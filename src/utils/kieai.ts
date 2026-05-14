@@ -133,16 +133,18 @@ export interface VideoModel {
   provider: string
   credits: number
   starred?: boolean
+  supportsDuration?: boolean
+  durationOptions?: number[]
 }
 
 export const VIDEO_MODELS: VideoModel[] = [
-  { id: 'seedance_2_0',      name: 'Seedance 2.0',      provider: 'ByteDance',      credits: 205, starred: true },
-  { id: 'seedance_2_0_fast', name: 'Seedance 2.0 Fast', provider: 'ByteDance',      credits: 165 },
-  { id: 'kling_3_0',         name: 'Kling 3.0',         provider: 'Kling AI',       credits: 70  },
+  { id: 'seedance_2_0',      name: 'Seedance 2.0',      provider: 'ByteDance',      credits: 205, starred: true, supportsDuration: true, durationOptions: [5, 8, 10, 12] },
+  { id: 'seedance_2_0_fast', name: 'Seedance 2.0 Fast', provider: 'ByteDance',      credits: 165,               supportsDuration: true, durationOptions: [5, 8, 10, 12] },
+  { id: 'kling_3_0',         name: 'Kling 3.0',         provider: 'Kling AI',       credits: 70,                supportsDuration: true, durationOptions: [5, 8, 10] },
   { id: 'veo3_fast',         name: 'Veo 3.1 Fast',      provider: 'Google',         credits: 60  },
   { id: 'veo3_lite',         name: 'Veo 3.1 Lite',      provider: 'Google',         credits: 30  },
   { id: 'veo3',              name: 'Veo 3.1 Quality',   provider: 'Google',         credits: 250 },
-  { id: 'wan_2_7',           name: 'Wan 2.7',           provider: 'Alibaba Tongyi', credits: 80  },
+  { id: 'wan_2_7',           name: 'Wan 2.7',           provider: 'Alibaba Tongyi', credits: 80,                supportsDuration: true, durationOptions: [5, 8, 10, 12] },
   { id: 'sora_2',            name: 'Sora 2',            provider: 'OpenAI',         credits: 30  },
   { id: 'sora_2_pro',        name: 'Sora 2 Pro',        provider: 'OpenAI',         credits: 150 },
 ]
@@ -157,6 +159,7 @@ export async function generateVideo(params: {
   prompt: string
   aspectRatio: AspectRatio
   resolution: Resolution
+  duration?: number
   startFrameUrl?: string
   endFrameUrl?: string
   referenceImageUrls?: string[]
@@ -179,6 +182,7 @@ export async function generateVideo(params: {
     resolution: params.resolution,
     generationType,
   }
+  if (params.duration) body.duration = params.duration
   if (imageUrls.length > 0) body.imageUrls = imageUrls
 
   const res = await fetch(`${KIE_BASE}/veo/generate`, {

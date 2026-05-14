@@ -25,6 +25,7 @@ interface SlotState {
   prompt: string
   aspectRatio: AspectRatio
   resolution: Resolution
+  duration: number | null
   startFrameUrl: string | null
   endFrameUrl: string | null
   referenceImageUrls: string[]
@@ -50,6 +51,7 @@ const createSlot = (): SlotState => ({
   prompt: '',
   aspectRatio: '16:9',
   resolution: '720p',
+  duration: null,
   startFrameUrl: null,
   endFrameUrl: null,
   referenceImageUrls: [],
@@ -288,6 +290,7 @@ export default function BRollVideos() {
         prompt: slot.prompt,
         aspectRatio: slot.aspectRatio,
         resolution: slot.resolution,
+        ...(slot.duration ? { duration: slot.duration } : {}),
         ...(slot.startFrameUrl && slot.endFrameUrl
           ? { startFrameUrl: slot.startFrameUrl, endFrameUrl: slot.endFrameUrl }
           : {}),
@@ -408,7 +411,7 @@ export default function BRollVideos() {
                     return (
                       <button
                         key={m.id}
-                        onClick={() => { updateSlot(activeSlot, { modelId: m.id }); setModelDropdownOpen(false) }}
+                        onClick={() => { updateSlot(activeSlot, { modelId: m.id, duration: null }); setModelDropdownOpen(false) }}
                         className={`flex w-full items-center gap-3 px-3 py-2.5 transition-colors hover:bg-black/5 ${isActive ? 'bg-indigo-500/10' : ''}`}
                       >
                         <ProviderIcon provider={m.provider} size="sm" />
@@ -426,6 +429,36 @@ export default function BRollVideos() {
                 </div>
               )}
             </div>
+
+            {/* Duration selector — only for supported models */}
+            {selectedModel.supportsDuration && selectedModel.durationOptions && (
+              <div>
+                <p className="mb-1.5 text-[10px] font-medium uppercase tracking-widest text-gray-400">
+                  Thời lượng video
+                </p>
+                <div className="flex gap-2">
+                  {selectedModel.durationOptions.map((sec) => {
+                    const isSelected = currentSlot.duration === sec
+                    return (
+                      <button
+                        key={sec}
+                        onClick={() => updateSlot(activeSlot, { duration: isSelected ? null : sec })}
+                        className={`flex flex-1 items-center justify-center rounded-lg border py-2 text-xs font-medium transition-colors ${
+                          isSelected
+                            ? 'border-indigo-500/30 bg-indigo-500/10 text-indigo-500'
+                            : 'border-black/10 text-gray-500 hover:border-black/15 hover:text-gray-700'
+                        }`}
+                      >
+                        {sec}s
+                      </button>
+                    )
+                  })}
+                </div>
+                {currentSlot.duration === null && (
+                  <p className="mt-1 text-[10px] text-gray-400">Mặc định ~5 giây nếu không chọn</p>
+                )}
+              </div>
+            )}
 
             {/* Start / End frames */}
             <div className="grid grid-cols-2 gap-3">
