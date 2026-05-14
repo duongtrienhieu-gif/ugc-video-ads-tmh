@@ -23,22 +23,25 @@ const FIELDS: { key: keyof Product; label: string; type: 'text' | 'textarea'; re
   { key: 'cta', label: 'CTA', type: 'text' },
 ]
 
-const AUTO_FILL_PROMPT = (url: string) => `Bạn là chuyên gia marketing. Hãy truy cập và phân tích trang sản phẩm tại URL sau:
-${url}
+const EXTRACT_PROMPT = (url: string, pageText: string) => `Bạn là chuyên gia marketing UGC. Dưới đây là nội dung trang sản phẩm được lấy từ URL: ${url}
 
-Dựa trên nội dung trang web, hãy trả về ONLY một JSON object với các trường sau (bỏ trường nào không tìm thấy thông tin):
+--- NỘI DUNG TRANG ---
+${pageText}
+--- KẾT THÚC ---
+
+Phân tích nội dung trên và trả về ONLY một JSON object (bỏ trường nào không có thông tin):
 {
   "productName": "tên sản phẩm đầy đủ",
-  "productDescription": "mô tả ngắn gọn, súc tích về sản phẩm (2-3 câu)",
-  "targetMarket": "đối tượng khách hàng mục tiêu cụ thể (tuổi, giới tính, nhu cầu)",
-  "painPoints": "các vấn đề / nỗi đau mà sản phẩm giải quyết (liệt kê, mỗi điểm 1 dòng)",
-  "usps": "điểm khác biệt và lợi thế độc nhất so với đối thủ (liệt kê, mỗi điểm 1 dòng)",
-  "benefits": "các lợi ích chính mang lại cho người dùng (liệt kê, mỗi điểm 1 dòng)",
-  "offer": "giá bán hiện tại và khuyến mãi nếu có",
-  "cta": "call-to-action phù hợp nhất cho sản phẩm này"
+  "productDescription": "mô tả ngắn gọn về sản phẩm (2-3 câu)",
+  "targetMarket": "đối tượng khách hàng mục tiêu cụ thể",
+  "painPoints": "các vấn đề mà sản phẩm giải quyết (mỗi điểm 1 dòng)",
+  "usps": "điểm khác biệt độc nhất của sản phẩm (mỗi điểm 1 dòng)",
+  "benefits": "các lợi ích chính (mỗi điểm 1 dòng)",
+  "offer": "giá bán và khuyến mãi nếu có",
+  "cta": "call-to-action phù hợp nhất"
 }
 
-Chỉ trả về JSON thuần, không markdown, không giải thích thêm.`
+Chỉ trả về JSON thuần, không markdown, không giải thích.`
 
 export default function ProductForm({ item, onSave, onCancel }: ProductFormProps) {
   const [form, setForm] = useState({
@@ -103,7 +106,36 @@ export default function ProductForm({ item, onSave, onCancel }: ProductFormProps
 
     setIsFetching(true)
     try {
-      const response = await kieTextGenerate(apiKey, AUTO_FILL_PROMPT(url))
+      // Step 1: Fetch the actual page content via CORS proxy
+      let pageText = ''
+      try {
+        const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`
+        const proxyRes = await fetch(proxyUrl, { signal: AbortSignal.timeout(15000) })
+        if (proxyRes.ok) {
+          const proxyData = await proxyRes.json() as { contents?: string }
+          if (proxyData.contents) {
+            pageText = proxyData.contents
+              .replace(/<script[\s\S]*?<\/script>/gi, '')
+              .replace(/<style[\s\S]*?<\/style>/gi, '')
+              .replace(/<[^>]+>/g, ' ')
+              .replace(/&nbsp;/g, ' ')
+              .replace(/&amp;/g, '&')
+              .replace(/&lt;/g, '<')
+              .replace(/&gt;/g, '>')
+              .replace(/\s{2,}/g, ' ')
+              .trim()
+              .slice(0, 7000)
+          }
+        }
+      } catch { /* network/CORS error — proceed with empty text */ }
+
+      if (!pageText) {
+        addToast('Không thể tải trang. Vui lòng kiểm tra URL và thử lại.', 'error')
+        return
+      }
+
+      // Step 2: Send extracted text to AI
+      const response = await kieTextGenerate(apiKey, EXTRACT_PROMPT(url, pageText))
 
       let cleaned = response.trim()
       const jsonMatch = cleaned.match(/\{[\s\S]*\}/)
