@@ -135,18 +135,19 @@ export interface VideoModel {
   starred?: boolean
   supportsDuration?: boolean
   durationOptions?: number[]
+  supportsResolution?: boolean  // false = don't send resolution field to API
 }
 
 export const VIDEO_MODELS: VideoModel[] = [
-  { id: 'seedance_2_0',      name: 'Seedance 2.0',      provider: 'ByteDance',      credits: 205, starred: true, supportsDuration: true, durationOptions: [5, 8, 10, 12] },
-  { id: 'seedance_2_0_fast', name: 'Seedance 2.0 Fast', provider: 'ByteDance',      credits: 165,               supportsDuration: true, durationOptions: [5, 8, 10, 12] },
-  { id: 'kling_3_0',         name: 'Kling 3.0',         provider: 'Kling AI',       credits: 70,                supportsDuration: true, durationOptions: [5, 8, 10] },
-  { id: 'veo3_fast',         name: 'Veo 3.1 Fast',      provider: 'Google',         credits: 60  },
-  { id: 'veo3_lite',         name: 'Veo 3.1 Lite',      provider: 'Google',         credits: 30  },
-  { id: 'veo3',              name: 'Veo 3.1 Quality',   provider: 'Google',         credits: 250 },
-  { id: 'wan_2_7',           name: 'Wan 2.7',           provider: 'Alibaba Tongyi', credits: 80,                supportsDuration: true, durationOptions: [5, 8, 10, 12] },
-  { id: 'sora_2',            name: 'Sora 2',            provider: 'OpenAI',         credits: 30  },
-  { id: 'sora_2_pro',        name: 'Sora 2 Pro',        provider: 'OpenAI',         credits: 150 },
+  { id: 'seedance_2_0',      name: 'Seedance 2.0',      provider: 'ByteDance',      credits: 205, starred: true, supportsDuration: true, durationOptions: [5, 8, 10, 12], supportsResolution: true },
+  { id: 'seedance_2_0_fast', name: 'Seedance 2.0 Fast', provider: 'ByteDance',      credits: 165,               supportsDuration: true, durationOptions: [5, 8, 10, 12], supportsResolution: true },
+  { id: 'kling_3_0',         name: 'Kling 3.0',         provider: 'Kling AI',       credits: 70,                supportsDuration: true, durationOptions: [5, 8, 10],    supportsResolution: true },
+  { id: 'veo3_fast',         name: 'Veo 3.1 Fast',      provider: 'Google',         credits: 60,  supportsResolution: true },
+  { id: 'veo3_lite',         name: 'Veo 3.1 Lite',      provider: 'Google',         credits: 30,  supportsResolution: true },
+  { id: 'veo3',              name: 'Veo 3.1 Quality',   provider: 'Google',         credits: 250, supportsResolution: true },
+  { id: 'wan_2_7',           name: 'Wan 2.7',           provider: 'Alibaba Tongyi', credits: 80,                supportsDuration: true, durationOptions: [5, 8, 10, 12], supportsResolution: true },
+  { id: 'sora_2',            name: 'Sora 2',            provider: 'OpenAI',         credits: 30,  supportsResolution: false },
+  { id: 'sora_2_pro',        name: 'Sora 2 Pro',        provider: 'OpenAI',         credits: 150, supportsResolution: false },
 ]
 
 export type AspectRatio = '16:9' | '9:16'
@@ -159,6 +160,7 @@ export async function generateVideo(params: {
   prompt: string
   aspectRatio: AspectRatio
   resolution: Resolution
+  sendResolution?: boolean  // false = omit resolution field
   duration?: number
   startFrameUrl?: string
   endFrameUrl?: string
@@ -179,9 +181,9 @@ export async function generateVideo(params: {
     prompt: params.prompt,
     model: params.model,
     aspect_ratio: params.aspectRatio,
-    resolution: params.resolution,
     generationType,
   }
+  if (params.sendResolution !== false) body.resolution = params.resolution
   if (params.duration) body.duration = params.duration
   if (imageUrls.length > 0) body.imageUrls = imageUrls
 

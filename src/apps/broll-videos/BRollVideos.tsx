@@ -319,12 +319,14 @@ export default function BRollVideos() {
         throw new Error('Khung đầu/cuối phải là ảnh từ PROJECT (không hỗ trợ upload trực tiếp cho video)')
       }
 
+      const slotModel = VIDEO_MODELS.find((m) => m.id === slot.modelId)
       const params = {
         apiKey,
         model: slot.modelId,
         prompt: slot.prompt,
         aspectRatio: slot.aspectRatio,
         resolution: slot.resolution,
+        sendResolution: slotModel?.supportsResolution !== false,
         ...(slot.duration ? { duration: slot.duration } : {}),
         ...(startUrl && endUrl ? { startFrameUrl: startUrl, endFrameUrl: endUrl } : {}),
         ...(refUrls.length > 0 ? { referenceImageUrls: refUrls } : {}),
@@ -609,7 +611,7 @@ export default function BRollVideos() {
             </div>
 
             {/* Aspect ratio & Resolution */}
-            <div className="grid grid-cols-2 gap-3">
+            <div className={`grid gap-3 ${selectedModel.supportsResolution !== false ? 'grid-cols-2' : 'grid-cols-1'}`}>
               <div>
                 <p className="mb-1.5 text-[10px] font-medium uppercase tracking-widest text-gray-400">Tỷ lệ</p>
                 <div className="flex gap-1">
@@ -628,24 +630,26 @@ export default function BRollVideos() {
                   ))}
                 </div>
               </div>
-              <div>
-                <p className="mb-1.5 text-[10px] font-medium uppercase tracking-widest text-gray-400">Độ phân giải</p>
-                <div className="flex gap-1">
-                  {(['720p', '1080p', '4k'] as Resolution[]).map((r) => (
-                    <button
-                      key={r}
-                      onClick={() => updateSlot(activeSlot, { resolution: r })}
-                      className={`flex-1 rounded-lg border py-1.5 text-[11px] font-medium transition-colors ${
-                        currentSlot.resolution === r
-                          ? 'border-indigo-500/50 bg-indigo-500/15 text-indigo-300'
-                          : 'border-black/10 text-gray-500 hover:border-black/15 hover:text-gray-700'
-                      }`}
-                    >
-                      {r === '4k' ? '4K' : r}
-                    </button>
-                  ))}
+              {selectedModel.supportsResolution !== false && (
+                <div>
+                  <p className="mb-1.5 text-[10px] font-medium uppercase tracking-widest text-gray-400">Độ phân giải</p>
+                  <div className="flex gap-1">
+                    {(['720p', '1080p', '4k'] as Resolution[]).map((r) => (
+                      <button
+                        key={r}
+                        onClick={() => updateSlot(activeSlot, { resolution: r })}
+                        className={`flex-1 rounded-lg border py-1.5 text-[11px] font-medium transition-colors ${
+                          currentSlot.resolution === r
+                            ? 'border-indigo-500/50 bg-indigo-500/15 text-indigo-300'
+                            : 'border-black/10 text-gray-500 hover:border-black/15 hover:text-gray-700'
+                        }`}
+                      >
+                        {r === '4k' ? '4K' : r}
+                      </button>
+                    ))}
+                  </div>
                 </div>
-              </div>
+              )}
             </div>
           </div>
         </div>
