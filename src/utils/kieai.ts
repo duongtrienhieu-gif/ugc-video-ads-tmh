@@ -1,0 +1,342 @@
+const KIE_BASE = 'https://api.kie.ai/api/v1'
+
+// ── Credits balance ───────────────────────────────────────────────────
+
+export async function getKieCredits(apiKey: string): Promise<number> {
+  const res = await fetch(`${KIE_BASE}/user/me`, {
+    headers: { Authorization: `Bearer ${apiKey}` },
+  })
+  if (!res.ok) throw new Error(`Auth failed: ${res.status}`)
+  const data = await res.json() as {
+    data?: { credits?: number; balance?: number; credit?: number }
+    credits?: number
+    balance?: number
+  }
+  const credits =
+    data?.data?.credits ??
+    data?.data?.balance ??
+    data?.data?.credit ??
+    data?.credits ??
+    data?.balance
+  if (credits === undefined || credits === null) throw new Error('No credits field in response')
+  return Number(credits)
+}
+
+// ── Image generation ──────────────────────────────────────────────────
+
+export interface ImageModel {
+  id: string
+  name: string
+  provider: string
+  credits: Record<ImageResolution, number>
+  starred?: boolean
+}
+
+export const IMAGE_MODELS: ImageModel[] = [
+  { id: 'nano-banana-2-text-to-image', name: 'Nano Banana 2',   provider: 'Google',           credits: { '1K': 8,   '2K': 12, '4K': 16 } },
+  { id: 'flux-2-pro-text-to-image',   name: 'Flux 2 Pro',      provider: 'Black Forest Labs', credits: { '1K': 14,  '2K': 20, '4K': 28 } },
+  { id: 'seedream-5-lite-t2i',        name: 'Seedream 5 Lite', provider: 'ByteDance',        credits: { '1K': 5.5, '2K': 8,  '4K': 12 } },
+  { id: 'gpt-image-2-text-to-image',  name: 'GPT Image 2',     provider: 'OpenAI',           credits: { '1K': 6,   '2K': 10, '4K': 16 }, starred: true },
+]
+
+export type ImageResolution = '1K' | '2K' | '4K'
+export type ImageStatus = 'pending' | 'processing' | 'completed' | 'failed'
+
+export async function generateImage(params: {
+  apiKey: string
+  model: string
+  prompt: string
+  resolution: ImageResolution
+  aspectRatio?: string
+}): Promise<{ taskId: string }> {
+  const res = await fetch(`${KIE_BASE}/jobs/createTask`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${params.apiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      model: params.model,
+      input: {
+        prompt: params.prompt,
+        resolution: params.resolution,
+        aspect_ratio: params.aspectRatio ?? '9:16',
+      },
+    }),
+  })
+  if (res.status === 402) throw new Error('INSUFFICIENT_CREDITS')
+  if (!res.ok) {
+    const text = await res.text().catch(() => res.statusText)
+    throw new Error(text)
+  }
+  const data = await res.json() as { code: number; data: { taskId: string } }
+  return { taskId: data.data.taskId }
+}
+
+export async function getImageStatus(params: {
+  apiKey: string
+  taskId: string
+}): Promise<{ status: ImageStatus; imageUrl?: string; error?: string }> {
+  const res = await fetch(
+    `${KIE_BASE}/jobs/task?taskId=${encodeURIComponent(params.taskId)}`,
+    { headers: { Authorization: `Bearer ${params.apiKey}` } },
+  )
+  if (!res.ok) throw new Error(`Status check failed: ${res.status}`)
+
+  const data = await res.json() as { data: { status: string; output?: { imageUrl?: string }; errorMessage?: string } }
+  const record = data.data
+  const rawStatus = String(record.status ?? '').toLowerCase()
+
+  let status: ImageStatus = 'pending'
+  if (rawStatus === 'completed' || rawStatus === 'success') status = 'completed'
+  else if (rawStatus === 'failed' || rawStatus === 'error') status = 'failed'
+  else if (rawStatus === 'processing' || rawStatus === 'running') status = 'processing'
+
+  return {
+    status,
+    imageUrl: record.output?.imageUrl,
+    error: status === 'failed' ? String(record.errorMessage ?? 'Tạo ảnh thất bại') : undefined,
+  }
+}
+
+export async function pollImageUntilDone(params: {
+  apiKey: string
+  taskId: string
+  onStatusChange?: (status: ImageStatus) => void
+  timeoutMs?: number
+}): Promise<string> {
+  const timeout = params.timeoutMs ?? 3 * 60 * 1000
+  const start = Date.now()
+
+  while (Date.now() - start < timeout) {
+    await new Promise<void>((resolve) => setTimeout(resolve, 3000))
+
+    const result = await getImageStatus({ apiKey: params.apiKey, taskId: params.taskId })
+    params.onStatusChange?.(result.status)
+
+    if (result.status === 'completed' && result.imageUrl) return result.imageUrl
+    if (result.status === 'failed') throw new Error(result.error ?? 'Tạo ảnh thất bại')
+  }
+
+  throw new Error('TIMEOUT')
+}
+
+// ── Video generation ──────────────────────────────────────────────────
+
+export interface VideoModel {
+  id: string
+  name: string
+  provider: string
+  credits: number
+  starred?: boolean
+}
+
+export const VIDEO_MODELS: VideoModel[] = [
+  { id: 'seedance_2_0',      name: 'Seedance 2.0',      provider: 'ByteDance',      credits: 205, starred: true },
+  { id: 'seedance_2_0_fast', name: 'Seedance 2.0 Fast', provider: 'ByteDance',      credits: 165 },
+  { id: 'kling_3_0',         name: 'Kling 3.0',         provider: 'Kling AI',       credits: 70  },
+  { id: 'veo3_fast',         name: 'Veo 3.1 Fast',      provider: 'Google',         credits: 60  },
+  { id: 'veo3_lite',         name: 'Veo 3.1 Lite',      provider: 'Google',         credits: 30  },
+  { id: 'veo3',              name: 'Veo 3.1 Quality',   provider: 'Google',         credits: 250 },
+  { id: 'wan_2_7',           name: 'Wan 2.7',           provider: 'Alibaba Tongyi', credits: 80  },
+  { id: 'sora_2',            name: 'Sora 2',            provider: 'OpenAI',         credits: 30  },
+  { id: 'sora_2_pro',        name: 'Sora 2 Pro',        provider: 'OpenAI',         credits: 150 },
+]
+
+export type AspectRatio = '16:9' | '9:16'
+export type Resolution = '720p' | '1080p' | '4k'
+export type VideoStatus = 'pending' | 'processing' | 'completed' | 'failed'
+
+export async function generateVideo(params: {
+  apiKey: string
+  model: string
+  prompt: string
+  aspectRatio: AspectRatio
+  resolution: Resolution
+  startFrameUrl?: string
+  endFrameUrl?: string
+  referenceImageUrls?: string[]
+}): Promise<{ taskId: string }> {
+  let generationType = 'TEXT_2_VIDEO'
+  const imageUrls: string[] = []
+
+  if (params.startFrameUrl && params.endFrameUrl) {
+    generationType = 'FIRST_AND_LAST_FRAMES_2_VIDEO'
+    imageUrls.push(params.startFrameUrl, params.endFrameUrl)
+  } else if (params.referenceImageUrls && params.referenceImageUrls.length > 0) {
+    generationType = 'REFERENCE_2_VIDEO'
+    imageUrls.push(...params.referenceImageUrls)
+  }
+
+  const body: Record<string, unknown> = {
+    prompt: params.prompt,
+    model: params.model,
+    aspect_ratio: params.aspectRatio,
+    resolution: params.resolution,
+    generationType,
+  }
+  if (imageUrls.length > 0) body.imageUrls = imageUrls
+
+  const res = await fetch(`${KIE_BASE}/veo/generate`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${params.apiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(body),
+  })
+
+  if (res.status === 402) throw new Error('INSUFFICIENT_CREDITS')
+  if (!res.ok) {
+    const text = await res.text().catch(() => res.statusText)
+    throw new Error(text)
+  }
+
+  const data = await res.json() as { data: { taskId: string } }
+  return { taskId: data.data.taskId }
+}
+
+export async function getVideoStatus(params: {
+  apiKey: string
+  taskId: string
+}): Promise<{ status: VideoStatus; videoUrl?: string; error?: string }> {
+  const res = await fetch(
+    `${KIE_BASE}/veo/record-info?taskId=${encodeURIComponent(params.taskId)}`,
+    { headers: { Authorization: `Bearer ${params.apiKey}` } },
+  )
+  if (!res.ok) throw new Error(`Status check failed: ${res.status}`)
+
+  const data = await res.json() as { data: Record<string, unknown> }
+  const record = data.data
+  const rawStatus = String(record.status ?? '').toLowerCase()
+
+  let status: VideoStatus = 'pending'
+  if (rawStatus === 'completed' || rawStatus === 'success') status = 'completed'
+  else if (rawStatus === 'failed' || rawStatus === 'error') status = 'failed'
+  else if (rawStatus === 'processing' || rawStatus === 'running') status = 'processing'
+
+  return {
+    status,
+    videoUrl: (record.videoUrl ?? record.resultVideoUrl ?? record.url ?? undefined) as string | undefined,
+    error: status === 'failed' ? String(record.errorMessage ?? 'Tạo video thất bại') : undefined,
+  }
+}
+
+export async function pollVideoUntilDone(params: {
+  apiKey: string
+  taskId: string
+  onStatusChange?: (status: VideoStatus) => void
+  timeoutMs?: number
+}): Promise<string> {
+  const timeout = params.timeoutMs ?? 5 * 60 * 1000
+  const start = Date.now()
+
+  while (Date.now() - start < timeout) {
+    await new Promise<void>((resolve) => setTimeout(resolve, 5000))
+
+    const result = await getVideoStatus({ apiKey: params.apiKey, taskId: params.taskId })
+    params.onStatusChange?.(result.status)
+
+    if (result.status === 'completed' && result.videoUrl) return result.videoUrl
+    if (result.status === 'failed') throw new Error(result.error ?? 'Tạo video thất bại')
+  }
+
+  throw new Error('TIMEOUT')
+}
+
+// ── Text Generation (kie.ai chat completions — OpenAI-compatible) ─────
+
+export async function kieTextGenerate(
+  apiKey: string,
+  prompt: string,
+  systemInstruction?: string,
+): Promise<string> {
+  const messages: { role: string; content: string }[] = []
+  if (systemInstruction) messages.push({ role: 'system', content: systemInstruction })
+  messages.push({ role: 'user', content: prompt })
+
+  const res = await fetch('https://api.kie.ai/api/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ model: 'gemini-2.5-flash', messages }),
+  })
+  if (res.status === 402) throw new Error('INSUFFICIENT_CREDITS')
+  if (!res.ok) {
+    const text = await res.text().catch(() => res.statusText)
+    throw new Error(`kie.ai text error (${res.status}): ${text}`)
+  }
+  const data = await res.json() as { choices?: { message?: { content?: string } }[] }
+  const content = data.choices?.[0]?.message?.content
+  if (!content) throw new Error('Không có phản hồi từ kie.ai text')
+  return content
+}
+
+// ── Image Analysis (kie.ai vision — OpenAI-compatible) ───────────────
+
+export async function kieAnalyzeImage(
+  apiKey: string,
+  imageBase64: string,
+  mimeType: string,
+  prompt: string,
+  systemInstruction?: string,
+): Promise<string> {
+  const messages: Array<{ role: string; content: unknown }> = []
+  if (systemInstruction) messages.push({ role: 'system', content: systemInstruction })
+  messages.push({
+    role: 'user',
+    content: [
+      { type: 'image_url', image_url: { url: `data:${mimeType};base64,${imageBase64}` } },
+      { type: 'text', text: prompt },
+    ],
+  })
+
+  const res = await fetch('https://api.kie.ai/api/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ model: 'gemini-2.5-flash', messages }),
+  })
+  if (res.status === 402) throw new Error('INSUFFICIENT_CREDITS')
+  if (!res.ok) {
+    const text = await res.text().catch(() => res.statusText)
+    throw new Error(`kie.ai vision error (${res.status}): ${text}`)
+  }
+  const data = await res.json() as { choices?: { message?: { content?: string } }[] }
+  const content = data.choices?.[0]?.message?.content
+  if (!content) throw new Error('Không có phản hồi từ kie.ai vision')
+  return content
+}
+
+// ── TTS / Voice (kie.ai audio — OpenAI-compatible) ───────────────────
+
+export async function kieTTS(params: {
+  apiKey: string
+  text: string
+  voiceId?: string
+  speed?: number
+}): Promise<ArrayBuffer> {
+  const res = await fetch('https://api.kie.ai/api/v1/audio/speech', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${params.apiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      model: 'tts-1',
+      input: params.text,
+      voice: params.voiceId ?? 'alloy',
+      speed: params.speed ?? 1.0,
+    }),
+  })
+  if (res.status === 402) throw new Error('INSUFFICIENT_CREDITS')
+  if (!res.ok) {
+    const text = await res.text().catch(() => res.statusText)
+    throw new Error(`kie.ai TTS error (${res.status}): ${text}`)
+  }
+  return res.arrayBuffer()
+}
