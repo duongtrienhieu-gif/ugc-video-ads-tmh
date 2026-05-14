@@ -298,7 +298,34 @@ export async function kieTextGenerate(
   return content
 }
 
-// ── Image Analysis (kie.ai vision — OpenAI-compatible) ───────────────
+// ── Image Analysis (kie.ai vision — gpt-4o-mini supports image_url) ──
+
+// Compress a Blob to small JPEG base64 for sending to vision API
+export async function blobToSmallBase64(blob: Blob, maxWidth = 768): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const img = new Image()
+    const url = URL.createObjectURL(blob)
+    img.onload = () => {
+      const scale = Math.min(1, maxWidth / img.width)
+      const canvas = document.createElement('canvas')
+      canvas.width = Math.round(img.width * scale)
+      canvas.height = Math.round(img.height * scale)
+      const ctx = canvas.getContext('2d')
+      if (!ctx) { URL.revokeObjectURL(url); reject(new Error('canvas')); return }
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height)
+      URL.revokeObjectURL(url)
+      canvas.toBlob((b) => {
+        if (!b) { reject(new Error('toBlob')); return }
+        const reader = new FileReader()
+        reader.onload = () => resolve((reader.result as string).split(',')[1])
+        reader.onerror = reject
+        reader.readAsDataURL(b)
+      }, 'image/jpeg', 0.75)
+    }
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('img load')) }
+    img.src = url
+  })
+}
 
 export async function kieAnalyzeImage(
   apiKey: string,
@@ -306,27 +333,32 @@ export async function kieAnalyzeImage(
   mimeType: string,
   prompt: string,
   systemInstruction?: string,
-  imageUrl?: string,
+  imageUrls?: string | string[],
 ): Promise<string> {
   const messages: Array<{ role: string; content: unknown }> = []
   if (systemInstruction) messages.push({ role: 'system', content: systemInstruction })
-  // Prefer real https:// URL over base64 data URL (kie.ai handles URL better)
-  const imgUrl = imageUrl ?? `data:${mimeType};base64,${imageBase64}`
+
+  // Build image content parts
+  const urls = imageUrls
+    ? (Array.isArray(imageUrls) ? imageUrls : [imageUrls])
+    : [`data:${mimeType || 'image/jpeg'};base64,${imageBase64}`]
+
   messages.push({
     role: 'user',
     content: [
-      { type: 'image_url', image_url: { url: imgUrl } },
+      ...urls.map((u) => ({ type: 'image_url', image_url: { url: u } })),
       { type: 'text', text: prompt },
     ],
   })
 
+  // gpt-4o-mini has reliable vision support through kie.ai OpenAI-compatible endpoint
   const res = await fetch('https://api.kie.ai/api/v1/chat/completions', {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${apiKey}`,
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({ model: 'gemini-2.5-flash', messages }),
+    body: JSON.stringify({ model: 'gpt-4o-mini', messages }),
   })
   if (res.status === 402) throw new Error('INSUFFICIENT_CREDITS')
   if (!res.ok) {

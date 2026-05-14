@@ -1,6 +1,6 @@
 import type { AnalysisResult } from '../types'
 import { useSettingsStore } from '../../../stores/settingsStore'
-import { saveAsset, getUrl, deleteAsset } from '../../../utils/assetStore'
+import { kieAnalyzeImage, blobToSmallBase64 } from '../../../utils/kieai'
 
 const SYSTEM_INSTRUCTION = `You are an elite UGC ad analyst. You dissect social media video ads and extract actionable insights for creators and brands.
 
@@ -50,38 +50,31 @@ SCORECARD RULE: Be brutally honest. Do not inflate scores. Most ads are average 
   "reconstructionPrompt": "<full prompt that could recreate this ad's structure for any product>"
 }`
 
-// Seek video to a specific time and resolve when ready
 function seekVideo(video: HTMLVideoElement, time: number): Promise<void> {
   return new Promise((resolve) => {
-    const onSeeked = () => {
-      video.removeEventListener('seeked', onSeeked)
-      resolve()
-    }
+    const onSeeked = () => { video.removeEventListener('seeked', onSeeked); resolve() }
     video.addEventListener('seeked', onSeeked)
     video.currentTime = time
   })
 }
 
-// Capture current video frame as JPEG Blob
-function captureFrame(video: HTMLVideoElement): Promise<Blob> {
+function captureFrameBlob(video: HTMLVideoElement): Promise<Blob> {
   return new Promise((resolve, reject) => {
     const canvas = document.createElement('canvas')
-    // Scale down to reduce size — 640px wide is enough for analysis
     const scale = Math.min(1, 640 / (video.videoWidth || 640))
     canvas.width = Math.round((video.videoWidth || 640) * scale)
     canvas.height = Math.round((video.videoHeight || 480) * scale)
     const ctx = canvas.getContext('2d')
-    if (!ctx) { reject(new Error('Canvas unavailable')); return }
+    if (!ctx) { reject(new Error('canvas')); return }
     ctx.drawImage(video, 0, 0, canvas.width, canvas.height)
     canvas.toBlob((blob) => {
       if (blob) resolve(blob)
       else reject(new Error('toBlob failed'))
-    }, 'image/jpeg', 0.80)
+    }, 'image/jpeg', 0.75)
   })
 }
 
-// Extract up to maxFrames evenly spread across the video
-async function extractFrames(videoFile: File, maxFrames = 8): Promise<Blob[]> {
+async function extractFrames(videoFile: File, maxFrames = 6): Promise<Blob[]> {
   return new Promise((resolve, reject) => {
     const video = document.createElement('video')
     const url = URL.createObjectURL(videoFile)
@@ -91,17 +84,13 @@ async function extractFrames(videoFile: File, maxFrames = 8): Promise<Blob[]> {
     video.onloadedmetadata = async () => {
       try {
         const duration = video.duration || 10
-        const count = Math.min(maxFrames, Math.max(1, Math.ceil(duration / 2)))
+        const count = Math.min(maxFrames, Math.max(1, Math.ceil(duration / 3)))
         const blobs: Blob[] = []
-
         for (let i = 0; i < count; i++) {
-          // Spread timestamps: 0.5s, then every (duration/count) seconds
           const t = i === 0 ? 0.5 : Math.min((duration / count) * i, duration - 0.2)
           await seekVideo(video, t)
-          const blob = await captureFrame(video)
-          blobs.push(blob)
+          blobs.push(await captureFrameBlob(video))
         }
-
         URL.revokeObjectURL(url)
         resolve(blobs)
       } catch (e) {
@@ -123,69 +112,27 @@ async function extractFrames(videoFile: File, maxFrames = 8): Promise<Blob[]> {
 export async function analyzeAd(videoFile: File): Promise<AnalysisResult> {
   const apiKey = useSettingsStore.getState().getApiKey()
 
-  // 1. Extract multiple frames from the video
-  const frameBlobs = await extractFrames(videoFile, 8)
+  // 1. Extract frames from video
+  const frameBlobs = await extractFrames(videoFile, 6)
 
-  // 2. Upload all frames to Supabase Storage in parallel → get signed URLs
-  const assetIds = await Promise.all(
-    frameBlobs.map((blob) => saveAsset(blob, 'image/jpeg'))
-  )
-  const imageUrls = await Promise.all(
-    assetIds.map(async (id) => {
-      const u = await getUrl(id)
-      if (!u) throw new Error('Không lấy được URL ảnh')
-      return u
-    })
+  // 2. Compress each frame to small base64
+  const base64Frames = await Promise.all(
+    frameBlobs.map((blob) => blobToSmallBase64(blob, 512))
   )
 
-  // 3. Send all frame URLs to kie.ai vision in a single message
-  const prompt = `I'm providing you with ${imageUrls.length} frames extracted at regular intervals from a UGC video ad.
-Frame 1 = beginning, Frame ${imageUrls.length} = near the end.
-Analyze the FULL video based on these frames: transcript, hook, structure beats, psychological levers, visual variety, and improvements.
-Return the analysis as JSON.`
+  // 3. Build data URLs for each frame
+  const imageUrls = base64Frames.map((b64) => `data:image/jpeg;base64,${b64}`)
 
-  let responseText: string
-  try {
-    const messages: Array<{ role: string; content: unknown }> = [
-      { role: 'system', content: SYSTEM_INSTRUCTION },
-      {
-        role: 'user',
-        content: [
-          ...imageUrls.map((u) => ({ type: 'image_url', image_url: { url: u } })),
-          { type: 'text', text: prompt },
-        ],
-      },
-    ]
+  const prompt = `I'm providing ${imageUrls.length} frames extracted at regular intervals from a UGC video ad (frame 1 = start, frame ${imageUrls.length} = near end). Analyze the FULL video based on these frames: transcript, hook, structure beats, psychological levers, visual variety, and improvements. Return the analysis as JSON.`
 
-    const res = await fetch('https://api.kie.ai/api/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ model: 'gemini-2.5-flash', messages }),
-    })
+  // 4. Send all frames to kie.ai vision (gpt-4o-mini supports multiple images)
+  const responseText = await kieAnalyzeImage(apiKey, '', '', prompt, SYSTEM_INSTRUCTION, imageUrls)
 
-    if (res.status === 402) throw new Error('Không đủ Credit')
-    if (!res.ok) {
-      const text = await res.text().catch(() => res.statusText)
-      throw new Error(`kie.ai error (${res.status}): ${text}`)
-    }
-
-    const data = await res.json() as { choices?: { message?: { content?: string } }[] }
-    responseText = data.choices?.[0]?.message?.content ?? ''
-    if (!responseText) throw new Error('AI không trả về kết quả phân tích')
-  } finally {
-    // 4. Clean up all temp assets
-    assetIds.forEach((id) => deleteAsset(id).catch(() => {}))
-  }
-
-  // 5. Parse JSON from response
+  // 5. Parse JSON
   let cleaned = responseText.trim()
   const jsonMatch = cleaned.match(/\{[\s\S]*\}/)
   if (jsonMatch) cleaned = jsonMatch[0]
   else cleaned = cleaned.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim()
 
-  const result: AnalysisResult = JSON.parse(cleaned)
-  return result
+  return JSON.parse(cleaned) as AnalysisResult
 }

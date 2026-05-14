@@ -9,8 +9,7 @@ import { generateCharacter } from './services/generateCharacter'
 import type { GenerationResult } from './services/generateCharacter'
 import { useSettingsStore } from '../../stores/settingsStore'
 import type { ImageResolution } from '../../utils/kieai'
-import { kieAnalyzeImage } from '../../utils/kieai'
-import { saveAsset, getUrl, deleteAsset } from '../../utils/assetStore'
+import { kieAnalyzeImage, blobToSmallBase64 } from '../../utils/kieai'
 
 const TAB_ICONS: Record<TabId, React.ElementType> = {
   physical: User,
@@ -74,17 +73,14 @@ export default function CharacterStudio() {
 
   const analyzeRefImage = async (file: File) => {
     setIsAnalyzingRef(true)
-    let tempAssetId: string | null = null
     try {
       const apiKey = useSettingsStore.getState().getApiKey()
 
-      // Upload to Supabase Storage → get real https:// URL for kie.ai
+      // Compress to small base64 — gpt-4o-mini handles data URLs fine at small sizes
       const blob = new Blob([await file.arrayBuffer()], { type: file.type })
-      tempAssetId = await saveAsset(blob, file.type)
-      const imageUrl = await getUrl(tempAssetId)
-      if (!imageUrl) throw new Error('Không lấy được URL ảnh')
+      const base64 = await blobToSmallBase64(blob, 768)
 
-      const responseText = await kieAnalyzeImage(apiKey, '', '', AUTO_FILL_PROMPT, undefined, imageUrl)
+      const responseText = await kieAnalyzeImage(apiKey, base64, 'image/jpeg', AUTO_FILL_PROMPT)
 
       // Extract JSON from response
       let cleaned = responseText.trim()
@@ -106,8 +102,6 @@ export default function CharacterStudio() {
       const msg = err instanceof Error ? err.message : String(err)
       addToast(`Phân tích ảnh thất bại: ${msg}`, 'error')
     } finally {
-      // Clean up temp storage asset
-      if (tempAssetId) deleteAsset(tempAssetId).catch(() => {})
       setIsAnalyzingRef(false)
     }
   }
