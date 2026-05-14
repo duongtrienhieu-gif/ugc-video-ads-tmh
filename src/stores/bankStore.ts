@@ -158,15 +158,15 @@ export const useBankStore = create<BankState>((set, get) => ({
       supabase.from('voice_history').select('*').order('created_at', { ascending: false }),
       supabase.from('brolls').select('*').order('created_at', { ascending: false }),
     ])
-    set({
-      products: (p.data ?? []).map(toProduct),
-      models: (m.data ?? []).map(toModel),
-      scripts: (s.data ?? []).map(toScript),
-      voices: (v.data ?? []).map(toVoice),
-      voiceHistory: (vh.data ?? []).map(toVoiceHistory),
-      brolls: (b.data ?? []).map(toBRoll),
+    set((prev) => ({
+      products:     p.error  ? prev.products     : (p.data  ?? []).map(toProduct),
+      models:       m.error  ? prev.models       : (m.data  ?? []).map(toModel),
+      scripts:      s.error  ? prev.scripts      : (s.data  ?? []).map(toScript),
+      voices:       v.error  ? prev.voices       : (v.data  ?? []).map(toVoice),
+      voiceHistory: vh.error ? prev.voiceHistory : (vh.data ?? []).map(toVoiceHistory),
+      brolls:       b.error  ? prev.brolls       : (b.data  ?? []).map(toBRoll),
       loading: false,
-    })
+    }))
   },
 
   // ── Products ──────────────────────────────────────────────────────────────

@@ -1,7 +1,7 @@
 ﻿import { useState } from 'react'
 import { FolderOpen, Trash2, Sparkles, Save } from 'lucide-react'
 import type { TabId, CharacterProfile } from '../types'
-import { TABS, PRESET_UGC_CAR, createEmptyProfile } from '../types'
+import { TABS, generateRandomUGCProfile, createEmptyProfile } from '../types'
 import type { Model } from '../../../stores/types'
 import { useBankStore } from '../../../stores/bankStore'
 import { buildJsonPrompt } from '../services/generateCharacter'
@@ -51,7 +51,7 @@ export default function ControlsPanel({ profile, onProfileChange, activeTab }: C
         <span className="mb-1.5 block text-[9px] font-semibold uppercase tracking-widest text-gray-400">Preset & PROJECT</span>
         <div className="flex items-center gap-1.5 flex-wrap">
           <button
-            onClick={() => onProfileChange({ ...PRESET_UGC_CAR })}
+            onClick={() => onProfileChange(generateRandomUGCProfile())}
             className="flex items-center gap-1 rounded-full bg-black/[0.04] px-2.5 py-1 text-[11px] font-medium text-gray-600 transition-colors hover:bg-black/[0.06] hover:text-gray-800"
           >
             <Sparkles className="h-3 w-3" />

@@ -1,20 +1,11 @@
-﻿import { useState, useEffect } from 'react'
-import { Package, Loader2, PenLine } from 'lucide-react'
+import { useState, useEffect, useRef } from 'react'
+import { Package, Loader2, PenLine, Upload, X } from 'lucide-react'
 import type { Product, Script } from '../../../stores/types'
+import type { EditableProductContext } from '../types'
 import { useBankStore } from '../../../stores/bankStore'
 import BankPicker from '../../../components/BankPicker'
 import { useAppStore } from '../../../stores/appStore'
 import { useAssetUrl } from '../../../hooks/useAssetUrl'
-
-interface EditableProductContext {
-  productDescription: string
-  targetMarket: string
-  painPoints: string
-  usps: string
-  benefits: string
-  offer: string
-  cta: string
-}
 
 function createEditableContext(product: Product): EditableProductContext {
   return {
@@ -33,8 +24,8 @@ interface InputPanelProps {
   onTranscriptChange: (value: string) => void
   selectedProduct: Product | null
   onProductSelect: (product: Product) => void
-  additionalContext: string
-  onAdditionalContextChange: (value: string) => void
+  attachedImage: { file: File; preview: string; base64: string; mimeType: string } | null
+  onAttachedImageChange: (img: { file: File; preview: string; base64: string; mimeType: string } | null) => void
   onGenerate: (context: EditableProductContext | null) => void
   isGenerating: boolean
   highlightField?: string | null
@@ -45,8 +36,8 @@ export default function InputPanel({
   onTranscriptChange,
   selectedProduct,
   onProductSelect,
-  additionalContext,
-  onAdditionalContextChange,
+  attachedImage,
+  onAttachedImageChange,
   onGenerate,
   isGenerating,
   highlightField,
@@ -54,6 +45,9 @@ export default function InputPanel({
   const [productPickerOpen, setProductPickerOpen] = useState(false)
   const [scriptPickerOpen, setScriptPickerOpen] = useState(false)
   const [editableContext, setEditableContext] = useState<EditableProductContext | null>(null)
+  const [imgDragOver, setImgDragOver] = useState(false)
+  const imgInputRef = useRef<HTMLInputElement>(null)
+
   const products = useBankStore((s) => s.products)
   const openApp = useAppStore((s) => s.openApp)
   const sendToApp = useAppStore((s) => s.sendToApp)
@@ -81,15 +75,28 @@ export default function InputPanel({
     onTranscriptChange(item.scriptText)
   }
 
+  const handleImageFile = async (file: File) => {
+    if (!file.type.startsWith('image/')) return
+    if (file.size > 10 * 1024 * 1024) return
+    const preview = URL.createObjectURL(file)
+    const { base64, mimeType } = await fileToBase64(file)
+    onAttachedImageChange({ file, preview, base64, mimeType })
+  }
+
+  const clearImage = () => {
+    if (attachedImage?.preview) URL.revokeObjectURL(attachedImage.preview)
+    onAttachedImageChange(null)
+    if (imgInputRef.current) imgInputRef.current.value = ''
+  }
+
   return (
     <div className="flex h-full flex-col">
       <div className="flex-1 overflow-y-auto p-5">
 
-        {/* ── Bước 1: Transcript ── */}
+        {/* ── Bước 1: Kịch bản ── */}
         <div className="mb-6">
-          <StepLabel step={1} label="Transcript quảng cáo mẫu" />
+          <StepLabel step={1} label="Chọn kịch bản mẫu" />
 
-          {/* Bank picker card */}
           <button
             onClick={() => setScriptPickerOpen(true)}
             className="mt-2 flex w-full items-center gap-3 rounded-xl border border-dashed border-black/10 bg-black/[0.02] p-4 text-left transition-colors hover:border-blue-500/30 hover:bg-blue-500/5"
@@ -98,19 +105,17 @@ export default function InputPanel({
               <PenLine className="h-5 w-5 text-blue-400" />
             </div>
             <div className="flex flex-col">
-              <span className="text-sm font-medium text-gray-700">Kịch bản</span>
-              <span className="text-xs text-gray-400">Nhấn để chọn từ Project</span>
+              <span className="text-sm font-medium text-gray-700">Kịch bản từ Project</span>
+              <span className="text-xs text-gray-400">Nhấn để chọn</span>
             </div>
           </button>
 
-          {/* HOẶC divider */}
           <div className="my-3 flex items-center gap-3">
             <div className="flex-1 border-t border-black/8" />
             <span className="text-[10px] font-semibold uppercase tracking-widest text-gray-300">Hoặc</span>
             <div className="flex-1 border-t border-black/8" />
           </div>
 
-          {/* Transcript textarea */}
           <textarea
             value={winningTranscript}
             onChange={(e) => onTranscriptChange(e.target.value)}
@@ -122,7 +127,7 @@ export default function InputPanel({
 
         {/* ── Bước 2: Sản phẩm ── */}
         <div className="mb-6">
-          <StepLabel step={2} label="Ngữ cảnh sản phẩm" />
+          <StepLabel step={2} label="Chọn sản phẩm" />
 
           {selectedProduct ? (
             <div className="mt-2">
@@ -200,15 +205,44 @@ export default function InputPanel({
           )}
         </div>
 
-        {/* ── Bước 3: Ngữ cảnh bổ sung ── */}
+        {/* ── Bước 3: Ảnh đính kèm ── */}
         <div className="mb-6">
-          <StepLabel step={3} label="Ngữ cảnh bổ sung (tùy chọn)" />
-          <textarea
-            value={additionalContext}
-            onChange={(e) => onAdditionalContextChange(e.target.value)}
-            rows={3}
-            placeholder="Ngữ cảnh bổ sung (vd: 'Tập trung vào tính năng tự làm sạch', 'Tone mùa hè')..."
-            className="mt-2 w-full rounded-xl border border-black/10 bg-black/[0.02] px-4 py-3 text-sm text-gray-800 placeholder-gray-400 outline-none transition-colors focus:border-blue-500/30 resize-none"
+          <StepLabel step={3} label="Tải ảnh đính kèm (tùy chọn)" />
+          <p className="mt-1 mb-2 text-[10px] text-gray-400">Ảnh chụp màn hình trang sản phẩm để Gemini trích xuất thêm ngữ cảnh</p>
+
+          {attachedImage ? (
+            <div className="flex items-center gap-3 rounded-xl border border-black/10 bg-black/[0.02] p-3">
+              <div className="relative h-14 w-14 shrink-0 overflow-hidden rounded-lg border border-black/10">
+                <img src={attachedImage.preview} alt="" className="h-full w-full object-cover" />
+              </div>
+              <span className="flex-1 truncate text-xs text-gray-500">{attachedImage.file.name}</span>
+              <button
+                onClick={clearImage}
+                className="rounded-lg p-1.5 text-gray-400 transition-colors hover:bg-black/5 hover:text-gray-700"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => imgInputRef.current?.click()}
+              onDrop={(e) => { e.preventDefault(); setImgDragOver(false); const f = e.dataTransfer.files[0]; if (f) handleImageFile(f) }}
+              onDragOver={(e) => { e.preventDefault(); setImgDragOver(true) }}
+              onDragLeave={() => setImgDragOver(false)}
+              className={`flex w-full items-center gap-3 rounded-xl border border-dashed px-4 py-3 text-left transition-all ${imgDragOver ? 'border-blue-500/40 bg-blue-500/5' : 'border-black/10 bg-black/[0.02] hover:border-black/15 hover:bg-black/[0.03]'}`}
+            >
+              <Upload className={`h-4 w-4 shrink-0 transition-colors ${imgDragOver ? 'text-blue-400' : 'text-gray-400'}`} />
+              <span className="text-xs text-gray-400">Thả ảnh vào đây — JPG, PNG, WebP — tối đa 10MB hoặc nhấn để duyệt</span>
+            </button>
+          )}
+
+          <input
+            ref={imgInputRef}
+            type="file"
+            accept="image/jpeg,image/png,image/webp"
+            className="hidden"
+            onChange={(e) => { const f = e.target.files?.[0]; if (f) handleImageFile(f) }}
           />
         </div>
       </div>
@@ -223,19 +257,19 @@ export default function InputPanel({
           {isGenerating ? (
             <>
               <Loader2 className="h-4 w-4 animate-spin" />
-              <span>Đang tạo kịch bản...</span>
+              <span>Đang tạo 3 kịch bản...</span>
             </>
           ) : (
-            <span>✏️ Tạo kịch bản</span>
+            <span>✏️ Tạo 3 kịch bản</span>
           )}
         </button>
 
         {!canGenerate && !isGenerating && (
           <p className="mt-2 text-center text-[11px] text-gray-300">
             {!winningTranscript.trim() && !selectedProduct
-              ? 'Dán transcript và chọn sản phẩm để tạo kịch bản'
+              ? 'Chọn kịch bản và sản phẩm để tạo'
               : !winningTranscript.trim()
-                ? 'Dán transcript quảng cáo mẫu vào ô bên trên'
+                ? 'Chọn hoặc dán kịch bản mẫu'
                 : 'Chọn sản phẩm từ Project'}
           </p>
         )}
@@ -280,4 +314,17 @@ function EditableField({ label, value, onChange }: { label: string; value: strin
       />
     </label>
   )
+}
+
+async function fileToBase64(file: File): Promise<{ base64: string; mimeType: string }> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => {
+      const result = reader.result as string
+      const base64 = result.split(',')[1]
+      resolve({ base64, mimeType: file.type || 'image/jpeg' })
+    }
+    reader.onerror = reject
+    reader.readAsDataURL(file)
+  })
 }

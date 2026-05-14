@@ -17,7 +17,7 @@ const GEMINI_MODELS      = ['gemini-2.5-flash', 'gemini-2.5-flash-preview-05-20'
 
 const SYSTEM_INSTRUCTION = `You are a creative strategist specializing in short-form video advertising. Analyze the video ad and return structured creative insights as JSON.
 
-CRITICAL RULE for "transcript": You MUST extract the EXACT, VERBATIM words spoken in the video — listen carefully to the audio. Do NOT write vague descriptions in brackets like "[Creator introduces product]" or "[Creator demonstrates item]". Write the ACTUAL words the person says. Also include any important on-screen text overlays as separate transcript lines. Timestamps must be accurate (0:00, 0:03, 0:07, etc.).
+CRITICAL RULE for "transcript": Transcribe this word for word in voice over in this video and give me full verbatim transcript. Listen carefully to EVERY word spoken. Do NOT write vague descriptions in brackets like "[Creator introduces product]" or "[Creator demonstrates item]". Write the ACTUAL words the person says, exactly as spoken. Also include any important on-screen text overlays as separate transcript lines. Timestamps must be accurate (0:00, 0:03, 0:07, etc.).
 
 Output ONLY a valid JSON object — no markdown, no code fences, no explanation:
 
@@ -157,9 +157,8 @@ async function analyzeWithVideoFile(
         parts: [
           { fileData: { mimeType, fileUri } },
           {
-            text: 'Watch and listen to this entire video advertisement. '
-              + 'Extract the EXACT verbatim spoken words for the transcript — every sentence the person says. '
-              + 'Then return the full JSON analysis.',
+            text: 'Transcribe this word for word in voice over in this video and give me full verbatim transcript of every single word spoken. '
+              + 'Then return the complete JSON analysis.',
           },
         ],
       }],

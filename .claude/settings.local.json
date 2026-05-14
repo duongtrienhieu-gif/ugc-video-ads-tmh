@@ -6,7 +6,8 @@
       "Bash(findstr \":3000\")",
       "Bash(findstr LISTENING)",
       "Bash(npx tsc *)",
-      "Bash(echo \"EXIT: $?\")"
+      "Bash(echo \"EXIT: $?\")",
+      "Bash(npm install *)"
     ]
   }
 }

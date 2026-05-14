@@ -1,48 +1,76 @@
-import type { GenerateScriptInput, GeneratedScript } from '../types'
+import type { GenerateScriptInput, GeneratedVariants } from '../types'
 import { useSettingsStore } from '../../../stores/settingsStore'
-import { geminiTextGenerate } from '../../../utils/gemini'
+import { directGeminiVision } from '../../../utils/gemini'
 
-const SYSTEM_INSTRUCTION = `You are an elite UGC ad script writer with the specialized skill of "Structural Adaptation".
+const SYSTEM_INSTRUCTION = `You are an elite UGC ad script writer specializing in authentic, natural-sounding short-form video scripts.
 
-Your task is taking a winning ad script and rewriting it for a completely new product while rigorously maintaining the original script's pacing, hook style, psychological triggers, and call-to-action placement.
+Your task: write THREE distinct UGC ad script variants based on the winning transcript structure and product details provided.
 
-CRITICAL FORMATING RULES:
-1. ONLY return the spoken dialogue. 
-2. Do NOT include any stage directions, timestamps, headers, bracketed text, or visual cues.
-3. Do NOT use quotation marks around the text.
-4. Do NOT include any introductions or conclusions (e.g., "Here is the script:").
-5. Return plain text only. EACH SENTENCE MUST BE ON ITS OWN LINE (Single spaced sentence-by-sentence format).`
+CRITICAL FORMATTING RULES:
+1. Return ONLY a JSON object: {"scripts": ["variant1", "variant2", "variant3"]}
+2. Each variant must contain ONLY the spoken dialogue — hook + body + call to action.
+3. Do NOT include stage directions, timestamps, headers, bracketed text, or visual cues.
+4. Do NOT use quotation marks inside the script text.
+5. Each sentence on its own line (single-spaced, sentence-by-sentence format).
+6. Scripts must be in ENGLISH.
+7. Each variant must start with a different hook to keep viewers engaged.`
 
-export async function generateScript(input: GenerateScriptInput): Promise<GeneratedScript> {
-  const apiKey = useSettingsStore.getState().getApiKey()
+const UGC_PROMPT_PREFIX = `I need you to write three UGC (User-Generated Content) ad scripts that sound like a real customer speaking into a camera. Use the provided winning transcript as inspiration and further develop the ad structure. The tone should be natural, conversational, not overly salesy or polished. Think authentic, like someone filming themselves with their phone and talking about their experience. The script will be spoken verbatim in the final ad, so make sure it sounds natural when read aloud. Each ad should start with a strong hook to keep viewers engaged. Create at least two to four benefits, recount your experience with the product and how it solved your problem, provide basic information about the product's ingredients and how it works (to give viewers more information about the product), and end with a natural call to action.`
 
-  let prompt = ''
+export async function generateScript(input: GenerateScriptInput): Promise<GeneratedVariants> {
+  const geminiKey = useSettingsStore.getState().getGeminiApiKey()
+
+  let prompt = UGC_PROMPT_PREFIX + '\n\n'
 
   if (input.winningTranscript) {
-    prompt += `Here is a winning ad transcript to use as inspiration for structure, pacing, and tone:\n\n${input.winningTranscript}\n\n`
+    prompt += `WINNING TRANSCRIPT (use as structural inspiration):\n${input.winningTranscript}\n\n`
   }
 
   if (input.productContext) {
-    prompt += `Write a UGC ad script for the following product. Base it on the provided product details below:\n`
+    prompt += `PRODUCT DETAILS:\n`
     if (input.productContext.productDescription) prompt += `- Product: ${input.productContext.productDescription}\n`
     if (input.productContext.targetMarket) prompt += `- Target Market: ${input.productContext.targetMarket}\n`
     if (input.productContext.painPoints) prompt += `- Pain Points: ${input.productContext.painPoints}\n`
     if (input.productContext.usps) prompt += `- USPs: ${input.productContext.usps}\n`
     if (input.productContext.benefits) prompt += `- Benefits: ${input.productContext.benefits}\n`
     if (input.productContext.offer) prompt += `- Offer: ${input.productContext.offer}\n`
-    if (input.productContext.cta) prompt += `- Call-to-Action: ${input.productContext.cta}\n\n`
-  } else if (input.productId) {
-    prompt += `Write a UGC ad script for this product. Use the product details provided in the context.\n\n`
-  } else {
-    prompt += `Write a UGC ad script.\n\n`
+    if (input.productContext.cta) prompt += `- Call-to-Action: ${input.productContext.cta}\n`
+    prompt += '\n'
   }
 
-  if (input.additionalContext) {
-    prompt += `Additional context and instructions:\n${input.additionalContext}\n\n`
+  if (input.attachedImage) {
+    prompt += `A product homepage screenshot is attached — use it to extract additional context about the product's appearance, branding, and claims.\n\n`
   }
 
-  prompt += `Generate the full script now.`
+  prompt += `Generate all three script variants now as JSON.`
 
-  const scriptText = await geminiTextGenerate(apiKey, prompt, SYSTEM_INSTRUCTION)
-  return { scriptText }
+  const parts: Array<{ inlineData: { mimeType: string; data: string } } | { text: string }> = []
+  if (input.attachedImage) {
+    parts.push({ inlineData: { mimeType: input.attachedImage.mimeType, data: input.attachedImage.base64 } })
+  }
+  parts.push({ text: prompt })
+
+  const responseText = await directGeminiVision({
+    apiKey: geminiKey,
+    parts,
+    systemInstruction: SYSTEM_INSTRUCTION,
+    maxOutputTokens: 8192,
+  })
+
+  let cleaned = responseText.trim()
+  const jsonMatch = cleaned.match(/\{[\s\S]*\}/)
+  if (jsonMatch) cleaned = jsonMatch[0]
+  else cleaned = cleaned.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim()
+
+  const parsed = JSON.parse(cleaned) as { scripts?: string[] }
+  const variants = parsed.scripts ?? []
+  if (variants.length === 0) throw new Error('Gemini không trả về variant nào')
+
+  return { variants }
+}
+
+export async function translateToMalay(scriptText: string): Promise<string> {
+  const geminiKey = useSettingsStore.getState().getGeminiApiKey()
+  const prompt = `Translate the following UGC ad script into natural Malaysian Malay (Bahasa Malaysia). Use native, colloquial phrasing that sounds authentic — like a real Malaysian person speaking casually on camera. Preserve the tone, energy, and sentence-by-sentence structure. Return ONLY the translated script, no explanations.\n\n${scriptText}`
+  return await directGeminiVision({ apiKey: geminiKey, parts: [{ text: prompt }], maxOutputTokens: 4096 })
 }

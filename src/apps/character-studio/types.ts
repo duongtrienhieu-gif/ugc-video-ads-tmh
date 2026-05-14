@@ -311,3 +311,82 @@ export function createEmptyProfile(): CharacterProfile {
   }
   return profile
 }
+
+function pickRandom<T>(arr: T[]): T {
+  return arr[Math.floor(Math.random() * arr.length)]
+}
+
+export function generateRandomUGCProfile(): CharacterProfile {
+  const gender = pickRandom(['Female', 'Male'])
+  const isFemale = gender === 'Female'
+  const ethnicity = isFemale ? 'Malaysian female Islam' : 'Malaysian male Islam'
+
+  const hairColor = isFemale ? '' : pickRandom(['Black', 'Dark brown', 'Brown', 'Auburn'])
+  const hairStyle = isFemale
+    ? pickRandom([
+        'Islamic headscarf in coral pink',
+        'Islamic headscarf in dusty rose',
+        'Islamic headscarf in sage green',
+        'Islamic headscarf in sky blue',
+        'Islamic headscarf in ivory white',
+        'Islamic headscarf in lavender',
+        'Islamic headscarf in terracotta',
+        'Islamic headscarf in soft beige',
+      ])
+    : pickRandom(['Short textured', 'Short curly', 'Buzz cut', 'Short wavy', 'Fade haircut'])
+  const hairTexture = isFemale ? '' : pickRandom(['Straight', 'Wavy', 'Curly'])
+  const facialHair = isFemale ? '' : pickRandom(['None', 'Clean-shaven', 'Stubble', 'Short beard', 'Light beard'])
+
+  return {
+    gender,
+    age: pickRandom(['18-24', '20s', '25-30', '30-40']),
+    ethnicity,
+    bodyType: pickRandom(['Slim', 'Athletic', 'Average', 'Curvy']),
+    skinTone: pickRandom(['Medium', 'Olive', 'Tan', 'Brown']),
+    skinTexture: pickRandom([
+      'Glass skin finish with ultra-detailed texture, including visible skin pores, fine peach fuzz, and a scattering of light freckles across the bridge of her nose',
+      'Glass skin',
+      'Natural pores',
+      'Natural pores with slight imperfections',
+      'Textured',
+    ]),
+    eyeColor: pickRandom(['Brown', 'Dark brown', 'Hazel', 'Amber']),
+    eyeShape: pickRandom(['Almond', 'Round', 'Hooded', 'Monolid', 'Upturned']),
+    hairColor,
+    hairStyle,
+    hairTexture,
+    facialFeatures: pickRandom(['Soft features', 'High cheekbones', 'Full lips', 'Sharp jawline', 'Soft features, gentle eyes']),
+    facialHair,
+    distinguishingMarks: pickRandom(['None', 'Beauty mark', 'Dimples', 'None', 'None']),
+    clothingStyle: isFemale
+      ? pickRandom(['Modest casual', 'Traditional Islamic modest wear', 'Modest athleisure', 'Casual modest style'])
+      : pickRandom(['Casual', 'Smart casual', 'Athleisure', 'Traditional Malay casual']),
+    accessories: pickRandom(['None', 'Simple earrings', 'Watch', 'Glasses', 'None']),
+    makeup: isFemale
+      ? pickRandom(['Natural/minimal', 'Light natural makeup', 'No makeup', 'Soft everyday makeup'])
+      : 'None',
+    location: pickRandom(['Bedroom', 'Living room', 'Kitchen', 'Coffee shop', 'Outdoors park', 'Car interior']),
+    background: pickRandom(['Neutral wall', 'Plants', 'Blurred background', 'Window with natural light', 'Minimalist', 'Bookshelf']),
+    lighting: pickRandom([
+      'Soft, diffused natural window light, creating gentle highlights on the cheekbones and realistic subsurface scattering on the skin',
+      'Soft natural light',
+      'Ring Light (Influencer)',
+      'Natural Window Light',
+      'Golden Hour',
+    ]),
+    weather: pickRandom(['Indoor (N/A)', 'Sunny', 'Overcast', 'Indoor (N/A)', 'Indoor (N/A)']),
+    timeOfDay: pickRandom(['Morning', 'Midday', 'Afternoon', 'Evening']),
+    pose: pickRandom(['Sitting on bed', 'Sitting on couch', 'Standing', 'Front-on facing the camera', 'Leaning on counter']),
+    action: pickRandom(['Speaking to camera', 'Holding product', 'Applying product', 'Pointing at something', 'Speaking to camera']),
+    expression: pickRandom(['Natural smile', 'Genuine smile', 'Excited', 'Thinking', 'Mid-sentence', 'Natural smile']),
+    shotType: pickRandom(['Close-up face', 'Medium shot (waist up)', 'Medium shot (waist up)', 'Full body']),
+    cameraAngle: pickRandom(['Eye Level', 'Low angle', 'High angle', 'Eye Level']),
+    cameraDevice: pickRandom([
+      'iPhone 15 Pro, casual UGC aesthetic',
+      'iPhone Front Cam',
+      'iPhone selfie cam',
+      'Ring light + phone',
+    ]),
+    aspectRatio: 'Portrait (9:16)',
+  }
+}

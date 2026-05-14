@@ -23,10 +23,8 @@ export interface ImageModel {
 }
 
 export const IMAGE_MODELS: ImageModel[] = [
-  { id: 'nano-banana-2-text-to-image', name: 'Nano Banana 2',   provider: 'Google',           credits: { '1K': 8,   '2K': 12, '4K': 16 } },
-  { id: 'flux-2-pro-text-to-image',   name: 'Flux 2 Pro',      provider: 'Black Forest Labs', credits: { '1K': 14,  '2K': 20, '4K': 28 } },
-  { id: 'seedream-5-lite-t2i',        name: 'Seedream 5 Lite', provider: 'ByteDance',        credits: { '1K': 5.5, '2K': 8,  '4K': 12 } },
-  { id: 'gpt-image-2-text-to-image',  name: 'GPT Image 2',     provider: 'OpenAI',           credits: { '1K': 6,   '2K': 10, '4K': 16 }, starred: true },
+  { id: 'nano-banana-2-text-to-image', name: 'Nano Banana 2', provider: 'Google', credits: { '1K': 8, '2K': 12, '4K': 16 } },
+  { id: 'gpt-image-2-text-to-image',  name: 'GPT Image 2',   provider: 'OpenAI', credits: { '1K': 6, '2K': 10, '4K': 16 }, starred: true },
 ]
 
 export type ImageResolution = '1K' | '2K' | '4K'
