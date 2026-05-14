@@ -8,44 +8,59 @@ const GEMINI_BASE = 'https://generativelanguage.googleapis.com/v1beta/models'
  * Direct Google Gemini vision call.
  * Sends one or more base64 images and returns the model's text response.
  */
+// Models tried in order — older ones removed, newest stable first
+const GEMINI_MODELS = [
+  'gemini-2.5-flash',
+  'gemini-2.5-flash-preview-05-20',
+  'gemini-1.5-flash',
+]
+
 export async function directGeminiVision(params: {
   apiKey: string
   parts: Array<{ inlineData: { mimeType: string; data: string } } | { text: string }>
   systemInstruction?: string
   model?: string
 }): Promise<string> {
-  const model = params.model ?? 'gemini-2.0-flash'
-  const url = `${GEMINI_BASE}/${model}:generateContent?key=${params.apiKey}`
+  const modelsToTry = params.model ? [params.model] : GEMINI_MODELS
+  const errors: string[] = []
 
-  const body: Record<string, unknown> = {
-    contents: [{ role: 'user', parts: params.parts }],
-    generationConfig: { temperature: 0.4, maxOutputTokens: 4096 },
+  for (const model of modelsToTry) {
+    const url = `${GEMINI_BASE}/${model}:generateContent?key=${params.apiKey}`
+
+    const body: Record<string, unknown> = {
+      contents: [{ role: 'user', parts: params.parts }],
+      generationConfig: { temperature: 0.4, maxOutputTokens: 4096 },
+    }
+    if (params.systemInstruction) {
+      body.systemInstruction = { parts: [{ text: params.systemInstruction }] }
+    }
+
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    })
+
+    if (!res.ok) {
+      const err = await res.text().catch(() => res.statusText)
+      // 404 = model not available for this user → try next model
+      if (res.status === 404) { errors.push(`${model}: không khả dụng`); continue }
+      throw new Error(`Gemini API lỗi (${res.status}): ${err.slice(0, 200)}`)
+    }
+
+    const data = await res.json() as {
+      candidates?: { content?: { parts?: { text?: string }[] } }[]
+      error?: { message?: string }
+    }
+
+    if (data.error?.message) { errors.push(`${model}: ${data.error.message}`); continue }
+
+    const text = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() ?? ''
+    if (!text) { errors.push(`${model}: phản hồi rỗng`); continue }
+    return text
   }
-  if (params.systemInstruction) {
-    body.systemInstruction = { parts: [{ text: params.systemInstruction }] }
-  }
 
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  })
-
-  if (!res.ok) {
-    const err = await res.text().catch(() => res.statusText)
-    throw new Error(`Gemini API lỗi (${res.status}): ${err.slice(0, 200)}`)
-  }
-
-  const data = await res.json() as {
-    candidates?: { content?: { parts?: { text?: string }[] } }[]
-    error?: { message?: string }
-  }
-
-  if (data.error?.message) throw new Error(`Gemini: ${data.error.message}`)
-
-  const text = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() ?? ''
-  if (!text) throw new Error('Gemini trả về phản hồi rỗng')
-  return text
+  throw new Error(errors.length ? errors.join(' | ') : 'Gemini: không có model khả dụng')
 }
 
 import {
