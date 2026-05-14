@@ -112,23 +112,29 @@ async function extractFrames(videoFile: File, maxFrames = 6): Promise<Blob[]> {
 export async function analyzeAd(videoFile: File): Promise<AnalysisResult> {
   const apiKey = useSettingsStore.getState().getApiKey()
 
-  // 1. Extract frames from video
-  const frameBlobs = await extractFrames(videoFile, 6)
+  // 1. Extract 3 key frames: start, middle, end
+  const frameBlobs = await extractFrames(videoFile, 3)
 
-  // 2. Compress each frame to small base64
+  // 2. Compress each frame to 480px JPEG base64 (keep payload small)
   const base64Frames = await Promise.all(
-    frameBlobs.map((blob) => blobToSmallBase64(blob, 512))
+    frameBlobs.map((blob) => blobToSmallBase64(blob, 480))
   )
 
-  // 3. Build data URLs for each frame
-  const imageUrls = base64Frames.map((b64) => `data:image/jpeg;base64,${b64}`)
+  // 3. Try multi-image first; fall back to single representative frame
+  let responseText: string
+  try {
+    const imageUrls = base64Frames.map((b64) => `data:image/jpeg;base64,${b64}`)
+    const prompt = `I'm providing ${imageUrls.length} frames from a UGC video ad (start, middle, end). Analyze the FULL video: transcript, hook, structure beats, psychological levers, visual variety, improvements. Return JSON only.`
+    responseText = await kieAnalyzeImage(apiKey, '', '', prompt, SYSTEM_INSTRUCTION, imageUrls)
+  } catch {
+    // Fallback: send only the first frame if multi-image fails
+    const singlePrompt = `Analyze this UGC video ad frame and infer the full ad structure: transcript, hook, structure beats, psychological levers, visual variety, improvements. Return JSON only.`
+    responseText = await kieAnalyzeImage(apiKey, base64Frames[0], 'image/jpeg', singlePrompt, SYSTEM_INSTRUCTION)
+  }
 
-  const prompt = `I'm providing ${imageUrls.length} frames extracted at regular intervals from a UGC video ad (frame 1 = start, frame ${imageUrls.length} = near end). Analyze the FULL video based on these frames: transcript, hook, structure beats, psychological levers, visual variety, and improvements. Return the analysis as JSON.`
+  if (!responseText?.trim()) throw new Error('Không có phản hồi từ AI. Vui lòng thử lại.')
 
-  // 4. Send all frames to kie.ai vision (gpt-4o-mini supports multiple images)
-  const responseText = await kieAnalyzeImage(apiKey, '', '', prompt, SYSTEM_INSTRUCTION, imageUrls)
-
-  // 5. Parse JSON
+  // 4. Parse JSON
   let cleaned = responseText.trim()
   const jsonMatch = cleaned.match(/\{[\s\S]*\}/)
   if (jsonMatch) cleaned = jsonMatch[0]
