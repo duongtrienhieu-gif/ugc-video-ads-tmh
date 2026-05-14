@@ -1,4 +1,4 @@
-﻿import { useState, useRef } from 'react'
+﻿import { useState, useRef, useEffect } from 'react'
 import { Loader2 } from 'lucide-react'
 import UploadView from './components/UploadView'
 import ResultsView from './components/ResultsView'
@@ -13,7 +13,29 @@ export default function AdAnatomy() {
   const [videoSrc, setVideoSrc] = useState<string | null>(null)
   const [fileName, setFileName] = useState('')
   const [error, setError] = useState<string | null>(null)
+  const [progress, setProgress] = useState(0)
   const videoUrlRef = useRef<string | null>(null)
+  const progressRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
+  useEffect(() => {
+    if (view === 'loading') {
+      setProgress(0)
+      progressRef.current = setInterval(() => {
+        setProgress((prev) => {
+          if (prev >= 95) return prev
+          const increment = prev < 40 ? 2.5 : prev < 70 ? 1.2 : prev < 90 ? 0.4 : 0.15
+          return Math.min(prev + increment, 95)
+        })
+      }, 600)
+    } else {
+      if (progressRef.current) clearInterval(progressRef.current)
+      if (view === 'results') {
+        setProgress(100)
+        setTimeout(() => setProgress(0), 400)
+      }
+    }
+    return () => { if (progressRef.current) clearInterval(progressRef.current) }
+  }, [view])
 
   const handleAnalyze = async (file: File) => {
     setView('loading')
@@ -52,21 +74,29 @@ export default function AdAnatomy() {
   if (view === 'loading') {
     return (
       <div className="flex h-full flex-col items-center justify-center gap-6">
-        {/* Greyscale video preview */}
         {videoSrc && (
           <div className="max-h-80 max-w-72 overflow-hidden rounded-xl border border-black/10 opacity-40 grayscale">
             <video src={videoSrc} className="h-full w-full object-contain" muted autoPlay loop />
           </div>
         )}
-        <div className="flex flex-col items-center gap-3">
-          <Loader2 className="h-6 w-6 animate-spin text-[#FB2B37]" />
-          <p className="text-sm font-medium tracking-tight text-gray-600">
-            Gemini đang phân tích quảng cáo với độ chính xác tuyệt đối
-          </p>
-          <div className="flex gap-1">
-            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-[#FB2B37]/40" style={{ animationDelay: '0ms' }} />
-            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-[#FB2B37]/40" style={{ animationDelay: '200ms' }} />
-            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-[#FB2B37]/40" style={{ animationDelay: '400ms' }} />
+        <div className="flex w-full max-w-sm flex-col items-center gap-4">
+          <div className="flex items-center gap-2">
+            <Loader2 className="h-4 w-4 animate-spin text-[#FB2B37]" />
+            <p className="text-sm font-medium tracking-tight text-gray-600">
+              AI đang phân tích quảng cáo...
+            </p>
+          </div>
+          <div className="w-full">
+            <div className="mb-1.5 flex justify-between">
+              <span className="text-xs text-gray-400">Đang xử lý</span>
+              <span className="text-xs font-semibold tabular-nums text-[#FB2B37]">{Math.round(progress)}%</span>
+            </div>
+            <div className="h-1.5 w-full overflow-hidden rounded-full bg-gray-100">
+              <div
+                className="h-full rounded-full bg-[#FB2B37] transition-all duration-500 ease-out"
+                style={{ width: `${progress}%` }}
+              />
+            </div>
           </div>
         </div>
       </div>
