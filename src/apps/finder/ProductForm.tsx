@@ -23,14 +23,7 @@ const FIELDS: { key: keyof Product; label: string; type: 'text' | 'textarea'; re
   { key: 'cta', label: 'CTA', type: 'text' },
 ]
 
-const EXTRACT_PROMPT = (url: string, pageText: string) => `Bạn là chuyên gia marketing UGC. Dưới đây là nội dung trang sản phẩm được lấy từ URL: ${url}
-
---- NỘI DUNG TRANG ---
-${pageText}
---- KẾT THÚC ---
-
-Phân tích nội dung trên và trả về ONLY một JSON object (bỏ trường nào không có thông tin):
-{
+const JSON_FIELDS = `{
   "productName": "tên sản phẩm đầy đủ",
   "productDescription": "mô tả ngắn gọn về sản phẩm (2-3 câu)",
   "targetMarket": "đối tượng khách hàng mục tiêu cụ thể",
@@ -39,9 +32,53 @@ Phân tích nội dung trên và trả về ONLY một JSON object (bỏ trườ
   "benefits": "các lợi ích chính (mỗi điểm 1 dòng)",
   "offer": "giá bán và khuyến mãi nếu có",
   "cta": "call-to-action phù hợp nhất"
-}
+}`
 
-Chỉ trả về JSON thuần, không markdown, không giải thích.`
+const EXTRACT_PROMPT = (url: string, pageText: string) =>
+  `Bạn là chuyên gia marketing UGC. Dưới đây là nội dung trang sản phẩm từ URL: ${url}\n\n--- NỘI DUNG TRANG ---\n${pageText}\n--- KẾT THÚC ---\n\nPhân tích và trả về ONLY JSON (bỏ trường không có thông tin):\n${JSON_FIELDS}\n\nChỉ trả về JSON thuần, không markdown, không giải thích.`
+
+const EXTRACT_URL_ONLY_PROMPT = (url: string) =>
+  `Bạn là chuyên gia marketing UGC. Dựa vào URL sản phẩm: ${url}\n\nHãy đoán loại sản phẩm từ domain/đường dẫn và tạo nội dung marketing phù hợp. Trả về ONLY JSON:\n${JSON_FIELDS}\n\nChỉ trả về JSON thuần, không markdown, không giải thích.`
+
+async function fetchPageText(url: string): Promise<string> {
+  const strip = (html: string) =>
+    html
+      .replace(/<script[\s\S]*?<\/script>/gi, '')
+      .replace(/<style[\s\S]*?<\/style>/gi, '')
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/&nbsp;/gi, ' ').replace(/&amp;/gi, '&').replace(/&lt;/gi, '<').replace(/&gt;/gi, '>')
+      .replace(/\s{2,}/g, ' ')
+      .trim()
+      .slice(0, 7000)
+
+  // Try multiple CORS proxies in sequence
+  const proxies: Array<() => Promise<string>> = [
+    async () => {
+      const r = await fetch(`https://api.allorigins.win/get?url=${encodeURIComponent(url)}`, { signal: AbortSignal.timeout(12000) })
+      if (!r.ok) return ''
+      const d = await r.json() as { contents?: string }
+      return strip(d.contents ?? '')
+    },
+    async () => {
+      const r = await fetch(`https://corsproxy.io/?url=${encodeURIComponent(url)}`, { signal: AbortSignal.timeout(12000) })
+      if (!r.ok) return ''
+      return strip(await r.text())
+    },
+    async () => {
+      const r = await fetch(`https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`, { signal: AbortSignal.timeout(12000) })
+      if (!r.ok) return ''
+      return strip(await r.text())
+    },
+  ]
+
+  for (const proxy of proxies) {
+    try {
+      const text = await proxy()
+      if (text.length > 200) return text
+    } catch { /* try next */ }
+  }
+  return ''
+}
 
 export default function ProductForm({ item, onSave, onCancel }: ProductFormProps) {
   const [form, setForm] = useState({
@@ -106,36 +143,14 @@ export default function ProductForm({ item, onSave, onCancel }: ProductFormProps
 
     setIsFetching(true)
     try {
-      // Step 1: Fetch the actual page content via CORS proxy
-      let pageText = ''
-      try {
-        const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`
-        const proxyRes = await fetch(proxyUrl, { signal: AbortSignal.timeout(15000) })
-        if (proxyRes.ok) {
-          const proxyData = await proxyRes.json() as { contents?: string }
-          if (proxyData.contents) {
-            pageText = proxyData.contents
-              .replace(/<script[\s\S]*?<\/script>/gi, '')
-              .replace(/<style[\s\S]*?<\/style>/gi, '')
-              .replace(/<[^>]+>/g, ' ')
-              .replace(/&nbsp;/g, ' ')
-              .replace(/&amp;/g, '&')
-              .replace(/&lt;/g, '<')
-              .replace(/&gt;/g, '>')
-              .replace(/\s{2,}/g, ' ')
-              .trim()
-              .slice(0, 7000)
-          }
-        }
-      } catch { /* network/CORS error — proceed with empty text */ }
+      // Step 1: Try to fetch actual page content (3 proxy fallbacks)
+      const pageText = await fetchPageText(url)
 
-      if (!pageText) {
-        addToast('Không thể tải trang. Vui lòng kiểm tra URL và thử lại.', 'error')
-        return
-      }
-
-      // Step 2: Send extracted text to AI
-      const response = await kieTextGenerate(apiKey, EXTRACT_PROMPT(url, pageText))
+      // Step 2: Send to AI — with page content if available, URL-only otherwise
+      const prompt = pageText.length > 200
+        ? EXTRACT_PROMPT(url, pageText)
+        : EXTRACT_URL_ONLY_PROMPT(url)
+      const response = await kieTextGenerate(apiKey, prompt)
 
       let cleaned = response.trim()
       const jsonMatch = cleaned.match(/\{[\s\S]*\}/)
