@@ -1,6 +1,6 @@
 import { supabase } from '../lib/supabase'
 
-// Signed URL cache — reuse within session (signed URLs valid 1 hour)
+// In-session signed URL cache (signed URLs valid 1 hour)
 const urlCache = new Map<string, string>()
 
 export function isAssetRef(value: string | undefined | null): boolean {
@@ -27,6 +27,10 @@ function mimeToExt(mimeType: string): string {
   return map[mimeType] ?? mimeType.split('/')[1]?.split(';')[0] ?? 'bin'
 }
 
+// ── Local path cache (in-memory, per session) ─────────────────────────────────
+// Avoids repeated DB queries for the same assetId within a session
+const pathCache = new Map<string, string>()
+
 // ── Save operations ───────────────────────────────────────────────────────────
 
 export async function saveAsset(blob: Blob, mimeType?: string): Promise<string> {
@@ -36,15 +40,19 @@ export async function saveAsset(blob: Blob, mimeType?: string): Promise<string> 
   const ext = mimeToExt(mime)
   const path = `${userId}/${assetId}.${ext}`
 
+  // 1. Upload binary to Supabase Storage
   const { error } = await supabase.storage.from('assets').upload(path, blob, {
     contentType: mime,
     upsert: false,
   })
   if (error) throw error
 
-  const map = getLocalMap()
-  map[assetId] = path
-  saveLocalMap(map)
+  // 2. Persist the assetId→path mapping to Supabase DB (survives any browser state)
+  await supabase.from('asset_paths').upsert({ asset_id: assetId, user_id: userId, path })
+
+  // 3. Also cache locally for fast same-session lookups
+  pathCache.set(assetId, path)
+  saveLocalMap(assetId, path)
 
   return assetId
 }
@@ -70,28 +78,57 @@ export async function saveFromBlobUrl(blobUrl: string): Promise<string> {
   return saveAsset(blob)
 }
 
-// ── Read operations ───────────────────────────────────────────────────────────
+// ── Path resolution (3-tier: memory → localStorage → Supabase DB) ─────────────
 
 async function resolvePath(assetId: string): Promise<string | null> {
-  const map = getLocalMap()
-  if (map[assetId]) return map[assetId]
+  // Tier 1: in-memory cache (fastest, same session)
+  const cached = pathCache.get(assetId)
+  if (cached) return cached
 
-  // Not in local map — search Storage (happens when user logs in on new device)
+  // Tier 2: localStorage (survives F5 but not cross-device)
+  const local = getLocalPath(assetId)
+  if (local) {
+    pathCache.set(assetId, local)
+    return local
+  }
+
+  // Tier 3: Supabase DB (survives everything — different browser, device, after logout)
+  try {
+    const { data } = await supabase
+      .from('asset_paths')
+      .select('path')
+      .eq('asset_id', assetId)
+      .single()
+
+    if (data?.path) {
+      pathCache.set(assetId, data.path)
+      saveLocalMap(assetId, data.path)
+      return data.path
+    }
+  } catch {
+    // table might not exist yet — fall through to storage list
+  }
+
+  // Tier 4: Storage list fallback (legacy: finds assets saved before this update)
   try {
     const userId = await getUserId()
     const { data } = await supabase.storage.from('assets').list(userId, { search: assetId })
     if (data && data.length > 0) {
       const path = `${userId}/${data[0].name}`
-      const m = getLocalMap()
-      m[assetId] = path
-      saveLocalMap(m)
+      // Backfill into DB so next lookup is instant
+      await supabase.from('asset_paths').upsert({ asset_id: assetId, user_id: userId, path })
+      pathCache.set(assetId, path)
+      saveLocalMap(assetId, path)
       return path
     }
   } catch {
     // silent
   }
+
   return null
 }
+
+// ── Read operations ───────────────────────────────────────────────────────────
 
 export async function getBlob(assetId: string): Promise<Blob | null> {
   const path = await resolvePath(assetId)
@@ -137,24 +174,25 @@ export async function getAsBase64(assetId: string): Promise<{ base64: string; mi
 // ── List & Delete ─────────────────────────────────────────────────────────────
 
 export async function getAllAssetIds(): Promise<string[]> {
-  return Object.keys(getLocalMap())
+  return Array.from(pathCache.keys())
 }
 
 export async function deleteAsset(assetId: string): Promise<void> {
   urlCache.delete(assetId)
+  pathCache.delete(assetId)
 
-  const map = getLocalMap()
-  const path = map[assetId]
+  const path = getLocalPath(assetId) ?? pathCache.get(assetId)
   if (path) {
     await supabase.storage.from('assets').remove([path])
-    delete map[assetId]
-    saveLocalMap(map)
   }
+
+  removeLocalPath(assetId)
+  await supabase.from('asset_paths').delete().eq('asset_id', assetId)
 }
 
-// ── Local map helpers (assetId → storagePath) ────────────────────────────────
+// ── localStorage helpers (assetId → storagePath, per user) ───────────────────
 
-function getLocalMapKey(): string {
+function getMapKey(): string {
   try {
     for (let i = 0; i < localStorage.length; i++) {
       const key = localStorage.key(i)
@@ -171,15 +209,33 @@ function getLocalMapKey(): string {
   return 'asset-map'
 }
 
-function getLocalMap(): Record<string, string> {
+function getLocalPath(assetId: string): string | null {
   try {
-    const raw = localStorage.getItem(getLocalMapKey())
-    return raw ? JSON.parse(raw) : {}
+    const raw = localStorage.getItem(getMapKey())
+    const map: Record<string, string> = raw ? JSON.parse(raw) : {}
+    return map[assetId] ?? null
   } catch {
-    return {}
+    return null
   }
 }
 
-function saveLocalMap(map: Record<string, string>) {
-  localStorage.setItem(getLocalMapKey(), JSON.stringify(map))
+function saveLocalMap(assetId: string, path: string): void {
+  try {
+    const key = getMapKey()
+    const raw = localStorage.getItem(key)
+    const map: Record<string, string> = raw ? JSON.parse(raw) : {}
+    map[assetId] = path
+    localStorage.setItem(key, JSON.stringify(map))
+  } catch { /* silent */ }
+}
+
+function removeLocalPath(assetId: string): void {
+  try {
+    const key = getMapKey()
+    const raw = localStorage.getItem(key)
+    if (!raw) return
+    const map: Record<string, string> = JSON.parse(raw)
+    delete map[assetId]
+    localStorage.setItem(key, JSON.stringify(map))
+  } catch { /* silent */ }
 }
