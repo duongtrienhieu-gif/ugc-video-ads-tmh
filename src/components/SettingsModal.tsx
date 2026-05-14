@@ -5,6 +5,7 @@ import { useAppStore } from '../stores/appStore'
 import { useBankStore } from '../stores/bankStore'
 import { getAllAssetIds, deleteAsset, isAssetRef } from '../utils/assetStore'
 import { getKieCredits } from '../utils/kieai'
+import { directGeminiVision } from '../utils/gemini'
 
 interface SettingsModalProps {
   open: boolean
@@ -23,6 +24,8 @@ export default function SettingsModal({ open, onClose }: SettingsModalProps) {
   const [cleaning, setCleaning] = useState(false)
   const [testing, setTesting] = useState(false)
   const [testResult, setTestResult] = useState<{ ok: boolean; credits?: number; error?: string } | null>(null)
+  const [testingGemini, setTestingGemini] = useState(false)
+  const [geminiTestResult, setGeminiTestResult] = useState<{ ok: boolean; error?: string } | null>(null)
 
   useEffect(() => {
     if (open) {
@@ -30,6 +33,7 @@ export default function SettingsModal({ open, onClose }: SettingsModalProps) {
       setDraftGemini(geminiApiKey)
       setSaved(false)
       setTestResult(null)
+      setGeminiTestResult(null)
     }
   }, [open, kieApiKey, geminiApiKey])
 
@@ -48,6 +52,22 @@ export default function SettingsModal({ open, onClose }: SettingsModalProps) {
       setTestResult({ ok: false, error: e instanceof Error ? e.message : 'Kết nối thất bại' })
     } finally {
       setTesting(false)
+    }
+  }
+
+  async function handleTestGemini() {
+    const key = draftGemini.trim()
+    if (!key) { addToast('Vui lòng nhập Gemini API key trước', 'error'); return }
+    setTestingGemini(true)
+    setGeminiTestResult(null)
+    try {
+      await directGeminiVision({ apiKey: key, parts: [{ text: 'Reply with the single word: ok' }] })
+      setGeminiTestResult({ ok: true })
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'Kết nối thất bại'
+      setGeminiTestResult({ ok: false, error: msg })
+    } finally {
+      setTestingGemini(false)
     }
   }
 
@@ -228,7 +248,7 @@ export default function SettingsModal({ open, onClose }: SettingsModalProps) {
                 <input
                   type={showGemini ? 'text' : 'password'}
                   value={draftGemini}
-                  onChange={(e) => setDraftGemini(e.target.value)}
+                  onChange={(e) => { setDraftGemini(e.target.value); setGeminiTestResult(null) }}
                   placeholder="AIza..."
                   className="w-full rounded-lg border border-black/10 bg-white/70 px-3 py-2.5 pr-10 text-sm text-gray-800 placeholder-gray-400 outline-none transition-colors focus:border-emerald-300 focus:bg-white"
                 />
@@ -243,6 +263,39 @@ export default function SettingsModal({ open, onClose }: SettingsModalProps) {
               <p className="text-[11px] text-gray-400">
                 Miễn phí · Dùng để phân tích ảnh và video quảng cáo
               </p>
+
+              {/* Test Gemini button */}
+              <button
+                onClick={handleTestGemini}
+                disabled={testingGemini || !draftGemini.trim()}
+                className="flex items-center gap-1.5 rounded-lg border border-emerald-200 px-3 py-1.5 text-xs font-medium text-emerald-700 transition-colors hover:bg-emerald-50 disabled:opacity-40"
+              >
+                <RefreshCw className={`h-3 w-3 ${testingGemini ? 'animate-spin' : ''}`} />
+                {testingGemini ? 'Đang kiểm tra...' : 'Kiểm tra kết nối'}
+              </button>
+
+              {/* Gemini test result */}
+              {geminiTestResult && (
+                <div
+                  className={`flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium ${
+                    geminiTestResult.ok
+                      ? 'bg-emerald-500/10 text-emerald-700 border border-emerald-500/20'
+                      : 'bg-red-500/10 text-red-600 border border-red-500/20'
+                  }`}
+                >
+                  {geminiTestResult.ok ? (
+                    <>
+                      <Check className="h-3.5 w-3.5 shrink-0" />
+                      <span>Kết nối thành công — API key hợp lệ</span>
+                    </>
+                  ) : (
+                    <>
+                      <X className="h-3.5 w-3.5 shrink-0" />
+                      <span>{geminiTestResult.error}</span>
+                    </>
+                  )}
+                </div>
+              )}
             </div>
           </div>{/* end Gemini box */}
 
