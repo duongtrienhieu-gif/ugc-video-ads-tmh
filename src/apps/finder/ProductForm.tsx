@@ -1,7 +1,10 @@
-﻿import { useState, useEffect, useRef } from 'react'
-import { X, ImagePlus } from 'lucide-react'
+import { useState, useEffect, useRef } from 'react'
+import { X, ImagePlus, Sparkles, Loader2 } from 'lucide-react'
 import type { Product } from '../../stores/types'
 import { useAssetUrl } from '../../hooks/useAssetUrl'
+import { useSettingsStore } from '../../stores/settingsStore'
+import { kieTextGenerate } from '../../utils/kieai'
+import { useAppStore } from '../../stores/appStore'
 
 interface ProductFormProps {
   item?: Product | null
@@ -20,6 +23,23 @@ const FIELDS: { key: keyof Product; label: string; type: 'text' | 'textarea'; re
   { key: 'cta', label: 'CTA', type: 'text' },
 ]
 
+const AUTO_FILL_PROMPT = (url: string) => `Bạn là chuyên gia marketing. Hãy truy cập và phân tích trang sản phẩm tại URL sau:
+${url}
+
+Dựa trên nội dung trang web, hãy trả về ONLY một JSON object với các trường sau (bỏ trường nào không tìm thấy thông tin):
+{
+  "productName": "tên sản phẩm đầy đủ",
+  "productDescription": "mô tả ngắn gọn, súc tích về sản phẩm (2-3 câu)",
+  "targetMarket": "đối tượng khách hàng mục tiêu cụ thể (tuổi, giới tính, nhu cầu)",
+  "painPoints": "các vấn đề / nỗi đau mà sản phẩm giải quyết (liệt kê, mỗi điểm 1 dòng)",
+  "usps": "điểm khác biệt và lợi thế độc nhất so với đối thủ (liệt kê, mỗi điểm 1 dòng)",
+  "benefits": "các lợi ích chính mang lại cho người dùng (liệt kê, mỗi điểm 1 dòng)",
+  "offer": "giá bán hiện tại và khuyến mãi nếu có",
+  "cta": "call-to-action phù hợp nhất cho sản phẩm này"
+}
+
+Chỉ trả về JSON thuần, không markdown, không giải thích thêm.`
+
 export default function ProductForm({ item, onSave, onCancel }: ProductFormProps) {
   const [form, setForm] = useState({
     productImage: item?.productImage ?? '',
@@ -32,11 +52,15 @@ export default function ProductForm({ item, onSave, onCancel }: ProductFormProps
     offer: item?.offer ?? '',
     cta: item?.cta ?? '',
   })
+  const [productUrl, setProductUrl] = useState('')
+  const [isFetching, setIsFetching] = useState(false)
+
   const fileRef = useRef<HTMLInputElement>(null)
-  // For new uploads, we have a data URL for immediate preview; for existing items, resolve asset ID
   const [localPreview, setLocalPreview] = useState<string | null>(null)
   const resolvedAssetUrl = useAssetUrl(form.productImage)
   const displayImage = localPreview ?? resolvedAssetUrl
+
+  const addToast = useAppStore((s) => s.addToast)
 
   useEffect(() => {
     if (item) {
@@ -68,6 +92,44 @@ export default function ProductForm({ item, onSave, onCancel }: ProductFormProps
     reader.readAsDataURL(file)
   }
 
+  const handleFetchInfo = async () => {
+    const url = productUrl.trim()
+    if (!url) return
+    const apiKey = useSettingsStore.getState().getApiKey()
+    if (!apiKey) {
+      addToast('Vui lòng nhập API key trong Cài đặt', 'error')
+      return
+    }
+
+    setIsFetching(true)
+    try {
+      const response = await kieTextGenerate(apiKey, AUTO_FILL_PROMPT(url))
+
+      let cleaned = response.trim()
+      const jsonMatch = cleaned.match(/\{[\s\S]*\}/)
+      if (jsonMatch) cleaned = jsonMatch[0]
+      else cleaned = cleaned.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim()
+
+      const extracted = JSON.parse(cleaned) as Record<string, string>
+
+      setForm((prev) => {
+        const next = { ...prev }
+        for (const [key, value] of Object.entries(extracted)) {
+          if (key in next && typeof value === 'string' && value.trim()) {
+            next[key as keyof typeof next] = value.trim()
+          }
+        }
+        return next
+      })
+      addToast('Đã điền thông tin sản phẩm tự động')
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      addToast(`Không thể lấy thông tin: ${msg}`, 'error')
+    } finally {
+      setIsFetching(false)
+    }
+  }
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     if (!form.productName.trim() || !form.productDescription.trim() || !form.targetMarket.trim()) return
@@ -83,6 +145,34 @@ export default function ProductForm({ item, onSave, onCancel }: ProductFormProps
         <button type="button" onClick={onCancel} className="text-gray-500 hover:text-gray-700 transition-colors">
           <X className="h-4 w-4" />
         </button>
+      </div>
+
+      {/* Auto-fill from URL */}
+      <div className="rounded-xl border border-sky-500/20 bg-sky-500/[0.04] p-3">
+        <p className="mb-2 text-[10px] font-semibold uppercase tracking-widest text-sky-400/80">
+          Tự động điền từ link sản phẩm
+        </p>
+        <div className="flex gap-2">
+          <input
+            type="url"
+            value={productUrl}
+            onChange={(e) => setProductUrl(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleFetchInfo() } }}
+            placeholder="https://shopee.vn/... hoặc link sản phẩm bất kỳ"
+            className="min-w-0 flex-1 rounded-lg border border-black/10 bg-white px-3 py-2 text-sm text-gray-800 placeholder-gray-400 outline-none transition-colors focus:border-sky-400/40"
+          />
+          <button
+            type="button"
+            onClick={handleFetchInfo}
+            disabled={isFetching || !productUrl.trim()}
+            className="flex shrink-0 items-center gap-1.5 rounded-lg bg-sky-500 px-3 py-2 text-xs font-semibold text-white transition-colors hover:bg-sky-600 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            {isFetching
+              ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Đang lấy...</>
+              : <><Sparkles className="h-3.5 w-3.5" /> Lấy thông tin</>
+            }
+          </button>
+        </div>
       </div>
 
       {/* Image upload */}
