@@ -53,9 +53,10 @@ async function extractFirstFrame(videoFile: File): Promise<{ base64: string; mim
     const video = document.createElement('video')
     const url = URL.createObjectURL(videoFile)
     video.muted = true
-    video.preload = 'metadata'
+    video.preload = 'auto'
+    video.crossOrigin = 'anonymous'
 
-    video.onloadeddata = () => {
+    const drawFrame = () => {
       try {
         const canvas = document.createElement('canvas')
         canvas.width = video.videoWidth || 640
@@ -72,12 +73,28 @@ async function extractFirstFrame(videoFile: File): Promise<{ base64: string; mim
       }
     }
 
+    video.onloadedmetadata = () => {
+      video.currentTime = 0.5
+    }
+
+    video.onseeked = () => {
+      drawFrame()
+    }
+
+    // Fallback: if seeked doesn't fire
+    video.onloadeddata = () => {
+      if (video.readyState >= 3) {
+        setTimeout(drawFrame, 100)
+      }
+    }
+
     video.onerror = () => {
       URL.revokeObjectURL(url)
-      reject(new Error('Không thể tải video'))
+      reject(new Error('Không thể tải video. Hãy thử file MP4 khác.'))
     }
 
     video.src = url
+    video.load()
   })
 }
 
@@ -89,7 +106,12 @@ export async function analyzeAd(videoFile: File): Promise<AnalysisResult> {
 
   const responseText = await geminiAnalyzeImage(apiKey, prompt, base64, mimeType, SYSTEM_INSTRUCTION)
 
-  const cleaned = responseText.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim()
+  // Strip markdown fences and extract JSON
+  let cleaned = responseText.trim()
+  const jsonMatch = cleaned.match(/\{[\s\S]*\}/)
+  if (jsonMatch) cleaned = jsonMatch[0]
+  else cleaned = cleaned.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim()
+
   const result: AnalysisResult = JSON.parse(cleaned)
   return result
 }

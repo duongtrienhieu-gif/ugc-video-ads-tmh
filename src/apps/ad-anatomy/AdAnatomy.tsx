@@ -30,8 +30,9 @@ export default function AdAnatomy() {
       const analysis = await analyzeAd(file)
       setResult(analysis)
       setView('results')
-    } catch {
-      setError('Phân tích thất bại. Vui lòng thử lại.')
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      setError(`Phân tích thất bại: ${msg}`)
       setView('upload')
     }
   }
