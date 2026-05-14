@@ -46,11 +46,13 @@ export default function InputPanel({
   const [scriptPickerOpen, setScriptPickerOpen] = useState(false)
   const [editableContext, setEditableContext] = useState<EditableProductContext | null>(null)
   const [imgDragOver, setImgDragOver] = useState(false)
+  const [imgUploading, setImgUploading] = useState(false)
   const imgInputRef = useRef<HTMLInputElement>(null)
 
   const products = useBankStore((s) => s.products)
   const openApp = useAppStore((s) => s.openApp)
   const sendToApp = useAppStore((s) => s.sendToApp)
+  const addToast = useAppStore((s) => s.addToast)
   const resolvedProductImage = useAssetUrl(selectedProduct?.productImage)
 
   useEffect(() => {
@@ -76,11 +78,31 @@ export default function InputPanel({
   }
 
   const handleImageFile = async (file: File) => {
-    if (!file.type.startsWith('image/')) return
-    if (file.size > 10 * 1024 * 1024) return
-    const preview = URL.createObjectURL(file)
-    const { base64, mimeType } = await fileToBase64(file)
-    onAttachedImageChange({ file, preview, base64, mimeType })
+    if (!file.type.startsWith('image/')) {
+      addToast(`File không phải ảnh: ${file.type || 'không xác định'}`, 'error')
+      return
+    }
+    if (file.size > 50 * 1024 * 1024) {
+      addToast(`Ảnh quá lớn (${(file.size / 1024 / 1024).toFixed(1)}MB). Tối đa 50MB.`, 'error')
+      return
+    }
+    setImgUploading(true)
+    try {
+      // Auto-compress large images to keep base64 reasonable (max 1600px wide, JPEG 85%)
+      const { blob, mimeType: outMime } = file.size > 2 * 1024 * 1024
+        ? await compressImage(file, 1600, 0.85)
+        : { blob: file, mimeType: file.type }
+
+      const preview = URL.createObjectURL(blob)
+      const base64 = await blobToBase64(blob)
+      onAttachedImageChange({ file, preview, base64, mimeType: outMime })
+      addToast('Đã tải ảnh lên thành công')
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      addToast(`Tải ảnh thất bại: ${msg}`, 'error')
+    } finally {
+      setImgUploading(false)
+    }
   }
 
   const clearImage = () => {
@@ -210,10 +232,15 @@ export default function InputPanel({
           <StepLabel step={3} label="Tải ảnh sản phẩm từ máy tính" />
           <p className="mt-1 mb-2 text-[10px] text-gray-400">Ảnh chụp trang bán sản phẩm để GPT trích xuất thêm ngữ cảnh</p>
 
-          {attachedImage ? (
+          {imgUploading ? (
+            <div className="flex items-center gap-3 rounded-xl border border-blue-500/30 bg-blue-500/5 p-4">
+              <Loader2 className="h-5 w-5 animate-spin text-blue-400" />
+              <span className="text-xs text-blue-400">Đang xử lý ảnh...</span>
+            </div>
+          ) : attachedImage ? (
             <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/5 p-3">
               <div className="flex items-start gap-3">
-                <div className="relative h-32 w-32 shrink-0 overflow-hidden rounded-lg border border-black/10 bg-black/5">
+                <div className="relative h-40 w-40 shrink-0 overflow-hidden rounded-lg border border-black/10 bg-black/5">
                   <img src={attachedImage.preview} alt="Đã tải lên" className="h-full w-full object-cover" />
                 </div>
                 <div className="flex flex-1 flex-col gap-1 min-w-0">
@@ -242,14 +269,14 @@ export default function InputPanel({
               className={`flex w-full items-center gap-3 rounded-xl border border-dashed px-4 py-3 text-left transition-all ${imgDragOver ? 'border-blue-500/40 bg-blue-500/5' : 'border-black/10 bg-black/[0.02] hover:border-black/15 hover:bg-black/[0.03]'}`}
             >
               <Upload className={`h-4 w-4 shrink-0 transition-colors ${imgDragOver ? 'text-blue-400' : 'text-gray-400'}`} />
-              <span className="text-xs text-gray-400">Thả ảnh vào đây — JPG, PNG, WebP — tối đa 10MB hoặc nhấn để duyệt</span>
+              <span className="text-xs text-gray-400">Thả ảnh vào đây — JPG, PNG, WebP — tối đa 50MB (tự nén nếu lớn) hoặc nhấn để duyệt</span>
             </button>
           )}
 
           <input
             ref={imgInputRef}
             type="file"
-            accept="image/jpeg,image/png,image/webp"
+            accept="image/*"
             className="hidden"
             onChange={(e) => { const f = e.target.files?.[0]; if (f) handleImageFile(f) }}
           />
@@ -325,15 +352,45 @@ function EditableField({ label, value, onChange }: { label: string; value: strin
   )
 }
 
-async function fileToBase64(file: File): Promise<{ base64: string; mimeType: string }> {
+function blobToBase64(blob: Blob): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader()
     reader.onload = () => {
       const result = reader.result as string
-      const base64 = result.split(',')[1]
-      resolve({ base64, mimeType: file.type || 'image/jpeg' })
+      resolve(result.split(',')[1])
     }
     reader.onerror = reject
-    reader.readAsDataURL(file)
+    reader.readAsDataURL(blob)
+  })
+}
+
+/**
+ * Resize image to fit within maxWidth, output as JPEG.
+ * Used for large screenshots (e.g. full-page sales page captures).
+ */
+function compressImage(file: File, maxWidth: number, quality: number): Promise<{ blob: Blob; mimeType: string }> {
+  return new Promise((resolve, reject) => {
+    const img = new Image()
+    const url = URL.createObjectURL(file)
+    img.onload = () => {
+      const scale = Math.min(1, maxWidth / img.width)
+      const canvas = document.createElement('canvas')
+      canvas.width = Math.round(img.width * scale)
+      canvas.height = Math.round(img.height * scale)
+      const ctx = canvas.getContext('2d')
+      if (!ctx) { URL.revokeObjectURL(url); reject(new Error('canvas context không khả dụng')); return }
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height)
+      URL.revokeObjectURL(url)
+      canvas.toBlob(
+        (b) => {
+          if (!b) { reject(new Error('compress thất bại')); return }
+          resolve({ blob: b, mimeType: 'image/jpeg' })
+        },
+        'image/jpeg',
+        quality,
+      )
+    }
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('Không tải được ảnh')) }
+    img.src = url
   })
 }
