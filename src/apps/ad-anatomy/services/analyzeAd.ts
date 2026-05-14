@@ -1,28 +1,43 @@
+// analyzeAd.ts
+// Primary path: upload the full video to Gemini Files API so Gemini can hear the
+// actual audio and produce a verbatim transcript with accurate timestamps.
+// Fallback path: extract frames and send as images (no audio — transcript will be
+// inferred from visual/on-screen text only).
+
 import type { AnalysisResult } from '../types'
 import { useSettingsStore } from '../../../stores/settingsStore'
 import { blobToSmallBase64 } from '../../../utils/kieai'
 import { directGeminiVision } from '../../../utils/gemini'
 
-const SYSTEM_INSTRUCTION = `You are a creative strategist specializing in short-form video advertising. Your job is to analyze video ad frames and return structured creative insights as JSON.
+const GEMINI_UPLOAD_BASE = 'https://generativelanguage.googleapis.com/upload/v1beta'
+const GEMINI_API_BASE    = 'https://generativelanguage.googleapis.com/v1beta'
+const GEMINI_MODELS      = ['gemini-2.5-flash', 'gemini-2.5-flash-preview-05-20', 'gemini-1.5-flash']
 
-Output ONLY a valid JSON object — no markdown, no code fences, no explanation. Use this exact structure:
+// ── System instruction ────────────────────────────────────────────────────────
+
+const SYSTEM_INSTRUCTION = `You are a creative strategist specializing in short-form video advertising. Analyze the video ad and return structured creative insights as JSON.
+
+CRITICAL RULE for "transcript": You MUST extract the EXACT, VERBATIM words spoken in the video — listen carefully to the audio. Do NOT write vague descriptions in brackets like "[Creator introduces product]" or "[Creator demonstrates item]". Write the ACTUAL words the person says. Also include any important on-screen text overlays as separate transcript lines. Timestamps must be accurate (0:00, 0:03, 0:07, etc.).
+
+Output ONLY a valid JSON object — no markdown, no code fences, no explanation:
 
 {
   "scorecard": {
     "scores": [
       { "label": "Hook Strength", "score": 6 },
-      { "label": "Structure Clarity", "score": 6 },
+      { "label": "Structure Clarity", "score": 7 },
       { "label": "Visual Variety", "score": 5 },
-      { "label": "Persuasion Depth", "score": 5 },
+      { "label": "Persuasion Depth", "score": 6 },
       { "label": "Overall Execution", "score": 6 }
     ],
-    "analystNote": "2-3 sentence creative summary. Be honest, not flattering."
+    "analystNote": "2-3 sentence honest creative summary."
   },
   "transcript": [
-    { "timestamp": "0:00", "text": "inferred spoken line or on-screen text" }
+    { "timestamp": "0:00", "text": "exact spoken words here — never use bracket descriptions" },
+    { "timestamp": "0:05", "text": "next line of speech verbatim" }
   ],
   "hookBreakdown": {
-    "hookText": "opening hook text",
+    "hookText": "exact opening hook text",
     "technique": "hook technique name",
     "whyItWorks": "brief explanation",
     "adaptableTemplate": "fill-in-the-blank version"
@@ -49,6 +64,137 @@ Output ONLY a valid JSON object — no markdown, no code fences, no explanation.
 
 Scores use integers 1-10. Most ads score 4-7. Reserve 9-10 for exceptional work only.`
 
+// ── Gemini Files API helpers ──────────────────────────────────────────────────
+
+/**
+ * Upload a video file to Gemini Files API using multipart upload.
+ * Returns { fileUri, fileName } on success.
+ */
+async function uploadVideoToGemini(
+  apiKey: string,
+  videoFile: File,
+): Promise<{ fileUri: string; fileName: string }> {
+  const mimeType  = videoFile.type || 'video/mp4'
+  const boundary  = 'GeminiBoundary' + Date.now().toString(36)
+  const metaJson  = JSON.stringify({ file: { display_name: videoFile.name || 'ad-video.mp4' } })
+
+  // Build multipart/related body manually so we stay in a single fetch call
+  const enc       = new TextEncoder()
+  const metaPart  = enc.encode(`--${boundary}\r\nContent-Type: application/json; charset=utf-8\r\n\r\n${metaJson}\r\n`)
+  const filePart  = enc.encode(`--${boundary}\r\nContent-Type: ${mimeType}\r\n\r\n`)
+  const closing   = enc.encode(`\r\n--${boundary}--`)
+  const fileBytes = new Uint8Array(await videoFile.arrayBuffer())
+
+  const body = new Uint8Array(metaPart.length + filePart.length + fileBytes.length + closing.length)
+  body.set(metaPart,  0)
+  body.set(filePart,  metaPart.length)
+  body.set(fileBytes, metaPart.length + filePart.length)
+  body.set(closing,   metaPart.length + filePart.length + fileBytes.length)
+
+  const res = await fetch(
+    `${GEMINI_UPLOAD_BASE}/files?uploadType=multipart&key=${apiKey}`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': `multipart/related; boundary=${boundary}` },
+      body,
+    },
+  )
+
+  if (!res.ok) {
+    const err = await res.text().catch(() => res.statusText)
+    throw new Error(`Upload video thất bại (${res.status}): ${err.slice(0, 200)}`)
+  }
+
+  const data = await res.json() as { file?: { uri?: string; name?: string } }
+  const fileUri  = data.file?.uri
+  const fileName = data.file?.name
+
+  if (!fileUri || !fileName) throw new Error('Gemini Files API không trả về URI')
+  return { fileUri, fileName }
+}
+
+/**
+ * Poll file status until ACTIVE (ready for inference).
+ */
+async function waitForFileActive(
+  apiKey: string,
+  fileName: string,
+  maxWaitMs = 120_000,
+): Promise<void> {
+  const deadline = Date.now() + maxWaitMs
+  while (Date.now() < deadline) {
+    const res  = await fetch(`${GEMINI_API_BASE}/${fileName}?key=${apiKey}`)
+    if (!res.ok) throw new Error('Không thể kiểm tra trạng thái file')
+    const data = await res.json() as { state?: string }
+    if (data.state === 'ACTIVE') return
+    if (data.state === 'FAILED') throw new Error('Gemini không xử lý được video này')
+    await new Promise((r) => setTimeout(r, 3000))
+  }
+  throw new Error('Xử lý video quá thời gian (>2 phút)')
+}
+
+/** Fire-and-forget file deletion — don't block the caller. */
+function deleteGeminiFile(apiKey: string, fileName: string): void {
+  fetch(`${GEMINI_API_BASE}/${fileName}?key=${apiKey}`, { method: 'DELETE' }).catch(() => {})
+}
+
+/**
+ * Call generateContent with a Gemini Files API file URI so the model can
+ * process both video and audio tracks.
+ */
+async function analyzeWithVideoFile(
+  apiKey: string,
+  fileUri: string,
+  mimeType: string,
+): Promise<string> {
+  const errors: string[] = []
+
+  for (const model of GEMINI_MODELS) {
+    const url  = `${GEMINI_API_BASE}/models/${model}:generateContent?key=${apiKey}`
+    const body = {
+      contents: [{
+        role: 'user',
+        parts: [
+          { fileData: { mimeType, fileUri } },
+          {
+            text: 'Watch and listen to this entire video advertisement. '
+              + 'Extract the EXACT verbatim spoken words for the transcript — every sentence the person says. '
+              + 'Then return the full JSON analysis.',
+          },
+        ],
+      }],
+      generationConfig: { temperature: 0.2, maxOutputTokens: 8192 },
+      systemInstruction: { parts: [{ text: SYSTEM_INSTRUCTION }] },
+    }
+
+    const res = await fetch(url, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify(body),
+    })
+
+    if (!res.ok) {
+      const err = await res.text().catch(() => res.statusText)
+      if (res.status === 404 || res.status === 429 || res.status === 503) {
+        errors.push(`${model}: ${res.status}`)
+        continue
+      }
+      throw new Error(`Gemini API lỗi (${res.status}): ${err.slice(0, 200)}`)
+    }
+
+    const data = await res.json() as {
+      candidates?: { content?: { parts?: { text?: string }[] } }[]
+    }
+    const text = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() ?? ''
+    if (!text) { errors.push(`${model}: phản hồi rỗng`); continue }
+    return text
+  }
+
+  throw new Error(errors.length ? errors.join(' | ') : 'Không có model khả dụng')
+}
+
+// ── Frame-extraction fallback ─────────────────────────────────────────────────
+
 function seekVideo(video: HTMLVideoElement, time: number): Promise<void> {
   return new Promise((resolve) => {
     const onSeeked = () => { video.removeEventListener('seeked', onSeeked); resolve() }
@@ -60,30 +206,30 @@ function seekVideo(video: HTMLVideoElement, time: number): Promise<void> {
 function captureFrameBlob(video: HTMLVideoElement): Promise<Blob> {
   return new Promise((resolve, reject) => {
     const canvas = document.createElement('canvas')
-    const scale = Math.min(1, 640 / (video.videoWidth || 640))
-    canvas.width = Math.round((video.videoWidth || 640) * scale)
+    const scale  = Math.min(1, 640 / (video.videoWidth || 640))
+    canvas.width  = Math.round((video.videoWidth  || 640) * scale)
     canvas.height = Math.round((video.videoHeight || 480) * scale)
     const ctx = canvas.getContext('2d')
     if (!ctx) { reject(new Error('canvas')); return }
     ctx.drawImage(video, 0, 0, canvas.width, canvas.height)
-    canvas.toBlob((blob) => {
-      if (blob) resolve(blob)
-      else reject(new Error('toBlob failed'))
-    }, 'image/jpeg', 0.75)
+    canvas.toBlob(
+      (blob) => { if (blob) resolve(blob); else reject(new Error('toBlob failed')) },
+      'image/jpeg', 0.75,
+    )
   })
 }
 
 async function extractFrames(videoFile: File, maxFrames = 6): Promise<Blob[]> {
   return new Promise((resolve, reject) => {
     const video = document.createElement('video')
-    const url = URL.createObjectURL(videoFile)
-    video.muted = true
+    const url   = URL.createObjectURL(videoFile)
+    video.muted   = true
     video.preload = 'auto'
 
     video.onloadedmetadata = async () => {
       try {
         const duration = video.duration || 10
-        const count = Math.min(maxFrames, Math.max(1, Math.ceil(duration / 3)))
+        const count    = Math.min(maxFrames, Math.max(1, Math.ceil(duration / 3)))
         const blobs: Blob[] = []
         for (let i = 0; i < count; i++) {
           const t = i === 0 ? 0.5 : Math.min((duration / count) * i, duration - 0.2)
@@ -92,10 +238,7 @@ async function extractFrames(videoFile: File, maxFrames = 6): Promise<Blob[]> {
         }
         URL.revokeObjectURL(url)
         resolve(blobs)
-      } catch (e) {
-        URL.revokeObjectURL(url)
-        reject(e)
-      }
+      } catch (e) { URL.revokeObjectURL(url); reject(e) }
     }
 
     video.onerror = () => {
@@ -108,34 +251,49 @@ async function extractFrames(videoFile: File, maxFrames = 6): Promise<Blob[]> {
   })
 }
 
+// ── Main export ───────────────────────────────────────────────────────────────
+
 export async function analyzeAd(videoFile: File): Promise<AnalysisResult> {
   const geminiKey = useSettingsStore.getState().getGeminiApiKey()
+  let responseText = ''
+  let uploadedFileName: string | null = null
 
-  // 1. Extract up to 4 key frames spread across the video
-  const frameBlobs = await extractFrames(videoFile, 4)
+  // ── Primary: upload video so Gemini can hear the audio ───────────────────
+  try {
+    const mimeType               = videoFile.type || 'video/mp4'
+    const { fileUri, fileName }  = await uploadVideoToGemini(geminiKey, videoFile)
+    uploadedFileName             = fileName
 
-  // 2. Compress each frame to 400px JPEG base64
-  const base64Frames = await Promise.all(
-    frameBlobs.map((blob) => blobToSmallBase64(blob, 400))
-  )
+    await waitForFileActive(geminiKey, fileName)
+    responseText = await analyzeWithVideoFile(geminiKey, fileUri, mimeType)
+  } catch (uploadErr) {
+    console.warn('[analyzeAd] Video upload path failed, falling back to frames:', uploadErr)
 
-  // 3. Call Gemini directly with all frames as inlineData parts
-  const imageParts = base64Frames.map((b64) => ({
-    inlineData: { mimeType: 'image/jpeg', data: b64 },
-  }))
-  const textPart = {
-    text: `These are ${base64Frames.length} frames taken at equal intervals from a short-form video advertisement. Study all frames carefully to understand the full video, then return the JSON analysis described in your instructions.`,
+    // ── Fallback: frames only (no audio — transcript will be visual-only) ──
+    const frameBlobs    = await extractFrames(videoFile, 4)
+    const base64Frames  = await Promise.all(frameBlobs.map((b) => blobToSmallBase64(b, 400)))
+    const imageParts    = base64Frames.map((b64) => ({
+      inlineData: { mimeType: 'image/jpeg', data: b64 },
+    }))
+    const textPart = {
+      text: `These are ${base64Frames.length} frames from a video ad (audio not available in this mode). `
+        + 'For transcript, extract only what is visible as on-screen text overlays — do not invent dialogue. '
+        + 'Return the full JSON analysis.',
+    }
+
+    responseText = await directGeminiVision({
+      apiKey: geminiKey,
+      parts: [...imageParts, textPart],
+      systemInstruction: SYSTEM_INSTRUCTION,
+    })
+  } finally {
+    // Always clean up the uploaded file (non-blocking)
+    if (uploadedFileName) deleteGeminiFile(geminiKey, uploadedFileName)
   }
 
-  const responseText = await directGeminiVision({
-    apiKey: geminiKey,
-    parts: [...imageParts, textPart],
-    systemInstruction: SYSTEM_INSTRUCTION,
-  })
+  if (!responseText.trim()) throw new Error('Không có phản hồi từ AI. Vui lòng thử lại.')
 
-  if (!responseText?.trim()) throw new Error('Không có phản hồi từ AI. Vui lòng thử lại.')
-
-  // 4. Parse JSON
+  // Parse JSON — Gemini sometimes wraps in ```json fences
   let cleaned = responseText.trim()
   const jsonMatch = cleaned.match(/\{[\s\S]*\}/)
   if (jsonMatch) cleaned = jsonMatch[0]
