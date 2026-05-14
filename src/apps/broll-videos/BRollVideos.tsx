@@ -169,8 +169,6 @@ export default function BRollVideos() {
   )
   const [activeSlot, setActiveSlot] = useState(0)
   const [history, setHistory] = useState<VideoHistoryItem[]>([])
-  const [resultItem, setResultItem] = useState<VideoHistoryItem | null>(null)
-  const [activeRightTab, setActiveRightTab] = useState<'history' | 'result'>('history')
   const [modelDropdownOpen, setModelDropdownOpen] = useState(false)
   const [generatingSlots, setGeneratingSlots] = useState<Record<number, boolean>>({})
   const [progress, setProgress] = useState(0)
@@ -308,7 +306,6 @@ export default function BRollVideos() {
 
     setHistory((prev) => [newItem, ...prev])
     setGeneratingSlots((prev) => ({ ...prev, [activeSlot]: true }))
-    setActiveRightTab('history')
 
     try {
       // kie.ai video API only accepts HTTP URLs, not data: base64 URLs
@@ -367,8 +364,6 @@ export default function BRollVideos() {
 
       const completed: VideoHistoryItem = { ...newItem, taskId, videoUrl, status: 'completed' }
       setHistory((prev) => prev.map((h) => (h.id === historyId ? completed : h)))
-      setResultItem(completed)
-      setActiveRightTab('result')
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
       let toastMsg = `Tạo video thất bại: ${msg}`
@@ -698,142 +693,124 @@ export default function BRollVideos() {
         </div>
       </div>
 
-      {/* ── Right panel ── */}
+      {/* ── Right panel — single results feed ── */}
       <div className="flex flex-1 flex-col overflow-hidden">
-        {/* Tab header */}
-        <div className="flex border-b border-black/8">
-          {(['history', 'result'] as const).map((tab) => (
+        {/* Header */}
+        <div className="flex shrink-0 items-center justify-between border-b border-black/8 px-4 py-3">
+          <span className="text-sm font-medium text-gray-700">Kết quả</span>
+          {history.length > 0 && (
             <button
-              key={tab}
-              onClick={() => setActiveRightTab(tab)}
-              className={`flex-1 py-3 text-sm font-medium transition-colors ${
-                activeRightTab === tab
-                  ? 'border-b-2 border-violet-500 text-gray-800'
-                  : 'text-gray-500 hover:text-gray-700'
-              }`}
+              onClick={() => setHistory([])}
+              className="text-[11px] text-gray-400 transition-colors hover:text-red-400"
             >
-              {tab === 'history' ? 'Lịch sử' : 'Kết quả'}
+              Xóa tất cả
             </button>
-          ))}
+          )}
         </div>
 
-        {/* History tab */}
-        {activeRightTab === 'history' && (
-          <div className="flex flex-1 flex-col overflow-hidden">
-            {history.length === 0 ? (
-              <div className="flex h-full flex-col items-center justify-center gap-3 p-8">
-                <Film className="h-12 w-12 text-gray-200" strokeWidth={1.5} />
-                <p className="text-sm font-medium text-gray-400">Chưa có video nào</p>
-                <p className="text-center text-xs text-gray-300">Mỗi video bạn tạo sẽ xuất hiện ở đây</p>
-              </div>
-            ) : (
-              <div className="flex-1 overflow-y-auto p-4">
-                <div className="mb-3 flex items-start gap-2 rounded-xl border border-amber-500/20 bg-amber-500/[0.06] px-3 py-2.5">
-                  <span className="mt-0.5 shrink-0 text-amber-400">⚠</span>
-                  <p className="text-[11px] leading-relaxed text-amber-400/80">
-                    Lưu ý: kie.ai lưu media trong 14 ngày. Hãy tải xuống hoặc lưu vào PROJECT.
-                  </p>
-                </div>
-                <div className="flex flex-col gap-3">
-                  {history.map((item) => (
-                    <div key={item.id} className="rounded-xl border border-black/8 bg-black/[0.02] p-3">
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-center gap-2">
-                            <span className="text-xs font-medium text-gray-700">{item.modelName}</span>
-                            <StatusBadge status={item.status} />
+        {history.length === 0 ? (
+          <div className="flex h-full flex-col items-center justify-center gap-3 p-8">
+            <Film className="h-12 w-12 text-gray-200" strokeWidth={1.5} />
+            <p className="text-sm font-medium text-gray-400">Chưa có video nào</p>
+            <p className="text-center text-xs text-gray-300">Mỗi video bạn tạo sẽ xuất hiện ở đây</p>
+          </div>
+        ) : (
+          <div className="flex-1 overflow-y-auto p-4">
+            <div className="mb-3 flex items-start gap-2 rounded-xl border border-amber-500/20 bg-amber-500/[0.06] px-3 py-2.5">
+              <span className="mt-0.5 shrink-0 text-amber-400">⚠</span>
+              <p className="text-[11px] leading-relaxed text-amber-400/80">
+                Lưu ý: kie.ai lưu media trong 14 ngày. Hãy tải xuống hoặc lưu vào PROJECT.
+              </p>
+            </div>
+
+            <div className="flex flex-col gap-3">
+              {history.map((item) => {
+                const isItemGenerating = item.status === 'pending' || item.status === 'processing'
+                return (
+                  <div key={item.id} className="overflow-hidden rounded-xl border border-black/8 bg-white shadow-sm">
+                    {/* Media area */}
+                    {isItemGenerating ? (
+                      <div className="flex h-44 flex-col items-center justify-center gap-4 bg-black/90 px-4">
+                        <Loader2 className="h-8 w-8 animate-spin text-white/20" />
+                        <div className="w-full">
+                          <div className="mb-1.5 flex items-center justify-between">
+                            <span className="text-[11px] text-white/40">Đang tạo video...</span>
+                            <span className="text-[11px] font-semibold tabular-nums text-sky-400">{Math.round(progress)}%</span>
                           </div>
-                          <p className="mt-1 line-clamp-2 text-[11px] leading-relaxed text-gray-400">{item.prompt}</p>
+                          <div className="h-1 w-full overflow-hidden rounded-full bg-white/10">
+                            <div
+                              className="h-full rounded-full bg-sky-400 transition-all duration-700 ease-out"
+                              style={{ width: `${progress}%` }}
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    ) : item.videoUrl ? (
+                      <div className="bg-black">
+                        <video
+                          key={item.id}
+                          src={item.videoUrl}
+                          controls
+                          autoPlay
+                          muted
+                          playsInline
+                          className="max-h-64 w-full object-contain"
+                        />
+                      </div>
+                    ) : (
+                      <div className="flex h-28 items-center justify-center bg-red-500/5">
+                        <X className="h-6 w-6 text-red-300" />
+                      </div>
+                    )}
+
+                    {/* Info area */}
+                    <div className="p-3">
+                      <div className="mb-1 flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-medium text-gray-700">{item.modelName}</span>
+                          <StatusBadge status={item.status} />
                         </div>
                         <span className="shrink-0 text-[10px] tabular-nums text-gray-300">
                           {new Date(item.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                         </span>
                       </div>
-                      {item.videoUrl && (
-                        <button
-                          onClick={() => { setResultItem(item); setActiveRightTab('result') }}
-                          className="mt-2.5 flex h-28 w-full items-center justify-center overflow-hidden rounded-lg border border-black/8 bg-black/40 transition-colors hover:border-black/10"
-                        >
-                          <video src={item.videoUrl} className="h-full w-full object-contain" muted playsInline preload="metadata" />
-                        </button>
+                      <p className="mb-2.5 line-clamp-2 text-[11px] leading-relaxed text-gray-400">{item.prompt}</p>
+
+                      {item.status === 'failed' && item.errorMessage && (
+                        <p className="mb-2 text-[11px] text-red-400">{item.errorMessage}</p>
                       )}
-                      <div className="mt-2.5 flex items-center gap-1.5">
+
+                      <div className="flex items-center gap-1.5">
                         {item.videoUrl && (
                           <>
-                            <button onClick={() => handleDownload(item)} className="flex h-7 w-7 items-center justify-center rounded-full bg-black/5 text-gray-600 transition-colors hover:bg-black/8 hover:text-gray-800" title="Tải xuống">
-                              <Download className="h-3 w-3" />
+                            <button
+                              onClick={() => handleDownload(item)}
+                              className="flex items-center gap-1.5 rounded-full border border-black/10 px-3 py-1.5 text-[11px] text-gray-600 transition-colors hover:bg-black/5"
+                            >
+                              <Download className="h-3 w-3" /> Tải xuống
                             </button>
-                            <button onClick={() => handleSaveToBank(item)} className="flex items-center gap-1 rounded-full px-2.5 py-1 text-[10px] font-medium text-gray-500 transition-colors hover:bg-black/5 hover:text-gray-700">
-                              <Save className="h-3 w-3" />
-                              Lưu vào PROJECT
+                            <button
+                              onClick={() => handleSaveToBank(item)}
+                              className="flex items-center gap-1.5 rounded-full border border-black/10 px-3 py-1.5 text-[11px] text-gray-600 transition-colors hover:bg-black/5"
+                            >
+                              <Save className="h-3 w-3" /> Lưu vào PROJECT
                             </button>
                           </>
                         )}
                         <div className="flex-1" />
-                        <button onClick={() => setHistory((prev) => prev.filter((h) => h.id !== item.id))} className="flex h-7 w-7 items-center justify-center rounded-full text-gray-300 transition-colors hover:bg-red-500/10 hover:text-red-400" title="Xóa">
+                        <button
+                          onClick={() => setHistory((prev) => prev.filter((h) => h.id !== item.id))}
+                          className="flex h-7 w-7 items-center justify-center rounded-full text-gray-300 transition-colors hover:bg-red-500/10 hover:text-red-400"
+                          title="Xóa"
+                        >
                           <Trash2 className="h-3 w-3" />
                         </button>
                       </div>
                     </div>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Result tab */}
-        {activeRightTab === 'result' && (
-          <div className="flex flex-1 flex-col overflow-hidden">
-            {isGenerating ? (
-              /* Generating state — dark area + progress bar */
-              <div className="flex flex-1 flex-col">
-                <div className="flex min-h-0 flex-1 items-center justify-center bg-black/90 m-4 rounded-xl border border-black/8">
-                  <Loader2 className="h-10 w-10 animate-spin text-white/20" />
-                </div>
-                <div className="shrink-0 border-t border-black/8 p-4 space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-gray-500">Đang tạo video...</span>
-                    <span className="text-xs font-semibold tabular-nums text-sky-500">{Math.round(progress)}%</span>
                   </div>
-                  <div className="h-1.5 w-full overflow-hidden rounded-full bg-gray-100">
-                    <div
-                      className="h-full rounded-full bg-sky-400 transition-all duration-700 ease-out"
-                      style={{ width: `${progress}%` }}
-                    />
-                  </div>
-                </div>
-              </div>
-            ) : resultItem?.videoUrl ? (
-              /* Completed video */
-              <div className="flex flex-1 flex-col overflow-hidden">
-                <div className="flex min-h-0 flex-1 items-center justify-center overflow-hidden bg-black">
-                  <video
-                    key={resultItem.id}
-                    src={resultItem.videoUrl}
-                    controls
-                    autoPlay
-                    className="max-h-full max-w-full rounded-lg"
-                    style={{ aspectRatio: resultItem.aspectRatio.replace(':', '/') }}
-                  />
-                </div>
-                <div className="shrink-0 border-t border-black/8 p-3 flex items-center gap-2">
-                  <button onClick={() => handleDownload(resultItem)} className="flex items-center gap-1.5 rounded-full border border-black/10 px-3 py-2 text-xs text-gray-600 transition-colors hover:bg-black/5">
-                    <Download className="h-3.5 w-3.5" /> Tải xuống
-                  </button>
-                  <button onClick={() => handleSaveToBank(resultItem)} className="flex items-center gap-1.5 rounded-full border border-black/10 px-3 py-2 text-xs text-gray-600 transition-colors hover:bg-black/5">
-                    <Save className="h-3.5 w-3.5" /> Lưu vào PROJECT
-                  </button>
-                </div>
-              </div>
-            ) : (
-              /* Empty */
-              <div className="flex h-full flex-col items-center justify-center gap-3 p-8">
-                <Film className="h-12 w-12 text-gray-200" strokeWidth={1.5} />
-                <p className="text-sm text-gray-400">Chưa có kết quả</p>
-                <p className="text-center text-xs text-gray-300">Video tạo thành công sẽ hiển thị ở đây</p>
-              </div>
-            )}
+                )
+              })}
+            </div>
           </div>
         )}
       </div>
