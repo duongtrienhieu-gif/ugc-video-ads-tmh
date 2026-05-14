@@ -43,8 +43,13 @@ export async function directGeminiVision(params: {
 
     if (!res.ok) {
       const err = await res.text().catch(() => res.statusText)
-      // 404 = model not available for this user → try next model
-      if (res.status === 404) { errors.push(`${model}: không khả dụng`); continue }
+      // 404 = model not available for this account → try next
+      // 429 = rate limit exceeded → try next
+      // 503 = model overloaded / high demand → try next
+      if (res.status === 404 || res.status === 429 || res.status === 503) {
+        errors.push(`${model}: ${res.status === 503 ? 'quá tải' : res.status === 429 ? 'rate limit' : 'không khả dụng'}`)
+        continue
+      }
       throw new Error(`Gemini API lỗi (${res.status}): ${err.slice(0, 200)}`)
     }
 
