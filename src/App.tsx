@@ -1,4 +1,4 @@
-﻿import { useEffect } from 'react'
+﻿import { useEffect, useState } from 'react'
 import Sidebar from './components/Sidebar'
 import ToastContainer from './components/Toast'
 import { useAppStore } from './stores/appStore'
@@ -6,6 +6,9 @@ import { supabase } from './lib/supabase'
 import { useAuthStore } from './stores/authStore'
 import { useBankStore } from './stores/bankStore'
 import AuthScreen from './components/AuthScreen'
+import { RefreshCw } from 'lucide-react'
+import { useSettingsStore } from './stores/settingsStore'
+import { getKieCredits } from './utils/kieai'
 
 import Finder from './apps/finder/Finder'
 import AdAnatomy from './apps/ad-anatomy/AdAnatomy'
@@ -33,6 +36,19 @@ export default function App() {
   const openApp = useAppStore((s) => s.openApp)
   const { user, loading, setUser, setLoading } = useAuthStore()
   const loadAll = useBankStore((s) => s.loadAll)
+  const { kieApiKey, kieCredits, setKieCredits } = useSettingsStore()
+  const [refreshing, setRefreshing] = useState(false)
+
+  async function handleRefreshCredits() {
+    if (!kieApiKey || refreshing) return
+    setRefreshing(true)
+    try {
+      const c = await getKieCredits(kieApiKey)
+      setKieCredits(c)
+    } catch { /* silent */ } finally {
+      setRefreshing(false)
+    }
+  }
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -67,6 +83,23 @@ export default function App() {
     <div className="flex h-screen w-screen overflow-hidden bg-[#EEEEF2] text-gray-900 antialiased">
       <Sidebar activeApp={activeApp} onNavigate={openApp} />
       <main className="relative flex-1 overflow-hidden bg-white shadow-sm">
+        {/* Credits badge top-right */}
+        {kieApiKey && (
+          <div className="absolute right-4 top-3 z-50 flex items-center gap-1.5 rounded-full border border-indigo-200 bg-white px-3 py-1.5 shadow-sm">
+            <span className="text-xs font-semibold tabular-nums text-indigo-600">
+              {kieCredits !== null
+                ? `${kieCredits % 1 === 0 ? kieCredits.toLocaleString('vi-VN') : kieCredits.toFixed(2)} credits`
+                : '-- credits'}
+            </span>
+            <button
+              onClick={handleRefreshCredits}
+              title="Làm mới credits"
+              className="rounded-full p-0.5 text-indigo-400 transition-colors hover:text-indigo-600"
+            >
+              <RefreshCw className={`h-3 w-3 ${refreshing ? 'animate-spin' : ''}`} />
+            </button>
+          </div>
+        )}
         {runningApps.map((appId) => {
           const Component = APP_COMPONENTS[appId]
           const isActive = activeApp === appId
