@@ -200,7 +200,10 @@ export async function generateVideo(params: {
     throw new Error(text)
   }
 
-  const data = await res.json() as { data: { taskId: string } }
+  const data = await res.json() as { code?: number; message?: string; data: { taskId: string } | null }
+  if (!data.data?.taskId) {
+    throw new Error(data.message ?? `API trả về lỗi (code: ${data.code ?? 'unknown'})`)
+  }
   return { taskId: data.data.taskId }
 }
 

@@ -284,6 +284,16 @@ export default function BRollVideos() {
     setActiveRightTab('history')
 
     try {
+      // kie.ai video API only accepts HTTP URLs, not data: base64 URLs
+      const isHttpUrl = (u: string) => u.startsWith('http://') || u.startsWith('https://')
+      const startUrl = slot.startFrameUrl && isHttpUrl(slot.startFrameUrl) ? slot.startFrameUrl : null
+      const endUrl = slot.endFrameUrl && isHttpUrl(slot.endFrameUrl) ? slot.endFrameUrl : null
+      const refUrls = slot.referenceImageUrls.filter(isHttpUrl)
+
+      if ((slot.startFrameUrl || slot.endFrameUrl) && (!startUrl || !endUrl)) {
+        throw new Error('Khung đầu/cuối phải là ảnh từ PROJECT (không hỗ trợ upload trực tiếp cho video)')
+      }
+
       const params = {
         apiKey,
         model: slot.modelId,
@@ -291,10 +301,8 @@ export default function BRollVideos() {
         aspectRatio: slot.aspectRatio,
         resolution: slot.resolution,
         ...(slot.duration ? { duration: slot.duration } : {}),
-        ...(slot.startFrameUrl && slot.endFrameUrl
-          ? { startFrameUrl: slot.startFrameUrl, endFrameUrl: slot.endFrameUrl }
-          : {}),
-        ...(slot.referenceImageUrls.length > 0 ? { referenceImageUrls: slot.referenceImageUrls } : {}),
+        ...(startUrl && endUrl ? { startFrameUrl: startUrl, endFrameUrl: endUrl } : {}),
+        ...(refUrls.length > 0 ? { referenceImageUrls: refUrls } : {}),
       }
 
       const { taskId } = await generateVideo(params)
