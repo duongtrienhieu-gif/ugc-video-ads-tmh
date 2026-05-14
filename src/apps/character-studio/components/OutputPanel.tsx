@@ -1,4 +1,4 @@
-﻿import { useState } from 'react'
+﻿import { useState, useEffect, useRef } from 'react'
 import { Copy, Check, Save, ChevronDown, UserRound, Loader2, Braces, Download } from 'lucide-react'
 import { useBankStore } from '../../../stores/bankStore'
 import type { GenerationResult } from '../services/generateCharacter'
@@ -54,6 +54,31 @@ export default function OutputPanel({ result, isGenerating, onGenerate, canGener
   const [selectedModel, setSelectedModel] = useState(IMAGE_MODELS[3]) // GPT Image 2
   const [resolution, setResolution] = useState<ImageResolution>('1K')
   const [modelDropOpen, setModelDropOpen] = useState(false)
+
+  const [progress, setProgress] = useState(0)
+  const progressRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
+  useEffect(() => {
+    if (isGenerating) {
+      setProgress(0)
+      progressRef.current = setInterval(() => {
+        setProgress((prev) => {
+          if (prev >= 95) return prev
+          // Fast at start, slow near end
+          const increment = prev < 40 ? 3 : prev < 70 ? 1.5 : prev < 90 ? 0.5 : 0.2
+          return Math.min(prev + increment, 95)
+        })
+      }, 600)
+    } else {
+      if (progressRef.current) clearInterval(progressRef.current)
+      if (progress > 0) {
+        setProgress(100)
+        setTimeout(() => setProgress(0), 500)
+      }
+    }
+    return () => { if (progressRef.current) clearInterval(progressRef.current) }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isGenerating])
 
   const addModel = useBankStore((s) => s.addModel)
   const resolvedImageUrl = useAssetUrl(result?.imageUrl)
@@ -185,10 +210,23 @@ export default function OutputPanel({ result, isGenerating, onGenerate, canGener
   if (isGenerating) {
     return (
       <div className="flex h-full flex-col">
-        <div className="flex flex-1 flex-col items-center justify-center gap-4 p-6">
+        <div className="flex flex-1 flex-col items-center justify-center gap-5 p-6">
           <div className={`skeleton w-full max-w-sm rounded-xl ${isPortrait ? 'aspect-[9/16]' : 'aspect-video'}`} />
-          <Loader2 className="h-5 w-5 animate-spin text-sky-400" />
-          <p className="text-xs text-gray-500">Đang tạo hình ảnh...</p>
+          <div className="flex w-full max-w-sm flex-col gap-2">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Loader2 className="h-3.5 w-3.5 animate-spin text-sky-400" />
+                <span className="text-xs text-gray-500">Đang tạo hình ảnh...</span>
+              </div>
+              <span className="text-xs font-semibold tabular-nums text-sky-500">{Math.round(progress)}%</span>
+            </div>
+            <div className="h-1.5 w-full overflow-hidden rounded-full bg-gray-100">
+              <div
+                className="h-full rounded-full bg-sky-400 transition-all duration-500 ease-out"
+                style={{ width: `${progress}%` }}
+              />
+            </div>
+          </div>
         </div>
         <BottomControls />
       </div>
