@@ -1,6 +1,7 @@
 import type { AnalysisResult } from '../types'
 import { useSettingsStore } from '../../../stores/settingsStore'
-import { geminiAnalyzeImage } from '../../../utils/gemini'
+import { kieAnalyzeImage } from '../../../utils/kieai'
+import { saveAsset, getUrl, deleteAsset } from '../../../utils/assetStore'
 
 const SYSTEM_INSTRUCTION = `You are an elite UGC ad analyst. You dissect social media video ads and extract actionable insights for creators and brands.
 
@@ -48,7 +49,7 @@ SCORECARD RULE: Be brutally honest. Do not inflate scores. Most ads are average 
   "reconstructionPrompt": "<full prompt that could recreate this ad's structure for any product>"
 }`
 
-async function extractFirstFrame(videoFile: File): Promise<{ base64: string; mimeType: string }> {
+async function extractFirstFrame(videoFile: File): Promise<Blob> {
   return new Promise((resolve, reject) => {
     const video = document.createElement('video')
     const url = URL.createObjectURL(videoFile)
@@ -65,8 +66,10 @@ async function extractFirstFrame(videoFile: File): Promise<{ base64: string; mim
         if (!ctx) throw new Error('Canvas context unavailable')
         ctx.drawImage(video, 0, 0)
         URL.revokeObjectURL(url)
-        const dataUrl = canvas.toDataURL('image/jpeg', 0.85)
-        resolve({ base64: dataUrl.split(',')[1], mimeType: 'image/jpeg' })
+        canvas.toBlob((blob) => {
+          if (blob) resolve(blob)
+          else reject(new Error('Không thể tạo ảnh từ video'))
+        }, 'image/jpeg', 0.85)
       } catch (e) {
         URL.revokeObjectURL(url)
         reject(e)
@@ -100,11 +103,28 @@ async function extractFirstFrame(videoFile: File): Promise<{ base64: string; mim
 
 export async function analyzeAd(videoFile: File): Promise<AnalysisResult> {
   const apiKey = useSettingsStore.getState().getApiKey()
-  const { base64, mimeType } = await extractFirstFrame(videoFile)
+
+  // Extract first frame as Blob, upload to Supabase Storage, get real https:// URL
+  const frameBlob = await extractFirstFrame(videoFile)
+  const tempAssetId = await saveAsset(frameBlob, 'image/jpeg')
+  let imageUrl: string
+  try {
+    const url = await getUrl(tempAssetId)
+    if (!url) throw new Error('Không lấy được URL ảnh')
+    imageUrl = url
+  } catch (e) {
+    deleteAsset(tempAssetId).catch(() => {})
+    throw e
+  }
 
   const prompt = `Analyze this UGC ad video/image thoroughly. Extract every detail: transcript with timestamps, hook technique, structure beats, psychological persuasion levers, visual playbook with image generation prompts, and improvement suggestions. Return the analysis as JSON.`
 
-  const responseText = await geminiAnalyzeImage(apiKey, prompt, base64, mimeType, SYSTEM_INSTRUCTION)
+  let responseText: string
+  try {
+    responseText = await kieAnalyzeImage(apiKey, '', '', prompt, SYSTEM_INSTRUCTION, imageUrl)
+  } finally {
+    deleteAsset(tempAssetId).catch(() => {})
+  }
 
   // Strip markdown fences and extract JSON
   let cleaned = responseText.trim()
