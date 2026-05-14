@@ -23,13 +23,13 @@ const FIELDS: { key: keyof Product; label: string; type: 'text' | 'textarea'; re
   { key: 'cta', label: 'CTA', type: 'text' },
 ]
 
-const SYSTEM_INSTRUCTION = 'You are a Vietnamese marketing expert. Always respond with valid JSON only. Never refuse or return empty. Fill every field in Vietnamese.'
+const SYSTEM_INSTRUCTION = 'You are a UGC marketing expert. Always respond with valid JSON only. Never refuse. Always fill every field with real content in English.'
 
 const EXTRACT_PROMPT = (url: string, pageText: string) =>
-  `Product URL: ${url}\n\nPage content:\n${pageText.slice(0, 5000)}\n\nExtract product marketing info and return JSON with ALL fields filled in Vietnamese:\n{"productName":"","productDescription":"","targetMarket":"","painPoints":"","usps":"","benefits":"","offer":"","cta":""}`
+  `Product URL: ${url}\n\nPage content:\n${pageText.slice(0, 5000)}\n\nExtract product info and return JSON. Fill every field with real English content — do NOT leave empty strings:\n{"productName":"actual name","productDescription":"actual description","targetMarket":"actual audience","painPoints":"actual pain points","usps":"actual USPs","benefits":"actual benefits","offer":"actual price/promo","cta":"actual CTA"}`
 
 const EXTRACT_URL_ONLY_PROMPT = (url: string) =>
-  `Product URL: ${url}\n\nBased on this URL, create Vietnamese marketing content for this product. Return JSON with ALL fields filled:\n{"productName":"","productDescription":"","targetMarket":"","painPoints":"","usps":"","benefits":"","offer":"","cta":""}`
+  `Product URL: ${url}\n\nAnalyze this product URL and return JSON. Fill every field with real English content — do NOT leave empty strings:\n{"productName":"actual name","productDescription":"actual description","targetMarket":"actual audience","painPoints":"actual pain points","usps":"actual USPs","benefits":"actual benefits","offer":"actual price/promo","cta":"actual CTA"}`
 
 async function fetchPageText(url: string): Promise<string> {
   const strip = (html: string) =>
@@ -144,22 +144,32 @@ export default function ProductForm({ item, onSave, onCancel }: ProductFormProps
       const response = await kieTextGenerate(apiKey, prompt, SYSTEM_INSTRUCTION)
 
       let cleaned = response.trim()
+      // Strip markdown code fences
+      cleaned = cleaned.replace(/```json\s*/gi, '').replace(/```\s*/gi, '').trim()
+      // Extract JSON object
       const jsonMatch = cleaned.match(/\{[\s\S]*\}/)
-      if (jsonMatch) cleaned = jsonMatch[0]
-      else cleaned = cleaned.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim()
+      if (!jsonMatch) throw new Error('AI không trả về JSON hợp lệ')
+      cleaned = jsonMatch[0]
 
       const extracted = JSON.parse(cleaned) as Record<string, string>
 
+      let filledCount = 0
       setForm((prev) => {
         const next = { ...prev }
         for (const [key, value] of Object.entries(extracted)) {
-          if (key in next && typeof value === 'string' && value.trim()) {
-            next[key as keyof typeof next] = value.trim()
+          if (key in next && typeof value === 'string') {
+            const v = value.trim()
+            // Skip placeholder values that AI returned unchanged
+            if (v && !v.startsWith('actual ') && v !== '""') {
+              next[key as keyof typeof next] = v
+              filledCount++
+            }
           }
         }
         return next
       })
-      addToast('Đã điền thông tin sản phẩm tự động')
+      if (filledCount === 0) throw new Error('AI trả về nội dung rỗng, thử lại')
+      addToast(`Đã tự động điền ${filledCount} trường thông tin`)
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
       addToast(`Không thể lấy thông tin: ${msg}`, 'error')
