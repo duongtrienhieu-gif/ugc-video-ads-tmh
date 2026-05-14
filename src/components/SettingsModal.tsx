@@ -178,7 +178,7 @@ export default function SettingsModal({ open, onClose }: SettingsModalProps) {
                 {testResult.ok ? (
                   <>
                     <Check className="h-3.5 w-3.5 shrink-0" />
-                    <span>Kết nối thành công — còn <strong>{testResult.credits?.toLocaleString('vi-VN', { maximumFractionDigits: 2 })}</strong> credits</span>
+                    <span>Kết nối thành công — còn <strong>{testResult.credits?.toLocaleString('vi-VN', { maximumFractionDigits: 2 })}</strong> Credit</span>
                   </>
                 ) : (
                   <>

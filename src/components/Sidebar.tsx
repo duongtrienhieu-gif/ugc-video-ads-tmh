@@ -108,10 +108,10 @@ export default function Sidebar({ activeApp, onNavigate }: SidebarProps) {
                 <span className="w-full text-center text-[8px] font-semibold leading-tight text-indigo-500 tabular-nums">
                   {kieCredits % 1 === 0
                     ? kieCredits.toLocaleString('vi-VN')
-                    : kieCredits.toFixed(2)} cr
+                    : kieCredits.toFixed(2)} Credit
                 </span>
               ) : (
-                <span className="text-[8px] text-gray-400">-- cr</span>
+                <span className="text-[8px] text-gray-400">-- Credit</span>
               )}
             </button>
           )}

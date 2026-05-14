@@ -112,7 +112,7 @@ export default function CharacterStudio() {
       setResult(gen)
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
-      if (msg === 'INSUFFICIENT_CREDITS') addToast('Không đủ credits kie.ai', 'error')
+      if (msg === 'INSUFFICIENT_CREDITS') addToast('Không đủ Credit kie.ai', 'error')
       else if (msg === 'TIMEOUT') addToast('Tạo ảnh quá thời gian. Vui lòng thử lại.', 'error')
       else addToast('Tạo ảnh thất bại. Vui lòng thử lại.', 'error')
     } finally {

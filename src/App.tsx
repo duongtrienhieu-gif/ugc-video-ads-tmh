@@ -88,8 +88,8 @@ export default function App() {
           <div className="absolute right-4 top-3 z-50 flex items-center gap-1.5 rounded-full border border-indigo-200 bg-white px-3 py-1.5 shadow-sm">
             <span className="text-xs font-semibold tabular-nums text-indigo-600">
               {kieCredits !== null
-                ? `${kieCredits % 1 === 0 ? kieCredits.toLocaleString('vi-VN') : kieCredits.toFixed(2)} credits`
-                : '-- credits'}
+                ? `${kieCredits % 1 === 0 ? kieCredits.toLocaleString('vi-VN') : kieCredits.toFixed(2)} Credit`
+                : '-- Credit'}
             </span>
             <button
               onClick={handleRefreshCredits}

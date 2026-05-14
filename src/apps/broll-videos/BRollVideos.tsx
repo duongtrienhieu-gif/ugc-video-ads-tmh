@@ -314,7 +314,7 @@ export default function BRollVideos() {
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
       let toastMsg = `Tạo video thất bại: ${msg}`
-      if (msg === 'INSUFFICIENT_CREDITS') toastMsg = 'Không đủ credits'
+      if (msg === 'INSUFFICIENT_CREDITS') toastMsg = 'Không đủ Credit'
       if (msg === 'TIMEOUT') toastMsg = 'Tạo video quá thời gian. Vui lòng thử lại.'
 
       addToast(toastMsg, 'error')
@@ -396,7 +396,7 @@ export default function BRollVideos() {
                     <span className="text-sm font-medium text-gray-800">{selectedModel.name}</span>
                     {selectedModel.starred && <Star className="h-3 w-3 fill-amber-400 text-amber-400" />}
                   </div>
-                  <span className="text-[11px] text-gray-400">{selectedModel.provider} · {selectedModel.credits} credits</span>
+                  <span className="text-[11px] text-gray-400">{selectedModel.provider} · {selectedModel.credits} Credit</span>
                 </div>
                 <ChevronDown className={`h-4 w-4 shrink-0 text-gray-400 transition-transform ${modelDropdownOpen ? 'rotate-180' : ''}`} />
               </button>
@@ -419,7 +419,7 @@ export default function BRollVideos() {
                           </div>
                           <span className="text-[10px] text-gray-400">{m.provider}</span>
                         </div>
-                        <span className="shrink-0 text-[10px] tabular-nums text-gray-400">{m.credits} cr</span>
+                        <span className="shrink-0 text-[10px] tabular-nums text-gray-400">{m.credits} Credit</span>
                       </button>
                     )
                   })}
@@ -601,7 +601,7 @@ export default function BRollVideos() {
               ) : (
                 <>
                   <Film className="h-4 w-4" />
-                  Tạo video ({selectedModel.credits} credits)
+                  Tạo video ({selectedModel.credits} Credit)
                 </>
               )}
             </span>

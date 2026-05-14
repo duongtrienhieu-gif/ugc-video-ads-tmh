@@ -116,7 +116,7 @@ export default function OutputPanel({ result, isGenerating, onGenerate, canGener
                 {selectedModel.starred && <span className="text-[10px] text-yellow-400">⭐</span>}
                 <span className="ml-1 text-[10px] text-gray-400">{selectedModel.provider}</span>
               </div>
-              <span className="text-[10px] text-gray-400">{resolution} — {credits} credits</span>
+              <span className="text-[10px] text-gray-400">{resolution} — {credits} Credit</span>
             </div>
             <ChevronDown className={`h-3.5 w-3.5 text-gray-400 transition-transform ${modelDropOpen ? 'rotate-180' : ''}`} />
           </button>
@@ -138,7 +138,7 @@ export default function OutputPanel({ result, isGenerating, onGenerate, canGener
                     {m.starred && <span className="text-[10px] text-yellow-400">⭐</span>}
                     <span className="text-[10px] text-gray-400">{m.provider}</span>
                     <span className={`ml-2 text-[10px] tabular-nums ${isSelected ? 'text-sky-400/70' : 'text-gray-400'}`}>
-                      {m.credits[resolution]} cr
+                      {m.credits[resolution]} Credit
                     </span>
                     {isSelected && <Check className="ml-1 h-3 w-3 text-sky-400" />}
                   </button>
@@ -157,7 +157,7 @@ export default function OutputPanel({ result, isGenerating, onGenerate, canGener
               className={`flex flex-1 flex-col items-center rounded-lg border py-2 text-xs transition-colors ${resolution === r ? 'border-sky-500/30 bg-sky-500/10 text-sky-400' : 'border-black/10 text-gray-500 hover:border-black/15 hover:text-gray-700'}`}
             >
               <span className="font-semibold">{r}</span>
-              <span className="text-[10px] opacity-70">{selectedModel.credits[r]} cr</span>
+              <span className="text-[10px] opacity-70">{selectedModel.credits[r]} Credit</span>
             </button>
           ))}
         </div>
@@ -174,7 +174,7 @@ export default function OutputPanel({ result, isGenerating, onGenerate, canGener
               <span>Đang tạo...</span>
             </>
           ) : (
-            <span>👤 Tạo nhân vật ({credits} credits)</span>
+            <span>👤 Tạo nhân vật ({credits} Credit)</span>
           )}
         </button>
       </div>
