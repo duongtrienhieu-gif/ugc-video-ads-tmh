@@ -294,11 +294,72 @@ export async function analyzeAd(videoFile: File): Promise<AnalysisResult> {
 
   if (!responseText.trim()) throw new Error('Không có phản hồi từ AI. Vui lòng thử lại.')
 
-  // Parse JSON — Gemini sometimes wraps in ```json fences
-  let cleaned = responseText.trim()
-  const jsonMatch = cleaned.match(/\{[\s\S]*\}/)
-  if (jsonMatch) cleaned = jsonMatch[0]
-  else cleaned = cleaned.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim()
+  return parseAnalysisJson(responseText)
+}
 
-  return JSON.parse(cleaned) as AnalysisResult
+// ── Robust JSON parsing for Gemini responses ──────────────────────────────────
+
+function parseAnalysisJson(raw: string): AnalysisResult {
+  let cleaned = raw.trim()
+
+  // Strip markdown code fences if present
+  cleaned = cleaned.replace(/^```(?:json)?\s*\n?/i, '').replace(/\n?```\s*$/, '').trim()
+
+  // Extract outermost { ... } block (handles cases where Gemini adds prose around JSON)
+  const firstBrace = cleaned.indexOf('{')
+  const lastBrace  = cleaned.lastIndexOf('}')
+  if (firstBrace !== -1 && lastBrace > firstBrace) {
+    cleaned = cleaned.slice(firstBrace, lastBrace + 1)
+  }
+
+  // First attempt: as-is
+  try {
+    return JSON.parse(cleaned) as AnalysisResult
+  } catch { /* fall through to repair */ }
+
+  // Second attempt: repair common Gemini JSON errors
+  const repaired = repairJson(cleaned)
+  try {
+    return JSON.parse(repaired) as AnalysisResult
+  } catch (e) {
+    const err = e instanceof Error ? e.message : String(e)
+    throw new Error(`AI trả về JSON không hợp lệ. ${err}. Vui lòng thử lại.`)
+  }
+}
+
+/**
+ * Repair common JSON issues from LLM responses:
+ * - Trailing commas before } or ]
+ * - Unescaped newlines inside string values
+ * - Unescaped tabs/control chars inside strings
+ * - Single quotes inside the body that break parsing
+ */
+function repairJson(input: string): string {
+  let s = input
+
+  // Remove trailing commas before } or ]
+  s = s.replace(/,(\s*[}\]])/g, '$1')
+
+  // Walk through strings and escape any raw control characters that JSON forbids
+  // (newlines, tabs, etc.) inside string literals.
+  let out = ''
+  let inString = false
+  let escape = false
+  for (let i = 0; i < s.length; i++) {
+    const ch = s[i]
+    if (escape) { out += ch; escape = false; continue }
+    if (ch === '\\') { out += ch; escape = true; continue }
+    if (ch === '"') { inString = !inString; out += ch; continue }
+    if (inString) {
+      const code = ch.charCodeAt(0)
+      if      (ch === '\n') out += '\\n'
+      else if (ch === '\r') out += '\\r'
+      else if (ch === '\t') out += '\\t'
+      else if (code < 0x20) out += '\\u' + code.toString(16).padStart(4, '0')
+      else out += ch
+    } else {
+      out += ch
+    }
+  }
+  return out
 }

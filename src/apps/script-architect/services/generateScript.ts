@@ -72,12 +72,7 @@ export async function generateScript(input: GenerateScriptInput): Promise<Genera
     responseText = await kieTextGenerate(kieKey, prompt, SYSTEM_INSTRUCTION)
   }
 
-  let cleaned = responseText.trim()
-  const jsonMatch = cleaned.match(/\{[\s\S]*\}/)
-  if (jsonMatch) cleaned = jsonMatch[0]
-  else cleaned = cleaned.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim()
-
-  const parsed = JSON.parse(cleaned) as { scripts?: Array<{ hook?: string; script?: string } | string> }
+  const parsed = parseLenientJson<{ scripts?: Array<{ hook?: string; script?: string } | string> }>(responseText)
   const rawVariants = parsed.scripts ?? []
   if (rawVariants.length === 0) throw new Error('GPT không trả về variant nào')
 
@@ -98,4 +93,42 @@ export async function translateToMalay(scriptText: string): Promise<string> {
   const kieKey = useSettingsStore.getState().getApiKey()
   const prompt = `Translate the following UGC ad script into natural Malaysian Malay (Bahasa Malaysia). Use native, colloquial phrasing that sounds authentic — like a real Malaysian person speaking casually on camera. Preserve the tone, energy, and sentence-by-sentence structure. Keep any "HOOK:" / "SCRIPT:" section labels in English but translate everything else. Return ONLY the translated script, no explanations.\n\n${scriptText}`
   return await kieTextGenerate(kieKey, prompt)
+}
+
+// ── Robust JSON parser for LLM responses ─────────────────────────────────────
+
+function parseLenientJson<T>(raw: string): T {
+  let cleaned = raw.trim()
+  cleaned = cleaned.replace(/^```(?:json)?\s*\n?/i, '').replace(/\n?```\s*$/, '').trim()
+  const first = cleaned.indexOf('{')
+  const last  = cleaned.lastIndexOf('}')
+  if (first !== -1 && last > first) cleaned = cleaned.slice(first, last + 1)
+
+  try { return JSON.parse(cleaned) as T } catch { /* repair */ }
+
+  // Repair: trailing commas + unescaped control chars inside strings
+  let s = cleaned.replace(/,(\s*[}\]])/g, '$1')
+  let out = ''
+  let inString = false
+  let escape = false
+  for (let i = 0; i < s.length; i++) {
+    const ch = s[i]
+    if (escape) { out += ch; escape = false; continue }
+    if (ch === '\\') { out += ch; escape = true; continue }
+    if (ch === '"') { inString = !inString; out += ch; continue }
+    if (inString) {
+      const code = ch.charCodeAt(0)
+      if      (ch === '\n') out += '\\n'
+      else if (ch === '\r') out += '\\r'
+      else if (ch === '\t') out += '\\t'
+      else if (code < 0x20) out += '\\u' + code.toString(16).padStart(4, '0')
+      else out += ch
+    } else { out += ch }
+  }
+  s = out
+  try { return JSON.parse(s) as T }
+  catch (e) {
+    const err = e instanceof Error ? e.message : String(e)
+    throw new Error(`AI trả về JSON không hợp lệ. ${err}`)
+  }
 }
