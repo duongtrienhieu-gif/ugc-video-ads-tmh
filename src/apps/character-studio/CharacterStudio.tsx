@@ -9,7 +9,7 @@ import { generateCharacter } from './services/generateCharacter'
 import type { GenerationResult } from './services/generateCharacter'
 import { useSettingsStore } from '../../stores/settingsStore'
 import type { ImageResolution } from '../../utils/kieai'
-import { kieAnalyzeImage, blobToSmallBase64 } from '../../utils/kieai'
+import { directGeminiVision, fileToBase64 } from '../../utils/gemini'
 
 const TAB_ICONS: Record<TabId, React.ElementType> = {
   physical: User,
@@ -75,13 +75,16 @@ export default function CharacterStudio() {
   const analyzeRefImage = async (file: File) => {
     setIsAnalyzingRef(true)
     try {
-      const apiKey = useSettingsStore.getState().getApiKey()
+      const geminiKey = useSettingsStore.getState().getGeminiApiKey()
+      const { base64, mimeType } = await fileToBase64(file)
 
-      // Compress to small base64 — gpt-4o-mini handles data URLs fine at small sizes
-      const blob = new Blob([await file.arrayBuffer()], { type: file.type })
-      const base64 = await blobToSmallBase64(blob, 768)
-
-      const responseText = await kieAnalyzeImage(apiKey, base64, 'image/jpeg', AUTO_FILL_PROMPT)
+      const responseText = await directGeminiVision({
+        apiKey: geminiKey,
+        parts: [
+          { inlineData: { mimeType, data: base64 } },
+          { text: AUTO_FILL_PROMPT },
+        ],
+      })
 
       // Extract JSON from response
       let cleaned = responseText.trim()
@@ -128,7 +131,7 @@ export default function CharacterStudio() {
       const msg = err instanceof Error ? err.message : String(err)
       if (msg === 'INSUFFICIENT_CREDITS') addToast('Không đủ Credit kie.ai', 'error')
       else if (msg === 'TIMEOUT') addToast('Tạo ảnh quá thời gian. Vui lòng thử lại.', 'error')
-      else addToast('Tạo ảnh thất bại. Vui lòng thử lại.', 'error')
+      else addToast(`Tạo ảnh thất bại: ${msg}`, 'error')
     } finally {
       setIsGenerating(false)
     }

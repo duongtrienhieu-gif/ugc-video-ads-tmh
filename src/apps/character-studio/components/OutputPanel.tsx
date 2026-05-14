@@ -52,7 +52,7 @@ export default function OutputPanel({ result, isGenerating, onGenerate, onCancel
   const [showSaveForm, setShowSaveForm] = useState(false)
   const [saveName, setSaveName] = useState('')
   const [saved, setSaved] = useState(false)
-  const [selectedModel, setSelectedModel] = useState(IMAGE_MODELS[3]) // GPT Image 2
+  const [selectedModel, setSelectedModel] = useState(IMAGE_MODELS[0]) // Nano Banana 2 — reliable default
   const [resolution, setResolution] = useState<ImageResolution>('1K')
   const [modelDropOpen, setModelDropOpen] = useState(false)
 
