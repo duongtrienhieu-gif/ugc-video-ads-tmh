@@ -377,7 +377,7 @@ export function generateRandomUGCProfile(): CharacterProfile {
     weather: pickRandom(['Indoor (N/A)', 'Sunny', 'Overcast', 'Indoor (N/A)', 'Indoor (N/A)']),
     timeOfDay: pickRandom(['Morning', 'Midday', 'Afternoon', 'Evening']),
     pose: pickRandom(['Sitting on bed', 'Sitting on couch', 'Standing', 'Front-on facing the camera', 'Leaning on counter']),
-    action: pickRandom(['Speaking to camera', 'Holding product', 'Applying product', 'Pointing at something', 'Speaking to camera']),
+    action: '',
     expression: pickRandom(['Natural smile', 'Genuine smile', 'Excited', 'Thinking', 'Mid-sentence', 'Natural smile']),
     shotType: pickRandom(['Close-up face', 'Medium shot (waist up)', 'Medium shot (waist up)', 'Full body']),
     cameraAngle: pickRandom(['Eye Level', 'Low angle', 'High angle', 'Eye Level']),
