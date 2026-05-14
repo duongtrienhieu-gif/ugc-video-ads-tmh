@@ -68,24 +68,38 @@ export async function getImageStatus(params: {
   taskId: string
 }): Promise<{ status: ImageStatus; imageUrl?: string; error?: string }> {
   const res = await fetch(
-    `${KIE_BASE}/jobs/task?taskId=${encodeURIComponent(params.taskId)}`,
+    `${KIE_BASE}/jobs/recordInfo?taskId=${encodeURIComponent(params.taskId)}`,
     { headers: { Authorization: `Bearer ${params.apiKey}` } },
   )
   if (!res.ok) throw new Error(`Status check failed: ${res.status}`)
 
-  const data = await res.json() as { data: { status: string; output?: { imageUrl?: string }; errorMessage?: string } }
+  const data = await res.json() as {
+    data: {
+      state: string
+      resultJson?: string
+      failMsg?: string
+    }
+  }
   const record = data.data
-  const rawStatus = String(record.status ?? '').toLowerCase()
+  const rawStatus = String(record.state ?? '').toLowerCase()
 
   let status: ImageStatus = 'pending'
-  if (rawStatus === 'completed' || rawStatus === 'success') status = 'completed'
-  else if (rawStatus === 'failed' || rawStatus === 'error') status = 'failed'
-  else if (rawStatus === 'processing' || rawStatus === 'running') status = 'processing'
+  if (rawStatus === 'success') status = 'completed'
+  else if (rawStatus === 'fail') status = 'failed'
+  else if (rawStatus === 'generating' || rawStatus === 'queuing' || rawStatus === 'waiting') status = 'processing'
+
+  let imageUrl: string | undefined
+  if (status === 'completed' && record.resultJson) {
+    try {
+      const parsed = JSON.parse(record.resultJson) as { resultUrls?: string[] }
+      imageUrl = parsed.resultUrls?.[0]
+    } catch { /* ignore */ }
+  }
 
   return {
     status,
-    imageUrl: record.output?.imageUrl,
-    error: status === 'failed' ? String(record.errorMessage ?? 'Tạo ảnh thất bại') : undefined,
+    imageUrl,
+    error: status === 'failed' ? String(record.failMsg ?? 'Tạo ảnh thất bại') : undefined,
   }
 }
 
@@ -196,19 +210,35 @@ export async function getVideoStatus(params: {
   )
   if (!res.ok) throw new Error(`Status check failed: ${res.status}`)
 
-  const data = await res.json() as { data: Record<string, unknown> }
+  const data = await res.json() as {
+    data: {
+      successFlag?: number
+      resultUrls?: string[] | string
+      fullResultUrls?: string[]
+    }
+  }
   const record = data.data
-  const rawStatus = String(record.status ?? '').toLowerCase()
+  const flag = record.successFlag
 
   let status: VideoStatus = 'pending'
-  if (rawStatus === 'completed' || rawStatus === 'success') status = 'completed'
-  else if (rawStatus === 'failed' || rawStatus === 'error') status = 'failed'
-  else if (rawStatus === 'processing' || rawStatus === 'running') status = 'processing'
+  if (flag === 1) status = 'completed'
+  else if (flag === 2 || flag === 3) status = 'failed'
+  else if (flag === 0) status = 'processing'
+
+  let videoUrl: string | undefined
+  if (status === 'completed') {
+    const urls = record.fullResultUrls ?? (
+      typeof record.resultUrls === 'string'
+        ? (JSON.parse(record.resultUrls) as string[])
+        : record.resultUrls
+    )
+    videoUrl = Array.isArray(urls) ? urls[0] : undefined
+  }
 
   return {
     status,
-    videoUrl: (record.videoUrl ?? record.resultVideoUrl ?? record.url ?? undefined) as string | undefined,
-    error: status === 'failed' ? String(record.errorMessage ?? 'Tạo video thất bại') : undefined,
+    videoUrl,
+    error: status === 'failed' ? 'Tạo video thất bại' : undefined,
   }
 }
 
