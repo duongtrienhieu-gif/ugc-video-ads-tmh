@@ -7,6 +7,8 @@ import {
   VIDEO_MODELS,
   generateVideo,
   pollVideoUntilDone,
+  generateVideoJob,
+  pollVideoJobUntilDone,
   type AspectRatio,
   type Resolution,
   type VideoStatus,
@@ -319,25 +321,43 @@ export default function BRollVideos() {
         throw new Error('Khung đầu/cuối phải là ảnh từ PROJECT (không hỗ trợ upload trực tiếp cho video)')
       }
 
-      const slotModel = VIDEO_MODELS.find((m) => m.id === slot.modelId)
-      const params = {
-        apiKey,
-        model: slot.modelId,
-        prompt: slot.prompt,
-        aspectRatio: slot.aspectRatio,
-        resolution: slot.resolution,
-        sendResolution: slotModel?.supportsResolution !== false,
+      const slotModel = VIDEO_MODELS.find((m) => m.id === slot.modelId)!
+      const commonFrameParams = {
         ...(slot.duration ? { duration: slot.duration } : {}),
         ...(startUrl && endUrl ? { startFrameUrl: startUrl, endFrameUrl: endUrl } : {}),
         ...(refUrls.length > 0 ? { referenceImageUrls: refUrls } : {}),
       }
 
-      const { taskId } = await generateVideo(params)
+      let taskId: string
+      if (slotModel.useJobsApi && slotModel.jobModelId) {
+        const result = await generateVideoJob({
+          apiKey,
+          jobModelId: slotModel.jobModelId,
+          prompt: slot.prompt,
+          aspectRatio: slot.aspectRatio,
+          resolution: slot.resolution,
+          ...commonFrameParams,
+        })
+        taskId = result.taskId
+      } else {
+        const result = await generateVideo({
+          apiKey,
+          model: slot.modelId,
+          prompt: slot.prompt,
+          aspectRatio: slot.aspectRatio,
+          resolution: slot.resolution,
+          sendResolution: slotModel.supportsResolution !== false,
+          ...commonFrameParams,
+        })
+        taskId = result.taskId
+      }
+
       setHistory((prev) =>
         prev.map((h) => (h.id === historyId ? { ...h, taskId, status: 'processing' } : h)),
       )
 
-      const videoUrl = await pollVideoUntilDone({
+      const pollFn = slotModel.useJobsApi ? pollVideoJobUntilDone : pollVideoUntilDone
+      const videoUrl = await pollFn({
         apiKey,
         taskId,
         onStatusChange: (status) => {

@@ -136,18 +136,20 @@ export interface VideoModel {
   supportsDuration?: boolean
   durationOptions?: number[]
   supportsResolution?: boolean  // false = don't send resolution field to API
+  useJobsApi?: boolean          // true = /jobs/createTask, false/undefined = /veo/generate
+  jobModelId?: string           // actual model ID string for jobs API
 }
 
 export const VIDEO_MODELS: VideoModel[] = [
-  { id: 'seedance_2_0',      name: 'Seedance 2.0',      provider: 'ByteDance',      credits: 205, starred: true, supportsDuration: true, durationOptions: [5, 8, 10, 12], supportsResolution: true },
-  { id: 'seedance_2_0_fast', name: 'Seedance 2.0 Fast', provider: 'ByteDance',      credits: 165,               supportsDuration: true, durationOptions: [5, 8, 10, 12], supportsResolution: true },
-  { id: 'kling_3_0',         name: 'Kling 3.0',         provider: 'Kling AI',       credits: 70,                supportsDuration: true, durationOptions: [5, 8, 10],    supportsResolution: true },
+  { id: 'seedance_2_0',      name: 'Seedance 2.0',      provider: 'ByteDance',      credits: 205, starred: true, supportsDuration: true, durationOptions: [5, 8, 10, 12], supportsResolution: true,  useJobsApi: true, jobModelId: 'bytedance/seedance-2' },
+  { id: 'seedance_2_0_fast', name: 'Seedance 2.0 Fast', provider: 'ByteDance',      credits: 165,               supportsDuration: true, durationOptions: [5, 8, 10, 12], supportsResolution: true,  useJobsApi: true, jobModelId: 'bytedance/seedance-2-fast' },
+  { id: 'kling_3_0',         name: 'Kling 3.0',         provider: 'Kling AI',       credits: 70,                supportsDuration: true, durationOptions: [5, 8, 10],    supportsResolution: false, useJobsApi: true, jobModelId: 'kling-3.0/video' },
   { id: 'veo3_fast',         name: 'Veo 3.1 Fast',      provider: 'Google',         credits: 60,  supportsResolution: true },
   { id: 'veo3_lite',         name: 'Veo 3.1 Lite',      provider: 'Google',         credits: 30,  supportsResolution: true },
   { id: 'veo3',              name: 'Veo 3.1 Quality',   provider: 'Google',         credits: 250, supportsResolution: true },
-  { id: 'wan_2_7',           name: 'Wan 2.7',           provider: 'Alibaba Tongyi', credits: 80,                supportsDuration: true, durationOptions: [5, 8, 10, 12], supportsResolution: true },
-  { id: 'sora_2',            name: 'Sora 2',            provider: 'OpenAI',         credits: 30,  supportsResolution: false },
-  { id: 'sora_2_pro',        name: 'Sora 2 Pro',        provider: 'OpenAI',         credits: 150, supportsResolution: false },
+  { id: 'wan_2_7',           name: 'Wan 2.7',           provider: 'Alibaba Tongyi', credits: 80,                supportsDuration: true, durationOptions: [5, 8, 10, 12], supportsResolution: true,  useJobsApi: true, jobModelId: 'wan/2-7-text-to-video' },
+  { id: 'sora_2',            name: 'Sora 2',            provider: 'OpenAI',         credits: 30,  supportsResolution: false, useJobsApi: true, jobModelId: 'sora-2-text-to-video' },
+  { id: 'sora_2_pro',        name: 'Sora 2 Pro',        provider: 'OpenAI',         credits: 150, supportsResolution: false, useJobsApi: true, jobModelId: 'sora-2-pro-text-to-video' },
 ]
 
 export type AspectRatio = '16:9' | '9:16'
@@ -166,8 +168,8 @@ export async function generateVideo(params: {
   endFrameUrl?: string
   referenceImageUrls?: string[]
 }): Promise<{ taskId: string }> {
-  let generationType = 'TEXT_2_VIDEO'
   const imageUrls: string[] = []
+  let generationType: string | null = null
 
   if (params.startFrameUrl && params.endFrameUrl) {
     generationType = 'FIRST_AND_LAST_FRAMES_2_VIDEO'
@@ -181,8 +183,9 @@ export async function generateVideo(params: {
     prompt: params.prompt,
     model: params.model,
     aspect_ratio: params.aspectRatio,
-    generationType,
   }
+  // Only send generationType when images are involved; omit for pure text-to-video
+  if (generationType) body.generationType = generationType
   if (params.sendResolution !== false) body.resolution = params.resolution
   if (params.duration) body.duration = params.duration
   if (imageUrls.length > 0) body.imageUrls = imageUrls
@@ -264,6 +267,127 @@ export async function pollVideoUntilDone(params: {
     await new Promise<void>((resolve) => setTimeout(resolve, 5000))
 
     const result = await getVideoStatus({ apiKey: params.apiKey, taskId: params.taskId })
+    params.onStatusChange?.(result.status)
+
+    if (result.status === 'completed' && result.videoUrl) return result.videoUrl
+    if (result.status === 'failed') throw new Error(result.error ?? 'Tạo video thất bại')
+  }
+
+  throw new Error('TIMEOUT')
+}
+
+// ── Video generation via Jobs API (non-Veo models) ───────────────────
+
+export async function generateVideoJob(params: {
+  apiKey: string
+  jobModelId: string
+  prompt: string
+  aspectRatio: AspectRatio
+  resolution: Resolution
+  duration?: number
+  startFrameUrl?: string
+  endFrameUrl?: string
+  referenceImageUrls?: string[]
+}): Promise<{ taskId: string }> {
+  const input: Record<string, unknown> = { prompt: params.prompt }
+
+  if (params.jobModelId.startsWith('bytedance/')) {
+    // Seedance
+    input.resolution = params.resolution
+    input.aspect_ratio = params.aspectRatio
+    if (params.duration) input.duration = params.duration
+    if (params.startFrameUrl) input.first_frame_image_url = params.startFrameUrl
+    if (params.endFrameUrl) input.last_frame_image_url = params.endFrameUrl
+    if (params.referenceImageUrls?.length) {
+      input.reference_images = params.referenceImageUrls.map((url) => ({ image_url: url }))
+    }
+  } else if (params.jobModelId.startsWith('kling')) {
+    // Kling
+    input.aspect_ratio = params.aspectRatio
+    if (params.duration) input.duration = params.duration
+    input.mode = 'std'
+    if (params.referenceImageUrls?.length) input.image_urls = params.referenceImageUrls
+  } else if (params.jobModelId.startsWith('wan/')) {
+    // Wan uses `ratio` instead of `aspect_ratio`
+    input.ratio = params.aspectRatio
+    input.resolution = params.resolution
+    if (params.duration) input.duration = params.duration
+  } else if (params.jobModelId.startsWith('sora')) {
+    // Sora uses portrait/landscape and n_frames instead of resolution/duration
+    input.aspect_ratio = params.aspectRatio === '9:16' ? 'portrait' : 'landscape'
+    input.n_frames = '15'
+  }
+
+  const res = await fetch(`${KIE_BASE}/jobs/createTask`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${params.apiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ model: params.jobModelId, input }),
+  })
+
+  if (res.status === 402) throw new Error('INSUFFICIENT_CREDITS')
+  if (!res.ok) {
+    const text = await res.text().catch(() => res.statusText)
+    throw new Error(text)
+  }
+  const data = await res.json() as { code?: number; message?: string; data: { taskId: string } | null }
+  if (!data.data?.taskId) {
+    throw new Error(data.message ?? `API trả về lỗi (code: ${data.code ?? 'unknown'})`)
+  }
+  return { taskId: data.data.taskId }
+}
+
+export async function getVideoJobStatus(params: {
+  apiKey: string
+  taskId: string
+}): Promise<{ status: VideoStatus; videoUrl?: string; error?: string }> {
+  const res = await fetch(
+    `${KIE_BASE}/jobs/recordInfo?taskId=${encodeURIComponent(params.taskId)}`,
+    { headers: { Authorization: `Bearer ${params.apiKey}` } },
+  )
+  if (!res.ok) throw new Error(`Status check failed: ${res.status}`)
+
+  const data = await res.json() as {
+    data: { state: string; resultJson?: string; failMsg?: string }
+  }
+  const record = data.data
+  const rawStatus = String(record.state ?? '').toLowerCase()
+
+  let status: VideoStatus = 'pending'
+  if (rawStatus === 'success') status = 'completed'
+  else if (rawStatus === 'fail') status = 'failed'
+  else if (rawStatus === 'generating' || rawStatus === 'queuing' || rawStatus === 'waiting') status = 'processing'
+
+  let videoUrl: string | undefined
+  if (status === 'completed' && record.resultJson) {
+    try {
+      const parsed = JSON.parse(record.resultJson) as { resultUrls?: string[] }
+      videoUrl = parsed.resultUrls?.[0]
+    } catch { /* ignore */ }
+  }
+
+  return {
+    status,
+    videoUrl,
+    error: status === 'failed' ? String(record.failMsg ?? 'Tạo video thất bại') : undefined,
+  }
+}
+
+export async function pollVideoJobUntilDone(params: {
+  apiKey: string
+  taskId: string
+  onStatusChange?: (status: VideoStatus) => void
+  timeoutMs?: number
+}): Promise<string> {
+  const timeout = params.timeoutMs ?? 5 * 60 * 1000
+  const start = Date.now()
+
+  while (Date.now() - start < timeout) {
+    await new Promise<void>((resolve) => setTimeout(resolve, 5000))
+
+    const result = await getVideoJobStatus({ apiKey: params.apiKey, taskId: params.taskId })
     params.onStatusChange?.(result.status)
 
     if (result.status === 'completed' && result.videoUrl) return result.videoUrl
