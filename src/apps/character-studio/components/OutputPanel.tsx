@@ -1,5 +1,5 @@
 ﻿import { useState, useEffect, useRef } from 'react'
-import { Copy, Check, Save, ChevronDown, UserRound, Loader2, Braces, Download } from 'lucide-react'
+import { Copy, Check, Save, ChevronDown, UserRound, Loader2, Braces, Download, X } from 'lucide-react'
 import { useBankStore } from '../../../stores/bankStore'
 import type { GenerationResult } from '../services/generateCharacter'
 import { useAssetUrl } from '../../../hooks/useAssetUrl'
@@ -10,6 +10,7 @@ interface OutputPanelProps {
   result: GenerationResult | null
   isGenerating: boolean
   onGenerate: (modelId: string, resolution: ImageResolution) => void
+  onCancel?: () => void
   canGenerate: boolean
   aspectRatio: string
   onAspectRatioChange: (v: string) => void
@@ -45,7 +46,7 @@ function ProviderIcon({ provider }: { provider: string }) {
   )
 }
 
-export default function OutputPanel({ result, isGenerating, onGenerate, canGenerate, aspectRatio, onAspectRatioChange }: OutputPanelProps) {
+export default function OutputPanel({ result, isGenerating, onGenerate, onCancel, canGenerate, aspectRatio, onAspectRatioChange }: OutputPanelProps) {
   const [copied, setCopied] = useState(false)
   const [jsonExpanded, setJsonExpanded] = useState(false)
   const [showSaveForm, setShowSaveForm] = useState(false)
@@ -206,18 +207,22 @@ export default function OutputPanel({ result, isGenerating, onGenerate, canGener
     )
   }
 
-  // ── Skeleton loading ──────────────────────────────────────────────────
+  // ── Generating state ──────────────────────────────────────────────────
   if (isGenerating) {
     return (
       <div className="flex h-full flex-col">
-        <div className="flex flex-1 flex-col items-center justify-center gap-5 p-6">
-          <div className={`skeleton w-full max-w-sm rounded-xl ${isPortrait ? 'aspect-[9/16]' : 'aspect-video'}`} />
-          <div className="flex w-full max-w-sm flex-col gap-2">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Loader2 className="h-3.5 w-3.5 animate-spin text-sky-400" />
-                <span className="text-xs text-gray-500">Đang tạo hình ảnh...</span>
-              </div>
+        {/* Dark image area */}
+        <div className="flex min-h-0 flex-1 flex-col p-4">
+          <div className={`flex items-center justify-center overflow-hidden rounded-xl border border-black/8 bg-black ${isPortrait ? 'h-full' : 'w-full aspect-video'}`}>
+            <Loader2 className="h-8 w-8 animate-spin text-white/20" />
+          </div>
+        </div>
+
+        {/* Progress + Cancel at bottom */}
+        <div className="shrink-0 border-t border-black/8 p-4 space-y-3">
+          <div>
+            <div className="mb-1.5 flex items-center justify-between">
+              <span className="text-xs text-gray-500">Đang tạo ảnh...</span>
               <span className="text-xs font-semibold tabular-nums text-sky-500">{Math.round(progress)}%</span>
             </div>
             <div className="h-1.5 w-full overflow-hidden rounded-full bg-gray-100">
@@ -227,8 +232,14 @@ export default function OutputPanel({ result, isGenerating, onGenerate, canGener
               />
             </div>
           </div>
+          <button
+            onClick={onCancel}
+            className="flex w-full items-center justify-center gap-2 rounded-full border border-black/12 px-6 py-3 text-sm text-gray-500 transition-colors hover:bg-black/[0.04] hover:text-gray-700"
+          >
+            <X className="h-4 w-4" />
+            Hủy
+          </button>
         </div>
-        <BottomControls />
       </div>
     )
   }

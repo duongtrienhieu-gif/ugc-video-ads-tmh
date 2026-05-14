@@ -32,6 +32,7 @@ export default function CharacterStudio() {
   const [result, setResult] = useState<GenerationResult | null>(null)
   const [isGenerating, setIsGenerating] = useState(false)
   const [activeTab, setActiveTab] = useState<TabId>('physical')
+  const cancelledRef = useRef(false)
 
   const [refImage, setRefImage] = useState<{ file: File; preview: string } | null>(null)
   const [isAnalyzingRef, setIsAnalyzingRef] = useState(false)
@@ -117,11 +118,13 @@ export default function CharacterStudio() {
       addToast('Vui lòng nhập kie.ai API key trong Cài đặt', 'error')
       return
     }
+    cancelledRef.current = false
     setIsGenerating(true)
     try {
       const gen = await generateCharacter(profile, modelId, resolution)
-      setResult(gen)
+      if (!cancelledRef.current) setResult(gen)
     } catch (err) {
+      if (cancelledRef.current) return
       const msg = err instanceof Error ? err.message : String(err)
       if (msg === 'INSUFFICIENT_CREDITS') addToast('Không đủ Credit kie.ai', 'error')
       else if (msg === 'TIMEOUT') addToast('Tạo ảnh quá thời gian. Vui lòng thử lại.', 'error')
@@ -129,6 +132,11 @@ export default function CharacterStudio() {
     } finally {
       setIsGenerating(false)
     }
+  }
+
+  const handleCancel = () => {
+    cancelledRef.current = true
+    setIsGenerating(false)
   }
 
   const tabCompletion = (tabId: TabId) => {
@@ -234,6 +242,7 @@ export default function CharacterStudio() {
             result={result}
             isGenerating={isGenerating}
             onGenerate={handleGenerate}
+            onCancel={handleCancel}
             canGenerate={Object.values(profile).some((v) => v.trim() !== '') && kieApiKey.trim() !== ''}
             aspectRatio={profile.aspectRatio || 'Portrait (9:16)'}
             onAspectRatioChange={(v) => setProfile((prev) => ({ ...prev, aspectRatio: v }))}
