@@ -408,23 +408,30 @@ export async function kieTextGenerate(
   if (systemInstruction) messages.push({ role: 'system', content: systemInstruction })
   messages.push({ role: 'user', content: prompt })
 
-  const res = await fetch('https://api.kie.ai/api/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({ model: 'gemini-2.5-flash', messages }),
-  })
-  if (res.status === 402) throw new Error('INSUFFICIENT_CREDITS')
-  if (!res.ok) {
-    const text = await res.text().catch(() => res.statusText)
-    throw new Error(`kie.ai text error (${res.status}): ${text}`)
+  const textModels = ['gpt-4o', 'gemini-2.5-flash', 'gpt-4o-mini']
+  let lastError = ''
+
+  for (const model of textModels) {
+    const res = await fetch('https://api.kie.ai/api/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ model, messages }),
+    })
+    if (res.status === 402) throw new Error('INSUFFICIENT_CREDITS')
+    if (!res.ok) {
+      lastError = `kie.ai text error (${res.status}): ${await res.text().catch(() => res.statusText)}`
+      continue
+    }
+    const data = await res.json() as { choices?: { message?: { content?: string } }[] }
+    const content = data.choices?.[0]?.message?.content
+    if (content) return content
+    lastError = `Model ${model} trả về phản hồi rỗng`
   }
-  const data = await res.json() as { choices?: { message?: { content?: string } }[] }
-  const content = data.choices?.[0]?.message?.content
-  if (!content) throw new Error('Không có phản hồi từ kie.ai text')
-  return content
+
+  throw new Error(lastError || 'Không có phản hồi từ kie.ai text')
 }
 
 // ── Image Analysis (kie.ai vision — gpt-4o-mini supports image_url) ──
