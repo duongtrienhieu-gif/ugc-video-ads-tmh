@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import type { User } from '@supabase/supabase-js'
 import { supabase } from '../lib/supabase'
+import { useBankStore } from './bankStore'
 
 interface AuthState {
   user: User | null
@@ -17,6 +18,10 @@ export const useAuthStore = create<AuthState>((set) => ({
   setLoading: (loading) => set({ loading }),
   signOut: async () => {
     await supabase.auth.signOut()
+    // Clear all bank data so next user doesn't see previous user's data
+    useBankStore.setState({
+      products: [], models: [], scripts: [], voices: [], voiceHistory: [], brolls: [],
+    })
     set({ user: null })
   },
 }))

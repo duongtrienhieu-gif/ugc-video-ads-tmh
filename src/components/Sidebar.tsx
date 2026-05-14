@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
-import { LayoutGrid, User, PenLine, Mic, Image, Video, Eye, Settings, FlaskConical, RefreshCw, LogOut } from 'lucide-react'
+import { LayoutGrid, User, PenLine, Mic, Image, Video, Eye, Settings, FlaskConical, RefreshCw, LogOut, Activity } from 'lucide-react'
 import SettingsModal from './SettingsModal'
+import Diagnostic from './Diagnostic'
 import { useSettingsStore } from '../stores/settingsStore'
 import { getKieCredits } from '../utils/kieai'
 import { useAuthStore } from '../stores/authStore'
@@ -28,6 +29,7 @@ interface SidebarProps {
 
 export default function Sidebar({ activeApp, onNavigate }: SidebarProps) {
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [diagnosticOpen, setDiagnosticOpen] = useState(false)
   const { kieApiKey, kieCredits, setKieCredits } = useSettingsStore()
   const [refreshing, setRefreshing] = useState(false)
   const { user, signOut } = useAuthStore()
@@ -117,6 +119,15 @@ export default function Sidebar({ activeApp, onNavigate }: SidebarProps) {
           )}
 
           <button
+            onClick={() => setDiagnosticOpen(true)}
+            title="Chẩn đoán dữ liệu"
+            className="flex w-full flex-col items-center gap-1 rounded-lg py-2 transition-colors hover:bg-amber-500/10"
+          >
+            <Activity className="h-5 w-5 text-amber-500" strokeWidth={1.5} />
+            <span className="text-[9px] leading-tight text-amber-500">Chẩn đoán</span>
+          </button>
+
+          <button
             onClick={() => setSettingsOpen(true)}
             className="flex w-full flex-col items-center gap-1 rounded-lg py-2 transition-colors hover:bg-black/5"
           >
@@ -143,6 +154,7 @@ export default function Sidebar({ activeApp, onNavigate }: SidebarProps) {
       </aside>
 
       <SettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} />
+      <Diagnostic isOpen={diagnosticOpen} onClose={() => setDiagnosticOpen(false)} />
     </>
   )
 }

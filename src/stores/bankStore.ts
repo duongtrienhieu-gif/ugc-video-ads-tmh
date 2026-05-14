@@ -161,12 +161,14 @@ export const useBankStore = create<BankState>((set, get) => ({
     loadAllInFlight = (async () => {
       set({ loading: true })
       try {
-        // Verify auth session is alive — refresh if needed
         const { data: { user } } = await supabase.auth.getUser()
         if (!user) {
+          console.warn('[loadAll] No user — skipping')
           set({ loading: false })
           return
         }
+
+        console.log('[loadAll] Loading data for user:', { id: user.id, email: user.email })
 
         const [p, m, s, v, vh, b] = await Promise.all([
           supabase.from('products').select('*').eq('user_id', user.id).order('created_at', { ascending: false }),
@@ -176,6 +178,15 @@ export const useBankStore = create<BankState>((set, get) => ({
           supabase.from('voice_history').select('*').eq('user_id', user.id).order('created_at', { ascending: false }),
           supabase.from('brolls').select('*').eq('user_id', user.id).order('created_at', { ascending: false }),
         ])
+
+        console.log('[loadAll] Counts:', {
+          products: p.data?.length ?? `ERROR: ${p.error?.message}`,
+          models: m.data?.length ?? `ERROR: ${m.error?.message}`,
+          scripts: s.data?.length ?? `ERROR: ${s.error?.message}`,
+          voices: v.data?.length ?? `ERROR: ${v.error?.message}`,
+          voice_history: vh.data?.length ?? `ERROR: ${vh.error?.message}`,
+          brolls: b.data?.length ?? `ERROR: ${b.error?.message}`,
+        })
 
         // Report any per-table errors to user so they know data fetch failed
         if (p.error)  reportError('Tải sản phẩm',  p.error)
@@ -211,6 +222,7 @@ export const useBankStore = create<BankState>((set, get) => ({
     set((s) => ({ products: [tempItem, ...s.products] }))
     try {
       const user_id = await requireUserId()
+      console.log('[addProduct] inserting with user_id:', user_id)
       const { data: row, error } = await supabase.from('products').insert({
         user_id,
         product_name: product.productName,
