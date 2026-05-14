@@ -2,6 +2,10 @@
 import Sidebar from './components/Sidebar'
 import ToastContainer from './components/Toast'
 import { useAppStore } from './stores/appStore'
+import { supabase } from './lib/supabase'
+import { useAuthStore } from './stores/authStore'
+import { useBankStore } from './stores/bankStore'
+import AuthScreen from './components/AuthScreen'
 
 import Finder from './apps/finder/Finder'
 import AdAnatomy from './apps/ad-anatomy/AdAnatomy'
@@ -27,10 +31,37 @@ export default function App() {
   const activeApp = useAppStore((s) => s.activeApp)
   const runningApps = useAppStore((s) => s.runningApps)
   const openApp = useAppStore((s) => s.openApp)
+  const { user, loading, setUser, setLoading } = useAuthStore()
+  const loadAll = useBankStore((s) => s.loadAll)
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setUser(session?.user ?? null)
+      setLoading(false)
+      if (session?.user) loadAll()
+    })
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user ?? null)
+      if (session?.user) loadAll()
+    })
+
+    return () => subscription.unsubscribe()
+  }, [setUser, setLoading, loadAll])
 
   useEffect(() => {
     openApp('finder')
   }, [openApp])
+
+  if (loading) {
+    return (
+      <div className="flex h-screen w-screen items-center justify-center bg-[#EEEEF2]">
+        <div className="h-8 w-8 animate-spin rounded-full border-2 border-gray-300 border-t-gray-700" />
+      </div>
+    )
+  }
+
+  if (!user) return <AuthScreen />
 
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-[#EEEEF2] text-gray-900 antialiased">

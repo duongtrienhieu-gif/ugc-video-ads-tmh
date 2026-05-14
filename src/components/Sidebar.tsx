@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react'
-import { LayoutGrid, User, PenLine, Mic, Image, Video, Eye, Settings, FlaskConical, RefreshCw } from 'lucide-react'
+import { LayoutGrid, User, PenLine, Mic, Image, Video, Eye, Settings, FlaskConical, RefreshCw, LogOut } from 'lucide-react'
 import SettingsModal from './SettingsModal'
 import { useSettingsStore } from '../stores/settingsStore'
 import { getKieCredits } from '../utils/kieai'
+import { useAuthStore } from '../stores/authStore'
 
 interface NavItem {
   id: string
@@ -29,6 +30,7 @@ export default function Sidebar({ activeApp, onNavigate }: SidebarProps) {
   const [settingsOpen, setSettingsOpen] = useState(false)
   const { kieApiKey, kieCredits, setKieCredits } = useSettingsStore()
   const [refreshing, setRefreshing] = useState(false)
+  const { user, signOut } = useAuthStore()
 
   // Auto-fetch credits on mount if key exists
   useEffect(() => {
@@ -122,8 +124,20 @@ export default function Sidebar({ activeApp, onNavigate }: SidebarProps) {
             <span className="text-[9px] leading-tight text-gray-500">Cài đặt</span>
           </button>
 
-          <div className="flex h-7 w-7 items-center justify-center rounded-full bg-gradient-to-br from-violet-500 to-pink-500">
-            <span className="text-[10px] font-semibold text-white">U</span>
+          {/* User info + logout */}
+          <div className="flex w-full flex-col items-center gap-1">
+            <button
+              onClick={signOut}
+              title={`Đăng xuất (${user?.email})`}
+              className="flex w-full flex-col items-center gap-0.5 rounded-lg py-1.5 transition-colors hover:bg-red-500/10"
+            >
+              <div className="flex h-7 w-7 items-center justify-center rounded-full bg-gradient-to-br from-violet-500 to-pink-500">
+                <span className="text-[10px] font-semibold text-white">
+                  {user?.email?.[0]?.toUpperCase() ?? 'U'}
+                </span>
+              </div>
+              <LogOut className="h-3 w-3 text-gray-400" />
+            </button>
           </div>
         </div>
       </aside>
