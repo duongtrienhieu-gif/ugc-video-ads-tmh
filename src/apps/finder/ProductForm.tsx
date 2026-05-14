@@ -23,22 +23,13 @@ const FIELDS: { key: keyof Product; label: string; type: 'text' | 'textarea'; re
   { key: 'cta', label: 'CTA', type: 'text' },
 ]
 
-const JSON_FIELDS = `{
-  "productName": "tên sản phẩm đầy đủ",
-  "productDescription": "mô tả ngắn gọn về sản phẩm (2-3 câu)",
-  "targetMarket": "đối tượng khách hàng mục tiêu cụ thể",
-  "painPoints": "các vấn đề mà sản phẩm giải quyết (mỗi điểm 1 dòng)",
-  "usps": "điểm khác biệt độc nhất của sản phẩm (mỗi điểm 1 dòng)",
-  "benefits": "các lợi ích chính (mỗi điểm 1 dòng)",
-  "offer": "giá bán và khuyến mãi nếu có",
-  "cta": "call-to-action phù hợp nhất"
-}`
+const SYSTEM_INSTRUCTION = 'You are a Vietnamese marketing expert. Always respond with valid JSON only. Never refuse or return empty. Fill every field in Vietnamese.'
 
 const EXTRACT_PROMPT = (url: string, pageText: string) =>
-  `Bạn là chuyên gia marketing UGC. Dưới đây là nội dung trang sản phẩm từ URL: ${url}\n\n--- NỘI DUNG TRANG ---\n${pageText}\n--- KẾT THÚC ---\n\nPhân tích và trả về ONLY JSON (bỏ trường không có thông tin):\n${JSON_FIELDS}\n\nChỉ trả về JSON thuần, không markdown, không giải thích.`
+  `Product URL: ${url}\n\nPage content:\n${pageText.slice(0, 5000)}\n\nExtract product marketing info and return JSON with ALL fields filled in Vietnamese:\n{"productName":"","productDescription":"","targetMarket":"","painPoints":"","usps":"","benefits":"","offer":"","cta":""}`
 
 const EXTRACT_URL_ONLY_PROMPT = (url: string) =>
-  `Bạn là chuyên gia marketing UGC. Dựa vào URL sản phẩm: ${url}\n\nHãy đoán loại sản phẩm từ domain/đường dẫn và tạo nội dung marketing phù hợp. Trả về ONLY JSON:\n${JSON_FIELDS}\n\nChỉ trả về JSON thuần, không markdown, không giải thích.`
+  `Product URL: ${url}\n\nBased on this URL, create Vietnamese marketing content for this product. Return JSON with ALL fields filled:\n{"productName":"","productDescription":"","targetMarket":"","painPoints":"","usps":"","benefits":"","offer":"","cta":""}`
 
 async function fetchPageText(url: string): Promise<string> {
   const strip = (html: string) =>
@@ -150,7 +141,7 @@ export default function ProductForm({ item, onSave, onCancel }: ProductFormProps
       const prompt = pageText.length > 200
         ? EXTRACT_PROMPT(url, pageText)
         : EXTRACT_URL_ONLY_PROMPT(url)
-      const response = await kieTextGenerate(apiKey, prompt)
+      const response = await kieTextGenerate(apiKey, prompt, SYSTEM_INSTRUCTION)
 
       let cleaned = response.trim()
       const jsonMatch = cleaned.match(/\{[\s\S]*\}/)

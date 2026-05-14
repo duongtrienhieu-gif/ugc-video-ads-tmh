@@ -425,10 +425,11 @@ export async function kieTextGenerate(
       lastError = `kie.ai text error (${res.status}): ${await res.text().catch(() => res.statusText)}`
       continue
     }
-    const data = await res.json() as { choices?: { message?: { content?: string } }[] }
-    const content = data.choices?.[0]?.message?.content
+    const data = await res.json() as { choices?: { message?: { content?: string | null; refusal?: string } }[] }
+    const msg = data.choices?.[0]?.message
+    const content = typeof msg?.content === 'string' ? msg.content.trim() : ''
     if (content) return content
-    lastError = `Model ${model} trả về phản hồi rỗng`
+    lastError = msg?.refusal ? `Model ${model} từ chối yêu cầu` : `Model ${model} trả về phản hồi rỗng`
   }
 
   throw new Error(lastError || 'Không có phản hồi từ kie.ai text')
