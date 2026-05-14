@@ -57,8 +57,16 @@ export async function generateImage(params: {
     const text = await res.text().catch(() => res.statusText)
     throw new Error(text)
   }
-  const data = await res.json() as { code: number; data: { taskId: string } }
-  return { taskId: data.data.taskId }
+  const data = await res.json() as { code?: number; msg?: string; message?: string; data?: { taskId?: string } | null }
+  if (data?.code !== undefined && data.code !== 200) {
+    throw new Error(data.msg ?? data.message ?? `kie.ai lỗi code ${data.code}`)
+  }
+  const taskId = data?.data?.taskId
+  if (!taskId) {
+    const msg = data?.msg ?? data?.message ?? JSON.stringify(data)
+    throw new Error(`kie.ai không trả về taskId: ${msg}`)
+  }
+  return { taskId }
 }
 
 export async function getImageStatus(params: {
