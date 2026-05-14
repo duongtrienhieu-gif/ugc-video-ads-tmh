@@ -40,6 +40,9 @@ async function analyzeProductWithAI(apiKey: string, prompt: string): Promise<str
       body: JSON.stringify({
         model,
         messages: [{ role: 'user', content: prompt }],
+        max_tokens: 2000,
+        temperature: 0.7,
+        stream: false,
       }),
     })
 
@@ -52,16 +55,20 @@ async function analyzeProductWithAI(apiKey: string, prompt: string): Promise<str
     }
 
     let content = ''
+    let finishReason = ''
     try {
-      const data = JSON.parse(rawText) as { choices?: { message?: { content?: string | null } }[] }
+      const data = JSON.parse(rawText) as {
+        choices?: { message?: { content?: string | null }; finish_reason?: string }[]
+      }
       content = (data.choices?.[0]?.message?.content ?? '').trim()
+      finishReason = data.choices?.[0]?.finish_reason ?? ''
     } catch {
       errors.push(`${model}: JSON parse error — ${rawText.slice(0, 120)}`)
       continue
     }
 
     if (content) return content
-    errors.push(`${model}: empty content`)
+    errors.push(`${model}: empty (finish_reason=${finishReason || 'unknown'})`)
   }
 
   throw new Error(errors.join(' | '))
