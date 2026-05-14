@@ -7,9 +7,10 @@ import ControlsPanel from './components/ControlsPanel'
 import OutputPanel from './components/OutputPanel'
 import { generateCharacter } from './services/generateCharacter'
 import type { GenerationResult } from './services/generateCharacter'
-import { geminiAnalyzeImage, fileToBase64 } from '../../utils/gemini'
 import { useSettingsStore } from '../../stores/settingsStore'
 import type { ImageResolution } from '../../utils/kieai'
+import { kieAnalyzeImage } from '../../utils/kieai'
+import { saveAsset, getUrl, deleteAsset } from '../../utils/assetStore'
 
 const TAB_ICONS: Record<TabId, React.ElementType> = {
   physical: User,
@@ -73,11 +74,24 @@ export default function CharacterStudio() {
 
   const analyzeRefImage = async (file: File) => {
     setIsAnalyzingRef(true)
+    let tempAssetId: string | null = null
     try {
       const apiKey = useSettingsStore.getState().getApiKey()
-      const { base64, mimeType } = await fileToBase64(file)
-      const responseText = await geminiAnalyzeImage(apiKey, AUTO_FILL_PROMPT, base64, mimeType)
-      const cleaned = responseText.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim()
+
+      // Upload to Supabase Storage → get real https:// URL for kie.ai
+      const blob = new Blob([await file.arrayBuffer()], { type: file.type })
+      tempAssetId = await saveAsset(blob, file.type)
+      const imageUrl = await getUrl(tempAssetId)
+      if (!imageUrl) throw new Error('Không lấy được URL ảnh')
+
+      const responseText = await kieAnalyzeImage(apiKey, '', '', AUTO_FILL_PROMPT, undefined, imageUrl)
+
+      // Extract JSON from response
+      let cleaned = responseText.trim()
+      const jsonMatch = cleaned.match(/\{[\s\S]*\}/)
+      if (jsonMatch) cleaned = jsonMatch[0]
+      else cleaned = cleaned.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim()
+
       const extracted = JSON.parse(cleaned) as Record<string, string>
       setProfile((prev) => {
         const next = { ...prev }
@@ -88,9 +102,12 @@ export default function CharacterStudio() {
         }
         return next
       })
-    } catch {
-      // Silent fail — user's existing profile is unchanged
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      addToast(`Phân tích ảnh thất bại: ${msg}`, 'error')
     } finally {
+      // Clean up temp storage asset
+      if (tempAssetId) deleteAsset(tempAssetId).catch(() => {})
       setIsAnalyzingRef(false)
     }
   }

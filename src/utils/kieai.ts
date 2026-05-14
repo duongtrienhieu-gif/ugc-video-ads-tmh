@@ -306,13 +306,16 @@ export async function kieAnalyzeImage(
   mimeType: string,
   prompt: string,
   systemInstruction?: string,
+  imageUrl?: string,
 ): Promise<string> {
   const messages: Array<{ role: string; content: unknown }> = []
   if (systemInstruction) messages.push({ role: 'system', content: systemInstruction })
+  // Prefer real https:// URL over base64 data URL (kie.ai handles URL better)
+  const imgUrl = imageUrl ?? `data:${mimeType};base64,${imageBase64}`
   messages.push({
     role: 'user',
     content: [
-      { type: 'image_url', image_url: { url: `data:${mimeType};base64,${imageBase64}` } },
+      { type: 'image_url', image_url: { url: imgUrl } },
       { type: 'text', text: prompt },
     ],
   })
