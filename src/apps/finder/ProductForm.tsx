@@ -3,7 +3,6 @@ import { X, ImagePlus, Sparkles, Loader2 } from 'lucide-react'
 import type { Product } from '../../stores/types'
 import { useAssetUrl } from '../../hooks/useAssetUrl'
 import { useSettingsStore } from '../../stores/settingsStore'
-import { kieTextGenerate } from '../../utils/kieai'
 import { useAppStore } from '../../stores/appStore'
 
 interface ProductFormProps {
@@ -23,13 +22,50 @@ const FIELDS: { key: keyof Product; label: string; type: 'text' | 'textarea'; re
   { key: 'cta', label: 'CTA', type: 'text' },
 ]
 
-const SYSTEM_INSTRUCTION = 'You are a UGC marketing expert. Always respond with valid JSON only. Never refuse. Always fill every field with real content in English.'
-
 const EXTRACT_PROMPT = (url: string, pageText: string) =>
-  `Product URL: ${url}\n\nPage content:\n${pageText.slice(0, 5000)}\n\nExtract product info and return JSON. Fill every field with real English content — do NOT leave empty strings:\n{"productName":"actual name","productDescription":"actual description","targetMarket":"actual audience","painPoints":"actual pain points","usps":"actual USPs","benefits":"actual benefits","offer":"actual price/promo","cta":"actual CTA"}`
+  `URL: ${url}\n\nContent:\n${pageText.slice(0, 4000)}\n\nReturn JSON with English values for these keys: productName, productDescription, targetMarket, painPoints, usps, benefits, offer, cta. JSON only, no markdown.`
 
 const EXTRACT_URL_ONLY_PROMPT = (url: string) =>
-  `Product URL: ${url}\n\nAnalyze this product URL and return JSON. Fill every field with real English content — do NOT leave empty strings:\n{"productName":"actual name","productDescription":"actual description","targetMarket":"actual audience","painPoints":"actual pain points","usps":"actual USPs","benefits":"actual benefits","offer":"actual price/promo","cta":"actual CTA"}`
+  `URL: ${url}\n\nReturn JSON with English marketing content for these keys: productName, productDescription, targetMarket, painPoints, usps, benefits, offer, cta. JSON only, no markdown.`
+
+// Direct API call for product analysis — bypasses kieTextGenerate to surface raw errors
+async function analyzeProductWithAI(apiKey: string, prompt: string): Promise<string> {
+  const models = ['gpt-4o', 'gemini-2.5-flash', 'gpt-4o-mini']
+  const errors: string[] = []
+
+  for (const model of models) {
+    const res = await fetch('https://api.kie.ai/api/v1/chat/completions', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model,
+        messages: [{ role: 'user', content: prompt }],
+      }),
+    })
+
+    const rawText = await res.text()
+
+    if (res.status === 402) throw new Error('INSUFFICIENT_CREDITS')
+    if (!res.ok) {
+      errors.push(`${model}: HTTP ${res.status} — ${rawText.slice(0, 120)}`)
+      continue
+    }
+
+    let content = ''
+    try {
+      const data = JSON.parse(rawText) as { choices?: { message?: { content?: string | null } }[] }
+      content = (data.choices?.[0]?.message?.content ?? '').trim()
+    } catch {
+      errors.push(`${model}: JSON parse error — ${rawText.slice(0, 120)}`)
+      continue
+    }
+
+    if (content) return content
+    errors.push(`${model}: empty content`)
+  }
+
+  throw new Error(errors.join(' | '))
+}
 
 async function fetchPageText(url: string): Promise<string> {
   const strip = (html: string) =>
@@ -141,7 +177,7 @@ export default function ProductForm({ item, onSave, onCancel }: ProductFormProps
       const prompt = pageText.length > 200
         ? EXTRACT_PROMPT(url, pageText)
         : EXTRACT_URL_ONLY_PROMPT(url)
-      const response = await kieTextGenerate(apiKey, prompt, SYSTEM_INSTRUCTION)
+      const response = await analyzeProductWithAI(apiKey, prompt)
 
       let cleaned = response.trim()
       // Strip markdown code fences
