@@ -171,18 +171,24 @@ export const useBankStore = create<BankState>((set, get) => ({
 
   // ── Products ──────────────────────────────────────────────────────────────
   addProduct: async (product) => {
-    const { data: row } = await supabase.from('products').insert({
-      product_name: product.productName,
-      product_description: product.productDescription,
-      target_market: product.targetMarket,
-      pain_points: product.painPoints,
-      usps: product.usps,
-      benefits: product.benefits,
-      offer: product.offer,
-      cta: product.cta,
-      product_image: product.productImage,
-    }).select().single()
-    if (row) set((s) => ({ products: [toProduct(row), ...s.products] }))
+    const tempId = crypto.randomUUID()
+    const tempItem: Product = { id: tempId, createdAt: Date.now(), ...product }
+    set((s) => ({ products: [tempItem, ...s.products] }))
+    try {
+      const { data: row, error } = await supabase.from('products').insert({
+        product_name: product.productName,
+        product_description: product.productDescription,
+        target_market: product.targetMarket,
+        pain_points: product.painPoints,
+        usps: product.usps,
+        benefits: product.benefits,
+        offer: product.offer,
+        cta: product.cta,
+        product_image: product.productImage,
+      }).select().single()
+      if (row) set((s) => ({ products: s.products.map((p) => p.id === tempId ? toProduct(row) : p) }))
+      else if (error) console.error('addProduct Supabase error:', error.message)
+    } catch (e) { console.error('addProduct error:', e) }
   },
 
   updateProduct: async (id, updates) => {
@@ -209,12 +215,18 @@ export const useBankStore = create<BankState>((set, get) => ({
 
   // ── Models ────────────────────────────────────────────────────────────────
   addModel: async (model) => {
-    const { data: row } = await supabase.from('models').insert({
-      label: model.name,
-      character_image: model.characterImage,
-      character_params: { notes: model.notes, source: model.source, jsonProfile: model.jsonProfile },
-    }).select().single()
-    if (row) set((s) => ({ models: [toModel(row), ...s.models] }))
+    const tempId = crypto.randomUUID()
+    const tempItem: Model = { id: tempId, createdAt: Date.now(), ...model }
+    set((s) => ({ models: [tempItem, ...s.models] }))
+    try {
+      const { data: row, error } = await supabase.from('models').insert({
+        label: model.name,
+        character_image: model.characterImage,
+        character_params: { notes: model.notes, source: model.source, jsonProfile: model.jsonProfile },
+      }).select().single()
+      if (row) set((s) => ({ models: s.models.map((m) => m.id === tempId ? toModel(row) : m) }))
+      else if (error) console.error('addModel Supabase error:', error.message)
+    } catch (e) { console.error('addModel error:', e) }
   },
 
   updateModel: async (id, updates) => {
@@ -242,14 +254,20 @@ export const useBankStore = create<BankState>((set, get) => ({
 
   // ── Scripts ───────────────────────────────────────────────────────────────
   addScript: async (script) => {
-    const { data: row } = await supabase.from('scripts').insert({
-      title: script.title,
-      full_script: script.scriptText,
-      hook: script.linkedProductId,
-      body: script.source,
-      cta: '',
-    }).select().single()
-    if (row) set((s) => ({ scripts: [toScript(row), ...s.scripts] }))
+    const tempId = crypto.randomUUID()
+    const tempItem: Script = { id: tempId, createdAt: Date.now(), ...script }
+    set((s) => ({ scripts: [tempItem, ...s.scripts] }))
+    try {
+      const { data: row, error } = await supabase.from('scripts').insert({
+        title: script.title,
+        full_script: script.scriptText,
+        hook: script.linkedProductId,
+        body: script.source,
+        cta: '',
+      }).select().single()
+      if (row) set((s) => ({ scripts: s.scripts.map((sc) => sc.id === tempId ? toScript(row) : sc) }))
+      else if (error) console.error('addScript Supabase error:', error.message)
+    } catch (e) { console.error('addScript error:', e) }
   },
 
   updateScript: async (id, updates) => {
@@ -271,16 +289,22 @@ export const useBankStore = create<BankState>((set, get) => ({
 
   // ── Voices ────────────────────────────────────────────────────────────────
   addVoice: async (voice) => {
-    const { data: row } = await supabase.from('voices').insert({
-      label: voice.label,
-      voice_name: voice.voiceName,
-      gender: voice.gender,
-      style_instructions: voice.styleInstructions,
-      creativity: voice.creativity,
-      ambience: voice.ambience,
-      linked_model_id: voice.linkedModelId,
-    }).select().single()
-    if (row) set((s) => ({ voices: [toVoice(row), ...s.voices] }))
+    const tempId = crypto.randomUUID()
+    const tempItem: VoicePreset = { id: tempId, createdAt: Date.now(), ...voice }
+    set((s) => ({ voices: [tempItem, ...s.voices] }))
+    try {
+      const { data: row, error } = await supabase.from('voices').insert({
+        label: voice.label,
+        voice_name: voice.voiceName,
+        gender: voice.gender,
+        style_instructions: voice.styleInstructions,
+        creativity: voice.creativity,
+        ambience: voice.ambience,
+        linked_model_id: voice.linkedModelId,
+      }).select().single()
+      if (row) set((s) => ({ voices: s.voices.map((v) => v.id === tempId ? toVoice(row) : v) }))
+      else if (error) console.error('addVoice Supabase error:', error.message)
+    } catch (e) { console.error('addVoice error:', e) }
   },
 
   updateVoice: async (id, updates) => {
@@ -331,14 +355,20 @@ export const useBankStore = create<BankState>((set, get) => ({
 
   // ── BRolls ────────────────────────────────────────────────────────────────
   addBRoll: async (broll) => {
-    const { data: row } = await supabase.from('brolls').insert({
-      image_url: broll.imageUrl,
-      prompt: broll.prompt,
-      video_url: broll.videoUrl ?? '',
-      videos: broll.videos ?? [],
-      label: JSON.stringify({ productId: broll.productId ?? null, modelId: broll.modelId ?? null, scriptId: broll.scriptId ?? null }),
-    }).select().single()
-    if (row) set((s) => ({ brolls: [toBRoll(row), ...s.brolls] }))
+    const tempId = crypto.randomUUID()
+    const tempItem: BRoll = { id: tempId, createdAt: Date.now(), videos: [], ...broll }
+    set((s) => ({ brolls: [tempItem, ...s.brolls] }))
+    try {
+      const { data: row, error } = await supabase.from('brolls').insert({
+        image_url: broll.imageUrl,
+        prompt: broll.prompt,
+        video_url: broll.videoUrl ?? '',
+        videos: broll.videos ?? [],
+        label: JSON.stringify({ productId: broll.productId ?? null, modelId: broll.modelId ?? null, scriptId: broll.scriptId ?? null }),
+      }).select().single()
+      if (row) set((s) => ({ brolls: s.brolls.map((b) => b.id === tempId ? toBRoll(row) : b) }))
+      else if (error) console.error('addBRoll Supabase error:', error.message)
+    } catch (e) { console.error('addBRoll error:', e) }
   },
 
   updateBRoll: async (id, updates) => {
