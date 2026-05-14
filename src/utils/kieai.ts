@@ -354,24 +354,30 @@ export async function kieAnalyzeImage(
     ],
   })
 
-  // gpt-4o-mini has reliable vision support through kie.ai OpenAI-compatible endpoint
-  const res = await fetch('https://api.kie.ai/api/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({ model: 'gpt-4o-mini', messages }),
-  })
-  if (res.status === 402) throw new Error('INSUFFICIENT_CREDITS')
-  if (!res.ok) {
-    const text = await res.text().catch(() => res.statusText)
-    throw new Error(`kie.ai vision error (${res.status}): ${text}`)
+  const visionModels = ['gpt-4o', 'gpt-4o-mini']
+  let lastError = ''
+
+  for (const model of visionModels) {
+    const res = await fetch('https://api.kie.ai/api/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ model, messages }),
+    })
+    if (res.status === 402) throw new Error('INSUFFICIENT_CREDITS')
+    if (!res.ok) {
+      lastError = `kie.ai vision error (${res.status}): ${await res.text().catch(() => res.statusText)}`
+      continue
+    }
+    const data = await res.json() as { choices?: { message?: { content?: string } }[] }
+    const content = data.choices?.[0]?.message?.content
+    if (content) return content
+    lastError = `Model ${model} trả về phản hồi rỗng`
   }
-  const data = await res.json() as { choices?: { message?: { content?: string } }[] }
-  const content = data.choices?.[0]?.message?.content
-  if (!content) throw new Error('Không có phản hồi từ kie.ai vision')
-  return content
+
+  throw new Error(lastError || 'Không có phản hồi từ kie.ai vision')
 }
 
 // ── TTS / Voice (kie.ai audio — OpenAI-compatible) ───────────────────
