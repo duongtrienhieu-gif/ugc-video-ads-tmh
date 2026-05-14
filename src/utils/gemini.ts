@@ -136,7 +136,7 @@ export async function geminiImageGenerate(
   const aspect = (aspectRatio === '9:16' || aspectRatio === '16:9') ? aspectRatio : '9:16'
   const { taskId } = await kieGenerateImage({
     apiKey,
-    model: 'nano-banana-2-text-to-image',
+    model: 'nano-banana-2',
     prompt,
     resolution: '1K',
     aspectRatio: aspect,

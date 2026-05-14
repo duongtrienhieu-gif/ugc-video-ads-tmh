@@ -23,8 +23,8 @@ export interface ImageModel {
 }
 
 export const IMAGE_MODELS: ImageModel[] = [
-  { id: 'nano-banana-2-text-to-image', name: 'Nano Banana 2', provider: 'Google', credits: { '1K': 8, '2K': 12, '4K': 16 } },
-  { id: 'gpt-image-2-text-to-image',  name: 'GPT Image 2',   provider: 'OpenAI', credits: { '1K': 6, '2K': 10, '4K': 16 }, starred: true },
+  { id: 'nano-banana-2',             name: 'Nano Banana 2', provider: 'Google', credits: { '1K': 8,  '2K': 12, '4K': 16 } },
+  { id: 'gpt-image-2-text-to-image', name: 'GPT Image 2',   provider: 'OpenAI', credits: { '1K': 6,  '2K': 10, '4K': 16 }, starred: true },
 ]
 
 export type ImageResolution = '1K' | '2K' | '4K'
