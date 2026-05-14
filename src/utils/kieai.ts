@@ -488,7 +488,7 @@ export async function kieAnalyzeImage(
     ],
   })
 
-  const visionModels = ['gpt-4o', 'gpt-4o-mini']
+  const visionModels = ['gpt-4o', 'gemini-2.5-flash', 'gpt-4o-mini']
   let lastError = ''
 
   for (const model of visionModels) {
@@ -505,10 +505,13 @@ export async function kieAnalyzeImage(
       lastError = `kie.ai vision error (${res.status}): ${await res.text().catch(() => res.statusText)}`
       continue
     }
-    const data = await res.json() as { choices?: { message?: { content?: string } }[] }
-    const content = data.choices?.[0]?.message?.content
+    const data = await res.json() as { choices?: { message?: { content?: string | null; refusal?: string } }[] }
+    const msg = data.choices?.[0]?.message
+    const content = typeof msg?.content === 'string' ? msg.content.trim() : ''
     if (content) return content
-    lastError = `Model ${model} trả về phản hồi rỗng`
+    lastError = msg?.refusal
+      ? `Model ${model} từ chối: ${msg.refusal.slice(0, 80)}`
+      : `Model ${model} trả về phản hồi rỗng`
   }
 
   throw new Error(lastError || 'Không có phản hồi từ kie.ai vision')

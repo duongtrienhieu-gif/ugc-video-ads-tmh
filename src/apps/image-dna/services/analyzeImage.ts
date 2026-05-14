@@ -1,6 +1,6 @@
 import type { VisualDNA } from '../types'
 import { useSettingsStore } from '../../../stores/settingsStore'
-import { geminiAnalyzeImage, fileToBase64 } from '../../../utils/gemini'
+import { directGeminiVision, fileToBase64 } from '../../../utils/gemini'
 
 const SYSTEM_INSTRUCTION = `You are a visual DNA extractor for UGC ad production. You analyze images of people and extract every visual detail that would be needed to recreate the exact same look in an AI image generation tool.
 
@@ -50,12 +50,17 @@ You must respond with ONLY valid JSON matching this exact structure (no markdown
 Be extremely specific and detailed. Every field should have a value — use your best assessment from the image.`
 
 export async function analyzeImage(imageFile: File): Promise<VisualDNA> {
-  const apiKey = useSettingsStore.getState().getApiKey()
+  const geminiKey = useSettingsStore.getState().getGeminiApiKey()
   const { base64, mimeType } = await fileToBase64(imageFile)
 
-  const prompt = `Extract the complete visual DNA from this image. Analyze every aspect: the person's physical appearance, clothing style, pose, location, and camera settings. Return as JSON.`
-
-  const responseText = await geminiAnalyzeImage(apiKey, prompt, base64, mimeType, SYSTEM_INSTRUCTION)
+  const responseText = await directGeminiVision({
+    apiKey: geminiKey,
+    parts: [
+      { inlineData: { mimeType, data: base64 } },
+      { text: 'Extract the complete visual DNA from this image. Analyze every aspect: the person\'s physical appearance, clothing style, pose, location, and camera settings. Return as JSON.' },
+    ],
+    systemInstruction: SYSTEM_INSTRUCTION,
+  })
 
   const cleaned = responseText.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim()
   const result: VisualDNA = JSON.parse(cleaned)

@@ -4,11 +4,15 @@ const STORAGE_KEY = 'ai-ugc-lab-settings'
 
 interface SettingsState {
   kieApiKey: string
+  geminiApiKey: string
   kieCredits: number | null
   setKieApiKey: (key: string) => void
+  setGeminiApiKey: (key: string) => void
   setKieCredits: (credits: number | null) => void
   hasApiKey: () => boolean
   getApiKey: () => string
+  getGeminiApiKey: () => string
+  hasGeminiKey: () => boolean
 }
 
 function loadFromStorage() {
@@ -16,14 +20,17 @@ function loadFromStorage() {
     const raw = localStorage.getItem(STORAGE_KEY)
     if (raw) {
       const parsed = JSON.parse(raw)
-      return { kieApiKey: parsed.kieApiKey ?? '' }
+      return {
+        kieApiKey: parsed.kieApiKey ?? '',
+        geminiApiKey: parsed.geminiApiKey ?? '',
+      }
     }
   } catch {}
-  return { kieApiKey: '' }
+  return { kieApiKey: '', geminiApiKey: '' }
 }
 
-function saveToStorage(kieApiKey: string) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify({ kieApiKey }))
+function saveToStorage(kieApiKey: string, geminiApiKey: string) {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify({ kieApiKey, geminiApiKey }))
 }
 
 export const useSettingsStore = create<SettingsState>((set, get) => ({
@@ -32,7 +39,12 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
 
   setKieApiKey: (key) => {
     set({ kieApiKey: key })
-    saveToStorage(key)
+    saveToStorage(key, get().geminiApiKey)
+  },
+
+  setGeminiApiKey: (key) => {
+    set({ geminiApiKey: key })
+    saveToStorage(get().kieApiKey, key)
   },
 
   setKieCredits: (credits) => set({ kieCredits: credits }),
@@ -44,4 +56,12 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     if (!key) throw new Error('Vui lòng nhập kie.ai API key trong Cài đặt')
     return key
   },
+
+  getGeminiApiKey: () => {
+    const key = get().geminiApiKey
+    if (!key) throw new Error('Vui lòng nhập Google Gemini API key trong Cài đặt')
+    return key
+  },
+
+  hasGeminiKey: () => get().geminiApiKey.length > 0,
 }))

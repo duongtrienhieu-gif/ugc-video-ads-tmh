@@ -12,11 +12,13 @@ interface SettingsModalProps {
 }
 
 export default function SettingsModal({ open, onClose }: SettingsModalProps) {
-  const { kieApiKey, kieCredits, setKieApiKey, setKieCredits } = useSettingsStore()
+  const { kieApiKey, geminiApiKey, kieCredits, setKieApiKey, setGeminiApiKey, setKieCredits } = useSettingsStore()
   const addToast = useAppStore((s) => s.addToast)
 
   const [draftKie, setDraftKie] = useState(kieApiKey)
+  const [draftGemini, setDraftGemini] = useState(geminiApiKey)
   const [show, setShow] = useState(false)
+  const [showGemini, setShowGemini] = useState(false)
   const [saved, setSaved] = useState(false)
   const [cleaning, setCleaning] = useState(false)
   const [testing, setTesting] = useState(false)
@@ -25,10 +27,11 @@ export default function SettingsModal({ open, onClose }: SettingsModalProps) {
   useEffect(() => {
     if (open) {
       setDraftKie(kieApiKey)
+      setDraftGemini(geminiApiKey)
       setSaved(false)
       setTestResult(null)
     }
-  }, [open, kieApiKey])
+  }, [open, kieApiKey, geminiApiKey])
 
   if (!open) return null
 
@@ -51,6 +54,7 @@ export default function SettingsModal({ open, onClose }: SettingsModalProps) {
   async function handleSave() {
     const key = draftKie.trim()
     setKieApiKey(key)
+    setGeminiApiKey(draftGemini.trim())
     setSaved(true)
     addToast('Đã lưu cài đặt thành công')
     // Auto-test after save to refresh credits
@@ -117,13 +121,14 @@ export default function SettingsModal({ open, onClose }: SettingsModalProps) {
         </div>
 
         <div className="flex flex-col gap-5">
-          {/* kie.ai API Key */}
-          <div className="space-y-2">
+
+          {/* ── KIE.AI ────────────────────────────────────── */}
+          <div className="rounded-xl border border-indigo-100 bg-indigo-50/40 p-4 space-y-3">
             <div className="flex items-center justify-between">
-              <label className="flex items-center gap-2 text-sm font-medium text-gray-700">
-                <Key className="h-3.5 w-3.5 text-gray-500" />
-                kie.ai API Key
-              </label>
+              <div>
+                <p className="text-xs font-bold uppercase tracking-widest text-indigo-400">KIE.AI</p>
+                <p className="text-[11px] text-gray-400 mt-0.5">Tạo ảnh · Video · Giọng đọc · Kịch bản</p>
+              </div>
               <a
                 href="https://kie.ai"
                 target="_blank"
@@ -132,6 +137,13 @@ export default function SettingsModal({ open, onClose }: SettingsModalProps) {
               >
                 Lấy key →
               </a>
+            </div>
+            <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <label className="flex items-center gap-2 text-sm font-medium text-gray-700">
+                <Key className="h-3.5 w-3.5 text-gray-500" />
+                API Key
+              </label>
             </div>
 
             {/* Input */}
@@ -153,7 +165,7 @@ export default function SettingsModal({ open, onClose }: SettingsModalProps) {
             </div>
 
             <p className="text-[11px] text-gray-400">
-              Dùng cho tất cả tính năng: tạo ảnh, video, giọng đọc và văn bản
+              Định dạng: <span className="font-mono text-gray-500">SK-...</span>
             </p>
 
             {/* Test connection button */}
@@ -188,7 +200,51 @@ export default function SettingsModal({ open, onClose }: SettingsModalProps) {
                 )}
               </div>
             )}
-          </div>
+            </div>{/* end space-y-2 */}
+          </div>{/* end KIE box */}
+
+          {/* ── GOOGLE GEMINI ─────────────────────────────── */}
+          <div className="rounded-xl border border-emerald-100 bg-emerald-50/40 p-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs font-bold uppercase tracking-widest text-emerald-500">Google Gemini</p>
+                <p className="text-[11px] text-gray-400 mt-0.5">Phân tích QC · Image DNA</p>
+              </div>
+              <a
+                href="https://aistudio.google.com/app/apikey"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-[11px] text-emerald-600 transition-colors hover:text-emerald-500"
+              >
+                Lấy key miễn phí →
+              </a>
+            </div>
+            <div className="space-y-2">
+              <label className="flex items-center gap-2 text-sm font-medium text-gray-700">
+                <Key className="h-3.5 w-3.5 text-gray-500" />
+                API Key
+              </label>
+              <div className="relative">
+                <input
+                  type={showGemini ? 'text' : 'password'}
+                  value={draftGemini}
+                  onChange={(e) => setDraftGemini(e.target.value)}
+                  placeholder="AIza..."
+                  className="w-full rounded-lg border border-black/10 bg-white/70 px-3 py-2.5 pr-10 text-sm text-gray-800 placeholder-gray-400 outline-none transition-colors focus:border-emerald-300 focus:bg-white"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowGemini(!showGemini)}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 transition-colors hover:text-gray-600"
+                >
+                  {showGemini ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
+              <p className="text-[11px] text-gray-400">
+                Miễn phí · Dùng để phân tích ảnh và video quảng cáo
+              </p>
+            </div>
+          </div>{/* end Gemini box */}
 
           {/* Storage */}
           <div className="rounded-lg border border-black/8 bg-black/[0.02] p-4">
