@@ -3,23 +3,13 @@ const KIE_BASE = 'https://api.kie.ai/api/v1'
 // ── Credits balance ───────────────────────────────────────────────────
 
 export async function getKieCredits(apiKey: string): Promise<number> {
-  const res = await fetch(`${KIE_BASE}/user/me`, {
+  const res = await fetch(`${KIE_BASE}/chat/credit`, {
     headers: { Authorization: `Bearer ${apiKey}` },
   })
   if (!res.ok) throw new Error(`Auth failed: ${res.status}`)
-  const data = await res.json() as {
-    data?: { credits?: number; balance?: number; credit?: number }
-    credits?: number
-    balance?: number
-  }
-  const credits =
-    data?.data?.credits ??
-    data?.data?.balance ??
-    data?.data?.credit ??
-    data?.credits ??
-    data?.balance
-  if (credits === undefined || credits === null) throw new Error('No credits field in response')
-  return Number(credits)
+  const data = await res.json() as { code?: number; data?: number }
+  if (data?.code !== 200 || data?.data === undefined) throw new Error('Invalid response')
+  return Number(data.data)
 }
 
 // ── Image generation ──────────────────────────────────────────────────
