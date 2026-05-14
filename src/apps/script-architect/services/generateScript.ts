@@ -1,6 +1,6 @@
 import type { GenerateScriptInput, GeneratedVariants } from '../types'
 import { useSettingsStore } from '../../../stores/settingsStore'
-import { directGeminiVision } from '../../../utils/gemini'
+import { kieTextGenerate, kieAnalyzeImage } from '../../../utils/kieai'
 
 const SYSTEM_INSTRUCTION = `You are an elite UGC ad script writer specializing in authentic, natural-sounding short-form video scripts.
 
@@ -18,7 +18,7 @@ CRITICAL FORMATTING RULES:
 const UGC_PROMPT_PREFIX = `I need you to write three UGC (User-Generated Content) ad scripts that sound like a real customer speaking into a camera. Use the provided winning transcript as inspiration and further develop the ad structure. The tone should be natural, conversational, not overly salesy or polished. Think authentic, like someone filming themselves with their phone and talking about their experience. The script will be spoken verbatim in the final ad, so make sure it sounds natural when read aloud. Each ad should start with a strong hook to keep viewers engaged. Create at least two to four benefits, recount your experience with the product and how it solved your problem, provide basic information about the product's ingredients and how it works (to give viewers more information about the product), and end with a natural call to action.`
 
 export async function generateScript(input: GenerateScriptInput): Promise<GeneratedVariants> {
-  const geminiKey = useSettingsStore.getState().getGeminiApiKey()
+  const kieKey = useSettingsStore.getState().getApiKey()
 
   let prompt = UGC_PROMPT_PREFIX + '\n\n'
 
@@ -39,23 +39,26 @@ export async function generateScript(input: GenerateScriptInput): Promise<Genera
   }
 
   if (input.attachedImage) {
-    prompt += `A product homepage screenshot is attached — use it to extract additional context about the product's appearance, branding, and claims.\n\n`
+    prompt += `A product homepage screenshot is attached — extract additional context about the product's appearance, branding, and claims from it.\n\n`
   }
 
   prompt += `Generate all three script variants now as JSON.`
 
-  const parts: Array<{ inlineData: { mimeType: string; data: string } } | { text: string }> = []
-  if (input.attachedImage) {
-    parts.push({ inlineData: { mimeType: input.attachedImage.mimeType, data: input.attachedImage.base64 } })
-  }
-  parts.push({ text: prompt })
+  let responseText: string
 
-  const responseText = await directGeminiVision({
-    apiKey: geminiKey,
-    parts,
-    systemInstruction: SYSTEM_INSTRUCTION,
-    maxOutputTokens: 8192,
-  })
+  if (input.attachedImage) {
+    // With image: use GPT-4o vision via kie.ai
+    responseText = await kieAnalyzeImage(
+      kieKey,
+      input.attachedImage.base64,
+      input.attachedImage.mimeType,
+      prompt,
+      SYSTEM_INSTRUCTION,
+    )
+  } else {
+    // Text only: use GPT-4o via kie.ai
+    responseText = await kieTextGenerate(kieKey, prompt, SYSTEM_INSTRUCTION)
+  }
 
   let cleaned = responseText.trim()
   const jsonMatch = cleaned.match(/\{[\s\S]*\}/)
@@ -70,7 +73,7 @@ export async function generateScript(input: GenerateScriptInput): Promise<Genera
 }
 
 export async function translateToMalay(scriptText: string): Promise<string> {
-  const geminiKey = useSettingsStore.getState().getGeminiApiKey()
+  const kieKey = useSettingsStore.getState().getApiKey()
   const prompt = `Translate the following UGC ad script into natural Malaysian Malay (Bahasa Malaysia). Use native, colloquial phrasing that sounds authentic — like a real Malaysian person speaking casually on camera. Preserve the tone, energy, and sentence-by-sentence structure. Return ONLY the translated script, no explanations.\n\n${scriptText}`
-  return await directGeminiVision({ apiKey: geminiKey, parts: [{ text: prompt }], maxOutputTokens: 4096 })
+  return await kieTextGenerate(kieKey, prompt)
 }
