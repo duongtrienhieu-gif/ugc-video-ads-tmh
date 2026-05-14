@@ -1,6 +1,7 @@
 import { create } from 'zustand'
-import { supabase } from '../lib/supabase'
+import { supabase, requireUserId } from '../lib/supabase'
 import type { Product, Model, Script, VoicePreset, VoiceHistoryItem, BRoll } from './types'
+import { useAppStore } from './appStore'
 
 // ── Row → TypeScript helpers ────────────────────────────────────────────────
 
@@ -20,8 +21,6 @@ function toProduct(row: Record<string, unknown>): Product {
   }
 }
 
-// models table: label=name, character_image=characterImage,
-// character_params JSONB = { notes, source, jsonProfile }
 function toModel(row: Record<string, unknown>): Model {
   const params = (row.character_params as Record<string, unknown>) ?? {}
   return {
@@ -35,7 +34,6 @@ function toModel(row: Record<string, unknown>): Model {
   }
 }
 
-// scripts table: title=title, full_script=scriptText, hook=linkedProductId, body=source
 function toScript(row: Record<string, unknown>): Script {
   return {
     id: row.id as string,
@@ -61,7 +59,6 @@ function toVoice(row: Record<string, unknown>): VoicePreset {
   }
 }
 
-// voice_history table: label=JSON({ voiceId, modelId, scriptPreview }), script=scriptText
 function toVoiceHistory(row: Record<string, unknown>): VoiceHistoryItem {
   let packed: Record<string, string> = {}
   try { packed = JSON.parse((row.label as string) ?? '{}') } catch { /* empty */ }
@@ -78,7 +75,6 @@ function toVoiceHistory(row: Record<string, unknown>): VoiceHistoryItem {
   }
 }
 
-// brolls table: label=JSON({ productId, modelId, scriptId })
 function toBRoll(row: Record<string, unknown>): BRoll {
   let packed: Record<string, string | undefined> = {}
   try { packed = JSON.parse((row.label as string) ?? '{}') } catch { /* empty */ }
@@ -93,6 +89,16 @@ function toBRoll(row: Record<string, unknown>): BRoll {
     modelId: packed.modelId ?? undefined,
     scriptId: packed.scriptId ?? undefined,
   }
+}
+
+// Show insert errors as toast so user knows data didn't save
+function reportError(action: string, error: { message?: string } | null) {
+  if (!error) return
+  const msg = error.message ?? String(error)
+  console.error(`${action} error:`, msg)
+  try {
+    useAppStore.getState().addToast(`${action} thất bại: ${msg}`, 'error')
+  } catch { /* appStore may not be ready */ }
 }
 
 // ── Store ────────────────────────────────────────────────────────────────────
@@ -133,11 +139,13 @@ interface BankState {
   deleteBRoll: (id: string) => Promise<void>
   getBRollById: (id: string) => BRoll | undefined
 
-  // addVoiceHistory takes full item (with id+createdAt) from generateVoice service
   addVoiceHistory: (item: VoiceHistoryItem) => Promise<void>
   deleteVoiceHistory: (id: string) => Promise<void>
   clearVoiceHistory: () => Promise<void>
 }
+
+// Guard against concurrent loadAll calls (React StrictMode runs effects twice)
+let loadAllInFlight: Promise<void> | null = null
 
 export const useBankStore = create<BankState>((set, get) => ({
   products: [],
@@ -149,24 +157,51 @@ export const useBankStore = create<BankState>((set, get) => ({
   loading: false,
 
   loadAll: async () => {
-    set({ loading: true })
-    const [p, m, s, v, vh, b] = await Promise.all([
-      supabase.from('products').select('*').order('created_at', { ascending: false }),
-      supabase.from('models').select('*').order('created_at', { ascending: false }),
-      supabase.from('scripts').select('*').order('created_at', { ascending: false }),
-      supabase.from('voices').select('*').order('created_at', { ascending: false }),
-      supabase.from('voice_history').select('*').order('created_at', { ascending: false }),
-      supabase.from('brolls').select('*').order('created_at', { ascending: false }),
-    ])
-    set((prev) => ({
-      products:     p.error  ? prev.products     : (p.data  ?? []).map(toProduct),
-      models:       m.error  ? prev.models       : (m.data  ?? []).map(toModel),
-      scripts:      s.error  ? prev.scripts      : (s.data  ?? []).map(toScript),
-      voices:       v.error  ? prev.voices       : (v.data  ?? []).map(toVoice),
-      voiceHistory: vh.error ? prev.voiceHistory : (vh.data ?? []).map(toVoiceHistory),
-      brolls:       b.error  ? prev.brolls       : (b.data  ?? []).map(toBRoll),
-      loading: false,
-    }))
+    if (loadAllInFlight) return loadAllInFlight
+    loadAllInFlight = (async () => {
+      set({ loading: true })
+      try {
+        // Verify auth session is alive — refresh if needed
+        const { data: { user } } = await supabase.auth.getUser()
+        if (!user) {
+          set({ loading: false })
+          return
+        }
+
+        const [p, m, s, v, vh, b] = await Promise.all([
+          supabase.from('products').select('*').eq('user_id', user.id).order('created_at', { ascending: false }),
+          supabase.from('models').select('*').eq('user_id', user.id).order('created_at', { ascending: false }),
+          supabase.from('scripts').select('*').eq('user_id', user.id).order('created_at', { ascending: false }),
+          supabase.from('voices').select('*').eq('user_id', user.id).order('created_at', { ascending: false }),
+          supabase.from('voice_history').select('*').eq('user_id', user.id).order('created_at', { ascending: false }),
+          supabase.from('brolls').select('*').eq('user_id', user.id).order('created_at', { ascending: false }),
+        ])
+
+        // Report any per-table errors to user so they know data fetch failed
+        if (p.error)  reportError('Tải sản phẩm',  p.error)
+        if (m.error)  reportError('Tải nhân vật',  m.error)
+        if (s.error)  reportError('Tải kịch bản',  s.error)
+        if (v.error)  reportError('Tải giọng đọc', v.error)
+        if (vh.error) reportError('Tải lịch sử',   vh.error)
+        if (b.error)  reportError('Tải B-Roll',    b.error)
+
+        set((prev) => ({
+          products:     p.error  ? prev.products     : (p.data  ?? []).map(toProduct),
+          models:       m.error  ? prev.models       : (m.data  ?? []).map(toModel),
+          scripts:      s.error  ? prev.scripts      : (s.data  ?? []).map(toScript),
+          voices:       v.error  ? prev.voices       : (v.data  ?? []).map(toVoice),
+          voiceHistory: vh.error ? prev.voiceHistory : (vh.data ?? []).map(toVoiceHistory),
+          brolls:       b.error  ? prev.brolls       : (b.data  ?? []).map(toBRoll),
+          loading: false,
+        }))
+      } catch (e) {
+        console.error('loadAll error:', e)
+        set({ loading: false })
+      } finally {
+        loadAllInFlight = null
+      }
+    })()
+    return loadAllInFlight
   },
 
   // ── Products ──────────────────────────────────────────────────────────────
@@ -175,7 +210,9 @@ export const useBankStore = create<BankState>((set, get) => ({
     const tempItem: Product = { id: tempId, createdAt: Date.now(), ...product }
     set((s) => ({ products: [tempItem, ...s.products] }))
     try {
+      const user_id = await requireUserId()
       const { data: row, error } = await supabase.from('products').insert({
+        user_id,
         product_name: product.productName,
         product_description: product.productDescription,
         target_market: product.targetMarket,
@@ -186,9 +223,16 @@ export const useBankStore = create<BankState>((set, get) => ({
         cta: product.cta,
         product_image: product.productImage,
       }).select().single()
-      if (row) set((s) => ({ products: s.products.map((p) => p.id === tempId ? toProduct(row) : p) }))
-      else if (error) console.error('addProduct Supabase error:', error.message)
-    } catch (e) { console.error('addProduct error:', e) }
+      if (error) {
+        reportError('Lưu sản phẩm', error)
+        set((s) => ({ products: s.products.filter((p) => p.id !== tempId) }))
+      } else if (row) {
+        set((s) => ({ products: s.products.map((p) => p.id === tempId ? toProduct(row) : p) }))
+      }
+    } catch (e) {
+      reportError('Lưu sản phẩm', { message: e instanceof Error ? e.message : String(e) })
+      set((s) => ({ products: s.products.filter((p) => p.id !== tempId) }))
+    }
   },
 
   updateProduct: async (id, updates) => {
@@ -202,13 +246,15 @@ export const useBankStore = create<BankState>((set, get) => ({
     if (updates.offer !== undefined) patch.offer = updates.offer
     if (updates.cta !== undefined) patch.cta = updates.cta
     if (updates.productImage !== undefined) patch.product_image = updates.productImage
-    await supabase.from('products').update(patch).eq('id', id)
-    set((s) => ({ products: s.products.map((p) => p.id === id ? { ...p, ...updates } : p) }))
+    const { error } = await supabase.from('products').update(patch).eq('id', id)
+    if (error) reportError('Cập nhật sản phẩm', error)
+    else set((s) => ({ products: s.products.map((p) => p.id === id ? { ...p, ...updates } : p) }))
   },
 
   deleteProduct: async (id) => {
-    await supabase.from('products').delete().eq('id', id)
-    set((s) => ({ products: s.products.filter((p) => p.id !== id) }))
+    const { error } = await supabase.from('products').delete().eq('id', id)
+    if (error) reportError('Xóa sản phẩm', error)
+    else set((s) => ({ products: s.products.filter((p) => p.id !== id) }))
   },
 
   getProductById: (id) => get().products.find((p) => p.id === id),
@@ -219,14 +265,23 @@ export const useBankStore = create<BankState>((set, get) => ({
     const tempItem: Model = { id: tempId, createdAt: Date.now(), ...model }
     set((s) => ({ models: [tempItem, ...s.models] }))
     try {
+      const user_id = await requireUserId()
       const { data: row, error } = await supabase.from('models').insert({
+        user_id,
         label: model.name,
         character_image: model.characterImage,
         character_params: { notes: model.notes, source: model.source, jsonProfile: model.jsonProfile },
       }).select().single()
-      if (row) set((s) => ({ models: s.models.map((m) => m.id === tempId ? toModel(row) : m) }))
-      else if (error) console.error('addModel Supabase error:', error.message)
-    } catch (e) { console.error('addModel error:', e) }
+      if (error) {
+        reportError('Lưu nhân vật', error)
+        set((s) => ({ models: s.models.filter((m) => m.id !== tempId) }))
+      } else if (row) {
+        set((s) => ({ models: s.models.map((m) => m.id === tempId ? toModel(row) : m) }))
+      }
+    } catch (e) {
+      reportError('Lưu nhân vật', { message: e instanceof Error ? e.message : String(e) })
+      set((s) => ({ models: s.models.filter((m) => m.id !== tempId) }))
+    }
   },
 
   updateModel: async (id, updates) => {
@@ -241,13 +296,15 @@ export const useBankStore = create<BankState>((set, get) => ({
         jsonProfile: updates.jsonProfile !== undefined ? updates.jsonProfile : current?.jsonProfile ?? null,
       }
     }
-    await supabase.from('models').update(patch).eq('id', id)
-    set((s) => ({ models: s.models.map((m) => m.id === id ? { ...m, ...updates } : m) }))
+    const { error } = await supabase.from('models').update(patch).eq('id', id)
+    if (error) reportError('Cập nhật nhân vật', error)
+    else set((s) => ({ models: s.models.map((m) => m.id === id ? { ...m, ...updates } : m) }))
   },
 
   deleteModel: async (id) => {
-    await supabase.from('models').delete().eq('id', id)
-    set((s) => ({ models: s.models.filter((m) => m.id !== id) }))
+    const { error } = await supabase.from('models').delete().eq('id', id)
+    if (error) reportError('Xóa nhân vật', error)
+    else set((s) => ({ models: s.models.filter((m) => m.id !== id) }))
   },
 
   getModelById: (id) => get().models.find((m) => m.id === id),
@@ -258,16 +315,25 @@ export const useBankStore = create<BankState>((set, get) => ({
     const tempItem: Script = { id: tempId, createdAt: Date.now(), ...script }
     set((s) => ({ scripts: [tempItem, ...s.scripts] }))
     try {
+      const user_id = await requireUserId()
       const { data: row, error } = await supabase.from('scripts').insert({
+        user_id,
         title: script.title,
         full_script: script.scriptText,
         hook: script.linkedProductId,
         body: script.source,
         cta: '',
       }).select().single()
-      if (row) set((s) => ({ scripts: s.scripts.map((sc) => sc.id === tempId ? toScript(row) : sc) }))
-      else if (error) console.error('addScript Supabase error:', error.message)
-    } catch (e) { console.error('addScript error:', e) }
+      if (error) {
+        reportError('Lưu kịch bản', error)
+        set((s) => ({ scripts: s.scripts.filter((sc) => sc.id !== tempId) }))
+      } else if (row) {
+        set((s) => ({ scripts: s.scripts.map((sc) => sc.id === tempId ? toScript(row) : sc) }))
+      }
+    } catch (e) {
+      reportError('Lưu kịch bản', { message: e instanceof Error ? e.message : String(e) })
+      set((s) => ({ scripts: s.scripts.filter((sc) => sc.id !== tempId) }))
+    }
   },
 
   updateScript: async (id, updates) => {
@@ -276,13 +342,15 @@ export const useBankStore = create<BankState>((set, get) => ({
     if (updates.scriptText !== undefined) patch.full_script = updates.scriptText
     if (updates.linkedProductId !== undefined) patch.hook = updates.linkedProductId
     if (updates.source !== undefined) patch.body = updates.source
-    await supabase.from('scripts').update(patch).eq('id', id)
-    set((s) => ({ scripts: s.scripts.map((sc) => sc.id === id ? { ...sc, ...updates } : sc) }))
+    const { error } = await supabase.from('scripts').update(patch).eq('id', id)
+    if (error) reportError('Cập nhật kịch bản', error)
+    else set((s) => ({ scripts: s.scripts.map((sc) => sc.id === id ? { ...sc, ...updates } : sc) }))
   },
 
   deleteScript: async (id) => {
-    await supabase.from('scripts').delete().eq('id', id)
-    set((s) => ({ scripts: s.scripts.filter((sc) => sc.id !== id) }))
+    const { error } = await supabase.from('scripts').delete().eq('id', id)
+    if (error) reportError('Xóa kịch bản', error)
+    else set((s) => ({ scripts: s.scripts.filter((sc) => sc.id !== id) }))
   },
 
   getScriptById: (id) => get().scripts.find((s) => s.id === id),
@@ -293,7 +361,9 @@ export const useBankStore = create<BankState>((set, get) => ({
     const tempItem: VoicePreset = { id: tempId, createdAt: Date.now(), ...voice }
     set((s) => ({ voices: [tempItem, ...s.voices] }))
     try {
+      const user_id = await requireUserId()
       const { data: row, error } = await supabase.from('voices').insert({
+        user_id,
         label: voice.label,
         voice_name: voice.voiceName,
         gender: voice.gender,
@@ -302,9 +372,16 @@ export const useBankStore = create<BankState>((set, get) => ({
         ambience: voice.ambience,
         linked_model_id: voice.linkedModelId,
       }).select().single()
-      if (row) set((s) => ({ voices: s.voices.map((v) => v.id === tempId ? toVoice(row) : v) }))
-      else if (error) console.error('addVoice Supabase error:', error.message)
-    } catch (e) { console.error('addVoice error:', e) }
+      if (error) {
+        reportError('Lưu giọng đọc', error)
+        set((s) => ({ voices: s.voices.filter((v) => v.id !== tempId) }))
+      } else if (row) {
+        set((s) => ({ voices: s.voices.map((v) => v.id === tempId ? toVoice(row) : v) }))
+      }
+    } catch (e) {
+      reportError('Lưu giọng đọc', { message: e instanceof Error ? e.message : String(e) })
+      set((s) => ({ voices: s.voices.filter((v) => v.id !== tempId) }))
+    }
   },
 
   updateVoice: async (id, updates) => {
@@ -316,41 +393,51 @@ export const useBankStore = create<BankState>((set, get) => ({
     if (updates.creativity !== undefined) patch.creativity = updates.creativity
     if (updates.ambience !== undefined) patch.ambience = updates.ambience
     if (updates.linkedModelId !== undefined) patch.linked_model_id = updates.linkedModelId
-    await supabase.from('voices').update(patch).eq('id', id)
-    set((s) => ({ voices: s.voices.map((v) => v.id === id ? { ...v, ...updates } : v) }))
+    const { error } = await supabase.from('voices').update(patch).eq('id', id)
+    if (error) reportError('Cập nhật giọng đọc', error)
+    else set((s) => ({ voices: s.voices.map((v) => v.id === id ? { ...v, ...updates } : v) }))
   },
 
   deleteVoice: async (id) => {
-    await supabase.from('voices').delete().eq('id', id)
-    set((s) => ({ voices: s.voices.filter((v) => v.id !== id) }))
+    const { error } = await supabase.from('voices').delete().eq('id', id)
+    if (error) reportError('Xóa giọng đọc', error)
+    else set((s) => ({ voices: s.voices.filter((v) => v.id !== id) }))
   },
 
   getVoiceById: (id) => get().voices.find((v) => v.id === id),
 
   // ── Voice History ─────────────────────────────────────────────────────────
-  // Takes full VoiceHistoryItem (with id+createdAt) from generateVoice service
   addVoiceHistory: async (item) => {
-    await supabase.from('voice_history').insert({
-      id: item.id,
-      created_at: item.createdAt,
-      voice_name: item.voiceName,
-      audio_url: item.audioUrl,
-      duration: item.duration,
-      script: item.scriptText,
-      label: JSON.stringify({ voiceId: item.voiceId, modelId: item.modelId, scriptPreview: item.scriptPreview }),
-    })
+    try {
+      const user_id = await requireUserId()
+      const { error } = await supabase.from('voice_history').insert({
+        id: item.id,
+        user_id,
+        created_at: item.createdAt,
+        voice_name: item.voiceName,
+        audio_url: item.audioUrl,
+        duration: item.duration,
+        script: item.scriptText,
+        label: JSON.stringify({ voiceId: item.voiceId, modelId: item.modelId, scriptPreview: item.scriptPreview }),
+      })
+      if (error) reportError('Lưu lịch sử giọng', error)
+    } catch (e) {
+      reportError('Lưu lịch sử giọng', { message: e instanceof Error ? e.message : String(e) })
+    }
     set((s) => ({ voiceHistory: [item, ...s.voiceHistory] }))
   },
 
   deleteVoiceHistory: async (id) => {
-    await supabase.from('voice_history').delete().eq('id', id)
-    set((s) => ({ voiceHistory: s.voiceHistory.filter((h) => h.id !== id) }))
+    const { error } = await supabase.from('voice_history').delete().eq('id', id)
+    if (error) reportError('Xóa lịch sử', error)
+    else set((s) => ({ voiceHistory: s.voiceHistory.filter((h) => h.id !== id) }))
   },
 
   clearVoiceHistory: async () => {
-    const { data: { user } } = await supabase.auth.getUser()
-    if (user) await supabase.from('voice_history').delete().eq('user_id', user.id)
-    set({ voiceHistory: [] })
+    const user_id = await requireUserId()
+    const { error } = await supabase.from('voice_history').delete().eq('user_id', user_id)
+    if (error) reportError('Xóa lịch sử', error)
+    else set({ voiceHistory: [] })
   },
 
   // ── BRolls ────────────────────────────────────────────────────────────────
@@ -359,16 +446,25 @@ export const useBankStore = create<BankState>((set, get) => ({
     const tempItem: BRoll = { id: tempId, createdAt: Date.now(), videos: [], ...broll }
     set((s) => ({ brolls: [tempItem, ...s.brolls] }))
     try {
+      const user_id = await requireUserId()
       const { data: row, error } = await supabase.from('brolls').insert({
+        user_id,
         image_url: broll.imageUrl,
         prompt: broll.prompt,
         video_url: broll.videoUrl ?? '',
         videos: broll.videos ?? [],
         label: JSON.stringify({ productId: broll.productId ?? null, modelId: broll.modelId ?? null, scriptId: broll.scriptId ?? null }),
       }).select().single()
-      if (row) set((s) => ({ brolls: s.brolls.map((b) => b.id === tempId ? toBRoll(row) : b) }))
-      else if (error) console.error('addBRoll Supabase error:', error.message)
-    } catch (e) { console.error('addBRoll error:', e) }
+      if (error) {
+        reportError('Lưu B-Roll', error)
+        set((s) => ({ brolls: s.brolls.filter((b) => b.id !== tempId) }))
+      } else if (row) {
+        set((s) => ({ brolls: s.brolls.map((b) => b.id === tempId ? toBRoll(row) : b) }))
+      }
+    } catch (e) {
+      reportError('Lưu B-Roll', { message: e instanceof Error ? e.message : String(e) })
+      set((s) => ({ brolls: s.brolls.filter((b) => b.id !== tempId) }))
+    }
   },
 
   updateBRoll: async (id, updates) => {
@@ -385,13 +481,15 @@ export const useBankStore = create<BankState>((set, get) => ({
         scriptId: updates.scriptId !== undefined ? (updates.scriptId ?? null) : (current?.scriptId ?? null),
       })
     }
-    await supabase.from('brolls').update(patch).eq('id', id)
-    set((s) => ({ brolls: s.brolls.map((b) => b.id === id ? { ...b, ...updates } : b) }))
+    const { error } = await supabase.from('brolls').update(patch).eq('id', id)
+    if (error) reportError('Cập nhật B-Roll', error)
+    else set((s) => ({ brolls: s.brolls.map((b) => b.id === id ? { ...b, ...updates } : b) }))
   },
 
   deleteBRoll: async (id) => {
-    await supabase.from('brolls').delete().eq('id', id)
-    set((s) => ({ brolls: s.brolls.filter((b) => b.id !== id) }))
+    const { error } = await supabase.from('brolls').delete().eq('id', id)
+    if (error) reportError('Xóa B-Roll', error)
+    else set((s) => ({ brolls: s.brolls.filter((b) => b.id !== id) }))
   },
 
   getBRollById: (id) => get().brolls.find((b) => b.id === id),

@@ -205,23 +205,32 @@ export default function InputPanel({
           )}
         </div>
 
-        {/* ── Bước 3: Ảnh đính kèm ── */}
+        {/* ── Bước 3: Ảnh sản phẩm ── */}
         <div className="mb-6">
-          <StepLabel step={3} label="Tải ảnh đính kèm (tùy chọn)" />
-          <p className="mt-1 mb-2 text-[10px] text-gray-400">Ảnh chụp màn hình trang sản phẩm để Gemini trích xuất thêm ngữ cảnh</p>
+          <StepLabel step={3} label="Tải ảnh sản phẩm từ máy tính" />
+          <p className="mt-1 mb-2 text-[10px] text-gray-400">Ảnh chụp trang bán sản phẩm để GPT trích xuất thêm ngữ cảnh</p>
 
           {attachedImage ? (
-            <div className="flex items-center gap-3 rounded-xl border border-black/10 bg-black/[0.02] p-3">
-              <div className="relative h-14 w-14 shrink-0 overflow-hidden rounded-lg border border-black/10">
-                <img src={attachedImage.preview} alt="" className="h-full w-full object-cover" />
+            <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/5 p-3">
+              <div className="flex items-start gap-3">
+                <div className="relative h-32 w-32 shrink-0 overflow-hidden rounded-lg border border-black/10 bg-black/5">
+                  <img src={attachedImage.preview} alt="Đã tải lên" className="h-full w-full object-cover" />
+                </div>
+                <div className="flex flex-1 flex-col gap-1 min-w-0">
+                  <div className="flex items-center gap-1.5 text-emerald-500">
+                    <svg className="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" /></svg>
+                    <span className="text-[11px] font-medium">Đã tải lên thành công</span>
+                  </div>
+                  <span className="truncate text-xs text-gray-700" title={attachedImage.file.name}>{attachedImage.file.name}</span>
+                  <span className="text-[10px] text-gray-400">{(attachedImage.file.size / 1024).toFixed(0)} KB</span>
+                  <button
+                    onClick={clearImage}
+                    className="mt-1 self-start rounded-lg px-2 py-1 text-[11px] font-medium text-red-400 transition-colors hover:bg-red-500/10"
+                  >
+                    <X className="inline h-3 w-3 mr-1" />Xóa ảnh
+                  </button>
+                </div>
               </div>
-              <span className="flex-1 truncate text-xs text-gray-500">{attachedImage.file.name}</span>
-              <button
-                onClick={clearImage}
-                className="rounded-lg p-1.5 text-gray-400 transition-colors hover:bg-black/5 hover:text-gray-700"
-              >
-                <X className="h-3.5 w-3.5" />
-              </button>
             </div>
           ) : (
             <button
