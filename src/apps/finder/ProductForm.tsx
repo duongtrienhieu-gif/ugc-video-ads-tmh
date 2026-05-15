@@ -231,15 +231,10 @@ export default function ProductForm({ item, onSave, onCancel }: ProductFormProps
       const extracted = parseExtracted(response)
       if (!extracted) throw new Error('AI không trích xuất được thông tin. Thử tải ảnh chụp màn hình thay thế.')
 
-      let filledCount = 0
-      setForm((prev) => {
-        const { next, count } = applyExtracted(extracted, prev)
-        filledCount = count
-        return next
-      })
-
-      if (filledCount === 0) throw new Error('Không trích xuất được thông tin. Thử tải ảnh chụp màn hình.')
-      addToast(`Đã tự động điền ${filledCount} trường thông tin`)
+      const { next, count } = applyExtracted(extracted, form)
+      if (count === 0) throw new Error('Không trích xuất được thông tin. Thử tải ảnh chụp màn hình.')
+      setForm(next)
+      addToast(`Đã tự động điền ${count} trường thông tin`)
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
       addToast(`Không thể lấy thông tin: ${msg}`, 'error')
@@ -270,15 +265,10 @@ export default function ProductForm({ item, onSave, onCancel }: ProductFormProps
       const extracted = parseExtracted(response)
       if (!extracted) throw new Error('AI không trích xuất được thông tin từ ảnh, thử ảnh khác')
 
-      let filledCount = 0
-      setForm((prev) => {
-        const { next, count } = applyExtracted(extracted, prev)
-        filledCount = count
-        return next
-      })
-
-      if (filledCount === 0) throw new Error('Không trích xuất được thông tin, thử ảnh khác')
-      addToast(`Đã tự động điền ${filledCount} trường từ ảnh`)
+      const { next, count } = applyExtracted(extracted, form)
+      if (count === 0) throw new Error('Không trích xuất được thông tin, thử ảnh khác')
+      setForm(next)
+      addToast(`Đã tự động điền ${count} trường từ ảnh`)
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
       addToast(`Phân tích ảnh thất bại: ${msg}`, 'error')
