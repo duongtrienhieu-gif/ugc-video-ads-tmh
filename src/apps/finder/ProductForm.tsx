@@ -26,37 +26,37 @@ const FIELDS: { key: keyof Product; label: string; type: 'text' | 'textarea'; re
 
 const JSON_SCHEMA = `{"productName":"","productDescription":"","targetMarket":"","painPoints":"","usps":"","benefits":"","offer":"","cta":""}`
 
-const EXTRACT_SYSTEM = 'You are a JSON extraction assistant for Vietnamese product pages. Your response must be ONLY a raw JSON object — no markdown, no code fences, no explanation, no extra text before or after.'
+const EXTRACT_SYSTEM = `Bạn là trợ lý trích xuất thông tin sản phẩm. Trang web có thể viết bằng Tiếng Malay, Tiếng Anh, hoặc Tiếng Việt — bất kể ngôn ngữ nào, bạn PHẢI dịch và trả kết quả HOÀN TOÀN bằng TIẾNG VIỆT. Phản hồi chỉ là JSON object thuần — không markdown, không code fence, không giải thích.`
 
 const EXTRACT_PROMPT = (pageText: string) =>
-  `You are reading a Vietnamese product landing page. Extract product information and fill in this JSON. Write values in Vietnamese if the page is in Vietnamese. No extra text, just the JSON:
+  `Đọc nội dung trang sản phẩm bên dưới (có thể là Tiếng Malay, Tiếng Anh hoặc Tiếng Việt). Trích xuất thông tin và điền vào JSON này. TẤT CẢ các giá trị phải viết bằng TIẾNG VIỆT — dịch nếu cần. Chỉ trả JSON, không thêm gì khác:
 ${JSON_SCHEMA}
 
-Field guide:
+Hướng dẫn từng trường (viết bằng tiếng Việt):
 - productName: tên sản phẩm chính
 - productDescription: mô tả ngắn gọn sản phẩm là gì, dùng để làm gì
-- targetMarket: khách hàng mục tiêu (ai nên dùng)
+- targetMarket: khách hàng mục tiêu (ai nên dùng sản phẩm này)
 - painPoints: các vấn đề/nỗi đau của khách hàng mà sản phẩm giải quyết
-- usps: điểm khác biệt/lợi thế độc nhất của sản phẩm
-- benefits: lợi ích khi dùng sản phẩm
-- offer: giá bán và khuyến mãi hiện tại
-- cta: lời kêu gọi hành động (mua ngay, đặt hàng, v.v.)
+- usps: điểm khác biệt/lợi thế độc nhất của sản phẩm so với đối thủ
+- benefits: lợi ích cụ thể khi dùng sản phẩm
+- offer: giá bán và khuyến mãi đang có
+- cta: lời kêu gọi hành động (ví dụ: Mua ngay, Đặt hàng, Nhận ưu đãi)
 
-WEBPAGE TEXT:
+NỘI DUNG TRANG WEB:
 ${pageText.slice(0, 8000)}`
 
-const IMAGE_EXTRACT_PROMPT = `You are reading a Vietnamese product page screenshot. Extract product information and fill in this JSON. Write values in Vietnamese. No extra text, just the JSON:
+const IMAGE_EXTRACT_PROMPT = `Đọc ảnh chụp màn hình trang sản phẩm này (có thể là Tiếng Malay, Tiếng Anh hoặc Tiếng Việt). Trích xuất thông tin và điền vào JSON. TẤT CẢ các giá trị phải viết bằng TIẾNG VIỆT — dịch nếu cần. Chỉ trả JSON, không thêm gì khác:
 ${JSON_SCHEMA}
 
-Field guide:
+Hướng dẫn từng trường (viết bằng tiếng Việt):
 - productName: tên sản phẩm chính
 - productDescription: mô tả ngắn gọn sản phẩm là gì, dùng để làm gì
-- targetMarket: khách hàng mục tiêu (ai nên dùng)
+- targetMarket: khách hàng mục tiêu (ai nên dùng sản phẩm này)
 - painPoints: các vấn đề/nỗi đau của khách hàng mà sản phẩm giải quyết
-- usps: điểm khác biệt/lợi thế độc nhất của sản phẩm
-- benefits: lợi ích khi dùng sản phẩm
-- offer: giá bán và khuyến mãi hiện tại
-- cta: lời kêu gọi hành động (mua ngay, đặt hàng, v.v.)`
+- usps: điểm khác biệt/lợi thế độc nhất của sản phẩm so với đối thủ
+- benefits: lợi ích cụ thể khi dùng sản phẩm
+- offer: giá bán và khuyến mãi đang có
+- cta: lời kêu gọi hành động (ví dụ: Mua ngay, Đặt hàng, Nhận ưu đãi)`
 
 // Jina Reader — renders JS pages and returns clean markdown. Handles LadiPage, Shopee, etc.
 async function fetchViaJina(url: string): Promise<string> {

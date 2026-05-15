@@ -8,12 +8,16 @@ const GEMINI_BASE = 'https://generativelanguage.googleapis.com/v1beta/models'
  * Direct Google Gemini vision call.
  * Sends one or more base64 images and returns the model's text response.
  */
-// Models tried in order — older ones removed, newest stable first
+// Models tried in order — newest first, more fallbacks for high-load periods
 const GEMINI_MODELS = [
   'gemini-2.5-flash',
+  'gemini-2.0-flash',
   'gemini-2.5-flash-preview-05-20',
   'gemini-1.5-flash',
+  'gemini-1.5-pro',
 ]
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
 export async function directGeminiVision(params: {
   apiKey: string
@@ -44,11 +48,13 @@ export async function directGeminiVision(params: {
 
     if (!res.ok) {
       const err = await res.text().catch(() => res.statusText)
-      // 404 = model not available for this account → try next
-      // 429 = rate limit exceeded → try next
-      // 503 = model overloaded / high demand → try next
-      if (res.status === 404 || res.status === 429 || res.status === 503) {
-        errors.push(`${model}: ${res.status === 503 ? 'quá tải' : res.status === 429 ? 'rate limit' : 'không khả dụng'}`)
+      if (res.status === 404) {
+        errors.push(`${model}: không khả dụng`)
+        continue
+      }
+      if (res.status === 429 || res.status === 503) {
+        errors.push(`${model}: ${res.status === 503 ? 'quá tải' : 'rate limit'}`)
+        await sleep(1500) // brief pause before trying next model
         continue
       }
       throw new Error(`Gemini API lỗi (${res.status}): ${err.slice(0, 200)}`)
