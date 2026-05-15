@@ -61,6 +61,8 @@ export default function VoiceStudio() {
     const preset = item as VoicePreset
     setSettings((prev) => ({
       ...prev,
+      // linkedModelId stores the ElevenLabs voice_id when preset comes from history Save
+      voiceId: preset.linkedModelId || prev.voiceId,
       voiceName: preset.voiceName,
       gender: preset.gender,
       creativity: preset.creativity,

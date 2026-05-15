@@ -1,7 +1,9 @@
 ﻿import { useState, useRef, useEffect, useCallback } from 'react'
-import { Play, Pause, Download, Trash2, Volume2 } from 'lucide-react'
+import { Play, Pause, Download, Trash2, Volume2, Save, Check } from 'lucide-react'
 import type { VoiceHistoryItem } from '../../../stores/types'
 import { getUrl } from '../../../utils/assetStore'
+import { useBankStore } from '../../../stores/bankStore'
+import { useAppStore } from '../../../stores/appStore'
 
 interface HistoryPanelProps {
   items: VoiceHistoryItem[]
@@ -153,9 +155,37 @@ export default function HistoryPanel({ items, onDelete }: HistoryPanelProps) {
   const [playingId, setPlayingId] = useState<string | null>(null)
   const [progress, setProgress] = useState<Record<string, number>>({})
   const [currentTime, setCurrentTime] = useState<Record<string, number>>({})
+  const [savingId, setSavingId] = useState<string | null>(null)
+  const [savedIds, setSavedIds] = useState<Set<string>>(new Set())
   const audioRef = useRef<HTMLAudioElement | null>(null)
   const animRef = useRef<number>(0)
   const playingIdRef = useRef<string | null>(null)
+
+  const addVoice = useBankStore((s) => s.addVoice)
+  const addToast = useAppStore((s) => s.addToast)
+
+  const handleSavePreset = async (item: VoiceHistoryItem) => {
+    if (savedIds.has(item.id)) return
+    setSavingId(item.id)
+    try {
+      await addVoice({
+        label: item.voiceName || 'Untitled voice',
+        voiceName: item.voiceName,
+        gender: 'Female',
+        styleInstructions: '',
+        creativity: 0.8,
+        ambience: 'Studio',
+        linkedModelId: item.voiceId, // ElevenLabs voice_id stored here for later TTS calls
+      })
+      setSavedIds((prev) => new Set(prev).add(item.id))
+      addToast(`Đã lưu "${item.voiceName}" vào PROJECT Giọng đọc`)
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      addToast(`Lưu preset thất bại: ${msg}`, 'error')
+    } finally {
+      setSavingId(null)
+    }
+  }
 
   const stopPlayback = useCallback(() => {
     if (audioRef.current) {
@@ -322,6 +352,23 @@ export default function HistoryPanel({ items, onDelete }: HistoryPanelProps) {
                     title="Tải xuống WAV"
                   >
                     <Download className="h-3 w-3" />
+                  </button>
+
+                  <button
+                    onClick={() => handleSavePreset(item)}
+                    disabled={savingId === item.id || savedIds.has(item.id)}
+                    className={`flex items-center gap-1 rounded-full px-2.5 py-1 text-[10px] font-medium transition-colors ${
+                      savedIds.has(item.id)
+                        ? 'bg-emerald-500/15 text-emerald-600'
+                        : 'border border-indigo-500/20 bg-indigo-500/10 text-indigo-500 hover:bg-indigo-500/20'
+                    } disabled:opacity-50`}
+                    title="Lưu preset vào PROJECT Giọng đọc"
+                  >
+                    {savedIds.has(item.id) ? (
+                      <><Check className="h-3 w-3" />Đã lưu</>
+                    ) : (
+                      <><Save className="h-3 w-3" />Lưu preset</>
+                    )}
                   </button>
 
                   <div className="flex-1" />
