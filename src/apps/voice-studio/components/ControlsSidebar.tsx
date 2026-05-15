@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react'
-import { FolderOpen, Headphones, DoorOpen, Mic, RefreshCw, Trash2, Loader2, Library } from 'lucide-react'
+import { FolderOpen, Headphones, DoorOpen, Mic, RefreshCw, Trash2, Loader2, Library, Sliders, ChevronDown, RotateCcw } from 'lucide-react'
 import type { VoiceSettings, Gender, Ambience, VoiceOption } from '../types'
 import { useSettingsStore } from '../../../stores/settingsStore'
 import { useAppStore } from '../../../stores/appStore'
@@ -33,6 +33,7 @@ function mapVoice(v: ElevenLabsVoice): VoiceOption {
 export default function ControlsSidebar({ settings, onSettingsChange, onLoadPreset, onOpenClone, onOpenLibrary, refreshKey }: ControlsSidebarProps) {
   const [voices, setVoices] = useState<VoiceOption[]>([])
   const [isLoading, setIsLoading] = useState(false)
+  const [advancedOpen, setAdvancedOpen] = useState(false)
   const hasElevenLabsKey = useSettingsStore((s) => s.hasElevenLabsKey())
   const addToast = useAppStore((s) => s.addToast)
 
@@ -191,6 +192,87 @@ export default function ControlsSidebar({ settings, onSettingsChange, onLoadPres
         </div>
       </div>
 
+      {/* Advanced Options — collapsible */}
+      <div className="border-b border-black/8">
+        <button
+          onClick={() => setAdvancedOpen((v) => !v)}
+          className="flex w-full items-center justify-between px-4 py-3 transition-colors hover:bg-black/[0.02]"
+        >
+          <span className="flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-widest text-gray-400">
+            <Sliders className="h-3 w-3" />
+            Tùy chọn đầu ra
+          </span>
+          <ChevronDown className={`h-3.5 w-3.5 text-gray-400 transition-transform ${advancedOpen ? 'rotate-180' : ''}`} />
+        </button>
+        {advancedOpen && (
+          <div className="space-y-3 px-4 pb-4">
+            {/* Tốc độ đọc */}
+            <SliderRow
+              label="Tốc độ đọc"
+              value={settings.speed}
+              min={0.7}
+              max={1.2}
+              step={0.05}
+              format={(v) => `${v.toFixed(2)}x`}
+              onChange={(v) => setField('speed', v)}
+              hintLeft="Chậm"
+              hintRight="Nhanh"
+            />
+            {/* Độ giống giọng gốc */}
+            <SliderRow
+              label="Giống giọng gốc"
+              value={settings.similarity}
+              min={0}
+              max={1}
+              step={0.05}
+              format={(v) => `${Math.round(v * 100)}%`}
+              onChange={(v) => setField('similarity', v)}
+              hintLeft="Tự nhiên"
+              hintRight="Bám sát"
+            />
+            {/* Cường độ phong cách */}
+            <SliderRow
+              label="Cường độ phong cách"
+              value={settings.styleExaggeration}
+              min={0}
+              max={1}
+              step={0.05}
+              format={(v) => `${Math.round(v * 100)}%`}
+              onChange={(v) => setField('styleExaggeration', v)}
+              hintLeft="Nhẹ"
+              hintRight="Mạnh"
+            />
+            {/* Speaker Boost toggle */}
+            <div className="flex items-center justify-between rounded-lg bg-black/[0.02] px-3 py-2">
+              <div className="flex flex-col">
+                <span className="text-[11px] font-medium text-gray-700">Tăng cường giọng</span>
+                <span className="text-[10px] text-gray-400">Speaker Boost — rõ và chắc hơn</span>
+              </div>
+              <button
+                onClick={() => setField('useSpeakerBoost', !settings.useSpeakerBoost)}
+                className={`relative h-5 w-9 rounded-full transition-colors ${settings.useSpeakerBoost ? 'bg-indigo-500' : 'bg-gray-300'}`}
+              >
+                <span className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow-sm transition-transform ${settings.useSpeakerBoost ? 'translate-x-4' : 'translate-x-0.5'}`} />
+              </button>
+            </div>
+            {/* Reset to defaults */}
+            <button
+              onClick={() => onSettingsChange({
+                ...settings,
+                speed: 1.0,
+                similarity: 0.75,
+                styleExaggeration: 0.3,
+                useSpeakerBoost: true,
+              })}
+              className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-black/10 px-3 py-1.5 text-[11px] font-medium text-gray-500 transition-colors hover:bg-black/5 hover:text-gray-700"
+            >
+              <RotateCcw className="h-3 w-3" />
+              Mặc định
+            </button>
+          </div>
+        )}
+      </div>
+
       {/* Voice Selection */}
       <div className="flex min-h-0 flex-1 flex-col px-4 py-4">
         <div className="flex items-center justify-between">
@@ -279,6 +361,55 @@ export default function ControlsSidebar({ settings, onSettingsChange, onLoadPres
           )}
         </div>
       </div>
+    </div>
+  )
+}
+
+interface SliderRowProps {
+  label: string
+  value: number
+  min: number
+  max: number
+  step: number
+  format: (v: number) => string
+  onChange: (v: number) => void
+  hintLeft?: string
+  hintRight?: string
+}
+
+function SliderRow({ label, value, min, max, step, format, onChange, hintLeft, hintRight }: SliderRowProps) {
+  const pct = ((value - min) / (max - min)) * 100
+  return (
+    <div>
+      <div className="flex items-center justify-between">
+        <span className="text-[11px] font-medium text-gray-600">{label}</span>
+        <span className="text-[11px] tabular-nums text-indigo-400">{format(value)}</span>
+      </div>
+      <div className="relative mt-2 h-2 w-full rounded-full bg-black/[0.05]">
+        <div
+          className="absolute left-0 top-0 h-full rounded-full bg-indigo-500/40"
+          style={{ width: `${pct}%` }}
+        />
+        <input
+          type="range"
+          min={min}
+          max={max}
+          step={step}
+          value={value}
+          onChange={(e) => onChange(parseFloat(e.target.value))}
+          className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+        />
+        <div
+          className="absolute top-1/2 -translate-y-1/2 h-3.5 w-3.5 rounded-full bg-indigo-400 border-2 border-white pointer-events-none"
+          style={{ left: `calc(${pct}% - 7px)` }}
+        />
+      </div>
+      {(hintLeft || hintRight) && (
+        <div className="mt-1 flex justify-between text-[9px] text-gray-300">
+          <span>{hintLeft}</span>
+          <span>{hintRight}</span>
+        </div>
+      )}
     </div>
   )
 }

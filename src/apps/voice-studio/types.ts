@@ -15,9 +15,13 @@ export interface VoiceSettings {
   voiceId: string
   voiceName: string
   gender: Gender
-  creativity: number          // 0-2 → maps to ElevenLabs stability (inverse)
+  creativity: number              // 0–2 → maps to ElevenLabs stability (inverse)
   ambience: Ambience
   styleInstructions: string
+  speed: number                   // 0.7 – 1.2, ElevenLabs voice_settings.speed
+  similarity: number              // 0 – 1, similarity_boost
+  styleExaggeration: number       // 0 – 1, style param
+  useSpeakerBoost: boolean
 }
 
 export function createDefaultSettings(): VoiceSettings {
@@ -28,5 +32,9 @@ export function createDefaultSettings(): VoiceSettings {
     creativity: 0.8,
     ambience: 'Studio',
     styleInstructions: '',
+    speed: 1.0,
+    similarity: 0.75,
+    styleExaggeration: 0.3,
+    useSpeakerBoost: true,
   }
 }

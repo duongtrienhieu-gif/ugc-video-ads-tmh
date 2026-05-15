@@ -165,6 +165,7 @@ export async function textToSpeech(params: {
   stability?: number       // 0-1, default 0.5 (lower = more variable/expressive)
   similarity?: number      // 0-1, default 0.75 (how close to original voice)
   style?: number           // 0-1, default 0 (style exaggeration)
+  speed?: number           // 0.7 - 1.2, default 1.0 (playback speed)
   useSpeakerBoost?: boolean
   modelId?: string         // default eleven_multilingual_v2
 }): Promise<ArrayBuffer> {
@@ -176,6 +177,7 @@ export async function textToSpeech(params: {
       similarity_boost: params.similarity ?? 0.75,
       style: params.style ?? 0,
       use_speaker_boost: params.useSpeakerBoost ?? true,
+      speed: params.speed ?? 1.0,
     },
   }
 

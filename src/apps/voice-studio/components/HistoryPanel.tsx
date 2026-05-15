@@ -175,7 +175,7 @@ export default function HistoryPanel({ items, onDelete }: HistoryPanelProps) {
         styleInstructions: '',
         creativity: 0.8,
         ambience: 'Studio',
-        linkedModelId: item.voiceId, // ElevenLabs voice_id stored here for later TTS calls
+        linkedModelId: item.voiceId, // ElevenLabs voice_id — needed to re-generate with same voice
       })
       setSavedIds((prev) => new Set(prev).add(item.id))
       addToast(`Đã lưu "${item.voiceName}" vào PROJECT Giọng đọc`)

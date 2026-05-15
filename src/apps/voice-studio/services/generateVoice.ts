@@ -32,9 +32,10 @@ export async function generateVoice(
     voiceId: settings.voiceId,
     text: ttsText,
     stability,
-    similarity: 0.75,
-    style: 0.3,
-    useSpeakerBoost: true,
+    similarity: settings.similarity,
+    style: settings.styleExaggeration,
+    speed: settings.speed,
+    useSpeakerBoost: settings.useSpeakerBoost,
     modelId: 'eleven_multilingual_v2',
   })
 
