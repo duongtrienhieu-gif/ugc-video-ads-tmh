@@ -8,49 +8,26 @@ function nextId() {
   return `var-${Date.now()}-${++idCounter}`
 }
 
-const SYSTEM_INSTRUCTION = `Bạn là Chuyên gia Chiến lược Sáng tạo UGC cao cấp.
+const STYLE_STRING = 'Style: Modern iPhone camera quality, 9:16 aspect ratio, unedited realism, matching A-roll lighting, zero bokeh, zero depth of field, sharp focus across entire frame.'
 
-Nhiệm vụ: Phân tích kịch bản quảng cáo UGC (có thể bằng bất kỳ ngôn ngữ nào) và tạo ra các prompt ảnh B-roll chuyên nghiệp bằng TIẾNG VIỆT để hỗ trợ hình ảnh cho video quảng cáo.
+const SYSTEM_INSTRUCTION = `You are a Senior UGC Creative Strategist. Analyze ad scripts in any language and output B-roll image prompts.
 
-NGÔN NGỮ BẮT BUỘC: Tất cả mô tả cảnh quay trong VAR_1, VAR_2, VAR_3 PHẢI viết bằng tiếng Việt. Chỉ chuỗi kỹ thuật Style ở cuối mới giữ tiếng Anh.
+CRITICAL: Write all image descriptions (VAR_1, VAR_2, VAR_3) in Vietnamese (Tiếng Việt). Only the Style string at the end stays in English.
 
-QUY TẮC PHÂN ĐOẠN KỊCH BẢN (QUAN TRỌNG):
-- KHÔNG tạo một cảnh cho mỗi câu đơn lẻ.
-- NHÓM THÔNG MINH: Gộp các cụm từ ngắn, hội thoại hoặc mở đầu (vd: "Thành thật mà nói", "Nghe này", "Và rồi") với câu thực chất liền kề.
-- Mỗi "Cảnh" phải tương ứng với một đoạn kịch bản có ý nghĩa, có thể hình dung được (khoảng 10-25 từ).
-- Nếu câu quá trừu tượng hoặc quá ngắn, hãy gộp lại.
+RULES:
+- Group short filler phrases with adjacent sentences (10-25 words per scene). Merge if too short.
+- Describe a single frozen action moment. No lighting description. No model appearance details.
+- Each VAR must end with: "${STYLE_STRING}"
+- 3 variations per scene: VAR_1=action/literal, VAR_2=emotional/face, VAR_3=product/detail
 
-CHIẾN LƯỢC & QUY TẮC HÌNH ẢNH (ÁP DỤNG CHO MỌI BIẾN THỂ):
-- KỂ CHUYỆN: Nếu kịch bản đề cập kết quả, hãy hiển thị kết quả đó. Nếu đề cập cảm xúc, hãy hiển thị tương tác tạo ra cảm xúc đó.
-- TÁCH BIỆT HÌNH ẢNH: Thay đổi môi trường/góc quay so với A-roll. B-roll phải trông như sản xuất đa camera chuyên nghiệp.
-- NGÔN NGỮ QUYẾT ĐOÁN: Cam kết với một quyết định sáng tạo duy nhất. KHÔNG dùng "hoặc", KHÔNG có nhiều lựa chọn trong một prompt.
-- KHUNG HÌNH TĨNH: Mô tả một khoảnh khắc hành động đỉnh điểm duy nhất, đóng băng. Không chuyển động/chuyển cảnh.
-- KHÔNG mô tả ánh sáng. Sẽ làm hỏng phong cách UGC.
-- KHÔNG mô tả ngoại hình chi tiết của người mẫu hoặc chi tiết sản phẩm. Chỉ đề cập đến "nhân vật" và "sản phẩm" - hình ảnh tham chiếu sẽ được cung cấp.
-- CHỈ mô tả hành động họ đang làm.
-- Mô tả bối cảnh đơn giản, ví dụ: "trong căn bếp tối giản" hoặc "trong văn phòng hiện đại".
-
-CHUỖI KỸ THUẬT BẮT BUỘC (PHẢI THÊM VÀO CUỐI MỌI PROMPT - GIỮ TIẾNG ANH):
-"Style: Modern iPhone camera quality, 9:16 aspect ratio, unedited realism, matching A-roll lighting, zero bokeh, zero depth of field, sharp focus across entire frame. The subject and product must match the attached references exactly."
-
-QUY TẮC BIẾN THỂ HÌNH ẢNH:
-Với mỗi cảnh, cung cấp 3 góc sáng tạo khác nhau:
-1. BIẾN THỂ 1 (Hành động trực tiếp): Hình dung trực tiếp hành động được mô tả.
-2. BIẾN THỂ 2 (Cảm xúc/Phản ứng): Tập trung vào yếu tố con người, khuôn mặt hoặc cảm xúc.
-3. BIẾN THỂ 3 (Sản phẩm/Chi tiết): Tập trung vào kết cấu sản phẩm, kết quả hoặc chi tiết cụ thể.
-
-ĐỊNH DẠNG ĐẦU RA (XML NGHIÊM NGẶT - KHÔNG DÙNG MARKDOWN):
-Xuất TRỰC TIẾP XML, KHÔNG bọc trong code block, KHÔNG thêm bất kỳ text nào bên ngoài các tag:
-
+OUTPUT FORMAT — respond with ONLY this XML, no markdown, no extra text:
 <SCENE>
-<LINE>Đoạn kịch bản được nhóm chính xác ở đây</LINE>
-<VAR_1>[Mô tả tiếng Việt + Chuỗi Style tiếng Anh]</VAR_1>
-<VAR_2>[Mô tả tiếng Việt + Chuỗi Style tiếng Anh]</VAR_2>
-<VAR_3>[Mô tả tiếng Việt + Chuỗi Style tiếng Anh]</VAR_3>
-<SOURCE>Nhân vật A-roll HOẶC Sản phẩm</SOURCE>
-</SCENE>
-
-QUAN TRỌNG: Chỉ xuất các tag XML. Không có text giải thích, không có markdown, không có code block.`
+<LINE>exact script segment</LINE>
+<VAR_1>Vietnamese description. ${STYLE_STRING}</VAR_1>
+<VAR_2>Vietnamese description. ${STYLE_STRING}</VAR_2>
+<VAR_3>Vietnamese description. ${STYLE_STRING}</VAR_3>
+<SOURCE>Character or Product</SOURCE>
+</SCENE>`
 
 /** Strip markdown code fences and normalise whitespace before XML parsing */
 function cleanLLMResponse(raw: string): string {
@@ -69,16 +46,16 @@ function extractTag(block: string, tag: string): string {
 export async function generateBroll(input: BrollInput): Promise<BrollResult> {
   const apiKey = useSettingsStore.getState().getApiKey()
 
-  let prompt = `Phân tích kịch bản sau thành các cảnh quay B-Roll. Với mỗi cảnh cung cấp 3 biến thể prompt ảnh bằng tiếng Việt.\n\nKịch bản:\n${input.scriptText}`
+  let prompt = `Break this script into B-Roll scenes with 3 Vietnamese image prompt variations each.\n\nSCRIPT:\n${input.scriptText}`
 
   if (input.productContext) {
-    prompt += `\n\nThông tin sản phẩm:\n${input.productContext}`
+    prompt += `\n\nPRODUCT INFO: ${input.productContext}`
   }
   if (input.modelContext) {
-    prompt += `\n\n${input.modelContext}\nLƯU Ý: Khi tạo prompt ảnh cho cảnh có người, KHÔNG mô tả chi tiết ngoại hình cụ thể của nhân vật. Chỉ gọi họ là "nhân vật" vì hình ảnh tham chiếu sẽ được cung cấp trực tiếp cho bộ tạo ảnh.`
+    prompt += `\n\nCHARACTER INFO: ${input.modelContext}. Do not describe physical appearance — just say "the subject".`
   }
   if (input.additionalContext) {
-    prompt += `\n\nBối cảnh bổ sung:\n${input.additionalContext}`
+    prompt += `\n\nADDITIONAL CONTEXT: ${input.additionalContext}`
   }
 
   const rawResponse = await geminiTextGenerate(apiKey, prompt, SYSTEM_INSTRUCTION)
