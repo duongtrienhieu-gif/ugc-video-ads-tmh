@@ -15,7 +15,7 @@ export default function OutputPanel({ variants, linkedProductId, isGenerating }:
     return (
       <div className="flex h-full flex-col gap-4 p-5">
         <div className="skeleton h-5 w-40" />
-        {[0, 1, 2].map((i) => (
+        {[0, 1].map((i) => (
           <div key={i} className="flex flex-col gap-3 rounded-xl border border-black/8 bg-black/20 p-5">
             <div className="skeleton h-4 w-full" />
             <div className="skeleton h-4 w-[90%]" />
@@ -36,7 +36,7 @@ export default function OutputPanel({ variants, linkedProductId, isGenerating }:
           <span className="text-[9px] font-bold uppercase tracking-widest text-violet-400">Gemini</span>
         </div>
         <PenLine className="h-8 w-8 text-gray-200" strokeWidth={1.5} />
-        <p className="text-sm text-gray-300">3 kịch bản của bạn sẽ xuất hiện ở đây</p>
+        <p className="text-sm text-gray-300">2 kịch bản của bạn sẽ xuất hiện ở đây</p>
       </div>
     )
   }

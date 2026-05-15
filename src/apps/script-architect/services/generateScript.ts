@@ -4,7 +4,7 @@ import { kieTextGenerate, kieAnalyzeImage } from '../../../utils/kieai'
 
 const SYSTEM_INSTRUCTION = `You are an elite UGC ad script writer. Write authentic, natural-sounding scripts that sound like a real customer speaking on camera.
 
-Output exactly THREE variants using this PLAIN TEXT format (no JSON, no markdown, no code fences):
+Output exactly TWO variants using this PLAIN TEXT format (no JSON, no markdown, no code fences):
 
 ===VARIANT 1===
 HOOK:
@@ -20,24 +20,17 @@ HOOK:
 SCRIPT:
 <full script>
 
-===VARIANT 3===
-HOOK:
-<another different hook>
-
-SCRIPT:
-<full script>
-
 Rules:
 - Write in ENGLISH only.
-- Each VARIANT must start with the exact line "===VARIANT N===" (N = 1, 2, 3).
+- Each VARIANT must start with the exact line "===VARIANT N===" (N = 1, 2).
 - Each variant has TWO sections: "HOOK:" and "SCRIPT:".
-- Hooks must be DIFFERENT across variants (different angle each).
+- Hooks must be DIFFERENT between variants (different angle each).
 - Scripts: natural conversational tone, not salesy. Like someone filming on their phone.
 - One sentence per line in the SCRIPT section.
 - No stage directions, no [brackets], no timestamps.
 - No explanations, no preamble — start directly with "===VARIANT 1===".`
 
-const UGC_PROMPT_PREFIX = `I need your help writing user-generated content (UGC) ad scripts that sound like a real customer speaking into the camera. Use all the data attached below as inspiration and further develop the ad. The tone should be natural, conversational, not overly salesy or polished. Think authentic, like someone filming themselves with their phone and talking about their experience. The script will be spoken verbatim in the final ad, so make sure it sounds natural when read aloud. Each ad should start with a strong opening statement (Hook) to keep viewers engaged. In the SCRIPT body, create at least two to four benefits, recount your experience with the product and how it solved your problem, provide basic information about the product's ingredients and how it works, and end with a natural call to action.`
+const UGC_PROMPT_PREFIX = `I need your help writing two user-generated content (UGC) ad scripts that sound like a real customer speaking into the camera. Use all the data attached below as inspiration and further develop the ad. The tone should be natural, conversational, not overly salesy or polished. Think authentic, like someone filming themselves with their phone and talking about their experience. The script will be spoken verbatim in the final ad, so make sure it sounds natural when read aloud. Each ad should start with a strong opening statement (Hook) to keep viewers engaged. In the SCRIPT body, create at least two to four benefits, recount your experience with the product and how it solved your problem, provide basic information about the product's ingredients and how it works, and end with a natural call to action.`
 
 export async function generateScript(input: GenerateScriptInput): Promise<GeneratedVariants> {
   const kieKey = useSettingsStore.getState().getApiKey()
@@ -64,7 +57,7 @@ export async function generateScript(input: GenerateScriptInput): Promise<Genera
     prompt += `A screenshot of the product's sales page is attached above — extract additional context from it.\n\n`
   }
 
-  prompt += `Now produce THREE script variants in the exact plain-text format described in the system instructions. Start your response with "===VARIANT 1===" — no preamble.`
+  prompt += `Now produce TWO script variants in the exact plain-text format described in the system instructions. Start your response with "===VARIANT 1===" — no preamble.`
 
   let responseText: string
 
@@ -129,7 +122,7 @@ function parseVariants(raw: string): string[] {
     }
   }
 
-  return variants.slice(0, 3)
+  return variants.slice(0, 2)
 }
 
 export async function translateToMalay(scriptText: string): Promise<string> {

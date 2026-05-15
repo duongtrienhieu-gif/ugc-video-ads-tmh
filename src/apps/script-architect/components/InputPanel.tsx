@@ -301,10 +301,10 @@ export default function InputPanel({
           {isGenerating ? (
             <>
               <Loader2 className="h-4 w-4 animate-spin" />
-              <span>Đang tạo 3 kịch bản... ({elapsedSec}s)</span>
+              <span>Đang tạo 2 kịch bản... ({elapsedSec}s)</span>
             </>
           ) : (
-            <span>✏️ Tạo 3 kịch bản</span>
+            <span>✏️ Tạo 2 kịch bản</span>
           )}
         </button>
 
