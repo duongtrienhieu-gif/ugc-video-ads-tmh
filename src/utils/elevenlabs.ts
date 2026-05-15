@@ -193,9 +193,24 @@ export async function textToSpeech(params: {
 
   if (!res.ok) {
     const err = await res.text().catch(() => res.statusText)
-    if (res.status === 401) throw new Error('API key không hợp lệ hoặc hết credit')
-    if (res.status === 422) throw new Error(`Yêu cầu không hợp lệ: ${err.slice(0, 150)}`)
-    throw new Error(`ElevenLabs TTS lỗi (${res.status}): ${err.slice(0, 150)}`)
+    // Parse ElevenLabs error body for clearer message
+    let detail = err
+    try {
+      const parsed = JSON.parse(err) as { detail?: { status?: string; message?: string } | string }
+      if (typeof parsed.detail === 'object' && parsed.detail) {
+        detail = `${parsed.detail.status ?? ''} ${parsed.detail.message ?? ''}`.trim()
+      } else if (typeof parsed.detail === 'string') {
+        detail = parsed.detail
+      }
+    } catch {/* keep raw */}
+
+    if (res.status === 401) {
+      if (detail.toLowerCase().includes('quota')) throw new Error('Đã hết credit ElevenLabs — đợi reset tháng sau hoặc upgrade gói')
+      if (detail.toLowerCase().includes('invalid')) throw new Error('API key ElevenLabs không hợp lệ — kiểm tra lại key trong Cài đặt')
+      throw new Error(`Không xác thực được: ${detail.slice(0, 200)}`)
+    }
+    if (res.status === 422) throw new Error(`Tham số không hợp lệ: ${detail.slice(0, 200)}`)
+    throw new Error(`ElevenLabs TTS lỗi (${res.status}): ${detail.slice(0, 200)}`)
   }
 
   return res.arrayBuffer()

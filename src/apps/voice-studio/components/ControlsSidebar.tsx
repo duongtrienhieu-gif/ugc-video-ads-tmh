@@ -16,10 +16,13 @@ interface ControlsSidebarProps {
 
 function mapVoice(v: ElevenLabsVoice): VoiceOption {
   const gender: Gender = (v.labels?.gender?.toLowerCase() === 'male') ? 'Male' : 'Female'
+  const accent = v.labels?.accent?.toUpperCase()
+  // Show accent for cloned/premade voices so user can see Malaysian voices at a glance
   const style =
+    accent && accent !== 'AMERICAN' && accent !== 'BRITISH' && accent !== 'AUSTRALIAN' ? accent :
     v.category === 'cloned' ? 'CLONED' :
     v.category === 'professional' ? 'PRO' :
-    v.labels?.accent?.toUpperCase() ?? v.category?.toUpperCase() ?? 'PREMADE'
+    accent ?? v.category?.toUpperCase() ?? 'PREMADE'
   return {
     voiceId: v.voice_id,
     name: v.name,
@@ -28,6 +31,21 @@ function mapVoice(v: ElevenLabsVoice): VoiceOption {
     category: v.category,
     previewUrl: v.preview_url,
   }
+}
+
+/** Detect if a voice has Malaysian accent based on its label */
+function isMalaysian(voice: ElevenLabsVoice): boolean {
+  const accent = voice.labels?.accent?.toLowerCase() ?? ''
+  const lang = voice.labels?.language?.toLowerCase() ?? ''
+  const descr = (voice.labels?.description ?? voice.description ?? '').toLowerCase()
+  return (
+    accent.includes('malay') ||
+    accent.includes('malaysian') ||
+    lang === 'ms' ||
+    lang === 'malay' ||
+    descr.includes('malay') ||
+    descr.includes('malaysian')
+  )
 }
 
 export default function ControlsSidebar({ settings, onSettingsChange, onLoadPreset, onOpenClone, onOpenLibrary, refreshKey }: ControlsSidebarProps) {
@@ -43,8 +61,16 @@ export default function ControlsSidebar({ settings, onSettingsChange, onLoadPres
     try {
       const apiKey = useSettingsStore.getState().getElevenLabsApiKey()
       const list = await listVoices(apiKey)
-      // Sort: cloned first, then professional, then premade
+      // Sort: cloned first → Malaysian accent → professional → premade
       const sorted = list.sort((a, b) => {
+        const aMy = isMalaysian(a) ? 0 : 1
+        const bMy = isMalaysian(b) ? 0 : 1
+        if (aMy !== bMy) {
+          // If one is Malaysian, it goes first (except when comparing to cloned which always wins)
+          if (a.category === 'cloned' && b.category !== 'cloned') return -1
+          if (b.category === 'cloned' && a.category !== 'cloned') return 1
+          return aMy - bMy
+        }
         const order: Record<string, number> = { cloned: 0, professional: 1, generated: 2, premade: 3 }
         return (order[a.category] ?? 9) - (order[b.category] ?? 9)
       })
