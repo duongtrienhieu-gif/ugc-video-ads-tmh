@@ -11,10 +11,10 @@ const GEMINI_BASE = 'https://generativelanguage.googleapis.com/v1beta/models'
 // Models tried in order — newest first, more fallbacks for high-load periods
 const GEMINI_MODELS = [
   'gemini-2.5-flash',
+  'gemini-2.5-flash-lite',
+  'gemini-2.5-pro',
   'gemini-2.0-flash',
-  'gemini-2.5-flash-preview-05-20',
-  'gemini-1.5-flash',
-  'gemini-1.5-pro',
+  'gemini-2.0-flash-lite',
 ]
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
@@ -40,11 +40,20 @@ export async function directGeminiVision(params: {
       body.systemInstruction = { parts: [{ text: params.systemInstruction }] }
     }
 
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    })
+    // Retry same model up to 2 times on 503 overload
+    let res: Response | null = null
+    let attempts = 0
+    while (attempts < 2) {
+      res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      })
+      if (res.status !== 503 || attempts === 1) break
+      attempts++
+      await sleep(3000) // back off before retrying overloaded model
+    }
+    if (!res) continue
 
     if (!res.ok) {
       const err = await res.text().catch(() => res.statusText)
