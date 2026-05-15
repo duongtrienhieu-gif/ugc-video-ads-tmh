@@ -8,100 +8,126 @@ function nextId() {
   return `var-${Date.now()}-${++idCounter}`
 }
 
-const SYSTEM_INSTRUCTION = `You are a Senior Creative Strategist.
+const SYSTEM_INSTRUCTION = `Bạn là Chuyên gia Chiến lược Sáng tạo UGC cao cấp.
 
-Your task is to generate high-conversion B-roll image prompts that visually support and amplify a scripted UGC video ad.
+Nhiệm vụ: Phân tích kịch bản quảng cáo UGC (có thể bằng bất kỳ ngôn ngữ nào) và tạo ra các prompt ảnh B-roll chuyên nghiệp bằng TIẾNG VIỆT để hỗ trợ hình ảnh cho video quảng cáo.
 
-You must follow these rules exactly:
+NGÔN NGỮ BẮT BUỘC: Tất cả mô tả cảnh quay trong VAR_1, VAR_2, VAR_3 PHẢI viết bằng tiếng Việt. Chỉ chuỗi kỹ thuật Style ở cuối mới giữ tiếng Anh.
 
-RULES FOR SCRIPT SEGMENTATION (CRITICAL):
-- DO NOT create a scene for every single sentence.
-- SMART GROUPING: Combine short, conversational, or filler phrases (e.g., "Be honest", "Listen", "And then") with the adjacent substantial sentence.
-- Each "Scene" must correspond to a meaningful, visualizable segment of the script (approx 10-25 words).
-- If a sentence is too abstract or short, merge it.
+QUY TẮC PHÂN ĐOẠN KỊCH BẢN (QUAN TRỌNG):
+- KHÔNG tạo một cảnh cho mỗi câu đơn lẻ.
+- NHÓM THÔNG MINH: Gộp các cụm từ ngắn, hội thoại hoặc mở đầu (vd: "Thành thật mà nói", "Nghe này", "Và rồi") với câu thực chất liền kề.
+- Mỗi "Cảnh" phải tương ứng với một đoạn kịch bản có ý nghĩa, có thể hình dung được (khoảng 10-25 từ).
+- Nếu câu quá trừu tượng hoặc quá ngắn, hãy gộp lại.
 
-STRATEGY & VISUAL RULES (APPLY TO EVERY VARIATION):
-- NARRATIVE: If the script mentions a result, show the result. If it mentions a feeling, show the interaction that creates that feeling.
-- VISUAL DECOUPLING: Use the A-roll image for identity, but change environment/framing. B-roll must look like a professional multi-camera production.
-- DIRECTIVE LANGUAGE: Commit to a single creative decision. NO "or", NO options within a single prompt.
-- STATIC FRAME LOGIC: Describe a single frozen "peak action" moment. No motion/transitions.
-- DO NOT describe lighting. It messes up the UGC style.
-- DO NOT describe the model's appearance or product details. Mention the product and the model/subject. Just use the product image.
-- ONLY describe the action they're doing.
-- Describe the scene simply, like 'in a minimalist kitchen' or 'in a modern office'.
+CHIẾN LƯỢC & QUY TẮC HÌNH ẢNH (ÁP DỤNG CHO MỌI BIẾN THỂ):
+- KỂ CHUYỆN: Nếu kịch bản đề cập kết quả, hãy hiển thị kết quả đó. Nếu đề cập cảm xúc, hãy hiển thị tương tác tạo ra cảm xúc đó.
+- TÁCH BIỆT HÌNH ẢNH: Thay đổi môi trường/góc quay so với A-roll. B-roll phải trông như sản xuất đa camera chuyên nghiệp.
+- NGÔN NGỮ QUYẾT ĐOÁN: Cam kết với một quyết định sáng tạo duy nhất. KHÔNG dùng "hoặc", KHÔNG có nhiều lựa chọn trong một prompt.
+- KHUNG HÌNH TĨNH: Mô tả một khoảnh khắc hành động đỉnh điểm duy nhất, đóng băng. Không chuyển động/chuyển cảnh.
+- KHÔNG mô tả ánh sáng. Sẽ làm hỏng phong cách UGC.
+- KHÔNG mô tả ngoại hình chi tiết của người mẫu hoặc chi tiết sản phẩm. Chỉ đề cập đến "nhân vật" và "sản phẩm" - hình ảnh tham chiếu sẽ được cung cấp.
+- CHỈ mô tả hành động họ đang làm.
+- Mô tả bối cảnh đơn giản, ví dụ: "trong căn bếp tối giản" hoặc "trong văn phòng hiện đại".
 
-STRICT TECHNICAL STYLE STRING (MUST BE APPENDED TO EVERY PROMPT):
+CHUỖI KỸ THUẬT BẮT BUỘC (PHẢI THÊM VÀO CUỐI MỌI PROMPT - GIỮ TIẾNG ANH):
 "Style: Modern iPhone camera quality, 9:16 aspect ratio, unedited realism, matching A-roll lighting, zero bokeh, zero depth of field, sharp focus across entire frame. The subject and product must match the attached references exactly."
 
-RULES FOR VISUAL VARIATIONS:
-For each scene, provide 3 different creative angles:
-1. VARIATION 1 (Literal/Action): Directly visualize the action described.
-2. VARIATION 2 (Emotional/Reaction): Focus on the human element, face, or feeling.
-3. VARIATION 3 (Product/Detail): Focus on the product texture, result, or a specific detail.
+QUY TẮC BIẾN THỂ HÌNH ẢNH:
+Với mỗi cảnh, cung cấp 3 góc sáng tạo khác nhau:
+1. BIẾN THỂ 1 (Hành động trực tiếp): Hình dung trực tiếp hành động được mô tả.
+2. BIẾN THỂ 2 (Cảm xúc/Phản ứng): Tập trung vào yếu tố con người, khuôn mặt hoặc cảm xúc.
+3. BIẾN THỂ 3 (Sản phẩm/Chi tiết): Tập trung vào kết cấu sản phẩm, kết quả hoặc chi tiết cụ thể.
 
-OUTPUT FORMAT (STRICT XML-STYLE):
-You must output every scene wrapped in these exact tags:
+ĐỊNH DẠNG ĐẦU RA (XML NGHIÊM NGẶT - KHÔNG DÙNG MARKDOWN):
+Xuất TRỰC TIẾP XML, KHÔNG bọc trong code block, KHÔNG thêm bất kỳ text nào bên ngoài các tag:
 
 <SCENE>
-<LINE>Insert the exact grouped script segment here</LINE>
-<VAR_1>[Full Description + Style String]</VAR_1>
-<VAR_2>[Full Description + Style String]</VAR_2>
-<VAR_3>[Full Description + Style String]</VAR_3>
-<SOURCE>Attach A-roll Character Image OR Attach Product Image</SOURCE>
+<LINE>Đoạn kịch bản được nhóm chính xác ở đây</LINE>
+<VAR_1>[Mô tả tiếng Việt + Chuỗi Style tiếng Anh]</VAR_1>
+<VAR_2>[Mô tả tiếng Việt + Chuỗi Style tiếng Anh]</VAR_2>
+<VAR_3>[Mô tả tiếng Việt + Chuỗi Style tiếng Anh]</VAR_3>
+<SOURCE>Nhân vật A-roll HOẶC Sản phẩm</SOURCE>
 </SCENE>
 
-Do not include any text outside these tags.`
+QUAN TRỌNG: Chỉ xuất các tag XML. Không có text giải thích, không có markdown, không có code block.`
+
+/** Strip markdown code fences and normalise whitespace before XML parsing */
+function cleanLLMResponse(raw: string): string {
+  return raw
+    .replace(/```xml\s*/gi, '')
+    .replace(/```\s*/g, '')
+    .replace(/^\s+|\s+$/g, '')
+}
+
+/** Extract inner text of an XML-like tag (case-insensitive, multiline) */
+function extractTag(block: string, tag: string): string {
+  const re = new RegExp(`<${tag}[^>]*>([\\s\\S]*?)<\\/${tag}>`, 'i')
+  return block.match(re)?.[1]?.trim() ?? ''
+}
 
 export async function generateBroll(input: BrollInput): Promise<BrollResult> {
   const apiKey = useSettingsStore.getState().getApiKey()
 
-  let prompt = `Break down this script into visual scenes for B-Roll production. For each scene, provide 3 creative prompt variations.\n\nScript:\n${input.scriptText}`
+  let prompt = `Phân tích kịch bản sau thành các cảnh quay B-Roll. Với mỗi cảnh cung cấp 3 biến thể prompt ảnh bằng tiếng Việt.\n\nKịch bản:\n${input.scriptText}`
 
   if (input.productContext) {
-    prompt += `\n\n${input.productContext}`
+    prompt += `\n\nThông tin sản phẩm:\n${input.productContext}`
   }
   if (input.modelContext) {
-    prompt += `\n\n${input.modelContext}\nIMPORTANT: When generating image prompts for scenes featuring a person/character, do NOT describe this specific model's physical appearance in detail. Just refer to them generally as the "subject", because a precise visual reference image will be provided directly to the image generator to capture their exact look.`
+    prompt += `\n\n${input.modelContext}\nLƯU Ý: Khi tạo prompt ảnh cho cảnh có người, KHÔNG mô tả chi tiết ngoại hình cụ thể của nhân vật. Chỉ gọi họ là "nhân vật" vì hình ảnh tham chiếu sẽ được cung cấp trực tiếp cho bộ tạo ảnh.`
   }
   if (input.additionalContext) {
-    prompt += `\n\nAdditional context:\n${input.additionalContext}`
+    prompt += `\n\nBối cảnh bổ sung:\n${input.additionalContext}`
   }
 
-  const responseText = await geminiTextGenerate(apiKey, prompt, SYSTEM_INSTRUCTION)
+  const rawResponse = await geminiTextGenerate(apiKey, prompt, SYSTEM_INSTRUCTION)
+  console.log('[generateBroll] raw response length:', rawResponse.length)
+  console.log('[generateBroll] raw preview:', rawResponse.slice(0, 300))
+
+  // Strip markdown code blocks the LLM sometimes adds despite instructions
+  const responseText = cleanLLMResponse(rawResponse)
 
   const scenes: Scene[] = []
-  const sceneRegex = /<SCENE>([\s\S]*?)<\/SCENE>/g
-  const lineRegex = /<LINE>([\s\S]*?)<\/LINE>/
-  const var1Regex = /<VAR_1>([\s\S]*?)<\/VAR_1>/
-  const var2Regex = /<VAR_2>([\s\S]*?)<\/VAR_2>/
-  const var3Regex = /<VAR_3>([\s\S]*?)<\/VAR_3>/
-  const sourceRegex = /<SOURCE>([\s\S]*?)<\/SOURCE>/
+  // Case-insensitive match for <SCENE>...</SCENE> blocks
+  const sceneRegex = /<SCENE[^>]*>([\s\S]*?)<\/SCENE>/gi
 
   let match
   let number = 1
   while ((match = sceneRegex.exec(responseText)) !== null) {
     const block = match[1]
-    const scriptLine = block.match(lineRegex)?.[1]?.trim() || ''
-    const var1 = block.match(var1Regex)?.[1]?.trim() || ''
-    const var2 = block.match(var2Regex)?.[1]?.trim() || ''
-    const var3 = block.match(var3Regex)?.[1]?.trim() || ''
-    const source = block.match(sourceRegex)?.[1]?.trim() || ''
+    const scriptLine = extractTag(block, 'LINE')
+    const var1 = extractTag(block, 'VAR_1')
+    const var2 = extractTag(block, 'VAR_2')
+    const var3 = extractTag(block, 'VAR_3')
+    const source = extractTag(block, 'SOURCE')
+
+    // Skip empty blocks
+    if (!scriptLine && !var1 && !var2 && !var3) continue
 
     let type: Scene['type'] = 'B-ROLL LIFESTYLE'
     const sLow = source.toLowerCase()
-    if (sLow.includes('character') || sLow.includes('model') || sLow.includes('subject')) type = 'A-ROLL CHARACTER'
-    else if (sLow.includes('product')) type = 'A-ROLL PRODUCT'
+    if (sLow.includes('nhân vật') || sLow.includes('character') || sLow.includes('model') || sLow.includes('subject')) type = 'A-ROLL CHARACTER'
+    else if (sLow.includes('sản phẩm') || sLow.includes('product')) type = 'A-ROLL PRODUCT'
 
     scenes.push({
       number: number++,
       type,
       scriptLine,
       variations: [
-        { id: nextId(), label: 'Option 1', tag: 'LITERAL / ACTION', prompt: var1 },
-        { id: nextId(), label: 'Option 2', tag: 'EMOTIONAL / REACTION', prompt: var2 },
-        { id: nextId(), label: 'Option 3', tag: 'PRODUCT / DETAIL', prompt: var3 },
+        { id: nextId(), label: 'Lựa chọn 1', tag: 'LITERAL / ACTION', prompt: var1 },
+        { id: nextId(), label: 'Lựa chọn 2', tag: 'EMOTIONAL / REACTION', prompt: var2 },
+        { id: nextId(), label: 'Lựa chọn 3', tag: 'PRODUCT / DETAIL', prompt: var3 },
       ],
     })
+  }
+
+  console.log('[generateBroll] parsed scenes:', scenes.length)
+
+  // Fallback: if XML parsing failed entirely, log the raw response for debugging
+  if (scenes.length === 0) {
+    console.error('[generateBroll] XML parse failed. Full response:\n', responseText)
+    throw new Error(`AI không trả về đúng định dạng. Thử lại lần nữa. (Phản hồi: ${responseText.slice(0, 200)}...)`)
   }
 
   return { scenes }
