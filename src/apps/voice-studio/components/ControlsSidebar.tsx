@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from 'react'
-import { FolderOpen, Headphones, DoorOpen, Mic, RefreshCw, Trash2, Loader2, Library, Sliders, ChevronDown, RotateCcw } from 'lucide-react'
-import type { VoiceSettings, Gender, Ambience, VoiceOption } from '../types'
+import { FolderOpen, Mic, RefreshCw, Trash2, Loader2, Library, Sliders, ChevronDown, RotateCcw, AudioLines } from 'lucide-react'
+import type { VoiceSettings, Gender, VoiceOption } from '../types'
 import { useSettingsStore } from '../../../stores/settingsStore'
 import { useAppStore } from '../../../stores/appStore'
 import { listVoices, deleteVoice, type ElevenLabsVoice } from '../../../utils/elevenlabs'
@@ -11,13 +11,12 @@ interface ControlsSidebarProps {
   onLoadPreset: () => void
   onOpenClone: () => void
   onOpenLibrary: () => void
-  refreshKey: number       // bump to trigger re-fetch (e.g. after clone)
+  refreshKey: number
 }
 
 function mapVoice(v: ElevenLabsVoice): VoiceOption {
   const gender: Gender = (v.labels?.gender?.toLowerCase() === 'male') ? 'Male' : 'Female'
   const accent = v.labels?.accent?.toUpperCase()
-  // Show accent for cloned/premade voices so user can see Malaysian voices at a glance
   const style =
     accent && accent !== 'AMERICAN' && accent !== 'BRITISH' && accent !== 'AUSTRALIAN' ? accent :
     v.category === 'cloned' ? 'CLONED' :
@@ -33,18 +32,13 @@ function mapVoice(v: ElevenLabsVoice): VoiceOption {
   }
 }
 
-/** Detect if a voice has Malaysian accent based on its label */
 function isMalaysian(voice: ElevenLabsVoice): boolean {
   const accent = voice.labels?.accent?.toLowerCase() ?? ''
   const lang = voice.labels?.language?.toLowerCase() ?? ''
   const descr = (voice.labels?.description ?? voice.description ?? '').toLowerCase()
   return (
-    accent.includes('malay') ||
-    accent.includes('malaysian') ||
-    lang === 'ms' ||
-    lang === 'malay' ||
-    descr.includes('malay') ||
-    descr.includes('malaysian')
+    accent.includes('malay') || lang === 'ms' || lang === 'malay' ||
+    descr.includes('malay') || descr.includes('malaysian')
   )
 }
 
@@ -61,23 +55,18 @@ export default function ControlsSidebar({ settings, onSettingsChange, onLoadPres
     try {
       const apiKey = useSettingsStore.getState().getElevenLabsApiKey()
       const list = await listVoices(apiKey)
-      // Sort: cloned first → Malaysian accent → professional → premade
       const sorted = list.sort((a, b) => {
+        if (a.category === 'cloned' && b.category !== 'cloned') return -1
+        if (b.category === 'cloned' && a.category !== 'cloned') return 1
         const aMy = isMalaysian(a) ? 0 : 1
         const bMy = isMalaysian(b) ? 0 : 1
-        if (aMy !== bMy) {
-          // If one is Malaysian, it goes first (except when comparing to cloned which always wins)
-          if (a.category === 'cloned' && b.category !== 'cloned') return -1
-          if (b.category === 'cloned' && a.category !== 'cloned') return 1
-          return aMy - bMy
-        }
+        if (aMy !== bMy) return aMy - bMy
         const order: Record<string, number> = { cloned: 0, professional: 1, generated: 2, premade: 3 }
         return (order[a.category] ?? 9) - (order[b.category] ?? 9)
       })
       const mapped = sorted.map(mapVoice)
       setVoices(mapped)
 
-      // Auto-select first matching gender if nothing selected
       if (!settings.voiceId && mapped.length > 0) {
         const first = mapped.find((v) => v.gender === settings.gender) ?? mapped[0]
         onSettingsChange({ ...settings, voiceId: first.voiceId, voiceName: first.name, gender: first.gender })
@@ -134,197 +123,72 @@ export default function ControlsSidebar({ settings, onSettingsChange, onLoadPres
 
   return (
     <div className="flex h-full flex-col">
-      {/* Top actions */}
-      <div className="border-b border-black/8 p-4 flex flex-col gap-2">
+      {/* Header */}
+      <div className="shrink-0 border-b border-slate-200 px-4 py-3 bg-gradient-to-r from-indigo-50/50 to-violet-50/50">
+        <div className="flex items-center gap-2">
+          <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-gradient-to-br from-indigo-500 to-violet-500 shadow-sm">
+            <AudioLines className="h-4 w-4 text-white" strokeWidth={2} />
+          </div>
+          <div>
+            <h2 className="text-sm font-bold tracking-tight text-slate-800">Voice Studio</h2>
+            <p className="text-[10px] text-slate-500">ElevenLabs · Multilingual</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Action row */}
+      <div className="shrink-0 border-b border-slate-200 px-3 py-3">
         <button
           onClick={onOpenLibrary}
           disabled={!hasElevenLabsKey}
-          className="flex w-full items-center justify-center gap-2 rounded-full bg-violet-500 px-6 py-3 text-[13px] font-medium tracking-tight text-white transition-colors hover:bg-violet-400 disabled:cursor-not-allowed disabled:opacity-40"
+          className="mb-2 flex w-full items-center justify-center gap-1.5 rounded-lg bg-gradient-to-r from-violet-500 to-purple-500 px-4 py-2.5 text-[12px] font-semibold text-white shadow-sm shadow-violet-500/20 transition-all hover:shadow-md hover:shadow-violet-500/30 active:scale-[0.99] disabled:cursor-not-allowed disabled:from-slate-300 disabled:to-slate-300 disabled:shadow-none"
         >
-          <Library className="h-4 w-4" />
+          <Library className="h-3.5 w-3.5" />
           Thư viện giọng
         </button>
-        <div className="flex gap-2">
+        <div className="grid grid-cols-2 gap-2">
           <button
             onClick={onOpenClone}
             disabled={!hasElevenLabsKey}
-            className="flex flex-1 items-center justify-center gap-1.5 rounded-full border border-indigo-500/20 bg-indigo-500/10 px-3 py-2 text-[11px] font-medium tracking-tight text-indigo-500 transition-colors hover:bg-indigo-500/20 disabled:cursor-not-allowed disabled:opacity-40"
+            className="flex items-center justify-center gap-1 rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-[11px] font-medium text-slate-600 transition-all hover:border-indigo-300 hover:bg-indigo-50 hover:text-indigo-600 disabled:cursor-not-allowed disabled:opacity-40"
           >
-            <Mic className="h-3.5 w-3.5" />
-            Clone từ mẫu
+            <Mic className="h-3 w-3" />
+            Clone
           </button>
           <button
             onClick={onLoadPreset}
-            className="flex flex-1 items-center justify-center gap-1.5 rounded-full border border-indigo-500/20 bg-indigo-500/10 px-3 py-2 text-[11px] font-medium tracking-tight text-indigo-500 transition-colors hover:bg-indigo-500/20"
+            className="flex items-center justify-center gap-1 rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-[11px] font-medium text-slate-600 transition-all hover:border-indigo-300 hover:bg-indigo-50 hover:text-indigo-600"
           >
-            <FolderOpen className="h-3.5 w-3.5" />
+            <FolderOpen className="h-3 w-3" />
             Preset
           </button>
         </div>
       </div>
 
-      {/* Creativity slider */}
-      <div className="border-b border-black/8 px-4 py-4">
-        <div className="flex items-center justify-between">
-          <span className="text-[11px] font-medium uppercase tracking-widest text-gray-400">Độ sáng tạo</span>
-          <span className="text-xs tabular-nums text-indigo-400">{settings.creativity.toFixed(1)}</span>
-        </div>
-        <div className="relative mt-3 h-2 w-full rounded-full bg-black/[0.05]">
-          <div
-            className="absolute left-0 top-0 h-full rounded-full bg-indigo-500/40"
-            style={{ width: `${(settings.creativity / 2) * 100}%` }}
-          />
-          <input
-            type="range"
-            min={0}
-            max={2}
-            step={0.1}
-            value={settings.creativity}
-            onChange={(e) => setField('creativity', parseFloat(e.target.value))}
-            className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
-          />
-          <div
-            className="absolute top-1/2 -translate-y-1/2 h-4 w-4 rounded-full bg-indigo-400 border-2 border-white pointer-events-none"
-            style={{ left: `calc(${(settings.creativity / 2) * 100}% - 8px)` }}
-          />
-        </div>
-        <div className="mt-2 flex justify-between text-[10px] text-gray-300">
-          <span>Ổn định</span>
-          <span>Biểu cảm</span>
-        </div>
-      </div>
-
-      {/* Room Ambience (used for style hint via styleInstructions) */}
-      <div className="border-b border-black/8 px-4 py-4">
-        <span className="text-[11px] font-medium uppercase tracking-widest text-gray-400">Âm thanh môi trường</span>
-        <div className="mt-3 flex gap-2">
-          {([
-            { value: 'Studio' as Ambience, icon: Headphones, label: 'Phòng thu' },
-            { value: 'Small Room' as Ambience, icon: DoorOpen, label: 'Phòng nhỏ' },
-          ]).map(({ value, icon: Icon, label }) => {
-            const isActive = settings.ambience === value
-            return (
-              <button
-                key={value}
-                onClick={() => setField('ambience', value)}
-                className={`flex flex-1 items-center justify-center gap-2 rounded-lg px-3 py-2 transition-colors ${isActive ? 'bg-indigo-500/20 text-indigo-300' : 'bg-black/[0.03] text-gray-500 hover:bg-black/[0.05] hover:text-gray-700'
-                  }`}
-              >
-                <Icon className="h-3.5 w-3.5" strokeWidth={1.5} />
-                <span className="text-[11px] font-medium">{label}</span>
-              </button>
-            )
-          })}
-        </div>
-      </div>
-
-      {/* Advanced Options — collapsible */}
-      <div className="border-b border-black/8">
-        <button
-          onClick={() => setAdvancedOpen((v) => !v)}
-          className="flex w-full items-center justify-between px-4 py-3 transition-colors hover:bg-black/[0.02]"
-        >
-          <span className="flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-widest text-gray-400">
-            <Sliders className="h-3 w-3" />
-            Tùy chọn đầu ra
-          </span>
-          <ChevronDown className={`h-3.5 w-3.5 text-gray-400 transition-transform ${advancedOpen ? 'rotate-180' : ''}`} />
-        </button>
-        {advancedOpen && (
-          <div className="space-y-3 px-4 pb-4">
-            {/* Tốc độ đọc */}
-            <SliderRow
-              label="Tốc độ đọc"
-              value={settings.speed}
-              min={0.7}
-              max={1.2}
-              step={0.05}
-              format={(v) => `${v.toFixed(2)}x`}
-              onChange={(v) => setField('speed', v)}
-              hintLeft="Chậm"
-              hintRight="Nhanh"
-            />
-            {/* Độ giống giọng gốc */}
-            <SliderRow
-              label="Giống giọng gốc"
-              value={settings.similarity}
-              min={0}
-              max={1}
-              step={0.05}
-              format={(v) => `${Math.round(v * 100)}%`}
-              onChange={(v) => setField('similarity', v)}
-              hintLeft="Tự nhiên"
-              hintRight="Bám sát"
-            />
-            {/* Cường độ phong cách */}
-            <SliderRow
-              label="Cường độ phong cách"
-              value={settings.styleExaggeration}
-              min={0}
-              max={1}
-              step={0.05}
-              format={(v) => `${Math.round(v * 100)}%`}
-              onChange={(v) => setField('styleExaggeration', v)}
-              hintLeft="Nhẹ"
-              hintRight="Mạnh"
-            />
-            {/* Speaker Boost toggle */}
-            <div className="flex items-center justify-between rounded-lg bg-black/[0.02] px-3 py-2">
-              <div className="flex flex-col">
-                <span className="text-[11px] font-medium text-gray-700">Tăng cường giọng</span>
-                <span className="text-[10px] text-gray-400">Speaker Boost — rõ và chắc hơn</span>
-              </div>
-              <button
-                onClick={() => setField('useSpeakerBoost', !settings.useSpeakerBoost)}
-                className={`relative h-5 w-9 rounded-full transition-colors ${settings.useSpeakerBoost ? 'bg-indigo-500' : 'bg-gray-300'}`}
-              >
-                <span className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow-sm transition-transform ${settings.useSpeakerBoost ? 'translate-x-4' : 'translate-x-0.5'}`} />
-              </button>
-            </div>
-            {/* Reset to defaults */}
-            <button
-              onClick={() => onSettingsChange({
-                ...settings,
-                speed: 1.0,
-                similarity: 0.75,
-                styleExaggeration: 0.3,
-                useSpeakerBoost: true,
-              })}
-              className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-black/10 px-3 py-1.5 text-[11px] font-medium text-gray-500 transition-colors hover:bg-black/5 hover:text-gray-700"
-            >
-              <RotateCcw className="h-3 w-3" />
-              Mặc định
-            </button>
-          </div>
-        )}
-      </div>
-
-      {/* Voice Selection */}
-      <div className="flex min-h-0 flex-1 flex-col px-4 py-4">
-        <div className="flex items-center justify-between">
-          <span className="text-[11px] font-medium uppercase tracking-widest text-gray-400">Giọng đọc</span>
+      {/* Voice Selection — takes most of the space */}
+      <div className="flex min-h-0 flex-1 flex-col px-3 py-3">
+        <div className="mb-2 flex items-center justify-between px-1">
+          <span className="text-[10px] font-semibold uppercase tracking-widest text-slate-500">Giọng đọc</span>
           <button
             onClick={fetchVoices}
             disabled={isLoading || !hasElevenLabsKey}
-            className="rounded p-1 text-gray-400 hover:bg-black/5 hover:text-gray-600 disabled:opacity-40"
+            className="rounded p-1 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600 disabled:opacity-40"
             title="Tải lại danh sách"
           >
             <RefreshCw className={`h-3 w-3 ${isLoading ? 'animate-spin' : ''}`} />
           </button>
         </div>
 
-        {/* Gender sliding toggle */}
-        <div className="relative mt-2 flex h-8 rounded-full bg-black/[0.04] p-0.5">
+        {/* Gender toggle */}
+        <div className="relative mb-2 flex h-8 rounded-lg bg-slate-100 p-0.5">
           <div
-            className={`absolute top-0.5 h-[calc(100%-4px)] w-[calc(50%-2px)] rounded-full bg-black/[0.06] transition-transform duration-200 ease-out ${isMale ? 'translate-x-[calc(100%+4px)]' : 'translate-x-0'
-              }`}
+            className={`absolute top-0.5 h-[calc(100%-4px)] w-[calc(50%-2px)] rounded-md bg-white shadow-sm transition-transform duration-200 ease-out ${isMale ? 'translate-x-[calc(100%+4px)]' : 'translate-x-0'}`}
           />
           {(['Female', 'Male'] as Gender[]).map((g) => (
             <button
               key={g}
               onClick={() => handleGenderSwitch(g)}
-              className={`relative z-10 flex-1 text-xs font-medium transition-colors duration-200 ${settings.gender === g ? 'text-gray-800' : 'text-gray-400 hover:text-gray-600'
-                }`}
+              className={`relative z-10 flex-1 text-[11px] font-semibold transition-colors duration-200 ${settings.gender === g ? 'text-slate-800' : 'text-slate-400 hover:text-slate-600'}`}
             >
               {g === 'Female' ? 'Nữ' : 'Nam'}
             </button>
@@ -332,49 +196,64 @@ export default function ControlsSidebar({ settings, onSettingsChange, onLoadPres
         </div>
 
         {/* Voice list */}
-        <div className="mt-3 min-h-0 flex-1 overflow-y-auto rounded-xl border border-white/[0.06]">
+        <div className="min-h-0 flex-1 overflow-y-auto rounded-lg border border-slate-200 bg-slate-50/30">
           {!hasElevenLabsKey ? (
-            <div className="flex h-full flex-col items-center justify-center gap-2 p-6 text-center">
-              <p className="text-xs text-gray-400">Chưa có ElevenLabs API key</p>
-              <p className="text-[10px] text-gray-300">Vào Cài đặt → ElevenLabs để thêm key</p>
+            <div className="flex h-full flex-col items-center justify-center gap-1 p-4 text-center">
+              <p className="text-xs font-medium text-slate-500">Chưa có ElevenLabs key</p>
+              <p className="text-[10px] text-slate-400">Vào Cài đặt để thêm</p>
             </div>
           ) : isLoading && voices.length === 0 ? (
             <div className="flex h-full items-center justify-center">
               <Loader2 className="h-4 w-4 animate-spin text-indigo-400" />
             </div>
           ) : filteredVoices.length === 0 ? (
-            <div className="flex h-full flex-col items-center justify-center gap-2 p-6 text-center">
-              <p className="text-xs text-gray-400">Chưa có giọng {settings.gender === 'Female' ? 'nữ' : 'nam'}</p>
-              <p className="text-[10px] text-gray-300">Bấm "Clone giọng mới" để tạo</p>
+            <div className="flex h-full flex-col items-center justify-center gap-1 p-4 text-center">
+              <p className="text-xs font-medium text-slate-500">Chưa có giọng {settings.gender === 'Female' ? 'nữ' : 'nam'}</p>
+              <p className="text-[10px] text-slate-400">Thêm từ Thư viện giọng</p>
             </div>
           ) : (
             <div className="flex flex-col gap-0.5 p-1">
               {filteredVoices.map((voice) => {
                 const isActive = settings.voiceId === voice.voiceId
                 const isCloned = voice.category === 'cloned'
+                const isMyAccent = ['MALAYSIAN', 'MALAY', 'MS'].some((a) => voice.style.includes(a))
                 return (
                   <button
                     key={voice.voiceId}
                     onClick={() => selectVoice(voice)}
-                    className={`flex items-center gap-2.5 rounded-lg px-3 py-2 text-left transition-colors group ${isActive
-                        ? 'bg-indigo-500/20'
-                        : 'hover:bg-black/[0.04]'
-                      }`}
+                    className={`group flex items-center gap-2 rounded-md px-2 py-1.5 text-left transition-all ${
+                      isActive
+                        ? 'bg-indigo-500 text-white shadow-sm'
+                        : 'hover:bg-white'
+                    }`}
                   >
                     <span
-                      className={`h-1.5 w-1.5 shrink-0 rounded-full transition-colors ${isActive ? 'bg-indigo-400' : isCloned ? 'bg-emerald-400' : 'bg-gray-300 group-hover:bg-indigo-400/50'
-                        }`}
+                      className={`h-1.5 w-1.5 shrink-0 rounded-full transition-colors ${
+                        isActive
+                          ? 'bg-white'
+                          : isCloned ? 'bg-emerald-400' : isMyAccent ? 'bg-amber-400' : 'bg-slate-300'
+                      }`}
                     />
-                    <span className={`text-xs font-medium truncate transition-colors ${isActive ? 'text-gray-800' : 'text-gray-500 group-hover:text-gray-700'}`}>
+                    <span className={`min-w-0 flex-1 truncate text-[11px] font-medium ${isActive ? 'text-white' : 'text-slate-700'}`}>
                       {voice.name}
                     </span>
-                    <span className={`ml-auto shrink-0 text-[10px] tracking-wide transition-colors ${isCloned ? 'text-emerald-500/80' : isActive ? 'text-indigo-400/70' : 'text-gray-300 group-hover:text-gray-600/60'}`}>
+                    <span
+                      className={`shrink-0 rounded px-1.5 py-0.5 text-[9px] font-bold tracking-wider ${
+                        isActive
+                          ? 'bg-white/20 text-white'
+                          : isCloned ? 'bg-emerald-100 text-emerald-700'
+                          : isMyAccent ? 'bg-amber-100 text-amber-700'
+                          : 'bg-slate-100 text-slate-500'
+                      }`}
+                    >
                       {voice.style}
                     </span>
                     {isCloned && (
                       <button
                         onClick={(e) => handleDeleteVoice(e, voice)}
-                        className="shrink-0 rounded p-0.5 text-gray-300 transition-colors hover:bg-red-500/10 hover:text-red-500"
+                        className={`shrink-0 rounded p-0.5 transition-colors ${
+                          isActive ? 'text-white/60 hover:bg-white/20 hover:text-white' : 'text-slate-300 hover:bg-red-100 hover:text-red-500'
+                        }`}
                         title="Xóa giọng clone"
                       >
                         <Trash2 className="h-3 w-3" />
@@ -386,6 +265,108 @@ export default function ControlsSidebar({ settings, onSettingsChange, onLoadPres
             </div>
           )}
         </div>
+      </div>
+
+      {/* Settings card */}
+      <div className="shrink-0 border-t border-slate-200 bg-slate-50/30 p-3">
+        {/* Creativity — always visible */}
+        <div className="mb-2 rounded-lg bg-white p-2.5 shadow-sm">
+          <div className="flex items-center justify-between">
+            <span className="text-[10px] font-semibold uppercase tracking-widest text-slate-500">Độ sáng tạo</span>
+            <span className="text-[11px] font-bold tabular-nums text-indigo-500">{settings.creativity.toFixed(1)}</span>
+          </div>
+          <div className="relative mt-2 h-1.5 w-full rounded-full bg-slate-100">
+            <div
+              className="absolute left-0 top-0 h-full rounded-full bg-gradient-to-r from-indigo-400 to-violet-400"
+              style={{ width: `${(settings.creativity / 2) * 100}%` }}
+            />
+            <input
+              type="range"
+              min={0}
+              max={2}
+              step={0.1}
+              value={settings.creativity}
+              onChange={(e) => setField('creativity', parseFloat(e.target.value))}
+              className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+            />
+            <div
+              className="pointer-events-none absolute top-1/2 h-3.5 w-3.5 -translate-y-1/2 rounded-full border-2 border-white bg-indigo-500 shadow-sm"
+              style={{ left: `calc(${(settings.creativity / 2) * 100}% - 7px)` }}
+            />
+          </div>
+          <div className="mt-1 flex justify-between text-[9px] text-slate-400">
+            <span>Ổn định</span>
+            <span>Biểu cảm</span>
+          </div>
+        </div>
+
+        {/* Advanced toggle */}
+        <button
+          onClick={() => setAdvancedOpen((v) => !v)}
+          className="flex w-full items-center justify-between rounded-lg bg-white px-2.5 py-2 text-[10px] font-semibold uppercase tracking-widest text-slate-500 shadow-sm transition-colors hover:bg-slate-50"
+        >
+          <span className="flex items-center gap-1.5">
+            <Sliders className="h-3 w-3" />
+            Tùy chọn nâng cao
+          </span>
+          <ChevronDown className={`h-3 w-3 transition-transform ${advancedOpen ? 'rotate-180' : ''}`} />
+        </button>
+
+        {advancedOpen && (
+          <div className="mt-2 space-y-2 rounded-lg bg-white p-2.5 shadow-sm">
+            <SliderRow
+              label="Tốc độ đọc"
+              value={settings.speed}
+              min={0.7} max={1.2} step={0.05}
+              format={(v) => `${v.toFixed(2)}x`}
+              onChange={(v) => setField('speed', v)}
+              hintLeft="Chậm" hintRight="Nhanh"
+            />
+            <SliderRow
+              label="Giống giọng gốc"
+              value={settings.similarity}
+              min={0} max={1} step={0.05}
+              format={(v) => `${Math.round(v * 100)}%`}
+              onChange={(v) => setField('similarity', v)}
+              hintLeft="Tự nhiên" hintRight="Bám sát"
+            />
+            <SliderRow
+              label="Cường độ phong cách"
+              value={settings.styleExaggeration}
+              min={0} max={1} step={0.05}
+              format={(v) => `${Math.round(v * 100)}%`}
+              onChange={(v) => setField('styleExaggeration', v)}
+              hintLeft="Nhẹ" hintRight="Mạnh"
+            />
+
+            <div className="flex items-center justify-between border-t border-slate-100 pt-2">
+              <div className="flex flex-col">
+                <span className="text-[10px] font-semibold text-slate-700">Tăng cường giọng</span>
+                <span className="text-[9px] text-slate-400">Speaker Boost</span>
+              </div>
+              <button
+                onClick={() => setField('useSpeakerBoost', !settings.useSpeakerBoost)}
+                className={`relative h-4 w-7 rounded-full transition-colors ${settings.useSpeakerBoost ? 'bg-indigo-500' : 'bg-slate-300'}`}
+              >
+                <span className={`absolute top-0.5 h-3 w-3 rounded-full bg-white shadow-sm transition-transform ${settings.useSpeakerBoost ? 'translate-x-3.5' : 'translate-x-0.5'}`} />
+              </button>
+            </div>
+
+            <button
+              onClick={() => onSettingsChange({
+                ...settings,
+                speed: 1.0,
+                similarity: 0.75,
+                styleExaggeration: 0.3,
+                useSpeakerBoost: true,
+              })}
+              className="flex w-full items-center justify-center gap-1 rounded border border-slate-200 px-2 py-1 text-[10px] font-medium text-slate-500 transition-colors hover:bg-slate-50"
+            >
+              <RotateCcw className="h-2.5 w-2.5" />
+              Mặc định
+            </button>
+          </div>
+        )}
       </div>
     </div>
   )
@@ -408,12 +389,12 @@ function SliderRow({ label, value, min, max, step, format, onChange, hintLeft, h
   return (
     <div>
       <div className="flex items-center justify-between">
-        <span className="text-[11px] font-medium text-gray-600">{label}</span>
-        <span className="text-[11px] tabular-nums text-indigo-400">{format(value)}</span>
+        <span className="text-[10px] font-semibold text-slate-600">{label}</span>
+        <span className="text-[10px] font-bold tabular-nums text-indigo-500">{format(value)}</span>
       </div>
-      <div className="relative mt-2 h-2 w-full rounded-full bg-black/[0.05]">
+      <div className="relative mt-1.5 h-1.5 w-full rounded-full bg-slate-100">
         <div
-          className="absolute left-0 top-0 h-full rounded-full bg-indigo-500/40"
+          className="absolute left-0 top-0 h-full rounded-full bg-gradient-to-r from-indigo-400 to-violet-400"
           style={{ width: `${pct}%` }}
         />
         <input
@@ -426,12 +407,12 @@ function SliderRow({ label, value, min, max, step, format, onChange, hintLeft, h
           className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
         />
         <div
-          className="absolute top-1/2 -translate-y-1/2 h-3.5 w-3.5 rounded-full bg-indigo-400 border-2 border-white pointer-events-none"
-          style={{ left: `calc(${pct}% - 7px)` }}
+          className="pointer-events-none absolute top-1/2 h-3 w-3 -translate-y-1/2 rounded-full border-2 border-white bg-indigo-500 shadow-sm"
+          style={{ left: `calc(${pct}% - 6px)` }}
         />
       </div>
       {(hintLeft || hintRight) && (
-        <div className="mt-1 flex justify-between text-[9px] text-gray-300">
+        <div className="mt-0.5 flex justify-between text-[9px] text-slate-400">
           <span>{hintLeft}</span>
           <span>{hintRight}</span>
         </div>

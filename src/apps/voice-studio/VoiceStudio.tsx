@@ -105,9 +105,9 @@ export default function VoiceStudio() {
   }
 
   return (
-    <div className="flex flex-col lg:flex-row h-full">
+    <div className="flex flex-col lg:flex-row h-full bg-slate-50/50">
       {/* Left sidebar — controls */}
-      <div className="flex w-full lg:w-[340px] shrink-0 flex-col border-b lg:border-b-0 lg:border-r border-black/8">
+      <div className="flex w-full lg:w-[300px] shrink-0 flex-col border-b border-slate-200 bg-white lg:border-b-0 lg:border-r">
         <ControlsSidebar
           settings={settings}
           onSettingsChange={handleSettingsChange}
@@ -130,11 +130,12 @@ export default function VoiceStudio() {
           isGenerating={isGenerating}
           canGenerate={scriptText.trim().length > 0 && !!settings.voiceId}
           highlightField={highlightField}
+          selectedVoiceName={settings.voiceName}
         />
       </div>
 
       {/* Right sidebar — history */}
-      <div className="flex w-full lg:w-[400px] shrink-0 flex-col border-t lg:border-t-0 lg:border-l border-black/8 max-h-[50vh] lg:max-h-none">
+      <div className="flex w-full lg:w-[440px] shrink-0 flex-col border-t border-slate-200 bg-white lg:border-t-0 lg:border-l max-h-[50vh] lg:max-h-none">
         <HistoryPanel
           items={history}
           onDelete={handleDeleteHistoryItem}

@@ -269,52 +269,66 @@ export default function HistoryPanel({ items, onDelete }: HistoryPanelProps) {
 
   if (items.length === 0) {
     return (
-      <div className="relative flex h-full flex-col items-center justify-center gap-3 p-6">
-        <div className="absolute right-4 top-4 flex items-center gap-1 rounded-full border border-black/10 bg-black/[0.04] px-2.5 py-1">
-          <span className="text-[9px] font-medium uppercase tracking-widest text-gray-400">Powered by</span>
-          <span className="text-[9px] font-bold uppercase tracking-widest text-green-400">Gemini</span>
+      <div className="flex h-full flex-col">
+        <div className="shrink-0 border-b border-slate-200 px-4 py-3 bg-gradient-to-r from-slate-50/50 to-white">
+          <h3 className="text-sm font-bold tracking-tight text-slate-800">Lịch sử giọng đọc</h3>
+          <span className="text-[10px] text-slate-400">Chưa có bản ghi nào</span>
         </div>
-        <Volume2 className="h-10 w-10 text-gray-200" strokeWidth={1.5} />
-        <p className="text-sm text-gray-300">Chưa có lịch sử giọng đọc</p>
-        <p className="text-xs text-gray-200">Audio được tạo sẽ hiển thị ở đây</p>
+        <div className="flex flex-1 flex-col items-center justify-center gap-2 p-6">
+          <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-indigo-100 to-violet-100">
+            <Volume2 className="h-6 w-6 text-indigo-400" strokeWidth={1.5} />
+          </div>
+          <p className="text-sm font-medium text-slate-500">Chưa có lịch sử giọng đọc</p>
+          <p className="text-xs text-slate-400 text-center max-w-[260px]">Audio bạn tạo sẽ xuất hiện ở đây và lưu vĩnh viễn cho đến khi xóa</p>
+        </div>
       </div>
     )
   }
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
-      <div className="border-b border-black/8 px-4 py-3">
-        <h3 className="text-sm font-semibold tracking-tight text-gray-800">Lịch sử giọng đọc</h3>
-        <span className="text-[10px] text-gray-300">{items.length} bản ghi</span>
+      <div className="shrink-0 border-b border-slate-200 px-4 py-3 bg-gradient-to-r from-slate-50/50 to-white">
+        <div className="flex items-center justify-between">
+          <div>
+            <h3 className="text-sm font-bold tracking-tight text-slate-800">Lịch sử giọng đọc</h3>
+            <span className="text-[10px] text-slate-400">{items.length} bản ghi</span>
+          </div>
+          <span className="rounded-full bg-indigo-50 px-2.5 py-0.5 text-[10px] font-semibold text-indigo-600">
+            {items.length}
+          </span>
+        </div>
       </div>
 
       <div className="flex-1 overflow-y-auto p-3">
-        <div className="flex flex-col gap-2">
+        <div className="flex flex-col gap-2.5">
           {items.map((item) => {
             const isPlaying = playingId === item.id
             const prog = progress[item.id] ?? 0
             const time = currentTime[item.id] ?? 0
+            const isSaved = savedIds.has(item.id)
 
             return (
               <div
                 key={item.id}
-                className="rounded-xl border border-black/8 bg-black/[0.02] p-3"
+                className={`group rounded-xl border bg-white p-3 shadow-sm transition-all hover:shadow-md ${
+                  isPlaying ? 'border-indigo-300 ring-2 ring-indigo-100' : 'border-slate-200'
+                }`}
               >
                 {/* Header row */}
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs font-medium text-gray-700">{item.voiceName}</span>
-                    <span className="rounded-md bg-black/5 px-1.5 py-0.5 text-[10px] text-gray-400">
-                      {item.modelId}
-                    </span>
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex min-w-0 items-center gap-2">
+                    <div className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-md ${isPlaying ? 'bg-indigo-500' : 'bg-slate-100'}`}>
+                      <Volume2 className={`h-3 w-3 ${isPlaying ? 'text-white' : 'text-slate-500'}`} strokeWidth={2} />
+                    </div>
+                    <span className="truncate text-xs font-semibold text-slate-800">{item.voiceName}</span>
                   </div>
-                  <span className="text-[10px] tabular-nums text-gray-300">
+                  <span className="shrink-0 text-[10px] tabular-nums text-slate-400">
                     {new Date(item.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                   </span>
                 </div>
 
                 {/* Script preview */}
-                <p className="mt-1.5 text-[11px] leading-relaxed text-gray-400 line-clamp-2">
+                <p className="mt-1.5 text-[11px] leading-relaxed text-slate-500 line-clamp-2">
                   {item.scriptPreview}
                 </p>
 
@@ -329,7 +343,7 @@ export default function HistoryPanel({ items, onDelete }: HistoryPanelProps) {
 
                 {/* Duration */}
                 <div className="mt-1 flex items-center justify-between">
-                  <span className="text-[10px] tabular-nums text-gray-300">
+                  <span className="text-[10px] font-medium tabular-nums text-slate-400">
                     {formatTime(time)} / {formatTime(item.duration)}
                   </span>
                 </div>
@@ -338,47 +352,44 @@ export default function HistoryPanel({ items, onDelete }: HistoryPanelProps) {
                 <div className="mt-2.5 flex items-center gap-1.5">
                   <button
                     onClick={() => handlePlay(item)}
-                    className={`flex h-9 w-9 lg:h-7 lg:w-7 items-center justify-center rounded-full transition-colors ${isPlaying
-                      ? 'bg-indigo-500/20 text-indigo-400'
-                      : 'bg-black/5 text-gray-600 hover:bg-black/8 hover:text-gray-800'
-                      }`}
+                    className={`flex h-8 w-8 items-center justify-center rounded-lg transition-all ${
+                      isPlaying
+                        ? 'bg-indigo-500 text-white shadow-sm shadow-indigo-500/30'
+                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                    }`}
                   >
-                    {isPlaying ? <Pause className="h-3 w-3" /> : <Play className="h-3 w-3" />}
+                    {isPlaying ? <Pause className="h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5 translate-x-[1px]" />}
                   </button>
 
                   <button
                     onClick={() => handleDownload(item)}
-                    className="flex h-9 w-9 lg:h-7 lg:w-7 items-center justify-center rounded-full bg-black/5 text-gray-600 transition-colors hover:bg-black/8 hover:text-gray-800"
-                    title="Tải xuống WAV"
+                    className="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-100 text-slate-600 transition-colors hover:bg-slate-200"
+                    title="Tải xuống"
                   >
-                    <Download className="h-3 w-3" />
+                    <Download className="h-3.5 w-3.5" />
                   </button>
 
                   <button
                     onClick={() => handleSavePreset(item)}
-                    disabled={savingId === item.id || savedIds.has(item.id)}
-                    className={`flex items-center gap-1 rounded-full px-2.5 py-1 text-[10px] font-medium transition-colors ${
-                      savedIds.has(item.id)
-                        ? 'bg-emerald-500/15 text-emerald-600'
-                        : 'border border-indigo-500/20 bg-indigo-500/10 text-indigo-500 hover:bg-indigo-500/20'
+                    disabled={savingId === item.id || isSaved}
+                    className={`flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-[11px] font-semibold transition-all ${
+                      isSaved
+                        ? 'bg-emerald-50 text-emerald-600 border border-emerald-200'
+                        : 'border border-indigo-200 bg-indigo-50 text-indigo-600 hover:bg-indigo-100'
                     } disabled:opacity-50`}
-                    title="Lưu preset vào PROJECT Giọng đọc"
+                    title="Lưu preset vào PROJECT"
                   >
-                    {savedIds.has(item.id) ? (
-                      <><Check className="h-3 w-3" />Đã lưu</>
-                    ) : (
-                      <><Save className="h-3 w-3" />Lưu preset</>
-                    )}
+                    {isSaved ? <><Check className="h-3 w-3" />Đã lưu</> : <><Save className="h-3 w-3" />Lưu preset</>}
                   </button>
 
                   <div className="flex-1" />
 
                   <button
                     onClick={() => onDelete(item.id)}
-                    className="flex h-9 w-9 lg:h-7 lg:w-7 items-center justify-center rounded-full text-gray-400 transition-colors hover:bg-red-500/10 hover:text-red-400"
+                    className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 transition-colors hover:bg-red-50 hover:text-red-500"
                     title="Xóa"
                   >
-                    <Trash2 className="h-3 w-3" />
+                    <Trash2 className="h-3.5 w-3.5" />
                   </button>
                 </div>
               </div>
