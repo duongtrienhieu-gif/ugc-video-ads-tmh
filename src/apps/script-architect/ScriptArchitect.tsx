@@ -70,7 +70,7 @@ export default function ScriptArchitect() {
 
   return (
     <div className="flex flex-col lg:flex-row h-full">
-      <div className="flex w-full lg:w-1/2 shrink-0 flex-col border-b lg:border-b-0 lg:border-r border-black/8">
+      <div className="flex w-full lg:w-[400px] shrink-0 flex-col border-b lg:border-b-0 lg:border-r border-black/8">
         <InputPanel
           winningTranscript={winningTranscript}
           onTranscriptChange={setWinningTranscript}
@@ -84,7 +84,7 @@ export default function ScriptArchitect() {
         />
       </div>
 
-      <div className="flex w-full lg:w-1/2 flex-col min-h-[300px] lg:min-h-0">
+      <div className="flex w-full flex-1 flex-col min-h-[300px] lg:min-h-0">
         <OutputPanel
           variants={generatedVariants}
           linkedProductId={selectedProduct?.id ?? null}

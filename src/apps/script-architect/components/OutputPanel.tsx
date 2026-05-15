@@ -135,13 +135,23 @@ function VariantCard({ index, scriptText, linkedProductId }: VariantCardProps) {
         <span className="text-[11px] font-semibold uppercase tracking-widest text-blue-400">
           Kịch bản {index + 1}
         </span>
-        <button
-          onClick={handleCopy}
-          className="flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-medium text-gray-500 transition-colors hover:bg-black/5 hover:text-gray-700"
-        >
-          {copied ? <Check className="h-3 w-3 text-green-400" /> : <Copy className="h-3 w-3" />}
-          {copied ? 'Đã sao chép' : 'Sao chép'}
-        </button>
+        <div className="flex items-center gap-1">
+          <button
+            onClick={handleTranslate}
+            disabled={translating}
+            className="flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-medium text-emerald-500 transition-colors hover:bg-emerald-500/8 disabled:opacity-50"
+          >
+            {translating ? <Loader2 className="h-3 w-3 animate-spin" /> : <Languages className="h-3 w-3" />}
+            {translating ? 'Đang dịch...' : malayScript ? 'Ẩn Malay' : 'Dịch Malay'}
+          </button>
+          <button
+            onClick={handleCopy}
+            className="flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-medium text-gray-500 transition-colors hover:bg-black/5 hover:text-gray-700"
+          >
+            {copied ? <Check className="h-3 w-3 text-green-400" /> : <Copy className="h-3 w-3" />}
+            {copied ? 'Đã sao chép' : 'Sao chép'}
+          </button>
+        </div>
       </div>
 
       {/* Script text */}
@@ -168,21 +178,6 @@ function VariantCard({ index, scriptText, linkedProductId }: VariantCardProps) {
 
       {/* Actions */}
       <div className="flex flex-col gap-2 border-t border-black/8 px-4 py-3">
-        {/* Translate button */}
-        <button
-          onClick={handleTranslate}
-          disabled={translating}
-          className="flex items-center justify-center gap-1.5 rounded-full border border-emerald-500/20 bg-emerald-500/8 px-4 py-2 text-[11px] font-medium text-emerald-500 transition-colors hover:bg-emerald-500/15 disabled:opacity-50"
-        >
-          {translating ? (
-            <><Loader2 className="h-3 w-3 animate-spin" />Đang dịch...</>
-          ) : malayScript ? (
-            <><Languages className="h-3 w-3" />Ẩn bản dịch Malay</>
-          ) : (
-            <><Languages className="h-3 w-3" />Dịch sang tiếng Malay</>
-          )}
-        </button>
-
         {/* Save to Project */}
         {showSaveForm ? (
           <div className="flex gap-2">
