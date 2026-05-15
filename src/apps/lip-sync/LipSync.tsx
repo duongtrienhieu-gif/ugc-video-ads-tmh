@@ -2,13 +2,17 @@ import { useState, useRef, useEffect } from 'react'
 import {
   Mic, Video, Upload, Database, Play, Pause,
   Loader2, Download, Trash2, User, AlertTriangle,
-  ChevronDown, Star,
+  ChevronDown, Star, Sparkles, X,
 } from 'lucide-react'
-import { listVoices, textToSpeech, type ElevenLabsVoice } from '../../utils/elevenlabs'
+import {
+  listVoices, listSharedVoices, textToSpeech,
+  type ElevenLabsVoice,
+} from '../../utils/elevenlabs'
 import {
   generateLipSync, pollLipSyncUntilDone,
   LIPSYNC_MODELS, type VideoStatus,
 } from '../../utils/kieai'
+import { directGeminiText } from '../../utils/gemini'
 import { useSettingsStore } from '../../stores/settingsStore'
 import { useAppStore } from '../../stores/appStore'
 import { saveAsset, getUrl, isAssetRef } from '../../utils/assetStore'
@@ -16,16 +20,35 @@ import BankPicker from '../../components/BankPicker'
 import type { Model } from '../../stores/types'
 import type { LipSyncHistoryItem } from './types'
 
-// ── Emotion tags (ElevenLabs inline directives) ───────────────────────────────
+// ── Emotion tags ──────────────────────────────────────────────────────────────
 
 const EMOTION_TAGS = [
-  { label: 'Vui vẻ',    tag: '[happy]' },
+  { label: 'Vui vẻ',     tag: '[happy]' },
   { label: 'Phấn khích', tag: '[excited]' },
   { label: 'Buồn',       tag: '[sad]' },
   { label: 'Tức giận',   tag: '[angry]' },
   { label: 'Thì thầm',  tag: '[whispers]' },
   { label: 'Cười',       tag: '[laughing]' },
 ]
+
+const EMOTION_TAG_NAMES = EMOTION_TAGS.map((e) => e.tag.replace(/[\[\]]/g, ''))
+
+// Strip [emotion] tags before sending to ElevenLabs TTS so they are not read aloud
+function stripEmotionTags(text: string): string {
+  const pattern = new RegExp(`\\[(${EMOTION_TAG_NAMES.join('|')})\\]`, 'gi')
+  return text.replace(pattern, ' ').replace(/\s{2,}/g, ' ').trim()
+}
+
+// AI system instruction for emotion suggestion
+const EMOTION_SUGGEST_INSTRUCTION = `You are a voice acting director. Given a script in any language (Vietnamese, English, Malay, or mixed), insert emotion/tone tags at appropriate places to guide voice expression.
+
+Available tags: [happy] [excited] [sad] [angry] [whispers] [laughing]
+
+Rules:
+- Insert tags BEFORE the word or phrase they apply to (e.g. "Tôi [happy]rất vui được gặp bạn!")
+- Use tags sparingly — only where the emotional tone clearly changes or needs emphasis
+- NEVER add, remove, or modify any original words — only INSERT tags
+- Do NOT add explanations, notes, or markdown — return ONLY the modified script text`
 
 // ── Status badge ──────────────────────────────────────────────────────────────
 
@@ -60,52 +83,73 @@ export default function LipSync() {
   const [selectedVoice, setSelectedVoice] = useState<ElevenLabsVoice | null>(null)
   const [voiceDropdownOpen, setVoiceDropdownOpen] = useState(false)
 
-  // ── Script ───────────────────────────────────────────────────────────
-  const [scriptText, setScriptText] = useState('')
+  // ── Script & emotion suggestion ──────────────────────────────────────
+  const [scriptText, setScriptText]                     = useState('')
+  const [isSuggestingEmotions, setIsSuggestingEmotions] = useState(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
   // ── Audio ────────────────────────────────────────────────────────────
-  const [audioAssetId, setAudioAssetId]     = useState<string | null>(null)
+  const [audioAssetId, setAudioAssetId]       = useState<string | null>(null)
   const [audioDisplayUrl, setAudioDisplayUrl] = useState<string | null>(null)
   const [isGeneratingAudio, setIsGeneratingAudio] = useState(false)
-  const [isPlaying, setIsPlaying]           = useState(false)
+  const [isPlaying, setIsPlaying]             = useState(false)
   const audioRef = useRef<HTMLAudioElement>(null)
 
   // ── Model / resolution ───────────────────────────────────────────────
-  const [selectedModelId, setSelectedModelId]   = useState('kling-avatar-std')
+  const [selectedModelId, setSelectedModelId]     = useState('kling-avatar-std')
   const [modelDropdownOpen, setModelDropdownOpen] = useState(false)
-  const [resolution, setResolution]             = useState<'480p' | '720p'>('720p')
+  const [resolution, setResolution]               = useState<'480p' | '720p'>('720p')
 
   // ── Video generation ─────────────────────────────────────────────────
-  const [history, setHistory]       = useState<LipSyncHistoryItem[]>([])
+  const [history, setHistory]           = useState<LipSyncHistoryItem[]>([])
   const [isGenerating, setIsGenerating] = useState(false)
-  const [progress, setProgress]     = useState(0)
+  const [progress, setProgress]         = useState(0)
   const progressRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
-  const addToast          = useAppStore((s) => s.addToast)
-  const elevenLabsApiKey  = useSettingsStore((s) => s.elevenLabsApiKey)
-  const kieApiKey         = useSettingsStore((s) => s.kieApiKey)
+  const addToast         = useAppStore((s) => s.addToast)
+  const elevenLabsApiKey = useSettingsStore((s) => s.elevenLabsApiKey)
+  const kieApiKey        = useSettingsStore((s) => s.kieApiKey)
+  const geminiApiKey     = useSettingsStore((s) => s.geminiApiKey)
 
   const selectedModel = LIPSYNC_MODELS.find((m) => m.id === selectedModelId) ?? LIPSYNC_MODELS[0]
 
-  // Load ElevenLabs voices when API key available
+  // ── Load voices: cloned (user) + Malaysian library ───────────────────
   useEffect(() => {
     if (!elevenLabsApiKey) return
     setVoicesLoading(true)
-    listVoices(elevenLabsApiKey)
-      .then((v) => {
-        const sorted = [...v].sort((a, b) => {
-          if (a.category === 'cloned' && b.category !== 'cloned') return -1
-          if (b.category === 'cloned' && a.category !== 'cloned') return 1
-          return a.name.localeCompare(b.name)
-        })
-        setVoices(sorted)
+
+    Promise.all([
+      listVoices(elevenLabsApiKey),
+      listSharedVoices({ apiKey: elevenLabsApiKey, language: 'ms',        pageSize: 50 }),
+      listSharedVoices({ apiKey: elevenLabsApiKey, accent: 'malaysian',   pageSize: 50 }),
+    ])
+      .then(([userVoices, msVoices, accentVoices]) => {
+        // Keep only cloned voices from user account
+        const cloned = userVoices.filter((v) => v.category === 'cloned')
+
+        // Merge & deduplicate Malaysian library voices
+        const libMap = new Map<string, (typeof msVoices)[0]>()
+        for (const v of [...msVoices, ...accentVoices]) {
+          libMap.set(v.voice_id, v)
+        }
+
+        // Convert SharedVoice → ElevenLabsVoice shape
+        const libraryVoices: ElevenLabsVoice[] = Array.from(libMap.values()).map((v) => ({
+          voice_id:    v.voice_id,
+          name:        v.name,
+          category:    'professional' as const,
+          labels:      { gender: v.gender ?? '', accent: 'malaysian', language: 'ms' },
+          preview_url: v.preview_url,
+        }))
+
+        // Cloned first, then Malaysian library
+        setVoices([...cloned, ...libraryVoices])
       })
       .catch(() => addToast('Không tải được danh sách giọng ElevenLabs', 'error'))
       .finally(() => setVoicesLoading(false))
   }, [elevenLabsApiKey, addToast])
 
-  // Fake progress bar during generation
+  // ── Fake progress bar ────────────────────────────────────────────────
   useEffect(() => {
     if (isGenerating) {
       setProgress(0)
@@ -151,7 +195,7 @@ export default function LipSync() {
     const reader = new FileReader()
     reader.onload = (ev) => {
       const dataUrl = ev.target?.result as string
-      setCharacterAssetId(dataUrl)   // store data URL directly — will be saved on generate
+      setCharacterAssetId(dataUrl)
       setCharacterDisplayUrl(dataUrl)
     }
     reader.readAsDataURL(file)
@@ -175,6 +219,32 @@ export default function LipSync() {
     }, 0)
   }
 
+  // AI emotion suggestion
+  const handleSuggestEmotions = async () => {
+    if (!scriptText.trim()) { addToast('Nhập kịch bản trước khi gợi ý biểu cảm', 'error'); return }
+    if (!geminiApiKey)       { addToast('Cần Gemini API key trong Cài đặt để dùng tính năng này', 'error'); return }
+
+    setIsSuggestingEmotions(true)
+    try {
+      const result = await directGeminiText({
+        apiKey: geminiApiKey,
+        prompt: `Script:\n${scriptText}`,
+        systemInstruction: EMOTION_SUGGEST_INSTRUCTION,
+      })
+      const cleaned = result.trim()
+      if (cleaned) {
+        setScriptText(cleaned)
+        addToast('Đã bổ sung biểu cảm vào kịch bản')
+      } else {
+        addToast('AI không trả về kết quả — thử lại', 'error')
+      }
+    } catch (err) {
+      addToast(`Gợi ý biểu cảm thất bại: ${err instanceof Error ? err.message : String(err)}`, 'error')
+    } finally {
+      setIsSuggestingEmotions(false)
+    }
+  }
+
   const handleGenerateAudio = async () => {
     if (!scriptText.trim()) { addToast('Nhập kịch bản trước khi tạo audio', 'error'); return }
     if (!selectedVoice)     { addToast('Chọn giọng đọc trước', 'error'); return }
@@ -186,7 +256,15 @@ export default function LipSync() {
     setIsPlaying(false)
 
     try {
-      const buffer  = await textToSpeech({ apiKey: elevenLabsApiKey, voiceId: selectedVoice.voice_id, text: scriptText })
+      // Strip [emotion] tags so they are NOT read aloud — voice expresses emotion through inflection
+      const cleanText = stripEmotionTags(scriptText)
+      const buffer    = await textToSpeech({
+        apiKey:        elevenLabsApiKey,
+        voiceId:       selectedVoice.voice_id,
+        text:          cleanText,
+        style:         0.35,  // moderate style exaggeration for expressiveness
+        useSpeakerBoost: true,
+      })
       const blob    = new Blob([buffer], { type: 'audio/mpeg' })
       const assetId = await saveAsset(blob, 'audio/mpeg')
       const display = await getUrl(assetId)
@@ -209,7 +287,7 @@ export default function LipSync() {
 
     const historyId = crypto.randomUUID()
     const newItem: LipSyncHistoryItem = {
-      id: historyId,
+      id:         historyId,
       imageUrl:   characterDisplayUrl ?? '',
       audioUrl:   audioDisplayUrl ?? '',
       videoUrl:   null,
@@ -223,27 +301,25 @@ export default function LipSync() {
     setHistory((prev) => [newItem, ...prev])
 
     try {
-      // Resolve character image to a public signed URL
+      // Resolve character image to public URL
       let imagePublicUrl: string
       if (isAssetRef(characterAssetId)) {
         const url = await getUrl(characterAssetId)
         if (!url) throw new Error('Không lấy được URL ảnh nhân vật')
         imagePublicUrl = url
       } else if (characterAssetId.startsWith('data:')) {
-        // Uploaded locally — save to Supabase first then get signed URL
-        const resp   = await fetch(characterAssetId)
-        const blob   = await resp.blob()
+        const resp    = await fetch(characterAssetId)
+        const blob    = await resp.blob()
         const savedId = await saveAsset(blob, blob.type || 'image/jpeg')
-        const url    = await getUrl(savedId)
+        const url     = await getUrl(savedId)
         if (!url) throw new Error('Không lấy được URL ảnh sau khi lưu')
-        // Update assetId so future calls work
         setCharacterAssetId(savedId)
         imagePublicUrl = url
       } else {
         imagePublicUrl = characterAssetId
       }
 
-      // Resolve audio to public signed URL
+      // Resolve audio to public URL
       const audioPublicUrl = await getUrl(audioAssetId)
       if (!audioPublicUrl) throw new Error('Không lấy được URL audio')
 
@@ -261,7 +337,6 @@ export default function LipSync() {
         prev.map((h) => (h.id === historyId ? { ...h, taskId, status: 'processing' as VideoStatus } : h)),
       )
 
-      // Poll until done (up to 8 min for longer audio)
       const videoUrl = await pollLipSyncUntilDone({
         apiKey:    kieApiKey,
         taskId,
@@ -309,6 +384,10 @@ export default function LipSync() {
 
   const canGenerateVideo = !!characterAssetId && !!audioAssetId && !isGenerating
 
+  // Partition voices: cloned vs library Malaysian
+  const clonedVoices  = voices.filter((v) => v.category === 'cloned')
+  const libraryVoices = voices.filter((v) => v.category !== 'cloned')
+
   // ── Render ────────────────────────────────────────────────────────────
 
   return (
@@ -328,13 +407,29 @@ export default function LipSync() {
             <div>
               <p className="mb-1.5 text-[10px] font-medium uppercase tracking-widest text-gray-400">Ảnh nhân vật</p>
               {characterDisplayUrl ? (
-                <div className="group relative overflow-hidden rounded-xl border border-black/10">
-                  <img src={characterDisplayUrl} alt="Nhân vật" className="h-52 w-full object-cover object-top" />
+                /* Compact thumbnail — full image visible, not cropped */
+                <div className="group relative flex items-center gap-3 rounded-xl border border-black/10 bg-black/[0.02] p-2">
+                  <div className="relative h-16 w-16 shrink-0 overflow-hidden rounded-lg border border-black/8 bg-black/5">
+                    <img
+                      src={characterDisplayUrl}
+                      alt="Nhân vật"
+                      className="h-full w-full object-contain"
+                    />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs font-medium text-gray-700">Ảnh đã chọn</p>
+                    <button
+                      onClick={() => fileInputRef.current?.click()}
+                      className="mt-0.5 text-[10px] text-indigo-500 hover:underline"
+                    >
+                      Đổi ảnh
+                    </button>
+                  </div>
                   <button
                     onClick={() => { setCharacterAssetId(null); setCharacterDisplayUrl(null) }}
-                    className="absolute right-2 top-2 flex h-6 w-6 items-center justify-center rounded-full bg-black/70 text-white opacity-0 transition-opacity group-hover:opacity-100"
+                    className="flex h-6 w-6 items-center justify-center rounded-full bg-black/10 text-gray-500 transition-colors hover:bg-red-500/15 hover:text-red-500"
                   >
-                    <span className="text-sm leading-none">×</span>
+                    <X className="h-3 w-3" />
                   </button>
                 </div>
               ) : (
@@ -357,7 +452,7 @@ export default function LipSync() {
               )}
             </div>
 
-            {/* 2. Voice selector */}
+            {/* 2. Voice selector — cloned + Malaysian library only */}
             <div>
               <p className="mb-1.5 text-[10px] font-medium uppercase tracking-widest text-gray-400">Giọng ElevenLabs</p>
               {!elevenLabsApiKey ? (
@@ -381,7 +476,7 @@ export default function LipSync() {
                         <>
                           <span className="block truncate text-sm font-medium text-gray-800">{selectedVoice.name}</span>
                           <span className="text-[10px] text-gray-400">
-                            {selectedVoice.category === 'cloned' ? 'Giọng đã clone' : 'Giọng thư viện'}
+                            {selectedVoice.category === 'cloned' ? 'Giọng đã clone' : 'Giọng thư viện Malaysian'}
                           </span>
                         </>
                       ) : (
@@ -392,33 +487,75 @@ export default function LipSync() {
                   </button>
 
                   {voiceDropdownOpen && voices.length > 0 && (
-                    <div className="absolute z-20 mt-1 max-h-52 w-full overflow-y-auto rounded-xl border border-black/10 bg-white shadow-xl">
-                      {voices.map((v) => (
-                        <button
-                          key={v.voice_id}
-                          onClick={() => { setSelectedVoice(v); setVoiceDropdownOpen(false) }}
-                          className={`flex w-full items-center gap-3 px-3 py-2 text-left transition-colors hover:bg-black/5 ${
-                            selectedVoice?.voice_id === v.voice_id ? 'bg-indigo-50' : ''
-                          }`}
-                        >
-                          <div className={`h-2 w-2 shrink-0 rounded-full ${v.category === 'cloned' ? 'bg-violet-400' : 'bg-gray-300'}`} />
-                          <span className="flex-1 truncate text-xs font-medium text-gray-700">{v.name}</span>
-                          {v.category === 'cloned' && (
-                            <span className="shrink-0 rounded-full bg-violet-50 px-2 py-0.5 text-[9px] font-semibold text-violet-600">
-                              Clone
-                            </span>
-                          )}
-                        </button>
-                      ))}
+                    <div className="absolute z-20 mt-1 max-h-64 w-full overflow-y-auto rounded-xl border border-black/10 bg-white shadow-xl">
+                      {/* Cloned voices section */}
+                      {clonedVoices.length > 0 && (
+                        <>
+                          <div className="sticky top-0 bg-white px-3 py-1.5 border-b border-black/5">
+                            <span className="text-[9px] font-semibold uppercase tracking-widest text-violet-500">Giọng đã clone</span>
+                          </div>
+                          {clonedVoices.map((v) => (
+                            <button
+                              key={v.voice_id}
+                              onClick={() => { setSelectedVoice(v); setVoiceDropdownOpen(false) }}
+                              className={`flex w-full items-center gap-3 px-3 py-2 text-left transition-colors hover:bg-black/5 ${selectedVoice?.voice_id === v.voice_id ? 'bg-indigo-50' : ''}`}
+                            >
+                              <div className="h-2 w-2 shrink-0 rounded-full bg-violet-400" />
+                              <span className="flex-1 truncate text-xs font-medium text-gray-700">{v.name}</span>
+                              <span className="shrink-0 rounded-full bg-violet-50 px-2 py-0.5 text-[9px] font-semibold text-violet-600">Clone</span>
+                            </button>
+                          ))}
+                        </>
+                      )}
+                      {/* Malaysian library voices section */}
+                      {libraryVoices.length > 0 && (
+                        <>
+                          <div className={`sticky top-0 bg-white px-3 py-1.5 border-b border-black/5 ${clonedVoices.length > 0 ? 'border-t' : ''}`}>
+                            <span className="text-[9px] font-semibold uppercase tracking-widest text-indigo-500">Thư viện Malaysian</span>
+                          </div>
+                          {libraryVoices.map((v) => (
+                            <button
+                              key={v.voice_id}
+                              onClick={() => { setSelectedVoice(v); setVoiceDropdownOpen(false) }}
+                              className={`flex w-full items-center gap-3 px-3 py-2 text-left transition-colors hover:bg-black/5 ${selectedVoice?.voice_id === v.voice_id ? 'bg-indigo-50' : ''}`}
+                            >
+                              <div className="h-2 w-2 shrink-0 rounded-full bg-indigo-300" />
+                              <span className="flex-1 truncate text-xs font-medium text-gray-700">{v.name}</span>
+                              <span className="shrink-0 text-[9px] text-gray-400">
+                                {v.labels?.gender === 'male' ? '♂' : v.labels?.gender === 'female' ? '♀' : ''}
+                              </span>
+                            </button>
+                          ))}
+                        </>
+                      )}
+                      {voices.length === 0 && !voicesLoading && (
+                        <div className="px-3 py-4 text-center text-xs text-gray-400">Không tìm được giọng Malaysian</div>
+                      )}
                     </div>
                   )}
                 </div>
               )}
             </div>
 
-            {/* 3. Script + emotion tags */}
+            {/* 3. Script + emotion tags + AI suggestion */}
             <div>
               <p className="mb-1.5 text-[10px] font-medium uppercase tracking-widest text-gray-400">Kịch bản</p>
+
+              {/* AI suggest button */}
+              <button
+                onClick={handleSuggestEmotions}
+                disabled={isSuggestingEmotions || !scriptText.trim()}
+                className="mb-2 flex w-full items-center justify-center gap-1.5 rounded-lg border border-violet-200 bg-violet-50 py-1.5 text-[11px] font-medium text-violet-700 transition-colors hover:bg-violet-100 disabled:cursor-not-allowed disabled:opacity-40"
+                title={!geminiApiKey ? 'Cần Gemini API key trong Cài đặt' : ''}
+              >
+                {isSuggestingEmotions ? (
+                  <><Loader2 className="h-3 w-3 animate-spin" />Đang gợi ý biểu cảm...</>
+                ) : (
+                  <><Sparkles className="h-3 w-3" />Gợi ý biểu cảm</>
+                )}
+              </button>
+
+              {/* Manual emotion tag buttons */}
               <div className="mb-2 flex flex-wrap gap-1.5">
                 {EMOTION_TAGS.map(({ label, tag }) => (
                   <button
@@ -430,14 +567,18 @@ export default function LipSync() {
                   </button>
                 ))}
               </div>
+
               <textarea
                 ref={textareaRef}
                 value={scriptText}
                 onChange={(e) => setScriptText(e.target.value)}
                 rows={5}
-                placeholder="Nhập kịch bản... Dùng nút cảm xúc để thêm tag như [happy], [excited]"
+                placeholder="Nhập kịch bản... Dùng nút cảm xúc hoặc 'Gợi ý biểu cảm' để thêm tag [happy], [excited]..."
                 className="w-full resize-none rounded-lg border border-black/10 bg-transparent px-3 py-2 text-sm text-gray-800 placeholder-gray-300 outline-none transition-colors focus:border-black/15"
               />
+              <p className="mt-1 text-[10px] text-gray-400">
+                Các tag biểu cảm sẽ được bỏ khi phát âm — giọng tự thể hiện qua ngữ điệu
+              </p>
             </div>
 
             {/* 4. Generate audio */}
@@ -504,9 +645,7 @@ export default function LipSync() {
                     <button
                       key={m.id}
                       onClick={() => { setSelectedModelId(m.id); setModelDropdownOpen(false) }}
-                      className={`flex w-full items-center gap-3 px-3 py-2.5 text-left transition-colors hover:bg-black/5 ${
-                        selectedModelId === m.id ? 'bg-indigo-50' : ''
-                      }`}
+                      className={`flex w-full items-center gap-3 px-3 py-2.5 text-left transition-colors hover:bg-black/5 ${selectedModelId === m.id ? 'bg-indigo-50' : ''}`}
                     >
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-1.5">
