@@ -1,37 +1,127 @@
-﻿import { FolderOpen, Headphones, DoorOpen } from 'lucide-react'
+import { useEffect, useState, useCallback } from 'react'
+import { FolderOpen, Headphones, DoorOpen, Mic, RefreshCw, Trash2, Loader2 } from 'lucide-react'
 import type { VoiceSettings, Gender, Ambience, VoiceOption } from '../types'
-import { VOICES } from '../types'
+import { useSettingsStore } from '../../../stores/settingsStore'
+import { useAppStore } from '../../../stores/appStore'
+import { listVoices, deleteVoice, type ElevenLabsVoice } from '../../../utils/elevenlabs'
 
 interface ControlsSidebarProps {
   settings: VoiceSettings
   onSettingsChange: (settings: VoiceSettings) => void
   onLoadPreset: () => void
+  onOpenClone: () => void
+  refreshKey: number       // bump to trigger re-fetch (e.g. after clone)
 }
 
-export default function ControlsSidebar({ settings, onSettingsChange, onLoadPreset }: ControlsSidebarProps) {
+function mapVoice(v: ElevenLabsVoice): VoiceOption {
+  const gender: Gender = (v.labels?.gender?.toLowerCase() === 'male') ? 'Male' : 'Female'
+  const style =
+    v.category === 'cloned' ? 'CLONED' :
+    v.category === 'professional' ? 'PRO' :
+    v.labels?.accent?.toUpperCase() ?? v.category?.toUpperCase() ?? 'PREMADE'
+  return {
+    voiceId: v.voice_id,
+    name: v.name,
+    gender,
+    style,
+    category: v.category,
+    previewUrl: v.preview_url,
+  }
+}
+
+export default function ControlsSidebar({ settings, onSettingsChange, onLoadPreset, onOpenClone, refreshKey }: ControlsSidebarProps) {
+  const [voices, setVoices] = useState<VoiceOption[]>([])
+  const [isLoading, setIsLoading] = useState(false)
+  const hasElevenLabsKey = useSettingsStore((s) => s.hasElevenLabsKey())
+  const addToast = useAppStore((s) => s.addToast)
+
+  const fetchVoices = useCallback(async () => {
+    if (!hasElevenLabsKey) return
+    setIsLoading(true)
+    try {
+      const apiKey = useSettingsStore.getState().getElevenLabsApiKey()
+      const list = await listVoices(apiKey)
+      // Sort: cloned first, then professional, then premade
+      const sorted = list.sort((a, b) => {
+        const order: Record<string, number> = { cloned: 0, professional: 1, generated: 2, premade: 3 }
+        return (order[a.category] ?? 9) - (order[b.category] ?? 9)
+      })
+      const mapped = sorted.map(mapVoice)
+      setVoices(mapped)
+
+      // Auto-select first matching gender if nothing selected
+      if (!settings.voiceId && mapped.length > 0) {
+        const first = mapped.find((v) => v.gender === settings.gender) ?? mapped[0]
+        onSettingsChange({ ...settings, voiceId: first.voiceId, voiceName: first.name, gender: first.gender })
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      addToast(`Không tải được danh sách giọng: ${msg}`, 'error')
+    } finally {
+      setIsLoading(false)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hasElevenLabsKey])
+
+  useEffect(() => {
+    fetchVoices()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hasElevenLabsKey, refreshKey])
+
   const setField = <K extends keyof VoiceSettings>(key: K, value: VoiceSettings[K]) => {
     onSettingsChange({ ...settings, [key]: value })
   }
 
-  const handleGenderSwitch = (gender: Gender) => {
-    if (gender === settings.gender) return
-    const firstVoice = VOICES.find((v) => v.gender === gender)
-    onSettingsChange({ ...settings, gender, voiceName: firstVoice?.name ?? settings.voiceName })
+  const selectVoice = (voice: VoiceOption) => {
+    onSettingsChange({ ...settings, voiceId: voice.voiceId, voiceName: voice.name, gender: voice.gender })
   }
 
-  const filteredVoices = VOICES.filter((v) => v.gender === settings.gender)
+  const handleGenderSwitch = (gender: Gender) => {
+    if (gender === settings.gender) return
+    const firstVoice = voices.find((v) => v.gender === gender)
+    if (firstVoice) {
+      onSettingsChange({ ...settings, gender, voiceId: firstVoice.voiceId, voiceName: firstVoice.name })
+    } else {
+      onSettingsChange({ ...settings, gender })
+    }
+  }
+
+  const handleDeleteVoice = async (e: React.MouseEvent, voice: VoiceOption) => {
+    e.stopPropagation()
+    if (voice.category !== 'cloned') return
+    if (!confirm(`Xóa giọng clone "${voice.name}"?`)) return
+    try {
+      const apiKey = useSettingsStore.getState().getElevenLabsApiKey()
+      await deleteVoice(apiKey, voice.voiceId)
+      addToast(`Đã xóa giọng "${voice.name}"`)
+      fetchVoices()
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      addToast(`Xóa giọng thất bại: ${msg}`, 'error')
+    }
+  }
+
+  const filteredVoices = voices.filter((v) => v.gender === settings.gender)
   const isMale = settings.gender === 'Male'
 
   return (
     <div className="flex h-full flex-col">
-      {/* Load Voice Preset */}
-      <div className="border-b border-black/8 p-4">
+      {/* Top actions */}
+      <div className="border-b border-black/8 p-4 flex flex-col gap-2">
+        <button
+          onClick={onOpenClone}
+          disabled={!hasElevenLabsKey}
+          className="flex w-full items-center justify-center gap-2 rounded-full bg-indigo-500 px-6 py-3 text-[13px] font-medium tracking-tight text-white transition-colors hover:bg-indigo-400 disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          <Mic className="h-4 w-4" />
+          Clone giọng mới
+        </button>
         <button
           onClick={onLoadPreset}
-          className="flex w-full items-center justify-center gap-2 rounded-full border border-indigo-500/20 bg-indigo-500/10 px-6 py-3 text-[13px] font-medium tracking-tight text-indigo-400 transition-colors hover:bg-indigo-500/20"
+          className="flex w-full items-center justify-center gap-2 rounded-full border border-indigo-500/20 bg-indigo-500/10 px-6 py-2 text-[12px] font-medium tracking-tight text-indigo-400 transition-colors hover:bg-indigo-500/20"
         >
-          <FolderOpen className="h-4 w-4" />
-          Tải preset giọng đọc
+          <FolderOpen className="h-3.5 w-3.5" />
+          Tải preset
         </button>
       </div>
 
@@ -61,12 +151,12 @@ export default function ControlsSidebar({ settings, onSettingsChange, onLoadPres
           />
         </div>
         <div className="mt-2 flex justify-between text-[10px] text-gray-300">
-          <span>Chính xác</span>
-          <span>Sáng tạo</span>
+          <span>Ổn định</span>
+          <span>Biểu cảm</span>
         </div>
       </div>
 
-      {/* Room Ambience */}
+      {/* Room Ambience (used for style hint via styleInstructions) */}
       <div className="border-b border-black/8 px-4 py-4">
         <span className="text-[11px] font-medium uppercase tracking-widest text-gray-400">Âm thanh môi trường</span>
         <div className="mt-3 flex gap-2">
@@ -92,7 +182,17 @@ export default function ControlsSidebar({ settings, onSettingsChange, onLoadPres
 
       {/* Voice Selection */}
       <div className="flex min-h-0 flex-1 flex-col px-4 py-4">
-        <span className="text-[11px] font-medium uppercase tracking-widest text-gray-400">Giọng đọc</span>
+        <div className="flex items-center justify-between">
+          <span className="text-[11px] font-medium uppercase tracking-widest text-gray-400">Giọng đọc</span>
+          <button
+            onClick={fetchVoices}
+            disabled={isLoading || !hasElevenLabsKey}
+            className="rounded p-1 text-gray-400 hover:bg-black/5 hover:text-gray-600 disabled:opacity-40"
+            title="Tải lại danh sách"
+          >
+            <RefreshCw className={`h-3 w-3 ${isLoading ? 'animate-spin' : ''}`} />
+          </button>
+        </div>
 
         {/* Gender sliding toggle */}
         <div className="relative mt-2 flex h-8 rounded-full bg-black/[0.04] p-0.5">
@@ -112,34 +212,60 @@ export default function ControlsSidebar({ settings, onSettingsChange, onLoadPres
           ))}
         </div>
 
-        {/* Voice list — scrollable within bordered box */}
+        {/* Voice list */}
         <div className="mt-3 min-h-0 flex-1 overflow-y-auto rounded-xl border border-white/[0.06]">
-          <div className="flex flex-col gap-0.5 p-1">
-            {filteredVoices.map((voice: VoiceOption) => {
-              const isActive = settings.voiceName === voice.name
-              return (
-                <button
-                  key={voice.name}
-                  onClick={() => setField('voiceName', voice.name)}
-                  className={`flex items-center gap-2.5 rounded-lg px-3 py-2 text-left transition-colors group ${isActive
-                      ? 'bg-indigo-500/20'
-                      : 'hover:bg-black/[0.04]'
-                    }`}
-                >
-                  <span
-                    className={`h-1.5 w-1.5 shrink-0 rounded-full transition-colors ${isActive ? 'bg-indigo-400' : 'bg-gray-300 group-hover:bg-indigo-400/50'
+          {!hasElevenLabsKey ? (
+            <div className="flex h-full flex-col items-center justify-center gap-2 p-6 text-center">
+              <p className="text-xs text-gray-400">Chưa có ElevenLabs API key</p>
+              <p className="text-[10px] text-gray-300">Vào Cài đặt → ElevenLabs để thêm key</p>
+            </div>
+          ) : isLoading && voices.length === 0 ? (
+            <div className="flex h-full items-center justify-center">
+              <Loader2 className="h-4 w-4 animate-spin text-indigo-400" />
+            </div>
+          ) : filteredVoices.length === 0 ? (
+            <div className="flex h-full flex-col items-center justify-center gap-2 p-6 text-center">
+              <p className="text-xs text-gray-400">Chưa có giọng {settings.gender === 'Female' ? 'nữ' : 'nam'}</p>
+              <p className="text-[10px] text-gray-300">Bấm "Clone giọng mới" để tạo</p>
+            </div>
+          ) : (
+            <div className="flex flex-col gap-0.5 p-1">
+              {filteredVoices.map((voice) => {
+                const isActive = settings.voiceId === voice.voiceId
+                const isCloned = voice.category === 'cloned'
+                return (
+                  <button
+                    key={voice.voiceId}
+                    onClick={() => selectVoice(voice)}
+                    className={`flex items-center gap-2.5 rounded-lg px-3 py-2 text-left transition-colors group ${isActive
+                        ? 'bg-indigo-500/20'
+                        : 'hover:bg-black/[0.04]'
                       }`}
-                  />
-                  <span className={`text-xs font-medium transition-colors ${isActive ? 'text-gray-800' : 'text-gray-500 group-hover:text-gray-700'}`}>
-                    {voice.name}
-                  </span>
-                  <span className={`ml-auto text-[10px] tracking-wide transition-colors ${isActive ? 'text-indigo-400/70' : 'text-gray-300 group-hover:text-gray-600/60'}`}>
-                    {voice.style}
-                  </span>
-                </button>
-              )
-            })}
-          </div>
+                  >
+                    <span
+                      className={`h-1.5 w-1.5 shrink-0 rounded-full transition-colors ${isActive ? 'bg-indigo-400' : isCloned ? 'bg-emerald-400' : 'bg-gray-300 group-hover:bg-indigo-400/50'
+                        }`}
+                    />
+                    <span className={`text-xs font-medium truncate transition-colors ${isActive ? 'text-gray-800' : 'text-gray-500 group-hover:text-gray-700'}`}>
+                      {voice.name}
+                    </span>
+                    <span className={`ml-auto shrink-0 text-[10px] tracking-wide transition-colors ${isCloned ? 'text-emerald-500/80' : isActive ? 'text-indigo-400/70' : 'text-gray-300 group-hover:text-gray-600/60'}`}>
+                      {voice.style}
+                    </span>
+                    {isCloned && (
+                      <button
+                        onClick={(e) => handleDeleteVoice(e, voice)}
+                        className="shrink-0 rounded p-0.5 text-gray-300 transition-colors hover:bg-red-500/10 hover:text-red-500"
+                        title="Xóa giọng clone"
+                      >
+                        <Trash2 className="h-3 w-3" />
+                      </button>
+                    )}
+                  </button>
+                )
+              })}
+            </div>
+          )}
         </div>
       </div>
     </div>

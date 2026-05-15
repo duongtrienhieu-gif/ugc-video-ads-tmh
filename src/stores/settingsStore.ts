@@ -5,18 +5,18 @@ const STORAGE_KEY = 'ai-ugc-lab-settings'
 interface SettingsState {
   kieApiKey: string
   geminiApiKey: string
-  googleTtsApiKey: string
+  elevenLabsApiKey: string
   kieCredits: number | null
   setKieApiKey: (key: string) => void
   setGeminiApiKey: (key: string) => void
-  setGoogleTtsApiKey: (key: string) => void
+  setElevenLabsApiKey: (key: string) => void
   setKieCredits: (credits: number | null) => void
   hasApiKey: () => boolean
   getApiKey: () => string
   getGeminiApiKey: () => string
   hasGeminiKey: () => boolean
-  getGoogleTtsApiKey: () => string
-  hasGoogleTtsKey: () => boolean
+  getElevenLabsApiKey: () => string
+  hasElevenLabsKey: () => boolean
 }
 
 function loadFromStorage() {
@@ -27,15 +27,15 @@ function loadFromStorage() {
       return {
         kieApiKey: parsed.kieApiKey ?? '',
         geminiApiKey: parsed.geminiApiKey ?? '',
-        googleTtsApiKey: parsed.googleTtsApiKey ?? '',
+        elevenLabsApiKey: parsed.elevenLabsApiKey ?? '',
       }
     }
   } catch {}
-  return { kieApiKey: '', geminiApiKey: '', googleTtsApiKey: '' }
+  return { kieApiKey: '', geminiApiKey: '', elevenLabsApiKey: '' }
 }
 
-function saveToStorage(kieApiKey: string, geminiApiKey: string, googleTtsApiKey: string) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify({ kieApiKey, geminiApiKey, googleTtsApiKey }))
+function saveToStorage(kieApiKey: string, geminiApiKey: string, elevenLabsApiKey: string) {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify({ kieApiKey, geminiApiKey, elevenLabsApiKey }))
 }
 
 export const useSettingsStore = create<SettingsState>((set, get) => ({
@@ -44,16 +44,16 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
 
   setKieApiKey: (key) => {
     set({ kieApiKey: key })
-    saveToStorage(key, get().geminiApiKey, get().googleTtsApiKey)
+    saveToStorage(key, get().geminiApiKey, get().elevenLabsApiKey)
   },
 
   setGeminiApiKey: (key) => {
     set({ geminiApiKey: key })
-    saveToStorage(get().kieApiKey, key, get().googleTtsApiKey)
+    saveToStorage(get().kieApiKey, key, get().elevenLabsApiKey)
   },
 
-  setGoogleTtsApiKey: (key) => {
-    set({ googleTtsApiKey: key })
+  setElevenLabsApiKey: (key) => {
+    set({ elevenLabsApiKey: key })
     saveToStorage(get().kieApiKey, get().geminiApiKey, key)
   },
 
@@ -75,12 +75,11 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
 
   hasGeminiKey: () => get().geminiApiKey.length > 0,
 
-  getGoogleTtsApiKey: () => {
-    // Fallback to Gemini key if no dedicated TTS key set (for users with unrestricted key)
-    const key = get().googleTtsApiKey || get().geminiApiKey
-    if (!key) throw new Error('Vui lòng nhập Google Cloud TTS API key trong Cài đặt')
+  getElevenLabsApiKey: () => {
+    const key = get().elevenLabsApiKey
+    if (!key) throw new Error('Vui lòng nhập ElevenLabs API key trong Cài đặt')
     return key
   },
 
-  hasGoogleTtsKey: () => get().googleTtsApiKey.length > 0 || get().geminiApiKey.length > 0,
+  hasElevenLabsKey: () => get().elevenLabsApiKey.length > 0,
 }))

@@ -1,4 +1,4 @@
-﻿import { useState, useEffect } from 'react'
+import { useState, useEffect } from 'react'
 import { useAppStore } from '../../stores/appStore'
 import { useBankStore } from '../../stores/bankStore'
 import type { VoicePreset, Script } from '../../stores/types'
@@ -8,6 +8,7 @@ import { generateVoice } from './services/generateVoice'
 import ControlsSidebar from './components/ControlsSidebar'
 import EditorPanel from './components/EditorPanel'
 import HistoryPanel from './components/HistoryPanel'
+import CloneVoiceModal from './components/CloneVoiceModal'
 import BankPicker from '../../components/BankPicker'
 
 type PickerMode = 'voices' | 'scripts' | null
@@ -17,6 +18,8 @@ export default function VoiceStudio() {
   const [scriptText, setScriptText] = useState('')
   const [isGenerating, setIsGenerating] = useState(false)
   const [pickerMode, setPickerMode] = useState<PickerMode>(null)
+  const [cloneOpen, setCloneOpen] = useState(false)
+  const [voicesRefreshKey, setVoicesRefreshKey] = useState(0)
   const [highlightField, setHighlightField] = useState<string | null>(null)
 
   const history = useBankStore((s) => s.voiceHistory)
@@ -54,13 +57,14 @@ export default function VoiceStudio() {
 
   const handleLoadVoicePreset = (item: unknown) => {
     const preset = item as VoicePreset
-    setSettings({
+    setSettings((prev) => ({
+      ...prev,
       voiceName: preset.voiceName,
       gender: preset.gender,
       creativity: preset.creativity,
       ambience: preset.ambience,
       styleInstructions: preset.styleInstructions,
-    })
+    }))
     setPickerMode(null)
   }
 
@@ -89,6 +93,13 @@ export default function VoiceStudio() {
     deleteVoiceHistory(id)
   }
 
+  const handleCloned = (voiceId: string) => {
+    // Bump refresh key so sidebar re-fetches voices, auto-selecting the new one
+    setVoicesRefreshKey((k) => k + 1)
+    // Optimistically select the just-cloned voice
+    setSettings((prev) => ({ ...prev, voiceId }))
+  }
+
   return (
     <div className="flex flex-col lg:flex-row h-full">
       {/* Left sidebar — controls */}
@@ -97,6 +108,8 @@ export default function VoiceStudio() {
           settings={settings}
           onSettingsChange={handleSettingsChange}
           onLoadPreset={() => setPickerMode('voices')}
+          onOpenClone={() => setCloneOpen(true)}
+          refreshKey={voicesRefreshKey}
         />
       </div>
 
@@ -110,7 +123,7 @@ export default function VoiceStudio() {
           onSelectScript={() => setPickerMode('scripts')}
           onGenerate={handleGenerate}
           isGenerating={isGenerating}
-          canGenerate={scriptText.trim().length > 0}
+          canGenerate={scriptText.trim().length > 0 && !!settings.voiceId}
           highlightField={highlightField}
         />
       </div>
@@ -122,6 +135,13 @@ export default function VoiceStudio() {
           onDelete={handleDeleteHistoryItem}
         />
       </div>
+
+      {/* Clone Voice Modal */}
+      <CloneVoiceModal
+        open={cloneOpen}
+        onClose={() => setCloneOpen(false)}
+        onCloned={handleCloned}
+      />
 
       {/* Bank Pickers */}
       <BankPicker
