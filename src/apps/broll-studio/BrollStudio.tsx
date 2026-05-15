@@ -24,6 +24,7 @@ export default function BrollStudio() {
   const interAppPayload = useAppStore((s) => s.interAppPayload)
   const consumePayload = useAppStore((s) => s.consumePayload)
   const activeApp = useAppStore((s) => s.activeApp)
+  const addToast = useAppStore((s) => s.addToast)
   const getScriptById = useBankStore((s) => s.getScriptById)
 
   // Consume inter-app payload (from Script Architect "Send to B-Roll Studio")
