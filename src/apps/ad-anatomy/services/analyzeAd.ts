@@ -15,11 +15,13 @@ const GEMINI_MODELS      = ['gemini-2.5-flash', 'gemini-2.5-flash-preview-05-20'
 
 // ── System instruction ────────────────────────────────────────────────────────
 
-const SYSTEM_INSTRUCTION = `You are a creative strategist specializing in short-form video advertising. Analyze the video ad and return structured creative insights as JSON.
+const SYSTEM_INSTRUCTION = `Bạn là chuyên gia phân tích quảng cáo video ngắn. Phân tích video quảng cáo và trả về JSON có cấu trúc.
 
-CRITICAL RULE for "transcript": Transcribe ONLY the spoken voice-over audio — word for word, exactly as heard. Do NOT include on-screen text, subtitles, captions, text overlays, or any text visible on screen. ONLY transcribe words that are actually spoken aloud by a person. Do NOT write bracket descriptions like "[Creator introduces product]". Write ONLY what is literally spoken. Timestamps must be accurate (0:00, 0:03, 0:07, etc.).
+NGÔN NGỮ OUTPUT: Viết TẤT CẢ nội dung phân tích bằng TIẾNG VIỆT — bao gồm analystNote, technique, whyItWorks, adaptableTemplate, pacing, beat descriptions, mô tả visual, weakness, fix, reconstructionPrompt. CHỈ giữ nguyên tiếng gốc cho trường "transcript" (chép lại lời thoại đúng ngôn ngữ nói trong video).
 
-Output ONLY a valid JSON object — no markdown, no code fences, no explanation:
+QUY TẮC TRANSCRIPT: Chép lại ĐÚNG TỪNG TỪ lời nói trong audio — bất kể ngôn ngữ là Tiếng Anh, Tiếng Malay, hay Tiếng Việt. KHÔNG bao gồm chữ hiển thị trên màn hình, subtitle, caption, hay text overlay. CHỈ chép lời người thật nói ra. KHÔNG dùng mô tả trong ngoặc như "[Creator nói về sản phẩm]". Timestamps phải chính xác (0:00, 0:03, 0:07, v.v.).
+
+Output CHỈ là JSON hợp lệ — không markdown, không code fence, không giải thích:
 
 {
   "scorecard": {
@@ -30,39 +32,39 @@ Output ONLY a valid JSON object — no markdown, no code fences, no explanation:
       { "label": "Persuasion Depth", "score": 6 },
       { "label": "Overall Execution", "score": 6 }
     ],
-    "analystNote": "2-3 sentence honest creative summary."
+    "analystNote": "Nhận xét 2-3 câu bằng tiếng Việt về chất lượng sáng tạo của quảng cáo."
   },
   "transcript": [
-    { "timestamp": "0:00", "text": "exact spoken words here — never use bracket descriptions" },
-    { "timestamp": "0:05", "text": "next line of speech verbatim" }
+    { "timestamp": "0:00", "text": "lời thoại đúng ngôn ngữ gốc trong video" },
+    { "timestamp": "0:05", "text": "câu tiếp theo đúng nguyên văn" }
   ],
   "hookBreakdown": {
-    "hookText": "exact opening hook text",
-    "technique": "hook technique name",
-    "whyItWorks": "brief explanation",
-    "adaptableTemplate": "fill-in-the-blank version"
+    "hookText": "câu hook mở đầu nguyên văn",
+    "technique": "tên kỹ thuật hook (tiếng Việt)",
+    "whyItWorks": "giải thích tại sao hook này hiệu quả (tiếng Việt)",
+    "adaptableTemplate": "mẫu có thể điền vào cho sản phẩm khác (tiếng Việt)"
   },
   "structureMap": {
     "runtime": "0:30",
-    "pacing": "pacing description",
+    "pacing": "mô tả nhịp độ bằng tiếng Việt",
     "beats": [
-      { "timestamp": "0:00–0:05", "beat": "Hook", "description": "what happens", "duration": "5s" }
+      { "timestamp": "0:00–0:05", "beat": "Hook", "description": "mô tả đoạn này bằng tiếng Việt", "duration": "5s" }
     ]
   },
   "psychology": {
-    "primaryLevers": ["lever 1", "lever 2"],
-    "targetingSignals": ["signal 1", "signal 2"]
+    "primaryLevers": ["đòn tâm lý 1 (tiếng Việt)", "đòn tâm lý 2"],
+    "targetingSignals": ["nhóm khách hàng mục tiêu 1 (tiếng Việt)", "nhóm 2"]
   },
   "visualPlaybook": [
-    { "timestamp": "0:00–0:05", "description": "what is shown on screen", "prompt": "image generation prompt to replicate this visual" }
+    { "timestamp": "0:00–0:05", "description": "mô tả hình ảnh bằng tiếng Việt", "prompt": "image prompt tiếng Anh để tái tạo cảnh này" }
   ],
   "improvements": [
-    { "weakness": "identified weakness", "fix": "actionable fix" }
+    { "weakness": "điểm yếu của quảng cáo (tiếng Việt)", "fix": "cách khắc phục cụ thể (tiếng Việt)" }
   ],
-  "reconstructionPrompt": "A detailed prompt that describes this ad's full creative structure so it could be recreated for any product."
+  "reconstructionPrompt": "Prompt chi tiết bằng tiếng Anh mô tả toàn bộ cấu trúc sáng tạo của quảng cáo này để có thể tái tạo cho sản phẩm bất kỳ."
 }
 
-Scores use integers 1-10. Most ads score 4-7. Reserve 9-10 for exceptional work only.`
+Điểm số dùng số nguyên 1-10. Hầu hết quảng cáo đạt 4-7. Chỉ cho 9-10 cho tác phẩm xuất sắc.`
 
 // ── Gemini Files API helpers ──────────────────────────────────────────────────
 
@@ -157,14 +159,14 @@ async function analyzeWithVideoFile(
         parts: [
           { fileData: { mimeType, fileUri } },
           {
-            text: 'Listen to the audio track of this video and transcribe ONLY the spoken voice-over words — word for word, exactly as heard. '
-              + 'Do NOT include any on-screen text, subtitles, captions, or text overlays visible in the video frames. '
-              + 'Only words actually spoken aloud by a person should appear in the transcript. '
-              + 'Then return the complete JSON analysis.',
+            text: 'Lắng nghe audio của video và chép lại ĐÚNG TỪNG TỪ lời nói — bất kể ngôn ngữ là Tiếng Anh, Tiếng Malay, hay Tiếng Việt. '
+              + 'KHÔNG bao gồm chữ hiển thị trên màn hình, subtitle, caption. Chỉ lời người thật nói. '
+              + 'Toàn bộ phân tích viết bằng Tiếng Việt (trừ transcript giữ nguyên ngôn ngữ gốc). '
+              + 'Trả về JSON phân tích đầy đủ.',
           },
         ],
       }],
-      generationConfig: { temperature: 0.2, maxOutputTokens: 8192 },
+      generationConfig: { temperature: 0.2, maxOutputTokens: 16384 },
       systemInstruction: { parts: [{ text: SYSTEM_INSTRUCTION }] },
     }
 
@@ -330,9 +332,8 @@ function parseAnalysisJson(raw: string): AnalysisResult {
 /**
  * Repair common JSON issues from LLM responses:
  * - Trailing commas before } or ]
- * - Unescaped newlines inside string values
- * - Unescaped tabs/control chars inside strings
- * - Single quotes inside the body that break parsing
+ * - Unescaped control chars inside strings
+ * - Truncated JSON (response cut off mid-stream) — close open brackets/strings
  */
 function repairJson(input: string): string {
   let s = input
@@ -340,16 +341,21 @@ function repairJson(input: string): string {
   // Remove trailing commas before } or ]
   s = s.replace(/,(\s*[}\]])/g, '$1')
 
-  // Walk through strings and escape any raw control characters that JSON forbids
-  // (newlines, tabs, etc.) inside string literals.
+  // Walk through strings: escape raw control chars, track open brackets/strings
   let out = ''
   let inString = false
   let escape = false
+  const stack: string[] = []   // tracks open { and [
+
   for (let i = 0; i < s.length; i++) {
     const ch = s[i]
     if (escape) { out += ch; escape = false; continue }
     if (ch === '\\') { out += ch; escape = true; continue }
-    if (ch === '"') { inString = !inString; out += ch; continue }
+    if (ch === '"') {
+      inString = !inString
+      out += ch
+      continue
+    }
     if (inString) {
       const code = ch.charCodeAt(0)
       if      (ch === '\n') out += '\\n'
@@ -358,8 +364,23 @@ function repairJson(input: string): string {
       else if (code < 0x20) out += '\\u' + code.toString(16).padStart(4, '0')
       else out += ch
     } else {
+      if (ch === '{' || ch === '[') stack.push(ch)
+      else if (ch === '}' || ch === ']') stack.pop()
       out += ch
     }
   }
+
+  // If response was truncated mid-string, close the open string
+  if (inString) out += '"'
+
+  // Remove trailing comma before we close brackets
+  out = out.replace(/,\s*$/, '')
+
+  // Close any unclosed brackets in reverse order
+  while (stack.length > 0) {
+    const open = stack.pop()
+    out += open === '{' ? '}' : ']'
+  }
+
   return out
 }
