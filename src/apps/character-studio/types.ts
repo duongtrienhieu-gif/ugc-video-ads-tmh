@@ -316,6 +316,70 @@ function pickRandom<T>(arr: T[]): T {
   return arr[Math.floor(Math.random() * arr.length)]
 }
 
+// UGC scenario: guarantees subject always faces camera directly
+interface UGCScenario {
+  location: string
+  background: string
+  lighting: string
+  weather: string
+  timeOfDay: string
+  pose: string
+  action: string
+  shotType: string
+  cameraDevice: string
+}
+
+const UGC_SCENARIOS: UGCScenario[] = [
+  // 1. Classic talking-head — selfie cam
+  {
+    location: pickRandom(['Bedroom', 'Living room', 'Kitchen']),
+    background: pickRandom(['Neutral wall', 'Blurred background', 'Minimalist']),
+    lighting: 'Soft, diffused natural window light, creating gentle highlights on the cheekbones and realistic subsurface scattering on the skin',
+    weather: 'Indoor (N/A)',
+    timeOfDay: pickRandom(['Morning', 'Afternoon']),
+    pose: 'Front-on, sitting upright, face directed straight at camera lens',
+    action: 'Speaking directly to camera, genuine direct eye contact with viewer',
+    shotType: 'Medium shot (waist up)',
+    cameraDevice: pickRandom(['iPhone selfie cam', 'iPhone Front Cam']),
+  },
+  // 2. Mirror selfie — holding iPhone
+  {
+    location: pickRandom(['Bedroom', 'Living room']),
+    background: 'Full-length mirror reflection, tidy room visible in background',
+    lighting: pickRandom(['Soft natural light', 'Natural Window Light']),
+    weather: 'Indoor (N/A)',
+    timeOfDay: pickRandom(['Morning', 'Afternoon']),
+    pose: 'Standing upright in front of full-length mirror, holding iPhone up toward mirror',
+    action: 'Mirror selfie, holding iPhone 15 Pro facing the mirror, eyes looking directly into the camera lens through the mirror reflection',
+    shotType: 'Medium shot (waist up)',
+    cameraDevice: 'iPhone 15 Pro, casual UGC aesthetic',
+  },
+  // 3. Ring-light creator setup
+  {
+    location: pickRandom(['Bedroom', 'Living room']),
+    background: pickRandom(['Neutral wall', 'Minimalist', 'Blurred background']),
+    lighting: 'Ring Light (Influencer)',
+    weather: 'Indoor (N/A)',
+    timeOfDay: 'Evening',
+    pose: 'Front-on, sitting at desk, face directed straight at camera',
+    action: 'Speaking to camera with confident direct eye contact, ring light reflected in eyes',
+    shotType: 'Close-up face',
+    cameraDevice: 'Ring light + phone',
+  },
+  // 4. Outdoor / casual UGC creator
+  {
+    location: pickRandom(['Outdoors park', 'Coffee shop']),
+    background: pickRandom(['Blurred background', 'Plants', 'Window with natural light']),
+    lighting: pickRandom(['Soft natural light', 'Golden Hour']),
+    weather: pickRandom(['Sunny', 'Overcast']),
+    timeOfDay: pickRandom(['Morning', 'Midday', 'Afternoon']),
+    pose: 'Standing, body and face front-on, looking directly into camera lens',
+    action: 'Holding phone out for selfie-style video, speaking to camera, eyes fixed on lens',
+    shotType: 'Medium shot (waist up)',
+    cameraDevice: 'iPhone 15 Pro, casual UGC aesthetic',
+  },
+]
+
 export function generateRandomUGCProfile(): CharacterProfile {
   const gender = pickRandom(['Female', 'Male'])
   const isFemale = gender === 'Female'
@@ -336,6 +400,9 @@ export function generateRandomUGCProfile(): CharacterProfile {
     : pickRandom(['Short textured', 'Short curly', 'Buzz cut', 'Short wavy', 'Fade haircut'])
   const hairTexture = isFemale ? '' : pickRandom(['Straight', 'Wavy', 'Curly'])
   const facialHair = isFemale ? '' : pickRandom(['None', 'Clean-shaven', 'Stubble', 'Short beard', 'Light beard'])
+
+  // Pick one scenario — all guarantee face-to-camera
+  const scene = pickRandom(UGC_SCENARIOS)
 
   return {
     gender,
@@ -365,28 +432,9 @@ export function generateRandomUGCProfile(): CharacterProfile {
     makeup: isFemale
       ? pickRandom(['Natural/minimal', 'Light natural makeup', 'No makeup', 'Soft everyday makeup'])
       : 'None',
-    location: pickRandom(['Bedroom', 'Living room', 'Kitchen', 'Coffee shop', 'Outdoors park', 'Car interior']),
-    background: pickRandom(['Neutral wall', 'Plants', 'Blurred background', 'Window with natural light', 'Minimalist', 'Bookshelf']),
-    lighting: pickRandom([
-      'Soft, diffused natural window light, creating gentle highlights on the cheekbones and realistic subsurface scattering on the skin',
-      'Soft natural light',
-      'Ring Light (Influencer)',
-      'Natural Window Light',
-      'Golden Hour',
-    ]),
-    weather: pickRandom(['Indoor (N/A)', 'Sunny', 'Overcast', 'Indoor (N/A)', 'Indoor (N/A)']),
-    timeOfDay: pickRandom(['Morning', 'Midday', 'Afternoon', 'Evening']),
-    pose: pickRandom(['Sitting on bed', 'Sitting on couch', 'Standing', 'Front-on facing the camera', 'Leaning on counter']),
-    action: '',
-    expression: pickRandom(['Natural smile', 'Genuine smile', 'Excited', 'Thinking', 'Mid-sentence', 'Natural smile']),
-    shotType: pickRandom(['Close-up face', 'Medium shot (waist up)', 'Medium shot (waist up)', 'Full body']),
-    cameraAngle: pickRandom(['Eye Level', 'Low angle', 'High angle', 'Eye Level']),
-    cameraDevice: pickRandom([
-      'iPhone 15 Pro, casual UGC aesthetic',
-      'iPhone Front Cam',
-      'iPhone selfie cam',
-      'Ring light + phone',
-    ]),
+    ...scene,
+    expression: pickRandom(['Natural smile', 'Genuine smile', 'Excited', 'Mid-sentence', 'Natural smile']),
+    cameraAngle: 'Eye Level',
     aspectRatio: 'Portrait (9:16)',
   }
 }

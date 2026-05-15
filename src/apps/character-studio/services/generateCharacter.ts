@@ -104,6 +104,19 @@ function buildImagePrompt(profile: CharacterProfile): string {
   ].filter(Boolean)
   if (cameraParts.length) parts.push(cameraParts.join(', ') + '.')
 
+  // For UGC / selfie / mirror scenarios: reinforce direct eye contact in the prompt
+  const actionLower = (profile.action ?? '').toLowerCase()
+  const poseLower = (profile.pose ?? '').toLowerCase()
+  if (
+    actionLower.includes('camera') ||
+    actionLower.includes('lens') ||
+    actionLower.includes('selfie') ||
+    poseLower.includes('camera') ||
+    poseLower.includes('mirror')
+  ) {
+    parts.push('Subject is making direct, confident eye contact with the camera lens. Face is fully visible, looking straight ahead at the viewer.')
+  }
+
   return parts.join(' ')
 }
 
