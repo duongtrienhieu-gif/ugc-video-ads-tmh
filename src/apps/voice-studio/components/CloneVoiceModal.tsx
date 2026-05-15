@@ -1,5 +1,5 @@
 import { useState, useRef } from 'react'
-import { X, Upload, Loader2, Mic } from 'lucide-react'
+import { X, Upload, Loader2, Mic, AlertTriangle } from 'lucide-react'
 import { useSettingsStore } from '../../../stores/settingsStore'
 import { useAppStore } from '../../../stores/appStore'
 import { cloneVoice } from '../../../utils/elevenlabs'
@@ -17,6 +17,7 @@ export default function CloneVoiceModal({ open, onClose, onCloned }: CloneVoiceM
   const [isCloning, setIsCloning] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const addToast = useAppStore((s) => s.addToast)
+  const hasKey = useSettingsStore((s) => s.hasElevenLabsKey())
 
   if (!open) return null
 
@@ -84,6 +85,16 @@ export default function CloneVoiceModal({ open, onClose, onCloned }: CloneVoiceM
         </div>
 
         <div className="flex flex-col gap-4">
+          {/* No key warning */}
+          {!hasKey && (
+            <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5">
+              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" />
+              <p className="text-[12px] leading-relaxed text-amber-700">
+                Chưa có ElevenLabs API key. Vào <strong>Cài đặt</strong> để nhập key trước khi tạo voice clone.
+              </p>
+            </div>
+          )}
+
           {/* Name */}
           <label className="flex flex-col gap-1.5">
             <span className="text-[11px] font-medium uppercase tracking-widest text-gray-500">Tên giọng *</span>
@@ -154,7 +165,7 @@ export default function CloneVoiceModal({ open, onClose, onCloned }: CloneVoiceM
             </button>
             <button
               onClick={handleClone}
-              disabled={isCloning || !name.trim() || !file}
+              disabled={isCloning || !name.trim() || !file || !hasKey}
               className="flex flex-[1.5] items-center justify-center gap-2 rounded-lg bg-indigo-500 px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-indigo-400 disabled:cursor-not-allowed disabled:opacity-40"
             >
               {isCloning ? (

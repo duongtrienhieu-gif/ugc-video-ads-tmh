@@ -42,6 +42,8 @@ export async function cloneVoice(params: {
   file: File
   description?: string
 }): Promise<string> {
+  if (!params.apiKey) throw new Error('Vui lòng nhập ElevenLabs API key trong Cài đặt')
+
   const form = new FormData()
   form.append('name', params.name)
   if (params.description) form.append('description', params.description)
@@ -55,13 +57,33 @@ export async function cloneVoice(params: {
 
   if (!res.ok) {
     const err = await res.text().catch(() => res.statusText)
-    if (res.status === 401) throw new Error('API key không hợp lệ')
-    if (res.status === 402 || res.status === 403) throw new Error('Gói ElevenLabs của bạn không hỗ trợ Voice Cloning. Cần Starter ($5/mo) trở lên.')
-    if (res.status === 422) throw new Error(`File không hợp lệ: ${err.slice(0, 150)}`)
-    throw new Error(`Clone giọng thất bại (${res.status}): ${err.slice(0, 150)}`)
+
+    // Parse ElevenLabs error body for clearer message (same as textToSpeech)
+    let detail = err
+    try {
+      const parsed = JSON.parse(err) as { detail?: { status?: string; message?: string } | string }
+      if (typeof parsed.detail === 'object' && parsed.detail) {
+        detail = `${parsed.detail.status ?? ''} ${parsed.detail.message ?? ''}`.trim()
+      } else if (typeof parsed.detail === 'string') {
+        detail = parsed.detail
+      }
+    } catch {/* keep raw */}
+
+    if (res.status === 401) {
+      const lower = detail.toLowerCase()
+      if (lower.includes('detected_unusual_activity') || lower.includes('free_tier_usage_disabled') || lower.includes('free tier')) {
+        throw new Error('Key bị ElevenLabs khóa (anti-abuse). Key này được tạo hàng loạt — không dùng được. Cần: (1) đổi key mới từ shop, hoặc (2) đăng ký Starter $5/mo tại elevenlabs.io.')
+      }
+      if (lower.includes('quota') || lower.includes('limit')) throw new Error('Đã hết credit ElevenLabs — đợi reset tháng sau hoặc upgrade gói.')
+      throw new Error(`API key ElevenLabs không hợp lệ — kiểm tra lại key trong Cài đặt. (${detail.slice(0, 120)})`)
+    }
+    if (res.status === 402 || res.status === 403) throw new Error('Gói ElevenLabs không hỗ trợ Voice Cloning. Cần Starter ($5/mo) trở lên. Chi tiết: ' + detail.slice(0, 100))
+    if (res.status === 422) throw new Error(`File audio không hợp lệ: ${detail.slice(0, 150)}`)
+    throw new Error(`Clone giọng thất bại (${res.status}): ${detail.slice(0, 150)}`)
   }
 
   const data = (await res.json()) as { voice_id: string }
+  if (!data.voice_id) throw new Error('ElevenLabs không trả về voice_id — thử lại.')
   return data.voice_id
 }
 
