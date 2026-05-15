@@ -26,12 +26,12 @@ const FIELDS: { key: keyof Product; label: string; type: 'text' | 'textarea'; re
 
 const JSON_SCHEMA = `{"productName":"","productDescription":"","targetMarket":"","painPoints":"","usps":"","benefits":"","offer":"","cta":""}`
 
-const EXTRACT_SYSTEM = 'You are a data-extraction assistant. Output ONLY a valid JSON object, no markdown, no explanation.'
+const EXTRACT_SYSTEM = 'You are a JSON extraction assistant. Your response must be ONLY a raw JSON object — no markdown, no code fences, no explanation, no extra text before or after.'
 
 const EXTRACT_PROMPT = (pageText: string) =>
-  `Extract product marketing information from the webpage text below. Return ONLY a JSON object with these keys and English string values:\n${JSON_SCHEMA}\n\nWEBPAGE TEXT:\n${pageText.slice(0, 6000)}`
+  `From the product webpage text below, fill in this JSON and return it. No extra text, just the JSON:\n${JSON_SCHEMA}\n\nWEBPAGE TEXT:\n${pageText.slice(0, 6000)}`
 
-const IMAGE_EXTRACT_PROMPT = `Look at this product page screenshot. Extract all visible marketing information. Return ONLY a JSON object with these keys and English string values:\n${JSON_SCHEMA}\n\nKeys: productName (product name), productDescription (what it is/does), targetMarket (who it's for), painPoints (problems solved), usps (unique selling points), benefits (key benefits), offer (pricing/promotions), cta (call to action text).`
+const IMAGE_EXTRACT_PROMPT = `From this product page screenshot, fill in this JSON and return it. No extra text, just the JSON:\n${JSON_SCHEMA}`
 
 // Jina Reader — renders JS pages and returns clean markdown. Handles LadiPage, Shopee, etc.
 async function fetchViaJina(url: string): Promise<string> {
@@ -49,14 +49,26 @@ async function fetchViaJina(url: string): Promise<string> {
 }
 
 function parseExtracted(raw: string): Record<string, string> | null {
-  let cleaned = raw.trim().replace(/```json\s*/gi, '').replace(/```\s*/gi, '').trim()
-  const match = cleaned.match(/\{[\s\S]*\}/)
-  if (!match) return null
-  try {
-    return JSON.parse(match[0]) as Record<string, string>
-  } catch {
-    return null
+  // Strip code fences
+  const cleaned = raw.trim().replace(/```json\s*/gi, '').replace(/```\s*/gi, '').trim()
+
+  // Strategy 1: direct parse
+  try { return JSON.parse(cleaned) as Record<string, string> } catch { /* continue */ }
+
+  // Strategy 2: depth-tracking bracket extractor (handles JSON buried in prose)
+  let depth = 0, start = -1
+  for (let i = 0; i < cleaned.length; i++) {
+    if (cleaned[i] === '{') { if (depth === 0) start = i; depth++ }
+    else if (cleaned[i] === '}') {
+      depth--
+      if (depth === 0 && start !== -1) {
+        try { return JSON.parse(cleaned.slice(start, i + 1)) as Record<string, string> } catch { start = -1 }
+      }
+    }
   }
+
+  console.error('[parseExtracted] failed, raw:', raw.slice(0, 300))
+  return null
 }
 
 type FormState = { productImage: string; productName: string; productDescription: string; targetMarket: string; painPoints: string; usps: string; benefits: string; offer: string; cta: string }
@@ -154,7 +166,7 @@ export default function ProductForm({ item, onSave, onCancel }: ProductFormProps
       })
 
       const extracted = parseExtracted(response)
-      if (!extracted) throw new Error('AI không trả về JSON hợp lệ')
+      if (!extracted) throw new Error(`AI trả về sai định dạng: "${response.slice(0, 120)}"`)
 
       let filledCount = 0
       setForm((prev) => {
