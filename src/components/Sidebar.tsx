@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { LayoutGrid, User, PenLine, Mic, Image, Video, Eye, Settings, FlaskConical, RefreshCw, LogOut, Activity } from 'lucide-react'
+import { LayoutGrid, User, PenLine, Mic, Image, Video, Eye, Settings, FlaskConical, RefreshCw, LogOut, Activity, Clapperboard } from 'lucide-react'
 import SettingsModal from './SettingsModal'
 import Diagnostic from './Diagnostic'
 import { useSettingsStore } from '../stores/settingsStore'
@@ -19,7 +19,8 @@ const NAV_ITEMS: NavItem[] = [
   { id: 'voice-studio', label: 'Giọng đọc', icon: Mic },
   { id: 'broll-studio', label: 'Ảnh B-Roll', icon: Image },
   { id: 'broll-videos', label: 'Video B-Roll', icon: Video },
-  { id: 'ad-anatomy', label: 'Phân tích QC', icon: Eye },
+  { id: 'lip-sync',     label: 'Lip-Sync',     icon: Clapperboard },
+  { id: 'ad-anatomy',   label: 'Phân tích QC', icon: Eye },
 ]
 
 interface SidebarProps {

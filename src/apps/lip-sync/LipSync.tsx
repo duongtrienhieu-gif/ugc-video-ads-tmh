@@ -1,0 +1,709 @@
+import { useState, useRef, useEffect } from 'react'
+import {
+  Mic, Video, Upload, Database, Play, Pause,
+  Loader2, Download, Trash2, User, AlertTriangle,
+  ChevronDown, Star,
+} from 'lucide-react'
+import { listVoices, textToSpeech, type ElevenLabsVoice } from '../../utils/elevenlabs'
+import {
+  generateLipSync, pollLipSyncUntilDone,
+  LIPSYNC_MODELS, type VideoStatus,
+} from '../../utils/kieai'
+import { useSettingsStore } from '../../stores/settingsStore'
+import { useAppStore } from '../../stores/appStore'
+import { saveAsset, getUrl, isAssetRef } from '../../utils/assetStore'
+import BankPicker from '../../components/BankPicker'
+import type { Model } from '../../stores/types'
+import type { LipSyncHistoryItem } from './types'
+
+// ── Emotion tags (ElevenLabs inline directives) ───────────────────────────────
+
+const EMOTION_TAGS = [
+  { label: 'Vui vẻ',    tag: '[happy]' },
+  { label: 'Phấn khích', tag: '[excited]' },
+  { label: 'Buồn',       tag: '[sad]' },
+  { label: 'Tức giận',   tag: '[angry]' },
+  { label: 'Thì thầm',  tag: '[whispers]' },
+  { label: 'Cười',       tag: '[laughing]' },
+]
+
+// ── Status badge ──────────────────────────────────────────────────────────────
+
+function StatusBadge({ status }: { status: VideoStatus }) {
+  const map: Record<VideoStatus, { label: string; className: string }> = {
+    pending:    { label: 'Đang chờ',    className: 'bg-gray-200 text-gray-500' },
+    processing: { label: 'Đang tạo',   className: 'bg-indigo-500/20 text-indigo-400' },
+    completed:  { label: 'Hoàn thành', className: 'bg-emerald-500/20 text-emerald-400' },
+    failed:     { label: 'Thất bại',   className: 'bg-red-500/20 text-red-400' },
+  }
+  const { label, className } = map[status]
+  return (
+    <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium ${className}`}>
+      {status === 'processing' && <Loader2 className="h-2.5 w-2.5 animate-spin" />}
+      {label}
+    </span>
+  )
+}
+
+// ── Main component ────────────────────────────────────────────────────────────
+
+export default function LipSync() {
+  // ── Character image ──────────────────────────────────────────────────
+  const [characterAssetId, setCharacterAssetId]       = useState<string | null>(null)
+  const [characterDisplayUrl, setCharacterDisplayUrl] = useState<string | null>(null)
+  const [pickerOpen, setPickerOpen]                   = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
+  // ── Voice ────────────────────────────────────────────────────────────
+  const [voices, setVoices]               = useState<ElevenLabsVoice[]>([])
+  const [voicesLoading, setVoicesLoading] = useState(false)
+  const [selectedVoice, setSelectedVoice] = useState<ElevenLabsVoice | null>(null)
+  const [voiceDropdownOpen, setVoiceDropdownOpen] = useState(false)
+
+  // ── Script ───────────────────────────────────────────────────────────
+  const [scriptText, setScriptText] = useState('')
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
+
+  // ── Audio ────────────────────────────────────────────────────────────
+  const [audioAssetId, setAudioAssetId]     = useState<string | null>(null)
+  const [audioDisplayUrl, setAudioDisplayUrl] = useState<string | null>(null)
+  const [isGeneratingAudio, setIsGeneratingAudio] = useState(false)
+  const [isPlaying, setIsPlaying]           = useState(false)
+  const audioRef = useRef<HTMLAudioElement>(null)
+
+  // ── Model / resolution ───────────────────────────────────────────────
+  const [selectedModelId, setSelectedModelId]   = useState('kling-avatar-std')
+  const [modelDropdownOpen, setModelDropdownOpen] = useState(false)
+  const [resolution, setResolution]             = useState<'480p' | '720p'>('720p')
+
+  // ── Video generation ─────────────────────────────────────────────────
+  const [history, setHistory]       = useState<LipSyncHistoryItem[]>([])
+  const [isGenerating, setIsGenerating] = useState(false)
+  const [progress, setProgress]     = useState(0)
+  const progressRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
+  const addToast          = useAppStore((s) => s.addToast)
+  const elevenLabsApiKey  = useSettingsStore((s) => s.elevenLabsApiKey)
+  const kieApiKey         = useSettingsStore((s) => s.kieApiKey)
+
+  const selectedModel = LIPSYNC_MODELS.find((m) => m.id === selectedModelId) ?? LIPSYNC_MODELS[0]
+
+  // Load ElevenLabs voices when API key available
+  useEffect(() => {
+    if (!elevenLabsApiKey) return
+    setVoicesLoading(true)
+    listVoices(elevenLabsApiKey)
+      .then((v) => {
+        const sorted = [...v].sort((a, b) => {
+          if (a.category === 'cloned' && b.category !== 'cloned') return -1
+          if (b.category === 'cloned' && a.category !== 'cloned') return 1
+          return a.name.localeCompare(b.name)
+        })
+        setVoices(sorted)
+      })
+      .catch(() => addToast('Không tải được danh sách giọng ElevenLabs', 'error'))
+      .finally(() => setVoicesLoading(false))
+  }, [elevenLabsApiKey, addToast])
+
+  // Fake progress bar during generation
+  useEffect(() => {
+    if (isGenerating) {
+      setProgress(0)
+      progressRef.current = setInterval(() => {
+        setProgress((prev) => {
+          if (prev >= 92) return prev
+          const inc = prev < 30 ? 2 : prev < 65 ? 0.8 : 0.2
+          return Math.min(prev + inc, 92)
+        })
+      }, 800)
+    } else {
+      if (progressRef.current) clearInterval(progressRef.current)
+      if (progress > 0) {
+        setProgress(100)
+        setTimeout(() => setProgress(0), 600)
+      }
+    }
+    return () => { if (progressRef.current) clearInterval(progressRef.current) }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isGenerating])
+
+  // ── Handlers ─────────────────────────────────────────────────────────
+
+  const handleBankSelect = async (item: unknown) => {
+    const model = item as Model
+    setPickerOpen(false)
+    if (!model.characterImage) {
+      addToast('Nhân vật này chưa có ảnh — upload ảnh trong Character Studio trước', 'error')
+      return
+    }
+    setCharacterAssetId(model.characterImage)
+    if (isAssetRef(model.characterImage)) {
+      const url = await getUrl(model.characterImage)
+      setCharacterDisplayUrl(url)
+    } else {
+      setCharacterDisplayUrl(model.characterImage)
+    }
+  }
+
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = (ev) => {
+      const dataUrl = ev.target?.result as string
+      setCharacterAssetId(dataUrl)   // store data URL directly — will be saved on generate
+      setCharacterDisplayUrl(dataUrl)
+    }
+    reader.readAsDataURL(file)
+    e.target.value = ''
+  }
+
+  const insertEmotionTag = (tag: string) => {
+    const textarea = textareaRef.current
+    if (!textarea) {
+      setScriptText((prev) => `${prev}${tag} `)
+      return
+    }
+    const start = textarea.selectionStart
+    const end   = textarea.selectionEnd
+    const next  = scriptText.slice(0, start) + tag + ' ' + scriptText.slice(end)
+    setScriptText(next)
+    setTimeout(() => {
+      textarea.selectionStart = start + tag.length + 1
+      textarea.selectionEnd   = start + tag.length + 1
+      textarea.focus()
+    }, 0)
+  }
+
+  const handleGenerateAudio = async () => {
+    if (!scriptText.trim()) { addToast('Nhập kịch bản trước khi tạo audio', 'error'); return }
+    if (!selectedVoice)     { addToast('Chọn giọng đọc trước', 'error'); return }
+    if (!elevenLabsApiKey)  { addToast('Cài ElevenLabs API key trong Cài đặt', 'error'); return }
+
+    setIsGeneratingAudio(true)
+    setAudioAssetId(null)
+    setAudioDisplayUrl(null)
+    setIsPlaying(false)
+
+    try {
+      const buffer  = await textToSpeech({ apiKey: elevenLabsApiKey, voiceId: selectedVoice.voice_id, text: scriptText })
+      const blob    = new Blob([buffer], { type: 'audio/mpeg' })
+      const assetId = await saveAsset(blob, 'audio/mpeg')
+      const display = await getUrl(assetId)
+      setAudioAssetId(assetId)
+      setAudioDisplayUrl(display)
+      addToast('Audio đã sẵn sàng')
+    } catch (err) {
+      addToast(`Tạo audio thất bại: ${err instanceof Error ? err.message : String(err)}`, 'error')
+    } finally {
+      setIsGeneratingAudio(false)
+    }
+  }
+
+  const handleGenerateVideo = async () => {
+    if (!characterAssetId) { addToast('Chọn ảnh nhân vật trước', 'error'); return }
+    if (!audioAssetId)     { addToast('Tạo audio trước khi tạo video', 'error'); return }
+    if (!kieApiKey)        { addToast('Cài kie.ai API key trong Cài đặt', 'error'); return }
+
+    setIsGenerating(true)
+
+    const historyId = crypto.randomUUID()
+    const newItem: LipSyncHistoryItem = {
+      id: historyId,
+      imageUrl:   characterDisplayUrl ?? '',
+      audioUrl:   audioDisplayUrl ?? '',
+      videoUrl:   null,
+      scriptText,
+      voiceName:  selectedVoice?.name ?? '',
+      modelName:  selectedModel.name,
+      status:     'pending',
+      taskId:     '',
+      createdAt:  Date.now(),
+    }
+    setHistory((prev) => [newItem, ...prev])
+
+    try {
+      // Resolve character image to a public signed URL
+      let imagePublicUrl: string
+      if (isAssetRef(characterAssetId)) {
+        const url = await getUrl(characterAssetId)
+        if (!url) throw new Error('Không lấy được URL ảnh nhân vật')
+        imagePublicUrl = url
+      } else if (characterAssetId.startsWith('data:')) {
+        // Uploaded locally — save to Supabase first then get signed URL
+        const resp   = await fetch(characterAssetId)
+        const blob   = await resp.blob()
+        const savedId = await saveAsset(blob, blob.type || 'image/jpeg')
+        const url    = await getUrl(savedId)
+        if (!url) throw new Error('Không lấy được URL ảnh sau khi lưu')
+        // Update assetId so future calls work
+        setCharacterAssetId(savedId)
+        imagePublicUrl = url
+      } else {
+        imagePublicUrl = characterAssetId
+      }
+
+      // Resolve audio to public signed URL
+      const audioPublicUrl = await getUrl(audioAssetId)
+      if (!audioPublicUrl) throw new Error('Không lấy được URL audio')
+
+      // Submit lip-sync job
+      const { taskId } = await generateLipSync({
+        apiKey:     kieApiKey,
+        modelId:    selectedModel.modelId,
+        imageUrl:   imagePublicUrl,
+        audioUrl:   audioPublicUrl,
+        prompt:     'Natural lip-sync, realistic facial expressions, smooth head motion, high quality',
+        resolution: selectedModel.supportsResolution ? resolution : undefined,
+      })
+
+      setHistory((prev) =>
+        prev.map((h) => (h.id === historyId ? { ...h, taskId, status: 'processing' as VideoStatus } : h)),
+      )
+
+      // Poll until done (up to 8 min for longer audio)
+      const videoUrl = await pollLipSyncUntilDone({
+        apiKey:    kieApiKey,
+        taskId,
+        onStatusChange: (status) => {
+          setHistory((prev) => prev.map((h) => (h.id === historyId ? { ...h, status } : h)))
+        },
+        timeoutMs: 8 * 60 * 1000,
+      })
+
+      setHistory((prev) =>
+        prev.map((h) => (h.id === historyId ? { ...h, videoUrl, status: 'completed' as VideoStatus } : h)),
+      )
+      addToast('Tạo video lip-sync thành công!')
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      let toastMsg = `Tạo video thất bại: ${msg}`
+      if (msg === 'INSUFFICIENT_CREDITS') toastMsg = 'Không đủ Credit kie.ai'
+      if (msg === 'TIMEOUT')              toastMsg = 'Quá thời gian tạo video — thử lại sau'
+      addToast(toastMsg, 'error')
+      setHistory((prev) =>
+        prev.map((h) => (h.id === historyId ? { ...h, status: 'failed' as VideoStatus, errorMessage: msg } : h)),
+      )
+    } finally {
+      setIsGenerating(false)
+    }
+  }
+
+  const handleTogglePlay = () => {
+    const audio = audioRef.current
+    if (!audio || !audioDisplayUrl) return
+    if (isPlaying) { audio.pause() } else { void audio.play() }
+    setIsPlaying(!isPlaying)
+  }
+
+  const handleDownload = (item: LipSyncHistoryItem) => {
+    if (!item.videoUrl) return
+    const a = document.createElement('a')
+    a.href = item.videoUrl
+    a.download = `lipsync-${Date.now()}.mp4`
+    a.target = '_blank'
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+  }
+
+  const canGenerateVideo = !!characterAssetId && !!audioAssetId && !isGenerating
+
+  // ── Render ────────────────────────────────────────────────────────────
+
+  return (
+    <div className="flex h-full flex-col lg:flex-row">
+      {/* Hidden inputs */}
+      <input ref={fileInputRef} type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={handleFileUpload} />
+      {audioDisplayUrl && (
+        <audio ref={audioRef} src={audioDisplayUrl} onEnded={() => setIsPlaying(false)} />
+      )}
+
+      {/* ── Left panel — controls ── */}
+      <div className="flex w-full shrink-0 flex-col border-b border-black/8 lg:w-1/3 lg:border-b-0 lg:border-r">
+        <div className="flex-1 overflow-y-auto p-4">
+          <div className="flex flex-col gap-5">
+
+            {/* 1. Character image */}
+            <div>
+              <p className="mb-1.5 text-[10px] font-medium uppercase tracking-widest text-gray-400">Ảnh nhân vật</p>
+              {characterDisplayUrl ? (
+                <div className="group relative overflow-hidden rounded-xl border border-black/10">
+                  <img src={characterDisplayUrl} alt="Nhân vật" className="h-52 w-full object-cover object-top" />
+                  <button
+                    onClick={() => { setCharacterAssetId(null); setCharacterDisplayUrl(null) }}
+                    className="absolute right-2 top-2 flex h-6 w-6 items-center justify-center rounded-full bg-black/70 text-white opacity-0 transition-opacity group-hover:opacity-100"
+                  >
+                    <span className="text-sm leading-none">×</span>
+                  </button>
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    onClick={() => fileInputRef.current?.click()}
+                    className="flex flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-black/12 bg-black/[0.02] py-7 text-gray-500 transition-colors hover:border-black/20 hover:bg-black/[0.04] hover:text-gray-700"
+                  >
+                    <Upload className="h-5 w-5" />
+                    <span className="text-[11px]">Tải ảnh lên</span>
+                  </button>
+                  <button
+                    onClick={() => setPickerOpen(true)}
+                    className="flex flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-black/12 bg-black/[0.02] py-7 text-gray-500 transition-colors hover:border-black/20 hover:bg-black/[0.04] hover:text-gray-700"
+                  >
+                    <Database className="h-5 w-5" />
+                    <span className="text-[11px]">Chọn từ Nhân vật</span>
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* 2. Voice selector */}
+            <div>
+              <p className="mb-1.5 text-[10px] font-medium uppercase tracking-widest text-gray-400">Giọng ElevenLabs</p>
+              {!elevenLabsApiKey ? (
+                <div className="flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5">
+                  <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-amber-500" />
+                  <p className="text-[11px] text-amber-700">Cài ElevenLabs API key trong Cài đặt</p>
+                </div>
+              ) : (
+                <div className="relative">
+                  <button
+                    onClick={() => setVoiceDropdownOpen(!voiceDropdownOpen)}
+                    className="flex w-full items-center gap-3 rounded-xl border border-black/10 bg-black/[0.02] p-3 text-left transition-colors hover:bg-black/[0.04]"
+                  >
+                    <Mic className="h-4 w-4 shrink-0 text-gray-400" />
+                    <div className="min-w-0 flex-1">
+                      {voicesLoading ? (
+                        <span className="flex items-center gap-1.5 text-xs text-gray-400">
+                          <Loader2 className="h-3 w-3 animate-spin" /> Đang tải giọng...
+                        </span>
+                      ) : selectedVoice ? (
+                        <>
+                          <span className="block truncate text-sm font-medium text-gray-800">{selectedVoice.name}</span>
+                          <span className="text-[10px] text-gray-400">
+                            {selectedVoice.category === 'cloned' ? 'Giọng đã clone' : 'Giọng thư viện'}
+                          </span>
+                        </>
+                      ) : (
+                        <span className="text-sm text-gray-400">Chọn giọng đọc...</span>
+                      )}
+                    </div>
+                    <ChevronDown className={`h-4 w-4 shrink-0 text-gray-400 transition-transform ${voiceDropdownOpen ? 'rotate-180' : ''}`} />
+                  </button>
+
+                  {voiceDropdownOpen && voices.length > 0 && (
+                    <div className="absolute z-20 mt-1 max-h-52 w-full overflow-y-auto rounded-xl border border-black/10 bg-white shadow-xl">
+                      {voices.map((v) => (
+                        <button
+                          key={v.voice_id}
+                          onClick={() => { setSelectedVoice(v); setVoiceDropdownOpen(false) }}
+                          className={`flex w-full items-center gap-3 px-3 py-2 text-left transition-colors hover:bg-black/5 ${
+                            selectedVoice?.voice_id === v.voice_id ? 'bg-indigo-50' : ''
+                          }`}
+                        >
+                          <div className={`h-2 w-2 shrink-0 rounded-full ${v.category === 'cloned' ? 'bg-violet-400' : 'bg-gray-300'}`} />
+                          <span className="flex-1 truncate text-xs font-medium text-gray-700">{v.name}</span>
+                          {v.category === 'cloned' && (
+                            <span className="shrink-0 rounded-full bg-violet-50 px-2 py-0.5 text-[9px] font-semibold text-violet-600">
+                              Clone
+                            </span>
+                          )}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* 3. Script + emotion tags */}
+            <div>
+              <p className="mb-1.5 text-[10px] font-medium uppercase tracking-widest text-gray-400">Kịch bản</p>
+              <div className="mb-2 flex flex-wrap gap-1.5">
+                {EMOTION_TAGS.map(({ label, tag }) => (
+                  <button
+                    key={tag}
+                    onClick={() => insertEmotionTag(tag)}
+                    className="rounded-full border border-violet-200 bg-violet-50 px-2.5 py-0.5 text-[10px] font-medium text-violet-600 transition-colors hover:bg-violet-100"
+                  >
+                    + {label}
+                  </button>
+                ))}
+              </div>
+              <textarea
+                ref={textareaRef}
+                value={scriptText}
+                onChange={(e) => setScriptText(e.target.value)}
+                rows={5}
+                placeholder="Nhập kịch bản... Dùng nút cảm xúc để thêm tag như [happy], [excited]"
+                className="w-full resize-none rounded-lg border border-black/10 bg-transparent px-3 py-2 text-sm text-gray-800 placeholder-gray-300 outline-none transition-colors focus:border-black/15"
+              />
+            </div>
+
+            {/* 4. Generate audio */}
+            <div>
+              <button
+                onClick={handleGenerateAudio}
+                disabled={isGeneratingAudio || !scriptText.trim() || !selectedVoice || !elevenLabsApiKey}
+                className="w-full rounded-xl border border-violet-300 bg-violet-50 px-4 py-2.5 text-sm font-medium text-violet-700 transition-colors hover:bg-violet-100 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                {isGeneratingAudio ? (
+                  <span className="flex items-center justify-center gap-2">
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" /> Đang tạo audio...
+                  </span>
+                ) : (
+                  <span className="flex items-center justify-center gap-2">
+                    <Mic className="h-3.5 w-3.5" /> Tạo audio từ kịch bản
+                  </span>
+                )}
+              </button>
+
+              {/* Audio player */}
+              {audioDisplayUrl && (
+                <div className="mt-2 flex items-center gap-3 rounded-lg border border-black/8 bg-black/[0.02] px-3 py-2.5">
+                  <button
+                    onClick={handleTogglePlay}
+                    className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-violet-500 text-white transition-colors hover:bg-violet-600"
+                  >
+                    {isPlaying ? (
+                      <Pause className="h-3.5 w-3.5" />
+                    ) : (
+                      <Play className="h-3.5 w-3.5 translate-x-px" />
+                    )}
+                  </button>
+                  <div className="min-w-0 flex-1">
+                    <span className="block text-xs font-medium text-gray-700">Audio đã sẵn sàng</span>
+                    <span className="text-[10px] text-gray-400">{selectedVoice?.name ?? 'ElevenLabs'}</span>
+                  </div>
+                  <span className="shrink-0 text-sm text-emerald-500">✓</span>
+                </div>
+              )}
+            </div>
+
+            {/* 5. Lip-sync model */}
+            <div>
+              <p className="mb-1.5 text-[10px] font-medium uppercase tracking-widest text-gray-400">Model Lip-Sync</p>
+              <button
+                onClick={() => setModelDropdownOpen(!modelDropdownOpen)}
+                className="flex w-full items-center gap-3 rounded-xl border border-black/10 bg-black/[0.02] p-3 transition-colors hover:bg-black/[0.04]"
+              >
+                <Video className="h-4 w-4 shrink-0 text-gray-400" />
+                <div className="min-w-0 flex-1 text-left">
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-sm font-medium text-gray-800">{selectedModel.name}</span>
+                    {selectedModel.starred && <Star className="h-3 w-3 fill-amber-400 text-amber-400" />}
+                  </div>
+                  <span className="text-[10px] text-gray-400">{selectedModel.resolution} · tối đa {selectedModel.maxDuration}</span>
+                </div>
+                <ChevronDown className={`h-4 w-4 shrink-0 text-gray-400 transition-transform ${modelDropdownOpen ? 'rotate-180' : ''}`} />
+              </button>
+
+              {modelDropdownOpen && (
+                <div className="mt-1 overflow-hidden rounded-xl border border-black/10 bg-white">
+                  {LIPSYNC_MODELS.map((m) => (
+                    <button
+                      key={m.id}
+                      onClick={() => { setSelectedModelId(m.id); setModelDropdownOpen(false) }}
+                      className={`flex w-full items-center gap-3 px-3 py-2.5 text-left transition-colors hover:bg-black/5 ${
+                        selectedModelId === m.id ? 'bg-indigo-50' : ''
+                      }`}
+                    >
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-1.5">
+                          <span className={`text-xs font-medium ${selectedModelId === m.id ? 'text-indigo-600' : 'text-gray-700'}`}>
+                            {m.name}
+                          </span>
+                          {m.starred && <Star className="h-2.5 w-2.5 fill-amber-400 text-amber-400" />}
+                        </div>
+                        <span className="text-[10px] text-gray-400">{m.resolution} · {m.maxDuration}</span>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {/* Resolution (InfiniteTalk only) */}
+              {selectedModel.supportsResolution && (
+                <div className="mt-2">
+                  <p className="mb-1 text-[10px] text-gray-400">Độ phân giải</p>
+                  <div className="flex gap-2">
+                    {(['480p', '720p'] as const).map((r) => (
+                      <button
+                        key={r}
+                        onClick={() => setResolution(r)}
+                        className={`flex-1 rounded-lg border py-1.5 text-xs font-medium transition-colors ${
+                          resolution === r
+                            ? 'border-indigo-500/50 bg-indigo-500/15 text-indigo-500'
+                            : 'border-black/10 text-gray-500 hover:border-black/15'
+                        }`}
+                      >
+                        {r}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
+          </div>
+        </div>
+
+        {/* Generate video button */}
+        <div className="border-t border-black/8 p-4">
+          {!characterAssetId && (
+            <p className="mb-2 text-center text-[11px] text-gray-400">Chưa có ảnh nhân vật</p>
+          )}
+          {characterAssetId && !audioAssetId && (
+            <p className="mb-2 text-center text-[11px] text-gray-400">Cần tạo audio trước</p>
+          )}
+          <button
+            onClick={handleGenerateVideo}
+            disabled={!canGenerateVideo}
+            className="w-full rounded-xl bg-indigo-600 px-4 py-3.5 text-sm font-semibold text-white transition-colors hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            {isGenerating ? (
+              <span className="flex items-center justify-center gap-2">
+                <Loader2 className="h-4 w-4 animate-spin" /> Đang tạo video...
+              </span>
+            ) : (
+              <span className="flex items-center justify-center gap-2">
+                <Video className="h-4 w-4" /> Tạo video Lip-Sync
+              </span>
+            )}
+          </button>
+        </div>
+      </div>
+
+      {/* ── Right panel — results ── */}
+      <div className="flex flex-1 flex-col overflow-hidden">
+        <div className="flex shrink-0 items-center justify-between border-b border-black/8 px-4 py-3">
+          <span className="text-sm font-medium text-gray-700">Kết quả</span>
+          {history.length > 0 && (
+            <button
+              onClick={() => setHistory([])}
+              className="text-[11px] text-gray-400 transition-colors hover:text-red-400"
+            >
+              Xóa tất cả
+            </button>
+          )}
+        </div>
+
+        {history.length === 0 ? (
+          <div className="flex h-full flex-col items-center justify-center gap-3 p-8">
+            <User className="h-12 w-12 text-gray-200" strokeWidth={1.5} />
+            <p className="text-sm font-medium text-gray-400">Chưa có video lip-sync nào</p>
+            <p className="max-w-xs text-center text-xs text-gray-300 leading-relaxed">
+              1. Chọn ảnh nhân vật → 2. Chọn giọng & nhập kịch bản → 3. Tạo audio → 4. Tạo video
+            </p>
+          </div>
+        ) : (
+          <div className="flex-1 overflow-y-auto p-4">
+            {/* Warning */}
+            <div className="mb-3 flex items-start gap-2 rounded-xl border border-amber-500/20 bg-amber-500/[0.06] px-3 py-2.5">
+              <span className="mt-0.5 shrink-0 text-amber-400">⚠</span>
+              <p className="text-[11px] leading-relaxed text-amber-400/80">
+                kie.ai lưu media trong 14 ngày — tải xuống trước khi hết hạn.
+              </p>
+            </div>
+
+            <div className="flex flex-col gap-3">
+              {history.map((item) => {
+                const isItemGenerating = item.status === 'pending' || item.status === 'processing'
+                return (
+                  <div key={item.id} className="overflow-hidden rounded-xl border border-black/8 bg-white shadow-sm">
+                    {/* Media */}
+                    {isItemGenerating ? (
+                      <div className="flex h-52 flex-col items-center justify-center gap-4 bg-black/90 px-6">
+                        <Loader2 className="h-8 w-8 animate-spin text-white/20" />
+                        <div className="w-full">
+                          <div className="mb-1.5 flex items-center justify-between">
+                            <span className="text-[11px] text-white/40">Đang tạo lip-sync...</span>
+                            <span className="text-[11px] font-semibold tabular-nums text-indigo-400">
+                              {Math.round(progress)}%
+                            </span>
+                          </div>
+                          <div className="h-1 w-full overflow-hidden rounded-full bg-white/10">
+                            <div
+                              className="h-full rounded-full bg-indigo-400 transition-all duration-700 ease-out"
+                              style={{ width: `${progress}%` }}
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    ) : item.videoUrl ? (
+                      <div className="bg-black">
+                        <video
+                          key={item.id}
+                          src={item.videoUrl}
+                          controls
+                          autoPlay
+                          muted
+                          playsInline
+                          className="max-h-72 w-full object-contain"
+                        />
+                      </div>
+                    ) : (
+                      <div className="flex h-28 items-center justify-center bg-red-500/5">
+                        <span className="text-3xl text-red-200">✕</span>
+                      </div>
+                    )}
+
+                    {/* Info */}
+                    <div className="p-3">
+                      <div className="mb-1 flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-medium text-gray-700">{item.modelName}</span>
+                          <StatusBadge status={item.status} />
+                        </div>
+                        <span className="shrink-0 text-[10px] tabular-nums text-gray-300">
+                          {new Date(item.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        </span>
+                      </div>
+                      {item.voiceName && (
+                        <p className="mb-1 text-[10px] text-gray-400">Giọng: {item.voiceName}</p>
+                      )}
+                      <p className="mb-2.5 line-clamp-2 text-[11px] leading-relaxed text-gray-400">{item.scriptText}</p>
+
+                      {item.status === 'failed' && item.errorMessage && (
+                        <p className="mb-2 rounded-lg bg-red-50 px-2 py-1.5 text-[11px] text-red-500">
+                          {item.errorMessage}
+                        </p>
+                      )}
+
+                      <div className="flex items-center gap-1.5">
+                        {item.videoUrl && (
+                          <button
+                            onClick={() => handleDownload(item)}
+                            className="flex items-center gap-1.5 rounded-full border border-black/10 px-3 py-1.5 text-[11px] text-gray-600 transition-colors hover:bg-black/5"
+                          >
+                            <Download className="h-3 w-3" /> Tải xuống
+                          </button>
+                        )}
+                        <div className="flex-1" />
+                        <button
+                          onClick={() => setHistory((prev) => prev.filter((h) => h.id !== item.id))}
+                          className="flex h-7 w-7 items-center justify-center rounded-full text-gray-300 transition-colors hover:bg-red-500/10 hover:text-red-400"
+                          title="Xóa"
+                        >
+                          <Trash2 className="h-3 w-3" />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Model picker */}
+      <BankPicker
+        bankType="models"
+        isOpen={pickerOpen}
+        onSelect={handleBankSelect}
+        onClose={() => setPickerOpen(false)}
+      />
+    </div>
+  )
+}

@@ -600,3 +600,87 @@ export async function kieTTS(params: {
   }
   return res.arrayBuffer()
 }
+
+// ── Lip-Sync (InfiniteTalk & Kling Avatar) ────────────────────────────
+
+export interface LipSyncModel {
+  id: string
+  name: string
+  modelId: string
+  maxDuration: string
+  resolution: string
+  supportsResolution: boolean
+  starred?: boolean
+}
+
+export const LIPSYNC_MODELS: LipSyncModel[] = [
+  {
+    id: 'kling-avatar-std',
+    name: 'Kling Avatar Standard',
+    modelId: 'kling/ai-avatar-standard',
+    maxDuration: '5 phút',
+    resolution: '720p',
+    supportsResolution: false,
+    starred: true,
+  },
+  {
+    id: 'infinitalk',
+    name: 'InfiniteTalk',
+    modelId: 'infinitalk/from-audio',
+    maxDuration: '15 giây',
+    resolution: '480p / 720p',
+    supportsResolution: true,
+  },
+]
+
+export async function generateLipSync(params: {
+  apiKey: string
+  modelId: string
+  imageUrl: string
+  audioUrl: string
+  prompt: string
+  resolution?: '480p' | '720p'
+}): Promise<{ taskId: string }> {
+  const input: Record<string, unknown> = {
+    image_url: params.imageUrl,
+    audio_url: params.audioUrl,
+    prompt: params.prompt,
+  }
+  if (params.resolution && params.modelId === 'infinitalk/from-audio') {
+    input.resolution = params.resolution
+  }
+
+  const res = await fetch(`${KIE_BASE}/jobs/createTask`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${params.apiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ model: params.modelId, input }),
+  })
+
+  if (res.status === 402) throw new Error('INSUFFICIENT_CREDITS')
+  if (!res.ok) {
+    const text = await res.text().catch(() => res.statusText)
+    throw new Error(text)
+  }
+  const data = await res.json() as { code?: number; msg?: string; message?: string; data?: { taskId?: string } | null }
+  if (data?.code !== undefined && data.code !== 200) {
+    throw new Error(data.msg ?? data.message ?? `kie.ai lỗi code ${data.code}`)
+  }
+  const taskId = data?.data?.taskId
+  if (!taskId) {
+    throw new Error(data?.msg ?? data?.message ?? 'kie.ai không trả về taskId')
+  }
+  return { taskId }
+}
+
+export async function pollLipSyncUntilDone(params: {
+  apiKey: string
+  taskId: string
+  onStatusChange?: (status: VideoStatus) => void
+  timeoutMs?: number
+}): Promise<string> {
+  // Lip-sync uses same jobs polling as video jobs
+  return pollVideoJobUntilDone(params)
+}
