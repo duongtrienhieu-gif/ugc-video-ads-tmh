@@ -59,9 +59,9 @@ export default function Diagnostic({ isOpen, onClose }: DiagnosticProps) {
 
     for (const table of tables) {
       try {
-        const { count, error } = await supabase.from(table).update({ user_id: user.id }).is('user_id', null).select('id', { count: 'exact', head: true })
+        const { data, error } = await supabase.from(table).update({ user_id: user.id }).is('user_id', null).select('id')
         if (error) errors.push(`${table}: ${error.message}`)
-        else if (count) totalRescued += count
+        else if (data) totalRescued += data.length
       } catch (e) {
         errors.push(`${table}: ${e instanceof Error ? e.message : String(e)}`)
       }
