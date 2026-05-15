@@ -131,9 +131,7 @@ export default function VideoTranslate() {
   // ── File handling ────────────────────────────────────────────────────
 
   const acceptFile = (f: File) => {
-    const validTypes = ['video/mp4', 'video/quicktime', 'video/x-msvideo', 'video/webm', 'video/mkv',
-      'audio/mpeg', 'audio/wav', 'audio/ogg', 'audio/mp4']
-    if (!validTypes.some((t) => f.type.startsWith('video/') || f.type.startsWith('audio/'))) {
+    if (!f.type.startsWith('video/') && !f.type.startsWith('audio/')) {
       addToast('Chỉ hỗ trợ file video/audio (MP4, MOV, WebM, MP3, WAV…)', 'error')
       return
     }
