@@ -14,49 +14,49 @@ interface ProductFormProps {
 }
 
 const FIELDS: { key: keyof Product; label: string; type: 'text' | 'textarea'; required?: boolean }[] = [
-  { key: 'productName', label: 'Tên sản phẩm', type: 'text', required: true },
-  { key: 'productDescription', label: 'Mô tả sản phẩm', type: 'textarea', required: true },
-  { key: 'targetMarket', label: 'Khách hàng mục tiêu', type: 'text', required: true },
-  { key: 'painPoints', label: 'Các pain point', type: 'textarea' },
-  { key: 'usps', label: 'USP - lợi thế độc nhất / khác biệt của sản phẩm', type: 'textarea' },
-  { key: 'benefits', label: 'Lợi ích', type: 'textarea' },
-  { key: 'offer', label: 'Giá bán và Khuyến mãi', type: 'text' },
+  { key: 'productName', label: 'Product Name', type: 'text', required: true },
+  { key: 'productDescription', label: 'Product Description', type: 'textarea', required: true },
+  { key: 'targetMarket', label: 'Target Market', type: 'text', required: true },
+  { key: 'painPoints', label: 'Pain Points', type: 'textarea' },
+  { key: 'usps', label: 'USP - Unique Selling Points', type: 'textarea' },
+  { key: 'benefits', label: 'Benefits', type: 'textarea' },
+  { key: 'offer', label: 'Offer & Pricing', type: 'text' },
   { key: 'cta', label: 'CTA', type: 'text' },
 ]
 
 const JSON_SCHEMA = `{"productName":"","productDescription":"","targetMarket":"","painPoints":"","usps":"","benefits":"","offer":"","cta":""}`
 
-const EXTRACT_SYSTEM = `Bạn là trợ lý trích xuất thông tin sản phẩm. Trang web có thể viết bằng Tiếng Malay, Tiếng Anh, hoặc Tiếng Việt — bất kể ngôn ngữ nào, bạn PHẢI dịch và trả kết quả HOÀN TOÀN bằng TIẾNG VIỆT. Phản hồi chỉ là JSON object thuần — không markdown, không code fence, không giải thích.`
+const EXTRACT_SYSTEM = 'You are a product info extraction assistant. Return ONLY a raw minified JSON object on a single line — no markdown, no code fences, no explanation, no newlines inside values.'
 
 const EXTRACT_PROMPT = (pageText: string) =>
-  `Đọc nội dung trang sản phẩm bên dưới (có thể là Tiếng Malay, Tiếng Anh hoặc Tiếng Việt). Trích xuất thông tin và điền vào JSON này. TẤT CẢ các giá trị phải viết bằng TIẾNG VIỆT — dịch nếu cần. Chỉ trả JSON, không thêm gì khác:
+  `Extract product information from the webpage text below and fill in this JSON. Return ONLY the JSON, nothing else, all on one line:
 ${JSON_SCHEMA}
 
-Hướng dẫn từng trường (viết bằng tiếng Việt):
-- productName: tên sản phẩm chính
-- productDescription: mô tả ngắn gọn sản phẩm là gì, dùng để làm gì
-- targetMarket: khách hàng mục tiêu (ai nên dùng sản phẩm này)
-- painPoints: các vấn đề/nỗi đau của khách hàng mà sản phẩm giải quyết
-- usps: điểm khác biệt/lợi thế độc nhất của sản phẩm so với đối thủ
-- benefits: lợi ích cụ thể khi dùng sản phẩm
-- offer: giá bán và khuyến mãi đang có
-- cta: lời kêu gọi hành động (ví dụ: Mua ngay, Đặt hàng, Nhận ưu đãi)
+Fields:
+- productName: main product name
+- productDescription: short description of what it is and does
+- targetMarket: target customers (who should use this)
+- painPoints: customer problems/pain points this product solves
+- usps: unique selling points / competitive advantages
+- benefits: specific benefits of using the product
+- offer: current pricing and promotions
+- cta: call to action (e.g. Buy Now, Order Today)
 
-NỘI DUNG TRANG WEB:
+WEBPAGE TEXT:
 ${pageText.slice(0, 8000)}`
 
-const IMAGE_EXTRACT_PROMPT = `Đọc ảnh chụp màn hình trang sản phẩm này (có thể là Tiếng Malay, Tiếng Anh hoặc Tiếng Việt). Trích xuất thông tin và điền vào JSON. TẤT CẢ các giá trị phải viết bằng TIẾNG VIỆT — dịch nếu cần. Chỉ trả JSON, không thêm gì khác:
+const IMAGE_EXTRACT_PROMPT = `Extract product information from this product page screenshot and fill in this JSON. Return ONLY the JSON, nothing else, all on one line:
 ${JSON_SCHEMA}
 
-Hướng dẫn từng trường (viết bằng tiếng Việt):
-- productName: tên sản phẩm chính
-- productDescription: mô tả ngắn gọn sản phẩm là gì, dùng để làm gì
-- targetMarket: khách hàng mục tiêu (ai nên dùng sản phẩm này)
-- painPoints: các vấn đề/nỗi đau của khách hàng mà sản phẩm giải quyết
-- usps: điểm khác biệt/lợi thế độc nhất của sản phẩm so với đối thủ
-- benefits: lợi ích cụ thể khi dùng sản phẩm
-- offer: giá bán và khuyến mãi đang có
-- cta: lời kêu gọi hành động (ví dụ: Mua ngay, Đặt hàng, Nhận ưu đãi)`
+Fields:
+- productName: main product name
+- productDescription: short description of what it is and does
+- targetMarket: target customers (who should use this)
+- painPoints: customer problems/pain points this product solves
+- usps: unique selling points / competitive advantages
+- benefits: specific benefits of using the product
+- offer: current pricing and promotions
+- cta: call to action (e.g. Buy Now, Order Today)`
 
 // Jina Reader — renders JS pages and returns clean markdown. Handles LadiPage, Shopee, etc.
 async function fetchViaJina(url: string): Promise<string> {
@@ -73,27 +73,56 @@ async function fetchViaJina(url: string): Promise<string> {
   }
 }
 
+/** Escape raw control chars inside JSON string values so JSON.parse doesn't choke */
+function repairJsonStrings(s: string): string {
+  let out = ''
+  let inStr = false
+  let esc = false
+  for (let i = 0; i < s.length; i++) {
+    const ch = s[i]
+    if (esc) { out += ch; esc = false; continue }
+    if (ch === '\\') { out += ch; esc = true; continue }
+    if (ch === '"') { inStr = !inStr; out += ch; continue }
+    if (inStr) {
+      if      (ch === '\n') out += '\\n'
+      else if (ch === '\r') out += '\\r'
+      else if (ch === '\t') out += '\\t'
+      else if (ch.charCodeAt(0) < 0x20) out += '\\u' + ch.charCodeAt(0).toString(16).padStart(4, '0')
+      else out += ch
+    } else {
+      // remove trailing commas before } or ]
+      out += ch
+    }
+  }
+  return out.replace(/,(\s*[}\]])/g, '$1')
+}
+
 function parseExtracted(raw: string): Record<string, string> | null {
   let cleaned = raw.trim()
 
-  // Strip ALL backtick variants: ```json, ```, `json, ` (single/triple at start and end)
+  // Strip ALL backtick/code-fence variants
   cleaned = cleaned
-    .replace(/^`{1,3}(?:json)?\s*/i, '')   // opening backticks + optional "json"
-    .replace(/`{1,3}\s*$/i, '')              // closing backticks
-    .replace(/```(?:json)?\s*/gi, '')        // any remaining triple backticks mid-text
+    .replace(/^`{1,3}(?:json)?\s*/i, '')
+    .replace(/`{1,3}\s*$/i, '')
+    .replace(/```(?:json)?\s*/gi, '')
     .trim()
 
   // Strategy 1: direct parse
   try { return JSON.parse(cleaned) as Record<string, string> } catch { /* continue */ }
 
-  // Strategy 2: find the first complete { ... } block (handles prose around JSON)
+  // Strategy 2: repair control chars then parse
+  try { return JSON.parse(repairJsonStrings(cleaned)) as Record<string, string> } catch { /* continue */ }
+
+  // Strategy 3: extract first { ... } block then repair + parse
   let depth = 0, start = -1
   for (let i = 0; i < cleaned.length; i++) {
     if (cleaned[i] === '{') { if (depth === 0) start = i; depth++ }
     else if (cleaned[i] === '}') {
       depth--
       if (depth === 0 && start !== -1) {
-        try { return JSON.parse(cleaned.slice(start, i + 1)) as Record<string, string> } catch { start = -1 }
+        const slice = cleaned.slice(start, i + 1)
+        try { return JSON.parse(slice) as Record<string, string> } catch { /* try repair */ }
+        try { return JSON.parse(repairJsonStrings(slice)) as Record<string, string> } catch { start = -1 }
       }
     }
   }
