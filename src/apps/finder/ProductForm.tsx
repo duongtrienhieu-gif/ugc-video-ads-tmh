@@ -4,7 +4,8 @@ import type { Product } from '../../stores/types'
 import { useAssetUrl } from '../../hooks/useAssetUrl'
 import { useSettingsStore } from '../../stores/settingsStore'
 import { useAppStore } from '../../stores/appStore'
-import { kieAnalyzeImage, blobToSmallBase64 } from '../../utils/kieai'
+import { directGeminiVision } from '../../utils/gemini'
+import { blobToSmallBase64 } from '../../utils/kieai'
 
 interface ProductFormProps {
   item?: Product | null
@@ -23,129 +24,53 @@ const FIELDS: { key: keyof Product; label: string; type: 'text' | 'textarea'; re
   { key: 'cta', label: 'CTA', type: 'text' },
 ]
 
-// Prompts intentionally omit the raw URL to avoid content-filter triggers.
-// We only pass page text (or a neutral domain hint) so models focus on extraction.
+const JSON_SCHEMA = `{"productName":"","productDescription":"","targetMarket":"","painPoints":"","usps":"","benefits":"","offer":"","cta":""}`
+
+const EXTRACT_SYSTEM = 'You are a data-extraction assistant. Output ONLY a valid JSON object, no markdown, no explanation.'
+
 const EXTRACT_PROMPT = (pageText: string) =>
-  `Extract product information from the following webpage text and return as a JSON object.
+  `Extract product marketing information from the webpage text below. Return ONLY a JSON object with these keys and English string values:\n${JSON_SCHEMA}\n\nWEBPAGE TEXT:\n${pageText.slice(0, 6000)}`
 
-TEXT:
-${pageText.slice(0, 3500)}
+const IMAGE_EXTRACT_PROMPT = `Look at this product page screenshot. Extract all visible marketing information. Return ONLY a JSON object with these keys and English string values:\n${JSON_SCHEMA}\n\nKeys: productName (product name), productDescription (what it is/does), targetMarket (who it's for), painPoints (problems solved), usps (unique selling points), benefits (key benefits), offer (pricing/promotions), cta (call to action text).`
 
-Return ONLY a JSON object with exactly these keys and English string values:
-{"productName":"","productDescription":"","targetMarket":"","painPoints":"","usps":"","benefits":"","offer":"","cta":""}
-
-No explanation. No markdown. Just the JSON object.`
-
-const EXTRACT_URL_ONLY_PROMPT = (url: string) => {
-  // Pass only the domain so the model can infer category, without triggering filters
-  let domain = url
-  try { domain = new URL(url).hostname.replace(/^www\./, '') } catch { /* ignore */ }
-  return `Generate marketing data for an e-commerce product from the website "${domain}" and return as a JSON object.
-
-Return ONLY a JSON object with exactly these keys and English string values:
-{"productName":"","productDescription":"","targetMarket":"","painPoints":"","usps":"","benefits":"","offer":"","cta":""}
-
-No explanation. No markdown. Just the JSON object.`
-}
-
-const SYSTEM_MSG = 'You are a data-extraction assistant. Your only job is to output valid JSON. Never refuse, never add explanation — only output the requested JSON object.'
-
-const IMAGE_EXTRACT_PROMPT = `You are looking at a product page screenshot. Extract all visible product marketing information and return as a JSON object with exactly these keys and English string values:
-{"productName":"","productDescription":"","targetMarket":"","painPoints":"","usps":"","benefits":"","offer":"","cta":""}
-
-- productName: the product name
-- productDescription: what the product is and does
-- targetMarket: who it's for (target audience)
-- painPoints: problems it solves, comma or line separated
-- usps: unique selling points / what makes it different
-- benefits: key benefits, comma or line separated
-- offer: pricing and promotions visible on the page
-- cta: call to action text
-
-Return ONLY the JSON object. No explanation, no markdown.`
-
-// Direct API call for product analysis — bypasses kieTextGenerate to surface raw errors
-async function analyzeProductWithAI(apiKey: string, prompt: string): Promise<string> {
-  const models = ['gpt-4o', 'gemini-2.5-flash', 'gpt-4o-mini']
-  const errors: string[] = []
-
-  for (const model of models) {
-    const res = await fetch('https://api.kie.ai/api/v1/chat/completions', {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model,
-        messages: [
-          { role: 'system', content: SYSTEM_MSG },
-          { role: 'user', content: prompt },
-        ],
-      }),
+// Jina Reader — renders JS pages and returns clean markdown. Handles LadiPage, Shopee, etc.
+async function fetchViaJina(url: string): Promise<string> {
+  try {
+    const r = await fetch(`https://r.jina.ai/${url}`, {
+      headers: { Accept: 'text/plain' },
+      signal: AbortSignal.timeout(20000),
     })
-
-    const rawText = await res.text()
-
-    if (res.status === 402) throw new Error('INSUFFICIENT_CREDITS')
-    if (!res.ok) {
-      errors.push(`${model}: HTTP ${res.status} — ${rawText.slice(0, 200)}`)
-      continue
-    }
-
-    let content = ''
-    try {
-      const data = JSON.parse(rawText) as {
-        choices?: { message?: { content?: string | null; refusal?: string } }[]
-      }
-      const msg = data.choices?.[0]?.message
-      content = (typeof msg?.content === 'string' ? msg.content : '').trim()
-      if (content) return content
-      const refusal = msg?.refusal
-      errors.push(refusal ? `${model}: từ chối — ${refusal.slice(0, 80)}` : `${model}: phản hồi rỗng (raw: ${rawText.slice(0, 120)})`)
-    } catch {
-      errors.push(`${model}: JSON parse error — ${rawText.slice(0, 120)}`)
-    }
+    if (!r.ok) return ''
+    const text = await r.text()
+    return text.slice(0, 8000)
+  } catch {
+    return ''
   }
-
-  throw new Error(errors.join(' | '))
 }
 
-async function fetchPageText(url: string): Promise<string> {
-  const strip = (html: string) =>
-    html
-      .replace(/<script[\s\S]*?<\/script>/gi, '')
-      .replace(/<style[\s\S]*?<\/style>/gi, '')
-      .replace(/<[^>]+>/g, ' ')
-      .replace(/&nbsp;/gi, ' ').replace(/&amp;/gi, '&').replace(/&lt;/gi, '<').replace(/&gt;/gi, '>')
-      .replace(/\s{2,}/g, ' ')
-      .trim()
-      .slice(0, 7000)
-
-  // Try multiple CORS proxies in sequence
-  const proxies: Array<() => Promise<string>> = [
-    async () => {
-      const r = await fetch(`https://api.allorigins.win/get?url=${encodeURIComponent(url)}`, { signal: AbortSignal.timeout(12000) })
-      if (!r.ok) return ''
-      const d = await r.json() as { contents?: string }
-      return strip(d.contents ?? '')
-    },
-    async () => {
-      const r = await fetch(`https://corsproxy.io/?url=${encodeURIComponent(url)}`, { signal: AbortSignal.timeout(12000) })
-      if (!r.ok) return ''
-      return strip(await r.text())
-    },
-    async () => {
-      const r = await fetch(`https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`, { signal: AbortSignal.timeout(12000) })
-      if (!r.ok) return ''
-      return strip(await r.text())
-    },
-  ]
-
-  for (const proxy of proxies) {
-    try {
-      const text = await proxy()
-      if (text.length > 200) return text
-    } catch { /* try next */ }
+function parseExtracted(raw: string): Record<string, string> | null {
+  let cleaned = raw.trim().replace(/```json\s*/gi, '').replace(/```\s*/gi, '').trim()
+  const match = cleaned.match(/\{[\s\S]*\}/)
+  if (!match) return null
+  try {
+    return JSON.parse(match[0]) as Record<string, string>
+  } catch {
+    return null
   }
-  return ''
+}
+
+type FormState = { productImage: string; productName: string; productDescription: string; targetMarket: string; painPoints: string; usps: string; benefits: string; offer: string; cta: string }
+
+function applyExtracted(extracted: Record<string, string>, prev: FormState): { next: FormState; count: number } {
+  const next = { ...prev }
+  let count = 0
+  for (const [key, value] of Object.entries(extracted)) {
+    if (key in next && typeof value === 'string') {
+      const v = value.trim()
+      if (v) { (next as Record<string, string>)[key] = v; count++ }
+    }
+  }
+  return { next, count }
 }
 
 export default function ProductForm({ item, onSave, onCancel }: ProductFormProps) {
@@ -162,8 +87,8 @@ export default function ProductForm({ item, onSave, onCancel }: ProductFormProps
   })
   const [productUrl, setProductUrl] = useState('')
   const [isFetching, setIsFetching] = useState(false)
-
   const [isAnalyzing, setIsAnalyzing] = useState(false)
+
   const fileRef = useRef<HTMLInputElement>(null)
   const screenshotRef = useRef<HTMLInputElement>(null)
   const [localPreview, setLocalPreview] = useState<string | null>(null)
@@ -190,6 +115,12 @@ export default function ProductForm({ item, onSave, onCancel }: ProductFormProps
 
   const set = (key: string, value: string) => setForm((f) => ({ ...f, [key]: value }))
 
+  const getGeminiKey = () => {
+    const store = useSettingsStore.getState()
+    if (!store.hasGeminiKey()) throw new Error('Chưa có Google Gemini API key. Vào Cài đặt → Google Gemini → lấy key miễn phí')
+    return store.getGeminiApiKey()
+  }
+
   const handleImage = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
@@ -205,49 +136,34 @@ export default function ProductForm({ item, onSave, onCancel }: ProductFormProps
   const handleFetchInfo = async () => {
     const url = productUrl.trim()
     if (!url) return
-    const apiKey = useSettingsStore.getState().getApiKey()
-    if (!apiKey) {
-      addToast('Vui lòng nhập API key trong Cài đặt', 'error')
-      return
-    }
 
     setIsFetching(true)
     try {
-      // Step 1: Try to fetch actual page content (3 proxy fallbacks)
-      const pageText = await fetchPageText(url)
+      const geminiKey = getGeminiKey()
 
-      // Step 2: Send to AI — with page content if available, URL-only otherwise
-      const prompt = pageText.length > 200
-        ? EXTRACT_PROMPT(pageText)
-        : EXTRACT_URL_ONLY_PROMPT(url)
-      const response = await analyzeProductWithAI(apiKey, prompt)
+      // Jina Reader handles JS-rendered pages (LadiPage, Shopee, etc.)
+      addToast('Đang đọc trang sản phẩm...')
+      const pageText = await fetchViaJina(url)
+      if (!pageText) throw new Error('Không đọc được nội dung trang. Thử tải ảnh chụp màn hình thay thế.')
 
-      let cleaned = response.trim()
-      // Strip markdown code fences
-      cleaned = cleaned.replace(/```json\s*/gi, '').replace(/```\s*/gi, '').trim()
-      // Extract JSON object
-      const jsonMatch = cleaned.match(/\{[\s\S]*\}/)
-      if (!jsonMatch) throw new Error('AI không trả về JSON hợp lệ')
-      cleaned = jsonMatch[0]
+      const response = await directGeminiVision({
+        apiKey: geminiKey,
+        parts: [{ text: EXTRACT_PROMPT(pageText) }],
+        systemInstruction: EXTRACT_SYSTEM,
+        maxOutputTokens: 1024,
+      })
 
-      const extracted = JSON.parse(cleaned) as Record<string, string>
+      const extracted = parseExtracted(response)
+      if (!extracted) throw new Error('AI không trả về JSON hợp lệ')
 
       let filledCount = 0
       setForm((prev) => {
-        const next = { ...prev }
-        for (const [key, value] of Object.entries(extracted)) {
-          if (key in next && typeof value === 'string') {
-            const v = value.trim()
-            // Skip placeholder values that AI returned unchanged
-            if (v && !v.startsWith('actual ') && v !== '""') {
-              next[key as keyof typeof next] = v
-              filledCount++
-            }
-          }
-        }
+        const { next, count } = applyExtracted(extracted, prev)
+        filledCount = count
         return next
       })
-      if (filledCount === 0) throw new Error('AI trả về nội dung rỗng, thử lại')
+
+      if (filledCount === 0) throw new Error('Không trích xuất được thông tin. Thử tải ảnh chụp màn hình.')
       addToast(`Đã tự động điền ${filledCount} trường thông tin`)
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
@@ -261,28 +177,28 @@ export default function ProductForm({ item, onSave, onCancel }: ProductFormProps
     const file = e.target.files?.[0]
     if (!file) return
     e.target.value = ''
-    const apiKey = useSettingsStore.getState().getApiKey()
-    if (!apiKey) { addToast('Vui lòng nhập API key trong Cài đặt', 'error'); return }
 
     setIsAnalyzing(true)
     try {
+      const geminiKey = getGeminiKey()
       const base64 = await blobToSmallBase64(file, 1024)
-      const response = await kieAnalyzeImage(apiKey, base64, 'image/jpeg', IMAGE_EXTRACT_PROMPT)
 
-      let cleaned = response.trim().replace(/```json\s*/gi, '').replace(/```\s*/gi, '').trim()
-      const jsonMatch = cleaned.match(/\{[\s\S]*\}/)
-      if (!jsonMatch) throw new Error('AI không trả về JSON hợp lệ')
-      const extracted = JSON.parse(jsonMatch[0]) as Record<string, string>
+      const response = await directGeminiVision({
+        apiKey: geminiKey,
+        parts: [
+          { inlineData: { mimeType: 'image/jpeg', data: base64 } },
+          { text: IMAGE_EXTRACT_PROMPT },
+        ],
+        maxOutputTokens: 1024,
+      })
+
+      const extracted = parseExtracted(response)
+      if (!extracted) throw new Error('AI không trả về JSON hợp lệ')
 
       let filledCount = 0
       setForm((prev) => {
-        const next = { ...prev }
-        for (const [key, value] of Object.entries(extracted)) {
-          if (key in next && typeof value === 'string') {
-            const v = value.trim()
-            if (v) { next[key as keyof typeof next] = v; filledCount++ }
-          }
-        }
+        const { next, count } = applyExtracted(extracted, prev)
+        filledCount = count
         return next
       })
 
@@ -318,14 +234,14 @@ export default function ProductForm({ item, onSave, onCancel }: ProductFormProps
         <p className="text-[10px] font-semibold uppercase tracking-widest text-sky-400/80">
           Tự động điền thông tin
         </p>
-        {/* Option 1: URL */}
+        {/* URL input */}
         <div className="flex gap-2">
           <input
             type="url"
             value={productUrl}
             onChange={(e) => setProductUrl(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleFetchInfo() } }}
-            placeholder="https://shopee.vn/... hoặc link sản phẩm bất kỳ"
+            placeholder="https://ladipage.vn/... hoặc link sản phẩm bất kỳ"
             className="min-w-0 flex-1 rounded-lg border border-black/10 bg-white px-3 py-2 text-sm text-gray-800 placeholder-gray-400 outline-none transition-colors focus:border-sky-400/40"
           />
           <button
@@ -346,7 +262,7 @@ export default function ProductForm({ item, onSave, onCancel }: ProductFormProps
           <span className="text-[10px] text-sky-400/60">hoặc</span>
           <div className="h-px flex-1 bg-sky-500/15" />
         </div>
-        {/* Option 2: Screenshot */}
+        {/* Screenshot upload */}
         <button
           type="button"
           onClick={() => screenshotRef.current?.click()}
@@ -358,16 +274,10 @@ export default function ProductForm({ item, onSave, onCancel }: ProductFormProps
             : <><ScanSearch className="h-3.5 w-3.5" />Tải ảnh chụp màn hình trang sản phẩm</>
           }
         </button>
-        <input
-          ref={screenshotRef}
-          type="file"
-          accept="image/*"
-          className="hidden"
-          onChange={handleScreenshotAnalyze}
-        />
+        <input ref={screenshotRef} type="file" accept="image/*" className="hidden" onChange={handleScreenshotAnalyze} />
       </div>
 
-      {/* Image upload */}
+      {/* Product image upload */}
       <button
         type="button"
         onClick={() => fileRef.current?.click()}
