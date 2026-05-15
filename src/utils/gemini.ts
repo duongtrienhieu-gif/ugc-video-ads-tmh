@@ -84,6 +84,65 @@ export async function directGeminiVision(params: {
   throw new Error(errors.length ? errors.join(' | ') : 'Gemini: không có model khả dụng')
 }
 
+/**
+ * Direct Google Gemini text-only call — bypasses kie.ai routing.
+ * Use this when kie.ai models return empty responses for complex JSON tasks.
+ */
+export async function directGeminiText(params: {
+  apiKey: string
+  prompt: string
+  systemInstruction?: string
+  maxOutputTokens?: number
+}): Promise<string> {
+  const modelsToTry = ['gemini-2.5-flash', 'gemini-2.5-flash-lite', 'gemini-2.0-flash', 'gemini-2.0-flash-lite']
+  const errors: string[] = []
+
+  for (const model of modelsToTry) {
+    const url = `${GEMINI_BASE}/${model}:generateContent?key=${params.apiKey}`
+    const body: Record<string, unknown> = {
+      contents: [{ role: 'user', parts: [{ text: params.prompt }] }],
+      generationConfig: { temperature: 0.3, maxOutputTokens: params.maxOutputTokens ?? 8192 },
+    }
+    if (params.systemInstruction) {
+      body.systemInstruction = { parts: [{ text: params.systemInstruction }] }
+    }
+
+    let res: Response | null = null
+    let attempts = 0
+    while (attempts < 2) {
+      res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      })
+      if (res.status !== 503 || attempts === 1) break
+      attempts++
+      await sleep(3000)
+    }
+    if (!res) continue
+
+    if (!res.ok) {
+      const err = await res.text().catch(() => res!.statusText)
+      if (res.status === 404) { errors.push(`${model}: không khả dụng`); continue }
+      if (res.status === 429 || res.status === 503) {
+        errors.push(`${model}: ${res.status === 503 ? 'quá tải' : 'rate limit'}`)
+        await sleep(1500)
+        continue
+      }
+      throw new Error(`Gemini text API lỗi (${res.status}): ${err.slice(0, 200)}`)
+    }
+
+    const data = await res.json() as {
+      candidates?: { content?: { parts?: { text?: string }[] } }[]
+    }
+    const text = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() ?? ''
+    if (!text) { errors.push(`${model}: phản hồi rỗng`); continue }
+    return text
+  }
+
+  throw new Error(errors.length ? errors.join(' | ') : 'Gemini text: không có model khả dụng')
+}
+
 import {
   kieTextGenerate,
   kieAnalyzeImage,

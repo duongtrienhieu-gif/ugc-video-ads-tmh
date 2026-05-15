@@ -7,8 +7,10 @@ export interface VoiceOption {
   name: string          // display name
   gender: Gender
   style: string         // short label (e.g. "CLONED", "PREMADE", or accent)
-  category?: 'cloned' | 'premade' | 'generated' | 'professional'
+  category?: 'cloned' | 'premade' | 'generated' | 'professional' | 'library'
   previewUrl?: string
+  isLibraryVoice?: boolean   // shared voice from ElevenLabs Library (not yet added to user account)
+  publicOwnerId?: string     // needed to call addSharedVoice
 }
 
 export interface VoiceSettings {

@@ -1,5 +1,5 @@
 ﻿import { useState, useRef, useEffect, useCallback } from 'react'
-import { Play, Pause, Download, Trash2, Volume2, Save, Check } from 'lucide-react'
+import { Play, Pause, Download, Trash2, Volume2, Save, Check, X } from 'lucide-react'
 import type { VoiceHistoryItem } from '../../../stores/types'
 import { getUrl } from '../../../utils/assetStore'
 import { useBankStore } from '../../../stores/bankStore'
@@ -157,34 +157,52 @@ export default function HistoryPanel({ items, onDelete }: HistoryPanelProps) {
   const [currentTime, setCurrentTime] = useState<Record<string, number>>({})
   const [savingId, setSavingId] = useState<string | null>(null)
   const [savedIds, setSavedIds] = useState<Set<string>>(new Set())
+  const [namingItemId, setNamingItemId] = useState<string | null>(null)
+  const [presetName, setPresetName] = useState('')
   const audioRef = useRef<HTMLAudioElement | null>(null)
   const animRef = useRef<number>(0)
   const playingIdRef = useRef<string | null>(null)
+  const nameInputRef = useRef<HTMLInputElement | null>(null)
 
   const addVoice = useBankStore((s) => s.addVoice)
   const addToast = useAppStore((s) => s.addToast)
 
-  const handleSavePreset = async (item: VoiceHistoryItem) => {
+  const handleOpenNaming = (item: VoiceHistoryItem) => {
     if (savedIds.has(item.id)) return
+    setNamingItemId(item.id)
+    setPresetName(item.voiceName || '')
+    // focus input on next tick
+    setTimeout(() => nameInputRef.current?.focus(), 50)
+  }
+
+  const handleConfirmPreset = async (item: VoiceHistoryItem) => {
+    const label = presetName.trim() || item.voiceName || 'Untitled voice'
     setSavingId(item.id)
     try {
       await addVoice({
-        label: item.voiceName || 'Untitled voice',
+        label,
         voiceName: item.voiceName,
         gender: 'Female',
         styleInstructions: '',
         creativity: 0.8,
         ambience: 'Studio',
-        linkedModelId: item.voiceId, // ElevenLabs voice_id — needed to re-generate with same voice
+        linkedModelId: item.voiceId,
       })
       setSavedIds((prev) => new Set(prev).add(item.id))
-      addToast(`Đã lưu "${item.voiceName}" vào PROJECT Giọng đọc`)
+      addToast(`Đã lưu "${label}" vào PROJECT Giọng đọc`)
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
       addToast(`Lưu preset thất bại: ${msg}`, 'error')
     } finally {
       setSavingId(null)
+      setNamingItemId(null)
+      setPresetName('')
     }
+  }
+
+  const handleCancelNaming = () => {
+    setNamingItemId(null)
+    setPresetName('')
   }
 
   const stopPlayback = useCallback(() => {
@@ -370,11 +388,13 @@ export default function HistoryPanel({ items, onDelete }: HistoryPanelProps) {
                   </button>
 
                   <button
-                    onClick={() => handleSavePreset(item)}
+                    onClick={() => handleOpenNaming(item)}
                     disabled={savingId === item.id || isSaved}
                     className={`flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-[11px] font-semibold transition-all ${
                       isSaved
                         ? 'bg-emerald-50 text-emerald-600 border border-emerald-200'
+                        : namingItemId === item.id
+                        ? 'bg-indigo-100 border border-indigo-300 text-indigo-700'
                         : 'border border-indigo-200 bg-indigo-50 text-indigo-600 hover:bg-indigo-100'
                     } disabled:opacity-50`}
                     title="Lưu preset vào PROJECT"
@@ -392,6 +412,42 @@ export default function HistoryPanel({ items, onDelete }: HistoryPanelProps) {
                     <Trash2 className="h-3.5 w-3.5" />
                   </button>
                 </div>
+
+                {/* Inline preset naming form */}
+                {namingItemId === item.id && (
+                  <div className="mt-2 flex items-center gap-1.5 rounded-lg border border-indigo-200 bg-indigo-50/60 px-2 py-1.5">
+                    <input
+                      ref={nameInputRef}
+                      type="text"
+                      value={presetName}
+                      onChange={(e) => setPresetName(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') handleConfirmPreset(item)
+                        if (e.key === 'Escape') handleCancelNaming()
+                      }}
+                      placeholder="Tên preset..."
+                      className="min-w-0 flex-1 rounded-md border border-indigo-200 bg-white px-2 py-1 text-[11px] text-slate-800 outline-none focus:border-indigo-400 focus:ring-1 focus:ring-indigo-200 placeholder:text-slate-400"
+                    />
+                    <button
+                      onClick={() => handleConfirmPreset(item)}
+                      disabled={savingId === item.id}
+                      className="flex items-center gap-1 rounded-md bg-indigo-500 px-2 py-1 text-[11px] font-semibold text-white transition-colors hover:bg-indigo-600 disabled:opacity-60"
+                    >
+                      {savingId === item.id ? (
+                        <span className="animate-pulse">Đang lưu…</span>
+                      ) : (
+                        <><Check className="h-3 w-3" />Lưu</>
+                      )}
+                    </button>
+                    <button
+                      onClick={handleCancelNaming}
+                      className="flex h-6 w-6 items-center justify-center rounded-md text-slate-400 transition-colors hover:bg-indigo-100 hover:text-slate-600"
+                      title="Hủy"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </div>
+                )}
               </div>
             )
           })}
