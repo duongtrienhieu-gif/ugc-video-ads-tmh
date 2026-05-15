@@ -26,12 +26,37 @@ const FIELDS: { key: keyof Product; label: string; type: 'text' | 'textarea'; re
 
 const JSON_SCHEMA = `{"productName":"","productDescription":"","targetMarket":"","painPoints":"","usps":"","benefits":"","offer":"","cta":""}`
 
-const EXTRACT_SYSTEM = 'You are a JSON extraction assistant. Your response must be ONLY a raw JSON object — no markdown, no code fences, no explanation, no extra text before or after.'
+const EXTRACT_SYSTEM = 'You are a JSON extraction assistant for Vietnamese product pages. Your response must be ONLY a raw JSON object — no markdown, no code fences, no explanation, no extra text before or after.'
 
 const EXTRACT_PROMPT = (pageText: string) =>
-  `From the product webpage text below, fill in this JSON and return it. No extra text, just the JSON:\n${JSON_SCHEMA}\n\nWEBPAGE TEXT:\n${pageText.slice(0, 6000)}`
+  `You are reading a Vietnamese product landing page. Extract product information and fill in this JSON. Write values in Vietnamese if the page is in Vietnamese. No extra text, just the JSON:
+${JSON_SCHEMA}
 
-const IMAGE_EXTRACT_PROMPT = `From this product page screenshot, fill in this JSON and return it. No extra text, just the JSON:\n${JSON_SCHEMA}`
+Field guide:
+- productName: tên sản phẩm chính
+- productDescription: mô tả ngắn gọn sản phẩm là gì, dùng để làm gì
+- targetMarket: khách hàng mục tiêu (ai nên dùng)
+- painPoints: các vấn đề/nỗi đau của khách hàng mà sản phẩm giải quyết
+- usps: điểm khác biệt/lợi thế độc nhất của sản phẩm
+- benefits: lợi ích khi dùng sản phẩm
+- offer: giá bán và khuyến mãi hiện tại
+- cta: lời kêu gọi hành động (mua ngay, đặt hàng, v.v.)
+
+WEBPAGE TEXT:
+${pageText.slice(0, 8000)}`
+
+const IMAGE_EXTRACT_PROMPT = `You are reading a Vietnamese product page screenshot. Extract product information and fill in this JSON. Write values in Vietnamese. No extra text, just the JSON:
+${JSON_SCHEMA}
+
+Field guide:
+- productName: tên sản phẩm chính
+- productDescription: mô tả ngắn gọn sản phẩm là gì, dùng để làm gì
+- targetMarket: khách hàng mục tiêu (ai nên dùng)
+- painPoints: các vấn đề/nỗi đau của khách hàng mà sản phẩm giải quyết
+- usps: điểm khác biệt/lợi thế độc nhất của sản phẩm
+- benefits: lợi ích khi dùng sản phẩm
+- offer: giá bán và khuyến mãi hiện tại
+- cta: lời kêu gọi hành động (mua ngay, đặt hàng, v.v.)`
 
 // Jina Reader — renders JS pages and returns clean markdown. Handles LadiPage, Shopee, etc.
 async function fetchViaJina(url: string): Promise<string> {
@@ -146,8 +171,11 @@ export default function ProductForm({ item, onSave, onCancel }: ProductFormProps
   }
 
   const handleFetchInfo = async () => {
-    const url = productUrl.trim()
+    let url = productUrl.trim()
     if (!url) return
+
+    // Auto-prepend https:// if missing
+    if (!/^https?:\/\//i.test(url)) url = 'https://' + url
 
     setIsFetching(true)
     try {
@@ -249,11 +277,11 @@ export default function ProductForm({ item, onSave, onCancel }: ProductFormProps
         {/* URL input */}
         <div className="flex gap-2">
           <input
-            type="url"
+            type="text"
             value={productUrl}
             onChange={(e) => setProductUrl(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleFetchInfo() } }}
-            placeholder="https://ladipage.vn/... hoặc link sản phẩm bất kỳ"
+            placeholder="ladipage.vn/... hoặc link sản phẩm bất kỳ"
             className="min-w-0 flex-1 rounded-lg border border-black/10 bg-white px-3 py-2 text-sm text-gray-800 placeholder-gray-400 outline-none transition-colors focus:border-sky-400/40"
           />
           <button
