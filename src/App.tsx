@@ -20,6 +20,7 @@ import BrollStudio from './apps/broll-studio/BrollStudio'
 import ImageDna from './apps/image-dna/ImageDna'
 import BRollVideos from './apps/broll-videos/BRollVideos'
 import LipSync from './apps/lip-sync/LipSync'
+import VideoTranslate from './apps/video-translate/VideoTranslate'
 
 const APP_COMPONENTS: Record<string, React.ComponentType> = {
   'finder': Finder,
@@ -31,6 +32,7 @@ const APP_COMPONENTS: Record<string, React.ComponentType> = {
   'image-dna': ImageDna,
   'broll-videos': BRollVideos,
   'lip-sync': LipSync,
+  'video-translate': VideoTranslate,
 }
 
 export default function App() {

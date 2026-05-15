@@ -270,6 +270,167 @@ export async function textToSpeech(params: {
   return res.arrayBuffer()
 }
 
+// ─── Video Dubbing (ElevenLabs Dubbing API) ─────────────────────────────────
+
+export interface DubbingProject {
+  dubbingId: string
+  name: string
+  status: 'pending' | 'processing' | 'dubbed' | 'failed'
+  targetLanguages: string[]
+  sourceLanguage?: string
+  createdAt: string
+  error?: string
+}
+
+/**
+ * Create a dubbing project. Pass either `file` (upload) or `sourceUrl` (remote URL).
+ * Returns dubbingId to poll with getDubbingStatus.
+ * Requires ElevenLabs Creator plan or higher.
+ */
+export async function createDubbing(params: {
+  apiKey: string
+  file?: File
+  sourceUrl?: string
+  targetLang: string
+  sourceLang?: string   // 'auto' by default
+  name?: string
+  numSpeakers?: number  // 0 = auto-detect
+  highestResolution?: boolean
+}): Promise<{ dubbingId: string; expectedDurationSec: number }> {
+  if (!params.apiKey) throw new Error('Vui lòng nhập ElevenLabs API key trong Cài đặt')
+  if (!params.file && !params.sourceUrl) throw new Error('Cần file video hoặc URL video')
+
+  const form = new FormData()
+  if (params.name)           form.append('name', params.name)
+  if (params.file)           form.append('file', params.file, params.file.name)
+  if (params.sourceUrl)      form.append('source_url', params.sourceUrl)
+  form.append('source_lang', params.sourceLang ?? 'auto')
+  form.append('target_lang', params.targetLang)
+  form.append('num_speakers', String(params.numSpeakers ?? 0))
+  form.append('watermark', 'false')
+  if (params.highestResolution) form.append('highest_resolution', 'true')
+
+  const res = await fetch(`${EL_BASE}/dubbing`, {
+    method: 'POST',
+    headers: { 'xi-api-key': params.apiKey },
+    body: form,
+  })
+
+  if (!res.ok) {
+    const err = await res.text().catch(() => res.statusText)
+    let detail = err
+    try {
+      const parsed = JSON.parse(err) as { detail?: { status?: string; message?: string } | string }
+      if (typeof parsed.detail === 'object' && parsed.detail) {
+        detail = `${parsed.detail.status ?? ''} ${parsed.detail.message ?? ''}`.trim()
+      } else if (typeof parsed.detail === 'string') {
+        detail = parsed.detail
+      }
+    } catch {/* keep raw */}
+
+    if (res.status === 401) {
+      const lower = detail.toLowerCase()
+      if (lower.includes('detected_unusual_activity') || lower.includes('free_tier')) {
+        throw new Error('Key ElevenLabs bị khóa (anti-abuse). Cần key cá nhân hợp lệ tại elevenlabs.io.')
+      }
+      throw new Error(`API key ElevenLabs không hợp lệ — kiểm tra lại trong Cài đặt. (${detail.slice(0, 100)})`)
+    }
+    if (res.status === 402 || res.status === 403) {
+      throw new Error('Tính năng Dubbing yêu cầu gói Creator ($22/mo) trở lên tại elevenlabs.io.')
+    }
+    if (res.status === 422) {
+      throw new Error(`Dữ liệu không hợp lệ: ${detail.slice(0, 200)}`)
+    }
+    throw new Error(`Tạo dubbing thất bại (${res.status}): ${detail.slice(0, 150)}`)
+  }
+
+  const data = await res.json() as { dubbing_id?: string; expected_duration_sec?: number }
+  if (!data.dubbing_id) throw new Error('ElevenLabs không trả về dubbing_id — thử lại')
+  return { dubbingId: data.dubbing_id, expectedDurationSec: data.expected_duration_sec ?? 0 }
+}
+
+/** Get current status of a dubbing project */
+export async function getDubbingStatus(apiKey: string, dubbingId: string): Promise<DubbingProject> {
+  const res = await fetch(`${EL_BASE}/dubbing/${dubbingId}`, {
+    headers: { 'xi-api-key': apiKey },
+  })
+  if (!res.ok) {
+    const err = await res.text().catch(() => res.statusText)
+    throw new Error(`Kiểm tra trạng thái dubbing thất bại (${res.status}): ${err.slice(0, 100)}`)
+  }
+  const data = await res.json() as {
+    dubbing_id: string
+    name: string
+    status: string
+    target_languages?: string[]
+    source_language?: string
+    created_at?: string
+    error?: string
+  }
+
+  let status: DubbingProject['status'] = 'pending'
+  const raw = (data.status ?? '').toLowerCase()
+  if (raw === 'dubbed') status = 'dubbed'
+  else if (raw === 'failed' || raw === 'error') status = 'failed'
+  else if (raw === 'processing' || raw === 'in_progress' || raw === 'running') status = 'processing'
+
+  return {
+    dubbingId: data.dubbing_id,
+    name: data.name ?? '',
+    status,
+    targetLanguages: data.target_languages ?? [],
+    sourceLanguage: data.source_language,
+    createdAt: data.created_at ?? new Date().toISOString(),
+    error: data.error,
+  }
+}
+
+/** Download the dubbed media (video or audio) */
+export async function getDubbedMedia(apiKey: string, dubbingId: string, languageCode: string): Promise<Blob> {
+  const res = await fetch(`${EL_BASE}/dubbing/${dubbingId}/audio/${languageCode}`, {
+    headers: { 'xi-api-key': apiKey },
+  })
+  if (!res.ok) {
+    const err = await res.text().catch(() => res.statusText)
+    throw new Error(`Tải video đã dịch thất bại (${res.status}): ${err.slice(0, 100)}`)
+  }
+  return res.blob()
+}
+
+/** Delete a dubbing project */
+export async function deleteDubbing(apiKey: string, dubbingId: string): Promise<void> {
+  await fetch(`${EL_BASE}/dubbing/${dubbingId}`, {
+    method: 'DELETE',
+    headers: { 'xi-api-key': apiKey },
+  })
+}
+
+/** Poll until dubbing is complete (dubbed or failed). Calls onStatusChange on each tick. */
+export async function pollDubbingUntilDone(params: {
+  apiKey: string
+  dubbingId: string
+  onStatusChange?: (status: DubbingProject['status']) => void
+  timeoutMs?: number
+}): Promise<DubbingProject> {
+  const timeout = params.timeoutMs ?? 20 * 60 * 1000  // 20 min max
+  const start   = Date.now()
+
+  while (Date.now() - start < timeout) {
+    await new Promise<void>((r) => setTimeout(r, 6000))  // poll every 6s
+
+    const project = await getDubbingStatus(params.apiKey, params.dubbingId)
+    params.onStatusChange?.(project.status)
+
+    if (project.status === 'dubbed' || project.status === 'failed') {
+      return project
+    }
+  }
+
+  throw new Error('TIMEOUT')
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+
 /** Get remaining credits/character count */
 export async function getSubscription(apiKey: string): Promise<{ used: number; limit: number; remaining: number; tier: string }> {
   const res = await fetch(`${EL_BASE}/user/subscription`, {
