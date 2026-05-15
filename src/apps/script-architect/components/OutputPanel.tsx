@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { Copy, Check, Save, ArrowUpRight, Mic, Film, PenLine, Loader2, Languages } from 'lucide-react'
 import { useBankStore } from '../../../stores/bankStore'
 import { useAppStore } from '../../../stores/appStore'
@@ -69,6 +69,13 @@ function VariantCard({ index, scriptText, linkedProductId }: VariantCardProps) {
   const [translating, setTranslating] = useState(false)
   const [malayScript, setMalayScript] = useState('')
   const [malayCopied, setMalayCopied] = useState(false)
+  const malayRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (malayScript) {
+      setTimeout(() => malayRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 50)
+    }
+  }, [malayScript])
 
   const addScript = useBankStore((s) => s.addScript)
   const sendToApp = useAppStore((s) => s.sendToApp)
@@ -161,7 +168,7 @@ function VariantCard({ index, scriptText, linkedProductId }: VariantCardProps) {
 
       {/* Malay translation panel */}
       {malayScript && (
-        <div className="mx-4 mb-3 rounded-lg border border-emerald-500/20 bg-emerald-500/5 px-3 py-3">
+        <div ref={malayRef} className="mx-4 mb-3 rounded-lg border border-emerald-500/20 bg-emerald-500/5 px-3 py-3">
           <div className="mb-2 flex items-center justify-between">
             <span className="text-[10px] font-semibold uppercase tracking-widest text-emerald-400">Tiếng Malay</span>
             <button
