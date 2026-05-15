@@ -108,9 +108,15 @@ export default function BrollStudio() {
         modelContext,
         referenceImages,
       })
-      setResult(res)
-    } catch {
-      // Will improve with real API
+      if (!res.scenes || res.scenes.length === 0) {
+        addToast('Không tạo được cảnh quay — thử lại hoặc kiểm tra API key trong Cài đặt.', 'error')
+      } else {
+        setResult(res)
+        addToast(`Đã tạo ${res.scenes.length} cảnh quay B-Roll`)
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      addToast(`Tạo B-Roll thất bại: ${msg}`, 'error')
     } finally {
       setIsGenerating(false)
     }

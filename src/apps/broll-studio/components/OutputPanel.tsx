@@ -16,6 +16,7 @@ import {
 import type { BrollResult, Scene, PromptVariation, CardState, GeneratedImage, ReferenceImage } from '../types'
 import { generateImage } from '../services/generateBroll'
 import { useBankStore } from '../../../stores/bankStore'
+import { useAppStore } from '../../../stores/appStore'
 import { useAssetUrl } from '../../../hooks/useAssetUrl'
 
 interface OutputPanelProps {
@@ -105,8 +106,13 @@ function VariationCard({
   const currentImage: GeneratedImage | undefined = cardState.images[cardState.currentImageIndex]
   const resolvedImageUrl = useAssetUrl(currentImage?.imageUrl)
   const resolvedVideoUrl = useAssetUrl(cardState.videoUrl ?? undefined)
+  const addToast = useAppStore((s) => s.addToast)
 
   const handleGenerateImage = async () => {
+    if (!cardState.editablePrompt.trim()) {
+      addToast('Nhập prompt trước khi tạo ảnh', 'error')
+      return
+    }
     onUpdateState({ isGeneratingImage: true })
     try {
       const imageUrl = await generateImage(cardState.editablePrompt, referenceImages)
@@ -118,7 +124,9 @@ function VariationCard({
         currentImageIndex: newImages.length - 1,
       })
       setSaved(false)
-    } catch {
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      addToast(`Tạo ảnh thất bại: ${msg}`, 'error')
       onUpdateState({ isGeneratingImage: false })
     }
   }
