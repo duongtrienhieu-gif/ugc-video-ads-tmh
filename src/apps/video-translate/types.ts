@@ -1,4 +1,10 @@
-export type TranslationStatus = 'pending' | 'processing' | 'dubbed' | 'failed'
+export type TranslationStatus =
+  | 'pending'
+  | 'extracting'   // extracting frame + uploading source
+  | 'dubbing'      // ElevenLabs dubbing in progress
+  | 'lipsyncing'   // KIE.ai lip-sync generation in progress
+  | 'dubbed'       // final video ready
+  | 'failed'
 
 export interface TranslationItem {
   id: string                   // local id (UUID)
@@ -7,8 +13,10 @@ export interface TranslationItem {
   sourceLang: string           // 'auto' or ISO-639-1 code
   targetLang: string           // ISO-639-1 code
   status: TranslationStatus
-  videoUrl: string | null      // local blob URL after download
-  assetId: string | null       // saved Supabase asset ref
+  videoUrl: string | null      // transient signed URL (regenerated on load)
+  assetId: string | null       // final lip-synced video Supabase ref (permanent)
+  audioAssetId?: string | null // dubbed audio Supabase ref (permanent)
+  imageAssetId?: string | null // extracted frame Supabase ref (permanent)
   errorMessage?: string
   expectedDurationSec?: number
   createdAt: number

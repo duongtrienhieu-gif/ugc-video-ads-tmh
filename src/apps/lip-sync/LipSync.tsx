@@ -19,6 +19,7 @@ import { saveAsset, getUrl, isAssetRef } from '../../utils/assetStore'
 import BankPicker from '../../components/BankPicker'
 import type { Model } from '../../stores/types'
 import type { LipSyncHistoryItem } from './types'
+import { useLipSyncStore } from '../../stores/lipSyncStore'
 
 // ── Emotion tags ──────────────────────────────────────────────────────────────
 
@@ -112,11 +113,40 @@ export default function LipSync() {
   const [modelDropdownOpen, setModelDropdownOpen] = useState(false)
   const [resolution, setResolution]               = useState<'480p' | '720p'>('720p')
 
-  // ── Video generation ─────────────────────────────────────────────────
-  const [history, setHistory]           = useState<LipSyncHistoryItem[]>([])
+  // ── Video generation (persistent history) ────────────────────────────
+  const history       = useLipSyncStore((s) => s.history)
+  const addItemStore  = useLipSyncStore((s) => s.addItem)
+  const updateItemStore = useLipSyncStore((s) => s.updateItem)
+  const setHistory: React.Dispatch<React.SetStateAction<LipSyncHistoryItem[]>> = (action) => {
+    const current = useLipSyncStore.getState().history
+    const next = typeof action === 'function' ? (action as (prev: LipSyncHistoryItem[]) => LipSyncHistoryItem[])(current) : action
+    useLipSyncStore.getState().setHistory(next)
+  }
   const [isGenerating, setIsGenerating] = useState(false)
   const [progress, setProgress]         = useState(0)
   const progressRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
+  // Restore signed URLs from assetIds on mount
+  useEffect(() => {
+    history.forEach((item) => {
+      if (item.videoAssetId && !item.videoUrl) {
+        getUrl(item.videoAssetId).then((url) => {
+          if (url) updateItemStore(item.id, { videoUrl: url })
+        }).catch(() => {})
+      }
+      if (item.imageAssetId && !item.imageUrl) {
+        getUrl(item.imageAssetId).then((url) => {
+          if (url) updateItemStore(item.id, { imageUrl: url })
+        }).catch(() => {})
+      }
+      if (item.audioAssetId && !item.audioUrl) {
+        getUrl(item.audioAssetId).then((url) => {
+          if (url) updateItemStore(item.id, { audioUrl: url })
+        }).catch(() => {})
+      }
+    })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const addToast         = useAppStore((s) => s.addToast)
   const elevenLabsApiKey = useSettingsStore((s) => s.elevenLabsApiKey)
@@ -299,18 +329,21 @@ export default function LipSync() {
 
     const historyId = crypto.randomUUID()
     const newItem: LipSyncHistoryItem = {
-      id:         historyId,
-      imageUrl:   characterDisplayUrl ?? '',
-      audioUrl:   audioDisplayUrl ?? '',
-      videoUrl:   null,
+      id:           historyId,
+      imageAssetId: isAssetRef(characterAssetId) ? characterAssetId : null,
+      audioAssetId,
+      videoAssetId: null,
+      imageUrl:     characterDisplayUrl ?? '',
+      audioUrl:     audioDisplayUrl ?? '',
+      videoUrl:     null,
       scriptText,
-      voiceName:  selectedVoice?.name ?? '',
-      modelName:  selectedModel.name,
-      status:     'pending',
-      taskId:     '',
-      createdAt:  Date.now(),
+      voiceName:    selectedVoice?.name ?? '',
+      modelName:    selectedModel.name,
+      status:       'pending',
+      taskId:       '',
+      createdAt:    Date.now(),
     }
-    setHistory((prev) => [newItem, ...prev])
+    addItemStore(newItem)
 
     try {
       // Resolve character image to public URL
@@ -349,18 +382,22 @@ export default function LipSync() {
         prev.map((h) => (h.id === historyId ? { ...h, taskId, status: 'processing' as VideoStatus } : h)),
       )
 
-      const videoUrl = await pollLipSyncUntilDone({
+      const rawVideoUrl = await pollLipSyncUntilDone({
         apiKey:    kieApiKey,
         taskId,
         onStatusChange: (status) => {
-          setHistory((prev) => prev.map((h) => (h.id === historyId ? { ...h, status } : h)))
+          updateItemStore(historyId, { status })
         },
         timeoutMs: 8 * 60 * 1000,
       })
 
-      setHistory((prev) =>
-        prev.map((h) => (h.id === historyId ? { ...h, videoUrl, status: 'completed' as VideoStatus } : h)),
-      )
+      // Persist video to Supabase Storage so it survives reloads
+      const vidRes  = await fetch(rawVideoUrl)
+      const vidBlob = await vidRes.blob()
+      const videoAssetId = await saveAsset(vidBlob, vidBlob.type || 'video/mp4')
+      const videoUrl     = await getUrl(videoAssetId)
+
+      updateItemStore(historyId, { videoUrl, videoAssetId, status: 'completed' as VideoStatus })
       addToast('Tạo video lip-sync thành công!')
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
@@ -369,9 +406,7 @@ export default function LipSync() {
       if (msg === 'TIMEOUT')              toastMsg = 'Quá thời gian tạo video — thử lại sau'
       if (isContentViolation(msg))        toastMsg = 'Kling từ chối nội dung — xem gợi ý bên dưới kết quả'
       addToast(toastMsg, 'error')
-      setHistory((prev) =>
-        prev.map((h) => (h.id === historyId ? { ...h, status: 'failed' as VideoStatus, errorMessage: msg } : h)),
-      )
+      updateItemStore(historyId, { status: 'failed' as VideoStatus, errorMessage: msg })
     } finally {
       setIsGenerating(false)
     }
@@ -404,18 +439,21 @@ export default function LipSync() {
     setIsGenerating(true)
     const historyId = crypto.randomUUID()
     const newItem: LipSyncHistoryItem = {
-      id: historyId,
-      imageUrl:   failedItem.imageUrl,
-      audioUrl:   failedItem.audioUrl,
-      videoUrl:   null,
-      scriptText: failedItem.scriptText,
-      voiceName:  failedItem.voiceName,
-      modelName:  retryModel.name,
-      status:     'pending',
-      taskId:     '',
-      createdAt:  Date.now(),
+      id:           historyId,
+      imageAssetId: failedItem.imageAssetId,
+      audioAssetId: failedItem.audioAssetId,
+      videoAssetId: null,
+      imageUrl:     failedItem.imageUrl,
+      audioUrl:     failedItem.audioUrl,
+      videoUrl:     null,
+      scriptText:   failedItem.scriptText,
+      voiceName:    failedItem.voiceName,
+      modelName:    retryModel.name,
+      status:       'pending',
+      taskId:       '',
+      createdAt:    Date.now(),
     }
-    setHistory((prev) => [newItem, ...prev])
+    addItemStore(newItem)
 
     try {
       // Resolve image URL
@@ -448,29 +486,28 @@ export default function LipSync() {
         resolution: retryModel.supportsResolution ? '720p' : undefined,
       })
 
-      setHistory((prev) =>
-        prev.map((h) => (h.id === historyId ? { ...h, taskId, status: 'processing' as VideoStatus } : h)),
-      )
+      updateItemStore(historyId, { taskId, status: 'processing' as VideoStatus })
 
-      const videoUrl = await pollLipSyncUntilDone({
+      const rawVideoUrl = await pollLipSyncUntilDone({
         apiKey: kieApiKey,
         taskId,
         onStatusChange: (status) => {
-          setHistory((prev) => prev.map((h) => (h.id === historyId ? { ...h, status } : h)))
+          updateItemStore(historyId, { status })
         },
         timeoutMs: 8 * 60 * 1000,
       })
 
-      setHistory((prev) =>
-        prev.map((h) => (h.id === historyId ? { ...h, videoUrl, status: 'completed' as VideoStatus } : h)),
-      )
+      const vidRes  = await fetch(rawVideoUrl)
+      const vidBlob = await vidRes.blob()
+      const videoAssetId = await saveAsset(vidBlob, vidBlob.type || 'video/mp4')
+      const videoUrl     = await getUrl(videoAssetId)
+
+      updateItemStore(historyId, { videoUrl, videoAssetId, status: 'completed' as VideoStatus })
       addToast('Tạo video lip-sync thành công!')
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
       addToast(`Tạo video thất bại: ${msg}`, 'error')
-      setHistory((prev) =>
-        prev.map((h) => (h.id === historyId ? { ...h, status: 'failed' as VideoStatus, errorMessage: msg } : h)),
-      )
+      updateItemStore(historyId, { status: 'failed' as VideoStatus, errorMessage: msg })
     } finally {
       setIsGenerating(false)
     }
