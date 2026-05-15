@@ -405,6 +405,18 @@ export async function pollVideoJobUntilDone(params: {
 
 // ── Text Generation (kie.ai chat completions — OpenAI-compatible) ─────
 
+const TEXT_TIMEOUT_MS = 90_000 // 90s per model attempt
+
+async function fetchWithTimeout(url: string, init: RequestInit, timeoutMs: number): Promise<Response> {
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), timeoutMs)
+  try {
+    return await fetch(url, { ...init, signal: controller.signal })
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
 export async function kieTextGenerate(
   apiKey: string,
   prompt: string,
@@ -418,24 +430,41 @@ export async function kieTextGenerate(
   let lastError = ''
 
   for (const model of textModels) {
-    const res = await fetch('https://api.kie.ai/api/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ model, messages }),
-    })
-    if (res.status === 402) throw new Error('INSUFFICIENT_CREDITS')
-    if (!res.ok) {
-      lastError = `kie.ai text error (${res.status}): ${await res.text().catch(() => res.statusText)}`
-      continue
+    const startedAt = Date.now()
+    console.log(`[kieTextGenerate] trying ${model}...`)
+    try {
+      const res = await fetchWithTimeout('https://api.kie.ai/api/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ model, messages }),
+      }, TEXT_TIMEOUT_MS)
+
+      if (res.status === 402) throw new Error('INSUFFICIENT_CREDITS')
+      if (!res.ok) {
+        lastError = `kie.ai text error (${res.status}): ${await res.text().catch(() => res.statusText)}`
+        console.warn(`[kieTextGenerate] ${model} HTTP ${res.status}, trying next`)
+        continue
+      }
+      const data = await res.json() as { choices?: { message?: { content?: string | null; refusal?: string } }[] }
+      const msg = data.choices?.[0]?.message
+      const content = typeof msg?.content === 'string' ? msg.content.trim() : ''
+      const elapsed = ((Date.now() - startedAt) / 1000).toFixed(1)
+      if (content) {
+        console.log(`[kieTextGenerate] ${model} OK in ${elapsed}s — ${content.length} chars`)
+        return content
+      }
+      lastError = msg?.refusal ? `Model ${model} từ chối yêu cầu` : `Model ${model} trả về phản hồi rỗng`
+      console.warn(`[kieTextGenerate] ${model} empty after ${elapsed}s, trying next`)
+    } catch (e) {
+      const elapsed = ((Date.now() - startedAt) / 1000).toFixed(1)
+      if (e instanceof Error && e.message === 'INSUFFICIENT_CREDITS') throw e
+      const isAbort = e instanceof Error && e.name === 'AbortError'
+      lastError = isAbort ? `Model ${model} timeout sau ${elapsed}s` : `Model ${model} lỗi: ${e instanceof Error ? e.message : String(e)}`
+      console.warn(`[kieTextGenerate] ${lastError}, trying next`)
     }
-    const data = await res.json() as { choices?: { message?: { content?: string | null; refusal?: string } }[] }
-    const msg = data.choices?.[0]?.message
-    const content = typeof msg?.content === 'string' ? msg.content.trim() : ''
-    if (content) return content
-    lastError = msg?.refusal ? `Model ${model} từ chối yêu cầu` : `Model ${model} trả về phản hồi rỗng`
   }
 
   throw new Error(lastError || 'Không có phản hồi từ kie.ai text')
@@ -495,29 +524,47 @@ export async function kieAnalyzeImage(
   })
 
   const visionModels = ['gpt-4o', 'gemini-2.5-flash', 'gpt-4o-mini']
+  const VISION_TIMEOUT_MS = 120_000 // 120s per model — vision is slower than text
   let lastError = ''
 
   for (const model of visionModels) {
-    const res = await fetch('https://api.kie.ai/api/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ model, messages }),
-    })
-    if (res.status === 402) throw new Error('INSUFFICIENT_CREDITS')
-    if (!res.ok) {
-      lastError = `kie.ai vision error (${res.status}): ${await res.text().catch(() => res.statusText)}`
-      continue
+    const startedAt = Date.now()
+    console.log(`[kieAnalyzeImage] trying ${model}...`)
+    try {
+      const res = await fetchWithTimeout('https://api.kie.ai/api/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ model, messages }),
+      }, VISION_TIMEOUT_MS)
+
+      if (res.status === 402) throw new Error('INSUFFICIENT_CREDITS')
+      if (!res.ok) {
+        lastError = `kie.ai vision error (${res.status}): ${await res.text().catch(() => res.statusText)}`
+        console.warn(`[kieAnalyzeImage] ${model} HTTP ${res.status}, trying next`)
+        continue
+      }
+      const data = await res.json() as { choices?: { message?: { content?: string | null; refusal?: string } }[] }
+      const msg = data.choices?.[0]?.message
+      const content = typeof msg?.content === 'string' ? msg.content.trim() : ''
+      const elapsed = ((Date.now() - startedAt) / 1000).toFixed(1)
+      if (content) {
+        console.log(`[kieAnalyzeImage] ${model} OK in ${elapsed}s — ${content.length} chars`)
+        return content
+      }
+      lastError = msg?.refusal
+        ? `Model ${model} từ chối: ${msg.refusal.slice(0, 80)}`
+        : `Model ${model} trả về phản hồi rỗng`
+      console.warn(`[kieAnalyzeImage] ${model} empty after ${elapsed}s, trying next`)
+    } catch (e) {
+      const elapsed = ((Date.now() - startedAt) / 1000).toFixed(1)
+      if (e instanceof Error && e.message === 'INSUFFICIENT_CREDITS') throw e
+      const isAbort = e instanceof Error && e.name === 'AbortError'
+      lastError = isAbort ? `Model ${model} timeout sau ${elapsed}s` : `Model ${model} lỗi: ${e instanceof Error ? e.message : String(e)}`
+      console.warn(`[kieAnalyzeImage] ${lastError}, trying next`)
     }
-    const data = await res.json() as { choices?: { message?: { content?: string | null; refusal?: string } }[] }
-    const msg = data.choices?.[0]?.message
-    const content = typeof msg?.content === 'string' ? msg.content.trim() : ''
-    if (content) return content
-    lastError = msg?.refusal
-      ? `Model ${model} từ chối: ${msg.refusal.slice(0, 80)}`
-      : `Model ${model} trả về phản hồi rỗng`
   }
 
   throw new Error(lastError || 'Không có phản hồi từ kie.ai vision')

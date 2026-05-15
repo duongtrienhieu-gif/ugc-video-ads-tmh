@@ -47,7 +47,16 @@ export default function InputPanel({
   const [editableContext, setEditableContext] = useState<EditableProductContext | null>(null)
   const [imgDragOver, setImgDragOver] = useState(false)
   const [imgUploading, setImgUploading] = useState(false)
+  const [elapsedSec, setElapsedSec] = useState(0)
   const imgInputRef = useRef<HTMLInputElement>(null)
+
+  // Elapsed timer while generating
+  useEffect(() => {
+    if (!isGenerating) { setElapsedSec(0); return }
+    const startedAt = Date.now()
+    const interval = setInterval(() => setElapsedSec(Math.floor((Date.now() - startedAt) / 1000)), 1000)
+    return () => clearInterval(interval)
+  }, [isGenerating])
 
   const products = useBankStore((s) => s.products)
   const openApp = useAppStore((s) => s.openApp)
@@ -88,10 +97,9 @@ export default function InputPanel({
     }
     setImgUploading(true)
     try {
-      // Auto-compress large images to keep base64 reasonable (max 1600px wide, JPEG 85%)
-      const { blob, mimeType: outMime } = file.size > 2 * 1024 * 1024
-        ? await compressImage(file, 1600, 0.85)
-        : { blob: file, mimeType: file.type }
+      // Always compress to keep API requests fast (max 1024px, JPEG 75%)
+      // GPT-4o vision reads detail well at this size, and request stays under ~500KB base64
+      const { blob, mimeType: outMime } = await compressImage(file, 1024, 0.75)
 
       const preview = URL.createObjectURL(blob)
       const base64 = await blobToBase64(blob)
@@ -293,7 +301,7 @@ export default function InputPanel({
           {isGenerating ? (
             <>
               <Loader2 className="h-4 w-4 animate-spin" />
-              <span>Đang tạo 3 kịch bản...</span>
+              <span>Đang tạo 3 kịch bản... ({elapsedSec}s)</span>
             </>
           ) : (
             <span>✏️ Tạo 3 kịch bản</span>
