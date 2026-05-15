@@ -405,7 +405,7 @@ export async function pollVideoJobUntilDone(params: {
 
 // ── Text Generation (kie.ai chat completions — OpenAI-compatible) ─────
 
-const TEXT_TIMEOUT_MS = 90_000 // 90s per model attempt
+const TEXT_TIMEOUT_MS = 60_000 // 60s per model attempt
 
 async function fetchWithTimeout(url: string, init: RequestInit, timeoutMs: number): Promise<Response> {
   const controller = new AbortController()
@@ -426,7 +426,8 @@ export async function kieTextGenerate(
   if (systemInstruction) messages.push({ role: 'system', content: systemInstruction })
   messages.push({ role: 'user', content: prompt })
 
-  const textModels = ['gpt-4o', 'gemini-2.5-flash', 'gpt-4o-mini']
+  // gemini-2.5-flash first: usually 3-5x faster than gpt-4o for text
+  const textModels = ['gemini-2.5-flash', 'gpt-4o-mini', 'gpt-4o']
   let lastError = ''
 
   for (const model of textModels) {
@@ -523,8 +524,9 @@ export async function kieAnalyzeImage(
     ],
   })
 
-  const visionModels = ['gpt-4o', 'gemini-2.5-flash', 'gpt-4o-mini']
-  const VISION_TIMEOUT_MS = 120_000 // 120s per model — vision is slower than text
+  // gemini-2.5-flash first: faster vision than gpt-4o on kie.ai
+  const visionModels = ['gemini-2.5-flash', 'gpt-4o-mini', 'gpt-4o']
+  const VISION_TIMEOUT_MS = 90_000 // 90s per model — vision is slower than text
   let lastError = ''
 
   for (const model of visionModels) {
