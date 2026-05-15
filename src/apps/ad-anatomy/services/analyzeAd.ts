@@ -15,13 +15,12 @@ const GEMINI_MODELS      = ['gemini-2.5-flash', 'gemini-2.5-flash-preview-05-20'
 
 // ── System instruction ────────────────────────────────────────────────────────
 
-const SYSTEM_INSTRUCTION = `Bạn là chuyên gia phân tích quảng cáo video ngắn. Phân tích video quảng cáo và trả về JSON có cấu trúc.
+const SYSTEM_INSTRUCTION = `QUAN TRỌNG NHẤT — NGÔN NGỮ: Toàn bộ nội dung phân tích PHẢI viết bằng TIẾNG VIỆT. TUYỆT ĐỐI KHÔNG được dùng tiếng Anh trong bất kỳ trường nào ngoại trừ:
+1. "transcript" — chép nguyên văn lời nói trong video (giữ đúng ngôn ngữ gốc: Malay/Anh/Việt)
+2. "visualPlaybook[].prompt" — prompt tạo ảnh AI (giữ tiếng Anh vì dùng cho AI image gen)
+TẤT CẢ các trường khác (analystNote, technique, whyItWorks, adaptableTemplate, pacing, beat description, primaryLevers, targetingSignals, visualPlaybook description, weakness, fix, reconstructionPrompt) PHẢI là tiếng Việt.
 
-NGÔN NGỮ OUTPUT: Viết TẤT CẢ nội dung phân tích bằng TIẾNG VIỆT — bao gồm analystNote, technique, whyItWorks, adaptableTemplate, pacing, beat descriptions, mô tả visual, weakness, fix, reconstructionPrompt. CHỈ giữ nguyên tiếng gốc cho trường "transcript" (chép lại lời thoại đúng ngôn ngữ nói trong video).
-
-QUY TẮC TRANSCRIPT: Chép lại ĐÚNG TỪNG TỪ lời nói trong audio — bất kể ngôn ngữ là Tiếng Anh, Tiếng Malay, hay Tiếng Việt. KHÔNG bao gồm chữ hiển thị trên màn hình, subtitle, caption, hay text overlay. CHỈ chép lời người thật nói ra. KHÔNG dùng mô tả trong ngoặc như "[Creator nói về sản phẩm]". Timestamps phải chính xác (0:00, 0:03, 0:07, v.v.).
-
-Output CHỈ là JSON hợp lệ — không markdown, không code fence, không giải thích:
+Bạn là chuyên gia phân tích quảng cáo video ngắn. Trả về JSON có cấu trúc sau — output CHỈ là JSON thuần, không markdown, không code fence:
 
 {
   "scorecard": {
@@ -32,39 +31,40 @@ Output CHỈ là JSON hợp lệ — không markdown, không code fence, không 
       { "label": "Persuasion Depth", "score": 6 },
       { "label": "Overall Execution", "score": 6 }
     ],
-    "analystNote": "Nhận xét 2-3 câu bằng tiếng Việt về chất lượng sáng tạo của quảng cáo."
+    "analystNote": "TIẾNG VIỆT: Nhận xét 2-3 câu về chất lượng sáng tạo của quảng cáo."
   },
   "transcript": [
-    { "timestamp": "0:00", "text": "lời thoại đúng ngôn ngữ gốc trong video" },
-    { "timestamp": "0:05", "text": "câu tiếp theo đúng nguyên văn" }
+    { "timestamp": "0:00", "text": "GIỮ NGUYÊN NGÔN NGỮ GỐC: lời nói thật từ audio, từng từ một" },
+    { "timestamp": "0:05", "text": "câu tiếp theo nguyên văn" }
   ],
   "hookBreakdown": {
     "hookText": "câu hook mở đầu nguyên văn",
-    "technique": "tên kỹ thuật hook (tiếng Việt)",
-    "whyItWorks": "giải thích tại sao hook này hiệu quả (tiếng Việt)",
-    "adaptableTemplate": "mẫu có thể điền vào cho sản phẩm khác (tiếng Việt)"
+    "technique": "TIẾNG VIỆT: tên kỹ thuật hook",
+    "whyItWorks": "TIẾNG VIỆT: giải thích tại sao hiệu quả",
+    "adaptableTemplate": "TIẾNG VIỆT: mẫu áp dụng cho sản phẩm khác"
   },
   "structureMap": {
     "runtime": "0:30",
-    "pacing": "mô tả nhịp độ bằng tiếng Việt",
+    "pacing": "TIẾNG VIỆT: mô tả nhịp độ",
     "beats": [
-      { "timestamp": "0:00–0:05", "beat": "Hook", "description": "mô tả đoạn này bằng tiếng Việt", "duration": "5s" }
+      { "timestamp": "0:00–0:05", "beat": "Hook", "description": "TIẾNG VIỆT: mô tả đoạn này", "duration": "5s" }
     ]
   },
   "psychology": {
-    "primaryLevers": ["đòn tâm lý 1 (tiếng Việt)", "đòn tâm lý 2"],
-    "targetingSignals": ["nhóm khách hàng mục tiêu 1 (tiếng Việt)", "nhóm 2"]
+    "primaryLevers": ["TIẾNG VIỆT: đòn tâm lý 1", "đòn tâm lý 2"],
+    "targetingSignals": ["TIẾNG VIỆT: nhóm khách hàng 1", "nhóm 2"]
   },
   "visualPlaybook": [
-    { "timestamp": "0:00–0:05", "description": "mô tả hình ảnh bằng tiếng Việt", "prompt": "image prompt tiếng Anh để tái tạo cảnh này" }
+    { "timestamp": "0:00–0:05", "description": "TIẾNG VIỆT: mô tả cảnh quay", "prompt": "ENGLISH ONLY: image gen prompt to recreate this scene" }
   ],
   "improvements": [
-    { "weakness": "điểm yếu của quảng cáo (tiếng Việt)", "fix": "cách khắc phục cụ thể (tiếng Việt)" }
+    { "weakness": "TIẾNG VIỆT: điểm yếu cụ thể", "fix": "TIẾNG VIỆT: cách khắc phục" }
   ],
-  "reconstructionPrompt": "Prompt chi tiết bằng tiếng Anh mô tả toàn bộ cấu trúc sáng tạo của quảng cáo này để có thể tái tạo cho sản phẩm bất kỳ."
+  "reconstructionPrompt": "TIẾNG VIỆT: Mô tả chi tiết toàn bộ cấu trúc sáng tạo của quảng cáo để tái tạo cho sản phẩm bất kỳ."
 }
 
-Điểm số dùng số nguyên 1-10. Hầu hết quảng cáo đạt 4-7. Chỉ cho 9-10 cho tác phẩm xuất sắc.`
+Điểm số: số nguyên 1-10. Phần lớn quảng cáo đạt 4-7. Chỉ cho 9-10 khi thực sự xuất sắc.
+NHẮC LẠI: Mọi trường ngoại trừ transcript và visualPlaybook.prompt PHẢI bằng TIẾNG VIỆT.`
 
 // ── Gemini Files API helpers ──────────────────────────────────────────────────
 
@@ -159,10 +159,10 @@ async function analyzeWithVideoFile(
         parts: [
           { fileData: { mimeType, fileUri } },
           {
-            text: 'Lắng nghe audio của video và chép lại ĐÚNG TỪNG TỪ lời nói — bất kể ngôn ngữ là Tiếng Anh, Tiếng Malay, hay Tiếng Việt. '
-              + 'KHÔNG bao gồm chữ hiển thị trên màn hình, subtitle, caption. Chỉ lời người thật nói. '
-              + 'Toàn bộ phân tích viết bằng Tiếng Việt (trừ transcript giữ nguyên ngôn ngữ gốc). '
-              + 'Trả về JSON phân tích đầy đủ.',
+            text: 'Phân tích video quảng cáo này.\n\n'
+              + 'TRANSCRIPT: Lắng nghe audio và chép lại ĐÚNG TỪNG TỪ lời người nói — bất kể ngôn ngữ Malay/Anh/Việt. KHÔNG chép chữ trên màn hình, subtitle, caption. Chỉ lời người thật nói.\n\n'
+              + 'NGÔN NGỮ OUTPUT: TOÀN BỘ nội dung phân tích (analystNote, technique, whyItWorks, adaptableTemplate, pacing, beat descriptions, description, primaryLevers, targetingSignals, weakness, fix, reconstructionPrompt) PHẢI viết bằng TIẾNG VIỆT. Chỉ trường transcript giữ nguyên ngôn ngữ gốc, và visualPlaybook.prompt giữ tiếng Anh.\n\n'
+              + 'Trả về JSON đầy đủ.',
           },
         ],
       }],
@@ -279,9 +279,10 @@ export async function analyzeAd(videoFile: File): Promise<AnalysisResult> {
       inlineData: { mimeType: 'image/jpeg', data: b64 },
     }))
     const textPart = {
-      text: `These are ${base64Frames.length} frames from a video ad (audio not available in this mode). `
-        + 'For transcript, extract only what is visible as on-screen text overlays — do not invent dialogue. '
-        + 'Return the full JSON analysis.',
+      text: `Đây là ${base64Frames.length} frame từ video quảng cáo (chế độ không có audio). `
+        + 'Transcript: chỉ chép chữ text overlay thực sự hiển thị trên màn hình, không bịa lời thoại. '
+        + 'NGÔN NGỮ OUTPUT: TOÀN BỘ phân tích PHẢI viết bằng TIẾNG VIỆT — analystNote, technique, whyItWorks, adaptableTemplate, pacing, descriptions, primaryLevers, targetingSignals, weakness, fix, reconstructionPrompt đều bằng tiếng Việt. Chỉ visualPlaybook.prompt giữ tiếng Anh. '
+        + 'Trả về JSON đầy đủ.',
     }
 
     responseText = await directGeminiVision({
