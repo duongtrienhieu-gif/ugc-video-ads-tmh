@@ -22,6 +22,7 @@ export default function VoiceStudio() {
   const history = useBankStore((s) => s.voiceHistory)
   const addVoiceHistory = useBankStore((s) => s.addVoiceHistory)
   const deleteVoiceHistory = useBankStore((s) => s.deleteVoiceHistory)
+  const addToast = useAppStore((s) => s.addToast)
 
   const interAppPayload = useAppStore((s) => s.interAppPayload)
   const consumePayload = useAppStore((s) => s.consumePayload)
@@ -75,8 +76,10 @@ export default function VoiceStudio() {
     try {
       const item = await generateVoice(settings, scriptText)
       addVoiceHistory(item)
-    } catch {
-      // Will improve with real API
+      addToast('Đã tạo giọng đọc')
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      addToast(`Tạo giọng đọc thất bại: ${msg}`, 'error')
     } finally {
       setIsGenerating(false)
     }
