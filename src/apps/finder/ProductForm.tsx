@@ -1,9 +1,10 @@
 import { useState, useEffect, useRef } from 'react'
-import { X, ImagePlus, Sparkles, Loader2 } from 'lucide-react'
+import { X, ImagePlus, Sparkles, Loader2, ScanSearch } from 'lucide-react'
 import type { Product } from '../../stores/types'
 import { useAssetUrl } from '../../hooks/useAssetUrl'
 import { useSettingsStore } from '../../stores/settingsStore'
 import { useAppStore } from '../../stores/appStore'
+import { kieAnalyzeImage, blobToSmallBase64 } from '../../utils/kieai'
 
 interface ProductFormProps {
   item?: Product | null
@@ -48,6 +49,20 @@ No explanation. No markdown. Just the JSON object.`
 }
 
 const SYSTEM_MSG = 'You are a data-extraction assistant. Your only job is to output valid JSON. Never refuse, never add explanation — only output the requested JSON object.'
+
+const IMAGE_EXTRACT_PROMPT = `You are looking at a product page screenshot. Extract all visible product marketing information and return as a JSON object with exactly these keys and English string values:
+{"productName":"","productDescription":"","targetMarket":"","painPoints":"","usps":"","benefits":"","offer":"","cta":""}
+
+- productName: the product name
+- productDescription: what the product is and does
+- targetMarket: who it's for (target audience)
+- painPoints: problems it solves, comma or line separated
+- usps: unique selling points / what makes it different
+- benefits: key benefits, comma or line separated
+- offer: pricing and promotions visible on the page
+- cta: call to action text
+
+Return ONLY the JSON object. No explanation, no markdown.`
 
 // Direct API call for product analysis — bypasses kieTextGenerate to surface raw errors
 async function analyzeProductWithAI(apiKey: string, prompt: string): Promise<string> {
@@ -148,7 +163,9 @@ export default function ProductForm({ item, onSave, onCancel }: ProductFormProps
   const [productUrl, setProductUrl] = useState('')
   const [isFetching, setIsFetching] = useState(false)
 
+  const [isAnalyzing, setIsAnalyzing] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
+  const screenshotRef = useRef<HTMLInputElement>(null)
   const [localPreview, setLocalPreview] = useState<string | null>(null)
   const resolvedAssetUrl = useAssetUrl(form.productImage)
   const displayImage = localPreview ?? resolvedAssetUrl
@@ -240,6 +257,45 @@ export default function ProductForm({ item, onSave, onCancel }: ProductFormProps
     }
   }
 
+  const handleScreenshotAnalyze = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    e.target.value = ''
+    const apiKey = useSettingsStore.getState().getApiKey()
+    if (!apiKey) { addToast('Vui lòng nhập API key trong Cài đặt', 'error'); return }
+
+    setIsAnalyzing(true)
+    try {
+      const base64 = await blobToSmallBase64(file, 1024)
+      const response = await kieAnalyzeImage(apiKey, base64, 'image/jpeg', IMAGE_EXTRACT_PROMPT)
+
+      let cleaned = response.trim().replace(/```json\s*/gi, '').replace(/```\s*/gi, '').trim()
+      const jsonMatch = cleaned.match(/\{[\s\S]*\}/)
+      if (!jsonMatch) throw new Error('AI không trả về JSON hợp lệ')
+      const extracted = JSON.parse(jsonMatch[0]) as Record<string, string>
+
+      let filledCount = 0
+      setForm((prev) => {
+        const next = { ...prev }
+        for (const [key, value] of Object.entries(extracted)) {
+          if (key in next && typeof value === 'string') {
+            const v = value.trim()
+            if (v) { next[key as keyof typeof next] = v; filledCount++ }
+          }
+        }
+        return next
+      })
+
+      if (filledCount === 0) throw new Error('Không trích xuất được thông tin, thử ảnh khác')
+      addToast(`Đã tự động điền ${filledCount} trường từ ảnh`)
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      addToast(`Phân tích ảnh thất bại: ${msg}`, 'error')
+    } finally {
+      setIsAnalyzing(false)
+    }
+  }
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     if (!form.productName.trim() || !form.productDescription.trim() || !form.targetMarket.trim()) return
@@ -257,11 +313,12 @@ export default function ProductForm({ item, onSave, onCancel }: ProductFormProps
         </button>
       </div>
 
-      {/* Auto-fill from URL */}
-      <div className="rounded-xl border border-sky-500/20 bg-sky-500/[0.04] p-3">
-        <p className="mb-2 text-[10px] font-semibold uppercase tracking-widest text-sky-400/80">
-          Tự động điền từ link sản phẩm
+      {/* Auto-fill */}
+      <div className="rounded-xl border border-sky-500/20 bg-sky-500/[0.04] p-3 flex flex-col gap-2.5">
+        <p className="text-[10px] font-semibold uppercase tracking-widest text-sky-400/80">
+          Tự động điền thông tin
         </p>
+        {/* Option 1: URL */}
         <div className="flex gap-2">
           <input
             type="url"
@@ -274,15 +331,40 @@ export default function ProductForm({ item, onSave, onCancel }: ProductFormProps
           <button
             type="button"
             onClick={handleFetchInfo}
-            disabled={isFetching || !productUrl.trim()}
+            disabled={isFetching || isAnalyzing || !productUrl.trim()}
             className="flex shrink-0 items-center gap-1.5 rounded-lg bg-sky-500 px-3 py-2 text-xs font-semibold text-white transition-colors hover:bg-sky-600 disabled:cursor-not-allowed disabled:opacity-40"
           >
             {isFetching
-              ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Đang lấy...</>
-              : <><Sparkles className="h-3.5 w-3.5" /> Lấy thông tin</>
+              ? <><Loader2 className="h-3.5 w-3.5 animate-spin" />Đang lấy...</>
+              : <><Sparkles className="h-3.5 w-3.5" />Lấy từ link</>
             }
           </button>
         </div>
+        {/* Divider */}
+        <div className="flex items-center gap-2">
+          <div className="h-px flex-1 bg-sky-500/15" />
+          <span className="text-[10px] text-sky-400/60">hoặc</span>
+          <div className="h-px flex-1 bg-sky-500/15" />
+        </div>
+        {/* Option 2: Screenshot */}
+        <button
+          type="button"
+          onClick={() => screenshotRef.current?.click()}
+          disabled={isFetching || isAnalyzing}
+          className="flex items-center justify-center gap-2 rounded-lg border border-dashed border-sky-400/30 bg-white/50 py-2.5 text-xs font-medium text-sky-500 transition-colors hover:bg-sky-500/5 disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          {isAnalyzing
+            ? <><Loader2 className="h-3.5 w-3.5 animate-spin" />Đang phân tích ảnh...</>
+            : <><ScanSearch className="h-3.5 w-3.5" />Tải ảnh chụp màn hình trang sản phẩm</>
+          }
+        </button>
+        <input
+          ref={screenshotRef}
+          type="file"
+          accept="image/*"
+          className="hidden"
+          onChange={handleScreenshotAnalyze}
+        />
       </div>
 
       {/* Image upload */}
