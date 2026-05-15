@@ -205,8 +205,12 @@ export async function textToSpeech(params: {
     } catch {/* keep raw */}
 
     if (res.status === 401) {
-      if (detail.toLowerCase().includes('quota')) throw new Error('Đã hết credit ElevenLabs — đợi reset tháng sau hoặc upgrade gói')
-      if (detail.toLowerCase().includes('invalid')) throw new Error('API key ElevenLabs không hợp lệ — kiểm tra lại key trong Cài đặt')
+      const lower = detail.toLowerCase()
+      if (lower.includes('detected_unusual_activity') || lower.includes('free tier usage disabled')) {
+        throw new Error('Key bị ElevenLabs khóa Free Tier (anti-abuse). Đây là key bulk tạo bằng tool — không generate được. Cần: (1) đổi key khác từ shop, hoặc (2) đăng ký Starter $5/mo trực tiếp tại elevenlabs.io.')
+      }
+      if (lower.includes('quota') || lower.includes('limit')) throw new Error('Đã hết credit ElevenLabs — đợi reset tháng sau hoặc upgrade gói.')
+      if (lower.includes('invalid')) throw new Error('API key ElevenLabs không hợp lệ — kiểm tra lại key trong Cài đặt.')
       throw new Error(`Không xác thực được: ${detail.slice(0, 200)}`)
     }
     if (res.status === 422) throw new Error(`Tham số không hợp lệ: ${detail.slice(0, 200)}`)
