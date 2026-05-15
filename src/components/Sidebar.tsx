@@ -60,7 +60,7 @@ export default function Sidebar({ activeApp, onNavigate }: SidebarProps) {
 
   return (
     <>
-      <aside className="flex h-full w-16 shrink-0 flex-col border-r border-black/10 bg-[#FAFAFA] shadow-[1px_0_0_0_rgba(0,0,0,0.04)]">
+      <aside className="flex h-full w-[72px] shrink-0 flex-col border-r border-black/10 bg-[#FAFAFA] shadow-[1px_0_0_0_rgba(0,0,0,0.04)]">
         {/* Logo */}
         <div className="flex h-16 shrink-0 items-center justify-center">
           <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-black/[0.05]">
@@ -81,12 +81,12 @@ export default function Sidebar({ activeApp, onNavigate }: SidebarProps) {
                 }`}
               >
                 <Icon
-                  className={`h-5 w-5 transition-colors ${isActive ? 'text-gray-900' : 'text-gray-500'}`}
-                  strokeWidth={isActive ? 2 : 1.5}
+                  className={`h-[18px] w-[18px] transition-colors ${isActive ? 'text-gray-900' : 'text-gray-500'}`}
+                  strokeWidth={isActive ? 2.5 : 2}
                 />
                 <span
-                  className={`w-full text-center text-[9px] leading-tight transition-colors ${
-                    isActive ? 'text-gray-900' : 'text-gray-500'
+                  className={`w-full text-center text-[10px] font-bold leading-tight tracking-tight transition-colors ${
+                    isActive ? 'text-gray-900' : 'text-gray-600'
                   }`}
                 >
                   {label}
@@ -109,13 +109,13 @@ export default function Sidebar({ activeApp, onNavigate }: SidebarProps) {
                 <RefreshCw className={`h-2.5 w-2.5 text-indigo-400 ${refreshing ? 'animate-spin' : ''}`} />
               </div>
               {kieCredits !== null ? (
-                <span className="w-full text-center text-[8px] font-semibold leading-tight text-indigo-500 tabular-nums">
+                <span className="w-full text-center text-[9px] font-bold leading-tight text-indigo-500 tabular-nums">
                   {kieCredits % 1 === 0
                     ? kieCredits.toLocaleString('vi-VN')
                     : kieCredits.toFixed(2)} Credit
                 </span>
               ) : (
-                <span className="text-[8px] text-gray-400">-- Credit</span>
+                <span className="text-[9px] font-bold text-gray-400">-- Credit</span>
               )}
             </button>
           )}
@@ -125,16 +125,16 @@ export default function Sidebar({ activeApp, onNavigate }: SidebarProps) {
             title="Chẩn đoán dữ liệu"
             className="flex w-full flex-col items-center gap-1 rounded-lg py-2 transition-colors hover:bg-amber-500/10"
           >
-            <Activity className="h-5 w-5 text-amber-500" strokeWidth={1.5} />
-            <span className="text-[9px] leading-tight text-amber-500">Chẩn đoán</span>
+            <Activity className="h-[18px] w-[18px] text-amber-500" strokeWidth={2} />
+            <span className="text-[10px] font-bold leading-tight text-amber-500">Chẩn đoán</span>
           </button>
 
           <button
             onClick={() => setSettingsOpen(true)}
             className="flex w-full flex-col items-center gap-1 rounded-lg py-2 transition-colors hover:bg-black/5"
           >
-            <Settings className="h-5 w-5 text-gray-500" strokeWidth={1.5} />
-            <span className="text-[9px] leading-tight text-gray-500">Cài đặt</span>
+            <Settings className="h-[18px] w-[18px] text-gray-500" strokeWidth={2} />
+            <span className="text-[10px] font-bold leading-tight text-gray-600">Cài đặt</span>
           </button>
 
           {/* User info + logout */}

@@ -11,21 +11,28 @@ body,
   margin: 0;
   padding: 0;
   overflow: hidden;
-  font-family: 'Be Vietnam Pro', ui-sans-serif, system-ui, -apple-system, sans-serif;
-  letter-spacing: -0.01em;
+  font-family: 'Plus Jakarta Sans', ui-sans-serif, system-ui, -apple-system, sans-serif;
+  font-weight: 600;
+  letter-spacing: -0.015em;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   background-color: #EEEEF2;
-  color: #111827;
+  color: #0f0f0f;
 }
 
-/* Form inputs — light weight, tight tracking */
+/* Form inputs */
 input,
 textarea,
 select {
-  font-family: 'Be Vietnam Pro', ui-sans-serif, system-ui, -apple-system, sans-serif;
-  font-weight: 300;
-  letter-spacing: -0.025em;
+  font-family: 'Plus Jakarta Sans', ui-sans-serif, system-ui, -apple-system, sans-serif;
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  color: #0f0f0f;
+}
+
+/* Ensure all text elements inherit bold weight */
+p, span, div, label, button, a, li, td, th, h1, h2, h3, h4, h5, h6 {
+  font-weight: inherit;
 }
 
 /* Prevent iOS auto-zoom on input focus (triggers when font-size < 16px) */
