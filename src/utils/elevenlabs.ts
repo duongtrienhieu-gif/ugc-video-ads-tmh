@@ -65,6 +65,86 @@ export async function cloneVoice(params: {
   return data.voice_id
 }
 
+// ─── Voice Library (shared voices) ─────────────────────────────────────
+
+export interface SharedVoice {
+  public_owner_id: string
+  voice_id: string
+  name: string
+  category: string
+  language: string
+  accent?: string
+  gender?: string
+  age?: string
+  preview_url?: string
+  description?: string
+  use_case?: string
+  descriptive?: string
+  cloned_by_count?: number
+  free_users_allowed?: boolean
+}
+
+interface SharedVoicesResponse {
+  voices: SharedVoice[]
+  has_more: boolean
+}
+
+/** Browse the public Voice Library (shared voices). Free tier can add these. */
+export async function listSharedVoices(params: {
+  apiKey: string
+  language?: string         // 'ms', 'en', etc.
+  accent?: string           // 'malaysian', 'american', etc.
+  gender?: 'male' | 'female'
+  search?: string
+  category?: string         // 'professional', 'high_quality', 'famous'
+  sort?: 'cloned_by_count' | 'created_at_unix'
+  pageSize?: number
+}): Promise<SharedVoice[]> {
+  const q = new URLSearchParams()
+  if (params.language) q.set('language', params.language)
+  if (params.accent) q.set('accent', params.accent)
+  if (params.gender) q.set('gender', params.gender)
+  if (params.search) q.set('search', params.search)
+  if (params.category) q.set('category', params.category)
+  q.set('sort', params.sort ?? 'cloned_by_count')
+  q.set('page_size', String(params.pageSize ?? 30))
+
+  const res = await fetch(`${EL_BASE}/shared-voices?${q.toString()}`, {
+    headers: { 'xi-api-key': params.apiKey },
+  })
+  if (!res.ok) {
+    const err = await res.text().catch(() => res.statusText)
+    throw new Error(`Voice Library lỗi (${res.status}): ${err.slice(0, 150)}`)
+  }
+  const data = (await res.json()) as SharedVoicesResponse
+  return data.voices ?? []
+}
+
+/** Add a shared voice from Voice Library to "My Voices". Free tier OK. */
+export async function addSharedVoice(params: {
+  apiKey: string
+  publicOwnerId: string
+  voiceId: string
+  newName: string
+}): Promise<string> {
+  const res = await fetch(`${EL_BASE}/voices/add/${params.publicOwnerId}/${params.voiceId}`, {
+    method: 'POST',
+    headers: {
+      'xi-api-key': params.apiKey,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ new_name: params.newName }),
+  })
+  if (!res.ok) {
+    const err = await res.text().catch(() => res.statusText)
+    if (res.status === 401) throw new Error('API key không hợp lệ')
+    if (res.status === 402 || res.status === 403) throw new Error('Đã đạt giới hạn số giọng. Xóa bớt giọng cũ hoặc upgrade gói.')
+    throw new Error(`Thêm giọng thất bại (${res.status}): ${err.slice(0, 150)}`)
+  }
+  const data = (await res.json()) as { voice_id: string }
+  return data.voice_id
+}
+
 /** Delete a cloned voice */
 export async function deleteVoice(apiKey: string, voiceId: string): Promise<void> {
   const res = await fetch(`${EL_BASE}/voices/${voiceId}`, {

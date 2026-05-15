@@ -9,6 +9,7 @@ import ControlsSidebar from './components/ControlsSidebar'
 import EditorPanel from './components/EditorPanel'
 import HistoryPanel from './components/HistoryPanel'
 import CloneVoiceModal from './components/CloneVoiceModal'
+import VoiceLibraryModal from './components/VoiceLibraryModal'
 import BankPicker from '../../components/BankPicker'
 
 type PickerMode = 'voices' | 'scripts' | null
@@ -19,6 +20,7 @@ export default function VoiceStudio() {
   const [isGenerating, setIsGenerating] = useState(false)
   const [pickerMode, setPickerMode] = useState<PickerMode>(null)
   const [cloneOpen, setCloneOpen] = useState(false)
+  const [libraryOpen, setLibraryOpen] = useState(false)
   const [voicesRefreshKey, setVoicesRefreshKey] = useState(0)
   const [highlightField, setHighlightField] = useState<string | null>(null)
 
@@ -109,6 +111,7 @@ export default function VoiceStudio() {
           onSettingsChange={handleSettingsChange}
           onLoadPreset={() => setPickerMode('voices')}
           onOpenClone={() => setCloneOpen(true)}
+          onOpenLibrary={() => setLibraryOpen(true)}
           refreshKey={voicesRefreshKey}
         />
       </div>
@@ -141,6 +144,13 @@ export default function VoiceStudio() {
         open={cloneOpen}
         onClose={() => setCloneOpen(false)}
         onCloned={handleCloned}
+      />
+
+      {/* Voice Library Modal */}
+      <VoiceLibraryModal
+        open={libraryOpen}
+        onClose={() => setLibraryOpen(false)}
+        onAdded={handleCloned}
       />
 
       {/* Bank Pickers */}
