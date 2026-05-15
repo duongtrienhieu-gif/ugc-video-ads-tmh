@@ -249,6 +249,7 @@ export default function BankList({ bankType, onEdit, onAdd }: BankListProps) {
         {products.map((p) => (
           <ProductCard key={p.id} item={p} onEdit={() => onEdit(p.id)} onDelete={() => deleteProduct(p.id)} />
         ))}
+        <AddCard label="Sản phẩm mới" onAdd={onAdd} />
       </div>
     )
   }
@@ -260,6 +261,7 @@ export default function BankList({ bankType, onEdit, onAdd }: BankListProps) {
         {models.map((m) => (
           <ModelCard key={m.id} item={m} onEdit={() => onEdit(m.id)} onDelete={() => deleteModel(m.id)} />
         ))}
+        <AddCard label="Nhân vật mới" onAdd={onAdd} />
       </div>
     )
   }
@@ -296,6 +298,20 @@ export default function BankList({ bankType, onEdit, onAdd }: BankListProps) {
         </div>
       ))}
     </div>
+  )
+}
+
+function AddCard({ label, onAdd }: { label: string; onAdd: () => void }) {
+  return (
+    <button
+      onClick={onAdd}
+      className="flex flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-black/15 bg-transparent aspect-square w-full transition-colors hover:border-black/25 hover:bg-black/[0.02]"
+    >
+      <div className="flex h-8 w-8 items-center justify-center rounded-full bg-black/[0.05]">
+        <Plus className="h-4 w-4 text-gray-400" />
+      </div>
+      <span className="text-[11px] font-medium text-gray-400">{label}</span>
+    </button>
   )
 }
 
