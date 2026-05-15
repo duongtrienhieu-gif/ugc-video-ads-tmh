@@ -149,6 +149,9 @@ export async function addSharedVoice(params: {
   voiceId: string
   newName: string
 }): Promise<string> {
+  if (!params.apiKey) throw new Error('Vui lòng nhập ElevenLabs API key trong Cài đặt')
+  if (!params.publicOwnerId) throw new Error('Thiếu publicOwnerId — thử tải lại danh sách giọng')
+
   const res = await fetch(`${EL_BASE}/voices/add/${params.publicOwnerId}/${params.voiceId}`, {
     method: 'POST',
     headers: {
@@ -157,13 +160,38 @@ export async function addSharedVoice(params: {
     },
     body: JSON.stringify({ new_name: params.newName }),
   })
+
   if (!res.ok) {
     const err = await res.text().catch(() => res.statusText)
-    if (res.status === 401) throw new Error('API key không hợp lệ')
-    if (res.status === 402 || res.status === 403) throw new Error('Đã đạt giới hạn số giọng. Xóa bớt giọng cũ hoặc upgrade gói.')
-    throw new Error(`Thêm giọng thất bại (${res.status}): ${err.slice(0, 150)}`)
+
+    // Parse ElevenLabs JSON error body for specific message
+    let detail = err
+    try {
+      const parsed = JSON.parse(err) as { detail?: { status?: string; message?: string } | string }
+      if (typeof parsed.detail === 'object' && parsed.detail) {
+        detail = `${parsed.detail.status ?? ''} ${parsed.detail.message ?? ''}`.trim()
+      } else if (typeof parsed.detail === 'string') {
+        detail = parsed.detail
+      }
+    } catch {/* keep raw */}
+
+    if (res.status === 401) {
+      const lower = detail.toLowerCase()
+      if (lower.includes('detected_unusual_activity') || lower.includes('free_tier_usage_disabled') || lower.includes('free tier')) {
+        throw new Error('Key ElevenLabs bị khóa (anti-abuse). Key mua từ shop không dùng được cho thao tác này. Cần key cá nhân hoặc đăng ký Starter $5/mo tại elevenlabs.io.')
+      }
+      if (lower.includes('quota') || lower.includes('limit')) throw new Error('Đã hết credit ElevenLabs — đợi reset tháng sau hoặc upgrade gói.')
+      throw new Error(`API key ElevenLabs không hợp lệ — kiểm tra lại key trong Cài đặt. (${detail.slice(0, 100)})`)
+    }
+    if (res.status === 402 || res.status === 403) {
+      throw new Error('Đã đạt giới hạn số giọng cho gói hiện tại. Xóa bớt giọng cũ hoặc upgrade gói ElevenLabs.')
+    }
+    if (res.status === 404) throw new Error('Giọng không tồn tại hoặc đã bị xóa khỏi thư viện')
+    throw new Error(`Thêm giọng thất bại (${res.status}): ${detail.slice(0, 150)}`)
   }
-  const data = (await res.json()) as { voice_id: string }
+
+  const data = (await res.json()) as { voice_id?: string }
+  if (!data.voice_id) throw new Error('ElevenLabs không trả về voice_id — thử lại')
   return data.voice_id
 }
 
