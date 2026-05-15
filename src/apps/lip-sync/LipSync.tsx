@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from 'react'
 import {
   Mic, Video, Upload, Database, Play, Pause,
   Loader2, Download, Trash2, User, AlertTriangle,
-  ChevronDown, Star, Sparkles, X,
+  ChevronDown, Star, Sparkles, X, RefreshCw, Info,
 } from 'lucide-react'
 import {
   listVoices, listSharedVoices, textToSpeech,
@@ -49,6 +49,18 @@ Rules:
 - Use tags sparingly — only where the emotional tone clearly changes or needs emphasis
 - NEVER add, remove, or modify any original words — only INSERT tags
 - Do NOT add explanations, notes, or markdown — return ONLY the modified script text`
+
+// ── Detect content-moderation failure from Kling ─────────────────────────────
+function isContentViolation(msg: string): boolean {
+  const lower = msg.toLowerCase()
+  return (
+    lower.includes('community guidelines') ||
+    lower.includes('violate') ||
+    lower.includes('content policy') ||
+    lower.includes('inappropriate') ||
+    lower.includes('unsafe')
+  )
+}
 
 // ── Status badge ──────────────────────────────────────────────────────────────
 
@@ -355,6 +367,7 @@ export default function LipSync() {
       let toastMsg = `Tạo video thất bại: ${msg}`
       if (msg === 'INSUFFICIENT_CREDITS') toastMsg = 'Không đủ Credit kie.ai'
       if (msg === 'TIMEOUT')              toastMsg = 'Quá thời gian tạo video — thử lại sau'
+      if (isContentViolation(msg))        toastMsg = 'Kling từ chối nội dung — xem gợi ý bên dưới kết quả'
       addToast(toastMsg, 'error')
       setHistory((prev) =>
         prev.map((h) => (h.id === historyId ? { ...h, status: 'failed' as VideoStatus, errorMessage: msg } : h)),
@@ -380,6 +393,87 @@ export default function LipSync() {
     document.body.appendChild(a)
     a.click()
     document.body.removeChild(a)
+  }
+
+  // Retry a failed item with a different model (e.g. InfiniteTalk after Kling fails)
+  const handleRetryWithModel = async (failedItem: LipSyncHistoryItem, modelId: string) => {
+    if (!characterAssetId || !audioAssetId || !kieApiKey) return
+    const retryModel = LIPSYNC_MODELS.find((m) => m.id === modelId)
+    if (!retryModel) return
+
+    setIsGenerating(true)
+    const historyId = crypto.randomUUID()
+    const newItem: LipSyncHistoryItem = {
+      id: historyId,
+      imageUrl:   failedItem.imageUrl,
+      audioUrl:   failedItem.audioUrl,
+      videoUrl:   null,
+      scriptText: failedItem.scriptText,
+      voiceName:  failedItem.voiceName,
+      modelName:  retryModel.name,
+      status:     'pending',
+      taskId:     '',
+      createdAt:  Date.now(),
+    }
+    setHistory((prev) => [newItem, ...prev])
+
+    try {
+      // Resolve image URL
+      let imagePublicUrl: string
+      if (isAssetRef(characterAssetId)) {
+        const url = await getUrl(characterAssetId)
+        if (!url) throw new Error('Không lấy được URL ảnh nhân vật')
+        imagePublicUrl = url
+      } else if (characterAssetId.startsWith('data:')) {
+        const resp    = await fetch(characterAssetId)
+        const blob    = await resp.blob()
+        const savedId = await saveAsset(blob, blob.type || 'image/jpeg')
+        const url     = await getUrl(savedId)
+        if (!url) throw new Error('Không lấy được URL ảnh sau khi lưu')
+        setCharacterAssetId(savedId)
+        imagePublicUrl = url
+      } else {
+        imagePublicUrl = characterAssetId
+      }
+
+      const audioPublicUrl = await getUrl(audioAssetId)
+      if (!audioPublicUrl) throw new Error('Không lấy được URL audio')
+
+      const { taskId } = await generateLipSync({
+        apiKey:     kieApiKey,
+        modelId:    retryModel.modelId,
+        imageUrl:   imagePublicUrl,
+        audioUrl:   audioPublicUrl,
+        prompt:     'Natural lip-sync, realistic facial expressions, smooth head motion, high quality',
+        resolution: retryModel.supportsResolution ? '720p' : undefined,
+      })
+
+      setHistory((prev) =>
+        prev.map((h) => (h.id === historyId ? { ...h, taskId, status: 'processing' as VideoStatus } : h)),
+      )
+
+      const videoUrl = await pollLipSyncUntilDone({
+        apiKey: kieApiKey,
+        taskId,
+        onStatusChange: (status) => {
+          setHistory((prev) => prev.map((h) => (h.id === historyId ? { ...h, status } : h)))
+        },
+        timeoutMs: 8 * 60 * 1000,
+      })
+
+      setHistory((prev) =>
+        prev.map((h) => (h.id === historyId ? { ...h, videoUrl, status: 'completed' as VideoStatus } : h)),
+      )
+      addToast('Tạo video lip-sync thành công!')
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      addToast(`Tạo video thất bại: ${msg}`, 'error')
+      setHistory((prev) =>
+        prev.map((h) => (h.id === historyId ? { ...h, status: 'failed' as VideoStatus, errorMessage: msg } : h)),
+      )
+    } finally {
+      setIsGenerating(false)
+    }
   }
 
   const canGenerateVideo = !!characterAssetId && !!audioAssetId && !isGenerating
@@ -661,6 +755,16 @@ export default function LipSync() {
                 </div>
               )}
 
+              {/* Kling Avatar Standard requirements tip */}
+              {selectedModel.id === 'kling-avatar-std' && (
+                <div className="mt-2 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-2">
+                  <Info className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-500" />
+                  <p className="text-[10px] leading-relaxed text-amber-700">
+                    Kling yêu cầu <strong>ảnh mặt thẳng, rõ nét</strong>. Ảnh góc nghiêng, đeo kính, hoặc mờ sẽ bị từ chối và <strong>vẫn tốn credit</strong>. Không chắc → dùng InfiniteTalk.
+                  </p>
+                </div>
+              )}
+
               {/* Resolution (InfiniteTalk only) */}
               {selectedModel.supportsResolution && (
                 <div className="mt-2">
@@ -804,9 +908,35 @@ export default function LipSync() {
                       <p className="mb-2.5 line-clamp-2 text-[11px] leading-relaxed text-gray-400">{item.scriptText}</p>
 
                       {item.status === 'failed' && item.errorMessage && (
-                        <p className="mb-2 rounded-lg bg-red-50 px-2 py-1.5 text-[11px] text-red-500">
-                          {item.errorMessage}
-                        </p>
+                        <div className="mb-2">
+                          {isContentViolation(item.errorMessage) ? (
+                            <div className="rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-2">
+                              <div className="flex items-start gap-1.5 mb-1.5">
+                                <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-500" />
+                                <p className="text-[11px] font-medium text-amber-700">
+                                  Kling từ chối vì vi phạm nội dung
+                                </p>
+                              </div>
+                              <p className="text-[10px] text-amber-600 leading-relaxed mb-2">
+                                Ảnh cần thẳng mặt, rõ nét. Nội dung script/ảnh có thể bị lọc. Thử lại với InfiniteTalk — ít nghiêm ngặt hơn.
+                              </p>
+                              {item.modelName !== 'InfiniteTalk' && (
+                                <button
+                                  onClick={() => handleRetryWithModel(item, 'infinitalk')}
+                                  disabled={isGenerating}
+                                  className="flex items-center gap-1.5 rounded-md bg-amber-500 px-3 py-1.5 text-[11px] font-semibold text-white transition-colors hover:bg-amber-600 disabled:opacity-50"
+                                >
+                                  <RefreshCw className="h-3 w-3" />
+                                  Thử lại với InfiniteTalk
+                                </button>
+                              )}
+                            </div>
+                          ) : (
+                            <p className="rounded-lg bg-red-50 px-2 py-1.5 text-[11px] text-red-500">
+                              {item.errorMessage}
+                            </p>
+                          )}
+                        </div>
                       )}
 
                       <div className="flex items-center gap-1.5">
