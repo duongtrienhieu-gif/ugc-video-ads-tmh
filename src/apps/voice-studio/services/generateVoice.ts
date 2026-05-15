@@ -15,7 +15,7 @@ export async function generateVoice(
   settings: VoiceSettings,
   scriptText: string,
 ): Promise<VoiceHistoryItem> {
-  const apiKey = useSettingsStore.getState().getGeminiApiKey()
+  const apiKey = useSettingsStore.getState().getGoogleTtsApiKey()
 
   // Map friendly name → Google voice ID
   const voice = VOICES.find((v) => v.name === settings.voiceName)

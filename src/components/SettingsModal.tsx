@@ -13,29 +13,35 @@ interface SettingsModalProps {
 }
 
 export default function SettingsModal({ open, onClose }: SettingsModalProps) {
-  const { kieApiKey, geminiApiKey, kieCredits, setKieApiKey, setGeminiApiKey, setKieCredits } = useSettingsStore()
+  const { kieApiKey, geminiApiKey, googleTtsApiKey, kieCredits, setKieApiKey, setGeminiApiKey, setGoogleTtsApiKey, setKieCredits } = useSettingsStore()
   const addToast = useAppStore((s) => s.addToast)
 
   const [draftKie, setDraftKie] = useState(kieApiKey)
   const [draftGemini, setDraftGemini] = useState(geminiApiKey)
+  const [draftTts, setDraftTts] = useState(googleTtsApiKey)
   const [show, setShow] = useState(false)
   const [showGemini, setShowGemini] = useState(false)
+  const [showTts, setShowTts] = useState(false)
   const [saved, setSaved] = useState(false)
   const [cleaning, setCleaning] = useState(false)
   const [testing, setTesting] = useState(false)
   const [testResult, setTestResult] = useState<{ ok: boolean; credits?: number; error?: string } | null>(null)
   const [testingGemini, setTestingGemini] = useState(false)
   const [geminiTestResult, setGeminiTestResult] = useState<{ ok: boolean; error?: string } | null>(null)
+  const [testingTts, setTestingTts] = useState(false)
+  const [ttsTestResult, setTtsTestResult] = useState<{ ok: boolean; error?: string } | null>(null)
 
   useEffect(() => {
     if (open) {
       setDraftKie(kieApiKey)
       setDraftGemini(geminiApiKey)
+      setDraftTts(googleTtsApiKey)
       setSaved(false)
       setTestResult(null)
       setGeminiTestResult(null)
+      setTtsTestResult(null)
     }
-  }, [open, kieApiKey, geminiApiKey])
+  }, [open, kieApiKey, geminiApiKey, googleTtsApiKey])
 
   if (!open) return null
 
@@ -71,10 +77,34 @@ export default function SettingsModal({ open, onClose }: SettingsModalProps) {
     }
   }
 
+  async function handleTestTts() {
+    const key = draftTts.trim() || draftGemini.trim()
+    if (!key) { addToast('Vui lòng nhập Cloud TTS API key trước', 'error'); return }
+    setTestingTts(true)
+    setTtsTestResult(null)
+    try {
+      const res = await fetch(`https://texttospeech.googleapis.com/v1/voices?key=${key}&languageCode=ms-MY`)
+      if (!res.ok) {
+        const errText = await res.text().catch(() => res.statusText)
+        if (res.status === 403) throw new Error('Key không truy cập được Cloud TTS. Kiểm tra: API đã enable trong project và key không bị restrict.')
+        throw new Error(`Lỗi ${res.status}: ${errText.slice(0, 120)}`)
+      }
+      const data = await res.json() as { voices?: unknown[] }
+      const count = data.voices?.length ?? 0
+      if (count === 0) throw new Error('Không tìm thấy giọng ms-MY')
+      setTtsTestResult({ ok: true })
+    } catch (e) {
+      setTtsTestResult({ ok: false, error: e instanceof Error ? e.message : 'Kết nối thất bại' })
+    } finally {
+      setTestingTts(false)
+    }
+  }
+
   async function handleSave() {
     const key = draftKie.trim()
     setKieApiKey(key)
     setGeminiApiKey(draftGemini.trim())
+    setGoogleTtsApiKey(draftTts.trim())
     setSaved(true)
     addToast('Đã lưu cài đặt thành công')
     // Auto-test after save to refresh credits
@@ -298,6 +328,81 @@ export default function SettingsModal({ open, onClose }: SettingsModalProps) {
               )}
             </div>
           </div>{/* end Gemini box */}
+
+          {/* ── GOOGLE CLOUD TTS ─────────────────────────────── */}
+          <div className="rounded-xl border border-sky-100 bg-sky-50/40 p-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs font-bold uppercase tracking-widest text-sky-500">Google Cloud TTS</p>
+                <p className="text-[11px] text-gray-400 mt-0.5">Giọng đọc Malaysia bản địa (ms-MY)</p>
+              </div>
+              <a
+                href="https://console.cloud.google.com/apis/credentials"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-[11px] text-sky-600 transition-colors hover:text-sky-500"
+              >
+                Tạo key →
+              </a>
+            </div>
+            <div className="space-y-2">
+              <label className="flex items-center gap-2 text-sm font-medium text-gray-700">
+                <Key className="h-3.5 w-3.5 text-gray-500" />
+                API Key
+                <span className="ml-1 text-[10px] font-normal text-gray-400">(để trống = dùng chung Gemini key)</span>
+              </label>
+              <div className="relative">
+                <input
+                  type={showTts ? 'text' : 'password'}
+                  value={draftTts}
+                  onChange={(e) => { setDraftTts(e.target.value); setTtsTestResult(null) }}
+                  placeholder="AIza... (key riêng cho Cloud TTS)"
+                  className="w-full rounded-lg border border-black/10 bg-white/70 px-3 py-2.5 pr-10 text-sm text-gray-800 placeholder-gray-400 outline-none transition-colors focus:border-sky-300 focus:bg-white"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowTts(!showTts)}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 transition-colors hover:text-gray-600"
+                >
+                  {showTts ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
+              <p className="text-[11px] text-gray-400">
+                Cần khi Gemini key bị restrict riêng. Bật <span className="font-mono">Cloud Text-to-Speech API</span> trong project Google Cloud.
+              </p>
+
+              <button
+                onClick={handleTestTts}
+                disabled={testingTts || (!draftTts.trim() && !draftGemini.trim())}
+                className="flex items-center gap-1.5 rounded-lg border border-sky-200 px-3 py-1.5 text-xs font-medium text-sky-700 transition-colors hover:bg-sky-50 disabled:opacity-40"
+              >
+                <RefreshCw className={`h-3 w-3 ${testingTts ? 'animate-spin' : ''}`} />
+                {testingTts ? 'Đang kiểm tra...' : 'Kiểm tra kết nối'}
+              </button>
+
+              {ttsTestResult && (
+                <div
+                  className={`flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium ${
+                    ttsTestResult.ok
+                      ? 'bg-emerald-500/10 text-emerald-700 border border-emerald-500/20'
+                      : 'bg-red-500/10 text-red-600 border border-red-500/20'
+                  }`}
+                >
+                  {ttsTestResult.ok ? (
+                    <>
+                      <Check className="h-3.5 w-3.5 shrink-0" />
+                      <span>Kết nối thành công — giọng ms-MY khả dụng</span>
+                    </>
+                  ) : (
+                    <>
+                      <X className="h-3.5 w-3.5 shrink-0" />
+                      <span>{ttsTestResult.error}</span>
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>{/* end Cloud TTS box */}
 
           {/* Storage */}
           <div className="rounded-lg border border-black/8 bg-black/[0.02] p-4">
