@@ -8,13 +8,7 @@ export interface EditableProductContext {
   cta: string
 }
 
-export interface GenerateScriptInput {
-  winningTranscript: string
-  productId: string | null
-  productContext?: EditableProductContext
-  attachedImage?: { base64: string; mimeType: string } | null
-}
-
-export interface GeneratedVariants {
-  variants: string[]
+export interface AdaptScriptResult {
+  vietnamese: string
+  malay: string
 }

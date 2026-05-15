@@ -1,5 +1,5 @@
-import { useState, useEffect, useRef } from 'react'
-import { Package, Loader2, PenLine, Upload, X } from 'lucide-react'
+import { useState, useEffect } from 'react'
+import { Package, Loader2, PenLine } from 'lucide-react'
 import type { Product, Script } from '../../../stores/types'
 import type { EditableProductContext } from '../types'
 import { useBankStore } from '../../../stores/bankStore'
@@ -24,8 +24,6 @@ interface InputPanelProps {
   onTranscriptChange: (value: string) => void
   selectedProduct: Product | null
   onProductSelect: (product: Product) => void
-  attachedImage: { file: File; preview: string; base64: string; mimeType: string } | null
-  onAttachedImageChange: (img: { file: File; preview: string; base64: string; mimeType: string } | null) => void
   onGenerate: (context: EditableProductContext | null) => void
   isGenerating: boolean
   highlightField?: string | null
@@ -36,8 +34,6 @@ export default function InputPanel({
   onTranscriptChange,
   selectedProduct,
   onProductSelect,
-  attachedImage,
-  onAttachedImageChange,
   onGenerate,
   isGenerating,
   highlightField,
@@ -45,10 +41,7 @@ export default function InputPanel({
   const [productPickerOpen, setProductPickerOpen] = useState(false)
   const [scriptPickerOpen, setScriptPickerOpen] = useState(false)
   const [editableContext, setEditableContext] = useState<EditableProductContext | null>(null)
-  const [imgDragOver, setImgDragOver] = useState(false)
-  const [imgUploading, setImgUploading] = useState(false)
   const [elapsedSec, setElapsedSec] = useState(0)
-  const imgInputRef = useRef<HTMLInputElement>(null)
 
   // Elapsed timer while generating
   useEffect(() => {
@@ -61,7 +54,6 @@ export default function InputPanel({
   const products = useBankStore((s) => s.products)
   const openApp = useAppStore((s) => s.openApp)
   const sendToApp = useAppStore((s) => s.sendToApp)
-  const addToast = useAppStore((s) => s.addToast)
   const resolvedProductImage = useAssetUrl(selectedProduct?.productImage)
 
   useEffect(() => {
@@ -84,39 +76,6 @@ export default function InputPanel({
 
   const handleScriptSelect = (item: Script) => {
     onTranscriptChange(item.scriptText)
-  }
-
-  const handleImageFile = async (file: File) => {
-    if (!file.type.startsWith('image/')) {
-      addToast(`File không phải ảnh: ${file.type || 'không xác định'}`, 'error')
-      return
-    }
-    if (file.size > 50 * 1024 * 1024) {
-      addToast(`Ảnh quá lớn (${(file.size / 1024 / 1024).toFixed(1)}MB). Tối đa 50MB.`, 'error')
-      return
-    }
-    setImgUploading(true)
-    try {
-      // Always compress to keep API requests fast (max 1024px, JPEG 75%)
-      // GPT-4o vision reads detail well at this size, and request stays under ~500KB base64
-      const { blob, mimeType: outMime } = await compressImage(file, 1024, 0.75)
-
-      const preview = URL.createObjectURL(blob)
-      const base64 = await blobToBase64(blob)
-      onAttachedImageChange({ file, preview, base64, mimeType: outMime })
-      addToast('Đã tải ảnh lên thành công')
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err)
-      addToast(`Tải ảnh thất bại: ${msg}`, 'error')
-    } finally {
-      setImgUploading(false)
-    }
-  }
-
-  const clearImage = () => {
-    if (attachedImage?.preview) URL.revokeObjectURL(attachedImage.preview)
-    onAttachedImageChange(null)
-    if (imgInputRef.current) imgInputRef.current.value = ''
   }
 
   return (
@@ -235,60 +194,6 @@ export default function InputPanel({
           )}
         </div>
 
-        {/* ── Bước 3: Ảnh sản phẩm ── */}
-        <div className="mb-6">
-          <StepLabel step={3} label="Tải ảnh sản phẩm từ máy tính" />
-          <p className="mt-1 mb-2 text-[10px] text-gray-400">Ảnh chụp trang bán sản phẩm để GPT trích xuất thêm ngữ cảnh</p>
-
-          {imgUploading ? (
-            <div className="flex items-center gap-3 rounded-xl border border-blue-500/30 bg-blue-500/5 p-4">
-              <Loader2 className="h-5 w-5 animate-spin text-blue-400" />
-              <span className="text-xs text-blue-400">Đang xử lý ảnh...</span>
-            </div>
-          ) : attachedImage ? (
-            <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/5 p-3">
-              <div className="flex items-start gap-3">
-                <div className="relative h-40 w-40 shrink-0 overflow-hidden rounded-lg border border-black/10 bg-black/5">
-                  <img src={attachedImage.preview} alt="Đã tải lên" className="h-full w-full object-cover" />
-                </div>
-                <div className="flex flex-1 flex-col gap-1 min-w-0">
-                  <div className="flex items-center gap-1.5 text-emerald-500">
-                    <svg className="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" /></svg>
-                    <span className="text-[11px] font-medium">Đã tải lên thành công</span>
-                  </div>
-                  <span className="truncate text-xs text-gray-700" title={attachedImage.file.name}>{attachedImage.file.name}</span>
-                  <span className="text-[10px] text-gray-400">{(attachedImage.file.size / 1024).toFixed(0)} KB</span>
-                  <button
-                    onClick={clearImage}
-                    className="mt-1 self-start rounded-lg px-2 py-1 text-[11px] font-medium text-red-400 transition-colors hover:bg-red-500/10"
-                  >
-                    <X className="inline h-3 w-3 mr-1" />Xóa ảnh
-                  </button>
-                </div>
-              </div>
-            </div>
-          ) : (
-            <button
-              type="button"
-              onClick={() => imgInputRef.current?.click()}
-              onDrop={(e) => { e.preventDefault(); setImgDragOver(false); const f = e.dataTransfer.files[0]; if (f) handleImageFile(f) }}
-              onDragOver={(e) => { e.preventDefault(); setImgDragOver(true) }}
-              onDragLeave={() => setImgDragOver(false)}
-              className={`flex w-full items-center gap-3 rounded-xl border border-dashed px-4 py-3 text-left transition-all ${imgDragOver ? 'border-blue-500/40 bg-blue-500/5' : 'border-black/10 bg-black/[0.02] hover:border-black/15 hover:bg-black/[0.03]'}`}
-            >
-              <Upload className={`h-4 w-4 shrink-0 transition-colors ${imgDragOver ? 'text-blue-400' : 'text-gray-400'}`} />
-              <span className="text-xs text-gray-400">Thả ảnh vào đây — JPG, PNG, WebP — tối đa 50MB (tự nén nếu lớn) hoặc nhấn để duyệt</span>
-            </button>
-          )}
-
-          <input
-            ref={imgInputRef}
-            type="file"
-            accept="image/*"
-            className="hidden"
-            onChange={(e) => { const f = e.target.files?.[0]; if (f) handleImageFile(f) }}
-          />
-        </div>
       </div>
 
       {/* Sticky generate button */}
@@ -301,17 +206,17 @@ export default function InputPanel({
           {isGenerating ? (
             <>
               <Loader2 className="h-4 w-4 animate-spin" />
-              <span>Đang tạo 2 kịch bản... ({elapsedSec}s)</span>
+              <span>Đang tạo kịch bản... ({elapsedSec}s)</span>
             </>
           ) : (
-            <span>✏️ Tạo 2 kịch bản</span>
+            <span>✏️ Tạo kịch bản</span>
           )}
         </button>
 
         {!canGenerate && !isGenerating && (
           <p className="mt-2 text-center text-[11px] text-gray-300">
             {!winningTranscript.trim() && !selectedProduct
-              ? 'Chọn kịch bản và sản phẩm để tạo'
+              ? 'Cần chọn kịch bản mẫu và sản phẩm'
               : !winningTranscript.trim()
                 ? 'Chọn hoặc dán kịch bản mẫu'
                 : 'Chọn sản phẩm từ Project'}
@@ -360,45 +265,3 @@ function EditableField({ label, value, onChange }: { label: string; value: strin
   )
 }
 
-function blobToBase64(blob: Blob): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader()
-    reader.onload = () => {
-      const result = reader.result as string
-      resolve(result.split(',')[1])
-    }
-    reader.onerror = reject
-    reader.readAsDataURL(blob)
-  })
-}
-
-/**
- * Resize image to fit within maxWidth, output as JPEG.
- * Used for large screenshots (e.g. full-page sales page captures).
- */
-function compressImage(file: File, maxWidth: number, quality: number): Promise<{ blob: Blob; mimeType: string }> {
-  return new Promise((resolve, reject) => {
-    const img = new Image()
-    const url = URL.createObjectURL(file)
-    img.onload = () => {
-      const scale = Math.min(1, maxWidth / img.width)
-      const canvas = document.createElement('canvas')
-      canvas.width = Math.round(img.width * scale)
-      canvas.height = Math.round(img.height * scale)
-      const ctx = canvas.getContext('2d')
-      if (!ctx) { URL.revokeObjectURL(url); reject(new Error('canvas context không khả dụng')); return }
-      ctx.drawImage(img, 0, 0, canvas.width, canvas.height)
-      URL.revokeObjectURL(url)
-      canvas.toBlob(
-        (b) => {
-          if (!b) { reject(new Error('compress thất bại')); return }
-          resolve({ blob: b, mimeType: 'image/jpeg' })
-        },
-        'image/jpeg',
-        quality,
-      )
-    }
-    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('Không tải được ảnh')) }
-    img.src = url
-  })
-}

@@ -2,21 +2,15 @@ import { useState, useEffect } from 'react'
 import { useAppStore } from '../../stores/appStore'
 import { useBankStore } from '../../stores/bankStore'
 import type { Product } from '../../stores/types'
-import type { EditableProductContext } from './types'
+import type { EditableProductContext, AdaptScriptResult } from './types'
 import InputPanel from './components/InputPanel'
 import OutputPanel from './components/OutputPanel'
-import { generateScript } from './services/generateScript'
+import { adaptAndTranslate } from './services/generateScript'
 
 export default function ScriptArchitect() {
   const [winningTranscript, setWinningTranscript] = useState('')
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null)
-  const [attachedImage, setAttachedImage] = useState<{
-    file: File
-    preview: string
-    base64: string
-    mimeType: string
-  } | null>(null)
-  const [generatedVariants, setGeneratedVariants] = useState<string[]>([])
+  const [result, setResult] = useState<AdaptScriptResult | null>(null)
   const [isGenerating, setIsGenerating] = useState(false)
   const [highlightField, setHighlightField] = useState<string | null>(null)
 
@@ -47,19 +41,13 @@ export default function ScriptArchitect() {
   }, [interAppPayload, activeApp, consumePayload, getProductById])
 
   const handleGenerate = async (productContext: EditableProductContext | null) => {
-    if (!winningTranscript.trim() || !selectedProduct) return
+    if (!winningTranscript.trim() || !selectedProduct || !productContext) return
 
     setIsGenerating(true)
+    setResult(null)
     try {
-      const result = await generateScript({
-        winningTranscript,
-        productId: selectedProduct.id,
-        productContext: productContext ?? undefined,
-        attachedImage: attachedImage
-          ? { base64: attachedImage.base64, mimeType: attachedImage.mimeType }
-          : null,
-      })
-      setGeneratedVariants(result.variants)
+      const adapted = await adaptAndTranslate(winningTranscript, productContext)
+      setResult(adapted)
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
       addToast(`Tạo kịch bản thất bại: ${msg}`, 'error')
@@ -76,8 +64,6 @@ export default function ScriptArchitect() {
           onTranscriptChange={setWinningTranscript}
           selectedProduct={selectedProduct}
           onProductSelect={setSelectedProduct}
-          attachedImage={attachedImage}
-          onAttachedImageChange={setAttachedImage}
           onGenerate={handleGenerate}
           isGenerating={isGenerating}
           highlightField={highlightField}
@@ -86,7 +72,7 @@ export default function ScriptArchitect() {
 
       <div className="flex w-full flex-1 flex-col min-h-[300px] lg:min-h-0">
         <OutputPanel
-          variants={generatedVariants}
+          result={result}
           linkedProductId={selectedProduct?.id ?? null}
           isGenerating={isGenerating}
         />
