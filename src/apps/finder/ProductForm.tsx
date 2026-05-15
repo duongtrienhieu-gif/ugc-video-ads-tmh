@@ -74,13 +74,19 @@ async function fetchViaJina(url: string): Promise<string> {
 }
 
 function parseExtracted(raw: string): Record<string, string> | null {
-  // Strip code fences
-  const cleaned = raw.trim().replace(/```json\s*/gi, '').replace(/```\s*/gi, '').trim()
+  let cleaned = raw.trim()
+
+  // Strip ALL backtick variants: ```json, ```, `json, ` (single/triple at start and end)
+  cleaned = cleaned
+    .replace(/^`{1,3}(?:json)?\s*/i, '')   // opening backticks + optional "json"
+    .replace(/`{1,3}\s*$/i, '')              // closing backticks
+    .replace(/```(?:json)?\s*/gi, '')        // any remaining triple backticks mid-text
+    .trim()
 
   // Strategy 1: direct parse
   try { return JSON.parse(cleaned) as Record<string, string> } catch { /* continue */ }
 
-  // Strategy 2: depth-tracking bracket extractor (handles JSON buried in prose)
+  // Strategy 2: find the first complete { ... } block (handles prose around JSON)
   let depth = 0, start = -1
   for (let i = 0; i < cleaned.length; i++) {
     if (cleaned[i] === '{') { if (depth === 0) start = i; depth++ }
@@ -92,7 +98,7 @@ function parseExtracted(raw: string): Record<string, string> | null {
     }
   }
 
-  console.error('[parseExtracted] failed, raw:', raw.slice(0, 300))
+  console.error('[parseExtracted] failed, raw:', raw.slice(0, 400))
   return null
 }
 
@@ -190,11 +196,11 @@ export default function ProductForm({ item, onSave, onCancel }: ProductFormProps
         apiKey: geminiKey,
         parts: [{ text: EXTRACT_PROMPT(pageText) }],
         systemInstruction: EXTRACT_SYSTEM,
-        maxOutputTokens: 1024,
+        maxOutputTokens: 2048,
       })
 
       const extracted = parseExtracted(response)
-      if (!extracted) throw new Error(`AI trả về sai định dạng: "${response.slice(0, 120)}"`)
+      if (!extracted) throw new Error('AI không trích xuất được thông tin. Thử tải ảnh chụp màn hình thay thế.')
 
       let filledCount = 0
       setForm((prev) => {
@@ -229,11 +235,11 @@ export default function ProductForm({ item, onSave, onCancel }: ProductFormProps
           { inlineData: { mimeType: 'image/jpeg', data: base64 } },
           { text: IMAGE_EXTRACT_PROMPT },
         ],
-        maxOutputTokens: 1024,
+        maxOutputTokens: 2048,
       })
 
       const extracted = parseExtracted(response)
-      if (!extracted) throw new Error('AI không trả về JSON hợp lệ')
+      if (!extracted) throw new Error('AI không trích xuất được thông tin từ ảnh, thử ảnh khác')
 
       let filledCount = 0
       setForm((prev) => {
