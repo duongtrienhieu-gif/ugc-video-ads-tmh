@@ -817,14 +817,22 @@ export default function LipSync() {
         </div>
       </div>
 
-      {/* ── Right panel — results ── */}
-      <div className="flex flex-1 flex-col overflow-hidden">
-        <div className="flex shrink-0 items-center justify-between border-b border-black/8 px-4 py-3">
-          <span className="text-sm font-medium text-gray-700">Kết quả</span>
+      {/* ── Right panel — library grid ── */}
+      <div className="flex flex-1 flex-col overflow-hidden bg-gray-50/40">
+        {/* Header */}
+        <div className="flex shrink-0 items-center justify-between border-b border-black/8 bg-white px-4 py-3">
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-semibold text-gray-700">Thư viện Lip-Sync</span>
+            {history.length > 0 && (
+              <span className="rounded-full bg-indigo-100 px-2 py-0.5 text-[10px] font-bold text-indigo-600">
+                {history.length}
+              </span>
+            )}
+          </div>
           {history.length > 0 && (
             <button
               onClick={() => setHistory([])}
-              className="text-[11px] text-gray-400 transition-colors hover:text-red-400"
+              className="rounded-lg px-2.5 py-1 text-[11px] font-medium text-gray-400 transition-colors hover:bg-red-50 hover:text-red-400"
             >
               Xóa tất cả
             </button>
@@ -832,126 +840,143 @@ export default function LipSync() {
         </div>
 
         {history.length === 0 ? (
+          /* ── Empty state ── */
           <div className="flex h-full flex-col items-center justify-center gap-3 p-8">
-            <User className="h-12 w-12 text-gray-200" strokeWidth={1.5} />
-            <p className="text-sm font-medium text-gray-400">Chưa có video lip-sync nào</p>
+            <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-indigo-50">
+              <User className="h-8 w-8 text-indigo-200" strokeWidth={1.5} />
+            </div>
+            <p className="text-sm font-medium text-gray-400">Thư viện trống</p>
             <p className="max-w-xs text-center text-xs text-gray-300 leading-relaxed">
               1. Chọn ảnh nhân vật → 2. Chọn giọng & nhập kịch bản → 3. Tạo audio → 4. Tạo video
             </p>
           </div>
         ) : (
-          <div className="flex-1 overflow-y-auto p-4">
-            {/* Warning */}
-            <div className="mb-3 flex items-start gap-2 rounded-xl border border-amber-500/20 bg-amber-500/[0.06] px-3 py-2.5">
-              <span className="mt-0.5 shrink-0 text-amber-400">⚠</span>
-              <p className="text-[11px] leading-relaxed text-amber-400/80">
-                kie.ai lưu media trong 14 ngày — tải xuống trước khi hết hạn.
+          <div className="flex-1 overflow-y-auto p-3">
+            {/* Warning bar */}
+            <div className="mb-3 flex items-center gap-2 rounded-lg border border-amber-200/60 bg-amber-50/80 px-3 py-2">
+              <AlertTriangle className="h-3 w-3 shrink-0 text-amber-400" />
+              <p className="text-[10px] text-amber-500/90">
+                kie.ai lưu media 14 ngày — tải xuống trước khi hết hạn
               </p>
             </div>
 
-            <div className="flex flex-col gap-3">
+            {/* ── Grid ── */}
+            <div className="grid grid-cols-2 gap-3 xl:grid-cols-3">
               {history.map((item) => {
                 const isItemGenerating = item.status === 'pending' || item.status === 'processing'
+                const isViolation = item.status === 'failed' && !!item.errorMessage && isContentViolation(item.errorMessage)
+
                 return (
-                  <div key={item.id} className="overflow-hidden rounded-xl border border-black/8 bg-white shadow-sm">
-                    {/* Media */}
-                    {isItemGenerating ? (
-                      <div className="flex h-52 flex-col items-center justify-center gap-4 bg-black/90 px-6">
-                        <Loader2 className="h-8 w-8 animate-spin text-white/20" />
-                        <div className="w-full">
-                          <div className="mb-1.5 flex items-center justify-between">
-                            <span className="text-[11px] text-white/40">Đang tạo lip-sync...</span>
-                            <span className="text-[11px] font-semibold tabular-nums text-indigo-400">
-                              {Math.round(progress)}%
-                            </span>
+                  <div
+                    key={item.id}
+                    className="group flex flex-col overflow-hidden rounded-2xl border border-black/8 bg-white shadow-sm transition-all hover:shadow-md hover:border-indigo-200"
+                  >
+                    {/* ── Media area ── */}
+                    <div className="relative aspect-video w-full overflow-hidden bg-black">
+                      {isItemGenerating ? (
+                        /* Processing overlay */
+                        <div className="flex h-full flex-col items-center justify-center gap-3 bg-gradient-to-br from-indigo-950 to-black px-4">
+                          <div className="relative">
+                            <div className="h-10 w-10 rounded-full border-2 border-white/10" />
+                            <Loader2 className="absolute inset-0 h-10 w-10 animate-spin text-indigo-400" />
                           </div>
-                          <div className="h-1 w-full overflow-hidden rounded-full bg-white/10">
-                            <div
-                              className="h-full rounded-full bg-indigo-400 transition-all duration-700 ease-out"
-                              style={{ width: `${progress}%` }}
-                            />
+                          <div className="w-full">
+                            <div className="mb-1 flex items-center justify-between">
+                              <span className="text-[9px] text-white/30">Đang tạo...</span>
+                              <span className="text-[9px] font-bold tabular-nums text-indigo-400">{Math.round(progress)}%</span>
+                            </div>
+                            <div className="h-0.5 w-full overflow-hidden rounded-full bg-white/10">
+                              <div
+                                className="h-full rounded-full bg-indigo-400 transition-all duration-700"
+                                style={{ width: `${progress}%` }}
+                              />
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    ) : item.videoUrl ? (
-                      <div className="bg-black">
+                      ) : item.videoUrl ? (
                         <video
                           key={item.id}
                           src={item.videoUrl}
                           controls
-                          autoPlay
-                          muted
                           playsInline
-                          className="max-h-72 w-full object-contain"
+                          className="h-full w-full object-contain"
                         />
-                      </div>
-                    ) : (
-                      <div className="flex h-28 items-center justify-center bg-red-500/5">
-                        <span className="text-3xl text-red-200">✕</span>
-                      </div>
-                    )}
-
-                    {/* Info */}
-                    <div className="p-3">
-                      <div className="mb-1 flex items-center justify-between gap-2">
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs font-medium text-gray-700">{item.modelName}</span>
-                          <StatusBadge status={item.status} />
+                      ) : isViolation ? (
+                        /* Content violation */
+                        <div className="flex h-full flex-col items-center justify-center gap-2 bg-amber-950/40 px-3 text-center">
+                          <AlertTriangle className="h-6 w-6 text-amber-400" />
+                          <p className="text-[9px] font-medium leading-tight text-amber-200">
+                            Kling từ chối nội dung
+                          </p>
                         </div>
-                        <span className="shrink-0 text-[10px] tabular-nums text-gray-300">
-                          {new Date(item.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                        </span>
-                      </div>
-                      {item.voiceName && (
-                        <p className="mb-1 text-[10px] text-gray-400">Giọng: {item.voiceName}</p>
-                      )}
-                      <p className="mb-2.5 line-clamp-2 text-[11px] leading-relaxed text-gray-400">{item.scriptText}</p>
-
-                      {item.status === 'failed' && item.errorMessage && (
-                        <div className="mb-2">
-                          {isContentViolation(item.errorMessage) ? (
-                            <div className="rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-2">
-                              <div className="flex items-start gap-1.5 mb-1.5">
-                                <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-500" />
-                                <p className="text-[11px] font-medium text-amber-700">
-                                  Kling từ chối vì vi phạm nội dung
-                                </p>
-                              </div>
-                              <p className="text-[10px] text-amber-600 leading-relaxed mb-2">
-                                Ảnh cần thẳng mặt, rõ nét. Nội dung script/ảnh có thể bị lọc. Thử lại với InfiniteTalk — ít nghiêm ngặt hơn.
-                              </p>
-                              {item.modelName !== 'InfiniteTalk' && (
-                                <button
-                                  onClick={() => handleRetryWithModel(item, 'infinitalk')}
-                                  disabled={isGenerating}
-                                  className="flex items-center gap-1.5 rounded-md bg-amber-500 px-3 py-1.5 text-[11px] font-semibold text-white transition-colors hover:bg-amber-600 disabled:opacity-50"
-                                >
-                                  <RefreshCw className="h-3 w-3" />
-                                  Thử lại với InfiniteTalk
-                                </button>
-                              )}
-                            </div>
-                          ) : (
-                            <p className="rounded-lg bg-red-50 px-2 py-1.5 text-[11px] text-red-500">
-                              {item.errorMessage}
-                            </p>
-                          )}
+                      ) : (
+                        /* Generic failed */
+                        <div className="flex h-full items-center justify-center bg-red-950/20">
+                          <span className="text-4xl text-red-200/40">✕</span>
                         </div>
                       )}
 
+                      {/* Status badge — top-left overlay */}
+                      <div className="absolute left-2 top-2">
+                        <StatusBadge status={item.status} />
+                      </div>
+
+                      {/* Time — top-right overlay */}
+                      <div className="absolute right-2 top-2 rounded-md bg-black/50 px-1.5 py-0.5 text-[9px] tabular-nums text-white/60 backdrop-blur-sm">
+                        {new Date(item.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      </div>
+                    </div>
+
+                    {/* ── Info + actions ── */}
+                    <div className="flex flex-1 flex-col gap-1.5 p-2.5">
+                      {/* Model + voice */}
                       <div className="flex items-center gap-1.5">
+                        <span className="truncate text-[10px] font-semibold text-gray-700">{item.modelName}</span>
+                        {item.voiceName && (
+                          <>
+                            <span className="text-gray-300">·</span>
+                            <span className="truncate text-[10px] text-gray-400">{item.voiceName}</span>
+                          </>
+                        )}
+                      </div>
+
+                      {/* Script preview */}
+                      <p className="line-clamp-2 text-[10px] leading-relaxed text-gray-400">
+                        {item.scriptText}
+                      </p>
+
+                      {/* Content violation retry */}
+                      {isViolation && item.modelName !== 'InfiniteTalk' && (
+                        <button
+                          onClick={() => handleRetryWithModel(item, 'infinitalk')}
+                          disabled={isGenerating}
+                          className="mt-0.5 flex items-center justify-center gap-1 rounded-lg bg-amber-50 border border-amber-200 py-1.5 text-[10px] font-semibold text-amber-700 transition-colors hover:bg-amber-100 disabled:opacity-50"
+                        >
+                          <RefreshCw className="h-2.5 w-2.5" />
+                          Thử với InfiniteTalk
+                        </button>
+                      )}
+
+                      {/* Non-violation error */}
+                      {item.status === 'failed' && item.errorMessage && !isViolation && (
+                        <p className="rounded-md bg-red-50 px-2 py-1 text-[9px] leading-relaxed text-red-500 line-clamp-2">
+                          {item.errorMessage}
+                        </p>
+                      )}
+
+                      {/* Action buttons */}
+                      <div className="mt-auto flex items-center gap-1.5 pt-1">
                         {item.videoUrl && (
                           <button
                             onClick={() => handleDownload(item)}
-                            className="flex items-center gap-1.5 rounded-full border border-black/10 px-3 py-1.5 text-[11px] text-gray-600 transition-colors hover:bg-black/5"
+                            className="flex flex-1 items-center justify-center gap-1 rounded-lg border border-indigo-200 bg-indigo-50 py-1.5 text-[10px] font-semibold text-indigo-600 transition-colors hover:bg-indigo-100"
                           >
-                            <Download className="h-3 w-3" /> Tải xuống
+                            <Download className="h-2.5 w-2.5" /> Tải xuống
                           </button>
                         )}
-                        <div className="flex-1" />
                         <button
                           onClick={() => setHistory((prev) => prev.filter((h) => h.id !== item.id))}
-                          className="flex h-7 w-7 items-center justify-center rounded-full text-gray-300 transition-colors hover:bg-red-500/10 hover:text-red-400"
+                          className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-gray-300 transition-colors hover:bg-red-50 hover:text-red-400"
                           title="Xóa"
                         >
                           <Trash2 className="h-3 w-3" />
