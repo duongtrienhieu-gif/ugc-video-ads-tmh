@@ -30,7 +30,7 @@ import {
   Wand2,
   Zap,
 } from 'lucide-react'
-import type { AnalysisResult } from '../types'
+import type { AnalysisResult, Variation } from '../types'
 import {
   AD_ANGLE_LABEL_VI,
   MARKET_AWARENESS_LABEL_VI,
@@ -38,7 +38,10 @@ import {
   VERDICT_LABEL_VI,
   RETENTION_RISK_COLOR,
   RETENTION_RISK_LABEL_VI,
+  VARIATION_LABEL_VI,
+  VARIATION_ACCENT,
 } from '../types'
+import { generateVariations } from '../services/generateVariations'
 import { useAppStore } from '../../../stores/appStore'
 import { useBankStore } from '../../../stores/bankStore'
 import { useAdTemplateStore } from '../../../stores/adTemplateStore'
@@ -89,6 +92,8 @@ interface ResultsViewProps {
   videoSrc: string | null
   fileName: string
   onReset: () => void
+  /** Z4: parent persists updated result (with variations) into cache. */
+  onResultUpdate?: (next: AnalysisResult) => void
 }
 
 function useCopy() {
@@ -534,6 +539,199 @@ function ActionTile({
   )
 }
 
+/* ─── Z4: Variation Engine ─── */
+/**
+ * Lazy second Gemini call. User clicks "Tạo 5 variations" → ~30-40s gen →
+ * 5 paste-ready variant cards (softer / aggressive / luxury / etc.). Each
+ * card has copy actions + "Gửi tới Kịch bản". Variations persist into the
+ * AnalysisResult via onResultUpdate so they survive F5.
+ */
+function VariationsSection({
+  result, onResultUpdate,
+}: {
+  result: AnalysisResult
+  onResultUpdate?: (next: AnalysisResult) => void
+}) {
+  const [generating, setGenerating] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const sendToApp = useAppStore((s) => s.sendToApp)
+  const addToast = useAppStore((s) => s.addToast)
+
+  const variations = result.variations ?? []
+  const hasVariations = variations.length > 0
+
+  const runGenerate = async () => {
+    setGenerating(true)
+    setError(null)
+    try {
+      const v = await generateVariations(result)
+      const nextResult: AnalysisResult = { ...result, variations: v }
+      onResultUpdate?.(nextResult)
+      addToast(`✨ Đã sinh ${v.length} biến thể script`, 'success')
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      setError(msg)
+      addToast(`Variations lỗi: ${msg}`, 'error')
+    } finally {
+      setGenerating(false)
+    }
+  }
+
+  const handleSendToScriptArchitect = (variation: Variation) => {
+    const blob = `# ${variation.nameVi}\n\n## HOOK\n${variation.hookText}\n\n## SCRIPT\n${variation.scriptText}\n\n## CTA\n${variation.ctaText}\n\n## TONE\n${variation.toneBreakdown}\n\n## PHÙ HỢP\n${variation.recommendedFor}`
+    sendToApp({
+      targetApp: 'script-architect',
+      targetField: 'winningTranscript',
+      data: blob,
+    })
+    addToast(`✨ Đã gửi "${variation.nameVi}" sang Kịch bản`)
+  }
+
+  return (
+    <Section className="border-fuchsia-200 bg-gradient-to-br from-fuchsia-50/40 to-violet-50/30">
+      <div className="mb-3 flex items-center gap-2">
+        <Wand2 className="h-4 w-4 text-fuchsia-600" strokeWidth={1.8} />
+        <h3 className="text-sm font-bold tracking-tight text-gray-900">Variation Engine — 5 biến thể script khác tone</h3>
+        <span className="ml-auto rounded-full bg-fuchsia-100 px-2 py-0.5 text-[9px] font-bold text-fuchsia-700">Z4</span>
+      </div>
+
+      {!hasVariations && !generating && (
+        <button
+          onClick={runGenerate}
+          className="flex w-full items-center justify-center gap-2 rounded-xl border-2 border-dashed border-fuchsia-300 bg-white px-4 py-6 text-sm font-bold text-fuchsia-700 transition-all hover:bg-fuchsia-50 hover:border-fuchsia-400"
+        >
+          <Sparkles className="h-4 w-4" />
+          Tạo 5 biến thể (softer / aggressive / luxury / scientific / emotional / etc.)
+        </button>
+      )}
+
+      {generating && (
+        <div className="flex flex-col items-center justify-center gap-3 rounded-xl border border-fuchsia-200 bg-white px-4 py-8">
+          <Loader2 className="h-6 w-6 animate-spin text-fuchsia-600" />
+          <p className="text-sm font-medium text-gray-700">AI Copywriter đang viết 5 biến thể...</p>
+          <p className="text-[11px] text-gray-500">~30-40s · cost ~50% phân tích chính</p>
+        </div>
+      )}
+
+      {error && !generating && (
+        <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2.5 text-xs text-red-700">
+          <p className="font-bold">Lỗi sinh variations</p>
+          <p className="mt-0.5">{error}</p>
+          <button
+            onClick={runGenerate}
+            className="mt-2 rounded-md bg-red-600 px-3 py-1 text-[11px] font-bold text-white hover:bg-red-700"
+          >
+            Thử lại
+          </button>
+        </div>
+      )}
+
+      {hasVariations && (
+        <div className="space-y-2">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+            {variations.map((v) => (
+              <VariationCard
+                key={v.id}
+                variation={v}
+                onSendToScript={() => handleSendToScriptArchitect(v)}
+              />
+            ))}
+          </div>
+          <button
+            onClick={runGenerate}
+            disabled={generating}
+            className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-fuchsia-200 bg-white px-3 py-2 text-[11px] font-semibold text-fuchsia-700 hover:bg-fuchsia-50 disabled:opacity-40"
+          >
+            <RotateCcw className="h-3 w-3" />
+            Tạo lại 5 biến thể khác
+          </button>
+        </div>
+      )}
+    </Section>
+  )
+}
+
+function VariationCard({
+  variation, onSendToScript,
+}: {
+  variation: Variation
+  onSendToScript: () => void
+}) {
+  const [expanded, setExpanded] = useState(false)
+  const { copied, copy } = useCopy()
+  const accent = VARIATION_ACCENT[variation.type] ?? 'border-gray-200 bg-white'
+
+  const copyAll = () => {
+    const blob = `${variation.nameVi}\n\nHOOK: ${variation.hookText}\n\nSCRIPT:\n${variation.scriptText}\n\nCTA: ${variation.ctaText}`
+    copy(blob)
+  }
+
+  return (
+    <div className={`rounded-xl border-2 ${accent} p-3`}>
+      <div className="flex items-start gap-2">
+        <div className="flex-1 min-w-0">
+          <p className="text-xs font-bold text-gray-900">{VARIATION_LABEL_VI[variation.type]}</p>
+          <p className="mt-0.5 text-[10px] text-gray-500 italic">{variation.nameVi}</p>
+        </div>
+        <div className="flex shrink-0 gap-1">
+          <button
+            onClick={copyAll}
+            title="Copy toàn bộ"
+            className="rounded-md border border-black/10 bg-white p-1 text-gray-600 hover:bg-gray-50"
+          >
+            {copied ? <Check className="h-3 w-3 text-emerald-500" /> : <Copy className="h-3 w-3" />}
+          </button>
+          <button
+            onClick={onSendToScript}
+            title="Gửi sang Kịch bản"
+            className="rounded-md bg-violet-600 p-1 text-white shadow-sm hover:bg-violet-700"
+          >
+            <Send className="h-3 w-3" />
+          </button>
+        </div>
+      </div>
+
+      {/* Hook */}
+      <div className="mt-2 border-l-2 border-emerald-400/40 pl-2 py-0.5">
+        <p className="text-[11px] font-medium italic text-gray-800" style={{ fontFamily: 'Georgia, serif' }}>
+          &ldquo;{variation.hookText}&rdquo;
+        </p>
+      </div>
+
+      {/* Tone + recommendedFor — always shown, compact */}
+      <div className="mt-2 grid grid-cols-1 gap-1">
+        <p className="text-[10px] leading-snug text-gray-600">
+          <span className="font-bold text-gray-700">Tone · </span>{variation.toneBreakdown}
+        </p>
+        <p className="text-[10px] leading-snug text-violet-700">
+          <span className="font-bold">Phù hợp · </span>{variation.recommendedFor}
+        </p>
+      </div>
+
+      {/* Script + CTA — expandable */}
+      <button
+        onClick={() => setExpanded((v) => !v)}
+        className="mt-2 flex w-full items-center justify-between text-[10px] font-semibold text-gray-500 hover:text-gray-700"
+      >
+        <span>{expanded ? '− Thu gọn' : '+ Xem script đầy đủ'}</span>
+        <ChevronDown className={`h-3 w-3 transition-transform ${expanded ? 'rotate-180' : ''}`} />
+      </button>
+      {expanded && (
+        <div className="mt-2 space-y-2">
+          <div className="rounded bg-white px-2.5 py-1.5">
+            <span className="text-[9px] font-bold uppercase tracking-widest text-gray-400">Script</span>
+            <p className="mt-1 whitespace-pre-wrap text-[11px] leading-relaxed text-gray-700">{variation.scriptText}</p>
+          </div>
+          <div className="rounded bg-emerald-50 px-2.5 py-1.5">
+            <span className="text-[9px] font-bold uppercase tracking-widest text-emerald-700">CTA</span>
+            <p className="mt-1 text-[11px] font-semibold text-emerald-800">{variation.ctaText}</p>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 /* ─── Z2: Retention Heatmap Timeline ─── */
 function RetentionHeatmapSection({ result }: { result: AnalysisResult }) {
   const r = result.retentionTimeline
@@ -916,7 +1114,7 @@ function Pill({ label, value }: { label: string; value: string }) {
 }
 
 /* ─── Main ResultsView ─── */
-export default function ResultsView({ result, videoSrc, fileName, onReset }: ResultsViewProps) {
+export default function ResultsView({ result, videoSrc, fileName, onReset, onResultUpdate }: ResultsViewProps) {
   const [savingTemplate, setSavingTemplate] = useState(false)
   const [templateName, setTemplateName] = useState(fileName.replace(/\.[^.]+$/, '') || 'Ad Win Template')
   const [saved, setSaved] = useState(false)
@@ -1020,6 +1218,8 @@ export default function ResultsView({ result, videoSrc, fileName, onReset }: Res
           {/* Z3: 1-click cross-app pipeline — directly under verdict so user
               can act immediately. */}
           <CreativeActionBar result={result} />
+          {/* Z4: Variation Engine — lazy 2nd Gemini call, persisted to cache */}
+          <VariationsSection result={result} onResultUpdate={onResultUpdate} />
           <ScorecardSection result={result} />
           {/* Z2: Retention heatmap — visual timeline */}
           <RetentionHeatmapSection result={result} />

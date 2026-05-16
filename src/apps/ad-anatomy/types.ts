@@ -190,6 +190,63 @@ export interface AnalysisResult {
   funnelPosition?: FunnelPosition
   scalingPotential?: ScalingPotential
   retentionTimeline?: RetentionTimeline
+
+  // ── Z4 — Variation Engine (lazy, second Gemini call) ────────────────────
+  variations?: Variation[]
+}
+
+// ── Z4 — Variation Engine types ────────────────────────────────────────────
+
+/** Tone archetypes for generated variants. */
+export type VariationType =
+  | 'softer'         // gentler, less aggressive — broader audience
+  | 'aggressive'     // urgent, direct, high-pressure CTA
+  | 'luxury'         // premium tone, aspirational, exclusivity
+  | 'scientific'     // clinical, data-driven, authority-heavy
+  | 'emotional'      // story-driven, vulnerability-led, empathy
+  | 'testimonial'    // first-person customer-voice angle
+  | 'feminine'       // warm, supportive, community-leaning
+  | 'masculine'      // results-focused, performance-leaning
+
+export interface Variation {
+  /** Unique id — used for per-card actions */
+  id: string
+  /** One of 8 enum archetypes */
+  type: VariationType
+  /** VN display name */
+  nameVi: string
+  /** New hook line for this variant (1 sentence) */
+  hookText: string
+  /** Full ~30s script for this variant (paste-ready transcript) */
+  scriptText: string
+  /** Primary CTA line for this variant */
+  ctaText: string
+  /** VN: 1-2 sentences explaining the tone choice */
+  toneBreakdown: string
+  /** VN: who / where to run this variant (audience + funnel hint) */
+  recommendedFor: string
+}
+
+export const VARIATION_LABEL_VI: Record<VariationType, string> = {
+  'softer':      '🌸 Nhẹ nhàng hơn',
+  'aggressive':  '🔥 Mạnh + urgent',
+  'luxury':      '💎 Premium / Luxury',
+  'scientific':  '🔬 Khoa học / Lâm sàng',
+  'emotional':   '💗 Cảm xúc / Câu chuyện',
+  'testimonial': '🗣 Lời chứng thực',
+  'feminine':    '🌷 Tone nữ tính',
+  'masculine':   '💪 Tone mạnh mẽ',
+}
+
+export const VARIATION_ACCENT: Record<VariationType, string> = {
+  'softer':      'border-pink-200 bg-pink-50/40',
+  'aggressive':  'border-red-200 bg-red-50/40',
+  'luxury':      'border-amber-200 bg-amber-50/40',
+  'scientific':  'border-cyan-200 bg-cyan-50/40',
+  'emotional':   'border-rose-200 bg-rose-50/40',
+  'testimonial': 'border-emerald-200 bg-emerald-50/40',
+  'feminine':    'border-fuchsia-200 bg-fuchsia-50/40',
+  'masculine':   'border-slate-200 bg-slate-50/40',
 }
 
 // ── Vietnamese label maps for UI ───────────────────────────────────────────

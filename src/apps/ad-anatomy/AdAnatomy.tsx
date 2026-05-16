@@ -159,6 +159,23 @@ export default function AdAnatomy() {
     )
   }
 
+  // ── Z4: persist child-driven result updates (variations, future fields) ──
+  const handleResultUpdate = (next: AnalysisResult) => {
+    setResult(next)
+    // Re-write cache with the same fileName / videoAssetId, just new result
+    try {
+      const saved = localStorage.getItem(CACHE_KEY)
+      const prev: AdAnatomyCache | null = saved ? JSON.parse(saved) : null
+      const merged: AdAnatomyCache = {
+        version: CACHE_VERSION,
+        result: next,
+        fileName: prev?.fileName ?? fileName,
+        videoAssetId: prev?.videoAssetId ?? null,
+      }
+      localStorage.setItem(CACHE_KEY, JSON.stringify(merged))
+    } catch { /* silent */ }
+  }
+
   if (view === 'results' && result) {
     return (
       <ResultsView
@@ -166,6 +183,7 @@ export default function AdAnatomy() {
         videoSrc={videoSrc}
         fileName={fileName}
         onReset={handleReset}
+        onResultUpdate={handleResultUpdate}
       />
     )
   }
