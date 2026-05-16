@@ -488,7 +488,7 @@ interface PersistedState {
 const STEP_INFO: Record<string, { num: number; label: string; subLabel: string; cost: string }> = {
   parse:    { num: 1, label: 'Storyboard',          subLabel: 'Gemini Pro phân tích script → cảnh quay (timing ước lượng từ char count)', cost: 'Miễn phí' },
   resolve:  { num: 2, label: 'Chuẩn bị tài nguyên', subLabel: 'Resolve URL ảnh avatar + sản phẩm',         cost: 'Miễn phí' },
-  brollimg: { num: 3, label: 'B-roll Images',       subLabel: 'GPT Image 2 — gen ảnh photoreal, review trước khi commit video', cost: '~60 KIE credit' },
+  brollimg: { num: 3, label: 'B-roll Images',       subLabel: 'Nano Banana 2 — identity-locked face + product matching (avatar duplicated 2x ref)', cost: '~80 KIE credit' },
   broll:    { num: 4, label: 'B-roll Videos',       subLabel: 'Seedance 2 Fast 480p — UGC motion, tiết kiệm credit', cost: '~850 KIE credit' },
   voice:    { num: 5, label: 'Voiceover',           subLabel: 'eleven_v3 expressive — sau khi B-roll OK (re-time segments theo audio thật)', cost: '~$0.30 · ElevenLabs' },
   avatar:   { num: 6, label: 'Avatar Lip-sync',     subLabel: 'Kling Avatar: ảnh + audio → video nói (bước đắt nhất)', cost: '~624 KIE credit' },
@@ -1730,34 +1730,62 @@ Return ONLY the description as plain text, no preamble, no markdown.` },
 
   const buildImagePrompt = (seg: ScriptSegment, hasAvatar: boolean, hasProduct: boolean): string => {
     // Hybrid B-roll: avatar (matching reference) is the MAIN subject performing
-    // the action. A small lip-sync inset will be added separately in Shotstack.
-    // Both avatar and product descriptions are locked via Gemini Vision (see
-    // runResolve) to keep them visually identical across all 9 generated images.
+    // the action. The corner lip-sync overlay is added separately by Shotstack.
+    // Identity descriptions from Gemini Vision are injected here as TEXT anchor.
     const avatarDesc  = pipeRef.current.avatarDescription
     const productDesc = pipeRef.current.productDescription
 
-    const lockRules: string[] = [
-      'IDENTITY LOCK (UGC review series — ONE person reviewing ONE product across multiple shots):',
-    ]
-    if (hasAvatar && avatarDesc) {
-      lockRules.push(`- AVATAR LOCK — the person in this image MUST appear EXACTLY as: ${avatarDesc}`)
-      lockRules.push('  Keep this same face / clothing / hijab / age / ethnicity across every shot. Treat as a real human you must portray consistently.')
-    } else if (hasAvatar) {
-      lockRules.push('- AVATAR must match reference image EXACTLY: identical face, hijab/clothing, age, ethnicity.')
-    }
-    if (hasProduct && productDesc) {
-      lockRules.push(`- PRODUCT LOCK — when this segment shows the product, it MUST appear EXACTLY as: ${productDesc}`)
-      lockRules.push('  Do NOT invent a different bottle, label color, or form factor.')
-    } else if (hasProduct) {
-      lockRules.push('- PRODUCT must match reference product image EXACTLY (same bottle/box/label/color/form factor).')
-    }
-    lockRules.push('- Setting feels cohesive across all 9 shots — consistent home/lifestyle aesthetic, same color palette, similar lighting style.')
-    lockRules.push('- Style: authentic phone-camera UGC (TikTok/Reels), slightly imperfect framing, natural lighting. NOT polished commercial.')
-    lockRules.push('- Avatar appears AS MAIN SUBJECT, full-frame composition (NOT in a corner — the corner lip-sync overlay is added separately by Shotstack).')
+    // CRITICAL: use directive language. "Photo of the SAME PERSON from image 1"
+    // signals to the model that this is identity preservation, not style xfer.
+    const identityBlock = hasAvatar
+      ? `🔒 ABSOLUTE IDENTITY LOCK — THE FACE MUST BE 100% IDENTICAL TO THE REFERENCE 🔒
 
-    const qualitySuffix = '. Photorealistic, vertical 9:16, hyper-realistic phone-camera quality, no text overlay (captions added later), no watermark.'
+This is photo #${seg.index + 1} in a continuous photo session of the SAME REAL PERSON
+shown in reference images 1 AND 2 (the avatar appears TWICE in the references —
+that is your absolute identity anchor, treat as a real human being to portray).
 
-    return `${lockRules.join('\n')}\n\nSCENE FOR THIS SHOT:\n${seg.brollPrompt}${qualitySuffix}`
+YOU MUST MATCH, PIXEL-LEVEL EXACTLY:
+- Face shape (oval / round / heart) — copy from reference
+- Eye shape, eye color, eye spacing
+- Eyebrow shape, thickness, arch
+- Nose shape, bridge, tip
+- Lip shape, fullness, resting expression
+- Jawline and chin
+- Skin tone, complexion, any moles/freckles
+- Hijab/hair color, style, coverage, drape
+- Clothing exact colors and style from reference
+
+${avatarDesc ? `Locked physical description (this is the SAME person as the reference images):\n${avatarDesc}\n` : ''}
+WHAT NOT TO DO:
+- Do NOT generate a "similar-looking" different person
+- Do NOT change face shape to match an emotion or pose
+- Do NOT alter the hijab style / outfit
+- Do NOT invent a new ethnicity or age
+- A different person ≠ acceptable. The face must be recognizably the SAME individual.
+
+If you cannot show the same face in this particular pose, choose a pose where
+the face is clearly visible matching the reference.`
+      : ''
+
+    const productBlock = hasProduct
+      ? `\n🔒 PRODUCT LOCK 🔒
+The product (when shown in this shot) MUST match the reference product image EXACTLY:
+- Same bottle / box / sachet shape
+- Same label colors, text, logo placement
+- Same capsule/form factor
+${productDesc ? `\nLocked product description:\n${productDesc}` : ''}
+Do NOT invent a different product variant.`
+      : ''
+
+    const compositionBlock = `\n📐 COMPOSITION
+- Avatar = MAIN subject, full-frame (NOT in a corner — corner lip-sync overlay added separately later by Shotstack)
+- UGC phone-camera aesthetic — natural lighting, slightly imperfect framing, real-home backgrounds
+- Cohesive style across all 9 shots in this series (consistent home aesthetic, color palette, lighting mood)
+- NOT polished studio commercial`
+
+    const qualitySuffix = '\n\nFinal output: photorealistic, vertical 9:16, hyper-realistic phone-camera quality, no text overlay (captions added later), no watermark.'
+
+    return `${identityBlock}${productBlock}${compositionBlock}\n\n🎬 SCENE FOR THIS SHOT:\n${seg.brollPrompt}${qualitySuffix}`
   }
 
   // Generate ONE image for a given segment index (used by both initial run + per-image regen)
@@ -1765,22 +1793,31 @@ Return ONLY the description as plain text, no preamble, no markdown.` },
     const { avatarImageUrl, productImageUrls } = pipeRef.current
     const prompt = buildImagePrompt(seg, !!avatarImageUrl, !!(productImageUrls && productImageUrls.length))
 
-    // Build reference image list: avatar FIRST (locks identity), then product
-    // images (locks product appearance). Order matters — Nano Banana 2 weights
-    // earlier references more heavily for identity.
+    // Build reference image list. Order matters — Nano Banana 2 weighs earlier
+    // references more heavily for identity. We pass AVATAR TWICE on purpose:
+    // the duplicate signal tells the model "this person is the most important
+    // anchor, far more critical than the product appearance". This dramatically
+    // reduces face drift across the 9 generated images.
     const refs: string[] = []
-    if (avatarImageUrl) refs.push(avatarImageUrl)
+    if (avatarImageUrl) {
+      refs.push(avatarImageUrl)
+      refs.push(avatarImageUrl)   // duplicate = stronger identity weight
+    }
     if (productImageUrls && productImageUrls.length > 0) {
-      refs.push(...productImageUrls.slice(0, 2))  // up to 2 product views
+      refs.push(productImageUrls[0])   // single product ref to leave model capacity for face
     }
 
     try {
-      // GPT Image 2 (OpenAI): more photorealistic faces/hands/products than
-      // Nano Banana 2 + cheaper (6 credits vs 8). Trade-off: slightly less
-      // identity-stable across multiple gens — mitigated by reference images.
+      // Nano Banana 2 (Google Gemini Image) — purpose-built for multi-image
+      // CHARACTER CONSISTENCY across a series. GPT Image 2 was slightly
+      // more photorealistic per-image but treated the avatar reference as
+      // a "style hint" rather than identity lock → face drifted between
+      // generations. Nano Banana 2 weighs the reference avatar much more
+      // heavily as the SAME PERSON across all 9 shots.
+      // Cost: 8 cr/image vs GPT-2's 6 cr — +2 cr per image worth the identity gain.
       const { taskId } = await generateImage({
         apiKey: kieApiKey!,
-        model: 'gpt-image-2-text-to-image',
+        model: 'nano-banana-2',
         prompt,
         resolution: '1K',
         aspectRatio: '9:16',
@@ -2409,7 +2446,7 @@ MOTION: Gentle cinematic camera motion only — slow push-in on key detail, or s
             </button>
           )}
           <p className="mt-2 text-center text-xs text-gray-400">
-            {isIdle ? 'Pipeline 8 bước · ~1,534 KIE credit + ~$1.30 (EL+fal+SS) · 480p tiết kiệm' : `Đang chạy · ~1,534 KIE credit + ~$1.30 ngoài KIE`}
+            {isIdle ? 'Pipeline 8 bước · ~1,554 KIE credit + ~$1.30 (EL+fal+SS) · 480p + Nano Banana 2 identity lock' : `Đang chạy · ~1,554 KIE credit + ~$1.30 ngoài KIE`}
           </p>
         </div>
       </div>
@@ -2657,14 +2694,14 @@ MOTION: Gentle cinematic camera motion only — slow push-in on key detail, or s
             <ReviewCard
               onRetry={runBrollImages}
               onContinue={runBroll}
-              retryLabel={`Tạo lại tất cả (~${previewBrollImageUrls.length * 6} cr)`}
+              retryLabel={`Tạo lại tất cả (~${previewBrollImageUrls.length * 8} cr)`}
               continueLabel="Tiếp tục → Animate"
               continueCost={STEP_INFO.broll.cost}
               disabled={regeneratingImageIndices.size > 0}
             >
               <p className="mb-3 text-xs text-gray-500">
                 <strong className="text-emerald-600">{previewBrollImageUrls.filter(Boolean).length}/{previewBrollImageUrls.length}</strong> ảnh thành công.
-                Click vào ảnh để gen lại từng cái (~6 KIE credit, GPT Image 2) — rẻ hơn 27x so với gen lại video.
+                Click vào ảnh để gen lại từng cái (~8 KIE credit, Nano Banana 2) — rẻ hơn 10x so với gen lại video.
               </p>
               <div className="grid grid-cols-3 gap-2">
                 {previewBrollImageUrls.map((url, i) => {
@@ -2689,7 +2726,7 @@ MOTION: Gentle cinematic camera motion only — slow push-in on key detail, or s
                       ) : (
                         <button
                           onClick={() => regenerateOneImage(i)}
-                          title={`Gen lại ảnh #${i + 1} (~6 KIE credit, GPT Image 2)`}
+                          title={`Gen lại ảnh #${i + 1} (~8 KIE credit, Nano Banana 2)`}
                           className="absolute right-1 top-1 flex h-7 w-7 items-center justify-center rounded-md bg-black/60 text-white opacity-0 transition-opacity hover:bg-violet-600 group-hover:opacity-100"
                         >
                           <RotateCcw className="h-3.5 w-3.5" />
@@ -2884,7 +2921,7 @@ MOTION: Gentle cinematic camera motion only — slow push-in on key detail, or s
                 </p>
               </div>
               <div className="flex flex-wrap justify-center gap-2 text-xs text-gray-400">
-                {['Free ① Storyboard', '60 cr ③ Images (GPT-2)', '850 cr ④ Videos (Seedance 480p)', '$0.30 EL ⑤ Voice', '624 cr ⑥ Avatar', '$0.50 fal ⑦ BG', '$0.50 SS ⑧ Render'].map((t) => (
+                {['Free ① Storyboard', '80 cr ③ Images (Nano Banana 2)', '850 cr ④ Videos (Seedance 480p)', '$0.30 EL ⑤ Voice', '624 cr ⑥ Avatar', '$0.50 fal ⑦ BG', '$0.50 SS ⑧ Render'].map((t) => (
                   <span key={t} className="rounded-full border border-black/8 bg-black/[0.02] px-3 py-1.5">{t}</span>
                 ))}
               </div>
