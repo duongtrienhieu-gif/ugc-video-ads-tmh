@@ -11,7 +11,7 @@ import { useAppStore } from '../../stores/appStore'
 import { useBankStore } from '../../stores/bankStore'
 import { getUrl, isAssetRef, saveAsset } from '../../utils/assetStore'
 import { directGeminiVision } from '../../utils/gemini'
-import { listVoices, textToSpeechSmooth } from '../../utils/elevenlabs'
+import { listVoices, listSharedVoices, textToSpeechSmooth } from '../../utils/elevenlabs'
 import { generateLipSync, pollLipSyncUntilDone, generateVideoJob, getVideoJobStatus, generateImage, pollImageUntilDone } from '../../utils/kieai'
 import { removeVideoBackground } from '../../utils/falai'
 import { buildUGCVideo, pollRenderUntilDone } from '../../utils/shotstack'
@@ -706,13 +706,43 @@ export default function VideoBuilder() {
   // History
   const [history, setHistory] = useState<VideoBuilderJob[]>([])
 
-  // Load voices
+  // Load voices: ONLY cloned (user's account) + Malaysian library voices.
+  // Skip American/other accents — UGC ads here target Malaysian/Vietnamese
+  // markets, so non-Malaysian premade voices clutter the dropdown.
   useEffect(() => {
     if (!elevenLabsApiKey) return
     setLoadingVoices(true)
-    listVoices(elevenLabsApiKey)
-      .then((v) => { setVoices(v); if (!selectedVoiceId && v.length > 0) setSelectedVoiceId(v[0].voice_id) })
-      .catch(() => {})
+
+    Promise.all([
+      listVoices(elevenLabsApiKey),
+      listSharedVoices({ apiKey: elevenLabsApiKey, language: 'ms',      pageSize: 50 }),
+      listSharedVoices({ apiKey: elevenLabsApiKey, accent: 'malaysian', pageSize: 50 }),
+    ])
+      .then(([userVoices, msVoices, accentVoices]) => {
+        // Only cloned voices from user account (skip premade like Rachel/Adam etc.)
+        const cloned = userVoices.filter((v) => v.category === 'cloned')
+
+        // Merge + dedupe Malaysian library voices (by language=ms + accent=malaysian)
+        const libMap = new Map<string, (typeof msVoices)[0]>()
+        for (const v of [...msVoices, ...accentVoices]) libMap.set(v.voice_id, v)
+
+        const libraryVoices: ElevenLabsVoice[] = Array.from(libMap.values()).map((v) => ({
+          voice_id:    v.voice_id,
+          name:        v.name,
+          category:    'professional' as const,
+          labels:      { gender: v.gender ?? '', accent: 'malaysian', language: 'ms' },
+          preview_url: v.preview_url,
+        }))
+
+        // Cloned first (user-owned), then Malaysian library
+        const allVoices = [...cloned, ...libraryVoices]
+        setVoices(allVoices)
+        if (!selectedVoiceId && allVoices.length > 0) setSelectedVoiceId(allVoices[0].voice_id)
+      })
+      .catch((err) => {
+        console.error('[loadVoices] failed:', err)
+        addToast('Không tải được danh sách giọng — kiểm tra ElevenLabs key', 'error')
+      })
       .finally(() => setLoadingVoices(false))
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [elevenLabsApiKey])
@@ -1015,9 +1045,10 @@ ${script}`
     setPhaseProgress(0)
 
     try {
-      // Real progress from chunk completion (85% allocated to TTS, rest for
-      // decode + concat). Result mimeType is 'audio/wav' when chunking was
-      // needed (clean WAV concat) or 'audio/mpeg' for short scripts.
+      // chunkSize 5000 ≈ ElevenLabs max-per-call → 99% scripts run as ONE
+      // API call → no MP3 concat → no audio artifacts (no rè/static).
+      // Only very long scripts (>5000 chars / ~6 minutes audio) fall back
+      // to chunked WAV concat path.
       const { buffer: audioBuffer, mimeType } = await textToSpeechSmooth({
         apiKey: elevenLabsApiKey,
         voiceId: selectedVoiceId,
@@ -1027,15 +1058,17 @@ ${script}`
         similarity: 0.75,
         speed: 1.1,
         outputFormat: 'mp3_44100_192',
-        chunkSize: 400,
+        chunkSize: 5000,
         onProgress: (done, total) => {
-          const pct = (done / total) * 85
+          const pct = (done / total) * 90
           setPhaseProgress(pct)
-          setPhaseDetail(`Tạo audio: ${done}/${total} chunks (1.1x speed)...`)
+          setPhaseDetail(total > 1
+            ? `Tạo audio: ${done}/${total} chunks (1.1x speed)...`
+            : `Tạo audio (single call, không concat — chất lượng tối đa)...`)
         },
       })
       setPhaseProgress(95)
-      setPhaseDetail('Đang decode + ghép audio mượt qua Web Audio API...')
+      setPhaseDetail('Đang decode audio duration...')
       const audioDuration = await getAudioDuration(audioBuffer)
       const audioBlob = new Blob([audioBuffer], { type: mimeType })
 
@@ -1642,19 +1675,37 @@ ${script}`
                 <span className="text-sm text-gray-400">Đang tải giọng...</span>
               </div>
             ) : (
-              <select
-                value={selectedVoiceId}
-                onChange={(e) => setSelectedVoiceId(e.target.value)}
-                disabled={isBuilding}
-                className="w-full rounded-xl border border-black/10 bg-white px-3 py-2.5 text-sm text-gray-800 outline-none transition-colors focus:border-violet-300 disabled:opacity-50"
-              >
-                <option value="">Chọn giọng đọc...</option>
-                {voices.map((v) => (
-                  <option key={v.voice_id} value={v.voice_id}>
-                    {v.name}{v.labels?.gender ? ` (${v.labels.gender})` : ''}{v.labels?.accent ? ` · ${v.labels.accent}` : ''}
-                  </option>
-                ))}
-              </select>
+              <>
+                <select
+                  value={selectedVoiceId}
+                  onChange={(e) => setSelectedVoiceId(e.target.value)}
+                  disabled={isBuilding}
+                  className="w-full rounded-xl border border-black/10 bg-white px-3 py-2.5 text-sm text-gray-800 outline-none transition-colors focus:border-violet-300 disabled:opacity-50"
+                >
+                  <option value="">Chọn giọng đọc...</option>
+                  {voices.filter((v) => v.category === 'cloned').length > 0 && (
+                    <optgroup label="✨ Giọng đã clone (của bạn)">
+                      {voices.filter((v) => v.category === 'cloned').map((v) => (
+                        <option key={v.voice_id} value={v.voice_id}>
+                          {v.name}{v.labels?.gender ? ` (${v.labels.gender})` : ''}
+                        </option>
+                      ))}
+                    </optgroup>
+                  )}
+                  {voices.filter((v) => v.category !== 'cloned').length > 0 && (
+                    <optgroup label="🇲🇾 Thư viện giọng Malaysian">
+                      {voices.filter((v) => v.category !== 'cloned').map((v) => (
+                        <option key={v.voice_id} value={v.voice_id}>
+                          {v.name}{v.labels?.gender ? ` (${v.labels.gender})` : ''}
+                        </option>
+                      ))}
+                    </optgroup>
+                  )}
+                </select>
+                <p className="mt-1 text-[10px] text-gray-400">
+                  Chỉ hiện giọng đã clone + accent Malaysian. Đã ẩn American/other accents.
+                </p>
+              </>
             )}
           </div>
 
