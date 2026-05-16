@@ -538,22 +538,42 @@ function PhaseHeader({ phase }: { phase: PipelinePhase }) {
   )
 }
 
-// ── Running panel (spinner during a step) ─────────────────────────────────────
+// ── Running panel (spinner + progress bar) ────────────────────────────────────
 
-function RunningPanel({ phase, detail }: { phase: PipelinePhase; detail: string }) {
+function RunningPanel({ phase, detail, progress }: {
+  phase: PipelinePhase
+  detail: string
+  progress: number    // 0-100
+}) {
   const step = getStepFromPhase(phase)
   const label = step && STEP_INFO[step] ? `Đang ${STEP_INFO[step].label.toLowerCase()}...` : 'Đang xử lý...'
+  const pct = Math.max(0, Math.min(100, progress))
 
   return (
-    <div className="flex flex-col items-center justify-center gap-4 py-16">
+    <div className="flex flex-col items-center justify-center gap-4 py-12">
       <div className="relative">
-        <div className="h-16 w-16 rounded-full border-4 border-violet-100" />
-        <Loader2 className="absolute inset-0 m-auto h-16 w-16 animate-spin text-violet-500" />
+        <div className="h-14 w-14 rounded-full border-4 border-violet-100" />
+        <Loader2 className="absolute inset-0 m-auto h-14 w-14 animate-spin text-violet-500" />
       </div>
       <div className="text-center">
         <p className="text-sm font-bold text-gray-700">{label}</p>
         {detail && <p className="mt-1 text-xs text-gray-400">{detail}</p>}
       </div>
+
+      {/* Progress bar */}
+      <div className="w-full max-w-xs">
+        <div className="mb-1.5 flex items-center justify-between">
+          <span className="text-[10px] font-medium uppercase tracking-wider text-gray-400">Tiến độ</span>
+          <span className="text-xs font-bold tabular-nums text-violet-600">{Math.round(pct)}%</span>
+        </div>
+        <div className="h-2 w-full overflow-hidden rounded-full bg-gray-100">
+          <div
+            className="h-full rounded-full bg-gradient-to-r from-violet-500 to-purple-500 shadow-sm transition-all duration-500 ease-out"
+            style={{ width: `${pct}%` }}
+          />
+        </div>
+      </div>
+
       <p className="text-[11px] text-gray-300">Vui lòng giữ tab mở</p>
     </div>
   )
@@ -653,8 +673,26 @@ export default function VideoBuilder() {
   // ── Pipeline state ───────────────────────────────────────────────────────
   const [phase, setPhase] = useState<PipelinePhase>('idle')
   const [phaseDetail, setPhaseDetail] = useState('')
+  const [phaseProgress, setPhaseProgress] = useState(0)   // 0-100 for current step
   const [phaseError, setPhaseError] = useState<string | null>(null)
   const pipeRef = useRef<Partial<PipeData>>({})
+
+  /**
+   * Time-based progress estimator. For steps where we don't get granular
+   * status from the underlying API (KIE polling, fal.ai, Shotstack), we
+   * creep the progress bar up toward 95% over the estimated duration.
+   * Returns a cleanup function to stop the timer when work completes.
+   */
+  const startTimedProgress = (estimatedMs: number): (() => void) => {
+    setPhaseProgress(0)
+    const startTime = Date.now()
+    const id = setInterval(() => {
+      const elapsed = Date.now() - startTime
+      const pct = Math.min((elapsed / estimatedMs) * 95, 95)
+      setPhaseProgress(pct)
+    }, 400)
+    return () => clearInterval(id)
+  }
 
   // Preview states (for review UI)
   const [previewSegments, setPreviewSegments] = useState<ScriptSegment[]>([])
@@ -743,6 +781,7 @@ export default function VideoBuilder() {
     pipeRef.current = {}
     setPhase('idle')
     setPhaseDetail('')
+    setPhaseProgress(0)
     setPhaseError(null)
     setPreviewSegments([])
     setPreviewVoiceUrl(null)
@@ -765,6 +804,7 @@ export default function VideoBuilder() {
     setPhase('running-parse')
     setPhaseError(null)
     setPhaseDetail('Đang đọc ảnh avatar + sản phẩm...')
+    const stopProgress = startTimedProgress(30 * 1000) // ~30s estimate for Pro vision call
 
     // ── Collect reference images so Gemini Vision can SEE the actual product
     //    appearance (capsule/tablet/bottle/sachet/cream/etc.) and avatar style
@@ -916,6 +956,7 @@ ${script}`
     }
 
     if (!parsed?.segments?.length) {
+      stopProgress()
       setPhaseError('Không tạo được segments — script có thể quá ngắn')
       setPhase('failed')
       return
@@ -942,6 +983,8 @@ ${script}`
       addToast('Đã dùng phân tích offline (Gemini không phản hồi). Bạn có thể chỉnh sửa segments.', 'error')
     }
 
+    stopProgress()
+    setPhaseProgress(100)
     setPhase('review-parse')
   }
 
@@ -968,12 +1011,11 @@ ${script}`
 
     setPhase('running-voice')
     setPhaseError(null)
-    setPhaseDetail('')
+    setPhaseDetail('Khởi tạo TTS...')
+    setPhaseProgress(0)
 
     try {
-      // textToSpeechSmooth: chunked + context continuity for consistent quality
-      // on long scripts. 192kbps MP3 (falls back to 128 if plan blocks it),
-      // stability 0.75 for steadier voice, 1.2x speed for snappier UGC pace.
+      // Real progress from chunk completion (90% allocated to TTS, 10% for post-decode)
       const audioBuffer = await textToSpeechSmooth({
         apiKey: elevenLabsApiKey,
         voiceId: selectedVoiceId,
@@ -985,9 +1027,13 @@ ${script}`
         outputFormat: 'mp3_44100_192',
         chunkSize: 400,
         onProgress: (done, total) => {
-          setPhaseDetail(`Tạo audio: ${done}/${total} chunks (1.1x speed, chất lượng cao)...`)
+          const pct = (done / total) * 90
+          setPhaseProgress(pct)
+          setPhaseDetail(`Tạo audio: ${done}/${total} chunks (1.1x speed)...`)
         },
       })
+      setPhaseProgress(95)
+      setPhaseDetail('Đang decode audio duration...')
       const audioDuration = await getAudioDuration(audioBuffer)
       const audioBlob = new Blob([audioBuffer], { type: 'audio/mpeg' })
 
@@ -1012,41 +1058,49 @@ ${script}`
 
     setPhase('running-resolve')
     setPhaseError(null)
-    setPhaseDetail('Upload audio + resolve ảnh...')
+    setPhaseDetail('Upload audio lên Supabase...')
+    setPhaseProgress(10)
 
     try {
-      // Upload audio to Supabase
+      // Upload audio to Supabase (30% of total work)
       const audioAssetId = await saveAsset(pipeRef.current.audioBlob, 'audio/mpeg')
       const voiceUrl = await getUrl(audioAssetId)
       if (!voiceUrl) throw new Error('Không lấy được URL audio sau khi upload')
       pipeRef.current.voiceUrl = voiceUrl
+      setPhaseProgress(40)
+      setPhaseDetail('Resolve URL ảnh avatar...')
 
-      // Resolve avatar image
+      // Resolve avatar image (20%)
       const model = models.find((m) => m.id === selectedModelId)
       const avatarSrc = manualAvatarUrl ?? model?.characterImage ?? ''
       const avatarImageUrl = await resolveImageUrl(avatarSrc)
       if (!avatarImageUrl) throw new Error('Không lấy được URL ảnh Avatar AI')
       pipeRef.current.avatarImageUrl = avatarImageUrl
+      setPhaseProgress(60)
+      setPhaseDetail('Resolve URL ảnh sản phẩm...')
 
-      // Resolve product images (single bank + manual uploads)
+      // Resolve product images — track progress per image
       const productImageUrls: string[] = []
+      const allProductRefs: string[] = []
       if (selectedProductId) {
         const prod = products.find((p) => p.id === selectedProductId)
-        if (prod?.productImage) {
-          const url = await resolveImageUrl(prod.productImage)
-          if (url) productImageUrls.push(url)
-        }
+        if (prod?.productImage) allProductRefs.push(prod.productImage)
       }
+      for (const mp of manualProducts) allProductRefs.push(mp.blobUrl)
+
       let manualFailCount = 0
-      for (const mp of manualProducts) {
-        const url = await resolveImageUrl(mp.blobUrl)
+      for (let i = 0; i < allProductRefs.length; i++) {
+        const url = await resolveImageUrl(allProductRefs[i])
         if (url) productImageUrls.push(url)
         else manualFailCount++
+        // 60% → 95% over product image count
+        setPhaseProgress(60 + ((i + 1) / Math.max(allProductRefs.length, 1)) * 35)
       }
       if (manualFailCount > 0) {
         addToast(`${manualFailCount} ảnh đính kèm không upload được`, 'error')
       }
       pipeRef.current.productImageUrls = productImageUrls
+      setPhaseProgress(100)
 
       // Auto-proceed to B-roll Images (cheap, test-first cost optimization)
       await runBrollImages()
@@ -1066,6 +1120,7 @@ ${script}`
     setPhase('running-avatar')
     setPhaseError(null)
     setPhaseDetail('Kling Avatar đang gen video (~3-5 phút)...')
+    const stopProgress = startTimedProgress(4 * 60 * 1000)  // ~4 min estimate
 
     try {
       const { taskId } = await generateLipSync({
@@ -1079,8 +1134,11 @@ ${script}`
 
       pipeRef.current.avatarRawUrl = avatarRawUrl
       setPreviewAvatarUrl(avatarRawUrl)
+      stopProgress()
+      setPhaseProgress(100)
       setPhase('review-avatar')
     } catch (err) {
+      stopProgress()
       setPhaseError(err instanceof Error ? err.message : String(err))
       setPhase('failed')
     }
@@ -1126,16 +1184,23 @@ ${script}`
 
     setPhase('running-brollimg')
     setPhaseError(null)
-    setPhaseDetail(`Gen ${timedSegments.length} ảnh tĩnh song song (~30-60s)...`)
+    setPhaseProgress(0)
+    setPhaseDetail(`Gen 0/${timedSegments.length} ảnh tĩnh song song (~30-60s)...`)
 
     try {
       const results: (string | null)[] = new Array(timedSegments.length).fill(null)
+      let completed = 0
       await Promise.all(timedSegments.map(async (seg, i) => {
         results[i] = await generateOneImage(i, seg)
+        completed++
+        const pct = (completed / timedSegments.length) * 100
+        setPhaseProgress(pct)
+        setPhaseDetail(`Gen ${completed}/${timedSegments.length} ảnh tĩnh...`)
       }))
 
       pipeRef.current.brollImageUrls = results
       setPreviewBrollImageUrls([...results])
+      setPhaseProgress(100)
       setPhase('review-brollimg')
     } catch (err) {
       setPhaseError(err instanceof Error ? err.message : String(err))
@@ -1183,10 +1248,12 @@ ${script}`
 
     setPhase('running-broll')
     setPhaseError(null)
-    setPhaseDetail(`Animate ${timedSegments.length} ảnh thành video clips...`)
+    setPhaseProgress(0)
+    setPhaseDetail(`Animate 0/${timedSegments.length} clips (~5-8 phút)...`)
 
     try {
       const brollResults: (string | null)[] = new Array(timedSegments.length).fill(null)
+      let completed = 0
 
       await Promise.all(timedSegments.map(async (seg, i) => {
         const startImage = brollImageUrls?.[i]
@@ -1218,10 +1285,18 @@ ${script}`
             if (s.status === 'failed') break
           }
         } catch { brollResults[i] = null }
+
+        // Update progress as each clip finishes (regardless of success/fail)
+        completed++
+        const pct = (completed / timedSegments.length) * 100
+        setPhaseProgress(pct)
+        const success = brollResults.filter(Boolean).length
+        setPhaseDetail(`Animate ${completed}/${timedSegments.length} clips (${success} thành công)...`)
       }))
 
       pipeRef.current.brollResults = brollResults
       setPreviewBrollUrls([...brollResults])
+      setPhaseProgress(100)
       setPhase('review-broll')
     } catch (err) {
       setPhaseError(err instanceof Error ? err.message : String(err))
@@ -1239,14 +1314,17 @@ ${script}`
     setPhase('running-bg')
     setPhaseError(null)
     setPhaseDetail('fal.ai đang xóa nền (~1-2 phút)...')
+    const stopProgress = startTimedProgress(90 * 1000)  // ~1.5 min estimate
 
     try {
       const finalUrl = await removeVideoBackground({ apiKey: falApiKey, videoUrl: avatarRawUrl, outputFormat: 'mp4' })
       pipeRef.current.avatarFinalUrl = finalUrl
       setPreviewBgUrl(finalUrl)
+      stopProgress()
+      setPhaseProgress(100)
       setPhase('review-bg')
     } catch (err) {
-      // Allow user to skip bg removal on failure
+      stopProgress()
       setPhaseError(`Xóa nền thất bại: ${err instanceof Error ? err.message.slice(0, 100) : 'lỗi'}`)
       setPhase('failed')
     }
@@ -1274,6 +1352,7 @@ ${script}`
     setPhase('running-assemble')
     setPhaseError(null)
     setPhaseDetail('Shotstack đang render...')
+    const stopProgress = startTimedProgress(3 * 60 * 1000)  // ~3 min estimate
 
     try {
       const renderId = await buildUGCVideo({
@@ -1322,9 +1401,12 @@ ${script}`
       }
       setHistory((h) => [newJob, ...h])
 
+      stopProgress()
+      setPhaseProgress(100)
       setPhase('done')
       addToast('🎬 UGC Video đã build xong!')
     } catch (err) {
+      stopProgress()
       setPhaseError(err instanceof Error ? err.message : String(err))
       setPhase('failed')
 
@@ -1757,7 +1839,7 @@ ${script}`
           {!isIdle && phase !== 'done' && phase !== 'failed' && <PhaseHeader phase={phase} />}
 
           {/* Running states */}
-          {phase.startsWith('running-') && <RunningPanel phase={phase} detail={phaseDetail} />}
+          {phase.startsWith('running-') && <RunningPanel phase={phase} detail={phaseDetail} progress={phaseProgress} />}
 
           {/* ─── Review: Storyboard (step 2) ─── */}
           {phase === 'review-parse' && (
