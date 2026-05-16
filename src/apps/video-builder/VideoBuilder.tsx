@@ -15,6 +15,7 @@ import { directGeminiVision } from '../../utils/gemini'
 import { listVoices, listSharedVoices, textToSpeechSmooth } from '../../utils/elevenlabs'
 import { generateLipSync, pollLipSyncUntilDone, generateVideoJob, getVideoJobStatus } from '../../utils/kieai'
 import { removeVideoBackground, generateInstantIDImage } from '../../utils/falai'
+import { generateBrollImageGPT } from '../../utils/openai'
 import { buildUGCVideo, pollRenderUntilDone } from '../../utils/shotstack'
 import type { ElevenLabsVoice } from '../../utils/elevenlabs'
 import type { ScriptSegment, VideoBuilderJob } from './types'
@@ -702,7 +703,7 @@ function ReviewCard({
 // ── Main component ────────────────────────────────────────────────────────────
 
 export default function VideoBuilder() {
-  const { kieApiKey, elevenLabsApiKey, falApiKey, shotstackApiKey, geminiApiKey } = useSettingsStore()
+  const { kieApiKey, elevenLabsApiKey, falApiKey, shotstackApiKey, geminiApiKey, openaiApiKey } = useSettingsStore()
   const addToast = useAppStore((s) => s.addToast)
   const { scripts, models, products } = useBankStore()
 
@@ -1682,20 +1683,40 @@ Return ONLY the description as plain text, no preamble, no markdown.` },
   // Why: cheap ($0.04/image) and reviewable BEFORE committing to expensive
   // video generation ($0.35/clip). User can regen bad images individually.
 
-  const buildImagePrompt = (seg: ScriptSegment, hasAvatar: boolean, hasProduct: boolean): string => {
-    // ── FLUX 1.1 Pro Ultra prompt strategy ───────────────────────────────
-    // FLUX Ultra uses image_url as a SOFT reference (image_prompt_strength ~0.15).
-    // Unlike PuLID (strict face embedding), FLUX Ultra is text-prompt-driven.
-    // Strategy: scene FIRST, then character description (medium detail), then product.
-    // More text identity detail = better character consistency across shots.
+  // ── GPT-image-1 prompt builder ────────────────────────────────────────────
+  // Strategy: scene from Gemini storyboard + character text description + product note.
+  // gpt-image-1 is text-driven — no reference image needed.
+  // Key: "zero bokeh, zero depth of field, sharp focus across entire frame" = UGC phone look.
+  const buildImagePromptGPT = (seg: ScriptSegment): string => {
     const avatarDesc  = pipeRef.current.avatarDescription
     const productDesc = pipeRef.current.productDescription
 
-    // Scene description drives action, composition, environment — FIRST for FLUX.
+    // Scene first — from Gemini's storyboard (already in English, 60-120 words)
     const scene = seg.brollPrompt
 
-    // Character anchor: medium detail. FLUX Ultra needs enough to recognize
-    // the character without being overridden by the soft image reference.
+    // Character: enough detail for GPT to render consistently across shots
+    const characterDesc = avatarDesc
+      ? avatarDesc.split('\n').slice(0, 4).join(', ')
+      : 'young Malaysian woman in her late 20s, warm beige hijab, modest loose-fit casual outfit, warm tan skin, natural minimal makeup, friendly approachable face'
+
+    // Product: only when scene involves product interaction
+    const productNote = (seg.useProduct || seg.brollPrompt.toLowerCase().includes('product')) && productDesc
+      ? `\nProduct being held/shown: ${productDesc.split('\n')[0]}. Render the product accurately — correct packaging shape, color, label, branding exactly as described.`
+      : ''
+
+    // UGC iPhone camera style — the magic words that eliminate "plastic AI look"
+    const style = `\n\nVisual style: authentic UGC smartphone video frame (shot on iPhone), 9:16 vertical, completely unedited natural look, zero bokeh, zero depth of field, sharp focus across the entire frame, natural ambient lighting (window light / room light), no professional studio lighting, no artificial rim lighting, no AI-generated sheen, no digital enhancement, no watermarks, no text overlay, photorealistic, film-quality realism.`
+
+    return `${scene}\n\nSubject: ${characterDesc}.${productNote}${style}`
+  }
+
+  // ── FLUX Ultra prompt builder (fallback when no OpenAI key) ──────────────
+  const buildImagePromptFLUX = (seg: ScriptSegment, hasAvatar: boolean, hasProduct: boolean): string => {
+    const avatarDesc  = pipeRef.current.avatarDescription
+    const productDesc = pipeRef.current.productDescription
+
+    const scene = seg.brollPrompt
+
     const identityAnchor = hasAvatar
       ? `\n\nSubject: ${avatarDesc
           ? avatarDesc.split('\n').slice(0, 3).join(', ')
@@ -1703,7 +1724,6 @@ Return ONLY the description as plain text, no preamble, no markdown.` },
         }. Same person appearing throughout this photo series.`
       : ''
 
-    // Product description — include when scene mentions product interaction.
     const productAnchor = hasProduct && seg.brollPrompt.toLowerCase().includes('product')
       ? `\nProduct: ${productDesc
           ? productDesc.split('\n')[0]
@@ -1711,7 +1731,7 @@ Return ONLY the description as plain text, no preamble, no markdown.` },
         } — held or placed naturally in frame, same product across all shots.`
       : ''
 
-    const style = `\nPhotography style: candid UGC phone-camera, natural ambient light, real home/cafe setting, waist-up or full-body — NOT a face close-up portrait. Hyper-photorealistic, film grain, no AI artifacts, no text overlay, no watermark.`
+    const style = `\nPhotography style: authentic UGC smartphone camera, zero bokeh, zero depth of field, sharp focus across entire frame, natural ambient lighting, real home/cafe setting, waist-up or full-body — NOT a face close-up portrait. Hyper-photorealistic, film grain, no AI artifacts, no text overlay, no watermark.`
 
     return `${scene}${identityAnchor}${productAnchor}${style}`
   }
@@ -1720,17 +1740,29 @@ Return ONLY the description as plain text, no preamble, no markdown.` },
   // THROWS on error — callers must catch and decide how to surface the message.
   // This way only ONE toast is shown per failure (no duplicate generic + detailed).
   const generateOneImage = async (_i: number, seg: ScriptSegment): Promise<string> => {
+    // ── Priority 1: OpenAI gpt-image-1 (best photorealism, no plastic look) ──
+    if (openaiApiKey.trim()) {
+      const prompt = buildImagePromptGPT(seg)
+      const rawResult = await generateBrollImageGPT({ apiKey: openaiApiKey, prompt, quality: 'medium' })
+
+      // Convert data URL or CDN URL → blob → save to IndexedDB → return public URL
+      const fetchRes = await fetch(rawResult)
+      const blob = await fetchRes.blob()
+      const assetId = await saveAsset(blob, blob.type || 'image/png')
+      const publicUrl = await getUrl(assetId)
+      if (!publicUrl) throw new Error('Không lấy được URL từ asset store')
+      return publicUrl
+    }
+
+    // ── Priority 2: fal.ai FLUX 1.1 Pro Ultra (fallback) ──────────────────
     const { avatarImageUrl } = pipeRef.current
     if (!avatarImageUrl) throw new Error('Thiếu URL avatar — chạy lại Resolve step')
     if (!falApiKey)      throw new Error('Thiếu fal.ai API key — cài trong Cài đặt')
 
     const hasAvatar  = true
     const hasProduct = !!(pipeRef.current.productImageUrls && pipeRef.current.productImageUrls.length)
-    const prompt = buildImagePrompt(seg, hasAvatar, hasProduct)
+    const prompt = buildImagePromptFLUX(seg, hasAvatar, hasProduct)
 
-    // FLUX 1.1 Pro Ultra: avatar image_url = soft identity reference (0.15 strength).
-    // Scene + character description in prompt drives composition and action.
-    // raw: true = natural photo mode (no AI look). Photorealism ~9/10.
     const imageUrl = await generateInstantIDImage({
       apiKey: falApiKey,
       faceImageUrl: avatarImageUrl,
@@ -2650,7 +2682,7 @@ MOTION: Gentle cinematic camera motion only — slow push-in on key detail, or s
                       ) : (
                         <button
                           onClick={() => regenerateOneImage(i)}
-                          title={`Gen lại ảnh #${i + 1} (~$0.05 fal.ai FLUX 1.1 Pro Ultra — photorealistic)`}
+                          title={openaiApiKey ? `Gen lại ảnh #${i + 1} (~$0.07 OpenAI gpt-image-1 — photorealistic)` : `Gen lại ảnh #${i + 1} (~$0.05 fal.ai FLUX 1.1 Pro Ultra — photorealistic)`}
                           className="absolute right-1 top-1 flex h-7 w-7 items-center justify-center rounded-md bg-black/60 text-white opacity-0 transition-opacity hover:bg-violet-600 group-hover:opacity-100"
                         >
                           <RotateCcw className="h-3.5 w-3.5" />

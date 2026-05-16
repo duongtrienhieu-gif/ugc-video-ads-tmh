@@ -7,6 +7,7 @@ import { getAllAssetIds, deleteAsset, isAssetRef } from '../utils/assetStore'
 import { getKieCredits } from '../utils/kieai'
 import { directGeminiVision } from '../utils/gemini'
 import { getSubscription } from '../utils/elevenlabs'
+import { testOpenAIConnection } from '../utils/openai'
 
 interface SettingsModalProps {
   open: boolean
@@ -15,7 +16,7 @@ interface SettingsModalProps {
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-type SectionId = 'kie' | 'gemini' | 'eleven' | 'fal' | 'shotstack'
+type SectionId = 'kie' | 'gemini' | 'eleven' | 'fal' | 'shotstack' | 'openai'
 
 interface ServiceConfig {
   id: SectionId
@@ -91,6 +92,18 @@ const SERVICES: ServiceConfig[] = [
     getKeyUrl: 'https://dashboard.shotstack.io/register',
     getKeyLabel: 'Đăng ký →',
   },
+  {
+    id: 'openai',
+    label: 'OpenAI',
+    sublabel: 'Ảnh B-Roll · gpt-image-1 · Chân thực hơn FLUX',
+    color: 'sky',
+    borderColor: 'border-sky-200',
+    bgColor: 'bg-sky-50',
+    keyHint: '~$0.07/ảnh (medium) · Thay thế fal.ai để tạo ảnh B-Roll chân thực, đúng sản phẩm',
+    placeholder: 'sk-...',
+    getKeyUrl: 'https://platform.openai.com/api-keys',
+    getKeyLabel: 'Lấy key →',
+  },
 ]
 
 // ── Color maps ─────────────────────────────────────────────────────────────────
@@ -101,6 +114,7 @@ const DOT_COLOR: Record<string, string> = {
   violet:  'bg-violet-400',
   pink:    'bg-pink-400',
   orange:  'bg-orange-400',
+  sky:     'bg-sky-400',
 }
 const TEXT_COLOR: Record<string, string> = {
   indigo:  'text-indigo-600',
@@ -108,6 +122,7 @@ const TEXT_COLOR: Record<string, string> = {
   violet:  'text-violet-600',
   pink:    'text-pink-600',
   orange:  'text-orange-600',
+  sky:     'text-sky-600',
 }
 const FOCUS_BORDER: Record<string, string> = {
   indigo:  'focus:border-indigo-300',
@@ -115,6 +130,7 @@ const FOCUS_BORDER: Record<string, string> = {
   violet:  'focus:border-violet-300',
   pink:    'focus:border-pink-300',
   orange:  'focus:border-orange-300',
+  sky:     'focus:border-sky-300',
 }
 const BTN_CLASS: Record<string, string> = {
   indigo:  'border-indigo-200 text-indigo-700 hover:bg-indigo-50',
@@ -122,15 +138,16 @@ const BTN_CLASS: Record<string, string> = {
   violet:  'border-violet-200 text-violet-700 hover:bg-violet-50',
   pink:    'border-pink-200 text-pink-700 hover:bg-pink-50',
   orange:  'border-orange-200 text-orange-700 hover:bg-orange-50',
+  sky:     'border-sky-200 text-sky-700 hover:bg-sky-50',
 }
 
 // ── Main component ─────────────────────────────────────────────────────────────
 
 export default function SettingsModal({ open, onClose }: SettingsModalProps) {
   const {
-    kieApiKey, geminiApiKey, elevenLabsApiKey, falApiKey, shotstackApiKey,
+    kieApiKey, geminiApiKey, elevenLabsApiKey, falApiKey, shotstackApiKey, openaiApiKey,
     kieCredits,
-    setKieApiKey, setGeminiApiKey, setElevenLabsApiKey, setFalApiKey, setShotstackApiKey,
+    setKieApiKey, setGeminiApiKey, setElevenLabsApiKey, setFalApiKey, setShotstackApiKey, setOpenaiApiKey,
     setKieCredits,
   } = useSettingsStore()
   const addToast = useAppStore((s) => s.addToast)
@@ -142,9 +159,10 @@ export default function SettingsModal({ open, onClose }: SettingsModalProps) {
     eleven: elevenLabsApiKey,
     fal: falApiKey,
     shotstack: shotstackApiKey,
+    openai: openaiApiKey,
   })
   const [shows, setShows] = useState<Record<SectionId, boolean>>({
-    kie: false, gemini: false, eleven: false, fal: false, shotstack: false,
+    kie: false, gemini: false, eleven: false, fal: false, shotstack: false, openai: false,
   })
   const [openSection, setOpenSection] = useState<SectionId | null>(null)
   const [saved, setSaved] = useState(false)
@@ -156,12 +174,12 @@ export default function SettingsModal({ open, onClose }: SettingsModalProps) {
 
   useEffect(() => {
     if (open) {
-      setDrafts({ kie: kieApiKey, gemini: geminiApiKey, eleven: elevenLabsApiKey, fal: falApiKey, shotstack: shotstackApiKey })
+      setDrafts({ kie: kieApiKey, gemini: geminiApiKey, eleven: elevenLabsApiKey, fal: falApiKey, shotstack: shotstackApiKey, openai: openaiApiKey })
       setSaved(false)
       setTestResults({})
       setOpenSection(null)
     }
-  }, [open, kieApiKey, geminiApiKey, elevenLabsApiKey, falApiKey, shotstackApiKey])
+  }, [open, kieApiKey, geminiApiKey, elevenLabsApiKey, falApiKey, shotstackApiKey, openaiApiKey])
 
   if (!open) return null
 
@@ -175,7 +193,7 @@ export default function SettingsModal({ open, onClose }: SettingsModalProps) {
   const isSaved = (id: SectionId): boolean => {
     const map: Record<SectionId, string> = {
       kie: kieApiKey, gemini: geminiApiKey, eleven: elevenLabsApiKey,
-      fal: falApiKey, shotstack: shotstackApiKey,
+      fal: falApiKey, shotstack: shotstackApiKey, openai: openaiApiKey,
     }
     return map[id].length > 0
   }
@@ -219,6 +237,9 @@ export default function SettingsModal({ open, onClose }: SettingsModalProps) {
         } else {
           setTestResults((r) => ({ ...r, shotstack: { ok: true, message: 'Kết nối thành công — Shotstack sẵn sàng' } }))
         }
+      } else if (id === 'openai') {
+        const message = await testOpenAIConnection(key)
+        setTestResults((r) => ({ ...r, openai: { ok: true, message } }))
       }
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'Kết nối thất bại'
@@ -234,6 +255,7 @@ export default function SettingsModal({ open, onClose }: SettingsModalProps) {
     setElevenLabsApiKey(drafts.eleven.trim())
     setFalApiKey(drafts.fal.trim())
     setShotstackApiKey(drafts.shotstack.trim())
+    setOpenaiApiKey(drafts.openai.trim())
     setSaved(true)
     addToast('Đã lưu cài đặt thành công')
     if (drafts.kie.trim()) {
@@ -285,7 +307,7 @@ export default function SettingsModal({ open, onClose }: SettingsModalProps) {
           <div>
             <h2 className="text-base font-bold text-gray-900">Cài đặt</h2>
             <p className="mt-0.5 text-[11px] text-gray-400">
-              {[kieApiKey, geminiApiKey, elevenLabsApiKey, falApiKey, shotstackApiKey].filter(Boolean).length}/5 dịch vụ đã kết nối
+              {[kieApiKey, geminiApiKey, elevenLabsApiKey, falApiKey, shotstackApiKey, openaiApiKey].filter(Boolean).length}/6 dịch vụ đã kết nối
             </p>
           </div>
           <button

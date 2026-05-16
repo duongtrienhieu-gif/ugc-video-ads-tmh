@@ -16,6 +16,7 @@ interface OutputPanelProps {
   canGenerate: boolean
   aspectRatio: string
   onAspectRatioChange: (v: string) => void
+  onAutoSave?: () => Promise<void>
 }
 
 function ProviderIcon({ provider }: { provider: string }) {
@@ -48,7 +49,7 @@ function ProviderIcon({ provider }: { provider: string }) {
   )
 }
 
-export default function OutputPanel({ result, isGenerating, onGenerate, onCancel, canGenerate, aspectRatio, onAspectRatioChange }: OutputPanelProps) {
+export default function OutputPanel({ result, isGenerating, onGenerate, onCancel, canGenerate, aspectRatio, onAspectRatioChange, onAutoSave }: OutputPanelProps) {
   const [copied, setCopied] = useState(false)
   const [jsonExpanded, setJsonExpanded] = useState(false)
   const [showSaveForm, setShowSaveForm] = useState(false)
@@ -56,6 +57,8 @@ export default function OutputPanel({ result, isGenerating, onGenerate, onCancel
   const [saved, setSaved] = useState(false)
   const [savedModel, setSavedModel] = useState<Model | null>(null)
   const [variantsOpen, setVariantsOpen] = useState(false)
+  const [isAutoSaving, setIsAutoSaving] = useState(false)
+  const pendingVariantsOpenRef = useRef(false)
   const [selectedModel, setSelectedModel] = useState(IMAGE_MODELS[0]) // Nano Banana 2 — reliable default
   const [resolution, setResolution] = useState<ImageResolution>('1K')
   const [modelDropOpen, setModelDropOpen] = useState(false)
@@ -89,7 +92,7 @@ export default function OutputPanel({ result, isGenerating, onGenerate, onCancel
   const models = useBankStore((s) => s.models)
   const resolvedImageUrl = useAssetUrl(result?.imageUrl)
 
-  const isPortrait = aspectRatio.includes('9:16')
+  const isPortrait = aspectRatio.includes('9:16') || aspectRatio.includes('1:1')
   const credits = selectedModel.credits[resolution]
 
   const handleCopy = () => {
@@ -103,7 +106,13 @@ export default function OutputPanel({ result, isGenerating, onGenerate, onCancel
   useEffect(() => {
     if (saved && result?.imageUrl && !savedModel) {
       const found = models.find((m) => m.characterImage === result.imageUrl)
-      if (found) setSavedModel(found)
+      if (found) {
+        setSavedModel(found)
+        if (pendingVariantsOpenRef.current) {
+          pendingVariantsOpenRef.current = false
+          setVariantsOpen(true)
+        }
+      }
     }
   }, [models, saved, result?.imageUrl, savedModel])
 
@@ -129,13 +138,19 @@ export default function OutputPanel({ result, isGenerating, onGenerate, onCancel
         <div className="flex gap-2">
           <button
             onClick={() => onAspectRatioChange('Portrait (9:16)')}
-            className={`flex flex-1 items-center justify-center gap-1.5 rounded-lg border py-2 text-xs font-medium transition-colors ${isPortrait ? 'border-sky-500/30 bg-sky-500/10 text-sky-400' : 'border-black/10 text-gray-500 hover:border-black/15 hover:text-gray-700'}`}
+            className={`flex flex-1 items-center justify-center gap-1.5 rounded-lg border py-2 text-xs font-medium transition-colors ${aspectRatio.includes('9:16') ? 'border-sky-500/30 bg-sky-500/10 text-sky-400' : 'border-black/10 text-gray-500 hover:border-black/15 hover:text-gray-700'}`}
           >
             <span>📱</span> Dọc 9:16
           </button>
           <button
+            onClick={() => onAspectRatioChange('Square (1:1)')}
+            className={`flex flex-1 items-center justify-center gap-1.5 rounded-lg border py-2 text-xs font-medium transition-colors ${aspectRatio.includes('1:1') ? 'border-sky-500/30 bg-sky-500/10 text-sky-400' : 'border-black/10 text-gray-500 hover:border-black/15 hover:text-gray-700'}`}
+          >
+            <span>⬜</span> Vuông 1:1
+          </button>
+          <button
             onClick={() => onAspectRatioChange('Landscape (16:9)')}
-            className={`flex flex-1 items-center justify-center gap-1.5 rounded-lg border py-2 text-xs font-medium transition-colors ${!isPortrait ? 'border-sky-500/30 bg-sky-500/10 text-sky-400' : 'border-black/10 text-gray-500 hover:border-black/15 hover:text-gray-700'}`}
+            className={`flex flex-1 items-center justify-center gap-1.5 rounded-lg border py-2 text-xs font-medium transition-colors ${aspectRatio === 'Landscape (16:9)' ? 'border-sky-500/30 bg-sky-500/10 text-sky-400' : 'border-black/10 text-gray-500 hover:border-black/15 hover:text-gray-700'}`}
           >
             <span>🖥</span> Ngang 16:9
           </button>
@@ -377,21 +392,47 @@ export default function OutputPanel({ result, isGenerating, onGenerate, onCancel
             </button>
           )}
 
-          {/* After saving: show "Create 4 angles" button for identity lock */}
-          {saved && savedModel && (
-            <button
-              onClick={() => setVariantsOpen(true)}
-              className="flex w-full items-center justify-center gap-2 rounded-full border border-violet-300 bg-violet-50 px-6 py-3.5 text-[13px] font-medium tracking-tight text-violet-700 transition-colors hover:bg-violet-100"
-            >
-              <Sparkles className="h-4 w-4" />
-              ✨ Tạo 4 góc mặt — identity lock B-roll
-            </button>
-          )}
-          {saved && !savedModel && (
-            <p className="text-center text-[11px] text-gray-400">
-              → Vào Project → Avatar AI → hover ảnh → ✨ để tạo 4 góc mặt
-            </p>
-          )}
+          {/* "Tạo 4 góc mặt" — visible as soon as result exists */}
+          <button
+            onClick={async () => {
+              if (savedModel) {
+                setVariantsOpen(true)
+              } else {
+                // Auto-save first, then wait for savedModel via useEffect
+                pendingVariantsOpenRef.current = true
+                setIsAutoSaving(true)
+                try {
+                  if (onAutoSave) {
+                    await onAutoSave()
+                  } else {
+                    // Fallback: save with default name inline
+                    if (!result) return
+                    await addModel({
+                      characterImage: result.imageUrl,
+                      name: `Avatar ${new Date().toLocaleDateString('vi-VN')}`,
+                      notes: '',
+                      jsonProfile: result.jsonPrompt as unknown as Record<string, unknown>,
+                      source: 'character-studio',
+                    })
+                    setSaved(true)
+                  }
+                } catch (err) {
+                  pendingVariantsOpenRef.current = false
+                  console.error('Auto-save failed:', err)
+                } finally {
+                  setIsAutoSaving(false)
+                }
+              }
+            }}
+            disabled={isAutoSaving}
+            className="flex w-full items-center justify-center gap-2 rounded-full border border-violet-300 bg-violet-50 px-6 py-3.5 text-[13px] font-medium tracking-tight text-violet-700 transition-colors hover:bg-violet-100 disabled:opacity-50"
+          >
+            {isAutoSaving ? (
+              <><Loader2 className="h-4 w-4 animate-spin" /> Đang lưu...</>
+            ) : (
+              <><Sparkles className="h-4 w-4" /> ✨ Tạo 4 góc mặt — identity lock B-roll</>
+            )}
+          </button>
         </div>
       </div>
 

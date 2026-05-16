@@ -48,7 +48,7 @@ export function buildJsonPrompt(profile: CharacterProfile): Record<string, Recor
 /**
  * Builds a natural language image generation prompt from the character profile.
  */
-function buildImagePrompt(profile: CharacterProfile): string {
+function buildImagePrompt(profile: CharacterProfile, hasProduct?: boolean): string {
   const parts: string[] = []
 
   // Physical description
@@ -82,6 +82,7 @@ function buildImagePrompt(profile: CharacterProfile): string {
   const poseParts = [
     profile.pose,
     profile.action,
+    hasProduct && 'holding a product bottle in their hands, product clearly visible',
     profile.expression && `${profile.expression} expression`,
   ].filter(Boolean)
   if (poseParts.length) parts.push(poseParts.join(', ') + '.')
@@ -124,14 +125,21 @@ export async function generateCharacter(
   profile: CharacterProfile,
   modelId: string,
   resolution: ImageResolution,
+  productImageUrl?: string,
 ): Promise<GenerationResult> {
   const kieApiKey = useSettingsStore.getState().kieApiKey
   if (!kieApiKey) throw new Error('NO_KIE_KEY')
 
-  const prompt = buildImagePrompt(profile)
-  const aspectRatio = profile.aspectRatio === 'Landscape (16:9)' ? '16:9' : '9:16'
+  const hasProduct = !!productImageUrl
+  const prompt = buildImagePrompt(profile, hasProduct)
+  const aspectRatio = profile.aspectRatio?.includes('1:1')
+    ? '1:1'
+    : profile.aspectRatio === 'Landscape (16:9)'
+    ? '16:9'
+    : '9:16'
 
-  const { taskId } = await generateImage({ apiKey: kieApiKey, model: modelId, prompt, resolution, aspectRatio })
+  const referenceImageUrls = productImageUrl ? [productImageUrl] : undefined
+  const { taskId } = await generateImage({ apiKey: kieApiKey, model: modelId, prompt, resolution, aspectRatio, referenceImageUrls })
   const remoteUrl = await pollImageUntilDone({ apiKey: kieApiKey, taskId, timeoutMs: 3 * 60 * 1000 })
 
   // Download and persist to IndexedDB so the image survives page reloads
