@@ -39,9 +39,13 @@ export default function OutputPanel({
     if (!result || !productId) return
     const title = (savedTitle.trim() || `${productName ?? 'Script'} — ${result.presetLabel}`).slice(0, 120)
     try {
+      // Only persist the Bahasa Melayu version — that's the one the
+      // downstream UGC video pipeline (voice / video builder) uses for the
+      // Malaysian market. English is reference-only and can be re-derived
+      // anytime by regenerating from the same product + preset.
       await addScript({
         title,
-        scriptText: `${result.english}\n\n──────── BAHASA MELAYU ────────\n\n${result.malay}`,
+        scriptText: result.malay,
         linkedProductId: productId,
         source: 'script-architect',
       })
