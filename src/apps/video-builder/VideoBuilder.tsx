@@ -485,7 +485,7 @@ const STEP_INFO: Record<string, { num: number; label: string; subLabel: string; 
   parse:    { num: 2, label: 'Storyboard',          subLabel: 'Gemini Pro phân tích voice → cảnh quay chi tiết', cost: 'Miễn phí' },
   resolve:  { num: 3, label: 'Chuẩn bị tài nguyên', subLabel: 'Upload audio + resolve URL ảnh',           cost: 'Miễn phí' },
   brollimg: { num: 4, label: 'B-roll Images',       subLabel: 'GPT Image 2 — gen ảnh photoreal, review trước khi commit video', cost: '~60 KIE credit' },
-  broll:    { num: 5, label: 'B-roll Videos',       subLabel: 'Seedance 2 Fast — UGC motion chân thực (TikTok-native)', cost: '~1,650 KIE credit' },
+  broll:    { num: 5, label: 'B-roll Videos',       subLabel: 'Seedance 2 Fast 480p — UGC motion, tiết kiệm credit', cost: '~850 KIE credit' },
   avatar:   { num: 6, label: 'Avatar Lip-sync',     subLabel: 'Kling Avatar: ảnh + audio → video nói (bước đắt nhất, làm sau cùng để chắc B-roll OK)', cost: '~624 KIE credit' },
   bg:       { num: 7, label: 'Xóa nền Avatar',      subLabel: 'Tách nền để overlay trong suốt',           cost: '~$0.50 · fal.ai' },
   assemble: { num: 8, label: 'Ghép video',          subLabel: 'Layer B-roll + avatar + captions',         cost: '~$0.50 · Shotstack' },
@@ -1537,18 +1537,18 @@ ${script}`
 MOTION: The avatar speaks naturally with subtle hand gestures, slight head turns, and authentic blinks — looks like a real person recording a UGC review on their phone. The main scene element has gentle cinematic camera motion (slow push-in on key detail, or smooth slow pan across the setting). NO static frozen frames, NO jitter, NO sudden cuts. Maintain photorealistic UGC ad style throughout the 5-second clip.`
 
         try {
-          // Seedance 2 Fast (ByteDance) — trained on billions of TikTok videos,
-          // produces the most authentic UGC motion. Uses `first_frame_image_url`
-          // for TRUE image-to-video (animates exactly from the provided still),
-          // unlike Kling's `image_urls` which is reference-based.
+          // Seedance 2 Fast at 480p — saves ~50% credits vs 720p. UGC ads on
+          // TikTok/Reels feed are heavily compressed anyway so 480p source
+          // looks fine after platform encoding. Uses `first_frame_image_url`
+          // for TRUE image-to-video (animates exactly from the provided still).
           const { taskId } = await generateVideoJob({
             apiKey: kieApiKey,
             jobModelId: 'bytedance/seedance-2-fast',
             prompt: motionPrompt,
             aspectRatio: '9:16',
-            resolution: '720p',
+            resolution: '480p',          // ~85 cr/clip vs ~165 cr at 720p
             duration: 5,
-            startFrameUrl: startImage,   // proper i2v anchor
+            startFrameUrl: startImage,
           })
           const brollStart = Date.now()
           while (Date.now() - brollStart < 8 * 60 * 1000) {
@@ -1970,7 +1970,7 @@ MOTION: The avatar speaks naturally with subtle hand gestures, slight head turns
             </button>
           )}
           <p className="mt-2 text-center text-xs text-gray-400">
-            {isIdle ? 'Pipeline 8 bước · ~2,334 KIE credit + ~$1.30 (EL+fal+SS)' : `Đang chạy · ~2,334 KIE credit + ~$1.30 ngoài KIE`}
+            {isIdle ? 'Pipeline 8 bước · ~1,534 KIE credit + ~$1.30 (EL+fal+SS) · 480p tiết kiệm' : `Đang chạy · ~1,534 KIE credit + ~$1.30 ngoài KIE`}
           </p>
         </div>
       </div>
@@ -2268,7 +2268,7 @@ MOTION: The avatar speaks naturally with subtle hand gestures, slight head turns
             <ReviewCard
               onRetry={runBroll}
               onContinue={runAvatar}
-              retryLabel={`Tạo lại tất cả (~${previewBrollUrls.length * 165} cr)`}
+              retryLabel={`Tạo lại tất cả (~${previewBrollUrls.length * 85} cr)`}
               continueLabel="Tiếp tục → Avatar"
               continueCost={STEP_INFO.avatar.cost}
             >
@@ -2376,7 +2376,7 @@ MOTION: The avatar speaks naturally with subtle hand gestures, slight head turns
                 </p>
               </div>
               <div className="flex flex-wrap justify-center gap-2 text-xs text-gray-400">
-                {['$0.30 EL ① Voice', 'Free ② Storyboard', '60 cr ④ Images (GPT-2)', '1,650 cr ⑤ Videos (Seedance)', '624 cr ⑥ Avatar', '$0.50 fal ⑦ BG', '$0.50 SS ⑧ Render'].map((t) => (
+                {['$0.30 EL ① Voice', 'Free ② Storyboard', '60 cr ④ Images (GPT-2)', '850 cr ⑤ Videos (Seedance 480p)', '624 cr ⑥ Avatar', '$0.50 fal ⑦ BG', '$0.50 SS ⑧ Render'].map((t) => (
                   <span key={t} className="rounded-full border border-black/8 bg-black/[0.02] px-3 py-1.5">{t}</span>
                 ))}
               </div>

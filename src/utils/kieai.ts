@@ -167,7 +167,7 @@ export const VIDEO_MODELS: VideoModel[] = [
 ]
 
 export type AspectRatio = '16:9' | '9:16'
-export type Resolution = '720p' | '1080p' | '4k'
+export type Resolution = '480p' | '720p' | '1080p' | '4k'
 export type VideoStatus = 'pending' | 'processing' | 'completed' | 'failed'
 
 export async function generateVideo(params: {
