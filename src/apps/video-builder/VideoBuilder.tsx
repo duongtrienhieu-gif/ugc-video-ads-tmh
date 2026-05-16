@@ -477,6 +477,9 @@ interface PersistedState {
   previewBrollImageUrls: (string | null)[]
   previewBrollUrls: (string | null)[]
   previewBgUrl: string | null
+  // Reference ad analysis (text only — file itself not persisted, user re-uploads if needed)
+  refVideoAnalysis: string | null
+  refVideoName: string
   // Completed jobs
   history: VideoBuilderJob[]
 }
@@ -701,6 +704,16 @@ export default function VideoBuilder() {
   const [manualAvatarName, setManualAvatarName] = useState('')
   const [manualProducts, setManualProducts] = useState<ManualProduct[]>([])
 
+  // ── Reference winning ad (optional) ──────────────────────────────────────
+  // User uploads a proven UGC ad video → Gemini Pro Vision analyzes it →
+  // structure/style insights get injected into the storyboard prompt so the
+  // generated video MATCHES the winning ad's composition + pacing + tone.
+  const refVideoInputRef = useRef<HTMLInputElement>(null)
+  const [refVideoFile, setRefVideoFile] = useState<File | null>(null)
+  const [refVideoName, setRefVideoName] = useState('')
+  const [refVideoAnalysis, setRefVideoAnalysis] = useState<string | null>(null)
+  const [analyzingRefVideo, setAnalyzingRefVideo] = useState(false)
+
   // ── Pipeline state ───────────────────────────────────────────────────────
   const [phase, setPhase] = useState<PipelinePhase>('idle')
   const [phaseDetail, setPhaseDetail] = useState('')
@@ -810,6 +823,8 @@ export default function VideoBuilder() {
       setPreviewBrollImageUrls((saved.previewBrollImageUrls ?? []).map(safeUrl))
       setPreviewBrollUrls((saved.previewBrollUrls ?? []).map(safeUrl))
       setPreviewBgUrl(safeUrl(saved.previewBgUrl))
+      setRefVideoAnalysis(saved.refVideoAnalysis ?? null)
+      setRefVideoName(saved.refVideoName ?? '')
       setHistory(saved.history ?? [])
 
       // Restore pipeData (Blob field excluded — re-fetch via assetId if needed)
@@ -866,6 +881,7 @@ export default function VideoBuilder() {
         pipeData: pipeDataCopy,
         previewSegments, previewVoiceUrl, previewAvatarUrl,
         previewBrollImageUrls, previewBrollUrls, previewBgUrl,
+        refVideoAnalysis, refVideoName,
         history,
       }
       localStorage.setItem(CACHE_KEY, JSON.stringify(state))
@@ -876,6 +892,7 @@ export default function VideoBuilder() {
     phase, phaseError,
     previewSegments, previewVoiceUrl, previewAvatarUrl,
     previewBrollImageUrls, previewBrollUrls, previewBgUrl,
+    refVideoAnalysis, refVideoName,
     history,
     selectedScriptId, script, selectedModelId, selectedProductId, selectedVoiceId,
   ])
@@ -889,6 +906,114 @@ export default function VideoBuilder() {
 
   const handleToggleProduct = (id: string) => {
     setSelectedProductId((prev) => prev === id ? '' : id)
+  }
+
+  // ── Reference winning ad — upload + analyze ──────────────────────────────
+
+  const handleRefVideoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    if (!file.type.startsWith('video/')) {
+      addToast('File phải là video (MP4 / MOV / WebM)', 'error'); return
+    }
+    if (file.size > 15 * 1024 * 1024) {
+      addToast('Video > 15MB. Compress lại bằng Handbrake / FFmpeg trước.', 'error'); return
+    }
+    setRefVideoFile(file)
+    setRefVideoName(file.name)
+    setRefVideoAnalysis(null)   // clear previous analysis
+    e.target.value = ''
+  }
+
+  const analyzeRefVideo = async () => {
+    if (!refVideoFile) { addToast('Upload video mẫu trước', 'error'); return }
+    if (!geminiApiKey) { addToast('Cần Gemini API key', 'error'); return }
+    setAnalyzingRefVideo(true)
+
+    try {
+      // Convert video → base64 (Gemini Vision needs inline data)
+      const buffer = await refVideoFile.arrayBuffer()
+      const bytes = new Uint8Array(buffer)
+      // Build base64 in chunks to avoid call-stack overflow for big files
+      let binary = ''
+      const chunkSize = 0x8000
+      for (let i = 0; i < bytes.length; i += chunkSize) {
+        binary += String.fromCharCode.apply(null, Array.from(bytes.subarray(i, i + chunkSize)))
+      }
+      const base64 = btoa(binary)
+
+      const analysisPrompt = `You are a senior UGC ad analyst. Analyze this winning advertisement video and extract a COMPREHENSIVE STRUCTURE BREAKDOWN. The user is building a similar ad for the Malaysia market and wants to replicate this video's exact STYLE + COMPOSITION + PACING.
+
+The reference ad may be in any language (English, Vietnamese, Malay). Analyze the VISUAL and STRUCTURAL elements regardless of language. Write the analysis in clear English.
+
+PROVIDE:
+
+1. TRANSCRIPT WITH TIMING — every spoken line with start time, e.g.:
+   0:00 "The secret to pain-free joints was discovered in 1973"
+   0:04 "And it's in this capsule"
+   ...
+
+2. NARRATIVE BEATS (identify which of these the ad uses):
+   - Hook (first 3-5s): what curiosity/discovery teaser opens
+   - Pain story: what suffering the speaker describes
+   - Failed solutions: what didn't work
+   - Discovery turning point: how they found the product
+   - How-it-works: mechanism explanation
+   - Science/authority signals
+   - Transformation: life change shown
+   - CTA: call to action style
+
+3. VISUAL COMPOSITION per beat:
+   - Shot type (close-up / medium / wide / over-shoulder / POV)
+   - Avatar position (full-frame center / corner inset bottom-right /
+     not visible / split-screen)
+   - Setting (kitchen / dining table / bedroom / park / lab / outdoor)
+   - Camera movement (static / slow push-in / pan / handheld / tracking)
+   - Lighting (warm natural / cool clinical / dramatic side / golden hour)
+   - Specific actions performed (e.g. "hands on stomach in pain",
+     "holding bottle up to camera", "eating happily")
+
+4. PACING:
+   - Average segment length (seconds)
+   - Cut frequency (slow / medium / fast)
+   - Energy progression (slow burn / steady / building urgency)
+
+5. CAPTIONS/OVERLAY TEXT:
+   - Are spoken words shown as captions on screen?
+   - Caption style (bold all-caps / lowercase casual / highlighted words)
+   - Position (bottom / center / animated)
+
+6. AVATAR/SPEAKER PROFILE:
+   - Apparent age, gender, ethnicity
+   - Clothing style
+   - Tone/delivery (energetic / calm / authoritative / vulnerable)
+
+7. KEY STYLISTIC SIGNATURES — what makes this ad feel like a winning UGC ad
+   vs a polished commercial? (e.g. slightly handheld, imperfect framing,
+   real-home backgrounds, natural lighting, no overproduction)
+
+Return as plain English text with clear section headers. Be specific and
+concrete — describe actual visuals, not generic terms. Target output:
+500-1500 words.`
+
+      const result = await directGeminiVision({
+        apiKey: geminiApiKey,
+        parts: [
+          { inlineData: { mimeType: refVideoFile.type || 'video/mp4', data: base64 } },
+          { text: analysisPrompt },
+        ],
+        model: 'gemini-2.5-pro',
+        maxOutputTokens: 8192,
+      })
+
+      setRefVideoAnalysis(result.trim())
+      addToast('✓ Đã phân tích video mẫu — style sẽ được apply vào storyboard')
+    } catch (err) {
+      console.error('[analyzeRefVideo] failed:', err)
+      addToast(`Phân tích thất bại: ${err instanceof Error ? err.message.slice(0, 80) : 'unknown'}`, 'error')
+    } finally {
+      setAnalyzingRefVideo(false)
+    }
   }
 
   const handleAvatarUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -947,7 +1072,9 @@ export default function VideoBuilder() {
     setPreviewBrollImageUrls([])
     setRegeneratingImageIndices(new Set())
     setPreviewBrollUrls([])
+    setGeneratingBrollIndices(new Set())
     setPreviewBgUrl(null)
+    // Reference video stays — user can build multiple videos with same reference
   }
 
   // ── Step 2: Storyboard from audio + script ────────────────────────────────
@@ -1043,7 +1170,38 @@ USE THIS CONTEXT TO:
       ? `Reference images attached (in order):\n${refLabels.map((l, i) => `[Image ${i + 1}] ${l}`).join('\n')}\n\nCRITICAL: First, look carefully at the product image(s). Identify the EXACT form factor (capsule / tablet / powder sachet / liquid bottle / cream tube / spray / etc.), packaging style, color, and branding. Your prompts MUST describe the product as it ACTUALLY APPEARS in the image — do not invent a different form even if the script's wording is ambiguous.\n\nExample: If you see capsules in a bottle but the script says "sachet", your prompt should still describe a BOTTLE of CAPSULES (the script may be loosely translated or using a generic term).\n\nFor avatar: every shot featuring a person should match the avatar's apparent age, ethnicity, style, and clothing as seen in the reference image.\n\n`
       : ''
 
-    const parsePrompt = `${imageManifest}${productContextBlock}You are a senior UGC video director creating a cinematic storyboard.
+    // If user uploaded a winning ad reference, inject its analysis as the
+    // PRIMARY style guide — Gemini must match this proven format exactly,
+    // adapted to the new product + Malaysian market context.
+    const referenceStyleBlock = refVideoAnalysis ? `
+═══════════════════════════════════════════════════════════════════
+🏆 WINNING AD STYLE REFERENCE (user uploaded a proven UGC ad to mimic)
+═══════════════════════════════════════════════════════════════════
+The user wants the generated UGC video to MATCH the visual style, composition,
+pacing, and emotional arc of this proven winning ad. The reference ad may be
+in English/Vietnamese/Malay — extract STYLE only, ignore the original product.
+
+REFERENCE AD ANALYSIS:
+${refVideoAnalysis}
+
+YOUR JOB: Mirror this winning ad's style exactly:
+- Use the same SHOT TYPES, AVATAR POSITIONING, FRAMING for each beat
+- Match the PACING (segment lengths and cut frequency)
+- Replicate the EMOTIONAL ARC progression
+- Adopt the CAMERA MOVEMENT style
+- Use the same LIGHTING aesthetic
+- Apply same CAPTION/OVERLAY style cues
+
+ADAPT to the NEW context:
+- Product: ${products.find((p) => p.id === selectedProductId)?.productName ?? 'the selected product (see reference images)'}
+- Market: Malaysia / SEA — adapt to Malaysian female lifestyle, hijab-friendly settings
+- Avatar: matches the uploaded reference avatar image
+- Language of dialogue: Malay (keep the script's original language)
+═══════════════════════════════════════════════════════════════════
+
+` : ''
+
+    const parsePrompt = `${imageManifest}${productContextBlock}${referenceStyleBlock}You are a senior UGC video director creating a cinematic storyboard.
 
 The voiceover is ${audioDuration.toFixed(1)} seconds long. Split the script into 8-12 segments matching natural pause/sentence boundaries. Each segment should be 4-8 seconds.
 
@@ -2098,6 +2256,87 @@ MOTION: Gentle cinematic camera motion only — slow push-in on key detail, or s
               className="hidden"
               onChange={handleProductUpload}
             />
+          </div>
+
+          {/* ─── Video mẫu (tùy chọn) ─── */}
+          <div>
+            <SectionLabel icon={Film}>Video ads mẫu — tham khảo style (tùy chọn)</SectionLabel>
+
+            {!refVideoFile && (
+              <button
+                type="button"
+                onClick={() => !isBuilding && refVideoInputRef.current?.click()}
+                disabled={isBuilding}
+                className="flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-violet-200 bg-violet-50/40 py-3 text-xs font-medium text-violet-600 transition-colors hover:border-violet-300 hover:bg-violet-50 disabled:opacity-40"
+              >
+                <Upload className="h-3.5 w-3.5" />
+                Upload video ad win (MP4 · ≤15MB)
+              </button>
+            )}
+
+            {refVideoFile && (
+              <div className="rounded-xl border border-violet-200 bg-violet-50/60 p-3">
+                <div className="flex items-start gap-2">
+                  <Film className="mt-0.5 h-4 w-4 shrink-0 text-violet-500" />
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-xs font-semibold text-violet-800">{refVideoName}</p>
+                    <p className="text-[10px] text-violet-600">
+                      {(refVideoFile.size / (1024 * 1024)).toFixed(1)} MB · {refVideoFile.type}
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => { setRefVideoFile(null); setRefVideoName(''); setRefVideoAnalysis(null) }}
+                    disabled={isBuilding || analyzingRefVideo}
+                    className="flex h-6 w-6 items-center justify-center rounded-md text-gray-400 hover:bg-red-50 hover:text-red-500 disabled:opacity-40"
+                    title="Bỏ video mẫu"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+
+                {!refVideoAnalysis ? (
+                  <button
+                    onClick={analyzeRefVideo}
+                    disabled={analyzingRefVideo || isBuilding || !geminiApiKey}
+                    className="mt-2 flex w-full items-center justify-center gap-1.5 rounded-lg bg-violet-600 px-3 py-1.5 text-xs font-bold text-white shadow-sm transition-colors hover:bg-violet-700 disabled:opacity-40"
+                  >
+                    {analyzingRefVideo ? (
+                      <><Loader2 className="h-3 w-3 animate-spin" />Đang phân tích bằng Gemini Pro Vision (~30s-1ph)...</>
+                    ) : (
+                      <><Sparkles className="h-3 w-3" />Phân tích style video</>
+                    )}
+                  </button>
+                ) : (
+                  <details className="mt-2 rounded-md border border-emerald-200 bg-emerald-50/60 p-2 text-[10px]">
+                    <summary className="cursor-pointer font-semibold text-emerald-700">
+                      ✓ Đã phân tích — click để xem chi tiết style (sẽ apply vào storyboard)
+                    </summary>
+                    <pre className="mt-2 max-h-48 overflow-y-auto whitespace-pre-wrap text-[9px] leading-relaxed text-gray-700">
+                      {refVideoAnalysis}
+                    </pre>
+                    <button
+                      onClick={analyzeRefVideo}
+                      disabled={analyzingRefVideo}
+                      className="mt-2 text-[10px] font-semibold text-violet-600 hover:underline"
+                    >
+                      Phân tích lại
+                    </button>
+                  </details>
+                )}
+              </div>
+            )}
+
+            <input
+              ref={refVideoInputRef}
+              type="file"
+              accept="video/mp4,video/quicktime,video/webm,video/mpeg"
+              className="hidden"
+              onChange={handleRefVideoUpload}
+            />
+
+            <p className="mt-1.5 text-[10px] text-gray-400">
+              Up video UGC ad đã win (English/Việt/Malay đều được). AI sẽ phân tích style + composition + pacing → áp dụng vào storyboard cho video Malaysia bạn build.
+            </p>
           </div>
 
           {/* ─── Giọng đọc ─── */}
