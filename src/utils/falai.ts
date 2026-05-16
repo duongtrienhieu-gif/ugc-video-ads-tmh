@@ -222,7 +222,7 @@ export async function generateInstantIDImage(params: {
   faceImageUrl: string          // reference face — the identity anchor
   prompt: string                // scene description
   negativePrompt?: string
-  /** 0-3, default 1.2. Higher = stronger identity lock, less prompt flexibility. */
+  /** 0-1, default 0.9. Higher = stronger identity lock, less prompt flexibility. Max = 1.0 */
   identityStrength?: number
   /** Exact width × height in pixels. */
   imageSize?: { width: number; height: number }
@@ -238,7 +238,7 @@ export async function generateInstantIDImage(params: {
     reference_image_url:  params.faceImageUrl,
     prompt:               params.prompt,
     negative_prompt:      params.negativePrompt ?? 'low quality, blurry, distorted, deformed face, multiple faces, watermark, text overlay',
-    id_weight:            params.identityStrength ?? 1.2,
+    id_weight:            Math.min(params.identityStrength ?? 0.9, 1.0),  // fal.ai max = 1.0
     image_size:           imageSize,
     num_inference_steps:  28,
     guidance_scale:       3.5,

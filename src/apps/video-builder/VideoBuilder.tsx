@@ -482,6 +482,7 @@ interface PersistedState {
   // Reference ad analysis (text only — file itself not persisted, user re-uploads if needed)
   refVideoAnalysis: string | null
   refVideoName: string
+  selectedTemplateId: string
   // Completed jobs
   history: VideoBuilderJob[]
 }
@@ -841,6 +842,7 @@ export default function VideoBuilder() {
       setPreviewBgUrl(safeUrl(saved.previewBgUrl))
       setRefVideoAnalysis(saved.refVideoAnalysis ?? null)
       setRefVideoName(saved.refVideoName ?? '')
+      setSelectedTemplateId(saved.selectedTemplateId ?? '')
       setHistory(saved.history ?? [])
 
       // Restore pipeData (Blob field excluded — re-fetch via assetId if needed)
@@ -897,7 +899,7 @@ export default function VideoBuilder() {
         pipeData: pipeDataCopy,
         previewSegments, previewVoiceUrl, previewAvatarUrl,
         previewBrollImageUrls, previewBrollUrls, previewBgUrl,
-        refVideoAnalysis, refVideoName,
+        refVideoAnalysis, refVideoName, selectedTemplateId,
         history,
       }
       localStorage.setItem(CACHE_KEY, JSON.stringify(state))
@@ -908,7 +910,7 @@ export default function VideoBuilder() {
     phase, phaseError,
     previewSegments, previewVoiceUrl, previewAvatarUrl,
     previewBrollImageUrls, previewBrollUrls, previewBgUrl,
-    refVideoAnalysis, refVideoName,
+    refVideoAnalysis, refVideoName, selectedTemplateId,
     history,
     selectedScriptId, script, selectedModelId, selectedProductId, selectedVoiceId,
   ])
@@ -1761,7 +1763,7 @@ Do NOT invent a different product variant.`
       faceImageUrl: avatarImageUrl,
       prompt,
       imageSize: { width: 720, height: 1280 },  // 9:16 vertical HD
-      identityStrength: 1.3,
+      identityStrength: 0.9,  // flux-pulid max id_weight = 1.0
       timeoutMs: 4 * 60 * 1000,
     })
     return imageUrl
