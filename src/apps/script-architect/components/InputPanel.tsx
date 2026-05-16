@@ -17,6 +17,17 @@ interface InputPanelProps {
   onProductSelect: (product: Product) => void
   onGenerate: (params: Omit<ScriptGenerationParams, 'productId'>) => void
   isGenerating: boolean
+  // Form state — owned by parent so it survives F5 via session persistence.
+  presetId: string
+  onPresetIdChange: (id: string) => void
+  lengthSec: LengthSeconds
+  onLengthSecChange: (n: LengthSeconds) => void
+  hookStrength: HookStrength
+  onHookStrengthChange: (h: HookStrength) => void
+  toneModifiers: ToneModifier[]
+  onToneModifiersChange: (next: ToneModifier[]) => void
+  educationalMode: boolean
+  onEducationalModeChange: (b: boolean) => void
 }
 
 const LENGTH_OPTIONS: { value: LengthSeconds; label: string; hint: string }[] = [
@@ -34,13 +45,13 @@ const HOOK_STRENGTH_OPTIONS: { value: HookStrength; label: string }[] = [
 
 export default function InputPanel({
   selectedProduct, onProductSelect, onGenerate, isGenerating,
+  presetId, onPresetIdChange: setPresetId,
+  lengthSec, onLengthSecChange: setLengthSec,
+  hookStrength, onHookStrengthChange: setHookStrength,
+  toneModifiers, onToneModifiersChange: setToneModifiers,
+  educationalMode, onEducationalModeChange: setEducationalMode,
 }: InputPanelProps) {
   const [productPickerOpen, setProductPickerOpen] = useState(false)
-  const [presetId, setPresetId] = useState<string>('problem-solution')
-  const [lengthSec, setLengthSec] = useState<LengthSeconds>(30)
-  const [hookStrength, setHookStrength] = useState<HookStrength>('balanced')
-  const [toneModifiers, setToneModifiers] = useState<ToneModifier[]>([])
-  const [educationalMode, setEducationalMode] = useState(false)
   const [showAdvanced, setShowAdvanced] = useState(false)
 
   const resolvedProductImage = useAssetUrl(selectedProduct?.productImage)
@@ -56,7 +67,7 @@ export default function InputPanel({
   const effectiveEducational = educationalMode || isEducationalPreset
 
   const toggleTone = (id: ToneModifier) => {
-    setToneModifiers((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]))
+    setToneModifiers(toneModifiers.includes(id) ? toneModifiers.filter((x) => x !== id) : [...toneModifiers, id])
   }
 
   const handleOpenFinder = () => {

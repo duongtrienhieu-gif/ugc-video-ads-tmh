@@ -10,14 +10,18 @@ export interface TranslationItem {
   id: string                   // local id (UUID)
   dubbingId: string            // ElevenLabs dubbing_id
   name: string                 // filename or user label
-  sourceLang: string           // 'auto' or ISO-639-1 code
+  sourceLang: string           // ISO-639-1 code (vi/en/ms/...). Phase 1: no more 'auto'
   targetLang: string           // ISO-639-1 code
   status: TranslationStatus
   videoUrl: string | null      // transient signed URL (regenerated on load)
   assetId: string | null       // final lip-synced video Supabase ref (permanent)
   audioAssetId?: string | null // dubbed audio Supabase ref (permanent)
   imageAssetId?: string | null // extracted frame Supabase ref (permanent)
+  /** Phase 5: persist fal.ai LatentSync request id so we can resume after F5 */
+  lipSyncRequestId?: string
   errorMessage?: string
+  /** Phase 4: full raw API error body for debugging (not truncated) */
+  rawErrorBody?: string
   expectedDurationSec?: number
   createdAt: number
 }
@@ -28,8 +32,11 @@ export interface Language {
   flag: string
 }
 
+// Phase 1: auto-detect removed — too unreliable with TikTok audio / mixed langs.
+// User must pick source language explicitly. This dramatically reduces failed
+// dubbing jobs (ElevenLabs auto-detect was returning wrong locale ~30% of time
+// on mixed-language UGC clips).
 export const SOURCE_LANGUAGES: Language[] = [
-  { code: 'auto', label: 'Tự động nhận diện', flag: '🔍' },
   { code: 'en',   label: 'Tiếng Anh',         flag: '🇺🇸' },
   { code: 'vi',   label: 'Tiếng Việt',         flag: '🇻🇳' },
   { code: 'ms',   label: 'Tiếng Malay',        flag: '🇲🇾' },
@@ -41,6 +48,10 @@ export const SOURCE_LANGUAGES: Language[] = [
   { code: 'de',   label: 'Tiếng Đức',          flag: '🇩🇪' },
   { code: 'id',   label: 'Tiếng Indonesia',    flag: '🇮🇩' },
 ]
+
+/** Whitelist of valid ISO-639-1 codes accepted by our pipeline. */
+export const VALID_SOURCE_CODES = new Set<string>(SOURCE_LANGUAGES.map((l) => l.code))
+export const VALID_TARGET_CODES = new Set<string>(['en', 'ms', 'zh', 'ja', 'ko', 'es', 'fr', 'de', 'id', 'hi', 'pt', 'ru', 'ar', 'vi'])
 
 export const TARGET_LANGUAGES: Language[] = [
   { code: 'en',   label: 'Tiếng Anh',         flag: '🇺🇸' },

@@ -2,7 +2,9 @@ import { useEffect, useRef, useState } from 'react'
 import { useAppStore } from '../../stores/appStore'
 import { useBankStore } from '../../stores/bankStore'
 import type { Product } from '../../stores/types'
-import type { AdsContentGenParams, AdsContentResult } from './types'
+import type {
+  AdsContentGenParams, AdsContentResult, CtaStrength, LengthMode, PlatformId, ToneId,
+} from './types'
 import { generateAdsContent } from './services/generateAdsContent'
 import InputPanel from './components/InputPanel'
 import OutputPanel from './components/OutputPanel'
@@ -11,16 +13,34 @@ import { useSessionPersist } from '../../services/sessionPersistence'
 
 interface AdsContentSnapshot {
   selectedProductId: string | null
+  presetId: string
+  platform: PlatformId
+  lengthMode: LengthMode
+  toneIds: ToneId[]
+  ctaStrength: CtaStrength
+  educationalMode: boolean
   result: AdsContentResult | null
   lastParams: Omit<AdsContentGenParams, 'productId'> | null
 }
+
+const DEFAULT_PRESET_ID = 'storytelling'
+const DEFAULT_PLATFORM: PlatformId = 'facebook-feed'
+const DEFAULT_LENGTH: LengthMode = 'medium'
+const DEFAULT_CTA: CtaStrength = 'balanced'
 
 export default function AdsContent() {
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null)
   const [result, setResult] = useState<AdsContentResult | null>(null)
   const [isGenerating, setIsGenerating] = useState(false)
 
-  // Remember last params so "Tạo lại" reuses the same preset / platform / etc.
+  // Form state lifted from InputPanel so it survives F5 via session persistence
+  const [presetId, setPresetId] = useState<string>(DEFAULT_PRESET_ID)
+  const [platform, setPlatform] = useState<PlatformId>(DEFAULT_PLATFORM)
+  const [lengthMode, setLengthMode] = useState<LengthMode>(DEFAULT_LENGTH)
+  const [toneIds, setToneIds] = useState<ToneId[]>([])
+  const [ctaStrength, setCtaStrength] = useState<CtaStrength>(DEFAULT_CTA)
+  const [educationalMode, setEducationalMode] = useState(false)
+
   const lastParamsRef = useRef<Omit<AdsContentGenParams, 'productId'> | null>(null)
 
   const interAppPayload = useAppStore((s) => s.interAppPayload)
@@ -31,9 +51,15 @@ export default function AdsContent() {
 
   const sessionApi = useSessionPersist<AdsContentSnapshot>({
     moduleId: 'ads-content',
-    version: 1,
+    version: 2, // bumped — snapshot now includes form state
     snapshot: () => ({
       selectedProductId: selectedProduct?.id ?? null,
+      presetId,
+      platform,
+      lengthMode,
+      toneIds,
+      ctaStrength,
+      educationalMode,
       result,
       lastParams: lastParamsRef.current,
     }),
@@ -42,15 +68,24 @@ export default function AdsContent() {
         const p = getProductById(data.selectedProductId)
         if (p) setSelectedProduct(p)
       }
-      if (data.result) setResult(data.result)
-      if (data.lastParams) lastParamsRef.current = data.lastParams
-      addToast('✓ Đã khôi phục Ads Content từ phiên trước', 'success')
+      if (data.presetId)    setPresetId(data.presetId)
+      if (data.platform)    setPlatform(data.platform)
+      if (data.lengthMode)  setLengthMode(data.lengthMode)
+      if (Array.isArray(data.toneIds)) setToneIds(data.toneIds)
+      if (data.ctaStrength) setCtaStrength(data.ctaStrength)
+      if (typeof data.educationalMode === 'boolean') setEducationalMode(data.educationalMode)
+      if (data.result)      setResult(data.result)
+      if (data.lastParams)  lastParamsRef.current = data.lastParams
     },
-    getStatus: () => (isGenerating ? 'in-progress' : result ? 'paused' : 'completed'),
+    getStatus: () => (isGenerating ? 'in-progress' : result || selectedProduct ? 'paused' : 'completed'),
     getTitleVi: () => selectedProduct?.productName,
-    getProgressVi: () => (result ? 'Đã sinh content — sẵn sàng copy' : isGenerating ? 'Đang tạo content...' : undefined),
-    shouldPersist: () => !!result || isGenerating,
-    deps: [selectedProduct?.id, result, isGenerating],
+    getProgressVi: () => (result ? 'Đã sinh content — sẵn sàng copy' : isGenerating ? 'Đang tạo content...' : selectedProduct ? 'Đã chọn sản phẩm — chưa tạo' : undefined),
+    shouldPersist: () =>
+      !!result || isGenerating || !!selectedProduct ||
+      presetId !== DEFAULT_PRESET_ID || platform !== DEFAULT_PLATFORM ||
+      lengthMode !== DEFAULT_LENGTH || ctaStrength !== DEFAULT_CTA ||
+      toneIds.length > 0 || educationalMode,
+    deps: [selectedProduct?.id, result, isGenerating, presetId, platform, lengthMode, toneIds, ctaStrength, educationalMode],
   })
 
   // Accept productId hand-off from other apps (e.g. Finder → Ads Content)
@@ -94,6 +129,18 @@ export default function AdsContent() {
           onProductSelect={setSelectedProduct}
           onGenerate={runGeneration}
           isGenerating={isGenerating}
+          presetId={presetId}
+          onPresetIdChange={setPresetId}
+          platform={platform}
+          onPlatformChange={setPlatform}
+          lengthMode={lengthMode}
+          onLengthModeChange={setLengthMode}
+          toneIds={toneIds}
+          onToneIdsChange={setToneIds}
+          ctaStrength={ctaStrength}
+          onCtaStrengthChange={setCtaStrength}
+          educationalMode={educationalMode}
+          onEducationalModeChange={setEducationalMode}
         />
       </div>
 

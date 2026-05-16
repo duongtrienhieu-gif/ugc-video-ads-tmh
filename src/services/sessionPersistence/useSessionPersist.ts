@@ -70,47 +70,41 @@ export function useSessionPersist<T>(opts: UseSessionPersistOpts<T>): UseSession
   const persistKey = registration?.persistKey ?? `ugc-lab:${opts.moduleId}:inflight-v${opts.version}`
 
   const hydratedRef = useRef(false)
-  const startedAtRef = useRef<number>(Date.now())
+  // Initialised lazily to avoid calling Date.now() during render (React 19 purity rule).
+  // The actual value is overwritten in the mount effect — this is just a stable placeholder.
+  const startedAtRef = useRef<number>(0)
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [isHydrated, setIsHydrated] = useState(false)
   const [lastSaveOk, setLastSaveOk] = useState(true)
   const [lastSavedAt, setLastSavedAt] = useState<number | null>(null)
 
-  // Keep latest opts in a ref so the subscribe effect doesn't re-fire on every render
+  // Keep latest opts in a ref so the subscribe effect doesn't re-fire on every render.
+  // React 19 purity rule forbids writing to refs during render, so we update it in an effect.
   const optsRef = useRef(opts)
-  optsRef.current = opts
+  useEffect(() => {
+    optsRef.current = opts
+  })
 
-  // ── Mount: decide whether to wait for the global modal's decision ───────
+  // ── Mount: auto-hydrate immediately if a valid snapshot exists ──────────
+  // Generated outputs are user assets — treat them like Figma files: always
+  // restore on reload. The coordinator's 'discard' decision is still honored
+  // for the case where the user explicitly clicked "Bỏ" in the drafts panel.
+  // setState in this effect is the documented hydration pattern (subscribe to
+  // an external system = localStorage), so the set-state-in-effect rule is
+  // disabled with a justification for the whole effect body.
+  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     const envelope = readEnvelope<T>(persistKey)
     const hasSnapshot = !!envelope && envelope.version === opts.version
 
     if (!hasSnapshot) {
-      // No saved data → safe to proceed immediately
       hydratedRef.current = true
       setIsHydrated(true)
       startedAtRef.current = Date.now()
       return
     }
 
-    // Check current decision from coordinator (might already be 'accept' or 'discard'
-    // if user already clicked through the global modal before mounting this module)
-    const decision = restoreCoordinator.getDecision(persistKey)
-
-    if (decision === 'accept') {
-      // User said "restore" — hydrate now
-      try {
-        optsRef.current.hydrate(envelope!.data)
-      } catch (err) {
-        console.warn(`[useSessionPersist:${opts.moduleId}] hydrate failed:`, err)
-      }
-      startedAtRef.current = envelope!.startedAt
-      hydratedRef.current = true
-      setIsHydrated(true)
-      return
-    }
-
-    if (decision === 'discard') {
+    if (restoreCoordinator.getDecision(persistKey) === 'discard') {
       clearEnvelope(persistKey)
       hydratedRef.current = true
       setIsHydrated(true)
@@ -118,29 +112,20 @@ export function useSessionPersist<T>(opts: UseSessionPersistOpts<T>): UseSession
       return
     }
 
-    // decision === 'pending' → subscribe for user's choice
-    const unsub = restoreCoordinator.subscribe(persistKey, (d) => {
-      if (d === 'accept') {
-        try {
-          optsRef.current.hydrate(envelope!.data)
-        } catch (err) {
-          console.warn(`[useSessionPersist:${opts.moduleId}] hydrate failed:`, err)
-        }
-        startedAtRef.current = envelope!.startedAt
-      } else if (d === 'discard') {
-        clearEnvelope(persistKey)
-        startedAtRef.current = Date.now()
-      }
-      hydratedRef.current = true
-      setIsHydrated(true)
-    })
-    return unsub
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    try {
+      optsRef.current.hydrate(envelope!.data)
+    } catch (err) {
+      console.warn(`[useSessionPersist:${opts.moduleId}] hydrate failed:`, err)
+    }
+    startedAtRef.current = envelope!.startedAt
+    restoreCoordinator.accept(persistKey)
+    hydratedRef.current = true
+    setIsHydrated(true)
   }, [persistKey, opts.moduleId, opts.version])
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   // ── Save effect — debounced ─────────────────────────────────────────────
   // We deliberately depend on `opts.deps` (user-provided) plus isHydrated.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (!hydratedRef.current) return
     if (opts.shouldPersist && !opts.shouldPersist()) return

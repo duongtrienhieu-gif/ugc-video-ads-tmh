@@ -13,7 +13,7 @@ import { useSettingsStore } from '../../stores/settingsStore'
 import { useAppStore } from '../../stores/appStore'
 import { useVideoTranslateStore } from '../../stores/videoTranslateStore'
 import {
-  SOURCE_LANGUAGES, TARGET_LANGUAGES,
+  SOURCE_LANGUAGES, TARGET_LANGUAGES, VALID_SOURCE_CODES, VALID_TARGET_CODES,
   type TranslationItem, type TranslationStatus,
 } from './types'
 
@@ -114,7 +114,9 @@ export default function VideoTranslate() {
   const [inputMode, setInputMode]       = useState<InputMode>('file')
   const [file, setFile]                 = useState<File | null>(null)
   const [sourceUrl, setSourceUrl]       = useState('')
-  const [sourceLang, setSourceLang]     = useState('auto')
+  // Phase 1: default source = 'vi' (most common for VN-MY workflows). User
+  // must explicitly pick. No more auto-detect.
+  const [sourceLang, setSourceLang]     = useState('vi')
   const [targetLang, setTargetLang]     = useState('en')
   const [numSpeakers, setNumSpeakers]   = useState(0)
   const [dragOver, setDragOver]         = useState(false)
@@ -147,6 +149,81 @@ export default function VideoTranslate() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  // ── Phase 5: resume in-flight jobs after F5 ──────────────────────────
+  // Only runs ONCE on mount. For each job stuck in 'dubbing' or 'lipsyncing'
+  // with the right id persisted, resume polling from where it left off.
+  // 'extracting' = mid-upload to Supabase — can't resume, mark failed.
+  // 'pending' = never even reached API — mark failed.
+  const resumedRef = useRef(false)
+  useEffect(() => {
+    if (resumedRef.current) return
+    resumedRef.current = true
+    if (!elevenLabsApiKey) return
+
+    history.forEach(async (item) => {
+      const patch = (u: Partial<TranslationItem>) => updateItemInStore(item.id, u)
+
+      // Cannot recover from these in-flight stages — mark failed cleanly
+      if (item.status === 'extracting' || item.status === 'pending') {
+        patch({ status: 'failed', errorMessage: 'Bị gián đoạn ở bước upload — chạy lại video này' })
+        return
+      }
+
+      // Resume ElevenLabs dubbing polling
+      if (item.status === 'dubbing' && item.dubbingId) {
+        console.info('[video-translate] resuming dubbing poll for', item.dubbingId)
+        try {
+          const result = await pollDubbingUntilDone({
+            apiKey: elevenLabsApiKey,
+            dubbingId: item.dubbingId,
+            timeoutMs: 20 * 60 * 1000,
+          })
+          if (result.status === 'failed') {
+            patch({ status: 'failed', errorMessage: result.error ?? 'Dubbing thất bại sau resume' })
+            return
+          }
+          // Dubbing finished while we were away — download audio + advance to lip-sync
+          const dubBlob = await getDubbedMedia(elevenLabsApiKey, item.dubbingId, item.targetLang)
+          const audioAssetId = await saveAsset(dubBlob, dubBlob.type || 'audio/mpeg')
+          patch({ audioAssetId })
+          // Lip-sync resume requires the source video URL too — for now mark
+          // as failed and ask user to re-run, since sourceVideoUrl is transient.
+          patch({
+            status: 'failed',
+            errorMessage: 'Dubbing đã xong, nhưng cần chạy lại lip-sync (sourceVideoUrl đã hết hạn)',
+          })
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err)
+          console.warn('[video-translate] resume failed:', msg)
+          patch({ status: 'failed', errorMessage: `Resume failed: ${msg}` })
+        }
+      }
+
+      // Resume fal.ai lip-sync polling
+      if (item.status === 'lipsyncing' && item.lipSyncRequestId && falApiKey) {
+        console.info('[video-translate] resuming lip-sync poll for', item.lipSyncRequestId)
+        try {
+          const result = await pollLatentSyncUntilDone({
+            apiKey: falApiKey,
+            requestId: item.lipSyncRequestId,
+            timeoutMs: 25 * 60 * 1000,
+          })
+          const finalRes = await fetch(result.videoUrl)
+          const finalBlob = await finalRes.blob()
+          const assetId = await saveAsset(finalBlob, finalBlob.type || 'video/mp4')
+          const videoUrl = await getUrl(assetId)
+          patch({ status: 'dubbed', assetId, videoUrl })
+          addToast(`✓ Đã hoàn tất "${item.name}" sau khi resume`, 'success')
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err)
+          console.warn('[video-translate] lip-sync resume failed:', msg)
+          patch({ status: 'failed', errorMessage: `Lip-sync resume failed: ${msg}` })
+        }
+      }
+    })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [elevenLabsApiKey, falApiKey])
+
   // ── File handling ────────────────────────────────────────────────────
 
   const acceptFile = (f: File) => {
@@ -174,10 +251,16 @@ export default function VideoTranslate() {
   const handleTranslate = async () => {
     if (inputMode === 'file' && !file) { addToast('Chọn file video trước', 'error'); return }
     if (inputMode === 'url' && !sourceUrl.trim()) { addToast('Nhập URL video trước', 'error'); return }
-    if (!targetLang) { addToast('Chọn ngôn ngữ đích', 'error'); return }
+    // Phase 2: whitelist validation — reject anything outside known ISO codes
+    if (!sourceLang || !VALID_SOURCE_CODES.has(sourceLang)) {
+      addToast('Chọn ngôn ngữ gốc hợp lệ', 'error'); return
+    }
+    if (!targetLang || !VALID_TARGET_CODES.has(targetLang)) {
+      addToast('Chọn ngôn ngữ đích hợp lệ', 'error'); return
+    }
     if (!elevenLabsApiKey) { addToast('Cài ElevenLabs API key trong Cài đặt', 'error'); return }
     if (!falApiKey) { addToast('Cài fal.ai API key trong Cài đặt (cho lip-sync video)', 'error'); return }
-    if (sourceLang === targetLang && sourceLang !== 'auto') {
+    if (sourceLang === targetLang) {
       addToast('Ngôn ngữ gốc và đích không được trùng nhau', 'error'); return
     }
 
@@ -219,16 +302,22 @@ export default function VideoTranslate() {
 
       // ── Stage 2: ElevenLabs Dubbing — dịch audio giữ giọng gốc ────────
       patch({ status: 'dubbing' })
+      // Phase 3: log full payload before API call so we can debug failed runs
+      console.info('[video-translate] createDubbing →', {
+        sourceLang, targetLang, numSpeakers,
+        inputMode, fileName: file?.name, fileSize: file?.size,
+      })
       const { dubbingId, expectedDurationSec } = await createDubbing({
         apiKey:            elevenLabsApiKey,
         file:              inputMode === 'file' ? (file ?? undefined) : undefined,
         sourceUrl:         inputMode === 'url' ? sourceUrl.trim() : undefined,
         targetLang,
-        sourceLang:        sourceLang === 'auto' ? 'auto' : sourceLang,
+        sourceLang,
         name:              displayName,
         numSpeakers,
         highestResolution: true,
       })
+      console.info('[video-translate] dubbing created:', { dubbingId, expectedDurationSec })
       patch({ dubbingId, expectedDurationSec })
 
       const result = await pollDubbingUntilDone({
@@ -255,6 +344,9 @@ export default function VideoTranslate() {
         videoUrl:  sourceVideoUrl,
         audioUrl:  dubbedAudioUrl,
       })
+      console.info('[video-translate] lip-sync requestId:', requestId)
+      // Phase 5: persist requestId so refresh-resume can pick it up
+      patch({ lipSyncRequestId: requestId })
 
       const lipSyncResult = await pollLatentSyncUntilDone({
         apiKey:    falApiKey,
@@ -272,11 +364,17 @@ export default function VideoTranslate() {
       addToast(`Dịch + lip-sync hoàn tất: ${displayName}`)
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
+      // Phase 3: log full error context for diagnostics
+      console.error('[video-translate] FAIL', {
+        sourceLang, targetLang, error: msg,
+        stack: err instanceof Error ? err.stack : undefined,
+      })
       const toast = msg === 'TIMEOUT'
         ? 'Quá thời gian xử lý — thử video ngắn hơn'
         : `Thất bại: ${msg}`
       addToast(toast, 'error')
-      patch({ status: 'failed', errorMessage: msg })
+      // Phase 4: persist FULL raw error so user can see it on the card
+      patch({ status: 'failed', errorMessage: msg, rawErrorBody: msg })
     } finally {
       setIsTranslating(false)
     }
@@ -340,7 +438,9 @@ export default function VideoTranslate() {
 
   const canTranslate =
     ((inputMode === 'file' && !!file) || (inputMode === 'url' && !!sourceUrl.trim())) &&
-    !!targetLang &&
+    !!sourceLang && VALID_SOURCE_CODES.has(sourceLang) &&
+    !!targetLang && VALID_TARGET_CODES.has(targetLang) &&
+    sourceLang !== targetLang &&
     !!elevenLabsApiKey &&
     !isTranslating
 
@@ -667,13 +767,26 @@ export default function VideoTranslate() {
                       </div>
                     )}
 
-                    {/* Failed state */}
+                    {/* Failed state — Phase 4: show FULL raw error (no truncation) */}
                     {item.status === 'failed' && (
-                      <div className="flex items-center gap-3 bg-red-50 px-4 py-3">
-                        <X className="h-5 w-5 shrink-0 text-red-400" />
-                        <p className="text-[11px] leading-relaxed text-red-500">
-                          {item.errorMessage?.slice(0, 200) ?? 'Dịch thất bại'}
-                        </p>
+                      <div className="flex items-start gap-3 bg-red-50 px-4 py-3">
+                        <X className="h-5 w-5 shrink-0 text-red-400 mt-0.5" />
+                        <div className="min-w-0 flex-1">
+                          <p className="text-[11px] font-bold text-red-700">Dịch thất bại</p>
+                          <p className="mt-1 whitespace-pre-wrap break-words text-[11px] leading-relaxed text-red-600">
+                            {item.errorMessage ?? item.rawErrorBody ?? '(không có chi tiết lỗi)'}
+                          </p>
+                          {item.errorMessage && item.rawErrorBody && item.rawErrorBody !== item.errorMessage && (
+                            <details className="mt-1">
+                              <summary className="cursor-pointer text-[10px] font-semibold text-red-500 hover:text-red-700">
+                                Raw API response
+                              </summary>
+                              <pre className="mt-1 max-h-32 overflow-y-auto whitespace-pre-wrap rounded bg-red-100/50 p-1.5 text-[10px] text-red-700">
+                                {item.rawErrorBody}
+                              </pre>
+                            </details>
+                          )}
+                        </div>
                       </div>
                     )}
 

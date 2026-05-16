@@ -537,20 +537,37 @@ export async function createDubbing(params: {
       }
     } catch {/* keep raw */}
 
+    // Phase 3: log full raw body for diagnostics — no truncation here
+    console.error('[elevenlabs.createDubbing] failed', {
+      httpStatus: res.status,
+      rawBody: err,
+      parsedDetail: detail,
+      sentParams: {
+        sourceLang: params.sourceLang,
+        targetLang: params.targetLang,
+        numSpeakers: params.numSpeakers,
+        hasFile: !!params.file,
+        hasSourceUrl: !!params.sourceUrl,
+      },
+    })
+
     if (res.status === 401) {
       const lower = detail.toLowerCase()
       if (lower.includes('detected_unusual_activity') || lower.includes('free_tier')) {
         throw new Error('Key ElevenLabs bị khóa (anti-abuse). Cần key cá nhân hợp lệ tại elevenlabs.io.')
       }
-      throw new Error(`API key ElevenLabs không hợp lệ — kiểm tra lại trong Cài đặt. (${detail.slice(0, 100)})`)
+      throw new Error(`API key ElevenLabs không hợp lệ — kiểm tra lại trong Cài đặt. (${detail})`)
     }
     if (res.status === 402 || res.status === 403) {
-      throw new Error('Tính năng Dubbing yêu cầu gói Creator ($22/mo) trở lên tại elevenlabs.io.')
+      throw new Error(`Tính năng Dubbing yêu cầu gói Creator ($22/mo) trở lên tại elevenlabs.io. Raw: ${detail}`)
     }
     if (res.status === 422) {
-      throw new Error(`Dữ liệu không hợp lệ: ${detail.slice(0, 200)}`)
+      // Phase 4: 422 usually means invalid language pair or unsupported codec.
+      // Surface FULL error so user knows exactly which param is wrong.
+      throw new Error(`Dữ liệu không hợp lệ (422): ${detail}`)
     }
-    throw new Error(`Tạo dubbing thất bại (${res.status}): ${detail.slice(0, 150)}`)
+    // Phase 4: untruncated — full ElevenLabs response goes to UI
+    throw new Error(`Tạo dubbing thất bại (HTTP ${res.status}): ${detail}`)
   }
 
   const data = await res.json() as { dubbing_id?: string; expected_duration_sec?: number }
@@ -623,11 +640,15 @@ export async function pollDubbingUntilDone(params: {
 }): Promise<DubbingProject> {
   const timeout = params.timeoutMs ?? 20 * 60 * 1000  // 20 min max
   const start   = Date.now()
+  let tickIdx = 0
 
   while (Date.now() - start < timeout) {
     await new Promise<void>((r) => setTimeout(r, 6000))  // poll every 6s
 
     const project = await getDubbingStatus(params.apiKey, params.dubbingId)
+    // Phase 3: log every poll tick so we can see exactly when/why dubbing stalls
+    tickIdx++
+    console.info(`[elevenlabs.poll] tick #${tickIdx} dubbingId=${params.dubbingId} status=${project.status}${project.error ? ` error=${project.error}` : ''}`)
     params.onStatusChange?.(project.status)
 
     if (project.status === 'dubbed' || project.status === 'failed') {

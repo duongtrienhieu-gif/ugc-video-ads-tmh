@@ -2,7 +2,9 @@ import { useState, useEffect, useRef } from 'react'
 import { useAppStore } from '../../stores/appStore'
 import { useBankStore } from '../../stores/bankStore'
 import type { Product } from '../../stores/types'
-import type { ScriptGenerationParams, ScriptGenerationResult } from './types'
+import type {
+  HookStrength, LengthSeconds, ScriptGenerationParams, ScriptGenerationResult, ToneModifier,
+} from './types'
 import InputPanel from './components/InputPanel'
 import OutputPanel from './components/OutputPanel'
 import AutoSaveIndicator from '../../components/AutoSaveIndicator'
@@ -12,17 +14,31 @@ import { generateUGCScript } from './services/generateScript'
 // Session-persistence snapshot — survives F5
 interface ScriptSnapshot {
   selectedProductId: string | null
+  presetId: string
+  lengthSec: LengthSeconds
+  hookStrength: HookStrength
+  toneModifiers: ToneModifier[]
+  educationalMode: boolean
   result: ScriptGenerationResult | null
   lastParams: Omit<ScriptGenerationParams, 'productId'> | null
 }
+
+const DEFAULT_PRESET_ID = 'problem-solution'
+const DEFAULT_LENGTH: LengthSeconds = 30
+const DEFAULT_HOOK: HookStrength = 'balanced'
 
 export default function ScriptArchitect() {
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null)
   const [result, setResult] = useState<ScriptGenerationResult | null>(null)
   const [isGenerating, setIsGenerating] = useState(false)
 
-  // Remember the last params so "Tạo lại" reuses the same preset / length /
-  // tone / educational mode instead of forcing the user to re-select.
+  // Form state lifted from InputPanel so it can be persisted across F5
+  const [presetId, setPresetId] = useState<string>(DEFAULT_PRESET_ID)
+  const [lengthSec, setLengthSec] = useState<LengthSeconds>(DEFAULT_LENGTH)
+  const [hookStrength, setHookStrength] = useState<HookStrength>(DEFAULT_HOOK)
+  const [toneModifiers, setToneModifiers] = useState<ToneModifier[]>([])
+  const [educationalMode, setEducationalMode] = useState(false)
+
   const lastParamsRef = useRef<Omit<ScriptGenerationParams, 'productId'> | null>(null)
 
   const interAppPayload = useAppStore((s) => s.interAppPayload)
@@ -33,9 +49,14 @@ export default function ScriptArchitect() {
 
   const sessionApi = useSessionPersist<ScriptSnapshot>({
     moduleId: 'script-architect',
-    version: 1,
+    version: 2, // bumped — snapshot shape changed to include form state
     snapshot: () => ({
       selectedProductId: selectedProduct?.id ?? null,
+      presetId,
+      lengthSec,
+      hookStrength,
+      toneModifiers,
+      educationalMode,
       result,
       lastParams: lastParamsRef.current,
     }),
@@ -44,15 +65,22 @@ export default function ScriptArchitect() {
         const p = getProductById(data.selectedProductId)
         if (p) setSelectedProduct(p)
       }
-      if (data.result) setResult(data.result)
-      if (data.lastParams) lastParamsRef.current = data.lastParams
-      addToast('✓ Đã khôi phục kịch bản từ phiên trước', 'success')
+      if (data.presetId)            setPresetId(data.presetId)
+      if (data.lengthSec)           setLengthSec(data.lengthSec)
+      if (data.hookStrength)        setHookStrength(data.hookStrength)
+      if (Array.isArray(data.toneModifiers)) setToneModifiers(data.toneModifiers)
+      if (typeof data.educationalMode === 'boolean') setEducationalMode(data.educationalMode)
+      if (data.result)              setResult(data.result)
+      if (data.lastParams)          lastParamsRef.current = data.lastParams
     },
-    getStatus: () => (isGenerating ? 'in-progress' : result ? 'paused' : 'completed'),
+    getStatus: () => (isGenerating ? 'in-progress' : result || selectedProduct ? 'paused' : 'completed'),
     getTitleVi: () => selectedProduct?.productName,
-    getProgressVi: () => (result ? 'Đã sinh kịch bản — sẵn sàng xem / chỉnh' : isGenerating ? 'Đang tạo kịch bản...' : undefined),
-    shouldPersist: () => !!result || isGenerating,
-    deps: [selectedProduct?.id, result, isGenerating],
+    getProgressVi: () => (result ? 'Đã sinh kịch bản — sẵn sàng xem / chỉnh' : isGenerating ? 'Đang tạo kịch bản...' : selectedProduct ? 'Đã chọn sản phẩm — chưa tạo' : undefined),
+    shouldPersist: () =>
+      !!result || isGenerating || !!selectedProduct ||
+      presetId !== DEFAULT_PRESET_ID || lengthSec !== DEFAULT_LENGTH ||
+      hookStrength !== DEFAULT_HOOK || toneModifiers.length > 0 || educationalMode,
+    deps: [selectedProduct?.id, result, isGenerating, presetId, lengthSec, hookStrength, toneModifiers, educationalMode],
   })
 
   // Accept productId hand-off from other apps (e.g. Finder → Tạo Kịch bản)
@@ -96,6 +124,16 @@ export default function ScriptArchitect() {
           onProductSelect={setSelectedProduct}
           onGenerate={runGeneration}
           isGenerating={isGenerating}
+          presetId={presetId}
+          onPresetIdChange={setPresetId}
+          lengthSec={lengthSec}
+          onLengthSecChange={setLengthSec}
+          hookStrength={hookStrength}
+          onHookStrengthChange={setHookStrength}
+          toneModifiers={toneModifiers}
+          onToneModifiersChange={setToneModifiers}
+          educationalMode={educationalMode}
+          onEducationalModeChange={setEducationalMode}
         />
       </div>
 

@@ -19,6 +19,19 @@ interface InputPanelProps {
   onProductSelect: (p: Product) => void
   onGenerate: (params: Omit<AdsContentGenParams, 'productId'>) => void
   isGenerating: boolean
+  // Form state — owned by parent so it survives F5 via session persistence.
+  presetId: string
+  onPresetIdChange: (id: string) => void
+  platform: PlatformId
+  onPlatformChange: (p: PlatformId) => void
+  lengthMode: LengthMode
+  onLengthModeChange: (l: LengthMode) => void
+  toneIds: ToneId[]
+  onToneIdsChange: (next: ToneId[]) => void
+  ctaStrength: CtaStrength
+  onCtaStrengthChange: (c: CtaStrength) => void
+  educationalMode: boolean
+  onEducationalModeChange: (b: boolean) => void
 }
 
 const CTA_OPTIONS: { value: CtaStrength; label: string; color: string }[] = [
@@ -29,14 +42,14 @@ const CTA_OPTIONS: { value: CtaStrength; label: string; color: string }[] = [
 
 export default function InputPanel({
   selectedProduct, onProductSelect, onGenerate, isGenerating,
+  presetId, onPresetIdChange: setPresetId,
+  platform, onPlatformChange: setPlatform,
+  lengthMode, onLengthModeChange: setLengthMode,
+  toneIds, onToneIdsChange: setToneIds,
+  ctaStrength, onCtaStrengthChange: setCtaStrength,
+  educationalMode, onEducationalModeChange: setEducationalMode,
 }: InputPanelProps) {
   const [pickerOpen, setPickerOpen] = useState(false)
-  const [presetId, setPresetId] = useState<string>('storytelling')
-  const [platform, setPlatform] = useState<PlatformId>('facebook-feed')
-  const [lengthMode, setLengthMode] = useState<LengthMode>('medium')
-  const [toneIds, setToneIds] = useState<ToneId[]>([])
-  const [ctaStrength, setCtaStrength] = useState<CtaStrength>('balanced')
-  const [educationalMode, setEducationalMode] = useState(false)
   const [showTones, setShowTones] = useState(false)
 
   const resolvedProductImage = useAssetUrl(selectedProduct?.productImage)
@@ -50,7 +63,7 @@ export default function InputPanel({
   const effectiveEducational = educationalMode || isMechanismPreset
 
   const toggleTone = (id: ToneId) => {
-    setToneIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]))
+    setToneIds(toneIds.includes(id) ? toneIds.filter((x) => x !== id) : [...toneIds, id])
   }
 
   const handleOpenFinder = () => {
