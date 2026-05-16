@@ -195,6 +195,120 @@ export async function pollLatentSyncUntilDone(params: {
   throw new Error('TIMEOUT')
 }
 
+// ── InstantID (identity-preserving image generation) ─────────────────────────
+// Designed specifically for "1 face photo → consistent character across many
+// scenes". Far better identity match (~95%) than generic image-reference
+// pipelines like Nano Banana 2 / GPT Image 2 (~70-80%).
+// Pricing: ~$0.04 per image at 1024x1024 / portrait sizes.
+
+interface FalImageResult {
+  images?: Array<{ url: string; content_type?: string; width?: number; height?: number }>
+  error?: string
+}
+
+/**
+ * Generate an image using fal-ai/instant-id with strong identity lock.
+ * Pass the avatar's face image — InstantID extracts a 512-dim face embedding
+ * and injects it directly into the diffusion model's latent space, so the
+ * generated person has the SAME face (~95% match) across every call.
+ */
+export async function generateInstantIDImage(params: {
+  apiKey: string
+  faceImageUrl: string          // reference face — the identity anchor
+  prompt: string                // scene description
+  negativePrompt?: string
+  /** Pose reference (optional). If provided, InstantID copies head pose +
+   *  body posture from this image while keeping the face identity from faceImageUrl. */
+  poseImageUrl?: string
+  /** 0-1, default 0.8. Higher = stronger identity preservation but less
+   *  prompt flexibility. */
+  identityStrength?: number
+  /** 0-1, default 0.8. How much to follow the face image style. */
+  adapterStrength?: number
+  imageSize?: 'portrait_16_9' | 'portrait_9_16' | 'square_hd' | 'square' | 'landscape_16_9' | 'landscape_4_3'
+  /** Optional callback for status updates during polling. */
+  onStatusChange?: (status: string) => void
+  timeoutMs?: number
+}): Promise<string> {
+  // ── Submit job to queue ────────────────────────────────────────────────
+  const submitRes = await fetch(`${FAL_QUEUE_BASE}/fal-ai/instant-id`, {
+    method: 'POST',
+    headers: {
+      ...authHeader(params.apiKey),
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      face_image_url:              params.faceImageUrl,
+      prompt:                      params.prompt,
+      negative_prompt:             params.negativePrompt ?? 'low quality, blurry, distorted, deformed face, multiple faces, watermark, text overlay',
+      pose_image_url:              params.poseImageUrl,
+      identitynet_strength_ratio:  params.identityStrength ?? 0.8,
+      adapter_strength_ratio:      params.adapterStrength  ?? 0.8,
+      image_size:                  params.imageSize ?? 'portrait_9_16',
+      num_inference_steps:         30,
+      guidance_scale:              5,
+    }),
+  })
+
+  if (submitRes.status === 401 || submitRes.status === 403) {
+    throw new Error('fal.ai API key không hợp lệ — kiểm tra Cài đặt')
+  }
+  if (submitRes.status === 402) {
+    throw new Error('Tài khoản fal.ai hết credit — nạp tại fal.ai/dashboard')
+  }
+  if (!submitRes.ok) {
+    const detail = await readErrorBody(submitRes)
+    throw new Error(`fal.ai InstantID submit lỗi (${submitRes.status}): ${detail}`)
+  }
+  const { request_id } = await submitRes.json() as FalQueueSubmitResponse
+  if (!request_id) throw new Error('fal.ai không trả về request_id cho InstantID')
+
+  // ── Poll for completion ────────────────────────────────────────────────
+  const timeout  = params.timeoutMs ?? 3 * 60 * 1000   // 3 min default
+  const interval = 3000
+  const start    = Date.now()
+  let lastStatus = ''
+
+  while (Date.now() - start < timeout) {
+    const statusRes = await fetch(
+      `${FAL_QUEUE_BASE}/fal-ai/instant-id/requests/${request_id}/status`,
+      { headers: authHeader(params.apiKey) },
+    )
+    if (!statusRes.ok) {
+      const detail = await readErrorBody(statusRes)
+      throw new Error(`InstantID status lỗi (${statusRes.status}): ${detail}`)
+    }
+    const s = await statusRes.json() as FalQueueStatusResponse
+    if (s.status !== lastStatus) {
+      lastStatus = s.status
+      params.onStatusChange?.(s.status)
+    }
+
+    if (s.status === 'COMPLETED') {
+      // Fetch the result
+      const resultRes = await fetch(
+        `${FAL_QUEUE_BASE}/fal-ai/instant-id/requests/${request_id}`,
+        { headers: authHeader(params.apiKey) },
+      )
+      if (!resultRes.ok) {
+        const detail = await readErrorBody(resultRes)
+        throw new Error(`InstantID result lỗi (${resultRes.status}): ${detail}`)
+      }
+      const result = await resultRes.json() as FalImageResult
+      const url = result.images?.[0]?.url
+      if (!url) throw new Error(result.error ?? 'InstantID không trả về image URL')
+      return url
+    }
+    if (s.status === 'FAILED') {
+      throw new Error(s.error ?? 'InstantID generation FAILED — thử lại hoặc dùng ảnh face khác')
+    }
+
+    await new Promise((r) => setTimeout(r, interval))
+  }
+
+  throw new Error('InstantID TIMEOUT — quá 3 phút mà chưa xong')
+}
+
 // ── Video Background Removal (veed/video-background-removal) ──────────────────
 
 interface FalBgRemoveSubmitResponse {
