@@ -376,7 +376,7 @@ export default function LipSync() {
         voiceId:       selectedVoice.voice_id,
         text:          cleanText,
         style:         0.35,  // moderate style exaggeration for expressiveness
-        speed:         1.2,   // ElevenLabs max — snappier UGC delivery
+        speed:         1.1,   // slight speedup — natural-sounding snappier UGC delivery
         useSpeakerBoost: true,
       })
       const blob    = new Blob([buffer], { type: 'audio/mpeg' })

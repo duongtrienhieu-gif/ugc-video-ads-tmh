@@ -417,7 +417,7 @@ interface PipeData {
 
 // Step labels for the running/review panel header
 const STEP_INFO: Record<string, { num: number; label: string; subLabel: string; cost: string }> = {
-  voice:    { num: 1, label: 'Voiceover',           subLabel: 'TTS toàn bộ script → audio file (1.2x speed)', cost: '~$0.30 · ElevenLabs' },
+  voice:    { num: 1, label: 'Voiceover',           subLabel: 'TTS toàn bộ script → audio file (1.1x speed)', cost: '~$0.30 · ElevenLabs' },
   parse:    { num: 2, label: 'Storyboard',          subLabel: 'Gemini Pro phân tích voice → cảnh quay chi tiết', cost: 'Miễn phí' },
   resolve:  { num: 3, label: 'Chuẩn bị tài nguyên', subLabel: 'Upload audio + resolve URL ảnh',           cost: 'Miễn phí' },
   avatar:   { num: 4, label: 'Avatar Lip-sync',     subLabel: 'Kling Avatar: ảnh + audio → video nói',    cost: '~624 KIE credit' },
@@ -867,11 +867,11 @@ ${script}`
         modelId: 'eleven_multilingual_v2',
         stability: 0.75,
         similarity: 0.75,
-        speed: 1.2,
+        speed: 1.1,
         outputFormat: 'mp3_44100_192',
         chunkSize: 400,
         onProgress: (done, total) => {
-          setPhaseDetail(`Tạo audio: ${done}/${total} chunks (1.2x speed, chất lượng cao)...`)
+          setPhaseDetail(`Tạo audio: ${done}/${total} chunks (1.1x speed, chất lượng cao)...`)
         },
       })
       const audioDuration = await getAudioDuration(audioBuffer)
@@ -1564,7 +1564,7 @@ ${script}`
               </p>
               <audio controls src={previewVoiceUrl ?? ''} className="w-full" />
               <p className="mt-2 text-xs text-gray-400">
-                Thời lượng: <strong>{formatDuration(pipeRef.current.audioDuration ?? 0)}</strong> · Kích thước: {Math.round((pipeRef.current.audioBlob?.size ?? 0) / 1024)} KB · 1.2x speed
+                Thời lượng: <strong>{formatDuration(pipeRef.current.audioDuration ?? 0)}</strong> · Kích thước: {Math.round((pipeRef.current.audioBlob?.size ?? 0) / 1024)} KB · 1.1x speed
               </p>
             </ReviewCard>
           )}
@@ -1753,7 +1753,7 @@ ${script}`
               <div className="text-center">
                 <p className="text-base font-semibold text-gray-500">Pipeline thủ công · 8 bước</p>
                 <p className="mt-1.5 max-w-sm text-center text-sm leading-relaxed text-gray-400">
-                  Voice trước (1.2x speed) → Gemini Pro phân tích từng câu thành storyboard cinematic → ảnh tĩnh review → animate → ghép cuối.
+                  Voice trước (1.1x speed) → Gemini Pro phân tích từng câu thành storyboard cinematic → ảnh tĩnh review → animate → ghép cuối.
                 </p>
               </div>
               <div className="flex flex-wrap justify-center gap-2 text-xs text-gray-400">
