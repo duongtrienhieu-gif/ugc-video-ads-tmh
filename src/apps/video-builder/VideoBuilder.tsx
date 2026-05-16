@@ -820,7 +820,7 @@ ${script}`
     try {
       // textToSpeechSmooth: chunked + context continuity for consistent quality
       // on long scripts. Uses 192kbps MP3 (falls back to 128 if plan blocks it),
-      // stability 0.75 for steadier voice across chunks.
+      // stability 0.75 for steadier voice across chunks, 1.2x speed for snappier UGC pace.
       const audioBuffer = await textToSpeechSmooth({
         apiKey: elevenLabsApiKey,
         voiceId: selectedVoiceId,
@@ -828,10 +828,11 @@ ${script}`
         modelId: 'eleven_multilingual_v2',
         stability: 0.75,
         similarity: 0.75,
+        speed: 1.2,                            // ElevenLabs max — snappier UGC delivery
         outputFormat: 'mp3_44100_192',
         chunkSize: 400,
         onProgress: (done, total) => {
-          setPhaseDetail(`Tạo audio: ${done}/${total} chunks (chất lượng cao + ghép mượt)...`)
+          setPhaseDetail(`Tạo audio: ${done}/${total} chunks (1.2x speed, chất lượng cao)...`)
         },
       })
       const audioDuration = await getAudioDuration(audioBuffer)

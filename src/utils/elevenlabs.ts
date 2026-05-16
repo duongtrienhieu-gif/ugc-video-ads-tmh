@@ -303,6 +303,8 @@ export async function textToSpeechSmooth(params: {
   stability?: number
   similarity?: number
   style?: number
+  /** Playback speed: 0.7 - 1.2, default 1.0. ElevenLabs hard-caps at 1.2. */
+  speed?: number
   useSpeakerBoost?: boolean
   outputFormat?: 'mp3_44100_128' | 'mp3_44100_192'
   /** Target chars per chunk. Default 400 — sweet spot for v2 stability. */
@@ -323,6 +325,7 @@ export async function textToSpeechSmooth(params: {
       stability: params.stability,
       similarity: params.similarity,
       style: params.style,
+      speed: params.speed,
       useSpeakerBoost: params.useSpeakerBoost,
       outputFormat: params.outputFormat,
     })
@@ -366,6 +369,7 @@ export async function textToSpeechSmooth(params: {
       stability: params.stability,
       similarity: params.similarity,
       style: params.style,
+      speed: params.speed,
       useSpeakerBoost: params.useSpeakerBoost,
       outputFormat: params.outputFormat,
       previousText,
