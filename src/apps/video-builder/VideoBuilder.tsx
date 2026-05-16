@@ -438,16 +438,45 @@ interface PipeData {
   totalEstimatedSec: number
   timedSegments: ScriptSegment[]
   audioDuration: number
-  audioBlob: Blob
-  voiceUrl: string
+  audioBlob: Blob                       // in-memory only; NOT persisted (use audioAssetId)
+  audioAssetId: string                  // Supabase asset ID — survives reload
+  voiceUrl: string                      // Supabase signed URL (refreshed from assetId on reload)
   avatarImageUrl: string
   productImageUrls: string[]
   avatarRawUrl: string
-  brollImageUrls: (string | null)[]   // static images (step 5)
+  brollImageUrls: (string | null)[]    // static images (step 5)
   brollResults: (string | null)[]      // videos animated from images (step 6)
   avatarFinalUrl: string
   finalVideoUrl: string
   finalAssetId: string
+}
+
+// ── Persistence ─────────────────────────────────────────────────────────────
+const CACHE_KEY = 'ugc-builder-state-v1'
+
+interface PersistedState {
+  version: number
+  savedAt: number
+  // Inputs
+  selectedScriptId: string
+  script: string
+  selectedModelId: string
+  selectedProductId: string
+  selectedVoiceId: string
+  // Pipeline state
+  phase: PipelinePhase
+  phaseError: string | null
+  // Pipe data (Blob field stripped — not JSON-serializable)
+  pipeData: Omit<Partial<PipeData>, 'audioBlob'>
+  // Preview URLs (blob: URLs will be filtered on restore — they don't survive reload)
+  previewSegments: ScriptSegment[]
+  previewVoiceUrl: string | null
+  previewAvatarUrl: string | null
+  previewBrollImageUrls: (string | null)[]
+  previewBrollUrls: (string | null)[]
+  previewBgUrl: string | null
+  // Completed jobs
+  history: VideoBuilderJob[]
 }
 
 // Step labels for the running/review panel header
@@ -753,6 +782,101 @@ export default function VideoBuilder() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  // ── Persistence: restore on mount ─────────────────────────────────────────
+  // Loads saved pipeline state from localStorage. Skips blob: URLs (they die
+  // on reload). For phases that were mid-task (running-*), converts to 'failed'
+  // so user can retry that specific step rather than losing all upstream work.
+  useEffect(() => {
+    const raw = localStorage.getItem(CACHE_KEY)
+    if (!raw) return
+    try {
+      const saved = JSON.parse(raw) as PersistedState
+      if (saved.version !== 1) { localStorage.removeItem(CACHE_KEY); return }
+
+      setSelectedScriptId(saved.selectedScriptId || '')
+      setScript(saved.script || '')
+      setSelectedModelId(saved.selectedModelId || '')
+      setSelectedProductId(saved.selectedProductId || '')
+      if (saved.selectedVoiceId) setSelectedVoiceId(saved.selectedVoiceId)
+
+      // Filter out blob: URLs (invalid after reload) from preview state
+      const safeUrl = (u: string | null | undefined) => (u && !u.startsWith('blob:') ? u : null)
+      setPreviewSegments(saved.previewSegments ?? [])
+      setPreviewVoiceUrl(safeUrl(saved.previewVoiceUrl))
+      setPreviewAvatarUrl(safeUrl(saved.previewAvatarUrl))
+      setPreviewBrollImageUrls((saved.previewBrollImageUrls ?? []).map(safeUrl))
+      setPreviewBrollUrls((saved.previewBrollUrls ?? []).map(safeUrl))
+      setPreviewBgUrl(safeUrl(saved.previewBgUrl))
+      setHistory(saved.history ?? [])
+
+      // Restore pipeData (Blob field excluded — re-fetch via assetId if needed)
+      pipeRef.current = saved.pipeData as Partial<PipeData>
+
+      // Restore phase. If we were mid-task, convert to 'failed' so user retries
+      // just that step instead of the pipeline being half-broken.
+      let restoredPhase = saved.phase
+      if (restoredPhase.startsWith('running-')) {
+        setPhaseError('Tab đã được reload giữa chừng — bấm "Tạo lại" để chạy lại bước này.')
+        restoredPhase = 'failed'
+      }
+      setPhase(restoredPhase)
+
+      // Async: refresh expired Supabase signed URLs from their assetIds
+      const p = pipeRef.current
+      if (p.audioAssetId) {
+        getUrl(p.audioAssetId).then((url) => {
+          if (url) {
+            pipeRef.current.voiceUrl = url
+            if (!safeUrl(saved.previewVoiceUrl)) setPreviewVoiceUrl(url)
+          }
+        }).catch(() => {})
+      }
+      if (p.finalAssetId) {
+        getUrl(p.finalAssetId).then((url) => {
+          if (url) pipeRef.current.finalVideoUrl = url
+        }).catch(() => {})
+      }
+    } catch (err) {
+      console.error('[restore] failed, clearing cache:', err)
+      localStorage.removeItem(CACHE_KEY)
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // ── Persistence: save on every meaningful state change ────────────────────
+  useEffect(() => {
+    // Skip writing when nothing has happened yet (idle + empty state)
+    if (phase === 'idle' && previewSegments.length === 0 && history.length === 0 && !script) return
+
+    try {
+      // Strip audioBlob — Blob isn't JSON-serializable and the data is on
+      // Supabase via audioAssetId anyway
+      const pipeDataCopy: Omit<Partial<PipeData>, 'audioBlob'> = { ...pipeRef.current }
+      // @ts-expect-error — explicit drop of Blob field
+      delete pipeDataCopy.audioBlob
+
+      const state: PersistedState = {
+        version:  1,
+        savedAt:  Date.now(),
+        selectedScriptId, script, selectedModelId, selectedProductId, selectedVoiceId,
+        phase, phaseError,
+        pipeData: pipeDataCopy,
+        previewSegments, previewVoiceUrl, previewAvatarUrl,
+        previewBrollImageUrls, previewBrollUrls, previewBgUrl,
+        history,
+      }
+      localStorage.setItem(CACHE_KEY, JSON.stringify(state))
+    } catch (err) {
+      console.error('[saveCache] failed:', err)
+    }
+  }, [
+    phase, phaseError,
+    previewSegments, previewVoiceUrl, previewAvatarUrl,
+    previewBrollImageUrls, previewBrollUrls, previewBgUrl,
+    history,
+    selectedScriptId, script, selectedModelId, selectedProductId, selectedVoiceId,
+  ])
+
   // ── Input handlers ───────────────────────────────────────────────────────
 
   const handleSelectScript = (id: string, text: string) => {
@@ -808,6 +932,7 @@ export default function VideoBuilder() {
 
   const handleReset = () => {
     if (previewVoiceUrl?.startsWith('blob:')) URL.revokeObjectURL(previewVoiceUrl)
+    localStorage.removeItem(CACHE_KEY)   // wipe persisted pipeline state
     pipeRef.current = {}
     setPhase('idle')
     setPhaseDetail('')
@@ -1094,18 +1219,27 @@ ${script}`
             : `Tạo audio (single call, không concat — chất lượng tối đa)...`)
         },
       })
-      setPhaseProgress(95)
-      setPhaseDetail('Đang decode audio duration...')
+      setPhaseProgress(93)
+      setPhaseDetail('Đang decode audio duration + upload Supabase (để survive F5)...')
       const audioDuration = await getAudioDuration(audioBuffer)
       const audioBlob = new Blob([audioBuffer], { type: mimeType })
 
+      // Upload to Supabase IMMEDIATELY (was in resolve step). This way the
+      // audio survives F5 / logout — we can fetch it back via audioAssetId.
+      const audioAssetId = await saveAsset(audioBlob, mimeType)
+      const voiceUrl = await getUrl(audioAssetId)
+      if (!voiceUrl) throw new Error('Không lấy được URL audio sau khi upload Supabase')
+
       pipeRef.current.audioDuration = audioDuration
-      pipeRef.current.audioBlob = audioBlob
+      pipeRef.current.audioBlob = audioBlob       // in-memory only
+      pipeRef.current.audioAssetId = audioAssetId // persisted across reload
+      pipeRef.current.voiceUrl = voiceUrl         // refreshable via assetId
 
-      // Local preview URL (upload to Supabase happens in resolve step)
+      // Preview URL: Supabase signed URL (persists vs blob: URL which dies on reload)
       if (previewVoiceUrl?.startsWith('blob:')) URL.revokeObjectURL(previewVoiceUrl)
-      setPreviewVoiceUrl(URL.createObjectURL(audioBlob))
+      setPreviewVoiceUrl(voiceUrl)
 
+      setPhaseProgress(100)
       setPhase('review-voice')
     } catch (err) {
       setPhaseError(err instanceof Error ? err.message : String(err))
@@ -1116,23 +1250,21 @@ ${script}`
   // ── Step 3: Resolve URLs (automatic, no review) ─────────────────────────
 
   const runResolve = async () => {
-    if (!pipeRef.current.audioBlob) { setPhaseError('Thiếu audio'); setPhase('failed'); return }
+    if (!pipeRef.current.voiceUrl) { setPhaseError('Thiếu audio URL'); setPhase('failed'); return }
 
     setPhase('running-resolve')
     setPhaseError(null)
-    setPhaseDetail('Upload audio lên Supabase...')
-    setPhaseProgress(10)
+    setPhaseDetail('Resolve URL ảnh avatar...')
+    setPhaseProgress(30)   // audio already uploaded in step 1
 
     try {
-      // Upload audio to Supabase (30% of total work).
-      // Use blob's actual type — may be audio/wav (chunked, clean) or audio/mpeg (single short script)
-      const audioBlob = pipeRef.current.audioBlob
-      const audioAssetId = await saveAsset(audioBlob, audioBlob.type || 'audio/wav')
-      const voiceUrl = await getUrl(audioAssetId)
-      if (!voiceUrl) throw new Error('Không lấy được URL audio sau khi upload')
-      pipeRef.current.voiceUrl = voiceUrl
+      // Audio is already on Supabase (uploaded at end of runVoice for persistence)
+      // Refresh URL in case the previous signed URL expired (e.g. after F5 several hours later)
+      if (pipeRef.current.audioAssetId) {
+        const fresh = await getUrl(pipeRef.current.audioAssetId)
+        if (fresh) pipeRef.current.voiceUrl = fresh
+      }
       setPhaseProgress(40)
-      setPhaseDetail('Resolve URL ảnh avatar...')
 
       // Resolve avatar image (20%)
       const model = models.find((m) => m.id === selectedModelId)
