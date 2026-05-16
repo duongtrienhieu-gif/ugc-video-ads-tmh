@@ -1,91 +1,202 @@
-import type { EditableProductContext, AdaptScriptResult } from '../types'
+import type {
+  ScriptGenerationParams,
+  ScriptGenerationResult,
+  ScriptStructured,
+  HookStrength,
+  LengthSeconds,
+  ToneModifier,
+} from '../types'
+import type { Product } from '../../../stores/types'
 import { useSettingsStore } from '../../../stores/settingsStore'
+import { useBankStore } from '../../../stores/bankStore'
 import { directGeminiVision } from '../../../utils/gemini'
+import { getPresetById, TONE_OPTIONS } from './presets'
 
-// ── System instruction ────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────
+// SYSTEM PROMPT — written like a brief to an elite DTC copywriter, not a
+// generic LLM assistant. The non-negotiable rules at the top exist because
+// the most common failure mode is corporate marketing voice leaking back in.
+// ─────────────────────────────────────────────────────────────────────────
 
-const ADAPT_SYSTEM = `You are a UGC script CLONE engineer.
-Your job: take a proven winning template script and clone its EXACT structure, rhythm, and feel for a new product. The output should feel like the same person wrote both scripts.
+const SYSTEM_PROMPT = `You are an elite DTC ecommerce copywriter who has written over a thousand winning UGC video ad scripts for TikTok and Meta. You specialize in Southeast Asian markets — primarily Malaysia and English-speaking ecommerce.
 
-═══════════════════════════════════════════════════════════════
-CRITICAL FIDELITY RULES (this is a CLONE, not a rewrite)
-═══════════════════════════════════════════════════════════════
-1. LINE COUNT must match EXACTLY — count the template's lines (separated by line breaks), output the SAME number of lines. Do not add lines. Do not merge lines.
-2. LINE LENGTH must roughly match — if a template line is 4 words, the output line is 4-7 words (not 20). If 15 words, the output line is 12-18 words.
-3. SENTENCE STRUCTURE — if template uses "Because X, Y is going to be great because Z" — output uses the SAME pattern. Do not switch to corporate marketing voice.
-4. WORD-FOR-WORD MAPPING for connectors and rhythm phrases:
-   - "Let's talk about X" → "Let's talk about [NEW PRODUCT]"
-   - "Because X is a Y disorder" → "Because [pain point] is a [problem type]"
-   - "herbs like X, also known as Y, is going to be great because Z" → "[ingredient] like X, also known as Y, is going to be great because Z"
-   - "Another great herb is X. This is known as Y, contains A, B, C." → SAME structure with new ingredient
-   - "We use all of these X and more in our [product] formulas" → SAME structure
-   - "which in recent clinical trial was found 70-90% effective" → "which in recent [topic] trial was found X% effective"
-   - "So if you're curious about X, tap the link to take [free thing]" → SAME soft CTA structure
-5. CTA TONE — match the template's CTA tone exactly. If template ends with soft helpful CTA ("tap the link to take our free assessment"), do NOT switch to hard sales ("50% off for first 50 customers!"). The CTA should feel identical in energy.
-6. INGREDIENT SUBSTITUTION is the KEY mechanic:
-   - If template names SPECIFIC herbs/vitamins/compounds (Motherwort, Angelica sinensis, Vitamin B12), substitute with SPECIFIC ingredients from the new product's "Ingredients" field
-   - Use the actual ingredient names — do not write generic "this powerful formula contains beneficial compounds"
-   - Mention ingredient origins/names exactly like template does ("from Denmark", "also known as Motherwort")
-7. DO NOT add marketing language not in the template — no "amazing", "powerful", "revolutionary" unless template has them
-8. REMOVE any "Hook:" / "Script:" / section labels — output plain content only
+You write VOICE-OVER ONLY. Just the words a real creator says into their phone camera. No scene directions. No camera moves. No labels. No markdown. No emojis. No section headers.
 
 ═══════════════════════════════════════════════════════════════
-TRANSLATION RULES (Malay version)
+NON-NEGOTIABLE RULES
 ═══════════════════════════════════════════════════════════════
-- Translate to natural Malaysian Malay (Bahasa Malaysia), colloquial and authentic
-- KEEP product name and ingredient names in original English (do not translate "INFINITY PROBIOTICS PLUS" or "Vitamin B12")
-- Match line count and structure of the English version exactly
-- Do NOT include section labels
+1. Sound like a real human creator, not a brand
+2. Short sentences. Spoken rhythm. Native cadence
+3. The hook must stop the scroll inside the first 3 seconds
+4. Every sentence earns the next sentence — no filler
+5. Use the product's REAL ingredient names — never generic "powerful formula", never invent ingredients
+6. Never claim to cure / treat / guarantee — keep the tone advertorial, not medical
+7. BANNED words and phrases: "revolutionary", "unlock", "transform your life", "amazing", "game-changer", "ultimate", "the best [X] of all time", "absolutely incredible"
+8. No emojis. No markdown. No bullet points. No section labels in the output. No "Hook:" / "Pain:" prefixes
 
 ═══════════════════════════════════════════════════════════════
-OUTPUT FORMAT — use EXACTLY these two markers, nothing else:
+MALAY VERSION RULES
+═══════════════════════════════════════════════════════════════
+Write in natural spoken Malaysian Bahasa Melayu — NOT textbook formal Malay.
+- Conversational and colloquial, like a real Malaysian creator on TikTok
+- Mix English words where it sounds natural ("memang worth it", "serius I tak sangka", "perut rasa ringan gila")
+- Keep PRODUCT NAME and INGREDIENT NAMES in their original English (do not translate "Vitamin B12" or brand names)
+- Same approximate length as the English version
+- Same emotional arc as the English version
+
+═══════════════════════════════════════════════════════════════
+SCRIPT STRUCTURE
+═══════════════════════════════════════════════════════════════
+Default flow:
+  Hook → Pain → Solution → Benefits → Proof/Demo → CTA
+
+When EDUCATIONAL MODE is ON, expand to:
+  Hook → Pain → Why this happens → Ingredient/mechanism → Why this product is different → Benefits → Proof/Demo → CTA
+
+Educational explanations must sound CONVERSATIONAL, like a creator explaining to a friend — NOT like a medical textbook. Use analogies and plain-language framing (e.g. "inulin basically acts like food for the good bacteria in your gut").
+
+═══════════════════════════════════════════════════════════════
+OUTPUT FORMAT — exactly these markers, nothing else
 ═══════════════════════════════════════════════════════════════
 <<<ENGLISH>>>
-[adapted English script — same line count and rhythm as template]
+[plain spoken voice-over English — no labels, no markdown, no scene directions]
 <<<MALAY>>>
-[Malaysian Malay translation — same structure]`
+[natural Malaysian Bahasa Melayu — colloquial, conversational]
+<<<STRUCTURED>>>
+{"hook":"...","pain":"...","whyItHappens":"...","ingredientMechanism":"...","solution":"...","benefits":"...","proof":"...","cta":"...","emotionalTone":"...","pacing":"...","audienceAngle":"..."}
 
-// ── Prompt builder ────────────────────────────────────────────────────────────
+(Omit "whyItHappens" and "ingredientMechanism" from the JSON if educational mode is OFF. The structured JSON is internal metadata — keep each value to one short sentence.)`
 
-function buildPrompt(template: string, context: EditableProductContext): string {
-  // Pre-compute template stats so the AI sees them explicitly
-  const templateLines = template.split('\n').filter((l) => l.trim() !== '')
-  const lineCount = templateLines.length
-  const wordCounts = templateLines.map((l) => l.trim().split(/\s+/).length)
-  const totalWords = wordCounts.reduce((a, b) => a + b, 0)
+// ── Length → target word count (English ~150 wpm spoken) ─────────────────
+const LENGTH_TARGETS: Record<LengthSeconds, { words: number; lines: number }> = {
+  15: { words: 38,  lines: 3 },
+  30: { words: 75,  lines: 5 },
+  45: { words: 113, lines: 7 },
+  60: { words: 150, lines: 9 },
+}
+
+// ── Hook strength briefing ──────────────────────────────────────────────
+const HOOK_STRENGTH_BRIEF: Record<HookStrength, string> = {
+  safe:       'Conservative hook tone — friendly, recognisable, no shock tactics. Suitable for risk-averse audiences and brand-safe placements.',
+  balanced:   'Balanced hook — emotionally engaging without being provocative. The default for most campaigns.',
+  aggressive: 'Aggressive hook — interruption-pattern, contrarian framing, provocative first line. Designed to stop the scroll at all costs while staying within platform policy.',
+}
+
+// ── Build the user-message portion of the prompt ────────────────────────
+function buildUserPrompt(params: ScriptGenerationParams, product: Product): string {
+  const preset = getPresetById(params.presetId)
+  if (!preset) throw new Error(`Unknown preset: ${params.presetId}`)
+
+  const target = LENGTH_TARGETS[params.lengthSec]
+  const toneHints = TONE_OPTIONS
+    .filter((t) => params.toneModifiers.includes(t.id))
+    .map((t) => `- ${t.label}: ${t.promptHint}`)
+    .join('\n')
+
+  // Educational mode is implicit for any educational preset, explicit via toggle for classic presets.
+  const educationalActive = params.educationalMode || preset.category === 'educational'
 
   const lines: string[] = []
-  lines.push(`═══════════════════════════════════════════════════════════════`)
-  lines.push(`TEMPLATE SCRIPT (this is the winning proven script — CLONE ITS STRUCTURE EXACTLY)`)
-  lines.push(`Template line count: ${lineCount} non-empty lines`)
-  lines.push(`Template word count: ${totalWords} words total`)
-  lines.push(`Per-line word counts: [${wordCounts.join(', ')}]`)
-  lines.push(`═══════════════════════════════════════════════════════════════`)
-  lines.push(template)
-  lines.push(``)
-  lines.push(`═══════════════════════════════════════════════════════════════`)
-  lines.push(`NEW PRODUCT (replace template product with this one)`)
-  lines.push(`═══════════════════════════════════════════════════════════════`)
-  if (context.productDescription) lines.push(`Product: ${context.productDescription}`)
-  if (context.targetMarket)       lines.push(`Audience: ${context.targetMarket}`)
-  if (context.painPoints)         lines.push(`Pain points to substitute: ${context.painPoints}`)
-  if (context.usps)               lines.push(`USPs: ${context.usps}`)
-  if (context.benefits)           lines.push(`Benefits: ${context.benefits}`)
-  if (context.offer)              lines.push(`Offer: ${context.offer}`)
-  if (context.ingredients)        lines.push(`★ INGREDIENTS (substitute these for template's herbs/compounds, KEEP NAMES IN ENGLISH): ${context.ingredients}`)
-  lines.push(``)
-  lines.push(`YOUR TASK:`)
-  lines.push(`1. Output ${lineCount} non-empty lines in English — SAME COUNT as template`)
-  lines.push(`2. Each line's word count should be within ±30% of the corresponding template line`)
-  lines.push(`3. Match sentence patterns word-for-word where possible — only swap product-specific content`)
-  lines.push(`4. Substitute template's specific ingredients/herbs with the new product's INGREDIENTS field — name them specifically, do not write generic descriptions`)
-  lines.push(`5. Match CTA tone exactly — if template uses soft "tap the link to learn more", do NOT switch to hard sales`)
-  lines.push(`6. After the English version, output the Malaysian Malay translation using the same line count and structure`)
-  lines.push(`7. Follow the <<<ENGLISH>>> / <<<MALAY>>> output format exactly`)
+
+  lines.push('═══════════════════════════════════════════════════════════════')
+  lines.push('PRODUCT CONTEXT (use the real fields — do not invent)')
+  lines.push('═══════════════════════════════════════════════════════════════')
+  if (product.productName)        lines.push(`Name: ${product.productName}`)
+  if (product.productDescription) lines.push(`Description: ${product.productDescription}`)
+  if (product.targetMarket)       lines.push(`Target market: ${product.targetMarket}`)
+  if (product.painPoints)         lines.push(`Pain points: ${product.painPoints}`)
+  if (product.usps)               lines.push(`USPs: ${product.usps}`)
+  if (product.benefits)           lines.push(`Benefits: ${product.benefits}`)
+  if (product.offer)              lines.push(`Offer: ${product.offer}`)
+  if (product.ingredients)        lines.push(`★ Ingredients (name these specifically in the script — never generic): ${product.ingredients}`)
+
+  lines.push('')
+  lines.push('═══════════════════════════════════════════════════════════════')
+  lines.push(`PRESET FRAMEWORK — ${preset.label} (${preset.category === 'educational' ? 'EDUCATIONAL' : 'classic'})`)
+  lines.push('═══════════════════════════════════════════════════════════════')
+  lines.push(`Hook formula: ${preset.hookFormula}`)
+  lines.push(`Pacing: ${preset.pacingNote}`)
+  lines.push(`Emotional angle: ${preset.emotionalAngle}`)
+  lines.push(`CTA style: ${preset.ctaStyle}`)
+  lines.push(`Proof style: ${preset.proofStyle}`)
+
+  lines.push('')
+  lines.push('═══════════════════════════════════════════════════════════════')
+  lines.push('LENGTH + INTENSITY')
+  lines.push('═══════════════════════════════════════════════════════════════')
+  lines.push(`Target length: ${params.lengthSec} seconds (~${target.words} English words, ~${target.lines} spoken lines).`)
+  lines.push(`Hook strength: ${params.hookStrength.toUpperCase()} — ${HOOK_STRENGTH_BRIEF[params.hookStrength]}`)
+
+  if (toneHints) {
+    lines.push('')
+    lines.push('Tone modifiers (apply ALL of these):')
+    lines.push(toneHints)
+  }
+
+  if (educationalActive) {
+    lines.push('')
+    lines.push('═══════════════════════════════════════════════════════════════')
+    lines.push('EDUCATIONAL MODE — ON')
+    lines.push('═══════════════════════════════════════════════════════════════')
+    lines.push('The script MUST explain:')
+    lines.push('- Why the problem actually happens (mechanism, not just "X is bad")')
+    lines.push('- How one or two key ingredients work, named specifically')
+    lines.push('- Why this product is different from the category default')
+    lines.push('Explanations must sound conversational, like a creator explaining to a friend. Use analogies. NEVER use medical-textbook tone. NEVER claim to cure / treat / guarantee.')
+  } else {
+    lines.push('')
+    lines.push('EDUCATIONAL MODE — OFF. Focus on emotional selling, fast hook, and direct conversion.')
+  }
+
+  lines.push('')
+  lines.push('Generate the script following the preset framework above. Output BOTH the English voice-over AND the Malaysian Malay version, plus the structured JSON. Use the exact <<<ENGLISH>>> / <<<MALAY>>> / <<<STRUCTURED>>> markers.')
+
   return lines.join('\n')
 }
 
-// ── Key helper ────────────────────────────────────────────────────────────────
+// ── Parsing helpers ─────────────────────────────────────────────────────
+
+function stripLabels(text: string): string {
+  // Strip any leaked "Hook:" / "Pain:" / numbered section prefixes
+  return text
+    .split('\n')
+    .map((line) =>
+      line.replace(/^\s*[-*•]?\s*(?:Hook|Pain|Solution|Benefits|Proof|Demo|CTA|Cta|Section|Body|Intro|Outro|Script|Voice[- ]?over)\s*\d*\s*(?:\([^)]*\))?\s*:\s*/i, ''),
+    )
+    .join('\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
+}
+
+function parseStructured(raw: string): ScriptStructured | null {
+  // Extract the JSON between <<<STRUCTURED>>> and end-of-string. Tolerant of
+  // trailing whitespace, leading commentary, and ```json fences.
+  const m = raw.match(/<<<STRUCTURED>>>\s*([\s\S]+?)\s*$/)
+  if (!m) return null
+  let body = m[1].trim()
+  const fence = body.match(/```(?:json)?\s*([\s\S]+?)```/)
+  if (fence) body = fence[1].trim()
+  try {
+    const parsed = JSON.parse(body) as ScriptStructured
+    return parsed
+  } catch {
+    // Last resort: find the first {...} block
+    const obj = body.match(/\{[\s\S]+\}/)
+    if (!obj) return null
+    try { return JSON.parse(obj[0]) as ScriptStructured } catch { return null }
+  }
+}
+
+function parseResponse(raw: string): { english: string; malay: string; structured: ScriptStructured | null } {
+  const englishMatch = raw.match(/<<<ENGLISH>>>([\s\S]*?)(?:<<<MALAY>>>|<<<STRUCTURED>>>|$)/)
+  const malayMatch   = raw.match(/<<<MALAY>>>([\s\S]*?)(?:<<<STRUCTURED>>>|$)/)
+
+  const english   = stripLabels(englishMatch?.[1]?.trim() ?? '')
+  const malay     = stripLabels(malayMatch?.[1]?.trim() ?? '')
+  const structured = parseStructured(raw)
+
+  return { english, malay, structured }
+}
 
 function getGeminiKey(): string {
   const store = useSettingsStore.getState()
@@ -95,77 +206,46 @@ function getGeminiKey(): string {
   return store.getGeminiApiKey()
 }
 
-// ── Parse response ────────────────────────────────────────────────────────────
+// ── Main export ─────────────────────────────────────────────────────────
 
-/**
- * Strip "Hook:" / "Script:" / "Section:" / numbered labels from any line.
- * Belt-and-suspenders cleanup in case Gemini ignores the system instruction.
- */
-function stripSectionLabels(text: string): string {
-  return text
-    .split('\n')
-    .map((line) => {
-      // Remove labels like "Hook:", "Script:", "Hook 1:", "Script (intro):"
-      // Match optional bullet/dash/number prefix, then label, then colon
-      return line.replace(/^\s*[-*•]?\s*(?:Hook|Script|Section|Body|Intro|Outro|CTA|Cta)\s*\d*\s*(?:\([^)]*\))?\s*:\s*/i, '')
-    })
-    .join('\n')
-    // Collapse 3+ consecutive blank lines into 2
-    .replace(/\n{3,}/g, '\n\n')
-    .trim()
-}
-
-function parseResponse(raw: string): { english: string; malay: string } {
-  const englishMatch = raw.match(/<<<ENGLISH>>>([\s\S]*?)(?:<<<MALAY>>>|$)/)
-  const malayMatch   = raw.match(/<<<MALAY>>>([\s\S]*)$/)
-
-  let english = (englishMatch?.[1] ?? '').trim()
-  let malay   = (malayMatch?.[1]  ?? '').trim()
-
-  // Fallback: if markers not found, try splitting on blank line heuristic
-  if (!english && !malay) {
-    const lines = raw.split('\n')
-    const half  = Math.floor(lines.length / 2)
-    english = lines.slice(0, half).join('\n').trim()
-    malay   = lines.slice(half).join('\n').trim()
-  }
-
-  // Strip Hook:/Script: labels post-hoc (Gemini sometimes ignores instruction)
-  english = stripSectionLabels(english)
-  malay   = stripSectionLabels(malay)
-
-  return { english, malay }
-}
-
-// ── Main export ───────────────────────────────────────────────────────────────
-
-/**
- * Single Gemini call: adapt template script for new product (English)
- * + translate to Malaysian Malay simultaneously.
- * Using maxOutputTokens: 16384 to prevent truncation on long scripts.
- */
-export async function adaptAndTranslate(
-  template: string,
-  context: EditableProductContext,
-): Promise<AdaptScriptResult> {
+export async function generateUGCScript(params: ScriptGenerationParams): Promise<ScriptGenerationResult> {
   const apiKey = getGeminiKey()
+  const product = useBankStore.getState().getProductById(params.productId)
+  if (!product) throw new Error('Không tìm thấy sản phẩm — chọn lại từ Project')
+
+  const preset = getPresetById(params.presetId)
+  if (!preset) throw new Error(`Preset không hợp lệ: ${params.presetId}`)
+
+  const userPrompt = buildUserPrompt(params, product)
 
   const raw = await directGeminiVision({
     apiKey,
-    parts: [{ text: buildPrompt(template, context) }],
-    systemInstruction: ADAPT_SYSTEM,
-    maxOutputTokens: 16384,   // was 2048 — prevents mid-script cutoff
+    parts: [{ text: userPrompt }],
+    systemInstruction: SYSTEM_PROMPT,
+    maxOutputTokens: 4096,
   })
 
-  const { english, malay } = parseResponse(raw)
+  const { english, malay, structured } = parseResponse(raw)
 
-  // Validate we got something meaningful back
-  if (!english || english.length < 50) {
-    throw new Error('Gemini trả về kịch bản quá ngắn — thử lại hoặc rút gọn kịch bản mẫu')
+  if (!english || english.length < 30) {
+    throw new Error('Gemini trả về kịch bản tiếng Anh quá ngắn — thử lại')
   }
-  if (!malay || malay.length < 50) {
+  if (!malay || malay.length < 30) {
     throw new Error('Gemini không dịch được sang tiếng Malay — thử lại')
   }
 
-  return { vietnamese: english, malay }
+  return {
+    english,
+    malay,
+    structured,
+    presetId: params.presetId,
+    presetLabel: preset.label,
+    lengthSec: params.lengthSec,
+    hookStrength: params.hookStrength,
+    toneModifiers: params.toneModifiers,
+    educationalMode: params.educationalMode || preset.category === 'educational',
+  }
 }
+
+// Re-export so call sites only need to import from this module.
+export type { ScriptGenerationParams, ScriptGenerationResult, ToneModifier, HookStrength, LengthSeconds }

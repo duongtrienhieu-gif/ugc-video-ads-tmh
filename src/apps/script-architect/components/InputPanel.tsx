@@ -1,267 +1,315 @@
-import { useState, useEffect } from 'react'
-import { Package, Loader2, PenLine } from 'lucide-react'
-import type { Product, Script } from '../../../stores/types'
-import type { EditableProductContext } from '../types'
+import { useState } from 'react'
+import { Package, Loader2, GraduationCap, Sparkles } from 'lucide-react'
+import type { Product } from '../../../stores/types'
+import type {
+  HookStrength, LengthSeconds, ScriptGenerationParams, ToneModifier,
+} from '../types'
 import { useBankStore } from '../../../stores/bankStore'
-import BankPicker from '../../../components/BankPicker'
+import { useSettingsStore } from '../../../stores/settingsStore'
 import { useAppStore } from '../../../stores/appStore'
 import { useAssetUrl } from '../../../hooks/useAssetUrl'
-
-function createEditableContext(product: Product): EditableProductContext {
-  return {
-    productDescription: product.productDescription,
-    targetMarket: product.targetMarket,
-    painPoints: product.painPoints,
-    usps: product.usps,
-    benefits: product.benefits,
-    offer: product.offer,
-    ingredients: product.ingredients,
-  }
-}
+import BankPicker from '../../../components/BankPicker'
+import { SCRIPT_PRESETS, TONE_OPTIONS, getPresetById } from '../services/presets'
 
 interface InputPanelProps {
-  winningTranscript: string
-  onTranscriptChange: (value: string) => void
   selectedProduct: Product | null
   onProductSelect: (product: Product) => void
-  onGenerate: (context: EditableProductContext | null) => void
+  onGenerate: (params: Omit<ScriptGenerationParams, 'productId'>) => void
   isGenerating: boolean
-  highlightField?: string | null
 }
 
+const LENGTH_OPTIONS: { value: LengthSeconds; label: string; hint: string }[] = [
+  { value: 15, label: '15s', hint: 'Hook-and-CTA' },
+  { value: 30, label: '30s', hint: 'Standard' },
+  { value: 45, label: '45s', hint: 'Educational' },
+  { value: 60, label: '60s', hint: 'Long-form' },
+]
+
+const HOOK_STRENGTH_OPTIONS: { value: HookStrength; label: string }[] = [
+  { value: 'safe',       label: 'An toàn' },
+  { value: 'balanced',   label: 'Cân bằng' },
+  { value: 'aggressive', label: 'Gắt' },
+]
+
 export default function InputPanel({
-  winningTranscript,
-  onTranscriptChange,
-  selectedProduct,
-  onProductSelect,
-  onGenerate,
-  isGenerating,
-  highlightField,
+  selectedProduct, onProductSelect, onGenerate, isGenerating,
 }: InputPanelProps) {
   const [productPickerOpen, setProductPickerOpen] = useState(false)
-  const [scriptPickerOpen, setScriptPickerOpen] = useState(false)
-  const [editableContext, setEditableContext] = useState<EditableProductContext | null>(null)
-  const [elapsedSec, setElapsedSec] = useState(0)
+  const [presetId, setPresetId] = useState<string>('problem-solution')
+  const [lengthSec, setLengthSec] = useState<LengthSeconds>(30)
+  const [hookStrength, setHookStrength] = useState<HookStrength>('balanced')
+  const [toneModifiers, setToneModifiers] = useState<ToneModifier[]>([])
+  const [educationalMode, setEducationalMode] = useState(false)
+  const [showAdvanced, setShowAdvanced] = useState(false)
 
-  // Elapsed timer while generating
-  useEffect(() => {
-    if (!isGenerating) { setElapsedSec(0); return }
-    const startedAt = Date.now()
-    const interval = setInterval(() => setElapsedSec(Math.floor((Date.now() - startedAt) / 1000)), 1000)
-    return () => clearInterval(interval)
-  }, [isGenerating])
-
-  const products = useBankStore((s) => s.products)
+  const resolvedProductImage = useAssetUrl(selectedProduct?.productImage)
+  const hasGeminiKey = useSettingsStore((s) => s.hasGeminiKey())
   const openApp = useAppStore((s) => s.openApp)
   const sendToApp = useAppStore((s) => s.sendToApp)
-  const resolvedProductImage = useAssetUrl(selectedProduct?.productImage)
+  const productCount = useBankStore((s) => s.products.length)
 
-  useEffect(() => {
-    if (selectedProduct) {
-      setEditableContext(createEditableContext(selectedProduct))
-    }
-  }, [selectedProduct])
+  const preset = getPresetById(presetId)
+  const isEducationalPreset = preset?.category === 'educational'
+  // Educational presets force-enable the mode in the prompt builder, so the
+  // toggle is just informational when one is selected.
+  const effectiveEducational = educationalMode || isEducationalPreset
 
-  const canGenerate = winningTranscript.trim().length > 0 && selectedProduct !== null
+  const toggleTone = (id: ToneModifier) => {
+    setToneModifiers((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]))
+  }
 
   const handleOpenFinder = () => {
     sendToApp({ targetApp: 'finder', targetField: 'activeBank', data: 'products' })
     openApp('finder')
   }
 
-  const updateField = (field: keyof EditableProductContext, value: string) => {
-    if (!editableContext) return
-    setEditableContext({ ...editableContext, [field]: value })
+  const canGenerate = !!selectedProduct && hasGeminiKey && !isGenerating
+
+  const handleClickGenerate = () => {
+    if (!canGenerate) return
+    onGenerate({
+      presetId,
+      lengthSec,
+      hookStrength,
+      toneModifiers,
+      educationalMode,
+    })
   }
 
-  const handleScriptSelect = (item: Script) => {
-    onTranscriptChange(item.scriptText)
-  }
+  const classicPresets = SCRIPT_PRESETS.filter((p) => p.category === 'classic')
+  const educationalPresets = SCRIPT_PRESETS.filter((p) => p.category === 'educational')
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex-1 overflow-y-auto p-5">
-
-        {/* ── Bước 1: Kịch bản ── */}
-        <div className="mb-6">
-          <StepLabel step={1} label="Chọn kịch bản mẫu" />
-
-          <button
-            onClick={() => setScriptPickerOpen(true)}
-            className="mt-2 flex w-full items-center gap-3 rounded-xl border border-dashed border-black/10 bg-black/[0.02] p-4 text-left transition-colors hover:border-blue-500/30 hover:bg-blue-500/5"
-          >
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-500/10">
-              <PenLine className="h-5 w-5 text-blue-400" />
-            </div>
-            <div className="flex flex-col">
-              <span className="text-sm font-medium text-gray-700">Kịch bản từ Project</span>
-              <span className="text-xs text-gray-400">Nhấn để chọn</span>
-            </div>
-          </button>
-
-          <div className="my-3 flex items-center gap-3">
-            <div className="flex-1 border-t border-black/8" />
-            <span className="text-[10px] font-semibold uppercase tracking-widest text-gray-300">Hoặc</span>
-            <div className="flex-1 border-t border-black/8" />
-          </div>
-
-          <textarea
-            value={winningTranscript}
-            onChange={(e) => onTranscriptChange(e.target.value)}
-            rows={6}
-            placeholder="Dán transcript quảng cáo thắng vào đây, hoặc gửi từ Phân tích QC..."
-            className={`w-full rounded-xl border border-black/10 bg-black/[0.02] px-4 py-3 text-sm leading-relaxed text-gray-800 placeholder-gray-400 outline-none transition-colors focus:border-blue-500/30 resize-none ${highlightField === 'transcript' ? 'animate-field-flash' : ''}`}
-          />
-        </div>
-
-        {/* ── Bước 2: Sản phẩm ── */}
-        <div className="mb-6">
-          <StepLabel step={2} label="Chọn sản phẩm" />
-
-          {selectedProduct ? (
-            <div className="mt-2">
-              <div className="rounded-xl border border-black/10 bg-black/[0.03] p-3">
-                <div className="flex items-center gap-3">
-                  <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-black/5">
-                    {resolvedProductImage ? (
-                      <img src={resolvedProductImage} alt="" className="h-full w-full object-cover" />
-                    ) : (
-                      <Package className="h-5 w-5 text-gray-400" />
-                    )}
-                  </div>
-                  <div className="flex min-w-0 flex-1 flex-col">
-                    <span className="truncate text-sm font-semibold tracking-tight text-gray-800">
-                      {selectedProduct.productName}
-                    </span>
-                    <span className="truncate text-xs text-gray-500">
-                      {selectedProduct.targetMarket || 'Chưa có thị trường mục tiêu'}
-                    </span>
-                  </div>
-                  <button
-                    onClick={() => setProductPickerOpen(true)}
-                    className="shrink-0 rounded-lg px-2.5 py-1 text-[11px] font-medium text-blue-400 transition-colors hover:bg-blue-500/10"
-                  >
-                    Thay đổi
-                  </button>
-                </div>
-              </div>
-
-              {editableContext && (
-                <div className="mt-3 flex flex-col gap-3">
-                  <p className="text-[10px] text-gray-400">Chỉnh sửa ở đây sẽ không thay đổi sản phẩm đã lưu</p>
-                  <EditableField label="Mô tả" value={editableContext.productDescription} onChange={(v) => updateField('productDescription', v)} />
-                  <EditableField label="Thị trường mục tiêu" value={editableContext.targetMarket} onChange={(v) => updateField('targetMarket', v)} />
-                  <EditableField label="Điểm đau" value={editableContext.painPoints} onChange={(v) => updateField('painPoints', v)} />
-                  <EditableField label="USP" value={editableContext.usps} onChange={(v) => updateField('usps', v)} />
-                  <EditableField label="Lợi ích" value={editableContext.benefits} onChange={(v) => updateField('benefits', v)} />
-                  <EditableField label="Ưu đãi" value={editableContext.offer} onChange={(v) => updateField('offer', v)} />
-                  <EditableField label="Thành phần" value={editableContext.ingredients} onChange={(v) => updateField('ingredients', v)} />
-                </div>
-              )}
-            </div>
-          ) : (
-            <div className="mt-2">
-              {products.length > 0 ? (
-                <button
-                  onClick={() => setProductPickerOpen(true)}
-                  className="flex w-full items-center gap-3 rounded-xl border border-dashed border-black/10 bg-black/[0.02] p-4 text-left transition-colors hover:border-blue-500/30 hover:bg-blue-500/5"
-                >
-                  <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-500/10">
-                    <Package className="h-5 w-5 text-blue-400" />
-                  </div>
-                  <div className="flex flex-col">
-                    <span className="text-sm font-medium text-gray-700">Chọn sản phẩm</span>
-                    <span className="text-xs text-gray-400">Chọn từ Project sản phẩm</span>
-                  </div>
-                </button>
-              ) : (
-                <div className="flex items-center gap-3 rounded-xl border border-dashed border-black/10 bg-black/[0.02] p-4">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-black/5">
-                    <Package className="h-5 w-5 text-gray-300" />
-                  </div>
-                  <div className="flex flex-col">
-                    <span className="text-sm text-gray-500">Chưa có sản phẩm — Thêm vào Project</span>
-                    <button
-                      onClick={handleOpenFinder}
-                      className="text-left text-xs text-blue-400 transition-colors hover:text-blue-300"
-                    >
-                      Thêm vào Project
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-
+      {/* Header */}
+      <div className="shrink-0 border-b border-black/8 px-4 py-3">
+        <h2 className="text-sm font-bold text-gray-900">AI Tạo Kịch bản UGC Chuyển đổi cao</h2>
+        <p className="mt-0.5 text-[11px] text-gray-500">
+          Tạo script video ads dựa trên công thức quảng cáo thực chiến.
+        </p>
       </div>
 
-      {/* Sticky generate button */}
-      <div className="shrink-0 border-t border-black/8 px-5 py-4">
+      <div className="flex-1 overflow-y-auto px-4 py-3 space-y-4">
+        {/* STEP 1 — Product */}
+        <Section step={1} title="Chọn sản phẩm">
+          {selectedProduct ? (
+            <div className="flex items-center gap-3 rounded-xl border border-black/10 bg-white p-2.5">
+              <div className="h-12 w-12 shrink-0 overflow-hidden rounded-lg bg-gray-100">
+                {resolvedProductImage ? (
+                  <img src={resolvedProductImage} alt="" className="h-full w-full object-cover" />
+                ) : (
+                  <div className="flex h-full w-full items-center justify-center text-gray-300">
+                    <Package className="h-5 w-5" />
+                  </div>
+                )}
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-semibold text-gray-900">{selectedProduct.productName}</p>
+                <p className="truncate text-[10px] text-gray-400">{selectedProduct.targetMarket || 'Chưa rõ market'}</p>
+              </div>
+              <button
+                onClick={() => setProductPickerOpen(true)}
+                className="rounded-lg border border-black/10 px-2 py-1 text-[10px] font-medium text-gray-600 hover:bg-black/[0.04]"
+              >
+                Đổi
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={() => setProductPickerOpen(true)}
+              className="flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-blue-300 bg-blue-50 px-4 py-3 text-sm font-semibold text-blue-700 hover:bg-blue-100"
+            >
+              <Package className="h-4 w-4" />
+              {productCount > 0 ? 'Chọn sản phẩm từ Project' : 'Chưa có sản phẩm — tạo trong Project'}
+            </button>
+          )}
+          {productCount === 0 && (
+            <button onClick={handleOpenFinder} className="text-[11px] text-blue-600 underline">
+              Mở Project để tạo sản phẩm
+            </button>
+          )}
+        </Section>
+
+        {/* STEP 2 — Preset */}
+        <Section step={2} title="Chọn công thức script">
+          <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-gray-400">Direct-response classics</p>
+          <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
+            {classicPresets.map((p) => (
+              <PresetCard key={p.id} preset={p} active={presetId === p.id} onClick={() => setPresetId(p.id)} />
+            ))}
+          </div>
+
+          <p className="mt-3 mb-2 flex items-center gap-1 text-[10px] font-bold uppercase tracking-widest text-emerald-700">
+            <GraduationCap className="h-3 w-3" /> Educational / Mechanism selling
+          </p>
+          <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
+            {educationalPresets.map((p) => (
+              <PresetCard key={p.id} preset={p} active={presetId === p.id} onClick={() => setPresetId(p.id)} />
+            ))}
+          </div>
+        </Section>
+
+        {/* STEP 3 — Length */}
+        <Section step={3} title="Thời lượng">
+          <div className="grid grid-cols-4 gap-1.5">
+            {LENGTH_OPTIONS.map((opt) => (
+              <button
+                key={opt.value}
+                onClick={() => setLengthSec(opt.value)}
+                className={`flex flex-col items-center rounded-lg border py-2 text-xs transition-colors ${
+                  lengthSec === opt.value
+                    ? 'border-blue-500/40 bg-blue-50 text-blue-700'
+                    : 'border-black/10 bg-white text-gray-600 hover:bg-black/[0.03]'
+                }`}
+              >
+                <span className="font-bold">{opt.label}</span>
+                <span className="text-[9px] opacity-60">{opt.hint}</span>
+              </button>
+            ))}
+          </div>
+        </Section>
+
+        {/* Hook strength */}
+        <Section step={4} title="Độ mạnh hook">
+          <div className="grid grid-cols-3 gap-1.5">
+            {HOOK_STRENGTH_OPTIONS.map((opt) => (
+              <button
+                key={opt.value}
+                onClick={() => setHookStrength(opt.value)}
+                className={`rounded-lg border py-2 text-xs font-medium transition-colors ${
+                  hookStrength === opt.value
+                    ? opt.value === 'aggressive'
+                      ? 'border-rose-400 bg-rose-50 text-rose-700'
+                      : opt.value === 'safe'
+                        ? 'border-emerald-400 bg-emerald-50 text-emerald-700'
+                        : 'border-blue-400 bg-blue-50 text-blue-700'
+                    : 'border-black/10 bg-white text-gray-600 hover:bg-black/[0.03]'
+                }`}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+        </Section>
+
+        {/* Educational mode toggle */}
+        <Section step={5} title="Chế độ giải thích">
+          <label className={`flex cursor-pointer items-start gap-2.5 rounded-xl border p-3 transition-colors ${
+            effectiveEducational ? 'border-emerald-300 bg-emerald-50' : 'border-black/10 bg-white hover:bg-black/[0.02]'
+          }`}>
+            <input
+              type="checkbox"
+              checked={effectiveEducational}
+              disabled={isEducationalPreset}
+              onChange={(e) => setEducationalMode(e.target.checked)}
+              className="mt-0.5 accent-emerald-600"
+            />
+            <div className="flex-1">
+              <p className="text-xs font-semibold text-gray-900">
+                Giải thích cơ chế sản phẩm
+                {isEducationalPreset && <span className="ml-1 text-[10px] font-normal text-emerald-700">(bật tự động cho preset Educational)</span>}
+              </p>
+              <p className="mt-0.5 text-[10px] text-gray-500">
+                AI sẽ giải thích vì sao vấn đề xảy ra, cơ chế ingredient, vì sao sản phẩm khác biệt — dành cho health / skincare / supplement / wellness.
+              </p>
+            </div>
+          </label>
+        </Section>
+
+        {/* Advanced — tone modifiers */}
+        <Section step={6} title="Tone (nâng cao)">
+          <button
+            onClick={() => setShowAdvanced((v) => !v)}
+            className="mb-2 text-[11px] text-blue-600 hover:underline"
+          >
+            {showAdvanced ? '− Ẩn' : '+ Thêm tone modifiers'}
+          </button>
+          {showAdvanced && (
+            <div className="flex flex-wrap gap-1.5">
+              {TONE_OPTIONS.map((t) => (
+                <button
+                  key={t.id}
+                  onClick={() => toggleTone(t.id)}
+                  className={`rounded-full border px-2.5 py-1 text-[11px] transition-colors ${
+                    toneModifiers.includes(t.id)
+                      ? 'border-blue-400 bg-blue-50 text-blue-700'
+                      : 'border-black/10 bg-white text-gray-600 hover:bg-black/[0.03]'
+                  }`}
+                >
+                  {t.label}
+                </button>
+              ))}
+            </div>
+          )}
+        </Section>
+      </div>
+
+      {/* Bottom CTA */}
+      <div className="shrink-0 border-t border-black/8 p-4">
+        {!hasGeminiKey && (
+          <p className="mb-2 text-center text-[10px] text-red-500">Cần Gemini API key trong Cài đặt</p>
+        )}
         <button
-          onClick={() => onGenerate(editableContext)}
-          disabled={!canGenerate || isGenerating}
-          className="flex w-full items-center justify-center gap-2.5 rounded-full border border-black/12 bg-blue-500 px-6 py-3.5 text-[13px] font-medium tracking-tight text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.1)] transition-all hover:bg-blue-400 disabled:cursor-not-allowed disabled:opacity-40"
+          onClick={handleClickGenerate}
+          disabled={!canGenerate}
+          className="flex w-full items-center justify-center gap-2 rounded-full bg-gradient-to-r from-blue-600 to-violet-600 px-6 py-3.5 text-sm font-bold text-white shadow-md transition-all hover:from-blue-700 hover:to-violet-700 disabled:cursor-not-allowed disabled:opacity-40"
         >
           {isGenerating ? (
-            <>
-              <Loader2 className="h-4 w-4 animate-spin" />
-              <span>Đang tạo kịch bản... ({elapsedSec}s)</span>
-            </>
+            <><Loader2 className="h-4 w-4 animate-spin" /> Đang tạo kịch bản...</>
           ) : (
-            <span>✏️ Tạo kịch bản</span>
+            <><Sparkles className="h-4 w-4" /> Tạo kịch bản UGC</>
           )}
         </button>
-
-        {!canGenerate && !isGenerating && (
-          <p className="mt-2 text-center text-[11px] text-gray-300">
-            {!winningTranscript.trim() && !selectedProduct
-              ? 'Cần chọn kịch bản mẫu và sản phẩm'
-              : !winningTranscript.trim()
-                ? 'Chọn hoặc dán kịch bản mẫu'
-                : 'Chọn sản phẩm từ Project'}
-          </p>
-        )}
       </div>
 
       <BankPicker
         bankType="products"
         isOpen={productPickerOpen}
-        onSelect={(item) => onProductSelect(item as Product)}
+        onSelect={(item) => { onProductSelect(item as Product); setProductPickerOpen(false) }}
         onClose={() => setProductPickerOpen(false)}
       />
-      <BankPicker
-        bankType="scripts"
-        isOpen={scriptPickerOpen}
-        onSelect={(item) => handleScriptSelect(item as Script)}
-        onClose={() => setScriptPickerOpen(false)}
-      />
     </div>
   )
 }
 
-function StepLabel({ step, label }: { step: number; label: string }) {
+// ── Small helpers ───────────────────────────────────────────────────────
+
+function Section({ step, title, children }: { step: number; title: string; children: React.ReactNode }) {
   return (
-    <div className="flex items-center gap-2.5">
-      <span className="flex h-5 w-5 items-center justify-center rounded-full bg-blue-500/15 text-[10px] font-bold tabular-nums text-blue-400">
-        {step}
-      </span>
-      <span className="text-[11px] font-medium uppercase tracking-widest text-gray-500">{label}</span>
+    <div>
+      <p className="mb-1.5 text-[10px] font-bold uppercase tracking-widest text-gray-400">
+        Bước {step} · {title}
+      </p>
+      <div className="space-y-1.5">{children}</div>
     </div>
   )
 }
 
-function EditableField({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) {
+function PresetCard({
+  preset, active, onClick,
+}: {
+  preset: typeof SCRIPT_PRESETS[number]
+  active: boolean
+  onClick: () => void
+}) {
   return (
-    <label className="flex flex-col gap-1">
-      <span className="text-[10px] font-medium uppercase tracking-widest text-gray-300">{label}</span>
-      <textarea
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        rows={2}
-        className="w-full rounded-lg border border-black/10 bg-black/[0.02] px-3 py-2 text-xs leading-relaxed text-gray-600 placeholder-zinc-700 outline-none transition-colors focus:border-blue-500/30 focus:text-gray-800 resize-none"
-      />
-    </label>
+    <button
+      onClick={onClick}
+      className={`flex items-start gap-2 rounded-lg border px-2.5 py-2 text-left transition-colors ${
+        active
+          ? preset.category === 'educational'
+            ? 'border-emerald-400 bg-emerald-50'
+            : 'border-blue-400 bg-blue-50'
+          : 'border-black/10 bg-white hover:bg-black/[0.03]'
+      }`}
+    >
+      <span className="text-lg leading-none">{preset.glyph}</span>
+      <div className="min-w-0 flex-1">
+        <p className={`truncate text-[11px] font-semibold ${active ? (preset.category === 'educational' ? 'text-emerald-800' : 'text-blue-800') : 'text-gray-800'}`}>
+          {preset.label}
+        </p>
+        <p className="truncate text-[10px] text-gray-500">{preset.hint}</p>
+      </div>
+    </button>
   )
 }
-

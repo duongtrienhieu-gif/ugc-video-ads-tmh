@@ -24,7 +24,7 @@ export const APP_REGISTRY: AppConfig[] = [
   { id: 'character-studio', name: 'Studio Avatar AI', icon: UserRound, accent: '#0ea5e9' },
   { id: 'image-dna', name: 'DNA Ảnh', icon: ScanSearch, accent: '#22c55e' },
   { id: 'ad-anatomy', name: 'Phân Tích QC', icon: Clapperboard, accent: '#FB2B37' },
-  { id: 'script-architect', name: 'Kịch Bản', icon: PenLine, accent: '#3b82f6' },
+  { id: 'script-architect', name: 'Tạo Kịch bản UGC', icon: PenLine, accent: '#3b82f6' },
   { id: 'voice-studio', name: 'Giọng Đọc', icon: Mic, accent: '#6366f1' },
   { id: 'broll-studio', name: 'Product AI', icon: Film, accent: '#f97316' },
   { id: 'broll-videos', name: 'Video B-Roll', icon: Video, accent: '#8b5cf6' },
