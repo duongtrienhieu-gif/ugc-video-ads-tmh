@@ -212,26 +212,35 @@ export async function textToSpeech(params: {
   apiKey: string
   voiceId: string
   text: string
-  stability?: number       // 0-1, default 0.5 (lower = more variable/expressive)
+  stability?: number       // 0-1, default 0.75 (higher = more consistent on long text)
   similarity?: number      // 0-1, default 0.75 (how close to original voice)
   style?: number           // 0-1, default 0 (style exaggeration)
   speed?: number           // 0.7 - 1.2, default 1.0 (playback speed)
   useSpeakerBoost?: boolean
   modelId?: string         // default eleven_multilingual_v2
+  /** Text that came before this chunk (for prosody continuity in chunked generation) */
+  previousText?: string
+  /** Text that comes after this chunk (for prosody continuity) */
+  nextText?: string
+  /** MP3 quality. Default mp3_44100_192 (Creator+ plans); falls back to 128 on free/Starter. */
+  outputFormat?: 'mp3_44100_128' | 'mp3_44100_192' | 'mp3_44100_64' | 'pcm_44100'
 }): Promise<ArrayBuffer> {
-  const body = {
+  const body: Record<string, unknown> = {
     text: params.text,
     model_id: params.modelId ?? 'eleven_multilingual_v2',
     voice_settings: {
-      stability: params.stability ?? 0.5,
+      stability: params.stability ?? 0.75,         // raised from 0.5 — better long-text consistency
       similarity_boost: params.similarity ?? 0.75,
       style: params.style ?? 0,
       use_speaker_boost: params.useSpeakerBoost ?? true,
       speed: params.speed ?? 1.0,
     },
   }
+  if (params.previousText) body.previous_text = params.previousText
+  if (params.nextText)     body.next_text     = params.nextText
 
-  const res = await fetch(`${EL_BASE}/text-to-speech/${params.voiceId}?output_format=mp3_44100_128`, {
+  const format = params.outputFormat ?? 'mp3_44100_192'
+  const res = await fetch(`${EL_BASE}/text-to-speech/${params.voiceId}?output_format=${format}`, {
     method: 'POST',
     headers: {
       'xi-api-key': params.apiKey,
@@ -263,11 +272,119 @@ export async function textToSpeech(params: {
       if (lower.includes('invalid')) throw new Error('API key ElevenLabs không hợp lệ — kiểm tra lại key trong Cài đặt.')
       throw new Error(`Không xác thực được: ${detail.slice(0, 200)}`)
     }
+    // 192kbps requires Creator+ plan — auto-retry at 128kbps if forbidden
+    if (res.status === 403 && format === 'mp3_44100_192') {
+      return textToSpeech({ ...params, outputFormat: 'mp3_44100_128' })
+    }
     if (res.status === 422) throw new Error(`Tham số không hợp lệ: ${detail.slice(0, 200)}`)
     throw new Error(`ElevenLabs TTS lỗi (${res.status}): ${detail.slice(0, 200)}`)
   }
 
   return res.arrayBuffer()
+}
+
+/**
+ * Generate smooth, consistent TTS for long scripts by chunking on sentence
+ * boundaries and passing previous_text/next_text for prosody continuity.
+ *
+ * Why: eleven_multilingual_v2 has known quality drift on inputs > ~500 chars
+ * (the voice "wanders" mid-script). Chunking with context keeps each chunk
+ * short enough that the model stays stable, while previous_text/next_text
+ * ensures pitch/pace continuity at chunk boundaries.
+ *
+ * Resulting MP3 buffers are concatenated as Uint8Array — works because all
+ * chunks share identical voice settings + bitrate + sample rate.
+ */
+export async function textToSpeechSmooth(params: {
+  apiKey: string
+  voiceId: string
+  text: string
+  modelId?: string
+  stability?: number
+  similarity?: number
+  style?: number
+  useSpeakerBoost?: boolean
+  outputFormat?: 'mp3_44100_128' | 'mp3_44100_192'
+  /** Target chars per chunk. Default 400 — sweet spot for v2 stability. */
+  chunkSize?: number
+  /** Called after each chunk completes (for progress UI) */
+  onProgress?: (done: number, total: number) => void
+}): Promise<ArrayBuffer> {
+  const text = params.text.trim()
+  const chunkSize = params.chunkSize ?? 400
+
+  // Single call for short text — no chunking benefit
+  if (text.length <= chunkSize) {
+    return textToSpeech({
+      apiKey: params.apiKey,
+      voiceId: params.voiceId,
+      text,
+      modelId: params.modelId,
+      stability: params.stability,
+      similarity: params.similarity,
+      style: params.style,
+      useSpeakerBoost: params.useSpeakerBoost,
+      outputFormat: params.outputFormat,
+    })
+  }
+
+  // Split into sentences then regroup into ~chunkSize-char chunks
+  const sentences = text
+    .replace(/\n+/g, ' ')
+    .split(/(?<=[.!?。！？])\s+/)
+    .map((s) => s.trim())
+    .filter(Boolean)
+
+  const chunks: string[] = []
+  let buf = ''
+  for (const sent of sentences) {
+    const combined = buf ? `${buf} ${sent}` : sent
+    if (combined.length > chunkSize && buf.length > 0) {
+      chunks.push(buf)
+      buf = sent
+    } else {
+      buf = combined
+    }
+  }
+  if (buf.trim()) chunks.push(buf)
+
+  // Edge case: a single sentence is longer than chunkSize → still send as one
+  if (chunks.length === 0) chunks.push(text)
+
+  // Generate each chunk in sequence (parallel risks rate limits + breaks order)
+  const buffers: ArrayBuffer[] = []
+  for (let i = 0; i < chunks.length; i++) {
+    // Context windows: trailing ~200 chars of prior chunks, leading ~200 of next
+    const previousText = i > 0                  ? chunks.slice(0, i).join(' ').slice(-200) : undefined
+    const nextText     = i < chunks.length - 1  ? chunks.slice(i + 1).join(' ').slice(0, 200) : undefined
+
+    const buf = await textToSpeech({
+      apiKey: params.apiKey,
+      voiceId: params.voiceId,
+      text: chunks[i],
+      modelId: params.modelId,
+      stability: params.stability,
+      similarity: params.similarity,
+      style: params.style,
+      useSpeakerBoost: params.useSpeakerBoost,
+      outputFormat: params.outputFormat,
+      previousText,
+      nextText,
+    })
+    buffers.push(buf)
+    params.onProgress?.(i + 1, chunks.length)
+  }
+
+  // Concatenate MP3 buffers. Safe because all chunks share identical
+  // bitrate/sample-rate/channel settings — MP3 frames stay aligned.
+  const totalSize = buffers.reduce((sum, b) => sum + b.byteLength, 0)
+  const combined  = new Uint8Array(totalSize)
+  let offset = 0
+  for (const b of buffers) {
+    combined.set(new Uint8Array(b), offset)
+    offset += b.byteLength
+  }
+  return combined.buffer
 }
 
 // ─── Video Dubbing (ElevenLabs Dubbing API) ─────────────────────────────────

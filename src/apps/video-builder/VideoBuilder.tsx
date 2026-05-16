@@ -11,7 +11,7 @@ import { useAppStore } from '../../stores/appStore'
 import { useBankStore } from '../../stores/bankStore'
 import { getUrl, isAssetRef, saveAsset } from '../../utils/assetStore'
 import { directGeminiVision } from '../../utils/gemini'
-import { listVoices, textToSpeech } from '../../utils/elevenlabs'
+import { listVoices, textToSpeechSmooth } from '../../utils/elevenlabs'
 import { generateLipSync, pollLipSyncUntilDone, generateVideoJob, getVideoJobStatus, generateImage, pollImageUntilDone } from '../../utils/kieai'
 import { removeVideoBackground } from '../../utils/falai'
 import { buildUGCVideo, pollRenderUntilDone } from '../../utils/shotstack'
@@ -801,11 +801,21 @@ ${script}`
     setPhaseDetail('')
 
     try {
-      const audioBuffer = await textToSpeech({
+      // textToSpeechSmooth: chunked + context continuity for consistent quality
+      // on long scripts. Uses 192kbps MP3 (falls back to 128 if plan blocks it),
+      // stability 0.75 for steadier voice across chunks.
+      const audioBuffer = await textToSpeechSmooth({
         apiKey: elevenLabsApiKey,
         voiceId: selectedVoiceId,
         text: script,
         modelId: 'eleven_multilingual_v2',
+        stability: 0.75,
+        similarity: 0.75,
+        outputFormat: 'mp3_44100_192',
+        chunkSize: 400,
+        onProgress: (done, total) => {
+          setPhaseDetail(`Tạo audio: ${done}/${total} chunks (chất lượng cao + ghép mượt)...`)
+        },
       })
       const audioDuration = await getAudioDuration(audioBuffer)
       const audioBlob = new Blob([audioBuffer], { type: 'audio/mpeg' })
