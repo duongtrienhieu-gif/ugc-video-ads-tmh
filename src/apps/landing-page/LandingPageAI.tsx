@@ -45,7 +45,7 @@ export default function LandingPageAI() {
     const totalSections = pack.sections.length
     const totalImages = pack.sections.reduce((sum, s) => sum + s.imagePrompts.length, 0)
     const doneImages = pack.sections.reduce(
-      (sum, s) => sum + s.imagePrompts.filter((p) => p.imageRef).length,
+      (sum, s) => sum + s.imagePrompts.filter((p) => p.generatedAssetRef).length,
       0,
     )
     if (totalImages === 0) {
@@ -80,7 +80,7 @@ export default function LandingPageAI() {
       return 'completed'
     },
     getProgressVi: computeProgress,
-    getTitleVi: () => pack?.metadata.productName ?? selectedProduct?.productName,
+    getTitleVi: () => pack?.productName ?? selectedProduct?.productName,
     // Only persist when there's actual work (avatar pack exists or gen in flight)
     shouldPersist: () => !!pack || isGenerating || isGeneratingImages,
     // Re-save when any of these change
