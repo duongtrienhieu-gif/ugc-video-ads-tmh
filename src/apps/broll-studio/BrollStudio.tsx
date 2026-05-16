@@ -248,12 +248,28 @@ async function toPublicUrl(ref: string): Promise<string | null> {
 }
 
 // ── State per result tile ───────────────────────────────────────────────────
+//
+// Each tile snapshots its scene / style / product / avatar at the moment of
+// generation. Regenerate ALWAYS uses these locked values — never the current
+// global selection — so changing the scene chip after generating does NOT
+// secretly mutate the regen behaviour of existing tiles. This is the same
+// design principle as identity-lock: the original generation params travel
+// with the image card.
+
+interface TileLock {
+  sceneId: string
+  styleId: string
+  productUrl: string
+  avatarUrl: string | null
+}
 
 interface TileState {
   url: string | null
   qc: ProductQC | null
   status: 'idle' | 'generating' | 'qc' | 'done' | 'error'
   error?: string
+  /** Snapshot of generation params taken at generate-time. Regen reuses these. */
+  lock?: TileLock
 }
 
 const EMPTY_TILES: TileState[] = VARIATIONS.map(() => ({ url: null, qc: null, status: 'idle' }))
@@ -275,9 +291,11 @@ interface ResultTileProps {
   saved: boolean
   /** Whether this slot can be filled from the idle state (product is selected). */
   canGenerate: boolean
+  /** Human-readable scene label resolved from the tile's lock (e.g. "Review trên bàn"). */
+  lockedSceneLabel?: string
 }
 
-function ResultTile({ state, label, onRegen, onDelete, onSave, saved, canGenerate }: ResultTileProps) {
+function ResultTile({ state, label, onRegen, onDelete, onSave, saved, canGenerate, lockedSceneLabel }: ResultTileProps) {
   const resolvedUrl = useAssetUrl(state.url ?? undefined)
   const displayUrl = state.url?.startsWith('http') || state.url?.startsWith('data:') ? state.url : resolvedUrl
 
@@ -299,14 +317,26 @@ function ResultTile({ state, label, onRegen, onDelete, onSave, saved, canGenerat
 
   return (
     <div className={`relative aspect-square overflow-hidden rounded-xl border ${containerClass}`}>
-      {/* ── Variant label — always visible top-left ───────────────────── */}
-      <span
-        className={`absolute left-2 top-2 z-10 rounded px-1.5 py-0.5 text-[10px] font-semibold backdrop-blur-sm ${
-          state.status === 'done' ? 'bg-black/60 text-white' : 'bg-white/80 text-gray-600'
-        }`}
-      >
-        {label}
-      </span>
+      {/* ── Variant + scene badges — always visible top-left ──────────── */}
+      <div className="absolute left-2 top-2 z-10 flex flex-col items-start gap-1">
+        <span
+          className={`rounded px-1.5 py-0.5 text-[10px] font-semibold backdrop-blur-sm ${
+            state.status === 'done' ? 'bg-black/60 text-white' : 'bg-white/80 text-gray-600'
+          }`}
+        >
+          {label}
+        </span>
+        {lockedSceneLabel && state.status !== 'idle' && (
+          <span
+            className={`max-w-[160px] truncate rounded px-1.5 py-0.5 text-[9px] font-medium backdrop-blur-sm ${
+              state.status === 'done' ? 'bg-violet-500/85 text-white' : 'bg-violet-100 text-violet-700'
+            }`}
+            title={`Scene đã lock: ${lockedSceneLabel}`}
+          >
+            🎬 {lockedSceneLabel}
+          </span>
+        )}
+      </div>
 
       {/* ── IDLE STATE (initial placeholder OR after delete) ──────────── */}
       {state.status === 'idle' && (
@@ -527,15 +557,23 @@ export default function ProductAI() {
   }
 
   // ── Single shot ───────────────────────────────────────────────────────────
+  // Scene/style are passed explicitly (not read from outer closure) so callers
+  // can lock them at generation time and reuse them on regen even if the user
+  // has since changed the global selection.
   const genOneShot = async (args: {
+    sceneId: string
+    styleId: string
     productUrl: string
     avatarUrl: string | null
     baseUrl: string | null
     variationHint: string | null
   }): Promise<string | null> => {
+    const scenePreset = SCENE_PRESETS.find((p) => p.id === args.sceneId) ?? SCENE_PRESETS[0]
+    const styleOpt    = STYLE_OPTIONS.find((s) => s.id === args.styleId) ?? STYLE_OPTIONS[0]
+
     const prompt = buildPrompt({
-      scene,
-      style,
+      scene: scenePreset,
+      style: styleOpt,
       hasAvatar: !!args.avatarUrl,
       hasBaseRef: !!args.baseUrl,
       variationHint: args.variationHint,
@@ -579,34 +617,54 @@ export default function ProductAI() {
   }
 
   // ── Generate one tile (handles strict-mode retry) ─────────────────────────
+  // `lock` is the snapshot we persist into TileState.lock — it lets regen
+  // reuse exactly the same scene / style / product / avatar later.
   const generateTile = async (idx: number, args: {
-    productUrl: string
-    avatarUrl: string | null
+    lock: TileLock
     baseUrl: string | null
     variationHint: string | null
   }): Promise<string | null> => {
-    updateTile(idx, { status: 'generating', error: undefined, qc: null, url: null })
+    // Snapshot the lock into the tile state IMMEDIATELY so even a failed gen
+    // leaves enough metadata to regen with the right scene later.
+    updateTile(idx, {
+      status: 'generating',
+      error: undefined,
+      qc: null,
+      url: null,
+      lock: args.lock,
+    })
+
+    const shotArgs = {
+      sceneId: args.lock.sceneId,
+      styleId: args.lock.styleId,
+      productUrl: args.lock.productUrl,
+      avatarUrl: args.lock.avatarUrl,
+      baseUrl: args.baseUrl,
+      variationHint: args.variationHint,
+    }
+
+    console.log('[ProductAI] generateTile', { idx, ...args.lock, variation: VARIATIONS[idx].label })
+
     try {
-      const url = await genOneShot(args)
+      const url = await genOneShot(shotArgs)
       if (!url) {
         updateTile(idx, { status: 'error', error: 'Không trả về ảnh' })
         return null
       }
       updateTile(idx, { url })
-      const qc = await runQC(idx, args.productUrl, url)
+      const qc = await runQC(idx, args.lock.productUrl, url)
       updateTile(idx, { qc, status: 'done' })
 
-      // Strict mode: one auto-retry only for the BASE tile. Variations carry
-      // over the base image, so retrying a variant in isolation is pointless.
+      // Strict mode: one auto-retry only for the BASE tile.
       if (strictQC && qc && !qc.pass && idx === 0) {
         updateTile(idx, { status: 'generating', error: undefined })
         const retry = await genOneShot({
-          ...args,
+          ...shotArgs,
           variationHint: 'The product label and packaging must be preserved with pixel-level fidelity. Triple-check that every letter of the label text is correct and that the bottle shape exactly matches the reference.',
         })
         if (retry) {
           updateTile(idx, { url: retry })
-          const qc2 = await runQC(idx, args.productUrl, retry)
+          const qc2 = await runQC(idx, args.lock.productUrl, retry)
           updateTile(idx, { qc: qc2, status: 'done' })
           return retry
         }
@@ -640,10 +698,21 @@ export default function ProductAI() {
         return
       }
 
-      // 1. Base shot
-      const baseAssetUrl = await generateTile(0, {
+      // Snapshot the CURRENT global scene/style/refs into a single lock object.
+      // Every tile generated in this batch keeps a copy. Subsequent regen
+      // calls read from each tile's own lock so they don't drift if the user
+      // changes the global selection afterwards.
+      const batchLock: TileLock = {
+        sceneId,
+        styleId,
         productUrl,
         avatarUrl,
+      }
+      console.log('[ProductAI] handleGenerate batch lock', batchLock)
+
+      // 1. Base shot
+      const baseAssetUrl = await generateTile(0, {
+        lock: batchLock,
         baseUrl: null,
         variationHint: VARIATIONS[0].hint,
       })
@@ -664,14 +733,12 @@ export default function ProductAI() {
       }
 
       // 3. Three variations in parallel — Promise.allSettled so one slot's
-      //    failure can never break the others. Each tile's status is also
-      //    managed internally by generateTile (which has its own try/catch),
-      //    so this is defense-in-depth.
+      //    failure can never break the others. All four tiles share the same
+      //    batchLock (same scene / style / product / avatar).
       const variationResults = await Promise.allSettled(
         [1, 2, 3].map(async (i) => {
           const url = await generateTile(i, {
-            productUrl,
-            avatarUrl,
+            lock: batchLock,
             baseUrl: basePublicUrl,
             variationHint: VARIATIONS[i].hint,
           })
@@ -696,33 +763,55 @@ export default function ProductAI() {
   }
 
   // ── Manual regen for a single tile ─────────────────────────────────────────
+  // Regen ALWAYS uses the tile's locked snapshot (scene + style + refs taken
+  // at original generation time). The current global scene/style selection
+  // is intentionally ignored — changing the chip after generating must not
+  // silently mutate what regen produces. To switch scenes, the user re-runs
+  // the full "Tạo 4 ảnh" batch.
+  //
+  // For a tile that has never been generated (idle slot after delete), there
+  // is no lock yet, so we fall back to the current global selection — that's
+  // the "▶ Tạo ảnh này" first-fill case.
   const handleRegen = async (idx: number) => {
-    if (!productImageRef) return
-    const [avatarUrl, productUrl] = await Promise.all([
-      avatarImageRef ? toPublicUrl(avatarImageRef) : Promise.resolve(null),
-      toPublicUrl(productImageRef),
-    ])
-    if (!productUrl) {
-      addToast('Không tải được ảnh sản phẩm', 'error')
-      return
+    const tile = tiles[idx]
+    let lock = tile.lock
+
+    if (!lock) {
+      // First-fill (idle slot) — capture current global selection as the lock.
+      if (!productImageRef || !canGenerate) return
+      const [avatarUrl, productUrl] = await Promise.all([
+        avatarImageRef ? toPublicUrl(avatarImageRef) : Promise.resolve(null),
+        toPublicUrl(productImageRef),
+      ])
+      if (!productUrl) {
+        addToast('Không tải được ảnh sản phẩm', 'error')
+        return
+      }
+      lock = { sceneId, styleId, productUrl, avatarUrl }
     }
 
+    console.log('[ProductAI] handleRegen', {
+      idx,
+      variation: VARIATIONS[idx].label,
+      tileLock: lock,
+      currentGlobal: { sceneId, styleId },
+      preservingScene: lock.sceneId,
+    })
+
     if (idx === 0) {
-      // Regenerating the base invalidates the previous variation base ref —
-      // we still regen only the base and leave variants for the user to
-      // refresh manually (avoids tearing down work they may want to keep).
+      // Regenerating the base — variations still reference the OLD base URL
+      // via their own filesUrl ref (we don't cascade). User can manually
+      // regen variations after if they want to re-bind to the new base.
       await generateTile(0, {
-        productUrl,
-        avatarUrl,
+        lock,
         baseUrl: null,
         variationHint: VARIATIONS[0].hint,
       })
     } else {
-      const baseAssetUrl = tiles[0].url
+      const baseAssetUrl = tiles[0]?.url
       const basePublicUrl = baseAssetUrl ? await toPublicUrl(baseAssetUrl) : null
       await generateTile(idx, {
-        productUrl,
-        avatarUrl,
+        lock,
         baseUrl: basePublicUrl,
         variationHint: VARIATIONS[idx].hint,
       })
@@ -761,10 +850,19 @@ export default function ProductAI() {
   const handleSaveToProject = async (idx: number) => {
     const tile = tiles[idx]
     if (!tile.url) return
+    // Resolve labels from the tile's OWN lock so the saved note reflects what
+    // was actually used to generate this image — not whatever chip the user
+    // has selected now.
+    const lockedScene = tile.lock
+      ? SCENE_PRESETS.find((p) => p.id === tile.lock!.sceneId) ?? scene
+      : scene
+    const lockedStyle = tile.lock
+      ? STYLE_OPTIONS.find((s) => s.id === tile.lock!.styleId) ?? style
+      : style
     try {
       await addBRoll({
         imageUrl: tile.url,
-        prompt: `Product AI — ${scene.label} / ${style.label}${VARIATIONS[idx].hint ? ` / ${VARIATIONS[idx].label}` : ''}`,
+        prompt: `Product AI — ${lockedScene.label} / ${lockedStyle.label}${VARIATIONS[idx].hint ? ` / ${VARIATIONS[idx].label}` : ''}`,
         productId: selectedProduct?.id,
         modelId: selectedAvatar?.id,
       })
@@ -905,18 +1003,22 @@ export default function ProductAI() {
             </div>
           ) : (
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              {tiles.map((t, i) => (
-                <ResultTile
-                  key={i}
-                  state={t}
-                  label={VARIATIONS[i].label}
-                  onRegen={() => handleRegen(i)}
-                  onDelete={() => handleDelete(i)}
-                  onSave={() => handleSaveToProject(i)}
-                  saved={savedIdx.has(i)}
-                  canGenerate={canGenerate}
-                />
-              ))}
+              {tiles.map((t, i) => {
+                const lockedScene = t.lock ? SCENE_PRESETS.find((p) => p.id === t.lock!.sceneId) : undefined
+                return (
+                  <ResultTile
+                    key={i}
+                    state={t}
+                    label={VARIATIONS[i].label}
+                    onRegen={() => handleRegen(i)}
+                    onDelete={() => handleDelete(i)}
+                    onSave={() => handleSaveToProject(i)}
+                    saved={savedIdx.has(i)}
+                    canGenerate={canGenerate}
+                    lockedSceneLabel={lockedScene?.label}
+                  />
+                )
+              })}
             </div>
           )}
         </div>
