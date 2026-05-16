@@ -1838,48 +1838,31 @@ Do NOT invent a different product variant.`
   }
 
   // Generate ONE image for a given segment index (used by both initial run + per-image regen)
-  // Now uses fal-ai/instant-id — purpose-built identity-preservation model.
-  // Extracts a 512-dim face embedding from the avatar and injects it directly
-  // into the diffusion latent space, yielding ~95% face match across all
-  // generated images (vs ~70-80% with Nano Banana 2's generic image refs).
-  const generateOneImage = async (i: number, seg: ScriptSegment): Promise<string | null> => {
+  // THROWS on error — callers must catch and decide how to surface the message.
+  // This way only ONE toast is shown per failure (no duplicate generic + detailed).
+  const generateOneImage = async (_i: number, seg: ScriptSegment): Promise<string> => {
     const { avatarImageUrl } = pipeRef.current
-    if (!avatarImageUrl) {
-      console.error(`[brollImage ${i}] no avatar URL`)
-      return null
-    }
-    if (!falApiKey) {
-      console.error(`[brollImage ${i}] no fal.ai API key`)
-      return null
-    }
+    if (!avatarImageUrl) throw new Error('Thiếu URL avatar — chạy lại Resolve step')
+    if (!falApiKey)      throw new Error('Thiếu fal.ai API key — cài trong Cài đặt')
 
     const hasAvatar  = true
     const hasProduct = !!(pipeRef.current.productImageUrls && pipeRef.current.productImageUrls.length)
     const prompt = buildImagePrompt(seg, hasAvatar, hasProduct)
 
-    try {
-      // InstantID is face-focused. Pass the avatar's primary face image as
-      // the identity anchor. Product appearance is handled via the locked
-      // product description embedded in the prompt (see buildImagePrompt).
-      // identityStrength 0.85 prioritizes face match over scene flexibility.
-      const imageUrl = await generateInstantIDImage({
-        apiKey: falApiKey,
-        faceImageUrl: avatarImageUrl,
-        prompt,
-        imageSize: { width: 720, height: 1280 },  // 9:16 vertical HD
-        identityStrength: 0.85,
-        adapterStrength: 0.8,
-        timeoutMs: 3 * 60 * 1000,
-      })
-      return imageUrl
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err)
-      console.error(`[brollImage ${i}] InstantID failed:`, msg)
-      // Surface the actual fal.ai error to the user via toast so they can
-      // debug (e.g. "out of credit", "invalid face_image_url", etc.)
-      addToast(`Ảnh #${i + 1}: ${msg.slice(0, 100)}`, 'error')
-      return null
-    }
+    // InstantID is face-focused. Pass the avatar's primary face image as
+    // the identity anchor. Product appearance is handled via the locked
+    // product description embedded in the prompt (see buildImagePrompt).
+    // identityStrength 0.85 prioritizes face match over scene flexibility.
+    const imageUrl = await generateInstantIDImage({
+      apiKey: falApiKey,
+      faceImageUrl: avatarImageUrl,
+      prompt,
+      imageSize: { width: 720, height: 1280 },  // 9:16 vertical HD
+      identityStrength: 0.85,
+      adapterStrength: 0.8,
+      timeoutMs: 3 * 60 * 1000,
+    })
+    return imageUrl
   }
 
   const runBrollImages = async () => {
@@ -1895,13 +1878,29 @@ Do NOT invent a different product variant.`
     try {
       const results: (string | null)[] = new Array(timedSegments.length).fill(null)
       let completed = 0
+      const firstErrors: string[] = []   // collect distinct error reasons for user
       await Promise.all(timedSegments.map(async (seg, i) => {
-        results[i] = await generateOneImage(i, seg)
+        try {
+          results[i] = await generateOneImage(i, seg)
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err)
+          console.error(`[brollImage ${i}] failed:`, msg)
+          if (!firstErrors.includes(msg)) firstErrors.push(msg)
+          results[i] = null
+        }
         completed++
         const pct = (completed / timedSegments.length) * 100
         setPhaseProgress(pct)
         setPhaseDetail(`Gen ${completed}/${timedSegments.length} ảnh tĩnh...`)
       }))
+
+      // If all/most failed, surface the FIRST distinct error message so user sees why
+      const successCount = results.filter(Boolean).length
+      if (successCount === 0 && firstErrors.length > 0) {
+        addToast(`Tất cả ${results.length} ảnh fail: ${firstErrors[0].slice(0, 150)}`, 'error')
+      } else if (successCount < results.length && firstErrors.length > 0) {
+        addToast(`${results.length - successCount}/${results.length} ảnh fail: ${firstErrors[0].slice(0, 100)}`, 'error')
+      }
 
       pipeRef.current.brollImageUrls = results
       setPreviewBrollImageUrls([...results])
@@ -1915,24 +1914,22 @@ Do NOT invent a different product variant.`
 
   // Regenerate just one image (called from review screen)
   const regenerateOneImage = async (i: number) => {
-    if (!kieApiKey) return
     const { timedSegments } = pipeRef.current
     if (!timedSegments?.[i]) return
 
     setRegeneratingImageIndices((prev) => new Set(prev).add(i))
     try {
       const newUrl = await generateOneImage(i, timedSegments[i])
-      if (newUrl) {
-        setPreviewBrollImageUrls((prev) => {
-          const next = [...prev]
-          next[i] = newUrl
-          // Persist back to pipeRef
-          if (pipeRef.current.brollImageUrls) pipeRef.current.brollImageUrls[i] = newUrl
-          return next
-        })
-      } else {
-        addToast(`Ảnh #${i + 1} gen lại thất bại`, 'error')
-      }
+      setPreviewBrollImageUrls((prev) => {
+        const next = [...prev]
+        next[i] = newUrl
+        if (pipeRef.current.brollImageUrls) pipeRef.current.brollImageUrls[i] = newUrl
+        return next
+      })
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      console.error(`[regenerateOneImage ${i}] failed:`, msg)
+      addToast(`Ảnh #${i + 1}: ${msg.slice(0, 150)}`, 'error')
     } finally {
       setRegeneratingImageIndices((prev) => {
         const next = new Set(prev)
