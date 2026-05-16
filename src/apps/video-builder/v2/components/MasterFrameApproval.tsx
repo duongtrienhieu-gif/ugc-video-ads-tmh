@@ -6,9 +6,10 @@
 //   - Reject all and go back to input step
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { Check, Loader2, RotateCcw, ArrowLeft, ArrowRight, Sparkles, AlertCircle } from 'lucide-react'
+import { Check, Loader2, RotateCcw, ArrowLeft, ArrowRight, Sparkles, AlertCircle, ShieldCheck } from 'lucide-react'
 import { useAssetUrl } from '../../../../hooks/useAssetUrl'
 import type { MasterFrame, MasterFrameStepState, IdentityPack } from '../types'
+import { QcBadge, QcScorePanel } from './QcScorePanel'
 
 interface Props {
   state: MasterFrameStepState
@@ -21,6 +22,11 @@ interface Props {
   onReject: () => void
   /** Continue to next phase (blueprint) after approval */
   onContinue: () => void
+  /** Module 4: QC auto-loop toggle (auto-retry on fail) */
+  qcEnabled: boolean
+  onQcEnabledChange: (enabled: boolean) => void
+  /** Optional progress message from inside the QC loop (e.g. "đang tạo lại để khớp sản phẩm...") */
+  qcProgress?: { attempt: number; status: string } | null
 }
 
 // ── One candidate tile ──────────────────────────────────────────────────────
@@ -57,11 +63,25 @@ function CandidateTile({
         Bản #{index + 1}
       </span>
 
+      {/* QC badge (top-right when QC was run) */}
+      {candidate.qc && !isApproved && (
+        <div className="absolute right-2 top-2">
+          <QcBadge qc={candidate.qc} />
+        </div>
+      )}
+
       {/* Approved badge */}
       {isApproved && (
         <div className="absolute right-2 top-2 flex h-7 w-7 items-center justify-center rounded-full bg-emerald-500 text-white shadow-md">
           <Check className="h-4 w-4" />
         </div>
+      )}
+
+      {/* QC retry count chip (bottom-left if any) */}
+      {candidate.qc && candidate.qc.retryCount > 0 && (
+        <span className="absolute bottom-2 left-2 rounded-md bg-violet-600/90 px-1.5 py-0.5 text-[9px] font-bold text-white backdrop-blur-sm">
+          retry {candidate.qc.retryCount}
+        </span>
       )}
     </button>
   )
@@ -69,24 +89,42 @@ function CandidateTile({
 
 export default function MasterFrameApproval({
   state, identity, onGenerateMore, onApprove, onReject, onContinue,
+  qcEnabled, onQcEnabledChange, qcProgress,
 }: Props) {
   const hasApproved = state.approvedIdx >= 0
   const isFirstGen = state.candidates.length === 0 && state.isGenerating
+  const approvedCandidate = state.approvedIdx >= 0 ? state.candidates[state.approvedIdx] : null
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
       {/* Header */}
       <div className="shrink-0 border-b border-black/8 bg-gradient-to-r from-violet-50 to-pink-50 px-6 py-4">
-        <div className="flex items-center gap-3">
-          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-violet-600 text-white shadow-md">
-            <Sparkles className="h-4 w-4" />
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-violet-600 text-white shadow-md">
+              <Sparkles className="h-4 w-4" />
+            </div>
+            <div>
+              <h2 className="text-base font-bold text-gray-900">Bước 1: Khung Master (Master Frame)</h2>
+              <p className="text-xs text-gray-500">
+                Tạo 1 ảnh chuẩn của avatar + sản phẩm. Tất cả B-Roll sau này sẽ "kế thừa" từ ảnh này → giữ identity nhất quán.
+              </p>
+            </div>
           </div>
-          <div>
-            <h2 className="text-base font-bold text-gray-900">Bước 1: Khung Master (Master Frame)</h2>
-            <p className="text-xs text-gray-500">
-              Tạo 1 ảnh chuẩn của avatar + sản phẩm. Tất cả B-Roll sau này sẽ "kế thừa" từ ảnh này → giữ identity nhất quán.
-            </p>
-          </div>
+          {/* QC auto-loop toggle */}
+          <label className="flex shrink-0 cursor-pointer items-center gap-2 rounded-lg border border-violet-300 bg-white px-3 py-1.5 shadow-sm">
+            <input
+              type="checkbox"
+              checked={qcEnabled}
+              onChange={(e) => onQcEnabledChange(e.target.checked)}
+              className="h-3.5 w-3.5 accent-violet-600"
+            />
+            <ShieldCheck className="h-3.5 w-3.5 text-violet-600" />
+            <div className="leading-tight">
+              <p className="text-[11px] font-bold text-violet-700">QC tự động</p>
+              <p className="text-[9px] text-gray-500">Auto-retry tối đa 3 lần nếu fail</p>
+            </div>
+          </label>
         </div>
       </div>
 
@@ -109,14 +147,26 @@ export default function MasterFrameApproval({
 
       {/* Body */}
       <div className="flex-1 overflow-y-auto p-6">
-        {/* Empty/first-gen state */}
+        {/* Empty/first-gen state — show QC progress if active */}
         {isFirstGen && (
           <div className="flex h-full flex-col items-center justify-center gap-3 text-center">
             <Loader2 className="h-10 w-10 animate-spin text-violet-500" />
-            <p className="text-sm font-semibold text-gray-700">Đang tạo Master Frame...</p>
-            <p className="max-w-md text-xs text-gray-500">
-              AI đang ghép avatar + sản phẩm thành 1 ảnh chuẩn. Bước này mất ~30-60 giây.
+            <p className="text-sm font-semibold text-gray-700">
+              {qcProgress?.status ?? 'Đang tạo Master Frame...'}
             </p>
+            <p className="max-w-md text-xs text-gray-500">
+              {qcEnabled
+                ? 'AI sẽ tự kiểm tra & tạo lại nếu sai sản phẩm/khuôn mặt. Mỗi lần ~30-60s, có thể chạy tối đa 4 lần.'
+                : 'AI đang ghép avatar + sản phẩm thành 1 ảnh chuẩn. Bước này mất ~30-60 giây.'}
+            </p>
+          </div>
+        )}
+
+        {/* QC progress banner (when generating subsequent attempts) */}
+        {qcProgress && !isFirstGen && (
+          <div className="mb-3 flex items-center gap-2 rounded-lg border border-violet-200 bg-violet-50 px-3 py-2 text-[12px] text-violet-700">
+            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            <span className="font-semibold">{qcProgress.status}</span>
           </div>
         )}
 
@@ -183,10 +233,21 @@ export default function MasterFrameApproval({
               )}
             </div>
 
+            {/* QC detail panel for approved candidate */}
+            {approvedCandidate?.qc && (
+              <div className="mt-4">
+                <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-gray-500">
+                  Báo cáo QC cho bản đã duyệt
+                </p>
+                <QcScorePanel qc={approvedCandidate.qc} />
+              </div>
+            )}
+
             {/* Tip */}
             <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50/60 px-3 py-2">
               <p className="text-[11px] text-amber-700">
                 💡 <strong>Mẹo:</strong> Chọn bản có khuôn mặt + sản phẩm rõ nét + ánh sáng tự nhiên nhất. Bản này sẽ làm "khuôn mẫu" cho toàn bộ 9 ảnh B-Roll → quyết định độ nhất quán của video.
+                {qcEnabled && ' QC tự động đã chạy — bản nào có badge 🟢 là đã đạt full QC.'}
               </p>
             </div>
           </>

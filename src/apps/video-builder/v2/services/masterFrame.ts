@@ -20,9 +20,10 @@ import { directGeminiVision } from '../../../../utils/gemini'
 import { generateGpt4oImage } from '../../../../utils/kieai'
 import { saveAsset, getUrl, isAssetRef } from '../../../../utils/assetStore'
 import type { Model, Product } from '../../../../stores/types'
-import type { IdentityPack, MasterFrame, ConsistencyConfig, VisualStyleDna, CompiledPrompt } from '../types'
+import type { IdentityPack, MasterFrame, ConsistencyConfig, VisualStyleDna, CompiledPrompt, SectionOverrides, QcScore } from '../types'
 import { defaultVisualStyleDna } from '../types'
 import { compileMasterFramePrompt } from './promptCompiler'
+import { runQcLoop } from './qcRetry'
 
 // ── Helpers: fetch a remote/asset image as base64 for Gemini Vision ─────────
 
@@ -138,12 +139,57 @@ export async function extractIdentityPack(params: {
 
 // ── Master Frame generation (uses Prompt Compiler v2) ────────────────────────
 
+// ── Internal helper: one shot of master-frame gen (no QC) ────────────────────
+
+async function generateMasterFrameOnce(params: {
+  kieApiKey: string
+  identity: IdentityPack
+  productName: string
+  consistency: ConsistencyConfig
+  dna: VisualStyleDna
+  overrides?: SectionOverrides
+}): Promise<{ remoteUrl: string; compiled: CompiledPrompt }> {
+  const compiled = compileMasterFramePrompt({
+    identity: params.identity,
+    productName: params.productName,
+    consistency: params.consistency,
+    dna: params.dna,
+    overrides: params.overrides,
+  })
+
+  const filesUrl: string[] = []
+  for (const role of compiled.filesUrlOrder) {
+    if (role === 'product') filesUrl.push(params.identity.productImageUrl)
+    if (role === 'avatar')  filesUrl.push(params.identity.avatarImageUrl)
+  }
+  // Bumped product lock → duplicate product reference slot for stronger weight
+  if (params.overrides?.bumpProductLock && filesUrl.length > 1) {
+    filesUrl.unshift(params.identity.productImageUrl)
+  }
+
+  const remoteUrl = await generateGpt4oImage({
+    apiKey: params.kieApiKey,
+    prompt: compiled.final,
+    filesUrl: filesUrl.slice(0, 5),
+    size: '2:3',
+    timeoutMs: 5 * 60 * 1000,
+  })
+
+  return { remoteUrl, compiled }
+}
+
+async function persistImage(remoteUrl: string): Promise<string> {
+  if (isAssetRef(remoteUrl)) return remoteUrl
+  const fetchRes = await fetch(remoteUrl)
+  const blob = await fetchRes.blob()
+  const assetId = await saveAsset(blob, blob.type || 'image/png')
+  const resolved = await getUrl(assetId)
+  return resolved ?? assetId
+}
+
 /**
- * Generate ONE master frame candidate. The compiler builds the 5-section
- * prompt — this function only orchestrates the API call + asset persistence.
- *
- * Returns BOTH the resulting MasterFrame AND the compiled prompt sections,
- * so the debug panel can render them block-by-block.
+ * Generate ONE master frame candidate (no QC).
+ * Used when QC is disabled. Returns frame + compiled prompt for the debug panel.
  */
 export async function generateMasterFrame(params: {
   kieApiKey: string
@@ -151,48 +197,12 @@ export async function generateMasterFrame(params: {
   productName: string
   consistency: ConsistencyConfig
   dna?: VisualStyleDna
+  overrides?: SectionOverrides
   onStatusChange?: (status: string, progress?: number) => void
 }): Promise<{ frame: MasterFrame; compiled: CompiledPrompt }> {
   const dna = params.dna ?? defaultVisualStyleDna()
-
-  // Compile the 5-section prompt
-  const compiled = compileMasterFramePrompt({
-    identity: params.identity,
-    productName: params.productName,
-    consistency: params.consistency,
-    dna,
-  })
-
-  // filesUrl order matches the prompt's reference-index references:
-  //   [0] = "image #1" = PRODUCT (highest priority)
-  //   [1] = "image #2" = AVATAR
-  const filesUrl: string[] = []
-  for (const role of compiled.filesUrlOrder) {
-    if (role === 'product') filesUrl.push(params.identity.productImageUrl)
-    if (role === 'avatar')  filesUrl.push(params.identity.avatarImageUrl)
-    // 'masterFrame' not used for the master-frame gen itself
-  }
-
-  const remoteUrl = await generateGpt4oImage({
-    apiKey: params.kieApiKey,
-    prompt: compiled.final,
-    filesUrl,
-    size: '2:3',  // vertical-ish (gpt4o only supports 1:1 / 3:2 / 2:3)
-    timeoutMs: 5 * 60 * 1000,
-    onStatusChange: params.onStatusChange,
-  })
-
-  // Persist to asset store so the URL doesn't expire mid-pipeline
-  let storedUrl: string
-  if (isAssetRef(remoteUrl)) {
-    storedUrl = remoteUrl
-  } else {
-    const fetchRes = await fetch(remoteUrl)
-    const blob = await fetchRes.blob()
-    const assetId = await saveAsset(blob, blob.type || 'image/png')
-    const resolved = await getUrl(assetId)
-    storedUrl = resolved ?? assetId
-  }
+  const { remoteUrl, compiled } = await generateMasterFrameOnce({ ...params, dna })
+  const storedUrl = await persistImage(remoteUrl)
 
   return {
     frame: {
@@ -202,5 +212,67 @@ export async function generateMasterFrame(params: {
       status: 'pending-approval',
     },
     compiled,
+  }
+}
+
+/**
+ * Generate ONE master frame with FULL QC LOOP — auto-retry on fail.
+ * Returns the best image + its final QC + the compiled prompt that produced it.
+ *
+ * Intermediate failed attempts are NOT exposed (per spec). Caller only sees:
+ *   - Status changes ("đang tạo lại để khớp sản phẩm...") via onAttempt callback
+ *   - Final accepted/best-of-N result
+ */
+export async function generateMasterFrameWithQc(params: {
+  kieApiKey: string
+  geminiKey: string
+  identity: IdentityPack
+  productName: string
+  consistency: ConsistencyConfig
+  dna?: VisualStyleDna
+  /** Fires once per attempt — UI can show "retry N/M..." progress */
+  onAttempt?: (attemptIdx: number, qc: QcScore | null) => void
+}): Promise<{ frame: MasterFrame; compiled: CompiledPrompt; qc: QcScore }> {
+  const dna = params.dna ?? defaultVisualStyleDna()
+  let lastCompiled: CompiledPrompt | null = null
+
+  const loopResult = await runQcLoop({
+    geminiKey: params.geminiKey,
+    avatarImageUrl: params.identity.avatarImageUrl,
+    productImageUrl: params.identity.productImageUrl,
+    consistency: params.consistency,
+    maxRetries: params.consistency.maxRetries,
+    generateFn: async (overrides, attemptIdx) => {
+      params.onAttempt?.(attemptIdx, null)
+      const { remoteUrl, compiled } = await generateMasterFrameOnce({
+        kieApiKey: params.kieApiKey,
+        identity: params.identity,
+        productName: params.productName,
+        consistency: params.consistency,
+        dna,
+        overrides,
+      })
+      lastCompiled = compiled
+      return await persistImage(remoteUrl)
+    },
+    onAttempt: (attempt) => {
+      params.onAttempt?.(attempt.attemptIdx, attempt.qc)
+    },
+  })
+
+  const finalCompiled: CompiledPrompt = lastCompiled ?? {
+    identityLock: '', productLock: '', sceneBlueprint: '',
+    visualDna: '', negativePrompt: '', final: '', filesUrlOrder: [],
+  }
+
+  return {
+    frame: {
+      imageUrl: loopResult.finalImageUrl,
+      promptUsed: finalCompiled.final,
+      createdAt: Date.now(),
+      status: 'pending-approval',
+    },
+    compiled: finalCompiled,
+    qc: loopResult.finalQc,
   }
 }

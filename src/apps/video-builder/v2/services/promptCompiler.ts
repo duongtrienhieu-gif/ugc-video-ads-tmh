@@ -40,33 +40,56 @@ function buildIdentityLock(ctx: CompiledPromptContext, refIndex: number): string
   const { identity, consistency } = ctx
   const tier = getStrengthTier(consistency)
 
-  // Phrase changes by tier (avatar lock is more elastic than product lock)
-  const matchPhrase = tier === 'strict'
+  // Smart-retry can force strict tier even when global consistency is lower
+  const forcedStrict = ctx.overrides?.bumpIdentityLock === true
+
+  const matchPhrase = (forcedStrict || tier === 'strict')
     ? 'MUST EXACTLY match'
     : tier === 'balanced'
       ? 'must closely match'
       : 'should closely resemble'
 
+  const extraBump = forcedStrict
+    ? '\n\nIDENTITY RETRY MODE: previous attempt drifted the face. This time, render LITERALLY the same individual — same face shape, same micro-features, same age. No "similar-looking" substitute. If the face does not match, the output is unusable.'
+    : ''
+
   return `[1] IDENTITY LOCK
 THE PERSON IS: the individual from reference image #${refIndex}.
 The face in the output ${matchPhrase} the face in this reference: same face shape, eyes (color + shape), eyebrows, nose, lips, jawline, cheekbones, skin tone, age range.
 Locked description (from analysis): ${identity.avatarDescription}
-Preserve: same gender · same ethnicity · same approximate age · same hijab style + color OR same hairstyle/hair color/length · same facial hair if present · same accessories on face/neck (glasses, earrings).`
+Preserve: same gender · same ethnicity · same approximate age · same hijab style + color OR same hairstyle/hair color/length · same facial hair if present · same accessories on face/neck (glasses, earrings).${extraBump}`
 }
 
 // ── [2] PRODUCT LOCK (always strict — see priority rule above) ───────────────
 
 function buildProductLock(ctx: CompiledPromptContext, refIndex: number): string {
   const { identity, productName } = ctx
+  const bumped = ctx.overrides?.bumpProductLock === true
+  const bumpedLabel = ctx.overrides?.bumpLabelLock === true
 
-  // PRODUCT LOCK never softens — packaging drift is unacceptable
-  return `[2] PRODUCT LOCK
+  // Base text — always strict regardless of consistency strength
+  const base = `[2] PRODUCT LOCK
 THE PRODUCT IS: the EXACT product from reference image #${refIndex}.
 Product name: "${productName}".
 The product in the output MUST EXACTLY match this reference: same container TYPE (jar / bottle / tube / box / sachet / blister pack / spray / pump — do NOT swap types), same shape proportions (squat vs tall — do NOT change), same colors, same label, same branding text and logo placement.
 Locked description (from analysis): ${identity.productDescription}
 
 ABSOLUTE BAN: do NOT redesign the packaging. Do NOT invent a new supplement bottle / cream jar / random pharmacy bottle. Do NOT change the brand logo or label text. Do NOT substitute a "similar-looking" product. The uploaded product is the ONLY valid product source — every pixel of packaging must derive from reference image #${refIndex}.`
+
+  // Smart-retry: previous attempt failed product match — escalate
+  const retryBlock = bumped
+    ? `
+
+PRODUCT RETRY MODE — CRITICAL: A previous attempt rendered the WRONG product (different shape / different brand / invented packaging). Do NOT do this again. The packaging in your output must be PIXEL-FOR-PIXEL the packaging in reference image #${refIndex} — only repositioned to fit the new pose. If you cannot replicate the packaging precisely, copy it as faithfully as possible rather than imagine alternatives. ANY deviation in container shape / brand color / logo position = automatic rejection.`
+    : ''
+
+  const labelBlock = bumpedLabel
+    ? `
+
+LABEL TEXT RETRY MODE: A previous attempt got the label text/logo wrong. Carefully preserve every word, every letter, every visual element of the label exactly as it appears on reference image #${refIndex}. Do NOT translate, do NOT abbreviate, do NOT invent fake brand names.`
+    : ''
+
+  return base + retryBlock + labelBlock
 }
 
 // ── [3] SCENE BLUEPRINT ──────────────────────────────────────────────────────
@@ -113,13 +136,20 @@ Overlay density: ${blueprint.overlayDensity}${cta}${masterFrameHint}`
 
 function buildVisualDna(ctx: CompiledPromptContext): string {
   const { dna } = ctx
-  // Per-scene visual tone (from blueprint, already clamped) overrides DNA default if present
   const tone = ctx.scene?.visualTone ?? dna.visualTone
+  const bumped = ctx.overrides?.bumpRealism === true
+
+  const retryBlock = bumped
+    ? `
+
+REALISM RETRY MODE: Previous attempt looked AI-generated (plastic skin / studio sheen / cinematic lighting / fake hands). This time render LITERALLY a raw unedited iPhone snapshot — visible skin texture with real pores, natural fingernail detail, no retouching, no glossy highlights on cheeks. If it looks like a magazine photo, it failed. Target: someone's actual phone camera roll, not a commercial shoot.`
+    : ''
+
   return `[4] VISUAL DNA
 Style target: realistic ecommerce / landing-page / website lifestyle / advertorial / social-proof imagery (NOT cinematic movie scene, NOT studio commercial, NOT fashion editorial).
 Camera: ${dna.cameraStyle}.
 Tone: ${tone}.
-Photography spec: authentic UGC smartphone — sharp focus across the entire subject + product area, zero bokeh on subject, zero depth-of-field blur on the product, natural ambient indoor lighting, no professional studio rim lighting, no AI-generated sheen, no digital enhancement, no watermarks, no text overlay. Skin shows real natural texture and pores, not retouched.`
+Photography spec: authentic UGC smartphone — sharp focus across the entire subject + product area, zero bokeh on subject, zero depth-of-field blur on the product, natural ambient indoor lighting, no professional studio rim lighting, no AI-generated sheen, no digital enhancement, no watermarks, no text overlay. Skin shows real natural texture and pores, not retouched.${retryBlock}`
 }
 
 // ── [5] NEGATIVE PROMPT ──────────────────────────────────────────────────────

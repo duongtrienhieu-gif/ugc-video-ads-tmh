@@ -40,6 +40,8 @@ export interface MasterFrame {
   createdAt: number
   /** Approval state — only approved frames can be used downstream */
   status: 'pending-approval' | 'approved' | 'rejected'
+  /** QC audit result (null = not yet QC'd, or QC disabled for this candidate) */
+  qc?: QcScore | null
 }
 
 /**
@@ -113,6 +115,8 @@ export interface CompiledPromptContext {
   scene?: SceneBlueprint
   /** Optional master-frame URL when this is a scene-derived gen (img2img anchor) */
   masterFrameUrl?: string
+  /** Optional per-section overrides — used by smart QC retry to bump specific locks */
+  overrides?: SectionOverrides
 }
 
 /**
@@ -199,25 +203,94 @@ export interface DiversityReport {
   notes: string[]
 }
 
-// ── MODULE 4: Basic QC via Gemini Vision ─────────────────────────────────────
+// ── MODULE 4: Real QC Loop via Gemini Vision ─────────────────────────────────
 
 /**
- * Per-image QC score after generation. Values 0-100, threshold ~75 to pass.
- * Computed by Gemini Vision comparing generated image against locked references.
+ * Failure classification — what went wrong in the generated image.
+ * Drives the smart retry strategy: which lock to bump on regen.
+ */
+export type FailureClassification =
+  | 'ok'                    // passed all checks
+  | 'wrong-product'         // generated product doesn't match (different shape/brand)
+  | 'wrong-label'           // label text/logo wrong
+  | 'redesigned-packaging'  // packaging redesigned (related to wrong-product)
+  | 'wrong-hijab'           // hijab style/color drifted
+  | 'wrong-ethnicity'       // face is different ethnicity
+  | 'wrong-age'             // face is wrong age range
+  | 'fake-hands'            // distorted fingers, extra fingers, etc.
+  | 'studio-look'           // looks like studio commercial, not UGC
+  | 'cinematic-lighting'    // dramatic movie lighting (banned)
+  | 'stock-photo-vibe'      // looks like stock photography
+  | 'plastic-skin'          // AI sheen / over-retouched skin
+  | 'multiple-issues'       // more than one of the above
+
+/**
+ * Per-image QC score from Gemini Vision audit.
+ * Compares generated image against avatar + product references.
  */
 export interface QcScore {
-  /** How well the face matches the master frame avatar (0-100) */
-  faceMatchScore: number
-  /** How well the product matches the master frame product (0-100) */
-  productMatchScore: number
-  /** OCR label similarity — does the label text match the original */
-  labelMatchScore: number
-  /** Overall photorealism score (no AI artifacts, plastic look, etc.) */
-  realismScore: number
-  /** Any drift/issue notes from Gemini Vision */
-  notes: string
-  /** Pass = all required scores >= threshold */
+  /** Pass = all axis scores >= their respective thresholds */
   passed: boolean
+  /** How many regen attempts were made before this final result */
+  retryCount: number
+  /** Face match score (0-100, threshold 72) */
+  faceScore: number
+  /** Product packaging match score (0-100, threshold 88 — highest priority) */
+  productScore: number
+  /** OCR label text similarity (0-100, threshold 82) */
+  ocrScore: number
+  /** Realism / non-AI-look score (0-100, threshold 75) */
+  realismScore: number
+  /** List of specific problems found (in English, technical) */
+  failureReasons: string[]
+  /** Single dominant failure classification (drives retry strategy) */
+  classification: FailureClassification
+  /** AI-generated recommendation on what to fix in the next attempt */
+  recommendation: string
+  /** Vietnamese user-facing summary (used in UI badges/tooltips) */
+  notes: string
+}
+
+/** Per-axis pass thresholds. Product has highest threshold (most critical). */
+export interface QcThresholds {
+  faceScore: number
+  productScore: number
+  ocrScore: number
+  realismScore: number
+}
+
+export const DEFAULT_QC_THRESHOLDS: QcThresholds = {
+  faceScore: 72,
+  productScore: 88,
+  ocrScore: 82,
+  realismScore: 75,
+}
+
+/** Override thresholds based on consistency strength (90-95 = tighter QC). */
+export function computeQcThresholds(strength: number): QcThresholds {
+  if (strength >= 90) {
+    return { faceScore: 76, productScore: 92, ocrScore: 86, realismScore: 78 }
+  }
+  if (strength >= 85) {
+    return DEFAULT_QC_THRESHOLDS
+  }
+  // creative tier — slightly relaxed
+  return { faceScore: 68, productScore: 85, ocrScore: 78, realismScore: 72 }
+}
+
+/**
+ * Per-section strength overrides — used by smart-retry to bump a specific
+ * lock without changing the global consistency strength.
+ */
+export interface SectionOverrides {
+  /** Extra-strict identity lock (bumps face-lock language) */
+  bumpIdentityLock?: boolean
+  /** Extra-strict product lock (extra ABSOLUTE BAN + duplicate reference) */
+  bumpProductLock?: boolean
+  /** Extra realism emphasis (more "raw unedited iphone" in DNA) */
+  bumpRealism?: boolean
+  /** Extra OCR / label preservation emphasis */
+  bumpLabelLock?: boolean
 }
 
 // ── MODULE 5: Consistency Slider ─────────────────────────────────────────────

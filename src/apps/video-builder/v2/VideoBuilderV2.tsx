@@ -19,7 +19,7 @@ import BankPicker from '../../../components/BankPicker'
 import type { Model, Product } from '../../../stores/types'
 import type { V2PipelineState, MasterFrame, CompiledPrompt } from './types'
 import { createEmptyV2State } from './types'
-import { extractIdentityPack, generateMasterFrame } from './services/masterFrame'
+import { extractIdentityPack, generateMasterFrame, generateMasterFrameWithQc } from './services/masterFrame'
 import { generateStoryboard } from './services/sceneBlueprint'
 import { defaultVisualStyleDna } from './types'
 import type { SceneBlueprint, DiversityReport } from './types'
@@ -117,6 +117,9 @@ export default function VideoBuilderV2({ onSwitchToV1 }: Props) {
   /** Module 3 storyboard state */
   const [diversityReport, setDiversityReport] = useState<DiversityReport | null>(null)
   const [isGeneratingStoryboard, setIsGeneratingStoryboard] = useState(false)
+  /** Module 4 QC state — when ON, master frame gen runs the QC loop with auto-retry */
+  const [qcEnabled, setQcEnabled] = useState(true)
+  const [qcProgress, setQcProgress] = useState<{ attempt: number; status: string } | null>(null)
   const cancelledRef = useRef(false)
 
   const kieApiKey = useSettingsStore((s) => s.kieApiKey)
@@ -173,7 +176,7 @@ export default function VideoBuilderV2({ onSwitchToV1 }: Props) {
     }
   }
 
-  // ── Phase 2: generate a master frame candidate ────────────────────────────
+  // ── Phase 2: generate a master frame candidate (with optional QC loop) ────
   const handleGenerateMasterFrame = async (identityOverride?: typeof state.identityPack) => {
     const identity = identityOverride ?? state.identityPack
     if (!identity || !state.inputs.product) return
@@ -186,14 +189,48 @@ export default function VideoBuilderV2({ onSwitchToV1 }: Props) {
       ...s,
       masterFrame: { ...s.masterFrame, isGenerating: true, error: null },
     }))
+    setQcProgress(null)
 
     try {
-      const { frame, compiled } = await generateMasterFrame({
-        kieApiKey,
-        identity,
-        productName: state.inputs.product.productName,
-        consistency: state.consistency,
-      })
+      let frame: MasterFrame
+      let compiled: CompiledPrompt
+
+      if (qcEnabled && geminiApiKey) {
+        // QC LOOP MODE — auto-retry on fail, return best-of-N
+        const result = await generateMasterFrameWithQc({
+          kieApiKey,
+          geminiKey: geminiApiKey,
+          identity,
+          productName: state.inputs.product.productName,
+          consistency: state.consistency,
+          onAttempt: (attemptIdx, qc) => {
+            if (qc === null) {
+              setQcProgress({ attempt: attemptIdx + 1, status: `Đang tạo ảnh lần ${attemptIdx + 1}...` })
+            } else if (qc.passed) {
+              setQcProgress({ attempt: attemptIdx + 1, status: `✓ Đạt QC ở lần ${attemptIdx + 1}` })
+            } else {
+              const reason = qc.classification === 'wrong-product' ? 'sản phẩm chưa khớp'
+                : qc.classification === 'wrong-ethnicity' || qc.classification === 'wrong-hijab' ? 'khuôn mặt chưa khớp'
+                : qc.classification === 'stock-photo-vibe' || qc.classification === 'studio-look' ? 'chưa đủ chân thực'
+                : 'cần điều chỉnh'
+              setQcProgress({ attempt: attemptIdx + 1, status: `Lần ${attemptIdx + 1} chưa đạt (${reason}) — đang tạo lại...` })
+            }
+          },
+        })
+        frame = { ...result.frame, qc: result.qc }
+        compiled = result.compiled
+      } else {
+        // SIMPLE MODE (no QC) — single shot, no auto-retry
+        const result = await generateMasterFrame({
+          kieApiKey,
+          identity,
+          productName: state.inputs.product.productName,
+          consistency: state.consistency,
+        })
+        frame = result.frame
+        compiled = result.compiled
+      }
+
       if (cancelledRef.current) return
       setLastCompiled(compiled)
       setState((s) => ({
@@ -204,13 +241,23 @@ export default function VideoBuilderV2({ onSwitchToV1 }: Props) {
           isGenerating: false,
         },
       }))
-      addToast(`✓ Đã tạo bản #${state.masterFrame.candidates.length + 1}`)
+      setQcProgress(null)
+
+      // Toast message reflects QC outcome
+      if (frame.qc?.passed) {
+        addToast(`✓ Bản #${state.masterFrame.candidates.length + 1} đạt QC (retry ${frame.qc.retryCount})`)
+      } else if (frame.qc) {
+        addToast(`Bản #${state.masterFrame.candidates.length + 1} không đạt full QC sau ${frame.qc.retryCount + 1} lần — hiển thị bản tốt nhất`, 'info')
+      } else {
+        addToast(`✓ Đã tạo bản #${state.masterFrame.candidates.length + 1}`)
+      }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
       setState((s) => ({
         ...s,
         masterFrame: { ...s.masterFrame, isGenerating: false, error: msg.slice(0, 200) },
       }))
+      setQcProgress(null)
       addToast(`Tạo Master Frame thất bại: ${msg.slice(0, 100)}`, 'error')
     }
   }
@@ -410,6 +457,9 @@ export default function VideoBuilderV2({ onSwitchToV1 }: Props) {
             onApprove={handleApproveFrame}
             onReject={handleRejectAll}
             onContinue={handleContinueAfterMasterFrame}
+            qcEnabled={qcEnabled}
+            onQcEnabledChange={setQcEnabled}
+            qcProgress={qcProgress}
           />
         )}
 
