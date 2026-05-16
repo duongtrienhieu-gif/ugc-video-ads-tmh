@@ -225,29 +225,36 @@ export async function generateInstantIDImage(params: {
   identityStrength?: number
   /** 0-1, default 0.8. How much to follow the face image style. */
   adapterStrength?: number
-  imageSize?: 'portrait_16_9' | 'portrait_9_16' | 'square_hd' | 'square' | 'landscape_16_9' | 'landscape_4_3'
+  /** Exact width × height in pixels (more reliable than enum names). */
+  imageSize?: { width: number; height: number }
   /** Optional callback for status updates during polling. */
   onStatusChange?: (status: string) => void
   timeoutMs?: number
 }): Promise<string> {
   // ── Submit job to queue ────────────────────────────────────────────────
+  // Default to 9:16 vertical at HD-ish resolution. Use explicit width/height
+  // object (more reliable than fal's enum names which vary per model).
+  const imageSize = params.imageSize ?? { width: 720, height: 1280 }
+
+  const requestBody: Record<string, unknown> = {
+    face_image_url:              params.faceImageUrl,
+    prompt:                      params.prompt,
+    negative_prompt:             params.negativePrompt ?? 'low quality, blurry, distorted, deformed face, multiple faces, watermark, text overlay',
+    identitynet_strength_ratio:  params.identityStrength ?? 0.8,
+    adapter_strength_ratio:      params.adapterStrength  ?? 0.8,
+    image_size:                  imageSize,
+    num_inference_steps:         30,
+    guidance_scale:              5,
+  }
+  if (params.poseImageUrl) requestBody.pose_image_url = params.poseImageUrl
+
   const submitRes = await fetch(`${FAL_QUEUE_BASE}/fal-ai/instant-id`, {
     method: 'POST',
     headers: {
       ...authHeader(params.apiKey),
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({
-      face_image_url:              params.faceImageUrl,
-      prompt:                      params.prompt,
-      negative_prompt:             params.negativePrompt ?? 'low quality, blurry, distorted, deformed face, multiple faces, watermark, text overlay',
-      pose_image_url:              params.poseImageUrl,
-      identitynet_strength_ratio:  params.identityStrength ?? 0.8,
-      adapter_strength_ratio:      params.adapterStrength  ?? 0.8,
-      image_size:                  params.imageSize ?? 'portrait_9_16',
-      num_inference_steps:         30,
-      guidance_scale:              5,
-    }),
+    body: JSON.stringify(requestBody),
   })
 
   if (submitRes.status === 401 || submitRes.status === 403) {

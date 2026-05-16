@@ -1866,14 +1866,18 @@ Do NOT invent a different product variant.`
         apiKey: falApiKey,
         faceImageUrl: avatarImageUrl,
         prompt,
-        imageSize: 'portrait_9_16',
+        imageSize: { width: 720, height: 1280 },  // 9:16 vertical HD
         identityStrength: 0.85,
         adapterStrength: 0.8,
         timeoutMs: 3 * 60 * 1000,
       })
       return imageUrl
     } catch (err) {
-      console.error(`[brollImage ${i}] InstantID failed:`, err)
+      const msg = err instanceof Error ? err.message : String(err)
+      console.error(`[brollImage ${i}] InstantID failed:`, msg)
+      // Surface the actual fal.ai error to the user via toast so they can
+      // debug (e.g. "out of credit", "invalid face_image_url", etc.)
+      addToast(`Ảnh #${i + 1}: ${msg.slice(0, 100)}`, 'error')
       return null
     }
   }
