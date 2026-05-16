@@ -1683,63 +1683,33 @@ Return ONLY the description as plain text, no preamble, no markdown.` },
   // video generation ($0.35/clip). User can regen bad images individually.
 
   const buildImagePrompt = (seg: ScriptSegment, hasAvatar: boolean, hasProduct: boolean): string => {
-    // Hybrid B-roll: avatar (matching reference) is the MAIN subject performing
-    // the action. The corner lip-sync overlay is added separately by Shotstack.
-    // Identity descriptions from Gemini Vision are injected here as TEXT anchor.
+    // ── FLUX PuLID prompt strategy ────────────────────────────────────────
+    // flux-pulid locks identity via reference_image_url (face embedding).
+    // Adding a long identity-lock TEXT block CONFLICTS with this mechanism:
+    // the model focuses on "generate a face" instead of the scene.
+    //
+    // Rule: lead with SCENE first. Keep identity anchor SHORT (1 line).
+    // Let the image embedding handle face identity, text handles everything else.
     const avatarDesc  = pipeRef.current.avatarDescription
     const productDesc = pipeRef.current.productDescription
 
-    // CRITICAL: use directive language. "Photo of the SAME PERSON from image 1"
-    // signals to the model that this is identity preservation, not style xfer.
-    const identityBlock = hasAvatar
-      ? `🔒 ABSOLUTE IDENTITY LOCK — THE FACE MUST BE 100% IDENTICAL TO THE REFERENCE 🔒
-
-This is photo #${seg.index + 1} in a continuous photo session of the SAME REAL PERSON
-shown in reference images 1 AND 2 (the avatar appears TWICE in the references —
-that is your absolute identity anchor, treat as a real human being to portray).
-
-YOU MUST MATCH, PIXEL-LEVEL EXACTLY:
-- Face shape (oval / round / heart) — copy from reference
-- Eye shape, eye color, eye spacing
-- Eyebrow shape, thickness, arch
-- Nose shape, bridge, tip
-- Lip shape, fullness, resting expression
-- Jawline and chin
-- Skin tone, complexion, any moles/freckles
-- Hijab/hair color, style, coverage, drape
-- Clothing exact colors and style from reference
-
-${avatarDesc ? `Locked physical description (this is the SAME person as the reference images):\n${avatarDesc}\n` : ''}
-WHAT NOT TO DO:
-- Do NOT generate a "similar-looking" different person
-- Do NOT change face shape to match an emotion or pose
-- Do NOT alter the hijab style / outfit
-- Do NOT invent a new ethnicity or age
-- A different person ≠ acceptable. The face must be recognizably the SAME individual.
-
-If you cannot show the same face in this particular pose, choose a pose where
-the face is clearly visible matching the reference.`
+    // Short identity anchor — just enough to anchor gender/ethnicity/style.
+    // DO NOT repeat detailed face features here (flux-pulid image handles that).
+    const identityAnchor = hasAvatar
+      ? `Subject: Malaysian woman${avatarDesc ? ` — ${avatarDesc.split('\n')[0]}` : ', hijab, casual home outfit'}. Face identity locked via reference image.`
       : ''
 
-    const productBlock = hasProduct
-      ? `\n🔒 PRODUCT LOCK 🔒
-The product (when shown in this shot) MUST match the reference product image EXACTLY:
-- Same bottle / box / sachet shape
-- Same label colors, text, logo placement
-- Same capsule/form factor
-${productDesc ? `\nLocked product description:\n${productDesc}` : ''}
-Do NOT invent a different product variant.`
+    // Product anchor — brief, appears only in shots where product is shown.
+    const productAnchor = hasProduct && seg.brollPrompt.toLowerCase().includes('product')
+      ? `\nProduct shown: ${productDesc ? productDesc.split('\n')[0] : 'supplement bottle, same as reference'}.`
       : ''
 
-    const compositionBlock = `\n📐 COMPOSITION
-- Avatar = MAIN subject, full-frame (NOT in a corner — corner lip-sync overlay added separately later by Shotstack)
-- UGC phone-camera aesthetic — natural lighting, slightly imperfect framing, real-home backgrounds
-- Cohesive style across all 9 shots in this series (consistent home aesthetic, color palette, lighting mood)
-- NOT polished studio commercial`
+    // Scene is FIRST — drives composition, action, expression, environment.
+    const scene = seg.brollPrompt
 
-    const qualitySuffix = '\n\nFinal output: photorealistic, vertical 9:16, hyper-realistic phone-camera quality, no text overlay (captions added later), no watermark.'
+    const style = `\nStyle: UGC phone-camera aesthetic, natural home lighting, vertical 9:16, photorealistic. Full-body or waist-up shot — NOT a face close-up. No text overlay, no watermark.`
 
-    return `${identityBlock}${productBlock}${compositionBlock}\n\n🎬 SCENE FOR THIS SHOT:\n${seg.brollPrompt}${qualitySuffix}`
+    return `${scene}\n\n${identityAnchor}${productAnchor}${style}`
   }
 
   // Generate ONE image for a given segment index (used by both initial run + per-image regen)
