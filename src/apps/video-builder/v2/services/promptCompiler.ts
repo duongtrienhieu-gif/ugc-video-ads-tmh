@@ -37,7 +37,7 @@ function getStrengthTier(c: ConsistencyConfig): StrengthTier {
 // ── [1] IDENTITY LOCK ────────────────────────────────────────────────────────
 
 function buildIdentityLock(ctx: CompiledPromptContext, refIndex: number): string {
-  const { identity, consistency } = ctx
+  const { identity, consistency, scene } = ctx
   const tier = getStrengthTier(consistency)
 
   // Smart-retry can force strict tier even when global consistency is lower
@@ -53,11 +53,18 @@ function buildIdentityLock(ctx: CompiledPromptContext, refIndex: number): string
     ? '\n\nIDENTITY RETRY MODE: previous attempt drifted the face. This time, render LITERALLY the same individual — same face shape, same micro-features, same age. No "similar-looking" substitute. If the face does not match, the output is unusable.'
     : ''
 
-  return `[1] IDENTITY LOCK
+  // Phase A: wardrobe + background are SOFT lock — must allow evolution
+  // across the timeline. Only IDENTITY (face/ethnicity/age/hair) is strict.
+  const wardrobeNote = scene?.wardrobeStyle
+    ? `\n\nWARDROBE (SOFT): The SAME person naturally changes outfits across the video timeline. For THIS scene, wear: "${scene.wardrobeStyle}". Do NOT copy the wardrobe from the reference image — only copy the face and identity. Outfit must match this scene's mood (e.g., pajama for night/pain, polished for cta).`
+    : ''
+
+  return `[1] IDENTITY LOCK (STRICT — face only)
 THE PERSON IS: the individual from reference image #${refIndex}.
 The face in the output ${matchPhrase} the face in this reference: same face shape, eyes (color + shape), eyebrows, nose, lips, jawline, cheekbones, skin tone, age range.
 Locked description (from analysis): ${identity.avatarDescription}
-Preserve: same gender · same ethnicity · same approximate age · same hijab style + color OR same hairstyle/hair color/length · same facial hair if present · same accessories on face/neck (glasses, earrings).${extraBump}`
+LOCK (STRICT): same gender · same ethnicity · same approximate age · same hijab style + color OR same hairstyle/hair color/length · same facial hair if present.
+DO NOT LOCK (SOFT — must vary across timeline): outfit / clothing / background / room — these intentionally change scene-to-scene so the ad reads as a real story progression, not a product gallery.${extraBump}${wardrobeNote}`
 }
 
 // ── [2] PRODUCT LOCK (always strict — see priority rule above) ───────────────
@@ -105,20 +112,33 @@ NOTE: This is a NEUTRAL baseline pose — subsequent scenes will derive variatio
 /** Scene blueprint compiled from structured JSON (replaces giant cinematic prompts). */
 function buildSceneFromBlueprint(blueprint: SceneBlueprint, hasMasterFrame: boolean): string {
   const visibilityHint: Record<SceneBlueprint['productVisibility'], string> = {
-    'low':    'product partially visible in background or held casually',
-    'medium': 'product clearly visible held at waist or table level',
-    'high':   'product prominently held at chest level, label facing camera',
+    'low':    'product is ABSENT from frame or only tiny in background — this scene is about the EMOTION/SITUATION, not the package',
+    'medium': 'product visible held casually at waist/table level — present but not the hero',
+    'high':   'product prominent at chest level, label facing camera — hero of the frame',
   }
 
+  // Phase A: keep IDENTITY consistent with master frame, but EXPLICITLY allow
+  // outfit + room + background to differ from master frame.
   const masterFrameHint = hasMasterFrame
-    ? '\nIMPORTANT: This scene is a VARIATION of the approved Master Frame (reference image #3). Keep the EXACT same person and EXACT same product packaging as in the master frame — only the pose, framing, environment, and expression change.'
+    ? '\nIMPORTANT (img2img derivation): This scene is part of an EMOTIONAL TIMELINE. Keep the EXACT same FACE/IDENTITY and EXACT same PRODUCT PACKAGING as in the master frame (reference image #3). HOWEVER, the outfit, environment, room, lighting mood, and energy in this scene are INTENTIONALLY DIFFERENT from the master frame — see the scene-specific values below.'
     : ''
 
-  const cta = blueprint.ctaFocus ? '\nCTA scene: emphasize trustworthy direct eye contact + product clearly visible for the call-to-action moment.' : ''
+  const cta = blueprint.ctaFocus ? '\nCTA scene: trustworthy direct eye contact + product hero in frame for the call-to-action moment.' : ''
+
+  // New story-driven fields — render only when present
+  const storyLines: string[] = []
+  if (blueprint.sceneType)        storyLines.push(`Scene type (narrative beat): ${blueprint.sceneType}`)
+  if (blueprint.narrativePurpose) storyLines.push(`Narrative purpose: ${blueprint.narrativePurpose}`)
+  if (blueprint.visualObjective)  storyLines.push(`Visual objective: ${blueprint.visualObjective}`)
+  if (blueprint.subjectAction)    storyLines.push(`Subject action: ${blueprint.subjectAction}`)
+  if (blueprint.shotEnergy)       storyLines.push(`Shot energy: ${blueprint.shotEnergy}`)
+  if (blueprint.wardrobeStyle)    storyLines.push(`Wardrobe (SOFT — varies across timeline): ${blueprint.wardrobeStyle}`)
+  if (blueprint.environmentType)  storyLines.push(`Environment type (SOFT — varies): ${blueprint.environmentType}`)
+  const storyBlock = storyLines.length > 0 ? storyLines.join('\n') + '\n' : ''
 
   return `[3] SCENE BLUEPRINT
-Goal: ${blueprint.sceneGoal}
-Environment: ${blueprint.environment}
+${storyBlock}Goal: ${blueprint.sceneGoal}
+Environment detail: ${blueprint.environment}
 Composition: ${blueprint.composition}
 Camera angle: ${blueprint.cameraAngle}
 Shot type: ${blueprint.shotType}

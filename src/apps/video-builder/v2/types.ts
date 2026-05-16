@@ -145,11 +145,60 @@ export interface CompiledPrompt {
  * All values target ecommerce / landing-page / advertorial / social proof
  * use — NOT cinematic movie scenes, NOT studio commercials.
  */
+/**
+ * Story-driven scene type — drives product visibility, wardrobe, environment,
+ * lighting, energy, AND framing for that specific emotional beat of the script.
+ *
+ * Pipeline philosophy: NOT 9 pose-variations of the same product showcase.
+ * Instead: 9 frames of an EMOTIONAL TIMELINE (hook → pain → discovery → CTA),
+ * where each scene's visual mood matches the script's narrative beat.
+ */
+export type SceneType =
+  | 'hook'              // pattern-interrupt opening — pull attention
+  | 'pain'              // showing the problem — low energy, dark/messy, low product visibility
+  | 'frustration'       // peak of pain — emotional/tense, product absent or hidden
+  | 'failed_solution'   // tried-other-things — competitor product context, skeptical mood
+  | 'discovery'         // first encounter with the product — curious/surprised
+  | 'explanation'       // how/why it works — calm credibility, label visible, ingredient closeup
+  | 'recovery'          // post-use result — relief, brighter look, healthier energy
+  | 'lifestyle'         // integrated daily-life context — confident, social, polished
+  | 'social_proof'      // testimonial / review / before-after — trust signals
+  | 'cta'               // closing direct ask — polished, product hero, eye-contact
+
+/**
+ * Shot energy — drives visual rhythm across the 9-scene timeline so it feels
+ * like a real edited UGC video, not a flat product gallery.
+ */
+export type ShotEnergy =
+  | 'intimate'   // close, quiet, vulnerable framing
+  | 'dynamic'    // motion-feeling, slight tilt, candid
+  | 'emotional'  // expressive face, tighter on emotion
+  | 'calm'       // grounded, balanced framing
+  | 'tension'    // pulled-back unease, slight asymmetry
+  | 'relief'     // relaxed posture, soft warm light
+  | 'energetic'  // upbeat, action-feeling, brighter
+
 export interface SceneBlueprint {
   /** 1-indexed scene id in the storyboard (1-9 typically) */
   sceneId: number
   /** @deprecated use sceneId — kept for back-compat with v1 */
   sceneNumber?: number
+  /** ── STORY-DRIVEN FIELDS (Phase A) ──────────────────────────────────────
+   * sceneType = narrative role of this scene in the emotional timeline.
+   * Drives product visibility, wardrobe, environment, lighting, energy. */
+  sceneType?: SceneType
+  /** What the scene visually proves / shows — e.g. "convey night-time fatigue", "demonstrate cap-twist freshness" */
+  visualObjective?: string
+  /** Concrete physical action subject performs — e.g. "rubbing temple while staring at laptop", "smiling, lifting jar to lens" */
+  subjectAction?: string
+  /** Why this frame exists in the ad — e.g. "establish problem reality", "trigger curiosity reflex", "close the sale" */
+  narrativePurpose?: string
+  /** Wardrobe style (SOFT LOCK — varies across timeline) — e.g. "pajama", "home casual", "office casual", "cafe outfit", "weekend relaxed" */
+  wardrobeStyle?: string
+  /** Environment archetype (SOFT LOCK — varies) — e.g. "bedroom", "kitchen", "cafe", "office desk", "outdoor lifestyle" */
+  environmentType?: string
+  /** Visual rhythm energy for this scene — alternates across timeline */
+  shotEnergy?: ShotEnergy
   /** The scene's narrative goal — e.g. "social proof review", "ingredient credibility", "demonstrate result" */
   sceneGoal: string
   /** Setting — e.g. "home kitchen", "bedroom", "cafe", "office desk", "bathroom mirror" */

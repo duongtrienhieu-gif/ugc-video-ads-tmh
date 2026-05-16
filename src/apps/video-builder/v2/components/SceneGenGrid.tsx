@@ -25,6 +25,20 @@ interface Props {
   onCancelQueue: () => void
 }
 
+// Color by narrative beat — visible at a glance so user can scan emotional arc
+const SCENE_TYPE_STYLE: Record<string, { bg: string; labelVi: string }> = {
+  hook:            { bg: 'bg-fuchsia-500/85',  labelVi: 'HOOK' },
+  pain:            { bg: 'bg-slate-700/85',    labelVi: 'PAIN' },
+  frustration:     { bg: 'bg-red-600/85',      labelVi: 'FRUST' },
+  failed_solution: { bg: 'bg-orange-600/85',   labelVi: 'FAIL' },
+  discovery:       { bg: 'bg-cyan-500/85',     labelVi: 'DISCO' },
+  explanation:     { bg: 'bg-blue-500/85',     labelVi: 'EXPL' },
+  recovery:        { bg: 'bg-emerald-500/85',  labelVi: 'RECOV' },
+  lifestyle:       { bg: 'bg-teal-500/85',     labelVi: 'LIFE' },
+  social_proof:    { bg: 'bg-amber-500/85',    labelVi: 'PROOF' },
+  cta:             { bg: 'bg-pink-600/90',     labelVi: 'CTA' },
+}
+
 // Solid dot colors — readable at 8px on the compact card bottom strip
 const STATUS_DOT_COLOR: Record<SceneGenItemStatus, string> = {
   'pending':           'bg-gray-300',
@@ -99,6 +113,16 @@ function SceneCard({
           #{item.sceneId}
         </span>
 
+        {/* sceneType beat badge — directly below scene number, color-coded for emotional arc scan */}
+        {item.blueprint.sceneType && SCENE_TYPE_STYLE[item.blueprint.sceneType] && (
+          <span
+            className={`absolute left-1.5 top-7 rounded px-1.5 py-0.5 text-[8px] font-bold tracking-wider text-white backdrop-blur-sm ${SCENE_TYPE_STYLE[item.blueprint.sceneType].bg}`}
+            title={`${item.blueprint.sceneType}${item.blueprint.narrativePurpose ? ` — ${item.blueprint.narrativePurpose}` : ''}`}
+          >
+            {SCENE_TYPE_STYLE[item.blueprint.sceneType].labelVi}
+          </span>
+        )}
+
         {/* QC badge — top-right when present */}
         {item.qc && hasImage && (
           <div className="absolute right-1.5 top-1.5 scale-90 origin-top-right">
@@ -113,9 +137,9 @@ function SceneCard({
           </div>
         )}
 
-        {/* Retry chip — top, only when > 0 */}
+        {/* Retry chip — bumped down to row 3 so it doesn't collide with sceneType badge */}
         {item.retryCount > 0 && hasImage && (
-          <span className="absolute left-1.5 top-7 rounded bg-violet-500/85 px-1.5 py-0.5 text-[8px] font-semibold text-white backdrop-blur-sm">
+          <span className="absolute left-1.5 top-[3.25rem] rounded bg-violet-500/85 px-1.5 py-0.5 text-[8px] font-semibold text-white backdrop-blur-sm">
             retry {item.retryCount}
           </span>
         )}
