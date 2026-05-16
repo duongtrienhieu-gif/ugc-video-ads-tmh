@@ -22,6 +22,13 @@ import {
   Rocket,
   AlertTriangle,
   ChevronDown,
+  Sparkles,
+  PenLine,
+  LayoutTemplate,
+  Image as ImageLucide,
+  Megaphone,
+  Wand2,
+  Zap,
 } from 'lucide-react'
 import type { AnalysisResult } from '../types'
 import {
@@ -340,6 +347,190 @@ function DecisionSection({ result }: { result: AnalysisResult }) {
         </div>
       )}
     </Section>
+  )
+}
+
+/* ─── Z3: 1-Click Creative Action Bar ─── */
+/**
+ * Cross-app generation pipeline. Each button sends extracted analysis data
+ * to the most-relevant downstream module + navigates. For apps that already
+ * have a custom inter-app receiver (Script Architect: 'winningTranscript'),
+ * we send the payload directly. For apps without receivers yet, we copy
+ * the relevant snippet to clipboard + show toast — user pastes manually.
+ *
+ * Future commits will add proper receivers in each app so no clipboard
+ * fallback is needed.
+ */
+function CreativeActionBar({ result }: { result: AnalysisResult }) {
+  const sendToApp = useAppStore((s) => s.sendToApp)
+  const openApp = useAppStore((s) => s.openApp)
+  const addToast = useAppStore((s) => s.addToast)
+
+  const transcriptText = result.transcript.map((l) => l.text).join('\n')
+  const hookText = result.hookBreakdown?.hookText ?? ''
+  const visualPlaybookText = (result.visualPlaybook ?? [])
+    .slice(0, 10)
+    .map((v, i) => `Shot ${i + 1} (${v.timestamp}) — ${v.description}\n${v.prompt}`)
+    .join('\n\n')
+  const reconstructionPrompt = result.reconstructionPrompt ?? ''
+
+  // ── 1. Tạo script tương tự — direct receiver in Script Architect ─────
+  const handleScriptSimilar = () => {
+    sendToApp({
+      targetApp: 'script-architect',
+      targetField: 'winningTranscript',
+      data: transcriptText,
+    })
+    addToast('✨ Đã gửi transcript sang Tạo Kịch bản UGC')
+  }
+
+  // ── 2. Tạo Hook variants — same target, focused intent ───────────────
+  const handleHookVariants = () => {
+    const hookContext = `# WINNING HOOK\n${hookText}\n\n# KỸ THUẬT\n${result.hookBreakdown?.technique ?? ''}\n\n# TẠI SAO HIỆU QUẢ\n${result.hookBreakdown?.whyItWorks ?? ''}\n\n# MẪU ÁP DỤNG\n${result.hookBreakdown?.adaptableTemplate ?? ''}\n\n=> Hãy viết 5 hook variants tương tự, đa dạng tone (emotional / authority / curiosity / urgency / pattern-interrupt).`
+    sendToApp({
+      targetApp: 'script-architect',
+      targetField: 'winningTranscript',
+      data: hookContext,
+    })
+    addToast('🪝 Đã gửi hook context — chọn preset hook trong Kịch bản')
+  }
+
+  // ── 3. Tạo Storyboard — copy reconstruction + navigate UGC Builder ───
+  const handleStoryboard = async () => {
+    try {
+      await navigator.clipboard.writeText(reconstructionPrompt)
+      addToast('🎬 Đã copy reconstruction prompt — paste vào "Kịch bản" của UGC Builder', 'success')
+    } catch {
+      addToast('🎬 Mở UGC Builder — dùng "Lưu thành Mẫu ADS Win" + reuse ở UGC Builder', 'info')
+    }
+    openApp('video-builder')
+  }
+
+  // ── 4. Tạo Landing Page — copy analysis snippet + navigate ───────────
+  const handleLandingPage = async () => {
+    const snippet = `# WINNING AD INSPIRATION\n\n## HOOK\n${hookText}\n\n## STRUCTURE\n${result.structureMap?.beats?.map((b) => `- ${b.timestamp} ${b.beat}: ${b.description}`).join('\n') ?? ''}\n\n## RECONSTRUCTION DIRECTIVE\n${reconstructionPrompt}`
+    try {
+      await navigator.clipboard.writeText(snippet)
+      addToast('🌐 Đã copy ad blueprint — chọn sản phẩm + paste vào "Niche / inspiration" trong LandingPage AI', 'success')
+    } catch {
+      addToast('🌐 Mở LandingPage AI — chọn sản phẩm để bắt đầu', 'info')
+    }
+    openApp('landing-page')
+  }
+
+  // ── 5. Tạo Product AI scenes — copy visual playbook + navigate ───────
+  const handleProductAIScenes = async () => {
+    try {
+      await navigator.clipboard.writeText(visualPlaybookText)
+      addToast('📸 Đã copy visual playbook — paste vào "Scene custom" của Product AI', 'success')
+    } catch {
+      addToast('📸 Mở Product AI — chọn scene preset gần nhất với ad win', 'info')
+    }
+    openApp('broll-studio')
+  }
+
+  // ── 6. Tạo CTA variants — copy hook+reconstruction + navigate Ads ────
+  const handleCTAVariants = async () => {
+    const ctaContext = `# WINNING AD CTA CONTEXT\n\n## ORIGINAL HOOK\n${hookText}\n\n## PERSUASION LEVERS\n${(result.psychology?.primaryLevers ?? []).map((l) => `- ${l}`).join('\n')}\n\n## TARGET AUDIENCE\n${(result.psychology?.targetingSignals ?? []).map((l) => `- ${l}`).join('\n')}\n\n=> Hãy viết 5 CTA variants Facebook primary text, đa dạng angle (urgency / scarcity / soft / question / direct).`
+    try {
+      await navigator.clipboard.writeText(ctaContext)
+      addToast('📣 Đã copy CTA context — paste vào Ads Content + chọn platform', 'success')
+    } catch {
+      addToast('📣 Mở Ads Content — chọn sản phẩm để viết CTA', 'info')
+    }
+    openApp('ads-content')
+  }
+
+  return (
+    <Section className="border-pink-200 bg-gradient-to-br from-pink-50/60 to-violet-50/40">
+      <div className="mb-3 flex items-center gap-2">
+        <Wand2 className="h-4 w-4 text-pink-600" strokeWidth={1.8} />
+        <h3 className="text-sm font-bold tracking-tight text-gray-900">1-Click Creative Pipeline — tái sử dụng phân tích này</h3>
+        <span className="ml-auto rounded-full bg-pink-100 px-2 py-0.5 text-[9px] font-bold text-pink-700">
+          Z3
+        </span>
+      </div>
+      <div className="grid grid-cols-2 gap-2 md:grid-cols-3">
+        <ActionTile
+          icon={PenLine}
+          label="Tạo script tương tự"
+          hint="Gửi transcript → Kịch bản UGC"
+          accent="violet"
+          onClick={handleScriptSimilar}
+        />
+        <ActionTile
+          icon={Anchor}
+          label="Tạo hook variants"
+          hint="5 hook khác nhau từ hook gốc"
+          accent="emerald"
+          onClick={handleHookVariants}
+        />
+        <ActionTile
+          icon={Megaphone}
+          label="Tạo CTA variants"
+          hint="5 FB primary text cho Ads"
+          accent="amber"
+          onClick={handleCTAVariants}
+        />
+        <ActionTile
+          icon={Film}
+          label="Tạo storyboard"
+          hint="Mở UGC Builder + reconstruction"
+          accent="cyan"
+          onClick={handleStoryboard}
+        />
+        <ActionTile
+          icon={LayoutTemplate}
+          label="Tạo Landing Page"
+          hint="14-section advertorial pack"
+          accent="blue"
+          onClick={handleLandingPage}
+        />
+        <ActionTile
+          icon={ImageLucide}
+          label="Tạo Product AI scenes"
+          hint="Visual playbook → 4 ảnh lifestyle"
+          accent="rose"
+          onClick={handleProductAIScenes}
+        />
+      </div>
+      <p className="mt-2 text-[10px] text-gray-500 flex items-center gap-1">
+        <Zap className="h-3 w-3 text-amber-500" />
+        Mỗi nút mở module tương ứng + tự copy snippet vào clipboard nếu cần paste.
+      </p>
+    </Section>
+  )
+}
+
+function ActionTile({
+  icon: Icon, label, hint, accent, onClick,
+}: {
+  icon: React.ElementType
+  label: string
+  hint: string
+  accent: 'violet' | 'emerald' | 'cyan' | 'amber' | 'blue' | 'rose'
+  onClick: () => void
+}) {
+  const ACCENT: Record<string, string> = {
+    violet:  'border-violet-200 bg-white hover:bg-violet-50 text-violet-700',
+    emerald: 'border-emerald-200 bg-white hover:bg-emerald-50 text-emerald-700',
+    cyan:    'border-cyan-200 bg-white hover:bg-cyan-50 text-cyan-700',
+    amber:   'border-amber-200 bg-white hover:bg-amber-50 text-amber-700',
+    blue:    'border-blue-200 bg-white hover:bg-blue-50 text-blue-700',
+    rose:    'border-rose-200 bg-white hover:bg-rose-50 text-rose-700',
+  }
+  return (
+    <button
+      onClick={onClick}
+      className={`flex flex-col items-start gap-1 rounded-xl border ${ACCENT[accent]} px-3 py-2.5 text-left transition-colors shadow-sm`}
+    >
+      <div className="flex w-full items-center gap-1.5">
+        <Icon className="h-3.5 w-3.5" strokeWidth={2} />
+        <span className="text-xs font-bold">{label}</span>
+        <Sparkles className="ml-auto h-3 w-3 opacity-60" />
+      </div>
+      <span className="text-[10px] text-gray-500 leading-tight">{hint}</span>
+    </button>
   )
 }
 
@@ -826,6 +1017,9 @@ export default function ResultsView({ result, videoSrc, fileName, onReset }: Res
         <div className="flex flex-col gap-5">
           {/* Z1: Decision Layer + Angle + Awareness + Funnel + Scaling — TOP of results */}
           <DecisionSection result={result} />
+          {/* Z3: 1-click cross-app pipeline — directly under verdict so user
+              can act immediately. */}
+          <CreativeActionBar result={result} />
           <ScorecardSection result={result} />
           {/* Z2: Retention heatmap — visual timeline */}
           <RetentionHeatmapSection result={result} />
