@@ -15,6 +15,7 @@
 import { directGeminiVision } from '../../../../utils/gemini'
 import type { QcScore, QcThresholds, FailureClassification } from '../types'
 import { DEFAULT_QC_THRESHOLDS } from '../types'
+import { safeParseJson, logJsonFailure } from './jsonResilience'
 
 // ── Image loading helper (URL → base64) ──────────────────────────────────────
 
@@ -43,8 +44,20 @@ You receive THREE images in order:
   IMAGE B — the AVATAR REFERENCE (the person who should appear in image A)
   IMAGE C — the PRODUCT REFERENCE (the product that should appear in image A)
 
-Your job is to score 4 dimensions (0-100), classify the dominant failure (if any),
-and return STRICT JSON only. No markdown fences, no preamble, no explanation outside the JSON.
+═══════════════════════════════════════════════════════════════
+OUTPUT FORMAT — ABSOLUTE RULES (violation = response rejected)
+═══════════════════════════════════════════════════════════════
+1. Return ONLY raw JSON. No markdown fences (no \`\`\`json). No prose. No comments.
+2. Escape all inner quotes inside string values: \\" not "
+3. NEVER use literal line breaks inside JSON string values.
+4. Keep notesVi + recommendation under 30 words each.
+5. Use straight " quotes only, never curly " ".
+
+If output is not valid JSON, the response is considered failed.
+
+═══════════════════════════════════════════════════════════════
+SCORING TASK
+═══════════════════════════════════════════════════════════════
 
 SCORING RUBRIC:
   • faceScore (0-100): Does IMAGE A's person match IMAGE B?
@@ -99,20 +112,14 @@ interface RawQcResponse {
   notesVi?: string
 }
 
-function parseQcResponse(raw: string): RawQcResponse {
-  let cleaned = raw.trim()
-    .replace(/^```(?:json)?\s*/i, '')
-    .replace(/```\s*$/i, '')
-    .trim()
-  const start = cleaned.indexOf('{')
-  const end = cleaned.lastIndexOf('}')
-  if (start >= 0 && end > start) cleaned = cleaned.slice(start, end + 1)
-  try {
-    return JSON.parse(cleaned) as RawQcResponse
-  } catch (err) {
-    console.error('[parseQcResponse] JSON parse failed. Raw:', raw.slice(0, 400))
-    throw new Error(`Gemini QC trả về không phải JSON: ${(err as Error).message}`)
+function parseQcResponse(raw: string): RawQcResponse | null {
+  const result = safeParseJson<RawQcResponse>(raw)
+  if (!result.ok) {
+    logJsonFailure('parseQcResponse', raw, result)
+    return null
   }
+  if (result.repairUsed) console.info('[parseQcResponse] ✓ recovered via repair layer')
+  return result.data
 }
 
 function clampScore(n: number | undefined, fallback: number = 50): number {
@@ -185,7 +192,45 @@ export async function qcImage(params: {
     model: 'gemini-2.5-flash',
   })
 
-  const parsed = parseQcResponse(response)
+  // Try resilient parse — if Gemini returns garbled JSON, do one retry with stricter prompt
+  let parsed = parseQcResponse(response)
+  if (!parsed) {
+    console.warn('[qcImage] attempt 1 parse failed — auto-retrying with stricter prompt')
+    const retryResponse = await directGeminiVision({
+      apiKey: params.geminiKey,
+      parts: [
+        { text: 'PREVIOUS RESPONSE WAS NOT VALID JSON. Return STRICT JSON only this time — no markdown, no prose, escape inner quotes. Audit:' },
+        { text: 'IMAGE A — AI-GENERATED OUTPUT TO AUDIT:' },
+        { inlineData: { mimeType: gen.mimeType, data: gen.base64 } },
+        { text: 'IMAGE B — AVATAR REFERENCE:' },
+        { inlineData: { mimeType: avatar.mimeType, data: avatar.base64 } },
+        { text: 'IMAGE C — PRODUCT REFERENCE:' },
+        { inlineData: { mimeType: product.mimeType, data: product.base64 } },
+      ],
+      systemInstruction: QC_SYSTEM_PROMPT,
+      maxOutputTokens: 1024,
+      model: 'gemini-2.5-flash',
+    })
+    parsed = parseQcResponse(retryResponse)
+  }
+
+  // If still failed, return a neutral "QC errored" fallback rather than throw —
+  // pipeline continues; this attempt counts as "QC unscored".
+  if (!parsed) {
+    console.error('[qcImage] both parse attempts failed — returning neutral fallback')
+    return {
+      passed: false,
+      retryCount: params.retryCount ?? 0,
+      faceScore: 50,
+      productScore: 50,
+      ocrScore: 50,
+      realismScore: 50,
+      failureReasons: ['QC Gemini trả JSON không parse được sau 2 lần thử'],
+      classification: 'multiple-issues',
+      recommendation: 'QC unscored — retry pipeline manually',
+      notes: 'AI trả về dữ liệu QC lỗi. Đang xử lý như fail để tự thử lại.',
+    }
+  }
 
   const faceScore = clampScore(parsed.faceScore)
   const productScore = clampScore(parsed.productScore)

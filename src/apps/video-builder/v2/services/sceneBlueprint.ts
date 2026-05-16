@@ -18,22 +18,36 @@
 import { directGeminiVision } from '../../../../utils/gemini'
 import type { IdentityPack, SceneBlueprint, VisualStyleDna, DiversityReport } from '../types'
 import { SCENE_PRESETS, DEFAULT_PRESET_ROTATION, VISUAL_TONE_CLAMP, getPreset } from './scenePresets'
+import { safeParseJson, logJsonFailure } from './jsonResilience'
 
 // ── Gemini storyboard prompt builder ─────────────────────────────────────────
 
-const STORYBOARD_SYSTEM = `You are a UGC ad storyboard director planning ECOMMERCE / LANDING-PAGE / SOCIAL-PROOF / ADVERTORIAL imagery (NOT cinematic, NOT studio commercial).
+// Strict JSON-only output rules — LLMs need EXPLICIT escape instructions
+const STORYBOARD_SYSTEM = `You are a UGC ad storyboard director for ECOMMERCE / LANDING-PAGE / SOCIAL-PROOF / ADVERTORIAL imagery (NOT cinematic, NOT studio commercial).
 
-Your job: read a script + a list of preset scene types, and output a strict JSON array of scene blueprints — one per scene.
+═══════════════════════════════════════════════════════════════
+OUTPUT FORMAT — ABSOLUTE RULES (violation = response rejected)
+═══════════════════════════════════════════════════════════════
+1. Return ONLY a raw JSON array. Nothing else.
+2. NO markdown wrappers — do NOT prefix with \`\`\`json or any code fence.
+3. NO prose before or after the array. NO explanation. NO comments.
+4. Escape ALL inner quotes inside string values: \\" not "
+5. NEVER use literal line breaks inside JSON string values — use \\n if you must.
+6. Keep every string value SHORT (under 15 words) — no paragraphs.
+7. Use ONLY straight double quotes ("), never curly quotes (" ").
+8. Output must be valid compact JSON that JSON.parse() accepts in one shot.
 
-ABSOLUTE RULES:
-1. Output ONLY a JSON array. No markdown fences, no preamble, no explanation.
-2. Every value is in English (technical strings for image-gen).
-3. Visual tone for EVERY scene must include "ecommerce" or "ugc" or "landing-page" or "social-proof" — never "cinematic", "movie", "fashion editorial", "studio commercial".
-4. Diversity is mandatory: across 9 scenes, vary composition, cameraAngle, pose. Never repeat the same composition twice in a row.
-5. At least 70% of scenes (e.g. 7 of 9) must have productVisibility = "high".
-6. The 'speech' field for each scene MUST be 1-2 lines extracted verbatim from the script (in order).
-7. The last 1-2 scenes have ctaFocus = true (where the script's CTA falls).
-8. Keep all string values SHORT (under 15 words each) — these feed the Prompt Compiler, not the image API directly.`
+If the output is not valid JSON, the response is considered failed.
+
+═══════════════════════════════════════════════════════════════
+CONTENT RULES
+═══════════════════════════════════════════════════════════════
+• All values in English (these feed the image-gen pipeline).
+• visualTone must include one of: "ecommerce", "ugc", "landing-page", "social-proof", "advertorial". Never "cinematic", "movie", "fashion editorial", "studio commercial".
+• Diversity: across 9 scenes vary composition + cameraAngle + pose. No back-to-back identical compositions.
+• ≥70% of scenes (7+ of 9) must have productVisibility = "high".
+• 'speech' for each scene = 1-2 short lines copied from the script, in order.
+• Last 1-2 scenes have ctaFocus = true (CTA moment of the script).`
 
 interface BlueprintPromptParams {
   script: string
@@ -45,60 +59,30 @@ interface BlueprintPromptParams {
 }
 
 function buildStoryboardPrompt(p: BlueprintPromptParams): string {
-  // Pull preset templates as hints
-  const presetDescriptions = p.presetRotation.slice(0, p.numScenes).map((id, idx) => {
+  // Compact preset hints — minimize token usage
+  const presetHints = p.presetRotation.slice(0, p.numScenes).map((id, idx) => {
     const preset = getPreset(id)
-    if (!preset) return `Scene ${idx + 1}: free choice`
-    return `Scene ${idx + 1}: PRESET "${preset.labelEn}" — composition=${preset.template.composition}, cameraAngle=${preset.template.cameraAngle}, shotType=${preset.template.shotType}, pose=${preset.template.pose}, visibility=${preset.template.productVisibility}, environment hint=${preset.template.backgroundType}`
-  }).join('\n')
+    if (!preset) return `${idx + 1}=free`
+    return `${idx + 1}=${preset.labelEn}`
+  }).join(', ')
 
-  return `SCRIPT (in order — extract 1-2 lines for each scene's 'speech' field, in sequence):
-"""
-${p.script}
-"""
+  // Pre-compile the example object so the LLM sees the EXACT schema (smaller = more reliable)
+  return `SCRIPT (extract 1-2 lines for each scene's 'speech' in order):
+${p.script.slice(0, 2000)}
 
-LOCKED IDENTITY (do NOT alter):
-- Avatar: ${p.identity.avatarDescription}
-- Product name: "${p.productName}"
-- Product visual: ${p.identity.productDescription}
+IDENTITY (do NOT alter):
+avatar: ${p.identity.avatarDescription.slice(0, 300)}
+product: "${p.productName}" — ${p.identity.productDescription.slice(0, 200)}
 
-LOCKED VISUAL STYLE DNA:
-- Tone: ${p.dna.visualTone}
-- Camera style: ${p.dna.cameraStyle}
-- Pacing: ${p.dna.pacingStyle}
-- Persuasion pattern: ${p.dna.persuasionPattern}
-- Subtitle density default: ${p.dna.subtitleDensity}
-- CTA style: ${p.dna.ctaStyle}
+STYLE DNA:
+tone=${p.dna.visualTone.slice(0, 100)} | camera=${p.dna.cameraStyle.slice(0, 60)} | cta=${p.dna.ctaStyle.slice(0, 60)}
 
-PRESET ROTATION FOR DIVERSITY (use these as starting points; you may refine):
-${presetDescriptions}
+PRESET ROTATION (start from these, refine for script flow): ${presetHints}
 
-OUTPUT FORMAT — strict JSON array of ${p.numScenes} objects with EXACTLY these keys:
-[
-  {
-    "sceneId": 1,
-    "sceneGoal": "short narrative goal — e.g. 'pattern interrupt hook'",
-    "environment": "specific setting — e.g. 'home kitchen morning', 'bathroom mirror'",
-    "composition": "framing — e.g. 'medium close-up'",
-    "cameraAngle": "vertical/horizontal angle — e.g. 'iphone eye-level'",
-    "shotType": "shot style — e.g. 'ugc handheld' / 'selfie arm-extended' / 'static tripod'",
-    "pose": "what avatar is doing — e.g. 'holding product near face, looking at camera'",
-    "emotion": "expression — e.g. 'friendly confident' / 'curious surprised'",
-    "handUsage": "hand interaction — e.g. 'one hand holding bottle' / 'both hands cradling jar'",
-    "productVisibility": "low" | "medium" | "high",
-    "backgroundType": "what's behind — e.g. 'real lived-in home softly out of focus on far walls'",
-    "lightingStyle": "light source — e.g. 'soft natural daylight' / 'morning window glow'",
-    "visualTone": "MUST contain 'ecommerce' or 'ugc' or 'landing-page' or 'social-proof' — never cinematic/studio/fashion",
-    "motionIntent": "subtle motion hint for video gen — e.g. 'slight handheld realism'",
-    "overlayDensity": "none" | "low" | "medium" | "high",
-    "ctaFocus": true | false,
-    "speech": "1-2 lines copied from the script",
-    "presetLabel": "the labelEn of the preset used as a base"
-  },
-  ... (repeat for ${p.numScenes} scenes)
-]
+OUTPUT — JSON array of exactly ${p.numScenes} objects with these keys (short string values, <15 words each):
+[{"sceneId":1,"sceneGoal":"...","environment":"...","composition":"medium close-up","cameraAngle":"iphone eye-level","shotType":"ugc handheld","pose":"...","emotion":"friendly confident","handUsage":"...","productVisibility":"high","backgroundType":"...","lightingStyle":"soft natural daylight","visualTone":"warm ecommerce ugc","motionIntent":"subtle handheld","overlayDensity":"low","ctaFocus":false,"speech":"...","presetLabel":"..."}]
 
-Remember: Output ONLY the JSON array. Nothing else.`
+Return ONLY the JSON array. No markdown. No prose.`
 }
 
 // ── Parse + safety-clamp ─────────────────────────────────────────────────────
@@ -125,26 +109,24 @@ interface RawBlueprint {
   presetLabel?: string
 }
 
-function parseStoryboardResponse(raw: string): RawBlueprint[] {
-  // Strip code-fence wrappers if any
-  let cleaned = raw.trim()
-    .replace(/^```(?:json)?\s*/i, '')
-    .replace(/```\s*$/i, '')
-    .trim()
-
-  // Find the first [ and the last ] to be safe
-  const start = cleaned.indexOf('[')
-  const end = cleaned.lastIndexOf(']')
-  if (start >= 0 && end > start) cleaned = cleaned.slice(start, end + 1)
-
-  try {
-    const parsed = JSON.parse(cleaned)
-    if (Array.isArray(parsed)) return parsed as RawBlueprint[]
-    throw new Error('not an array')
-  } catch (err) {
-    console.error('[parseStoryboardResponse] JSON parse failed. Raw response:', raw.slice(0, 400))
-    throw new Error(`Gemini không trả về JSON hợp lệ: ${(err as Error).message}`)
+/**
+ * Resilient parse — uses jsonResilience.safeParseJson + validates shape.
+ * Returns null on failure (caller decides to retry vs fail).
+ */
+function parseStoryboardResponse(raw: string): RawBlueprint[] | null {
+  const result = safeParseJson<unknown>(raw)
+  if (!result.ok) {
+    logJsonFailure('parseStoryboardResponse', raw, result)
+    return null
   }
+  if (!Array.isArray(result.data)) {
+    console.error('[parseStoryboardResponse] result is not an array:', result.data)
+    return null
+  }
+  if (result.repairUsed) {
+    console.info('[parseStoryboardResponse] ✓ recovered via repair layer')
+  }
+  return result.data as RawBlueprint[]
 }
 
 function clampVisibility(v: string | undefined): SceneBlueprint['productVisibility'] {
@@ -245,8 +227,12 @@ export function validateDiversity(blueprints: SceneBlueprint[]): DiversityReport
 
 /**
  * Generate a structured storyboard (array of SceneBlueprints) from a script
- * via Gemini. NO long prompt text — only structured JSON. Diversity + safety
- * clamps applied in post-processing.
+ * via Gemini. Production-grade resilience:
+ *   1. Strict JSON-only system prompt
+ *   2. safeParseJson() with extract + repair layer
+ *   3. Auto-retry ONCE on parse fail with "previous output was invalid JSON" prefix
+ *   4. Friendly Vietnamese error if both attempts fail
+ *   5. Debug logging of raw + extracted + repaired versions
  */
 export async function generateStoryboard(params: {
   geminiKey: string
@@ -256,7 +242,9 @@ export async function generateStoryboard(params: {
   dna: VisualStyleDna
   numScenes?: number
   presetRotation?: string[]
-}): Promise<{ blueprints: SceneBlueprint[]; diversity: DiversityReport }> {
+  /** Fires when a parse retry is happening — UI can show "AI format chưa đúng, đang retry..." */
+  onParseRetry?: () => void
+}): Promise<{ blueprints: SceneBlueprint[]; diversity: DiversityReport; recoveredFromRetry: boolean }> {
   const numScenes = params.numScenes ?? 9
   const presetRotation = params.presetRotation ?? DEFAULT_PRESET_ROTATION.slice(0, numScenes)
 
@@ -269,14 +257,49 @@ export async function generateStoryboard(params: {
     numScenes,
   })
 
-  const raw = await directGeminiVision({
+  // ── Attempt 1: normal call ──────────────────────────────────────────────
+  let raw = await directGeminiVision({
     apiKey: params.geminiKey,
     parts: [{ text: prompt }],
     systemInstruction: STORYBOARD_SYSTEM,
     maxOutputTokens: 4096,
   })
 
-  const rawBlueprints = parseStoryboardResponse(raw)
+  let rawBlueprints = parseStoryboardResponse(raw)
+  let recoveredFromRetry = false
+
+  // ── Attempt 2: auto-retry once with stricter "you just failed" prefix ──
+  if (!rawBlueprints) {
+    console.warn('[generateStoryboard] attempt 1 parse failed — auto-retrying with stricter prompt')
+    params.onParseRetry?.()
+
+    const retryPrompt = `Your previous output was NOT valid JSON. The response failed JSON.parse().
+
+Return STRICT VALID JSON ONLY this time:
+- No markdown wrappers (no \`\`\`json)
+- No prose before or after
+- Escape all inner quotes with \\"
+- No literal newlines inside string values
+- Compact JSON only
+
+Original task:
+${prompt}`
+
+    raw = await directGeminiVision({
+      apiKey: params.geminiKey,
+      parts: [{ text: retryPrompt }],
+      systemInstruction: STORYBOARD_SYSTEM,
+      maxOutputTokens: 4096,
+    })
+    rawBlueprints = parseStoryboardResponse(raw)
+    if (rawBlueprints) recoveredFromRetry = true
+  }
+
+  // ── Both attempts failed — throw a Vietnamese-friendly error ───────────
+  if (!rawBlueprints) {
+    throw new Error('AI không trả về JSON hợp lệ sau 2 lần thử. Vui lòng thử lại — mở DevTools Console để xem chi tiết debug.')
+  }
+
   let blueprints = rawBlueprints.map((rb, i) => normalizeBlueprint(rb, i))
 
   // Truncate or pad to exact numScenes
@@ -292,7 +315,7 @@ export async function generateStoryboard(params: {
   // Apply VISUAL_TONE_CLAMP suffix to ensure no scene smuggles in banned terms downstream
   blueprints = blueprints.map((b) => ({ ...b, visualTone: `${b.visualTone}. ${VISUAL_TONE_CLAMP}` }))
 
-  return { blueprints, diversity }
+  return { blueprints, diversity, recoveredFromRetry }
 }
 
 // ── Helper: build a single blueprint from a chosen preset ────────────────────
