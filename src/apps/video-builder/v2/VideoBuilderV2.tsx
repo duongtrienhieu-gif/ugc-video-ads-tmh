@@ -11,7 +11,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { useState, useEffect, useRef } from 'react'
-import { Sparkles, FlaskConical, Package, UserRound, FileText, ChevronRight, Loader2, Info, ArrowLeft, Code2 } from 'lucide-react'
+import { Sparkles, FlaskConical, Package, UserRound, FileText, ChevronRight, Loader2, Info, ArrowLeft, Code2, BarChart3 } from 'lucide-react'
 import { useAppStore } from '../../../stores/appStore'
 import { useSettingsStore } from '../../../stores/settingsStore'
 import { useAssetUrl } from '../../../hooks/useAssetUrl'
@@ -25,6 +25,7 @@ import { defaultVisualStyleDna, computeConsistencyConfig } from './types'
 import type { SceneBlueprint, DiversityReport } from './types'
 import ConsistencySlider from './components/ConsistencySlider'
 import MasterFrameJobStepper from './components/MasterFrameJobStepper'
+import AnalyticsPanel from './components/AnalyticsPanel'
 import { useMasterFrameJobStore } from './stores/masterFrameJobStore'
 import { startMasterFrameJob, clearMasterFrameJob } from './services/masterFrameJobRunner'
 import MasterFrameApproval from './components/MasterFrameApproval'
@@ -128,6 +129,8 @@ export default function VideoBuilderV2({ onSwitchToV1 }: Props) {
   /** Module 4 QC state — when ON, master frame gen runs the QC loop with auto-retry */
   const [qcEnabled, setQcEnabled] = useState(true)
   const [qcProgress, setQcProgress] = useState<{ attempt: number; status: string; elapsedSec?: number } | null>(null)
+  /** Task 8 — analytics panel modal */
+  const [analyticsOpen, setAnalyticsOpen] = useState(false)
   const cancelledRef = useRef(false)
   /** Wallclock when current Master Frame gen started — used to show "stuck N s" warning */
   const genStartRef = useRef<number | null>(null)
@@ -400,6 +403,13 @@ export default function VideoBuilderV2({ onSwitchToV1 }: Props) {
           </div>
           <div className="flex items-center gap-2">
             <button
+              onClick={() => setAnalyticsOpen(true)}
+              title="Tổng hợp usable rate / fail reasons / best strength từ các job đã chạy"
+              className="flex items-center gap-1.5 rounded-lg bg-white/15 px-3 py-1.5 text-xs font-semibold backdrop-blur-sm transition-colors hover:bg-white/25"
+            >
+              <BarChart3 className="h-3.5 w-3.5" /> Analytics
+            </button>
+            <button
               onClick={() => setDebugOpen(true)}
               disabled={!lastCompiled}
               title={lastCompiled ? 'Xem prompt cuối đã compile (5 sections)' : 'Chưa có prompt nào — tạo Master Frame trước'}
@@ -581,6 +591,9 @@ export default function VideoBuilderV2({ onSwitchToV1 }: Props) {
 
       {/* Prompt Compiler v2 debug overlay */}
       {debugOpen && <PromptCompilerDebugPanel compiled={lastCompiled} onClose={() => setDebugOpen(false)} />}
+
+      {/* Task 8 — Analytics modal */}
+      <AnalyticsPanel open={analyticsOpen} onClose={() => setAnalyticsOpen(false)} />
     </div>
   )
 }

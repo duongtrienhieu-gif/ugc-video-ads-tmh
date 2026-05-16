@@ -44,10 +44,64 @@ CONTENT RULES
 ═══════════════════════════════════════════════════════════════
 • All values in English (these feed the image-gen pipeline).
 • visualTone must include one of: "ecommerce", "ugc", "landing-page", "social-proof", "advertorial". Never "cinematic", "movie", "fashion editorial", "studio commercial".
-• Diversity: across 9 scenes vary composition + cameraAngle + pose. No back-to-back identical compositions.
-• ≥70% of scenes (7+ of 9) must have productVisibility = "high".
 • 'speech' for each scene = 1-2 short lines copied from the script, in order.
-• Last 1-2 scenes have ctaFocus = true (CTA moment of the script).`
+
+═══════════════════════════════════════════════════════════════
+DIVERSITY RULES (HARD CONSTRAINTS — failure = poor ad)
+═══════════════════════════════════════════════════════════════
+Across the 9 scenes, you MUST diversify on these axes:
+
+1. COMPOSITION — use AT LEAST 5 different values from:
+   close-up · tight close-up · medium close-up · medium shot · wide-medium ·
+   over-the-shoulder · tabletop flatlay · split-frame before-after
+   NEVER repeat the same composition back-to-back.
+
+2. CAMERA ANGLE — use AT LEAST 4 different values from:
+   iphone eye-level · iphone slight low-angle · iphone slight high-angle ·
+   iphone selfie eye-level · iphone overhead · iphone slight side-angle ·
+   iphone waist-level
+
+3. SHOT TYPE — mix at least 3 from:
+   ugc handheld · selfie arm-extended · static tripod · phone-on-shelf POV ·
+   phone-on-tripod static · selfie POV intimate
+
+4. POSE / POSTURE — vary across:
+   sitting · standing · walking · leaning · close-to-mirror · at-desk ·
+   in-bed · at-kitchen-counter
+   At least 3 different postures across 9 scenes.
+
+5. ENVIRONMENT — use AT LEAST 4 different settings:
+   home kitchen · bathroom · bedroom · home office desk · cafe ·
+   living room · bedside · home counter
+   NEVER use the same environment 3 times in a row.
+
+6. EMOTIONAL STATE — vary:
+   tired/concerned · curious/surprised · confident/explaining ·
+   relieved/glowing · warm/trusting · excited/energetic · contemplative
+   Track the SCRIPT'S emotional arc — early scenes can be lower energy
+   (pain/curiosity), later scenes higher energy (proof/CTA).
+
+7. PRODUCT DISTANCE — vary how far the product is from the lens:
+   far (on table 2m) · medium (held at chest) · close (right at lens) · using
+
+═══════════════════════════════════════════════════════════════
+PRODUCT VISIBILITY LOGIC (smart per-role rules)
+═══════════════════════════════════════════════════════════════
+Apply these rules when picking each scene's productVisibility:
+
+• HOOK scene (scene 1-2): "medium" OK — focus on pain/expression, product
+  introduces gently. Even "low" is acceptable if hook is pure emotion.
+• TRUST / CREDIBILITY scenes (mom rec, doctor explanation): "high" required
+  with label clearly visible and readable.
+• INGREDIENT explanation scenes: "high" + label/branding front-facing so
+  ingredient names on the package are readable.
+• REVIEW / DEMO scenes: "high" with packaging front-facing toward camera.
+• PROOF / RESULT scenes (before-after): "medium" or "high" — product can
+  be subtle here since the proof IS the result, not the package.
+• CTA scene (last 1-2): MUST be "high" — product clearly hero in frame,
+  no obstruction, label readable for the final purchase moment.
+
+REQUIREMENT: ≥70% of scenes (7 of 9) must have productVisibility = "high".`
 
 interface BlueprintPromptParams {
   script: string
@@ -186,29 +240,59 @@ function normalizeBlueprint(raw: RawBlueprint, idx: number): SceneBlueprint {
 
 // ── Diversity validator ──────────────────────────────────────────────────────
 
+/**
+ * Diversity validator — now tracks 6 axes (was 4). Per Task 3 optimization spec.
+ * Returns notes in Vietnamese for the UI.
+ */
 export function validateDiversity(blueprints: SceneBlueprint[]): DiversityReport {
   const total = blueprints.length
   const notes: string[] = []
 
-  const uniqueCompositions = new Set(blueprints.map((b) => b.composition.toLowerCase())).size
-  const uniqueCameraAngles = new Set(blueprints.map((b) => b.cameraAngle.toLowerCase())).size
-  const uniquePoses = new Set(blueprints.map((b) => b.pose.toLowerCase())).size
+  // Axis: composition / cameraAngle / pose / shotType / environment / handUsage
+  const norm = (s: string) => s.toLowerCase().trim()
+  const uniqueCompositions = new Set(blueprints.map((b) => norm(b.composition))).size
+  const uniqueCameraAngles = new Set(blueprints.map((b) => norm(b.cameraAngle))).size
+  const uniquePoses        = new Set(blueprints.map((b) => norm(b.pose))).size
+  const uniqueShotTypes    = new Set(blueprints.map((b) => norm(b.shotType))).size
+  const uniqueEnvironments = new Set(blueprints.map((b) => norm(b.environment))).size
+  const uniqueHandUsages   = new Set(blueprints.map((b) => norm(b.handUsage))).size
   const highVisibilityCount = blueprints.filter((b) => b.productVisibility === 'high').length
 
-  // Diversity thresholds for 9 scenes: at least 4 unique compositions + 4 unique camera angles
-  const minUnique = Math.max(3, Math.floor(total / 2))
-  if (uniqueCompositions < minUnique) notes.push(`Quá ít composition khác nhau (${uniqueCompositions}/${total})`)
-  if (uniqueCameraAngles < minUnique) notes.push(`Quá ít cameraAngle khác nhau (${uniqueCameraAngles}/${total})`)
-  if (uniquePoses < minUnique) notes.push(`Quá ít pose khác nhau (${uniquePoses}/${total})`)
+  // 9-scene thresholds — stricter than v1 to push real diversity
+  const minComposition  = Math.max(5, Math.floor(total * 0.55))  // ≥55% unique
+  const minCameraAngle  = Math.max(4, Math.floor(total * 0.45))  // ≥45%
+  const minPose         = Math.max(5, Math.floor(total * 0.55))
+  const minShotType     = Math.max(3, Math.floor(total * 0.33))
+  const minEnvironment  = Math.max(4, Math.floor(total * 0.45))
+  const minHandUsage    = Math.max(4, Math.floor(total * 0.45))
+
+  if (uniqueCompositions < minComposition) notes.push(`Composition đa dạng yếu (${uniqueCompositions}/${total}, cần ≥${minComposition})`)
+  if (uniqueCameraAngles < minCameraAngle) notes.push(`Góc máy đa dạng yếu (${uniqueCameraAngles}/${total}, cần ≥${minCameraAngle})`)
+  if (uniquePoses < minPose) notes.push(`Pose đa dạng yếu (${uniquePoses}/${total}, cần ≥${minPose})`)
+  if (uniqueShotTypes < minShotType) notes.push(`Shot type đa dạng yếu (${uniqueShotTypes}/${total}, cần ≥${minShotType})`)
+  if (uniqueEnvironments < minEnvironment) notes.push(`Môi trường đa dạng yếu (${uniqueEnvironments}/${total}, cần ≥${minEnvironment})`)
+  if (uniqueHandUsages < minHandUsage) notes.push(`Cách cầm sản phẩm đa dạng yếu (${uniqueHandUsages}/${total}, cần ≥${minHandUsage})`)
 
   // 70% must be high visibility
   const minHigh = Math.ceil(total * 0.7)
   if (highVisibilityCount < minHigh) notes.push(`Quá ít scene có productVisibility=high (${highVisibilityCount}/${total}, cần ≥${minHigh})`)
 
-  // Check for back-to-back identical compositions
+  // Check for back-to-back identical compositions OR environments
   for (let i = 1; i < blueprints.length; i++) {
-    if (blueprints[i].composition.toLowerCase() === blueprints[i - 1].composition.toLowerCase()) {
+    if (norm(blueprints[i].composition) === norm(blueprints[i - 1].composition)) {
       notes.push(`Scene #${i + 1} composition giống scene #${i} — không nên lặp liên tiếp`)
+    }
+    if (norm(blueprints[i].environment) === norm(blueprints[i - 1].environment) && i >= 2 && norm(blueprints[i - 2].environment) === norm(blueprints[i].environment)) {
+      notes.push(`Scene #${i - 1}, #${i}, #${i + 1} cùng môi trường — quá monotone`)
+    }
+  }
+
+  // Last scene MUST be CTA visibility (high)
+  if (total > 0) {
+    const lastIsCTA = blueprints[total - 1].ctaFocus
+    const lastIsHighVis = blueprints[total - 1].productVisibility === 'high'
+    if (lastIsCTA && !lastIsHighVis) {
+      notes.push(`Scene CTA cuối (${total}) phải có productVisibility=high — đang là ${blueprints[total - 1].productVisibility}`)
     }
   }
 

@@ -218,6 +218,154 @@ export const SCENE_PRESETS: ScenePreset[] = [
       overlayDensity: 'medium',
     },
   },
+  // ─── ADDITIONAL VIRAL UGC AD STRUCTURES (Task 2 — optimization phase) ───
+  // High-performing structures inspired by real TikTok / Meta UGC ads:
+  // 'almost-gave-up' / 'nobody-told-me' / doctor / mom / office-worker /
+  // night-routine / partner-recommendation / reaction / comment-reply.
+  {
+    id: 'vulnerable-hook',
+    labelVi: 'Hook "I almost gave up"',
+    labelEn: 'vulnerable-hook',
+    hintVi: 'Cận mặt buồn/mệt mỏi đầu video — emotional pattern interrupt',
+    template: {
+      composition: 'tight close-up, head + shoulders only',
+      cameraAngle: 'iphone slight low-angle eye-level',
+      shotType: 'selfie arm-extended, intimate',
+      pose: 'slight downward gaze then looking up at camera with tired honest expression',
+      handUsage: 'product visible at bottom of frame held loosely in one hand',
+      productVisibility: 'medium',
+      backgroundType: 'real bedroom or living room — slightly messy, not staged',
+      lightingStyle: 'overcast daylight from window, slightly flat',
+      motionIntent: 'subtle handheld with micro-pause',
+      overlayDensity: 'low',
+    },
+  },
+  {
+    id: 'doctor-explanation',
+    labelVi: 'Doctor-style explanation',
+    labelEn: 'doctor-authority-shot',
+    hintVi: 'Giọng điệu chuyên môn — chỉ vào label đọc thành phần',
+    template: {
+      composition: 'medium close-up, hands + product center',
+      cameraAngle: 'iphone slight side-angle, eye-level',
+      shotType: 'static phone-on-shelf with small movement',
+      pose: 'rotating the product to show label, examining a specific ingredient line',
+      handUsage: 'two hands — one holds, one points or rotates product',
+      productVisibility: 'high',
+      backgroundType: 'home kitchen or bookshelf, soft credibility context',
+      lightingStyle: 'soft daylight + ambient warm interior',
+      motionIntent: 'slow controlled rotation gesture',
+      overlayDensity: 'high',
+    },
+  },
+  {
+    id: 'mom-kitchen-recommendation',
+    labelVi: 'Mom recommendation',
+    labelEn: 'mom-kitchen-trust',
+    hintVi: 'Mẹ bếp warm trust — phù hợp female-30+ audience',
+    template: {
+      composition: 'medium shot, kitchen counter visible',
+      cameraAngle: 'iphone waist-level eye-contact',
+      shotType: 'ugc handheld lifestyle',
+      pose: 'standing at kitchen counter, gentle smile, holding product at chest level naturally',
+      handUsage: 'one hand on the product, other resting on counter',
+      productVisibility: 'high',
+      backgroundType: 'lived-in family kitchen — fruit bowl, breakfast prep, slight clutter',
+      lightingStyle: 'warm morning daylight from kitchen window',
+      motionIntent: 'natural lifestyle moment',
+      overlayDensity: 'low',
+    },
+  },
+  {
+    id: 'office-worker-pain',
+    labelVi: 'Office worker pain point',
+    labelEn: 'office-burnout-pain',
+    hintVi: 'Mệt mỏi giờ làm việc — relatable cho dân văn phòng',
+    template: {
+      composition: 'medium shot from desk, laptop in foreground edge',
+      cameraAngle: 'iphone eye-level looking across desk',
+      shotType: 'static phone propped against laptop',
+      pose: 'sitting at desk, slight slump, rubbing forehead or looking at product with tired interest',
+      handUsage: 'one hand holds product, other rests near laptop',
+      productVisibility: 'medium',
+      backgroundType: 'real home office or coworking — laptop, coffee, notebook',
+      lightingStyle: 'office overhead + side natural light',
+      motionIntent: 'still casual desk pose',
+      overlayDensity: 'medium',
+    },
+  },
+  {
+    id: 'night-routine-bedroom',
+    labelVi: 'Night routine bedroom',
+    labelEn: 'night-routine',
+    hintVi: 'Trước khi ngủ — phù hợp supplement/skincare evening use',
+    template: {
+      composition: 'medium close-up, bed lamp glow',
+      cameraAngle: 'iphone slight high-angle, looking down at lap',
+      shotType: 'selfie POV in bed',
+      pose: 'sitting up in bed in casual pajamas, holding product up to read the label',
+      handUsage: 'both hands holding the product near chest',
+      productVisibility: 'high',
+      backgroundType: 'cozy bedroom — bedsheets, nightstand with lamp, plant',
+      lightingStyle: 'warm bedside lamp + soft window backlight',
+      motionIntent: 'still relaxed bed pose',
+      overlayDensity: 'low',
+    },
+  },
+  {
+    id: 'partner-recommendation',
+    labelVi: 'Husband/wife recommendation',
+    labelEn: 'partner-rec',
+    hintVi: 'Có người thứ 2 thấp thoáng — social proof từ couple',
+    template: {
+      composition: 'medium shot, second person blurred in background',
+      cameraAngle: 'iphone eye-level',
+      shotType: 'ugc handheld casual',
+      pose: 'foreground person holding product with relaxed smile, partner softly out of focus making coffee or reading behind',
+      handUsage: 'one hand showing product to camera',
+      productVisibility: 'high',
+      backgroundType: 'real shared apartment or kitchen, partner clearly visible but soft-focus',
+      lightingStyle: 'warm home ambient daylight',
+      motionIntent: 'natural domestic moment',
+      overlayDensity: 'low',
+    },
+  },
+  {
+    id: 'reaction-shocked',
+    labelVi: 'Reaction "nobody told me this"',
+    labelEn: 'reaction-shocked',
+    hintVi: 'Mắt mở to ngạc nhiên cầm product — pattern interrupt strong',
+    template: {
+      composition: 'tight close-up face + product near cheek',
+      cameraAngle: 'iphone selfie eye-level very close',
+      shotType: 'selfie POV, dramatic close',
+      pose: 'wide-eyed surprised reaction, mouth slightly open, holding product right at cheek level',
+      handUsage: 'one hand holding product up close to lens, label visible',
+      productVisibility: 'high',
+      backgroundType: 'real home corner softly out of focus, neutral',
+      lightingStyle: 'natural daylight slightly contrasty for energy',
+      motionIntent: 'tiny shake of disbelief',
+      overlayDensity: 'high',
+    },
+  },
+  {
+    id: 'comment-reply-pov',
+    labelVi: 'Comment-reply POV',
+    labelEn: 'comment-reply',
+    hintVi: 'Trả lời comment dạng TikTok — cầm phone đáp lại câu hỏi',
+    template: {
+      composition: 'medium close-up phone-talking-to-phone',
+      cameraAngle: 'iphone selfie eye-level',
+      shotType: 'selfie POV, conversational',
+      pose: 'looking directly at camera as if replying to a viewer comment, gesturing slightly with one hand',
+      handUsage: 'one hand holding product near shoulder, casual point-show',
+      productVisibility: 'high',
+      backgroundType: 'real home or office corner, casual native creator vibe',
+      lightingStyle: 'soft window daylight',
+      motionIntent: 'animated gesture handheld',
+      overlayDensity: 'high',
+    },
+  },
 ]
 
 /**
@@ -234,15 +382,40 @@ export function getPreset(id: string): ScenePreset | null {
   return SCENE_PRESETS.find((p) => p.id === id) ?? null
 }
 
-/** Default rotation: gives Gemini a diverse starting set of 9 presets. */
+/** Default rotation: gives Gemini a diverse starting set of 9 presets.
+ *  Updated for optimization phase — maximize composition/pose/environment variety. */
 export const DEFAULT_PRESET_ROTATION: string[] = [
-  'tiktok-pov',           // 1 — hook
-  'selfie-review',        // 2 — claim
-  'product-showcase',     // 3 — hero
-  'using-product',        // 4 — proof / demo
-  'desk-review',          // 5 — ingredient / feature callout
-  'before-after-reaction',// 6 — result
-  'lifestyle-kitchen',    // 7 — lifestyle context
-  'multi-product-desk',   // 8 — social proof / stock visual
-  'product-showcase',     // 9 — CTA hero (will be marked ctaFocus=true)
+  'vulnerable-hook',         // 1 — emotional hook (NEW)
+  'reaction-shocked',        // 2 — pattern interrupt (NEW)
+  'doctor-explanation',      // 3 — credibility / mechanism (NEW)
+  'desk-review',             // 4 — ingredient callout
+  'using-product',           // 5 — proof / demo
+  'mom-kitchen-recommendation',  // 6 — trust + lifestyle (NEW)
+  'before-after-reaction',   // 7 — result reveal
+  'comment-reply-pov',       // 8 — social proof reply (NEW)
+  'product-showcase',        // 9 — CTA hero
 ]
+
+/** Alternative rotations — Gemini can swap based on script topic. */
+export const PRESET_ROTATIONS_BY_VIBE: Record<string, string[]> = {
+  'female-30+-supplement': [
+    'vulnerable-hook', 'office-worker-pain', 'doctor-explanation',
+    'using-product', 'desk-review', 'mom-kitchen-recommendation',
+    'before-after-reaction', 'night-routine-bedroom', 'product-showcase',
+  ],
+  'young-tiktok': [
+    'reaction-shocked', 'tiktok-pov', 'selfie-review',
+    'using-product', 'desk-review', 'comment-reply-pov',
+    'before-after-reaction', 'lifestyle-kitchen', 'product-showcase',
+  ],
+  'beauty-skincare': [
+    'vulnerable-hook', 'bathroom-routine', 'doctor-explanation',
+    'using-product', 'desk-review', 'before-after-reaction',
+    'night-routine-bedroom', 'mom-kitchen-recommendation', 'product-showcase',
+  ],
+  'couple-family': [
+    'partner-recommendation', 'office-worker-pain', 'doctor-explanation',
+    'using-product', 'mom-kitchen-recommendation', 'lifestyle-kitchen',
+    'before-after-reaction', 'partner-recommendation', 'product-showcase',
+  ],
+}

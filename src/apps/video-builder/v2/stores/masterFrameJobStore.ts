@@ -15,34 +15,31 @@ import type { MasterFrameJob, MasterFrameJobStatus, MasterFrameJobAttempt, QcSco
 import { JOB_STATUS_LABEL_VI, JOB_PROGRESS_PCT } from '../types'
 
 const STORAGE_KEY = 'ugc-lab-v2-master-frame-job'
+const HISTORY_KEY = 'ugc-lab-v2-master-frame-history'
 /** Max age before a stored job is discarded as stale (12 minutes per spec). */
 const MAX_JOB_AGE_MS = 12 * 60 * 1000
+/** Keep this many recent completed/failed jobs in history (analytics). */
+const MAX_HISTORY = 50
 
 interface JobStoreState {
   /** Currently-active or most-recent job (null if never started) */
   job: MasterFrameJob | null
+  /** History of last N completed/failed/cancelled jobs (for analytics) */
+  history: MasterFrameJob[]
 
   // ── Mutations ───────────────────────────────────────────────────────────────
-  /** Create a brand-new job, replacing any previous one. Persists immediately. */
   createJob: (job: Omit<MasterFrameJob, 'createdAt' | 'updatedAt' | 'attempts' | 'statusVi' | 'progress' | 'elapsedSec'>) => void
-  /** Patch fields on the current job. Auto-updates statusVi + progress from status. */
   updateJob: (patch: Partial<MasterFrameJob>) => void
-  /** Move to a new status — automatically maps statusVi + progress. */
   setStatus: (status: MasterFrameJobStatus, statusViOverride?: string) => void
-  /** Push a new attempt onto the attempts array. */
   addAttempt: (attempt: MasterFrameJobAttempt) => void
-  /** Update the most recent attempt (e.g. when QC finishes for it). */
   patchLastAttempt: (patch: Partial<MasterFrameJobAttempt>) => void
-  /** Set final result fields on completion. */
   finalize: (params: { imageUrl: string; qc?: QcScore | null; compiled?: CompiledPrompt | null }) => void
-  /** Mark identity pack after extraction. */
   setIdentity: (identity: IdentityPack) => void
-  /** Tick the elapsed-seconds counter (called by a UI interval). */
   tickElapsed: (sec: number) => void
-  /** Clear the active job (forget). */
   clearJob: () => void
-  /** Try to resume a job from localStorage on app mount. Returns true if a recoverable job was loaded. */
   tryResumeFromStorage: () => boolean
+  /** Clear the entire analytics history. */
+  clearHistory: () => void
 }
 
 // ── localStorage helpers ─────────────────────────────────────────────────────
@@ -74,10 +71,40 @@ function saveToStorage(job: MasterFrameJob | null): void {
   } catch {/* silent — storage may be unavailable in private mode */}
 }
 
+function loadHistoryFromStorage(): MasterFrameJob[] {
+  try {
+    const raw = localStorage.getItem(HISTORY_KEY)
+    if (!raw) return []
+    const parsed = JSON.parse(raw)
+    if (!Array.isArray(parsed)) return []
+    return parsed as MasterFrameJob[]
+  } catch { return [] }
+}
+
+function saveHistoryToStorage(history: MasterFrameJob[]): void {
+  try {
+    // Trim to MAX_HISTORY before writing
+    const trimmed = history.slice(0, MAX_HISTORY)
+    localStorage.setItem(HISTORY_KEY, JSON.stringify(trimmed))
+  } catch {/* silent */}
+}
+
 // ── Store ────────────────────────────────────────────────────────────────────
+
+// Push the current job onto history (newest first), then trim + persist
+function archiveToHistory(get: () => JobStoreState, set: (patch: Partial<JobStoreState>) => void): void {
+  const cur = get().job
+  if (!cur) return
+  // Only archive terminal states
+  if (cur.status !== 'completed' && cur.status !== 'failed' && cur.status !== 'cancelled') return
+  const newHistory = [cur, ...get().history.filter((h) => h.jobId !== cur.jobId)].slice(0, MAX_HISTORY)
+  set({ history: newHistory })
+  saveHistoryToStorage(newHistory)
+}
 
 export const useMasterFrameJobStore = create<JobStoreState>((set, get) => ({
   job: null,
+  history: loadHistoryFromStorage(),
 
   createJob: (input) => {
     const now = Date.now()
@@ -107,6 +134,10 @@ export const useMasterFrameJobStore = create<JobStoreState>((set, get) => ({
     }
     set({ job: next })
     saveToStorage(next)
+    // Archive when status hits terminal (completed/failed/cancelled)
+    if (patch.status && (patch.status === 'completed' || patch.status === 'failed' || patch.status === 'cancelled')) {
+      archiveToHistory(get, (p) => set(p as Partial<JobStoreState>))
+    }
   },
 
   setStatus: (status, statusViOverride) => {
@@ -163,5 +194,10 @@ export const useMasterFrameJobStore = create<JobStoreState>((set, get) => ({
     if (!stored) return false
     set({ job: stored })
     return stored.status !== 'completed' && stored.status !== 'failed' && stored.status !== 'cancelled'
+  },
+
+  clearHistory: () => {
+    set({ history: [] })
+    saveHistoryToStorage([])
   },
 }))
