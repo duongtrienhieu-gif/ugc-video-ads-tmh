@@ -1,20 +1,19 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import {
   Film, Download, Loader2, CheckCircle2,
   AlertTriangle, ChevronRight, Trash2, RefreshCw,
   Mic, Sparkles, FileText, User, Package,
-  Check, ChevronDown, ChevronUp,
+  Check, ChevronDown, ChevronUp, Upload, X,
 } from 'lucide-react'
 import { useSettingsStore } from '../../stores/settingsStore'
 import { useAppStore } from '../../stores/appStore'
 import { useBankStore } from '../../stores/bankStore'
-import { getUrl, isAssetRef } from '../../utils/assetStore'
+import { getUrl, isAssetRef, saveAsset } from '../../utils/assetStore'
 import { directGeminiVision } from '../../utils/gemini'
 import { listVoices, textToSpeech } from '../../utils/elevenlabs'
 import { generateLipSync, pollLipSyncUntilDone, generateVideoJob, getVideoJobStatus } from '../../utils/kieai'
 import { removeVideoBackground } from '../../utils/falai'
 import { buildUGCVideo, pollRenderUntilDone } from '../../utils/shotstack'
-import { saveAsset } from '../../utils/assetStore'
 import type { ElevenLabsVoice } from '../../utils/elevenlabs'
 import type { ScriptSegment, BuildStep, BuildStepStatus, VideoBuilderJob } from './types'
 import type { Script, Model, Product } from '../../stores/types'
@@ -39,10 +38,19 @@ function formatDuration(sec: number): string {
   return `${m}:${s.toString().padStart(2, '0')}`
 }
 
+/** Resolve any image ref (asset://, blob:, or direct URL) to a public URL */
 async function resolveImageUrl(ref: string): Promise<string | null> {
   if (!ref) return null
   if (isAssetRef(ref)) return getUrl(ref)
-  return ref  // already a direct URL
+  if (ref.startsWith('blob:')) {
+    try {
+      const resp = await fetch(ref)
+      const blob = await resp.blob()
+      const assetId = await saveAsset(blob, blob.type || 'image/jpeg')
+      return getUrl(assetId)
+    } catch { return null }
+  }
+  return ref
 }
 
 // ── Step indicator ────────────────────────────────────────────────────────────
@@ -71,14 +79,102 @@ function StepRow({ step }: { step: BuildStep }) {
           'text-gray-400'
         }`}>{step.label}</p>
         {step.detail && step.status !== 'idle' && (
-          <p className="mt-0.5 text-[10px] text-gray-400 leading-relaxed">{step.detail}</p>
+          <p className="mt-0.5 text-[11px] text-gray-400 leading-relaxed">{step.detail}</p>
         )}
       </div>
     </div>
   )
 }
 
-// ── Script picker ─────────────────────────────────────────────────────────────
+// ── Avatar card — resolves asset:// URLs ──────────────────────────────────────
+
+function AvatarCard({ model, selected, onSelect }: {
+  model: Model
+  selected: boolean
+  onSelect: () => void
+}) {
+  const [imgSrc, setImgSrc] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!model.characterImage) { setImgSrc(null); return }
+    if (isAssetRef(model.characterImage)) {
+      getUrl(model.characterImage).then((url) => setImgSrc(url ?? null))
+    } else {
+      setImgSrc(model.characterImage)
+    }
+  }, [model.characterImage])
+
+  return (
+    <button
+      onClick={onSelect}
+      className={`relative flex flex-col items-center gap-2 rounded-xl border-2 p-2.5 transition-all ${
+        selected
+          ? 'border-violet-400 bg-violet-50 shadow-md shadow-violet-100'
+          : 'border-black/8 bg-white hover:border-violet-200 hover:bg-violet-50/40'
+      }`}
+    >
+      {imgSrc ? (
+        <img src={imgSrc} alt={model.name} className="h-16 w-16 rounded-lg object-cover border border-black/8" />
+      ) : (
+        <div className="flex h-16 w-16 items-center justify-center rounded-lg bg-gray-100">
+          <User className="h-7 w-7 text-gray-300" />
+        </div>
+      )}
+      <p className="w-full truncate text-center text-xs font-semibold text-gray-700">{model.name || 'Avatar AI'}</p>
+      {selected && (
+        <div className="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full bg-violet-500 shadow">
+          <Check className="h-3 w-3 text-white" />
+        </div>
+      )}
+    </button>
+  )
+}
+
+// ── Product card — resolves asset:// URLs ─────────────────────────────────────
+
+function ProductCard({ product, selected, onToggle, disabled }: {
+  product: Product
+  selected: boolean
+  onToggle: () => void
+  disabled: boolean
+}) {
+  const [imgSrc, setImgSrc] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!product.productImage) { setImgSrc(null); return }
+    if (isAssetRef(product.productImage)) {
+      getUrl(product.productImage).then((url) => setImgSrc(url ?? null))
+    } else {
+      setImgSrc(product.productImage)
+    }
+  }, [product.productImage])
+
+  return (
+    <button
+      onClick={onToggle}
+      disabled={disabled}
+      className={`relative flex flex-col items-center gap-1.5 rounded-xl border-2 p-2 transition-all disabled:opacity-40 ${
+        selected ? 'border-violet-400 bg-violet-50' : 'border-black/8 bg-white hover:border-violet-200'
+      }`}
+    >
+      {imgSrc ? (
+        <img src={imgSrc} alt={product.productName} className="h-14 w-14 rounded-lg object-cover border border-black/8" />
+      ) : (
+        <div className="flex h-14 w-14 items-center justify-center rounded-lg bg-gray-100">
+          <Package className="h-5 w-5 text-gray-300" />
+        </div>
+      )}
+      <p className="w-full truncate text-center text-xs font-medium text-gray-600">{product.productName}</p>
+      {selected && (
+        <div className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-violet-500">
+          <Check className="h-2.5 w-2.5 text-white" />
+        </div>
+      )}
+    </button>
+  )
+}
+
+// ── Script picker dropdown ────────────────────────────────────────────────────
 
 function ScriptPicker({ scripts, selectedId, onSelect }: {
   scripts: Script[]
@@ -88,161 +184,51 @@ function ScriptPicker({ scripts, selectedId, onSelect }: {
   const [expanded, setExpanded] = useState(false)
   const selected = scripts.find((s) => s.id === selectedId)
 
-  if (scripts.length === 0) {
-    return (
-      <div className="rounded-xl border-2 border-dashed border-black/10 bg-black/[0.01] px-4 py-4 text-center">
-        <p className="text-xs text-gray-400">Chưa có kịch bản nào trong Project</p>
-        <p className="mt-0.5 text-[10px] text-gray-300">Tạo kịch bản tại app <strong>Kịch bản</strong> trước</p>
-      </div>
-    )
-  }
+  if (scripts.length === 0) return null
 
   return (
-    <div className="relative">
+    <div className="relative mb-2">
       <button
         onClick={() => setExpanded(!expanded)}
         className={`flex w-full items-center gap-3 rounded-xl border px-3 py-2.5 text-left transition-colors ${
-          selected ? 'border-violet-200 bg-violet-50/40' : 'border-black/10 bg-white hover:bg-black/[0.02]'
+          selected ? 'border-violet-200 bg-violet-50/60' : 'border-black/10 bg-white hover:bg-black/[0.02]'
         }`}
       >
         <FileText className={`h-4 w-4 shrink-0 ${selected ? 'text-violet-500' : 'text-gray-300'}`} />
         <div className="flex-1 min-w-0">
           {selected ? (
-            <>
-              <p className="text-xs font-semibold text-violet-800 truncate">{selected.title || 'Kịch bản không có tiêu đề'}</p>
-              <p className="text-[10px] text-violet-500 truncate">{selected.scriptText.slice(0, 60)}...</p>
-            </>
+            <p className="text-sm font-semibold text-violet-800 truncate">{selected.title || 'Kịch bản không có tiêu đề'}</p>
           ) : (
-            <p className="text-sm text-gray-400">Chọn kịch bản từ Project...</p>
+            <p className="text-sm text-gray-400">Chọn từ Project kịch bản...</p>
           )}
         </div>
-        {expanded ? <ChevronUp className="h-4 w-4 shrink-0 text-gray-400" /> : <ChevronDown className="h-4 w-4 shrink-0 text-gray-400" />}
+        {expanded
+          ? <ChevronUp className="h-4 w-4 shrink-0 text-gray-400" />
+          : <ChevronDown className="h-4 w-4 shrink-0 text-gray-400" />
+        }
       </button>
 
       {expanded && (
-        <div className="absolute z-20 mt-1 w-full overflow-hidden rounded-xl border border-black/10 bg-white shadow-xl max-h-64 overflow-y-auto">
+        <div className="absolute z-20 mt-1 w-full rounded-xl border border-black/10 bg-white shadow-xl max-h-56 overflow-y-auto">
           {scripts.map((s) => (
             <button
               key={s.id}
               onClick={() => { onSelect(s.id, s.scriptText); setExpanded(false) }}
-              className={`flex w-full items-start gap-2.5 px-3 py-2.5 text-left transition-colors hover:bg-violet-50 ${
+              className={`flex w-full items-start gap-2.5 px-3 py-3 text-left transition-colors hover:bg-violet-50 ${
                 s.id === selectedId ? 'bg-violet-50' : ''
               }`}
             >
-              {s.id === selectedId && <Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-violet-500" />}
-              {s.id !== selectedId && <div className="mt-0.5 h-3.5 w-3.5 shrink-0" />}
+              <div className="mt-0.5 h-3.5 w-3.5 shrink-0">
+                {s.id === selectedId && <Check className="h-3.5 w-3.5 text-violet-500" />}
+              </div>
               <div className="min-w-0">
-                <p className="text-xs font-semibold text-gray-800 truncate">{s.title || 'Không có tiêu đề'}</p>
-                <p className="mt-0.5 text-[10px] text-gray-400 line-clamp-2">{s.scriptText.slice(0, 100)}</p>
+                <p className="text-sm font-semibold text-gray-800 truncate">{s.title || 'Không có tiêu đề'}</p>
+                <p className="mt-0.5 text-xs text-gray-400 line-clamp-2">{s.scriptText.slice(0, 100)}</p>
               </div>
             </button>
           ))}
         </div>
       )}
-    </div>
-  )
-}
-
-// ── Model picker (avatar) ─────────────────────────────────────────────────────
-
-function ModelPicker({ models, selectedId, onSelect }: {
-  models: Model[]
-  selectedId: string
-  onSelect: (id: string) => void
-}) {
-  if (models.length === 0) {
-    return (
-      <div className="rounded-xl border-2 border-dashed border-black/10 bg-black/[0.01] px-4 py-4 text-center">
-        <p className="text-xs text-gray-400">Chưa có Avatar AI nào trong Project</p>
-        <p className="mt-0.5 text-[10px] text-gray-300">Tạo Avatar AI tại app <strong>Avatar AI</strong> trước</p>
-      </div>
-    )
-  }
-
-  return (
-    <div className="grid grid-cols-3 gap-2">
-      {models.map((m) => (
-        <button
-          key={m.id}
-          onClick={() => onSelect(m.id)}
-          className={`relative flex flex-col items-center gap-1.5 rounded-xl border-2 p-2 transition-all ${
-            m.id === selectedId
-              ? 'border-violet-400 bg-violet-50 shadow-sm'
-              : 'border-black/8 bg-white hover:border-violet-200 hover:bg-violet-50/40'
-          }`}
-        >
-          {m.characterImage ? (
-            <img
-              src={isAssetRef(m.characterImage) ? undefined : m.characterImage}
-              onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
-              alt={m.name}
-              className="h-14 w-14 rounded-lg object-cover border border-black/8"
-            />
-          ) : (
-            <div className="flex h-14 w-14 items-center justify-center rounded-lg bg-gray-100">
-              <User className="h-6 w-6 text-gray-300" />
-            </div>
-          )}
-          <p className="w-full truncate text-center text-[10px] font-semibold text-gray-700">{m.name || 'Avatar AI'}</p>
-          {m.id === selectedId && (
-            <div className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-violet-500">
-              <Check className="h-2.5 w-2.5 text-white" />
-            </div>
-          )}
-        </button>
-      ))}
-    </div>
-  )
-}
-
-// ── Product picker ────────────────────────────────────────────────────────────
-
-function ProductPicker({ products, selectedIds, onToggle }: {
-  products: Product[]
-  selectedIds: string[]
-  onToggle: (id: string) => void
-}) {
-  if (products.length === 0) {
-    return (
-      <p className="text-[11px] text-gray-400 italic">Chưa có sản phẩm — bỏ qua hoặc thêm tại app Sản phẩm</p>
-    )
-  }
-
-  return (
-    <div className="grid grid-cols-4 gap-1.5">
-      {products.map((p) => {
-        const selected = selectedIds.includes(p.id)
-        return (
-          <button
-            key={p.id}
-            onClick={() => onToggle(p.id)}
-            disabled={!selected && selectedIds.length >= 5}
-            className={`relative flex flex-col items-center gap-1 rounded-xl border-2 p-1.5 transition-all disabled:opacity-40 ${
-              selected
-                ? 'border-violet-400 bg-violet-50'
-                : 'border-black/8 bg-white hover:border-violet-200'
-            }`}
-          >
-            {p.productImage ? (
-              <img
-                src={isAssetRef(p.productImage) ? undefined : p.productImage}
-                alt={p.productName}
-                className="h-10 w-10 rounded-lg object-cover border border-black/8"
-              />
-            ) : (
-              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-gray-100">
-                <Package className="h-4 w-4 text-gray-300" />
-              </div>
-            )}
-            <p className="w-full truncate text-center text-[9px] font-medium text-gray-600">{p.productName}</p>
-            {selected && (
-              <div className="absolute -right-1 -top-1 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-violet-500">
-                <Check className="h-2 w-2 text-white" />
-              </div>
-            )}
-          </button>
-        )
-      })}
     </div>
   )
 }
@@ -269,13 +255,13 @@ function HistoryCard({ job, onDelete }: { job: VideoBuilderJob; onDelete: () => 
       {job.status === 'failed' && (
         <div className="flex items-start gap-2 bg-red-50 px-4 py-3">
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-red-400" />
-          <p className="text-[11px] text-red-600">{job.errorMessage?.slice(0, 200) ?? 'Build thất bại'}</p>
+          <p className="text-xs text-red-600">{job.errorMessage?.slice(0, 200) ?? 'Build thất bại'}</p>
         </div>
       )}
       <div className="p-3">
         <div className="mb-1.5 flex items-center justify-between gap-2">
-          <p className="truncate text-xs font-semibold text-gray-700">{job.name}</p>
-          <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+          <p className="truncate text-sm font-semibold text-gray-700">{job.name}</p>
+          <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold ${
             job.status === 'done'   ? 'bg-emerald-100 text-emerald-700' :
             job.status === 'failed' ? 'bg-red-100 text-red-600' :
             'bg-violet-100 text-violet-600'
@@ -283,18 +269,18 @@ function HistoryCard({ job, onDelete }: { job: VideoBuilderJob; onDelete: () => 
             {job.status === 'done' ? 'Hoàn thành' : job.status === 'failed' ? 'Thất bại' : 'Đang xử lý'}
           </span>
         </div>
-        <p className="mb-3 text-[10px] text-gray-400">
+        <p className="mb-3 text-xs text-gray-400">
           {job.voiceName} · {job.totalDuration ? formatDuration(job.totalDuration) : '--'} · {new Date(job.createdAt).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}
         </p>
         <div className="flex items-center gap-1.5">
           {job.status === 'done' && job.videoUrl && (
-            <button onClick={handleDownload} className="flex items-center gap-1.5 rounded-lg border border-violet-200 bg-violet-50 px-3 py-1.5 text-[11px] font-semibold text-violet-700 transition-colors hover:bg-violet-100">
-              <Download className="h-3 w-3" /> Tải xuống
+            <button onClick={handleDownload} className="flex items-center gap-1.5 rounded-lg border border-violet-200 bg-violet-50 px-3 py-1.5 text-xs font-semibold text-violet-700 transition-colors hover:bg-violet-100">
+              <Download className="h-3.5 w-3.5" /> Tải xuống
             </button>
           )}
           <div className="flex-1" />
-          <button onClick={onDelete} className="flex h-7 w-7 items-center justify-center rounded-lg text-gray-300 transition-colors hover:bg-red-50 hover:text-red-400">
-            <Trash2 className="h-3.5 w-3.5" />
+          <button onClick={onDelete} className="flex h-8 w-8 items-center justify-center rounded-lg text-gray-300 transition-colors hover:bg-red-50 hover:text-red-400">
+            <Trash2 className="h-4 w-4" />
           </button>
         </div>
       </div>
@@ -314,6 +300,40 @@ const INITIAL_STEPS: BuildStep[] = [
   { id: 'assemble', label: '⑦ Ghép video (Shotstack)',            detail: 'Layer B-roll + avatar + captions → 9:16 MP4', status: 'idle' },
 ]
 
+// ── Manual product type ───────────────────────────────────────────────────────
+
+interface ManualProduct {
+  id: string
+  name: string
+  blobUrl: string
+}
+
+// ── Section label ─────────────────────────────────────────────────────────────
+
+function SectionLabel({ icon: Icon, children }: { icon: React.ElementType; children: React.ReactNode }) {
+  return (
+    <label className="mb-2 flex items-center gap-1.5 text-xs font-bold uppercase tracking-widest text-gray-500">
+      <Icon className="h-3.5 w-3.5" />
+      {children}
+    </label>
+  )
+}
+
+// ── Upload button ─────────────────────────────────────────────────────────────
+
+function UploadBtn({ onClick, children }: { onClick: () => void; children: React.ReactNode }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="mt-2 flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-black/12 bg-black/[0.01] py-2.5 text-xs font-medium text-gray-500 transition-colors hover:border-violet-300 hover:bg-violet-50/40 hover:text-violet-600"
+    >
+      <Upload className="h-3.5 w-3.5" />
+      {children}
+    </button>
+  )
+}
+
 // ── Main component ────────────────────────────────────────────────────────────
 
 export default function VideoBuilder() {
@@ -323,13 +343,19 @@ export default function VideoBuilder() {
 
   // ── Input state ──────────────────────────────────────────────────────────
   const [selectedScriptId, setSelectedScriptId] = useState('')
-  const [script, setScript] = useState('')          // editable after selection
+  const [script, setScript] = useState('')
   const [selectedModelId, setSelectedModelId] = useState('')
   const [selectedProductIds, setSelectedProductIds] = useState<string[]>([])
   const [selectedVoiceId, setSelectedVoiceId] = useState('')
   const [voices, setVoices] = useState<ElevenLabsVoice[]>([])
   const [loadingVoices, setLoadingVoices] = useState(false)
-  const [scriptExpanded, setScriptExpanded] = useState(false)
+
+  // ── Manual upload state ──────────────────────────────────────────────────
+  const avatarFileRef = useRef<HTMLInputElement>(null)
+  const productFileRef = useRef<HTMLInputElement>(null)
+  const [manualAvatarUrl, setManualAvatarUrl] = useState<string | null>(null)
+  const [manualAvatarName, setManualAvatarName] = useState('')
+  const [manualProducts, setManualProducts] = useState<ManualProduct[]>([])
 
   // ── Build state ──────────────────────────────────────────────────────────
   const [isBuilding, setIsBuilding] = useState(false)
@@ -355,10 +381,34 @@ export default function VideoBuilder() {
     setScript(text)
   }
 
+  const totalProductCount = selectedProductIds.length + manualProducts.length
+
   const handleToggleProduct = (id: string) => {
-    setSelectedProductIds((prev) =>
-      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id].slice(0, 5)
-    )
+    if (!selectedProductIds.includes(id) && totalProductCount >= 5) {
+      addToast('Tối đa 5 sản phẩm', 'error'); return
+    }
+    setSelectedProductIds((prev) => prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id])
+  }
+
+  const handleAvatarUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setManualAvatarUrl(URL.createObjectURL(file))
+    setManualAvatarName(file.name.replace(/\.[^.]+$/, ''))
+    setSelectedModelId('')
+    e.target.value = ''
+  }
+
+  const handleProductUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    if (totalProductCount >= 5) { addToast('Tối đa 5 sản phẩm', 'error'); return }
+    setManualProducts((prev) => [...prev, {
+      id: crypto.randomUUID(),
+      name: file.name.replace(/\.[^.]+$/, ''),
+      blobUrl: URL.createObjectURL(file),
+    }])
+    e.target.value = ''
   }
 
   const setStep = (id: string, status: BuildStepStatus, detail?: string) => {
@@ -368,14 +418,14 @@ export default function VideoBuilder() {
   // ── Build pipeline ───────────────────────────────────────────────────────
 
   const handleBuild = async () => {
-    if (!script.trim())       { addToast('Chọn hoặc nhập kịch bản', 'error'); return }
-    if (!selectedModelId)     { addToast('Chọn Avatar AI', 'error'); return }
-    if (!selectedVoiceId)     { addToast('Chọn giọng đọc', 'error'); return }
-    if (!elevenLabsApiKey)    { addToast('Cần ElevenLabs API key', 'error'); return }
-    if (!kieApiKey)           { addToast('Cần KIE.ai API key', 'error'); return }
-    if (!falApiKey)           { addToast('Cần fal.ai API key', 'error'); return }
-    if (!shotstackApiKey)     { addToast('Cần Shotstack API key', 'error'); return }
-    if (!geminiApiKey)        { addToast('Cần Gemini API key', 'error'); return }
+    if (!script.trim())                       { addToast('Nhập hoặc chọn kịch bản', 'error'); return }
+    if (!selectedModelId && !manualAvatarUrl) { addToast('Chọn hoặc tải lên Avatar AI', 'error'); return }
+    if (!selectedVoiceId)                     { addToast('Chọn giọng đọc', 'error'); return }
+    if (!elevenLabsApiKey)                    { addToast('Cần ElevenLabs API key', 'error'); return }
+    if (!kieApiKey)                           { addToast('Cần KIE.ai API key', 'error'); return }
+    if (!falApiKey)                           { addToast('Cần fal.ai API key', 'error'); return }
+    if (!shotstackApiKey)                     { addToast('Cần Shotstack API key', 'error'); return }
+    if (!geminiApiKey)                        { addToast('Cần Gemini API key', 'error'); return }
 
     const jobId     = crypto.randomUUID()
     const model     = models.find((m) => m.id === selectedModelId)
@@ -435,7 +485,6 @@ SCRIPT:\n${script}`
       const voiceUrl      = await getUrl(audioAssetId)
       if (!voiceUrl) throw new Error('Không lấy được URL audio sau khi upload')
 
-      // Recalculate timing based on actual audio duration
       const totalChars = segments.reduce((s, seg) => s + seg.text.length, 0)
       let cursor = 0
       const timedSegments = segments.map((seg) => {
@@ -448,21 +497,32 @@ SCRIPT:\n${script}`
       setStep('voice', 'done', `${formatDuration(audioDuration)} · ${Math.round(audioBlob.size / 1024)} KB`)
       patchJob({ totalDuration: audioDuration })
 
-      // ── Step 3: Resolve URLs from Project assets ──────────────────────────
+      // ── Step 3: Resolve URLs ──────────────────────────────────────────────
       setStep('resolve', 'running')
-      const avatarImageUrl = await resolveImageUrl(model?.characterImage ?? '')
+
+      // Avatar image: manual upload takes priority over bank selection
+      const avatarSrc = manualAvatarUrl ?? model?.characterImage ?? ''
+      const avatarImageUrl = await resolveImageUrl(avatarSrc)
       if (!avatarImageUrl) throw new Error('Không lấy được URL ảnh Avatar AI — kiểm tra Avatar AI trong Project')
 
       const productImageUrls: string[] = []
+      // From bank
       for (const pid of selectedProductIds) {
         const prod = products.find((p) => p.id === pid)
         if (!prod?.productImage) continue
         const url = await resolveImageUrl(prod.productImage)
         if (url) productImageUrls.push(url)
       }
-      setStep('resolve', 'done', `avatar: ${model?.name ?? '?'} · ${productImageUrls.length} sản phẩm`)
+      // From manual uploads
+      for (const mp of manualProducts) {
+        const url = await resolveImageUrl(mp.blobUrl)
+        if (url) productImageUrls.push(url)
+      }
 
-      // ── Step 4: Avatar lip-sync (Kling Avatar Standard) ──────────────────
+      const avatarDisplayName = manualAvatarUrl ? manualAvatarName : (model?.name ?? '?')
+      setStep('resolve', 'done', `avatar: ${avatarDisplayName} · ${productImageUrls.length} sản phẩm`)
+
+      // ── Step 4: Avatar lip-sync ───────────────────────────────────────────
       setStep('avatar', 'running')
       patchJob({ status: 'avatar' })
       const { taskId: avatarTaskId } = await generateLipSync({
@@ -541,7 +601,6 @@ SCRIPT:\n${script}`
         timeoutMs: 15 * 60 * 1000,
       })
 
-      // Save to Supabase
       const finalRes   = await fetch(finalVideoUrl)
       const finalBlob  = await finalRes.blob()
       const finalAsset = await saveAsset(finalBlob, 'video/mp4')
@@ -561,7 +620,8 @@ SCRIPT:\n${script}`
     }
   }
 
-  const canBuild = !!script.trim() && !!selectedModelId && !!selectedVoiceId && !isBuilding
+  const hasAvatar  = !!selectedModelId || !!manualAvatarUrl
+  const canBuild   = !!script.trim() && hasAvatar && !!selectedVoiceId && !isBuilding
     && !!elevenLabsApiKey && !!kieApiKey && !!falApiKey && !!shotstackApiKey && !!geminiApiKey
 
   const missingKeys = [
@@ -574,8 +634,9 @@ SCRIPT:\n${script}`
   return (
     <div className="flex h-full flex-col lg:flex-row bg-gradient-to-br from-violet-50/30 via-white to-purple-50/20">
 
-      {/* ── Left panel ── */}
-      <div className="flex w-full shrink-0 flex-col border-b border-black/8 lg:w-[360px] lg:border-b-0 lg:border-r">
+      {/* ══ Left panel ══ */}
+      <div className="flex w-full shrink-0 flex-col border-b border-black/8 lg:w-[440px] lg:border-b-0 lg:border-r">
+
         {/* Header */}
         <div className="shrink-0 border-b border-black/8 bg-gradient-to-r from-violet-600 to-purple-500 px-5 py-4">
           <div className="flex items-center gap-3">
@@ -583,89 +644,183 @@ SCRIPT:\n${script}`
               <Film className="h-5 w-5 text-white" strokeWidth={2} />
             </div>
             <div>
-              <h2 className="text-sm font-bold text-white">UGC Video Builder</h2>
-              <p className="text-[11px] text-white/70">Project → Script · Avatar AI · Sản phẩm → Video</p>
+              <h2 className="text-base font-bold text-white">UGC Video Builder</h2>
+              <p className="text-xs text-white/70">Project → Script · Avatar AI · Sản phẩm → Video</p>
             </div>
           </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-4 space-y-5">
+        {/* Scrollable content */}
+        <div className="flex-1 overflow-y-auto p-5 space-y-6">
 
           {/* Missing keys warning */}
           {missingKeys.length > 0 && (
-            <div className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5">
-              <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-500" />
-              <p className="text-[11px] text-amber-700">Thiếu API key: <strong>{missingKeys.join(', ')}</strong></p>
+            <div className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-3">
+              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" />
+              <p className="text-xs text-amber-700">Thiếu API key: <strong>{missingKeys.join(', ')}</strong></p>
             </div>
           )}
 
-          {/* ── Script from Project ── */}
+          {/* ─── Kịch bản ─── */}
           <div>
-            <div className="mb-1.5 flex items-center justify-between">
-              <label className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest text-gray-400">
-                <FileText className="h-3 w-3" /> Kịch bản
-              </label>
-              {script && (
-                <button
-                  onClick={() => setScriptExpanded(!scriptExpanded)}
-                  className="flex items-center gap-0.5 text-[10px] text-violet-500 hover:text-violet-700"
-                >
-                  {scriptExpanded ? 'Thu gọn' : 'Xem / Sửa'}
-                  {scriptExpanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
-                </button>
-              )}
-            </div>
+            <SectionLabel icon={FileText}>Kịch bản</SectionLabel>
+
+            {/* Picker from bank (only shown if scripts exist) */}
             <ScriptPicker scripts={scripts} selectedId={selectedScriptId} onSelect={handleSelectScript} />
-            {/* Editable preview */}
-            {script && scriptExpanded && (
-              <textarea
-                value={script}
-                onChange={(e) => setScript(e.target.value)}
-                rows={6}
-                className="mt-2 w-full resize-none rounded-xl border border-violet-200 bg-violet-50/30 px-3 py-2.5 text-xs text-gray-700 outline-none transition-colors focus:border-violet-300"
-              />
-            )}
-            {script && !scriptExpanded && (
-              <p className="mt-1 text-[10px] text-gray-400">
+
+            {/* Always-visible editable textarea */}
+            <textarea
+              value={script}
+              onChange={(e) => { setScript(e.target.value); setSelectedScriptId('') }}
+              placeholder={scripts.length > 0
+                ? 'Kịch bản từ Project sẽ hiển thị ở đây, hoặc nhập thủ công...'
+                : 'Nhập kịch bản thủ công vào đây...'
+              }
+              rows={6}
+              className="w-full resize-none rounded-xl border border-black/10 bg-white px-4 py-3 text-sm text-gray-800 placeholder-gray-400 outline-none transition-colors focus:border-violet-300 focus:ring-2 focus:ring-violet-100"
+            />
+            {script && (
+              <p className="mt-1.5 text-xs text-gray-400">
                 {script.length} ký tự · ~{formatDuration(Math.round(script.length / 12.5))}
               </p>
             )}
           </div>
 
-          {/* ── Avatar AI from Project ── */}
+          {/* ─── Avatar AI ─── */}
           <div>
-            <label className="mb-1.5 flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest text-gray-400">
-              <User className="h-3 w-3" /> Avatar AI
-            </label>
-            <ModelPicker models={models} selectedId={selectedModelId} onSelect={setSelectedModelId} />
-            {selectedModelId && (
-              <p className="mt-1 text-[10px] text-emerald-600">
+            <SectionLabel icon={User}>Avatar AI</SectionLabel>
+
+            {/* Manual avatar override card */}
+            {manualAvatarUrl && (
+              <div className="mb-3 flex items-center gap-3 rounded-xl border-2 border-violet-300 bg-violet-50 p-3">
+                <img src={manualAvatarUrl} alt={manualAvatarName} className="h-14 w-14 shrink-0 rounded-lg object-cover border border-violet-200" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold text-gray-800 truncate">{manualAvatarName || 'Ảnh tự tải lên'}</p>
+                  <p className="text-xs text-violet-500">Ảnh avatar thủ công</p>
+                </div>
+                <button
+                  onClick={() => { setManualAvatarUrl(null); setManualAvatarName('') }}
+                  className="flex h-7 w-7 items-center justify-center rounded-lg text-gray-400 transition-colors hover:bg-red-50 hover:text-red-400"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+            )}
+
+            {/* Bank picker grid */}
+            {models.length === 0 ? (
+              <div className="rounded-xl border-2 border-dashed border-black/10 bg-black/[0.01] px-4 py-5 text-center">
+                <User className="mx-auto mb-2 h-6 w-6 text-gray-300" />
+                <p className="text-sm text-gray-400">Chưa có Avatar AI nào trong Project</p>
+                <p className="mt-0.5 text-xs text-gray-300">Tạo tại app <strong>Avatar AI</strong> hoặc tải ảnh lên bên dưới</p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-3 gap-2.5">
+                {models.map((m) => (
+                  <AvatarCard
+                    key={m.id}
+                    model={m}
+                    selected={!manualAvatarUrl && m.id === selectedModelId}
+                    onSelect={() => { setSelectedModelId(m.id); setManualAvatarUrl(null); setManualAvatarName('') }}
+                  />
+                ))}
+              </div>
+            )}
+
+            {/* Upload manual avatar */}
+            <UploadBtn onClick={() => avatarFileRef.current?.click()}>
+              Tải ảnh avatar lên thủ công
+            </UploadBtn>
+            <input
+              ref={avatarFileRef}
+              type="file"
+              accept="image/png,image/jpeg,image/webp"
+              className="hidden"
+              onChange={handleAvatarUpload}
+            />
+
+            {hasAvatar && !manualAvatarUrl && selectedModelId && (
+              <p className="mt-1.5 text-xs text-emerald-600">
                 ✓ {models.find((m) => m.id === selectedModelId)?.name} đã chọn
               </p>
             )}
           </div>
 
-          {/* ── Products from Project ── */}
+          {/* ─── Sản phẩm ─── */}
           <div>
-            <label className="mb-1.5 flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest text-gray-400">
-              <Package className="h-3 w-3" /> Sản phẩm (tùy chọn · tối đa 5)
-            </label>
-            <ProductPicker products={products} selectedIds={selectedProductIds} onToggle={handleToggleProduct} />
-            {selectedProductIds.length > 0 && (
-              <p className="mt-1 text-[10px] text-violet-500">{selectedProductIds.length} sản phẩm đã chọn</p>
+            <div className="mb-2 flex items-center justify-between">
+              <SectionLabel icon={Package}>Sản phẩm (tùy chọn · tối đa 5)</SectionLabel>
+              {totalProductCount > 0 && (
+                <span className="rounded-full bg-violet-100 px-2 py-0.5 text-xs font-semibold text-violet-600">
+                  {totalProductCount}/5
+                </span>
+              )}
+            </div>
+
+            {/* Bank products */}
+            {products.length > 0 && (
+              <div className="grid grid-cols-3 gap-2.5">
+                {products.map((p) => (
+                  <ProductCard
+                    key={p.id}
+                    product={p}
+                    selected={selectedProductIds.includes(p.id)}
+                    onToggle={() => handleToggleProduct(p.id)}
+                    disabled={!selectedProductIds.includes(p.id) && totalProductCount >= 5}
+                  />
+                ))}
+              </div>
             )}
+
+            {/* Manual products */}
+            {manualProducts.length > 0 && (
+              <div className={`grid grid-cols-3 gap-2.5 ${products.length > 0 ? 'mt-2.5' : ''}`}>
+                {manualProducts.map((mp) => (
+                  <div
+                    key={mp.id}
+                    className="relative flex flex-col items-center gap-1.5 rounded-xl border-2 border-violet-300 bg-violet-50 p-2"
+                  >
+                    <img src={mp.blobUrl} alt={mp.name} className="h-14 w-14 rounded-lg object-cover border border-violet-200" />
+                    <p className="w-full truncate text-center text-xs font-medium text-gray-700">{mp.name}</p>
+                    <button
+                      onClick={() => setManualProducts((prev) => prev.filter((p) => p.id !== mp.id))}
+                      className="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full bg-red-400 shadow"
+                    >
+                      <X className="h-3 w-3 text-white" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* No products at all */}
+            {products.length === 0 && manualProducts.length === 0 && (
+              <p className="text-sm text-gray-400 italic">Chưa có sản phẩm — bỏ qua hoặc tải ảnh lên bên dưới</p>
+            )}
+
+            {/* Upload product image */}
+            {totalProductCount < 5 && (
+              <UploadBtn onClick={() => productFileRef.current?.click()}>
+                Thêm ảnh sản phẩm thủ công
+              </UploadBtn>
+            )}
+            <input
+              ref={productFileRef}
+              type="file"
+              accept="image/png,image/jpeg,image/webp"
+              className="hidden"
+              onChange={handleProductUpload}
+            />
           </div>
 
-          {/* ── Voice ── */}
+          {/* ─── Giọng đọc ─── */}
           <div>
-            <label className="mb-1.5 flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest text-gray-400">
-              <Mic className="h-3 w-3" /> Giọng đọc (ElevenLabs)
-            </label>
+            <SectionLabel icon={Mic}>Giọng đọc (ElevenLabs)</SectionLabel>
             {!elevenLabsApiKey ? (
-              <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] text-amber-600">Cần ElevenLabs API key</p>
+              <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-sm text-amber-600">Cần ElevenLabs API key trong Cài đặt</p>
             ) : loadingVoices ? (
-              <div className="flex items-center gap-2 rounded-xl border border-black/10 bg-white px-3 py-2.5">
-                <Loader2 className="h-3.5 w-3.5 animate-spin text-violet-400" />
+              <div className="flex items-center gap-2 rounded-xl border border-black/10 bg-white px-3 py-3">
+                <Loader2 className="h-4 w-4 animate-spin text-violet-400" />
                 <span className="text-sm text-gray-400">Đang tải giọng...</span>
               </div>
             ) : (
@@ -691,7 +846,7 @@ SCRIPT:\n${script}`
           <button
             onClick={handleBuild}
             disabled={!canBuild}
-            className="relative w-full overflow-hidden rounded-xl py-3.5 text-sm font-bold text-white shadow-lg shadow-violet-500/25 transition-all hover:shadow-violet-500/40 disabled:cursor-not-allowed disabled:opacity-40"
+            className="relative w-full overflow-hidden rounded-xl py-4 text-sm font-bold text-white shadow-lg shadow-violet-500/25 transition-all hover:shadow-violet-500/40 disabled:cursor-not-allowed disabled:opacity-40"
             style={{
               background: canBuild ? 'linear-gradient(135deg, #7c3aed, #a855f7)' : undefined,
               backgroundColor: !canBuild ? '#d1d5db' : undefined,
@@ -703,36 +858,36 @@ SCRIPT:\n${script}`
               <span className="flex items-center justify-center gap-2"><Sparkles className="h-4 w-4" />Build UGC Video</span>
             )}
           </button>
-          <p className="mt-1.5 text-center text-[10px] text-gray-400">~5–10 phút · Giữ tab mở khi đang xử lý</p>
+          <p className="mt-2 text-center text-xs text-gray-400">~5–10 phút · Giữ tab mở khi đang xử lý</p>
         </div>
       </div>
 
-      {/* ── Right panel: Progress + History ── */}
+      {/* ══ Right panel: Progress + History ══ */}
       <div className="flex flex-1 flex-col overflow-hidden">
-        <div className="flex shrink-0 items-center justify-between border-b border-black/8 bg-white/60 px-5 py-3">
+        <div className="flex shrink-0 items-center justify-between border-b border-black/8 bg-white/60 px-5 py-3.5">
           <div className="flex items-center gap-2">
             <Film className="h-4 w-4 text-violet-500" />
             <span className="text-sm font-semibold text-gray-700">Kết quả</span>
             {history.length > 0 && (
-              <span className="rounded-full bg-violet-100 px-2 py-0.5 text-[10px] font-semibold text-violet-600">{history.length}</span>
+              <span className="rounded-full bg-violet-100 px-2 py-0.5 text-xs font-semibold text-violet-600">{history.length}</span>
             )}
           </div>
           {history.length > 0 && !isBuilding && (
-            <button onClick={() => setHistory([])} className="text-[11px] text-gray-400 transition-colors hover:text-red-400">Xóa tất cả</button>
+            <button onClick={() => setHistory([])} className="text-xs text-gray-400 transition-colors hover:text-red-400">Xóa tất cả</button>
           )}
         </div>
 
         <div className="flex-1 overflow-y-auto p-4">
           {isBuilding && (
             <div className="mb-4 rounded-2xl border border-violet-200 bg-white p-4 shadow-sm">
-              <p className="mb-3 flex items-center gap-2 text-xs font-bold text-violet-700">
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />Đang build video...
+              <p className="mb-3 flex items-center gap-2 text-sm font-bold text-violet-700">
+                <Loader2 className="h-4 w-4 animate-spin" />Đang build video...
               </p>
               <div className="space-y-1.5">
                 {steps.map((step) => <StepRow key={step.id} step={step} />)}
               </div>
-              <div className="mt-3 flex items-center gap-1 text-[10px] text-gray-400">
-                <RefreshCw className="h-2.5 w-2.5 animate-spin" />Vui lòng giữ tab mở trong suốt quá trình
+              <div className="mt-3 flex items-center gap-1.5 text-xs text-gray-400">
+                <RefreshCw className="h-3 w-3 animate-spin" />Vui lòng giữ tab mở trong suốt quá trình
               </div>
             </div>
           )}
@@ -743,14 +898,14 @@ SCRIPT:\n${script}`
                 <Film className="h-10 w-10 text-violet-400" strokeWidth={1.5} />
               </div>
               <div className="text-center">
-                <p className="text-sm font-semibold text-gray-500">Chưa có video nào được build</p>
-                <p className="mt-1 max-w-xs text-center text-xs leading-relaxed text-gray-400">
+                <p className="text-base font-semibold text-gray-500">Chưa có video nào được build</p>
+                <p className="mt-1.5 max-w-xs text-center text-sm leading-relaxed text-gray-400">
                   Chọn kịch bản + Avatar AI từ Project, chọn giọng đọc → Build UGC Video
                 </p>
               </div>
-              <div className="flex flex-wrap justify-center gap-2 text-[10px] text-gray-400">
+              <div className="flex flex-wrap justify-center gap-2 text-xs text-gray-400">
                 {['🎬 3-layer video', '🗣 Lip-sync avatar', '📹 Auto B-roll', '📝 Auto captions'].map((t) => (
-                  <span key={t} className="rounded-full border border-black/8 bg-black/[0.02] px-2.5 py-1">{t}</span>
+                  <span key={t} className="rounded-full border border-black/8 bg-black/[0.02] px-3 py-1.5">{t}</span>
                 ))}
               </div>
             </div>
@@ -771,7 +926,7 @@ SCRIPT:\n${script}`
         </div>
 
         <div className="shrink-0 border-t border-black/6 bg-white/60 px-5 py-2.5">
-          <div className="flex items-center justify-between text-[10px] text-gray-400">
+          <div className="flex items-center justify-between text-xs text-gray-400">
             <span className="flex items-center gap-1">
               <ChevronRight className="h-3 w-3" />
               Gemini · ElevenLabs · KIE.ai Kling · fal.ai · Shotstack
