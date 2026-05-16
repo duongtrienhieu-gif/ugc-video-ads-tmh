@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { Package, Loader2, GraduationCap, Sparkles } from 'lucide-react'
+import { useState, useRef, useEffect } from 'react'
+import { Package, Loader2, GraduationCap, Sparkles, Info } from 'lucide-react'
 import type { Product } from '../../../stores/types'
 import type {
   HookStrength, LengthSeconds, ScriptGenerationParams, ToneModifier,
@@ -10,6 +10,7 @@ import { useAppStore } from '../../../stores/appStore'
 import { useAssetUrl } from '../../../hooks/useAssetUrl'
 import BankPicker from '../../../components/BankPicker'
 import { SCRIPT_PRESETS, TONE_OPTIONS, getPresetById } from '../services/presets'
+import { PresetTooltip } from './PresetTooltip'
 
 interface InputPanelProps {
   selectedProduct: Product | null
@@ -292,24 +293,94 @@ function PresetCard({
   active: boolean
   onClick: () => void
 }) {
+  // Anchor lives in state (callback-ref) so the tooltip can read it during
+  // render — accessing useRef().current in render violates React 19 lint.
+  const [cardEl, setCardEl] = useState<HTMLDivElement | null>(null)
+  // 'hover' = transient (mouse leave dismisses), 'tap' = sticky (close button required)
+  const [tipMode, setTipMode] = useState<'hover' | 'tap' | null>(null)
+  const hoverTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const clearHoverTimer = () => {
+    if (hoverTimer.current) {
+      clearTimeout(hoverTimer.current)
+      hoverTimer.current = null
+    }
+  }
+
+  const handleMouseEnter = () => {
+    if (tipMode === 'tap') return
+    clearHoverTimer()
+    hoverTimer.current = setTimeout(() => setTipMode('hover'), 150)
+  }
+  const handleMouseLeave = () => {
+    clearHoverTimer()
+    if (tipMode === 'hover') setTipMode(null)
+  }
+
+  useEffect(() => () => clearHoverTimer(), [])
+
+  // Close sticky tooltip when user clicks outside the card or the tooltip
+  useEffect(() => {
+    if (tipMode !== 'tap') return
+    const onDocClick = (e: MouseEvent) => {
+      const t = e.target as Node
+      if (cardEl?.contains(t)) return
+      // Tooltip is portaled — also check role=tooltip element
+      const tooltip = document.querySelector('[role="tooltip"]')
+      if (tooltip?.contains(t)) return
+      setTipMode(null)
+    }
+    document.addEventListener('mousedown', onDocClick)
+    return () => document.removeEventListener('mousedown', onDocClick)
+  }, [tipMode, cardEl])
+
   return (
-    <button
-      onClick={onClick}
-      className={`flex items-start gap-2 rounded-lg border px-2.5 py-2 text-left transition-colors ${
+    <div
+      ref={setCardEl}
+      onMouseEnter={handleMouseEnter}
+      onMouseLeave={handleMouseLeave}
+      className={`relative flex items-start gap-2 rounded-lg border px-2.5 py-2 text-left transition-colors cursor-pointer ${
         active
           ? preset.category === 'educational'
             ? 'border-emerald-400 bg-emerald-50'
             : 'border-blue-400 bg-blue-50'
           : 'border-black/10 bg-white hover:bg-black/[0.03]'
       }`}
+      onClick={onClick}
+      role="button"
+      tabIndex={0}
+      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick() } }}
     >
       <span className="text-lg leading-none">{preset.glyph}</span>
-      <div className="min-w-0 flex-1">
+      <div className="min-w-0 flex-1 pr-4">
         <p className={`truncate text-[11px] font-semibold ${active ? (preset.category === 'educational' ? 'text-emerald-800' : 'text-blue-800') : 'text-gray-800'}`}>
           {preset.label}
         </p>
         <p className="truncate text-[10px] text-gray-500">{preset.hint}</p>
       </div>
-    </button>
+
+      {/* Info button — works on touch (tap to toggle sticky tooltip) and as a
+          visible affordance on desktop. */}
+      <button
+        type="button"
+        aria-label={`Xem chi tiết công thức ${preset.label}`}
+        onClick={(e) => {
+          e.stopPropagation()
+          setTipMode((m) => (m === 'tap' ? null : 'tap'))
+        }}
+        className="absolute right-1 top-1 flex h-5 w-5 items-center justify-center rounded-md text-gray-300 transition-colors hover:bg-black/[0.06] hover:text-gray-600"
+      >
+        <Info className="h-3 w-3" />
+      </button>
+
+      {tipMode && cardEl && (
+        <PresetTooltip
+          preset={preset}
+          anchor={cardEl}
+          onDismiss={() => setTipMode(null)}
+          dismissible={tipMode === 'tap'}
+        />
+      )}
+    </div>
   )
 }

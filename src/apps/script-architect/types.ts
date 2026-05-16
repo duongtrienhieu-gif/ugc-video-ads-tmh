@@ -22,12 +22,24 @@ export interface ToneOption {
 export type HookStrength = 'safe' | 'balanced' | 'aggressive'
 export type LengthSeconds = 15 | 30 | 45 | 60
 
+// ── Rich Vietnamese tooltip content for each preset ─────────────────────
+export interface PresetDetailVi {
+  /** Cơ chế — 1-2 câu mô tả cách công thức này hoạt động. */
+  mechanism: string
+  /** Mục tiêu — short bullet list of marketing goals. */
+  goals: string[]
+  /** Phù hợp — short bullet list of when to use this preset. */
+  useCase: string[]
+  /** Ví dụ — one example hook line (English or Vietnamese, in quotes). */
+  example: string
+}
+
 // ── Script preset (framework, not random AI style) ──────────────────────
 export interface ScriptPreset {
   id: string
   /** Vietnamese label shown in the UI. */
   label: string
-  /** Vietnamese one-line hint. */
+  /** Vietnamese one-line hint shown under the label on the card. */
   hint: string
   /** Visual glyph (emoji or symbol). */
   glyph: string
@@ -39,6 +51,8 @@ export interface ScriptPreset {
   emotionalAngle: string
   ctaStyle: string
   proofStyle: string
+  /** Rich Vietnamese explanation rendered in the hover tooltip / mobile modal. */
+  detailVi: PresetDetailVi
 }
 
 // ── Structured internal output (future-ready for storyboard mapping) ────
