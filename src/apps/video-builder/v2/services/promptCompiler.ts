@@ -138,13 +138,22 @@ function buildVisualDna(ctx: CompiledPromptContext): string {
   const { dna } = ctx
   const tone = ctx.scene?.visualTone ?? dna.visualTone
   const bumped = ctx.overrides?.bumpRealism === true
+  const tier = getStrengthTier(ctx.consistency)
 
   const retryBlock = bumped
-    ? `
-
-REALISM RETRY MODE: Previous attempt looked AI-generated (plastic skin / studio sheen / cinematic lighting / fake hands). This time render LITERALLY a raw unedited iPhone snapshot — visible skin texture with real pores, natural fingernail detail, no retouching, no glossy highlights on cheeks. If it looks like a magazine photo, it failed. Target: someone's actual phone camera roll, not a commercial shoot.`
+    ? `\n\nREALISM RETRY: previous attempt looked AI-generated. This time render LITERALLY a raw unedited iPhone snapshot — visible skin texture, natural hands, no retouching.`
     : ''
 
+  // ── SPEED-FIRST: keep this section short by default ─────────────────────
+  // Strict tier gets the full verbose realism block; creative/balanced get
+  // a tight 3-line core that still conveys the UGC iPhone aesthetic.
+  if (tier !== 'strict') {
+    return `[4] VISUAL DNA
+Authentic UGC iPhone photo. Sharp focus, zero bokeh on product, natural indoor lighting, lived-in setting. NOT cinematic / NOT studio commercial / NOT magazine-glossy.
+Tone: ${tone}.${retryBlock}`
+  }
+
+  // Strict tier — full verbose realism guidance for hero / landing-page shots
   return `[4] VISUAL DNA — Authentic UGC iPhone Realism
 Style target: realistic ecommerce / landing-page / advertorial / social-proof imagery shot on a phone by a real person. NOT cinematic movie scene, NOT studio commercial, NOT fashion editorial, NOT stock-photo corporate.
 Camera: ${dna.cameraStyle}.
@@ -167,45 +176,66 @@ Photography spec — authentic UGC smartphone (iPhone 13/14/15 look):
 function buildNegativePrompt(ctx: CompiledPromptContext): string {
   const tier = getStrengthTier(ctx.consistency)
 
-  const baseNegs = [
-    // Identity / product errors
-    'random influencer who is not the reference person',
-    'redesigned face / different ethnicity / different age',
-    'redesigned product / different brand / fake supplement packaging',
-    'invented bottle / generic white pharmacy bottle / placeholder packaging',
-    'distorted fingers / extra fingers / malformed hands',
-    'extra random objects in frame',
-    // Studio / commercial leaks (Task 6 optimization)
-    'professional studio backdrop / commercial photo gloss',
-    'magazine cover composition / editorial fashion vibe',
-    'perfectly symmetric composition / centered like a brand catalog',
-    'over-polished gallery-quality framing / curated still-life',
-    'pristine empty staged room / showroom-clean environment',
-    'plastic AI-sheen skin / retouched flawless skin / porcelain doll skin',
-    'glossy beauty-campaign highlights on cheeks or forehead',
-    'studio rim lighting / hair light / ring-light catchlight in eyes',
-    'graded teal-orange cinematic color / bleach-bypass fashion grade',
-    // DoF / focus leaks
-    'heavy bokeh / dramatic depth of field blur on product',
-    'blurred or unreadable product label due to depth of field',
-    // Overlay / branding leaks
-    'text overlay / watermarks / brand stamps that weren\'t in the reference',
-    'AI-generated logo additions / fake brand text',
-    // Style leaks
-    'cartoon / illustration / 3D-render look',
-    'over-saturated Instagram filter / VSCO preset look',
-  ]
+  // ── SPEED-FIRST: tier-aware negative density ────────────────────────────
+  // Default (creative + balanced) ships a TIGHT 5-item core that covers the
+  // failure modes that matter for media-buying ad images. Verbose anti-stock /
+  // anti-magazine / anti-bokeh negatives are reserved for strict tier where
+  // user explicitly traded speed for hero quality.
 
-  // Strict mode adds extra hard negatives — heavy anti-stock-photo
-  if (tier === 'strict') {
-    baseNegs.push(
+  let baseNegs: string[]
+
+  if (tier === 'creative') {
+    // Smallest possible — speed > coverage. User accepts mild drift.
+    baseNegs = [
+      'different person / wrong face',
+      'redesigned product / different packaging',
+      'distorted fingers / extra fingers',
+      'cartoon / 3D-render / illustration',
+      'text overlay / watermarks',
+    ]
+  } else if (tier === 'balanced') {
+    // Core + a few common UGC failure modes
+    baseNegs = [
+      'random influencer who is not the reference person',
+      'redesigned product / different brand / invented packaging',
+      'distorted fingers / extra fingers / malformed hands',
+      'professional studio backdrop / commercial photo gloss',
+      'plastic AI-sheen skin / retouched flawless skin',
+      'heavy bokeh / blurred unreadable product label',
+      'text overlay / watermarks / fake brand text',
+      'cartoon / illustration / 3D-render look',
+    ]
+  } else {
+    // Strict — full verbose anti-everything list
+    baseNegs = [
+      'random influencer who is not the reference person',
+      'redesigned face / different ethnicity / different age',
+      'redesigned product / different brand / fake supplement packaging',
+      'invented bottle / generic white pharmacy bottle / placeholder packaging',
+      'distorted fingers / extra fingers / malformed hands',
+      'extra random objects in frame',
+      'professional studio backdrop / commercial photo gloss',
+      'magazine cover composition / editorial fashion vibe',
+      'perfectly symmetric composition / centered like a brand catalog',
+      'over-polished gallery-quality framing / curated still-life',
+      'pristine empty staged room / showroom-clean environment',
+      'plastic AI-sheen skin / retouched flawless skin / porcelain doll skin',
+      'glossy beauty-campaign highlights on cheeks or forehead',
+      'studio rim lighting / hair light / ring-light catchlight in eyes',
+      'graded teal-orange cinematic color / bleach-bypass fashion grade',
+      'heavy bokeh / dramatic depth of field blur on product',
+      'blurred or unreadable product label due to depth of field',
+      'text overlay / watermarks / brand stamps that weren\'t in the reference',
+      'AI-generated logo additions / fake brand text',
+      'cartoon / illustration / 3D-render look',
+      'over-saturated Instagram filter / VSCO preset look',
       'any face that even slightly resembles a stock photo person',
       'any product that even slightly resembles a similar competing brand',
       'rotated label that hides the brand text',
       'shutterstock / getty / istock aesthetic',
       'overly happy fake smile / corporate stock-photo expression',
       'perfectly arranged props on the table',
-    )
+    ]
   }
 
   return `[5] NEGATIVE PROMPT (avoid all of the following)

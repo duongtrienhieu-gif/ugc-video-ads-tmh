@@ -22,13 +22,16 @@ import type { MasterFrameJobStatus } from '../types'
 // Phase grouping for the stepper visual (collapses retry_1/2/3 into one bucket)
 type PhaseId = 'queue' | 'identity' | 'gen' | 'qc' | 'done'
 
-const PHASES: { id: PhaseId; labelVi: string; mapsFrom: MasterFrameJobStatus[] }[] = [
-  { id: 'queue',    labelVi: 'Xếp hàng đợi',           mapsFrom: ['queued'] },
-  { id: 'identity', labelVi: 'Phân tích avatar + SP',  mapsFrom: ['extracting_identity'] },
-  { id: 'gen',      labelVi: 'Tạo ảnh Master Frame',   mapsFrom: ['generating', 'retrying_1', 'retrying_2', 'retrying_3'] },
-  { id: 'qc',       labelVi: 'Kiểm tra QC',            mapsFrom: ['auto_validating'] },
-  { id: 'done',     labelVi: 'Hoàn thành',             mapsFrom: ['completed'] },
+const PHASES_FULL: { id: PhaseId; labelVi: string; mapsFrom: MasterFrameJobStatus[] }[] = [
+  { id: 'queue',    labelVi: 'Chuẩn bị',              mapsFrom: ['queued'] },
+  { id: 'identity', labelVi: 'Phân tích avatar + SP', mapsFrom: ['extracting_identity'] },
+  { id: 'gen',      labelVi: 'Tạo ảnh',               mapsFrom: ['generating', 'retrying_1', 'retrying_2', 'retrying_3'] },
+  { id: 'qc',       labelVi: 'Kiểm tra chất lượng',   mapsFrom: ['auto_validating'] },
+  { id: 'done',     labelVi: 'Xong',                  mapsFrom: ['completed'] },
 ]
+
+// Speed-first variant: hide the QC step when the user didn't enable it
+const PHASES_FAST: typeof PHASES_FULL = PHASES_FULL.filter((p) => p.id !== 'qc')
 
 function getPhaseState(currentStatus: MasterFrameJobStatus, phaseId: PhaseId): 'done' | 'active' | 'pending' {
   if (currentStatus === 'failed' || currentStatus === 'cancelled') {
@@ -38,7 +41,7 @@ function getPhaseState(currentStatus: MasterFrameJobStatus, phaseId: PhaseId): '
   }
   const order: PhaseId[] = ['queue', 'identity', 'gen', 'qc', 'done']
   // Find which phase the currentStatus maps to
-  const activePhase = PHASES.find((p) => (p.mapsFrom as string[]).includes(currentStatus))?.id ?? 'queue'
+  const activePhase = PHASES_FULL.find((p) => (p.mapsFrom as string[]).includes(currentStatus))?.id ?? 'queue'
   const activeIdx = order.indexOf(activePhase)
   const thisIdx = order.indexOf(phaseId)
   if (thisIdx < activeIdx) return 'done'
@@ -74,9 +77,12 @@ export default function MasterFrameJobStepper({ onCompleted }: Props) {
 
   const isRunning = job.status !== 'completed' && job.status !== 'failed' && job.status !== 'cancelled'
   const elapsed = job.elapsedSec
+  // Speed-first thresholds: 60s = soft warning, 90s = strong warning
   const elapsedWarn = elapsed > 90 ? 'text-red-600' : elapsed > 60 ? 'text-amber-600' : 'text-gray-500'
 
-  const lastAttempt = job.attempts.at(-1) ?? null
+  // If QC was never run on any attempt, use the fast variant (hide QC step)
+  const qcEverRan = job.attempts.some((a) => a.qc !== undefined && a.qc !== null)
+  const phases = qcEverRan ? PHASES_FULL : PHASES_FAST
 
   return (
     <div className="space-y-3">
@@ -125,9 +131,9 @@ export default function MasterFrameJobStepper({ onCompleted }: Props) {
         />
       </div>
 
-      {/* Phase stepper */}
+      {/* Phase stepper — simplified, hides QC step when QC off */}
       <div className="space-y-1.5">
-        {PHASES.map((phase, idx) => {
+        {phases.map((phase, idx) => {
           const phaseState = getPhaseState(job.status, phase.id)
           return (
             <div key={phase.id} className="flex items-center gap-3">
@@ -146,32 +152,23 @@ export default function MasterFrameJobStepper({ onCompleted }: Props) {
                 'text-gray-400'
               }`}>
                 {phase.labelVi}
-                {phaseState === 'active' && phase.id === 'gen' && job.attempts.length > 1 && (
-                  <span className="ml-1 text-[10px] text-gray-500">(lần {job.attempts.length})</span>
-                )}
               </span>
             </div>
           )
         })}
       </div>
 
-      {/* Most-recent attempt's QC (when QC just ran) */}
-      {lastAttempt?.qc && isRunning && (
-        <div className="rounded-lg border border-amber-200 bg-amber-50/40 px-3 py-2">
-          <p className="mb-1 text-[10px] font-bold uppercase tracking-widest text-amber-700">
-            QC vừa chạy — Lần thử {lastAttempt.attemptIdx + 1}
-          </p>
-          <p className="text-[11px] text-amber-700">
-            {lastAttempt.qc.notes || `Face: ${lastAttempt.qc.faceScore} · SP: ${lastAttempt.qc.productScore} · OCR: ${lastAttempt.qc.ocrScore} · Realism: ${lastAttempt.qc.realismScore}`}
-          </p>
+      {/* Slow-server warning (60s+) — speed-first threshold */}
+      {isRunning && elapsed > 60 && elapsed <= 90 && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50/60 px-3 py-2 text-[11px] text-amber-700">
+          ⏳ Server AI đang chậm hơn bình thường ({elapsed}s) — vui lòng đợi thêm chút hoặc bấm Hủy + thử lại.
         </div>
       )}
 
-      {/* Stuck warning */}
+      {/* Stuck warning (90s+) */}
       {isRunning && elapsed > 90 && (
         <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-[11px] text-red-700">
-          ⚠ Task đã chạy {elapsed}s — có thể bị stuck queue KIE. Bấm "Hủy" để abort + retry.
-          Mở DevTools (F12) → Console xem log <code className="rounded bg-white/60 px-1">[gpt4o-poll]</code>.
+          ⚠ Task đã chạy {elapsed}s — server AI có vẻ bị stuck. Bấm "Hủy" để abort + thử lại ngay.
         </div>
       )}
 

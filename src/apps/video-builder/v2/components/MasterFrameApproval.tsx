@@ -118,8 +118,11 @@ export default function MasterFrameApproval({
               </p>
             </div>
           </div>
-          {/* QC auto-loop toggle */}
-          <label className="flex shrink-0 cursor-pointer items-center gap-2 rounded-lg border border-violet-300 bg-white px-3 py-1.5 shadow-sm">
+          {/* QC quality check — OPTIONAL, default off (speed-first) */}
+          <label
+            title="Bật để AI tự kiểm tra và tạo lại nếu phát hiện sai sản phẩm/khuôn mặt. Tăng thời gian chờ ~30-90s. Mặc định TẮT cho tốc độ media-buying."
+            className="flex shrink-0 cursor-pointer items-center gap-2 rounded-lg border border-violet-300 bg-white px-3 py-1.5 shadow-sm"
+          >
             <input
               type="checkbox"
               checked={qcEnabled}
@@ -128,8 +131,8 @@ export default function MasterFrameApproval({
             />
             <ShieldCheck className="h-3.5 w-3.5 text-violet-600" />
             <div className="leading-tight">
-              <p className="text-[11px] font-bold text-violet-700">QC tự động</p>
-              <p className="text-[9px] text-gray-500">Auto-retry tối đa 3 lần nếu fail</p>
+              <p className="text-[11px] font-bold text-violet-700">Kiểm tra chất lượng AI</p>
+              <p className="text-[9px] text-gray-500">{qcEnabled ? '(BẬT — chậm hơn ~30-90s)' : '(TẮT — tốc độ ưu tiên)'}</p>
             </div>
           </label>
         </div>

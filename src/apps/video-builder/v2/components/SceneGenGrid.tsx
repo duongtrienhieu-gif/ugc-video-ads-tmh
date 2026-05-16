@@ -265,9 +265,9 @@ export default function SceneGenGrid({ onRegenerate, onApprove, onReject, onCanc
         </p>
       </div>
 
-      {/* 9-card grid */}
-      <div className="flex-1 overflow-y-auto p-6">
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+      {/* Compact 5-col gallery grid (Midjourney-style scan-and-compare layout) */}
+      <div className="flex-1 overflow-y-auto p-4">
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5">
           {job.items.map((item, idx) => (
             <SceneCard
               key={item.sceneId}

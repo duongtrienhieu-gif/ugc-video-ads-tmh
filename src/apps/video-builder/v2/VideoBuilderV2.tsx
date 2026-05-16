@@ -129,8 +129,8 @@ export default function VideoBuilderV2({ onSwitchToV1 }: Props) {
   /** Module 3 storyboard state */
   const [diversityReport, setDiversityReport] = useState<DiversityReport | null>(null)
   const [isGeneratingStoryboard, setIsGeneratingStoryboard] = useState(false)
-  /** Module 4 QC state — when ON, master frame gen runs the QC loop with auto-retry */
-  const [qcEnabled, setQcEnabled] = useState(true)
+  /** Module 4 QC state — OFF by default (speed-first mode). User opts in for slow strict QC. */
+  const [qcEnabled, setQcEnabled] = useState(false)
   const [qcProgress, setQcProgress] = useState<{ attempt: number; status: string; elapsedSec?: number } | null>(null)
   /** Task 8 — analytics panel modal */
   const [analyticsOpen, setAnalyticsOpen] = useState(false)

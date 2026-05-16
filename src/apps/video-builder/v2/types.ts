@@ -330,18 +330,18 @@ export function getStrengthTierName(strength: number): StrengthTierName {
   return 'creative'
 }
 
-/** Vietnamese label for each tier (per Module 5 spec). */
+/** Vietnamese label for each tier — speed-first edition (spec section IX). */
 export const TIER_LABEL_VI: Record<StrengthTierName, string> = {
-  'creative': 'Sáng tạo hơn',
-  'balanced': 'Cân bằng',
-  'strict':   'Giữ mặt/sản phẩm chặt hơn',
+  'creative': '⚡ Nhanh hơn — sáng tạo hơn',
+  'balanced': '⚖️ Cân bằng',
+  'strict':   '🛡️ Chặt hơn — chậm hơn',
 }
 
-/** Tier description for tooltips/debug panels. */
+/** Tier description — emphasize the speed trade-off so user picks intentionally. */
 export const TIER_DESC_VI: Record<StrengthTierName, string> = {
-  'creative': 'Mỗi cảnh được phép sáng tạo nhiều hơn, ít retry, QC dễ hơn. Đa dạng composition nhưng dễ drift mặt/sản phẩm.',
-  'balanced': 'Điểm cân bằng giữa sáng tạo và nhất quán. Default cho hầu hết use case.',
-  'strict':   'Product lock cực mạnh, identity lock mạnh, retry aggressive, thêm anti-redesign negatives, realism strict hơn.',
+  'creative': 'Tốc độ cao nhất. Prompt gọn, ít negative, generate 1 phát. Có thể drift nhẹ mặt/sản phẩm — đổi lại iterate nhanh để test ad.',
+  'balanced': 'Mặc định cho media-buying workflow. Đủ lock identity + product, không lãng phí tốc độ cho perfectionism.',
+  'strict':   'Lock cực chặt, retry khi QC bật, thêm anti-redesign negatives. Chậm hơn ~30-60s — chỉ bật khi cần ảnh hero cho landing/advertorial.',
 }
 
 /** Pre-defined slider presets (per Module 5 spec). */
@@ -397,14 +397,14 @@ export type MasterFrameJobStatus =
 
 /** Vietnamese label for each job status — shown in the stepper UI. */
 export const JOB_STATUS_LABEL_VI: Record<MasterFrameJobStatus, string> = {
-  'queued':              'Đã xếp hàng đợi...',
-  'extracting_identity': 'Đang phân tích avatar và sản phẩm...',
-  'generating':          'Đang tạo ảnh Master Frame...',
-  'auto_validating':     'Đang kiểm tra độ khớp sản phẩm + khuôn mặt...',
-  'retrying_1':          'Đang tạo lại lần 2 (điều chỉnh prompt)...',
-  'retrying_2':          'Đang tạo lại lần 3 (tăng cường lock)...',
-  'retrying_3':          'Đang tạo lại lần 4 (lần cuối)...',
-  'completed':           'Đã hoàn thành ✓',
+  'queued':              'Chuẩn bị...',
+  'extracting_identity': 'Đang phân tích avatar + sản phẩm...',
+  'generating':          'Đang tạo ảnh...',
+  'auto_validating':     'Đang kiểm tra chất lượng...',
+  'retrying_1':          'Đang tạo lại...',
+  'retrying_2':          'Đang tạo lại...',
+  'retrying_3':          'Đang tạo lại...',
+  'completed':           'Xong ✓',
   'failed':              'Thất bại',
   'cancelled':           'Đã hủy',
 }
