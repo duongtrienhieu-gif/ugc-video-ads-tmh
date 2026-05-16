@@ -3,10 +3,66 @@ import { useSettingsStore } from '../../../stores/settingsStore'
 import { generateImage, pollImageUntilDone } from '../../../utils/kieai'
 import type { ImageResolution } from '../../../utils/kieai'
 import { saveAsset } from '../../../utils/assetStore'
+import { directGeminiVision } from '../../../utils/gemini'
 
 export interface GenerationResult {
   imageUrl: string
   jsonPrompt: Record<string, Record<string, string>>
+}
+
+/**
+ * Use Gemini Vision to describe the uploaded product image in detail.
+ * This description is embedded in the image gen prompt so the avatar holds
+ * the EXACT product (correct shape, color, label) — relying on referenceImageUrls
+ * alone is unreliable (model often invents a generic bottle instead).
+ */
+async function describeProductFromImage(imageUrl: string, geminiKey: string): Promise<string | null> {
+  try {
+    let base64: string
+    let mimeType: string
+
+    if (imageUrl.startsWith('data:')) {
+      // data:image/jpeg;base64,XXXXX
+      const match = imageUrl.match(/^data:([^;]+);base64,(.+)$/)
+      if (!match) return null
+      mimeType = match[1]
+      base64 = match[2]
+    } else {
+      // http(s):// or asset URL → fetch + convert to base64
+      const res = await fetch(imageUrl)
+      if (!res.ok) return null
+      const blob = await res.blob()
+      mimeType = blob.type || 'image/jpeg'
+      const buf = await blob.arrayBuffer()
+      const bytes = new Uint8Array(buf)
+      let binary = ''
+      for (let i = 0; i < bytes.byteLength; i++) binary += String.fromCharCode(bytes[i])
+      base64 = btoa(binary)
+    }
+
+    const response = await directGeminiVision({
+      apiKey: geminiKey,
+      parts: [
+        { inlineData: { mimeType, data: base64 } },
+        { text: `Describe this product in 1-2 SHORT sentences for an image-generation prompt. Focus ONLY on visual appearance:
+- Container type: bottle / jar / tube / box / sachet / pouch / can / blister pack / etc.
+- Container color + cap/lid color
+- Container shape (tall vs short, slim vs wide, round vs square)
+- Container material (clear plastic / opaque plastic / glass / cardboard / metal / foil)
+- Label background color + brand text if visible
+- Approximate size relative to a human hand
+
+Output: ONLY the visual description, no preamble, no markdown. Example: "A short, squat white plastic jar with a gold metallic screw-top lid, dark blue rectangular label with white brand text, roughly palm-sized."` },
+      ],
+      maxOutputTokens: 250,
+      model: 'gemini-2.5-flash',
+    })
+
+    return response.trim().replace(/^["']|["']$/g, '')
+  } catch (err) {
+    console.error('[describeProductFromImage] failed:', err)
+    return null
+  }
 }
 
 /**
@@ -47,8 +103,11 @@ export function buildJsonPrompt(profile: CharacterProfile): Record<string, Recor
 
 /**
  * Builds a natural language image generation prompt from the character profile.
+ * If productDescription is provided (from Gemini Vision analysis of the uploaded
+ * product image), it's embedded with strong identity-lock instructions so the
+ * generated avatar holds the EXACT product, not a generic invented bottle.
  */
-function buildImagePrompt(profile: CharacterProfile, hasProduct?: boolean): string {
+function buildImagePrompt(profile: CharacterProfile, productDescription?: string): string {
   const parts: string[] = []
 
   // Physical description
@@ -78,11 +137,15 @@ function buildImagePrompt(profile: CharacterProfile, hasProduct?: boolean): stri
   ].filter(Boolean)
   if (styleParts.length) parts.push(styleParts.join(', ') + '.')
 
-  // Pose & action
+  // Pose & action — with EXACT product description if uploaded
+  const productLine = productDescription
+    ? `holding the EXACT specific product described here in their hand at chest level, label/branding clearly facing the camera: ${productDescription}. The product MUST match this description precisely — same container shape, same color, same label, same size. Do NOT substitute a generic bottle or invent a different product`
+    : null
+
   const poseParts = [
     profile.pose,
     profile.action,
-    hasProduct && 'holding a product bottle in their hands, product clearly visible',
+    productLine,
     profile.expression && `${profile.expression} expression`,
   ].filter(Boolean)
   if (poseParts.length) parts.push(poseParts.join(', ') + '.')
@@ -127,17 +190,35 @@ export async function generateCharacter(
   resolution: ImageResolution,
   productImageUrl?: string,
 ): Promise<GenerationResult> {
-  const kieApiKey = useSettingsStore.getState().kieApiKey
+  const settings = useSettingsStore.getState()
+  const kieApiKey = settings.kieApiKey
   if (!kieApiKey) throw new Error('NO_KIE_KEY')
 
-  const hasProduct = !!productImageUrl
-  const prompt = buildImagePrompt(profile, hasProduct)
+  // ── Step 1: If product image uploaded, describe it via Gemini Vision FIRST ──
+  // This gives the image-gen model a specific textual description of the
+  // exact product (shape/color/label/branding) to render, rather than guessing.
+  let productDescription: string | undefined
+  if (productImageUrl) {
+    const geminiKey = settings.geminiApiKey
+    if (geminiKey) {
+      productDescription = (await describeProductFromImage(productImageUrl, geminiKey)) ?? undefined
+    }
+    // If no Gemini key OR description failed: fall through with generic phrasing
+    if (!productDescription) {
+      productDescription = 'a product container (matching the reference image)'
+    }
+  }
+
+  const prompt = buildImagePrompt(profile, productDescription)
   const aspectRatio = profile.aspectRatio?.includes('1:1')
     ? '1:1'
     : profile.aspectRatio === 'Landscape (16:9)'
     ? '16:9'
     : '9:16'
 
+  // ── Step 2: Generate image. Pass product image as reference too — models that
+  //    support it (Nano Banana 2) will use both textual + visual identity locks.
+  //    Models without ref-image support (gpt-image-1) rely on the textual description.
   const referenceImageUrls = productImageUrl ? [productImageUrl] : undefined
   const { taskId } = await generateImage({ apiKey: kieApiKey, model: modelId, prompt, resolution, aspectRatio, referenceImageUrls })
   const remoteUrl = await pollImageUntilDone({ apiKey: kieApiKey, taskId, timeoutMs: 3 * 60 * 1000 })
