@@ -4,7 +4,7 @@ import {
   AlertTriangle, ChevronRight, Trash2,
   Mic, Sparkles, FileText, User, Package,
   Check, ChevronDown, ChevronUp, Upload, X,
-  RotateCcw, SkipForward, DollarSign,
+  RotateCcw, SkipForward, Coins,
 } from 'lucide-react'
 import { useSettingsStore } from '../../stores/settingsStore'
 import { useAppStore } from '../../stores/appStore'
@@ -418,13 +418,13 @@ interface PipeData {
 // Step labels for the running/review panel header
 const STEP_INFO: Record<string, { num: number; label: string; subLabel: string; cost: string }> = {
   parse:    { num: 1, label: 'Phân tích kịch bản',  subLabel: 'Chia script thành đoạn + B-roll prompts',  cost: 'Miễn phí' },
-  voice:    { num: 2, label: 'Voiceover',           subLabel: 'TTS toàn bộ script → audio file',          cost: '~$0.30' },
+  voice:    { num: 2, label: 'Voiceover',           subLabel: 'TTS toàn bộ script → audio file',          cost: '~$0.30 · ElevenLabs' },
   resolve:  { num: 3, label: 'Chuẩn bị tài nguyên', subLabel: 'Resolve URL ảnh',                          cost: 'Miễn phí' },
-  avatar:   { num: 4, label: 'Avatar Lip-sync',     subLabel: 'Kling Avatar: ảnh + audio → video nói',    cost: '~$3.00' },
-  brollimg: { num: 5, label: 'B-roll Images',       subLabel: 'Gen ảnh tĩnh từ prompt — review trước khi animate', cost: '~$0.32' },
-  broll:    { num: 6, label: 'B-roll Videos',       subLabel: 'Image-to-video: ảnh tĩnh → clip chuyển động', cost: '~$2.80' },
-  bg:       { num: 7, label: 'Xóa nền Avatar',      subLabel: 'Tách nền để overlay trong suốt',           cost: '~$0.50' },
-  assemble: { num: 8, label: 'Ghép video',          subLabel: 'Layer B-roll + avatar + captions',         cost: '~$0.50' },
+  avatar:   { num: 4, label: 'Avatar Lip-sync',     subLabel: 'Kling Avatar: ảnh + audio → video nói',    cost: '~624 KIE credit' },
+  brollimg: { num: 5, label: 'B-roll Images',       subLabel: 'Gen ảnh tĩnh từ prompt — review trước khi animate', cost: '~64 KIE credit' },
+  broll:    { num: 6, label: 'B-roll Videos',       subLabel: 'Image-to-video: ảnh tĩnh → clip chuyển động', cost: '~560 KIE credit' },
+  bg:       { num: 7, label: 'Xóa nền Avatar',      subLabel: 'Tách nền để overlay trong suốt',           cost: '~$0.50 · fal.ai' },
+  assemble: { num: 8, label: 'Ghép video',          subLabel: 'Layer B-roll + avatar + captions',         cost: '~$0.50 · Shotstack' },
 }
 
 function getStepFromPhase(phase: PipelinePhase): string | null {
@@ -537,7 +537,7 @@ function ReviewCard({
 
         {continueCost && (
           <span className="flex items-center gap-1 text-[11px] font-semibold text-gray-400">
-            <DollarSign className="h-3 w-3" />
+            <Coins className="h-3 w-3" />
             {continueCost}
           </span>
         )}
@@ -1456,7 +1456,7 @@ ${script}`
             </button>
           )}
           <p className="mt-2 text-center text-xs text-gray-400">
-            {isIdle ? 'Pipeline 8 bước · duyệt thủ công từng bước · tổng ~$7-8/video' : `Đang chạy · Tổng ước tính: ~$7-8/video`}
+            {isIdle ? 'Pipeline 8 bước · ~1,248 KIE credit + ~$1.30 (EL+fal+SS)' : `Đang chạy · ~1,248 KIE credit + ~$1.30 ngoài KIE`}
           </p>
         </div>
       </div>
@@ -1526,7 +1526,7 @@ ${script}`
               continueCost={STEP_INFO.avatar.cost}
             >
               <p className="mb-2 text-xs text-gray-500">
-                Nghe thử voiceover trước khi commit cost lớn nhất (~$3 cho Avatar)
+                Nghe thử voiceover trước khi commit cost lớn nhất (~624 KIE credit cho Avatar)
               </p>
               <audio controls src={previewVoiceUrl ?? ''} className="w-full" />
               <p className="mt-2 text-xs text-gray-400">
@@ -1540,12 +1540,12 @@ ${script}`
             <ReviewCard
               onRetry={runAvatar}
               onContinue={runBrollImages}
-              retryLabel="Tạo lại (~$3)"
+              retryLabel="Tạo lại (~624 cr)"
               continueLabel="Tiếp tục → B-roll Images"
               continueCost={STEP_INFO.brollimg.cost}
             >
               <p className="mb-2 text-xs text-gray-500">
-                Xem avatar nói có khớp môi và tự nhiên không. Tiếp theo sẽ gen ảnh tĩnh trước (rẻ), review xong mới animate.
+                Xem avatar nói có khớp môi và tự nhiên không. Tạo lại = ~624 KIE credit. Tiếp theo gen ảnh tĩnh trước (~64 cr, rẻ), review xong mới animate.
               </p>
               {previewAvatarUrl ? (
                 <video
@@ -1565,14 +1565,14 @@ ${script}`
             <ReviewCard
               onRetry={runBrollImages}
               onContinue={runBroll}
-              retryLabel={`Tạo lại tất cả (~$${(previewBrollImageUrls.length * 0.04).toFixed(2)})`}
+              retryLabel={`Tạo lại tất cả (~${previewBrollImageUrls.length * 8} cr)`}
               continueLabel="Tiếp tục → Animate"
               continueCost={STEP_INFO.broll.cost}
               disabled={regeneratingImageIndices.size > 0}
             >
               <p className="mb-3 text-xs text-gray-500">
                 <strong className="text-emerald-600">{previewBrollImageUrls.filter(Boolean).length}/{previewBrollImageUrls.length}</strong> ảnh thành công.
-                Click vào ảnh để gen lại từng cái (~$0.04) — rẻ hơn nhiều so với gen lại video.
+                Click vào ảnh để gen lại từng cái (~8 KIE credit) — rẻ hơn nhiều so với gen lại video.
               </p>
               <div className="grid grid-cols-3 gap-2">
                 {previewBrollImageUrls.map((url, i) => {
@@ -1597,7 +1597,7 @@ ${script}`
                       ) : (
                         <button
                           onClick={() => regenerateOneImage(i)}
-                          title={`Gen lại ảnh #${i + 1} (~$0.04)`}
+                          title={`Gen lại ảnh #${i + 1} (~8 KIE credit)`}
                           className="absolute right-1 top-1 flex h-7 w-7 items-center justify-center rounded-md bg-black/60 text-white opacity-0 transition-opacity hover:bg-violet-600 group-hover:opacity-100"
                         >
                           <RotateCcw className="h-3.5 w-3.5" />
@@ -1615,7 +1615,7 @@ ${script}`
             <ReviewCard
               onRetry={runBroll}
               onContinue={runBg}
-              retryLabel={`Tạo lại tất cả (~$${(previewBrollUrls.length * 0.35).toFixed(2)})`}
+              retryLabel={`Tạo lại tất cả (~${previewBrollUrls.length * 70} cr)`}
               continueLabel="Tiếp tục → Xóa nền"
               continueCost={STEP_INFO.bg.cost}
             >
@@ -1646,7 +1646,7 @@ ${script}`
               onContinue={runAssemble}
               onSkip={handleSkipBg}
               skipLabel="Bỏ qua xóa nền"
-              retryLabel="Tạo lại (~$0.50)"
+              retryLabel="Tạo lại (~$0.50 fal.ai)"
               continueLabel="Tiếp tục → Ghép video"
               continueCost={STEP_INFO.assemble.cost}
             >
@@ -1723,7 +1723,7 @@ ${script}`
                 </p>
               </div>
               <div className="flex flex-wrap justify-center gap-2 text-xs text-gray-400">
-                {['Free ① Parse', '$0.30 ② Voice', '$3.00 ④ Avatar', '$0.32 ⑤ Images', '$2.80 ⑥ Videos', '$0.50 ⑦ BG', '$0.50 ⑧ Render'].map((t) => (
+                {['Free ① Parse', '$0.30 EL ② Voice', '624 cr ④ Avatar', '64 cr ⑤ Images', '560 cr ⑥ Videos', '$0.50 fal ⑦ BG', '$0.50 SS ⑧ Render'].map((t) => (
                   <span key={t} className="rounded-full border border-black/8 bg-black/[0.02] px-3 py-1.5">{t}</span>
                 ))}
               </div>
