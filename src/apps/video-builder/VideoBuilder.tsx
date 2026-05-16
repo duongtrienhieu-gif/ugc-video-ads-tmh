@@ -12,7 +12,7 @@ import { useBankStore } from '../../stores/bankStore'
 import { getUrl, isAssetRef, saveAsset } from '../../utils/assetStore'
 import { directGeminiVision } from '../../utils/gemini'
 import { listVoices, textToSpeech } from '../../utils/elevenlabs'
-import { generateLipSync, pollLipSyncUntilDone, generateVideoJob, getVideoJobStatus } from '../../utils/kieai'
+import { generateLipSync, pollLipSyncUntilDone, generateVideoJob, getVideoJobStatus, generateImage, pollImageUntilDone } from '../../utils/kieai'
 import { removeVideoBackground } from '../../utils/falai'
 import { buildUGCVideo, pollRenderUntilDone } from '../../utils/shotstack'
 import type { ElevenLabsVoice } from '../../utils/elevenlabs'
@@ -367,12 +367,13 @@ function UploadBtn({ onClick, children }: { onClick: () => void; children: React
 
 type PipelinePhase =
   | 'idle'
-  | 'running-parse'    | 'review-parse'
-  | 'running-voice'    | 'review-voice'
+  | 'running-parse'     | 'review-parse'
+  | 'running-voice'     | 'review-voice'
   | 'running-resolve'
-  | 'running-avatar'   | 'review-avatar'
-  | 'running-broll'    | 'review-broll'
-  | 'running-bg'       | 'review-bg'
+  | 'running-avatar'    | 'review-avatar'
+  | 'running-brollimg'  | 'review-brollimg'
+  | 'running-broll'     | 'review-broll'
+  | 'running-bg'        | 'review-bg'
   | 'running-assemble'
   | 'done'
   | 'failed'
@@ -390,7 +391,8 @@ interface PipeData {
   avatarImageUrl: string
   productImageUrls: string[]
   avatarRawUrl: string
-  brollResults: (string | null)[]
+  brollImageUrls: (string | null)[]   // static images (step 5)
+  brollResults: (string | null)[]      // videos animated from images (step 6)
   avatarFinalUrl: string
   finalVideoUrl: string
   finalAssetId: string
@@ -398,13 +400,14 @@ interface PipeData {
 
 // Step labels for the running/review panel header
 const STEP_INFO: Record<string, { num: number; label: string; subLabel: string; cost: string }> = {
-  parse:    { num: 1, label: 'Phân tích kịch bản',  subLabel: 'Chia script thành đoạn + B-roll prompts', cost: 'Miễn phí' },
-  voice:    { num: 2, label: 'Voiceover',           subLabel: 'TTS toàn bộ script → audio file',         cost: '~$0.30' },
+  parse:    { num: 1, label: 'Phân tích kịch bản',  subLabel: 'Chia script thành đoạn + B-roll prompts',  cost: 'Miễn phí' },
+  voice:    { num: 2, label: 'Voiceover',           subLabel: 'TTS toàn bộ script → audio file',          cost: '~$0.30' },
   resolve:  { num: 3, label: 'Chuẩn bị tài nguyên', subLabel: 'Resolve URL ảnh',                          cost: 'Miễn phí' },
   avatar:   { num: 4, label: 'Avatar Lip-sync',     subLabel: 'Kling Avatar: ảnh + audio → video nói',    cost: '~$3.00' },
-  broll:    { num: 5, label: 'B-roll Clips',        subLabel: 'Gen video minh họa cho mỗi đoạn',          cost: '~$0.38' },
-  bg:       { num: 6, label: 'Xóa nền Avatar',      subLabel: 'Tách nền để overlay trong suốt',           cost: '~$0.50' },
-  assemble: { num: 7, label: 'Ghép video',          subLabel: 'Layer B-roll + avatar + captions',         cost: '~$0.50' },
+  brollimg: { num: 5, label: 'B-roll Images',       subLabel: 'Gen ảnh tĩnh từ prompt — review trước khi animate', cost: '~$0.32' },
+  broll:    { num: 6, label: 'B-roll Videos',       subLabel: 'Image-to-video: ảnh tĩnh → clip chuyển động', cost: '~$2.80' },
+  bg:       { num: 7, label: 'Xóa nền Avatar',      subLabel: 'Tách nền để overlay trong suốt',           cost: '~$0.50' },
+  assemble: { num: 8, label: 'Ghép video',          subLabel: 'Layer B-roll + avatar + captions',         cost: '~$0.50' },
 }
 
 function getStepFromPhase(phase: PipelinePhase): string | null {
@@ -436,7 +439,7 @@ function PhaseHeader({ phase }: { phase: PipelinePhase }) {
               {isReview ? `✓ ${info.label}` : info.label}
             </p>
             <span className="rounded-full bg-white/80 px-2 py-0.5 text-[10px] font-semibold text-gray-500">
-              Bước {info.num}/7 · {info.cost}
+              Bước {info.num}/8 · {info.cost}
             </span>
           </div>
           <p className="mt-0.5 text-xs text-gray-500 truncate">{info.subLabel}</p>
@@ -568,6 +571,8 @@ export default function VideoBuilder() {
   const [previewSegments, setPreviewSegments] = useState<ScriptSegment[]>([])
   const [previewVoiceUrl, setPreviewVoiceUrl] = useState<string | null>(null)
   const [previewAvatarUrl, setPreviewAvatarUrl] = useState<string | null>(null)
+  const [previewBrollImageUrls, setPreviewBrollImageUrls] = useState<(string | null)[]>([])
+  const [regeneratingImageIndices, setRegeneratingImageIndices] = useState<Set<number>>(new Set())
   const [previewBrollUrls, setPreviewBrollUrls] = useState<(string | null)[]>([])
   const [previewBgUrl, setPreviewBgUrl] = useState<string | null>(null)
 
@@ -653,6 +658,8 @@ export default function VideoBuilder() {
     setPreviewSegments([])
     setPreviewVoiceUrl(null)
     setPreviewAvatarUrl(null)
+    setPreviewBrollImageUrls([])
+    setRegeneratingImageIndices(new Set())
     setPreviewBrollUrls([])
     setPreviewBgUrl(null)
   }
@@ -911,46 +918,129 @@ ${script}`
     }
   }
 
-  // ── Step 5: B-roll generation ────────────────────────────────────────────
+  // ── Step 5: B-roll Static Images ─────────────────────────────────────────
+  // Why: cheap ($0.04/image) and reviewable BEFORE committing to expensive
+  // video generation ($0.35/clip). User can regen bad images individually.
+
+  const buildImagePrompt = (seg: ScriptSegment, hasAvatar: boolean, hasProduct: boolean): string => {
+    const useProd = seg.useProduct && hasProduct
+    if (useProd) {
+      return `${seg.brollPrompt}. Photorealistic cinematic 9:16 vertical UGC ad shot. ${
+        hasAvatar ? 'A friendly content creator (matching avatar style) ' : ''
+      }holding/showing the product clearly. Lifestyle home setting, soft natural window lighting, warm tones, shallow depth of field. Hyper-realistic, professional photography, no text overlay, no watermark.`
+    }
+    return `${seg.brollPrompt}. Photorealistic cinematic 9:16 vertical lifestyle B-roll image. Authentic real-world setting, warm natural lighting, professional photography quality. No text overlay, no watermark.`
+  }
+
+  // Generate ONE image for a given segment index (used by both initial run + per-image regen)
+  const generateOneImage = async (i: number, seg: ScriptSegment): Promise<string | null> => {
+    const { avatarImageUrl, productImageUrls } = pipeRef.current
+    const prompt = buildImagePrompt(seg, !!avatarImageUrl, !!(productImageUrls && productImageUrls.length))
+    try {
+      const { taskId } = await generateImage({
+        apiKey: kieApiKey!,
+        model: 'nano-banana-2',
+        prompt,
+        resolution: '1K',
+        aspectRatio: '9:16',
+      })
+      return await pollImageUntilDone({ apiKey: kieApiKey!, taskId, timeoutMs: 3 * 60 * 1000 })
+    } catch (err) {
+      console.error(`[brollImage ${i}] failed:`, err)
+      return null
+    }
+  }
+
+  const runBrollImages = async () => {
+    if (!kieApiKey) { setPhaseError('Cần KIE.ai API key'); setPhase('failed'); return }
+    const { timedSegments } = pipeRef.current
+    if (!timedSegments?.length) { setPhaseError('Thiếu segments'); setPhase('failed'); return }
+
+    setPhase('running-brollimg')
+    setPhaseError(null)
+    setPhaseDetail(`Gen ${timedSegments.length} ảnh tĩnh song song (~30-60s)...`)
+
+    try {
+      const results: (string | null)[] = new Array(timedSegments.length).fill(null)
+      await Promise.all(timedSegments.map(async (seg, i) => {
+        results[i] = await generateOneImage(i, seg)
+      }))
+
+      pipeRef.current.brollImageUrls = results
+      setPreviewBrollImageUrls([...results])
+      setPhase('review-brollimg')
+    } catch (err) {
+      setPhaseError(err instanceof Error ? err.message : String(err))
+      setPhase('failed')
+    }
+  }
+
+  // Regenerate just one image (called from review screen)
+  const regenerateOneImage = async (i: number) => {
+    if (!kieApiKey) return
+    const { timedSegments } = pipeRef.current
+    if (!timedSegments?.[i]) return
+
+    setRegeneratingImageIndices((prev) => new Set(prev).add(i))
+    try {
+      const newUrl = await generateOneImage(i, timedSegments[i])
+      if (newUrl) {
+        setPreviewBrollImageUrls((prev) => {
+          const next = [...prev]
+          next[i] = newUrl
+          // Persist back to pipeRef
+          if (pipeRef.current.brollImageUrls) pipeRef.current.brollImageUrls[i] = newUrl
+          return next
+        })
+      } else {
+        addToast(`Ảnh #${i + 1} gen lại thất bại`, 'error')
+      }
+    } finally {
+      setRegeneratingImageIndices((prev) => {
+        const next = new Set(prev)
+        next.delete(i)
+        return next
+      })
+    }
+  }
+
+  // ── Step 6: B-roll Videos (image-to-video) ───────────────────────────────
+  // Uses the approved static images as starting reference for video generation.
+  // Much better than pure text-to-video because the AI starts from a known image.
 
   const runBroll = async () => {
     if (!kieApiKey) { setPhaseError('Cần KIE.ai API key'); setPhase('failed'); return }
-    const { timedSegments, productImageUrls, avatarImageUrl } = pipeRef.current
+    const { timedSegments, brollImageUrls } = pipeRef.current
     if (!timedSegments?.length) { setPhaseError('Thiếu segments'); setPhase('failed'); return }
 
     setPhase('running-broll')
     setPhaseError(null)
-    setPhaseDetail(`Đang gen ${timedSegments.length} clips song song...`)
+    setPhaseDetail(`Animate ${timedSegments.length} ảnh thành video clips...`)
 
     try {
       const brollResults: (string | null)[] = new Array(timedSegments.length).fill(null)
 
       await Promise.all(timedSegments.map(async (seg, i) => {
-        // Build reference image list (max 3 — Kling limit)
-        // When useProduct=true: pass avatar + product images so AI generates
-        // "creator holding product" scenes matching both references.
-        const refImages: string[] = []
-        if (seg.useProduct) {
-          if (productImageUrls && productImageUrls.length > 0) {
-            refImages.push(...productImageUrls.slice(0, 2))   // up to 2 product views
-          }
-          if (avatarImageUrl) refImages.push(avatarImageUrl)  // 1 avatar reference
+        const startImage = brollImageUrls?.[i]
+        if (!startImage) {
+          // Skip segments without a valid image (fallback: stays null → avatar fullscreen)
+          return
         }
 
-        // Inject explicit instruction to use the references when product segment
-        const promptSuffix = seg.useProduct && refImages.length > 0
-          ? '. IMPORTANT: The person in the shot must match the reference avatar image (same face, outfit, style). The product must clearly match the reference product image. Vertical 9:16, 720p, no text overlay.'
-          : '. Vertical 9:16, cinematic, no text overlay.'
+        // Motion prompt: describe HOW the camera/scene moves (image already shows WHAT)
+        const motionPrompt = `${seg.brollPrompt}. Smooth cinematic camera movement: slow zoom in or gentle pan, natural subtle motion. No static shots, no jitter. Maintain photorealistic UGC ad style throughout.`
 
         try {
           const { taskId } = await generateVideoJob({
             apiKey: kieApiKey,
             jobModelId: 'kling-3.0/video',
-            prompt: seg.brollPrompt + promptSuffix,
+            prompt: motionPrompt,
             aspectRatio: '9:16',
             resolution: '720p',
             duration: 5,
-            referenceImageUrls: refImages.length > 0 ? refImages : undefined,
+            // Pass the generated image as the reference — Kling treats first
+            // image as the start frame, giving us proper image-to-video.
+            referenceImageUrls: [startImage],
           })
           const brollStart = Date.now()
           while (Date.now() - brollStart < 8 * 60 * 1000) {
@@ -1339,7 +1429,7 @@ ${script}`
             </button>
           )}
           <p className="mt-2 text-center text-xs text-gray-400">
-            {isIdle ? 'Mỗi bước cần duyệt thủ công · tiết kiệm chi phí' : `Tổng ước tính: ~$4-6/video`}
+            {isIdle ? 'Pipeline 8 bước · duyệt thủ công từng bước · tổng ~$7-8/video' : `Đang chạy · Tổng ước tính: ~$7-8/video`}
           </p>
         </div>
       </div>
@@ -1422,13 +1512,13 @@ ${script}`
           {phase === 'review-avatar' && (
             <ReviewCard
               onRetry={runAvatar}
-              onContinue={runBroll}
+              onContinue={runBrollImages}
               retryLabel="Tạo lại (~$3)"
-              continueLabel="Tiếp tục → B-roll"
-              continueCost={STEP_INFO.broll.cost}
+              continueLabel="Tiếp tục → B-roll Images"
+              continueCost={STEP_INFO.brollimg.cost}
             >
               <p className="mb-2 text-xs text-gray-500">
-                Xem avatar nói có khớp môi và tự nhiên không. Nếu xấu, "Tạo lại" sẽ tốn thêm ~$3.
+                Xem avatar nói có khớp môi và tự nhiên không. Tiếp theo sẽ gen ảnh tĩnh trước (rẻ), review xong mới animate.
               </p>
               {previewAvatarUrl ? (
                 <video
@@ -1443,17 +1533,67 @@ ${script}`
             </ReviewCard>
           )}
 
-          {/* ─── Review: B-roll ─── */}
+          {/* ─── Review: B-roll Static Images ─── */}
+          {phase === 'review-brollimg' && (
+            <ReviewCard
+              onRetry={runBrollImages}
+              onContinue={runBroll}
+              retryLabel={`Tạo lại tất cả (~$${(previewBrollImageUrls.length * 0.04).toFixed(2)})`}
+              continueLabel="Tiếp tục → Animate"
+              continueCost={STEP_INFO.broll.cost}
+              disabled={regeneratingImageIndices.size > 0}
+            >
+              <p className="mb-3 text-xs text-gray-500">
+                <strong className="text-emerald-600">{previewBrollImageUrls.filter(Boolean).length}/{previewBrollImageUrls.length}</strong> ảnh thành công.
+                Click vào ảnh để gen lại từng cái (~$0.04) — rẻ hơn nhiều so với gen lại video.
+              </p>
+              <div className="grid grid-cols-3 gap-2">
+                {previewBrollImageUrls.map((url, i) => {
+                  const isRegen = regeneratingImageIndices.has(i)
+                  return (
+                    <div
+                      key={i}
+                      className={`group relative overflow-hidden rounded-lg border ${url ? 'border-emerald-200' : 'border-red-200 bg-red-50'} ${isRegen ? 'opacity-60' : ''}`}
+                    >
+                      {url ? (
+                        <img src={url} alt={`Đoạn ${i + 1}`} className="h-32 w-full object-cover" />
+                      ) : (
+                        <div className="flex h-32 items-center justify-center">
+                          <X className="h-5 w-5 text-red-400" />
+                        </div>
+                      )}
+                      <span className="absolute bottom-1 left-1 rounded bg-black/60 px-1.5 py-0.5 text-[9px] font-bold text-white">#{i + 1}</span>
+                      {isRegen ? (
+                        <div className="absolute inset-0 flex items-center justify-center bg-white/50">
+                          <Loader2 className="h-6 w-6 animate-spin text-violet-500" />
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => regenerateOneImage(i)}
+                          title={`Gen lại ảnh #${i + 1} (~$0.04)`}
+                          className="absolute right-1 top-1 flex h-7 w-7 items-center justify-center rounded-md bg-black/60 text-white opacity-0 transition-opacity hover:bg-violet-600 group-hover:opacity-100"
+                        >
+                          <RotateCcw className="h-3.5 w-3.5" />
+                        </button>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            </ReviewCard>
+          )}
+
+          {/* ─── Review: B-roll Videos ─── */}
           {phase === 'review-broll' && (
             <ReviewCard
               onRetry={runBroll}
               onContinue={runBg}
-              retryLabel={`Tạo lại tất cả (~$${(previewBrollUrls.length * 0.125).toFixed(2)})`}
+              retryLabel={`Tạo lại tất cả (~$${(previewBrollUrls.length * 0.35).toFixed(2)})`}
               continueLabel="Tiếp tục → Xóa nền"
               continueCost={STEP_INFO.bg.cost}
             >
               <p className="mb-3 text-xs text-gray-500">
-                <strong className="text-emerald-600">{previewBrollUrls.filter(Boolean).length}/{previewBrollUrls.length}</strong> clips thành công. Clips lỗi sẽ bị bỏ qua (avatar fullscreen).
+                <strong className="text-emerald-600">{previewBrollUrls.filter(Boolean).length}/{previewBrollUrls.length}</strong> clips thành công (animate từ ảnh tĩnh đã duyệt). Clips lỗi sẽ bị bỏ qua.
               </p>
               <div className="grid grid-cols-3 gap-2">
                 {previewBrollUrls.map((url, i) => (
@@ -1550,14 +1690,13 @@ ${script}`
                 <Film className="h-10 w-10 text-violet-400" strokeWidth={1.5} />
               </div>
               <div className="text-center">
-                <p className="text-base font-semibold text-gray-500">Pipeline thủ công · 7 bước</p>
+                <p className="text-base font-semibold text-gray-500">Pipeline thủ công · 8 bước</p>
                 <p className="mt-1.5 max-w-sm text-center text-sm leading-relaxed text-gray-400">
-                  Mỗi bước chạy xong → bạn duyệt kết quả → bấm "Tiếp tục →" để qua bước tiếp.
-                  Nếu không OK → "Tạo lại ↺" để retry. Tránh tốn tiền oan.
+                  Mỗi bước duyệt thủ công · B-roll chia 2 phase (ảnh tĩnh rẻ → animate đắt) để bạn fix ảnh xấu trước khi commit video.
                 </p>
               </div>
               <div className="flex flex-wrap justify-center gap-2 text-xs text-gray-400">
-                {['Free ① Parse', '$0.30 ② Voice', '$3.00 ④ Avatar', '$0.38 ⑤ B-roll', '$0.50 ⑥ BG', '$0.50 ⑦ Render'].map((t) => (
+                {['Free ① Parse', '$0.30 ② Voice', '$3.00 ④ Avatar', '$0.32 ⑤ Images', '$2.80 ⑥ Videos', '$0.50 ⑦ BG', '$0.50 ⑧ Render'].map((t) => (
                   <span key={t} className="rounded-full border border-black/8 bg-black/[0.02] px-3 py-1.5">{t}</span>
                 ))}
               </div>
