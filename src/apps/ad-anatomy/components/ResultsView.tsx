@@ -123,6 +123,76 @@ function Section({ children, className = '' }: { children: React.ReactNode; clas
   )
 }
 
+/* ─── Z5: CollapsibleSection — text-heavy sections collapse to title + quick-copy ─── */
+function CollapsibleSection({
+  icon: Icon,
+  title,
+  subtitle,
+  defaultOpen = true,
+  copyText,
+  copyLabel = 'Copy section',
+  className = '',
+  badge,
+  children,
+}: {
+  icon: React.ElementType
+  title: string
+  subtitle?: string
+  defaultOpen?: boolean
+  /** When provided, renders a Copy button next to the chevron. */
+  copyText?: string
+  copyLabel?: string
+  className?: string
+  /** Optional small badge shown next to title (eg. "Z5", "NEW") */
+  badge?: string
+  children: React.ReactNode
+}) {
+  const [open, setOpen] = useState(defaultOpen)
+  const { copied, copy } = useCopy()
+
+  return (
+    <div className={`rounded-xl border border-black/8 bg-black/[0.02] ${className}`}>
+      <div className="flex items-center gap-2 px-5 py-3.5">
+        <button
+          onClick={() => setOpen((v) => !v)}
+          className="flex flex-1 items-center gap-2 text-left"
+        >
+          <Icon className="h-4 w-4 text-[#FB2B37]/80" strokeWidth={1.5} />
+          <h3 className="text-sm font-semibold tracking-tight text-gray-800">{title}</h3>
+          {badge && (
+            <span className="rounded-full bg-violet-100 px-1.5 py-0.5 text-[9px] font-bold text-violet-700">{badge}</span>
+          )}
+          {subtitle && (
+            <span className="text-[11px] text-gray-400 truncate">· {subtitle}</span>
+          )}
+        </button>
+        {copyText && (
+          <button
+            onClick={(e) => { e.stopPropagation(); copy(copyText) }}
+            title={copyLabel}
+            className="flex items-center gap-1 rounded-full px-2 py-1 text-[10px] font-medium text-gray-500 transition-colors hover:bg-black/5 hover:text-gray-700"
+          >
+            {copied ? <Check className="h-3 w-3 text-emerald-500" /> : <Copy className="h-3 w-3" />}
+            <span className="hidden sm:inline">{copied ? 'Đã copy' : copyLabel}</span>
+          </button>
+        )}
+        <button
+          onClick={() => setOpen((v) => !v)}
+          className="rounded-full p-1 text-gray-400 transition-colors hover:bg-black/5 hover:text-gray-700"
+          aria-label={open ? 'Thu gọn' : 'Mở rộng'}
+        >
+          <ChevronDown className={`h-4 w-4 transition-transform ${open ? 'rotate-180' : ''}`} />
+        </button>
+      </div>
+      {open && (
+        <div className="border-t border-black/8 px-5 py-4">
+          {children}
+        </div>
+      )}
+    </div>
+  )
+}
+
 /* ─── 1. Scorecard ─── */
 function scoreColor(score: number) {
   if (score >= 9) return { text: 'text-cyan-400', border: 'border-cyan-400/20', bg: 'bg-cyan-400/10' }
@@ -947,9 +1017,15 @@ function HookSection({ result }: { result: AnalysisResult }) {
 /* ─── 4. Structure Map ─── */
 function StructureSection({ result }: { result: AnalysisResult }) {
   const { structureMap } = result
+  const copyText = `# CẤU TRÚC\nThời lượng: ${structureMap.runtime} · Nhịp độ: ${structureMap.pacing}\n\n${structureMap.beats.map((b) => `${b.timestamp} · ${b.beat} (${b.duration}): ${b.description}`).join('\n')}`
   return (
-    <Section>
-      <SectionHeader icon={Map} title="Sơ đồ cấu trúc" />
+    <CollapsibleSection
+      icon={Map}
+      title="Sơ đồ cấu trúc"
+      subtitle={`${structureMap.runtime} · ${structureMap.beats.length} beats`}
+      copyText={copyText}
+      copyLabel="Copy structure"
+    >
       <div className="mb-4 flex gap-4">
         <Pill label="Thời lượng" value={structureMap.runtime} />
         <Pill label="Nhịp độ" value={structureMap.pacing} />
@@ -976,16 +1052,22 @@ function StructureSection({ result }: { result: AnalysisResult }) {
           </tbody>
         </table>
       </div>
-    </Section>
+    </CollapsibleSection>
   )
 }
 
 /* ─── 5. Psychology & Persuasion ─── */
 function PsychologySection({ result }: { result: AnalysisResult }) {
   const { psychology } = result
+  const copyText = `# TÂM LÝ & THUYẾT PHỤC\n\n## ĐÒN TÂM LÝ\n${psychology.primaryLevers.map((l) => `- ${l}`).join('\n')}\n\n## TÍN HIỆU TARGET\n${psychology.targetingSignals.map((s) => `- ${s}`).join('\n')}`
   return (
-    <Section>
-      <SectionHeader icon={Brain} title="Tâm lý & Thuyết phục" />
+    <CollapsibleSection
+      icon={Brain}
+      title="Tâm lý & Thuyết phục"
+      subtitle={`${psychology.primaryLevers.length} đòn · ${psychology.targetingSignals.length} target`}
+      copyText={copyText}
+      copyLabel="Copy psychology"
+    >
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <div>
           <span className="text-[11px] font-medium uppercase tracking-widest text-gray-400">Đòn tâm lý chính</span>
@@ -1010,7 +1092,7 @@ function PsychologySection({ result }: { result: AnalysisResult }) {
           </ul>
         </div>
       </div>
-    </Section>
+    </CollapsibleSection>
   )
 }
 
@@ -1041,23 +1123,36 @@ function VisualFrameCard({ frame }: { frame: { timestamp: string; description: s
 }
 
 function VisualSection({ result }: { result: AnalysisResult }) {
+  const copyText = `# KỊCH BẢN HÌNH ẢNH\n\n${result.visualPlaybook.map((f, i) => `## Shot ${i + 1} — ${f.timestamp}\n${f.description}\n\nPrompt: ${f.prompt}`).join('\n\n')}`
   return (
-    <Section>
-      <SectionHeader icon={Eye} title="Kịch bản hình ảnh" />
+    <CollapsibleSection
+      icon={Eye}
+      title="Kịch bản hình ảnh"
+      subtitle={`${result.visualPlaybook.length} shots`}
+      copyText={copyText}
+      copyLabel="Copy visual playbook"
+      defaultOpen={false}
+    >
       <div className="flex flex-col gap-3">
         {result.visualPlaybook.map((frame, i) => (
           <VisualFrameCard key={i} frame={frame} />
         ))}
       </div>
-    </Section>
+    </CollapsibleSection>
   )
 }
 
 /* ─── 7. Opportunities for Improvement ─── */
 function ImprovementsSection({ result }: { result: AnalysisResult }) {
+  const copyText = `# CƠ HỘI CẢI THIỆN\n\n${result.improvements.map((i, idx) => `${idx + 1}. ĐIỂM YẾU: ${i.weakness}\n   FIX: ${i.fix}`).join('\n\n')}`
   return (
-    <Section>
-      <SectionHeader icon={Lightbulb} title="Cơ hội cải thiện" />
+    <CollapsibleSection
+      icon={Lightbulb}
+      title="Cơ hội cải thiện"
+      subtitle={`${result.improvements.length} điểm`}
+      copyText={copyText}
+      copyLabel="Copy improvements"
+    >
       <div className="flex flex-col gap-3">
         {result.improvements.map((imp, i) => (
           <div key={i} className="rounded-lg border border-black/8 bg-black/[0.02] p-4 flex flex-col gap-3">
@@ -1072,33 +1167,26 @@ function ImprovementsSection({ result }: { result: AnalysisResult }) {
           </div>
         ))}
       </div>
-    </Section>
+    </CollapsibleSection>
   )
 }
 
-/* ─── 8. AI Reconstruction Prompt ─── */
+/* ─── 8. Creative Blueprint (was: AI Reconstruction Prompt) — Z5 rename ─── */
 function ReconstructionSection({ result }: { result: AnalysisResult }) {
-  const { copied, copy } = useCopy()
-
   return (
-    <Section>
-      <div className="mb-3 flex items-center justify-between">
-        <SectionHeader icon={Bot} title="Prompt tái tạo AI" />
-        <div className="flex items-center gap-1.5">
-          <button
-            onClick={() => copy(result.reconstructionPrompt)}
-            className="flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-medium text-gray-500 transition-colors hover:bg-black/5 hover:text-gray-700"
-          >
-            {copied ? <Check className="h-3 w-3 text-green-400" /> : <Copy className="h-3 w-3" />}
-            {copied ? 'Đã sao chép' : 'Sao chép prompt'}
-          </button>
-        </div>
-      </div>
+    <CollapsibleSection
+      icon={Bot}
+      title="Creative Blueprint"
+      subtitle="Directive đầy đủ để tái tạo cho sản phẩm bất kỳ"
+      copyText={result.reconstructionPrompt}
+      copyLabel="Copy blueprint"
+      badge="Z5"
+      defaultOpen={false}
+    >
       <pre className="whitespace-pre-wrap rounded-lg bg-gray-100 p-4 text-xs leading-relaxed text-gray-500">
         {result.reconstructionPrompt}
       </pre>
-
-    </Section>
+    </CollapsibleSection>
   )
 }
 
