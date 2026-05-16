@@ -71,6 +71,41 @@ function extractJson(raw: string): string {
 }
 
 /**
+ * Read an image reference (asset:// / blob: / https://) and return its bytes
+ * as base64 + mime type. Used to feed images directly into Gemini Vision so
+ * the AI can visually analyze the product/avatar before writing prompts.
+ * Does NOT upload anywhere — read-only conversion.
+ */
+async function getImageBytes(ref: string): Promise<{ base64: string; mimeType: string } | null> {
+  try {
+    let fetchUrl: string | null = null
+    if (isAssetRef(ref))        fetchUrl = await getUrl(ref)
+    else if (ref.startsWith('blob:')) fetchUrl = ref
+    else                              fetchUrl = ref
+    if (!fetchUrl) return null
+
+    const res = await fetch(fetchUrl)
+    if (!res.ok) return null
+    const blob = await res.blob()
+    const mime = blob.type || 'image/jpeg'
+
+    return await new Promise((resolve, reject) => {
+      const reader = new FileReader()
+      reader.onload = () => {
+        const result = reader.result as string
+        const base64 = result.split(',')[1] ?? ''
+        resolve({ base64, mimeType: mime })
+      }
+      reader.onerror = reject
+      reader.readAsDataURL(blob)
+    })
+  } catch (err) {
+    console.error('[getImageBytes] failed for ref:', ref, err)
+    return null
+  }
+}
+
+/**
  * Client-side script splitter — fallback when Gemini fails.
  * Splits script into 4-8 second segments based on sentence boundaries.
  * Works with any language (Malay, Vietnamese, English, etc.).
@@ -729,9 +764,49 @@ export default function VideoBuilder() {
 
     setPhase('running-parse')
     setPhaseError(null)
-    setPhaseDetail('Gemini Pro phân tích voice → storyboard chi tiết...')
+    setPhaseDetail('Đang đọc ảnh avatar + sản phẩm...')
 
-    const parsePrompt = `You are a senior UGC video director creating a cinematic storyboard.
+    // ── Collect reference images so Gemini Vision can SEE the actual product
+    //    appearance (capsule/tablet/bottle/sachet/cream/etc.) and avatar style
+    //    before writing prompts. Without this, the AI guesses based on script
+    //    wording and often hallucinates the wrong product form.
+    const referenceImages: Array<{ inlineData: { mimeType: string; data: string } }> = []
+    const refLabels: string[] = []   // for the prompt text — tells Gemini what each image is
+
+    // Avatar reference (always present — required by canStart)
+    const model = models.find((m) => m.id === selectedModelId)
+    const avatarSrc = manualAvatarUrl ?? model?.characterImage ?? ''
+    if (avatarSrc) {
+      const img = await getImageBytes(avatarSrc)
+      if (img) {
+        referenceImages.push({ inlineData: { mimeType: img.mimeType, data: img.base64 } })
+        refLabels.push('AVATAR (the content creator who appears in the video)')
+      }
+    }
+
+    // Product references (single bank + up to 4 manual uploads)
+    const productRefs: string[] = []
+    if (selectedProductId) {
+      const prod = products.find((p) => p.id === selectedProductId)
+      if (prod?.productImage) productRefs.push(prod.productImage)
+    }
+    for (const mp of manualProducts) productRefs.push(mp.blobUrl)
+
+    for (const ref of productRefs.slice(0, 4)) {
+      const img = await getImageBytes(ref)
+      if (img) {
+        referenceImages.push({ inlineData: { mimeType: img.mimeType, data: img.base64 } })
+        refLabels.push('PRODUCT photo — analyze form factor, packaging, color, branding')
+      }
+    }
+
+    setPhaseDetail(`Gemini Pro analyzing ${referenceImages.length} ảnh + script → storyboard...`)
+
+    const imageManifest = refLabels.length > 0
+      ? `Reference images attached (in order):\n${refLabels.map((l, i) => `[Image ${i + 1}] ${l}`).join('\n')}\n\nCRITICAL: First, look carefully at the product image(s). Identify the EXACT form factor (capsule / tablet / powder sachet / liquid bottle / cream tube / spray / etc.), packaging style, color, and branding. Your prompts MUST describe the product as it ACTUALLY APPEARS in the image — do not invent a different form even if the script's wording is ambiguous.\n\nExample: If you see capsules in a bottle but the script says "sachet", your prompt should still describe a BOTTLE of CAPSULES (the script may be loosely translated or using a generic term).\n\nFor avatar: every shot featuring a person should match the avatar's apparent age, ethnicity, style, and clothing as seen in the reference image.\n\n`
+      : ''
+
+    const parsePrompt = `${imageManifest}You are a senior UGC video director creating a cinematic storyboard.
 
 The voiceover is ${audioDuration.toFixed(1)} seconds long. Split the script into 8-12 segments matching natural pause/sentence boundaries. Each segment should be 4-8 seconds.
 
@@ -799,14 +874,17 @@ ${script}`
     let parsed: ParseResult | null = null
     let usedFallback = false
 
-    // Attempt 1: Gemini Pro (best creative reasoning) with schema
+    // Build parts: images FIRST so Gemini analyzes them before reading the prompt
+    const parts = [...referenceImages, { text: parsePrompt }]
+
+    // Attempt 1: Gemini Pro Vision (best creative reasoning + image analysis)
     if (geminiApiKey) {
       try {
         const raw = await directGeminiVision({
           apiKey: geminiApiKey,
-          parts: [{ text: parsePrompt }],
-          model: 'gemini-2.5-pro',          // Pro = better cinematic storyboarding
-          maxOutputTokens: 16384,            // detailed prompts use more tokens
+          parts,
+          model: 'gemini-2.5-pro',
+          maxOutputTokens: 16384,
           responseMimeType: 'application/json',
           responseSchema: parseSchema,
         })
@@ -815,11 +893,10 @@ ${script}`
         console.warn('[parse] Pro attempt failed, falling back to Flash:', e1)
         setPhaseDetail('Pro bận → thử Flash...')
 
-        // Attempt 2: Gemini Flash (faster fallback) with schema
         try {
           const raw = await directGeminiVision({
             apiKey: geminiApiKey,
-            parts: [{ text: parsePrompt }],
+            parts,
             maxOutputTokens: 16384,
             responseMimeType: 'application/json',
             responseSchema: parseSchema,
