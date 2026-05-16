@@ -139,11 +139,10 @@ function AvatarCard({ model, selected, onSelect }: {
 
 // ── Product card — resolves asset:// URLs ─────────────────────────────────────
 
-function ProductCard({ product, selected, onToggle, disabled }: {
+function ProductCard({ product, selected, onToggle }: {
   product: Product
   selected: boolean
   onToggle: () => void
-  disabled: boolean
 }) {
   const [imgSrc, setImgSrc] = useState<string | null>(null)
 
@@ -159,8 +158,7 @@ function ProductCard({ product, selected, onToggle, disabled }: {
   return (
     <button
       onClick={onToggle}
-      disabled={disabled}
-      className={`relative flex flex-col items-center gap-1.5 rounded-xl border-2 p-2 transition-all disabled:opacity-40 ${
+      className={`relative flex flex-col items-center gap-1.5 rounded-xl border-2 p-2 transition-all ${
         selected ? 'border-violet-400 bg-violet-50' : 'border-black/8 bg-white hover:border-violet-200'
       }`}
     >
@@ -352,7 +350,7 @@ export default function VideoBuilder() {
   const [selectedScriptId, setSelectedScriptId] = useState('')
   const [script, setScript] = useState('')
   const [selectedModelId, setSelectedModelId] = useState('')
-  const [selectedProductIds, setSelectedProductIds] = useState<string[]>([])
+  const [selectedProductId, setSelectedProductId] = useState('')   // single bank product
   const [selectedVoiceId, setSelectedVoiceId] = useState('')
   const [voices, setVoices] = useState<ElevenLabsVoice[]>([])
   const [loadingVoices, setLoadingVoices] = useState(false)
@@ -388,13 +386,9 @@ export default function VideoBuilder() {
     setScript(text)
   }
 
-  const totalProductCount = selectedProductIds.length + manualProducts.length
-
+  // Single-select from bank: click to select, click again to deselect
   const handleToggleProduct = (id: string) => {
-    if (!selectedProductIds.includes(id) && totalProductCount >= 5) {
-      addToast('Tối đa 5 sản phẩm', 'error'); return
-    }
-    setSelectedProductIds((prev) => prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id])
+    setSelectedProductId((prev) => prev === id ? '' : id)
   }
 
   const handleAvatarUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -406,15 +400,21 @@ export default function VideoBuilder() {
     e.target.value = ''
   }
 
+  // Multiple manual product images allowed (up to 8 for reference data)
   const handleProductUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (!file) return
-    if (totalProductCount >= 5) { addToast('Tối đa 5 sản phẩm', 'error'); return }
-    setManualProducts((prev) => [...prev, {
-      id: crypto.randomUUID(),
-      name: file.name.replace(/\.[^.]+$/, ''),
-      blobUrl: URL.createObjectURL(file),
-    }])
+    const files = Array.from(e.target.files ?? [])
+    if (!files.length) return
+    if (manualProducts.length + files.length > 8) {
+      addToast('Tối đa 8 ảnh đính kèm sản phẩm', 'error'); return
+    }
+    setManualProducts((prev) => [
+      ...prev,
+      ...files.map((file) => ({
+        id: crypto.randomUUID(),
+        name: file.name.replace(/\.[^.]+$/, ''),
+        blobUrl: URL.createObjectURL(file),
+      })),
+    ])
     e.target.value = ''
   }
 
@@ -566,15 +566,19 @@ ${script}`
       const avatarImageUrl = await resolveImageUrl(avatarSrc)
       if (!avatarImageUrl) throw new Error('Không lấy được URL ảnh Avatar AI — kiểm tra Avatar AI trong Project')
 
+      // Product images: 1 bank product (primary) + N manual uploads (reference data for AI)
       const productImageUrls: string[] = []
-      // From bank
-      for (const pid of selectedProductIds) {
-        const prod = products.find((p) => p.id === pid)
-        if (!prod?.productImage) continue
-        const url = await resolveImageUrl(prod.productImage)
-        if (url) productImageUrls.push(url)
+
+      // Bank product (single selection)
+      if (selectedProductId) {
+        const prod = products.find((p) => p.id === selectedProductId)
+        if (prod?.productImage) {
+          const url = await resolveImageUrl(prod.productImage)
+          if (url) productImageUrls.push(url)
+        }
       }
-      // From manual uploads
+
+      // Manual uploads — all images as extra reference data for B-roll gen
       let manualFailCount = 0
       for (const mp of manualProducts) {
         const url = await resolveImageUrl(mp.blobUrl)
@@ -582,11 +586,11 @@ ${script}`
         else manualFailCount++
       }
       if (manualFailCount > 0) {
-        addToast(`${manualFailCount} ảnh sản phẩm thủ công không upload được — kiểm tra kết nối`, 'error')
+        addToast(`${manualFailCount} ảnh đính kèm không upload được — kiểm tra kết nối`, 'error')
       }
 
       const avatarDisplayName = manualAvatarUrl ? manualAvatarName : (model?.name ?? '?')
-      setStep('resolve', 'done', `avatar: ${avatarDisplayName} · ${productImageUrls.length} sản phẩm`)
+      setStep('resolve', 'done', `avatar: ${avatarDisplayName} · ${productImageUrls.length} ảnh sản phẩm`)
 
       // ── Step 4: Avatar lip-sync ───────────────────────────────────────────
       setStep('avatar', 'running')
@@ -607,7 +611,10 @@ ${script}`
       const brollResults: (string | null)[] = new Array(timedSegments.length).fill(null)
 
       await Promise.all(timedSegments.map(async (seg, i) => {
-        const refImages = (seg.useProduct && productImageUrls.length > 0) ? [productImageUrls[0]] : undefined
+        // Pass up to 3 product images as reference so AI has richer visual context
+        const refImages = (seg.useProduct && productImageUrls.length > 0)
+          ? productImageUrls.slice(0, 3)
+          : undefined
         try {
           const { taskId } = await generateVideoJob({
             apiKey: kieApiKey,
@@ -686,8 +693,8 @@ ${script}`
     }
   }
 
-  const hasAvatar  = !!selectedModelId || !!manualAvatarUrl
-  const canBuild   = !!script.trim() && hasAvatar && !!selectedVoiceId && !isBuilding
+  const hasAvatar = !!selectedModelId || !!manualAvatarUrl
+  const canBuild  = !!script.trim() && hasAvatar && !!selectedVoiceId && !isBuilding
     && !!elevenLabsApiKey && !!kieApiKey && !!falApiKey && !!shotstackApiKey && !!geminiApiKey
 
   const missingKeys = [
@@ -814,66 +821,71 @@ ${script}`
 
           {/* ─── Sản phẩm ─── */}
           <div>
+            {/* Section header */}
             <div className="mb-2 flex items-center justify-between">
-              <SectionLabel icon={Package}>Sản phẩm (tùy chọn · tối đa 5)</SectionLabel>
-              {totalProductCount > 0 && (
+              <SectionLabel icon={Package}>Sản phẩm (chọn 1)</SectionLabel>
+              {selectedProductId && (
                 <span className="rounded-full bg-violet-100 px-2 py-0.5 text-xs font-semibold text-violet-600">
-                  {totalProductCount}/5
+                  ✓ đã chọn
                 </span>
               )}
             </div>
 
-            {/* Bank products */}
-            {products.length > 0 && (
+            {/* Bank products — single select */}
+            {products.length > 0 ? (
               <div className="grid grid-cols-3 gap-2.5">
                 {products.map((p) => (
                   <ProductCard
                     key={p.id}
                     product={p}
-                    selected={selectedProductIds.includes(p.id)}
+                    selected={selectedProductId === p.id}
                     onToggle={() => handleToggleProduct(p.id)}
-                    disabled={!selectedProductIds.includes(p.id) && totalProductCount >= 5}
                   />
                 ))}
               </div>
+            ) : (
+              <p className="text-sm text-gray-400 italic">Chưa có sản phẩm trong Project — bỏ qua hoặc đính kèm ảnh bên dưới</p>
             )}
 
-            {/* Manual products */}
+            {/* Manual reference images — multiple allowed */}
             {manualProducts.length > 0 && (
-              <div className={`grid grid-cols-3 gap-2.5 ${products.length > 0 ? 'mt-2.5' : ''}`}>
-                {manualProducts.map((mp) => (
-                  <div
-                    key={mp.id}
-                    className="relative flex flex-col items-center gap-1.5 rounded-xl border-2 border-violet-300 bg-violet-50 p-2"
-                  >
-                    <img src={mp.blobUrl} alt={mp.name} className="h-14 w-14 rounded-lg object-cover border border-violet-200" />
-                    <p className="w-full truncate text-center text-xs font-medium text-gray-700">{mp.name}</p>
-                    <button
-                      onClick={() => setManualProducts((prev) => prev.filter((p) => p.id !== mp.id))}
-                      className="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full bg-red-400 shadow"
+              <div className="mt-3">
+                <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-gray-400">
+                  Ảnh đính kèm ({manualProducts.length}) — AI dùng làm tham khảo khi gen B-roll
+                </p>
+                <div className="grid grid-cols-4 gap-2">
+                  {manualProducts.map((mp) => (
+                    <div
+                      key={mp.id}
+                      className="relative flex flex-col items-center gap-1 rounded-xl border border-violet-200 bg-violet-50/60 p-1.5"
                     >
-                      <X className="h-3 w-3 text-white" />
-                    </button>
-                  </div>
-                ))}
+                      <img src={mp.blobUrl} alt={mp.name} className="h-12 w-12 rounded-lg object-cover border border-violet-100" />
+                      <p className="w-full truncate text-center text-[10px] font-medium text-gray-600">{mp.name}</p>
+                      <button
+                        onClick={() => setManualProducts((prev) => prev.filter((p) => p.id !== mp.id))}
+                        className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-red-400 shadow"
+                      >
+                        <X className="h-2.5 w-2.5 text-white" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
 
-            {/* No products at all */}
-            {products.length === 0 && manualProducts.length === 0 && (
-              <p className="text-sm text-gray-400 italic">Chưa có sản phẩm — bỏ qua hoặc tải ảnh lên bên dưới</p>
-            )}
-
-            {/* Upload product image */}
-            {totalProductCount < 5 && (
+            {/* Upload button — always shown until limit */}
+            {manualProducts.length < 8 && (
               <UploadBtn onClick={() => productFileRef.current?.click()}>
-                Thêm ảnh sản phẩm thủ công
+                {manualProducts.length === 0
+                  ? 'Đính kèm ảnh sản phẩm (AI tham khảo khi gen B-roll)'
+                  : `Thêm ảnh đính kèm (${manualProducts.length}/8)`}
               </UploadBtn>
             )}
             <input
               ref={productFileRef}
               type="file"
               accept="image/png,image/jpeg,image/webp"
+              multiple
               className="hidden"
               onChange={handleProductUpload}
             />
