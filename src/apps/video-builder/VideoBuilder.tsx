@@ -448,30 +448,63 @@ export default function VideoBuilder() {
     try {
       // ── Step 1: Parse script with Gemini ──────────────────────────────────
       setStep('parse', 'running')
-      const parsePrompt = `Bạn là AI phân tích kịch bản video quảng cáo UGC. Phân tích script sau và trả về JSON:
-{
-  "segments": [
-    {
-      "index": 0,
-      "text": "nội dung đoạn nguyên văn",
-      "durationSec": 5.0,
-      "startSec": 0.0,
-      "brollPrompt": "cinematic scene description in English, vertical 9:16, no text",
-      "avatarPosition": "right",
-      "useProduct": false
-    }
-  ],
-  "totalEstimatedSec": 55.0
-}
-Quy tắc: chia 6-10 đoạn (4-8s/đoạn) · durationSec theo tốc độ đọc ~130 từ/phút · avatarPosition luân phiên left/right · useProduct=true nếu đoạn đề cập sản phẩm · trả về JSON thuần, không markdown.
-SCRIPT:\n${script}`
+      const parsePrompt = `You are a UGC video script analyzer. Split the script into segments and return ONLY a valid JSON object — no markdown, no explanation, no extra text.
 
-      const parseResult = await directGeminiVision({ apiKey: geminiApiKey, parts: [{ text: parsePrompt }], maxOutputTokens: 2048 })
+JSON format:
+{"segments":[{"index":0,"text":"exact segment text","durationSec":5.0,"startSec":0.0,"brollPrompt":"cinematic scene in English, vertical 9:16, no text, no people","avatarPosition":"right","useProduct":false}],"totalEstimatedSec":60.0}
+
+Rules:
+- Split into 6-10 segments (4-8s each)
+- durationSec based on ~130 words/min reading speed
+- avatarPosition alternates left/right each segment
+- useProduct=true if segment mentions the product
+- brollPrompt: vivid English scene description, no people, no text overlay
+- Return ONLY the JSON object, starting with { and ending with }
+
+SCRIPT:
+${script}`
+
+      // Robust JSON extractor — handles markdown fences and extra text
+      function extractJson(raw: string): string {
+        // Strip markdown code fences
+        let s = raw.replace(/^```(?:json)?\s*/im, '').replace(/\s*```\s*$/im, '').trim()
+        // Extract the outermost {...} block
+        const start = s.indexOf('{')
+        const end   = s.lastIndexOf('}')
+        if (start !== -1 && end !== -1 && end > start) {
+          s = s.slice(start, end + 1)
+        }
+        return s
+      }
+
+      // Attempt parse with retry on failure
+      let parseResult = await directGeminiVision({
+        apiKey: geminiApiKey,
+        parts: [{ text: parsePrompt }],
+        maxOutputTokens: 8192,   // was 2048 — JSON for 10 segments needs ~2-4k tokens
+      })
+
       let parsed: { segments: ScriptSegment[]; totalEstimatedSec: number }
       try {
-        const clean = parseResult.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim()
-        parsed = JSON.parse(clean) as { segments: ScriptSegment[]; totalEstimatedSec: number }
-      } catch { throw new Error('Gemini không trả về JSON hợp lệ — thử lại') }
+        parsed = JSON.parse(extractJson(parseResult)) as typeof parsed
+      } catch {
+        // Retry once with the same prompt
+        setStep('parse', 'running', 'Thử lại lần 2...')
+        try {
+          parseResult = await directGeminiVision({
+            apiKey: geminiApiKey,
+            parts: [{ text: parsePrompt }],
+            maxOutputTokens: 8192,
+          })
+          parsed = JSON.parse(extractJson(parseResult)) as typeof parsed
+        } catch {
+          throw new Error(`Gemini không trả về JSON hợp lệ sau 2 lần thử. Thử rút ngắn kịch bản hoặc kiểm tra Gemini API key.`)
+        }
+      }
+
+      if (!Array.isArray(parsed.segments) || parsed.segments.length === 0) {
+        throw new Error('Gemini trả về JSON không có segments — thử lại')
+      }
 
       const segments = parsed.segments
       setStep('parse', 'done', `${segments.length} segments · ~${formatDuration(parsed.totalEstimatedSec)}`)
