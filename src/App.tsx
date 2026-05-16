@@ -17,6 +17,7 @@ import AdAnatomy from './apps/ad-anatomy/AdAnatomy'
 import ScriptArchitect from './apps/script-architect/ScriptArchitect'
 import AdsContent from './apps/ads-content/AdsContent'
 import LandingPageAI from './apps/landing-page/LandingPageAI'
+import History from './apps/history/History'
 import CharacterStudio from './apps/character-studio/CharacterStudio'
 import VoiceStudio from './apps/voice-studio/VoiceStudio'
 import BrollStudio from './apps/broll-studio/BrollStudio'
@@ -31,6 +32,7 @@ const APP_COMPONENTS: Record<string, React.ComponentType> = {
   'script-architect': ScriptArchitect,
   'ads-content': AdsContent,
   'landing-page': LandingPageAI,
+  'history': History,
   'character-studio': CharacterStudio,
   'voice-studio': VoiceStudio,
   'broll-studio': BrollStudio,
