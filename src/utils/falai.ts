@@ -195,11 +195,14 @@ export async function pollLatentSyncUntilDone(params: {
   throw new Error('TIMEOUT')
 }
 
-// ── InstantID (identity-preserving image generation) ─────────────────────────
-// Designed specifically for "1 face photo → consistent character across many
-// scenes". Far better identity match (~95%) than generic image-reference
-// pipelines like Nano Banana 2 / GPT Image 2 (~70-80%).
-// Pricing: ~$0.04 per image at 1024x1024 / portrait sizes.
+// ── FLUX PuLID (identity-preserving image generation) ────────────────────────
+// fal-ai/flux-pulid: FLUX-based model with PuLID face identity injection.
+// Accepts 1 reference face image → injects face embedding into FLUX latent
+// space → consistent identity (~90-95% match) across all generated scenes.
+// Endpoint: queue.fal.run/fal-ai/flux-pulid
+// Key params: reference_image_url, prompt, id_weight (0-3, default 1.0),
+//             image_size (object {width,height} or enum string)
+// Pricing: ~$0.05-0.08 per image at portrait resolutions.
 
 interface FalImageResult {
   images?: Array<{ url: string; content_type?: string; width?: number; height?: number }>
@@ -207,48 +210,41 @@ interface FalImageResult {
 }
 
 /**
- * Generate an image using fal-ai/instant-id with strong identity lock.
- * Pass the avatar's face image — InstantID extracts a 512-dim face embedding
- * and injects it directly into the diffusion model's latent space, so the
- * generated person has the SAME face (~95% match) across every call.
+ * Generate an image using fal-ai/flux-pulid with strong identity lock.
+ * Pass the avatar's face image — PuLID extracts a face embedding and injects
+ * it into FLUX's latent space, producing the SAME face (~95% match) per call.
+ *
+ * Previously used fal-ai/instant-id (404 — endpoint removed by fal.ai).
+ * Switched to flux-pulid which is the current recommended alternative.
  */
 export async function generateInstantIDImage(params: {
   apiKey: string
   faceImageUrl: string          // reference face — the identity anchor
   prompt: string                // scene description
   negativePrompt?: string
-  /** Pose reference (optional). If provided, InstantID copies head pose +
-   *  body posture from this image while keeping the face identity from faceImageUrl. */
-  poseImageUrl?: string
-  /** 0-1, default 0.8. Higher = stronger identity preservation but less
-   *  prompt flexibility. */
+  /** 0-3, default 1.2. Higher = stronger identity lock, less prompt flexibility. */
   identityStrength?: number
-  /** 0-1, default 0.8. How much to follow the face image style. */
-  adapterStrength?: number
-  /** Exact width × height in pixels (more reliable than enum names). */
+  /** Exact width × height in pixels. */
   imageSize?: { width: number; height: number }
   /** Optional callback for status updates during polling. */
   onStatusChange?: (status: string) => void
   timeoutMs?: number
 }): Promise<string> {
   // ── Submit job to queue ────────────────────────────────────────────────
-  // Default to 9:16 vertical at HD-ish resolution. Use explicit width/height
-  // object (more reliable than fal's enum names which vary per model).
+  // Default to 9:16 vertical at HD-ish resolution.
   const imageSize = params.imageSize ?? { width: 720, height: 1280 }
 
   const requestBody: Record<string, unknown> = {
-    face_image_url:              params.faceImageUrl,
-    prompt:                      params.prompt,
-    negative_prompt:             params.negativePrompt ?? 'low quality, blurry, distorted, deformed face, multiple faces, watermark, text overlay',
-    identitynet_strength_ratio:  params.identityStrength ?? 0.8,
-    adapter_strength_ratio:      params.adapterStrength  ?? 0.8,
-    image_size:                  imageSize,
-    num_inference_steps:         30,
-    guidance_scale:              5,
+    reference_image_url:  params.faceImageUrl,
+    prompt:               params.prompt,
+    negative_prompt:      params.negativePrompt ?? 'low quality, blurry, distorted, deformed face, multiple faces, watermark, text overlay',
+    id_weight:            params.identityStrength ?? 1.2,
+    image_size:           imageSize,
+    num_inference_steps:  28,
+    guidance_scale:       3.5,
   }
-  if (params.poseImageUrl) requestBody.pose_image_url = params.poseImageUrl
 
-  const submitRes = await fetch(`${FAL_QUEUE_BASE}/fal-ai/instant-id`, {
+  const submitRes = await fetch(`${FAL_QUEUE_BASE}/fal-ai/flux-pulid`, {
     method: 'POST',
     headers: {
       ...authHeader(params.apiKey),
@@ -265,25 +261,25 @@ export async function generateInstantIDImage(params: {
   }
   if (!submitRes.ok) {
     const detail = await readErrorBody(submitRes)
-    throw new Error(`fal.ai InstantID submit lỗi (${submitRes.status}): ${detail}`)
+    throw new Error(`fal.ai flux-pulid submit lỗi (${submitRes.status}): ${detail}`)
   }
   const { request_id } = await submitRes.json() as FalQueueSubmitResponse
-  if (!request_id) throw new Error('fal.ai không trả về request_id cho InstantID')
+  if (!request_id) throw new Error('fal.ai không trả về request_id cho flux-pulid')
 
   // ── Poll for completion ────────────────────────────────────────────────
-  const timeout  = params.timeoutMs ?? 3 * 60 * 1000   // 3 min default
-  const interval = 3000
+  const timeout  = params.timeoutMs ?? 4 * 60 * 1000   // 4 min (FLUX is slower than SD)
+  const interval = 4000
   const start    = Date.now()
   let lastStatus = ''
 
   while (Date.now() - start < timeout) {
     const statusRes = await fetch(
-      `${FAL_QUEUE_BASE}/fal-ai/instant-id/requests/${request_id}/status`,
+      `${FAL_QUEUE_BASE}/fal-ai/flux-pulid/requests/${request_id}/status`,
       { headers: authHeader(params.apiKey) },
     )
     if (!statusRes.ok) {
       const detail = await readErrorBody(statusRes)
-      throw new Error(`InstantID status lỗi (${statusRes.status}): ${detail}`)
+      throw new Error(`flux-pulid status lỗi (${statusRes.status}): ${detail}`)
     }
     const s = await statusRes.json() as FalQueueStatusResponse
     if (s.status !== lastStatus) {
@@ -294,26 +290,26 @@ export async function generateInstantIDImage(params: {
     if (s.status === 'COMPLETED') {
       // Fetch the result
       const resultRes = await fetch(
-        `${FAL_QUEUE_BASE}/fal-ai/instant-id/requests/${request_id}`,
+        `${FAL_QUEUE_BASE}/fal-ai/flux-pulid/requests/${request_id}`,
         { headers: authHeader(params.apiKey) },
       )
       if (!resultRes.ok) {
         const detail = await readErrorBody(resultRes)
-        throw new Error(`InstantID result lỗi (${resultRes.status}): ${detail}`)
+        throw new Error(`flux-pulid result lỗi (${resultRes.status}): ${detail}`)
       }
       const result = await resultRes.json() as FalImageResult
       const url = result.images?.[0]?.url
-      if (!url) throw new Error(result.error ?? 'InstantID không trả về image URL')
+      if (!url) throw new Error(result.error ?? 'flux-pulid không trả về image URL')
       return url
     }
     if (s.status === 'FAILED') {
-      throw new Error(s.error ?? 'InstantID generation FAILED — thử lại hoặc dùng ảnh face khác')
+      throw new Error(s.error ?? 'flux-pulid FAILED — thử lại hoặc dùng ảnh face rõ hơn')
     }
 
     await new Promise((r) => setTimeout(r, interval))
   }
 
-  throw new Error('InstantID TIMEOUT — quá 3 phút mà chưa xong')
+  throw new Error('flux-pulid TIMEOUT — quá 4 phút mà chưa xong')
 }
 
 // ── Video Background Removal (veed/video-background-removal) ──────────────────

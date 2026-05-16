@@ -490,7 +490,7 @@ interface PersistedState {
 const STEP_INFO: Record<string, { num: number; label: string; subLabel: string; cost: string }> = {
   parse:    { num: 1, label: 'Storyboard',          subLabel: 'Gemini Pro phân tích script → cảnh quay (timing ước lượng từ char count)', cost: 'Miễn phí' },
   resolve:  { num: 2, label: 'Chuẩn bị tài nguyên', subLabel: 'Resolve URL ảnh avatar + sản phẩm',         cost: 'Miễn phí' },
-  brollimg: { num: 3, label: 'B-roll Images',       subLabel: 'fal.ai InstantID — face-embedding identity lock (~95% match, commercial-grade)', cost: '~$0.36 · fal.ai' },
+  brollimg: { num: 3, label: 'B-roll Images',       subLabel: 'fal.ai FLUX PuLID — face-embedding identity lock (~95% match, commercial-grade)', cost: '~$0.36 · fal.ai' },
   broll:    { num: 4, label: 'B-roll Videos',       subLabel: 'Seedance 2 Fast 480p — UGC motion, tiết kiệm credit', cost: '~850 KIE credit' },
   voice:    { num: 5, label: 'Voiceover',           subLabel: 'eleven_v3 expressive — sau khi B-roll OK (re-time segments theo audio thật)', cost: '~$0.30 · ElevenLabs' },
   avatar:   { num: 6, label: 'Avatar Lip-sync',     subLabel: 'Kling Avatar: ảnh + audio → video nói (bước đắt nhất)', cost: '~624 KIE credit' },
@@ -1752,18 +1752,17 @@ Do NOT invent a different product variant.`
     const hasProduct = !!(pipeRef.current.productImageUrls && pipeRef.current.productImageUrls.length)
     const prompt = buildImagePrompt(seg, hasAvatar, hasProduct)
 
-    // InstantID is face-focused. Pass the avatar's primary face image as
-    // the identity anchor. Product appearance is handled via the locked
-    // product description embedded in the prompt (see buildImagePrompt).
-    // identityStrength 0.85 prioritizes face match over scene flexibility.
+    // FLUX PuLID: Pass the avatar's primary face image as identity anchor.
+    // Product appearance is handled via the locked product description
+    // embedded in the prompt (see buildImagePrompt).
+    // identityStrength (id_weight) 1.3 prioritizes face match over scene flex.
     const imageUrl = await generateInstantIDImage({
       apiKey: falApiKey,
       faceImageUrl: avatarImageUrl,
       prompt,
       imageSize: { width: 720, height: 1280 },  // 9:16 vertical HD
-      identityStrength: 0.85,
-      adapterStrength: 0.8,
-      timeoutMs: 3 * 60 * 1000,
+      identityStrength: 1.3,
+      timeoutMs: 4 * 60 * 1000,
     })
     return imageUrl
   }
@@ -2390,7 +2389,7 @@ MOTION: Gentle cinematic camera motion only — slow push-in on key detail, or s
             </button>
           )}
           <p className="mt-2 text-center text-xs text-gray-400">
-            {isIdle ? 'Pipeline 8 bước · ~1,474 KIE credit + ~$1.66 (EL+fal InstantID+fal BG+SS) · InstantID face lock 95%' : `Đang chạy · ~1,474 KIE credit + ~$1.66 ngoài KIE`}
+            {isIdle ? 'Pipeline 8 bước · ~1,474 KIE credit + ~$1.66 (EL+fal FLUX PuLID+fal BG+SS) · face lock 95%' : `Đang chạy · ~1,474 KIE credit + ~$1.66 ngoài KIE`}
           </p>
         </div>
       </div>
@@ -2651,7 +2650,7 @@ MOTION: Gentle cinematic camera motion only — slow push-in on key detail, or s
             >
               <p className="mb-3 text-xs text-gray-500">
                 <strong className="text-emerald-600">{previewBrollImageUrls.filter(Boolean).length}/{previewBrollImageUrls.length}</strong> ảnh thành công.
-                Click vào ảnh để gen lại từng cái (~$0.04, fal.ai InstantID — face lock 95%) — vẫn rẻ hơn ~10x so với gen lại video.
+                Click vào ảnh để gen lại từng cái (~$0.05, fal.ai FLUX PuLID — face lock 95%) — vẫn rẻ hơn ~10x so với gen lại video.
               </p>
               <div className="grid grid-cols-3 gap-2">
                 {previewBrollImageUrls.map((url, i) => {
@@ -2676,7 +2675,7 @@ MOTION: Gentle cinematic camera motion only — slow push-in on key detail, or s
                       ) : (
                         <button
                           onClick={() => regenerateOneImage(i)}
-                          title={`Gen lại ảnh #${i + 1} (~$0.04 fal.ai InstantID — face lock 95%)`}
+                          title={`Gen lại ảnh #${i + 1} (~$0.05 fal.ai FLUX PuLID — face lock 95%)`}
                           className="absolute right-1 top-1 flex h-7 w-7 items-center justify-center rounded-md bg-black/60 text-white opacity-0 transition-opacity hover:bg-violet-600 group-hover:opacity-100"
                         >
                           <RotateCcw className="h-3.5 w-3.5" />
@@ -2908,7 +2907,7 @@ MOTION: Gentle cinematic camera motion only — slow push-in on key detail, or s
                 </p>
               </div>
               <div className="flex flex-wrap justify-center gap-2 text-xs text-gray-400">
-                {['Free ① Storyboard', '$0.36 fal ③ Images (InstantID 95%)', '850 cr ④ Videos (Seedance 480p)', '$0.30 EL ⑤ Voice', '624 cr ⑥ Avatar', '$0.50 fal ⑦ BG', '$0.50 SS ⑧ Render'].map((t) => (
+                {['Free ① Storyboard', '$0.36 fal ③ Images (FLUX PuLID 95%)', '850 cr ④ Videos (Seedance 480p)', '$0.30 EL ⑤ Voice', '624 cr ⑥ Avatar', '$0.50 fal ⑦ BG', '$0.50 SS ⑧ Render'].map((t) => (
                   <span key={t} className="rounded-full border border-black/8 bg-black/[0.02] px-3 py-1.5">{t}</span>
                 ))}
               </div>
