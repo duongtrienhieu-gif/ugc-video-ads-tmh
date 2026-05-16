@@ -81,37 +81,44 @@ NOTE: This is a NEUTRAL baseline pose — subsequent scenes will derive variatio
 
 /** Scene blueprint compiled from structured JSON (replaces giant cinematic prompts). */
 function buildSceneFromBlueprint(blueprint: SceneBlueprint, hasMasterFrame: boolean): string {
-  const visibilityHint: Record<typeof blueprint.productVisibility, string> = {
-    'none':   'product not visible in this shot',
+  const visibilityHint: Record<SceneBlueprint['productVisibility'], string> = {
     'low':    'product partially visible in background or held casually',
     'medium': 'product clearly visible held at waist or table level',
     'high':   'product prominently held at chest level, label facing camera',
-    'hero':   'product is the FOCAL POINT — held up close to lens, label sharp',
   }
 
   const masterFrameHint = hasMasterFrame
     ? '\nIMPORTANT: This scene is a VARIATION of the approved Master Frame (reference image #3). Keep the EXACT same person and EXACT same product packaging as in the master frame — only the pose, framing, environment, and expression change.'
     : ''
 
+  const cta = blueprint.ctaFocus ? '\nCTA scene: emphasize trustworthy direct eye contact + product clearly visible for the call-to-action moment.' : ''
+
   return `[3] SCENE BLUEPRINT
 Goal: ${blueprint.sceneGoal}
 Environment: ${blueprint.environment}
-Avatar action: ${blueprint.avatarAction}
+Composition: ${blueprint.composition}
+Camera angle: ${blueprint.cameraAngle}
+Shot type: ${blueprint.shotType}
+Pose: ${blueprint.pose}
+Hand usage: ${blueprint.handUsage}
 Emotion / expression: ${blueprint.emotion}
-Camera style: ${blueprint.cameraStyle}
+Background: ${blueprint.backgroundType}
+Lighting: ${blueprint.lightingStyle}
 Product visibility: ${blueprint.productVisibility} (${visibilityHint[blueprint.productVisibility]})
-Motion hint: ${blueprint.motionType}
-Overlay density: ${blueprint.overlayDensity}${masterFrameHint}`
+Motion hint: ${blueprint.motionIntent}
+Overlay density: ${blueprint.overlayDensity}${cta}${masterFrameHint}`
 }
 
 // ── [4] VISUAL DNA ───────────────────────────────────────────────────────────
 
 function buildVisualDna(ctx: CompiledPromptContext): string {
   const { dna } = ctx
+  // Per-scene visual tone (from blueprint, already clamped) overrides DNA default if present
+  const tone = ctx.scene?.visualTone ?? dna.visualTone
   return `[4] VISUAL DNA
-Style target: realistic ecommerce / landing-page / website lifestyle imagery (NOT cinematic movie scene, NOT studio commercial).
+Style target: realistic ecommerce / landing-page / website lifestyle / advertorial / social-proof imagery (NOT cinematic movie scene, NOT studio commercial, NOT fashion editorial).
 Camera: ${dna.cameraStyle}.
-Tone: ${dna.visualTone}.
+Tone: ${tone}.
 Photography spec: authentic UGC smartphone — sharp focus across the entire subject + product area, zero bokeh on subject, zero depth-of-field blur on the product, natural ambient indoor lighting, no professional studio rim lighting, no AI-generated sheen, no digital enhancement, no watermarks, no text overlay. Skin shows real natural texture and pores, not retouched.`
 }
 

@@ -20,8 +20,12 @@ import type { Model, Product } from '../../../stores/types'
 import type { V2PipelineState, MasterFrame, CompiledPrompt } from './types'
 import { createEmptyV2State } from './types'
 import { extractIdentityPack, generateMasterFrame } from './services/masterFrame'
+import { generateStoryboard } from './services/sceneBlueprint'
+import { defaultVisualStyleDna } from './types'
+import type { SceneBlueprint, DiversityReport } from './types'
 import MasterFrameApproval from './components/MasterFrameApproval'
 import PromptCompilerDebugPanel from './components/PromptCompilerDebugPanel'
+import StoryboardEditor from './components/StoryboardEditor'
 
 // ── Phase header (top breadcrumb) ───────────────────────────────────────────
 function PhaseHeader({ phase }: { phase: V2PipelineState['phase'] }) {
@@ -110,6 +114,9 @@ export default function VideoBuilderV2({ onSwitchToV1 }: Props) {
   /** Last compiled prompt — shown in debug panel. Always reflects the most recent gen. */
   const [lastCompiled, setLastCompiled] = useState<CompiledPrompt | null>(null)
   const [debugOpen, setDebugOpen] = useState(false)
+  /** Module 3 storyboard state */
+  const [diversityReport, setDiversityReport] = useState<DiversityReport | null>(null)
+  const [isGeneratingStoryboard, setIsGeneratingStoryboard] = useState(false)
   const cancelledRef = useRef(false)
 
   const kieApiKey = useSettingsStore((s) => s.kieApiKey)
@@ -231,9 +238,61 @@ export default function VideoBuilderV2({ onSwitchToV1 }: Props) {
   }
 
   const handleContinueAfterMasterFrame = () => {
-    addToast('Module 2-5 đang được xây dựng — quay lại Pipeline v1 để hoàn thiện video', 'info')
-    // For Phase 1 (this commit) — next modules will wire here later
     setState((s) => ({ ...s, phase: 'blueprint' }))
+    // Auto-trigger first storyboard generation
+    void handleGenerateStoryboard()
+  }
+
+  // ── Module 3: storyboard JSON gen via Gemini ─────────────────────────────
+  const handleGenerateStoryboard = async () => {
+    if (!state.identityPack || !state.inputs.product || !state.inputs.script.trim()) {
+      addToast('Thiếu identity pack hoặc kịch bản', 'error')
+      return
+    }
+    if (!geminiApiKey) {
+      addToast('Cần Gemini API key trong Cài đặt', 'error')
+      return
+    }
+    setIsGeneratingStoryboard(true)
+    try {
+      const { blueprints, diversity } = await generateStoryboard({
+        geminiKey: geminiApiKey,
+        script: state.inputs.script,
+        identity: state.identityPack,
+        productName: state.inputs.product.productName,
+        dna: defaultVisualStyleDna(),
+        numScenes: 9,
+      })
+      if (cancelledRef.current) return
+      setState((s) => ({ ...s, blueprints }))
+      setDiversityReport(diversity)
+      if (diversity.passed) {
+        addToast(`✓ Đã tạo storyboard ${blueprints.length} cảnh (diversity OK)`)
+      } else {
+        addToast(`Đã tạo storyboard nhưng diversity cảnh báo — review trước khi gen ảnh`, 'info')
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      addToast(`Tạo storyboard thất bại: ${msg.slice(0, 120)}`, 'error')
+    } finally {
+      setIsGeneratingStoryboard(false)
+    }
+  }
+
+  const handleUpdateScene = (idx: number, patch: Partial<SceneBlueprint>) => {
+    setState((s) => ({
+      ...s,
+      blueprints: s.blueprints.map((b, i) => (i === idx ? { ...b, ...patch } : b)),
+    }))
+  }
+
+  const handleBackToMasterFrame = () => {
+    setState((s) => ({ ...s, phase: 'master-frame' }))
+  }
+
+  const handleContinueAfterStoryboard = () => {
+    addToast('Module 4 (QC) + Module 5 (Slider) đang được xây dựng. Sau đó sẽ wire Gen B-Roll img2img.', 'info')
+    setState((s) => ({ ...s, phase: 'scene-gen' }))
   }
 
   const canStart = !!state.inputs.avatar && !!state.inputs.product && !!state.inputs.script.trim()
@@ -354,16 +413,29 @@ export default function VideoBuilderV2({ onSwitchToV1 }: Props) {
           />
         )}
 
-        {/* PHASE: BLUEPRINT (next module — placeholder) */}
+        {/* PHASE: BLUEPRINT (Module 3 — Scene Blueprint JSON editor) */}
         {state.phase === 'blueprint' && (
+          <StoryboardEditor
+            blueprints={state.blueprints}
+            diversity={diversityReport}
+            isGenerating={isGeneratingStoryboard}
+            onRegenerate={() => void handleGenerateStoryboard()}
+            onUpdateScene={handleUpdateScene}
+            onBack={handleBackToMasterFrame}
+            onContinue={handleContinueAfterStoryboard}
+          />
+        )}
+
+        {/* PHASE: SCENE-GEN (Module 6 placeholder — next phase) */}
+        {state.phase === 'scene-gen' && (
           <div className="flex h-full flex-col items-center justify-center gap-4 p-8 text-center">
             <div className="rounded-full bg-violet-50 p-4">
               <Sparkles className="h-8 w-8 text-violet-500" />
             </div>
-            <h2 className="text-base font-bold text-gray-800">Module 2-5 đang được xây dựng</h2>
+            <h2 className="text-base font-bold text-gray-800">Module 4-6 đang được xây dựng</h2>
             <p className="max-w-md text-xs text-gray-500">
-              Module 1 (Master Frame Workflow) đã hoàn thành ✓<br />
-              Các module tiếp theo: Prompt Compiler · Scene Blueprint · Basic QC · Consistency Slider.<br /><br />
+              Module 1 (Master Frame) ✓ · Module 2 (Prompt Compiler) ✓ · Module 3 (Storyboard JSON) ✓<br />
+              Còn lại: QC engine · Consistency Slider · Gen B-Roll img2img.<br /><br />
               Để hoàn thiện video, hãy quay lại Pipeline v1.
             </p>
             <button

@@ -137,28 +137,66 @@ export interface CompiledPrompt {
  * Structured per-scene blueprint — replaces giant cinematic prompts.
  * Gemini outputs an array of these instead of long visual paragraphs.
  * The Prompt Compiler (module 2) turns these into final prompts.
+ *
+ * All values target ecommerce / landing-page / advertorial / social proof
+ * use — NOT cinematic movie scenes, NOT studio commercials.
  */
 export interface SceneBlueprint {
-  /** Index in the storyboard (1-9 typically) */
-  sceneNumber: number
-  /** The scene's narrative goal — e.g. "show scientific authority", "build trust", "demonstrate result" */
+  /** 1-indexed scene id in the storyboard (1-9 typically) */
+  sceneId: number
+  /** @deprecated use sceneId — kept for back-compat with v1 */
+  sceneNumber?: number
+  /** The scene's narrative goal — e.g. "social proof review", "ingredient credibility", "demonstrate result" */
   sceneGoal: string
-  /** Emotion arc — e.g. "concerned", "curious", "confident", "excited", "relieved" */
-  emotion: string
-  /** Camera framing — e.g. "iphone selfie", "over-shoulder", "tabletop flatlay", "medium close-up" */
-  cameraStyle: string
-  /** How prominently the product appears — drives gen weighting */
-  productVisibility: 'none' | 'low' | 'medium' | 'high' | 'hero'
-  /** Setting — e.g. "modern kitchen", "bedroom", "park bench", "office desk", "bathroom mirror" */
+  /** Setting — e.g. "home kitchen", "bedroom", "cafe", "office desk", "bathroom mirror" */
   environment: string
-  /** Camera/subject motion hint (used in step 9 video gen) */
-  motionType: string
-  /** How much text overlay accompanies this scene */
+  /** Framing — e.g. "close-up", "medium close-up", "medium shot", "over-the-shoulder", "tabletop flatlay" */
+  composition: string
+  /** Camera vertical/horizontal angle — e.g. "iphone eye-level", "slight low angle", "high overhead" */
+  cameraAngle: string
+  /** Shot style — e.g. "ugc handheld", "selfie arm-extended", "tripod static", "phone-on-shelf POV" */
+  shotType: string
+  /** What the avatar is doing — e.g. "holding product near face", "pointing at label", "scooping from jar" */
+  pose: string
+  /** Emotion / expression — e.g. "friendly confident", "curious surprised", "warm reassuring", "concerned" */
+  emotion: string
+  /** How the hands interact with the product — e.g. "one hand holding bottle", "both hands cradling jar", "pinch-grip on sachet" */
+  handUsage: string
+  /** How prominently the product appears */
+  productVisibility: 'low' | 'medium' | 'high'
+  /** Background style — e.g. "real lived-in home", "messy kitchen counter", "clean white tile bathroom", "wooden cafe table" */
+  backgroundType: string
+  /** Lighting — e.g. "soft natural daylight", "warm window-side glow", "overhead kitchen LED", "morning bathroom light" */
+  lightingStyle: string
+  /** Visual tone keyword — should always lean ecommerce/UGC */
+  visualTone: string
+  /** Motion intent for downstream video gen — e.g. "slight handheld realism", "subtle slow zoom", "static phone-mount" */
+  motionIntent: string
+  /** Text overlay density (Module 5+ subtitles) */
   overlayDensity: 'none' | 'low' | 'medium' | 'high'
-  /** The avatar's action in this scene — e.g. "holding product up", "pointing at label", "smiling at camera" */
-  avatarAction: string
-  /** Speech (1-2 lines from the script that voice over plays during this shot) */
+  /** True only on the dedicated CTA scene (usually last 1-2 scenes) */
+  ctaFocus: boolean
+  /** Speech (1-2 lines from the script that voice plays during this shot) */
   speech: string
+  /** Optional preset label this scene was generated from (for UI display) */
+  presetLabel?: string
+}
+
+/** Diversity check result — fails when 9 scenes are too similar. */
+export interface DiversityReport {
+  passed: boolean
+  /** Number of unique composition values across all scenes */
+  uniqueCompositions: number
+  /** Number of unique cameraAngle values */
+  uniqueCameraAngles: number
+  /** Number of unique pose values */
+  uniquePoses: number
+  /** Number of scenes with productVisibility = 'high' */
+  highVisibilityCount: number
+  /** Total scene count */
+  totalScenes: number
+  /** Notes about what failed */
+  notes: string[]
 }
 
 // ── MODULE 4: Basic QC via Gemini Vision ─────────────────────────────────────
