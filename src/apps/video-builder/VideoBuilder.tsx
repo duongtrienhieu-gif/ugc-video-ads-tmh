@@ -484,8 +484,8 @@ const STEP_INFO: Record<string, { num: number; label: string; subLabel: string; 
   voice:    { num: 1, label: 'Voiceover',           subLabel: 'TTS toàn bộ script → audio file (1.1x speed)', cost: '~$0.30 · ElevenLabs' },
   parse:    { num: 2, label: 'Storyboard',          subLabel: 'Gemini Pro phân tích voice → cảnh quay chi tiết', cost: 'Miễn phí' },
   resolve:  { num: 3, label: 'Chuẩn bị tài nguyên', subLabel: 'Upload audio + resolve URL ảnh',           cost: 'Miễn phí' },
-  brollimg: { num: 4, label: 'B-roll Images',       subLabel: 'Gen ảnh tĩnh từ storyboard — test trước khi commit chi phí lớn', cost: '~64 KIE credit' },
-  broll:    { num: 5, label: 'B-roll Videos',       subLabel: 'Image-to-video: ảnh tĩnh → clip chuyển động', cost: '~560 KIE credit' },
+  brollimg: { num: 4, label: 'B-roll Images',       subLabel: 'GPT Image 2 — gen ảnh photoreal, review trước khi commit video', cost: '~60 KIE credit' },
+  broll:    { num: 5, label: 'B-roll Videos',       subLabel: 'Seedance 2 Fast — UGC motion chân thực (TikTok-native)', cost: '~1,650 KIE credit' },
   avatar:   { num: 6, label: 'Avatar Lip-sync',     subLabel: 'Kling Avatar: ảnh + audio → video nói (bước đắt nhất, làm sau cùng để chắc B-roll OK)', cost: '~624 KIE credit' },
   bg:       { num: 7, label: 'Xóa nền Avatar',      subLabel: 'Tách nền để overlay trong suốt',           cost: '~$0.50 · fal.ai' },
   assemble: { num: 8, label: 'Ghép video',          subLabel: 'Layer B-roll + avatar + captions',         cost: '~$0.50 · Shotstack' },
@@ -1423,9 +1423,12 @@ ${script}`
     }
 
     try {
+      // GPT Image 2 (OpenAI): more photorealistic faces/hands/products than
+      // Nano Banana 2 + cheaper (6 credits vs 8). Trade-off: slightly less
+      // identity-stable across multiple gens — mitigated by reference images.
       const { taskId } = await generateImage({
         apiKey: kieApiKey!,
-        model: 'nano-banana-2',
+        model: 'gpt-image-2-text-to-image',
         prompt,
         resolution: '1K',
         aspectRatio: '9:16',
@@ -1534,16 +1537,18 @@ ${script}`
 MOTION: The avatar speaks naturally with subtle hand gestures, slight head turns, and authentic blinks — looks like a real person recording a UGC review on their phone. The main scene element has gentle cinematic camera motion (slow push-in on key detail, or smooth slow pan across the setting). NO static frozen frames, NO jitter, NO sudden cuts. Maintain photorealistic UGC ad style throughout the 5-second clip.`
 
         try {
+          // Seedance 2 Fast (ByteDance) — trained on billions of TikTok videos,
+          // produces the most authentic UGC motion. Uses `first_frame_image_url`
+          // for TRUE image-to-video (animates exactly from the provided still),
+          // unlike Kling's `image_urls` which is reference-based.
           const { taskId } = await generateVideoJob({
             apiKey: kieApiKey,
-            jobModelId: 'kling-3.0/video',
+            jobModelId: 'bytedance/seedance-2-fast',
             prompt: motionPrompt,
             aspectRatio: '9:16',
             resolution: '720p',
             duration: 5,
-            // Pass the generated image as the reference — Kling treats first
-            // image as the start frame, giving us proper image-to-video.
-            referenceImageUrls: [startImage],
+            startFrameUrl: startImage,   // proper i2v anchor
           })
           const brollStart = Date.now()
           while (Date.now() - brollStart < 8 * 60 * 1000) {
@@ -1965,7 +1970,7 @@ MOTION: The avatar speaks naturally with subtle hand gestures, slight head turns
             </button>
           )}
           <p className="mt-2 text-center text-xs text-gray-400">
-            {isIdle ? 'Pipeline 8 bước · ~1,248 KIE credit + ~$1.30 (EL+fal+SS)' : `Đang chạy · ~1,248 KIE credit + ~$1.30 ngoài KIE`}
+            {isIdle ? 'Pipeline 8 bước · ~2,334 KIE credit + ~$1.30 (EL+fal+SS)' : `Đang chạy · ~2,334 KIE credit + ~$1.30 ngoài KIE`}
           </p>
         </div>
       </div>
@@ -2132,7 +2137,7 @@ MOTION: The avatar speaks naturally with subtle hand gestures, slight head turns
             <ReviewCard
               onRetry={runParse}
               onContinue={runResolve}
-              continueLabel="Tiếp tục → B-roll Images"
+              continueLabel="Tiếp tục → B-roll Images (GPT Image 2)"
               continueCost={STEP_INFO.brollimg.cost}
             >
               <p className="mb-3 text-xs text-gray-500">
@@ -2213,14 +2218,14 @@ MOTION: The avatar speaks naturally with subtle hand gestures, slight head turns
             <ReviewCard
               onRetry={runBrollImages}
               onContinue={runBroll}
-              retryLabel={`Tạo lại tất cả (~${previewBrollImageUrls.length * 8} cr)`}
+              retryLabel={`Tạo lại tất cả (~${previewBrollImageUrls.length * 6} cr)`}
               continueLabel="Tiếp tục → Animate"
               continueCost={STEP_INFO.broll.cost}
               disabled={regeneratingImageIndices.size > 0}
             >
               <p className="mb-3 text-xs text-gray-500">
                 <strong className="text-emerald-600">{previewBrollImageUrls.filter(Boolean).length}/{previewBrollImageUrls.length}</strong> ảnh thành công.
-                Click vào ảnh để gen lại từng cái (~8 KIE credit) — rẻ hơn nhiều so với gen lại video.
+                Click vào ảnh để gen lại từng cái (~6 KIE credit, GPT Image 2) — rẻ hơn 27x so với gen lại video.
               </p>
               <div className="grid grid-cols-3 gap-2">
                 {previewBrollImageUrls.map((url, i) => {
@@ -2245,7 +2250,7 @@ MOTION: The avatar speaks naturally with subtle hand gestures, slight head turns
                       ) : (
                         <button
                           onClick={() => regenerateOneImage(i)}
-                          title={`Gen lại ảnh #${i + 1} (~8 KIE credit)`}
+                          title={`Gen lại ảnh #${i + 1} (~6 KIE credit, GPT Image 2)`}
                           className="absolute right-1 top-1 flex h-7 w-7 items-center justify-center rounded-md bg-black/60 text-white opacity-0 transition-opacity hover:bg-violet-600 group-hover:opacity-100"
                         >
                           <RotateCcw className="h-3.5 w-3.5" />
@@ -2263,7 +2268,7 @@ MOTION: The avatar speaks naturally with subtle hand gestures, slight head turns
             <ReviewCard
               onRetry={runBroll}
               onContinue={runAvatar}
-              retryLabel={`Tạo lại tất cả (~${previewBrollUrls.length * 70} cr)`}
+              retryLabel={`Tạo lại tất cả (~${previewBrollUrls.length * 165} cr)`}
               continueLabel="Tiếp tục → Avatar"
               continueCost={STEP_INFO.avatar.cost}
             >
@@ -2371,7 +2376,7 @@ MOTION: The avatar speaks naturally with subtle hand gestures, slight head turns
                 </p>
               </div>
               <div className="flex flex-wrap justify-center gap-2 text-xs text-gray-400">
-                {['$0.30 EL ① Voice', 'Free ② Storyboard', '64 cr ④ Images', '560 cr ⑤ Videos', '624 cr ⑥ Avatar', '$0.50 fal ⑦ BG', '$0.50 SS ⑧ Render'].map((t) => (
+                {['$0.30 EL ① Voice', 'Free ② Storyboard', '60 cr ④ Images (GPT-2)', '1,650 cr ⑤ Videos (Seedance)', '624 cr ⑥ Avatar', '$0.50 fal ⑦ BG', '$0.50 SS ⑧ Render'].map((t) => (
                   <span key={t} className="rounded-full border border-black/8 bg-black/[0.02] px-3 py-1.5">{t}</span>
                 ))}
               </div>
