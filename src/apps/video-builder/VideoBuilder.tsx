@@ -491,7 +491,7 @@ interface PersistedState {
 const STEP_INFO: Record<string, { num: number; label: string; subLabel: string; cost: string }> = {
   parse:    { num: 1, label: 'Storyboard',          subLabel: 'Gemini Pro phân tích script → cảnh quay (timing ước lượng từ char count)', cost: 'Miễn phí' },
   resolve:  { num: 2, label: 'Chuẩn bị tài nguyên', subLabel: 'Resolve URL ảnh avatar + sản phẩm',         cost: 'Miễn phí' },
-  brollimg: { num: 3, label: 'B-roll Images',       subLabel: 'fal.ai FLUX 1.1 Pro Ultra — photorealistic, raw photo mode (~9/10 realism)', cost: '~$0.36 · fal.ai' },
+  brollimg: { num: 3, label: 'B-roll Images',       subLabel: 'KIE GPT Image 2 — avatar + product image references for identity/product lock', cost: '~54 KIE credit' },
   broll:    { num: 4, label: 'B-roll Videos',       subLabel: 'Seedance 2 Fast 480p — UGC motion, tiết kiệm credit', cost: '~850 KIE credit' },
   voice:    { num: 5, label: 'Voiceover',           subLabel: 'eleven_v3 expressive — sau khi B-roll OK (re-time segments theo audio thật)', cost: '~$0.30 · ElevenLabs' },
   avatar:   { num: 6, label: 'Avatar Lip-sync',     subLabel: 'Kling Avatar: ảnh + audio → video nói (bước đắt nhất)', cost: '~624 KIE credit' },
@@ -1682,31 +1682,68 @@ Return ONLY the description as plain text, no preamble, no markdown.` },
   // Why: cheap ($0.04/image) and reviewable BEFORE committing to expensive
   // video generation ($0.35/clip). User can regen bad images individually.
 
-  // ── GPT-image-1 prompt builder ────────────────────────────────────────────
-  // Strategy: scene from Gemini storyboard + character text description + product note.
-  // gpt-image-1 is text-driven — no reference image needed.
-  // Key: "zero bokeh, zero depth of field, sharp focus across entire frame" = UGC phone look.
+  // ── B-Roll prompt builder for KIE GPT Image 2 ────────────────────────────
+  // Strategy: SCENE from Gemini storyboard + STRONG product override + character anchor.
+  //
+  // CRITICAL: Gemini storyboards often mention product names from the Ad Win Template
+  // (e.g. "INFINITY PROBIOTICS PLUS") which DON'T match the user's actual uploaded product.
+  // We aggressively strip those names and force the model to render ONLY the
+  // product shown in the reference image, described in productDescription.
   const buildImagePromptGPT = (seg: ScriptSegment): string => {
     const avatarDesc  = pipeRef.current.avatarDescription
     const productDesc = pipeRef.current.productDescription
+    const bankProduct = selectedProductId ? products.find((p) => p.id === selectedProductId) : null
+    const actualProductName = bankProduct?.productName ?? 'the product'
+    const hasProductRef = (pipeRef.current.productImageUrls?.length ?? 0) > 0
 
-    // Scene first — from Gemini's storyboard (already in English, 60-120 words)
-    const scene = seg.brollPrompt
+    // Scene from Gemini's storyboard — but REPLACE any product brand name mentions
+    // with a neutral phrase so the AI doesn't render the wrong brand.
+    let scene = seg.brollPrompt
+    if (hasProductRef && bankProduct) {
+      // Strip common product name patterns the storyboard might have inherited
+      // from the Ad Win Template. We want the scene action without forcing a brand name.
+      scene = scene
+        .replace(/\bINFINITY\s+PROBIOTICS(?:\s+PLUS)?\b/gi, actualProductName)
+        .replace(/\bsupplement\s+bottle\b/gi, 'product container')
+        .replace(/\bprobiotic\s+bottle\b/gi, 'product container')
+        .replace(/\bbottle\s+of\s+\w+\b/gi, 'product container')
+    }
 
-    // Character: enough detail for GPT to render consistently across shots
     const characterDesc = avatarDesc
       ? avatarDesc.split('\n').slice(0, 4).join(', ')
-      : 'young Malaysian woman in her late 20s, warm beige hijab, modest loose-fit casual outfit, warm tan skin, natural minimal makeup, friendly approachable face'
+      : 'young Malaysian woman in her late 20s, warm beige hijab, modest loose-fit casual outfit, warm tan skin, natural minimal makeup'
 
-    // Product: only when scene involves product interaction
-    const productNote = (seg.useProduct || seg.brollPrompt.toLowerCase().includes('product')) && productDesc
-      ? `\nProduct being held/shown: ${productDesc.split('\n')[0]}. Render the product accurately — correct packaging shape, color, label, branding exactly as described.`
+    // STRONG product anchor — only when scene shows product interaction.
+    // The reference image is passed in referenceImageUrls; here we describe it precisely.
+    const productBlock = (seg.useProduct || /product|hold|show|bottle|jar|container/i.test(seg.brollPrompt)) && hasProductRef
+      ? `
+
+═══════════════════════════════════════════════════════════════
+PRODUCT LOCK — ABSOLUTE PRIORITY (THE PRODUCT IS NON-NEGOTIABLE)
+═══════════════════════════════════════════════════════════════
+The product being held/shown/used in this image MUST EXACTLY match the product reference image attached. It is "${actualProductName}".
+${productDesc ? `Product visual description: ${productDesc}` : ''}
+
+DO NOT render:
+• Any "INFINITY PROBIOTICS" bottle (this is a different product from a template — ignore it)
+• Any generic white supplement bottle, gold-label bottle, or random pharmacy bottle
+• Any product whose container shape, color, or label does NOT match the reference image
+
+DO render:
+• The EXACT product from the reference image — same container TYPE (jar/bottle/tube/box),
+  same shape proportions (squat vs tall), same colors, same label/branding placement
+• The product clearly visible in frame, label facing the camera when held
+═══════════════════════════════════════════════════════════════`
       : ''
 
-    // UGC iPhone camera style — the magic words that eliminate "plastic AI look"
-    const style = `\n\nVisual style: authentic UGC smartphone video frame (shot on iPhone), 9:16 vertical, completely unedited natural look, zero bokeh, zero depth of field, sharp focus across the entire frame, natural ambient lighting (window light / room light), no professional studio lighting, no artificial rim lighting, no AI-generated sheen, no digital enhancement, no watermarks, no text overlay, photorealistic, film-quality realism.`
+    // UGC iPhone aesthetic — eliminates the "plastic AI look"
+    const style = `
 
-    return `${scene}\n\nSubject: ${characterDesc}.${productNote}${style}`
+Visual style: authentic UGC smartphone video frame (shot on iPhone), 9:16 vertical, completely unedited natural look, zero bokeh, zero depth of field, sharp focus across the entire frame, natural ambient lighting (window light / room light), no professional studio lighting, no artificial rim lighting, no AI-generated sheen, no digital enhancement, no watermarks, no text overlay, photorealistic, film-quality realism.`
+
+    return `${scene}
+
+Subject (matches the avatar reference image): ${characterDesc}.${productBlock}${style}`
   }
 
   // Generate ONE B-Roll image via KIE.ai's GPT Image 2 (same model as Avatar AI)
@@ -1719,13 +1756,23 @@ Return ONLY the description as plain text, no preamble, no markdown.` },
 
     const prompt = buildImagePromptGPT(seg)
 
-    // Build reference images: avatar (always) + product (if available)
+    // Build reference images.
+    // ── Reference weighting trick ────────────────────────────────────────
+    // KIE GPT Image 2 weights each reference roughly equally per slot. To make
+    // the model prioritize the user's actual product over the avatar+template
+    // bias, we pass the product image 2x and the avatar 1x.
+    // This combats the "wrong product" bug where the model invents a
+    // different bottle (e.g. INFINITY PROBIOTICS) instead of the real one.
     const { avatarImageUrl, productImageUrls } = pipeRef.current
     const refs: string[] = []
-    if (avatarImageUrl) refs.push(avatarImageUrl)
     if (productImageUrls && productImageUrls.length > 0) {
-      refs.push(...productImageUrls.slice(0, 3))  // up to 3 product refs
+      // Product first (priority) — duplicate first product for stronger weight
+      refs.push(productImageUrls[0])
+      refs.push(productImageUrls[0])
+      // Add additional product variants if user uploaded multiple
+      if (productImageUrls.length > 1) refs.push(productImageUrls[1])
     }
+    if (avatarImageUrl) refs.push(avatarImageUrl)
 
     const { taskId } = await generateImage({
       apiKey: kieApiKey,
@@ -1733,7 +1780,7 @@ Return ONLY the description as plain text, no preamble, no markdown.` },
       prompt,
       resolution: '1K',
       aspectRatio: '9:16',
-      referenceImageUrls: refs.length > 0 ? refs : undefined,
+      referenceImageUrls: refs.length > 0 ? refs.slice(0, 4) : undefined,
     })
     const remoteUrl = await pollImageUntilDone({ apiKey: kieApiKey, taskId, timeoutMs: 4 * 60 * 1000 })
 
@@ -2629,7 +2676,7 @@ MOTION: Gentle cinematic camera motion only — slow push-in on key detail, or s
             >
               <p className="mb-3 text-xs text-gray-500">
                 <strong className="text-emerald-600">{previewBrollImageUrls.filter(Boolean).length}/{previewBrollImageUrls.length}</strong> ảnh thành công.
-                Click vào ảnh để gen lại từng cái (~$0.05, fal.ai FLUX 1.1 Pro Ultra — photorealistic) — vẫn rẻ hơn ~10x so với gen lại video.
+                Click vào ảnh để gen lại từng cái (~6 KIE credit, GPT Image 2 với avatar + product reference) — rẻ hơn ~10x so với gen lại video.
               </p>
               <div className="grid grid-cols-3 gap-2">
                 {previewBrollImageUrls.map((url, i) => {

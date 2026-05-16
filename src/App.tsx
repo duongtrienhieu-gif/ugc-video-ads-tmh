@@ -19,7 +19,6 @@ import VoiceStudio from './apps/voice-studio/VoiceStudio'
 import BrollStudio from './apps/broll-studio/BrollStudio'
 import ImageDna from './apps/image-dna/ImageDna'
 import BRollVideos from './apps/broll-videos/BRollVideos'
-import LipSync from './apps/lip-sync/LipSync'
 import VideoTranslate from './apps/video-translate/VideoTranslate'
 import VideoBuilder from './apps/video-builder/VideoBuilder'
 
@@ -32,7 +31,6 @@ const APP_COMPONENTS: Record<string, React.ComponentType> = {
   'broll-studio': BrollStudio,
   'image-dna': ImageDna,
   'broll-videos': BRollVideos,
-  'lip-sync': LipSync,
   'video-translate': VideoTranslate,
   'video-builder': VideoBuilder,
 }
