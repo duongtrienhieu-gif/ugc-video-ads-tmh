@@ -13,7 +13,7 @@ interface ProductFormProps {
   onCancel: () => void
 }
 
-const FIELDS: { key: keyof Product; label: string; type: 'text' | 'textarea'; required?: boolean }[] = [
+const FIELDS: { key: keyof Product; label: string; type: 'text' | 'textarea'; required?: boolean; placeholder?: string }[] = [
   { key: 'productName', label: 'Product Name', type: 'text', required: true },
   { key: 'productDescription', label: 'Product Description', type: 'textarea', required: true },
   { key: 'targetMarket', label: 'Target Market', type: 'text', required: true },
@@ -21,15 +21,15 @@ const FIELDS: { key: keyof Product; label: string; type: 'text' | 'textarea'; re
   { key: 'usps', label: 'USP - Unique Selling Points', type: 'textarea' },
   { key: 'benefits', label: 'Benefits', type: 'textarea' },
   { key: 'offer', label: 'Offer & Pricing', type: 'text' },
-  { key: 'cta', label: 'CTA', type: 'text' },
+  { key: 'ingredients', label: 'Ingredients', type: 'textarea', placeholder: 'e.g. Vitamin B12, Inulin (prebiotic), FloraFit probiotic strains, Angelica sinensis, Motherwort...' },
 ]
 
-const JSON_SCHEMA = `{"productName":"","productDescription":"","targetMarket":"","painPoints":"","usps":"","benefits":"","offer":"","cta":""}`
+const JSON_SCHEMA = `{"productName":"","productDescription":"","targetMarket":"","painPoints":"","usps":"","benefits":"","offer":"","ingredients":""}`
 
-const EXTRACT_SYSTEM = 'You are a product info extraction assistant. Return ONLY a raw minified JSON object on a single line — no markdown, no code fences, no explanation, no newlines inside values.'
+const EXTRACT_SYSTEM = 'You are a product info extraction assistant. Return ONLY a raw minified JSON object on a single line — no markdown, no code fences, no explanation, no newlines inside values. Always respond in English.'
 
 const EXTRACT_PROMPT = (pageText: string) =>
-  `Extract product information from the webpage text below and fill in this JSON. Return ONLY the JSON, nothing else, all on one line:
+  `Extract product information from the webpage text below and fill in this JSON. ALL VALUES MUST BE IN ENGLISH (translate from source language if needed). Return ONLY the JSON, nothing else, all on one line:
 ${JSON_SCHEMA}
 
 Fields:
@@ -40,12 +40,12 @@ Fields:
 - usps: unique selling points / competitive advantages
 - benefits: specific benefits of using the product
 - offer: current pricing and promotions
-- cta: call to action (e.g. Buy Now, Order Today)
+- ingredients: SPECIFIC ingredients / active components / key compounds in this product (e.g. "Vitamin B12, A, E, biotin, iron", "Inulin prebiotic, FloraFit probiotic strains, Lactobacillus acidophilus", "Angelica sinensis, Motherwort herb"). List the actual ingredient names — do not write generic descriptions. If the page doesn't list ingredients explicitly, infer the most likely active components from product type.
 
 WEBPAGE TEXT:
 ${pageText.slice(0, 8000)}`
 
-const IMAGE_EXTRACT_PROMPT = `Extract product information from this product page screenshot and fill in this JSON. Return ONLY the JSON, nothing else, all on one line:
+const IMAGE_EXTRACT_PROMPT = `Extract product information from this product page screenshot and fill in this JSON. ALL VALUES MUST BE IN ENGLISH (translate from source language if needed). Return ONLY the JSON, nothing else, all on one line:
 ${JSON_SCHEMA}
 
 Fields:
@@ -56,7 +56,7 @@ Fields:
 - usps: unique selling points / competitive advantages
 - benefits: specific benefits of using the product
 - offer: current pricing and promotions
-- cta: call to action (e.g. Buy Now, Order Today)`
+- ingredients: SPECIFIC ingredients / active components / key compounds in this product (e.g. "Vitamin B12, A, E, biotin, iron", "Inulin prebiotic, FloraFit probiotic strains, Lactobacillus acidophilus", "Angelica sinensis, Motherwort herb"). List the actual ingredient names — do not write generic descriptions. If the screenshot doesn't list ingredients explicitly, infer the most likely active components from product type.`
 
 // Jina Reader — renders JS pages and returns clean markdown. Handles LadiPage, Shopee, etc.
 async function fetchViaJina(url: string): Promise<string> {
@@ -131,7 +131,7 @@ function parseExtracted(raw: string): Record<string, string> | null {
   return null
 }
 
-type FormState = { productImage: string; productName: string; productDescription: string; targetMarket: string; painPoints: string; usps: string; benefits: string; offer: string; cta: string }
+type FormState = { productImage: string; productName: string; productDescription: string; targetMarket: string; painPoints: string; usps: string; benefits: string; offer: string; ingredients: string }
 
 function applyExtracted(extracted: Record<string, string>, prev: FormState): { next: FormState; count: number } {
   const next = { ...prev }
@@ -155,7 +155,7 @@ export default function ProductForm({ item, onSave, onCancel }: ProductFormProps
     usps: item?.usps ?? '',
     benefits: item?.benefits ?? '',
     offer: item?.offer ?? '',
-    cta: item?.cta ?? '',
+    ingredients: item?.ingredients ?? '',
   })
   const [productUrl, setProductUrl] = useState('')
   const [isFetching, setIsFetching] = useState(false)
@@ -180,7 +180,7 @@ export default function ProductForm({ item, onSave, onCancel }: ProductFormProps
         usps: item.usps,
         benefits: item.benefits,
         offer: item.offer,
-        cta: item.cta,
+        ingredients: item.ingredients,
       })
     }
   }, [item])
@@ -356,7 +356,7 @@ export default function ProductForm({ item, onSave, onCancel }: ProductFormProps
       </button>
       <input ref={fileRef} type="file" accept=".png,.jpg,.jpeg,.webp,image/png,image/jpeg,image/webp" className="hidden" onChange={handleImage} />
 
-      {FIELDS.map(({ key, label, type, required }) => (
+      {FIELDS.map(({ key, label, type, required, placeholder }) => (
         <label key={key} className="flex flex-col gap-1">
           <span className="text-[11px] font-medium uppercase tracking-widest text-gray-500">
             {label}{required && ' *'}
@@ -365,6 +365,7 @@ export default function ProductForm({ item, onSave, onCancel }: ProductFormProps
             <textarea
               value={form[key as keyof typeof form] as string}
               onChange={(e) => set(key, e.target.value)}
+              placeholder={placeholder}
               rows={2}
               className="rounded-lg border border-black/10 bg-transparent px-3 py-2 text-sm text-gray-800 placeholder-gray-400 outline-none transition-colors focus:border-black/15 resize-none"
             />
@@ -372,6 +373,7 @@ export default function ProductForm({ item, onSave, onCancel }: ProductFormProps
             <input
               value={form[key as keyof typeof form] as string}
               onChange={(e) => set(key, e.target.value)}
+              placeholder={placeholder}
               className="rounded-lg border border-black/10 bg-transparent px-3 py-2 text-sm text-gray-800 placeholder-gray-400 outline-none transition-colors focus:border-black/15"
             />
           )}

@@ -5,7 +5,7 @@ export interface EditableProductContext {
   usps: string
   benefits: string
   offer: string
-  cta: string
+  ingredients: string
 }
 
 export interface AdaptScriptResult {

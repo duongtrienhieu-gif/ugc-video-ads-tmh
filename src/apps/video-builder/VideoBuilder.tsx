@@ -1088,7 +1088,7 @@ ${bankProduct.painPoints         ? `Pain points the product solves: ${bankProduc
 ${bankProduct.usps               ? `Unique selling points: ${bankProduct.usps}` : ''}
 ${bankProduct.benefits           ? `Benefits to user: ${bankProduct.benefits}` : ''}
 ${bankProduct.offer              ? `Offer / pricing: ${bankProduct.offer}` : ''}
-${bankProduct.cta                ? `Call to action: ${bankProduct.cta}` : ''}
+${bankProduct.ingredients        ? `Key ingredients / active components: ${bankProduct.ingredients}` : ''}
 
 USE THIS CONTEXT TO:
 - For "pain point" segments: visualize the SPECIFIC pain points listed above

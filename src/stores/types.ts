@@ -8,7 +8,7 @@ export interface Product {
   usps: string
   benefits: string
   offer: string
-  cta: string
+  ingredients: string
   createdAt: number
 }
 

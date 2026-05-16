@@ -32,7 +32,7 @@ function ConfirmDelete({ onConfirm, onCancel }: { onConfirm: () => void; onCance
 }
 
 function productCompleteness(p: Product): string {
-  const fields = [p.productImage, p.productName, p.productDescription, p.targetMarket, p.painPoints, p.usps, p.benefits, p.offer, p.cta]
+  const fields = [p.productImage, p.productName, p.productDescription, p.targetMarket, p.painPoints, p.usps, p.benefits, p.offer, p.ingredients]
   const filled = fields.filter((f) => f && f.trim() !== '').length
   return `${filled}/9 trường`
 }

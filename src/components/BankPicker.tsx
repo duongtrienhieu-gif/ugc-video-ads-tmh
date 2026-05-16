@@ -94,7 +94,7 @@ export default function BankPicker({ bankType, isOpen, onSelect, onClose }: Bank
     let newItem: BankItem | null = null
 
     if (bankType === 'products') {
-      addProduct({ productImage: '', productName: name, productDescription: '', targetMarket: '', painPoints: '', usps: '', benefits: '', offer: '', cta: '' })
+      addProduct({ productImage: '', productName: name, productDescription: '', targetMarket: '', painPoints: '', usps: '', benefits: '', offer: '', ingredients: '' })
       // Get the latest item (just added)
       newItem = useBankStore.getState().products[useBankStore.getState().products.length - 1]
     } else if (bankType === 'models') {

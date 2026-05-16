@@ -15,7 +15,7 @@ function createEditableContext(product: Product): EditableProductContext {
     usps: product.usps,
     benefits: product.benefits,
     offer: product.offer,
-    cta: product.cta,
+    ingredients: product.ingredients,
   }
 }
 
@@ -155,7 +155,7 @@ export default function InputPanel({
                   <EditableField label="USP" value={editableContext.usps} onChange={(v) => updateField('usps', v)} />
                   <EditableField label="Lợi ích" value={editableContext.benefits} onChange={(v) => updateField('benefits', v)} />
                   <EditableField label="Ưu đãi" value={editableContext.offer} onChange={(v) => updateField('offer', v)} />
-                  <EditableField label="CTA" value={editableContext.cta} onChange={(v) => updateField('cta', v)} />
+                  <EditableField label="Thành phần" value={editableContext.ingredients} onChange={(v) => updateField('ingredients', v)} />
                 </div>
               )}
             </div>

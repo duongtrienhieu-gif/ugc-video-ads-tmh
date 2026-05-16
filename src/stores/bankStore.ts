@@ -16,7 +16,7 @@ function toProduct(row: Record<string, unknown>): Product {
     usps: (row.usps as string) ?? '',
     benefits: (row.benefits as string) ?? '',
     offer: (row.offer as string) ?? '',
-    cta: (row.cta as string) ?? '',
+    ingredients: ((row.ingredients ?? row.cta) as string) ?? '',
     productImage: (row.product_image as string) ?? '',
   }
 }
@@ -233,7 +233,7 @@ export const useBankStore = create<BankState>((set, get) => ({
         usps: product.usps,
         benefits: product.benefits,
         offer: product.offer,
-        cta: product.cta,
+        cta: product.ingredients,  // legacy column name — stores ingredients
         product_image: product.productImage,
       }).select().single()
       if (error) {
@@ -257,7 +257,7 @@ export const useBankStore = create<BankState>((set, get) => ({
     if (updates.usps !== undefined) patch.usps = updates.usps
     if (updates.benefits !== undefined) patch.benefits = updates.benefits
     if (updates.offer !== undefined) patch.offer = updates.offer
-    if (updates.cta !== undefined) patch.cta = updates.cta
+    if (updates.ingredients !== undefined) patch.cta = updates.ingredients  // legacy column name
     if (updates.productImage !== undefined) patch.product_image = updates.productImage
     const { error } = await supabase.from('products').update(patch).eq('id', id)
     if (error) reportError('Cập nhật sản phẩm', error)
