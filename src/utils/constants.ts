@@ -10,6 +10,7 @@ import {
   Package,
   FileText,
   Megaphone,
+  LayoutTemplate,
 } from 'lucide-react'
 import type { ElementType } from 'react'
 
@@ -27,6 +28,7 @@ export const APP_REGISTRY: AppConfig[] = [
   { id: 'ad-anatomy', name: 'Phân Tích QC', icon: Clapperboard, accent: '#FB2B37' },
   { id: 'script-architect', name: 'Tạo Kịch bản UGC', icon: PenLine, accent: '#3b82f6' },
   { id: 'ads-content',      name: 'Ads Content',       icon: Megaphone, accent: '#ec4899' },
+  { id: 'landing-page',     name: 'Landing Page AI',   icon: LayoutTemplate, accent: '#7c3aed' },
   { id: 'voice-studio', name: 'Giọng Đọc', icon: Mic, accent: '#6366f1' },
   { id: 'broll-studio', name: 'Product AI', icon: Film, accent: '#f97316' },
   { id: 'broll-videos', name: 'Video B-Roll', icon: Video, accent: '#8b5cf6' },
