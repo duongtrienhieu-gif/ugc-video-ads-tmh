@@ -96,6 +96,80 @@ export async function generateBrollImageGPT(params: {
 }
 
 /**
+ * Edit/transform an image using OpenAI gpt-image-1 via the /v1/images/edits endpoint.
+ * Pass one or more reference images — the model will preserve identity from them
+ * while applying the prompt transformation. Stronger identity-lock than text-only.
+ *
+ * Use cases:
+ *   - Generate face angle variants (pass avatar photo, prompt new angle)
+ *   - Place a specific product into a scene (pass product photo)
+ *
+ * Returns base64 data URL — save to asset store for persistent URL.
+ */
+export async function editImageWithReferenceGPT(params: {
+  apiKey: string
+  prompt: string
+  /** Reference images as Blobs (will be uploaded as multipart). First is primary. */
+  referenceImages: Blob[]
+  quality?: 'low' | 'medium' | 'high'
+  size?: '1024x1024' | '1024x1536' | '1536x1024'
+}): Promise<string> {
+  const formData = new FormData()
+  formData.append('model', 'gpt-image-1')
+  formData.append('prompt', params.prompt)
+  formData.append('n', '1')
+  formData.append('size', params.size ?? '1024x1536')
+  formData.append('quality', params.quality ?? 'medium')
+
+  // Multiple reference images: gpt-image-1 supports up to 16 via image[] field
+  for (let i = 0; i < params.referenceImages.length; i++) {
+    const blob = params.referenceImages[i]
+    const ext = (blob.type.split('/')[1] || 'png').replace('jpeg', 'jpg')
+    formData.append('image[]', blob, `ref-${i}.${ext}`)
+  }
+
+  const res = await fetch(`${OPENAI_BASE}/images/edits`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${params.apiKey}`,
+      // Do NOT set Content-Type — browser fills boundary automatically
+    },
+    body: formData,
+  })
+
+  if (res.status === 401 || res.status === 403) {
+    throw new Error('OpenAI API key không hợp lệ — kiểm tra Cài đặt')
+  }
+  if (res.status === 402) {
+    throw new Error('Tài khoản OpenAI hết quota — nạp tại platform.openai.com/account/billing')
+  }
+  if (res.status === 429) {
+    throw new Error('OpenAI rate limit — chờ vài giây rồi thử lại')
+  }
+  if (!res.ok) {
+    const detail = await readOpenAIError(res)
+    throw new Error(`OpenAI edits lỗi (${res.status}): ${detail}`)
+  }
+
+  const data = await res.json() as OpenAIImageResponse
+  const b64 = data.data?.[0]?.b64_json
+  const url = data.data?.[0]?.url
+  if (b64) return `data:image/png;base64,${b64}`
+  if (url) return url
+  throw new Error('OpenAI edits không trả về ảnh — thử lại')
+}
+
+/**
+ * Helper to fetch an image URL (data: / https: / blob:) and return a Blob.
+ * Useful for converting reference image URLs into multipart-uploadable Blobs.
+ */
+export async function fetchImageAsBlob(url: string): Promise<Blob> {
+  const res = await fetch(url)
+  if (!res.ok) throw new Error(`Không tải được ảnh tham chiếu (${res.status})`)
+  return await res.blob()
+}
+
+/**
  * Quick connectivity test — sends a tiny 1024x1024 low-quality generation.
  * Returns credits/quota info if available.
  */

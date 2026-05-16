@@ -14,7 +14,7 @@ import { getUrl, isAssetRef, saveAsset } from '../../utils/assetStore'
 import { directGeminiVision } from '../../utils/gemini'
 import { listVoices, listSharedVoices, textToSpeechSmooth } from '../../utils/elevenlabs'
 import { generateLipSync, pollLipSyncUntilDone, generateVideoJob, getVideoJobStatus } from '../../utils/kieai'
-import { removeVideoBackground, generateInstantIDImage } from '../../utils/falai'
+import { removeVideoBackground } from '../../utils/falai'
 import { generateBrollImageGPT } from '../../utils/openai'
 import { buildUGCVideo, pollRenderUntilDone } from '../../utils/shotstack'
 import type { ElevenLabsVoice } from '../../utils/elevenlabs'
@@ -1710,68 +1710,23 @@ Return ONLY the description as plain text, no preamble, no markdown.` },
     return `${scene}\n\nSubject: ${characterDesc}.${productNote}${style}`
   }
 
-  // ── FLUX Ultra prompt builder (fallback when no OpenAI key) ──────────────
-  const buildImagePromptFLUX = (seg: ScriptSegment, hasAvatar: boolean, hasProduct: boolean): string => {
-    const avatarDesc  = pipeRef.current.avatarDescription
-    const productDesc = pipeRef.current.productDescription
-
-    const scene = seg.brollPrompt
-
-    const identityAnchor = hasAvatar
-      ? `\n\nSubject: ${avatarDesc
-          ? avatarDesc.split('\n').slice(0, 3).join(', ')
-          : 'Malaysian woman in her 30s, warm terracotta hijab, modest loose-fit outfit, warm tan skin, warm brown eyes, natural minimal makeup'
-        }. Same person appearing throughout this photo series.`
-      : ''
-
-    const productAnchor = hasProduct && seg.brollPrompt.toLowerCase().includes('product')
-      ? `\nProduct: ${productDesc
-          ? productDesc.split('\n')[0]
-          : 'white supplement bottle with orange/gold label, capsule supplement'
-        } — held or placed naturally in frame, same product across all shots.`
-      : ''
-
-    const style = `\nPhotography style: authentic UGC smartphone camera, zero bokeh, zero depth of field, sharp focus across entire frame, natural ambient lighting, real home/cafe setting, waist-up or full-body — NOT a face close-up portrait. Hyper-photorealistic, film grain, no AI artifacts, no text overlay, no watermark.`
-
-    return `${scene}${identityAnchor}${productAnchor}${style}`
-  }
-
-  // Generate ONE image for a given segment index (used by both initial run + per-image regen)
+  // Generate ONE B-Roll image via OpenAI gpt-image-1 (mandatory — no fallback)
   // THROWS on error — callers must catch and decide how to surface the message.
-  // This way only ONE toast is shown per failure (no duplicate generic + detailed).
   const generateOneImage = async (_i: number, seg: ScriptSegment): Promise<string> => {
-    // ── Priority 1: OpenAI gpt-image-1 (best photorealism, no plastic look) ──
-    if (openaiApiKey.trim()) {
-      const prompt = buildImagePromptGPT(seg)
-      const rawResult = await generateBrollImageGPT({ apiKey: openaiApiKey, prompt, quality: 'medium' })
-
-      // Convert data URL or CDN URL → blob → save to IndexedDB → return public URL
-      const fetchRes = await fetch(rawResult)
-      const blob = await fetchRes.blob()
-      const assetId = await saveAsset(blob, blob.type || 'image/png')
-      const publicUrl = await getUrl(assetId)
-      if (!publicUrl) throw new Error('Không lấy được URL từ asset store')
-      return publicUrl
+    if (!openaiApiKey.trim()) {
+      throw new Error('Thiếu OpenAI API key — vào Cài đặt → OpenAI để thêm. B-Roll chỉ dùng gpt-image-1.')
     }
 
-    // ── Priority 2: fal.ai FLUX 1.1 Pro Ultra (fallback) ──────────────────
-    const { avatarImageUrl } = pipeRef.current
-    if (!avatarImageUrl) throw new Error('Thiếu URL avatar — chạy lại Resolve step')
-    if (!falApiKey)      throw new Error('Thiếu fal.ai API key — cài trong Cài đặt')
+    const prompt = buildImagePromptGPT(seg)
+    const rawResult = await generateBrollImageGPT({ apiKey: openaiApiKey, prompt, quality: 'medium' })
 
-    const hasAvatar  = true
-    const hasProduct = !!(pipeRef.current.productImageUrls && pipeRef.current.productImageUrls.length)
-    const prompt = buildImagePromptFLUX(seg, hasAvatar, hasProduct)
-
-    const imageUrl = await generateInstantIDImage({
-      apiKey: falApiKey,
-      faceImageUrl: avatarImageUrl,
-      prompt,
-      imageSize: { width: 720, height: 1280 },  // ignored internally — FLUX uses aspect_ratio enum
-      identityStrength: 0.15,  // low = scene-driven; high = image-driven (0.1-0.25 sweet spot)
-      timeoutMs: 4 * 60 * 1000,
-    })
-    return imageUrl
+    // Convert data URL or CDN URL → blob → save to IndexedDB → return public URL
+    const fetchRes = await fetch(rawResult)
+    const blob = await fetchRes.blob()
+    const assetId = await saveAsset(blob, blob.type || 'image/png')
+    const publicUrl = await getUrl(assetId)
+    if (!publicUrl) throw new Error('Không lấy được URL từ asset store')
+    return publicUrl
   }
 
   const runBrollImages = async () => {
@@ -2088,11 +2043,12 @@ MOTION: Gentle cinematic camera motion only — slow push-in on key detail, or s
 
   const hasAvatar = !!selectedModelId || !!manualAvatarUrl
   const canStart = !!script.trim() && hasAvatar && !!selectedVoiceId && isIdle
-    && !!elevenLabsApiKey && !!kieApiKey && !!falApiKey && !!shotstackApiKey && !!geminiApiKey
+    && !!elevenLabsApiKey && !!kieApiKey && !!falApiKey && !!shotstackApiKey && !!geminiApiKey && !!openaiApiKey
 
   const missingKeys = [
     !geminiApiKey && 'Gemini', !elevenLabsApiKey && 'ElevenLabs',
     !kieApiKey && 'KIE.ai', !falApiKey && 'fal.ai', !shotstackApiKey && 'Shotstack',
+    !openaiApiKey && 'OpenAI',
   ].filter(Boolean) as string[]
 
   // ── Render ────────────────────────────────────────────────────────────────
@@ -2682,7 +2638,7 @@ MOTION: Gentle cinematic camera motion only — slow push-in on key detail, or s
                       ) : (
                         <button
                           onClick={() => regenerateOneImage(i)}
-                          title={openaiApiKey ? `Gen lại ảnh #${i + 1} (~$0.07 OpenAI gpt-image-1 — photorealistic)` : `Gen lại ảnh #${i + 1} (~$0.05 fal.ai FLUX 1.1 Pro Ultra — photorealistic)`}
+                          title={`Gen lại ảnh #${i + 1} (~$0.07 OpenAI gpt-image-1)`}
                           className="absolute right-1 top-1 flex h-7 w-7 items-center justify-center rounded-md bg-black/60 text-white opacity-0 transition-opacity hover:bg-violet-600 group-hover:opacity-100"
                         >
                           <RotateCcw className="h-3.5 w-3.5" />

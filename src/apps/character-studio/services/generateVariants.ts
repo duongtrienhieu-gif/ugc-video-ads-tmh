@@ -1,6 +1,6 @@
-import { generateImage, pollImageUntilDone } from '../../../utils/kieai'
-import { saveAsset, isAssetRef } from '../../../utils/assetStore'
+import { saveAsset } from '../../../utils/assetStore'
 import { directGeminiVision } from '../../../utils/gemini'
+import { editImageWithReferenceGPT, fetchImageAsBlob } from '../../../utils/openai'
 import type { AvatarVariant } from '../../../stores/types'
 
 /**
@@ -101,15 +101,18 @@ export const DEFAULT_VARIANT_RECIPES: VariantRecipe[] = [
 ]
 
 /**
- * Generate ONE variant. Returns the variant object or null on failure.
- * Uses Nano Banana 2 with the original image as reference for identity lock.
+ * Generate ONE variant via OpenAI gpt-image-1 /v1/images/edits endpoint.
+ * The original avatar image is passed as a reference for STRONG identity lock —
+ * far more reliable than Nano Banana 2 which often produced different people.
  *
  * mode:
  *   - 'strict' (default): keep face + hair + outfit + lighting all from reference
  *   - 'flex-outfit': keep face + hair + facial hair, allow slight outfit variation
+ *
+ * The `apiKey` param is the OpenAI API key (NOT KIE.ai).
  */
 export async function generateOneVariant(params: {
-  apiKey: string
+  apiKey: string  // OpenAI API key
   originalImageUrl: string
   recipe: VariantRecipe
   avatarDescription?: string  // optional locked physical description
@@ -117,57 +120,46 @@ export async function generateOneVariant(params: {
 }): Promise<AvatarVariant | null> {
   const { apiKey, originalImageUrl, recipe, avatarDescription, mode = 'strict' } = params
 
-  // ── Prompt designed for Nano Banana 2 (Gemini image edit) ────────────────
-  // Direct structure works better than emoji/all-caps shouting. The avatar
-  // description is the PRIMARY identity anchor — reference image is secondary.
   const descBlock = avatarDescription
     ? `\nTHE PERSON IN THE REFERENCE IMAGE:\n${avatarDescription}\n`
     : ''
 
   const allowOutfitVariation = mode === 'flex-outfit'
 
-  const identityLockText = `TASK: Re-render the EXACT SAME PERSON from the reference image, viewed from a different angle.
+  const identityLockText = `Edit the reference image to show the EXACT SAME PERSON from a different angle.
 ${descBlock}
-WHAT MUST STAY IDENTICAL (this is the same individual, NOT a similar-looking different person):
-• Same face: same eye color, eye shape, eyebrows, nose, lips, jawline, cheekbones, skin tone, age
-• Same gender, same ethnicity, same approximate age (do NOT make older younger or vice versa)
-• Same hijab style and color if wearing one, OR same hairstyle/hair color/hair length
-• Same facial hair if any (beard, stubble, mustache) — same style and color
-• Same accessories visible on face/neck (glasses, earrings)
+KEEP IDENTICAL (this is the SAME individual, not a similar-looking different person):
+• Same face: eyes, eyebrows, nose, lips, jawline, cheekbones, skin tone, age
+• Same gender, ethnicity, age range
+• Same hijab style and color if present, OR same hairstyle/hair color/hair length
+• Same facial hair (beard, stubble, mustache) if present
+• Same accessories on face/neck (glasses, earrings)
 
-WHAT CAN ${allowOutfitVariation ? 'VARY' : 'STAY THE SAME'}:
 ${allowOutfitVariation
-  ? '• Outfit/clothing — different top color or style is OK, but same modesty level (e.g. modest hijab outfit stays modest)\n• Background — can be slightly different setting'
-  : '• Outfit and lighting should match the reference closely'}
+  ? 'CAN VARY: outfit color/style (same modesty level), background scenery'
+  : 'KEEP THE SAME: outfit, lighting, background style'}
 
-WHAT CHANGES (apply this transformation):
-${recipe.prompt}
+CHANGE: ${recipe.prompt}
 
-CRITICAL RULE: This MUST be the SAME individual as the reference. Do not invent a different person — even one who "looks similar". If you produce a different person, the output is a failure. Use the reference image as the primary identity anchor.
-
-Output: photorealistic, vertical 9:16, authentic natural lighting, no text overlay, no watermark.`
+Output: photorealistic vertical 9:16 image, authentic natural lighting, no text, no watermark. The output MUST be the same individual as the reference image, only the head pose and angle change.`
 
   try {
-    const { taskId } = await generateImage({
-      apiKey,
-      model: 'nano-banana-2',
-      prompt: identityLockText,
-      resolution: '1K',
-      aspectRatio: '9:16',
-      referenceImageUrls: [originalImageUrl, originalImageUrl],  // duplicate for stronger weight
-    })
-    const imageUrl = await pollImageUntilDone({ apiKey, taskId, timeoutMs: 3 * 60 * 1000 })
+    // Fetch the reference avatar as Blob for multipart upload
+    const refBlob = await fetchImageAsBlob(originalImageUrl)
 
-    // Upload to Supabase so it persists like the rest of the bank
-    let storedRef: string
-    if (isAssetRef(imageUrl)) {
-      storedRef = imageUrl
-    } else {
-      const resp = await fetch(imageUrl)
-      if (!resp.ok) throw new Error(`fetch variant failed: ${resp.status}`)
-      const blob = await resp.blob()
-      storedRef = await saveAsset(blob, blob.type || 'image/jpeg')
-    }
+    // Call OpenAI image edits — pass avatar reference 2x for stronger identity weight
+    const resultUrl = await editImageWithReferenceGPT({
+      apiKey,
+      prompt: identityLockText,
+      referenceImages: [refBlob, refBlob],
+      size: '1024x1536',
+      quality: 'medium',
+    })
+
+    // Convert data URL → Blob → save to asset store
+    const resp = await fetch(resultUrl)
+    const blob = await resp.blob()
+    const storedRef = await saveAsset(blob, blob.type || 'image/png')
 
     return {
       id: crypto.randomUUID(),
