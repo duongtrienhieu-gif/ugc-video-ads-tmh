@@ -7,16 +7,17 @@ const GEMINI_FILES_BASE = 'https://generativelanguage.googleapis.com/v1beta/file
 const GEMINI_FILES_UPLOAD = 'https://generativelanguage.googleapis.com/upload/v1beta/files'
 
 /**
- * Upload a file to Gemini Files API. Used for video / audio inputs larger
- * than 20MB (the inline-data limit). Returns a fileUri that can be passed
- * in generateContent calls via `fileData: { fileUri, mimeType }` parts.
+ * Upload a file to Gemini Files API via the RESUMABLE upload protocol.
+ * More reliable than multipart for large files (up to 2GB). Used for video
+ * inputs that exceed the 20MB inline-data limit.
  *
- * Process:
- *  1) POST file bytes to upload endpoint → returns file resource with state
- *     usually "PROCESSING"
- *  2) Poll the file's GET endpoint until state === "ACTIVE" (video files
- *     need a few seconds for Google to transcode/index)
- *  3) Caller uses { fileUri, mimeType } in parts
+ * Two-step protocol:
+ *  1) POST init request with metadata JSON + X-Goog-Upload-Protocol: resumable
+ *     → Google returns an upload URL in the X-Goog-Upload-URL header
+ *  2) POST file bytes to that URL with X-Goog-Upload-Command: upload, finalize
+ *     → Google returns the file resource (with state usually PROCESSING)
+ *  3) Poll the file's GET endpoint until state === ACTIVE (video transcoding
+ *     takes 5-30s on Google's side)
  *
  * Files auto-expire after 48 hours.
  */
@@ -33,27 +34,36 @@ export async function uploadFileToGemini(params: {
 
   onProgress?.('uploading')
 
-  // ── Step 1: Upload (multipart) ─────────────────────────────────────
-  const metadata = { file: { display_name: displayName ?? 'upload' } }
-  const boundary = `--bound_${Math.random().toString(36).slice(2)}`
-  const enc = new TextEncoder()
-  const head =
-    `--${boundary}\r\n` +
-    'Content-Type: application/json; charset=UTF-8\r\n\r\n' +
-    JSON.stringify(metadata) +
-    `\r\n--${boundary}\r\n` +
-    `Content-Type: ${mimeType}\r\n\r\n`
-  const tail = `\r\n--${boundary}--\r\n`
-
-  // Concat head + file bytes + tail into a single Blob (multipart body)
-  const body = new Blob([enc.encode(head), file, enc.encode(tail)], {
-    type: `multipart/related; boundary=${boundary}`,
-  })
-
-  const uploadRes = await fetch(`${GEMINI_FILES_UPLOAD}?key=${apiKey}`, {
+  // ── Step 1a: Initiate resumable upload session ─────────────────────
+  const initRes = await fetch(`${GEMINI_FILES_UPLOAD}?key=${apiKey}`, {
     method: 'POST',
-    headers: { 'Content-Type': `multipart/related; boundary=${boundary}` },
-    body,
+    headers: {
+      'X-Goog-Upload-Protocol':            'resumable',
+      'X-Goog-Upload-Command':             'start',
+      'X-Goog-Upload-Header-Content-Length': String(file.size),
+      'X-Goog-Upload-Header-Content-Type': mimeType,
+      'Content-Type':                      'application/json',
+    },
+    body: JSON.stringify({ file: { display_name: displayName ?? 'upload' } }),
+  })
+  if (!initRes.ok) {
+    const err = await initRes.text().catch(() => initRes.statusText)
+    throw new Error(`Files API init thất bại (${initRes.status}): ${err.slice(0, 200)}`)
+  }
+  const uploadUrl = initRes.headers.get('X-Goog-Upload-URL') || initRes.headers.get('x-goog-upload-url')
+  if (!uploadUrl) {
+    throw new Error('Files API không trả về upload URL trong header')
+  }
+
+  // ── Step 1b: Upload binary to the returned URL ─────────────────────
+  const uploadRes = await fetch(uploadUrl, {
+    method: 'POST',
+    headers: {
+      'X-Goog-Upload-Offset':  '0',
+      'X-Goog-Upload-Command': 'upload, finalize',
+      'Content-Type':          mimeType,
+    },
+    body: file,
   })
   if (!uploadRes.ok) {
     const err = await uploadRes.text().catch(() => uploadRes.statusText)
@@ -63,14 +73,19 @@ export async function uploadFileToGemini(params: {
     file?: { name?: string; uri?: string; state?: string; mimeType?: string }
   }
   if (!uploadData.file?.name || !uploadData.file?.uri) {
-    throw new Error('Files API không trả về file URI')
+    throw new Error('Files API không trả về file URI sau upload')
   }
   const fileName = uploadData.file.name              // e.g. "files/abc123"
   const fileUri  = uploadData.file.uri
   const fileMime = uploadData.file.mimeType ?? mimeType
 
+  // If already ACTIVE (small files / images), return immediately
+  if (uploadData.file.state === 'ACTIVE') {
+    onProgress?.('active')
+    return { fileUri, mimeType: fileMime }
+  }
+
   // ── Step 2: Poll until state === ACTIVE ────────────────────────────
-  // Video files take ~5-20s to transcode on Google's side.
   onProgress?.('processing')
   const start = Date.now()
   while (Date.now() - start < timeoutMs) {
