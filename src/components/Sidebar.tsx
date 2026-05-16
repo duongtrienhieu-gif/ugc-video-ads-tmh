@@ -1,11 +1,13 @@
 import { useState, useEffect } from 'react'
-import { LayoutGrid, User, PenLine, Mic, Image, Video, Eye, Settings, FlaskConical, RefreshCw, LogOut, Activity, Languages, Sparkles, Package, Megaphone, LayoutTemplate } from 'lucide-react'
+import { LayoutGrid, User, PenLine, Mic, Image, Video, Eye, Settings, FlaskConical, RefreshCw, LogOut, Activity, Languages, Sparkles, Package, Megaphone, LayoutTemplate, FolderOpen } from 'lucide-react'
 import SettingsModal from './SettingsModal'
 import Diagnostic from './Diagnostic'
+import DraftsPanel from './DraftsPanel'
 import { useSettingsStore } from '../stores/settingsStore'
 import { useAppStore } from '../stores/appStore'
 import { getKieCredits } from '../utils/kieai'
 import { useAuthStore } from '../stores/authStore'
+import { scanForPendingSessions } from '../services/sessionPersistence'
 
 interface NavItem {
   id: string
@@ -36,10 +38,20 @@ interface SidebarProps {
 export default function Sidebar({ activeApp, onNavigate }: SidebarProps) {
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [diagnosticOpen, setDiagnosticOpen] = useState(false)
+  const [draftsOpen, setDraftsOpen] = useState(false)
+  const [draftsCount, setDraftsCount] = useState(0)
   const { kieApiKey, kieCredits, setKieCredits } = useSettingsStore()
   const [refreshing, setRefreshing] = useState(false)
   const { user, signOut } = useAuthStore()
   const sendToApp = useAppStore((s) => s.sendToApp)
+
+  // Poll for drafts count every 10s to update the badge dot
+  useEffect(() => {
+    const updateCount = () => setDraftsCount(scanForPendingSessions().length)
+    updateCount()
+    const id = setInterval(updateCount, 10000)
+    return () => clearInterval(id)
+  }, [])
 
   // "Sản phẩm" shortcut → open Finder + auto-select products bank
   const handleNav = (id: string) => {
@@ -137,6 +149,20 @@ export default function Sidebar({ activeApp, onNavigate }: SidebarProps) {
           )}
 
           <button
+            onClick={() => setDraftsOpen(true)}
+            title="Bản nháp chưa hoàn thành"
+            className="relative flex w-full flex-col items-center gap-1 rounded-lg py-2 transition-colors hover:bg-violet-500/10"
+          >
+            <FolderOpen className="h-[18px] w-[18px] text-violet-500" strokeWidth={2} />
+            {draftsCount > 0 && (
+              <span className="absolute right-1 top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-violet-600 px-1 text-[9px] font-bold text-white shadow-sm">
+                {draftsCount}
+              </span>
+            )}
+            <span className="text-[10px] font-bold leading-tight text-violet-500">Bản nháp</span>
+          </button>
+
+          <button
             onClick={() => setDiagnosticOpen(true)}
             title="Chẩn đoán dữ liệu"
             className="flex w-full flex-col items-center gap-1 rounded-lg py-2 transition-colors hover:bg-amber-500/10"
@@ -173,6 +199,7 @@ export default function Sidebar({ activeApp, onNavigate }: SidebarProps) {
 
       <SettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} />
       <Diagnostic isOpen={diagnosticOpen} onClose={() => setDiagnosticOpen(false)} />
+      <DraftsPanel open={draftsOpen} onClose={() => setDraftsOpen(false)} />
     </>
   )
 }
