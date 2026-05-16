@@ -178,6 +178,38 @@ export type ShotEnergy =
   | 'relief'     // relaxed posture, soft warm light
   | 'energetic'  // upbeat, action-feeling, brighter
 
+/**
+ * Subject motion style — describes WHAT the person physically does during
+ * the shot. Captured at storyboard time so downstream Kling / Veo / Runway
+ * / Minimax / Hailuo video gen knows what to animate, instead of forcing
+ * the animator to guess from a still image.
+ */
+export type MotionStyle =
+  | 'subtle_head_turn'   // small head turn / face-to-camera reveal — hook & discovery beats
+  | 'stomach_holding'    // hand on stomach, slight wince — pain / frustration
+  | 'eating_motion'      // raising fork, taking a sip, biting — recovery / lifestyle
+  | 'selfie_talk'        // talking to camera, slight nod — testimonial / CTA
+  | 'pointing_product'   // index finger pointing at label — explain / proof
+  | 'laugh_with_family'  // group warmth, smile, slight body laugh — lifestyle / recovery
+  | 'unboxing_reveal'    // hands lifting / opening / rotating packaging — discovery
+  | 'walking_in'         // entering frame from edge — lifestyle / hook
+  | 'static_pose'        // intentionally still — credibility / explain beats
+
+/**
+ * Camera motion intent — what the operator (or AI animator) does behind the
+ * lens. Feeds Kling/Veo prompt as the "camera move" instruction so the
+ * generated clip has the right cinematic rhythm.
+ */
+export type CameraMotion =
+  | 'handheld'         // realistic micro-shake, UGC default
+  | 'iphone_selfie'    // arm-extended selfie cadence, slight bob
+  | 'slow_pushin'      // gentle dolly toward subject — emotional moments
+  | 'slow_pullout'     // dolly back — reveal / lifestyle
+  | 'static'           // tripod, fixed — credibility / testimonial
+  | 'over_shoulder'    // POV behind subject — explain / discovery
+  | 'walking_follow'   // tracking shot, walking pace — lifestyle
+  | 'overhead_top'     // flat lay / top-down — ingredient / explain
+
 export interface SceneBlueprint {
   /** 1-indexed scene id in the storyboard (1-9 typically) */
   sceneId: number
@@ -235,6 +267,14 @@ export interface SceneBlueprint {
   presetLabel?: string
   /** Auto-inferred preset confidence 0-100 (Phase A — Auto Preset Inference Engine) */
   presetConfidence?: number
+  // ── VIDEO-LAYER PREP (Phase B) ───────────────────────────────────────
+  /** What the SUBJECT physically does during the shot — used by downstream
+   *  Kling/Veo/Runway video gen so the clip animates the right action
+   *  rather than turning the still into a static slideshow. */
+  motionStyle?: MotionStyle
+  /** What the CAMERA does behind the lens — feeds the video-gen prompt as
+   *  the camera move instruction (handheld micro-shake / slow pushin / etc). */
+  cameraMotion?: CameraMotion
 }
 
 /** Diversity check result — fails when 9 scenes are too similar. */

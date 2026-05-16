@@ -148,6 +148,22 @@ function SceneCard({
         <span className="rounded bg-black/[0.04] px-2 py-0.5 text-gray-600"><strong>{VI_LABELS.composition}:</strong> {scene.composition}</span>
         <span className="rounded bg-black/[0.04] px-2 py-0.5 text-gray-600"><strong>{VI_LABELS.environment}:</strong> {scene.environment}</span>
         <span className="rounded bg-black/[0.04] px-2 py-0.5 text-gray-600"><strong>{VI_LABELS.emotion}:</strong> {scene.emotion}</span>
+        {scene.motionStyle && (
+          <span
+            className="rounded bg-violet-100 px-2 py-0.5 text-violet-700"
+            title="Subject motion — drives Kling/Veo/Runway video gen later"
+          >
+            <strong>🎭</strong> {scene.motionStyle.replace(/_/g, ' ')}
+          </span>
+        )}
+        {scene.cameraMotion && (
+          <span
+            className="rounded bg-sky-100 px-2 py-0.5 text-sky-700"
+            title="Camera motion — feeds video-gen prompt as the camera move instruction"
+          >
+            <strong>🎥</strong> {scene.cameraMotion.replace(/_/g, ' ')}
+          </span>
+        )}
         {currentPreset && (
           <span
             className="ml-auto flex items-center gap-1 rounded bg-violet-100 px-2 py-0.5 text-[10px] font-semibold text-violet-700"

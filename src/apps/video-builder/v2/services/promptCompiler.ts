@@ -148,6 +148,11 @@ function buildSceneFromBlueprint(blueprint: SceneBlueprint, hasMasterFrame: bool
   if (blueprint.shotEnergy)       storyLines.push(`Shot energy: ${blueprint.shotEnergy}`)
   if (blueprint.wardrobeStyle)    storyLines.push(`Wardrobe (SOFT — varies across timeline): ${blueprint.wardrobeStyle}`)
   if (blueprint.environmentType)  storyLines.push(`Environment type (SOFT — varies): ${blueprint.environmentType}`)
+  // Motion fields drive video animation downstream but also bias the STILL
+  // toward the right pose + camera feel so the keyframe doesn't have to be
+  // re-blocked later when Kling/Veo/Runway animate it.
+  if (blueprint.motionStyle)      storyLines.push(`Subject motion (capture mid-action): ${blueprint.motionStyle.replace(/_/g, ' ')}`)
+  if (blueprint.cameraMotion)     storyLines.push(`Camera feel: ${blueprint.cameraMotion.replace(/_/g, ' ')}`)
   const storyBlock = storyLines.length > 0 ? storyLines.join('\n') + '\n' : ''
 
   return `[3] SCENE BLUEPRINT

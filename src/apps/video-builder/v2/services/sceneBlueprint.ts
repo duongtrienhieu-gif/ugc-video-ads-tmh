@@ -66,7 +66,28 @@ sceneId, sceneType, visualObjective, subjectAction, narrativePurpose,
 sceneGoal, environment, environmentType, wardrobeStyle, composition,
 cameraAngle, shotType, shotEnergy, pose, emotion, handUsage,
 productVisibility, backgroundType, lightingStyle, visualTone,
-motionIntent, overlayDensity, ctaFocus, speech, presetLabel
+motionIntent, overlayDensity, ctaFocus, speech, presetLabel,
+motionStyle, cameraMotion
+
+═══════════════════════════════════════════════════════════════
+VIDEO-LAYER FIELDS (drive downstream Kling / Veo / Runway clip gen)
+═══════════════════════════════════════════════════════════════
+motionStyle — ONE OF (what the subject's BODY does during the shot):
+  subtle_head_turn · stomach_holding · eating_motion · selfie_talk ·
+  pointing_product · laugh_with_family · unboxing_reveal · walking_in ·
+  static_pose
+
+cameraMotion — ONE OF (what the CAMERA does behind the lens):
+  handheld · iphone_selfie · slow_pushin · slow_pullout · static ·
+  over_shoulder · walking_follow · overhead_top
+
+Pair motion to the beat:
+  pain → stomach_holding + slow_pushin
+  failed_solution → static_pose + overhead_top
+  discovery → unboxing_reveal + iphone_selfie
+  explanation → pointing_product + static
+  recovery → eating_motion + walking_follow
+  cta → selfie_talk + iphone_selfie
 
 ═══════════════════════════════════════════════════════════════
 sceneType — ONE OF (mandatory):
@@ -266,6 +287,8 @@ interface RawBlueprint {
   ctaFocus?: boolean
   speech?: string
   presetLabel?: string
+  motionStyle?: string
+  cameraMotion?: string
 }
 
 const SCENE_TYPE_SET: SceneType[] = [
@@ -440,7 +463,66 @@ function normalizeBlueprint(raw: RawBlueprint, idx: number): SceneBlueprint {
     ctaFocus: raw.ctaFocus === true || sceneType === 'cta',
     speech: raw.speech ?? '',
     presetLabel: raw.presetLabel,
+    motionStyle: clampMotionStyle(raw.motionStyle, sceneType),
+    cameraMotion: clampCameraMotion(raw.cameraMotion, sceneType),
   }
+}
+
+// ── Motion field clamps — fall back to sceneType-aware defaults ──────────
+// These are critical for downstream Kling/Veo/Runway video gen — the
+// animator needs to know WHAT the subject does and WHERE the camera moves,
+// not guess from a still.
+
+const MOTION_STYLE_SET: NonNullable<SceneBlueprint['motionStyle']>[] = [
+  'subtle_head_turn', 'stomach_holding', 'eating_motion', 'selfie_talk',
+  'pointing_product', 'laugh_with_family', 'unboxing_reveal',
+  'walking_in', 'static_pose',
+]
+const CAMERA_MOTION_SET: NonNullable<SceneBlueprint['cameraMotion']>[] = [
+  'handheld', 'iphone_selfie', 'slow_pushin', 'slow_pullout',
+  'static', 'over_shoulder', 'walking_follow', 'overhead_top',
+]
+
+function motionForSceneType(t: SceneType | undefined): SceneBlueprint['motionStyle'] {
+  switch (t) {
+    case 'pain':
+    case 'frustration':     return 'stomach_holding'
+    case 'failed_solution': return 'static_pose'
+    case 'discovery':       return 'unboxing_reveal'
+    case 'explanation':     return 'pointing_product'
+    case 'recovery':
+    case 'lifestyle':       return 'eating_motion'
+    case 'social_proof':    return 'laugh_with_family'
+    case 'cta':             return 'selfie_talk'
+    case 'hook':            return 'subtle_head_turn'
+    default:                return 'subtle_head_turn'
+  }
+}
+
+function cameraForSceneType(t: SceneType | undefined): SceneBlueprint['cameraMotion'] {
+  switch (t) {
+    case 'pain':
+    case 'frustration':     return 'slow_pushin'   // tighten in on emotion
+    case 'failed_solution': return 'overhead_top'  // flat lay of failed remedies
+    case 'discovery':       return 'iphone_selfie' // first-moment selfie
+    case 'explanation':     return 'static'        // credibility / steady
+    case 'recovery':
+    case 'lifestyle':       return 'walking_follow' // tracking through happy moments
+    case 'social_proof':    return 'handheld'
+    case 'cta':             return 'iphone_selfie' // talk-to-camera testimonial
+    case 'hook':            return 'handheld'      // scroll-stopping micro-shake
+    default:                return 'handheld'
+  }
+}
+
+function clampMotionStyle(v: string | undefined, t: SceneType | undefined): SceneBlueprint['motionStyle'] {
+  if (v && (MOTION_STYLE_SET as readonly string[]).includes(v)) return v as SceneBlueprint['motionStyle']
+  return motionForSceneType(t)
+}
+
+function clampCameraMotion(v: string | undefined, t: SceneType | undefined): SceneBlueprint['cameraMotion'] {
+  if (v && (CAMERA_MOTION_SET as readonly string[]).includes(v)) return v as SceneBlueprint['cameraMotion']
+  return cameraForSceneType(t)
 }
 
 // ── Diversity validator ──────────────────────────────────────────────────────
