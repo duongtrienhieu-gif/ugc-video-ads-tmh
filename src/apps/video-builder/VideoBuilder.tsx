@@ -45,10 +45,17 @@ async function resolveImageUrl(ref: string): Promise<string | null> {
   if (ref.startsWith('blob:')) {
     try {
       const resp = await fetch(ref)
+      if (!resp.ok) throw new Error(`fetch blob failed: ${resp.status}`)
       const blob = await resp.blob()
-      const assetId = await saveAsset(blob, blob.type || 'image/jpeg')
-      return getUrl(assetId)
-    } catch { return null }
+      const mimeType = blob.type || 'image/jpeg'
+      const assetId = await saveAsset(blob, mimeType)
+      const url = await getUrl(assetId)
+      if (!url) throw new Error('getUrl trả về null sau khi upload')
+      return url
+    } catch (err) {
+      console.error('[resolveImageUrl] blob upload failed:', err)
+      return null
+    }
   }
   return ref
 }
@@ -477,18 +484,19 @@ ${script}`
         return s
       }
 
-      // Attempt parse with retry on failure
+      // Attempt parse — responseMimeType forces pure JSON output (no markdown fences)
       let parseResult = await directGeminiVision({
         apiKey: geminiApiKey,
         parts: [{ text: parsePrompt }],
-        maxOutputTokens: 8192,   // was 2048 — JSON for 10 segments needs ~2-4k tokens
+        maxOutputTokens: 8192,
+        responseMimeType: 'application/json',
       })
 
       let parsed: { segments: ScriptSegment[]; totalEstimatedSec: number }
       try {
         parsed = JSON.parse(extractJson(parseResult)) as typeof parsed
       } catch {
-        // Retry once with the same prompt
+        // Retry once without responseMimeType (older model fallback)
         setStep('parse', 'running', 'Thử lại lần 2...')
         try {
           parseResult = await directGeminiVision({
@@ -547,9 +555,14 @@ ${script}`
         if (url) productImageUrls.push(url)
       }
       // From manual uploads
+      let manualFailCount = 0
       for (const mp of manualProducts) {
         const url = await resolveImageUrl(mp.blobUrl)
         if (url) productImageUrls.push(url)
+        else manualFailCount++
+      }
+      if (manualFailCount > 0) {
+        addToast(`${manualFailCount} ảnh sản phẩm thủ công không upload được — kiểm tra kết nối`, 'error')
       }
 
       const avatarDisplayName = manualAvatarUrl ? manualAvatarName : (model?.name ?? '?')

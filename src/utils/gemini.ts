@@ -25,6 +25,7 @@ export async function directGeminiVision(params: {
   systemInstruction?: string
   model?: string
   maxOutputTokens?: number
+  responseMimeType?: 'application/json' | 'text/plain'
 }): Promise<string> {
   const modelsToTry = params.model ? [params.model] : GEMINI_MODELS
   const errors: string[] = []
@@ -34,7 +35,11 @@ export async function directGeminiVision(params: {
 
     const body: Record<string, unknown> = {
       contents: [{ role: 'user', parts: params.parts }],
-      generationConfig: { temperature: 0.4, maxOutputTokens: params.maxOutputTokens ?? 4096 },
+      generationConfig: {
+        temperature: 0.4,
+        maxOutputTokens: params.maxOutputTokens ?? 4096,
+        ...(params.responseMimeType && { responseMimeType: params.responseMimeType }),
+      },
     }
     if (params.systemInstruction) {
       body.systemInstruction = { parts: [{ text: params.systemInstruction }] }
