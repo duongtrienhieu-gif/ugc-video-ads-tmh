@@ -1,10 +1,12 @@
 ﻿import { useState, useEffect, useRef } from 'react'
-import { Copy, Check, Save, ChevronDown, UserRound, Loader2, Braces, Download, X } from 'lucide-react'
+import { Copy, Check, Save, ChevronDown, UserRound, Loader2, Braces, Download, X, Sparkles } from 'lucide-react'
 import { useBankStore } from '../../../stores/bankStore'
 import type { GenerationResult } from '../services/generateCharacter'
 import { useAssetUrl } from '../../../hooks/useAssetUrl'
 import { IMAGE_MODELS } from '../../../utils/kieai'
 import type { ImageResolution } from '../../../utils/kieai'
+import VariantsModal from '../../finder/VariantsModal'
+import type { Model } from '../../../stores/types'
 
 interface OutputPanelProps {
   result: GenerationResult | null
@@ -52,6 +54,8 @@ export default function OutputPanel({ result, isGenerating, onGenerate, onCancel
   const [showSaveForm, setShowSaveForm] = useState(false)
   const [saveName, setSaveName] = useState('')
   const [saved, setSaved] = useState(false)
+  const [savedModel, setSavedModel] = useState<Model | null>(null)
+  const [variantsOpen, setVariantsOpen] = useState(false)
   const [selectedModel, setSelectedModel] = useState(IMAGE_MODELS[0]) // Nano Banana 2 — reliable default
   const [resolution, setResolution] = useState<ImageResolution>('1K')
   const [modelDropOpen, setModelDropOpen] = useState(false)
@@ -82,6 +86,7 @@ export default function OutputPanel({ result, isGenerating, onGenerate, onCancel
   }, [isGenerating])
 
   const addModel = useBankStore((s) => s.addModel)
+  const models = useBankStore((s) => s.models)
   const resolvedImageUrl = useAssetUrl(result?.imageUrl)
 
   const isPortrait = aspectRatio.includes('9:16')
@@ -94,9 +99,17 @@ export default function OutputPanel({ result, isGenerating, onGenerate, onCancel
     setTimeout(() => setCopied(false), 2000)
   }
 
-  const handleSave = () => {
+  // After saved=true, watch models reactively to find the newly saved model
+  useEffect(() => {
+    if (saved && result?.imageUrl && !savedModel) {
+      const found = models.find((m) => m.characterImage === result.imageUrl)
+      if (found) setSavedModel(found)
+    }
+  }, [models, saved, result?.imageUrl, savedModel])
+
+  const handleSave = async () => {
     if (!saveName.trim() || !result) return
-    addModel({
+    await addModel({
       characterImage: result.imageUrl,
       name: saveName.trim(),
       notes: '',
@@ -106,7 +119,6 @@ export default function OutputPanel({ result, isGenerating, onGenerate, onCancel
     setShowSaveForm(false)
     setSaveName('')
     setSaved(true)
-    setTimeout(() => setSaved(false), 3000)
   }
 
   // ── Shared bottom controls ────────────────────────────────────────────
@@ -364,10 +376,29 @@ export default function OutputPanel({ result, isGenerating, onGenerate, onCancel
               )}
             </button>
           )}
+
+          {/* After saving: show "Create 4 angles" button for identity lock */}
+          {saved && savedModel && (
+            <button
+              onClick={() => setVariantsOpen(true)}
+              className="flex w-full items-center justify-center gap-2 rounded-full border border-violet-300 bg-violet-50 px-6 py-3.5 text-[13px] font-medium tracking-tight text-violet-700 transition-colors hover:bg-violet-100"
+            >
+              <Sparkles className="h-4 w-4" />
+              ✨ Tạo 4 góc mặt — identity lock B-roll
+            </button>
+          )}
+          {saved && !savedModel && (
+            <p className="text-center text-[11px] text-gray-400">
+              → Vào Project → Avatar AI → hover ảnh → ✨ để tạo 4 góc mặt
+            </p>
+          )}
         </div>
       </div>
 
       <BottomControls />
+      {variantsOpen && savedModel && (
+        <VariantsModal model={savedModel} onClose={() => setVariantsOpen(false)} />
+      )}
     </div>
   )
 }
