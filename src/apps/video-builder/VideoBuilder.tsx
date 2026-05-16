@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import {
   Film, Download, Loader2, CheckCircle2,
-  AlertTriangle, ChevronRight, Trash2,
+  AlertTriangle, ChevronRight, ChevronLeft, Trash2,
   Mic, Sparkles, FileText, User, Package,
   Check, ChevronDown, ChevronUp, Upload, X,
   RotateCcw, SkipForward, Coins,
@@ -10,7 +10,7 @@ import { useSettingsStore } from '../../stores/settingsStore'
 import { useAppStore } from '../../stores/appStore'
 import { useBankStore } from '../../stores/bankStore'
 import { getUrl, isAssetRef, saveAsset } from '../../utils/assetStore'
-import { directGeminiVision } from '../../utils/gemini'
+import { directGeminiVision, uploadFileToGemini } from '../../utils/gemini'
 import { listVoices, listSharedVoices, textToSpeechSmooth } from '../../utils/elevenlabs'
 import { generateLipSync, pollLipSyncUntilDone, generateVideoJob, getVideoJobStatus, generateImage, pollImageUntilDone } from '../../utils/kieai'
 import { removeVideoBackground } from '../../utils/falai'
@@ -617,21 +617,24 @@ function RunningPanel({ phase, detail, progress }: {
 // ── Review card (wraps each step's review UI) ─────────────────────────────────
 
 function ReviewCard({
-  onRetry, onContinue, onSkip,
+  onRetry, onContinue, onSkip, onBack,
   retryLabel = 'Tạo lại',
   continueLabel = 'Tiếp tục',
   continueCost,
   skipLabel,
+  backLabel = 'Quay lại',
   children,
   disabled = false,
 }: {
   onRetry: () => void
   onContinue: () => void
   onSkip?: () => void
+  onBack?: () => void           // hide back button if not provided (e.g. step 1)
   retryLabel?: string
   continueLabel?: string
   continueCost?: string
   skipLabel?: string
+  backLabel?: string
   children: React.ReactNode
   disabled?: boolean
 }) {
@@ -640,6 +643,18 @@ function ReviewCard({
       <div className="p-4">{children}</div>
 
       <div className="flex flex-wrap items-center gap-2 border-t border-black/6 bg-gray-50/60 px-4 py-3">
+        {onBack && (
+          <button
+            onClick={onBack}
+            disabled={disabled}
+            title="Quay lại bước trước (giữ nguyên dữ liệu)"
+            className="flex items-center gap-1.5 rounded-lg border border-black/10 bg-white px-3 py-2 text-xs font-semibold text-gray-500 transition-colors hover:border-gray-400 hover:bg-gray-50 hover:text-gray-700 disabled:opacity-40"
+          >
+            <ChevronLeft className="h-3.5 w-3.5" />
+            {backLabel}
+          </button>
+        )}
+
         <button
           onClick={onRetry}
           disabled={disabled}
@@ -917,8 +932,8 @@ export default function VideoBuilder() {
     if (!file.type.startsWith('video/')) {
       addToast('File phải là video (MP4 / MOV / WebM)', 'error'); return
     }
-    if (file.size > 15 * 1024 * 1024) {
-      addToast('Video > 15MB. Compress lại bằng Handbrake / FFmpeg trước.', 'error'); return
+    if (file.size > 50 * 1024 * 1024) {
+      addToast('Video > 50MB. Compress lại bằng Handbrake / FFmpeg trước.', 'error'); return
     }
     setRefVideoFile(file)
     setRefVideoName(file.name)
@@ -932,16 +947,22 @@ export default function VideoBuilder() {
     setAnalyzingRefVideo(true)
 
     try {
-      // Convert video → base64 (Gemini Vision needs inline data)
-      const buffer = await refVideoFile.arrayBuffer()
-      const bytes = new Uint8Array(buffer)
-      // Build base64 in chunks to avoid call-stack overflow for big files
-      let binary = ''
-      const chunkSize = 0x8000
-      for (let i = 0; i < bytes.length; i += chunkSize) {
-        binary += String.fromCharCode.apply(null, Array.from(bytes.subarray(i, i + chunkSize)))
-      }
-      const base64 = btoa(binary)
+      // Upload to Gemini Files API (handles up to 2GB; inline-data limit
+      // would cap at ~15MB so Files API is required for our 50MB limit).
+      // The upload flow: POST file → poll until state=ACTIVE → use fileUri
+      // in generateContent parts.
+      addToast(`Uploading ${(refVideoFile.size / (1024 * 1024)).toFixed(1)}MB video lên Gemini Files API...`)
+      const { fileUri, mimeType } = await uploadFileToGemini({
+        apiKey: geminiApiKey,
+        file: refVideoFile,
+        displayName: refVideoFile.name,
+        onProgress: (status) => {
+          if (status === 'uploading')      addToast('Upload video...', 'error')
+          else if (status === 'processing') addToast('Gemini đang process video (~10-30s)...', 'error')
+          else                              addToast('✓ Video ready, đang phân tích...')
+        },
+        timeoutMs: 8 * 60 * 1000,
+      })
 
       const analysisPrompt = `You are a senior UGC ad analyst. Analyze this winning advertisement video and extract a COMPREHENSIVE STRUCTURE BREAKDOWN. The user is building a similar ad for the Malaysia market and wants to replicate this video's exact STYLE + COMPOSITION + PACING.
 
@@ -1000,7 +1021,7 @@ concrete — describe actual visuals, not generic terms. Target output:
       const result = await directGeminiVision({
         apiKey: geminiApiKey,
         parts: [
-          { inlineData: { mimeType: refVideoFile.type || 'video/mp4', data: base64 } },
+          { fileData: { fileUri, mimeType } },   // referenced via Files API (no inline data)
           { text: analysisPrompt },
         ],
         model: 'gemini-2.5-pro',
@@ -1058,6 +1079,16 @@ concrete — describe actual visuals, not generic terms. Target output:
   }
 
   // ── Reset pipeline ───────────────────────────────────────────────────────
+
+  // Navigate back to the previous review state. All prior results stay in
+  // pipeRef + preview states, so the previous step's full preview reappears.
+  const goBackToPreviousReview = () => {
+    if (phase === 'review-brollimg')      setPhase('review-parse')
+    else if (phase === 'review-broll')    setPhase('review-brollimg')
+    else if (phase === 'review-voice')    setPhase('review-broll')
+    else if (phase === 'review-avatar')   setPhase('review-voice')
+    else if (phase === 'review-bg')       setPhase('review-avatar')
+  }
 
   const handleReset = () => {
     if (previewVoiceUrl?.startsWith('blob:')) URL.revokeObjectURL(previewVoiceUrl)
@@ -2352,7 +2383,7 @@ MOTION: Gentle cinematic camera motion only — slow push-in on key detail, or s
                 className="flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-violet-200 bg-violet-50/40 py-3 text-xs font-medium text-violet-600 transition-colors hover:border-violet-300 hover:bg-violet-50 disabled:opacity-40"
               >
                 <Upload className="h-3.5 w-3.5" />
-                Upload video ad win (MP4 · ≤15MB)
+                Upload video ad win (MP4 · ≤50MB)
               </button>
             )}
 
@@ -2696,6 +2727,8 @@ MOTION: Gentle cinematic camera motion only — slow push-in on key detail, or s
             <ReviewCard
               onRetry={runVoice}
               onContinue={runAvatar}
+              onBack={goBackToPreviousReview}
+              backLabel="← B-roll Videos"
               continueLabel="Tiếp tục → Avatar Lip-sync"
               continueCost={STEP_INFO.avatar.cost}
             >
@@ -2714,6 +2747,8 @@ MOTION: Gentle cinematic camera motion only — slow push-in on key detail, or s
             <ReviewCard
               onRetry={runAvatar}
               onContinue={runBg}
+              onBack={goBackToPreviousReview}
+              backLabel="← Voiceover"
               retryLabel="Tạo lại (~624 cr)"
               continueLabel="Tiếp tục → Xóa nền"
               continueCost={STEP_INFO.bg.cost}
@@ -2739,6 +2774,8 @@ MOTION: Gentle cinematic camera motion only — slow push-in on key detail, or s
             <ReviewCard
               onRetry={runBrollImages}
               onContinue={runBroll}
+              onBack={goBackToPreviousReview}
+              backLabel="← Storyboard"
               retryLabel={`Tạo lại tất cả (~${previewBrollImageUrls.length * 8} cr)`}
               continueLabel="Tiếp tục → Animate"
               continueCost={STEP_INFO.broll.cost}
@@ -2801,6 +2838,8 @@ MOTION: Gentle cinematic camera motion only — slow push-in on key detail, or s
               <ReviewCard
                 onRetry={() => addToast('Click nút "Gen" trên từng clip để tạo riêng từng cái', 'error')}
                 onContinue={runVoice}
+                onBack={goBackToPreviousReview}
+                backLabel="← B-roll Images"
                 retryLabel="Hướng dẫn"
                 continueLabel={doneCount === 0 ? 'Tiếp tục (skip B-roll)' : `Tiếp tục → Voiceover (${doneCount}/${previewBrollUrls.length} clips)`}
                 continueCost={STEP_INFO.voice.cost}
@@ -2908,6 +2947,8 @@ MOTION: Gentle cinematic camera motion only — slow push-in on key detail, or s
               onRetry={runBg}
               onContinue={runAssemble}
               onSkip={handleSkipBg}
+              onBack={goBackToPreviousReview}
+              backLabel="← Avatar"
               skipLabel="Bỏ qua xóa nền"
               retryLabel="Tạo lại (~$0.50 fal.ai)"
               continueLabel="Tiếp tục → Ghép video"
