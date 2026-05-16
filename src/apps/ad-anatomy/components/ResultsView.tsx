@@ -14,6 +14,7 @@ import {
   Bot,
   Film,
   Save,
+  Loader2,
 } from 'lucide-react'
 import type { AnalysisResult } from '../types'
 import { useAppStore } from '../../../stores/appStore'
@@ -21,7 +22,7 @@ import { useBankStore } from '../../../stores/bankStore'
 
 interface ResultsViewProps {
   result: AnalysisResult
-  videoSrc: string
+  videoSrc: string | null
   fileName: string
   onReset: () => void
 }
@@ -410,11 +411,18 @@ export default function ResultsView({ result, videoSrc, fileName, onReset }: Res
       {/* Left column — pinned video */}
       <div className="flex lg:h-full w-full lg:w-1/3 shrink-0 flex-col gap-4 border-b lg:border-b-0 lg:border-r border-black/8 p-4 lg:p-5 min-h-0">
         <div className="flex-1 min-h-0 max-h-48 lg:max-h-none w-full overflow-hidden rounded-xl border border-black/10 bg-black flex items-center justify-center">
-          <video
-            src={videoSrc}
-            className="max-h-full max-w-full object-contain"
-            controls
-          />
+          {videoSrc ? (
+            <video
+              src={videoSrc}
+              className="max-h-full max-w-full object-contain"
+              controls
+            />
+          ) : (
+            <div className="flex flex-col items-center gap-2 p-6 text-center">
+              <Loader2 className="h-6 w-6 animate-spin text-white/30" />
+              <p className="text-xs text-white/40">Đang tải lại video...</p>
+            </div>
+          )}
         </div>
         <div className="flex shrink-0 items-center gap-2 rounded-lg bg-black/[0.03] px-3 py-2 min-w-0">
           <Film className="h-3.5 w-3.5 shrink-0 text-gray-400" />

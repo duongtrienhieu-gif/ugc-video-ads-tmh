@@ -3,9 +3,18 @@ import { Loader2 } from 'lucide-react'
 import UploadView from './components/UploadView'
 import ResultsView from './components/ResultsView'
 import { analyzeAd } from './services/analyzeAd'
+import { getUrl, saveAsset } from '../../utils/assetStore'
 import type { AnalysisResult } from './types'
 
 type ViewState = 'upload' | 'loading' | 'results'
+
+const CACHE_KEY = 'ugc-ad-anatomy-cache'
+
+interface AdAnatomyCache {
+  result: AnalysisResult
+  fileName: string
+  videoAssetId: string | null
+}
 
 export default function AdAnatomy() {
   const [view, setView] = useState<ViewState>('upload')
@@ -17,6 +26,28 @@ export default function AdAnatomy() {
   const videoUrlRef = useRef<string | null>(null)
   const progressRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
+  // ── Restore cached result on mount ────────────────────────────────────────
+  useEffect(() => {
+    const saved = localStorage.getItem(CACHE_KEY)
+    if (!saved) return
+    try {
+      const cache = JSON.parse(saved) as AdAnatomyCache
+      if (!cache.result || !cache.fileName) { localStorage.removeItem(CACHE_KEY); return }
+      setResult(cache.result)
+      setFileName(cache.fileName)
+      setView('results')
+      // Restore video URL from Supabase asynchronously
+      if (cache.videoAssetId) {
+        getUrl(cache.videoAssetId)
+          .then((url) => { if (url) setVideoSrc(url) })
+          .catch(() => {})
+      }
+    } catch {
+      localStorage.removeItem(CACHE_KEY)
+    }
+  }, [])
+
+  // ── Progress bar ──────────────────────────────────────────────────────────
   useEffect(() => {
     if (view === 'loading') {
       setProgress(0)
@@ -42,16 +73,29 @@ export default function AdAnatomy() {
     setFileName(file.name)
     setError(null)
 
-    // Create a preview URL for the video
+    // Create a local preview URL for the video
     if (videoUrlRef.current) URL.revokeObjectURL(videoUrlRef.current)
-    const url = URL.createObjectURL(file)
-    videoUrlRef.current = url
-    setVideoSrc(url)
+    const localUrl = URL.createObjectURL(file)
+    videoUrlRef.current = localUrl
+    setVideoSrc(localUrl)
 
     try {
       const analysis = await analyzeAd(file)
       setResult(analysis)
       setView('results')
+
+      // ── Persist result immediately (video will be added async) ──────────
+      const cache: AdAnatomyCache = { result: analysis, fileName: file.name, videoAssetId: null }
+      localStorage.setItem(CACHE_KEY, JSON.stringify(cache))
+
+      // Upload video to Supabase in background for persistent URL
+      saveAsset(file, file.type || 'video/mp4')
+        .then((assetId) => {
+          cache.videoAssetId = assetId
+          localStorage.setItem(CACHE_KEY, JSON.stringify(cache))
+        })
+        .catch(() => { /* silent — video stays as blob URL for this session */ })
+
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
       setError(`Phân tích thất bại: ${msg}`)
@@ -60,6 +104,8 @@ export default function AdAnatomy() {
   }
 
   const handleReset = () => {
+    // Clear persisted cache — this is the ONLY place we wipe it
+    localStorage.removeItem(CACHE_KEY)
     setResult(null)
     setView('upload')
     if (videoUrlRef.current) {
@@ -103,7 +149,7 @@ export default function AdAnatomy() {
     )
   }
 
-  if (view === 'results' && result && videoSrc) {
+  if (view === 'results' && result) {
     return (
       <ResultsView
         result={result}
