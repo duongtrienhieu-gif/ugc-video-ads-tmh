@@ -19,7 +19,7 @@
 // Each image runs through Gemini Vision QC: pass/fail badge with similarity
 // scores. Strict mode auto-regens once on QC fail.
 
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef } from 'react'
 import { Sparkles, Loader2, RotateCcw, UserRound, Package, Upload, Check, Download, Save, ShieldCheck, Trash2, AlertTriangle } from 'lucide-react'
 import { useAppStore } from '../../stores/appStore'
 import { useBankStore } from '../../stores/bankStore'
@@ -28,6 +28,8 @@ import { useAssetUrl } from '../../hooks/useAssetUrl'
 import { generateGpt4oImage } from '../../utils/kieai'
 import { saveAsset, getUrl, isAssetRef } from '../../utils/assetStore'
 import BankPicker from '../../components/BankPicker'
+import AutoSaveIndicator from '../../components/AutoSaveIndicator'
+import { useSessionPersist } from '../../services/sessionPersistence'
 import type { Product, Model } from '../../stores/types'
 import { qcProduct, type ProductQC } from './services/qcProduct'
 
@@ -288,13 +290,10 @@ async function resolveLockToPublic(
   return { productUrl, avatarUrl }
 }
 
-// ── Auto-save / restore ─────────────────────────────────────────────────────
-// Every meaningful state change writes a snapshot to localStorage. On page
-// load we read it back and offer the user a one-click restore. Image data
-// itself is never stored here — only asset:xxx refs that round-trip cleanly.
-
-const PERSIST_KEY = 'product-ai-state-v1'
-const PERSIST_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000  // 7 days
+// ── Auto-save / restore (Phase R4b — migrated to useSessionPersist) ─────────
+// Snapshot shape persists across F5. Image blobs never stored here — only
+// asset:xxx refs that round-trip cleanly via utils/assetStore.ts.
+// Legacy key 'product-ai-state-v1' is auto-migrated on app boot.
 
 interface ProductAIPersisted {
   selectedAvatarId: string | null
@@ -306,7 +305,6 @@ interface ProductAIPersisted {
   strictQC: boolean
   tiles: TileState[]
   savedIdx: number[]
-  lastUpdatedAt: number
 }
 
 // ── Result tile ─────────────────────────────────────────────────────────────
@@ -574,20 +572,74 @@ export default function ProductAI() {
   const [progress, setProgress] = useState({ done: 0, total: 0 })
   const [savedIdx, setSavedIdx] = useState<Set<number>>(new Set())
 
-  // Restore prompt — populated on mount if a non-empty session exists in
-  // localStorage. Null otherwise. User dismisses it via Restore / Discard.
-  const [restorePrompt, setRestorePrompt] = useState<ProductAIPersisted | null>(null)
-  // Hydration guard: skip the persist useEffect on the very first render so
-  // we don't overwrite the saved blob with our initial empty defaults before
-  // the restore decision is made.
-  const hydratedRef = useRef(false)
-
   const kieApiKey    = useSettingsStore((s) => s.kieApiKey)
   const geminiApiKey = useSettingsStore((s) => s.geminiApiKey)
   const addToast     = useAppStore((s) => s.addToast)
   const addBRoll     = useBankStore((s) => s.addBRoll)
   const models       = useBankStore((s) => s.models)
   const products     = useBankStore((s) => s.products)
+
+  // ── Session persistence (R4b — shared hook) ────────────────────────────
+  // In-flight tile statuses (generating/qc) cannot resume across refresh, so
+  // they're flattened to 'error' on save. This matches the legacy behavior.
+  const flattenInFlight = (ts: TileState[]): TileState[] => ts.map((t) =>
+    t.status === 'generating' || t.status === 'qc'
+      ? { ...t, status: 'error', error: 'Bị gián đoạn — thử lại' }
+      : t,
+  )
+
+  const sessionApi = useSessionPersist<ProductAIPersisted>({
+    moduleId: 'broll-studio',
+    version: 1,
+    snapshot: () => ({
+      selectedAvatarId: selectedAvatar?.id ?? null,
+      selectedProductId: selectedProduct?.id ?? null,
+      uploadedAvatarRef: uploadedAvatarUrl,
+      uploadedProductRef: uploadedProductUrl,
+      sceneId,
+      styleId,
+      strictQC,
+      tiles: flattenInFlight(tiles),
+      savedIdx: [...savedIdx],
+    }),
+    hydrate: (data) => {
+      if (data.selectedAvatarId) {
+        const m = models.find((x) => x.id === data.selectedAvatarId)
+        if (m) setSelectedAvatar(m)
+      }
+      if (data.selectedProductId) {
+        const p = products.find((x) => x.id === data.selectedProductId)
+        if (p) setSelectedProduct(p)
+      }
+      setUploadedAvatarUrl(data.uploadedAvatarRef)
+      setUploadedProductUrl(data.uploadedProductRef)
+      setSceneId(data.sceneId)
+      setStyleId(data.styleId)
+      setStrictQC(data.strictQC)
+      setTiles(flattenInFlight(data.tiles))
+      setSavedIdx(new Set(data.savedIdx))
+      addToast('✓ Đã khôi phục Product AI từ phiên trước', 'success')
+    },
+    getStatus: () => (isBatch ? 'in-progress' : tiles.some((t) => t.url || t.lock) ? 'paused' : 'completed'),
+    getProgressVi: () => {
+      const filled = tiles.filter((t) => t.url).length
+      if (isBatch) return `Đang gen ${progress.done}/${progress.total || 4} ảnh...`
+      if (filled > 0) return `${filled}/${tiles.length} tile đã tạo`
+      return undefined
+    },
+    getTitleVi: () => selectedProduct?.productName ?? undefined,
+    shouldPersist: () =>
+      tiles.some((t) => t.url || t.lock) ||
+      !!uploadedAvatarUrl || !!uploadedProductUrl ||
+      !!selectedAvatar || !!selectedProduct ||
+      isBatch,
+    deps: [
+      selectedAvatar?.id, selectedProduct?.id,
+      uploadedAvatarUrl, uploadedProductUrl,
+      sceneId, styleId, strictQC,
+      tiles, savedIdx, isBatch, progress,
+    ],
+  })
 
   const avatarImageRef  = selectedAvatar?.characterImage  ?? uploadedAvatarUrl
   const productImageRef = selectedProduct?.productImage ?? uploadedProductUrl
@@ -601,94 +653,8 @@ export default function ProductAI() {
     setTiles((prev) => prev.map((t, idx) => (idx === i ? { ...t, ...patch } : t)))
   }
 
-  // ── Restore from localStorage on mount ────────────────────────────────────
-  // Reads the last saved snapshot; if it has restorable content, surfaces a
-  // popup. The persist effect below is gated on `hydratedRef` so it won't
-  // clobber the saved blob with empty defaults before the user decides.
-  useEffect(() => {
-    try {
-      const raw = localStorage.getItem(PERSIST_KEY)
-      if (!raw) { hydratedRef.current = true; return }
-      const data = JSON.parse(raw) as ProductAIPersisted
-      if (!data?.lastUpdatedAt) { hydratedRef.current = true; return }
-      if (Date.now() - data.lastUpdatedAt > PERSIST_MAX_AGE_MS) {
-        localStorage.removeItem(PERSIST_KEY)
-        hydratedRef.current = true
-        return
-      }
-      const hasContent =
-        data.tiles?.some((t) => t.url || t.lock) ||
-        !!data.uploadedAvatarRef || !!data.uploadedProductRef ||
-        !!data.selectedAvatarId || !!data.selectedProductId
-      if (!hasContent) { hydratedRef.current = true; return }
-      setRestorePrompt(data)
-    } catch {
-      hydratedRef.current = true
-    }
-  }, [])
-
-  // ── Persist on every change (after hydration) ─────────────────────────────
-  useEffect(() => {
-    if (!hydratedRef.current) return
-    try {
-      // In-flight tile statuses cannot be resumed across a refresh — flatten
-      // them to a recoverable error state at save time so the loaded
-      // snapshot is always internally consistent.
-      const safeTiles: TileState[] = tiles.map((t) =>
-        t.status === 'generating' || t.status === 'qc'
-          ? { ...t, status: 'error', error: 'Bị gián đoạn — thử lại' }
-          : t,
-      )
-      const snapshot: ProductAIPersisted = {
-        selectedAvatarId: selectedAvatar?.id ?? null,
-        selectedProductId: selectedProduct?.id ?? null,
-        uploadedAvatarRef: uploadedAvatarUrl,
-        uploadedProductRef: uploadedProductUrl,
-        sceneId,
-        styleId,
-        strictQC,
-        tiles: safeTiles,
-        savedIdx: [...savedIdx],
-        lastUpdatedAt: Date.now(),
-      }
-      localStorage.setItem(PERSIST_KEY, JSON.stringify(snapshot))
-    } catch (err) {
-      console.warn('[ProductAI] persist failed:', err)
-    }
-  }, [selectedAvatar, selectedProduct, uploadedAvatarUrl, uploadedProductUrl, sceneId, styleId, strictQC, tiles, savedIdx])
-
-  const handleRestoreSession = () => {
-    if (!restorePrompt) return
-    const data = restorePrompt
-    if (data.selectedAvatarId) {
-      const m = models.find((x) => x.id === data.selectedAvatarId)
-      if (m) setSelectedAvatar(m)
-    }
-    if (data.selectedProductId) {
-      const p = products.find((x) => x.id === data.selectedProductId)
-      if (p) setSelectedProduct(p)
-    }
-    setUploadedAvatarUrl(data.uploadedAvatarRef)
-    setUploadedProductUrl(data.uploadedProductRef)
-    setSceneId(data.sceneId)
-    setStyleId(data.styleId)
-    setStrictQC(data.strictQC)
-    setTiles(data.tiles.map((t) =>
-      t.status === 'generating' || t.status === 'qc'
-        ? { ...t, status: 'error', error: 'Bị gián đoạn — thử lại' }
-        : t,
-    ))
-    setSavedIdx(new Set(data.savedIdx))
-    setRestorePrompt(null)
-    hydratedRef.current = true
-    addToast('✓ Đã khôi phục session trước')
-  }
-
-  const handleDiscardSession = () => {
-    localStorage.removeItem(PERSIST_KEY)
-    setRestorePrompt(null)
-    hydratedRef.current = true
-  }
+  // (Restore / discard / persist are all handled by useSessionPersist above
+  //  and the global RestoreSessionModal mounted in App.tsx)
 
   // ── Single shot ───────────────────────────────────────────────────────────
   // Scene/style are passed explicitly (not read from outer closure) so callers
@@ -1021,7 +987,10 @@ export default function ProductAI() {
 
   // ── Render ─────────────────────────────────────────────────────────────────
   return (
-    <div className="flex h-full flex-col overflow-hidden">
+    <div className="flex h-full flex-col overflow-hidden relative">
+      <div className="absolute right-4 top-4 z-30">
+        <AutoSaveIndicator lastSavedAt={sessionApi.lastSavedAt} lastSaveOk={sessionApi.lastSaveOk} />
+      </div>
       {/* Header */}
       <div className="shrink-0 border-b border-black/8 bg-gradient-to-r from-violet-50 to-pink-50 px-6 py-4">
         <h1 className="text-xl font-bold tracking-tight text-gray-900">Product AI</h1>
@@ -1180,75 +1149,10 @@ export default function ProductAI() {
         onClose={() => setPickerMode(null)}
       />
 
-      {/* Restore-session popup — surfaces only on page load when a saved
-          snapshot with content is found. One click to restore or discard. */}
-      {restorePrompt && (
-        <RestorePromptModal
-          data={restorePrompt}
-          onRestore={handleRestoreSession}
-          onDiscard={handleDiscardSession}
-        />
-      )}
+      {/* Restore is now handled globally by RestoreSessionModal in App.tsx */}
     </div>
   )
 }
 
-// ── Restore-session popup ─────────────────────────────────────────────────
-function RestorePromptModal({
-  data, onRestore, onDiscard,
-}: {
-  data: ProductAIPersisted
-  onRestore: () => void
-  onDiscard: () => void
-}) {
-  // Compute age once at mount via lazy useState init — `Date.now()` inside
-  // render body is flagged by the React 19 purity lint.
-  const [ageStr] = useState(() => formatAge(Date.now() - data.lastUpdatedAt))
-  const filledTiles = data.tiles.filter((t) => t.url).length
-  const sceneLabel = SCENE_PRESETS.find((p) => p.id === data.sceneId)?.label ?? data.sceneId
-  const styleLabel = STYLE_OPTIONS.find((s) => s.id === data.styleId)?.label ?? data.styleId
-
-  return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm">
-      <div className="w-full max-w-md rounded-2xl bg-white p-5 shadow-2xl">
-        <div className="mb-3 flex items-center gap-2">
-          <span className="flex h-9 w-9 items-center justify-center rounded-full bg-violet-100 text-lg">↻</span>
-          <h3 className="text-base font-bold text-gray-900">Khôi phục session trước?</h3>
-        </div>
-        <p className="text-xs leading-relaxed text-gray-600">
-          Tìm thấy session đang dang dở từ <strong>{ageStr}</strong> trước:
-        </p>
-        <ul className="mt-2 space-y-0.5 text-[11px] text-gray-700">
-          <li>• <strong>{filledTiles}/4</strong> ảnh đã tạo</li>
-          <li>• Scene: <strong>{sceneLabel}</strong> · Style: <strong>{styleLabel}</strong></li>
-          {(data.uploadedAvatarRef || data.selectedAvatarId) && <li>• Avatar đã chọn</li>}
-          {(data.uploadedProductRef || data.selectedProductId) && <li>• Sản phẩm đã chọn</li>}
-        </ul>
-        <div className="mt-5 flex gap-2">
-          <button
-            onClick={onDiscard}
-            className="flex-1 rounded-lg border border-black/10 px-4 py-2.5 text-sm font-medium text-gray-600 hover:bg-black/[0.04]"
-          >
-            Bỏ qua
-          </button>
-          <button
-            onClick={onRestore}
-            className="flex-1 rounded-lg bg-violet-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-violet-700"
-          >
-            Khôi phục
-          </button>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-function formatAge(ms: number): string {
-  const m = Math.floor(ms / 60000)
-  if (m < 1) return 'vài giây'
-  if (m < 60) return `${m} phút`
-  const h = Math.floor(m / 60)
-  if (h < 24) return `${h} giờ`
-  const d = Math.floor(h / 24)
-  return `${d} ngày`
-}
+// Old RestorePromptModal + formatAge helpers removed in R4b — replaced by
+// the global RestoreSessionModal + useSessionPersist hook.

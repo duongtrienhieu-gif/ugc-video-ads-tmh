@@ -27,10 +27,13 @@ import ConsistencySlider from './components/ConsistencySlider'
 import MasterFrameJobStepper from './components/MasterFrameJobStepper'
 import AnalyticsPanel from './components/AnalyticsPanel'
 import SceneGenGrid from './components/SceneGenGrid'
+import VideoGenGrid from './components/VideoGenGrid'
 import { useMasterFrameJobStore } from './stores/masterFrameJobStore'
 import { useSceneGenJobStore } from './stores/sceneGenJobStore'
+import { useVideoGenJobStore } from './stores/videoGenJobStore'
 import { startMasterFrameJob, clearMasterFrameJob } from './services/masterFrameJobRunner'
 import { startSceneGenQueue, regenerateScene, cancelSceneGenQueue } from './services/sceneGenJobRunner'
+import { runVideoQueue, retrySingleVideoClip, buildVideoQueueFromScenes } from './services/videoGenJobRunner'
 import MasterFrameApproval from './components/MasterFrameApproval'
 import PromptCompilerDebugPanel from './components/PromptCompilerDebugPanel'
 import StoryboardEditor from './components/StoryboardEditor'
@@ -41,6 +44,7 @@ import StoryboardEditor from './components/StoryboardEditor'
 function computeReachablePhases(
   state: V2PipelineState,
   hasSceneJob: boolean,
+  hasVideoJob: boolean,
 ): ReadonlySet<V2PipelineState['phase']> {
   const reachable = new Set<V2PipelineState['phase']>(['input', state.phase])
   if (state.identityPack) {
@@ -53,10 +57,13 @@ function computeReachablePhases(
   if (state.blueprints.length > 0) {
     reachable.add('blueprint')
   }
-  // Scene-gen has its own external store (sceneGenJobStore) — if a job exists
-  // there OR we ever advanced past blueprint, the user can re-enter the grid.
   if (hasSceneJob || state.blueprints.length > 0) {
     reachable.add('scene-gen')
+  }
+  // video-gen: reachable once the scene-gen queue has any approved clip OR
+  // a video job already exists (resumed from localStorage).
+  if (hasVideoJob || hasSceneJob) {
+    reachable.add('video-gen')
   }
   return reachable
 }
@@ -78,7 +85,8 @@ function PhaseHeader({
     { id: 'master-frame',     label: 'Master Frame',         num: 3 },
     { id: 'blueprint',        label: 'Storyboard',           num: 4 },
     { id: 'scene-gen',        label: 'Gen B-Roll',           num: 5 },
-    { id: 'video-voice',      label: 'Voice + Video',        num: 6 },
+    { id: 'video-gen',        label: 'Sinh Video',           num: 6 },
+    { id: 'video-voice',      label: 'Voice + Concat',       num: 7 },
   ]
   const activeIdx = steps.findIndex((s) => s.id === phase)
 
@@ -564,7 +572,7 @@ export default function VideoBuilderV2({ onSwitchToV1 }: Props) {
       <div className="shrink-0 border-b border-black/8 bg-white px-6 py-2.5">
         <PhaseHeader
           phase={state.phase}
-          reachable={computeReachablePhases(state, !!sceneJob)}
+          reachable={computeReachablePhases(state, !!sceneJob, !!videoJob)}
           onPhaseClick={(id) => setState((s) => (s.phase === id ? s : { ...s, phase: id }))}
         />
       </div>

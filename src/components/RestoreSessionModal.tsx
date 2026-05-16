@@ -16,6 +16,7 @@ import { useAppStore } from '../stores/appStore'
 import {
   scanForPendingSessions,
   pruneExpiredSnapshots,
+  migrateLegacyKeys,
   formatRelativeVi,
   restoreCoordinator,
 } from '../services/sessionPersistence'
@@ -29,6 +30,7 @@ export default function RestoreSessionModal() {
 
   // Boot-time scan
   useEffect(() => {
+    migrateLegacyKeys()         // R4b: move 'product-ai-state-v1' → new envelope
     pruneExpiredSnapshots()
     const found = scanForPendingSessions()
     if (found.length === 0) return

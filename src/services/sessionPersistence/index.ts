@@ -16,6 +16,7 @@ export {
   discardSession,
   discardAllPendingSessions,
   pruneExpiredSnapshots,
+  migrateLegacyKeys,
   formatRelativeVi,
 } from './registry'
 

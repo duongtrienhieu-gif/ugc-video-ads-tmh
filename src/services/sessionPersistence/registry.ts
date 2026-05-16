@@ -50,8 +50,14 @@ export const MODULE_REGISTRY: ModuleRegistration[] = [
     version: 1,
     maxAgeMs: DEFAULT_MAX_AGE_MS,
   },
-  // ── R4b — BrollStudio (migrating from bespoke pattern) ───────────────────
-  // { moduleId: 'broll-studio',     moduleNameVi: 'Product AI',   persistKey: 'ugc-lab:broll-studio:inflight-v1',   version: 1, maxAgeMs: DEFAULT_MAX_AGE_MS },
+  // ── R4b — BrollStudio (migrated from bespoke pattern) ────────────────────
+  {
+    moduleId: 'broll-studio',
+    moduleNameVi: 'Product AI',
+    persistKey: 'ugc-lab:broll-studio:inflight-v1',
+    version: 1,
+    maxAgeMs: 7 * 24 * 60 * 60 * 1000, // 7 days — original BrollStudio behavior
+  },
   // ── R5+ slots ────────────────────────────────────────────────────────────
   // { moduleId: 'voice-studio',     moduleNameVi: 'Giọng đọc',    persistKey: 'ugc-lab:voice-studio:inflight-v1',   version: 1, maxAgeMs: DEFAULT_MAX_AGE_MS },
   // { moduleId: 'video-builder',    moduleNameVi: 'UGC Builder',  persistKey: 'ugc-lab:video-builder:inflight-v1',  version: 1, maxAgeMs: DEFAULT_MAX_AGE_MS },
@@ -146,6 +152,83 @@ export function discardSession(persistKey: string): void {
 export function discardAllPendingSessions(): void {
   for (const reg of MODULE_REGISTRY) {
     clearEnvelope(reg.persistKey)
+  }
+}
+
+/**
+ * One-time migration of legacy bespoke localStorage keys into the new envelope
+ * format. Idempotent — running it twice is safe (no-op if already migrated).
+ *
+ * Add new entries here when migrating a module from its own ad-hoc key.
+ */
+const LEGACY_MIGRATIONS: Array<{
+  oldKey: string
+  newKey: string
+  moduleId: string
+  moduleNameVi: string
+  version: number
+  /** Build the envelope's `data` field + metadata from the old blob shape. */
+  build: (raw: unknown) => { data: unknown; startedAt: number; updatedAt: number; titleVi?: string; progressVi?: string } | null
+}> = [
+  // BrollStudio (Product AI) — moved from 'product-ai-state-v1' bespoke key
+  {
+    oldKey: 'product-ai-state-v1',
+    newKey: 'ugc-lab:broll-studio:inflight-v1',
+    moduleId: 'broll-studio',
+    moduleNameVi: 'Product AI',
+    version: 1,
+    build: (raw) => {
+      try {
+        const r = raw as { lastUpdatedAt?: number; tiles?: Array<{ url?: string | null }> }
+        if (!r || typeof r.lastUpdatedAt !== 'number') return null
+        const filledTiles = Array.isArray(r.tiles) ? r.tiles.filter((t) => t?.url).length : 0
+        return {
+          data: r,
+          startedAt: r.lastUpdatedAt,
+          updatedAt: r.lastUpdatedAt,
+          progressVi: `${filledTiles}/${Array.isArray(r.tiles) ? r.tiles.length : 4} tile đã tạo`,
+        }
+      } catch {
+        return null
+      }
+    },
+  },
+]
+
+export function migrateLegacyKeys(): void {
+  for (const m of LEGACY_MIGRATIONS) {
+    try {
+      // Skip if new key already populated — don't clobber
+      if (localStorage.getItem(m.newKey)) {
+        // But still clean up the old key to avoid clutter
+        localStorage.removeItem(m.oldKey)
+        continue
+      }
+      const oldRaw = localStorage.getItem(m.oldKey)
+      if (!oldRaw) continue
+      const parsed = JSON.parse(oldRaw)
+      const built = m.build(parsed)
+      if (!built) {
+        localStorage.removeItem(m.oldKey)
+        continue
+      }
+      const envelope: SnapshotEnvelope = {
+        version: m.version,
+        moduleId: m.moduleId,
+        moduleNameVi: m.moduleNameVi,
+        status: 'paused',
+        startedAt: built.startedAt,
+        updatedAt: built.updatedAt,
+        progressVi: built.progressVi,
+        titleVi: built.titleVi,
+        data: built.data,
+      }
+      localStorage.setItem(m.newKey, JSON.stringify(envelope))
+      localStorage.removeItem(m.oldKey)
+      console.info(`[sessionPersistence] migrated legacy key '${m.oldKey}' → '${m.newKey}'`)
+    } catch (err) {
+      console.warn(`[sessionPersistence] migration failed for ${m.oldKey}:`, err)
+    }
   }
 }
 
