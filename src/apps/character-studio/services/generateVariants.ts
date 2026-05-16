@@ -1,6 +1,6 @@
 import { saveAsset, isAssetRef } from '../../../utils/assetStore'
 import { directGeminiVision } from '../../../utils/gemini'
-import { generateImage, pollImageUntilDone } from '../../../utils/kieai'
+import { generateGpt4oImage } from '../../../utils/kieai'
 import type { AvatarVariant } from '../../../stores/types'
 
 /**
@@ -125,34 +125,35 @@ export async function generateOneVariant(params: {
 
   const allowOutfitVariation = mode === 'flex-outfit'
 
-  const identityLockText = `Re-render the EXACT SAME PERSON from the reference image, viewed from a different angle.
-${descBlock}
-KEEP IDENTICAL (this is the SAME individual, not a similar-looking different person):
-• Same face: eyes, eyebrows, nose, lips, jawline, cheekbones, skin tone, age
-• Same gender, ethnicity, age range
-• Same hijab style and color if present, OR same hairstyle/hair color/hair length
-• Same facial hair (beard, stubble, mustache) if present
+  const identityLockText = `IMAGE-EDITING TASK: Re-render the EXACT SAME PERSON from the attached reference image, viewed from a different angle.
+
+THE PERSON IS: the individual in the attached reference image. KEEP HER/HIS FACE EXACTLY:
+• Same face shape, eyes (color + shape), eyebrows, nose, lips, jawline, cheekbones, skin tone
+• Same gender, same ethnicity, same age range — do NOT make older younger or vice versa
+• Same hijab style and color if present, OR same hairstyle / hair color / hair length / hair texture
+• Same facial hair (beard, stubble, mustache) if present — same style and color
 • Same accessories on face/neck (glasses, earrings)
 
+${descBlock ? `Additional identity description for accuracy:${descBlock}` : ''}
+
 ${allowOutfitVariation
-  ? 'CAN VARY: outfit color/style (same modesty level), background scenery'
-  : 'KEEP THE SAME: outfit, lighting, background style'}
+  ? 'CAN VARY: outfit color/style (same modesty level if hijab outfit), background scenery'
+  : 'KEEP THE SAME: outfit, lighting, background style as reference'}
 
-CHANGE: ${recipe.prompt}
+WHAT CHANGES (apply this transformation): ${recipe.prompt}
 
-Output: photorealistic vertical 9:16 image, authentic natural lighting, no text, no watermark. The output MUST be the same individual as the reference image, only the head pose and angle change.`
+OUTPUT: photorealistic vertical image, authentic natural lighting, no text overlay, no watermark. The output MUST be recognizably the same individual as the reference image — only the head pose, angle, or expression changes.`
 
   try {
-    // Use KIE.ai's GPT Image 2 — pass reference 2x for stronger identity weight
-    const { taskId } = await generateImage({
+    // Use KIE GPT-4o image-edit endpoint with filesUrl — the proper image
+    // conditioning pipeline (gpt-image-2-text-to-image silently ignores refs).
+    const imageUrl = await generateGpt4oImage({
       apiKey,
-      model: 'gpt-image-2-text-to-image',
       prompt: identityLockText,
-      resolution: '1K',
-      aspectRatio: '9:16',
-      referenceImageUrls: [originalImageUrl, originalImageUrl],
+      filesUrl: [originalImageUrl],
+      size: '2:3',  // closest to 9:16 (gpt4o only supports 1:1, 3:2, 2:3)
+      timeoutMs: 4 * 60 * 1000,
     })
-    const imageUrl = await pollImageUntilDone({ apiKey, taskId, timeoutMs: 4 * 60 * 1000 })
 
     // Upload to asset store so it persists like the rest of the bank
     let storedRef: string

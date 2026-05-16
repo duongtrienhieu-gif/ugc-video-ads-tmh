@@ -1,5 +1,153 @@
 const KIE_BASE = 'https://api.kie.ai/api/v1'
 
+// ── GPT-4o Image Generation (proper image-to-image editing) ──────────────────
+// CRITICAL: /jobs/createTask + gpt-image-2-text-to-image is TEXT-ONLY — it
+// silently ignores image_urls. For TRUE image editing with reference images,
+// you MUST use this separate endpoint /gpt4o-image/generate with `filesUrl`.
+// This endpoint internally calls OpenAI gpt-image-1's image-edit pipeline.
+
+export type Gpt4oSize = '1:1' | '3:2' | '2:3'
+
+/**
+ * Submit a GPT-4o image generation task with up to 5 reference images.
+ * Returns taskId — poll with pollGpt4oUntilDone() to get the final URL.
+ *
+ * @param filesUrl Up to 5 publicly accessible reference image URLs (avatar, product, etc.)
+ * @param size    Aspect ratio: '1:1', '3:2', or '2:3' only
+ */
+export async function submitGpt4oImage(params: {
+  apiKey: string
+  prompt: string
+  filesUrl?: string[]
+  size: Gpt4oSize
+  enableFallback?: boolean
+}): Promise<{ taskId: string }> {
+  const body: Record<string, unknown> = {
+    prompt: params.prompt,
+    size: params.size,
+    enableFallback: params.enableFallback ?? true,
+    fallbackModel: 'GPT_IMAGE_1',
+  }
+  if (params.filesUrl && params.filesUrl.length > 0) {
+    body.filesUrl = params.filesUrl.slice(0, 5)
+  }
+
+  const res = await fetch(`${KIE_BASE}/gpt4o-image/generate`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${params.apiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(body),
+  })
+
+  if (res.status === 402) throw new Error('INSUFFICIENT_CREDITS')
+  if (!res.ok) {
+    const text = await res.text().catch(() => res.statusText)
+    throw new Error(`KIE GPT-4o image submit lỗi (${res.status}): ${text.slice(0, 300)}`)
+  }
+  const data = await res.json() as { code?: number; msg?: string; message?: string; data?: { taskId?: string } | null }
+  if (data?.code !== undefined && data.code !== 200) {
+    throw new Error(data.msg ?? data.message ?? `KIE GPT-4o lỗi code ${data.code}`)
+  }
+  const taskId = data?.data?.taskId
+  if (!taskId) throw new Error(`KIE GPT-4o không trả về taskId: ${JSON.stringify(data).slice(0, 200)}`)
+  return { taskId }
+}
+
+/**
+ * Get status of a GPT-4o image task. Status values:
+ *  - GENERATING / WAITING / QUEUING → still running
+ *  - SUCCESS → done, resultUrls available
+ *  - CREATE_TASK_FAILED / GENERATE_FAILED → failed
+ */
+export async function getGpt4oImageStatus(params: {
+  apiKey: string
+  taskId: string
+}): Promise<{ status: ImageStatus; imageUrl?: string; error?: string; progress?: number }> {
+  const res = await fetch(
+    `${KIE_BASE}/gpt4o-image/record-info?taskId=${encodeURIComponent(params.taskId)}`,
+    { headers: { Authorization: `Bearer ${params.apiKey}` } },
+  )
+  if (!res.ok) throw new Error(`GPT-4o status check failed: ${res.status}`)
+
+  const json = await res.json() as {
+    data?: {
+      status?: string
+      progress?: number | string
+      response?: { resultUrls?: string[] }
+      errorMessage?: string
+      errorCode?: number
+    }
+  }
+  const record = json.data ?? {}
+  const rawStatus = String(record.status ?? '').toUpperCase()
+
+  let status: ImageStatus = 'pending'
+  if (rawStatus === 'SUCCESS') status = 'completed'
+  else if (rawStatus === 'CREATE_TASK_FAILED' || rawStatus === 'GENERATE_FAILED') status = 'failed'
+  else if (rawStatus === 'GENERATING' || rawStatus === 'QUEUING' || rawStatus === 'WAITING') status = 'processing'
+
+  return {
+    status,
+    imageUrl: status === 'completed' ? record.response?.resultUrls?.[0] : undefined,
+    error: status === 'failed' ? String(record.errorMessage ?? 'Tạo ảnh thất bại') : undefined,
+    progress: typeof record.progress === 'number' ? record.progress : undefined,
+  }
+}
+
+/** Poll until the GPT-4o image task is done. Returns the result URL. */
+export async function pollGpt4oUntilDone(params: {
+  apiKey: string
+  taskId: string
+  onStatusChange?: (status: ImageStatus, progress?: number) => void
+  timeoutMs?: number
+}): Promise<string> {
+  const timeout = params.timeoutMs ?? 4 * 60 * 1000
+  const start = Date.now()
+  let lastStatus = ''
+
+  while (Date.now() - start < timeout) {
+    await new Promise<void>((r) => setTimeout(r, 3000))
+    const s = await getGpt4oImageStatus({ apiKey: params.apiKey, taskId: params.taskId })
+    if (s.status !== lastStatus) {
+      lastStatus = s.status
+      params.onStatusChange?.(s.status, s.progress)
+    }
+    if (s.status === 'completed') {
+      if (!s.imageUrl) throw new Error('GPT-4o completed nhưng không trả về imageUrl')
+      return s.imageUrl
+    }
+    if (s.status === 'failed') {
+      throw new Error(s.error ?? 'GPT-4o gen thất bại')
+    }
+  }
+  throw new Error('TIMEOUT — GPT-4o quá 4 phút chưa xong')
+}
+
+/** All-in-one: submit + poll + return final image URL. */
+export async function generateGpt4oImage(params: {
+  apiKey: string
+  prompt: string
+  filesUrl?: string[]
+  size: Gpt4oSize
+  onStatusChange?: (status: ImageStatus, progress?: number) => void
+  timeoutMs?: number
+}): Promise<string> {
+  const { taskId } = await submitGpt4oImage({
+    apiKey: params.apiKey,
+    prompt: params.prompt,
+    filesUrl: params.filesUrl,
+    size: params.size,
+  })
+  return await pollGpt4oUntilDone({
+    apiKey: params.apiKey,
+    taskId,
+    onStatusChange: params.onStatusChange,
+    timeoutMs: params.timeoutMs,
+  })
+}
+
 // ── Credits balance ───────────────────────────────────────────────────
 
 export async function getKieCredits(apiKey: string): Promise<number> {

@@ -12,7 +12,7 @@ import { useAppStore } from '../../stores/appStore'
 import { useBankStore } from '../../stores/bankStore'
 import { useSettingsStore } from '../../stores/settingsStore'
 import { useAssetUrl } from '../../hooks/useAssetUrl'
-import { generateImage, pollImageUntilDone } from '../../utils/kieai'
+import { generateGpt4oImage } from '../../utils/kieai'
 import { saveAsset, getUrl, isAssetRef } from '../../utils/assetStore'
 import BankPicker from '../../components/BankPicker'
 import type { Product, Model } from '../../stores/types'
@@ -27,22 +27,65 @@ interface ShotRecipe {
   prompt: string
 }
 
+// Prompts EXPLICITLY reference both attached images.
+// Image order passed to filesUrl: [PRODUCT, AVATAR] — so:
+//   "the first reference image" = PRODUCT
+//   "the second reference image" = AVATAR (the person)
+// This explicit indexing is critical — without it the model often invents
+// a different person + different product from imagination.
 const PRODUCT_SHOTS: ShotRecipe[] = [
   {
     label: 'Cầm sản phẩm',
-    prompt: 'The same person from the reference image is holding the product (matching the product reference image) at chest level with one or both hands, label fully facing the camera, gentle confident smile, looking directly at the lens. Natural soft daylight indoors, neutral home background (light wall / window light). Authentic UGC iPhone photo aesthetic: sharp focus across the entire frame, zero bokeh, zero depth of field, unedited natural skin and lighting, no artificial studio look, no AI artifacts. Square 1:1 framing, waist-up composition. The product must EXACTLY match the reference product image — same container shape, color, label, branding.',
+    prompt: `IMAGE-EDITING TASK: Combine the two reference images into one new photo.
+
+THE PERSON IS: the woman from the SECOND attached reference image (the avatar/face photo). KEEP HER FACE EXACTLY: same face shape, same eyes, same nose, same mouth, same skin tone, same hijab/hair color and style, same age. She MUST be recognizably the same individual — not a similar-looking different person.
+
+THE PRODUCT IS: the EXACT product from the FIRST attached reference image. KEEP THE PRODUCT EXACTLY: same container shape (jar/box/bottle/tube as shown), same colors, same label design, same branding text and logo, same proportions. The product MUST be recognizably the same item — not a similar product.
+
+SCENE: That woman is holding the product at chest level with one or both hands, label fully facing the camera, with a gentle confident smile, looking directly at the lens. Natural soft daylight indoors, neutral home background (light wall, window light, plants softly out of focus).
+
+STYLE: Authentic UGC iPhone photo — square 1:1, waist-up framing, sharp focus across the entire frame, zero bokeh, zero depth of field, unedited natural skin texture and lighting, no professional studio look, no AI-generated sheen, no watermarks, no text overlay.`,
   },
   {
     label: 'Review chỉ vào sản phẩm',
-    prompt: 'The same person from the reference image is holding the product (matching the product reference image) with one hand while using the index finger of the other hand to point at a specific part of the label / packaging, looking down at it with a focused interested expression, as if explaining the product to a friend or reviewing it on camera. Soft natural daylight, neutral indoor background. Authentic UGC iPhone photo: sharp focus across the entire frame, zero bokeh, unedited skin, no studio look. Square 1:1 framing, medium close-up. Product must EXACTLY match the reference image.',
+    prompt: `IMAGE-EDITING TASK: Combine the two reference images into one new photo.
+
+THE PERSON IS: the woman from the SECOND attached reference image. KEEP HER FACE EXACTLY: same face shape, eyes, nose, mouth, skin tone, hijab/hair, age. She MUST be recognizable as the same individual.
+
+THE PRODUCT IS: the EXACT product from the FIRST attached reference image. KEEP container shape, colors, label, branding, proportions — same item, not a substitute.
+
+SCENE: That woman holds the product in one hand and uses the index finger of her other hand to point at a specific feature on the label/packaging, looking down at it with a focused and interested expression — as if explaining the product to a friend on camera. Soft natural daylight, neutral indoor background.
+
+STYLE: Authentic UGC iPhone photo — square 1:1, medium close-up, sharp focus across the entire frame, zero bokeh, unedited skin, no studio look, no AI sheen.`,
   },
   {
     label: 'Bàn nhiều sản phẩm',
-    prompt: 'The same person from the reference image is sitting at a clean wooden or marble desk/table, with 3-5 units of the product (matching the product reference image — same shape, color, label) arranged in a tidy row or small cluster in front of them. They are leaning slightly forward, picking up one unit while smiling warmly at the camera. Cozy home or cafe background softly visible, soft natural window light from the side. UGC iPhone aesthetic: sharp focus across the entire frame, zero bokeh on the product row, unedited natural skin, no AI sheen. Square 1:1 framing.',
+    prompt: `IMAGE-EDITING TASK: Combine the two reference images into one new photo.
+
+THE PERSON IS: the woman from the SECOND attached reference image. KEEP HER FACE EXACTLY: same face shape, eyes, nose, mouth, skin tone, hijab/hair, age. Same individual — recognizable.
+
+THE PRODUCT IS: the EXACT product from the FIRST attached reference image. The image must show 3-5 IDENTICAL units of this exact product arranged together — same container shape, same colors, same label, same branding. Do NOT substitute different products.
+
+SCENE: That woman sits at a clean wooden or marble desk/table, with 3-5 units of the SAME product arranged in a tidy row or small cluster in front of her. She leans slightly forward, picking up one unit while smiling warmly at the camera. Cozy home or cafe background softly visible, soft natural window light from the side.
+
+STYLE: Authentic UGC iPhone photo — square 1:1, sharp focus across the entire frame, zero bokeh on the product row, unedited natural skin, no AI sheen, no studio look.`,
   },
   {
     label: 'Đang dùng sản phẩm',
-    prompt: 'The same person from the reference image is naturally using or applying the product (matching the product reference image) — for example: opening a jar/bottle and dispensing a small amount onto their hand / a finger, OR taking a tablet/capsule from a blister pack, OR holding the product near their face/skin in a natural usage moment. Genuine engaged expression, looking down at the product or at the camera. Soft daylight, real home/bathroom/kitchen setting depending on product type. Authentic UGC iPhone photo: sharp focus across the entire frame, zero bokeh, unedited skin, no studio gloss. Square 1:1, waist-up composition. Product must EXACTLY match the reference image.',
+    prompt: `IMAGE-EDITING TASK: Combine the two reference images into one new photo.
+
+THE PERSON IS: the woman from the SECOND attached reference image. KEEP HER FACE EXACTLY: same face shape, eyes, nose, mouth, skin tone, hijab/hair, age. Same individual.
+
+THE PRODUCT IS: the EXACT product from the FIRST attached reference image. Same container shape, same colors, same label, same branding — do NOT swap for any other brand.
+
+SCENE: That woman is naturally using or applying the product — appropriate to the product type:
+- if it's a jar/cream → opening it and dispensing a small amount onto her finger
+- if it's a capsule bottle → taking one capsule from the bottle into her hand
+- if it's a tube → squeezing a small amount onto her hand
+- otherwise → holding the product near her face/skin in a natural usage moment
+With a genuine engaged expression, looking down at the product or at the camera. Soft daylight, real home/bathroom/kitchen setting matched to product type.
+
+STYLE: Authentic UGC iPhone photo — square 1:1, waist-up composition, sharp focus across the entire frame, zero bokeh, unedited skin, no studio gloss.`,
   },
 ]
 
@@ -223,19 +266,20 @@ export default function ProductAI() {
     setSelectedProduct(null)
   }
 
-  // Generate ONE shot via KIE GPT Image 2 — avatar + product passed as references
+  // Generate ONE shot via KIE GPT-4o Image API — the REAL image-edit endpoint.
+  // Uses `/gpt4o-image/generate` (not the text-to-image jobs endpoint) which
+  // actually consumes reference images via `filesUrl`. Internally backed by
+  // OpenAI gpt-image-1 with image conditioning enabled.
   const genOneShot = async (recipe: ShotRecipe, avatarPublicUrl: string, productPublicUrl: string): Promise<string | null> => {
     try {
-      const { taskId } = await generateImage({
+      const url = await generateGpt4oImage({
         apiKey: kieApiKey,
-        model: 'gpt-image-2-text-to-image',
         prompt: recipe.prompt,
-        resolution: '1K',
-        aspectRatio: '1:1',
-        // Pass product twice for stronger product identity weight
-        referenceImageUrls: [avatarPublicUrl, productPublicUrl, productPublicUrl],
+        // Order matters — product first (priority anchor), then avatar (identity)
+        filesUrl: [productPublicUrl, avatarPublicUrl],
+        size: '1:1',
+        timeoutMs: 4 * 60 * 1000,
       })
-      const url = await pollImageUntilDone({ apiKey: kieApiKey, taskId, timeoutMs: 4 * 60 * 1000 })
       // Persist to asset store (URL might be temporary)
       let stored: string
       if (isAssetRef(url)) stored = url

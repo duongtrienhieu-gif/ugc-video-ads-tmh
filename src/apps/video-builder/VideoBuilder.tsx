@@ -13,7 +13,7 @@ import { useAdTemplateStore } from '../../stores/adTemplateStore'
 import { getUrl, isAssetRef, saveAsset } from '../../utils/assetStore'
 import { directGeminiVision } from '../../utils/gemini'
 import { listVoices, listSharedVoices, textToSpeechSmooth } from '../../utils/elevenlabs'
-import { generateLipSync, pollLipSyncUntilDone, generateVideoJob, getVideoJobStatus, generateImage, pollImageUntilDone } from '../../utils/kieai'
+import { generateLipSync, pollLipSyncUntilDone, generateVideoJob, getVideoJobStatus, generateGpt4oImage } from '../../utils/kieai'
 import { removeVideoBackground } from '../../utils/falai'
 import { buildUGCVideo, pollRenderUntilDone } from '../../utils/shotstack'
 import type { ElevenLabsVoice } from '../../utils/elevenlabs'
@@ -1682,13 +1682,12 @@ Return ONLY the description as plain text, no preamble, no markdown.` },
   // Why: cheap ($0.04/image) and reviewable BEFORE committing to expensive
   // video generation ($0.35/clip). User can regen bad images individually.
 
-  // ── B-Roll prompt builder for KIE GPT Image 2 ────────────────────────────
-  // Strategy: SCENE from Gemini storyboard + STRONG product override + character anchor.
-  //
-  // CRITICAL: Gemini storyboards often mention product names from the Ad Win Template
-  // (e.g. "INFINITY PROBIOTICS PLUS") which DON'T match the user's actual uploaded product.
-  // We aggressively strip those names and force the model to render ONLY the
-  // product shown in the reference image, described in productDescription.
+  // ── B-Roll prompt builder for KIE GPT-4o Image API ───────────────────────
+  // Endpoint: /gpt4o-image/generate with filesUrl = [PRODUCT, AVATAR].
+  // Prompt explicitly references "FIRST reference image" (= product) and
+  // "SECOND reference image" (= avatar) so the model knows what to copy from
+  // each input. Without this explicit indexing, gpt-image-1 often invents
+  // a different person + product from imagination.
   const buildImagePromptGPT = (seg: ScriptSegment): string => {
     const avatarDesc  = pipeRef.current.avatarDescription
     const productDesc = pipeRef.current.productDescription
@@ -1696,12 +1695,9 @@ Return ONLY the description as plain text, no preamble, no markdown.` },
     const actualProductName = bankProduct?.productName ?? 'the product'
     const hasProductRef = (pipeRef.current.productImageUrls?.length ?? 0) > 0
 
-    // Scene from Gemini's storyboard — but REPLACE any product brand name mentions
-    // with a neutral phrase so the AI doesn't render the wrong brand.
+    // Strip Ad Win Template brand mentions so the model doesn't lock onto the wrong product
     let scene = seg.brollPrompt
     if (hasProductRef && bankProduct) {
-      // Strip common product name patterns the storyboard might have inherited
-      // from the Ad Win Template. We want the scene action without forcing a brand name.
       scene = scene
         .replace(/\bINFINITY\s+PROBIOTICS(?:\s+PLUS)?\b/gi, actualProductName)
         .replace(/\bsupplement\s+bottle\b/gi, 'product container')
@@ -1711,39 +1707,30 @@ Return ONLY the description as plain text, no preamble, no markdown.` },
 
     const characterDesc = avatarDesc
       ? avatarDesc.split('\n').slice(0, 4).join(', ')
-      : 'young Malaysian woman in her late 20s, warm beige hijab, modest loose-fit casual outfit, warm tan skin, natural minimal makeup'
+      : 'young Malaysian woman in her late 20s, warm beige hijab, modest casual outfit, warm tan skin'
 
-    // STRONG product anchor — only when scene shows product interaction.
-    // The reference image is passed in referenceImageUrls; here we describe it precisely.
-    const productBlock = (seg.useProduct || /product|hold|show|bottle|jar|container/i.test(seg.brollPrompt)) && hasProductRef
-      ? `
+    // Explicit image-index references — critical for gpt-image-1 edit endpoint
+    const sceneInvolvesProduct = (seg.useProduct || /product|hold|show|bottle|jar|container/i.test(seg.brollPrompt)) && hasProductRef
 
-═══════════════════════════════════════════════════════════════
-PRODUCT LOCK — ABSOLUTE PRIORITY (THE PRODUCT IS NON-NEGOTIABLE)
-═══════════════════════════════════════════════════════════════
-The product being held/shown/used in this image MUST EXACTLY match the product reference image attached. It is "${actualProductName}".
-${productDesc ? `Product visual description: ${productDesc}` : ''}
+    const head = sceneInvolvesProduct
+      ? `IMAGE-EDITING TASK: Combine the two attached reference images into one new photo.
 
-DO NOT render:
-• Any "INFINITY PROBIOTICS" bottle (this is a different product from a template — ignore it)
-• Any generic white supplement bottle, gold-label bottle, or random pharmacy bottle
-• Any product whose container shape, color, or label does NOT match the reference image
+THE PERSON IS: the woman from the SECOND attached reference image. KEEP HER FACE EXACTLY (same face shape, eyes, eyebrows, nose, lips, jawline, skin tone, hijab/hair, age). Recognizably the same individual — not a similar-looking different person. Additional locked description: ${characterDesc}.
 
-DO render:
-• The EXACT product from the reference image — same container TYPE (jar/bottle/tube/box),
-  same shape proportions (squat vs tall), same colors, same label/branding placement
-• The product clearly visible in frame, label facing the camera when held
-═══════════════════════════════════════════════════════════════`
-      : ''
+THE PRODUCT IS: the EXACT product from the FIRST attached reference image (named "${actualProductName}"). KEEP THE PRODUCT EXACTLY: same container type (jar/box/bottle/tube as shown in the reference), same shape proportions, same colors, same label, same branding text and logo. Do NOT substitute any other product. Do NOT invent a generic supplement bottle.${productDesc ? ` Locked product description: ${productDesc}` : ''}
 
-    // UGC iPhone aesthetic — eliminates the "plastic AI look"
+SCENE: ${scene}`
+      : `IMAGE-EDITING TASK: Use the attached reference image as the subject for a new photo.
+
+THE PERSON IS: the woman from the attached reference image. KEEP HER FACE EXACTLY (same face shape, eyes, nose, mouth, skin tone, hijab/hair, age). Same individual. Additional locked description: ${characterDesc}.
+
+SCENE: ${scene}`
+
     const style = `
 
-Visual style: authentic UGC smartphone video frame (shot on iPhone), 9:16 vertical, completely unedited natural look, zero bokeh, zero depth of field, sharp focus across the entire frame, natural ambient lighting (window light / room light), no professional studio lighting, no artificial rim lighting, no AI-generated sheen, no digital enhancement, no watermarks, no text overlay, photorealistic, film-quality realism.`
+STYLE: Authentic UGC smartphone video frame (shot on iPhone), vertical framing, completely unedited natural look, sharp focus across the entire frame, zero bokeh, zero depth of field, natural ambient lighting (window light / room light), no professional studio lighting, no AI-generated sheen, no watermarks, no text overlay, photorealistic, film-quality realism.`
 
-    return `${scene}
-
-Subject (matches the avatar reference image): ${characterDesc}.${productBlock}${style}`
+    return head + style
   }
 
   // Generate ONE B-Roll image via KIE.ai's GPT Image 2 (same model as Avatar AI)
@@ -1756,33 +1743,27 @@ Subject (matches the avatar reference image): ${characterDesc}.${productBlock}${
 
     const prompt = buildImagePromptGPT(seg)
 
-    // Build reference images.
-    // ── Reference weighting trick ────────────────────────────────────────
-    // KIE GPT Image 2 weights each reference roughly equally per slot. To make
-    // the model prioritize the user's actual product over the avatar+template
-    // bias, we pass the product image 2x and the avatar 1x.
-    // This combats the "wrong product" bug where the model invents a
-    // different bottle (e.g. INFINITY PROBIOTICS) instead of the real one.
+    // ── Reference images (filesUrl) for GPT-4o image-edit endpoint ──────
+    // Order MATTERS — filesUrl[0] = PRODUCT (priority anchor for product identity)
+    //                 filesUrl[1] = AVATAR (face identity)
+    // The new prompt explicitly says "FIRST reference image = product, SECOND =
+    // person". Max 5 references — we use 2 for stronger per-slot weight.
     const { avatarImageUrl, productImageUrls } = pipeRef.current
-    const refs: string[] = []
+    const filesUrl: string[] = []
     if (productImageUrls && productImageUrls.length > 0) {
-      // Product first (priority) — duplicate first product for stronger weight
-      refs.push(productImageUrls[0])
-      refs.push(productImageUrls[0])
-      // Add additional product variants if user uploaded multiple
-      if (productImageUrls.length > 1) refs.push(productImageUrls[1])
+      filesUrl.push(productImageUrls[0])
     }
-    if (avatarImageUrl) refs.push(avatarImageUrl)
+    if (avatarImageUrl) filesUrl.push(avatarImageUrl)
 
-    const { taskId } = await generateImage({
+    // Note: GPT-4o image endpoint supports only 1:1, 3:2, 2:3 — we use 2:3 for
+    // vertical 9:16-ish framing (closest available).
+    const remoteUrl = await generateGpt4oImage({
       apiKey: kieApiKey,
-      model: 'gpt-image-2-text-to-image',
       prompt,
-      resolution: '1K',
-      aspectRatio: '9:16',
-      referenceImageUrls: refs.length > 0 ? refs.slice(0, 4) : undefined,
+      filesUrl: filesUrl.length > 0 ? filesUrl : undefined,
+      size: '2:3',
+      timeoutMs: 4 * 60 * 1000,
     })
-    const remoteUrl = await pollImageUntilDone({ apiKey: kieApiKey, taskId, timeoutMs: 4 * 60 * 1000 })
 
     // Persist to asset store so the URL doesn't expire mid-pipeline
     const fetchRes = await fetch(remoteUrl)
