@@ -19,7 +19,7 @@
 // Each image runs through Gemini Vision QC: pass/fail badge with similarity
 // scores. Strict mode auto-regens once on QC fail.
 
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { Sparkles, Loader2, RotateCcw, UserRound, Package, Upload, Check, Download, Save, ShieldCheck, Trash2, AlertTriangle } from 'lucide-react'
 import { useAppStore } from '../../stores/appStore'
 import { useBankStore } from '../../stores/bankStore'
@@ -286,6 +286,27 @@ async function resolveLockToPublic(
   if (!productUrl) return null
   const avatarUrl = lock.avatarRef ? await getUrl(lock.avatarRef) : null
   return { productUrl, avatarUrl }
+}
+
+// ── Auto-save / restore ─────────────────────────────────────────────────────
+// Every meaningful state change writes a snapshot to localStorage. On page
+// load we read it back and offer the user a one-click restore. Image data
+// itself is never stored here — only asset:xxx refs that round-trip cleanly.
+
+const PERSIST_KEY = 'product-ai-state-v1'
+const PERSIST_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000  // 7 days
+
+interface ProductAIPersisted {
+  selectedAvatarId: string | null
+  selectedProductId: string | null
+  uploadedAvatarRef: string | null
+  uploadedProductRef: string | null
+  sceneId: string
+  styleId: string
+  strictQC: boolean
+  tiles: TileState[]
+  savedIdx: number[]
+  lastUpdatedAt: number
 }
 
 // ── Result tile ─────────────────────────────────────────────────────────────
@@ -578,6 +599,95 @@ export default function ProductAI() {
 
   const updateTile = (i: number, patch: Partial<TileState>) => {
     setTiles((prev) => prev.map((t, idx) => (idx === i ? { ...t, ...patch } : t)))
+  }
+
+  // ── Restore from localStorage on mount ────────────────────────────────────
+  // Reads the last saved snapshot; if it has restorable content, surfaces a
+  // popup. The persist effect below is gated on `hydratedRef` so it won't
+  // clobber the saved blob with empty defaults before the user decides.
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(PERSIST_KEY)
+      if (!raw) { hydratedRef.current = true; return }
+      const data = JSON.parse(raw) as ProductAIPersisted
+      if (!data?.lastUpdatedAt) { hydratedRef.current = true; return }
+      if (Date.now() - data.lastUpdatedAt > PERSIST_MAX_AGE_MS) {
+        localStorage.removeItem(PERSIST_KEY)
+        hydratedRef.current = true
+        return
+      }
+      const hasContent =
+        data.tiles?.some((t) => t.url || t.lock) ||
+        !!data.uploadedAvatarRef || !!data.uploadedProductRef ||
+        !!data.selectedAvatarId || !!data.selectedProductId
+      if (!hasContent) { hydratedRef.current = true; return }
+      setRestorePrompt(data)
+    } catch {
+      hydratedRef.current = true
+    }
+  }, [])
+
+  // ── Persist on every change (after hydration) ─────────────────────────────
+  useEffect(() => {
+    if (!hydratedRef.current) return
+    try {
+      // In-flight tile statuses cannot be resumed across a refresh — flatten
+      // them to a recoverable error state at save time so the loaded
+      // snapshot is always internally consistent.
+      const safeTiles: TileState[] = tiles.map((t) =>
+        t.status === 'generating' || t.status === 'qc'
+          ? { ...t, status: 'error', error: 'Bị gián đoạn — thử lại' }
+          : t,
+      )
+      const snapshot: ProductAIPersisted = {
+        selectedAvatarId: selectedAvatar?.id ?? null,
+        selectedProductId: selectedProduct?.id ?? null,
+        uploadedAvatarRef: uploadedAvatarUrl,
+        uploadedProductRef: uploadedProductUrl,
+        sceneId,
+        styleId,
+        strictQC,
+        tiles: safeTiles,
+        savedIdx: [...savedIdx],
+        lastUpdatedAt: Date.now(),
+      }
+      localStorage.setItem(PERSIST_KEY, JSON.stringify(snapshot))
+    } catch (err) {
+      console.warn('[ProductAI] persist failed:', err)
+    }
+  }, [selectedAvatar, selectedProduct, uploadedAvatarUrl, uploadedProductUrl, sceneId, styleId, strictQC, tiles, savedIdx])
+
+  const handleRestoreSession = () => {
+    if (!restorePrompt) return
+    const data = restorePrompt
+    if (data.selectedAvatarId) {
+      const m = models.find((x) => x.id === data.selectedAvatarId)
+      if (m) setSelectedAvatar(m)
+    }
+    if (data.selectedProductId) {
+      const p = products.find((x) => x.id === data.selectedProductId)
+      if (p) setSelectedProduct(p)
+    }
+    setUploadedAvatarUrl(data.uploadedAvatarRef)
+    setUploadedProductUrl(data.uploadedProductRef)
+    setSceneId(data.sceneId)
+    setStyleId(data.styleId)
+    setStrictQC(data.strictQC)
+    setTiles(data.tiles.map((t) =>
+      t.status === 'generating' || t.status === 'qc'
+        ? { ...t, status: 'error', error: 'Bị gián đoạn — thử lại' }
+        : t,
+    ))
+    setSavedIdx(new Set(data.savedIdx))
+    setRestorePrompt(null)
+    hydratedRef.current = true
+    addToast('✓ Đã khôi phục session trước')
+  }
+
+  const handleDiscardSession = () => {
+    localStorage.removeItem(PERSIST_KEY)
+    setRestorePrompt(null)
+    hydratedRef.current = true
   }
 
   // ── Single shot ───────────────────────────────────────────────────────────
@@ -1069,6 +1179,76 @@ export default function ProductAI() {
         onSelect={handleSelectProduct}
         onClose={() => setPickerMode(null)}
       />
+
+      {/* Restore-session popup — surfaces only on page load when a saved
+          snapshot with content is found. One click to restore or discard. */}
+      {restorePrompt && (
+        <RestorePromptModal
+          data={restorePrompt}
+          onRestore={handleRestoreSession}
+          onDiscard={handleDiscardSession}
+        />
+      )}
     </div>
   )
+}
+
+// ── Restore-session popup ─────────────────────────────────────────────────
+function RestorePromptModal({
+  data, onRestore, onDiscard,
+}: {
+  data: ProductAIPersisted
+  onRestore: () => void
+  onDiscard: () => void
+}) {
+  // Compute age once at mount via lazy useState init — `Date.now()` inside
+  // render body is flagged by the React 19 purity lint.
+  const [ageStr] = useState(() => formatAge(Date.now() - data.lastUpdatedAt))
+  const filledTiles = data.tiles.filter((t) => t.url).length
+  const sceneLabel = SCENE_PRESETS.find((p) => p.id === data.sceneId)?.label ?? data.sceneId
+  const styleLabel = STYLE_OPTIONS.find((s) => s.id === data.styleId)?.label ?? data.styleId
+
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm">
+      <div className="w-full max-w-md rounded-2xl bg-white p-5 shadow-2xl">
+        <div className="mb-3 flex items-center gap-2">
+          <span className="flex h-9 w-9 items-center justify-center rounded-full bg-violet-100 text-lg">↻</span>
+          <h3 className="text-base font-bold text-gray-900">Khôi phục session trước?</h3>
+        </div>
+        <p className="text-xs leading-relaxed text-gray-600">
+          Tìm thấy session đang dang dở từ <strong>{ageStr}</strong> trước:
+        </p>
+        <ul className="mt-2 space-y-0.5 text-[11px] text-gray-700">
+          <li>• <strong>{filledTiles}/4</strong> ảnh đã tạo</li>
+          <li>• Scene: <strong>{sceneLabel}</strong> · Style: <strong>{styleLabel}</strong></li>
+          {(data.uploadedAvatarRef || data.selectedAvatarId) && <li>• Avatar đã chọn</li>}
+          {(data.uploadedProductRef || data.selectedProductId) && <li>• Sản phẩm đã chọn</li>}
+        </ul>
+        <div className="mt-5 flex gap-2">
+          <button
+            onClick={onDiscard}
+            className="flex-1 rounded-lg border border-black/10 px-4 py-2.5 text-sm font-medium text-gray-600 hover:bg-black/[0.04]"
+          >
+            Bỏ qua
+          </button>
+          <button
+            onClick={onRestore}
+            className="flex-1 rounded-lg bg-violet-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-violet-700"
+          >
+            Khôi phục
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function formatAge(ms: number): string {
+  const m = Math.floor(ms / 60000)
+  if (m < 1) return 'vài giây'
+  if (m < 60) return `${m} phút`
+  const h = Math.floor(m / 60)
+  if (h < 24) return `${h} giờ`
+  const d = Math.floor(h / 24)
+  return `${d} ngày`
 }
