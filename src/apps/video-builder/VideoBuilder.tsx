@@ -1,9 +1,10 @@
 import { useState, useEffect, useRef } from 'react'
 import {
   Film, Download, Loader2, CheckCircle2,
-  AlertTriangle, ChevronRight, Trash2, RefreshCw,
+  AlertTriangle, ChevronRight, Trash2,
   Mic, Sparkles, FileText, User, Package,
   Check, ChevronDown, ChevronUp, Upload, X,
+  RotateCcw, SkipForward, DollarSign,
 } from 'lucide-react'
 import { useSettingsStore } from '../../stores/settingsStore'
 import { useAppStore } from '../../stores/appStore'
@@ -15,7 +16,7 @@ import { generateLipSync, pollLipSyncUntilDone, generateVideoJob, getVideoJobSta
 import { removeVideoBackground } from '../../utils/falai'
 import { buildUGCVideo, pollRenderUntilDone } from '../../utils/shotstack'
 import type { ElevenLabsVoice } from '../../utils/elevenlabs'
-import type { ScriptSegment, BuildStep, BuildStepStatus, VideoBuilderJob } from './types'
+import type { ScriptSegment, VideoBuilderJob } from './types'
 import type { Script, Model, Product } from '../../stores/types'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -60,37 +61,62 @@ async function resolveImageUrl(ref: string): Promise<string | null> {
   return ref
 }
 
-// ── Step indicator ────────────────────────────────────────────────────────────
+/** Robust JSON extractor — handles markdown fences and surrounding text */
+function extractJson(raw: string): string {
+  let s = raw.replace(/^```(?:json)?\s*/im, '').replace(/\s*```\s*$/im, '').trim()
+  const start = s.indexOf('{')
+  const end   = s.lastIndexOf('}')
+  if (start !== -1 && end !== -1 && end > start) s = s.slice(start, end + 1)
+  return s
+}
 
-function StepRow({ step }: { step: BuildStep }) {
-  const icons: Record<BuildStepStatus, React.ReactNode> = {
-    idle:    <div className="h-4 w-4 rounded-full border-2 border-gray-200" />,
-    running: <Loader2 className="h-4 w-4 animate-spin text-violet-500" />,
-    done:    <CheckCircle2 className="h-4 w-4 text-emerald-500" />,
-    failed:  <div className="h-4 w-4 rounded-full bg-red-400 flex items-center justify-center"><span className="text-white text-[8px] font-bold">✕</span></div>,
-    skipped: <div className="h-4 w-4 rounded-full bg-gray-200" />,
+/**
+ * Client-side script splitter — fallback when Gemini fails.
+ * Splits script into 4-8 second segments based on sentence boundaries.
+ * Works with any language (Malay, Vietnamese, English, etc.).
+ */
+function splitScriptClientSide(script: string): { segments: ScriptSegment[]; totalEstimatedSec: number } {
+  const sentences = script
+    .replace(/\n+/g, ' ')
+    .split(/(?<=[.!?。！？])\s+/)
+    .map((s) => s.trim())
+    .filter(Boolean)
+
+  const TARGET_CHARS = 90  // ~5-7 sec at conversational pace
+  const buckets: string[] = []
+  let buffer = ''
+
+  for (const sentence of sentences) {
+    const combined = buffer ? `${buffer} ${sentence}` : sentence
+    if (combined.length >= TARGET_CHARS && buffer) {
+      buckets.push(buffer)
+      buffer = sentence
+    } else {
+      buffer = combined
+    }
   }
-  return (
-    <div className={`flex items-start gap-3 rounded-xl px-3 py-2.5 transition-colors ${
-      step.status === 'running' ? 'bg-violet-50 border border-violet-100' :
-      step.status === 'done'    ? 'bg-emerald-50/60 border border-emerald-100/60' :
-      step.status === 'failed'  ? 'bg-red-50 border border-red-100' :
-      'border border-transparent'
-    }`}>
-      <div className="mt-0.5 shrink-0">{icons[step.status]}</div>
-      <div className="min-w-0 flex-1">
-        <p className={`text-xs font-semibold ${
-          step.status === 'running' ? 'text-violet-700' :
-          step.status === 'done'    ? 'text-emerald-700' :
-          step.status === 'failed'  ? 'text-red-600' :
-          'text-gray-400'
-        }`}>{step.label}</p>
-        {step.detail && step.status !== 'idle' && (
-          <p className="mt-0.5 text-[11px] text-gray-400 leading-relaxed">{step.detail}</p>
-        )}
-      </div>
-    </div>
-  )
+  if (buffer.trim()) buckets.push(buffer)
+
+  // Edge case: very short script with no punctuation
+  if (buckets.length === 0 && script.trim()) buckets.push(script.trim())
+
+  let cursor = 0
+  const segments: ScriptSegment[] = buckets.map((text, index) => {
+    const dur = Math.max(3, text.length / 14)  // ~14 chars/sec
+    const seg: ScriptSegment = {
+      index,
+      text,
+      durationSec: dur,
+      startSec: cursor,
+      brollPrompt: `Cinematic vertical 9:16 lifestyle scene related to: ${text.slice(0, 80)}. No people, no text overlay, professional UGC ad style, soft natural lighting.`,
+      avatarPosition: index % 2 === 0 ? 'right' : 'left',
+      useProduct: false,
+    }
+    cursor += dur
+    return seg
+  })
+
+  return { segments, totalEstimatedSec: cursor }
 }
 
 // ── Avatar card — resolves asset:// URLs ──────────────────────────────────────
@@ -293,18 +319,6 @@ function HistoryCard({ job, onDelete }: { job: VideoBuilderJob; onDelete: () => 
   )
 }
 
-// ── Step definitions ──────────────────────────────────────────────────────────
-
-const INITIAL_STEPS: BuildStep[] = [
-  { id: 'parse',    label: '① Phân tích kịch bản (Gemini)',      detail: 'Chia script thành segments + B-roll prompts', status: 'idle' },
-  { id: 'voice',    label: '② Tạo voiceover (ElevenLabs)',        detail: 'TTS toàn bộ script → audio file', status: 'idle' },
-  { id: 'resolve',  label: '③ Chuẩn bị tài nguyên',              detail: 'Resolve URL ảnh Avatar AI và sản phẩm', status: 'idle' },
-  { id: 'avatar',   label: '④ Tạo avatar lip-sync (KIE.ai)',      detail: 'Kling Avatar: ảnh + audio → video nói', status: 'idle' },
-  { id: 'broll',    label: '⑤ Tạo B-roll clips (KIE.ai Kling)',   detail: 'Gen video minh họa song song cho mỗi đoạn', status: 'idle' },
-  { id: 'bg',       label: '⑥ Xóa nền avatar (fal.ai)',           detail: 'Tách nền để overlay trong suốt lên B-roll', status: 'idle' },
-  { id: 'assemble', label: '⑦ Ghép video (Shotstack)',            detail: 'Layer B-roll + avatar + captions → 9:16 MP4', status: 'idle' },
-]
-
 // ── Manual product type ───────────────────────────────────────────────────────
 
 interface ManualProduct {
@@ -339,6 +353,178 @@ function UploadBtn({ onClick, children }: { onClick: () => void; children: React
   )
 }
 
+// ── Pipeline phase + data ─────────────────────────────────────────────────────
+
+type PipelinePhase =
+  | 'idle'
+  | 'running-parse'    | 'review-parse'
+  | 'running-voice'    | 'review-voice'
+  | 'running-resolve'
+  | 'running-avatar'   | 'review-avatar'
+  | 'running-broll'    | 'review-broll'
+  | 'running-bg'       | 'review-bg'
+  | 'running-assemble'
+  | 'done'
+  | 'failed'
+
+interface PipeData {
+  jobId: string
+  jobName: string
+  voiceName: string
+  segments: ScriptSegment[]
+  totalEstimatedSec: number
+  timedSegments: ScriptSegment[]
+  audioDuration: number
+  audioBlob: Blob
+  voiceUrl: string
+  avatarImageUrl: string
+  productImageUrls: string[]
+  avatarRawUrl: string
+  brollResults: (string | null)[]
+  avatarFinalUrl: string
+  finalVideoUrl: string
+  finalAssetId: string
+}
+
+// Step labels for the running/review panel header
+const STEP_INFO: Record<string, { num: number; label: string; subLabel: string; cost: string }> = {
+  parse:    { num: 1, label: 'Phân tích kịch bản',  subLabel: 'Chia script thành đoạn + B-roll prompts', cost: 'Miễn phí' },
+  voice:    { num: 2, label: 'Voiceover',           subLabel: 'TTS toàn bộ script → audio file',         cost: '~$0.30' },
+  resolve:  { num: 3, label: 'Chuẩn bị tài nguyên', subLabel: 'Resolve URL ảnh',                          cost: 'Miễn phí' },
+  avatar:   { num: 4, label: 'Avatar Lip-sync',     subLabel: 'Kling Avatar: ảnh + audio → video nói',    cost: '~$3.00' },
+  broll:    { num: 5, label: 'B-roll Clips',        subLabel: 'Gen video minh họa cho mỗi đoạn',          cost: '~$0.38' },
+  bg:       { num: 6, label: 'Xóa nền Avatar',      subLabel: 'Tách nền để overlay trong suốt',           cost: '~$0.50' },
+  assemble: { num: 7, label: 'Ghép video',          subLabel: 'Layer B-roll + avatar + captions',         cost: '~$0.50' },
+}
+
+function getStepFromPhase(phase: PipelinePhase): string | null {
+  if (phase === 'idle' || phase === 'done' || phase === 'failed') return null
+  const m = phase.match(/(?:running|review)-(\w+)/)
+  return m ? m[1] : null
+}
+
+// ── Phase progress header ─────────────────────────────────────────────────────
+
+function PhaseHeader({ phase }: { phase: PipelinePhase }) {
+  const step = getStepFromPhase(phase)
+  if (!step) return null
+  const info = STEP_INFO[step]
+  if (!info) return null
+  const isReview = phase.startsWith('review-')
+
+  return (
+    <div className="mb-3 rounded-xl border border-violet-100 bg-gradient-to-r from-violet-50/80 to-purple-50/40 px-4 py-3">
+      <div className="flex items-center gap-3">
+        <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-sm font-bold text-white shadow-md ${
+          isReview ? 'bg-emerald-500' : 'bg-violet-500'
+        }`}>
+          {info.num}
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2">
+            <p className="text-sm font-bold text-gray-800 truncate">
+              {isReview ? `✓ ${info.label}` : info.label}
+            </p>
+            <span className="rounded-full bg-white/80 px-2 py-0.5 text-[10px] font-semibold text-gray-500">
+              Bước {info.num}/7 · {info.cost}
+            </span>
+          </div>
+          <p className="mt-0.5 text-xs text-gray-500 truncate">{info.subLabel}</p>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ── Running panel (spinner during a step) ─────────────────────────────────────
+
+function RunningPanel({ phase, detail }: { phase: PipelinePhase; detail: string }) {
+  const step = getStepFromPhase(phase)
+  const label = step && STEP_INFO[step] ? `Đang ${STEP_INFO[step].label.toLowerCase()}...` : 'Đang xử lý...'
+
+  return (
+    <div className="flex flex-col items-center justify-center gap-4 py-16">
+      <div className="relative">
+        <div className="h-16 w-16 rounded-full border-4 border-violet-100" />
+        <Loader2 className="absolute inset-0 m-auto h-16 w-16 animate-spin text-violet-500" />
+      </div>
+      <div className="text-center">
+        <p className="text-sm font-bold text-gray-700">{label}</p>
+        {detail && <p className="mt-1 text-xs text-gray-400">{detail}</p>}
+      </div>
+      <p className="text-[11px] text-gray-300">Vui lòng giữ tab mở</p>
+    </div>
+  )
+}
+
+// ── Review card (wraps each step's review UI) ─────────────────────────────────
+
+function ReviewCard({
+  onRetry, onContinue, onSkip,
+  retryLabel = 'Tạo lại',
+  continueLabel = 'Tiếp tục',
+  continueCost,
+  skipLabel,
+  children,
+  disabled = false,
+}: {
+  onRetry: () => void
+  onContinue: () => void
+  onSkip?: () => void
+  retryLabel?: string
+  continueLabel?: string
+  continueCost?: string
+  skipLabel?: string
+  children: React.ReactNode
+  disabled?: boolean
+}) {
+  return (
+    <div className="overflow-hidden rounded-2xl border border-black/8 bg-white shadow-sm">
+      <div className="p-4">{children}</div>
+
+      <div className="flex flex-wrap items-center gap-2 border-t border-black/6 bg-gray-50/60 px-4 py-3">
+        <button
+          onClick={onRetry}
+          disabled={disabled}
+          className="flex items-center gap-1.5 rounded-lg border border-black/10 bg-white px-3 py-2 text-xs font-semibold text-gray-600 transition-colors hover:border-violet-200 hover:bg-violet-50 hover:text-violet-700 disabled:opacity-40"
+        >
+          <RotateCcw className="h-3.5 w-3.5" />
+          {retryLabel}
+        </button>
+
+        {onSkip && skipLabel && (
+          <button
+            onClick={onSkip}
+            disabled={disabled}
+            className="flex items-center gap-1.5 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-700 transition-colors hover:bg-amber-100 disabled:opacity-40"
+          >
+            <SkipForward className="h-3.5 w-3.5" />
+            {skipLabel}
+          </button>
+        )}
+
+        <div className="flex-1" />
+
+        {continueCost && (
+          <span className="flex items-center gap-1 text-[11px] font-semibold text-gray-400">
+            <DollarSign className="h-3 w-3" />
+            {continueCost}
+          </span>
+        )}
+
+        <button
+          onClick={onContinue}
+          disabled={disabled}
+          className="flex items-center gap-1.5 rounded-lg bg-gradient-to-r from-violet-600 to-purple-500 px-4 py-2 text-xs font-bold text-white shadow-md shadow-violet-200 transition-all hover:shadow-violet-300 disabled:opacity-40"
+        >
+          {continueLabel}
+          <ChevronRight className="h-4 w-4" />
+        </button>
+      </div>
+    </div>
+  )
+}
+
 // ── Main component ────────────────────────────────────────────────────────────
 
 export default function VideoBuilder() {
@@ -350,7 +536,7 @@ export default function VideoBuilder() {
   const [selectedScriptId, setSelectedScriptId] = useState('')
   const [script, setScript] = useState('')
   const [selectedModelId, setSelectedModelId] = useState('')
-  const [selectedProductId, setSelectedProductId] = useState('')   // single bank product
+  const [selectedProductId, setSelectedProductId] = useState('')
   const [selectedVoiceId, setSelectedVoiceId] = useState('')
   const [voices, setVoices] = useState<ElevenLabsVoice[]>([])
   const [loadingVoices, setLoadingVoices] = useState(false)
@@ -362,11 +548,21 @@ export default function VideoBuilder() {
   const [manualAvatarName, setManualAvatarName] = useState('')
   const [manualProducts, setManualProducts] = useState<ManualProduct[]>([])
 
-  // ── Build state ──────────────────────────────────────────────────────────
-  const [isBuilding, setIsBuilding] = useState(false)
-  const [steps, setSteps] = useState<BuildStep[]>(INITIAL_STEPS)
+  // ── Pipeline state ───────────────────────────────────────────────────────
+  const [phase, setPhase] = useState<PipelinePhase>('idle')
+  const [phaseDetail, setPhaseDetail] = useState('')
+  const [phaseError, setPhaseError] = useState<string | null>(null)
+  const pipeRef = useRef<Partial<PipeData>>({})
+
+  // Preview states (for review UI)
+  const [previewSegments, setPreviewSegments] = useState<ScriptSegment[]>([])
+  const [previewVoiceUrl, setPreviewVoiceUrl] = useState<string | null>(null)
+  const [previewAvatarUrl, setPreviewAvatarUrl] = useState<string | null>(null)
+  const [previewBrollUrls, setPreviewBrollUrls] = useState<(string | null)[]>([])
+  const [previewBgUrl, setPreviewBgUrl] = useState<string | null>(null)
+
+  // History
   const [history, setHistory] = useState<VideoBuilderJob[]>([])
-  const [activeJobId, setActiveJobId] = useState<string | null>(null)
 
   // Load voices
   useEffect(() => {
@@ -379,14 +575,19 @@ export default function VideoBuilder() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [elevenLabsApiKey])
 
-  // ── Handlers ─────────────────────────────────────────────────────────────
+  // Cleanup blob URLs on unmount
+  useEffect(() => () => {
+    if (previewVoiceUrl?.startsWith('blob:')) URL.revokeObjectURL(previewVoiceUrl)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // ── Input handlers ───────────────────────────────────────────────────────
 
   const handleSelectScript = (id: string, text: string) => {
     setSelectedScriptId(id)
     setScript(text)
   }
 
-  // Single-select from bank: click to select, click again to deselect
   const handleToggleProduct = (id: string) => {
     setSelectedProductId((prev) => prev === id ? '' : id)
   }
@@ -400,7 +601,6 @@ export default function VideoBuilder() {
     e.target.value = ''
   }
 
-  // Multiple manual product images allowed (up to 8 for reference data)
   const handleProductUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files ?? [])
     if (!files.length) return
@@ -418,158 +618,211 @@ export default function VideoBuilder() {
     e.target.value = ''
   }
 
-  const setStep = (id: string, status: BuildStepStatus, detail?: string) => {
-    setSteps((prev) => prev.map((s) => s.id === id ? { ...s, status, detail: detail ?? s.detail } : s))
+  // ── Reset pipeline ───────────────────────────────────────────────────────
+
+  const handleReset = () => {
+    if (previewVoiceUrl?.startsWith('blob:')) URL.revokeObjectURL(previewVoiceUrl)
+    pipeRef.current = {}
+    setPhase('idle')
+    setPhaseDetail('')
+    setPhaseError(null)
+    setPreviewSegments([])
+    setPreviewVoiceUrl(null)
+    setPreviewAvatarUrl(null)
+    setPreviewBrollUrls([])
+    setPreviewBgUrl(null)
   }
 
-  // ── Build pipeline ───────────────────────────────────────────────────────
+  // ── Step 1: Parse script ─────────────────────────────────────────────────
 
-  const handleBuild = async () => {
-    if (!script.trim())                       { addToast('Nhập hoặc chọn kịch bản', 'error'); return }
-    if (!selectedModelId && !manualAvatarUrl) { addToast('Chọn hoặc tải lên Avatar AI', 'error'); return }
-    if (!selectedVoiceId)                     { addToast('Chọn giọng đọc', 'error'); return }
-    if (!elevenLabsApiKey)                    { addToast('Cần ElevenLabs API key', 'error'); return }
-    if (!kieApiKey)                           { addToast('Cần KIE.ai API key', 'error'); return }
-    if (!falApiKey)                           { addToast('Cần fal.ai API key', 'error'); return }
-    if (!shotstackApiKey)                     { addToast('Cần Shotstack API key', 'error'); return }
-    if (!geminiApiKey)                        { addToast('Cần Gemini API key', 'error'); return }
+  const runParse = async () => {
+    setPhase('running-parse')
+    setPhaseError(null)
+    setPhaseDetail('Đang gọi Gemini...')
 
-    const jobId     = crypto.randomUUID()
-    const model     = models.find((m) => m.id === selectedModelId)
-    const voiceName = voices.find((v) => v.voice_id === selectedVoiceId)?.name ?? selectedVoiceId
-    const jobName   = (scripts.find((s) => s.id === selectedScriptId)?.title || script.slice(0, 40)).trim()
-
-    setIsBuilding(true)
-    setActiveJobId(jobId)
-    setSteps(INITIAL_STEPS.map((s) => ({ ...s, status: 'idle' })))
-
-    const newJob: VideoBuilderJob = {
-      id: jobId, name: jobName, status: 'parsing', errorMessage: null,
-      script, voiceId: selectedVoiceId, voiceName,
-      videoUrl: null, assetId: null, totalDuration: null, createdAt: Date.now(),
+    // Initialize job metadata on first run
+    if (!pipeRef.current.jobId) {
+      const voiceName = voices.find((v) => v.voice_id === selectedVoiceId)?.name ?? selectedVoiceId
+      const jobName = (scripts.find((s) => s.id === selectedScriptId)?.title || script.slice(0, 40)).trim()
+      pipeRef.current.jobId = crypto.randomUUID()
+      pipeRef.current.jobName = jobName
+      pipeRef.current.voiceName = voiceName
     }
-    setHistory((h) => [newJob, ...h])
-    const patchJob = (updates: Partial<VideoBuilderJob>) =>
-      setHistory((h) => h.map((j) => j.id === jobId ? { ...j, ...updates } : j))
 
-    try {
-      // ── Step 1: Parse script with Gemini ──────────────────────────────────
-      setStep('parse', 'running')
-      const parsePrompt = `You are a UGC video script analyzer. Split this script into 6-10 segments (4-8 seconds each).
+    const parsePrompt = `Split this UGC video script into 6-10 segments (4-8 seconds each).
 
 Rules:
 - Split at natural sentence/pause boundaries
 - durationSec: estimate from ~130 words/min reading speed
-- startSec: always 0.0 (will be recalculated from audio)
+- startSec: always 0.0 (recalculated later)
 - avatarPosition: alternate "left" and "right" each segment
-- useProduct: true if the segment mentions the product by name
-- brollPrompt: vivid cinematic English description of a scene that matches the segment — no people, no text overlay, vertical 9:16 composition
+- useProduct: true if segment mentions a product by name
+- brollPrompt: vivid cinematic English description, no people, no text overlay, vertical 9:16
 
 SCRIPT:
 ${script}`
 
-      // Strict JSON schema — Gemini MUST follow this exact structure
-      const parseSchema: Record<string, unknown> = {
-        type: 'object',
-        properties: {
-          segments: {
-            type: 'array',
-            items: {
-              type: 'object',
-              properties: {
-                index:          { type: 'integer' },
-                text:           { type: 'string' },
-                durationSec:    { type: 'number' },
-                startSec:       { type: 'number' },
-                brollPrompt:    { type: 'string' },
-                avatarPosition: { type: 'string', enum: ['left', 'right'] },
-                useProduct:     { type: 'boolean' },
-              },
-              required: ['index', 'text', 'durationSec', 'startSec', 'brollPrompt', 'avatarPosition', 'useProduct'],
+    const parseSchema: Record<string, unknown> = {
+      type: 'object',
+      properties: {
+        segments: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              index:          { type: 'integer' },
+              text:           { type: 'string' },
+              durationSec:    { type: 'number' },
+              startSec:       { type: 'number' },
+              brollPrompt:    { type: 'string' },
+              avatarPosition: { type: 'string', enum: ['left', 'right'] },
+              useProduct:     { type: 'boolean' },
             },
+            required: ['index', 'text', 'durationSec', 'startSec', 'brollPrompt', 'avatarPosition', 'useProduct'],
           },
-          totalEstimatedSec: { type: 'number' },
         },
-        required: ['segments', 'totalEstimatedSec'],
-      }
+        totalEstimatedSec: { type: 'number' },
+      },
+      required: ['segments', 'totalEstimatedSec'],
+    }
 
-      // Robust JSON extractor — fallback for models that wrap output in markdown
-      function extractJson(raw: string): string {
-        let s = raw.replace(/^```(?:json)?\s*/im, '').replace(/\s*```\s*$/im, '').trim()
-        const start = s.indexOf('{')
-        const end   = s.lastIndexOf('}')
-        if (start !== -1 && end !== -1 && end > start) s = s.slice(start, end + 1)
-        return s
-      }
+    type ParseResult = { segments: ScriptSegment[]; totalEstimatedSec: number }
+    let parsed: ParseResult | null = null
+    let usedFallback = false
 
-      // Attempt 1: with responseSchema (forces exact JSON structure — most reliable)
-      let parseResult = await directGeminiVision({
-        apiKey: geminiApiKey,
-        parts: [{ text: parsePrompt }],
-        maxOutputTokens: 8192,
-        responseMimeType: 'application/json',
-        responseSchema: parseSchema,
-      })
-
-      let parsed: { segments: ScriptSegment[]; totalEstimatedSec: number }
+    // Attempt 1: Gemini with schema
+    if (geminiApiKey) {
       try {
-        parsed = JSON.parse(extractJson(parseResult)) as typeof parsed
-      } catch {
-        // Attempt 2: without schema (fallback for older models)
-        setStep('parse', 'running', 'Thử lại lần 2...')
+        const raw = await directGeminiVision({
+          apiKey: geminiApiKey,
+          parts: [{ text: parsePrompt }],
+          maxOutputTokens: 8192,
+          responseMimeType: 'application/json',
+          responseSchema: parseSchema,
+        })
+        parsed = JSON.parse(extractJson(raw)) as ParseResult
+      } catch (e1) {
+        console.warn('[parse] Gemini attempt 1 failed:', e1)
+        setPhaseDetail('Thử lại Gemini...')
+
+        // Attempt 2: Gemini without schema
         try {
-          parseResult = await directGeminiVision({
+          const raw = await directGeminiVision({
             apiKey: geminiApiKey,
             parts: [{ text: parsePrompt }],
             maxOutputTokens: 8192,
             responseMimeType: 'application/json',
           })
-          parsed = JSON.parse(extractJson(parseResult)) as typeof parsed
-        } catch {
-          throw new Error(`Gemini không trả về JSON hợp lệ sau 2 lần thử. Thử rút ngắn kịch bản hoặc kiểm tra Gemini API key.`)
+          parsed = JSON.parse(extractJson(raw)) as ParseResult
+        } catch (e2) {
+          console.warn('[parse] Gemini attempt 2 failed:', e2)
         }
       }
+    }
 
-      if (!Array.isArray(parsed.segments) || parsed.segments.length === 0) {
-        throw new Error('Gemini trả về JSON không có segments — thử lại')
-      }
+    // Fallback: client-side split (never fails)
+    if (!parsed?.segments?.length) {
+      setPhaseDetail('Gemini không phản hồi — dùng phân tích offline...')
+      parsed = splitScriptClientSide(script)
+      usedFallback = true
+    }
 
-      const segments = parsed.segments
-      setStep('parse', 'done', `${segments.length} segments · ~${formatDuration(parsed.totalEstimatedSec)}`)
+    if (!parsed?.segments?.length) {
+      setPhaseError('Không tạo được segments — script có thể quá ngắn')
+      setPhase('failed')
+      return
+    }
 
-      // ── Step 2: Generate voiceover ────────────────────────────────────────
-      setStep('voice', 'running')
-      const audioBuffer   = await textToSpeech({ apiKey: elevenLabsApiKey, voiceId: selectedVoiceId, text: script, modelId: 'eleven_multilingual_v2' })
+    pipeRef.current.segments = parsed.segments
+    pipeRef.current.totalEstimatedSec = parsed.totalEstimatedSec
+    setPreviewSegments([...parsed.segments])
+
+    if (usedFallback) {
+      addToast('Đã dùng phân tích offline (Gemini không phản hồi). Bạn có thể chỉnh sửa segments.', 'error')
+    }
+
+    setPhase('review-parse')
+  }
+
+  // Update a single segment's text in the review UI
+  const handleEditSegmentText = (index: number, newText: string) => {
+    setPreviewSegments((prev) => prev.map((s, i) => i === index ? { ...s, text: newText } : s))
+  }
+
+  // ── Step 2: Generate voiceover ───────────────────────────────────────────
+
+  const runVoice = async () => {
+    // Persist any edits the user made to segments
+    pipeRef.current.segments = [...previewSegments]
+
+    if (!elevenLabsApiKey) { setPhaseError('Cần ElevenLabs API key'); setPhase('failed'); return }
+
+    setPhase('running-voice')
+    setPhaseError(null)
+    setPhaseDetail('')
+
+    try {
+      const audioBuffer = await textToSpeech({
+        apiKey: elevenLabsApiKey,
+        voiceId: selectedVoiceId,
+        text: script,
+        modelId: 'eleven_multilingual_v2',
+      })
       const audioDuration = await getAudioDuration(audioBuffer)
-      const audioBlob     = new Blob([audioBuffer], { type: 'audio/mpeg' })
-      const audioAssetId  = await saveAsset(audioBlob, 'audio/mpeg')
-      const voiceUrl      = await getUrl(audioAssetId)
-      if (!voiceUrl) throw new Error('Không lấy được URL audio sau khi upload')
+      const audioBlob = new Blob([audioBuffer], { type: 'audio/mpeg' })
 
+      // Recalculate per-segment timing from real audio duration
+      const segments = pipeRef.current.segments ?? []
       const totalChars = segments.reduce((s, seg) => s + seg.text.length, 0)
       let cursor = 0
-      const timedSegments = segments.map((seg) => {
+      const timedSegments: ScriptSegment[] = segments.map((seg) => {
         const ratio    = totalChars > 0 ? seg.text.length / totalChars : 1 / segments.length
         const duration = audioDuration * ratio
-        const s        = { ...seg, startSec: cursor, durationSec: duration }
+        const s = { ...seg, startSec: cursor, durationSec: duration }
         cursor += duration
         return s
       })
-      setStep('voice', 'done', `${formatDuration(audioDuration)} · ${Math.round(audioBlob.size / 1024)} KB`)
-      patchJob({ totalDuration: audioDuration })
 
-      // ── Step 3: Resolve URLs ──────────────────────────────────────────────
-      setStep('resolve', 'running')
+      pipeRef.current.audioDuration = audioDuration
+      pipeRef.current.audioBlob = audioBlob
+      pipeRef.current.timedSegments = timedSegments
 
-      // Avatar image: manual upload takes priority over bank selection
+      // Local preview URL (we upload to Supabase only when user continues)
+      if (previewVoiceUrl?.startsWith('blob:')) URL.revokeObjectURL(previewVoiceUrl)
+      setPreviewVoiceUrl(URL.createObjectURL(audioBlob))
+
+      setPhase('review-voice')
+    } catch (err) {
+      setPhaseError(err instanceof Error ? err.message : String(err))
+      setPhase('failed')
+    }
+  }
+
+  // ── Step 3: Resolve URLs (automatic, no review) ─────────────────────────
+
+  const runResolve = async () => {
+    if (!pipeRef.current.audioBlob) { setPhaseError('Thiếu audio'); setPhase('failed'); return }
+
+    setPhase('running-resolve')
+    setPhaseError(null)
+    setPhaseDetail('Upload audio + resolve ảnh...')
+
+    try {
+      // Upload audio to Supabase
+      const audioAssetId = await saveAsset(pipeRef.current.audioBlob, 'audio/mpeg')
+      const voiceUrl = await getUrl(audioAssetId)
+      if (!voiceUrl) throw new Error('Không lấy được URL audio sau khi upload')
+      pipeRef.current.voiceUrl = voiceUrl
+
+      // Resolve avatar image
+      const model = models.find((m) => m.id === selectedModelId)
       const avatarSrc = manualAvatarUrl ?? model?.characterImage ?? ''
       const avatarImageUrl = await resolveImageUrl(avatarSrc)
-      if (!avatarImageUrl) throw new Error('Không lấy được URL ảnh Avatar AI — kiểm tra Avatar AI trong Project')
+      if (!avatarImageUrl) throw new Error('Không lấy được URL ảnh Avatar AI')
+      pipeRef.current.avatarImageUrl = avatarImageUrl
 
-      // Product images: 1 bank product (primary) + N manual uploads (reference data for AI)
+      // Resolve product images (single bank + manual uploads)
       const productImageUrls: string[] = []
-
-      // Bank product (single selection)
       if (selectedProductId) {
         const prod = products.find((p) => p.id === selectedProductId)
         if (prod?.productImage) {
@@ -577,8 +830,6 @@ ${script}`
           if (url) productImageUrls.push(url)
         }
       }
-
-      // Manual uploads — all images as extra reference data for B-roll gen
       let manualFailCount = 0
       for (const mp of manualProducts) {
         const url = await resolveImageUrl(mp.blobUrl)
@@ -586,33 +837,64 @@ ${script}`
         else manualFailCount++
       }
       if (manualFailCount > 0) {
-        addToast(`${manualFailCount} ảnh đính kèm không upload được — kiểm tra kết nối`, 'error')
+        addToast(`${manualFailCount} ảnh đính kèm không upload được`, 'error')
       }
+      pipeRef.current.productImageUrls = productImageUrls
 
-      const avatarDisplayName = manualAvatarUrl ? manualAvatarName : (model?.name ?? '?')
-      setStep('resolve', 'done', `avatar: ${avatarDisplayName} · ${productImageUrls.length} ảnh sản phẩm`)
+      // Auto-proceed to avatar generation
+      await runAvatar()
+    } catch (err) {
+      setPhaseError(err instanceof Error ? err.message : String(err))
+      setPhase('failed')
+    }
+  }
 
-      // ── Step 4: Avatar lip-sync ───────────────────────────────────────────
-      setStep('avatar', 'running')
-      patchJob({ status: 'avatar' })
-      const { taskId: avatarTaskId } = await generateLipSync({
+  // ── Step 4: Avatar lip-sync ──────────────────────────────────────────────
+
+  const runAvatar = async () => {
+    if (!kieApiKey) { setPhaseError('Cần KIE.ai API key'); setPhase('failed'); return }
+    const { avatarImageUrl, voiceUrl } = pipeRef.current
+    if (!avatarImageUrl || !voiceUrl) { setPhaseError('Thiếu ảnh avatar hoặc audio'); setPhase('failed'); return }
+
+    setPhase('running-avatar')
+    setPhaseError(null)
+    setPhaseDetail('Kling Avatar đang gen video (~3-5 phút)...')
+
+    try {
+      const { taskId } = await generateLipSync({
         apiKey: kieApiKey,
         modelId: 'kling/ai-avatar-standard',
         imageUrl: avatarImageUrl,
         audioUrl: voiceUrl,
         prompt: 'A confident UGC content creator speaking naturally to camera, professional look, clean background',
       })
-      const avatarRawUrl = await pollLipSyncUntilDone({ apiKey: kieApiKey, taskId: avatarTaskId, timeoutMs: 15 * 60 * 1000 })
-      setStep('avatar', 'done', 'Kling Avatar Standard hoàn thành')
+      const avatarRawUrl = await pollLipSyncUntilDone({ apiKey: kieApiKey, taskId, timeoutMs: 15 * 60 * 1000 })
 
-      // ── Step 5: B-roll generation (parallel) ─────────────────────────────
-      setStep('broll', 'running')
-      patchJob({ status: 'broll' })
+      pipeRef.current.avatarRawUrl = avatarRawUrl
+      setPreviewAvatarUrl(avatarRawUrl)
+      setPhase('review-avatar')
+    } catch (err) {
+      setPhaseError(err instanceof Error ? err.message : String(err))
+      setPhase('failed')
+    }
+  }
+
+  // ── Step 5: B-roll generation ────────────────────────────────────────────
+
+  const runBroll = async () => {
+    if (!kieApiKey) { setPhaseError('Cần KIE.ai API key'); setPhase('failed'); return }
+    const { timedSegments, productImageUrls } = pipeRef.current
+    if (!timedSegments?.length) { setPhaseError('Thiếu segments'); setPhase('failed'); return }
+
+    setPhase('running-broll')
+    setPhaseError(null)
+    setPhaseDetail(`Đang gen ${timedSegments.length} clips song song...`)
+
+    try {
       const brollResults: (string | null)[] = new Array(timedSegments.length).fill(null)
 
       await Promise.all(timedSegments.map(async (seg, i) => {
-        // Pass up to 3 product images as reference so AI has richer visual context
-        const refImages = (seg.useProduct && productImageUrls.length > 0)
+        const refImages = (seg.useProduct && productImageUrls && productImageUrls.length > 0)
           ? productImageUrls.slice(0, 3)
           : undefined
         try {
@@ -635,24 +917,62 @@ ${script}`
         } catch { brollResults[i] = null }
       }))
 
-      const successCount = brollResults.filter(Boolean).length
-      setStep('broll', successCount > 0 ? 'done' : 'skipped', `${successCount}/${timedSegments.length} clips thành công`)
+      pipeRef.current.brollResults = brollResults
+      setPreviewBrollUrls([...brollResults])
+      setPhase('review-broll')
+    } catch (err) {
+      setPhaseError(err instanceof Error ? err.message : String(err))
+      setPhase('failed')
+    }
+  }
 
-      // ── Step 6: Remove avatar background ─────────────────────────────────
-      setStep('bg', 'running')
-      patchJob({ status: 'removing-bg' })
-      let avatarFinalUrl = avatarRawUrl
-      try {
-        avatarFinalUrl = await removeVideoBackground({ apiKey: falApiKey, videoUrl: avatarRawUrl, outputFormat: 'mp4' })
-        setStep('bg', 'done', 'Nền avatar đã được xóa')
-      } catch (bgErr) {
-        setStep('bg', 'skipped', `Bỏ qua: ${bgErr instanceof Error ? bgErr.message.slice(0, 60) : 'lỗi không xác định'}`)
-      }
+  // ── Step 6: Background removal ───────────────────────────────────────────
 
-      // ── Step 7: Shotstack assembly ────────────────────────────────────────
-      setStep('assemble', 'running')
-      patchJob({ status: 'assembling' })
+  const runBg = async () => {
+    if (!falApiKey) { setPhaseError('Cần fal.ai API key'); setPhase('failed'); return }
+    const { avatarRawUrl } = pipeRef.current
+    if (!avatarRawUrl) { setPhaseError('Thiếu avatar video'); setPhase('failed'); return }
 
+    setPhase('running-bg')
+    setPhaseError(null)
+    setPhaseDetail('fal.ai đang xóa nền (~1-2 phút)...')
+
+    try {
+      const finalUrl = await removeVideoBackground({ apiKey: falApiKey, videoUrl: avatarRawUrl, outputFormat: 'mp4' })
+      pipeRef.current.avatarFinalUrl = finalUrl
+      setPreviewBgUrl(finalUrl)
+      setPhase('review-bg')
+    } catch (err) {
+      // Allow user to skip bg removal on failure
+      setPhaseError(`Xóa nền thất bại: ${err instanceof Error ? err.message.slice(0, 100) : 'lỗi'}`)
+      setPhase('failed')
+    }
+  }
+
+  // Skip bg removal → use raw avatar
+  const handleSkipBg = () => {
+    pipeRef.current.avatarFinalUrl = pipeRef.current.avatarRawUrl ?? ''
+    addToast('Đã bỏ qua xóa nền', 'error')
+    runAssemble()
+  }
+
+  // ── Step 7: Final assembly ───────────────────────────────────────────────
+
+  const runAssemble = async () => {
+    if (!shotstackApiKey) { setPhaseError('Cần Shotstack API key'); setPhase('failed'); return }
+    const {
+      voiceUrl, avatarFinalUrl, audioDuration,
+      timedSegments, brollResults, jobId, jobName, voiceName,
+    } = pipeRef.current
+    if (!voiceUrl || !avatarFinalUrl || !audioDuration || !timedSegments) {
+      setPhaseError('Thiếu dữ liệu để ghép video'); setPhase('failed'); return
+    }
+
+    setPhase('running-assemble')
+    setPhaseError(null)
+    setPhaseDetail('Shotstack đang render...')
+
+    try {
       const renderId = await buildUGCVideo({
         apiKey: shotstackApiKey,
         voiceUrl,
@@ -662,7 +982,7 @@ ${script}`
           text: seg.text,
           startSec: seg.startSec,
           durationSec: seg.durationSec,
-          brollUrl: brollResults[i],
+          brollUrl: brollResults?.[i] ?? null,
           avatarPosition: seg.avatarPosition,
         })),
       })
@@ -670,31 +990,65 @@ ${script}`
       const finalVideoUrl = await pollRenderUntilDone({
         apiKey: shotstackApiKey,
         renderId,
-        onStatusChange: (s) => setStep('assemble', 'running', `Shotstack: ${s}...`),
+        onStatusChange: (s) => setPhaseDetail(`Shotstack: ${s}...`),
         timeoutMs: 15 * 60 * 1000,
       })
 
+      // Save to Supabase
       const finalRes   = await fetch(finalVideoUrl)
       const finalBlob  = await finalRes.blob()
       const finalAsset = await saveAsset(finalBlob, 'video/mp4')
       const savedUrl   = await getUrl(finalAsset) ?? finalVideoUrl
 
-      setStep('assemble', 'done', 'Video hoàn chỉnh sẵn sàng')
-      patchJob({ status: 'done', videoUrl: savedUrl, assetId: finalAsset })
-      addToast('🎬 UGC Video đã build xong!')
+      pipeRef.current.finalVideoUrl = savedUrl
+      pipeRef.current.finalAssetId = finalAsset
 
+      // Add to history
+      const newJob: VideoBuilderJob = {
+        id: jobId ?? crypto.randomUUID(),
+        name: jobName ?? 'UGC Video',
+        status: 'done',
+        errorMessage: null,
+        script,
+        voiceId: selectedVoiceId,
+        voiceName: voiceName ?? '?',
+        videoUrl: savedUrl,
+        assetId: finalAsset,
+        totalDuration: audioDuration,
+        createdAt: Date.now(),
+      }
+      setHistory((h) => [newJob, ...h])
+
+      setPhase('done')
+      addToast('🎬 UGC Video đã build xong!')
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err)
-      patchJob({ status: 'failed', errorMessage: msg })
-      addToast(`Build thất bại: ${msg.slice(0, 80)}`, 'error')
-      setSteps((prev) => prev.map((s) => s.status === 'running' ? { ...s, status: 'failed' } : s))
-    } finally {
-      setIsBuilding(false)
+      setPhaseError(err instanceof Error ? err.message : String(err))
+      setPhase('failed')
+
+      const failedJob: VideoBuilderJob = {
+        id: jobId ?? crypto.randomUUID(),
+        name: jobName ?? 'UGC Video',
+        status: 'failed',
+        errorMessage: err instanceof Error ? err.message : String(err),
+        script,
+        voiceId: selectedVoiceId,
+        voiceName: voiceName ?? '?',
+        videoUrl: null,
+        assetId: null,
+        totalDuration: audioDuration ?? null,
+        createdAt: Date.now(),
+      }
+      setHistory((h) => [failedJob, ...h])
     }
   }
 
+  // ── Computed ─────────────────────────────────────────────────────────────
+
+  const isIdle = phase === 'idle'
+  const isBuilding = !isIdle && phase !== 'done' && phase !== 'failed'
+
   const hasAvatar = !!selectedModelId || !!manualAvatarUrl
-  const canBuild  = !!script.trim() && hasAvatar && !!selectedVoiceId && !isBuilding
+  const canStart = !!script.trim() && hasAvatar && !!selectedVoiceId && isIdle
     && !!elevenLabsApiKey && !!kieApiKey && !!falApiKey && !!shotstackApiKey && !!geminiApiKey
 
   const missingKeys = [
@@ -718,7 +1072,7 @@ ${script}`
             </div>
             <div>
               <h2 className="text-base font-bold text-white">UGC Video Builder</h2>
-              <p className="text-xs text-white/70">Project → Script · Avatar AI · Sản phẩm → Video</p>
+              <p className="text-xs text-white/70">Pipeline thủ công · review từng bước · tiết kiệm chi phí</p>
             </div>
           </div>
         </div>
@@ -737,20 +1091,17 @@ ${script}`
           {/* ─── Kịch bản ─── */}
           <div>
             <SectionLabel icon={FileText}>Kịch bản</SectionLabel>
-
-            {/* Picker from bank (only shown if scripts exist) */}
             <ScriptPicker scripts={scripts} selectedId={selectedScriptId} onSelect={handleSelectScript} />
-
-            {/* Always-visible editable textarea */}
             <textarea
               value={script}
               onChange={(e) => { setScript(e.target.value); setSelectedScriptId('') }}
+              disabled={isBuilding}
               placeholder={scripts.length > 0
                 ? 'Kịch bản từ Project sẽ hiển thị ở đây, hoặc nhập thủ công...'
                 : 'Nhập kịch bản thủ công vào đây...'
               }
               rows={6}
-              className="w-full resize-none rounded-xl border border-black/10 bg-white px-4 py-3 text-sm text-gray-800 placeholder-gray-400 outline-none transition-colors focus:border-violet-300 focus:ring-2 focus:ring-violet-100"
+              className="w-full resize-none rounded-xl border border-black/10 bg-white px-4 py-3 text-sm text-gray-800 placeholder-gray-400 outline-none transition-colors focus:border-violet-300 focus:ring-2 focus:ring-violet-100 disabled:opacity-50"
             />
             {script && (
               <p className="mt-1.5 text-xs text-gray-400">
@@ -763,7 +1114,6 @@ ${script}`
           <div>
             <SectionLabel icon={User}>Avatar AI</SectionLabel>
 
-            {/* Manual avatar override card */}
             {manualAvatarUrl && (
               <div className="mb-3 flex items-center gap-3 rounded-xl border-2 border-violet-300 bg-violet-50 p-3">
                 <img src={manualAvatarUrl} alt={manualAvatarName} className="h-14 w-14 shrink-0 rounded-lg object-cover border border-violet-200" />
@@ -773,14 +1123,14 @@ ${script}`
                 </div>
                 <button
                   onClick={() => { setManualAvatarUrl(null); setManualAvatarName('') }}
-                  className="flex h-7 w-7 items-center justify-center rounded-lg text-gray-400 transition-colors hover:bg-red-50 hover:text-red-400"
+                  disabled={isBuilding}
+                  className="flex h-7 w-7 items-center justify-center rounded-lg text-gray-400 transition-colors hover:bg-red-50 hover:text-red-400 disabled:opacity-40"
                 >
                   <X className="h-4 w-4" />
                 </button>
               </div>
             )}
 
-            {/* Bank picker grid */}
             {models.length === 0 ? (
               <div className="rounded-xl border-2 border-dashed border-black/10 bg-black/[0.01] px-4 py-5 text-center">
                 <User className="mx-auto mb-2 h-6 w-6 text-gray-300" />
@@ -794,14 +1144,13 @@ ${script}`
                     key={m.id}
                     model={m}
                     selected={!manualAvatarUrl && m.id === selectedModelId}
-                    onSelect={() => { setSelectedModelId(m.id); setManualAvatarUrl(null); setManualAvatarName('') }}
+                    onSelect={() => { if (!isBuilding) { setSelectedModelId(m.id); setManualAvatarUrl(null); setManualAvatarName('') } }}
                   />
                 ))}
               </div>
             )}
 
-            {/* Upload manual avatar */}
-            <UploadBtn onClick={() => avatarFileRef.current?.click()}>
+            <UploadBtn onClick={() => !isBuilding && avatarFileRef.current?.click()}>
               Tải ảnh avatar lên thủ công
             </UploadBtn>
             <input
@@ -811,17 +1160,10 @@ ${script}`
               className="hidden"
               onChange={handleAvatarUpload}
             />
-
-            {hasAvatar && !manualAvatarUrl && selectedModelId && (
-              <p className="mt-1.5 text-xs text-emerald-600">
-                ✓ {models.find((m) => m.id === selectedModelId)?.name} đã chọn
-              </p>
-            )}
           </div>
 
           {/* ─── Sản phẩm ─── */}
           <div>
-            {/* Section header */}
             <div className="mb-2 flex items-center justify-between">
               <SectionLabel icon={Package}>Sản phẩm (chọn 1)</SectionLabel>
               {selectedProductId && (
@@ -831,7 +1173,6 @@ ${script}`
               )}
             </div>
 
-            {/* Bank products — single select */}
             {products.length > 0 ? (
               <div className="grid grid-cols-3 gap-2.5">
                 {products.map((p) => (
@@ -839,7 +1180,7 @@ ${script}`
                     key={p.id}
                     product={p}
                     selected={selectedProductId === p.id}
-                    onToggle={() => handleToggleProduct(p.id)}
+                    onToggle={() => !isBuilding && handleToggleProduct(p.id)}
                   />
                 ))}
               </div>
@@ -847,11 +1188,10 @@ ${script}`
               <p className="text-sm text-gray-400 italic">Chưa có sản phẩm trong Project — bỏ qua hoặc đính kèm ảnh bên dưới</p>
             )}
 
-            {/* Manual reference images — multiple allowed */}
             {manualProducts.length > 0 && (
               <div className="mt-3">
                 <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-gray-400">
-                  Ảnh đính kèm ({manualProducts.length}) — AI dùng làm tham khảo khi gen B-roll
+                  Ảnh đính kèm ({manualProducts.length}) — AI dùng làm tham khảo
                 </p>
                 <div className="grid grid-cols-4 gap-2">
                   {manualProducts.map((mp) => (
@@ -862,8 +1202,9 @@ ${script}`
                       <img src={mp.blobUrl} alt={mp.name} className="h-12 w-12 rounded-lg object-cover border border-violet-100" />
                       <p className="w-full truncate text-center text-[10px] font-medium text-gray-600">{mp.name}</p>
                       <button
-                        onClick={() => setManualProducts((prev) => prev.filter((p) => p.id !== mp.id))}
-                        className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-red-400 shadow"
+                        onClick={() => !isBuilding && setManualProducts((prev) => prev.filter((p) => p.id !== mp.id))}
+                        disabled={isBuilding}
+                        className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-red-400 shadow disabled:opacity-40"
                       >
                         <X className="h-2.5 w-2.5 text-white" />
                       </button>
@@ -873,9 +1214,8 @@ ${script}`
               </div>
             )}
 
-            {/* Upload button — always shown until limit */}
             {manualProducts.length < 8 && (
-              <UploadBtn onClick={() => productFileRef.current?.click()}>
+              <UploadBtn onClick={() => !isBuilding && productFileRef.current?.click()}>
                 {manualProducts.length === 0
                   ? 'Đính kèm ảnh sản phẩm (AI tham khảo khi gen B-roll)'
                   : `Thêm ảnh đính kèm (${manualProducts.length}/8)`}
@@ -905,7 +1245,8 @@ ${script}`
               <select
                 value={selectedVoiceId}
                 onChange={(e) => setSelectedVoiceId(e.target.value)}
-                className="w-full rounded-xl border border-black/10 bg-white px-3 py-2.5 text-sm text-gray-800 outline-none transition-colors focus:border-violet-300"
+                disabled={isBuilding}
+                className="w-full rounded-xl border border-black/10 bg-white px-3 py-2.5 text-sm text-gray-800 outline-none transition-colors focus:border-violet-300 disabled:opacity-50"
               >
                 <option value="">Chọn giọng đọc...</option>
                 {voices.map((v) => (
@@ -919,88 +1260,264 @@ ${script}`
 
         </div>
 
-        {/* Build button */}
+        {/* Start button */}
         <div className="shrink-0 border-t border-black/8 p-4">
-          <button
-            onClick={handleBuild}
-            disabled={!canBuild}
-            className="relative w-full overflow-hidden rounded-xl py-4 text-sm font-bold text-white shadow-lg shadow-violet-500/25 transition-all hover:shadow-violet-500/40 disabled:cursor-not-allowed disabled:opacity-40"
-            style={{
-              background: canBuild ? 'linear-gradient(135deg, #7c3aed, #a855f7)' : undefined,
-              backgroundColor: !canBuild ? '#d1d5db' : undefined,
-            }}
-          >
-            {isBuilding ? (
-              <span className="flex items-center justify-center gap-2"><Loader2 className="h-4 w-4 animate-spin" />Đang build...</span>
-            ) : (
-              <span className="flex items-center justify-center gap-2"><Sparkles className="h-4 w-4" />Build UGC Video</span>
-            )}
-          </button>
-          <p className="mt-2 text-center text-xs text-gray-400">~5–10 phút · Giữ tab mở khi đang xử lý</p>
+          {isIdle ? (
+            <button
+              onClick={runParse}
+              disabled={!canStart}
+              className="relative w-full overflow-hidden rounded-xl py-4 text-sm font-bold text-white shadow-lg shadow-violet-500/25 transition-all hover:shadow-violet-500/40 disabled:cursor-not-allowed disabled:opacity-40"
+              style={{
+                background: canStart ? 'linear-gradient(135deg, #7c3aed, #a855f7)' : undefined,
+                backgroundColor: !canStart ? '#d1d5db' : undefined,
+              }}
+            >
+              <span className="flex items-center justify-center gap-2"><Sparkles className="h-4 w-4" />Bắt đầu Build (Bước 1: Miễn phí)</span>
+            </button>
+          ) : (
+            <button
+              onClick={handleReset}
+              className="w-full rounded-xl border border-red-200 bg-red-50 py-3 text-sm font-bold text-red-600 transition-colors hover:bg-red-100"
+            >
+              {phase === 'done' ? 'Build video mới' : phase === 'failed' ? 'Bắt đầu lại' : 'Hủy & Bắt đầu lại'}
+            </button>
+          )}
+          <p className="mt-2 text-center text-xs text-gray-400">
+            {isIdle ? 'Mỗi bước cần duyệt thủ công · tiết kiệm chi phí' : `Tổng ước tính: ~$4-6/video`}
+          </p>
         </div>
       </div>
 
-      {/* ══ Right panel: Progress + History ══ */}
+      {/* ══ Right panel: Pipeline ══ */}
       <div className="flex flex-1 flex-col overflow-hidden">
         <div className="flex shrink-0 items-center justify-between border-b border-black/8 bg-white/60 px-5 py-3.5">
           <div className="flex items-center gap-2">
             <Film className="h-4 w-4 text-violet-500" />
-            <span className="text-sm font-semibold text-gray-700">Kết quả</span>
+            <span className="text-sm font-semibold text-gray-700">
+              {isIdle ? 'Pipeline' : phase === 'done' ? 'Hoàn thành ✓' : phase === 'failed' ? 'Thất bại' : 'Đang xử lý...'}
+            </span>
             {history.length > 0 && (
               <span className="rounded-full bg-violet-100 px-2 py-0.5 text-xs font-semibold text-violet-600">{history.length}</span>
             )}
           </div>
-          {history.length > 0 && !isBuilding && (
-            <button onClick={() => setHistory([])} className="text-xs text-gray-400 transition-colors hover:text-red-400">Xóa tất cả</button>
+          {history.length > 0 && isIdle && (
+            <button onClick={() => setHistory([])} className="text-xs text-gray-400 transition-colors hover:text-red-400">Xóa lịch sử</button>
           )}
         </div>
 
         <div className="flex-1 overflow-y-auto p-4">
-          {isBuilding && (
-            <div className="mb-4 rounded-2xl border border-violet-200 bg-white p-4 shadow-sm">
-              <p className="mb-3 flex items-center gap-2 text-sm font-bold text-violet-700">
-                <Loader2 className="h-4 w-4 animate-spin" />Đang build video...
+
+          {/* Phase header (shown during all phases except idle/done/failed) */}
+          {!isIdle && phase !== 'done' && phase !== 'failed' && <PhaseHeader phase={phase} />}
+
+          {/* Running states */}
+          {phase.startsWith('running-') && <RunningPanel phase={phase} detail={phaseDetail} />}
+
+          {/* ─── Review: Parse ─── */}
+          {phase === 'review-parse' && (
+            <ReviewCard
+              onRetry={runParse}
+              onContinue={runVoice}
+              continueLabel="Tiếp tục → Voiceover"
+              continueCost={STEP_INFO.voice.cost}
+            >
+              <p className="mb-3 text-xs text-gray-500">
+                <strong className="text-emerald-600">{previewSegments.length} đoạn</strong> · ~{formatDuration(pipeRef.current.totalEstimatedSec ?? 0)} · Bạn có thể sửa text trực tiếp
               </p>
-              <div className="space-y-1.5">
-                {steps.map((step) => <StepRow key={step.id} step={step} />)}
+              <div className="space-y-2 max-h-96 overflow-y-auto">
+                {previewSegments.map((seg, i) => (
+                  <div key={i} className="rounded-lg border border-black/8 bg-gray-50 p-2.5">
+                    <div className="mb-1.5 flex items-center justify-between text-[10px] uppercase tracking-wide">
+                      <span className="font-bold text-violet-600">Đoạn {i + 1}</span>
+                      <span className="text-gray-400">{seg.durationSec.toFixed(1)}s · avatar {seg.avatarPosition}{seg.useProduct ? ' · 📦' : ''}</span>
+                    </div>
+                    <textarea
+                      value={seg.text}
+                      onChange={(e) => handleEditSegmentText(i, e.target.value)}
+                      rows={2}
+                      className="w-full resize-none rounded-md border border-black/8 bg-white px-2 py-1.5 text-xs text-gray-700 outline-none focus:border-violet-300"
+                    />
+                    <p className="mt-1.5 line-clamp-2 text-[10px] italic text-violet-500">B-roll: {seg.brollPrompt}</p>
+                  </div>
+                ))}
               </div>
-              <div className="mt-3 flex items-center gap-1.5 text-xs text-gray-400">
-                <RefreshCw className="h-3 w-3 animate-spin" />Vui lòng giữ tab mở trong suốt quá trình
+            </ReviewCard>
+          )}
+
+          {/* ─── Review: Voice ─── */}
+          {phase === 'review-voice' && (
+            <ReviewCard
+              onRetry={runVoice}
+              onContinue={runResolve}
+              continueLabel="Tiếp tục → Avatar"
+              continueCost={STEP_INFO.avatar.cost}
+            >
+              <p className="mb-2 text-xs text-gray-500">
+                Nghe thử voiceover trước khi commit cost lớn nhất (~$3 cho Avatar)
+              </p>
+              <audio controls src={previewVoiceUrl ?? ''} className="w-full" />
+              <p className="mt-2 text-xs text-gray-400">
+                Thời lượng: <strong>{formatDuration(pipeRef.current.audioDuration ?? 0)}</strong> · Kích thước: {Math.round((pipeRef.current.audioBlob?.size ?? 0) / 1024)} KB
+              </p>
+            </ReviewCard>
+          )}
+
+          {/* ─── Review: Avatar ─── */}
+          {phase === 'review-avatar' && (
+            <ReviewCard
+              onRetry={runAvatar}
+              onContinue={runBroll}
+              retryLabel="Tạo lại (~$3)"
+              continueLabel="Tiếp tục → B-roll"
+              continueCost={STEP_INFO.broll.cost}
+            >
+              <p className="mb-2 text-xs text-gray-500">
+                Xem avatar nói có khớp môi và tự nhiên không. Nếu xấu, "Tạo lại" sẽ tốn thêm ~$3.
+              </p>
+              {previewAvatarUrl ? (
+                <video
+                  controls
+                  src={previewAvatarUrl}
+                  playsInline
+                  className="w-full max-h-80 rounded-lg bg-black object-contain"
+                />
+              ) : (
+                <p className="text-sm text-gray-400">Đang tải video...</p>
+              )}
+            </ReviewCard>
+          )}
+
+          {/* ─── Review: B-roll ─── */}
+          {phase === 'review-broll' && (
+            <ReviewCard
+              onRetry={runBroll}
+              onContinue={runBg}
+              retryLabel={`Tạo lại tất cả (~$${(previewBrollUrls.length * 0.125).toFixed(2)})`}
+              continueLabel="Tiếp tục → Xóa nền"
+              continueCost={STEP_INFO.bg.cost}
+            >
+              <p className="mb-3 text-xs text-gray-500">
+                <strong className="text-emerald-600">{previewBrollUrls.filter(Boolean).length}/{previewBrollUrls.length}</strong> clips thành công. Clips lỗi sẽ bị bỏ qua (avatar fullscreen).
+              </p>
+              <div className="grid grid-cols-3 gap-2">
+                {previewBrollUrls.map((url, i) => (
+                  <div key={i} className={`relative overflow-hidden rounded-lg border ${url ? 'border-emerald-200' : 'border-red-200 bg-red-50'}`}>
+                    {url ? (
+                      <video src={url} muted loop autoPlay playsInline className="h-28 w-full object-cover" />
+                    ) : (
+                      <div className="flex h-28 items-center justify-center">
+                        <X className="h-5 w-5 text-red-400" />
+                      </div>
+                    )}
+                    <span className="absolute bottom-1 left-1 rounded bg-black/60 px-1.5 py-0.5 text-[9px] font-bold text-white">#{i + 1}</span>
+                  </div>
+                ))}
               </div>
+            </ReviewCard>
+          )}
+
+          {/* ─── Review: BG removal ─── */}
+          {phase === 'review-bg' && (
+            <ReviewCard
+              onRetry={runBg}
+              onContinue={runAssemble}
+              onSkip={handleSkipBg}
+              skipLabel="Bỏ qua xóa nền"
+              retryLabel="Tạo lại (~$0.50)"
+              continueLabel="Tiếp tục → Ghép video"
+              continueCost={STEP_INFO.assemble.cost}
+            >
+              <p className="mb-2 text-xs text-gray-500">
+                Avatar đã tách nền — kiểm tra xem viền có sạch không. Nếu xấu, có thể bỏ qua (giữ nền gốc).
+              </p>
+              {previewBgUrl ? (
+                <video
+                  controls
+                  src={previewBgUrl}
+                  playsInline
+                  className="w-full max-h-80 rounded-lg object-contain"
+                  style={{ background: 'repeating-conic-gradient(#e5e7eb 0% 25%, #f9fafb 0% 50%) 50% / 20px 20px' }}
+                />
+              ) : (
+                <p className="text-sm text-gray-400">Đang tải video...</p>
+              )}
+            </ReviewCard>
+          )}
+
+          {/* ─── Done ─── */}
+          {phase === 'done' && (
+            <div className="rounded-2xl border border-emerald-200 bg-emerald-50/50 p-4">
+              <div className="flex items-center gap-2 mb-3">
+                <CheckCircle2 className="h-5 w-5 text-emerald-500" />
+                <p className="text-base font-bold text-emerald-700">🎬 Video hoàn thành!</p>
+              </div>
+              {pipeRef.current.finalVideoUrl && (
+                <video
+                  controls
+                  src={pipeRef.current.finalVideoUrl}
+                  playsInline
+                  className="w-full max-h-96 rounded-xl bg-black object-contain"
+                />
+              )}
+              <button
+                onClick={handleReset}
+                className="mt-3 text-xs font-semibold text-violet-600 hover:underline"
+              >
+                Build video mới →
+              </button>
             </div>
           )}
 
-          {history.length === 0 && !isBuilding ? (
+          {/* ─── Failed ─── */}
+          {phase === 'failed' && (
+            <div className="rounded-2xl border border-red-200 bg-red-50 p-4">
+              <div className="flex items-start gap-2 mb-2">
+                <AlertTriangle className="h-5 w-5 mt-0.5 text-red-500 shrink-0" />
+                <div>
+                  <p className="text-sm font-bold text-red-700">Bước thất bại</p>
+                  <p className="text-xs text-red-600 mt-1">{phaseError}</p>
+                </div>
+              </div>
+              <button
+                onClick={handleReset}
+                className="mt-2 rounded-lg bg-red-600 px-4 py-2 text-xs font-bold text-white hover:bg-red-700"
+              >
+                Bắt đầu lại
+              </button>
+            </div>
+          )}
+
+          {/* ─── Idle empty state ─── */}
+          {isIdle && history.length === 0 && (
             <div className="flex h-full flex-col items-center justify-center gap-4 p-8">
               <div className="flex h-20 w-20 items-center justify-center rounded-3xl bg-gradient-to-br from-violet-100 to-purple-100">
                 <Film className="h-10 w-10 text-violet-400" strokeWidth={1.5} />
               </div>
               <div className="text-center">
-                <p className="text-base font-semibold text-gray-500">Chưa có video nào được build</p>
-                <p className="mt-1.5 max-w-xs text-center text-sm leading-relaxed text-gray-400">
-                  Chọn kịch bản + Avatar AI từ Project, chọn giọng đọc → Build UGC Video
+                <p className="text-base font-semibold text-gray-500">Pipeline thủ công · 7 bước</p>
+                <p className="mt-1.5 max-w-sm text-center text-sm leading-relaxed text-gray-400">
+                  Mỗi bước chạy xong → bạn duyệt kết quả → bấm "Tiếp tục →" để qua bước tiếp.
+                  Nếu không OK → "Tạo lại ↺" để retry. Tránh tốn tiền oan.
                 </p>
               </div>
               <div className="flex flex-wrap justify-center gap-2 text-xs text-gray-400">
-                {['🎬 3-layer video', '🗣 Lip-sync avatar', '📹 Auto B-roll', '📝 Auto captions'].map((t) => (
+                {['Free ① Parse', '$0.30 ② Voice', '$3.00 ④ Avatar', '$0.38 ⑤ B-roll', '$0.50 ⑥ BG', '$0.50 ⑦ Render'].map((t) => (
                   <span key={t} className="rounded-full border border-black/8 bg-black/[0.02] px-3 py-1.5">{t}</span>
                 ))}
               </div>
             </div>
-          ) : (
-            <div className="space-y-3">
+          )}
+
+          {/* ─── History (always shown below) ─── */}
+          {history.length > 0 && (
+            <div className={`space-y-3 ${!isIdle ? 'mt-4 pt-4 border-t border-black/8' : ''}`}>
+              {!isIdle && <p className="text-xs font-bold uppercase tracking-wide text-gray-400">Lịch sử</p>}
               {history.map((job) => (
-                <div key={job.id}>
-                  {job.id === activeJobId && !isBuilding && (job.status === 'done' || job.status === 'failed') && (
-                    <div className="mb-2 rounded-xl border border-black/6 bg-white p-3">
-                      <div className="space-y-1">{steps.map((step) => <StepRow key={step.id} step={step} />)}</div>
-                    </div>
-                  )}
-                  <HistoryCard job={job} onDelete={() => setHistory((h) => h.filter((j) => j.id !== job.id))} />
-                </div>
+                <HistoryCard key={job.id} job={job} onDelete={() => setHistory((h) => h.filter((j) => j.id !== job.id))} />
               ))}
             </div>
           )}
+
         </div>
 
         <div className="shrink-0 border-t border-black/6 bg-white/60 px-5 py-2.5">
