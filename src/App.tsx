@@ -6,6 +6,7 @@ import { supabase } from './lib/supabase'
 import { useAuthStore } from './stores/authStore'
 import { useBankStore } from './stores/bankStore'
 import AuthScreen from './components/AuthScreen'
+import RestoreSessionModal from './components/RestoreSessionModal'
 import { RefreshCw, CheckCircle2, AlertCircle } from 'lucide-react'
 import { useSettingsStore } from './stores/settingsStore'
 import { getKieCredits } from './utils/kieai'
@@ -183,6 +184,7 @@ export default function App() {
         })}
       </main>
       <ToastContainer />
+      <RestoreSessionModal />
     </div>
   )
 }

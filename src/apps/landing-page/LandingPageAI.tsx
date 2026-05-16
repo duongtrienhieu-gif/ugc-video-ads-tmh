@@ -5,8 +5,22 @@ import type { Product } from '../../stores/types'
 import type { LandingGenParams, LandingPagePack, ImagePrompt } from './types'
 import { generateLandingPack } from './services/generateLandingPack'
 import { generatePackImages, regenerateSingleImage } from './services/generateImages'
+import { useSessionPersist } from '../../services/sessionPersistence'
+import AutoSaveIndicator from '../../components/AutoSaveIndicator'
 import InputPanel from './components/InputPanel'
 import OutputPanel from './components/OutputPanel'
+
+// ── Session-persistence snapshot shape ─────────────────────────────────────
+// Phase R3 pilot. Persisted across F5 / refresh / browser-close. Stores only
+// lightweight refs (asset URLs / IDs) — actual image blobs live in Supabase
+// via utils/assetStore.ts. Generation-in-flight is NOT auto-resumed (KIE
+// task IDs aren't currently kept here in R3) — but UI state + outputs are.
+interface LandingPageSnapshot {
+  selectedProductId: string | null
+  pack: LandingPagePack | null
+  imageProgress: { done: number; failed: number; total: number } | null
+  lastParams: Omit<LandingGenParams, 'productId'> | null
+}
 
 export default function LandingPageAI() {
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null)
@@ -23,6 +37,55 @@ export default function LandingPageAI() {
   const activeApp       = useAppStore((s) => s.activeApp)
   const addToast        = useAppStore((s) => s.addToast)
   const getProductById  = useBankStore((s) => s.getProductById)
+
+  // ── Session persistence (Phase R3 pilot) ──────────────────────────────
+  // Counts how many sections + images are complete — drives the modal preview.
+  const computeProgress = () => {
+    if (!pack) return undefined
+    const totalSections = pack.sections.length
+    const totalImages = pack.sections.reduce((sum, s) => sum + s.imagePrompts.length, 0)
+    const doneImages = pack.sections.reduce(
+      (sum, s) => sum + s.imagePrompts.filter((p) => p.imageRef).length,
+      0,
+    )
+    if (totalImages === 0) {
+      return `${totalSections} section · chưa render ảnh`
+    }
+    return `${totalSections} section · ${doneImages}/${totalImages} ảnh đã render`
+  }
+
+  const sessionApi = useSessionPersist<LandingPageSnapshot>({
+    moduleId: 'landing-page',
+    moduleNameVi: 'LandingPage AI',
+    version: 1,
+    snapshot: () => ({
+      selectedProductId: selectedProduct?.id ?? null,
+      pack,
+      imageProgress,
+      lastParams: lastParamsRef.current,
+    }),
+    hydrate: (data) => {
+      if (data.selectedProductId) {
+        const p = getProductById(data.selectedProductId)
+        if (p) setSelectedProduct(p)
+      }
+      if (data.pack) setPack(data.pack)
+      if (data.imageProgress) setImageProgress(data.imageProgress)
+      if (data.lastParams) lastParamsRef.current = data.lastParams
+      addToast('✓ Đã khôi phục LandingPage AI từ phiên trước', 'success')
+    },
+    getStatus: () => {
+      if (isGenerating || isGeneratingImages) return 'in-progress'
+      if (pack) return 'paused'
+      return 'completed'
+    },
+    getProgressVi: computeProgress,
+    getTitleVi: () => pack?.metadata.productName ?? selectedProduct?.productName,
+    // Only persist when there's actual work (avatar pack exists or gen in flight)
+    shouldPersist: () => !!pack || isGenerating || isGeneratingImages,
+    // Re-save when any of these change
+    deps: [selectedProduct?.id, pack, isGenerating, isGeneratingImages, imageProgress],
+  })
 
   useEffect(() => {
     if (activeApp !== 'landing-page') return
@@ -57,6 +120,8 @@ export default function LandingPageAI() {
         visualMemory,
       })
       setPack(p)
+      // Force-save right after pack lands — don't wait for debounce
+      sessionApi.forceSave()
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
       addToast(`Tạo landing pack thất bại: ${msg}`, 'error')
@@ -71,6 +136,7 @@ export default function LandingPageAI() {
   }
 
   // ── Per-image patch — used by queue workers + single regen ──────────
+  // Each successful image patch triggers the debounced auto-save (via deps).
   const patchImagePrompt = (sectionIdx: number, imageIdx: number, patch: Partial<ImagePrompt>) => {
     setPack((prev) => {
       if (!prev) return prev
@@ -103,6 +169,8 @@ export default function LandingPageAI() {
       addToast(`Sinh ảnh lỗi: ${msg}`, 'error')
     } finally {
       setIsGeneratingImages(false)
+      // Final save once batch completes
+      sessionApi.forceSave()
     }
   }
 
@@ -129,6 +197,13 @@ export default function LandingPageAI() {
       </div>
 
       <div className="flex w-full flex-1 flex-col min-h-[400px] lg:min-h-0">
+        {/* Floating auto-save indicator — Canva-style */}
+        <div className="absolute right-4 top-14 z-30">
+          <AutoSaveIndicator
+            lastSavedAt={sessionApi.lastSavedAt}
+            lastSaveOk={sessionApi.lastSaveOk}
+          />
+        </div>
         <OutputPanel
           pack={pack}
           isGenerating={isGenerating}
