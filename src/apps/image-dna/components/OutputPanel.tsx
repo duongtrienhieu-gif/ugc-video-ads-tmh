@@ -5,7 +5,7 @@ import { useAppStore } from '../../../stores/appStore'
 import type { VisualDNA, DNASectionName } from '../types'
 
 const SECTION_CONFIG: Record<DNASectionName, { label: string; icon: React.ElementType }> = {
-  model: { label: 'Nhân vật', icon: User },
+  model: { label: 'Avatar AI', icon: User },
   style: { label: 'Phong cách', icon: Shirt },
   pose: { label: 'Tư thế & Hành động', icon: Move },
   location: { label: 'Địa điểm & Bối cảnh', icon: MapPin },
@@ -70,7 +70,7 @@ export default function OutputPanel({ dna, imageUrl }: OutputPanelProps) {
     return (
       <div className="flex h-full flex-col items-center justify-center gap-3 p-8">
         <Dna className="h-10 w-10 text-gray-200" strokeWidth={1.5} />
-        <p className="text-sm text-gray-300">Tải ảnh lên để trích xuất DNA nhân vật</p>
+        <p className="text-sm text-gray-300">Tải ảnh lên để trích xuất DNA Avatar AI</p>
         <p className="text-xs text-gray-200">Kết quả JSON có cấu trúc sẽ hiện ở đây</p>
       </div>
     )
@@ -128,7 +128,7 @@ export default function OutputPanel({ dna, imageUrl }: OutputPanelProps) {
     setShowSaveForm(false)
     setSaveName('')
     setSaved(true)
-    addToast('Đã lưu nhân vật vào PROJECT')
+    addToast('Đã lưu Avatar AI vào PROJECT')
     setTimeout(() => setSaved(false), 3000)
   }
 
@@ -139,7 +139,7 @@ export default function OutputPanel({ dna, imageUrl }: OutputPanelProps) {
       data: flattenDna(),
     })
     openApp('character-studio')
-    addToast('Đã gửi DNA tới Studio Nhân Vật')
+    addToast('Đã gửi DNA tới Studio Avatar AI')
     setSentToStudio(true)
     setTimeout(() => setSentToStudio(false), 3000)
   }
@@ -237,9 +237,9 @@ export default function OutputPanel({ dna, imageUrl }: OutputPanelProps) {
               }`}
           >
             {saved ? (
-              <><Check className="h-4 w-4" /> Đã lưu vào PROJECT nhân vật</>
+              <><Check className="h-4 w-4" /> Đã lưu vào PROJECT Avatar AI</>
             ) : (
-              <><Save className="h-4 w-4" /> Lưu vào PROJECT nhân vật</>
+              <><Save className="h-4 w-4" /> Lưu vào PROJECT Avatar AI</>
             )}
           </button>
         )}
@@ -253,9 +253,9 @@ export default function OutputPanel({ dna, imageUrl }: OutputPanelProps) {
             }`}
         >
           {sentToStudio ? (
-            <><Check className="h-4 w-4" /> Đã gửi tới Studio Nhân Vật</>
+            <><Check className="h-4 w-4" /> Đã gửi tới Studio Avatar AI</>
           ) : (
-            <>Gửi tới Studio Nhân Vật <ArrowUpRight className="h-3.5 w-3.5" /></>
+            <>Gửi tới Studio Avatar AI <ArrowUpRight className="h-3.5 w-3.5" /></>
           )}
         </button>
       </div>

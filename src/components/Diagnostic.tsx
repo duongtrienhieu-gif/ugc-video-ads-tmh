@@ -123,7 +123,7 @@ export default function Diagnostic({ isOpen, onClose }: DiagnosticProps) {
             <h3 className="mb-2 text-xs font-semibold uppercase tracking-widest text-gray-500">Dữ liệu trên trình duyệt</h3>
             <div className="grid grid-cols-3 gap-2 text-xs">
               <Stat label="Sản phẩm"     value={products.length} />
-              <Stat label="Nhân vật"     value={models.length} />
+              <Stat label="Avatar AI"    value={models.length} />
               <Stat label="Kịch bản"     value={scripts.length} />
               <Stat label="Giọng đọc"    value={voices.length} />
               <Stat label="Lịch sử voice" value={voiceHistory.length} />

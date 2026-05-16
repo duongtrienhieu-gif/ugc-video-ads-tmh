@@ -200,7 +200,7 @@ export default function OutputPanel({ result, isGenerating, onGenerate, onCancel
               <span>Đang tạo...</span>
             </>
           ) : (
-            <span>👤 Tạo nhân vật ({credits} Credit)</span>
+            <span>👤 Tạo Avatar AI ({credits} Credit)</span>
           )}
         </button>
       </div>
@@ -254,8 +254,8 @@ export default function OutputPanel({ result, isGenerating, onGenerate, onCancel
             <span className="text-[9px] font-bold uppercase tracking-widest text-sky-400">kie.ai</span>
           </div>
           <UserRound className="h-10 w-10 text-gray-200" strokeWidth={1.5} />
-          <p className="text-sm text-gray-300">Điền thông tin để tạo nhân vật</p>
-          <p className="text-xs text-gray-200">Hình ảnh nhân vật sẽ hiển thị ở đây</p>
+          <p className="text-sm text-gray-300">Điền thông tin để tạo Avatar AI</p>
+          <p className="text-xs text-gray-200">Hình ảnh Avatar AI sẽ hiển thị ở đây</p>
         </div>
         <BottomControls />
       </div>
@@ -358,9 +358,9 @@ export default function OutputPanel({ result, isGenerating, onGenerate, onCancel
                 }`}
             >
               {saved ? (
-                <><Check className="h-4 w-4" /> Đã lưu vào Project nhân vật</>
+                <><Check className="h-4 w-4" /> Đã lưu vào Project Avatar AI</>
               ) : (
-                <><Save className="h-4 w-4" /> Lưu vào Project nhân vật</>
+                <><Save className="h-4 w-4" /> Lưu vào Project Avatar AI</>
               )}
             </button>
           )}

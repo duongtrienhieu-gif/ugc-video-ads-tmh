@@ -71,7 +71,7 @@ export default function ModelForm({ item, onSave, onCancel }: ModelFormProps) {
     <form onSubmit={handleSubmit} className="flex flex-col gap-4">
       <div className="flex items-center justify-between">
         <h3 className="text-sm font-semibold tracking-tight text-gray-800">
-          {item ? 'Chỉnh sửa nhân vật' : 'Nhân vật mới'}
+          {item ? 'Chỉnh sửa Avatar AI' : 'Avatar AI mới'}
         </h3>
         <button type="button" onClick={onCancel} className="text-gray-500 hover:text-gray-700 transition-colors">
           <X className="h-4 w-4" />
@@ -160,7 +160,7 @@ export default function ModelForm({ item, onSave, onCancel }: ModelFormProps) {
         type="submit"
         className="mt-1 rounded-full bg-black/8 px-4 py-2 text-sm font-medium text-gray-800 transition-colors hover:bg-black/10"
       >
-        {item ? 'Lưu thay đổi' : 'Thêm nhân vật'}
+        {item ? 'Lưu thay đổi' : 'Thêm Avatar AI'}
       </button>
     </form>
   )

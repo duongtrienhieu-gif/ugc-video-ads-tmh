@@ -190,7 +190,7 @@ export const useBankStore = create<BankState>((set, get) => ({
 
         // Report any per-table errors to user so they know data fetch failed
         if (p.error)  reportError('Tải sản phẩm',  p.error)
-        if (m.error)  reportError('Tải nhân vật',  m.error)
+        if (m.error)  reportError('Tải Avatar AI',  m.error)
         if (s.error)  reportError('Tải kịch bản',  s.error)
         if (v.error)  reportError('Tải giọng đọc', v.error)
         if (vh.error) reportError('Tải lịch sử',   vh.error)
@@ -285,13 +285,13 @@ export const useBankStore = create<BankState>((set, get) => ({
         character_params: { notes: model.notes, source: model.source, jsonProfile: model.jsonProfile },
       }).select().single()
       if (error) {
-        reportError('Lưu nhân vật', error)
+        reportError('Lưu Avatar AI', error)
         set((s) => ({ models: s.models.filter((m) => m.id !== tempId) }))
       } else if (row) {
         set((s) => ({ models: s.models.map((m) => m.id === tempId ? toModel(row) : m) }))
       }
     } catch (e) {
-      reportError('Lưu nhân vật', { message: e instanceof Error ? e.message : String(e) })
+      reportError('Lưu Avatar AI', { message: e instanceof Error ? e.message : String(e) })
       set((s) => ({ models: s.models.filter((m) => m.id !== tempId) }))
     }
   },
@@ -309,13 +309,13 @@ export const useBankStore = create<BankState>((set, get) => ({
       }
     }
     const { error } = await supabase.from('models').update(patch).eq('id', id)
-    if (error) reportError('Cập nhật nhân vật', error)
+    if (error) reportError('Cập nhật Avatar AI', error)
     else set((s) => ({ models: s.models.map((m) => m.id === id ? { ...m, ...updates } : m) }))
   },
 
   deleteModel: async (id) => {
     const { error } = await supabase.from('models').delete().eq('id', id)
-    if (error) reportError('Xóa nhân vật', error)
+    if (error) reportError('Xóa Avatar AI', error)
     else set((s) => ({ models: s.models.filter((m) => m.id !== id) }))
   },
 

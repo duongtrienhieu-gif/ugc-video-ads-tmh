@@ -60,10 +60,10 @@ function ModelContent({ item }: { item: Model }) {
       <Thumbnail src={item.characterImage} fallback={UserRound} />
       <div className="flex min-w-0 flex-1 flex-col gap-0.5">
         <span className="truncate text-sm font-semibold tracking-tight text-gray-800">
-          {item.name || 'Nhân vật chưa đặt tên'}
+          {item.name || 'Avatar AI chưa đặt tên'}
         </span>
         <span className="truncate text-xs text-gray-500">
-          {item.source === 'character-studio' ? 'Studio Nhân Vật' : item.source === 'image-dna-extractor' ? 'DNA Ảnh' : 'Nhập thủ công'}
+          {item.source === 'character-studio' ? 'Studio Avatar AI' : item.source === 'image-dna-extractor' ? 'DNA Ảnh' : 'Nhập thủ công'}
         </span>
       </div>
     </>

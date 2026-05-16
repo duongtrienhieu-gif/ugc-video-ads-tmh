@@ -173,7 +173,7 @@ export default function InputPanel({
           {/* Model */}
           <BankCard
             icon={UserRound}
-            label="Nhân vật"
+            label="Avatar AI"
             accentClass="bg-sky-500/15 text-sky-400"
             isEmpty={!selectedModel}
             onSelect={onSelectModel}

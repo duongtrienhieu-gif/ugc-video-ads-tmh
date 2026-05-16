@@ -14,7 +14,7 @@ interface NavItem {
 
 const NAV_ITEMS: NavItem[] = [
   { id: 'finder', label: 'Project', icon: LayoutGrid },
-  { id: 'character-studio', label: 'Nhân vật', icon: User },
+  { id: 'character-studio', label: 'Avatar AI', icon: User },
   { id: 'script-architect', label: 'Kịch bản', icon: PenLine },
   { id: 'voice-studio', label: 'Giọng đọc', icon: Mic },
   { id: 'broll-studio', label: 'Ảnh B-Roll', icon: Image },

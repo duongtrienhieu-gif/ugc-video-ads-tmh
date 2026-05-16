@@ -219,7 +219,7 @@ export default function LipSync() {
     const model = item as Model
     setPickerOpen(false)
     if (!model.characterImage) {
-      addToast('Nhân vật này chưa có ảnh — upload ảnh trong Character Studio trước', 'error')
+      addToast('Avatar AI này chưa có ảnh — upload ảnh trong Character Studio trước', 'error')
       return
     }
     setCharacterAssetId(model.characterImage)
@@ -321,7 +321,7 @@ export default function LipSync() {
   }
 
   const handleGenerateVideo = async () => {
-    if (!characterAssetId) { addToast('Chọn ảnh nhân vật trước', 'error'); return }
+    if (!characterAssetId) { addToast('Chọn ảnh Avatar AI trước', 'error'); return }
     if (!audioAssetId)     { addToast('Tạo audio trước khi tạo video', 'error'); return }
     if (!kieApiKey)        { addToast('Cài kie.ai API key trong Cài đặt', 'error'); return }
 
@@ -350,7 +350,7 @@ export default function LipSync() {
       let imagePublicUrl: string
       if (isAssetRef(characterAssetId)) {
         const url = await getUrl(characterAssetId)
-        if (!url) throw new Error('Không lấy được URL ảnh nhân vật')
+        if (!url) throw new Error('Không lấy được URL ảnh Avatar AI')
         imagePublicUrl = url
       } else if (characterAssetId.startsWith('data:')) {
         const resp    = await fetch(characterAssetId)
@@ -460,7 +460,7 @@ export default function LipSync() {
       let imagePublicUrl: string
       if (isAssetRef(characterAssetId)) {
         const url = await getUrl(characterAssetId)
-        if (!url) throw new Error('Không lấy được URL ảnh nhân vật')
+        if (!url) throw new Error('Không lấy được URL ảnh Avatar AI')
         imagePublicUrl = url
       } else if (characterAssetId.startsWith('data:')) {
         const resp    = await fetch(characterAssetId)
@@ -536,14 +536,14 @@ export default function LipSync() {
 
             {/* 1. Character image */}
             <div>
-              <p className="mb-1.5 text-[10px] font-medium uppercase tracking-widest text-gray-400">Ảnh nhân vật</p>
+              <p className="mb-1.5 text-[10px] font-medium uppercase tracking-widest text-gray-400">Ảnh Avatar AI</p>
               {characterDisplayUrl ? (
                 /* Compact thumbnail — full image visible, not cropped */
                 <div className="group relative flex items-center gap-3 rounded-xl border border-black/10 bg-black/[0.02] p-2">
                   <div className="relative h-16 w-16 shrink-0 overflow-hidden rounded-lg border border-black/8 bg-black/5">
                     <img
                       src={characterDisplayUrl}
-                      alt="Nhân vật"
+                      alt="Avatar AI"
                       className="h-full w-full object-contain"
                     />
                   </div>
@@ -577,7 +577,7 @@ export default function LipSync() {
                     className="flex flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-black/12 bg-black/[0.02] py-7 text-gray-500 transition-colors hover:border-black/20 hover:bg-black/[0.04] hover:text-gray-700"
                   >
                     <Database className="h-5 w-5" />
-                    <span className="text-[11px]">Chọn từ Nhân vật</span>
+                    <span className="text-[11px]">Chọn từ Avatar AI</span>
                   </button>
                 </div>
               )}
@@ -831,7 +831,7 @@ export default function LipSync() {
         {/* Generate video button */}
         <div className="border-t border-black/8 p-4">
           {!characterAssetId && (
-            <p className="mb-2 text-center text-[11px] text-gray-400">Chưa có ảnh nhân vật</p>
+            <p className="mb-2 text-center text-[11px] text-gray-400">Chưa có ảnh Avatar AI</p>
           )}
           {characterAssetId && !audioAssetId && (
             <p className="mb-2 text-center text-[11px] text-gray-400">Cần tạo audio trước</p>
@@ -884,7 +884,7 @@ export default function LipSync() {
             </div>
             <p className="text-sm font-medium text-gray-400">Thư viện trống</p>
             <p className="max-w-xs text-center text-xs text-gray-300 leading-relaxed">
-              1. Chọn ảnh nhân vật → 2. Chọn giọng & nhập kịch bản → 3. Tạo audio → 4. Tạo video
+              1. Chọn ảnh Avatar AI → 2. Chọn giọng & nhập kịch bản → 3. Tạo audio → 4. Tạo video
             </p>
           </div>
         ) : (

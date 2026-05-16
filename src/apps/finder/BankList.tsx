@@ -74,7 +74,7 @@ function ProductCard({ item, onEdit, onDelete }: { item: Product; onEdit: () => 
 function ModelCard({ item, onEdit, onDelete }: { item: Model; onEdit: () => void; onDelete: () => void }) {
   const [confirm, setConfirm] = useState(false)
   const resolvedImage = useAssetUrl(item.characterImage)
-  const sourceLabel = item.source === 'character-studio' ? 'Studio Nhân Vật' : item.source === 'image-dna-extractor' ? 'DNA Ảnh' : 'Nhập thủ công'
+  const sourceLabel = item.source === 'character-studio' ? 'Studio Avatar AI' : item.source === 'image-dna-extractor' ? 'DNA Ảnh' : 'Nhập thủ công'
   const hasJson = item.jsonProfile !== null
   return (
     <div onClick={onEdit} className="group cursor-pointer rounded-xl border border-black/8 bg-black/[0.03] transition-all hover:border-black/12 hover:bg-black/[0.04] hover:-translate-y-0.5">
@@ -255,13 +255,13 @@ export default function BankList({ bankType, onEdit, onAdd }: BankListProps) {
   }
 
   if (bankType === 'models') {
-    if (models.length === 0) return <EmptyState icon={UserRound} label="nhân vật" onAdd={onAdd} />
+    if (models.length === 0) return <EmptyState icon={UserRound} label="Avatar AI" onAdd={onAdd} />
     return (
       <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-2.5">
         {models.map((m) => (
           <ModelCard key={m.id} item={m} onEdit={() => onEdit(m.id)} onDelete={() => deleteModel(m.id)} />
         ))}
-        <AddCard label="Nhân vật mới" onAdd={onAdd} />
+        <AddCard label="Avatar AI mới" onAdd={onAdd} />
       </div>
     )
   }

@@ -153,8 +153,8 @@ function ModelPicker({ models, selectedId, onSelect }: {
   if (models.length === 0) {
     return (
       <div className="rounded-xl border-2 border-dashed border-black/10 bg-black/[0.01] px-4 py-4 text-center">
-        <p className="text-xs text-gray-400">Chưa có nhân vật nào trong Project</p>
-        <p className="mt-0.5 text-[10px] text-gray-300">Tạo nhân vật tại app <strong>Nhân vật</strong> trước</p>
+        <p className="text-xs text-gray-400">Chưa có Avatar AI nào trong Project</p>
+        <p className="mt-0.5 text-[10px] text-gray-300">Tạo Avatar AI tại app <strong>Avatar AI</strong> trước</p>
       </div>
     )
   }
@@ -183,7 +183,7 @@ function ModelPicker({ models, selectedId, onSelect }: {
               <User className="h-6 w-6 text-gray-300" />
             </div>
           )}
-          <p className="w-full truncate text-center text-[10px] font-semibold text-gray-700">{m.name || 'Nhân vật'}</p>
+          <p className="w-full truncate text-center text-[10px] font-semibold text-gray-700">{m.name || 'Avatar AI'}</p>
           {m.id === selectedId && (
             <div className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-violet-500">
               <Check className="h-2.5 w-2.5 text-white" />
@@ -307,7 +307,7 @@ function HistoryCard({ job, onDelete }: { job: VideoBuilderJob; onDelete: () => 
 const INITIAL_STEPS: BuildStep[] = [
   { id: 'parse',    label: '① Phân tích kịch bản (Gemini)',      detail: 'Chia script thành segments + B-roll prompts', status: 'idle' },
   { id: 'voice',    label: '② Tạo voiceover (ElevenLabs)',        detail: 'TTS toàn bộ script → audio file', status: 'idle' },
-  { id: 'resolve',  label: '③ Chuẩn bị tài nguyên',              detail: 'Resolve URL ảnh nhân vật và sản phẩm', status: 'idle' },
+  { id: 'resolve',  label: '③ Chuẩn bị tài nguyên',              detail: 'Resolve URL ảnh Avatar AI và sản phẩm', status: 'idle' },
   { id: 'avatar',   label: '④ Tạo avatar lip-sync (KIE.ai)',      detail: 'Kling Avatar: ảnh + audio → video nói', status: 'idle' },
   { id: 'broll',    label: '⑤ Tạo B-roll clips (KIE.ai Kling)',   detail: 'Gen video minh họa song song cho mỗi đoạn', status: 'idle' },
   { id: 'bg',       label: '⑥ Xóa nền avatar (fal.ai)',           detail: 'Tách nền để overlay trong suốt lên B-roll', status: 'idle' },
@@ -369,7 +369,7 @@ export default function VideoBuilder() {
 
   const handleBuild = async () => {
     if (!script.trim())       { addToast('Chọn hoặc nhập kịch bản', 'error'); return }
-    if (!selectedModelId)     { addToast('Chọn nhân vật avatar', 'error'); return }
+    if (!selectedModelId)     { addToast('Chọn Avatar AI', 'error'); return }
     if (!selectedVoiceId)     { addToast('Chọn giọng đọc', 'error'); return }
     if (!elevenLabsApiKey)    { addToast('Cần ElevenLabs API key', 'error'); return }
     if (!kieApiKey)           { addToast('Cần KIE.ai API key', 'error'); return }
@@ -451,7 +451,7 @@ SCRIPT:\n${script}`
       // ── Step 3: Resolve URLs from Project assets ──────────────────────────
       setStep('resolve', 'running')
       const avatarImageUrl = await resolveImageUrl(model?.characterImage ?? '')
-      if (!avatarImageUrl) throw new Error('Không lấy được URL ảnh nhân vật — kiểm tra nhân vật trong Project')
+      if (!avatarImageUrl) throw new Error('Không lấy được URL ảnh Avatar AI — kiểm tra Avatar AI trong Project')
 
       const productImageUrls: string[] = []
       for (const pid of selectedProductIds) {
@@ -584,7 +584,7 @@ SCRIPT:\n${script}`
             </div>
             <div>
               <h2 className="text-sm font-bold text-white">UGC Video Builder</h2>
-              <p className="text-[11px] text-white/70">Project → Script · Nhân vật · Sản phẩm → Video</p>
+              <p className="text-[11px] text-white/70">Project → Script · Avatar AI · Sản phẩm → Video</p>
             </div>
           </div>
         </div>
@@ -632,10 +632,10 @@ SCRIPT:\n${script}`
             )}
           </div>
 
-          {/* ── Avatar (Nhân vật) from Project ── */}
+          {/* ── Avatar AI from Project ── */}
           <div>
             <label className="mb-1.5 flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest text-gray-400">
-              <User className="h-3 w-3" /> Nhân vật (Avatar)
+              <User className="h-3 w-3" /> Avatar AI
             </label>
             <ModelPicker models={models} selectedId={selectedModelId} onSelect={setSelectedModelId} />
             {selectedModelId && (
@@ -745,7 +745,7 @@ SCRIPT:\n${script}`
               <div className="text-center">
                 <p className="text-sm font-semibold text-gray-500">Chưa có video nào được build</p>
                 <p className="mt-1 max-w-xs text-center text-xs leading-relaxed text-gray-400">
-                  Chọn kịch bản + nhân vật từ Project, chọn giọng đọc → Build UGC Video
+                  Chọn kịch bản + Avatar AI từ Project, chọn giọng đọc → Build UGC Video
                 </p>
               </div>
               <div className="flex flex-wrap justify-center gap-2 text-[10px] text-gray-400">
