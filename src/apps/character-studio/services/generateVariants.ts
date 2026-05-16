@@ -1,6 +1,64 @@
 import { generateImage, pollImageUntilDone } from '../../../utils/kieai'
 import { saveAsset, isAssetRef } from '../../../utils/assetStore'
+import { directGeminiVision } from '../../../utils/gemini'
 import type { AvatarVariant } from '../../../stores/types'
+
+/**
+ * Use Gemini Vision to describe the avatar's face + style in detail.
+ * This description anchors the identity lock when generating angle variants —
+ * reference-image alone is unreliable (model often invents a different person).
+ */
+export async function describeAvatarFromImage(imageUrl: string, geminiKey: string): Promise<string | null> {
+  try {
+    let base64: string
+    let mimeType: string
+
+    if (imageUrl.startsWith('data:')) {
+      const match = imageUrl.match(/^data:([^;]+);base64,(.+)$/)
+      if (!match) return null
+      mimeType = match[1]
+      base64 = match[2]
+    } else {
+      const res = await fetch(imageUrl)
+      if (!res.ok) return null
+      const blob = await res.blob()
+      mimeType = blob.type || 'image/jpeg'
+      const buf = await blob.arrayBuffer()
+      const bytes = new Uint8Array(buf)
+      let binary = ''
+      for (let i = 0; i < bytes.byteLength; i++) binary += String.fromCharCode(bytes[i])
+      base64 = btoa(binary)
+    }
+
+    const response = await directGeminiVision({
+      apiKey: geminiKey,
+      parts: [
+        { inlineData: { mimeType, data: base64 } },
+        { text: `Describe this person's face and identifying features in 2-3 SHORT sentences for an image-generation prompt. Focus ONLY on:
+- Gender, approximate age range (e.g. "late 40s-50s")
+- Ethnicity / regional appearance (e.g. "Malaysian", "Vietnamese", "Caucasian", "Middle Eastern")
+- Skin tone, face shape, distinctive features (cheekbones, jaw, smile, wrinkles)
+- Eye color, eye shape, eyebrow style
+- Hairstyle OR hijab (color, style, how it's worn) — be specific
+- Any facial hair (beard, stubble, clean-shaven, mustache style)
+- Outfit colors and style (top color, pattern if any)
+- Any visible accessories (glasses, jewelry, earrings, bracelet)
+
+Be VERY specific so the same person can be reliably re-rendered at a different angle.
+Output: only the description, no preamble, no markdown, no lists, just flowing sentences.
+
+Example output: "A Malaysian woman in her late 40s with warm tan skin, soft rounded face shape, warm brown almond-shaped eyes, gentle smile lines, wearing a soft lavender hijab pinned modestly under chin, lavender floral top, and a thin gold bracelet on her wrist."` },
+      ],
+      maxOutputTokens: 350,
+      model: 'gemini-2.5-flash',
+    })
+
+    return response.trim().replace(/^["']|["']$/g, '')
+  } catch (err) {
+    console.error('[describeAvatarFromImage] failed:', err)
+    return null
+  }
+}
 
 /**
  * Generate alternate angle variants of an existing avatar.
@@ -59,35 +117,35 @@ export async function generateOneVariant(params: {
 }): Promise<AvatarVariant | null> {
   const { apiKey, originalImageUrl, recipe, avatarDescription, mode = 'strict' } = params
 
-  // Build identity-lock prompt with the recipe + reference
-  const identityLockText = mode === 'flex-outfit'
-    ? `🔒 STRICT IDENTITY LOCK 🔒
-This is the SAME identical human being shown in the reference image.
-${avatarDescription ? `\nLocked physical description:\n${avatarDescription}\n` : ''}
-KEEP EXACTLY THE SAME (from reference image):
-- Face shape, eye color + shape, eyebrows, nose, lips, jawline, skin tone, age
-- Hairstyle, hair color, hair length, hair texture (or hijab style if female with hijab)
-- Any facial hair: beard, mustache, stubble (exact same style and color)
+  // ── Prompt designed for Nano Banana 2 (Gemini image edit) ────────────────
+  // Direct structure works better than emoji/all-caps shouting. The avatar
+  // description is the PRIMARY identity anchor — reference image is secondary.
+  const descBlock = avatarDescription
+    ? `\nTHE PERSON IN THE REFERENCE IMAGE:\n${avatarDescription}\n`
+    : ''
 
-CAN VARY SLIGHTLY:
-- Outfit / clothing — different shirt or top color/style is OK, but keep same modesty level + casual UGC style
-- Pose / angle / facial expression as specified below
+  const allowOutfitVariation = mode === 'flex-outfit'
 
-DO NOT generate a similar-looking different person — that is failure.
+  const identityLockText = `TASK: Re-render the EXACT SAME PERSON from the reference image, viewed from a different angle.
+${descBlock}
+WHAT MUST STAY IDENTICAL (this is the same individual, NOT a similar-looking different person):
+• Same face: same eye color, eye shape, eyebrows, nose, lips, jawline, cheekbones, skin tone, age
+• Same gender, same ethnicity, same approximate age (do NOT make older younger or vice versa)
+• Same hijab style and color if wearing one, OR same hairstyle/hair color/hair length
+• Same facial hair if any (beard, stubble, mustache) — same style and color
+• Same accessories visible on face/neck (glasses, earrings)
 
+WHAT CAN ${allowOutfitVariation ? 'VARY' : 'STAY THE SAME'}:
+${allowOutfitVariation
+  ? '• Outfit/clothing — different top color or style is OK, but same modesty level (e.g. modest hijab outfit stays modest)\n• Background — can be slightly different setting'
+  : '• Outfit and lighting should match the reference closely'}
+
+WHAT CHANGES (apply this transformation):
 ${recipe.prompt}
 
-Output: photorealistic, vertical 9:16, authentic UGC-style photography, natural ambient lighting, no text overlay, no watermark.`
-    : `🔒 ABSOLUTE IDENTITY LOCK 🔒
-This is the SAME identical human being shown in the reference image. You are photographing them again from a different angle.
-${avatarDescription ? `\nLocked physical description:\n${avatarDescription}\n` : ''}
-DO NOT change: face shape, eye color/shape, eyebrow shape, nose, lips, jawline, skin tone, hijab/hair style, outfit, lighting.
-DO NOT generate a similar-looking different person — that is failure.
-The only thing that changes is the head pose/angle/expression specified below.
+CRITICAL RULE: This MUST be the SAME individual as the reference. Do not invent a different person — even one who "looks similar". If you produce a different person, the output is a failure. Use the reference image as the primary identity anchor.
 
-${recipe.prompt}
-
-Output: photorealistic, vertical 9:16, hyper-realistic studio photography, no text overlay, no watermark.`
+Output: photorealistic, vertical 9:16, authentic natural lighting, no text overlay, no watermark.`
 
   try {
     const { taskId } = await generateImage({

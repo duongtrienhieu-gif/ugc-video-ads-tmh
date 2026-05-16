@@ -7,7 +7,7 @@ import type { GenerationResult } from '../services/generateCharacter'
 import { useAssetUrl } from '../../../hooks/useAssetUrl'
 import { IMAGE_MODELS } from '../../../utils/kieai'
 import type { ImageResolution } from '../../../utils/kieai'
-import { generateExtra3Angles, generateOneVariant, EXTRA_3_RECIPES } from '../services/generateVariants'
+import { generateExtra3Angles, generateOneVariant, describeAvatarFromImage, EXTRA_3_RECIPES } from '../services/generateVariants'
 import type { AvatarVariant } from '../../../stores/types'
 
 interface OutputPanelProps {
@@ -69,7 +69,11 @@ export default function OutputPanel({ result, isGenerating, onGenerate, onCancel
   const [isSavingPreset, setIsSavingPreset] = useState(false)
 
   const kieApiKey = useSettingsStore((s) => s.kieApiKey)
+  const geminiApiKey = useSettingsStore((s) => s.geminiApiKey)
   const addToast = useAppStore((s) => s.addToast)
+
+  // Cached avatar description (Gemini Vision) — computed once on first gen, reused for regens
+  const avatarDescRef = useRef<string | null>(null)
 
   const [progress, setProgress] = useState(0)
   const progressRef = useRef<ReturnType<typeof setInterval> | null>(null)
@@ -107,6 +111,7 @@ export default function OutputPanel({ result, isGenerating, onGenerate, onCancel
     setExtraAngles([])
     setPresetName('')
     setSaved(false)
+    avatarDescRef.current = null  // invalidate cached description for new avatar
   }, [result?.imageUrl])
 
   const handleCopy = () => {
@@ -114,6 +119,16 @@ export default function OutputPanel({ result, isGenerating, onGenerate, onCancel
     navigator.clipboard.writeText(JSON.stringify(result.jsonPrompt, null, 2))
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
+  }
+
+  // Compute (or reuse cached) avatar description via Gemini Vision.
+  // This is the PRIMARY identity anchor — without it the angle gen produces random people.
+  const ensureAvatarDescription = async (): Promise<string | undefined> => {
+    if (avatarDescRef.current) return avatarDescRef.current
+    if (!resolvedImageUrl || !geminiApiKey) return undefined
+    const desc = await describeAvatarFromImage(resolvedImageUrl, geminiApiKey)
+    avatarDescRef.current = desc
+    return desc ?? undefined
   }
 
   // ── Generate 3 extra face angles inline ───────────────────────────────────
@@ -125,12 +140,20 @@ export default function OutputPanel({ result, isGenerating, onGenerate, onCancel
     }
     setIsGeneratingExtras(true)
     setExtraAngles([null, null, null])
-    setExtraProgress({ done: 0, total: 3, label: 'khởi tạo' })
+    setExtraProgress({ done: 0, total: 3, label: 'phân tích avatar' })
 
     try {
+      // Step 1: Describe the avatar via Gemini Vision (identity anchor in prompt)
+      const avatarDesc = await ensureAvatarDescription()
+      if (!avatarDesc) {
+        addToast('Gemini Vision không phân tích được avatar — vẫn thử gen', 'error')
+      }
+
+      // Step 2: Generate the 3 angles with the description embedded
       const angles = await generateExtra3Angles({
         apiKey: kieApiKey,
         originalImageUrl: resolvedImageUrl,
+        avatarDescription: avatarDesc,
         onProgress: (done, total, label) => setExtraProgress({ done, total, label }),
       })
       // Pad to 3 slots in case some failed
@@ -149,7 +172,7 @@ export default function OutputPanel({ result, isGenerating, onGenerate, onCancel
     }
   }
 
-  // Regenerate one of the 3 angles
+  // Regenerate one of the 3 angles — reuses cached avatar description
   const handleRegenAngle = async (idx: number) => {
     if (!resolvedImageUrl) return
     if (!kieApiKey) {
@@ -158,11 +181,13 @@ export default function OutputPanel({ result, isGenerating, onGenerate, onCancel
     }
     setRegenIdx(idx)
     try {
+      const avatarDesc = await ensureAvatarDescription()
       const recipe = EXTRA_3_RECIPES[idx]
       const v = await generateOneVariant({
         apiKey: kieApiKey,
         originalImageUrl: resolvedImageUrl,
         recipe,
+        avatarDescription: avatarDesc,
         mode: 'flex-outfit',
       })
       if (v) {
