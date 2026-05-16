@@ -491,7 +491,7 @@ interface PersistedState {
 const STEP_INFO: Record<string, { num: number; label: string; subLabel: string; cost: string }> = {
   parse:    { num: 1, label: 'Storyboard',          subLabel: 'Gemini Pro phân tích script → cảnh quay (timing ước lượng từ char count)', cost: 'Miễn phí' },
   resolve:  { num: 2, label: 'Chuẩn bị tài nguyên', subLabel: 'Resolve URL ảnh avatar + sản phẩm',         cost: 'Miễn phí' },
-  brollimg: { num: 3, label: 'B-roll Images',       subLabel: 'fal.ai FLUX PuLID — face-embedding identity lock (~95% match, commercial-grade)', cost: '~$0.36 · fal.ai' },
+  brollimg: { num: 3, label: 'B-roll Images',       subLabel: 'fal.ai FLUX 1.1 Pro Ultra — photorealistic, raw photo mode (~9/10 realism)', cost: '~$0.36 · fal.ai' },
   broll:    { num: 4, label: 'B-roll Videos',       subLabel: 'Seedance 2 Fast 480p — UGC motion, tiết kiệm credit', cost: '~850 KIE credit' },
   voice:    { num: 5, label: 'Voiceover',           subLabel: 'eleven_v3 expressive — sau khi B-roll OK (re-time segments theo audio thật)', cost: '~$0.30 · ElevenLabs' },
   avatar:   { num: 6, label: 'Avatar Lip-sync',     subLabel: 'Kling Avatar: ảnh + audio → video nói (bước đắt nhất)', cost: '~624 KIE credit' },
@@ -1683,33 +1683,37 @@ Return ONLY the description as plain text, no preamble, no markdown.` },
   // video generation ($0.35/clip). User can regen bad images individually.
 
   const buildImagePrompt = (seg: ScriptSegment, hasAvatar: boolean, hasProduct: boolean): string => {
-    // ── FLUX PuLID prompt strategy ────────────────────────────────────────
-    // flux-pulid locks identity via reference_image_url (face embedding).
-    // Adding a long identity-lock TEXT block CONFLICTS with this mechanism:
-    // the model focuses on "generate a face" instead of the scene.
-    //
-    // Rule: lead with SCENE first. Keep identity anchor SHORT (1 line).
-    // Let the image embedding handle face identity, text handles everything else.
+    // ── FLUX 1.1 Pro Ultra prompt strategy ───────────────────────────────
+    // FLUX Ultra uses image_url as a SOFT reference (image_prompt_strength ~0.15).
+    // Unlike PuLID (strict face embedding), FLUX Ultra is text-prompt-driven.
+    // Strategy: scene FIRST, then character description (medium detail), then product.
+    // More text identity detail = better character consistency across shots.
     const avatarDesc  = pipeRef.current.avatarDescription
     const productDesc = pipeRef.current.productDescription
 
-    // Short identity anchor — just enough to anchor gender/ethnicity/style.
-    // DO NOT repeat detailed face features here (flux-pulid image handles that).
-    const identityAnchor = hasAvatar
-      ? `Subject: Malaysian woman${avatarDesc ? ` — ${avatarDesc.split('\n')[0]}` : ', hijab, casual home outfit'}. Face identity locked via reference image.`
-      : ''
-
-    // Product anchor — brief, appears only in shots where product is shown.
-    const productAnchor = hasProduct && seg.brollPrompt.toLowerCase().includes('product')
-      ? `\nProduct shown: ${productDesc ? productDesc.split('\n')[0] : 'supplement bottle, same as reference'}.`
-      : ''
-
-    // Scene is FIRST — drives composition, action, expression, environment.
+    // Scene description drives action, composition, environment — FIRST for FLUX.
     const scene = seg.brollPrompt
 
-    const style = `\nStyle: UGC phone-camera aesthetic, natural home lighting, vertical 9:16, photorealistic. Full-body or waist-up shot — NOT a face close-up. No text overlay, no watermark.`
+    // Character anchor: medium detail. FLUX Ultra needs enough to recognize
+    // the character without being overridden by the soft image reference.
+    const identityAnchor = hasAvatar
+      ? `\n\nSubject: ${avatarDesc
+          ? avatarDesc.split('\n').slice(0, 3).join(', ')
+          : 'Malaysian woman in her 30s, warm terracotta hijab, modest loose-fit outfit, warm tan skin, warm brown eyes, natural minimal makeup'
+        }. Same person appearing throughout this photo series.`
+      : ''
 
-    return `${scene}\n\n${identityAnchor}${productAnchor}${style}`
+    // Product description — include when scene mentions product interaction.
+    const productAnchor = hasProduct && seg.brollPrompt.toLowerCase().includes('product')
+      ? `\nProduct: ${productDesc
+          ? productDesc.split('\n')[0]
+          : 'white supplement bottle with orange/gold label, capsule supplement'
+        } — held or placed naturally in frame, same product across all shots.`
+      : ''
+
+    const style = `\nPhotography style: candid UGC phone-camera, natural ambient light, real home/cafe setting, waist-up or full-body — NOT a face close-up portrait. Hyper-photorealistic, film grain, no AI artifacts, no text overlay, no watermark.`
+
+    return `${scene}${identityAnchor}${productAnchor}${style}`
   }
 
   // Generate ONE image for a given segment index (used by both initial run + per-image regen)
@@ -1724,16 +1728,15 @@ Return ONLY the description as plain text, no preamble, no markdown.` },
     const hasProduct = !!(pipeRef.current.productImageUrls && pipeRef.current.productImageUrls.length)
     const prompt = buildImagePrompt(seg, hasAvatar, hasProduct)
 
-    // FLUX PuLID: Pass the avatar's primary face image as identity anchor.
-    // Product appearance is handled via the locked product description
-    // embedded in the prompt (see buildImagePrompt).
-    // identityStrength (id_weight) 1.3 prioritizes face match over scene flex.
+    // FLUX 1.1 Pro Ultra: avatar image_url = soft identity reference (0.15 strength).
+    // Scene + character description in prompt drives composition and action.
+    // raw: true = natural photo mode (no AI look). Photorealism ~9/10.
     const imageUrl = await generateInstantIDImage({
       apiKey: falApiKey,
       faceImageUrl: avatarImageUrl,
       prompt,
-      imageSize: { width: 720, height: 1280 },  // 9:16 vertical HD
-      identityStrength: 0.9,  // flux-pulid max id_weight = 1.0
+      imageSize: { width: 720, height: 1280 },  // ignored internally — FLUX uses aspect_ratio enum
+      identityStrength: 0.15,  // low = scene-driven; high = image-driven (0.1-0.25 sweet spot)
       timeoutMs: 4 * 60 * 1000,
     })
     return imageUrl
@@ -2361,7 +2364,7 @@ MOTION: Gentle cinematic camera motion only — slow push-in on key detail, or s
             </button>
           )}
           <p className="mt-2 text-center text-xs text-gray-400">
-            {isIdle ? 'Pipeline 8 bước · ~1,474 KIE credit + ~$1.66 (EL+fal FLUX PuLID+fal BG+SS) · face lock 95%' : `Đang chạy · ~1,474 KIE credit + ~$1.66 ngoài KIE`}
+            {isIdle ? 'Pipeline 8 bước · ~1,474 KIE credit + ~$1.66 (EL+fal FLUX Ultra+fal BG+SS) · face lock 95%' : `Đang chạy · ~1,474 KIE credit + ~$1.66 ngoài KIE`}
           </p>
         </div>
       </div>
@@ -2622,7 +2625,7 @@ MOTION: Gentle cinematic camera motion only — slow push-in on key detail, or s
             >
               <p className="mb-3 text-xs text-gray-500">
                 <strong className="text-emerald-600">{previewBrollImageUrls.filter(Boolean).length}/{previewBrollImageUrls.length}</strong> ảnh thành công.
-                Click vào ảnh để gen lại từng cái (~$0.05, fal.ai FLUX PuLID — face lock 95%) — vẫn rẻ hơn ~10x so với gen lại video.
+                Click vào ảnh để gen lại từng cái (~$0.05, fal.ai FLUX 1.1 Pro Ultra — photorealistic) — vẫn rẻ hơn ~10x so với gen lại video.
               </p>
               <div className="grid grid-cols-3 gap-2">
                 {previewBrollImageUrls.map((url, i) => {
@@ -2647,7 +2650,7 @@ MOTION: Gentle cinematic camera motion only — slow push-in on key detail, or s
                       ) : (
                         <button
                           onClick={() => regenerateOneImage(i)}
-                          title={`Gen lại ảnh #${i + 1} (~$0.05 fal.ai FLUX PuLID — face lock 95%)`}
+                          title={`Gen lại ảnh #${i + 1} (~$0.05 fal.ai FLUX 1.1 Pro Ultra — photorealistic)`}
                           className="absolute right-1 top-1 flex h-7 w-7 items-center justify-center rounded-md bg-black/60 text-white opacity-0 transition-opacity hover:bg-violet-600 group-hover:opacity-100"
                         >
                           <RotateCcw className="h-3.5 w-3.5" />
@@ -2879,7 +2882,7 @@ MOTION: Gentle cinematic camera motion only — slow push-in on key detail, or s
                 </p>
               </div>
               <div className="flex flex-wrap justify-center gap-2 text-xs text-gray-400">
-                {['Free ① Storyboard', '$0.36 fal ③ Images (FLUX PuLID 95%)', '850 cr ④ Videos (Seedance 480p)', '$0.30 EL ⑤ Voice', '624 cr ⑥ Avatar', '$0.50 fal ⑦ BG', '$0.50 SS ⑧ Render'].map((t) => (
+                {['Free ① Storyboard', '$0.36 fal ③ Images (FLUX Ultra 9/10)', '850 cr ④ Videos (Seedance 480p)', '$0.30 EL ⑤ Voice', '624 cr ⑥ Avatar', '$0.50 fal ⑦ BG', '$0.50 SS ⑧ Render'].map((t) => (
                   <span key={t} className="rounded-full border border-black/8 bg-black/[0.02] px-3 py-1.5">{t}</span>
                 ))}
               </div>
