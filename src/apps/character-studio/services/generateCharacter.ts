@@ -155,6 +155,16 @@ function buildImagePrompt(profile: CharacterProfile, productDescription?: string
   ].filter(Boolean)
   if (poseParts.length) parts.push(poseParts.join(', ') + '.')
 
+  // When NO product is attached, the avatar must be hand-empty. Without this
+  // explicit instruction, image models like to invent props ("coffee shop"
+  // location → cup in hand, "casual selfie" → phone in hand, etc). This is
+  // critical for the downstream Product AI / B-Roll pipeline which composes
+  // the clean avatar with a real product later — props in the avatar would
+  // conflict with the lifestyle scene the product is later placed into.
+  if (!productDescription) {
+    parts.push('Subject has EMPTY HANDS — both hands are visibly empty and relaxed at the sides or naturally framed below the shot. DO NOT add any prop in the hands: no phone, no smartphone, no iPhone, no cup, no mug, no coffee, no glass, no water bottle, no product, no jar, no tube, no can, no book, no notebook, no flowers, no bag, no fork, no spoon, no remote, no objects of any kind. The subject is NOT holding anything.')
+  }
+
   // Scene
   const sceneParts = [
     profile.location,

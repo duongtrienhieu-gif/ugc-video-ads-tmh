@@ -329,54 +329,59 @@ interface UGCScenario {
   cameraDevice: string
 }
 
+// All scenarios are explicitly PROP-FREE — the avatar must never be holding a
+// phone, cup, glass, product, or any other object. UGC Creator generates a
+// CLEAN avatar that downstream tools (Product AI, B-Roll) compose with the
+// actual product later. Props in the avatar would conflict with that pipeline.
 const UGC_SCENARIOS: UGCScenario[] = [
-  // 1. Classic talking-head — selfie cam
+  // 1. Classic talking-head — face-to-camera, hands out of frame
   {
     location: pickRandom(['Bedroom', 'Living room', 'Kitchen']),
     background: pickRandom(['Neutral wall', 'Blurred background', 'Minimalist']),
     lighting: 'Soft, diffused natural window light, creating gentle highlights on the cheekbones and realistic subsurface scattering on the skin',
     weather: 'Indoor (N/A)',
     timeOfDay: pickRandom(['Morning', 'Afternoon']),
-    pose: 'Front-on, sitting upright, face directed straight at camera lens',
-    action: 'Speaking directly to camera, genuine direct eye contact with viewer',
-    shotType: 'Medium shot (waist up)',
-    cameraDevice: pickRandom(['iPhone selfie cam', 'iPhone Front Cam']),
+    pose: 'Front-on, sitting upright, face directed straight at camera lens, hands relaxed below frame',
+    action: 'Speaking directly to camera, genuine direct eye contact with viewer. EMPTY HANDS — no phone, no cup, no objects in hands',
+    shotType: 'Medium close-up (chest up)',
+    cameraDevice: pickRandom(['iPhone selfie cam on tripod', 'iPhone Front Cam']),
   },
-  // 2. Mirror selfie — holding iPhone
+  // 2. Window-side soft-light portrait — replaces the old "mirror selfie" so
+  //    the model has no excuse to render a phone in hand
   {
     location: pickRandom(['Bedroom', 'Living room']),
-    background: 'Full-length mirror reflection, tidy room visible in background',
+    background: 'Soft blurred home interior, window visible to one side',
     lighting: pickRandom(['Soft natural light', 'Natural Window Light']),
     weather: 'Indoor (N/A)',
     timeOfDay: pickRandom(['Morning', 'Afternoon']),
-    pose: 'Standing upright in front of full-length mirror, holding iPhone up toward mirror',
-    action: 'Mirror selfie, holding iPhone 15 Pro facing the mirror, eyes looking directly into the camera lens through the mirror reflection',
-    shotType: 'Medium shot (waist up)',
-    cameraDevice: 'iPhone 15 Pro, casual UGC aesthetic',
+    pose: 'Standing or sitting near a window, body slightly angled toward the light, face front-on to camera, hands relaxed at sides',
+    action: 'Looking directly at the camera with a natural friendly expression. EMPTY HANDS — no phone, no cup, no objects in hands',
+    shotType: 'Medium close-up (chest up)',
+    cameraDevice: 'iPhone Front Cam on tripod',
   },
-  // 3. Ring-light creator setup
+  // 3. Ring-light creator setup — phone on tripod (not in hand)
   {
     location: pickRandom(['Bedroom', 'Living room']),
     background: pickRandom(['Neutral wall', 'Minimalist', 'Blurred background']),
     lighting: 'Ring Light (Influencer)',
     weather: 'Indoor (N/A)',
     timeOfDay: 'Evening',
-    pose: 'Front-on, sitting at desk, face directed straight at camera',
-    action: 'Speaking to camera with confident direct eye contact, ring light reflected in eyes',
+    pose: 'Front-on, sitting at desk, face directed straight at camera, hands relaxed below frame',
+    action: 'Speaking to camera with confident direct eye contact, ring light reflected in eyes. EMPTY HANDS — no phone, no cup, no objects in hands',
     shotType: 'Close-up face',
-    cameraDevice: 'Ring light + phone',
+    cameraDevice: 'Ring light with phone on tripod',
   },
-  // 4. Outdoor / casual UGC creator
+  // 4. Outdoor casual portrait — replaces the old "holding phone for selfie"
   {
     location: pickRandom(['Outdoors park', 'Coffee shop']),
     background: pickRandom(['Blurred background', 'Plants', 'Window with natural light']),
     lighting: pickRandom(['Soft natural light', 'Golden Hour']),
     weather: pickRandom(['Sunny', 'Overcast']),
     timeOfDay: pickRandom(['Morning', 'Midday', 'Afternoon']),
-    pose: 'Standing, body and face front-on, looking directly into camera lens',
-    action: 'Holding phone out for selfie-style video, speaking to camera, eyes fixed on lens',
-    shotType: 'Medium shot (waist up)',
-    cameraDevice: 'iPhone 15 Pro, casual UGC aesthetic',
+    pose: 'Standing or seated, body and face front-on, looking directly at camera, hands relaxed at sides',
+    action: 'Speaking to camera with a natural confident smile. EMPTY HANDS — no phone, no cup, no glass, no products or objects in hands',
+    shotType: 'Medium close-up (chest up)',
+    cameraDevice: 'iPhone Front Cam on tripod',
   },
 ]
 
