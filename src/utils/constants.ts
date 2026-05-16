@@ -6,7 +6,6 @@ import {
   PenLine,
   Mic,
   Film,
-  Video,
   Package,
   FileText,
   Megaphone,
