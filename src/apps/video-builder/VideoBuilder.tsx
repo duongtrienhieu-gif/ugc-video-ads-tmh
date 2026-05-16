@@ -9,8 +9,9 @@ import {
 import { useSettingsStore } from '../../stores/settingsStore'
 import { useAppStore } from '../../stores/appStore'
 import { useBankStore } from '../../stores/bankStore'
+import { useAdTemplateStore } from '../../stores/adTemplateStore'
 import { getUrl, isAssetRef, saveAsset } from '../../utils/assetStore'
-import { directGeminiVision, uploadFileToGemini } from '../../utils/gemini'
+import { directGeminiVision } from '../../utils/gemini'
 import { listVoices, listSharedVoices, textToSpeechSmooth } from '../../utils/elevenlabs'
 import { generateLipSync, pollLipSyncUntilDone, generateVideoJob, getVideoJobStatus } from '../../utils/kieai'
 import { removeVideoBackground, generateInstantIDImage } from '../../utils/falai'
@@ -720,15 +721,14 @@ export default function VideoBuilder() {
   const [manualAvatarName, setManualAvatarName] = useState('')
   const [manualProducts, setManualProducts] = useState<ManualProduct[]>([])
 
-  // ── Reference winning ad (optional) ──────────────────────────────────────
-  // User uploads a proven UGC ad video → Gemini Pro Vision analyzes it →
-  // structure/style insights get injected into the storyboard prompt so the
-  // generated video MATCHES the winning ad's composition + pacing + tone.
-  const refVideoInputRef = useRef<HTMLInputElement>(null)
-  const [refVideoFile, setRefVideoFile] = useState<File | null>(null)
-  const [refVideoName, setRefVideoName] = useState('')
+  // ── Reference winning ad — Ad Win Template picker ────────────────────────
+  // Replaces the old "upload video for analysis" flow. Users analyze ads ONCE
+  // in Phân tích QC, save as named templates, then pick from a dropdown here.
+  // Way faster than re-uploading + re-analyzing the same video repeatedly.
+  const adTemplates = useAdTemplateStore((s) => s.templates)
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string>('')
   const [refVideoAnalysis, setRefVideoAnalysis] = useState<string | null>(null)
-  const [analyzingRefVideo, setAnalyzingRefVideo] = useState(false)
+  const [refVideoName, setRefVideoName] = useState('')
 
   // ── Pipeline state ───────────────────────────────────────────────────────
   const [phase, setPhase] = useState<PipelinePhase>('idle')
@@ -924,117 +924,20 @@ export default function VideoBuilder() {
     setSelectedProductId((prev) => prev === id ? '' : id)
   }
 
-  // ── Reference winning ad — upload + analyze ──────────────────────────────
+  // ── Ad Win Template picker ──────────────────────────────────────────────
 
-  const handleRefVideoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (!file) return
-    if (!file.type.startsWith('video/')) {
-      addToast('File phải là video (MP4 / MOV / WebM)', 'error'); return
+  const handleSelectTemplate = (templateId: string) => {
+    setSelectedTemplateId(templateId)
+    if (!templateId) {
+      setRefVideoAnalysis(null)
+      setRefVideoName('')
+      return
     }
-    if (file.size > 50 * 1024 * 1024) {
-      addToast('Video > 50MB. Compress lại bằng Handbrake / FFmpeg trước.', 'error'); return
-    }
-    setRefVideoFile(file)
-    setRefVideoName(file.name)
-    setRefVideoAnalysis(null)   // clear previous analysis
-    e.target.value = ''
-  }
-
-  const analyzeRefVideo = async () => {
-    if (!refVideoFile) { addToast('Upload video mẫu trước', 'error'); return }
-    if (!geminiApiKey) { addToast('Cần Gemini API key', 'error'); return }
-    setAnalyzingRefVideo(true)
-
-    try {
-      // Upload to Gemini Files API (handles up to 2GB; inline-data limit
-      // would cap at ~15MB so Files API is required for our 50MB limit).
-      // The upload flow: POST file → poll until state=ACTIVE → use fileUri
-      // in generateContent parts.
-      addToast(`Uploading ${(refVideoFile.size / (1024 * 1024)).toFixed(1)}MB video lên Gemini Files API...`)
-      const { fileUri, mimeType } = await uploadFileToGemini({
-        apiKey: geminiApiKey,
-        file: refVideoFile,
-        displayName: refVideoFile.name,
-        onProgress: (status) => {
-          if (status === 'uploading')      addToast('Upload video...', 'error')
-          else if (status === 'processing') addToast('Gemini đang process video (~10-30s)...', 'error')
-          else                              addToast('✓ Video ready, đang phân tích...')
-        },
-        timeoutMs: 8 * 60 * 1000,
-      })
-
-      const analysisPrompt = `You are a senior UGC ad analyst. Analyze this winning advertisement video and extract a COMPREHENSIVE STRUCTURE BREAKDOWN. The user is building a similar ad for the Malaysia market and wants to replicate this video's exact STYLE + COMPOSITION + PACING.
-
-The reference ad may be in any language (English, Vietnamese, Malay). Analyze the VISUAL and STRUCTURAL elements regardless of language. Write the analysis in clear English.
-
-PROVIDE:
-
-1. TRANSCRIPT WITH TIMING — every spoken line with start time, e.g.:
-   0:00 "The secret to pain-free joints was discovered in 1973"
-   0:04 "And it's in this capsule"
-   ...
-
-2. NARRATIVE BEATS (identify which of these the ad uses):
-   - Hook (first 3-5s): what curiosity/discovery teaser opens
-   - Pain story: what suffering the speaker describes
-   - Failed solutions: what didn't work
-   - Discovery turning point: how they found the product
-   - How-it-works: mechanism explanation
-   - Science/authority signals
-   - Transformation: life change shown
-   - CTA: call to action style
-
-3. VISUAL COMPOSITION per beat:
-   - Shot type (close-up / medium / wide / over-shoulder / POV)
-   - Avatar position (full-frame center / corner inset bottom-right /
-     not visible / split-screen)
-   - Setting (kitchen / dining table / bedroom / park / lab / outdoor)
-   - Camera movement (static / slow push-in / pan / handheld / tracking)
-   - Lighting (warm natural / cool clinical / dramatic side / golden hour)
-   - Specific actions performed (e.g. "hands on stomach in pain",
-     "holding bottle up to camera", "eating happily")
-
-4. PACING:
-   - Average segment length (seconds)
-   - Cut frequency (slow / medium / fast)
-   - Energy progression (slow burn / steady / building urgency)
-
-5. CAPTIONS/OVERLAY TEXT:
-   - Are spoken words shown as captions on screen?
-   - Caption style (bold all-caps / lowercase casual / highlighted words)
-   - Position (bottom / center / animated)
-
-6. AVATAR/SPEAKER PROFILE:
-   - Apparent age, gender, ethnicity
-   - Clothing style
-   - Tone/delivery (energetic / calm / authoritative / vulnerable)
-
-7. KEY STYLISTIC SIGNATURES — what makes this ad feel like a winning UGC ad
-   vs a polished commercial? (e.g. slightly handheld, imperfect framing,
-   real-home backgrounds, natural lighting, no overproduction)
-
-Return as plain English text with clear section headers. Be specific and
-concrete — describe actual visuals, not generic terms. Target output:
-500-1500 words.`
-
-      const result = await directGeminiVision({
-        apiKey: geminiApiKey,
-        parts: [
-          { fileData: { fileUri, mimeType } },   // referenced via Files API (no inline data)
-          { text: analysisPrompt },
-        ],
-        model: 'gemini-2.5-pro',
-        maxOutputTokens: 8192,
-      })
-
-      setRefVideoAnalysis(result.trim())
-      addToast('✓ Đã phân tích video mẫu — style sẽ được apply vào storyboard')
-    } catch (err) {
-      console.error('[analyzeRefVideo] failed:', err)
-      addToast(`Phân tích thất bại: ${err instanceof Error ? err.message.slice(0, 80) : 'unknown'}`, 'error')
-    } finally {
-      setAnalyzingRefVideo(false)
+    const template = adTemplates.find((t) => t.id === templateId)
+    if (template) {
+      setRefVideoAnalysis(template.analysisText)
+      setRefVideoName(template.name)
+      addToast(`✓ Đã chọn Mẫu ADS Win "${template.name}"`)
     }
   }
 
@@ -2372,84 +2275,48 @@ MOTION: Gentle cinematic camera motion only — slow push-in on key detail, or s
             />
           </div>
 
-          {/* ─── Video mẫu (tùy chọn) ─── */}
+          {/* ─── Mẫu ADS Win đã lưu (replaces upload feature) ─── */}
           <div>
-            <SectionLabel icon={Film}>Video ads mẫu — tham khảo style (tùy chọn)</SectionLabel>
+            <SectionLabel icon={Film}>Mẫu ADS Win đã lưu (tùy chọn)</SectionLabel>
 
-            {!refVideoFile && (
-              <button
-                type="button"
-                onClick={() => !isBuilding && refVideoInputRef.current?.click()}
-                disabled={isBuilding}
-                className="flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-violet-200 bg-violet-50/40 py-3 text-xs font-medium text-violet-600 transition-colors hover:border-violet-300 hover:bg-violet-50 disabled:opacity-40"
-              >
-                <Upload className="h-3.5 w-3.5" />
-                Upload video ad win (MP4 · ≤50MB)
-              </button>
-            )}
+            {adTemplates.length === 0 ? (
+              <div className="rounded-xl border border-dashed border-violet-200 bg-violet-50/30 px-3 py-4 text-center">
+                <p className="text-xs text-violet-600">Chưa có Mẫu ADS Win nào</p>
+                <p className="mt-1 text-[10px] text-violet-500">
+                  Vào <strong>Phân tích QC</strong> → upload video ad win → click <strong>"Lưu thành Mẫu ADS Win"</strong>
+                </p>
+              </div>
+            ) : (
+              <>
+                <select
+                  value={selectedTemplateId}
+                  onChange={(e) => handleSelectTemplate(e.target.value)}
+                  disabled={isBuilding}
+                  className="w-full rounded-xl border border-black/10 bg-white px-3 py-2.5 text-sm text-gray-800 outline-none transition-colors focus:border-violet-300 disabled:opacity-50"
+                >
+                  <option value="">-- Không dùng template --</option>
+                  {adTemplates.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.name}{t.videoFileName ? ` (${t.videoFileName.slice(0, 30)})` : ''}
+                    </option>
+                  ))}
+                </select>
 
-            {refVideoFile && (
-              <div className="rounded-xl border border-violet-200 bg-violet-50/60 p-3">
-                <div className="flex items-start gap-2">
-                  <Film className="mt-0.5 h-4 w-4 shrink-0 text-violet-500" />
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-xs font-semibold text-violet-800">{refVideoName}</p>
-                    <p className="text-[10px] text-violet-600">
-                      {(refVideoFile.size / (1024 * 1024)).toFixed(1)} MB · {refVideoFile.type}
-                    </p>
-                  </div>
-                  <button
-                    onClick={() => { setRefVideoFile(null); setRefVideoName(''); setRefVideoAnalysis(null) }}
-                    disabled={isBuilding || analyzingRefVideo}
-                    className="flex h-6 w-6 items-center justify-center rounded-md text-gray-400 hover:bg-red-50 hover:text-red-500 disabled:opacity-40"
-                    title="Bỏ video mẫu"
-                  >
-                    <X className="h-3.5 w-3.5" />
-                  </button>
-                </div>
-
-                {!refVideoAnalysis ? (
-                  <button
-                    onClick={analyzeRefVideo}
-                    disabled={analyzingRefVideo || isBuilding || !geminiApiKey}
-                    className="mt-2 flex w-full items-center justify-center gap-1.5 rounded-lg bg-violet-600 px-3 py-1.5 text-xs font-bold text-white shadow-sm transition-colors hover:bg-violet-700 disabled:opacity-40"
-                  >
-                    {analyzingRefVideo ? (
-                      <><Loader2 className="h-3 w-3 animate-spin" />Đang phân tích bằng Gemini Pro Vision (~30s-1ph)...</>
-                    ) : (
-                      <><Sparkles className="h-3 w-3" />Phân tích style video</>
-                    )}
-                  </button>
-                ) : (
+                {refVideoAnalysis && (
                   <details className="mt-2 rounded-md border border-emerald-200 bg-emerald-50/60 p-2 text-[10px]">
                     <summary className="cursor-pointer font-semibold text-emerald-700">
-                      ✓ Đã phân tích — click để xem chi tiết style (sẽ apply vào storyboard)
+                      ✓ Đang dùng "{refVideoName}" — click để xem analysis sẽ inject vào storyboard
                     </summary>
                     <pre className="mt-2 max-h-48 overflow-y-auto whitespace-pre-wrap text-[9px] leading-relaxed text-gray-700">
                       {refVideoAnalysis}
                     </pre>
-                    <button
-                      onClick={analyzeRefVideo}
-                      disabled={analyzingRefVideo}
-                      className="mt-2 text-[10px] font-semibold text-violet-600 hover:underline"
-                    >
-                      Phân tích lại
-                    </button>
                   </details>
                 )}
-              </div>
+              </>
             )}
 
-            <input
-              ref={refVideoInputRef}
-              type="file"
-              accept="video/mp4,video/quicktime,video/webm,video/mpeg"
-              className="hidden"
-              onChange={handleRefVideoUpload}
-            />
-
             <p className="mt-1.5 text-[10px] text-gray-400">
-              Up video UGC ad đã win (English/Việt/Malay đều được). AI sẽ phân tích style + composition + pacing → áp dụng vào storyboard cho video Malaysia bạn build.
+              Chọn 1 Mẫu ADS Win đã phân tích trước. AI sẽ đọc style + composition + pacing → áp dụng vào storyboard cho video Malaysia bạn build.
             </p>
           </div>
 

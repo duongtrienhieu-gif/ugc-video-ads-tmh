@@ -15,10 +15,53 @@ import {
   Film,
   Save,
   Loader2,
+  Bookmark,
 } from 'lucide-react'
 import type { AnalysisResult } from '../types'
 import { useAppStore } from '../../../stores/appStore'
 import { useBankStore } from '../../../stores/bankStore'
+import { useAdTemplateStore } from '../../../stores/adTemplateStore'
+
+/**
+ * Convert an AnalysisResult into a single text block suitable for injecting
+ * into the UGC Builder's storyboard prompt as a "winning ad reference".
+ * Combines the reconstructionPrompt (full AI directive), the structure beats,
+ * and a brief visual playbook into one consolidated reference document.
+ */
+function analysisToPromptText(result: AnalysisResult): string {
+  const parts: string[] = []
+
+  parts.push('═══════════════════════════════════════════════════════════════')
+  parts.push('WINNING UGC AD ANALYSIS — STYLE / STRUCTURE / PACING REFERENCE')
+  parts.push('═══════════════════════════════════════════════════════════════\n')
+
+  parts.push('## TRANSCRIPT WITH TIMING')
+  result.transcript.forEach((line) => {
+    parts.push(`${line.timestamp} ${line.text}`)
+  })
+
+  parts.push('\n## STRUCTURE / BEATS')
+  result.structureMap.beats?.forEach((beat) => {
+    parts.push(`- ${beat.timestamp}  ${beat.beat}: ${beat.description}`)
+  })
+
+  if (result.psychology?.primaryLevers?.length) {
+    parts.push('\n## PSYCHOLOGY / PERSUASION LEVERS')
+    result.psychology.primaryLevers.forEach((p) => parts.push(`- ${p}`))
+  }
+
+  if (result.visualPlaybook?.length) {
+    parts.push('\n## VISUAL PLAYBOOK (per-shot composition)')
+    result.visualPlaybook.slice(0, 10).forEach((v, i) => {
+      parts.push(`Shot ${i + 1} (${v.timestamp}):  ${v.description}`)
+    })
+  }
+
+  parts.push('\n## AI RECONSTRUCTION PROMPT')
+  parts.push(result.reconstructionPrompt)
+
+  return parts.join('\n')
+}
 
 interface ResultsViewProps {
   result: AnalysisResult
@@ -406,6 +449,24 @@ function Pill({ label, value }: { label: string; value: string }) {
 
 /* ─── Main ResultsView ─── */
 export default function ResultsView({ result, videoSrc, fileName, onReset }: ResultsViewProps) {
+  const [savingTemplate, setSavingTemplate] = useState(false)
+  const [templateName, setTemplateName] = useState(fileName.replace(/\.[^.]+$/, '') || 'Ad Win Template')
+  const [saved, setSaved] = useState(false)
+  const addTemplate = useAdTemplateStore((s) => s.addTemplate)
+  const addToast = useAppStore((s) => s.addToast)
+
+  const handleSaveTemplate = () => {
+    const trimmed = templateName.trim()
+    if (!trimmed) { addToast('Đặt tên cho template', 'error'); return }
+    const analysisText = analysisToPromptText(result)
+    const transcript = result.transcript.map((l) => `${l.timestamp} ${l.text}`).join('\n')
+    addTemplate(trimmed, analysisText, { videoFileName: fileName, sourceTranscript: transcript })
+    setSaved(true)
+    setSavingTemplate(false)
+    addToast(`✓ Đã lưu Mẫu ADS Win "${trimmed}" — dùng trong UGC Builder`)
+    setTimeout(() => setSaved(false), 3000)
+  }
+
   return (
     <div className="flex flex-col lg:flex-row h-full overflow-hidden">
       {/* Left column — pinned video */}
@@ -428,6 +489,52 @@ export default function ResultsView({ result, videoSrc, fileName, onReset }: Res
           <Film className="h-3.5 w-3.5 shrink-0 text-gray-400" />
           <span className="truncate text-xs text-gray-500">{fileName}</span>
         </div>
+
+        {/* Save as Ad Win Template */}
+        {!savingTemplate ? (
+          <button
+            onClick={() => setSavingTemplate(true)}
+            disabled={saved}
+            className="flex shrink-0 items-center justify-center gap-2 rounded-full border border-violet-500/30 bg-violet-500/10 px-4 py-2.5 text-sm font-medium text-violet-600 transition-colors hover:bg-violet-500/20 disabled:opacity-60"
+          >
+            {saved ? (
+              <><Check className="h-3.5 w-3.5" />Đã lưu Mẫu ADS Win</>
+            ) : (
+              <><Bookmark className="h-3.5 w-3.5" />Lưu thành Mẫu ADS Win</>
+            )}
+          </button>
+        ) : (
+          <div className="shrink-0 rounded-xl border border-violet-300 bg-violet-50 p-3 space-y-2">
+            <label className="text-[10px] font-bold uppercase tracking-wide text-violet-700">
+              Đặt tên cho Mẫu ADS Win
+            </label>
+            <input
+              value={templateName}
+              onChange={(e) => setTemplateName(e.target.value)}
+              placeholder="VD: BPC-157 Win Format, INFINITY style..."
+              autoFocus
+              className="w-full rounded-md border border-violet-200 bg-white px-2 py-1.5 text-xs text-gray-800 outline-none focus:border-violet-400"
+            />
+            <div className="flex gap-2">
+              <button
+                onClick={handleSaveTemplate}
+                className="flex flex-1 items-center justify-center gap-1 rounded-md bg-violet-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-violet-700"
+              >
+                <Save className="h-3 w-3" /> Lưu
+              </button>
+              <button
+                onClick={() => setSavingTemplate(false)}
+                className="rounded-md border border-black/10 bg-white px-3 py-1.5 text-xs text-gray-600 hover:bg-gray-50"
+              >
+                Hủy
+              </button>
+            </div>
+            <p className="text-[10px] text-violet-600">
+              Template sẽ dùng được trong UGC Builder — AI đọc analysis này để tạo storyboard cùng style.
+            </p>
+          </div>
+        )}
+
         <button
           onClick={onReset}
           className="flex shrink-0 items-center justify-center gap-2 rounded-full border border-[#FB2B37]/20 bg-[#FB2B37]/10 px-4 py-2.5 text-sm font-medium text-[#FB2B37] transition-colors hover:bg-[#FB2B37]/20"
