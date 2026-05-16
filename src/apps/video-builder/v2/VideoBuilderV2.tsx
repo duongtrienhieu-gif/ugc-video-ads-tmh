@@ -120,14 +120,41 @@ export default function VideoBuilderV2({ onSwitchToV1 }: Props) {
   const [isGeneratingStoryboard, setIsGeneratingStoryboard] = useState(false)
   /** Module 4 QC state — when ON, master frame gen runs the QC loop with auto-retry */
   const [qcEnabled, setQcEnabled] = useState(true)
-  const [qcProgress, setQcProgress] = useState<{ attempt: number; status: string } | null>(null)
+  const [qcProgress, setQcProgress] = useState<{ attempt: number; status: string; elapsedSec?: number } | null>(null)
   const cancelledRef = useRef(false)
+  /** Wallclock when current Master Frame gen started — used to show "stuck N s" warning */
+  const genStartRef = useRef<number | null>(null)
 
   const kieApiKey = useSettingsStore((s) => s.kieApiKey)
   const geminiApiKey = useSettingsStore((s) => s.geminiApiKey)
   const addToast = useAppStore((s) => s.addToast)
 
   useEffect(() => () => { cancelledRef.current = true }, [])
+
+  // Tick the elapsed-seconds counter every second while generating, so user sees
+  // "stuck for 45s" rather than just a spinner with no time info.
+  useEffect(() => {
+    if (!state.masterFrame.isGenerating || !genStartRef.current) return
+    const id = setInterval(() => {
+      if (!genStartRef.current) return
+      const elapsedSec = Math.round((Date.now() - genStartRef.current) / 1000)
+      setQcProgress((prev) => prev ? { ...prev, elapsedSec } : { attempt: 1, status: 'Đang xử lý...', elapsedSec })
+    }, 1000)
+    return () => clearInterval(id)
+  }, [state.masterFrame.isGenerating])
+
+  const handleCancelGen = () => {
+    cancelledRef.current = true
+    genStartRef.current = null
+    setState((s) => ({
+      ...s,
+      masterFrame: { ...s.masterFrame, isGenerating: false, error: 'Đã hủy bởi user' },
+    }))
+    setQcProgress(null)
+    addToast('Đã hủy task. KIE backend có thể vẫn xử lý — bạn không bị trừ thêm credit cho task bị bỏ.', 'info')
+    // Reset cancellation flag after a beat so subsequent gens work
+    setTimeout(() => { cancelledRef.current = false }, 100)
+  }
 
   // ── Module 5: Consistency slider handler ──────────────────────────────────
   // Updating strength recomputes the entire ConsistencyConfig (threshold + retries)
@@ -198,6 +225,7 @@ export default function VideoBuilderV2({ onSwitchToV1 }: Props) {
       masterFrame: { ...s.masterFrame, isGenerating: true, error: null },
     }))
     setQcProgress(null)
+    genStartRef.current = Date.now()
 
     try {
       let frame: MasterFrame
@@ -250,6 +278,7 @@ export default function VideoBuilderV2({ onSwitchToV1 }: Props) {
         },
       }))
       setQcProgress(null)
+      genStartRef.current = null
 
       // Toast message reflects QC outcome
       if (frame.qc?.passed) {
@@ -266,7 +295,10 @@ export default function VideoBuilderV2({ onSwitchToV1 }: Props) {
         masterFrame: { ...s.masterFrame, isGenerating: false, error: msg.slice(0, 200) },
       }))
       setQcProgress(null)
-      addToast(`Tạo Master Frame thất bại: ${msg.slice(0, 100)}`, 'error')
+      genStartRef.current = null
+      if (!msg.includes('CANCELLED')) {
+        addToast(`Tạo Master Frame thất bại: ${msg.slice(0, 100)}`, 'error')
+      }
     }
   }
 
@@ -477,6 +509,7 @@ export default function VideoBuilderV2({ onSwitchToV1 }: Props) {
             qcEnabled={qcEnabled}
             onQcEnabledChange={setQcEnabled}
             qcProgress={qcProgress}
+            onCancel={handleCancelGen}
             consistencyStrength={state.consistency.strength}
             onConsistencyChange={handleStrengthChange}
           />

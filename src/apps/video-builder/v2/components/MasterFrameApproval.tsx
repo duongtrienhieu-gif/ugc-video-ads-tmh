@@ -27,7 +27,9 @@ interface Props {
   qcEnabled: boolean
   onQcEnabledChange: (enabled: boolean) => void
   /** Optional progress message from inside the QC loop (e.g. "đang tạo lại để khớp sản phẩm...") */
-  qcProgress?: { attempt: number; status: string } | null
+  qcProgress?: { attempt: number; status: string; elapsedSec?: number } | null
+  /** Cancel the in-flight gen */
+  onCancel: () => void
   /** Module 5: consistency strength + handler */
   consistencyStrength: number
   onConsistencyChange: (strength: number) => void
@@ -93,7 +95,7 @@ function CandidateTile({
 
 export default function MasterFrameApproval({
   state, identity, onGenerateMore, onApprove, onReject, onContinue,
-  qcEnabled, onQcEnabledChange, qcProgress,
+  qcEnabled, onQcEnabledChange, qcProgress, onCancel,
   consistencyStrength, onConsistencyChange,
 }: Props) {
   const hasApproved = state.approvedIdx >= 0
@@ -161,17 +163,33 @@ export default function MasterFrameApproval({
 
       {/* Body */}
       <div className="flex-1 overflow-y-auto p-6">
-        {/* Empty/first-gen state — show QC progress if active */}
+        {/* Empty/first-gen state — show QC progress + elapsed + cancel */}
         {isFirstGen && (
           <div className="flex h-full flex-col items-center justify-center gap-3 text-center">
             <Loader2 className="h-10 w-10 animate-spin text-violet-500" />
             <p className="text-sm font-semibold text-gray-700">
               {qcProgress?.status ?? 'Đang tạo Master Frame...'}
             </p>
+            {qcProgress?.elapsedSec !== undefined && (
+              <p className={`tabular-nums text-xs font-bold ${qcProgress.elapsedSec > 90 ? 'text-red-600' : qcProgress.elapsedSec > 60 ? 'text-amber-600' : 'text-gray-500'}`}>
+                {qcProgress.elapsedSec}s
+                {qcProgress.elapsedSec > 90 && ' — có thể bị stuck queue KIE, thử hủy + retry'}
+                {qcProgress.elapsedSec <= 90 && qcProgress.elapsedSec > 60 && ' — gen lâu hơn bình thường'}
+              </p>
+            )}
             <p className="max-w-md text-xs text-gray-500">
               {qcEnabled
                 ? 'AI sẽ tự kiểm tra & tạo lại nếu sai sản phẩm/khuôn mặt. Mỗi lần ~30-60s, có thể chạy tối đa 4 lần.'
                 : 'AI đang ghép avatar + sản phẩm thành 1 ảnh chuẩn. Bước này mất ~30-60 giây.'}
+            </p>
+            <button
+              onClick={onCancel}
+              className="mt-2 flex items-center gap-1.5 rounded-lg border border-red-300 bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-700 transition-colors hover:bg-red-100"
+            >
+              <AlertCircle className="h-3.5 w-3.5" /> Hủy task này
+            </button>
+            <p className="text-[10px] text-gray-400">
+              Mở DevTools (F12) → Console xem log <code className="rounded bg-black/[0.05] px-1">[gpt4o-poll]</code> để debug status thật từ KIE.
             </p>
           </div>
         )}

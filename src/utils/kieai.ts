@@ -96,33 +96,53 @@ export async function getGpt4oImageStatus(params: {
   }
 }
 
-/** Poll until the GPT-4o image task is done. Returns the result URL. */
+/** Poll until the GPT-4o image task is done. Returns the result URL.
+ *  Logs each status change to console for diagnostics on stuck generations. */
 export async function pollGpt4oUntilDone(params: {
   apiKey: string
   taskId: string
   onStatusChange?: (status: ImageStatus, progress?: number) => void
   timeoutMs?: number
+  /** Set this to true to abort the polling loop early (e.g. user clicked Cancel) */
+  signal?: AbortSignal
 }): Promise<string> {
   const timeout = params.timeoutMs ?? 4 * 60 * 1000
   const start = Date.now()
   let lastStatus = ''
+  let pollCount = 0
+
+  console.log(`[gpt4o-poll] start task=${params.taskId.slice(0, 12)}... timeout=${Math.round(timeout / 1000)}s`)
 
   while (Date.now() - start < timeout) {
+    if (params.signal?.aborted) {
+      throw new Error('CANCELLED — user hủy task')
+    }
     await new Promise<void>((r) => setTimeout(r, 3000))
+    pollCount++
     const s = await getGpt4oImageStatus({ apiKey: params.apiKey, taskId: params.taskId })
+    const elapsedSec = Math.round((Date.now() - start) / 1000)
+
     if (s.status !== lastStatus) {
+      console.log(`[gpt4o-poll] +${elapsedSec}s status=${s.status} progress=${s.progress ?? '-'} (poll #${pollCount})`)
       lastStatus = s.status
       params.onStatusChange?.(s.status, s.progress)
+    } else if (pollCount % 10 === 0) {
+      // Heartbeat every ~30s even if status hasn't changed — useful for stuck-queue detection
+      console.log(`[gpt4o-poll] +${elapsedSec}s still ${s.status} progress=${s.progress ?? '-'} (poll #${pollCount})`)
     }
+
     if (s.status === 'completed') {
       if (!s.imageUrl) throw new Error('GPT-4o completed nhưng không trả về imageUrl')
+      console.log(`[gpt4o-poll] DONE in ${elapsedSec}s, url=${s.imageUrl.slice(0, 80)}`)
       return s.imageUrl
     }
     if (s.status === 'failed') {
+      console.error(`[gpt4o-poll] FAILED in ${elapsedSec}s: ${s.error}`)
       throw new Error(s.error ?? 'GPT-4o gen thất bại')
     }
   }
-  throw new Error('TIMEOUT — GPT-4o quá 4 phút chưa xong')
+  console.error(`[gpt4o-poll] TIMEOUT after ${Math.round(timeout / 1000)}s — task có thể bị stuck trong queue KIE`)
+  throw new Error(`TIMEOUT — KIE GPT-4o quá ${Math.round(timeout / 60000)} phút chưa xong (task có thể bị stuck queue — refresh + thử lại)`)
 }
 
 /** All-in-one: submit + poll + return final image URL. */
@@ -133,7 +153,9 @@ export async function generateGpt4oImage(params: {
   size: Gpt4oSize
   onStatusChange?: (status: ImageStatus, progress?: number) => void
   timeoutMs?: number
+  signal?: AbortSignal
 }): Promise<string> {
+  console.log(`[gpt4o-gen] submit prompt=${params.prompt.length} chars · refs=${params.filesUrl?.length ?? 0} · size=${params.size}`)
   const { taskId } = await submitGpt4oImage({
     apiKey: params.apiKey,
     prompt: params.prompt,
@@ -145,6 +167,7 @@ export async function generateGpt4oImage(params: {
     taskId,
     onStatusChange: params.onStatusChange,
     timeoutMs: params.timeoutMs,
+    signal: params.signal,
   })
 }
 
