@@ -54,7 +54,6 @@ export default function CharacterStudio() {
   const productInputRef = useRef<HTMLInputElement>(null)
 
   const addModel = useBankStore((s) => s.addModel)
-  const models = useBankStore((s) => s.models)
 
   const interAppPayload = useAppStore((s) => s.interAppPayload)
   const consumePayload = useAppStore((s) => s.consumePayload)

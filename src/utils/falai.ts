@@ -206,11 +206,6 @@ export async function pollLatentSyncUntilDone(params: {
 //
 // Pricing: ~$0.06/image at 9:16.
 
-interface FalImageResult {
-  images?: Array<{ url: string; content_type?: string; width?: number; height?: number }>
-  error?: string
-}
-
 interface FalFluxUltraResult {
   images?: Array<{ url: string; content_type?: string; width?: number; height?: number }>
   seed?: number
