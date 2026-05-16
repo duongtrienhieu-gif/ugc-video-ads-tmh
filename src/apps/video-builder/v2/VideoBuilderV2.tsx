@@ -526,6 +526,67 @@ export default function VideoBuilderV2({ onSwitchToV1 }: Props) {
   const handleApproveScene = (idx: number) => patchSceneItem(idx, { status: 'approved' })
   const handleRejectScene  = (idx: number) => patchSceneItem(idx, { status: 'rejected' })
 
+  // ── Video Gen (Kling 3.0) handlers ────────────────────────────────────
+  const videoJob = useVideoGenJobStore((s) => s.job)
+  const createVideoQueue = useVideoGenJobStore((s) => s.createQueue)
+  const videoCancelRef = useRef<AbortController | null>(null)
+
+  /** Map sceneId → SceneBlueprint so the runner can compile per-clip prompts. */
+  const blueprintBySceneId = new Map<number, SceneBlueprint>(
+    state.blueprints.map((b) => [b.sceneId, b]),
+  )
+
+  const handleStartVideoQueue = async () => {
+    if (!sceneJob || !kieApiKey) return
+    // Only animate APPROVED scenes — rejected / failed are skipped
+    const approvedScenes = sceneJob.items
+      .filter((it) => it.status === 'approved' && it.imageUrl)
+      .map((it) => ({ sceneId: it.sceneId, keyframeRef: it.imageUrl! }))
+
+    if (approvedScenes.length === 0) {
+      addToast('Chưa có cảnh nào được duyệt — quay lại Gen B-Roll duyệt trước', 'error')
+      return
+    }
+
+    // Build + persist a fresh job, then jump to the video-gen phase
+    const job = buildVideoQueueFromScenes(approvedScenes, { durationSec: 5 })
+    createVideoQueue(job)
+    setState((s) => ({ ...s, phase: 'video-gen' }))
+
+    // Run the queue (2 workers). AbortController lets the Cancel button stop.
+    const ctrl = new AbortController()
+    videoCancelRef.current = ctrl
+    try {
+      await runVideoQueue({
+        apiKey: kieApiKey,
+        blueprintBySceneId,
+        concurrency: 2,
+        signal: ctrl.signal,
+      })
+      addToast('✓ Đã sinh xong toàn bộ video clips')
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      addToast(`Sinh video lỗi: ${msg}`, 'error')
+    } finally {
+      videoCancelRef.current = null
+    }
+  }
+
+  const handleRetryVideoClip = async (idx: number) => {
+    if (!kieApiKey) return
+    try {
+      await retrySingleVideoClip(idx, kieApiKey, blueprintBySceneId)
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      addToast(`Sinh lại clip lỗi: ${msg}`, 'error')
+    }
+  }
+
+  const handleCancelVideoQueue = () => {
+    videoCancelRef.current?.abort()
+    useVideoGenJobStore.getState().setQueueState({ isRunning: false, isPaused: true })
+  }
+
   const canStart = !!state.inputs.avatar && !!state.inputs.product && !!state.inputs.script.trim()
 
   // ── Render by phase ───────────────────────────────────────────────────────
@@ -711,11 +772,46 @@ export default function VideoBuilderV2({ onSwitchToV1 }: Props) {
 
         {/* PHASE: SCENE-GEN — Module 7 — real sequential img2img queue */}
         {state.phase === 'scene-gen' && (
-          <SceneGenGrid
-            onRegenerate={handleRegenScene}
-            onApprove={handleApproveScene}
-            onReject={handleRejectScene}
-            onCancelQueue={cancelSceneGenQueue}
+          <div className="flex h-full flex-col">
+            <div className="flex-1 overflow-hidden">
+              <SceneGenGrid
+                onRegenerate={handleRegenScene}
+                onApprove={handleApproveScene}
+                onReject={handleRejectScene}
+                onCancelQueue={cancelSceneGenQueue}
+              />
+            </div>
+            {/* "Sinh video" CTA — appears once at least 1 scene is approved */}
+            {sceneJob && sceneJob.items.some((it) => it.status === 'approved' && it.imageUrl) && (
+              <div className="shrink-0 border-t border-black/8 bg-gradient-to-r from-violet-50 to-pink-50 px-6 py-3">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="text-sm font-bold text-gray-900">
+                      🎬 Bước tiếp theo: Sinh video clip cho {sceneJob.items.filter((i) => i.status === 'approved' && i.imageUrl).length} cảnh đã duyệt
+                    </p>
+                    <p className="text-[11px] text-gray-500">
+                      Kling 3.0 std / KIE · ~70 credit/clip · 5s mỗi clip · 2 worker song song · motion + camera bám blueprint
+                    </p>
+                  </div>
+                  <button
+                    onClick={handleStartVideoQueue}
+                    disabled={!kieApiKey || (videoJob?.isRunning ?? false)}
+                    className="flex items-center gap-2 rounded-full bg-gradient-to-r from-violet-600 to-pink-600 px-5 py-2 text-sm font-bold text-white shadow-md transition-colors hover:from-violet-700 hover:to-pink-700 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    🎬 Sinh {sceneJob.items.filter((i) => i.status === 'approved' && i.imageUrl).length} video clip
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* PHASE: VIDEO-GEN — image-to-video via Kling 3.0 std */}
+        {state.phase === 'video-gen' && (
+          <VideoGenGrid
+            blueprintBySceneId={blueprintBySceneId}
+            onRetry={handleRetryVideoClip}
+            onCancelQueue={handleCancelVideoQueue}
           />
         )}
       </div>

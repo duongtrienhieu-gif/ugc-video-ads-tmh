@@ -14,7 +14,7 @@
 //   5. Hook subscribes via subscribe(persistKey, fn) → cleanup on unmount.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { MODULE_REGISTRY, scanForPendingSessions, clearEnvelope } from './registry'
+import { MODULE_REGISTRY, scanForPendingSessions, clearEnvelope, getBridgeByKey } from './registry'
 
 type Decision = 'pending' | 'accept' | 'discard'
 
@@ -51,7 +51,13 @@ class RestoreCoordinator {
   /** User chose "Bỏ" for this session. */
   discard(persistKey: string): void {
     this.decisions.set(persistKey, 'discard')
-    clearEnvelope(persistKey)
+    // External bridge (e.g. v2 job stores) has its own discard hook
+    const bridge = getBridgeByKey(persistKey)
+    if (bridge) {
+      bridge.discard()
+    } else {
+      clearEnvelope(persistKey)
+    }
     this.notify(persistKey, 'discard')
   }
 

@@ -103,7 +103,6 @@ export default function VideoGenGrid({ blueprintBySceneId, onRetry, onCancelQueu
             <VideoCard
               key={item.sceneId}
               item={item}
-              idx={idx}
               blueprint={blueprintBySceneId.get(item.sceneId)}
               onRetry={() => onRetry(idx)}
             />
@@ -117,10 +116,9 @@ export default function VideoGenGrid({ blueprintBySceneId, onRetry, onCancelQueu
 // ─────────────────────────────────────────────────────────────────────────
 
 function VideoCard({
-  item, idx, blueprint, onRetry,
+  item, blueprint, onRetry,
 }: {
   item: VideoGenItem
-  idx: number
   blueprint: SceneBlueprint | undefined
   onRetry: () => void
 }) {

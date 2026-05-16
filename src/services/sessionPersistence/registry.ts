@@ -138,13 +138,174 @@ export function scanForPendingSessions(): SessionMeta[] {
     })
   }
 
+  // External bridges (v2 video-builder jobs, etc.)
+  for (const bridge of EXTERNAL_BRIDGES) {
+    const meta = bridge.scan()
+    if (meta) results.push(meta)
+  }
+
   // Most recently updated first
   results.sort((a, b) => b.updatedAt - a.updatedAt)
   return results
 }
 
+// ── External Job Bridges (R5+) ───────────────────────────────────────────────
+// Some modules (notably video-builder v2) already have their own async-job
+// stores with bespoke localStorage + tryResumeFromStorage logic. Rather than
+// refactor those, we bridge their raw job blobs into the unified modal.
+//
+// Each bridge:
+//   - Has its own localStorage key + raw shape (no envelope wrapper)
+//   - Provides a `scan()` returning SessionMeta if a non-terminal job exists
+//   - Provides `discard()` to wipe the key (when user clicks [Bỏ])
+//
+// On [Khôi phục], the bridge does NOTHING extra — when the user navigates to
+// the module, its existing tryResumeFromStorage picks the data back up.
+
+export interface ExternalJobBridge {
+  /** Module id this bridge belongs to (used for "Khôi phục" navigation). */
+  moduleId: string
+  /** Display name for the modal. */
+  moduleNameVi: string
+  /** localStorage key holding the raw job blob. */
+  persistKey: string
+  /** Read localStorage + return modal metadata, or null if no pending job. */
+  scan(): SessionMeta | null
+  /** User chose [Bỏ] — remove the underlying data. */
+  discard(): void
+}
+
+/** Inspect a raw v2 master-frame job blob and decide if it's pending. */
+function scanMasterFrameJob(): SessionMeta | null {
+  const KEY = 'ugc-lab-v2-master-frame-job'
+  const MAX_AGE = 12 * 60 * 1000 // 12 minutes — matches store's MAX_JOB_AGE_MS
+  try {
+    const raw = localStorage.getItem(KEY)
+    if (!raw) return null
+    const job = JSON.parse(raw) as {
+      status?: string
+      createdAt?: number
+      updatedAt?: number
+      statusVi?: string
+      inputs?: { productName?: string }
+      progress?: number
+    }
+    if (!job?.status || typeof job.createdAt !== 'number') return null
+    if (Date.now() - job.createdAt > MAX_AGE) {
+      localStorage.removeItem(KEY)
+      return null
+    }
+    const isTerminal = job.status === 'completed' || job.status === 'failed' || job.status === 'cancelled'
+    if (isTerminal) return null
+    return {
+      moduleId: 'video-builder',
+      moduleNameVi: 'UGC Builder — Master Frame',
+      status: 'in-progress',
+      startedAt: job.createdAt,
+      updatedAt: job.updatedAt ?? job.createdAt,
+      progressVi: `${job.statusVi ?? 'Đang xử lý'} (${job.progress ?? 0}%)`,
+      titleVi: job.inputs?.productName,
+      persistKey: KEY,
+    }
+  } catch {
+    return null
+  }
+}
+
+function scanSceneGenJob(): SessionMeta | null {
+  const KEY = 'ugc-lab-v2-scene-gen-job'
+  try {
+    const raw = localStorage.getItem(KEY)
+    if (!raw) return null
+    const job = JSON.parse(raw) as {
+      status?: string
+      startedAt?: number
+      items?: Array<{ status?: string }>
+      productName?: string
+    }
+    if (!job?.status || !Array.isArray(job.items)) return null
+    const isTerminal = job.status === 'completed' || job.status === 'failed' || job.status === 'cancelled'
+    if (isTerminal) return null
+    const approved = job.items.filter((i) => i?.status === 'approved').length
+    return {
+      moduleId: 'video-builder',
+      moduleNameVi: 'UGC Builder — B-Roll Queue',
+      status: 'in-progress',
+      startedAt: job.startedAt ?? Date.now(),
+      updatedAt: job.startedAt ?? Date.now(),
+      progressVi: `${approved}/${job.items.length} cảnh đã duyệt`,
+      titleVi: job.productName,
+      persistKey: KEY,
+    }
+  } catch {
+    return null
+  }
+}
+
+function scanVideoGenJob(): SessionMeta | null {
+  const KEY = 'ugc-lab-v2-video-gen-job'
+  try {
+    const raw = localStorage.getItem(KEY)
+    if (!raw) return null
+    const job = JSON.parse(raw) as {
+      status?: string
+      startedAt?: number
+      items?: Array<{ status?: string }>
+    }
+    if (!job?.status || !Array.isArray(job.items)) return null
+    const isTerminal = job.status === 'completed' || job.status === 'failed' || job.status === 'cancelled'
+    if (isTerminal) return null
+    const done = job.items.filter((i) => i?.status === 'completed' || i?.status === 'approved').length
+    return {
+      moduleId: 'video-builder',
+      moduleNameVi: 'UGC Builder — Video Render',
+      status: 'in-progress',
+      startedAt: job.startedAt ?? Date.now(),
+      updatedAt: job.startedAt ?? Date.now(),
+      progressVi: `${done}/${job.items.length} video clip render xong`,
+      persistKey: KEY,
+    }
+  } catch {
+    return null
+  }
+}
+
+export const EXTERNAL_BRIDGES: ExternalJobBridge[] = [
+  {
+    moduleId: 'video-builder',
+    moduleNameVi: 'UGC Builder — Master Frame',
+    persistKey: 'ugc-lab-v2-master-frame-job',
+    scan: scanMasterFrameJob,
+    discard: () => { try { localStorage.removeItem('ugc-lab-v2-master-frame-job') } catch {/* ignore */} },
+  },
+  {
+    moduleId: 'video-builder',
+    moduleNameVi: 'UGC Builder — B-Roll Queue',
+    persistKey: 'ugc-lab-v2-scene-gen-job',
+    scan: scanSceneGenJob,
+    discard: () => { try { localStorage.removeItem('ugc-lab-v2-scene-gen-job') } catch {/* ignore */} },
+  },
+  {
+    moduleId: 'video-builder',
+    moduleNameVi: 'UGC Builder — Video Render',
+    persistKey: 'ugc-lab-v2-video-gen-job',
+    scan: scanVideoGenJob,
+    discard: () => { try { localStorage.removeItem('ugc-lab-v2-video-gen-job') } catch {/* ignore */} },
+  },
+]
+
+/** Get external bridge by persistKey — used by modal's per-session discard. */
+export function getBridgeByKey(persistKey: string): ExternalJobBridge | null {
+  return EXTERNAL_BRIDGES.find((b) => b.persistKey === persistKey) ?? null
+}
+
 /** Discard a single session — used when user clicks [Bỏ] on one item. */
 export function discardSession(persistKey: string): void {
+  const bridge = getBridgeByKey(persistKey)
+  if (bridge) {
+    bridge.discard()
+    return
+  }
   clearEnvelope(persistKey)
 }
 
