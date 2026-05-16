@@ -17,7 +17,7 @@
 
 import { directGeminiVision } from '../../../../utils/gemini'
 import type { IdentityPack, SceneBlueprint, SceneType, ShotEnergy, VisualStyleDna, DiversityReport } from '../types'
-import { SCENE_PRESETS, DEFAULT_PRESET_ROTATION, VISUAL_TONE_CLAMP, getPreset } from './scenePresets'
+import { SCENE_PRESETS, DEFAULT_PRESET_ROTATION, VISUAL_TONE_CLAMP, getPreset, inferPresetForScene } from './scenePresets'
 import { safeParseJson, logJsonFailure } from './jsonResilience'
 
 // ── Gemini storyboard prompt builder ─────────────────────────────────────────
@@ -665,6 +665,24 @@ ${normalPrompt}`
   if (blueprints.length > 0 && !blueprints.some((b) => b.ctaFocus)) {
     blueprints[blueprints.length - 1].ctaFocus = true
   }
+
+  // ── AUTO PRESET INFERENCE ENGINE (Phase A) ──────────────────────────────
+  // Run AFTER normalize so blueprint has its sceneType + script-derived fields.
+  // Sequential pass with anti-repetition penalty so 9 scenes spread across
+  // the preset library instead of all picking the same hero preset.
+  const usedPresetIds = new Set<string>()
+  blueprints = blueprints.map((b) => {
+    const match = inferPresetForScene(b, { usedPresetIds })
+    usedPresetIds.add(match.preset.id)
+    return {
+      ...b,
+      // Only auto-fill presetLabel if LLM didn't already pick one that matches a real preset
+      presetLabel: b.presetLabel && SCENE_PRESETS.some((p) => p.labelEn === b.presetLabel)
+        ? b.presetLabel
+        : match.preset.labelEn,
+      presetConfidence: match.confidence,
+    }
+  })
 
   const diversity = validateDiversity(blueprints)
 

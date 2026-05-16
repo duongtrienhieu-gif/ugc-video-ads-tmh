@@ -231,8 +231,10 @@ export interface SceneBlueprint {
   ctaFocus: boolean
   /** Speech (1-2 lines from the script that voice plays during this shot) */
   speech: string
-  /** Optional preset label this scene was generated from (for UI display) */
+  /** Optional preset label this scene was generated from (for UI display) — matches ScenePreset.labelEn */
   presetLabel?: string
+  /** Auto-inferred preset confidence 0-100 (Phase A — Auto Preset Inference Engine) */
+  presetConfidence?: number
 }
 
 /** Diversity check result — fails when 9 scenes are too similar. */

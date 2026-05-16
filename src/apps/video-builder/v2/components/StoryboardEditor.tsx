@@ -107,8 +107,20 @@ function SceneCard({
         <span className="rounded bg-black/[0.04] px-2 py-0.5 text-gray-600"><strong>{VI_LABELS.environment}:</strong> {scene.environment}</span>
         <span className="rounded bg-black/[0.04] px-2 py-0.5 text-gray-600"><strong>{VI_LABELS.emotion}:</strong> {scene.emotion}</span>
         {currentPreset && (
-          <span className="ml-auto rounded bg-violet-100 px-2 py-0.5 text-[10px] font-semibold text-violet-700">
+          <span
+            className="ml-auto flex items-center gap-1 rounded bg-violet-100 px-2 py-0.5 text-[10px] font-semibold text-violet-700"
+            title={`Preset auto-chọn: ${currentPreset.hintVi}${typeof scene.presetConfidence === 'number' ? ` · confidence ${scene.presetConfidence}%` : ''}`}
+          >
             🎬 {currentPreset.labelVi}
+            {typeof scene.presetConfidence === 'number' && (
+              <span className={`ml-1 rounded px-1 py-px text-[9px] font-bold ${
+                scene.presetConfidence >= 70 ? 'bg-emerald-500 text-white' :
+                scene.presetConfidence >= 50 ? 'bg-amber-400 text-amber-900' :
+                'bg-gray-300 text-gray-700'
+              }`}>
+                {scene.presetConfidence}%
+              </span>
+            )}
           </span>
         )}
       </div>
@@ -127,13 +139,23 @@ function SceneCard({
         <div className="space-y-2 border-t border-black/8 bg-black/[0.015] px-4 py-3 text-[11px]">
           {/* Preset switcher */}
           <div className="mb-2">
-            <p className="mb-1 text-[10px] font-bold uppercase tracking-widest text-gray-500">Đổi preset cảnh</p>
+            <p className="mb-1 flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-gray-500">
+              Preset cảnh
+              {currentPreset && typeof scene.presetConfidence === 'number' && (
+                <span className="rounded bg-violet-50 px-1.5 py-0.5 text-[9px] font-semibold normal-case tracking-normal text-violet-600">
+                  AI auto-chọn · {scene.presetConfidence}% match
+                </span>
+              )}
+            </p>
             <div className="relative">
               <button
                 onClick={() => setPresetPickerOpen((v) => !v)}
                 className="flex w-full items-center justify-between rounded-md border border-violet-200 bg-white px-2.5 py-1.5 text-left text-[11px] font-semibold text-violet-700"
               >
-                {currentPreset?.labelVi ?? 'Chọn preset...'}
+                <span className="flex items-center gap-1.5">
+                  {currentPreset?.labelVi ?? 'Chọn preset...'}
+                  {currentPreset && <span className="text-[9px] font-normal text-gray-400">— có thể đổi nếu muốn</span>}
+                </span>
                 <ChevronDown className={`h-3 w-3 transition-transform ${presetPickerOpen ? 'rotate-180' : ''}`} />
               </button>
               {presetPickerOpen && (
