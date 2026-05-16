@@ -1,19 +1,23 @@
-import { useState, useRef, useEffect, useCallback } from 'react'
+import { useState, useEffect } from 'react'
 import {
-  Film, Upload, X, Download, Loader2, CheckCircle2,
-  AlertTriangle, ChevronRight, Trash2, RefreshCw, Mic,
-  ImageIcon, User, FileText, Sparkles,
+  Film, Download, Loader2, CheckCircle2,
+  AlertTriangle, ChevronRight, Trash2, RefreshCw,
+  Mic, Sparkles, FileText, User, Package,
+  Check, ChevronDown, ChevronUp,
 } from 'lucide-react'
 import { useSettingsStore } from '../../stores/settingsStore'
 import { useAppStore } from '../../stores/appStore'
-import { saveAsset, getUrl } from '../../utils/assetStore'
+import { useBankStore } from '../../stores/bankStore'
+import { getUrl, isAssetRef } from '../../utils/assetStore'
 import { directGeminiVision } from '../../utils/gemini'
 import { listVoices, textToSpeech } from '../../utils/elevenlabs'
 import { generateLipSync, pollLipSyncUntilDone, generateVideoJob, getVideoJobStatus } from '../../utils/kieai'
 import { removeVideoBackground } from '../../utils/falai'
 import { buildUGCVideo, pollRenderUntilDone } from '../../utils/shotstack'
+import { saveAsset } from '../../utils/assetStore'
 import type { ElevenLabsVoice } from '../../utils/elevenlabs'
 import type { ScriptSegment, BuildStep, BuildStepStatus, VideoBuilderJob } from './types'
+import type { Script, Model, Product } from '../../stores/types'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -24,10 +28,8 @@ function getAudioDuration(buffer: ArrayBuffer): Promise<number> {
       ctx.decodeAudioData(buffer.slice(0), (decoded) => {
         resolve(decoded.duration)
         ctx.close()
-      }, () => resolve(60))  // fallback 60s
-    } catch {
-      resolve(60)
-    }
+      }, () => resolve(60))
+    } catch { resolve(60) }
   })
 }
 
@@ -37,6 +39,12 @@ function formatDuration(sec: number): string {
   return `${m}:${s.toString().padStart(2, '0')}`
 }
 
+async function resolveImageUrl(ref: string): Promise<string | null> {
+  if (!ref) return null
+  if (isAssetRef(ref)) return getUrl(ref)
+  return ref  // already a direct URL
+}
+
 // ── Step indicator ────────────────────────────────────────────────────────────
 
 function StepRow({ step }: { step: BuildStep }) {
@@ -44,8 +52,8 @@ function StepRow({ step }: { step: BuildStep }) {
     idle:    <div className="h-4 w-4 rounded-full border-2 border-gray-200" />,
     running: <Loader2 className="h-4 w-4 animate-spin text-violet-500" />,
     done:    <CheckCircle2 className="h-4 w-4 text-emerald-500" />,
-    failed:  <X className="h-4 w-4 text-red-400" />,
-    skipped: <div className="h-4 w-4 rounded-full bg-gray-100" />,
+    failed:  <div className="h-4 w-4 rounded-full bg-red-400 flex items-center justify-center"><span className="text-white text-[8px] font-bold">✕</span></div>,
+    skipped: <div className="h-4 w-4 rounded-full bg-gray-200" />,
   }
   return (
     <div className={`flex items-start gap-3 rounded-xl px-3 py-2.5 transition-colors ${
@@ -63,9 +71,178 @@ function StepRow({ step }: { step: BuildStep }) {
           'text-gray-400'
         }`}>{step.label}</p>
         {step.detail && step.status !== 'idle' && (
-          <p className="mt-0.5 text-[10px] text-gray-400 truncate">{step.detail}</p>
+          <p className="mt-0.5 text-[10px] text-gray-400 leading-relaxed">{step.detail}</p>
         )}
       </div>
+    </div>
+  )
+}
+
+// ── Script picker ─────────────────────────────────────────────────────────────
+
+function ScriptPicker({ scripts, selectedId, onSelect }: {
+  scripts: Script[]
+  selectedId: string
+  onSelect: (id: string, text: string) => void
+}) {
+  const [expanded, setExpanded] = useState(false)
+  const selected = scripts.find((s) => s.id === selectedId)
+
+  if (scripts.length === 0) {
+    return (
+      <div className="rounded-xl border-2 border-dashed border-black/10 bg-black/[0.01] px-4 py-4 text-center">
+        <p className="text-xs text-gray-400">Chưa có kịch bản nào trong Project</p>
+        <p className="mt-0.5 text-[10px] text-gray-300">Tạo kịch bản tại app <strong>Kịch bản</strong> trước</p>
+      </div>
+    )
+  }
+
+  return (
+    <div className="relative">
+      <button
+        onClick={() => setExpanded(!expanded)}
+        className={`flex w-full items-center gap-3 rounded-xl border px-3 py-2.5 text-left transition-colors ${
+          selected ? 'border-violet-200 bg-violet-50/40' : 'border-black/10 bg-white hover:bg-black/[0.02]'
+        }`}
+      >
+        <FileText className={`h-4 w-4 shrink-0 ${selected ? 'text-violet-500' : 'text-gray-300'}`} />
+        <div className="flex-1 min-w-0">
+          {selected ? (
+            <>
+              <p className="text-xs font-semibold text-violet-800 truncate">{selected.title || 'Kịch bản không có tiêu đề'}</p>
+              <p className="text-[10px] text-violet-500 truncate">{selected.scriptText.slice(0, 60)}...</p>
+            </>
+          ) : (
+            <p className="text-sm text-gray-400">Chọn kịch bản từ Project...</p>
+          )}
+        </div>
+        {expanded ? <ChevronUp className="h-4 w-4 shrink-0 text-gray-400" /> : <ChevronDown className="h-4 w-4 shrink-0 text-gray-400" />}
+      </button>
+
+      {expanded && (
+        <div className="absolute z-20 mt-1 w-full overflow-hidden rounded-xl border border-black/10 bg-white shadow-xl max-h-64 overflow-y-auto">
+          {scripts.map((s) => (
+            <button
+              key={s.id}
+              onClick={() => { onSelect(s.id, s.scriptText); setExpanded(false) }}
+              className={`flex w-full items-start gap-2.5 px-3 py-2.5 text-left transition-colors hover:bg-violet-50 ${
+                s.id === selectedId ? 'bg-violet-50' : ''
+              }`}
+            >
+              {s.id === selectedId && <Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-violet-500" />}
+              {s.id !== selectedId && <div className="mt-0.5 h-3.5 w-3.5 shrink-0" />}
+              <div className="min-w-0">
+                <p className="text-xs font-semibold text-gray-800 truncate">{s.title || 'Không có tiêu đề'}</p>
+                <p className="mt-0.5 text-[10px] text-gray-400 line-clamp-2">{s.scriptText.slice(0, 100)}</p>
+              </div>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── Model picker (avatar) ─────────────────────────────────────────────────────
+
+function ModelPicker({ models, selectedId, onSelect }: {
+  models: Model[]
+  selectedId: string
+  onSelect: (id: string) => void
+}) {
+  if (models.length === 0) {
+    return (
+      <div className="rounded-xl border-2 border-dashed border-black/10 bg-black/[0.01] px-4 py-4 text-center">
+        <p className="text-xs text-gray-400">Chưa có nhân vật nào trong Project</p>
+        <p className="mt-0.5 text-[10px] text-gray-300">Tạo nhân vật tại app <strong>Nhân vật</strong> trước</p>
+      </div>
+    )
+  }
+
+  return (
+    <div className="grid grid-cols-3 gap-2">
+      {models.map((m) => (
+        <button
+          key={m.id}
+          onClick={() => onSelect(m.id)}
+          className={`relative flex flex-col items-center gap-1.5 rounded-xl border-2 p-2 transition-all ${
+            m.id === selectedId
+              ? 'border-violet-400 bg-violet-50 shadow-sm'
+              : 'border-black/8 bg-white hover:border-violet-200 hover:bg-violet-50/40'
+          }`}
+        >
+          {m.characterImage ? (
+            <img
+              src={isAssetRef(m.characterImage) ? undefined : m.characterImage}
+              onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
+              alt={m.name}
+              className="h-14 w-14 rounded-lg object-cover border border-black/8"
+            />
+          ) : (
+            <div className="flex h-14 w-14 items-center justify-center rounded-lg bg-gray-100">
+              <User className="h-6 w-6 text-gray-300" />
+            </div>
+          )}
+          <p className="w-full truncate text-center text-[10px] font-semibold text-gray-700">{m.name || 'Nhân vật'}</p>
+          {m.id === selectedId && (
+            <div className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-violet-500">
+              <Check className="h-2.5 w-2.5 text-white" />
+            </div>
+          )}
+        </button>
+      ))}
+    </div>
+  )
+}
+
+// ── Product picker ────────────────────────────────────────────────────────────
+
+function ProductPicker({ products, selectedIds, onToggle }: {
+  products: Product[]
+  selectedIds: string[]
+  onToggle: (id: string) => void
+}) {
+  if (products.length === 0) {
+    return (
+      <p className="text-[11px] text-gray-400 italic">Chưa có sản phẩm — bỏ qua hoặc thêm tại app Sản phẩm</p>
+    )
+  }
+
+  return (
+    <div className="grid grid-cols-4 gap-1.5">
+      {products.map((p) => {
+        const selected = selectedIds.includes(p.id)
+        return (
+          <button
+            key={p.id}
+            onClick={() => onToggle(p.id)}
+            disabled={!selected && selectedIds.length >= 5}
+            className={`relative flex flex-col items-center gap-1 rounded-xl border-2 p-1.5 transition-all disabled:opacity-40 ${
+              selected
+                ? 'border-violet-400 bg-violet-50'
+                : 'border-black/8 bg-white hover:border-violet-200'
+            }`}
+          >
+            {p.productImage ? (
+              <img
+                src={isAssetRef(p.productImage) ? undefined : p.productImage}
+                alt={p.productName}
+                className="h-10 w-10 rounded-lg object-cover border border-black/8"
+              />
+            ) : (
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-gray-100">
+                <Package className="h-4 w-4 text-gray-300" />
+              </div>
+            )}
+            <p className="w-full truncate text-center text-[9px] font-medium text-gray-600">{p.productName}</p>
+            {selected && (
+              <div className="absolute -right-1 -top-1 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-violet-500">
+                <Check className="h-2 w-2 text-white" />
+              </div>
+            )}
+          </button>
+        )
+      })}
     </div>
   )
 }
@@ -79,31 +256,24 @@ function HistoryCard({ job, onDelete }: { job: VideoBuilderJob; onDelete: () => 
     a.href = job.videoUrl
     a.download = `ugc-video-${Date.now()}.mp4`
     a.target = '_blank'
-    document.body.appendChild(a)
-    a.click()
-    document.body.removeChild(a)
+    document.body.appendChild(a); a.click(); document.body.removeChild(a)
   }
 
   return (
     <div className="overflow-hidden rounded-2xl border border-black/8 bg-white shadow-sm">
       {job.status === 'done' && job.videoUrl && (
         <div className="bg-black">
-          <video
-            src={job.videoUrl}
-            controls
-            playsInline
-            className="max-h-64 w-full object-contain"
-          />
+          <video src={job.videoUrl} controls playsInline className="max-h-64 w-full object-contain" />
         </div>
       )}
       {job.status === 'failed' && (
         <div className="flex items-start gap-2 bg-red-50 px-4 py-3">
-          <X className="mt-0.5 h-4 w-4 shrink-0 text-red-400" />
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-red-400" />
           <p className="text-[11px] text-red-600">{job.errorMessage?.slice(0, 200) ?? 'Build thất bại'}</p>
         </div>
       )}
       <div className="p-3">
-        <div className="mb-2 flex items-center justify-between gap-2">
+        <div className="mb-1.5 flex items-center justify-between gap-2">
           <p className="truncate text-xs font-semibold text-gray-700">{job.name}</p>
           <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold ${
             job.status === 'done'   ? 'bg-emerald-100 text-emerald-700' :
@@ -118,18 +288,12 @@ function HistoryCard({ job, onDelete }: { job: VideoBuilderJob; onDelete: () => 
         </p>
         <div className="flex items-center gap-1.5">
           {job.status === 'done' && job.videoUrl && (
-            <button
-              onClick={handleDownload}
-              className="flex items-center gap-1.5 rounded-lg border border-violet-200 bg-violet-50 px-3 py-1.5 text-[11px] font-semibold text-violet-700 transition-colors hover:bg-violet-100"
-            >
+            <button onClick={handleDownload} className="flex items-center gap-1.5 rounded-lg border border-violet-200 bg-violet-50 px-3 py-1.5 text-[11px] font-semibold text-violet-700 transition-colors hover:bg-violet-100">
               <Download className="h-3 w-3" /> Tải xuống
             </button>
           )}
           <div className="flex-1" />
-          <button
-            onClick={onDelete}
-            className="flex h-7 w-7 items-center justify-center rounded-lg text-gray-300 transition-colors hover:bg-red-50 hover:text-red-400"
-          >
+          <button onClick={onDelete} className="flex h-7 w-7 items-center justify-center rounded-lg text-gray-300 transition-colors hover:bg-red-50 hover:text-red-400">
             <Trash2 className="h-3.5 w-3.5" />
           </button>
         </div>
@@ -138,31 +302,34 @@ function HistoryCard({ job, onDelete }: { job: VideoBuilderJob; onDelete: () => 
   )
 }
 
-// ── Main component ────────────────────────────────────────────────────────────
+// ── Step definitions ──────────────────────────────────────────────────────────
 
 const INITIAL_STEPS: BuildStep[] = [
-  { id: 'parse',    label: 'Phân tích kịch bản',          detail: 'Gemini AI chia script thành segments + B-roll prompts', status: 'idle' },
-  { id: 'voice',    label: 'Tạo giọng đọc (Voiceover)',   detail: 'ElevenLabs TTS toàn bộ script', status: 'idle' },
-  { id: 'upload',   label: 'Upload tài nguyên',            detail: 'Upload ảnh lên Supabase để lấy URL', status: 'idle' },
-  { id: 'avatar',   label: 'Tạo avatar lip-sync',          detail: 'KIE.ai Kling Avatar: ảnh chân dung + audio → video', status: 'idle' },
-  { id: 'broll',    label: 'Tạo B-roll clips',             detail: 'KIE.ai Kling 3.0: gen video minh họa mỗi đoạn', status: 'idle' },
-  { id: 'bg',       label: 'Xóa nền avatar',               detail: 'fal.ai: tách nền để overlay lên B-roll', status: 'idle' },
-  { id: 'assemble', label: 'Ghép video (Shotstack)',        detail: '3 layer: B-roll + avatar overlay + captions', status: 'idle' },
+  { id: 'parse',    label: '① Phân tích kịch bản (Gemini)',      detail: 'Chia script thành segments + B-roll prompts', status: 'idle' },
+  { id: 'voice',    label: '② Tạo voiceover (ElevenLabs)',        detail: 'TTS toàn bộ script → audio file', status: 'idle' },
+  { id: 'resolve',  label: '③ Chuẩn bị tài nguyên',              detail: 'Resolve URL ảnh nhân vật và sản phẩm', status: 'idle' },
+  { id: 'avatar',   label: '④ Tạo avatar lip-sync (KIE.ai)',      detail: 'Kling Avatar: ảnh + audio → video nói', status: 'idle' },
+  { id: 'broll',    label: '⑤ Tạo B-roll clips (KIE.ai Kling)',   detail: 'Gen video minh họa song song cho mỗi đoạn', status: 'idle' },
+  { id: 'bg',       label: '⑥ Xóa nền avatar (fal.ai)',           detail: 'Tách nền để overlay trong suốt lên B-roll', status: 'idle' },
+  { id: 'assemble', label: '⑦ Ghép video (Shotstack)',            detail: 'Layer B-roll + avatar + captions → 9:16 MP4', status: 'idle' },
 ]
+
+// ── Main component ────────────────────────────────────────────────────────────
 
 export default function VideoBuilder() {
   const { kieApiKey, elevenLabsApiKey, falApiKey, shotstackApiKey, geminiApiKey } = useSettingsStore()
   const addToast = useAppStore((s) => s.addToast)
+  const { scripts, models, products } = useBankStore()
 
   // ── Input state ──────────────────────────────────────────────────────────
-  const [script, setScript] = useState('')
-  const [productFiles, setProductFiles] = useState<File[]>([])
-  const [avatarFile, setAvatarFile] = useState<File | null>(null)
-  const [avatarPreview, setAvatarPreview] = useState<string | null>(null)
-  const [productPreviews, setProductPreviews] = useState<string[]>([])
+  const [selectedScriptId, setSelectedScriptId] = useState('')
+  const [script, setScript] = useState('')          // editable after selection
+  const [selectedModelId, setSelectedModelId] = useState('')
+  const [selectedProductIds, setSelectedProductIds] = useState<string[]>([])
   const [selectedVoiceId, setSelectedVoiceId] = useState('')
   const [voices, setVoices] = useState<ElevenLabsVoice[]>([])
   const [loadingVoices, setLoadingVoices] = useState(false)
+  const [scriptExpanded, setScriptExpanded] = useState(false)
 
   // ── Build state ──────────────────────────────────────────────────────────
   const [isBuilding, setIsBuilding] = useState(false)
@@ -170,68 +337,50 @@ export default function VideoBuilder() {
   const [history, setHistory] = useState<VideoBuilderJob[]>([])
   const [activeJobId, setActiveJobId] = useState<string | null>(null)
 
-  const productInputRef = useRef<HTMLInputElement>(null)
-  const avatarInputRef  = useRef<HTMLInputElement>(null)
-
-  // ── Load voices when key available ──────────────────────────────────────
+  // Load voices
   useEffect(() => {
     if (!elevenLabsApiKey) return
     setLoadingVoices(true)
     listVoices(elevenLabsApiKey)
-      .then((v) => {
-        setVoices(v)
-        if (!selectedVoiceId && v.length > 0) setSelectedVoiceId(v[0].voice_id)
-      })
+      .then((v) => { setVoices(v); if (!selectedVoiceId && v.length > 0) setSelectedVoiceId(v[0].voice_id) })
       .catch(() => {})
       .finally(() => setLoadingVoices(false))
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [elevenLabsApiKey])
 
-  // ── File handlers ────────────────────────────────────────────────────────
+  // ── Handlers ─────────────────────────────────────────────────────────────
 
-  const handleProductFiles = useCallback((files: File[]) => {
-    const images = files.filter((f) => f.type.startsWith('image/')).slice(0, 5)
-    setProductFiles((prev) => [...prev, ...images].slice(0, 5))
-    images.forEach((f) => {
-      const url = URL.createObjectURL(f)
-      setProductPreviews((prev) => [...prev, url].slice(0, 5))
-    })
-  }, [])
-
-  const handleAvatarFile = useCallback((file: File) => {
-    if (!file.type.startsWith('image/')) return
-    setAvatarFile(file)
-    setAvatarPreview(URL.createObjectURL(file))
-  }, [])
-
-  const removeProduct = (idx: number) => {
-    setProductFiles((p) => p.filter((_, i) => i !== idx))
-    setProductPreviews((p) => p.filter((_, i) => i !== idx))
+  const handleSelectScript = (id: string, text: string) => {
+    setSelectedScriptId(id)
+    setScript(text)
   }
 
-  // ── Step helpers ─────────────────────────────────────────────────────────
+  const handleToggleProduct = (id: string) => {
+    setSelectedProductIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id].slice(0, 5)
+    )
+  }
 
   const setStep = (id: string, status: BuildStepStatus, detail?: string) => {
-    setSteps((prev) => prev.map((s) =>
-      s.id === id ? { ...s, status, detail: detail ?? s.detail } : s
-    ))
+    setSteps((prev) => prev.map((s) => s.id === id ? { ...s, status, detail: detail ?? s.detail } : s))
   }
 
   // ── Build pipeline ───────────────────────────────────────────────────────
 
   const handleBuild = async () => {
-    if (!script.trim()) { addToast('Nhập script trước', 'error'); return }
-    if (!avatarFile)    { addToast('Upload ảnh avatar trước', 'error'); return }
-    if (!selectedVoiceId) { addToast('Chọn giọng đọc', 'error'); return }
-    if (!elevenLabsApiKey) { addToast('Cần ElevenLabs API key', 'error'); return }
-    if (!kieApiKey)        { addToast('Cần KIE.ai API key', 'error'); return }
-    if (!falApiKey)        { addToast('Cần fal.ai API key', 'error'); return }
-    if (!shotstackApiKey)  { addToast('Cần Shotstack API key', 'error'); return }
-    if (!geminiApiKey)     { addToast('Cần Gemini API key', 'error'); return }
+    if (!script.trim())       { addToast('Chọn hoặc nhập kịch bản', 'error'); return }
+    if (!selectedModelId)     { addToast('Chọn nhân vật avatar', 'error'); return }
+    if (!selectedVoiceId)     { addToast('Chọn giọng đọc', 'error'); return }
+    if (!elevenLabsApiKey)    { addToast('Cần ElevenLabs API key', 'error'); return }
+    if (!kieApiKey)           { addToast('Cần KIE.ai API key', 'error'); return }
+    if (!falApiKey)           { addToast('Cần fal.ai API key', 'error'); return }
+    if (!shotstackApiKey)     { addToast('Cần Shotstack API key', 'error'); return }
+    if (!geminiApiKey)        { addToast('Cần Gemini API key', 'error'); return }
 
-    const jobId   = crypto.randomUUID()
+    const jobId     = crypto.randomUUID()
+    const model     = models.find((m) => m.id === selectedModelId)
     const voiceName = voices.find((v) => v.voice_id === selectedVoiceId)?.name ?? selectedVoiceId
-    const jobName   = script.slice(0, 40).trim() + (script.length > 40 ? '...' : '')
+    const jobName   = (scripts.find((s) => s.id === selectedScriptId)?.title || script.slice(0, 40)).trim()
 
     setIsBuilding(true)
     setActiveJobId(jobId)
@@ -243,76 +392,50 @@ export default function VideoBuilder() {
       videoUrl: null, assetId: null, totalDuration: null, createdAt: Date.now(),
     }
     setHistory((h) => [newJob, ...h])
-
-    const patchJob = (updates: Partial<VideoBuilderJob>) => {
+    const patchJob = (updates: Partial<VideoBuilderJob>) =>
       setHistory((h) => h.map((j) => j.id === jobId ? { ...j, ...updates } : j))
-    }
 
     try {
       // ── Step 1: Parse script with Gemini ──────────────────────────────────
       setStep('parse', 'running')
-      const parsePrompt = `Bạn là AI phân tích kịch bản video quảng cáo UGC.
-
-Phân tích script sau và trả về JSON với cấu trúc chính xác như sau:
+      const parsePrompt = `Bạn là AI phân tích kịch bản video quảng cáo UGC. Phân tích script sau và trả về JSON:
 {
   "segments": [
     {
       "index": 0,
-      "text": "nội dung đoạn (nguyên văn từ script)",
+      "text": "nội dung đoạn nguyên văn",
       "durationSec": 5.0,
       "startSec": 0.0,
-      "brollPrompt": "mô tả cảnh B-roll bằng tiếng Anh (chi tiết, cinematic, vertical 9:16)",
+      "brollPrompt": "cinematic scene description in English, vertical 9:16, no text",
       "avatarPosition": "right",
       "useProduct": false
     }
   ],
   "totalEstimatedSec": 55.0
 }
+Quy tắc: chia 6-10 đoạn (4-8s/đoạn) · durationSec theo tốc độ đọc ~130 từ/phút · avatarPosition luân phiên left/right · useProduct=true nếu đoạn đề cập sản phẩm · trả về JSON thuần, không markdown.
+SCRIPT:\n${script}`
 
-Quy tắc:
-- Chia script thành 6-10 đoạn ngắn (mỗi đoạn 4-8 giây)
-- durationSec = ước tính thời gian đọc (~130 từ/phút)
-- startSec = tổng durationSec của các đoạn trước
-- brollPrompt: mô tả cảnh quay phù hợp nội dung (tiếng Anh, chi tiết)
-- avatarPosition: luân phiên "left"/"right" giữa các đoạn
-- useProduct: true nếu đoạn đề cập sản phẩm, nguyên liệu, kết quả
-- Trả về JSON thuần túy, không markdown
-
-SCRIPT:
-${script}`
-
-      const parseResult = await directGeminiVision({
-        apiKey: geminiApiKey,
-        parts: [{ text: parsePrompt }],
-        maxOutputTokens: 2048,
-      })
-
+      const parseResult = await directGeminiVision({ apiKey: geminiApiKey, parts: [{ text: parsePrompt }], maxOutputTokens: 2048 })
       let parsed: { segments: ScriptSegment[]; totalEstimatedSec: number }
       try {
         const clean = parseResult.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim()
         parsed = JSON.parse(clean) as { segments: ScriptSegment[]; totalEstimatedSec: number }
-      } catch {
-        throw new Error('Gemini không trả về JSON hợp lệ — thử lại')
-      }
+      } catch { throw new Error('Gemini không trả về JSON hợp lệ — thử lại') }
 
       const segments = parsed.segments
       setStep('parse', 'done', `${segments.length} segments · ~${formatDuration(parsed.totalEstimatedSec)}`)
 
       // ── Step 2: Generate voiceover ────────────────────────────────────────
       setStep('voice', 'running')
-      const audioBuffer = await textToSpeech({
-        apiKey: elevenLabsApiKey,
-        voiceId: selectedVoiceId,
-        text: script,
-        modelId: 'eleven_multilingual_v2',
-      })
+      const audioBuffer   = await textToSpeech({ apiKey: elevenLabsApiKey, voiceId: selectedVoiceId, text: script, modelId: 'eleven_multilingual_v2' })
       const audioDuration = await getAudioDuration(audioBuffer)
       const audioBlob     = new Blob([audioBuffer], { type: 'audio/mpeg' })
       const audioAssetId  = await saveAsset(audioBlob, 'audio/mpeg')
       const voiceUrl      = await getUrl(audioAssetId)
       if (!voiceUrl) throw new Error('Không lấy được URL audio sau khi upload')
 
-      // Recalculate segment timings based on actual audio duration
+      // Recalculate timing based on actual audio duration
       const totalChars = segments.reduce((s, seg) => s + seg.text.length, 0)
       let cursor = 0
       const timedSegments = segments.map((seg) => {
@@ -322,23 +445,22 @@ ${script}`
         cursor += duration
         return s
       })
-
       setStep('voice', 'done', `${formatDuration(audioDuration)} · ${Math.round(audioBlob.size / 1024)} KB`)
       patchJob({ totalDuration: audioDuration })
 
-      // ── Step 3: Upload avatar + product images ────────────────────────────
-      setStep('upload', 'running')
-      const avatarAssetId  = await saveAsset(avatarFile, avatarFile.type)
-      const avatarImageUrl = await getUrl(avatarAssetId)
-      if (!avatarImageUrl) throw new Error('Không lấy được URL avatar')
+      // ── Step 3: Resolve URLs from Project assets ──────────────────────────
+      setStep('resolve', 'running')
+      const avatarImageUrl = await resolveImageUrl(model?.characterImage ?? '')
+      if (!avatarImageUrl) throw new Error('Không lấy được URL ảnh nhân vật — kiểm tra nhân vật trong Project')
 
       const productImageUrls: string[] = []
-      for (const pf of productFiles) {
-        const aid = await saveAsset(pf, pf.type)
-        const url = await getUrl(aid)
+      for (const pid of selectedProductIds) {
+        const prod = products.find((p) => p.id === pid)
+        if (!prod?.productImage) continue
+        const url = await resolveImageUrl(prod.productImage)
         if (url) productImageUrls.push(url)
       }
-      setStep('upload', 'done', `avatar + ${productImageUrls.length} ảnh sản phẩm`)
+      setStep('resolve', 'done', `avatar: ${model?.name ?? '?'} · ${productImageUrls.length} sản phẩm`)
 
       // ── Step 4: Avatar lip-sync (Kling Avatar Standard) ──────────────────
       setStep('avatar', 'running')
@@ -348,97 +470,68 @@ ${script}`
         modelId: 'kling/ai-avatar-standard',
         imageUrl: avatarImageUrl,
         audioUrl: voiceUrl,
-        prompt: 'A confident UGC content creator speaking naturally to camera, professional lighting, clean background',
+        prompt: 'A confident UGC content creator speaking naturally to camera, professional look, clean background',
       })
-
-      const avatarRawUrl = await pollLipSyncUntilDone({
-        apiKey: kieApiKey,
-        taskId: avatarTaskId,
-        timeoutMs: 15 * 60 * 1000,
-      })
+      const avatarRawUrl = await pollLipSyncUntilDone({ apiKey: kieApiKey, taskId: avatarTaskId, timeoutMs: 15 * 60 * 1000 })
       setStep('avatar', 'done', 'Kling Avatar Standard hoàn thành')
 
       // ── Step 5: B-roll generation (parallel) ─────────────────────────────
       setStep('broll', 'running')
       patchJob({ status: 'broll' })
-
       const brollResults: (string | null)[] = new Array(timedSegments.length).fill(null)
 
-      // Generate all B-roll clips in parallel (max 5 concurrent)
-      const brollJobs = timedSegments.map(async (seg, i) => {
-        const refImages = (seg.useProduct && productImageUrls.length > 0)
-          ? [productImageUrls[0]]
-          : undefined
-
+      await Promise.all(timedSegments.map(async (seg, i) => {
+        const refImages = (seg.useProduct && productImageUrls.length > 0) ? [productImageUrls[0]] : undefined
         try {
           const { taskId } = await generateVideoJob({
             apiKey: kieApiKey,
             jobModelId: 'kling-3.0/video',
-            prompt: seg.brollPrompt + '. Vertical 9:16 video, cinematic quality, no text overlay.',
+            prompt: seg.brollPrompt + '. Vertical 9:16, cinematic, no text overlay.',
             aspectRatio: '9:16',
             resolution: '720p',
             duration: 5,
             referenceImageUrls: refImages,
           })
-
-          // Poll B-roll
-          const brollTimeout = 8 * 60 * 1000
-          const brollStart   = Date.now()
-          let brollUrl: string | null = null
-
-          while (Date.now() - brollStart < brollTimeout) {
+          const brollStart = Date.now()
+          while (Date.now() - brollStart < 8 * 60 * 1000) {
             await new Promise((r) => setTimeout(r, 5000))
             const s = await getVideoJobStatus({ apiKey: kieApiKey, taskId })
-            if (s.status === 'completed' && s.videoUrl) { brollUrl = s.videoUrl; break }
+            if (s.status === 'completed' && s.videoUrl) { brollResults[i] = s.videoUrl; break }
             if (s.status === 'failed') break
           }
+        } catch { brollResults[i] = null }
+      }))
 
-          brollResults[i] = brollUrl
-        } catch {
-          brollResults[i] = null  // skip failed clips
-        }
-      })
-
-      await Promise.all(brollJobs)
       const successCount = brollResults.filter(Boolean).length
       setStep('broll', successCount > 0 ? 'done' : 'skipped', `${successCount}/${timedSegments.length} clips thành công`)
 
       // ── Step 6: Remove avatar background ─────────────────────────────────
       setStep('bg', 'running')
       patchJob({ status: 'removing-bg' })
-
-      let avatarNoBgUrl = avatarRawUrl  // fallback to original if removal fails
+      let avatarFinalUrl = avatarRawUrl
       try {
-        avatarNoBgUrl = await removeVideoBackground({
-          apiKey: falApiKey,
-          videoUrl: avatarRawUrl,
-          outputFormat: 'mp4',
-        })
-        setStep('bg', 'done', 'Nền đã được xóa thành công')
+        avatarFinalUrl = await removeVideoBackground({ apiKey: falApiKey, videoUrl: avatarRawUrl, outputFormat: 'mp4' })
+        setStep('bg', 'done', 'Nền avatar đã được xóa')
       } catch (bgErr) {
-        // Non-critical: continue without background removal
-        const bgMsg = bgErr instanceof Error ? bgErr.message : 'Unknown'
-        setStep('bg', 'skipped', `Bỏ qua xóa nền: ${bgMsg.slice(0, 60)}`)
+        setStep('bg', 'skipped', `Bỏ qua: ${bgErr instanceof Error ? bgErr.message.slice(0, 60) : 'lỗi không xác định'}`)
       }
 
       // ── Step 7: Shotstack assembly ────────────────────────────────────────
       setStep('assemble', 'running')
       patchJob({ status: 'assembling' })
 
-      const segmentTimings = timedSegments.map((seg, i) => ({
-        text: seg.text,
-        startSec: seg.startSec,
-        durationSec: seg.durationSec,
-        brollUrl: brollResults[i],
-        avatarPosition: seg.avatarPosition,
-      }))
-
       const renderId = await buildUGCVideo({
         apiKey: shotstackApiKey,
         voiceUrl,
-        avatarVideoUrl: avatarNoBgUrl,
+        avatarVideoUrl: avatarFinalUrl,
         totalDuration: audioDuration,
-        segments: segmentTimings,
+        segments: timedSegments.map((seg, i) => ({
+          text: seg.text,
+          startSec: seg.startSec,
+          durationSec: seg.durationSec,
+          brollUrl: brollResults[i],
+          avatarPosition: seg.avatarPosition,
+        })),
       })
 
       const finalVideoUrl = await pollRenderUntilDone({
@@ -448,38 +541,32 @@ ${script}`
         timeoutMs: 15 * 60 * 1000,
       })
 
-      // Save final video to Supabase
+      // Save to Supabase
       const finalRes   = await fetch(finalVideoUrl)
       const finalBlob  = await finalRes.blob()
       const finalAsset = await saveAsset(finalBlob, 'video/mp4')
       const savedUrl   = await getUrl(finalAsset) ?? finalVideoUrl
 
-      setStep('assemble', 'done', 'Video hoàn chỉnh đã sẵn sàng')
+      setStep('assemble', 'done', 'Video hoàn chỉnh sẵn sàng')
       patchJob({ status: 'done', videoUrl: savedUrl, assetId: finalAsset })
-      addToast('🎬 UGC Video đã build xong!', 'success')
+      addToast('🎬 UGC Video đã build xong!')
 
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
       patchJob({ status: 'failed', errorMessage: msg })
       addToast(`Build thất bại: ${msg.slice(0, 80)}`, 'error')
-      // Mark current running step as failed
-      setSteps((prev) => prev.map((s) =>
-        s.status === 'running' ? { ...s, status: 'failed' } : s
-      ))
+      setSteps((prev) => prev.map((s) => s.status === 'running' ? { ...s, status: 'failed' } : s))
     } finally {
       setIsBuilding(false)
     }
   }
 
-  const canBuild = !!script.trim() && !!avatarFile && !!selectedVoiceId && !isBuilding
+  const canBuild = !!script.trim() && !!selectedModelId && !!selectedVoiceId && !isBuilding
     && !!elevenLabsApiKey && !!kieApiKey && !!falApiKey && !!shotstackApiKey && !!geminiApiKey
 
   const missingKeys = [
-    !geminiApiKey     && 'Gemini',
-    !elevenLabsApiKey && 'ElevenLabs',
-    !kieApiKey        && 'KIE.ai',
-    !falApiKey        && 'fal.ai',
-    !shotstackApiKey  && 'Shotstack',
+    !geminiApiKey && 'Gemini', !elevenLabsApiKey && 'ElevenLabs',
+    !kieApiKey && 'KIE.ai', !falApiKey && 'fal.ai', !shotstackApiKey && 'Shotstack',
   ].filter(Boolean) as string[]
 
   // ── Render ────────────────────────────────────────────────────────────────
@@ -487,9 +574,8 @@ ${script}`
   return (
     <div className="flex h-full flex-col lg:flex-row bg-gradient-to-br from-violet-50/30 via-white to-purple-50/20">
 
-      {/* ── Left panel: Inputs ── */}
+      {/* ── Left panel ── */}
       <div className="flex w-full shrink-0 flex-col border-b border-black/8 lg:w-[360px] lg:border-b-0 lg:border-r">
-
         {/* Header */}
         <div className="shrink-0 border-b border-black/8 bg-gradient-to-r from-violet-600 to-purple-500 px-5 py-4">
           <div className="flex items-center gap-3">
@@ -498,125 +584,85 @@ ${script}`
             </div>
             <div>
               <h2 className="text-sm font-bold text-white">UGC Video Builder</h2>
-              <p className="text-[11px] text-white/70">Script → Avatar → B-Roll → Video hoàn chỉnh</p>
+              <p className="text-[11px] text-white/70">Project → Script · Nhân vật · Sản phẩm → Video</p>
             </div>
           </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-4 space-y-4">
+        <div className="flex-1 overflow-y-auto p-4 space-y-5">
 
           {/* Missing keys warning */}
           {missingKeys.length > 0 && (
             <div className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5">
               <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-500" />
-              <p className="text-[11px] text-amber-700">
-                Thiếu API key: <strong>{missingKeys.join(', ')}</strong> — vào Cài đặt để thêm.
-              </p>
+              <p className="text-[11px] text-amber-700">Thiếu API key: <strong>{missingKeys.join(', ')}</strong></p>
             </div>
           )}
 
-          {/* Script input */}
+          {/* ── Script from Project ── */}
           <div>
-            <label className="mb-1.5 flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest text-gray-400">
-              <FileText className="h-3 w-3" /> Script
-            </label>
-            <textarea
-              value={script}
-              onChange={(e) => setScript(e.target.value)}
-              placeholder={`Nhập kịch bản video của bạn ở đây...\n\nVí dụ:\n"The secret to pain-free joints was discovered in 1973. My knees used to hurt so bad I couldn't even play with my kids..."`}
-              rows={8}
-              className="w-full resize-none rounded-xl border border-black/10 bg-white px-3 py-2.5 text-sm text-gray-800 placeholder-gray-300 outline-none transition-colors focus:border-violet-300 focus:ring-2 focus:ring-violet-100"
-            />
-            <p className="mt-1 text-[10px] text-gray-400">
-              {script.length} ký tự · ước ~{formatDuration(Math.round(script.length / 12.5))}
-            </p>
-          </div>
-
-          {/* Avatar upload */}
-          <div>
-            <label className="mb-1.5 flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest text-gray-400">
-              <User className="h-3 w-3" /> Ảnh Avatar (chân dung)
-            </label>
-            <input
-              ref={avatarInputRef}
-              type="file"
-              accept="image/*"
-              className="hidden"
-              onChange={(e) => { const f = e.target.files?.[0]; if (f) handleAvatarFile(f); e.target.value = '' }}
-            />
-            {avatarFile ? (
-              <div className="flex items-center gap-3 rounded-xl border border-violet-200 bg-violet-50 px-3 py-2.5">
-                {avatarPreview && (
-                  <img src={avatarPreview} alt="avatar" className="h-12 w-12 rounded-lg object-cover border border-violet-200" />
-                )}
-                <div className="flex-1 min-w-0">
-                  <p className="truncate text-xs font-semibold text-violet-800">{avatarFile.name}</p>
-                  <p className="text-[10px] text-violet-500">{(avatarFile.size / 1024).toFixed(0)} KB</p>
-                </div>
-                <button onClick={() => { setAvatarFile(null); setAvatarPreview(null) }} className="text-violet-400 hover:text-violet-600">
-                  <X className="h-4 w-4" />
+            <div className="mb-1.5 flex items-center justify-between">
+              <label className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest text-gray-400">
+                <FileText className="h-3 w-3" /> Kịch bản
+              </label>
+              {script && (
+                <button
+                  onClick={() => setScriptExpanded(!scriptExpanded)}
+                  className="flex items-center gap-0.5 text-[10px] text-violet-500 hover:text-violet-700"
+                >
+                  {scriptExpanded ? 'Thu gọn' : 'Xem / Sửa'}
+                  {scriptExpanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
                 </button>
-              </div>
-            ) : (
-              <button
-                onClick={() => avatarInputRef.current?.click()}
-                className="flex w-full items-center gap-3 rounded-xl border-2 border-dashed border-black/10 bg-black/[0.01] px-4 py-4 text-left transition-colors hover:border-violet-300 hover:bg-violet-50/40"
-              >
-                <User className="h-5 w-5 text-gray-300" />
-                <div>
-                  <p className="text-sm font-medium text-gray-500">Upload ảnh chân dung</p>
-                  <p className="text-[10px] text-gray-400">JPG, PNG · Nền đơn giản · Nhìn thẳng vào camera</p>
-                </div>
-              </button>
+              )}
+            </div>
+            <ScriptPicker scripts={scripts} selectedId={selectedScriptId} onSelect={handleSelectScript} />
+            {/* Editable preview */}
+            {script && scriptExpanded && (
+              <textarea
+                value={script}
+                onChange={(e) => setScript(e.target.value)}
+                rows={6}
+                className="mt-2 w-full resize-none rounded-xl border border-violet-200 bg-violet-50/30 px-3 py-2.5 text-xs text-gray-700 outline-none transition-colors focus:border-violet-300"
+              />
+            )}
+            {script && !scriptExpanded && (
+              <p className="mt-1 text-[10px] text-gray-400">
+                {script.length} ký tự · ~{formatDuration(Math.round(script.length / 12.5))}
+              </p>
             )}
           </div>
 
-          {/* Product images */}
+          {/* ── Avatar (Nhân vật) from Project ── */}
           <div>
             <label className="mb-1.5 flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest text-gray-400">
-              <ImageIcon className="h-3 w-3" /> Ảnh sản phẩm (tùy chọn, tối đa 5)
+              <User className="h-3 w-3" /> Nhân vật (Avatar)
             </label>
-            <input
-              ref={productInputRef}
-              type="file"
-              accept="image/*"
-              multiple
-              className="hidden"
-              onChange={(e) => { if (e.target.files) handleProductFiles(Array.from(e.target.files)); e.target.value = '' }}
-            />
-            {productPreviews.length > 0 && (
-              <div className="mb-2 flex flex-wrap gap-2">
-                {productPreviews.map((url, i) => (
-                  <div key={i} className="relative">
-                    <img src={url} alt="" className="h-14 w-14 rounded-lg border border-black/8 object-cover" />
-                    <button
-                      onClick={() => removeProduct(i)}
-                      className="absolute -right-1.5 -top-1.5 flex h-4.5 w-4.5 items-center justify-center rounded-full bg-red-500 text-white hover:bg-red-600"
-                    >
-                      <X className="h-2.5 w-2.5" />
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
-            {productFiles.length < 5 && (
-              <button
-                onClick={() => productInputRef.current?.click()}
-                className="flex w-full items-center gap-2 rounded-xl border-2 border-dashed border-black/10 bg-black/[0.01] px-4 py-3 text-left transition-colors hover:border-violet-300 hover:bg-violet-50/40"
-              >
-                <Upload className="h-4 w-4 text-gray-300" />
-                <p className="text-xs text-gray-400">Thêm ảnh sản phẩm</p>
-              </button>
+            <ModelPicker models={models} selectedId={selectedModelId} onSelect={setSelectedModelId} />
+            {selectedModelId && (
+              <p className="mt-1 text-[10px] text-emerald-600">
+                ✓ {models.find((m) => m.id === selectedModelId)?.name} đã chọn
+              </p>
             )}
           </div>
 
-          {/* Voice selection */}
+          {/* ── Products from Project ── */}
+          <div>
+            <label className="mb-1.5 flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest text-gray-400">
+              <Package className="h-3 w-3" /> Sản phẩm (tùy chọn · tối đa 5)
+            </label>
+            <ProductPicker products={products} selectedIds={selectedProductIds} onToggle={handleToggleProduct} />
+            {selectedProductIds.length > 0 && (
+              <p className="mt-1 text-[10px] text-violet-500">{selectedProductIds.length} sản phẩm đã chọn</p>
+            )}
+          </div>
+
+          {/* ── Voice ── */}
           <div>
             <label className="mb-1.5 flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest text-gray-400">
               <Mic className="h-3 w-3" /> Giọng đọc (ElevenLabs)
             </label>
             {!elevenLabsApiKey ? (
-              <p className="text-[11px] text-amber-600 bg-amber-50 rounded-lg px-3 py-2">Cần ElevenLabs API key</p>
+              <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] text-amber-600">Cần ElevenLabs API key</p>
             ) : loadingVoices ? (
               <div className="flex items-center gap-2 rounded-xl border border-black/10 bg-white px-3 py-2.5">
                 <Loader2 className="h-3.5 w-3.5 animate-spin text-violet-400" />
@@ -631,30 +677,13 @@ ${script}`
                 <option value="">Chọn giọng đọc...</option>
                 {voices.map((v) => (
                   <option key={v.voice_id} value={v.voice_id}>
-                    {v.name} {v.labels?.gender ? `(${v.labels.gender})` : ''} {v.labels?.accent ? `· ${v.labels.accent}` : ''}
+                    {v.name}{v.labels?.gender ? ` (${v.labels.gender})` : ''}{v.labels?.accent ? ` · ${v.labels.accent}` : ''}
                   </option>
                 ))}
               </select>
             )}
           </div>
 
-          {/* Pipeline info */}
-          <div className="rounded-xl border border-violet-100 bg-violet-50/60 px-3 py-2.5">
-            <p className="mb-1.5 text-[10px] font-bold uppercase tracking-widest text-violet-400">Pipeline</p>
-            {[
-              'Gemini phân tích kịch bản → N segments',
-              'ElevenLabs tạo voiceover toàn bộ script',
-              'KIE.ai Kling Avatar: ảnh → avatar lip-sync',
-              'KIE.ai Kling 3.0: gen B-roll song song',
-              'fal.ai xóa nền avatar',
-              'Shotstack ghép 3 layer → video 9:16',
-            ].map((item, i) => (
-              <div key={i} className="flex items-start gap-1.5 mb-0.5">
-                <span className="text-[9px] font-bold text-violet-400 mt-0.5">{i + 1}.</span>
-                <p className="text-[10px] text-violet-600">{item}</p>
-              </div>
-            ))}
-          </div>
         </div>
 
         {/* Build button */}
@@ -669,67 +698,45 @@ ${script}`
             }}
           >
             {isBuilding ? (
-              <span className="flex items-center justify-center gap-2">
-                <Loader2 className="h-4 w-4 animate-spin" />
-                Đang build...
-              </span>
+              <span className="flex items-center justify-center gap-2"><Loader2 className="h-4 w-4 animate-spin" />Đang build...</span>
             ) : (
-              <span className="flex items-center justify-center gap-2">
-                <Sparkles className="h-4 w-4" />
-                Build UGC Video
-              </span>
+              <span className="flex items-center justify-center gap-2"><Sparkles className="h-4 w-4" />Build UGC Video</span>
             )}
           </button>
-          <p className="mt-1.5 text-center text-[10px] text-gray-400">
-            Thời gian ~5-10 phút · Cần tất cả 5 API keys
-          </p>
+          <p className="mt-1.5 text-center text-[10px] text-gray-400">~5–10 phút · Giữ tab mở khi đang xử lý</p>
         </div>
       </div>
 
       {/* ── Right panel: Progress + History ── */}
       <div className="flex flex-1 flex-col overflow-hidden">
-
-        {/* Panel header */}
         <div className="flex shrink-0 items-center justify-between border-b border-black/8 bg-white/60 px-5 py-3">
           <div className="flex items-center gap-2">
             <Film className="h-4 w-4 text-violet-500" />
             <span className="text-sm font-semibold text-gray-700">Kết quả</span>
             {history.length > 0 && (
-              <span className="rounded-full bg-violet-100 px-2 py-0.5 text-[10px] font-semibold text-violet-600">
-                {history.length}
-              </span>
+              <span className="rounded-full bg-violet-100 px-2 py-0.5 text-[10px] font-semibold text-violet-600">{history.length}</span>
             )}
           </div>
           {history.length > 0 && !isBuilding && (
-            <button
-              onClick={() => setHistory([])}
-              className="text-[11px] text-gray-400 transition-colors hover:text-red-400"
-            >
-              Xóa tất cả
-            </button>
+            <button onClick={() => setHistory([])} className="text-[11px] text-gray-400 transition-colors hover:text-red-400">Xóa tất cả</button>
           )}
         </div>
 
         <div className="flex-1 overflow-y-auto p-4">
-
-          {/* Build progress (shown while building) */}
           {isBuilding && (
             <div className="mb-4 rounded-2xl border border-violet-200 bg-white p-4 shadow-sm">
-              <p className="mb-3 text-xs font-bold text-violet-700 flex items-center gap-2">
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                Đang build video...
+              <p className="mb-3 flex items-center gap-2 text-xs font-bold text-violet-700">
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />Đang build video...
               </p>
               <div className="space-y-1.5">
                 {steps.map((step) => <StepRow key={step.id} step={step} />)}
               </div>
               <div className="mt-3 flex items-center gap-1 text-[10px] text-gray-400">
-                <RefreshCw className="h-2.5 w-2.5 animate-spin" />
-                Quá trình này mất 5-10 phút, vui lòng giữ tab mở
+                <RefreshCw className="h-2.5 w-2.5 animate-spin" />Vui lòng giữ tab mở trong suốt quá trình
               </div>
             </div>
           )}
 
-          {/* History */}
           {history.length === 0 && !isBuilding ? (
             <div className="flex h-full flex-col items-center justify-center gap-4 p-8">
               <div className="flex h-20 w-20 items-center justify-center rounded-3xl bg-gradient-to-br from-violet-100 to-purple-100">
@@ -738,7 +745,7 @@ ${script}`
               <div className="text-center">
                 <p className="text-sm font-semibold text-gray-500">Chưa có video nào được build</p>
                 <p className="mt-1 max-w-xs text-center text-xs leading-relaxed text-gray-400">
-                  Nhập script, upload ảnh avatar và sản phẩm, chọn giọng đọc → Build UGC Video
+                  Chọn kịch bản + nhân vật từ Project, chọn giọng đọc → Build UGC Video
                 </p>
               </div>
               <div className="flex flex-wrap justify-center gap-2 text-[10px] text-gray-400">
@@ -751,25 +758,18 @@ ${script}`
             <div className="space-y-3">
               {history.map((job) => (
                 <div key={job.id}>
-                  {/* Show steps for active job */}
                   {job.id === activeJobId && !isBuilding && (job.status === 'done' || job.status === 'failed') && (
                     <div className="mb-2 rounded-xl border border-black/6 bg-white p-3">
-                      <div className="space-y-1">
-                        {steps.map((step) => <StepRow key={step.id} step={step} />)}
-                      </div>
+                      <div className="space-y-1">{steps.map((step) => <StepRow key={step.id} step={step} />)}</div>
                     </div>
                   )}
-                  <HistoryCard
-                    job={job}
-                    onDelete={() => setHistory((h) => h.filter((j) => j.id !== job.id))}
-                  />
+                  <HistoryCard job={job} onDelete={() => setHistory((h) => h.filter((j) => j.id !== job.id))} />
                 </div>
               ))}
             </div>
           )}
         </div>
 
-        {/* Bottom info bar */}
         <div className="shrink-0 border-t border-black/6 bg-white/60 px-5 py-2.5">
           <div className="flex items-center justify-between text-[10px] text-gray-400">
             <span className="flex items-center gap-1">
