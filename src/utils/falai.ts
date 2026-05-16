@@ -37,12 +37,43 @@ function authHeader(apiKey: string): Record<string, string> {
   return { Authorization: `Key ${apiKey}` }
 }
 
+/**
+ * Parse fal.ai error response bodies. fal.ai returns multiple shapes:
+ *   1. { detail: "string message" }
+ *   2. { detail: [{ loc, msg, type }, ...] }   ← FastAPI validation 422 errors
+ *   3. { message: "..." } or { error: "..." }
+ *   4. Plain text
+ * The old code stringified the array → "[object Object]" — useless.
+ */
 async function readErrorBody(res: Response): Promise<string> {
   try {
     const text = await res.text()
     try {
-      const json = JSON.parse(text) as { detail?: string; message?: string; error?: string }
-      return json.detail ?? json.message ?? json.error ?? text.slice(0, 300)
+      const json = JSON.parse(text) as {
+        detail?: string | Array<{ loc?: string[]; msg?: string; type?: string; message?: string }>
+        message?: string
+        error?: string
+      }
+
+      // Case 2: array of validation errors → flatten to readable string
+      if (Array.isArray(json.detail)) {
+        return json.detail
+          .map((e) => {
+            const field = Array.isArray(e.loc) ? e.loc.slice(-2).join('.') : ''
+            const msg   = e.msg ?? e.message ?? e.type ?? 'invalid'
+            return field ? `${field}: ${msg}` : msg
+          })
+          .join(' · ')
+          .slice(0, 300)
+      }
+
+      // Case 1, 3: scalar string fields
+      if (typeof json.detail === 'string')  return json.detail.slice(0, 300)
+      if (typeof json.message === 'string') return json.message.slice(0, 300)
+      if (typeof json.error === 'string')   return json.error.slice(0, 300)
+
+      // Fallback: stringify the whole body so it's never "[object Object]"
+      return JSON.stringify(json).slice(0, 300)
     } catch {
       return text.slice(0, 300)
     }
