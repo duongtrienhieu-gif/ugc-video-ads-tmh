@@ -1,6 +1,6 @@
-import { saveAsset } from '../../../utils/assetStore'
+import { saveAsset, isAssetRef } from '../../../utils/assetStore'
 import { directGeminiVision } from '../../../utils/gemini'
-import { editImageWithReferenceGPT, fetchImageAsBlob } from '../../../utils/openai'
+import { generateImage, pollImageUntilDone } from '../../../utils/kieai'
 import type { AvatarVariant } from '../../../stores/types'
 
 /**
@@ -101,18 +101,17 @@ export const DEFAULT_VARIANT_RECIPES: VariantRecipe[] = [
 ]
 
 /**
- * Generate ONE variant via OpenAI gpt-image-1 /v1/images/edits endpoint.
- * The original avatar image is passed as a reference for STRONG identity lock —
- * far more reliable than Nano Banana 2 which often produced different people.
+ * Generate ONE variant via KIE.ai's GPT Image 2 (same model used by Avatar AI gen).
+ * The original avatar image is passed via referenceImageUrls for identity lock.
  *
  * mode:
  *   - 'strict' (default): keep face + hair + outfit + lighting all from reference
  *   - 'flex-outfit': keep face + hair + facial hair, allow slight outfit variation
  *
- * The `apiKey` param is the OpenAI API key (NOT KIE.ai).
+ * The `apiKey` param is the KIE.ai API key.
  */
 export async function generateOneVariant(params: {
-  apiKey: string  // OpenAI API key
+  apiKey: string  // KIE.ai API key
   originalImageUrl: string
   recipe: VariantRecipe
   avatarDescription?: string  // optional locked physical description
@@ -126,7 +125,7 @@ export async function generateOneVariant(params: {
 
   const allowOutfitVariation = mode === 'flex-outfit'
 
-  const identityLockText = `Edit the reference image to show the EXACT SAME PERSON from a different angle.
+  const identityLockText = `Re-render the EXACT SAME PERSON from the reference image, viewed from a different angle.
 ${descBlock}
 KEEP IDENTICAL (this is the SAME individual, not a similar-looking different person):
 • Same face: eyes, eyebrows, nose, lips, jawline, cheekbones, skin tone, age
@@ -144,22 +143,27 @@ CHANGE: ${recipe.prompt}
 Output: photorealistic vertical 9:16 image, authentic natural lighting, no text, no watermark. The output MUST be the same individual as the reference image, only the head pose and angle change.`
 
   try {
-    // Fetch the reference avatar as Blob for multipart upload
-    const refBlob = await fetchImageAsBlob(originalImageUrl)
-
-    // Call OpenAI image edits — pass avatar reference 2x for stronger identity weight
-    const resultUrl = await editImageWithReferenceGPT({
+    // Use KIE.ai's GPT Image 2 — pass reference 2x for stronger identity weight
+    const { taskId } = await generateImage({
       apiKey,
+      model: 'gpt-image-2-text-to-image',
       prompt: identityLockText,
-      referenceImages: [refBlob, refBlob],
-      size: '1024x1536',
-      quality: 'medium',
+      resolution: '1K',
+      aspectRatio: '9:16',
+      referenceImageUrls: [originalImageUrl, originalImageUrl],
     })
+    const imageUrl = await pollImageUntilDone({ apiKey, taskId, timeoutMs: 4 * 60 * 1000 })
 
-    // Convert data URL → Blob → save to asset store
-    const resp = await fetch(resultUrl)
-    const blob = await resp.blob()
-    const storedRef = await saveAsset(blob, blob.type || 'image/png')
+    // Upload to asset store so it persists like the rest of the bank
+    let storedRef: string
+    if (isAssetRef(imageUrl)) {
+      storedRef = imageUrl
+    } else {
+      const resp = await fetch(imageUrl)
+      if (!resp.ok) throw new Error(`fetch variant failed: ${resp.status}`)
+      const blob = await resp.blob()
+      storedRef = await saveAsset(blob, blob.type || 'image/png')
+    }
 
     return {
       id: crypto.randomUUID(),

@@ -7,7 +7,6 @@ import { getAllAssetIds, deleteAsset, isAssetRef } from '../utils/assetStore'
 import { getKieCredits } from '../utils/kieai'
 import { directGeminiVision } from '../utils/gemini'
 import { getSubscription } from '../utils/elevenlabs'
-import { testOpenAIConnection } from '../utils/openai'
 
 interface SettingsModalProps {
   open: boolean
@@ -16,7 +15,7 @@ interface SettingsModalProps {
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-type SectionId = 'kie' | 'gemini' | 'eleven' | 'fal' | 'shotstack' | 'openai'
+type SectionId = 'kie' | 'gemini' | 'eleven' | 'fal' | 'shotstack'
 
 interface ServiceConfig {
   id: SectionId
@@ -92,18 +91,6 @@ const SERVICES: ServiceConfig[] = [
     getKeyUrl: 'https://dashboard.shotstack.io/register',
     getKeyLabel: 'Đăng ký →',
   },
-  {
-    id: 'openai',
-    label: 'OpenAI',
-    sublabel: 'Ảnh B-Roll · gpt-image-1 · Chân thực hơn FLUX',
-    color: 'sky',
-    borderColor: 'border-sky-200',
-    bgColor: 'bg-sky-50',
-    keyHint: '~$0.07/ảnh (medium) · Thay thế fal.ai để tạo ảnh B-Roll chân thực, đúng sản phẩm',
-    placeholder: 'sk-...',
-    getKeyUrl: 'https://platform.openai.com/api-keys',
-    getKeyLabel: 'Lấy key →',
-  },
 ]
 
 // ── Color maps ─────────────────────────────────────────────────────────────────
@@ -145,9 +132,9 @@ const BTN_CLASS: Record<string, string> = {
 
 export default function SettingsModal({ open, onClose }: SettingsModalProps) {
   const {
-    kieApiKey, geminiApiKey, elevenLabsApiKey, falApiKey, shotstackApiKey, openaiApiKey,
+    kieApiKey, geminiApiKey, elevenLabsApiKey, falApiKey, shotstackApiKey,
     kieCredits,
-    setKieApiKey, setGeminiApiKey, setElevenLabsApiKey, setFalApiKey, setShotstackApiKey, setOpenaiApiKey,
+    setKieApiKey, setGeminiApiKey, setElevenLabsApiKey, setFalApiKey, setShotstackApiKey,
     setKieCredits,
   } = useSettingsStore()
   const addToast = useAppStore((s) => s.addToast)
@@ -159,10 +146,9 @@ export default function SettingsModal({ open, onClose }: SettingsModalProps) {
     eleven: elevenLabsApiKey,
     fal: falApiKey,
     shotstack: shotstackApiKey,
-    openai: openaiApiKey,
   })
   const [shows, setShows] = useState<Record<SectionId, boolean>>({
-    kie: false, gemini: false, eleven: false, fal: false, shotstack: false, openai: false,
+    kie: false, gemini: false, eleven: false, fal: false, shotstack: false,
   })
   const [openSection, setOpenSection] = useState<SectionId | null>(null)
   const [saved, setSaved] = useState(false)
@@ -174,12 +160,12 @@ export default function SettingsModal({ open, onClose }: SettingsModalProps) {
 
   useEffect(() => {
     if (open) {
-      setDrafts({ kie: kieApiKey, gemini: geminiApiKey, eleven: elevenLabsApiKey, fal: falApiKey, shotstack: shotstackApiKey, openai: openaiApiKey })
+      setDrafts({ kie: kieApiKey, gemini: geminiApiKey, eleven: elevenLabsApiKey, fal: falApiKey, shotstack: shotstackApiKey })
       setSaved(false)
       setTestResults({})
       setOpenSection(null)
     }
-  }, [open, kieApiKey, geminiApiKey, elevenLabsApiKey, falApiKey, shotstackApiKey, openaiApiKey])
+  }, [open, kieApiKey, geminiApiKey, elevenLabsApiKey, falApiKey, shotstackApiKey])
 
   if (!open) return null
 
@@ -193,7 +179,7 @@ export default function SettingsModal({ open, onClose }: SettingsModalProps) {
   const isSaved = (id: SectionId): boolean => {
     const map: Record<SectionId, string> = {
       kie: kieApiKey, gemini: geminiApiKey, eleven: elevenLabsApiKey,
-      fal: falApiKey, shotstack: shotstackApiKey, openai: openaiApiKey,
+      fal: falApiKey, shotstack: shotstackApiKey,
     }
     return map[id].length > 0
   }
@@ -237,9 +223,6 @@ export default function SettingsModal({ open, onClose }: SettingsModalProps) {
         } else {
           setTestResults((r) => ({ ...r, shotstack: { ok: true, message: 'Kết nối thành công — Shotstack sẵn sàng' } }))
         }
-      } else if (id === 'openai') {
-        const message = await testOpenAIConnection(key)
-        setTestResults((r) => ({ ...r, openai: { ok: true, message } }))
       }
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'Kết nối thất bại'
@@ -255,7 +238,6 @@ export default function SettingsModal({ open, onClose }: SettingsModalProps) {
     setElevenLabsApiKey(drafts.eleven.trim())
     setFalApiKey(drafts.fal.trim())
     setShotstackApiKey(drafts.shotstack.trim())
-    setOpenaiApiKey(drafts.openai.trim())
     setSaved(true)
     addToast('Đã lưu cài đặt thành công')
     if (drafts.kie.trim()) {
@@ -307,7 +289,7 @@ export default function SettingsModal({ open, onClose }: SettingsModalProps) {
           <div>
             <h2 className="text-base font-bold text-gray-900">Cài đặt</h2>
             <p className="mt-0.5 text-[11px] text-gray-400">
-              {[kieApiKey, geminiApiKey, elevenLabsApiKey, falApiKey, shotstackApiKey, openaiApiKey].filter(Boolean).length}/6 dịch vụ đã kết nối
+              {[kieApiKey, geminiApiKey, elevenLabsApiKey, falApiKey, shotstackApiKey].filter(Boolean).length}/5 dịch vụ đã kết nối
             </p>
           </div>
           <button

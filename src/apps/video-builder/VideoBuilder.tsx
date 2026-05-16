@@ -13,9 +13,8 @@ import { useAdTemplateStore } from '../../stores/adTemplateStore'
 import { getUrl, isAssetRef, saveAsset } from '../../utils/assetStore'
 import { directGeminiVision } from '../../utils/gemini'
 import { listVoices, listSharedVoices, textToSpeechSmooth } from '../../utils/elevenlabs'
-import { generateLipSync, pollLipSyncUntilDone, generateVideoJob, getVideoJobStatus } from '../../utils/kieai'
+import { generateLipSync, pollLipSyncUntilDone, generateVideoJob, getVideoJobStatus, generateImage, pollImageUntilDone } from '../../utils/kieai'
 import { removeVideoBackground } from '../../utils/falai'
-import { generateBrollImageGPT } from '../../utils/openai'
 import { buildUGCVideo, pollRenderUntilDone } from '../../utils/shotstack'
 import type { ElevenLabsVoice } from '../../utils/elevenlabs'
 import type { ScriptSegment, VideoBuilderJob } from './types'
@@ -703,7 +702,7 @@ function ReviewCard({
 // ── Main component ────────────────────────────────────────────────────────────
 
 export default function VideoBuilder() {
-  const { kieApiKey, elevenLabsApiKey, falApiKey, shotstackApiKey, geminiApiKey, openaiApiKey } = useSettingsStore()
+  const { kieApiKey, elevenLabsApiKey, falApiKey, shotstackApiKey, geminiApiKey } = useSettingsStore()
   const addToast = useAppStore((s) => s.addToast)
   const { scripts, models, products } = useBankStore()
 
@@ -1710,18 +1709,36 @@ Return ONLY the description as plain text, no preamble, no markdown.` },
     return `${scene}\n\nSubject: ${characterDesc}.${productNote}${style}`
   }
 
-  // Generate ONE B-Roll image via OpenAI gpt-image-1 (mandatory — no fallback)
+  // Generate ONE B-Roll image via KIE.ai's GPT Image 2 (same model as Avatar AI)
+  // Avatar + product images are passed as referenceImageUrls for identity lock.
   // THROWS on error — callers must catch and decide how to surface the message.
   const generateOneImage = async (_i: number, seg: ScriptSegment): Promise<string> => {
-    if (!openaiApiKey.trim()) {
-      throw new Error('Thiếu OpenAI API key — vào Cài đặt → OpenAI để thêm. B-Roll chỉ dùng gpt-image-1.')
+    if (!kieApiKey.trim()) {
+      throw new Error('Thiếu KIE.ai API key — vào Cài đặt → KIE.AI để thêm.')
     }
 
     const prompt = buildImagePromptGPT(seg)
-    const rawResult = await generateBrollImageGPT({ apiKey: openaiApiKey, prompt, quality: 'medium' })
 
-    // Convert data URL or CDN URL → blob → save to IndexedDB → return public URL
-    const fetchRes = await fetch(rawResult)
+    // Build reference images: avatar (always) + product (if available)
+    const { avatarImageUrl, productImageUrls } = pipeRef.current
+    const refs: string[] = []
+    if (avatarImageUrl) refs.push(avatarImageUrl)
+    if (productImageUrls && productImageUrls.length > 0) {
+      refs.push(...productImageUrls.slice(0, 3))  // up to 3 product refs
+    }
+
+    const { taskId } = await generateImage({
+      apiKey: kieApiKey,
+      model: 'gpt-image-2-text-to-image',
+      prompt,
+      resolution: '1K',
+      aspectRatio: '9:16',
+      referenceImageUrls: refs.length > 0 ? refs : undefined,
+    })
+    const remoteUrl = await pollImageUntilDone({ apiKey: kieApiKey, taskId, timeoutMs: 4 * 60 * 1000 })
+
+    // Persist to asset store so the URL doesn't expire mid-pipeline
+    const fetchRes = await fetch(remoteUrl)
     const blob = await fetchRes.blob()
     const assetId = await saveAsset(blob, blob.type || 'image/png')
     const publicUrl = await getUrl(assetId)
@@ -2043,12 +2060,11 @@ MOTION: Gentle cinematic camera motion only — slow push-in on key detail, or s
 
   const hasAvatar = !!selectedModelId || !!manualAvatarUrl
   const canStart = !!script.trim() && hasAvatar && !!selectedVoiceId && isIdle
-    && !!elevenLabsApiKey && !!kieApiKey && !!falApiKey && !!shotstackApiKey && !!geminiApiKey && !!openaiApiKey
+    && !!elevenLabsApiKey && !!kieApiKey && !!falApiKey && !!shotstackApiKey && !!geminiApiKey
 
   const missingKeys = [
     !geminiApiKey && 'Gemini', !elevenLabsApiKey && 'ElevenLabs',
     !kieApiKey && 'KIE.ai', !falApiKey && 'fal.ai', !shotstackApiKey && 'Shotstack',
-    !openaiApiKey && 'OpenAI',
   ].filter(Boolean) as string[]
 
   // ── Render ────────────────────────────────────────────────────────────────
@@ -2638,7 +2654,7 @@ MOTION: Gentle cinematic camera motion only — slow push-in on key detail, or s
                       ) : (
                         <button
                           onClick={() => regenerateOneImage(i)}
-                          title={`Gen lại ảnh #${i + 1} (~$0.07 OpenAI gpt-image-1)`}
+                          title={`Gen lại ảnh #${i + 1} (~6 KIE credit · GPT Image 2)`}
                           className="absolute right-1 top-1 flex h-7 w-7 items-center justify-center rounded-md bg-black/60 text-white opacity-0 transition-opacity hover:bg-violet-600 group-hover:opacity-100"
                         >
                           <RotateCcw className="h-3.5 w-3.5" />

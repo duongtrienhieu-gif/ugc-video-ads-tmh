@@ -53,7 +53,7 @@ function VariantThumb({ variant, onDelete }: { variant: AvatarVariant; onDelete:
 export default function VariantsModal({ model, onClose }: Props) {
   const updateModel = useBankStore((s) => s.updateModel)
   const addToast = useAppStore((s) => s.addToast)
-  const openaiApiKey = useSettingsStore((s) => s.openaiApiKey)
+  const kieApiKey = useSettingsStore((s) => s.kieApiKey)
 
   const originalImageUrl = useAssetUrl(model.characterImage)
   const variants = model.variants ?? []
@@ -63,7 +63,7 @@ export default function VariantsModal({ model, onClose }: Props) {
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const handleGen4Angles = async () => {
-    if (!openaiApiKey) { addToast('Cần OpenAI API key trong Cài đặt (gen 4 góc dùng gpt-image-1 edits)', 'error'); return }
+    if (!kieApiKey) { addToast('Cần KIE.ai API key trong Cài đặt', 'error'); return }
     if (!originalImageUrl) { addToast('Avatar gốc chưa load — thử lại sau giây', 'error'); return }
 
     setGenerating(true)
@@ -71,7 +71,7 @@ export default function VariantsModal({ model, onClose }: Props) {
 
     try {
       const newVariants = await generateAllVariants({
-        apiKey: openaiApiKey,
+        apiKey: kieApiKey,
         originalImageUrl,
         avatarDescription: undefined,
         onProgress: (done, total, label) => setProgress({ done, total, label }),
@@ -180,11 +180,11 @@ export default function VariantsModal({ model, onClose }: Props) {
                 AI tự gen 4 angles: 3/4 trái, 3/4 phải, smile, side profile. Nano Banana 2 + identity lock prompt.
               </p>
               <p className="mb-3 rounded bg-violet-100 px-2 py-1 text-[11px] text-violet-700">
-                Cost: <strong>~$0.28 (OpenAI gpt-image-1)</strong> · Thời gian: ~40-80s
+                Cost: <strong>~24 KIE credit ($0.12)</strong> · Thời gian: ~40-80s
               </p>
               <button
                 onClick={handleGen4Angles}
-                disabled={generating || !openaiApiKey}
+                disabled={generating || !kieApiKey}
                 className="flex w-full items-center justify-center gap-1.5 rounded-lg bg-violet-600 px-4 py-2 text-sm font-bold text-white shadow-md transition-all hover:bg-violet-700 disabled:cursor-not-allowed disabled:opacity-40"
               >
                 {generating ? (

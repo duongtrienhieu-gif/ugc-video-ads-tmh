@@ -68,7 +68,7 @@ export default function OutputPanel({ result, isGenerating, onGenerate, onCancel
   const [regenIdx, setRegenIdx] = useState<number | null>(null)
   const [isSavingPreset, setIsSavingPreset] = useState(false)
 
-  const openaiApiKey = useSettingsStore((s) => s.openaiApiKey)
+  const kieApiKey = useSettingsStore((s) => s.kieApiKey)
   const geminiApiKey = useSettingsStore((s) => s.geminiApiKey)
   const addToast = useAppStore((s) => s.addToast)
 
@@ -134,8 +134,8 @@ export default function OutputPanel({ result, isGenerating, onGenerate, onCancel
   // ── Generate 3 extra face angles inline ───────────────────────────────────
   const handleGenerateExtras = async () => {
     if (!result || !resolvedImageUrl) return
-    if (!openaiApiKey) {
-      addToast('Cần OpenAI API key trong Cài đặt (Tạo 3 góc dùng gpt-image-1 edits)', 'error')
+    if (!kieApiKey) {
+      addToast('Cần KIE.ai API key trong Cài đặt', 'error')
       return
     }
     setIsGeneratingExtras(true)
@@ -149,9 +149,9 @@ export default function OutputPanel({ result, isGenerating, onGenerate, onCancel
         addToast('Gemini Vision không phân tích được avatar — vẫn thử gen', 'error')
       }
 
-      // Step 2: Generate the 3 angles via OpenAI gpt-image-1 edits
+      // Step 2: Generate the 3 angles via KIE.ai GPT Image 2 (with reference)
       const angles = await generateExtra3Angles({
-        apiKey: openaiApiKey,
+        apiKey: kieApiKey,
         originalImageUrl: resolvedImageUrl,
         avatarDescription: avatarDesc,
         onProgress: (done, total, label) => setExtraProgress({ done, total, label }),
@@ -175,7 +175,7 @@ export default function OutputPanel({ result, isGenerating, onGenerate, onCancel
   // Regenerate one of the 3 angles — reuses cached avatar description
   const handleRegenAngle = async (idx: number) => {
     if (!resolvedImageUrl) return
-    if (!openaiApiKey) {
+    if (!kieApiKey) {
       addToast('Cần OpenAI API key trong Cài đặt', 'error')
       return
     }
@@ -184,7 +184,7 @@ export default function OutputPanel({ result, isGenerating, onGenerate, onCancel
       const avatarDesc = await ensureAvatarDescription()
       const recipe = EXTRA_3_RECIPES[idx]
       const v = await generateOneVariant({
-        apiKey: openaiApiKey,
+        apiKey: kieApiKey,
         originalImageUrl: resolvedImageUrl,
         recipe,
         avatarDescription: avatarDesc,
@@ -479,12 +479,12 @@ export default function OutputPanel({ result, isGenerating, onGenerate, onCancel
           {!hasExtras && (
             <button
               onClick={handleGenerateExtras}
-              disabled={isGeneratingExtras || !openaiApiKey}
-              title={!openaiApiKey ? 'Cần OpenAI API key trong Cài đặt' : 'Tạo 3 góc mặt cùng người qua OpenAI gpt-image-1 edits'}
+              disabled={isGeneratingExtras || !kieApiKey}
+              title={!kieApiKey ? 'Cần KIE.ai API key trong Cài đặt' : 'Tạo 3 góc mặt cùng người qua KIE GPT Image 2'}
               className="flex w-full items-center justify-center gap-2 rounded-full border border-violet-300 bg-violet-50 px-6 py-3.5 text-[13px] font-semibold text-violet-700 transition-colors hover:bg-violet-100 disabled:opacity-50"
             >
               <Sparkles className="h-4 w-4" />
-              ✨ Tạo 3 góc mặt thêm (cùng người, đa góc nhìn) {!openaiApiKey && '— cần OpenAI key'}
+              ✨ Tạo 3 góc mặt thêm (cùng người, đa góc nhìn) {!kieApiKey && '— cần KIE key'}
             </button>
           )}
 
