@@ -2,7 +2,8 @@ import { useState, useRef, useEffect } from 'react'
 import {
   Mic, Video, Upload, Database, Play, Pause,
   Loader2, Download, Trash2, User, AlertTriangle,
-  ChevronDown, Star, Sparkles, X, RefreshCw, Info,
+  ChevronDown, ChevronUp, Star, Sparkles, X, RefreshCw, Info,
+  FileText, Check,
 } from 'lucide-react'
 import {
   listVoices, listSharedVoices, textToSpeech,
@@ -17,9 +18,69 @@ import { useSettingsStore } from '../../stores/settingsStore'
 import { useAppStore } from '../../stores/appStore'
 import { saveAsset, getUrl, isAssetRef } from '../../utils/assetStore'
 import BankPicker from '../../components/BankPicker'
-import type { Model } from '../../stores/types'
+import { useBankStore } from '../../stores/bankStore'
+import type { Model, Script } from '../../stores/types'
 import type { LipSyncHistoryItem } from './types'
 import { useLipSyncStore } from '../../stores/lipSyncStore'
+
+// ── Saved script picker (loads from Project → Scripts bank) ──────────────────
+
+function SavedScriptPicker({ scripts, selectedId, onSelect }: {
+  scripts: Script[]
+  selectedId: string
+  onSelect: (id: string, text: string) => void
+}) {
+  const [expanded, setExpanded] = useState(false)
+  const selected = scripts.find((s) => s.id === selectedId)
+
+  if (scripts.length === 0) return null
+
+  return (
+    <div className="relative mb-2">
+      <button
+        onClick={() => setExpanded(!expanded)}
+        className={`flex w-full items-center gap-2 rounded-lg border px-2.5 py-1.5 text-left transition-colors ${
+          selected ? 'border-violet-200 bg-violet-50/60' : 'border-black/10 bg-white hover:bg-black/[0.02]'
+        }`}
+      >
+        <FileText className={`h-3.5 w-3.5 shrink-0 ${selected ? 'text-violet-500' : 'text-gray-300'}`} />
+        <div className="min-w-0 flex-1">
+          {selected ? (
+            <p className="truncate text-xs font-semibold text-violet-800">{selected.title || 'Kịch bản không có tiêu đề'}</p>
+          ) : (
+            <p className="text-xs text-gray-400">Chọn kịch bản đã lưu từ Project...</p>
+          )}
+        </div>
+        {expanded
+          ? <ChevronUp className="h-3.5 w-3.5 shrink-0 text-gray-400" />
+          : <ChevronDown className="h-3.5 w-3.5 shrink-0 text-gray-400" />
+        }
+      </button>
+
+      {expanded && (
+        <div className="absolute z-20 mt-1 w-full max-h-56 overflow-y-auto rounded-lg border border-black/10 bg-white shadow-xl">
+          {scripts.map((s) => (
+            <button
+              key={s.id}
+              onClick={() => { onSelect(s.id, s.scriptText); setExpanded(false) }}
+              className={`flex w-full items-start gap-2 px-2.5 py-2 text-left transition-colors hover:bg-violet-50 ${
+                s.id === selectedId ? 'bg-violet-50' : ''
+              }`}
+            >
+              <div className="mt-0.5 h-3 w-3 shrink-0">
+                {s.id === selectedId && <Check className="h-3 w-3 text-violet-500" />}
+              </div>
+              <div className="min-w-0">
+                <p className="truncate text-xs font-semibold text-gray-800">{s.title || 'Không có tiêu đề'}</p>
+                <p className="mt-0.5 line-clamp-2 text-[10px] text-gray-400">{s.scriptText.slice(0, 100)}</p>
+              </div>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
 
 // ── Emotion tags ──────────────────────────────────────────────────────────────
 
@@ -98,8 +159,18 @@ export default function LipSync() {
 
   // ── Script & emotion suggestion ──────────────────────────────────────
   const [scriptText, setScriptText]                     = useState('')
+  const [selectedScriptId, setSelectedScriptId]         = useState('')
   const [isSuggestingEmotions, setIsSuggestingEmotions] = useState(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const savedScripts = useBankStore((s) => s.scripts)
+
+  const handleSelectSavedScript = (id: string, text: string) => {
+    setSelectedScriptId(id)
+    setScriptText(text)
+    // Reset previously generated audio when script changes — it's stale
+    setAudioAssetId(null)
+    setAudioDisplayUrl(null)
+  }
 
   // ── Audio ────────────────────────────────────────────────────────────
   const [audioAssetId, setAudioAssetId]       = useState<string | null>(null)
@@ -670,7 +741,21 @@ export default function LipSync() {
 
             {/* 3. Script + emotion tags + AI suggestion */}
             <div>
-              <p className="mb-1.5 text-[10px] font-medium uppercase tracking-widest text-gray-400">Kịch bản</p>
+              <div className="mb-1.5 flex items-center justify-between">
+                <p className="text-[10px] font-medium uppercase tracking-widest text-gray-400">Kịch bản</p>
+                {savedScripts.length > 0 && (
+                  <span className="text-[10px] text-gray-300">
+                    {savedScripts.length} kịch bản đã lưu trong Project
+                  </span>
+                )}
+              </div>
+
+              {/* Picker: load from Project → Scripts bank */}
+              <SavedScriptPicker
+                scripts={savedScripts}
+                selectedId={selectedScriptId}
+                onSelect={handleSelectSavedScript}
+              />
 
               {/* AI suggest button */}
               <button
@@ -702,9 +787,16 @@ export default function LipSync() {
               <textarea
                 ref={textareaRef}
                 value={scriptText}
-                onChange={(e) => setScriptText(e.target.value)}
+                onChange={(e) => {
+                  setScriptText(e.target.value)
+                  // User started editing manually → unlink from saved script
+                  if (selectedScriptId) setSelectedScriptId('')
+                }}
                 rows={5}
-                placeholder="Nhập kịch bản... Dùng nút cảm xúc hoặc 'Gợi ý biểu cảm' để thêm tag [happy], [excited]..."
+                placeholder={savedScripts.length > 0
+                  ? 'Chọn kịch bản đã lưu ở trên, hoặc nhập thủ công...'
+                  : 'Nhập kịch bản... Dùng nút cảm xúc hoặc "Gợi ý biểu cảm" để thêm tag [happy], [excited]...'
+                }
                 className="w-full resize-none rounded-lg border border-black/10 bg-transparent px-3 py-2 text-sm text-gray-800 placeholder-gray-300 outline-none transition-colors focus:border-black/15"
               />
               <p className="mt-1 text-[10px] text-gray-400">
