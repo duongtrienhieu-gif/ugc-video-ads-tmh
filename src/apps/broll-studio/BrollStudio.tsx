@@ -251,16 +251,20 @@ async function toPublicUrl(ref: string): Promise<string | null> {
 //
 // Each tile snapshots its scene / style / product / avatar at the moment of
 // generation. Regenerate ALWAYS uses these locked values — never the current
-// global selection — so changing the scene chip after generating does NOT
-// secretly mutate the regen behaviour of existing tiles. This is the same
-// design principle as identity-lock: the original generation params travel
-// with the image card.
+// global selection.
+//
+// IMPORTANT: lock stores ASSET REFS (asset:xxx), not signed Supabase URLs.
+// Signed URLs expire after 1 hour, so persisting them across a refresh (or
+// even a long-running session) would break regen. We resolve refs to fresh
+// public URLs right before each KIE call via `resolveLockToPublic`.
 
 interface TileLock {
   sceneId: string
   styleId: string
-  productUrl: string
-  avatarUrl: string | null
+  /** asset:xxx ref — stable, survives refresh and URL expiry. */
+  productRef: string
+  /** asset:xxx ref or null if no avatar selected. */
+  avatarRef: string | null
 }
 
 interface TileState {
@@ -273,6 +277,16 @@ interface TileState {
 }
 
 const EMPTY_TILES: TileState[] = VARIATIONS.map(() => ({ url: null, qc: null, status: 'idle' }))
+
+/** Resolve a lock's asset refs into freshly-signed public URLs that KIE can fetch. */
+async function resolveLockToPublic(
+  lock: TileLock,
+): Promise<{ productUrl: string; avatarUrl: string | null } | null> {
+  const productUrl = await getUrl(lock.productRef)
+  if (!productUrl) return null
+  const avatarUrl = lock.avatarRef ? await getUrl(lock.avatarRef) : null
+  return { productUrl, avatarUrl }
+}
 
 // ── Result tile ─────────────────────────────────────────────────────────────
 // Each tile manages its own lifecycle independently. One tile's failure must
@@ -539,10 +553,20 @@ export default function ProductAI() {
   const [progress, setProgress] = useState({ done: 0, total: 0 })
   const [savedIdx, setSavedIdx] = useState<Set<number>>(new Set())
 
+  // Restore prompt — populated on mount if a non-empty session exists in
+  // localStorage. Null otherwise. User dismisses it via Restore / Discard.
+  const [restorePrompt, setRestorePrompt] = useState<ProductAIPersisted | null>(null)
+  // Hydration guard: skip the persist useEffect on the very first render so
+  // we don't overwrite the saved blob with our initial empty defaults before
+  // the restore decision is made.
+  const hydratedRef = useRef(false)
+
   const kieApiKey    = useSettingsStore((s) => s.kieApiKey)
   const geminiApiKey = useSettingsStore((s) => s.geminiApiKey)
   const addToast     = useAppStore((s) => s.addToast)
   const addBRoll     = useBankStore((s) => s.addBRoll)
+  const models       = useBankStore((s) => s.models)
+  const products     = useBankStore((s) => s.products)
 
   const avatarImageRef  = selectedAvatar?.characterImage  ?? uploadedAvatarUrl
   const productImageRef = selectedProduct?.productImage ?? uploadedProductUrl
@@ -634,11 +658,18 @@ export default function ProductAI() {
       lock: args.lock,
     })
 
+    // Resolve asset refs → public URLs (KIE backend can't fetch asset:// directly)
+    const resolved = await resolveLockToPublic(args.lock)
+    if (!resolved) {
+      updateTile(idx, { status: 'error', error: 'Không resolve được URL sản phẩm' })
+      return null
+    }
+
     const shotArgs = {
       sceneId: args.lock.sceneId,
       styleId: args.lock.styleId,
-      productUrl: args.lock.productUrl,
-      avatarUrl: args.lock.avatarUrl,
+      productUrl: resolved.productUrl,
+      avatarUrl: resolved.avatarUrl,
       baseUrl: args.baseUrl,
       variationHint: args.variationHint,
     }
@@ -652,7 +683,7 @@ export default function ProductAI() {
         return null
       }
       updateTile(idx, { url })
-      const qc = await runQC(idx, args.lock.productUrl, url)
+      const qc = await runQC(idx, resolved.productUrl, url)
       updateTile(idx, { qc, status: 'done' })
 
       // Strict mode: one auto-retry only for the BASE tile.
@@ -664,7 +695,7 @@ export default function ProductAI() {
         })
         if (retry) {
           updateTile(idx, { url: retry })
-          const qc2 = await runQC(idx, args.lock.productUrl, retry)
+          const qc2 = await runQC(idx, resolved.productUrl, retry)
           updateTile(idx, { qc: qc2, status: 'done' })
           return retry
         }
@@ -688,25 +719,15 @@ export default function ProductAI() {
     setProgress({ done: 0, total: 4 })
 
     try {
-      const [avatarUrl, productUrl] = await Promise.all([
-        avatarImageRef ? toPublicUrl(avatarImageRef) : Promise.resolve(null),
-        toPublicUrl(productImageRef),
-      ])
-      if (!productUrl) {
-        addToast('Không tải được ảnh sản phẩm — thử lại', 'error')
-        setIsBatch(false)
-        return
-      }
-
-      // Snapshot the CURRENT global scene/style/refs into a single lock object.
-      // Every tile generated in this batch keeps a copy. Subsequent regen
-      // calls read from each tile's own lock so they don't drift if the user
-      // changes the global selection afterwards.
+      // batchLock stores asset:// refs (stable across signed-URL expiry).
+      // generateTile resolves them to public URLs internally per call via
+      // resolveLockToPublic. This is what lets locks survive a page refresh:
+      // any baked-in URL would be expired by then.
       const batchLock: TileLock = {
         sceneId,
         styleId,
-        productUrl,
-        avatarUrl,
+        productRef: productImageRef,
+        avatarRef: avatarImageRef ?? null,
       }
       console.log('[ProductAI] handleGenerate batch lock', batchLock)
 
@@ -778,16 +799,14 @@ export default function ProductAI() {
 
     if (!lock) {
       // First-fill (idle slot) — capture current global selection as the lock.
+      // Store asset:// refs (not URLs) so the lock survives signed-URL expiry.
       if (!productImageRef || !canGenerate) return
-      const [avatarUrl, productUrl] = await Promise.all([
-        avatarImageRef ? toPublicUrl(avatarImageRef) : Promise.resolve(null),
-        toPublicUrl(productImageRef),
-      ])
-      if (!productUrl) {
-        addToast('Không tải được ảnh sản phẩm', 'error')
-        return
+      lock = {
+        sceneId,
+        styleId,
+        productRef: productImageRef,
+        avatarRef: avatarImageRef ?? null,
       }
-      lock = { sceneId, styleId, productUrl, avatarUrl }
     }
 
     console.log('[ProductAI] handleRegen', {
@@ -837,13 +856,26 @@ export default function ProductAI() {
     setUploadedProductUrl(null)
     setPickerMode(null)
   }
-  const handleUploadAvatar = (file: File) => {
-    setUploadedAvatarUrl(URL.createObjectURL(file))
-    setSelectedAvatar(null)
+  // Uploads are persisted to the asset store immediately so they survive a
+  // page refresh. blob: URLs from URL.createObjectURL are session-scoped and
+  // disappear on reload, which would break locks pointing back at them.
+  const handleUploadAvatar = async (file: File) => {
+    try {
+      const ref = await saveAsset(file, file.type || 'image/jpeg')
+      setUploadedAvatarUrl(ref)
+      setSelectedAvatar(null)
+    } catch (err) {
+      addToast(`Upload avatar lỗi: ${err instanceof Error ? err.message.slice(0, 60) : 'unknown'}`, 'error')
+    }
   }
-  const handleUploadProduct = (file: File) => {
-    setUploadedProductUrl(URL.createObjectURL(file))
-    setSelectedProduct(null)
+  const handleUploadProduct = async (file: File) => {
+    try {
+      const ref = await saveAsset(file, file.type || 'image/jpeg')
+      setUploadedProductUrl(ref)
+      setSelectedProduct(null)
+    } catch (err) {
+      addToast(`Upload sản phẩm lỗi: ${err instanceof Error ? err.message.slice(0, 60) : 'unknown'}`, 'error')
+    }
   }
 
   // ── Save handlers ──────────────────────────────────────────────────────────

@@ -17,13 +17,16 @@ import { useSettingsStore } from '../../../stores/settingsStore'
 import { useAssetUrl } from '../../../hooks/useAssetUrl'
 import BankPicker from '../../../components/BankPicker'
 import type { Model, Product } from '../../../stores/types'
-import type { V2PipelineState, MasterFrame, CompiledPrompt } from './types'
+import type { V2PipelineState, CompiledPrompt } from './types'
 import { createEmptyV2State } from './types'
-import { extractIdentityPack, generateMasterFrame, generateMasterFrameWithQc } from './services/masterFrame'
+import { extractIdentityPack } from './services/masterFrame'
 import { generateStoryboard } from './services/sceneBlueprint'
 import { defaultVisualStyleDna, computeConsistencyConfig } from './types'
 import type { SceneBlueprint, DiversityReport } from './types'
 import ConsistencySlider from './components/ConsistencySlider'
+import MasterFrameJobStepper from './components/MasterFrameJobStepper'
+import { useMasterFrameJobStore } from './stores/masterFrameJobStore'
+import { startMasterFrameJob, clearMasterFrameJob } from './services/masterFrameJobRunner'
 import MasterFrameApproval from './components/MasterFrameApproval'
 import PromptCompilerDebugPanel from './components/PromptCompilerDebugPanel'
 import StoryboardEditor from './components/StoryboardEditor'
@@ -112,9 +115,13 @@ export default function VideoBuilderV2({ onSwitchToV1 }: Props) {
   const [state, setState] = useState<V2PipelineState>(createEmptyV2State)
   const [pickerMode, setPickerMode] = useState<'avatar' | 'product' | 'script' | null>(null)
   const [identityProgress, setIdentityProgress] = useState<string>('')
-  /** Last compiled prompt — shown in debug panel. Always reflects the most recent gen. */
-  const [lastCompiled, setLastCompiled] = useState<CompiledPrompt | null>(null)
+  /** Last compiled prompt — shown in debug panel. Reflects job's finalCompiled. */
+  const [lastCompiled, _setLastCompiled] = useState<CompiledPrompt | null>(null)
   const [debugOpen, setDebugOpen] = useState(false)
+  // setLastCompiled is reserved for future use when scene-gen module 6 wires
+  // its own debug panel calls; the job runner stores the compiled prompt
+  // directly on the finalized job object instead. Suppress unused-var warning:
+  void _setLastCompiled
   /** Module 3 storyboard state */
   const [diversityReport, setDiversityReport] = useState<DiversityReport | null>(null)
   const [isGeneratingStoryboard, setIsGeneratingStoryboard] = useState(false)
@@ -130,6 +137,48 @@ export default function VideoBuilderV2({ onSwitchToV1 }: Props) {
   const addToast = useAppStore((s) => s.addToast)
 
   useEffect(() => () => { cancelledRef.current = true }, [])
+
+  // ── Module 6: Resume in-flight job from localStorage on mount ───────────
+  // If a previous session was interrupted (refresh / crash), the job state is
+  // in localStorage. We restore it so the user sees their last progress
+  // instead of starting from scratch.
+  const activeJob = useMasterFrameJobStore((s) => s.job)
+  const tryResumeFromStorage = useMasterFrameJobStore((s) => s.tryResumeFromStorage)
+  useEffect(() => {
+    const resumed = tryResumeFromStorage()
+    if (resumed) {
+      addToast('Đã khôi phục Master Frame job đang chạy từ phiên trước', 'info')
+      // Auto-jump to the master-frame phase so user sees the stepper
+      setState((s) => s.phase === 'input' ? { ...s, phase: 'master-frame' } : s)
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // When the job runner finalizes with 'completed', sync the result into the
+  // local v2 state so existing MasterFrameApproval grid can show it.
+  useEffect(() => {
+    if (activeJob?.status === 'completed' && activeJob.finalImageUrl) {
+      // Check if already in candidates (avoid double-add on re-render)
+      const alreadyAdded = state.masterFrame.candidates.some((c) => c.imageUrl === activeJob.finalImageUrl)
+      if (!alreadyAdded) {
+        setState((s) => ({
+          ...s,
+          masterFrame: {
+            ...s.masterFrame,
+            candidates: [...s.masterFrame.candidates, {
+              imageUrl: activeJob.finalImageUrl!,
+              promptUsed: activeJob.finalCompiled?.final ?? '',
+              createdAt: activeJob.updatedAt,
+              status: 'pending-approval',
+              qc: activeJob.finalQc ?? null,
+            }],
+            isGenerating: false,
+          },
+        }))
+      }
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeJob?.status, activeJob?.finalImageUrl])
 
   // Tick the elapsed-seconds counter every second while generating, so user sees
   // "stuck for 45s" rather than just a spinner with no time info.
@@ -199,9 +248,9 @@ export default function VideoBuilderV2({ onSwitchToV1 }: Props) {
       })
       if (cancelledRef.current) return
       setState((s) => ({ ...s, identityPack: identity, phase: 'master-frame' }))
-      addToast('✓ Đã trích xuất identity pack — đang tạo Master Frame...')
-      // Auto-start first master frame generation
-      void handleGenerateMasterFrame(identity)
+      addToast('✓ Đã trích xuất identity pack — đang tạo Master Frame (async job)...')
+      // Auto-start first master frame generation via the new job runner
+      handleGenerateMasterFrameViaJob(identity)
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
       addToast(`Phân tích identity thất bại: ${msg.slice(0, 100)}`, 'error')
@@ -211,96 +260,37 @@ export default function VideoBuilderV2({ onSwitchToV1 }: Props) {
     }
   }
 
-  // ── Phase 2: generate a master frame candidate (with optional QC loop) ────
-  const handleGenerateMasterFrame = async (identityOverride?: typeof state.identityPack) => {
+  // ── New job-based gen (Module 6 async architecture) ───────────────────────
+  // Returns jobId immediately; the pipeline runs as a detached promise that
+  // updates masterFrameJobStore as it progresses. UI subscribes via the store.
+  const handleGenerateMasterFrameViaJob = (identityOverride?: typeof state.identityPack) => {
     const identity = identityOverride ?? state.identityPack
-    if (!identity || !state.inputs.product) return
-    if (!kieApiKey) {
-      addToast('Cần KIE.ai API key trong Cài đặt', 'error')
-      return
-    }
+    if (!state.inputs.avatar || !state.inputs.product) return
+    if (!kieApiKey) { addToast('Cần KIE.ai API key', 'error'); return }
+    if (!geminiApiKey) { addToast('Cần Gemini API key', 'error'); return }
 
-    setState((s) => ({
-      ...s,
-      masterFrame: { ...s.masterFrame, isGenerating: true, error: null },
-    }))
-    setQcProgress(null)
-    genStartRef.current = Date.now()
+    // Resolve URLs (if identity not yet extracted, use raw bank refs as URLs)
+    const avatarImageUrl = identity?.avatarImageUrl ?? state.inputs.avatar.characterImage
+    const productImageUrl = identity?.productImageUrl ?? state.inputs.product.productImage
 
-    try {
-      let frame: MasterFrame
-      let compiled: CompiledPrompt
-
-      if (qcEnabled && geminiApiKey) {
-        // QC LOOP MODE — auto-retry on fail, return best-of-N
-        const result = await generateMasterFrameWithQc({
-          kieApiKey,
-          geminiKey: geminiApiKey,
-          identity,
-          productName: state.inputs.product.productName,
-          consistency: state.consistency,
-          onAttempt: (attemptIdx, qc) => {
-            if (qc === null) {
-              setQcProgress({ attempt: attemptIdx + 1, status: `Đang tạo ảnh lần ${attemptIdx + 1}...` })
-            } else if (qc.passed) {
-              setQcProgress({ attempt: attemptIdx + 1, status: `✓ Đạt QC ở lần ${attemptIdx + 1}` })
-            } else {
-              const reason = qc.classification === 'wrong-product' ? 'sản phẩm chưa khớp'
-                : qc.classification === 'wrong-ethnicity' || qc.classification === 'wrong-hijab' ? 'khuôn mặt chưa khớp'
-                : qc.classification === 'stock-photo-vibe' || qc.classification === 'studio-look' ? 'chưa đủ chân thực'
-                : 'cần điều chỉnh'
-              setQcProgress({ attempt: attemptIdx + 1, status: `Lần ${attemptIdx + 1} chưa đạt (${reason}) — đang tạo lại...` })
-            }
-          },
-        })
-        frame = { ...result.frame, qc: result.qc }
-        compiled = result.compiled
-      } else {
-        // SIMPLE MODE (no QC) — single shot, no auto-retry
-        const result = await generateMasterFrame({
-          kieApiKey,
-          identity,
-          productName: state.inputs.product.productName,
-          consistency: state.consistency,
-        })
-        frame = result.frame
-        compiled = result.compiled
-      }
-
-      if (cancelledRef.current) return
-      setLastCompiled(compiled)
-      setState((s) => ({
-        ...s,
-        masterFrame: {
-          ...s.masterFrame,
-          candidates: [...s.masterFrame.candidates, frame as MasterFrame],
-          isGenerating: false,
-        },
-      }))
-      setQcProgress(null)
-      genStartRef.current = null
-
-      // Toast message reflects QC outcome
-      if (frame.qc?.passed) {
-        addToast(`✓ Bản #${state.masterFrame.candidates.length + 1} đạt QC (retry ${frame.qc.retryCount})`)
-      } else if (frame.qc) {
-        addToast(`Bản #${state.masterFrame.candidates.length + 1} không đạt full QC sau ${frame.qc.retryCount + 1} lần — hiển thị bản tốt nhất`, 'info')
-      } else {
-        addToast(`✓ Đã tạo bản #${state.masterFrame.candidates.length + 1}`)
-      }
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err)
-      setState((s) => ({
-        ...s,
-        masterFrame: { ...s.masterFrame, isGenerating: false, error: msg.slice(0, 200) },
-      }))
-      setQcProgress(null)
-      genStartRef.current = null
-      if (!msg.includes('CANCELLED')) {
-        addToast(`Tạo Master Frame thất bại: ${msg.slice(0, 100)}`, 'error')
-      }
-    }
+    startMasterFrameJob({
+      kieApiKey,
+      geminiKey: geminiApiKey,
+      inputs: {
+        avatarId: state.inputs.avatar.id,
+        productId: state.inputs.product.id,
+        consistencyStrength: state.consistency.strength,
+        qcEnabled,
+        avatarImageUrl,
+        productImageUrl,
+        productName: state.inputs.product.productName,
+      },
+    })
+    addToast('✓ Job đã bắt đầu — chạy ở background', 'info')
   }
+
+  // (Legacy synchronous handleGenerateMasterFrame removed — replaced by
+  //  handleGenerateMasterFrameViaJob which uses the async job runner.)
 
   const handleApproveFrame = (idx: number) => {
     setState((s) => ({
@@ -497,22 +487,45 @@ export default function VideoBuilderV2({ onSwitchToV1 }: Props) {
           </div>
         )}
 
-        {/* PHASE: MASTER FRAME (this module's main UI) */}
+        {/* PHASE: MASTER FRAME — stepper overlay when job running, then approval grid */}
         {state.phase === 'master-frame' && (
-          <MasterFrameApproval
-            state={state.masterFrame}
-            identity={state.identityPack}
-            onGenerateMore={() => void handleGenerateMasterFrame()}
-            onApprove={handleApproveFrame}
-            onReject={handleRejectAll}
-            onContinue={handleContinueAfterMasterFrame}
-            qcEnabled={qcEnabled}
-            onQcEnabledChange={setQcEnabled}
-            qcProgress={qcProgress}
-            onCancel={handleCancelGen}
-            consistencyStrength={state.consistency.strength}
-            onConsistencyChange={handleStrengthChange}
-          />
+          <div className="flex h-full flex-col overflow-hidden">
+            {/* Show stepper if there's an active or recently-finished job */}
+            {activeJob && (activeJob.status !== 'completed' || state.masterFrame.candidates.length === 0) && (
+              <div className="shrink-0 border-b border-black/8 bg-gradient-to-r from-violet-50/50 to-pink-50/50 p-4">
+                <MasterFrameJobStepper
+                  onCompleted={() => {
+                    // After job completes, optionally clear it so user can start fresh
+                    // (the candidate already got pushed into local state via the useEffect above)
+                  }}
+                />
+                {activeJob.status === 'completed' && (
+                  <button
+                    onClick={() => clearMasterFrameJob()}
+                    className="mt-2 text-[10px] text-violet-600 hover:text-violet-800 underline"
+                  >
+                    Đóng panel job
+                  </button>
+                )}
+              </div>
+            )}
+            <div className="min-h-0 flex-1 overflow-hidden">
+              <MasterFrameApproval
+                state={state.masterFrame}
+                identity={state.identityPack}
+                onGenerateMore={() => handleGenerateMasterFrameViaJob()}
+                onApprove={handleApproveFrame}
+                onReject={handleRejectAll}
+                onContinue={handleContinueAfterMasterFrame}
+                qcEnabled={qcEnabled}
+                onQcEnabledChange={setQcEnabled}
+                qcProgress={qcProgress}
+                onCancel={handleCancelGen}
+                consistencyStrength={state.consistency.strength}
+                onConsistencyChange={handleStrengthChange}
+              />
+            </div>
+          </div>
         )}
 
         {/* PHASE: BLUEPRINT (Module 3 — Scene Blueprint JSON editor) */}

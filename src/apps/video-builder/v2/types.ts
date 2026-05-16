@@ -377,6 +377,110 @@ export const CONSISTENCY_PRESETS: ConsistencyPreset[] = [
   },
 ]
 
+// ── ASYNC JOB ARCHITECTURE — Master Frame ─────────────────────────────────────
+// Master Frame generation is moved from synchronous request to a detached
+// async job. The runner starts the job, returns jobId immediately, and the
+// pipeline runs in the background. UI subscribes to job-state updates via
+// the jobStore. State is persisted to localStorage so refresh resumes.
+
+export type MasterFrameJobStatus =
+  | 'queued'                  // job created, not yet started
+  | 'extracting_identity'     // Gemini Vision describing avatar + product
+  | 'generating'              // initial KIE image gen in flight (1st attempt)
+  | 'auto_validating'         // quick heuristic + Gemini QC running
+  | 'retrying_1'              // QC failed once, re-generating with bumps
+  | 'retrying_2'              // 2nd retry
+  | 'retrying_3'              // 3rd retry (final)
+  | 'completed'               // success or best-of-N returned
+  | 'failed'                  // hard error or timeout
+  | 'cancelled'               // user cancelled
+
+/** Vietnamese label for each job status — shown in the stepper UI. */
+export const JOB_STATUS_LABEL_VI: Record<MasterFrameJobStatus, string> = {
+  'queued':              'Đã xếp hàng đợi...',
+  'extracting_identity': 'Đang phân tích avatar và sản phẩm...',
+  'generating':          'Đang tạo ảnh Master Frame...',
+  'auto_validating':     'Đang kiểm tra độ khớp sản phẩm + khuôn mặt...',
+  'retrying_1':          'Đang tạo lại lần 2 (điều chỉnh prompt)...',
+  'retrying_2':          'Đang tạo lại lần 3 (tăng cường lock)...',
+  'retrying_3':          'Đang tạo lại lần 4 (lần cuối)...',
+  'completed':           'Đã hoàn thành ✓',
+  'failed':              'Thất bại',
+  'cancelled':           'Đã hủy',
+}
+
+/** Estimated overall progress 0-100 per status — drives the progress bar. */
+export const JOB_PROGRESS_PCT: Record<MasterFrameJobStatus, number> = {
+  'queued':              5,
+  'extracting_identity': 15,
+  'generating':          40,
+  'auto_validating':     55,
+  'retrying_1':          70,
+  'retrying_2':          82,
+  'retrying_3':          90,
+  'completed':           100,
+  'failed':              100,
+  'cancelled':           100,
+}
+
+export interface MasterFrameJobInputs {
+  avatarId: string         // Model.id from bank
+  productId: string        // Product.id from bank
+  consistencyStrength: number
+  qcEnabled: boolean
+  /** Resolved at job start, used as primary identity refs */
+  avatarImageUrl: string
+  productImageUrl: string
+  productName: string
+}
+
+export interface MasterFrameJobAttempt {
+  attemptIdx: number          // 0 = first try, 1 = retry 1, ...
+  /** Persisted intermediate image (per spec: auto-save every successful gen) */
+  imageUrl: string | null
+  /** KIE task id — persisted so refresh can re-poll without losing this attempt */
+  kieTaskId?: string
+  qc?: QcScore | null
+  startedAt: number
+  finishedAt?: number
+}
+
+export interface MasterFrameJobFailure {
+  failureType: 'timeout' | 'api_error' | 'qc_unrecoverable' | 'cancelled' | 'unknown'
+  message: string
+  lastScores?: QcScore
+  retryHistory: Array<{ attemptIdx: number; classification?: string; failureReasons?: string[] }>
+}
+
+export interface MasterFrameJob {
+  jobId: string
+  createdAt: number
+  updatedAt: number
+  status: MasterFrameJobStatus
+  inputs: MasterFrameJobInputs
+
+  /** Locked identity descriptions from Gemini Vision — set after extracting_identity completes */
+  identity?: IdentityPack | null
+
+  /** All attempts so far (success or fail) — auto-saved as they complete */
+  attempts: MasterFrameJobAttempt[]
+
+  /** Final accepted/best image (null until completed) */
+  finalImageUrl?: string | null
+  finalQc?: QcScore | null
+  finalCompiled?: CompiledPrompt | null
+
+  /** Vietnamese status text — drives stepper UI */
+  statusVi: string
+  /** Progress 0-100 — combines status pct + intra-status elapsed */
+  progress: number
+  /** Live elapsed seconds (UI ticker updates this) */
+  elapsedSec: number
+
+  /** Failure detail (populated when status='failed') */
+  failure?: MasterFrameJobFailure
+}
+
 // ── v2 Pipeline State ────────────────────────────────────────────────────────
 
 export type V2Phase =
