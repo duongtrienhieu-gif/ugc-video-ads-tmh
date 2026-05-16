@@ -433,6 +433,43 @@ function getStepFromPhase(phase: PipelinePhase): string | null {
   return m ? m[1] : null
 }
 
+/** Returns step number from phase, or 99 if not in pipeline. Useful for ordering. */
+function getActiveStepNum(phase: PipelinePhase): number {
+  if (phase === 'done') return 99   // all steps complete
+  const step = getStepFromPhase(phase)
+  return step ? (STEP_INFO[step]?.num ?? 0) : 0
+}
+
+// ── Completed step card (collapsible history item) ────────────────────────────
+
+function CompletedStepCard({ stepId, summary, children }: {
+  stepId: string
+  summary: string
+  children?: React.ReactNode
+}) {
+  const info = STEP_INFO[stepId]
+  if (!info) return null
+  return (
+    <details className="group overflow-hidden rounded-xl border border-emerald-200/70 bg-emerald-50/40">
+      <summary className="flex cursor-pointer items-center gap-3 px-3 py-2 hover:bg-emerald-50">
+        <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-emerald-500 text-[10px] font-bold text-white">
+          {info.num}
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="flex items-center gap-1.5 text-xs font-bold text-emerald-800">
+            <CheckCircle2 className="h-3 w-3" /> {info.label}
+          </p>
+          <p className="truncate text-[10px] text-emerald-600">{summary}</p>
+        </div>
+        <ChevronDown className="h-3.5 w-3.5 text-emerald-500 transition-transform group-open:rotate-180" />
+      </summary>
+      {children && (
+        <div className="border-t border-emerald-100 bg-white/70 p-3">{children}</div>
+      )}
+    </details>
+  )
+}
+
 // ── Phase progress header ─────────────────────────────────────────────────────
 
 function PhaseHeader({ phase }: { phase: PipelinePhase }) {
@@ -1506,6 +1543,138 @@ ${script}`
         </div>
 
         <div className="flex-1 overflow-y-auto p-4">
+
+          {/* Completed steps history (collapsible cards) — shown so user
+              can refer back to any step they've already approved */}
+          {!isIdle && (() => {
+            const activeNum = getActiveStepNum(phase)
+            const cards: React.ReactNode[] = []
+
+            // Step 1: Voice
+            if (previewVoiceUrl && (activeNum > 1 || phase === 'done')) {
+              cards.push(
+                <CompletedStepCard
+                  key="voice"
+                  stepId="voice"
+                  summary={`${formatDuration(pipeRef.current.audioDuration ?? 0)} · ${Math.round((pipeRef.current.audioBlob?.size ?? 0) / 1024)} KB · 1.1x speed`}
+                >
+                  <audio controls src={previewVoiceUrl} className="w-full" />
+                </CompletedStepCard>
+              )
+            }
+
+            // Step 2: Storyboard
+            if (previewSegments.length > 0 && (activeNum > 2 || phase === 'done')) {
+              cards.push(
+                <CompletedStepCard
+                  key="parse"
+                  stepId="parse"
+                  summary={`${previewSegments.length} cảnh quay · ${formatDuration(pipeRef.current.audioDuration ?? 0)}`}
+                >
+                  <div className="max-h-48 space-y-1.5 overflow-y-auto">
+                    {previewSegments.map((seg, i) => (
+                      <div key={i} className="rounded-md bg-gray-50 px-2 py-1.5">
+                        <p className="text-[10px] font-bold text-violet-600">Đoạn {i + 1} · {seg.durationSec.toFixed(1)}s</p>
+                        <p className="text-[11px] text-gray-700">{seg.text}</p>
+                      </div>
+                    ))}
+                  </div>
+                </CompletedStepCard>
+              )
+            }
+
+            // Step 3: Resolve (always shown as completed once past — minimal preview)
+            if (pipeRef.current.voiceUrl && (activeNum > 3 || phase === 'done')) {
+              const productCount = pipeRef.current.productImageUrls?.length ?? 0
+              cards.push(
+                <CompletedStepCard
+                  key="resolve"
+                  stepId="resolve"
+                  summary={`Audio uploaded · 1 avatar · ${productCount} ảnh sản phẩm`}
+                />
+              )
+            }
+
+            // Step 4: Avatar Lip-sync
+            if (previewAvatarUrl && (activeNum > 4 || phase === 'done')) {
+              cards.push(
+                <CompletedStepCard
+                  key="avatar"
+                  stepId="avatar"
+                  summary={`Lip-sync video · ${formatDuration(pipeRef.current.audioDuration ?? 0)} · 720p`}
+                >
+                  <video controls src={previewAvatarUrl} playsInline className="w-full max-h-64 rounded-lg bg-black object-contain" />
+                </CompletedStepCard>
+              )
+            }
+
+            // Step 5: B-roll Images
+            if (previewBrollImageUrls.length > 0 && (activeNum > 5 || phase === 'done')) {
+              const successCount = previewBrollImageUrls.filter(Boolean).length
+              cards.push(
+                <CompletedStepCard
+                  key="brollimg"
+                  stepId="brollimg"
+                  summary={`${successCount}/${previewBrollImageUrls.length} ảnh tĩnh đã duyệt`}
+                >
+                  <div className="grid grid-cols-4 gap-1.5">
+                    {previewBrollImageUrls.map((url, i) => (
+                      <div key={i} className="relative overflow-hidden rounded-md border border-emerald-100">
+                        {url
+                          ? <img src={url} alt={`#${i + 1}`} className="h-20 w-full object-cover" />
+                          : <div className="flex h-20 items-center justify-center bg-red-50"><X className="h-4 w-4 text-red-400" /></div>
+                        }
+                        <span className="absolute bottom-0.5 left-0.5 rounded bg-black/60 px-1 py-0.5 text-[8px] font-bold text-white">#{i + 1}</span>
+                      </div>
+                    ))}
+                  </div>
+                </CompletedStepCard>
+              )
+            }
+
+            // Step 6: B-roll Videos
+            if (previewBrollUrls.length > 0 && (activeNum > 6 || phase === 'done')) {
+              const successCount = previewBrollUrls.filter(Boolean).length
+              cards.push(
+                <CompletedStepCard
+                  key="broll"
+                  stepId="broll"
+                  summary={`${successCount}/${previewBrollUrls.length} video clips đã animate`}
+                >
+                  <div className="grid grid-cols-3 gap-1.5">
+                    {previewBrollUrls.map((url, i) => (
+                      <div key={i} className="relative overflow-hidden rounded-md border border-emerald-100">
+                        {url
+                          ? <video src={url} muted loop autoPlay playsInline className="h-24 w-full object-cover" />
+                          : <div className="flex h-24 items-center justify-center bg-red-50"><X className="h-4 w-4 text-red-400" /></div>
+                        }
+                        <span className="absolute bottom-0.5 left-0.5 rounded bg-black/60 px-1 py-0.5 text-[8px] font-bold text-white">#{i + 1}</span>
+                      </div>
+                    ))}
+                  </div>
+                </CompletedStepCard>
+              )
+            }
+
+            // Step 7: BG removal
+            if (previewBgUrl && (activeNum > 7 || phase === 'done')) {
+              cards.push(
+                <CompletedStepCard
+                  key="bg"
+                  stepId="bg"
+                  summary="Avatar đã xóa nền"
+                >
+                  <video
+                    controls src={previewBgUrl} playsInline
+                    className="w-full max-h-48 rounded-lg object-contain"
+                    style={{ background: 'repeating-conic-gradient(#e5e7eb 0% 25%, #f9fafb 0% 50%) 50% / 16px 16px' }}
+                  />
+                </CompletedStepCard>
+              )
+            }
+
+            return cards.length > 0 ? <div className="mb-3 space-y-2">{cards}</div> : null
+          })()}
 
           {/* Phase header (shown during all phases except idle/done/failed) */}
           {!isIdle && phase !== 'done' && phase !== 'failed' && <PhaseHeader phase={phase} />}
