@@ -25,16 +25,16 @@ interface Props {
   onCancelQueue: () => void
 }
 
-// ── Vietnamese status labels by item status (used in stepper banner) ─────────
-const STATUS_PILL_COLOR: Record<SceneGenItemStatus, string> = {
-  'pending':           'bg-gray-100 text-gray-500',
-  'generating':        'bg-violet-100 text-violet-700',
-  'auto_validating':   'bg-amber-100 text-amber-700',
-  'retrying':          'bg-orange-100 text-orange-700',
-  'approved':          'bg-emerald-100 text-emerald-700',
-  'rejected':          'bg-pink-100 text-pink-700',
-  'failed':            'bg-red-100 text-red-700',
-  'cancelled':         'bg-gray-100 text-gray-500',
+// Solid dot colors — readable at 8px on the compact card bottom strip
+const STATUS_DOT_COLOR: Record<SceneGenItemStatus, string> = {
+  'pending':           'bg-gray-300',
+  'generating':        'bg-violet-500 animate-pulse',
+  'auto_validating':   'bg-amber-500 animate-pulse',
+  'retrying':          'bg-orange-500 animate-pulse',
+  'approved':          'bg-emerald-500',
+  'rejected':          'bg-pink-500',
+  'failed':            'bg-red-500',
+  'cancelled':         'bg-gray-400',
 }
 
 // ── Single scene card ───────────────────────────────────────────────────────
@@ -60,141 +60,185 @@ function SceneCard({
   const hasImage = !!item.imageUrl
 
   return (
-    <div className={`flex flex-col overflow-hidden rounded-xl border-2 transition-all ${
-      item.status === 'approved' ? 'border-emerald-300 bg-emerald-50/30' :
-      item.status === 'failed' ? 'border-red-200 bg-red-50/20' :
-      item.status === 'rejected' ? 'border-pink-200 bg-pink-50/20' :
-      'border-black/10 bg-white'
+    <div className={`group relative flex flex-col overflow-hidden rounded-lg border transition-all ${
+      item.status === 'approved' ? 'border-emerald-400 ring-2 ring-emerald-200/60' :
+      item.status === 'failed'   ? 'border-red-300' :
+      item.status === 'rejected' ? 'border-pink-300' :
+      'border-black/10'
     }`}>
-      {/* Image area */}
-      <div className="relative aspect-[2/3] w-full bg-gray-900">
+      {/* Image area — ~90% of card height, dominates the card */}
+      <div className="relative aspect-[2/3] w-full bg-gray-100">
         {isLoading ? (
-          <div className="flex h-full flex-col items-center justify-center gap-2 text-violet-300">
-            <Loader2 className="h-8 w-8 animate-spin" />
-            <span className="text-[10px] font-semibold">{SCENE_STATUS_LABEL_VI[item.status]}</span>
-            {item.retryCount > 0 && <span className="text-[9px] opacity-70">Retry #{item.retryCount}</span>}
+          <div className="flex h-full flex-col items-center justify-center gap-1.5 text-violet-400">
+            <Loader2 className="h-5 w-5 animate-spin" />
+            <span className="px-1 text-center text-[9px] font-medium leading-tight">
+              {SCENE_STATUS_LABEL_VI[item.status]}
+              {item.retryCount > 0 && ` #${item.retryCount}`}
+            </span>
+            {/* mini progress shimmer */}
+            <div className="absolute inset-x-0 bottom-0 h-0.5 overflow-hidden bg-black/5">
+              <div className="h-full w-1/3 animate-pulse bg-violet-400" />
+            </div>
           </div>
         ) : hasImage && displayUrl ? (
           <img src={displayUrl} alt={`Scene ${item.sceneId}`} className="h-full w-full object-cover" />
         ) : item.status === 'failed' ? (
-          <div className="flex h-full flex-col items-center justify-center gap-2 px-3 text-center text-red-300">
-            <AlertCircle className="h-8 w-8" />
-            <span className="text-[10px] line-clamp-3">{item.error ?? 'Lỗi không xác định'}</span>
+          <div className="flex h-full flex-col items-center justify-center gap-1 px-2 text-center text-red-400">
+            <AlertCircle className="h-5 w-5" />
+            <span className="line-clamp-2 text-[9px] leading-tight">{item.error ?? 'Lỗi'}</span>
           </div>
         ) : (
-          <div className="flex h-full flex-col items-center justify-center gap-2 text-gray-500">
-            <Sparkles className="h-8 w-8 opacity-40" />
-            <span className="text-[10px]">{SCENE_STATUS_LABEL_VI[item.status]}</span>
+          <div className="flex h-full flex-col items-center justify-center gap-1 text-gray-300">
+            <Sparkles className="h-5 w-5 opacity-40" />
+            <span className="text-[9px]">{SCENE_STATUS_LABEL_VI[item.status]}</span>
           </div>
         )}
 
-        {/* Scene number overlay */}
-        <span className="absolute left-2 top-2 rounded-md bg-black/70 px-2 py-0.5 text-[10px] font-bold text-white backdrop-blur-sm">
-          Cảnh #{item.sceneId}
+        {/* Scene number — top-left, always visible */}
+        <span className="absolute left-1.5 top-1.5 rounded bg-black/65 px-1.5 py-0.5 text-[9px] font-bold text-white backdrop-blur-sm">
+          #{item.sceneId}
         </span>
 
-        {/* QC badge */}
+        {/* QC badge — top-right when present */}
         {item.qc && hasImage && (
-          <div className="absolute right-2 top-2">
+          <div className="absolute right-1.5 top-1.5 scale-90 origin-top-right">
             <QcBadge qc={item.qc} />
           </div>
         )}
 
-        {/* Approved checkmark */}
+        {/* Approved checkmark — bottom-right, always visible */}
         {item.status === 'approved' && (
-          <div className="absolute right-2 bottom-2 flex h-7 w-7 items-center justify-center rounded-full bg-emerald-500 text-white shadow-md">
-            <Check className="h-4 w-4" />
+          <div className="absolute right-1.5 bottom-1.5 flex h-6 w-6 items-center justify-center rounded-full bg-emerald-500 text-white shadow-md">
+            <Check className="h-3.5 w-3.5" />
           </div>
         )}
 
-        {/* Download button (on hover) */}
-        {hasImage && displayUrl && (
-          <button
-            onClick={() => {
-              const a = document.createElement('a')
-              a.href = displayUrl
-              a.download = `scene-${item.sceneId}.png`
-              a.click()
-            }}
-            className="absolute left-2 bottom-2 flex h-7 w-7 items-center justify-center rounded-md bg-black/60 text-white opacity-0 backdrop-blur-sm transition-opacity hover:bg-black/80 group-hover:opacity-100"
-            title="Tải xuống"
-          >
-            <Download className="h-3.5 w-3.5" />
-          </button>
-        )}
-      </div>
-
-      {/* Info row */}
-      <div className="border-b border-black/8 px-3 py-2">
-        <p className="truncate text-xs font-bold text-gray-900">{item.blueprint.sceneGoal}</p>
-        <div className="mt-0.5 flex items-center gap-1.5 flex-wrap">
-          <span className={`rounded px-1.5 py-0.5 text-[9px] font-semibold ${STATUS_PILL_COLOR[item.status]}`}>
-            {SCENE_STATUS_LABEL_VI[item.status]}
+        {/* Retry chip — top, only when > 0 */}
+        {item.retryCount > 0 && hasImage && (
+          <span className="absolute left-1.5 top-7 rounded bg-violet-500/85 px-1.5 py-0.5 text-[8px] font-semibold text-white backdrop-blur-sm">
+            retry {item.retryCount}
           </span>
-          {item.retryCount > 0 && (
-            <span className="rounded bg-violet-100 px-1.5 py-0.5 text-[9px] font-semibold text-violet-700">
-              retry {item.retryCount}
-            </span>
+        )}
+
+        {/* CTA chip — bottom-left, always visible when applicable */}
+        {item.blueprint.ctaFocus && (
+          <span className="absolute left-1.5 bottom-1.5 rounded bg-pink-500/85 px-1.5 py-0.5 text-[8px] font-bold text-white backdrop-blur-sm">
+            CTA
+          </span>
+        )}
+
+        {/* Hover action overlay — appears on hover, fades smoothly */}
+        <div className="absolute inset-x-0 top-1/2 -translate-y-1/2 flex justify-center gap-1 opacity-0 transition-opacity duration-150 group-hover:opacity-100">
+          {/* Quick regenerate */}
+          <IconAction
+            label="Gen lại"
+            color="violet"
+            disabled={isLoading}
+            onClick={(e) => { e.stopPropagation(); onRegenerate(idx) }}
+          >
+            <RotateCcw className="h-3.5 w-3.5" />
+          </IconAction>
+
+          {/* Quick approve — only when not yet approved */}
+          {hasImage && item.status !== 'approved' && (
+            <IconAction
+              label="Duyệt"
+              color="emerald"
+              disabled={isLoading}
+              onClick={(e) => { e.stopPropagation(); onApprove(idx) }}
+            >
+              <Check className="h-3.5 w-3.5" />
+            </IconAction>
           )}
-          {item.blueprint.ctaFocus && (
-            <span className="rounded bg-pink-100 px-1.5 py-0.5 text-[9px] font-bold text-pink-700">CTA</span>
+
+          {/* Quick un-approve */}
+          {item.status === 'approved' && (
+            <IconAction
+              label="Bỏ duyệt"
+              color="pink"
+              disabled={isLoading}
+              onClick={(e) => { e.stopPropagation(); onReject(idx) }}
+            >
+              <X className="h-3.5 w-3.5" />
+            </IconAction>
+          )}
+
+          {/* Prompt expand */}
+          <IconAction
+            label="Xem prompt"
+            color="black"
+            disabled={!item.promptUsed}
+            onClick={(e) => { e.stopPropagation(); setExpanded((v) => !v) }}
+          >
+            <FileText className="h-3.5 w-3.5" />
+          </IconAction>
+
+          {/* Download */}
+          {hasImage && displayUrl && (
+            <IconAction
+              label="Tải xuống"
+              color="black"
+              onClick={(e) => {
+                e.stopPropagation()
+                const a = document.createElement('a')
+                a.href = displayUrl
+                a.download = `scene-${item.sceneId}.png`
+                a.click()
+              }}
+            >
+              <Download className="h-3.5 w-3.5" />
+            </IconAction>
           )}
         </div>
-        <p className="mt-1 truncate text-[10px] text-gray-500">
-          {item.blueprint.composition} · {item.blueprint.cameraAngle}
-        </p>
       </div>
 
-      {/* Action buttons */}
-      <div className="flex items-center gap-1 px-2 py-2">
-        <button
-          onClick={() => onRegenerate(idx)}
-          disabled={isLoading}
-          title="Tạo lại cảnh này"
-          className="flex flex-1 items-center justify-center gap-1 rounded-md border border-violet-200 bg-violet-50 px-2 py-1 text-[10px] font-semibold text-violet-700 transition-colors hover:bg-violet-100 disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          <RotateCcw className="h-3 w-3" /> Gen lại
-        </button>
-        {item.status === 'rejected' && (
-          <button
-            onClick={() => onApprove(idx)}
-            disabled={isLoading || !hasImage}
-            title="Duyệt cảnh này dù QC chưa đạt"
-            className="flex flex-1 items-center justify-center gap-1 rounded-md border border-emerald-200 bg-emerald-50 px-2 py-1 text-[10px] font-semibold text-emerald-700 transition-colors hover:bg-emerald-100 disabled:opacity-50"
-          >
-            <Check className="h-3 w-3" /> Duyệt
-          </button>
-        )}
-        {item.status === 'approved' && (
-          <button
-            onClick={() => onReject(idx)}
-            disabled={isLoading}
-            title="Bỏ duyệt — gen lại sau"
-            className="flex flex-1 items-center justify-center gap-1 rounded-md border border-pink-200 bg-pink-50 px-2 py-1 text-[10px] font-semibold text-pink-700 transition-colors hover:bg-pink-100 disabled:opacity-50"
-          >
-            <X className="h-3 w-3" /> Bỏ duyệt
-          </button>
-        )}
-        <button
-          onClick={() => setExpanded((v) => !v)}
-          disabled={!item.promptUsed}
-          title="Xem prompt dùng để gen"
-          className="flex items-center justify-center rounded-md border border-black/10 bg-white px-2 py-1 text-[10px] font-semibold text-gray-500 transition-colors hover:bg-black/[0.04] disabled:opacity-40"
-        >
-          <FileText className="h-3 w-3" />
-        </button>
+      {/* Compact bottom strip — 1 line: status dot + scene goal truncated */}
+      <div className="flex items-center gap-1.5 border-t border-black/8 bg-white px-2 py-1.5">
+        <span className={`inline-block h-2 w-2 shrink-0 rounded-full ${STATUS_DOT_COLOR[item.status]}`} title={SCENE_STATUS_LABEL_VI[item.status]} />
+        <span className="min-w-0 flex-1 truncate text-[11px] font-semibold text-gray-800" title={item.blueprint.sceneGoal}>
+          {item.blueprint.sceneGoal}
+        </span>
       </div>
 
-      {/* Expanded prompt detail */}
+      {/* Expanded prompt panel — toggled by hover icon */}
       {expanded && item.promptUsed && (
-        <div className="border-t border-black/8 bg-gray-50 px-3 py-2">
-          <p className="mb-1 text-[9px] font-bold uppercase tracking-widest text-gray-500">Prompt dùng để gen</p>
-          <pre className="max-h-32 overflow-y-auto whitespace-pre-wrap rounded bg-white px-2 py-1.5 font-mono text-[9px] leading-relaxed text-gray-600">
+        <div className="border-t border-black/8 bg-gray-50 px-2 py-1.5">
+          <p className="mb-0.5 text-[8px] font-bold uppercase tracking-widest text-gray-400">Prompt</p>
+          <pre className="max-h-24 overflow-y-auto whitespace-pre-wrap rounded bg-white px-1.5 py-1 font-mono text-[9px] leading-snug text-gray-600">
             {item.promptUsed}
           </pre>
         </div>
       )}
     </div>
+  )
+}
+
+// ── Tiny hover-overlay action button ─────────────────────────────────────
+function IconAction({
+  label, color, disabled, onClick, children,
+}: {
+  label: string
+  color: 'violet' | 'emerald' | 'pink' | 'black'
+  disabled?: boolean
+  onClick: (e: React.MouseEvent) => void
+  children: React.ReactNode
+}) {
+  const cls =
+    color === 'violet'  ? 'bg-violet-500 hover:bg-violet-600' :
+    color === 'emerald' ? 'bg-emerald-500 hover:bg-emerald-600' :
+    color === 'pink'    ? 'bg-pink-500 hover:bg-pink-600' :
+    'bg-black/75 hover:bg-black/90'
+  return (
+    <button
+      type="button"
+      title={label}
+      aria-label={label}
+      disabled={disabled}
+      onClick={onClick}
+      className={`flex h-7 w-7 items-center justify-center rounded-md text-white shadow-md backdrop-blur-sm transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${cls}`}
+    >
+      {children}
+    </button>
   )
 }
 
