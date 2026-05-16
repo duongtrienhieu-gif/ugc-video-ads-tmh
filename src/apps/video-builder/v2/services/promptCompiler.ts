@@ -69,6 +69,20 @@ DO NOT LOCK (SOFT — must vary across timeline): outfit / clothing / background
 
 // ── [2] PRODUCT LOCK (always strict — see priority rule above) ───────────────
 
+/**
+ * Used when scene.productVisibility === 'low'. Tells the model this beat is
+ * intentionally about the EMOTION/SITUATION before the product is introduced,
+ * so render no branded packaging at all. Paired with dropping product from
+ * filesUrl so KIE GPT-image-1's image conditioning doesn't smuggle the
+ * packaging back in.
+ */
+function buildNoProductDirective(): string {
+  return `[2] NO-PRODUCT SCENE
+This scene is part of the EMOTIONAL TIMELINE that comes BEFORE the product reveal — pain / frustration / failed-attempts / lifestyle context. Do NOT render any branded supplement bottle, jar, tube, sachet, or branded packaging in this frame. No brand logos, no labels. The product is intentionally ABSENT. Generic everyday objects (water glass, food, phone, paper) are fine — they help establish the situation.
+
+The viewer must FEEL the problem in this scene, not see the product yet.`
+}
+
 function buildProductLock(ctx: CompiledPromptContext, refIndex: number): string {
   const { identity, productName } = ctx
   const bumped = ctx.overrides?.bumpProductLock === true
@@ -276,33 +290,58 @@ ${baseNegs.map((n) => `• ${n}`).join('\n')}`
  * final joined string for the API call.
  */
 export function compilePrompt(ctx: CompiledPromptContext): CompiledPrompt {
-  // Reference indices — keep prompt text consistent with filesUrl order
-  const PRODUCT_REF = 1
-  const AVATAR_REF = 2
-  const MASTER_REF = 3
+  // When a low-visibility scene (pain / frustration / failed-attempt) asks for
+  // NO product, drop the product reference from filesUrl too — otherwise KIE
+  // GPT-image-1's image conditioning will bake the packaging back in even
+  // though the prompt body says "absent".
+  const productAbsent = ctx.scene?.productVisibility === 'low'
 
-  const filesUrlOrder: CompiledPrompt['filesUrlOrder'] = ['product', 'avatar']
+  const filesUrlOrder: CompiledPrompt['filesUrlOrder'] = []
+  if (!productAbsent) filesUrlOrder.push('product')
+  filesUrlOrder.push('avatar')
   if (ctx.masterFrameUrl) filesUrlOrder.push('masterFrame')
 
-  const identityLock = buildIdentityLock(ctx, ctx.masterFrameUrl ? MASTER_REF : AVATAR_REF)
-  const productLock = buildProductLock(ctx, ctx.masterFrameUrl ? MASTER_REF : PRODUCT_REF)
+  // Reference indices follow the ACTUAL filesUrl order (1-indexed).
+  const productRefIdx = productAbsent ? null : 1
+  const avatarRefIdx  = productAbsent ? 1 : 2
+  const masterRefIdx  = ctx.masterFrameUrl
+    ? (productAbsent ? 2 : 3)
+    : null
+
+  // Identity lock uses master frame ref (if available), else avatar ref.
+  const identityLockRef = masterRefIdx ?? avatarRefIdx
+  // Product lock uses master frame ref (if available — it has the locked
+  // product baked in) else product ref. Skipped entirely when product is
+  // absent for this scene.
+  const productLockRef = masterRefIdx ?? productRefIdx ?? 0
+
+  const identityLock = buildIdentityLock(ctx, identityLockRef)
+  const productLock = productAbsent
+    ? buildNoProductDirective()
+    : buildProductLock(ctx, productLockRef)
   const sceneBlueprint = ctx.scene
     ? buildSceneFromBlueprint(ctx.scene, !!ctx.masterFrameUrl)
     : buildMasterFrameComposition()
   const visualDna = buildVisualDna(ctx)
   const negativePrompt = buildNegativePrompt(ctx)
 
+  // Build header showing the actual reference order
+  const refLines: string[] = []
+  if (productRefIdx) refLines.push(`  • Image #${productRefIdx} = PRODUCT (highest priority — packaging must be preserved exactly)`)
+  refLines.push(`  • Image #${avatarRefIdx} = AVATAR (face/style identity)`)
+  if (masterRefIdx) refLines.push(`  • Image #${masterRefIdx} = MASTER FRAME (approved baseline — re-use its person${productRefIdx ? ' + product' : ''})`)
+  if (productAbsent) refLines.push('  • Product reference DELIBERATELY OMITTED — this scene is product-absent (pain / pre-discovery)')
+
   const header = `IMAGE-EDITING TASK — combine the attached reference images into one new photo optimized for ecommerce / landing-page / social-proof use (NOT cinematic).
 
 Reference order:
-  • Image #1 = PRODUCT (highest priority — packaging must be preserved exactly)
-  • Image #2 = AVATAR (face/style identity)${ctx.masterFrameUrl ? '\n  • Image #3 = MASTER FRAME (approved baseline — re-use its person + product)' : ''}
+${refLines.join('\n')}
 
 ═══════════════════════════════════════════════════════════════`
 
   const final = [
     header,
-    productLock,    // product FIRST in the prompt body too — priority signal
+    productLock,
     identityLock,
     sceneBlueprint,
     visualDna,

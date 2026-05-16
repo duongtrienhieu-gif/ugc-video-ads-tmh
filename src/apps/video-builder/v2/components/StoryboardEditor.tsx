@@ -55,6 +55,33 @@ function visibilityColor(v: SceneBlueprint['productVisibility']): string {
   return 'bg-gray-100 text-gray-500 border-gray-200'
 }
 
+// ── Narrative beat label + colour — for the storyboard scan-and-arc view ──
+const SCENE_TYPE_VI: Partial<Record<NonNullable<SceneBlueprint['sceneType']>, string>> = {
+  hook:            'HOOK',
+  pain:            'PAIN',
+  frustration:     'BỰC',
+  failed_solution: 'FAIL',
+  discovery:       'DISCO',
+  explanation:     'EXPL',
+  recovery:        'RECOV',
+  lifestyle:       'LIFE',
+  social_proof:    'PROOF',
+  cta:             'CTA',
+}
+
+const SCENE_TYPE_BG: Partial<Record<NonNullable<SceneBlueprint['sceneType']>, string>> = {
+  hook:            'bg-fuchsia-500',
+  pain:            'bg-slate-700',
+  frustration:     'bg-red-600',
+  failed_solution: 'bg-orange-600',
+  discovery:       'bg-cyan-500',
+  explanation:     'bg-blue-500',
+  recovery:        'bg-emerald-500',
+  lifestyle:       'bg-teal-500',
+  social_proof:    'bg-amber-500',
+  cta:             'bg-pink-600',
+}
+
 // ── Single scene card ───────────────────────────────────────────────────────
 function SceneCard({
   scene, idx, onUpdate,
@@ -89,7 +116,22 @@ function SceneCard({
           {scene.sceneId}
         </div>
         <div className="flex-1 min-w-0">
-          <p className="truncate text-sm font-bold text-gray-900">{scene.sceneGoal}</p>
+          <div className="flex flex-wrap items-center gap-1.5">
+            {scene.sceneType && SCENE_TYPE_VI[scene.sceneType] && (
+              <span
+                className={`rounded px-1.5 py-0.5 text-[10px] font-bold tracking-wider text-white ${SCENE_TYPE_BG[scene.sceneType] ?? 'bg-gray-500'}`}
+                title={`Narrative beat: ${scene.sceneType}${scene.narrativePurpose ? ` — ${scene.narrativePurpose}` : ''}`}
+              >
+                {SCENE_TYPE_VI[scene.sceneType]}
+              </span>
+            )}
+            <p className="truncate text-sm font-bold text-gray-900">{scene.sceneGoal}</p>
+          </div>
+          {scene.narrativePurpose && (
+            <p className="mt-0.5 truncate text-[10px] italic text-violet-600">
+              → {scene.narrativePurpose}
+            </p>
+          )}
           <p className="mt-0.5 text-[11px] text-gray-500 line-clamp-2">{scene.speech || '(chưa có lời thoại)'}</p>
         </div>
         {scene.ctaFocus && (

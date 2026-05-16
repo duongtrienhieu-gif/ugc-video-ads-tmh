@@ -93,8 +93,12 @@ async function generateSceneOnce(
     if (role === 'masterFrame') filesUrl.push(params.masterFrameUrl)
   }
 
-  // Smart-retry duplicates the product ref for stronger weighting
-  if (overrides.bumpProductLock && filesUrl.length > 1) {
+  // Smart-retry duplicates the product ref for stronger weighting — but ONLY
+  // if the scene wants the product visible at all. Low-visibility scenes
+  // (pain / frustration / failed-attempts) intentionally omit product, so
+  // bumping the product ref would defeat the no-product directive.
+  const productInRefs = compiled.filesUrlOrder.includes('product')
+  if (overrides.bumpProductLock && productInRefs && filesUrl.length > 1) {
     filesUrl.unshift(params.identity.productImageUrl)
   }
 
