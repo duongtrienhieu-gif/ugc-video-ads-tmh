@@ -443,9 +443,11 @@ interface PipeData {
   voiceUrl: string                      // Supabase signed URL (refreshed from assetId on reload)
   avatarImageUrl: string
   productImageUrls: string[]
+  avatarDescription: string             // Gemini-generated locked physical description
+  productDescription: string            // Gemini-generated locked product description
   avatarRawUrl: string
-  brollImageUrls: (string | null)[]    // static images (step 5)
-  brollResults: (string | null)[]      // videos animated from images (step 6)
+  brollImageUrls: (string | null)[]    // static images (step 3)
+  brollResults: (string | null)[]      // videos animated from images (step 4)
   avatarFinalUrl: string
   finalVideoUrl: string
   finalAssetId: string
@@ -730,6 +732,7 @@ export default function VideoBuilder() {
   const [previewBrollImageUrls, setPreviewBrollImageUrls] = useState<(string | null)[]>([])
   const [regeneratingImageIndices, setRegeneratingImageIndices] = useState<Set<number>>(new Set())
   const [previewBrollUrls, setPreviewBrollUrls] = useState<(string | null)[]>([])
+  const [generatingBrollIndices, setGeneratingBrollIndices] = useState<Set<number>>(new Set())
   const [previewBgUrl, setPreviewBgUrl] = useState<string | null>(null)
 
   // History
@@ -1045,24 +1048,26 @@ USE THIS CONTEXT TO:
 The voiceover is ${audioDuration.toFixed(1)} seconds long. Split the script into 8-12 segments matching natural pause/sentence boundaries. Each segment should be 4-8 seconds.
 
 ═══════════════════════════════════════════════════════════════════
-PROVEN UGC AD FORMAT (reverse-engineered from a successful ad analysis)
+CRITICAL: B-ROLL = SCENE LAYER ONLY (NO speaker / avatar / face in shot)
 ═══════════════════════════════════════════════════════════════════
-Every shot follows ONE OF TWO COMPOSITIONS — the AVATAR appears in EVERY shot:
+The AVATAR is generated SEPARATELY as a talking-head lip-sync video by
+Kling Avatar. Shotstack will overlay the avatar (corner inset or full-screen)
+on top of these B-roll scenes during final composition. So your job is to
+write prompts for the BACKGROUND/SCENE LAYER — DO NOT include the speaker
+or avatar's face in the prompt.
 
-(A) ILLUSTRATIVE SHOT — small avatar inset + main B-roll scene
-    "[Avatar description matching reference] is in the bottom right corner,
-     looking at the camera and talking. The main frame shows [scene]."
+Allowed in B-roll scenes:
+- First-person POV (hands, feet, partial body — no face)
+- Anonymous body parts (someone's hands holding a product, feet walking)
+- Product close-ups, macro shots
+- Pure lifestyle scenes (kitchen, park, bathroom) — no people OR generic
+  background figures with face away from camera
+- Scientific / abstract visuals
 
-(B) DEMONSTRATIVE SHOT — avatar IS the main subject doing the action
-    "[Avatar description] is [performing specific action] [in setting].
-     [Pose/expression/details]."
-
-Pick the composition that best serves each segment:
-- (B) for personal story moments ("I sat on the floor rubbing my knees"),
-  product handling ("she unscrews the bottle and shakes a capsule"),
-  emotional reveals ("she takes the first satisfying bite")
-- (A) for illustrative info shots (scientific lab visuals, lifestyle B-roll
-  the speaker is narrating about without being the actor)
+NEVER allowed in B-roll:
+- Any close-up of a person's face
+- Any shot where the avatar/speaker character is identifiable
+- Anyone "looking at camera and talking" (that's the avatar lip-sync layer)
 
 ═══════════════════════════════════════════════════════════════════
 STRUCTURAL ARC (most successful UGC supplement ads follow this beat order)
@@ -1080,40 +1085,48 @@ Match each script segment to the closest beat. The script may be loosely
 adapted — your job is to recognize which beat each segment is fulfilling.
 
 ═══════════════════════════════════════════════════════════════════
-EXAMPLES from the analyzed reference ad (BPC-157 by Soothe Supps)
+EXAMPLES — SCENE-ONLY (no avatar, no speaker face) — reverse-engineered
+from BPC-157 ad's B-roll layer (speaker overlay added separately later)
 ═══════════════════════════════════════════════════════════════════
 Voice "The secret to pain-free joints was discovered in 1973"
-→ "A man in a light blue polo shirt is in the bottom right corner, looking at the camera and talking. The main frame shows a split-screen scene: on the left, two scientists in lab coats and safety glasses are looking at a tablet in a futuristic lab. On the right, a man in a light blue polo shirt is smiling directly at the camera. Soft daylight, professional documentary look, vertical 9:16, photorealistic."
+→ "Macro shot of an old scientific notebook from 1973 with handwritten formulas, illuminated by soft warm desk lamp. Lab glassware blurred in background. Vintage research aesthetic, photorealistic, vertical 9:16. No people."
 
 Voice "My knees used to hurt so bad, I couldn't even play with my kids anymore"
-→ "A man in a light blue polo shirt is in the bottom right corner, looking at the camera and talking. The main frame shows a first-person perspective of a man sitting on a carpeted floor at home, wearing light-colored sweatpants and slippers, rubbing his knees with a pained expression. Warm soft living-room lighting. Vertical 9:16, photorealistic UGC ad style."
+→ "First-person POV looking down at someone's hands gripping their knees on a carpeted living room floor, wearing dark sweatpants. Empty toys scattered nearby — a soccer ball, kids' shoes — suggesting unable to join in. Warm late-afternoon home light. Vertical 9:16, photorealistic emotional B-roll. NO face visible."
 
 Voice "Every morning was agony, just getting out of bed felt impossible"
-→ "A man in a light blue polo shirt is in the bottom right corner, looking at the camera and talking. The main frame shows a man in red pajamas sitting on the edge of an unmade bed, struggling to stand up, grimacing in pain as he holds his knee. Soft morning light through curtain. Vertical 9:16, authentic photoreal UGC style."
+→ "First-person POV from a bed: hands gripping the bedside, knuckles white, comforter rumpled. Soft early-morning light through curtain. Detail on the strain in the hands. Vertical 9:16, photorealistic. No face."
 
 Voice "I tried everything: cortisone shots made it worse"
-→ "A man in a light blue polo shirt is in the bottom right corner, looking at the camera and talking. The main frame shows a close-up of a person's bare arm receiving a cortisone injection from a medical professional wearing blue nitrile gloves in a clinical office. Cool fluorescent lighting. Vertical 9:16, photorealistic."
+→ "Macro close-up of a gloved medical hand holding a syringe near a bare arm in a clinical office. Sterile blue tones, clinical lighting. Person's face cropped out of frame — only arm visible. Vertical 9:16, documentary realism."
 
 Voice "But everything changed when I discovered this one thing"
-→ "A man in a light blue polo shirt is in the bottom right corner, looking at the camera and talking. The main frame shows a hero product reveal: a white BPC-157 supplement bottle placed on a polished wooden table, soft directional light catching the label. Lifestyle background blurred. Vertical 9:16, premium commercial photorealism."
+→ "Hero product shot: an INFINITY PROBIOTICS PLUS supplement bottle placed on a polished wooden table, soft directional light catching the label. Capsules artistically spilled beside it. Lifestyle background blurred. No people in frame. Vertical 9:16, premium commercial photorealism."
 
 Voice "Now? I'm playing with my kids again and living pain-free"
-→ "A wide low-angle shot of a man in a light blue polo shirt running joyfully through a sunny suburban park with his two young children, all laughing. Golden hour back-light, bright green lawn, distant houses. Vertical 9:16, vivid color, photorealistic empowered ending shot. (Speaker is the main subject this time — full screen, no inset.)"
+→ "Wide low-angle shot of a sunny suburban park path with a soccer ball mid-bounce, distant blurred figures of children running away from camera, golden-hour back-light, bright green lawn. Hopeful empowered atmosphere. NO identifiable faces. Vertical 9:16, vivid photorealism."
+
+Voice "BPC-157 has truly changed my life"
+→ "Final hero shot: macro close-up of the BPC-157 bottle held by anonymous hands in front of soft natural sunset light, the label fully readable, capsules visible through the glass. Premium commercial look. Vertical 9:16, hyperrealistic."
 
 ═══════════════════════════════════════════════════════════════════
 RULES FOR YOUR brollPrompt OUTPUT
 ═══════════════════════════════════════════════════════════════════
 - ALWAYS in English (image generator performs best in English)
 - 60-120 words per prompt
-- ALWAYS describe the avatar as matching the reference avatar image
-  (same face, hijab/clothing, age, ethnicity)
-- For shot composition (A): explicitly say "is in the bottom right corner,
-  looking at the camera and talking"
-- For shot composition (B): describe the avatar doing the specific action
+- NEVER include the avatar / speaker / a recognizable person's face.
+  This is the BACKGROUND layer only — the speaker is added later via Kling
+  Avatar lip-sync as an overlay.
+- ACCEPTABLE: first-person POV, anonymous hands, body parts (no face),
+  product shots, lifestyle scenes, abstract / scientific visuals
 - Reference the actual product (matching product image — capsule bottle,
-  not powder sachet, etc.) when the segment mentions/handles the product
+  not powder sachet, etc.) when the segment mentions/handles the product.
+  Describe form, label, color exactly.
 - "Photorealistic", "vertical 9:16", "no text overlay" suffix on every prompt
   (captions will be added later by Shotstack, not embedded in image)
+- Tip: For PAIN/STRUGGLE segments, use first-person POV with hands gripping
+  the affected area. For TRANSFORMATION/JOY, use empowered lifestyle scenes
+  with figures cropped or facing away.
 
 Other rules:
 - avatarPosition: alternate "left" / "right" each segment (Shotstack uses
@@ -1422,6 +1435,44 @@ Return ONLY the tagged script. No explanation, no markdown, no preamble.`
         addToast(`${manualFailCount} ảnh đính kèm không upload được`, 'error')
       }
       pipeRef.current.productImageUrls = productImageUrls
+      setPhaseProgress(85)
+
+      // Get a LOCKED product description via Gemini Vision — this exact text
+      // gets injected into every B-roll image prompt to keep the product
+      // (bottle shape, label, color, branding) consistent across all 9 shots.
+      // Avatar consistency comes from the single Kling Avatar lip-sync video
+      // (one source video = one face), so no avatar description needed.
+      if (productImageUrls.length > 0 && geminiApiKey) {
+        setPhaseDetail('Phân tích chi tiết sản phẩm để lock identity...')
+        try {
+          const firstProduct = productImageUrls[0]
+          const productImg = await getImageBytes(firstProduct)
+          if (productImg) {
+            const productDescRaw = await directGeminiVision({
+              apiKey: geminiApiKey,
+              parts: [
+                { inlineData: { mimeType: productImg.mimeType, data: productImg.base64 } },
+                { text: `You are a casting director writing a precise physical description for image-generation continuity. This product will appear in 9 different generated images and must look IDENTICAL each time.
+
+Describe the product's physical appearance in 2-3 concise sentences. Include:
+- Container type (bottle / jar / box / sachet) — exact material and color (e.g. "dark amber glass", "white matte plastic")
+- Label design — colors, dominant text (product name, capsule count if visible), logo placement, any country flags or certification icons
+- Capsule/tablet visibility — color, count visible if any
+- Any accompanying retail box and its appearance
+- Distinguishing features that must NOT be invented away (e.g. specific shape, ribbon, sticker)
+
+Return ONLY the description as plain text, no preamble, no markdown.` },
+              ],
+              model: 'gemini-2.5-flash',
+              maxOutputTokens: 512,
+            })
+            pipeRef.current.productDescription = productDescRaw.trim()
+            console.log('[resolve] product description locked:', pipeRef.current.productDescription)
+          }
+        } catch (err) {
+          console.warn('[resolve] product description analysis failed:', err)
+        }
+      }
       setPhaseProgress(100)
 
       // Auto-proceed to B-roll Images (cheap, test-first cost optimization)
@@ -1470,21 +1521,27 @@ Return ONLY the tagged script. No explanation, no markdown, no preamble.`
   // Why: cheap ($0.04/image) and reviewable BEFORE committing to expensive
   // video generation ($0.35/clip). User can regen bad images individually.
 
-  const buildImagePrompt = (seg: ScriptSegment, hasAvatar: boolean, hasProduct: boolean): string => {
-    // Gemini already crafted seg.brollPrompt in the proven UGC ad composition
-    // format (see runParse). This wrapper just adds identity-lock instructions
-    // and a final quality/style suffix.
-    const identityLock = [
-      'IDENTITY LOCK (this is a UGC review series — ONE person reviewing ONE product):',
-      hasAvatar  ? '- The PERSON must EXACTLY match the first reference image: identical face, hijab/clothing, age, ethnicity. Same individual across the entire series.' : null,
-      hasProduct ? '- The PRODUCT must EXACTLY match the reference product image: same bottle shape, label, color, branding. Do not invent a different form factor.' : null,
-      '- Setting feels like the same person\'s real home across all shots (consistent aesthetic, lighting, color palette).',
-      '- Style: authentic phone-camera UGC look (TikTok/Reels). NOT polished commercial. Slightly imperfect framing, natural light.',
-    ].filter(Boolean).join('\n')
+  const buildImagePrompt = (seg: ScriptSegment, _hasAvatar: boolean, hasProduct: boolean): string => {
+    // B-roll is SCENE-LAYER ONLY. The avatar/speaker is generated separately
+    // by Kling Avatar and overlaid later by Shotstack. So this prompt should
+    // describe the BACKGROUND scene with no recognizable face / speaker.
+    const productDesc = pipeRef.current.productDescription
+    const lockRules: string[] = [
+      'SCENE LOCK (this is the BACKGROUND layer of a UGC review video — the avatar will be added as an overlay later):',
+      '- DO NOT include any recognizable face, speaker, or person identifiable as a content creator. The avatar overlay handles all talking-head visuals.',
+      '- Allowed people: anonymous hands, first-person POV, figures cropped or facing away from camera.',
+    ]
+    if (hasProduct && productDesc) {
+      lockRules.push(`- PRODUCT LOCK — when this segment shows the product, it MUST appear EXACTLY as described: ${productDesc}`)
+    } else if (hasProduct) {
+      lockRules.push('- PRODUCT must match reference product image EXACTLY (same bottle/box/label/color/form factor).')
+    }
+    lockRules.push('- Setting should feel cohesive across all 9 shots — consistent home/lifestyle aesthetic, same color palette, similar lighting style.')
+    lockRules.push('- Style: authentic phone-camera UGC, slightly imperfect framing, natural lighting (NOT polished commercial).')
 
-    const qualitySuffix = '. Photorealistic, vertical 9:16, hyper-realistic phone-camera quality, no text overlay (captions added later in editing), no watermark.'
+    const qualitySuffix = '. Photorealistic, vertical 9:16, hyper-realistic phone-camera quality, no text overlay, no watermark, no faces of speakers/creators.'
 
-    return `${identityLock}\n\nSCENE:\n${seg.brollPrompt}${qualitySuffix}`
+    return `${lockRules.join('\n')}\n\nSCENE FOR THIS SHOT:\n${seg.brollPrompt}${qualitySuffix}`
   }
 
   // Generate ONE image for a given segment index (used by both initial run + per-image regen)
@@ -1584,76 +1641,82 @@ Return ONLY the tagged script. No explanation, no markdown, no preamble.`
   // Uses the approved static images as starting reference for video generation.
   // Much better than pure text-to-video because the AI starts from a known image.
 
-  const runBroll = async () => {
-    if (!kieApiKey) { setPhaseError('Cần KIE.ai API key'); setPhase('failed'); return }
-    const { timedSegments, brollImageUrls } = pipeRef.current
-    if (!timedSegments?.length) { setPhaseError('Thiếu segments'); setPhase('failed'); return }
+  /** Build the motion prompt for a given segment — visible to user before they
+   *  trigger per-clip generation. */
+  const buildMotionPrompt = (seg: ScriptSegment): string => {
+    return `${seg.brollPrompt}.
+MOTION: Gentle cinematic camera motion only — slow push-in on key detail, or smooth slow pan across the setting. NO static frozen frames, NO jitter, NO sudden cuts. Maintain photorealistic UGC ad style. The avatar/speaker will be overlaid separately later — keep this scene without any visible speaker.`
+  }
 
-    setPhase('running-broll')
-    setPhaseError(null)
-    setPhaseProgress(0)
-    setPhaseDetail(`Animate 0/${timedSegments.length} clips (~5-8 phút)...`)
+  /** Generate ONE B-roll video clip for a given segment. Used by per-clip
+   *  manual generation in review-broll — user clicks Gen on each card
+   *  individually instead of all 9 firing in parallel. */
+  const generateOneBrollVideo = async (i: number): Promise<void> => {
+    if (!kieApiKey) { addToast('Cần KIE.ai API key', 'error'); return }
+    const { timedSegments, brollImageUrls } = pipeRef.current
+    if (!timedSegments?.[i]) { addToast(`Thiếu segment #${i + 1}`, 'error'); return }
+
+    const seg = timedSegments[i]
+    const startImage = brollImageUrls?.[i]
+    if (!startImage) { addToast(`Đoạn #${i + 1} chưa có ảnh tĩnh — bỏ qua`, 'error'); return }
+
+    setGeneratingBrollIndices((prev) => new Set(prev).add(i))
+    const motionPrompt = buildMotionPrompt(seg)
 
     try {
-      const brollResults: (string | null)[] = new Array(timedSegments.length).fill(null)
-      let completed = 0
+      const { taskId } = await generateVideoJob({
+        apiKey: kieApiKey,
+        jobModelId: 'bytedance/seedance-2-fast',
+        prompt: motionPrompt,
+        aspectRatio: '9:16',
+        resolution: '480p',
+        duration: 5,
+        startFrameUrl: startImage,
+      })
+      const start = Date.now()
+      let resultUrl: string | null = null
+      while (Date.now() - start < 8 * 60 * 1000) {
+        await new Promise((r) => setTimeout(r, 5000))
+        const s = await getVideoJobStatus({ apiKey: kieApiKey, taskId })
+        if (s.status === 'completed' && s.videoUrl) { resultUrl = s.videoUrl; break }
+        if (s.status === 'failed') break
+      }
 
-      await Promise.all(timedSegments.map(async (seg, i) => {
-        const startImage = brollImageUrls?.[i]
-        if (!startImage) {
-          // Skip segments without a valid image (fallback: stays null → avatar fullscreen)
-          return
-        }
-
-        // Motion prompt: animate the composed UGC shot.
-        // The image already shows WHAT (avatar in corner + main scene OR avatar
-        // as central actor). Motion describes HOW:
-        // - The avatar (corner or main): subtle natural talking gestures,
-        //   blinks, slight head movement — looks like real person filming TikTok
-        // - The main scene B-roll: gentle cinematic motion (slow zoom / pan)
-        //   to keep visual interest without distracting from the talking
-        const motionPrompt = `${seg.brollPrompt}.
-MOTION: The avatar speaks naturally with subtle hand gestures, slight head turns, and authentic blinks — looks like a real person recording a UGC review on their phone. The main scene element has gentle cinematic camera motion (slow push-in on key detail, or smooth slow pan across the setting). NO static frozen frames, NO jitter, NO sudden cuts. Maintain photorealistic UGC ad style throughout the 5-second clip.`
-
-        try {
-          // Seedance 2 Fast at 480p — saves ~50% credits vs 720p. UGC ads on
-          // TikTok/Reels feed are heavily compressed anyway so 480p source
-          // looks fine after platform encoding. Uses `first_frame_image_url`
-          // for TRUE image-to-video (animates exactly from the provided still).
-          const { taskId } = await generateVideoJob({
-            apiKey: kieApiKey,
-            jobModelId: 'bytedance/seedance-2-fast',
-            prompt: motionPrompt,
-            aspectRatio: '9:16',
-            resolution: '480p',          // ~85 cr/clip vs ~165 cr at 720p
-            duration: 5,
-            startFrameUrl: startImage,
-          })
-          const brollStart = Date.now()
-          while (Date.now() - brollStart < 8 * 60 * 1000) {
-            await new Promise((r) => setTimeout(r, 5000))
-            const s = await getVideoJobStatus({ apiKey: kieApiKey, taskId })
-            if (s.status === 'completed' && s.videoUrl) { brollResults[i] = s.videoUrl; break }
-            if (s.status === 'failed') break
-          }
-        } catch { brollResults[i] = null }
-
-        // Update progress as each clip finishes (regardless of success/fail)
-        completed++
-        const pct = (completed / timedSegments.length) * 100
-        setPhaseProgress(pct)
-        const success = brollResults.filter(Boolean).length
-        setPhaseDetail(`Animate ${completed}/${timedSegments.length} clips (${success} thành công)...`)
-      }))
-
-      pipeRef.current.brollResults = brollResults
-      setPreviewBrollUrls([...brollResults])
-      setPhaseProgress(100)
-      setPhase('review-broll')
+      if (resultUrl) {
+        setPreviewBrollUrls((prev) => {
+          const next = [...prev]
+          next[i] = resultUrl
+          return next
+        })
+        if (!pipeRef.current.brollResults) pipeRef.current.brollResults = []
+        pipeRef.current.brollResults[i] = resultUrl
+        addToast(`✓ Clip #${i + 1} đã gen xong`)
+      } else {
+        addToast(`Clip #${i + 1} gen thất bại — thử lại`, 'error')
+      }
     } catch (err) {
-      setPhaseError(err instanceof Error ? err.message : String(err))
-      setPhase('failed')
+      console.error(`[brollVideo ${i}] failed:`, err)
+      addToast(`Clip #${i + 1} lỗi: ${err instanceof Error ? err.message.slice(0, 60) : 'unknown'}`, 'error')
+    } finally {
+      setGeneratingBrollIndices((prev) => {
+        const next = new Set(prev)
+        next.delete(i)
+        return next
+      })
     }
+  }
+
+  const runBroll = async () => {
+    const { timedSegments } = pipeRef.current
+    if (!timedSegments?.length) { setPhaseError('Thiếu segments'); setPhase('failed'); return }
+
+    // NO auto-generation — user generates each clip manually via the review UI.
+    // Initialize empty results array and transition straight to review state.
+    const empty: (string | null)[] = new Array(timedSegments.length).fill(null)
+    pipeRef.current.brollResults = empty
+    setPreviewBrollUrls(empty)
+    setPhaseProgress(100)
+    setPhase('review-broll')
   }
 
   // ── Step 6: Background removal ───────────────────────────────────────────
@@ -2342,34 +2405,103 @@ MOTION: The avatar speaks naturally with subtle hand gestures, slight head turns
             </ReviewCard>
           )}
 
-          {/* ─── Review: B-roll Videos (step 4 — last check before Voice + Avatar) ─── */}
-          {phase === 'review-broll' && (
-            <ReviewCard
-              onRetry={runBroll}
-              onContinue={runVoice}
-              retryLabel={`Tạo lại tất cả (~${previewBrollUrls.length * 85} cr)`}
-              continueLabel="Tiếp tục → Voiceover"
-              continueCost={STEP_INFO.voice.cost}
-            >
-              <p className="mb-3 text-xs text-gray-500">
-                <strong className="text-emerald-600">{previewBrollUrls.filter(Boolean).length}/{previewBrollUrls.length}</strong> clips thành công. ⚠️ Tiếp theo là Voice + Avatar — commit cost lớn nhất ($3+). Chắc chắn B-roll OK trước khi continue.
-              </p>
-              <div className="grid grid-cols-3 gap-2">
-                {previewBrollUrls.map((url, i) => (
-                  <div key={i} className={`relative aspect-[9/16] w-full overflow-hidden rounded-lg border bg-gray-900 ${url ? 'border-emerald-200' : 'border-red-200 bg-red-50'}`}>
-                    {url ? (
-                      <video src={url} muted loop autoPlay playsInline className="h-full w-full object-contain" />
-                    ) : (
-                      <div className="flex h-full items-center justify-center">
-                        <X className="h-5 w-5 text-red-400" />
+          {/* ─── Review: B-roll Videos — PER-CLIP MANUAL generation ─── */}
+          {phase === 'review-broll' && (() => {
+            const doneCount = previewBrollUrls.filter(Boolean).length
+            const totalSpent = doneCount * 85
+            const isAnyGenerating = generatingBrollIndices.size > 0
+            return (
+              <ReviewCard
+                onRetry={() => addToast('Click nút "Gen" trên từng clip để tạo riêng từng cái', 'error')}
+                onContinue={runVoice}
+                retryLabel="Hướng dẫn"
+                continueLabel={doneCount === 0 ? 'Tiếp tục (skip B-roll)' : `Tiếp tục → Voiceover (${doneCount}/${previewBrollUrls.length} clips)`}
+                continueCost={STEP_INFO.voice.cost}
+                disabled={isAnyGenerating}
+              >
+                <div className="mb-3 rounded-lg border border-violet-200 bg-violet-50 px-3 py-2">
+                  <p className="text-xs text-violet-700">
+                    📌 <strong>Gen từng clip riêng</strong> — click nút "Gen" trên mỗi card khi đã review motion prompt. KHÔNG tự động gen 9 cùng lúc.
+                  </p>
+                  <p className="mt-1 text-[11px] text-violet-600">
+                    Đã gen: <strong>{doneCount}/{previewBrollUrls.length}</strong> clips · Tốn: <strong>{totalSpent} cr (${(totalSpent * 0.005).toFixed(2)})</strong> · Mỗi clip ~85 cr
+                  </p>
+                </div>
+
+                <div className="space-y-3">
+                  {previewSegments.map((seg, i) => {
+                    const videoUrl = previewBrollUrls[i]
+                    const imageUrl = previewBrollImageUrls[i]
+                    const isGen = generatingBrollIndices.has(i)
+                    const motionPrompt = buildMotionPrompt(seg)
+                    return (
+                      <div key={i} className="overflow-hidden rounded-lg border border-black/10 bg-white">
+                        <div className="flex gap-3 p-2">
+                          {/* Preview: video if generated, else static image */}
+                          <div className="relative aspect-[9/16] w-24 shrink-0 overflow-hidden rounded-md border border-black/8 bg-gray-900">
+                            {videoUrl ? (
+                              <video src={videoUrl} muted loop autoPlay playsInline className="h-full w-full object-contain" />
+                            ) : imageUrl ? (
+                              <img src={imageUrl} alt={`#${i + 1}`} className="h-full w-full object-contain opacity-70" />
+                            ) : (
+                              <div className="flex h-full items-center justify-center">
+                                <X className="h-4 w-4 text-red-400" />
+                              </div>
+                            )}
+                            <span className="absolute bottom-0.5 left-0.5 rounded bg-black/60 px-1 py-0.5 text-[9px] font-bold text-white">#{i + 1}</span>
+                            {isGen && (
+                              <div className="absolute inset-0 flex items-center justify-center bg-white/50">
+                                <Loader2 className="h-6 w-6 animate-spin text-violet-500" />
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Right side: text + prompt + button */}
+                          <div className="min-w-0 flex-1">
+                            <p className="text-[10px] font-bold uppercase tracking-wide text-violet-600">
+                              Đoạn {i + 1} · {seg.durationSec.toFixed(1)}s
+                            </p>
+                            <p className="line-clamp-2 text-xs text-gray-700">{seg.text}</p>
+
+                            <details className="mt-1 text-[10px] text-violet-600">
+                              <summary className="cursor-pointer font-semibold hover:underline">
+                                🎬 Motion prompt (click để xem trước khi gen)
+                              </summary>
+                              <p className="mt-1 rounded bg-violet-50 p-2 italic leading-relaxed text-gray-700">
+                                {motionPrompt}
+                              </p>
+                            </details>
+
+                            <div className="mt-1.5 flex items-center gap-2">
+                              <button
+                                onClick={() => generateOneBrollVideo(i)}
+                                disabled={isGen || !imageUrl}
+                                className={`flex items-center gap-1.5 rounded-md px-2.5 py-1 text-[11px] font-bold transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
+                                  videoUrl
+                                    ? 'border border-violet-200 bg-violet-50 text-violet-700 hover:bg-violet-100'
+                                    : 'bg-gradient-to-r from-violet-600 to-purple-500 text-white shadow hover:shadow-md'
+                                }`}
+                              >
+                                {isGen ? (
+                                  <><Loader2 className="h-3 w-3 animate-spin" /> Đang gen...</>
+                                ) : videoUrl ? (
+                                  <><RotateCcw className="h-3 w-3" /> Tạo lại (~85 cr)</>
+                                ) : (
+                                  <><Sparkles className="h-3 w-3" /> Gen clip (~85 cr)</>
+                                )}
+                              </button>
+                              {videoUrl && <span className="text-[10px] text-emerald-600 font-semibold">✓ Đã gen</span>}
+                              {!imageUrl && <span className="text-[10px] text-red-400">Thiếu ảnh tĩnh</span>}
+                            </div>
+                          </div>
+                        </div>
                       </div>
-                    )}
-                    <span className="absolute bottom-1 left-1 rounded bg-black/60 px-1.5 py-0.5 text-[9px] font-bold text-white">#{i + 1}</span>
-                  </div>
-                ))}
-              </div>
-            </ReviewCard>
-          )}
+                    )
+                  })}
+                </div>
+              </ReviewCard>
+            )
+          })()}
 
           {/* ─── Review: BG removal ─── */}
           {phase === 'review-bg' && (
