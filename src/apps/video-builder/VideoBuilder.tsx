@@ -607,14 +607,28 @@ export default function VideoBuilder() {
     if (manualProducts.length + files.length > 8) {
       addToast('Tối đa 8 ảnh đính kèm sản phẩm', 'error'); return
     }
+    // Validate file types (only accept images)
+    const invalid = files.filter((f) => !f.type.startsWith('image/'))
+    if (invalid.length > 0) {
+      addToast(`${invalid.length} file không phải ảnh — đã bỏ qua`, 'error')
+    }
+    const valid = files.filter((f) => f.type.startsWith('image/'))
+    // Warn on large files
+    const tooLarge = valid.filter((f) => f.size > 10 * 1024 * 1024)
+    if (tooLarge.length > 0) {
+      addToast(`${tooLarge.length} ảnh > 10MB — có thể upload chậm`, 'error')
+    }
+    if (valid.length === 0) { e.target.value = ''; return }
+
     setManualProducts((prev) => [
       ...prev,
-      ...files.map((file) => ({
+      ...valid.map((file) => ({
         id: crypto.randomUUID(),
         name: file.name.replace(/\.[^.]+$/, ''),
         blobUrl: URL.createObjectURL(file),
       })),
     ])
+    addToast(`✓ Đã tải lên ${valid.length} ảnh sản phẩm`)
     e.target.value = ''
   }
 
@@ -1190,23 +1204,34 @@ ${script}`
 
             {manualProducts.length > 0 && (
               <div className="mt-3">
-                <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-gray-400">
-                  Ảnh đính kèm ({manualProducts.length}) — AI dùng làm tham khảo
-                </p>
+                <div className="mb-1.5 flex items-center justify-between">
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-emerald-600">
+                    ✓ {manualProducts.length} ảnh đã tải lên — AI sẽ tham khảo khi gen B-roll
+                  </p>
+                </div>
                 <div className="grid grid-cols-4 gap-2">
                   {manualProducts.map((mp) => (
                     <div
                       key={mp.id}
-                      className="relative flex flex-col items-center gap-1 rounded-xl border border-violet-200 bg-violet-50/60 p-1.5"
+                      className="group relative flex flex-col items-center gap-1 rounded-xl border-2 border-emerald-200 bg-emerald-50/40 p-1.5"
                     >
-                      <img src={mp.blobUrl} alt={mp.name} className="h-12 w-12 rounded-lg object-cover border border-violet-100" />
-                      <p className="w-full truncate text-center text-[10px] font-medium text-gray-600">{mp.name}</p>
+                      {/* Thumbnail */}
+                      <div className="relative">
+                        <img src={mp.blobUrl} alt={mp.name} className="h-12 w-12 rounded-lg object-cover border border-emerald-100" />
+                        {/* Green check badge — clearly marks "uploaded successfully" */}
+                        <div className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-emerald-500 shadow ring-2 ring-white">
+                          <Check className="h-2.5 w-2.5 text-white" strokeWidth={3} />
+                        </div>
+                      </div>
+                      <p className="w-full truncate text-center text-[10px] font-medium text-gray-700">{mp.name}</p>
+                      {/* Delete button — only on hover, neutral gray (not red) */}
                       <button
                         onClick={() => !isBuilding && setManualProducts((prev) => prev.filter((p) => p.id !== mp.id))}
                         disabled={isBuilding}
-                        className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-red-400 shadow disabled:opacity-40"
+                        title="Xóa ảnh này"
+                        className="absolute right-1 bottom-1 flex h-5 w-5 items-center justify-center rounded-md bg-white/90 text-gray-400 opacity-0 shadow transition-opacity group-hover:opacity-100 hover:text-red-500 disabled:opacity-40"
                       >
-                        <X className="h-2.5 w-2.5 text-white" />
+                        <Trash2 className="h-3 w-3" />
                       </button>
                     </div>
                   ))}
