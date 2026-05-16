@@ -100,17 +100,27 @@ function splitScriptClientSide(script: string): { segments: ScriptSegment[]; tot
   // Edge case: very short script with no punctuation
   if (buckets.length === 0 && script.trim()) buckets.push(script.trim())
 
+  // Detect product mentions heuristically (works for most languages — checks uppercase brand names + common product keywords)
+  const PRODUCT_HINTS = /\b(infinity|probiotic|dental|herbal|shilajit|product|produc|produk|sản phẩm|chai|tube|bottle|jar|gel|cream|serum|capsul|tablet|pill|supplement)\b/i
+  const hasUppercaseBrand = (t: string) => /\b[A-Z]{2,}(?:\s+[A-Z][A-Z0-9]+)*\b/.test(t)
+
   let cursor = 0
   const segments: ScriptSegment[] = buckets.map((text, index) => {
     const dur = Math.max(3, text.length / 14)  // ~14 chars/sec
+    const isProductSeg = PRODUCT_HINTS.test(text) || hasUppercaseBrand(text)
+
+    const brollPrompt = isProductSeg
+      ? `Cinematic vertical 9:16 close-up UGC ad shot: a friendly content creator (matching reference avatar) holding and showing the product (matching reference product image) with natural hand gestures. Lifestyle home setting, soft natural window lighting, warm tones, shallow depth of field. Focus on the product. No text overlay.`
+      : `Cinematic vertical 9:16 lifestyle B-roll: ${text.slice(0, 80)}. Real-world setting (kitchen, bathroom, bedroom, daily activity). Warm natural lighting, authentic UGC feel. No text overlay.`
+
     const seg: ScriptSegment = {
       index,
       text,
       durationSec: dur,
       startSec: cursor,
-      brollPrompt: `Cinematic vertical 9:16 lifestyle scene related to: ${text.slice(0, 80)}. No people, no text overlay, professional UGC ad style, soft natural lighting.`,
+      brollPrompt,
       avatarPosition: index % 2 === 0 ? 'right' : 'left',
-      useProduct: false,
+      useProduct: isProductSeg,
     }
     cursor += dur
     return seg
@@ -670,8 +680,16 @@ Rules:
 - durationSec: estimate from ~130 words/min reading speed
 - startSec: always 0.0 (recalculated later)
 - avatarPosition: alternate "left" and "right" each segment
-- useProduct: true if segment mentions a product by name
-- brollPrompt: vivid cinematic English description, no people, no text overlay, vertical 9:16
+
+useProduct logic:
+- true: segment mentions, describes, recommends, or references the product (by name OR by benefit/feature)
+- false: pure intro/hook/pain-point/lifestyle storytelling without product reference
+
+brollPrompt logic (English, vivid, cinematic):
+- If useProduct=true:
+  "Cinematic vertical 9:16 close-up UGC ad shot of a friendly content creator (matching the reference avatar image) holding/using/showing the product (matching the reference product image) with natural hand gestures. Lifestyle home setting matching the script context. Soft natural window lighting, warm tones, shallow depth of field. Focus on the product. No text overlay."
+- If useProduct=false:
+  Describe a vivid lifestyle B-roll scene related to the segment's emotional content (e.g., "Person waking up tired and unmotivated", "Hands kneading a sore stomach", "Bright morning kitchen with healthy food on counter"). Vertical 9:16, cinematic, authentic UGC look. No text overlay. People allowed.
 
 SCRIPT:
 ${script}`
@@ -880,7 +898,7 @@ ${script}`
         modelId: 'kling/ai-avatar-standard',
         imageUrl: avatarImageUrl,
         audioUrl: voiceUrl,
-        prompt: 'A confident UGC content creator speaking naturally to camera, professional look, clean background',
+        prompt: 'A confident UGC content creator speaking naturally and energetically to camera, expressive facial gestures, natural blinking, authentic emotion, soft natural lighting, looks like a real person filming a vertical TikTok/Reels video at home',
       })
       const avatarRawUrl = await pollLipSyncUntilDone({ apiKey: kieApiKey, taskId, timeoutMs: 15 * 60 * 1000 })
 
@@ -897,7 +915,7 @@ ${script}`
 
   const runBroll = async () => {
     if (!kieApiKey) { setPhaseError('Cần KIE.ai API key'); setPhase('failed'); return }
-    const { timedSegments, productImageUrls } = pipeRef.current
+    const { timedSegments, productImageUrls, avatarImageUrl } = pipeRef.current
     if (!timedSegments?.length) { setPhaseError('Thiếu segments'); setPhase('failed'); return }
 
     setPhase('running-broll')
@@ -908,18 +926,31 @@ ${script}`
       const brollResults: (string | null)[] = new Array(timedSegments.length).fill(null)
 
       await Promise.all(timedSegments.map(async (seg, i) => {
-        const refImages = (seg.useProduct && productImageUrls && productImageUrls.length > 0)
-          ? productImageUrls.slice(0, 3)
-          : undefined
+        // Build reference image list (max 3 — Kling limit)
+        // When useProduct=true: pass avatar + product images so AI generates
+        // "creator holding product" scenes matching both references.
+        const refImages: string[] = []
+        if (seg.useProduct) {
+          if (productImageUrls && productImageUrls.length > 0) {
+            refImages.push(...productImageUrls.slice(0, 2))   // up to 2 product views
+          }
+          if (avatarImageUrl) refImages.push(avatarImageUrl)  // 1 avatar reference
+        }
+
+        // Inject explicit instruction to use the references when product segment
+        const promptSuffix = seg.useProduct && refImages.length > 0
+          ? '. IMPORTANT: The person in the shot must match the reference avatar image (same face, outfit, style). The product must clearly match the reference product image. Vertical 9:16, 720p, no text overlay.'
+          : '. Vertical 9:16, cinematic, no text overlay.'
+
         try {
           const { taskId } = await generateVideoJob({
             apiKey: kieApiKey,
             jobModelId: 'kling-3.0/video',
-            prompt: seg.brollPrompt + '. Vertical 9:16, cinematic, no text overlay.',
+            prompt: seg.brollPrompt + promptSuffix,
             aspectRatio: '9:16',
             resolution: '720p',
             duration: 5,
-            referenceImageUrls: refImages,
+            referenceImageUrls: refImages.length > 0 ? refImages : undefined,
           })
           const brollStart = Date.now()
           while (Date.now() - brollStart < 8 * 60 * 1000) {
