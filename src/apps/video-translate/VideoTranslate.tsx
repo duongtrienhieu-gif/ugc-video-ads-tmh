@@ -7,8 +7,7 @@ import {
 import {
   createDubbing, getDubbedMedia, pollDubbingUntilDone, deleteDubbing,
 } from '../../utils/elevenlabs'
-import { generateLipSync, pollLipSyncUntilDone } from '../../utils/kieai'
-import { extractFrameFromVideo, extractFrameFromVideoUrl } from '../../utils/videoUtils'
+import { submitLatentSync, pollLatentSyncUntilDone } from '../../utils/falai'
 import { saveAsset, getUrl } from '../../utils/assetStore'
 import { useSettingsStore } from '../../stores/settingsStore'
 import { useAppStore } from '../../stores/appStore'
@@ -41,7 +40,7 @@ function StatusBadge({ status }: { status: TranslationStatus }) {
   const spinner = <Loader2 className="h-2.5 w-2.5 animate-spin" />
   const map: Record<TranslationStatus, { label: string; className: string; icon?: React.ReactNode }> = {
     pending:    { label: 'Đang chờ',       className: 'bg-slate-100 text-slate-500' },
-    extracting: { label: 'Trích khung',    className: 'bg-slate-100 text-slate-600', icon: spinner },
+    extracting: { label: 'Upload nguồn',   className: 'bg-slate-100 text-slate-600', icon: spinner },
     dubbing:    { label: 'Đang dịch',      className: 'bg-teal-500/15 text-teal-600', icon: spinner },
     lipsyncing: { label: 'Đang lip-sync',  className: 'bg-indigo-500/15 text-indigo-600', icon: spinner },
     dubbed:     { label: 'Hoàn thành',     className: 'bg-emerald-500/15 text-emerald-600', icon: <CheckCircle2 className="h-2.5 w-2.5" /> },
@@ -134,7 +133,7 @@ export default function VideoTranslate() {
 
   const addToast         = useAppStore((s) => s.addToast)
   const elevenLabsApiKey = useSettingsStore((s) => s.elevenLabsApiKey)
-  const kieApiKey        = useSettingsStore((s) => s.kieApiKey)
+  const falApiKey        = useSettingsStore((s) => s.falApiKey)
 
   // ── Restore videoUrl from assetId after reload ───────────────────────
   useEffect(() => {
@@ -177,7 +176,7 @@ export default function VideoTranslate() {
     if (inputMode === 'url' && !sourceUrl.trim()) { addToast('Nhập URL video trước', 'error'); return }
     if (!targetLang) { addToast('Chọn ngôn ngữ đích', 'error'); return }
     if (!elevenLabsApiKey) { addToast('Cài ElevenLabs API key trong Cài đặt', 'error'); return }
-    if (!kieApiKey) { addToast('Cài KIE.ai API key trong Cài đặt (cho bước lip-sync)', 'error'); return }
+    if (!falApiKey) { addToast('Cài fal.ai API key trong Cài đặt (cho lip-sync video)', 'error'); return }
     if (sourceLang === targetLang && sourceLang !== 'auto') {
       addToast('Ngôn ngữ gốc và đích không được trùng nhau', 'error'); return
     }
@@ -205,17 +204,20 @@ export default function VideoTranslate() {
     const patch = (updates: Partial<TranslationItem>) => updateItemInStore(localId, updates)
 
     try {
-      // ── Stage 1: Extract frame from video for lip-sync ─────────────────
+      // ── Stage 1: Upload source video to Supabase (for fal.ai access) ──
       patch({ status: 'extracting' })
-      const frameBlob = inputMode === 'file' && file
-        ? await extractFrameFromVideo(file, 0.5)
-        : await extractFrameFromVideoUrl(sourceUrl.trim(), 0.5)
-      const imageAssetId = await saveAsset(frameBlob, 'image/jpeg')
-      const imageUrl     = await getUrl(imageAssetId)
-      if (!imageUrl) throw new Error('Không lấy được URL khung hình')
-      patch({ imageAssetId })
+      let sourceVideoUrl: string
+      if (inputMode === 'file' && file) {
+        const srcAssetId = await saveAsset(file, file.type || 'video/mp4')
+        const url = await getUrl(srcAssetId)
+        if (!url) throw new Error('Không lấy được URL video nguồn sau khi upload')
+        sourceVideoUrl = url
+        patch({ imageAssetId: srcAssetId })  // reuse imageAssetId to track source video
+      } else {
+        sourceVideoUrl = sourceUrl.trim()
+      }
 
-      // ── Stage 2: ElevenLabs Dubbing ────────────────────────────────────
+      // ── Stage 2: ElevenLabs Dubbing — dịch audio giữ giọng gốc ────────
       patch({ status: 'dubbing' })
       const { dubbingId, expectedDurationSec } = await createDubbing({
         apiKey:            elevenLabsApiKey,
@@ -246,24 +248,22 @@ export default function VideoTranslate() {
       if (!dubbedAudioUrl) throw new Error('Không lấy được URL audio đã dịch')
       patch({ audioAssetId })
 
-      // ── Stage 3: KIE.ai Lip-Sync (image + dubbed audio) ───────────────
+      // ── Stage 3: fal.ai LatentSync — video-to-video lip-sync ──────────
       patch({ status: 'lipsyncing' })
-      const { taskId } = await generateLipSync({
-        apiKey:    kieApiKey,
-        modelId:   'kling/ai-avatar-standard',
-        imageUrl,
+      const { requestId } = await submitLatentSync({
+        apiKey:    falApiKey,
+        videoUrl:  sourceVideoUrl,
         audioUrl:  dubbedAudioUrl,
-        prompt:    'Lip-sync to the provided audio with natural facial expressions.',
       })
 
-      const finalVideoUrl = await pollLipSyncUntilDone({
-        apiKey:    kieApiKey,
-        taskId,
-        timeoutMs: 20 * 60 * 1000,
+      const lipSyncResult = await pollLatentSyncUntilDone({
+        apiKey:    falApiKey,
+        requestId,
+        timeoutMs: 25 * 60 * 1000,
       })
 
       // Download lip-synced video + save permanently
-      const finalRes  = await fetch(finalVideoUrl)
+      const finalRes  = await fetch(lipSyncResult.videoUrl)
       const finalBlob = await finalRes.blob()
       const assetId   = await saveAsset(finalBlob, finalBlob.type || 'video/mp4')
       const videoUrl  = await getUrl(assetId)
@@ -497,7 +497,7 @@ export default function VideoTranslate() {
             <div className="flex items-start gap-2 rounded-xl border border-teal-100 bg-teal-50/60 px-3 py-2.5">
               <Info className="mt-0.5 h-3.5 w-3.5 shrink-0 text-teal-500" />
               <p className="text-[10px] leading-relaxed text-teal-700">
-                <strong>Pipeline 3 bước:</strong> trích khung hình → ElevenLabs dịch giọng giữ giọng gốc → Kling Avatar tạo lip-sync khớp môi với giọng dịch. Output là <em>talking head</em> dùng khung hình trích từ video gốc. Thời gian ~3–6 phút/phút video.
+                <strong>Pipeline 2 bước:</strong> ElevenLabs dịch giọng giữ giọng gốc → fal.ai LatentSync tái tạo khớp môi cho video. <strong>Giữ nguyên cảnh, body, chuyển động</strong> — chỉ thay lip + audio. Thời gian ~3–6 phút/phút video.
               </p>
             </div>
 
@@ -529,9 +529,9 @@ export default function VideoTranslate() {
               </span>
             )}
           </button>
-          {(!elevenLabsApiKey || !kieApiKey) && (
+          {(!elevenLabsApiKey || !falApiKey) && (
             <p className="mt-2 text-center text-[10px] text-gray-400">
-              Cần ElevenLabs Creator plan + KIE.ai key
+              Cần ElevenLabs Creator plan + fal.ai key
             </p>
           )}
         </div>
@@ -632,9 +632,9 @@ export default function VideoTranslate() {
                             {getLangFlag(item.targetLang)} {getLangLabel(item.targetLang)}
                           </p>
                           <p className="mt-1.5 text-[10px] text-white/40 animate-pulse">
-                            {item.status === 'extracting' && 'Đang trích khung hình từ video...'}
+                            {item.status === 'extracting' && 'Đang upload video nguồn...'}
                             {item.status === 'dubbing'    && 'ElevenLabs đang phiên âm và dịch giọng...'}
-                            {item.status === 'lipsyncing' && 'Kling Avatar đang tạo lip-sync khớp môi...'}
+                            {item.status === 'lipsyncing' && 'fal.ai LatentSync đang tái tạo khớp môi cho video...'}
                             {item.status === 'pending'    && 'Đang chuẩn bị...'}
                           </p>
                         </div>

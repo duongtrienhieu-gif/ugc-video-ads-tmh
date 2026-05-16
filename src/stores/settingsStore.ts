@@ -6,10 +6,12 @@ interface SettingsState {
   kieApiKey: string
   geminiApiKey: string
   elevenLabsApiKey: string
+  falApiKey: string
   kieCredits: number | null
   setKieApiKey: (key: string) => void
   setGeminiApiKey: (key: string) => void
   setElevenLabsApiKey: (key: string) => void
+  setFalApiKey: (key: string) => void
   setKieCredits: (credits: number | null) => void
   hasApiKey: () => boolean
   getApiKey: () => string
@@ -17,25 +19,35 @@ interface SettingsState {
   hasGeminiKey: () => boolean
   getElevenLabsApiKey: () => string
   hasElevenLabsKey: () => boolean
+  getFalApiKey: () => string
+  hasFalKey: () => boolean
 }
 
-function loadFromStorage() {
+interface StoredSettings {
+  kieApiKey: string
+  geminiApiKey: string
+  elevenLabsApiKey: string
+  falApiKey: string
+}
+
+function loadFromStorage(): StoredSettings {
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
     if (raw) {
       const parsed = JSON.parse(raw)
       return {
-        kieApiKey: parsed.kieApiKey ?? '',
-        geminiApiKey: parsed.geminiApiKey ?? '',
+        kieApiKey:        parsed.kieApiKey        ?? '',
+        geminiApiKey:     parsed.geminiApiKey     ?? '',
         elevenLabsApiKey: parsed.elevenLabsApiKey ?? '',
+        falApiKey:        parsed.falApiKey        ?? '',
       }
     }
-  } catch {}
-  return { kieApiKey: '', geminiApiKey: '', elevenLabsApiKey: '' }
+  } catch { /* silent */ }
+  return { kieApiKey: '', geminiApiKey: '', elevenLabsApiKey: '', falApiKey: '' }
 }
 
-function saveToStorage(kieApiKey: string, geminiApiKey: string, elevenLabsApiKey: string) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify({ kieApiKey, geminiApiKey, elevenLabsApiKey }))
+function saveToStorage(s: StoredSettings) {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(s))
 }
 
 export const useSettingsStore = create<SettingsState>((set, get) => ({
@@ -44,17 +56,42 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
 
   setKieApiKey: (key) => {
     set({ kieApiKey: key })
-    saveToStorage(key, get().geminiApiKey, get().elevenLabsApiKey)
+    saveToStorage({
+      kieApiKey: key,
+      geminiApiKey: get().geminiApiKey,
+      elevenLabsApiKey: get().elevenLabsApiKey,
+      falApiKey: get().falApiKey,
+    })
   },
 
   setGeminiApiKey: (key) => {
     set({ geminiApiKey: key })
-    saveToStorage(get().kieApiKey, key, get().elevenLabsApiKey)
+    saveToStorage({
+      kieApiKey: get().kieApiKey,
+      geminiApiKey: key,
+      elevenLabsApiKey: get().elevenLabsApiKey,
+      falApiKey: get().falApiKey,
+    })
   },
 
   setElevenLabsApiKey: (key) => {
     set({ elevenLabsApiKey: key })
-    saveToStorage(get().kieApiKey, get().geminiApiKey, key)
+    saveToStorage({
+      kieApiKey: get().kieApiKey,
+      geminiApiKey: get().geminiApiKey,
+      elevenLabsApiKey: key,
+      falApiKey: get().falApiKey,
+    })
+  },
+
+  setFalApiKey: (key) => {
+    set({ falApiKey: key })
+    saveToStorage({
+      kieApiKey: get().kieApiKey,
+      geminiApiKey: get().geminiApiKey,
+      elevenLabsApiKey: get().elevenLabsApiKey,
+      falApiKey: key,
+    })
   },
 
   setKieCredits: (credits) => set({ kieCredits: credits }),
@@ -82,4 +119,12 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   },
 
   hasElevenLabsKey: () => get().elevenLabsApiKey.length > 0,
+
+  getFalApiKey: () => {
+    const key = get().falApiKey
+    if (!key) throw new Error('Vui lòng nhập fal.ai API key trong Cài đặt')
+    return key
+  },
+
+  hasFalKey: () => get().falApiKey.length > 0,
 }))

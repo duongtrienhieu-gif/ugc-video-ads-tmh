@@ -14,15 +14,17 @@ interface SettingsModalProps {
 }
 
 export default function SettingsModal({ open, onClose }: SettingsModalProps) {
-  const { kieApiKey, geminiApiKey, elevenLabsApiKey, kieCredits, setKieApiKey, setGeminiApiKey, setElevenLabsApiKey, setKieCredits } = useSettingsStore()
+  const { kieApiKey, geminiApiKey, elevenLabsApiKey, falApiKey, kieCredits, setKieApiKey, setGeminiApiKey, setElevenLabsApiKey, setFalApiKey, setKieCredits } = useSettingsStore()
   const addToast = useAppStore((s) => s.addToast)
 
   const [draftKie, setDraftKie] = useState(kieApiKey)
   const [draftGemini, setDraftGemini] = useState(geminiApiKey)
   const [draftEleven, setDraftEleven] = useState(elevenLabsApiKey)
+  const [draftFal, setDraftFal] = useState(falApiKey)
   const [show, setShow] = useState(false)
   const [showGemini, setShowGemini] = useState(false)
   const [showEleven, setShowEleven] = useState(false)
+  const [showFal, setShowFal] = useState(false)
   const [saved, setSaved] = useState(false)
   const [cleaning, setCleaning] = useState(false)
   const [testing, setTesting] = useState(false)
@@ -37,12 +39,13 @@ export default function SettingsModal({ open, onClose }: SettingsModalProps) {
       setDraftKie(kieApiKey)
       setDraftGemini(geminiApiKey)
       setDraftEleven(elevenLabsApiKey)
+      setDraftFal(falApiKey)
       setSaved(false)
       setTestResult(null)
       setGeminiTestResult(null)
       setElevenTestResult(null)
     }
-  }, [open, kieApiKey, geminiApiKey, elevenLabsApiKey])
+  }, [open, kieApiKey, geminiApiKey, elevenLabsApiKey, falApiKey])
 
   if (!open) return null
 
@@ -99,6 +102,7 @@ export default function SettingsModal({ open, onClose }: SettingsModalProps) {
     setKieApiKey(key)
     setGeminiApiKey(draftGemini.trim())
     setElevenLabsApiKey(draftEleven.trim())
+    setFalApiKey(draftFal.trim())
     setSaved(true)
     addToast('Đã lưu cài đặt thành công')
     if (key) {
@@ -342,6 +346,49 @@ export default function SettingsModal({ open, onClose }: SettingsModalProps) {
                   )}
                 </div>
               )}
+            </div>
+          </div>
+
+          {/* ── FAL.AI ─────────────────────────────────── */}
+          <div className="rounded-xl border border-pink-100 bg-pink-50/40 p-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs font-bold uppercase tracking-widest text-pink-500">fal.ai</p>
+                <p className="text-[11px] text-gray-400 mt-0.5">Lip-sync video-to-video (LatentSync) · Dịch Video</p>
+              </div>
+              <a
+                href="https://fal.ai/dashboard/keys"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-[11px] text-pink-600 transition-colors hover:text-pink-500"
+              >
+                Lấy key →
+              </a>
+            </div>
+            <div className="space-y-2">
+              <label className="flex items-center gap-2 text-sm font-medium text-gray-700">
+                <Key className="h-3.5 w-3.5 text-gray-500" />
+                API Key
+              </label>
+              <div className="relative">
+                <input
+                  type={showFal ? 'text' : 'password'}
+                  value={draftFal}
+                  onChange={(e) => setDraftFal(e.target.value)}
+                  placeholder="fal-..."
+                  className="w-full rounded-lg border border-black/10 bg-white/70 px-3 py-2.5 pr-10 text-sm text-gray-800 placeholder-gray-400 outline-none transition-colors focus:border-pink-300 focus:bg-white"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowFal(!showFal)}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 transition-colors hover:text-gray-600"
+                >
+                  {showFal ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
+              <p className="text-[11px] text-gray-400">
+                Video-to-video lip-sync giữ nguyên cảnh gốc · ~<span className="font-mono">$0.005/s</span> (~$0.30/phút)
+              </p>
             </div>
           </div>
 
