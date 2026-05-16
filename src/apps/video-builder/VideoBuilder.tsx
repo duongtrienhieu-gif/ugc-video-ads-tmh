@@ -1950,13 +1950,23 @@ MOTION: Gentle cinematic camera motion only — slow push-in on key detail, or s
   }
 
   /** Seedance 2 Fast supports clip durations of 5 / 8 / 10 / 12 seconds.
-   *  Pick the smallest option that fully covers the segment so Shotstack
-   *  doesn't have to loop/freeze a short clip across a long segment. */
+   *  Round to the NEAREST supported duration (not round-up) for cost
+   *  optimization. Shotstack handles minor 0.3-0.5s mismatches gracefully:
+   *  - clip shorter than segment → freeze-frame on last frame for the gap
+   *  - clip longer than segment → trim the excess
+   *  Both effects are imperceptible at < 0.5s, and we save ~50 cr per clip.
+   *
+   *  Breakpoints (midpoints between supported durations):
+   *  - < 6.5s → 5    (4s segment closer to 5 than 8)
+   *  - < 9s   → 8    (7s segment closer to 8 than 10)
+   *  - < 11s  → 10   (10s segment exactly 10)
+   *  - ≥ 11s  → 12   (max)
+   */
   const pickClipDuration = (segmentDuration: number): 5 | 8 | 10 | 12 => {
-    if (segmentDuration <= 5)  return 5
-    if (segmentDuration <= 8)  return 8
-    if (segmentDuration <= 10) return 10
-    return 12   // max for Seedance Fast; segments > 12s will be trimmed in Shotstack
+    if (segmentDuration < 6.5) return 5
+    if (segmentDuration < 9)   return 8
+    if (segmentDuration < 11)  return 10
+    return 12   // max for Seedance Fast
   }
 
   /** Approximate KIE credit cost for a Seedance 2 Fast 480p clip of N seconds.
@@ -2883,11 +2893,24 @@ MOTION: Gentle cinematic camera motion only — slow push-in on key detail, or s
                               <span className="rounded-full bg-violet-100 px-1.5 py-0.5 text-[9px] font-semibold text-violet-700">
                                 → Clip {clipDur}s
                               </span>
-                              {seg.durationSec > 12 && (
-                                <span className="text-[9px] text-amber-500" title="Segment > max clip 12s, sẽ trim đuôi">
-                                  ⚠ cắt {(seg.durationSec - 12).toFixed(1)}s
-                                </span>
-                              )}
+                              {(() => {
+                                const diff = seg.durationSec - clipDur
+                                if (Math.abs(diff) < 0.1) return null
+                                if (diff > 0) {
+                                  // segment longer than clip → Shotstack freeze-frame the gap
+                                  return (
+                                    <span className="text-[9px] text-amber-500" title={`Segment dài hơn clip ${diff.toFixed(1)}s — Shotstack freeze-frame phần đuôi`}>
+                                      ⏸ freeze {diff.toFixed(1)}s
+                                    </span>
+                                  )
+                                }
+                                // clip longer than segment → trim
+                                return (
+                                  <span className="text-[9px] text-gray-400" title={`Clip dài hơn segment ${Math.abs(diff).toFixed(1)}s — Shotstack trim đuôi`}>
+                                    ✂ trim {Math.abs(diff).toFixed(1)}s
+                                  </span>
+                                )
+                              })()}
                             </div>
                             <p className="line-clamp-2 text-xs text-gray-700">{seg.text}</p>
 
