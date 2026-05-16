@@ -1901,6 +1901,23 @@ Do NOT invent a different product variant.`
 MOTION: Gentle cinematic camera motion only — slow push-in on key detail, or smooth slow pan across the setting. NO static frozen frames, NO jitter, NO sudden cuts. Maintain photorealistic UGC ad style. The avatar/speaker will be overlaid separately later — keep this scene without any visible speaker.`
   }
 
+  /** Seedance 2 Fast supports clip durations of 5 / 8 / 10 / 12 seconds.
+   *  Pick the smallest option that fully covers the segment so Shotstack
+   *  doesn't have to loop/freeze a short clip across a long segment. */
+  const pickClipDuration = (segmentDuration: number): 5 | 8 | 10 | 12 => {
+    if (segmentDuration <= 5)  return 5
+    if (segmentDuration <= 8)  return 8
+    if (segmentDuration <= 10) return 10
+    return 12   // max for Seedance Fast; segments > 12s will be trimmed in Shotstack
+  }
+
+  /** Approximate KIE credit cost for a Seedance 2 Fast 480p clip of N seconds.
+   *  Scaling is roughly linear with duration. */
+  const estimateClipCost = (clipDuration: 5 | 8 | 10 | 12): number => {
+    const table = { 5: 85, 8: 135, 10: 170, 12: 205 }
+    return table[clipDuration]
+  }
+
   /** Generate ONE B-roll video clip for a given segment. Used by per-clip
    *  manual generation in review-broll — user clicks Gen on each card
    *  individually instead of all 9 firing in parallel. */
@@ -1915,6 +1932,7 @@ MOTION: Gentle cinematic camera motion only — slow push-in on key detail, or s
 
     setGeneratingBrollIndices((prev) => new Set(prev).add(i))
     const motionPrompt = buildMotionPrompt(seg)
+    const clipDuration = pickClipDuration(seg.durationSec)   // 5 / 8 / 10 / 12
 
     try {
       const { taskId } = await generateVideoJob({
@@ -1923,7 +1941,7 @@ MOTION: Gentle cinematic camera motion only — slow push-in on key detail, or s
         prompt: motionPrompt,
         aspectRatio: '9:16',
         resolution: '480p',
-        duration: 5,
+        duration: clipDuration,
         startFrameUrl: startImage,
       })
       const start = Date.now()
@@ -2742,7 +2760,15 @@ MOTION: Gentle cinematic camera motion only — slow push-in on key detail, or s
           {/* ─── Review: B-roll Videos — PER-CLIP MANUAL generation ─── */}
           {phase === 'review-broll' && (() => {
             const doneCount = previewBrollUrls.filter(Boolean).length
-            const totalSpent = doneCount * 85
+            // Estimate spent based on which clips are done (each clip's cost depends on its segment duration)
+            const totalSpent = previewBrollUrls.reduce((sum, url, i) => {
+              if (!url) return sum
+              const seg = previewSegments[i]
+              if (!seg) return sum
+              return sum + estimateClipCost(pickClipDuration(seg.durationSec))
+            }, 0)
+            // Estimate of total cost if user gens all remaining clips
+            const totalEstimate = previewSegments.reduce((sum, seg) => sum + estimateClipCost(pickClipDuration(seg.durationSec)), 0)
             const isAnyGenerating = generatingBrollIndices.size > 0
             return (
               <ReviewCard
@@ -2755,10 +2781,10 @@ MOTION: Gentle cinematic camera motion only — slow push-in on key detail, or s
               >
                 <div className="mb-3 rounded-lg border border-violet-200 bg-violet-50 px-3 py-2">
                   <p className="text-xs text-violet-700">
-                    📌 <strong>Gen từng clip riêng</strong> — click nút "Gen" trên mỗi card khi đã review motion prompt. KHÔNG tự động gen 9 cùng lúc.
+                    📌 <strong>Gen từng clip riêng</strong> — mỗi clip duration auto-match segment (5/8/10/12s). Cost mỗi clip thay đổi theo độ dài.
                   </p>
                   <p className="mt-1 text-[11px] text-violet-600">
-                    Đã gen: <strong>{doneCount}/{previewBrollUrls.length}</strong> clips · Tốn: <strong>{totalSpent} cr (${(totalSpent * 0.005).toFixed(2)})</strong> · Mỗi clip ~85 cr
+                    Đã gen: <strong>{doneCount}/{previewBrollUrls.length}</strong> clips · Đã tốn: <strong>{totalSpent} cr (${(totalSpent * 0.005).toFixed(2)})</strong> · Tổng nếu gen hết: ~{totalEstimate} cr (${(totalEstimate * 0.005).toFixed(2)})
                   </p>
                 </div>
 
@@ -2768,6 +2794,8 @@ MOTION: Gentle cinematic camera motion only — slow push-in on key detail, or s
                     const imageUrl = previewBrollImageUrls[i]
                     const isGen = generatingBrollIndices.has(i)
                     const motionPrompt = buildMotionPrompt(seg)
+                    const clipDur = pickClipDuration(seg.durationSec)
+                    const clipCost = estimateClipCost(clipDur)
                     return (
                       <div key={i} className="overflow-hidden rounded-lg border border-black/10 bg-white">
                         <div className="flex gap-3 p-2">
@@ -2792,9 +2820,19 @@ MOTION: Gentle cinematic camera motion only — slow push-in on key detail, or s
 
                           {/* Right side: text + prompt + button */}
                           <div className="min-w-0 flex-1">
-                            <p className="text-[10px] font-bold uppercase tracking-wide text-violet-600">
-                              Đoạn {i + 1} · {seg.durationSec.toFixed(1)}s
-                            </p>
+                            <div className="flex items-center gap-2">
+                              <p className="text-[10px] font-bold uppercase tracking-wide text-violet-600">
+                                Đoạn {i + 1} · Segment {seg.durationSec.toFixed(1)}s
+                              </p>
+                              <span className="rounded-full bg-violet-100 px-1.5 py-0.5 text-[9px] font-semibold text-violet-700">
+                                → Clip {clipDur}s
+                              </span>
+                              {seg.durationSec > 12 && (
+                                <span className="text-[9px] text-amber-500" title="Segment > max clip 12s, sẽ trim đuôi">
+                                  ⚠ cắt {(seg.durationSec - 12).toFixed(1)}s
+                                </span>
+                              )}
+                            </div>
                             <p className="line-clamp-2 text-xs text-gray-700">{seg.text}</p>
 
                             <details className="mt-1 text-[10px] text-violet-600">
@@ -2819,9 +2857,9 @@ MOTION: Gentle cinematic camera motion only — slow push-in on key detail, or s
                                 {isGen ? (
                                   <><Loader2 className="h-3 w-3 animate-spin" /> Đang gen...</>
                                 ) : videoUrl ? (
-                                  <><RotateCcw className="h-3 w-3" /> Tạo lại (~85 cr)</>
+                                  <><RotateCcw className="h-3 w-3" /> Tạo lại {clipDur}s (~{clipCost} cr)</>
                                 ) : (
-                                  <><Sparkles className="h-3 w-3" /> Gen clip (~85 cr)</>
+                                  <><Sparkles className="h-3 w-3" /> Gen clip {clipDur}s (~{clipCost} cr)</>
                                 )}
                               </button>
                               {videoUrl && <span className="text-[10px] text-emerald-600 font-semibold">✓ Đã gen</span>}
