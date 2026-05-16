@@ -36,21 +36,29 @@ export async function generateImage(params: {
   prompt: string
   resolution: ImageResolution
   aspectRatio?: string
+  /**
+   * Reference images for identity / product lock. Nano Banana 2 + GPT Image 2
+   * use these to maintain consistency across multi-shot generations
+   * (e.g. same avatar face + same product packaging across 9 B-roll frames).
+   */
+  referenceImageUrls?: string[]
 }): Promise<{ taskId: string }> {
+  const input: Record<string, unknown> = {
+    prompt: params.prompt,
+    resolution: params.resolution,
+    aspect_ratio: params.aspectRatio ?? '9:16',
+  }
+  if (params.referenceImageUrls?.length) {
+    input.image_urls = params.referenceImageUrls
+  }
+
   const res = await fetch(`${KIE_BASE}/jobs/createTask`, {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${params.apiKey}`,
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({
-      model: params.model,
-      input: {
-        prompt: params.prompt,
-        resolution: params.resolution,
-        aspect_ratio: params.aspectRatio ?? '9:16',
-      },
-    }),
+    body: JSON.stringify({ model: params.model, input }),
   })
   if (res.status === 402) throw new Error('INSUFFICIENT_CREDITS')
   if (!res.ok) {

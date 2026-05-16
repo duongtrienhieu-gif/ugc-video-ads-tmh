@@ -1213,19 +1213,42 @@ ${script}`
   // video generation ($0.35/clip). User can regen bad images individually.
 
   const buildImagePrompt = (seg: ScriptSegment, hasAvatar: boolean, hasProduct: boolean): string => {
+    // Identity-lock instruction — REQUIRED for UGC continuity. The reference
+    // image of the avatar MUST appear as the same person in every shot of
+    // the series (same face, same hijab/clothing, same age, same ethnicity).
+    // The product MUST appear identically (same bottle, same box, same label).
+    const identityLock = `
+IDENTITY LOCK (mandatory — this is a UGC review series where ONE person uses ONE product):
+${hasAvatar ? '- The PERSON in this image must be the SAME individual as the first reference image: identical face, identical hijab/clothing style, identical age, identical ethnicity. Treat the reference as a real human you must portray consistently.' : ''}
+${hasProduct ? '- The PRODUCT must match the reference product image EXACTLY: same bottle/box shape, same label design, same color, same branding. Do NOT invent a different product.' : ''}
+- Setting should feel like the SAME person's real home across all shots (consistent kitchen/living room aesthetic, lighting style, color palette). This is NOT 9 different people testing 9 products — it's ONE person's genuine review journey.
+- Style: authentic UGC review video (real person filming TikTok/Reels), NOT polished commercial. Slight handheld feel, natural imperfect framing.
+
+SCENE FOR THIS SHOT:
+`.trim()
+
     const useProd = seg.useProduct && hasProduct
-    if (useProd) {
-      return `${seg.brollPrompt}. Photorealistic cinematic 9:16 vertical UGC ad shot. ${
-        hasAvatar ? 'A friendly content creator (matching avatar style) ' : ''
-      }holding/showing the product clearly. Lifestyle home setting, soft natural window lighting, warm tones, shallow depth of field. Hyper-realistic, professional photography, no text overlay, no watermark.`
-    }
-    return `${seg.brollPrompt}. Photorealistic cinematic 9:16 vertical lifestyle B-roll image. Authentic real-world setting, warm natural lighting, professional photography quality. No text overlay, no watermark.`
+    const sceneSpec = useProd
+      ? `${seg.brollPrompt}. Photorealistic 9:16 vertical UGC shot, the avatar (matching reference) is holding/showing the exact product from the reference. Lifestyle home setting, soft natural window lighting, warm tones. Hyper-realistic phone-camera quality, shallow depth of field, no text overlay, no watermark.`
+      : `${seg.brollPrompt}. Photorealistic 9:16 vertical lifestyle B-roll. ${hasAvatar ? 'Featuring the avatar (matching reference) — keep the same person consistent. ' : ''}Authentic real-world setting matching the avatar's home style. Warm natural lighting, phone-camera quality, no text overlay, no watermark.`
+
+    return `${identityLock}\n${sceneSpec}`
   }
 
   // Generate ONE image for a given segment index (used by both initial run + per-image regen)
   const generateOneImage = async (i: number, seg: ScriptSegment): Promise<string | null> => {
     const { avatarImageUrl, productImageUrls } = pipeRef.current
     const prompt = buildImagePrompt(seg, !!avatarImageUrl, !!(productImageUrls && productImageUrls.length))
+
+    // Build reference image list: avatar FIRST (locks identity), then product
+    // images (locks product appearance). Order matters — Nano Banana 2 weights
+    // earlier references more heavily for identity.
+    const refs: string[] = []
+    if (avatarImageUrl) refs.push(avatarImageUrl)
+    if (productImageUrls && productImageUrls.length > 0) {
+      refs.push(...productImageUrls.slice(0, 2))  // up to 2 product views
+    }
+
     try {
       const { taskId } = await generateImage({
         apiKey: kieApiKey!,
@@ -1233,6 +1256,7 @@ ${script}`
         prompt,
         resolution: '1K',
         aspectRatio: '9:16',
+        referenceImageUrls: refs.length > 0 ? refs : undefined,
       })
       return await pollImageUntilDone({ apiKey: kieApiKey!, taskId, timeoutMs: 3 * 60 * 1000 })
     } catch (err) {
@@ -1847,10 +1871,10 @@ ${script}`
                 >
                   <div className="grid grid-cols-4 gap-1.5">
                     {previewBrollImageUrls.map((url, i) => (
-                      <div key={i} className="relative overflow-hidden rounded-md border border-emerald-100">
+                      <div key={i} className="relative aspect-[9/16] w-full overflow-hidden rounded-md border border-emerald-100 bg-gray-900">
                         {url
-                          ? <img src={url} alt={`#${i + 1}`} className="h-20 w-full object-cover" />
-                          : <div className="flex h-20 items-center justify-center bg-red-50"><X className="h-4 w-4 text-red-400" /></div>
+                          ? <img src={url} alt={`#${i + 1}`} className="h-full w-full object-contain" />
+                          : <div className="flex h-full items-center justify-center bg-red-50"><X className="h-4 w-4 text-red-400" /></div>
                         }
                         <span className="absolute bottom-0.5 left-0.5 rounded bg-black/60 px-1 py-0.5 text-[8px] font-bold text-white">#{i + 1}</span>
                       </div>
@@ -1871,10 +1895,10 @@ ${script}`
                 >
                   <div className="grid grid-cols-3 gap-1.5">
                     {previewBrollUrls.map((url, i) => (
-                      <div key={i} className="relative overflow-hidden rounded-md border border-emerald-100">
+                      <div key={i} className="relative aspect-[9/16] w-full overflow-hidden rounded-md border border-emerald-100 bg-gray-900">
                         {url
-                          ? <video src={url} muted loop autoPlay playsInline className="h-24 w-full object-cover" />
-                          : <div className="flex h-24 items-center justify-center bg-red-50"><X className="h-4 w-4 text-red-400" /></div>
+                          ? <video src={url} muted loop autoPlay playsInline className="h-full w-full object-contain" />
+                          : <div className="flex h-full items-center justify-center bg-red-50"><X className="h-4 w-4 text-red-400" /></div>
                         }
                         <span className="absolute bottom-0.5 left-0.5 rounded bg-black/60 px-1 py-0.5 text-[8px] font-bold text-white">#{i + 1}</span>
                       </div>
@@ -2024,12 +2048,12 @@ ${script}`
                   return (
                     <div
                       key={i}
-                      className={`group relative overflow-hidden rounded-lg border ${url ? 'border-emerald-200' : 'border-red-200 bg-red-50'} ${isRegen ? 'opacity-60' : ''}`}
+                      className={`group relative aspect-[9/16] w-full overflow-hidden rounded-lg border bg-gray-900 ${url ? 'border-emerald-200' : 'border-red-200 bg-red-50'} ${isRegen ? 'opacity-60' : ''}`}
                     >
                       {url ? (
-                        <img src={url} alt={`Đoạn ${i + 1}`} className="h-32 w-full object-cover" />
+                        <img src={url} alt={`Đoạn ${i + 1}`} className="h-full w-full object-contain" />
                       ) : (
-                        <div className="flex h-32 items-center justify-center">
+                        <div className="flex h-full items-center justify-center">
                           <X className="h-5 w-5 text-red-400" />
                         </div>
                       )}
@@ -2068,11 +2092,11 @@ ${script}`
               </p>
               <div className="grid grid-cols-3 gap-2">
                 {previewBrollUrls.map((url, i) => (
-                  <div key={i} className={`relative overflow-hidden rounded-lg border ${url ? 'border-emerald-200' : 'border-red-200 bg-red-50'}`}>
+                  <div key={i} className={`relative aspect-[9/16] w-full overflow-hidden rounded-lg border bg-gray-900 ${url ? 'border-emerald-200' : 'border-red-200 bg-red-50'}`}>
                     {url ? (
-                      <video src={url} muted loop autoPlay playsInline className="h-28 w-full object-cover" />
+                      <video src={url} muted loop autoPlay playsInline className="h-full w-full object-contain" />
                     ) : (
-                      <div className="flex h-28 items-center justify-center">
+                      <div className="flex h-full items-center justify-center">
                         <X className="h-5 w-5 text-red-400" />
                       </div>
                     )}
