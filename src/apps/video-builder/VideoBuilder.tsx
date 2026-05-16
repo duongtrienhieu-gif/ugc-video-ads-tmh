@@ -1048,26 +1048,36 @@ USE THIS CONTEXT TO:
 The voiceover is ${audioDuration.toFixed(1)} seconds long. Split the script into 8-12 segments matching natural pause/sentence boundaries. Each segment should be 4-8 seconds.
 
 ═══════════════════════════════════════════════════════════════════
-CRITICAL: B-ROLL = SCENE LAYER ONLY (NO speaker / avatar / face in shot)
+B-ROLL COMPOSITION (hybrid format — avatar in main frame + lip-sync overlay)
 ═══════════════════════════════════════════════════════════════════
-The AVATAR is generated SEPARATELY as a talking-head lip-sync video by
-Kling Avatar. Shotstack will overlay the avatar (corner inset or full-screen)
-on top of these B-roll scenes during final composition. So your job is to
-write prompts for the BACKGROUND/SCENE LAYER — DO NOT include the speaker
-or avatar's face in the prompt.
+The final video has TWO visual layers composited by Shotstack:
 
-Allowed in B-roll scenes:
-- First-person POV (hands, feet, partial body — no face)
-- Anonymous body parts (someone's hands holding a product, feet walking)
-- Product close-ups, macro shots
-- Pure lifestyle scenes (kitchen, park, bathroom) — no people OR generic
-  background figures with face away from camera
-- Scientific / abstract visuals
+  LAYER 1 (main B-roll, full-screen): the avatar (matching reference image)
+    performing actions, showing expressions, holding the product — visually
+    illustrating what the voiceover is saying at that moment.
 
-NEVER allowed in B-roll:
-- Any close-up of a person's face
-- Any shot where the avatar/speaker character is identifiable
-- Anyone "looking at camera and talking" (that's the avatar lip-sync layer)
+  LAYER 2 (small corner inset, bottom-right): the same avatar's TALKING
+    HEAD lip-syncing to the voice precisely (generated separately by Kling
+    Avatar in step 6). This is the credibility anchor.
+
+YOUR JOB: write the B-roll prompt for LAYER 1 only.
+
+EVERY B-roll image must include the avatar (matching the reference image)
+doing the specific action / showing the specific expression the script is
+describing at that moment. Examples:
+- Pain segment → avatar holding stomach, painful face, food untouched
+- Failed-solutions → avatar examining medication bottles, frustrated
+- Discovery → avatar holding the product, hopeful smile
+- Transformation → avatar eating happily, energetic walk
+- CTA → avatar holding product, confident smile to camera
+
+DO NOT add the avatar in a corner — that's the lip-sync overlay added later.
+The B-roll image should be full-frame composition with the avatar as the
+main subject performing the action.
+
+IDENTITY: Always describe the avatar as "young Asian woman in beige hijab,
+matching reference" (or similar, per the actual reference). The avatar's
+physical traits will be locked via a separate description injected later.
 
 ═══════════════════════════════════════════════════════════════════
 STRUCTURAL ARC (most successful UGC supplement ads follow this beat order)
@@ -1085,48 +1095,53 @@ Match each script segment to the closest beat. The script may be loosely
 adapted — your job is to recognize which beat each segment is fulfilling.
 
 ═══════════════════════════════════════════════════════════════════
-EXAMPLES — SCENE-ONLY (no avatar, no speaker face) — reverse-engineered
-from BPC-157 ad's B-roll layer (speaker overlay added separately later)
+EXAMPLES — avatar (matching reference) doing actions in main frame
 ═══════════════════════════════════════════════════════════════════
-Voice "The secret to pain-free joints was discovered in 1973"
-→ "Macro shot of an old scientific notebook from 1973 with handwritten formulas, illuminated by soft warm desk lamp. Lab glassware blurred in background. Vintage research aesthetic, photorealistic, vertical 9:16. No people."
+Voice "Dulu perut saya sakit sangat-sangat, sampai tak boleh nak enjoy makan dah"
+→ "Medium close-up of a young Asian woman in a beige hijab (matching reference avatar) sitting at a wooden dining table, one hand pressed firmly on her stomach with a clearly pained expression, brow furrowed. A plate of untouched curry and rice in soft focus foreground. Warm evening tungsten lighting. Authentic UGC documentary aesthetic, photorealistic, vertical 9:16."
 
-Voice "My knees used to hurt so bad, I couldn't even play with my kids anymore"
-→ "First-person POV looking down at someone's hands gripping their knees on a carpeted living room floor, wearing dark sweatpants. Empty toys scattered nearby — a soccer ball, kids' shoes — suggesting unable to join in. Warm late-afternoon home light. Vertical 9:16, photorealistic emotional B-roll. NO face visible."
+Voice "Tiap kali makan, rasa seksa sangat"
+→ "Over-the-shoulder medium shot of the same young Asian woman in beige hijab pushing away a half-eaten plate at a restaurant table, head slightly tilted down in defeat. Warm restaurant lighting, blurred diners in background. Genuine emotional UGC moment, photorealistic, vertical 9:16."
 
-Voice "Every morning was agony, just getting out of bed felt impossible"
-→ "First-person POV from a bed: hands gripping the bedside, knuckles white, comforter rumpled. Soft early-morning light through curtain. Detail on the strain in the hands. Vertical 9:16, photorealistic. No face."
+Voice "Macam-macam saya dah cuba: ubat gastrik, ubah diet"
+→ "Medium shot of the same young Asian woman in beige hijab standing at a bathroom counter examining a cluttered row of gastric medicine bottles, antacid blister packs, and diet books, with a frustrated tired expression. Cool fluorescent overhead lighting. Documentary realism, photorealistic, vertical 9:16."
 
-Voice "I tried everything: cortisone shots made it worse"
-→ "Macro close-up of a gloved medical hand holding a syringe near a bare arm in a clinical office. Sterile blue tones, clinical lighting. Person's face cropped out of frame — only arm visible. Vertical 9:16, documentary realism."
+Voice "Tapi semua berubah bila saya jumpa satu benda ni: INFINITY PROBIOTICS PLUS"
+→ "Hero close-up: the same young Asian woman in beige hijab smiling brightly and holding up an INFINITY PROBIOTICS PLUS supplement bottle (matching reference product) towards the camera with both hands. Bright modern kitchen background, soft natural window daylight catching the label. Hopeful turning-point moment, premium UGC aesthetic, photorealistic, vertical 9:16."
 
-Voice "But everything changed when I discovered this one thing"
-→ "Hero product shot: an INFINITY PROBIOTICS PLUS supplement bottle placed on a polished wooden table, soft directional light catching the label. Capsules artistically spilled beside it. Lifestyle background blurred. No people in frame. Vertical 9:16, premium commercial photorealism."
+Voice "Sekarang? Saya dah boleh enjoy makanan balik"
+→ "Medium shot of the same young Asian woman in beige hijab at a sunny breakfast table, taking a satisfying bite of healthy food with closed-eye genuine pleasure. Warm golden morning light through kitchen window. Authentic UGC vibe, photorealistic, vertical 9:16."
 
-Voice "Now? I'm playing with my kids again and living pain-free"
-→ "Wide low-angle shot of a sunny suburban park path with a soccer ball mid-bounce, distant blurred figures of children running away from camera, golden-hour back-light, bright green lawn. Hopeful empowered atmosphere. NO identifiable faces. Vertical 9:16, vivid photorealism."
+Voice "Saya rasa lebih bertenaga pulak sekarang"
+→ "Wide low-angle shot of the same young Asian woman in beige hijab walking briskly through a sunny morning park path, arms swinging naturally, bright empowered smile. Sun-flares through trees, vibrant green nature background. Vivid empowered ending shot, photorealistic, vertical 9:16."
 
-Voice "BPC-157 has truly changed my life"
-→ "Final hero shot: macro close-up of the BPC-157 bottle held by anonymous hands in front of soft natural sunset light, the label fully readable, capsules visible through the glass. Premium commercial look. Vertical 9:16, hyperrealistic."
+Voice "INFINITY PROBIOTICS PLUS ni memang betul-betul dah ubah hidup saya"
+→ "Final hero close-up: the same young Asian woman in beige hijab holding the INFINITY PROBIOTICS PLUS bottle (matching reference product) toward the camera, gentle confident smile, label fully readable. Warm honey-toned living-room lighting, blurred home background. Premium commercial UGC feel, photorealistic, vertical 9:16."
 
 ═══════════════════════════════════════════════════════════════════
 RULES FOR YOUR brollPrompt OUTPUT
 ═══════════════════════════════════════════════════════════════════
 - ALWAYS in English (image generator performs best in English)
 - 60-120 words per prompt
-- NEVER include the avatar / speaker / a recognizable person's face.
-  This is the BACKGROUND layer only — the speaker is added later via Kling
-  Avatar lip-sync as an overlay.
-- ACCEPTABLE: first-person POV, anonymous hands, body parts (no face),
-  product shots, lifestyle scenes, abstract / scientific visuals
-- Reference the actual product (matching product image — capsule bottle,
-  not powder sachet, etc.) when the segment mentions/handles the product.
-  Describe form, label, color exactly.
-- "Photorealistic", "vertical 9:16", "no text overlay" suffix on every prompt
-  (captions will be added later by Shotstack, not embedded in image)
-- Tip: For PAIN/STRUGGLE segments, use first-person POV with hands gripping
-  the affected area. For TRANSFORMATION/JOY, use empowered lifestyle scenes
-  with figures cropped or facing away.
+- The AVATAR (matching reference image) is the main subject in EVERY shot —
+  doing the action / showing the expression the script is describing
+- Reference the avatar consistently: "young Asian woman in beige hijab"
+  (or whatever matches the reference — adapt to the actual avatar)
+- Reference the actual product when the segment mentions/handles it:
+  "INFINITY PROBIOTICS PLUS supplement bottle (matching reference product)"
+- DO NOT place avatar in a corner — that's the lip-sync overlay added later.
+  Avatar = main subject, full-frame composition.
+- "Photorealistic", "vertical 9:16" suffix on every prompt
+  (captions will be added later by Shotstack)
+- Match the segment's beat:
+  HOOK → curious / discovery composition
+  PAIN → avatar showing physical pain / frustration / sadness
+  FAILED → avatar examining failed remedies, defeated
+  DISCOVERY → avatar holding product with hope
+  HOW-IT-WORKS → avatar taking the product / showing benefits
+  SCIENCE → avatar with clean clinical aesthetic / examining label
+  TRANSFORM → avatar happy, eating, active, smiling
+  CTA → avatar hero shot holding product with confidence
 
 Other rules:
 - avatarPosition: alternate "left" / "right" each segment (Shotstack uses
@@ -1435,42 +1450,76 @@ Return ONLY the tagged script. No explanation, no markdown, no preamble.`
         addToast(`${manualFailCount} ảnh đính kèm không upload được`, 'error')
       }
       pipeRef.current.productImageUrls = productImageUrls
-      setPhaseProgress(85)
+      setPhaseProgress(70)
 
-      // Get a LOCKED product description via Gemini Vision — this exact text
-      // gets injected into every B-roll image prompt to keep the product
-      // (bottle shape, label, color, branding) consistent across all 9 shots.
-      // Avatar consistency comes from the single Kling Avatar lip-sync video
-      // (one source video = one face), so no avatar description needed.
-      if (productImageUrls.length > 0 && geminiApiKey) {
-        setPhaseDetail('Phân tích chi tiết sản phẩm để lock identity...')
+      // Lock physical descriptions via Gemini Vision — these exact texts get
+      // injected into every B-roll image prompt to keep BOTH the avatar AND
+      // the product visually consistent across all generated images.
+      // (Without this, GPT Image 2 drifts: 9 different faces, 9 different
+      // product variants — destroying UGC review authenticity.)
+      if (geminiApiKey) {
+        // 1) Avatar description (the person who appears full-frame in B-roll)
+        setPhaseDetail('Phân tích chi tiết avatar (lock face/clothing)...')
         try {
-          const firstProduct = productImageUrls[0]
-          const productImg = await getImageBytes(firstProduct)
-          if (productImg) {
-            const productDescRaw = await directGeminiVision({
+          const avatarImg = await getImageBytes(avatarImageUrl)
+          if (avatarImg) {
+            const avatarDescRaw = await directGeminiVision({
               apiKey: geminiApiKey,
               parts: [
-                { inlineData: { mimeType: productImg.mimeType, data: productImg.base64 } },
-                { text: `You are a casting director writing a precise physical description for image-generation continuity. This product will appear in 9 different generated images and must look IDENTICAL each time.
+                { inlineData: { mimeType: avatarImg.mimeType, data: avatarImg.base64 } },
+                { text: `You are a casting director writing a precise physical description of this avatar for image-generation continuity. This SAME person must appear IDENTICALLY in 9 different generated images of a UGC product review.
+
+Describe the avatar's physical appearance in 2-3 concise sentences. Include:
+- Approximate age, ethnicity, gender
+- Face shape and complexion (skin tone, distinguishing features like dimples, freckles, eye shape)
+- Hair OR hijab (if any) — exact color, style, coverage / length
+- Eye color, eyebrow style
+- Wardrobe in the reference shot — exact colors, neckline, fabric vibe (this same wardrobe should appear across all shots for continuity)
+- Any accessories (glasses, earrings if visible)
+
+Return ONLY the description as plain text, no preamble, no markdown. Write it in a way image-gen models can use directly — concrete physical adjectives.` },
+              ],
+              model: 'gemini-2.5-flash',
+              maxOutputTokens: 512,
+            })
+            pipeRef.current.avatarDescription = avatarDescRaw.trim()
+            console.log('[resolve] avatar description locked:', pipeRef.current.avatarDescription)
+          }
+        } catch (err) {
+          console.warn('[resolve] avatar description analysis failed:', err)
+        }
+        setPhaseProgress(85)
+
+        // 2) Product description (when the avatar is handling / showing product)
+        if (productImageUrls.length > 0) {
+          setPhaseDetail('Phân tích chi tiết sản phẩm (lock bottle/label)...')
+          try {
+            const productImg = await getImageBytes(productImageUrls[0])
+            if (productImg) {
+              const productDescRaw = await directGeminiVision({
+                apiKey: geminiApiKey,
+                parts: [
+                  { inlineData: { mimeType: productImg.mimeType, data: productImg.base64 } },
+                  { text: `You are a casting director writing a precise physical description for image-generation continuity. This product will appear in multiple generated images and must look IDENTICAL each time.
 
 Describe the product's physical appearance in 2-3 concise sentences. Include:
 - Container type (bottle / jar / box / sachet) — exact material and color (e.g. "dark amber glass", "white matte plastic")
 - Label design — colors, dominant text (product name, capsule count if visible), logo placement, any country flags or certification icons
 - Capsule/tablet visibility — color, count visible if any
 - Any accompanying retail box and its appearance
-- Distinguishing features that must NOT be invented away (e.g. specific shape, ribbon, sticker)
+- Distinguishing features that must NOT be invented away
 
 Return ONLY the description as plain text, no preamble, no markdown.` },
-              ],
-              model: 'gemini-2.5-flash',
-              maxOutputTokens: 512,
-            })
-            pipeRef.current.productDescription = productDescRaw.trim()
-            console.log('[resolve] product description locked:', pipeRef.current.productDescription)
+                ],
+                model: 'gemini-2.5-flash',
+                maxOutputTokens: 512,
+              })
+              pipeRef.current.productDescription = productDescRaw.trim()
+              console.log('[resolve] product description locked:', pipeRef.current.productDescription)
+            }
+          } catch (err) {
+            console.warn('[resolve] product description analysis failed:', err)
           }
-        } catch (err) {
-          console.warn('[resolve] product description analysis failed:', err)
         }
       }
       setPhaseProgress(100)
@@ -1521,25 +1570,34 @@ Return ONLY the description as plain text, no preamble, no markdown.` },
   // Why: cheap ($0.04/image) and reviewable BEFORE committing to expensive
   // video generation ($0.35/clip). User can regen bad images individually.
 
-  const buildImagePrompt = (seg: ScriptSegment, _hasAvatar: boolean, hasProduct: boolean): string => {
-    // B-roll is SCENE-LAYER ONLY. The avatar/speaker is generated separately
-    // by Kling Avatar and overlaid later by Shotstack. So this prompt should
-    // describe the BACKGROUND scene with no recognizable face / speaker.
+  const buildImagePrompt = (seg: ScriptSegment, hasAvatar: boolean, hasProduct: boolean): string => {
+    // Hybrid B-roll: avatar (matching reference) is the MAIN subject performing
+    // the action. A small lip-sync inset will be added separately in Shotstack.
+    // Both avatar and product descriptions are locked via Gemini Vision (see
+    // runResolve) to keep them visually identical across all 9 generated images.
+    const avatarDesc  = pipeRef.current.avatarDescription
     const productDesc = pipeRef.current.productDescription
+
     const lockRules: string[] = [
-      'SCENE LOCK (this is the BACKGROUND layer of a UGC review video — the avatar will be added as an overlay later):',
-      '- DO NOT include any recognizable face, speaker, or person identifiable as a content creator. The avatar overlay handles all talking-head visuals.',
-      '- Allowed people: anonymous hands, first-person POV, figures cropped or facing away from camera.',
+      'IDENTITY LOCK (UGC review series — ONE person reviewing ONE product across multiple shots):',
     ]
+    if (hasAvatar && avatarDesc) {
+      lockRules.push(`- AVATAR LOCK — the person in this image MUST appear EXACTLY as: ${avatarDesc}`)
+      lockRules.push('  Keep this same face / clothing / hijab / age / ethnicity across every shot. Treat as a real human you must portray consistently.')
+    } else if (hasAvatar) {
+      lockRules.push('- AVATAR must match reference image EXACTLY: identical face, hijab/clothing, age, ethnicity.')
+    }
     if (hasProduct && productDesc) {
-      lockRules.push(`- PRODUCT LOCK — when this segment shows the product, it MUST appear EXACTLY as described: ${productDesc}`)
+      lockRules.push(`- PRODUCT LOCK — when this segment shows the product, it MUST appear EXACTLY as: ${productDesc}`)
+      lockRules.push('  Do NOT invent a different bottle, label color, or form factor.')
     } else if (hasProduct) {
       lockRules.push('- PRODUCT must match reference product image EXACTLY (same bottle/box/label/color/form factor).')
     }
-    lockRules.push('- Setting should feel cohesive across all 9 shots — consistent home/lifestyle aesthetic, same color palette, similar lighting style.')
-    lockRules.push('- Style: authentic phone-camera UGC, slightly imperfect framing, natural lighting (NOT polished commercial).')
+    lockRules.push('- Setting feels cohesive across all 9 shots — consistent home/lifestyle aesthetic, same color palette, similar lighting style.')
+    lockRules.push('- Style: authentic phone-camera UGC (TikTok/Reels), slightly imperfect framing, natural lighting. NOT polished commercial.')
+    lockRules.push('- Avatar appears AS MAIN SUBJECT, full-frame composition (NOT in a corner — the corner lip-sync overlay is added separately by Shotstack).')
 
-    const qualitySuffix = '. Photorealistic, vertical 9:16, hyper-realistic phone-camera quality, no text overlay, no watermark, no faces of speakers/creators.'
+    const qualitySuffix = '. Photorealistic, vertical 9:16, hyper-realistic phone-camera quality, no text overlay (captions added later), no watermark.'
 
     return `${lockRules.join('\n')}\n\nSCENE FOR THIS SHOT:\n${seg.brollPrompt}${qualitySuffix}`
   }
