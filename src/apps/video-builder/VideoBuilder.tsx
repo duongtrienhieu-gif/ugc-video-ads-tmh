@@ -420,9 +420,9 @@ const STEP_INFO: Record<string, { num: number; label: string; subLabel: string; 
   voice:    { num: 1, label: 'Voiceover',           subLabel: 'TTS toàn bộ script → audio file (1.1x speed)', cost: '~$0.30 · ElevenLabs' },
   parse:    { num: 2, label: 'Storyboard',          subLabel: 'Gemini Pro phân tích voice → cảnh quay chi tiết', cost: 'Miễn phí' },
   resolve:  { num: 3, label: 'Chuẩn bị tài nguyên', subLabel: 'Upload audio + resolve URL ảnh',           cost: 'Miễn phí' },
-  avatar:   { num: 4, label: 'Avatar Lip-sync',     subLabel: 'Kling Avatar: ảnh + audio → video nói',    cost: '~624 KIE credit' },
-  brollimg: { num: 5, label: 'B-roll Images',       subLabel: 'Gen ảnh tĩnh từ storyboard — review trước khi animate', cost: '~64 KIE credit' },
-  broll:    { num: 6, label: 'B-roll Videos',       subLabel: 'Image-to-video: ảnh tĩnh → clip chuyển động', cost: '~560 KIE credit' },
+  brollimg: { num: 4, label: 'B-roll Images',       subLabel: 'Gen ảnh tĩnh từ storyboard — test trước khi commit chi phí lớn', cost: '~64 KIE credit' },
+  broll:    { num: 5, label: 'B-roll Videos',       subLabel: 'Image-to-video: ảnh tĩnh → clip chuyển động', cost: '~560 KIE credit' },
+  avatar:   { num: 6, label: 'Avatar Lip-sync',     subLabel: 'Kling Avatar: ảnh + audio → video nói (bước đắt nhất, làm sau cùng để chắc B-roll OK)', cost: '~624 KIE credit' },
   bg:       { num: 7, label: 'Xóa nền Avatar',      subLabel: 'Tách nền để overlay trong suốt',           cost: '~$0.50 · fal.ai' },
   assemble: { num: 8, label: 'Ghép video',          subLabel: 'Layer B-roll + avatar + captions',         cost: '~$0.50 · Shotstack' },
 }
@@ -971,8 +971,8 @@ ${script}`
       }
       pipeRef.current.productImageUrls = productImageUrls
 
-      // Auto-proceed to avatar generation
-      await runAvatar()
+      // Auto-proceed to B-roll Images (cheap, test-first cost optimization)
+      await runBrollImages()
     } catch (err) {
       setPhaseError(err instanceof Error ? err.message : String(err))
       setPhase('failed')
@@ -1595,21 +1595,8 @@ ${script}`
               )
             }
 
-            // Step 4: Avatar Lip-sync
-            if (previewAvatarUrl && (activeNum > 4 || phase === 'done')) {
-              cards.push(
-                <CompletedStepCard
-                  key="avatar"
-                  stepId="avatar"
-                  summary={`Lip-sync video · ${formatDuration(pipeRef.current.audioDuration ?? 0)} · 720p`}
-                >
-                  <video controls src={previewAvatarUrl} playsInline className="w-full max-h-64 rounded-lg bg-black object-contain" />
-                </CompletedStepCard>
-              )
-            }
-
-            // Step 5: B-roll Images
-            if (previewBrollImageUrls.length > 0 && (activeNum > 5 || phase === 'done')) {
+            // Step 4: B-roll Images (was step 5, now runs BEFORE avatar)
+            if (previewBrollImageUrls.length > 0 && (activeNum > 4 || phase === 'done')) {
               const successCount = previewBrollImageUrls.filter(Boolean).length
               cards.push(
                 <CompletedStepCard
@@ -1632,8 +1619,8 @@ ${script}`
               )
             }
 
-            // Step 6: B-roll Videos
-            if (previewBrollUrls.length > 0 && (activeNum > 6 || phase === 'done')) {
+            // Step 5: B-roll Videos (was step 6, now runs BEFORE avatar)
+            if (previewBrollUrls.length > 0 && (activeNum > 5 || phase === 'done')) {
               const successCount = previewBrollUrls.filter(Boolean).length
               cards.push(
                 <CompletedStepCard
@@ -1652,6 +1639,19 @@ ${script}`
                       </div>
                     ))}
                   </div>
+                </CompletedStepCard>
+              )
+            }
+
+            // Step 6: Avatar Lip-sync (moved here from step 4 — runs AFTER B-roll passes)
+            if (previewAvatarUrl && (activeNum > 6 || phase === 'done')) {
+              cards.push(
+                <CompletedStepCard
+                  key="avatar"
+                  stepId="avatar"
+                  summary={`Lip-sync video · ${formatDuration(pipeRef.current.audioDuration ?? 0)} · 720p`}
+                >
+                  <video controls src={previewAvatarUrl} playsInline className="w-full max-h-64 rounded-lg bg-black object-contain" />
                 </CompletedStepCard>
               )
             }
@@ -1682,13 +1682,13 @@ ${script}`
           {/* Running states */}
           {phase.startsWith('running-') && <RunningPanel phase={phase} detail={phaseDetail} />}
 
-          {/* ─── Review: Storyboard (was Parse, now step 2) ─── */}
+          {/* ─── Review: Storyboard (step 2) ─── */}
           {phase === 'review-parse' && (
             <ReviewCard
               onRetry={runParse}
               onContinue={runResolve}
-              continueLabel="Tiếp tục → Avatar"
-              continueCost={STEP_INFO.avatar.cost}
+              continueLabel="Tiếp tục → B-roll Images"
+              continueCost={STEP_INFO.brollimg.cost}
             >
               <p className="mb-3 text-xs text-gray-500">
                 <strong className="text-emerald-600">{previewSegments.length} cảnh quay</strong> · {formatDuration(pipeRef.current.audioDuration ?? 0)} (timed từ audio thật) · Bạn có thể sửa text trực tiếp
@@ -1738,17 +1738,17 @@ ${script}`
             </ReviewCard>
           )}
 
-          {/* ─── Review: Avatar ─── */}
+          {/* ─── Review: Avatar (step 6 — last big spend before final compose) ─── */}
           {phase === 'review-avatar' && (
             <ReviewCard
               onRetry={runAvatar}
-              onContinue={runBrollImages}
+              onContinue={runBg}
               retryLabel="Tạo lại (~624 cr)"
-              continueLabel="Tiếp tục → B-roll Images"
-              continueCost={STEP_INFO.brollimg.cost}
+              continueLabel="Tiếp tục → Xóa nền"
+              continueCost={STEP_INFO.bg.cost}
             >
               <p className="mb-2 text-xs text-gray-500">
-                Xem avatar nói có khớp môi và tự nhiên không. Tạo lại = ~624 KIE credit. Tiếp theo gen ảnh tĩnh trước (~64 cr, rẻ), review xong mới animate.
+                Bước cuối tốn KIE credit lớn — bạn đã duyệt B-roll OK rồi nên giờ chỉ cần check lip-sync. Tạo lại = ~624 KIE credit.
               </p>
               {previewAvatarUrl ? (
                 <video
@@ -1763,7 +1763,7 @@ ${script}`
             </ReviewCard>
           )}
 
-          {/* ─── Review: B-roll Static Images ─── */}
+          {/* ─── Review: B-roll Static Images (step 4 — cheap test) ─── */}
           {phase === 'review-brollimg' && (
             <ReviewCard
               onRetry={runBrollImages}
@@ -1813,17 +1813,17 @@ ${script}`
             </ReviewCard>
           )}
 
-          {/* ─── Review: B-roll Videos ─── */}
+          {/* ─── Review: B-roll Videos (step 5 — last check before big Avatar spend) ─── */}
           {phase === 'review-broll' && (
             <ReviewCard
               onRetry={runBroll}
-              onContinue={runBg}
+              onContinue={runAvatar}
               retryLabel={`Tạo lại tất cả (~${previewBrollUrls.length * 70} cr)`}
-              continueLabel="Tiếp tục → Xóa nền"
-              continueCost={STEP_INFO.bg.cost}
+              continueLabel="Tiếp tục → Avatar"
+              continueCost={STEP_INFO.avatar.cost}
             >
               <p className="mb-3 text-xs text-gray-500">
-                <strong className="text-emerald-600">{previewBrollUrls.filter(Boolean).length}/{previewBrollUrls.length}</strong> clips thành công (animate từ ảnh tĩnh đã duyệt). Clips lỗi sẽ bị bỏ qua.
+                <strong className="text-emerald-600">{previewBrollUrls.filter(Boolean).length}/{previewBrollUrls.length}</strong> clips thành công. ⚠️ Tiếp theo là Avatar Lip-sync — bước đắt nhất (~624 cr). Chắc chắn B-roll OK trước khi continue.
               </p>
               <div className="grid grid-cols-3 gap-2">
                 {previewBrollUrls.map((url, i) => (
@@ -1922,11 +1922,11 @@ ${script}`
               <div className="text-center">
                 <p className="text-base font-semibold text-gray-500">Pipeline thủ công · 8 bước</p>
                 <p className="mt-1.5 max-w-sm text-center text-sm leading-relaxed text-gray-400">
-                  Voice trước (1.1x speed) → Gemini Pro phân tích từng câu thành storyboard cinematic → ảnh tĩnh review → animate → ghép cuối.
+                  Voice → Storyboard → B-roll Images → B-roll Videos → Avatar (đắt nhất, làm sau cùng để chắc chắn B-roll OK trước) → BG → Ghép.
                 </p>
               </div>
               <div className="flex flex-wrap justify-center gap-2 text-xs text-gray-400">
-                {['$0.30 EL ① Voice', 'Free ② Storyboard', '624 cr ④ Avatar', '64 cr ⑤ Images', '560 cr ⑥ Videos', '$0.50 fal ⑦ BG', '$0.50 SS ⑧ Render'].map((t) => (
+                {['$0.30 EL ① Voice', 'Free ② Storyboard', '64 cr ④ Images', '560 cr ⑤ Videos', '624 cr ⑥ Avatar', '$0.50 fal ⑦ BG', '$0.50 SS ⑧ Render'].map((t) => (
                   <span key={t} className="rounded-full border border-black/8 bg-black/[0.02] px-3 py-1.5">{t}</span>
                 ))}
               </div>
