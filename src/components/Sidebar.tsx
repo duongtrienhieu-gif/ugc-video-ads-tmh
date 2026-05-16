@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { LayoutGrid, User, PenLine, Mic, Image, Video, Eye, Settings, FlaskConical, RefreshCw, LogOut, Activity, Clapperboard, Languages } from 'lucide-react'
+import { LayoutGrid, User, PenLine, Mic, Image, Video, Eye, Settings, FlaskConical, RefreshCw, LogOut, Activity, Clapperboard, Languages, Sparkles } from 'lucide-react'
 import SettingsModal from './SettingsModal'
 import Diagnostic from './Diagnostic'
 import { useSettingsStore } from '../stores/settingsStore'
@@ -21,6 +21,7 @@ const NAV_ITEMS: NavItem[] = [
   { id: 'broll-videos', label: 'Video B-Roll', icon: Video },
   { id: 'lip-sync',        label: 'Lip-Sync',     icon: Clapperboard },
   { id: 'video-translate', label: 'Dịch Video',   icon: Languages },
+  { id: 'video-builder',   label: 'UGC Builder',  icon: Sparkles },
   { id: 'ad-anatomy',      label: 'Phân tích QC', icon: Eye },
 ]
 

@@ -163,3 +163,88 @@ export async function pollLatentSyncUntilDone(params: {
   }
   throw new Error('TIMEOUT')
 }
+
+// ── Video Background Removal (veed/video-background-removal) ──────────────────
+
+interface FalBgRemoveSubmitResponse {
+  request_id: string
+}
+
+interface FalBgRemoveResultResponse {
+  video?: { url: string; content_type?: string; file_size?: number }
+  error?: string
+}
+
+/** Remove background from a video. Returns URL of video with transparent/clean background. */
+export async function removeVideoBackground(params: {
+  apiKey: string
+  videoUrl: string
+  outputFormat?: 'mp4' | 'webm'  // webm = alpha channel transparency
+}): Promise<string> {
+  // Submit job
+  const submitRes = await fetch(`${FAL_QUEUE_BASE}/veed/video-background-removal`, {
+    method: 'POST',
+    headers: {
+      ...authHeader(params.apiKey),
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      video_url: params.videoUrl,
+      output_format: params.outputFormat ?? 'mp4',
+    }),
+  })
+
+  if (submitRes.status === 401 || submitRes.status === 403) {
+    throw new Error('fal.ai API key không hợp lệ — kiểm tra trong Cài đặt')
+  }
+  if (!submitRes.ok) {
+    const detail = await readErrorBody(submitRes)
+    throw new Error(`fal.ai background removal lỗi (${submitRes.status}): ${detail}`)
+  }
+
+  const submitData = await submitRes.json() as FalBgRemoveSubmitResponse
+  if (!submitData.request_id) throw new Error('fal.ai không trả về request_id cho background removal')
+  const requestId = submitData.request_id
+
+  // Poll for result
+  const timeout = 10 * 60 * 1000  // 10 min
+  const interval = 5000
+  const start = Date.now()
+
+  while (Date.now() - start < timeout) {
+    const statusRes = await fetch(
+      `${FAL_QUEUE_BASE}/veed/video-background-removal/requests/${requestId}/status`,
+      { headers: authHeader(params.apiKey) },
+    )
+    if (!statusRes.ok) {
+      const detail = await readErrorBody(statusRes)
+      throw new Error(`fal.ai background removal status lỗi (${statusRes.status}): ${detail}`)
+    }
+    const s = await statusRes.json() as FalQueueStatusResponse
+
+    if (s.status === 'COMPLETED') {
+      // Fetch result
+      const resultRes = await fetch(
+        `${FAL_QUEUE_BASE}/veed/video-background-removal/requests/${requestId}`,
+        { headers: authHeader(params.apiKey) },
+      )
+      if (!resultRes.ok) {
+        const detail = await readErrorBody(resultRes)
+        throw new Error(`fal.ai background removal result lỗi (${resultRes.status}): ${detail}`)
+      }
+      const result = await resultRes.json() as FalBgRemoveResultResponse
+      if (!result.video?.url) {
+        throw new Error(result.error ?? 'fal.ai background removal không trả về video URL')
+      }
+      return result.video.url
+    }
+
+    if (s.status === 'FAILED') {
+      throw new Error(s.error ?? 'fal.ai background removal thất bại — thử lại')
+    }
+
+    await new Promise((r) => setTimeout(r, interval))
+  }
+
+  throw new Error('TIMEOUT')
+}
