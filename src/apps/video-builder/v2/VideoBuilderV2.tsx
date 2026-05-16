@@ -345,23 +345,34 @@ export default function VideoBuilderV2({ onSwitchToV1 }: Props) {
     }
     setIsGeneratingStoryboard(true)
     try {
-      const { blueprints, diversity, recoveredFromRetry } = await generateStoryboard({
+      const { blueprints, diversity, recoveredAtStage } = await generateStoryboard({
         geminiKey: geminiApiKey,
         script: state.inputs.script,
         identity: state.identityPack,
         productName: state.inputs.product.productName,
         dna: defaultVisualStyleDna(),
         numScenes: 9,
-        onParseRetry: () => {
-          // User-friendly Vietnamese feedback during the auto-retry round
-          addToast('AI format chưa đúng — đang retry để sửa JSON...', 'info')
+        onStageChange: (stage, reason) => {
+          // Spec Task 10: stage-specific Vietnamese toasts
+          if (stage === 'attempt-1') {
+            // Initial — no toast needed (just the "đang tạo storyboard" loader)
+            return
+          }
+          if (stage === 'reprompt-2') {
+            addToast(`🔧 JSON lỗi — đang tự sửa format (retry lần 2)...${reason ? '\n' + reason : ''}`, 'info')
+          } else if (stage === 'safe-mode-3') {
+            addToast(`⚠️ JSON vẫn lỗi sau 2 lần — chuyển sang SAFE-MODE (prompt đơn giản, tin cậy cao)`, 'info')
+          }
         },
       })
       if (cancelledRef.current) return
       setState((s) => ({ ...s, blueprints }))
       setDiversityReport(diversity)
-      if (recoveredFromRetry) {
-        addToast(`✓ Đã tạo storyboard (đã tự sửa JSON từ lần thử 2)`, 'info')
+      // Stage-specific success message
+      if (recoveredAtStage === 'safe-mode-3') {
+        addToast(`✓ Đã tạo storyboard ở SAFE-MODE — nội dung đơn giản hơn nhưng đầy đủ`, 'info')
+      } else if (recoveredAtStage === 'reprompt-2') {
+        addToast(`✓ Đã tạo storyboard (sửa được JSON ở lần 2)`, 'info')
       } else if (diversity.passed) {
         addToast(`✓ Đã tạo storyboard ${blueprints.length} cảnh (diversity OK)`)
       } else {
@@ -369,9 +380,9 @@ export default function VideoBuilderV2({ onSwitchToV1 }: Props) {
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
-      // Friendly Vietnamese error — hide raw JSON-parse-error noise from users
-      if (msg.includes('JSON') || msg.includes('json')) {
-        addToast('AI trả về dữ liệu lỗi format. Đã thử tự sửa nhưng vẫn fail — vui lòng nhấn "Gen lại storyboard" để thử lại. (Mở DevTools Console xem chi tiết.)', 'error')
+      // Friendly Vietnamese error — show retry count + suggestion
+      if (msg.includes('JSON') || msg.includes('json') || msg.includes('3 lần')) {
+        addToast('🔴 AI không trả được JSON hợp lệ sau 3 lần thử (normal → reprompt → safe-mode). Vui lòng nhấn "Gen lại storyboard" sau ~10s. Mở DevTools Console (F12) xem [parseStoryboardResponse] log chi tiết.', 'error')
       } else {
         addToast(`Tạo storyboard thất bại: ${msg.slice(0, 120)}`, 'error')
       }

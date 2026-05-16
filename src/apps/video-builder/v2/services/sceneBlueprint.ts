@@ -112,6 +112,32 @@ interface BlueprintPromptParams {
   numScenes: number
 }
 
+// ── SAFE-MODE prompt — fallback when JSON keeps breaking ─────────────────────
+// Shorter strings, no emoji, no special chars, simpler wording.
+// Reliability > creativity. Used on the 3rd attempt after 2 normal+repair fails.
+
+function buildSafeModeStoryboardPrompt(p: BlueprintPromptParams): string {
+  const numScenes = p.numScenes
+  return `Output a JSON array of exactly ${numScenes} simple scene objects. Use plain ASCII only. No emoji. No special characters.
+
+Each object has these keys with short string values (max 8 words each):
+sceneId, sceneGoal, environment, composition, cameraAngle, shotType, pose, emotion, handUsage, productVisibility, backgroundType, lightingStyle, visualTone, motionIntent, overlayDensity, ctaFocus, speech, presetLabel
+
+productVisibility must be "low" or "medium" or "high".
+overlayDensity must be "none" or "low" or "medium" or "high".
+ctaFocus must be true or false.
+
+Avatar: ${p.identity.avatarDescription.slice(0, 200).replace(/["']/g, '')}
+Product: ${p.productName.replace(/["']/g, '')} - ${p.identity.productDescription.slice(0, 150).replace(/["']/g, '')}
+
+Script (extract speech lines from this):
+${p.script.slice(0, 1500).replace(/["']/g, '')}
+
+Example single object: {"sceneId":1,"sceneGoal":"hook","environment":"home kitchen","composition":"medium close up","cameraAngle":"iphone eye level","shotType":"ugc handheld","pose":"holding product","emotion":"curious","handUsage":"one hand","productVisibility":"high","backgroundType":"home","lightingStyle":"daylight","visualTone":"warm ecommerce ugc","motionIntent":"handheld","overlayDensity":"low","ctaFocus":false,"speech":"line from script","presetLabel":"product showcase"}
+
+Return only the JSON array. Nothing else. No markdown.`
+}
+
 function buildStoryboardPrompt(p: BlueprintPromptParams): string {
   // Compact preset hints — minimize token usage
   const presetHints = p.presetRotation.slice(0, p.numScenes).map((id, idx) => {
@@ -180,7 +206,61 @@ function parseStoryboardResponse(raw: string): RawBlueprint[] | null {
   if (result.repairUsed) {
     console.info('[parseStoryboardResponse] ✓ recovered via repair layer')
   }
+  if (result.sanitizationUsed) {
+    console.info('[parseStoryboardResponse] ✓ unicode sanitization applied')
+  }
   return result.data as RawBlueprint[]
+}
+
+// ── Schema validation — strict per-scene field check ────────────────────────
+
+/**
+ * Required fields per scene (per spec Task 6). Returns the FIRST validation
+ * error encountered, or null if all scenes pass.
+ *
+ * Strictness allows the runtime to defaultable some optional fields in
+ * `normalizeBlueprint` — but core identity-shaping fields (sceneId, sceneGoal,
+ * cameraAngle, composition, emotion, environment, productVisibility) MUST be
+ * present and non-empty. presetLabel can be missing.
+ */
+export interface SchemaError {
+  sceneIndex: number
+  field: string
+  reason: string
+}
+
+export function validateBlueprintSchema(blueprints: RawBlueprint[], expectedCount: number): SchemaError | null {
+  if (blueprints.length < expectedCount * 0.7) {
+    return {
+      sceneIndex: -1,
+      field: 'array length',
+      reason: `Chỉ có ${blueprints.length}/${expectedCount} scene — quá ít`,
+    }
+  }
+  const required: Array<keyof RawBlueprint> = [
+    'sceneGoal', 'cameraAngle', 'composition', 'emotion', 'environment', 'productVisibility',
+  ]
+  for (let i = 0; i < blueprints.length; i++) {
+    const bp = blueprints[i]
+    if (typeof bp !== 'object' || bp === null) {
+      return { sceneIndex: i, field: '(whole object)', reason: 'không phải object' }
+    }
+    for (const field of required) {
+      const val = bp[field]
+      if (val === undefined || val === null) {
+        return { sceneIndex: i, field, reason: 'missing' }
+      }
+      if (typeof val === 'string' && val.trim().length === 0) {
+        return { sceneIndex: i, field, reason: 'empty string' }
+      }
+    }
+    // productVisibility must be one of low/medium/high
+    const vis = String(bp.productVisibility).toLowerCase()
+    if (!['low', 'medium', 'high', 'hero', 'mid', 'med'].includes(vis)) {
+      return { sceneIndex: i, field: 'productVisibility', reason: `value '${bp.productVisibility}' không hợp lệ (cần low/medium/high)` }
+    }
+  }
+  return null
 }
 
 function clampVisibility(v: string | undefined): SceneBlueprint['productVisibility'] {
@@ -309,14 +389,21 @@ export function validateDiversity(blueprints: SceneBlueprint[]): DiversityReport
 
 // ── Main service ─────────────────────────────────────────────────────────────
 
+/** Stage of the 3-tier retry pipeline — used by the UI to show specific status. */
+export type StoryboardGenStage = 'attempt-1' | 'repair-1' | 'reprompt-2' | 'safe-mode-3'
+
 /**
- * Generate a structured storyboard (array of SceneBlueprints) from a script
- * via Gemini. Production-grade resilience:
- *   1. Strict JSON-only system prompt
- *   2. safeParseJson() with extract + repair layer
- *   3. Auto-retry ONCE on parse fail with "previous output was invalid JSON" prefix
- *   4. Friendly Vietnamese error if both attempts fail
- *   5. Debug logging of raw + extracted + repaired versions
+ * Generate a structured storyboard (array of SceneBlueprints) from a script via Gemini.
+ *
+ * PRODUCTION-GRADE 3-TIER RESILIENCE:
+ *   Tier 1: Normal Gemini call → safeParseJson (extract + repair internally)
+ *           → schema validate. If pass: done.
+ *   Tier 2: Reprompt with explicit "Previous failed" prefix → safeParseJson →
+ *           schema validate. If pass: done (recoveredFromRetry=true).
+ *   Tier 3: SAFE-MODE — shorter prompt, no emoji, plain ASCII bias →
+ *           safeParseJson → schema validate. Last resort, reliability > creativity.
+ *
+ * Throws a Vietnamese-friendly error if all 3 tiers fail.
  */
 export async function generateStoryboard(params: {
   geminiKey: string
@@ -326,38 +413,50 @@ export async function generateStoryboard(params: {
   dna: VisualStyleDna
   numScenes?: number
   presetRotation?: string[]
-  /** Fires when a parse retry is happening — UI can show "AI format chưa đúng, đang retry..." */
-  onParseRetry?: () => void
-}): Promise<{ blueprints: SceneBlueprint[]; diversity: DiversityReport; recoveredFromRetry: boolean }> {
+  /** Per-stage callback — UI can show specific status per retry stage */
+  onStageChange?: (stage: StoryboardGenStage, reason?: string) => void
+}): Promise<{ blueprints: SceneBlueprint[]; diversity: DiversityReport; recoveredAtStage: StoryboardGenStage }> {
   const numScenes = params.numScenes ?? 9
   const presetRotation = params.presetRotation ?? DEFAULT_PRESET_ROTATION.slice(0, numScenes)
-
-  const prompt = buildStoryboardPrompt({
+  const promptParams: BlueprintPromptParams = {
     script: params.script,
     identity: params.identity,
     productName: params.productName,
     dna: params.dna,
     presetRotation,
     numScenes,
-  })
+  }
 
-  // ── Attempt 1: normal call ──────────────────────────────────────────────
+  let rawBlueprints: RawBlueprint[] | null = null
+  let recoveredAtStage: StoryboardGenStage = 'attempt-1'
+
+  // ── Tier 1: Normal call ─────────────────────────────────────────────────
+  params.onStageChange?.('attempt-1')
+  const normalPrompt = buildStoryboardPrompt(promptParams)
   let raw = await directGeminiVision({
     apiKey: params.geminiKey,
-    parts: [{ text: prompt }],
+    parts: [{ text: normalPrompt }],
     systemInstruction: STORYBOARD_SYSTEM,
     maxOutputTokens: 4096,
   })
+  rawBlueprints = parseStoryboardResponse(raw)
 
-  let rawBlueprints = parseStoryboardResponse(raw)
-  let recoveredFromRetry = false
+  // ── Tier 1.5: schema validation on tier-1 success ──────────────────────
+  if (rawBlueprints) {
+    const schemaErr = validateBlueprintSchema(rawBlueprints, numScenes)
+    if (schemaErr) {
+      console.warn(`[generateStoryboard] tier 1 parsed but schema failed: scene ${schemaErr.sceneIndex} field '${schemaErr.field}' (${schemaErr.reason})`)
+      rawBlueprints = null  // force retry
+    }
+  }
 
-  // ── Attempt 2: auto-retry once with stricter "you just failed" prefix ──
+  // ── Tier 2: Reprompt with "Previous failed" prefix ──────────────────────
   if (!rawBlueprints) {
-    console.warn('[generateStoryboard] attempt 1 parse failed — auto-retrying with stricter prompt')
-    params.onParseRetry?.()
+    console.warn('[generateStoryboard] tier 1 failed — auto-retry with stricter prompt')
+    recoveredAtStage = 'reprompt-2'
+    params.onStageChange?.('reprompt-2', 'parse/schema fail on attempt 1')
 
-    const retryPrompt = `Your previous output was NOT valid JSON. The response failed JSON.parse().
+    const retryPrompt = `Your previous output was NOT valid JSON or missing required fields. The response failed validation.
 
 Return STRICT VALID JSON ONLY this time:
 - No markdown wrappers (no \`\`\`json)
@@ -365,9 +464,11 @@ Return STRICT VALID JSON ONLY this time:
 - Escape all inner quotes with \\"
 - No literal newlines inside string values
 - Compact JSON only
+- Every scene MUST include: sceneId, sceneGoal, environment, composition, cameraAngle, shotType, pose, emotion, handUsage, productVisibility, backgroundType, lightingStyle, visualTone, motionIntent, overlayDensity, ctaFocus, speech, presetLabel
+- productVisibility must be exactly one of: "low" | "medium" | "high"
 
 Original task:
-${prompt}`
+${normalPrompt}`
 
     raw = await directGeminiVision({
       apiKey: params.geminiKey,
@@ -376,12 +477,42 @@ ${prompt}`
       maxOutputTokens: 4096,
     })
     rawBlueprints = parseStoryboardResponse(raw)
-    if (rawBlueprints) recoveredFromRetry = true
+    if (rawBlueprints) {
+      const schemaErr = validateBlueprintSchema(rawBlueprints, numScenes)
+      if (schemaErr) {
+        console.warn(`[generateStoryboard] tier 2 parsed but schema failed: ${JSON.stringify(schemaErr)}`)
+        rawBlueprints = null
+      }
+    }
   }
 
-  // ── Both attempts failed — throw a Vietnamese-friendly error ───────────
+  // ── Tier 3: SAFE-MODE — simpler prompt, no emoji, plain ASCII ──────────
   if (!rawBlueprints) {
-    throw new Error('AI không trả về JSON hợp lệ sau 2 lần thử. Vui lòng thử lại — mở DevTools Console để xem chi tiết debug.')
+    console.warn('[generateStoryboard] tier 2 failed — falling back to SAFE-MODE (low-creativity JSON)')
+    recoveredAtStage = 'safe-mode-3'
+    params.onStageChange?.('safe-mode-3', 'parse/schema fail on attempt 2 — using simpler prompt')
+
+    const safePrompt = buildSafeModeStoryboardPrompt(promptParams)
+    raw = await directGeminiVision({
+      apiKey: params.geminiKey,
+      parts: [{ text: safePrompt }],
+      // Use minimal system instruction in safe-mode — less verbose context to confuse
+      systemInstruction: 'You output strict valid JSON arrays. No markdown. No prose. Plain ASCII only.',
+      maxOutputTokens: 4096,
+    })
+    rawBlueprints = parseStoryboardResponse(raw)
+    if (rawBlueprints) {
+      const schemaErr = validateBlueprintSchema(rawBlueprints, numScenes)
+      if (schemaErr) {
+        console.error(`[generateStoryboard] SAFE-MODE also failed schema: ${JSON.stringify(schemaErr)}`)
+        rawBlueprints = null
+      }
+    }
+  }
+
+  // ── All 3 tiers failed — give up with VN-friendly error ────────────────
+  if (!rawBlueprints) {
+    throw new Error('AI không trả về JSON hợp lệ sau 3 lần thử (normal → reprompt → safe-mode). Vui lòng thử lại — mở DevTools Console để xem chi tiết debug.')
   }
 
   let blueprints = rawBlueprints.map((rb, i) => normalizeBlueprint(rb, i))
@@ -399,7 +530,7 @@ ${prompt}`
   // Apply VISUAL_TONE_CLAMP suffix to ensure no scene smuggles in banned terms downstream
   blueprints = blueprints.map((b) => ({ ...b, visualTone: `${b.visualTone}. ${VISUAL_TONE_CLAMP}` }))
 
-  return { blueprints, diversity, recoveredFromRetry }
+  return { blueprints, diversity, recoveredAtStage }
 }
 
 // ── Helper: build a single blueprint from a chosen preset ────────────────────
