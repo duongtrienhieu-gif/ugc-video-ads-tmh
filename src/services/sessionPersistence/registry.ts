@@ -58,9 +58,14 @@ export const MODULE_REGISTRY: ModuleRegistration[] = [
     version: 1,
     maxAgeMs: 7 * 24 * 60 * 60 * 1000, // 7 days — original BrollStudio behavior
   },
-  // ── R5+ slots ────────────────────────────────────────────────────────────
-  // { moduleId: 'voice-studio',     moduleNameVi: 'Giọng đọc',    persistKey: 'ugc-lab:voice-studio:inflight-v1',   version: 1, maxAgeMs: DEFAULT_MAX_AGE_MS },
-  // { moduleId: 'video-builder',    moduleNameVi: 'UGC Builder',  persistKey: 'ugc-lab:video-builder:inflight-v1',  version: 1, maxAgeMs: DEFAULT_MAX_AGE_MS },
+  // ── R6 ───────────────────────────────────────────────────────────────────
+  {
+    moduleId: 'voice-studio',
+    moduleNameVi: 'Giọng đọc',
+    persistKey: 'ugc-lab:voice-studio:inflight-v1',
+    version: 1,
+    maxAgeMs: DEFAULT_MAX_AGE_MS,
+  },
 ]
 
 /** Get a module's registration by moduleId. */

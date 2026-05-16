@@ -11,6 +11,13 @@ import HistoryPanel from './components/HistoryPanel'
 import CloneVoiceModal from './components/CloneVoiceModal'
 import VoiceLibraryModal from './components/VoiceLibraryModal'
 import BankPicker from '../../components/BankPicker'
+import AutoSaveIndicator from '../../components/AutoSaveIndicator'
+import { useSessionPersist } from '../../services/sessionPersistence'
+
+interface VoiceStudioSnapshot {
+  settings: VoiceSettings
+  scriptText: string
+}
 
 type PickerMode = 'voices' | 'scripts' | null
 
@@ -28,6 +35,27 @@ export default function VoiceStudio() {
   const addVoiceHistory = useBankStore((s) => s.addVoiceHistory)
   const deleteVoiceHistory = useBankStore((s) => s.deleteVoiceHistory)
   const addToast = useAppStore((s) => s.addToast)
+
+  const sessionApi = useSessionPersist<VoiceStudioSnapshot>({
+    moduleId: 'voice-studio',
+    version: 1,
+    snapshot: () => ({ settings, scriptText }),
+    hydrate: (data) => {
+      if (data.settings) setSettings(data.settings)
+      if (typeof data.scriptText === 'string') setScriptText(data.scriptText)
+      addToast('✓ Đã khôi phục Giọng đọc từ phiên trước', 'success')
+    },
+    getStatus: () => (isGenerating ? 'in-progress' : scriptText.trim() ? 'paused' : 'completed'),
+    getProgressVi: () => {
+      const words = scriptText.trim().split(/\s+/).filter(Boolean).length
+      if (isGenerating) return 'Đang gen voice...'
+      if (words > 0) return `Đã nhập ${words} từ trong editor`
+      return undefined
+    },
+    getTitleVi: () => settings.voiceName || undefined,
+    shouldPersist: () => scriptText.trim().length > 0 || isGenerating,
+    deps: [settings, scriptText, isGenerating],
+  })
 
   const interAppPayload = useAppStore((s) => s.interAppPayload)
   const consumePayload = useAppStore((s) => s.consumePayload)
@@ -105,7 +133,10 @@ export default function VoiceStudio() {
   }
 
   return (
-    <div className="flex flex-col lg:flex-row h-full bg-slate-50/50">
+    <div className="flex flex-col lg:flex-row h-full bg-slate-50/50 relative">
+      <div className="absolute right-4 top-3 z-30">
+        <AutoSaveIndicator lastSavedAt={sessionApi.lastSavedAt} lastSaveOk={sessionApi.lastSaveOk} />
+      </div>
       {/* Left sidebar — controls */}
       <div className="flex w-full lg:w-[300px] shrink-0 flex-col border-b border-slate-200 bg-white lg:border-b-0 lg:border-r">
         <ControlsSidebar
