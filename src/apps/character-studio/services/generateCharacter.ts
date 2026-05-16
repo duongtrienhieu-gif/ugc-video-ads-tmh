@@ -44,17 +44,21 @@ async function describeProductFromImage(imageUrl: string, geminiKey: string): Pr
       apiKey: geminiKey,
       parts: [
         { inlineData: { mimeType, data: base64 } },
-        { text: `Describe this product in 1-2 SHORT sentences for an image-generation prompt. Focus ONLY on visual appearance:
-- Container type: bottle / jar / tube / box / sachet / pouch / can / blister pack / etc.
-- Container color + cap/lid color
-- Container shape (tall vs short, slim vs wide, round vs square)
-- Container material (clear plastic / opaque plastic / glass / cardboard / metal / foil)
-- Label background color + brand text if visible
-- Approximate size relative to a human hand
+        { text: `Describe this product as a SINGLE precise sentence (max 50 words) for an image-generation prompt. The description MUST disambiguate the container shape so an AI cannot confuse it for a different shape.
 
-Output: ONLY the visual description, no preamble, no markdown. Example: "A short, squat white plastic jar with a gold metallic screw-top lid, dark blue rectangular label with white brand text, roughly palm-sized."` },
+REQUIRED ELEMENTS (in this order):
+1. EXACT container TYPE — use ONE specific word: "jar" (short squat) / "bottle" (tall cylindrical) / "tube" (slim soft squeeze) / "sachet" (flat foil pouch) / "box" (rectangular cardboard) / "blister pack" (foil+plastic pills) / "spray can" / "pump dispenser" / "pouch".
+2. PROPORTIONS — explicit: "short and wide", "tall and slim", "flat and rectangular", "compact cube", "palm-sized round". Mention if WIDTH > HEIGHT (squat) or HEIGHT > WIDTH (tall).
+3. PRIMARY container color + secondary color of cap/lid/seal.
+4. MATERIAL — clear plastic / opaque plastic / glass / aluminum / cardboard / foil pouch.
+5. LABEL color + any brand text visible.
+6. ROUGH SIZE relative to a hand.
+
+CRITICAL: If it's a JAR (short squat container), explicitly say "short squat jar, wider than tall" — never say "bottle". If it's a TUBE (slim flexible), say "soft squeeze tube". The container shape word is the MOST important — get it right.
+
+Output: ONLY the description, no preamble, no markdown, no quotes. Example: "A short, squat opaque white plastic jar wider than it is tall (palm-sized), with a flat gold metallic screw-top lid, white rectangular label printed with black brand text on the side."` },
       ],
-      maxOutputTokens: 250,
+      maxOutputTokens: 350,
       model: 'gemini-2.5-flash',
     })
 
@@ -138,8 +142,9 @@ function buildImagePrompt(profile: CharacterProfile, productDescription?: string
   if (styleParts.length) parts.push(styleParts.join(', ') + '.')
 
   // Pose & action — with EXACT product description if uploaded
+  // Repeat the shape word at the start to force the model to lock on it.
   const productLine = productDescription
-    ? `holding the EXACT specific product described here in their hand at chest level, label/branding clearly facing the camera: ${productDescription}. The product MUST match this description precisely — same container shape, same color, same label, same size. Do NOT substitute a generic bottle or invent a different product`
+    ? `holding in their hand at chest level the EXACT product shown in the reference image — which is: ${productDescription} — held with label/branding clearly facing the camera. CRITICAL: the product in the generated image MUST match the reference image AND this description PRECISELY — same container TYPE (jar vs bottle vs tube — do NOT swap), same shape proportions (squat vs tall — do NOT change), same color, same label, same size. DO NOT substitute a generic bottle or invent any different product`
     : null
 
   const poseParts = [
@@ -216,10 +221,13 @@ export async function generateCharacter(
     ? '16:9'
     : '9:16'
 
-  // ── Step 2: Generate image. Pass product image as reference too — models that
-  //    support it (Nano Banana 2) will use both textual + visual identity locks.
+  // ── Step 2: Generate image. Pass product image MULTIPLE times to give it
+  //    higher weight in the reference set (Nano Banana 2 uses all refs with
+  //    equal weight per slot — duplicating boosts product identity preservation).
   //    Models without ref-image support (gpt-image-1) rely on the textual description.
-  const referenceImageUrls = productImageUrl ? [productImageUrl] : undefined
+  const referenceImageUrls = productImageUrl
+    ? [productImageUrl, productImageUrl, productImageUrl]
+    : undefined
   const { taskId } = await generateImage({ apiKey: kieApiKey, model: modelId, prompt, resolution, aspectRatio, referenceImageUrls })
   const remoteUrl = await pollImageUntilDone({ apiKey: kieApiKey, taskId, timeoutMs: 3 * 60 * 1000 })
 

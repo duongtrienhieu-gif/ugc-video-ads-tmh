@@ -39,7 +39,7 @@ Fields:
 - painPoints: customer problems/pain points this product solves
 - usps: unique selling points / competitive advantages
 - benefits: specific benefits of using the product
-- offer: current pricing and promotions
+- offer: ONLY the main product price and any discount/promotion (e.g. "RM59, 50% off for first 50 customers"). Do NOT include shipping fees, shipping conditions, regional shipping surcharges, delivery times, COD info, or address-related text. If the page has "Additional RM5 shipping cost for Sabah and Sarawak" or similar, OMIT it entirely. Keep this field FOCUSED on price + discount only.
 - ingredients: PHYSICAL substances / compounds / active components actually INSIDE the product. Examples of CORRECT values: "Vitamin B12, A, E, biotin, iron, magnesium" or "Inulin prebiotic, FloraFit probiotic strains, Lactobacillus acidophilus, Bifidobacterium" or "Angelica sinensis, Motherwort herb, Dong Quai root" or "Hyaluronic acid, niacinamide, vitamin C, peptides".
   ❌ ABSOLUTE PROHIBITION: NEVER put marketing slogans, CTAs, call-to-action phrases, or promotional text here. The following are NOT ingredients and MUST NEVER appear in this field: "DAFTAR UNTUK DAPATKAN HARGA TAWARAN SEKARANG", "REGISTER TO GET THE OFFER PRICE NOW", "BUY NOW", "ORDER TODAY", "CLICK HERE", "SUBSCRIBE", "JOM BELI", "MUA NGAY", "ĐẶT HÀNG NGAY", "ĐĂNG KÝ", "Get yours now", "Shop now", etc.
   Ingredients = PHYSICAL THINGS inside the bottle/box (vitamins, herbs, probiotic strains, compounds, active molecules). CTAs = marketing actions for the customer to take. These are DIFFERENT.
@@ -58,7 +58,7 @@ Fields:
 - painPoints: customer problems/pain points this product solves
 - usps: unique selling points / competitive advantages
 - benefits: specific benefits of using the product
-- offer: current pricing and promotions
+- offer: ONLY the main product price and any discount/promotion (e.g. "RM59, 50% off for first 50 customers"). Do NOT include shipping fees, shipping conditions, regional shipping surcharges, delivery times, COD info, or address-related text. If the page has "Additional RM5 shipping cost for Sabah and Sarawak" or similar, OMIT it entirely. Keep this field FOCUSED on price + discount only.
 - ingredients: SPECIFIC ingredients / active components / key compounds in this product (e.g. "Vitamin B12, A, E, biotin, iron", "Inulin prebiotic, FloraFit probiotic strains, Lactobacillus acidophilus", "Angelica sinensis, Motherwort herb"). List the actual ingredient names — do not write generic descriptions. If the screenshot doesn't list ingredients explicitly, infer the most likely active components from product type.`
 
 // Jina Reader — renders JS pages and returns clean markdown. Handles LadiPage, Shopee, etc.
@@ -137,18 +137,44 @@ function parseExtracted(raw: string): Record<string, string> | null {
 type FormState = { productImage: string; productName: string; productDescription: string; targetMarket: string; painPoints: string; usps: string; benefits: string; offer: string; ingredients: string }
 
 /** Detect CTA/marketing text that should NEVER appear in the ingredients field. */
-function looksLikeCTA(text: string): boolean {
+export function looksLikeCTA(text: string): boolean {
   if (!text) return false
   const upper = text.trim().toUpperCase()
   if (!upper) return false
   const ctaKeywords = [
+    // Malay
     'DAFTAR', 'BELI SEKARANG', 'BELI NOW', 'TEMPAH', 'TAWARAN', 'JOM BELI', 'KLIK',
-    'MUA NGAY', 'ĐẶT HÀNG', 'ĐĂNG KÝ', 'NHẬN NGAY', 'NHẤN VÀO',
+    'DAPATKAN', 'HARGA PROMOSI', 'HARGA TAWARAN', 'OFFER PRICE',
+    // Vietnamese
+    'MUA NGAY', 'ĐẶT HÀNG', 'ĐĂNG KÝ', 'NHẬN NGAY', 'NHẤN VÀO', 'NHẬN ƯU ĐÃI',
+    'GIÁ ƯU ĐÃI', 'KHUYẾN MÃI HÔM NAY',
+    // English
     'BUY NOW', 'ORDER NOW', 'ORDER TODAY', 'CLICK HERE', 'REGISTER NOW',
-    'SUBSCRIBE', 'SHOP NOW', 'GET IT NOW', 'GET YOURS', 'SIGN UP',
+    'REGISTER TO', 'REGISTER TODAY', 'SUBSCRIBE', 'SHOP NOW',
+    'GET IT NOW', 'GET YOURS', 'GET THE OFFER', 'SIGN UP',
     'JOIN NOW', 'LEARN MORE', 'CLAIM NOW', 'CLAIM YOUR',
+    'ADD TO CART', 'CHECKOUT', 'LIMITED TIME', 'HURRY',
   ]
   return ctaKeywords.some((kw) => upper.includes(kw))
+}
+
+/** Strip shipping/delivery text from offer field. Keeps only price + discount. */
+export function stripShippingFromOffer(text: string): string {
+  if (!text) return ''
+  // Common shipping phrases across languages — remove the entire sentence containing them
+  const shippingPatterns = [
+    // English
+    /[^.!?\n]*(?:shipping|delivery|deliver to|cod\b|cash on delivery|free ship|additional[^.!?\n]*RM|extra cost|surcharge)[^.!?\n]*[.!?\n]?/gi,
+    // Malay
+    /[^.!?\n]*(?:penghantaran|kos hantar|tambahan untuk Sabah|tambahan untuk Sarawak|bayar bila terima)[^.!?\n]*[.!?\n]?/gi,
+    // Vietnamese
+    /[^.!?\n]*(?:phí ship|ship cod|giao hàng|miễn phí ship|phí vận chuyển)[^.!?\n]*[.!?\n]?/gi,
+  ]
+  let cleaned = text
+  for (const pat of shippingPatterns) cleaned = cleaned.replace(pat, ' ')
+  // Collapse whitespace + remove dangling punctuation
+  cleaned = cleaned.replace(/\s+/g, ' ').replace(/^[\s,.;:-]+|[\s,.;:-]+$/g, '').trim()
+  return cleaned
 }
 
 function applyExtracted(extracted: Record<string, string>, prev: FormState): { next: FormState; count: number } {
@@ -156,12 +182,21 @@ function applyExtracted(extracted: Record<string, string>, prev: FormState): { n
   let count = 0
   for (const [key, value] of Object.entries(extracted)) {
     if (key in next && typeof value === 'string') {
-      const v = value.trim()
+      let v = value.trim()
       if (!v) continue
       // Safety net: if AI puts CTA text into ingredients field, drop it
       if (key === 'ingredients' && looksLikeCTA(v)) {
         console.warn('[applyExtracted] AI returned CTA in ingredients, dropping:', v.slice(0, 80))
         continue
+      }
+      // Safety net: strip shipping/delivery text from offer field
+      if (key === 'offer') {
+        const stripped = stripShippingFromOffer(v)
+        if (stripped !== v) {
+          console.info('[applyExtracted] stripped shipping from offer:', v.slice(0, 80), '→', stripped.slice(0, 80))
+        }
+        v = stripped
+        if (!v) continue
       }
       ;(next as Record<string, string>)[key] = v
       count++
@@ -179,7 +214,7 @@ export default function ProductForm({ item, onSave, onCancel }: ProductFormProps
     painPoints: item?.painPoints ?? '',
     usps: item?.usps ?? '',
     benefits: item?.benefits ?? '',
-    offer: item?.offer ?? '',
+    offer: stripShippingFromOffer(item?.offer ?? ''),
     ingredients: looksLikeCTA(item?.ingredients ?? '') ? '' : (item?.ingredients ?? ''),
   })
   const [productUrl, setProductUrl] = useState('')
@@ -204,12 +239,23 @@ export default function ProductForm({ item, onSave, onCancel }: ProductFormProps
         painPoints: item.painPoints,
         usps: item.usps,
         benefits: item.benefits,
-        offer: item.offer,
+        // Auto-strip shipping/delivery text from offer field on load
+        offer: stripShippingFromOffer(item.offer),
         // Clear legacy CTA text that leaked from the old `cta` column rename
         ingredients: looksLikeCTA(item.ingredients) ? '' : item.ingredients,
       })
     }
   }, [item])
+
+  /** Force-clean all promotional / shipping noise from the form right now. */
+  const handleCleanGarbage = () => {
+    setForm((f) => ({
+      ...f,
+      offer: stripShippingFromOffer(f.offer),
+      ingredients: looksLikeCTA(f.ingredients) ? '' : f.ingredients,
+    }))
+    addToast('✓ Đã dọn text quảng cáo / shipping khỏi các trường')
+  }
 
   const set = (key: string, value: string) => setForm((f) => ({ ...f, [key]: value }))
 
@@ -405,6 +451,15 @@ export default function ProductForm({ item, onSave, onCancel }: ProductFormProps
           )}
         </label>
       ))}
+
+      <button
+        type="button"
+        onClick={handleCleanGarbage}
+        className="mt-1 rounded-full border border-amber-300 bg-amber-50 px-4 py-2 text-xs font-medium text-amber-700 transition-colors hover:bg-amber-100"
+        title="Strip CTA text khỏi Ingredients + shipping text khỏi Offer"
+      >
+        🧹 Dọn text quảng cáo / shipping khỏi các trường
+      </button>
 
       <button
         type="submit"
