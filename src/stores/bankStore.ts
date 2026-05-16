@@ -283,7 +283,12 @@ export const useBankStore = create<BankState>((set, get) => ({
         user_id,
         label: model.name,
         character_image: model.characterImage,
-        character_params: { notes: model.notes, source: model.source, jsonProfile: model.jsonProfile },
+        character_params: {
+          notes: model.notes,
+          source: model.source,
+          jsonProfile: model.jsonProfile,
+          variants: model.variants ?? [],
+        },
       }).select().single()
       if (error) {
         reportError('Lưu Avatar AI', error)

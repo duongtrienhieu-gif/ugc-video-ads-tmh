@@ -1,6 +1,6 @@
 ﻿import { useState } from 'react'
-import { Trash2, Package, UserRound, FileText, Mic, Film, Plus, Braces, Video, Download, Sparkles } from 'lucide-react'
-import type { Product, Model, Script, VoicePreset, BRoll } from '../../stores/types'
+import { Trash2, Package, UserRound, FileText, Mic, Film, Plus, Braces, Video, Download, Sparkles, Layers, ArrowLeft } from 'lucide-react'
+import type { Product, Model, Script, VoicePreset, BRoll, AvatarVariant } from '../../stores/types'
 import type { BankType } from '../../utils/constants'
 import { useBankStore } from '../../stores/bankStore'
 import { useAssetUrl } from '../../hooks/useAssetUrl'
@@ -72,34 +72,82 @@ function ProductCard({ item, onEdit, onDelete }: { item: Product; onEdit: () => 
   )
 }
 
+// Mini thumbnail for the 2x2 group preview tiles
+function MiniTile({ assetRef }: { assetRef: string }) {
+  const url = useAssetUrl(assetRef)
+  return url ? (
+    <img src={url} alt="" className="h-full w-full object-cover" />
+  ) : (
+    <div className="flex h-full w-full items-center justify-center bg-gray-100">
+      <UserRound className="h-4 w-4 text-gray-300" />
+    </div>
+  )
+}
+
 function ModelCard({ item, onEdit, onDelete }: { item: Model; onEdit: () => void; onDelete: () => void }) {
   const [confirm, setConfirm] = useState(false)
   const [variantsOpen, setVariantsOpen] = useState(false)
+  const [viewerOpen, setViewerOpen] = useState(false)
   const resolvedImage = useAssetUrl(item.characterImage)
   const sourceLabel = item.source === 'character-studio' ? 'Studio Avatar AI' : item.source === 'image-dna-extractor' ? 'DNA Ảnh' : 'Nhập thủ công'
   const hasJson = item.jsonProfile !== null
-  const variantCount = item.variants?.length ?? 0
+  const variants = item.variants ?? []
+  const variantCount = variants.length
+  const isGrouped = variantCount >= 3   // 1 main + 3 variants = preset group
+
+  // Click handler: grouped → viewer; solo → edit form
+  const handleClick = () => {
+    if (isGrouped) setViewerOpen(true)
+    else onEdit()
+  }
+
   return (
     <>
-      <div onClick={onEdit} className="group cursor-pointer rounded-xl border border-black/8 bg-black/[0.03] transition-all hover:border-black/12 hover:bg-black/[0.04] hover:-translate-y-0.5">
-        {/* Thumbnail */}
+      <div onClick={handleClick} className="group cursor-pointer rounded-xl border border-black/8 bg-black/[0.03] transition-all hover:border-black/12 hover:bg-black/[0.04] hover:-translate-y-0.5">
+        {/* Thumbnail — 2x2 grid for grouped, single image otherwise */}
         <div className="relative aspect-square w-full overflow-hidden rounded-t-xl bg-black/[0.04]">
-          {resolvedImage ? (
+          {isGrouped ? (
+            // 2x2 grid of main + first 3 variants
+            <div className="grid h-full w-full grid-cols-2 gap-0.5 bg-black/8 p-0.5">
+              <div className="overflow-hidden rounded">
+                {resolvedImage ? (
+                  <img src={resolvedImage} alt="" className="h-full w-full object-cover" />
+                ) : (
+                  <div className="flex h-full w-full items-center justify-center bg-gray-100">
+                    <UserRound className="h-4 w-4 text-gray-300" />
+                  </div>
+                )}
+              </div>
+              {variants.slice(0, 3).map((v) => (
+                <div key={v.id} className="overflow-hidden rounded">
+                  <MiniTile assetRef={v.imageUrl} />
+                </div>
+              ))}
+            </div>
+          ) : resolvedImage ? (
             <img src={resolvedImage} alt="" className="h-full w-full object-cover" />
           ) : (
             <div className="flex h-full w-full items-center justify-center">
               <UserRound className="h-10 w-10 text-gray-200" strokeWidth={1} />
             </div>
           )}
+
           {/* Badges overlay */}
           <div className="absolute left-2 top-2 flex items-center gap-1">
-            {hasJson && (
+            {isGrouped && (
+              <span className="flex items-center gap-1 rounded-md bg-violet-600/90 px-1.5 py-0.5 text-[10px] font-bold text-white backdrop-blur-sm">
+                <Layers className="h-2.5 w-2.5" />
+                {variantCount + 1} ảnh
+              </span>
+            )}
+            {hasJson && !isGrouped && (
               <span className="flex items-center gap-1 rounded-md bg-black/60 px-1.5 py-0.5 text-[10px] font-medium text-sky-400 backdrop-blur-sm">
                 <Braces className="h-2.5 w-2.5" />
                 JSON
               </span>
             )}
           </div>
+
           {/* Top-right controls */}
           <div className="absolute right-2 top-2 flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
             {confirm ? (
@@ -120,12 +168,13 @@ function ModelCard({ item, onEdit, onDelete }: { item: Model; onEdit: () => void
             )}
           </div>
         </div>
+
         {/* Info */}
         <div className="flex flex-col gap-1 p-3">
           <span className="truncate text-sm font-semibold tracking-tight text-gray-800">{item.name}</span>
           <div className="flex flex-wrap items-center gap-1">
             <span className="rounded bg-black/5 px-1.5 py-0.5 text-[10px] text-gray-500">{sourceLabel}</span>
-            {variantCount > 0 ? (
+            {variantCount > 0 && (
               <button
                 onClick={(e) => { e.stopPropagation(); setVariantsOpen(true) }}
                 className="rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-700 hover:bg-emerald-200"
@@ -133,7 +182,8 @@ function ModelCard({ item, onEdit, onDelete }: { item: Model; onEdit: () => void
               >
                 ✨ {variantCount + 1} góc
               </button>
-            ) : (
+            )}
+            {variantCount === 0 && (
               <button
                 onClick={(e) => { e.stopPropagation(); setVariantsOpen(true) }}
                 className="rounded bg-violet-50 px-1.5 py-0.5 text-[10px] text-violet-600 hover:bg-violet-100"
@@ -145,8 +195,73 @@ function ModelCard({ item, onEdit, onDelete }: { item: Model; onEdit: () => void
           </div>
         </div>
       </div>
+
       {variantsOpen && <VariantsModal model={item} onClose={() => setVariantsOpen(false)} />}
+      {viewerOpen && <ModelGroupViewer model={item} onClose={() => setViewerOpen(false)} onEdit={() => { setViewerOpen(false); onEdit() }} />}
     </>
+  )
+}
+
+// ── Model group viewer modal — shows all 4 images large + back button ─────
+function GroupImageTile({ assetRef, label, badge }: { assetRef: string; label: string; badge?: string }) {
+  const url = useAssetUrl(assetRef)
+  return (
+    <div className="relative aspect-[9/16] overflow-hidden rounded-xl border border-black/10 bg-black">
+      {url ? (
+        <img src={url} alt={label} className="h-full w-full object-cover" />
+      ) : (
+        <div className="flex h-full items-center justify-center text-gray-300">...</div>
+      )}
+      {badge && (
+        <span className="absolute left-2 top-2 rounded-md bg-violet-600/90 px-2 py-0.5 text-[10px] font-bold text-white backdrop-blur-sm">
+          {badge}
+        </span>
+      )}
+      <span className="absolute bottom-2 left-2 rounded bg-black/60 px-1.5 py-0.5 text-[10px] font-medium text-white">
+        {label}
+      </span>
+    </div>
+  )
+}
+
+function ModelGroupViewer({ model, onClose, onEdit }: { model: Model; onClose: () => void; onEdit: () => void }) {
+  const variants = model.variants ?? []
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4" onClick={onClose}>
+      <div onClick={(e) => e.stopPropagation()} className="flex max-h-[92vh] w-full max-w-4xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
+        {/* Header with back button */}
+        <div className="flex items-center justify-between border-b border-black/8 bg-gradient-to-r from-violet-600 to-purple-500 px-5 py-3.5">
+          <button
+            onClick={onClose}
+            className="flex items-center gap-1.5 rounded-lg bg-white/20 px-3 py-1.5 text-sm font-semibold text-white transition-colors hover:bg-white/30"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            Quay lại thư viện
+          </button>
+          <div className="text-center">
+            <h2 className="text-base font-bold text-white">{model.name}</h2>
+            <p className="text-[11px] text-white/70">Preset {variants.length + 1} ảnh</p>
+          </div>
+          <button
+            onClick={onEdit}
+            className="rounded-lg bg-white/20 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-white/30"
+            title="Chỉnh sửa info"
+          >
+            Sửa info
+          </button>
+        </div>
+
+        {/* 2x2 grid of all 4 images at large size */}
+        <div className="flex-1 overflow-y-auto p-5">
+          <div className="grid grid-cols-2 gap-3 md:gap-4">
+            <GroupImageTile assetRef={model.characterImage} label="CHÍNH" badge="Ảnh gốc" />
+            {variants.map((v: AvatarVariant) => (
+              <GroupImageTile key={v.id} assetRef={v.imageUrl} label={v.label} />
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
   )
 }
 

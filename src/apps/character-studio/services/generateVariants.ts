@@ -45,17 +45,40 @@ export const DEFAULT_VARIANT_RECIPES: VariantRecipe[] = [
 /**
  * Generate ONE variant. Returns the variant object or null on failure.
  * Uses Nano Banana 2 with the original image as reference for identity lock.
+ *
+ * mode:
+ *   - 'strict' (default): keep face + hair + outfit + lighting all from reference
+ *   - 'flex-outfit': keep face + hair + facial hair, allow slight outfit variation
  */
 export async function generateOneVariant(params: {
   apiKey: string
   originalImageUrl: string
   recipe: VariantRecipe
   avatarDescription?: string  // optional locked physical description
+  mode?: 'strict' | 'flex-outfit'
 }): Promise<AvatarVariant | null> {
-  const { apiKey, originalImageUrl, recipe, avatarDescription } = params
+  const { apiKey, originalImageUrl, recipe, avatarDescription, mode = 'strict' } = params
 
   // Build identity-lock prompt with the recipe + reference
-  const identityLockText = `🔒 ABSOLUTE IDENTITY LOCK 🔒
+  const identityLockText = mode === 'flex-outfit'
+    ? `🔒 STRICT IDENTITY LOCK 🔒
+This is the SAME identical human being shown in the reference image.
+${avatarDescription ? `\nLocked physical description:\n${avatarDescription}\n` : ''}
+KEEP EXACTLY THE SAME (from reference image):
+- Face shape, eye color + shape, eyebrows, nose, lips, jawline, skin tone, age
+- Hairstyle, hair color, hair length, hair texture (or hijab style if female with hijab)
+- Any facial hair: beard, mustache, stubble (exact same style and color)
+
+CAN VARY SLIGHTLY:
+- Outfit / clothing — different shirt or top color/style is OK, but keep same modesty level + casual UGC style
+- Pose / angle / facial expression as specified below
+
+DO NOT generate a similar-looking different person — that is failure.
+
+${recipe.prompt}
+
+Output: photorealistic, vertical 9:16, authentic UGC-style photography, natural ambient lighting, no text overlay, no watermark.`
+    : `🔒 ABSOLUTE IDENTITY LOCK 🔒
 This is the SAME identical human being shown in the reference image. You are photographing them again from a different angle.
 ${avatarDescription ? `\nLocked physical description:\n${avatarDescription}\n` : ''}
 DO NOT change: face shape, eye color/shape, eyebrow shape, nose, lips, jawline, skin tone, hijab/hair style, outfit, lighting.
@@ -140,4 +163,54 @@ export async function addManualVariant(file: File, label: string): Promise<Avata
     source: 'manual-upload',
     createdAt: Date.now(),
   }
+}
+
+// ── EXTRA 3 ANGLES (integrated Avatar AI workflow — outfit-flex mode) ────────
+// Used right after main avatar generation. Keeps face + hair + facial hair
+// from original, allows slight outfit variation for natural photo-series feel.
+
+export const EXTRA_3_RECIPES: VariantRecipe[] = [
+  {
+    angleType: '3/4 trái',
+    prompt: 'Same person photographed from a 3/4 LEFT angle (head turned ~35° to camera-left). Natural relaxed expression. Same hairstyle and any facial hair as the reference. Outfit may differ slightly (different shirt color or top is OK) but same casual UGC modesty level. Same natural ambient lighting.',
+  },
+  {
+    angleType: '3/4 phải',
+    prompt: 'Same person photographed from a 3/4 RIGHT angle (head turned ~35° to camera-right). Natural relaxed expression. Same hairstyle and any facial hair as the reference. Outfit may differ slightly (different shirt color or top is OK) but same casual UGC modesty level. Same natural ambient lighting.',
+  },
+  {
+    angleType: 'cười',
+    prompt: 'Same person front-facing with a gentle warm genuine smile (slight teeth visible). Eyes naturally relaxed. Same hairstyle and any facial hair as the reference. Outfit may differ slightly (different shirt color or top is OK) but same casual UGC modesty level. Same natural ambient lighting.',
+  },
+]
+
+/**
+ * Generate the 3 extra angles for the integrated Avatar AI workflow.
+ * Uses flex-outfit mode (keep face + hair + facial hair, allow outfit variation).
+ */
+export async function generateExtra3Angles(params: {
+  apiKey: string
+  originalImageUrl: string
+  avatarDescription?: string
+  onProgress?: (done: number, total: number, currentLabel: string) => void
+}): Promise<AvatarVariant[]> {
+  const { apiKey, originalImageUrl, avatarDescription, onProgress } = params
+  const out: AvatarVariant[] = []
+  for (let i = 0; i < EXTRA_3_RECIPES.length; i++) {
+    const recipe = EXTRA_3_RECIPES[i]
+    onProgress?.(i, EXTRA_3_RECIPES.length, recipe.angleType)
+    const v = await generateOneVariant({
+      apiKey,
+      originalImageUrl,
+      recipe,
+      avatarDescription,
+      mode: 'flex-outfit',
+    })
+    if (v) out.push(v)
+    if (i < EXTRA_3_RECIPES.length - 1) {
+      await new Promise((r) => setTimeout(r, 800))
+    }
+  }
+  onProgress?.(EXTRA_3_RECIPES.length, EXTRA_3_RECIPES.length, 'done')
+  return out
 }

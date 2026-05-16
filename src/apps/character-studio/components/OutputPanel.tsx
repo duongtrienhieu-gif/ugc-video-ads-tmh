@@ -1,12 +1,14 @@
 ﻿import { useState, useEffect, useRef } from 'react'
-import { Copy, Check, Save, ChevronDown, UserRound, Loader2, Braces, Download, X, Sparkles } from 'lucide-react'
+import { Copy, Check, Save, ChevronDown, UserRound, Loader2, Braces, Download, X, Sparkles, RotateCcw } from 'lucide-react'
 import { useBankStore } from '../../../stores/bankStore'
+import { useSettingsStore } from '../../../stores/settingsStore'
+import { useAppStore } from '../../../stores/appStore'
 import type { GenerationResult } from '../services/generateCharacter'
 import { useAssetUrl } from '../../../hooks/useAssetUrl'
 import { IMAGE_MODELS } from '../../../utils/kieai'
 import type { ImageResolution } from '../../../utils/kieai'
-import VariantsModal from '../../finder/VariantsModal'
-import type { Model } from '../../../stores/types'
+import { generateExtra3Angles, generateOneVariant, EXTRA_3_RECIPES } from '../services/generateVariants'
+import type { AvatarVariant } from '../../../stores/types'
 
 interface OutputPanelProps {
   result: GenerationResult | null
@@ -16,7 +18,6 @@ interface OutputPanelProps {
   canGenerate: boolean
   aspectRatio: string
   onAspectRatioChange: (v: string) => void
-  onAutoSave?: () => Promise<void>
 }
 
 function ProviderIcon({ provider }: { provider: string }) {
@@ -49,19 +50,26 @@ function ProviderIcon({ provider }: { provider: string }) {
   )
 }
 
-export default function OutputPanel({ result, isGenerating, onGenerate, onCancel, canGenerate, aspectRatio, onAspectRatioChange, onAutoSave }: OutputPanelProps) {
+export default function OutputPanel({ result, isGenerating, onGenerate, onCancel, canGenerate, aspectRatio, onAspectRatioChange }: OutputPanelProps) {
   const [copied, setCopied] = useState(false)
   const [jsonExpanded, setJsonExpanded] = useState(false)
-  const [showSaveForm, setShowSaveForm] = useState(false)
-  const [saveName, setSaveName] = useState('')
+  const [presetName, setPresetName] = useState('')
   const [saved, setSaved] = useState(false)
-  const [savedModel, setSavedModel] = useState<Model | null>(null)
-  const [variantsOpen, setVariantsOpen] = useState(false)
-  const [isAutoSaving, setIsAutoSaving] = useState(false)
-  const pendingVariantsOpenRef = useRef(false)
   const [selectedModel, setSelectedModel] = useState(IMAGE_MODELS[0]) // Nano Banana 2 — reliable default
   const [resolution, setResolution] = useState<ImageResolution>('1K')
   const [modelDropOpen, setModelDropOpen] = useState(false)
+
+  // ── Integrated 4-image workflow state ─────────────────────────────────────
+  // After main avatar is generated, user can produce 3 extra face angles inline.
+  // null slot = not yet generated; AvatarVariant = ready; isRegenerating tracks per-slot regen.
+  const [extraAngles, setExtraAngles] = useState<(AvatarVariant | null)[]>([])
+  const [isGeneratingExtras, setIsGeneratingExtras] = useState(false)
+  const [extraProgress, setExtraProgress] = useState({ done: 0, total: 0, label: '' })
+  const [regenIdx, setRegenIdx] = useState<number | null>(null)
+  const [isSavingPreset, setIsSavingPreset] = useState(false)
+
+  const kieApiKey = useSettingsStore((s) => s.kieApiKey)
+  const addToast = useAppStore((s) => s.addToast)
 
   const [progress, setProgress] = useState(0)
   const progressRef = useRef<ReturnType<typeof setInterval> | null>(null)
@@ -89,11 +97,17 @@ export default function OutputPanel({ result, isGenerating, onGenerate, onCancel
   }, [isGenerating])
 
   const addModel = useBankStore((s) => s.addModel)
-  const models = useBankStore((s) => s.models)
   const resolvedImageUrl = useAssetUrl(result?.imageUrl)
 
   const isPortrait = aspectRatio.includes('9:16') || aspectRatio.includes('1:1')
   const credits = selectedModel.credits[resolution]
+
+  // Reset workflow when result changes (e.g. user generates new avatar)
+  useEffect(() => {
+    setExtraAngles([])
+    setPresetName('')
+    setSaved(false)
+  }, [result?.imageUrl])
 
   const handleCopy = () => {
     if (!result) return
@@ -102,33 +116,96 @@ export default function OutputPanel({ result, isGenerating, onGenerate, onCancel
     setTimeout(() => setCopied(false), 2000)
   }
 
-  // After saved=true, watch models reactively to find the newly saved model
-  useEffect(() => {
-    if (saved && result?.imageUrl && !savedModel) {
-      const found = models.find((m) => m.characterImage === result.imageUrl)
-      if (found) {
-        setSavedModel(found)
-        if (pendingVariantsOpenRef.current) {
-          pendingVariantsOpenRef.current = false
-          setVariantsOpen(true)
-        }
-      }
+  // ── Generate 3 extra face angles inline ───────────────────────────────────
+  const handleGenerateExtras = async () => {
+    if (!result || !resolvedImageUrl) return
+    if (!kieApiKey) {
+      addToast('Cần KIE.ai API key trong Cài đặt', 'error')
+      return
     }
-  }, [models, saved, result?.imageUrl, savedModel])
+    setIsGeneratingExtras(true)
+    setExtraAngles([null, null, null])
+    setExtraProgress({ done: 0, total: 3, label: 'khởi tạo' })
 
-  const handleSave = async () => {
-    if (!saveName.trim() || !result) return
-    await addModel({
-      characterImage: result.imageUrl,
-      name: saveName.trim(),
-      notes: '',
-      jsonProfile: result.jsonPrompt as unknown as Record<string, unknown>,
-      source: 'character-studio',
-    })
-    setShowSaveForm(false)
-    setSaveName('')
-    setSaved(true)
+    try {
+      const angles = await generateExtra3Angles({
+        apiKey: kieApiKey,
+        originalImageUrl: resolvedImageUrl,
+        onProgress: (done, total, label) => setExtraProgress({ done, total, label }),
+      })
+      // Pad to 3 slots in case some failed
+      const padded: (AvatarVariant | null)[] = [angles[0] ?? null, angles[1] ?? null, angles[2] ?? null]
+      setExtraAngles(padded)
+      if (angles.length < 3) {
+        addToast(`Chỉ tạo được ${angles.length}/3 góc — bạn có thể tạo lại từng ảnh`, 'error')
+      } else {
+        addToast('✓ Đã tạo 3 góc mặt thêm')
+      }
+    } catch (err) {
+      console.error('[gen extras] failed:', err)
+      addToast(`Lỗi: ${err instanceof Error ? err.message.slice(0, 80) : 'unknown'}`, 'error')
+    } finally {
+      setIsGeneratingExtras(false)
+    }
   }
+
+  // Regenerate one of the 3 angles
+  const handleRegenAngle = async (idx: number) => {
+    if (!resolvedImageUrl) return
+    if (!kieApiKey) {
+      addToast('Cần KIE.ai API key trong Cài đặt', 'error')
+      return
+    }
+    setRegenIdx(idx)
+    try {
+      const recipe = EXTRA_3_RECIPES[idx]
+      const v = await generateOneVariant({
+        apiKey: kieApiKey,
+        originalImageUrl: resolvedImageUrl,
+        recipe,
+        mode: 'flex-outfit',
+      })
+      if (v) {
+        setExtraAngles((prev) => {
+          const next = [...prev]
+          next[idx] = v
+          return next
+        })
+      } else {
+        addToast(`Tạo lại góc #${idx + 1} thất bại`, 'error')
+      }
+    } catch (err) {
+      addToast(`Lỗi: ${err instanceof Error ? err.message.slice(0, 80) : 'unknown'}`, 'error')
+    } finally {
+      setRegenIdx(null)
+    }
+  }
+
+  // Save the full preset: main image + 3 angles → 1 Model with variants
+  const handleSavePreset = async () => {
+    if (!result || !presetName.trim()) return
+    setIsSavingPreset(true)
+    try {
+      const validVariants = extraAngles.filter((v): v is AvatarVariant => v !== null)
+      await addModel({
+        characterImage: result.imageUrl,
+        name: presetName.trim(),
+        notes: validVariants.length > 0 ? `Preset ${validVariants.length + 1} góc mặt` : '',
+        jsonProfile: result.jsonPrompt as unknown as Record<string, unknown>,
+        source: 'character-studio',
+        variants: validVariants.length > 0 ? validVariants : undefined,
+      })
+      setSaved(true)
+      addToast(`✓ Đã lưu preset "${presetName.trim()}" (${validVariants.length + 1} ảnh) vào Project`)
+    } catch (err) {
+      addToast(`Lưu thất bại: ${err instanceof Error ? err.message.slice(0, 80) : 'unknown'}`, 'error')
+    } finally {
+      setIsSavingPreset(false)
+    }
+  }
+
+  const hasExtras = extraAngles.length > 0
+  const allExtrasReady = hasExtras && extraAngles.every((v) => v !== null)
 
   // ── Shared bottom controls ────────────────────────────────────────────
   function BottomControls() {
@@ -291,35 +368,57 @@ export default function OutputPanel({ result, isGenerating, onGenerate, onCancel
 
   // ── Result state ──────────────────────────────────────────────────────
   return (
-    <div className="flex h-full flex-col">
-      <div className="flex min-h-0 flex-1 flex-col p-4">
-        {/* Image */}
-        <div className="flex min-h-0 flex-1 items-center justify-center">
-          <div className={`group relative overflow-hidden rounded-xl border border-black/10 bg-black ${isPortrait ? 'h-full max-h-full' : 'w-full'}`}>
-            <img
-              src={resolvedImageUrl}
-              alt="Generated character"
-              className={`${isPortrait ? 'h-full' : 'w-full'} object-contain`}
-            />
-            <button
-              onClick={() => {
-                if (!resolvedImageUrl) return
-                const a = document.createElement('a')
-                a.href = resolvedImageUrl
-                a.download = `character-${Date.now()}.png`
-                a.click()
-              }}
-              className="absolute bottom-3 right-3 flex h-8 w-8 items-center justify-center rounded-full bg-black/60 text-white/70 opacity-0 backdrop-blur-sm transition-opacity group-hover:opacity-100 hover:bg-black/80 hover:text-white"
-              title="Tải xuống ảnh"
-            >
-              <Download className="h-4 w-4" />
-            </button>
+    <div className="flex h-full flex-col overflow-hidden">
+      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto p-4">
+        {/* ── Main image + 3 angle thumbnails (2x2 when extras present) ── */}
+        {hasExtras ? (
+          // 2x2 grid: main top-left + 3 angles
+          <div className="grid grid-cols-2 gap-2">
+            {/* Main (top-left) */}
+            <div className="group relative aspect-[9/16] overflow-hidden rounded-xl border-2 border-sky-300 bg-black">
+              <img src={resolvedImageUrl} alt="Main" className="h-full w-full object-cover" />
+              <span className="absolute left-1.5 top-1.5 rounded bg-sky-500/90 px-1.5 py-0.5 text-[9px] font-bold text-white">CHÍNH</span>
+            </div>
+            {/* 3 angle slots */}
+            {extraAngles.map((variant, idx) => (
+              <AngleSlot
+                key={idx}
+                variant={variant}
+                label={EXTRA_3_RECIPES[idx].angleType}
+                isRegenerating={regenIdx === idx || (isGeneratingExtras && variant === null)}
+                onRegen={() => handleRegenAngle(idx)}
+              />
+            ))}
           </div>
-        </div>
+        ) : (
+          // Single image full-size before extras
+          <div className="flex min-h-0 flex-1 items-center justify-center">
+            <div className={`group relative overflow-hidden rounded-xl border border-black/10 bg-black ${isPortrait ? 'h-full max-h-full' : 'w-full'}`}>
+              <img
+                src={resolvedImageUrl}
+                alt="Generated character"
+                className={`${isPortrait ? 'h-full' : 'w-full'} object-contain`}
+              />
+              <button
+                onClick={() => {
+                  if (!resolvedImageUrl) return
+                  const a = document.createElement('a')
+                  a.href = resolvedImageUrl
+                  a.download = `character-${Date.now()}.png`
+                  a.click()
+                }}
+                className="absolute bottom-3 right-3 flex h-8 w-8 items-center justify-center rounded-full bg-black/60 text-white/70 opacity-0 backdrop-blur-sm transition-opacity group-hover:opacity-100 hover:bg-black/80 hover:text-white"
+                title="Tải xuống ảnh"
+              >
+                <Download className="h-4 w-4" />
+              </button>
+            </div>
+          </div>
+        )}
 
-        {/* Actions */}
+        {/* ── Actions ── */}
         <div className="mt-3 flex flex-col gap-2">
-          {/* Collapsible JSON */}
+          {/* Collapsible JSON (compact) */}
           <div className="rounded-xl border border-black/8 bg-black/[0.02]">
             <button
               onClick={() => setJsonExpanded(!jsonExpanded)}
@@ -351,94 +450,115 @@ export default function OutputPanel({ result, isGenerating, onGenerate, onCancel
             )}
           </div>
 
-          {/* Save to Model Bank */}
-          {showSaveForm ? (
-            <div className="flex gap-2">
-              <input
-                value={saveName}
-                onChange={(e) => setSaveName(e.target.value)}
-                onKeyDown={(e) => { if (e.key === 'Enter') handleSave() }}
-                placeholder='vd: "Sarah - Phòng ngủ"'
-                autoFocus
-                className="flex-1 rounded-full border border-black/10 bg-transparent px-4 py-3 text-sm text-gray-800 placeholder-gray-400 outline-none transition-colors focus:border-sky-500/30"
-              />
-              <button
-                onClick={handleSave}
-                disabled={!saveName.trim()}
-                className="rounded-full bg-sky-500/15 px-5 py-3 text-sm font-medium text-sky-400 transition-colors hover:bg-sky-500/25 disabled:opacity-40"
-              >
-                Lưu
-              </button>
-              <button
-                onClick={() => { setShowSaveForm(false); setSaveName('') }}
-                className="rounded-full px-5 py-3 text-sm text-gray-500 transition-colors hover:text-gray-700"
-              >
-                Hủy
-              </button>
-            </div>
-          ) : (
+          {/* Step 1: Generate 3 extra angles (only if not yet started) */}
+          {!hasExtras && (
             <button
-              onClick={() => setShowSaveForm(true)}
-              className={`flex w-full items-center justify-center gap-2 rounded-full border px-6 py-3.5 text-[13px] font-medium tracking-tight transition-colors ${saved
-                ? 'border-green-500/20 bg-green-500/10 text-green-400'
-                : 'border-black/12 text-gray-700 hover:bg-black/[0.05] hover:text-gray-900'
-                }`}
+              onClick={handleGenerateExtras}
+              disabled={isGeneratingExtras || !kieApiKey}
+              className="flex w-full items-center justify-center gap-2 rounded-full border border-violet-300 bg-violet-50 px-6 py-3.5 text-[13px] font-semibold text-violet-700 transition-colors hover:bg-violet-100 disabled:opacity-50"
             >
-              {saved ? (
-                <><Check className="h-4 w-4" /> Đã lưu vào Project Avatar AI</>
-              ) : (
-                <><Save className="h-4 w-4" /> Lưu vào Project Avatar AI</>
-              )}
+              <Sparkles className="h-4 w-4" />
+              ✨ Tạo 3 góc mặt thêm (cùng người, đa góc nhìn)
             </button>
           )}
 
-          {/* "Tạo 4 góc mặt" — visible as soon as result exists */}
-          <button
-            onClick={async () => {
-              if (savedModel) {
-                setVariantsOpen(true)
-              } else {
-                // Auto-save first, then wait for savedModel via useEffect
-                pendingVariantsOpenRef.current = true
-                setIsAutoSaving(true)
-                try {
-                  if (onAutoSave) {
-                    await onAutoSave()
-                  } else {
-                    // Fallback: save with default name inline
-                    if (!result) return
-                    await addModel({
-                      characterImage: result.imageUrl,
-                      name: `Avatar ${new Date().toLocaleDateString('vi-VN')}`,
-                      notes: '',
-                      jsonProfile: result.jsonPrompt as unknown as Record<string, unknown>,
-                      source: 'character-studio',
-                    })
-                    setSaved(true)
-                  }
-                } catch (err) {
-                  pendingVariantsOpenRef.current = false
-                  console.error('Auto-save failed:', err)
-                } finally {
-                  setIsAutoSaving(false)
-                }
-              }
-            }}
-            disabled={isAutoSaving}
-            className="flex w-full items-center justify-center gap-2 rounded-full border border-violet-300 bg-violet-50 px-6 py-3.5 text-[13px] font-medium tracking-tight text-violet-700 transition-colors hover:bg-violet-100 disabled:opacity-50"
-          >
-            {isAutoSaving ? (
-              <><Loader2 className="h-4 w-4 animate-spin" /> Đang lưu...</>
-            ) : (
-              <><Sparkles className="h-4 w-4" /> ✨ Tạo 4 góc mặt — identity lock B-roll</>
-            )}
-          </button>
+          {/* Progress bar while gen extras */}
+          {isGeneratingExtras && (
+            <div className="rounded-xl border border-violet-200 bg-violet-50 p-3">
+              <div className="mb-1.5 flex items-center justify-between text-xs">
+                <span className="font-medium text-violet-700">Đang tạo góc: {extraProgress.label}</span>
+                <span className="font-bold tabular-nums text-violet-700">{extraProgress.done}/{extraProgress.total}</span>
+              </div>
+              <div className="h-1.5 w-full overflow-hidden rounded-full bg-violet-100">
+                <div
+                  className="h-full rounded-full bg-violet-500 transition-all duration-500"
+                  style={{ width: `${(extraProgress.done / Math.max(extraProgress.total, 1)) * 100}%` }}
+                />
+              </div>
+            </div>
+          )}
+
+          {/* Step 2: Save preset (all 4) — visible after extras are generated */}
+          {hasExtras && !isGeneratingExtras && (
+            <div className="flex flex-col gap-2 rounded-xl border border-emerald-200 bg-emerald-50/50 p-3">
+              <p className="text-xs font-semibold text-emerald-700">
+                💾 Lưu preset {allExtrasReady ? '4' : `${1 + extraAngles.filter(Boolean).length}`} ảnh vào Project
+              </p>
+              <input
+                value={presetName}
+                onChange={(e) => setPresetName(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter' && presetName.trim()) handleSavePreset() }}
+                placeholder='Đặt tên preset, vd: "Sarah hijab - bếp"'
+                disabled={saved}
+                className="rounded-lg border border-emerald-300 bg-white px-3 py-2 text-sm text-gray-800 placeholder-gray-400 outline-none focus:border-emerald-500 disabled:opacity-60"
+              />
+              <button
+                onClick={handleSavePreset}
+                disabled={!presetName.trim() || isSavingPreset || saved}
+                className={`flex w-full items-center justify-center gap-2 rounded-full px-6 py-3 text-[13px] font-bold transition-colors ${saved
+                  ? 'bg-green-500/15 text-green-700'
+                  : 'bg-emerald-600 text-white hover:bg-emerald-700 disabled:bg-gray-200 disabled:text-gray-400'
+                }`}
+              >
+                {saved ? (
+                  <><Check className="h-4 w-4" /> Đã lưu vào Project</>
+                ) : isSavingPreset ? (
+                  <><Loader2 className="h-4 w-4 animate-spin" /> Đang lưu...</>
+                ) : (
+                  <><Save className="h-4 w-4" /> Lưu preset (cả {1 + extraAngles.filter(Boolean).length} ảnh)</>
+                )}
+              </button>
+            </div>
+          )}
         </div>
       </div>
 
       <BottomControls />
-      {variantsOpen && savedModel && (
-        <VariantsModal model={savedModel} onClose={() => setVariantsOpen(false)} />
+    </div>
+  )
+}
+
+// ── 3-angle slot thumbnail ────────────────────────────────────────────────
+function AngleSlot({
+  variant, label, isRegenerating, onRegen,
+}: {
+  variant: AvatarVariant | null
+  label: string
+  isRegenerating: boolean
+  onRegen: () => void
+}) {
+  const url = useAssetUrl(variant?.imageUrl)
+  return (
+    <div className="group relative aspect-[9/16] overflow-hidden rounded-xl border border-violet-200 bg-gray-100">
+      {isRegenerating ? (
+        <div className="flex h-full items-center justify-center">
+          <Loader2 className="h-6 w-6 animate-spin text-violet-400" />
+        </div>
+      ) : variant && url ? (
+        <>
+          <img src={url} alt={label} className="h-full w-full object-cover" />
+          <span className="absolute left-1.5 top-1.5 rounded bg-black/60 px-1.5 py-0.5 text-[9px] font-bold text-white">
+            {label}
+          </span>
+          <button
+            onClick={onRegen}
+            title={`Tạo lại góc ${label}`}
+            className="absolute right-1.5 top-1.5 flex h-7 w-7 items-center justify-center rounded-md bg-black/60 text-white opacity-0 backdrop-blur-sm transition-opacity hover:bg-violet-600 group-hover:opacity-100"
+          >
+            <RotateCcw className="h-3.5 w-3.5" />
+          </button>
+        </>
+      ) : (
+        <div className="flex h-full flex-col items-center justify-center gap-1 text-gray-400">
+          <X className="h-5 w-5" />
+          <span className="text-[10px]">Lỗi — </span>
+          <button
+            onClick={onRegen}
+            className="rounded-md bg-violet-600 px-2 py-0.5 text-[10px] font-semibold text-white hover:bg-violet-700"
+          >
+            Tạo lại
+          </button>
+        </div>
       )}
     </div>
   )
