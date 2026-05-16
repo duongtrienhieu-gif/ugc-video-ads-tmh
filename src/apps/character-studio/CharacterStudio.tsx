@@ -1,5 +1,5 @@
 ﻿import { useState, useEffect, useRef, useCallback } from 'react'
-import { User, MapPin, Move, Camera, Upload, X, Loader2, Sparkles, Package } from 'lucide-react'
+import { User, MapPin, Move, Camera, Upload, X, Loader2, Sparkles } from 'lucide-react'
 import { useAppStore } from '../../stores/appStore'
 import type { CharacterProfile, TabId } from './types'
 import { createEmptyProfile, TABS } from './types'
@@ -10,7 +10,6 @@ import type { GenerationResult } from './services/generateCharacter'
 import { useSettingsStore } from '../../stores/settingsStore'
 import type { ImageResolution } from '../../utils/kieai'
 import { directGeminiVision, fileToBase64 } from '../../utils/gemini'
-import { useAssetUrl } from '../../hooks/useAssetUrl'
 import { useBankStore } from '../../stores/bankStore'
 import { saveAsset } from '../../utils/assetStore'
 import VariantsModal from '../finder/VariantsModal'
@@ -47,11 +46,8 @@ export default function CharacterStudio() {
   const [variantsOpen, setVariantsOpen] = useState(false)
   const [isSavingRef, setIsSavingRef] = useState(false)
 
-  // Product image state
-  const [productImage, setProductImage] = useState<{ file: File; preview: string; base64: string; mimeType: string } | null>(null)
-  const [productAssetId, setProductAssetId] = useState<string | null>(null)
-  const [isSavingProduct, setIsSavingProduct] = useState(false)
-  const productInputRef = useRef<HTMLInputElement>(null)
+  // Product image upload moved to PRODUCT AI tool — Avatar AI is now purely
+  // character/scene generation. To create avatar holding a product, use Product AI.
 
   const addModel = useBankStore((s) => s.addModel)
 
@@ -132,38 +128,6 @@ export default function CharacterStudio() {
     if (refInputRef.current) refInputRef.current.value = ''
   }
 
-  const handleSetProductImage = async (file: File) => {
-    if (!file.type.startsWith('image/')) return
-    if (file.size > 5 * 1024 * 1024) {
-      addToast('Ảnh sản phẩm quá lớn — tối đa 5MB', 'error')
-      return
-    }
-    const preview = URL.createObjectURL(file)
-    const { base64, mimeType } = await fileToBase64(file)
-    setProductImage({ file, preview, base64, mimeType })
-    setProductAssetId(null)
-    // Save to asset store in background
-    setIsSavingProduct(true)
-    try {
-      const assetId = await saveAsset(file, mimeType)
-      setProductAssetId(assetId)
-    } catch (err) {
-      addToast(`Lưu ảnh sản phẩm thất bại: ${err instanceof Error ? err.message.slice(0, 60) : 'unknown'}`, 'error')
-    } finally {
-      setIsSavingProduct(false)
-    }
-  }
-
-  const clearProductImage = () => {
-    if (productImage?.preview) URL.revokeObjectURL(productImage.preview)
-    setProductImage(null)
-    setProductAssetId(null)
-    if (productInputRef.current) productInputRef.current.value = ''
-  }
-
-  // Resolve the product asset URL for use as a reference image
-  const resolvedProductUrl = useAssetUrl(productAssetId ?? undefined)
-
   // Save reference photo as a Model + open VariantsModal to generate 4 angles.
   // Used when user uploads a real photo and wants variants without AI generation.
   const handleSaveRefAndGenAngles = async () => {
@@ -202,10 +166,7 @@ export default function CharacterStudio() {
     cancelledRef.current = false
     setIsGenerating(true)
     try {
-      // Use resolved product URL (public URL) or fall back to base64 data URL
-      const productUrl = resolvedProductUrl
-        ?? (productImage ? `data:${productImage.mimeType};base64,${productImage.base64}` : undefined)
-      const gen = await generateCharacter(profile, modelId, resolution, productUrl ?? undefined)
+      const gen = await generateCharacter(profile, modelId, resolution)
       if (!cancelledRef.current) setResult(gen)
     } catch (err) {
       if (cancelledRef.current) return
@@ -299,53 +260,6 @@ export default function CharacterStudio() {
           onChange={(e) => { const f = e.target.files?.[0]; if (f) handleSetRefImage(f) }}
         />
 
-        {/* ── Product image upload ── */}
-        <div className="mt-3">
-          <p className="mb-2 text-[9px] font-semibold uppercase tracking-widest text-gray-400">
-            Ảnh sản phẩm (tùy chọn) — avatar sẽ cầm sản phẩm này
-          </p>
-          {productImage ? (
-            <div className="flex items-center gap-3">
-              <div className="relative h-10 w-10 shrink-0 overflow-hidden rounded-lg border border-black/10">
-                <img src={productImage.preview} alt="" className="h-full w-full object-cover" />
-              </div>
-              <div className="flex flex-1 items-center gap-2">
-                {isSavingProduct ? (
-                  <>
-                    <Loader2 className="h-3.5 w-3.5 animate-spin text-sky-400" />
-                    <span className="text-xs text-gray-500">Đang lưu ảnh sản phẩm...</span>
-                  </>
-                ) : (
-                  <span className="text-xs text-gray-500">{productImage.file.name}</span>
-                )}
-              </div>
-              <button
-                onClick={clearProductImage}
-                className="rounded-lg p-1.5 text-gray-400 transition-colors hover:bg-black/5 hover:text-gray-700"
-              >
-                <X className="h-3.5 w-3.5" />
-              </button>
-            </div>
-          ) : (
-            <button
-              type="button"
-              onClick={() => productInputRef.current?.click()}
-              className="flex w-full items-center gap-3 rounded-xl border border-dashed border-black/10 bg-black/[0.02] px-4 py-3 text-left transition-all hover:border-black/15 hover:bg-black/[0.03]"
-            >
-              <Package className="h-4 w-4 shrink-0 text-gray-400" />
-              <span className="text-xs text-gray-400">
-                Thả ảnh sản phẩm vào đây — JPG, PNG, WebP — tối đa 5MB
-              </span>
-            </button>
-          )}
-          <input
-            ref={productInputRef}
-            type="file"
-            accept="image/jpeg,image/png,image/webp"
-            className="hidden"
-            onChange={(e) => { const f = e.target.files?.[0]; if (f) void handleSetProductImage(f) }}
-          />
-        </div>
       </div>
 
       {/* ── Main 3-column layout ── */}

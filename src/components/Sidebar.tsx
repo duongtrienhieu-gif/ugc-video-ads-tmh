@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react'
-import { LayoutGrid, User, PenLine, Mic, Image, Video, Eye, Settings, FlaskConical, RefreshCw, LogOut, Activity, Clapperboard, Languages, Sparkles } from 'lucide-react'
+import { LayoutGrid, User, PenLine, Mic, Image, Video, Eye, Settings, FlaskConical, RefreshCw, LogOut, Activity, Clapperboard, Languages, Sparkles, Package } from 'lucide-react'
 import SettingsModal from './SettingsModal'
 import Diagnostic from './Diagnostic'
 import { useSettingsStore } from '../stores/settingsStore'
+import { useAppStore } from '../stores/appStore'
 import { getKieCredits } from '../utils/kieai'
 import { useAuthStore } from '../stores/authStore'
 
@@ -14,10 +15,11 @@ interface NavItem {
 
 const NAV_ITEMS: NavItem[] = [
   { id: 'finder', label: 'Project', icon: LayoutGrid },
+  { id: 'products-shortcut', label: 'Sản phẩm', icon: Package },
   { id: 'character-studio', label: 'Avatar AI', icon: User },
   { id: 'script-architect', label: 'Kịch bản', icon: PenLine },
   { id: 'voice-studio', label: 'Giọng đọc', icon: Mic },
-  { id: 'broll-studio', label: 'Ảnh B-Roll', icon: Image },
+  { id: 'broll-studio', label: 'Product AI', icon: Image },
   { id: 'broll-videos', label: 'Video B-Roll', icon: Video },
   { id: 'lip-sync',        label: 'Lip-Sync',     icon: Clapperboard },
   { id: 'video-translate', label: 'Dịch Video',   icon: Languages },
@@ -36,6 +38,16 @@ export default function Sidebar({ activeApp, onNavigate }: SidebarProps) {
   const { kieApiKey, kieCredits, setKieCredits } = useSettingsStore()
   const [refreshing, setRefreshing] = useState(false)
   const { user, signOut } = useAuthStore()
+  const sendToApp = useAppStore((s) => s.sendToApp)
+
+  // "Sản phẩm" shortcut → open Finder + auto-select products bank
+  const handleNav = (id: string) => {
+    if (id === 'products-shortcut') {
+      sendToApp({ targetApp: 'finder', targetField: 'activeBank', data: 'products' })
+      return
+    }
+    onNavigate(id)
+  }
 
   // Auto-fetch credits on mount if key exists
   useEffect(() => {
@@ -72,11 +84,13 @@ export default function Sidebar({ activeApp, onNavigate }: SidebarProps) {
         {/* Nav items */}
         <nav className="flex flex-1 flex-col items-center gap-0.5 overflow-y-auto px-1.5 pb-2">
           {NAV_ITEMS.map(({ id, label, icon: Icon }) => {
-            const isActive = activeApp === id
+            // 'products-shortcut' lights up when finder shows products bank — but for simplicity
+            // we just always show it as inactive (it's a shortcut, not a route)
+            const isActive = id !== 'products-shortcut' && activeApp === id
             return (
               <button
                 key={id}
-                onClick={() => onNavigate(id)}
+                onClick={() => handleNav(id)}
                 className={`flex w-full flex-col items-center gap-1 rounded-lg py-2 transition-colors hover:bg-black/5 ${
                   isActive ? 'bg-black/5' : ''
                 }`}

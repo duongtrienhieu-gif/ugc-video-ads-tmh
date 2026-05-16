@@ -26,7 +26,7 @@ export const APP_REGISTRY: AppConfig[] = [
   { id: 'ad-anatomy', name: 'Phân Tích QC', icon: Clapperboard, accent: '#FB2B37' },
   { id: 'script-architect', name: 'Kịch Bản', icon: PenLine, accent: '#3b82f6' },
   { id: 'voice-studio', name: 'Giọng Đọc', icon: Mic, accent: '#6366f1' },
-  { id: 'broll-studio', name: 'B-Roll', icon: Film, accent: '#f97316' },
+  { id: 'broll-studio', name: 'Product AI', icon: Film, accent: '#f97316' },
   { id: 'broll-videos', name: 'Video B-Roll', icon: Video, accent: '#8b5cf6' },
 ]
 
@@ -40,7 +40,7 @@ export const BANK_CONFIG: Record<BankType, { label: string; icon: ElementType }>
   models: { label: 'Avatar AI', icon: UserRound },
   scripts: { label: 'Kịch bản', icon: FileText },
   voices: { label: 'Giọng đọc', icon: Mic },
-  brolls: { label: 'B-Roll', icon: Film },
+  brolls: { label: 'Product AI', icon: Film },
 }
 
 export function getAppConfig(appId: string): AppConfig | undefined {
