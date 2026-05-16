@@ -37,14 +37,15 @@ export const APP_REGISTRY: AppConfig[] = [
 export const FINDER_APP = APP_REGISTRY[0]
 export const DOCK_APPS = APP_REGISTRY
 
-export type BankType = 'products' | 'models' | 'scripts' | 'voices' | 'brolls'
+export type BankType = 'products' | 'models' | 'scripts' | 'voices' | 'brolls' | 'adsContent'
 
 export const BANK_CONFIG: Record<BankType, { label: string; icon: ElementType }> = {
-  products: { label: 'Sản phẩm', icon: Package },
-  models: { label: 'Avatar AI', icon: UserRound },
-  scripts: { label: 'Kịch bản', icon: FileText },
-  voices: { label: 'Giọng đọc', icon: Mic },
-  brolls: { label: 'Product AI', icon: Film },
+  products:   { label: 'Sản phẩm',  icon: Package },
+  models:     { label: 'Avatar AI', icon: UserRound },
+  scripts:    { label: 'Kịch bản',  icon: FileText },
+  voices:     { label: 'Giọng đọc', icon: Mic },
+  brolls:     { label: 'Product AI', icon: Film },
+  adsContent: { label: 'Ads Content', icon: Megaphone },
 }
 
 export function getAppConfig(appId: string): AppConfig | undefined {

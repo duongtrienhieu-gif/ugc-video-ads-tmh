@@ -82,7 +82,9 @@ export interface ScriptGenerationParams {
 }
 
 export interface ScriptGenerationResult {
-  english: string
+  /** Master Vietnamese voice-over script — left box in the UI. */
+  vietnamese: string
+  /** Translated Malaysian Malay version — right box in the UI. */
   malay: string
   /** Optional — parsed from <<<STRUCTURED>>>; null if Gemini didn't return valid JSON. */
   structured: ScriptStructured | null

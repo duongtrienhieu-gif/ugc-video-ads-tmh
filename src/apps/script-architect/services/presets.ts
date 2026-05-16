@@ -19,10 +19,10 @@ const CLASSIC_PRESETS: ScriptPreset[] = [
     ctaStyle: 'Direct and confident — "tap the link, try it, your problem is solved."',
     proofStyle: 'One quick personal result line. No timeline, no science — just outcome.',
     detailVi: {
-      mechanism: 'Mở đầu bằng câu hỏi đánh trúng pain point, đẩy nhanh xuống giải pháp trong 5 giây đầu. Tạo cảm giác "đúng là mình" rồi giới thiệu sản phẩm.',
-      goals: ['Hook trực diện 3 giây đầu', 'Match-to-pain rõ ràng', 'Conversion-focused, ít chi tiết thừa'],
-      useCase: ['Sản phẩm giải quyết pain phổ biến', 'Audience đã ý thức vấn đề', 'Cold traffic ngắn 15-30s'],
-      example: '"Anyone else dealing with bloating every single day?"',
+      mechanism: 'Mở đầu bằng câu hỏi đánh trúng đúng nỗi đau, đẩy nhanh xuống giải pháp trong 5 giây đầu. Tạo cảm giác "đúng là mình" rồi giới thiệu sản phẩm.',
+      goals: ['Hook trực diện 3 giây đầu', 'Khớp đúng nỗi đau của khán giả', 'Tập trung chuyển đổi, không kể lể'],
+      useCase: ['Sản phẩm giải quyết nỗi đau phổ biến', 'Khán giả đã nhận ra vấn đề', 'Quảng cáo cold traffic ngắn 15-30 giây'],
+      example: '"Có ai cũng bị đầy hơi sau mỗi bữa ăn như mình không?"',
     },
   },
   {
@@ -38,9 +38,9 @@ const CLASSIC_PRESETS: ScriptPreset[] = [
     proofStyle: 'Personal transformation timeline with one specific marker (number of days, one observable change).',
     detailVi: {
       mechanism: 'Kể câu chuyện chuyển hoá: quá khứ đau → bước ngoặt → hiện tại tốt hơn. Tạo cảm giác "họ làm được thì mình cũng làm được".',
-      goals: ['Tạo đồng cảm sâu', 'Chứng minh kết quả qua thời gian', 'Giảm rào cản tin tưởng'],
-      useCase: ['Sản phẩm transformation (skincare, supplement, fitness)', 'Audience cần proof chậm', 'Ads 30-60s'],
-      example: '"For 3 years I struggled with adult acne — until I tried this."',
+      goals: ['Tạo đồng cảm sâu với khán giả', 'Chứng minh kết quả qua thời gian thực tế', 'Giảm rào cản tin tưởng'],
+      useCase: ['Sản phẩm có sự chuyển hoá rõ (skincare, supplement, fitness)', 'Khán giả cần thấy bằng chứng từ từ', 'Quảng cáo 30-60 giây'],
+      example: '"Suốt 3 năm mình vật lộn với mụn người lớn — cho đến khi thử cái này."',
     },
   },
   {
@@ -56,9 +56,9 @@ const CLASSIC_PRESETS: ScriptPreset[] = [
     proofStyle: 'One counter-intuitive proof point that contradicts a common belief.',
     detailVi: {
       mechanism: 'Ra lệnh ngược ("Đừng làm X nữa") để chặn scroll, sau đó giải thích vì sao và đưa giải pháp đúng. Khai thác sự bực bội tích luỹ.',
-      goals: ['Pattern interrupt mạnh', 'Khai thác frustration với solution rởm', 'Định vị uy quyền'],
-      useCase: ['Niche nhiều sản phẩm fake / rởm', 'Audience đã thử nhiều thứ không work', 'Tone advertorial gắt'],
-      example: '"Stop drinking detox tea — it\'s making your bloating worse."',
+      goals: ['Chặn scroll bằng lời nói ngược', 'Khai thác sự bực bội với giải pháp rởm', 'Định vị uy quyền cho thương hiệu'],
+      useCase: ['Ngành có nhiều sản phẩm giả / kém chất lượng', 'Khán giả đã thử nhiều thứ không hiệu quả', 'Phong cách advertorial gay gắt'],
+      example: '"Đừng uống trà detox nữa — nó đang làm bụng bạn đầy hơi hơn đấy."',
     },
   },
   {
@@ -73,10 +73,10 @@ const CLASSIC_PRESETS: ScriptPreset[] = [
     ctaStyle: 'Soft — "learn more in the link below."',
     proofStyle: 'Specific study reference, percentage, or expert source. No vague "studies show".',
     detailVi: {
-      mechanism: 'Trích nghiên cứu / góc nhìn chuyên gia để tăng credibility. Hạ cảm giác "đây là quảng cáo", đẩy lên cảm giác "thông tin hữu ích".',
-      goals: ['Tăng độ tin tưởng', 'Định vị sản phẩm có cơ sở khoa học', 'Giảm rào cản giá cao'],
-      useCase: ['Supplement / health', 'Skincare có ingredient claim', 'Sản phẩm AOV cao cần trust'],
-      example: '"A new study found 80% of bloating cases trace back to gut bacteria imbalance."',
+      mechanism: 'Trích nghiên cứu / góc nhìn chuyên gia để tăng độ tin cậy. Giảm cảm giác "đây là quảng cáo", đẩy lên cảm giác "thông tin hữu ích".',
+      goals: ['Tăng độ tin tưởng', 'Định vị sản phẩm có cơ sở khoa học', 'Giảm rào cản với mức giá cao'],
+      useCase: ['Supplement / sức khoẻ', 'Skincare có công bố thành phần', 'Sản phẩm giá trị đơn hàng cao cần niềm tin'],
+      example: '"Nghiên cứu mới phát hiện 80% trường hợp đầy hơi là do mất cân bằng vi khuẩn đường ruột."',
     },
   },
   {
@@ -91,10 +91,10 @@ const CLASSIC_PRESETS: ScriptPreset[] = [
     ctaStyle: 'Helpful — "you should genuinely try it, it changed my routine."',
     proofStyle: 'Anecdotal — share the friend\'s observable result, not a stat.',
     detailVi: {
-      mechanism: 'Voice tone bạn-tới-bạn ("Bạn tôi giới thiệu cái này…"). Word-of-mouth là dạng social proof ấm và thuyết phục nhất.',
-      goals: ['Loại bỏ feel quảng cáo', 'Trust qua anecdote cá nhân', 'Conversion qua relatability'],
-      useCase: ['Beauty / wellness', 'Sản phẩm thường chia sẻ trong nhóm bạn', 'Female 20-35 audience'],
-      example: '"My friend kept raving about this thing, so I had to try it."',
+      mechanism: 'Giọng kể bạn-tới-bạn ("Bạn tôi giới thiệu cái này…"). Truyền miệng là dạng bằng chứng xã hội ấm và thuyết phục nhất.',
+      goals: ['Loại bỏ cảm giác quảng cáo', 'Tạo niềm tin qua câu chuyện cá nhân', 'Tăng chuyển đổi nhờ sự gần gũi'],
+      useCase: ['Beauty / wellness', 'Sản phẩm hay được chia sẻ trong nhóm bạn', 'Khán giả nữ 20-35'],
+      example: '"Đứa bạn cứ khen cái này hoài, mình đành phải thử."',
     },
   },
   {
@@ -109,10 +109,10 @@ const CLASSIC_PRESETS: ScriptPreset[] = [
     ctaStyle: 'Mystery-resolution — "tap to see the rest."',
     proofStyle: 'Insider framing — "I only found out because..."',
     detailVi: {
-      mechanism: 'Mở curiosity loop ("Không ai nói cho bạn điều này…"). Khiến khán giả cảm thấy mình "trong cuộc", phải xem hết để biết bí mật.',
-      goals: ['Tăng watch time qua tò mò', 'CTR cao do mystery', 'Reveal cuối → CTA'],
-      useCase: ['Sản phẩm có cơ chế lạ ít người biết', 'Niche cạnh tranh cao', 'Audience thích insider tips'],
-      example: '"The skincare industry doesn\'t want you to know about this ingredient."',
+      mechanism: 'Mở vòng tò mò ("Không ai nói cho bạn điều này…"). Khiến khán giả cảm thấy mình "trong cuộc", phải xem hết để biết bí mật.',
+      goals: ['Tăng thời gian xem nhờ sự tò mò', 'CTR cao nhờ yếu tố bí ẩn', 'Tiết lộ cuối → dẫn về CTA'],
+      useCase: ['Sản phẩm có cơ chế lạ, ít người biết', 'Ngành cạnh tranh cao', 'Khán giả thích mẹo "trong cuộc"'],
+      example: '"Có 1 điều ngành mỹ phẩm không muốn bạn biết về thành phần này…"',
     },
   },
   {
@@ -127,10 +127,10 @@ const CLASSIC_PRESETS: ScriptPreset[] = [
     ctaStyle: 'Implicit — "this is the one, no more searching."',
     proofStyle: 'Showing not telling. Describe the moment of using the product, not the result.',
     detailVi: {
-      mechanism: 'Dùng format POV native của TikTok ("POV: cuối cùng bạn cũng tìm được…"). Tận dụng meme rhythm sẵn có để blend vào feed tự nhiên.',
-      goals: ['Blend organic feed', 'High retention do format quen', 'Khuấy động discovery joy'],
-      useCase: ['Audience Gen Z / Millennial', 'TikTok organic + paid mix', 'Lifestyle / beauty product'],
-      example: '"POV: you finally found the moisturizer that actually works for oily skin."',
+      mechanism: 'Dùng định dạng POV thuần TikTok ("POV: cuối cùng bạn cũng tìm được…"). Tận dụng nhịp meme có sẵn để hoà vào feed một cách tự nhiên.',
+      goals: ['Hoà vào dòng feed organic', 'Giữ chân người xem nhờ định dạng quen thuộc', 'Khơi gợi cảm giác "tìm được rồi"'],
+      useCase: ['Khán giả Gen Z / Millennial', 'TikTok organic + chạy quảng cáo', 'Sản phẩm lifestyle / beauty'],
+      example: '"POV: cuối cùng cũng tìm được kem dưỡng dành cho da dầu thật sự dùng được."',
     },
   },
   {
@@ -145,10 +145,10 @@ const CLASSIC_PRESETS: ScriptPreset[] = [
     ctaStyle: 'Honest — "honestly, I\'d recommend it."',
     proofStyle: 'Personal timeline review with at least one specific observed change.',
     detailVi: {
-      mechanism: 'Review có thời gian cụ thể ("Sau 7 ngày…"). Tin tưởng đến từ kết quả cá nhân quan sát được, không phải hứa hẹn lớn.',
-      goals: ['Earned credibility', 'Set expectation realistic', 'Reduce skepticism'],
-      useCase: ['Sản phẩm cần thời gian thấy kết quả', 'AOV trung-cao', 'Audience scrutiny cao'],
-      example: '"After 14 days using this serum, here\'s what genuinely changed."',
+      mechanism: 'Review có mốc thời gian cụ thể ("Sau 7 ngày…"). Tin tưởng đến từ kết quả cá nhân quan sát được, không phải hứa hẹn lớn lao.',
+      goals: ['Tạo uy tín bằng trải nghiệm thật', 'Đặt kỳ vọng thực tế cho người mua', 'Giảm sự hoài nghi'],
+      useCase: ['Sản phẩm cần thời gian thấy kết quả', 'Giá trị đơn hàng trung-cao', 'Khán giả kỹ tính, hay so sánh'],
+      example: '"Sau 14 ngày dùng serum này, đây là những gì thật sự đã thay đổi."',
     },
   },
   {
@@ -163,10 +163,10 @@ const CLASSIC_PRESETS: ScriptPreset[] = [
     ctaStyle: 'Light — "everything\'s linked in bio."',
     proofStyle: 'Aesthetic and lifestyle integration — the product belongs in the world the creator is showing.',
     detailVi: {
-      mechanism: 'Aspirational lifestyle entry — sản phẩm xuất hiện tự nhiên trong morning routine. Không bán, chỉ show — khán giả tự muốn join lifestyle đó.',
-      goals: ['Lifestyle envy / belonging', 'Soft CTA, top-of-funnel', 'Brand association mềm'],
-      useCase: ['Premium / aesthetic product', 'Female lifestyle audience', 'Awareness / branding'],
-      example: '"My morning routine — coffee, sunlight, and this little ritual."',
+      mechanism: 'Mở đầu kiểu lifestyle khát vọng — sản phẩm xuất hiện tự nhiên trong morning routine. Không bán, chỉ show — khán giả tự muốn join lifestyle đó.',
+      goals: ['Tạo cảm giác "muốn có cuộc sống như vậy"', 'CTA mềm, dành cho top-of-funnel', 'Gắn thương hiệu vào lối sống mong muốn'],
+      useCase: ['Sản phẩm cao cấp / thẩm mỹ', 'Khán giả nữ thích lifestyle', 'Giai đoạn nhận diện thương hiệu'],
+      example: '"Morning routine của mình — cà phê, nắng sớm, và 1 nghi thức nhỏ này."',
     },
   },
   {
@@ -181,10 +181,10 @@ const CLASSIC_PRESETS: ScriptPreset[] = [
     ctaStyle: 'Direct — "try the switch, you won\'t go back."',
     proofStyle: 'Side-by-side comparison logic with one clearly better attribute.',
     detailVi: {
-      mechanism: 'Switch story ("Tôi bỏ X vì…"). Định vị sản phẩm là lựa chọn thông minh, khán giả cảm thấy mình informed khi follow.',
-      goals: ['Position vs. category leader', 'Trigger consideration', 'Audience cảm thấy upgrade'],
-      useCase: ['Category đông đối thủ', 'Sản phẩm có USP rõ ràng', 'Re-targeting / mid-funnel'],
-      example: '"I switched from my $80 cream to this — and never looked back."',
+      mechanism: 'Câu chuyện đổi sản phẩm ("Tôi bỏ X vì…"). Định vị sản phẩm là lựa chọn thông minh — khán giả cảm thấy mình hiểu biết khi mua theo.',
+      goals: ['Đối đầu trực tiếp với sản phẩm dẫn đầu ngành', 'Kích hoạt sự cân nhắc đổi sản phẩm', 'Cho khán giả cảm giác "đang nâng cấp"'],
+      useCase: ['Ngành đông đối thủ', 'Sản phẩm có USP rõ ràng', 'Re-targeting / mid-funnel'],
+      example: '"Mình bỏ chai kem 2 triệu để đổi sang cái này — và không hề hối hận."',
     },
   },
   {
@@ -199,10 +199,10 @@ const CLASSIC_PRESETS: ScriptPreset[] = [
     ctaStyle: 'Gentle — "if you feel this too, this helped me."',
     proofStyle: 'Personal narrative arc — a specific emotional turning point, not a stat.',
     detailVi: {
-      mechanism: 'Vulnerability open ("Tôi đã mất tự tin vì…"). Tạo đồng cảm sâu, slow burn từ tổn thương đến relief.',
-      goals: ['Deep empathy', 'Long-form retention', 'Brand love / loyalty'],
-      useCase: ['Sản phẩm liên quan tự tin (skin, hair, body)', 'Audience từng tổn thương', 'Female 25-45'],
-      example: '"I stopped going out for two years because of my skin."',
+      mechanism: 'Mở đầu bằng sự yếu đuối ("Tôi đã mất tự tin vì…"). Tạo đồng cảm sâu, slow-burn từ tổn thương đến giải thoát.',
+      goals: ['Tạo đồng cảm rất sâu', 'Giữ chân người xem cho video dài', 'Xây dựng tình cảm với thương hiệu'],
+      useCase: ['Sản phẩm liên quan tự tin (da, tóc, body)', 'Khán giả từng tổn thương về ngoại hình', 'Khán giả nữ 25-45'],
+      example: '"Mình từng không dám ra ngoài suốt 2 năm vì da mặt."',
     },
   },
   {
@@ -217,10 +217,10 @@ const CLASSIC_PRESETS: ScriptPreset[] = [
     ctaStyle: 'Hard — "tap the link now, link in bio."',
     proofStyle: 'Skip proof — go straight to CTA. The match-to-pain is the proof.',
     detailVi: {
-      mechanism: 'Match-to-pain câu đầu, đẩy thẳng CTA — không proof, không story. Conversion speed-run cho audience đã warm.',
-      goals: ['Max CTR ở short-form', 'Bottom-funnel re-target', 'Direct response thuần'],
-      useCase: ['Re-targeting audience đã từng tương tác', 'Flash sale / urgency offer', 'Đã có proof từ ads upstream'],
-      example: '"If you have bloating, you NEED to see this — link in bio."',
+      mechanism: 'Câu đầu khớp đúng nỗi đau, đẩy thẳng CTA — không kể chuyện, không proof. Chốt đơn nhanh cho khán giả đã warm.',
+      goals: ['CTR tối đa cho video ngắn', 'Re-target khán giả ở đáy phễu', 'Phản hồi trực tiếp, không vòng vo'],
+      useCase: ['Re-targeting khán giả đã từng tương tác', 'Flash sale / khuyến mãi gấp', 'Đã có bằng chứng từ quảng cáo phía trước'],
+      example: '"Nếu bạn đang bị đầy hơi, bạn BẮT BUỘC phải xem cái này — link in bio."',
     },
   },
   {
@@ -235,10 +235,10 @@ const CLASSIC_PRESETS: ScriptPreset[] = [
     ctaStyle: 'Casual — "go check it out, link in bio."',
     proofStyle: 'Off-the-cuff anecdote — sound like the creator is just remembering it.',
     detailVi: {
-      mechanism: 'Như video selfie thật, hơi rambling ("Guys I just have to talk about this…"). Loại bỏ feel quảng cáo, tăng cảm giác chân thật.',
-      goals: ['Authenticity tối đa', 'Blend native feed', 'Conversion qua trust'],
-      useCase: ['TikTok organic posting', 'Whitelisted creator ads', 'Audience cảnh giác với ads'],
-      example: '"Ok guys wait — I just discovered something and I can\'t stop thinking about it."',
+      mechanism: 'Giống video selfie thật, hơi lan man ("Ê mọi người, mình phải kể cái này…"). Loại bỏ cảm giác quảng cáo, tăng sự chân thật.',
+      goals: ['Cảm giác chân thật tối đa', 'Hoà vào dòng feed tự nhiên', 'Tăng chuyển đổi nhờ tin tưởng'],
+      useCase: ['TikTok organic', 'Quảng cáo creator whitelisted', 'Khán giả đã cảnh giác với quảng cáo'],
+      example: '"Ê khoan — mình vừa phát hiện cái này mà cứ nghĩ hoài không thôi được."',
     },
   },
   {
@@ -253,10 +253,10 @@ const CLASSIC_PRESETS: ScriptPreset[] = [
     ctaStyle: 'Twist — "still curious? tap the link."',
     proofStyle: 'Counter-intuitive reveal — the explanation flips the assumption.',
     detailVi: {
-      mechanism: 'Câu mở đầu lạ / trái kỳ vọng ("Đừng mua sản phẩm này nếu…"). Hand-grenade hook chặn scroll — giải thích NGAY sau cú nổ.',
-      goals: ['Max stop-scroll 3s đầu', 'Tăng CTR mạnh', 'Stand out trên feed dày đặc'],
-      useCase: ['Cold traffic khó approach', 'Audience đã "banner blindness"', 'Brand mới cần break-in'],
-      example: '"Don\'t buy this serum if you actually like clear skin overnight."',
+      mechanism: 'Câu mở đầu lạ / trái kỳ vọng ("Đừng mua sản phẩm này nếu…"). Hook nổ như lựu đạn để chặn scroll — giải thích NGAY sau cú nổ.',
+      goals: ['Chặn scroll tối đa trong 3 giây đầu', 'Tăng CTR mạnh', 'Nổi bật trên feed dày đặc quảng cáo'],
+      useCase: ['Cold traffic khó tiếp cận', 'Khán giả đã "miễn dịch" với quảng cáo', 'Thương hiệu mới cần phá vỡ rào cản'],
+      example: '"Đừng mua serum này nếu bạn thật sự thích da sáng sau 1 đêm."',
     },
   },
   {
@@ -271,10 +271,10 @@ const CLASSIC_PRESETS: ScriptPreset[] = [
     ctaStyle: 'Confident — "join them, tap the link."',
     proofStyle: 'Numbers, ratings, and mass adoption signals.',
     detailVi: {
-      mechanism: 'Dẫn số liệu lớn ("10,000+ người đã chuyển sang…"). Bandwagon trigger + FOMO — khán giả cảm thấy mình đang chậm chân.',
-      goals: ['Social proof at scale', 'Bandwagon + FOMO', 'Trust qua mass adoption'],
-      useCase: ['Brand đã có volume sale', 'Re-launch / scaling phase', 'Niche trust-driven'],
-      example: '"10,000+ Malaysians already switched to this gut formula — here\'s why."',
+      mechanism: 'Dẫn số liệu lớn ("10,000+ người đã chuyển sang…"). Kích hoạt tâm lý đám đông + FOMO — khán giả cảm thấy mình đang chậm chân.',
+      goals: ['Bằng chứng xã hội ở quy mô lớn', 'Tâm lý đám đông + FOMO', 'Niềm tin nhờ nhiều người đã dùng'],
+      useCase: ['Thương hiệu đã có lượng đơn hàng lớn', 'Giai đoạn re-launch / scale', 'Ngành dựa vào niềm tin'],
+      example: '"Hơn 10,000 người Malaysia đã chuyển sang công thức này — đây là lý do."',
     },
   },
 ]
@@ -298,10 +298,10 @@ const EDUCATIONAL_PRESETS: ScriptPreset[] = [
     ctaStyle: 'Educational — "now that you know, here\'s where to find it."',
     proofStyle: 'Plain-language ingredient explanation. No medical jargon. Compare to something familiar.',
     detailVi: {
-      mechanism: 'Giáo dục về ingredient ("Ít người biết thật sự X làm gì"). Bạn-tới-bạn explain, không lecture — khán giả ra về thấy mình thông minh hơn.',
-      goals: ['Empowered understanding', 'Trust qua kiến thức', 'Justify giá / chất lượng cao'],
-      useCase: ['Sản phẩm có ingredient đặc biệt', 'Audience research kỹ trước khi mua', 'Health / skincare / supplement'],
-      example: '"Most people don\'t actually know what inulin does — let me explain."',
+      mechanism: 'Giáo dục về thành phần ("Ít người biết thật sự X làm gì"). Giải thích kiểu bạn-tới-bạn, không lên lớp — khán giả ra về cảm thấy mình thông minh hơn.',
+      goals: ['Cảm giác được trao kiến thức', 'Niềm tin nhờ hiểu rõ', 'Hợp lý hoá mức giá cao'],
+      useCase: ['Sản phẩm có thành phần đặc biệt', 'Khán giả nghiên cứu kỹ trước khi mua', 'Sức khoẻ / skincare / supplement'],
+      example: '"Mọi người ít ai biết Inulin thật sự làm gì — để mình giải thích nhé."',
     },
   },
   {
@@ -316,10 +316,10 @@ const EDUCATIONAL_PRESETS: ScriptPreset[] = [
     ctaStyle: 'Soft — "now you know how to fix it."',
     proofStyle: 'Cause-effect mechanism explained in plain creator language.',
     detailVi: {
-      mechanism: 'Mechanism-first ("Sự thật là vấn đề này xảy ra vì…"). Giải thích cause-effect bằng ngôn ngữ tự nhiên, không jargon y học.',
-      goals: ['Hiểu root cause', 'Trust qua insight', 'Reduce confusion về vấn đề'],
-      useCase: ['Health niche có nhiều myth', 'Audience đang confused về cause', 'Advertorial style'],
-      example: '"Actually, bloating often happens because your gut bacteria is out of balance."',
+      mechanism: 'Đi thẳng vào cơ chế ("Sự thật là vấn đề này xảy ra vì…"). Giải thích nguyên nhân-kết quả bằng ngôn ngữ đời thường, không dùng thuật ngữ y học.',
+      goals: ['Hiểu được nguyên nhân gốc', 'Niềm tin nhờ nhận thức mới', 'Giảm sự bối rối về vấn đề'],
+      useCase: ['Ngành sức khoẻ có nhiều quan niệm sai', 'Khán giả đang bối rối về nguyên nhân', 'Phong cách advertorial'],
+      example: '"Thật ra, đầy hơi thường xảy ra vì hệ vi khuẩn đường ruột mất cân bằng."',
     },
   },
   {
@@ -334,10 +334,10 @@ const EDUCATIONAL_PRESETS: ScriptPreset[] = [
     ctaStyle: 'Reasoned — "now you understand why this works."',
     proofStyle: 'Step-by-step mechanism with the key ingredient(s) named at each step.',
     detailVi: {
-      mechanism: 'Step-by-step breakdown ("Sản phẩm này hoạt động ra sao? Để mình giải thích…"). Mỗi bước ngắn, link logic rõ ràng.',
-      goals: ['Logical confidence', 'Justify mechanism của sản phẩm', 'Educate audience kỹ tính'],
-      useCase: ['Sản phẩm có cơ chế unique', 'Audience trung niên / older', 'AOV cao'],
-      example: '"Here\'s how this actually works — first, the probiotic strains attach to..."',
+      mechanism: 'Giải thích từng bước ("Sản phẩm này hoạt động ra sao? Để mình giải thích…"). Mỗi bước ngắn, logic liền mạch.',
+      goals: ['Tạo sự tự tin nhờ logic', 'Hợp lý hoá cơ chế của sản phẩm', 'Giáo dục khán giả kỹ tính'],
+      useCase: ['Sản phẩm có cơ chế độc đáo', 'Khán giả trung niên / lớn tuổi', 'Giá trị đơn hàng cao'],
+      example: '"Đây là cách nó hoạt động — đầu tiên, các chủng lợi khuẩn bám vào…"',
     },
   },
   {
@@ -352,10 +352,10 @@ const EDUCATIONAL_PRESETS: ScriptPreset[] = [
     ctaStyle: 'Smart choice — "the one that actually works is the one in the link."',
     proofStyle: 'Category vs. specific product — contrast the generic vs. this specific formula.',
     detailVi: {
-      mechanism: 'Bust myth ("Không phải probiotic nào cũng giống nhau"). Định vị sản phẩm khác biệt hẳn category — khán giả cảm thấy "informed buyer".',
-      goals: ['Informed superiority', 'Differentiation rõ', 'Smart-choice trigger'],
-      useCase: ['Category bị commoditize', 'Có USP technical rõ ràng', 'Audience đã "ngán" category'],
-      example: '"Not all probiotics are the same — most don\'t even survive your stomach acid."',
+      mechanism: 'Phá bỏ niềm tin sai phổ biến ("Không phải probiotic nào cũng giống nhau"). Định vị sản phẩm khác hẳn ngành — khán giả thấy mình là "người mua hiểu biết".',
+      goals: ['Cảm giác "mình biết nhiều hơn người khác"', 'Phân biệt sản phẩm rõ ràng', 'Kích hoạt lựa chọn thông minh'],
+      useCase: ['Ngành bị thương mại hoá tràn lan', 'Có USP kỹ thuật rõ', 'Khán giả đã ngán ngành hàng'],
+      example: '"Không phải probiotic nào cũng giống nhau — đa phần không sống nổi qua axit dạ dày."',
     },
   },
   {
@@ -370,10 +370,10 @@ const EDUCATIONAL_PRESETS: ScriptPreset[] = [
     ctaStyle: 'Solution-pointed — "this is the only one that addresses the real cause."',
     proofStyle: 'Root-cause logic linking the unexpected mechanism to the visible symptom.',
     detailVi: {
-      mechanism: 'Reveal nguyên nhân thật ("Punca sebenar không phải cái bạn nghĩ"). Surprise → relief → solution. Giải thích vì sao các solution cũ thất bại.',
-      goals: ['Reframe problem', 'Justify vì sao solution khác fail', 'Position sản phẩm là "only one that works"'],
-      useCase: ['Audience đã thử nhiều thứ không work', 'Niche complex problem', 'Advertorial dài 45-60s'],
-      example: '"The real cause of your skin breakouts isn\'t what you think — it\'s deeper."',
+      mechanism: 'Tiết lộ nguyên nhân thật ("Nguyên nhân thật sự không phải cái bạn nghĩ"). Bất ngờ → nhẹ nhõm → giải pháp. Giải thích vì sao các giải pháp cũ thất bại.',
+      goals: ['Định nghĩa lại vấn đề', 'Lý giải vì sao các giải pháp khác thất bại', 'Định vị sản phẩm là "duy nhất hoạt động được"'],
+      useCase: ['Khán giả đã thử nhiều thứ không hiệu quả', 'Vấn đề phức tạp trong ngành', 'Advertorial dài 45-60 giây'],
+      example: '"Nguyên nhân thật sự khiến da bạn bị nổi mụn không phải cái bạn nghĩ — nó sâu hơn nhiều."',
     },
   },
   {
@@ -388,10 +388,10 @@ const EDUCATIONAL_PRESETS: ScriptPreset[] = [
     ctaStyle: 'Specific — "look for X on the label, this product has it."',
     proofStyle: 'Single ingredient deep proof — origin, mechanism, and observable effect.',
     detailVi: {
-      mechanism: 'Deep-dive 1 hero ingredient ("X là ingredient đang thay đổi mọi thứ"). Focus = clarity = ấn tượng sâu.',
-      goals: ['Brand-it ingredient', 'Justify uniqueness của sản phẩm', 'Curiosity sâu về 1 yếu tố'],
-      useCase: ['Sản phẩm có hero ingredient mạnh', 'Trend ingredient marketing (NMN, peptide, …)', 'Niche audience'],
-      example: '"Inulin is the ingredient quietly changing how we treat bloating."',
+      mechanism: 'Đi sâu vào 1 thành phần ngôi sao ("X là thành phần đang thay đổi mọi thứ"). Tập trung = rõ ràng = ấn tượng sâu.',
+      goals: ['Xây thương hiệu cho 1 thành phần', 'Hợp lý hoá sự độc đáo của sản phẩm', 'Khơi gợi tò mò sâu về 1 yếu tố'],
+      useCase: ['Sản phẩm có thành phần ngôi sao mạnh', 'Xu hướng thành phần đang lên (NMN, peptide, …)', 'Khán giả niche'],
+      example: '"Inulin là thành phần đang âm thầm thay đổi cách chúng ta xử lý đầy hơi."',
     },
   },
   {
@@ -406,10 +406,10 @@ const EDUCATIONAL_PRESETS: ScriptPreset[] = [
     ctaStyle: 'Recommendation — "honestly, I\'d try it after reading this."',
     proofStyle: 'Creator-reported research distilled into one or two plain takeaways.',
     detailVi: {
-      mechanism: 'Creator-as-researcher ("Tôi đọc một nghiên cứu…"). Mix authority + creator voice — research được "dịch" thành ngôn ngữ TikTok.',
-      goals: ['Smart-creator authority', 'Trust qua casual research', 'Educational nhưng vẫn relatable'],
-      useCase: ['Audience tin creator hơn brand', 'Health / supplement / longevity', 'Advertorial casual'],
-      example: '"I read a study about gut health last week — and I had to share this."',
+      mechanism: 'Creator-vai-nhà-nghiên-cứu ("Tôi đọc một nghiên cứu…"). Kết hợp uy quyền + giọng creator — nghiên cứu được "dịch" sang ngôn ngữ TikTok.',
+      goals: ['Uy quyền kiểu creator thông minh', 'Niềm tin qua nghiên cứu kiểu thân thiện', 'Vừa giáo dục vừa gần gũi'],
+      useCase: ['Khán giả tin creator hơn thương hiệu', 'Sức khoẻ / supplement / chống lão hoá', 'Advertorial nhẹ nhàng'],
+      example: '"Tuần trước mình đọc 1 nghiên cứu về sức khoẻ đường ruột — phải chia sẻ liền."',
     },
   },
 ]

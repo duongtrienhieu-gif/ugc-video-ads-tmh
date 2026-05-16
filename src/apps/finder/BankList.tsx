@@ -1,9 +1,11 @@
 ﻿import { useState } from 'react'
-import { Trash2, Package, UserRound, FileText, Mic, Film, Plus, Braces, Video, Download, Sparkles, Layers, ArrowLeft } from 'lucide-react'
+import { Trash2, Package, UserRound, FileText, Mic, Film, Plus, Braces, Video, Download, Sparkles, Layers, ArrowLeft, Megaphone, Copy, Check, Pencil, Search } from 'lucide-react'
 import type { Product, Model, Script, VoicePreset, BRoll, AvatarVariant } from '../../stores/types'
 import type { BankType } from '../../utils/constants'
 import { useBankStore } from '../../stores/bankStore'
 import { useAssetUrl } from '../../hooks/useAssetUrl'
+import { useAdsContentStore } from '../ads-content/store'
+import type { SavedAdsContent } from '../ads-content/types'
 import VariantsModal from './VariantsModal'
 
 interface BankListProps {
@@ -437,7 +439,11 @@ export default function BankList({ bankType, onEdit, onAdd }: BankListProps) {
     )
   }
 
-  // brolls
+  if (bankType === 'adsContent') {
+    return <AdsContentBankList onAdd={onAdd} />
+  }
+
+  // brolls (default)
   if (brolls.length === 0) return <EmptyState icon={Film} label="Product AI" onAdd={onAdd} />
   return (
     <div className="columns-2 sm:columns-3 md:columns-4 lg:columns-6 xl:columns-7 gap-2.5">
@@ -446,6 +452,208 @@ export default function BankList({ bankType, onEdit, onAdd }: BankListProps) {
           <BRollCard item={b} onEdit={() => onEdit(b.id)} onDelete={() => deleteBRoll(b.id)} />
         </div>
       ))}
+    </div>
+  )
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Ads Content bank — reads from local Zustand persist store (NOT bankStore).
+// Items are created inside the Ads Content app via "Lưu vào Project".
+// This view renders preview + copy + edit-title + delete + search.
+// ─────────────────────────────────────────────────────────────────────────
+
+function AdsContentBankList({ onAdd }: { onAdd: () => void }) {
+  const items = useAdsContentStore((s) => s.items)
+  const remove = useAdsContentStore((s) => s.remove)
+  const updateTitle = useAdsContentStore((s) => s.updateTitle)
+  const [query, setQuery] = useState('')
+
+  const filtered = items.filter((it) => {
+    if (!query.trim()) return true
+    const q = query.trim().toLowerCase()
+    return (
+      it.title.toLowerCase().includes(q) ||
+      it.productName.toLowerCase().includes(q) ||
+      it.presetLabel.toLowerCase().includes(q) ||
+      it.platformLabel.toLowerCase().includes(q) ||
+      it.vietnamese.toLowerCase().includes(q) ||
+      it.malay.toLowerCase().includes(q)
+    )
+  })
+
+  if (items.length === 0) return <EmptyState icon={Megaphone} label="Ads Content" onAdd={onAdd} />
+
+  return (
+    <div className="flex flex-col gap-3">
+      {/* Search */}
+      <div className="relative">
+        <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-gray-400" />
+        <input
+          type="text"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Tìm theo tên, sản phẩm, preset, nội dung..."
+          className="w-full rounded-lg border border-black/10 bg-white py-2 pl-9 pr-3 text-xs text-gray-800 placeholder-gray-400 outline-none focus:border-pink-500/40"
+        />
+      </div>
+
+      {filtered.length === 0 ? (
+        <p className="py-12 text-center text-xs text-gray-400">Không tìm thấy kết quả cho "{query}"</p>
+      ) : (
+        <div className="flex flex-col gap-2">
+          {filtered.map((it) => (
+            <AdsContentCard
+              key={it.id}
+              item={it}
+              onRemove={() => remove(it.id)}
+              onUpdateTitle={(newTitle) => updateTitle(it.id, newTitle)}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function AdsContentCard({
+  item, onRemove, onUpdateTitle,
+}: {
+  item: SavedAdsContent
+  onRemove: () => void
+  onUpdateTitle: (t: string) => void
+}) {
+  const [expanded, setExpanded] = useState(false)
+  const [editing, setEditing] = useState(false)
+  const [draftTitle, setDraftTitle] = useState(item.title)
+  const [confirmDelete, setConfirmDelete] = useState(false)
+  const [copiedField, setCopiedField] = useState<'vn' | 'my' | null>(null)
+
+  const handleCopy = async (field: 'vn' | 'my') => {
+    const text = field === 'vn' ? item.vietnamese : item.malay
+    try {
+      await navigator.clipboard.writeText(text)
+      setCopiedField(field)
+      setTimeout(() => setCopiedField(null), 1600)
+    } catch { /* silent */ }
+  }
+
+  const handleSaveTitle = () => {
+    const t = draftTitle.trim()
+    if (t && t !== item.title) onUpdateTitle(t.slice(0, 160))
+    setEditing(false)
+  }
+
+  return (
+    <div className="rounded-xl border border-black/10 bg-white overflow-hidden">
+      {/* Header row */}
+      <div className="flex items-center gap-2 px-3 py-2 hover:bg-black/[0.02]">
+        <span className="text-base">{item.presetGlyph}</span>
+        <div className="min-w-0 flex-1">
+          {editing ? (
+            <div className="flex items-center gap-1">
+              <input
+                value={draftTitle}
+                onChange={(e) => setDraftTitle(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') handleSaveTitle()
+                  if (e.key === 'Escape') { setEditing(false); setDraftTitle(item.title) }
+                }}
+                autoFocus
+                className="flex-1 rounded border border-pink-300 bg-white px-2 py-1 text-xs text-gray-800 outline-none focus:border-pink-500"
+              />
+              <button onClick={handleSaveTitle} className="rounded bg-pink-600 px-2 py-1 text-[10px] font-semibold text-white hover:bg-pink-700">
+                Lưu
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={() => setExpanded((v) => !v)}
+              className="block w-full text-left"
+            >
+              <p className="truncate text-xs font-semibold text-gray-800">{item.title}</p>
+              <p className="truncate text-[10px] text-gray-400">
+                {item.platformLabel} · {item.presetLabel} · {new Date(item.createdAt).toLocaleString('vi-VN', { dateStyle: 'short', timeStyle: 'short' })}
+              </p>
+            </button>
+          )}
+        </div>
+        {!editing && (
+          <>
+            <button
+              onClick={() => setEditing(true)}
+              title="Đổi tên"
+              className="rounded-md p-1 text-gray-400 hover:bg-black/[0.04] hover:text-gray-700"
+            >
+              <Pencil className="h-3.5 w-3.5" />
+            </button>
+            {confirmDelete ? (
+              <ConfirmDelete onConfirm={() => { onRemove(); setConfirmDelete(false) }} onCancel={() => setConfirmDelete(false)} />
+            ) : (
+              <button
+                onClick={() => setConfirmDelete(true)}
+                title="Xoá"
+                className="rounded-md p-1 text-gray-400 hover:bg-red-50 hover:text-red-600"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+              </button>
+            )}
+          </>
+        )}
+      </div>
+
+      {/* Expanded preview */}
+      {expanded && !editing && (
+        <div className="grid grid-cols-1 gap-2 border-t border-black/8 bg-gray-50/40 p-3 lg:grid-cols-2">
+          <PreviewBlock
+            flag="🇻🇳"
+            label="Vietnamese"
+            text={item.vietnamese}
+            copied={copiedField === 'vn'}
+            onCopy={() => handleCopy('vn')}
+          />
+          <PreviewBlock
+            flag="🇲🇾"
+            label="Bahasa Melayu"
+            text={item.malay}
+            copied={copiedField === 'my'}
+            onCopy={() => handleCopy('my')}
+          />
+        </div>
+      )}
+    </div>
+  )
+}
+
+function PreviewBlock({
+  flag, label, text, copied, onCopy,
+}: {
+  flag: string
+  label: string
+  text: string
+  copied: boolean
+  onCopy: () => void
+}) {
+  return (
+    <div className="rounded-lg border border-black/8 bg-white overflow-hidden">
+      <div className="flex items-center justify-between border-b border-black/8 bg-gray-50/60 px-2.5 py-1">
+        <span className="text-[10px] font-bold uppercase tracking-widest text-gray-600">
+          {flag} {label}
+        </span>
+        <button
+          onClick={onCopy}
+          className={`flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-[10px] font-medium transition-colors ${
+            copied
+              ? 'border-emerald-300 bg-emerald-50 text-emerald-700'
+              : 'border-black/10 bg-white text-gray-600 hover:bg-black/[0.03]'
+          }`}
+        >
+          {copied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+          {copied ? 'Đã chép' : 'Chép'}
+        </button>
+      </div>
+      <div className="max-h-64 overflow-y-auto p-2.5">
+        <p className="whitespace-pre-wrap text-[12px] leading-relaxed text-gray-800">{text}</p>
+      </div>
     </div>
   )
 }

@@ -1,7 +1,8 @@
 ﻿import { useState, useEffect, useCallback } from 'react'
-import { Plus, Package, UserRound, FileText, Mic, Film } from 'lucide-react'
+import { Plus, Package, UserRound, FileText, Mic, Film, Megaphone } from 'lucide-react'
 import { useAppStore } from '../../stores/appStore'
 import { useBankStore } from '../../stores/bankStore'
+import { useAdsContentStore } from '../ads-content/store'
 import type { BankType } from '../../utils/constants'
 import { BANK_CONFIG } from '../../utils/constants'
 import type { Product, Model, Script, VoicePreset, BRoll } from '../../stores/types'
@@ -19,9 +20,10 @@ const SIDEBAR_ICONS: Record<BankType, React.ElementType> = {
   scripts: FileText,
   voices: Mic,
   brolls: Film,
+  adsContent: Megaphone,
 }
 
-const BANK_TYPES: BankType[] = ['products', 'models', 'scripts', 'voices', 'brolls']
+const BANK_TYPES: BankType[] = ['products', 'models', 'scripts', 'voices', 'brolls', 'adsContent']
 
 export default function Finder() {
   const [activeBank, setActiveBank] = useState<BankType>('products')
@@ -36,6 +38,9 @@ export default function Finder() {
   const scripts = useBankStore((s) => s.scripts)
   const voices = useBankStore((s) => s.voices)
   const brolls = useBankStore((s) => s.brolls)
+  // Ads Content uses a local Zustand persist store (NOT bankStore) — the
+  // ads_content Supabase table isn't provisioned yet.
+  const adsContentItems = useAdsContentStore((s) => s.items)
   const addProduct = useBankStore((s) => s.addProduct)
   const updateProduct = useBankStore((s) => s.updateProduct)
   const addModel = useBankStore((s) => s.addModel)
@@ -64,9 +69,18 @@ export default function Finder() {
     scripts: scripts.length,
     voices: voices.length,
     brolls: brolls.length,
+    adsContent: adsContentItems.length,
   }
 
+  const openApp = useAppStore((s) => s.openApp)
+
   const handleAdd = () => {
+    // Ads Content items are created inside the Ads Content app, not via a
+    // Finder form. The Add button there acts as a shortcut to open that app.
+    if (activeBank === 'adsContent') {
+      openApp('ads-content')
+      return
+    }
     setEditingId(null)
     setShowForm(true)
   }

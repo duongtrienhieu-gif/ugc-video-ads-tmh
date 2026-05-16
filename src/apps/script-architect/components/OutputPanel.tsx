@@ -16,16 +16,16 @@ interface OutputPanelProps {
 export default function OutputPanel({
   result, productId, productName, isGenerating, onRegenerate,
 }: OutputPanelProps) {
-  const [copied, setCopied] = useState<'english' | 'malay' | null>(null)
+  const [copied, setCopied] = useState<'vietnamese' | 'malay' | null>(null)
   const [saved, setSaved] = useState(false)
   const [savedTitle, setSavedTitle] = useState('')
 
   const addScript = useBankStore((s) => s.addScript)
   const addToast  = useAppStore((s) => s.addToast)
 
-  const handleCopy = async (which: 'english' | 'malay') => {
+  const handleCopy = async (which: 'vietnamese' | 'malay') => {
     if (!result) return
-    const text = which === 'english' ? result.english : result.malay
+    const text = which === 'vietnamese' ? result.vietnamese : result.malay
     try {
       await navigator.clipboard.writeText(text)
       setCopied(which)
@@ -111,11 +111,11 @@ export default function OutputPanel({
       {/* 2 boxes side-by-side */}
       <div className="grid min-h-0 flex-1 grid-cols-1 gap-3 overflow-y-auto p-4 lg:grid-cols-2">
         <ScriptBox
-          flag="🇬🇧"
-          label="English voice-over"
-          text={result.english}
-          copied={copied === 'english'}
-          onCopy={() => handleCopy('english')}
+          flag="🇻🇳"
+          label="Vietnamese script"
+          text={result.vietnamese}
+          copied={copied === 'vietnamese'}
+          onCopy={() => handleCopy('vietnamese')}
         />
         <ScriptBox
           flag="🇲🇾"
