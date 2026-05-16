@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { X, Eye, EyeOff, Key, Check, HardDrive, RefreshCw } from 'lucide-react'
+import { X, Eye, EyeOff, Key, Check, HardDrive, RefreshCw, ChevronDown, ExternalLink } from 'lucide-react'
 import { useSettingsStore } from '../stores/settingsStore'
 import { useAppStore } from '../stores/appStore'
 import { useBankStore } from '../stores/bankStore'
@@ -13,159 +13,234 @@ interface SettingsModalProps {
   onClose: () => void
 }
 
+// ── Types ─────────────────────────────────────────────────────────────────────
+
+type SectionId = 'kie' | 'gemini' | 'eleven' | 'fal' | 'shotstack'
+
+interface ServiceConfig {
+  id: SectionId
+  label: string
+  sublabel: string
+  color: string        // dot + accent color class
+  borderColor: string
+  bgColor: string
+  keyHint: string
+  placeholder: string
+  getKeyUrl: string
+  getKeyLabel: string
+}
+
+const SERVICES: ServiceConfig[] = [
+  {
+    id: 'kie',
+    label: 'KIE.AI',
+    sublabel: 'Tạo ảnh · Video · Kịch bản',
+    color: 'indigo',
+    borderColor: 'border-indigo-200',
+    bgColor: 'bg-indigo-50',
+    keyHint: 'Định dạng: SK-...',
+    placeholder: 'SK-...',
+    getKeyUrl: 'https://kie.ai',
+    getKeyLabel: 'Lấy key →',
+  },
+  {
+    id: 'gemini',
+    label: 'Google Gemini',
+    sublabel: 'Phân tích QC · Image DNA · Kịch bản AI',
+    color: 'emerald',
+    borderColor: 'border-emerald-200',
+    bgColor: 'bg-emerald-50',
+    keyHint: 'Miễn phí · Dùng để phân tích ảnh và tạo kịch bản',
+    placeholder: 'AIza...',
+    getKeyUrl: 'https://aistudio.google.com/app/apikey',
+    getKeyLabel: 'Lấy key miễn phí →',
+  },
+  {
+    id: 'eleven',
+    label: 'ElevenLabs',
+    sublabel: 'Giọng đọc · Voice Cloning · Dịch video',
+    color: 'violet',
+    borderColor: 'border-violet-200',
+    bgColor: 'bg-violet-50',
+    keyHint: 'Hỗ trợ clone giọng · model eleven_multilingual_v2',
+    placeholder: 'sk_...',
+    getKeyUrl: 'https://elevenlabs.io/app/settings/api-keys',
+    getKeyLabel: 'Lấy key →',
+  },
+  {
+    id: 'fal',
+    label: 'fal.ai',
+    sublabel: 'Lip-sync video · Xóa nền · Auto captions',
+    color: 'pink',
+    borderColor: 'border-pink-200',
+    bgColor: 'bg-pink-50',
+    keyHint: '~$0.005/s · Video-to-video lip-sync giữ nguyên cảnh gốc',
+    placeholder: 'fal-...',
+    getKeyUrl: 'https://fal.ai/dashboard/keys',
+    getKeyLabel: 'Lấy key →',
+  },
+  {
+    id: 'shotstack',
+    label: 'Shotstack',
+    sublabel: 'Ghép video · Overlay avatar · Auto assembly',
+    color: 'orange',
+    borderColor: 'border-orange-200',
+    bgColor: 'bg-orange-50',
+    keyHint: '$29/mo · 200 renders · Dùng cho UGC Video Builder',
+    placeholder: 'your_api_key...',
+    getKeyUrl: 'https://dashboard.shotstack.io/register',
+    getKeyLabel: 'Đăng ký →',
+  },
+]
+
+// ── Color maps ─────────────────────────────────────────────────────────────────
+
+const DOT_COLOR: Record<string, string> = {
+  indigo:  'bg-indigo-400',
+  emerald: 'bg-emerald-400',
+  violet:  'bg-violet-400',
+  pink:    'bg-pink-400',
+  orange:  'bg-orange-400',
+}
+const TEXT_COLOR: Record<string, string> = {
+  indigo:  'text-indigo-600',
+  emerald: 'text-emerald-600',
+  violet:  'text-violet-600',
+  pink:    'text-pink-600',
+  orange:  'text-orange-600',
+}
+const FOCUS_BORDER: Record<string, string> = {
+  indigo:  'focus:border-indigo-300',
+  emerald: 'focus:border-emerald-300',
+  violet:  'focus:border-violet-300',
+  pink:    'focus:border-pink-300',
+  orange:  'focus:border-orange-300',
+}
+const BTN_CLASS: Record<string, string> = {
+  indigo:  'border-indigo-200 text-indigo-700 hover:bg-indigo-50',
+  emerald: 'border-emerald-200 text-emerald-700 hover:bg-emerald-50',
+  violet:  'border-violet-200 text-violet-700 hover:bg-violet-50',
+  pink:    'border-pink-200 text-pink-700 hover:bg-pink-50',
+  orange:  'border-orange-200 text-orange-700 hover:bg-orange-50',
+}
+
+// ── Main component ─────────────────────────────────────────────────────────────
+
 export default function SettingsModal({ open, onClose }: SettingsModalProps) {
-  const { kieApiKey, geminiApiKey, elevenLabsApiKey, falApiKey, kieCredits, setKieApiKey, setGeminiApiKey, setElevenLabsApiKey, setFalApiKey, setKieCredits } = useSettingsStore()
+  const {
+    kieApiKey, geminiApiKey, elevenLabsApiKey, falApiKey, shotstackApiKey,
+    kieCredits,
+    setKieApiKey, setGeminiApiKey, setElevenLabsApiKey, setFalApiKey, setShotstackApiKey,
+    setKieCredits,
+  } = useSettingsStore()
   const addToast = useAppStore((s) => s.addToast)
 
-  const [draftKie, setDraftKie] = useState(kieApiKey)
-  const [draftGemini, setDraftGemini] = useState(geminiApiKey)
-  const [draftEleven, setDraftEleven] = useState(elevenLabsApiKey)
-  const [draftFal, setDraftFal] = useState(falApiKey)
-  const [show, setShow] = useState(false)
-  const [showGemini, setShowGemini] = useState(false)
-  const [showEleven, setShowEleven] = useState(false)
-  const [showFal, setShowFal] = useState(false)
+  // Draft values
+  const [drafts, setDrafts] = useState({
+    kie: kieApiKey,
+    gemini: geminiApiKey,
+    eleven: elevenLabsApiKey,
+    fal: falApiKey,
+    shotstack: shotstackApiKey,
+  })
+  const [shows, setShows] = useState<Record<SectionId, boolean>>({
+    kie: false, gemini: false, eleven: false, fal: false, shotstack: false,
+  })
+  const [openSection, setOpenSection] = useState<SectionId | null>(null)
   const [saved, setSaved] = useState(false)
   const [cleaning, setCleaning] = useState(false)
-  const [testing, setTesting] = useState(false)
-  const [testResult, setTestResult] = useState<{ ok: boolean; credits?: number; error?: string } | null>(null)
-  const [testingGemini, setTestingGemini] = useState(false)
-  const [geminiTestResult, setGeminiTestResult] = useState<{ ok: boolean; error?: string } | null>(null)
-  const [testingEleven, setTestingEleven] = useState(false)
-  const [elevenTestResult, setElevenTestResult] = useState<{ ok: boolean; remaining?: number; tier?: string; error?: string } | null>(null)
-  const [testingFal, setTestingFal] = useState(false)
-  const [falTestResult, setFalTestResult] = useState<{ ok: boolean; error?: string } | null>(null)
+
+  // Test states per service
+  const [testing, setTesting] = useState<Partial<Record<SectionId, boolean>>>({})
+  const [testResults, setTestResults] = useState<Partial<Record<SectionId, { ok: boolean; message: string }>>>({})
 
   useEffect(() => {
     if (open) {
-      setDraftKie(kieApiKey)
-      setDraftGemini(geminiApiKey)
-      setDraftEleven(elevenLabsApiKey)
-      setDraftFal(falApiKey)
+      setDrafts({ kie: kieApiKey, gemini: geminiApiKey, eleven: elevenLabsApiKey, fal: falApiKey, shotstack: shotstackApiKey })
       setSaved(false)
-      setTestResult(null)
-      setGeminiTestResult(null)
-      setElevenTestResult(null)
-      setFalTestResult(null)
+      setTestResults({})
+      setOpenSection(null)
     }
-  }, [open, kieApiKey, geminiApiKey, elevenLabsApiKey, falApiKey])
+  }, [open, kieApiKey, geminiApiKey, elevenLabsApiKey, falApiKey, shotstackApiKey])
 
   if (!open) return null
 
-  async function handleTest() {
-    const key = draftKie.trim()
+  const setDraft = (id: SectionId, val: string) => {
+    setDrafts((d) => ({ ...d, [id]: val }))
+    setTestResults((r) => ({ ...r, [id]: undefined }))
+  }
+  const toggleShow = (id: SectionId) => setShows((s) => ({ ...s, [id]: !s[id] }))
+  const toggleSection = (id: SectionId) => setOpenSection((cur) => cur === id ? null : id)
+
+  const isSaved = (id: SectionId): boolean => {
+    const map: Record<SectionId, string> = {
+      kie: kieApiKey, gemini: geminiApiKey, eleven: elevenLabsApiKey,
+      fal: falApiKey, shotstack: shotstackApiKey,
+    }
+    return map[id].length > 0
+  }
+
+  // ── Test handlers ────────────────────────────────────────────────────────────
+
+  async function handleTest(id: SectionId) {
+    const key = drafts[id].trim()
     if (!key) { addToast('Vui lòng nhập API key trước', 'error'); return }
-    setTesting(true)
-    setTestResult(null)
-    try {
-      const credits = await getKieCredits(key)
-      setTestResult({ ok: true, credits })
-      setKieCredits(credits)
-    } catch (e) {
-      setTestResult({ ok: false, error: e instanceof Error ? e.message : 'Kết nối thất bại' })
-    } finally {
-      setTesting(false)
-    }
-  }
+    setTesting((t) => ({ ...t, [id]: true }))
+    setTestResults((r) => ({ ...r, [id]: undefined }))
 
-  async function handleTestGemini() {
-    const key = draftGemini.trim()
-    if (!key) { addToast('Vui lòng nhập Gemini API key trước', 'error'); return }
-    setTestingGemini(true)
-    setGeminiTestResult(null)
     try {
-      await directGeminiVision({ apiKey: key, parts: [{ text: 'Reply with the single word: ok' }] })
-      setGeminiTestResult({ ok: true })
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : 'Kết nối thất bại'
-      setGeminiTestResult({ ok: false, error: msg })
-    } finally {
-      setTestingGemini(false)
-    }
-  }
-
-  async function handleTestEleven() {
-    const key = draftEleven.trim()
-    if (!key) { addToast('Vui lòng nhập ElevenLabs API key trước', 'error'); return }
-    setTestingEleven(true)
-    setElevenTestResult(null)
-    try {
-      const sub = await getSubscription(key)
-      setElevenTestResult({ ok: true, remaining: sub.remaining, tier: sub.tier })
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : 'Kết nối thất bại'
-      setElevenTestResult({ ok: false, error: msg })
-    } finally {
-      setTestingEleven(false)
-    }
-  }
-
-  async function handleTestFal() {
-    const key = draftFal.trim()
-    if (!key) { addToast('Vui lòng nhập fal.ai API key trước', 'error'); return }
-    setTestingFal(true)
-    setFalTestResult(null)
-    try {
-      // Use fal.ai key validation endpoint — returns 200 with a short-lived token if key is valid
-      const res = await fetch('https://rest.alpha.fal.ai/tokens/', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Key ${key}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ allowed_apps: ['fal-ai/latentsync'], expire_at: null }),
-      })
-      if (res.status === 401 || res.status === 403) {
-        let errMsg = 'API key không hợp lệ hoặc không có quyền truy cập'
-        try {
-          const body = await res.json() as { detail?: string; message?: string }
-          if (body.detail || body.message) errMsg = body.detail ?? body.message ?? errMsg
-        } catch { /* ignore */ }
-        setFalTestResult({ ok: false, error: errMsg })
-      } else if (res.ok || res.status === 404) {
-        // 200 = token created (key valid), 404 = endpoint not found but key auth passed
-        setFalTestResult({ ok: true })
-      } else {
-        // Other error but not auth — key format likely ok, billing/plan issue
-        let detail = ''
-        try { const b = await res.json() as { detail?: string }; detail = b.detail ?? '' } catch { /* ignore */ }
-        setFalTestResult({ ok: false, error: `Lỗi ${res.status}${detail ? `: ${detail}` : ''} — kiểm tra billing tại fal.ai/dashboard` })
-      }
-    } catch {
-      // Network error — try simpler ping
-      try {
-        const res2 = await fetch('https://queue.fal.run/fal-ai/latentsync/requests/ping-test', {
-          headers: { 'Authorization': `Key ${key}` },
+      if (id === 'kie') {
+        const credits = await getKieCredits(key)
+        setKieCredits(credits)
+        setTestResults((r) => ({ ...r, kie: { ok: true, message: `Kết nối thành công — còn ${credits.toLocaleString('vi-VN', { maximumFractionDigits: 2 })} Credit` } }))
+      } else if (id === 'gemini') {
+        await directGeminiVision({ apiKey: key, parts: [{ text: 'Reply with the single word: ok' }] })
+        setTestResults((r) => ({ ...r, gemini: { ok: true, message: 'Kết nối thành công — API key hợp lệ' } }))
+      } else if (id === 'eleven') {
+        const sub = await getSubscription(key)
+        setTestResults((r) => ({ ...r, eleven: { ok: true, message: `Gói ${sub.tier} — còn ${sub.remaining?.toLocaleString('vi-VN')} ký tự` } }))
+      } else if (id === 'fal') {
+        const res = await fetch('https://rest.alpha.fal.ai/tokens/', {
+          method: 'POST',
+          headers: { 'Authorization': `Key ${key}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ allowed_apps: ['fal-ai/latentsync'], expire_at: null }),
         })
-        if (res2.status === 401 || res2.status === 403) {
-          setFalTestResult({ ok: false, error: 'API key không hợp lệ' })
+        if (res.status === 401 || res.status === 403) {
+          setTestResults((r) => ({ ...r, fal: { ok: false, message: 'API key không hợp lệ hoặc không có quyền truy cập' } }))
         } else {
-          setFalTestResult({ ok: true })
+          setTestResults((r) => ({ ...r, fal: { ok: true, message: 'Kết nối thành công — API key hợp lệ' } }))
         }
-      } catch {
-        setFalTestResult({ ok: false, error: 'Không thể kết nối đến fal.ai — kiểm tra mạng' })
+      } else if (id === 'shotstack') {
+        const res = await fetch('https://api.shotstack.io/edit/v1/render?limit=1', {
+          headers: { 'x-api-key': key },
+        })
+        if (res.status === 401 || res.status === 403) {
+          setTestResults((r) => ({ ...r, shotstack: { ok: false, message: 'API key không hợp lệ' } }))
+        } else {
+          setTestResults((r) => ({ ...r, shotstack: { ok: true, message: 'Kết nối thành công — Shotstack sẵn sàng' } }))
+        }
       }
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'Kết nối thất bại'
+      setTestResults((r) => ({ ...r, [id]: { ok: false, message: msg } }))
     } finally {
-      setTestingFal(false)
+      setTesting((t) => ({ ...t, [id]: false }))
     }
   }
 
   async function handleSave() {
-    const key = draftKie.trim()
-    setKieApiKey(key)
-    setGeminiApiKey(draftGemini.trim())
-    setElevenLabsApiKey(draftEleven.trim())
-    setFalApiKey(draftFal.trim())
+    setKieApiKey(drafts.kie.trim())
+    setGeminiApiKey(drafts.gemini.trim())
+    setElevenLabsApiKey(drafts.eleven.trim())
+    setFalApiKey(drafts.fal.trim())
+    setShotstackApiKey(drafts.shotstack.trim())
     setSaved(true)
     addToast('Đã lưu cài đặt thành công')
-    if (key) {
+    if (drafts.kie.trim()) {
       try {
-        const credits = await getKieCredits(key)
+        const credits = await getKieCredits(drafts.kie.trim())
         setKieCredits(credits)
-        setTestResult({ ok: true, credits })
-      } catch {
-        // silent — don't override the "saved" toast
-      }
+      } catch { /* silent */ }
     }
     setTimeout(() => setSaved(false), 2000)
   }
@@ -175,7 +250,6 @@ export default function SettingsModal({ open, onClose }: SettingsModalProps) {
     try {
       const { products, models, voiceHistory, brolls } = useBankStore.getState()
       const referenced = new Set<string>()
-
       products.forEach((p) => { if (isAssetRef(p.productImage)) referenced.add(p.productImage) })
       models.forEach((m) => { if (isAssetRef(m.characterImage)) referenced.add(m.characterImage) })
       voiceHistory.forEach((v) => { if (isAssetRef(v.audioUrl)) referenced.add(v.audioUrl) })
@@ -184,10 +258,8 @@ export default function SettingsModal({ open, onClose }: SettingsModalProps) {
         if (b.videoUrl && isAssetRef(b.videoUrl)) referenced.add(b.videoUrl)
         b.videos?.forEach((v) => { if (isAssetRef(v.url)) referenced.add(v.url) })
       })
-
       const allIds = await getAllAssetIds()
       const toDelete = allIds.filter((id) => !referenced.has(id))
-
       await Promise.all(toDelete.map((id) => deleteAsset(id)))
       addToast(`Đã xóa ${toDelete.length} file không dùng`)
     } catch {
@@ -197,315 +269,179 @@ export default function SettingsModal({ open, onClose }: SettingsModalProps) {
     }
   }
 
+  // ── Render ────────────────────────────────────────────────────────────────────
+
   return (
     <div
       className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm"
       onClick={onClose}
     >
       <div
-        className="mx-4 w-full max-w-md rounded-xl border border-black/10 bg-white p-5 shadow-2xl lg:mx-0 lg:p-6 max-h-[90vh] overflow-y-auto"
+        className="mx-4 w-full max-w-md rounded-2xl border border-black/10 bg-white shadow-2xl lg:mx-0 max-h-[90vh] flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="mb-5 flex items-center justify-between">
+        <div className="shrink-0 flex items-center justify-between px-5 py-4 border-b border-black/8">
           <div>
-            <h2 className="text-lg font-semibold tracking-tight text-gray-900">Cài đặt</h2>
-            <p className="mt-0.5 text-sm text-gray-500">API key và cài đặt hệ thống</p>
+            <h2 className="text-base font-bold text-gray-900">Cài đặt</h2>
+            <p className="mt-0.5 text-[11px] text-gray-400">
+              {[kieApiKey, geminiApiKey, elevenLabsApiKey, falApiKey, shotstackApiKey].filter(Boolean).length}/5 dịch vụ đã kết nối
+            </p>
           </div>
           <button
             onClick={onClose}
-            className="rounded-lg p-1.5 text-gray-500 transition-colors hover:bg-black/5 hover:text-gray-700"
+            className="rounded-lg p-1.5 text-gray-400 transition-colors hover:bg-black/5 hover:text-gray-600"
           >
             <X className="h-4 w-4" />
           </button>
         </div>
 
-        <div className="flex flex-col gap-5">
+        {/* Accordion list */}
+        <div className="flex-1 overflow-y-auto">
+          <div className="divide-y divide-black/6">
+            {SERVICES.map((svc) => {
+              const isOpen = openSection === svc.id
+              const connected = isSaved(svc.id)
+              const isTesting = testing[svc.id] ?? false
+              const result = testResults[svc.id]
 
-          {/* ── KIE.AI ────────────────────────────────────── */}
-          <div className="rounded-xl border border-indigo-100 bg-indigo-50/40 p-4 space-y-3">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-xs font-bold uppercase tracking-widest text-indigo-400">KIE.AI</p>
-                <p className="text-[11px] text-gray-400 mt-0.5">Tạo ảnh · Video · Kịch bản</p>
-              </div>
-              <a
-                href="https://kie.ai"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-[11px] text-indigo-500 transition-colors hover:text-indigo-400"
-              >
-                Lấy key →
-              </a>
-            </div>
-            <div className="space-y-2">
-              <label className="flex items-center gap-2 text-sm font-medium text-gray-700">
-                <Key className="h-3.5 w-3.5 text-gray-500" />
-                API Key
-              </label>
-              <div className="relative">
-                <input
-                  type={show ? 'text' : 'password'}
-                  value={draftKie}
-                  onChange={(e) => { setDraftKie(e.target.value); setTestResult(null) }}
-                  placeholder="SK-..."
-                  className="w-full rounded-lg border border-black/10 bg-black/5 px-3 py-2.5 pr-10 text-sm text-gray-800 placeholder-gray-400 outline-none transition-colors focus:border-black/20 focus:bg-black/[0.06]"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShow(!show)}
-                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 transition-colors hover:text-gray-600"
-                >
-                  {show ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                </button>
-              </div>
-              <p className="text-[11px] text-gray-400">
-                Định dạng: <span className="font-mono text-gray-500">SK-...</span>
-              </p>
-              <button
-                onClick={handleTest}
-                disabled={testing || !draftKie.trim()}
-                className="flex items-center gap-1.5 rounded-lg border border-black/10 px-3 py-1.5 text-xs font-medium text-gray-600 transition-colors hover:bg-black/5 hover:text-gray-800 disabled:opacity-40"
-              >
-                <RefreshCw className={`h-3 w-3 ${testing ? 'animate-spin' : ''}`} />
-                {testing ? 'Đang kiểm tra...' : 'Kiểm tra kết nối'}
-              </button>
-              {testResult && (
-                <div className={`flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium ${testResult.ok ? 'bg-emerald-500/10 text-emerald-700 border border-emerald-500/20' : 'bg-red-500/10 text-red-600 border border-red-500/20'}`}>
-                  {testResult.ok ? (
-                    <><Check className="h-3.5 w-3.5 shrink-0" /><span>Kết nối thành công — còn <strong>{testResult.credits?.toLocaleString('vi-VN', { maximumFractionDigits: 2 })}</strong> Credit</span></>
-                  ) : (
-                    <><X className="h-3.5 w-3.5 shrink-0" /><span>{testResult.error}</span></>
+              return (
+                <div key={svc.id}>
+                  {/* Row header — always visible */}
+                  <button
+                    onClick={() => toggleSection(svc.id)}
+                    className="flex w-full items-center gap-3 px-5 py-3.5 text-left transition-colors hover:bg-black/[0.02]"
+                  >
+                    {/* Status dot */}
+                    <div className={`h-2.5 w-2.5 shrink-0 rounded-full transition-colors ${connected ? DOT_COLOR[svc.color] : 'bg-gray-200'}`} />
+
+                    {/* Label */}
+                    <div className="flex-1 min-w-0">
+                      <p className={`text-sm font-bold ${TEXT_COLOR[svc.color]}`}>{svc.label}</p>
+                      <p className="text-[11px] text-gray-400 truncate">{svc.sublabel}</p>
+                    </div>
+
+                    {/* Status text */}
+                    <span className={`shrink-0 text-[11px] font-medium ${connected ? 'text-emerald-500' : 'text-gray-300'}`}>
+                      {connected ? 'Đã kết nối' : 'Chưa cài'}
+                    </span>
+
+                    {/* Chevron */}
+                    <ChevronDown className={`h-4 w-4 shrink-0 text-gray-300 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} />
+                  </button>
+
+                  {/* Expanded content */}
+                  {isOpen && (
+                    <div className={`px-5 pb-4 pt-3 space-y-3 border-t border-black/6 ${svc.bgColor}/30`}>
+                      {/* Get key link */}
+                      <div className="flex items-center justify-between">
+                        <label className="flex items-center gap-1.5 text-xs font-semibold text-gray-600">
+                          <Key className="h-3 w-3 text-gray-400" />
+                          API Key
+                        </label>
+                        <a
+                          href={svc.getKeyUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className={`flex items-center gap-1 text-[11px] font-medium ${TEXT_COLOR[svc.color]} hover:opacity-70`}
+                        >
+                          {svc.getKeyLabel}
+                          <ExternalLink className="h-2.5 w-2.5" />
+                        </a>
+                      </div>
+
+                      {/* Input */}
+                      <div className="relative">
+                        <input
+                          type={shows[svc.id] ? 'text' : 'password'}
+                          value={drafts[svc.id]}
+                          onChange={(e) => setDraft(svc.id, e.target.value)}
+                          placeholder={svc.placeholder}
+                          className={`w-full rounded-xl border border-black/10 bg-white px-3 py-2.5 pr-10 text-sm text-gray-800 placeholder-gray-300 outline-none transition-colors ${FOCUS_BORDER[svc.color]}`}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => toggleShow(svc.id)}
+                          className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-300 transition-colors hover:text-gray-500"
+                        >
+                          {shows[svc.id] ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+                        </button>
+                      </div>
+
+                      {/* Hint */}
+                      <p className="text-[11px] text-gray-400">{svc.keyHint}</p>
+
+                      {/* Test button */}
+                      <button
+                        onClick={() => handleTest(svc.id)}
+                        disabled={isTesting || !drafts[svc.id].trim()}
+                        className={`flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors disabled:opacity-40 ${BTN_CLASS[svc.color]}`}
+                      >
+                        <RefreshCw className={`h-3 w-3 ${isTesting ? 'animate-spin' : ''}`} />
+                        {isTesting ? 'Đang kiểm tra...' : 'Kiểm tra kết nối'}
+                      </button>
+
+                      {/* Test result */}
+                      {result && (
+                        <div className={`flex items-start gap-2 rounded-xl px-3 py-2.5 text-xs font-medium ${
+                          result.ok
+                            ? 'bg-emerald-500/10 text-emerald-700 border border-emerald-500/20'
+                            : 'bg-red-500/10 text-red-600 border border-red-500/20'
+                        }`}>
+                          {result.ok
+                            ? <Check className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+                            : <X className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+                          }
+                          <span>{result.message}</span>
+                        </div>
+                      )}
+                    </div>
                   )}
                 </div>
-              )}
-            </div>
+              )
+            })}
           </div>
 
-          {/* ── GOOGLE GEMINI ─────────────────────────────── */}
-          <div className="rounded-xl border border-emerald-100 bg-emerald-50/40 p-4 space-y-3">
-            <div className="flex items-center justify-between">
+          {/* Storage section */}
+          <div className="border-t border-black/6 px-5 py-4">
+            <div className="flex items-center justify-between gap-3">
               <div>
-                <p className="text-xs font-bold uppercase tracking-widest text-emerald-500">Google Gemini</p>
-                <p className="text-[11px] text-gray-400 mt-0.5">Phân tích QC · Image DNA · Trích xuất sản phẩm</p>
-              </div>
-              <a
-                href="https://aistudio.google.com/app/apikey"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-[11px] text-emerald-600 transition-colors hover:text-emerald-500"
-              >
-                Lấy key miễn phí →
-              </a>
-            </div>
-            <div className="space-y-2">
-              <label className="flex items-center gap-2 text-sm font-medium text-gray-700">
-                <Key className="h-3.5 w-3.5 text-gray-500" />
-                API Key
-              </label>
-              <div className="relative">
-                <input
-                  type={showGemini ? 'text' : 'password'}
-                  value={draftGemini}
-                  onChange={(e) => { setDraftGemini(e.target.value); setGeminiTestResult(null) }}
-                  placeholder="AIza..."
-                  className="w-full rounded-lg border border-black/10 bg-white/70 px-3 py-2.5 pr-10 text-sm text-gray-800 placeholder-gray-400 outline-none transition-colors focus:border-emerald-300 focus:bg-white"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowGemini(!showGemini)}
-                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 transition-colors hover:text-gray-600"
-                >
-                  {showGemini ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                </button>
-              </div>
-              <p className="text-[11px] text-gray-400">
-                Miễn phí · Dùng để phân tích ảnh và video quảng cáo
-              </p>
-              <button
-                onClick={handleTestGemini}
-                disabled={testingGemini || !draftGemini.trim()}
-                className="flex items-center gap-1.5 rounded-lg border border-emerald-200 px-3 py-1.5 text-xs font-medium text-emerald-700 transition-colors hover:bg-emerald-50 disabled:opacity-40"
-              >
-                <RefreshCw className={`h-3 w-3 ${testingGemini ? 'animate-spin' : ''}`} />
-                {testingGemini ? 'Đang kiểm tra...' : 'Kiểm tra kết nối'}
-              </button>
-              {geminiTestResult && (
-                <div className={`flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium ${geminiTestResult.ok ? 'bg-emerald-500/10 text-emerald-700 border border-emerald-500/20' : 'bg-red-500/10 text-red-600 border border-red-500/20'}`}>
-                  {geminiTestResult.ok ? (
-                    <><Check className="h-3.5 w-3.5 shrink-0" /><span>Kết nối thành công — API key hợp lệ</span></>
-                  ) : (
-                    <><X className="h-3.5 w-3.5 shrink-0" /><span>{geminiTestResult.error}</span></>
-                  )}
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* ── ELEVENLABS ─────────────────────────────── */}
-          <div className="rounded-xl border border-violet-100 bg-violet-50/40 p-4 space-y-3">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-xs font-bold uppercase tracking-widest text-violet-500">ElevenLabs</p>
-                <p className="text-[11px] text-gray-400 mt-0.5">Giọng đọc · Voice Cloning (Malay native)</p>
-              </div>
-              <a
-                href="https://elevenlabs.io/app/settings/api-keys"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-[11px] text-violet-600 transition-colors hover:text-violet-500"
-              >
-                Lấy key →
-              </a>
-            </div>
-            <div className="space-y-2">
-              <label className="flex items-center gap-2 text-sm font-medium text-gray-700">
-                <Key className="h-3.5 w-3.5 text-gray-500" />
-                API Key
-              </label>
-              <div className="relative">
-                <input
-                  type={showEleven ? 'text' : 'password'}
-                  value={draftEleven}
-                  onChange={(e) => { setDraftEleven(e.target.value); setElevenTestResult(null) }}
-                  placeholder="sk_..."
-                  className="w-full rounded-lg border border-black/10 bg-white/70 px-3 py-2.5 pr-10 text-sm text-gray-800 placeholder-gray-400 outline-none transition-colors focus:border-violet-300 focus:bg-white"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowEleven(!showEleven)}
-                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 transition-colors hover:text-gray-600"
-                >
-                  {showEleven ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                </button>
-              </div>
-              <p className="text-[11px] text-gray-400">
-                Hỗ trợ clone giọng từ mẫu audio · model <span className="font-mono">eleven_multilingual_v2</span>
-              </p>
-              <button
-                onClick={handleTestEleven}
-                disabled={testingEleven || !draftEleven.trim()}
-                className="flex items-center gap-1.5 rounded-lg border border-violet-200 px-3 py-1.5 text-xs font-medium text-violet-700 transition-colors hover:bg-violet-50 disabled:opacity-40"
-              >
-                <RefreshCw className={`h-3 w-3 ${testingEleven ? 'animate-spin' : ''}`} />
-                {testingEleven ? 'Đang kiểm tra...' : 'Kiểm tra kết nối'}
-              </button>
-              {elevenTestResult && (
-                <div className={`flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium ${elevenTestResult.ok ? 'bg-emerald-500/10 text-emerald-700 border border-emerald-500/20' : 'bg-red-500/10 text-red-600 border border-red-500/20'}`}>
-                  {elevenTestResult.ok ? (
-                    <><Check className="h-3.5 w-3.5 shrink-0" /><span>Gói <strong>{elevenTestResult.tier}</strong> — còn <strong>{elevenTestResult.remaining?.toLocaleString('vi-VN')}</strong> ký tự</span></>
-                  ) : (
-                    <><X className="h-3.5 w-3.5 shrink-0" /><span>{elevenTestResult.error}</span></>
-                  )}
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* ── FAL.AI ─────────────────────────────────── */}
-          <div className="rounded-xl border border-pink-100 bg-pink-50/40 p-4 space-y-3">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-xs font-bold uppercase tracking-widest text-pink-500">fal.ai</p>
-                <p className="text-[11px] text-gray-400 mt-0.5">Lip-sync video-to-video (LatentSync) · Dịch Video</p>
-              </div>
-              <a
-                href="https://fal.ai/dashboard/keys"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-[11px] text-pink-600 transition-colors hover:text-pink-500"
-              >
-                Lấy key →
-              </a>
-            </div>
-            <div className="space-y-2">
-              <label className="flex items-center gap-2 text-sm font-medium text-gray-700">
-                <Key className="h-3.5 w-3.5 text-gray-500" />
-                API Key
-              </label>
-              <div className="relative">
-                <input
-                  type={showFal ? 'text' : 'password'}
-                  value={draftFal}
-                  onChange={(e) => { setDraftFal(e.target.value); setFalTestResult(null) }}
-                  placeholder="fal-..."
-                  className="w-full rounded-lg border border-black/10 bg-white/70 px-3 py-2.5 pr-10 text-sm text-gray-800 placeholder-gray-400 outline-none transition-colors focus:border-pink-300 focus:bg-white"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowFal(!showFal)}
-                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 transition-colors hover:text-gray-600"
-                >
-                  {showFal ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                </button>
-              </div>
-              <p className="text-[11px] text-gray-400">
-                Video-to-video lip-sync giữ nguyên cảnh gốc · ~<span className="font-mono">$0.005/s</span> (~$0.30/phút)
-              </p>
-              <button
-                onClick={handleTestFal}
-                disabled={testingFal || !draftFal.trim()}
-                className="flex items-center gap-1.5 rounded-lg border border-pink-200 px-3 py-1.5 text-xs font-medium text-pink-700 transition-colors hover:bg-pink-50 disabled:opacity-40"
-              >
-                <RefreshCw className={`h-3 w-3 ${testingFal ? 'animate-spin' : ''}`} />
-                {testingFal ? 'Đang kiểm tra...' : 'Kiểm tra kết nối'}
-              </button>
-              {falTestResult && (
-                <div className={`flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium ${falTestResult.ok ? 'bg-emerald-500/10 text-emerald-700 border border-emerald-500/20' : 'bg-red-500/10 text-red-600 border border-red-500/20'}`}>
-                  {falTestResult.ok ? (
-                    <><Check className="h-3.5 w-3.5 shrink-0" /><span>Kết nối thành công — API key hợp lệ</span></>
-                  ) : (
-                    <><X className="h-3.5 w-3.5 shrink-0" /><span>{falTestResult.error}</span></>
-                  )}
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Storage */}
-          <div className="rounded-lg border border-black/8 bg-black/[0.02] p-4">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <p className="flex items-center gap-1.5 text-sm font-medium text-gray-700">
-                  <HardDrive className="h-3.5 w-3.5 text-gray-500" />
+                <p className="flex items-center gap-1.5 text-xs font-semibold text-gray-600">
+                  <HardDrive className="h-3.5 w-3.5 text-gray-400" />
                   Lưu trữ
                 </p>
-                <p className="mt-1 text-[11px] leading-relaxed text-gray-400">
-                  Xóa các file media không còn được tham chiếu bởi Project dữ liệu.
-                </p>
+                <p className="mt-0.5 text-[11px] text-gray-400">Xóa file media không còn được tham chiếu</p>
               </div>
               <button
                 onClick={handleCleanup}
                 disabled={cleaning}
-                className="shrink-0 rounded-lg border border-black/10 px-3 py-1.5 text-xs text-gray-600 transition-colors hover:bg-black/5 hover:text-gray-800 disabled:opacity-40"
+                className="shrink-0 rounded-lg border border-black/10 px-3 py-1.5 text-xs font-medium text-gray-500 transition-colors hover:bg-black/5 hover:text-gray-700 disabled:opacity-40"
               >
-                {cleaning ? 'Đang dọn...' : 'Dọn dẹp bộ nhớ'}
+                {cleaning ? 'Đang dọn...' : 'Dọn dẹp'}
               </button>
             </div>
           </div>
         </div>
 
-        {/* Save button */}
-        <button
-          onClick={handleSave}
-          disabled={saved}
-          className="mt-5 flex w-full items-center justify-center gap-2 rounded-lg bg-black/8 py-2.5 text-sm font-medium text-gray-700 transition-colors hover:bg-black/10 disabled:opacity-60"
-        >
-          {saved ? (
-            <>
-              <Check className="h-4 w-4 text-emerald-500" />
-              <span className="text-emerald-500">Đã lưu</span>
-            </>
-          ) : (
-            'Lưu cài đặt'
+        {/* Footer — Save button */}
+        <div className="shrink-0 border-t border-black/8 px-5 py-4">
+          <button
+            onClick={handleSave}
+            disabled={saved}
+            className="flex w-full items-center justify-center gap-2 rounded-xl bg-black/8 py-2.5 text-sm font-bold text-gray-700 transition-colors hover:bg-black/12 disabled:opacity-60"
+          >
+            {saved ? (
+              <><Check className="h-4 w-4 text-emerald-500" /><span className="text-emerald-500">Đã lưu</span></>
+            ) : (
+              'Lưu cài đặt'
+            )}
+          </button>
+          {kieCredits !== null && (
+            <p className="mt-2 text-center text-[11px] text-gray-400">
+              KIE Credits: <span className="font-bold text-gray-600">{kieCredits.toLocaleString('vi-VN', { maximumFractionDigits: 2 })}</span>
+            </p>
           )}
-        </button>
-
-        {kieCredits !== null && (
-          <p className="mt-3 text-center text-[11px] text-gray-400">
-            Credits hiện tại: <span className="font-semibold text-gray-600">{kieCredits.toLocaleString('vi-VN', { maximumFractionDigits: 2 })}</span>
-          </p>
-        )}
+        </div>
       </div>
     </div>
   )
