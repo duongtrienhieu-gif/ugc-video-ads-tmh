@@ -21,8 +21,9 @@ import type { V2PipelineState, MasterFrame, CompiledPrompt } from './types'
 import { createEmptyV2State } from './types'
 import { extractIdentityPack, generateMasterFrame, generateMasterFrameWithQc } from './services/masterFrame'
 import { generateStoryboard } from './services/sceneBlueprint'
-import { defaultVisualStyleDna } from './types'
+import { defaultVisualStyleDna, computeConsistencyConfig } from './types'
 import type { SceneBlueprint, DiversityReport } from './types'
+import ConsistencySlider from './components/ConsistencySlider'
 import MasterFrameApproval from './components/MasterFrameApproval'
 import PromptCompilerDebugPanel from './components/PromptCompilerDebugPanel'
 import StoryboardEditor from './components/StoryboardEditor'
@@ -127,6 +128,13 @@ export default function VideoBuilderV2({ onSwitchToV1 }: Props) {
   const addToast = useAppStore((s) => s.addToast)
 
   useEffect(() => () => { cancelledRef.current = true }, [])
+
+  // ── Module 5: Consistency slider handler ──────────────────────────────────
+  // Updating strength recomputes the entire ConsistencyConfig (threshold + retries)
+  // which propagates to prompt compiler, QC engine, retry orchestrator.
+  const handleStrengthChange = (newStrength: number) => {
+    setState((s) => ({ ...s, consistency: computeConsistencyConfig(newStrength) }))
+  }
 
   // ── Handlers: input pickers ───────────────────────────────────────────────
   const handlePickAvatar = (item: unknown) => {
@@ -394,6 +402,15 @@ export default function VideoBuilderV2({ onSwitchToV1 }: Props) {
               </div>
             </div>
 
+            {/* Module 5 — Consistency slider (full debug variant on input page) */}
+            <div className="mb-4">
+              <ConsistencySlider
+                strength={state.consistency.strength}
+                onChange={handleStrengthChange}
+                variant="full"
+              />
+            </div>
+
             <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
               <InputPickerTile
                 imageUrl={state.inputs.avatar?.characterImage}
@@ -460,6 +477,8 @@ export default function VideoBuilderV2({ onSwitchToV1 }: Props) {
             qcEnabled={qcEnabled}
             onQcEnabledChange={setQcEnabled}
             qcProgress={qcProgress}
+            consistencyStrength={state.consistency.strength}
+            onConsistencyChange={handleStrengthChange}
           />
         )}
 

@@ -20,7 +20,7 @@
 // scores. Strict mode auto-regens once on QC fail.
 
 import { useState, useRef } from 'react'
-import { Sparkles, Loader2, RotateCcw, UserRound, Package, Upload, Check, Download, Save, ShieldCheck } from 'lucide-react'
+import { Sparkles, Loader2, RotateCcw, UserRound, Package, Upload, Check, Download, Save, ShieldCheck, Trash2, AlertTriangle } from 'lucide-react'
 import { useAppStore } from '../../stores/appStore'
 import { useBankStore } from '../../stores/bankStore'
 import { useSettingsStore } from '../../stores/settingsStore'
@@ -259,84 +259,169 @@ interface TileState {
 const EMPTY_TILES: TileState[] = VARIATIONS.map(() => ({ url: null, qc: null, status: 'idle' }))
 
 // ── Result tile ─────────────────────────────────────────────────────────────
+// Each tile manages its own lifecycle independently. One tile's failure must
+// NEVER cascade into another tile's UI — that's why the parent uses
+// Promise.allSettled and each generateTile call has internal try/catch.
 
-function ResultTile({
-  state, label, onRegen, onSave, saved,
-}: {
+interface ResultTileProps {
   state: TileState
   label: string
+  /** Re-run generation for THIS tile only (same product / avatar / scene / style). */
   onRegen: () => void
+  /** Clear this tile back to the empty placeholder. Does NOT affect other tiles. */
+  onDelete: () => void
+  /** Persist this tile's image into the Project bank. */
   onSave: () => void
   saved: boolean
-}) {
+  /** Whether this slot can be filled from the idle state (product is selected). */
+  canGenerate: boolean
+}
+
+function ResultTile({ state, label, onRegen, onDelete, onSave, saved, canGenerate }: ResultTileProps) {
   const resolvedUrl = useAssetUrl(state.url ?? undefined)
   const displayUrl = state.url?.startsWith('http') || state.url?.startsWith('data:') ? state.url : resolvedUrl
-  const busy = state.status === 'generating' || state.status === 'qc'
+
+  const handleDownload = () => {
+    if (!displayUrl) return
+    const a = document.createElement('a')
+    a.href = displayUrl
+    a.download = `product-ai-${label}-${Date.now()}.png`
+    a.click()
+  }
+
+  // ── Border + background reflect status so failure is visually distinct ───
+  const containerClass =
+    state.status === 'error'
+      ? 'border-red-300 bg-red-50/40'
+      : state.status === 'done'
+        ? 'border-black/10 bg-gray-100'
+        : 'border-dashed border-black/10 bg-gradient-to-br from-gray-50 to-gray-100'
 
   return (
-    <div className="group relative aspect-square overflow-hidden rounded-xl border border-black/10 bg-gray-100">
-      {busy ? (
-        <div className="flex h-full flex-col items-center justify-center gap-2">
-          <Loader2 className="h-6 w-6 animate-spin text-violet-400" />
-          <span className="text-[10px] text-gray-500">
+    <div className={`relative aspect-square overflow-hidden rounded-xl border ${containerClass}`}>
+      {/* ── Variant label — always visible top-left ───────────────────── */}
+      <span
+        className={`absolute left-2 top-2 z-10 rounded px-1.5 py-0.5 text-[10px] font-semibold backdrop-blur-sm ${
+          state.status === 'done' ? 'bg-black/60 text-white' : 'bg-white/80 text-gray-600'
+        }`}
+      >
+        {label}
+      </span>
+
+      {/* ── IDLE STATE (initial placeholder OR after delete) ──────────── */}
+      {state.status === 'idle' && (
+        <div className="flex h-full flex-col items-center justify-center gap-3 p-4 text-center">
+          <Sparkles className="h-6 w-6 text-gray-300" />
+          <p className="text-[11px] text-gray-400">Chưa có ảnh</p>
+          {canGenerate && (
+            <button
+              onClick={onRegen}
+              className="rounded-full bg-violet-600 px-3 py-1.5 text-[11px] font-semibold text-white hover:bg-violet-700"
+            >
+              ▶ Tạo ảnh này
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* ── LOADING STATE (generating or running QC) ──────────────────── */}
+      {(state.status === 'generating' || state.status === 'qc') && (
+        <div className="relative flex h-full flex-col items-center justify-center gap-2">
+          {/* Skeleton shimmer behind the spinner */}
+          <div className="absolute inset-0 animate-pulse bg-gradient-to-br from-violet-50 via-gray-100 to-violet-50" />
+          <Loader2 className="relative h-7 w-7 animate-spin text-violet-500" />
+          <span className="relative text-[11px] font-medium text-violet-700">
             {state.status === 'qc' ? 'Đang QC sản phẩm…' : 'Đang render…'}
           </span>
         </div>
-      ) : displayUrl ? (
+      )}
+
+      {/* ── ERROR STATE — gray placeholder + prominent retry ──────────── */}
+      {state.status === 'error' && (
+        <div className="flex h-full flex-col items-center justify-center gap-3 p-4 text-center">
+          <AlertTriangle className="h-7 w-7 text-red-400" />
+          <div>
+            <p className="text-xs font-semibold text-red-700">Tạo ảnh thất bại</p>
+            {state.error && (
+              <p className="mt-0.5 line-clamp-3 text-[10px] text-red-500/80">
+                {state.error.slice(0, 120)}
+              </p>
+            )}
+          </div>
+          <button
+            onClick={onRegen}
+            className="flex items-center gap-1.5 rounded-full bg-red-500 px-4 py-1.5 text-[11px] font-semibold text-white hover:bg-red-600"
+          >
+            <RotateCcw className="h-3 w-3" />
+            Thử lại
+          </button>
+        </div>
+      )}
+
+      {/* ── DONE STATE — image + always-visible action buttons ────────── */}
+      {state.status === 'done' && displayUrl && (
         <>
           <img src={displayUrl} alt={label} className="h-full w-full object-cover" />
 
-          <span className="absolute left-2 top-2 rounded bg-black/60 px-1.5 py-0.5 text-[10px] font-semibold text-white backdrop-blur-sm">
-            {label}
-          </span>
-
+          {/* QC badge — bottom-left so it never clashes with the top-right action bar */}
           {state.qc && (
             <span
-              title={state.qc.issues.join(' · ') || `Label ${state.qc.labelSimilarity} · Logo ${state.qc.logoSimilarity} · Bottle ${state.qc.bottleSimilarity}`}
-              className="absolute right-2 top-2 rounded px-1.5 py-0.5 text-[10px] font-semibold text-white backdrop-blur-sm"
+              title={
+                state.qc.issues.length > 0
+                  ? state.qc.issues.join(' · ')
+                  : `Label ${state.qc.labelSimilarity} · Logo ${state.qc.logoSimilarity} · Bottle ${state.qc.bottleSimilarity}`
+              }
+              className="absolute bottom-12 left-2 z-10 rounded px-1.5 py-0.5 text-[10px] font-semibold text-white backdrop-blur-sm"
               style={{ background: state.qc.pass ? 'rgba(16,185,129,0.85)' : 'rgba(239,68,68,0.85)' }}
             >
               {state.qc.pass ? `✓ QC ${state.qc.overall}` : `✗ QC ${state.qc.overall}`}
             </span>
           )}
 
-          <div className="absolute inset-x-0 bottom-0 flex items-center gap-1 bg-gradient-to-t from-black/70 to-transparent p-2 opacity-0 transition-opacity group-hover:opacity-100">
+          {/* Always-visible top-right action bar */}
+          <div className="absolute right-2 top-2 z-10 flex gap-1">
             <button
               onClick={onRegen}
-              title="Tạo lại ảnh này"
-              className="flex h-7 w-7 items-center justify-center rounded-md bg-white/15 text-white backdrop-blur-sm hover:bg-violet-600"
+              title="Tạo lại ảnh này (giữ nguyên người + sản phẩm)"
+              className="flex h-7 w-7 items-center justify-center rounded-md bg-black/55 text-white shadow-sm backdrop-blur-sm hover:bg-violet-600"
             >
               <RotateCcw className="h-3.5 w-3.5" />
             </button>
             <button
-              onClick={() => { if (!displayUrl) return; const a = document.createElement('a'); a.href = displayUrl; a.download = `product-ai-${label}-${Date.now()}.png`; a.click() }}
-              title="Tải xuống"
-              className="flex h-7 w-7 items-center justify-center rounded-md bg-white/15 text-white backdrop-blur-sm hover:bg-white/30"
+              onClick={handleDownload}
+              title="Tải ảnh xuống"
+              className="flex h-7 w-7 items-center justify-center rounded-md bg-black/55 text-white shadow-sm backdrop-blur-sm hover:bg-black/80"
             >
               <Download className="h-3.5 w-3.5" />
             </button>
             <button
-              onClick={onSave}
-              title={saved ? 'Đã lưu vào Project' : 'Lưu vào Project'}
-              className={`ml-auto flex h-7 items-center gap-1 rounded-md px-2 text-[10px] font-semibold backdrop-blur-sm ${saved ? 'bg-emerald-500 text-white' : 'bg-white/15 text-white hover:bg-emerald-600'}`}
+              onClick={onDelete}
+              title="Xoá ảnh này"
+              className="flex h-7 w-7 items-center justify-center rounded-md bg-black/55 text-white shadow-sm backdrop-blur-sm hover:bg-red-600"
             >
-              {saved ? <Check className="h-3.5 w-3.5" /> : <Save className="h-3.5 w-3.5" />}
-              {saved ? 'Đã lưu' : 'Lưu'}
+              <Trash2 className="h-3.5 w-3.5" />
             </button>
           </div>
+
+          {/* Bottom row: Save into Project */}
+          <div className="absolute inset-x-0 bottom-0 flex items-center gap-2 bg-gradient-to-t from-black/75 via-black/30 to-transparent p-2">
+            <button
+              onClick={onSave}
+              title={saved ? 'Đã lưu vào Project' : 'Lưu vào Project → Product AI'}
+              className={`flex items-center gap-1 rounded-md px-2 py-1 text-[10px] font-semibold backdrop-blur-sm transition-colors ${
+                saved ? 'bg-emerald-500 text-white' : 'bg-white/20 text-white hover:bg-emerald-600'
+              }`}
+            >
+              {saved ? <Check className="h-3 w-3" /> : <Save className="h-3 w-3" />}
+              {saved ? 'Đã lưu' : 'Lưu vào Project'}
+            </button>
+            {state.qc?.issues && state.qc.issues.length > 0 && !state.qc.pass && (
+              <span className="ml-auto truncate text-[9px] text-rose-200" title={state.qc.issues.join(' · ')}>
+                ⚠ {state.qc.issues[0]}
+              </span>
+            )}
+          </div>
         </>
-      ) : state.status === 'error' ? (
-        <div className="flex h-full flex-col items-center justify-center gap-2 p-3 text-center">
-          <span className="text-[11px] text-red-500">⚠ {state.error?.slice(0, 60) ?? 'Tạo ảnh thất bại'}</span>
-          <button onClick={onRegen} className="rounded-md border border-black/10 px-2 py-1 text-[10px] hover:bg-black/[0.04]">
-            Thử lại
-          </button>
-        </div>
-      ) : (
-        <div className="flex h-full flex-col items-center justify-center gap-1 text-gray-400">
-          <Sparkles className="h-5 w-5" />
-          <span className="text-[10px]">{label}</span>
-        </div>
       )}
     </div>
   )
@@ -578,20 +663,33 @@ export default function ProductAI() {
         return
       }
 
-      // 3. Three variations in parallel — all derived from the base
-      await Promise.all([1, 2, 3].map(async (i) => {
-        await generateTile(i, {
-          productUrl,
-          avatarUrl,
-          baseUrl: basePublicUrl,
-          variationHint: VARIATIONS[i].hint,
-        })
-        setProgress((p) => ({ ...p, done: p.done + 1 }))
-      }))
+      // 3. Three variations in parallel — Promise.allSettled so one slot's
+      //    failure can never break the others. Each tile's status is also
+      //    managed internally by generateTile (which has its own try/catch),
+      //    so this is defense-in-depth.
+      const variationResults = await Promise.allSettled(
+        [1, 2, 3].map(async (i) => {
+          const url = await generateTile(i, {
+            productUrl,
+            avatarUrl,
+            baseUrl: basePublicUrl,
+            variationHint: VARIATIONS[i].hint,
+          })
+          setProgress((p) => ({ ...p, done: p.done + 1 }))
+          return url
+        }),
+      )
 
-      const ok = tiles.filter((t) => t.url).length
+      // Count successes from the actual generateTile return values — the tiles
+      // state at this point is stale because React batches updates.
+      const variationOk = variationResults.filter(
+        (r) => r.status === 'fulfilled' && r.value !== null,
+      ).length
+      const ok = (baseAssetUrl ? 1 : 0) + variationOk
+
       if (ok === 0) addToast('Tạo ảnh thất bại — kiểm tra KIE credit', 'error')
-      else addToast(`✓ Đã tạo ${ok}/4 ảnh`)
+      else if (ok < 4) addToast(`Đã tạo ${ok}/4 ảnh — slot lỗi có nút "Thử lại" trên ảnh`)
+      else addToast('✓ Đã tạo 4/4 ảnh')
     } finally {
       setIsBatch(false)
     }
@@ -629,6 +727,13 @@ export default function ProductAI() {
         variationHint: VARIATIONS[idx].hint,
       })
     }
+    setSavedIdx((prev) => { const next = new Set(prev); next.delete(idx); return next })
+  }
+
+  // ── Delete a single tile — clears it back to idle so the user can decide
+  //    whether to re-fill the slot. Does NOT touch the other tiles. ────────
+  const handleDelete = (idx: number) => {
+    updateTile(idx, { url: null, qc: null, status: 'idle', error: undefined })
     setSavedIdx((prev) => { const next = new Set(prev); next.delete(idx); return next })
   }
 
@@ -806,8 +911,10 @@ export default function ProductAI() {
                   state={t}
                   label={VARIATIONS[i].label}
                   onRegen={() => handleRegen(i)}
+                  onDelete={() => handleDelete(i)}
                   onSave={() => handleSaveToProject(i)}
                   saved={savedIdx.has(i)}
+                  canGenerate={canGenerate}
                 />
               ))}
             </div>

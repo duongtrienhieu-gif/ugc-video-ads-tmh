@@ -321,6 +321,62 @@ export function computeConsistencyConfig(strength: ConsistencyStrength): Consist
   return { strength: clamped, qcThreshold, maxRetries }
 }
 
+/** 3-tier classification of consistency strength (drives label colors + UI). */
+export type StrengthTierName = 'creative' | 'balanced' | 'strict'
+
+export function getStrengthTierName(strength: number): StrengthTierName {
+  if (strength >= 90) return 'strict'
+  if (strength >= 85) return 'balanced'
+  return 'creative'
+}
+
+/** Vietnamese label for each tier (per Module 5 spec). */
+export const TIER_LABEL_VI: Record<StrengthTierName, string> = {
+  'creative': 'Sáng tạo hơn',
+  'balanced': 'Cân bằng',
+  'strict':   'Giữ mặt/sản phẩm chặt hơn',
+}
+
+/** Tier description for tooltips/debug panels. */
+export const TIER_DESC_VI: Record<StrengthTierName, string> = {
+  'creative': 'Mỗi cảnh được phép sáng tạo nhiều hơn, ít retry, QC dễ hơn. Đa dạng composition nhưng dễ drift mặt/sản phẩm.',
+  'balanced': 'Điểm cân bằng giữa sáng tạo và nhất quán. Default cho hầu hết use case.',
+  'strict':   'Product lock cực mạnh, identity lock mạnh, retry aggressive, thêm anti-redesign negatives, realism strict hơn.',
+}
+
+/** Pre-defined slider presets (per Module 5 spec). */
+export interface ConsistencyPreset {
+  id: string
+  emoji: string
+  labelVi: string
+  hintVi: string
+  strength: number
+}
+
+export const CONSISTENCY_PRESETS: ConsistencyPreset[] = [
+  {
+    id: 'tiktok',
+    emoji: '🟣',
+    labelVi: 'TikTok UGC',
+    hintVi: 'Cân bằng sáng tạo, vẫn giữ identity ổn — phù hợp video viral nhanh',
+    strength: 86,
+  },
+  {
+    id: 'landing',
+    emoji: '🟢',
+    labelVi: 'Landing Page',
+    hintVi: 'Identity + product chặt — ảnh dùng cho landing/advertorial chuyên nghiệp',
+    strength: 92,
+  },
+  {
+    id: 'ecommerce',
+    emoji: '🟡',
+    labelVi: 'Ecommerce sạch',
+    hintVi: 'Tối đa product accuracy — packaging tuyệt đối không drift, dùng cho hero ảnh sản phẩm',
+    strength: 94,
+  },
+]
+
 // ── v2 Pipeline State ────────────────────────────────────────────────────────
 
 export type V2Phase =

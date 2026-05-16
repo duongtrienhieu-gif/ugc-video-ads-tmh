@@ -10,6 +10,7 @@ import { Check, Loader2, RotateCcw, ArrowLeft, ArrowRight, Sparkles, AlertCircle
 import { useAssetUrl } from '../../../../hooks/useAssetUrl'
 import type { MasterFrame, MasterFrameStepState, IdentityPack } from '../types'
 import { QcBadge, QcScorePanel } from './QcScorePanel'
+import ConsistencySlider from './ConsistencySlider'
 
 interface Props {
   state: MasterFrameStepState
@@ -27,6 +28,9 @@ interface Props {
   onQcEnabledChange: (enabled: boolean) => void
   /** Optional progress message from inside the QC loop (e.g. "đang tạo lại để khớp sản phẩm...") */
   qcProgress?: { attempt: number; status: string } | null
+  /** Module 5: consistency strength + handler */
+  consistencyStrength: number
+  onConsistencyChange: (strength: number) => void
 }
 
 // ── One candidate tile ──────────────────────────────────────────────────────
@@ -90,6 +94,7 @@ function CandidateTile({
 export default function MasterFrameApproval({
   state, identity, onGenerateMore, onApprove, onReject, onContinue,
   qcEnabled, onQcEnabledChange, qcProgress,
+  consistencyStrength, onConsistencyChange,
 }: Props) {
   const hasApproved = state.approvedIdx >= 0
   const isFirstGen = state.candidates.length === 0 && state.isGenerating
@@ -126,6 +131,15 @@ export default function MasterFrameApproval({
             </div>
           </label>
         </div>
+      </div>
+
+      {/* Module 5: Consistency slider — compact mode below header */}
+      <div className="shrink-0 border-b border-black/8 bg-white px-6 py-2.5">
+        <ConsistencySlider
+          strength={consistencyStrength}
+          onChange={onConsistencyChange}
+          variant="compact"
+        />
       </div>
 
       {/* Identity locks preview */}
