@@ -276,6 +276,11 @@ export async function textToSpeech(params: {
     if (res.status === 403 && format === 'mp3_44100_192') {
       return textToSpeech({ ...params, outputFormat: 'mp3_44100_128' })
     }
+    // eleven_v3 may not be available for all plans / voices — fallback to v2
+    if (params.modelId === 'eleven_v3' && (res.status === 422 || res.status === 404 || res.status === 400)) {
+      console.warn('[textToSpeech] eleven_v3 unavailable, falling back to multilingual_v2')
+      return textToSpeech({ ...params, modelId: 'eleven_multilingual_v2' })
+    }
     if (res.status === 422) throw new Error(`Tham số không hợp lệ: ${detail.slice(0, 200)}`)
     throw new Error(`ElevenLabs TTS lỗi (${res.status}): ${detail.slice(0, 200)}`)
   }

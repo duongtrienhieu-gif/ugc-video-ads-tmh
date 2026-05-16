@@ -1222,6 +1222,61 @@ ${script}`
     setPreviewSegments((prev) => prev.map((s, i) => i === index ? { ...s, text: newText } : s))
   }
 
+  // ── Helper: Gemini-powered expression injection ───────────────────────────
+  // Adds ElevenLabs v3 audio tags + natural pacing markers to make the voice
+  // sound human + emotional, not monotone. Tags like [excited], [sad],
+  // [sighs], pauses with "..." and "—" for emphasis.
+
+  const preprocessScriptForExpression = async (rawScript: string): Promise<string> => {
+    if (!geminiApiKey) return rawScript
+
+    const prompt = `You are a voice acting director for an authentic UGC product review video.
+The script below will be voiced by AI. Currently it sounds monotone. Your job: insert ElevenLabs v3 audio tags + natural pacing markers so it sounds like a genuine human review with emotional variation.
+
+INLINE RULES:
+- Insert tags BEFORE the phrase: e.g. "[excited] This is amazing!"
+- Available tags: [excited] [happy] [sad] [curious] [sighs] [chuckles] [whispers] [exclaims] [pauses]
+- Use sparingly — only where emotion clearly shifts (every 1-3 sentences max, NOT every sentence)
+- Natural pacing: use "..." for thoughtful pauses, "," for short breaths, "—" for emphasis
+- DO NOT change actual words. Only ADD tags + pacing markers.
+- Keep the original language exactly (Vietnamese / Malay / English / mixed)
+- DO NOT translate
+
+UGC AD ARC GUIDE (apply emotions based on context):
+- Hook (intro/discovery teaser): [curious] or [excited]
+- Pain story (suffering, frustration): [sad] or [sighs]
+- Failed attempts: [sighs] frustrated tone
+- Discovery (turning point): [excited]
+- How it works (mechanism): [curious] or calm (no tag)
+- Science / authority: calm (no tag)
+- Transformation (relief, joy): [excited] [happy]
+- CTA: confident, [excited]
+
+ORIGINAL SCRIPT:
+${rawScript}
+
+Return ONLY the tagged script. No explanation, no markdown, no preamble.`
+
+    try {
+      const result = await directGeminiVision({
+        apiKey: geminiApiKey,
+        parts: [{ text: prompt }],
+        model: 'gemini-2.5-flash',     // simple task — Flash is enough
+        maxOutputTokens: 4096,
+      })
+      const cleaned = result.trim()
+      // Sanity check: result should be roughly the same length (just with tags added)
+      if (cleaned.length < rawScript.length * 0.8 || cleaned.length > rawScript.length * 2.5) {
+        console.warn('[preprocessScript] suspicious output length, using original')
+        return rawScript
+      }
+      return cleaned
+    } catch (err) {
+      console.warn('[preprocessScript] failed, using original:', err)
+      return rawScript
+    }
+  }
+
   // ── Step 1: Generate voiceover (NEW first step) ──────────────────────────
   // Voice runs BEFORE storyboarding so the AI director knows the real audio
   // duration and can time segments precisely without estimating.
@@ -1240,30 +1295,37 @@ ${script}`
 
     setPhase('running-voice')
     setPhaseError(null)
-    setPhaseDetail('Khởi tạo TTS...')
-    setPhaseProgress(0)
+    setPhaseDetail('Đang phân tích cảm xúc + thêm ngắt nghỉ tự nhiên...')
+    setPhaseProgress(5)
 
     try {
-      // chunkSize 5000 ≈ ElevenLabs max-per-call → 99% scripts run as ONE
-      // API call → no MP3 concat → no audio artifacts (no rè/static).
-      // Only very long scripts (>5000 chars / ~6 minutes audio) fall back
-      // to chunked WAV concat path.
+      // Step 1a: Gemini Flash injects emotion tags + pacing markers into the
+      // raw script so the v3 model has signals for natural expression.
+      const expressiveScript = await preprocessScriptForExpression(script)
+      setPhaseProgress(15)
+      setPhaseDetail('Tạo voiceover với eleven_v3 (expressive)...')
+
+      // Step 1b: TTS with eleven_v3 — supports inline audio tags, much more
+      // expressive than v2. Lower stability (0.5) + style (0.4) for natural
+      // emotional variation instead of robotic flat reading.
+      // chunkSize 5000 ≈ ElevenLabs max-per-call → 99% scripts run single call.
       const { buffer: audioBuffer, mimeType } = await textToSpeechSmooth({
         apiKey: elevenLabsApiKey,
         voiceId: selectedVoiceId,
-        text: script,
-        modelId: 'eleven_multilingual_v2',
-        stability: 0.75,
+        text: expressiveScript,
+        modelId: 'eleven_v3',                // new model — interprets audio tags
+        stability: 0.5,                       // lower = more dynamic (was 0.75)
         similarity: 0.75,
+        style: 0.4,                           // raised from 0 — expressive (was 0)
         speed: 1.1,
         outputFormat: 'mp3_44100_192',
         chunkSize: 5000,
         onProgress: (done, total) => {
-          const pct = (done / total) * 90
+          const pct = 15 + (done / total) * 75
           setPhaseProgress(pct)
           setPhaseDetail(total > 1
-            ? `Tạo audio: ${done}/${total} chunks (1.1x speed)...`
-            : `Tạo audio (single call, không concat — chất lượng tối đa)...`)
+            ? `Tạo audio: ${done}/${total} chunks (eleven_v3, expressive)...`
+            : `Tạo audio (eleven_v3 single call, cảm xúc tự nhiên)...`)
         },
       })
       setPhaseProgress(93)
