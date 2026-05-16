@@ -26,8 +26,11 @@ import type { SceneBlueprint, DiversityReport } from './types'
 import ConsistencySlider from './components/ConsistencySlider'
 import MasterFrameJobStepper from './components/MasterFrameJobStepper'
 import AnalyticsPanel from './components/AnalyticsPanel'
+import SceneGenGrid from './components/SceneGenGrid'
 import { useMasterFrameJobStore } from './stores/masterFrameJobStore'
+import { useSceneGenJobStore } from './stores/sceneGenJobStore'
 import { startMasterFrameJob, clearMasterFrameJob } from './services/masterFrameJobRunner'
+import { startSceneGenQueue, regenerateScene, cancelSceneGenQueue } from './services/sceneGenJobRunner'
 import MasterFrameApproval from './components/MasterFrameApproval'
 import PromptCompilerDebugPanel from './components/PromptCompilerDebugPanel'
 import StoryboardEditor from './components/StoryboardEditor'
@@ -147,12 +150,19 @@ export default function VideoBuilderV2({ onSwitchToV1 }: Props) {
   // instead of starting from scratch.
   const activeJob = useMasterFrameJobStore((s) => s.job)
   const tryResumeFromStorage = useMasterFrameJobStore((s) => s.tryResumeFromStorage)
+  // Also try to resume an in-flight scene-gen queue
+  const tryResumeSceneQueue = useSceneGenJobStore((s) => s.tryResumeFromStorage)
   useEffect(() => {
-    const resumed = tryResumeFromStorage()
-    if (resumed) {
+    const resumedMaster = tryResumeFromStorage()
+    if (resumedMaster) {
       addToast('Đã khôi phục Master Frame job đang chạy từ phiên trước', 'info')
-      // Auto-jump to the master-frame phase so user sees the stepper
       setState((s) => s.phase === 'input' ? { ...s, phase: 'master-frame' } : s)
+    }
+    // Resume scene-gen queue if any
+    const resumedScenes = tryResumeSceneQueue()
+    if (resumedScenes) {
+      addToast('Đã khôi phục queue Gen B-Roll đang dở từ phiên trước (đã pause)', 'info')
+      setState((s) => ({ ...s, phase: 'scene-gen' }))
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -381,10 +391,64 @@ export default function VideoBuilderV2({ onSwitchToV1 }: Props) {
     setState((s) => ({ ...s, phase: 'master-frame' }))
   }
 
+  // ── Module 7: Scene Generation Engine — start the queue ────────────────
+  const [lowCostMode, setLowCostMode] = useState(false)
+
   const handleContinueAfterStoryboard = () => {
-    addToast('Module 4 (QC) + Module 5 (Slider) đang được xây dựng. Sau đó sẽ wire Gen B-Roll img2img.', 'info')
+    if (!state.identityPack || !state.inputs.product) return
+    if (state.blueprints.length === 0) {
+      addToast('Chưa có storyboard — gen storyboard trước', 'error')
+      return
+    }
+    // Need an approved master frame to derive scenes from
+    const approvedFrame = state.masterFrame.candidates[state.masterFrame.approvedIdx]
+    if (!approvedFrame) {
+      addToast('Chưa có Master Frame đã duyệt — quay lại bước trước', 'error')
+      return
+    }
+    if (!kieApiKey || !geminiApiKey) {
+      addToast('Thiếu API key (KIE / Gemini) trong Cài đặt', 'error')
+      return
+    }
+
     setState((s) => ({ ...s, phase: 'scene-gen' }))
+    startSceneGenQueue({
+      kieApiKey,
+      geminiKey: geminiApiKey,
+      blueprints: state.blueprints,
+      masterFrameUrl: approvedFrame.imageUrl,
+      identity: state.identityPack,
+      productName: state.inputs.product.productName,
+      consistency: state.consistency,
+      dna: defaultVisualStyleDna(),
+      lowCostMode,
+    })
+    addToast(`✓ Đã bắt đầu queue ${state.blueprints.length} cảnh (sequential, ${lowCostMode ? 'low-cost' : 'với QC'})`, 'info')
   }
+
+  // ── Scene Gen UI handlers ─────────────────────────────────────────────
+  const sceneJob = useSceneGenJobStore((s) => s.job)
+  const patchSceneItem = useSceneGenJobStore((s) => s.patchItem)
+
+  const handleRegenScene = (idx: number) => {
+    if (!sceneJob || !state.identityPack || !state.inputs.product) return
+    const approvedFrame = state.masterFrame.candidates[state.masterFrame.approvedIdx]
+    if (!approvedFrame || !kieApiKey || !geminiApiKey) return
+    void regenerateScene(idx, {
+      kieApiKey,
+      geminiKey: geminiApiKey,
+      blueprints: state.blueprints,
+      masterFrameUrl: approvedFrame.imageUrl,
+      identity: state.identityPack,
+      productName: state.inputs.product.productName,
+      consistency: state.consistency,
+      dna: defaultVisualStyleDna(),
+      lowCostMode,
+    })
+  }
+
+  const handleApproveScene = (idx: number) => patchSceneItem(idx, { status: 'approved' })
+  const handleRejectScene  = (idx: number) => patchSceneItem(idx, { status: 'rejected' })
 
   const canStart = !!state.inputs.avatar && !!state.inputs.product && !!state.inputs.script.trim()
 
@@ -559,28 +623,19 @@ export default function VideoBuilderV2({ onSwitchToV1 }: Props) {
             onUpdateScene={handleUpdateScene}
             onBack={handleBackToMasterFrame}
             onContinue={handleContinueAfterStoryboard}
+            lowCostMode={lowCostMode}
+            onLowCostModeChange={setLowCostMode}
           />
         )}
 
-        {/* PHASE: SCENE-GEN (Module 6 placeholder — next phase) */}
+        {/* PHASE: SCENE-GEN — Module 7 — real sequential img2img queue */}
         {state.phase === 'scene-gen' && (
-          <div className="flex h-full flex-col items-center justify-center gap-4 p-8 text-center">
-            <div className="rounded-full bg-violet-50 p-4">
-              <Sparkles className="h-8 w-8 text-violet-500" />
-            </div>
-            <h2 className="text-base font-bold text-gray-800">Module 4-6 đang được xây dựng</h2>
-            <p className="max-w-md text-xs text-gray-500">
-              Module 1 (Master Frame) ✓ · Module 2 (Prompt Compiler) ✓ · Module 3 (Storyboard JSON) ✓<br />
-              Còn lại: QC engine · Consistency Slider · Gen B-Roll img2img.<br /><br />
-              Để hoàn thiện video, hãy quay lại Pipeline v1.
-            </p>
-            <button
-              onClick={onSwitchToV1}
-              className="rounded-full bg-violet-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-violet-700"
-            >
-              Quay về Pipeline v1 để render
-            </button>
-          </div>
+          <SceneGenGrid
+            onRegenerate={handleRegenScene}
+            onApprove={handleApproveScene}
+            onReject={handleRejectScene}
+            onCancelQueue={cancelSceneGenQueue}
+          />
         )}
       </div>
 

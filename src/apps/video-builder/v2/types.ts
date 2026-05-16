@@ -481,6 +481,75 @@ export interface MasterFrameJob {
   failure?: MasterFrameJobFailure
 }
 
+// ── MODULE 7: Scene Generation Engine ────────────────────────────────────────
+// After Master Frame is approved + storyboard JSON is locked, the SceneGenEngine
+// turns each Scene Blueprint into a REAL image via img2img derived from the
+// approved Master Frame. NOT independent txt2img — every scene inherits identity
+// + packaging from the master frame, only pose / framing / environment vary.
+
+export type SceneGenItemStatus =
+  | 'pending'       // queued, not yet started
+  | 'generating'    // KIE GPT-4o image-edit in flight
+  | 'auto_validating' // heuristic + Gemini QC running
+  | 'retrying'      // QC failed once, regenerating with bumps
+  | 'approved'      // user-approved (default: auto-approved on QC pass)
+  | 'rejected'      // user rejected (will be regen'd or skipped)
+  | 'failed'        // hard fail after retries exhausted
+  | 'cancelled'
+
+export const SCENE_STATUS_LABEL_VI: Record<SceneGenItemStatus, string> = {
+  'pending':           'Đang chờ...',
+  'generating':        'Đang tạo ảnh...',
+  'auto_validating':   'Đang kiểm tra QC...',
+  'retrying':          'Đang tạo lại (QC fail)...',
+  'approved':          'Đã duyệt ✓',
+  'rejected':          'Đã từ chối',
+  'failed':            'Thất bại',
+  'cancelled':         'Đã hủy',
+}
+
+export interface SceneGenItem {
+  sceneId: number                 // 1-indexed (matches SceneBlueprint.sceneId)
+  blueprint: SceneBlueprint       // locked at queue start
+  status: SceneGenItemStatus
+  /** Final accepted image url (or best-so-far on retry exhaust) */
+  imageUrl: string | null
+  /** Compiled prompt for this scene — for debug panel */
+  promptUsed?: string
+  /** QC score for the final accepted image */
+  qc?: QcScore | null
+  /** Per-scene retry count (within this scene's gen loop) */
+  retryCount: number
+  /** When this scene started / finished */
+  startedAt?: number
+  finishedAt?: number
+  /** Error message if status='failed' */
+  error?: string
+}
+
+export interface SceneGenJob {
+  /** When the queue started */
+  startedAt: number
+  /** Master Frame URL — all scenes derive img2img from this */
+  masterFrameUrl: string
+  /** Locked identity pack from earlier phase */
+  identity: IdentityPack
+  /** Product name from bank for prompt anchoring */
+  productName: string
+  /** Consistency settings — locks compiler strength + QC thresholds */
+  consistency: ConsistencyConfig
+  /** Visual style DNA snapshot */
+  dna: VisualStyleDna
+  /** Cost control: skip QC retry loop entirely (1 attempt per scene) */
+  lowCostMode: boolean
+  /** 9 scene items in order */
+  items: SceneGenItem[]
+  /** Index of the scene currently being processed (-1 = idle/done) */
+  currentIdx: number
+  /** Overall queue status */
+  status: 'idle' | 'running' | 'paused' | 'completed' | 'failed' | 'cancelled'
+}
+
 // ── v2 Pipeline State ────────────────────────────────────────────────────────
 
 export type V2Phase =

@@ -18,6 +18,9 @@ interface Props {
   onUpdateScene: (idx: number, patch: Partial<SceneBlueprint>) => void
   onBack: () => void
   onContinue: () => void
+  /** Module 7 cost-control: skip QC retry per scene for cheaper queue */
+  lowCostMode: boolean
+  onLowCostModeChange: (v: boolean) => void
 }
 
 // ── Vietnamese label mapping ────────────────────────────────────────────────
@@ -273,6 +276,7 @@ function DiversityPanel({ report }: { report: DiversityReport }) {
 // ── Main editor ─────────────────────────────────────────────────────────────
 export default function StoryboardEditor({
   blueprints, diversity, isGenerating, onRegenerate, onUpdateScene, onBack, onContinue,
+  lowCostMode, onLowCostModeChange,
 }: Props) {
   return (
     <div className="flex h-full flex-col overflow-hidden">
@@ -337,13 +341,25 @@ export default function StoryboardEditor({
           >
             <ArrowLeft className="h-3.5 w-3.5" /> Quay lại Master Frame
           </button>
-          <button
-            onClick={onContinue}
-            disabled={blueprints.length === 0 || isGenerating}
-            className="flex items-center gap-1.5 rounded-lg bg-gradient-to-r from-violet-600 to-purple-500 px-4 py-2 text-xs font-bold text-white shadow-md transition-all hover:from-violet-700 hover:to-purple-600 disabled:cursor-not-allowed disabled:opacity-40"
-          >
-            Tiếp theo: Gen B-Roll <ArrowRight className="h-3.5 w-3.5" />
-          </button>
+          <div className="flex items-center gap-2">
+            {/* Cost-control toggle */}
+            <label className="flex cursor-pointer items-center gap-1.5 rounded-lg border border-amber-300 bg-amber-50/60 px-2 py-1.5 text-[10px] font-semibold text-amber-700">
+              <input
+                type="checkbox"
+                checked={lowCostMode}
+                onChange={(e) => onLowCostModeChange(e.target.checked)}
+                className="h-3 w-3 accent-amber-600"
+              />
+              Low-cost mode (bỏ QC retry)
+            </label>
+            <button
+              onClick={onContinue}
+              disabled={blueprints.length === 0 || isGenerating}
+              className="flex items-center gap-1.5 rounded-lg bg-gradient-to-r from-violet-600 to-purple-500 px-4 py-2 text-xs font-bold text-white shadow-md transition-all hover:from-violet-700 hover:to-purple-600 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              Tiếp theo: Gen B-Roll <ArrowRight className="h-3.5 w-3.5" />
+            </button>
+          </div>
         </div>
       </div>
     </div>
