@@ -1,5 +1,5 @@
 ﻿import { useState, useEffect, useRef, useCallback } from 'react'
-import { User, MapPin, Move, Camera, Upload, X, Loader2 } from 'lucide-react'
+import { User, MapPin, Move, Camera, Upload, X, Loader2, Sparkles } from 'lucide-react'
 import { useAppStore } from '../../stores/appStore'
 import type { CharacterProfile, TabId } from './types'
 import { createEmptyProfile, TABS } from './types'
@@ -10,6 +10,10 @@ import type { GenerationResult } from './services/generateCharacter'
 import { useSettingsStore } from '../../stores/settingsStore'
 import type { ImageResolution } from '../../utils/kieai'
 import { directGeminiVision, fileToBase64 } from '../../utils/gemini'
+import { useBankStore } from '../../stores/bankStore'
+import { saveAsset } from '../../utils/assetStore'
+import VariantsModal from '../finder/VariantsModal'
+import type { Model } from '../../stores/types'
 
 const TAB_ICONS: Record<TabId, React.ElementType> = {
   physical: User,
@@ -38,6 +42,12 @@ export default function CharacterStudio() {
   const [isAnalyzingRef, setIsAnalyzingRef] = useState(false)
   const [refDragOver, setRefDragOver] = useState(false)
   const refInputRef = useRef<HTMLInputElement>(null)
+  const [variantModel, setVariantModel] = useState<Model | null>(null)
+  const [variantsOpen, setVariantsOpen] = useState(false)
+  const [isSavingRef, setIsSavingRef] = useState(false)
+
+  const addModel = useBankStore((s) => s.addModel)
+  const models = useBankStore((s) => s.models)
 
   const interAppPayload = useAppStore((s) => s.interAppPayload)
   const consumePayload = useAppStore((s) => s.consumePayload)
@@ -116,6 +126,36 @@ export default function CharacterStudio() {
     if (refInputRef.current) refInputRef.current.value = ''
   }
 
+  // Save reference photo as a Model + open VariantsModal to generate 4 angles.
+  // Used when user uploads a real photo and wants variants without AI generation.
+  const handleSaveRefAndGenAngles = async () => {
+    if (!refImage) return
+    setIsSavingRef(true)
+    try {
+      const assetRef = await saveAsset(refImage.file, refImage.file.type || 'image/jpeg')
+      const name = refImage.file.name.replace(/\.[^.]+$/, '') || 'Avatar thật'
+      await addModel({
+        characterImage: assetRef,
+        name,
+        notes: 'Ảnh thật — upload từ Avatar AI',
+        jsonProfile: null,
+        source: 'character-studio',
+      })
+      // Find the saved model reactively — it's at the top of models (newest first)
+      const saved = useBankStore.getState().models.find((m) => m.characterImage === assetRef)
+      if (saved) {
+        setVariantModel(saved)
+        setVariantsOpen(true)
+      } else {
+        addToast('Lưu xong — vào Project → Avatar AI → hover ảnh → ✨ để tạo 4 góc', 'info')
+      }
+    } catch (err) {
+      addToast(`Lưu ảnh thất bại: ${err instanceof Error ? err.message.slice(0, 80) : 'unknown'}`, 'error')
+    } finally {
+      setIsSavingRef(false)
+    }
+  }
+
   const handleGenerate = async (modelId: string, resolution: ImageResolution) => {
     if (!kieApiKey.trim()) {
       addToast('Vui lòng nhập kie.ai API key trong Cài đặt', 'error')
@@ -157,26 +197,42 @@ export default function CharacterStudio() {
         </p>
 
         {refImage ? (
-          <div className="flex items-center gap-3">
-            <div className="relative h-12 w-12 shrink-0 overflow-hidden rounded-lg border border-black/10">
-              <img src={refImage.preview} alt="" className="h-full w-full object-cover" />
+          <div className="flex flex-col gap-2">
+            <div className="flex items-center gap-3">
+              <div className="relative h-12 w-12 shrink-0 overflow-hidden rounded-lg border border-black/10">
+                <img src={refImage.preview} alt="" className="h-full w-full object-cover" />
+              </div>
+              <div className="flex flex-1 items-center gap-2">
+                {isAnalyzingRef ? (
+                  <>
+                    <Loader2 className="h-3.5 w-3.5 animate-spin text-sky-400" />
+                    <span className="text-xs text-gray-500">Đang phân tích ảnh...</span>
+                  </>
+                ) : (
+                  <span className="text-xs text-gray-500">Đã điền thông số từ ảnh tham chiếu</span>
+                )}
+              </div>
+              <button
+                onClick={clearRefImage}
+                className="rounded-lg p-1.5 text-gray-400 transition-colors hover:bg-black/5 hover:text-gray-700"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
             </div>
-            <div className="flex flex-1 items-center gap-2">
-              {isAnalyzingRef ? (
-                <>
-                  <Loader2 className="h-3.5 w-3.5 animate-spin text-sky-400" />
-                  <span className="text-xs text-gray-500">Đang phân tích ảnh...</span>
-                </>
-              ) : (
-                <span className="text-xs text-gray-500">Đã điền thông số từ ảnh tham chiếu</span>
-              )}
-            </div>
-            <button
-              onClick={clearRefImage}
-              className="rounded-lg p-1.5 text-gray-400 transition-colors hover:bg-black/5 hover:text-gray-700"
-            >
-              <X className="h-3.5 w-3.5" />
-            </button>
+            {/* Save real photo + generate 4 angles directly */}
+            {!isAnalyzingRef && (
+              <button
+                onClick={handleSaveRefAndGenAngles}
+                disabled={isSavingRef}
+                className="flex w-full items-center justify-center gap-2 rounded-lg border border-violet-300 bg-violet-50 px-3 py-2 text-xs font-semibold text-violet-700 transition-colors hover:bg-violet-100 disabled:opacity-50"
+              >
+                {isSavingRef ? (
+                  <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Đang lưu...</>
+                ) : (
+                  <><Sparkles className="h-3.5 w-3.5" /> Lưu ảnh thật + Tạo 4 góc mặt (identity lock)</>
+                )}
+              </button>
+            )}
           </div>
         ) : (
           <button
@@ -252,6 +308,9 @@ export default function CharacterStudio() {
           />
         </div>
       </div>
+      {variantsOpen && variantModel && (
+        <VariantsModal model={variantModel} onClose={() => setVariantsOpen(false)} />
+      )}
     </div>
   )
 }
