@@ -417,11 +417,11 @@ interface PipeData {
 
 // Step labels for the running/review panel header
 const STEP_INFO: Record<string, { num: number; label: string; subLabel: string; cost: string }> = {
-  parse:    { num: 1, label: 'Phân tích kịch bản',  subLabel: 'Chia script thành đoạn + B-roll prompts',  cost: 'Miễn phí' },
-  voice:    { num: 2, label: 'Voiceover',           subLabel: 'TTS toàn bộ script → audio file',          cost: '~$0.30 · ElevenLabs' },
-  resolve:  { num: 3, label: 'Chuẩn bị tài nguyên', subLabel: 'Resolve URL ảnh',                          cost: 'Miễn phí' },
+  voice:    { num: 1, label: 'Voiceover',           subLabel: 'TTS toàn bộ script → audio file (1.2x speed)', cost: '~$0.30 · ElevenLabs' },
+  parse:    { num: 2, label: 'Storyboard',          subLabel: 'Gemini Pro phân tích voice → cảnh quay chi tiết', cost: 'Miễn phí' },
+  resolve:  { num: 3, label: 'Chuẩn bị tài nguyên', subLabel: 'Upload audio + resolve URL ảnh',           cost: 'Miễn phí' },
   avatar:   { num: 4, label: 'Avatar Lip-sync',     subLabel: 'Kling Avatar: ảnh + audio → video nói',    cost: '~624 KIE credit' },
-  brollimg: { num: 5, label: 'B-roll Images',       subLabel: 'Gen ảnh tĩnh từ prompt — review trước khi animate', cost: '~64 KIE credit' },
+  brollimg: { num: 5, label: 'B-roll Images',       subLabel: 'Gen ảnh tĩnh từ storyboard — review trước khi animate', cost: '~64 KIE credit' },
   broll:    { num: 6, label: 'B-roll Videos',       subLabel: 'Image-to-video: ảnh tĩnh → clip chuyển động', cost: '~560 KIE credit' },
   bg:       { num: 7, label: 'Xóa nền Avatar',      subLabel: 'Tách nền để overlay trong suốt',           cost: '~$0.50 · fal.ai' },
   assemble: { num: 8, label: 'Ghép video',          subLabel: 'Layer B-roll + avatar + captions',         cost: '~$0.50 · Shotstack' },
@@ -681,39 +681,55 @@ export default function VideoBuilder() {
     setPreviewBgUrl(null)
   }
 
-  // ── Step 1: Parse script ─────────────────────────────────────────────────
+  // ── Step 2: Storyboard from audio + script ────────────────────────────────
+  // Runs AFTER voice so we have real audio duration and segments time exactly.
+  // Uses cinematic-director prompt to generate VISUALLY SPECIFIC scene prompts
+  // matching the actual content of each voice line.
 
   const runParse = async () => {
+    const audioDuration = pipeRef.current.audioDuration
+    if (!audioDuration) { setPhaseError('Thiếu audio — chạy lại bước Voice'); setPhase('failed'); return }
+
     setPhase('running-parse')
     setPhaseError(null)
-    setPhaseDetail('Đang gọi Gemini...')
+    setPhaseDetail('Gemini Pro phân tích voice → storyboard chi tiết...')
 
-    // Initialize job metadata on first run
-    if (!pipeRef.current.jobId) {
-      const voiceName = voices.find((v) => v.voice_id === selectedVoiceId)?.name ?? selectedVoiceId
-      const jobName = (scripts.find((s) => s.id === selectedScriptId)?.title || script.slice(0, 40)).trim()
-      pipeRef.current.jobId = crypto.randomUUID()
-      pipeRef.current.jobName = jobName
-      pipeRef.current.voiceName = voiceName
-    }
+    const parsePrompt = `You are a senior UGC video director creating a cinematic storyboard.
 
-    const parsePrompt = `Split this UGC video script into 6-10 segments (4-8 seconds each).
+The voiceover is ${audioDuration.toFixed(1)} seconds long. Split the script into 8-12 segments matching natural pause/sentence boundaries. Each segment should be 4-8 seconds.
 
-Rules:
-- Split at natural sentence/pause boundaries
-- durationSec: estimate from ~130 words/min reading speed
-- startSec: always 0.0 (recalculated later)
-- avatarPosition: alternate "left" and "right" each segment
+For EACH segment, produce a HIGHLY SPECIFIC visual storyboard prompt (brollPrompt, English, 60-100 words) that VISUALLY MATCHES what the speaker is saying at that exact moment. The image generator will use this prompt to create a still photo, which will then be animated into a 5-second video clip.
 
-useProduct logic:
-- true: segment mentions, describes, recommends, or references the product (by name OR by benefit/feature)
-- false: pure intro/hook/pain-point/lifestyle storytelling without product reference
+brollPrompt MUST describe:
+1. AVATAR ACTION: specific physical action the avatar (friendly content creator) is doing — matched to the voice content
+2. SETTING: specific real-world location matching the context (kitchen / bathroom / park / desk / dining table / pharmacy / outdoor / etc.)
+3. EMOTION: facial expression / body language matching what the speaker feels in that line (frustrated / relieved / joyful / energetic / confident / nostalgic)
+4. SHOT TYPE: close-up macro / medium shot / wide / over-shoulder / POV
+5. CAMERA MOVEMENT: slow zoom-in / gentle pan / static / handheld / tracking
+6. LIGHTING & MOOD: warm golden hour / soft daylight / clinical white / dramatic side-light
+7. PRODUCT (if mentioned): describe product appearance — bottle shape, label color, capsule/liquid form
+8. CINEMATIC STYLE: hyperrealistic UGC ad, shallow depth of field, no text overlay, vertical 9:16
 
-brollPrompt logic (English, vivid, cinematic):
-- If useProduct=true:
-  "Cinematic vertical 9:16 close-up UGC ad shot of a friendly content creator (matching the reference avatar image) holding/using/showing the product (matching the reference product image) with natural hand gestures. Lifestyle home setting matching the script context. Soft natural window lighting, warm tones, shallow depth of field. Focus on the product. No text overlay."
-- If useProduct=false:
-  Describe a vivid lifestyle B-roll scene related to the segment's emotional content (e.g., "Person waking up tired and unmotivated", "Hands kneading a sore stomach", "Bright morning kitchen with healthy food on counter"). Vertical 9:16, cinematic, authentic UGC look. No text overlay. People allowed.
+EXAMPLES (study these carefully — your prompts must be this specific):
+
+Voice: "Cơ sở khoa học của sản phẩm rất vững chắc"
+→ "Macro close-up of two hands holding a probiotic supplement bottle, label clearly visible showing scientific iconography. Clean white desk surface with a notebook in soft focus. Side window daylight, professional documentary aesthetic, shallow depth of field. Camera slowly pushes in on the label. Vertical 9:16, hyperrealistic photography, no text overlay."
+
+Voice: "Tôi có thể thưởng thức đồ ăn trở lại"
+→ "Medium shot of cheerful young woman at sunny breakfast table, taking a satisfying bite of pasta with closed-eye genuine pleasure. Warm golden morning light streams through kitchen window. Plate of healthy food, fresh orange juice nearby. Camera at eye level with slight handheld feel. Authentic UGC vibe, fork lifts toward mouth. Vertical 9:16, hyperrealistic."
+
+Voice: "Tôi cảm thấy tràn đầy năng lượng"
+→ "Wide low-angle tracking shot of confident woman walking briskly through morning park path, arms swinging naturally, bright empowered smile. Sunlight flares through trees, dappled light on her face. Vibrant green nature background. Camera matches her energetic pace. Vertical 9:16, vivid color, hyperrealistic, no text overlay."
+
+Voice: "INFINITY PROBIOTICS PLUS thực sự đã thay đổi cuộc đời tôi"
+→ "Hero close-up product shot: avatar's hands present the INFINITY PROBIOTICS PLUS bottle directly toward camera, label fully readable. Soft natural living-room background blurred. Gentle smile partially visible above. Warm honey-toned lighting, premium commercial feel, slight camera push-in. Vertical 9:16, hyperrealistic, no text overlay."
+
+Other rules:
+- avatarPosition: alternate "left" / "right" each segment
+- useProduct: true if segment mentions/references the product (by name, benefit, mechanism, or transformation result)
+- durationSec + startSec: distribute proportionally to text length, MUST sum to exactly ${audioDuration.toFixed(1)} seconds
+- text: the exact original-language voice text for this segment (Vietnamese / Malay / English — DO NOT translate)
+- brollPrompt: always in English (image model works best in English)
 
 SCRIPT:
 ${script}`
@@ -746,32 +762,34 @@ ${script}`
     let parsed: ParseResult | null = null
     let usedFallback = false
 
-    // Attempt 1: Gemini with schema
+    // Attempt 1: Gemini Pro (best creative reasoning) with schema
     if (geminiApiKey) {
       try {
         const raw = await directGeminiVision({
           apiKey: geminiApiKey,
           parts: [{ text: parsePrompt }],
-          maxOutputTokens: 8192,
+          model: 'gemini-2.5-pro',          // Pro = better cinematic storyboarding
+          maxOutputTokens: 16384,            // detailed prompts use more tokens
           responseMimeType: 'application/json',
           responseSchema: parseSchema,
         })
         parsed = JSON.parse(extractJson(raw)) as ParseResult
       } catch (e1) {
-        console.warn('[parse] Gemini attempt 1 failed:', e1)
-        setPhaseDetail('Thử lại Gemini...')
+        console.warn('[parse] Pro attempt failed, falling back to Flash:', e1)
+        setPhaseDetail('Pro bận → thử Flash...')
 
-        // Attempt 2: Gemini without schema
+        // Attempt 2: Gemini Flash (faster fallback) with schema
         try {
           const raw = await directGeminiVision({
             apiKey: geminiApiKey,
             parts: [{ text: parsePrompt }],
-            maxOutputTokens: 8192,
+            maxOutputTokens: 16384,
             responseMimeType: 'application/json',
+            responseSchema: parseSchema,
           })
           parsed = JSON.parse(extractJson(raw)) as ParseResult
         } catch (e2) {
-          console.warn('[parse] Gemini attempt 2 failed:', e2)
+          console.warn('[parse] Flash attempt failed:', e2)
         }
       }
     }
@@ -789,9 +807,22 @@ ${script}`
       return
     }
 
-    pipeRef.current.segments = parsed.segments
-    pipeRef.current.totalEstimatedSec = parsed.totalEstimatedSec
-    setPreviewSegments([...parsed.segments])
+    // Re-time segments from REAL audio duration (not Gemini's estimate)
+    // Distribute time proportionally to character count of each segment
+    const totalChars = parsed.segments.reduce((s, seg) => s + seg.text.length, 0)
+    let cursor = 0
+    const timedSegments: ScriptSegment[] = parsed.segments.map((seg) => {
+      const ratio    = totalChars > 0 ? seg.text.length / totalChars : 1 / parsed!.segments.length
+      const duration = audioDuration * ratio
+      const ts = { ...seg, startSec: cursor, durationSec: duration }
+      cursor += duration
+      return ts
+    })
+
+    pipeRef.current.segments = timedSegments
+    pipeRef.current.timedSegments = timedSegments
+    pipeRef.current.totalEstimatedSec = audioDuration
+    setPreviewSegments([...timedSegments])
 
     if (usedFallback) {
       addToast('Đã dùng phân tích offline (Gemini không phản hồi). Bạn có thể chỉnh sửa segments.', 'error')
@@ -805,13 +836,21 @@ ${script}`
     setPreviewSegments((prev) => prev.map((s, i) => i === index ? { ...s, text: newText } : s))
   }
 
-  // ── Step 2: Generate voiceover ───────────────────────────────────────────
+  // ── Step 1: Generate voiceover (NEW first step) ──────────────────────────
+  // Voice runs BEFORE storyboarding so the AI director knows the real audio
+  // duration and can time segments precisely without estimating.
 
   const runVoice = async () => {
-    // Persist any edits the user made to segments
-    pipeRef.current.segments = [...previewSegments]
-
     if (!elevenLabsApiKey) { setPhaseError('Cần ElevenLabs API key'); setPhase('failed'); return }
+
+    // Initialize job metadata on first run (moved here since voice is step 1)
+    if (!pipeRef.current.jobId) {
+      const voiceName = voices.find((v) => v.voice_id === selectedVoiceId)?.name ?? selectedVoiceId
+      const jobName = (scripts.find((s) => s.id === selectedScriptId)?.title || script.slice(0, 40)).trim()
+      pipeRef.current.jobId = crypto.randomUUID()
+      pipeRef.current.jobName = jobName
+      pipeRef.current.voiceName = voiceName
+    }
 
     setPhase('running-voice')
     setPhaseError(null)
@@ -819,8 +858,8 @@ ${script}`
 
     try {
       // textToSpeechSmooth: chunked + context continuity for consistent quality
-      // on long scripts. Uses 192kbps MP3 (falls back to 128 if plan blocks it),
-      // stability 0.75 for steadier voice across chunks, 1.2x speed for snappier UGC pace.
+      // on long scripts. 192kbps MP3 (falls back to 128 if plan blocks it),
+      // stability 0.75 for steadier voice, 1.2x speed for snappier UGC pace.
       const audioBuffer = await textToSpeechSmooth({
         apiKey: elevenLabsApiKey,
         voiceId: selectedVoiceId,
@@ -828,7 +867,7 @@ ${script}`
         modelId: 'eleven_multilingual_v2',
         stability: 0.75,
         similarity: 0.75,
-        speed: 1.2,                            // ElevenLabs max — snappier UGC delivery
+        speed: 1.2,
         outputFormat: 'mp3_44100_192',
         chunkSize: 400,
         onProgress: (done, total) => {
@@ -838,23 +877,10 @@ ${script}`
       const audioDuration = await getAudioDuration(audioBuffer)
       const audioBlob = new Blob([audioBuffer], { type: 'audio/mpeg' })
 
-      // Recalculate per-segment timing from real audio duration
-      const segments = pipeRef.current.segments ?? []
-      const totalChars = segments.reduce((s, seg) => s + seg.text.length, 0)
-      let cursor = 0
-      const timedSegments: ScriptSegment[] = segments.map((seg) => {
-        const ratio    = totalChars > 0 ? seg.text.length / totalChars : 1 / segments.length
-        const duration = audioDuration * ratio
-        const s = { ...seg, startSec: cursor, durationSec: duration }
-        cursor += duration
-        return s
-      })
-
       pipeRef.current.audioDuration = audioDuration
       pipeRef.current.audioBlob = audioBlob
-      pipeRef.current.timedSegments = timedSegments
 
-      // Local preview URL (we upload to Supabase only when user continues)
+      // Local preview URL (upload to Supabase happens in resolve step)
       if (previewVoiceUrl?.startsWith('blob:')) URL.revokeObjectURL(previewVoiceUrl)
       setPreviewVoiceUrl(URL.createObjectURL(audioBlob))
 
@@ -1438,7 +1464,7 @@ ${script}`
         <div className="shrink-0 border-t border-black/8 p-4">
           {isIdle ? (
             <button
-              onClick={runParse}
+              onClick={runVoice}
               disabled={!canStart}
               className="relative w-full overflow-hidden rounded-xl py-4 text-sm font-bold text-white shadow-lg shadow-violet-500/25 transition-all hover:shadow-violet-500/40 disabled:cursor-not-allowed disabled:opacity-40"
               style={{
@@ -1446,7 +1472,7 @@ ${script}`
                 backgroundColor: !canStart ? '#d1d5db' : undefined,
               }}
             >
-              <span className="flex items-center justify-center gap-2"><Sparkles className="h-4 w-4" />Bắt đầu Build (Bước 1: Miễn phí)</span>
+              <span className="flex items-center justify-center gap-2"><Sparkles className="h-4 w-4" />Bắt đầu Build (Bước 1: Voice ~$0.30)</span>
             </button>
           ) : (
             <button
@@ -1487,16 +1513,16 @@ ${script}`
           {/* Running states */}
           {phase.startsWith('running-') && <RunningPanel phase={phase} detail={phaseDetail} />}
 
-          {/* ─── Review: Parse ─── */}
+          {/* ─── Review: Storyboard (was Parse, now step 2) ─── */}
           {phase === 'review-parse' && (
             <ReviewCard
               onRetry={runParse}
-              onContinue={runVoice}
-              continueLabel="Tiếp tục → Voiceover"
-              continueCost={STEP_INFO.voice.cost}
+              onContinue={runResolve}
+              continueLabel="Tiếp tục → Avatar"
+              continueCost={STEP_INFO.avatar.cost}
             >
               <p className="mb-3 text-xs text-gray-500">
-                <strong className="text-emerald-600">{previewSegments.length} đoạn</strong> · ~{formatDuration(pipeRef.current.totalEstimatedSec ?? 0)} · Bạn có thể sửa text trực tiếp
+                <strong className="text-emerald-600">{previewSegments.length} cảnh quay</strong> · {formatDuration(pipeRef.current.audioDuration ?? 0)} (timed từ audio thật) · Bạn có thể sửa text trực tiếp
               </p>
               <div className="space-y-2 max-h-96 overflow-y-auto">
                 {previewSegments.map((seg, i) => (
@@ -1511,27 +1537,34 @@ ${script}`
                       rows={2}
                       className="w-full resize-none rounded-md border border-black/8 bg-white px-2 py-1.5 text-xs text-gray-700 outline-none focus:border-violet-300"
                     />
-                    <p className="mt-1.5 line-clamp-2 text-[10px] italic text-violet-500">B-roll: {seg.brollPrompt}</p>
+                    <details className="mt-1.5 text-[10px] text-violet-600">
+                      <summary className="cursor-pointer font-semibold hover:underline">
+                        🎬 Storyboard cảnh quay (click để xem chi tiết)
+                      </summary>
+                      <p className="mt-1 rounded bg-violet-50 p-2 italic leading-relaxed text-gray-700">
+                        {seg.brollPrompt}
+                      </p>
+                    </details>
                   </div>
                 ))}
               </div>
             </ReviewCard>
           )}
 
-          {/* ─── Review: Voice ─── */}
+          {/* ─── Review: Voice (now step 1) ─── */}
           {phase === 'review-voice' && (
             <ReviewCard
               onRetry={runVoice}
-              onContinue={runResolve}
-              continueLabel="Tiếp tục → Avatar"
-              continueCost={STEP_INFO.avatar.cost}
+              onContinue={runParse}
+              continueLabel="Tiếp tục → Storyboard"
+              continueCost={STEP_INFO.parse.cost}
             >
               <p className="mb-2 text-xs text-gray-500">
-                Nghe thử voiceover trước khi commit cost lớn nhất (~624 KIE credit cho Avatar)
+                Nghe thử voiceover. Tiếp theo Gemini Pro sẽ phân tích chi tiết từng câu để gen storyboard cảnh quay khớp với voice.
               </p>
               <audio controls src={previewVoiceUrl ?? ''} className="w-full" />
               <p className="mt-2 text-xs text-gray-400">
-                Thời lượng: <strong>{formatDuration(pipeRef.current.audioDuration ?? 0)}</strong> · Kích thước: {Math.round((pipeRef.current.audioBlob?.size ?? 0) / 1024)} KB
+                Thời lượng: <strong>{formatDuration(pipeRef.current.audioDuration ?? 0)}</strong> · Kích thước: {Math.round((pipeRef.current.audioBlob?.size ?? 0) / 1024)} KB · 1.2x speed
               </p>
             </ReviewCard>
           )}
@@ -1720,11 +1753,11 @@ ${script}`
               <div className="text-center">
                 <p className="text-base font-semibold text-gray-500">Pipeline thủ công · 8 bước</p>
                 <p className="mt-1.5 max-w-sm text-center text-sm leading-relaxed text-gray-400">
-                  Mỗi bước duyệt thủ công · B-roll chia 2 phase (ảnh tĩnh rẻ → animate đắt) để bạn fix ảnh xấu trước khi commit video.
+                  Voice trước (1.2x speed) → Gemini Pro phân tích từng câu thành storyboard cinematic → ảnh tĩnh review → animate → ghép cuối.
                 </p>
               </div>
               <div className="flex flex-wrap justify-center gap-2 text-xs text-gray-400">
-                {['Free ① Parse', '$0.30 EL ② Voice', '624 cr ④ Avatar', '64 cr ⑤ Images', '560 cr ⑥ Videos', '$0.50 fal ⑦ BG', '$0.50 SS ⑧ Render'].map((t) => (
+                {['$0.30 EL ① Voice', 'Free ② Storyboard', '624 cr ④ Avatar', '64 cr ⑤ Images', '560 cr ⑥ Videos', '$0.50 fal ⑦ BG', '$0.50 SS ⑧ Render'].map((t) => (
                   <span key={t} className="rounded-full border border-black/8 bg-black/[0.02] px-3 py-1.5">{t}</span>
                 ))}
               </div>
