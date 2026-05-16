@@ -283,17 +283,104 @@ export async function textToSpeech(params: {
   return res.arrayBuffer()
 }
 
+// ── Audio concatenation via Web Audio API ─────────────────────────────────
+// Concatenating MP3s at the binary level produces audible pops/static at the
+// chunk boundaries (frame headers misalign, ID3 tags interrupt sample flow).
+// That noise also breaks downstream lip-sync models like Kling Avatar — they
+// lose phoneme tracking once they hit a pop. The fix: decode each MP3 to
+// raw PCM samples via Web Audio API, concatenate samples (no boundaries),
+// re-encode as a single seamless WAV file.
+
+function writeString(view: DataView, offset: number, str: string): void {
+  for (let i = 0; i < str.length; i++) view.setUint8(offset + i, str.charCodeAt(i))
+}
+
+function float32ToWav(samples: Float32Array, numChannels: number, sampleRate: number): ArrayBuffer {
+  const dataSize = samples.length * 2  // 16-bit PCM
+  const totalSize = 44 + dataSize
+  const ab = new ArrayBuffer(totalSize)
+  const view = new DataView(ab)
+
+  // RIFF header
+  writeString(view, 0, 'RIFF')
+  view.setUint32(4, totalSize - 8, true)
+  writeString(view, 8, 'WAVE')
+  // fmt chunk
+  writeString(view, 12, 'fmt ')
+  view.setUint32(16, 16, true)                              // chunk size
+  view.setUint16(20, 1, true)                               // PCM format
+  view.setUint16(22, numChannels, true)
+  view.setUint32(24, sampleRate, true)
+  view.setUint32(28, sampleRate * numChannels * 2, true)    // byte rate
+  view.setUint16(32, numChannels * 2, true)                 // block align
+  view.setUint16(34, 16, true)                              // bits per sample
+  // data chunk
+  writeString(view, 36, 'data')
+  view.setUint32(40, dataSize, true)
+
+  // Samples (clamp to [-1, 1], convert to int16)
+  let offset = 44
+  for (let i = 0; i < samples.length; i++) {
+    const s = Math.max(-1, Math.min(1, samples[i]))
+    view.setInt16(offset, s < 0 ? s * 0x8000 : s * 0x7fff, true)
+    offset += 2
+  }
+  return ab
+}
+
+async function concatMp3sToWav(mp3Buffers: ArrayBuffer[]): Promise<ArrayBuffer> {
+  if (mp3Buffers.length === 0) throw new Error('No audio buffers to concat')
+
+  // Browsers may not honor sampleRate option exactly; we'll use whatever
+  // decodeAudioData gives us (usually 44100 from ElevenLabs MP3 output)
+  const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext
+  const audioCtx = new AudioCtx()
+
+  try {
+    // Decode each MP3 chunk into AudioBuffer (PCM samples in float32)
+    const audioBuffers: AudioBuffer[] = []
+    for (const mp3 of mp3Buffers) {
+      // slice(0) creates a copy so the original ArrayBuffer isn't detached
+      const decoded = await audioCtx.decodeAudioData(mp3.slice(0))
+      audioBuffers.push(decoded)
+    }
+
+    // All chunks should share the same sample rate + channel count since
+    // ElevenLabs returns consistent output for the same voice settings
+    const numChannels = audioBuffers[0].numberOfChannels
+    const sampleRate  = audioBuffers[0].sampleRate
+    const totalSamples = audioBuffers.reduce((sum, b) => sum + b.length, 0)
+
+    // Build interleaved sample array (left, right, left, right, ...)
+    const output = new Float32Array(totalSamples * numChannels)
+    let writeIndex = 0
+    for (const buf of audioBuffers) {
+      const channels: Float32Array[] = []
+      for (let ch = 0; ch < numChannels; ch++) channels.push(buf.getChannelData(ch))
+      for (let i = 0; i < buf.length; i++) {
+        for (let ch = 0; ch < numChannels; ch++) {
+          output[writeIndex++] = channels[ch][i]
+        }
+      }
+    }
+
+    return float32ToWav(output, numChannels, sampleRate)
+  } finally {
+    await audioCtx.close().catch(() => {})
+  }
+}
+
 /**
  * Generate smooth, consistent TTS for long scripts by chunking on sentence
  * boundaries and passing previous_text/next_text for prosody continuity.
  *
- * Why: eleven_multilingual_v2 has known quality drift on inputs > ~500 chars
- * (the voice "wanders" mid-script). Chunking with context keeps each chunk
- * short enough that the model stays stable, while previous_text/next_text
- * ensures pitch/pace continuity at chunk boundaries.
+ * Why: eleven_multilingual_v2 has known quality drift on inputs > ~500 chars.
+ * Chunking with context keeps each chunk short enough that the model stays
+ * stable, while previous_text/next_text ensures pitch/pace continuity.
  *
- * Resulting MP3 buffers are concatenated as Uint8Array — works because all
- * chunks share identical voice settings + bitrate + sample rate.
+ * The returned audio is a single seamless WAV file: each MP3 chunk is decoded
+ * to PCM via Web Audio API, samples concatenated, then re-encoded as WAV.
+ * No binary-level MP3 concatenation = no pops/static at chunk boundaries.
  */
 export async function textToSpeechSmooth(params: {
   apiKey: string
@@ -311,13 +398,13 @@ export async function textToSpeechSmooth(params: {
   chunkSize?: number
   /** Called after each chunk completes (for progress UI) */
   onProgress?: (done: number, total: number) => void
-}): Promise<ArrayBuffer> {
+}): Promise<{ buffer: ArrayBuffer; mimeType: string }> {
   const text = params.text.trim()
   const chunkSize = params.chunkSize ?? 400
 
-  // Single call for short text — no chunking benefit
+  // Single call for short text — no chunking benefit, return raw MP3
   if (text.length <= chunkSize) {
-    return textToSpeech({
+    const buf = await textToSpeech({
       apiKey: params.apiKey,
       voiceId: params.voiceId,
       text,
@@ -329,6 +416,7 @@ export async function textToSpeechSmooth(params: {
       useSpeakerBoost: params.useSpeakerBoost,
       outputFormat: params.outputFormat,
     })
+    return { buffer: buf, mimeType: 'audio/mpeg' }
   }
 
   // Split into sentences then regroup into ~chunkSize-char chunks
@@ -379,16 +467,11 @@ export async function textToSpeechSmooth(params: {
     params.onProgress?.(i + 1, chunks.length)
   }
 
-  // Concatenate MP3 buffers. Safe because all chunks share identical
-  // bitrate/sample-rate/channel settings — MP3 frames stay aligned.
-  const totalSize = buffers.reduce((sum, b) => sum + b.byteLength, 0)
-  const combined  = new Uint8Array(totalSize)
-  let offset = 0
-  for (const b of buffers) {
-    combined.set(new Uint8Array(b), offset)
-    offset += b.byteLength
-  }
-  return combined.buffer
+  // Decode each MP3 → PCM samples → concatenate samples (no boundary pops)
+  // → re-encode as a single WAV file. Result: seamless audio that downstream
+  // models (Kling Avatar) can lip-sync without losing track at chunk seams.
+  const wavBuffer = await concatMp3sToWav(buffers)
+  return { buffer: wavBuffer, mimeType: 'audio/wav' }
 }
 
 // ─── Video Dubbing (ElevenLabs Dubbing API) ─────────────────────────────────

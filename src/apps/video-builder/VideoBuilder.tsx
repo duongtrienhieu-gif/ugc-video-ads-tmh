@@ -1015,8 +1015,10 @@ ${script}`
     setPhaseProgress(0)
 
     try {
-      // Real progress from chunk completion (90% allocated to TTS, 10% for post-decode)
-      const audioBuffer = await textToSpeechSmooth({
+      // Real progress from chunk completion (85% allocated to TTS, rest for
+      // decode + concat). Result mimeType is 'audio/wav' when chunking was
+      // needed (clean WAV concat) or 'audio/mpeg' for short scripts.
+      const { buffer: audioBuffer, mimeType } = await textToSpeechSmooth({
         apiKey: elevenLabsApiKey,
         voiceId: selectedVoiceId,
         text: script,
@@ -1027,15 +1029,15 @@ ${script}`
         outputFormat: 'mp3_44100_192',
         chunkSize: 400,
         onProgress: (done, total) => {
-          const pct = (done / total) * 90
+          const pct = (done / total) * 85
           setPhaseProgress(pct)
           setPhaseDetail(`Tạo audio: ${done}/${total} chunks (1.1x speed)...`)
         },
       })
       setPhaseProgress(95)
-      setPhaseDetail('Đang decode audio duration...')
+      setPhaseDetail('Đang decode + ghép audio mượt qua Web Audio API...')
       const audioDuration = await getAudioDuration(audioBuffer)
-      const audioBlob = new Blob([audioBuffer], { type: 'audio/mpeg' })
+      const audioBlob = new Blob([audioBuffer], { type: mimeType })
 
       pipeRef.current.audioDuration = audioDuration
       pipeRef.current.audioBlob = audioBlob
@@ -1062,8 +1064,10 @@ ${script}`
     setPhaseProgress(10)
 
     try {
-      // Upload audio to Supabase (30% of total work)
-      const audioAssetId = await saveAsset(pipeRef.current.audioBlob, 'audio/mpeg')
+      // Upload audio to Supabase (30% of total work).
+      // Use blob's actual type — may be audio/wav (chunked, clean) or audio/mpeg (single short script)
+      const audioBlob = pipeRef.current.audioBlob
+      const audioAssetId = await saveAsset(audioBlob, audioBlob.type || 'audio/wav')
       const voiceUrl = await getUrl(audioAssetId)
       if (!voiceUrl) throw new Error('Không lấy được URL audio sau khi upload')
       pipeRef.current.voiceUrl = voiceUrl
