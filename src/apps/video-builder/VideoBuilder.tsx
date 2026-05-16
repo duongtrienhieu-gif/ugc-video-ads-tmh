@@ -856,10 +856,8 @@ export default function VideoBuilder() {
 
     // Product references (single bank + up to 4 manual uploads)
     const productRefs: string[] = []
-    if (selectedProductId) {
-      const prod = products.find((p) => p.id === selectedProductId)
-      if (prod?.productImage) productRefs.push(prod.productImage)
-    }
+    const bankProduct = selectedProductId ? products.find((p) => p.id === selectedProductId) : null
+    if (bankProduct?.productImage) productRefs.push(bankProduct.productImage)
     for (const mp of manualProducts) productRefs.push(mp.blobUrl)
 
     for (const ref of productRefs.slice(0, 4)) {
@@ -870,13 +868,42 @@ export default function VideoBuilder() {
       }
     }
 
+    // Rich product marketing context (only if user picked from bank — manual
+    // uploads have no metadata). Gives Gemini the WHY behind each scene:
+    // not just "what does product look like" but "what pain does it solve,
+    // who buys it, what's the offer". Storyboard quality jumps significantly.
+    const productContextBlock = bankProduct ? `
+═══════════════════════════════════════════════════════════════
+PRODUCT MARKETING CONTEXT (use this to inform every shot's emotional beat)
+═══════════════════════════════════════════════════════════════
+Product name: ${bankProduct.productName}
+${bankProduct.productDescription ? `Description: ${bankProduct.productDescription}` : ''}
+${bankProduct.targetMarket       ? `Target market: ${bankProduct.targetMarket}` : ''}
+${bankProduct.painPoints         ? `Pain points the product solves: ${bankProduct.painPoints}` : ''}
+${bankProduct.usps               ? `Unique selling points: ${bankProduct.usps}` : ''}
+${bankProduct.benefits           ? `Benefits to user: ${bankProduct.benefits}` : ''}
+${bankProduct.offer              ? `Offer / pricing: ${bankProduct.offer}` : ''}
+${bankProduct.cta                ? `Call to action: ${bankProduct.cta}` : ''}
+
+USE THIS CONTEXT TO:
+- For "pain point" segments: visualize the SPECIFIC pain points listed above
+  (don't invent generic pain — match the documented ones)
+- For "transformation" segments: visualize the SPECIFIC benefits listed above
+- For "product reveal" segments: highlight the documented USPs visually
+- For "social proof / closing" segments: hint at the offer urgency if relevant
+- Match the avatar's demographic to the target market (age, lifestyle context)
+
+═══════════════════════════════════════════════════════════════
+` : ''
+
+
     setPhaseDetail(`Gemini Pro analyzing ${referenceImages.length} ảnh + script → storyboard...`)
 
     const imageManifest = refLabels.length > 0
       ? `Reference images attached (in order):\n${refLabels.map((l, i) => `[Image ${i + 1}] ${l}`).join('\n')}\n\nCRITICAL: First, look carefully at the product image(s). Identify the EXACT form factor (capsule / tablet / powder sachet / liquid bottle / cream tube / spray / etc.), packaging style, color, and branding. Your prompts MUST describe the product as it ACTUALLY APPEARS in the image — do not invent a different form even if the script's wording is ambiguous.\n\nExample: If you see capsules in a bottle but the script says "sachet", your prompt should still describe a BOTTLE of CAPSULES (the script may be loosely translated or using a generic term).\n\nFor avatar: every shot featuring a person should match the avatar's apparent age, ethnicity, style, and clothing as seen in the reference image.\n\n`
       : ''
 
-    const parsePrompt = `${imageManifest}You are a senior UGC video director creating a cinematic storyboard.
+    const parsePrompt = `${imageManifest}${productContextBlock}You are a senior UGC video director creating a cinematic storyboard.
 
 The voiceover is ${audioDuration.toFixed(1)} seconds long. Split the script into 8-12 segments matching natural pause/sentence boundaries. Each segment should be 4-8 seconds.
 
