@@ -16,8 +16,22 @@ import {
   Save,
   Loader2,
   Bookmark,
+  Target,
+  TrendingUp,
+  Activity,
+  Rocket,
+  AlertTriangle,
+  ChevronDown,
 } from 'lucide-react'
 import type { AnalysisResult } from '../types'
+import {
+  AD_ANGLE_LABEL_VI,
+  MARKET_AWARENESS_LABEL_VI,
+  FUNNEL_LABEL_VI,
+  VERDICT_LABEL_VI,
+  RETENTION_RISK_COLOR,
+  RETENTION_RISK_LABEL_VI,
+} from '../types'
 import { useAppStore } from '../../../stores/appStore'
 import { useBankStore } from '../../../stores/bankStore'
 import { useAdTemplateStore } from '../../../stores/adTemplateStore'
@@ -105,34 +119,297 @@ function scoreColor(score: number) {
   return { text: 'text-[#FB2B37]', border: 'border-[#FB2B37]/20', bg: 'bg-[#FB2B37]/10' }
 }
 
+/** Format 7.4 → "7.4", but 7 → "7.0" for consistent display. */
+function fmtScore(n: number): string {
+  return n.toFixed(1)
+}
+
 function ScorecardSection({ result }: { result: AnalysisResult }) {
   const { scorecard } = result
   return (
     <Section>
-      <SectionHeader icon={BarChart3} title="Bảng điểm" />
-      <div className="flex flex-col lg:flex-row gap-5">
-        {/* Score list — left */}
-        <div className="flex flex-1 flex-col gap-2">
-          {scorecard.scores.map((s) => {
-            const color = scoreColor(s.score)
-            const isOverall = s.label === 'Overall Execution'
-            return (
-              <div key={s.label}>
-                {isOverall && <div className="mb-2 mt-1 h-px w-full bg-black/8" />}
-                <div className="flex items-center gap-3">
-                  <span className={`w-10 shrink-0 rounded-md py-1 text-center text-sm font-semibold tabular-nums tracking-tight ${color.bg} ${color.text}`}>
-                    {s.score}
+      <SectionHeader icon={BarChart3} title="Bảng điểm — có WHY + HOW TO IMPROVE" />
+      <div className="flex flex-col gap-3">
+        {scorecard.scores.map((s) => {
+          const color = scoreColor(s.score)
+          const isOverall = s.label === 'Overall Execution'
+          return (
+            <div key={s.label} className={`rounded-lg border ${color.border} ${color.bg} p-3`}>
+              <div className="flex items-center gap-3">
+                <span className={`flex h-10 w-14 shrink-0 items-center justify-center rounded-md bg-white text-sm font-bold tabular-nums tracking-tight ${color.text} shadow-sm`}>
+                  {fmtScore(s.score)}
+                </span>
+                <span className={`text-sm ${isOverall ? 'font-bold text-gray-800' : 'font-semibold text-gray-700'}`}>{s.label}</span>
+              </div>
+              {(s.reason || s.howToImprove) && (
+                <div className="mt-2 ml-[68px] space-y-1">
+                  {s.reason && (
+                    <p className="text-[11px] leading-relaxed text-gray-600">
+                      <span className="font-bold text-gray-700">WHY · </span>{s.reason}
+                    </p>
+                  )}
+                  {s.howToImprove && (
+                    <p className="text-[11px] leading-relaxed text-violet-700">
+                      <span className="font-bold">HOW · </span>{s.howToImprove}
+                    </p>
+                  )}
+                </div>
+              )}
+            </div>
+          )
+        })}
+        <div className="rounded-lg bg-black/[0.03] px-4 py-3">
+          <span className="text-[11px] font-medium uppercase tracking-widest text-gray-400">Nhận xét tổng quan</span>
+          <p className="mt-1.5 text-sm leading-relaxed text-gray-600">{scorecard.analystNote}</p>
+        </div>
+      </div>
+    </Section>
+  )
+}
+
+/* ─── Z1: Decision Layer (Creative Director verdict + tests) ─── */
+function DecisionSection({ result }: { result: AnalysisResult }) {
+  const [open, setOpen] = useState(true)
+  const d = result.decisionLayer
+  const angle = result.adAngle
+  const aware = result.marketAwareness
+  const funnel = result.funnelPosition
+  const scaling = result.scalingPotential
+
+  // Only render section if at least one decision-layer field exists (back-compat)
+  if (!d && !angle && !aware && !funnel && !scaling) return null
+
+  const verdictColor: Record<string, string> = {
+    SCALE:     'bg-emerald-500 text-white',
+    TEST_MORE: 'bg-amber-500 text-white',
+    ITERATE:   'bg-violet-500 text-white',
+    KILL:      'bg-red-500 text-white',
+  }
+  const scalingTierColor: Record<string, string> = {
+    HIGH:   'text-emerald-600 bg-emerald-50 border-emerald-200',
+    MEDIUM: 'text-amber-600 bg-amber-50 border-amber-200',
+    LOW:    'text-red-600 bg-red-50 border-red-200',
+  }
+
+  return (
+    <Section className="border-violet-200 bg-gradient-to-br from-violet-50/60 to-pink-50/40">
+      <button
+        onClick={() => setOpen((v) => !v)}
+        className="flex w-full items-center justify-between gap-2 mb-3"
+      >
+        <div className="flex items-center gap-2">
+          <Target className="h-4 w-4 text-violet-600" strokeWidth={1.8} />
+          <h3 className="text-sm font-bold tracking-tight text-gray-900">AI Creative Director — Verdict + Quyết định</h3>
+        </div>
+        <ChevronDown className={`h-3.5 w-3.5 text-gray-500 transition-transform ${open ? 'rotate-180' : ''}`} />
+      </button>
+
+      {open && (
+        <div className="space-y-3">
+          {/* Top row — verdict + scaling */}
+          {(d || scaling) && (
+            <div className="flex flex-wrap items-center gap-2">
+              {d && (
+                <span className={`rounded-full px-3 py-1.5 text-xs font-bold shadow-sm ${verdictColor[d.verdict] ?? 'bg-gray-500 text-white'}`}>
+                  {VERDICT_LABEL_VI[d.verdict]}
+                </span>
+              )}
+              {scaling && (
+                <span className={`flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-bold ${scalingTierColor[scaling.tier]}`}>
+                  <Rocket className="h-3 w-3" />
+                  Scaling: {scaling.tier} ({fmtScore(scaling.score)}/10)
+                </span>
+              )}
+            </div>
+          )}
+
+          {/* Scale action — bold one-liner */}
+          {d?.scaleAction && (
+            <div className="rounded-lg border border-violet-200 bg-white px-4 py-3">
+              <span className="text-[10px] font-bold uppercase tracking-widest text-violet-600">Hành động ngay</span>
+              <p className="mt-1 text-sm font-medium leading-relaxed text-gray-800">{d.scaleAction}</p>
+            </div>
+          )}
+
+          {/* Angle + Awareness + Funnel — 3-col mini grid */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+            {angle && (
+              <div className="rounded-lg border border-black/8 bg-white px-3 py-2.5">
+                <span className="text-[9px] font-bold uppercase tracking-widest text-gray-400">Ad Angle</span>
+                <p className="mt-1 text-xs font-bold text-cyan-700">{AD_ANGLE_LABEL_VI[angle.primary]}</p>
+                {angle.secondary && (
+                  <p className="text-[10px] text-gray-500">phụ: {AD_ANGLE_LABEL_VI[angle.secondary]}</p>
+                )}
+                <p className="mt-1 text-[10px] leading-snug text-gray-600">{angle.rationale}</p>
+              </div>
+            )}
+            {aware && (
+              <div className="rounded-lg border border-black/8 bg-white px-3 py-2.5">
+                <span className="text-[9px] font-bold uppercase tracking-widest text-gray-400">Awareness</span>
+                <p className="mt-1 text-xs font-bold text-amber-700">{MARKET_AWARENESS_LABEL_VI[aware.level]}</p>
+                <p className="mt-1 text-[10px] leading-snug text-gray-600">{aware.recommendation}</p>
+              </div>
+            )}
+            {funnel && (
+              <div className="rounded-lg border border-black/8 bg-white px-3 py-2.5">
+                <span className="text-[9px] font-bold uppercase tracking-widest text-gray-400">Funnel Position</span>
+                <p className="mt-1 text-xs font-bold text-emerald-700">Best: {FUNNEL_LABEL_VI[funnel.bestFor]}</p>
+                {funnel.weakFor.length > 0 && (
+                  <p className="text-[10px] text-red-600">Yếu: {funnel.weakFor.map((f) => FUNNEL_LABEL_VI[f]).join(', ')}</p>
+                )}
+                <p className="mt-1 text-[10px] leading-snug text-gray-600">{funnel.reasoning}</p>
+              </div>
+            )}
+          </div>
+
+          {/* Recommended tests + Do not test */}
+          {d && (d.recommendedTests.length > 0 || d.doNotTest.length > 0) && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+              {d.recommendedTests.length > 0 && (
+                <div className="rounded-lg border border-emerald-200 bg-emerald-50/50 px-3 py-2.5">
+                  <span className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-widest text-emerald-700">
+                    <Check className="h-3 w-3" /> NÊN TEST
                   </span>
-                  <span className={`text-sm ${isOverall ? 'font-bold text-gray-800' : 'text-gray-600'}`}>{s.label}</span>
+                  <ul className="mt-1.5 space-y-0.5">
+                    {d.recommendedTests.map((t, i) => (
+                      <li key={i} className="text-[11px] leading-snug text-gray-700">• {t}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              {d.doNotTest.length > 0 && (
+                <div className="rounded-lg border border-red-200 bg-red-50/50 px-3 py-2.5">
+                  <span className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-widest text-red-700">
+                    <AlertTriangle className="h-3 w-3" /> KHÔNG TEST
+                  </span>
+                  <ul className="mt-1.5 space-y-0.5">
+                    {d.doNotTest.map((t, i) => (
+                      <li key={i} className="text-[11px] leading-snug text-gray-700">• {t}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Fix priority — top 3 ranked */}
+          {d && d.fixPriority.length > 0 && (
+            <div className="rounded-lg border border-black/8 bg-white px-3 py-2.5">
+              <span className="text-[10px] font-bold uppercase tracking-widest text-gray-500">Top 3 fix theo impact</span>
+              <ol className="mt-2 space-y-1.5">
+                {d.fixPriority.map((f) => (
+                  <li key={f.rank} className="flex items-start gap-2">
+                    <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-violet-600 text-[10px] font-bold text-white">
+                      {f.rank}
+                    </span>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-semibold text-gray-800">{f.title}</p>
+                      <p className="text-[10px] text-emerald-700">⇧ {f.expectedImpact}</p>
+                    </div>
+                  </li>
+                ))}
+              </ol>
+            </div>
+          )}
+
+          {/* Scaling factors + blockers */}
+          {scaling && (scaling.scalingFactors.length > 0 || scaling.blockers.length > 0) && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+              {scaling.scalingFactors.length > 0 && (
+                <div className="rounded-lg border border-emerald-200 bg-white px-3 py-2.5">
+                  <span className="text-[10px] font-bold uppercase tracking-widest text-emerald-700">Yếu tố scale ✓</span>
+                  <ul className="mt-1 space-y-0.5">
+                    {scaling.scalingFactors.map((f, i) => (
+                      <li key={i} className="text-[11px] leading-snug text-gray-700">• {f}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              {scaling.blockers.length > 0 && (
+                <div className="rounded-lg border border-amber-200 bg-white px-3 py-2.5">
+                  <span className="text-[10px] font-bold uppercase tracking-widest text-amber-700">Chặn scale ⚠</span>
+                  <ul className="mt-1 space-y-0.5">
+                    {scaling.blockers.map((b, i) => (
+                      <li key={i} className="text-[11px] leading-snug text-gray-700">• {b}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+    </Section>
+  )
+}
+
+/* ─── Z2: Retention Heatmap Timeline ─── */
+function RetentionHeatmapSection({ result }: { result: AnalysisResult }) {
+  const r = result.retentionTimeline
+  if (!r || r.segments.length === 0) return null
+
+  return (
+    <Section>
+      <SectionHeader icon={Activity} title="Retention Heatmap — drop risk theo timeline" />
+      <div className="space-y-3">
+        {/* Bar timeline */}
+        <div className="flex h-10 w-full overflow-hidden rounded-lg border border-black/10">
+          {r.segments.map((seg, i) => (
+            <div
+              key={i}
+              className={`relative flex-1 ${RETENTION_RISK_COLOR[seg.risk]} group cursor-help transition-opacity hover:opacity-80`}
+              title={`${seg.timestamp} · ${seg.retentionScore}% retention · ${RETENTION_RISK_LABEL_VI[seg.risk]}\n${seg.note}`}
+            >
+              <span className="absolute inset-x-0 top-0 px-0.5 text-center text-[8px] font-bold leading-none text-white/90 truncate">
+                {seg.retentionScore}
+              </span>
+              {/* Tooltip on hover */}
+              <div className="pointer-events-none absolute bottom-full left-1/2 z-10 mb-1 hidden -translate-x-1/2 group-hover:block">
+                <div className="whitespace-nowrap rounded-md bg-gray-900 px-2 py-1 text-[10px] font-medium text-white shadow-lg">
+                  {seg.timestamp} · {seg.retentionScore}%
+                  <div className="mt-0.5 text-[9px] font-normal text-white/80">{seg.note}</div>
                 </div>
               </div>
-            )
-          })}
+            </div>
+          ))}
         </div>
-        {/* Analyst's Note — right */}
-        <div className="flex-1 rounded-lg bg-black/[0.03] px-4 py-3">
-          <span className="text-[11px] font-medium uppercase tracking-widest text-gray-400">Nhận xét</span>
-          <p className="mt-1.5 text-sm leading-relaxed text-gray-600">{scorecard.analystNote}</p>
+
+        {/* Timestamp labels under bar */}
+        <div className="flex w-full">
+          {r.segments.map((seg, i) => (
+            <span key={i} className="flex-1 text-center text-[9px] tabular-nums text-gray-500">
+              {seg.timestamp.split('-')[0]}
+            </span>
+          ))}
+        </div>
+
+        {/* Overall diagnosis */}
+        <div className="rounded-lg bg-black/[0.03] px-4 py-2.5">
+          <span className="text-[10px] font-bold uppercase tracking-widest text-gray-500">Chẩn đoán pacing</span>
+          <p className="mt-1 text-xs leading-relaxed text-gray-700">{r.overallDiagnosis}</p>
+        </div>
+
+        {/* Critical drops */}
+        {r.criticalDrops.length > 0 && (
+          <div className="flex flex-wrap items-center gap-2 rounded-lg border border-red-200 bg-red-50/50 px-3 py-2">
+            <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-red-600" />
+            <span className="text-[10px] font-bold uppercase tracking-widest text-red-700">Drop nguy hiểm</span>
+            {r.criticalDrops.map((t, i) => (
+              <span key={i} className="rounded-full bg-white px-2 py-0.5 text-[10px] font-mono font-bold tabular-nums text-red-700 border border-red-200">
+                {t}
+              </span>
+            ))}
+          </div>
+        )}
+
+        {/* Legend */}
+        <div className="flex items-center gap-3 text-[10px] text-gray-500">
+          <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-emerald-500" /> Giữ chân tốt</span>
+          <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-amber-500" /> Nguy cơ TB</span>
+          <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-red-500" /> Drop cao</span>
+          <span className="ml-auto flex items-center gap-1 text-gray-400">
+            <TrendingUp className="h-3 w-3" /> Hover thanh để xem chi tiết segment
+          </span>
         </div>
       </div>
     </Section>
@@ -547,7 +824,11 @@ export default function ResultsView({ result, videoSrc, fileName, onReset }: Res
       {/* Right column — scrollable results */}
       <div className="flex-1 overflow-y-auto p-5">
         <div className="flex flex-col gap-5">
+          {/* Z1: Decision Layer + Angle + Awareness + Funnel + Scaling — TOP of results */}
+          <DecisionSection result={result} />
           <ScorecardSection result={result} />
+          {/* Z2: Retention heatmap — visual timeline */}
+          <RetentionHeatmapSection result={result} />
           <TranscriptSection result={result} />
           <HookSection result={result} />
           <StructureSection result={result} />

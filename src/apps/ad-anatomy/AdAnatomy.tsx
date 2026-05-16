@@ -8,9 +8,14 @@ import type { AnalysisResult } from './types'
 
 type ViewState = 'upload' | 'loading' | 'results'
 
+// Cache version — bump to invalidate older cached analyses when the shape changes
+// v2 = Z1+Z2 Creative Director upgrade (decisionLayer / adAngle / retentionTimeline / etc.)
 const CACHE_KEY = 'ugc-ad-anatomy-cache'
+const CACHE_VERSION = 2
 
 interface AdAnatomyCache {
+  /** Optional for back-compat — entries without `version` are treated as v1 (stale) */
+  version?: number
   result: AnalysisResult
   fileName: string
   videoAssetId: string | null
@@ -33,6 +38,11 @@ export default function AdAnatomy() {
     try {
       const cache = JSON.parse(saved) as AdAnatomyCache
       if (!cache.result || !cache.fileName) { localStorage.removeItem(CACHE_KEY); return }
+      // Drop stale cache from before the Creative Director upgrade
+      if (cache.version !== CACHE_VERSION) {
+        localStorage.removeItem(CACHE_KEY)
+        return
+      }
       setResult(cache.result)
       setFileName(cache.fileName)
       setView('results')
@@ -85,7 +95,7 @@ export default function AdAnatomy() {
       setView('results')
 
       // ── Persist result immediately (video will be added async) ──────────
-      const cache: AdAnatomyCache = { result: analysis, fileName: file.name, videoAssetId: null }
+      const cache: AdAnatomyCache = { version: CACHE_VERSION, result: analysis, fileName: file.name, videoAssetId: null }
       localStorage.setItem(CACHE_KEY, JSON.stringify(cache))
 
       // Upload video to Supabase in background for persistent URL

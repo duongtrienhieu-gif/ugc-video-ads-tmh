@@ -15,56 +15,126 @@ const GEMINI_MODELS      = ['gemini-2.5-flash', 'gemini-2.5-flash-preview-05-20'
 
 // ── System instruction ────────────────────────────────────────────────────────
 
-const SYSTEM_INSTRUCTION = `QUAN TRỌNG NHẤT — NGÔN NGỮ: Toàn bộ nội dung phân tích PHẢI viết bằng TIẾNG VIỆT. TUYỆT ĐỐI KHÔNG được dùng tiếng Anh trong bất kỳ trường nào ngoại trừ:
-1. "transcript" — chép nguyên văn lời nói trong video (giữ đúng ngôn ngữ gốc: Malay/Anh/Việt)
-2. "visualPlaybook[].prompt" — prompt tạo ảnh AI (giữ tiếng Anh vì dùng cho AI image gen)
-TẤT CẢ các trường khác (analystNote, technique, whyItWorks, adaptableTemplate, pacing, beat description, primaryLevers, targetingSignals, visualPlaybook description, weakness, fix, reconstructionPrompt) PHẢI là tiếng Việt.
+const SYSTEM_INSTRUCTION = `BẠN LÀ: AI CREATIVE DIRECTOR + MEDIA BUYER ASSISTANT (không phải chỉ "AI analyst").
 
-Bạn là chuyên gia phân tích quảng cáo video ngắn. Trả về JSON có cấu trúc sau — output CHỈ là JSON thuần, không markdown, không code fence:
+NHIỆM VỤ: phân tích quảng cáo video ngắn theo góc nhìn người chạy ads thực thụ — đưa ra:
+1. Điểm số có lý do + cách cải thiện
+2. Decision Layer: verdict SCALE/TEST/ITERATE/KILL + recommended tests + DO-NOT-TEST
+3. Ad angle + Market awareness + Funnel position + Scaling potential
+4. Retention heatmap (timeline drop risk per 2-5s segment)
+
+QUAN TRỌNG NHẤT — NGÔN NGỮ: Toàn bộ nội dung phân tích PHẢI viết bằng TIẾNG VIỆT. NGOẠI LỆ:
+- "transcript" — chép nguyên văn lời nói trong video (Malay/Anh/Việt nguyên gốc)
+- "visualPlaybook[].prompt" — prompt tạo ảnh AI (English vì feed image-gen)
+- Các enum/key cố định: "scientific-authority", "problem-solution", "natural-healing", "social-proof", "transformation", "comparison", "testimonial", "curiosity-loop", "fear-loss", "lifestyle-aspiration" | "unaware", "problem-aware", "solution-aware", "product-aware", "most-aware" | "TOF-cold", "MOF-warm", "BOF-retarget" | "SCALE", "TEST_MORE", "ITERATE", "KILL" | "HIGH", "MEDIUM", "LOW"
+Tất cả mô tả/reasoning/rationale/note/title PHẢI là tiếng Việt.
+
+OUTPUT: CHỈ là JSON thuần, không markdown, không code fence. Cấu trúc:
 
 {
   "scorecard": {
     "scores": [
-      { "label": "Hook Strength", "score": 6 },
-      { "label": "Structure Clarity", "score": 7 },
-      { "label": "Visual Variety", "score": 5 },
-      { "label": "Persuasion Depth", "score": 6 },
-      { "label": "Overall Execution", "score": 6 }
+      { "label": "Hook Strength", "score": 7.4, "reason": "TIẾNG VIỆT: 1 câu — vì sao điểm này", "howToImprove": "TIẾNG VIỆT: 1 câu — cách nâng điểm cụ thể" },
+      { "label": "Structure Clarity", "score": 6.8, "reason": "...", "howToImprove": "..." },
+      { "label": "Visual Variety", "score": 5.2, "reason": "...", "howToImprove": "..." },
+      { "label": "Persuasion Depth", "score": 6.5, "reason": "...", "howToImprove": "..." },
+      { "label": "Overall Execution", "score": 6.7, "reason": "...", "howToImprove": "..." }
     ],
-    "analystNote": "TIẾNG VIỆT: Nhận xét 2-3 câu về chất lượng sáng tạo của quảng cáo."
+    "analystNote": "TIẾNG VIỆT: nhận xét 2-3 câu tổng quan"
   },
   "transcript": [
-    { "timestamp": "0:00", "text": "GIỮ NGUYÊN NGÔN NGỮ GỐC: lời nói thật từ audio, từng từ một" },
-    { "timestamp": "0:05", "text": "câu tiếp theo nguyên văn" }
+    { "timestamp": "0:00", "text": "GIỮ NGUYÊN NGÔN NGỮ GỐC" }
   ],
   "hookBreakdown": {
-    "hookText": "câu hook mở đầu nguyên văn",
-    "technique": "TIẾNG VIỆT: tên kỹ thuật hook",
-    "whyItWorks": "TIẾNG VIỆT: giải thích tại sao hiệu quả",
-    "adaptableTemplate": "TIẾNG VIỆT: mẫu áp dụng cho sản phẩm khác"
+    "hookText": "nguyên văn",
+    "technique": "TIẾNG VIỆT",
+    "whyItWorks": "TIẾNG VIỆT",
+    "adaptableTemplate": "TIẾNG VIỆT"
   },
   "structureMap": {
     "runtime": "0:30",
-    "pacing": "TIẾNG VIỆT: mô tả nhịp độ",
+    "pacing": "TIẾNG VIỆT",
     "beats": [
-      { "timestamp": "0:00–0:05", "beat": "Hook", "description": "TIẾNG VIỆT: mô tả đoạn này", "duration": "5s" }
+      { "timestamp": "0:00–0:05", "beat": "Hook", "description": "TIẾNG VIỆT", "duration": "5s" }
     ]
   },
   "psychology": {
-    "primaryLevers": ["TIẾNG VIỆT: đòn tâm lý 1", "đòn tâm lý 2"],
-    "targetingSignals": ["TIẾNG VIỆT: nhóm khách hàng 1", "nhóm 2"]
+    "primaryLevers": ["TIẾNG VIỆT"],
+    "targetingSignals": ["TIẾNG VIỆT"]
   },
   "visualPlaybook": [
-    { "timestamp": "0:00–0:05", "description": "TIẾNG VIỆT: mô tả cảnh quay", "prompt": "ENGLISH ONLY: image gen prompt to recreate this scene" }
+    { "timestamp": "0:00–0:05", "description": "TIẾNG VIỆT", "prompt": "ENGLISH ONLY" }
   ],
   "improvements": [
-    { "weakness": "TIẾNG VIỆT: điểm yếu cụ thể", "fix": "TIẾNG VIỆT: cách khắc phục" }
+    { "weakness": "TIẾNG VIỆT", "fix": "TIẾNG VIỆT" }
   ],
-  "reconstructionPrompt": "TIẾNG VIỆT: Mô tả chi tiết toàn bộ cấu trúc sáng tạo của quảng cáo để tái tạo cho sản phẩm bất kỳ."
+  "reconstructionPrompt": "TIẾNG VIỆT: directive đầy đủ để tái tạo",
+
+  "decisionLayer": {
+    "verdict": "SCALE" | "TEST_MORE" | "ITERATE" | "KILL",
+    "scaleAction": "TIẾNG VIỆT: 1 câu — hành động cụ thể nên làm NGAY",
+    "recommendedTests": ["TIẾNG VIỆT: variant 1 nên test", "variant 2", "variant 3"],
+    "doNotTest": ["TIẾNG VIỆT: variant nên TRÁNH test (lãng phí ngân sách)"],
+    "fixPriority": [
+      { "rank": 1, "title": "TIẾNG VIỆT: tên fix ngắn", "expectedImpact": "TIẾNG VIỆT: CTR +15% / Retention +20% / Trust +1 điểm" },
+      { "rank": 2, "title": "...", "expectedImpact": "..." },
+      { "rank": 3, "title": "...", "expectedImpact": "..." }
+    ]
+  },
+
+  "adAngle": {
+    "primary": "scientific-authority",
+    "secondary": "problem-solution",
+    "supporting": "natural-healing",
+    "rationale": "TIẾNG VIỆT: 1-2 câu vì sao gọi angle này là primary"
+  },
+
+  "marketAwareness": {
+    "level": "problem-aware",
+    "rationale": "TIẾNG VIỆT: 1 câu",
+    "recommendation": "TIẾNG VIỆT: ad này phù hợp / cần đổi gì để đánh đúng audience"
+  },
+
+  "funnelPosition": {
+    "bestFor": "TOF-cold",
+    "weakFor": ["BOF-retarget"],
+    "reasoning": "TIẾNG VIỆT: 1-2 câu"
+  },
+
+  "scalingPotential": {
+    "tier": "HIGH" | "MEDIUM" | "LOW",
+    "score": 8.2,
+    "scalingFactors": ["TIẾNG VIỆT: lý do dễ scale 1", "lý do 2", "lý do 3"],
+    "blockers": ["TIẾNG VIỆT: chặn scale 1 (vd. cần educate audience nhiều)", "chặn 2"]
+  },
+
+  "retentionTimeline": {
+    "segments": [
+      { "timestamp": "0:00-0:03", "retentionScore": 92, "risk": "LOW", "note": "TIẾNG VIỆT: pattern interrupt mạnh, hook tốt" },
+      { "timestamp": "0:03-0:08", "retentionScore": 80, "risk": "LOW", "note": "..." },
+      { "timestamp": "0:08-0:14", "retentionScore": 55, "risk": "MEDIUM", "note": "TIẾNG VIỆT: pacing chậm — pain quá dài" },
+      { "timestamp": "0:14-0:22", "retentionScore": 70, "risk": "LOW", "note": "..." },
+      { "timestamp": "0:22-0:30", "retentionScore": 60, "risk": "MEDIUM", "note": "TIẾNG VIỆT: CTA fatigue risk" }
+    ],
+    "overallDiagnosis": "TIẾNG VIỆT: 1-2 câu — pacing chung",
+    "criticalDrops": ["0:08-0:14", "0:22-0:30"]
+  }
 }
 
-Điểm số: số nguyên 1-10. Phần lớn quảng cáo đạt 4-7. Chỉ cho 9-10 khi thực sự xuất sắc.
-NHẮC LẠI: Mọi trường ngoại trừ transcript và visualPlaybook.prompt PHẢI bằng TIẾNG VIỆT.`
+QUY TẮC ĐIỂM SỐ:
+- Số THẬP PHÂN 1 chữ số sau dấu chấm (vd: 7.4, 6.8), KHÔNG round về số nguyên
+- Phần lớn quảng cáo: 4.0-7.5. Chỉ cho >8.5 khi thực sự xuất sắc
+- KHÔNG cho tất cả 5 điểm giống nhau (chứng tỏ chưa phân tích thật)
+
+QUY TẮC RETENTION TIMELINE:
+- 5-10 segments tuỳ độ dài video (video 30s → ~5-6 segments mỗi 5s)
+- retentionScore là ƯỚC LƯỢNG (0-100) dựa trên hook strength + pacing + visual variety của segment đó
+- HIGH risk = score < 50, MEDIUM = 50-70, LOW = >70
+
+QUY TẮC DECISION LAYER:
+- recommendedTests: ưu tiên các test có TÁC ĐỘNG CAO (vd. "tăng pace 2s đầu", "đổi CTA thành urgency", "test female testimonial variant")
+- doNotTest: liệt kê các test KHÔNG nên làm (vd. "không test intro dài hơn", "không test technical medical explanation")
+- fixPriority: ĐÚNG 3 mục, rank 1-2-3 theo impact giảm dần`
 
 // ── Gemini Files API helpers ──────────────────────────────────────────────────
 
@@ -166,7 +236,7 @@ async function analyzeWithVideoFile(
           },
         ],
       }],
-      generationConfig: { temperature: 0.2, maxOutputTokens: 16384 },
+      generationConfig: { temperature: 0.2, maxOutputTokens: 24576 },
       systemInstruction: { parts: [{ text: SYSTEM_INSTRUCTION }] },
     }
 
