@@ -1,0 +1,370 @@
+// ── VideoBuilderV2 — AI Director Pipeline (BETA) ─────────────────────────────
+// New pipeline architecture targeting consistent face + product across all
+// B-Roll scenes. Replaces independent txt2img scene generation with a
+// Master Frame → derived variations workflow.
+//
+// MODULE 1 (this file): Master Frame Workflow
+//   ├─ input          : pick avatar + product + script
+//   ├─ identity-extract: Gemini Vision describes avatar + product (locked)
+//   ├─ master-frame   : gen + user approves canonical reference frame
+//   └─ next phases    : will be filled in by modules 2-5 in future commits
+// ─────────────────────────────────────────────────────────────────────────────
+
+import { useState, useEffect, useRef } from 'react'
+import { Sparkles, FlaskConical, Package, UserRound, FileText, ChevronRight, Loader2, Info, ArrowLeft } from 'lucide-react'
+import { useAppStore } from '../../../stores/appStore'
+import { useSettingsStore } from '../../../stores/settingsStore'
+import { useAssetUrl } from '../../../hooks/useAssetUrl'
+import BankPicker from '../../../components/BankPicker'
+import type { Model, Product } from '../../../stores/types'
+import type { V2PipelineState, MasterFrame } from './types'
+import { createEmptyV2State } from './types'
+import { extractIdentityPack, generateMasterFrame } from './services/masterFrame'
+import MasterFrameApproval from './components/MasterFrameApproval'
+
+// ── Phase header (top breadcrumb) ───────────────────────────────────────────
+function PhaseHeader({ phase }: { phase: V2PipelineState['phase'] }) {
+  const steps: { id: V2PipelineState['phase']; label: string; num: number }[] = [
+    { id: 'input',            label: 'Chọn input',           num: 1 },
+    { id: 'identity-extract', label: 'Phân tích identity',  num: 2 },
+    { id: 'master-frame',     label: 'Master Frame',         num: 3 },
+    { id: 'blueprint',        label: 'Storyboard',           num: 4 },
+    { id: 'scene-gen',        label: 'Gen B-Roll',           num: 5 },
+    { id: 'video-voice',      label: 'Voice + Video',        num: 6 },
+  ]
+  const activeIdx = steps.findIndex((s) => s.id === phase)
+
+  return (
+    <div className="flex items-center gap-1 overflow-x-auto px-1">
+      {steps.map((s, i) => {
+        const isActive = i === activeIdx
+        const isPast = i < activeIdx
+        return (
+          <div key={s.id} className="flex shrink-0 items-center">
+            <div className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[11px] font-semibold transition-colors ${
+              isActive ? 'bg-violet-600 text-white' : isPast ? 'bg-emerald-100 text-emerald-700' : 'bg-black/[0.04] text-gray-400'
+            }`}>
+              <span className={`flex h-4 w-4 items-center justify-center rounded-full text-[9px] ${
+                isActive ? 'bg-white text-violet-600' : isPast ? 'bg-emerald-500 text-white' : 'bg-gray-300 text-white'
+              }`}>{isPast ? '✓' : s.num}</span>
+              <span>{s.label}</span>
+            </div>
+            {i < steps.length - 1 && <ChevronRight className="h-3 w-3 shrink-0 text-gray-300" />}
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+// ── Input picker tile ────────────────────────────────────────────────────────
+function InputPickerTile({
+  imageUrl, label, hint, icon: Icon, onPick, onClear,
+}: {
+  imageUrl: string | null | undefined
+  label: string
+  hint: string
+  icon: React.ElementType
+  onPick: () => void
+  onClear?: () => void
+}) {
+  const resolvedUrl = useAssetUrl(imageUrl ?? undefined)
+  const display = imageUrl?.startsWith('http') ? imageUrl : resolvedUrl
+
+  return (
+    <div className="flex flex-col gap-2 rounded-xl border border-black/10 bg-white p-3">
+      <div className="flex items-center justify-between">
+        <p className="text-[11px] font-bold uppercase tracking-widest text-gray-500">{label}</p>
+        {imageUrl && onClear && (
+          <button onClick={onClear} className="text-[10px] text-gray-400 hover:text-red-500">Bỏ chọn</button>
+        )}
+      </div>
+      <button
+        onClick={onPick}
+        className="group aspect-square w-full overflow-hidden rounded-lg border border-dashed border-black/10 bg-black/[0.02] transition-colors hover:border-violet-400 hover:bg-violet-50/30"
+      >
+        {display ? (
+          <img src={display} alt={label} className="h-full w-full object-cover" />
+        ) : (
+          <div className="flex h-full flex-col items-center justify-center gap-2 text-gray-300 group-hover:text-violet-400">
+            <Icon className="h-8 w-8" strokeWidth={1.2} />
+            <span className="text-[11px] font-semibold">Chọn từ Project</span>
+          </div>
+        )}
+      </button>
+      <p className="text-[10px] text-gray-400">{hint}</p>
+    </div>
+  )
+}
+
+interface Props {
+  /** Called when user clicks "Switch về Pipeline v1" — parent toggles version */
+  onSwitchToV1: () => void
+}
+
+export default function VideoBuilderV2({ onSwitchToV1 }: Props) {
+  const [state, setState] = useState<V2PipelineState>(createEmptyV2State)
+  const [pickerMode, setPickerMode] = useState<'avatar' | 'product' | 'script' | null>(null)
+  const [identityProgress, setIdentityProgress] = useState<string>('')
+  const cancelledRef = useRef(false)
+
+  const kieApiKey = useSettingsStore((s) => s.kieApiKey)
+  const geminiApiKey = useSettingsStore((s) => s.geminiApiKey)
+  const addToast = useAppStore((s) => s.addToast)
+
+  useEffect(() => () => { cancelledRef.current = true }, [])
+
+  // ── Handlers: input pickers ───────────────────────────────────────────────
+  const handlePickAvatar = (item: unknown) => {
+    setState((s) => ({ ...s, inputs: { ...s.inputs, avatar: item as Model } }))
+    setPickerMode(null)
+  }
+  const handlePickProduct = (item: unknown) => {
+    setState((s) => ({ ...s, inputs: { ...s.inputs, product: item as Product } }))
+    setPickerMode(null)
+  }
+  const handlePickScript = (item: unknown) => {
+    const sc = item as { scriptText: string }
+    setState((s) => ({ ...s, inputs: { ...s.inputs, script: sc.scriptText ?? '' } }))
+    setPickerMode(null)
+  }
+
+  // ── Phase 1: extract identity pack via Gemini Vision ──────────────────────
+  const handleStartIdentityExtract = async () => {
+    if (!state.inputs.avatar || !state.inputs.product) {
+      addToast('Cần chọn cả Avatar và Sản phẩm', 'error')
+      return
+    }
+    if (!geminiApiKey) {
+      addToast('Cần Gemini API key trong Cài đặt', 'error')
+      return
+    }
+
+    setState((s) => ({ ...s, phase: 'identity-extract' }))
+    setIdentityProgress('Phân tích avatar + sản phẩm...')
+    try {
+      const identity = await extractIdentityPack({
+        avatar: state.inputs.avatar,
+        product: state.inputs.product,
+        geminiKey: geminiApiKey,
+      })
+      if (cancelledRef.current) return
+      setState((s) => ({ ...s, identityPack: identity, phase: 'master-frame' }))
+      addToast('✓ Đã trích xuất identity pack — đang tạo Master Frame...')
+      // Auto-start first master frame generation
+      void handleGenerateMasterFrame(identity)
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      addToast(`Phân tích identity thất bại: ${msg.slice(0, 100)}`, 'error')
+      setState((s) => ({ ...s, phase: 'input' }))
+    } finally {
+      setIdentityProgress('')
+    }
+  }
+
+  // ── Phase 2: generate a master frame candidate ────────────────────────────
+  const handleGenerateMasterFrame = async (identityOverride?: typeof state.identityPack) => {
+    const identity = identityOverride ?? state.identityPack
+    if (!identity || !state.inputs.product) return
+    if (!kieApiKey) {
+      addToast('Cần KIE.ai API key trong Cài đặt', 'error')
+      return
+    }
+
+    setState((s) => ({
+      ...s,
+      masterFrame: { ...s.masterFrame, isGenerating: true, error: null },
+    }))
+
+    try {
+      const frame: MasterFrame = await generateMasterFrame({
+        kieApiKey,
+        identity,
+        productName: state.inputs.product.productName,
+        consistency: state.consistency,
+      })
+      if (cancelledRef.current) return
+      setState((s) => ({
+        ...s,
+        masterFrame: {
+          ...s.masterFrame,
+          candidates: [...s.masterFrame.candidates, frame],
+          isGenerating: false,
+        },
+      }))
+      addToast(`✓ Đã tạo bản #${state.masterFrame.candidates.length + 1}`)
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      setState((s) => ({
+        ...s,
+        masterFrame: { ...s.masterFrame, isGenerating: false, error: msg.slice(0, 200) },
+      }))
+      addToast(`Tạo Master Frame thất bại: ${msg.slice(0, 100)}`, 'error')
+    }
+  }
+
+  const handleApproveFrame = (idx: number) => {
+    setState((s) => ({
+      ...s,
+      masterFrame: {
+        ...s.masterFrame,
+        approvedIdx: idx,
+        candidates: s.masterFrame.candidates.map((c, i) => ({
+          ...c,
+          status: i === idx ? 'approved' : 'pending-approval',
+        })),
+      },
+    }))
+  }
+
+  const handleRejectAll = () => {
+    setState((s) => ({
+      ...s,
+      masterFrame: { candidates: [], approvedIdx: -1, isGenerating: false, error: null },
+      phase: 'input',
+    }))
+  }
+
+  const handleContinueAfterMasterFrame = () => {
+    addToast('Module 2-5 đang được xây dựng — quay lại Pipeline v1 để hoàn thiện video', 'info')
+    // For Phase 1 (this commit) — next modules will wire here later
+    setState((s) => ({ ...s, phase: 'blueprint' }))
+  }
+
+  const canStart = !!state.inputs.avatar && !!state.inputs.product && !!state.inputs.script.trim()
+
+  // ── Render by phase ───────────────────────────────────────────────────────
+  return (
+    <div className="flex h-full flex-col overflow-hidden">
+      {/* Header — beta banner + switch to v1 + phase breadcrumb */}
+      <div className="shrink-0 border-b border-black/8 bg-gradient-to-r from-violet-600 to-purple-600 px-6 py-3 text-white">
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <FlaskConical className="h-5 w-5" />
+            <div>
+              <h1 className="text-sm font-bold">UGC Builder v2 — AI Director (BETA)</h1>
+              <p className="text-[11px] text-white/70">Pipeline mới: Master Frame → derived scenes · giảm drift, tăng nhất quán</p>
+            </div>
+          </div>
+          <button
+            onClick={onSwitchToV1}
+            className="flex items-center gap-1.5 rounded-lg bg-white/15 px-3 py-1.5 text-xs font-semibold backdrop-blur-sm hover:bg-white/25"
+          >
+            <ArrowLeft className="h-3.5 w-3.5" /> Quay về v1 (stable)
+          </button>
+        </div>
+      </div>
+
+      {/* Phase breadcrumb */}
+      <div className="shrink-0 border-b border-black/8 bg-white px-6 py-2.5">
+        <PhaseHeader phase={state.phase} />
+      </div>
+
+      {/* Body — switches by phase */}
+      <div className="flex-1 overflow-hidden">
+        {/* PHASE: INPUT */}
+        {state.phase === 'input' && (
+          <div className="h-full overflow-y-auto p-6">
+            <div className="mb-4 flex items-start gap-2 rounded-lg border border-violet-200 bg-violet-50 px-3 py-2">
+              <Info className="mt-0.5 h-4 w-4 shrink-0 text-violet-500" />
+              <div className="text-xs text-violet-700">
+                <p className="font-semibold">Bước 1: Chọn input</p>
+                <p>Chọn avatar + sản phẩm + kịch bản đã lưu trong Project. Pipeline v2 sẽ tạo 1 "Master Frame" làm khuôn mẫu identity cho toàn bộ video.</p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+              <InputPickerTile
+                imageUrl={state.inputs.avatar?.characterImage}
+                label="Avatar AI"
+                hint={state.inputs.avatar?.name ?? 'Chưa chọn avatar'}
+                icon={UserRound}
+                onPick={() => setPickerMode('avatar')}
+                onClear={() => setState((s) => ({ ...s, inputs: { ...s.inputs, avatar: null } }))}
+              />
+              <InputPickerTile
+                imageUrl={state.inputs.product?.productImage}
+                label="Sản phẩm"
+                hint={state.inputs.product?.productName ?? 'Chưa chọn sản phẩm'}
+                icon={Package}
+                onPick={() => setPickerMode('product')}
+                onClear={() => setState((s) => ({ ...s, inputs: { ...s.inputs, product: null } }))}
+              />
+              <div className="flex flex-col gap-2 rounded-xl border border-black/10 bg-white p-3">
+                <p className="text-[11px] font-bold uppercase tracking-widest text-gray-500">Kịch bản</p>
+                <button
+                  onClick={() => setPickerMode('script')}
+                  className="flex aspect-square w-full flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-black/10 bg-black/[0.02] text-gray-300 transition-colors hover:border-violet-400 hover:bg-violet-50/30 hover:text-violet-400"
+                >
+                  <FileText className="h-8 w-8" strokeWidth={1.2} />
+                  <span className="text-[11px] font-semibold">Chọn kịch bản</span>
+                </button>
+                <p className="text-[10px] text-gray-400 line-clamp-2">{state.inputs.script ? state.inputs.script.slice(0, 80) + '...' : 'Chưa chọn kịch bản'}</p>
+              </div>
+            </div>
+
+            <div className="mt-6 flex justify-end">
+              <button
+                onClick={handleStartIdentityExtract}
+                disabled={!canStart}
+                className="flex items-center gap-2 rounded-full bg-gradient-to-r from-violet-600 to-purple-500 px-6 py-3 text-sm font-bold text-white shadow-lg transition-all hover:from-violet-700 hover:to-purple-600 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                <Sparkles className="h-4 w-4" /> Bắt đầu phân tích & tạo Master Frame
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* PHASE: IDENTITY EXTRACT */}
+        {state.phase === 'identity-extract' && (
+          <div className="flex h-full flex-col items-center justify-center gap-4 p-8 text-center">
+            <Loader2 className="h-10 w-10 animate-spin text-violet-500" />
+            <h2 className="text-base font-bold text-gray-800">Đang phân tích avatar + sản phẩm</h2>
+            <p className="max-w-md text-xs text-gray-500">
+              Gemini Vision đang trích xuất mô tả chính xác về khuôn mặt + bao bì sản phẩm để khóa identity cho toàn bộ pipeline.
+            </p>
+            {identityProgress && <p className="text-[11px] text-violet-600">{identityProgress}</p>}
+          </div>
+        )}
+
+        {/* PHASE: MASTER FRAME (this module's main UI) */}
+        {state.phase === 'master-frame' && (
+          <MasterFrameApproval
+            state={state.masterFrame}
+            identity={state.identityPack}
+            onGenerateMore={() => void handleGenerateMasterFrame()}
+            onApprove={handleApproveFrame}
+            onReject={handleRejectAll}
+            onContinue={handleContinueAfterMasterFrame}
+          />
+        )}
+
+        {/* PHASE: BLUEPRINT (next module — placeholder) */}
+        {state.phase === 'blueprint' && (
+          <div className="flex h-full flex-col items-center justify-center gap-4 p-8 text-center">
+            <div className="rounded-full bg-violet-50 p-4">
+              <Sparkles className="h-8 w-8 text-violet-500" />
+            </div>
+            <h2 className="text-base font-bold text-gray-800">Module 2-5 đang được xây dựng</h2>
+            <p className="max-w-md text-xs text-gray-500">
+              Module 1 (Master Frame Workflow) đã hoàn thành ✓<br />
+              Các module tiếp theo: Prompt Compiler · Scene Blueprint · Basic QC · Consistency Slider.<br /><br />
+              Để hoàn thiện video, hãy quay lại Pipeline v1.
+            </p>
+            <button
+              onClick={onSwitchToV1}
+              className="rounded-full bg-violet-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-violet-700"
+            >
+              Quay về Pipeline v1 để render
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* Bank pickers */}
+      <BankPicker bankType="models" isOpen={pickerMode === 'avatar'} onSelect={handlePickAvatar} onClose={() => setPickerMode(null)} />
+      <BankPicker bankType="products" isOpen={pickerMode === 'product'} onSelect={handlePickProduct} onClose={() => setPickerMode(null)} />
+      <BankPicker bankType="scripts" isOpen={pickerMode === 'script'} onSelect={handlePickScript} onClose={() => setPickerMode(null)} />
+    </div>
+  )
+}

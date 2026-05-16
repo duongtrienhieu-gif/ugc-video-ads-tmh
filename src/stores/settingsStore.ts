@@ -2,6 +2,8 @@ import { create } from 'zustand'
 
 const STORAGE_KEY = 'ai-ugc-lab-settings'
 
+export type PipelineVersion = 'v1' | 'v2'
+
 interface SettingsState {
   kieApiKey: string
   geminiApiKey: string
@@ -9,12 +11,15 @@ interface SettingsState {
   falApiKey: string
   shotstackApiKey: string
   kieCredits: number | null
+  /** UGC Builder pipeline version. v1 = stable (production), v2 = AI Director beta. */
+  pipelineVersion: PipelineVersion
   setKieApiKey: (key: string) => void
   setGeminiApiKey: (key: string) => void
   setElevenLabsApiKey: (key: string) => void
   setFalApiKey: (key: string) => void
   setShotstackApiKey: (key: string) => void
   setKieCredits: (credits: number | null) => void
+  setPipelineVersion: (v: PipelineVersion) => void
   hasApiKey: () => boolean
   getApiKey: () => string
   getGeminiApiKey: () => string
@@ -33,6 +38,7 @@ interface StoredSettings {
   elevenLabsApiKey: string
   falApiKey: string
   shotstackApiKey: string
+  pipelineVersion: PipelineVersion
 }
 
 function loadFromStorage(): StoredSettings {
@@ -46,10 +52,11 @@ function loadFromStorage(): StoredSettings {
         elevenLabsApiKey: parsed.elevenLabsApiKey ?? '',
         falApiKey:        parsed.falApiKey        ?? '',
         shotstackApiKey:  parsed.shotstackApiKey  ?? '',
+        pipelineVersion:  (parsed.pipelineVersion === 'v2' ? 'v2' : 'v1'),
       }
     }
   } catch { /* silent */ }
-  return { kieApiKey: '', geminiApiKey: '', elevenLabsApiKey: '', falApiKey: '', shotstackApiKey: '' }
+  return { kieApiKey: '', geminiApiKey: '', elevenLabsApiKey: '', falApiKey: '', shotstackApiKey: '', pipelineVersion: 'v1' }
 }
 
 function saveToStorage(s: StoredSettings) {
@@ -64,6 +71,7 @@ function getStored(get: () => SettingsState): StoredSettings {
     elevenLabsApiKey: s.elevenLabsApiKey,
     falApiKey:        s.falApiKey,
     shotstackApiKey:  s.shotstackApiKey,
+    pipelineVersion:  s.pipelineVersion,
   }
 }
 
@@ -97,6 +105,11 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   },
 
   setKieCredits: (credits) => set({ kieCredits: credits }),
+
+  setPipelineVersion: (v) => {
+    set({ pipelineVersion: v })
+    saveToStorage({ ...getStored(get), pipelineVersion: v })
+  },
 
   hasApiKey: () => get().kieApiKey.length > 0,
 

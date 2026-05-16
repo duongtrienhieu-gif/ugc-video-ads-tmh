@@ -701,7 +701,20 @@ function ReviewCard({
 
 // ── Main component ────────────────────────────────────────────────────────────
 
+// ── Outer dispatcher: routes to v1 (stable) or v2 (AI Director beta) ────────
+import VideoBuilderV2 from './v2/VideoBuilderV2'
+
 export default function VideoBuilder() {
+  const pipelineVersion = useSettingsStore((s) => s.pipelineVersion)
+  const setPipelineVersion = useSettingsStore((s) => s.setPipelineVersion)
+
+  if (pipelineVersion === 'v2') {
+    return <VideoBuilderV2 onSwitchToV1={() => setPipelineVersion('v1')} />
+  }
+  return <VideoBuilderV1 onSwitchToV2={() => setPipelineVersion('v2')} />
+}
+
+function VideoBuilderV1({ onSwitchToV2 }: { onSwitchToV2: () => void }) {
   const { kieApiKey, elevenLabsApiKey, falApiKey, shotstackApiKey, geminiApiKey } = useSettingsStore()
   const addToast = useAppStore((s) => s.addToast)
   const { scripts, models, products } = useBankStore()
@@ -2104,7 +2117,7 @@ MOTION: Gentle cinematic camera motion only — slow push-in on key detail, or s
       <div className="flex w-full shrink-0 flex-col border-b border-black/8 lg:w-[440px] lg:border-b-0 lg:border-r">
 
         {/* Header */}
-        <div className="shrink-0 border-b border-black/8 bg-gradient-to-r from-violet-600 to-purple-500 px-5 py-4">
+        <div className="flex shrink-0 items-center justify-between gap-2 border-b border-black/8 bg-gradient-to-r from-violet-600 to-purple-500 px-5 py-4">
           <div className="flex items-center gap-3">
             <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-white/20 backdrop-blur-sm">
               <Film className="h-5 w-5 text-white" strokeWidth={2} />
@@ -2114,6 +2127,14 @@ MOTION: Gentle cinematic camera motion only — slow push-in on key detail, or s
               <p className="text-xs text-white/70">Pipeline thủ công · review từng bước · tiết kiệm chi phí</p>
             </div>
           </div>
+          <button
+            onClick={onSwitchToV2}
+            title="Thử Pipeline v2 BETA — AI Director với Master Frame workflow, giảm drift mặt/sản phẩm"
+            className="flex items-center gap-1.5 rounded-lg border border-white/30 bg-white/10 px-3 py-1.5 text-[11px] font-bold text-white shadow-sm backdrop-blur-sm transition-colors hover:bg-white/20"
+          >
+            <Sparkles className="h-3.5 w-3.5" />
+            Thử v2 BETA
+          </button>
         </div>
 
         {/* Scrollable content */}
