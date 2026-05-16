@@ -76,10 +76,11 @@ export async function submitLatentSync(params: {
   })
 
   if (res.status === 401 || res.status === 403) {
-    throw new Error('fal.ai API key không hợp lệ — kiểm tra trong Cài đặt')
+    const detail = await readErrorBody(res)
+    throw new Error(`fal.ai từ chối xác thực (${res.status}): ${detail}`)
   }
   if (res.status === 402) {
-    throw new Error('Tài khoản fal.ai hết credit — nạp thêm tại fal.ai')
+    throw new Error('Tài khoản fal.ai hết credit — nạp thêm tại fal.ai/dashboard')
   }
   if (!res.ok) {
     const detail = await readErrorBody(res)

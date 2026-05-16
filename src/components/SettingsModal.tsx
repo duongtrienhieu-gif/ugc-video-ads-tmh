@@ -106,18 +106,45 @@ export default function SettingsModal({ open, onClose }: SettingsModalProps) {
     setTestingFal(true)
     setFalTestResult(null)
     try {
-      // Hit a non-existent request status endpoint — 401 = invalid key, 404 = key valid (request not found)
-      const res = await fetch('https://queue.fal.run/fal-ai/latentsync/requests/test-connection-check', {
-        headers: { 'Authorization': `Key ${key}` },
+      // Use fal.ai key validation endpoint — returns 200 with a short-lived token if key is valid
+      const res = await fetch('https://rest.alpha.fal.ai/tokens/', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Key ${key}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ allowed_apps: ['fal-ai/latentsync'], expire_at: null }),
       })
       if (res.status === 401 || res.status === 403) {
-        setFalTestResult({ ok: false, error: 'API key không hợp lệ hoặc không có quyền truy cập' })
-      } else {
-        // 404 = key is valid, request just doesn't exist — that's what we want
+        let errMsg = 'API key không hợp lệ hoặc không có quyền truy cập'
+        try {
+          const body = await res.json() as { detail?: string; message?: string }
+          if (body.detail || body.message) errMsg = body.detail ?? body.message ?? errMsg
+        } catch { /* ignore */ }
+        setFalTestResult({ ok: false, error: errMsg })
+      } else if (res.ok || res.status === 404) {
+        // 200 = token created (key valid), 404 = endpoint not found but key auth passed
         setFalTestResult({ ok: true })
+      } else {
+        // Other error but not auth — key format likely ok, billing/plan issue
+        let detail = ''
+        try { const b = await res.json() as { detail?: string }; detail = b.detail ?? '' } catch { /* ignore */ }
+        setFalTestResult({ ok: false, error: `Lỗi ${res.status}${detail ? `: ${detail}` : ''} — kiểm tra billing tại fal.ai/dashboard` })
       }
     } catch {
-      setFalTestResult({ ok: false, error: 'Không thể kết nối đến fal.ai' })
+      // Network error — try simpler ping
+      try {
+        const res2 = await fetch('https://queue.fal.run/fal-ai/latentsync/requests/ping-test', {
+          headers: { 'Authorization': `Key ${key}` },
+        })
+        if (res2.status === 401 || res2.status === 403) {
+          setFalTestResult({ ok: false, error: 'API key không hợp lệ' })
+        } else {
+          setFalTestResult({ ok: true })
+        }
+      } catch {
+        setFalTestResult({ ok: false, error: 'Không thể kết nối đến fal.ai — kiểm tra mạng' })
+      }
     } finally {
       setTestingFal(false)
     }
