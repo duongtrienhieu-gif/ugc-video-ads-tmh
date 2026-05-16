@@ -35,8 +35,43 @@ import MasterFrameApproval from './components/MasterFrameApproval'
 import PromptCompilerDebugPanel from './components/PromptCompilerDebugPanel'
 import StoryboardEditor from './components/StoryboardEditor'
 
+// Compute which phase pills the user can click — a phase is reachable
+// either because we're currently on it OR because its data is already
+// populated (re-entry should restore the cached view, not regenerate).
+function computeReachablePhases(
+  state: V2PipelineState,
+  hasSceneJob: boolean,
+): ReadonlySet<V2PipelineState['phase']> {
+  const reachable = new Set<V2PipelineState['phase']>(['input', state.phase])
+  if (state.identityPack) {
+    reachable.add('identity-extract')
+    reachable.add('master-frame')
+  }
+  if (state.masterFrame.candidates.length > 0) {
+    reachable.add('master-frame')
+  }
+  if (state.blueprints.length > 0) {
+    reachable.add('blueprint')
+  }
+  // Scene-gen has its own external store (sceneGenJobStore) — if a job exists
+  // there OR we ever advanced past blueprint, the user can re-enter the grid.
+  if (hasSceneJob || state.blueprints.length > 0) {
+    reachable.add('scene-gen')
+  }
+  return reachable
+}
+
 // ── Phase header (top breadcrumb) ───────────────────────────────────────────
-function PhaseHeader({ phase }: { phase: V2PipelineState['phase'] }) {
+// Each phase pill is a NAVIGATION button — clicking any phase that has
+// cached data jumps the workspace back to that view WITHOUT regenerating.
+// Phases that don't have data yet render as disabled (visual only).
+function PhaseHeader({
+  phase, reachable, onPhaseClick,
+}: {
+  phase: V2PipelineState['phase']
+  reachable: ReadonlySet<V2PipelineState['phase']>
+  onPhaseClick: (id: V2PipelineState['phase']) => void
+}) {
   const steps: { id: V2PipelineState['phase']; label: string; num: number }[] = [
     { id: 'input',            label: 'Chọn input',           num: 1 },
     { id: 'identity-extract', label: 'Phân tích identity',  num: 2 },
@@ -52,16 +87,38 @@ function PhaseHeader({ phase }: { phase: V2PipelineState['phase'] }) {
       {steps.map((s, i) => {
         const isActive = i === activeIdx
         const isPast = i < activeIdx
+        const isReachable = reachable.has(s.id)
+        const baseCls = isActive
+          ? 'bg-violet-600 text-white'
+          : isPast
+            ? 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200'
+            : isReachable
+              ? 'bg-black/[0.04] text-gray-600 hover:bg-violet-50 hover:text-violet-700'
+              : 'bg-black/[0.04] text-gray-400 cursor-not-allowed'
+        const dotCls = isActive
+          ? 'bg-white text-violet-600'
+          : isPast ? 'bg-emerald-500 text-white' : 'bg-gray-300 text-white'
+
         return (
           <div key={s.id} className="flex shrink-0 items-center">
-            <div className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[11px] font-semibold transition-colors ${
-              isActive ? 'bg-violet-600 text-white' : isPast ? 'bg-emerald-100 text-emerald-700' : 'bg-black/[0.04] text-gray-400'
-            }`}>
-              <span className={`flex h-4 w-4 items-center justify-center rounded-full text-[9px] ${
-                isActive ? 'bg-white text-violet-600' : isPast ? 'bg-emerald-500 text-white' : 'bg-gray-300 text-white'
-              }`}>{isPast ? '✓' : s.num}</span>
+            <button
+              type="button"
+              onClick={() => { if (isReachable) onPhaseClick(s.id) }}
+              disabled={!isReachable}
+              title={
+                isActive
+                  ? `Đang ở: ${s.label}`
+                  : isReachable
+                    ? `Quay lại "${s.label}" (giữ nguyên data, không regenerate)`
+                    : `${s.label} chưa có dữ liệu — hoàn thành các bước trước`
+              }
+              className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[11px] font-semibold transition-colors ${baseCls}`}
+            >
+              <span className={`flex h-4 w-4 items-center justify-center rounded-full text-[9px] ${dotCls}`}>
+                {isPast ? '✓' : s.num}
+              </span>
               <span>{s.label}</span>
-            </div>
+            </button>
             {i < steps.length - 1 && <ChevronRight className="h-3 w-3 shrink-0 text-gray-300" />}
           </div>
         )
@@ -502,9 +559,14 @@ export default function VideoBuilderV2({ onSwitchToV1 }: Props) {
         </div>
       </div>
 
-      {/* Phase breadcrumb */}
+      {/* Phase breadcrumb — clickable navigation; revisiting a phase
+          restores its cached state without regenerating anything. */}
       <div className="shrink-0 border-b border-black/8 bg-white px-6 py-2.5">
-        <PhaseHeader phase={state.phase} />
+        <PhaseHeader
+          phase={state.phase}
+          reachable={computeReachablePhases(state, !!sceneJob)}
+          onPhaseClick={(id) => setState((s) => (s.phase === id ? s : { ...s, phase: id }))}
+        />
       </div>
 
       {/* Body — switches by phase */}
