@@ -1,18 +1,27 @@
 import { useState } from 'react'
-import { Loader2, LayoutTemplate, Save, Check, RotateCcw, Trash2, FolderOpen, ChevronDown, ImageIcon, Sparkles } from 'lucide-react'
+import { Loader2, LayoutTemplate, Save, Check, RotateCcw, Trash2, FolderOpen, ChevronDown, ImageIcon, Sparkles, AlertTriangle } from 'lucide-react'
 import type { LandingPagePack, SavedLandingPack } from '../types'
 import SectionCard from './SectionCard'
 import { useLandingPageStore } from '../store'
 import { useAppStore } from '../../../stores/appStore'
 
+/** KIE GPT-image-1 ~ 6 credits per call. Drives all cost hints in this module. */
+const CREDIT_PER_IMAGE = 6
+
 interface OutputPanelProps {
   pack: LandingPagePack | null
   isGenerating: boolean
   onRegenerate: () => void
-  /** Trigger the image queue for all image prompts in the pack. */
+  /** Trigger the image queue for ALL image prompts in the pack. */
   onGenerateAllImages: () => void
+  /** Generate only images that are idle/empty (skip already-done images). */
+  onGenerateRemaining: () => void
+  /** Re-generate ONLY the images that failed last time. */
+  onRetryFailed: () => void
   /** Regenerate a single image inside the pack. */
   onRegenerateImage: (sectionIdx: number, imageIdx: number) => void
+  /** Delete a single image inside the pack (clears generated ref + resets status). */
+  onDeleteImage: (sectionIdx: number, imageIdx: number) => void
   /** Total / done / failed counts for the image batch. */
   imageProgress: { done: number; failed: number; total: number } | null
   isGeneratingImages: boolean
@@ -20,7 +29,9 @@ interface OutputPanelProps {
 
 export default function OutputPanel({
   pack, isGenerating, onRegenerate,
-  onGenerateAllImages, onRegenerateImage, imageProgress, isGeneratingImages,
+  onGenerateAllImages, onGenerateRemaining, onRetryFailed,
+  onRegenerateImage, onDeleteImage,
+  imageProgress, isGeneratingImages,
 }: OutputPanelProps) {
   const [saved, setSaved] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -122,6 +133,8 @@ export default function OutputPanel({
         <ImageGenerationBar
           pack={pack}
           onGenerateAll={onGenerateAllImages}
+          onGenerateRemaining={onGenerateRemaining}
+          onRetryFailed={onRetryFailed}
           progress={imageProgress}
           isGenerating={isGeneratingImages}
         />
@@ -136,6 +149,7 @@ export default function OutputPanel({
               index={i}
               section={section}
               onRegenerateImage={onRegenerateImage}
+              onDeleteImage={onDeleteImage}
             />
           ))}
         </div>
@@ -151,10 +165,12 @@ export default function OutputPanel({
 // progress while running, and an estimated-cost preview before running.
 // ─────────────────────────────────────────────────────────────────────
 function ImageGenerationBar({
-  pack, onGenerateAll, progress, isGenerating,
+  pack, onGenerateAll, onGenerateRemaining, onRetryFailed, progress, isGenerating,
 }: {
   pack: LandingPagePack
   onGenerateAll: () => void
+  onGenerateRemaining: () => void
+  onRetryFailed: () => void
   progress: { done: number; failed: number; total: number } | null
   isGenerating: boolean
 }) {
@@ -163,8 +179,14 @@ function ImageGenerationBar({
     (acc, s) => acc + (s.imagePrompts?.filter((p) => p.status === 'done').length ?? 0),
     0,
   )
-  // KIE GPT-image-1 ~6 credits per call
-  const estCredits = totalImages * 6
+  const failedCount = pack.sections.reduce(
+    (acc, s) => acc + (s.imagePrompts?.filter((p) => p.status === 'failed').length ?? 0),
+    0,
+  )
+  const remaining = totalImages - generated
+  const estCreditsAll       = totalImages * CREDIT_PER_IMAGE
+  const estCreditsRemaining = remaining * CREDIT_PER_IMAGE
+  const estCreditsFailed    = failedCount * CREDIT_PER_IMAGE
 
   return (
     <div className="flex flex-wrap items-center justify-between gap-2">
@@ -174,12 +196,14 @@ function ImageGenerationBar({
           Sinh ảnh thật cho landing pack
         </p>
         <p className="text-[10px] text-gray-500">
-          {generated}/{totalImages} ảnh đã sinh · 3 worker chạy song song · KIE GPT-image-1
+          {generated}/{totalImages} ảnh đã sinh
+          {failedCount > 0 && <span className="text-red-600"> · {failedCount} lỗi</span>}
+          {' '}· <span className="font-medium text-amber-700">1 ảnh ≈ {CREDIT_PER_IMAGE} credit</span>
           {pack.visualMemory.length > 0 && ` · ${pack.visualMemory.length} ảnh tham chiếu`}
         </p>
       </div>
 
-      <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center gap-1.5">
         {isGenerating && progress && (
           <div className="flex items-center gap-2">
             <Loader2 className="h-3.5 w-3.5 animate-spin text-amber-600" />
@@ -194,13 +218,42 @@ function ImageGenerationBar({
             </div>
           </div>
         )}
+
+        {/* Retry failed only — appears whenever there are failed images */}
+        {failedCount > 0 && !isGenerating && (
+          <button
+            onClick={onRetryFailed}
+            title={`Chỉ tạo lại ${failedCount} ảnh lỗi (~${estCreditsFailed} credit)`}
+            className="flex items-center gap-1 rounded-full border border-red-200 bg-white px-3 py-1.5 text-[11px] font-bold text-red-700 hover:bg-red-50"
+          >
+            <AlertTriangle className="h-3 w-3" /> Tạo lại {failedCount} ảnh lỗi (~{estCreditsFailed} credit)
+          </button>
+        )}
+
+        {/* Generate only remaining — appears when some images are still empty */}
+        {remaining > 0 && remaining < totalImages && !isGenerating && (
+          <button
+            onClick={onGenerateRemaining}
+            title={`Chỉ tạo ${remaining} ảnh còn thiếu (~${estCreditsRemaining} credit)`}
+            className="flex items-center gap-1 rounded-full border border-violet-200 bg-white px-3 py-1.5 text-[11px] font-bold text-violet-700 hover:bg-violet-50"
+          >
+            <Sparkles className="h-3 w-3" /> Tạo {remaining} ảnh còn thiếu (~{estCreditsRemaining} credit)
+          </button>
+        )}
+
+        {/* Bulk gen-all — bold primary CTA */}
         <button
           onClick={onGenerateAll}
           disabled={isGenerating || totalImages === 0}
+          title={`Sinh toàn bộ ${totalImages} ảnh (~${estCreditsAll} credit)`}
           className="flex items-center gap-1.5 rounded-full bg-amber-600 px-4 py-1.5 text-[11px] font-bold text-white shadow-sm hover:bg-amber-700 disabled:cursor-not-allowed disabled:opacity-40"
         >
           {isGenerating ? <Loader2 className="h-3 w-3 animate-spin" /> : <Sparkles className="h-3 w-3" />}
-          {isGenerating ? 'Đang sinh…' : generated > 0 ? `Sinh lại ${totalImages} ảnh (~${estCredits} credit)` : `Sinh ${totalImages} ảnh (~${estCredits} credit)`}
+          {isGenerating
+            ? 'Đang sinh…'
+            : generated > 0
+              ? `Sinh lại tất cả ${totalImages} ảnh (~${estCreditsAll} credit)`
+              : `Sinh tất cả ${totalImages} ảnh (~${estCreditsAll} credit)`}
         </button>
       </div>
     </div>

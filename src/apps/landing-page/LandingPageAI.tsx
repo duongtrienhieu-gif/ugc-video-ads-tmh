@@ -174,16 +174,75 @@ export default function LandingPageAI() {
     }
   }
 
-  // ── Per-image regen — fired by click 🔄 on a single image card ─────
+  // ── Per-image regen — fired by click ✨ / 🔄 / Thử lại on a single card ─
   const handleRegenerateOneImage = async (sectionIdx: number, imageIdx: number) => {
     if (!pack) return
     try {
       await regenerateSingleImage(pack, sectionIdx, imageIdx, patchImagePrompt)
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
-      addToast(`Sinh lại ảnh lỗi: ${msg}`, 'error')
+      addToast(`Sinh ảnh lỗi: ${msg}`, 'error')
     }
   }
+
+  // ── Per-image delete — clears generatedAssetRef + resets status to idle ─
+  const handleDeleteOneImage = (sectionIdx: number, imageIdx: number) => {
+    if (!pack) return
+    patchImagePrompt(sectionIdx, imageIdx, {
+      status: 'idle',
+      generatedAssetRef: undefined,
+      error: undefined,
+    })
+  }
+
+  // ── Batch helpers: only failed / only remaining ─────────────────────
+  // Both reuse regenerateSingleImage in sequence (not the worker pool) so
+  // each card's loading state animates individually — matches per-card UX.
+  const runImageSubset = async (predicate: (p: ImagePrompt) => boolean) => {
+    if (!pack) return
+    setIsGeneratingImages(true)
+    const targets: Array<[number, number]> = []
+    pack.sections.forEach((s, si) => {
+      s.imagePrompts?.forEach((p, ii) => {
+        if (predicate(p)) targets.push([si, ii])
+      })
+    })
+    if (targets.length === 0) {
+      setIsGeneratingImages(false)
+      return
+    }
+    setImageProgress({ done: 0, failed: 0, total: targets.length })
+    let done = 0
+    let failed = 0
+    // Run up to 3 in parallel (matches the batch worker pool concurrency)
+    const CONCURRENCY = 3
+    let cursor = 0
+    await new Promise<void>((resolve) => {
+      let active = 0
+      const pump = () => {
+        while (active < CONCURRENCY && cursor < targets.length) {
+          const [si, ii] = targets[cursor++]
+          active++
+          regenerateSingleImage(pack, si, ii, patchImagePrompt)
+            .then(() => { done++ })
+            .catch(() => { failed++ })
+            .finally(() => {
+              active--
+              setImageProgress({ done, failed, total: targets.length })
+              if (cursor >= targets.length && active === 0) resolve()
+              else pump()
+            })
+        }
+      }
+      pump()
+    })
+    setIsGeneratingImages(false)
+    addToast(`✓ Hoàn tất: ${done} ảnh OK${failed > 0 ? ` · ${failed} lỗi` : ''}`)
+    sessionApi.forceSave()
+  }
+
+  const handleRetryFailedImages = () => runImageSubset((p) => p.status === 'failed')
+  const handleGenerateRemaining  = () => runImageSubset((p) => p.status !== 'done' && p.status !== 'generating' && p.status !== 'queued')
 
   return (
     <div className="flex h-full flex-col lg:flex-row">
@@ -209,7 +268,10 @@ export default function LandingPageAI() {
           isGenerating={isGenerating}
           onRegenerate={handleRegenerate}
           onGenerateAllImages={handleGenerateAllImages}
+          onGenerateRemaining={handleGenerateRemaining}
+          onRetryFailed={handleRetryFailedImages}
           onRegenerateImage={handleRegenerateOneImage}
+          onDeleteImage={handleDeleteOneImage}
           imageProgress={imageProgress}
           isGeneratingImages={isGeneratingImages}
         />

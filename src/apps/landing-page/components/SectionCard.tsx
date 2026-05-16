@@ -1,7 +1,10 @@
 import { useState } from 'react'
-import { Copy, Check, ChevronDown, Image as ImageIcon, Loader2, RotateCcw, Download, AlertCircle } from 'lucide-react'
+import { Copy, Check, ChevronDown, Image as ImageIcon, Loader2, RotateCcw, Download, AlertCircle, Sparkles, Trash2 } from 'lucide-react'
 import type { LandingSection, ImagePrompt, SectionType } from '../types'
 import { useAssetUrl } from '../../../hooks/useAssetUrl'
+
+/** KIE GPT-image-1 ~ 6 credits per call. Used in tooltips + cost hints. */
+const CREDIT_PER_IMAGE = 6
 
 // ─────────────────────────────────────────────────────────────────────
 // Renders one advertorial section as a copy-paste-friendly card. Each
@@ -48,9 +51,11 @@ interface SectionCardProps {
   section: LandingSection
   /** Optional — when provided, image cards expose a per-image regen button. */
   onRegenerateImage?: (sectionIdx: number, imageIdx: number) => void
+  /** Optional — when provided, image cards expose a per-image delete button. */
+  onDeleteImage?: (sectionIdx: number, imageIdx: number) => void
 }
 
-export default function SectionCard({ index, section, onRegenerateImage }: SectionCardProps) {
+export default function SectionCard({ index, section, onRegenerateImage, onDeleteImage }: SectionCardProps) {
   const [expanded, setExpanded] = useState(true)
   const glyph = SECTION_GLYPH[section.type] ?? '📄'
   const accent = SECTION_ACCENT[section.type] ?? 'border-black/10 bg-white'
@@ -173,6 +178,7 @@ export default function SectionCard({ index, section, onRegenerateImage }: Secti
                     key={i}
                     prompt={p}
                     onRegenerate={onRegenerateImage ? () => onRegenerateImage(index, i) : undefined}
+                    onDelete={onDeleteImage ? () => onDeleteImage(index, i) : undefined}
                   />
                 ))}
               </div>
@@ -187,10 +193,11 @@ export default function SectionCard({ index, section, onRegenerateImage }: Secti
 // ─────────────────────────────────────────────────────────────────────
 
 function ImagePromptCard({
-  prompt, onRegenerate,
+  prompt, onRegenerate, onDelete,
 }: {
   prompt: ImagePrompt
   onRegenerate?: () => void
+  onDelete?: () => void
 }) {
   const [showPrompt, setShowPrompt] = useState(false)
   const resolvedUrl = useAssetUrl(prompt.generatedAssetRef ?? undefined)
@@ -198,6 +205,7 @@ function ImagePromptCard({
   const isLoading = prompt.status === 'queued' || prompt.status === 'generating'
   const hasImage = prompt.status === 'done' && prompt.generatedAssetRef
   const hasError = prompt.status === 'failed'
+  const isEmpty = !isLoading && !hasImage && !hasError
 
   const handleDownload = () => {
     if (!resolvedUrl) return
@@ -232,12 +240,22 @@ function ImagePromptCard({
             <AlertCircle className="h-4 w-4" />
             <span className="line-clamp-2 text-[9px] leading-tight">{prompt.error ?? 'Lỗi'}</span>
           </div>
-        ) : (
-          <div className="flex h-full flex-col items-center justify-center gap-1 text-gray-300">
+        ) : isEmpty ? (
+          <div className="flex h-full flex-col items-center justify-center gap-2 px-2 text-gray-400">
             <ImageIcon className="h-5 w-5 opacity-40" />
-            <span className="text-[9px]">Chưa sinh</span>
+            <span className="text-[9px] text-gray-400">Chưa sinh</span>
+            {onRegenerate && (
+              <button
+                onClick={onRegenerate}
+                title={`Tạo riêng ảnh này (~${CREDIT_PER_IMAGE} credit)`}
+                className="flex items-center gap-1 rounded-md bg-violet-600 px-2.5 py-1 text-[10px] font-bold text-white shadow-sm transition-colors hover:bg-violet-700"
+              >
+                <Sparkles className="h-3 w-3" /> Tạo ảnh
+              </button>
+            )}
+            <span className="text-[9px] text-gray-300">~{CREDIT_PER_IMAGE} credit</span>
           </div>
-        )}
+        ) : null}
 
         {/* Hover overlay actions — only when image exists */}
         {hasImage && (
@@ -246,8 +264,13 @@ function ImagePromptCard({
               <Download className="h-3 w-3" />
             </IconButton>
             {onRegenerate && (
-              <IconButton onClick={onRegenerate} title="Sinh lại ảnh" color="violet">
+              <IconButton onClick={onRegenerate} title={`Tạo lại (~${CREDIT_PER_IMAGE} credit)`} color="violet">
                 <RotateCcw className="h-3 w-3" />
+              </IconButton>
+            )}
+            {onDelete && (
+              <IconButton onClick={onDelete} title="Xoá ảnh" color="red">
+                <Trash2 className="h-3 w-3" />
               </IconButton>
             )}
           </div>
@@ -257,9 +280,10 @@ function ImagePromptCard({
         {hasError && onRegenerate && (
           <button
             onClick={onRegenerate}
+            title={`Thử lại (~${CREDIT_PER_IMAGE} credit)`}
             className="absolute inset-x-2 bottom-2 flex items-center justify-center gap-1 rounded-md bg-red-500/85 px-2 py-1 text-[10px] font-semibold text-white shadow-sm hover:bg-red-600"
           >
-            <RotateCcw className="h-3 w-3" /> Sinh lại
+            <RotateCcw className="h-3 w-3" /> Thử lại
           </button>
         )}
 
@@ -302,10 +326,13 @@ function IconButton({
 }: {
   onClick: () => void
   title: string
-  color: 'black' | 'violet'
+  color: 'black' | 'violet' | 'red'
   children: React.ReactNode
 }) {
-  const cls = color === 'violet' ? 'bg-violet-500 hover:bg-violet-600' : 'bg-black/70 hover:bg-black/90'
+  const cls =
+    color === 'violet' ? 'bg-violet-500 hover:bg-violet-600' :
+    color === 'red'    ? 'bg-red-500 hover:bg-red-600' :
+    'bg-black/70 hover:bg-black/90'
   return (
     <button
       type="button"
