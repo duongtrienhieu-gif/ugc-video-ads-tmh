@@ -40,7 +40,10 @@ Fields:
 - usps: unique selling points / competitive advantages
 - benefits: specific benefits of using the product
 - offer: current pricing and promotions
-- ingredients: SPECIFIC ingredients / active components / key compounds in this product (e.g. "Vitamin B12, A, E, biotin, iron", "Inulin prebiotic, FloraFit probiotic strains, Lactobacillus acidophilus", "Angelica sinensis, Motherwort herb"). List the actual ingredient names — do not write generic descriptions. If the page doesn't list ingredients explicitly, infer the most likely active components from product type.
+- ingredients: PHYSICAL substances / compounds / active components actually INSIDE the product. Examples of CORRECT values: "Vitamin B12, A, E, biotin, iron, magnesium" or "Inulin prebiotic, FloraFit probiotic strains, Lactobacillus acidophilus, Bifidobacterium" or "Angelica sinensis, Motherwort herb, Dong Quai root" or "Hyaluronic acid, niacinamide, vitamin C, peptides".
+  ❌ ABSOLUTE PROHIBITION: NEVER put marketing slogans, CTAs, call-to-action phrases, or promotional text here. The following are NOT ingredients and MUST NEVER appear in this field: "DAFTAR UNTUK DAPATKAN HARGA TAWARAN SEKARANG", "REGISTER TO GET THE OFFER PRICE NOW", "BUY NOW", "ORDER TODAY", "CLICK HERE", "SUBSCRIBE", "JOM BELI", "MUA NGAY", "ĐẶT HÀNG NGAY", "ĐĂNG KÝ", "Get yours now", "Shop now", etc.
+  Ingredients = PHYSICAL THINGS inside the bottle/box (vitamins, herbs, probiotic strains, compounds, active molecules). CTAs = marketing actions for the customer to take. These are DIFFERENT.
+  If the page does NOT list any actual ingredients/compounds and you cannot reasonably infer them from product type, return an EMPTY STRING "" — do NOT fill this field with marketing text, offer text, or CTAs.
 
 WEBPAGE TEXT:
 ${pageText.slice(0, 8000)}`
@@ -133,13 +136,35 @@ function parseExtracted(raw: string): Record<string, string> | null {
 
 type FormState = { productImage: string; productName: string; productDescription: string; targetMarket: string; painPoints: string; usps: string; benefits: string; offer: string; ingredients: string }
 
+/** Detect CTA/marketing text that should NEVER appear in the ingredients field. */
+function looksLikeCTA(text: string): boolean {
+  if (!text) return false
+  const upper = text.trim().toUpperCase()
+  if (!upper) return false
+  const ctaKeywords = [
+    'DAFTAR', 'BELI SEKARANG', 'BELI NOW', 'TEMPAH', 'TAWARAN', 'JOM BELI', 'KLIK',
+    'MUA NGAY', 'ĐẶT HÀNG', 'ĐĂNG KÝ', 'NHẬN NGAY', 'NHẤN VÀO',
+    'BUY NOW', 'ORDER NOW', 'ORDER TODAY', 'CLICK HERE', 'REGISTER NOW',
+    'SUBSCRIBE', 'SHOP NOW', 'GET IT NOW', 'GET YOURS', 'SIGN UP',
+    'JOIN NOW', 'LEARN MORE', 'CLAIM NOW', 'CLAIM YOUR',
+  ]
+  return ctaKeywords.some((kw) => upper.includes(kw))
+}
+
 function applyExtracted(extracted: Record<string, string>, prev: FormState): { next: FormState; count: number } {
   const next = { ...prev }
   let count = 0
   for (const [key, value] of Object.entries(extracted)) {
     if (key in next && typeof value === 'string') {
       const v = value.trim()
-      if (v) { (next as Record<string, string>)[key] = v; count++ }
+      if (!v) continue
+      // Safety net: if AI puts CTA text into ingredients field, drop it
+      if (key === 'ingredients' && looksLikeCTA(v)) {
+        console.warn('[applyExtracted] AI returned CTA in ingredients, dropping:', v.slice(0, 80))
+        continue
+      }
+      ;(next as Record<string, string>)[key] = v
+      count++
     }
   }
   return { next, count }
@@ -155,7 +180,7 @@ export default function ProductForm({ item, onSave, onCancel }: ProductFormProps
     usps: item?.usps ?? '',
     benefits: item?.benefits ?? '',
     offer: item?.offer ?? '',
-    ingredients: item?.ingredients ?? '',
+    ingredients: looksLikeCTA(item?.ingredients ?? '') ? '' : (item?.ingredients ?? ''),
   })
   const [productUrl, setProductUrl] = useState('')
   const [isFetching, setIsFetching] = useState(false)
@@ -180,7 +205,8 @@ export default function ProductForm({ item, onSave, onCancel }: ProductFormProps
         usps: item.usps,
         benefits: item.benefits,
         offer: item.offer,
-        ingredients: item.ingredients,
+        // Clear legacy CTA text that leaked from the old `cta` column rename
+        ingredients: looksLikeCTA(item.ingredients) ? '' : item.ingredients,
       })
     }
   }, [item])

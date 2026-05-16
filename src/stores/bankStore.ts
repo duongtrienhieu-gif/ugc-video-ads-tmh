@@ -5,7 +5,39 @@ import { useAppStore } from './appStore'
 
 // ── Row → TypeScript helpers ────────────────────────────────────────────────
 
+/**
+ * Detect if a text looks like a CTA (call-to-action) rather than actual ingredients.
+ * Used to filter out legacy CTA text leaking into the new Ingredients field after
+ * the schema rename. Old products had CTAs like "DAFTAR UNTUK DAPATKAN HARGA..."
+ * stored in the `cta` column — we don't want to surface those as "ingredients".
+ */
+function looksLikeCTA(text: string): boolean {
+  if (!text) return false
+  const t = text.trim()
+  if (!t) return false
+  const upper = t.toUpperCase()
+  // Common CTA / marketing imperatives across English, Malay, Vietnamese
+  const ctaKeywords = [
+    // Malay
+    'DAFTAR', 'BELI SEKARANG', 'BELI NOW', 'TEMPAH', 'TAWARAN',
+    'JOM BELI', 'KLIK DI SINI', 'KLIK SINI',
+    // Vietnamese
+    'MUA NGAY', 'ĐẶT HÀNG', 'ĐĂNG KÝ', 'NHẬN NGAY', 'ĐẶT MUA',
+    'NHẤN VÀO ĐÂY', 'CLICK NGAY',
+    // English
+    'BUY NOW', 'ORDER NOW', 'ORDER TODAY', 'CLICK HERE', 'REGISTER NOW',
+    'SUBSCRIBE', 'SHOP NOW', 'GET IT NOW', 'GET YOURS', 'SIGN UP',
+    'JOIN NOW', 'LEARN MORE', 'CLAIM NOW', 'CLAIM YOUR',
+  ]
+  return ctaKeywords.some((kw) => upper.includes(kw))
+}
+
 function toProduct(row: Record<string, unknown>): Product {
+  // Read from new column first; fallback to legacy `cta` column.
+  // Strip CTA-like text — those were stored in the old `cta` column and leak in.
+  const rawIngredients = ((row.ingredients ?? row.cta) as string) ?? ''
+  const cleanIngredients = looksLikeCTA(rawIngredients) ? '' : rawIngredients
+
   return {
     id: row.id as string,
     createdAt: row.created_at as number,
@@ -16,7 +48,7 @@ function toProduct(row: Record<string, unknown>): Product {
     usps: (row.usps as string) ?? '',
     benefits: (row.benefits as string) ?? '',
     offer: (row.offer as string) ?? '',
-    ingredients: ((row.ingredients ?? row.cta) as string) ?? '',
+    ingredients: cleanIngredients,
     productImage: (row.product_image as string) ?? '',
   }
 }
