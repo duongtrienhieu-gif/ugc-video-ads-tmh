@@ -1,161 +1,78 @@
 import { saveAsset, isAssetRef } from '../../../utils/assetStore'
-import { directGeminiVision } from '../../../utils/gemini'
 import { generateGpt4oImage } from '../../../utils/kieai'
 import type { AvatarVariant } from '../../../stores/types'
 
-/**
- * Use Gemini Vision to describe the avatar's face + style in detail.
- * This description anchors the identity lock when generating angle variants —
- * reference-image alone is unreliable (model often invents a different person).
- */
-export async function describeAvatarFromImage(imageUrl: string, geminiKey: string): Promise<string | null> {
-  try {
-    let base64: string
-    let mimeType: string
+// ── IDENTITY-LOCKED VARIATIONS ──────────────────────────────────────────────
+//
+// We pass the original avatar via `filesUrl` to KIE's GPT-image-1 edit endpoint
+// and rely on IMAGE conditioning for identity preservation. The prompt is kept
+// deliberately SHORT — long verbose identity-lock paragraphs dilute image
+// conditioning weight and push the model toward "imagining a similar-looking
+// different person" from text alone. The shorter the prompt, the more the
+// model trusts the reference image.
+//
+// Failure mode this design fixes: previous implementation sent a ~350-token
+// wall of text ("KEEP face shape, eyes, eyebrows, nose, lips, jawline, ...")
+// plus a Gemini-Vision-generated description block. The model treated that as
+// the primary identity source and generated "a person matching that text
+// description" instead of "the exact person in the reference image".
 
-    if (imageUrl.startsWith('data:')) {
-      const match = imageUrl.match(/^data:([^;]+);base64,(.+)$/)
-      if (!match) return null
-      mimeType = match[1]
-      base64 = match[2]
-    } else {
-      const res = await fetch(imageUrl)
-      if (!res.ok) return null
-      const blob = await res.blob()
-      mimeType = blob.type || 'image/jpeg'
-      const buf = await blob.arrayBuffer()
-      const bytes = new Uint8Array(buf)
-      let binary = ''
-      for (let i = 0; i < bytes.byteLength; i++) binary += String.fromCharCode(bytes[i])
-      base64 = btoa(binary)
-    }
-
-    const response = await directGeminiVision({
-      apiKey: geminiKey,
-      parts: [
-        { inlineData: { mimeType, data: base64 } },
-        { text: `Describe this person's face and identifying features in 2-3 SHORT sentences for an image-generation prompt. Focus ONLY on:
-- Gender, approximate age range (e.g. "late 40s-50s")
-- Ethnicity / regional appearance (e.g. "Malaysian", "Vietnamese", "Caucasian", "Middle Eastern")
-- Skin tone, face shape, distinctive features (cheekbones, jaw, smile, wrinkles)
-- Eye color, eye shape, eyebrow style
-- Hairstyle OR hijab (color, style, how it's worn) — be specific
-- Any facial hair (beard, stubble, clean-shaven, mustache style)
-- Outfit colors and style (top color, pattern if any)
-- Any visible accessories (glasses, jewelry, earrings, bracelet)
-
-Be VERY specific so the same person can be reliably re-rendered at a different angle.
-Output: only the description, no preamble, no markdown, no lists, just flowing sentences.
-
-Example output: "A Malaysian woman in her late 40s with warm tan skin, soft rounded face shape, warm brown almond-shaped eyes, gentle smile lines, wearing a soft lavender hijab pinned modestly under chin, lavender floral top, and a thin gold bracelet on her wrist."` },
-      ],
-      maxOutputTokens: 350,
-      model: 'gemini-2.5-flash',
-    })
-
-    return response.trim().replace(/^["']|["']$/g, '')
-  } catch (err) {
-    console.error('[describeAvatarFromImage] failed:', err)
-    return null
-  }
-}
-
-/**
- * Generate alternate angle variants of an existing avatar.
- *
- * Why: Single-reference identity preservation is unreliable — when B-roll
- * gen needs to render the avatar in 3/4 angles or expressions, AI has to
- * "imagine" the new view and often drifts away from the original face.
- * With 3-5 reference images covering different angles, the model has a
- * proper "identity manifold" and stays much more consistent.
- *
- * Uses Nano Banana 2 (Google) in edit-mode with strong identity-lock prompts
- * and the original avatar passed as reference image. Generates 4 angles
- * sequentially (not parallel) to avoid rate limits on free Gemini tier.
- */
+const CONSISTENCY_SUFFIX =
+  'Maintain identical facial identity and bone structure. Do not change ethnicity, hairstyle, age, facial proportions, or skin texture. Same outfit. Only alter angle and expression. Photorealistic consistency.'
 
 export interface VariantRecipe {
   angleType: AvatarVariant['label']
+  /** SHORT (one sentence) description of the visual change — angle + expression only.
+   *  The image reference does the identity heavy-lifting; this is just the "what changes" hint. */
   prompt: string
 }
 
-/** The 4 angle variants we generate by default. Designed to give image-gen
- *  models a complete view of the avatar's face from multiple perspectives. */
+// ── 4-angle variant pack (used by VariantsModal for saved Models) ───────────
+
 export const DEFAULT_VARIANT_RECIPES: VariantRecipe[] = [
-  {
-    angleType: '3/4 trái',
-    prompt: 'Same identical person from the reference image, now photographed from a 3/4 LEFT angle (head turned slightly to camera-left, about 30-45 degrees). Same neutral expression, same hijab/hair style, same outfit, same lighting setup as reference. Keep face shape, eyes, eyebrows, nose, lips, jawline, skin tone EXACTLY as in reference. Studio portrait shot, vertical 9:16, photorealistic.',
-  },
-  {
-    angleType: '3/4 phải',
-    prompt: 'Same identical person from the reference image, now photographed from a 3/4 RIGHT angle (head turned slightly to camera-right, about 30-45 degrees). Same neutral expression, same hijab/hair style, same outfit, same lighting setup as reference. Keep face shape, eyes, eyebrows, nose, lips, jawline, skin tone EXACTLY as in reference. Studio portrait shot, vertical 9:16, photorealistic.',
-  },
-  {
-    angleType: 'cười',
-    prompt: 'Same identical person from the reference image, now with a gentle warm smile showing slight teeth, eyes still naturally relaxed. Front-facing. Same hijab/hair style, same outfit, same lighting setup as reference. Keep face shape, eye shape + color, eyebrows, nose, lips (just smiling now), jawline, skin tone EXACTLY as in reference. Studio portrait shot, vertical 9:16, photorealistic.',
-  },
-  {
-    angleType: 'side profile',
-    prompt: 'Same identical person from the reference image, now photographed in SIDE PROFILE (head turned 90 degrees so we see the side of the face — nose, lips, chin silhouette). Same neutral expression, same hijab/hair style, same outfit, same lighting setup as reference. Keep skin tone, nose shape, lip shape, chin/jaw EXACTLY as in reference. Studio portrait shot, vertical 9:16, photorealistic.',
-  },
+  { angleType: '3/4 trái',     prompt: 'Same exact person, head turned slightly to the left (about 30° 3/4 angle), natural neutral expression.' },
+  { angleType: '3/4 phải',     prompt: 'Same exact person, head turned slightly to the right (about 30° 3/4 angle), natural neutral expression.' },
+  { angleType: 'cười',         prompt: 'Same exact person, front-facing, warm natural smile with slight teeth, eyes relaxed.' },
+  { angleType: 'side profile', prompt: 'Same exact person, full side profile — head turned 90° showing one full side of the face.' },
+]
+
+// ── 3-angle integrated workflow (used inline in Avatar AI Studio output) ────
+
+export const EXTRA_3_RECIPES: VariantRecipe[] = [
+  { angleType: '3/4 trái', prompt: 'Same exact person, slight 3/4 left angle (head turned ~30° camera-left), natural relaxed expression.' },
+  { angleType: '3/4 phải', prompt: 'Same exact person, slight 3/4 right angle (head turned ~30° camera-right), natural relaxed expression.' },
+  { angleType: 'cười',     prompt: 'Same exact person, front-facing, gentle natural smile (slight teeth), eyes relaxed.' },
 ]
 
 /**
- * Generate ONE variant via KIE.ai's GPT Image 2 (same model used by Avatar AI gen).
- * The original avatar image is passed via referenceImageUrls for identity lock.
+ * Generate ONE identity-locked variant via KIE GPT-image-1 image-edit endpoint.
+ * The original avatar is passed as the reference image via `filesUrl[0]` so
+ * the model uses it as the identity anchor.
  *
- * mode:
- *   - 'strict' (default): keep face + hair + outfit + lighting all from reference
- *   - 'flex-outfit': keep face + hair + facial hair, allow slight outfit variation
- *
- * The `apiKey` param is the KIE.ai API key.
+ * Prompt = short variation hint + a one-line consistency clause. That's it.
  */
 export async function generateOneVariant(params: {
-  apiKey: string  // KIE.ai API key
-  originalImageUrl: string
+  apiKey: string            // KIE.ai API key
+  originalImageUrl: string  // PUBLIC URL the KIE backend can fetch (signed Supabase URL is fine)
   recipe: VariantRecipe
-  avatarDescription?: string  // optional locked physical description
+  /** @deprecated kept for backwards-compat — no longer used; image reference is the anchor. */
+  avatarDescription?: string
+  /** @deprecated kept for backwards-compat — outfit is now always locked. */
   mode?: 'strict' | 'flex-outfit'
 }): Promise<AvatarVariant | null> {
-  const { apiKey, originalImageUrl, recipe, avatarDescription, mode = 'strict' } = params
+  const { apiKey, originalImageUrl, recipe } = params
 
-  const descBlock = avatarDescription
-    ? `\nTHE PERSON IN THE REFERENCE IMAGE:\n${avatarDescription}\n`
-    : ''
-
-  const allowOutfitVariation = mode === 'flex-outfit'
-
-  const identityLockText = `IMAGE-EDITING TASK: Re-render the EXACT SAME PERSON from the attached reference image, viewed from a different angle.
-
-THE PERSON IS: the individual in the attached reference image. KEEP HER/HIS FACE EXACTLY:
-• Same face shape, eyes (color + shape), eyebrows, nose, lips, jawline, cheekbones, skin tone
-• Same gender, same ethnicity, same age range — do NOT make older younger or vice versa
-• Same hijab style and color if present, OR same hairstyle / hair color / hair length / hair texture
-• Same facial hair (beard, stubble, mustache) if present — same style and color
-• Same accessories on face/neck (glasses, earrings)
-
-${descBlock ? `Additional identity description for accuracy:${descBlock}` : ''}
-
-${allowOutfitVariation
-  ? 'CAN VARY: outfit color/style (same modesty level if hijab outfit), background scenery'
-  : 'KEEP THE SAME: outfit, lighting, background style as reference'}
-
-WHAT CHANGES (apply this transformation): ${recipe.prompt}
-
-OUTPUT: photorealistic vertical image, authentic natural lighting, no text overlay, no watermark. The output MUST be recognizably the same individual as the reference image — only the head pose, angle, or expression changes.`
+  const prompt = `${recipe.prompt}\n\n${CONSISTENCY_SUFFIX}`
 
   try {
-    // Use KIE GPT-4o image-edit endpoint with filesUrl — the proper image
-    // conditioning pipeline (gpt-image-2-text-to-image silently ignores refs).
     const imageUrl = await generateGpt4oImage({
       apiKey,
-      prompt: identityLockText,
+      prompt,
       filesUrl: [originalImageUrl],
-      size: '2:3',  // closest to 9:16 (gpt4o only supports 1:1, 3:2, 2:3)
+      size: '2:3',  // closest to 9:16 (KIE gpt4o supports only 1:1, 3:2, 2:3)
       timeoutMs: 4 * 60 * 1000,
     })
 
-    // Upload to asset store so it persists like the rest of the bank
     let storedRef: string
     if (isAssetRef(imageUrl)) {
       storedRef = imageUrl
@@ -179,24 +96,21 @@ OUTPUT: photorealistic vertical image, authentic natural lighting, no text overl
   }
 }
 
-/**
- * Generate all 4 default angle variants. Returns the variants that succeeded.
- * Runs sequentially with a small delay to be gentle on rate limits.
- */
+/** Generate all 4 default angles (used by Project → Avatar AI → ✨ on saved model). */
 export async function generateAllVariants(params: {
   apiKey: string
   originalImageUrl: string
+  /** @deprecated no longer used — image reference is the identity anchor. */
   avatarDescription?: string
   onProgress?: (done: number, total: number, currentLabel: string) => void
 }): Promise<AvatarVariant[]> {
-  const { apiKey, originalImageUrl, avatarDescription, onProgress } = params
+  const { apiKey, originalImageUrl, onProgress } = params
   const variants: AvatarVariant[] = []
   for (let i = 0; i < DEFAULT_VARIANT_RECIPES.length; i++) {
     const recipe = DEFAULT_VARIANT_RECIPES[i]
     onProgress?.(i, DEFAULT_VARIANT_RECIPES.length, recipe.angleType)
-    const v = await generateOneVariant({ apiKey, originalImageUrl, recipe, avatarDescription })
+    const v = await generateOneVariant({ apiKey, originalImageUrl, recipe })
     if (v) variants.push(v)
-    // Small pause to avoid burst-rate limits
     if (i < DEFAULT_VARIANT_RECIPES.length - 1) {
       await new Promise((r) => setTimeout(r, 1000))
     }
@@ -205,10 +119,30 @@ export async function generateAllVariants(params: {
   return variants
 }
 
-/**
- * Build an AvatarVariant from a user-uploaded image file (no AI gen — pure upload).
- * This is the "manual upload" fallback for users who have real-life photos.
- */
+/** Generate the 3 extra angles for the integrated Avatar AI workflow. */
+export async function generateExtra3Angles(params: {
+  apiKey: string
+  originalImageUrl: string
+  /** @deprecated no longer used. */
+  avatarDescription?: string
+  onProgress?: (done: number, total: number, currentLabel: string) => void
+}): Promise<AvatarVariant[]> {
+  const { apiKey, originalImageUrl, onProgress } = params
+  const out: AvatarVariant[] = []
+  for (let i = 0; i < EXTRA_3_RECIPES.length; i++) {
+    const recipe = EXTRA_3_RECIPES[i]
+    onProgress?.(i, EXTRA_3_RECIPES.length, recipe.angleType)
+    const v = await generateOneVariant({ apiKey, originalImageUrl, recipe })
+    if (v) out.push(v)
+    if (i < EXTRA_3_RECIPES.length - 1) {
+      await new Promise((r) => setTimeout(r, 800))
+    }
+  }
+  onProgress?.(EXTRA_3_RECIPES.length, EXTRA_3_RECIPES.length, 'done')
+  return out
+}
+
+/** Build an AvatarVariant from a user-uploaded image file (no AI gen). */
 export async function addManualVariant(file: File, label: string): Promise<AvatarVariant> {
   const assetId = await saveAsset(file, file.type || 'image/jpeg')
   return {
@@ -220,52 +154,14 @@ export async function addManualVariant(file: File, label: string): Promise<Avata
   }
 }
 
-// ── EXTRA 3 ANGLES (integrated Avatar AI workflow — outfit-flex mode) ────────
-// Used right after main avatar generation. Keeps face + hair + facial hair
-// from original, allows slight outfit variation for natural photo-series feel.
-
-export const EXTRA_3_RECIPES: VariantRecipe[] = [
-  {
-    angleType: '3/4 trái',
-    prompt: 'Same person photographed from a 3/4 LEFT angle (head turned ~35° to camera-left). Natural relaxed expression. Same hairstyle and any facial hair as the reference. Outfit may differ slightly (different shirt color or top is OK) but same casual UGC modesty level. Same natural ambient lighting.',
-  },
-  {
-    angleType: '3/4 phải',
-    prompt: 'Same person photographed from a 3/4 RIGHT angle (head turned ~35° to camera-right). Natural relaxed expression. Same hairstyle and any facial hair as the reference. Outfit may differ slightly (different shirt color or top is OK) but same casual UGC modesty level. Same natural ambient lighting.',
-  },
-  {
-    angleType: 'cười',
-    prompt: 'Same person front-facing with a gentle warm genuine smile (slight teeth visible). Eyes naturally relaxed. Same hairstyle and any facial hair as the reference. Outfit may differ slightly (different shirt color or top is OK) but same casual UGC modesty level. Same natural ambient lighting.',
-  },
-]
-
 /**
- * Generate the 3 extra angles for the integrated Avatar AI workflow.
- * Uses flex-outfit mode (keep face + hair + facial hair, allow outfit variation).
+ * @deprecated Avatar description from Gemini Vision is no longer used as an
+ * identity anchor — the image reference (via filesUrl) is far more reliable
+ * and the description block was actively hurting identity consistency by
+ * pulling the model toward "a person matching this description" instead of
+ * "the person in this image". Kept exported for backwards compat with any
+ * lingering imports; will be removed in a future cleanup.
  */
-export async function generateExtra3Angles(params: {
-  apiKey: string
-  originalImageUrl: string
-  avatarDescription?: string
-  onProgress?: (done: number, total: number, currentLabel: string) => void
-}): Promise<AvatarVariant[]> {
-  const { apiKey, originalImageUrl, avatarDescription, onProgress } = params
-  const out: AvatarVariant[] = []
-  for (let i = 0; i < EXTRA_3_RECIPES.length; i++) {
-    const recipe = EXTRA_3_RECIPES[i]
-    onProgress?.(i, EXTRA_3_RECIPES.length, recipe.angleType)
-    const v = await generateOneVariant({
-      apiKey,
-      originalImageUrl,
-      recipe,
-      avatarDescription,
-      mode: 'flex-outfit',
-    })
-    if (v) out.push(v)
-    if (i < EXTRA_3_RECIPES.length - 1) {
-      await new Promise((r) => setTimeout(r, 800))
-    }
-  }
-  onProgress?.(EXTRA_3_RECIPES.length, EXTRA_3_RECIPES.length, 'done')
-  return out
+export async function describeAvatarFromImage(): Promise<string | null> {
+  return null
 }

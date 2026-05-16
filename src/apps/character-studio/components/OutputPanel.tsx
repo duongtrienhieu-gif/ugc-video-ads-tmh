@@ -7,7 +7,7 @@ import type { GenerationResult } from '../services/generateCharacter'
 import { useAssetUrl } from '../../../hooks/useAssetUrl'
 import { IMAGE_MODELS } from '../../../utils/kieai'
 import type { ImageResolution } from '../../../utils/kieai'
-import { generateExtra3Angles, generateOneVariant, describeAvatarFromImage, EXTRA_3_RECIPES } from '../services/generateVariants'
+import { generateExtra3Angles, generateOneVariant, EXTRA_3_RECIPES } from '../services/generateVariants'
 import type { AvatarVariant } from '../../../stores/types'
 
 interface OutputPanelProps {
@@ -69,11 +69,7 @@ export default function OutputPanel({ result, isGenerating, onGenerate, onCancel
   const [isSavingPreset, setIsSavingPreset] = useState(false)
 
   const kieApiKey = useSettingsStore((s) => s.kieApiKey)
-  const geminiApiKey = useSettingsStore((s) => s.geminiApiKey)
   const addToast = useAppStore((s) => s.addToast)
-
-  // Cached avatar description (Gemini Vision) — computed once on first gen, reused for regens
-  const avatarDescRef = useRef<string | null>(null)
 
   const [progress, setProgress] = useState(0)
   const progressRef = useRef<ReturnType<typeof setInterval> | null>(null)
@@ -111,7 +107,6 @@ export default function OutputPanel({ result, isGenerating, onGenerate, onCancel
     setExtraAngles([])
     setPresetName('')
     setSaved(false)
-    avatarDescRef.current = null  // invalidate cached description for new avatar
   }, [result?.imageUrl])
 
   const handleCopy = () => {
@@ -121,17 +116,9 @@ export default function OutputPanel({ result, isGenerating, onGenerate, onCancel
     setTimeout(() => setCopied(false), 2000)
   }
 
-  // Compute (or reuse cached) avatar description via Gemini Vision.
-  // This is the PRIMARY identity anchor — without it the angle gen produces random people.
-  const ensureAvatarDescription = async (): Promise<string | undefined> => {
-    if (avatarDescRef.current) return avatarDescRef.current
-    if (!resolvedImageUrl || !geminiApiKey) return undefined
-    const desc = await describeAvatarFromImage(resolvedImageUrl, geminiApiKey)
-    avatarDescRef.current = desc
-    return desc ?? undefined
-  }
-
-  // ── Generate 3 extra face angles inline ───────────────────────────────────
+  // ── Generate 3 identity-locked variations inline ──────────────────────────
+  // The original image is sent as reference (filesUrl) to KIE GPT-image-1's
+  // image-edit endpoint — identity comes from the image, not from text.
   const handleGenerateExtras = async () => {
     if (!result || !resolvedImageUrl) return
     if (!kieApiKey) {
@@ -140,29 +127,20 @@ export default function OutputPanel({ result, isGenerating, onGenerate, onCancel
     }
     setIsGeneratingExtras(true)
     setExtraAngles([null, null, null])
-    setExtraProgress({ done: 0, total: 3, label: 'phân tích avatar' })
+    setExtraProgress({ done: 0, total: 3, label: EXTRA_3_RECIPES[0].angleType })
 
     try {
-      // Step 1: Describe the avatar via Gemini Vision (identity anchor in prompt)
-      const avatarDesc = await ensureAvatarDescription()
-      if (!avatarDesc) {
-        addToast('Gemini Vision không phân tích được avatar — vẫn thử gen', 'error')
-      }
-
-      // Step 2: Generate the 3 angles via KIE.ai GPT Image 2 (with reference)
       const angles = await generateExtra3Angles({
         apiKey: kieApiKey,
         originalImageUrl: resolvedImageUrl,
-        avatarDescription: avatarDesc,
         onProgress: (done, total, label) => setExtraProgress({ done, total, label }),
       })
-      // Pad to 3 slots in case some failed
       const padded: (AvatarVariant | null)[] = [angles[0] ?? null, angles[1] ?? null, angles[2] ?? null]
       setExtraAngles(padded)
       if (angles.length < 3) {
-        addToast(`Chỉ tạo được ${angles.length}/3 góc — bạn có thể tạo lại từng ảnh`, 'error')
+        addToast(`Chỉ tạo được ${angles.length}/3 biến thể — bạn có thể tạo lại từng ảnh`, 'error')
       } else {
-        addToast('✓ Đã tạo 3 góc mặt thêm')
+        addToast('✓ Đã tạo 3 biến thể cùng người')
       }
     } catch (err) {
       console.error('[gen extras] failed:', err)
@@ -172,23 +150,19 @@ export default function OutputPanel({ result, isGenerating, onGenerate, onCancel
     }
   }
 
-  // Regenerate one of the 3 angles — reuses cached avatar description
   const handleRegenAngle = async (idx: number) => {
     if (!resolvedImageUrl) return
     if (!kieApiKey) {
-      addToast('Cần OpenAI API key trong Cài đặt', 'error')
+      addToast('Cần KIE.ai API key trong Cài đặt', 'error')
       return
     }
     setRegenIdx(idx)
     try {
-      const avatarDesc = await ensureAvatarDescription()
       const recipe = EXTRA_3_RECIPES[idx]
       const v = await generateOneVariant({
         apiKey: kieApiKey,
         originalImageUrl: resolvedImageUrl,
         recipe,
-        avatarDescription: avatarDesc,
-        mode: 'flex-outfit',
       })
       if (v) {
         setExtraAngles((prev) => {
@@ -197,7 +171,7 @@ export default function OutputPanel({ result, isGenerating, onGenerate, onCancel
           return next
         })
       } else {
-        addToast(`Tạo lại góc #${idx + 1} thất bại`, 'error')
+        addToast(`Tạo lại biến thể #${idx + 1} thất bại`, 'error')
       }
     } catch (err) {
       addToast(`Lỗi: ${err instanceof Error ? err.message.slice(0, 80) : 'unknown'}`, 'error')
@@ -215,7 +189,7 @@ export default function OutputPanel({ result, isGenerating, onGenerate, onCancel
       await addModel({
         characterImage: result.imageUrl,
         name: presetName.trim(),
-        notes: validVariants.length > 0 ? `Preset ${validVariants.length + 1} góc mặt` : '',
+        notes: validVariants.length > 0 ? `Preset ${validVariants.length + 1} biến thể cùng người` : '',
         jsonProfile: result.jsonPrompt as unknown as Record<string, unknown>,
         source: 'character-studio',
         variants: validVariants.length > 0 ? validVariants : undefined,
@@ -480,11 +454,11 @@ export default function OutputPanel({ result, isGenerating, onGenerate, onCancel
             <button
               onClick={handleGenerateExtras}
               disabled={isGeneratingExtras || !kieApiKey}
-              title={!kieApiKey ? 'Cần KIE.ai API key trong Cài đặt' : 'Tạo 3 góc mặt cùng người qua KIE GPT Image 2'}
+              title={!kieApiKey ? 'Cần KIE.ai API key trong Cài đặt' : 'Lấy ảnh gốc làm reference, tạo 3 biến thể cùng người qua KIE GPT Image (image-edit, không phải text-to-image)'}
               className="flex w-full items-center justify-center gap-2 rounded-full border border-violet-300 bg-violet-50 px-6 py-3.5 text-[13px] font-semibold text-violet-700 transition-colors hover:bg-violet-100 disabled:opacity-50"
             >
               <Sparkles className="h-4 w-4" />
-              ✨ Tạo 3 góc mặt thêm (cùng người, đa góc nhìn) {!kieApiKey && '— cần KIE key'}
+              ✨ Tạo 3 biến thể cùng người {!kieApiKey && '— cần KIE key'}
             </button>
           )}
 
@@ -492,7 +466,7 @@ export default function OutputPanel({ result, isGenerating, onGenerate, onCancel
           {isGeneratingExtras && (
             <div className="rounded-xl border border-violet-200 bg-violet-50 p-3">
               <div className="mb-1.5 flex items-center justify-between text-xs">
-                <span className="font-medium text-violet-700">Đang tạo góc: {extraProgress.label}</span>
+                <span className="font-medium text-violet-700">Đang tạo biến thể: {extraProgress.label}</span>
                 <span className="font-bold tabular-nums text-violet-700">{extraProgress.done}/{extraProgress.total}</span>
               </div>
               <div className="h-1.5 w-full overflow-hidden rounded-full bg-violet-100">
@@ -568,7 +542,7 @@ function AngleSlot({
           </span>
           <button
             onClick={onRegen}
-            title={`Tạo lại góc ${label}`}
+            title={`Tạo lại biến thể ${label}`}
             className="absolute right-1.5 top-1.5 flex h-7 w-7 items-center justify-center rounded-md bg-black/60 text-white opacity-0 backdrop-blur-sm transition-opacity hover:bg-violet-600 group-hover:opacity-100"
           >
             <RotateCcw className="h-3.5 w-3.5" />
