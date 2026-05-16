@@ -1,6 +1,7 @@
 import { useState } from 'react'
-import { Copy, Check, ChevronDown, Image as ImageIcon } from 'lucide-react'
+import { Copy, Check, ChevronDown, Image as ImageIcon, Loader2, RotateCcw, Download, AlertCircle } from 'lucide-react'
 import type { LandingSection, ImagePrompt, SectionType } from '../types'
+import { useAssetUrl } from '../../../hooks/useAssetUrl'
 
 // ─────────────────────────────────────────────────────────────────────
 // Renders one advertorial section as a copy-paste-friendly card. Each
@@ -9,37 +10,47 @@ import type { LandingSection, ImagePrompt, SectionType } from '../types'
 // ─────────────────────────────────────────────────────────────────────
 
 const SECTION_GLYPH: Record<SectionType, string> = {
-  hero:           '🚀',
-  pain:           '😩',
-  'why-happens':  '🔬',
-  ingredients:    '🧪',
-  'social-proof': '💬',
-  'before-after': '↔️',
-  benefits:       '✅',
-  offer:          '🎁',
-  faq:            '❓',
-  'final-cta':    '📣',
+  hero:                    '🚀',
+  pain:                    '😩',
+  'why-happens':           '🔬',
+  'failed-solutions':      '❌',
+  'product-discovery':     '✨',
+  ingredients:             '🧪',
+  mechanism:               '⚙️',
+  benefits:                '✅',
+  lifestyle:               '🌅',
+  'social-proof':          '💬',
+  'whatsapp-testimonials': '📱',
+  offer:                   '🎁',
+  faq:                     '❓',
+  'final-cta':             '📣',
 }
 
 const SECTION_ACCENT: Record<SectionType, string> = {
-  hero:           'border-violet-300 bg-violet-50/40',
-  pain:           'border-rose-200 bg-rose-50/40',
-  'why-happens':  'border-blue-200 bg-blue-50/40',
-  ingredients:    'border-emerald-200 bg-emerald-50/40',
-  'social-proof': 'border-amber-200 bg-amber-50/40',
-  'before-after': 'border-pink-200 bg-pink-50/40',
-  benefits:       'border-teal-200 bg-teal-50/40',
-  offer:          'border-orange-200 bg-orange-50/40',
-  faq:            'border-gray-200 bg-gray-50/40',
-  'final-cta':    'border-violet-300 bg-violet-50/40',
+  hero:                    'border-violet-300 bg-violet-50/40',
+  pain:                    'border-rose-200 bg-rose-50/40',
+  'why-happens':           'border-blue-200 bg-blue-50/40',
+  'failed-solutions':      'border-red-200 bg-red-50/40',
+  'product-discovery':     'border-cyan-200 bg-cyan-50/40',
+  ingredients:             'border-emerald-200 bg-emerald-50/40',
+  mechanism:               'border-sky-200 bg-sky-50/40',
+  benefits:                'border-teal-200 bg-teal-50/40',
+  lifestyle:               'border-pink-200 bg-pink-50/40',
+  'social-proof':          'border-amber-200 bg-amber-50/40',
+  'whatsapp-testimonials': 'border-green-200 bg-green-50/40',
+  offer:                   'border-orange-200 bg-orange-50/40',
+  faq:                     'border-gray-200 bg-gray-50/40',
+  'final-cta':             'border-violet-300 bg-violet-50/40',
 }
 
 interface SectionCardProps {
   index: number
   section: LandingSection
+  /** Optional — when provided, image cards expose a per-image regen button. */
+  onRegenerateImage?: (sectionIdx: number, imageIdx: number) => void
 }
 
-export default function SectionCard({ index, section }: SectionCardProps) {
+export default function SectionCard({ index, section, onRegenerateImage }: SectionCardProps) {
   const [expanded, setExpanded] = useState(true)
   const glyph = SECTION_GLYPH[section.type] ?? '📄'
   const accent = SECTION_ACCENT[section.type] ?? 'border-black/10 bg-white'
@@ -156,9 +167,13 @@ export default function SectionCard({ index, section }: SectionCardProps) {
                   <span className="ml-auto text-[10px] text-gray-400">{section.imageSizeHint}</span>
                 )}
               </div>
-              <div className="space-y-2">
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
                 {section.imagePrompts.map((p, i) => (
-                  <ImagePromptCard key={i} prompt={p} />
+                  <ImagePromptCard
+                    key={i}
+                    prompt={p}
+                    onRegenerate={onRegenerateImage ? () => onRegenerateImage(index, i) : undefined}
+                  />
                 ))}
               </div>
             </div>
@@ -171,23 +186,136 @@ export default function SectionCard({ index, section }: SectionCardProps) {
 
 // ─────────────────────────────────────────────────────────────────────
 
-function ImagePromptCard({ prompt }: { prompt: ImagePrompt }) {
+function ImagePromptCard({
+  prompt, onRegenerate,
+}: {
+  prompt: ImagePrompt
+  onRegenerate?: () => void
+}) {
+  const [showPrompt, setShowPrompt] = useState(false)
+  const resolvedUrl = useAssetUrl(prompt.generatedAssetRef ?? undefined)
+
+  const isLoading = prompt.status === 'queued' || prompt.status === 'generating'
+  const hasImage = prompt.status === 'done' && prompt.generatedAssetRef
+  const hasError = prompt.status === 'failed'
+
+  const handleDownload = () => {
+    if (!resolvedUrl) return
+    const a = document.createElement('a')
+    a.href = resolvedUrl
+    a.download = prompt.filename || 'landing-image.png'
+    a.click()
+  }
+
+  // Map aspect ratio → CSS aspect (preview thumbnails)
+  const aspectClass =
+    prompt.aspectRatio === '1:1' ? 'aspect-square' :
+    prompt.aspectRatio === '16:9' ? 'aspect-video' :
+    prompt.aspectRatio === '9:16' ? 'aspect-[9/16]' :
+    'aspect-[4/5]'  // default 4:5
+
   return (
-    <div className="rounded-md border border-black/8 bg-white p-2.5">
-      <div className="flex items-center justify-between gap-2">
-        <span className="font-mono text-[10px] text-gray-500">{prompt.filename}</span>
-        <div className="flex items-center gap-1">
-          <span className="rounded-full bg-violet-100 px-1.5 py-0.5 text-[9px] font-medium text-violet-700">
-            {prompt.style}
-          </span>
-          <span className="rounded-full bg-gray-100 px-1.5 py-0.5 text-[9px] font-medium text-gray-600">
+    <div className="rounded-md border border-black/8 bg-white overflow-hidden">
+      {/* Image / state area */}
+      <div className={`group relative ${aspectClass} w-full bg-gray-100`}>
+        {hasImage && resolvedUrl ? (
+          <img src={resolvedUrl} alt={prompt.filename} className="h-full w-full object-cover" />
+        ) : isLoading ? (
+          <div className="flex h-full flex-col items-center justify-center gap-1.5 text-violet-400">
+            <Loader2 className="h-5 w-5 animate-spin" />
+            <span className="text-[9px] font-medium">
+              {prompt.status === 'queued' ? 'Hàng chờ' : 'Đang sinh ảnh…'}
+            </span>
+          </div>
+        ) : hasError ? (
+          <div className="flex h-full flex-col items-center justify-center gap-1 px-2 text-center text-red-400">
+            <AlertCircle className="h-4 w-4" />
+            <span className="line-clamp-2 text-[9px] leading-tight">{prompt.error ?? 'Lỗi'}</span>
+          </div>
+        ) : (
+          <div className="flex h-full flex-col items-center justify-center gap-1 text-gray-300">
+            <ImageIcon className="h-5 w-5 opacity-40" />
+            <span className="text-[9px]">Chưa sinh</span>
+          </div>
+        )}
+
+        {/* Hover overlay actions — only when image exists */}
+        {hasImage && (
+          <div className="absolute right-1.5 top-1.5 flex gap-1 opacity-0 transition-opacity group-hover:opacity-100 hover:opacity-100">
+            <IconButton onClick={handleDownload} title="Tải xuống" color="black">
+              <Download className="h-3 w-3" />
+            </IconButton>
+            {onRegenerate && (
+              <IconButton onClick={onRegenerate} title="Sinh lại ảnh" color="violet">
+                <RotateCcw className="h-3 w-3" />
+              </IconButton>
+            )}
+          </div>
+        )}
+
+        {/* Always-visible retry on failed */}
+        {hasError && onRegenerate && (
+          <button
+            onClick={onRegenerate}
+            className="absolute inset-x-2 bottom-2 flex items-center justify-center gap-1 rounded-md bg-red-500/85 px-2 py-1 text-[10px] font-semibold text-white shadow-sm hover:bg-red-600"
+          >
+            <RotateCcw className="h-3 w-3" /> Sinh lại
+          </button>
+        )}
+
+        {/* Aspect + style badges */}
+        <div className="absolute left-1.5 top-1.5 flex gap-1">
+          <span className="rounded bg-black/65 px-1.5 py-0.5 text-[9px] font-medium text-white backdrop-blur-sm">
             {prompt.aspectRatio}
           </span>
-          <CopyAllButton text={prompt.prompt} compact />
         </div>
       </div>
-      <p className="mt-1.5 whitespace-pre-wrap text-[12px] leading-relaxed text-gray-700">{prompt.prompt}</p>
+
+      {/* Footer: filename + style + prompt toggle */}
+      <div className="px-2 py-1.5 space-y-1">
+        <div className="flex items-center justify-between gap-1">
+          <span className="truncate font-mono text-[9px] text-gray-500">{prompt.filename}</span>
+          <span className="rounded-full bg-violet-100 px-1.5 py-0.5 text-[9px] font-medium text-violet-700 shrink-0">
+            {prompt.style}
+          </span>
+        </div>
+        <button
+          onClick={() => setShowPrompt((v) => !v)}
+          className="flex w-full items-center justify-between gap-1 text-left text-[10px] text-gray-500 hover:text-gray-700"
+        >
+          <span>{showPrompt ? '− Ẩn prompt' : '+ Xem prompt'}</span>
+          <CopyAllButton text={prompt.prompt} compact />
+        </button>
+        {showPrompt && (
+          <p className="whitespace-pre-wrap rounded bg-gray-50 p-1.5 text-[10px] leading-snug text-gray-600">
+            {prompt.prompt}
+          </p>
+        )}
+      </div>
     </div>
+  )
+}
+
+// Tiny icon button for hover overlay
+function IconButton({
+  onClick, title, color, children,
+}: {
+  onClick: () => void
+  title: string
+  color: 'black' | 'violet'
+  children: React.ReactNode
+}) {
+  const cls = color === 'violet' ? 'bg-violet-500 hover:bg-violet-600' : 'bg-black/70 hover:bg-black/90'
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      title={title}
+      aria-label={title}
+      className={`flex h-6 w-6 items-center justify-center rounded-md text-white shadow-sm backdrop-blur-sm transition-colors ${cls}`}
+    >
+      {children}
+    </button>
   )
 }
 

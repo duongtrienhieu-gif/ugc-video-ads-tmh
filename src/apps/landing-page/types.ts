@@ -6,19 +6,37 @@
 // guide. Phase 2 will add auto image generation + ZIP export.
 // ─────────────────────────────────────────────────────────────────────
 
+// 14-section structure per the Phase 2 spec — direct response advertorial
+// flow tuned for Malaysian FB ads + COD ecommerce.
 export type SectionType =
   | 'hero'
   | 'pain'
   | 'why-happens'
+  | 'failed-solutions'
+  | 'product-discovery'
   | 'ingredients'
-  | 'social-proof'
-  | 'before-after'
+  | 'mechanism'
   | 'benefits'
-  | 'offer'
+  | 'lifestyle'
+  | 'social-proof'
+  | 'whatsapp-testimonials'
   | 'faq'
+  | 'offer'
   | 'final-cta'
 
 export type LandingLanguage = 'ms' | 'vi' | 'en'
+
+/** A single uploaded product reference image used as visual memory across
+ *  image generations. Pass top 3 into KIE filesUrl for product-focused
+ *  sections so the rendered product stays visually consistent. */
+export interface VisualMemoryItem {
+  /** asset:xxx ref — stable, survives signed-URL expiry. */
+  ref: string
+  /** User-facing label like "front packaging", "back label", "logo". */
+  label: string
+}
+
+export type ImagePromptStatus = 'idle' | 'queued' | 'generating' | 'done' | 'failed'
 
 export interface ImagePrompt {
   /** Suggested filename like "hero_01.jpg" for the user's reference. */
@@ -29,6 +47,11 @@ export interface ImagePrompt {
   style: string
   /** "4:5" / "1:1" / "9:16" / "16:9" — guidance for Ladipage placement. */
   aspectRatio: string
+  // ── Phase 2 — real generated image fields (optional for backwards compat) ──
+  /** asset:xxx ref of the generated image, set once worker completes. */
+  generatedAssetRef?: string
+  status?: ImagePromptStatus
+  error?: string
 }
 
 export interface FaqItem {
@@ -74,6 +97,9 @@ export interface LandingPagePack {
   productName: string
   language: LandingLanguage
   sections: LandingSection[]
+  /** Uploaded product reference images. May be empty — falls back to
+   *  selectedProduct.productImage at gen time if so. */
+  visualMemory: VisualMemoryItem[]
   generatedAt: number
 }
 
@@ -82,8 +108,11 @@ export interface LandingGenParams {
   language: LandingLanguage
   /** Niche label (e.g. "supplement gut health") helps Gemini calibrate tone. */
   nicheHint?: string
-  /** Optional source URL — passed as text context to Gemini. NOT crawled in Phase 1. */
+  /** Optional source URL — passed as text context to Gemini. NOT crawled in Phase 2. */
   sourceUrl?: string
+  /** Pre-collected visual references. Passed into the pack as-is and reused
+   *  for image generation in Phase B. */
+  visualMemory?: VisualMemoryItem[]
 }
 
 export interface SavedLandingPack extends LandingPagePack {

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Loader2, LayoutTemplate, Save, Check, RotateCcw, Trash2, FolderOpen, ChevronDown } from 'lucide-react'
+import { Loader2, LayoutTemplate, Save, Check, RotateCcw, Trash2, FolderOpen, ChevronDown, ImageIcon, Sparkles } from 'lucide-react'
 import type { LandingPagePack, SavedLandingPack } from '../types'
 import SectionCard from './SectionCard'
 import { useLandingPageStore } from '../store'
@@ -9,9 +9,19 @@ interface OutputPanelProps {
   pack: LandingPagePack | null
   isGenerating: boolean
   onRegenerate: () => void
+  /** Trigger the image queue for all image prompts in the pack. */
+  onGenerateAllImages: () => void
+  /** Regenerate a single image inside the pack. */
+  onRegenerateImage: (sectionIdx: number, imageIdx: number) => void
+  /** Total / done / failed counts for the image batch. */
+  imageProgress: { done: number; failed: number; total: number } | null
+  isGeneratingImages: boolean
 }
 
-export default function OutputPanel({ pack, isGenerating, onRegenerate }: OutputPanelProps) {
+export default function OutputPanel({
+  pack, isGenerating, onRegenerate,
+  onGenerateAllImages, onRegenerateImage, imageProgress, isGeneratingImages,
+}: OutputPanelProps) {
   const [saved, setSaved] = useState(false)
   const [saving, setSaving] = useState(false)
   const [title, setTitle] = useState('')
@@ -107,15 +117,91 @@ export default function OutputPanel({ pack, isGenerating, onRegenerate }: Output
         </div>
       </div>
 
+      {/* Image generation bar — between meta header and sections */}
+      <div className="shrink-0 border-b border-black/8 bg-amber-50/30 px-5 py-2.5">
+        <ImageGenerationBar
+          pack={pack}
+          onGenerateAll={onGenerateAllImages}
+          progress={imageProgress}
+          isGenerating={isGeneratingImages}
+        />
+      </div>
+
       <div className="flex-1 overflow-y-auto p-4">
         {/* Section cards */}
         <div className="space-y-3">
           {pack.sections.map((section, i) => (
-            <SectionCard key={`${section.type}-${i}`} index={i} section={section} />
+            <SectionCard
+              key={`${section.type}-${i}`}
+              index={i}
+              section={section}
+              onRegenerateImage={onRegenerateImage}
+            />
           ))}
         </div>
 
         <SavedHistorySection />
+      </div>
+    </div>
+  )
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Image generation action bar — shows the "Sinh tất cả ảnh" CTA,
+// progress while running, and an estimated-cost preview before running.
+// ─────────────────────────────────────────────────────────────────────
+function ImageGenerationBar({
+  pack, onGenerateAll, progress, isGenerating,
+}: {
+  pack: LandingPagePack
+  onGenerateAll: () => void
+  progress: { done: number; failed: number; total: number } | null
+  isGenerating: boolean
+}) {
+  const totalImages = pack.sections.reduce((acc, s) => acc + (s.imagePrompts?.length ?? 0), 0)
+  const generated = pack.sections.reduce(
+    (acc, s) => acc + (s.imagePrompts?.filter((p) => p.status === 'done').length ?? 0),
+    0,
+  )
+  // KIE GPT-image-1 ~6 credits per call
+  const estCredits = totalImages * 6
+
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-2">
+      <div className="min-w-0">
+        <p className="flex items-center gap-1.5 text-xs font-semibold text-gray-800">
+          <ImageIcon className="h-3.5 w-3.5 text-amber-600" />
+          Sinh ảnh thật cho landing pack
+        </p>
+        <p className="text-[10px] text-gray-500">
+          {generated}/{totalImages} ảnh đã sinh · 3 worker chạy song song · KIE GPT-image-1
+          {pack.visualMemory.length > 0 && ` · ${pack.visualMemory.length} ảnh tham chiếu`}
+        </p>
+      </div>
+
+      <div className="flex items-center gap-2">
+        {isGenerating && progress && (
+          <div className="flex items-center gap-2">
+            <Loader2 className="h-3.5 w-3.5 animate-spin text-amber-600" />
+            <span className="text-[11px] font-medium text-amber-700">
+              {progress.done}/{progress.total} {progress.failed > 0 && `· ${progress.failed} lỗi`}
+            </span>
+            <div className="h-1.5 w-24 overflow-hidden rounded-full bg-amber-100">
+              <div
+                className="h-full bg-amber-500 transition-all"
+                style={{ width: `${Math.round(((progress.done + progress.failed) / Math.max(1, progress.total)) * 100)}%` }}
+              />
+            </div>
+          </div>
+        )}
+        <button
+          onClick={onGenerateAll}
+          disabled={isGenerating || totalImages === 0}
+          className="flex items-center gap-1.5 rounded-full bg-amber-600 px-4 py-1.5 text-[11px] font-bold text-white shadow-sm hover:bg-amber-700 disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          {isGenerating ? <Loader2 className="h-3 w-3 animate-spin" /> : <Sparkles className="h-3 w-3" />}
+          {isGenerating ? 'Đang sinh…' : generated > 0 ? `Sinh lại ${totalImages} ảnh (~${estCredits} credit)` : `Sinh ${totalImages} ảnh (~${estCredits} credit)`}
+        </button>
       </div>
     </div>
   )

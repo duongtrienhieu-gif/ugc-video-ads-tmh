@@ -57,7 +57,7 @@ Each section object has these fields. Include only those relevant to the section
 }
 
 ═══════════════════════════════════════════════════════════════
-SECTION SPEC — produce EXACTLY these 10, in this order
+SECTION SPEC — produce EXACTLY these 14, in this order
 ═══════════════════════════════════════════════════════════════
 1. type="hero" — Mở đầu chốt scroll
    • headline (scroll-stopping, addresses pain), subheadline, cta, offerStrip, urgencyText
@@ -66,42 +66,61 @@ SECTION SPEC — produce EXACTLY these 10, in this order
 
 2. type="pain" — Đau cảm xúc
    • copy: emotional pain agitation, mobile-first paragraphs with emojis
-   • 2 imagePrompts: 1 relatable suffering moment (face / hand on stomach / mirror), 1 lifestyle pain context (rejecting food, hiding face). UGC. 4:5 or 1:1.
+   • 2 imagePrompts: 1 relatable suffering moment (face / hand on stomach / mirror), 1 lifestyle pain context (rejecting food, hiding face). UGC. 4:5 or 1:1. NO product visible — focus on the person.
 
 3. type="why-happens" — Vì sao xảy ra (educational)
    • copy: explain the root mechanism in plain Malay/Vi/En — short paragraphs, conversational, NOT medical-textbook
    • 1-2 imagePrompts: infographic-style mechanism visual (gut microbiome / skin layer / patch placement — pick what fits the product niche). Clean, mobile-readable. 1:1.
 
-4. type="ingredients" — Cơ chế ingredient (CRITICAL)
+4. type="failed-solutions" — Các giải pháp đã thử mà thất bại
+   • copy: list of common solutions the customer has tried that didn't work (other supplements, detox tea, diet, doctor visits…) — validate their frustration
+   • bullets: 3-5 "❌ Đã thử X — không work" lines
+   • 1-2 imagePrompts: a tired Malaysian customer surrounded by failed products / empty bottles on the table / disappointed expression. UGC. 4:5. NO our product visible — show the OTHER failed options.
+
+5. type="product-discovery" — Khoảnh khắc tìm thấy sản phẩm
+   • copy: the "aha" moment — friend recommendation / Facebook ad / TikTok find. Bridges failed-solutions into the product reveal.
+   • 1 imagePrompt: Malaysian person holding the product for the first time with a curious / hopeful expression, soft natural light. UGC. 4:5.
+
+6. type="ingredients" — Phân tích thành phần (CRITICAL)
    • copy: name 2-3 hero ingredients from the product brief and explain how each works, simply
    • bullets: 3-5 ingredient → effect lines
    • 2-3 imagePrompts: ingredient cards (capsule + molecule illustration / ingredient hero shot / benefits comparison visual). Infographic style. 1:1.
 
-5. type="social-proof" — Bằng chứng xã hội
-   • reviews: 4-6 fake-but-realistic reviews in the chosen language, with author names appropriate to Malaysia (Aisyah, Siti, Ahmad, etc.), short quotes, optional meta like "WhatsApp · 2 minggu lepas"
-   • copy: 1-2 short framing paragraphs
-   • 2-3 imagePrompts: WhatsApp screenshot, Messenger screenshot, TikTok comment screenshot — MUST look realistic + slightly compressed + imperfect spacing + authentic local vibe. NEVER over-designed clean UI. 9:16 or 4:5.
+7. type="mechanism" — Cơ chế khoa học
+   • copy: explain HOW the formula works step-by-step — cause → effect chain. Plain creator language.
+   • 1-2 imagePrompts: scientific mechanism diagram (gut absorption / skin penetration / receptor binding — pick by niche). Clean infographic. 1:1.
 
-6. type="before-after" — Trước & sau
-   • copy: short testimonial-style story
-   • 1-2 imagePrompts: realistic before/after, NOT exaggerated, UGC look. 1:1 split-frame.
-
-7. type="benefits" — Lợi ích
+8. type="benefits" — Lợi ích
    • bullets: 5-7 short benefits with leading emoji each
    • copy: 1 short framing paragraph
    • 1 imagePrompt: benefits comparison grid or icon-card visual. 1:1.
 
-8. type="offer" — Khuyến mãi & COD
-   • copy: offer description, discount, COD details, shipping
-   • offerStrip + urgencyText
-   • cta: strong button text
-   • 1-2 imagePrompts: promo banner, COD card. 16:9 or 4:5.
+9. type="lifestyle" — Sự chuyển hoá lối sống
+   • copy: paint the after-life — energetic mornings, eating with family without discomfort, confidence
+   • 1-2 imagePrompts: Malaysian family enjoying breakfast / a woman laughing / energetic candid moment — happy, healthy, vibrant. UGC. 4:5. NO product visible — focus on the transformed life.
 
-9. type="faq" — Câu hỏi thường gặp
-   • faqs: 5-7 Malaysia-localized FAQs (halal status, side effects, "berapa lama nampak hasil", COD payment, shipping, return policy, allergies). Answers conversational.
-   • imagePrompts: [] (FAQ section needs no image)
+10. type="social-proof" — Bằng chứng xã hội
+    • reviews: 4-6 fake-but-realistic reviews in the chosen language, with author names appropriate to Malaysia (Aisyah, Siti, Ahmad, etc.), short quotes, optional meta like "WhatsApp · 2 minggu lepas"
+    • copy: 1-2 short framing paragraphs
+    • 2-3 imagePrompts: lifestyle selfie style review photo, TikTok comment screenshot, Facebook comment screenshot — MUST look realistic + slightly compressed + imperfect spacing + authentic local vibe. NEVER over-designed clean UI. 9:16 or 4:5.
 
-10. type="final-cta" — Chốt cuối
+11. type="whatsapp-testimonials" — Tin nhắn WhatsApp / Messenger (specific subtype)
+    • reviews: 4-6 chat-style testimonials. The "quote" should look like a multi-line chat message, with multiple lines and emojis a real customer would send. "author" = Malaysian first name (Aisyah, Hafiz, etc). "meta" = "WhatsApp · today" or "Messenger · 3 days ago".
+    • copy: short framing sentence
+    • 2-3 imagePrompts: WhatsApp screenshot mockup (green chat bubbles, slightly compressed JPEG quality, natural Malay text in emojis, imperfect spacing — feels grabbed from a phone). 9:16.
+
+12. type="faq" — Câu hỏi thường gặp
+    • faqs: 5-7 Malaysia-localized FAQs (halal status, side effects, "berapa lama nampak hasil", COD payment, shipping, return policy, allergies). Answers conversational.
+    • imagePrompts: [] (FAQ section needs no image)
+
+13. type="offer" — Stack khuyến mãi & COD
+    • copy: offer description with multiple value adds (free shipping + bonus + COD), urgency framing
+    • bullets: 3-5 "✅ Bonus X (RM Y)" stack items
+    • offerStrip + urgencyText
+    • cta: strong button text
+    • 1-2 imagePrompts: promo banner with the product + offer text, COD card with payment-on-delivery vibe. 16:9 or 4:5.
+
+14. type="final-cta" — Chốt cuối
     • headline (strong urgency), subheadline, cta, urgencyText
     • copy: closing pitch
     • 1 imagePrompt: hero ecommerce shot or final product banner. 4:5.
@@ -200,8 +219,9 @@ interface RawPack {
 }
 
 const SECTION_ORDER: SectionType[] = [
-  'hero', 'pain', 'why-happens', 'ingredients', 'social-proof',
-  'before-after', 'benefits', 'offer', 'faq', 'final-cta',
+  'hero', 'pain', 'why-happens', 'failed-solutions', 'product-discovery',
+  'ingredients', 'mechanism', 'benefits', 'lifestyle', 'social-proof',
+  'whatsapp-testimonials', 'faq', 'offer', 'final-cta',
 ]
 
 function normalizeSection(s: RawSection): LandingSection | null {
@@ -274,6 +294,7 @@ export async function generateLandingPack(params: LandingGenParams): Promise<Lan
     productName: product.productName,
     language: (parsed.language as LandingLanguage) ?? params.language,
     sections,
+    visualMemory: params.visualMemory ?? [],
     generatedAt: Date.now(),
   }
 }
