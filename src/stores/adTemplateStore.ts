@@ -11,6 +11,7 @@
  */
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
+import type { AnalysisResult } from '../apps/ad-anatomy/types'
 
 export interface AdWinTemplate {
   id: string
@@ -18,12 +19,14 @@ export interface AdWinTemplate {
   analysisText: string          // full Gemini analysis output (~500-1500 words)
   videoFileName?: string        // original file name for reference
   sourceTranscript?: string     // optional: actual transcript text from the ad
+  /** Z6: full structured analysis result — enables benchmark + pattern stats */
+  analysis?: AnalysisResult
   createdAt: number
 }
 
 interface AdTemplateState {
   templates: AdWinTemplate[]
-  addTemplate:    (name: string, analysisText: string, opts?: { videoFileName?: string; sourceTranscript?: string }) => string  // returns id
+  addTemplate:    (name: string, analysisText: string, opts?: { videoFileName?: string; sourceTranscript?: string; analysis?: AnalysisResult }) => string  // returns id
   updateTemplate: (id: string, updates: Partial<AdWinTemplate>) => void
   deleteTemplate: (id: string) => void
   getById:        (id: string) => AdWinTemplate | undefined
@@ -40,6 +43,7 @@ export const useAdTemplateStore = create<AdTemplateState>()(
           analysisText,
           videoFileName: opts?.videoFileName,
           sourceTranscript: opts?.sourceTranscript,
+          analysis: opts?.analysis,
           createdAt: Date.now(),
         }
         set((s) => ({ templates: [template, ...s.templates] }))

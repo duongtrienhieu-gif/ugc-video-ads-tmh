@@ -42,6 +42,7 @@ import {
   VARIATION_ACCENT,
 } from '../types'
 import { generateVariations } from '../services/generateVariations'
+import { computeBenchmark, computePatternStats } from '../services/winningPatternStats'
 import { useAppStore } from '../../../stores/appStore'
 import { useBankStore } from '../../../stores/bankStore'
 import { useAdTemplateStore } from '../../../stores/adTemplateStore'
@@ -606,6 +607,155 @@ function ActionTile({
       </div>
       <span className="text-[10px] text-gray-500 leading-tight">{hint}</span>
     </button>
+  )
+}
+
+/* ─── Z6: Winning Pattern Benchmark ─── */
+/**
+ * Compares the current analysis against the user's saved Ad Win Templates
+ * (adTemplateStore). Shows: percentile rank, score deltas vs baseline,
+ * how many saved templates share the same angle/awareness/hook technique,
+ * and top patterns across the user's whole database.
+ *
+ * Empty state when user has 0 saved templates with structured analysis
+ * encourages them to start building their Win DB.
+ */
+function WinningPatternSection({ result }: { result: AnalysisResult }) {
+  const templates = useAdTemplateStore((s) => s.templates)
+  const benchmark = computeBenchmark(result, templates)
+  const stats = computePatternStats(templates)
+
+  // Empty state — user has no saved templates with structured analysis
+  if (!benchmark || stats.sampleSize === 0) {
+    return (
+      <Section className="border-amber-200 bg-gradient-to-br from-amber-50/60 to-orange-50/30">
+        <div className="flex items-center gap-2">
+          <Bookmark className="h-4 w-4 text-amber-600" strokeWidth={1.8} />
+          <h3 className="text-sm font-bold tracking-tight text-gray-900">Winning Pattern Database</h3>
+          <span className="ml-auto rounded-full bg-amber-100 px-2 py-0.5 text-[9px] font-bold text-amber-700">Z6</span>
+        </div>
+        <p className="mt-2 text-xs leading-relaxed text-gray-600">
+          Lưu các ads winning bạn phân tích để build database riêng. Mỗi template đóng góp vào benchmark — biết hook nào lặp lại nhiều lần, angle nào win, scaling tier trung bình.
+        </p>
+        <p className="mt-1 text-[11px] text-amber-700 font-semibold">
+          Bấm "Lưu thành Mẫu ADS Win" ở cột trái để bắt đầu DB.
+        </p>
+      </Section>
+    )
+  }
+
+  const totalTemplates = templates.length
+  const withStructured = stats.sampleSize
+
+  return (
+    <Section className="border-amber-200 bg-gradient-to-br from-amber-50/60 to-orange-50/30">
+      <div className="mb-3 flex items-center gap-2">
+        <Bookmark className="h-4 w-4 text-amber-600" strokeWidth={1.8} />
+        <h3 className="text-sm font-bold tracking-tight text-gray-900">Benchmark vs Winning DB</h3>
+        <span className="ml-auto rounded-full bg-amber-100 px-2 py-0.5 text-[9px] font-bold text-amber-700">
+          {withStructured} mẫu DB
+        </span>
+      </div>
+
+      <div className="space-y-3">
+        {/* Percentile callout */}
+        {benchmark.percentileVsSaved !== null && (
+          <div className="rounded-lg border border-amber-200 bg-white px-4 py-3">
+            <p className="text-[10px] font-bold uppercase tracking-widest text-amber-700">Vị trí ad này trong DB</p>
+            <div className="mt-1 flex items-baseline gap-2">
+              <span className="text-2xl font-bold tabular-nums text-amber-700">{benchmark.percentileVsSaved}%</span>
+              <span className="text-xs text-gray-600">
+                ads đã lưu có Overall thấp hơn ad này
+              </span>
+            </div>
+            <p className="mt-1 text-[10px] text-gray-500">
+              {benchmark.percentileVsSaved >= 75 ? '🚀 Top 25% — scale ngay' :
+               benchmark.percentileVsSaved >= 50 ? '✓ Trên trung bình — đáng test' :
+               benchmark.percentileVsSaved >= 25 ? '⚠ Dưới trung bình — nên iterate' :
+               '⛔ Quá thấp — review trước khi chạy'}
+            </p>
+          </div>
+        )}
+
+        {/* Score deltas vs DB average */}
+        {benchmark.scoreDeltas.length > 0 && (
+          <div className="rounded-lg border border-black/8 bg-white px-3 py-2.5">
+            <p className="text-[10px] font-bold uppercase tracking-widest text-gray-500 mb-2">
+              So với trung bình DB ({withStructured} mẫu)
+            </p>
+            <div className="space-y-1">
+              {benchmark.scoreDeltas.map((d) => {
+                const isAbove = d.delta > 0
+                const isFlat = Math.abs(d.delta) < 0.1
+                const color = isFlat ? 'text-gray-500' : isAbove ? 'text-emerald-600' : 'text-red-600'
+                const arrow = isFlat ? '·' : isAbove ? '▲' : '▼'
+                return (
+                  <div key={d.label} className="flex items-center gap-2 text-[11px]">
+                    <span className="flex-1 text-gray-700">{d.label}</span>
+                    <span className="tabular-nums text-gray-500">{d.current.toFixed(1)} / {d.average.toFixed(1)}</span>
+                    <span className={`tabular-nums font-bold ${color} w-12 text-right`}>
+                      {arrow} {Math.abs(d.delta).toFixed(1)}
+                    </span>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* Pattern matches */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+          {result.adAngle && (
+            <div className="rounded-lg border border-cyan-200 bg-white px-3 py-2.5">
+              <span className="text-[9px] font-bold uppercase tracking-widest text-cyan-700">Angle này</span>
+              <p className="mt-1 text-lg font-bold tabular-nums text-cyan-700">
+                {benchmark.matchingAngleCount}<span className="text-[10px] text-gray-400">/{withStructured}</span>
+              </p>
+              <p className="text-[10px] text-gray-500">ads cùng angle trong DB</p>
+            </div>
+          )}
+          {result.hookBreakdown?.technique && benchmark.matchingHookCount > 0 && (
+            <div className="rounded-lg border border-violet-200 bg-white px-3 py-2.5">
+              <span className="text-[9px] font-bold uppercase tracking-widest text-violet-700">Hook pattern</span>
+              <p className="mt-1 text-lg font-bold tabular-nums text-violet-700">
+                {benchmark.matchingHookCount}<span className="text-[10px] text-gray-400">/{withStructured}</span>
+              </p>
+              <p className="text-[10px] text-gray-500">ads dùng kỹ thuật tương tự</p>
+            </div>
+          )}
+          {result.marketAwareness && (
+            <div className="rounded-lg border border-amber-200 bg-white px-3 py-2.5">
+              <span className="text-[9px] font-bold uppercase tracking-widest text-amber-700">Awareness</span>
+              <p className="mt-1 text-lg font-bold tabular-nums text-amber-700">
+                {benchmark.matchingAwarenessCount}<span className="text-[10px] text-gray-400">/{withStructured}</span>
+              </p>
+              <p className="text-[10px] text-gray-500">ads cùng awareness level</p>
+            </div>
+          )}
+        </div>
+
+        {/* Top patterns across whole DB */}
+        {stats.topHookTechniques.length > 0 && (
+          <div className="rounded-lg border border-black/8 bg-white px-3 py-2.5">
+            <p className="text-[10px] font-bold uppercase tracking-widest text-gray-500">Top hook patterns trong DB</p>
+            <ol className="mt-1.5 space-y-0.5">
+              {stats.topHookTechniques.map((h, i) => (
+                <li key={i} className="flex items-center gap-2 text-[11px] text-gray-700">
+                  <span className="font-bold tabular-nums text-violet-600 w-5">#{i + 1}</span>
+                  <span className="flex-1 truncate">{h.technique}</span>
+                  <span className="tabular-nums text-gray-400">{h.count}× xuất hiện</span>
+                </li>
+              ))}
+            </ol>
+          </div>
+        )}
+
+        <p className="text-[10px] text-gray-400 text-center">
+          Database hiện có {totalTemplates} mẫu ({withStructured} có analysis đầy đủ) — local-only.
+          {totalTemplates < 5 && ' Lưu thêm mẫu để stats chính xác hơn.'}
+        </p>
+      </div>
+    </Section>
   )
 }
 
@@ -1214,10 +1364,11 @@ export default function ResultsView({ result, videoSrc, fileName, onReset, onRes
     if (!trimmed) { addToast('Đặt tên cho template', 'error'); return }
     const analysisText = analysisToPromptText(result)
     const transcript = result.transcript.map((l) => `${l.timestamp} ${l.text}`).join('\n')
-    addTemplate(trimmed, analysisText, { videoFileName: fileName, sourceTranscript: transcript })
+    // Z6: persist the FULL structured analysis so it contributes to benchmark stats
+    addTemplate(trimmed, analysisText, { videoFileName: fileName, sourceTranscript: transcript, analysis: result })
     setSaved(true)
     setSavingTemplate(false)
-    addToast(`✓ Đã lưu Mẫu ADS Win "${trimmed}" — dùng trong UGC Builder`)
+    addToast(`✓ Đã lưu Mẫu ADS Win "${trimmed}" — đóng góp vào Winning Pattern DB`)
     setTimeout(() => setSaved(false), 3000)
   }
 
@@ -1306,6 +1457,8 @@ export default function ResultsView({ result, videoSrc, fileName, onReset, onRes
           {/* Z3: 1-click cross-app pipeline — directly under verdict so user
               can act immediately. */}
           <CreativeActionBar result={result} />
+          {/* Z6: Winning Pattern benchmark — compare vs user's saved templates */}
+          <WinningPatternSection result={result} />
           {/* Z4: Variation Engine — lazy 2nd Gemini call, persisted to cache */}
           <VariationsSection result={result} onResultUpdate={onResultUpdate} />
           <ScorecardSection result={result} />

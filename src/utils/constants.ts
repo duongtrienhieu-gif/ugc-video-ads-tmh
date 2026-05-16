@@ -33,7 +33,6 @@ export const APP_REGISTRY: AppConfig[] = [
   { id: 'history',          name: 'History',           icon: HistoryIcon, accent: '#8b5cf6' },
   { id: 'voice-studio', name: 'Giọng Đọc', icon: Mic, accent: '#6366f1' },
   { id: 'broll-studio', name: 'Product AI', icon: Film, accent: '#f97316' },
-  { id: 'broll-videos', name: 'Video B-Roll', icon: Video, accent: '#8b5cf6' },
 ]
 
 export const FINDER_APP = APP_REGISTRY[0]
