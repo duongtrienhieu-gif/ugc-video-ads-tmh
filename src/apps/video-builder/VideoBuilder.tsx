@@ -2296,7 +2296,7 @@ MOTION: Gentle cinematic camera motion only — slow push-in on key detail, or s
                   <option value="">-- Không dùng template --</option>
                   {adTemplates.map((t) => (
                     <option key={t.id} value={t.id}>
-                      {t.name}{t.videoFileName ? ` (${t.videoFileName.slice(0, 30)})` : ''}
+                      {t.name}
                     </option>
                   ))}
                 </select>
