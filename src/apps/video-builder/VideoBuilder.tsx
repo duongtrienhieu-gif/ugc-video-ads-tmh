@@ -455,54 +455,74 @@ export default function VideoBuilder() {
     try {
       // ── Step 1: Parse script with Gemini ──────────────────────────────────
       setStep('parse', 'running')
-      const parsePrompt = `You are a UGC video script analyzer. Split the script into segments and return ONLY a valid JSON object — no markdown, no explanation, no extra text.
-
-JSON format:
-{"segments":[{"index":0,"text":"exact segment text","durationSec":5.0,"startSec":0.0,"brollPrompt":"cinematic scene in English, vertical 9:16, no text, no people","avatarPosition":"right","useProduct":false}],"totalEstimatedSec":60.0}
+      const parsePrompt = `You are a UGC video script analyzer. Split this script into 6-10 segments (4-8 seconds each).
 
 Rules:
-- Split into 6-10 segments (4-8s each)
-- durationSec based on ~130 words/min reading speed
-- avatarPosition alternates left/right each segment
-- useProduct=true if segment mentions the product
-- brollPrompt: vivid English scene description, no people, no text overlay
-- Return ONLY the JSON object, starting with { and ending with }
+- Split at natural sentence/pause boundaries
+- durationSec: estimate from ~130 words/min reading speed
+- startSec: always 0.0 (will be recalculated from audio)
+- avatarPosition: alternate "left" and "right" each segment
+- useProduct: true if the segment mentions the product by name
+- brollPrompt: vivid cinematic English description of a scene that matches the segment — no people, no text overlay, vertical 9:16 composition
 
 SCRIPT:
 ${script}`
 
-      // Robust JSON extractor — handles markdown fences and extra text
+      // Strict JSON schema — Gemini MUST follow this exact structure
+      const parseSchema: Record<string, unknown> = {
+        type: 'object',
+        properties: {
+          segments: {
+            type: 'array',
+            items: {
+              type: 'object',
+              properties: {
+                index:          { type: 'integer' },
+                text:           { type: 'string' },
+                durationSec:    { type: 'number' },
+                startSec:       { type: 'number' },
+                brollPrompt:    { type: 'string' },
+                avatarPosition: { type: 'string', enum: ['left', 'right'] },
+                useProduct:     { type: 'boolean' },
+              },
+              required: ['index', 'text', 'durationSec', 'startSec', 'brollPrompt', 'avatarPosition', 'useProduct'],
+            },
+          },
+          totalEstimatedSec: { type: 'number' },
+        },
+        required: ['segments', 'totalEstimatedSec'],
+      }
+
+      // Robust JSON extractor — fallback for models that wrap output in markdown
       function extractJson(raw: string): string {
-        // Strip markdown code fences
         let s = raw.replace(/^```(?:json)?\s*/im, '').replace(/\s*```\s*$/im, '').trim()
-        // Extract the outermost {...} block
         const start = s.indexOf('{')
         const end   = s.lastIndexOf('}')
-        if (start !== -1 && end !== -1 && end > start) {
-          s = s.slice(start, end + 1)
-        }
+        if (start !== -1 && end !== -1 && end > start) s = s.slice(start, end + 1)
         return s
       }
 
-      // Attempt parse — responseMimeType forces pure JSON output (no markdown fences)
+      // Attempt 1: with responseSchema (forces exact JSON structure — most reliable)
       let parseResult = await directGeminiVision({
         apiKey: geminiApiKey,
         parts: [{ text: parsePrompt }],
         maxOutputTokens: 8192,
         responseMimeType: 'application/json',
+        responseSchema: parseSchema,
       })
 
       let parsed: { segments: ScriptSegment[]; totalEstimatedSec: number }
       try {
         parsed = JSON.parse(extractJson(parseResult)) as typeof parsed
       } catch {
-        // Retry once without responseMimeType (older model fallback)
+        // Attempt 2: without schema (fallback for older models)
         setStep('parse', 'running', 'Thử lại lần 2...')
         try {
           parseResult = await directGeminiVision({
             apiKey: geminiApiKey,
             parts: [{ text: parsePrompt }],
             maxOutputTokens: 8192,
+            responseMimeType: 'application/json',
           })
           parsed = JSON.parse(extractJson(parseResult)) as typeof parsed
         } catch {
