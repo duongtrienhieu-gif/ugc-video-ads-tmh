@@ -269,9 +269,14 @@ function ModelGroupViewer({ model, onClose, onEdit }: { model: Model; onClose: (
 
 function ScriptCard({ item, onEdit, onDelete }: { item: Script; onEdit: () => void; onDelete: () => void }) {
   const [confirm, setConfirm] = useState(false)
+  // Capture `now` at mount via lazy useState init — React 19 purity rule
+  // forbids Date.now() during render.
+  const [now] = useState(() => Date.now())
   const getProductById = useBankStore((s) => s.getProductById)
   const linked = item.linkedProductId ? getProductById(item.linkedProductId) : null
   const preview = item.scriptText.split('\n').slice(0, 2).join(' ').slice(0, 80)
+  // Scripts saved via Tạo Kịch bản UGC are Bahasa Melayu only (per save-rule).
+  const isMalay = item.source === 'script-architect'
   return (
     <div onClick={onEdit} className="group flex cursor-pointer gap-3 rounded-xl border border-black/8 bg-black/[0.03] p-3 transition-colors hover:border-black/10 hover:bg-black/[0.04]">
       <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-black/5">
@@ -280,9 +285,14 @@ function ScriptCard({ item, onEdit, onDelete }: { item: Script; onEdit: () => vo
       <div className="flex min-w-0 flex-1 flex-col gap-0.5">
         <span className="truncate text-sm font-semibold tracking-tight text-gray-800">{item.title}</span>
         <span className="truncate text-xs text-gray-500">{preview || 'Kịch bản trống'}</span>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-1.5">
+          {isMalay && (
+            <span className="inline-flex items-center gap-0.5 rounded-full bg-emerald-100 px-1.5 py-0.5 text-[9px] font-bold text-emerald-700">
+              🇲🇾 Bahasa Melayu
+            </span>
+          )}
           {linked && <span className="text-[10px] text-gray-400">{linked.productName}</span>}
-          <span className="text-[10px] text-gray-300">{new Date(item.createdAt).toLocaleDateString()}</span>
+          <span className="text-[10px] text-gray-300">{formatRelativeScript(item.createdAt, now)}</span>
         </div>
       </div>
       <div className="shrink-0 self-start" onClick={(e) => e.stopPropagation()}>
@@ -296,6 +306,18 @@ function ScriptCard({ item, onEdit, onDelete }: { item: Script; onEdit: () => vo
       </div>
     </div>
   )
+}
+
+function formatRelativeScript(ts: number, now: number): string {
+  const diff = Math.max(0, Math.floor((now - ts) / 1000))
+  if (diff < 60) return `${diff}s trước`
+  const m = Math.floor(diff / 60)
+  if (m < 60) return `${m} phút trước`
+  const h = Math.floor(m / 60)
+  if (h < 24) return `${h} giờ trước`
+  const d = Math.floor(h / 24)
+  if (d < 7) return `${d} ngày trước`
+  return new Date(ts).toLocaleDateString('vi-VN', { day: 'numeric', month: 'short' })
 }
 
 function BRollCard({ item, onEdit, onDelete }: { item: BRoll; onEdit: () => void; onDelete: () => void }) {
