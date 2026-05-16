@@ -12,6 +12,17 @@ export interface Product {
   createdAt: number
 }
 
+/** A variant is a different angle/expression of the SAME avatar.
+ *  Used as additional reference image(s) when generating B-roll to lock
+ *  identity across multiple shots. */
+export interface AvatarVariant {
+  id: string
+  imageUrl: string       // asset:// reference
+  label: string          // e.g. "3/4 left", "side profile", "smiling close-up"
+  source: 'ai-generated' | 'manual-upload'
+  createdAt: number
+}
+
 export interface Model {
   id: string
   characterImage: string
@@ -19,6 +30,7 @@ export interface Model {
   name: string
   notes: string
   source: 'character-studio' | 'image-dna-extractor' | 'manual-import'
+  variants?: AvatarVariant[]   // optional alternate angles for identity-lock
   createdAt: number
 }
 

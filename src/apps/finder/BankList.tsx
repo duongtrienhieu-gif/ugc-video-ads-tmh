@@ -1,9 +1,10 @@
 ﻿import { useState } from 'react'
-import { Trash2, Package, UserRound, FileText, Mic, Film, Plus, Braces, Video, Download } from 'lucide-react'
+import { Trash2, Package, UserRound, FileText, Mic, Film, Plus, Braces, Video, Download, Sparkles } from 'lucide-react'
 import type { Product, Model, Script, VoicePreset, BRoll } from '../../stores/types'
 import type { BankType } from '../../utils/constants'
 import { useBankStore } from '../../stores/bankStore'
 import { useAssetUrl } from '../../hooks/useAssetUrl'
+import VariantsModal from './VariantsModal'
 
 interface BankListProps {
   bankType: BankType
@@ -73,46 +74,79 @@ function ProductCard({ item, onEdit, onDelete }: { item: Product; onEdit: () => 
 
 function ModelCard({ item, onEdit, onDelete }: { item: Model; onEdit: () => void; onDelete: () => void }) {
   const [confirm, setConfirm] = useState(false)
+  const [variantsOpen, setVariantsOpen] = useState(false)
   const resolvedImage = useAssetUrl(item.characterImage)
   const sourceLabel = item.source === 'character-studio' ? 'Studio Avatar AI' : item.source === 'image-dna-extractor' ? 'DNA Ảnh' : 'Nhập thủ công'
   const hasJson = item.jsonProfile !== null
+  const variantCount = item.variants?.length ?? 0
   return (
-    <div onClick={onEdit} className="group cursor-pointer rounded-xl border border-black/8 bg-black/[0.03] transition-all hover:border-black/12 hover:bg-black/[0.04] hover:-translate-y-0.5">
-      {/* Thumbnail */}
-      <div className="relative aspect-square w-full overflow-hidden rounded-t-xl bg-black/[0.04]">
-        {resolvedImage ? (
-          <img src={resolvedImage} alt="" className="h-full w-full object-cover" />
-        ) : (
-          <div className="flex h-full w-full items-center justify-center">
-            <UserRound className="h-10 w-10 text-gray-200" strokeWidth={1} />
-          </div>
-        )}
-        {/* Badges overlay */}
-        <div className="absolute left-2 top-2 flex items-center gap-1">
-          {hasJson && (
-            <span className="flex items-center gap-1 rounded-md bg-black/60 px-1.5 py-0.5 text-[10px] font-medium text-sky-400 backdrop-blur-sm">
-              <Braces className="h-2.5 w-2.5" />
-              JSON
-            </span>
-          )}
-        </div>
-        {/* Delete button overlay */}
-        <div className="absolute right-2 top-2" onClick={(e) => e.stopPropagation()}>
-          {confirm ? (
-            <ConfirmDelete onConfirm={onDelete} onCancel={() => setConfirm(false)} />
+    <>
+      <div onClick={onEdit} className="group cursor-pointer rounded-xl border border-black/8 bg-black/[0.03] transition-all hover:border-black/12 hover:bg-black/[0.04] hover:-translate-y-0.5">
+        {/* Thumbnail */}
+        <div className="relative aspect-square w-full overflow-hidden rounded-t-xl bg-black/[0.04]">
+          {resolvedImage ? (
+            <img src={resolvedImage} alt="" className="h-full w-full object-cover" />
           ) : (
-            <button onClick={() => setConfirm(true)} className="rounded-lg bg-black/50 p-1.5 text-gray-600 opacity-0 backdrop-blur-sm transition-all hover:text-red-400 group-hover:opacity-100">
-              <Trash2 className="h-3.5 w-3.5" />
-            </button>
+            <div className="flex h-full w-full items-center justify-center">
+              <UserRound className="h-10 w-10 text-gray-200" strokeWidth={1} />
+            </div>
           )}
+          {/* Badges overlay */}
+          <div className="absolute left-2 top-2 flex items-center gap-1">
+            {hasJson && (
+              <span className="flex items-center gap-1 rounded-md bg-black/60 px-1.5 py-0.5 text-[10px] font-medium text-sky-400 backdrop-blur-sm">
+                <Braces className="h-2.5 w-2.5" />
+                JSON
+              </span>
+            )}
+          </div>
+          {/* Top-right controls */}
+          <div className="absolute right-2 top-2 flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+            {confirm ? (
+              <ConfirmDelete onConfirm={onDelete} onCancel={() => setConfirm(false)} />
+            ) : (
+              <>
+                <button
+                  onClick={() => setVariantsOpen(true)}
+                  title={variantCount > 0 ? `Quản lý ${variantCount} góc mặt` : 'Thêm góc mặt cho identity lock'}
+                  className="rounded-lg bg-black/50 p-1.5 text-violet-300 opacity-0 backdrop-blur-sm transition-all hover:text-violet-200 group-hover:opacity-100"
+                >
+                  <Sparkles className="h-3.5 w-3.5" />
+                </button>
+                <button onClick={() => setConfirm(true)} className="rounded-lg bg-black/50 p-1.5 text-gray-600 opacity-0 backdrop-blur-sm transition-all hover:text-red-400 group-hover:opacity-100">
+                  <Trash2 className="h-3.5 w-3.5" />
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+        {/* Info */}
+        <div className="flex flex-col gap-1 p-3">
+          <span className="truncate text-sm font-semibold tracking-tight text-gray-800">{item.name}</span>
+          <div className="flex flex-wrap items-center gap-1">
+            <span className="rounded bg-black/5 px-1.5 py-0.5 text-[10px] text-gray-500">{sourceLabel}</span>
+            {variantCount > 0 ? (
+              <button
+                onClick={(e) => { e.stopPropagation(); setVariantsOpen(true) }}
+                className="rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-700 hover:bg-emerald-200"
+                title="Click để quản lý variants"
+              >
+                ✨ {variantCount + 1} góc
+              </button>
+            ) : (
+              <button
+                onClick={(e) => { e.stopPropagation(); setVariantsOpen(true) }}
+                className="rounded bg-violet-50 px-1.5 py-0.5 text-[10px] text-violet-600 hover:bg-violet-100"
+                title="Tạo góc mặt để lock identity"
+              >
+                + góc mặt
+              </button>
+            )}
+          </div>
         </div>
       </div>
-      {/* Info */}
-      <div className="flex flex-col gap-1 p-3">
-        <span className="truncate text-sm font-semibold tracking-tight text-gray-800">{item.name}</span>
-        <span className="rounded bg-black/5 px-1.5 py-0.5 text-[10px] text-gray-500 w-fit">{sourceLabel}</span>
-      </div>
-    </div>
+      {variantsOpen && <VariantsModal model={item} onClose={() => setVariantsOpen(false)} />}
+    </>
   )
 }
 

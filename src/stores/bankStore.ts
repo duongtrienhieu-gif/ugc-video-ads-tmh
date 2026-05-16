@@ -31,6 +31,7 @@ function toModel(row: Record<string, unknown>): Model {
     notes: (params.notes as string) ?? '',
     source: ((params.source as string) ?? 'manual-import') as Model['source'],
     jsonProfile: (params.jsonProfile as Record<string, unknown>) ?? null,
+    variants: Array.isArray(params.variants) ? (params.variants as Model['variants']) : undefined,
   }
 }
 
@@ -300,12 +301,18 @@ export const useBankStore = create<BankState>((set, get) => ({
     const patch: Record<string, unknown> = {}
     if (updates.name !== undefined) patch.label = updates.name
     if (updates.characterImage !== undefined) patch.character_image = updates.characterImage
-    if (updates.notes !== undefined || updates.source !== undefined || updates.jsonProfile !== undefined) {
+    if (
+      updates.notes !== undefined ||
+      updates.source !== undefined ||
+      updates.jsonProfile !== undefined ||
+      updates.variants !== undefined
+    ) {
       const current = get().models.find((m) => m.id === id)
       patch.character_params = {
         notes: updates.notes ?? current?.notes ?? '',
         source: updates.source ?? current?.source ?? 'manual-import',
         jsonProfile: updates.jsonProfile !== undefined ? updates.jsonProfile : current?.jsonProfile ?? null,
+        variants: updates.variants !== undefined ? updates.variants : current?.variants ?? undefined,
       }
     }
     const { error } = await supabase.from('models').update(patch).eq('id', id)

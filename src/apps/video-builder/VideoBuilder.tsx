@@ -442,6 +442,7 @@ interface PipeData {
   audioAssetId: string                  // Supabase asset ID — survives reload
   voiceUrl: string                      // Supabase signed URL (refreshed from assetId on reload)
   avatarImageUrl: string
+  avatarVariantUrls: string[]           // resolved URLs of avatar's angle variants
   productImageUrls: string[]
   avatarDescription: string             // Gemini-generated locked physical description
   productDescription: string            // Gemini-generated locked product description
@@ -1584,6 +1585,23 @@ Return ONLY the tagged script. No explanation, no markdown, no preamble.`
       const avatarImageUrl = await resolveImageUrl(avatarSrc)
       if (!avatarImageUrl) throw new Error('Không lấy được URL ảnh Avatar AI')
       pipeRef.current.avatarImageUrl = avatarImageUrl
+
+      // Resolve avatar VARIANTS (if any) — these are alternate angles of the
+      // same avatar used as additional reference images for identity-lock
+      // during B-roll image gen. Only present for bank-picked avatars; manual
+      // uploads don't have variants.
+      const avatarVariantUrls: string[] = []
+      if (model?.variants && model.variants.length > 0) {
+        for (const v of model.variants) {
+          const url = await resolveImageUrl(v.imageUrl)
+          if (url) avatarVariantUrls.push(url)
+        }
+      }
+      pipeRef.current.avatarVariantUrls = avatarVariantUrls
+      if (avatarVariantUrls.length > 0) {
+        console.log(`[resolve] Avatar has ${avatarVariantUrls.length} variants — using as identity-lock references`)
+      }
+
       setPhaseProgress(60)
       setPhaseDetail('Resolve URL ảnh sản phẩm...')
 
@@ -1790,21 +1808,30 @@ Do NOT invent a different product variant.`
 
   // Generate ONE image for a given segment index (used by both initial run + per-image regen)
   const generateOneImage = async (i: number, seg: ScriptSegment): Promise<string | null> => {
-    const { avatarImageUrl, productImageUrls } = pipeRef.current
+    const { avatarImageUrl, productImageUrls, avatarVariantUrls } = pipeRef.current
     const prompt = buildImagePrompt(seg, !!avatarImageUrl, !!(productImageUrls && productImageUrls.length))
 
-    // Build reference image list. Order matters — Nano Banana 2 weighs earlier
-    // references more heavily for identity. We pass AVATAR TWICE on purpose:
-    // the duplicate signal tells the model "this person is the most important
-    // anchor, far more critical than the product appearance". This dramatically
-    // reduces face drift across the 9 generated images.
+    // Build reference image list. Identity-lock strategy:
+    //   1) If the avatar has VARIANTS (multiple angles), pass original + up to
+    //      3 variants = 4 face anchors covering different views. This gives
+    //      Nano Banana 2 a proper "identity manifold" and dramatically reduces
+    //      face drift compared to a single reference.
+    //   2) If no variants, fall back to duplicating the original (still better
+    //      than 1 image alone, but variants are way more effective).
+    //   3) Plus 1 product reference.
     const refs: string[] = []
     if (avatarImageUrl) {
-      refs.push(avatarImageUrl)
-      refs.push(avatarImageUrl)   // duplicate = stronger identity weight
+      refs.push(avatarImageUrl)   // original (main)
+      if (avatarVariantUrls && avatarVariantUrls.length > 0) {
+        // multi-angle identity manifold
+        refs.push(...avatarVariantUrls.slice(0, 3))
+      } else {
+        // duplicate trick for single-reference avatars
+        refs.push(avatarImageUrl)
+      }
     }
     if (productImageUrls && productImageUrls.length > 0) {
-      refs.push(productImageUrls[0])   // single product ref to leave model capacity for face
+      refs.push(productImageUrls[0])
     }
 
     try {
