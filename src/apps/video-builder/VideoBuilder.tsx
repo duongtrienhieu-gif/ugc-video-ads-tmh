@@ -481,12 +481,12 @@ interface PersistedState {
 
 // Step labels for the running/review panel header
 const STEP_INFO: Record<string, { num: number; label: string; subLabel: string; cost: string }> = {
-  voice:    { num: 1, label: 'Voiceover',           subLabel: 'TTS toàn bộ script → audio file (1.1x speed)', cost: '~$0.30 · ElevenLabs' },
-  parse:    { num: 2, label: 'Storyboard',          subLabel: 'Gemini Pro phân tích voice → cảnh quay chi tiết', cost: 'Miễn phí' },
-  resolve:  { num: 3, label: 'Chuẩn bị tài nguyên', subLabel: 'Upload audio + resolve URL ảnh',           cost: 'Miễn phí' },
-  brollimg: { num: 4, label: 'B-roll Images',       subLabel: 'GPT Image 2 — gen ảnh photoreal, review trước khi commit video', cost: '~60 KIE credit' },
-  broll:    { num: 5, label: 'B-roll Videos',       subLabel: 'Seedance 2 Fast 480p — UGC motion, tiết kiệm credit', cost: '~850 KIE credit' },
-  avatar:   { num: 6, label: 'Avatar Lip-sync',     subLabel: 'Kling Avatar: ảnh + audio → video nói (bước đắt nhất, làm sau cùng để chắc B-roll OK)', cost: '~624 KIE credit' },
+  parse:    { num: 1, label: 'Storyboard',          subLabel: 'Gemini Pro phân tích script → cảnh quay (timing ước lượng từ char count)', cost: 'Miễn phí' },
+  resolve:  { num: 2, label: 'Chuẩn bị tài nguyên', subLabel: 'Resolve URL ảnh avatar + sản phẩm',         cost: 'Miễn phí' },
+  brollimg: { num: 3, label: 'B-roll Images',       subLabel: 'GPT Image 2 — gen ảnh photoreal, review trước khi commit video', cost: '~60 KIE credit' },
+  broll:    { num: 4, label: 'B-roll Videos',       subLabel: 'Seedance 2 Fast 480p — UGC motion, tiết kiệm credit', cost: '~850 KIE credit' },
+  voice:    { num: 5, label: 'Voiceover',           subLabel: 'eleven_v3 expressive — sau khi B-roll OK (re-time segments theo audio thật)', cost: '~$0.30 · ElevenLabs' },
+  avatar:   { num: 6, label: 'Avatar Lip-sync',     subLabel: 'Kling Avatar: ảnh + audio → video nói (bước đắt nhất)', cost: '~624 KIE credit' },
   bg:       { num: 7, label: 'Xóa nền Avatar',      subLabel: 'Tách nền để overlay trong suốt',           cost: '~$0.50 · fal.ai' },
   assemble: { num: 8, label: 'Ghép video',          subLabel: 'Layer B-roll + avatar + captions',         cost: '~$0.50 · Shotstack' },
 }
@@ -953,8 +953,20 @@ export default function VideoBuilder() {
   // matching the actual content of each voice line.
 
   const runParse = async () => {
-    const audioDuration = pipeRef.current.audioDuration
-    if (!audioDuration) { setPhaseError('Thiếu audio — chạy lại bước Voice'); setPhase('failed'); return }
+    // Voice now runs LATER (after B-roll). We estimate audio duration from
+    // char count (~14 chars/sec at 1.1x speed for Malay/Vietnamese). The
+    // voice step will RE-TIME segments based on actual audio duration later.
+    const audioDuration = script.length / 14
+    if (!script.trim()) { setPhaseError('Thiếu script'); setPhase('failed'); return }
+
+    // Initialize job metadata on first run (moved here since parse is now step 1)
+    if (!pipeRef.current.jobId) {
+      const voiceName = voices.find((v) => v.voice_id === selectedVoiceId)?.name ?? selectedVoiceId
+      const jobName = (scripts.find((s) => s.id === selectedScriptId)?.title || script.slice(0, 40)).trim()
+      pipeRef.current.jobId = crypto.randomUUID()
+      pipeRef.current.jobName = jobName
+      pipeRef.current.voiceName = voiceName
+    }
 
     setPhase('running-parse')
     setPhaseError(null)
@@ -1277,21 +1289,14 @@ Return ONLY the tagged script. No explanation, no markdown, no preamble.`
     }
   }
 
-  // ── Step 1: Generate voiceover (NEW first step) ──────────────────────────
-  // Voice runs BEFORE storyboarding so the AI director knows the real audio
-  // duration and can time segments precisely without estimating.
+  // ── Step 5: Generate voiceover (moved AFTER B-roll so user can test
+  //   cheap B-roll quality before committing to TTS + Avatar lip-sync cost).
+  //   After audio is generated, segments are re-timed based on actual
+  //   audio duration (was previously estimated from char count in parse).
 
   const runVoice = async () => {
     if (!elevenLabsApiKey) { setPhaseError('Cần ElevenLabs API key'); setPhase('failed'); return }
-
-    // Initialize job metadata on first run (moved here since voice is step 1)
-    if (!pipeRef.current.jobId) {
-      const voiceName = voices.find((v) => v.voice_id === selectedVoiceId)?.name ?? selectedVoiceId
-      const jobName = (scripts.find((s) => s.id === selectedScriptId)?.title || script.slice(0, 40)).trim()
-      pipeRef.current.jobId = crypto.randomUUID()
-      pipeRef.current.jobName = jobName
-      pipeRef.current.voiceName = voiceName
-    }
+    if (!pipeRef.current.segments) { setPhaseError('Thiếu segments — chạy Storyboard trước'); setPhase('failed'); return }
 
     setPhase('running-voice')
     setPhaseError(null)
@@ -1344,6 +1349,22 @@ Return ONLY the tagged script. No explanation, no markdown, no preamble.`
       pipeRef.current.audioAssetId = audioAssetId // persisted across reload
       pipeRef.current.voiceUrl = voiceUrl         // refreshable via assetId
 
+      // Re-time segments based on REAL audio duration (previously estimated
+      // from char count in parse step). Distribute proportionally to text length.
+      const segments = pipeRef.current.segments ?? []
+      const totalChars = segments.reduce((s, seg) => s + seg.text.length, 0)
+      let cursor = 0
+      const timedSegments: ScriptSegment[] = segments.map((seg) => {
+        const ratio    = totalChars > 0 ? seg.text.length / totalChars : 1 / segments.length
+        const duration = audioDuration * ratio
+        const ts = { ...seg, startSec: cursor, durationSec: duration }
+        cursor += duration
+        return ts
+      })
+      pipeRef.current.timedSegments = timedSegments
+      pipeRef.current.totalEstimatedSec = audioDuration
+      setPreviewSegments([...timedSegments])
+
       // Preview URL: Supabase signed URL (persists vs blob: URL which dies on reload)
       if (previewVoiceUrl?.startsWith('blob:')) URL.revokeObjectURL(previewVoiceUrl)
       setPreviewVoiceUrl(voiceUrl)
@@ -1359,20 +1380,16 @@ Return ONLY the tagged script. No explanation, no markdown, no preamble.`
   // ── Step 3: Resolve URLs (automatic, no review) ─────────────────────────
 
   const runResolve = async () => {
-    if (!pipeRef.current.voiceUrl) { setPhaseError('Thiếu audio URL'); setPhase('failed'); return }
+    if (!pipeRef.current.segments) { setPhaseError('Thiếu segments — chạy Storyboard trước'); setPhase('failed'); return }
 
     setPhase('running-resolve')
     setPhaseError(null)
     setPhaseDetail('Resolve URL ảnh avatar...')
-    setPhaseProgress(30)   // audio already uploaded in step 1
+    setPhaseProgress(20)
 
     try {
-      // Audio is already on Supabase (uploaded at end of runVoice for persistence)
-      // Refresh URL in case the previous signed URL expired (e.g. after F5 several hours later)
-      if (pipeRef.current.audioAssetId) {
-        const fresh = await getUrl(pipeRef.current.audioAssetId)
-        if (fresh) pipeRef.current.voiceUrl = fresh
-      }
+      // Voice now runs LATER (step 5), so this step only handles image URLs.
+      // Audio upload happens in runVoice after the user approves B-roll quality.
       setPhaseProgress(40)
 
       // Resolve avatar image (20%)
@@ -2013,7 +2030,7 @@ MOTION: The avatar speaks naturally with subtle hand gestures, slight head turns
         <div className="shrink-0 border-t border-black/8 p-4">
           {isIdle ? (
             <button
-              onClick={runVoice}
+              onClick={runParse}
               disabled={!canStart}
               className="relative w-full overflow-hidden rounded-xl py-4 text-sm font-bold text-white shadow-lg shadow-violet-500/25 transition-all hover:shadow-violet-500/40 disabled:cursor-not-allowed disabled:opacity-40"
               style={{
@@ -2021,7 +2038,7 @@ MOTION: The avatar speaks naturally with subtle hand gestures, slight head turns
                 backgroundColor: !canStart ? '#d1d5db' : undefined,
               }}
             >
-              <span className="flex items-center justify-center gap-2"><Sparkles className="h-4 w-4" />Bắt đầu Build (Bước 1: Voice ~$0.30)</span>
+              <span className="flex items-center justify-center gap-2"><Sparkles className="h-4 w-4" />Bắt đầu Build (Bước 1: Storyboard — Miễn phí)</span>
             </button>
           ) : (
             <button
@@ -2062,26 +2079,13 @@ MOTION: The avatar speaks naturally with subtle hand gestures, slight head turns
             const activeNum = getActiveStepNum(phase)
             const cards: React.ReactNode[] = []
 
-            // Step 1: Voice
-            if (previewVoiceUrl && (activeNum > 1 || phase === 'done')) {
-              cards.push(
-                <CompletedStepCard
-                  key="voice"
-                  stepId="voice"
-                  summary={`${formatDuration(pipeRef.current.audioDuration ?? 0)} · ${Math.round((pipeRef.current.audioBlob?.size ?? 0) / 1024)} KB · 1.1x speed`}
-                >
-                  <audio controls src={previewVoiceUrl} className="w-full" />
-                </CompletedStepCard>
-              )
-            }
-
-            // Step 2: Storyboard
-            if (previewSegments.length > 0 && (activeNum > 2 || phase === 'done')) {
+            // Step 1: Storyboard (moved earlier)
+            if (previewSegments.length > 0 && (activeNum > 1 || phase === 'done')) {
               cards.push(
                 <CompletedStepCard
                   key="parse"
                   stepId="parse"
-                  summary={`${previewSegments.length} cảnh quay · ${formatDuration(pipeRef.current.audioDuration ?? 0)}`}
+                  summary={`${previewSegments.length} cảnh quay · ${formatDuration(pipeRef.current.audioDuration ?? 0)} (ước lượng / re-timed sau Voice)`}
                 >
                   <div className="max-h-48 space-y-1.5 overflow-y-auto">
                     {previewSegments.map((seg, i) => (
@@ -2095,14 +2099,14 @@ MOTION: The avatar speaks naturally with subtle hand gestures, slight head turns
               )
             }
 
-            // Step 3: Resolve (always shown as completed once past — minimal preview)
-            if (pipeRef.current.voiceUrl && (activeNum > 3 || phase === 'done')) {
+            // Step 2: Resolve (image URLs only — audio uploaded in voice step now)
+            if (pipeRef.current.avatarImageUrl && (activeNum > 2 || phase === 'done')) {
               const productCount = pipeRef.current.productImageUrls?.length ?? 0
               cards.push(
                 <CompletedStepCard
                   key="resolve"
                   stepId="resolve"
-                  summary={`Audio uploaded · 1 avatar · ${productCount} ảnh sản phẩm`}
+                  summary={`1 avatar + ${productCount} ảnh sản phẩm đã resolve URL`}
                 />
               )
             }
@@ -2155,7 +2159,20 @@ MOTION: The avatar speaks naturally with subtle hand gestures, slight head turns
               )
             }
 
-            // Step 6: Avatar Lip-sync (moved here from step 4 — runs AFTER B-roll passes)
+            // Step 5: Voice (moved here from step 1 — runs AFTER B-roll passes)
+            if (previewVoiceUrl && (activeNum > 5 || phase === 'done')) {
+              cards.push(
+                <CompletedStepCard
+                  key="voice"
+                  stepId="voice"
+                  summary={`${formatDuration(pipeRef.current.audioDuration ?? 0)} · ${Math.round((pipeRef.current.audioBlob?.size ?? 0) / 1024)} KB · eleven_v3 1.1x`}
+                >
+                  <audio controls src={previewVoiceUrl} className="w-full" />
+                </CompletedStepCard>
+              )
+            }
+
+            // Step 6: Avatar Lip-sync (runs AFTER Voice passes)
             if (previewAvatarUrl && (activeNum > 6 || phase === 'done')) {
               cards.push(
                 <CompletedStepCard
@@ -2194,7 +2211,7 @@ MOTION: The avatar speaks naturally with subtle hand gestures, slight head turns
           {/* Running states */}
           {phase.startsWith('running-') && <RunningPanel phase={phase} detail={phaseDetail} progress={phaseProgress} />}
 
-          {/* ─── Review: Storyboard (step 2) ─── */}
+          {/* ─── Review: Storyboard (step 1 — first review) ─── */}
           {phase === 'review-parse' && (
             <ReviewCard
               onRetry={runParse}
@@ -2232,20 +2249,20 @@ MOTION: The avatar speaks naturally with subtle hand gestures, slight head turns
             </ReviewCard>
           )}
 
-          {/* ─── Review: Voice (now step 1) ─── */}
+          {/* ─── Review: Voice (now step 5 — AFTER B-roll, BEFORE Avatar) ─── */}
           {phase === 'review-voice' && (
             <ReviewCard
               onRetry={runVoice}
-              onContinue={runParse}
-              continueLabel="Tiếp tục → Storyboard"
-              continueCost={STEP_INFO.parse.cost}
+              onContinue={runAvatar}
+              continueLabel="Tiếp tục → Avatar Lip-sync"
+              continueCost={STEP_INFO.avatar.cost}
             >
               <p className="mb-2 text-xs text-gray-500">
-                Nghe thử voiceover. Tiếp theo Gemini Pro sẽ phân tích chi tiết từng câu để gen storyboard cảnh quay khớp với voice.
+                Nghe thử voiceover. Đã re-time segments theo audio thật. Tiếp theo Avatar lip-sync (~624 cr — bước đắt nhất).
               </p>
               <audio controls src={previewVoiceUrl ?? ''} className="w-full" />
               <p className="mt-2 text-xs text-gray-400">
-                Thời lượng: <strong>{formatDuration(pipeRef.current.audioDuration ?? 0)}</strong> · Kích thước: {Math.round((pipeRef.current.audioBlob?.size ?? 0) / 1024)} KB · 1.1x speed
+                Thời lượng: <strong>{formatDuration(pipeRef.current.audioDuration ?? 0)}</strong> · Kích thước: {Math.round((pipeRef.current.audioBlob?.size ?? 0) / 1024)} KB · 1.1x speed · eleven_v3 expressive
               </p>
             </ReviewCard>
           )}
@@ -2325,17 +2342,17 @@ MOTION: The avatar speaks naturally with subtle hand gestures, slight head turns
             </ReviewCard>
           )}
 
-          {/* ─── Review: B-roll Videos (step 5 — last check before big Avatar spend) ─── */}
+          {/* ─── Review: B-roll Videos (step 4 — last check before Voice + Avatar) ─── */}
           {phase === 'review-broll' && (
             <ReviewCard
               onRetry={runBroll}
-              onContinue={runAvatar}
+              onContinue={runVoice}
               retryLabel={`Tạo lại tất cả (~${previewBrollUrls.length * 85} cr)`}
-              continueLabel="Tiếp tục → Avatar"
-              continueCost={STEP_INFO.avatar.cost}
+              continueLabel="Tiếp tục → Voiceover"
+              continueCost={STEP_INFO.voice.cost}
             >
               <p className="mb-3 text-xs text-gray-500">
-                <strong className="text-emerald-600">{previewBrollUrls.filter(Boolean).length}/{previewBrollUrls.length}</strong> clips thành công. ⚠️ Tiếp theo là Avatar Lip-sync — bước đắt nhất (~624 cr). Chắc chắn B-roll OK trước khi continue.
+                <strong className="text-emerald-600">{previewBrollUrls.filter(Boolean).length}/{previewBrollUrls.length}</strong> clips thành công. ⚠️ Tiếp theo là Voice + Avatar — commit cost lớn nhất ($3+). Chắc chắn B-roll OK trước khi continue.
               </p>
               <div className="grid grid-cols-3 gap-2">
                 {previewBrollUrls.map((url, i) => (
@@ -2434,11 +2451,11 @@ MOTION: The avatar speaks naturally with subtle hand gestures, slight head turns
               <div className="text-center">
                 <p className="text-base font-semibold text-gray-500">Pipeline thủ công · 8 bước</p>
                 <p className="mt-1.5 max-w-sm text-center text-sm leading-relaxed text-gray-400">
-                  Voice → Storyboard → B-roll Images → B-roll Videos → Avatar (đắt nhất, làm sau cùng để chắc chắn B-roll OK trước) → BG → Ghép.
+                  Storyboard (timing ước lượng) → B-roll Images → B-roll Videos → Voice (re-time chính xác) → Avatar → BG → Ghép. Test B-roll trước khi commit Voice + Avatar.
                 </p>
               </div>
               <div className="flex flex-wrap justify-center gap-2 text-xs text-gray-400">
-                {['$0.30 EL ① Voice', 'Free ② Storyboard', '60 cr ④ Images (GPT-2)', '850 cr ⑤ Videos (Seedance 480p)', '624 cr ⑥ Avatar', '$0.50 fal ⑦ BG', '$0.50 SS ⑧ Render'].map((t) => (
+                {['Free ① Storyboard', '60 cr ③ Images (GPT-2)', '850 cr ④ Videos (Seedance 480p)', '$0.30 EL ⑤ Voice', '624 cr ⑥ Avatar', '$0.50 fal ⑦ BG', '$0.50 SS ⑧ Render'].map((t) => (
                   <span key={t} className="rounded-full border border-black/8 bg-black/[0.02] px-3 py-1.5">{t}</span>
                 ))}
               </div>
