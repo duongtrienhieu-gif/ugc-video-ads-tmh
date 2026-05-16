@@ -650,9 +650,68 @@ export type V2Phase =
   | 'blueprint'          // Gemini → scene blueprints
   | 'scene-gen'          // img2img from master frame for each scene
   | 'qc-loop'            // QC + auto-regen
+  | 'video-gen'          // Phase B: keyframe → Kling 3.0 image-to-video clip
   | 'video-voice'        // delegate to v1 for video + voice + render
   | 'done'
   | 'failed'
+
+// ── Phase 6 — Video clip generation per scene ────────────────────────────
+// One VideoGenItem per approved scene keyframe. The runner submits the
+// keyframe + motion/camera fields to KIE Kling, polls for the resulting
+// clip URL, persists into the asset store, and exposes status via the
+// videoGenJobStore for the UI to react to.
+
+export type VideoGenItemStatus =
+  | 'pending'
+  | 'queued'
+  | 'generating'
+  | 'completed'
+  | 'failed'
+  | 'cancelled'
+
+export interface VideoGenItem {
+  /** 1-indexed scene id, matches the SceneBlueprint it derives from. */
+  sceneId: number
+  /** The keyframe asset ref this clip was animated from. */
+  keyframeRef: string
+  /** Compiled video prompt that was submitted to Kling. */
+  promptUsed?: string
+  /** Persisted asset ref to the generated clip (asset:xxx). */
+  videoRef?: string
+  /** KIE task id — kept for debugging + future retry/resume. */
+  taskId?: string
+  status: VideoGenItemStatus
+  retryCount: number
+  error?: string
+  /** Duration sent to the API (sec) — Kling supports 5/8/10. */
+  durationSec: number
+}
+
+export interface VideoGenJob {
+  /** Local job id for grouping. */
+  id: string
+  /** Total clip count (= number of approved scenes). */
+  total: number
+  /** Per-clip state. */
+  items: VideoGenItem[]
+  /** True while at least one worker is mid-flight. */
+  isRunning: boolean
+  /** True when the user paused / cancelled the queue. */
+  isPaused: boolean
+  /** Provider label shown in the UI (e.g. "Kling 3.0 / KIE"). */
+  providerLabel: string
+  /** Approx KIE credit cost per clip (for the cost-preview UI). */
+  creditPerClip: number
+}
+
+export const VIDEO_STATUS_LABEL_VI: Record<VideoGenItemStatus, string> = {
+  pending:    'Chờ',
+  queued:     'Trong hàng chờ',
+  generating: 'Đang sinh video…',
+  completed:  'Đã xong',
+  failed:     'Lỗi',
+  cancelled:  'Đã huỷ',
+}
 
 export interface V2PipelineState {
   phase: V2Phase

@@ -28,12 +28,33 @@ export const MODULE_REGISTRY: ModuleRegistration[] = [
     version: 1,
     maxAgeMs: DEFAULT_MAX_AGE_MS,
   },
-  // ── R4+ slots — uncomment as each module is wired ────────────────────────
-  // { moduleId: 'character-studio', moduleNameVi: 'Avatar AI', persistKey: 'ugc-lab:character-studio:inflight-v1', version: 1, maxAgeMs: DEFAULT_MAX_AGE_MS },
-  // { moduleId: 'broll-studio',     moduleNameVi: 'Product AI', persistKey: 'ugc-lab:broll-studio:inflight-v1',     version: 1, maxAgeMs: DEFAULT_MAX_AGE_MS },
-  // { moduleId: 'script-architect', moduleNameVi: 'Kịch bản',   persistKey: 'ugc-lab:script-architect:inflight-v1', version: 1, maxAgeMs: DEFAULT_MAX_AGE_MS },
-  // { moduleId: 'ads-content',      moduleNameVi: 'Ads Content', persistKey: 'ugc-lab:ads-content:inflight-v1',      version: 1, maxAgeMs: DEFAULT_MAX_AGE_MS },
-  // { moduleId: 'voice-studio',     moduleNameVi: 'Giọng đọc',   persistKey: 'ugc-lab:voice-studio:inflight-v1',     version: 1, maxAgeMs: DEFAULT_MAX_AGE_MS },
+  // ── R4 rollout ───────────────────────────────────────────────────────────
+  {
+    moduleId: 'character-studio',
+    moduleNameVi: 'Avatar AI',
+    persistKey: 'ugc-lab:character-studio:inflight-v1',
+    version: 1,
+    maxAgeMs: DEFAULT_MAX_AGE_MS,
+  },
+  {
+    moduleId: 'script-architect',
+    moduleNameVi: 'Tạo Kịch bản UGC',
+    persistKey: 'ugc-lab:script-architect:inflight-v1',
+    version: 1,
+    maxAgeMs: DEFAULT_MAX_AGE_MS,
+  },
+  {
+    moduleId: 'ads-content',
+    moduleNameVi: 'Ads Content',
+    persistKey: 'ugc-lab:ads-content:inflight-v1',
+    version: 1,
+    maxAgeMs: DEFAULT_MAX_AGE_MS,
+  },
+  // ── R4b — BrollStudio (migrating from bespoke pattern) ───────────────────
+  // { moduleId: 'broll-studio',     moduleNameVi: 'Product AI',   persistKey: 'ugc-lab:broll-studio:inflight-v1',   version: 1, maxAgeMs: DEFAULT_MAX_AGE_MS },
+  // ── R5+ slots ────────────────────────────────────────────────────────────
+  // { moduleId: 'voice-studio',     moduleNameVi: 'Giọng đọc',    persistKey: 'ugc-lab:voice-studio:inflight-v1',   version: 1, maxAgeMs: DEFAULT_MAX_AGE_MS },
+  // { moduleId: 'video-builder',    moduleNameVi: 'UGC Builder',  persistKey: 'ugc-lab:video-builder:inflight-v1',  version: 1, maxAgeMs: DEFAULT_MAX_AGE_MS },
 ]
 
 /** Get a module's registration by moduleId. */

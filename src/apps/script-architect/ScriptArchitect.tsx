@@ -5,7 +5,16 @@ import type { Product } from '../../stores/types'
 import type { ScriptGenerationParams, ScriptGenerationResult } from './types'
 import InputPanel from './components/InputPanel'
 import OutputPanel from './components/OutputPanel'
+import AutoSaveIndicator from '../../components/AutoSaveIndicator'
+import { useSessionPersist } from '../../services/sessionPersistence'
 import { generateUGCScript } from './services/generateScript'
+
+// Session-persistence snapshot — survives F5
+interface ScriptSnapshot {
+  selectedProductId: string | null
+  result: ScriptGenerationResult | null
+  lastParams: Omit<ScriptGenerationParams, 'productId'> | null
+}
 
 export default function ScriptArchitect() {
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null)
@@ -21,6 +30,30 @@ export default function ScriptArchitect() {
   const activeApp       = useAppStore((s) => s.activeApp)
   const addToast        = useAppStore((s) => s.addToast)
   const getProductById  = useBankStore((s) => s.getProductById)
+
+  const sessionApi = useSessionPersist<ScriptSnapshot>({
+    moduleId: 'script-architect',
+    version: 1,
+    snapshot: () => ({
+      selectedProductId: selectedProduct?.id ?? null,
+      result,
+      lastParams: lastParamsRef.current,
+    }),
+    hydrate: (data) => {
+      if (data.selectedProductId) {
+        const p = getProductById(data.selectedProductId)
+        if (p) setSelectedProduct(p)
+      }
+      if (data.result) setResult(data.result)
+      if (data.lastParams) lastParamsRef.current = data.lastParams
+      addToast('✓ Đã khôi phục kịch bản từ phiên trước', 'success')
+    },
+    getStatus: () => (isGenerating ? 'in-progress' : result ? 'paused' : 'completed'),
+    getTitleVi: () => selectedProduct?.productName,
+    getProgressVi: () => (result ? 'Đã sinh kịch bản — sẵn sàng xem / chỉnh' : isGenerating ? 'Đang tạo kịch bản...' : undefined),
+    shouldPersist: () => !!result || isGenerating,
+    deps: [selectedProduct?.id, result, isGenerating],
+  })
 
   // Accept productId hand-off from other apps (e.g. Finder → Tạo Kịch bản)
   useEffect(() => {
@@ -41,6 +74,7 @@ export default function ScriptArchitect() {
     try {
       const r = await generateUGCScript({ ...params, productId: selectedProduct.id })
       setResult(r)
+      sessionApi.forceSave()
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
       addToast(`Tạo kịch bản thất bại: ${msg}`, 'error')
@@ -65,7 +99,10 @@ export default function ScriptArchitect() {
         />
       </div>
 
-      <div className="flex w-full flex-1 flex-col min-h-[400px] lg:min-h-0">
+      <div className="flex w-full flex-1 flex-col min-h-[400px] lg:min-h-0 relative">
+        <div className="absolute right-4 top-3 z-30">
+          <AutoSaveIndicator lastSavedAt={sessionApi.lastSavedAt} lastSaveOk={sessionApi.lastSaveOk} />
+        </div>
         <OutputPanel
           result={result}
           productId={selectedProduct?.id ?? null}

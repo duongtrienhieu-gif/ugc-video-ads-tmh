@@ -5,6 +5,8 @@ import type { CharacterProfile, TabId } from './types'
 import { createEmptyProfile, TABS } from './types'
 import ControlsPanel from './components/ControlsPanel'
 import OutputPanel from './components/OutputPanel'
+import AutoSaveIndicator from '../../components/AutoSaveIndicator'
+import { useSessionPersist } from '../../services/sessionPersistence'
 import { generateCharacter } from './services/generateCharacter'
 import type { GenerationResult } from './services/generateCharacter'
 import { useSettingsStore } from '../../stores/settingsStore'
@@ -14,6 +16,15 @@ import { useBankStore } from '../../stores/bankStore'
 import { saveAsset } from '../../utils/assetStore'
 import VariantsModal from '../finder/VariantsModal'
 import type { Model } from '../../stores/types'
+
+// Snapshot — survives F5. Reference image (File + blobURL) is NOT persistable;
+// user re-uploads after restore if they want auto-fill again. The rest (profile
+// + generated result + active tab) is preserved.
+interface CharacterStudioSnapshot {
+  profile: CharacterProfile
+  result: GenerationResult | null
+  activeTab: TabId
+}
 
 const TAB_ICONS: Record<TabId, React.ElementType> = {
   physical: User,
@@ -57,6 +68,32 @@ export default function CharacterStudio() {
   const addToast = useAppStore((s) => s.addToast)
 
   const kieApiKey = useSettingsStore((s) => s.kieApiKey)
+
+  // ── Session persistence (R4) ───────────────────────────────────────────
+  // Count filled profile fields to drive the progress text in the restore modal.
+  const profileFilled = Object.values(profile).filter((v) => v && v.trim() !== '').length
+  const profileTotal = TABS.reduce((sum, t) => sum + t.fields.length, 0)
+
+  const sessionApi = useSessionPersist<CharacterStudioSnapshot>({
+    moduleId: 'character-studio',
+    version: 1,
+    snapshot: () => ({ profile, result, activeTab }),
+    hydrate: (data) => {
+      if (data.profile) setProfile(data.profile)
+      if (data.result) setResult(data.result)
+      if (data.activeTab) setActiveTab(data.activeTab)
+      addToast('✓ Đã khôi phục Avatar AI từ phiên trước', 'success')
+    },
+    getStatus: () => (isGenerating ? 'in-progress' : result || profileFilled > 0 ? 'paused' : 'completed'),
+    getProgressVi: () => {
+      if (result) return 'Đã sinh ảnh — sẵn sàng lưu vào Project'
+      if (isGenerating) return 'Đang tạo ảnh avatar...'
+      if (profileFilled > 0) return `${profileFilled}/${profileTotal} trường đã điền`
+      return undefined
+    },
+    shouldPersist: () => profileFilled > 0 || !!result || isGenerating,
+    deps: [profile, result, activeTab, isGenerating],
+  })
 
   useEffect(() => {
     if (activeApp !== 'character-studio') return
@@ -167,7 +204,10 @@ export default function CharacterStudio() {
     setIsGenerating(true)
     try {
       const gen = await generateCharacter(profile, modelId, resolution)
-      if (!cancelledRef.current) setResult(gen)
+      if (!cancelledRef.current) {
+        setResult(gen)
+        sessionApi.forceSave()
+      }
     } catch (err) {
       if (cancelledRef.current) return
       const msg = err instanceof Error ? err.message : String(err)
@@ -191,7 +231,11 @@ export default function CharacterStudio() {
   }
 
   return (
-    <div className="flex h-full flex-col">
+    <div className="flex h-full flex-col relative">
+      {/* Auto-save chip — top right, above everything */}
+      <div className="absolute right-4 top-3 z-30">
+        <AutoSaveIndicator lastSavedAt={sessionApi.lastSavedAt} lastSaveOk={sessionApi.lastSaveOk} />
+      </div>
       {/* ── Auto-fill banner ── */}
       <div className="shrink-0 border-b border-black/8 px-4 py-3">
         <p className="mb-2 text-[9px] font-semibold uppercase tracking-widest text-gray-400">
