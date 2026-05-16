@@ -1032,40 +1032,87 @@ USE THIS CONTEXT TO:
 
 The voiceover is ${audioDuration.toFixed(1)} seconds long. Split the script into 8-12 segments matching natural pause/sentence boundaries. Each segment should be 4-8 seconds.
 
-For EACH segment, produce a HIGHLY SPECIFIC visual storyboard prompt (brollPrompt, English, 60-100 words) that VISUALLY MATCHES what the speaker is saying at that exact moment. The image generator will use this prompt to create a still photo, which will then be animated into a 5-second video clip.
+═══════════════════════════════════════════════════════════════════
+PROVEN UGC AD FORMAT (reverse-engineered from a successful ad analysis)
+═══════════════════════════════════════════════════════════════════
+Every shot follows ONE OF TWO COMPOSITIONS — the AVATAR appears in EVERY shot:
 
-brollPrompt MUST describe:
-1. AVATAR ACTION: specific physical action the avatar (friendly content creator) is doing — matched to the voice content
-2. SETTING: specific real-world location matching the context (kitchen / bathroom / park / desk / dining table / pharmacy / outdoor / etc.)
-3. EMOTION: facial expression / body language matching what the speaker feels in that line (frustrated / relieved / joyful / energetic / confident / nostalgic)
-4. SHOT TYPE: close-up macro / medium shot / wide / over-shoulder / POV
-5. CAMERA MOVEMENT: slow zoom-in / gentle pan / static / handheld / tracking
-6. LIGHTING & MOOD: warm golden hour / soft daylight / clinical white / dramatic side-light
-7. PRODUCT (if mentioned): describe product appearance — bottle shape, label color, capsule/liquid form
-8. CINEMATIC STYLE: hyperrealistic UGC ad, shallow depth of field, no text overlay, vertical 9:16
+(A) ILLUSTRATIVE SHOT — small avatar inset + main B-roll scene
+    "[Avatar description matching reference] is in the bottom right corner,
+     looking at the camera and talking. The main frame shows [scene]."
 
-EXAMPLES (study these carefully — your prompts must be this specific):
+(B) DEMONSTRATIVE SHOT — avatar IS the main subject doing the action
+    "[Avatar description] is [performing specific action] [in setting].
+     [Pose/expression/details]."
 
-Voice: "Cơ sở khoa học của sản phẩm rất vững chắc"
-→ "Macro close-up of two hands holding a probiotic supplement bottle, label clearly visible showing scientific iconography. Clean white desk surface with a notebook in soft focus. Side window daylight, professional documentary aesthetic, shallow depth of field. Camera slowly pushes in on the label. Vertical 9:16, hyperrealistic photography, no text overlay."
+Pick the composition that best serves each segment:
+- (B) for personal story moments ("I sat on the floor rubbing my knees"),
+  product handling ("she unscrews the bottle and shakes a capsule"),
+  emotional reveals ("she takes the first satisfying bite")
+- (A) for illustrative info shots (scientific lab visuals, lifestyle B-roll
+  the speaker is narrating about without being the actor)
 
-Voice: "Tôi có thể thưởng thức đồ ăn trở lại"
-→ "Medium shot of cheerful young woman at sunny breakfast table, taking a satisfying bite of pasta with closed-eye genuine pleasure. Warm golden morning light streams through kitchen window. Plate of healthy food, fresh orange juice nearby. Camera at eye level with slight handheld feel. Authentic UGC vibe, fork lifts toward mouth. Vertical 9:16, hyperrealistic."
+═══════════════════════════════════════════════════════════════════
+STRUCTURAL ARC (most successful UGC supplement ads follow this beat order)
+═══════════════════════════════════════════════════════════════════
+1. HOOK (0-4s):      Discovery teaser → curiosity + main product
+2. PAIN (4-14s):     Personal pain story → user emotionally suffering
+3. FAILED (14-21s):  What user tried before that didn't work
+4. DISCOVERY (21-28s): Found THIS product → turning point reveal
+5. HOW-IT-WORKS (28-37s): Mechanism + first positive result
+6. SCIENCE (37-46s): Authority/credibility → benefits explained
+7. TRANSFORM (46-54s): Life change — user thriving now
+8. CTA (54-60s):     Hero product close + transformation summary
 
-Voice: "Tôi cảm thấy tràn đầy năng lượng"
-→ "Wide low-angle tracking shot of confident woman walking briskly through morning park path, arms swinging naturally, bright empowered smile. Sunlight flares through trees, dappled light on her face. Vibrant green nature background. Camera matches her energetic pace. Vertical 9:16, vivid color, hyperrealistic, no text overlay."
+Match each script segment to the closest beat. The script may be loosely
+adapted — your job is to recognize which beat each segment is fulfilling.
 
-Voice: "INFINITY PROBIOTICS PLUS thực sự đã thay đổi cuộc đời tôi"
-→ "Hero close-up product shot: avatar's hands present the INFINITY PROBIOTICS PLUS bottle directly toward camera, label fully readable. Soft natural living-room background blurred. Gentle smile partially visible above. Warm honey-toned lighting, premium commercial feel, slight camera push-in. Vertical 9:16, hyperrealistic, no text overlay."
+═══════════════════════════════════════════════════════════════════
+EXAMPLES from the analyzed reference ad (BPC-157 by Soothe Supps)
+═══════════════════════════════════════════════════════════════════
+Voice "The secret to pain-free joints was discovered in 1973"
+→ "A man in a light blue polo shirt is in the bottom right corner, looking at the camera and talking. The main frame shows a split-screen scene: on the left, two scientists in lab coats and safety glasses are looking at a tablet in a futuristic lab. On the right, a man in a light blue polo shirt is smiling directly at the camera. Soft daylight, professional documentary look, vertical 9:16, photorealistic."
+
+Voice "My knees used to hurt so bad, I couldn't even play with my kids anymore"
+→ "A man in a light blue polo shirt is in the bottom right corner, looking at the camera and talking. The main frame shows a first-person perspective of a man sitting on a carpeted floor at home, wearing light-colored sweatpants and slippers, rubbing his knees with a pained expression. Warm soft living-room lighting. Vertical 9:16, photorealistic UGC ad style."
+
+Voice "Every morning was agony, just getting out of bed felt impossible"
+→ "A man in a light blue polo shirt is in the bottom right corner, looking at the camera and talking. The main frame shows a man in red pajamas sitting on the edge of an unmade bed, struggling to stand up, grimacing in pain as he holds his knee. Soft morning light through curtain. Vertical 9:16, authentic photoreal UGC style."
+
+Voice "I tried everything: cortisone shots made it worse"
+→ "A man in a light blue polo shirt is in the bottom right corner, looking at the camera and talking. The main frame shows a close-up of a person's bare arm receiving a cortisone injection from a medical professional wearing blue nitrile gloves in a clinical office. Cool fluorescent lighting. Vertical 9:16, photorealistic."
+
+Voice "But everything changed when I discovered this one thing"
+→ "A man in a light blue polo shirt is in the bottom right corner, looking at the camera and talking. The main frame shows a hero product reveal: a white BPC-157 supplement bottle placed on a polished wooden table, soft directional light catching the label. Lifestyle background blurred. Vertical 9:16, premium commercial photorealism."
+
+Voice "Now? I'm playing with my kids again and living pain-free"
+→ "A wide low-angle shot of a man in a light blue polo shirt running joyfully through a sunny suburban park with his two young children, all laughing. Golden hour back-light, bright green lawn, distant houses. Vertical 9:16, vivid color, photorealistic empowered ending shot. (Speaker is the main subject this time — full screen, no inset.)"
+
+═══════════════════════════════════════════════════════════════════
+RULES FOR YOUR brollPrompt OUTPUT
+═══════════════════════════════════════════════════════════════════
+- ALWAYS in English (image generator performs best in English)
+- 60-120 words per prompt
+- ALWAYS describe the avatar as matching the reference avatar image
+  (same face, hijab/clothing, age, ethnicity)
+- For shot composition (A): explicitly say "is in the bottom right corner,
+  looking at the camera and talking"
+- For shot composition (B): describe the avatar doing the specific action
+- Reference the actual product (matching product image — capsule bottle,
+  not powder sachet, etc.) when the segment mentions/handles the product
+- "Photorealistic", "vertical 9:16", "no text overlay" suffix on every prompt
+  (captions will be added later by Shotstack, not embedded in image)
 
 Other rules:
-- avatarPosition: alternate "left" / "right" each segment
-- useProduct: true if segment mentions/references the product (by name, benefit, mechanism, or transformation result)
-- durationSec + startSec: distribute proportionally to text length, MUST sum to exactly ${audioDuration.toFixed(1)} seconds
-- text: the exact original-language voice text for this segment (Vietnamese / Malay / English — DO NOT translate)
-- brollPrompt: always in English (image model works best in English)
+- avatarPosition: alternate "left" / "right" each segment (Shotstack uses
+  this for the lip-sync overlay placement when compositing)
+- useProduct: true if segment mentions/references the product
+- durationSec + startSec: distribute proportionally to text length, MUST
+  sum to exactly ${audioDuration.toFixed(1)} seconds
+- text: the EXACT original-language voice text for this segment
+  (Vietnamese / Malay / English — DO NOT translate)
 
-SCRIPT:
+SCRIPT TO ADAPT:
 ${script}`
 
     const parseSchema: Record<string, unknown> = {
@@ -1345,26 +1392,20 @@ ${script}`
   // video generation ($0.35/clip). User can regen bad images individually.
 
   const buildImagePrompt = (seg: ScriptSegment, hasAvatar: boolean, hasProduct: boolean): string => {
-    // Identity-lock instruction — REQUIRED for UGC continuity. The reference
-    // image of the avatar MUST appear as the same person in every shot of
-    // the series (same face, same hijab/clothing, same age, same ethnicity).
-    // The product MUST appear identically (same bottle, same box, same label).
-    const identityLock = `
-IDENTITY LOCK (mandatory — this is a UGC review series where ONE person uses ONE product):
-${hasAvatar ? '- The PERSON in this image must be the SAME individual as the first reference image: identical face, identical hijab/clothing style, identical age, identical ethnicity. Treat the reference as a real human you must portray consistently.' : ''}
-${hasProduct ? '- The PRODUCT must match the reference product image EXACTLY: same bottle/box shape, same label design, same color, same branding. Do NOT invent a different product.' : ''}
-- Setting should feel like the SAME person's real home across all shots (consistent kitchen/living room aesthetic, lighting style, color palette). This is NOT 9 different people testing 9 products — it's ONE person's genuine review journey.
-- Style: authentic UGC review video (real person filming TikTok/Reels), NOT polished commercial. Slight handheld feel, natural imperfect framing.
+    // Gemini already crafted seg.brollPrompt in the proven UGC ad composition
+    // format (see runParse). This wrapper just adds identity-lock instructions
+    // and a final quality/style suffix.
+    const identityLock = [
+      'IDENTITY LOCK (this is a UGC review series — ONE person reviewing ONE product):',
+      hasAvatar  ? '- The PERSON must EXACTLY match the first reference image: identical face, hijab/clothing, age, ethnicity. Same individual across the entire series.' : null,
+      hasProduct ? '- The PRODUCT must EXACTLY match the reference product image: same bottle shape, label, color, branding. Do not invent a different form factor.' : null,
+      '- Setting feels like the same person\'s real home across all shots (consistent aesthetic, lighting, color palette).',
+      '- Style: authentic phone-camera UGC look (TikTok/Reels). NOT polished commercial. Slightly imperfect framing, natural light.',
+    ].filter(Boolean).join('\n')
 
-SCENE FOR THIS SHOT:
-`.trim()
+    const qualitySuffix = '. Photorealistic, vertical 9:16, hyper-realistic phone-camera quality, no text overlay (captions added later in editing), no watermark.'
 
-    const useProd = seg.useProduct && hasProduct
-    const sceneSpec = useProd
-      ? `${seg.brollPrompt}. Photorealistic 9:16 vertical UGC shot, the avatar (matching reference) is holding/showing the exact product from the reference. Lifestyle home setting, soft natural window lighting, warm tones. Hyper-realistic phone-camera quality, shallow depth of field, no text overlay, no watermark.`
-      : `${seg.brollPrompt}. Photorealistic 9:16 vertical lifestyle B-roll. ${hasAvatar ? 'Featuring the avatar (matching reference) — keep the same person consistent. ' : ''}Authentic real-world setting matching the avatar's home style. Warm natural lighting, phone-camera quality, no text overlay, no watermark.`
-
-    return `${identityLock}\n${sceneSpec}`
+    return `${identityLock}\n\nSCENE:\n${seg.brollPrompt}${qualitySuffix}`
   }
 
   // Generate ONE image for a given segment index (used by both initial run + per-image regen)
@@ -1482,8 +1523,15 @@ SCENE FOR THIS SHOT:
           return
         }
 
-        // Motion prompt: describe HOW the camera/scene moves (image already shows WHAT)
-        const motionPrompt = `${seg.brollPrompt}. Smooth cinematic camera movement: slow zoom in or gentle pan, natural subtle motion. No static shots, no jitter. Maintain photorealistic UGC ad style throughout.`
+        // Motion prompt: animate the composed UGC shot.
+        // The image already shows WHAT (avatar in corner + main scene OR avatar
+        // as central actor). Motion describes HOW:
+        // - The avatar (corner or main): subtle natural talking gestures,
+        //   blinks, slight head movement — looks like real person filming TikTok
+        // - The main scene B-roll: gentle cinematic motion (slow zoom / pan)
+        //   to keep visual interest without distracting from the talking
+        const motionPrompt = `${seg.brollPrompt}.
+MOTION: The avatar speaks naturally with subtle hand gestures, slight head turns, and authentic blinks — looks like a real person recording a UGC review on their phone. The main scene element has gentle cinematic camera motion (slow push-in on key detail, or smooth slow pan across the setting). NO static frozen frames, NO jitter, NO sudden cuts. Maintain photorealistic UGC ad style throughout the 5-second clip.`
 
         try {
           const { taskId } = await generateVideoJob({
