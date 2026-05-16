@@ -11,16 +11,17 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { useState, useEffect, useRef } from 'react'
-import { Sparkles, FlaskConical, Package, UserRound, FileText, ChevronRight, Loader2, Info, ArrowLeft } from 'lucide-react'
+import { Sparkles, FlaskConical, Package, UserRound, FileText, ChevronRight, Loader2, Info, ArrowLeft, Code2 } from 'lucide-react'
 import { useAppStore } from '../../../stores/appStore'
 import { useSettingsStore } from '../../../stores/settingsStore'
 import { useAssetUrl } from '../../../hooks/useAssetUrl'
 import BankPicker from '../../../components/BankPicker'
 import type { Model, Product } from '../../../stores/types'
-import type { V2PipelineState, MasterFrame } from './types'
+import type { V2PipelineState, MasterFrame, CompiledPrompt } from './types'
 import { createEmptyV2State } from './types'
 import { extractIdentityPack, generateMasterFrame } from './services/masterFrame'
 import MasterFrameApproval from './components/MasterFrameApproval'
+import PromptCompilerDebugPanel from './components/PromptCompilerDebugPanel'
 
 // ── Phase header (top breadcrumb) ───────────────────────────────────────────
 function PhaseHeader({ phase }: { phase: V2PipelineState['phase'] }) {
@@ -106,6 +107,9 @@ export default function VideoBuilderV2({ onSwitchToV1 }: Props) {
   const [state, setState] = useState<V2PipelineState>(createEmptyV2State)
   const [pickerMode, setPickerMode] = useState<'avatar' | 'product' | 'script' | null>(null)
   const [identityProgress, setIdentityProgress] = useState<string>('')
+  /** Last compiled prompt — shown in debug panel. Always reflects the most recent gen. */
+  const [lastCompiled, setLastCompiled] = useState<CompiledPrompt | null>(null)
+  const [debugOpen, setDebugOpen] = useState(false)
   const cancelledRef = useRef(false)
 
   const kieApiKey = useSettingsStore((s) => s.kieApiKey)
@@ -177,18 +181,19 @@ export default function VideoBuilderV2({ onSwitchToV1 }: Props) {
     }))
 
     try {
-      const frame: MasterFrame = await generateMasterFrame({
+      const { frame, compiled } = await generateMasterFrame({
         kieApiKey,
         identity,
         productName: state.inputs.product.productName,
         consistency: state.consistency,
       })
       if (cancelledRef.current) return
+      setLastCompiled(compiled)
       setState((s) => ({
         ...s,
         masterFrame: {
           ...s.masterFrame,
-          candidates: [...s.masterFrame.candidates, frame],
+          candidates: [...s.masterFrame.candidates, frame as MasterFrame],
           isGenerating: false,
         },
       }))
@@ -246,12 +251,22 @@ export default function VideoBuilderV2({ onSwitchToV1 }: Props) {
               <p className="text-[11px] text-white/70">Pipeline mới: Master Frame → derived scenes · giảm drift, tăng nhất quán</p>
             </div>
           </div>
-          <button
-            onClick={onSwitchToV1}
-            className="flex items-center gap-1.5 rounded-lg bg-white/15 px-3 py-1.5 text-xs font-semibold backdrop-blur-sm hover:bg-white/25"
-          >
-            <ArrowLeft className="h-3.5 w-3.5" /> Quay về v1 (stable)
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setDebugOpen(true)}
+              disabled={!lastCompiled}
+              title={lastCompiled ? 'Xem prompt cuối đã compile (5 sections)' : 'Chưa có prompt nào — tạo Master Frame trước'}
+              className="flex items-center gap-1.5 rounded-lg bg-white/15 px-3 py-1.5 text-xs font-semibold backdrop-blur-sm transition-colors hover:bg-white/25 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <Code2 className="h-3.5 w-3.5" /> Prompt Compiler v2
+            </button>
+            <button
+              onClick={onSwitchToV1}
+              className="flex items-center gap-1.5 rounded-lg bg-white/15 px-3 py-1.5 text-xs font-semibold backdrop-blur-sm hover:bg-white/25"
+            >
+              <ArrowLeft className="h-3.5 w-3.5" /> Quay về v1 (stable)
+            </button>
+          </div>
         </div>
       </div>
 
@@ -365,6 +380,9 @@ export default function VideoBuilderV2({ onSwitchToV1 }: Props) {
       <BankPicker bankType="models" isOpen={pickerMode === 'avatar'} onSelect={handlePickAvatar} onClose={() => setPickerMode(null)} />
       <BankPicker bankType="products" isOpen={pickerMode === 'product'} onSelect={handlePickProduct} onClose={() => setPickerMode(null)} />
       <BankPicker bankType="scripts" isOpen={pickerMode === 'script'} onSelect={handlePickScript} onClose={() => setPickerMode(null)} />
+
+      {/* Prompt Compiler v2 debug overlay */}
+      {debugOpen && <PromptCompilerDebugPanel compiled={lastCompiled} onClose={() => setDebugOpen(false)} />}
     </div>
   )
 }

@@ -20,7 +20,9 @@ import { directGeminiVision } from '../../../../utils/gemini'
 import { generateGpt4oImage } from '../../../../utils/kieai'
 import { saveAsset, getUrl, isAssetRef } from '../../../../utils/assetStore'
 import type { Model, Product } from '../../../../stores/types'
-import type { IdentityPack, MasterFrame, ConsistencyConfig } from '../types'
+import type { IdentityPack, MasterFrame, ConsistencyConfig, VisualStyleDna, CompiledPrompt } from '../types'
+import { defaultVisualStyleDna } from '../types'
+import { compileMasterFramePrompt } from './promptCompiler'
 
 // ── Helpers: fetch a remote/asset image as base64 for Gemini Vision ─────────
 
@@ -134,91 +136,47 @@ export async function extractIdentityPack(params: {
   }
 }
 
-// ── Master Frame prompt builder ──────────────────────────────────────────────
+// ── Master Frame generation (uses Prompt Compiler v2) ────────────────────────
 
 /**
- * Build the prompt for the very first canonical Master Frame. This is a
- * BASELINE composition — clean medium shot, avatar holding product, label
- * facing camera. Subsequent scenes will derive variations from THIS frame.
+ * Generate ONE master frame candidate. The compiler builds the 5-section
+ * prompt — this function only orchestrates the API call + asset persistence.
  *
- * Composed in the 5-section structure that Module 2 (Prompt Compiler) will
- * formalize. For now we hardcode the master-frame variant inline.
- */
-export function buildMasterFramePrompt(params: {
-  identity: IdentityPack
-  productName: string
-  consistency: ConsistencyConfig
-}): string {
-  const { identity, productName, consistency } = params
-  const strictLanguage = consistency.strength >= 90
-    ? 'MUST EXACTLY match'
-    : 'should closely resemble'
-
-  return `IMAGE-EDITING TASK: Combine the two attached reference images into one new baseline portrait that will serve as the master reference for an entire UGC ad photo series.
-
-═══════════════════════════════════════════════════════════════
-[1] IDENTITY LOCK
-═══════════════════════════════════════════════════════════════
-THE PERSON IS: the individual from the SECOND attached reference image.
-The face in the output ${strictLanguage} the face in this reference: same face shape, same eyes (color + shape), same eyebrows, nose, lips, jawline, cheekbones, skin tone, age range.
-Additional locked description (from analysis): ${identity.avatarDescription}
-Same gender, same ethnicity, same age as reference.
-Same hijab style and color if wearing one, OR same hairstyle / hair color / length.
-Same facial hair if present (beard / stubble / mustache).
-Same accessories on face / neck (glasses, earrings).
-
-═══════════════════════════════════════════════════════════════
-[2] PRODUCT LOCK
-═══════════════════════════════════════════════════════════════
-THE PRODUCT IS: the EXACT product from the FIRST attached reference image.
-Product name: "${productName}".
-The product in the output ${strictLanguage} this reference: same container TYPE, same shape proportions, same colors, same label, same branding text and logo placement.
-Additional locked description (from analysis): ${identity.productDescription}
-
-CRITICAL: Do NOT redesign the packaging. Do NOT invent a different product. Do NOT substitute a generic supplement bottle / cream jar / random pharmacy bottle. The uploaded product is the ONLY valid product source.
-
-═══════════════════════════════════════════════════════════════
-[3] MASTER FRAME COMPOSITION (baseline)
-═══════════════════════════════════════════════════════════════
-Medium close-up portrait. The person holds the product at chest-to-shoulder level with one or both hands, label fully facing the camera. Gentle confident expression, looking directly at the lens. Clean modern home interior background softly out of focus only on far walls (subject + product remain sharp). Natural daylight from a window to one side.
-
-This is a NEUTRAL baseline pose — subsequent scenes will derive variations from this frame (different angles, environments, expressions), so render this one cleanly and centered so it works as a reference.
-
-═══════════════════════════════════════════════════════════════
-[4] VISUAL DNA (UGC iPhone aesthetic)
-═══════════════════════════════════════════════════════════════
-Authentic UGC smartphone photo — shot on iPhone — vertical framing. Completely unedited natural look: sharp focus across the entire subject + product area, zero bokeh on subject, zero depth-of-field blur on the product, natural ambient indoor lighting, no professional studio rim lighting, no AI-generated sheen, no digital enhancement, no watermarks, no text overlay. Photorealistic, film-quality realism. Subject skin shows real texture and natural pores, not retouched.
-
-═══════════════════════════════════════════════════════════════
-[5] NEGATIVE PROMPT (what NOT to do)
-═══════════════════════════════════════════════════════════════
-DO NOT: change face identity to a different person, change ethnicity, change age, invent a new product, redesign the packaging, swap brand label, add a professional studio backdrop, blur the product, add bokeh, add watermark, add text overlay, output a plastic AI-sheen look, output a different person who "looks similar".`
-}
-
-// ── Master Frame generation ──────────────────────────────────────────────────
-
-/**
- * Generate ONE master frame candidate. The caller can call this multiple
- * times to get re-rolls before the user approves one.
+ * Returns BOTH the resulting MasterFrame AND the compiled prompt sections,
+ * so the debug panel can render them block-by-block.
  */
 export async function generateMasterFrame(params: {
   kieApiKey: string
   identity: IdentityPack
   productName: string
   consistency: ConsistencyConfig
+  dna?: VisualStyleDna
   onStatusChange?: (status: string, progress?: number) => void
-}): Promise<MasterFrame> {
-  const prompt = buildMasterFramePrompt({
+}): Promise<{ frame: MasterFrame; compiled: CompiledPrompt }> {
+  const dna = params.dna ?? defaultVisualStyleDna()
+
+  // Compile the 5-section prompt
+  const compiled = compileMasterFramePrompt({
     identity: params.identity,
     productName: params.productName,
     consistency: params.consistency,
+    dna,
   })
 
-  // filesUrl order: [product, avatar] — matches prompt's "FIRST=product, SECOND=avatar"
+  // filesUrl order matches the prompt's reference-index references:
+  //   [0] = "image #1" = PRODUCT (highest priority)
+  //   [1] = "image #2" = AVATAR
+  const filesUrl: string[] = []
+  for (const role of compiled.filesUrlOrder) {
+    if (role === 'product') filesUrl.push(params.identity.productImageUrl)
+    if (role === 'avatar')  filesUrl.push(params.identity.avatarImageUrl)
+    // 'masterFrame' not used for the master-frame gen itself
+  }
+
   const remoteUrl = await generateGpt4oImage({
     apiKey: params.kieApiKey,
-    prompt,
-    filesUrl: [params.identity.productImageUrl, params.identity.avatarImageUrl],
+    prompt: compiled.final,
+    filesUrl,
     size: '2:3',  // vertical-ish (gpt4o only supports 1:1 / 3:2 / 2:3)
     timeoutMs: 5 * 60 * 1000,
     onStatusChange: params.onStatusChange,
@@ -237,9 +195,12 @@ export async function generateMasterFrame(params: {
   }
 
   return {
-    imageUrl: storedUrl,
-    promptUsed: prompt,
-    createdAt: Date.now(),
-    status: 'pending-approval',
+    frame: {
+      imageUrl: storedUrl,
+      promptUsed: compiled.final,
+      createdAt: Date.now(),
+      status: 'pending-approval',
+    },
+    compiled,
   }
 }

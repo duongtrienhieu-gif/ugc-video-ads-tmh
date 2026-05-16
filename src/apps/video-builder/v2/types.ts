@@ -56,6 +56,81 @@ export interface MasterFrameStepState {
   error: string | null
 }
 
+// ── MODULE 2: Prompt Compiler (5-section structure) ──────────────────────────
+
+/**
+ * Visual Style DNA — extracted from an Ads Win Template (or default preset).
+ * Replaces the old "inject entire Ads Win prompt" approach. Each field is a
+ * short concept token, not a paragraph — keeps the compiled prompt short.
+ *
+ * Phase 1: default values are hardcoded for ecommerce/landing/UGC use.
+ * Phase 2: will be extracted via Gemini from uploaded Ads Win reference.
+ */
+export interface VisualStyleDna {
+  /** Camera style — e.g. "iphone selfie", "handheld over-shoulder", "tabletop flatlay" */
+  cameraStyle: string
+  /** Hook style — e.g. "pattern interrupt", "before-after reveal", "direct claim" */
+  hookStyle: string
+  /** Pacing — e.g. "fast cuts (3-5s)", "slow soak (8-10s)", "balanced (5-7s)" */
+  pacingStyle: string
+  /** Subtitle / overlay density — e.g. "minimal", "bold-claim-keywords", "heavy-callouts" */
+  subtitleDensity: 'none' | 'minimal' | 'medium' | 'heavy'
+  /** Overall visual tone — e.g. "warm authentic UGC", "clinical credibility", "lifestyle aspirational" */
+  visualTone: string
+  /** Persuasion pattern (overall arc) — e.g. "problem → solution → proof → CTA" */
+  persuasionPattern: string
+  /** CTA style — e.g. "urgency-limited-time", "soft-link-bio", "scarcity-50-units" */
+  ctaStyle: string
+}
+
+/** Sensible defaults for ecommerce + landing page + social proof UGC ads. */
+export function defaultVisualStyleDna(): VisualStyleDna {
+  return {
+    cameraStyle: 'authentic iphone selfie + over-shoulder UGC, vertical handheld',
+    hookStyle: 'pattern interrupt + relatable pain point',
+    pacingStyle: 'balanced 5-7s shots, beat-matched to voice',
+    subtitleDensity: 'medium',
+    visualTone: 'warm authentic UGC — realistic ecommerce / landing-page lifestyle imagery, social proof tone',
+    persuasionPattern: 'problem → solution → ingredient/proof → social proof → CTA',
+    ctaStyle: 'soft helpful direction to link in bio / website',
+  }
+}
+
+/**
+ * Inputs the compiler needs to produce a final prompt.
+ * Shared across master-frame, scene, and re-roll compilations.
+ */
+export interface CompiledPromptContext {
+  /** Locked text anchors from Gemini Vision */
+  identity: IdentityPack
+  /** Product display name (from bank) */
+  productName: string
+  /** Visual style — defaults to ecommerce UGC preset */
+  dna: VisualStyleDna
+  /** Consistency config — drives lock language strength */
+  consistency: ConsistencyConfig
+  /** Optional scene-specific blueprint (omit for master frame baseline) */
+  scene?: SceneBlueprint
+  /** Optional master-frame URL when this is a scene-derived gen (img2img anchor) */
+  masterFrameUrl?: string
+}
+
+/**
+ * The compiled output. Sections kept separately so the debug panel can show
+ * each block; `final` is the joined string sent to the image API.
+ */
+export interface CompiledPrompt {
+  identityLock: string
+  productLock: string
+  sceneBlueprint: string
+  visualDna: string
+  negativePrompt: string
+  /** All sections concatenated — this is what gets sent as the `prompt` field */
+  final: string
+  /** Reference priority order — what to pass as filesUrl[] */
+  filesUrlOrder: Array<'product' | 'avatar' | 'masterFrame'>
+}
+
 // ── MODULE 3: Scene Blueprint JSON ───────────────────────────────────────────
 
 /**
