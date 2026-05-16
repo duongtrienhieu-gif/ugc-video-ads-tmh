@@ -33,6 +33,8 @@ export default function SettingsModal({ open, onClose }: SettingsModalProps) {
   const [geminiTestResult, setGeminiTestResult] = useState<{ ok: boolean; error?: string } | null>(null)
   const [testingEleven, setTestingEleven] = useState(false)
   const [elevenTestResult, setElevenTestResult] = useState<{ ok: boolean; remaining?: number; tier?: string; error?: string } | null>(null)
+  const [testingFal, setTestingFal] = useState(false)
+  const [falTestResult, setFalTestResult] = useState<{ ok: boolean; error?: string } | null>(null)
 
   useEffect(() => {
     if (open) {
@@ -44,6 +46,7 @@ export default function SettingsModal({ open, onClose }: SettingsModalProps) {
       setTestResult(null)
       setGeminiTestResult(null)
       setElevenTestResult(null)
+      setFalTestResult(null)
     }
   }, [open, kieApiKey, geminiApiKey, elevenLabsApiKey, falApiKey])
 
@@ -94,6 +97,29 @@ export default function SettingsModal({ open, onClose }: SettingsModalProps) {
       setElevenTestResult({ ok: false, error: msg })
     } finally {
       setTestingEleven(false)
+    }
+  }
+
+  async function handleTestFal() {
+    const key = draftFal.trim()
+    if (!key) { addToast('Vui lòng nhập fal.ai API key trước', 'error'); return }
+    setTestingFal(true)
+    setFalTestResult(null)
+    try {
+      // Hit a non-existent request status endpoint — 401 = invalid key, 404 = key valid (request not found)
+      const res = await fetch('https://queue.fal.run/fal-ai/latentsync/requests/test-connection-check', {
+        headers: { 'Authorization': `Key ${key}` },
+      })
+      if (res.status === 401 || res.status === 403) {
+        setFalTestResult({ ok: false, error: 'API key không hợp lệ hoặc không có quyền truy cập' })
+      } else {
+        // 404 = key is valid, request just doesn't exist — that's what we want
+        setFalTestResult({ ok: true })
+      }
+    } catch {
+      setFalTestResult({ ok: false, error: 'Không thể kết nối đến fal.ai' })
+    } finally {
+      setTestingFal(false)
     }
   }
 
@@ -374,7 +400,7 @@ export default function SettingsModal({ open, onClose }: SettingsModalProps) {
                 <input
                   type={showFal ? 'text' : 'password'}
                   value={draftFal}
-                  onChange={(e) => setDraftFal(e.target.value)}
+                  onChange={(e) => { setDraftFal(e.target.value); setFalTestResult(null) }}
                   placeholder="fal-..."
                   className="w-full rounded-lg border border-black/10 bg-white/70 px-3 py-2.5 pr-10 text-sm text-gray-800 placeholder-gray-400 outline-none transition-colors focus:border-pink-300 focus:bg-white"
                 />
@@ -389,6 +415,23 @@ export default function SettingsModal({ open, onClose }: SettingsModalProps) {
               <p className="text-[11px] text-gray-400">
                 Video-to-video lip-sync giữ nguyên cảnh gốc · ~<span className="font-mono">$0.005/s</span> (~$0.30/phút)
               </p>
+              <button
+                onClick={handleTestFal}
+                disabled={testingFal || !draftFal.trim()}
+                className="flex items-center gap-1.5 rounded-lg border border-pink-200 px-3 py-1.5 text-xs font-medium text-pink-700 transition-colors hover:bg-pink-50 disabled:opacity-40"
+              >
+                <RefreshCw className={`h-3 w-3 ${testingFal ? 'animate-spin' : ''}`} />
+                {testingFal ? 'Đang kiểm tra...' : 'Kiểm tra kết nối'}
+              </button>
+              {falTestResult && (
+                <div className={`flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium ${falTestResult.ok ? 'bg-emerald-500/10 text-emerald-700 border border-emerald-500/20' : 'bg-red-500/10 text-red-600 border border-red-500/20'}`}>
+                  {falTestResult.ok ? (
+                    <><Check className="h-3.5 w-3.5 shrink-0" /><span>Kết nối thành công — API key hợp lệ</span></>
+                  ) : (
+                    <><X className="h-3.5 w-3.5 shrink-0" /><span>{falTestResult.error}</span></>
+                  )}
+                </div>
+              )}
             </div>
           </div>
 
