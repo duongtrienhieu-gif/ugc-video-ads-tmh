@@ -1,30 +1,22 @@
-// ── Prompt Compiler v2 — LITE ────────────────────────────────────────────────
+// ── Prompt Compiler v2 — LAYERED ARCHITECTURE ───────────────────────────────
 //
-// PHILOSOPHY SHIFT (Phase L1 — lite refactor):
-//   Storyboard already carries structured scene data (sceneType, emotion,
-//   composition, environment, motionStyle, etc). Identity comes from the
-//   reference IMAGE, not from a text essay describing the face.
+// Phase L2 refactor. The first lite pass reduced section verbosity but kept
+// the 5-section bullet-list structure (~1200-1500 chars per prompt). User
+// reported KIE timeouts + queue stalls — prompts still too big.
 //
-//   The old compiler produced ~2000-token prompts with massive identity
-//   blocks, product essays, multi-paragraph DNA, and 20-item negative lists.
-//   That over-prompting:
-//     • slowed gen + cost more credits
-//     • created prompt-vs-image-conditioning conflicts
-//     • produced inconsistent outputs across the timeline
+// NEW LAYERED ARCHITECTURE:
+//   1. GLOBAL_STYLE     — module-level constant, ~110 chars, shared every call
+//   2. GLOBAL_NEGATIVE  — module-level constant, ~90 chars, shared every call
+//   3. LOCKS            — 2 short lines: "Same person from #N. Same product from #M"
+//   4. SCENE DELTA      — ONE flowing paragraph from blueprint fields
+//   5. Header           — single line referencing the image refs
 //
-//   New compiler emits ~150-400 token prompts. Each section is ONE LINE
-//   driven by the blueprint data + a global style preset. The reference
-//   images do the identity heavy-lifting.
+// Target prompt size: 400-900 chars per scene (vs ~4k-8k before lite, vs
+// ~1500 after first lite pass).
 //
-//   Retry overrides (bumpIdentityLock / bumpProductLock / bumpRealism /
-//   bumpLabelLock) still work — they append ONE short sentence each,
-//   not a multi-paragraph essay.
-//
-// PRESERVED:
-//   • Same CompiledPrompt return shape — no caller breakage
-//   • Same compileMasterFramePrompt / compileScenePrompt exports
-//   • filesUrlOrder gating for productVisibility='low' (pain/pre-discovery)
-//   • Reference indices auto-shift when product is omitted
+// Globals are JS module constants — string allocation happens once at import
+// time, every compilePrompt() call references the same memory. No need for
+// runtime caching.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import type {
@@ -33,95 +25,128 @@ import type {
   SceneBlueprint,
 } from '../types'
 
-// ── Global style preset ──────────────────────────────────────────────────────
-// One line. Re-used across every gen instead of repeating a 20-line essay.
-const GLOBAL_STYLE = 'Style: realistic UGC ecommerce iPhone photography — natural ambient light, sharp focus on subject + product label, candid framing, lived-in real interior. NOT cinematic, NOT studio, NOT magazine editorial.'
+// ═══════════════════════════════════════════════════════════════════════
+// LAYER 1 — GLOBAL STYLE (shared once per pipeline, allocated once at import)
+// ═══════════════════════════════════════════════════════════════════════
+const GLOBAL_STYLE = 'Authentic UGC iPhone photo · natural ambient light · sharp focus on subject + product label · real lived-in interior · NOT cinematic · NOT studio · NOT editorial.'
 
-// ── Global negative — 5 essentials only ──────────────────────────────────────
-const GLOBAL_NEGATIVE = 'Avoid: wrong face / different person, redesigned packaging / different brand, distorted hands / extra fingers, text overlays / fake watermarks, cartoon / 3D-render / illustration look.'
+// ═══════════════════════════════════════════════════════════════════════
+// LAYER 2 — GLOBAL NEGATIVE (shared once)
+// ═══════════════════════════════════════════════════════════════════════
+const GLOBAL_NEGATIVE = 'Avoid: wrong face · redesigned packaging · distorted hands / extra fingers · text overlay / watermark · cartoon / 3D-render look.'
 
-// ─────────────────────────────────────────────────────────────────────────────
-// IDENTITY LOCK — one line. Reference image carries the face.
-// ─────────────────────────────────────────────────────────────────────────────
-function buildIdentityLock(ctx: CompiledPromptContext, refIndex: number): string {
-  const bump = ctx.overrides?.bumpIdentityLock
-    ? ' RETRY: previous attempt drifted the face — render LITERALLY the same individual.'
+// ═══════════════════════════════════════════════════════════════════════
+// LAYER 3 — IDENTITY + PRODUCT LOCKS (2 short lines from refs)
+// ═══════════════════════════════════════════════════════════════════════
+function buildLocks(opts: {
+  identityRef: number
+  productRef: number | null
+  ctx: CompiledPromptContext
+}): string {
+  const { identityRef, productRef, ctx } = opts
+
+  const identityBump = ctx.overrides?.bumpIdentityLock
+    ? ' Retry: previous attempt drifted face — match LITERALLY.'
     : ''
-  // wardrobeStyle is the only piece we explicitly call out — it's the "vary
-  // across timeline" exception to the otherwise-locked identity.
-  const wardrobe = ctx.scene?.wardrobeStyle
-    ? ` Outfit for this scene: ${ctx.scene.wardrobeStyle} (clothes vary scene-to-scene; face stays locked).`
-    : ''
-  return `Identity: same exact person as reference image #${refIndex} — face, hair, age, ethnicity locked.${wardrobe}${bump}`
+
+  const identityLine = `Same person from ref #${identityRef} — face / age / ethnicity locked. Outfit + environment vary per scene.${identityBump}`
+
+  const productLine = productRef === null
+    ? 'Product ABSENT this scene — pre-discovery beat, generic objects only.'
+    : (() => {
+        const bump = ctx.overrides?.bumpProductLock
+          ? ' Retry: previous attempt redesigned the packaging — render pixel-for-pixel.'
+          : ''
+        const label = ctx.overrides?.bumpLabelLock
+          ? ' Preserve every label letter.'
+          : ''
+        return `Same product from ref #${productRef} — packaging / label / logo / shape preserved exactly.${bump}${label}`
+      })()
+
+  return `${identityLine}\n${productLine}`
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// PRODUCT LOCK — one line. Reference image carries the packaging.
-// ─────────────────────────────────────────────────────────────────────────────
-function buildProductLock(ctx: CompiledPromptContext, refIndex: number): string {
-  const bump = ctx.overrides?.bumpProductLock
-    ? ' RETRY: previous attempt redesigned the packaging — render PIXEL-FOR-PIXEL the same product.'
-    : ''
-  const labelBump = ctx.overrides?.bumpLabelLock
-    ? ' Preserve every letter of the label exactly.'
-    : ''
-  return `Product: same exact product as reference image #${refIndex} — packaging shape, label, logo, colors preserved exactly. Do not redesign, do not substitute.${bump}${labelBump}`
+// ═══════════════════════════════════════════════════════════════════════
+// LAYER 4 — SCENE DELTA (one flowing paragraph from blueprint fields)
+// ═══════════════════════════════════════════════════════════════════════
+//
+// Combines every meaningful blueprint axis into a single natural-language
+// sentence rather than a labelled bullet list. Models follow flowing
+// descriptions better than enumerations of the same length.
+
+const MOTION_PHRASE: Partial<Record<NonNullable<SceneBlueprint['motionStyle']>, string>> = {
+  subtle_head_turn:   'subtle head turn',
+  stomach_holding:    'holding stomach with slight wince',
+  eating_motion:      'mid-bite / casual sip',
+  selfie_talk:        'talking to phone camera',
+  pointing_product:   'pointing at product label',
+  laugh_with_family:  'warm laugh with others',
+  unboxing_reveal:    'lifting / rotating package',
+  walking_in:         'walking into frame',
+  static_pose:        'holding the exact pose',
 }
 
-/** Used when scene.productVisibility === 'low' — pain/pre-discovery beats. */
-function buildNoProductDirective(): string {
-  return 'Product: ABSENT from this scene (emotional/pre-discovery beat). No branded packaging, no logos, no labels — only generic everyday objects.'
-}
+const VISIBILITY_PHRASE = {
+  low:    'product NOT in frame',
+  medium: 'product visible but not hero',
+  high:   'product hero, label clearly readable',
+} as const
 
-// ─────────────────────────────────────────────────────────────────────────────
-// SCENE — data-driven one-liners straight from the storyboard fields.
-// ─────────────────────────────────────────────────────────────────────────────
-function buildSceneFromBlueprint(blueprint: SceneBlueprint): string {
-  const lines: string[] = ['Scene:']
-  if (blueprint.sceneType) {
-    const beat = blueprint.narrativePurpose
-      ? `${blueprint.sceneType} (${blueprint.narrativePurpose})`
-      : blueprint.sceneType
-    lines.push(`• Beat: ${beat}`)
+function buildSceneDelta(blueprint: SceneBlueprint): string {
+  // Build phrases in natural reading order: action → emotion → outfit →
+  // environment → light → framing → camera → motion → product visibility.
+  const phrases: string[] = []
+
+  // Lead: action + emotion fuse into the opening clause
+  if (blueprint.subjectAction && blueprint.emotion) {
+    phrases.push(`Subject ${blueprint.subjectAction} with ${blueprint.emotion} expression`)
+  } else if (blueprint.subjectAction) {
+    phrases.push(`Subject ${blueprint.subjectAction}`)
+  } else if (blueprint.pose) {
+    phrases.push(`Subject ${blueprint.pose}`)
   }
-  if (blueprint.subjectAction)    lines.push(`• Action: ${blueprint.subjectAction}`)
-  if (blueprint.pose)             lines.push(`• Pose: ${blueprint.pose}`)
-  if (blueprint.emotion)          lines.push(`• Emotion: ${blueprint.emotion}`)
-  if (blueprint.composition)      lines.push(`• Framing: ${blueprint.composition}`)
-  if (blueprint.cameraAngle)      lines.push(`• Camera: ${blueprint.cameraAngle}`)
-  if (blueprint.environment)      lines.push(`• Environment: ${blueprint.environment}`)
-  if (blueprint.lightingStyle)    lines.push(`• Light: ${blueprint.lightingStyle}`)
-  // Motion fields — useful even for STILL so the keyframe captures mid-action
-  // for downstream video animators (Kling/Veo).
-  if (blueprint.motionStyle)      lines.push(`• Motion intent: ${blueprint.motionStyle.replace(/_/g, ' ')}`)
-  if (blueprint.handUsage)        lines.push(`• Hands: ${blueprint.handUsage}`)
-  if (blueprint.ctaFocus)         lines.push('• CTA beat: direct confident eye contact, product hero in frame.')
-  return lines.join('\n')
+
+  // Wardrobe + environment as a single contextual clause
+  const contextBits: string[] = []
+  if (blueprint.wardrobeStyle) contextBits.push(`wearing ${blueprint.wardrobeStyle}`)
+  if (blueprint.environment)   contextBits.push(`in ${blueprint.environment}`)
+  else if (blueprint.environmentType) contextBits.push(`in ${blueprint.environmentType}`)
+  if (contextBits.length) phrases.push(contextBits.join(' '))
+
+  if (blueprint.lightingStyle) phrases.push(blueprint.lightingStyle)
+
+  // Camera as one clause
+  const camBits: string[] = []
+  if (blueprint.composition) camBits.push(blueprint.composition)
+  if (blueprint.cameraAngle) camBits.push(blueprint.cameraAngle)
+  if (camBits.length) phrases.push(camBits.join(', '))
+
+  // Motion intent (drives video animation later)
+  if (blueprint.motionStyle && MOTION_PHRASE[blueprint.motionStyle]) {
+    phrases.push(`mid-action: ${MOTION_PHRASE[blueprint.motionStyle]}`)
+  }
+
+  // Product visibility — explicit so model knows whether to show packaging
+  phrases.push(VISIBILITY_PHRASE[blueprint.productVisibility])
+
+  if (blueprint.ctaFocus) phrases.push('CTA beat: direct confident eye contact')
+
+  const beat = blueprint.sceneType ? `[${blueprint.sceneType.toUpperCase()}] ` : ''
+  return `${beat}${phrases.join('. ')}.`
 }
 
-/** Baseline composition for the master-frame (when no scene blueprint exists). */
-function buildMasterFrameComposition(): string {
-  return `Scene: baseline master frame — person holds the product at chest level with one or both hands, label facing the camera, gentle confident expression, looking at lens. Clean modern home interior, soft natural daylight from one side. Vertical medium close-up portrait. Rendered cleanly as a neutral reference for downstream scenes to derive from.`
+/** Baseline master-frame paragraph (no scene blueprint exists). */
+function buildMasterFrameDelta(): string {
+  return 'Subject holds product at chest level with label facing camera, gentle confident expression, looking at lens. Clean modern home interior, soft natural daylight from one side. Vertical medium close-up portrait. Product hero, label clearly readable.'
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// VISUAL DNA — global style + optional realism retry. Always ≤ 2 lines.
-// ─────────────────────────────────────────────────────────────────────────────
-function buildVisualDna(ctx: CompiledPromptContext): string {
-  const retry = ctx.overrides?.bumpRealism
-    ? ' RETRY: previous attempt looked AI-rendered — emphasise visible skin texture, natural hand proportions, no retouching.'
-    : ''
-  return `${GLOBAL_STYLE}${retry}`
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════════════
 // MAIN COMPILER
-// ─────────────────────────────────────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════════════
 
 export function compilePrompt(ctx: CompiledPromptContext): CompiledPrompt {
-  // Drop product ref entirely on pain/pre-discovery beats — otherwise KIE
-  // GPT-image-1's image conditioning bakes the packaging back into frame
-  // even if the text says "absent".
+  // Pain / pre-discovery scenes: drop product from filesUrl so KIE image
+  // conditioning doesn't smuggle the packaging into a "no product" frame.
   const productAbsent = ctx.scene?.productVisibility === 'low'
 
   const filesUrlOrder: CompiledPrompt['filesUrlOrder'] = []
@@ -129,46 +154,45 @@ export function compilePrompt(ctx: CompiledPromptContext): CompiledPrompt {
   filesUrlOrder.push('avatar')
   if (ctx.masterFrameUrl) filesUrlOrder.push('masterFrame')
 
-  // Reference indices follow the ACTUAL filesUrl order (1-indexed).
+  // Reference indices follow the ACTUAL filesUrl order (1-indexed)
   const productRefIdx = productAbsent ? null : 1
   const avatarRefIdx  = productAbsent ? 1 : 2
   const masterRefIdx  = ctx.masterFrameUrl
     ? (productAbsent ? 2 : 3)
     : null
+  const identityRef = masterRefIdx ?? avatarRefIdx
+  const productLockRef = masterRefIdx ?? productRefIdx
 
-  const identityLockRef = masterRefIdx ?? avatarRefIdx
-  const productLockRef = masterRefIdx ?? productRefIdx ?? 0
-
-  const identityLock = buildIdentityLock(ctx, identityLockRef)
-  const productLock = productAbsent
-    ? buildNoProductDirective()
-    : buildProductLock(ctx, productLockRef)
-  const sceneBlueprint = ctx.scene
-    ? buildSceneFromBlueprint(ctx.scene)
-    : buildMasterFrameComposition()
-  const visualDna = buildVisualDna(ctx)
+  // Build the 4 prompt sections
+  const locks = buildLocks({
+    identityRef,
+    productRef: productAbsent ? null : productLockRef,
+    ctx,
+  })
+  const sceneDelta = ctx.scene ? buildSceneDelta(ctx.scene) : buildMasterFrameDelta()
+  const visualDna = ctx.overrides?.bumpRealism
+    ? `${GLOBAL_STYLE} Retry: emphasise visible skin texture, no AI sheen.`
+    : GLOBAL_STYLE
   const negativePrompt = GLOBAL_NEGATIVE
 
-  // Compact header — single line listing the ref map.
+  // Header — single short line listing actual ref map
   const refMap: string[] = []
-  if (productRefIdx) refMap.push(`#${productRefIdx}=PRODUCT`)
-  refMap.push(`#${avatarRefIdx}=AVATAR`)
-  if (masterRefIdx)  refMap.push(`#${masterRefIdx}=MASTER FRAME`)
-  const header = `Image-edit task. References: ${refMap.join(' · ')}${productAbsent ? ' (product ref omitted — emotional/pre-discovery scene)' : ''}.`
+  if (productRefIdx) refMap.push(`#${productRefIdx}=product`)
+  refMap.push(`#${avatarRefIdx}=avatar`)
+  if (masterRefIdx)  refMap.push(`#${masterRefIdx}=master frame`)
+  const header = `Image-edit: ${refMap.join(' · ')}${productAbsent ? ' (product ref omitted)' : ''}.`
 
-  const final = [
-    header,
-    identityLock,
-    productLock,
-    sceneBlueprint,
-    visualDna,
-    negativePrompt,
-  ].join('\n\n')
+  // Assemble — locks immediately under header so model sees identity before scene
+  const final = [header, locks, sceneDelta, visualDna, negativePrompt].join('\n\n')
 
+  // Return preserves the legacy CompiledPrompt shape (5 named sections) so
+  // existing debug panel + smart-retry logic keep working. identityLock
+  // and productLock are stored as the two halves of `locks`.
+  const lockLines = locks.split('\n')
   return {
-    identityLock,
-    productLock,
-    sceneBlueprint,
+    identityLock: lockLines[0] ?? '',
+    productLock: lockLines[1] ?? '',
+    sceneBlueprint: sceneDelta,
     visualDna,
     negativePrompt,
     final,
