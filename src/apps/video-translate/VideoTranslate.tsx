@@ -289,16 +289,42 @@ export default function VideoTranslate() {
     removeItem(item.id)
   }
 
-  const handleDownload = (item: TranslationItem) => {
+  const handleDownload = async (item: TranslationItem) => {
     if (!item.videoUrl) return
-    const ext  = item.videoUrl.includes('.mp3') || item.videoUrl.includes('audio') ? 'mp3' : 'mp4'
-    const a    = document.createElement('a')
-    a.href     = item.videoUrl
-    a.download = `translated-${item.targetLang}-${Date.now()}.${ext}`
-    a.target   = '_blank'
-    document.body.appendChild(a)
-    a.click()
-    document.body.removeChild(a)
+    const isAudio  = item.videoUrl.includes('.mp3') || item.videoUrl.includes('audio')
+    const ext      = isAudio ? 'mp3' : 'mp4'
+    const mimeType = isAudio ? 'audio/mpeg' : 'video/mp4'
+    const filename = `translated-${item.targetLang}-${Date.now()}.${ext}`
+
+    try {
+      // Fetch and re-wrap as blob with correct MIME type so the browser saves
+      // it as .mp4 (not octet-stream). Supabase signed URLs serve as
+      // application/octet-stream and browsers ignore <a download> filename
+      // on cross-origin responses — wrapping in a same-origin blob URL fixes this.
+      const res = await fetch(item.videoUrl)
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      const rawBlob = await res.blob()
+      const blob    = new Blob([rawBlob], { type: mimeType })
+      const blobUrl = URL.createObjectURL(blob)
+
+      const a = document.createElement('a')
+      a.href     = blobUrl
+      a.download = filename
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 1000)
+    } catch (err) {
+      // Fallback to direct link if fetch fails (CORS, network, etc.)
+      console.error('[download] fetch failed:', err)
+      const a = document.createElement('a')
+      a.href     = item.videoUrl
+      a.download = filename
+      a.target   = '_blank'
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+    }
   }
 
   const handleTogglePlay = (item: TranslationItem) => {

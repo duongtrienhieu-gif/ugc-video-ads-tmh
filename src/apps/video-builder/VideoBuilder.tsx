@@ -277,13 +277,30 @@ function ScriptPicker({ scripts, selectedId, onSelect }: {
 // ── History card ──────────────────────────────────────────────────────────────
 
 function HistoryCard({ job, onDelete }: { job: VideoBuilderJob; onDelete: () => void }) {
-  const handleDownload = () => {
+  const handleDownload = async () => {
     if (!job.videoUrl) return
-    const a = document.createElement('a')
-    a.href = job.videoUrl
-    a.download = `ugc-video-${Date.now()}.mp4`
-    a.target = '_blank'
-    document.body.appendChild(a); a.click(); document.body.removeChild(a)
+    const filename = `ugc-video-${Date.now()}.mp4`
+    try {
+      // Re-wrap as same-origin video/mp4 blob — Supabase serves octet-stream,
+      // which browsers ignore the <a download> filename for on cross-origin URLs.
+      const res = await fetch(job.videoUrl)
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      const rawBlob = await res.blob()
+      const blob    = new Blob([rawBlob], { type: 'video/mp4' })
+      const blobUrl = URL.createObjectURL(blob)
+
+      const a = document.createElement('a')
+      a.href     = blobUrl
+      a.download = filename
+      document.body.appendChild(a); a.click(); document.body.removeChild(a)
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 1000)
+    } catch {
+      const a = document.createElement('a')
+      a.href = job.videoUrl
+      a.download = filename
+      a.target = '_blank'
+      document.body.appendChild(a); a.click(); document.body.removeChild(a)
+    }
   }
 
   return (
