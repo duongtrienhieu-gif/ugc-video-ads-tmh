@@ -8,54 +8,67 @@ import { saveAsset, getUrl, isAssetRef } from '../../../utils/assetStore'
 // ─────────────────────────────────────────────────────────────────────────
 // IMAGE GENERATION QUEUE for landing-page packs.
 //
-// Phase A (generateLandingPack) produces 14 sections with image PROMPTS.
-// Phase B (this file) actually generates each image via KIE GPT-image-1,
-// passing the user's uploaded VisualMemoryItem refs as filesUrl[] for
-// product-focused sections only — people-focused sections (pain, lifestyle,
-// social-proof, WhatsApp) generate without product refs so the rendered
-// person isn't tethered to the packaging visuals.
-//
-// Concurrency is capped at 3 to avoid overwhelming the KIE backend and to
-// keep per-credit cost predictable for the user.
+// Fix round — key changes vs previous version:
+// 1. social-proof + whatsapp moved to PRODUCT_FOCUS_SECTIONS — they show
+//    the product in TikTok/Shopee/selfie/crowd images.
+// 2. Product identity lock prefix injected into prompts when refs exist.
+// 3. Section-level imageAspectRatio overrides per-image aspectRatio.
+// 4. 9:16 removed — only 1:1 and 4:5 (→ '2:3') allowed.
+// 5. Retry logic: up to 3 attempts with 5s / 15s backoff.
+// 6. Concurrency lowered from 3 → 2 for backend stability.
 // ─────────────────────────────────────────────────────────────────────────
 
-// Section types that should be rendered WITH the user's product references.
+// Section types rendered WITH the user's product references.
+// Includes social-proof and whatsapp-testimonials — both show the product
+// (TikTok/Shopee screenshots have the product image; selfie/crowd show people
+// holding the product). Without the ref the model hallucinates a different product.
 const PRODUCT_FOCUS_SECTIONS: ReadonlySet<SectionType> = new Set<SectionType>([
   'hero',
   'product-discovery',
   'ingredients',
   'mechanism',
   'benefits',
-  'comparison',   // comparison infographic shows our product
+  'comparison',
+  'social-proof',          // TikTok, Shopee, selfie, crowd — all show the product
+  'whatsapp-testimonials', // WhatsApp screenshots include product thumbnail/mention
   'offer',
   'final-cta',
 ])
 
-// Section types that focus on people / lifestyle / chat — do NOT pass product
-// refs to avoid the model inserting the product into a candid moment.
+// People / lifestyle / editorial — do NOT pass product refs so the model
+// doesn't insert the packaging into a candid human moment.
 const PEOPLE_FOCUS_SECTIONS: ReadonlySet<SectionType> = new Set<SectionType>([
   'pain',
   'failed-solutions',
   'lifestyle',
-  'social-proof',
-  'whatsapp-testimonials',
-  'news-proof',    // news screenshots — no product refs
-  'before-after',  // transformation photos — no product refs
+  'news-proof',
+  'before-after',
 ])
+
+// ─────────────────────────────────────────────────────────────────────────
+// PRODUCT IDENTITY LOCK — prepend to every prompt that receives product refs.
+// Tells the image model to preserve exact packaging, not redesign the product.
+// ─────────────────────────────────────────────────────────────────────────
+const PRODUCT_IDENTITY_PREFIX =
+  'CRITICAL — match the reference product image EXACTLY: ' +
+  'preserve the same bottle/packaging shape, label typography, cap style, ' +
+  'packaging colors, logo placement and proportions. ' +
+  'Do NOT redesign, alter, or replace the product. '
 
 /** Pick the asset refs (if any) to pass into KIE filesUrl for this section. */
 function selectRefsForSection(type: SectionType, memory: VisualMemoryItem[]): string[] {
   if (PEOPLE_FOCUS_SECTIONS.has(type)) return []
   if (PRODUCT_FOCUS_SECTIONS.has(type)) return memory.slice(0, 3).map((m) => m.ref)
-  // why-happens, faq → no refs by default (infographic / no image)
   return []
 }
 
-/** Convert "4:5" / "1:1" / "9:16" / "16:9" → the closest KIE-supported aspect. */
-function toKieAspect(ratio: string): Gpt4oSize {
+/**
+ * Convert section/prompt aspect ratio → the closest KIE-supported size.
+ * Only 1:1 and 4:5 (→ '2:3') are allowed — 9:16 and 16:9 are banned.
+ */
+function toKieAspect(ratio: string | undefined): Gpt4oSize {
   if (ratio === '1:1') return '1:1'
-  if (ratio === '16:9') return '3:2'  // closest landscape
-  // 4:5, 9:16, 2:3, anything portrait
+  // Everything portrait (4:5, 9:16, 2:3, undefined) → 2:3
   return '2:3'
 }
 
@@ -87,7 +100,9 @@ interface QueueOptions {
   onProgress?: (done: number, failed: number, total: number) => void
 }
 
-/** Generate ONE image via KIE, save the result to the asset store, return the asset ref. */
+// ─────────────────────────────────────────────────────────────────────────
+// Core image generation — single attempt (no retry).
+// ─────────────────────────────────────────────────────────────────────────
 async function runSingleImage(
   job: ImageJob,
   memory: VisualMemoryItem[],
@@ -96,20 +111,73 @@ async function runSingleImage(
   const refs = selectRefsForSection(job.section.type, memory)
   const filesUrl = await resolveRefs(refs)
 
+  // ── Section-level aspect ratio override (fixes #6 / #7) ──────────────
+  // Section.imageAspectRatio takes priority over per-image aspectRatio.
+  // If neither is set, default to portrait 4:5.
+  const effectiveRatio = job.section.imageAspectRatio ?? job.prompt.aspectRatio ?? '4:5'
+  const size = toKieAspect(effectiveRatio)
+
+  // ── Product identity lock prefix (fixes #1) ───────────────────────────
+  // Prepend lock text whenever product refs are passed so the model doesn't
+  // redesign the packaging.
+  const prompt = filesUrl.length > 0
+    ? PRODUCT_IDENTITY_PREFIX + job.prompt.prompt
+    : job.prompt.prompt
+
   const remoteUrl = await generateGpt4oImage({
     apiKey: kieApiKey,
-    prompt: job.prompt.prompt,
+    prompt,
     filesUrl: filesUrl.length > 0 ? filesUrl : undefined,
-    size: toKieAspect(job.prompt.aspectRatio),
-    timeoutMs: 4 * 60 * 1000,
+    size,
+    timeoutMs: 5 * 60 * 1000, // 5 min — generous for KIE queue congestion
   })
 
-  // Persist returned URL into the asset store so it survives the signed-URL TTL
   if (isAssetRef(remoteUrl)) return remoteUrl
   const resp = await fetch(remoteUrl)
   if (!resp.ok) throw new Error(`Fetch generated image lỗi: ${resp.status}`)
   const blob = await resp.blob()
+  if (blob.size < 1000) throw new Error('Response image quá nhỏ — có thể bị corrupt')
   return await saveAsset(blob, blob.type || 'image/png')
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Retry wrapper — up to 3 attempts (fixes #4 / #8).
+// Backs off 5s then 15s between retries.
+// Does NOT retry on credit errors or content-policy failures.
+// ─────────────────────────────────────────────────────────────────────────
+const MAX_ATTEMPTS = 3
+
+async function runWithRetry(
+  job: ImageJob,
+  memory: VisualMemoryItem[],
+  kieApiKey: string,
+): Promise<string> {
+  let lastError: Error | null = null
+  const backoffMs = [0, 5_000, 15_000]
+
+  for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+    if (attempt > 0) {
+      const delay = backoffMs[attempt] ?? 15_000
+      console.log(`[LandingPageAI] retry ${attempt}/${MAX_ATTEMPTS - 1} for ${job.prompt.filename} (wait ${delay / 1000}s)`)
+      await new Promise((r) => setTimeout(r, delay))
+    }
+    try {
+      return await runSingleImage(job, memory, kieApiKey)
+    } catch (err) {
+      lastError = err instanceof Error ? err : new Error(String(err))
+      // Hard failures — don't waste credits retrying
+      if (
+        lastError.message === 'INSUFFICIENT_CREDITS' ||
+        lastError.message.includes('GENERATE_FAILED') ||
+        lastError.message.includes('content_policy') ||
+        lastError.message.includes('Đã huỷ')
+      ) {
+        throw lastError
+      }
+      console.warn(`[LandingPageAI] attempt ${attempt + 1} failed: ${lastError.message.slice(0, 120)}`)
+    }
+  }
+  throw lastError ?? new Error('Image generation failed after max retries')
 }
 
 /** Build the flat list of jobs from a pack. */
@@ -140,8 +208,7 @@ export function countImagesInPack(pack: LandingPagePack): number {
 
 // ─────────────────────────────────────────────────────────────────────────
 // PUBLIC: generate all images in a pack with a worker pool.
-// onTaskUpdate fires for every status transition so the UI can re-render
-// per-image as workers finish. Returns when all jobs settle.
+// Concurrency lowered to 2 (was 3) for better KIE backend stability.
 // ─────────────────────────────────────────────────────────────────────────
 export async function generatePackImages(
   pack: LandingPagePack,
@@ -152,7 +219,6 @@ export async function generatePackImages(
   const total = jobs.length
   if (total === 0) return
 
-  // Mark every job as queued up front so the UI shows the spinner state.
   for (const j of jobs) {
     options.onTaskUpdate(j.sectionIdx, j.imageIdx, { status: 'queued', error: undefined })
   }
@@ -160,7 +226,7 @@ export async function generatePackImages(
   let failed = 0
   options.onProgress?.(done, failed, total)
 
-  const concurrency = options.concurrency ?? 3
+  const concurrency = options.concurrency ?? 2 // lowered from 3 → 2 for stability
   let cursor = 0
 
   await new Promise<void>((resolve) => {
@@ -178,12 +244,9 @@ export async function generatePackImages(
     const pump = () => {
       while (!resolved && active < concurrency && cursor < jobs.length) {
         if (options.signal?.aborted) {
-          // Mark remaining queued jobs as failed so the UI doesn't show
-          // permanent spinners.
           for (let i = cursor; i < jobs.length; i++) {
             options.onTaskUpdate(jobs[i].sectionIdx, jobs[i].imageIdx, {
-              status: 'failed',
-              error: 'Đã huỷ',
+              status: 'failed', error: 'Đã huỷ',
             })
           }
           cursor = jobs.length
@@ -195,20 +258,17 @@ export async function generatePackImages(
         active++
         options.onTaskUpdate(job.sectionIdx, job.imageIdx, { status: 'generating' })
 
-        runSingleImage(job, pack.visualMemory, kieApiKey)
+        runWithRetry(job, pack.visualMemory, kieApiKey)
           .then((assetRef) => {
             options.onTaskUpdate(job.sectionIdx, job.imageIdx, {
-              status: 'done',
-              generatedAssetRef: assetRef,
-              error: undefined,
+              status: 'done', generatedAssetRef: assetRef, error: undefined,
             })
             done++
           })
           .catch((err) => {
             const msg = err instanceof Error ? err.message : String(err)
             options.onTaskUpdate(job.sectionIdx, job.imageIdx, {
-              status: 'failed',
-              error: msg,
+              status: 'failed', error: msg,
             })
             failed++
           })
@@ -227,7 +287,8 @@ export async function generatePackImages(
 }
 
 // ─────────────────────────────────────────────────────────────────────────
-// PUBLIC: regenerate a SINGLE image (used by the per-card retry button).
+// PUBLIC: regenerate a SINGLE image (per-card retry button).
+// Also uses retry wrapper for consistency.
 // ─────────────────────────────────────────────────────────────────────────
 export async function regenerateSingleImage(
   pack: LandingPagePack,
@@ -243,7 +304,7 @@ export async function regenerateSingleImage(
 
   onTaskUpdate(sectionIdx, imageIdx, { status: 'generating', error: undefined })
   try {
-    const assetRef = await runSingleImage(
+    const assetRef = await runWithRetry(
       { sectionIdx, imageIdx, prompt, section },
       pack.visualMemory,
       kieApiKey,

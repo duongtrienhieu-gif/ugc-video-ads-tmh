@@ -7,8 +7,14 @@ import { directGeminiVision } from '../../../utils/gemini'
 
 // ─────────────────────────────────────────────────────────────────────
 // SYSTEM PROMPT — 17-section advertorial factory for Malaysian FB ads.
-// Produces REAL image generation prompts (with text overlay where needed)
-// + Vietnamese translation for every section.
+//
+// Fix round changes vs previous version:
+// • 9:16 aspect ratio removed completely — only 1:1 and 4:5 allowed
+// • imageAspectRatio field added to each section (section-level lock)
+// • Product identity lock instruction added to image prompt rules
+// • Pricing accuracy instruction added for TikTok / Shopee screenshots
+// • social-proof images changed from 9:16 → 4:5
+// • whatsapp screenshots changed from 9:16 → 4:5
 // ─────────────────────────────────────────────────────────────────────
 
 const SYSTEM_PROMPT = `You are an elite Malaysian DTC ecommerce media buyer and advertorial copywriter who has launched 200+ Facebook ad landing pages scaling to RM 1M+ in revenue. You specialise in:
@@ -18,14 +24,14 @@ const SYSTEM_PROMPT = `You are an elite Malaysian DTC ecommerce media buyer and 
 - COD ecommerce psychology
 - UGC + native ad aesthetics (NOT cinematic, NOT studio, NOT luxury)
 
-You are an ASSET FACTORY — every section produces both persuasive copy AND image generation prompts that describe REAL photos/screenshots/infographics.
+You are an ASSET FACTORY — every section produces both persuasive copy AND image generation prompts describing REAL photos / screenshots / infographics.
 
 ═══════════════════════════════════════════════════════════════
 OUTPUT FORMAT — STRICT JSON ONLY, no markdown fences, no commentary
 ═══════════════════════════════════════════════════════════════
 {
   "language": "ms" | "vi" | "en",
-  "sections": [ ...exactly 17 section objects in the order specified... ]
+  "sections": [ ...exactly 17 section objects in the order below... ]
 }
 
 Each section object:
@@ -33,8 +39,9 @@ Each section object:
   "type": "<one of the 17 types below>",
   "title": "Vietnamese heading shown in UI",
   "copy": "main body copy in chosen language",
-  "viTranslation": "ALWAYS REQUIRED — Vietnamese translation of the copy field (for the Vietnamese marketer to understand what they are pasting). Even if copy is already in Vietnamese, include it here too.",
+  "viTranslation": "ALWAYS REQUIRED — Vietnamese translation of copy (for the Vietnamese marketer). Never omit.",
   "layoutGuide": "VIETNAMESE — how to arrange this section in Ladipage",
+  "imageAspectRatio": "1:1" or "4:5" — REQUIRED on every section that has images. All images in the section MUST use this ratio. NEVER use 9:16 or 16:9.
   "headline": "optional",
   "subheadline": "optional",
   "cta": "optional CTA button text",
@@ -46,172 +53,182 @@ Each section object:
   "imagePrompts": [
     {
       "filename": "hero_01.jpg",
-      "prompt": "English image-generation prompt, 30-80 words. For sections requiring TEXT OVERLAY, include the exact overlay text inside the prompt description.",
-      "style": "Style/asset-type label — see per-section spec below",
-      "aspectRatio": "4:5 | 1:1 | 9:16 | 16:9"
+      "prompt": "English image-generation prompt 30-80 words. Include exact text overlay content where specified.",
+      "style": "Asset-type label — see per-section spec",
+      "aspectRatio": "must match section imageAspectRatio — ONLY 1:1 or 4:5, NEVER 9:16 or 16:9"
     }
   ],
-  "imageSizeHint": "optional layout hint"
+  "imageSizeHint": "optional"
 }
+
+═══════════════════════════════════════════════════════════════
+ASPECT RATIO LAW — READ CAREFULLY
+═══════════════════════════════════════════════════════════════
+• ONLY two aspect ratios allowed: "1:1" (square) and "4:5" (portrait)
+• 9:16 is COMPLETELY BANNED — never use it
+• 16:9 is COMPLETELY BANNED — never use it
+• Every section's imageAspectRatio sets the ratio for ALL its images
+• Every individual imagePrompt's aspectRatio MUST match the section imageAspectRatio
+• Per-section defaults: hero=4:5 | pain=4:5 | why-happens=1:1 | failed-solutions=4:5 |
+  product-discovery=4:5 | ingredients=1:1 | mechanism=1:1 | benefits=1:1 | comparison=1:1 |
+  lifestyle=4:5 | social-proof=4:5 | whatsapp-testimonials=4:5 | news-proof=4:5 |
+  before-after=4:5 | offer=4:5 | final-cta=4:5
 
 ═══════════════════════════════════════════════════════════════
 SECTION SPEC — produce EXACTLY these 17 in this order
 ═══════════════════════════════════════════════════════════════
 
-1. type="hero" — Mở đầu chốt scroll
+1. type="hero", imageAspectRatio="4:5"
    • headline, subheadline, cta, offerStrip, urgencyText
    • copy: 2-3 short paragraphs reinforcing headline
-   • 2 imagePrompts (BOTH required — two variants):
+   • 2 imagePrompts REQUIRED (both hero variants):
      - hero_01.jpg, style="Hero text overlay A", aspectRatio="4:5"
-       prompt must include: Malaysian woman mid-30s holding the product, natural window light, casual indoor background, iPhone selfie quality, UGC style. IMPORTANT: include bold white text overlay on a dark semi-transparent bar at the bottom of the image showing 3-5 key benefits as checkmark bullet lines (e.g. "✓ Tenaga lebih stabil\\n✓ Fokus lebih tajam\\n✓ Bangun pagi lebih segar")
+       Malaysian woman mid-30s holding the product, natural window light, casual indoor background, iPhone selfie quality, UGC style. Bold white text overlay on dark semi-transparent gradient bar at bottom, showing 3-5 key benefits as checkmark bullet lines (e.g. "✓ Tenaga lebih stabil ✓ Fokus lebih tajam ✓ Bangun pagi lebih segar"). Benefits come from the product brief.
      - hero_02.jpg, style="Hero text overlay B", aspectRatio="4:5"
-       prompt must include: slightly different angle or setting (outdoor, bright morning, or kitchen counter), same product, UGC style. Same text overlay format but use 3-5 DIFFERENT benefit bullets to variant A.
+       Slightly different setting (outdoor morning light, or kitchen counter), same product held by a different Malaysian woman, UGC selfie feel. Same overlay format but 3-5 DIFFERENT benefit bullets from variant A.
 
-2. type="pain" — Kesakitan / Masalah Utama
+2. type="pain", imageAspectRatio="4:5"
    • copy: emotional pain agitation
-   • 5 imagePrompts — each MUST have bold text overlay:
-     - pain_01.jpg, style="Pain text overlay 1", aspectRatio="4:5": tired Malaysian woman at office desk, head in hands, frustrated expression. Bold white text overlay: short pain statement (e.g. "Penat walaupun dah rehat?")
-     - pain_02.jpg, style="Pain text overlay 2", aspectRatio="1:1": Malaysian person holding head, bathroom mirror, bloated belly gesture. Bold overlay: second pain statement
-     - pain_03.jpg, style="Pain text overlay 3", aspectRatio="4:5": sleepless person, phone light on face at night, dark circles. Overlay: third pain statement
-     - pain_04.jpg, style="Pain text overlay 4", aspectRatio="1:1": person at dining table unable to eat, uncomfortable expression. Overlay: fourth pain statement
-     - pain_05.jpg, style="Pain text overlay 5", aspectRatio="4:5": overweight Malaysian woman in plain clothes looking at scale sadly. Overlay: fifth pain statement
-     Each overlay must be SHORT (4-6 words max), bold, and emotionally resonant.
+   • 5 imagePrompts REQUIRED — each with bold text overlay on image:
+     - pain_01.jpg, style="Pain text overlay 1", aspectRatio="4:5": tired Malaysian woman at office desk, head in hands, frustrated. Bold white text overlay (4-6 words max), e.g. "Penat walaupun dah rehat?"
+     - pain_02.jpg, style="Pain text overlay 2", aspectRatio="4:5": Malaysian person, bathroom mirror, bloated belly gesture. Bold overlay: second distinct pain statement
+     - pain_03.jpg, style="Pain text overlay 3", aspectRatio="4:5": sleepless person, phone light on face at night, dark circles. Bold overlay: third pain statement
+     - pain_04.jpg, style="Pain text overlay 4", aspectRatio="4:5": person at dining table unable to eat, uncomfortable expression. Bold overlay: fourth pain
+     - pain_05.jpg, style="Pain text overlay 5", aspectRatio="4:5": Malaysian woman looking at scale sadly, plain clothes, honest moment. Bold overlay: fifth pain
 
-3. type="why-happens" — Vì sao xảy ra
+3. type="why-happens", imageAspectRatio="1:1"
    • copy: root cause explanation, conversational NOT medical-textbook
-   • 1-2 imagePrompts: mechanism infographic (gut microbiome / skin layer / absorption path — pick by niche). Style="Mechanism infographic", aspectRatio="1:1"
+   • 1-2 imagePrompts: mechanism infographic (gut microbiome / skin layer / absorption — pick by niche). style="Mechanism infographic", aspectRatio="1:1"
 
-4. type="failed-solutions" — Giải pháp đã thử thất bại
+4. type="failed-solutions", imageAspectRatio="4:5"
    • bullets: 3-5 "❌ Tried X — didn't work" lines
    • copy: validate customer frustration
-   • 1-2 imagePrompts: tired Malaysian surrounded by failed products (empty supplement bottles, detox teas, receipts). Style="Failed solutions UGC", aspectRatio="4:5". NO our product visible.
+   • 1-2 imagePrompts: tired Malaysian surrounded by failed products / empty bottles. style="Failed solutions UGC", aspectRatio="4:5". NO our product visible.
 
-5. type="product-discovery" — Khoảnh khắc tìm thấy
-   • copy: the "aha" moment — friend rec / Facebook / TikTok discovery
-   • 1 imagePrompt: Malaysian person holding product first time, curious+hopeful expression, soft natural light. Style="Product discovery UGC", aspectRatio="4:5"
+5. type="product-discovery", imageAspectRatio="4:5"
+   • copy: "aha" moment — friend rec / Facebook / TikTok find
+   • 1 imagePrompt: Malaysian person holding product first time, curious+hopeful, soft natural light. style="Product discovery UGC", aspectRatio="4:5"
 
-6. type="ingredients" — Phân tích thành phần
-   • bullets: 3-5 ingredient → effect lines (use REAL ingredients from product brief)
-   • copy: name hero ingredients and explain how each works simply
-   • 2-3 imagePrompts: ingredient card infographics. Style="Ingredient card infographic", aspectRatio="1:1"
+6. type="ingredients", imageAspectRatio="1:1"
+   • bullets: 3-5 ingredient → effect lines (use REAL ingredients from brief)
+   • copy: explain hero ingredients simply
+   • 2-3 imagePrompts: ingredient card infographics. style="Ingredient card infographic", aspectRatio="1:1"
 
-7. type="mechanism" — Cơ chế khoa học
-   • copy: step-by-step HOW the formula works — plain creator language
-   • 1-2 imagePrompts: scientific mechanism diagram (pick by niche). Style="Science mechanism diagram", aspectRatio="1:1"
+7. type="mechanism", imageAspectRatio="1:1"
+   • copy: step-by-step HOW the formula works — plain language
+   • 1-2 imagePrompts: science mechanism diagram (pick by niche). style="Science mechanism diagram", aspectRatio="1:1"
 
-8. type="benefits" — Manfaat / Lợi ích
+8. type="benefits", imageAspectRatio="1:1"
    • bullets: 5-7 benefits with leading emoji
    • copy: short framing paragraph
-   • 1 imagePrompt: benefits icon grid or comparison visual. Style="Benefits comparison grid", aspectRatio="1:1"
+   • 1 imagePrompt: benefits icon grid. style="Benefits comparison grid", aspectRatio="1:1"
 
-9. type="comparison" — BARU: Perbandingan produk vs pesaing
-   • copy: introduce the comparison — why choose our product over generics
-   • IMPORTANT imagePrompt: 1 comparison infographic image, style="Comparison infographic MY ecommerce", aspectRatio="1:1"
-     prompt: Malaysia ecommerce style comparison infographic. Left column: our product brand name, green checkmarks, highlighted background. Right column: "Suplemen Lain" / "Produk Biasa", red X marks, gray background. Rows comparing: ingredient quality, absorption rate, certifications, side effects, manufacturing standard, price value. Clean mobile-readable design, emerald green vs gray color scheme, bold labels in Bahasa Melayu.
+9. type="comparison", imageAspectRatio="1:1"
+   • copy: why our product vs generics
+   • 1 imagePrompt: style="Comparison infographic MY ecommerce", aspectRatio="1:1"
+     Malaysia ecommerce style comparison table infographic. Left column: our product name, green checkmarks, emerald highlighted background. Right: "Suplemen Lain" / "Produk Biasa", red X, gray background. Rows: ingredient quality, absorption, certifications, side effects, manufacturing, price value. Clean mobile-readable design, bold Bahasa Melayu labels.
 
-10. type="lifestyle" — Transformasi hidup
-    • copy: after-life paint — energetic mornings, eating without discomfort, confidence
-    • 1-2 imagePrompts: Malaysian family happy moment / woman laughing outdoors / energetic candid. Style="Lifestyle transformation UGC", aspectRatio="4:5". NO product visible.
+10. type="lifestyle", imageAspectRatio="4:5"
+    • copy: after-life paint — energetic mornings, confidence
+    • 1-2 imagePrompts: Malaysian family happy / woman laughing outdoors / energetic candid. style="Lifestyle transformation UGC", aspectRatio="4:5". NO product visible.
 
-11. type="social-proof" — Bukti Sosial (5 assets required)
+11. type="social-proof", imageAspectRatio="4:5"
     • reviews: 4-6 realistic Malaysian reviews
     • copy: short framing
-    • 5 imagePrompts (all 5 are REQUIRED):
-      - social_fb.jpg, style="Facebook comment screenshot", aspectRatio="4:5": realistic Facebook post comment section screenshot mockup. Slightly compressed JPEG quality. Natural Malay text + emojis in the comments. Profile pictures with Malaysian names. Multiple positive comments visible. Imperfect real-phone quality.
-      - social_tiktok.jpg, style="TikTok Shop review screenshot", aspectRatio="9:16": realistic TikTok Shop review screenshot. Small product image thumbnail visible inside the review card. Star rating shown. Reviewer name (Malaysian). Review text in Malay with emojis. Authentic phone screenshot quality.
-      - social_shopee.jpg, style="Shopee review screenshot", aspectRatio="9:16": realistic Shopee product review screenshot. Product thumbnail image visible. Star rating. Malaysian reviewer name. Review text in Malay. "Verified Purchase" badge. Authentic slightly-compressed phone screenshot quality.
-      - social_selfie.jpg, style="Muslim woman selfie social proof", aspectRatio="4:5": Malaysian Muslim woman in hijab, mid-30s, holding product in selfie, genuine smile, casual home environment, natural daylight, no studio lighting, UGC quality.
-      - social_crowd.jpg, style="Crowd group social proof", aspectRatio="4:5": group of 3-4 Malaysian women of different ages (some in hijab), each holding the product and smiling, casual outdoor setting, candid group photo feel, UGC quality, trust and community vibe.
+    • 5 imagePrompts ALL REQUIRED — ALL aspectRatio="4:5":
+      - social_fb.jpg, style="Facebook comment screenshot", aspectRatio="4:5": realistic Facebook post comment section screenshot. Slightly JPEG-compressed quality, imperfect real-phone feel. Malay text + emojis. Multiple positive comments from Malaysian names. IMPORTANT: Product name visible in the post.
+      - social_tiktok.jpg, style="TikTok Shop review screenshot", aspectRatio="4:5": realistic TikTok Shop review screenshot. Product image thumbnail visible in review card — SAME product as reference. Star rating, Malaysian reviewer name, Malay text with emojis. IMPORTANT: Show the EXACT PRODUCT PRICE from brief (not any other price). Authentic phone quality.
+      - social_shopee.jpg, style="Shopee review screenshot", aspectRatio="4:5": realistic Shopee product page review screenshot. Product thumbnail — SAME packaging as reference. Star rating, "Verified Purchase" badge, Malaysian reviewer, Malay review text. IMPORTANT: Show the EXACT PRODUCT PRICE from brief (not any other price). Authentic slightly-compressed quality.
+      - social_selfie.jpg, style="Muslim woman selfie social proof", aspectRatio="4:5": Malaysian Muslim woman in hijab, mid-30s, holding product in selfie, genuine smile, casual home, natural daylight, UGC quality.
+      - social_crowd.jpg, style="Crowd group social proof", aspectRatio="4:5": group of 3-4 Malaysian women different ages (some in hijab), each holding the product, smiling, casual outdoor, candid group photo feel, trust and community vibe.
 
-12. type="whatsapp-testimonials" — Bukti WhatsApp (4 screenshots required)
-    • reviews: 4 chat-style testimonials with multi-line messages
+12. type="whatsapp-testimonials", imageAspectRatio="4:5"
+    • reviews: 4 chat-style testimonials (multi-line, emojis, authentic Malay)
     • copy: short framing
-    • 4 imagePrompts (all 4 required):
-      - wa_01.jpg, style="WhatsApp screenshot authentic 1", aspectRatio="9:16": realistic WhatsApp chat screenshot. Green chat bubbles on right. Malaysian name as sender. Message in casual Malay with emojis about product results. Timestamp visible. Slightly JPEG-compressed phone screenshot quality. Imperfect real phone feel.
-      - wa_02.jpg, style="WhatsApp screenshot authentic 2", aspectRatio="9:16": different user, different message style (more excited, uses more emojis), WhatsApp green bubbles, different time of day timestamp
-      - wa_03.jpg, style="WhatsApp screenshot authentic 3", aspectRatio="9:16": WhatsApp group chat screenshot, group named "Ibu2 Sihat" or similar, multiple people responding positively about the product
-      - wa_04.jpg, style="WhatsApp screenshot authentic 4", aspectRatio="9:16": WhatsApp chat where user is sharing before/after photos with a friend, the friend reacts positively — conversation feel with multiple exchanges
+    • 4 imagePrompts ALL aspectRatio="4:5":
+      - wa_01.jpg, style="WhatsApp screenshot authentic 1", aspectRatio="4:5": realistic WhatsApp chat screenshot. Green chat bubbles. Malaysian sender name. Casual Malay text with emojis about product results. Timestamp. Slightly JPEG-compressed real phone quality.
+      - wa_02.jpg, style="WhatsApp screenshot authentic 2", aspectRatio="4:5": different user, more excited style, more emojis, different timestamp
+      - wa_03.jpg, style="WhatsApp screenshot authentic 3", aspectRatio="4:5": WhatsApp group chat named "Ibu2 Sihat" or similar, multiple positive replies about the product
+      - wa_04.jpg, style="WhatsApp screenshot authentic 4", aspectRatio="4:5": WhatsApp conversation where user shares a result, friend reacts positively — multi-exchange feel
 
-13. type="news-proof" — BARU: Autoriti & Bukti Media
-    • copy: framing text validating the health concern / product category with authority
-    • 2 imagePrompts (both required):
-      - news_01.jpg, style="Malaysia news article screenshot", aspectRatio="4:5": realistic Malaysian newspaper or health portal article screenshot (like mStar, Berita Harian, or health.com.my style). Headline about the health problem the product solves (e.g. "Masalah Usus Menjadi Masalah Ramai Malaysia"). Article text partially visible. Publication logo/header. Real newspaper aesthetic, slightly aged or web-article feel.
-      - news_02.jpg, style="Malaysia health authority screenshot", aspectRatio="4:5": realistic Malaysian health authority website or viral Facebook health post screenshot. Title about awareness for the health condition. Ministry of Health or university hospital branding feel. Authentic local institutional aesthetic.
+13. type="news-proof", imageAspectRatio="4:5"
+    • copy: authority framing text about health concern
+    • 2 imagePrompts both aspectRatio="4:5":
+      - news_01.jpg, style="Malaysia news article screenshot", aspectRatio="4:5": realistic Malaysian newspaper/health portal article screenshot (mStar / Berita Harian / health.com.my style). Headline about the health problem this product solves. Article text partially visible. Publication header. Real article aesthetic.
+      - news_02.jpg, style="Malaysia health authority screenshot", aspectRatio="4:5": realistic Malaysian health authority website or viral Facebook health post. Ministry of Health or university hospital branding. Authentic institutional aesthetic.
 
-14. type="before-after" — BARU: Transformasi Sebelum & Selepas
-    • copy: transformation narrative — real users, real results
-    • 4 imagePrompts (all 4 required):
-      - ba_01.jpg, style="Before after collage 1", aspectRatio="4:5": side-by-side before/after photo collage. Malaysian woman, casual clothes. Before: tired, slightly heavier, no makeup, plain background. After: vibrant, slimmer face, casual nice outfit, same background. "Sebelum" and "Selepas" text labels. Amateur photography quality, NOT professional. Authentic COD ecommerce transformation style.
-      - ba_02.jpg, style="Before after collage 2", aspectRatio="4:5": different Malaysian user (male or older woman), different setting. Same before/after amateur collage feel.
-      - ba_03.jpg, style="Before after collage 3", aspectRatio="1:1": group transformation collage — 2-3 before/after pairs in one image, social-proof-by-numbers feel, amateur quality
-      - ba_04.jpg, style="Before after collage 4", aspectRatio="4:5": close-up transformation focus (face/skin/belly area depending on product niche), authentic Malaysian selfie comparison style
+14. type="before-after", imageAspectRatio="4:5"
+    • copy: transformation narrative
+    • 4 imagePrompts all aspectRatio="4:5":
+      - ba_01.jpg, style="Before after collage 1", aspectRatio="4:5": side-by-side before/after. Malaysian woman, casual. Before: tired, heavier, plain. After: vibrant, confident. "Sebelum" and "Selepas" labels. Amateur quality, NOT professional. Authentic COD ecommerce style.
+      - ba_02.jpg, style="Before after collage 2", aspectRatio="4:5": different user (male or older woman), different setting
+      - ba_03.jpg, style="Before after collage 3", aspectRatio="4:5": 2-3 before/after pairs in one collage, social-proof-by-numbers feel
+      - ba_04.jpg, style="Before after collage 4", aspectRatio="4:5": close-up transformation (face/skin/belly by niche), selfie comparison style
 
-15. type="faq" — Soalan Lazim
-    • faqs: 5-7 Malaysia-localized FAQs (halal status, side effects, "berapa lama nampak hasil", COD payment, shipping, return policy, allergies)
-    • imagePrompts: [] (no image for FAQ)
+15. type="faq"
+    • faqs: 5-7 Malaysia FAQs (halal, side effects, "berapa lama nampak hasil", COD, shipping, return, allergies)
+    • imagePrompts: []
 
-16. type="offer" — Tawaran & COD
+16. type="offer", imageAspectRatio="4:5"
     • offerStrip, urgencyText, cta
     • bullets: 3-5 "✅ Bonus X (RM Y)" stack items
-    • copy: offer description with multiple value adds
-    • 1-2 imagePrompts: promo banner with product + offer text. Style="Promo banner COD", aspectRatio="4:5" or "16:9"
+    • copy: value stack + COD offer
+    • 1-2 imagePrompts: promo banner with product + offer. style="Promo banner COD", aspectRatio="4:5"
+      IMPORTANT: Show EXACT PRODUCT PRICE from brief in the banner (not any invented price).
 
-17. type="final-cta" — Penutup
+17. type="final-cta", imageAspectRatio="4:5"
     • headline, subheadline, cta, urgencyText
     • copy: closing pitch
-    • 1 imagePrompt: final hero product shot. Style="Final CTA hero shot", aspectRatio="4:5"
+    • 1 imagePrompt: final hero product shot. style="Final CTA hero shot", aspectRatio="4:5"
 
 ═══════════════════════════════════════════════════════════════
-VIVTRANSLATION RULES
+CRITICAL IMAGE PROMPT RULES
 ═══════════════════════════════════════════════════════════════
-• viTranslation is ALWAYS required on EVERY section — no exceptions
-• It is the Vietnamese translation of the "copy" field
-• Natural Vietnamese ecommerce voice — "mình/bạn" register
-• Include translated bullets, headline, and key copy
-• Format: plain text with line breaks, emojis preserved
-• This field helps the Vietnamese marketer understand what they are pasting
+• ALWAYS English, 30-80 words
+• ASPECT RATIO: only "1:1" or "4:5" — 9:16 and 16:9 are completely banned
+• All imagePrompts in a section must use the section's imageAspectRatio value
+• DEFAULT ETHNICITY: Malaysian native / Southeast Asian
+• NEVER cinematic / editorial / luxury / stock-photo
+• Aesthetic: Facebook Ads Malaysia native ecommerce UGC — real phone, real lighting
+• PRODUCT IDENTITY: for sections where the product appears (TikTok, Shopee, selfie, crowd, hero), instruct the model to use the exact same product packaging — same bottle shape, label, cap color, logo placement
+• PRICE ACCURACY: for TikTok Shop, Shopee, promo banner image prompts — include the EXACT price from the product offer field. Do NOT invent any other price.
+• Text overlay prompts: include exact text content (e.g. "bold white text overlay reads: ✓ Kurang Penat ✓ Tenaga Lebih")
+• Screenshot prompts: note "slightly JPEG-compressed", "imperfect real phone quality", "authentic"
+• Before/after: amateur quality, NOT gym influencer, NOT professional
 
 ═══════════════════════════════════════════════════════════════
-LANGUAGE RULES FOR COPY
+LANGUAGE RULES
 ═══════════════════════════════════════════════════════════════
-• Default: natural colloquial Bahasa Malaysia (NOT textbook), mix English where natural ("memang worth it", "tau tak", "I tak sangka", "serius gila")
-• If language=vi → natural Vietnamese ecommerce voice
-• If language=en → conversational SEA English, slightly informal
-• layoutGuide is ALWAYS in VIETNAMESE regardless of copy language
-• Product name and ingredient names stay in their original English
+• viTranslation: ALWAYS on every section — Vietnamese translation of copy field
+• Default copy: natural colloquial Bahasa Malaysia
+• layoutGuide: ALWAYS Vietnamese regardless of copy language
+• Product name + ingredient names: original English
 
 ═══════════════════════════════════════════════════════════════
-IMAGE PROMPT RULES (CRITICAL)
+COPY FORMAT — mobile-first
 ═══════════════════════════════════════════════════════════════
-• ALWAYS English, 30-80 words per prompt
-• DEFAULT ETHNICITY: Malaysian native / Southeast Asian unless target market clearly differs
-• NEVER cinematic / fashion editorial / luxury commercial / stock-photo corporate
-• Aesthetic target: Facebook Ads Malaysia native ecommerce UGC — real phone, real lighting, real people
-• Social proof screenshots: explicitly note "slightly compressed image quality", "imperfect real phone screenshot quality", "casual Malay language", "natural emoji usage"
-• Text overlay: include exact text content in the prompt (e.g. "bold white text overlay reads: ✓ Tenaga lebih stabil ✓ Fokus lebih tajam")
-• WhatsApp screenshots: green chat bubbles, realistic interface, Malaysian names, natural Malay language in messages
-• Before/after: amateur photography quality, NOT gym influencer aesthetic, NOT professional photography
-• Comparison infographics: mobile-readable, clean but NOT over-designed, Malaysia ecommerce native style
-• News screenshots: realistic authentic Malaysian media aesthetic
-
-═══════════════════════════════════════════════════════════════
-COPY FORMATTING — mobile-first non-negotiable
-═══════════════════════════════════════════════════════════════
-• Short paragraphs (1-3 lines) separated by BLANK LINES
+• Short paragraphs (1-3 lines) + blank lines between
 • Strategic emojis at paragraph starts
-• ✅ benefits / ❌ failed alternatives where useful
-• 👉 / 👇 for pointing at CTAs
-• NO giant text walls, NO markdown headers
-• NEVER claim cure / treatment / guaranteed — keep advertorial-safe`
+• ✅ benefits / ❌ failed alternatives
+• 👉 / 👇 for CTAs
+• NO walls of text, NO markdown headers
+• NEVER claim cure / treatment / guaranteed — advertorial-safe only`
 
 // ─────────────────────────────────────────────────────────────────────
 
 function getGeminiKey(): string {
   const s = useSettingsStore.getState()
   if (!s.hasGeminiKey()) {
-    throw new Error('Chưa có Google Gemini API key. Vào Cài đặt → Google Gemini → nhập key miễn phí từ aistudio.google.com')
+    throw new Error('Chưa có Google Gemini API key. Vào Cài đặt → nhập key từ aistudio.google.com')
   }
   return s.getGeminiApiKey()
+}
+
+/** Extract the first RM price string from the product offer field. */
+function extractPriceTag(offer: string): string | null {
+  if (!offer) return null
+  const match = offer.match(/RM\s*\d+(?:\.\d{1,2})?/i)
+  return match ? match[0].replace(/\s+/, '') : null
 }
 
 function buildUserPrompt(params: LandingGenParams): string {
@@ -229,7 +246,13 @@ function buildUserPrompt(params: LandingGenParams): string {
   if (product.usps)               lines.push(`USPs: ${product.usps}`)
   if (product.benefits)           lines.push(`Benefits: ${product.benefits}`)
   if (product.offer)              lines.push(`Offer: ${product.offer}`)
-  if (product.ingredients)        lines.push(`★ Ingredients (name these specifically): ${product.ingredients}`)
+  if (product.ingredients)        lines.push(`★ Ingredients (use REAL names): ${product.ingredients}`)
+
+  // ── Explicit pricing line — prevents Gemini from hallucinating wrong prices ──
+  const priceTag = extractPriceTag(product.offer ?? '')
+  if (priceTag) {
+    lines.push(`★ EXACT SELLING PRICE: ${priceTag} — ALL ecommerce screenshot image prompts (TikTok Shop, Shopee, promo banners) MUST display ONLY this price. Do NOT invent any other price.`)
+  }
 
   lines.push('')
   lines.push(`Output language: ${params.language}`)
@@ -237,7 +260,7 @@ function buildUserPrompt(params: LandingGenParams): string {
   if (params.sourceUrl) lines.push(`Reference URL (context only): ${params.sourceUrl}`)
 
   lines.push('')
-  lines.push('Generate the full 17-section advertorial asset pack as a single STRICT JSON object. No markdown fences, no commentary — JSON only. EVERY section MUST include viTranslation.')
+  lines.push('Generate the 17-section advertorial asset pack as a single STRICT JSON object. No markdown fences, no commentary — JSON only. EVERY section MUST include viTranslation and imageAspectRatio (where images exist).')
 
   return lines.join('\n')
 }
@@ -268,15 +291,50 @@ const SECTION_ORDER: SectionType[] = [
   'faq', 'offer', 'final-cta',
 ]
 
+/** Hardcoded fallback aspect ratios — applied even when Gemini omits the field.
+ *  Guarantees no 9:16 ever makes it into the pack. */
+const SECTION_ASPECT_DEFAULTS: Partial<Record<SectionType, '1:1' | '4:5'>> = {
+  'hero':                    '4:5',
+  'pain':                    '4:5',
+  'why-happens':             '1:1',
+  'failed-solutions':        '4:5',
+  'product-discovery':       '4:5',
+  'ingredients':             '1:1',
+  'mechanism':               '1:1',
+  'benefits':                '1:1',
+  'comparison':              '1:1',
+  'lifestyle':               '4:5',
+  'social-proof':            '4:5',
+  'whatsapp-testimonials':   '4:5',
+  'news-proof':              '4:5',
+  'before-after':            '4:5',
+  'offer':                   '4:5',
+  'final-cta':               '4:5',
+}
+
 function normalizeSection(s: RawSection): LandingSection | null {
   const type = SECTION_ORDER.find((t) => t === s.type)
   if (!type) return null
+
+  // Sanitize the section-level aspect ratio — only '1:1' or '4:5' allowed.
+  const rawRatio = s.imageAspectRatio as string | undefined
+  const lockedRatio: '1:1' | '4:5' =
+    rawRatio === '1:1' ? '1:1' :
+    rawRatio === '4:5' ? '4:5' :
+    SECTION_ASPECT_DEFAULTS[type] ?? '4:5'
+
+  // Sanitize each image prompt's aspectRatio to match the section lock.
+  const imagePrompts = Array.isArray(s.imagePrompts)
+    ? s.imagePrompts.map((p) => ({ ...p, aspectRatio: lockedRatio }))
+    : []
+
   return {
     type,
     title: s.title ?? type,
     copy: s.copy ?? '',
     layoutGuide: s.layoutGuide ?? '',
     viTranslation: s.viTranslation,
+    imageAspectRatio: lockedRatio,
     headline: s.headline,
     subheadline: s.subheadline,
     cta: s.cta,
@@ -285,9 +343,34 @@ function normalizeSection(s: RawSection): LandingSection | null {
     bullets: Array.isArray(s.bullets) ? s.bullets.map(String) : undefined,
     faqs: Array.isArray(s.faqs) ? s.faqs : undefined,
     reviews: Array.isArray(s.reviews) ? s.reviews : undefined,
-    imagePrompts: Array.isArray(s.imagePrompts) ? s.imagePrompts : [],
+    imagePrompts,
     imageSizeHint: s.imageSizeHint,
   }
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Post-processing: inject exact price into ecommerce screenshot prompts.
+// Runs after normalizeSection so we catch prompts Gemini hallucinated
+// wrong prices into.
+// ─────────────────────────────────────────────────────────────────────
+function injectPriceIntoPrompts(sections: LandingSection[], priceTag: string | null): void {
+  if (!priceTag) return
+  const ecommerceKeywords = ['tiktok', 'shopee', 'promo', 'banner', 'offer', 'cta hero']
+  sections.forEach((section) => {
+    section.imagePrompts.forEach((ip) => {
+      const lower = ip.style.toLowerCase()
+      if (!ecommerceKeywords.some((k) => lower.includes(k))) return
+      if (!ip.prompt.toLowerCase().includes('rm')) {
+        ip.prompt += ` Price shown must be exactly "${priceTag}" — do NOT display any other price.`
+      } else {
+        // Replace any hallucinated RM price with the correct one
+        ip.prompt = ip.prompt.replace(/RM\s*\d+(?:\.\d{1,2})?/gi, priceTag)
+        if (!ip.prompt.includes('do NOT display any other price')) {
+          ip.prompt += ` (show only ${priceTag})`
+        }
+      }
+    })
+  })
 }
 
 // ─────────────────────────────────────────────────────────────────────
@@ -298,12 +381,13 @@ export async function generateLandingPack(params: LandingGenParams): Promise<Lan
   if (!product) throw new Error('Không tìm thấy sản phẩm — chọn lại từ Project')
 
   const userPrompt = buildUserPrompt(params)
+  const priceTag = extractPriceTag(product.offer ?? '')
 
   const raw = await directGeminiVision({
     apiKey,
     parts: [{ text: userPrompt }],
     systemInstruction: SYSTEM_PROMPT,
-    // 17 sections × rich content + viTranslation + image prompts → need large budget
+    // 17 sections × rich content + viTranslation + image prompts
     maxOutputTokens: 32768,
     responseMimeType: 'application/json',
   })
@@ -332,6 +416,9 @@ export async function generateLandingPack(params: LandingGenParams): Promise<Lan
   if (sections.length === 0) {
     throw new Error('Không có section nào hợp lệ trong JSON Gemini trả về')
   }
+
+  // ── Post-processing: lock price in ecommerce screenshot prompts ──────
+  injectPriceIntoPrompts(sections, priceTag)
 
   return {
     productId: params.productId,

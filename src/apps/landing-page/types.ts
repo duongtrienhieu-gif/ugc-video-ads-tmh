@@ -68,6 +68,9 @@ export interface LandingSection {
   /** Vietnamese translation of `copy` (for the Vietnamese-speaking marketer).
    *  Always included regardless of output language. */
   viTranslation?: string
+  /** Section-level aspect ratio — enforced on ALL images in this section.
+   *  Only '1:1' or '4:5' allowed (9:16 is banned globally). */
+  imageAspectRatio?: '1:1' | '4:5'
   headline?: string
   subheadline?: string
   cta?: string
