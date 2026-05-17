@@ -210,6 +210,28 @@ export type CameraMotion =
   | 'walking_follow'   // tracking shot, walking pace — lifestyle
   | 'overhead_top'     // flat lay / top-down — ingredient / explain
 
+/**
+ * Z11 — what KIND of visual this scene is. Decides whether the avatar
+ * appears at all, whether the product is hero, or whether the scene is
+ * an infographic / animation / lifestyle environment.
+ *
+ * Drives ref-routing in promptCompiler:
+ *   • person       → pass avatar + product refs (existing default)
+ *   • product      → drop avatar ref, product hero macro
+ *   • infographic  → drop avatar ref, infographic / 3D animation / floating particles
+ *   • ingredient   → drop avatar ref, ingredient closeup / macro
+ *   • lifestyle    → drop BOTH refs — environment-only context shot
+ *
+ * Without this axis, every scene defaulted to a person holding the product,
+ * producing 9 near-identical portraits instead of a real video-ad timeline.
+ */
+export type SubjectFocus =
+  | 'person'       // avatar visible — emotional / testimonial / CTA / UGC selfie
+  | 'product'      // product hero macro — label closeup / hero shot, no person
+  | 'infographic'  // 3D animation / molecular / floating particles / mechanism diagram
+  | 'ingredient'   // raw ingredient macro / capsule explode / ingredient swirl
+  | 'lifestyle'    // environment / context only — no person, no product hero
+
 export interface SceneBlueprint {
   /** 1-indexed scene id in the storyboard (1-9 typically) */
   sceneId: number
@@ -219,6 +241,9 @@ export interface SceneBlueprint {
    * sceneType = narrative role of this scene in the emotional timeline.
    * Drives product visibility, wardrobe, environment, lighting, energy. */
   sceneType?: SceneType
+  /** Z11: what KIND of visual this scene is. Decides if the avatar appears
+   *  at all. Without it, every scene becomes a portrait. */
+  subjectFocus?: SubjectFocus
   /** What the scene visually proves / shows — e.g. "convey night-time fatigue", "demonstrate cap-twist freshness" */
   visualObjective?: string
   /** Concrete physical action subject performs — e.g. "rubbing temple while staring at laptop", "smiling, lifting jar to lens" */

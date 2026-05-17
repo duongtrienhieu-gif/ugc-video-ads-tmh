@@ -16,7 +16,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { directGeminiVision } from '../../../../utils/gemini'
-import type { IdentityPack, SceneBlueprint, SceneType, ShotEnergy, VisualStyleDna, DiversityReport } from '../types'
+import type { IdentityPack, SceneBlueprint, SceneType, ShotEnergy, SubjectFocus, VisualStyleDna, DiversityReport } from '../types'
 import { SCENE_PRESETS, DEFAULT_PRESET_ROTATION, VISUAL_TONE_CLAMP, getPreset, inferPresetForScene } from './scenePresets'
 import { safeParseJson, logJsonFailure } from './jsonResilience'
 
@@ -62,12 +62,62 @@ A typical 30-sec UGC ad uses 5-7 of these beats spread over 9 scenes.
 ═══════════════════════════════════════════════════════════════
 REQUIRED FIELDS PER SCENE
 ═══════════════════════════════════════════════════════════════
-sceneId, sceneType, visualObjective, subjectAction, narrativePurpose,
+sceneId, sceneType, subjectFocus, visualObjective, subjectAction, narrativePurpose,
 sceneGoal, environment, environmentType, wardrobeStyle, composition,
 cameraAngle, shotType, shotEnergy, pose, emotion, handUsage,
 productVisibility, backgroundType, lightingStyle, visualTone,
 motionIntent, overlayDensity, ctaFocus, speech, presetLabel,
 motionStyle, cameraMotion
+
+═══════════════════════════════════════════════════════════════
+subjectFocus — Z11 VISUAL TYPE ENGINE — ONE OF (mandatory):
+═══════════════════════════════════════════════════════════════
+person · product · infographic · ingredient · lifestyle
+
+This is the SINGLE MOST IMPORTANT axis for video-ad diversity. Without it,
+every scene becomes a portrait of the same person holding the same product
+— that is NOT a video ad, it is a product gallery.
+
+CLASSIFICATION RULES (read the script line tied to each scene):
+
+• person      → the SCRIPT LINE expresses EMOTION, TESTIMONIAL, or DIRECT
+                ADDRESS. Examples: "saya rasa…", "anda akan…", "macam tak
+                percaya…", "cuba bayangkan…". Hook / pain / discovery /
+                recovery / social_proof / cta usually = person.
+• product     → the SCRIPT LINE describes the PRODUCT itself (packaging /
+                label / form factor). Examples: "produk ini…", "dalam botol
+                ini…", "bentuk gummy…". Render as macro hero shot of the
+                product, NO PERSON.
+• infographic → the SCRIPT LINE describes a MECHANISM, SCIENCE, BODY
+                FUNCTION, or invisible cause. Examples: "vitamin B membantu
+                metabolisme…", "8 jenis vitamin penting…", "darah anda…",
+                "sel tubuh…". Render as 3D animation / floating molecules /
+                glowing particles / capsule explode view / energy flow
+                infographic AROUND the product, NO PERSON.
+• ingredient  → the SCRIPT LINE names specific INGREDIENTS. Examples:
+                "kolagen…", "vitamin B1, B2…", "ekstrak buah delima…".
+                Render as raw ingredient macro / capsule cross-section /
+                ingredient swirl. NO PERSON.
+• lifestyle   → the SCRIPT LINE describes CONTEXT / ENVIRONMENT / AFTER-
+                LIFE without explicit person. Examples: "pagi yang
+                produktif…", "rumah anda…". Render as environment shot,
+                NO PERSON, product subtle or absent.
+
+COMPOSITION MIX TARGET (across all scenes in the storyboard):
+  ~40% person · ~30% product · ~20% infographic · ~10% ingredient/lifestyle
+
+NEVER let person scenes exceed 60% of the total. NEVER produce 3+ consecutive
+person scenes back-to-back — interleave them with product/infographic beats.
+
+WHEN subjectFocus IS NOT 'person':
+  • Set wardrobeStyle = "n/a (no person)" — the field still ships but isn't used.
+  • Set pose / emotion / handUsage to short n/a placeholders ("n/a — product hero",
+    "n/a — animation", etc) — they won't drive the image.
+  • shotEnergy and lightingStyle STILL APPLY — they shape mood.
+  • cameraAngle / composition STILL APPLY — they shape framing of the product/
+    infographic/ingredient.
+  • subjectAction describes the VISUAL ACTION: "particles orbit product",
+    "capsule splits open releasing molecules", "ingredient powder swirls", etc.
 
 ═══════════════════════════════════════════════════════════════
 VIDEO-LAYER FIELDS (drive downstream Kling / Veo / Runway clip gen)
@@ -202,9 +252,11 @@ function buildSafeModeStoryboardPrompt(p: BlueprintPromptParams): string {
   return `Output a JSON array of exactly ${numScenes} simple scene objects. Use plain ASCII only. No emoji. No special characters.
 
 Each object has these keys with short string values (max 8 words each):
-sceneId, sceneType, visualObjective, subjectAction, narrativePurpose, sceneGoal, environment, environmentType, wardrobeStyle, composition, cameraAngle, shotType, shotEnergy, pose, emotion, handUsage, productVisibility, backgroundType, lightingStyle, visualTone, motionIntent, overlayDensity, ctaFocus, speech, presetLabel
+sceneId, sceneType, subjectFocus, visualObjective, subjectAction, narrativePurpose, sceneGoal, environment, environmentType, wardrobeStyle, composition, cameraAngle, shotType, shotEnergy, pose, emotion, handUsage, productVisibility, backgroundType, lightingStyle, visualTone, motionIntent, overlayDensity, ctaFocus, speech, presetLabel
 
 sceneType must be one of: hook, pain, frustration, failed_solution, discovery, explanation, recovery, lifestyle, social_proof, cta.
+subjectFocus must be one of: person, product, infographic, ingredient, lifestyle.
+Mix subjectFocus across scenes — roughly 40% person / 30% product / 20% infographic / 10% ingredient or lifestyle.
 shotEnergy must be one of: intimate, dynamic, emotional, calm, tension, relief, energetic.
 productVisibility must be low or medium or high.
 overlayDensity must be none or low or medium or high.
@@ -219,7 +271,7 @@ Product: ${p.productName.replace(/["']/g, '')} - ${p.identity.productDescription
 Script (extract speech lines and emotional beats from this):
 ${p.script.slice(0, 1500).replace(/["']/g, '')}
 
-Example: {"sceneId":1,"sceneType":"pain","visualObjective":"show night fatigue","subjectAction":"rubbing temple at desk","narrativePurpose":"establish problem","sceneGoal":"open with pain","environment":"messy home office at night","environmentType":"home office desk","wardrobeStyle":"home casual","composition":"medium close up","cameraAngle":"iphone eye level","shotType":"ugc handheld","shotEnergy":"tension","pose":"slumped at desk","emotion":"tired concerned","handUsage":"hand on forehead","productVisibility":"low","backgroundType":"messy desk dim","lightingStyle":"dim cool night","visualTone":"warm ecommerce ugc","motionIntent":"handheld","overlayDensity":"low","ctaFocus":false,"speech":"line from script","presetLabel":"pain hook"}
+Example: {"sceneId":1,"sceneType":"pain","subjectFocus":"person","visualObjective":"show night fatigue","subjectAction":"rubbing temple at desk","narrativePurpose":"establish problem","sceneGoal":"open with pain","environment":"messy home office at night","environmentType":"home office desk","wardrobeStyle":"home casual","composition":"medium close up","cameraAngle":"iphone eye level","shotType":"ugc handheld","shotEnergy":"tension","pose":"slumped at desk","emotion":"tired concerned","handUsage":"hand on forehead","productVisibility":"low","backgroundType":"messy desk dim","lightingStyle":"dim cool night","visualTone":"warm ecommerce ugc","motionIntent":"handheld","overlayDensity":"low","ctaFocus":false,"speech":"line from script","presetLabel":"pain hook"}
 
 Return only the JSON array. Nothing else. No markdown.`
 }
@@ -246,14 +298,18 @@ tone=${p.dna.visualTone.slice(0, 100)} | camera=${p.dna.cameraStyle.slice(0, 60)
 PRESET ROTATION (loose hint — sceneType + script beat takes priority): ${presetHints}
 
 OUTPUT — JSON array of exactly ${p.numScenes} objects with these keys (short string values, <15 words each):
-[{"sceneId":1,"sceneType":"pain","visualObjective":"convey night fatigue reality","subjectAction":"rubbing temple while staring at laptop","narrativePurpose":"establish problem the viewer recognizes","sceneGoal":"open on pain","environment":"messy home office at night","environmentType":"home office desk","wardrobeStyle":"home casual","composition":"medium close-up","cameraAngle":"iphone slight low-angle","shotType":"ugc handheld","shotEnergy":"tension","pose":"slumped over laptop","emotion":"tired concerned","handUsage":"hand on forehead, no product","productVisibility":"low","backgroundType":"cluttered desk dim light","lightingStyle":"dim cool blue night","visualTone":"warm authentic ugc","motionIntent":"subtle handheld","overlayDensity":"low","ctaFocus":false,"speech":"...","presetLabel":"pain hook"}]
+[{"sceneId":1,"sceneType":"pain","subjectFocus":"person","visualObjective":"convey night fatigue reality","subjectAction":"rubbing temple while staring at laptop","narrativePurpose":"establish problem the viewer recognizes","sceneGoal":"open on pain","environment":"messy home office at night","environmentType":"home office desk","wardrobeStyle":"home casual","composition":"medium close-up","cameraAngle":"iphone slight low-angle","shotType":"ugc handheld","shotEnergy":"tension","pose":"slumped over laptop","emotion":"tired concerned","handUsage":"hand on forehead, no product","productVisibility":"low","backgroundType":"cluttered desk dim light","lightingStyle":"dim cool blue night","visualTone":"warm authentic ugc","motionIntent":"subtle handheld","overlayDensity":"low","ctaFocus":false,"speech":"...","presetLabel":"pain hook"}]
 
 KEY REMINDERS before emitting:
-- Vary wardrobeStyle (≥3 unique) and environmentType (≥4 unique) across 9 scenes
+- Z11: subjectFocus MUST vary — target ~40% person / 30% product / 20% infographic / 10% ingredient or lifestyle
+- When the script line is about MECHANISM / VITAMIN / INGREDIENT / BODY SCIENCE → subjectFocus = "infographic" or "ingredient" (no person)
+- When the script line describes the PACKAGING / PRODUCT FORM → subjectFocus = "product" (macro hero, no person)
+- NEVER produce 3+ consecutive person scenes — interleave them with product/infographic beats
+- Vary wardrobeStyle (≥3 unique) and environmentType (≥4 unique) across person scenes
 - Pain/frustration/failed_solution scenes: productVisibility = "low"
 - CTA scene: productVisibility = "high" + ctaFocus = true
 - Match shotEnergy to sceneType (pain→tension, recovery→relief, cta→energetic)
-- 9 frames must read as a STORY ARC, not a product gallery
+- The frames must read as a STORY ARC, not a product gallery
 
 Return ONLY the JSON array. No markdown. No prose.`
 }
@@ -264,6 +320,7 @@ interface RawBlueprint {
   sceneId?: number
   sceneNumber?: number
   sceneType?: string
+  subjectFocus?: string
   visualObjective?: string
   subjectAction?: string
   narrativePurpose?: string
@@ -295,6 +352,32 @@ const SCENE_TYPE_SET: SceneType[] = [
   'hook', 'pain', 'frustration', 'failed_solution', 'discovery',
   'explanation', 'recovery', 'lifestyle', 'social_proof', 'cta',
 ]
+
+const SUBJECT_FOCUS_SET: SubjectFocus[] = [
+  'person', 'product', 'infographic', 'ingredient', 'lifestyle',
+]
+
+/** Z11: smart default for subjectFocus when LLM omits it — derived from
+ *  sceneType. Person-centric beats default to 'person'; explanation
+ *  scenes default to 'infographic' (mechanism / science); the rest stay
+ *  person but normalizer keeps the mix from collapsing entirely. */
+function focusForSceneType(t: SceneType | undefined): SubjectFocus {
+  if (!t) return 'person'
+  if (t === 'explanation') return 'infographic'
+  return 'person'
+}
+
+function clampSubjectFocus(v: string | undefined, fallback: SubjectFocus): SubjectFocus {
+  if (!v) return fallback
+  const lower = v.toLowerCase().trim().replace(/[\s-]/g, '_')
+  // Common aliases LLMs use
+  if (lower === 'avatar' || lower === 'user' || lower === 'subject') return 'person'
+  if (lower === 'macro'  || lower === 'closeup' || lower === 'product_hero') return 'product'
+  if (lower === 'animation' || lower === 'mechanism' || lower === 'science') return 'infographic'
+  if (lower === 'capsule' || lower === 'pill') return 'ingredient'
+  if (lower === 'environment' || lower === 'context' || lower === 'scene') return 'lifestyle'
+  return (SUBJECT_FOCUS_SET as string[]).includes(lower) ? (lower as SubjectFocus) : fallback
+}
 
 const SHOT_ENERGY_SET: ShotEnergy[] = [
   'intimate', 'dynamic', 'emotional', 'calm', 'tension', 'relief', 'energetic',
@@ -433,6 +516,7 @@ function clampVisualTone(v: string | undefined): string {
 
 function normalizeBlueprint(raw: RawBlueprint, idx: number): SceneBlueprint {
   const sceneType = clampSceneType(raw.sceneType)
+  const subjectFocus = clampSubjectFocus(raw.subjectFocus, focusForSceneType(sceneType))
   const productVisibility = raw.productVisibility
     ? clampVisibility(raw.productVisibility)
     : visibilityForSceneType(sceneType)
@@ -440,6 +524,7 @@ function normalizeBlueprint(raw: RawBlueprint, idx: number): SceneBlueprint {
     sceneId: raw.sceneId ?? raw.sceneNumber ?? idx + 1,
     sceneNumber: raw.sceneId ?? raw.sceneNumber ?? idx + 1,
     sceneType,
+    subjectFocus,
     visualObjective: raw.visualObjective,
     subjectAction: raw.subjectAction,
     narrativePurpose: raw.narrativePurpose,

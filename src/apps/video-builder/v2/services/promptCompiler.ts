@@ -23,6 +23,7 @@ import type {
   CompiledPrompt,
   CompiledPromptContext,
   SceneBlueprint,
+  SubjectFocus,
 } from '../types'
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -39,17 +40,27 @@ const GLOBAL_NEGATIVE = 'Avoid: wrong face · redesigned packaging · distorted 
 // LAYER 3 — IDENTITY + PRODUCT LOCKS (2 short lines from refs)
 // ═══════════════════════════════════════════════════════════════════════
 function buildLocks(opts: {
-  identityRef: number
+  identityRef: number | null
   productRef: number | null
   ctx: CompiledPromptContext
+  /** Z11: when true, this scene has NO person — replace identity lock with
+   *  an explicit "no person" directive. */
+  avatarAbsent: boolean
+  focus: SubjectFocus
 }): string {
-  const { identityRef, productRef, ctx } = opts
+  const { identityRef, productRef, ctx, avatarAbsent, focus } = opts
 
-  const identityBump = ctx.overrides?.bumpIdentityLock
-    ? ' Retry: previous attempt drifted face — match LITERALLY.'
-    : ''
-
-  const identityLine = `Same person from ref #${identityRef} — face / age / ethnicity locked. Outfit + environment vary per scene.${identityBump}`
+  let identityLine: string
+  if (avatarAbsent) {
+    identityLine = `NO PERSON in this scene — subjectFocus=${focus}. Do NOT render any human, face, hands, or body. Reference images are for product / object identity only.`
+  } else if (identityRef === null) {
+    identityLine = 'No identity reference for this scene.'
+  } else {
+    const identityBump = ctx.overrides?.bumpIdentityLock
+      ? ' Retry: previous attempt drifted face — match LITERALLY.'
+      : ''
+    identityLine = `Same person from ref #${identityRef} — face / age / ethnicity locked. Outfit + environment vary per scene.${identityBump}`
+  }
 
   const productLine = productRef === null
     ? 'Product ABSENT this scene — pre-discovery beat, generic objects only.'
@@ -93,8 +104,15 @@ const VISIBILITY_PHRASE = {
 } as const
 
 function buildSceneDelta(blueprint: SceneBlueprint): string {
-  // Build phrases in natural reading order: action → emotion → outfit →
-  // environment → light → framing → camera → motion → product visibility.
+  // Z11: route by subjectFocus. Non-person scenes get a totally different
+  // shape (no wardrobe, no pose, no avatar instruction).
+  const focus = blueprint.subjectFocus ?? 'person'
+
+  if (focus !== 'person') {
+    return buildNonPersonDelta(blueprint, focus)
+  }
+
+  // ── Default: person-centric scene (existing behavior) ─────────────────
   const phrases: string[] = []
 
   // Lead: action + emotion fuse into the opening clause
@@ -135,6 +153,65 @@ function buildSceneDelta(blueprint: SceneBlueprint): string {
   return `${beat}${phrases.join('. ')}.`
 }
 
+// ─── Z11: scene-delta variants for non-person subjectFocus ─────────────────
+//
+// These produce entirely different prompt shapes so a "Vitamin B floating
+// particles" scene doesn't end up as a portrait of a person holding a bottle.
+//
+function buildNonPersonDelta(blueprint: SceneBlueprint, focus: Exclude<SubjectFocus, 'person'>): string {
+  const beat = blueprint.sceneType ? `[${blueprint.sceneType.toUpperCase()}] ` : ''
+  const camBits: string[] = []
+  if (blueprint.composition) camBits.push(blueprint.composition)
+  if (blueprint.cameraAngle) camBits.push(blueprint.cameraAngle)
+  const camera = camBits.length ? camBits.join(', ') : 'centered composition'
+  const lighting = blueprint.lightingStyle ?? 'clean even product light'
+  // subjectAction is repurposed in non-person scenes to describe the VISUAL
+  // (particles orbit, capsule splits, ingredient swirls, etc).
+  const visualAction = blueprint.subjectAction?.trim() || blueprint.visualObjective?.trim() || ''
+
+  switch (focus) {
+    case 'product': {
+      // Hero product macro, NO PERSON in frame.
+      return `${beat}NO PERSON IN FRAME — hero product macro shot. ` +
+        `Product centered, label clearly readable, preserve packaging exactly from reference image. ` +
+        `${visualAction ? `Visual: ${visualAction}. ` : ''}` +
+        `${camera}. ${lighting}. ` +
+        `Background: clean minimal seamless surface that complements the packaging color. ` +
+        `Product hero, no avatar, no hands, no body parts.`
+    }
+    case 'infographic': {
+      // 3D animation / floating molecules / mechanism diagram.
+      return `${beat}NO PERSON IN FRAME — infographic / 3D animation visual. ` +
+        `${visualAction ? `Show: ${visualAction}. ` : ''}` +
+        `Render as glowing 3D particles / molecular structures / floating energy / capsule explode view / ` +
+        `mechanism diagram surrounding the product. The product (from reference) sits centered with its ` +
+        `packaging preserved exactly — particles and labels orbit / float / animate AROUND it. ` +
+        `Clean dark gradient background with subtle glow. ${camera}. ${lighting}. ` +
+        `Native Malaysia ecommerce infographic feel — NOT pharma-clinical, NOT cinematic. ` +
+        `No avatar, no person, no hands.`
+    }
+    case 'ingredient': {
+      // Raw ingredient closeup / capsule cross-section.
+      return `${beat}NO PERSON IN FRAME — ingredient macro shot. ` +
+        `${visualAction ? `Show: ${visualAction}. ` : ''}` +
+        `Render the key ingredient (capsule cross-section, fruit/herb macro, powder swirl, gummy split, ` +
+        `vitamin tablet closeup) with the product packaging visible in background or beside the ingredient. ` +
+        `Shallow depth of field. ${camera}. ${lighting}. ` +
+        `Native ecommerce ingredient card aesthetic. No avatar, no person.`
+    }
+    case 'lifestyle': {
+      // Environment / context shot — no person, product subtle or absent.
+      return `${beat}NO PERSON IN FRAME — lifestyle environment context. ` +
+        `${visualAction ? `Scene: ${visualAction}. ` : `Setting: ${blueprint.environment ?? 'home interior'}`}. ` +
+        `${blueprint.productVisibility === 'low'
+          ? 'Product NOT in frame — pure environment / mood shot.'
+          : 'Product subtly placed in context (kitchen counter, desk corner, etc) — not held by anyone.'} ` +
+        `${camera}. ${lighting}. ` +
+        `Native UGC environment shot feel. No avatar, no person, no hands.`
+    }
+  }
+}
+
 /** Baseline master-frame paragraph (no scene blueprint exists). */
 function buildMasterFrameDelta(): string {
   return 'Subject holds product at chest level with label facing camera, gentle confident expression, looking at lens. Clean modern home interior, soft natural daylight from one side. Vertical medium close-up portrait. Product hero, label clearly readable.'
@@ -149,17 +226,24 @@ export function compilePrompt(ctx: CompiledPromptContext): CompiledPrompt {
   // conditioning doesn't smuggle the packaging into a "no product" frame.
   const productAbsent = ctx.scene?.productVisibility === 'low'
 
+  // Z11: when subjectFocus is non-person, DROP the avatar ref entirely.
+  // Otherwise the image model treats the avatar as a "must include" and
+  // forces the avatar into product / infographic / ingredient scenes.
+  const focus: SubjectFocus = ctx.scene?.subjectFocus ?? 'person'
+  const avatarAbsent = focus !== 'person'
+
   const filesUrlOrder: CompiledPrompt['filesUrlOrder'] = []
   if (!productAbsent) filesUrlOrder.push('product')
-  filesUrlOrder.push('avatar')
+  if (!avatarAbsent)  filesUrlOrder.push('avatar')
   if (ctx.masterFrameUrl) filesUrlOrder.push('masterFrame')
 
   // Reference indices follow the ACTUAL filesUrl order (1-indexed)
-  const productRefIdx = productAbsent ? null : 1
-  const avatarRefIdx  = productAbsent ? 1 : 2
-  const masterRefIdx  = ctx.masterFrameUrl
-    ? (productAbsent ? 2 : 3)
-    : null
+  let cursor = 1
+  const productRefIdx = !productAbsent ? cursor++ : null
+  const avatarRefIdx  = !avatarAbsent  ? cursor++ : null
+  const masterRefIdx  = ctx.masterFrameUrl ? cursor++ : null
+
+  // identity = master frame if we have it, else avatar, else null (non-person scene)
   const identityRef = masterRefIdx ?? avatarRefIdx
   const productLockRef = masterRefIdx ?? productRefIdx
 
@@ -168,19 +252,29 @@ export function compilePrompt(ctx: CompiledPromptContext): CompiledPrompt {
     identityRef,
     productRef: productAbsent ? null : productLockRef,
     ctx,
+    avatarAbsent,
+    focus,
   })
   const sceneDelta = ctx.scene ? buildSceneDelta(ctx.scene) : buildMasterFrameDelta()
   const visualDna = ctx.overrides?.bumpRealism
     ? `${GLOBAL_STYLE} Retry: emphasise visible skin texture, no AI sheen.`
     : GLOBAL_STYLE
-  const negativePrompt = GLOBAL_NEGATIVE
+  // Z11: non-person scenes need a different negative — explicitly forbid
+  // accidentally inserting a person.
+  const negativePrompt = avatarAbsent
+    ? `${GLOBAL_NEGATIVE} Also avoid: any person, face, hands, body parts, model — this is a product/infographic scene only.`
+    : GLOBAL_NEGATIVE
 
   // Header — single short line listing actual ref map
   const refMap: string[] = []
   if (productRefIdx) refMap.push(`#${productRefIdx}=product`)
-  refMap.push(`#${avatarRefIdx}=avatar`)
+  if (avatarRefIdx)  refMap.push(`#${avatarRefIdx}=avatar`)
   if (masterRefIdx)  refMap.push(`#${masterRefIdx}=master frame`)
-  const header = `Image-edit: ${refMap.join(' · ')}${productAbsent ? ' (product ref omitted)' : ''}.`
+  const refTag = refMap.length > 0 ? refMap.join(' · ') : 'no reference images'
+  const omitted: string[] = []
+  if (productAbsent) omitted.push('product ref omitted')
+  if (avatarAbsent)  omitted.push(`avatar ref omitted — subjectFocus=${focus}`)
+  const header = `Image-edit: ${refTag}${omitted.length ? ` (${omitted.join(', ')})` : ''}.`
 
   // Assemble — locks immediately under header so model sees identity before scene
   const final = [header, locks, sceneDelta, visualDna, negativePrompt].join('\n\n')
