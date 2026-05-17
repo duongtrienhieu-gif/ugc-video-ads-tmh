@@ -132,12 +132,14 @@ export default function BankPicker({ bankType, isOpen, onSelect, onClose }: Bank
         onClick={onClose}
       />
 
-      {/* Panel */}
+      {/* Panel — desktop: stretch nearly full height so long lists (10+
+          items) fit without aggressive clipping that hides scrollable items
+          below the dock area. */}
       <div
         ref={panelRef}
         className={`fixed z-50 flex flex-col border-black/8 bg-white/95 backdrop-blur-2xl transition-transform duration-300 ease-out ${
           isDesktop
-            ? `right-0 top-9 bottom-20 w-[380px] border-l ${isOpen ? 'translate-x-0' : 'translate-x-full'}`
+            ? `right-0 top-9 bottom-4 w-[380px] border-l ${isOpen ? 'translate-x-0' : 'translate-x-full'}`
             : `inset-x-0 bottom-0 top-12 border-t rounded-t-2xl ${isOpen ? 'translate-y-0' : 'translate-y-full'}`
         }`}
       >
@@ -147,10 +149,15 @@ export default function BankPicker({ bankType, isOpen, onSelect, onClose }: Bank
             <div className="h-1 w-10 rounded-full bg-black/12" />
           </div>
         )}
-        {/* Header */}
+        {/* Header — shows total count so user knows the full inventory size */}
         <div className="flex items-center justify-between border-b border-black/8 px-5 py-3.5">
           <h3 className="text-sm font-semibold tracking-tight text-gray-800">
             Chọn {label}
+            {items.length > 0 && (
+              <span className="ml-1.5 rounded-full bg-violet-100 px-1.5 py-0.5 text-[10px] font-bold text-violet-700 align-middle">
+                {items.length}
+              </span>
+            )}
           </h3>
           <button
             onClick={onClose}
@@ -174,6 +181,18 @@ export default function BankPicker({ bankType, isOpen, onSelect, onClose }: Bank
           </div>
         </div>
 
+        {/* Result count strip — shown above the list when there are many
+            items. Tells the user "yes, all 11 are loaded, just scroll" so
+            they don't think items are missing when in fact they're below
+            the fold. */}
+        {filtered.length > 6 && (
+          <div className="border-b border-black/8 bg-violet-50/40 px-4 py-1.5 text-[11px] text-violet-700">
+            <span className="font-bold">{filtered.length}</span>
+            {search.trim() ? ` kết quả` : ` ${label.toLowerCase()}`}
+            <span className="ml-1 text-gray-500">· cuộn để xem tất cả ↓</span>
+          </div>
+        )}
+
         {/* Item list */}
         <div className="flex-1 overflow-y-auto px-4 py-3">
           {filtered.length === 0 ? (
@@ -195,12 +214,20 @@ export default function BankPicker({ bankType, isOpen, onSelect, onClose }: Bank
                   onClick={() => handleSelect(item)}
                 />
               ))}
+              {/* Footer marker — explicit "end of list" so user knows they
+                  reached the bottom and nothing else is hidden. */}
+              {filtered.length > 6 && (
+                <div className="py-2 text-center text-[10px] text-gray-300">
+                  — hết {filtered.length} mục —
+                </div>
+              )}
             </div>
           )}
         </div>
 
-        {/* Footer — quick add + manage in finder */}
-        <div className="border-t border-black/8 px-4 py-3">
+        {/* Footer — quick add + manage in finder. Compact layout (buttons
+            on same row) so it doesn't eat into list space. */}
+        <div className="border-t border-black/8 px-4 py-2.5">
           {showQuickAdd ? (
             <div className="flex flex-col gap-2">
               <input
@@ -228,22 +255,24 @@ export default function BankPicker({ bankType, isOpen, onSelect, onClose }: Bank
               </div>
             </div>
           ) : (
-            <button
-              onClick={() => setShowQuickAdd(true)}
-              className="flex w-full items-center gap-2 rounded-xl border border-dashed border-black/10 p-3 text-sm text-gray-500 transition-colors hover:border-black/15 hover:text-gray-700"
-            >
-              <Plus className="h-4 w-4" />
-              Thêm mới
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setShowQuickAdd(true)}
+                className="flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-dashed border-black/10 py-1.5 text-xs text-gray-500 transition-colors hover:border-black/15 hover:text-gray-700"
+              >
+                <Plus className="h-3.5 w-3.5" />
+                Thêm mới
+              </button>
+              <button
+                onClick={handleManageInFinder}
+                className="flex items-center justify-center gap-1 rounded-lg px-2.5 py-1.5 text-xs text-gray-400 transition-colors hover:bg-black/5 hover:text-gray-600"
+                title="Quản lý trong Trình Duyệt"
+              >
+                <FolderOpen className="h-3 w-3" />
+                Quản lý
+              </button>
+            </div>
           )}
-
-          <button
-            onClick={handleManageInFinder}
-            className="mt-2 flex w-full items-center justify-center gap-1.5 py-2 text-xs text-gray-400 transition-colors hover:text-gray-600"
-          >
-            <FolderOpen className="h-3 w-3" />
-            Quản lý trong Trình Duyệt
-          </button>
         </div>
       </div>
     </>
