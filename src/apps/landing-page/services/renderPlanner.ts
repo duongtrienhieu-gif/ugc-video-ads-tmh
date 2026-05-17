@@ -106,12 +106,20 @@ const PRODUCT_OVERLAY_SECTIONS = new Set([
   'final-cta',  // 2 metrics banners — reuse product packshot
 ])
 
-/** Sections that contribute to the reusable product packshot pool (the FIRST
- *  AI image of these sections becomes the master packshot). */
-const REUSABLE_FEEDERS = new Set([
-  'hero',  // hero_01 = canonical product-with-person packshot — heroes will
-           // still be AI, but the rendered packshot is cached for promo reuse
-])
+/** Phase H1 fix — reusable feeders narrowed.
+ *  hero_01 is NOT reused across all sections anymore (was causing the
+ *  "same packshot / same hand / same bg" clone look that users noticed).
+ *  ONLY the offer/final-cta promo banners reuse the hero packshot, since
+ *  those are explicitly template-overlay banners where reuse is expected.
+ *  All other sections (social-proof selfies, ingredient cards, etc.) get
+ *  fresh AI renders with their own variation directives.
+ *
+ *  Empty for now — Phase H1 effectively disables packshot pooling. Future
+ *  optimization could re-enable it ONLY for promo composer consumption,
+ *  but the planner doesn't need to mark hero as reusable to make that work:
+ *  the promo composer can pull the rendered hero_01 directly from the pack
+ *  (see hybridRouter.findUpstreamRef) without going through the pool. */
+const REUSABLE_FEEDERS = new Set<string>([])
 
 // ── Classifier ─────────────────────────────────────────────────────────────
 

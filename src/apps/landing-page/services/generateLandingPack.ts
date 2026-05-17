@@ -188,11 +188,27 @@ SECTION SPEC — produce EXACTLY these 17 in this order
 
 14. type="before-after", imageAspectRatio="4:5"
     • copy: transformation narrative
-    • 4 imagePrompts all aspectRatio="4:5":
-      - ba_01.jpg, style="Before after collage 1", aspectRatio="4:5": side-by-side before/after. Malaysian woman, casual. Before: tired, heavier, plain. After: vibrant, confident. "Sebelum" and "Selepas" labels. Amateur quality, NOT professional. Authentic COD ecommerce style.
-      - ba_02.jpg, style="Before after collage 2", aspectRatio="4:5": different user (male or older woman), different setting
-      - ba_03.jpg, style="Before after collage 3", aspectRatio="4:5": 2-3 before/after pairs in one collage, social-proof-by-numbers feel
-      - ba_04.jpg, style="Before after collage 4", aspectRatio="4:5": close-up transformation (face/skin/belly by niche), selfie comparison style
+    • 4 imagePrompts — H1 REWRITE: ba_01/ba_02 are SINGLE-PERSON portraits
+      composed locally into collages ba_03/ba_04. Strict "time-passed
+      different person look" rules to prevent AI-clone fake feel.
+      - ba_01.jpg, style="Before portrait — tired / dim / cluttered", aspectRatio="4:5":
+        SINGLE Malaysian woman, BEFORE state. Wearing OLD WORN clothes (faded t-shirt or oversized hoodie, no makeup, hair tied back lazy). DIM COOL lighting (overcast window, dull indoor lamp). Setting: MESSY HOME corner — unmade bed / cluttered desk / unfinished laundry. TIRED posture — slouched shoulders, hand on belly OR forehead, low-energy expression, slight bloat. NO product in frame. NO labels. Authentic phone-camera quality, slightly grainy.
+      - ba_02.jpg, style="After portrait — bright / confident / clean", aspectRatio="4:5":
+        SAME person identity AFTER 30 days. STRICT TIME-PASSED REALISM:
+          - DIFFERENT OUTFIT (clean fitted top, light cardigan, or smart-casual — NOT same shirt as ba_01)
+          - DIFFERENT LIGHTING (bright warm window daylight or golden hour — NOT the dim ba_01 lamp)
+          - DIFFERENT ROOM/SETTING (kitchen with morning light / balcony / cafe / sunlit living room — NEVER the same room as ba_01)
+          - DIFFERENT HAIR styling (down naturally, brushed, or styled — NOT lazy tied)
+          - CONFIDENT posture (upright, slight smile, energetic, healthier skin glow)
+          - DIFFERENT camera angle (if ba_01 is eye-level, ba_02 is slight low-angle or 3/4)
+        NO product in frame. NO labels. Authentic real-life phone capture.
+      - ba_03.jpg, style="Before/after collage — derived", aspectRatio="4:5":
+        DERIVED LOCALLY from ba_01 + ba_02 portraits — DO NOT generate via AI.
+        Composed split-frame collage with "Sebelum" / "Selepas" labels added
+        in post. Marker for the renderer: this asset is composed locally.
+      - ba_04.jpg, style="Before/after collage variant — derived", aspectRatio="4:5":
+        DERIVED LOCALLY same as ba_03 but different split layout (vertical
+        stack vs horizontal). Marker: composed locally.
 
 15. type="faq"
     • faqs: 5-7 Malaysia FAQs (halal, side effects, "berapa lama nampak hasil", COD, shipping, return, allergies)
@@ -235,6 +251,49 @@ SECTION SPEC — produce EXACTLY these 17 in this order
       overlay, random supplement bottle, overdesigned layout, plain solo product shot with no social proof.
 
 ═══════════════════════════════════════════════════════════════
+DIVERSITY RULES — ZERO TOLERANCE FOR AI-CLONE LOOK
+═══════════════════════════════════════════════════════════════
+The #1 dead giveaway of AI-generated landing pages is "same hand pose / same
+bottle angle / same lighting / same shadow" across multiple shots. End users
+spot it instantly and lose trust. Treat every image as if a DIFFERENT person
+took it on a DIFFERENT day in a DIFFERENT room.
+
+LOCK (must stay identical across all images in the pack):
+  • Product brand identity — logo, label text, bottle TYPE (jar/bottle/sachet), packaging colors
+  • Person ethnicity (Malaysian) and broad age range
+
+VARY (MUST change image-to-image inside the same section):
+  • Camera angle — eye-level / slight low-angle / 3/4 / top-down / waist-level
+  • Lighting direction — left window / right window / overhead / warm dim / cool morning / golden hour
+  • Hand pose — both hands / one hand / no hands / pointing / cradling / lifting
+  • Background context — different room corner, different surface, different props
+  • Bottle rotation — front-facing / 3/4 / side / slight back / top-down
+  • Depth of field — sharp / shallow blur / mid-blur
+  • Person outfit (when person appears) — different shirt color/style per shot
+  • Person facial expression — never copy the exact same expression twice
+
+PROHIBITED inside any single section with 3+ images:
+  ✗ Two consecutive images using the same camera angle
+  ✗ Two consecutive images using the same hand pose
+  ✗ Two consecutive images using the same lighting direction
+  ✗ Two consecutive images using the same background context
+
+ENFORCEMENT: in every image prompt, EXPLICITLY state the chosen variation
+axes. Example: "iPhone selfie, slight low-angle, hand-on-stomach pose, warm
+kitchen window lighting, blurred fridge background, bottle held at 3/4 angle".
+DO NOT just say "Malaysian woman holding the product" — that produces
+clones. Be specific about EVERY axis above per image.
+
+═══════════════════════════════════════════════════════════════
+SHOT TYPE ROTATION POOL (per section, never repeat consecutively)
+═══════════════════════════════════════════════════════════════
+Within a multi-image section, rotate through this pool:
+  selfie · close-up · top-down flat-lay · side-angle waist-level ·
+  hand-held casual · mirror shot · table shot · over-the-shoulder · POV reach
+For a 5-image section, pick 5 DIFFERENT shot types from the pool.
+For a 2-image section, the 2 shots must be from DIFFERENT shot types.
+
+═══════════════════════════════════════════════════════════════
 CRITICAL IMAGE PROMPT RULES
 ═══════════════════════════════════════════════════════════════
 • ALWAYS English, 30-80 words
@@ -243,11 +302,11 @@ CRITICAL IMAGE PROMPT RULES
 • DEFAULT ETHNICITY: Malaysian native / Southeast Asian
 • NEVER cinematic / editorial / luxury / stock-photo
 • Aesthetic: Facebook Ads Malaysia native ecommerce UGC — real phone, real lighting
-• PRODUCT IDENTITY: for sections where the product appears (TikTok, Shopee, selfie, crowd, hero), instruct the model to use the exact same product packaging — same bottle shape, label, cap color, logo placement
+• PRODUCT IDENTITY: for sections where the product appears (TikTok, Shopee, selfie, crowd, hero), instruct the model to use the exact same product packaging — same bottle shape, label, cap color, logo placement. BUT vary every OTHER axis per Diversity Rules above.
 • PRICE ACCURACY: for TikTok Shop, Shopee, promo banner image prompts — include the EXACT price from the product offer field. Do NOT invent any other price.
 • Text overlay prompts: include exact text content (e.g. "bold white text overlay reads: ✓ Kurang Penat ✓ Tenaga Lebih")
 • Screenshot prompts: note "slightly JPEG-compressed", "imperfect real phone quality", "authentic"
-• Before/after: amateur quality, NOT gym influencer, NOT professional
+• Before/after: amateur quality, NOT gym influencer, NOT professional. ba_01 = SINGLE before portrait, ba_02 = SINGLE after portrait. STRICT time-passed cues required (different outfit/room/lighting/hair).
 
 ═══════════════════════════════════════════════════════════════
 LANGUAGE RULES — ABSOLUTE

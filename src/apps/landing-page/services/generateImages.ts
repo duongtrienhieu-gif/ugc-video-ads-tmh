@@ -158,6 +158,8 @@ interface QueueOptions {
 
 // ─────────────────────────────────────────────────────────────────────────
 // Build the final prompt fed to KIE — prepends identity locks as needed.
+// Phase H1: appends a per-image variation token + diversity instruction so
+// KIE never produces "same hand / same bg / same bottle angle" clones.
 // ─────────────────────────────────────────────────────────────────────────
 function buildFinalPrompt(job: ImageJob, hasProductRefs: boolean): string {
   const parts: string[] = []
@@ -165,7 +167,108 @@ function buildFinalPrompt(job: ImageJob, hasProductRefs: boolean): string {
   if (job.section.type === 'hero') parts.push(HERO_CHARACTER_LOCK)
   if (hasProductRefs) parts.push(PRODUCT_IDENTITY_PREFIX)
   parts.push(job.prompt.prompt)
-  return parts.join('')
+  // ── Phase H1 anti-clone variation enrichment ─────────────────────────
+  parts.push(buildVariationDirective(job))
+  return parts.join('\n\n')
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Phase H1 — Variation directive.
+// Forces KIE to produce a DIFFERENT latent per image even when the base
+// prompts look similar. Two mechanisms:
+//   1. Unique 6-char `variationSeed` token appended → forces prompt-hash drift
+//   2. Explicit per-image axis selection (camera/lighting/hand/bg/bottle)
+//      seeded by section type + image index so each shot in a section gets
+//      a deterministically different rotation through the axis pools.
+// ─────────────────────────────────────────────────────────────────────────
+
+// Axis pools — picked deterministically per image so a section's N shots
+// cycle through DIFFERENT combinations.
+const CAMERA_ANGLES = [
+  'iPhone selfie eye-level', 'slight low-angle 30°', '3/4 angle waist-height',
+  'top-down flat-lay', 'side-profile slice', 'over-the-shoulder',
+  'POV reach (first-person)', 'mirror reflection shot',
+]
+const LIGHTING_DIRS = [
+  'soft window daylight from left', 'warm kitchen-side glow',
+  'overhead noon natural light', 'golden-hour right-side warm',
+  'cool morning bathroom light', 'dim cozy table-lamp evening',
+  'mixed window + ceiling light', 'soft overcast diffused',
+]
+const HAND_POSES = [
+  'one hand cradling product at chest',
+  'both hands lifting product to face',
+  'pointing index finger at product label',
+  'product resting on palm of one hand',
+  'no hands — product on surface',
+  'hand on belly, other hand near product',
+  'one hand reaching toward camera with product',
+  'cradling product against shoulder',
+]
+const BG_CONTEXTS = [
+  'home kitchen counter with fresh fruit bowl', 'bedroom bedside with plant',
+  'living-room sofa corner with cushions', 'bathroom counter with towel',
+  'cafe table with coffee cup beside', 'home office desk with laptop edge',
+  'dining table with breakfast plate', 'balcony plants softly out of focus',
+]
+const BOTTLE_ANGLES = [
+  'product front-facing label fully visible',
+  'product 3/4 rotated showing depth',
+  'product side profile with cap visible',
+  'product slight top-down 15° tilt',
+  'product held angled toward camera',
+]
+
+function pickFromPool<T>(pool: T[], seed: string, offset = 0): T {
+  let h = 0
+  for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) >>> 0
+  return pool[(h + offset) % pool.length]
+}
+
+/** 6-char random token — appended to every prompt to force latent drift. */
+function makeVariationSeed(): string {
+  return Math.random().toString(36).slice(2, 8)
+}
+
+function buildVariationDirective(job: ImageJob): string {
+  // Pull the existing seed (if pack was loaded from saved project) or mint
+  // a fresh one. Either way, this token appears in the prompt body and
+  // makes the prompt-hash unique per render.
+  const seed = job.prompt.variationSeed ?? makeVariationSeed()
+
+  // Cache the seed onto the prompt for stability — subsequent regens of
+  // this image reuse the same seed so the latent stays consistent.
+  if (!job.prompt.variationSeed) {
+    job.prompt.variationSeed = seed
+  }
+
+  // ── Determine which axes to vary ─────────────────────────────────────
+  // Person-centric sections get all 5 axes; product-only / infographic /
+  // screenshot sections get a narrower set.
+  const personSections = new Set([
+    'hero', 'pain', 'failed-solutions', 'product-discovery',
+    'lifestyle', 'social-proof', 'before-after',
+  ])
+  const isPerson = personSections.has(job.section.type)
+
+  const idxSeed = `${job.section.type}-${job.imageIdx}-${seed}`
+  const camera   = pickFromPool(CAMERA_ANGLES,   idxSeed, 0)
+  const lighting = pickFromPool(LIGHTING_DIRS,   idxSeed, 7)
+  const hand     = pickFromPool(HAND_POSES,      idxSeed, 13)
+  const bg       = pickFromPool(BG_CONTEXTS,     idxSeed, 19)
+  const bottle   = pickFromPool(BOTTLE_ANGLES,   idxSeed, 23)
+
+  const lines: string[] = []
+  lines.push('AUTHENTICITY VARIATION DIRECTIVE — strict, do NOT clone previous variants:')
+  lines.push(`  • Camera angle: ${camera}`)
+  lines.push(`  • Lighting: ${lighting}`)
+  if (isPerson) lines.push(`  • Hand pose: ${hand}`)
+  lines.push(`  • Background context: ${bg}`)
+  lines.push(`  • Product rotation: ${bottle}`)
+  lines.push(`  • This image must NOT share the same hand position / lighting / background / bottle angle as any other image in the pack.`)
+  lines.push(`  • Variation token: ${seed} (different latent enforcement)`)
+
+  return lines.join('\n')
 }
 
 // ─────────────────────────────────────────────────────────────────────────

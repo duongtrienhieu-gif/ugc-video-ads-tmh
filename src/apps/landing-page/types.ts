@@ -110,6 +110,12 @@ export interface ImagePrompt {
   /** VN human-readable explanation of why this strategy was picked.
    *  Shown in DevTools / debug panel only, never user-facing UI. */
   renderReason?: string
+  /** Phase H1 — Anti-clone variation token. Random 6-char string forces the
+   *  KIE prompt to be UNIQUE per image, which forces a different latent and
+   *  prevents the "same hand / same background / same bottle angle" clone
+   *  look that plagues AI-generated landing pages. Auto-populated by
+   *  generateLandingPack; never user-facing. */
+  variationSeed?: string
 }
 
 export interface FaqItem {
