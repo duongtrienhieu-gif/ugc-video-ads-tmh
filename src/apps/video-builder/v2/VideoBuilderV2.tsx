@@ -20,7 +20,7 @@ import type { Model, Product } from '../../../stores/types'
 import type { V2PipelineState, CompiledPrompt } from './types'
 import { createEmptyV2State } from './types'
 import { extractIdentityPack } from './services/masterFrame'
-import { generateStoryboard } from './services/sceneBlueprint'
+import { generateStoryboard, computeSceneCount } from './services/sceneBlueprint'
 import { defaultVisualStyleDna, computeConsistencyConfig } from './types'
 import type { SceneBlueprint, DiversityReport } from './types'
 import ConsistencySlider from './components/ConsistencySlider'
@@ -409,6 +409,10 @@ export default function VideoBuilderV2({ onSwitchToV1 }: Props) {
       return
     }
     setIsGeneratingStoryboard(true)
+    // Z12: dynamic scene count — scale with script length.
+    // clamp(ceil(words/35), 8, 24). A 60-word script → 8 scenes; 500 → 15;
+    // 800 → 23; very long → capped at 24.
+    const dynamicSceneCount = computeSceneCount(state.inputs.script)
     try {
       const { blueprints, diversity, recoveredAtStage } = await generateStoryboard({
         geminiKey: geminiApiKey,
@@ -416,7 +420,7 @@ export default function VideoBuilderV2({ onSwitchToV1 }: Props) {
         identity: state.identityPack,
         productName: state.inputs.product.productName,
         dna: defaultVisualStyleDna(),
-        numScenes: 9,
+        numScenes: dynamicSceneCount,
         onStageChange: (stage, reason) => {
           // Spec Task 10: stage-specific Vietnamese toasts
           if (stage === 'attempt-1') {

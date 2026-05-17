@@ -24,6 +24,7 @@ import type {
   CompiledPromptContext,
   SceneBlueprint,
   SubjectFocus,
+  VisualMotif,
 } from '../types'
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -149,14 +150,48 @@ function buildSceneDelta(blueprint: SceneBlueprint): string {
 
   if (blueprint.ctaFocus) phrases.push('CTA beat: direct confident eye contact')
 
+  // Z12: layer motif anchor so person scenes don't all share the same mood
+  const motif = motifAnchor(blueprint.visualMotif)
+
   const beat = blueprint.sceneType ? `[${blueprint.sceneType.toUpperCase()}] ` : ''
-  return `${beat}${phrases.join('. ')}.`
+  return `${beat}${phrases.join('. ')}.${motif}`
+}
+
+// ─── Z12: motif phrases injected into non-person scene delta ───────────────
+// Adds a concrete aesthetic anchor on top of subjectFocus so two infographic
+// scenes don't look identical.
+//
+// Example: subjectFocus='infographic' + motif='chemistry' →
+//   "render as glowing 3D molecular structures, atomic bonds, chemical formulas
+//    orbiting the product"
+//
+// vs subjectFocus='infographic' + motif='social-proof' →
+//   "render as floating metric cards with ★ stars, user count badges,
+//    testimonial chips around the product"
+
+const MOTIF_PHRASE: Record<VisualMotif, string> = {
+  'medical':      'clinical diagram aesthetic: cell pathway / body system / diagnostic infographic feel, sterile blue-white palette',
+  'chemistry':    'molecular structures, atomic bonds, chemical formulas, lab beaker hint, deep blue/teal gradient',
+  'energy':       'glowing 3D particles, light streaks, motion-blur energy waves, electric cyan/amber glow',
+  'premium':      'soft gradient backdrop, gold/cream accent, halo glow, refined minimal',
+  'luxury':       'black velvet backdrop, marble pedestal, dramatic chiaroscuro lighting',
+  'scientific':   'data viz, microscope-feel detail, sterile clean palette, technical labels',
+  'organic':      'fresh herbs / leaves / fruit accent, soft natural daylight, earthy tones',
+  'social-proof': 'floating metric cards (★ stars, user count, COD badge), testimonial chips, multi-card composition',
+  'kinetic':      'motion blur, dynamic crop, fast-feel composition, action streak',
+  'emotional':    'warm window light, golden hour, intimate / vulnerable mood',
+}
+
+function motifAnchor(motif: VisualMotif | undefined): string {
+  if (!motif) return ''
+  return ` Motif: ${MOTIF_PHRASE[motif]}.`
 }
 
 // ─── Z11: scene-delta variants for non-person subjectFocus ─────────────────
 //
 // These produce entirely different prompt shapes so a "Vitamin B floating
 // particles" scene doesn't end up as a portrait of a person holding a bottle.
+// Z12 layers a motif anchor on top so two infographic scenes feel distinct.
 //
 function buildNonPersonDelta(blueprint: SceneBlueprint, focus: Exclude<SubjectFocus, 'person'>): string {
   const beat = blueprint.sceneType ? `[${blueprint.sceneType.toUpperCase()}] ` : ''
@@ -168,6 +203,9 @@ function buildNonPersonDelta(blueprint: SceneBlueprint, focus: Exclude<SubjectFo
   // subjectAction is repurposed in non-person scenes to describe the VISUAL
   // (particles orbit, capsule splits, ingredient swirls, etc).
   const visualAction = blueprint.subjectAction?.trim() || blueprint.visualObjective?.trim() || ''
+  // Z12: motif phrase anchors the aesthetic so this scene doesn't look like
+  // every other scene of the same focus.
+  const motif = motifAnchor(blueprint.visualMotif)
 
   switch (focus) {
     case 'product': {
@@ -175,7 +213,7 @@ function buildNonPersonDelta(blueprint: SceneBlueprint, focus: Exclude<SubjectFo
       return `${beat}NO PERSON IN FRAME — hero product macro shot. ` +
         `Product centered, label clearly readable, preserve packaging exactly from reference image. ` +
         `${visualAction ? `Visual: ${visualAction}. ` : ''}` +
-        `${camera}. ${lighting}. ` +
+        `${camera}. ${lighting}.${motif} ` +
         `Background: clean minimal seamless surface that complements the packaging color. ` +
         `Product hero, no avatar, no hands, no body parts.`
     }
@@ -186,7 +224,7 @@ function buildNonPersonDelta(blueprint: SceneBlueprint, focus: Exclude<SubjectFo
         `Render as glowing 3D particles / molecular structures / floating energy / capsule explode view / ` +
         `mechanism diagram surrounding the product. The product (from reference) sits centered with its ` +
         `packaging preserved exactly — particles and labels orbit / float / animate AROUND it. ` +
-        `Clean dark gradient background with subtle glow. ${camera}. ${lighting}. ` +
+        `Clean dark gradient background with subtle glow. ${camera}. ${lighting}.${motif} ` +
         `Native Malaysia ecommerce infographic feel — NOT pharma-clinical, NOT cinematic. ` +
         `No avatar, no person, no hands.`
     }
@@ -196,7 +234,7 @@ function buildNonPersonDelta(blueprint: SceneBlueprint, focus: Exclude<SubjectFo
         `${visualAction ? `Show: ${visualAction}. ` : ''}` +
         `Render the key ingredient (capsule cross-section, fruit/herb macro, powder swirl, gummy split, ` +
         `vitamin tablet closeup) with the product packaging visible in background or beside the ingredient. ` +
-        `Shallow depth of field. ${camera}. ${lighting}. ` +
+        `Shallow depth of field. ${camera}. ${lighting}.${motif} ` +
         `Native ecommerce ingredient card aesthetic. No avatar, no person.`
     }
     case 'lifestyle': {
@@ -206,7 +244,7 @@ function buildNonPersonDelta(blueprint: SceneBlueprint, focus: Exclude<SubjectFo
         `${blueprint.productVisibility === 'low'
           ? 'Product NOT in frame — pure environment / mood shot.'
           : 'Product subtly placed in context (kitchen counter, desk corner, etc) — not held by anyone.'} ` +
-        `${camera}. ${lighting}. ` +
+        `${camera}. ${lighting}.${motif} ` +
         `Native UGC environment shot feel. No avatar, no person, no hands.`
     }
   }

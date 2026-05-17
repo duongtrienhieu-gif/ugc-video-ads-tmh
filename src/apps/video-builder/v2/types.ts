@@ -232,6 +232,36 @@ export type SubjectFocus =
   | 'ingredient'   // raw ingredient macro / capsule explode / ingredient swirl
   | 'lifestyle'    // environment / context only — no person, no product hero
 
+/**
+ * Z12 — VISUAL MOTIF ENGINE.
+ *
+ * subjectFocus tells WHAT kind of subject is in the scene (person / product /
+ * infographic / etc). visualMotif tells the AESTHETIC the scene wears so two
+ * infographic scenes don't end up looking identical.
+ *
+ * Example pairings:
+ *   • infographic + chemistry  → molecular bonds, chemical formulas, lab feel
+ *   • infographic + energy     → glowing particles, light streaks, motion blur
+ *   • infographic + social-proof → metrics cards, star ratings, testimonial chips
+ *   • ingredient  + organic    → fresh leaves, herb macro, natural light
+ *   • product     + premium    → soft gradient, gold accent, halo glow
+ *   • product     + luxury     → black velvet, marble pedestal, dramatic light
+ *   • person      + emotional  → tight on face, warm window light, vulnerable
+ *   • person      + kinetic    → motion-blur action, dynamic pose
+ *   • lifestyle   + emotional  → golden-hour, warm interior, after-life mood
+ */
+export type VisualMotif =
+  | 'medical'       // clinical / lab / diagnostic — cell diagrams, body systems
+  | 'chemistry'     // molecular bonds, chemical formulas, atom orbitals
+  | 'energy'        // glowing particles, light streaks, motion-blur energy waves
+  | 'premium'       // soft gradients, gold/cream accent, halo glow, refined
+  | 'luxury'        // black velvet, marble, dramatic chiaroscuro lighting
+  | 'scientific'    // data viz, microscope feel, sterile clean
+  | 'organic'       // fresh herbs/leaves/fruit, soft natural daylight, earthy
+  | 'social-proof'  // metric cards, stars, testimonial chips, multi-card layout
+  | 'kinetic'       // motion blur, action, dynamic crop, fast feel
+  | 'emotional'     // warm window light, golden hour, vulnerable / intimate
+
 export interface SceneBlueprint {
   /** 1-indexed scene id in the storyboard (1-9 typically) */
   sceneId: number
@@ -244,6 +274,10 @@ export interface SceneBlueprint {
   /** Z11: what KIND of visual this scene is. Decides if the avatar appears
    *  at all. Without it, every scene becomes a portrait. */
   subjectFocus?: SubjectFocus
+  /** Z12: visual motif / aesthetic skin layered on top of subjectFocus.
+   *  Differentiates two scenes of the same focus (eg. two infographic scenes
+   *  feel different when one is `chemistry` and the other is `social-proof`). */
+  visualMotif?: VisualMotif
   /** What the scene visually proves / shows — e.g. "convey night-time fatigue", "demonstrate cap-twist freshness" */
   visualObjective?: string
   /** Concrete physical action subject performs — e.g. "rubbing temple while staring at laptop", "smiling, lifting jar to lens" */

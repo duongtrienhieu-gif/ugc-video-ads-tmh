@@ -16,7 +16,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { directGeminiVision } from '../../../../utils/gemini'
-import type { IdentityPack, SceneBlueprint, SceneType, ShotEnergy, SubjectFocus, VisualStyleDna, DiversityReport } from '../types'
+import type { IdentityPack, SceneBlueprint, SceneType, ShotEnergy, SubjectFocus, VisualMotif, VisualStyleDna, DiversityReport } from '../types'
 import { SCENE_PRESETS, DEFAULT_PRESET_ROTATION, VISUAL_TONE_CLAMP, getPreset, inferPresetForScene } from './scenePresets'
 import { safeParseJson, logJsonFailure } from './jsonResilience'
 
@@ -62,9 +62,9 @@ A typical 30-sec UGC ad uses 5-7 of these beats spread over 9 scenes.
 ═══════════════════════════════════════════════════════════════
 REQUIRED FIELDS PER SCENE
 ═══════════════════════════════════════════════════════════════
-sceneId, sceneType, subjectFocus, visualObjective, subjectAction, narrativePurpose,
-sceneGoal, environment, environmentType, wardrobeStyle, composition,
-cameraAngle, shotType, shotEnergy, pose, emotion, handUsage,
+sceneId, sceneType, subjectFocus, visualMotif, visualObjective, subjectAction,
+narrativePurpose, sceneGoal, environment, environmentType, wardrobeStyle,
+composition, cameraAngle, shotType, shotEnergy, pose, emotion, handUsage,
 productVisibility, backgroundType, lightingStyle, visualTone,
 motionIntent, overlayDensity, ctaFocus, speech, presetLabel,
 motionStyle, cameraMotion
@@ -118,6 +118,49 @@ WHEN subjectFocus IS NOT 'person':
     infographic/ingredient.
   • subjectAction describes the VISUAL ACTION: "particles orbit product",
     "capsule splits open releasing molecules", "ingredient powder swirls", etc.
+
+═══════════════════════════════════════════════════════════════
+Z12 — visualMotif — VISUAL AESTHETIC LAYER (mandatory):
+═══════════════════════════════════════════════════════════════
+ONE OF: medical · chemistry · energy · premium · luxury · scientific ·
+        organic · social-proof · kinetic · emotional
+
+This is a SECOND axis layered on top of subjectFocus. Without it, two
+infographic scenes look identical. With it, one infographic scene becomes
+"chemistry" (molecular bonds, lab feel) and another becomes "energy"
+(glowing particles, light streaks) — they finally feel different.
+
+MOTIF CLASSIFICATION GUIDE (combined with subjectFocus):
+
+  • infographic + chemistry    → molecular bonds, atomic structure, formulas
+  • infographic + energy       → glowing particles, light streaks, energy waves
+  • infographic + social-proof → metric cards (★ rating, user count, badges)
+  • infographic + medical      → clinical diagram, body system, cell pathways
+  • infographic + scientific   → data viz, microscope feel, lab clean
+
+  • ingredient + organic       → fresh herbs / fruit / leaf macro, daylight
+  • ingredient + chemistry     → capsule cross-section, molecule swirl
+
+  • product + premium          → soft gradient, gold/cream accent, halo glow
+  • product + luxury           → black velvet, marble pedestal, chiaroscuro
+  • product + kinetic          → product spinning, motion-blur action shot
+
+  • person + emotional         → warm window light, vulnerable / intimate
+  • person + kinetic           → motion-blur action, dynamic pose
+  • person + premium           → polished confident lighting, brand model feel
+
+  • lifestyle + emotional      → golden hour, warm interior, after-life mood
+  • lifestyle + organic        → outdoor daylight, plant-rich environment
+
+CLASSIFICATION RULE:
+  Read the script line. If it talks about science / vitamin function /
+  metabolism → motif "chemistry" or "energy". If it cites numbers / reviews /
+  trust → motif "social-proof". If it talks about ingredient origin →
+  "organic". If it's about emotion / aspiration → "emotional". If product
+  glamour → "premium" or "luxury". If high-action / motion → "kinetic".
+
+DIVERSITY: across all scenes use AT LEAST 4 different visualMotif values.
+Never repeat the same motif in 3+ scenes in a row.
 
 ═══════════════════════════════════════════════════════════════
 VIDEO-LAYER FIELDS (drive downstream Kling / Veo / Runway clip gen)
@@ -252,11 +295,13 @@ function buildSafeModeStoryboardPrompt(p: BlueprintPromptParams): string {
   return `Output a JSON array of exactly ${numScenes} simple scene objects. Use plain ASCII only. No emoji. No special characters.
 
 Each object has these keys with short string values (max 8 words each):
-sceneId, sceneType, subjectFocus, visualObjective, subjectAction, narrativePurpose, sceneGoal, environment, environmentType, wardrobeStyle, composition, cameraAngle, shotType, shotEnergy, pose, emotion, handUsage, productVisibility, backgroundType, lightingStyle, visualTone, motionIntent, overlayDensity, ctaFocus, speech, presetLabel
+sceneId, sceneType, subjectFocus, visualMotif, visualObjective, subjectAction, narrativePurpose, sceneGoal, environment, environmentType, wardrobeStyle, composition, cameraAngle, shotType, shotEnergy, pose, emotion, handUsage, productVisibility, backgroundType, lightingStyle, visualTone, motionIntent, overlayDensity, ctaFocus, speech, presetLabel
 
 sceneType must be one of: hook, pain, frustration, failed_solution, discovery, explanation, recovery, lifestyle, social_proof, cta.
 subjectFocus must be one of: person, product, infographic, ingredient, lifestyle.
 Mix subjectFocus across scenes — roughly 40% person / 30% product / 20% infographic / 10% ingredient or lifestyle.
+visualMotif must be one of: medical, chemistry, energy, premium, luxury, scientific, organic, social-proof, kinetic, emotional.
+Use at least 4 different visualMotif values across the scenes.
 shotEnergy must be one of: intimate, dynamic, emotional, calm, tension, relief, energetic.
 productVisibility must be low or medium or high.
 overlayDensity must be none or low or medium or high.
@@ -271,7 +316,7 @@ Product: ${p.productName.replace(/["']/g, '')} - ${p.identity.productDescription
 Script (extract speech lines and emotional beats from this):
 ${p.script.slice(0, 1500).replace(/["']/g, '')}
 
-Example: {"sceneId":1,"sceneType":"pain","subjectFocus":"person","visualObjective":"show night fatigue","subjectAction":"rubbing temple at desk","narrativePurpose":"establish problem","sceneGoal":"open with pain","environment":"messy home office at night","environmentType":"home office desk","wardrobeStyle":"home casual","composition":"medium close up","cameraAngle":"iphone eye level","shotType":"ugc handheld","shotEnergy":"tension","pose":"slumped at desk","emotion":"tired concerned","handUsage":"hand on forehead","productVisibility":"low","backgroundType":"messy desk dim","lightingStyle":"dim cool night","visualTone":"warm ecommerce ugc","motionIntent":"handheld","overlayDensity":"low","ctaFocus":false,"speech":"line from script","presetLabel":"pain hook"}
+Example: {"sceneId":1,"sceneType":"pain","subjectFocus":"person","visualMotif":"emotional","visualObjective":"show night fatigue","subjectAction":"rubbing temple at desk","narrativePurpose":"establish problem","sceneGoal":"open with pain","environment":"messy home office at night","environmentType":"home office desk","wardrobeStyle":"home casual","composition":"medium close up","cameraAngle":"iphone eye level","shotType":"ugc handheld","shotEnergy":"tension","pose":"slumped at desk","emotion":"tired concerned","handUsage":"hand on forehead","productVisibility":"low","backgroundType":"messy desk dim","lightingStyle":"dim cool night","visualTone":"warm ecommerce ugc","motionIntent":"handheld","overlayDensity":"low","ctaFocus":false,"speech":"line from script","presetLabel":"pain hook"}
 
 Return only the JSON array. Nothing else. No markdown.`
 }
@@ -298,13 +343,18 @@ tone=${p.dna.visualTone.slice(0, 100)} | camera=${p.dna.cameraStyle.slice(0, 60)
 PRESET ROTATION (loose hint — sceneType + script beat takes priority): ${presetHints}
 
 OUTPUT — JSON array of exactly ${p.numScenes} objects with these keys (short string values, <15 words each):
-[{"sceneId":1,"sceneType":"pain","subjectFocus":"person","visualObjective":"convey night fatigue reality","subjectAction":"rubbing temple while staring at laptop","narrativePurpose":"establish problem the viewer recognizes","sceneGoal":"open on pain","environment":"messy home office at night","environmentType":"home office desk","wardrobeStyle":"home casual","composition":"medium close-up","cameraAngle":"iphone slight low-angle","shotType":"ugc handheld","shotEnergy":"tension","pose":"slumped over laptop","emotion":"tired concerned","handUsage":"hand on forehead, no product","productVisibility":"low","backgroundType":"cluttered desk dim light","lightingStyle":"dim cool blue night","visualTone":"warm authentic ugc","motionIntent":"subtle handheld","overlayDensity":"low","ctaFocus":false,"speech":"...","presetLabel":"pain hook"}]
+[{"sceneId":1,"sceneType":"pain","subjectFocus":"person","visualMotif":"emotional","visualObjective":"convey night fatigue reality","subjectAction":"rubbing temple while staring at laptop","narrativePurpose":"establish problem the viewer recognizes","sceneGoal":"open on pain","environment":"messy home office at night","environmentType":"home office desk","wardrobeStyle":"home casual","composition":"medium close-up","cameraAngle":"iphone slight low-angle","shotType":"ugc handheld","shotEnergy":"tension","pose":"slumped over laptop","emotion":"tired concerned","handUsage":"hand on forehead, no product","productVisibility":"low","backgroundType":"cluttered desk dim light","lightingStyle":"dim cool blue night","visualTone":"warm authentic ugc","motionIntent":"subtle handheld","overlayDensity":"low","ctaFocus":false,"speech":"...","presetLabel":"pain hook"}]
 
 KEY REMINDERS before emitting:
 - Z11: subjectFocus MUST vary — target ~40% person / 30% product / 20% infographic / 10% ingredient or lifestyle
-- When the script line is about MECHANISM / VITAMIN / INGREDIENT / BODY SCIENCE → subjectFocus = "infographic" or "ingredient" (no person)
-- When the script line describes the PACKAGING / PRODUCT FORM → subjectFocus = "product" (macro hero, no person)
+- Z12: visualMotif MUST vary — use ≥4 different motifs across the storyboard. Two infographic scenes with same motif look identical.
+- When the script line is about MECHANISM / VITAMIN / INGREDIENT / BODY SCIENCE → subjectFocus = "infographic" or "ingredient" + motif = "chemistry" / "energy" / "medical"
+- When the script line cites REVIEWS / STARS / USER COUNT → motif = "social-proof"
+- When the script line describes the PACKAGING / PRODUCT FORM → subjectFocus = "product" + motif = "premium" or "kinetic"
 - NEVER produce 3+ consecutive person scenes — interleave them with product/infographic beats
+- NEVER repeat the same composition back-to-back (medium close-up → medium close-up is forbidden)
+- NEVER repeat the same pose twice anywhere in the storyboard
+- CTA scene must be in the FINAL 20% of the timeline (e.g. last 2 of 9, last 3 of 12), never earlier
 - Vary wardrobeStyle (≥3 unique) and environmentType (≥4 unique) across person scenes
 - Pain/frustration/failed_solution scenes: productVisibility = "low"
 - CTA scene: productVisibility = "high" + ctaFocus = true
@@ -321,6 +371,7 @@ interface RawBlueprint {
   sceneNumber?: number
   sceneType?: string
   subjectFocus?: string
+  visualMotif?: string
   visualObjective?: string
   subjectAction?: string
   narrativePurpose?: string
@@ -377,6 +428,45 @@ function clampSubjectFocus(v: string | undefined, fallback: SubjectFocus): Subje
   if (lower === 'capsule' || lower === 'pill') return 'ingredient'
   if (lower === 'environment' || lower === 'context' || lower === 'scene') return 'lifestyle'
   return (SUBJECT_FOCUS_SET as string[]).includes(lower) ? (lower as SubjectFocus) : fallback
+}
+
+// ── Z12: visualMotif clamp + smart default ─────────────────────────────────
+const VISUAL_MOTIF_SET: VisualMotif[] = [
+  'medical', 'chemistry', 'energy', 'premium', 'luxury', 'scientific',
+  'organic', 'social-proof', 'kinetic', 'emotional',
+]
+
+/** Smart default motif based on (sceneType, subjectFocus) when LLM omits it. */
+function motifDefault(sceneType: SceneType | undefined, focus: SubjectFocus): VisualMotif {
+  if (focus === 'infographic') {
+    if (sceneType === 'explanation') return 'chemistry'
+    if (sceneType === 'social_proof') return 'social-proof'
+    return 'energy'
+  }
+  if (focus === 'ingredient') return 'organic'
+  if (focus === 'product') return sceneType === 'cta' ? 'kinetic' : 'premium'
+  if (focus === 'lifestyle') return 'emotional'
+  // person
+  if (sceneType === 'pain' || sceneType === 'frustration' || sceneType === 'discovery') return 'emotional'
+  if (sceneType === 'cta') return 'kinetic'
+  return 'emotional'
+}
+
+function clampVisualMotif(v: string | undefined, fallback: VisualMotif): VisualMotif {
+  if (!v) return fallback
+  const lower = v.toLowerCase().trim().replace(/[\s_]/g, '-')
+  // Common aliases
+  if (lower === 'clinical' || lower === 'pharma') return 'medical'
+  if (lower === 'molecular' || lower === 'molecule' || lower === 'lab') return 'chemistry'
+  if (lower === 'particles' || lower === 'glow' || lower === 'electric') return 'energy'
+  if (lower === 'elegant' || lower === 'minimal-premium') return 'premium'
+  if (lower === 'high-end' || lower === 'sophisticated') return 'luxury'
+  if (lower === 'data' || lower === 'lab-tech') return 'scientific'
+  if (lower === 'natural' || lower === 'herbal' || lower === 'fresh') return 'organic'
+  if (lower === 'metrics' || lower === 'reviews' || lower === 'testimonials' || lower === 'socialproof') return 'social-proof'
+  if (lower === 'motion' || lower === 'action' || lower === 'dynamic') return 'kinetic'
+  if (lower === 'warm' || lower === 'intimate' || lower === 'storytelling') return 'emotional'
+  return (VISUAL_MOTIF_SET as string[]).includes(lower) ? (lower as VisualMotif) : fallback
 }
 
 const SHOT_ENERGY_SET: ShotEnergy[] = [
@@ -517,6 +607,7 @@ function clampVisualTone(v: string | undefined): string {
 function normalizeBlueprint(raw: RawBlueprint, idx: number): SceneBlueprint {
   const sceneType = clampSceneType(raw.sceneType)
   const subjectFocus = clampSubjectFocus(raw.subjectFocus, focusForSceneType(sceneType))
+  const visualMotif = clampVisualMotif(raw.visualMotif, motifDefault(sceneType, subjectFocus))
   const productVisibility = raw.productVisibility
     ? clampVisibility(raw.productVisibility)
     : visibilityForSceneType(sceneType)
@@ -525,6 +616,7 @@ function normalizeBlueprint(raw: RawBlueprint, idx: number): SceneBlueprint {
     sceneNumber: raw.sceneId ?? raw.sceneNumber ?? idx + 1,
     sceneType,
     subjectFocus,
+    visualMotif,
     visualObjective: raw.visualObjective,
     subjectAction: raw.subjectAction,
     narrativePurpose: raw.narrativePurpose,
@@ -851,12 +943,207 @@ ${normalPrompt}`
     }
   })
 
+  // Z12: TIMELINE DIRECTOR + ANTI-DUPLICATE ENGINE
+  // Runs AFTER preset inference so mutations land on the final shape.
+  blueprints = enforceTimelineDirector(blueprints)
+
   const diversity = validateDiversity(blueprints)
 
   // Apply VISUAL_TONE_CLAMP suffix to ensure no scene smuggles in banned terms downstream
   blueprints = blueprints.map((b) => ({ ...b, visualTone: `${b.visualTone}. ${VISUAL_TONE_CLAMP}` }))
 
   return { blueprints, diversity, recoveredAtStage }
+}
+
+// ═════════════════════════════════════════════════════════════════════════
+// Z12 — DYNAMIC SCENE COUNT
+// ═════════════════════════════════════════════════════════════════════════
+// Formula: clamp(ceil(words / 35), 8, 24)
+// 35 words ≈ ~7s of voiceover at ~150 wpm; each scene covers ~3-5s of video,
+// so two scenes per beat is a reasonable budget.
+//
+// Examples:
+//   60-word script  → 2 scenes → clamped to 8 (floor)
+//   300-word script → 9 scenes
+//   500-word script → 15 scenes
+//   800-word script → 23 scenes
+//   1200-word script → clamped to 24 (ceiling)
+// ─────────────────────────────────────────────────────────────────────────
+
+/** Count words in the script (whitespace-split, filters empty tokens). */
+function countWords(script: string): number {
+  return script.trim().split(/\s+/).filter(Boolean).length
+}
+
+export const SCENE_COUNT_MIN = 8
+export const SCENE_COUNT_MAX = 24
+const WORDS_PER_SCENE = 35
+
+export function computeSceneCount(script: string): number {
+  const words = countWords(script)
+  const raw = Math.ceil(words / WORDS_PER_SCENE)
+  return Math.max(SCENE_COUNT_MIN, Math.min(SCENE_COUNT_MAX, raw))
+}
+
+// ═════════════════════════════════════════════════════════════════════════
+// Z12 — TIMELINE DIRECTOR + ANTI-DUPLICATE ENGINE
+// ═════════════════════════════════════════════════════════════════════════
+// Post-processor that runs AFTER normalizeBlueprint. Detects + auto-mutates
+// blueprint sequences that violate the hard rules:
+//
+//   R1. No 3+ consecutive person scenes — middle one converts to product/
+//       infographic/ingredient (whichever doesn't repeat)
+//   R2. No 2 identical composition values back-to-back — second one swaps
+//       to an alternative from a pool
+//   R3. No identical pose appearing twice anywhere — duplicates get mutated
+//   R4. Same backgroundType max 2x total — extras get re-themed
+//   R5. CTA scenes must live in the final 20% of the timeline — earlier
+//       ctaFocus flags get cleared (they were misclassified)
+//   R6. Infographic motif spacing — same motif can't repeat 3+ in a row
+//
+// Why mutate vs retry: Gemini retry adds 20-30s + cost. Mutation is instant
+// and uses a curated alternative pool that already passes style clamps.
+// ─────────────────────────────────────────────────────────────────────────
+
+const COMPOSITION_ALT_POOL = [
+  'medium close-up', 'wide-medium', 'over-the-shoulder', 'selfie POV',
+  'object detail shot', 'environment shot', 'reaction shot', 'macro detail',
+  'top-down flatlay', 'centered hero composition',
+]
+const BACKGROUND_ALT_POOL = [
+  'real lived-in home softly out of focus',
+  'kitchen counter mid-morning',
+  'cafe wooden table',
+  'sunlit bedroom',
+  'home office desk corner',
+  'bathroom mirror morning light',
+  'dining room window-side',
+  'cosy living room couch',
+]
+const POSE_ALT_POOL = [
+  'natural standing relaxed',
+  'sitting at table thinking',
+  'leaning on counter casually',
+  'half-turn toward camera',
+  'arms crossed confidently',
+  'hand to chin reflective',
+  'walking with subtle stride',
+  'looking down then up at lens',
+]
+
+/** Pick the first item from `pool` that isn't already used in `seen`. */
+function pickFreshFromPool(pool: string[], seen: Set<string>, idx: number): string {
+  // Deterministic rotation so the same idx always picks the same slot when
+  // not blocked — keeps mutations stable across regenerations.
+  for (let off = 0; off < pool.length; off++) {
+    const candidate = pool[(idx + off) % pool.length]
+    if (!seen.has(candidate.toLowerCase())) return candidate
+  }
+  return pool[idx % pool.length]
+}
+
+export function enforceTimelineDirector(blueprints: SceneBlueprint[]): SceneBlueprint[] {
+  if (blueprints.length === 0) return blueprints
+  const N = blueprints.length
+  const ctaCutoff = Math.floor(N * 0.8) // CTA only allowed from this index onward
+
+  // Work on a mutable copy
+  const out = blueprints.map((b) => ({ ...b }))
+
+  // ── R1: no 3+ consecutive person scenes ──────────────────────────────
+  for (let i = 2; i < out.length; i++) {
+    if (
+      out[i - 2].subjectFocus === 'person' &&
+      out[i - 1].subjectFocus === 'person' &&
+      out[i].subjectFocus     === 'person'
+    ) {
+      // Mutate the middle one. Pick a non-person focus that suits the beat.
+      const middle = out[i - 1]
+      const newFocus: SubjectFocus =
+        middle.sceneType === 'explanation' ? 'infographic' :
+        middle.sceneType === 'social_proof' ? 'infographic' :
+        middle.sceneType === 'lifestyle' ? 'lifestyle' :
+        'product'
+      out[i - 1] = {
+        ...middle,
+        subjectFocus: newFocus,
+        visualMotif: motifDefault(middle.sceneType, newFocus),
+      }
+      console.log(`[timelineDirector] R1: scene ${i} broke 3-person run — converted scene ${i - 1} to ${newFocus}`)
+    }
+  }
+
+  // ── R2: no identical composition back-to-back ────────────────────────
+  for (let i = 1; i < out.length; i++) {
+    const prev = (out[i - 1].composition ?? '').toLowerCase().trim()
+    const cur  = (out[i].composition ?? '').toLowerCase().trim()
+    if (prev && cur && prev === cur) {
+      const used = new Set([prev])
+      out[i] = { ...out[i], composition: pickFreshFromPool(COMPOSITION_ALT_POOL, used, i) }
+      console.log(`[timelineDirector] R2: scene ${i + 1} duplicated composition — swapped`)
+    }
+  }
+
+  // ── R3: same pose appears 2x anywhere → mutate duplicates ────────────
+  const seenPoses = new Set<string>()
+  for (let i = 0; i < out.length; i++) {
+    const pose = (out[i].pose ?? '').toLowerCase().trim()
+    if (!pose) continue
+    if (seenPoses.has(pose)) {
+      out[i] = { ...out[i], pose: pickFreshFromPool(POSE_ALT_POOL, seenPoses, i) }
+      seenPoses.add(out[i].pose.toLowerCase())
+      console.log(`[timelineDirector] R3: scene ${i + 1} duplicated pose — mutated`)
+    } else {
+      seenPoses.add(pose)
+    }
+  }
+
+  // ── R4: same backgroundType max 2x total ─────────────────────────────
+  const bgCount = new Map<string, number>()
+  for (let i = 0; i < out.length; i++) {
+    const bg = (out[i].backgroundType ?? '').toLowerCase().trim()
+    if (!bg) continue
+    const c = bgCount.get(bg) ?? 0
+    if (c >= 2) {
+      const used = new Set(Array.from(bgCount.keys()))
+      out[i] = { ...out[i], backgroundType: pickFreshFromPool(BACKGROUND_ALT_POOL, used, i) }
+      bgCount.set(out[i].backgroundType.toLowerCase(), 1)
+      console.log(`[timelineDirector] R4: scene ${i + 1} 3rd repeat of same background — swapped`)
+    } else {
+      bgCount.set(bg, c + 1)
+    }
+  }
+
+  // ── R5: CTA only in final 20% ────────────────────────────────────────
+  for (let i = 0; i < out.length; i++) {
+    if (out[i].ctaFocus && i < ctaCutoff) {
+      out[i] = { ...out[i], ctaFocus: false }
+      console.log(`[timelineDirector] R5: scene ${i + 1} had ctaFocus too early (cutoff=${ctaCutoff}) — cleared`)
+    }
+  }
+  // Guarantee at least one CTA-flagged scene in the final tier
+  const ctaWindow = out.slice(ctaCutoff)
+  if (!ctaWindow.some((b) => b.ctaFocus)) {
+    const lastIdx = out.length - 1
+    out[lastIdx] = { ...out[lastIdx], ctaFocus: true, sceneType: out[lastIdx].sceneType ?? 'cta' }
+    console.log(`[timelineDirector] R5: no CTA in final window — promoted scene ${lastIdx + 1} to ctaFocus`)
+  }
+
+  // ── R6: visualMotif no 3+ in a row ───────────────────────────────────
+  for (let i = 2; i < out.length; i++) {
+    if (
+      out[i - 2].visualMotif === out[i - 1].visualMotif &&
+      out[i - 1].visualMotif === out[i].visualMotif &&
+      out[i].visualMotif
+    ) {
+      // Rotate the middle motif to another from the set
+      const altPool = VISUAL_MOTIF_SET.filter((m) => m !== out[i - 1].visualMotif)
+      out[i - 1] = { ...out[i - 1], visualMotif: altPool[(i - 1) % altPool.length] }
+      console.log(`[timelineDirector] R6: scene ${i} broke 3-motif run — rotated middle`)
+    }
+  }
+
+  return out
 }
 
 // ── Helper: build a single blueprint from a chosen preset ────────────────────
