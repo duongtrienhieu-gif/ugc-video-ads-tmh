@@ -20,6 +20,8 @@
 
 import { useMasterFrameJobStore } from '../stores/masterFrameJobStore'
 import { compileMasterFramePrompt } from './promptCompiler'
+import { compileMasterFrameRenderPayload } from './renderPayloadCompiler'
+import type { RenderMode } from './renderPayloadCompiler'
 import { generateGpt4oImageFast } from '../../../../utils/kieai'
 import { saveAsset, getUrl, isAssetRef } from '../../../../utils/assetStore'
 import { directGeminiVision } from '../../../../utils/gemini'
@@ -49,59 +51,16 @@ const SOFT_TIMEOUT_MS = 45_000               // Z18 — soft-timeout warning thr
 let activeJobAbort: AbortController | null = null
 
 // ─────────────────────────────────────────────────────────────────────────
-// Z18 — PROMPT COMPLEXITY + RETRY SIMPLIFICATION
+// Z18 → Z19 — Promptweight simplification superseded by renderPayloadCompiler.
 //
-// On retry, the same overweight prompt re-submitted produces the same KIE
-// slowness. Auto-strip decorative pieces so the retry has a real chance of
-// completing faster:
-//   • Drop GLOBAL_NEGATIVE paragraph (saves ~90-110 chars)
-//   • Drop "Retry: previous attempt..." bump phrases inside locks
-//   • Drop tone-clamp suffixes ("— landing-page / social-proof lifestyle")
-//   • Drop "Preserve every label letter." extra clause
+// The old simplifyMasterFramePromptForRetry() did regex-strip surgery on
+// the rich prompt. Z19 replaces it with a proper mode-aware compiler
+// (compileMasterFrameRenderPayload) that knows about FAST_SAFE / BALANCED
+// / CINEMATIC_HEAVY modes + per-model budget + priority-order trimming.
 //
-// Priority preserved (per spec):
-//   ✓ avatar identity lock
-//   ✓ product identity lock
-//   ✓ core composition (Vertical medium close-up portrait)
+// The mode escalation lives at the call site (search for "mode escalation"
+// below).
 // ─────────────────────────────────────────────────────────────────────────
-
-function simplifyMasterFramePromptForRetry(originalFinal: string): string {
-  const paragraphs = originalFinal.split('\n\n')
-  return paragraphs
-    // 1. Drop GLOBAL_NEGATIVE (the "Avoid: ..." paragraph)
-    .filter((p) => !p.trimStart().startsWith('Avoid:'))
-    .map((p) => p
-      // 2. Drop "Retry: previous attempt..." bumps from compileMasterFramePrompt
-      .replace(/\s*Retry: previous attempt[^.]+\.\s*/g, ' ')
-      // 3. Drop the "Preserve every label letter." extra label-lock clause
-      .replace(/\s*Preserve every label letter\.\s*/g, ' ')
-      // 4. Drop the tone-clamp suffix (when present)
-      .replace(/\s*—\s*ecommerce lifestyle/g, '')
-      .replace(/\s*—\s*landing-page \/ social-proof lifestyle/g, '')
-    )
-    .join('\n\n')
-    .replace(/\s+/g, ' ')   // collapse extra whitespace from the strips
-    .replace(/\s+\./g, '.') // tidy stray " ." artifacts
-    .trim()
-}
-
-interface PromptComplexity {
-  chars: number
-  paragraphCount: number
-  hasNegative: boolean
-  hasBumps: boolean
-  simplified: boolean
-}
-
-function measurePromptComplexity(prompt: string): PromptComplexity {
-  return {
-    chars: prompt.length,
-    paragraphCount: prompt.split('\n\n').length,
-    hasNegative: prompt.includes('Avoid:'),
-    hasBumps: prompt.includes('Retry: previous attempt'),
-    simplified: !prompt.includes('Avoid:') && !prompt.includes('Retry: previous attempt'),
-  }
-}
 
 // ── Identity describe Gemini prompts (lifted from masterFrame.ts) ────────────
 
@@ -320,34 +279,29 @@ async function runJobPipeline(_jobId: string, params: StartJobParams): Promise<v
         filesUrl.unshift(identity.productImageUrl)
       }
 
-      // Z18: Prepare full + simplified prompts. Outer QC retry (attemptIdx>0)
-      // forces simplified from the FIRST inner attempt. Otherwise inner
-      // attempt 1 uses full, inner attempt 2 uses simplified.
-      const fullPrompt = compiled.final
-      const simplifiedPrompt = simplifyMasterFramePromptForRetry(fullPrompt)
-      const forceSimplifiedFromStart = attemptIdx > 0
-      const fullComplexity       = measurePromptComplexity(fullPrompt)
-      const simplifiedComplexity = measurePromptComplexity(simplifiedPrompt)
-      console.log(
-        `[MASTERFRAME_PROMPT] qcAttempt=${attemptIdx + 1}/${MAX_RETRIES + 1} ` +
-        `consistency=${inputs.consistencyStrength} ` +
-        `forceSimplified=${forceSimplifiedFromStart} ` +
-        `full={chars:${fullComplexity.chars} negative:${fullComplexity.hasNegative} bumps:${fullComplexity.hasBumps}} ` +
-        `simplified={chars:${simplifiedComplexity.chars} saved:${fullComplexity.chars - simplifiedComplexity.chars}chars}`,
-      )
+      // Z19: Pick the render mode based on outer QC retry index.
+      //   Outer QC attempt 0  → start with BALANCED (cinematic cues kept)
+      //   Outer QC attempt 1+ → start with FAST_SAFE (strip everything decorative)
+      // Inner Fast wrapper retry (attempt 2) ALWAYS downshifts to FAST_SAFE.
+      const startMode: RenderMode = attemptIdx === 0 ? 'BALANCED' : 'FAST_SAFE'
 
       let remoteUrl: string
       try {
-        // Z16+Z18: Fast wrapper — 2 KIE submissions × 60s each, soft warning
-        // at 45s. Inner attempt 2 always uses simplified prompt; outer QC
-        // retry also forces simplified on the first inner attempt.
+        // Z16+Z18+Z19: Fast wrapper with mode-aware lightweight payload.
+        // Per-attempt timeline:
+        //   Inner 1: startMode (BALANCED on qcAttempt 0, FAST_SAFE on retry)
+        //   Inner 2: FAST_SAFE (forced — recovery from stuck attempt)
+        // renderPayloadCompiler enforces 600-850 char budget + strips
+        // cinematic extras + emits [RENDER_PAYLOAD] log.
         remoteUrl = await generateGpt4oImageFast({
           apiKey: params.kieApiKey,
           prompt: (innerAttempt) => {
-            // Inner attempt 2 → always simplified (recovery from stuck attempt 1)
-            // Outer QC retry → simplified from inner attempt 1 too
-            if (innerAttempt === 2 || forceSimplifiedFromStart) return simplifiedPrompt
-            return fullPrompt
+            const mode: RenderMode = innerAttempt === 1 ? startMode : 'FAST_SAFE'
+            const payload = compileMasterFrameRenderPayload(
+              { identity, productName: inputs.productName, consistency, dna, overrides },
+              { mode, targetModel: 'gpt4o' },
+            )
+            return payload.prompt
           },
           filesUrl: filesUrl.slice(0, 5),
           size: '2:3',
@@ -356,7 +310,8 @@ async function runJobPipeline(_jobId: string, params: StartJobParams): Promise<v
           maxAttempts: 2,
           signal: jobAbortSignal,
           onAttemptChange: (a, t) => {
-            console.log(`[masterFrame] QC attempt ${attemptIdx + 1} → KIE submit ${a}/${t} (using ${a === 1 && !forceSimplifiedFromStart ? 'full' : 'simplified'} prompt)`)
+            const mode: RenderMode = a === 1 ? startMode : 'FAST_SAFE'
+            console.log(`[masterFrame] QC attempt ${attemptIdx + 1} → KIE submit ${a}/${t} mode=${mode}`)
           },
         })
       } catch (err) {
