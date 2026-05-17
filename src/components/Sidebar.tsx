@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { LayoutGrid, User, PenLine, Mic, Image, Eye, Settings, FlaskConical, RefreshCw, LogOut, Activity, Languages, Sparkles, Package, Megaphone, LayoutTemplate, FolderOpen, History as HistoryIcon } from 'lucide-react'
+import { LayoutGrid, User, PenLine, Mic, Image, Eye, Settings, FlaskConical, RefreshCw, LogOut, Activity, Languages, Sparkles, Package, Megaphone, LayoutTemplate, FolderOpen, Brain, History as HistoryIcon } from 'lucide-react'
 import SettingsModal from './SettingsModal'
 import Diagnostic from './Diagnostic'
 import DraftsPanel from './DraftsPanel'
@@ -23,6 +23,7 @@ const NAV_ITEMS: NavItem[] = [
   { id: 'character-studio', label: 'Avatar AI', icon: User },
   { id: 'script-architect', label: 'Kịch bản', icon: PenLine },
   { id: 'ads-content',      label: 'Ads Content', icon: Megaphone },
+  { id: 'lab-content',      label: 'Lab Content', icon: Brain },
   { id: 'landing-page',     label: 'Landing Page', icon: LayoutTemplate },
   { id: 'voice-studio', label: 'Giọng đọc', icon: Mic },
   { id: 'broll-studio', label: 'Product AI', icon: Image },
