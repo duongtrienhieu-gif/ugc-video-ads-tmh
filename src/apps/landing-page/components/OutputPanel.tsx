@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Loader2, LayoutTemplate, Save, Check, RotateCcw, Trash2, FolderOpen, ChevronDown, ImageIcon, Sparkles, AlertTriangle, Clock, Zap, RefreshCw, FilePlus, FileDown, Copy as CopyIcon, FolderInput, Cpu, LayoutGrid, Cloud, CloudOff, CloudCog } from 'lucide-react'
+import { Loader2, LayoutTemplate, Save, Check, RotateCcw, Trash2, FolderOpen, ChevronDown, ImageIcon, Sparkles, AlertTriangle, Clock, Zap, RefreshCw, FilePlus, FileDown, Copy as CopyIcon, FolderInput, Cpu, LayoutGrid, Cloud, CloudOff, CloudCog, ScanSearch, ShieldAlert } from 'lucide-react'
 import type { LandingPagePack, SavedLandingPack } from '../types'
 import type { ImageProgress } from '../LandingPageAI'
 import SectionCard from './SectionCard'
@@ -7,6 +7,7 @@ import { useLandingPageStore } from '../store'
 import { useAppStore } from '../../../stores/appStore'
 import { isHybridRenderEnabled } from '../lib/featureFlags'
 import { planRenderPack } from '../services/renderPlanner'
+import { scanSection, type SectionScanReport } from '../services/fakeSimilarityQC'
 
 /** KIE GPT-image-1 ~ 6 credits per call. Drives all cost hints in this module. */
 const CREDIT_PER_IMAGE = 6
@@ -179,8 +180,10 @@ export default function OutputPanel({
         </div>
       </div>
 
-      {/* Image generation bar — between meta header and sections */}
-      <div className="shrink-0 border-b border-black/8 bg-amber-50/30 px-5 py-2.5">
+      {/* Image generation bar — STICKY when generating so progress always visible while user scrolls sections */}
+      <div className={`shrink-0 border-b border-black/8 bg-amber-50/30 px-5 py-2.5 ${
+        isGeneratingImages ? 'sticky top-0 z-20 shadow-md bg-amber-50/95 backdrop-blur-sm' : ''
+      }`}>
         <ImageGenerationBar
           pack={pack}
           onGenerateAll={onGenerateAllImages}
@@ -189,6 +192,8 @@ export default function OutputPanel({
           progress={imageProgress}
           isGenerating={isGeneratingImages}
         />
+        {/* H3: Fake similarity scanner — surfaces clone-look risks across sections */}
+        <SimilarityScanPanel pack={pack} />
       </div>
 
       <div className="flex-1 overflow-y-auto p-4">
@@ -207,6 +212,159 @@ export default function OutputPanel({
 
         <SavedHistorySection onLoadProject={onLoadProject} loadedFromId={loadedFromId} />
       </div>
+    </div>
+  )
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// SimilarityScanPanel — H3 Phase
+// On-demand "Quét tương đồng" scanner. Compares consecutive AI-rendered
+// images within multi-image sections to detect AI-clone look. Surfaces
+// flagged pairs as warning chips so user can decide whether to regenerate.
+// Never auto-regenerates (avoids burning credit on false positives).
+// ─────────────────────────────────────────────────────────────────────
+function SimilarityScanPanel({ pack }: { pack: LandingPagePack }) {
+  const [reports, setReports] = useState<SectionScanReport[]>([])
+  const [scanning, setScanning] = useState(false)
+  const [progress, setProgress] = useState<{ done: number; total: number } | null>(null)
+  const addToast = useAppStore((s) => s.addToast)
+
+  // Eligible sections: at least 2 AI-rendered images (excluding template-composed)
+  const eligibleSections = pack.sections
+    .map((s, idx) => ({ section: s, idx }))
+    .filter(({ section }) => {
+      const aiDone = section.imagePrompts.filter(
+        (p) => p.status === 'done'
+          && p.generatedAssetRef
+          && (p.renderStrategy === 'ai_full_render' || p.renderStrategy === 'reusable_render' || !p.renderStrategy),
+      )
+      return aiDone.length >= 2
+    })
+
+  if (eligibleSections.length === 0) return null
+
+  const totalPairs = eligibleSections.reduce(
+    (acc, { section }) => acc + Math.max(0, section.imagePrompts.filter((p) => p.status === 'done').length - 1),
+    0,
+  )
+
+  const handleScan = async (): Promise<void> => {
+    setScanning(true)
+    setReports([])
+    setProgress({ done: 0, total: totalPairs })
+    let done = 0
+    const newReports: SectionScanReport[] = []
+    try {
+      for (const { section, idx } of eligibleSections) {
+        const imageRefs = section.imagePrompts
+          .map((p, i) => ({ ref: p.generatedAssetRef ?? '', idx: i, status: p.status }))
+          .filter((x) => x.ref && x.status === 'done')
+        if (imageRefs.length < 2) continue
+        const report = await scanSection(
+          section.type, idx,
+          imageRefs.map((x) => ({ ref: x.ref, idx: x.idx })),
+          () => {
+            done++
+            setProgress({ done, total: totalPairs })
+          },
+        )
+        newReports.push(report)
+      }
+      setReports(newReports)
+      const flaggedCount = newReports.reduce((acc, r) => acc + r.flaggedImageIdx.length, 0)
+      if (flaggedCount > 0) {
+        addToast(`⚠ Phát hiện ${flaggedCount} ảnh có dấu hiệu trùng — xem chi tiết ở panel scanner`, 'info')
+      } else {
+        addToast('✓ Không thấy ảnh nào bị clone — pack OK', 'success')
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      addToast(`Quét tương đồng lỗi: ${msg}`, 'error')
+    } finally {
+      setScanning(false)
+      setProgress(null)
+    }
+  }
+
+  return (
+    <div className="mt-3 rounded-lg border border-cyan-200 bg-cyan-50/40 px-3 py-2">
+      <div className="flex items-center justify-between gap-2">
+        <div className="min-w-0 flex items-center gap-2">
+          <ScanSearch className="h-3.5 w-3.5 text-cyan-700" />
+          <span className="text-[11px] font-semibold text-cyan-900">
+            Fake Detector QC
+          </span>
+          <span className="text-[10px] text-cyan-700">
+            {scanning && progress
+              ? `Đang quét... ${progress.done}/${progress.total} pair`
+              : reports.length > 0
+                ? `Đã quét ${reports.reduce((a, r) => a + r.pairs.length, 0)} pair`
+                : `Sẵn sàng quét ${totalPairs} pair · ~${Math.ceil(totalPairs * 0.001 * 100) / 100}$ Gemini`}
+          </span>
+        </div>
+        <button
+          onClick={handleScan}
+          disabled={scanning || totalPairs === 0}
+          className="flex items-center gap-1 rounded-full bg-cyan-600 px-3 py-1 text-[11px] font-bold text-white shadow-sm hover:bg-cyan-700 disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          {scanning ? <Loader2 className="h-3 w-3 animate-spin" /> : <ScanSearch className="h-3 w-3" />}
+          {scanning ? 'Đang quét...' : reports.length > 0 ? 'Quét lại' : 'Quét tương đồng'}
+        </button>
+      </div>
+
+      {reports.length > 0 && (
+        <div className="mt-2 space-y-1.5">
+          {reports.map((report) => {
+            const section = pack.sections[report.sectionIdx]
+            const sev = report.maxSimilarity >= 85 ? 'red' : report.maxSimilarity >= 70 ? 'amber' : 'emerald'
+            const sevColors = {
+              red:     'border-red-300 bg-red-50 text-red-900',
+              amber:   'border-amber-300 bg-amber-50 text-amber-900',
+              emerald: 'border-emerald-300 bg-emerald-50 text-emerald-900',
+            }[sev]
+            const sevIcon = sev === 'emerald' ? <Check className="h-3 w-3 text-emerald-600" /> : <ShieldAlert className="h-3 w-3" />
+            const sevLabel = sev === 'red'
+              ? 'CAO — cần regen'
+              : sev === 'amber'
+                ? 'Trung bình — cân nhắc regen'
+                : 'OK'
+            return (
+              <details key={report.sectionIdx} className={`rounded-md border ${sevColors} px-2 py-1.5`}>
+                <summary className="flex cursor-pointer items-center gap-1.5 text-[11px] font-semibold">
+                  {sevIcon}
+                  Section #{report.sectionIdx + 1} ({section?.type ?? '?'}) — {report.maxSimilarity}% similarity · {sevLabel}
+                  {report.flaggedImageIdx.length > 0 && (
+                    <span className="ml-auto rounded-full bg-white px-1.5 py-0.5 text-[9px] font-bold">
+                      ⚠ {report.flaggedImageIdx.length} ảnh
+                    </span>
+                  )}
+                </summary>
+                <div className="mt-2 space-y-1">
+                  {report.pairs.map((pair, pi) => (
+                    <div key={pi} className="rounded bg-white/60 px-2 py-1 text-[10px]">
+                      <div className="flex items-center justify-between">
+                        <span className="font-semibold">
+                          Pair {pi + 1}–{pi + 2}: {pair.result.overall}%
+                        </span>
+                        <span className="flex gap-1.5 text-[9px]">
+                          <span title="Composition">📐 {pair.result.axes.composition}</span>
+                          <span title="Body pose">🤚 {pair.result.axes.bodyPose}</span>
+                          <span title="Background">🏠 {pair.result.axes.background}</span>
+                          <span title="Lighting">💡 {pair.result.axes.lighting}</span>
+                          <span title="Product">📦 {pair.result.axes.productPlacement}</span>
+                        </span>
+                      </div>
+                      {pair.result.summaryVi && (
+                        <p className="mt-0.5 text-[10px] italic opacity-80">{pair.result.summaryVi}</p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </details>
+            )
+          })}
+        </div>
+      )}
     </div>
   )
 }
