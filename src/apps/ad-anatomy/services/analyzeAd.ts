@@ -3,11 +3,55 @@
 // actual audio and produce a verbatim transcript with accurate timestamps.
 // Fallback path: extract frames and send as images (no audio — transcript will be
 // inferred from visual/on-screen text only).
+//
+// Z21 — REAL DURATION. The browser measures the video file's true duration with
+// HTMLVideoElement.duration BEFORE the Gemini call. That number gets injected
+// into the user prompt and then HARD-OVERRIDES structureMap.runtime + reformats
+// retentionTimeline segments on the parsed result. AI is no longer trusted to
+// guess "0:30" when the video is actually 0:57.
 
-import type { AnalysisResult } from '../types'
+import type { AnalysisResult, StructureBeat, RetentionSegment, Improvement } from '../types'
 import { useSettingsStore } from '../../../stores/settingsStore'
 import { blobToSmallBase64 } from '../../../utils/kieai'
 import { directGeminiVision } from '../../../utils/gemini'
+
+// ── Real-duration helpers ────────────────────────────────────────────────────
+
+/** Measure the true playback duration of a video file in the browser. Returns
+ *  null when the metadata can't be read (corrupt file etc.). Resolves under
+ *  ~1s for any reasonable mp4/mov/webm — we just need `loadedmetadata`. */
+export function measureVideoDurationSec(videoFile: File): Promise<number | null> {
+  return new Promise((resolve) => {
+    const video = document.createElement('video')
+    const url = URL.createObjectURL(videoFile)
+    let resolved = false
+    const cleanup = (val: number | null) => {
+      if (resolved) return
+      resolved = true
+      URL.revokeObjectURL(url)
+      resolve(val)
+    }
+    video.preload = 'metadata'
+    video.muted = true
+    video.onloadedmetadata = () => {
+      const d = video.duration
+      cleanup(isFinite(d) && d > 0 ? d : null)
+    }
+    video.onerror = () => cleanup(null)
+    // Safety timeout — never hang the analyze flow
+    setTimeout(() => cleanup(null), 8000)
+    video.src = url
+    video.load()
+  })
+}
+
+/** Format seconds as "M:SS" — used everywhere the AI expected a runtime string. */
+function fmtMSS(totalSec: number): string {
+  const s = Math.max(0, Math.round(totalSec))
+  const m = Math.floor(s / 60)
+  const ss = s % 60
+  return `${m}:${String(ss).padStart(2, '0')}`
+}
 
 const GEMINI_UPLOAD_BASE = 'https://generativelanguage.googleapis.com/upload/v1beta'
 const GEMINI_API_BASE    = 'https://generativelanguage.googleapis.com/v1beta'
@@ -218,8 +262,21 @@ async function analyzeWithVideoFile(
   apiKey: string,
   fileUri: string,
   mimeType: string,
+  realDurationSec: number | null,
 ): Promise<string> {
   const errors: string[] = []
+
+  // Z21 — inject the measured runtime into the user prompt so Gemini stops
+  // hardcoding "0:30" from the schema example. We also tell it the exact
+  // number of segments to produce in retentionTimeline + the timestamp
+  // format to use for transcript lines.
+  const durationDirective = realDurationSec && realDurationSec > 0
+    ? `\n\nVIDEO RUNTIME — CHÍNH XÁC: ${realDurationSec.toFixed(1)} giây (= ${fmtMSS(realDurationSec)}).
+   • structureMap.runtime PHẢI là "${fmtMSS(realDurationSec)}" — KHÔNG được dùng 0:30 trong ví dụ schema.
+   • structureMap.beats: chia đều khắp toàn bộ ${fmtMSS(realDurationSec)} — beat cuối phải kết thúc đúng tại ${fmtMSS(realDurationSec)}, KHÔNG dừng sớm ở 0:30.
+   • retentionTimeline.segments: tạo ${Math.max(5, Math.min(10, Math.ceil(realDurationSec / 5)))} segment phủ kín 0:00 → ${fmtMSS(realDurationSec)}.
+   • transcript.timestamp: dùng định dạng "M:SS" theo audio THỰC — không chia đều mỗi 5s, lấy đúng thời điểm câu nói bắt đầu trong audio.`
+    : ''
 
   for (const model of GEMINI_MODELS) {
     const url  = `${GEMINI_API_BASE}/models/${model}:generateContent?key=${apiKey}`
@@ -230,9 +287,11 @@ async function analyzeWithVideoFile(
           { fileData: { mimeType, fileUri } },
           {
             text: 'Phân tích video quảng cáo này.\n\n'
-              + 'TRANSCRIPT: Lắng nghe audio và chép lại ĐÚNG TỪNG TỪ lời người nói — bất kể ngôn ngữ Malay/Anh/Việt. KHÔNG chép chữ trên màn hình, subtitle, caption. Chỉ lời người thật nói.\n\n'
+              + 'TRANSCRIPT: Lắng nghe audio và chép lại ĐÚNG TỪNG TỪ lời người nói — bất kể ngôn ngữ Malay/Anh/Việt. KHÔNG chép chữ trên màn hình, subtitle, caption. Chỉ lời người thật nói. Mỗi dòng transcript dùng timestamp THỰC tại thời điểm câu nói BẮT ĐẦU trong audio (M:SS), không chia đều cứng 5s/dòng.\n\n'
               + 'NGÔN NGỮ OUTPUT: TOÀN BỘ nội dung phân tích (analystNote, technique, whyItWorks, adaptableTemplate, pacing, beat descriptions, description, primaryLevers, targetingSignals, weakness, fix, reconstructionPrompt) PHẢI viết bằng TIẾNG VIỆT. Chỉ trường transcript giữ nguyên ngôn ngữ gốc, và visualPlaybook.prompt giữ tiếng Anh.\n\n'
-              + 'Trả về JSON đầy đủ.',
+              + 'BẮT BUỘC: improvements PHẢI có ít nhất 3 mục cụ thể với weakness + fix tiếng Việt rõ ràng. reconstructionPrompt PHẢI là một đoạn directive đầy đủ (50-200 từ) mô tả cách tái tạo concept này cho sản phẩm khác.'
+              + durationDirective
+              + '\n\nTrả về JSON đầy đủ.',
           },
         ],
       }],
@@ -331,6 +390,11 @@ export async function analyzeAd(videoFile: File): Promise<AnalysisResult> {
   let responseText = ''
   let uploadedFileName: string | null = null
 
+  // Z21 — measure the real duration in PARALLEL with the video upload so the
+  // total flow doesn't get slower. Both finish within seconds; we await both
+  // before kicking off the actual Gemini analysis call that needs the number.
+  const durationPromise = measureVideoDurationSec(videoFile)
+
   // ── Primary: upload video so Gemini can hear the audio ───────────────────
   try {
     const mimeType               = videoFile.type || 'video/mp4'
@@ -338,7 +402,12 @@ export async function analyzeAd(videoFile: File): Promise<AnalysisResult> {
     uploadedFileName             = fileName
 
     await waitForFileActive(geminiKey, fileName)
-    responseText = await analyzeWithVideoFile(geminiKey, fileUri, mimeType)
+    const realDurationSec = await durationPromise
+    responseText = await analyzeWithVideoFile(geminiKey, fileUri, mimeType, realDurationSec)
+
+    if (!responseText.trim()) throw new Error('Không có phản hồi từ AI. Vui lòng thử lại.')
+    const parsed = parseAnalysisJson(responseText)
+    return normalizeAnalysisResult(parsed, realDurationSec)
   } catch (uploadErr) {
     console.warn('[analyzeAd] Video upload path failed, falling back to frames:', uploadErr)
 
@@ -348,10 +417,16 @@ export async function analyzeAd(videoFile: File): Promise<AnalysisResult> {
     const imageParts    = base64Frames.map((b64) => ({
       inlineData: { mimeType: 'image/jpeg', data: b64 },
     }))
+    const realDurationSec = await durationPromise
+    const durationLine = realDurationSec && realDurationSec > 0
+      ? `Video dài chính xác ${realDurationSec.toFixed(1)} giây (${fmtMSS(realDurationSec)}). structureMap.runtime PHẢI là "${fmtMSS(realDurationSec)}". `
+      : ''
     const textPart = {
       text: `Đây là ${base64Frames.length} frame từ video quảng cáo (chế độ không có audio). `
+        + durationLine
         + 'Transcript: chỉ chép chữ text overlay thực sự hiển thị trên màn hình, không bịa lời thoại. '
         + 'NGÔN NGỮ OUTPUT: TOÀN BỘ phân tích PHẢI viết bằng TIẾNG VIỆT — analystNote, technique, whyItWorks, adaptableTemplate, pacing, descriptions, primaryLevers, targetingSignals, weakness, fix, reconstructionPrompt đều bằng tiếng Việt. Chỉ visualPlaybook.prompt giữ tiếng Anh. '
+        + 'BẮT BUỘC: improvements ≥ 3 mục cụ thể (weakness + fix). reconstructionPrompt là directive 50-200 từ.\n'
         + 'Trả về JSON đầy đủ.',
     }
 
@@ -360,14 +435,129 @@ export async function analyzeAd(videoFile: File): Promise<AnalysisResult> {
       parts: [...imageParts, textPart],
       systemInstruction: SYSTEM_INSTRUCTION,
     })
+
+    if (!responseText.trim()) throw new Error('Không có phản hồi từ AI. Vui lòng thử lại.')
+    const parsed = parseAnalysisJson(responseText)
+    return normalizeAnalysisResult(parsed, realDurationSec)
   } finally {
     // Always clean up the uploaded file (non-blocking)
     if (uploadedFileName) deleteGeminiFile(geminiKey, uploadedFileName)
   }
+}
 
-  if (!responseText.trim()) throw new Error('Không có phản hồi từ AI. Vui lòng thử lại.')
+// ── Z21 — post-processing: real-duration override + fallback fillers ────────
 
-  return parseAnalysisJson(responseText)
+/** Generic fallback improvements when Gemini returns an empty array. */
+function buildFallbackImprovements(): Improvement[] {
+  return [
+    { weakness: 'Hook 3 giây đầu chưa đủ mạnh — chưa có pattern interrupt rõ ràng', fix: 'Bắt đầu bằng một câu shock hoặc visual đối lập trong 1 giây đầu (vd. zoom mạnh / cận cảnh pain point)' },
+    { weakness: 'CTA xuất hiện hơi muộn so với attention span trung bình', fix: 'Chèn 1 micro-CTA quanh giây 8-12 (text overlay "Lawati kedai" hoặc swipe arrow) trước khi đi sâu vào benefit' },
+    { weakness: 'Visual chưa tập trung đủ vào pain point cụ thể của target', fix: 'Thay 1-2 cut by-product bằng cận cảnh body part đau / triệu chứng để audience tự nhận ra mình' },
+    { weakness: 'Thiếu social proof rõ ràng (review chip / số người dùng / badge KKM)', fix: 'Overlay 1 chip "20,000+ pengguna" hoặc "★ 4.8/5" trong 2-3s đoạn giữa để build trust' },
+  ]
+}
+
+/** Fallback Creative Blueprint when Gemini reconstructionPrompt is empty. */
+function buildFallbackBlueprint(realDurationSec: number | null): string {
+  const dur = realDurationSec && realDurationSec > 0 ? fmtMSS(realDurationSec) : '0:30'
+  return (
+    `DIRECTIVE TÁI TẠO (fallback — AI không trả về blueprint, dùng template chuẩn):\n\n`
+    + `Quay 1 video UGC ${dur} cho sản phẩm bất kỳ với cấu trúc:\n`
+    + `1) Hook 0:00-0:03 — pattern interrupt + claim mạnh về kết quả nhanh\n`
+    + `2) Pain 0:03-0:08 — cận cảnh triệu chứng / hậu quả audience đang chịu\n`
+    + `3) Authority 0:08-0:15 — bác sĩ / chuyên gia / chứng nhận giới thiệu sản phẩm\n`
+    + `4) Benefit 0:15-0:22 — hình ảnh lifestyle sau khi dùng + 3-4 benefit chips\n`
+    + `5) CTA 0:22-${dur} — ưu đãi cụ thể + urgency + nút mua\n\n`
+    + `Giọng UGC tự nhiên, không cinematic. Mọi text overlay bằng ngôn ngữ target market.`
+  )
+}
+
+/** Override AI-guessed runtime + reformat beats/segments to fit the real duration. */
+function normalizeAnalysisResult(
+  raw: AnalysisResult,
+  realDurationSec: number | null,
+): AnalysisResult {
+  const r: AnalysisResult = { ...raw }
+  let usedFallback = false
+
+  // Improvements fallback
+  if (!Array.isArray(r.improvements) || r.improvements.length === 0) {
+    r.improvements = buildFallbackImprovements()
+    usedFallback = true
+  }
+
+  // Blueprint fallback
+  if (!r.reconstructionPrompt || r.reconstructionPrompt.trim().length < 20) {
+    r.reconstructionPrompt = buildFallbackBlueprint(realDurationSec)
+    usedFallback = true
+  }
+
+  // Real-duration override
+  if (realDurationSec && realDurationSec > 0) {
+    r.realDurationSec = realDurationSec
+    const realRuntime = fmtMSS(realDurationSec)
+
+    // structureMap.runtime override (don't trust AI's "0:30" placeholder)
+    r.structureMap = {
+      ...r.structureMap,
+      runtime: realRuntime,
+      beats: rescaleBeats(r.structureMap?.beats ?? [], realDurationSec),
+    }
+
+    // Retention timeline — rescale segments to cover the real runtime
+    if (r.retentionTimeline) {
+      r.retentionTimeline = {
+        ...r.retentionTimeline,
+        segments: rescaleRetentionSegments(r.retentionTimeline.segments ?? [], realDurationSec),
+      }
+    }
+  }
+
+  r.usedFallback = usedFallback
+  return r
+}
+
+/** Stretch beat timestamps proportionally so they cover the entire real
+ *  duration instead of stopping at 0:30. Parses "0:05-0:10" ranges and the
+ *  duration string, scales by realDur / inferredDur. */
+function rescaleBeats(beats: StructureBeat[], realDurationSec: number): StructureBeat[] {
+  if (beats.length === 0) return beats
+  // Infer what duration the AI used by reading the END of the last beat
+  const lastEnd = parseSecondFromRange(beats[beats.length - 1].timestamp, 'end')
+  if (lastEnd <= 0 || Math.abs(lastEnd - realDurationSec) < 1) return beats
+  const scale = realDurationSec / lastEnd
+  return beats.map((b) => {
+    const start = parseSecondFromRange(b.timestamp, 'start') * scale
+    const end   = parseSecondFromRange(b.timestamp, 'end')   * scale
+    const dur   = Math.max(1, Math.round(end - start))
+    return {
+      ...b,
+      timestamp: `${fmtMSS(start)}-${fmtMSS(end)}`,
+      duration:  `${dur}s`,
+    }
+  })
+}
+
+function rescaleRetentionSegments(segs: RetentionSegment[], realDurationSec: number): RetentionSegment[] {
+  if (segs.length === 0) return segs
+  const lastEnd = parseSecondFromRange(segs[segs.length - 1].timestamp, 'end')
+  if (lastEnd <= 0 || Math.abs(lastEnd - realDurationSec) < 1) return segs
+  const scale = realDurationSec / lastEnd
+  return segs.map((s) => {
+    const start = parseSecondFromRange(s.timestamp, 'start') * scale
+    const end   = parseSecondFromRange(s.timestamp, 'end')   * scale
+    return { ...s, timestamp: `${fmtMSS(start)}-${fmtMSS(end)}` }
+  })
+}
+
+/** "0:05-0:10" → 5 (start) or 10 (end). Tolerant of "0:05–0:10" with en-dash too. */
+function parseSecondFromRange(ts: string, which: 'start' | 'end'): number {
+  if (!ts) return 0
+  const parts = ts.split(/[-–]/).map((p) => p.trim())
+  const target = which === 'start' ? parts[0] : (parts[1] ?? parts[0])
+  const m = target.match(/^(\d+):(\d+)$/)
+  if (!m) return 0
+  return parseInt(m[1], 10) * 60 + parseInt(m[2], 10)
 }
 
 // ── Robust JSON parsing for Gemini responses ──────────────────────────────────

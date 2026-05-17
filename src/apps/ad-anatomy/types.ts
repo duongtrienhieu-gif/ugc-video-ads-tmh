@@ -183,6 +183,15 @@ export interface AnalysisResult {
   improvements: Improvement[]
   reconstructionPrompt: string
 
+  // ── Z21 — real video duration measured by the browser, NOT estimated by AI.
+  // Source of truth for structureMap.runtime and retentionTimeline.segments
+  // formatting. Set by analyzeAd() before the Gemini call. Optional only for
+  // back-compat with v2 cached analyses.
+  realDurationSec?: number
+  /** True when one or more sections were filled in by fallback engine
+   *  because Gemini returned empty/null. UI shows a small notice. */
+  usedFallback?: boolean
+
   // ── Z1 + Z2 (all optional for back-compat with v1 cached analyses) ────────
   decisionLayer?: DecisionLayer
   adAngle?: AdAngle

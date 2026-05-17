@@ -142,10 +142,9 @@ function pickTransitionByRole(
     return 'blur_wipe'                                     // → info = blur wipe
   }
   if (currRole === 'social_proof')   return 'dissolve'     // → social proof = soft
-  if (currRole === 'recovery')       return 'dissolve'     // → recovery = soft
-  // Source-driven fallback
+  if (currRole === 'recovery')       return 'dissolve'     // → recovery = soft (catches both source-driven & destination-driven)
+  // Source-driven fallback (currRole 'recovery' already handled above)
   if (prevRole === 'pain' && currRole === 'product_reveal') return 'smash_cut'  // pain → reveal
-  if (prevRole === 'ingredient' && currRole === 'recovery') return 'dissolve'   // ingredient → recovery
   return 'cut'
 }
 

@@ -1098,8 +1098,9 @@ function TranscriptSection({ result, pipeline }: { result: AnalysisResult; pipel
 
       <div className="flex flex-col gap-0.5">
         {result.transcript.map((line, i) => (
-          <div key={i} className="flex gap-3 rounded-lg px-3 py-1.5 transition-colors hover:bg-black/[0.03]">
-            <span className="shrink-0 tabular-nums text-[11px] text-gray-300">{line.timestamp}</span>
+          <div key={i} className="flex items-start gap-3 rounded-lg px-3 py-1.5 transition-colors hover:bg-black/[0.03]">
+            {/* Z21 — pin min-width so different timestamp lengths don't shift the text column */}
+            <span className="w-12 shrink-0 tabular-nums text-[11px] leading-[1.45] text-gray-300">{line.timestamp}</span>
             <span className="text-sm text-gray-600">{line.text}</span>
           </div>
         ))}
@@ -1520,6 +1521,16 @@ export default function ResultsView({ result, videoSrc, fileName, onReset, onRes
       {/* Right column — scrollable results */}
       <div className="flex-1 overflow-y-auto p-5">
         <div className="flex flex-col gap-5">
+          {/* Z21 — fallback notice when one or more sections were filled
+              from local defaults because Gemini returned empty fields. */}
+          {result.usedFallback && (
+            <div className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50/70 px-4 py-2.5 text-[12px] text-amber-800">
+              <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-500" />
+              <span>
+                <strong>Một số mục được tạo bằng fallback engine</strong> — AI không trả về đủ dữ liệu cho "Cơ hội cải thiện" hoặc "Creative Blueprint". Nội dung dưới đây dùng template chuẩn. Phân tích lại để có kết quả tùy chỉnh đầy đủ.
+              </span>
+            </div>
+          )}
           {/* Z1: Decision Layer + Angle + Awareness + Funnel + Scaling — TOP of results */}
           <DecisionSection result={result} />
           {/* Z7: AI Creative Control Center — inline generation, no redirect */}
