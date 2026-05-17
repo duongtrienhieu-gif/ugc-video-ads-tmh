@@ -198,38 +198,16 @@ SECTION SPEC — produce EXACTLY these 17 in this order
     • faqs: 5-7 Malaysia FAQs (halal, side effects, "berapa lama nampak hasil", COD, shipping, return, allergies)
     • imagePrompts: []
 
-16. type="offer", imageAspectRatio="16:9" (or "1:1") — SOCIAL PROOF METRICS BANNER
+16. type="offer", imageAspectRatio="16:9" (or "1:1") — PROMO BANNER SECTION (price + discount focus)
     • offerStrip, urgencyText, cta
     • bullets: 3-5 "✅ Bonus X (RM Y)" stack items
     • copy: value stack + COD offer
     • 2 imagePrompts REQUIRED — both must use the SAME ratio as the section (1:1 OR 16:9, never mix):
-      - offer_01.jpg, style="Social proof metrics banner — promo + trust stack", aspectRatio="<section ratio>":
-        Malaysian ecommerce social-proof METRICS infographic banner — NOT a simple product photo.
-        Multi-card composition with the EXACT uploaded product packaging on the LEFT (preserve label/cap/colors).
-        On the RIGHT a vertical stack of metric cards rendered as floating glass / rounded badges:
-          ★★★★★ "4.8/5" big bold star rating card
-          "20,000+ pengguna" user count card
-          "Verified by KKM" + small Malaysia trust shield
-          "COD SELURUH MALAYSIA" badge with COD/truck icon
-          "PILIHAN MALAYSIA" + small flag
-        Below or above the cards add the promo strip in bold Malay:
-          "DISKAUN 50% HARI INI" + "STOK TERHAD"
-        Soft warm gradient background (cream → amber), subtle glow behind product, before/after thumbnails as
-        small chips at the bottom (faces blurred or abstract). Native Facebook/TikTok MY ecommerce infographic feel.
-        Strong visual hierarchy — viewer scans rating → user count → CTA in one second.
-      - offer_02.jpg, style="Social proof metrics banner — hard-sell urgency stack", aspectRatio="<section ratio>":
-        Higher-contrast urgent METRICS banner. EXACT uploaded product packaging prominent.
-        Multi-card infographic layout with: big bold "4.8★" star metric, "20,000+ ORDER DAH HANTAR", "TRENDING #1",
-        "VERIFIED COD MALAYSIA" shield, and a row of testimonial mini-cards (3-4 thumbnail review chips with stars and
-        short Malay quotes like "Berkesan!" "Memang berbaloi"). Bold red/orange urgency strip:
-          "PROMOSI TAMAT MALAM INI" + "JANGAN LEPASKAN" + "RAMAI DAH CUBA"
-        Darker saturated background (deep red, navy + amber), starburst behind product, visible CTA button.
-        Native MY hard-sell ecommerce infographic. Strong CTA hierarchy.
-      ABSOLUTE: Show EXACT PRODUCT PRICE from brief. Use ONLY the uploaded packaging — never invent label, logo, or
-      bottle shape. NEVER render a banner that is just product + plain text — banners MUST include rating + user
-      count + trust badge + COD badge as visible infographic elements (it is a SOCIAL PROOF banner, not a poster).
-      Negative: fake packaging, Western branding, luxury cinematic poster, tiny product, unreadable text, blurry
-      overlay, random supplement bottle, overdesigned layout, plain solo product shot with no social proof.
+      - offer_01.jpg, style="Promo banner clean ecommerce", aspectRatio="<section ratio>":
+        Clean Malaysian ecommerce promo banner. The EXACT uploaded product packaging large and centered (preserve label/typography/cap/colors). Soft gradient background (warm amber → cream OR cool teal → white). Large readable Malay promo text overlay reading EXACTLY these three lines: "DISKAUN 50% HARI INI" + "COD SELURUH MALAYSIA" + "STOK TERHAD". Small trust badges (HALAL / KKM / shield icon). Native Facebook/TikTok ecommerce feel. Mobile-friendly composition.
+      - offer_02.jpg, style="Promo banner hard sell urgency", aspectRatio="<section ratio>":
+        Higher-contrast urgent Malaysian ecommerce banner. EXACT uploaded product packaging large and bold. Background darker / more saturated (deep red, navy + amber accent). Strong CTA arrow or starburst. Bold readable Malay text overlay reading EXACTLY: "PROMOSI TAMAT MALAM INI" + "JANGAN LEPASKAN PELUANG" + "RAMAI DAH CUBA". Visible CTA button shape. Native MY ecommerce hard-sell feel, not luxury, not cinematic.
+      ABSOLUTE: Show EXACT PRODUCT PRICE from brief in both banners. Use ONLY the uploaded packaging — never invent label, logo, or bottle shape. Negative: fake packaging, Western branding, luxury cinematic poster, tiny product, unreadable text, blurry overlay, random supplement bottle, overdesigned layout.
 
 17. type="final-cta", imageAspectRatio="16:9" (or "1:1") — SOCIAL PROOF METRICS BANNER (CTA emphasis)
     • headline, subheadline, cta, urgencyText
