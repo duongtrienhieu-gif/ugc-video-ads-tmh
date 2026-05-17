@@ -23,6 +23,12 @@ import type {
 } from '../types'
 import { SCENE_PRESETS, DEFAULT_PRESET_ROTATION, VISUAL_TONE_CLAMP, getPreset, inferPresetForScene } from './scenePresets'
 import { safeParseJson, logJsonFailure } from './jsonResilience'
+import {
+  inferVisualRole,
+  enforceVisualRoleDiversity,
+  autoMutateRepetitive,
+  buildMotionForMaster,
+} from './editorialIntelligence'
 
 // ── Gemini storyboard prompt builder ─────────────────────────────────────────
 
@@ -1009,6 +1015,15 @@ ${normalPrompt}`
   // on the final shape and Z13 R7-R9 rules can fire.
   blueprints = enforceTimelineDirector(blueprints)
 
+  // Z17: EDITORIAL INTELLIGENCE — attach visualRole + run semantic diversity
+  // rules + auto-mutate semantic duplicates + add motion blueprint to each
+  // master scene. Runs after the cinematic engine + timeline director so it
+  // has the full Z11/Z12/Z13 data to work with.
+  blueprints = blueprints.map((b) => ({ ...b, visualRole: b.visualRole ?? inferVisualRole(b) }))
+  blueprints = enforceVisualRoleDiversity(blueprints)
+  blueprints = autoMutateRepetitive(blueprints)
+  blueprints = blueprints.map((m) => ({ ...m, motion: m.motion ?? buildMotionForMaster(m) }))
+
   const diversity = validateDiversity(blueprints)
 
   // Apply VISUAL_TONE_CLAMP suffix to ensure no scene smuggles in banned terms downstream
@@ -1025,9 +1040,17 @@ ${normalPrompt}`
       `subjectFocus=${sample.subjectFocus} · visualMotif=${sample.visualMotif} · ` +
       `cameraGrammar=${sample.cameraGrammar} · cinematicIntent=${sample.cinematicIntent} · ` +
       `energyScore=${sample.energyScore} · socialPreset=${sample.socialPreset} · ` +
-      `transitionOut=${sample.transitionOut ?? '(end)'}`,
+      `transitionOut=${sample.transitionOut ?? '(end)'} · ` +
+      `visualRole=${sample.visualRole} · motion=zoom:${sample.motion?.zoomDirection ?? '-'}/intensity:${sample.motion?.intensity ?? '-'}`,
     )
   }
+  // Z17: editorial brain summary — visualRole distribution
+  const roleHistogram: Record<string, number> = {}
+  for (const b of blueprints) {
+    const r = b.visualRole ?? 'unset'
+    roleHistogram[r] = (roleHistogram[r] ?? 0) + 1
+  }
+  console.log(`[EDITORIAL_ROLES] ${Object.entries(roleHistogram).map(([r, c]) => `${r}×${c}`).join(' · ')}`)
 
   return { blueprints, diversity, recoveredAtStage }
 }
