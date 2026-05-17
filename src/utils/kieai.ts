@@ -117,6 +117,7 @@ export async function pollGpt4oUntilDone(params: {
   const timeout = params.timeoutMs ?? 4 * 60 * 1000
   const start = Date.now()
   let lastStatus = ''
+  let sameStatusCount = 0  // Z18: stuck-status watchdog counter
   let pollCount = 0
 
   const taskTag = params.taskId.slice(0, 12)
@@ -137,10 +138,20 @@ export async function pollGpt4oUntilDone(params: {
     if (s.status !== lastStatus) {
       console.log(`[POLL_STATUS] task=${taskTag} +${elapsedSec}s status=${s.status} progress=${s.progress ?? '-'} (poll #${pollCount})`)
       lastStatus = s.status
+      sameStatusCount = 0
       params.onStatusChange?.(s.status, s.progress)
-    } else if (pollCount % 10 === 0) {
-      // Heartbeat every ~20s even if status hasn't changed — useful for stuck-queue detection
-      console.log(`[POLL_ELAPSED] task=${taskTag} +${elapsedSec}s still ${s.status} (poll #${pollCount})`)
+    } else {
+      sameStatusCount++
+      // Z18: stuck-status watchdog — advisory warning at 12 polls (~24s)
+      // of unchanged status. Useful diagnostic; the hard timeout still
+      // owns the actual abort decision.
+      if (sameStatusCount === 12) {
+        console.warn(`[POLL_STUCK_WARN] task=${taskTag} +${elapsedSec}s status=${s.status} unchanged for ${sameStatusCount} polls (~24s) — KIE may be frozen`)
+      }
+      if (pollCount % 10 === 0) {
+        // Heartbeat every ~20s even if status hasn't changed
+        console.log(`[POLL_ELAPSED] task=${taskTag} +${elapsedSec}s still ${s.status} (poll #${pollCount}, same#${sameStatusCount})`)
+      }
     }
 
     if (s.status === 'completed') {
@@ -153,7 +164,7 @@ export async function pollGpt4oUntilDone(params: {
       throw new Error(s.error ?? 'GPT-4o gen thất bại')
     }
   }
-  console.error(`[POLL_FAIL] task=${taskTag} +${Math.round(timeout / 1000)}s reason=TIMEOUT`)
+  console.error(`[POLL_FAIL] task=${taskTag} +${Math.round(timeout / 1000)}s reason=TIMEOUT (final status=${lastStatus} sameCount=${sameStatusCount})`)
   throw new Error(`TIMEOUT — KIE GPT-4o quá ${Math.round(timeout / 1000)}s chưa xong (task có thể bị stuck queue — retry tự động hoặc refresh + thử lại)`)
 }
 
@@ -202,11 +213,16 @@ export async function generateGpt4oImage(params: {
 // ─────────────────────────────────────────────────────────────────────────
 export async function generateGpt4oImageFast(params: {
   apiKey: string
-  prompt: string
+  /** Z18: prompt can be a function of (attempt) so caller can simplify on
+   *  retry. Static string still works — gets used for every attempt. */
+  prompt: string | ((attempt: number) => string)
   filesUrl?: string[]
   size: Gpt4oSize
   /** Per-attempt KIE poll timeout. Defaults to 60s. */
   attemptTimeoutMs?: number
+  /** Z18: soft timeout — logs [POLL_SOFT_TIMEOUT] warning at this mark
+   *  but does NOT abort. Used to surface "running slow" diagnostic. */
+  softTimeoutMs?: number
   /** Max fresh submissions. Defaults to 2 → total max ~120-130s. */
   maxAttempts?: number
   signal?: AbortSignal
@@ -215,18 +231,25 @@ export async function generateGpt4oImageFast(params: {
   onStatusChange?: (status: ImageStatus, progress?: number) => void
 }): Promise<string> {
   const attemptTimeout = params.attemptTimeoutMs ?? 60_000
+  const softTimeout    = params.softTimeoutMs ?? 45_000
   const maxAttempts    = params.maxAttempts ?? 2
   let lastError: Error | null = null
 
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     if (params.signal?.aborted) throw new Error('CANCELLED — user hủy task')
     params.onAttemptChange?.(attempt, maxAttempts)
-    console.log(`[FAST attempt ${attempt}/${maxAttempts}] timeout=${Math.round(attemptTimeout / 1000)}s submit...`)
+    const currentPrompt = typeof params.prompt === 'function' ? params.prompt(attempt) : params.prompt
+    console.log(`[FAST attempt ${attempt}/${maxAttempts}] timeout=${Math.round(attemptTimeout / 1000)}s soft=${Math.round(softTimeout / 1000)}s promptLen=${currentPrompt.length} submit...`)
+
+    // Z18: soft timeout watcher — fires once at softTimeoutMs to log warning
+    const softTimer = setTimeout(() => {
+      console.warn(`[POLL_SOFT_TIMEOUT] attempt ${attempt}/${maxAttempts} — passed soft deadline ${Math.round(softTimeout / 1000)}s, will hard-timeout at ${Math.round(attemptTimeout / 1000)}s`)
+    }, softTimeout)
 
     try {
       const { taskId } = await submitGpt4oImage({
         apiKey: params.apiKey,
-        prompt: params.prompt,
+        prompt: currentPrompt,
         filesUrl: params.filesUrl,
         size: params.size,
       })
@@ -255,7 +278,9 @@ export async function generateGpt4oImageFast(params: {
       }
 
       // Timeout / network — abandon this task and retry with a fresh submission
-      console.warn(`[FAST attempt ${attempt}/${maxAttempts}] soft-fail: ${msg.slice(0, 120)} — ${attempt < maxAttempts ? 'submitting fresh task' : 'no more attempts'}`)
+      console.warn(`[FAST attempt ${attempt}/${maxAttempts}] soft-fail: ${msg.slice(0, 120)} — ${attempt < maxAttempts ? 'submitting fresh task (will use simplified prompt if caller provided fn-form)' : 'no more attempts'}`)
+    } finally {
+      clearTimeout(softTimer)
     }
   }
 

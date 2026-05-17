@@ -42,10 +42,66 @@ import type {
 const MAX_JOB_DURATION_MS = 3 * 60 * 1000   // 3-min hard ceiling (was 12min)
 const MAX_RETRIES = 3
 const PER_ATTEMPT_TIMEOUT_MS = 60_000        // per KIE submission, 2 submissions per QC attempt
+const SOFT_TIMEOUT_MS = 45_000               // Z18 — soft-timeout warning threshold
 
 // Z16: track the active AbortController so cancelMasterFrameJob() can
 // signal the KIE poll loop instead of letting it run to its own timeout.
 let activeJobAbort: AbortController | null = null
+
+// ─────────────────────────────────────────────────────────────────────────
+// Z18 — PROMPT COMPLEXITY + RETRY SIMPLIFICATION
+//
+// On retry, the same overweight prompt re-submitted produces the same KIE
+// slowness. Auto-strip decorative pieces so the retry has a real chance of
+// completing faster:
+//   • Drop GLOBAL_NEGATIVE paragraph (saves ~90-110 chars)
+//   • Drop "Retry: previous attempt..." bump phrases inside locks
+//   • Drop tone-clamp suffixes ("— landing-page / social-proof lifestyle")
+//   • Drop "Preserve every label letter." extra clause
+//
+// Priority preserved (per spec):
+//   ✓ avatar identity lock
+//   ✓ product identity lock
+//   ✓ core composition (Vertical medium close-up portrait)
+// ─────────────────────────────────────────────────────────────────────────
+
+function simplifyMasterFramePromptForRetry(originalFinal: string): string {
+  const paragraphs = originalFinal.split('\n\n')
+  return paragraphs
+    // 1. Drop GLOBAL_NEGATIVE (the "Avoid: ..." paragraph)
+    .filter((p) => !p.trimStart().startsWith('Avoid:'))
+    .map((p) => p
+      // 2. Drop "Retry: previous attempt..." bumps from compileMasterFramePrompt
+      .replace(/\s*Retry: previous attempt[^.]+\.\s*/g, ' ')
+      // 3. Drop the "Preserve every label letter." extra label-lock clause
+      .replace(/\s*Preserve every label letter\.\s*/g, ' ')
+      // 4. Drop the tone-clamp suffix (when present)
+      .replace(/\s*—\s*ecommerce lifestyle/g, '')
+      .replace(/\s*—\s*landing-page \/ social-proof lifestyle/g, '')
+    )
+    .join('\n\n')
+    .replace(/\s+/g, ' ')   // collapse extra whitespace from the strips
+    .replace(/\s+\./g, '.') // tidy stray " ." artifacts
+    .trim()
+}
+
+interface PromptComplexity {
+  chars: number
+  paragraphCount: number
+  hasNegative: boolean
+  hasBumps: boolean
+  simplified: boolean
+}
+
+function measurePromptComplexity(prompt: string): PromptComplexity {
+  return {
+    chars: prompt.length,
+    paragraphCount: prompt.split('\n\n').length,
+    hasNegative: prompt.includes('Avoid:'),
+    hasBumps: prompt.includes('Retry: previous attempt'),
+    simplified: !prompt.includes('Avoid:') && !prompt.includes('Retry: previous attempt'),
+  }
+}
 
 // ── Identity describe Gemini prompts (lifted from masterFrame.ts) ────────────
 
@@ -264,21 +320,43 @@ async function runJobPipeline(_jobId: string, params: StartJobParams): Promise<v
         filesUrl.unshift(identity.productImageUrl)
       }
 
+      // Z18: Prepare full + simplified prompts. Outer QC retry (attemptIdx>0)
+      // forces simplified from the FIRST inner attempt. Otherwise inner
+      // attempt 1 uses full, inner attempt 2 uses simplified.
+      const fullPrompt = compiled.final
+      const simplifiedPrompt = simplifyMasterFramePromptForRetry(fullPrompt)
+      const forceSimplifiedFromStart = attemptIdx > 0
+      const fullComplexity       = measurePromptComplexity(fullPrompt)
+      const simplifiedComplexity = measurePromptComplexity(simplifiedPrompt)
+      console.log(
+        `[MASTERFRAME_PROMPT] qcAttempt=${attemptIdx + 1}/${MAX_RETRIES + 1} ` +
+        `consistency=${inputs.consistencyStrength} ` +
+        `forceSimplified=${forceSimplifiedFromStart} ` +
+        `full={chars:${fullComplexity.chars} negative:${fullComplexity.hasNegative} bumps:${fullComplexity.hasBumps}} ` +
+        `simplified={chars:${simplifiedComplexity.chars} saved:${fullComplexity.chars - simplifiedComplexity.chars}chars}`,
+      )
+
       let remoteUrl: string
       try {
-        // Z16: Fast wrapper — 2 KIE submissions × 60s each. If the first
-        // submission gets stuck >60s we abandon it and submit fresh. Total
-        // worst case ~130s per QC attempt vs the previous 5min hang.
+        // Z16+Z18: Fast wrapper — 2 KIE submissions × 60s each, soft warning
+        // at 45s. Inner attempt 2 always uses simplified prompt; outer QC
+        // retry also forces simplified on the first inner attempt.
         remoteUrl = await generateGpt4oImageFast({
           apiKey: params.kieApiKey,
-          prompt: compiled.final,
+          prompt: (innerAttempt) => {
+            // Inner attempt 2 → always simplified (recovery from stuck attempt 1)
+            // Outer QC retry → simplified from inner attempt 1 too
+            if (innerAttempt === 2 || forceSimplifiedFromStart) return simplifiedPrompt
+            return fullPrompt
+          },
           filesUrl: filesUrl.slice(0, 5),
           size: '2:3',
           attemptTimeoutMs: PER_ATTEMPT_TIMEOUT_MS,
+          softTimeoutMs: SOFT_TIMEOUT_MS,
           maxAttempts: 2,
           signal: jobAbortSignal,
           onAttemptChange: (a, t) => {
-            console.log(`[masterFrame] QC attempt ${attemptIdx + 1} → KIE submit ${a}/${t}`)
+            console.log(`[masterFrame] QC attempt ${attemptIdx + 1} → KIE submit ${a}/${t} (using ${a === 1 && !forceSimplifiedFromStart ? 'full' : 'simplified'} prompt)`)
           },
         })
       } catch (err) {

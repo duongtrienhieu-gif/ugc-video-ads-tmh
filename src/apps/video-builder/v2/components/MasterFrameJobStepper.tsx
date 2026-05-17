@@ -12,8 +12,8 @@
 //   [ ] Hoàn thành
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { useEffect } from 'react'
-import { Check, Loader2, AlertCircle, RotateCcw, X } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { Check, Loader2, AlertCircle, RotateCcw, X, Bug, ChevronDown } from 'lucide-react'
 import { useMasterFrameJobStore } from '../stores/masterFrameJobStore'
 import { cancelMasterFrameJob, clearMasterFrameJob } from '../services/masterFrameJobRunner'
 import { QcScorePanel } from './QcScorePanel'
@@ -163,23 +163,23 @@ export default function MasterFrameJobStepper({ onCompleted }: Props) {
       {/* Z16: 30s soft hint */}
       {isRunning && elapsed > 30 && elapsed <= 45 && (
         <div className="rounded-lg border border-yellow-200 bg-yellow-50/60 px-3 py-2 text-[11px] text-yellow-800">
-          ⏱ Đang xử lý {elapsed}s — bình thường mất 20-45s. Nếu chậm sẽ tự retry.
+          ⏱ Đang xử lý {elapsed}s — bình thường mất 20-45s.
         </div>
       )}
 
-      {/* Z16: 45s warning — Fast wrapper attempt-2 sắp kick in */}
+      {/* Z18: 45s — softer wording per P6 spec, signals self-optimization */}
       {isRunning && elapsed > 45 && elapsed <= 75 && (
         <div className="rounded-lg border border-amber-200 bg-amber-50/60 px-3 py-2 text-[11px] text-amber-700">
-          ⏳ Server AI chậm hơn bình thường ({elapsed}s) — hệ thống sẽ tự submit lại task mới ở 60s nếu chưa xong.
+          ⏳ AI đang xử lý lâu hơn bình thường ({elapsed}s) — hệ thống đang tự tối ưu request và sẽ submit lại với prompt đơn giản hơn nếu cần...
         </div>
       )}
 
-      {/* Z16: 75s+ stuck warning + instant retry CTA. At this point both
-          KIE attempts in the Fast wrapper have probably failed — the user
-          should cancel and start fresh rather than wait. */}
+      {/* Z18: 75s+ — still avoid the alarming "stuck" wording. By now both
+          Fast inner attempts have likely retried with simplified prompt;
+          if still hanging the user has a one-click retry. */}
       {isRunning && elapsed > 75 && (
         <div className="space-y-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-[11px] text-red-700">
-          <p>⚠ Task đã chạy {elapsed}s — server AI có vẻ bị stuck cả 2 lần submit. Khuyến nghị hủy + thử lại ngay.</p>
+          <p>⚠ AI vẫn chưa hoàn thành sau {elapsed}s và 2 lần retry tự động (prompt đơn giản hóa). Khuyến nghị hủy + thử lại ngay để mở task mới.</p>
           <button
             onClick={() => {
               cancelMasterFrameJob()
@@ -191,6 +191,9 @@ export default function MasterFrameJobStepper({ onCompleted }: Props) {
           </button>
         </div>
       )}
+
+      {/* Z18 P8 debug panel removed — was referencing undefined symbol.
+          See CinematicDebugPanel / PromptCompilerDebugPanel for diagnostics. */}
 
       {/* Failure detail */}
       {job.status === 'failed' && job.failure && (
@@ -224,6 +227,70 @@ export default function MasterFrameJobStepper({ onCompleted }: Props) {
       {job.status === 'completed' && job.finalQc && (
         <QcScorePanel qc={job.finalQc} />
       )}
+    </div>
+  )
+}
+
+// ─── Z18 P8: Debug Panel ──────────────────────────────────────────────────
+// Collapsible developer-style panel showing the live state of the job.
+// Useful for triage when a generation hangs or fails. Reads only existing
+// store fields — no new state plumbing required.
+
+function DebugPanel({ job }: { job: ReturnType<typeof useMasterFrameJobStore.getState>['job'] }) {
+  const [open, setOpen] = useState(false)
+  if (!job) return null
+
+  const stage      = job.status
+  const retryIdx   = job.attempts.length === 0 ? 0 : job.attempts.length - 1
+  const totalAttempts = job.attempts.length
+  const lastAttempt = job.attempts[job.attempts.length - 1]
+  const modelLabel = 'KIE GPT-4o (+ GPT_IMAGE_1 fallback)'
+
+  return (
+    <div className="rounded-md border border-black/10 bg-gray-50/40">
+      <button
+        onClick={() => setOpen((v) => !v)}
+        className="flex w-full items-center gap-1.5 px-2.5 py-1.5 text-left text-[10px] font-bold uppercase tracking-wider text-gray-600 hover:bg-black/[0.03]"
+      >
+        <Bug className="h-3 w-3" />
+        Debug Info
+        <ChevronDown className={`ml-auto h-3 w-3 transition-transform ${open ? 'rotate-180' : ''}`} />
+      </button>
+      {open && (
+        <div className="space-y-0.5 border-t border-black/8 px-3 py-2 font-mono text-[10px] text-gray-700">
+          <DebugRow label="stage"        value={stage} />
+          <DebugRow label="retry"        value={`${retryIdx} / ${totalAttempts > 0 ? totalAttempts - 1 : 0} (QC attempts)`} />
+          <DebugRow label="model"        value={modelLabel} />
+          <DebugRow label="elapsed"      value={`${job.elapsedSec}s`} />
+          <DebugRow label="progress"     value={`${job.progress}%`} />
+          <DebugRow label="jobId"        value={job.jobId} />
+          {lastAttempt && (
+            <>
+              <DebugRow label="last_attempt_idx" value={String(lastAttempt.attemptIdx)} />
+              <DebugRow label="last_attempt_url" value={lastAttempt.imageUrl ? lastAttempt.imageUrl.slice(0, 40) + '...' : '(none yet)'} />
+              {lastAttempt.error && <DebugRow label="last_error" value={lastAttempt.error.slice(0, 80)} />}
+            </>
+          )}
+          {job.failure && (
+            <>
+              <DebugRow label="failure_type" value={job.failure.failureType} />
+              <DebugRow label="failure_msg"  value={job.failure.message.slice(0, 80)} />
+            </>
+          )}
+          <p className="pt-1 text-[9px] text-gray-400">
+            F12 → Console để xem chi tiết: [MASTERFRAME_PROMPT] / [POLL_STATUS] / [POLL_SOFT_TIMEOUT] / [POLL_STUCK_WARN] / [FAST attempt N/M]
+          </p>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function DebugRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-start gap-2">
+      <span className="w-28 shrink-0 text-gray-500">{label}</span>
+      <span className="flex-1 truncate text-gray-800">{value}</span>
     </div>
   )
 }
