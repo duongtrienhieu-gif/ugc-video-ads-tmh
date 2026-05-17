@@ -296,3 +296,92 @@ export const RETENTION_RISK_LABEL_VI: Record<RetentionRisk, string> = {
   'MEDIUM': 'Nguy cơ drop trung bình',
   'HIGH':   'Drop cao — cần sửa',
 }
+
+// ── Z7 — Inline Creative Pipeline (script generation from ad analysis) ─────
+// Every "Tạo …" button now opens an inline modal and renders output below
+// the calling module. No more cross-app redirects for the generation step.
+// Sending the FINAL script to Avatar/Voice/UGC apps is still a redirect since
+// that is the user's explicit intent.
+
+export type ScriptGenLanguage = 'ms' | 'vi' | 'en'
+
+export type ScriptGenTone =
+  | 'original'      // giống ads gốc
+  | 'emotional'
+  | 'hard-sell'
+  | 'testimonial'
+  | 'soft-sell'
+  | 'scientific'
+
+export const SCRIPT_TONE_LABEL_VI: Record<ScriptGenTone, string> = {
+  'original':    'Giống ads gốc',
+  'emotional':   'Emotional',
+  'hard-sell':   'Hard sell',
+  'testimonial': 'Testimonial',
+  'soft-sell':   'Soft sell',
+  'scientific':  'Scientific',
+}
+
+export const SCRIPT_LANG_LABEL: Record<ScriptGenLanguage, { label: string; flag: string }> = {
+  'ms': { label: 'MY · Bahasa Melayu', flag: '🇲🇾' },
+  'vi': { label: 'VN · Tiếng Việt',    flag: '🇻🇳' },
+  'en': { label: 'GB · English',       flag: '🇬🇧' },
+}
+
+/** What kind of asset the modal is generating — controls the prompt + output shape. */
+export type PipelineMode =
+  | 'script-similar'     // 1-Click: tạo script tương tự
+  | 'hook-variants'      // 1-Click: tạo hook variants
+  | 'cta-variants'       // 1-Click: tạo CTA variants
+  | 'storyboard'         // 1-Click: tạo storyboard text
+  | 'landing-page'       // 1-Click: tạo landing page outline
+  | 'product-scenes'     // 1-Click: tạo product AI scene briefs
+  | 'variation-script'   // Variation card: dùng cho sản phẩm
+  | 'transcript-similar' // Transcript section: tạo kịch bản tương tự
+
+export const PIPELINE_MODE_LABEL_VI: Record<PipelineMode, string> = {
+  'script-similar':     'Script tương tự',
+  'hook-variants':      'Hook variants',
+  'cta-variants':       'CTA variants',
+  'storyboard':         'Storyboard',
+  'landing-page':       'Landing page outline',
+  'product-scenes':     'Product AI scenes',
+  'variation-script':   'Script từ variation',
+  'transcript-similar': 'Script từ lời thoại',
+}
+
+export interface ScriptGenParams {
+  mode: PipelineMode
+  productId: string
+  language: ScriptGenLanguage
+  tone: ScriptGenTone
+  /** Text dump fed to Gemini — transcript, hook, reconstruction, etc. */
+  sourceContext: string
+  /** Original ad filename — saved in metadata header. */
+  sourceFileName?: string
+}
+
+export interface GeneratedScript {
+  id: string
+  mode: PipelineMode
+  language: ScriptGenLanguage
+  tone: ScriptGenTone
+  productId: string
+  productName: string
+  sourceFileName?: string
+  /** Hook line (always present for script modes; may be the variant for hook-variants mode) */
+  hook?: string
+  /** Body / main script content. For non-script modes (storyboard/landing/scenes) this holds the main asset text. */
+  body?: string
+  cta?: string
+  sceneSuggestion?: string
+  brollSuggestion?: string
+  emotionNote?: string
+  voiceTone?: string
+  /** Vietnamese translation — collapse-hidden by default in UI. */
+  viTranslation?: string
+  /** Fallback raw text if structured JSON parse failed. */
+  rawText?: string
+  generatedAt: number
+}
+

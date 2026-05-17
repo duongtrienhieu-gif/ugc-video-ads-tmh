@@ -30,7 +30,7 @@ import {
   Wand2,
   Zap,
 } from 'lucide-react'
-import type { AnalysisResult, Variation } from '../types'
+import type { AnalysisResult, Variation, GeneratedScript, PipelineMode } from '../types'
 import {
   AD_ANGLE_LABEL_VI,
   MARKET_AWARENESS_LABEL_VI,
@@ -46,6 +46,21 @@ import { computeBenchmark, computePatternStats } from '../services/winningPatter
 import { useAppStore } from '../../../stores/appStore'
 import { useBankStore } from '../../../stores/bankStore'
 import { useAdTemplateStore } from '../../../stores/adTemplateStore'
+import InlineScriptModal, { type InlineModalContext } from './InlineScriptModal'
+import GeneratedScriptCard from './GeneratedScriptCard'
+
+/**
+ * Z7 — Inline creative pipeline glue.
+ * Every "Tạo …" button across the page calls `openModal(key, mode, sourceContext)`.
+ * Generated outputs are stored under `key` and rendered below the calling module
+ * by `scriptsFor(key)`. No cross-app redirects for the generation step.
+ */
+export interface ScriptPipelineHooks {
+  openModal: (key: string, mode: PipelineMode, sourceContext: string) => void
+  scriptsFor: (key: string) => GeneratedScript[]
+  removeScript: (key: string, id: string) => void
+  duplicateScript: (key: string, script: GeneratedScript) => void
+}
 
 /**
  * Convert an AnalysisResult into a single text block suitable for injecting
@@ -437,11 +452,7 @@ function DecisionSection({ result }: { result: AnalysisResult }) {
  * Future commits will add proper receivers in each app so no clipboard
  * fallback is needed.
  */
-function CreativeActionBar({ result }: { result: AnalysisResult }) {
-  const sendToApp = useAppStore((s) => s.sendToApp)
-  const openApp = useAppStore((s) => s.openApp)
-  const addToast = useAppStore((s) => s.addToast)
-
+function CreativeActionBar({ result, pipeline }: { result: AnalysisResult; pipeline: ScriptPipelineHooks }) {
   const transcriptText = result.transcript.map((l) => l.text).join('\n')
   const hookText = result.hookBreakdown?.hookText ?? ''
   const visualPlaybookText = (result.visualPlaybook ?? [])
@@ -450,130 +461,69 @@ function CreativeActionBar({ result }: { result: AnalysisResult }) {
     .join('\n\n')
   const reconstructionPrompt = result.reconstructionPrompt ?? ''
 
-  // ── 1. Tạo script tương tự — direct receiver in Script Architect ─────
-  const handleScriptSimilar = () => {
-    sendToApp({
-      targetApp: 'script-architect',
-      targetField: 'winningTranscript',
-      data: transcriptText,
-    })
-    addToast('✨ Đã gửi transcript sang Tạo Kịch bản UGC')
-  }
+  // ── Source context per mode — fed to Gemini inside the modal ─────────
+  const ctxScriptSimilar = `# TRANSCRIPT\n${transcriptText}\n\n# HOOK\n${hookText}\n\n# RECONSTRUCTION\n${reconstructionPrompt}`
+  const ctxHookVariants  = `# WINNING HOOK\n${hookText}\n\n# KỸ THUẬT\n${result.hookBreakdown?.technique ?? ''}\n\n# TẠI SAO HIỆU QUẢ\n${result.hookBreakdown?.whyItWorks ?? ''}\n\n# MẪU ÁP DỤNG\n${result.hookBreakdown?.adaptableTemplate ?? ''}`
+  const ctxCtaVariants   = `# ORIGINAL HOOK\n${hookText}\n\n# PERSUASION LEVERS\n${(result.psychology?.primaryLevers ?? []).map((l) => `- ${l}`).join('\n')}\n\n# TARGET AUDIENCE\n${(result.psychology?.targetingSignals ?? []).map((l) => `- ${l}`).join('\n')}`
+  const ctxStoryboard    = `# RECONSTRUCTION DIRECTIVE\n${reconstructionPrompt}\n\n# STRUCTURE BEATS\n${(result.structureMap?.beats ?? []).map((b) => `${b.timestamp} ${b.beat}: ${b.description}`).join('\n')}`
+  const ctxLanding       = `# HOOK\n${hookText}\n\n# STRUCTURE\n${(result.structureMap?.beats ?? []).map((b) => `- ${b.timestamp} ${b.beat}: ${b.description}`).join('\n')}\n\n# RECONSTRUCTION\n${reconstructionPrompt}`
+  const ctxScenes        = `# VISUAL PLAYBOOK\n${visualPlaybookText}\n\n# RECONSTRUCTION\n${reconstructionPrompt}`
 
-  // ── 2. Tạo Hook variants — same target, focused intent ───────────────
-  const handleHookVariants = () => {
-    const hookContext = `# WINNING HOOK\n${hookText}\n\n# KỸ THUẬT\n${result.hookBreakdown?.technique ?? ''}\n\n# TẠI SAO HIỆU QUẢ\n${result.hookBreakdown?.whyItWorks ?? ''}\n\n# MẪU ÁP DỤNG\n${result.hookBreakdown?.adaptableTemplate ?? ''}\n\n=> Hãy viết 5 hook variants tương tự, đa dạng tone (emotional / authority / curiosity / urgency / pattern-interrupt).`
-    sendToApp({
-      targetApp: 'script-architect',
-      targetField: 'winningTranscript',
-      data: hookContext,
-    })
-    addToast('🪝 Đã gửi hook context — chọn preset hook trong Kịch bản')
-  }
-
-  // ── 3. Tạo Storyboard — copy reconstruction + navigate UGC Builder ───
-  const handleStoryboard = async () => {
-    try {
-      await navigator.clipboard.writeText(reconstructionPrompt)
-      addToast('🎬 Đã copy reconstruction prompt — paste vào "Kịch bản" của UGC Builder', 'success')
-    } catch {
-      addToast('🎬 Mở UGC Builder — dùng "Lưu thành Mẫu ADS Win" + reuse ở UGC Builder', 'info')
-    }
-    openApp('video-builder')
-  }
-
-  // ── 4. Tạo Landing Page — copy analysis snippet + navigate ───────────
-  const handleLandingPage = async () => {
-    const snippet = `# WINNING AD INSPIRATION\n\n## HOOK\n${hookText}\n\n## STRUCTURE\n${result.structureMap?.beats?.map((b) => `- ${b.timestamp} ${b.beat}: ${b.description}`).join('\n') ?? ''}\n\n## RECONSTRUCTION DIRECTIVE\n${reconstructionPrompt}`
-    try {
-      await navigator.clipboard.writeText(snippet)
-      addToast('🌐 Đã copy ad blueprint — chọn sản phẩm + paste vào "Niche / inspiration" trong LandingPage AI', 'success')
-    } catch {
-      addToast('🌐 Mở LandingPage AI — chọn sản phẩm để bắt đầu', 'info')
-    }
-    openApp('landing-page')
-  }
-
-  // ── 5. Tạo Product AI scenes — copy visual playbook + navigate ───────
-  const handleProductAIScenes = async () => {
-    try {
-      await navigator.clipboard.writeText(visualPlaybookText)
-      addToast('📸 Đã copy visual playbook — paste vào "Scene custom" của Product AI', 'success')
-    } catch {
-      addToast('📸 Mở Product AI — chọn scene preset gần nhất với ad win', 'info')
-    }
-    openApp('broll-studio')
-  }
-
-  // ── 6. Tạo CTA variants — copy hook+reconstruction + navigate Ads ────
-  const handleCTAVariants = async () => {
-    const ctaContext = `# WINNING AD CTA CONTEXT\n\n## ORIGINAL HOOK\n${hookText}\n\n## PERSUASION LEVERS\n${(result.psychology?.primaryLevers ?? []).map((l) => `- ${l}`).join('\n')}\n\n## TARGET AUDIENCE\n${(result.psychology?.targetingSignals ?? []).map((l) => `- ${l}`).join('\n')}\n\n=> Hãy viết 5 CTA variants Facebook primary text, đa dạng angle (urgency / scarcity / soft / question / direct).`
-    try {
-      await navigator.clipboard.writeText(ctaContext)
-      addToast('📣 Đã copy CTA context — paste vào Ads Content + chọn platform', 'success')
-    } catch {
-      addToast('📣 Mở Ads Content — chọn sản phẩm để viết CTA', 'info')
-    }
-    openApp('ads-content')
-  }
+  const BUTTONS: Array<{ key: string; mode: PipelineMode; icon: React.ElementType; label: string; hint: string; accent: 'violet' | 'emerald' | 'cyan' | 'amber' | 'blue' | 'rose'; context: string }> = [
+    { key: 'pipeline:script-similar', mode: 'script-similar', icon: PenLine,        label: 'Tạo script tương tự',  hint: 'Full script — Hook/Body/CTA',         accent: 'violet',  context: ctxScriptSimilar },
+    { key: 'pipeline:hook-variants',  mode: 'hook-variants',  icon: Anchor,         label: 'Tạo hook variants',    hint: '5 hook mới từ hook gốc',              accent: 'emerald', context: ctxHookVariants },
+    { key: 'pipeline:cta-variants',   mode: 'cta-variants',   icon: Megaphone,      label: 'Tạo CTA variants',     hint: '5 FB primary text',                   accent: 'amber',   context: ctxCtaVariants },
+    { key: 'pipeline:storyboard',     mode: 'storyboard',     icon: Film,           label: 'Tạo storyboard',       hint: 'Shot list theo cấu trúc gốc',         accent: 'cyan',    context: ctxStoryboard },
+    { key: 'pipeline:landing-page',   mode: 'landing-page',   icon: LayoutTemplate, label: 'Tạo Landing Page',     hint: 'Outline 8 section advertorial',       accent: 'blue',    context: ctxLanding },
+    { key: 'pipeline:product-scenes', mode: 'product-scenes', icon: ImageLucide,    label: 'Tạo Product AI scenes',hint: '4 scene briefs lifestyle UGC',        accent: 'rose',    context: ctxScenes },
+  ]
 
   return (
     <Section className="border-pink-200 bg-gradient-to-br from-pink-50/60 to-violet-50/40">
       <div className="mb-3 flex items-center gap-2">
         <Wand2 className="h-4 w-4 text-pink-600" strokeWidth={1.8} />
-        <h3 className="text-sm font-bold tracking-tight text-gray-900">1-Click Creative Pipeline — tái sử dụng phân tích này</h3>
+        <h3 className="text-sm font-bold tracking-tight text-gray-900">AI Creative Control Center — tạo trực tiếp tại đây</h3>
         <span className="ml-auto rounded-full bg-pink-100 px-2 py-0.5 text-[9px] font-bold text-pink-700">
-          Z3
+          Z7
         </span>
       </div>
       <div className="grid grid-cols-2 gap-2 md:grid-cols-3">
-        <ActionTile
-          icon={PenLine}
-          label="Tạo script tương tự"
-          hint="Gửi transcript → Kịch bản UGC"
-          accent="violet"
-          onClick={handleScriptSimilar}
-        />
-        <ActionTile
-          icon={Anchor}
-          label="Tạo hook variants"
-          hint="5 hook khác nhau từ hook gốc"
-          accent="emerald"
-          onClick={handleHookVariants}
-        />
-        <ActionTile
-          icon={Megaphone}
-          label="Tạo CTA variants"
-          hint="5 FB primary text cho Ads"
-          accent="amber"
-          onClick={handleCTAVariants}
-        />
-        <ActionTile
-          icon={Film}
-          label="Tạo storyboard"
-          hint="Mở UGC Builder + reconstruction"
-          accent="cyan"
-          onClick={handleStoryboard}
-        />
-        <ActionTile
-          icon={LayoutTemplate}
-          label="Tạo Landing Page"
-          hint="14-section advertorial pack"
-          accent="blue"
-          onClick={handleLandingPage}
-        />
-        <ActionTile
-          icon={ImageLucide}
-          label="Tạo Product AI scenes"
-          hint="Visual playbook → 4 ảnh lifestyle"
-          accent="rose"
-          onClick={handleProductAIScenes}
-        />
+        {BUTTONS.map((b) => (
+          <ActionTile
+            key={b.key}
+            icon={b.icon}
+            label={b.label}
+            hint={b.hint}
+            accent={b.accent}
+            onClick={() => pipeline.openModal(b.key, b.mode, b.context)}
+          />
+        ))}
       </div>
       <p className="mt-2 text-[10px] text-gray-500 flex items-center gap-1">
         <Zap className="h-3 w-3 text-amber-500" />
-        Mỗi nút mở module tương ứng + tự copy snippet vào clipboard nếu cần paste.
+        Mỗi nút mở popup chọn sản phẩm + ngôn ngữ + tone — output render NGAY bên dưới, không chuyển trang.
       </p>
+
+      {/* Inline output cards — one stack per pipeline button */}
+      {BUTTONS.map((b) => {
+        const scripts = pipeline.scriptsFor(b.key)
+        if (scripts.length === 0) return null
+        return (
+          <div key={`out-${b.key}`} className="mt-3 space-y-2">
+            <p className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest text-violet-700">
+              <Sparkles className="h-3 w-3" /> Output · {b.label} ({scripts.length})
+            </p>
+            {scripts.map((s) => (
+              <GeneratedScriptCard
+                key={s.id}
+                script={s}
+                onRemove={() => pipeline.removeScript(b.key, s.id)}
+                onDuplicate={() => pipeline.duplicateScript(b.key, s)}
+              />
+            ))}
+          </div>
+        )
+      })}
     </Section>
   )
 }
@@ -767,10 +717,11 @@ function WinningPatternSection({ result }: { result: AnalysisResult }) {
  * AnalysisResult via onResultUpdate so they survive F5.
  */
 function VariationsSection({
-  result, onResultUpdate,
+  result, onResultUpdate, pipeline,
 }: {
   result: AnalysisResult
   onResultUpdate?: (next: AnalysisResult) => void
+  pipeline: ScriptPipelineHooks
 }) {
   const [generating, setGenerating] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -854,6 +805,7 @@ function VariationsSection({
                 key={v.id}
                 variation={v}
                 onSendToScript={() => handleSendToScriptArchitect(v)}
+                pipeline={pipeline}
               />
             ))}
           </div>
@@ -872,10 +824,11 @@ function VariationsSection({
 }
 
 function VariationCard({
-  variation, onSendToScript,
+  variation, onSendToScript, pipeline,
 }: {
   variation: Variation
   onSendToScript: () => void
+  pipeline: ScriptPipelineHooks
 }) {
   const [expanded, setExpanded] = useState(false)
   const { copied, copy } = useCopy()
@@ -948,6 +901,36 @@ function VariationCard({
           </div>
         </div>
       )}
+
+      {/* Z7: "Dùng cho sản phẩm" — open inline modal pre-loaded with this variant */}
+      <button
+        onClick={() => {
+          const ctx = `# VARIATION TONE: ${VARIATION_LABEL_VI[variation.type]}\n\n# HOOK\n${variation.hookText}\n\n# SCRIPT\n${variation.scriptText}\n\n# CTA\n${variation.ctaText}\n\n# TONE BREAKDOWN\n${variation.toneBreakdown}\n\n# RECOMMENDED FOR\n${variation.recommendedFor}`
+          pipeline.openModal(`variation:${variation.id}`, 'variation-script', ctx)
+        }}
+        className="mt-2 flex w-full items-center justify-center gap-1.5 rounded-lg bg-violet-600 px-3 py-1.5 text-[11px] font-bold text-white shadow-sm hover:bg-violet-700"
+      >
+        <Sparkles className="h-3 w-3" />
+        Dùng cho sản phẩm — sinh script đầy đủ
+      </button>
+
+      {/* Z7: inline generated outputs for THIS variation */}
+      {(() => {
+        const out = pipeline.scriptsFor(`variation:${variation.id}`)
+        if (out.length === 0) return null
+        return (
+          <div className="mt-2 space-y-2">
+            {out.map((s) => (
+              <GeneratedScriptCard
+                key={s.id}
+                script={s}
+                onRemove={() => pipeline.removeScript(`variation:${variation.id}`, s.id)}
+                onDuplicate={() => pipeline.duplicateScript(`variation:${variation.id}`, s)}
+              />
+            ))}
+          </div>
+        )
+      })()}
     </div>
   )
 }
@@ -1026,22 +1009,17 @@ function RetentionHeatmapSection({ result }: { result: AnalysisResult }) {
 }
 
 /* ─── 2. Transcript ─── */
-function TranscriptSection({ result }: { result: AnalysisResult }) {
+function TranscriptSection({ result, pipeline }: { result: AnalysisResult; pipeline: ScriptPipelineHooks }) {
   const { copied, copy } = useCopy()
   const [savingTitle, setSavingTitle] = useState<string | null>(null)
-  const sendToApp = useAppStore((s) => s.sendToApp)
   const addToast = useAppStore((s) => s.addToast)
   const addScript = useBankStore((s) => s.addScript)
 
   const withoutTimestamps = result.transcript.map((l) => l.text).join('\n')
 
-  const handleSendToScriptArchitect = () => {
-    sendToApp({
-      targetApp: 'script-architect',
-      targetField: 'winningTranscript',
-      data: withoutTimestamps,
-    })
-    addToast('Đã gửi lời thoại tới Kịch Bản')
+  const handleCreateSimilarScript = () => {
+    const ctx = `# TRANSCRIPT\n${withoutTimestamps}\n\n# HOOK\n${result.hookBreakdown?.hookText ?? ''}\n\n# STRUCTURE\n${(result.structureMap?.beats ?? []).map((b) => `- ${b.timestamp} ${b.beat}: ${b.description}`).join('\n')}\n\n# CTA / RECONSTRUCTION\n${result.reconstructionPrompt ?? ''}`
+    pipeline.openModal('transcript', 'transcript-similar', ctx)
   }
 
   const handleSaveToBank = () => {
@@ -1079,14 +1057,14 @@ function TranscriptSection({ result }: { result: AnalysisResult }) {
             className="flex items-center gap-1 rounded-full bg-black/[0.04] px-2.5 py-1 text-[11px] font-medium text-gray-600 transition-colors hover:bg-black/8 hover:text-gray-800"
           >
             <Save className="h-3 w-3" />
-            Lưu vào PROJECT kịch bản
+            Lưu transcript vào PROJECT
           </button>
           <button
-            onClick={handleSendToScriptArchitect}
-            className="flex items-center gap-1 rounded-full bg-[#FB2B37]/10 px-2.5 py-1 text-[11px] font-medium text-[#FB2B37] transition-colors hover:bg-[#FB2B37]/20"
+            onClick={handleCreateSimilarScript}
+            className="flex items-center gap-1 rounded-full bg-gradient-to-r from-pink-600 to-violet-600 px-2.5 py-1 text-[11px] font-bold text-white shadow-sm transition-all hover:from-pink-700 hover:to-violet-700"
           >
-            <Send className="h-3 w-3" />
-            Gửi tới Kịch Bản
+            <Sparkles className="h-3 w-3" />
+            Chọn sản phẩm + Tạo kịch bản tương tự
           </button>
         </div>
       </div>
@@ -1126,6 +1104,27 @@ function TranscriptSection({ result }: { result: AnalysisResult }) {
           </div>
         ))}
       </div>
+
+      {/* Z7: inline generated outputs from "Tạo kịch bản tương tự" */}
+      {(() => {
+        const out = pipeline.scriptsFor('transcript')
+        if (out.length === 0) return null
+        return (
+          <div className="mt-4 space-y-2">
+            <p className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest text-violet-700">
+              <Sparkles className="h-3 w-3" /> Kịch bản tương tự đã tạo ({out.length})
+            </p>
+            {out.map((s) => (
+              <GeneratedScriptCard
+                key={s.id}
+                script={s}
+                onRemove={() => pipeline.removeScript('transcript', s.id)}
+                onDuplicate={() => pipeline.duplicateScript('transcript', s)}
+              />
+            ))}
+          </div>
+        )
+      })()}
     </Section>
   )
 }
@@ -1359,6 +1358,47 @@ export default function ResultsView({ result, videoSrc, fileName, onReset, onRes
   const addTemplate = useAdTemplateStore((s) => s.addTemplate)
   const addToast = useAppStore((s) => s.addToast)
 
+  // ── Z7: inline creative pipeline state ─────────────────────────────────
+  const [modalState, setModalState] = useState<{ key: string; context: InlineModalContext } | null>(null)
+  const [scriptsByKey, setScriptsByKey] = useState<Record<string, GeneratedScript[]>>({})
+
+  const pipeline: ScriptPipelineHooks = {
+    openModal: (key, mode, sourceContext) => {
+      setModalState({ key, context: { mode, sourceContext, sourceFileName: fileName } })
+    },
+    scriptsFor: (key) => scriptsByKey[key] ?? [],
+    removeScript: (key, id) => {
+      setScriptsByKey((prev) => ({
+        ...prev,
+        [key]: (prev[key] ?? []).filter((s) => s.id !== id),
+      }))
+    },
+    duplicateScript: (key, script) => {
+      const copy: GeneratedScript = {
+        ...script,
+        id: (typeof crypto !== 'undefined' && 'randomUUID' in crypto)
+          ? crypto.randomUUID()
+          : `dup-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+        generatedAt: Date.now(),
+      }
+      setScriptsByKey((prev) => ({
+        ...prev,
+        [key]: [...(prev[key] ?? []), copy],
+      }))
+      addToast('Đã duplicate script')
+    },
+  }
+
+  const handleGenerated = (script: GeneratedScript) => {
+    if (!modalState) return
+    const key = modalState.key
+    setScriptsByKey((prev) => ({
+      ...prev,
+      [key]: [...(prev[key] ?? []), script],
+    }))
+    setModalState(null)
+  }
+
   const handleSaveTemplate = () => {
     const trimmed = templateName.trim()
     if (!trimmed) { addToast('Đặt tên cho template', 'error'); return }
@@ -1454,17 +1494,16 @@ export default function ResultsView({ result, videoSrc, fileName, onReset, onRes
         <div className="flex flex-col gap-5">
           {/* Z1: Decision Layer + Angle + Awareness + Funnel + Scaling — TOP of results */}
           <DecisionSection result={result} />
-          {/* Z3: 1-click cross-app pipeline — directly under verdict so user
-              can act immediately. */}
-          <CreativeActionBar result={result} />
+          {/* Z7: AI Creative Control Center — inline generation, no redirect */}
+          <CreativeActionBar result={result} pipeline={pipeline} />
           {/* Z6: Winning Pattern benchmark — compare vs user's saved templates */}
           <WinningPatternSection result={result} />
           {/* Z4: Variation Engine — lazy 2nd Gemini call, persisted to cache */}
-          <VariationsSection result={result} onResultUpdate={onResultUpdate} />
+          <VariationsSection result={result} onResultUpdate={onResultUpdate} pipeline={pipeline} />
           <ScorecardSection result={result} />
           {/* Z2: Retention heatmap — visual timeline */}
           <RetentionHeatmapSection result={result} />
-          <TranscriptSection result={result} />
+          <TranscriptSection result={result} pipeline={pipeline} />
           <HookSection result={result} />
           <StructureSection result={result} />
           <PsychologySection result={result} />
@@ -1473,6 +1512,14 @@ export default function ResultsView({ result, videoSrc, fileName, onReset, onRes
           <ReconstructionSection result={result} />
         </div>
       </div>
+
+      {/* Z7: shared inline modal — opened from every "Tạo …" button */}
+      <InlineScriptModal
+        open={modalState !== null}
+        context={modalState?.context ?? null}
+        onClose={() => setModalState(null)}
+        onGenerated={handleGenerated}
+      />
     </div>
   )
 }
