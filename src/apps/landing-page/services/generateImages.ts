@@ -371,27 +371,33 @@ function buildExpertEditorialDirective(job: ImageJob): string {
   const isNewsProof       = sectionType === 'news-proof'
   const isBeforeAfter     = sectionType === 'before-after'
 
-  // ── Diagram / infographic shots ──────────────────────────────────────
+  // ── Diagram / infographic shots — REQUIRE labeled callouts ────────────
   if (isDiagramShot) {
     return (
-      `EDITORIAL INFOGRAPHIC AESTHETIC (chuyen-gia form):\n`
-      + `  • Clean magazine-textbook layout — neat typography, generous whitespace, soft palette (cream / pale sage / off-white / pale blue)\n`
-      + `  • Scientific / anatomical diagram with clear callout labels in clean sans-serif\n`
-      + `  • NO person in this shot. NO UGC selfie aesthetic. NO TikTok-style composition.\n`
-      + `  • NO floating product PNG. NO designed marketing graphics. NO emoji.\n`
-      + `  • Reference style: pages from a health magazine OR a medical textbook — NOT phone screenshots, NOT advertisements.`
+      `EDITORIAL SCIENTIFIC INFOGRAPHIC (chuyen-gia form):\n`
+      + `  • Clean magazine-textbook layout with VISIBLE TEXT LABELS rendered into the image. Use neat editorial sans-serif typography for all callouts.\n`
+      + `  • Soft palette: cream / pale sage / off-white / pale blue. Generous whitespace.\n`
+      + `  • Scientific / anatomical diagram with clear text callouts pointing to organs / cells / mechanism steps. EVERY callout has a short label (eg "Gut Microbiome", "Bước 1", "50 Billion CFU"). Thin connecting lines or arrows between label and target.\n`
+      + `  • Reference style: pages from a health magazine OR medical textbook — NOT phone screenshots, NOT marketing posters.\n`
+      + `  • NO person in this shot. NO UGC selfie aesthetic. NO TikTok composition. NO floating product PNG. NO emoji.\n`
+      + `  • LABELS are REQUIRED — this is the difference between "scientific article" and "generic stock illustration".`
     )
   }
 
-  // ── Ingredient macro photography ─────────────────────────────────────
+  // ── Ingredient infographic — LABELED scientific aesthetic ──────────────
   if (isIngredientMacro) {
     return (
-      `INGREDIENT MACRO PHOTOGRAPHY (chuyen-gia form):\n`
-      + `  • High-quality close-up of the natural source of one active compound (raw ingredient — eg ginger root cross-section, marine collagen capsule on white linen, probiotic powder texture, herb leaf macro). NOT the product bottle.\n`
-      + `  • Neutral background — pale cream / off-white / soft beige with subtle natural texture (linen, paper, light wood).\n`
-      + `  • Editorial supplement / food photography aesthetic. Clean studio lighting allowed.\n`
-      + `  • NO person. NO product packaging. NO designed text overlay.\n`
-      + `  • Soft shallow depth-of-field, magazine-clean composition.`
+      `INGREDIENT SCIENTIFIC INFOGRAPHIC (chuyen-gia form) — LABELED:\n`
+      + `  • The active compound name MUST be rendered AS TEXT inside the image in clean editorial sans-serif typography (eg "Lactobacillus Acidophilus", "Niacinamide 5%", "Glucosamine Sulfate", "Hyaluronic Acid"). Use the exact compound name from the imagePrompt body above.\n`
+      + `  • Optional small molecular formula OR "% concentration" annotation next to the label.\n`
+      + `  • Vary asset format across the section's 3 images:\n`
+      + `      - Labeled ingredient macro (close-up of raw compound + name label)\n`
+      + `      - Capsule cross-section / formula board with 3-4 ingredient labels and thin callout lines\n`
+      + `      - Mechanism target diagram (microbiome / cell / tissue) showing where the compound acts, with the compound name labeled\n`
+      + `  • Neutral background — pale cream / off-white / soft beige / linen / pale sage.\n`
+      + `  • Editorial supplement / food / scientific magazine photography aesthetic.\n`
+      + `  • NO person. NO product packaging / bottle in frame. NO emoji. NO marketing badge. NO discount overlay.\n`
+      + `  • Banned: generic unlabeled powder stock photo (this is the failure mode we are fixing — every ingredient image MUST have its compound name visible).`
     )
   }
 
@@ -621,11 +627,15 @@ function buildFinalPrompt(job: ImageJob, hasProductRefs: boolean): string {
   return parts.join('\n\n')
 }
 
-// Phase 4 — expert-form-specific negative prompt. Allows editorial /
-// clinical / magazine aesthetic but bans UGC selfie / TikTok / Shopee /
-// marketplace screenshot / urgency badge / countdown / emoji spam.
+// Phase 4 (stabilization update) — expert-form-specific negative prompt.
+// Allows editorial / clinical / magazine aesthetic + ALLOWS scientific
+// text labels (compound names, mechanism step labels, benefit phrases) on
+// ingredient / mechanism / benefits / diagram shots. Still bans:
+// marketing-style text overlays (discount banners, urgency strips,
+// CTA buttons rendered into image), UGC selfie, marketplace screenshots,
+// emoji spam, cartoonish illustration.
 const EXPERT_NEGATIVE_BLOCK =
-  'AVOID HARD (chuyen-gia editorial-infographic form): UGC selfie phone-quality aesthetic; TikTok / Shopee / marketplace screenshot layout; designed text overlays except SEBELUM/SELEPAS pair labels; floating product PNG; centered marketing composition; urgency badges / countdown / discount strips; emoji-heavy graphics; cartoonish or chibi illustration; harsh advertising lighting; dramatic gym-influencer transformation aesthetic; chaotic collage; fake brand text substitution.'
+  'AVOID HARD (chuyen-gia editorial-infographic form): UGC selfie phone-quality aesthetic; TikTok / Shopee / marketplace screenshot layout; floating product PNG; centered marketing composition; urgency badges / countdown / discount strips / CTA buttons / "DISKAUN" or "ORDER" text rendered into the image; emoji-heavy graphics; cartoonish or chibi illustration; harsh advertising lighting; dramatic gym-influencer transformation aesthetic; chaotic collage; fake brand text substitution; unlabeled generic stock powder photo (ingredient images MUST have compound name labels rendered into them); oversaturated colors. NOTE: scientific text labels (compound names like "Lactobacillus Acidophilus", mechanism step labels like "Bước 1", short benefit phrases like "Tenaga Stabil", anatomical callouts) ARE REQUIRED on infographic / ingredient / mechanism / benefits sections — these are scientific labels, NOT marketing overlays.'
 
 // Phase 6 — premium-form-specific negatives. EXPLICITLY allows
 // fashion-editorial / luxury studio / cinematic photography aesthetic

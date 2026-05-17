@@ -194,18 +194,30 @@ The user prompt will declare ONE specific expert (name, credentials, archetype, 
    • copy = 4-6 line paragraph explaining specifically how the product's active formulation addresses the root cause. Connect to the why-happens section's mechanism. Step-by-step process language — "Langkah 1: …, Langkah 2: …" optional structure.
    • bullets = optional 3-step mechanism description
    • 2 imagePrompts:
-       (a) Mechanism flow diagram — clean infographic showing 3-4 steps of how the product works in the body. Editorial style, NOT cartoon. Soft palette.
-       (b) Close-up of the product label or capsule cross-section / formulation visual — clean clinical photography on white or pale background.
+       (a) MECHANISM FLOW DIAGRAM with rendered step labels — clean infographic showing 3-4 numbered steps of how the product works in the body. EACH step must have a visible text label rendered into the image (eg "Bước 1: Asid lambung dilalui", "Bước 2: Bakteria mengkoloni usus", "Bước 3: Imbangan flora pulih"). Editorial textbook-illustration style, soft palette (cream / pale sage / pale blue). Arrows or thin connecting lines between steps. NOT cartoon.
+       (b) FORMULA / CAPSULE BREAKDOWN — close-up of the product's capsule cross-section OR a labeled formula board. RENDER 3-4 ingredient name labels with thin callout lines pointing to each component (eg "Probiotic 50 Billion CFU", "Prebiotic FOS", "Vitamin D3"). Clean clinical photography on white or pale background. Magazine-editorial typography.
 
 6. type="ingredients" — INGREDIENT DEEP DIVE (3 key active compounds)
    • copy = 3-4 line paragraph framing why each active compound was selected (formulation rationale).
    • bullets = 3 items — one per active ingredient. Each in the format "Nama bahan aktif — apa ia, kenapa penting" (1-2 sentences).
-   • 3 imagePrompts: ONE macro photo per active compound — clean ingredient close-up on neutral background (eg ginger root cross-section, probiotic powder texture, marine collagen capsule). Editorial food / supplement photography style. NO PRODUCT BOTTLE in these — these are the raw ingredient sources. NO person.
+
+   • 3 imagePrompts — MUST diversify the asset format (NOT 3 identical powder macros). Each image is a SCIENTIFIC INGREDIENT INFOGRAPHIC with VISIBLE TEXT LABELS rendered into the image itself (not as a UI overlay — the AI must produce typography inside the photograph). User reported the previous output looked like generic stock powder photos; this fix makes them scientific editorial.
+
+   FORMAT MIX (vary across the 3 images):
+       (a) LABELED INGREDIENT MACRO — close-up of one raw active compound (eg probiotic powder texture, ginger root cross-section, marine collagen capsule, niacinamide crystal, glucosamine powder swatch). RENDER the exact compound name as a clean editorial sans-serif label on the image (eg "Lactobacillus Acidophilus", "Niacinamide 5%", "Glucosamine Sulfate"). Soft beige / cream / off-white background. Editorial supplement photography aesthetic. Small molecular formula or "% concentration" annotation if applicable.
+
+       (b) CAPSULE / FORMULA BREAKDOWN — exploded view of a capsule cross-section OR a "formula board" composition showing 3-4 raw ingredients arranged with neat callouts. Each ingredient labeled with its scientific name. Arrows or thin connecting lines between compound and its function (eg "supports gut flora", "enhances absorption"). Clean magazine-editorial typography, soft palette.
+
+       (c) MECHANISM / TARGET DIAGRAM — biological target visualization for ONE hero ingredient (eg gut microbiome illustration showing where probiotic strains colonize, joint cartilage diagram with glucosamine action site, skin layer cross-section with niacinamide penetration). Includes labeled callouts pointing to bacteria / cells / structures, with the active compound name visible. Editorial textbook-illustration style, NOT cartoon.
+
+   ABSOLUTE: For each of the 3 images, the ACTIVE INGREDIENT NAME must be RENDERED AS TEXT inside the photograph in clean editorial sans-serif typography. Use the EXACT compound names from the bullets above (eg if bullets list "Lactobacillus Acidophilus", "Bifidobacterium Lactis", "Fructooligosaccharides (FOS)" — those exact strings must appear as labels in the corresponding images). NO PRODUCT BOTTLE in any of these. NO person. NO marketing badge / star rating / discount overlay. NO emoji.
+
+   BANS: generic unlabeled powder stock photo; 3 nearly-identical compositions; cartoonish chibi illustration; oversaturated colors; beauty-influencer aesthetic; missing text labels.
 
 7. type="benefits" — MEASURED BENEFIT EXPLANATION
    • copy = 4-6 line paragraph translating the mechanism into concrete benefits a user can expect. Use MEASURED language — "kebanyakan pengguna melaporkan …", "kajian menunjukkan …". NEVER guarantee specific kg loss / days to result.
    • bullets = 3-4 measured benefits (no "AJAIB" / "MUKJIZAT" / 100% language)
-   • 1 imagePrompt: clean benefit infographic — small icon grid (4 simple icons + 4 short labels) on soft pale background. Magazine-editorial design. NO person. NO product overlay.
+   • 1 imagePrompt: clean benefit infographic — 4 minimalist icons in a 2x2 grid, EACH icon paired with a short Malay benefit label rendered as clean editorial sans-serif typography (eg "Tenaga Stabil", "Tidur Lena", "Pencernaan Lancar", "Kekebalan Kuat"). Soft pale background (cream / pale sage). Magazine-editorial design. NO person. NO product overlay. NO emoji.
 
 8. type="news-proof" — Journal / media / authority mentions
    • copy = 3-5 line paragraph framing third-party authority recognition (journal mentions, mainstream media coverage, KKM-related notes). NEVER fabricate specific citations — keep claims general ("dilaporkan dalam media kesihatan", "memenuhi standard tempatan").
@@ -257,12 +269,13 @@ IMAGE RULES — EDITORIAL INFOGRAPHIC AESTHETIC
 • Studio / clinical look IS allowed (this is the only form where studio look is permitted — premium / editorial / clinical)
 • Soft neutral palette: cream / pale sage / soft blue / off-white / warm beige
 • Editorial magazine layout — generous whitespace, neat typography, clean diagrams
-• Infographic sections (pain, failed-solutions, why-happens, mechanism, comparison, benefits) should look like pages from a health magazine or textbook — NOT phone screenshots
-• Ingredient macros: high-quality close-up food / supplement photography on neutral background
+• Infographic sections (pain, failed-solutions, why-happens, mechanism, comparison, benefits, ingredients) should look like pages from a health magazine or textbook — NOT phone screenshots.
+• Ingredient & mechanism & benefits sections REQUIRE rendered text labels INSIDE the image — compound names (eg "Lactobacillus Acidophilus", "Niacinamide 5%"), step labels ("Bước 1", "Bước 2"), or short benefit phrases ("Tenaga Stabil") in clean editorial sans-serif typography. The text is part of the photograph / illustration, NOT a UI overlay. This is what differentiates a "scientific article" from "generic stock photo".
 • Expert portraits: clean professional clinical environment, same person from hero appears in: pain, failed-solutions, why-happens, mechanism, comparison, before-after, lifestyle, final-cta
-• NO selfie aesthetic, NO UGC handheld phone quality, NO TikTok composition, NO marketplace screenshot, NO designed text overlays except SEBELUM/SELEPAS on ba_01/ba_02
-• NO floating product PNG. When product appears, integrate naturally into the scene
-• Product appears ONLY in: mechanism (b), lifestyle, final-cta. Other sections focus on diagrams / ingredients / authority badges
+• NO selfie aesthetic, NO UGC handheld phone quality, NO TikTok composition, NO marketplace screenshot.
+• Designed text overlays ARE ALLOWED on infographic / ingredient / mechanism / benefits diagrams (the scientific labels — see above). Outside infographic sections, only SEBELUM/SELEPAS labels on ba_01/ba_02.
+• NO floating product PNG. When product appears, integrate naturally into the scene.
+• Product appears ONLY in: mechanism (b), lifestyle, final-cta. Other sections focus on diagrams / ingredients / authority badges.
 
 ═══════════════════════════════════════════════════════════════
 LANGUAGE RULES
