@@ -57,6 +57,15 @@ const FORM_OPTIONS: {
     tagline: 'Urgency mạnh, chốt nhanh',
     tooltip: 'Urgency tối đa, scarcity, nhiều CTA. Tối ưu cho COD, budget thấp, niche tiêu dùng nhanh. Mục tiêu chốt đơn trong vòng 60 giây đọc trang.',
   },
+  // Phase 2 — NEW form added, stub for now (delegates to UGC default).
+  // Phase 4 will replace with real expert / scientific engine.
+  {
+    id: 'chuyen-gia',
+    icon: '🔬',
+    title: 'Chuyên Gia / Khoa Học',
+    tagline: 'Bác sĩ, cơ chế, nghiên cứu',
+    tooltip: 'Landing page xây dựng niềm tin bằng chuyên gia, cơ chế sản phẩm, nghiên cứu và case study. Phù hợp niche medical / supplement / health tech. (Phase 2 stub — output tạm giống form UGC Malaysia, Phase 4 sẽ có engine riêng).',
+  },
 ]
 
 const NICHE_PRESETS = [

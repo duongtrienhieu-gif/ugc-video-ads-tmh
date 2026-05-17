@@ -25,10 +25,11 @@ export type SectionType =
 export type LandingLanguage = 'ms' | 'vi' | 'en'
 
 export type LandingForm =
-  | 'ugc-malaysia'    // default — 17-section MY ecommerce advertorial
-  | 'advertorial'     // editorial / review storytelling
-  | 'premium'         // clean brand, lifestyle, less hard-sell
-  | 'hard-sell-cod'   // maximum urgency, scarcity, chốt nhanh COD
+  | 'ugc-malaysia'    // UGC Chuyển Đổi Nhanh — 17-section MY ecommerce advertorial (FROZEN — form 1)
+  | 'advertorial'     // Kể Chuyện Hành Trình — editorial / review storytelling
+  | 'premium'         // Thương Hiệu Cao Cấp — clean brand, lifestyle, less hard-sell
+  | 'hard-sell-cod'   // Chốt Đơn Mạnh — maximum urgency, scarcity, COD aggressive
+  | 'chuyen-gia'      // Chuyên Gia / Khoa Học — credibility/infographic/mechanism (Phase 2 stub)
 
 export type CompetitorInfluence = 'low' | 'medium' | 'high'
 

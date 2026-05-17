@@ -482,6 +482,23 @@ const FORM_BLUEPRINTS: Record<LandingForm, FormBlueprint> = {
       'Single CTA at the bottom only — must be repeated CTAs throughout',
     ],
   },
+
+  // Phase 2 — chuyen-gia stub. Reuses ugc-malaysia blueprint as fallback
+  // because forms/chuyen-gia.ts currently delegates to ugc-malaysia.
+  // Phase 4 will replace with a real expert blueprint.
+  'chuyen-gia': {
+    label: 'CHUYÊN GIA / KHOA HỌC — credibility-led (Phase 2 stub)',
+    sections: [
+      'hero', 'pain', 'why-happens', 'failed-solutions', 'product-discovery',
+      'ingredients', 'mechanism', 'benefits', 'comparison', 'lifestyle',
+      'social-proof', 'whatsapp-testimonials', 'news-proof', 'before-after',
+      'faq', 'offer', 'final-cta',
+    ],
+    styleNotes: [
+      'Phase 2 stub — delegates to ugc-malaysia logic until Phase 4 engine ships',
+    ],
+    bans: [],
+  },
 }
 
 function getGeminiKey(): string {
@@ -762,7 +779,19 @@ function injectPriceIntoPrompts(sections: LandingSection[], priceTag: string | n
 
 // ─────────────────────────────────────────────────────────────────────
 
-export async function generateLandingPack(params: LandingGenParams): Promise<LandingPagePack> {
+/**
+ * Phase 2 — Form 1 LEGACY implementation.
+ *
+ * This used to be `generateLandingPack` — the single public entry. It has
+ * been renamed to make the boundary explicit: this function is now ONLY
+ * called by the ugc-malaysia form module via adapter. All other forms
+ * go through the form registry → form module → optionally delegate here.
+ *
+ * The new public entry is `generateLandingPack` further down — it resolves
+ * the form module and calls its buildPack(). FROZEN: do not change the body
+ * of this function in Phase 2 (form-1 bit-identical guarantee).
+ */
+export async function legacyGenerateUgcMalaysiaPack(params: LandingGenParams): Promise<LandingPagePack> {
   const apiKey = getGeminiKey()
   const product = useBankStore.getState().getProductById(params.productId)
   if (!product) throw new Error('Không tìm thấy sản phẩm — chọn lại từ Project')
@@ -823,4 +852,25 @@ export async function generateLandingPack(params: LandingGenParams): Promise<Lan
     visualMemory: params.visualMemory ?? [],
     generatedAt: Date.now(),
   }
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Phase 2 — PUBLIC ENTRY POINT (new)
+//
+// Replaces the previous direct function. Resolves the form module via the
+// registry and delegates to its buildPack(). For form 1 (ugc-malaysia) the
+// module is a pure adapter pointing back at `legacyGenerateUgcMalaysiaPack`
+// — so form-1 behaviour is bit-identical to before Phase 2.
+//
+// Forms 2-5 currently delegate to form 1 via stub modules (see
+// services/forms/*.ts). Phase 3-6 will replace each stub with a real
+// per-form engine.
+// ─────────────────────────────────────────────────────────────────────────
+
+export async function generateLandingPack(params: LandingGenParams): Promise<LandingPagePack> {
+  // Lazy-import to avoid a circular module graph (registry → ugc-malaysia
+  // module → this file).
+  const { resolveForm } = await import('./forms/_registry')
+  const formModule = await resolveForm(params.form)
+  return formModule.buildPack(params)
 }
