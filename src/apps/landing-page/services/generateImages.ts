@@ -26,6 +26,7 @@ const PRODUCT_FOCUS_SECTIONS: ReadonlySet<SectionType> = new Set<SectionType>([
   'ingredients',
   'mechanism',
   'benefits',
+  'comparison',   // comparison infographic shows our product
   'offer',
   'final-cta',
 ])
@@ -38,6 +39,8 @@ const PEOPLE_FOCUS_SECTIONS: ReadonlySet<SectionType> = new Set<SectionType>([
   'lifestyle',
   'social-proof',
   'whatsapp-testimonials',
+  'news-proof',    // news screenshots — no product refs
+  'before-after',  // transformation photos — no product refs
 ])
 
 /** Pick the asset refs (if any) to pass into KIE filesUrl for this section. */

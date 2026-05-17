@@ -102,7 +102,7 @@ export default function InputPanel({
           Landing Page AI
         </h2>
         <p className="mt-0.5 text-[11px] text-gray-500">
-          Advertorial pack copy + image prompts để paste vào Ladipage. Mobile-first, conversion-first.
+          Advertorial factory: 17 sections, ảnh thật, dual-language (MY + VI). Mobile-first, conversion-first.
         </p>
       </div>
 
@@ -258,7 +258,7 @@ export default function InputPanel({
           className="flex w-full items-center justify-center gap-2 rounded-full bg-gradient-to-r from-violet-600 to-purple-600 px-6 py-3.5 text-sm font-bold text-white shadow-md transition-all hover:from-violet-700 hover:to-purple-700 disabled:cursor-not-allowed disabled:opacity-40"
         >
           {isGenerating ? (
-            <><Loader2 className="h-4 w-4 animate-spin" /> Đang tạo 10 sections...</>
+            <><Loader2 className="h-4 w-4 animate-spin" /> Đang tạo 17 sections...</>
           ) : (
             <><LayoutTemplate className="h-4 w-4" /> Tạo Landing Pack</>
           )}
