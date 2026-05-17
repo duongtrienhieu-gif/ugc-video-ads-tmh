@@ -63,7 +63,18 @@ export default function LandingPageAI() {
   const lpAdd          = useLandingPageStore((s) => s.add)
   const lpUpdate       = useLandingPageStore((s) => s.update)
   const lpItems        = useLandingPageStore((s) => s.items)
+  const lpSyncFromCloud = useLandingPageStore((s) => s.syncFromCloud)
   const loadedProject  = loadedFromId ? lpItems.find((x) => x.id === loadedFromId) : null
+
+  // ── H2: pull projects from Supabase on mount (idempotent + safe) ────
+  // Runs once per app load. If Supabase table missing / offline / not
+  // logged in, the call is a no-op — localStorage stays the source of truth.
+  const cloudSyncedRef = useRef(false)
+  useEffect(() => {
+    if (cloudSyncedRef.current) return
+    cloudSyncedRef.current = true
+    void lpSyncFromCloud()
+  }, [lpSyncFromCloud])
 
   // ── Load a saved project into the active editor (Canva-style "open") ──
   const handleLoadProject = useCallback((id: string) => {

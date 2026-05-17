@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Loader2, LayoutTemplate, Save, Check, RotateCcw, Trash2, FolderOpen, ChevronDown, ImageIcon, Sparkles, AlertTriangle, Clock, Zap, RefreshCw, FilePlus, FileDown, Copy as CopyIcon, FolderInput, Cpu, LayoutGrid } from 'lucide-react'
+import { Loader2, LayoutTemplate, Save, Check, RotateCcw, Trash2, FolderOpen, ChevronDown, ImageIcon, Sparkles, AlertTriangle, Clock, Zap, RefreshCw, FilePlus, FileDown, Copy as CopyIcon, FolderInput, Cpu, LayoutGrid, Cloud, CloudOff, CloudCog } from 'lucide-react'
 import type { LandingPagePack, SavedLandingPack } from '../types'
 import type { ImageProgress } from '../LandingPageAI'
 import SectionCard from './SectionCard'
@@ -125,6 +125,7 @@ export default function OutputPanel({
                   {loadedProjectTitle}
                 </span>
               )}
+              <CloudSyncBadge />
             </div>
             <p className="text-[10px] text-gray-400">
               Ngôn ngữ: {pack.language.toUpperCase()} · Tạo lúc {new Date(pack.generatedAt).toLocaleTimeString('vi-VN')}
@@ -349,6 +350,39 @@ function ImageGenerationBar({
         </button>
       </div>
     </div>
+  )
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// CloudSyncBadge — Phase H2
+// Tiny pill showing Supabase sync state. Hidden when sync is in 'idle'
+// (initial mount before first attempt). Shown next to the project title.
+// ─────────────────────────────────────────────────────────────────────
+function CloudSyncBadge() {
+  const status = useLandingPageStore((s) => s.syncStatus)
+  const lastSyncedAt = useLandingPageStore((s) => s.lastSyncedAt)
+  const error = useLandingPageStore((s) => s.syncError)
+
+  if (status === 'idle') return null
+
+  const config: Record<'syncing' | 'synced' | 'error' | 'offline', { icon: typeof Cloud; bg: string; text: string; label: string; title: string }> = {
+    'syncing': { icon: CloudCog, bg: 'bg-cyan-100',    text: 'text-cyan-700',    label: 'Đang đồng bộ',     title: 'Đang push thay đổi lên Supabase…' },
+    'synced':  { icon: Cloud,    bg: 'bg-emerald-100', text: 'text-emerald-700', label: 'Đã đồng bộ ☁',     title: lastSyncedAt ? `Đồng bộ thành công ${new Date(lastSyncedAt).toLocaleTimeString('vi-VN')}` : '' },
+    'error':   { icon: CloudOff, bg: 'bg-red-100',     text: 'text-red-700',     label: 'Sync lỗi',          title: error ?? 'Không sync được — sẽ thử lại khi edit tiếp' },
+    'offline': { icon: CloudOff, bg: 'bg-amber-100',   text: 'text-amber-700',   label: 'Local-only',        title: 'Chưa setup Supabase table — chạy SUPABASE_LANDING_PROJECTS_MIGRATION.md để bật cross-device sync' },
+  }
+  const c = config[status]
+  if (!c) return null
+  const Icon = c.icon
+
+  return (
+    <span
+      className={`flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold ${c.bg} ${c.text}`}
+      title={c.title}
+    >
+      <Icon className={`h-2.5 w-2.5 ${status === 'syncing' ? 'animate-spin' : ''}`} />
+      {c.label}
+    </span>
   )
 }
 
