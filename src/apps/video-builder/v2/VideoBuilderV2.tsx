@@ -39,7 +39,6 @@ import { runVideoQueue, retrySingleVideoClip, buildVideoQueueFromScenes } from '
 import { buildEditorialBlueprint } from './services/editorialIntelligence'
 import { estimateVoiceDuration } from './services/timelineAssembler'
 import { buildTimelineRenderJob } from './services/timelineRenderer'
-import type { EditorialBlueprint, TimelineRenderJob } from './types'
 import MasterFrameApproval from './components/MasterFrameApproval'
 import PromptCompilerDebugPanel from './components/PromptCompilerDebugPanel'
 import StoryboardEditor from './components/StoryboardEditor'
@@ -98,8 +97,9 @@ function PhaseHeader({
     { id: 'master-frame',     label: 'Master Frame',         num: 3 },
     { id: 'blueprint',        label: 'Storyboard',           num: 4 },
     { id: 'scene-gen',        label: 'Gen B-Roll',           num: 5 },
-    { id: 'video-gen',        label: 'Sinh Video',           num: 6 },
-    { id: 'video-voice',      label: 'Voice + Concat',       num: 7 },
+    { id: 'timeline-planning',label: 'Coverage & Timeline',  num: 6 },
+    { id: 'video-gen',        label: 'Render Clips',         num: 7 },
+    { id: 'video-voice',      label: 'Voice + Concat',       num: 8 },
   ]
   const activeIdx = steps.findIndex((s) => s.id === phase)
 
@@ -565,9 +565,69 @@ export default function VideoBuilderV2({ onSwitchToV1 }: Props) {
     state.blueprints.map((b) => [b.sceneId, b]),
   )
 
+  // ── Z23: NEW planning step — runs editorial brain on approved scenes,
+  //         produces EditorialBlueprint + TimelineRenderJob. NO Kling. ────
+  const [isBuildingTimeline, setIsBuildingTimeline] = useState(false)
+
+  const handleBuildTimelinePlan = () => {
+    if (!sceneJob) return
+    const approvedScenes = sceneJob.items
+      .filter((it) => it.status === 'approved' && it.imageUrl)
+    if (approvedScenes.length === 0) {
+      addToast('Chưa có cảnh nào được duyệt — quay lại Gen B-Roll duyệt trước', 'error')
+      return
+    }
+
+    // Jump to planning phase immediately + show loader
+    setIsBuildingTimeline(true)
+    setState((s) => ({ ...s, phase: 'timeline-planning' }))
+
+    // Run synchronously — pure logic, no network. Wrap in setTimeout(0)
+    // so the loading UI gets a chance to paint first.
+    setTimeout(() => {
+      try {
+        // Voice duration estimate from script (150 wpm Vietnamese/Malay UGC)
+        const voiceDurationSec = estimateVoiceDuration(state.inputs.script)
+
+        // Editorial brain — derive coverage + cuts + transitions + motion
+        const blueprint = buildEditorialBlueprint(state.blueprints, { voiceDurationSec })
+
+        // Map masterSceneId → approved keyframe asset ref
+        const masterKeyframeRefs: Record<number, string> = {}
+        for (const it of approvedScenes) {
+          if (it.imageUrl) masterKeyframeRefs[it.sceneId] = it.imageUrl
+        }
+
+        // Build ready-to-render TimelineRenderJob (still NO Kling call)
+        const renderJob = buildTimelineRenderJob(blueprint, {
+          masterKeyframeRefs,
+          providerLabel: 'Kling 3.0 std / KIE (cut-level)',
+          creditPerClip: 70,
+        })
+
+        setState((s) => ({
+          ...s,
+          editorialBlueprint: blueprint,
+          timelineRenderJob: renderJob,
+        }))
+        addToast(
+          `✓ Đã build coverage & timeline — ${blueprint.coverageShots.length} shots → ${blueprint.timelineCuts.length} cuts (${(blueprint.estimatedDurationSec ?? 0).toFixed(1)}s)`,
+        )
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err)
+        addToast(`Build timeline lỗi: ${msg}`, 'error')
+        // Bounce back to scene-gen if planning fails
+        setState((s) => ({ ...s, phase: 'scene-gen' }))
+      } finally {
+        setIsBuildingTimeline(false)
+      }
+    }, 50)
+  }
+
+  // ── Render motion clips — actually calls Kling now (separate from
+  //    planning step). Triggered from TimelinePlanningView's CTA. ────────
   const handleStartVideoQueue = async () => {
     if (!sceneJob || !kieApiKey) return
-    // Only animate APPROVED scenes — rejected / failed are skipped
     const approvedScenes = sceneJob.items
       .filter((it) => it.status === 'approved' && it.imageUrl)
       .map((it) => ({ sceneId: it.sceneId, keyframeRef: it.imageUrl! }))
@@ -811,29 +871,41 @@ export default function VideoBuilderV2({ onSwitchToV1 }: Props) {
                 onCancelQueue={cancelSceneGenQueue}
               />
             </div>
-            {/* "Sinh video" CTA — appears once at least 1 scene is approved */}
+            {/* Z23: "Build Coverage & Timeline" CTA — pure LOCAL planning,
+                no Kling call. Replaces the old direct "Sinh video clip". */}
             {sceneJob && sceneJob.items.some((it) => it.status === 'approved' && it.imageUrl) && (
               <div className="shrink-0 border-t border-black/8 bg-gradient-to-r from-violet-50 to-pink-50 px-6 py-3">
                 <div className="flex items-center justify-between gap-3">
                   <div className="min-w-0">
                     <p className="text-sm font-bold text-gray-900">
-                      🎬 Bước tiếp theo: Sinh video clip cho {sceneJob.items.filter((i) => i.status === 'approved' && i.imageUrl).length} cảnh đã duyệt
+                      🧠 Bước tiếp theo: Coverage & Timeline planning ({sceneJob.items.filter((i) => i.status === 'approved' && i.imageUrl).length} masters đã duyệt)
                     </p>
                     <p className="text-[11px] text-gray-500">
-                      Kling 3.0 std / KIE · ~70 credit/clip · 5s mỗi clip · 2 worker song song · motion + camera bám blueprint
+                      Editorial brain derive 25-40 coverage shots + 20-35 timeline cuts + motion + transitions. ⚡ Local · không gọi Kling · không tốn credit.
                     </p>
                   </div>
                   <button
-                    onClick={handleStartVideoQueue}
-                    disabled={!kieApiKey || (videoJob?.isRunning ?? false)}
-                    className="flex items-center gap-2 rounded-full bg-gradient-to-r from-violet-600 to-pink-600 px-5 py-2 text-sm font-bold text-white shadow-md transition-colors hover:from-violet-700 hover:to-pink-700 disabled:cursor-not-allowed disabled:opacity-50"
+                    onClick={handleBuildTimelinePlan}
+                    className="flex items-center gap-2 rounded-full bg-gradient-to-r from-violet-600 to-pink-600 px-5 py-2 text-sm font-bold text-white shadow-md transition-colors hover:from-violet-700 hover:to-pink-700"
                   >
-                    🎬 Sinh {sceneJob.items.filter((i) => i.status === 'approved' && i.imageUrl).length} video clip
+                    🧠 Build Coverage & Timeline
                   </button>
                 </div>
               </div>
             )}
           </div>
+        )}
+
+        {/* Z23 — PHASE: TIMELINE-PLANNING (pure editorial brain, NO Kling) */}
+        {state.phase === 'timeline-planning' && (
+          <TimelinePlanningView
+            blueprint={state.editorialBlueprint ?? null}
+            renderJob={state.timelineRenderJob ?? null}
+            isBuilding={isBuildingTimeline}
+            onBack={() => setState((s) => ({ ...s, phase: 'scene-gen' }))}
+            onRenderClips={handleStartVideoQueue}
+            voiceDurationSec={estimateVoiceDuration(state.inputs.script)}
+          />
         )}
 
         {/* PHASE: VIDEO-GEN — image-to-video via Kling 3.0 std */}
