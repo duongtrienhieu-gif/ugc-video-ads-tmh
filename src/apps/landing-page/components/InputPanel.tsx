@@ -43,12 +43,13 @@ const FORM_OPTIONS: {
     tagline: 'Storytelling, trust-building',
     tooltip: 'Viết theo dạng bài báo / review dài. Câu chuyện cá nhân → vấn đề → khám phá sản phẩm → kết quả. Phù hợp ngách y tế, sức khỏe, supplement cao cấp.',
   },
+  // Phase 6 — real luxury engine shipped.
   {
     id: 'premium',
     icon: '💎',
-    title: 'Premium Brand',
-    tagline: 'Clean, lifestyle, ít hard-sell',
-    tooltip: 'Tone sang trọng, hình ảnh lifestyle, ít urgency. Phù hợp skincare cao cấp, sản phẩm giá cao (>RM200). Brand-building hơn conversion-first.',
+    title: 'Thương Hiệu Cao Cấp',
+    tagline: 'Luxury editorial, brand-first',
+    tooltip: '11-section luxury editorial: hero cinematic → philosophy → lifestyle → product reveal → ingredient spotlight → texture/ritual → benefits → curated testimonials → premium press → minimal FAQ → soft CTA. ~15 ảnh fashion-editorial / Aesop / Apple aesthetic. KHÔNG TikTok/Shopee/WhatsApp screenshot, KHÔNG urgency, KHÔNG discount. Phù hợp luxury skincare / beauty / premium wellness / high-AOV brand-first products.',
   },
   // Phase 5 — real urgency engine shipped.
   {

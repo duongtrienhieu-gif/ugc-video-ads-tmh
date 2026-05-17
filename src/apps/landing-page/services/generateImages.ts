@@ -243,6 +243,11 @@ function buildDiversityDirective(job: ImageJob): string {
   if (job.pack.form === 'chuyen-gia') {
     return buildExpertEditorialDirective(job)
   }
+  // Premium / luxury override — fashion-editorial aesthetic, soft palette,
+  // generous whitespace, cinematic luxury campaign feel.
+  if (job.pack.form === 'premium') {
+    return buildPremiumLuxuryDirective(job)
+  }
   if (DIVERSITY_SUPPRESSED_SECTIONS.has(job.section.type)) return ''
   if (!job.prompt.variationSeed) job.prompt.variationSeed = makeVariationSeed()
   const seed = `${job.section.type}-${job.imageIdx}-${job.prompt.variationSeed}`
@@ -252,6 +257,78 @@ function buildDiversityDirective(job: ImageJob): string {
   const hand        = hashPick(HAND_POOL,        seed, 3)
   const light       = hashPick(LIGHT_POOL,       seed, 4)
   return `COMPOSITION: ${composition}. SHOT: ${angle}, in ${bg}, ${hand}, ${light}. Render as INDEPENDENT phone photo — do not mimic the side-by-side box+bottle composition of the reference image; pick the COMPOSITION above. Seed: ${job.prompt.variationSeed}.`
+}
+
+/** Phase 6 — Premium / luxury form directive.
+ *
+ *  Routes per section type. All shots get a luxury-editorial aesthetic
+ *  envelope; section-specific adjustments layer on top.
+ *
+ *  Hero / lifestyle / product-discovery / final-cta: fashion-campaign
+ *  cinematic shot.
+ *  Pain (brand-philosophy mood) / mechanism (texture-ritual): atmospheric
+ *  moody photography or premium texture macro.
+ *  Ingredients: luxury beauty-magazine ingredient macro.
+ *  Social-proof: editorial portrait (NOT marketplace screenshot).
+ *  News-proof: Vogue/Tatler/Female Malaysia mock layout (NOT mStar).
+ */
+function buildPremiumLuxuryDirective(job: ImageJob): string {
+  const sectionType = job.section.type
+  const imageIdx = job.imageIdx
+
+  const baseAesthetic =
+    'LUXURY EDITORIAL AESTHETIC (thuong-hieu-cao-cap form):\n'
+    + '  • Premium palette — cream / dusty rose / soft beige / linen / marble / pale sage / muted gold / warm grey. AVOID hot red, neon orange, harsh contrast.\n'
+    + '  • Generous whitespace, single subject, controlled gradient backgrounds.\n'
+    + '  • Soft natural OR controlled studio lighting — cinematic luxury campaign feel.\n'
+    + '  • NO designed text overlay (text lives in the landing UI, not in the photograph).\n'
+    + '  • NO discount badge, NO star rating widget, NO marketplace UI, NO emoji.\n'
+
+  if (sectionType === 'social-proof') {
+    return baseAesthetic + (
+      '  • Specific to social-proof: fashion-editorial portrait of an elegant Malaysian woman (or man) in soft natural light, candid contemplative moment (NOT looking at camera, NOT smiling broadly). Magazine portrait quality. NO Shopee/TikTok/Facebook screenshot UI. NO marketplace badges.'
+    )
+  }
+
+  if (sectionType === 'news-proof') {
+    if (imageIdx === 0) {
+      return baseAesthetic + (
+        '  • Specific to news-proof (mock 1): premium press editorial layout — Vogue / Tatler / Harper\'s Bazaar / Female Malaysia register. Clean serif typography, generous whitespace, single product feature image. NEVER mStar / Berita Harian style (wrong register).'
+      )
+    }
+    return baseAesthetic + (
+      '  • Specific to news-proof (mock 2): minimal recognition badge / award-mention layout. Neutral palette, single line of recognition text. NO loud color, NO starbursts, NO discount badges.'
+    )
+  }
+
+  if (sectionType === 'ingredients') {
+    return baseAesthetic + (
+      '  • Specific to ingredients: luxury beauty-magazine ingredient macro — natural source close-up (ginseng root on linen, marine algae texture, rosehip macro, ginger slice) on a luxe neutral background. Fashion-editorial still-life, premium soft lighting.'
+    )
+  }
+
+  if (sectionType === 'mechanism') {
+    return baseAesthetic + (
+      '  • Specific to mechanism (texture / ritual): close-up of the product\'s actual sensory experience — cream swatch on fingertips, oil dripping, serum on smooth surface, OR a serene bathroom-shelf ritual moment. Editorial intimate composition. NO biology jargon, NO process arrows.'
+    )
+  }
+
+  if (sectionType === 'pain') {
+    return baseAesthetic + (
+      '  • Specific to pain (brand philosophy mood): atmospheric photograph evoking the gap the brand fills — quiet morning routine, hand on glass, candle moment, empty luxe bathroom. NOT showing the product yet. Editorial magazine mood photograph.'
+    )
+  }
+
+  if (sectionType === 'product-discovery') {
+    return baseAesthetic + (
+      '  • Specific to product-discovery: luxury studio product photography on a premium surface (raw silk, soft marble, dusty linen, sculpted shadow). Cinematic studio lighting with controlled gradient background. Editorial fashion-still-life aesthetic.'
+    )
+  }
+
+  // hero / lifestyle / benefits / final-cta — cinematic luxury campaign
+  return baseAesthetic + (
+    `  • Specific to ${sectionType}: cinematic fashion-campaign aesthetic. When a model appears — elegant Malaysian person in refined casual / linen / silk / soft cotton, candid contemplative expression, NOT broad smile. When product appears — luxury still-life on premium surface OR softly held by model. Editorial luxury campaign mood.`
+  )
 }
 
 /** Phase 4 — Expert / Scientific form directive.
@@ -442,13 +519,14 @@ interface QueueOptions {
 // ─────────────────────────────────────────────────────────────────────────
 function buildFinalPrompt(job: ImageJob, hasProductRefs: boolean): string {
   const parts: string[] = []
-  // Hero gets the default UGC-Malaysia character lock UNLESS the pack
-  // declares its own character profile (advertorial storytelling form).
-  // Storytelling's per-section continuity directive (further down) covers
-  // the character spec — stacking both would conflict ("hijab Muslim
-  // woman" vs character.archetype="Chinese woman").
+  // Hero gets the default UGC-Malaysia character lock ONLY for the UGC
+  // form (and only when no custom characterProfile is set). Premium /
+  // advertorial / expert / hard-sell have their own model/character
+  // direction — stacking the UGC hijab default would conflict with
+  // their aesthetic.
   const hasCharacterProfile = !!job.pack.characterProfile
-  if (job.section.type === 'hero' && !hasCharacterProfile) {
+  const formNeedsHeroLock = !job.pack.form || job.pack.form === 'ugc-malaysia'
+  if (job.section.type === 'hero' && !hasCharacterProfile && formNeedsHeroLock) {
     parts.push(HERO_CHARACTER_LOCK)
   }
   if (hasProductRefs) parts.push(PRODUCT_IDENTITY_PREFIX)
@@ -460,14 +538,18 @@ function buildFinalPrompt(job: ImageJob, hasProductRefs: boolean): string {
   if (diversity) parts.push(diversity)
 
   // Z22 — hard negatives. Form-specific overrides:
-  //   • chuyen-gia: allows editorial / clinical look (default block bans it)
+  //   • chuyen-gia: allows editorial / clinical look
   //   • hard-sell-cod: allows promo banner / CTA overlay / ecommerce ad
-  //     aesthetic on offer + final-cta + hero sections (default block bans
-  //     "ecommerce advertisement look" + "centered symmetrical")
+  //   • premium: allows fashion-editorial / luxury studio aesthetic +
+  //     bans UGC selfie / marketplace screenshots / urgency badges
+  //   • advertorial: cinematic-lifestyle, default negatives apply
+  //   • ugc-malaysia: default negatives apply
   if (job.pack.form === 'chuyen-gia') {
     parts.push(EXPERT_NEGATIVE_BLOCK)
   } else if (job.pack.form === 'hard-sell-cod') {
     parts.push(HARDSELL_NEGATIVE_BLOCK)
+  } else if (job.pack.form === 'premium') {
+    parts.push(PREMIUM_NEGATIVE_BLOCK)
   } else {
     parts.push(NEGATIVE_PROMPT_BLOCK)
   }
@@ -480,6 +562,13 @@ function buildFinalPrompt(job: ImageJob, hasProductRefs: boolean): string {
 // marketplace screenshot / urgency badge / countdown / emoji spam.
 const EXPERT_NEGATIVE_BLOCK =
   'AVOID HARD (chuyen-gia editorial-infographic form): UGC selfie phone-quality aesthetic; TikTok / Shopee / marketplace screenshot layout; designed text overlays except SEBELUM/SELEPAS pair labels; floating product PNG; centered marketing composition; urgency badges / countdown / discount strips; emoji-heavy graphics; cartoonish or chibi illustration; harsh advertising lighting; dramatic gym-influencer transformation aesthetic; chaotic collage; fake brand text substitution.'
+
+// Phase 6 — premium-form-specific negatives. EXPLICITLY allows
+// fashion-editorial / luxury studio / cinematic photography aesthetic
+// (which the default block bans). Bans the marketplace / UGC / urgency
+// patterns that would break the luxury reading experience.
+const PREMIUM_NEGATIVE_BLOCK =
+  'AVOID HARD (thuong-hieu-cao-cap luxury-editorial form): UGC mobile-phone selfie aesthetic; TikTok / Shopee / Facebook / WhatsApp screenshot UI; marketplace badges (Verified Purchase / 5-star widget / Trending #1); discount banners or urgency strips; designed CTA overlays in image (text belongs in landing UI, not in photograph); SEBELUM/SELEPAS dramatic before-after labels; crowd group photos; phone-selfie posing or broad smile; hot red / neon orange / harsh contrast palettes; loud starburst graphics; mStar / Berita Harian mass-market editorial register (use Vogue / Tatler / Female Malaysia register instead); floating cut-out product PNG; fake brand text substitution; clinical infographic icon grids; emoji rendered into image.'
 
 // Phase 5 — hard-sell-form-specific negatives. ALLOWS designed CTA
 // overlays / promo banners / urgency badges / ecommerce ad look on
