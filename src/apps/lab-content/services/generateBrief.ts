@@ -442,6 +442,7 @@ export async function generateBrief(params: LabBriefParams): Promise<LabBriefRes
     goal: params.goal,
     toneId: params.toneId,
     customToneNote: params.customToneNote,
+    pricing: params.pricing,
     painPoints,
     angles,
     hooks,

@@ -3,8 +3,9 @@ import { useAppStore } from '../../stores/appStore'
 import { useBankStore } from '../../stores/bankStore'
 import type { Product } from '../../stores/types'
 import type {
-  ContentAngle, Goal, LabBriefParams, LabBriefResult, ToneId,
+  ContentAngle, Goal, LabBriefParams, LabBriefResult, PricingInfo, ToneId,
 } from './types'
+import { DEFAULT_PRICING_INFO } from './types'
 import { generateBrief } from './services/generateBrief'
 import { generateLabCaption } from './services/generateLabCaption'
 import { generateLabScript } from './services/generateLabScript'
@@ -25,6 +26,7 @@ interface LabContentSnapshot {
   goal: Goal
   toneId: ToneId
   customToneNote: string
+  pricing: PricingInfo
   result: LabBriefResult | null
   lastParams: Omit<LabBriefParams, 'productId'> | null
   savedBriefId: string | null
@@ -41,6 +43,7 @@ export default function LabContent() {
   const [goal, setGoal] = useState<Goal>(DEFAULT_GOAL)
   const [toneId, setToneId] = useState<ToneId>(DEFAULT_TONE)
   const [customToneNote, setCustomToneNote] = useState('')
+  const [pricing, setPricing] = useState<PricingInfo>(DEFAULT_PRICING_INFO)
 
   const [savedBriefId, setSavedBriefId] = useState<string | null>(null)
 
@@ -78,6 +81,7 @@ export default function LabContent() {
       goal,
       toneId,
       customToneNote,
+      pricing,
       result,
       lastParams: lastParamsRef.current,
       savedBriefId,
@@ -90,6 +94,7 @@ export default function LabContent() {
       if (data.goal)                        setGoal(data.goal)
       if (data.toneId)                      setToneId(data.toneId)
       if (typeof data.customToneNote === 'string') setCustomToneNote(data.customToneNote)
+      if (data.pricing && typeof data.pricing === 'object') setPricing({ ...DEFAULT_PRICING_INFO, ...data.pricing })
       if (data.result) {
         // Migrate older snapshots that pre-date angleOutputs
         setResult({ ...data.result, angleOutputs: data.result.angleOutputs ?? {} })
@@ -109,8 +114,9 @@ export default function LabContent() {
             : undefined,
     shouldPersist: () =>
       !!result || isGenerating || !!selectedProduct ||
-      goal !== DEFAULT_GOAL || toneId !== DEFAULT_TONE || customToneNote.trim().length > 0,
-    deps: [selectedProduct?.id, result, isGenerating, goal, toneId, customToneNote, savedBriefId],
+      goal !== DEFAULT_GOAL || toneId !== DEFAULT_TONE || customToneNote.trim().length > 0 ||
+      pricing.enabled,
+    deps: [selectedProduct?.id, result, isGenerating, goal, toneId, customToneNote, pricing, savedBriefId],
   })
 
   // Accept productId hand-off from other apps (e.g. Finder → Lab Content)
@@ -309,6 +315,8 @@ export default function LabContent() {
           onToneIdChange={setToneId}
           customToneNote={customToneNote}
           onCustomToneNoteChange={setCustomToneNote}
+          pricing={pricing}
+          onPricingChange={setPricing}
         />
       </div>
 

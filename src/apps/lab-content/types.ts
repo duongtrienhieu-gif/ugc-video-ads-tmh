@@ -26,6 +26,51 @@ export interface ToneOption {
   promptHint: string
 }
 
+// ── Pricing Layer ─────────────────────────────────────────────────────────
+// 7 chiến lược giá / neo tâm lý từ skill. AI tự chọn nếu user chọn 'auto',
+// hoặc dùng đúng các chiến lược user ưu tiên.
+
+export type PricingStrategy =
+  | 'anchoring'        // Price Anchoring — giá gốc → giá sale
+  | 'value-stacking'   // Value Stacking — tổng giá trị > giá trả
+  | 'cost-inaction'    // Cost of Inaction — không mua = mất X
+  | 'daily-cost'       // Daily Cost Breakdown — "16K/ngày"
+  | 'decoy'            // Decoy Pricing — 3 gói
+  | 'pain-paying'      // Pain of Paying Reduction — trả góp, dùng thử
+  | 'perceived-value'  // Perceived Value Inflation — bonus 990K
+
+export interface PricingStrategyOption {
+  id: PricingStrategy
+  label: string
+  glyph: string
+  hint: string         // VN one-liner
+  promptHint: string   // sent into Gemini
+}
+
+export interface PricingInfo {
+  /** Có bật pricing layer không. Nếu false → không inject pricing vào prompt. */
+  enabled: boolean
+  /** Giá bán hiện tại (VNĐ). 0 = chưa nhập. */
+  currentPrice: number
+  /** Giá gốc / giá so sánh (VNĐ). 0 = không có anchor price. */
+  anchorPrice: number
+  /** Mô tả ưu đãi cụ thể (text-free). Ví dụ "Mua 2 tặng 1, freeship". */
+  offerDescription: string
+  /** Bonus tặng kèm (text-free). Ví dụ "Tặng ebook trị giá 990K". */
+  bonusDescription: string
+  /** Chiến lược ưu tiên — nếu rỗng, AI tự chọn. */
+  preferredStrategies: PricingStrategy[]
+}
+
+export const DEFAULT_PRICING_INFO: PricingInfo = {
+  enabled: false,
+  currentPrice: 0,
+  anchorPrice: 0,
+  offerDescription: '',
+  bonusDescription: '',
+  preferredStrategies: [],
+}
+
 // ── Pain point ────────────────────────────────────────────────────────────
 export type PainType = 'money' | 'time' | 'health' | 'relationship' | 'status'
 
@@ -82,6 +127,8 @@ export interface LabBriefParams {
   toneId: ToneId
   /** Free-text tone description when toneId === 'custom'. */
   customToneNote?: string
+  /** Optional pricing strategy layer. */
+  pricing?: PricingInfo
 }
 
 // ── Inline content generation per angle ───────────────────────────────────
@@ -188,6 +235,9 @@ export interface LabBriefResult {
   goal: Goal
   toneId: ToneId
   customToneNote?: string
+  /** Pricing layer used at generation time (if enabled). Read by all
+   *  downstream generators (caption, script, hook lab, funnel). */
+  pricing?: PricingInfo
 
   /** 5 nỗi đau, đã rank theo intensity desc */
   painPoints: PainPoint[]

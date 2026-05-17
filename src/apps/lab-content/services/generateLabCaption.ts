@@ -4,7 +4,7 @@ import type {
 import { useSettingsStore } from '../../../stores/settingsStore'
 import { useBankStore } from '../../../stores/bankStore'
 import { directGeminiVision } from '../../../utils/gemini'
-import { getGoalById, getToneById } from './presets'
+import { buildPricingPromptBlock, getGoalById, getToneById } from './presets'
 
 // ─────────────────────────────────────────────────────────────────────────
 // Lab-internal caption generator. Takes the strategic brief + the picked
@@ -134,6 +134,17 @@ function buildUserPrompt(brief: LabBriefResult, angle: ContentAngle): string {
     lines.push('')
     lines.push('Custom tone note from user:')
     lines.push(brief.customToneNote.trim())
+  }
+
+  // Pricing layer — emphasis derived from campaign goal
+  const emphasis: 'soft' | 'medium' | 'hard' =
+    brief.goal === 'conversion' || brief.goal === 'retargeting' ? 'hard'
+    : brief.goal === 'engagement' ? 'medium'
+    : 'soft'
+  const pricingBlock = buildPricingPromptBlock(brief.pricing, emphasis)
+  if (pricingBlock) {
+    lines.push('')
+    lines.push(pricingBlock)
   }
 
   lines.push('')

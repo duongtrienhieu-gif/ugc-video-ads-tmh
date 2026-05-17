@@ -4,7 +4,7 @@ import type {
 import { useSettingsStore } from '../../../stores/settingsStore'
 import { useBankStore } from '../../../stores/bankStore'
 import { directGeminiVision } from '../../../utils/gemini'
-import { getToneById } from './presets'
+import { buildPricingPromptBlock, getToneById } from './presets'
 
 // ─────────────────────────────────────────────────────────────────────────
 // Funnel Content — produces 9 ready-to-post captions across 3 funnel
@@ -203,6 +203,22 @@ function buildUserPrompt(brief: LabBriefResult): string {
     lines.push('')
     lines.push('Custom tone note from user:')
     lines.push(brief.customToneNote.trim())
+  }
+
+  // Pricing layer — funnel has the richest tier-aware emphasis use:
+  // - TOFU section uses SOFT (background mention only)
+  // - MOFU section uses MEDIUM (value-stacking + anchoring lever)
+  // - BOFU section uses HARD (pricing is the hero of the copy)
+  // We instruct the model directly because Funnel generates all 3 tiers in one call.
+  const pricingBlockHard = buildPricingPromptBlock(brief.pricing, 'hard')
+  if (pricingBlockHard) {
+    lines.push('')
+    lines.push(pricingBlockHard)
+    lines.push('')
+    lines.push('TIER-SPECIFIC PRICING APPLICATION:')
+    lines.push('- TOFU pieces: do NOT lead with price. Mention offer only at the end if it fits naturally (1 of 3 pieces max).')
+    lines.push('- MOFU pieces: use Value Stacking + Anchoring to build perceived value. No hard urgency.')
+    lines.push('- BOFU pieces: pricing is the HERO. Use Anchoring + Daily-Cost + Risk-Reversal + Urgency aggressively. Every BOFU piece should make the offer visible.')
   }
 
   lines.push('')

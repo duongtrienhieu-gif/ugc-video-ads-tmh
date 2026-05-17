@@ -4,7 +4,7 @@ import type {
 import { useSettingsStore } from '../../../stores/settingsStore'
 import { useBankStore } from '../../../stores/bankStore'
 import { directGeminiVision } from '../../../utils/gemini'
-import { getGoalById, getToneById } from './presets'
+import { buildPricingPromptBlock, getGoalById, getToneById } from './presets'
 
 // ─────────────────────────────────────────────────────────────────────────
 // Hook Lab — generate 30 hook candidates distributed across 8-14 copywriting
@@ -152,6 +152,17 @@ function buildUserPrompt(brief: LabBriefResult): string {
     lines.push('')
     lines.push('Custom tone note from user:')
     lines.push(brief.customToneNote.trim())
+  }
+
+  // Pricing layer — hooks are short, use MEDIUM emphasis so some hooks
+  // (especially counter-intuitive + BOFU-leaning ones) can lead with price
+  // anchoring or daily-cost reframing, while most stay strategy-led.
+  const pricingBlock = buildPricingPromptBlock(brief.pricing, 'medium')
+  if (pricingBlock) {
+    lines.push('')
+    lines.push(pricingBlock)
+    lines.push('')
+    lines.push('Pricing-specific note: only 4-6 of the 30 hooks should explicitly use price/offer/discount language — the rest stay strategy-led. The price-led hooks should lead with anchor savings or daily-cost reframing.')
   }
 
   lines.push('')
