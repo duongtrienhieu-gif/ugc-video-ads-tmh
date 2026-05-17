@@ -91,20 +91,39 @@ SECTION SPEC — produce EXACTLY these 17 in this order
 1. type="hero", imageAspectRatio="4:5"
    • headline, subheadline, cta, offerStrip, urgencyText
    • copy: 2-3 short paragraphs reinforcing headline
-   • 2 imagePrompts REQUIRED (both hero variants):
-     - hero_01.jpg, style="Hero text overlay A", aspectRatio="4:5"
-       Malaysian woman mid-30s holding the product, natural window light, casual indoor background, iPhone selfie quality, UGC style. Bold white text overlay on dark semi-transparent gradient bar at bottom, showing 3-5 key benefits as checkmark bullet lines (e.g. "✓ Tenaga lebih stabil ✓ Fokus lebih tajam ✓ Bangun pagi lebih segar"). Benefits come from the product brief.
-     - hero_02.jpg, style="Hero text overlay B", aspectRatio="4:5"
-       Slightly different setting (outdoor morning light, or kitchen counter), same product held by a different Malaysian woman, UGC selfie feel. Same overlay format but 3-5 DIFFERENT benefit bullets from variant A.
+   • 2 imagePrompts REQUIRED (both hero variants) — both must use DESIGNED text overlay (not plain text):
+     - hero_01.jpg, style="Hero text overlay A — designed decor", aspectRatio="4:5"
+       Malaysian woman mid-30s holding the product, natural window light, casual indoor background, iPhone selfie
+       quality, UGC style. DESIGNED text overlay with multi-layer hierarchy:
+         · BIG bold condensed main hook headline (top) — 5-8 Malay words from the product hook, white with subtle
+           glow / drop-shadow, font feels like a sans-serif display
+         · Below: 3-5 benefit bullets as glassmorphism rounded badges, each prefixed by a relevant emoji icon
+           from this pool: ⚡ tenaga / 🔥 metabolisme / ✅ berkesan / 💊 vitamin / 🧠 fokus / ❤️ kesihatan
+           Example layout: "⚡ Tenaga lebih stabil" "🧠 Fokus tajam" "✅ Bangun segar"
+         · Optional small CTA chip / arrow sticker pointing toward the product
+       Visual decor: subtle gradient panel behind text (NOT a flat black bar), depth — text mid-layer floating
+       above background. Soft particles or spark behind the headline. Mobile-readable, max 12 words total overlay.
+     - hero_02.jpg, style="Hero text overlay B — designed decor", aspectRatio="4:5"
+       Slightly different setting (outdoor morning light, or kitchen counter), same product held by a different
+       Malaysian woman, UGC selfie feel. Same DESIGNED overlay format (multi-layer hierarchy, glassmorphism
+       badges with emoji icons, subtle glow) but 3-5 DIFFERENT benefit bullets and a different main hook headline
+       from variant A. Different gradient color palette so the two hero variants feel distinct.
 
 2. type="pain", imageAspectRatio="4:5"
    • copy: emotional pain agitation
-   • 5 imagePrompts REQUIRED — each with bold text overlay on image:
-     - pain_01.jpg, style="Pain text overlay 1", aspectRatio="4:5": tired Malaysian woman at office desk, head in hands, frustrated. Bold white text overlay (4-6 words max), e.g. "Penat walaupun dah rehat?"
-     - pain_02.jpg, style="Pain text overlay 2", aspectRatio="4:5": Malaysian person, bathroom mirror, bloated belly gesture. Bold overlay: second distinct pain statement
-     - pain_03.jpg, style="Pain text overlay 3", aspectRatio="4:5": sleepless person, phone light on face at night, dark circles. Bold overlay: third pain statement
-     - pain_04.jpg, style="Pain text overlay 4", aspectRatio="4:5": person at dining table unable to eat, uncomfortable expression. Bold overlay: fourth pain
-     - pain_05.jpg, style="Pain text overlay 5", aspectRatio="4:5": Malaysian woman looking at scale sadly, plain clothes, honest moment. Bold overlay: fifth pain
+   • 5 imagePrompts REQUIRED — each with DESIGNED text overlay (NOT plain centered text):
+     OVERLAY DESIGN RULES — apply to all 5:
+       · Use italic / slanted display font for the pain statement (conveys urgency / emotion)
+       · Place overlay on a rounded glassmorphism or gradient panel (NOT plain text floating)
+       · Add a relevant emoji at the start: 😩 fatigue / 😣 pain / 💤 sleep / ⚠️ warning / 🤯 stress
+       · Subtle red / dark gradient shadow behind text for contrast
+       · Small decorative element (arrow, spark, burst) drawing attention to the face/body part the pain is about
+       · Max 4-6 Malay words per overlay — mobile-readable
+     - pain_01.jpg, style="Pain text overlay 1 — italic urgent decor", aspectRatio="4:5": tired Malaysian woman at office desk, head in hands, frustrated. Italic slanted Malay overlay on rounded dark glass panel, e.g. "😩 Penat walaupun dah rehat?" with subtle red glow + arrow pointing to her temple.
+     - pain_02.jpg, style="Pain text overlay 2 — italic urgent decor", aspectRatio="4:5": Malaysian person, bathroom mirror, bloated belly gesture. Italic Malay overlay on glassmorphism panel: second distinct pain statement starting with ⚠️ or 😣, with subtle red/orange gradient highlight near belly.
+     - pain_03.jpg, style="Pain text overlay 3 — italic urgent decor", aspectRatio="4:5": sleepless person, phone light on face at night, dark circles. Italic Malay overlay with 💤 or 😩 emoji on dark-blue glass panel, soft glow under the eyes, third pain statement.
+     - pain_04.jpg, style="Pain text overlay 4 — italic urgent decor", aspectRatio="4:5": person at dining table unable to eat, uncomfortable expression. Italic Malay overlay with 😣 or ⚠️ emoji, glassmorphism panel, subtle highlight near stomach, fourth pain statement.
+     - pain_05.jpg, style="Pain text overlay 5 — italic urgent decor", aspectRatio="4:5": Malaysian woman looking at scale sadly, plain clothes, honest moment. Italic Malay overlay with 🤯 or 😩 emoji on glass panel, soft red shadow, fifth pain statement.
 
 3. type="why-happens", imageAspectRatio="1:1"
    • copy: root cause explanation, conversational NOT medical-textbook
@@ -179,26 +198,63 @@ SECTION SPEC — produce EXACTLY these 17 in this order
     • faqs: 5-7 Malaysia FAQs (halal, side effects, "berapa lama nampak hasil", COD, shipping, return, allergies)
     • imagePrompts: []
 
-16. type="offer", imageAspectRatio="16:9" (or "1:1") — BANNER SECTION
+16. type="offer", imageAspectRatio="16:9" (or "1:1") — SOCIAL PROOF METRICS BANNER
     • offerStrip, urgencyText, cta
     • bullets: 3-5 "✅ Bonus X (RM Y)" stack items
     • copy: value stack + COD offer
     • 2 imagePrompts REQUIRED — both must use the SAME ratio as the section (1:1 OR 16:9, never mix):
-      - offer_01.jpg, style="Promo banner clean ecommerce", aspectRatio="<section ratio>":
-        Clean Malaysian ecommerce promo banner. The EXACT uploaded product packaging large and centered (preserve label/typography/cap/colors). Soft gradient background (warm amber → cream OR cool teal → white). Large readable Malay promo text overlay reading EXACTLY these three lines: "DISKAUN 50% HARI INI" + "COD SELURUH MALAYSIA" + "STOK TERHAD". Small trust badges (HALAL / KKM / shield icon). Native Facebook/TikTok ecommerce feel. Mobile-friendly composition.
-      - offer_02.jpg, style="Promo banner hard sell urgency", aspectRatio="<section ratio>":
-        Higher-contrast urgent Malaysian ecommerce banner. EXACT uploaded product packaging large and bold. Background darker / more saturated (deep red, navy + amber accent). Strong CTA arrow or starburst. Bold readable Malay text overlay reading EXACTLY: "PROMOSI TAMAT MALAM INI" + "JANGAN LEPASKAN PELUANG" + "RAMAI DAH CUBA". Visible CTA button shape. Native MY ecommerce hard-sell feel, not luxury, not cinematic.
-      ABSOLUTE: Show EXACT PRODUCT PRICE from brief. Use ONLY the uploaded packaging — never invent label, logo, or bottle shape. Negative: fake packaging, Western branding, luxury cinematic poster, tiny product, unreadable text, blurry overlay, random supplement bottle, overdesigned layout.
+      - offer_01.jpg, style="Social proof metrics banner — promo + trust stack", aspectRatio="<section ratio>":
+        Malaysian ecommerce social-proof METRICS infographic banner — NOT a simple product photo.
+        Multi-card composition with the EXACT uploaded product packaging on the LEFT (preserve label/cap/colors).
+        On the RIGHT a vertical stack of metric cards rendered as floating glass / rounded badges:
+          ★★★★★ "4.8/5" big bold star rating card
+          "20,000+ pengguna" user count card
+          "Verified by KKM" + small Malaysia trust shield
+          "COD SELURUH MALAYSIA" badge with COD/truck icon
+          "PILIHAN MALAYSIA" + small flag
+        Below or above the cards add the promo strip in bold Malay:
+          "DISKAUN 50% HARI INI" + "STOK TERHAD"
+        Soft warm gradient background (cream → amber), subtle glow behind product, before/after thumbnails as
+        small chips at the bottom (faces blurred or abstract). Native Facebook/TikTok MY ecommerce infographic feel.
+        Strong visual hierarchy — viewer scans rating → user count → CTA in one second.
+      - offer_02.jpg, style="Social proof metrics banner — hard-sell urgency stack", aspectRatio="<section ratio>":
+        Higher-contrast urgent METRICS banner. EXACT uploaded product packaging prominent.
+        Multi-card infographic layout with: big bold "4.8★" star metric, "20,000+ ORDER DAH HANTAR", "TRENDING #1",
+        "VERIFIED COD MALAYSIA" shield, and a row of testimonial mini-cards (3-4 thumbnail review chips with stars and
+        short Malay quotes like "Berkesan!" "Memang berbaloi"). Bold red/orange urgency strip:
+          "PROMOSI TAMAT MALAM INI" + "JANGAN LEPASKAN" + "RAMAI DAH CUBA"
+        Darker saturated background (deep red, navy + amber), starburst behind product, visible CTA button.
+        Native MY hard-sell ecommerce infographic. Strong CTA hierarchy.
+      ABSOLUTE: Show EXACT PRODUCT PRICE from brief. Use ONLY the uploaded packaging — never invent label, logo, or
+      bottle shape. NEVER render a banner that is just product + plain text — banners MUST include rating + user
+      count + trust badge + COD badge as visible infographic elements (it is a SOCIAL PROOF banner, not a poster).
+      Negative: fake packaging, Western branding, luxury cinematic poster, tiny product, unreadable text, blurry
+      overlay, random supplement bottle, overdesigned layout, plain solo product shot with no social proof.
 
-17. type="final-cta", imageAspectRatio="16:9" (or "1:1") — BANNER SECTION
+17. type="final-cta", imageAspectRatio="16:9" (or "1:1") — SOCIAL PROOF METRICS BANNER (CTA emphasis)
     • headline, subheadline, cta, urgencyText
     • copy: closing pitch
     • 2 imagePrompts REQUIRED — both must use the SAME ratio as the section (1:1 OR 16:9, never mix):
-      - finalcta_01.jpg, style="Final CTA clean premium banner", aspectRatio="<section ratio>":
-        Last-scroll-stopper CTA banner. EXACT uploaded product packaging large and centered with a subtle soft glow halo. Clean premium gradient background (cream / pearl / soft teal). Trust feel. CTA centered. Large Malay text overlay reading EXACTLY: "KESIHATAN ANDA BERMULA HARI INI" + "CUBA SEKARANG" + "DISKAUN 50%". Mobile-friendly readable text.
-      - finalcta_02.jpg, style="Final CTA emotional urgency banner", aspectRatio="<section ratio>":
-        Emotional urgent CTA banner. EXACT uploaded product packaging large and prominent. Darker / high-contrast background (deep navy or charcoal with red accent). Stronger conversion angle. Bold visible CTA button. Large Malay text overlay reading EXACTLY: "JANGAN TUNGGU SEHINGGA MAKIN TERUK" + "BERTINDAK HARI INI" + "PROMOSI TERHAD". Native MY ecommerce feel, not cinematic.
-      ABSOLUTE: Use ONLY the uploaded packaging — never invent or alter. Native MY conversion banner aesthetic. Negative: fake packaging, Western branding, luxury cinematic poster, tiny product, unreadable text, blurry overlay, random supplement bottle, overdesigned layout.
+      - finalcta_01.jpg, style="Final CTA social proof banner — clean premium metrics", aspectRatio="<section ratio>":
+        Last-scroll-stopper CTA infographic banner with social proof METRICS.
+        EXACT uploaded product packaging centered with subtle glow halo, surrounded by a halo of small
+        floating metric chips: "★ 4.8/5", "20,000+ pengguna", "✓ Verified KKM Malaysia", "✓ COD seluruh Malaysia",
+        "TOP RATED 2026". A row of 2-3 mini before/after thumbnail cards across the bottom (abstract or blurred faces).
+        Clean premium gradient (cream / pearl / soft teal). Large readable Malay text overlay:
+          "KESIHATAN ANDA BERMULA HARI INI" + "CUBA SEKARANG" + "DISKAUN 50%"
+        Trust feel, CTA centered as a clear button. Mobile-friendly text size.
+      - finalcta_02.jpg, style="Final CTA social proof banner — emotional urgency metrics", aspectRatio="<section ratio>":
+        Emotional urgent CTA banner with social proof.
+        EXACT uploaded product packaging large with red glow accent. Around it: big bold "★★★★★ 4.8/5", "20,000+
+        ORDER", "TRENDING #1 MALAYSIA", "PILIHAN IBU-IBU" cards, "COD MALAYSIA" badge with truck icon.
+        Mini testimonial chips ("Best!", "Suka sangat!") across the bottom.
+        Darker high-contrast bg (deep navy or charcoal with red accent). Strong visible CTA button. Bold Malay text:
+          "JANGAN TUNGGU SEHINGGA MAKIN TERUK" + "BERTINDAK HARI INI" + "PROMOSI TERHAD"
+        Native MY ecommerce conversion feel — multi-card infographic, not a plain poster.
+      ABSOLUTE: Use ONLY the uploaded packaging — never invent or alter. Both banners MUST be SOCIAL PROOF METRICS
+      infographics (rating + user count + trust badge + COD badge as visible elements) — never a plain product photo.
+      Negative: fake packaging, Western branding, luxury cinematic poster, tiny product, unreadable text, blurry
+      overlay, random supplement bottle, overdesigned layout, plain solo product shot with no social proof.
 
 ═══════════════════════════════════════════════════════════════
 CRITICAL IMAGE PROMPT RULES
