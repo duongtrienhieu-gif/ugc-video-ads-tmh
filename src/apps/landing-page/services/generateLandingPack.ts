@@ -197,12 +197,20 @@ CRITICAL IMAGE PROMPT RULES
 • Before/after: amateur quality, NOT gym influencer, NOT professional
 
 ═══════════════════════════════════════════════════════════════
-LANGUAGE RULES
+LANGUAGE RULES — ABSOLUTE
 ═══════════════════════════════════════════════════════════════
-• viTranslation: ALWAYS on every section — Vietnamese translation of copy field
-• Default copy: natural colloquial Bahasa Malaysia
-• layoutGuide: ALWAYS Vietnamese regardless of copy language
-• Product name + ingredient names: original English
+• The user prompt specifies the OUTPUT LANGUAGE — this is BINDING and NON-NEGOTIABLE
+• ALL copy fields MUST be written ENTIRELY in the specified output language:
+  copy, headline, subheadline, cta, offerStrip, urgencyText, bullets,
+  faqs (questions AND answers), reviews (quotes), WhatsApp message text,
+  before/after labels, comparison table labels, imagePrompt text overlay content
+• DO NOT mix languages within any single field — if language is Bahasa Melayu,
+  every word of copy must be Bahasa Melayu (natural colloquial, can include
+  common English loanwords like "detox", "supplement" — but NO full English sentences)
+• viTranslation: ALWAYS on every section — Vietnamese translation of copy (regardless of output language)
+• layoutGuide: ALWAYS Vietnamese regardless of output language
+• imagePrompt.prompt: ALWAYS English (required by the image generation model)
+• Product name + ingredient names: keep original English / brand name in any language
 
 ═══════════════════════════════════════════════════════════════
 COPY FORMAT — mobile-first
@@ -255,9 +263,95 @@ function buildUserPrompt(params: LandingGenParams): string {
   }
 
   lines.push('')
-  lines.push(`Output language: ${params.language}`)
-  if (params.nicheHint) lines.push(`Niche hint: ${params.nicheHint}`)
-  if (params.sourceUrl) lines.push(`Reference URL (context only): ${params.sourceUrl}`)
+
+  // ── LANGUAGE LOCK — strong explicit block prevents mixing ────────────
+  const langName =
+    params.language === 'ms' ? 'Bahasa Melayu (Malaysia)' :
+    params.language === 'vi' ? 'Tiếng Việt (Vietnamese)' :
+    'English'
+  lines.push('═══════════════════════════════════════════════════════════════')
+  lines.push(`OUTPUT LANGUAGE LOCK: ${langName}`)
+  lines.push('═══════════════════════════════════════════════════════════════')
+  lines.push(`ALL copy fields (copy, headline, subheadline, cta, offerStrip, urgencyText,`)
+  lines.push(`bullets, faqs questions+answers, reviews quotes, WhatsApp texts, before/after labels,`)
+  lines.push(`comparison table labels, imagePrompt text overlay content) MUST be written`)
+  lines.push(`ENTIRELY in ${langName}. Zero exceptions. Zero mixing with other languages.`)
+  lines.push(`EXCEPTIONS: layoutGuide → always Vietnamese | viTranslation → always Vietnamese`)
+  lines.push(`| imagePrompt.prompt → always English | product/ingredient names → original brand name`)
+  lines.push(`Output language field in JSON: "${params.language}"`)
+
+  if (params.nicheHint) {
+    lines.push('')
+    lines.push(`Niche hint: ${params.nicheHint}`)
+  }
+
+  // ── FORM-SPECIFIC COPY STYLE ─────────────────────────────────────────
+  const form = params.form ?? 'ugc-malaysia'
+  if (form !== 'ugc-malaysia') {
+    lines.push('')
+    lines.push('═══════════════════════════════════════════════════════════════')
+    if (form === 'advertorial') {
+      lines.push('FORM STYLE: ADVERTORIAL / REVIEW')
+      lines.push('═══════════════════════════════════════════════════════════════')
+      lines.push('• Write copy as a personal editorial / review article — first-person narrative throughout')
+      lines.push('• Story arc: relatable hook story → problem deep-dive → discovery moment → results journey → social proof → offer')
+      lines.push('• Longer paragraphs (3-5 lines), storytelling rhythm, build trust before selling')
+      lines.push('• Reduce direct hard-sell language — increase "this is what happened to me / my friend" authenticity')
+      lines.push('• Pain section: personal story angle, not just bullet lists')
+      lines.push('• FAQ: feel like real reader questions answered by a trusted blogger, not a brand')
+      lines.push('• Social proof: integrate testimonials into the narrative, not just as screenshots')
+    } else if (form === 'premium') {
+      lines.push('FORM STYLE: PREMIUM BRAND')
+      lines.push('═══════════════════════════════════════════════════════════════')
+      lines.push('• Clean, sophisticated copy — minimal hard-sell urgency, no countdown scarcity')
+      lines.push('• Focus on aspirational lifestyle, quality ingredients, brand heritage, efficacy')
+      lines.push('• Fewer emojis (max 1-2 per section), more elegant flowing prose')
+      lines.push('• Avoid "❌ SOLD OUT" / "HARI INI SAHAJA" / countdown language')
+      lines.push('• Social proof: curated quality testimonials over quantity screenshots')
+      lines.push('• Offer section: premium framing — value, exclusivity, quality promise — not cheap COD discount')
+      lines.push('• Before/after: subtle transformation, not dramatic COD-style comparison')
+      lines.push('• WhatsApp: fewer but more thoughtful/eloquent testimonials')
+    } else if (form === 'hard-sell-cod') {
+      lines.push('FORM STYLE: HARD SELL COD')
+      lines.push('═══════════════════════════════════════════════════════════════')
+      lines.push('• MAXIMUM urgency in every section — scarcity, time pressure, FOMO throughout')
+      lines.push('• Multiple strong CTAs: not just in offer section but also in hero, social proof, before/after')
+      lines.push('• Copy: short punchy sentences (max 1-2 lines), heavy emoji use 🔥 ⚠️ ✅ 🚨 💥')
+      lines.push('• Urgency phrases: "HARI INI SAHAJA", "STOK TERHAD — X unit je tinggal", "ORDER SEKARANG"')
+      lines.push('• Offer section: ultra-aggressive — big value stack, bonus expiry warning, COD emphasis')
+      lines.push('• Pain section: short sharp emotional hits, not long paragraphs')
+      lines.push('• FAQ: reframe as objection-crushing — address "berapa lama?" with specific rapid results')
+      lines.push('• Add urgency strip: "⏰ PROMOSI TUTUP [TIME/DATE]" to headline/offer')
+    }
+  }
+
+  // ── COMPETITOR INFLUENCE ─────────────────────────────────────────────
+  const competitorUrl = params.competitorUrl || params.sourceUrl
+  if (competitorUrl) {
+    lines.push('')
+    lines.push('═══════════════════════════════════════════════════════════════')
+    lines.push('COMPETITOR REFERENCE')
+    lines.push('═══════════════════════════════════════════════════════════════')
+    lines.push(`Competitor landing page: ${competitorUrl}`)
+    const influence = params.competitorInfluence ?? 'low'
+    if (influence === 'low') {
+      lines.push('INFLUENCE LEVEL: LOW')
+      lines.push('→ Only learn the tone, voice, and writing style from this competitor.')
+      lines.push('→ Do NOT copy their structure, section ideas, or any product information.')
+    } else if (influence === 'medium') {
+      lines.push('INFLUENCE LEVEL: MEDIUM')
+      lines.push('→ Adopt their copywriting style AND borrow interesting section angles / ideas that suit our product.')
+      lines.push('→ Do NOT copy their product claims, pricing, brand name, or specific product facts.')
+    } else if (influence === 'high') {
+      lines.push('INFLUENCE LEVEL: HIGH')
+      lines.push('→ Strongly adapt the persuasion structure, argumentation flow, and emotional triggers from this competitor.')
+      lines.push('→ Rebuild it entirely for our product. Mirror what works, reimagine for our niche.')
+      lines.push('→ NEVER copy: product name, ingredients, price, dosage, brand identity, or any product-specific fact.')
+    }
+    lines.push('HARD RULES regardless of influence level:')
+    lines.push('• NEVER override product name, price, ingredients, selected language, or 17-section structure')
+    lines.push('• NEVER reproduce verbatim sentences from the competitor page')
+  }
 
   lines.push('')
   lines.push('Generate the 17-section advertorial asset pack as a single STRICT JSON object. No markdown fences, no commentary — JSON only. EVERY section MUST include viTranslation and imageAspectRatio (where images exist).')

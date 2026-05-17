@@ -24,6 +24,14 @@ export type SectionType =
 
 export type LandingLanguage = 'ms' | 'vi' | 'en'
 
+export type LandingForm =
+  | 'ugc-malaysia'    // default — 17-section MY ecommerce advertorial
+  | 'advertorial'     // editorial / review storytelling
+  | 'premium'         // clean brand, lifestyle, less hard-sell
+  | 'hard-sell-cod'   // maximum urgency, scarcity, chốt nhanh COD
+
+export type CompetitorInfluence = 'low' | 'medium' | 'high'
+
 /** A single uploaded product reference image used as visual memory across
  *  image generations. */
 export interface VisualMemoryItem {
@@ -95,8 +103,11 @@ export interface LandingPagePack {
 export interface LandingGenParams {
   productId: string
   language: LandingLanguage
+  form?: LandingForm
   nicheHint?: string
-  sourceUrl?: string
+  sourceUrl?: string          // legacy — kept for compat
+  competitorUrl?: string      // Step 5: competitor landing page to learn from
+  competitorInfluence?: CompetitorInfluence
   visualMemory?: VisualMemoryItem[]
 }
 

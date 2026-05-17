@@ -1,7 +1,7 @@
 import { useState, useRef } from 'react'
-import { Package, Loader2, LayoutTemplate, Globe2, Upload, X, Image as ImageIcon } from 'lucide-react'
+import { Package, Loader2, LayoutTemplate, Globe2, Upload, X, Image as ImageIcon, Link2 } from 'lucide-react'
 import type { Product } from '../../../stores/types'
-import type { LandingGenParams, LandingLanguage, VisualMemoryItem } from '../types'
+import type { LandingGenParams, LandingLanguage, LandingForm, CompetitorInfluence, VisualMemoryItem } from '../types'
 import { useBankStore } from '../../../stores/bankStore'
 import { useSettingsStore } from '../../../stores/settingsStore'
 import { useAppStore } from '../../../stores/appStore'
@@ -22,6 +22,43 @@ const LANGUAGE_OPTIONS: { id: LandingLanguage; label: string; flag: string; hint
   { id: 'en', label: 'English',        flag: '🇬🇧', hint: 'SEA English' },
 ]
 
+const FORM_OPTIONS: {
+  id: LandingForm
+  icon: string
+  title: string
+  tagline: string
+  tooltip: string
+}[] = [
+  {
+    id: 'ugc-malaysia',
+    icon: '🚀',
+    title: 'UGC Malaysia',
+    tagline: 'Default — chuẩn chuyển đổi',
+    tooltip: 'Form mặc định. 17 section chuẩn MY Ecommerce: hero + pain + social proof + WhatsApp + before/after + offer. Tỉ lệ chuyển đổi cao nhất cho FB Ads Malaysia.',
+  },
+  {
+    id: 'advertorial',
+    icon: '📰',
+    title: 'Advertorial / Review',
+    tagline: 'Storytelling, trust-building',
+    tooltip: 'Viết theo dạng bài báo / review dài. Câu chuyện cá nhân → vấn đề → khám phá sản phẩm → kết quả. Phù hợp ngách y tế, sức khỏe, supplement cao cấp.',
+  },
+  {
+    id: 'premium',
+    icon: '💎',
+    title: 'Premium Brand',
+    tagline: 'Clean, lifestyle, ít hard-sell',
+    tooltip: 'Tone sang trọng, hình ảnh lifestyle, ít urgency. Phù hợp skincare cao cấp, sản phẩm giá cao (>RM200). Brand-building hơn conversion-first.',
+  },
+  {
+    id: 'hard-sell-cod',
+    icon: '⚡',
+    title: 'Hard Sell COD',
+    tagline: 'Urgency mạnh, chốt nhanh',
+    tooltip: 'Urgency tối đa, scarcity, nhiều CTA. Tối ưu cho COD, budget thấp, niche tiêu dùng nhanh. Mục tiêu chốt đơn trong vòng 60 giây đọc trang.',
+  },
+]
+
 const NICHE_PRESETS = [
   'supplement gut health',
   'supplement collagen / beauty',
@@ -32,20 +69,28 @@ const NICHE_PRESETS = [
   'detox / cleanse',
 ]
 
+const INFLUENCE_OPTIONS: { id: CompetitorInfluence; icon: string; label: string; desc: string }[] = [
+  { id: 'low',    icon: '🟢', label: 'Thấp',       desc: 'Chỉ học tone / giọng văn' },
+  { id: 'medium', icon: '🟡', label: 'Trung bình', desc: 'Học style + ý tưởng section' },
+  { id: 'high',   icon: '🔴', label: 'Cao',         desc: 'Adapt mạnh structure đối thủ' },
+]
+
 export default function InputPanel({
   selectedProduct, onProductSelect, onGenerate, isGenerating,
 }: InputPanelProps) {
-  const [pickerOpen, setPickerOpen] = useState(false)
-  const [language, setLanguage] = useState<LandingLanguage>('ms')
-  const [nicheHint, setNicheHint] = useState('')
-  const [sourceUrl, setSourceUrl] = useState('')
-  const [visualMemory, setVisualMemory] = useState<VisualMemoryItem[]>([])
-  const [uploading, setUploading] = useState(false)
+  const [pickerOpen, setPickerOpen]           = useState(false)
+  const [language, setLanguage]               = useState<LandingLanguage>('ms')
+  const [form, setForm]                       = useState<LandingForm>('ugc-malaysia')
+  const [nicheHint, setNicheHint]             = useState('')
+  const [competitorUrl, setCompetitorUrl]     = useState('')
+  const [competitorInfluence, setCompetitorInfluence] = useState<CompetitorInfluence>('low')
+  const [visualMemory, setVisualMemory]       = useState<VisualMemoryItem[]>([])
+  const [uploading, setUploading]             = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const resolvedProductImage = useAssetUrl(selectedProduct?.productImage)
   const hasGeminiKey = useSettingsStore((s) => s.hasGeminiKey())
-  const openApp = useAppStore((s) => s.openApp)
+  const openApp  = useAppStore((s) => s.openApp)
   const sendToApp = useAppStore((s) => s.sendToApp)
   const productCount = useBankStore((s) => s.products.length)
 
@@ -60,8 +105,10 @@ export default function InputPanel({
     if (!canGenerate) return
     onGenerate({
       language,
+      form,
       nicheHint: nicheHint.trim() || undefined,
-      sourceUrl: sourceUrl.trim() || undefined,
+      competitorUrl: competitorUrl.trim() || undefined,
+      competitorInfluence: competitorUrl.trim() ? competitorInfluence : undefined,
       visualMemory,
     })
   }
@@ -107,6 +154,7 @@ export default function InputPanel({
       </div>
 
       <div className="flex-1 overflow-y-auto px-4 py-3 space-y-4">
+
         {/* STEP 1 — Product */}
         <Section step={1} title="Chọn sản phẩm">
           {selectedProduct ? (
@@ -147,10 +195,10 @@ export default function InputPanel({
           )}
         </Section>
 
-        {/* STEP 2 — Visual Memory (multi-image upload) */}
+        {/* STEP 2 — Visual Memory */}
         <Section step={2} title="Visual Memory (tuỳ chọn)">
           <p className="text-[10px] text-gray-500">
-            Upload ảnh sản phẩm (packaging, label, logo, screenshot Shopee/competitor…) để AI giữ identity nhất quán khi sinh ảnh. Tối đa 3 ảnh đầu sẽ được pass vào image generator.
+            Upload ảnh sản phẩm (packaging, label, logo…) để AI giữ identity nhất quán khi sinh ảnh. Tối đa 3 ảnh đầu được pass vào image generator.
           </p>
           <div className="flex items-center gap-2">
             <button
@@ -206,45 +254,99 @@ export default function InputPanel({
           </div>
           <p className="mt-1 text-[10px] text-gray-400">
             <Globe2 className="mr-1 inline h-3 w-3" />
-            "Hướng dẫn layout" luôn là Tiếng Việt cho dù chọn ngôn ngữ nào.
+            Toàn bộ copy, headline, bullet, FAQ sẽ được viết HOÀN TOÀN bằng ngôn ngữ đã chọn.
           </p>
         </Section>
 
-        {/* STEP 4 — Niche hint (optional) */}
-        <Section step={4} title="Gợi ý niche (tuỳ chọn)">
-          <input
-            type="text"
-            value={nicheHint}
-            onChange={(e) => setNicheHint(e.target.value)}
-            placeholder='vd: "supplement gut health"'
-            className="w-full rounded-lg border border-black/10 bg-white px-3 py-2 text-xs text-gray-800 placeholder-gray-400 outline-none focus:border-violet-500/40"
-          />
-          <div className="mt-1.5 flex flex-wrap gap-1">
-            {NICHE_PRESETS.map((n) => (
-              <button
-                key={n}
-                onClick={() => setNicheHint(n)}
-                className="rounded-full border border-black/10 bg-white px-2 py-0.5 text-[10px] text-gray-500 hover:bg-violet-50 hover:text-violet-700"
-              >
-                {n}
-              </button>
+        {/* STEP 4 — Form selector */}
+        <Section step={4} title="Chọn form landing page">
+          <div className="grid grid-cols-2 gap-1.5">
+            {FORM_OPTIONS.map((f) => (
+              <FormCard
+                key={f.id}
+                option={f}
+                selected={form === f.id}
+                onSelect={() => setForm(f.id)}
+              />
             ))}
+          </div>
+
+          {/* Niche hint — compact sub-field within Step 4 */}
+          <div className="mt-2">
+            <p className="mb-1 text-[10px] text-gray-400 font-semibold uppercase tracking-wider">Gợi ý niche (tuỳ chọn)</p>
+            <input
+              type="text"
+              value={nicheHint}
+              onChange={(e) => setNicheHint(e.target.value)}
+              placeholder='vd: "supplement gut health"'
+              className="w-full rounded-lg border border-black/10 bg-white px-3 py-2 text-xs text-gray-800 placeholder-gray-400 outline-none focus:border-violet-500/40"
+            />
+            <div className="mt-1 flex flex-wrap gap-1">
+              {NICHE_PRESETS.map((n) => (
+                <button
+                  key={n}
+                  onClick={() => setNicheHint(n)}
+                  className="rounded-full border border-black/10 bg-white px-2 py-0.5 text-[10px] text-gray-500 hover:bg-violet-50 hover:text-violet-700"
+                >
+                  {n}
+                </button>
+              ))}
+            </div>
           </div>
         </Section>
 
-        {/* STEP 5 — Source URL (optional, Phase 2 = context only, no crawl) */}
-        <Section step={5} title="URL tham chiếu (tuỳ chọn)">
-          <input
-            type="url"
-            value={sourceUrl}
-            onChange={(e) => setSourceUrl(e.target.value)}
-            placeholder="https://..."
-            className="w-full rounded-lg border border-black/10 bg-white px-3 py-2 text-xs text-gray-800 placeholder-gray-400 outline-none focus:border-violet-500/40"
-          />
-          <p className="mt-1 text-[10px] text-amber-600">
-            Phase 2: URL pass làm context cho Gemini. Auto-crawl (image scrape, section structure) sẽ ship ở Phase 3.
-          </p>
+        {/* STEP 5 — Competitor URL (AI học từ đối thủ) */}
+        <Section step={5} title="AI học từ landing page đối thủ (tuỳ chọn)">
+          <div className="flex items-center gap-2 rounded-lg border border-black/10 bg-white px-3 py-2">
+            <Link2 className="h-3.5 w-3.5 shrink-0 text-gray-400" />
+            <input
+              type="url"
+              value={competitorUrl}
+              onChange={(e) => setCompetitorUrl(e.target.value)}
+              placeholder="Dán link landing page đối thủ hoặc sản phẩm tương tự…"
+              className="flex-1 bg-transparent text-xs text-gray-800 placeholder-gray-400 outline-none"
+            />
+            {competitorUrl && (
+              <button onClick={() => setCompetitorUrl('')} className="text-gray-300 hover:text-gray-500">
+                <X className="h-3 w-3" />
+              </button>
+            )}
+          </div>
+
+          {/* Influence strength — only show when URL is entered */}
+          {competitorUrl.trim() && (
+            <div className="mt-2 space-y-1.5">
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">AI Influence Strength</p>
+              <div className="grid grid-cols-3 gap-1">
+                {INFLUENCE_OPTIONS.map((opt) => (
+                  <button
+                    key={opt.id}
+                    onClick={() => setCompetitorInfluence(opt.id)}
+                    className={`flex flex-col items-center gap-0.5 rounded-lg border py-2 text-[10px] transition-colors ${
+                      competitorInfluence === opt.id
+                        ? 'border-violet-400 bg-violet-50 text-violet-700'
+                        : 'border-black/10 bg-white text-gray-600 hover:bg-black/[0.03]'
+                    }`}
+                  >
+                    <span className="text-sm leading-none">{opt.icon}</span>
+                    <span className="font-semibold">{opt.label}</span>
+                    <span className="text-center text-[9px] leading-tight text-gray-400">{opt.desc}</span>
+                  </button>
+                ))}
+              </div>
+              <p className="text-[10px] text-amber-600">
+                AI chỉ học style/structure từ URL này. Tên sản phẩm, giá, ngôn ngữ và 17-section không bao giờ bị thay đổi.
+              </p>
+            </div>
+          )}
+
+          {!competitorUrl.trim() && (
+            <p className="text-[10px] text-gray-400">
+              Dán link landing page đối thủ để AI học style, tone, và cấu trúc — không bao giờ copy thông tin sản phẩm hay giá.
+            </p>
+          )}
         </Section>
+
       </div>
 
       {/* Bottom CTA */}
@@ -275,7 +377,7 @@ export default function InputPanel({
   )
 }
 
-// ── Helper ────────────────────────────────────────────────────────────
+// ── Helper components ─────────────────────────────────────────────────
 
 function Section({ step, title, children }: { step: number; title: string; children: React.ReactNode }) {
   return (
@@ -288,7 +390,46 @@ function Section({ step, title, children }: { step: number; title: string; child
   )
 }
 
-// ── Visual memory thumbnail with inline label edit + remove ─────────────
+// Form card with hover tooltip
+function FormCard({
+  option,
+  selected,
+  onSelect,
+}: {
+  option: typeof FORM_OPTIONS[number]
+  selected: boolean
+  onSelect: () => void
+}) {
+  return (
+    <div className="group relative">
+      <button
+        onClick={onSelect}
+        className={`w-full rounded-lg border px-2.5 py-2 text-left transition-colors ${
+          selected
+            ? 'border-violet-400 bg-violet-50'
+            : 'border-black/10 bg-white hover:bg-black/[0.02]'
+        }`}
+      >
+        <div className="flex items-center gap-1.5">
+          <span className="text-base leading-none">{option.icon}</span>
+          <span className={`text-[11px] font-bold leading-tight ${selected ? 'text-violet-700' : 'text-gray-800'}`}>
+            {option.title}
+          </span>
+        </div>
+        <p className={`mt-0.5 text-[9px] leading-tight ${selected ? 'text-violet-500' : 'text-gray-400'}`}>
+          {option.tagline}
+        </p>
+      </button>
+      {/* Hover tooltip */}
+      <div className="pointer-events-none absolute bottom-full left-0 z-20 mb-1.5 hidden w-52 rounded-lg border border-black/10 bg-white p-2.5 text-[10px] leading-relaxed text-gray-600 shadow-lg group-hover:block">
+        <p className="mb-1 font-semibold text-gray-800">{option.icon} {option.title}</p>
+        {option.tooltip}
+      </div>
+    </div>
+  )
+}
+
+// Visual memory thumbnail with inline label edit + remove
 function VisualMemoryThumb({
   item, onRemove, onLabelChange,
 }: {
@@ -298,7 +439,7 @@ function VisualMemoryThumb({
 }) {
   const url = useAssetUrl(item.ref)
   return (
-    <div className="relative rounded-lg border border-black/10 bg-white overflow-hidden">
+    <div className="relative overflow-hidden rounded-lg border border-black/10 bg-white">
       <div className="aspect-square w-full bg-gray-100">
         {url ? (
           <img src={url} alt={item.label} className="h-full w-full object-cover" />
@@ -317,7 +458,7 @@ function VisualMemoryThumb({
       <button
         onClick={onRemove}
         title="Xoá"
-        className="absolute right-1 top-1 flex h-5 w-5 items-center justify-center rounded-full bg-black/60 text-white opacity-0 transition-opacity hover:bg-red-600 group-hover:opacity-100"
+        className="absolute right-1 top-1 flex h-5 w-5 items-center justify-center rounded-full bg-black/60 text-white transition-opacity hover:bg-red-600"
         style={{ opacity: 1 }}
       >
         <X className="h-2.5 w-2.5" />
