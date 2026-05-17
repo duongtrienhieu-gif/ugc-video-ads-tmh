@@ -21,6 +21,7 @@ interface FilterChip {
 
 const FILTERS: FilterChip[] = [
   { id: 'all',          label: 'Tất cả',         icon: '📂' },
+  { id: 'lab-content',  label: 'Lab Content',    icon: '🧠' },
   { id: 'landing-page', label: 'Landing Page',   icon: '📄' },
   { id: 'ads-content',  label: 'Ads Content',    icon: '📣' },
   { id: 'script',       label: 'Kịch bản',       icon: '✍️' },
@@ -37,6 +38,7 @@ const ACCENT_BG: Record<HistoryItem['typeAccent'], string> = {
   orange:  'bg-orange-100 text-orange-700',
   sky:     'bg-sky-100 text-sky-700',
   emerald: 'bg-emerald-100 text-emerald-700',
+  purple:  'bg-purple-100 text-purple-700',
 }
 
 export default function History() {

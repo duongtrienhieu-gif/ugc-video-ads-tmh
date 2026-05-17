@@ -10,6 +10,10 @@ import OutputPanel from './components/OutputPanel'
 import AutoSaveIndicator from '../../components/AutoSaveIndicator'
 import { useSessionPersist } from '../../services/sessionPersistence'
 import { generateUGCScript } from './services/generateScript'
+import {
+  mapFormulaToScriptPreset, mapLabToneToScriptTones,
+} from '../lab-content/services/handoffMapping'
+import type { LabBriefHandoff } from '../lab-content/types'
 
 // Session-persistence snapshot — survives F5
 interface ScriptSnapshot {
@@ -83,13 +87,25 @@ export default function ScriptArchitect() {
     deps: [selectedProduct?.id, result, isGenerating, presetId, lengthSec, hookStrength, toneModifiers, educationalMode],
   })
 
-  // Accept productId hand-off from other apps (e.g. Finder → Tạo Kịch bản)
+  // Accept productId / lab-brief hand-off from other apps
   useEffect(() => {
     if (activeApp !== 'script-architect') return
     if (!interAppPayload || interAppPayload.targetApp !== 'script-architect') return
     if (interAppPayload.targetField === 'productId') {
       const product = getProductById(interAppPayload.data as string)
       if (product) setSelectedProduct(product)
+    } else if (interAppPayload.targetField === 'lab-brief') {
+      // Pre-fill form from a Lab Content strategic brief.
+      const handoff = interAppPayload.data as LabBriefHandoff
+      const product = getProductById(handoff.productId)
+      if (product) setSelectedProduct(product)
+      setPresetId(mapFormulaToScriptPreset(handoff.angle.recommendedFormula))
+      const mappedTones = mapLabToneToScriptTones(handoff.toneId) as ToneModifier[]
+      if (mappedTones.length > 0) setToneModifiers(mappedTones)
+      // Conversion goal → stronger hook; awareness → balanced.
+      if (handoff.goal === 'conversion' || handoff.goal === 'retargeting') {
+        setHookStrength('aggressive')
+      }
     }
     consumePayload()
   }, [interAppPayload, activeApp, consumePayload, getProductById])

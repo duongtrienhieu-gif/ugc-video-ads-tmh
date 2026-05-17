@@ -50,6 +50,13 @@ export const MODULE_REGISTRY: ModuleRegistration[] = [
     version: 1,
     maxAgeMs: DEFAULT_MAX_AGE_MS,
   },
+  {
+    moduleId: 'lab-content',
+    moduleNameVi: 'Lab Content',
+    persistKey: 'ugc-lab:lab-content:inflight-v1',
+    version: 1,
+    maxAgeMs: DEFAULT_MAX_AGE_MS,
+  },
   // ── R4b — BrollStudio (migrated from bespoke pattern) ────────────────────
   {
     moduleId: 'broll-studio',
