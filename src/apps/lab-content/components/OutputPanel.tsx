@@ -16,11 +16,12 @@ interface OutputPanelProps {
   onOpenScript: (angle: ContentAngle) => void
   onOpenHookLab: () => void
   onOpenFunnel: () => void
+  onOpenCoc: () => void
 }
 
 export default function OutputPanel({
   result, isGenerating, isAlreadySaved,
-  onRegenerate, onSave, onOpenCaption, onOpenScript, onOpenHookLab, onOpenFunnel,
+  onRegenerate, onSave, onOpenCaption, onOpenScript, onOpenHookLab, onOpenFunnel, onOpenCoc,
 }: OutputPanelProps) {
   const [lang, setLang] = useState<'vi' | 'my'>('vi')
 
@@ -235,6 +236,33 @@ export default function OutputPanel({
             >
               <Target className="h-3.5 w-3.5" />
               {result.funnelOutput ? 'Mở Phễu Content (9 caption)' : 'Tạo Phễu Content'}
+            </button>
+          </div>
+        </section>
+
+        {/* COC Multiplier — 1 pillar → 7 platform-native micros */}
+        <section>
+          <div className="rounded-2xl border border-cyan-200 bg-gradient-to-br from-cyan-50/60 to-teal-50/60 p-4">
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest text-gray-500">
+                <Layers className="h-3 w-3" />
+                COC Multiplier · 1 pillar → 7 micro-content
+              </div>
+              {result.cocOutput && (
+                <span className="rounded-full bg-cyan-100 px-2 py-0.5 text-[10px] font-semibold text-cyan-700">
+                  ✅ Đã tạo · {result.cocOutput.micros.length} micros
+                </span>
+              )}
+            </div>
+            <p className="mb-3 text-[12px] leading-relaxed text-gray-700">
+              Nhân 1 pillar caption thành <b>7 micro-content native</b> cho FB / IG / TikTok / Threads / Zalo / Email / IG Story — mỗi nền tảng có rhythm + tone riêng, KHÔNG phải copy-paste.
+            </p>
+            <button
+              onClick={onOpenCoc}
+              className="flex w-full items-center justify-center gap-2 rounded-full bg-gradient-to-r from-cyan-600 to-teal-600 px-4 py-2.5 text-[12px] font-bold text-white shadow-sm transition-all hover:from-cyan-700 hover:to-teal-700"
+            >
+              <Sparkles className="h-3.5 w-3.5" />
+              {result.cocOutput ? 'Mở COC Multiplier (7 micros)' : 'Mở COC Multiplier'}
             </button>
           </div>
         </section>

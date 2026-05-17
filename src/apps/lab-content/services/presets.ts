@@ -1,4 +1,4 @@
-import type { GoalOption, PricingInfo, PricingStrategyOption, ToneOption } from '../types'
+import type { CocFormatOption, GoalOption, PricingInfo, PricingStrategyOption, ToneOption } from '../types'
 
 // ─────────────────────────────────────────────────────────────────────────
 // Goal options — 4 mục tiêu cốt lõi của campaign.
@@ -248,4 +248,71 @@ export function buildPricingPromptBlock(
   })
 
   return lines.join('\n')
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// COC formats — 7 platform-specific micro-content target formats.
+// ─────────────────────────────────────────────────────────────────────────
+
+export const COC_FORMAT_OPTIONS: CocFormatOption[] = [
+  {
+    id: 'facebook-feed',
+    label: 'Facebook Feed',
+    glyph: '📘',
+    hint: 'Caption FB ~120-180 từ, paragraph rhythm',
+    formatBrief:
+      'Facebook Feed caption — 120-180 words. Mobile-first paragraph rhythm: short paragraphs (1-3 lines) separated by BLANK LINES. Strategic emoji at paragraph starts. The first line is the HOOK that earns "see more". End with a clear CTA. No hashtags (FB algo penalises them).',
+  },
+  {
+    id: 'instagram',
+    label: 'Instagram',
+    glyph: '📷',
+    hint: 'IG caption + 5-8 hashtag liên quan',
+    formatBrief:
+      'Instagram caption — 80-150 words. More visual / aspirational tone than Facebook. End with 5-8 RELEVANT hashtags (mix of broad + niche). The first sentence must earn the "more" tap. Allowed emoji freely.',
+  },
+  {
+    id: 'tiktok',
+    label: 'TikTok',
+    glyph: '🎵',
+    hint: 'Caption ngắn 50-80 từ, slang OK',
+    formatBrief:
+      'TikTok caption — 50-80 words. VERY casual, slang OK, can break grammar for rhythm. First 5-7 words must be a scroll-stopper. End with a soft CTA or rhetorical question. NO hashtags except 1-2 trending ones if relevant.',
+  },
+  {
+    id: 'threads',
+    label: 'Threads',
+    glyph: '🧵',
+    hint: 'Max 3 dòng, ~200 chars, tone đối thoại',
+    formatBrief:
+      'Threads post — max 3 lines, ~200 characters total. Conversational, opinion-led tone (Threads readers want hot takes, not ads). Can be a question, a thought-stopper, or a tiny story. NO emojis spam, NO hashtags. Sound human.',
+  },
+  {
+    id: 'zalo-sms',
+    label: 'Zalo / SMS',
+    glyph: '💬',
+    hint: 'Broadcast 1-2 câu, max 160 chars',
+    formatBrief:
+      'Zalo / SMS broadcast — 1-2 short sentences, max 160 characters total. Direct, value-led, no fluff. Include the offer + 1 clear action (link / hotline / promo code). Treat like sending to a known customer.',
+  },
+  {
+    id: 'email',
+    label: 'Email',
+    glyph: '📧',
+    hint: 'Subject + preview line tối ưu inbox',
+    formatBrief:
+      'Email subject + preview line. SUBJECT: under 50 chars, curiosity-led or value-led, no spam triggers ("FREE", "URGENT" in CAPS, multiple !!). PREVIEW: under 90 chars, complements (not repeats) the subject. Output format MUST be exactly:\nSUBJECT: <text>\nPREVIEW: <text>',
+  },
+  {
+    id: 'instagram-story',
+    label: 'Instagram Story (3 frames)',
+    glyph: '📱',
+    hint: '3 frame text — escalating đến CTA',
+    formatBrief:
+      'Instagram Story — 3 frames of short text. Each frame is 1-2 short lines (Story is read in 2-3 seconds). Frame 1 = hook / question / pattern interrupt. Frame 2 = value / insight / reveal. Frame 3 = CTA (swipe up, link in bio, follow). Output format MUST be exactly:\nFRAME 1: <text>\nFRAME 2: <text>\nFRAME 3: <text>',
+  },
+]
+
+export function getCocFormatById(id: string): CocFormatOption | undefined {
+  return COC_FORMAT_OPTIONS.find((f) => f.id === id)
 }

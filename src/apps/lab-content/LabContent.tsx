@@ -11,6 +11,7 @@ import { generateLabCaption } from './services/generateLabCaption'
 import { generateLabScript } from './services/generateLabScript'
 import { generateHookLab } from './services/generateHookLab'
 import { generateFunnel } from './services/generateFunnel'
+import { generateCoc } from './services/generateCoc'
 import { getGoalById } from './services/presets'
 import { useLabContentStore } from './store'
 import InputPanel from './components/InputPanel'
@@ -18,6 +19,7 @@ import OutputPanel from './components/OutputPanel'
 import AngleOutputModal, { type OutputMode } from './components/AngleOutputModal'
 import HookLabModal from './components/HookLabModal'
 import FunnelModal from './components/FunnelModal'
+import CocModal from './components/CocModal'
 import AutoSaveIndicator from '../../components/AutoSaveIndicator'
 import { useSessionPersist } from '../../services/sessionPersistence'
 
@@ -63,6 +65,11 @@ export default function LabContent() {
   const [funnelOpen, setFunnelOpen] = useState(false)
   const [funnelGenerating, setFunnelGenerating] = useState(false)
   const [funnelError, setFunnelError] = useState<string | null>(null)
+
+  // ── COC Multiplier modal state ─────────────────────────────────────────
+  const [cocOpen, setCocOpen] = useState(false)
+  const [cocGenerating, setCocGenerating] = useState(false)
+  const [cocError, setCocError] = useState<string | null>(null)
 
   const lastParamsRef = useRef<Omit<LabBriefParams, 'productId'> | null>(null)
 
@@ -294,6 +301,30 @@ export default function LabContent() {
     }
   }
 
+  // ── COC Multiplier ─────────────────────────────────────────────────────
+  const handleOpenCoc = () => {
+    setCocError(null)
+    setCocOpen(true)
+    // Don't auto-generate — user provides pillar text first
+  }
+
+  const runCocGeneration = async (pillarText: string) => {
+    if (!result) return
+    setCocGenerating(true)
+    setCocError(null)
+    try {
+      const output = await generateCoc(result, pillarText)
+      setResult((prev) => prev ? { ...prev, cocOutput: output } : prev)
+      sessionApi.forceSave()
+      addToast(`Đã tạo ${output.micros.length} micro-content`, 'success')
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      setCocError(msg)
+    } finally {
+      setCocGenerating(false)
+    }
+  }
+
   const cachedModalOutput = (() => {
     if (!modalAngle || !result) return null
     const slot = result.angleOutputs?.[modalAngle.id]
@@ -334,6 +365,7 @@ export default function LabContent() {
           onOpenScript={handleOpenScript}
           onOpenHookLab={handleOpenHookLab}
           onOpenFunnel={handleOpenFunnel}
+          onOpenCoc={handleOpenCoc}
         />
       </div>
 
@@ -366,6 +398,16 @@ export default function LabContent() {
         error={funnelError}
         onClose={() => setFunnelOpen(false)}
         onRegenerate={() => void runFunnelGeneration(true)}
+      />
+
+      <CocModal
+        open={cocOpen}
+        result={result}
+        cachedOutput={result?.cocOutput ?? null}
+        isGenerating={cocGenerating}
+        error={cocError}
+        onClose={() => setCocOpen(false)}
+        onGenerate={(pillarText) => void runCocGeneration(pillarText)}
       />
     </div>
   )

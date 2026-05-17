@@ -225,6 +225,45 @@ export interface FunnelOutput {
   generatedAt: number
 }
 
+// ── COC Multiplier ────────────────────────────────────────────────────────
+// 1 pillar content → N platform-specific micro-content. Implements the
+// "COC" (Content Once, Cut-many) formula from the skill: take one pillar
+// idea, repurpose into platform-native variants without losing the core
+// message.
+
+export type CocFormatId =
+  | 'facebook-feed'   // ~120-180 words, mobile-first paragraphs
+  | 'instagram'       // ~80-150 words + 5-8 hashtags
+  | 'tiktok'          // ~50-80 words, very casual / slang OK
+  | 'threads'         // 3-line max, ~200 chars
+  | 'zalo-sms'        // 1-2 short sentences, broadcast tone
+  | 'email'           // subject + preview line
+  | 'instagram-story' // 3 frames text (escalating to CTA)
+
+export interface CocFormatOption {
+  id: CocFormatId
+  label: string       // Vietnamese
+  glyph: string
+  hint: string        // VN one-liner
+  /** English instruction sent into Gemini to shape this format. */
+  formatBrief: string
+}
+
+export interface CocMicroContent {
+  id: string
+  format: CocFormatId
+  vietnamese: string
+  malay: string
+}
+
+export interface CocOutput {
+  /** The pillar text used to generate this batch (echoed back for context). */
+  pillarText: string
+  /** 7 micro-content pieces, one per format. */
+  micros: CocMicroContent[]
+  generatedAt: number
+}
+
 // ── Output ────────────────────────────────────────────────────────────────
 export interface LabBriefResult {
   /** Product link */
@@ -262,6 +301,9 @@ export interface LabBriefResult {
 
   /** Cached Funnel Content output (9 pieces across TOFU/MOFU/BOFU). Optional. */
   funnelOutput?: FunnelOutput
+
+  /** Cached COC Multiplier output (1 pillar → 7 micros). Optional. */
+  cocOutput?: CocOutput
 
   generatedAt: number
 }
