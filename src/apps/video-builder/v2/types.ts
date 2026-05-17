@@ -1053,20 +1053,28 @@ export interface MasterFrameJob {
 // + packaging from the master frame, only pose / framing / environment vary.
 
 export type SceneGenItemStatus =
-  | 'pending'       // queued, not yet started
-  | 'generating'    // KIE GPT-4o image-edit in flight
-  | 'auto_validating' // heuristic + Gemini QC running
-  | 'retrying'      // QC failed once, regenerating with bumps
-  | 'approved'      // user-approved (default: auto-approved on QC pass)
-  | 'rejected'      // user rejected (will be regen'd or skipped)
-  | 'failed'        // hard fail after retries exhausted
+  | 'pending'           // queued, not yet started
+  | 'queued'            // Z24: in dispatch order, waiting for a worker slot
+  | 'generating'        // KIE GPT-4o image-edit in flight
+  | 'auto_validating'   // heuristic + Gemini QC running
+  | 'retrying'          // QC failed once, regenerating with bumps
+  | 'provider_stuck'    // Z24: KIE task exceeded soft-timeout (90s) — about to soft-cancel + retry
+  | 'retrying_provider' // Z24: fresh provider submission after soft-cancel
+  | 'recovered'         // Z24: provider retry succeeded — transient diagnostic state (auto-replaced by approved/rejected on QC)
+  | 'approved'          // user-approved (default: auto-approved on QC pass)
+  | 'rejected'          // user rejected (will be regen'd or skipped)
+  | 'failed'            // hard fail after retries exhausted
   | 'cancelled'
 
 export const SCENE_STATUS_LABEL_VI: Record<SceneGenItemStatus, string> = {
   'pending':           'Đang chờ...',
+  'queued':            'Trong hàng đợi...',
   'generating':        'Đang tạo ảnh...',
   'auto_validating':   'Đang kiểm tra QC...',
   'retrying':          'Đang tạo lại (QC fail)...',
+  'provider_stuck':    'Provider bị nghẽn — sắp huỷ mềm...',
+  'retrying_provider': 'Đang gửi lại provider...',
+  'recovered':         'Đã phục hồi ✓',
   'approved':          'Đã duyệt ✓',
   'rejected':          'Đã từ chối',
   'failed':            'Thất bại',

@@ -13,11 +13,25 @@
 //   "Image #3 = MASTER FRAME — re-use its person + product, only vary pose/env"
 //
 // QC loop runs after each generation. Smart-retry bumps locks per failure class.
+//
+// Z24 PROVIDER OVERLOAD FIX:
+//   • Switched from raw generateGpt4oImage (5-min timeout) to
+//     generateGpt4oImageFast (90s attempt + soft-watchdog at 60s).
+//   • Switched prompt source from raw compileScenePrompt → compileSceneRenderPayload
+//     (Z19) with mode escalation: attempt 1 = BALANCED, attempt 2 = FAST_SAFE.
+//   • Cap filesUrl to 2 refs (product + avatar) — drop master frame ref to
+//     reduce image-edit complexity. Identity now travels through prompt locks
+//     + the establishing-scene cache, not multi-ref weighting.
+//   • Soft-cancel + provider-retry UI signals via new optional callbacks.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { generateGpt4oImage } from '../../../../utils/kieai'
+// Phase 5 build fix — the actual call site at line ~160 uses
+// generateGpt4oImageFast. compileScenePrompt + raw generateGpt4oImage
+// were only referenced in stale code comments. Importing only what's
+// actually called.
+import { generateGpt4oImageFast } from '../../../../utils/kieai'
 import { saveAsset, getUrl, isAssetRef } from '../../../../utils/assetStore'
-import { compileScenePrompt } from './promptCompiler'
+import { compileSceneRenderPayload, modeForAttempt } from './renderPayloadCompiler'
 import { runQcLoop } from './qcRetry'
 import type {
   SceneBlueprint,
@@ -42,6 +56,15 @@ export interface SceneGenParams {
   lowCostMode: boolean
   /** Callback per attempt — for UI status updates */
   onAttempt?: (attemptIdx: number, qc: QcScore | null) => void
+  /** Z24: KIE soft-timeout crossed — UI shows "provider_stuck" while we
+   *  prepare a fresh submission. attempt is 1-indexed (the one that stuck). */
+  onProviderStuck?: (attempt: number, totalAttempts: number) => void
+  /** Z24: a fresh KIE submission started after a stall — UI flips to
+   *  "retrying_provider". attempt is the new 1-indexed attempt. */
+  onProviderRetry?: (attempt: number, totalAttempts: number) => void
+  /** Z24: provider eventually returned a usable image — UI flashes
+   *  "recovered" briefly before QC takes over. */
+  onRecovered?: () => void
   /** Abort signal — for user cancel */
   signal?: AbortSignal
 }
@@ -67,52 +90,115 @@ async function persistImage(remoteUrl: string): Promise<string> {
 }
 
 // ── Internal: one-shot scene generation (compile + KIE call + persist) ──────
+//
+// Z24 changes vs pre-fix:
+//   1. Render payload via compileSceneRenderPayload (mode escalation), not
+//      raw compileScenePrompt — strict char budget per attempt.
+//   2. filesUrl capped at 2 (product + avatar). Master frame ref dropped:
+//      identity travels through the prompt's identity-lock paragraph instead.
+//      Low-visibility scenes (pain / failed_attempts) still get only avatar.
+//   3. generateGpt4oImageFast wrapper handles soft-timeout (60s warn) +
+//      hard timeout (90s per attempt) + fresh resubmission. The wrapper's
+//      own retry loop fires onProviderStuck / onProviderRetry through
+//      KIE's onStatusChange path is not used — we wrap it manually below.
+//   4. Prompt is passed as a function-of-attempt so the wrapper can
+//      automatically switch to FAST_SAFE on attempt 2.
 
 async function generateSceneOnce(
   params: SceneGenParams,
   overrides: SectionOverrides,
-): Promise<{ imageUrl: string; compiled: CompiledPrompt }> {
-  // Compile the scene prompt — passes master frame URL as 3rd reference
-  const compiled = compileScenePrompt(
-    {
-      identity: params.identity,
-      productName: params.productName,
-      consistency: params.consistency,
-      dna: params.dna,
-      overrides,
-    },
-    params.blueprint,
-    params.masterFrameUrl,
-  )
-
-  // Build filesUrl array matching the compiled prompt's reference indices
-  const filesUrl: string[] = []
-  for (const role of compiled.filesUrlOrder) {
-    if (role === 'product')     filesUrl.push(params.identity.productImageUrl)
-    if (role === 'avatar')      filesUrl.push(params.identity.avatarImageUrl)
-    if (role === 'masterFrame') filesUrl.push(params.masterFrameUrl)
+): Promise<{ imageUrl: string; compiled: CompiledPrompt; modeUsed: string; charsUsed: number }> {
+  // We compile twice (BALANCED for attempt 1, FAST_SAFE for attempt 2) so the
+  // Fast wrapper can swap the prompt on resubmission without a re-entry.
+  const compileAt = (attempt: number) => {
+    const mode = modeForAttempt(attempt)  // 1→BALANCED, 2→FAST_SAFE
+    const payload = compileSceneRenderPayload(
+      {
+        identity: params.identity,
+        productName: params.productName,
+        consistency: params.consistency,
+        dna: params.dna,
+        overrides,
+      },
+      params.blueprint,
+      params.masterFrameUrl,
+      { mode, targetModel: 'gpt4o' },
+    )
+    return payload
   }
 
-  // Smart-retry duplicates the product ref for stronger weighting — but ONLY
-  // if the scene wants the product visible at all. Low-visibility scenes
-  // (pain / frustration / failed-attempts) intentionally omit product, so
-  // bumping the product ref would defeat the no-product directive.
-  const productInRefs = compiled.filesUrlOrder.includes('product')
-  if (overrides.bumpProductLock && productInRefs && filesUrl.length > 1) {
-    filesUrl.unshift(params.identity.productImageUrl)
-  }
+  // Pre-compute attempt-1 payload — we need its filesUrlOrder to assemble refs
+  // (filesUrlOrder is independent of mode, depends only on scene type +
+  // overrides, so attempt-1 is representative).
+  const attempt1Payload = compileAt(1)
 
-  // KIE supports max 5 filesUrl — truncate
-  const remoteUrl = await generateGpt4oImage({
+  // ── Z24 REF-CAP: max 2 refs (product + avatar). NO master frame ref. ──
+  // The master frame's identity transfer happens through the identity-lock
+  // paragraph in the prompt, not through ref weighting. Dropping it removes
+  // the single heaviest cause of provider stalls on KIE GPT-Image-1.
+  const refs: string[] = []
+  for (const role of attempt1Payload.filesUrlOrder) {
+    if (role === 'product') refs.push(params.identity.productImageUrl)
+    if (role === 'avatar')  refs.push(params.identity.avatarImageUrl)
+    // role === 'masterFrame' — intentionally skipped (Z24)
+  }
+  // Smart-retry product-lock bump (only when product is already in refs)
+  const productInRefs = attempt1Payload.filesUrlOrder.includes('product')
+  if (overrides.bumpProductLock && productInRefs && refs.length > 1) {
+    refs.unshift(params.identity.productImageUrl)
+  }
+  const filesUrl = refs.slice(0, 2)  // hard cap
+
+  // The remote URL: Fast wrapper handles soft-watch + retry; we feed the
+  // mode-appropriate prompt per attempt via the function form.
+  let lastPayload = attempt1Payload  // captured for return-value below
+  const remoteUrl = await generateGpt4oImageFast({
     apiKey: params.kieApiKey,
-    prompt: compiled.final,
-    filesUrl: filesUrl.slice(0, 5),
-    size: '2:3',  // vertical-ish (gpt4o only supports 1:1/3:2/2:3)
-    timeoutMs: 5 * 60 * 1000,
+    prompt: (attempt: number) => {
+      const p = compileAt(attempt)
+      lastPayload = p
+      return p.prompt
+    },
+    filesUrl,
+    size: '2:3',
+    softTimeoutMs: 60_000,
+    attemptTimeoutMs: 90_000,
+    maxAttempts: 2,
     signal: params.signal,
+    onAttemptChange: (attempt, total) => {
+      // attempt 2 = a fresh submission after the first one was abandoned
+      if (attempt > 1) params.onProviderRetry?.(attempt, total)
+    },
+    onStatusChange: (status) => {
+      // soft-timeout is logged inside the wrapper; we flag "stuck" UI when
+      // KIE still reports queued/processing late into the attempt.
+      if (status === 'processing' || status === 'pending') {
+        // No-op here — the wrapper's [POLL_SOFT_TIMEOUT] log fires at 60s.
+        // UI surface for "provider_stuck" comes from the runner watchdog.
+      }
+    },
   })
 
-  return { imageUrl: remoteUrl, compiled }
+  // Synthesize a CompiledPrompt-compatible shape for backward compat with
+  // callers that read .compiled (debug panel, QC retry overrides). We keep
+  // the legacy fields empty since the render-payload compiler doesn't track
+  // them separately — only `final` matters for downstream.
+  const compiled: CompiledPrompt = {
+    identityLock: '',
+    productLock: '',
+    sceneBlueprint: '',
+    visualDna: '',
+    negativePrompt: '',
+    final: lastPayload.prompt,
+    filesUrlOrder: lastPayload.filesUrlOrder,
+  }
+
+  return {
+    imageUrl: remoteUrl,
+    compiled,
+    modeUsed: lastPayload.mode,
+    charsUsed: lastPayload.chars,
+  }
 }
 
 // ── Main: generate a single scene with full QC loop ─────────────────────────

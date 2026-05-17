@@ -459,11 +459,15 @@ function buildFinalPrompt(job: ImageJob, hasProductRefs: boolean): string {
   const diversity = buildDiversityDirective(job)
   if (diversity) parts.push(diversity)
 
-  // Z22 — hard negatives. Phase 4 — chuyen-gia form OVERRIDES the
-  // default negatives because the global block bans "editorial / studio /
-  // luxury look" which is exactly the aesthetic chuyen-gia wants.
+  // Z22 — hard negatives. Form-specific overrides:
+  //   • chuyen-gia: allows editorial / clinical look (default block bans it)
+  //   • hard-sell-cod: allows promo banner / CTA overlay / ecommerce ad
+  //     aesthetic on offer + final-cta + hero sections (default block bans
+  //     "ecommerce advertisement look" + "centered symmetrical")
   if (job.pack.form === 'chuyen-gia') {
     parts.push(EXPERT_NEGATIVE_BLOCK)
+  } else if (job.pack.form === 'hard-sell-cod') {
+    parts.push(HARDSELL_NEGATIVE_BLOCK)
   } else {
     parts.push(NEGATIVE_PROMPT_BLOCK)
   }
@@ -476,6 +480,15 @@ function buildFinalPrompt(job: ImageJob, hasProductRefs: boolean): string {
 // marketplace screenshot / urgency badge / countdown / emoji spam.
 const EXPERT_NEGATIVE_BLOCK =
   'AVOID HARD (chuyen-gia editorial-infographic form): UGC selfie phone-quality aesthetic; TikTok / Shopee / marketplace screenshot layout; designed text overlays except SEBELUM/SELEPAS pair labels; floating product PNG; centered marketing composition; urgency badges / countdown / discount strips; emoji-heavy graphics; cartoonish or chibi illustration; harsh advertising lighting; dramatic gym-influencer transformation aesthetic; chaotic collage; fake brand text substitution.'
+
+// Phase 5 — hard-sell-form-specific negatives. ALLOWS designed CTA
+// overlays / promo banners / urgency badges / ecommerce ad look on
+// banner-type sections (hero / offer / final-cta / news-proof). Still
+// bans the worst AI-clone failure modes: floating cut-out product PNG
+// pasted on background, fake brand substitution, identical clone
+// composition across all reviewer shots, AI-glossy skin.
+const HARDSELL_NEGATIVE_BLOCK =
+  'AVOID HARD (chot-don-manh COD form): floating cut-out product PNG pasted onto random background (must be in-scene grounded); identical clone composition across all reviewer / WhatsApp / TikTok / Shopee shots (each reviewer must be a DIFFERENT Malaysian person — diversity desired); AI-glossy hyper-perfect skin on selfie shots (real phone UGC quality with natural skin texture); fake brand text substitution (no inventing brand names — use the exact uploaded product brand); cinematic studio look on UGC sections (banner sections allow promo design but UGC reviews stay imperfect phone-quality); fabricated medical claims rendered into images; Western / Caucasian / Korean / Chinese-influencer faces in Malaysian-target reviewer slots (Malaysian Southeast-Asian features required for testimonials).'
 
 // ─────────────────────────────────────────────────────────────────────────
 // CREDIT-SAFE single image — splits submit / poll so we can recover

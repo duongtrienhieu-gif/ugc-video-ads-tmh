@@ -13,6 +13,22 @@
 // Cancellation: setting job.status='cancelled' stops the pump from launching
 // any further scenes. In-flight scenes continue to completion (KIE doesn't
 // expose abort) — their results still land in the store.
+//
+// ── Z24 PROVIDER OVERLOAD FIX (current) ────────────────────────────────────
+// Symptom: 8 heavy image-edit requests fired in parallel cause KIE provider
+// queue to stall → 300s timeouts on 2/8 scenes.
+//
+// Strategy:
+//   1. STAGED orchestration — render the highest-priority scene ALONE first
+//      (establishes identity / style / packaging cache on KIE side), then
+//      open the worker pool for the remaining scenes.
+//   2. Concurrency cap: 2 (was 3). Even with the Fast wrapper's 90s
+//      attempt timeout, 8 parallel image-edit jobs trample the provider.
+//   3. Watchdog: per-scene setTimeout(75s) flags 'provider_stuck' if the
+//      Fast wrapper hasn't returned yet — UI surfaces this before the
+//      90s hard-cut triggers a fresh resubmission.
+//   4. New status callbacks: provider_stuck / retrying_provider / recovered
+//      so the grid card shows what's happening instead of just spinning.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { useSceneGenJobStore } from '../stores/sceneGenJobStore'
@@ -38,8 +54,10 @@ export interface StartSceneQueueParams {
   dna: VisualStyleDna
   /** Cost control: skip QC retry per scene (also the "Fast Mode" switch) */
   lowCostMode?: boolean
-  /** Z9: max scenes in flight simultaneously. Default 3 — KIE happily handles
-   *  3 concurrent /gpt4o-image/generate calls. Higher risks 429s. */
+  /** Z24: max scenes in flight simultaneously DURING STAGE 2. Default 2
+   *  (was 3 in Z9). KIE provider queue stalls under 3+ heavy image-edits;
+   *  2 stays just below the saturation threshold we observed. Stage 1
+   *  (scene[0]) always runs solo regardless of this value. */
   concurrency?: number
 }
 
@@ -87,7 +105,9 @@ export function startSceneGenQueue(params: StartSceneQueueParams): void {
     retryCount: 0,
   }))
 
-  const concurrency = Math.max(1, Math.min(6, params.concurrency ?? 3))
+  // Z24: default 2 (was 3). Cap raised slightly (4 max) so power users can
+  // still override, but never above 4 — KIE provider saturates around there.
+  const concurrency = Math.max(1, Math.min(4, params.concurrency ?? 2))
 
   const job: SceneGenJob = {
     startedAt: Date.now(),
@@ -112,9 +132,20 @@ export function startSceneGenQueue(params: StartSceneQueueParams): void {
 }
 
 // ─────────────────────────────────────────────────────────────────────────
-// Z9: PARALLEL WORKER POOL (replaces sequential for-loop).
-// Up to `concurrency` scenes run simultaneously. As each completes, the
-// pump launches the next-priority scene until the queue drains.
+// Z24: STAGED ORCHESTRATION
+//
+//   Stage 1 — render dispatch[0] ALONE and await. This is the highest-
+//   priority scene (usually the hook). Running it solo:
+//     • avoids parallel-load contention with the heavy first request
+//     • establishes identity / packaging refs on KIE's side (cache warm)
+//     • surfaces auth / quota / hard provider failures FAST so the user
+//       can stop the whole queue before we burn credit on 7 more
+//
+//   Stage 2 — open the worker pool with `concurrency` (default 2) for
+//   the remaining scenes. As each completes, the pump launches the
+//   next-priority scene until the queue drains.
+//
+// All other scenes start in 'queued' state until the pool launches them.
 // ─────────────────────────────────────────────────────────────────────────
 
 async function runQueue(params: StartSceneQueueParams, concurrency: number): Promise<void> {
@@ -129,11 +160,36 @@ async function runQueue(params: StartSceneQueueParams, concurrency: number): Pro
     .map((x) => x.idx)
 
   console.log(
-    `[sceneGenJobRunner] Z9 parallel queue start: concurrency=${concurrency} · ` +
-    `dispatch order = [${dispatchOrder.map((i) => `${i + 1}(${blueprints[i].sceneType ?? 'na'})`).join(', ')}]`,
+    `[SCENE_GEN STAGED] start · stage2_concurrency=${concurrency} · ` +
+    `dispatch = [${dispatchOrder.map((i) => `${i + 1}(${blueprints[i].sceneType ?? 'na'})`).join(', ')}]`,
   )
 
-  let cursor = 0
+  // Mark all non-terminal items as 'queued' so the UI shows they're waiting
+  // (instead of leaving them in 'pending' which looks like "not yet started").
+  for (const idx of dispatchOrder) {
+    const cur = storeGet().job?.items[idx]
+    if (cur && cur.status !== 'approved' && cur.status !== 'failed') {
+      storeGet().patchItem(idx, { status: 'queued' })
+    }
+  }
+
+  // ── STAGE 1: solo render of dispatch[0] ─────────────────────────────────
+  if (dispatchOrder.length > 0) {
+    const firstIdx = dispatchOrder[0]
+    const job0 = storeGet().job
+    if (job0 && (job0.status === 'cancelled' || job0.status === 'paused')) {
+      console.log(`[SCENE_GEN STAGED] cancelled before stage 1`)
+    } else if (job0?.items[firstIdx]?.status !== 'approved' && job0?.items[firstIdx]?.status !== 'failed') {
+      console.log(`[SCENE_GEN STAGED] stage 1 · solo render scene ${firstIdx + 1} (${blueprints[firstIdx].sceneType ?? 'na'}) — establishing identity/style/packaging cache`)
+      storeGet().setQueueState({ currentIdx: firstIdx })
+      storeGet().patchItem(firstIdx, { status: 'generating', startedAt: Date.now() })
+      await runOne(params, blueprints, firstIdx)
+      console.log(`[SCENE_GEN STAGED] stage 1 done · opening pool for ${dispatchOrder.length - 1} remaining scene(s)`)
+    }
+  }
+
+  // ── STAGE 2: pool with `concurrency` for remaining scenes ───────────────
+  let cursor = 1  // start after dispatch[0]
   await new Promise<void>((resolve) => {
     let active = 0
     let resolved = false
@@ -154,7 +210,7 @@ async function runQueue(params: StartSceneQueueParams, concurrency: number): Pro
         // User cancelled / paused — stop launching new scenes (in-flight ones
         // finish on their own)
         if (current.status === 'cancelled' || current.status === 'paused') {
-          console.log(`[sceneGenJobRunner] queue ${current.status} — stopped launching new scenes`)
+          console.log(`[SCENE_GEN STAGED] stage 2 ${current.status} — stopped launching new scenes`)
           cursor = dispatchOrder.length
           finish()
           return
@@ -195,12 +251,18 @@ async function runQueue(params: StartSceneQueueParams, concurrency: number): Pro
       currentIdx: -1,
       status: wasCancelled ? 'cancelled' : anyFailed ? 'failed' : 'completed',
     })
+    console.log(`[SCENE_GEN STAGED] queue finished · status=${wasCancelled ? 'cancelled' : anyFailed ? 'failed' : 'completed'}`)
   }
 }
 
 // ─────────────────────────────────────────────────────────────────────────
 // Run ONE scene end-to-end. Used by the worker pool above + manual regen.
 // Patches the store; never throws (errors land in item.error).
+//
+// Z24: adds a soft-watchdog timer that marks the item 'provider_stuck'
+// at 75s if the Fast wrapper hasn't returned. Wrapper's hard-cut at 90s
+// then triggers a fresh resubmission → 'retrying_provider' callback fires.
+// On eventual success, a brief 'recovered' flash precedes the QC update.
 // ─────────────────────────────────────────────────────────────────────────
 async function runOne(
   params: StartSceneQueueParams,
@@ -208,6 +270,18 @@ async function runOne(
   itemIdx: number,
 ): Promise<void> {
   const storeGet = useSceneGenJobStore.getState
+  let usedProviderRetry = false  // set when onProviderRetry fires
+
+  // Z24: watchdog — if the first KIE submission is still in flight at 75s,
+  // surface 'provider_stuck' in the UI. The Fast wrapper will hard-cut at
+  // 90s and trigger onProviderRetry (which flips us to 'retrying_provider').
+  const stuckWatchdog = setTimeout(() => {
+    const cur = storeGet().job?.items[itemIdx]
+    if (cur && cur.status === 'generating') {
+      console.warn(`[SCENE_GEN STAGED] scene ${itemIdx + 1} → provider_stuck (watchdog 75s)`)
+      storeGet().patchItem(itemIdx, { status: 'provider_stuck' })
+    }
+  }, 75_000)
 
   try {
     const result = await generateScene({
@@ -231,7 +305,27 @@ async function runOne(
           storeGet().patchItem(itemIdx, { status: 'auto_validating', qc })
         }
       },
+      onProviderStuck: (attempt, total) => {
+        console.warn(`[SCENE_GEN STAGED] scene ${itemIdx + 1} provider_stuck attempt ${attempt}/${total}`)
+        storeGet().patchItem(itemIdx, { status: 'provider_stuck' })
+      },
+      onProviderRetry: (attempt, total) => {
+        usedProviderRetry = true
+        console.warn(`[SCENE_GEN STAGED] scene ${itemIdx + 1} retrying_provider attempt ${attempt}/${total}`)
+        storeGet().patchItem(itemIdx, { status: 'retrying_provider' })
+      },
+      onRecovered: () => {
+        storeGet().patchItem(itemIdx, { status: 'recovered' })
+      },
     })
+
+    // Z24: brief "recovered" flash before the final approved/rejected status
+    // — only if we actually had a provider retry, so the user sees the win.
+    if (usedProviderRetry) {
+      storeGet().patchItem(itemIdx, { status: 'recovered' })
+      // tiny delay so the UI gets to paint the recovered chip before flipping
+      await new Promise<void>((r) => setTimeout(r, 400))
+    }
 
     const autoApprove = result.passedOnLastTry || params.lowCostMode
     storeGet().patchItem(itemIdx, {
@@ -243,8 +337,8 @@ async function runOne(
       finishedAt: Date.now(),
     })
     console.log(
-      `[sceneGenJobRunner] scene ${itemIdx + 1}/${blueprints.length} done — ` +
-      `status=${autoApprove ? 'approved' : 'rejected'}`,
+      `[SCENE_GEN STAGED] scene ${itemIdx + 1}/${blueprints.length} done — ` +
+      `status=${autoApprove ? 'approved' : 'rejected'}${usedProviderRetry ? ' (via provider retry)' : ''}`,
     )
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
@@ -258,8 +352,10 @@ async function runOne(
       // Cancel cascades: mark whole queue cancelled (pump will stop next tick)
       storeGet().setQueueState({ status: 'cancelled' })
     } else {
-      console.error(`[sceneGenJobRunner] scene ${itemIdx + 1} failed:`, msg)
+      console.error(`[SCENE_GEN STAGED] scene ${itemIdx + 1} failed:`, msg)
     }
+  } finally {
+    clearTimeout(stuckWatchdog)
   }
 }
 

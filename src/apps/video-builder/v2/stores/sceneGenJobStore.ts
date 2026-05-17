@@ -35,9 +35,18 @@ function loadFromStorage(): SceneGenJob | null {
     const raw = localStorage.getItem(STORAGE_KEY)
     if (!raw) return null
     const job = JSON.parse(raw) as SceneGenJob
-    // Resume cleanup: any in-flight items revert to pending
+    // Resume cleanup: any in-flight / transient items revert to pending
+    // (Z24: includes the new staged-orchestration transient statuses)
     job.items = job.items.map((item) => {
-      if (item.status === 'generating' || item.status === 'auto_validating' || item.status === 'retrying') {
+      const inFlight =
+        item.status === 'queued' ||
+        item.status === 'generating' ||
+        item.status === 'auto_validating' ||
+        item.status === 'retrying' ||
+        item.status === 'provider_stuck' ||
+        item.status === 'retrying_provider' ||
+        item.status === 'recovered'
+      if (inFlight) {
         return { ...item, status: 'pending' as SceneGenItemStatus, retryCount: 0 }
       }
       return item

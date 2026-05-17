@@ -42,9 +42,13 @@ const SCENE_TYPE_STYLE: Record<string, { bg: string; labelVi: string }> = {
 // Solid dot colors — readable at 8px on the compact card bottom strip
 const STATUS_DOT_COLOR: Record<SceneGenItemStatus, string> = {
   'pending':           'bg-gray-300',
+  'queued':            'bg-slate-400 animate-pulse',
   'generating':        'bg-violet-500 animate-pulse',
   'auto_validating':   'bg-amber-500 animate-pulse',
   'retrying':          'bg-orange-500 animate-pulse',
+  'provider_stuck':    'bg-yellow-500 animate-pulse',
+  'retrying_provider': 'bg-orange-600 animate-pulse',
+  'recovered':         'bg-teal-500',
   'approved':          'bg-emerald-500',
   'rejected':          'bg-pink-500',
   'failed':            'bg-red-500',
@@ -70,7 +74,13 @@ function SceneCard({
   const resolvedUrl = useAssetUrl(item.imageUrl ?? undefined)
   const displayUrl = item.imageUrl?.startsWith('http') ? item.imageUrl : resolvedUrl
 
-  const isLoading = item.status === 'generating' || item.status === 'auto_validating' || item.status === 'retrying'
+  const isLoading =
+    item.status === 'queued' ||
+    item.status === 'generating' ||
+    item.status === 'auto_validating' ||
+    item.status === 'retrying' ||
+    item.status === 'provider_stuck' ||
+    item.status === 'retrying_provider'
   const hasImage = !!item.imageUrl
 
   return (

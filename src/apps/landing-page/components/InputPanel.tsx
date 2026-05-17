@@ -50,12 +50,13 @@ const FORM_OPTIONS: {
     tagline: 'Clean, lifestyle, ít hard-sell',
     tooltip: 'Tone sang trọng, hình ảnh lifestyle, ít urgency. Phù hợp skincare cao cấp, sản phẩm giá cao (>RM200). Brand-building hơn conversion-first.',
   },
+  // Phase 5 — real urgency engine shipped.
   {
     id: 'hard-sell-cod',
     icon: '⚡',
-    title: 'Hard Sell COD',
-    tagline: 'Urgency mạnh, chốt nhanh',
-    tooltip: 'Urgency tối đa, scarcity, nhiều CTA. Tối ưu cho COD, budget thấp, niche tiêu dùng nhanh. Mục tiêu chốt đơn trong vòng 60 giây đọc trang.',
+    title: 'Chốt Đơn Mạnh',
+    tagline: 'Urgency tối đa, CTA dày, COD aggressive',
+    tooltip: '14-section conversion funnel. CTA xuất hiện ở 13/14 section. Urgency strip ở hero/offer/final-cta. ~35 ảnh: heavy social proof (FB/TikTok/Shopee/WhatsApp) + before-after pair + COD delivery + promo banner + final urgency closer. Phù hợp COD impulse buy, audience đọc nhanh FB Ads Malaysia.',
   },
   // Phase 4 — real expert / scientific engine shipped.
   {
