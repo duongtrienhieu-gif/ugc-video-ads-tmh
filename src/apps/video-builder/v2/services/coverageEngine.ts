@@ -145,7 +145,23 @@ export function buildCoveragePrompt(scene: SceneBlueprint, template: CoverageTem
   return sceneSubject ? `${template.promptDelta} — ${sceneSubject}` : template.promptDelta
 }
 
-/** P5 — Derive 3-6 coverage shots for a master scene using V2 templates. */
+/**
+ * Z25 MVP COST CAP — was minShots=3, maxShots=6 (so 6 template shots +
+ * 1 master = 7 per master = ~56 total). Now defaults to minShots=1,
+ * maxShots=2 (so 1-2 template shots + 1 master = 2-3 per master =
+ * ~10-15 total).
+ *
+ * Template selection: the first 1-2 entries in each COVERAGE_TEMPLATES_V2
+ * row are hand-ordered as the STRONGEST picks for that role:
+ *   pain/reaction/hook → strongest emotional shot first
+ *   product_reveal/cta → strongest product shot first
+ *   education/social_proof/credibility → strongest trust shot first
+ * Everything past index 1 is treated as a fallback/diversity variant —
+ * dropped by default in MVP mode.
+ *
+ * Callers wanting "Hollywood mode" coverage can still pass higher
+ * min/max to opt out of the cost cap.
+ */
 export function deriveCoverageShots(
   master: SceneBlueprint,
   startShotId: number,
@@ -153,8 +169,9 @@ export function deriveCoverageShots(
 ): CoverageShot[] {
   const role = master.visualRole ?? inferVisualRole(master)
   const templates = deriveCoverageByRole(role)
-  const minShots = opts.minShots ?? 3
-  const maxShots = Math.min(opts.maxShots ?? 6, templates.length)
+  // Z25 defaults: 1-2 template shots per master (was 3-6).
+  const minShots = opts.minShots ?? 1
+  const maxShots = Math.min(opts.maxShots ?? 2, templates.length)
   const count = Math.max(minShots, maxShots)
   const continuityGroup = master.continuityGroup ?? `cg_master_${master.sceneId}`
 
@@ -176,7 +193,8 @@ export function deriveCoverageShots(
     derivedFrom: `master_${master.sceneId}`,
   })
 
-  // Template-driven coverage shots
+  // Template-driven coverage shots — pick the TOP `count` templates
+  // (already ordered strongest-first in COVERAGE_TEMPLATES_V2).
   for (let i = 0; i < count; i++) {
     const tpl = templates[i % templates.length]
     shots.push({

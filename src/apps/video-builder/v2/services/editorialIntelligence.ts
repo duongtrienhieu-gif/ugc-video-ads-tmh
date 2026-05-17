@@ -675,23 +675,26 @@ export function buildEditorialBlueprint(
   // ── 4. Build motion blueprint per master ─────────────────────────────
   masters = masters.map((m) => ({ ...m, motion: m.motion ?? buildMotionForMaster(m) }))
 
-  // ── 5. Z21 — Derive coverage via V2 templates (6 per role) ──────────
-  // Auto-determine shot count per master from voice duration target.
-  // Spec: 15s → 8-12 · 30s → 14-20 · 60s → 24-40 shots.
-  const shotCountRec = tlRecommendCoverageShotCount(options.voiceDurationSec)
-  const shotsPerMasterMax = Math.max(3, Math.ceil(shotCountRec.max / Math.max(1, masters.length)))
-
+  // ── 5. Z25 MVP COST CAP — coverage shots ────────────────────────────
+  // Was: 6-7 shots per master × 8 masters = 56 shots → ~3500 credits.
+  // Now: 2-3 shots per master × 4-6 masters = 10-15 shots → ~500-1200 credits.
+  //
+  // tlRecommendCoverageShotCount is kept for back-compat callers but the
+  // editorial blueprint no longer derives the cap from voice duration.
+  // The MVP cap is FIXED at 1-2 template shots per master (plus the
+  // master itself) regardless of voice length — cheap iteration first.
   const coverageShots: CoverageShot[] = []
   let shotIdCursor = 1
   for (const master of masters) {
     const shots = ceDeriveCoverageShots(master, shotIdCursor, {
-      minShots: options.minShotsPerMaster ?? 3,
-      maxShots: options.maxShotsPerMaster ?? Math.min(6, shotsPerMasterMax),
+      minShots: options.minShotsPerMaster ?? 1,
+      maxShots: options.maxShotsPerMaster ?? 2,
     })
     coverageShots.push(...shots)
     shotIdCursor += shots.length
     console.log(`[COVERAGE] scene-${master.sceneId} (${master.visualRole}) generated ${shots.length} coverage shots`)
   }
+  void tlRecommendCoverageShotCount  // kept for back-compat — see note above
 
   // ── 5b. Z21 — Enforce coverage diversity (similarity ≥ 0.72 → mutate) ─
   const diverseShots = ceEnforceCoverageDiversity(coverageShots, 0.72)

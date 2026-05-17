@@ -178,6 +178,14 @@ export interface BuildTimelineOptions {
   voiceDurationSec: number
   /** CTA window start (default 0.80 = final 20%). */
   ctaStart?: number
+  /**
+   * Z25 MVP COST CAP — hard ceiling on number of timeline cuts.
+   * Default 18 (the editorial-spec upper bound for the MVP density:
+   * Hook 2-3 · Body 2-3 · Reveal 2-3 · Proof 2 · CTA 1-2 + Recovery 1-2
+   * + a couple education beats). Each cut → one Kling clip → ~70 credits.
+   * Set to 0 to disable the cap (legacy "Hollywood" mode).
+   */
+  maxCuts?: number
 }
 
 export function buildTimelineCuts(
@@ -186,6 +194,7 @@ export function buildTimelineCuts(
 ): TimelineCut[] {
   const { voiceDurationSec } = options
   const ctaStart = options.ctaStart ?? 0.80
+  const maxCuts = options.maxCuts ?? 18
   if (coverageShots.length === 0 || voiceDurationSec <= 0) return []
 
   const energyCurve = buildEnergyCurve(voiceDurationSec)
@@ -206,6 +215,12 @@ export function buildTimelineCuts(
 
   for (const shot of sorted) {
     if (cursorSec >= voiceDurationSec) break
+    // Z25 MVP COST CAP — stop once we've emitted the hard ceiling number
+    // of cuts even if there's voice duration / coverage shots remaining.
+    if (maxCuts > 0 && cuts.length >= maxCuts) {
+      console.log(`[PACING] Z25 maxCuts cap hit (${maxCuts}) — stopping assembler at cut ${cuts.length}`)
+      break
+    }
 
     const pos = cursorSec / voiceDurationSec
     const phase = phaseAtPosition(pos, ctaStart)

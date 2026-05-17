@@ -1056,18 +1056,26 @@ ${normalPrompt}`
 }
 
 // ═════════════════════════════════════════════════════════════════════════
-// Z12 — DYNAMIC SCENE COUNT
+// Z12 / Z25 — DYNAMIC SCENE COUNT (MVP COST CAP)
 // ═════════════════════════════════════════════════════════════════════════
-// Formula: clamp(ceil(words / 35), 8, 24)
-// 35 words ≈ ~7s of voiceover at ~150 wpm; each scene covers ~3-5s of video,
-// so two scenes per beat is a reasonable budget.
+// Z25 MVP cost cap: was clamp(ceil(words/35), 8, 24) — produced 8 master
+// scenes which exploded into 56 coverage shots / 50 timeline cuts /
+// ~3500 credits per render. Way too expensive for iteration.
 //
-// Examples:
-//   60-word script  → 2 scenes → clamped to 8 (floor)
-//   300-word script → 9 scenes
-//   500-word script → 15 scenes
-//   800-word script → 23 scenes
-//   1200-word script → clamped to 24 (ceiling)
+// New formula: clamp(ceil(words / 55), 4, 6)
+//   • Floor 4 — minimum coherent narrative (hook · problem · reveal · cta)
+//   • Ceiling 6 — caps render cost even for long scripts
+//   • 55 words/scene — fewer beats, each carries more script
+//
+// Combined with Z25 coverage cap (1-2 templates per master) + maxCuts=18,
+// this brings target render cost from ~3500 → ~500-1200 credits.
+//
+// Examples (new):
+//   60-word script  → 2 scenes → clamped to 4 (floor)
+//   175-word script → 4 scenes
+//   275-word script → 5 scenes
+//   330-word script → 6 scenes (ceiling)
+//   800-word script → still 6 (ceiling)
 // ─────────────────────────────────────────────────────────────────────────
 
 /** Count words in the script (whitespace-split, filters empty tokens). */
@@ -1075,9 +1083,11 @@ function countWords(script: string): number {
   return script.trim().split(/\s+/).filter(Boolean).length
 }
 
-export const SCENE_COUNT_MIN = 8
-export const SCENE_COUNT_MAX = 24
-const WORDS_PER_SCENE = 35
+// Z25 MVP cost cap — was 8/24, now 4/6. The render cost scales linearly
+// with master count (each master → coverage shots → cuts → Kling clips).
+export const SCENE_COUNT_MIN = 4
+export const SCENE_COUNT_MAX = 6
+const WORDS_PER_SCENE = 55  // was 35 — fewer, denser beats
 
 export function computeSceneCount(script: string): number {
   const words = countWords(script)
