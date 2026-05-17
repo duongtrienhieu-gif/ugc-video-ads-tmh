@@ -150,6 +150,34 @@ export interface HookLabOutput {
   generatedAt: number
 }
 
+// ── Funnel Content ─────────────────────────────────────────────────────────
+// Phase 3 — full content funnel for one product. Three tiers, three pieces
+// each, totaling 9 ready-to-post bilingual captions.
+//
+//   TOFU = Awareness   — pull strangers in. Storytelling / ACC / AIDA.
+//   MOFU = Consideration — convince warm leads. FAB / 4Cs / PPPP / 5W1H.
+//   BOFU = Conversion  — close. PAS / SLAP / Hook-Value-CTA / AIDA.
+
+export type FunnelTier = 'tofu' | 'mofu' | 'bofu'
+
+export interface FunnelPiece {
+  id: string
+  tier: FunnelTier
+  /** Formula from the 14: PAS, AIDA, Storytelling, FAB, etc. */
+  formula: string
+  /** Suggested CTA strength for this piece. */
+  ctaStrength: 'soft' | 'balanced' | 'hard'
+  /** Vietnamese caption — 100-150 words, ready to post. */
+  vietnamese: string
+  /** Malaysian Malay caption — same length. */
+  malay: string
+}
+
+export interface FunnelOutput {
+  pieces: FunnelPiece[]   // 9 pieces total (3 per tier)
+  generatedAt: number
+}
+
 // ── Output ────────────────────────────────────────────────────────────────
 export interface LabBriefResult {
   /** Product link */
@@ -181,6 +209,9 @@ export interface LabBriefResult {
 
   /** Cached Hook Lab output (30 hooks across 14 formulas). Optional. */
   hookLabOutput?: HookLabOutput
+
+  /** Cached Funnel Content output (9 pieces across TOFU/MOFU/BOFU). Optional. */
+  funnelOutput?: FunnelOutput
 
   generatedAt: number
 }

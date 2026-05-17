@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { Sparkles, Save, RefreshCw, Brain, Target, Anchor, Compass } from 'lucide-react'
+import { Sparkles, Save, RefreshCw, Brain, Target, Anchor, Compass, Layers } from 'lucide-react'
 import type { ContentAngle, LabBriefResult } from '../types'
 import { getGoalById, getToneById } from '../services/presets'
 import PainPointCard from './PainPointCard'
@@ -15,11 +15,12 @@ interface OutputPanelProps {
   onOpenCaption: (angle: ContentAngle) => void
   onOpenScript: (angle: ContentAngle) => void
   onOpenHookLab: () => void
+  onOpenFunnel: () => void
 }
 
 export default function OutputPanel({
   result, isGenerating, isAlreadySaved,
-  onRegenerate, onSave, onOpenCaption, onOpenScript, onOpenHookLab,
+  onRegenerate, onSave, onOpenCaption, onOpenScript, onOpenHookLab, onOpenFunnel,
 }: OutputPanelProps) {
   const [lang, setLang] = useState<'vi' | 'my'>('vi')
 
@@ -208,6 +209,33 @@ export default function OutputPanel({
                 </div>
               )
             })}
+          </div>
+        </section>
+
+        {/* Funnel Content (Phase 3) */}
+        <section>
+          <div className="rounded-2xl border border-violet-200 bg-gradient-to-br from-emerald-50/40 via-blue-50/40 to-rose-50/40 p-4">
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest text-gray-500">
+                <Layers className="h-3 w-3" />
+                Phễu Content · TOFU / MOFU / BOFU
+              </div>
+              {result.funnelOutput && (
+                <span className="rounded-full bg-violet-100 px-2 py-0.5 text-[10px] font-semibold text-violet-700">
+                  ✅ Đã tạo · {result.funnelOutput.pieces.length} caption
+                </span>
+              )}
+            </div>
+            <p className="mb-3 text-[12px] leading-relaxed text-gray-700">
+              Sinh bộ <b>9 caption</b> trải đều 3 tầng phễu — đủ chạy campaign nhiều stage. Mỗi tầng dùng công thức + CTA phù hợp giai đoạn customer journey.
+            </p>
+            <button
+              onClick={onOpenFunnel}
+              className="flex w-full items-center justify-center gap-2 rounded-full bg-gradient-to-r from-emerald-500 via-blue-500 to-rose-500 px-4 py-2.5 text-[12px] font-bold text-white shadow-sm transition-all hover:opacity-90"
+            >
+              <Target className="h-3.5 w-3.5" />
+              {result.funnelOutput ? 'Mở Phễu Content (9 caption)' : 'Tạo Phễu Content'}
+            </button>
           </div>
         </section>
       </div>
