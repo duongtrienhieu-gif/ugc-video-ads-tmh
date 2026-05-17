@@ -110,9 +110,15 @@ function selectRefsForSection(type: SectionType, memory: VisualMemoryItem[]): st
   return []
 }
 
-/** 1:1 or portrait 2:3 — 9:16 and 16:9 are banned. */
+/** Map landing-section ratio → KIE GPT-4o supported size.
+ *  KIE only supports 1:1, 3:2 (landscape), and 2:3 (portrait).
+ *   - '1:1'  → '1:1'
+ *   - '16:9' → '3:2' (closest KIE landscape — used by offer + final-cta banners)
+ *   - '4:5' / '9:16' / anything else → '2:3' (portrait, default)
+ *  9:16 still banned at the section-spec level. */
 function toKieAspect(ratio: string | undefined): Gpt4oSize {
-  if (ratio === '1:1') return '1:1'
+  if (ratio === '1:1')  return '1:1'
+  if (ratio === '16:9') return '3:2'
   return '2:3'
 }
 

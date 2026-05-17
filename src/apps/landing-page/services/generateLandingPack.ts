@@ -64,15 +64,18 @@ Each section object:
 ═══════════════════════════════════════════════════════════════
 ASPECT RATIO LAW — READ CAREFULLY
 ═══════════════════════════════════════════════════════════════
-• ONLY two aspect ratios allowed: "1:1" (square) and "4:5" (portrait)
-• 9:16 is COMPLETELY BANNED — never use it
-• 16:9 is COMPLETELY BANNED — never use it
+• Allowed ratios depend on section type:
+    - MOST sections: ONLY "1:1" (square) OR "4:5" (portrait)
+    - BANNER sections (offer + final-cta) ONLY: "1:1" OR "16:9" (landscape)
+      → 4:5 is FORBIDDEN for offer + final-cta
+• 9:16 is COMPLETELY BANNED everywhere — never use it
+• 16:9 is BANNED everywhere EXCEPT offer + final-cta (banner sections)
 • Every section's imageAspectRatio sets the ratio for ALL its images
 • Every individual imagePrompt's aspectRatio MUST match the section imageAspectRatio
 • Per-section defaults: hero=4:5 | pain=4:5 | why-happens=1:1 | failed-solutions=4:5 |
   product-discovery=4:5 | ingredients=1:1 | mechanism=1:1 | benefits=1:1 | comparison=1:1 |
   lifestyle=4:5 | social-proof=4:5 | whatsapp-testimonials=4:5 | news-proof=4:5 |
-  before-after=4:5 | offer=4:5 | final-cta=4:5
+  before-after=4:5 | offer=16:9 | final-cta=16:9
 
 ═══════════════════════════════════════════════════════════════
 SECTION SPEC — produce EXACTLY these 17 in this order
@@ -169,17 +172,26 @@ SECTION SPEC — produce EXACTLY these 17 in this order
     • faqs: 5-7 Malaysia FAQs (halal, side effects, "berapa lama nampak hasil", COD, shipping, return, allergies)
     • imagePrompts: []
 
-16. type="offer", imageAspectRatio="4:5"
+16. type="offer", imageAspectRatio="16:9" (or "1:1") — BANNER SECTION
     • offerStrip, urgencyText, cta
     • bullets: 3-5 "✅ Bonus X (RM Y)" stack items
     • copy: value stack + COD offer
-    • 1-2 imagePrompts: promo banner with product + offer. style="Promo banner COD", aspectRatio="4:5"
-      IMPORTANT: Show EXACT PRODUCT PRICE from brief in the banner (not any invented price).
+    • 2 imagePrompts REQUIRED — both must use the SAME ratio as the section (1:1 OR 16:9, never mix):
+      - offer_01.jpg, style="Promo banner clean ecommerce", aspectRatio="<section ratio>":
+        Clean Malaysian ecommerce promo banner. The EXACT uploaded product packaging large and centered (preserve label/typography/cap/colors). Soft gradient background (warm amber → cream OR cool teal → white). Large readable Malay promo text overlay reading EXACTLY these three lines: "DISKAUN 50% HARI INI" + "COD SELURUH MALAYSIA" + "STOK TERHAD". Small trust badges (HALAL / KKM / shield icon). Native Facebook/TikTok ecommerce feel. Mobile-friendly composition.
+      - offer_02.jpg, style="Promo banner hard sell urgency", aspectRatio="<section ratio>":
+        Higher-contrast urgent Malaysian ecommerce banner. EXACT uploaded product packaging large and bold. Background darker / more saturated (deep red, navy + amber accent). Strong CTA arrow or starburst. Bold readable Malay text overlay reading EXACTLY: "PROMOSI TAMAT MALAM INI" + "JANGAN LEPASKAN PELUANG" + "RAMAI DAH CUBA". Visible CTA button shape. Native MY ecommerce hard-sell feel, not luxury, not cinematic.
+      ABSOLUTE: Show EXACT PRODUCT PRICE from brief. Use ONLY the uploaded packaging — never invent label, logo, or bottle shape. Negative: fake packaging, Western branding, luxury cinematic poster, tiny product, unreadable text, blurry overlay, random supplement bottle, overdesigned layout.
 
-17. type="final-cta", imageAspectRatio="4:5"
+17. type="final-cta", imageAspectRatio="16:9" (or "1:1") — BANNER SECTION
     • headline, subheadline, cta, urgencyText
     • copy: closing pitch
-    • 1 imagePrompt: final hero product shot. style="Final CTA hero shot", aspectRatio="4:5"
+    • 2 imagePrompts REQUIRED — both must use the SAME ratio as the section (1:1 OR 16:9, never mix):
+      - finalcta_01.jpg, style="Final CTA clean premium banner", aspectRatio="<section ratio>":
+        Last-scroll-stopper CTA banner. EXACT uploaded product packaging large and centered with a subtle soft glow halo. Clean premium gradient background (cream / pearl / soft teal). Trust feel. CTA centered. Large Malay text overlay reading EXACTLY: "KESIHATAN ANDA BERMULA HARI INI" + "CUBA SEKARANG" + "DISKAUN 50%". Mobile-friendly readable text.
+      - finalcta_02.jpg, style="Final CTA emotional urgency banner", aspectRatio="<section ratio>":
+        Emotional urgent CTA banner. EXACT uploaded product packaging large and prominent. Darker / high-contrast background (deep navy or charcoal with red accent). Stronger conversion angle. Bold visible CTA button. Large Malay text overlay reading EXACTLY: "JANGAN TUNGGU SEHINGGA MAKIN TERUK" + "BERTINDAK HARI INI" + "PROMOSI TERHAD". Native MY ecommerce feel, not cinematic.
+      ABSOLUTE: Use ONLY the uploaded packaging — never invent or alter. Native MY conversion banner aesthetic. Negative: fake packaging, Western branding, luxury cinematic poster, tiny product, unreadable text, blurry overlay, random supplement bottle, overdesigned layout.
 
 ═══════════════════════════════════════════════════════════════
 CRITICAL IMAGE PROMPT RULES
@@ -385,9 +397,12 @@ const SECTION_ORDER: SectionType[] = [
   'faq', 'offer', 'final-cta',
 ]
 
+type LockedRatio = '1:1' | '4:5' | '16:9'
+
 /** Hardcoded fallback aspect ratios — applied even when Gemini omits the field.
- *  Guarantees no 9:16 ever makes it into the pack. */
-const SECTION_ASPECT_DEFAULTS: Partial<Record<SectionType, '1:1' | '4:5'>> = {
+ *  Guarantees no 9:16 ever makes it into the pack.
+ *  offer + final-cta are BANNER sections and default to 16:9 landscape. */
+const SECTION_ASPECT_DEFAULTS: Partial<Record<SectionType, LockedRatio>> = {
   'hero':                    '4:5',
   'pain':                    '4:5',
   'why-happens':             '1:1',
@@ -402,20 +417,30 @@ const SECTION_ASPECT_DEFAULTS: Partial<Record<SectionType, '1:1' | '4:5'>> = {
   'whatsapp-testimonials':   '4:5',
   'news-proof':              '4:5',
   'before-after':            '4:5',
-  'offer':                   '4:5',
-  'final-cta':               '4:5',
+  'offer':                   '16:9',
+  'final-cta':               '16:9',
 }
+
+/** Which ratios are LEGAL for each section.
+ *  Banner sections (offer, final-cta): 1:1 or 16:9 only (no 4:5).
+ *  Everything else: 1:1 or 4:5 only (no 16:9). */
+const ALLOWED_RATIOS_BY_SECTION: Partial<Record<SectionType, ReadonlyArray<LockedRatio>>> = {
+  'offer':     ['1:1', '16:9'],
+  'final-cta': ['1:1', '16:9'],
+}
+const DEFAULT_ALLOWED: ReadonlyArray<LockedRatio> = ['1:1', '4:5']
 
 function normalizeSection(s: RawSection): LandingSection | null {
   const type = SECTION_ORDER.find((t) => t === s.type)
   if (!type) return null
 
-  // Sanitize the section-level aspect ratio — only '1:1' or '4:5' allowed.
+  // Sanitize the section-level aspect ratio against the per-section whitelist.
+  const allowed = ALLOWED_RATIOS_BY_SECTION[type] ?? DEFAULT_ALLOWED
   const rawRatio = s.imageAspectRatio as string | undefined
-  const lockedRatio: '1:1' | '4:5' =
-    rawRatio === '1:1' ? '1:1' :
-    rawRatio === '4:5' ? '4:5' :
-    SECTION_ASPECT_DEFAULTS[type] ?? '4:5'
+  const lockedRatio: LockedRatio =
+    (rawRatio === '1:1' || rawRatio === '4:5' || rawRatio === '16:9') && allowed.includes(rawRatio as LockedRatio)
+      ? (rawRatio as LockedRatio)
+      : SECTION_ASPECT_DEFAULTS[type] ?? '4:5'
 
   // Sanitize each image prompt's aspectRatio to match the section lock.
   const imagePrompts = Array.isArray(s.imagePrompts)

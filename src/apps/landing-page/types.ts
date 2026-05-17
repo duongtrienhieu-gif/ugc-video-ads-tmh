@@ -77,8 +77,10 @@ export interface LandingSection {
    *  Always included regardless of output language. */
   viTranslation?: string
   /** Section-level aspect ratio — enforced on ALL images in this section.
-   *  Only '1:1' or '4:5' allowed (9:16 is banned globally). */
-  imageAspectRatio?: '1:1' | '4:5'
+   *  '1:1' or '4:5' allowed for most sections (9:16 is banned globally).
+   *  '16:9' is allowed ONLY for banner sections (offer / final-cta) where it
+   *  better suits landscape promo banners. */
+  imageAspectRatio?: '1:1' | '4:5' | '16:9'
   headline?: string
   subheadline?: string
   cta?: string
