@@ -791,6 +791,33 @@ export function validateDiversity(blueprints: SceneBlueprint[]): DiversityReport
   }
 }
 
+// ── Z15: validator helpers — advisory mode, never reject batch ──────────
+// `validateBlueprintSchema` still exists for diagnostic use. The generator
+// uses these lighter helpers so a single bad field doesn't tank the entire
+// retry loop. Missing/invalid fields get defaulted by normalizeBlueprint.
+
+/**
+ * Loose count check used during the retry decision. Accepts the array if it
+ * has ≥50% of the requested scenes with a floor of 6. Truncated outputs
+ * (Gemini ran out of tokens mid-array) still survive as long as we got
+ * enough beats to work with.
+ */
+function hasEnoughScenes(blueprints: RawBlueprint[], requested: number): boolean {
+  const floor = Math.max(6, Math.ceil(requested * 0.5))
+  return blueprints.length >= floor
+}
+
+/** Diagnostic logger — surfaces field issues without rejecting the batch. */
+function logFieldWarnings(blueprints: RawBlueprint[], expected: number, tag: string): void {
+  const result = validateBlueprintSchema(blueprints, expected)
+  if (result) {
+    console.warn(
+      `[VALIDATION_WARN ${tag}] scene #${result.sceneIndex + 1} field "${result.field}" ` +
+      `(${result.reason}) — non-fatal, normalizer will default`,
+    )
+  }
+}
+
 // ── Main service ─────────────────────────────────────────────────────────────
 
 /** Stage of the 3-tier retry pipeline — used by the UI to show specific status. */
@@ -831,8 +858,16 @@ export async function generateStoryboard(params: {
     numScenes,
   }
 
+  console.log(`[generateStoryboard] START numScenes=${numScenes} script.words=${params.script.trim().split(/\s+/).filter(Boolean).length}`)
+
   let rawBlueprints: RawBlueprint[] | null = null
   let recoveredAtStage: StoryboardGenStage = 'attempt-1'
+
+  // Z15 token budget: 4096 was too low for 12+ scenes × 27 fields → Gemini
+  // would truncate mid-array, JSON parse would fail, retry would also fail
+  // because the prompt is even larger. 8192 is Gemini 2.5 Flash's native
+  // output ceiling — handles up to 24 scenes comfortably.
+  const STORYBOARD_OUTPUT_TOKENS = 8192
 
   // ── Tier 1: Normal call ─────────────────────────────────────────────────
   params.onStageChange?.('attempt-1')
@@ -841,17 +876,21 @@ export async function generateStoryboard(params: {
     apiKey: params.geminiKey,
     parts: [{ text: normalPrompt }],
     systemInstruction: STORYBOARD_SYSTEM,
-    maxOutputTokens: 4096,
+    maxOutputTokens: STORYBOARD_OUTPUT_TOKENS,
   })
+  console.log(`[RAW_GEMINI tier-1] length=${raw.length} preview=${raw.slice(0, 200).replace(/\s+/g, ' ')}`)
   rawBlueprints = parseStoryboardResponse(raw)
+  console.log(`[PARSED tier-1] count=${rawBlueprints?.length ?? 'null'}`)
 
-  // ── Tier 1.5: schema validation on tier-1 success ──────────────────────
-  if (rawBlueprints) {
-    const schemaErr = validateBlueprintSchema(rawBlueprints, numScenes)
-    if (schemaErr) {
-      console.warn(`[generateStoryboard] tier 1 parsed but schema failed: scene ${schemaErr.sceneIndex} field '${schemaErr.field}' (${schemaErr.reason})`)
-      rawBlueprints = null  // force retry
-    }
+  // ── Tier 1.5: scene-count check on tier-1 success ─────────────────────
+  // Z15: validator is now ADVISORY (returns warnings, doesn't reject batch).
+  // Only retry when the parsed count is too low OR parse failed entirely.
+  // Field-level issues get logged and handled by the normalizer's defaults.
+  if (rawBlueprints && !hasEnoughScenes(rawBlueprints, numScenes)) {
+    console.warn(`[VALIDATION_ERROR tier-1] count ${rawBlueprints.length} too low for requested ${numScenes} — retrying`)
+    rawBlueprints = null
+  } else if (rawBlueprints) {
+    logFieldWarnings(rawBlueprints, numScenes, 'tier-1')
   }
 
   // ── Tier 2: Reprompt with "Previous failed" prefix ──────────────────────
@@ -860,14 +899,15 @@ export async function generateStoryboard(params: {
     recoveredAtStage = 'reprompt-2'
     params.onStageChange?.('reprompt-2', 'parse/schema fail on attempt 1')
 
-    const retryPrompt = `Your previous output was NOT valid JSON or missing required fields. The response failed validation.
+    const retryPrompt = `Your previous output was NOT valid JSON or had too few scenes. The response failed validation.
 
 Return STRICT VALID JSON ONLY this time:
 - No markdown wrappers (no \`\`\`json)
 - No prose before or after
 - Escape all inner quotes with \\"
 - No literal newlines inside string values
-- Compact JSON only
+- Compact JSON only — keep every string value SHORT (<10 words)
+- The array MUST contain at least ${Math.ceil(numScenes * 0.5)} scenes (target ${numScenes})
 - Every scene MUST include: sceneId, sceneGoal, environment, composition, cameraAngle, shotType, pose, emotion, handUsage, productVisibility, backgroundType, lightingStyle, visualTone, motionIntent, overlayDensity, ctaFocus, speech, presetLabel
 - productVisibility must be exactly one of: "low" | "medium" | "high"
 
@@ -878,15 +918,16 @@ ${normalPrompt}`
       apiKey: params.geminiKey,
       parts: [{ text: retryPrompt }],
       systemInstruction: STORYBOARD_SYSTEM,
-      maxOutputTokens: 4096,
+      maxOutputTokens: STORYBOARD_OUTPUT_TOKENS,
     })
+    console.log(`[RAW_GEMINI tier-2] length=${raw.length} preview=${raw.slice(0, 200).replace(/\s+/g, ' ')}`)
     rawBlueprints = parseStoryboardResponse(raw)
-    if (rawBlueprints) {
-      const schemaErr = validateBlueprintSchema(rawBlueprints, numScenes)
-      if (schemaErr) {
-        console.warn(`[generateStoryboard] tier 2 parsed but schema failed: ${JSON.stringify(schemaErr)}`)
-        rawBlueprints = null
-      }
+    console.log(`[PARSED tier-2] count=${rawBlueprints?.length ?? 'null'}`)
+    if (rawBlueprints && !hasEnoughScenes(rawBlueprints, numScenes)) {
+      console.warn(`[VALIDATION_ERROR tier-2] count ${rawBlueprints.length} too low — falling to safe-mode`)
+      rawBlueprints = null
+    } else if (rawBlueprints) {
+      logFieldWarnings(rawBlueprints, numScenes, 'tier-2')
     }
   }
 
@@ -902,15 +943,20 @@ ${normalPrompt}`
       parts: [{ text: safePrompt }],
       // Use minimal system instruction in safe-mode — less verbose context to confuse
       systemInstruction: 'You output strict valid JSON arrays. No markdown. No prose. Plain ASCII only.',
-      maxOutputTokens: 4096,
+      maxOutputTokens: STORYBOARD_OUTPUT_TOKENS,
     })
+    console.log(`[RAW_GEMINI tier-3 safe] length=${raw.length} preview=${raw.slice(0, 200).replace(/\s+/g, ' ')}`)
     rawBlueprints = parseStoryboardResponse(raw)
-    if (rawBlueprints) {
-      const schemaErr = validateBlueprintSchema(rawBlueprints, numScenes)
-      if (schemaErr) {
-        console.error(`[generateStoryboard] SAFE-MODE also failed schema: ${JSON.stringify(schemaErr)}`)
-        rawBlueprints = null
-      }
+    console.log(`[PARSED tier-3] count=${rawBlueprints?.length ?? 'null'}`)
+    // Z15: safe-mode threshold is even looser — accept anything ≥ 4 scenes
+    // since this is the last resort. The normalizer + cinematic engine will
+    // fill in defaults for missing fields. Better to render an imperfect
+    // storyboard than hard-fail.
+    if (rawBlueprints && rawBlueprints.length < 4) {
+      console.error(`[VALIDATION_ERROR tier-3] only ${rawBlueprints.length} scenes — too few even for safe-mode`)
+      rawBlueprints = null
+    } else if (rawBlueprints) {
+      logFieldWarnings(rawBlueprints, numScenes, 'tier-3 safe-mode')
     }
   }
 
@@ -920,6 +966,11 @@ ${normalPrompt}`
   }
 
   let blueprints = rawBlueprints.map((rb, i) => normalizeBlueprint(rb, i))
+  console.log(
+    `[NORMALIZED] count=${blueprints.length} ` +
+    `subjectFocus_sample=[${blueprints.slice(0, 3).map((b) => b.subjectFocus ?? 'n/a').join(',')}] ` +
+    `visualMotif_sample=[${blueprints.slice(0, 3).map((b) => b.visualMotif ?? 'n/a').join(',')}]`,
+  )
 
   // Truncate or pad to exact numScenes
   if (blueprints.length > numScenes) blueprints = blueprints.slice(0, numScenes)
@@ -962,6 +1013,21 @@ ${normalPrompt}`
 
   // Apply VISUAL_TONE_CLAMP suffix to ensure no scene smuggles in banned terms downstream
   blueprints = blueprints.map((b) => ({ ...b, visualTone: `${b.visualTone}. ${VISUAL_TONE_CLAMP}` }))
+
+  // Z15: final diagnostic dump — confirms cinematic engine produced sane values
+  const sample = blueprints[0]
+  console.log(
+    `[FINAL_SCENE_COUNT] requested=${numScenes} actual=${blueprints.length} stage=${recoveredAtStage}`,
+  )
+  if (sample) {
+    console.log(
+      `[CINEMATIC_FIELDS scene-1] ` +
+      `subjectFocus=${sample.subjectFocus} · visualMotif=${sample.visualMotif} · ` +
+      `cameraGrammar=${sample.cameraGrammar} · cinematicIntent=${sample.cinematicIntent} · ` +
+      `energyScore=${sample.energyScore} · socialPreset=${sample.socialPreset} · ` +
+      `transitionOut=${sample.transitionOut ?? '(end)'}`,
+    )
+  }
 
   return { blueprints, diversity, recoveredAtStage }
 }
@@ -1119,9 +1185,12 @@ export function computeEnergyArc(numScenes: number): number[] {
   return arc
 }
 
-/** Per-scene energy score derived from the global arc + scene-type modifier. */
+/** Per-scene energy score derived from the global arc + scene-type modifier.
+ *  Z15 safety: clamps + Number.isFinite guards so a malformed arc never
+ *  produces NaN or Infinity that would crash downstream consumers. */
 function assignEnergyScore(b: SceneBlueprint, idx: number, arc: number[]): number {
-  const base = arc[idx] ?? 60
+  const baseRaw = arc[idx]
+  const base = Number.isFinite(baseRaw) ? (baseRaw as number) : 60
 
   // Scene-type modifiers — bump or dampen the base curve
   let modifier = 0
@@ -1134,7 +1203,9 @@ function assignEnergyScore(b: SceneBlueprint, idx: number, arc: number[]): numbe
   if (b.sceneType === 'cta')                                     modifier += 10
   if (b.subjectFocus === 'product')                              modifier += 3
 
-  return Math.max(0, Math.min(100, base + modifier))
+  const result = base + modifier
+  if (!Number.isFinite(result)) return 50  // hard fallback per spec
+  return Math.max(0, Math.min(100, result))
 }
 
 // ── Transition rules — scene-pair-aware ──────────────────────────────────

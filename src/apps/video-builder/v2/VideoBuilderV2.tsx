@@ -413,6 +413,10 @@ export default function VideoBuilderV2({ onSwitchToV1 }: Props) {
     // clamp(ceil(words/35), 8, 24). A 60-word script → 8 scenes; 500 → 15;
     // 800 → 23; very long → capped at 24.
     const dynamicSceneCount = computeSceneCount(state.inputs.script)
+    console.log(
+      `[CINEMATIC] dynamicSceneCount=${dynamicSceneCount} ` +
+      `script.words=${state.inputs.script.trim().split(/\s+/).filter(Boolean).length}`,
+    )
     try {
       const { blueprints, diversity, recoveredAtStage } = await generateStoryboard({
         geminiKey: geminiApiKey,
