@@ -1,10 +1,12 @@
 import { useState, useEffect } from 'react'
-import { Loader2, LayoutTemplate, Save, Check, RotateCcw, Trash2, FolderOpen, ChevronDown, ImageIcon, Sparkles, AlertTriangle, Clock, Zap, RefreshCw, FilePlus, FileDown, Copy as CopyIcon, FolderInput } from 'lucide-react'
+import { Loader2, LayoutTemplate, Save, Check, RotateCcw, Trash2, FolderOpen, ChevronDown, ImageIcon, Sparkles, AlertTriangle, Clock, Zap, RefreshCw, FilePlus, FileDown, Copy as CopyIcon, FolderInput, Cpu, LayoutGrid } from 'lucide-react'
 import type { LandingPagePack, SavedLandingPack } from '../types'
 import type { ImageProgress } from '../LandingPageAI'
 import SectionCard from './SectionCard'
 import { useLandingPageStore } from '../store'
 import { useAppStore } from '../../../stores/appStore'
+import { isHybridRenderEnabled } from '../lib/featureFlags'
+import { planRenderPack } from '../services/renderPlanner'
 
 /** KIE GPT-image-1 ~ 6 credits per call. Drives all cost hints in this module. */
 const CREDIT_PER_IMAGE = 6
@@ -249,6 +251,7 @@ function ImageGenerationBar({
           {' '}· <span className="font-medium text-amber-700">1 ảnh ≈ {CREDIT_PER_IMAGE} credit</span>
           {pack.visualMemory.length > 0 && ` · ${pack.visualMemory.length} ảnh tham chiếu`}
         </p>
+        <HybridRenderMetrics pack={pack} />
       </div>
 
       <div className="flex flex-wrap items-center gap-1.5">
@@ -293,6 +296,46 @@ function ImageGenerationBar({
               : `Sinh tất cả ${totalImages} ảnh (~${estCreditsAll} credit)`}
         </button>
       </div>
+    </div>
+  )
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// HybridRenderMetrics — Phase 8 chip
+// Shows AI render count vs template-composed vs derived for this pack
+// when the hybrid render flag is on. Off → renders nothing.
+// ─────────────────────────────────────────────────────────────────────
+function HybridRenderMetrics({ pack }: { pack: LandingPagePack }) {
+  if (!isHybridRenderEnabled()) return null
+  const plan = planRenderPack(pack)
+  const { stats } = plan
+  const aiOnlyCost = stats.total * CREDIT_PER_IMAGE
+  const hybridCost = stats.kieCallsRequired * CREDIT_PER_IMAGE
+  const saved = aiOnlyCost - hybridCost
+  const savedPct = aiOnlyCost > 0 ? Math.round((saved / aiOnlyCost) * 100) : 0
+
+  return (
+    <div className="mt-1.5 flex flex-wrap items-center gap-2 text-[10px]">
+      <span className="flex items-center gap-1 rounded-full border border-violet-200 bg-violet-50 px-2 py-0.5 font-semibold text-violet-700">
+        <Cpu className="h-2.5 w-2.5" />
+        Hybrid mode
+      </span>
+      <span className="text-amber-700">
+        <strong>{stats.aiFullCount}</strong> AI render
+      </span>
+      <span className="text-cyan-700">
+        + <strong>{stats.reusableCount}</strong> reusable
+      </span>
+      <span className="text-emerald-700 flex items-center gap-0.5">
+        <LayoutGrid className="h-2.5 w-2.5" />
+        <strong>{stats.templateComposedCount}</strong> template
+      </span>
+      <span className="text-pink-700">
+        <strong>{stats.derivedCount}</strong> derived
+      </span>
+      <span className="ml-auto rounded-full bg-emerald-50 px-2 py-0.5 font-bold text-emerald-700 border border-emerald-200">
+        💰 Tiết kiệm ~{saved} credit (-{savedPct}%)
+      </span>
     </div>
   )
 }
