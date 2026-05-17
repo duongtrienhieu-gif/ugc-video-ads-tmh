@@ -24,6 +24,17 @@ import type {
   MotionBlueprint, ContinuityGroup, TimelineCut, EditorialBlueprint,
   CameraGrammar,
 } from '../types'
+// Z21 — coverage + timeline engines layered on top of the Z17 foundation
+import {
+  deriveCoverageShots as ceDeriveCoverageShots,
+  enforceCoverageDiversity as ceEnforceCoverageDiversity,
+} from './coverageEngine'
+import {
+  recommendCoverageShotCount as tlRecommendCoverageShotCount,
+  buildTimelineCuts as tlBuildTimelineCuts,
+  buildEnergyCurve as tlBuildEnergyCurve,
+  summarizePhaseDensities as tlSummarizePhaseDensities,
+} from './timelineAssembler'
 
 // ═════════════════════════════════════════════════════════════════════════
 // P1 — VISUAL ROLE ENGINE
@@ -547,6 +558,7 @@ export function assembleTimeline(
       coverageShotId: shot.shotId,
       masterSceneId: shot.masterSceneId,
       startSec: round1(cursorSec),
+      endSec: round1(cursorSec + duration),
       durationSec: round1(duration),
       visualRole: shot.visualRole,
       energy: energySample,
@@ -663,47 +675,70 @@ export function buildEditorialBlueprint(
   // ── 4. Build motion blueprint per master ─────────────────────────────
   masters = masters.map((m) => ({ ...m, motion: m.motion ?? buildMotionForMaster(m) }))
 
-  // ── 5. Derive coverage shots ──────────────────────────────────────────
+  // ── 5. Z21 — Derive coverage via V2 templates (6 per role) ──────────
+  // Auto-determine shot count per master from voice duration target.
+  // Spec: 15s → 8-12 · 30s → 14-20 · 60s → 24-40 shots.
+  const shotCountRec = tlRecommendCoverageShotCount(options.voiceDurationSec)
+  const shotsPerMasterMax = Math.max(3, Math.ceil(shotCountRec.max / Math.max(1, masters.length)))
+
   const coverageShots: CoverageShot[] = []
   let shotIdCursor = 1
   for (const master of masters) {
-    const shots = deriveCoverageShots(master, shotIdCursor, {
+    const shots = ceDeriveCoverageShots(master, shotIdCursor, {
       minShots: options.minShotsPerMaster ?? 3,
-      maxShots: options.maxShotsPerMaster ?? 5,
+      maxShots: options.maxShotsPerMaster ?? Math.min(6, shotsPerMasterMax),
     })
     coverageShots.push(...shots)
     shotIdCursor += shots.length
+    console.log(`[COVERAGE] scene-${master.sceneId} (${master.visualRole}) generated ${shots.length} coverage shots`)
   }
 
+  // ── 5b. Z21 — Enforce coverage diversity (similarity ≥ 0.72 → mutate) ─
+  const diverseShots = ceEnforceCoverageDiversity(coverageShots, 0.72)
+
   // ── 6. Assign continuity groups ──────────────────────────────────────
-  const continuityGroups = assignContinuityGroups(masters, coverageShots)
+  const continuityGroups = assignContinuityGroups(masters, diverseShots)
 
-  // ── 7. Assemble the timeline ─────────────────────────────────────────
-  const timelineCuts = assembleTimeline(coverageShots, options.voiceDurationSec)
+  // ── 7. Z21 — Assemble timeline via phase-aware assembler ─────────────
+  const timelineCuts = tlBuildTimelineCuts(diverseShots, {
+    voiceDurationSec: options.voiceDurationSec,
+  })
 
-  // ── 8. Build the cut-to-cut transition graph ─────────────────────────
+  // ── 8. Build the cut-to-cut transition graph (Z17 — back-compat) ────
   const transitionGraph = buildTransitionGraph(timelineCuts)
 
   // Parallel motion blueprints array
-  const motionBlueprints = coverageShots.map((s) => s.motion)
+  const motionBlueprints = diverseShots.map((s) => s.motion)
 
-  // Energy curve at second-granularity
-  const energyCurve = computeTimelineEnergyCurve(options.voiceDurationSec)
+  // Energy curve at second-granularity (Z21 refined arc)
+  const energyCurve = tlBuildEnergyCurve(options.voiceDurationSec)
+
+  // Estimated total duration = sum of cut durations
+  const estimatedDurationSec = timelineCuts.reduce((sum, c) => sum + c.durationSec, 0)
 
   console.log(
-    `[editorial] BLUEPRINT BUILT — ` +
-    `${masters.length} masters → ${coverageShots.length} coverage shots → ${timelineCuts.length} timeline cuts ` +
-    `(voice=${options.voiceDurationSec}s, groups=${continuityGroups.length})`,
+    `[TIMELINE] ${options.voiceDurationSec}s voice → ${timelineCuts.length} cuts ` +
+    `(estimated ${estimatedDurationSec.toFixed(1)}s, ${diverseShots.length} coverage shots, ` +
+    `${masters.length} masters, ${continuityGroups.length} continuity groups)`,
+  )
+
+  // Phase density summary
+  const phaseSummary = tlSummarizePhaseDensities(timelineCuts)
+  console.log(
+    `[PACING] hook_density=${phaseSummary.hook} · body_density=${phaseSummary.body} · ` +
+    `education_density=${phaseSummary.education} · recovery_density=${phaseSummary.recovery} · ` +
+    `cta_density=${phaseSummary.cta}`,
   )
 
   return {
     masterScenes: masters,
-    coverageShots,
+    coverageShots: diverseShots,
     timelineCuts,
     motionBlueprints,
     energyCurve,
     continuityGroups,
     transitionGraph,
     voiceDurationSec: options.voiceDurationSec,
+    estimatedDurationSec,
   }
 }

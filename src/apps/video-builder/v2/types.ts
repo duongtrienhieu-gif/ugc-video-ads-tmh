@@ -386,6 +386,54 @@ export type EditorialTransition =
   | 'blur_wipe'        // → infographic / education
   | 'flash'            // → CTA impact
 
+// ═════════════════════════════════════════════════════════════════════════
+// Z21 — COVERAGE ENGINE + TIMELINE ASSEMBLER (P18)
+// ═════════════════════════════════════════════════════════════════════════
+//
+// Refinement of Z17 EditorialIntelligenceLayer with:
+//   • 10 explicit editor-semantic coverage roles (CoverageShotRole)
+//   • Editor-style cut taxonomy (EditorialCutType)
+//   • Phase-aware pacing density
+//   • Phase-aware timeline phases for cut density rules
+//
+// Coexists with Z17 fields — CoverageShot.shotType / TimelineCut.transition
+// stay for backward compat; new coverageRole / cutType / phase fields layer
+// editor-semantic meaning on top.
+
+/** Editor-style coverage shot role — the semantic purpose of THIS shot
+ *  within the parent master scene's coverage set. Drives template lookup
+ *  + diversity rules. */
+export type CoverageShotRole =
+  | 'closeup'         // tight emotional crop
+  | 'macro'           // extreme detail (product label, capsule cross-section)
+  | 'wide'            // establishing / environment shot
+  | 'insert'          // brief contextual insert (laptop screen, phone)
+  | 'reaction'        // face / emotion reaction shot
+  | 'hand_detail'     // hand interaction (holding, pointing, scooping)
+  | 'ingredient'      // raw ingredient macro / capsule split
+  | 'product_macro'   // hero product macro shot
+  | 'environment'     // setting / room / outdoor context
+  | 'motion_anchor'   // implied motion (rotation, particles, spin)
+
+/** Editor-style cut type — captures the EDITORIAL INTENT of the transition
+ *  (not just the visual effect). Sister field to existing EditorialTransition
+ *  which captures the visual FX kind. Both stored on TimelineCut. */
+export type EditorialCutType =
+  | 'hard'      // basic hard cut — default
+  | 'match'     // match cut — visual similarity bridge between shots
+  | 'smash'     // smash cut — aggressive contrast (pain → discovery)
+  | 'dissolve'  // crossfade — emotional / recovery
+  | 'whip'      // whip pan — energetic transition
+  | 'flash'     // flash impact — → CTA
+
+/** Pacing density at a timeline phase — drives cut duration target. */
+export type EditorialPacingDensity = 'high' | 'medium' | 'low'
+
+/** Logical phase a cut belongs to — used by the timeline assembler
+ *  to pick the right pacing density. Phases roughly map to a typical
+ *  60s UGC ad: 0-8% hook, 8-65% body, 65-80% breath, 80-100% CTA. */
+export type EditorialPhase = 'hook' | 'body' | 'education' | 'recovery' | 'cta'
+
 /** Motion blueprint per coverage shot — drives the downstream video animator
  *  (Kling / Veo / Runway). Static keyframe becomes an animated cut. */
 export interface MotionBlueprint {
@@ -411,7 +459,7 @@ export interface CoverageShot {
   shotId: number
   /** sceneId of the master scene this shot derives from */
   masterSceneId: number
-  /** Kind of coverage this is */
+  /** Kind of coverage this is — Z17 field */
   shotType: CoverageShotType
   /** Short English description — feeds the downstream renderer's prompt */
   shotDescription: string
@@ -423,6 +471,20 @@ export interface CoverageShot {
   durationSec: number
   /** Visual role inherited from the master scene */
   visualRole: VisualRole
+  // ── Z21 fields ───────────────────────────────────────────────────
+  /** Editor-semantic role (closeup / macro / wide / hand_detail / etc) */
+  coverageRole?: CoverageShotRole
+  /** Prompt DELTA from the master — what changes vs the master scene.
+   *  Used by the renderer phase to derive per-shot prompts without
+   *  re-running Gemini. */
+  promptDelta?: string
+  /** Camera grammar specific to this coverage shot (overrides master's). */
+  cameraGrammar?: CameraGrammar
+  /** Editorial transition INTO this shot (visual effect). */
+  transitionOut?: EditorialTransition
+  /** Explicit parent reference — same as masterSceneId but as string id
+   *  for hash-style lookup. */
+  derivedFrom?: string
 }
 
 /** A continuity bundle — group of shots that should share identity. Editor
@@ -456,14 +518,24 @@ export interface TimelineCut {
   masterSceneId: number
   /** Start time in seconds (absolute, from t=0) */
   startSec: number
+  /** Z21: end time in seconds (= startSec + durationSec). Convenience for
+   *  the renderer phase. */
+  endSec: number
   /** Duration of this cut in seconds */
   durationSec: number
   /** Visual role of this cut */
   visualRole: VisualRole
   /** Energy 0-100 at this point in the curve (smoothed sample) */
   energy: number
-  /** Transition INTO this cut */
+  /** Transition INTO this cut (visual FX kind) */
   transition: EditorialTransition
+  /** Z21: editor-semantic cut intent (separate from visual transition).
+   *  Renderer may use either; transition for FX rendering, cutType for
+   *  pacing audit + analytics. */
+  cutType?: EditorialCutType
+  /** Z21: which timeline phase this cut belongs to. Drives the assembler's
+   *  density choice for this cut + adjacent cuts. */
+  phase?: EditorialPhase
 }
 
 /** Top-level editorial intelligence output. Consumed by the future renderer
@@ -477,6 +549,10 @@ export interface EditorialBlueprint {
   continuityGroups: ContinuityGroup[]
   transitionGraph: Array<{ fromCutId: number; toCutId: number; type: EditorialTransition }>
   voiceDurationSec: number
+  /** Z21: estimated TOTAL duration of the final assembled timeline (sum
+   *  of cut durations). May differ slightly from voiceDurationSec if the
+   *  assembler had to round cut counts. */
+  estimatedDurationSec?: number
 }
 
 export interface SceneBlueprint {
