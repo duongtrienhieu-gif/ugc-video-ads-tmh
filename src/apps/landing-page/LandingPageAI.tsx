@@ -10,6 +10,10 @@ import AutoSaveIndicator from '../../components/AutoSaveIndicator'
 import InputPanel from './components/InputPanel'
 import OutputPanel from './components/OutputPanel'
 import { useLandingPageStore } from './store'
+// Phase 3 — side-effect import: registers window.__testWhatsappComposer for
+// DevTools authenticity testing. Does NOT change render path — composer is
+// never invoked from generateImages.ts in stable-render-v1.
+import './services/composers/whatsappComposer'
 
 // ── Session-persistence snapshot shape ─────────────────────────────────────
 // Phase R3 pilot. Persisted across F5 / refresh / browser-close. Stores only
