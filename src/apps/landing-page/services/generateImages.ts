@@ -83,13 +83,30 @@ const SECTION_PRIORITY: Record<SectionType, number> = {
 }
 
 // ─────────────────────────────────────────────────────────────────────────
-// PRODUCT IDENTITY LOCK — prepended whenever product refs are passed.
+// PRODUCT IDENTITY LOCK — Z22 NARROW LOCK POLICY.
+//
+// Previously this prefix locked too much (composition, lighting, hand, room).
+// Result: KIE rendered every image with the same hand pose / same background /
+// same bottle angle → obvious AI-clone look that users spot instantly.
+//
+// New policy: lock ONLY the product identity (label / logo / bottle shape).
+// EXPLICITLY allow every other axis to vary so the section feels like real
+// customer photos taken on different days in different rooms.
 // ─────────────────────────────────────────────────────────────────────────
 const PRODUCT_IDENTITY_PREFIX =
-  'CRITICAL — match the reference product image EXACTLY: ' +
-  'preserve the same bottle/packaging shape, label typography, cap style, ' +
-  'packaging colors, logo placement and proportions. ' +
-  'Do NOT redesign, alter, or replace the product. '
+  'PRODUCT IDENTITY (NARROW LOCK) — match the reference image on these axes ONLY:\n' +
+  '  • Brand name TEXT on the label (exact letters, exact spelling)\n' +
+  '  • Label typography, label colors, label graphic layout\n' +
+  '  • Bottle/jar/sachet SHAPE + cap style + packaging ratio\n' +
+  '  • Logo design and placement on the packaging\n' +
+  'EXPLICITLY VARY (do NOT copy from any reference or previous render):\n' +
+  '  • Background / room / surface / props\n' +
+  '  • Hand pose, body position, who is holding the product (if anyone)\n' +
+  '  • Lighting direction, color temperature, mood\n' +
+  '  • Camera angle, framing, depth-of-field\n' +
+  '  • Bottle rotation and angle relative to camera\n' +
+  'Do NOT invent a fake brand name (no "OXEVIN" / "DOSPRO" / "VITALEX" / etc.) — use the exact brand from the reference.\n' +
+  'Do NOT redesign the label even slightly.\n'
 
 // ─────────────────────────────────────────────────────────────────────────
 // SECTION-1 HERO CHARACTER LOCK — Malaysian Muslim hijab women only.
@@ -102,6 +119,121 @@ const HERO_CHARACTER_LOCK =
   'authentic ecommerce-native UGC aesthetic. ' +
   'STRICTLY NO men, NO Western/Caucasian faces, NO Chinese influencer-style faces, ' +
   'NO Korean/Japanese aesthetic. Same ethnicity and hijab style across hero variants. '
+
+// ─────────────────────────────────────────────────────────────────────────
+// Z22 — DIVERSITY ENGINE: 4 axis pools rotated deterministically per image.
+//
+// For a section with N images, this picks N DIFFERENT combinations of
+// (background, camera angle, hand pose, lighting) by hashing
+// `${sectionType}-${imageIdx}-${variationSeed}`. KIE receives an explicit
+// "shot this scene at <angle>, in <background>, with <hand>, in <lighting>"
+// directive per image so latents diverge.
+//
+// Pools are deliberately wide. The hash-mod indexing guarantees no two
+// adjacent images in the same section pick the same axis value.
+// ─────────────────────────────────────────────────────────────────────────
+
+const BG_POOL = [
+  'home kitchen counter with morning sunlight',
+  'wooden dining table with breakfast nearby',
+  'minimal white desk with notebook',
+  'living room sofa corner with cushions',
+  'cafe table with coffee cup beside',
+  'marble bathroom countertop with towel',
+  'bedroom bedside with plant and soft daylight',
+  'home office desk with laptop edge in frame',
+  'balcony garden corner with leaves softly out of focus',
+  'sunlit windowsill with sheer curtain',
+  'restaurant table with food blurred behind',
+  'car passenger seat with daylight through window',
+  'picnic blanket outdoor warm light',
+  'shelf-edge with books and small plant',
+  'open shopfront with natural ambient light',
+]
+
+const ANGLE_POOL = [
+  'iPhone selfie eye-level',
+  'slight low-angle 30° hand-held',
+  '3/4 angle waist-height',
+  'top-down flat-lay',
+  'side-profile slice with shallow DOF',
+  'over-the-shoulder POV',
+  'first-person reach toward camera',
+  'mirror reflection shot',
+  'macro close-up of label',
+  'wide environmental lifestyle shot',
+]
+
+const HAND_POOL = [
+  'one hand cradling the product at chest',
+  'both hands lifting the product to face',
+  'pointing index finger at the label',
+  'product resting on palm of open hand',
+  'no hands — product on a real surface',
+  'hand on belly / chest area, product beside',
+  'reaching toward camera with product',
+  'product gripped at the neck with thumb on cap',
+]
+
+const LIGHT_POOL = [
+  'soft window daylight from left',
+  'warm kitchen-side glow with golden hour bounce',
+  'overhead noon natural light',
+  'cool morning bathroom diffused light',
+  'dim cozy table-lamp evening',
+  'mixed window + ceiling light',
+  'soft overcast diffused window light',
+  'late afternoon side-warmth from right window',
+]
+
+/** Tiny deterministic hash → index into a pool. */
+function hashPick<T>(pool: T[], seed: string, salt: number): T {
+  let h = 0
+  const s = `${seed}::${salt}`
+  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0
+  return pool[h % pool.length]
+}
+
+/** 6-char random token appended to every prompt to force latent drift. */
+function makeVariationSeed(): string {
+  return Math.random().toString(36).slice(2, 8)
+}
+
+/** Z22 — per-image diversity directive.
+ *  Suppressed for `before-after` (which has its own same-scene lock spec
+ *  written by Gemini into the imagePrompt body). */
+function buildDiversityDirective(job: ImageJob): string {
+  if (job.section.type === 'before-after') return ''
+  if (!job.prompt.variationSeed) job.prompt.variationSeed = makeVariationSeed()
+  const seed = `${job.section.type}-${job.imageIdx}-${job.prompt.variationSeed}`
+  const bg     = hashPick(BG_POOL,    seed, 0)
+  const angle  = hashPick(ANGLE_POOL, seed, 1)
+  const hand   = hashPick(HAND_POOL,  seed, 2)
+  const light  = hashPick(LIGHT_POOL, seed, 3)
+  return (
+    'AUTHENTICITY DIRECTIVE — render this as if a DIFFERENT person took this photo on a DIFFERENT day in a DIFFERENT room than any other image in the pack:\n'
+    + `  • Background: ${bg}\n`
+    + `  • Camera angle: ${angle}\n`
+    + `  • Hand pose: ${hand}\n`
+    + `  • Lighting: ${light}\n`
+    + `  • Fresh latent seed: ${job.prompt.variationSeed}\n`
+    + '  • Render as an INDEPENDENT phone photo — do NOT echo composition, hand pose, or background from any reference image; only the PRODUCT identity is copied from the reference.'
+  )
+}
+
+/** Negative-prompt block listing every AI-clone failure mode we want KIE to avoid. */
+const NEGATIVE_PROMPT_BLOCK =
+  'AVOID (hard negatives — these make the image look AI-generated and fail the ad):\n'
+  + '  • Duplicate background or same room repeated across renders\n'
+  + '  • Same hand pose / same finger arrangement / same body position\n'
+  + '  • Same lighting direction / same time of day across all images\n'
+  + '  • Same camera angle / same composition twice in a row\n'
+  + '  • Product rendered as a cut-out PNG pasted over the background (floating packshot)\n'
+  + '  • Two product variants stacked or composited into one frame\n'
+  + '  • Cinematic / studio / editorial / luxury aesthetic (we want phone-quality UGC)\n'
+  + '  • Hyper-perfect skin, hyper-perfect lighting, AI-glossy texture\n'
+  + '  • Symmetrical perfect composition (real phone photos are slightly imperfect)\n'
+  + '  • Fake brand substitution or invented label text'
 
 /** Pick the asset refs (if any) to pass into KIE filesUrl for this section. */
 function selectRefsForSection(type: SectionType, memory: VisualMemoryItem[]): string[] {
@@ -164,7 +296,15 @@ function buildFinalPrompt(job: ImageJob, hasProductRefs: boolean): string {
   if (job.section.type === 'hero') parts.push(HERO_CHARACTER_LOCK)
   if (hasProductRefs) parts.push(PRODUCT_IDENTITY_PREFIX)
   parts.push(job.prompt.prompt)
-  return parts.join('')
+
+  // Z22 — per-image diversity directive (suppressed for before-after)
+  const diversity = buildDiversityDirective(job)
+  if (diversity) parts.push(diversity)
+
+  // Z22 — hard negatives appended on every render
+  parts.push(NEGATIVE_PROMPT_BLOCK)
+
+  return parts.join('\n\n')
 }
 
 // ─────────────────────────────────────────────────────────────────────────

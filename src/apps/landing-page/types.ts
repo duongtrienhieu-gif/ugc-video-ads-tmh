@@ -54,6 +54,10 @@ export interface ImagePrompt {
   generatedAssetRef?: string
   status?: ImagePromptStatus
   error?: string
+  /** Z22 — 6-char token seeding the per-image diversity directive. Forces
+   *  a unique prompt hash so KIE produces a different latent. Stable across
+   *  manual regens (minted once per ImagePrompt). */
+  variationSeed?: string
 }
 
 export interface FaqItem {
