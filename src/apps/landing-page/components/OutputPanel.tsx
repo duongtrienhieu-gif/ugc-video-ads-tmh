@@ -106,9 +106,15 @@ export default function OutputPanel({
   // ── Result state ──────────────────────────────────────────────────
   return (
     <div className="flex h-full flex-col overflow-hidden">
-      {/* Top action bar */}
+      {/* Top action bar — 3-zone grid so the "Lưu LandingPage" button sits
+          visibly in the CENTER on lg+ screens. The right zone is a fixed
+          19rem spacer that reserves room for the global Gemini/KIE badges
+          (which live in App.tsx at position absolute right-4 top-3 z-50)
+          so they no longer cover the save button. Below lg the layout
+          collapses to a single column. */}
       <div className="shrink-0 border-b border-black/8 bg-gradient-to-r from-violet-50/40 to-purple-50/30 px-5 py-3">
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <div className="grid grid-cols-1 gap-2 lg:grid-cols-[minmax(0,1fr)_auto_19rem] lg:items-center">
+          {/* Zone 1 — title + sync badge + meta */}
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-1.5">
               <p className="truncate text-sm font-bold text-gray-900">
@@ -129,13 +135,15 @@ export default function OutputPanel({
               {loadedFromId && ' · ✓ Tự đồng bộ project'}
             </p>
           </div>
-          <div className="flex flex-wrap gap-1.5">
+
+          {/* Zone 2 — action buttons (CENTERED on lg+) */}
+          <div className="flex flex-wrap items-center justify-center gap-1.5">
             {!loadedFromId && (
               <input
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
                 placeholder={`vd: "${pack.productName} v1"`}
-                className="rounded-lg border border-black/10 bg-white px-2 py-1.5 text-[11px] outline-none focus:border-violet-500/40"
+                className="w-44 rounded-lg border border-black/10 bg-white px-2 py-1.5 text-[11px] outline-none focus:border-violet-500/40"
               />
             )}
             {loadedFromId && onNewProject && (
@@ -158,7 +166,7 @@ export default function OutputPanel({
             <button
               onClick={handleSave}
               disabled={saving || saved}
-              className={`flex items-center gap-1 rounded-full px-4 py-1.5 text-[11px] font-bold transition-colors ${
+              className={`flex items-center gap-1 rounded-full px-4 py-1.5 text-[11px] font-bold shadow-sm transition-colors ${
                 saved
                   ? 'bg-emerald-500/15 text-emerald-700'
                   : loadedFromId
@@ -170,9 +178,14 @@ export default function OutputPanel({
                 ? <><Check className="h-3 w-3" /> Đã lưu</>
                 : loadedFromId
                   ? <><Save className="h-3 w-3" /> Lưu thay đổi</>
-                  : <><Save className="h-3 w-3" /> Lưu thành project</>}
+                  : <><Save className="h-3 w-3" /> Lưu LandingPage</>}
             </button>
           </div>
+
+          {/* Zone 3 — spacer reserving room for the global Gemini/KIE badges
+              (App.tsx absolute right-4 top-3 z-50). Only rendered on lg+
+              since badges hide on smaller breakpoints. */}
+          <div className="hidden lg:block" aria-hidden="true" />
         </div>
       </div>
 
