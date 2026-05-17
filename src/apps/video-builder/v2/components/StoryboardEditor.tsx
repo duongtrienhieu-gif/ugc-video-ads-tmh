@@ -9,6 +9,7 @@ import { ArrowLeft, ArrowRight, RefreshCw, ChevronDown, AlertTriangle, CheckCirc
 import type { SceneBlueprint, DiversityReport } from '../types'
 import { SCENE_PRESETS } from '../services/scenePresets'
 import { blueprintFromPreset } from '../services/sceneBlueprint'
+import CinematicDebugPanel from './CinematicDebugPanel'
 
 interface Props {
   blueprints: SceneBlueprint[]
@@ -21,6 +22,8 @@ interface Props {
   /** Module 7 cost-control: skip QC retry per scene for cheaper queue */
   lowCostMode: boolean
   onLowCostModeChange: (v: boolean) => void
+  /** Z14: original script — fed to the debug panel for the export hash. */
+  script?: string
 }
 
 // ── Vietnamese label mapping ────────────────────────────────────────────────
@@ -356,7 +359,7 @@ function DiversityPanel({ report }: { report: DiversityReport }) {
 // ── Main editor ─────────────────────────────────────────────────────────────
 export default function StoryboardEditor({
   blueprints, diversity, isGenerating, onRegenerate, onUpdateScene, onBack, onContinue,
-  lowCostMode, onLowCostModeChange,
+  lowCostMode, onLowCostModeChange, script,
 }: Props) {
   return (
     <div className="flex h-full flex-col overflow-hidden">
@@ -400,6 +403,9 @@ export default function StoryboardEditor({
         ) : (
           <div className="space-y-3">
             {diversity && <DiversityPanel report={diversity} />}
+            {/* Z14: Cinematic Debug + Diagnostics — scene table, warnings,
+                energy curve, export JSON. Collapsible (closed by default). */}
+            <CinematicDebugPanel blueprints={blueprints} scriptSource={script} />
             {blueprints.map((sc, i) => (
               <SceneCard
                 key={sc.sceneId}

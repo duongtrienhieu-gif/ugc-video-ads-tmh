@@ -779,6 +779,7 @@ export default function VideoBuilderV2({ onSwitchToV1 }: Props) {
             onContinue={handleContinueAfterStoryboard}
             lowCostMode={lowCostMode}
             onLowCostModeChange={setLowCostMode}
+            script={state.inputs.script}
           />
         )}
 
