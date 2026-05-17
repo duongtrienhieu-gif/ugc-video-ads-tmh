@@ -14,11 +14,12 @@ interface OutputPanelProps {
   onSave: () => void
   onOpenCaption: (angle: ContentAngle) => void
   onOpenScript: (angle: ContentAngle) => void
+  onOpenHookLab: () => void
 }
 
 export default function OutputPanel({
   result, isGenerating, isAlreadySaved,
-  onRegenerate, onSave, onOpenCaption, onOpenScript,
+  onRegenerate, onSave, onOpenCaption, onOpenScript, onOpenHookLab,
 }: OutputPanelProps) {
   const [lang, setLang] = useState<'vi' | 'my'>('vi')
 
@@ -181,9 +182,19 @@ export default function OutputPanel({
 
         {/* Hook Candidates */}
         <section>
-          <div className="mb-2 flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest text-gray-500">
-            <Sparkles className="h-3 w-3" />
-            7 hook ứng viên · phân theo góc
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest text-gray-500">
+              <Sparkles className="h-3 w-3" />
+              7 hook ứng viên · phân theo góc
+            </div>
+            <button
+              onClick={onOpenHookLab}
+              className="flex items-center gap-1.5 rounded-full bg-gradient-to-r from-violet-600 to-purple-600 px-3 py-1 text-[11px] font-bold text-white shadow-sm transition-all hover:from-violet-700 hover:to-purple-700"
+              title={result.hookLabOutput ? 'Mở Hook Lab — 30 hook đã tạo' : 'Mở Hook Lab — sinh 30 hook'}
+            >
+              <Sparkles className="h-3 w-3" />
+              {result.hookLabOutput ? '🎣 Hook Lab (30)' : '🎣 Mở Hook Lab'}
+            </button>
           </div>
           <div className="space-y-1.5">
             {([1, 2, 3] as const).map((angleIdx) => {

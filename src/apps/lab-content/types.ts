@@ -124,6 +124,32 @@ export type AngleOutputs = Record<string, {
   script?: ScriptOutput
 }>
 
+// ── Hook Lab ──────────────────────────────────────────────────────────────
+// Phase 2 — generates 30 hooks distributed across the 14 copywriting
+// formulas. Each hook is tagged with formula + which angle it belongs to
+// + 1-2 psychology biases + 1 NLP technique. UI groups by formula.
+
+export interface LabHook {
+  id: string
+  /** One of the 14 formula tags (PAS, AIDA, BAB, ...). */
+  formula: string
+  /** Which angle (1/2/3) from the brief this hook belongs to. */
+  angleIndex: 1 | 2 | 3
+  /** 1-2 psychology biases the hook fires. */
+  psychology: string[]
+  /** 1 NLP technique used in the hook (optional). */
+  nlpTechnique?: string
+  /** Vietnamese hook — 1-2 lines. */
+  vietnamese: string
+  /** Malaysian Malay hook. */
+  malay: string
+}
+
+export interface HookLabOutput {
+  hooks: LabHook[]
+  generatedAt: number
+}
+
 // ── Output ────────────────────────────────────────────────────────────────
 export interface LabBriefResult {
   /** Product link */
@@ -152,6 +178,9 @@ export interface LabBriefResult {
 
   /** Cached per-angle caption + script outputs. Empty by default. */
   angleOutputs: AngleOutputs
+
+  /** Cached Hook Lab output (30 hooks across 14 formulas). Optional. */
+  hookLabOutput?: HookLabOutput
 
   generatedAt: number
 }

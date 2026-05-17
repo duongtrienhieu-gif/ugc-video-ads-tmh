@@ -8,11 +8,13 @@ import type {
 import { generateBrief } from './services/generateBrief'
 import { generateLabCaption } from './services/generateLabCaption'
 import { generateLabScript } from './services/generateLabScript'
+import { generateHookLab } from './services/generateHookLab'
 import { getGoalById } from './services/presets'
 import { useLabContentStore } from './store'
 import InputPanel from './components/InputPanel'
 import OutputPanel from './components/OutputPanel'
 import AngleOutputModal, { type OutputMode } from './components/AngleOutputModal'
+import HookLabModal from './components/HookLabModal'
 import AutoSaveIndicator from '../../components/AutoSaveIndicator'
 import { useSessionPersist } from '../../services/sessionPersistence'
 
@@ -40,12 +42,17 @@ export default function LabContent() {
 
   const [savedBriefId, setSavedBriefId] = useState<string | null>(null)
 
-  // ── Inline output modal state ──────────────────────────────────────────
+  // ── Inline output modal state (caption + script per angle) ─────────────
   const [modalOpen, setModalOpen] = useState(false)
   const [modalMode, setModalMode] = useState<OutputMode>('caption')
   const [modalAngle, setModalAngle] = useState<ContentAngle | null>(null)
   const [modalGenerating, setModalGenerating] = useState(false)
   const [modalError, setModalError] = useState<string | null>(null)
+
+  // ── Hook Lab modal state ───────────────────────────────────────────────
+  const [hookLabOpen, setHookLabOpen] = useState(false)
+  const [hookLabGenerating, setHookLabGenerating] = useState(false)
+  const [hookLabError, setHookLabError] = useState<string | null>(null)
 
   const lastParamsRef = useRef<Omit<LabBriefParams, 'productId'> | null>(null)
 
@@ -226,6 +233,30 @@ export default function LabContent() {
     else                          void runScriptGeneration(modalAngle, true)
   }
 
+  // ── Hook Lab ───────────────────────────────────────────────────────────
+  const handleOpenHookLab = () => {
+    setHookLabError(null)
+    setHookLabOpen(true)
+    if (!result?.hookLabOutput) void runHookLabGeneration(false)
+  }
+
+  const runHookLabGeneration = async (isRetry: boolean) => {
+    if (!result) return
+    setHookLabGenerating(true)
+    setHookLabError(null)
+    try {
+      const output = await generateHookLab(result)
+      setResult((prev) => prev ? { ...prev, hookLabOutput: output } : prev)
+      sessionApi.forceSave()
+      if (isRetry) addToast('Đã tạo lại 30 hook', 'success')
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      setHookLabError(msg)
+    } finally {
+      setHookLabGenerating(false)
+    }
+  }
+
   const cachedModalOutput = (() => {
     if (!modalAngle || !result) return null
     const slot = result.angleOutputs?.[modalAngle.id]
@@ -262,6 +293,7 @@ export default function LabContent() {
           onSave={handleSave}
           onOpenCaption={handleOpenCaption}
           onOpenScript={handleOpenScript}
+          onOpenHookLab={handleOpenHookLab}
         />
       </div>
 
@@ -274,6 +306,16 @@ export default function LabContent() {
         error={modalError}
         onClose={() => setModalOpen(false)}
         onRegenerate={handleModalRegenerate}
+      />
+
+      <HookLabModal
+        open={hookLabOpen}
+        productName={result?.productName ?? ''}
+        cachedOutput={result?.hookLabOutput ?? null}
+        isGenerating={hookLabGenerating}
+        error={hookLabError}
+        onClose={() => setHookLabOpen(false)}
+        onRegenerate={() => void runHookLabGeneration(true)}
       />
     </div>
   )
