@@ -234,9 +234,39 @@ function ImageGenerationBar({
     0,
   )
   const remaining = totalImages - generated
-  const estCreditsAll       = totalImages * CREDIT_PER_IMAGE
-  const estCreditsRemaining = remaining * CREDIT_PER_IMAGE
-  const estCreditsFailed    = failedCount * CREDIT_PER_IMAGE
+
+  // ── Cost estimate — hybrid mode aware ────────────────────────────────
+  // When hybrid render is ON, only AI-required calls (ai_full_render +
+  // reusable_render) cost credit. template/derived assets cost 0. This
+  // makes the primary CTA reflect the ACTUAL cost user will be charged.
+  const hybridOn = isHybridRenderEnabled()
+  const plan = hybridOn ? planRenderPack(pack) : null
+
+  // Per-strategy cost: count how many of the listed prompts are AI-renders
+  function costForPrompts(predicate: (p: import('../types').ImagePrompt) => boolean): number {
+    if (!hybridOn || !plan) {
+      // Legacy: every prompt costs CREDIT_PER_IMAGE
+      let count = 0
+      pack.sections.forEach((s) => s.imagePrompts?.forEach((p) => { if (predicate(p)) count++ }))
+      return count * CREDIT_PER_IMAGE
+    }
+    // Hybrid: only ai_full_render + reusable_render cost credit
+    let kieCalls = 0
+    pack.sections.forEach((section, sIdx) => {
+      section.imagePrompts?.forEach((p, iIdx) => {
+        if (!predicate(p)) return
+        const asset = plan.assets.find((a) => a.sectionIdx === sIdx && a.imageIdx === iIdx)
+        if (asset && (asset.strategy === 'ai_full_render' || asset.strategy === 'reusable_render')) {
+          kieCalls++
+        }
+      })
+    })
+    return kieCalls * CREDIT_PER_IMAGE
+  }
+
+  const estCreditsAll       = costForPrompts(() => true)
+  const estCreditsRemaining = costForPrompts((p) => p.status !== 'done' && p.status !== 'generating' && p.status !== 'queued')
+  const estCreditsFailed    = costForPrompts((p) => p.status === 'failed')
 
   return (
     <div className="flex flex-wrap items-center justify-between gap-2">
@@ -248,10 +278,26 @@ function ImageGenerationBar({
         <p className="text-[10px] text-gray-500">
           {generated}/{totalImages} ảnh đã sinh
           {failedCount > 0 && <span className="text-red-600"> · {failedCount} lỗi</span>}
-          {' '}· <span className="font-medium text-amber-700">1 ảnh ≈ {CREDIT_PER_IMAGE} credit</span>
+          {' '}·{' '}
+          {hybridOn ? (
+            <span className="font-medium text-emerald-700">
+              ⚡ Hybrid mode bật — chỉ tính credit cho {plan?.stats.kieCallsRequired ?? '?'} ảnh AI thật
+            </span>
+          ) : (
+            <span className="font-medium text-amber-700">1 ảnh ≈ {CREDIT_PER_IMAGE} credit</span>
+          )}
           {pack.visualMemory.length > 0 && ` · ${pack.visualMemory.length} ảnh tham chiếu`}
         </p>
         <HybridRenderMetrics pack={pack} />
+        {!hybridOn && totalImages >= 20 && (
+          <p className="mt-1 text-[10px] text-emerald-700">
+            💡 Bật hybrid mode để tiết kiệm ~60% credit:{' '}
+            <code className="rounded bg-emerald-50 px-1 py-px font-mono text-[10px] text-emerald-800">
+              __setHybridRender(true)
+            </code>
+            {' '}rồi reload
+          </p>
+        )}
       </div>
 
       <div className="flex flex-wrap items-center gap-1.5">
@@ -285,15 +331,21 @@ function ImageGenerationBar({
         <button
           onClick={onGenerateAll}
           disabled={isGenerating || totalImages === 0}
-          title={`Sinh toàn bộ ${totalImages} ảnh (~${estCreditsAll} credit)`}
-          className="flex items-center gap-1.5 rounded-full bg-amber-600 px-4 py-1.5 text-[11px] font-bold text-white shadow-sm hover:bg-amber-700 disabled:cursor-not-allowed disabled:opacity-40"
+          title={hybridOn
+            ? `Sinh ${totalImages} ảnh (~${estCreditsAll} credit hybrid)`
+            : `Sinh toàn bộ ${totalImages} ảnh (~${estCreditsAll} credit)`}
+          className={`flex items-center gap-1.5 rounded-full px-4 py-1.5 text-[11px] font-bold text-white shadow-sm disabled:cursor-not-allowed disabled:opacity-40 ${
+            hybridOn ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-amber-600 hover:bg-amber-700'
+          }`}
         >
           {isGenerating ? <Loader2 className="h-3 w-3 animate-spin" /> : <Sparkles className="h-3 w-3" />}
           {isGenerating
             ? 'Đang sinh…'
-            : generated > 0
-              ? `Sinh lại tất cả ${totalImages} ảnh (~${estCreditsAll} credit)`
-              : `Sinh tất cả ${totalImages} ảnh (~${estCreditsAll} credit)`}
+            : hybridOn
+              ? `⚡ Sinh ${totalImages} ảnh — chỉ ~${estCreditsAll} credit`
+              : generated > 0
+                ? `Sinh lại tất cả ${totalImages} ảnh (~${estCreditsAll} credit)`
+                : `Sinh tất cả ${totalImages} ảnh (~${estCreditsAll} credit)`}
         </button>
       </div>
     </div>
