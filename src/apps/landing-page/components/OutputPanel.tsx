@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Loader2, LayoutTemplate, Save, Check, RotateCcw, Trash2, FolderOpen, ChevronDown, ImageIcon, Sparkles, AlertTriangle, Clock, Zap, RefreshCw } from 'lucide-react'
+import { Loader2, LayoutTemplate, Save, Check, RotateCcw, Trash2, FolderOpen, ChevronDown, ImageIcon, Sparkles, AlertTriangle, Clock, Zap, RefreshCw, FilePlus, FileDown, Copy as CopyIcon, FolderInput } from 'lucide-react'
 import type { LandingPagePack, SavedLandingPack } from '../types'
 import type { ImageProgress } from '../LandingPageAI'
 import SectionCard from './SectionCard'
@@ -26,6 +26,17 @@ interface OutputPanelProps {
   /** Z8 progress: done / failed / total / retries / startedAt */
   imageProgress: ImageProgress | null
   isGeneratingImages: boolean
+  // ── Project system (Canva-style) ─────────────────────────────────────
+  /** Id of the currently-loaded saved project (null = fresh session). */
+  loadedFromId?: string | null
+  /** Display title of the loaded project (shown in top bar). */
+  loadedProjectTitle?: string
+  /** Click handler when user opens a saved project from the history list. */
+  onLoadProject?: (id: string) => void
+  /** "Lưu thành project" — creates a new saved project or syncs existing one. */
+  onSaveAsProject?: (title?: string) => void
+  /** "Project mới" — clears the loaded-project link + active pack. */
+  onNewProject?: () => void
 }
 
 export default function OutputPanel({
@@ -33,6 +44,8 @@ export default function OutputPanel({
   onGenerateAllImages, onGenerateRemaining, onRetryFailed,
   onRegenerateImage, onDeleteImage,
   imageProgress, isGeneratingImages,
+  loadedFromId, loadedProjectTitle,
+  onLoadProject, onSaveAsProject, onNewProject,
 }: OutputPanelProps) {
   const [saved, setSaved] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -41,12 +54,17 @@ export default function OutputPanel({
   const addToStore = useLandingPageStore((s) => s.add)
   const addToast = useAppStore((s) => s.addToast)
 
+  // Prefer the project-system save handler if provided (Canva-style)
   const handleSave = () => {
     if (!pack || saving || saved) return
     setSaving(true)
     try {
       const t = title.trim() || `${pack.productName} — Landing Pack`
-      addToStore(pack, t)
+      if (onSaveAsProject) {
+        onSaveAsProject(t)
+      } else {
+        addToStore(pack, t)
+      }
       setSaved(true)
       setTitle('')
       setTimeout(() => setSaved(false), 2500)
@@ -77,10 +95,10 @@ export default function OutputPanel({
           <LayoutTemplate className="h-10 w-10 text-gray-200" strokeWidth={1.5} />
           <p className="text-sm text-gray-400">Chọn sản phẩm + nhấn "Tạo Landing Pack"</p>
           <p className="text-xs text-gray-300 max-w-sm">
-            Output 17 sections (hero, pain, mechanism, ingredients, social proof, comparison, news, before/after, benefits, offer, FAQ, final CTA) — copy từng section vào Ladipage.
+            Output 17 sections — hoặc mở lại một project đã lưu bên dưới.
           </p>
         </div>
-        <SavedHistorySection />
+        <SavedHistorySection onLoadProject={onLoadProject} loadedFromId={loadedFromId} />
       </div>
     )
   }
@@ -92,20 +110,43 @@ export default function OutputPanel({
       <div className="shrink-0 border-b border-black/8 bg-gradient-to-r from-violet-50/40 to-purple-50/30 px-5 py-3">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <div className="min-w-0">
-            <p className="truncate text-sm font-bold text-gray-900">
-              {pack.productName} — {pack.sections.length} sections
-            </p>
+            <div className="flex flex-wrap items-center gap-1.5">
+              <p className="truncate text-sm font-bold text-gray-900">
+                {pack.productName} — {pack.sections.length} sections
+              </p>
+              {loadedFromId && loadedProjectTitle && (
+                <span
+                  className="flex items-center gap-1 rounded-full bg-violet-100 px-2 py-0.5 text-[10px] font-bold text-violet-700"
+                  title="Đang chỉnh sửa project — mọi thay đổi tự đồng bộ"
+                >
+                  <FolderInput className="h-2.5 w-2.5" />
+                  {loadedProjectTitle}
+                </span>
+              )}
+            </div>
             <p className="text-[10px] text-gray-400">
               Ngôn ngữ: {pack.language.toUpperCase()} · Tạo lúc {new Date(pack.generatedAt).toLocaleTimeString('vi-VN')}
+              {loadedFromId && ' · ✓ Tự đồng bộ project'}
             </p>
           </div>
           <div className="flex flex-wrap gap-1.5">
-            <input
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              placeholder={`vd: "${pack.productName} v1"`}
-              className="rounded-lg border border-black/10 bg-white px-2 py-1.5 text-[11px] outline-none focus:border-violet-500/40"
-            />
+            {!loadedFromId && (
+              <input
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                placeholder={`vd: "${pack.productName} v1"`}
+                className="rounded-lg border border-black/10 bg-white px-2 py-1.5 text-[11px] outline-none focus:border-violet-500/40"
+              />
+            )}
+            {loadedFromId && onNewProject && (
+              <button
+                onClick={onNewProject}
+                title="Thoát project và bắt đầu mới"
+                className="flex items-center gap-1 rounded-full border border-black/10 bg-white px-3 py-1.5 text-[11px] font-medium text-gray-700 hover:bg-black/[0.04]"
+              >
+                <FilePlus className="h-3 w-3" /> Project mới
+              </button>
+            )}
             <button
               onClick={onRegenerate}
               disabled={isGenerating}
@@ -120,10 +161,16 @@ export default function OutputPanel({
               className={`flex items-center gap-1 rounded-full px-4 py-1.5 text-[11px] font-bold transition-colors ${
                 saved
                   ? 'bg-emerald-500/15 text-emerald-700'
-                  : 'bg-violet-600 text-white hover:bg-violet-700'
+                  : loadedFromId
+                    ? 'bg-emerald-600 text-white hover:bg-emerald-700'
+                    : 'bg-violet-600 text-white hover:bg-violet-700'
               }`}
             >
-              {saved ? <><Check className="h-3 w-3" /> Đã lưu</> : <><Save className="h-3 w-3" /> Lưu vào Project</>}
+              {saved
+                ? <><Check className="h-3 w-3" /> Đã lưu</>
+                : loadedFromId
+                  ? <><Save className="h-3 w-3" /> Lưu thay đổi</>
+                  : <><Save className="h-3 w-3" /> Lưu thành project</>}
             </button>
           </div>
         </div>
@@ -155,7 +202,7 @@ export default function OutputPanel({
           ))}
         </div>
 
-        <SavedHistorySection />
+        <SavedHistorySection onLoadProject={onLoadProject} loadedFromId={loadedFromId} />
       </div>
     </div>
   )
@@ -327,9 +374,17 @@ function ProgressMeter({ progress }: { progress: ImageProgress }) {
 // Saved history — Project → Landing Pages
 // ─────────────────────────────────────────────────────────────────────
 
-function SavedHistorySection() {
+function SavedHistorySection({
+  onLoadProject, loadedFromId,
+}: {
+  onLoadProject?: (id: string) => void
+  loadedFromId?: string | null
+}) {
   const items = useLandingPageStore((s) => s.items)
   const remove = useLandingPageStore((s) => s.remove)
+  const duplicate = useLandingPageStore((s) => s.duplicate)
+  const updateTitle = useLandingPageStore((s) => s.updateTitle)
+  const addToast = useAppStore((s) => s.addToast)
   const [expandedId, setExpandedId] = useState<string | null>(null)
 
   if (items.length === 0) return null
@@ -341,7 +396,7 @@ function SavedHistorySection() {
         Project → Landing Pages ({items.length})
       </h3>
       <p className="mb-3 text-[10px] text-gray-400">
-        Lưu local trong trình duyệt — sẽ sync sang database khi backend bật bảng landing_pages.
+        Click "Mở" để tiếp tục chỉnh sửa — mọi thay đổi tự lưu lại project.
       </p>
       <div className="space-y-2">
         {items.map((item) => (
@@ -349,8 +404,25 @@ function SavedHistorySection() {
             key={item.id}
             item={item}
             isOpen={expandedId === item.id}
+            isLoaded={loadedFromId === item.id}
             onToggle={() => setExpandedId(expandedId === item.id ? null : item.id)}
             onRemove={() => remove(item.id)}
+            onOpen={onLoadProject ? () => onLoadProject(item.id) : undefined}
+            onDuplicate={() => {
+              const copy = duplicate(item.id)
+              if (copy) addToast(`✓ Đã nhân bản → "${copy.title}"`)
+            }}
+            onRename={(title) => updateTitle(item.id, title)}
+            onExportJson={() => {
+              const blob = new Blob([JSON.stringify(item, null, 2)], { type: 'application/json' })
+              const url = URL.createObjectURL(blob)
+              const a = document.createElement('a')
+              a.href = url
+              a.download = `${item.title.replace(/[^\w\d-]+/g, '_')}.json`
+              a.click()
+              setTimeout(() => URL.revokeObjectURL(url), 1000)
+              addToast('✓ Đã xuất JSON')
+            }}
           />
         ))}
       </div>
@@ -359,37 +431,126 @@ function SavedHistorySection() {
 }
 
 function SavedRow({
-  item, isOpen, onToggle, onRemove,
+  item, isOpen, isLoaded, onToggle, onRemove, onOpen, onDuplicate, onRename, onExportJson,
 }: {
   item: SavedLandingPack
   isOpen: boolean
+  isLoaded?: boolean
   onToggle: () => void
   onRemove: () => void
+  onOpen?: () => void
+  onDuplicate?: () => void
+  onRename?: (title: string) => void
+  onExportJson?: () => void
 }) {
+  const [renaming, setRenaming] = useState(false)
+  const [titleDraft, setTitleDraft] = useState(item.title)
+
+  const commitRename = () => {
+    const t = titleDraft.trim()
+    if (t && t !== item.title && onRename) onRename(t)
+    setRenaming(false)
+  }
+
   return (
-    <div className="rounded-xl border border-black/10 bg-white overflow-hidden">
-      <button
-        type="button"
-        onClick={onToggle}
-        className="flex w-full items-center gap-2 px-3 py-2 text-left hover:bg-black/[0.02]"
-      >
-        <LayoutTemplate className="h-4 w-4 text-violet-500" />
-        <div className="min-w-0 flex-1">
-          <p className="truncate text-xs font-semibold text-gray-800">{item.title}</p>
-          <p className="truncate text-[10px] text-gray-400">
-            {item.language.toUpperCase()} · {item.sections.length} sections · {new Date(item.createdAt).toLocaleString('vi-VN', { dateStyle: 'short', timeStyle: 'short' })}
-          </p>
-        </div>
-        <ChevronDown className={`h-3.5 w-3.5 text-gray-400 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+    <div className={`rounded-xl border bg-white overflow-hidden transition-colors ${
+      isLoaded ? 'border-violet-400 ring-2 ring-violet-200/60' : 'border-black/10'
+    }`}>
+      <div className="flex w-full items-center gap-2 px-3 py-2 hover:bg-black/[0.02]">
         <button
           type="button"
-          onClick={(e) => { e.stopPropagation(); if (confirm('Xoá landing pack này?')) onRemove() }}
-          className="rounded-md p-1 text-gray-400 hover:bg-red-50 hover:text-red-600"
-          aria-label="Xoá"
+          onClick={onToggle}
+          className="flex flex-1 items-center gap-2 text-left min-w-0"
         >
-          <Trash2 className="h-3.5 w-3.5" />
+          <LayoutTemplate className={`h-4 w-4 shrink-0 ${isLoaded ? 'text-violet-700' : 'text-violet-500'}`} />
+          <div className="min-w-0 flex-1">
+            {renaming ? (
+              <input
+                value={titleDraft}
+                onChange={(e) => setTitleDraft(e.target.value)}
+                onBlur={commitRename}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') commitRename()
+                  if (e.key === 'Escape') { setTitleDraft(item.title); setRenaming(false) }
+                }}
+                onClick={(e) => e.stopPropagation()}
+                autoFocus
+                className="w-full rounded border border-violet-300 bg-white px-1.5 py-0.5 text-xs font-semibold text-gray-800 outline-none"
+              />
+            ) : (
+              <p className="truncate text-xs font-semibold text-gray-800">
+                {item.title}
+                {isLoaded && (
+                  <span className="ml-1.5 rounded-full bg-violet-100 px-1.5 py-0.5 text-[9px] font-bold text-violet-700">
+                    đang mở
+                  </span>
+                )}
+              </p>
+            )}
+            <p className="truncate text-[10px] text-gray-400">
+              {item.language.toUpperCase()} · {item.sections.length} sections · {new Date(item.createdAt).toLocaleString('vi-VN', { dateStyle: 'short', timeStyle: 'short' })}
+            </p>
+          </div>
         </button>
-      </button>
+
+        {/* Per-item actions */}
+        <div className="flex shrink-0 items-center gap-0.5">
+          {onOpen && !isLoaded && (
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); onOpen() }}
+              title="Tiếp tục chỉnh sửa"
+              className="rounded-md bg-violet-600 px-2 py-1 text-[10px] font-bold text-white hover:bg-violet-700"
+            >
+              Mở
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); setRenaming((v) => !v) }}
+            title="Đổi tên"
+            className="rounded-md p-1 text-gray-400 hover:bg-black/5 hover:text-gray-700"
+          >
+            <FilePlus className="h-3.5 w-3.5" />
+          </button>
+          {onDuplicate && (
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); onDuplicate() }}
+              title="Nhân bản"
+              className="rounded-md p-1 text-gray-400 hover:bg-black/5 hover:text-gray-700"
+            >
+              <CopyIcon className="h-3.5 w-3.5" />
+            </button>
+          )}
+          {onExportJson && (
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); onExportJson() }}
+              title="Xuất JSON"
+              className="rounded-md p-1 text-gray-400 hover:bg-black/5 hover:text-gray-700"
+            >
+              <FileDown className="h-3.5 w-3.5" />
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); onToggle() }}
+            title={isOpen ? 'Thu gọn' : 'Xem trước'}
+            className="rounded-md p-1 text-gray-400 hover:bg-black/5 hover:text-gray-700"
+          >
+            <ChevronDown className={`h-3.5 w-3.5 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+          </button>
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); if (confirm(`Xoá vĩnh viễn project "${item.title}"?`)) onRemove() }}
+            title="Xoá"
+            className="rounded-md p-1 text-gray-400 hover:bg-red-50 hover:text-red-600"
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      </div>
       {isOpen && (
         <div className="space-y-2 border-t border-black/8 bg-gray-50/40 p-3">
           {item.sections.map((s, i) => (

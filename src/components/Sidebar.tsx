@@ -8,6 +8,7 @@ import { useAppStore } from '../stores/appStore'
 import { getKieCredits } from '../utils/kieai'
 import { useAuthStore } from '../stores/authStore'
 import { scanForPendingSessions } from '../services/sessionPersistence'
+import { useLandingPageStore } from '../apps/landing-page/store'
 
 interface NavItem {
   id: string
@@ -44,6 +45,7 @@ export default function Sidebar({ activeApp, onNavigate }: SidebarProps) {
   const [refreshing, setRefreshing] = useState(false)
   const { user, signOut } = useAuthStore()
   const sendToApp = useAppStore((s) => s.sendToApp)
+  const landingProjectCount = useLandingPageStore((s) => s.items.length)
 
   // Poll for drafts count every 10s to update the badge dot
   useEffect(() => {
@@ -100,11 +102,13 @@ export default function Sidebar({ activeApp, onNavigate }: SidebarProps) {
             // 'products-shortcut' lights up when finder shows products bank — but for simplicity
             // we just always show it as inactive (it's a shortcut, not a route)
             const isActive = id !== 'products-shortcut' && activeApp === id
+            // Show project count badge on Landing Page nav (Canva-style)
+            const badge = id === 'landing-page' && landingProjectCount > 0 ? landingProjectCount : null
             return (
               <button
                 key={id}
                 onClick={() => handleNav(id)}
-                className={`flex w-full flex-col items-center gap-1 rounded-lg py-2 transition-colors hover:bg-black/5 ${
+                className={`relative flex w-full flex-col items-center gap-1 rounded-lg py-2 transition-colors hover:bg-black/5 ${
                   isActive ? 'bg-black/5' : ''
                 }`}
               >
@@ -112,6 +116,11 @@ export default function Sidebar({ activeApp, onNavigate }: SidebarProps) {
                   className={`h-[18px] w-[18px] transition-colors ${isActive ? 'text-gray-900' : 'text-gray-500'}`}
                   strokeWidth={isActive ? 2.5 : 2}
                 />
+                {badge !== null && (
+                  <span className="absolute right-1 top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-violet-600 px-1 text-[9px] font-bold text-white shadow-sm">
+                    {badge}
+                  </span>
+                )}
                 <span
                   className={`w-full text-center text-[10px] font-bold leading-tight tracking-tight transition-colors ${
                     isActive ? 'text-gray-900' : 'text-gray-600'

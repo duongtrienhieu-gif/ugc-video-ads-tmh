@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useAppStore } from '../../stores/appStore'
 import { useBankStore } from '../../stores/bankStore'
 import type { Product } from '../../stores/types'
@@ -9,6 +9,7 @@ import { useSessionPersist } from '../../services/sessionPersistence'
 import AutoSaveIndicator from '../../components/AutoSaveIndicator'
 import InputPanel from './components/InputPanel'
 import OutputPanel from './components/OutputPanel'
+import { useLandingPageStore } from './store'
 
 // ── Session-persistence snapshot shape ─────────────────────────────────────
 // Phase R3 pilot. Persisted across F5 / refresh / browser-close. Stores only
@@ -20,6 +21,8 @@ interface LandingPageSnapshot {
   pack: LandingPagePack | null
   imageProgress: ImageProgress | null
   lastParams: Omit<LandingGenParams, 'productId'> | null
+  /** Canva-style: when set, edits auto-sync back to the saved project with this id. */
+  loadedFromId?: string | null
 }
 
 /** Z8: extended progress shape — drives the ETA / images-per-minute UI. */
@@ -39,6 +42,8 @@ export default function LandingPageAI() {
   const [isGenerating, setIsGenerating] = useState(false)
   const [isGeneratingImages, setIsGeneratingImages] = useState(false)
   const [imageProgress, setImageProgress] = useState<ImageProgress | null>(null)
+  /** When non-null, edits to `pack` auto-sync back to the project with this id. */
+  const [loadedFromId, setLoadedFromId] = useState<string | null>(null)
 
   // Remember last params so "Tạo lại" reuses language / niche / visualMemory.
   const lastParamsRef = useRef<Omit<LandingGenParams, 'productId'> | null>(null)
@@ -48,6 +53,37 @@ export default function LandingPageAI() {
   const activeApp       = useAppStore((s) => s.activeApp)
   const addToast        = useAppStore((s) => s.addToast)
   const getProductById  = useBankStore((s) => s.getProductById)
+  const lpGetById      = useLandingPageStore((s) => s.getById)
+  const lpAdd          = useLandingPageStore((s) => s.add)
+  const lpUpdate       = useLandingPageStore((s) => s.update)
+  const lpItems        = useLandingPageStore((s) => s.items)
+  const loadedProject  = loadedFromId ? lpItems.find((x) => x.id === loadedFromId) : null
+
+  // ── Load a saved project into the active editor (Canva-style "open") ──
+  const handleLoadProject = useCallback((id: string) => {
+    const saved = lpGetById(id)
+    if (!saved) {
+      addToast('Không tìm thấy project', 'error')
+      return
+    }
+    setLoadedFromId(saved.id)
+    setPack({
+      productId:    saved.productId,
+      productName:  saved.productName,
+      language:     saved.language,
+      sections:     saved.sections,
+      visualMemory: saved.visualMemory,
+      generatedAt:  saved.generatedAt,
+    })
+    if (saved.productId) {
+      const p = getProductById(saved.productId)
+      if (p) setSelectedProduct(p)
+    }
+    setImageProgress(null)
+    setIsGenerating(false)
+    setIsGeneratingImages(false)
+    addToast(`✓ Đã mở "${saved.title}" — chỉnh sửa tự đồng bộ`, 'success')
+  }, [lpGetById, getProductById, addToast])
 
   // ── Session persistence (Phase R3 pilot) ──────────────────────────────
   // Counts how many sections + images are complete — drives the modal preview.
@@ -74,6 +110,7 @@ export default function LandingPageAI() {
       pack,
       imageProgress,
       lastParams: lastParamsRef.current,
+      loadedFromId,
     }),
     hydrate: (data) => {
       if (data.selectedProductId) {
@@ -83,6 +120,7 @@ export default function LandingPageAI() {
       if (data.pack) setPack(data.pack)
       if (data.imageProgress) setImageProgress(data.imageProgress)
       if (data.lastParams) lastParamsRef.current = data.lastParams
+      if (data.loadedFromId) setLoadedFromId(data.loadedFromId)
       addToast('✓ Đã khôi phục LandingPage AI từ phiên trước', 'success')
     },
     getStatus: () => {
@@ -95,8 +133,57 @@ export default function LandingPageAI() {
     // Only persist when there's actual work (avatar pack exists or gen in flight)
     shouldPersist: () => !!pack || isGenerating || isGeneratingImages,
     // Re-save when any of these change
-    deps: [selectedProduct?.id, pack, isGenerating, isGeneratingImages, imageProgress],
+    deps: [selectedProduct?.id, pack, isGenerating, isGeneratingImages, imageProgress, loadedFromId],
   })
+
+  // ── Auto-sync edits to the saved project (Canva-style live save) ─────
+  // Debounced 1.5s — every change to `pack` while a project is loaded
+  // gets pushed back to the store. No "Lưu" button needed during editing.
+  const syncTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  useEffect(() => {
+    if (!loadedFromId || !pack) return
+    if (isGenerating) return  // never overwrite during fresh generation
+    if (syncTimerRef.current) clearTimeout(syncTimerRef.current)
+    syncTimerRef.current = setTimeout(() => {
+      lpUpdate(loadedFromId, pack)
+    }, 1500)
+    return () => {
+      if (syncTimerRef.current) clearTimeout(syncTimerRef.current)
+    }
+  }, [pack, loadedFromId, isGenerating, lpUpdate])
+
+  // ── Accept "open project" payload from sidebar / finder ───────────────
+  useEffect(() => {
+    if (activeApp !== 'landing-page') return
+    if (!interAppPayload || interAppPayload.targetApp !== 'landing-page') return
+    if (interAppPayload.targetField === 'landingProjectId' && typeof interAppPayload.data === 'string') {
+      handleLoadProject(interAppPayload.data)
+      consumePayload()
+    }
+  }, [interAppPayload, activeApp, consumePayload, handleLoadProject])
+
+  // ── "Lưu thành project" / "Đã lưu" handler — promotes session to a saved project ──
+  const handleSaveAsProject = (title?: string) => {
+    if (!pack) return
+    if (loadedFromId) {
+      // Already a saved project — force-sync immediately
+      lpUpdate(loadedFromId, pack)
+      addToast('✓ Đã lưu thay đổi vào project')
+      return
+    }
+    const saved = lpAdd(pack, title)
+    setLoadedFromId(saved.id)
+    addToast(`✓ Đã tạo project "${saved.title}" — chỉnh sửa tự đồng bộ`)
+  }
+
+  // ── Start a fresh session (drop loaded project link) ──────────────────
+  const handleNewProject = () => {
+    setLoadedFromId(null)
+    setPack(null)
+    setImageProgress(null)
+    lastParamsRef.current = null
+    addToast('Đã thoát project — tạo mới')
+  }
 
   useEffect(() => {
     if (activeApp !== 'landing-page') return
@@ -104,14 +191,17 @@ export default function LandingPageAI() {
     if (interAppPayload.targetField === 'productId') {
       const product = getProductById(interAppPayload.data as string)
       if (product) setSelectedProduct(product)
+      consumePayload()
     }
-    consumePayload()
+    // landingProjectId handled in a separate effect (after handleLoadProject is defined)
   }, [interAppPayload, activeApp, consumePayload, getProductById])
 
   // ── Pack generation (Phase A — text only) ───────────────────────────
   const runGeneration = async (params: Omit<LandingGenParams, 'productId'>) => {
     if (!selectedProduct) return
     lastParamsRef.current = params
+    // Fresh generation breaks the "loaded project" link — user starts over.
+    if (loadedFromId) setLoadedFromId(null)
     setIsGenerating(true)
     setPack(null)
     setImageProgress(null)
@@ -288,6 +378,11 @@ export default function LandingPageAI() {
           onDeleteImage={handleDeleteOneImage}
           imageProgress={imageProgress}
           isGeneratingImages={isGeneratingImages}
+          loadedFromId={loadedFromId}
+          loadedProjectTitle={loadedProject?.title}
+          onLoadProject={handleLoadProject}
+          onSaveAsProject={handleSaveAsProject}
+          onNewProject={handleNewProject}
         />
       </div>
     </div>
