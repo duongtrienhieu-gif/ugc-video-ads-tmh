@@ -6,6 +6,7 @@ import {
   submitGpt4oImage, pollGpt4oUntilDone, type Gpt4oSize,
 } from '../../../utils/kieai'
 import { saveAsset, getUrl, isAssetRef } from '../../../utils/assetStore'
+import { routeAndExecuteJob } from './hybridRouter'
 
 // ─────────────────────────────────────────────────────────────────────────
 // IMAGE GENERATION QUEUE for landing-page packs.
@@ -386,13 +387,18 @@ export async function generatePackImages(
         active++
         options.onTaskUpdate(job.sectionIdx, job.imageIdx, { status: 'generating' })
 
-        runWithCreditSafeRetry(
-          job,
-          pack.visualMemory,
+        // ── Hybrid router: classify + dispatch (flag off = legacy path) ─
+        routeAndExecuteJob(job, {
+          pack,
           kieApiKey,
-          (patch) => options.onTaskUpdate(job.sectionIdx, job.imageIdx, patch),
-          options.signal,
-        )
+          onTaskUpdate: (patch) => options.onTaskUpdate(job.sectionIdx, job.imageIdx, patch),
+          signal: options.signal,
+          legacyRunner: () => runWithCreditSafeRetry(
+            job, pack.visualMemory, kieApiKey,
+            (patch) => options.onTaskUpdate(job.sectionIdx, job.imageIdx, patch),
+            options.signal,
+          ),
+        })
           .then(({ assetRef, retries }) => {
             options.onTaskUpdate(job.sectionIdx, job.imageIdx, {
               status: 'done', generatedAssetRef: assetRef, error: undefined,
@@ -439,12 +445,17 @@ export async function regenerateSingleImage(
 
   onTaskUpdate(sectionIdx, imageIdx, { status: 'generating', error: undefined })
   try {
-    const { assetRef } = await runWithCreditSafeRetry(
-      { sectionIdx, imageIdx, prompt, section },
-      pack.visualMemory,
+    // ── Hybrid router for single-image regen as well ─────────────────
+    const job = { sectionIdx, imageIdx, prompt, section }
+    const { assetRef } = await routeAndExecuteJob(job, {
+      pack,
       kieApiKey,
-      (patch) => onTaskUpdate(sectionIdx, imageIdx, patch),
-    )
+      onTaskUpdate: (patch) => onTaskUpdate(sectionIdx, imageIdx, patch),
+      legacyRunner: () => runWithCreditSafeRetry(
+        job, pack.visualMemory, kieApiKey,
+        (patch) => onTaskUpdate(sectionIdx, imageIdx, patch),
+      ),
+    })
     onTaskUpdate(sectionIdx, imageIdx, { status: 'done', generatedAssetRef: assetRef, error: undefined })
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
