@@ -173,6 +173,29 @@ const LIGHT_POOL = [
   'late afternoon side-warmth from right window',
 ]
 
+// Z24 — COMPOSITION POOL. Root cause of "all 4 WhatsApp attachments show
+// box + bottle side by side" was that KIE was mimicking the composition of
+// the reference product image. By injecting an explicit composition
+// directive per render, we force the model to pick a DIFFERENT physical
+// arrangement of the product in each shot — not always packshot+bottle
+// side-by-side.
+const COMPOSITION_POOL = [
+  'single bottle only (no box) held casually',
+  'single bottle only on a real surface, no packaging box',
+  '2 bottles together standing on a table — no box',
+  '3-4 bottles grouped casually (family pack feel) — no box',
+  'bottle on a dining table with breakfast/meal nearby',
+  'bottle in the kitchen next to fresh produce / fruit',
+  'bottle peeking out of a handbag or tote',
+  'bottle on a bathroom shelf with personal items',
+  'bottle on an office desk next to laptop edge',
+  'bottle handheld close-up showing only label and one hand',
+  'casual selfie of person holding a single bottle',
+  'unpacking-style shot: bottle just removed from torn paper / box discarded behind',
+  'bottle on a messy real kitchen counter (slightly cluttered, lived-in)',
+  'bottle outdoors (balcony / picnic / cafe) in natural light',
+]
+
 /** Tiny deterministic hash → index into a pool. */
 function hashPick<T>(pool: T[], seed: string, salt: number): T {
   let h = 0
@@ -189,21 +212,35 @@ function makeVariationSeed(): string {
 /** Z22 — per-image diversity directive.
  *  Suppressed for `before-after` (which has its own same-scene lock spec
  *  written by Gemini into the imagePrompt body). */
-// Z23 — single-line compact directive (~180 chars vs old ~380).
+// Sections where the diversity directive is suppressed because the
+// section spec already mandates a specific structure (same-scene lock,
+// app screenshot recreation, etc.). Mixing in a "random composition"
+// directive would fight the structural intent.
+const DIVERSITY_SUPPRESSED_SECTIONS: ReadonlySet<SectionType> = new Set<SectionType>([
+  'before-after',          // same-scene lock per pair
+  'social-proof',          // FB/TikTok/Shopee screenshot recreation
+  'whatsapp-testimonials', // pure screenshot vs attached-photo split
+  'news-proof',            // news article screenshot recreation
+])
+
+// Z24 — diversity directive with COMPOSITION axis added. Suppressed for
+// sections where structure is locked by spec (see set above).
 function buildDiversityDirective(job: ImageJob): string {
-  if (job.section.type === 'before-after') return ''
+  if (DIVERSITY_SUPPRESSED_SECTIONS.has(job.section.type)) return ''
   if (!job.prompt.variationSeed) job.prompt.variationSeed = makeVariationSeed()
   const seed = `${job.section.type}-${job.imageIdx}-${job.prompt.variationSeed}`
-  const bg     = hashPick(BG_POOL,    seed, 0)
-  const angle  = hashPick(ANGLE_POOL, seed, 1)
-  const hand   = hashPick(HAND_POOL,  seed, 2)
-  const light  = hashPick(LIGHT_POOL, seed, 3)
-  return `SHOT: ${angle}, in ${bg}, ${hand}, ${light}. Render as INDEPENDENT phone photo — do not echo composition from any reference. Seed: ${job.prompt.variationSeed}.`
+  const composition = hashPick(COMPOSITION_POOL, seed, 0)
+  const bg          = hashPick(BG_POOL,          seed, 1)
+  const angle       = hashPick(ANGLE_POOL,       seed, 2)
+  const hand        = hashPick(HAND_POOL,        seed, 3)
+  const light       = hashPick(LIGHT_POOL,       seed, 4)
+  return `COMPOSITION: ${composition}. SHOT: ${angle}, in ${bg}, ${hand}, ${light}. Render as INDEPENDENT phone photo — do not mimic the side-by-side box+bottle composition of the reference image; pick the COMPOSITION above. Seed: ${job.prompt.variationSeed}.`
 }
 
-// Z23 — compressed from ~600 to ~200 chars. Same bans, fewer tokens.
+// Z24 — strengthened negatives per user list. Covers all known failure
+// modes: clone composition, fake UI, poster/infographic look, etc.
 const NEGATIVE_PROMPT_BLOCK =
-  'AVOID: duplicate background or hand pose across renders; floating cut-out product PNG; stacked product composites; cinematic/studio/luxury look; AI-glossy hyper-perfect skin; symmetrical perfect composition; fake brand text substitution.'
+  'AVOID HARD: poster or infographic layout; centered symmetrical composition; floating cut-out product PNG over a background; stacked product composites; duplicated background or hand pose across renders; cinematic / studio / luxury / editorial look; AI-glossy hyper-perfect skin; fake or futuristic UI; fake typography; overdesigned spacing; ecommerce advertisement look; fake brand text substitution; box and bottle always side-by-side as the only composition.'
 
 /** Pick the asset refs (if any) to pass into KIE filesUrl for this section. */
 function selectRefsForSection(type: SectionType, memory: VisualMemoryItem[]): string[] {

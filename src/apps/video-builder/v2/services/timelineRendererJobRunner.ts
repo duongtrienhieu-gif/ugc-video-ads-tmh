@@ -95,7 +95,9 @@ async function submitCutToKling(
       apiKey,
       jobModelId: fullPayload.jobModelId,
       prompt: fullPayload.prompt,
-      aspectRatio: fullPayload.aspectRatio,
+      // KIE generateVideoJob only accepts 16:9 / 9:16. KlingSubmitPayload
+      // may include '1:1' too — fall back to 9:16 for square requests.
+      aspectRatio: fullPayload.aspectRatio === '1:1' ? '9:16' : fullPayload.aspectRatio,
       resolution: '720p',
       duration: fullPayload.duration,
       referenceImageUrls: [fullPayload.imageUrl],
@@ -116,7 +118,7 @@ async function submitCutToKling(
           apiKey,
           jobModelId: minimal.jobModelId,
           prompt: minimal.prompt,
-          aspectRatio: minimal.aspectRatio,
+          aspectRatio: minimal.aspectRatio === '1:1' ? '9:16' : minimal.aspectRatio,
           resolution: '720p',
           duration: minimal.duration,
           referenceImageUrls: [minimal.imageUrl],

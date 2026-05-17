@@ -82,7 +82,7 @@ function validAspect(a: string | undefined): string {
 // continuity groups, energy scores, etc. Those stay internal.
 
 export function compileCutPrompt(
-  cut: TimelineCut,
+  _cut: TimelineCut,  // reserved for future editorial enrichment
   coverageShot: CoverageShot,
   masterBlueprint: SceneBlueprint | undefined,
   klingMotion: KlingSafeMotion,
