@@ -887,10 +887,15 @@ export async function legacyGenerateUgcMalaysiaPack(params: LandingGenParams): P
 // per-form engine.
 // ─────────────────────────────────────────────────────────────────────────
 
+// Stabilization fix — was previously dynamic-imported to avoid a circular
+// module graph (registry → ugc-malaysia → this file). Static import works
+// in practice because the cycle resolves to top-level `function`
+// declarations + named exports, which JS hoists before any module body
+// executes. Switching to static eliminates the last dynamic-import code
+// path that could fail on stale CDN cache after redeploys.
+import { resolveForm as _resolveForm } from './forms/_registry'
+
 export async function generateLandingPack(params: LandingGenParams): Promise<LandingPagePack> {
-  // Lazy-import to avoid a circular module graph (registry → ugc-malaysia
-  // module → this file).
-  const { resolveForm } = await import('./forms/_registry')
-  const formModule = await resolveForm(params.form)
+  const formModule = await _resolveForm(params.form)
   return formModule.buildPack(params)
 }

@@ -1,45 +1,50 @@
 // ─────────────────────────────────────────────────────────────────────────
-// services/forms/_registry.ts — Phase 2 — FORM MODULE DISPATCH
+// services/forms/_registry.ts — STATIC IMPORT MAP (stabilization fix)
 //
-// Resolves a form id (from LandingGenParams.form) to the actual
-// FormBlueprintModule instance. Uses dynamic imports so each form's code
-// only loads when a user actually picks it (bundle splitting).
+// HISTORY
+//   • Phase 2: used `async () => (await import('./<form>')).module` per
+//     entry. Vite code-split each form into a separate chunk (~20-26KB
+//     each). Worked in dev + first prod build.
+//   • Stabilization fix: that worked UNTIL a redeploy changed the hashed
+//     chunk filenames (eg `chuyen-gia-2xLvczDG.js` → `chuyen-gia-BZiKyU1T
+//     .js`). Browsers that had cached the OLD `index-*.js` kept asking
+//     the CDN for the OLD chunk path, which no longer existed → 404 +
+//     "Failed to fetch dynamically imported module" error toast.
+//   • Fix: switch to STATIC eager imports. All 5 form modules now live
+//     inside the main index bundle. No separate chunks, no lazy fetches
+//     that can stale-cache across deploys. Bundle bloat is small (~90KB
+//     total across all forms) and worth the stability win.
 //
-// Backward-compat: FORM_ALIASES maps any older / alternative id to the
-// canonical form id. Phase 2 keeps existing ids untouched (no DB migration
-// needed). The alias table is the migration safety net — if Phase 7 ever
-// renames ids to Vietnamese, we add the old EN id here pointing to the
-// new VI id, and saved projects keep loading.
-//
-// NOTE: this is a dispatch layer ONLY. No business logic lives here.
+// NO BUSINESS LOGIC HERE. Just dispatch + alias resolution.
 // ─────────────────────────────────────────────────────────────────────────
 
 import type { LandingForm } from '../../types'
-import type { FormBlueprintModule, FormResolver } from './_types'
+import type { FormBlueprintModule } from './_types'
 
-// Lazy loaders keyed by canonical form id. Each loader returns the module
-// instance (NOT the file's default export — we expose a named `module`
-// inside each form file for clarity).
-const FORM_REGISTRY: Record<LandingForm, FormResolver> = {
-  'ugc-malaysia':  async () => (await import('./ugc-malaysia')).module,
-  'advertorial':   async () => (await import('./advertorial')).module,
-  'premium':       async () => (await import('./premium')).module,
-  'hard-sell-cod': async () => (await import('./hard-sell-cod')).module,
-  'chuyen-gia':    async () => (await import('./chuyen-gia')).module,
+// ── Static imports — bundled into the main index chunk on build ──────────
+import { module as ugcMalaysiaModule }  from './ugc-malaysia'
+import { module as advertorialModule }  from './advertorial'
+import { module as premiumModule }      from './premium'
+import { module as hardSellCodModule }  from './hard-sell-cod'
+import { module as chuyenGiaModule }    from './chuyen-gia'
+
+// Static map keyed by canonical form id. No async, no dynamic paths,
+// no chunk splitting → no cache-bust failure mode on redeploy.
+const FORM_MODULES: Record<LandingForm, FormBlueprintModule> = {
+  'ugc-malaysia':  ugcMalaysiaModule,
+  'advertorial':   advertorialModule,
+  'premium':       premiumModule,
+  'hard-sell-cod': hardSellCodModule,
+  'chuyen-gia':    chuyenGiaModule,
 }
 
 /**
  * Aliases for backward compatibility. If a saved project or stale URL
  * refers to a form id that has been renamed, resolve it to the canonical
- * id via this map. Empty at Phase 2 — kept here as the future migration
- * point.
- *
- * Example future use:
- *   'ugc-malaysia' → 'ugc-chuyendoi-nhanh'
- *   'advertorial'  → 'ke-chuyen-hanh-trinh'
+ * id via this map. Empty today — kept as the future migration safety net.
  */
 const FORM_ALIASES: Partial<Record<string, LandingForm>> = {
-  // No aliases yet — Phase 2 preserves all existing ids exactly.
+  // No aliases yet — current IDs preserved exactly.
 }
 
 /** Default form when the input is missing / unknown. Form 1 is the safest
@@ -47,25 +52,24 @@ const FORM_ALIASES: Partial<Record<string, LandingForm>> = {
 const FALLBACK_FORM: LandingForm = 'ugc-malaysia'
 
 /**
- * Resolve a form id to its blueprint module. Async because each form is
- * lazy-loaded. Falls back to ugc-malaysia if the id is unknown — never
- * throws, so a corrupt saved project still opens.
+ * Resolve a form id to its blueprint module. Returns a Promise so the
+ * public API surface stays unchanged for callers that previously awaited
+ * the async lazy loader. Internally synchronous — Promise.resolve only.
+ * Falls back to ugc-malaysia if the id is unknown — never throws.
  */
 export async function resolveForm(formId: string | undefined): Promise<FormBlueprintModule> {
   const raw = formId ?? FALLBACK_FORM
   const canonical = (FORM_ALIASES[raw] ?? raw) as LandingForm
-  const loader = FORM_REGISTRY[canonical]
-  if (!loader) {
+  const module = FORM_MODULES[canonical]
+  if (!module) {
     console.warn(`[FORM REGISTRY] unknown formId="${formId}" — falling back to ${FALLBACK_FORM}`)
-    return (await FORM_REGISTRY[FALLBACK_FORM]()) as FormBlueprintModule
+    return FORM_MODULES[FALLBACK_FORM]
   }
-  const module = await loader()
   console.info(`[FORM REGISTRY] resolved formId=${canonical} → ${module.label.en} (${module.sections.length} sections)`)
   return module
 }
 
-/** List all registered forms (for InputPanel UI). Synchronous — returns
- *  ids only, the UI doesn't need to load modules just to show the picker. */
+/** List all registered forms (for InputPanel UI). Synchronous. */
 export function listFormIds(): LandingForm[] {
-  return Object.keys(FORM_REGISTRY) as LandingForm[]
+  return Object.keys(FORM_MODULES) as LandingForm[]
 }
