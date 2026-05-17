@@ -48,11 +48,25 @@ function readLocalStorageFlag(): boolean | null {
  * Override precedence: localStorage > env var > default.
  */
 export function isHybridRenderEnabled(): boolean {
-  const ls = readLocalStorageFlag()
-  if (ls !== null) return ls
-  const env = readEnvFlag()
-  if (env !== null) return env
-  return false  // ← stable-render-v1 default
+  // V4 QUALITY HOTFIX — hybrid is FORCE-DISABLED unconditionally.
+  //
+  // The composer dispatch (FB/Shopee/TikTok screenshot canvases, before-after
+  // collage, promo-banner overlay) was producing the obvious "AI showcase"
+  // look that users instantly spot as fake (centered product, designed UI
+  // overlays, floating bottles). Quality > credit savings.
+  //
+  // Even if a tester previously set localStorage["ugc-lab:feature:hybrid-render"]
+  // = "true" or VITE_ENABLE_HYBRID_RENDER=true, we ignore both and ALWAYS
+  // return false. To re-enable in the future, delete this short-circuit and
+  // restore the original precedence chain (kept below for reference).
+  return false
+
+  // ── original precedence (kept commented for future restoration) ──
+  // const ls = readLocalStorageFlag()
+  // if (ls !== null) return ls
+  // const env = readEnvFlag()
+  // if (env !== null) return env
+  // return false
 }
 
 /** For UI debug — shows where the flag value came from. */

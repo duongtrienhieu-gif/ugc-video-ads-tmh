@@ -203,39 +203,55 @@ SECTION SPEC — produce EXACTLY these 17 in this order
 
 14. type="before-after", imageAspectRatio="4:5"
     • copy: transformation narrative
-    • 4 imagePrompts — V3 REWRITE: 4 INDEPENDENT phone-quality photos.
-      NO collages. NO split-frames. NO "Sebelum/Selepas" labels in the
-      image itself. NO designed marketing layout. Each image is ONE
-      independent realistic phone photo — like a real customer sent it.
-      - ba_01.jpg, style="Before portrait — tired / dim / casual home", aspectRatio="4:5":
-        SINGLE Malaysian woman, BEFORE state. Casual home wear (faded t-shirt, plain hoodie, oversized). No makeup, hair tied back lazily. DIM REALISTIC lighting (overcast window, dull indoor lamp). Setting: lived-in home corner — bedroom, kitchen edge, dining table — naturally cluttered, NOT staged. TIRED posture, slouched shoulders, slight belly bloat visible through clothes, low-energy expression. NO product in frame. NO labels. NO "Sebelum" overlay. ONE independent phone-quality portrait photo.
-      - ba_02.jpg, style="After portrait — bright / confident / DIFFERENT outfit + room", aspectRatio="4:5":
-        SAME person identity AFTER 30 days. INDEPENDENT phone-quality portrait — NOT a collage panel. STRICT time-passed cues:
-          - DIFFERENT outfit (clean fitted top or smart-casual — NEVER same shirt as ba_01)
-          - DIFFERENT lighting (bright warm window daylight or golden hour — NOT dim ba_01 lamp)
-          - DIFFERENT room (kitchen morning light / balcony / sunlit living room — NEVER ba_01's room)
-          - DIFFERENT hair (down naturally, brushed, or styled — NOT lazy tied)
-          - DIFFERENT camera angle (if ba_01 eye-level, this is 3/4 or slight low-angle)
-          - Confident posture, healthier skin glow, slight smile
-        NO product in frame. NO labels. NO "Selepas" overlay. ONE independent photo.
-      - ba_03.jpg, style="Before body comparison — stomach bloat side pose", aspectRatio="4:5":
-        BEFORE body shot — same person OR similar Malaysian person (testimonial #2). Side pose showing visible belly bloat under fitting clothes. Casual home setting. Darker mood indoor lighting. NO product in frame. NO labels. NO collage. ONE independent realistic phone photo.
-      - ba_04.jpg, style="After body comparison — flatter stomach DIFFERENT outfit + light", aspectRatio="4:5":
-        AFTER body shot — same person as ba_03. INDEPENDENT phone-quality photo, NOT a collage panel. STRICT time-passed differences:
-          - DIFFERENT outfit (fitted activewear, clean tank, smart-casual — NEVER same as ba_03)
-          - DIFFERENT lighting (bright window or outdoor — NOT ba_03's dim)
-          - DIFFERENT room/environment
-          - Flatter stomach visible, healthier posture, confident pose
-        NO product. NO labels. NO collage. ONE independent photo.
+    • 4 imagePrompts — V4 REWRITE: BELIEVABLE same-person before/after.
+      A real customer would NOT change outfit + room + hair + camera between
+      photos. They'd take the second photo a few weeks later in the SAME
+      mirror / SAME corner of the house, wearing similar casual clothes,
+      with only their body and energy looking different. That's what makes
+      it believable.
+      NO collages. NO split-frames. NO "Sebelum/Selepas" labels in the image
+      itself. NO designed marketing layout. NO gym-influencer transformation.
+      NO race/body-shape swap. NO lingerie / sports-bra reveal. Each image
+      is ONE independent phone photo with strong continuity to its pair.
 
-      STRICT BAN for this whole section:
-        • NO collages (split-frame, side-by-side, vertical stack — ALL banned)
-        • NO "Sebelum" / "Selepas" text overlays in the rendered image
-        • NO duplicated halves
-        • NO designed marketing poster aesthetic
-        • NO ecommerce template look
-        Each image stands alone as a single phone photo. The UI shows them
-        in sequence but the IMAGES THEMSELVES are not collages.
+      MANDATORY SHARED-SCENE LOCK across ba_01 ↔ ba_02 (PAIR A — portrait):
+        • SAME Malaysian woman — identical face structure, skin tone, age, ethnicity
+        • SAME hair length and color (small styling difference allowed — tied vs down)
+        • SAME room (same wall, same window, same furniture corner)
+        • SAME camera distance and SAME angle (eye-level OR mirror selfie — pick ONE for the pair)
+        • SAME outfit FAMILY (e.g. both casual home tees, both modest hijab + loose top) — slight color shift OK, NEVER swap to activewear / sports bra
+        Only these things differ between BEFORE and AFTER:
+          - Posture (slouched/tired → relaxed/upright)
+          - Expression (flat or tired → small natural smile, brighter eyes)
+          - Stomach / face (slight bloat or puffiness → flatter / clearer skin)
+          - Lighting MOOD (cooler / dimmer / overcast → warmer / brighter same-window light)
+        NO product in either frame. NO text overlays.
+
+      - ba_01.jpg, style="Before portrait — same-scene, tired/bloated state", aspectRatio="4:5":
+        Malaysian woman, BEFORE state. Casual home setting, cool dim window light, slouched posture, low-energy expression, slight belly bloat visible through loose tee. NO product in frame. NO label overlays.
+      - ba_02.jpg, style="After portrait — same-scene, brighter/healthier state", aspectRatio="4:5":
+        SAME person, SAME room corner, SAME camera angle, SAME outfit family as ba_01. Warmer light through the SAME window. Posture relaxed and upright, slight natural smile, skin and eyes brighter, stomach noticeably flatter under the same style of top. NO product in frame. NO label overlays.
+
+      MANDATORY SHARED-SCENE LOCK across ba_03 ↔ ba_04 (PAIR B — body/side):
+        • SAME Malaysian woman as a SECOND testimonial (different from ba_01/02 but consistent across ba_03/04)
+        • SAME side-profile pose, SAME mirror or wall background, SAME camera distance, SAME angle
+        • SAME outfit FAMILY (loose tee + soft pants, both photos — never activewear reveal)
+        Only stomach contour + lighting MOOD + posture differ between BEFORE and AFTER. NO product. NO labels.
+
+      - ba_03.jpg, style="Before body — same-scene side pose, bloated", aspectRatio="4:5":
+        Side-profile body shot showing visible belly bloat under a loose casual top. Dim same-room lighting, slumped posture. NO product. NO labels.
+      - ba_04.jpg, style="After body — same-scene side pose, flatter stomach", aspectRatio="4:5":
+        SAME person, SAME side-profile angle, SAME camera distance, SAME outfit family as ba_03. Brighter same-window light. Flatter stomach under the same style of loose top. Slightly improved posture. NO product. NO labels.
+
+      ABSOLUTE BANS for this whole section:
+        • NO collages, split-frames, side-by-side composites
+        • NO "Sebelum" / "Selepas" / "Before" / "After" text rendered into the image
+        • NO gym influencer transformation, NO sports-bra / activewear reveal, NO lingerie
+        • NO race / body-type swap between BEFORE and AFTER (same person, full stop)
+        • NO different room, NO different camera, NO different outfit family between pair members
+        • NO ecommerce template / marketing poster aesthetic
+        Each image is a single phone photo. The pair effect comes from the
+        UI placing them side by side — the IMAGES THEMSELVES stay clean.
 
 15. type="faq"
     • faqs: 5-7 Malaysia FAQs (halal, side effects, "berapa lama nampak hasil", COD, shipping, return, allergies)
@@ -333,7 +349,9 @@ CRITICAL IMAGE PROMPT RULES
 • PRICE ACCURACY: for TikTok Shop, Shopee, promo banner image prompts — include the EXACT price from the product offer field. Do NOT invent any other price.
 • Text overlay prompts: include exact text content (e.g. "bold white text overlay reads: ✓ Kurang Penat ✓ Tenaga Lebih")
 • Screenshot prompts: note "slightly JPEG-compressed", "imperfect real phone quality", "authentic"
-• Before/after: amateur quality, NOT gym influencer, NOT professional. ba_01 = SINGLE before portrait, ba_02 = SINGLE after portrait. STRICT time-passed cues required (different outfit/room/lighting/hair).
+• Before/after (V4 spec): amateur quality, NOT gym influencer, NOT professional. ba_01/ba_02 are a SAME-SCENE pair (same person, same room, same camera, same outfit family — only stomach + light mood + posture differ). ba_03/ba_04 are another SAME-SCENE pair (same person side profile). NEVER swap to activewear, NEVER change room, NEVER change camera between paired before/after shots. This overrides the generic "VARY camera/lighting/hand pose" rule for these 4 images.
+
+• NO FLOATING PRODUCT OVERLAYS — ABSOLUTE: never render the product as a cut-out PNG pasted onto a background, never show a duplicated product packshot floating in mid-air, never composite two product views into a single image. The product must be physically grounded in the scene (held in hand with realistic finger contact, resting on a real surface with matching shadow, or naturally placed in the environment). Hero / banner sections may include text overlay graphics, but the PRODUCT ITSELF stays in-scene with grounded perspective and lighting. No "Sebelum/Selepas" composites and no stacked product cards floating over a portrait.
 
 ═══════════════════════════════════════════════════════════════
 LANGUAGE RULES — ABSOLUTE

@@ -181,10 +181,28 @@ function buildFinalPrompt(job: ImageJob, hasProductRefs: boolean): string {
   if (job.section.type === 'hero') parts.push(HERO_CHARACTER_LOCK)
   if (hasProductRefs) parts.push(PRODUCT_IDENTITY_PREFIX)
   parts.push(job.prompt.prompt)
-  // ── Phase H1 anti-clone variation enrichment ─────────────────────────
-  parts.push(buildVariationDirective(job))
+
+  // V4 — append the no-floating-product rule on every product render so KIE
+  // doesn't paste cut-out PNGs over portraits.
+  if (hasProductRefs) parts.push(NO_FLOATING_PRODUCT_RULE)
+
+  // ── Variation directive — V4: SUPPRESSED for before-after pairs.
+  // The before-after spec mandates SAME camera / SAME lighting / SAME room
+  // within each pair, so injecting "different camera angle hint + different
+  // lighting hint" would fight the same-scene lock and break believability.
+  if (job.section.type !== 'before-after') {
+    parts.push(buildVariationDirective(job))
+  } else {
+    // Still mint a seed so subsequent regens stay stable, but don't emit
+    // the variation directive into the prompt.
+    if (!job.prompt.variationSeed) job.prompt.variationSeed = makeVariationSeed()
+  }
   return parts.join('\n\n')
 }
+
+// V4 — anti-floating-product rule appended to every product-bearing prompt.
+const NO_FLOATING_PRODUCT_RULE =
+  'NO FLOATING PRODUCT OVERLAYS: the product MUST be physically present in the scene — held in a hand with realistic finger contact and matching shadow, OR resting on a real surface with grounded shadow, OR naturally placed in the environment with correct perspective. Do NOT render the product as a cut-out PNG pasted over the background. Do NOT duplicate the product packshot. Do NOT stack multiple product views in one frame. One product, one grounded placement, one realistic shadow.'
 
 // ─────────────────────────────────────────────────────────────────────────
 // Phase H1 — Variation directive.
@@ -265,9 +283,14 @@ function buildVariationDirective(job: ImageJob): string {
 // Retry attempt: re-poll the OLD taskId for 60s. If KIE eventually returns
 // success → no new credit. If still stuck/failed → submit a fresh task.
 // ─────────────────────────────────────────────────────────────────────────
-const MAX_ATTEMPTS = 4
-const RECOVERY_POLL_MS = 60_000   // give an in-flight task another 60s
-const FRESH_POLL_MS    = 5 * 60_000
+// V4 — tighter timeouts so a single stuck KIE task no longer drags the
+// whole queue. KIE GPT-4o image renders normally complete in 40-70s; we
+// give 110s before declaring stuck and either re-polling or re-submitting.
+// Net effect: faster failure → faster retry → better effective throughput
+// when a small fraction of tasks hang.
+const MAX_ATTEMPTS     = 3
+const RECOVERY_POLL_MS = 45_000   // give an in-flight task another 45s
+const FRESH_POLL_MS    = 110_000  // single attempt max wait — was 5 min
 
 async function runWithCreditSafeRetry(
   job: ImageJob,
