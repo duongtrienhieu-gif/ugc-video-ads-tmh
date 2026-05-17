@@ -18,8 +18,19 @@ import OutputPanel from './components/OutputPanel'
 interface LandingPageSnapshot {
   selectedProductId: string | null
   pack: LandingPagePack | null
-  imageProgress: { done: number; failed: number; total: number } | null
+  imageProgress: ImageProgress | null
   lastParams: Omit<LandingGenParams, 'productId'> | null
+}
+
+/** Z8: extended progress shape — drives the ETA / images-per-minute UI. */
+export interface ImageProgress {
+  done: number
+  failed: number
+  total: number
+  /** Accumulated retry count across all jobs (informational). */
+  retries: number
+  /** Epoch ms when the batch started — used for ETA + throughput. */
+  startedAt: number
 }
 
 export default function LandingPageAI() {
@@ -27,7 +38,7 @@ export default function LandingPageAI() {
   const [pack, setPack] = useState<LandingPagePack | null>(null)
   const [isGenerating, setIsGenerating] = useState(false)
   const [isGeneratingImages, setIsGeneratingImages] = useState(false)
-  const [imageProgress, setImageProgress] = useState<{ done: number; failed: number; total: number } | null>(null)
+  const [imageProgress, setImageProgress] = useState<ImageProgress | null>(null)
 
   // Remember last params so "Tạo lại" reuses language / niche / visualMemory.
   const lastParamsRef = useRef<Omit<LandingGenParams, 'productId'> | null>(null)
@@ -152,16 +163,18 @@ export default function LandingPageAI() {
     })
   }
 
-  // ── Phase B — batch image generation ────────────────────────────────
+  // ── Phase B — batch image generation (Z8 perf upgrade) ──────────────
   const handleGenerateAllImages = async () => {
     if (!pack) return
     setIsGeneratingImages(true)
-    setImageProgress({ done: 0, failed: 0, total: 0 })
+    const startedAt = Date.now()
+    setImageProgress({ done: 0, failed: 0, total: 0, retries: 0, startedAt })
     try {
       await generatePackImages(pack, {
-        concurrency: 3,
+        concurrency: 6, // Z8: 3 → 6 (3x throughput, priority queue gates hero first)
         onTaskUpdate: patchImagePrompt,
-        onProgress: (done, failed, total) => setImageProgress({ done, failed, total }),
+        onProgress: (done, failed, total, retries) =>
+          setImageProgress({ done, failed, total, retries, startedAt }),
       })
       addToast('✓ Đã sinh xong toàn bộ ảnh landing pack')
     } catch (err) {
@@ -211,11 +224,12 @@ export default function LandingPageAI() {
       setIsGeneratingImages(false)
       return
     }
-    setImageProgress({ done: 0, failed: 0, total: targets.length })
+    const startedAt = Date.now()
+    setImageProgress({ done: 0, failed: 0, total: targets.length, retries: 0, startedAt })
     let done = 0
     let failed = 0
-    // Run up to 3 in parallel (matches the batch worker pool concurrency)
-    const CONCURRENCY = 3
+    // Z8: 3 → 6 parallel (matches batch worker pool)
+    const CONCURRENCY = 6
     let cursor = 0
     await new Promise<void>((resolve) => {
       let active = 0
@@ -228,7 +242,7 @@ export default function LandingPageAI() {
             .catch(() => { failed++ })
             .finally(() => {
               active--
-              setImageProgress({ done, failed, total: targets.length })
+              setImageProgress({ done, failed, total: targets.length, retries: 0, startedAt })
               if (cursor >= targets.length && active === 0) resolve()
               else pump()
             })

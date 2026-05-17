@@ -39,7 +39,7 @@ export interface VisualMemoryItem {
   label: string
 }
 
-export type ImagePromptStatus = 'idle' | 'queued' | 'generating' | 'done' | 'failed'
+export type ImagePromptStatus = 'idle' | 'queued' | 'generating' | 'retrying' | 'done' | 'failed'
 
 export interface ImagePrompt {
   filename: string

@@ -1,6 +1,7 @@
-import { useState } from 'react'
-import { Loader2, LayoutTemplate, Save, Check, RotateCcw, Trash2, FolderOpen, ChevronDown, ImageIcon, Sparkles, AlertTriangle } from 'lucide-react'
+import { useState, useEffect } from 'react'
+import { Loader2, LayoutTemplate, Save, Check, RotateCcw, Trash2, FolderOpen, ChevronDown, ImageIcon, Sparkles, AlertTriangle, Clock, Zap, RefreshCw } from 'lucide-react'
 import type { LandingPagePack, SavedLandingPack } from '../types'
+import type { ImageProgress } from '../LandingPageAI'
 import SectionCard from './SectionCard'
 import { useLandingPageStore } from '../store'
 import { useAppStore } from '../../../stores/appStore'
@@ -22,8 +23,8 @@ interface OutputPanelProps {
   onRegenerateImage: (sectionIdx: number, imageIdx: number) => void
   /** Delete a single image inside the pack (clears generated ref + resets status). */
   onDeleteImage: (sectionIdx: number, imageIdx: number) => void
-  /** Total / done / failed counts for the image batch. */
-  imageProgress: { done: number; failed: number; total: number } | null
+  /** Z8 progress: done / failed / total / retries / startedAt */
+  imageProgress: ImageProgress | null
   isGeneratingImages: boolean
 }
 
@@ -171,7 +172,7 @@ function ImageGenerationBar({
   onGenerateAll: () => void
   onGenerateRemaining: () => void
   onRetryFailed: () => void
-  progress: { done: number; failed: number; total: number } | null
+  progress: ImageProgress | null
   isGenerating: boolean
 }) {
   const totalImages = pack.sections.reduce((acc, s) => acc + (s.imagePrompts?.length ?? 0), 0)
@@ -205,18 +206,7 @@ function ImageGenerationBar({
 
       <div className="flex flex-wrap items-center gap-1.5">
         {isGenerating && progress && (
-          <div className="flex items-center gap-2">
-            <Loader2 className="h-3.5 w-3.5 animate-spin text-amber-600" />
-            <span className="text-[11px] font-medium text-amber-700">
-              {progress.done}/{progress.total} {progress.failed > 0 && `· ${progress.failed} lỗi`}
-            </span>
-            <div className="h-1.5 w-24 overflow-hidden rounded-full bg-amber-100">
-              <div
-                className="h-full bg-amber-500 transition-all"
-                style={{ width: `${Math.round(((progress.done + progress.failed) / Math.max(1, progress.total)) * 100)}%` }}
-              />
-            </div>
-          </div>
+          <ProgressMeter progress={progress} />
         )}
 
         {/* Retry failed only — appears whenever there are failed images */}
@@ -255,6 +245,79 @@ function ImageGenerationBar({
               ? `Sinh lại tất cả ${totalImages} ảnh (~${estCreditsAll} credit)`
               : `Sinh tất cả ${totalImages} ảnh (~${estCreditsAll} credit)`}
         </button>
+      </div>
+    </div>
+  )
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Z8 ProgressMeter — ETA + images/min + retry count.
+// Shows live throughput so the user trusts the new fast pipeline.
+// ─────────────────────────────────────────────────────────────────────
+function ProgressMeter({ progress }: { progress: ImageProgress }) {
+  // 1s tick — keeps elapsed/ETA fresh between completions.
+  // `now` lives in state (instead of calling Date.now() in render) so the
+  // component remains pure under React 19's strict purity rule.
+  const [now, setNow] = useState(() => Date.now())
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 1000)
+    return () => clearInterval(id)
+  }, [])
+
+  const finished  = progress.done + progress.failed
+  const remaining = Math.max(0, progress.total - finished)
+  const elapsedMs = Math.max(1, now - progress.startedAt)
+  const elapsedSec = elapsedMs / 1000
+
+  // Throughput — images per minute (only after the first image lands)
+  const imagesPerMin = finished > 0 ? (finished / elapsedSec) * 60 : 0
+
+  // ETA — based on average time per finished image; shown after >=1 image done
+  let etaText = '…'
+  if (finished > 0 && remaining > 0) {
+    const avgMs = elapsedMs / finished
+    const etaSec = Math.round((remaining * avgMs) / 1000)
+    etaText = etaSec >= 60
+      ? `${Math.floor(etaSec / 60)}m ${etaSec % 60}s`
+      : `${etaSec}s`
+  } else if (remaining === 0) {
+    etaText = 'xong'
+  }
+
+  const pct = Math.round((finished / Math.max(1, progress.total)) * 100)
+
+  return (
+    <div className="flex flex-col gap-1 min-w-[220px]">
+      <div className="flex items-center gap-2">
+        <Loader2 className="h-3.5 w-3.5 animate-spin text-amber-600" />
+        <span className="text-[11px] font-bold tabular-nums text-amber-800">
+          {progress.done}/{progress.total} ảnh
+        </span>
+        {progress.failed > 0 && (
+          <span className="text-[10px] font-bold text-red-600">· {progress.failed} lỗi</span>
+        )}
+        <span className="ml-auto flex items-center gap-1 text-[10px] font-semibold tabular-nums text-amber-700">
+          <Clock className="h-2.5 w-2.5" /> còn {etaText}
+        </span>
+      </div>
+      <div className="h-1.5 w-full overflow-hidden rounded-full bg-amber-100">
+        <div
+          className="h-full bg-amber-500 transition-all"
+          style={{ width: `${pct}%` }}
+        />
+      </div>
+      <div className="flex items-center gap-3 text-[9px] text-amber-700/80">
+        <span className="flex items-center gap-0.5">
+          <Zap className="h-2.5 w-2.5" />
+          {imagesPerMin > 0 ? `${imagesPerMin.toFixed(1)} ảnh/phút` : 'đang khởi động…'}
+        </span>
+        {progress.retries > 0 && (
+          <span className="flex items-center gap-0.5">
+            <RefreshCw className="h-2.5 w-2.5" />
+            {progress.retries} lần retry
+          </span>
+        )}
+        <span className="ml-auto tabular-nums">{Math.round(elapsedSec)}s đã chạy</span>
       </div>
     </div>
   )

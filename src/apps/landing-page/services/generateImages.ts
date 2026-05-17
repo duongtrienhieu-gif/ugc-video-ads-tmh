@@ -2,26 +2,33 @@ import type {
   LandingPagePack, LandingSection, ImagePrompt, SectionType, VisualMemoryItem,
 } from '../types'
 import { useSettingsStore } from '../../../stores/settingsStore'
-import { generateGpt4oImage, type Gpt4oSize } from '../../../utils/kieai'
+import {
+  submitGpt4oImage, pollGpt4oUntilDone, type Gpt4oSize,
+} from '../../../utils/kieai'
 import { saveAsset, getUrl, isAssetRef } from '../../../utils/assetStore'
 
 // ─────────────────────────────────────────────────────────────────────────
 // IMAGE GENERATION QUEUE for landing-page packs.
 //
-// Fix round — key changes vs previous version:
-// 1. social-proof + whatsapp moved to PRODUCT_FOCUS_SECTIONS — they show
-//    the product in TikTok/Shopee/selfie/crowd images.
-// 2. Product identity lock prefix injected into prompts when refs exist.
-// 3. Section-level imageAspectRatio overrides per-image aspectRatio.
-// 4. 9:16 removed — only 1:1 and 4:5 (→ '2:3') allowed.
-// 5. Retry logic: up to 3 attempts with 5s / 15s backoff.
-// 6. Concurrency lowered from 3 → 2 for backend stability.
+// Z8 PERFORMANCE FIX — targets:
+//   • 5 ảnh   < 30s
+//   • 15 ảnh  < 90s
+//   • 30 ảnh  < 3-5 phút
+//
+// Major changes vs previous version:
+//  1. Concurrency 2 → 6 (3x throughput).
+//  2. PRIORITY QUEUE — hero generates FIRST, then social-proof/whatsapp/
+//     before-after (visible above the fold), then infographics/comparison,
+//     then everything else. User sees important assets land first.
+//  3. CREDIT-SAFE RETRY — splits submit / poll so on a poll-timeout we
+//     poll the SAME taskId again instead of re-submitting (saves credit).
+//  4. 'retrying' UI status — distinct from 'generating', surfaced in cards.
+//  5. SECTION 1 CHARACTER LOCK — every hero prompt is prepended with
+//     "Malaysian Muslim woman in hijab" lock so the brand persona stays
+//     consistent across hero variants.
 // ─────────────────────────────────────────────────────────────────────────
 
 // Section types rendered WITH the user's product references.
-// Includes social-proof and whatsapp-testimonials — both show the product
-// (TikTok/Shopee screenshots have the product image; selfie/crowd show people
-// holding the product). Without the ref the model hallucinates a different product.
 const PRODUCT_FOCUS_SECTIONS: ReadonlySet<SectionType> = new Set<SectionType>([
   'hero',
   'product-discovery',
@@ -29,14 +36,13 @@ const PRODUCT_FOCUS_SECTIONS: ReadonlySet<SectionType> = new Set<SectionType>([
   'mechanism',
   'benefits',
   'comparison',
-  'social-proof',          // TikTok, Shopee, selfie, crowd — all show the product
-  'whatsapp-testimonials', // WhatsApp screenshots include product thumbnail/mention
+  'social-proof',
+  'whatsapp-testimonials',
   'offer',
   'final-cta',
 ])
 
-// People / lifestyle / editorial — do NOT pass product refs so the model
-// doesn't insert the packaging into a candid human moment.
+// People / lifestyle / editorial — do NOT pass product refs.
 const PEOPLE_FOCUS_SECTIONS: ReadonlySet<SectionType> = new Set<SectionType>([
   'pain',
   'failed-solutions',
@@ -46,14 +52,56 @@ const PEOPLE_FOCUS_SECTIONS: ReadonlySet<SectionType> = new Set<SectionType>([
 ])
 
 // ─────────────────────────────────────────────────────────────────────────
-// PRODUCT IDENTITY LOCK — prepend to every prompt that receives product refs.
-// Tells the image model to preserve exact packaging, not redesign the product.
+// PRIORITY QUEUE — lower number = higher priority.
+//
+// Tier 0 (HERO — non-negotiable first): hero
+// Tier 1 (TRUST proof above the fold): social-proof, whatsapp-testimonials,
+//        before-after, final-cta
+// Tier 2 (BODY copy support):           pain, product-discovery, lifestyle,
+//        news-proof
+// Tier 3 (LOW-priority fillers):        ingredients, mechanism, benefits,
+//        comparison, why-happens, failed-solutions, offer, faq
+// ─────────────────────────────────────────────────────────────────────────
+const SECTION_PRIORITY: Record<SectionType, number> = {
+  'hero':                  0,
+  'social-proof':          1,
+  'whatsapp-testimonials': 1,
+  'before-after':          1,
+  'final-cta':             1,
+  'pain':                  2,
+  'product-discovery':     2,
+  'lifestyle':             2,
+  'news-proof':            2,
+  'ingredients':           3,
+  'mechanism':             3,
+  'benefits':              3,
+  'comparison':            3,
+  'why-happens':           3,
+  'failed-solutions':      3,
+  'offer':                 3,
+  'faq':                   3,
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// PRODUCT IDENTITY LOCK — prepended whenever product refs are passed.
 // ─────────────────────────────────────────────────────────────────────────
 const PRODUCT_IDENTITY_PREFIX =
   'CRITICAL — match the reference product image EXACTLY: ' +
   'preserve the same bottle/packaging shape, label typography, cap style, ' +
   'packaging colors, logo placement and proportions. ' +
   'Do NOT redesign, alter, or replace the product. '
+
+// ─────────────────────────────────────────────────────────────────────────
+// SECTION-1 HERO CHARACTER LOCK — Malaysian Muslim hijab women only.
+// Brand persona consistency across hero variants. No men, no Western faces,
+// no Chinese influencer aesthetic.
+// ─────────────────────────────────────────────────────────────────────────
+const HERO_CHARACTER_LOCK =
+  'CHARACTER LOCK: Malaysian Muslim woman in modest hijab, mid 30s, ' +
+  'natural Southeast-Asian features, warm friendly expression, ' +
+  'authentic ecommerce-native UGC aesthetic. ' +
+  'STRICTLY NO men, NO Western/Caucasian faces, NO Chinese influencer-style faces, ' +
+  'NO Korean/Japanese aesthetic. Same ethnicity and hijab style across hero variants. '
 
 /** Pick the asset refs (if any) to pass into KIE filesUrl for this section. */
 function selectRefsForSection(type: SectionType, memory: VisualMemoryItem[]): string[] {
@@ -62,13 +110,9 @@ function selectRefsForSection(type: SectionType, memory: VisualMemoryItem[]): st
   return []
 }
 
-/**
- * Convert section/prompt aspect ratio → the closest KIE-supported size.
- * Only 1:1 and 4:5 (→ '2:3') are allowed — 9:16 and 16:9 are banned.
- */
+/** 1:1 or portrait 2:3 — 9:16 and 16:9 are banned. */
 function toKieAspect(ratio: string | undefined): Gpt4oSize {
   if (ratio === '1:1') return '1:1'
-  // Everything portrait (4:5, 9:16, 2:3, undefined) → 2:3
   return '2:3'
 }
 
@@ -97,41 +141,140 @@ interface QueueOptions {
   concurrency?: number
   signal?: AbortSignal
   onTaskUpdate: (sectionIdx: number, imageIdx: number, patch: Partial<ImagePrompt>) => void
-  onProgress?: (done: number, failed: number, total: number) => void
+  /**
+   * Progress callback. Args:
+   *  done, failed, total, retries (number of retry attempts performed so far,
+   *  accumulated across all jobs)
+   */
+  onProgress?: (done: number, failed: number, total: number, retries: number) => void
 }
 
 // ─────────────────────────────────────────────────────────────────────────
-// Core image generation — single attempt (no retry).
+// Build the final prompt fed to KIE — prepends identity locks as needed.
 // ─────────────────────────────────────────────────────────────────────────
-async function runSingleImage(
+function buildFinalPrompt(job: ImageJob, hasProductRefs: boolean): string {
+  const parts: string[] = []
+  // Hero ALWAYS gets the character lock (even without product refs)
+  if (job.section.type === 'hero') parts.push(HERO_CHARACTER_LOCK)
+  if (hasProductRefs) parts.push(PRODUCT_IDENTITY_PREFIX)
+  parts.push(job.prompt.prompt)
+  return parts.join('')
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// CREDIT-SAFE single image — splits submit / poll so we can recover
+// in-flight taskIds across retry boundaries instead of burning a fresh
+// credit on every retry.
+//
+// First attempt: submit + poll (5 min timeout)
+// Retry attempt: re-poll the OLD taskId for 60s. If KIE eventually returns
+// success → no new credit. If still stuck/failed → submit a fresh task.
+// ─────────────────────────────────────────────────────────────────────────
+const MAX_ATTEMPTS = 4
+const RECOVERY_POLL_MS = 60_000   // give an in-flight task another 60s
+const FRESH_POLL_MS    = 5 * 60_000
+
+async function runWithCreditSafeRetry(
   job: ImageJob,
   memory: VisualMemoryItem[],
   kieApiKey: string,
-): Promise<string> {
+  onTaskUpdate: (patch: Partial<ImagePrompt>) => void,
+  signal?: AbortSignal,
+): Promise<{ assetRef: string; retries: number }> {
   const refs = selectRefsForSection(job.section.type, memory)
   const filesUrl = await resolveRefs(refs)
+  const hasProductRefs = filesUrl.length > 0
 
-  // ── Section-level aspect ratio override (fixes #6 / #7) ──────────────
-  // Section.imageAspectRatio takes priority over per-image aspectRatio.
-  // If neither is set, default to portrait 4:5.
   const effectiveRatio = job.section.imageAspectRatio ?? job.prompt.aspectRatio ?? '4:5'
   const size = toKieAspect(effectiveRatio)
 
-  // ── Product identity lock prefix (fixes #1) ───────────────────────────
-  // Prepend lock text whenever product refs are passed so the model doesn't
-  // redesign the packaging.
-  const prompt = filesUrl.length > 0
-    ? PRODUCT_IDENTITY_PREFIX + job.prompt.prompt
-    : job.prompt.prompt
+  const finalPrompt = buildFinalPrompt(job, hasProductRefs)
 
-  const remoteUrl = await generateGpt4oImage({
-    apiKey: kieApiKey,
-    prompt,
-    filesUrl: filesUrl.length > 0 ? filesUrl : undefined,
-    size,
-    timeoutMs: 5 * 60 * 1000, // 5 min — generous for KIE queue congestion
-  })
+  let lastTaskId: string | null = null
+  let lastError: Error | null = null
+  let retries = 0
 
+  for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+    if (signal?.aborted) throw new Error('Đã huỷ')
+
+    // ── Recover an in-flight task before re-submitting (saves credit) ──
+    if (lastTaskId) {
+      try {
+        onTaskUpdate({ status: 'retrying', error: undefined })
+        const recoveredUrl = await pollGpt4oUntilDone({
+          apiKey: kieApiKey,
+          taskId: lastTaskId,
+          timeoutMs: RECOVERY_POLL_MS,
+          signal,
+        })
+        const assetRef = await downloadAndStore(recoveredUrl)
+        return { assetRef, retries }
+      } catch (err) {
+        // Recovery failed — fall through to fresh submission
+        lastError = err instanceof Error ? err : new Error(String(err))
+        lastTaskId = null
+        retries++
+      }
+    }
+
+    // ── Submit a brand-new task ────────────────────────────────────────
+    try {
+      onTaskUpdate({ status: attempt === 0 ? 'generating' : 'retrying', error: undefined })
+
+      const { taskId } = await submitGpt4oImage({
+        apiKey: kieApiKey,
+        prompt: finalPrompt,
+        filesUrl: filesUrl.length > 0 ? filesUrl : undefined,
+        size,
+      })
+      lastTaskId = taskId
+
+      const remoteUrl = await pollGpt4oUntilDone({
+        apiKey: kieApiKey,
+        taskId,
+        timeoutMs: FRESH_POLL_MS,
+        signal,
+      })
+
+      const assetRef = await downloadAndStore(remoteUrl)
+      // Success → clear the in-flight tracker
+      lastTaskId = null
+      return { assetRef, retries }
+
+    } catch (err) {
+      lastError = err instanceof Error ? err : new Error(String(err))
+
+      // Hard failures — never retry (don't burn credit on something that
+      // structurally can't succeed)
+      if (
+        lastError.message === 'INSUFFICIENT_CREDITS' ||
+        lastError.message.includes('content_policy') ||
+        lastError.message.includes('Đã huỷ') ||
+        lastError.message.includes('CANCELLED')
+      ) {
+        throw lastError
+      }
+
+      // GENERATE_FAILED → KIE definitively failed → retry with fresh submit
+      if (lastError.message.includes('GENERATE_FAILED')) {
+        lastTaskId = null
+      }
+      // Otherwise (timeout / network) → keep lastTaskId so next iteration
+      // tries to recover it before re-submitting.
+
+      retries++
+      if (attempt < MAX_ATTEMPTS - 1) {
+        const backoff = [0, 3_000, 8_000, 15_000][attempt + 1] ?? 15_000
+        console.log(`[LandingPageAI] retry ${attempt + 1}/${MAX_ATTEMPTS - 1} for ${job.prompt.filename} (wait ${backoff / 1000}s, ${lastTaskId ? 'will re-poll old task' : 'will re-submit'})`)
+        await new Promise((r) => setTimeout(r, backoff))
+      }
+    }
+  }
+
+  throw lastError ?? new Error('Image generation failed after max retries')
+}
+
+async function downloadAndStore(remoteUrl: string): Promise<string> {
   if (isAssetRef(remoteUrl)) return remoteUrl
   const resp = await fetch(remoteUrl)
   if (!resp.ok) throw new Error(`Fetch generated image lỗi: ${resp.status}`)
@@ -141,46 +284,11 @@ async function runSingleImage(
 }
 
 // ─────────────────────────────────────────────────────────────────────────
-// Retry wrapper — up to 3 attempts (fixes #4 / #8).
-// Backs off 5s then 15s between retries.
-// Does NOT retry on credit errors or content-policy failures.
+// Build the flat list of jobs from a pack — SORTED by priority.
+//
+// Sort key: (section priority tier, original section index, image index).
+// This guarantees hero comes first; within a tier we preserve pack order.
 // ─────────────────────────────────────────────────────────────────────────
-const MAX_ATTEMPTS = 3
-
-async function runWithRetry(
-  job: ImageJob,
-  memory: VisualMemoryItem[],
-  kieApiKey: string,
-): Promise<string> {
-  let lastError: Error | null = null
-  const backoffMs = [0, 5_000, 15_000]
-
-  for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
-    if (attempt > 0) {
-      const delay = backoffMs[attempt] ?? 15_000
-      console.log(`[LandingPageAI] retry ${attempt}/${MAX_ATTEMPTS - 1} for ${job.prompt.filename} (wait ${delay / 1000}s)`)
-      await new Promise((r) => setTimeout(r, delay))
-    }
-    try {
-      return await runSingleImage(job, memory, kieApiKey)
-    } catch (err) {
-      lastError = err instanceof Error ? err : new Error(String(err))
-      // Hard failures — don't waste credits retrying
-      if (
-        lastError.message === 'INSUFFICIENT_CREDITS' ||
-        lastError.message.includes('GENERATE_FAILED') ||
-        lastError.message.includes('content_policy') ||
-        lastError.message.includes('Đã huỷ')
-      ) {
-        throw lastError
-      }
-      console.warn(`[LandingPageAI] attempt ${attempt + 1} failed: ${lastError.message.slice(0, 120)}`)
-    }
-  }
-  throw lastError ?? new Error('Image generation failed after max retries')
-}
-
-/** Build the flat list of jobs from a pack. */
 function collectJobs(pack: LandingPagePack): ImageJob[] {
   const jobs: ImageJob[] = []
   for (let si = 0; si < pack.sections.length; si++) {
@@ -190,6 +298,16 @@ function collectJobs(pack: LandingPagePack): ImageJob[] {
       jobs.push({ sectionIdx: si, imageIdx: ii, prompt: section.imagePrompts[ii], section })
     }
   }
+
+  // Priority sort — stable on tie via insertion order
+  jobs.sort((a, b) => {
+    const pa = SECTION_PRIORITY[a.section.type] ?? 9
+    const pb = SECTION_PRIORITY[b.section.type] ?? 9
+    if (pa !== pb) return pa - pb
+    if (a.sectionIdx !== b.sectionIdx) return a.sectionIdx - b.sectionIdx
+    return a.imageIdx - b.imageIdx
+  })
+
   return jobs
 }
 
@@ -207,8 +325,10 @@ export function countImagesInPack(pack: LandingPagePack): number {
 }
 
 // ─────────────────────────────────────────────────────────────────────────
-// PUBLIC: generate all images in a pack with a worker pool.
-// Concurrency lowered to 2 (was 3) for better KIE backend stability.
+// PUBLIC: generate all images in a pack with a high-throughput worker pool.
+// Concurrency raised 2 → 6 for ~3x speedup. KIE backend handles concurrent
+// /gpt4o-image/generate fine — the bottleneck is per-image latency, not API
+// rate limit.
 // ─────────────────────────────────────────────────────────────────────────
 export async function generatePackImages(
   pack: LandingPagePack,
@@ -224,9 +344,11 @@ export async function generatePackImages(
   }
   let done = 0
   let failed = 0
-  options.onProgress?.(done, failed, total)
+  let totalRetries = 0
+  options.onProgress?.(done, failed, total, totalRetries)
 
-  const concurrency = options.concurrency ?? 2 // lowered from 3 → 2 for stability
+  // ── Z8: concurrency 2 → 6 (3x throughput) ────────────────────────────
+  const concurrency = options.concurrency ?? 6
   let cursor = 0
 
   await new Promise<void>((resolve) => {
@@ -258,12 +380,19 @@ export async function generatePackImages(
         active++
         options.onTaskUpdate(job.sectionIdx, job.imageIdx, { status: 'generating' })
 
-        runWithRetry(job, pack.visualMemory, kieApiKey)
-          .then((assetRef) => {
+        runWithCreditSafeRetry(
+          job,
+          pack.visualMemory,
+          kieApiKey,
+          (patch) => options.onTaskUpdate(job.sectionIdx, job.imageIdx, patch),
+          options.signal,
+        )
+          .then(({ assetRef, retries }) => {
             options.onTaskUpdate(job.sectionIdx, job.imageIdx, {
               status: 'done', generatedAssetRef: assetRef, error: undefined,
             })
             done++
+            totalRetries += retries
           })
           .catch((err) => {
             const msg = err instanceof Error ? err.message : String(err)
@@ -274,7 +403,7 @@ export async function generatePackImages(
           })
           .finally(() => {
             active--
-            options.onProgress?.(done, failed, total)
+            options.onProgress?.(done, failed, total, totalRetries)
             pump()
             finish()
           })
@@ -288,7 +417,7 @@ export async function generatePackImages(
 
 // ─────────────────────────────────────────────────────────────────────────
 // PUBLIC: regenerate a SINGLE image (per-card retry button).
-// Also uses retry wrapper for consistency.
+// Also uses credit-safe retry wrapper for consistency.
 // ─────────────────────────────────────────────────────────────────────────
 export async function regenerateSingleImage(
   pack: LandingPagePack,
@@ -304,10 +433,11 @@ export async function regenerateSingleImage(
 
   onTaskUpdate(sectionIdx, imageIdx, { status: 'generating', error: undefined })
   try {
-    const assetRef = await runWithRetry(
+    const { assetRef } = await runWithCreditSafeRetry(
       { sectionIdx, imageIdx, prompt, section },
       pack.visualMemory,
       kieApiKey,
+      (patch) => onTaskUpdate(sectionIdx, imageIdx, patch),
     )
     onTaskUpdate(sectionIdx, imageIdx, { status: 'done', generatedAssetRef: assetRef, error: undefined })
   } catch (err) {

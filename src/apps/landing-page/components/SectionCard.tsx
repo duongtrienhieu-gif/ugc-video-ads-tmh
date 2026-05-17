@@ -250,7 +250,7 @@ function ImagePromptCard({
   const [showPrompt, setShowPrompt] = useState(false)
   const resolvedUrl = useAssetUrl(prompt.generatedAssetRef ?? undefined)
 
-  const isLoading = prompt.status === 'queued' || prompt.status === 'generating'
+  const isLoading = prompt.status === 'queued' || prompt.status === 'generating' || prompt.status === 'retrying'
   const hasImage = prompt.status === 'done' && prompt.generatedAssetRef
   const hasError = prompt.status === 'failed'
   const isEmpty = !isLoading && !hasImage && !hasError
@@ -288,10 +288,12 @@ function ImagePromptCard({
         {hasImage && resolvedUrl ? (
           <img src={resolvedUrl} alt={prompt.filename} className="h-full w-full object-cover" />
         ) : isLoading ? (
-          <div className="flex h-full flex-col items-center justify-center gap-1.5 text-violet-400">
+          <div className={`flex h-full flex-col items-center justify-center gap-1.5 ${prompt.status === 'retrying' ? 'text-amber-500' : 'text-violet-400'}`}>
             <Loader2 className="h-5 w-5 animate-spin" />
             <span className="text-[9px] font-medium">
-              {prompt.status === 'queued' ? 'Hàng chờ' : 'Đang sinh…'}
+              {prompt.status === 'queued'    ? 'Hàng chờ' :
+               prompt.status === 'retrying'  ? 'Thử lại…' :
+                                               'Đang sinh…'}
             </span>
           </div>
         ) : hasError ? (
