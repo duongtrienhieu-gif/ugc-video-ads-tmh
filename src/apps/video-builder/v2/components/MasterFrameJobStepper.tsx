@@ -192,8 +192,9 @@ export default function MasterFrameJobStepper({ onCompleted }: Props) {
         </div>
       )}
 
-      {/* Z18 P8 debug panel removed — was referencing undefined symbol.
-          See CinematicDebugPanel / PromptCompilerDebugPanel for diagnostics. */}
+      {/* Z18 P8: Debug panel — surfaces stage / retry / model / attempts
+          history. Collapsed by default; expand to diagnose. */}
+      <DebugPanel job={job} />
 
       {/* Failure detail */}
       {job.status === 'failed' && job.failure && (
@@ -268,7 +269,6 @@ function DebugPanel({ job }: { job: ReturnType<typeof useMasterFrameJobStore.get
             <>
               <DebugRow label="last_attempt_idx" value={String(lastAttempt.attemptIdx)} />
               <DebugRow label="last_attempt_url" value={lastAttempt.imageUrl ? lastAttempt.imageUrl.slice(0, 40) + '...' : '(none yet)'} />
-              {lastAttempt.error && <DebugRow label="last_error" value={lastAttempt.error.slice(0, 80)} />}
             </>
           )}
           {job.failure && (

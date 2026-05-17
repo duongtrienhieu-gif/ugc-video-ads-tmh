@@ -1,6 +1,7 @@
 ﻿import { useEffect, useState } from 'react'
 import Sidebar from './components/Sidebar'
 import ToastContainer from './components/Toast'
+import ErrorBoundary from './components/ErrorBoundary'
 import { useAppStore } from './stores/appStore'
 import { supabase } from './lib/supabase'
 import { useAuthStore } from './stores/authStore'
@@ -38,6 +39,24 @@ const APP_COMPONENTS: Record<string, React.ComponentType> = {
   'image-dna': ImageDna,
   'video-translate': VideoTranslate,
   'video-builder': VideoBuilder,
+}
+
+/** VN label + cache keys used by the per-app ErrorBoundary fallback so the
+ *  user can wipe stale localStorage and reload when an app crashes.
+ *  Cache key list mirrors the keys each app reads on mount. */
+const APP_BOUNDARY_META: Record<string, { name: string; resetKeys: string[] }> = {
+  'finder':            { name: 'Finder',         resetKeys: [] },
+  'ad-anatomy':        { name: 'Phân tích QC',   resetKeys: ['ugc-ad-anatomy-cache'] },
+  'script-architect':  { name: 'Script Architect', resetKeys: [] },
+  'ads-content':       { name: 'Ads Content',    resetKeys: [] },
+  'landing-page':      { name: 'Landing Page AI', resetKeys: [] },
+  'history':           { name: 'Lịch sử',        resetKeys: [] },
+  'character-studio':  { name: 'Character Studio', resetKeys: [] },
+  'voice-studio':      { name: 'Voice Studio',   resetKeys: [] },
+  'broll-studio':      { name: 'Product AI',     resetKeys: [] },
+  'image-dna':         { name: 'Image DNA',      resetKeys: [] },
+  'video-translate':   { name: 'Dịch Video',     resetKeys: [] },
+  'video-builder':     { name: 'UGC Builder',    resetKeys: [] },
 }
 
 export default function App() {
@@ -177,7 +196,14 @@ export default function App() {
               }`}
             >
               <div className="h-full overflow-y-auto">
-                {Component ? <Component /> : null}
+                {Component ? (
+                  <ErrorBoundary
+                    appName={APP_BOUNDARY_META[appId]?.name ?? appId}
+                    resetKeys={APP_BOUNDARY_META[appId]?.resetKeys ?? []}
+                  >
+                    <Component />
+                  </ErrorBoundary>
+                ) : null}
               </div>
             </div>
           )
