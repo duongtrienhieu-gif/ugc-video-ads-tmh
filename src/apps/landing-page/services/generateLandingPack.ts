@@ -1,5 +1,5 @@
 import type {
-  LandingGenParams, LandingPagePack, LandingSection, SectionType, LandingLanguage,
+  LandingGenParams, LandingPagePack, LandingSection, SectionType, LandingLanguage, LandingForm,
 } from '../types'
 import { useSettingsStore } from '../../../stores/settingsStore'
 import { useBankStore } from '../../../stores/bankStore'
@@ -340,6 +340,143 @@ COPY FORMAT — mobile-first
 • NEVER claim cure / treatment / guaranteed — advertorial-safe only`
 
 // ─────────────────────────────────────────────────────────────────────
+// Z25 — FORM_BLUEPRINTS
+//
+// Each landing form gets a DIFFERENT section blueprint (count, order,
+// types). The 17-section SYSTEM_PROMPT spec above defines the SHAPE of
+// each section type; the blueprint below tells Gemini which TYPES to
+// actually emit + in what order for the selected form.
+//
+// Section types must be drawn from the SectionType union in types.ts.
+// ─────────────────────────────────────────────────────────────────────
+
+interface FormBlueprint {
+  label: string
+  sections: SectionType[]
+  styleNotes: string[]
+  bans: string[]
+}
+
+const FORM_BLUEPRINTS: Record<LandingForm, FormBlueprint> = {
+  // Default — full 17-section ecommerce conversion factory.
+  'ugc-malaysia': {
+    label: 'UGC MALAYSIA — Default 17-section conversion-first',
+    sections: [
+      'hero', 'pain', 'why-happens', 'failed-solutions', 'product-discovery',
+      'ingredients', 'mechanism', 'benefits', 'comparison', 'lifestyle',
+      'social-proof', 'whatsapp-testimonials', 'news-proof', 'before-after',
+      'faq', 'offer', 'final-cta',
+    ],
+    styleNotes: [
+      'Mobile-first FB Ads Malaysia ecommerce UGC — real phone, real lighting',
+      'Mixed proof formats (social + WhatsApp + before/after + news)',
+      'Standard COD urgency in offer + final-cta only',
+    ],
+    bans: [
+      'Boring article tone (this is a high-conversion ecommerce page, not a blog)',
+    ],
+  },
+
+  // Storytelling article — long-form trust build, soft CTA at the end.
+  'advertorial': {
+    label: 'ADVERTORIAL / REVIEW — article-style storytelling',
+    sections: [
+      'hero',              // article headline + first-person opener
+      'pain',              // personal story, not bullets
+      'failed-solutions',  // "I tried everything before…"
+      'product-discovery', // discovery moment narrative
+      'mechanism',         // doctor/expert explanation in prose
+      'ingredients',       // ingredient breakdown integrated into story
+      'benefits',          // personal results journey
+      'social-proof',      // curated testimonials integrated into narrative
+      'faq',               // reader Q&A style
+      'final-cta',         // soft single CTA at the end
+    ],
+    styleNotes: [
+      'Personal editorial / first-person narrative throughout — "saya pernah…"',
+      'Longer paragraphs (3-5 lines), storytelling rhythm, trust before sell',
+      'Reduce direct hard-sell — increase "this is what happened to me" authenticity',
+      'FAQ feels like trusted blogger answering readers, not a brand',
+      'Soft CTA tone — invitation, not order command',
+      'Medical/news editorial vibe (light) — credibility-leaning',
+    ],
+    bans: [
+      'WhatsApp screenshot section (advertorial doesn\'t need chat proof)',
+      'Multiple repeating CTA buttons across sections',
+      'COD urgency / countdown / "HARI INI SAHAJA" style',
+      'Short-form UGC punchy emoji-heavy style',
+      'Before/after dramatic transformation collage',
+      'Aggressive scarcity messaging',
+    ],
+  },
+
+  // Luxury / lifestyle / brand-building — no urgency, no spam proof.
+  'premium': {
+    label: 'PREMIUM BRAND — clean lifestyle, brand-first',
+    sections: [
+      'hero',              // premium hero, aspirational
+      'pain',              // subtle problem framing (not panicky)
+      'ingredients',       // ingredient showcase as quality story
+      'mechanism',         // refined explanation, not technical spam
+      'benefits',          // elegant benefit list
+      'lifestyle',         // aspirational lifestyle moment
+      'social-proof',      // curated tasteful testimonials only
+      'final-cta',         // premium invitation CTA
+    ],
+    styleNotes: [
+      'Luxury / clean spacing / minimalist tone — Apple/Dyson vibe',
+      'Aspirational lifestyle, quality ingredients, brand heritage focus',
+      'Max 1-2 emojis per section, elegant flowing prose',
+      'Curated quality testimonials over quantity screenshots',
+      'Premium framing: value, exclusivity, quality promise — no cheap discount',
+      'CTA tone: invitation, not command',
+      'Cinematic studio-clean image visuals OK for premium (deviates from default UGC rule)',
+    ],
+    bans: [
+      'WhatsApp screenshot section (too casual for premium tone)',
+      'TikTok / Shopee screenshot social proof (too marketplace-y)',
+      'Before/after dramatic comparison',
+      'COD trust badges, urgency strips, countdown',
+      '"HARI INI SAHAJA", "STOK TERHAD", FOMO language',
+      'Heavy emoji use 🔥 🚨 💥',
+      'Hard-sell offer stack with bonus expiry warnings',
+    ],
+  },
+
+  // Marketplace COD aggressive — urgency-heavy, repeated CTAs, scarcity.
+  'hard-sell-cod': {
+    label: 'HARD SELL COD — urgency-heavy conversion machine',
+    sections: [
+      'hero',                  // massive hook with urgency
+      'pain',                  // sharp emotional pain hits
+      'failed-solutions',      // "everything else failed"
+      'product-discovery',     // fast reveal
+      'benefits',              // benefit bullets, no fluff
+      'social-proof',          // mass-screenshot social proof
+      'whatsapp-testimonials', // chat proof
+      'before-after',          // dramatic transformation
+      'offer',                 // value stack + COD emphasis
+      'comparison',            // vs competitor table
+      'faq',                   // objection crushing
+      'final-cta',             // final hard CTA + countdown
+    ],
+    styleNotes: [
+      'MAXIMUM urgency — scarcity, time pressure, FOMO in every section',
+      'Multiple strong CTAs across hero, social proof, before/after',
+      'Short punchy sentences (max 1-2 lines), heavy emoji 🔥 ⚠️ ✅ 🚨 💥',
+      'Urgency phrases: "HARI INI SAHAJA", "STOK TERHAD — X unit je tinggal", "ORDER SEKARANG"',
+      'Offer section ultra-aggressive: big value stack + bonus expiry + COD emphasis',
+      'FAQ reframed as objection crusher: "berapa lama?" → "lihat hasil 7 hari"',
+      'Add urgency strip "⏰ PROMOSI TUTUP [TIME/DATE]" to headline',
+    ],
+    bans: [
+      'Long storytelling paragraphs (advertorial mode)',
+      'Premium / luxury / minimalist tone',
+      'Soft CTA / invitation language',
+      'Single CTA at the bottom only — must be repeated CTAs throughout',
+    ],
+  },
+}
 
 function getGeminiKey(): string {
   const s = useSettingsStore.getState()
@@ -405,44 +542,38 @@ function buildUserPrompt(params: LandingGenParams): string {
     lines.push(`Niche hint: ${params.nicheHint}`)
   }
 
-  // ── FORM-SPECIFIC COPY STYLE ─────────────────────────────────────────
+  // ── FORM-SPECIFIC BLUEPRINT (Z25) ────────────────────────────────────
+  // Previously only the COPY TONE varied per form — all 4 forms still
+  // produced the same 17 sections in the same order. User complaint:
+  // "user chọn FORM khác nhưng output vẫn luôn 17-section schema".
+  //
+  // Z25 — each form now also OVERRIDES the section blueprint: which
+  // section TYPES, in what ORDER, with what COUNT. The 17-section spec
+  // above remains the SCHEMA REFERENCE for each section type (so Gemini
+  // knows what fields to put in a "hero" or "social-proof" section),
+  // but the BLUEPRINT list below dictates which sections to actually
+  // produce. Console-logged on every generate so it's verifiable.
   const form = params.form ?? 'ugc-malaysia'
+  const blueprint = FORM_BLUEPRINTS[form]
+  console.info('[TEMPLATE]', form, '· sections =', blueprint.sections.length, '·', blueprint.sections.join(' → '))
+
   if (form !== 'ugc-malaysia') {
     lines.push('')
     lines.push('═══════════════════════════════════════════════════════════════')
-    if (form === 'advertorial') {
-      lines.push('FORM STYLE: ADVERTORIAL / REVIEW')
-      lines.push('═══════════════════════════════════════════════════════════════')
-      lines.push('• Write copy as a personal editorial / review article — first-person narrative throughout')
-      lines.push('• Story arc: relatable hook story → problem deep-dive → discovery moment → results journey → social proof → offer')
-      lines.push('• Longer paragraphs (3-5 lines), storytelling rhythm, build trust before selling')
-      lines.push('• Reduce direct hard-sell language — increase "this is what happened to me / my friend" authenticity')
-      lines.push('• Pain section: personal story angle, not just bullet lists')
-      lines.push('• FAQ: feel like real reader questions answered by a trusted blogger, not a brand')
-      lines.push('• Social proof: integrate testimonials into the narrative, not just as screenshots')
-    } else if (form === 'premium') {
-      lines.push('FORM STYLE: PREMIUM BRAND')
-      lines.push('═══════════════════════════════════════════════════════════════')
-      lines.push('• Clean, sophisticated copy — minimal hard-sell urgency, no countdown scarcity')
-      lines.push('• Focus on aspirational lifestyle, quality ingredients, brand heritage, efficacy')
-      lines.push('• Fewer emojis (max 1-2 per section), more elegant flowing prose')
-      lines.push('• Avoid "❌ SOLD OUT" / "HARI INI SAHAJA" / countdown language')
-      lines.push('• Social proof: curated quality testimonials over quantity screenshots')
-      lines.push('• Offer section: premium framing — value, exclusivity, quality promise — not cheap COD discount')
-      lines.push('• Before/after: subtle transformation, not dramatic COD-style comparison')
-      lines.push('• WhatsApp: fewer but more thoughtful/eloquent testimonials')
-    } else if (form === 'hard-sell-cod') {
-      lines.push('FORM STYLE: HARD SELL COD')
-      lines.push('═══════════════════════════════════════════════════════════════')
-      lines.push('• MAXIMUM urgency in every section — scarcity, time pressure, FOMO throughout')
-      lines.push('• Multiple strong CTAs: not just in offer section but also in hero, social proof, before/after')
-      lines.push('• Copy: short punchy sentences (max 1-2 lines), heavy emoji use 🔥 ⚠️ ✅ 🚨 💥')
-      lines.push('• Urgency phrases: "HARI INI SAHAJA", "STOK TERHAD — X unit je tinggal", "ORDER SEKARANG"')
-      lines.push('• Offer section: ultra-aggressive — big value stack, bonus expiry warning, COD emphasis')
-      lines.push('• Pain section: short sharp emotional hits, not long paragraphs')
-      lines.push('• FAQ: reframe as objection-crushing — address "berapa lama?" with specific rapid results')
-      lines.push('• Add urgency strip: "⏰ PROMOSI TUTUP [TIME/DATE]" to headline/offer')
-    }
+    lines.push(`FORM BLUEPRINT OVERRIDE — ${blueprint.label}`)
+    lines.push('═══════════════════════════════════════════════════════════════')
+    lines.push(`IGNORE the 17-section default list above. Produce EXACTLY these ${blueprint.sections.length} sections in this exact order:`)
+    blueprint.sections.forEach((t, i) => {
+      lines.push(`  ${i + 1}. type="${t}"`)
+    })
+    lines.push('')
+    lines.push('Use the SECTION SCHEMA REFERENCE above for the field shape of each type (imagePrompts, headline, etc.). But the OUTPUT JSON sections[] array must contain EXACTLY the types listed here, in this order, no extras, no skips.')
+    lines.push('')
+    lines.push(`TONE & STYLE — ${blueprint.label}:`)
+    blueprint.styleNotes.forEach((s) => lines.push(`  • ${s}`))
+    lines.push('')
+    lines.push('STRICT BANS for this form:')
+    blueprint.bans.forEach((b) => lines.push(`  ✗ ${b}`))
   }
 
   // ── COMPETITOR INFLUENCE ─────────────────────────────────────────────
