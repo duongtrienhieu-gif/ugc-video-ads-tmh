@@ -69,27 +69,43 @@ export default function SectionCard({ index, section, onRegenerateImage, onDelet
 
   return (
     <div className={`rounded-xl border ${accent} shadow-sm overflow-hidden`}>
-      {/* Header */}
-      <div className="flex w-full items-center justify-between gap-2 px-4 py-3">
+      {/* Header — Z10b: title + inline VN translation on a second line */}
+      <div className="flex w-full items-start justify-between gap-2 px-4 py-3">
         <button
           type="button"
           onClick={() => setExpanded((v) => !v)}
-          className="flex flex-1 items-center gap-2 text-left"
+          className="flex flex-1 items-start gap-2 text-left min-w-0"
         >
-          <span className="rounded-full bg-white px-2 py-0.5 text-[10px] font-bold text-gray-500 shadow-sm">
+          <span className="mt-0.5 shrink-0 rounded-full bg-white px-2 py-0.5 text-[10px] font-bold text-gray-500 shadow-sm">
             {index + 1}
           </span>
-          <span className="text-base">{glyph}</span>
-          <h3 className="text-sm font-bold text-gray-900">{section.title}</h3>
-          {isNewSection && (
-            <span className={`rounded-full px-1.5 py-0.5 text-[9px] font-bold ${NEW_SECTION_BADGE[section.type] ?? 'bg-gray-100 text-gray-600'}`}>
-              MỚI
-            </span>
-          )}
+          <span className="text-base leading-tight">{glyph}</span>
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <h3 className="text-sm font-bold text-gray-900 leading-snug">{section.title}</h3>
+              {isNewSection && (
+                <span className={`rounded-full px-1.5 py-0.5 text-[9px] font-bold ${NEW_SECTION_BADGE[section.type] ?? 'bg-gray-100 text-gray-600'}`}>
+                  MỚI
+                </span>
+              )}
+            </div>
+            {/* Z10b: VN translation of the title — auto-hidden when identical to title */}
+            {section.titleVi
+              && section.titleVi.trim().toLowerCase() !== section.title.trim().toLowerCase() && (
+              <p className="mt-0.5 flex items-start gap-1 text-[11px] italic leading-snug text-blue-700/85">
+                <span className="shrink-0 text-[10px] pt-px">🇻🇳</span>
+                <span>{section.titleVi}</span>
+              </p>
+            )}
+          </div>
         </button>
         {/* Title copy button — always visible */}
         <div className="flex items-center gap-1.5 shrink-0">
-          <CopyAllButton text={section.title} compact title="Chép tiêu đề section" />
+          <CopyAllButton
+            text={section.titleVi ? `${section.title}\n🇻🇳 ${section.titleVi}` : section.title}
+            compact
+            title="Chép tiêu đề section (kèm bản dịch nếu có)"
+          />
           <button
             type="button"
             onClick={() => setExpanded((v) => !v)}

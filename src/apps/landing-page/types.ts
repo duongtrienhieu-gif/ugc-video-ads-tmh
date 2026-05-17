@@ -71,6 +71,10 @@ export interface ReviewItem {
 export interface LandingSection {
   type: SectionType
   title: string
+  /** Z10b: Vietnamese translation of the section title — shown italic
+   *  directly under `title` in the section header bar. Always generated
+   *  alongside `title` regardless of output language. */
+  titleVi?: string
   copy: string
   layoutGuide: string
   /** Vietnamese translation of `copy` (for the Vietnamese-speaking marketer).

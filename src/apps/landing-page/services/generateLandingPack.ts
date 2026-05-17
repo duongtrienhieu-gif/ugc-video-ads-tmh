@@ -37,7 +37,8 @@ OUTPUT FORMAT — STRICT JSON ONLY, no markdown fences, no commentary
 Each section object:
 {
   "type": "<one of the 17 types below>",
-  "title": "Vietnamese heading shown in UI",
+  "title": "Section heading shown in UI — written in the OUTPUT LANGUAGE (catchy ad-style heading, not just the section role)",
+  "titleVi": "ALWAYS REQUIRED — Vietnamese translation of title. Shown italic under the title in the section header bar.",
   "copy": "main body copy in chosen language",
   "viTranslation": "ALWAYS REQUIRED — Vietnamese translation of copy (for the Vietnamese marketer). Never omit.",
   "layoutGuide": "VIETNAMESE — how to arrange this section in Ladipage",
@@ -226,7 +227,7 @@ LANGUAGE RULES — ABSOLUTE
   every word of copy must be Bahasa Melayu (natural colloquial, can include
   common English loanwords like "detox", "supplement" — but NO full English sentences)
 • viTranslation: ALWAYS on every section — Vietnamese translation of copy (regardless of output language)
-• Per-field Vietnamese translations (headlineVi, subheadlineVi, ctaVi, offerStripVi, urgencyTextVi, bulletsVi):
+• Per-field Vietnamese translations (titleVi, headlineVi, subheadlineVi, ctaVi, offerStripVi, urgencyTextVi, bulletsVi):
   ALWAYS in Vietnamese regardless of output language. Generate them whenever the source field exists.
   If output language is already 'vi' (Vietnamese), still include them — just mirror the original (UI dedupes).
 • bulletsVi MUST have the same length as bullets and be index-aligned (bullet[0] ↔ bulletsVi[0]).
@@ -299,7 +300,7 @@ function buildUserPrompt(params: LandingGenParams): string {
   lines.push(`comparison table labels, imagePrompt text overlay content) MUST be written`)
   lines.push(`ENTIRELY in ${langName}. Zero exceptions. Zero mixing with other languages.`)
   lines.push(`EXCEPTIONS (always Vietnamese regardless of output language):`)
-  lines.push(`  layoutGuide, viTranslation, headlineVi, subheadlineVi, ctaVi, offerStripVi, urgencyTextVi, bulletsVi`)
+  lines.push(`  layoutGuide, viTranslation, titleVi, headlineVi, subheadlineVi, ctaVi, offerStripVi, urgencyTextVi, bulletsVi`)
   lines.push(`EXCEPTIONS (always English): imagePrompt.prompt`)
   lines.push(`EXCEPTIONS (keep brand name as-is): product name, ingredient names`)
   lines.push(`bulletsVi MUST be the same length as bullets (index-aligned 1:1 translation).`)
@@ -474,6 +475,7 @@ function normalizeSection(s: RawSection): LandingSection | null {
   return {
     type,
     title: s.title ?? type,
+    titleVi: s.titleVi,
     copy: s.copy ?? '',
     layoutGuide: s.layoutGuide ?? '',
     viTranslation: s.viTranslation,
