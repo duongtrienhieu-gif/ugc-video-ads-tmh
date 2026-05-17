@@ -644,16 +644,21 @@ export function buildEditorialBlueprint(
   options: BuildEditorialOptions,
 ): EditorialBlueprint {
   // ── 1. Infer visualRole everywhere it's missing ──────────────────────
-  let masters = rawMasters.map((b) => ({
+  // The narrowed type below tells TS that visualRole is non-optional after
+  // step 1. enforceVisualRoleDiversity + autoMutateRepetitive return the
+  // same shape (they only ever copy/mutate, never strip visualRole), so we
+  // cast the result back to the narrowed type to preserve the guarantee.
+  type MasterWithRole = SceneBlueprint & { visualRole: NonNullable<SceneBlueprint['visualRole']> }
+  let masters: MasterWithRole[] = rawMasters.map((b) => ({
     ...b,
-    visualRole: b.visualRole ?? inferVisualRole(b),
+    visualRole: (b.visualRole ?? inferVisualRole(b)) as MasterWithRole['visualRole'],
   }))
 
   // ── 2. Enforce visual role diversity ─────────────────────────────────
-  masters = enforceVisualRoleDiversity(masters)
+  masters = enforceVisualRoleDiversity(masters) as MasterWithRole[]
 
   // ── 3. Auto-mutate semantically duplicate consecutive scenes ─────────
-  masters = autoMutateRepetitive(masters)
+  masters = autoMutateRepetitive(masters) as MasterWithRole[]
 
   // ── 4. Build motion blueprint per master ─────────────────────────────
   masters = masters.map((m) => ({ ...m, motion: m.motion ?? buildMotionForMaster(m) }))

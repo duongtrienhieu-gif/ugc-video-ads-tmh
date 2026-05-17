@@ -84,13 +84,27 @@ const SECTION_PRIORITY: Record<SectionType, number> = {
 }
 
 // ─────────────────────────────────────────────────────────────────────────
-// PRODUCT IDENTITY LOCK — prepended whenever product refs are passed.
+// PRODUCT IDENTITY LOCK — V3 — strict-no-substitute policy.
+// User reported AI swapping the product entirely (OXEVIN / DOSPRO renamed)
+// instead of using INFINITY PROBIOTICS reference. Hardened with explicit
+// pixel-for-pixel + brand-name lock + fail-rather-than-substitute language.
 // ─────────────────────────────────────────────────────────────────────────
 const PRODUCT_IDENTITY_PREFIX =
-  'CRITICAL — match the reference product image EXACTLY: ' +
-  'preserve the same bottle/packaging shape, label typography, cap style, ' +
-  'packaging colors, logo placement and proportions. ' +
-  'Do NOT redesign, alter, or replace the product. '
+  'ABSOLUTE PRODUCT IDENTITY LOCK — read carefully:\n' +
+  'The product MUST be PIXEL-FOR-PIXEL the EXACT product from the attached reference image.\n' +
+  '  • Same bottle / jar / sachet / packaging SHAPE (no swapping container types)\n' +
+  '  • Same exact brand name TEXT on the label — do NOT rename, do NOT invent a new brand\n' +
+  '  • Same label TYPOGRAPHY (font, size, layout)\n' +
+  '  • Same label COLORS (every color must match the reference)\n' +
+  '  • Same cap style and color\n' +
+  '  • Same logo placement and proportions\n' +
+  '  • Same packaging RATIO (squat vs tall — do NOT change)\n' +
+  'BANNED behaviors:\n' +
+  '  • Inventing a fake brand name like "OXEVIN", "DOSPRO", "VITALEX" — use ONLY the brand from the reference\n' +
+  '  • Substituting a "similar-looking" generic supplement bottle — pixel-for-pixel match only\n' +
+  '  • Redesigning the label even slightly — every word and graphic stays as-is\n' +
+  '  • Changing the cap, removing the cap, swapping container types\n' +
+  'If you cannot precisely replicate the product, fail and return an error rather than render a substitute.\n'
 
 // ─────────────────────────────────────────────────────────────────────────
 // SECTION-1 HERO CHARACTER LOCK — Malaysian Muslim hijab women only.
@@ -195,29 +209,10 @@ const LIGHTING_DIRS = [
   'cool morning bathroom light', 'dim cozy table-lamp evening',
   'mixed window + ceiling light', 'soft overcast diffused',
 ]
-const HAND_POSES = [
-  'one hand cradling product at chest',
-  'both hands lifting product to face',
-  'pointing index finger at product label',
-  'product resting on palm of one hand',
-  'no hands — product on surface',
-  'hand on belly, other hand near product',
-  'one hand reaching toward camera with product',
-  'cradling product against shoulder',
-]
-const BG_CONTEXTS = [
-  'home kitchen counter with fresh fruit bowl', 'bedroom bedside with plant',
-  'living-room sofa corner with cushions', 'bathroom counter with towel',
-  'cafe table with coffee cup beside', 'home office desk with laptop edge',
-  'dining table with breakfast plate', 'balcony plants softly out of focus',
-]
-const BOTTLE_ANGLES = [
-  'product front-facing label fully visible',
-  'product 3/4 rotated showing depth',
-  'product side profile with cap visible',
-  'product slight top-down 15° tilt',
-  'product held angled toward camera',
-]
+// V3 — HAND_POSES, BG_CONTEXTS, BOTTLE_ANGLES removed.
+// Old 5-axis variation directive softened to 2 axes (camera + lighting only)
+// so section structure (e.g. "BEFORE portrait", "pure WhatsApp screenshot")
+// is not contaminated by generic hand/bg/bottle hints.
 
 function pickFromPool<T>(pool: T[], seed: string, offset = 0): T {
   let h = 0
@@ -242,31 +237,21 @@ function buildVariationDirective(job: ImageJob): string {
     job.prompt.variationSeed = seed
   }
 
-  // ── Determine which axes to vary ─────────────────────────────────────
-  // Person-centric sections get all 5 axes; product-only / infographic /
-  // screenshot sections get a narrower set.
-  const personSections = new Set([
-    'hero', 'pain', 'failed-solutions', 'product-discovery',
-    'lifestyle', 'social-proof', 'before-after',
-  ])
-  const isPerson = personSections.has(job.section.type)
-
+  // ── V3: softer variation — 2 axes instead of 5 ──────────────────────
+  // Previous version aggressively rotated 5 axes per image which OVER-
+  // randomized and broke section structure. V3 keeps section structure
+  // intact + only varies camera angle + lighting. Section-specific specs
+  // in SYSTEM_PROMPT now drive context/hand/bottle variation naturally.
   const idxSeed = `${job.section.type}-${job.imageIdx}-${seed}`
-  const camera   = pickFromPool(CAMERA_ANGLES,   idxSeed, 0)
-  const lighting = pickFromPool(LIGHTING_DIRS,   idxSeed, 7)
-  const hand     = pickFromPool(HAND_POSES,      idxSeed, 13)
-  const bg       = pickFromPool(BG_CONTEXTS,     idxSeed, 19)
-  const bottle   = pickFromPool(BOTTLE_ANGLES,   idxSeed, 23)
+  const camera   = pickFromPool(CAMERA_ANGLES, idxSeed, 0)
+  const lighting = pickFromPool(LIGHTING_DIRS, idxSeed, 7)
 
   const lines: string[] = []
-  lines.push('AUTHENTICITY VARIATION DIRECTIVE — strict, do NOT clone previous variants:')
-  lines.push(`  • Camera angle: ${camera}`)
-  lines.push(`  • Lighting: ${lighting}`)
-  if (isPerson) lines.push(`  • Hand pose: ${hand}`)
-  lines.push(`  • Background context: ${bg}`)
-  lines.push(`  • Product rotation: ${bottle}`)
-  lines.push(`  • This image must NOT share the same hand position / lighting / background / bottle angle as any other image in the pack.`)
-  lines.push(`  • Variation token: ${seed} (different latent enforcement)`)
+  lines.push('AUTHENTICITY VARIATION DIRECTIVE (soft — respect section structure):')
+  lines.push(`  • Camera angle hint: ${camera}`)
+  lines.push(`  • Lighting hint: ${lighting}`)
+  lines.push(`  • Render as INDEPENDENT phone-quality photo — do NOT derive from any other image.`)
+  lines.push(`  • Fresh seed token: ${seed}`)
 
   return lines.join('\n')
 }

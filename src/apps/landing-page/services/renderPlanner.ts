@@ -63,41 +63,45 @@ interface ComposerHint {
   reason: string
 }
 
-/** Filename-prefix lookups for template-composed assets. Order matters —
- *  first match wins. All patterns are case-insensitive. */
+/** V3 — Filename patterns that STILL route through template composers.
+ *  User reported template-composed screenshots / collages look fake compared
+ *  to AI-rendered. So this list is now VERY narrow — ONLY explicit marketing
+ *  banners (offer + final-cta) which are supposed to be designed graphics,
+ *  not authentic phone screenshots.
+ *
+ *  Removed in V3 (these now go through ai_full_render):
+ *    • WhatsApp screenshots → AI renders pure phone screenshots authentically
+ *    • Shopee review cards  → AI renders the screenshot
+ *    • TikTok review cards  → AI renders the screenshot
+ *    • FB comment screens   → AI renders the screenshot
+ *    • News article screens → AI renders the screenshot
+ *
+ *  These screenshot composers still exist in /composers/ for power users
+ *  who want to invoke them via DevTools (__testWhatsappComposer etc.), but
+ *  they're no longer in the auto-routing path.
+ */
 const TEMPLATE_PATTERNS: Array<{ test: RegExp; hint: ComposerHint }> = [
-  // WhatsApp screenshots — 4 per pack
-  { test: /^wa_\d+/i,                hint: { composer: 'whatsapp-chat',     reason: 'WhatsApp UI có thể compose từ HTML + ảnh sản phẩm reuse' } },
-  // Shopee review screenshots
-  { test: /shopee/i,                 hint: { composer: 'shopee-review',     reason: 'Shopee review card 90% template chrome' } },
-  // TikTok Shop review screenshots
-  { test: /tiktok/i,                 hint: { composer: 'tiktok-review',     reason: 'TikTok Shop card 90% template chrome' } },
-  // Facebook comment screenshots
-  { test: /^social_fb/i,             hint: { composer: 'fb-comment',        reason: 'Facebook comment section UI thuần template' } },
-  // News article screenshots
-  { test: /^news_/i,                 hint: { composer: 'news-article',      reason: 'Malaysia news layout pure template — chỉ headline/body cần dynamic' } },
-  // Promo banner (offer + final-cta)
-  { test: /^(offer|finalcta)_/i,     hint: { composer: 'promo-banner',      reason: 'Promo banner = product packshot reuse + overlay typography' } },
+  // Promo banner (offer + final-cta) — these ARE explicit marketing banners.
+  // Kept as template-composed because the section's intent is "designed
+  // promo graphic with product packshot + overlay", which is exactly what
+  // canvas composition delivers cleanly.
+  { test: /^(offer|finalcta)_/i,     hint: { composer: 'promo-banner',      reason: 'Promo banner = designed marketing graphic (intended)' } },
 ]
 
-/** Style-keyword fallback when filename doesn't match a known pattern. */
+/** V3 — Style-keyword fallback. Same narrowing as TEMPLATE_PATTERNS.
+ *  Only promo banner styles still match — everything else falls through
+ *  to ai_full_render. */
 const STYLE_PATTERNS: Array<{ test: RegExp; hint: ComposerHint }> = [
-  { test: /whatsapp/i,               hint: { composer: 'whatsapp-chat',     reason: 'Style label nhắc WhatsApp UI' } },
-  { test: /shopee/i,                 hint: { composer: 'shopee-review',     reason: 'Style label nhắc Shopee review' } },
-  { test: /tiktok shop/i,            hint: { composer: 'tiktok-review',     reason: 'Style label nhắc TikTok Shop card' } },
-  { test: /facebook comment/i,       hint: { composer: 'fb-comment',        reason: 'Style label nhắc FB comment screenshot' } },
   { test: /promo banner/i,           hint: { composer: 'promo-banner',      reason: 'Style label nhắc promo banner' } },
-  { test: /news article|berita|mstar/i, hint: { composer: 'news-article',   reason: 'Style label nhắc Malaysia news' } },
 ]
 
 // ── Section-level strategy hints ───────────────────────────────────────────
 //
 // Sections where EVERY image is template-composed (no AI render needed at all).
 
-const ALL_TEMPLATE_SECTIONS = new Set([
-  'whatsapp-testimonials',  // 4 WA screenshots = pure template
-  'news-proof',             // 2 news article shots = pure template
-])
+// V3 — emptied. WhatsApp + news-proof now AI-rendered like everything else.
+// Template composition was producing AI-clone look that users could detect.
+const ALL_TEMPLATE_SECTIONS = new Set<string>([])
 
 /** Sections where exactly one image is composed from the master product
  *  packshot plus an overlay. */
@@ -190,52 +194,13 @@ export function classifyImagePrompt(
     }
   }
 
-  // 4. Section-specific section-internal mixing
-  // 4a. social-proof: 3 first images = screenshots (template), last 2 = AI selfie+crowd
-  if (section.type === 'social-proof' && imageIdxInSection < 3) {
-    return {
-      sectionIdx: -1,
-      imageIdx: imageIdxInSection,
-      filename,
-      style,
-      strategy: 'template_composed',
-      reason: 'Social proof screenshot — UI template + reusable product render',
-      compositionConfig: { composer: 'social-screenshot', params: { idx: imageIdxInSection } },
-    }
-  }
-
-  // 4b. before-after: 4 collages — first 2 are AI portraits, last 2 are derived collages
-  if (section.type === 'before-after' && imageIdxInSection >= 2) {
-    return {
-      sectionIdx: -1,
-      imageIdx: imageIdxInSection,
-      filename,
-      style,
-      strategy: 'derived_asset',
-      reason: 'Before/after collage — build từ 2 portrait đã render bằng AI',
-      derivedFrom: 'ba_01.jpg',
-      compositionConfig: { composer: 'before-after-collage', params: { variantIdx: imageIdxInSection - 2 } },
-    }
-  }
-
-  // 5. Infographic sections — render entirely from copy + reusable assets
-  if (
-    section.type === 'why-happens' ||
-    section.type === 'ingredients' ||
-    section.type === 'mechanism' ||
-    section.type === 'benefits' ||
-    section.type === 'comparison'
-  ) {
-    return {
-      sectionIdx: -1,
-      imageIdx: imageIdxInSection,
-      filename,
-      style,
-      strategy: 'template_composed',
-      reason: `${section.type} infographic — bullets/copy + reusable swatch → canvas`,
-      compositionConfig: { composer: `${section.type}-infographic`, params: {} },
-    }
-  }
+  // V3 REMOVED sections 4a (social-proof screenshots → template), 4b
+  // (before-after collages), and 5 (infographic templates). All go through
+  // ai_full_render now — user feedback: template-composed assets had an
+  // AI-clone look and broke conversion-quality bar.
+  //
+  // Section-specific routing kept ONLY for explicit marketing banners
+  // (offer + final-cta) — handled above in PRODUCT_OVERLAY_SECTIONS.
 
   // 6. Default fallback — AI full render. Safe-expensive path.
   // Hero is also marked as a reusable feeder so its first image is cached.

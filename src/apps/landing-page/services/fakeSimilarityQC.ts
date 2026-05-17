@@ -168,7 +168,9 @@ export async function comparePair(imageARef: string, imageBRef: string): Promise
       overall,
       axes,
       summaryVi: typeof parsed.summaryVi === 'string' ? parsed.summaryVi : '',
-      flagged: overall >= 70,
+      // V3 — lowered threshold 70→55. User now prioritizes realism > diversity
+      // tolerance, so even "moderate" similarity warrants regen consideration.
+      flagged: overall >= 55,
     }
   } catch (err) {
     console.warn('[fakeSimilarityQC] compare failed:', err)

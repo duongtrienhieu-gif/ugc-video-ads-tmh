@@ -174,11 +174,26 @@ SECTION SPEC — produce EXACTLY these 17 in this order
 12. type="whatsapp-testimonials", imageAspectRatio="4:5"
     • reviews: 4 chat-style testimonials (multi-line, emojis, authentic Malay)
     • copy: short framing
-    • 4 imagePrompts ALL aspectRatio="4:5":
-      - wa_01.jpg, style="WhatsApp screenshot authentic 1", aspectRatio="4:5": realistic WhatsApp chat screenshot. Green chat bubbles. Malaysian sender name. Casual Malay text with emojis about product results. Timestamp. Slightly JPEG-compressed real phone quality.
-      - wa_02.jpg, style="WhatsApp screenshot authentic 2", aspectRatio="4:5": different user, more excited style, more emojis, different timestamp
-      - wa_03.jpg, style="WhatsApp screenshot authentic 3", aspectRatio="4:5": WhatsApp group chat named "Ibu2 Sihat" or similar, multiple positive replies about the product
-      - wa_04.jpg, style="WhatsApp screenshot authentic 4", aspectRatio="4:5": WhatsApp conversation where user shares a result, friend reacts positively — multi-exchange feel
+    • 4 imagePrompts — V3 STRICT STRUCTURE:
+        2 PURE WhatsApp screenshots (NO product visible)
+        + 2 REAL-LIFE casual product photos (NOT designed banners)
+      Goal: looks like a customer sent these 4 images via WhatsApp.
+      NOT a marketing graphic. NOT an ecommerce template.
+      - wa_01.jpg, style="WhatsApp screenshot ONLY — pure phone screen, no product", aspectRatio="4:5":
+        Authentic smartphone WhatsApp chat screenshot ONLY. NO product packshot. NO product in frame at all. NO staged lighting. NO marketing layout.
+        Show: phone status bar at top, WhatsApp green header with chat partner name (blurred or generic Malaysian female avatar), green outgoing message bubbles, white incoming bubbles, Malay testimonial text with emojis (3-5 messages), realistic timestamp, message input bar at bottom. Slight JPEG compression artifacts — like a screenshot a customer actually sent. ABSOLUTE: no product bottle visible anywhere.
+      - wa_02.jpg, style="WhatsApp screenshot ONLY — pure phone screen, no product (different convo)", aspectRatio="4:5":
+        Another authentic WhatsApp chat screenshot. Different person from wa_01 (different chat partner name + avatar color). Different conversation flow with different emojis and timestamp. Same authenticity rules: NO product in frame, just chat UI. Looks like a totally separate customer.
+      - wa_03.jpg, style="Real-life product photo — handheld casual, NOT staged", aspectRatio="4:5":
+        Authentic phone-camera photo of a Malaysian person holding the product casually at home. NOT a professional product shot. NOT a marketing banner. NOT centered or designed. Slight motion blur OR shallow depth-of-field. Imperfect framing. Casual home environment in background (kitchen counter / bedside / dining table). Lighting natural ambient indoor — NOT studio. Hand visible holding the product but NOT centered. Looks like the customer snapped it quickly to send a friend.
+      - wa_04.jpg, style="Real-life product photo — DIFFERENT environment + hand + light", aspectRatio="4:5":
+        Different person from wa_03. STRICT VARIATION: different home environment (if wa_03 was kitchen, this is bedroom / living room / balcony), different hand grip, different camera angle, different lighting. Same product identity LOCKED — same brand, same bottle shape, same label colors. Authentic phone-photo aesthetic, NOT marketing.
+
+      STRICT BAN for this whole section:
+        • NO marketing collages
+        • NO designed text overlays on the photos
+        • NO "Testimonials" headlines on the images
+        • NO 4 product packshots — at least 2 MUST be pure screenshots with NO product
 
 13. type="news-proof", imageAspectRatio="4:5"
     • copy: authority framing text about health concern
@@ -188,27 +203,39 @@ SECTION SPEC — produce EXACTLY these 17 in this order
 
 14. type="before-after", imageAspectRatio="4:5"
     • copy: transformation narrative
-    • 4 imagePrompts — H1 REWRITE: ba_01/ba_02 are SINGLE-PERSON portraits
-      composed locally into collages ba_03/ba_04. Strict "time-passed
-      different person look" rules to prevent AI-clone fake feel.
-      - ba_01.jpg, style="Before portrait — tired / dim / cluttered", aspectRatio="4:5":
-        SINGLE Malaysian woman, BEFORE state. Wearing OLD WORN clothes (faded t-shirt or oversized hoodie, no makeup, hair tied back lazy). DIM COOL lighting (overcast window, dull indoor lamp). Setting: MESSY HOME corner — unmade bed / cluttered desk / unfinished laundry. TIRED posture — slouched shoulders, hand on belly OR forehead, low-energy expression, slight bloat. NO product in frame. NO labels. Authentic phone-camera quality, slightly grainy.
-      - ba_02.jpg, style="After portrait — bright / confident / clean", aspectRatio="4:5":
-        SAME person identity AFTER 30 days. STRICT TIME-PASSED REALISM:
-          - DIFFERENT OUTFIT (clean fitted top, light cardigan, or smart-casual — NOT same shirt as ba_01)
-          - DIFFERENT LIGHTING (bright warm window daylight or golden hour — NOT the dim ba_01 lamp)
-          - DIFFERENT ROOM/SETTING (kitchen with morning light / balcony / cafe / sunlit living room — NEVER the same room as ba_01)
-          - DIFFERENT HAIR styling (down naturally, brushed, or styled — NOT lazy tied)
-          - CONFIDENT posture (upright, slight smile, energetic, healthier skin glow)
-          - DIFFERENT camera angle (if ba_01 is eye-level, ba_02 is slight low-angle or 3/4)
-        NO product in frame. NO labels. Authentic real-life phone capture.
-      - ba_03.jpg, style="Before/after collage — derived", aspectRatio="4:5":
-        DERIVED LOCALLY from ba_01 + ba_02 portraits — DO NOT generate via AI.
-        Composed split-frame collage with "Sebelum" / "Selepas" labels added
-        in post. Marker for the renderer: this asset is composed locally.
-      - ba_04.jpg, style="Before/after collage variant — derived", aspectRatio="4:5":
-        DERIVED LOCALLY same as ba_03 but different split layout (vertical
-        stack vs horizontal). Marker: composed locally.
+    • 4 imagePrompts — V3 REWRITE: 4 INDEPENDENT phone-quality photos.
+      NO collages. NO split-frames. NO "Sebelum/Selepas" labels in the
+      image itself. NO designed marketing layout. Each image is ONE
+      independent realistic phone photo — like a real customer sent it.
+      - ba_01.jpg, style="Before portrait — tired / dim / casual home", aspectRatio="4:5":
+        SINGLE Malaysian woman, BEFORE state. Casual home wear (faded t-shirt, plain hoodie, oversized). No makeup, hair tied back lazily. DIM REALISTIC lighting (overcast window, dull indoor lamp). Setting: lived-in home corner — bedroom, kitchen edge, dining table — naturally cluttered, NOT staged. TIRED posture, slouched shoulders, slight belly bloat visible through clothes, low-energy expression. NO product in frame. NO labels. NO "Sebelum" overlay. ONE independent phone-quality portrait photo.
+      - ba_02.jpg, style="After portrait — bright / confident / DIFFERENT outfit + room", aspectRatio="4:5":
+        SAME person identity AFTER 30 days. INDEPENDENT phone-quality portrait — NOT a collage panel. STRICT time-passed cues:
+          - DIFFERENT outfit (clean fitted top or smart-casual — NEVER same shirt as ba_01)
+          - DIFFERENT lighting (bright warm window daylight or golden hour — NOT dim ba_01 lamp)
+          - DIFFERENT room (kitchen morning light / balcony / sunlit living room — NEVER ba_01's room)
+          - DIFFERENT hair (down naturally, brushed, or styled — NOT lazy tied)
+          - DIFFERENT camera angle (if ba_01 eye-level, this is 3/4 or slight low-angle)
+          - Confident posture, healthier skin glow, slight smile
+        NO product in frame. NO labels. NO "Selepas" overlay. ONE independent photo.
+      - ba_03.jpg, style="Before body comparison — stomach bloat side pose", aspectRatio="4:5":
+        BEFORE body shot — same person OR similar Malaysian person (testimonial #2). Side pose showing visible belly bloat under fitting clothes. Casual home setting. Darker mood indoor lighting. NO product in frame. NO labels. NO collage. ONE independent realistic phone photo.
+      - ba_04.jpg, style="After body comparison — flatter stomach DIFFERENT outfit + light", aspectRatio="4:5":
+        AFTER body shot — same person as ba_03. INDEPENDENT phone-quality photo, NOT a collage panel. STRICT time-passed differences:
+          - DIFFERENT outfit (fitted activewear, clean tank, smart-casual — NEVER same as ba_03)
+          - DIFFERENT lighting (bright window or outdoor — NOT ba_03's dim)
+          - DIFFERENT room/environment
+          - Flatter stomach visible, healthier posture, confident pose
+        NO product. NO labels. NO collage. ONE independent photo.
+
+      STRICT BAN for this whole section:
+        • NO collages (split-frame, side-by-side, vertical stack — ALL banned)
+        • NO "Sebelum" / "Selepas" text overlays in the rendered image
+        • NO duplicated halves
+        • NO designed marketing poster aesthetic
+        • NO ecommerce template look
+        Each image stands alone as a single phone photo. The UI shows them
+        in sequence but the IMAGES THEMSELVES are not collages.
 
 15. type="faq"
     • faqs: 5-7 Malaysia FAQs (halal, side effects, "berapa lama nampak hasil", COD, shipping, return, allergies)

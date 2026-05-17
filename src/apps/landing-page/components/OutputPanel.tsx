@@ -329,7 +329,9 @@ function SimilarityScanPanel({ pack }: { pack: LandingPagePack }) {
         <div className="mt-2 space-y-1.5">
           {reports.map((report) => {
             const section = pack.sections[report.sectionIdx]
-            const sev = report.maxSimilarity >= 85 ? 'red' : report.maxSimilarity >= 70 ? 'amber' : 'emerald'
+            // V3 — tighter thresholds (was 85/70, now 70/55) since user
+            // prioritizes realism > template-look tolerance.
+            const sev = report.maxSimilarity >= 70 ? 'red' : report.maxSimilarity >= 55 ? 'amber' : 'emerald'
             const sevColors = {
               red:     'border-red-300 bg-red-50 text-red-900',
               amber:   'border-amber-300 bg-amber-50 text-amber-900',
@@ -461,15 +463,10 @@ function ImageGenerationBar({
           {pack.visualMemory.length > 0 && ` · ${pack.visualMemory.length} ảnh tham chiếu`}
         </p>
         <HybridRenderMetrics pack={pack} />
-        {!hybridOn && totalImages >= 20 && (
-          <p className="mt-1 text-[10px] text-emerald-700">
-            💡 Bật hybrid mode để tiết kiệm ~60% credit:{' '}
-            <code className="rounded bg-emerald-50 px-1 py-px font-mono text-[10px] text-emerald-800">
-              __setHybridRender(true)
-            </code>
-            {' '}rồi reload
-          </p>
-        )}
+        {/* V3 — removed "Bật hybrid mode" hint.
+            User priority is QUALITY > COST. Hybrid mode now used ONLY for
+            promo banners (offer / final-cta) where designed-graphic look is
+            intentional. Everything else renders via fresh AI. */}
       </div>
 
       <div className="flex flex-wrap items-center gap-1.5">
