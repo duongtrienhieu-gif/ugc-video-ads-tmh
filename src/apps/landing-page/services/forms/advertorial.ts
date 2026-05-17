@@ -89,24 +89,18 @@ const IMAGES_PER_SECTION: Partial<Record<SectionType, number>> = {
 //   2. Saved to pack.characterProfile so generateImages.ts can emit a
 //      character-lock directive on every people-shot at KIE submission.
 
+// Phase 7 stabilization — locked to ONE archetype only (Malaysian Muslim
+// woman in hijab) per user spec. Previously had 3 archetypes (Chinese
+// woman with hair down + Malay woman with hair tied back) which caused
+// ethnicity / hijab inconsistency when Gemini was free to pick. The
+// storytelling form must always be the SAME Malaysian Muslim hijab woman
+// — period. Name + small environment details rotate per pack.
 const ARCHETYPE_OPTIONS = [
   {
-    archetype: 'Malaysian Muslim woman, mid-30s, working mother',
-    nameVi: ['Aishah binti Rahman', 'Siti Norhayati', 'Nor Aini', 'Faridah Hassan'],
-    appearance: 'Mid-30s Malaysian Muslim woman, soft-rounded face, warm brown eyes, light olive skin with natural pores, slight smile lines, modest tudung (hijab) in muted tones (dusty pink / sage / cream — keep ONE color across all photos), no heavy makeup, natural eyebrows, small ear earrings barely visible under hijab',
-    environment: 'Small Malaysian family home — kitchen with formica counter and fruit bowl visible, living room with batik throw on a beige sofa, late-morning warm window light from the right side, soft cluttered "lived-in" feel — NOT staged',
-  },
-  {
-    archetype: 'Malaysian Chinese woman, late-30s, office worker',
-    nameVi: ['Lim Wei Lin', 'Tan Mei Ling', 'Chong Hui Min', 'Ng Pei San'],
-    appearance: 'Late-30s Malaysian Chinese woman, oval face, dark almond eyes, slight under-eye shadow (tired-but-pretty), shoulder-length straight black hair with subtle messy waves, fair-medium skin with light freckles, no makeup or minimal, casual cotton tee or cardigan',
-    environment: 'Modern Malaysian condo — small open kitchen with marble-effect counter, large window with city skyline blurred behind sheer curtain, cool morning light, scattered work-from-home items (laptop edge, coffee mug, notebook)',
-  },
-  {
-    archetype: 'Malaysian Malay woman, mid-30s, freelance / homemaker',
-    nameVi: ['Mawar Saleha', 'Hanis Iskandar', 'Aliya Karim', 'Wani Hashim'],
-    appearance: 'Mid-30s Malaysian woman, oval face with high cheekbones, warm brown eyes, medium skin with sun-kissed warmth, long wavy dark brown hair tied loosely back, subtle freckles across nose bridge, casual loose tee + soft cotton trousers, no jewelry',
-    environment: 'Suburban Malaysian terrace home — wooden dining table with morning breakfast leftovers, brass-accent ceiling light, potted plants in the corner, soft natural daylight through louvre window',
+    archetype: 'Malaysian Muslim woman, mid-30s, modest hijab, working mother',
+    nameVi: ['Aishah binti Rahman', 'Siti Norhayati', 'Nor Aini', 'Faridah Hassan', 'Hanis Iskandar', 'Mawar Saleha'],
+    appearance: 'Mid-30s Malaysian Muslim woman, soft-rounded face, warm brown eyes, light-medium olive skin with natural pores, slight smile lines, ALWAYS wearing modest tudung (hijab) in muted tone (dusty pink OR pale sage OR cream OR soft mocha — pick ONE color and KEEP it across every render in the pack), no heavy makeup, natural eyebrows, small ear earrings barely visible under hijab, modest loose tunic / kurung / casual cotton top — NEVER fitted Western fashion, NEVER bare arms / shoulders / décolletage',
+    environment: 'Small Malaysian Muslim family home — kitchen with formica counter and fruit bowl, living room with batik throw on a beige sofa, late-morning warm window light from the right side, soft "lived-in" cluttered feel — NOT staged Pinterest-perfect',
   },
 ]
 
@@ -165,9 +159,30 @@ OUTPUT FORMAT — STRICT JSON ONLY, no markdown fences, no commentary
 Each section object has the same shape as form 1: type, title, titleVi, copy, viTranslation, layoutGuide, imageAspectRatio, optionally headline/subheadline/cta/offerStrip/urgencyText/bullets/faqs/reviews/imagePrompts. ALL imageAspectRatio="4:5" for this form. NO 16:9 banners — this is a long-form article, not an ecommerce banner.
 
 ═══════════════════════════════════════════════════════════════
-NHÂN VẬT CHÍNH — IDENTITY LOCK
+NHÂN VẬT CHÍNH — IDENTITY LOCK (CRITICAL — DO NOT BREAK)
 ═══════════════════════════════════════════════════════════════
-The user prompt below will declare ONE specific character (name, archetype, appearance, environment). EVERY copy reference + EVERY imagePrompt that involves a person MUST use that exact character. NEVER introduce a second main character. Friends/family in social-proof are auxiliary — the main character stays the same person from section 1 to section 12.
+The user prompt below declares ONE specific character (Malaysian Muslim woman in modest hijab — name, age, appearance, environment all locked). EVERY copy reference + EVERY imagePrompt that involves a person MUST use that exact character.
+
+HARD BANS — auto-fail any imagePrompt that depicts:
+  ✗ A MAN / male / boy / father (the hero is FEMALE — period)
+  ✗ A woman WITHOUT hijab / tudung / head covering (this hero wears hijab in EVERY shot)
+  ✗ Western / Caucasian / European face
+  ✗ Korean idol / Chinese beauty model / Japanese anime aesthetic / Indian woman
+  ✗ A different age (the hero is mid-30s — not 20-year-old college girl, not 50+ aunty)
+  ✗ A different woman with different face structure / different ethnicity than the locked archetype
+  ✗ Two main characters in one frame (the hero is solo; auxiliary characters in social-proof are children / spouse / mother but the HERO is the same woman every time)
+  ✗ Bare arms / shoulders / décolletage / fitted Western fashion / influencer makeup
+  ✗ Studio glam / luxury fashion editorial / professional model headshot
+  ✗ Hair-down portraits (always hijab)
+
+POSITIVE LOCK — EVERY people-shot prompt must explicitly state:
+  • "Same Malaysian Muslim hijab woman from previous reference image"
+  • The exact appearance descriptor from the user prompt
+  • Modest dress (kurung / loose tunic / long-sleeve modest top)
+  • Same hijab color across the whole pack (declared in user prompt)
+  • Same Malaysian Muslim home environment
+
+If you describe a person in any imagePrompt without these positive locks, the image will be rejected as a continuity break.
 
 ═══════════════════════════════════════════════════════════════
 12-SECTION EMOTIONAL FLOW — produce EXACTLY these types in order

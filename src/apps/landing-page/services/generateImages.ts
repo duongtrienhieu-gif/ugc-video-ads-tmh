@@ -433,23 +433,51 @@ function buildExpertEditorialDirective(job: ImageJob): string {
   )
 }
 
-/** Phase 3 — character continuity directive for the advertorial form.
- *  Pastes the locked appearance + environment + per-section mood verbatim
- *  into every people-shot prompt so KIE produces the same person across
- *  the entire pack. */
+/** Phase 3 (Phase 7 hardened) — character continuity directive for the
+ *  advertorial / storytelling form.
+ *
+ *  Locks the character via TWO mechanisms:
+ *    1. Textual appearance + environment lock (this directive)
+ *    2. Image reference — hero asset is prepended to filesUrl for every
+ *       non-hero people-shot once stage-1 sequential render completes
+ *       (see generatePackImages → STAGE 1 + selectRefsForSection)
+ *
+ *  Adds HARD NEGATIVE bans to prevent the failure modes user reported:
+ *  random ethnicity switches, hijab-removed shots, male appearances,
+ *  Western/Korean/Chinese influencer faces, age drift, hair-down portraits. */
 function buildStorytellingContinuityDirective(job: ImageJob): string {
   const char = job.pack.characterProfile
   if (!char) return ''
   const arc = char.emotionalArc.find((e) => e.sectionType === job.section.type)
   const mood = arc?.mood ?? 'natural neutral expression'
+
+  // Phase 7 — check if hero ref will be injected as filesUrl[0]. If so,
+  // tell KIE explicitly that the FIRST reference image IS the hero
+  // character (locks face identity via image-to-image).
+  const isHeroShot = job.section.type === 'hero'
+  const heroSection = job.pack.sections.find((s) => s.type === 'hero')
+  const hasHeroRef = !isHeroShot && !!heroSection?.imagePrompts?.[0]?.generatedAssetRef
+  const heroRefLine = hasHeroRef
+    ? `  • REFERENCE IMAGE #1 (filesUrl[0]) IS THE HERO CHARACTER — render the SAME WOMAN with the SAME FACE / SAME HIJAB STYLE / SAME ETHNICITY. Treat ref image #1 as the identity lock; the OUTPUT must be visually recognizable as the same person.\n`
+    : ''
+
   return (
-    `CHARACTER CONTINUITY LOCK (advertorial form — same person every shot):\n`
+    `CHARACTER CONTINUITY LOCK (advertorial — Malaysian Muslim hijab woman, SAME person every shot):\n`
     + `  • Person: ${char.name} — ${char.archetype}\n`
-    + `  • Appearance (KEEP EXACT across all renders in this pack): ${char.appearanceLock}\n`
-    + `  • Environment (consistent home/room across the pack): ${char.environmentLock}\n`
+    + `  • Appearance (KEEP EXACT across all renders): ${char.appearanceLock}\n`
+    + `  • Environment (consistent home / room family): ${char.environmentLock}\n`
     + `  • Mood for this section (${job.section.type}): ${mood}\n`
-    + `  • Cinematic lifestyle photography — documentary feel, natural skin texture, soft DOF. NO studio glamour. NO commercial gloss. NO designed text overlays (except SEBELUM/SELEPAS labels on before-after pair if section type is before-after).\n`
-    + `  • DO NOT introduce a different woman. DO NOT change face / hair / hijab style / outfit family between sections — only mood + posture + light vary.`
+    + heroRefLine
+    + `  • Cinematic lifestyle documentary photography. Natural skin texture. Soft DOF. NO studio glamour. NO commercial gloss. NO designed text overlay (except SEBELUM/SELEPAS labels if section is before-after).\n`
+    + `\n`
+    + `HARD BANS — this image will be rejected if it depicts:\n`
+    + `  ✗ A man / male / boy / father\n`
+    + `  ✗ A woman WITHOUT hijab / tudung (hero wears hijab in EVERY shot)\n`
+    + `  ✗ Western / Caucasian / European / Korean idol / Chinese beauty model / Japanese anime face\n`
+    + `  ✗ Hair-down portrait, fitted Western fashion, bare arms / shoulders / décolletage\n`
+    + `  ✗ Different face structure / different ethnicity / different age range than the locked archetype\n`
+    + `  ✗ Studio glamour, luxury fashion editorial, professional model headshot, heavy makeup, influencer aesthetic\n`
+    + `  ✗ A second main woman (the hero is solo; auxiliary children / spouse / mother allowed but the HERO is the same woman every time)`
   )
 }
 
@@ -459,10 +487,46 @@ const NEGATIVE_PROMPT_BLOCK =
   'AVOID HARD: poster or infographic layout; centered symmetrical composition; floating cut-out product PNG over a background; stacked product composites; duplicated background or hand pose across renders; cinematic / studio / luxury / editorial look; AI-glossy hyper-perfect skin; fake or futuristic UI; fake typography; overdesigned spacing; ecommerce advertisement look; fake brand text substitution; box and bottle always side-by-side as the only composition.'
 
 /** Pick the asset refs (if any) to pass into KIE filesUrl for this section. */
-function selectRefsForSection(type: SectionType, memory: VisualMemoryItem[]): string[] {
-  if (PEOPLE_FOCUS_SECTIONS.has(type)) return []
-  if (PRODUCT_FOCUS_SECTIONS.has(type)) return memory.slice(0, 3).map((m) => m.ref)
-  return []
+/** Phase 7 stabilization — accepts the full pack so storytelling form
+ *  can prepend the hero asset as the first filesUrl reference. This is
+ *  the TRUE character identity binding (image-based, not just textual)
+ *  that section 3 of the user's storytelling spec demands.
+ *
+ *  Rule per form:
+ *    • advertorial: if hero asset is ready → prepend it as ref[0] for
+ *      EVERY people-shot. Then add up to 2 product refs (cap total at 3).
+ *    • other forms: existing behavior (product refs only). */
+function selectRefsForSection(
+  type: SectionType,
+  pack: LandingPagePack,
+): string[] {
+  const memory = pack.visualMemory ?? []
+  const refs: string[] = []
+
+  // Storytelling — inject hero asset as the master character reference.
+  // The hero section is rendered FIRST (stage-1 sequential dispatch in
+  // generatePackImages), so by the time non-hero people-shots dispatch
+  // the hero's generatedAssetRef is already populated.
+  if (pack.form === 'advertorial' && type !== 'hero') {
+    const heroSection = pack.sections.find((s) => s.type === 'hero')
+    const heroRef = heroSection?.imagePrompts?.[0]?.generatedAssetRef
+    if (heroRef) refs.push(heroRef)
+  }
+
+  if (PEOPLE_FOCUS_SECTIONS.has(type)) {
+    // People-focused sections previously got NO refs — but for advertorial
+    // form they now get the hero ref (already pushed above). KIE supports
+    // up to 5 filesUrl so this stays within budget.
+    return refs
+  }
+
+  if (PRODUCT_FOCUS_SECTIONS.has(type)) {
+    // Cap total refs at 3: keep hero (if any) + up to 2 product memory refs
+    const room = Math.max(0, 3 - refs.length)
+    refs.push(...memory.slice(0, room).map((m) => m.ref))
+  }
+
+  return refs
 }
 
 /** Map landing-section ratio → KIE GPT-4o supported size.
@@ -600,12 +664,12 @@ const FRESH_POLL_MS    = 100_000  // was 5min
 
 async function runWithCreditSafeRetry(
   job: ImageJob,
-  memory: VisualMemoryItem[],
+  _memory: VisualMemoryItem[],  // legacy param — kept for callers, pack now used directly
   kieApiKey: string,
   onTaskUpdate: (patch: Partial<ImagePrompt>) => void,
   signal?: AbortSignal,
 ): Promise<{ assetRef: string; retries: number }> {
-  const refs = selectRefsForSection(job.section.type, memory)
+  const refs = selectRefsForSection(job.section.type, job.pack)
   const filesUrl = await resolveRefs(refs)
   const hasProductRefs = filesUrl.length > 0
 
@@ -759,17 +823,69 @@ export async function generatePackImages(
   options: QueueOptions,
 ): Promise<void> {
   const kieApiKey = getKieKey()
-  const jobs = collectJobs(pack)
-  const total = jobs.length
+  const allJobs = collectJobs(pack)
+  const total = allJobs.length
   if (total === 0) return
 
-  for (const j of jobs) {
+  for (const j of allJobs) {
     options.onTaskUpdate(j.sectionIdx, j.imageIdx, { status: 'queued', error: undefined })
   }
   let done = 0
   let failed = 0
   let totalRetries = 0
   options.onProgress?.(done, failed, total, totalRetries)
+
+  // ── Phase 7 stabilization — STAGE 1 SEQUENTIAL HERO RENDER ───────────
+  //
+  // Storytelling form ('advertorial') needs the hero image to be ready
+  // BEFORE any other people-shot starts, so subsequent prompts can use
+  // hero_01's generatedAssetRef as a filesUrl reference (true face
+  // identity binding via KIE GPT-4o image-to-image).
+  //
+  // We render the hero in isolation first, mutate pack.sections to expose
+  // the assetRef, then drop the hero job from the worker pool and run
+  // everything else in parallel as before. selectRefsForSection (called
+  // inside runWithCreditSafeRetry) reads pack.sections[hero].imagePrompts
+  // [0].generatedAssetRef and prepends it as the first reference.
+  let jobs = allJobs
+  if (pack.form === 'advertorial') {
+    const heroIdx = jobs.findIndex((j) => j.section.type === 'hero')
+    if (heroIdx >= 0) {
+      const heroJob = jobs[heroIdx]
+      console.info('[FORM advertorial] stage-1 sequential hero render — waiting for hero_01 before dispatching other people-shots')
+      options.onTaskUpdate(heroJob.sectionIdx, heroJob.imageIdx, { status: 'generating' })
+      try {
+        const { assetRef, retries } = await runWithCreditSafeRetry(
+          heroJob,
+          pack.visualMemory,
+          kieApiKey,
+          (patch) => options.onTaskUpdate(heroJob.sectionIdx, heroJob.imageIdx, patch),
+          options.signal,
+        )
+        // CRITICAL — mutate pack so selectRefsForSection sees the hero ref
+        const heroSection = pack.sections[heroJob.sectionIdx]
+        if (heroSection && heroSection.imagePrompts?.[heroJob.imageIdx]) {
+          heroSection.imagePrompts[heroJob.imageIdx].generatedAssetRef = assetRef
+          heroSection.imagePrompts[heroJob.imageIdx].status = 'done'
+        }
+        options.onTaskUpdate(heroJob.sectionIdx, heroJob.imageIdx, {
+          status: 'done', generatedAssetRef: assetRef, error: undefined,
+        })
+        done++
+        totalRetries += retries
+        options.onProgress?.(done, failed, total, totalRetries)
+        console.info('[FORM advertorial] stage-1 hero ready — assetRef =', assetRef, '— dispatching stage-2 with hero ref injected')
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err)
+        console.warn('[FORM advertorial] stage-1 hero failed — dispatching stage-2 without hero ref; subsequent people-shots may drift from one character:', msg)
+        options.onTaskUpdate(heroJob.sectionIdx, heroJob.imageIdx, { status: 'failed', error: msg })
+        failed++
+        options.onProgress?.(done, failed, total, totalRetries)
+      }
+      // Remove hero from the pool — already processed (success or fail)
+      jobs = jobs.filter((_, i) => i !== heroIdx)
+    }
+  }
 
   // ── Z8: concurrency 2 → 6 (3x throughput) ────────────────────────────
   // Z23 — concurrency 6 → 8. KIE backend tolerates 8 parallel /gpt4o-image
