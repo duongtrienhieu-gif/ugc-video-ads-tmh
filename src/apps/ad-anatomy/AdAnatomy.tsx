@@ -3,6 +3,7 @@ import { Loader2 } from 'lucide-react'
 import UploadView from './components/UploadView'
 import ResultsView from './components/ResultsView'
 import { analyzeAd } from './services/analyzeAd'
+import { sanitizeAnalysisResult, safeParseLocalStorage } from './services/sanitizeAnalysisResult'
 import { getUrl, saveAsset } from '../../utils/assetStore'
 import type { AnalysisResult } from './types'
 
@@ -32,28 +33,30 @@ export default function AdAnatomy() {
   const progressRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   // ── Restore cached result on mount ────────────────────────────────────────
+  // Z20: safeParseLocalStorage + sanitizeAnalysisResult so malformed /
+  // partial / pre-v2 cached data NEVER crashes the page. Missing required
+  // fields get filled with safe defaults; UI renders empty-but-functional
+  // state instead of throwing on direct destructure access.
   useEffect(() => {
-    const saved = localStorage.getItem(CACHE_KEY)
-    if (!saved) return
-    try {
-      const cache = JSON.parse(saved) as AdAnatomyCache
-      if (!cache.result || !cache.fileName) { localStorage.removeItem(CACHE_KEY); return }
-      // Drop stale cache from before the Creative Director upgrade
-      if (cache.version !== CACHE_VERSION) {
-        localStorage.removeItem(CACHE_KEY)
-        return
-      }
-      setResult(cache.result)
-      setFileName(cache.fileName)
-      setView('results')
-      // Restore video URL from Supabase asynchronously
-      if (cache.videoAssetId) {
-        getUrl(cache.videoAssetId)
-          .then((url) => { if (url) setVideoSrc(url) })
-          .catch(() => {})
-      }
-    } catch {
+    const cache = safeParseLocalStorage<AdAnatomyCache | null>(CACHE_KEY, null)
+    if (!cache) return
+    if (!cache.result || !cache.fileName) {
       localStorage.removeItem(CACHE_KEY)
+      return
+    }
+    // Drop stale cache from before the Creative Director upgrade
+    if (cache.version !== CACHE_VERSION) {
+      localStorage.removeItem(CACHE_KEY)
+      return
+    }
+    setResult(sanitizeAnalysisResult(cache.result))
+    setFileName(cache.fileName)
+    setView('results')
+    // Restore video URL from Supabase asynchronously
+    if (cache.videoAssetId) {
+      getUrl(cache.videoAssetId)
+        .then((url) => { if (url) setVideoSrc(url) })
+        .catch(() => {})
     }
   }, [])
 
@@ -90,7 +93,11 @@ export default function AdAnatomy() {
     setVideoSrc(localUrl)
 
     try {
-      const analysis = await analyzeAd(file)
+      const rawAnalysis = await analyzeAd(file)
+      // Z20: sanitize before storing in state OR localStorage — guarantees
+      // every required field is present so HookSection etc. can't crash on
+      // a malformed Gemini response.
+      const analysis = sanitizeAnalysisResult(rawAnalysis)
       setResult(analysis)
       setView('results')
 
@@ -161,19 +168,22 @@ export default function AdAnatomy() {
 
   // ── Z4: persist child-driven result updates (variations, future fields) ──
   const handleResultUpdate = (next: AnalysisResult) => {
-    setResult(next)
+    // Z20: sanitize updates too — variations from a 2nd Gemini call could
+    // arrive malformed; this guarantees the state never holds an unrender-
+    // able object.
+    const clean = sanitizeAnalysisResult(next)
+    setResult(clean)
     // Re-write cache with the same fileName / videoAssetId, just new result
+    const prev = safeParseLocalStorage<AdAnatomyCache | null>(CACHE_KEY, null)
+    const merged: AdAnatomyCache = {
+      version: CACHE_VERSION,
+      result: clean,
+      fileName: prev?.fileName ?? fileName,
+      videoAssetId: prev?.videoAssetId ?? null,
+    }
     try {
-      const saved = localStorage.getItem(CACHE_KEY)
-      const prev: AdAnatomyCache | null = saved ? JSON.parse(saved) : null
-      const merged: AdAnatomyCache = {
-        version: CACHE_VERSION,
-        result: next,
-        fileName: prev?.fileName ?? fileName,
-        videoAssetId: prev?.videoAssetId ?? null,
-      }
       localStorage.setItem(CACHE_KEY, JSON.stringify(merged))
-    } catch { /* silent */ }
+    } catch { /* silent — quota / Safari private mode */ }
   }
 
   if (view === 'results' && result) {

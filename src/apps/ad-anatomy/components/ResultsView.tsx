@@ -1130,34 +1130,62 @@ function TranscriptSection({ result, pipeline }: { result: AnalysisResult; pipel
 }
 
 /* ─── 3. Hook Breakdown ─── */
+// Z20: defensive — old/malformed caches can leave hookBreakdown undefined
+// or a partial object. Use optional access + nullish defaults so a missing
+// field renders as empty placeholder text instead of crashing the page.
 function HookSection({ result }: { result: AnalysisResult }) {
-  const { hookBreakdown } = result
+  const hb = result.hookBreakdown
+  const hookText          = hb?.hookText          ?? ''
+  const technique         = hb?.technique         ?? ''
+  const whyItWorks        = hb?.whyItWorks        ?? ''
+  const adaptableTemplate = hb?.adaptableTemplate ?? ''
+
+  // Empty state — if every field is empty there's nothing meaningful to
+  // render. Show a placeholder instead of an empty card.
+  const isEmpty = !hookText && !technique && !whyItWorks && !adaptableTemplate
+  if (isEmpty) {
+    return (
+      <Section>
+        <SectionHeader icon={Anchor} title="Phân tích Hook" />
+        <p className="text-xs text-gray-400 italic">
+          Chưa có dữ liệu hook breakdown — phân tích lại quảng cáo để Gemini trích xuất hook.
+        </p>
+      </Section>
+    )
+  }
+
   return (
     <Section>
       <SectionHeader icon={Anchor} title="Phân tích Hook" />
       <div className="flex flex-col gap-4">
         {/* Large italic hook text with green left border */}
-        <div className="border-l-2 border-emerald-400/40 pl-4 py-1">
-          <p className="text-lg font-medium italic leading-relaxed text-gray-800" style={{ fontFamily: 'Georgia, serif' }}>
-            &ldquo;{hookBreakdown.hookText}&rdquo;
-          </p>
-        </div>
+        {hookText && (
+          <div className="border-l-2 border-emerald-400/40 pl-4 py-1">
+            <p className="text-lg font-medium italic leading-relaxed text-gray-800" style={{ fontFamily: 'Georgia, serif' }}>
+              &ldquo;{hookText}&rdquo;
+            </p>
+          </div>
+        )}
         {/* Two columns: Technique + Why It Works */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          <div>
-            <span className="text-[11px] font-medium uppercase tracking-widest text-gray-400">Kỹ thuật</span>
-            <p className="mt-1 text-sm leading-relaxed text-gray-600">{hookBreakdown.technique}</p>
+        {(technique || whyItWorks) && (
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <div>
+              <span className="text-[11px] font-medium uppercase tracking-widest text-gray-400">Kỹ thuật</span>
+              <p className="mt-1 text-sm leading-relaxed text-gray-600">{technique || '—'}</p>
+            </div>
+            <div>
+              <span className="text-[11px] font-medium uppercase tracking-widest text-gray-400">Tại sao hiệu quả</span>
+              <p className="mt-1 text-sm leading-relaxed text-gray-600">{whyItWorks || '—'}</p>
+            </div>
           </div>
-          <div>
-            <span className="text-[11px] font-medium uppercase tracking-widest text-gray-400">Tại sao hiệu quả</span>
-            <p className="mt-1 text-sm leading-relaxed text-gray-600">{hookBreakdown.whyItWorks}</p>
-          </div>
-        </div>
+        )}
         {/* Highlighted "How to Adapt" card */}
-        <div className="rounded-lg bg-emerald-500/5 border border-emerald-500/10 px-4 py-3">
-          <span className="text-[11px] font-medium uppercase tracking-widest text-emerald-400/60">Cách áp dụng</span>
-          <p className="mt-1.5 text-sm font-medium text-gray-700">{hookBreakdown.adaptableTemplate}</p>
-        </div>
+        {adaptableTemplate && (
+          <div className="rounded-lg bg-emerald-500/5 border border-emerald-500/10 px-4 py-3">
+            <span className="text-[11px] font-medium uppercase tracking-widest text-emerald-400/60">Cách áp dụng</span>
+            <p className="mt-1.5 text-sm font-medium text-gray-700">{adaptableTemplate}</p>
+          </div>
+        )}
       </div>
     </Section>
   )
