@@ -237,6 +237,12 @@ function buildDiversityDirective(job: ImageJob): string {
   if (job.pack.form === 'advertorial' && job.pack.characterProfile) {
     return buildStorytellingContinuityDirective(job)
   }
+  // Expert / scientific override — editorial-infographic aesthetic with
+  // an expert character lock for people-shots and clean-editorial style
+  // for diagram/ingredient/news-proof shots.
+  if (job.pack.form === 'chuyen-gia') {
+    return buildExpertEditorialDirective(job)
+  }
   if (DIVERSITY_SUPPRESSED_SECTIONS.has(job.section.type)) return ''
   if (!job.prompt.variationSeed) job.prompt.variationSeed = makeVariationSeed()
   const seed = `${job.section.type}-${job.imageIdx}-${job.prompt.variationSeed}`
@@ -246,6 +252,108 @@ function buildDiversityDirective(job: ImageJob): string {
   const hand        = hashPick(HAND_POOL,        seed, 3)
   const light       = hashPick(LIGHT_POOL,       seed, 4)
   return `COMPOSITION: ${composition}. SHOT: ${angle}, in ${bg}, ${hand}, ${light}. Render as INDEPENDENT phone photo — do not mimic the side-by-side box+bottle composition of the reference image; pick the COMPOSITION above. Seed: ${job.prompt.variationSeed}.`
+}
+
+/** Phase 4 — Expert / Scientific form directive.
+ *
+ *  Routes based on section type within the expert blueprint:
+ *
+ *    People-shots (hero/pain/failed-solutions/why-happens/mechanism/
+ *    comparison/before-after/lifestyle/final-cta): emit expert continuity
+ *    lock so the same expert appears across all shots.
+ *
+ *    Diagram-shots (pain anatomy diagrams, why-happens scientific diagrams,
+ *    mechanism flow diagram, comparison chart, failed-solutions
+ *    comparison): emit editorial-infographic style directive (clean
+ *    palette, neat typography, magazine-textbook style).
+ *
+ *    Ingredient shots: emit ingredient-macro photography directive.
+ *
+ *    News-proof shots: emit clean editorial mock article directive.
+ *
+ *  Since Gemini wrote the imagePrompt body already with the section
+ *  context, this directive layers AESTHETIC + CONTINUITY guarantees on
+ *  top — KIE may otherwise drift toward UGC selfie defaults. */
+function buildExpertEditorialDirective(job: ImageJob): string {
+  const expert = job.pack.characterProfile
+  const sectionType = job.section.type
+  const imageIdx = job.imageIdx
+
+  // Sections where the imagePrompt body is fundamentally about an
+  // INFOGRAPHIC / DIAGRAM (no expert face needed). Apply editorial
+  // aesthetic only.
+  const isDiagramShot =
+    (sectionType === 'pain'             && imageIdx === 0) ||
+    (sectionType === 'failed-solutions' && imageIdx === 0) ||
+    (sectionType === 'why-happens'      && imageIdx === 0) ||
+    (sectionType === 'mechanism'        && imageIdx === 0) ||
+    (sectionType === 'benefits'         && imageIdx === 0) ||
+    (sectionType === 'comparison'       && imageIdx === 0)
+
+  const isIngredientMacro = sectionType === 'ingredients'
+  const isNewsProof       = sectionType === 'news-proof'
+  const isBeforeAfter     = sectionType === 'before-after'
+
+  // ── Diagram / infographic shots ──────────────────────────────────────
+  if (isDiagramShot) {
+    return (
+      `EDITORIAL INFOGRAPHIC AESTHETIC (chuyen-gia form):\n`
+      + `  • Clean magazine-textbook layout — neat typography, generous whitespace, soft palette (cream / pale sage / off-white / pale blue)\n`
+      + `  • Scientific / anatomical diagram with clear callout labels in clean sans-serif\n`
+      + `  • NO person in this shot. NO UGC selfie aesthetic. NO TikTok-style composition.\n`
+      + `  • NO floating product PNG. NO designed marketing graphics. NO emoji.\n`
+      + `  • Reference style: pages from a health magazine OR a medical textbook — NOT phone screenshots, NOT advertisements.`
+    )
+  }
+
+  // ── Ingredient macro photography ─────────────────────────────────────
+  if (isIngredientMacro) {
+    return (
+      `INGREDIENT MACRO PHOTOGRAPHY (chuyen-gia form):\n`
+      + `  • High-quality close-up of the natural source of one active compound (raw ingredient — eg ginger root cross-section, marine collagen capsule on white linen, probiotic powder texture, herb leaf macro). NOT the product bottle.\n`
+      + `  • Neutral background — pale cream / off-white / soft beige with subtle natural texture (linen, paper, light wood).\n`
+      + `  • Editorial supplement / food photography aesthetic. Clean studio lighting allowed.\n`
+      + `  • NO person. NO product packaging. NO designed text overlay.\n`
+      + `  • Soft shallow depth-of-field, magazine-clean composition.`
+    )
+  }
+
+  // ── News-proof editorial mocks ───────────────────────────────────────
+  if (isNewsProof) {
+    return (
+      `EDITORIAL AUTHORITY MOCK (chuyen-gia form):\n`
+      + `  • Clean health-magazine / journal article layout OR authority badge composition.\n`
+      + `  • Reference Malaysian publications when relevant: mStar, Berita Harian, Health.com.my, Hello Doktor style.\n`
+      + `  • NO designed marketing graphics. NO floating product.\n`
+      + `  • Soft neutral palette. Magazine-clean typography.`
+    )
+  }
+
+  // ── Before-after clinical pair ───────────────────────────────────────
+  if (isBeforeAfter) {
+    return (
+      `CLINICAL CASE-STUDY PAIR (chuyen-gia form — anonymized):\n`
+      + `  • Subject anonymity cue (head out of frame, back of head, OR shadow / silhouette) — clinical patient case, NOT dramatic UGC transformation.\n`
+      + `  • Soft clinical environment — NOT homey kitchen, NOT gym.\n`
+      + `  • SAME framing across the BEFORE/AFTER pair (same camera angle, same anonymity cue).\n`
+      + `  • RENDER "SEBELUM" / "SELEPAS" Malay label top-left in clean editorial sans-serif (NOT bold caps stamp — clean magazine label style).\n`
+      + `  • NO dramatic body-shape swap. NO gym-influencer aesthetic. Measured clinical transformation only.`
+    )
+  }
+
+  // ── Default: expert portrait shot (hero / lifestyle / final-cta) ──────
+  if (!expert) return ''
+  const arc = expert.emotionalArc.find((e) => e.sectionType === sectionType)
+  const tone = arc?.mood ?? 'calm authoritative professional expression'
+  return (
+    `EXPERT CONTINUITY LOCK (chuyen-gia form — same expert every people-shot):\n`
+    + `  • Expert: ${expert.name} — ${expert.archetype}\n`
+    + `  • Appearance (KEEP EXACT across all renders): ${expert.appearanceLock}\n`
+    + `  • Environment: ${expert.environmentLock}\n`
+    + `  • Pose / tone for this section (${sectionType}): ${tone}\n`
+    + `  • Editorial clinical photography — clean professional aesthetic, soft natural lighting, magazine-quality composition. NO UGC selfie style. NO designed text overlay (except SEBELUM/SELEPAS labels in before-after section).\n`
+    + `  • DO NOT introduce a different expert. DO NOT change face / age / clinical attire / environment between sections — only pose + facial micro-expression vary.`
+  )
 }
 
 /** Phase 3 — character continuity directive for the advertorial form.
@@ -351,11 +459,23 @@ function buildFinalPrompt(job: ImageJob, hasProductRefs: boolean): string {
   const diversity = buildDiversityDirective(job)
   if (diversity) parts.push(diversity)
 
-  // Z22 — hard negatives appended on every render
-  parts.push(NEGATIVE_PROMPT_BLOCK)
+  // Z22 — hard negatives. Phase 4 — chuyen-gia form OVERRIDES the
+  // default negatives because the global block bans "editorial / studio /
+  // luxury look" which is exactly the aesthetic chuyen-gia wants.
+  if (job.pack.form === 'chuyen-gia') {
+    parts.push(EXPERT_NEGATIVE_BLOCK)
+  } else {
+    parts.push(NEGATIVE_PROMPT_BLOCK)
+  }
 
   return parts.join('\n\n')
 }
+
+// Phase 4 — expert-form-specific negative prompt. Allows editorial /
+// clinical / magazine aesthetic but bans UGC selfie / TikTok / Shopee /
+// marketplace screenshot / urgency badge / countdown / emoji spam.
+const EXPERT_NEGATIVE_BLOCK =
+  'AVOID HARD (chuyen-gia editorial-infographic form): UGC selfie phone-quality aesthetic; TikTok / Shopee / marketplace screenshot layout; designed text overlays except SEBELUM/SELEPAS pair labels; floating product PNG; centered marketing composition; urgency badges / countdown / discount strips; emoji-heavy graphics; cartoonish or chibi illustration; harsh advertising lighting; dramatic gym-influencer transformation aesthetic; chaotic collage; fake brand text substitution.'
 
 // ─────────────────────────────────────────────────────────────────────────
 // CREDIT-SAFE single image — splits submit / poll so we can recover
