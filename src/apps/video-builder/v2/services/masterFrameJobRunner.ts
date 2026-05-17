@@ -20,7 +20,7 @@
 
 import { useMasterFrameJobStore } from '../stores/masterFrameJobStore'
 import { compileMasterFramePrompt } from './promptCompiler'
-import { generateGpt4oImage } from '../../../../utils/kieai'
+import { generateGpt4oImageFast } from '../../../../utils/kieai'
 import { saveAsset, getUrl, isAssetRef } from '../../../../utils/assetStore'
 import { directGeminiVision } from '../../../../utils/gemini'
 import { qcImage } from './qcEngine'
@@ -37,8 +37,15 @@ import type {
   CompiledPrompt,
 } from '../types'
 
-const MAX_JOB_DURATION_MS = 12 * 60 * 1000  // hard limit per spec
+// Z16: shorter hard limit since Fast mode tops out at ~130s per gen call.
+// Old 12min ceiling was way over user target of 30-60s.
+const MAX_JOB_DURATION_MS = 3 * 60 * 1000   // 3-min hard ceiling (was 12min)
 const MAX_RETRIES = 3
+const PER_ATTEMPT_TIMEOUT_MS = 60_000        // per KIE submission, 2 submissions per QC attempt
+
+// Z16: track the active AbortController so cancelMasterFrameJob() can
+// signal the KIE poll loop instead of letting it run to its own timeout.
+let activeJobAbort: AbortController | null = null
 
 // ── Identity describe Gemini prompts (lifted from masterFrame.ts) ────────────
 
@@ -188,10 +195,18 @@ async function runJobPipeline(_jobId: string, params: StartJobParams): Promise<v
   const dna = defaultVisualStyleDna()
   const thresholds = computeQcThresholds(inputs.consistencyStrength)
 
-  // Global watchdog — hard timeout per spec
+  // Z16: fresh AbortController per job so cancel signal reaches the KIE poll.
+  activeJobAbort = new AbortController()
+  const jobAbortSignal = activeJobAbort.signal
+  console.log(`[masterFrame START] jobId=${_jobId} qcEnabled=${inputs.qcEnabled} target=30-60s`)
+
+  // Global watchdog — hard timeout. On fire, ALSO abort the KIE poll so the
+  // pipeline doesn't keep running after the watchdog triggers.
   const watchdog = setTimeout(() => {
     if (getJob()?.status !== 'completed' && getJob()?.status !== 'failed' && getJob()?.status !== 'cancelled') {
-      finalizeFailure(_jobId, 'timeout', `Job vượt giới hạn ${Math.round(MAX_JOB_DURATION_MS / 60000)} phút — KIE backend có thể bị stuck`)
+      console.error(`[masterFrame WATCHDOG] hit ${Math.round(MAX_JOB_DURATION_MS / 1000)}s — aborting`)
+      activeJobAbort?.abort()
+      finalizeFailure(_jobId, 'timeout', `Job vượt giới hạn ${Math.round(MAX_JOB_DURATION_MS / 1000)}s — KIE backend có thể bị stuck`)
     }
   }, MAX_JOB_DURATION_MS)
 
@@ -251,15 +266,28 @@ async function runJobPipeline(_jobId: string, params: StartJobParams): Promise<v
 
       let remoteUrl: string
       try {
-        remoteUrl = await generateGpt4oImage({
+        // Z16: Fast wrapper — 2 KIE submissions × 60s each. If the first
+        // submission gets stuck >60s we abandon it and submit fresh. Total
+        // worst case ~130s per QC attempt vs the previous 5min hang.
+        remoteUrl = await generateGpt4oImageFast({
           apiKey: params.kieApiKey,
           prompt: compiled.final,
           filesUrl: filesUrl.slice(0, 5),
           size: '2:3',
-          timeoutMs: 5 * 60 * 1000,
+          attemptTimeoutMs: PER_ATTEMPT_TIMEOUT_MS,
+          maxAttempts: 2,
+          signal: jobAbortSignal,
+          onAttemptChange: (a, t) => {
+            console.log(`[masterFrame] QC attempt ${attemptIdx + 1} → KIE submit ${a}/${t}`)
+          },
         })
       } catch (err) {
-        finalizeFailure(_jobId, 'api_error', `KIE GPT-4o lỗi attempt ${attemptIdx + 1}: ${(err as Error).message}`)
+        const msg = (err as Error).message
+        if (msg.includes('CANCELLED')) {
+          console.log('[masterFrame] cancelled mid-gen')
+          return
+        }
+        finalizeFailure(_jobId, 'api_error', `KIE GPT-4o lỗi attempt ${attemptIdx + 1}: ${msg}`)
         return
       }
       if (cancelledCheck()) return
@@ -350,7 +378,9 @@ async function runJobPipeline(_jobId: string, params: StartJobParams): Promise<v
     })
   } finally {
     clearTimeout(watchdog)
-    console.log(`[job-runner] finished in ${Math.round((Date.now() - startedAt) / 1000)}s status=${getJob()?.status}`)
+    // Z16: release the abort controller so the next job can start clean
+    activeJobAbort = null
+    console.log(`[masterFrame END] +${Math.round((Date.now() - startedAt) / 1000)}s status=${getJob()?.status}`)
   }
 }
 
@@ -359,12 +389,19 @@ function cancelledCheck(): boolean {
   return getJob()?.status === 'cancelled'
 }
 
-/** Cancel the active job (sets status to 'cancelled' so the pipeline exits early). */
+/** Cancel the active job — Z16 now ALSO aborts the KIE poll loop so the
+ *  network request actually stops instead of running to its own timeout. */
 export function cancelMasterFrameJob(): void {
   const store = useMasterFrameJobStore.getState()
   const cur = store.job
   if (!cur || cur.status === 'completed' || cur.status === 'failed') return
   store.updateJob({ status: 'cancelled' })
+  // Z16: signal the AbortController so generateGpt4oImageFast bails immediately
+  if (activeJobAbort) {
+    console.log('[masterFrame] user cancel → aborting KIE poll')
+    activeJobAbort.abort()
+    activeJobAbort = null
+  }
 }
 
 /** Reset to start fresh — clears any active or finished job. */

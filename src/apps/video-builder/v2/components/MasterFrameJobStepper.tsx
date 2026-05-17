@@ -77,8 +77,10 @@ export default function MasterFrameJobStepper({ onCompleted }: Props) {
 
   const isRunning = job.status !== 'completed' && job.status !== 'failed' && job.status !== 'cancelled'
   const elapsed = job.elapsedSec
-  // Speed-first thresholds: 60s = soft warning, 90s = strong warning
-  const elapsedWarn = elapsed > 90 ? 'text-red-600' : elapsed > 60 ? 'text-amber-600' : 'text-gray-500'
+  // Z16: tighter speed-first thresholds — 30s/45s/75s. Target normal:
+  // 20-45s; warn at 45s; auto-retry kicks in via Fast wrapper at ~60s;
+  // hard "stuck" warning + instant retry CTA at 75s.
+  const elapsedWarn = elapsed > 75 ? 'text-red-600' : elapsed > 45 ? 'text-amber-600' : elapsed > 30 ? 'text-yellow-600' : 'text-gray-500'
 
   // If QC was never run on any attempt, use the fast variant (hide QC step)
   const qcEverRan = job.attempts.some((a) => a.qc !== undefined && a.qc !== null)
@@ -158,17 +160,35 @@ export default function MasterFrameJobStepper({ onCompleted }: Props) {
         })}
       </div>
 
-      {/* Slow-server warning (60s+) — speed-first threshold */}
-      {isRunning && elapsed > 60 && elapsed <= 90 && (
-        <div className="rounded-lg border border-amber-200 bg-amber-50/60 px-3 py-2 text-[11px] text-amber-700">
-          ⏳ Server AI đang chậm hơn bình thường ({elapsed}s) — vui lòng đợi thêm chút hoặc bấm Hủy + thử lại.
+      {/* Z16: 30s soft hint */}
+      {isRunning && elapsed > 30 && elapsed <= 45 && (
+        <div className="rounded-lg border border-yellow-200 bg-yellow-50/60 px-3 py-2 text-[11px] text-yellow-800">
+          ⏱ Đang xử lý {elapsed}s — bình thường mất 20-45s. Nếu chậm sẽ tự retry.
         </div>
       )}
 
-      {/* Stuck warning (90s+) */}
-      {isRunning && elapsed > 90 && (
-        <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-[11px] text-red-700">
-          ⚠ Task đã chạy {elapsed}s — server AI có vẻ bị stuck. Bấm "Hủy" để abort + thử lại ngay.
+      {/* Z16: 45s warning — Fast wrapper attempt-2 sắp kick in */}
+      {isRunning && elapsed > 45 && elapsed <= 75 && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50/60 px-3 py-2 text-[11px] text-amber-700">
+          ⏳ Server AI chậm hơn bình thường ({elapsed}s) — hệ thống sẽ tự submit lại task mới ở 60s nếu chưa xong.
+        </div>
+      )}
+
+      {/* Z16: 75s+ stuck warning + instant retry CTA. At this point both
+          KIE attempts in the Fast wrapper have probably failed — the user
+          should cancel and start fresh rather than wait. */}
+      {isRunning && elapsed > 75 && (
+        <div className="space-y-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-[11px] text-red-700">
+          <p>⚠ Task đã chạy {elapsed}s — server AI có vẻ bị stuck cả 2 lần submit. Khuyến nghị hủy + thử lại ngay.</p>
+          <button
+            onClick={() => {
+              cancelMasterFrameJob()
+              setTimeout(() => clearMasterFrameJob(), 300)
+            }}
+            className="flex items-center gap-1.5 rounded-md bg-red-600 px-2.5 py-1 text-[11px] font-bold text-white hover:bg-red-700"
+          >
+            <RotateCcw className="h-3 w-3" /> Hủy + Thử lại ngay
+          </button>
         </div>
       )}
 

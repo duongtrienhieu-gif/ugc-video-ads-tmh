@@ -81,17 +81,25 @@ export async function getGpt4oImageStatus(params: {
     }
   }
   const record = json.data ?? {}
-  const rawStatus = String(record.status ?? '').toUpperCase()
+  // Z16: broaden status normalization. KIE documents SUCCESS/GENERATING/
+  // QUEUING/WAITING/CREATE_TASK_FAILED/GENERATE_FAILED, but other providers
+  // and KIE's future variants may emit COMPLETED/DONE/FINISHED/RUNNING/
+  // PROCESSING/PENDING/ERROR/CANCELLED/TIMEOUT. Don't rely on one exact
+  // string — group by intent.
+  const rawStatus = String(record.status ?? '').toUpperCase().trim()
+  const SUCCESS  = new Set(['SUCCESS', 'COMPLETED', 'DONE', 'FINISHED', 'COMPLETE'])
+  const FAILED   = new Set(['CREATE_TASK_FAILED', 'GENERATE_FAILED', 'FAILED', 'ERROR', 'CANCELLED', 'TIMEOUT', 'ABORTED'])
+  const RUNNING  = new Set(['GENERATING', 'QUEUING', 'QUEUED', 'WAITING', 'PROCESSING', 'PENDING', 'RUNNING'])
 
   let status: ImageStatus = 'pending'
-  if (rawStatus === 'SUCCESS') status = 'completed'
-  else if (rawStatus === 'CREATE_TASK_FAILED' || rawStatus === 'GENERATE_FAILED') status = 'failed'
-  else if (rawStatus === 'GENERATING' || rawStatus === 'QUEUING' || rawStatus === 'WAITING') status = 'processing'
+  if (SUCCESS.has(rawStatus))      status = 'completed'
+  else if (FAILED.has(rawStatus))  status = 'failed'
+  else if (RUNNING.has(rawStatus)) status = 'processing'
 
   return {
     status,
     imageUrl: status === 'completed' ? record.response?.resultUrls?.[0] : undefined,
-    error: status === 'failed' ? String(record.errorMessage ?? 'Tạo ảnh thất bại') : undefined,
+    error: status === 'failed' ? String(record.errorMessage ?? `Tạo ảnh thất bại (raw=${rawStatus || 'empty'})`) : undefined,
     progress: typeof record.progress === 'number' ? record.progress : undefined,
   }
 }
@@ -111,38 +119,42 @@ export async function pollGpt4oUntilDone(params: {
   let lastStatus = ''
   let pollCount = 0
 
-  console.log(`[gpt4o-poll] start task=${params.taskId.slice(0, 12)}... timeout=${Math.round(timeout / 1000)}s`)
+  const taskTag = params.taskId.slice(0, 12)
+  console.log(`[POLL_START] task=${taskTag} timeout=${Math.round(timeout / 1000)}s`)
 
   while (Date.now() - start < timeout) {
     if (params.signal?.aborted) {
+      console.warn(`[POLL_FAIL] task=${taskTag} reason=ABORTED`)
       throw new Error('CANCELLED — user hủy task')
     }
-    await new Promise<void>((r) => setTimeout(r, 3000))
+    // Z16: faster polling cadence (3s → 2s) so completion detection lands
+    // 1s sooner on average. Network cost is negligible.
+    await new Promise<void>((r) => setTimeout(r, 2000))
     pollCount++
     const s = await getGpt4oImageStatus({ apiKey: params.apiKey, taskId: params.taskId })
     const elapsedSec = Math.round((Date.now() - start) / 1000)
 
     if (s.status !== lastStatus) {
-      console.log(`[gpt4o-poll] +${elapsedSec}s status=${s.status} progress=${s.progress ?? '-'} (poll #${pollCount})`)
+      console.log(`[POLL_STATUS] task=${taskTag} +${elapsedSec}s status=${s.status} progress=${s.progress ?? '-'} (poll #${pollCount})`)
       lastStatus = s.status
       params.onStatusChange?.(s.status, s.progress)
     } else if (pollCount % 10 === 0) {
-      // Heartbeat every ~30s even if status hasn't changed — useful for stuck-queue detection
-      console.log(`[gpt4o-poll] +${elapsedSec}s still ${s.status} progress=${s.progress ?? '-'} (poll #${pollCount})`)
+      // Heartbeat every ~20s even if status hasn't changed — useful for stuck-queue detection
+      console.log(`[POLL_ELAPSED] task=${taskTag} +${elapsedSec}s still ${s.status} (poll #${pollCount})`)
     }
 
     if (s.status === 'completed') {
       if (!s.imageUrl) throw new Error('GPT-4o completed nhưng không trả về imageUrl')
-      console.log(`[gpt4o-poll] DONE in ${elapsedSec}s, url=${s.imageUrl.slice(0, 80)}`)
+      console.log(`[POLL_COMPLETE] task=${taskTag} +${elapsedSec}s url=${s.imageUrl.slice(0, 80)}`)
       return s.imageUrl
     }
     if (s.status === 'failed') {
-      console.error(`[gpt4o-poll] FAILED in ${elapsedSec}s: ${s.error}`)
+      console.error(`[POLL_FAIL] task=${taskTag} +${elapsedSec}s reason=${s.error}`)
       throw new Error(s.error ?? 'GPT-4o gen thất bại')
     }
   }
-  console.error(`[gpt4o-poll] TIMEOUT after ${Math.round(timeout / 1000)}s — task có thể bị stuck trong queue KIE`)
-  throw new Error(`TIMEOUT — KIE GPT-4o quá ${Math.round(timeout / 60000)} phút chưa xong (task có thể bị stuck queue — refresh + thử lại)`)
+  console.error(`[POLL_FAIL] task=${taskTag} +${Math.round(timeout / 1000)}s reason=TIMEOUT`)
+  throw new Error(`TIMEOUT — KIE GPT-4o quá ${Math.round(timeout / 1000)}s chưa xong (task có thể bị stuck queue — retry tự động hoặc refresh + thử lại)`)
 }
 
 /** All-in-one: submit + poll + return final image URL. */
@@ -169,6 +181,85 @@ export async function generateGpt4oImage(params: {
     timeoutMs: params.timeoutMs,
     signal: params.signal,
   })
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Z16 — Fast-mode wrapper for time-sensitive use cases (Master Frame).
+//
+// Submit + short-timeout poll. On timeout, ABANDON the stuck task and
+// submit a fresh one. This converts 5-minute hangs into ~120s worst case.
+//
+// Used by: masterFrameJobRunner.ts (replaces direct generateGpt4oImage).
+// NOT used by: landing-page (long, batch-style, can tolerate longer waits).
+//
+// Per-attempt timeline:
+//   attempt 1 → submit → poll up to attemptTimeoutMs (60s default)
+//   if timeout/network-error → attempt 2 → fresh submit → poll up to 60s
+//   if attempt 2 also fails → throw with consolidated error
+//
+// Hard failures (CANCELLED, INSUFFICIENT_CREDITS, content_policy) skip
+// retry — no point burning a fresh credit on an unrecoverable error.
+// ─────────────────────────────────────────────────────────────────────────
+export async function generateGpt4oImageFast(params: {
+  apiKey: string
+  prompt: string
+  filesUrl?: string[]
+  size: Gpt4oSize
+  /** Per-attempt KIE poll timeout. Defaults to 60s. */
+  attemptTimeoutMs?: number
+  /** Max fresh submissions. Defaults to 2 → total max ~120-130s. */
+  maxAttempts?: number
+  signal?: AbortSignal
+  /** Fires when a new attempt starts — UI can refresh "trying attempt 2/2" hint */
+  onAttemptChange?: (attempt: number, total: number) => void
+  onStatusChange?: (status: ImageStatus, progress?: number) => void
+}): Promise<string> {
+  const attemptTimeout = params.attemptTimeoutMs ?? 60_000
+  const maxAttempts    = params.maxAttempts ?? 2
+  let lastError: Error | null = null
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    if (params.signal?.aborted) throw new Error('CANCELLED — user hủy task')
+    params.onAttemptChange?.(attempt, maxAttempts)
+    console.log(`[FAST attempt ${attempt}/${maxAttempts}] timeout=${Math.round(attemptTimeout / 1000)}s submit...`)
+
+    try {
+      const { taskId } = await submitGpt4oImage({
+        apiKey: params.apiKey,
+        prompt: params.prompt,
+        filesUrl: params.filesUrl,
+        size: params.size,
+      })
+      const url = await pollGpt4oUntilDone({
+        apiKey: params.apiKey,
+        taskId,
+        timeoutMs: attemptTimeout,
+        signal: params.signal,
+        onStatusChange: params.onStatusChange,
+      })
+      console.log(`[FAST attempt ${attempt}/${maxAttempts}] DONE`)
+      return url
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      lastError = err instanceof Error ? err : new Error(msg)
+
+      // Hard failures — never retry
+      if (
+        msg.includes('CANCELLED') ||
+        msg === 'INSUFFICIENT_CREDITS' ||
+        msg.includes('content_policy') ||
+        msg.includes('GENERATE_FAILED')
+      ) {
+        console.error(`[FAST attempt ${attempt}/${maxAttempts}] hard-fail (no retry): ${msg.slice(0, 120)}`)
+        throw lastError
+      }
+
+      // Timeout / network — abandon this task and retry with a fresh submission
+      console.warn(`[FAST attempt ${attempt}/${maxAttempts}] soft-fail: ${msg.slice(0, 120)} — ${attempt < maxAttempts ? 'submitting fresh task' : 'no more attempts'}`)
+    }
+  }
+
+  throw lastError ?? new Error('Hết lượt thử Fast mode — KIE backend có thể đang quá tải')
 }
 
 // ── Credits balance ───────────────────────────────────────────────────
