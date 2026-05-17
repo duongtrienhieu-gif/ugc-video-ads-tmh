@@ -6,7 +6,6 @@ import {
   submitGpt4oImage, pollGpt4oUntilDone, type Gpt4oSize,
 } from '../../../utils/kieai'
 import { saveAsset, getUrl, isAssetRef } from '../../../utils/assetStore'
-import { routeAndExecuteJob } from './hybridRouter'
 
 // ─────────────────────────────────────────────────────────────────────────
 // IMAGE GENERATION QUEUE for landing-page packs.
@@ -84,27 +83,13 @@ const SECTION_PRIORITY: Record<SectionType, number> = {
 }
 
 // ─────────────────────────────────────────────────────────────────────────
-// PRODUCT IDENTITY LOCK — V3 — strict-no-substitute policy.
-// User reported AI swapping the product entirely (OXEVIN / DOSPRO renamed)
-// instead of using INFINITY PROBIOTICS reference. Hardened with explicit
-// pixel-for-pixel + brand-name lock + fail-rather-than-substitute language.
+// PRODUCT IDENTITY LOCK — prepended whenever product refs are passed.
 // ─────────────────────────────────────────────────────────────────────────
 const PRODUCT_IDENTITY_PREFIX =
-  'ABSOLUTE PRODUCT IDENTITY LOCK — read carefully:\n' +
-  'The product MUST be PIXEL-FOR-PIXEL the EXACT product from the attached reference image.\n' +
-  '  • Same bottle / jar / sachet / packaging SHAPE (no swapping container types)\n' +
-  '  • Same exact brand name TEXT on the label — do NOT rename, do NOT invent a new brand\n' +
-  '  • Same label TYPOGRAPHY (font, size, layout)\n' +
-  '  • Same label COLORS (every color must match the reference)\n' +
-  '  • Same cap style and color\n' +
-  '  • Same logo placement and proportions\n' +
-  '  • Same packaging RATIO (squat vs tall — do NOT change)\n' +
-  'BANNED behaviors:\n' +
-  '  • Inventing a fake brand name like "OXEVIN", "DOSPRO", "VITALEX" — use ONLY the brand from the reference\n' +
-  '  • Substituting a "similar-looking" generic supplement bottle — pixel-for-pixel match only\n' +
-  '  • Redesigning the label even slightly — every word and graphic stays as-is\n' +
-  '  • Changing the cap, removing the cap, swapping container types\n' +
-  'If you cannot precisely replicate the product, fail and return an error rather than render a substitute.\n'
+  'CRITICAL — match the reference product image EXACTLY: ' +
+  'preserve the same bottle/packaging shape, label typography, cap style, ' +
+  'packaging colors, logo placement and proportions. ' +
+  'Do NOT redesign, alter, or replace the product. '
 
 // ─────────────────────────────────────────────────────────────────────────
 // SECTION-1 HERO CHARACTER LOCK — Malaysian Muslim hijab women only.
@@ -172,8 +157,6 @@ interface QueueOptions {
 
 // ─────────────────────────────────────────────────────────────────────────
 // Build the final prompt fed to KIE — prepends identity locks as needed.
-// Phase H1: appends a per-image variation token + diversity instruction so
-// KIE never produces "same hand / same bg / same bottle angle" clones.
 // ─────────────────────────────────────────────────────────────────────────
 function buildFinalPrompt(job: ImageJob, hasProductRefs: boolean): string {
   const parts: string[] = []
@@ -181,97 +164,7 @@ function buildFinalPrompt(job: ImageJob, hasProductRefs: boolean): string {
   if (job.section.type === 'hero') parts.push(HERO_CHARACTER_LOCK)
   if (hasProductRefs) parts.push(PRODUCT_IDENTITY_PREFIX)
   parts.push(job.prompt.prompt)
-
-  // V4 — append the no-floating-product rule on every product render so KIE
-  // doesn't paste cut-out PNGs over portraits.
-  if (hasProductRefs) parts.push(NO_FLOATING_PRODUCT_RULE)
-
-  // ── Variation directive — V4: SUPPRESSED for before-after pairs.
-  // The before-after spec mandates SAME camera / SAME lighting / SAME room
-  // within each pair, so injecting "different camera angle hint + different
-  // lighting hint" would fight the same-scene lock and break believability.
-  if (job.section.type !== 'before-after') {
-    parts.push(buildVariationDirective(job))
-  } else {
-    // Still mint a seed so subsequent regens stay stable, but don't emit
-    // the variation directive into the prompt.
-    if (!job.prompt.variationSeed) job.prompt.variationSeed = makeVariationSeed()
-  }
-  return parts.join('\n\n')
-}
-
-// V4 — anti-floating-product rule appended to every product-bearing prompt.
-const NO_FLOATING_PRODUCT_RULE =
-  'NO FLOATING PRODUCT OVERLAYS: the product MUST be physically present in the scene — held in a hand with realistic finger contact and matching shadow, OR resting on a real surface with grounded shadow, OR naturally placed in the environment with correct perspective. Do NOT render the product as a cut-out PNG pasted over the background. Do NOT duplicate the product packshot. Do NOT stack multiple product views in one frame. One product, one grounded placement, one realistic shadow.'
-
-// ─────────────────────────────────────────────────────────────────────────
-// Phase H1 — Variation directive.
-// Forces KIE to produce a DIFFERENT latent per image even when the base
-// prompts look similar. Two mechanisms:
-//   1. Unique 6-char `variationSeed` token appended → forces prompt-hash drift
-//   2. Explicit per-image axis selection (camera/lighting/hand/bg/bottle)
-//      seeded by section type + image index so each shot in a section gets
-//      a deterministically different rotation through the axis pools.
-// ─────────────────────────────────────────────────────────────────────────
-
-// Axis pools — picked deterministically per image so a section's N shots
-// cycle through DIFFERENT combinations.
-const CAMERA_ANGLES = [
-  'iPhone selfie eye-level', 'slight low-angle 30°', '3/4 angle waist-height',
-  'top-down flat-lay', 'side-profile slice', 'over-the-shoulder',
-  'POV reach (first-person)', 'mirror reflection shot',
-]
-const LIGHTING_DIRS = [
-  'soft window daylight from left', 'warm kitchen-side glow',
-  'overhead noon natural light', 'golden-hour right-side warm',
-  'cool morning bathroom light', 'dim cozy table-lamp evening',
-  'mixed window + ceiling light', 'soft overcast diffused',
-]
-// V3 — HAND_POSES, BG_CONTEXTS, BOTTLE_ANGLES removed.
-// Old 5-axis variation directive softened to 2 axes (camera + lighting only)
-// so section structure (e.g. "BEFORE portrait", "pure WhatsApp screenshot")
-// is not contaminated by generic hand/bg/bottle hints.
-
-function pickFromPool<T>(pool: T[], seed: string, offset = 0): T {
-  let h = 0
-  for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) >>> 0
-  return pool[(h + offset) % pool.length]
-}
-
-/** 6-char random token — appended to every prompt to force latent drift. */
-function makeVariationSeed(): string {
-  return Math.random().toString(36).slice(2, 8)
-}
-
-function buildVariationDirective(job: ImageJob): string {
-  // Pull the existing seed (if pack was loaded from saved project) or mint
-  // a fresh one. Either way, this token appears in the prompt body and
-  // makes the prompt-hash unique per render.
-  const seed = job.prompt.variationSeed ?? makeVariationSeed()
-
-  // Cache the seed onto the prompt for stability — subsequent regens of
-  // this image reuse the same seed so the latent stays consistent.
-  if (!job.prompt.variationSeed) {
-    job.prompt.variationSeed = seed
-  }
-
-  // ── V3: softer variation — 2 axes instead of 5 ──────────────────────
-  // Previous version aggressively rotated 5 axes per image which OVER-
-  // randomized and broke section structure. V3 keeps section structure
-  // intact + only varies camera angle + lighting. Section-specific specs
-  // in SYSTEM_PROMPT now drive context/hand/bottle variation naturally.
-  const idxSeed = `${job.section.type}-${job.imageIdx}-${seed}`
-  const camera   = pickFromPool(CAMERA_ANGLES, idxSeed, 0)
-  const lighting = pickFromPool(LIGHTING_DIRS, idxSeed, 7)
-
-  const lines: string[] = []
-  lines.push('AUTHENTICITY VARIATION DIRECTIVE (soft — respect section structure):')
-  lines.push(`  • Camera angle hint: ${camera}`)
-  lines.push(`  • Lighting hint: ${lighting}`)
-  lines.push(`  • Render as INDEPENDENT phone-quality photo — do NOT derive from any other image.`)
-  lines.push(`  • Fresh seed token: ${seed}`)
-
-  return lines.join('\n')
+  return parts.join('')
 }
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -283,14 +176,9 @@ function buildVariationDirective(job: ImageJob): string {
 // Retry attempt: re-poll the OLD taskId for 60s. If KIE eventually returns
 // success → no new credit. If still stuck/failed → submit a fresh task.
 // ─────────────────────────────────────────────────────────────────────────
-// V4 — tighter timeouts so a single stuck KIE task no longer drags the
-// whole queue. KIE GPT-4o image renders normally complete in 40-70s; we
-// give 110s before declaring stuck and either re-polling or re-submitting.
-// Net effect: faster failure → faster retry → better effective throughput
-// when a small fraction of tasks hang.
-const MAX_ATTEMPTS     = 3
-const RECOVERY_POLL_MS = 45_000   // give an in-flight task another 45s
-const FRESH_POLL_MS    = 110_000  // single attempt max wait — was 5 min
+const MAX_ATTEMPTS = 4
+const RECOVERY_POLL_MS = 60_000   // give an in-flight task another 60s
+const FRESH_POLL_MS    = 5 * 60_000
 
 async function runWithCreditSafeRetry(
   job: ImageJob,
@@ -498,18 +386,13 @@ export async function generatePackImages(
         active++
         options.onTaskUpdate(job.sectionIdx, job.imageIdx, { status: 'generating' })
 
-        // ── Hybrid router: classify + dispatch (flag off = legacy path) ─
-        routeAndExecuteJob(job, {
-          pack,
+        runWithCreditSafeRetry(
+          job,
+          pack.visualMemory,
           kieApiKey,
-          onTaskUpdate: (patch) => options.onTaskUpdate(job.sectionIdx, job.imageIdx, patch),
-          signal: options.signal,
-          legacyRunner: () => runWithCreditSafeRetry(
-            job, pack.visualMemory, kieApiKey,
-            (patch) => options.onTaskUpdate(job.sectionIdx, job.imageIdx, patch),
-            options.signal,
-          ),
-        })
+          (patch) => options.onTaskUpdate(job.sectionIdx, job.imageIdx, patch),
+          options.signal,
+        )
           .then(({ assetRef, retries }) => {
             options.onTaskUpdate(job.sectionIdx, job.imageIdx, {
               status: 'done', generatedAssetRef: assetRef, error: undefined,
@@ -556,17 +439,12 @@ export async function regenerateSingleImage(
 
   onTaskUpdate(sectionIdx, imageIdx, { status: 'generating', error: undefined })
   try {
-    // ── Hybrid router for single-image regen as well ─────────────────
-    const job = { sectionIdx, imageIdx, prompt, section }
-    const { assetRef } = await routeAndExecuteJob(job, {
-      pack,
+    const { assetRef } = await runWithCreditSafeRetry(
+      { sectionIdx, imageIdx, prompt, section },
+      pack.visualMemory,
       kieApiKey,
-      onTaskUpdate: (patch) => onTaskUpdate(sectionIdx, imageIdx, patch),
-      legacyRunner: () => runWithCreditSafeRetry(
-        job, pack.visualMemory, kieApiKey,
-        (patch) => onTaskUpdate(sectionIdx, imageIdx, patch),
-      ),
-    })
+      (patch) => onTaskUpdate(sectionIdx, imageIdx, patch),
+    )
     onTaskUpdate(sectionIdx, imageIdx, { status: 'done', generatedAssetRef: assetRef, error: undefined })
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)

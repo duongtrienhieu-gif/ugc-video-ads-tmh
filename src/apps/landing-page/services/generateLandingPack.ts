@@ -174,26 +174,11 @@ SECTION SPEC — produce EXACTLY these 17 in this order
 12. type="whatsapp-testimonials", imageAspectRatio="4:5"
     • reviews: 4 chat-style testimonials (multi-line, emojis, authentic Malay)
     • copy: short framing
-    • 4 imagePrompts — V3 STRICT STRUCTURE:
-        2 PURE WhatsApp screenshots (NO product visible)
-        + 2 REAL-LIFE casual product photos (NOT designed banners)
-      Goal: looks like a customer sent these 4 images via WhatsApp.
-      NOT a marketing graphic. NOT an ecommerce template.
-      - wa_01.jpg, style="WhatsApp screenshot ONLY — pure phone screen, no product", aspectRatio="4:5":
-        Authentic smartphone WhatsApp chat screenshot ONLY. NO product packshot. NO product in frame at all. NO staged lighting. NO marketing layout.
-        Show: phone status bar at top, WhatsApp green header with chat partner name (blurred or generic Malaysian female avatar), green outgoing message bubbles, white incoming bubbles, Malay testimonial text with emojis (3-5 messages), realistic timestamp, message input bar at bottom. Slight JPEG compression artifacts — like a screenshot a customer actually sent. ABSOLUTE: no product bottle visible anywhere.
-      - wa_02.jpg, style="WhatsApp screenshot ONLY — pure phone screen, no product (different convo)", aspectRatio="4:5":
-        Another authentic WhatsApp chat screenshot. Different person from wa_01 (different chat partner name + avatar color). Different conversation flow with different emojis and timestamp. Same authenticity rules: NO product in frame, just chat UI. Looks like a totally separate customer.
-      - wa_03.jpg, style="Real-life product photo — handheld casual, NOT staged", aspectRatio="4:5":
-        Authentic phone-camera photo of a Malaysian person holding the product casually at home. NOT a professional product shot. NOT a marketing banner. NOT centered or designed. Slight motion blur OR shallow depth-of-field. Imperfect framing. Casual home environment in background (kitchen counter / bedside / dining table). Lighting natural ambient indoor — NOT studio. Hand visible holding the product but NOT centered. Looks like the customer snapped it quickly to send a friend.
-      - wa_04.jpg, style="Real-life product photo — DIFFERENT environment + hand + light", aspectRatio="4:5":
-        Different person from wa_03. STRICT VARIATION: different home environment (if wa_03 was kitchen, this is bedroom / living room / balcony), different hand grip, different camera angle, different lighting. Same product identity LOCKED — same brand, same bottle shape, same label colors. Authentic phone-photo aesthetic, NOT marketing.
-
-      STRICT BAN for this whole section:
-        • NO marketing collages
-        • NO designed text overlays on the photos
-        • NO "Testimonials" headlines on the images
-        • NO 4 product packshots — at least 2 MUST be pure screenshots with NO product
+    • 4 imagePrompts ALL aspectRatio="4:5":
+      - wa_01.jpg, style="WhatsApp screenshot authentic 1", aspectRatio="4:5": realistic WhatsApp chat screenshot. Green chat bubbles. Malaysian sender name. Casual Malay text with emojis about product results. Timestamp. Slightly JPEG-compressed real phone quality.
+      - wa_02.jpg, style="WhatsApp screenshot authentic 2", aspectRatio="4:5": different user, more excited style, more emojis, different timestamp
+      - wa_03.jpg, style="WhatsApp screenshot authentic 3", aspectRatio="4:5": WhatsApp group chat named "Ibu2 Sihat" or similar, multiple positive replies about the product
+      - wa_04.jpg, style="WhatsApp screenshot authentic 4", aspectRatio="4:5": WhatsApp conversation where user shares a result, friend reacts positively — multi-exchange feel
 
 13. type="news-proof", imageAspectRatio="4:5"
     • copy: authority framing text about health concern
@@ -203,55 +188,11 @@ SECTION SPEC — produce EXACTLY these 17 in this order
 
 14. type="before-after", imageAspectRatio="4:5"
     • copy: transformation narrative
-    • 4 imagePrompts — V4 REWRITE: BELIEVABLE same-person before/after.
-      A real customer would NOT change outfit + room + hair + camera between
-      photos. They'd take the second photo a few weeks later in the SAME
-      mirror / SAME corner of the house, wearing similar casual clothes,
-      with only their body and energy looking different. That's what makes
-      it believable.
-      NO collages. NO split-frames. NO "Sebelum/Selepas" labels in the image
-      itself. NO designed marketing layout. NO gym-influencer transformation.
-      NO race/body-shape swap. NO lingerie / sports-bra reveal. Each image
-      is ONE independent phone photo with strong continuity to its pair.
-
-      MANDATORY SHARED-SCENE LOCK across ba_01 ↔ ba_02 (PAIR A — portrait):
-        • SAME Malaysian woman — identical face structure, skin tone, age, ethnicity
-        • SAME hair length and color (small styling difference allowed — tied vs down)
-        • SAME room (same wall, same window, same furniture corner)
-        • SAME camera distance and SAME angle (eye-level OR mirror selfie — pick ONE for the pair)
-        • SAME outfit FAMILY (e.g. both casual home tees, both modest hijab + loose top) — slight color shift OK, NEVER swap to activewear / sports bra
-        Only these things differ between BEFORE and AFTER:
-          - Posture (slouched/tired → relaxed/upright)
-          - Expression (flat or tired → small natural smile, brighter eyes)
-          - Stomach / face (slight bloat or puffiness → flatter / clearer skin)
-          - Lighting MOOD (cooler / dimmer / overcast → warmer / brighter same-window light)
-        NO product in either frame. NO text overlays.
-
-      - ba_01.jpg, style="Before portrait — same-scene, tired/bloated state", aspectRatio="4:5":
-        Malaysian woman, BEFORE state. Casual home setting, cool dim window light, slouched posture, low-energy expression, slight belly bloat visible through loose tee. NO product in frame. NO label overlays.
-      - ba_02.jpg, style="After portrait — same-scene, brighter/healthier state", aspectRatio="4:5":
-        SAME person, SAME room corner, SAME camera angle, SAME outfit family as ba_01. Warmer light through the SAME window. Posture relaxed and upright, slight natural smile, skin and eyes brighter, stomach noticeably flatter under the same style of top. NO product in frame. NO label overlays.
-
-      MANDATORY SHARED-SCENE LOCK across ba_03 ↔ ba_04 (PAIR B — body/side):
-        • SAME Malaysian woman as a SECOND testimonial (different from ba_01/02 but consistent across ba_03/04)
-        • SAME side-profile pose, SAME mirror or wall background, SAME camera distance, SAME angle
-        • SAME outfit FAMILY (loose tee + soft pants, both photos — never activewear reveal)
-        Only stomach contour + lighting MOOD + posture differ between BEFORE and AFTER. NO product. NO labels.
-
-      - ba_03.jpg, style="Before body — same-scene side pose, bloated", aspectRatio="4:5":
-        Side-profile body shot showing visible belly bloat under a loose casual top. Dim same-room lighting, slumped posture. NO product. NO labels.
-      - ba_04.jpg, style="After body — same-scene side pose, flatter stomach", aspectRatio="4:5":
-        SAME person, SAME side-profile angle, SAME camera distance, SAME outfit family as ba_03. Brighter same-window light. Flatter stomach under the same style of loose top. Slightly improved posture. NO product. NO labels.
-
-      ABSOLUTE BANS for this whole section:
-        • NO collages, split-frames, side-by-side composites
-        • NO "Sebelum" / "Selepas" / "Before" / "After" text rendered into the image
-        • NO gym influencer transformation, NO sports-bra / activewear reveal, NO lingerie
-        • NO race / body-type swap between BEFORE and AFTER (same person, full stop)
-        • NO different room, NO different camera, NO different outfit family between pair members
-        • NO ecommerce template / marketing poster aesthetic
-        Each image is a single phone photo. The pair effect comes from the
-        UI placing them side by side — the IMAGES THEMSELVES stay clean.
+    • 4 imagePrompts all aspectRatio="4:5":
+      - ba_01.jpg, style="Before after collage 1", aspectRatio="4:5": side-by-side before/after. Malaysian woman, casual. Before: tired, heavier, plain. After: vibrant, confident. "Sebelum" and "Selepas" labels. Amateur quality, NOT professional. Authentic COD ecommerce style.
+      - ba_02.jpg, style="Before after collage 2", aspectRatio="4:5": different user (male or older woman), different setting
+      - ba_03.jpg, style="Before after collage 3", aspectRatio="4:5": 2-3 before/after pairs in one collage, social-proof-by-numbers feel
+      - ba_04.jpg, style="Before after collage 4", aspectRatio="4:5": close-up transformation (face/skin/belly by niche), selfie comparison style
 
 15. type="faq"
     • faqs: 5-7 Malaysia FAQs (halal, side effects, "berapa lama nampak hasil", COD, shipping, return, allergies)
@@ -294,49 +235,6 @@ SECTION SPEC — produce EXACTLY these 17 in this order
       overlay, random supplement bottle, overdesigned layout, plain solo product shot with no social proof.
 
 ═══════════════════════════════════════════════════════════════
-DIVERSITY RULES — ZERO TOLERANCE FOR AI-CLONE LOOK
-═══════════════════════════════════════════════════════════════
-The #1 dead giveaway of AI-generated landing pages is "same hand pose / same
-bottle angle / same lighting / same shadow" across multiple shots. End users
-spot it instantly and lose trust. Treat every image as if a DIFFERENT person
-took it on a DIFFERENT day in a DIFFERENT room.
-
-LOCK (must stay identical across all images in the pack):
-  • Product brand identity — logo, label text, bottle TYPE (jar/bottle/sachet), packaging colors
-  • Person ethnicity (Malaysian) and broad age range
-
-VARY (MUST change image-to-image inside the same section):
-  • Camera angle — eye-level / slight low-angle / 3/4 / top-down / waist-level
-  • Lighting direction — left window / right window / overhead / warm dim / cool morning / golden hour
-  • Hand pose — both hands / one hand / no hands / pointing / cradling / lifting
-  • Background context — different room corner, different surface, different props
-  • Bottle rotation — front-facing / 3/4 / side / slight back / top-down
-  • Depth of field — sharp / shallow blur / mid-blur
-  • Person outfit (when person appears) — different shirt color/style per shot
-  • Person facial expression — never copy the exact same expression twice
-
-PROHIBITED inside any single section with 3+ images:
-  ✗ Two consecutive images using the same camera angle
-  ✗ Two consecutive images using the same hand pose
-  ✗ Two consecutive images using the same lighting direction
-  ✗ Two consecutive images using the same background context
-
-ENFORCEMENT: in every image prompt, EXPLICITLY state the chosen variation
-axes. Example: "iPhone selfie, slight low-angle, hand-on-stomach pose, warm
-kitchen window lighting, blurred fridge background, bottle held at 3/4 angle".
-DO NOT just say "Malaysian woman holding the product" — that produces
-clones. Be specific about EVERY axis above per image.
-
-═══════════════════════════════════════════════════════════════
-SHOT TYPE ROTATION POOL (per section, never repeat consecutively)
-═══════════════════════════════════════════════════════════════
-Within a multi-image section, rotate through this pool:
-  selfie · close-up · top-down flat-lay · side-angle waist-level ·
-  hand-held casual · mirror shot · table shot · over-the-shoulder · POV reach
-For a 5-image section, pick 5 DIFFERENT shot types from the pool.
-For a 2-image section, the 2 shots must be from DIFFERENT shot types.
-
-═══════════════════════════════════════════════════════════════
 CRITICAL IMAGE PROMPT RULES
 ═══════════════════════════════════════════════════════════════
 • ALWAYS English, 30-80 words
@@ -345,13 +243,11 @@ CRITICAL IMAGE PROMPT RULES
 • DEFAULT ETHNICITY: Malaysian native / Southeast Asian
 • NEVER cinematic / editorial / luxury / stock-photo
 • Aesthetic: Facebook Ads Malaysia native ecommerce UGC — real phone, real lighting
-• PRODUCT IDENTITY: for sections where the product appears (TikTok, Shopee, selfie, crowd, hero), instruct the model to use the exact same product packaging — same bottle shape, label, cap color, logo placement. BUT vary every OTHER axis per Diversity Rules above.
+• PRODUCT IDENTITY: for sections where the product appears (TikTok, Shopee, selfie, crowd, hero), instruct the model to use the exact same product packaging — same bottle shape, label, cap color, logo placement
 • PRICE ACCURACY: for TikTok Shop, Shopee, promo banner image prompts — include the EXACT price from the product offer field. Do NOT invent any other price.
 • Text overlay prompts: include exact text content (e.g. "bold white text overlay reads: ✓ Kurang Penat ✓ Tenaga Lebih")
 • Screenshot prompts: note "slightly JPEG-compressed", "imperfect real phone quality", "authentic"
-• Before/after (V4 spec): amateur quality, NOT gym influencer, NOT professional. ba_01/ba_02 are a SAME-SCENE pair (same person, same room, same camera, same outfit family — only stomach + light mood + posture differ). ba_03/ba_04 are another SAME-SCENE pair (same person side profile). NEVER swap to activewear, NEVER change room, NEVER change camera between paired before/after shots. This overrides the generic "VARY camera/lighting/hand pose" rule for these 4 images.
-
-• NO FLOATING PRODUCT OVERLAYS — ABSOLUTE: never render the product as a cut-out PNG pasted onto a background, never show a duplicated product packshot floating in mid-air, never composite two product views into a single image. The product must be physically grounded in the scene (held in hand with realistic finger contact, resting on a real surface with matching shadow, or naturally placed in the environment). Hero / banner sections may include text overlay graphics, but the PRODUCT ITSELF stays in-scene with grounded perspective and lighting. No "Sebelum/Selepas" composites and no stacked product cards floating over a portrait.
+• Before/after: amateur quality, NOT gym influencer, NOT professional
 
 ═══════════════════════════════════════════════════════════════
 LANGUAGE RULES — ABSOLUTE

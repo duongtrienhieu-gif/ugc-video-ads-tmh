@@ -1,13 +1,10 @@
 import { useState, useEffect } from 'react'
-import { Loader2, LayoutTemplate, Save, Check, RotateCcw, Trash2, FolderOpen, ChevronDown, ImageIcon, Sparkles, AlertTriangle, Clock, Zap, RefreshCw, FilePlus, FileDown, Copy as CopyIcon, FolderInput, Cpu, LayoutGrid, Cloud, CloudOff, CloudCog, ScanSearch, ShieldAlert } from 'lucide-react'
+import { Loader2, LayoutTemplate, Save, Check, RotateCcw, Trash2, FolderOpen, ChevronDown, ImageIcon, Sparkles, AlertTriangle, Clock, Zap, RefreshCw, FilePlus, FileDown, Copy as CopyIcon, FolderInput } from 'lucide-react'
 import type { LandingPagePack, SavedLandingPack } from '../types'
 import type { ImageProgress } from '../LandingPageAI'
 import SectionCard from './SectionCard'
 import { useLandingPageStore } from '../store'
 import { useAppStore } from '../../../stores/appStore'
-import { isHybridRenderEnabled } from '../lib/featureFlags'
-import { planRenderPack } from '../services/renderPlanner'
-import { scanSection, type SectionScanReport } from '../services/fakeSimilarityQC'
 
 /** KIE GPT-image-1 ~ 6 credits per call. Drives all cost hints in this module. */
 const CREDIT_PER_IMAGE = 6
@@ -109,15 +106,9 @@ export default function OutputPanel({
   // ── Result state ──────────────────────────────────────────────────
   return (
     <div className="flex h-full flex-col overflow-hidden">
-      {/* Top action bar — 3-zone layout to avoid the global API badges that
-          live in App.tsx at right-4 top-3 z-50 (Gemini chip + KIE credit).
-          Zone 1 (left): title meta block — flex-grow but capped.
-          Zone 2 (center): save / regen action buttons — visually centered.
-          Zone 3 (right): empty spacer ~19rem wide reserving space for the
-                          global badges so they never overlap our buttons. */}
+      {/* Top action bar */}
       <div className="shrink-0 border-b border-black/8 bg-gradient-to-r from-violet-50/40 to-purple-50/30 px-5 py-3">
-        <div className="grid grid-cols-1 gap-2 lg:grid-cols-[minmax(0,1fr)_auto_19rem] lg:items-center lg:gap-3">
-          {/* Zone 1 — Title + sync badge */}
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-1.5">
               <p className="truncate text-sm font-bold text-gray-900">
@@ -132,22 +123,19 @@ export default function OutputPanel({
                   {loadedProjectTitle}
                 </span>
               )}
-              <CloudSyncBadge />
             </div>
             <p className="text-[10px] text-gray-400">
               Ngôn ngữ: {pack.language.toUpperCase()} · Tạo lúc {new Date(pack.generatedAt).toLocaleTimeString('vi-VN')}
               {loadedFromId && ' · ✓ Tự đồng bộ project'}
             </p>
           </div>
-
-          {/* Zone 2 — Action buttons centered, away from global API badges */}
-          <div className="flex flex-wrap items-center justify-start gap-1.5 lg:justify-center">
+          <div className="flex flex-wrap gap-1.5">
             {!loadedFromId && (
               <input
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
                 placeholder={`vd: "${pack.productName} v1"`}
-                className="rounded-lg border border-black/10 bg-white px-2 py-1.5 text-[11px] outline-none focus:border-violet-500/40 w-44"
+                className="rounded-lg border border-black/10 bg-white px-2 py-1.5 text-[11px] outline-none focus:border-violet-500/40"
               />
             )}
             {loadedFromId && onNewProject && (
@@ -170,7 +158,7 @@ export default function OutputPanel({
             <button
               onClick={handleSave}
               disabled={saving || saved}
-              className={`flex items-center gap-1 rounded-full px-4 py-1.5 text-[11px] font-bold shadow-sm transition-colors ${
+              className={`flex items-center gap-1 rounded-full px-4 py-1.5 text-[11px] font-bold transition-colors ${
                 saved
                   ? 'bg-emerald-500/15 text-emerald-700'
                   : loadedFromId
@@ -182,21 +170,14 @@ export default function OutputPanel({
                 ? <><Check className="h-3 w-3" /> Đã lưu</>
                 : loadedFromId
                   ? <><Save className="h-3 w-3" /> Lưu thay đổi</>
-                  : <><Save className="h-3 w-3" /> Lưu LandingPage</>}
+                  : <><Save className="h-3 w-3" /> Lưu thành project</>}
             </button>
           </div>
-
-          {/* Zone 3 — Spacer matching the App-level badge column width.
-              Hidden on smaller screens (badges hide too via responsive design
-              upstream). Marked aria-hidden because it carries no semantic. */}
-          <div aria-hidden className="hidden lg:block" />
         </div>
       </div>
 
-      {/* Image generation bar — STICKY when generating so progress always visible while user scrolls sections */}
-      <div className={`shrink-0 border-b border-black/8 bg-amber-50/30 px-5 py-2.5 ${
-        isGeneratingImages ? 'sticky top-0 z-20 shadow-md bg-amber-50/95 backdrop-blur-sm' : ''
-      }`}>
+      {/* Image generation bar — between meta header and sections */}
+      <div className="shrink-0 border-b border-black/8 bg-amber-50/30 px-5 py-2.5">
         <ImageGenerationBar
           pack={pack}
           onGenerateAll={onGenerateAllImages}
@@ -205,8 +186,6 @@ export default function OutputPanel({
           progress={imageProgress}
           isGenerating={isGeneratingImages}
         />
-        {/* H3: Fake similarity scanner — surfaces clone-look risks across sections */}
-        <SimilarityScanPanel pack={pack} />
       </div>
 
       <div className="flex-1 overflow-y-auto p-4">
@@ -225,161 +204,6 @@ export default function OutputPanel({
 
         <SavedHistorySection onLoadProject={onLoadProject} loadedFromId={loadedFromId} />
       </div>
-    </div>
-  )
-}
-
-// ─────────────────────────────────────────────────────────────────────
-// SimilarityScanPanel — H3 Phase
-// On-demand "Quét tương đồng" scanner. Compares consecutive AI-rendered
-// images within multi-image sections to detect AI-clone look. Surfaces
-// flagged pairs as warning chips so user can decide whether to regenerate.
-// Never auto-regenerates (avoids burning credit on false positives).
-// ─────────────────────────────────────────────────────────────────────
-function SimilarityScanPanel({ pack }: { pack: LandingPagePack }) {
-  const [reports, setReports] = useState<SectionScanReport[]>([])
-  const [scanning, setScanning] = useState(false)
-  const [progress, setProgress] = useState<{ done: number; total: number } | null>(null)
-  const addToast = useAppStore((s) => s.addToast)
-
-  // Eligible sections: at least 2 AI-rendered images (excluding template-composed)
-  const eligibleSections = pack.sections
-    .map((s, idx) => ({ section: s, idx }))
-    .filter(({ section }) => {
-      const aiDone = section.imagePrompts.filter(
-        (p) => p.status === 'done'
-          && p.generatedAssetRef
-          && (p.renderStrategy === 'ai_full_render' || p.renderStrategy === 'reusable_render' || !p.renderStrategy),
-      )
-      return aiDone.length >= 2
-    })
-
-  if (eligibleSections.length === 0) return null
-
-  const totalPairs = eligibleSections.reduce(
-    (acc, { section }) => acc + Math.max(0, section.imagePrompts.filter((p) => p.status === 'done').length - 1),
-    0,
-  )
-
-  const handleScan = async (): Promise<void> => {
-    setScanning(true)
-    setReports([])
-    setProgress({ done: 0, total: totalPairs })
-    let done = 0
-    const newReports: SectionScanReport[] = []
-    try {
-      for (const { section, idx } of eligibleSections) {
-        const imageRefs = section.imagePrompts
-          .map((p, i) => ({ ref: p.generatedAssetRef ?? '', idx: i, status: p.status }))
-          .filter((x) => x.ref && x.status === 'done')
-        if (imageRefs.length < 2) continue
-        const report = await scanSection(
-          section.type, idx,
-          imageRefs.map((x) => ({ ref: x.ref, idx: x.idx })),
-          () => {
-            done++
-            setProgress({ done, total: totalPairs })
-          },
-        )
-        newReports.push(report)
-      }
-      setReports(newReports)
-      const flaggedCount = newReports.reduce((acc, r) => acc + r.flaggedImageIdx.length, 0)
-      if (flaggedCount > 0) {
-        addToast(`⚠ Phát hiện ${flaggedCount} ảnh có dấu hiệu trùng — xem chi tiết ở panel scanner`, 'info')
-      } else {
-        addToast('✓ Không thấy ảnh nào bị clone — pack OK', 'success')
-      }
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err)
-      addToast(`Quét tương đồng lỗi: ${msg}`, 'error')
-    } finally {
-      setScanning(false)
-      setProgress(null)
-    }
-  }
-
-  return (
-    <div className="mt-3 rounded-lg border border-cyan-200 bg-cyan-50/40 px-3 py-2">
-      <div className="flex items-center justify-between gap-2">
-        <div className="min-w-0 flex items-center gap-2">
-          <ScanSearch className="h-3.5 w-3.5 text-cyan-700" />
-          <span className="text-[11px] font-semibold text-cyan-900">
-            Fake Detector QC
-          </span>
-          <span className="text-[10px] text-cyan-700">
-            {scanning && progress
-              ? `Đang quét... ${progress.done}/${progress.total} pair`
-              : reports.length > 0
-                ? `Đã quét ${reports.reduce((a, r) => a + r.pairs.length, 0)} pair`
-                : `Sẵn sàng quét ${totalPairs} pair · ~${Math.ceil(totalPairs * 0.001 * 100) / 100}$ Gemini`}
-          </span>
-        </div>
-        <button
-          onClick={handleScan}
-          disabled={scanning || totalPairs === 0}
-          className="flex items-center gap-1 rounded-full bg-cyan-600 px-3 py-1 text-[11px] font-bold text-white shadow-sm hover:bg-cyan-700 disabled:cursor-not-allowed disabled:opacity-40"
-        >
-          {scanning ? <Loader2 className="h-3 w-3 animate-spin" /> : <ScanSearch className="h-3 w-3" />}
-          {scanning ? 'Đang quét...' : reports.length > 0 ? 'Quét lại' : 'Quét tương đồng'}
-        </button>
-      </div>
-
-      {reports.length > 0 && (
-        <div className="mt-2 space-y-1.5">
-          {reports.map((report) => {
-            const section = pack.sections[report.sectionIdx]
-            // V3 — tighter thresholds (was 85/70, now 70/55) since user
-            // prioritizes realism > template-look tolerance.
-            const sev = report.maxSimilarity >= 70 ? 'red' : report.maxSimilarity >= 55 ? 'amber' : 'emerald'
-            const sevColors = {
-              red:     'border-red-300 bg-red-50 text-red-900',
-              amber:   'border-amber-300 bg-amber-50 text-amber-900',
-              emerald: 'border-emerald-300 bg-emerald-50 text-emerald-900',
-            }[sev]
-            const sevIcon = sev === 'emerald' ? <Check className="h-3 w-3 text-emerald-600" /> : <ShieldAlert className="h-3 w-3" />
-            const sevLabel = sev === 'red'
-              ? 'CAO — cần regen'
-              : sev === 'amber'
-                ? 'Trung bình — cân nhắc regen'
-                : 'OK'
-            return (
-              <details key={report.sectionIdx} className={`rounded-md border ${sevColors} px-2 py-1.5`}>
-                <summary className="flex cursor-pointer items-center gap-1.5 text-[11px] font-semibold">
-                  {sevIcon}
-                  Section #{report.sectionIdx + 1} ({section?.type ?? '?'}) — {report.maxSimilarity}% similarity · {sevLabel}
-                  {report.flaggedImageIdx.length > 0 && (
-                    <span className="ml-auto rounded-full bg-white px-1.5 py-0.5 text-[9px] font-bold">
-                      ⚠ {report.flaggedImageIdx.length} ảnh
-                    </span>
-                  )}
-                </summary>
-                <div className="mt-2 space-y-1">
-                  {report.pairs.map((pair, pi) => (
-                    <div key={pi} className="rounded bg-white/60 px-2 py-1 text-[10px]">
-                      <div className="flex items-center justify-between">
-                        <span className="font-semibold">
-                          Pair {pi + 1}–{pi + 2}: {pair.result.overall}%
-                        </span>
-                        <span className="flex gap-1.5 text-[9px]">
-                          <span title="Composition">📐 {pair.result.axes.composition}</span>
-                          <span title="Body pose">🤚 {pair.result.axes.bodyPose}</span>
-                          <span title="Background">🏠 {pair.result.axes.background}</span>
-                          <span title="Lighting">💡 {pair.result.axes.lighting}</span>
-                          <span title="Product">📦 {pair.result.axes.productPlacement}</span>
-                        </span>
-                      </div>
-                      {pair.result.summaryVi && (
-                        <p className="mt-0.5 text-[10px] italic opacity-80">{pair.result.summaryVi}</p>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </details>
-            )
-          })}
-        </div>
-      )}
     </div>
   )
 }
@@ -408,39 +232,9 @@ function ImageGenerationBar({
     0,
   )
   const remaining = totalImages - generated
-
-  // ── Cost estimate — hybrid mode aware ────────────────────────────────
-  // When hybrid render is ON, only AI-required calls (ai_full_render +
-  // reusable_render) cost credit. template/derived assets cost 0. This
-  // makes the primary CTA reflect the ACTUAL cost user will be charged.
-  const hybridOn = isHybridRenderEnabled()
-  const plan = hybridOn ? planRenderPack(pack) : null
-
-  // Per-strategy cost: count how many of the listed prompts are AI-renders
-  function costForPrompts(predicate: (p: import('../types').ImagePrompt) => boolean): number {
-    if (!hybridOn || !plan) {
-      // Legacy: every prompt costs CREDIT_PER_IMAGE
-      let count = 0
-      pack.sections.forEach((s) => s.imagePrompts?.forEach((p) => { if (predicate(p)) count++ }))
-      return count * CREDIT_PER_IMAGE
-    }
-    // Hybrid: only ai_full_render + reusable_render cost credit
-    let kieCalls = 0
-    pack.sections.forEach((section, sIdx) => {
-      section.imagePrompts?.forEach((p, iIdx) => {
-        if (!predicate(p)) return
-        const asset = plan.assets.find((a) => a.sectionIdx === sIdx && a.imageIdx === iIdx)
-        if (asset && (asset.strategy === 'ai_full_render' || asset.strategy === 'reusable_render')) {
-          kieCalls++
-        }
-      })
-    })
-    return kieCalls * CREDIT_PER_IMAGE
-  }
-
-  const estCreditsAll       = costForPrompts(() => true)
-  const estCreditsRemaining = costForPrompts((p) => p.status !== 'done' && p.status !== 'generating' && p.status !== 'queued')
-  const estCreditsFailed    = costForPrompts((p) => p.status === 'failed')
+  const estCreditsAll       = totalImages * CREDIT_PER_IMAGE
+  const estCreditsRemaining = remaining * CREDIT_PER_IMAGE
+  const estCreditsFailed    = failedCount * CREDIT_PER_IMAGE
 
   return (
     <div className="flex flex-wrap items-center justify-between gap-2">
@@ -452,21 +246,9 @@ function ImageGenerationBar({
         <p className="text-[10px] text-gray-500">
           {generated}/{totalImages} ảnh đã sinh
           {failedCount > 0 && <span className="text-red-600"> · {failedCount} lỗi</span>}
-          {' '}·{' '}
-          {hybridOn ? (
-            <span className="font-medium text-emerald-700">
-              ⚡ Hybrid mode bật — chỉ tính credit cho {plan?.stats.kieCallsRequired ?? '?'} ảnh AI thật
-            </span>
-          ) : (
-            <span className="font-medium text-amber-700">1 ảnh ≈ {CREDIT_PER_IMAGE} credit</span>
-          )}
+          {' '}· <span className="font-medium text-amber-700">1 ảnh ≈ {CREDIT_PER_IMAGE} credit</span>
           {pack.visualMemory.length > 0 && ` · ${pack.visualMemory.length} ảnh tham chiếu`}
         </p>
-        <HybridRenderMetrics pack={pack} />
-        {/* V3 — removed "Bật hybrid mode" hint.
-            User priority is QUALITY > COST. Hybrid mode now used ONLY for
-            promo banners (offer / final-cta) where designed-graphic look is
-            intentional. Everything else renders via fresh AI. */}
       </div>
 
       <div className="flex flex-wrap items-center gap-1.5">
@@ -500,96 +282,17 @@ function ImageGenerationBar({
         <button
           onClick={onGenerateAll}
           disabled={isGenerating || totalImages === 0}
-          title={hybridOn
-            ? `Sinh ${totalImages} ảnh (~${estCreditsAll} credit hybrid)`
-            : `Sinh toàn bộ ${totalImages} ảnh (~${estCreditsAll} credit)`}
-          className={`flex items-center gap-1.5 rounded-full px-4 py-1.5 text-[11px] font-bold text-white shadow-sm disabled:cursor-not-allowed disabled:opacity-40 ${
-            hybridOn ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-amber-600 hover:bg-amber-700'
-          }`}
+          title={`Sinh toàn bộ ${totalImages} ảnh (~${estCreditsAll} credit)`}
+          className="flex items-center gap-1.5 rounded-full bg-amber-600 px-4 py-1.5 text-[11px] font-bold text-white shadow-sm hover:bg-amber-700 disabled:cursor-not-allowed disabled:opacity-40"
         >
           {isGenerating ? <Loader2 className="h-3 w-3 animate-spin" /> : <Sparkles className="h-3 w-3" />}
           {isGenerating
             ? 'Đang sinh…'
-            : hybridOn
-              ? `⚡ Sinh ${totalImages} ảnh — chỉ ~${estCreditsAll} credit`
-              : generated > 0
-                ? `Sinh lại tất cả ${totalImages} ảnh (~${estCreditsAll} credit)`
-                : `Sinh tất cả ${totalImages} ảnh (~${estCreditsAll} credit)`}
+            : generated > 0
+              ? `Sinh lại tất cả ${totalImages} ảnh (~${estCreditsAll} credit)`
+              : `Sinh tất cả ${totalImages} ảnh (~${estCreditsAll} credit)`}
         </button>
       </div>
-    </div>
-  )
-}
-
-// ─────────────────────────────────────────────────────────────────────
-// CloudSyncBadge — Phase H2
-// Tiny pill showing Supabase sync state. Hidden when sync is in 'idle'
-// (initial mount before first attempt). Shown next to the project title.
-// ─────────────────────────────────────────────────────────────────────
-function CloudSyncBadge() {
-  const status = useLandingPageStore((s) => s.syncStatus)
-  const lastSyncedAt = useLandingPageStore((s) => s.lastSyncedAt)
-  const error = useLandingPageStore((s) => s.syncError)
-
-  if (status === 'idle') return null
-
-  const config: Record<'syncing' | 'synced' | 'error' | 'offline', { icon: typeof Cloud; bg: string; text: string; label: string; title: string }> = {
-    'syncing': { icon: CloudCog, bg: 'bg-cyan-100',    text: 'text-cyan-700',    label: 'Đang đồng bộ',     title: 'Đang push thay đổi lên Supabase…' },
-    'synced':  { icon: Cloud,    bg: 'bg-emerald-100', text: 'text-emerald-700', label: 'Đã đồng bộ ☁',     title: lastSyncedAt ? `Đồng bộ thành công ${new Date(lastSyncedAt).toLocaleTimeString('vi-VN')}` : '' },
-    'error':   { icon: CloudOff, bg: 'bg-red-100',     text: 'text-red-700',     label: 'Sync lỗi',          title: error ?? 'Không sync được — sẽ thử lại khi edit tiếp' },
-    'offline': { icon: CloudOff, bg: 'bg-amber-100',   text: 'text-amber-700',   label: 'Local-only',        title: 'Chưa setup Supabase table — chạy SUPABASE_LANDING_PROJECTS_MIGRATION.md để bật cross-device sync' },
-  }
-  const c = config[status]
-  if (!c) return null
-  const Icon = c.icon
-
-  return (
-    <span
-      className={`flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold ${c.bg} ${c.text}`}
-      title={c.title}
-    >
-      <Icon className={`h-2.5 w-2.5 ${status === 'syncing' ? 'animate-spin' : ''}`} />
-      {c.label}
-    </span>
-  )
-}
-
-// ─────────────────────────────────────────────────────────────────────
-// HybridRenderMetrics — Phase 8 chip
-// Shows AI render count vs template-composed vs derived for this pack
-// when the hybrid render flag is on. Off → renders nothing.
-// ─────────────────────────────────────────────────────────────────────
-function HybridRenderMetrics({ pack }: { pack: LandingPagePack }) {
-  if (!isHybridRenderEnabled()) return null
-  const plan = planRenderPack(pack)
-  const { stats } = plan
-  const aiOnlyCost = stats.total * CREDIT_PER_IMAGE
-  const hybridCost = stats.kieCallsRequired * CREDIT_PER_IMAGE
-  const saved = aiOnlyCost - hybridCost
-  const savedPct = aiOnlyCost > 0 ? Math.round((saved / aiOnlyCost) * 100) : 0
-
-  return (
-    <div className="mt-1.5 flex flex-wrap items-center gap-2 text-[10px]">
-      <span className="flex items-center gap-1 rounded-full border border-violet-200 bg-violet-50 px-2 py-0.5 font-semibold text-violet-700">
-        <Cpu className="h-2.5 w-2.5" />
-        Hybrid mode
-      </span>
-      <span className="text-amber-700">
-        <strong>{stats.aiFullCount}</strong> AI render
-      </span>
-      <span className="text-cyan-700">
-        + <strong>{stats.reusableCount}</strong> reusable
-      </span>
-      <span className="text-emerald-700 flex items-center gap-0.5">
-        <LayoutGrid className="h-2.5 w-2.5" />
-        <strong>{stats.templateComposedCount}</strong> template
-      </span>
-      <span className="text-pink-700">
-        <strong>{stats.derivedCount}</strong> derived
-      </span>
-      <span className="ml-auto rounded-full bg-emerald-50 px-2 py-0.5 font-bold text-emerald-700 border border-emerald-200">
-        💰 Tiết kiệm ~{saved} credit (-{savedPct}%)
-      </span>
     </div>
   )
 }
