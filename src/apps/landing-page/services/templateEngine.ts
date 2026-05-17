@@ -203,3 +203,91 @@ export function seededRand(seed: string): () => number {
     return (h & 0xffffffff) / 0x100000000
   }
 }
+
+/** Draw N-star rating row (filled + empty stars). Used by Shopee + TikTok composers. */
+export function drawStars(
+  ctx: CanvasRenderingContext2D,
+  x: number, y: number,
+  rating: number,
+  size: number,
+  color = '#FFA500',
+): number {
+  const SPACING = size * 0.15
+  const starCount = 5
+  for (let i = 0; i < starCount; i++) {
+    const filled = i < Math.floor(rating)
+    const cx = x + i * (size + SPACING) + size / 2
+    const cy = y + size / 2
+    drawStar(ctx, cx, cy, size / 2, filled ? color : '#E0E0E0')
+  }
+  return x + starCount * (size + SPACING)
+}
+
+function drawStar(
+  ctx: CanvasRenderingContext2D,
+  cx: number, cy: number,
+  r: number,
+  fill: string,
+): void {
+  ctx.fillStyle = fill
+  ctx.beginPath()
+  for (let i = 0; i < 10; i++) {
+    const ang = (Math.PI / 5) * i - Math.PI / 2
+    const rad = i % 2 === 0 ? r : r * 0.42
+    const px = cx + Math.cos(ang) * rad
+    const py = cy + Math.sin(ang) * rad
+    if (i === 0) ctx.moveTo(px, py)
+    else ctx.lineTo(px, py)
+  }
+  ctx.closePath()
+  ctx.fill()
+}
+
+/** Resolve an asset ref or http URL to a loadable URL for `loadImage()`. */
+export async function resolveImageRef(ref: string | undefined | null): Promise<string | null> {
+  if (!ref) return null
+  if (ref.startsWith('http')) return ref
+  if (ref.startsWith('asset:') || ref.startsWith('asset-')) {
+    const { getUrl } = await import('../../../utils/assetStore')
+    return getUrl(ref)
+  }
+  return null
+}
+
+/** Subtle JPEG-artifact simulation — adds noise on top of the canvas.
+ *  Call AFTER all drawing. Heavy noise = mobile screenshot feel. */
+export function addJpegNoise(
+  ctx: CanvasRenderingContext2D,
+  width: number, height: number,
+  intensity = 0.04,  // 0..1
+  seed = 'noise',
+): void {
+  const rng = seededRand(seed)
+  const img = ctx.getImageData(0, 0, width, height)
+  const data = img.data
+  for (let i = 0; i < data.length; i += 4) {
+    const noise = (rng() - 0.5) * 255 * intensity
+    data[i]     = Math.max(0, Math.min(255, data[i]     + noise))
+    data[i + 1] = Math.max(0, Math.min(255, data[i + 1] + noise))
+    data[i + 2] = Math.max(0, Math.min(255, data[i + 2] + noise))
+  }
+  ctx.putImageData(img, 0, 0)
+}
+
+/** Initials helper — extracts first letter of first 2 words. */
+export function makeInitials(name: string): string {
+  const parts = name.trim().split(/\s+/).slice(0, 2)
+  return parts.map((p) => p[0] ?? '').join('').toUpperCase()
+}
+
+/** Stable color picker from a string seed — used for avatar / badge colors. */
+const STABLE_PALETTE = [
+  '#7CB342', '#26A69A', '#5C6BC0', '#EC407A', '#FF7043',
+  '#AB47BC', '#42A5F5', '#FFA726', '#66BB6A', '#EF5350',
+  '#8D6E63', '#78909C', '#F06292', '#9CCC65', '#FFCA28',
+]
+export function pickColorBySeed(seed: string): string {
+  let h = 0
+  for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) >>> 0
+  return STABLE_PALETTE[h % STABLE_PALETTE.length]
+}

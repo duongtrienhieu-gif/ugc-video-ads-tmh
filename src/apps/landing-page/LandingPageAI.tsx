@@ -10,10 +10,12 @@ import AutoSaveIndicator from '../../components/AutoSaveIndicator'
 import InputPanel from './components/InputPanel'
 import OutputPanel from './components/OutputPanel'
 import { useLandingPageStore } from './store'
-// Phase 3 — side-effect import: registers window.__testWhatsappComposer for
-// DevTools authenticity testing. Does NOT change render path — composer is
-// never invoked from generateImages.ts in stable-render-v1.
-import './services/composers/whatsappComposer'
+// Phase 4 — side-effect import: registers full composer registry + DevTools
+// test helpers (window.__testShopeeComposer / __testTiktokComposer /
+// __testFbComposer / __testNewsComposer / __testPromoComposer /
+// __testBeforeAfterComposer / __testInfographicComposer / __testAllComposers).
+// Phase 6 will wire these into generateImages.ts behind ENABLE_HYBRID_RENDER.
+import './services/composers'
 
 // ── Session-persistence snapshot shape ─────────────────────────────────────
 // Phase R3 pilot. Persisted across F5 / refresh / browser-close. Stores only
