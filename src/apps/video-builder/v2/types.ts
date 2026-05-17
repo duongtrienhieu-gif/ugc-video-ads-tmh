@@ -328,6 +328,157 @@ export type SceneTransition =
   | 'cross_dissolve'      // generic warm transition
   | 'cut'                 // default hard cut
 
+// ═════════════════════════════════════════════════════════════════════════
+// Z17 — EDITORIAL INTELLIGENCE LAYER (P1-P13)
+//
+// Sits between the storyboard engine (Z11/Z12/Z13) and the future video
+// renderer. Adds:
+//   • visualRole — semantic purpose per scene (hook/pain/sensory/credibility/...)
+//   • coverageShots — 3-6 derived shots per master scene
+//   • continuityGroup — identity-lock bundle (avatar/wardrobe/lighting/product)
+//   • motion blueprint — zoom/pan/blur/handheld parameters per shot
+//   • timelineCuts — final ordered cuts assembled to fill voice duration
+//   • editorial transition graph — cut-to-cut transition rules
+//
+// All inferred LOCALLY from existing blueprint axes — Gemini schema unchanged.
+// ═════════════════════════════════════════════════════════════════════════
+
+/** Semantic role of a scene in the editorial flow. Adds a layer of meaning
+ *  beyond sceneType + subjectFocus + visualMotif so the diversity engine can
+ *  detect "3 informational beats in a row" (semantic duplication) — not just
+ *  "3 same compositions in a row" (visual duplication). */
+export type VisualRole =
+  | 'hook'             // attention-grab opener
+  | 'pain'             // problem agitation
+  | 'reaction'         // emotional reaction shot (frustration, failed attempts)
+  | 'education'        // mechanism / ingredient explanation / science
+  | 'sensory'          // tactile / textural / sensual closeup
+  | 'product_reveal'   // product hero / first encounter
+  | 'credibility'      // metric cards / certification / authority signals
+  | 'ingredient'       // ingredient macro / capsule splay / herbs
+  | 'lifestyle'        // after-life / environmental context
+  | 'recovery'         // relief / post-pain result
+  | 'social_proof'     // testimonial / review / before-after
+  | 'cta'              // closer / BUY NOW / direct ask
+
+/** Coverage shot type — what KIND of derived shot this is within a master
+ *  scene. Each master scene gets 3-6 coverage shots so a 60s voiceover has
+ *  20-35 cuts (editor-style pacing) instead of 9 long static masters. */
+export type CoverageShotType =
+  | 'master'           // the original master scene (1:1 with SceneBlueprint)
+  | 'closeup'          // tight emotional / detail crop
+  | 'medium'           // mid-distance composition
+  | 'detail'           // hand / label / texture detail
+  | 'reaction'         // face / emotion crop
+  | 'environment'      // wider establishing context shot
+  | 'product_focus'    // product macro / label-only / cap rotation
+  | 'crop'             // tighter recompose of the master
+  | 'overlay_space'    // composition leaves room for typography overlay
+  | 'motion_frame'     // implied motion (rotation / spin / particles)
+
+/** Cut-to-cut transition style at the editorial timeline level. Different
+ *  from SceneTransition (which is master-to-master at storyboard level). */
+export type EditorialTransition =
+  | 'cut'              // default hard cut
+  | 'smash_cut'        // aggressive — hook / pain spike
+  | 'whip'             // fast directional blur transition
+  | 'dissolve'         // soft warm crossfade — recovery / emotional
+  | 'blur_wipe'        // → infographic / education
+  | 'flash'            // → CTA impact
+
+/** Motion blueprint per coverage shot — drives the downstream video animator
+ *  (Kling / Veo / Runway). Static keyframe becomes an animated cut. */
+export interface MotionBlueprint {
+  /** Zoom direction during the clip. 'none' = locked-off. */
+  zoomDirection?: 'in' | 'out' | 'none'
+  /** Camera pan/tilt direction. 'none' = locked-off. */
+  cameraMove?: 'left' | 'right' | 'up' | 'down' | 'none'
+  /** Overall motion intensity 0-100. Higher = more movement. */
+  intensity?: number
+  /** Motion blur amount 0-100. Higher for kinetic / urgency moments. */
+  blurAmount?: number
+  /** Handheld shake amount 0-100. Higher for UGC realism / pain / hook. */
+  handheldAmount?: number
+  /** Easing curve — drives the animation's velocity profile. */
+  easing?: 'linear' | 'ease-in' | 'ease-out' | 'ease-in-out'
+}
+
+/** A single derived coverage shot — a master scene typically produces 3-6
+ *  of these so the final timeline has editor-pace cuts instead of long
+ *  static masters. */
+export interface CoverageShot {
+  /** 1-indexed shot id, unique across the entire EditorialBlueprint */
+  shotId: number
+  /** sceneId of the master scene this shot derives from */
+  masterSceneId: number
+  /** Kind of coverage this is */
+  shotType: CoverageShotType
+  /** Short English description — feeds the downstream renderer's prompt */
+  shotDescription: string
+  /** Motion blueprint */
+  motion: MotionBlueprint
+  /** Continuity group id (shots that share avatar/wardrobe/lighting/product) */
+  continuityGroup: string
+  /** Estimated screen-time in seconds (computed by the assembler) */
+  durationSec: number
+  /** Visual role inherited from the master scene */
+  visualRole: VisualRole
+}
+
+/** A continuity bundle — group of shots that should share identity. Editor
+ *  references this so the renderer phase locks avatar / wardrobe / room
+ *  tone / product across the group, even when shots have different
+ *  compositions / motion. */
+export interface ContinuityGroup {
+  groupId: string
+  /** Reference to the avatar (or shot it derived from) */
+  avatarRef: string
+  /** Wardrobe / outfit signature */
+  wardrobe: string
+  /** Lighting family — broad category (warm / cool / dim / bright / golden) */
+  lightingFamily: string
+  /** Room tone signature */
+  roomTone: string
+  /** Product identity reference */
+  productRef: string
+  /** Shot ids that belong to this group */
+  shotIds: number[]
+}
+
+/** A final ordered cut in the assembled timeline. The renderer phase
+ *  consumes this array sequentially to produce the final video. */
+export interface TimelineCut {
+  /** 1-indexed ordinal in the final timeline */
+  cutId: number
+  /** Reference to a CoverageShot.shotId */
+  coverageShotId: number
+  /** Master scene id (for continuity grouping in the renderer) */
+  masterSceneId: number
+  /** Start time in seconds (absolute, from t=0) */
+  startSec: number
+  /** Duration of this cut in seconds */
+  durationSec: number
+  /** Visual role of this cut */
+  visualRole: VisualRole
+  /** Energy 0-100 at this point in the curve (smoothed sample) */
+  energy: number
+  /** Transition INTO this cut */
+  transition: EditorialTransition
+}
+
+/** Top-level editorial intelligence output. Consumed by the future renderer
+ *  phase; for now it's also surfaced in the debug panel. */
+export interface EditorialBlueprint {
+  masterScenes: SceneBlueprint[]
+  coverageShots: CoverageShot[]
+  timelineCuts: TimelineCut[]
+  motionBlueprints: MotionBlueprint[]   // parallel array to coverageShots
+  energyCurve: number[]                  // per-second energy 0-100
+  continuityGroups: ContinuityGroup[]
+  transitionGraph: Array<{ fromCutId: number; toCutId: number; type: EditorialTransition }>
+  voiceDurationSec: number
+}
+
 export interface SceneBlueprint {
   /** 1-indexed scene id in the storyboard (1-9 typically) */
   sceneId: number
@@ -363,6 +514,18 @@ export interface SceneBlueprint {
   /** Transition style FROM this scene TO the next. Undefined on the final
    *  scene. Assigned by the transition director based on scene-pair logic. */
   transitionOut?: SceneTransition
+  // ── Z17 — EDITORIAL INTELLIGENCE LAYER (inferred locally) ────────────
+  /** Semantic editorial role — drives the visual-role diversity engine.
+   *  Detects "3 informational beats in a row" (semantic dup) even when
+   *  the underlying composition/pose are different. */
+  visualRole?: VisualRole
+  /** Continuity group id — bundles scenes that share avatar/wardrobe/
+   *  lighting/product identity. The renderer phase locks identity across
+   *  shots in the same group. */
+  continuityGroup?: string
+  /** Motion blueprint at the MASTER level. Coverage shots derived from
+   *  this scene inherit + variate from this base. */
+  motion?: MotionBlueprint
   /** What the scene visually proves / shows — e.g. "convey night-time fatigue", "demonstrate cap-twist freshness" */
   visualObjective?: string
   /** Concrete physical action subject performs — e.g. "rubbing temple while staring at laptop", "smiling, lifting jar to lens" */

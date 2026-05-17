@@ -109,9 +109,15 @@ export default function OutputPanel({
   // ── Result state ──────────────────────────────────────────────────
   return (
     <div className="flex h-full flex-col overflow-hidden">
-      {/* Top action bar */}
+      {/* Top action bar — 3-zone layout to avoid the global API badges that
+          live in App.tsx at right-4 top-3 z-50 (Gemini chip + KIE credit).
+          Zone 1 (left): title meta block — flex-grow but capped.
+          Zone 2 (center): save / regen action buttons — visually centered.
+          Zone 3 (right): empty spacer ~19rem wide reserving space for the
+                          global badges so they never overlap our buttons. */}
       <div className="shrink-0 border-b border-black/8 bg-gradient-to-r from-violet-50/40 to-purple-50/30 px-5 py-3">
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <div className="grid grid-cols-1 gap-2 lg:grid-cols-[minmax(0,1fr)_auto_19rem] lg:items-center lg:gap-3">
+          {/* Zone 1 — Title + sync badge */}
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-1.5">
               <p className="truncate text-sm font-bold text-gray-900">
@@ -133,13 +139,15 @@ export default function OutputPanel({
               {loadedFromId && ' · ✓ Tự đồng bộ project'}
             </p>
           </div>
-          <div className="flex flex-wrap gap-1.5">
+
+          {/* Zone 2 — Action buttons centered, away from global API badges */}
+          <div className="flex flex-wrap items-center justify-start gap-1.5 lg:justify-center">
             {!loadedFromId && (
               <input
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
                 placeholder={`vd: "${pack.productName} v1"`}
-                className="rounded-lg border border-black/10 bg-white px-2 py-1.5 text-[11px] outline-none focus:border-violet-500/40"
+                className="rounded-lg border border-black/10 bg-white px-2 py-1.5 text-[11px] outline-none focus:border-violet-500/40 w-44"
               />
             )}
             {loadedFromId && onNewProject && (
@@ -162,7 +170,7 @@ export default function OutputPanel({
             <button
               onClick={handleSave}
               disabled={saving || saved}
-              className={`flex items-center gap-1 rounded-full px-4 py-1.5 text-[11px] font-bold transition-colors ${
+              className={`flex items-center gap-1 rounded-full px-4 py-1.5 text-[11px] font-bold shadow-sm transition-colors ${
                 saved
                   ? 'bg-emerald-500/15 text-emerald-700'
                   : loadedFromId
@@ -174,9 +182,14 @@ export default function OutputPanel({
                 ? <><Check className="h-3 w-3" /> Đã lưu</>
                 : loadedFromId
                   ? <><Save className="h-3 w-3" /> Lưu thay đổi</>
-                  : <><Save className="h-3 w-3" /> Lưu thành project</>}
+                  : <><Save className="h-3 w-3" /> Lưu LandingPage</>}
             </button>
           </div>
+
+          {/* Zone 3 — Spacer matching the App-level badge column width.
+              Hidden on smaller screens (badges hide too via responsive design
+              upstream). Marked aria-hidden because it carries no semantic. */}
+          <div aria-hidden className="hidden lg:block" />
         </div>
       </div>
 
