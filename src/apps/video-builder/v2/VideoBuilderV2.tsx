@@ -11,7 +11,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { useState, useEffect, useRef } from 'react'
-import { Sparkles, FlaskConical, Package, UserRound, FileText, ChevronRight, Loader2, Info, ArrowLeft, Code2, BarChart3 } from 'lucide-react'
+import { Sparkles, FlaskConical, Package, UserRound, FileText, ChevronRight, Loader2, Info, ArrowLeft, Code2, BarChart3, RotateCcw, AlertTriangle, X } from 'lucide-react'
 import { useAppStore } from '../../../stores/appStore'
 import { useSettingsStore } from '../../../stores/settingsStore'
 import { useAssetUrl } from '../../../hooks/useAssetUrl'
@@ -43,6 +43,8 @@ import { estimateVoiceDuration } from './services/timelineAssembler'
 import { buildTimelineRenderJob } from './services/timelineRenderer'
 // Z26: incremental render — store-wired entry points
 import { startTimelineRender, renderSingleCut } from './services/timelineRendererJobRunner'
+// Z27: hard persistence — V2PipelineState survives F5 / logout
+import { loadV2State, saveV2State, clearAllV2Persistence } from './services/v2StatePersist'
 import MasterFrameApproval from './components/MasterFrameApproval'
 import PromptCompilerDebugPanel from './components/PromptCompilerDebugPanel'
 import StoryboardEditor from './components/StoryboardEditor'
@@ -198,7 +200,13 @@ interface Props {
 }
 
 export default function VideoBuilderV2({ onSwitchToV1 }: Props) {
-  const [state, setState] = useState<V2PipelineState>(createEmptyV2State)
+  // Z27 — hydrate from localStorage SYNCHRONOUSLY on first render so we
+  // never paint an empty pipeline that the user already filled in a
+  // previous session. Falls back to createEmptyV2State() on first ever
+  // launch or after the user clicks "Tạo lại từ đầu".
+  const [state, setState] = useState<V2PipelineState>(() => loadV2State() ?? createEmptyV2State())
+  // Z27 — modal flag for the "Tạo lại từ đầu" confirm dialog.
+  const [resetConfirmOpen, setResetConfirmOpen] = useState(false)
   const [pickerMode, setPickerMode] = useState<'avatar' | 'product' | 'script' | null>(null)
   const [identityProgress, setIdentityProgress] = useState<string>('')
   /** Last compiled prompt — shown in debug panel. Reflects job's finalCompiled. */
@@ -226,6 +234,31 @@ export default function VideoBuilderV2({ onSwitchToV1 }: Props) {
 
   useEffect(() => () => { cancelledRef.current = true }, [])
 
+  // ── Z27: auto-save V2PipelineState to localStorage ───────────────────────
+  // Debounced so rapid typing in the script textarea doesn't spam
+  // localStorage. 500ms is below the human-perceivable threshold; if the
+  // tab closes before the timer fires, the last keystrokes might be lost
+  // but everything CRITICAL (identity / blueprints / approvals) is saved
+  // by the operations that produce them — script typing is the only
+  // high-frequency mutation.
+  useEffect(() => {
+    const t = setTimeout(() => { saveV2State(state) }, 500)
+    return () => clearTimeout(t)
+  }, [state])
+
+  // ── Z27: "Tạo lại từ đầu" — wipe V2 state + all 4 job stores ────────────
+  const handleResetAll = async () => {
+    setResetConfirmOpen(false)
+    try {
+      await clearAllV2Persistence()
+      setState(createEmptyV2State())
+      addToast('Đã xoá toàn bộ tiến trình — bắt đầu lại từ bước Chọn input', 'success')
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      addToast(`Xoá thất bại: ${msg}`, 'error')
+    }
+  }
+
   // ── Module 6: Resume in-flight job from localStorage on mount ───────────
   // If a previous session was interrupted (refresh / crash), the job state is
   // in localStorage. We restore it so the user sees their last progress
@@ -246,6 +279,28 @@ export default function VideoBuilderV2({ onSwitchToV1 }: Props) {
       addToast('Đã khôi phục queue Gen B-Roll đang dở từ phiên trước (đã pause)', 'info')
       setState((s) => ({ ...s, phase: 'scene-gen' }))
     }
+
+    // Z27 — spinner-deadlock guard. The 'identity-extract' phase doesn't
+    // have a backing job store — it's a one-shot Gemini call held in a
+    // Promise that dies on F5. If we resume into this phase WITHOUT a
+    // completed identityPack, the user sees the loader spinning forever.
+    // Same for the storyboard-gen flicker phases. Bump back to the
+    // nearest stable phase so the user can retry instead of staring at
+    // a frozen spinner.
+    setState((s) => {
+      if (s.phase === 'identity-extract' && !s.identityPack) {
+        console.log('[V2_STATE] resume bumped phase identity-extract → input (no identityPack)')
+        return { ...s, phase: 'input' }
+      }
+      if (s.phase === 'blueprint' && s.blueprints.length === 0 && s.identityPack) {
+        // Storyboard didn't finish — go back to master-frame approval
+        // (which is what triggers storyboard gen). User can re-click
+        // "Tới Storyboard" to retry.
+        console.log('[V2_STATE] resume bumped phase blueprint → master-frame (no blueprints)')
+        return { ...s, phase: 'master-frame' }
+      }
+      return s
+    })
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -805,6 +860,17 @@ export default function VideoBuilderV2({ onSwitchToV1 }: Props) {
             >
               <Code2 className="h-3.5 w-3.5" /> Prompt Compiler v2
             </button>
+            {/* Z27 — "Tạo lại từ đầu" — only way to wipe persisted state.
+                Placed right of v1-switch so it's findable but requires
+                a confirm modal click so you don't nuke 8 minutes of
+                Gemini extractions with a stray mouse twitch. */}
+            <button
+              onClick={() => setResetConfirmOpen(true)}
+              title="Xoá toàn bộ tiến trình đã làm (identity / storyboard / scenes / renders) và bắt đầu lại từ bước 1"
+              className="flex items-center gap-1.5 rounded-lg border border-white/30 bg-red-500/30 px-3 py-1.5 text-xs font-semibold backdrop-blur-sm transition-colors hover:bg-red-500/50"
+            >
+              <RotateCcw className="h-3.5 w-3.5" /> Tạo lại từ đầu
+            </button>
             <button
               onClick={onSwitchToV1}
               className="flex items-center gap-1.5 rounded-lg bg-white/15 px-3 py-1.5 text-xs font-semibold backdrop-blur-sm hover:bg-white/25"
@@ -1038,6 +1104,66 @@ export default function VideoBuilderV2({ onSwitchToV1 }: Props) {
 
       {/* Task 8 — Analytics modal */}
       <AnalyticsPanel open={analyticsOpen} onClose={() => setAnalyticsOpen(false)} />
+
+      {/* Z27 — "Tạo lại từ đầu" confirm modal. Destructive operation —
+          requires explicit confirm so a stray click doesn't burn hours
+          of identity extraction + storyboard generation work. */}
+      {resetConfirmOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
+          onClick={() => setResetConfirmOpen(false)}
+        >
+          <div
+            className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-red-100">
+                <AlertTriangle className="h-5 w-5 text-red-600" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <h3 className="text-base font-bold text-gray-900">Xoá toàn bộ tiến trình?</h3>
+                <p className="mt-1 text-[13px] leading-relaxed text-gray-600">
+                  Hành động này sẽ xoá <strong>VĨNH VIỄN</strong>:
+                </p>
+                <ul className="mt-2 space-y-1 text-[12px] text-gray-600">
+                  <li>• Identity pack (Gemini Vision đã phân tích)</li>
+                  <li>• Master Frame đã duyệt</li>
+                  <li>• Storyboard ({state.blueprints.length} scenes)</li>
+                  <li>• Scene-Gen images đã render</li>
+                  <li>• Editorial blueprint + Timeline render job</li>
+                  <li>• Tất cả clip đã render qua Kling (kể cả đã khoá 🔒)</li>
+                </ul>
+                <p className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] text-amber-800">
+                  <strong>Không hoàn tác được.</strong> Bạn sẽ phải tạo lại từ bước Chọn input và tốn credit Gemini + KIE lần nữa.
+                </p>
+              </div>
+              <button
+                onClick={() => setResetConfirmOpen(false)}
+                className="rounded-lg p-1 text-gray-400 hover:bg-gray-100"
+                title="Đóng"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <div className="mt-5 flex items-center justify-end gap-2">
+              <button
+                onClick={() => setResetConfirmOpen(false)}
+                className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50"
+              >
+                Huỷ
+              </button>
+              <button
+                onClick={handleResetAll}
+                className="flex items-center gap-1.5 rounded-lg bg-red-600 px-4 py-2 text-sm font-bold text-white shadow-sm hover:bg-red-700"
+              >
+                <RotateCcw className="h-3.5 w-3.5" />
+                Xoá hết và tạo lại
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
