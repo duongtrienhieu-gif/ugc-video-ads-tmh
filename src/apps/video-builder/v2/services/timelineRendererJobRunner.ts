@@ -3,12 +3,26 @@
 // Kling 3.0 std via KIE.ai with concurrency 2 (matches videoGenJobRunner
 // pattern). Per-cut status updates pushed via callbacks.
 //
-// NOT a React store wiring — that's a future commit. This is pure logic so
-// the caller can decide how to persist (zustand / context / direct UI).
-//
 // On 422 from Kling: auto-retry once with minimal-fallback payload. If
 // minimal also fails, mark cut failed + move on.
-// ─────────────────────────────────────────────────────────────────────────────
+//
+// ── Z26 INCREMENTAL RENDER ───────────────────────────────────────────────
+// Adds store-wired entry points that respect the LOCK + SKIP semantics
+// from useTimelineRenderJobStore. The legacy callback-based runner
+// (runTimelineRender) is kept for non-store callers.
+//
+//   startTimelineRender({ apiKey, cutIds?, signal?, concurrency? })
+//     • Reads the active job from the store.
+//     • If cutIds passed: only render those cuts (preview / batch).
+//       Else: render all status='pending' (+ 'failed' if includeFailed).
+//     • ALWAYS skips 'locked' + 'skipped' + 'completed' items.
+//     • Writes status updates back to the store directly.
+//
+//   renderSingleCut(cutId, { apiKey, signal? })
+//     • Single-cut render (used by per-card [Render] / [Rerender] button).
+//     • Resets status to 'queued' → 'generating' → 'completed' | 'failed'.
+//     • Never bumps a 'locked' cut.
+// ─────────────────────────────────────────────────────────────────────────
 
 import type {
   TimelineRenderItem, TimelineRenderJob, TimelineRenderStatus,
@@ -18,6 +32,7 @@ import {
 } from './timelineRenderer'
 import { saveAsset, getUrl, isAssetRef } from '../../../../utils/assetStore'
 import { generateVideoJob, pollVideoJobUntilDone } from '../../../../utils/kieai'
+import { useTimelineRenderJobStore } from '../stores/timelineRenderJobStore'
 
 // ═════════════════════════════════════════════════════════════════════════
 // Public callback shape — caller wires this into their store / UI
@@ -173,10 +188,17 @@ export async function runTimelineRender(params: RunTimelineRenderParams): Promis
     `concurrency=${concurrency} estimated=${job.estimatedDurationSec.toFixed(1)}s`,
   )
 
-  // Queue index — only items not already terminal
+  // Queue index — only items not already terminal. Z26: also skip
+  // 'locked' + 'skipped' so any direct caller of the legacy entry point
+  // inherits the lock semantics for free.
   const queueIndices: number[] = []
   items.forEach((it, idx) => {
-    if (it.status !== 'completed' && it.status !== 'cancelled') queueIndices.push(idx)
+    if (
+      it.status !== 'completed' &&
+      it.status !== 'cancelled' &&
+      it.status !== 'locked' &&
+      it.status !== 'skipped'
+    ) queueIndices.push(idx)
   })
 
   let cursor = 0
@@ -280,6 +302,188 @@ export async function retrySingleCut(
       status: 'failed',
       error: msg.slice(0, 200),
       retryCount: (item.retryCount ?? 0) + 1,
+    })
+  }
+}
+
+// ═════════════════════════════════════════════════════════════════════════
+// Z26 — STORE-WIRED ENTRY POINTS (lock/skip aware)
+// ═════════════════════════════════════════════════════════════════════════
+//
+// These wrap the legacy callback runner with reads + writes against
+// useTimelineRenderJobStore. Used by the new TimelineRenderGrid UI.
+//
+// The lock semantics are enforced HERE so callers don't have to remember:
+//   • Bulk render skips 'locked' + 'skipped' + 'completed'.
+//   • Single-cut render REFUSES to touch 'locked' (no-op + warn).
+//   • Single-cut render on a 'completed' cut treats it as a rerender —
+//     overwrites the previous videoRef.
+
+export interface StartTimelineRenderParams {
+  apiKey: string
+  /** Optional explicit list of cut IDs to render. If omitted, runs every
+   *  status='pending' item. Locked / skipped / completed are NEVER
+   *  rendered regardless of this list — that's the whole point of Z26. */
+  cutIds?: number[]
+  /** Include 'failed' items in the bulk run (default false — failed
+   *  retries go through a separate UI button to avoid surprise reruns). */
+  includeFailed?: boolean
+  /** Worker concurrency. Default 2 — KIE Kling handles 2 well; higher
+   *  risks the same provider-overload pattern that hit scene-gen. */
+  concurrency?: number
+  signal?: AbortSignal
+}
+
+/**
+ * Z26 — Render the eligible subset of the active TimelineRenderJob.
+ * Reads from useTimelineRenderJobStore, writes status patches back.
+ *
+ * Returns when all targeted cuts have settled (completed | failed |
+ * cancelled). Throws only on fatal "no job in store" errors.
+ */
+export async function startTimelineRender(
+  params: StartTimelineRenderParams,
+): Promise<{ done: number; failed: number; skipped: number }> {
+  const store = useTimelineRenderJobStore.getState
+  const job = store().job
+  if (!job) {
+    throw new Error('Chưa có timeline render job — quay lại bước "Coverage & Timeline" để build trước')
+  }
+
+  // Build the eligible target set:
+  //   1. Start with cutIds if provided, else all items.
+  //   2. Filter out locked / skipped / completed (always).
+  //   3. Filter out failed unless includeFailed=true.
+  //   4. Filter out generating (already in flight from another caller).
+  const requested = params.cutIds ? new Set(params.cutIds) : null
+  const eligible = job.items.filter((it) => {
+    if (requested && !requested.has(it.cutId)) return false
+    if (it.status === 'locked' || it.status === 'skipped' || it.status === 'completed') return false
+    if (it.status === 'generating') return false
+    if (it.status === 'failed' && !params.includeFailed) return false
+    return true
+  })
+
+  if (eligible.length === 0) {
+    console.log(`[TIMELINE_RENDER Z26] no eligible cuts to render — all locked/skipped/completed`)
+    return { done: 0, failed: 0, skipped: 0 }
+  }
+
+  console.log(
+    `[TIMELINE_RENDER Z26] start · targets=${eligible.length} · ` +
+    `concurrency=${params.concurrency ?? 2} · includeFailed=${params.includeFailed ?? false}`,
+  )
+
+  // Mark targets queued + set runner flag
+  store().setJobState({ isRunning: true, isPaused: false })
+  for (const it of eligible) {
+    store().patchItem(it.cutId, { status: 'queued', error: undefined })
+  }
+
+  let done = 0
+  let failed = 0
+
+  // Build a synthetic job containing ONLY the eligible items so we can
+  // reuse the legacy worker pool. Store patches still happen via the
+  // onCutUpdate callback below.
+  const syntheticJob: TimelineRenderJob = { ...job, items: eligible }
+
+  try {
+    await runTimelineRender({
+      apiKey: params.apiKey,
+      job: syntheticJob,
+      concurrency: params.concurrency ?? 2,
+      signal: params.signal,
+      onCutUpdate: (update) => {
+        // Z26 hardening — NEVER overwrite a 'locked' item even if the
+        // runner somehow gets a stale callback for it. Belt-and-braces.
+        const cur = store().job?.items.find((i) => i.cutId === update.cutId)
+        if (cur?.status === 'locked') {
+          console.warn(`[TIMELINE_RENDER Z26] ignored status update for locked cut-${update.cutId}`)
+          return
+        }
+        const patch: Partial<TimelineRenderItem> = {
+          status: update.status,
+        }
+        if (update.taskId !== undefined)      patch.taskId = update.taskId
+        if (update.videoRef !== undefined)    patch.videoRef = update.videoRef
+        if (update.error !== undefined)       patch.error = update.error
+        if (update.retryCount !== undefined)  patch.retryCount = update.retryCount
+        if (update.status === 'generating')   patch.startedAt = Date.now()
+        if (update.status === 'completed' || update.status === 'failed') patch.finishedAt = Date.now()
+        store().patchItem(update.cutId, patch)
+      },
+      onProgress: (d, f) => {
+        done = d
+        failed = f
+      },
+    })
+  } finally {
+    store().setJobState({ isRunning: false })
+  }
+
+  console.log(`[TIMELINE_RENDER Z26] end · done=${done} failed=${failed}`)
+  return { done, failed, skipped: 0 }
+}
+
+/**
+ * Z26 — Render a single cut (per-card [Render] / [Rerender] / [Preview]).
+ * Refuses to touch a 'locked' cut. On a 'completed' cut it acts as a
+ * rerender — overwrites videoRef on success.
+ */
+export async function renderSingleCut(
+  cutId: number,
+  params: { apiKey: string; signal?: AbortSignal },
+): Promise<void> {
+  const store = useTimelineRenderJobStore.getState
+  const job = store().job
+  if (!job) throw new Error('Chưa có timeline render job')
+
+  const item = job.items.find((it) => it.cutId === cutId)
+  if (!item) throw new Error(`Không tìm thấy cut-${cutId}`)
+
+  if (item.status === 'locked') {
+    console.warn(`[TIMELINE_RENDER Z26] renderSingleCut cut-${cutId} refused — clip đã khoá. Mở khoá trước.`)
+    return
+  }
+  if (item.status === 'generating') {
+    console.warn(`[TIMELINE_RENDER Z26] renderSingleCut cut-${cutId} skipped — already in flight`)
+    return
+  }
+
+  store().patchItem(cutId, {
+    status: 'generating',
+    startedAt: Date.now(),
+    error: undefined,
+  })
+
+  try {
+    const { videoRef, taskId, usedFallback } =
+      await submitCutToKling(item, params.apiKey, params.signal)
+    console.log(`[TIMELINE_RENDER Z26 cut-${cutId}] single-render DONE${usedFallback ? ' (via minimal fallback)' : ''}`)
+
+    // Z26 race guard — if the user locked this cut while it was rendering,
+    // honour the lock (keep their previous videoRef) and discard this one.
+    const after = store().job?.items.find((i) => i.cutId === cutId)
+    if (after?.status === 'locked') {
+      console.warn(`[TIMELINE_RENDER Z26] cut-${cutId} locked mid-flight — discarding new videoRef`)
+      return
+    }
+    store().patchItem(cutId, {
+      status: 'completed',
+      videoRef,
+      taskId,
+      finishedAt: Date.now(),
+    })
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    const isCancel = msg.includes('huỷ') || msg.toLowerCase().includes('abort') || params.signal?.aborted
+    console.error(`[TIMELINE_RENDER Z26 cut-${cutId}] single-render FAIL: ${msg.slice(0, 200)}`)
+    store().patchItem(cutId, {
+      status: isCancel ? 'cancelled' : 'failed',
+      error: msg.slice(0, 200),
+      retryCount: (item.retryCount ?? 0) + 1,
+      finishedAt: Date.now(),
     })
   }
 }

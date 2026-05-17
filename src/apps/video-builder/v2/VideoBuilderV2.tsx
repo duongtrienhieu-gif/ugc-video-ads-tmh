@@ -29,9 +29,11 @@ import AnalyticsPanel from './components/AnalyticsPanel'
 import SceneGenGrid from './components/SceneGenGrid'
 import VideoGenGrid from './components/VideoGenGrid'
 import TimelinePlanningView from './components/TimelinePlanningView'
+import TimelineRenderGrid from './components/TimelineRenderGrid'
 import { useMasterFrameJobStore } from './stores/masterFrameJobStore'
 import { useSceneGenJobStore } from './stores/sceneGenJobStore'
 import { useVideoGenJobStore } from './stores/videoGenJobStore'
+import { useTimelineRenderJobStore } from './stores/timelineRenderJobStore'
 import { startMasterFrameJob, clearMasterFrameJob } from './services/masterFrameJobRunner'
 import { startSceneGenQueue, regenerateScene, cancelSceneGenQueue } from './services/sceneGenJobRunner'
 import { runVideoQueue, retrySingleVideoClip, buildVideoQueueFromScenes } from './services/videoGenJobRunner'
@@ -39,6 +41,8 @@ import { runVideoQueue, retrySingleVideoClip, buildVideoQueueFromScenes } from '
 import { buildEditorialBlueprint } from './services/editorialIntelligence'
 import { estimateVoiceDuration } from './services/timelineAssembler'
 import { buildTimelineRenderJob } from './services/timelineRenderer'
+// Z26: incremental render — store-wired entry points
+import { startTimelineRender, renderSingleCut } from './services/timelineRendererJobRunner'
 import MasterFrameApproval from './components/MasterFrameApproval'
 import PromptCompilerDebugPanel from './components/PromptCompilerDebugPanel'
 import StoryboardEditor from './components/StoryboardEditor'
@@ -533,6 +537,9 @@ export default function VideoBuilderV2({ onSwitchToV1 }: Props) {
 
   // ── Scene Gen UI handlers ─────────────────────────────────────────────
   const sceneJob = useSceneGenJobStore((s) => s.job)
+  // Z26 — reactive subscription so the grid swap re-renders correctly
+  // when the job lands / clears.
+  const timelineRenderJobStoreVal = useTimelineRenderJobStore((s) => s.job)
   const patchSceneItem = useSceneGenJobStore((s) => s.patchItem)
 
   const handleRegenScene = (idx: number) => {
@@ -605,6 +612,11 @@ export default function VideoBuilderV2({ onSwitchToV1 }: Props) {
           creditPerClip: 70,
         })
 
+        // Z26 — persist into the timelineRenderJobStore. This is the
+        // source of truth for the new per-cut grid + survives refreshes
+        // (locks/skips persist via localStorage). The legacy state.timelineRenderJob
+        // still gets set for any consumer that reads it directly.
+        useTimelineRenderJobStore.getState().createJob(renderJob)
         setState((s) => ({
           ...s,
           editorialBlueprint: blueprint,
@@ -624,8 +636,95 @@ export default function VideoBuilderV2({ onSwitchToV1 }: Props) {
     }, 50)
   }
 
-  // ── Render motion clips — actually calls Kling now (separate from
-  //    planning step). Triggered from TimelinePlanningView's CTA. ────────
+  // ── Z26 — Navigate to render phase WITHOUT auto-rendering. The
+  //    TimelineRenderGrid drives all Kling calls per-cut so users can
+  //    preview-test 1-3 clips, lock the good ones, and only then bulk-
+  //    render the rest. This replaces the old "click → 50 clips burn"
+  //    flow that motivated Z26.
+  const handleNavigateToRender = () => {
+    if (!useTimelineRenderJobStore.getState().job) {
+      addToast('Chưa có timeline render job — build planning trước', 'error')
+      return
+    }
+    setState((s) => ({ ...s, phase: 'video-gen' }))
+  }
+
+  // ── Z26 — Single-cut render (per-card [Render] / [Rerender] button) ──
+  const handleRenderSingleCut = async (cutId: number) => {
+    if (!kieApiKey) {
+      addToast('Chưa có KIE API key', 'error')
+      return
+    }
+    try {
+      await renderSingleCut(cutId, { apiKey: kieApiKey })
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      addToast(`Render cut-${cutId} lỗi: ${msg}`, 'error')
+    }
+  }
+
+  // ── Z26 — Bulk render all PENDING cuts. Locked + skipped are always
+  //    excluded (enforced inside startTimelineRender). ─────────────────
+  const handleRenderRemainingCuts = async () => {
+    if (!kieApiKey) {
+      addToast('Chưa có KIE API key', 'error')
+      return
+    }
+    const ctrl = new AbortController()
+    videoCancelRef.current = ctrl
+    try {
+      const result = await startTimelineRender({
+        apiKey: kieApiKey,
+        concurrency: 2,
+        signal: ctrl.signal,
+      })
+      if (result.done > 0 || result.failed > 0) {
+        addToast(
+          `✓ Render xong ${result.done} clip${result.failed > 0 ? ` · ${result.failed} lỗi (xem nút "Thử lại lỗi")` : ''}`,
+          result.failed > 0 ? 'error' : 'success',
+        )
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      addToast(`Bulk render lỗi: ${msg}`, 'error')
+    } finally {
+      videoCancelRef.current = null
+    }
+  }
+
+  // ── Z26 — Retry only the FAILED cuts. Same runner as bulk, but with
+  //    includeFailed=true and cutIds limited to failed items. ─────────
+  const handleRetryFailedCuts = async () => {
+    if (!kieApiKey) return
+    const job = useTimelineRenderJobStore.getState().job
+    if (!job) return
+    const failedIds = job.items.filter((it) => it.status === 'failed').map((it) => it.cutId)
+    if (failedIds.length === 0) return
+
+    const ctrl = new AbortController()
+    videoCancelRef.current = ctrl
+    try {
+      const result = await startTimelineRender({
+        apiKey: kieApiKey,
+        cutIds: failedIds,
+        includeFailed: true,
+        concurrency: 2,
+        signal: ctrl.signal,
+      })
+      addToast(
+        `✓ Retry xong ${result.done}/${failedIds.length} clip${result.failed > 0 ? ` · ${result.failed} vẫn lỗi` : ''}`,
+        result.failed > 0 ? 'error' : 'success',
+      )
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      addToast(`Retry lỗi: ${msg}`, 'error')
+    } finally {
+      videoCancelRef.current = null
+    }
+  }
+
+  // ── LEGACY — Z23 cut-level video gen (still used if user comes from
+  //    an older flow without a timelineRenderJob in store). ──────────
   const handleStartVideoQueue = async () => {
     if (!sceneJob || !kieApiKey) return
     const approvedScenes = sceneJob.items
@@ -637,12 +736,10 @@ export default function VideoBuilderV2({ onSwitchToV1 }: Props) {
       return
     }
 
-    // Build + persist a fresh job, then jump to the video-gen phase
     const job = buildVideoQueueFromScenes(approvedScenes, { durationSec: 5 })
     createVideoQueue(job)
     setState((s) => ({ ...s, phase: 'video-gen' }))
 
-    // Run the queue (2 workers). AbortController lets the Cancel button stop.
     const ctrl = new AbortController()
     videoCancelRef.current = ctrl
     try {
@@ -660,6 +757,7 @@ export default function VideoBuilderV2({ onSwitchToV1 }: Props) {
       videoCancelRef.current = null
     }
   }
+  void handleStartVideoQueue  // kept for back-compat — not wired in Z26 path
 
   const handleRetryVideoClip = async (idx: number) => {
     if (!kieApiKey) return
@@ -903,18 +1001,30 @@ export default function VideoBuilderV2({ onSwitchToV1 }: Props) {
             renderJob={state.timelineRenderJob ?? null}
             isBuilding={isBuildingTimeline}
             onBack={() => setState((s) => ({ ...s, phase: 'scene-gen' }))}
-            onRenderClips={handleStartVideoQueue}
+            onRenderClips={handleNavigateToRender}
             voiceDurationSec={estimateVoiceDuration(state.inputs.script)}
           />
         )}
 
-        {/* PHASE: VIDEO-GEN — image-to-video via Kling 3.0 std */}
+        {/* PHASE: VIDEO-GEN — Z26 per-cut render UX (preview-first + lock).
+            Falls back to legacy VideoGenGrid only if no timelineRenderJob
+            exists in the store (pre-Z23 flow). */}
         {state.phase === 'video-gen' && (
-          <VideoGenGrid
-            blueprintBySceneId={blueprintBySceneId}
-            onRetry={handleRetryVideoClip}
-            onCancelQueue={handleCancelVideoQueue}
-          />
+          timelineRenderJobStoreVal ? (
+            <TimelineRenderGrid
+              creditPerClip={state.timelineRenderJob?.creditPerClip ?? 70}
+              onRenderCut={handleRenderSingleCut}
+              onRenderRemaining={handleRenderRemainingCuts}
+              onRetryFailed={handleRetryFailedCuts}
+              onCancelRun={handleCancelVideoQueue}
+            />
+          ) : (
+            <VideoGenGrid
+              blueprintBySceneId={blueprintBySceneId}
+              onRetry={handleRetryVideoClip}
+              onCancelQueue={handleCancelVideoQueue}
+            />
+          )
         )}
       </div>
 

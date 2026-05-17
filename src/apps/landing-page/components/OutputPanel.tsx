@@ -68,7 +68,7 @@ export default function OutputPanel({
       setSaved(true)
       setTitle('')
       setTimeout(() => setSaved(false), 2500)
-      addToast(`✓ Đã lưu "${t}" vào Project → Landing Pages`)
+      addToast(`✓ Đã lưu "${t}" vào Landing Page đã lưu`)
     } finally {
       setSaving(false)
     }
@@ -79,9 +79,9 @@ export default function OutputPanel({
     return (
       <div className="flex h-full flex-col items-center justify-center gap-3 p-6 text-center">
         <Loader2 className="h-8 w-8 animate-spin text-violet-500" />
-        <p className="text-sm font-medium text-gray-700">Đang tạo landing pack...</p>
+        <p className="text-sm font-medium text-gray-700">AI đang tạo landing page...</p>
         <p className="text-xs text-gray-400 max-w-sm">
-          Gemini đang viết copy + image prompts theo form đã chọn
+          Đang viết copy + bố cục section + image prompts theo kiểu landing page bạn đã chọn
         </p>
       </div>
     )
@@ -95,7 +95,7 @@ export default function OutputPanel({
           <LayoutTemplate className="h-10 w-10 text-gray-200" strokeWidth={1.5} />
           <p className="text-sm text-gray-400">Chọn sản phẩm + nhấn "Tạo Landing Pack"</p>
           <p className="text-xs text-gray-300 max-w-sm">
-            Output landing pack theo form đã chọn — hoặc mở lại một project đã lưu bên dưới.
+            Output landing page theo kiểu đã chọn — hoặc mở lại một landing page đã lưu bên dưới.
           </p>
         </div>
         <SavedHistorySection onLoadProject={onLoadProject} loadedFromId={loadedFromId} />
@@ -390,7 +390,7 @@ function ProgressMeter({ progress }: { progress: ImageProgress }) {
 }
 
 // ─────────────────────────────────────────────────────────────────────
-// Saved history — Project → Landing Pages
+// Saved history — Landing Page đã lưu
 // ─────────────────────────────────────────────────────────────────────
 
 function SavedHistorySection({
@@ -469,7 +469,7 @@ function SavedHistorySection({
       <div className="mt-6 border-t border-black/8 pt-5">
         <h3 className="mb-2 flex items-center gap-2 text-[11px] font-bold uppercase tracking-widest text-gray-500">
           <FolderOpen className="h-3.5 w-3.5" />
-          Project → Landing Pages ({items.length})
+          Landing Page đã lưu ({items.length})
         </h3>
         <p className="mb-3 text-[10px] text-gray-400">
           Click "Mở" để tiếp tục chỉnh sửa — mọi thay đổi tự lưu lại project.
@@ -489,7 +489,7 @@ function SavedHistorySection({
       >
         <FolderOpen className="h-3.5 w-3.5 text-violet-600" />
         <span className="text-[11px] font-bold uppercase tracking-widest text-gray-700">
-          Project → Landing Pages
+          Landing Page đã lưu
         </span>
         <span className="rounded-full bg-violet-100 px-2 py-0.5 text-[10px] font-bold text-violet-700">
           {items.length}

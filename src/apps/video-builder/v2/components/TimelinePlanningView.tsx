@@ -166,22 +166,26 @@ export default function TimelinePlanningView({
         </DebugSection>
       </div>
 
-      {/* Footer — render CTA */}
+      {/* Footer — navigate to per-cut render UX (Z26).
+          Click = NAVIGATE only, NOT auto-render. The grid lets users
+          preview-test 1-3 clips, lock the good ones, then bulk-render
+          the rest — avoiding the old "click → ~3500 credit burn" bug. */}
       <div className="shrink-0 border-t border-black/8 bg-gradient-to-r from-violet-50 to-pink-50 px-6 py-3">
         <div className="flex items-center justify-between gap-3">
           <div className="min-w-0">
             <p className="text-sm font-bold text-gray-900">
-              ▶ Bước tiếp theo: Render motion clips ({cutCount} cuts · ~{(cutCount * (renderJob.creditPerClip ?? 70)).toLocaleString()} credit)
+              ▶ Bước tiếp theo: Render từng clip ({cutCount} cuts · trần ~{(cutCount * (renderJob.creditPerClip ?? 70)).toLocaleString()} credit nếu render hết)
             </p>
             <p className="text-[11px] text-gray-500">
-              Kling 3.0 std / KIE · ~{renderJob.creditPerClip} credit/clip · 5s mỗi clip · 2 worker song song · motion bám editorial blueprint
+              <span className="font-semibold text-amber-700">Preview-first</span>: render lẻ 1-3 clip test motion · khoá clip tốt 🔒 · sau đó bulk render phần còn lại · Kling 3.0 std · ~{renderJob.creditPerClip} credit/clip
             </p>
           </div>
           <button
             onClick={onRenderClips}
             className="flex items-center gap-2 rounded-full bg-gradient-to-r from-violet-600 to-pink-600 px-5 py-2 text-sm font-bold text-white shadow-md transition-colors hover:from-violet-700 hover:to-pink-700"
+            title="Mở grid render — chưa tốn credit, bạn render từng clip"
           >
-            🎬 Render {cutCount} motion clips
+            🎬 Đi tới bước Render
             <ArrowRight className="h-4 w-4" />
           </button>
         </div>

@@ -22,52 +22,91 @@ const LANGUAGE_OPTIONS: { id: LandingLanguage; label: string; flag: string; hint
   { id: 'en', label: 'English',        flag: '🇬🇧', hint: 'SEA English' },
 ]
 
+// Phase 7 — productized form selector. Each form is a visual card with:
+//   • icon + VN title
+//   • badge chip (one-line positioning — "Chuyển đổi nhanh", "Cảm xúc mạnh", ...)
+//   • short description (the WHY in one sentence)
+//   • audience hint ("Phù hợp cho ...") so user immediately knows fit
+//   • metrics row (số section + số ảnh + style)
+//   • detailed tooltip (the WHAT — for hover/long press)
+//
+// Order matters: most-common conversion-first first, then expanding into
+// niche-specific (storytelling / expert / hard-sell / premium).
 const FORM_OPTIONS: {
   id: LandingForm
   icon: string
   title: string
-  tagline: string
+  badge: string
+  badgeColor: 'violet' | 'emerald' | 'cyan' | 'amber' | 'rose'
+  description: string
+  audience: string
+  metrics: string
   tooltip: string
 }[] = [
   {
     id: 'ugc-malaysia',
     icon: '🚀',
-    title: 'UGC Malaysia',
-    tagline: 'Default — chuẩn chuyển đổi',
-    tooltip: 'Form mặc định. 17 section chuẩn MY Ecommerce: hero + pain + social proof + WhatsApp + before/after + offer. Tỉ lệ chuyển đổi cao nhất cho FB Ads Malaysia.',
+    title: 'UGC Chuyển Đổi Nhanh',
+    badge: 'Chuyển đổi nhanh',
+    badgeColor: 'violet',
+    description: 'Social proof, review, UGC và bố cục TikTok/Shopee style.',
+    audience: 'TikTok Ads · COD · impulse products · supplement / beauty mass-market',
+    metrics: '17 sections · ~36 ảnh · UGC mobile',
+    tooltip: 'Form mặc định — landing page tối ưu chuyển đổi bằng social proof, review, UGC và bố cục TikTok/Shopee style. 17 section đầy đủ (hero + pain + social proof + WhatsApp + before/after + offer). Tỉ lệ chuyển đổi cao nhất cho FB Ads Malaysia.',
   },
   {
     id: 'advertorial',
     icon: '📰',
-    title: 'Advertorial / Review',
-    tagline: 'Storytelling, trust-building',
-    tooltip: 'Viết theo dạng bài báo / review dài. Câu chuyện cá nhân → vấn đề → khám phá sản phẩm → kết quả. Phù hợp ngách y tế, sức khỏe, supplement cao cấp.',
+    title: 'Kể Chuyện Hành Trình',
+    badge: 'Cảm xúc mạnh',
+    badgeColor: 'rose',
+    description: 'Một nhân vật xuyên suốt kể lại hành trình thay đổi.',
+    audience: 'supplement · skincare · health · sản phẩm cần build trust trước khi sell',
+    metrics: '12 sections · ~16 ảnh · cinematic lifestyle',
+    tooltip: 'Form advertorial dạng kể chuyện cá nhân — một nhân vật xuyên suốt từ vấn đề → cơ duyên gặp sản phẩm → kết quả → giới thiệu người khác. 12 section emotional arc, character continuity, ~16 ảnh cinematic. Phù hợp ngách cần xây dựng cảm xúc và niềm tin trước khi chốt đơn.',
   },
-  // Phase 6 — real luxury engine shipped.
-  {
-    id: 'premium',
-    icon: '💎',
-    title: 'Thương Hiệu Cao Cấp',
-    tagline: 'Luxury editorial, brand-first',
-    tooltip: '11-section luxury editorial: hero cinematic → philosophy → lifestyle → product reveal → ingredient spotlight → texture/ritual → benefits → curated testimonials → premium press → minimal FAQ → soft CTA. ~15 ảnh fashion-editorial / Aesop / Apple aesthetic. KHÔNG TikTok/Shopee/WhatsApp screenshot, KHÔNG urgency, KHÔNG discount. Phù hợp luxury skincare / beauty / premium wellness / high-AOV brand-first products.',
-  },
-  // Phase 5 — real urgency engine shipped.
-  {
-    id: 'hard-sell-cod',
-    icon: '⚡',
-    title: 'Chốt Đơn Mạnh',
-    tagline: 'Urgency tối đa, CTA dày, COD aggressive',
-    tooltip: '14-section conversion funnel. CTA xuất hiện ở 13/14 section. Urgency strip ở hero/offer/final-cta. ~35 ảnh: heavy social proof (FB/TikTok/Shopee/WhatsApp) + before-after pair + COD delivery + promo banner + final urgency closer. Phù hợp COD impulse buy, audience đọc nhanh FB Ads Malaysia.',
-  },
-  // Phase 4 — real expert / scientific engine shipped.
   {
     id: 'chuyen-gia',
     icon: '🔬',
     title: 'Chuyên Gia / Khoa Học',
-    tagline: 'Bác sĩ, cơ chế, nghiên cứu',
-    tooltip: '13-section authority flow do một chuyên gia (dược sĩ / bác sĩ / dietitian) dẫn dắt. Tập trung mechanism + ingredient + comparison + news-proof. ~17 ảnh editorial / infographic (không phải UGC selfie). Phù hợp medical / supplement / health tech / anti-aging / premium wellness.',
+    badge: 'Độ tin cậy cao',
+    badgeColor: 'cyan',
+    description: 'Tập trung cơ chế sản phẩm và xây dựng niềm tin chuyên môn.',
+    audience: 'medical · supplement · health tech · anti-aging · premium wellness',
+    metrics: '13 sections · ~17 ảnh · editorial infographic',
+    tooltip: 'Form chuyên gia / khoa học — landing page authority do một dược sĩ / bác sĩ / dietitian dẫn dắt. Tập trung mechanism + ingredient + comparison + news-proof. 13 section, ~17 ảnh editorial / infographic (không phải UGC selfie). Phù hợp ngách cần trust qua kiến thức chuyên môn.',
+  },
+  {
+    id: 'hard-sell-cod',
+    icon: '⚡',
+    title: 'Chốt Đơn Mạnh',
+    badge: 'CTA dày',
+    badgeColor: 'amber',
+    description: 'CTA dày, urgency mạnh, tối ưu COD impulse buy.',
+    audience: 'COD · impulse buy · low-mid ticket · viral FB ads · audience đọc nhanh',
+    metrics: '14 sections · ~35 ảnh · CTA banner',
+    tooltip: 'Form chốt đơn mạnh — 14 section conversion funnel với CTA xuất hiện ở 13/14 section, urgency strip ở hero/offer/final-cta. ~35 ảnh heavy social proof (FB/TikTok/Shopee/WhatsApp) + before-after + COD delivery + promo banner. Phù hợp COD impulse buy, audience đọc nhanh.',
+  },
+  {
+    id: 'premium',
+    icon: '💎',
+    title: 'Thương Hiệu Cao Cấp',
+    badge: 'Lifestyle cao cấp',
+    badgeColor: 'emerald',
+    description: 'Premium lifestyle, thương hiệu sang trọng, brand-first.',
+    audience: 'luxury skincare · beauty · premium wellness · high-AOV brand-first',
+    metrics: '11 sections · ~15 ảnh · luxury editorial',
+    tooltip: 'Form thương hiệu cao cấp — 11 section luxury editorial (hero cinematic → brand philosophy → lifestyle → ingredient → texture / ritual → curated testimonials → premium press → soft CTA). ~15 ảnh fashion-editorial / Aesop / Apple aesthetic. KHÔNG TikTok/Shopee/WhatsApp screenshot, KHÔNG urgency, KHÔNG discount. Phù hợp luxury skincare / premium wellness / high-AOV brand-first products.',
   },
 ]
+
+const FORM_BADGE_CLASSES: Record<'violet' | 'emerald' | 'cyan' | 'amber' | 'rose', string> = {
+  violet:  'bg-violet-100 text-violet-700',
+  emerald: 'bg-emerald-100 text-emerald-700',
+  cyan:    'bg-cyan-100 text-cyan-700',
+  amber:   'bg-amber-100 text-amber-700',
+  rose:    'bg-rose-100 text-rose-700',
+}
 
 const NICHE_PRESETS = [
   'supplement gut health',
@@ -159,7 +198,7 @@ export default function InputPanel({
           Landing Page AI
         </h2>
         <p className="mt-0.5 text-[11px] text-gray-500">
-          Advertorial factory: 17 sections, ảnh thật, dual-language (MY + VI). Mobile-first, conversion-first.
+          Chọn sản phẩm, chọn kiểu landing page, AI tạo toàn bộ copy + ảnh — sẵn sàng dán vào Ladipage.
         </p>
       </div>
 
@@ -206,7 +245,7 @@ export default function InputPanel({
         </Section>
 
         {/* STEP 2 — Visual Memory */}
-        <Section step={2} title="Visual Memory (tuỳ chọn)">
+        <Section step={2} title="Ảnh tham chiếu sản phẩm (tuỳ chọn)">
           <p className="text-[10px] text-gray-500">
             Upload ảnh sản phẩm (packaging, label, logo…) để AI giữ identity nhất quán khi sinh ảnh. Tối đa 3 ảnh đầu được pass vào image generator.
           </p>
@@ -244,7 +283,7 @@ export default function InputPanel({
         </Section>
 
         {/* STEP 3 — Language */}
-        <Section step={3} title="Ngôn ngữ output">
+        <Section step={3} title="Ngôn ngữ landing page">
           <div className="grid grid-cols-3 gap-1.5">
             {LANGUAGE_OPTIONS.map((l) => (
               <button
@@ -268,9 +307,12 @@ export default function InputPanel({
           </p>
         </Section>
 
-        {/* STEP 4 — Form selector */}
-        <Section step={4} title="Chọn form landing page">
-          <div className="grid grid-cols-2 gap-1.5">
+        {/* STEP 4 — Form selector (Phase 7 — productized visual cards) */}
+        <Section step={4} title="Chọn kiểu landing page">
+          <p className="mb-2 text-[10px] text-gray-400">
+            Mỗi kiểu là một <strong>sales psychology engine riêng</strong> — chọn theo mục tiêu marketing, không chỉ theo giao diện.
+          </p>
+          <div className="flex flex-col gap-2">
             {FORM_OPTIONS.map((f) => (
               <FormCard
                 key={f.id}
@@ -306,7 +348,7 @@ export default function InputPanel({
         </Section>
 
         {/* STEP 5 — Competitor URL (AI học từ đối thủ) */}
-        <Section step={5} title="AI học từ landing page đối thủ (tuỳ chọn)">
+        <Section step={5} title="Học từ landing page đối thủ (tuỳ chọn)">
           <div className="flex items-center gap-2 rounded-lg border border-black/10 bg-white px-3 py-2">
             <Link2 className="h-3.5 w-3.5 shrink-0 text-gray-400" />
             <input
@@ -401,6 +443,13 @@ function Section({ step, title, children }: { step: number; title: string; child
 }
 
 // Form card with hover tooltip
+// Phase 7 — productized form card. Visual hierarchy:
+//   icon + title + selected ring
+//   → badge chip (color-coded positioning)
+//   → 1-line description (the WHY)
+//   → "Phù hợp" audience hint (the WHO)
+//   → metrics row (section count · ảnh count · aesthetic)
+//   → hover tooltip with full spec for power users
 function FormCard({
   option,
   selected,
@@ -410,30 +459,53 @@ function FormCard({
   selected: boolean
   onSelect: () => void
 }) {
+  const badgeCls = FORM_BADGE_CLASSES[option.badgeColor]
   return (
     <div className="group relative">
       <button
         onClick={onSelect}
-        className={`w-full rounded-lg border px-2.5 py-2 text-left transition-colors ${
+        className={`flex w-full flex-col gap-1.5 rounded-xl border px-3 py-2.5 text-left transition-all ${
           selected
-            ? 'border-violet-400 bg-violet-50'
-            : 'border-black/10 bg-white hover:bg-black/[0.02]'
+            ? 'border-violet-400 bg-violet-50/50 ring-2 ring-violet-200/60'
+            : 'border-black/10 bg-white hover:border-black/20 hover:bg-black/[0.02]'
         }`}
       >
-        <div className="flex items-center gap-1.5">
-          <span className="text-base leading-none">{option.icon}</span>
-          <span className={`text-[11px] font-bold leading-tight ${selected ? 'text-violet-700' : 'text-gray-800'}`}>
-            {option.title}
-          </span>
+        {/* Row 1 — icon + title + badge */}
+        <div className="flex items-start gap-2">
+          <span className="text-lg leading-none">{option.icon}</span>
+          <div className="flex-1 min-w-0">
+            <p className={`text-[12px] font-bold leading-tight ${selected ? 'text-violet-800' : 'text-gray-900'}`}>
+              {option.title}
+            </p>
+            <span className={`mt-0.5 inline-block rounded-full px-1.5 py-0.5 text-[9px] font-bold leading-none ${badgeCls}`}>
+              {option.badge}
+            </span>
+          </div>
         </div>
-        <p className={`mt-0.5 text-[9px] leading-tight ${selected ? 'text-violet-500' : 'text-gray-400'}`}>
-          {option.tagline}
+
+        {/* Row 2 — short description */}
+        <p className={`text-[10px] leading-snug ${selected ? 'text-violet-700' : 'text-gray-500'}`}>
+          {option.description}
+        </p>
+
+        {/* Row 3 — audience hint */}
+        <p className="text-[9px] leading-snug text-gray-400">
+          <span className="font-semibold text-gray-500">Phù hợp:</span> {option.audience}
+        </p>
+
+        {/* Row 4 — metrics */}
+        <p className="text-[9px] font-medium leading-none text-gray-400">
+          {option.metrics}
         </p>
       </button>
-      {/* Hover tooltip */}
-      <div className="pointer-events-none absolute bottom-full left-0 z-20 mb-1.5 hidden w-52 rounded-lg border border-black/10 bg-white p-2.5 text-[10px] leading-relaxed text-gray-600 shadow-lg group-hover:block">
-        <p className="mb-1 font-semibold text-gray-800">{option.icon} {option.title}</p>
-        {option.tooltip}
+
+      {/* Hover tooltip — full spec for power users */}
+      <div className="pointer-events-none absolute bottom-full left-0 z-20 mb-2 hidden w-64 rounded-xl border border-black/10 bg-white p-3 text-[11px] leading-relaxed text-gray-600 shadow-xl group-hover:block">
+        <p className="mb-1.5 flex items-center gap-1.5 text-[12px] font-bold text-gray-800">
+          <span>{option.icon}</span>
+          <span>{option.title}</span>
+        </p>
+        <p>{option.tooltip}</p>
       </div>
     </div>
   )

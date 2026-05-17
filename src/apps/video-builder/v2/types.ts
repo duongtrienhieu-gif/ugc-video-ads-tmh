@@ -460,12 +460,26 @@ export type KlingSafeMotion =
 
 /** Status of a single cut render. */
 export type TimelineRenderStatus =
-  | 'pending'
-  | 'queued'
-  | 'generating'
-  | 'completed'
-  | 'failed'
-  | 'cancelled'
+  | 'pending'      // never rendered — eligible for next bulk render
+  | 'queued'       // in runner's worker pool, waiting for a slot
+  | 'generating'   // Kling clip in flight
+  | 'completed'    // has videoRef — can be locked, skipped, or rerendered
+  | 'locked'       // Z26 — user-locked: has videoRef + IMMUNE to all bulk operations
+  | 'skipped'      // Z26 — user-skipped: excluded from bulk renders (toggleable)
+  | 'failed'       // render attempt failed — eligible for retry
+  | 'cancelled'    // user cancelled mid-flight
+
+/** Vietnamese label per render status — for UI cards / status chips. */
+export const TIMELINE_RENDER_STATUS_LABEL_VI: Record<TimelineRenderStatus, string> = {
+  'pending':    'Chưa render',
+  'queued':     'Trong hàng đợi...',
+  'generating': 'Đang render...',
+  'completed':  'Đã xong ✓',
+  'locked':     'Đã khoá 🔒',
+  'skipped':    'Đã bỏ qua',
+  'failed':     'Thất bại',
+  'cancelled':  'Đã huỷ',
+}
 
 /** A single cut waiting to render OR already rendered. Pairs the
  *  EditorialBlueprint's TimelineCut metadata with the actual Kling job
@@ -507,6 +521,14 @@ export interface TimelineRenderItem {
   error?: string
   /** Retry attempts */
   retryCount?: number
+  /** Z26 — timestamp when user locked this cut. Used for resume + UI sort. */
+  lockedAt?: number
+  /** Z26 — timestamp when user skipped this cut. */
+  skippedAt?: number
+  /** Z26 — timestamp when render started (for "elapsed" UI). */
+  startedAt?: number
+  /** Z26 — timestamp when render completed. */
+  finishedAt?: number
 }
 
 /** Top-level timeline render job. 1:1 with EditorialBlueprint.timelineCuts. */
