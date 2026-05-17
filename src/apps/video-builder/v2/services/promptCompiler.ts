@@ -25,6 +25,7 @@ import type {
   SceneBlueprint,
   SubjectFocus,
   VisualMotif,
+  CameraGrammar,
 } from '../types'
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -152,9 +153,12 @@ function buildSceneDelta(blueprint: SceneBlueprint): string {
 
   // Z12: layer motif anchor so person scenes don't all share the same mood
   const motif = motifAnchor(blueprint.visualMotif)
+  // Z13: layer camera grammar so the still feels like a frame from a real
+  // edited video, not a posed photo
+  const camera = cameraGrammarAnchor(blueprint.cameraGrammar)
 
   const beat = blueprint.sceneType ? `[${blueprint.sceneType.toUpperCase()}] ` : ''
-  return `${beat}${phrases.join('. ')}.${motif}`
+  return `${beat}${phrases.join('. ')}.${motif}${camera}`
 }
 
 // ─── Z12: motif phrases injected into non-person scene delta ───────────────
@@ -187,6 +191,33 @@ function motifAnchor(motif: VisualMotif | undefined): string {
   return ` Motif: ${MOTIF_PHRASE[motif]}.`
 }
 
+// ─── Z13: camera-grammar phrases — push image gen toward "video still"
+// composition cues. Each grammar implies a moment frozen mid-motion so the
+// resulting frame has implied movement instead of slideshow staticness.
+
+const CAMERA_GRAMMAR_PHRASE: Record<CameraGrammar, string> = {
+  'handheld_close':    'frame as if from a tight handheld iPhone close-up with subtle micro-shake — slight tilt, intimate distance',
+  'slow_push':         'frame as a still pulled from a slow dolly-in — subject feels gently approaching the lens',
+  'punch_zoom':        'frame as if mid-snap-zoom — slight motion blur on edges, subject pushed forward into frame',
+  'drift_left':        'frame as a still from a slow lateral drift left — subtle parallax on background',
+  'drift_right':       'frame as a still from a slow lateral drift right — subtle parallax on background',
+  'orbit_soft':        'frame as a still from a slow rotational orbit — subject seen from a gentle off-axis perspective',
+  'parallax_depth':    'frame with explicit depth layering — foreground / mid / background tiers visible, parallax-ready',
+  'static_tension':    'frame as a locked-off tripod still — no implied movement, tense composed stillness',
+  'shake_micro':       'frame as a still from a micro-shake burst — slight edge blur, urgency feel',
+  'topdown_float':     'frame as a flat top-down view — overhead floating perspective, items laid out below',
+  'review_pan':        'frame as a still from a slow horizontal pan across review cards / testimonials — subtle horizontal motion blur',
+  'whatsapp_scroll':   'frame as a still from a vertical scroll — slight vertical motion implied on chat bubbles',
+  'infographic_float': 'frame with floating layered infographic elements — particles, labels, diagrams suspended at multiple depths',
+  'emotional_zoom':    'frame as a still from a slow emotional push-in — soft focus pull on subject\'s face/eyes',
+  'product_macro':     'frame as a tight product macro — extreme closeup on packaging label, shallow depth of field, every detail readable',
+}
+
+function cameraGrammarAnchor(grammar: CameraGrammar | undefined): string {
+  if (!grammar) return ''
+  return ` Camera: ${CAMERA_GRAMMAR_PHRASE[grammar]}.`
+}
+
 // ─── Z11: scene-delta variants for non-person subjectFocus ─────────────────
 //
 // These produce entirely different prompt shapes so a "Vitamin B floating
@@ -206,6 +237,8 @@ function buildNonPersonDelta(blueprint: SceneBlueprint, focus: Exclude<SubjectFo
   // Z12: motif phrase anchors the aesthetic so this scene doesn't look like
   // every other scene of the same focus.
   const motif = motifAnchor(blueprint.visualMotif)
+  // Z13: camera grammar layer — implies motion within the still frame.
+  const grammar = cameraGrammarAnchor(blueprint.cameraGrammar)
 
   switch (focus) {
     case 'product': {
@@ -213,7 +246,7 @@ function buildNonPersonDelta(blueprint: SceneBlueprint, focus: Exclude<SubjectFo
       return `${beat}NO PERSON IN FRAME — hero product macro shot. ` +
         `Product centered, label clearly readable, preserve packaging exactly from reference image. ` +
         `${visualAction ? `Visual: ${visualAction}. ` : ''}` +
-        `${camera}. ${lighting}.${motif} ` +
+        `${camera}. ${lighting}.${motif}${grammar} ` +
         `Background: clean minimal seamless surface that complements the packaging color. ` +
         `Product hero, no avatar, no hands, no body parts.`
     }
@@ -224,7 +257,7 @@ function buildNonPersonDelta(blueprint: SceneBlueprint, focus: Exclude<SubjectFo
         `Render as glowing 3D particles / molecular structures / floating energy / capsule explode view / ` +
         `mechanism diagram surrounding the product. The product (from reference) sits centered with its ` +
         `packaging preserved exactly — particles and labels orbit / float / animate AROUND it. ` +
-        `Clean dark gradient background with subtle glow. ${camera}. ${lighting}.${motif} ` +
+        `Clean dark gradient background with subtle glow. ${camera}. ${lighting}.${motif}${grammar} ` +
         `Native Malaysia ecommerce infographic feel — NOT pharma-clinical, NOT cinematic. ` +
         `No avatar, no person, no hands.`
     }
@@ -234,7 +267,7 @@ function buildNonPersonDelta(blueprint: SceneBlueprint, focus: Exclude<SubjectFo
         `${visualAction ? `Show: ${visualAction}. ` : ''}` +
         `Render the key ingredient (capsule cross-section, fruit/herb macro, powder swirl, gummy split, ` +
         `vitamin tablet closeup) with the product packaging visible in background or beside the ingredient. ` +
-        `Shallow depth of field. ${camera}. ${lighting}.${motif} ` +
+        `Shallow depth of field. ${camera}. ${lighting}.${motif}${grammar} ` +
         `Native ecommerce ingredient card aesthetic. No avatar, no person.`
     }
     case 'lifestyle': {
@@ -244,7 +277,7 @@ function buildNonPersonDelta(blueprint: SceneBlueprint, focus: Exclude<SubjectFo
         `${blueprint.productVisibility === 'low'
           ? 'Product NOT in frame — pure environment / mood shot.'
           : 'Product subtly placed in context (kitchen counter, desk corner, etc) — not held by anyone.'} ` +
-        `${camera}. ${lighting}.${motif} ` +
+        `${camera}. ${lighting}.${motif}${grammar} ` +
         `Native UGC environment shot feel. No avatar, no person, no hands.`
     }
   }

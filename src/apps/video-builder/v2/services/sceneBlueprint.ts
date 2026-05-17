@@ -16,7 +16,11 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { directGeminiVision } from '../../../../utils/gemini'
-import type { IdentityPack, SceneBlueprint, SceneType, ShotEnergy, SubjectFocus, VisualMotif, VisualStyleDna, DiversityReport } from '../types'
+import type {
+  IdentityPack, SceneBlueprint, SceneType, ShotEnergy, SubjectFocus, VisualMotif,
+  VisualStyleDna, DiversityReport,
+  CameraGrammar, CinematicIntent, SocialMotionPreset, SceneTransition,
+} from '../types'
 import { SCENE_PRESETS, DEFAULT_PRESET_ROTATION, VISUAL_TONE_CLAMP, getPreset, inferPresetForScene } from './scenePresets'
 import { safeParseJson, logJsonFailure } from './jsonResilience'
 
@@ -943,8 +947,15 @@ ${normalPrompt}`
     }
   })
 
+  // Z13: CINEMATIC ENGINE — assign cameraGrammar / cinematicIntent /
+  // socialPreset / energyScore / transitionOut to every scene from inferred
+  // defaults. Runs BEFORE timelineDirector so R7-R9 can polish energy +
+  // transition rules on top of the assigned fields.
+  blueprints = assignCinematicFields(blueprints)
+
   // Z12: TIMELINE DIRECTOR + ANTI-DUPLICATE ENGINE
-  // Runs AFTER preset inference so mutations land on the final shape.
+  // Runs AFTER preset inference + cinematic assignment so mutations land
+  // on the final shape and Z13 R7-R9 rules can fire.
   blueprints = enforceTimelineDirector(blueprints)
 
   const diversity = validateDiversity(blueprints)
@@ -983,6 +994,218 @@ export function computeSceneCount(script: string): number {
   const words = countWords(script)
   const raw = Math.ceil(words / WORDS_PER_SCENE)
   return Math.max(SCENE_COUNT_MIN, Math.min(SCENE_COUNT_MAX, raw))
+}
+
+// ═════════════════════════════════════════════════════════════════════════
+// Z13 — CINEMATIC ENGINE
+// ═════════════════════════════════════════════════════════════════════════
+// 7 modules that turn the "smart slideshow" into TikTok-native UGC pacing.
+// All inferred LOCALLY from (sceneType, subjectFocus, visualMotif, idx,
+// totalScenes) — Gemini is not asked to fill these, so prompt complexity
+// stays flat.
+//
+//   1. Camera grammar engine     — concrete movement per scene
+//   2. Cinematic intent engine    — motion psychology layer
+//   3. Cinematic timeline curves  — HIGH → MED → HIGH → MAX energy arc
+//   4. Scene energy mapper        — 0-100 score per scene
+//   5. Social motion presets      — bundled TikTok-native packs
+//   6. Transition director        — scene-pair-aware exit transitions
+//   7. CTA impact engine          — escalates pacing in final 20%
+// ─────────────────────────────────────────────────────────────────────────
+
+/** Camera grammar inferred from sceneType + subjectFocus. */
+function inferCameraGrammar(b: SceneBlueprint): CameraGrammar {
+  const t = b.sceneType
+  const f = b.subjectFocus ?? 'person'
+
+  // Subject-focus-specific overrides take priority
+  if (f === 'product')     return 'product_macro'
+  if (f === 'ingredient')  return 'topdown_float'
+  if (f === 'infographic') {
+    return b.visualMotif === 'social-proof' ? 'parallax_depth' : 'infographic_float'
+  }
+  if (f === 'lifestyle')   return 'drift_right'
+
+  // person path — pick by sceneType
+  switch (t) {
+    case 'hook':            return 'punch_zoom'
+    case 'pain':            return 'handheld_close'
+    case 'frustration':     return 'static_tension'
+    case 'failed_solution': return 'static_tension'
+    case 'discovery':       return 'slow_push'
+    case 'explanation':     return 'parallax_depth'
+    case 'recovery':        return 'emotional_zoom'
+    case 'lifestyle':       return 'drift_left'
+    case 'social_proof':    return 'review_pan'
+    case 'cta':             return 'punch_zoom'
+    default:                return 'slow_push'
+  }
+}
+
+/** Cinematic intent (motion psychology) inferred from sceneType + ctaFocus. */
+function inferCinematicIntent(b: SceneBlueprint): CinematicIntent {
+  if (b.ctaFocus) return 'conversion'
+  switch (b.sceneType) {
+    case 'hook':            return 'urgency'
+    case 'pain':            return 'emotional'
+    case 'frustration':     return 'urgency'
+    case 'failed_solution': return 'educational'
+    case 'discovery':       return 'curiosity'
+    case 'explanation':     return b.visualMotif === 'scientific' || b.visualMotif === 'medical' ? 'authority' : 'educational'
+    case 'recovery':        return 'relief'
+    case 'lifestyle':       return b.visualMotif === 'premium' || b.visualMotif === 'luxury' ? 'premium' : 'emotional'
+    case 'social_proof':    return 'trust'
+    case 'cta':             return 'conversion'
+    default:                return 'trust'
+  }
+}
+
+/** Social motion preset — TikTok-native pack. */
+function inferSocialPreset(b: SceneBlueprint): SocialMotionPreset {
+  if (b.ctaFocus || b.sceneType === 'cta')         return 'cta_hardsell'
+  if (b.sceneType === 'hook')                       return 'hook_aggressive'
+  if (b.subjectFocus === 'infographic')             return 'infographic_edu'
+  if (b.sceneType === 'social_proof')               return 'social_proof_pan'
+  return 'ugc_soft'
+}
+
+// ── Timeline curve: HIGH → MEDIUM → HIGH → MAX CTA ──────────────────────
+/**
+ * Energy curve for N scenes. Returns target energy 0-100 per scene index.
+ *
+ * Pattern:
+ *   • scene 0 (hook):           90  (HIGH)
+ *   • middle dip (≈30% mark):    50  (MEDIUM)
+ *   • re-engagement (≈60%):      75  (HIGH)
+ *   • middle low again (~75%):   55  (MEDIUM)
+ *   • final 20% (CTA region):    90 → 100 (MAX)
+ *
+ * Interpolated linearly between control points.
+ */
+export function computeEnergyArc(numScenes: number): number[] {
+  if (numScenes <= 0) return []
+  if (numScenes === 1) return [95]
+  if (numScenes === 2) return [85, 100]
+
+  // Control points (fraction of timeline → energy 0-100)
+  const ctaStart = 0.80
+  const points: Array<[number, number]> = [
+    [0.00, 90],   // hook spike
+    [0.30, 50],   // breathing room
+    [0.60, 75],   // re-engagement
+    [0.75, 55],   // brief dip before CTA
+    [ctaStart, 90], // CTA escalation start
+    [1.00, 100],  // final CTA peak
+  ]
+
+  const arc: number[] = []
+  for (let i = 0; i < numScenes; i++) {
+    const t = i / (numScenes - 1)
+    // Find the two control points t falls between
+    let lower = points[0]
+    let upper = points[points.length - 1]
+    for (let p = 0; p < points.length - 1; p++) {
+      if (t >= points[p][0] && t <= points[p + 1][0]) {
+        lower = points[p]
+        upper = points[p + 1]
+        break
+      }
+    }
+    const span = upper[0] - lower[0]
+    const localT = span === 0 ? 0 : (t - lower[0]) / span
+    const energy = Math.round(lower[1] + (upper[1] - lower[1]) * localT)
+    arc.push(Math.max(0, Math.min(100, energy)))
+  }
+  return arc
+}
+
+/** Per-scene energy score derived from the global arc + scene-type modifier. */
+function assignEnergyScore(b: SceneBlueprint, idx: number, arc: number[]): number {
+  const base = arc[idx] ?? 60
+
+  // Scene-type modifiers — bump or dampen the base curve
+  let modifier = 0
+  if (b.ctaFocus)                                                modifier += 8
+  if (b.sceneType === 'hook')                                    modifier += 5
+  if (b.sceneType === 'pain' || b.sceneType === 'frustration')   modifier -= 3   // pain dampens raw energy
+  if (b.sceneType === 'failed_solution')                         modifier -= 8   // static tension
+  if (b.sceneType === 'explanation')                             modifier -= 10  // calm educational
+  if (b.sceneType === 'recovery')                                modifier -= 5   // relief is soft
+  if (b.sceneType === 'cta')                                     modifier += 10
+  if (b.subjectFocus === 'product')                              modifier += 3
+
+  return Math.max(0, Math.min(100, base + modifier))
+}
+
+// ── Transition rules — scene-pair-aware ──────────────────────────────────
+/** Pick the exit transition for scene `cur` heading into scene `next`. */
+function inferTransition(cur: SceneBlueprint, next: SceneBlueprint | null): SceneTransition {
+  if (!next) return 'cut' // last scene has no exit transition (handled by caller via undefined)
+
+  // Destination-driven rules (priority order)
+  if (next.ctaFocus || next.sceneType === 'cta')                 return 'flash_impact'
+  if (next.sceneType === 'hook')                                 return 'smash_cut'
+  if (next.subjectFocus === 'infographic')                       return 'directional_wipe'
+  if (next.sceneType === 'social_proof')                         return 'cinematic_dissolve'
+
+  // Source-driven rules
+  if (cur.cinematicIntent === 'emotional')                       return 'soft_fade'
+  if (cur.sceneType === 'recovery')                              return 'soft_fade'
+
+  // Default warm transition
+  return 'cross_dissolve'
+}
+
+function assignTransitions(blueprints: SceneBlueprint[]): SceneBlueprint[] {
+  if (blueprints.length === 0) return blueprints
+  const out = blueprints.map((b) => ({ ...b }))
+  const TRANSITION_ALTS: SceneTransition[] = [
+    'cross_dissolve', 'soft_fade', 'cut', 'directional_wipe', 'cinematic_dissolve',
+  ]
+  let lastUsed: SceneTransition | null = null
+  let consecutiveSame = 0
+
+  for (let i = 0; i < out.length - 1; i++) {
+    let t = inferTransition(out[i], out[i + 1])
+
+    // Anti-repeat: never the same transition 2x in a row
+    if (lastUsed && t === lastUsed) {
+      consecutiveSame++
+      if (consecutiveSame >= 1) {
+        // Pick an alt that's neither current nor would create a triple
+        const alt = TRANSITION_ALTS.find((a) => a !== t && a !== lastUsed) ?? 'cut'
+        t = alt
+        consecutiveSame = 0
+      }
+    } else {
+      consecutiveSame = 0
+    }
+    lastUsed = t
+    out[i] = { ...out[i], transitionOut: t }
+  }
+  // Final scene: no exit transition
+  return out
+}
+
+/** Apply all 4 cinematic fields to every blueprint + compute the energy arc.
+ *  Called AFTER preset inference, BEFORE the extended timelineDirector. */
+export function assignCinematicFields(blueprints: SceneBlueprint[]): SceneBlueprint[] {
+  if (blueprints.length === 0) return blueprints
+  const arc = computeEnergyArc(blueprints.length)
+
+  const enriched = blueprints.map((b, idx) => {
+    const cameraGrammar  = b.cameraGrammar  ?? inferCameraGrammar(b)
+    const cinematicIntent = b.cinematicIntent ?? inferCinematicIntent(b)
+    const socialPreset    = b.socialPreset    ?? inferSocialPreset(b)
+    // Energy gets assigned via the arc + sceneType modifier
+    const energyScore     = b.energyScore !== undefined
+      ? b.energyScore
+      : assignEnergyScore({ ...b, cameraGrammar, cinematicIntent, socialPreset }, idx, arc)
+    return { ...b, cameraGrammar, cinematicIntent, socialPreset, energyScore }
+  })
+
+  // Transitions read both current + next scene's enriched fields
+  return assignTransitions(enriched)
 }
 
 // ═════════════════════════════════════════════════════════════════════════
@@ -1140,6 +1363,79 @@ export function enforceTimelineDirector(blueprints: SceneBlueprint[]): SceneBlue
       const altPool = VISUAL_MOTIF_SET.filter((m) => m !== out[i - 1].visualMotif)
       out[i - 1] = { ...out[i - 1], visualMotif: altPool[(i - 1) % altPool.length] }
       console.log(`[timelineDirector] R6: scene ${i} broke 3-motif run — rotated middle`)
+    }
+  }
+
+  // ── Z13 R7: no 3+ high-energy scenes back-to-back ────────────────────
+  // High-energy is defined as energyScore ≥ 75. If three in a row, dampen
+  // the middle one to ~55 + tag it with a calmer cinematicIntent. Prevents
+  // viewer fatigue + lets the editor breathe before the next spike.
+  const HIGH_THRESHOLD = 75
+  for (let i = 2; i < out.length; i++) {
+    const a = out[i - 2].energyScore ?? 0
+    const b = out[i - 1].energyScore ?? 0
+    const c = out[i].energyScore ?? 0
+    if (a >= HIGH_THRESHOLD && b >= HIGH_THRESHOLD && c >= HIGH_THRESHOLD) {
+      // Don't dampen CTA window — the final escalation is intentional
+      const inCtaWindow = (i - 1) >= ctaCutoff
+      if (!inCtaWindow) {
+        out[i - 1] = {
+          ...out[i - 1],
+          energyScore: 55,
+          cinematicIntent: 'trust',  // calmer psychology
+        }
+        console.log(`[timelineDirector] R7: scene ${i} broke 3-high-energy run — cooled scene ${i - 1} to 55`)
+      }
+    }
+  }
+
+  // ── Z13 R8: never 2 identical transitions in a row ───────────────────
+  // assignTransitions already enforces this; this pass is a final safety
+  // net in case other mutations (R1-R7) re-tagged scenes and invalidated
+  // the original transition pairing.
+  for (let i = 1; i < out.length - 1; i++) {
+    const prev = out[i - 1].transitionOut
+    const cur  = out[i].transitionOut
+    if (prev && cur && prev === cur) {
+      const altPool: SceneTransition[] = ['cross_dissolve', 'soft_fade', 'cut', 'directional_wipe', 'cinematic_dissolve']
+      const alt = altPool.find((a) => a !== prev) ?? 'cut'
+      out[i] = { ...out[i], transitionOut: alt }
+      console.log(`[timelineDirector] R8: scene ${i + 1} duplicated transition — swapped to ${alt}`)
+    }
+  }
+
+  // ── Z13 R9: CTA IMPACT — escalate final 20% ──────────────────────────
+  // Every scene in the CTA window must have:
+  //   • energyScore ≥ 85
+  //   • cinematicIntent ∈ {urgency, conversion}
+  //   • cameraGrammar ∈ {punch_zoom, emotional_zoom, product_macro, shake_micro}
+  //   • socialPreset = 'cta_hardsell' for the final scene
+  // This guarantees the BUY NOW momentum the spec calls for.
+  for (let i = ctaCutoff; i < out.length; i++) {
+    const isFinal = i === out.length - 1
+    const escalation: Partial<SceneBlueprint> = {}
+
+    const curEnergy = out[i].energyScore ?? 0
+    if (curEnergy < 85) escalation.energyScore = isFinal ? 100 : Math.max(85, curEnergy + 15)
+
+    const intent = out[i].cinematicIntent
+    if (intent !== 'urgency' && intent !== 'conversion') {
+      escalation.cinematicIntent = isFinal ? 'conversion' : 'urgency'
+    }
+
+    const grammar = out[i].cameraGrammar
+    const ctaGrammars: CameraGrammar[] = ['punch_zoom', 'emotional_zoom', 'product_macro', 'shake_micro']
+    if (!grammar || !ctaGrammars.includes(grammar)) {
+      escalation.cameraGrammar = isFinal ? 'punch_zoom' : (out[i].subjectFocus === 'product' ? 'product_macro' : 'emotional_zoom')
+    }
+
+    if (isFinal && out[i].socialPreset !== 'cta_hardsell') {
+      escalation.socialPreset = 'cta_hardsell'
+    }
+
+    if (Object.keys(escalation).length > 0) {
+      out[i] = { ...out[i], ...escalation }
+      console.log(`[timelineDirector] R9: scene ${i + 1} (CTA window) escalated — ${Object.keys(escalation).join(', ')}`)
     }
   }
 

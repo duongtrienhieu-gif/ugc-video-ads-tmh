@@ -262,6 +262,72 @@ export type VisualMotif =
   | 'kinetic'       // motion blur, action, dynamic crop, fast feel
   | 'emotional'     // warm window light, golden hour, vulnerable / intimate
 
+// ═════════════════════════════════════════════════════════════════════════
+// Z13 — CINEMATIC ENGINE (P2): camera grammar + motion psychology +
+//        energy mapping + social preset + transition director.
+//
+// These fields make image-based scenes FEEL like video by encoding the
+// editor's motion intent, energy curve, and inter-scene transition rules.
+// All four are inferred LOCALLY from existing blueprint axes — Gemini is
+// NOT asked to fill them, so prompt complexity stays flat.
+// ═════════════════════════════════════════════════════════════════════════
+
+/** Camera language — concrete movement description used to drive both
+ *  cinematic prompt phrasing AND the future downstream video animator. */
+export type CameraGrammar =
+  | 'handheld_close'      // hook / pain — tight handheld with micro-shake
+  | 'slow_push'           // testimonials / discovery — gentle dolly in
+  | 'punch_zoom'          // hook / CTA — aggressive snap zoom
+  | 'drift_left'          // ambient / lifestyle — slow lateral drift
+  | 'drift_right'         // ambient / lifestyle — slow lateral drift
+  | 'orbit_soft'          // product hero — slow rotational orbit
+  | 'parallax_depth'      // infographic — layered floating parallax
+  | 'static_tension'      // pain / failed_solution — locked-off, no movement, tense
+  | 'shake_micro'         // urgency moments — sub-second shake bursts
+  | 'topdown_float'       // flatlay / ingredient overhead
+  | 'review_pan'          // social_proof — slow pan across review cards
+  | 'whatsapp_scroll'     // WhatsApp testimonial scroll feel
+  | 'infographic_float'   // floating mechanism diagram with depth
+  | 'emotional_zoom'      // recovery / testimonial — slow emotional push
+  | 'product_macro'       // product hero macro — locked tight on label
+
+/** Motion psychology layer — what FEELING the motion should evoke.
+ *  Different name from legacy `motionIntent: string` field (which is a
+ *  free-form description). The two coexist: `motionIntent` stays as
+ *  free-form text fed to image prompts; `cinematicIntent` is the typed
+ *  psychology category that drives camera-grammar selection. */
+export type CinematicIntent =
+  | 'urgency'       // hook / CTA — fast, aggressive, attention-grabbing
+  | 'trust'         // social_proof / explanation — slow, stable, credible
+  | 'premium'       // brand-elevation moments — smooth, refined, elegant
+  | 'emotional'     // pain / recovery — warm, intimate, vulnerable
+  | 'educational'   // explanation / mechanism — clear, paced, didactic
+  | 'authority'     // expert / clinical — composed, sterile, scientific
+  | 'kinetic'       // product spin / action — dynamic motion energy
+  | 'curiosity'     // discovery / reveal — anticipation-building
+  | 'relief'        // post-pain / after-state — soft exhale, calm
+  | 'conversion'    // CTA — momentum, "BUY NOW" energy
+
+/** Reusable TikTok-native motion packs. Each preset bundles a camera
+ *  grammar + energy band + transition flavor for fast assignment. */
+export type SocialMotionPreset =
+  | 'hook_aggressive'   // punch zoom + fast scale + shake micro
+  | 'ugc_soft'          // handheld drift + subtle zoom (default lifestyle)
+  | 'infographic_edu'   // layered parallax + floating labels
+  | 'social_proof_pan'  // review pan + comment scroll + screenshot drift
+  | 'cta_hardsell'      // rapid zoom + glow pulse + kinetic typography
+
+/** Inter-scene transition style — assigned to scene N as the "exit" toward
+ *  scene N+1. Last scene has no transitionOut. */
+export type SceneTransition =
+  | 'soft_fade'           // emotional → emotional
+  | 'directional_wipe'    // → infographic
+  | 'smash_cut'           // → hook / aggressive reveal
+  | 'flash_impact'        // → CTA
+  | 'cinematic_dissolve'  // → social_proof / testimonial
+  | 'cross_dissolve'      // generic warm transition
+  | 'cut'                 // default hard cut
+
 export interface SceneBlueprint {
   /** 1-indexed scene id in the storyboard (1-9 typically) */
   sceneId: number
@@ -278,6 +344,25 @@ export interface SceneBlueprint {
    *  Differentiates two scenes of the same focus (eg. two infographic scenes
    *  feel different when one is `chemistry` and the other is `social-proof`). */
   visualMotif?: VisualMotif
+  // ── Z13 — CINEMATIC ENGINE (inferred locally, not asked from Gemini) ────
+  /** Concrete camera language for this scene (punch_zoom, parallax_depth,
+   *  emotional_zoom, etc). Drives both prompt phrasing AND downstream
+   *  video animator. */
+  cameraGrammar?: CameraGrammar
+  /** Motion psychology — what FEELING the camera/edit evokes (urgency,
+   *  trust, emotional, conversion, etc). Sister field to existing
+   *  `motionIntent: string`; that stays as free-form text for image prompts,
+   *  this one is typed for cinematic routing. */
+  cinematicIntent?: CinematicIntent
+  /** 0-100 energy score. Drives pacing curve + the "no 3 high-energy
+   *  back-to-back" rule. CTA scenes get 90-100; calm middle gets 40-55. */
+  energyScore?: number
+  /** TikTok-native motion preset pack — bundles camera grammar + transition
+   *  flavor for fast downstream lookup. */
+  socialPreset?: SocialMotionPreset
+  /** Transition style FROM this scene TO the next. Undefined on the final
+   *  scene. Assigned by the transition director based on scene-pair logic. */
+  transitionOut?: SceneTransition
   /** What the scene visually proves / shows — e.g. "convey night-time fatigue", "demonstrate cap-twist freshness" */
   visualObjective?: string
   /** Concrete physical action subject performs — e.g. "rubbing temple while staring at laptop", "smiling, lifting jar to lens" */
