@@ -43,11 +43,17 @@ Each section object:
   "layoutGuide": "VIETNAMESE — how to arrange this section in Ladipage",
   "imageAspectRatio": "1:1" or "4:5" — REQUIRED on every section that has images. All images in the section MUST use this ratio. NEVER use 9:16 or 16:9.
   "headline": "optional",
+  "headlineVi": "ALWAYS include when headline exists — Vietnamese translation of headline",
   "subheadline": "optional",
+  "subheadlineVi": "ALWAYS include when subheadline exists — Vietnamese translation",
   "cta": "optional CTA button text",
+  "ctaVi": "ALWAYS include when cta exists — Vietnamese translation",
   "offerStrip": "optional offer strip",
+  "offerStripVi": "ALWAYS include when offerStrip exists — Vietnamese translation",
   "urgencyText": "optional urgency line",
+  "urgencyTextVi": "ALWAYS include when urgencyText exists — Vietnamese translation",
   "bullets": ["optional bullet list"],
+  "bulletsVi": ["ALWAYS include when bullets exist — Vietnamese translation, parallel array with SAME LENGTH as bullets, index-aligned"],
   "faqs": [{"question":"...","answer":"..."}],
   "reviews": [{"author":"...","quote":"...","meta":"optional","rating":5}],
   "imagePrompts": [
@@ -220,6 +226,10 @@ LANGUAGE RULES — ABSOLUTE
   every word of copy must be Bahasa Melayu (natural colloquial, can include
   common English loanwords like "detox", "supplement" — but NO full English sentences)
 • viTranslation: ALWAYS on every section — Vietnamese translation of copy (regardless of output language)
+• Per-field Vietnamese translations (headlineVi, subheadlineVi, ctaVi, offerStripVi, urgencyTextVi, bulletsVi):
+  ALWAYS in Vietnamese regardless of output language. Generate them whenever the source field exists.
+  If output language is already 'vi' (Vietnamese), still include them — just mirror the original (UI dedupes).
+• bulletsVi MUST have the same length as bullets and be index-aligned (bullet[0] ↔ bulletsVi[0]).
 • layoutGuide: ALWAYS Vietnamese regardless of output language
 • imagePrompt.prompt: ALWAYS English (required by the image generation model)
 • Product name + ingredient names: keep original English / brand name in any language
@@ -288,8 +298,11 @@ function buildUserPrompt(params: LandingGenParams): string {
   lines.push(`bullets, faqs questions+answers, reviews quotes, WhatsApp texts, before/after labels,`)
   lines.push(`comparison table labels, imagePrompt text overlay content) MUST be written`)
   lines.push(`ENTIRELY in ${langName}. Zero exceptions. Zero mixing with other languages.`)
-  lines.push(`EXCEPTIONS: layoutGuide → always Vietnamese | viTranslation → always Vietnamese`)
-  lines.push(`| imagePrompt.prompt → always English | product/ingredient names → original brand name`)
+  lines.push(`EXCEPTIONS (always Vietnamese regardless of output language):`)
+  lines.push(`  layoutGuide, viTranslation, headlineVi, subheadlineVi, ctaVi, offerStripVi, urgencyTextVi, bulletsVi`)
+  lines.push(`EXCEPTIONS (always English): imagePrompt.prompt`)
+  lines.push(`EXCEPTIONS (keep brand name as-is): product name, ingredient names`)
+  lines.push(`bulletsVi MUST be the same length as bullets (index-aligned 1:1 translation).`)
   lines.push(`Output language field in JSON: "${params.language}"`)
 
   if (params.nicheHint) {
@@ -447,6 +460,17 @@ function normalizeSection(s: RawSection): LandingSection | null {
     ? s.imagePrompts.map((p) => ({ ...p, aspectRatio: lockedRatio }))
     : []
 
+  // Z10: pad bulletsVi to match bullets length if Gemini under-translated
+  const bullets = Array.isArray(s.bullets) ? s.bullets.map(String) : undefined
+  let bulletsVi: string[] | undefined
+  if (bullets && Array.isArray(s.bulletsVi)) {
+    const viArr = s.bulletsVi.map(String)
+    // Truncate or pad to match — guard against Gemini returning mismatched array
+    bulletsVi = bullets.map((_, i) => viArr[i] ?? '')
+    // If every entry is empty, drop the field
+    if (bulletsVi.every((v) => !v.trim())) bulletsVi = undefined
+  }
+
   return {
     type,
     title: s.title ?? type,
@@ -459,11 +483,18 @@ function normalizeSection(s: RawSection): LandingSection | null {
     cta: s.cta,
     offerStrip: s.offerStrip,
     urgencyText: s.urgencyText,
-    bullets: Array.isArray(s.bullets) ? s.bullets.map(String) : undefined,
+    bullets,
     faqs: Array.isArray(s.faqs) ? s.faqs : undefined,
     reviews: Array.isArray(s.reviews) ? s.reviews : undefined,
     imagePrompts,
     imageSizeHint: s.imageSizeHint,
+    // ── Z10: per-field VN translations ────────────────────────────────
+    headlineVi:     s.headlineVi,
+    subheadlineVi:  s.subheadlineVi,
+    ctaVi:          s.ctaVi,
+    offerStripVi:   s.offerStripVi,
+    urgencyTextVi:  s.urgencyTextVi,
+    bulletsVi,
   }
 }
 

@@ -91,6 +91,16 @@ export interface LandingSection {
   reviews?: ReviewItem[]
   imagePrompts: ImagePrompt[]
   imageSizeHint?: string
+  // ── Z10: per-field Vietnamese translations (rendered inline under each MY value) ──
+  // Always generated when output language ≠ 'vi'. UI hides any *Vi value that
+  // equals its source so the VN-output case doesn't show duplicates.
+  headlineVi?: string
+  subheadlineVi?: string
+  ctaVi?: string
+  offerStripVi?: string
+  urgencyTextVi?: string
+  /** Parallel array to `bullets` — same length, index-aligned. */
+  bulletsVi?: string[]
 }
 
 export interface LandingPagePack {

@@ -109,21 +109,21 @@ export default function SectionCard({ index, section, onRegenerateImage, onDelet
             </InfoBlock>
           )}
 
-          {/* Structured header fields */}
+          {/* Structured header fields — Z10: inline VN translation under each */}
           {section.headline && (
-            <FieldRow label="Headline" value={section.headline} />
+            <FieldRow label="Headline" value={section.headline} valueVi={section.headlineVi} />
           )}
           {section.subheadline && (
-            <FieldRow label="Subheadline" value={section.subheadline} />
+            <FieldRow label="Subheadline" value={section.subheadline} valueVi={section.subheadlineVi} />
           )}
           {section.cta && (
-            <FieldRow label="CTA button" value={section.cta} highlight="orange" />
+            <FieldRow label="CTA button" value={section.cta} valueVi={section.ctaVi} highlight="orange" />
           )}
           {section.offerStrip && (
-            <FieldRow label="Offer strip" value={section.offerStrip} highlight="rose" />
+            <FieldRow label="Offer strip" value={section.offerStrip} valueVi={section.offerStripVi} highlight="rose" />
           )}
           {section.urgencyText && (
-            <FieldRow label="Urgency" value={section.urgencyText} highlight="amber" />
+            <FieldRow label="Urgency" value={section.urgencyText} valueVi={section.urgencyTextVi} highlight="amber" />
           )}
 
           {/* Main copy */}
@@ -157,9 +157,11 @@ export default function SectionCard({ index, section, onRegenerateImage, onDelet
             </div>
           )}
 
-          {/* Bullets */}
+          {/* Bullets — Z10: bilingual when bulletsVi exists, otherwise plain block */}
           {section.bullets && section.bullets.length > 0 && (
-            <BlockField label="Bullets" body={section.bullets.map((b) => `• ${b}`).join('\n')} />
+            section.bulletsVi && section.bulletsVi.length > 0
+              ? <BilingualBullets bullets={section.bullets} bulletsVi={section.bulletsVi} />
+              : <BlockField label="Bullets" body={section.bullets.map((b) => `• ${b}`).join('\n')} />
           )}
 
           {/* FAQs */}
@@ -419,19 +421,83 @@ function IconButton({
 
 // ─────────────────────────────────────────────────────────────────────
 
-function FieldRow({ label, value, highlight }: { label: string; value: string; highlight?: 'orange' | 'rose' | 'amber' }) {
+function FieldRow({
+  label, value, valueVi, highlight,
+}: {
+  label: string
+  value: string
+  /** Z10: optional inline Vietnamese translation — rendered as smaller blue
+   *  text under the MY value. Auto-hidden when valueVi equals value (i.e.
+   *  output language was already VN — no point showing duplicate). */
+  valueVi?: string
+  highlight?: 'orange' | 'rose' | 'amber'
+}) {
   const valueCls =
     highlight === 'orange' ? 'bg-orange-50 text-orange-800 border-orange-200' :
     highlight === 'rose'   ? 'bg-rose-50 text-rose-800 border-rose-200'       :
     highlight === 'amber'  ? 'bg-amber-50 text-amber-800 border-amber-200'    :
     'bg-gray-50 text-gray-800 border-black/8'
+
+  const showVi = !!valueVi && valueVi.trim().toLowerCase() !== value.trim().toLowerCase()
+
   return (
     <div className="flex flex-col gap-1 sm:flex-row sm:items-start">
       <span className="w-28 shrink-0 text-[10px] font-bold uppercase tracking-widest text-gray-400">{label}</span>
-      <div className={`flex flex-1 items-start gap-2 rounded-md border px-2.5 py-1.5 text-[12px] ${valueCls}`}>
-        <span className="flex-1">{value}</span>
-        <CopyAllButton text={value} compact />
+      <div className="flex-1 space-y-1">
+        <div className={`flex items-start gap-2 rounded-md border px-2.5 py-1.5 text-[12px] ${valueCls}`}>
+          <span className="flex-1">{value}</span>
+          <CopyAllButton text={value} compact />
+        </div>
+        {showVi && (
+          <div className="flex items-start gap-1.5 rounded-md border border-blue-100 bg-blue-50/30 px-2.5 py-1 pl-3">
+            <span className="shrink-0 text-[10px] leading-tight pt-px">🇻🇳</span>
+            <span className="flex-1 italic text-[11px] leading-snug text-blue-800/85">{valueVi}</span>
+            <CopyAllButton text={valueVi!} compact />
+          </div>
+        )}
       </div>
+    </div>
+  )
+}
+
+/** Z10: bilingual bullets — each item shows MY then VN italic below.
+ *  Used when section.bulletsVi exists and length matches. */
+function BilingualBullets({
+  bullets, bulletsVi,
+}: {
+  bullets: string[]
+  bulletsVi: string[]
+}) {
+  const copyBlob = bullets.map((b, i) => {
+    const vi = bulletsVi[i]?.trim()
+    return vi && vi.toLowerCase() !== b.trim().toLowerCase()
+      ? `• ${b}\n   🇻🇳 ${vi}`
+      : `• ${b}`
+  }).join('\n')
+  return (
+    <div className="rounded-lg border border-black/8 bg-gray-50/40 p-3">
+      <div className="mb-1.5 flex items-center justify-between">
+        <p className="text-[10px] font-bold uppercase tracking-widest text-gray-500">
+          Bullets <span className="text-blue-500">· 🇻🇳 song ngữ</span>
+        </p>
+        <CopyAllButton text={copyBlob} />
+      </div>
+      <ul className="space-y-2">
+        {bullets.map((b, i) => {
+          const vi = bulletsVi[i]?.trim()
+          const showVi = !!vi && vi.toLowerCase() !== b.trim().toLowerCase()
+          return (
+            <li key={i} className="space-y-0.5">
+              <p className="text-[13px] leading-relaxed text-gray-800">• {b}</p>
+              {showVi && (
+                <p className="ml-3 border-l-2 border-blue-200 pl-2 text-[11px] italic leading-snug text-blue-800/85">
+                  🇻🇳 {vi}
+                </p>
+              )}
+            </li>
+          )
+        })}
+      </ul>
     </div>
   )
 }
