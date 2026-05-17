@@ -600,12 +600,16 @@ function buildUserPrompt(params: LandingGenParams): string {
       lines.push('→ NEVER copy: product name, ingredients, price, dosage, brand identity, or any product-specific fact.')
     }
     lines.push('HARD RULES regardless of influence level:')
-    lines.push('• NEVER override product name, price, ingredients, selected language, or 17-section structure')
+    lines.push('• NEVER override product name, price, ingredients, selected language, or the selected form blueprint')
     lines.push('• NEVER reproduce verbatim sentences from the competitor page')
   }
 
+  // Z25 fix — final instruction must reflect the chosen form blueprint,
+  // NOT hardcode "17-section". The previous hardcoded line overrode the
+  // blueprint override block above, which is why user still saw 17
+  // sections even after picking Advertorial / Premium / Hard-Sell-COD.
   lines.push('')
-  lines.push('Generate the 17-section advertorial asset pack as a single STRICT JSON object. No markdown fences, no commentary — JSON only. EVERY section MUST include viTranslation and imageAspectRatio (where images exist).')
+  lines.push(`Generate the ${blueprint.sections.length}-section ${blueprint.label} pack as a single STRICT JSON object. No markdown fences, no commentary — JSON only. EVERY section MUST include viTranslation and imageAspectRatio (where images exist). The sections[] array MUST contain EXACTLY these ${blueprint.sections.length} types in this order: ${blueprint.sections.join(', ')}.`)
 
   return lines.join('\n')
 }
@@ -781,14 +785,22 @@ export async function generateLandingPack(params: LandingGenParams): Promise<Lan
     throw new Error('Gemini không trả về section nào — thử lại')
   }
 
+  // Z25 fix — post-processing must respect the FORM BLUEPRINT order, not
+  // the hardcoded SECTION_ORDER. Previously this loop rebuilt sections in
+  // the default 17-section order, silently discarding the blueprint's
+  // custom ordering even when Gemini returned a different mix. Now we
+  // iterate the SELECTED blueprint's section list instead.
+  const selectedForm = params.form ?? 'ugc-malaysia'
+  const orderList: SectionType[] = FORM_BLUEPRINTS[selectedForm]?.sections ?? SECTION_ORDER
   const sections: LandingSection[] = []
-  for (const ord of SECTION_ORDER) {
+  for (const ord of orderList) {
     const found = parsed.sections.find((s) => s.type === ord)
     if (found) {
       const norm = normalizeSection(found)
       if (norm) sections.push(norm)
     }
   }
+  console.info('[TEMPLATE OUTPUT]', selectedForm, '· emitted =', sections.length, '/', orderList.length, 'expected · types =', sections.map((s) => s.type).join(' → '))
 
   if (sections.length === 0) {
     throw new Error('Không có section nào hợp lệ trong JSON Gemini trả về')

@@ -28,12 +28,18 @@ import MasterFrameJobStepper from './components/MasterFrameJobStepper'
 import AnalyticsPanel from './components/AnalyticsPanel'
 import SceneGenGrid from './components/SceneGenGrid'
 import VideoGenGrid from './components/VideoGenGrid'
+import TimelinePlanningView from './components/TimelinePlanningView'
 import { useMasterFrameJobStore } from './stores/masterFrameJobStore'
 import { useSceneGenJobStore } from './stores/sceneGenJobStore'
 import { useVideoGenJobStore } from './stores/videoGenJobStore'
 import { startMasterFrameJob, clearMasterFrameJob } from './services/masterFrameJobRunner'
 import { startSceneGenQueue, regenerateScene, cancelSceneGenQueue } from './services/sceneGenJobRunner'
 import { runVideoQueue, retrySingleVideoClip, buildVideoQueueFromScenes } from './services/videoGenJobRunner'
+// Z23: editorial planning step — pure logic, NO Kling
+import { buildEditorialBlueprint } from './services/editorialIntelligence'
+import { estimateVoiceDuration } from './services/timelineAssembler'
+import { buildTimelineRenderJob } from './services/timelineRenderer'
+import type { EditorialBlueprint, TimelineRenderJob } from './types'
 import MasterFrameApproval from './components/MasterFrameApproval'
 import PromptCompilerDebugPanel from './components/PromptCompilerDebugPanel'
 import StoryboardEditor from './components/StoryboardEditor'
@@ -60,9 +66,16 @@ function computeReachablePhases(
   if (hasSceneJob || state.blueprints.length > 0) {
     reachable.add('scene-gen')
   }
-  // video-gen: reachable once the scene-gen queue has any approved clip OR
-  // a video job already exists (resumed from localStorage).
-  if (hasVideoJob || hasSceneJob) {
+  // Z23: timeline-planning reachable once we have an editorial blueprint
+  // (planning is local — no remote job needed). Also reachable if user
+  // has any scene-gen output (so they can build planning from approved
+  // masters even after refresh).
+  if (state.editorialBlueprint || hasSceneJob) {
+    reachable.add('timeline-planning')
+  }
+  // video-gen: reachable once the timeline render job is built OR a video
+  // job already exists (resumed from localStorage).
+  if (hasVideoJob || state.timelineRenderJob) {
     reachable.add('video-gen')
   }
   return reachable

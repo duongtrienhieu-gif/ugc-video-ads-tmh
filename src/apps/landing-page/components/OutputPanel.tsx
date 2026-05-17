@@ -79,9 +79,9 @@ export default function OutputPanel({
     return (
       <div className="flex h-full flex-col items-center justify-center gap-3 p-6 text-center">
         <Loader2 className="h-8 w-8 animate-spin text-violet-500" />
-        <p className="text-sm font-medium text-gray-700">Đang tạo 17-section advertorial pack...</p>
+        <p className="text-sm font-medium text-gray-700">Đang tạo landing pack...</p>
         <p className="text-xs text-gray-400 max-w-sm">
-          Gemini đang viết hero / pain / mechanism / ingredient / social proof / comparison / news-proof / before-after / benefits / offer / FAQ / final CTA + image prompts
+          Gemini đang viết copy + image prompts theo form đã chọn
         </p>
       </div>
     )
@@ -95,7 +95,7 @@ export default function OutputPanel({
           <LayoutTemplate className="h-10 w-10 text-gray-200" strokeWidth={1.5} />
           <p className="text-sm text-gray-400">Chọn sản phẩm + nhấn "Tạo Landing Pack"</p>
           <p className="text-xs text-gray-300 max-w-sm">
-            Output 17 sections — hoặc mở lại một project đã lưu bên dưới.
+            Output landing pack theo form đã chọn — hoặc mở lại một project đã lưu bên dưới.
           </p>
         </div>
         <SavedHistorySection onLoadProject={onLoadProject} loadedFromId={loadedFromId} />

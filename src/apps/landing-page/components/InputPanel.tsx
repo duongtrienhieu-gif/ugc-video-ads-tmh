@@ -360,7 +360,7 @@ export default function InputPanel({
           className="flex w-full items-center justify-center gap-2 rounded-full bg-gradient-to-r from-violet-600 to-purple-600 px-6 py-3.5 text-sm font-bold text-white shadow-md transition-all hover:from-violet-700 hover:to-purple-700 disabled:cursor-not-allowed disabled:opacity-40"
         >
           {isGenerating ? (
-            <><Loader2 className="h-4 w-4 animate-spin" /> Đang tạo 17 sections...</>
+            <><Loader2 className="h-4 w-4 animate-spin" /> Đang tạo landing pack...</>
           ) : (
             <><LayoutTemplate className="h-4 w-4" /> Tạo Landing Pack</>
           )}

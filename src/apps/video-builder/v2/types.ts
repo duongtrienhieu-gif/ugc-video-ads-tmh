@@ -1130,6 +1130,7 @@ export type V2Phase =
   | 'blueprint'          // Gemini → scene blueprints
   | 'scene-gen'          // img2img from master frame for each scene
   | 'qc-loop'            // QC + auto-regen
+  | 'timeline-planning'  // Z23 — coverage shots + timeline cuts + motion + transitions (NO Kling)
   | 'video-gen'          // Phase B: keyframe → Kling 3.0 image-to-video clip
   | 'video-voice'        // delegate to v1 for video + voice + render
   | 'done'
@@ -1206,6 +1207,14 @@ export interface V2PipelineState {
     script: string
     visualStyleDna?: string  // Phase 2 — Ads Win DNA placeholder
   }
+  /** Z23 — editorial planning output. Built from approved scene-gen
+   *  keyframes + Gemini blueprints + voiceDurationSec estimate. NO Kling
+   *  calls — this is pure planning data the renderer phase will consume. */
+  editorialBlueprint?: EditorialBlueprint | null
+  /** Z23 — ready-to-render timeline job. One TimelineRenderItem per cut.
+   *  Built alongside editorialBlueprint by the planning step. The renderer
+   *  phase (video-gen) iterates these. */
+  timelineRenderJob?: TimelineRenderJob | null
 }
 
 export function createEmptyV2State(): V2PipelineState {
