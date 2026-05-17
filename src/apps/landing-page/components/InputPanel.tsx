@@ -108,15 +108,13 @@ const FORM_BADGE_CLASSES: Record<'violet' | 'emerald' | 'cyan' | 'amber' | 'rose
   rose:    'bg-rose-100 text-rose-700',
 }
 
-const NICHE_PRESETS = [
-  'supplement gut health',
-  'supplement collagen / beauty',
-  'skincare anti-aging',
-  'skincare acne',
-  'weight-loss patch',
-  'haircare / hair growth',
-  'detox / cleanse',
-]
+// Phase 7 stabilization — NICHE_PRESETS removed with the "Gợi ý niche"
+// UI block. Kept here as a code comment for future reference if we want
+// to surface niche presets in another way:
+//   'supplement gut health', 'supplement collagen / beauty',
+//   'skincare anti-aging',   'skincare acne',
+//   'weight-loss patch',     'haircare / hair growth',
+//   'detox / cleanse'
 
 const INFLUENCE_OPTIONS: { id: CompetitorInfluence; icon: string; label: string; desc: string }[] = [
   { id: 'low',    icon: '🟢', label: 'Thấp',       desc: 'Chỉ học tone / giọng văn' },
@@ -130,7 +128,9 @@ export default function InputPanel({
   const [pickerOpen, setPickerOpen]           = useState(false)
   const [language, setLanguage]               = useState<LandingLanguage>('ms')
   const [form, setForm]                       = useState<LandingForm>('ugc-malaysia')
-  const [nicheHint, setNicheHint]             = useState('')
+  // Phase 7 — niche hint removed at user request. State retained briefly
+  // for back-compat but always undefined now.
+  const nicheHint = ''
   const [competitorUrl, setCompetitorUrl]     = useState('')
   const [competitorInfluence, setCompetitorInfluence] = useState<CompetitorInfluence>('low')
   const [visualMemory, setVisualMemory]       = useState<VisualMemoryItem[]>([])
@@ -323,28 +323,10 @@ export default function InputPanel({
             ))}
           </div>
 
-          {/* Niche hint — compact sub-field within Step 4 */}
-          <div className="mt-2">
-            <p className="mb-1 text-[10px] text-gray-400 font-semibold uppercase tracking-wider">Gợi ý niche (tuỳ chọn)</p>
-            <input
-              type="text"
-              value={nicheHint}
-              onChange={(e) => setNicheHint(e.target.value)}
-              placeholder='vd: "supplement gut health"'
-              className="w-full rounded-lg border border-black/10 bg-white px-3 py-2 text-xs text-gray-800 placeholder-gray-400 outline-none focus:border-violet-500/40"
-            />
-            <div className="mt-1 flex flex-wrap gap-1">
-              {NICHE_PRESETS.map((n) => (
-                <button
-                  key={n}
-                  onClick={() => setNicheHint(n)}
-                  className="rounded-full border border-black/10 bg-white px-2 py-0.5 text-[10px] text-gray-500 hover:bg-violet-50 hover:text-violet-700"
-                >
-                  {n}
-                </button>
-              ))}
-            </div>
-          </div>
+          {/* Phase 7 stabilization — niche hint block removed at user request.
+              nicheHint state still exists for API compat (passed to onGenerate)
+              but always undefined now. NICHE_PRESETS retained as a code-only
+              reference for future use. */}
         </Section>
 
         {/* STEP 5 — Competitor URL (AI học từ đối thủ) */}

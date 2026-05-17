@@ -709,8 +709,18 @@ export function normalizeSection(s: RawSection): LandingSection | null {
       : SECTION_ASPECT_DEFAULTS[type] ?? '4:5'
 
   // Sanitize each image prompt's aspectRatio to match the section lock.
+  // Phase 7 stabilization — default every text field so downstream code
+  // can safely call .toLowerCase() / .includes() / .replace() without null
+  // checks. Gemini occasionally omits `style` for non-banner sections and
+  // `filename` for inline imagePrompts in the new forms.
   const imagePrompts = Array.isArray(s.imagePrompts)
-    ? s.imagePrompts.map((p) => ({ ...p, aspectRatio: lockedRatio }))
+    ? s.imagePrompts.map((p) => ({
+        ...p,
+        filename:    typeof p?.filename === 'string' ? p.filename : `${type}_${Math.random().toString(36).slice(2, 6)}.jpg`,
+        prompt:      typeof p?.prompt   === 'string' ? p.prompt   : '',
+        style:       typeof p?.style    === 'string' ? p.style    : type,
+        aspectRatio: lockedRatio,
+      }))
     : []
 
   // Z10: pad bulletsVi to match bullets length if Gemini under-translated
@@ -761,17 +771,26 @@ export function injectPriceIntoPrompts(sections: LandingSection[], priceTag: str
   if (!priceTag) return
   const ecommerceKeywords = ['tiktok', 'shopee', 'promo', 'banner', 'offer', 'cta hero']
   sections.forEach((section) => {
+    if (!Array.isArray(section.imagePrompts)) return
     section.imagePrompts.forEach((ip) => {
-      const lower = ip.style.toLowerCase()
+      // Phase 7 stabilization — guard against Gemini returning imagePrompts
+      // with missing style / prompt fields. Some new-form section spec docs
+      // don't emit style on text-only sections, which crashed buildPack
+      // with "Cannot read properties of undefined (reading 'toLowerCase')".
+      const style = typeof ip.style === 'string' ? ip.style : ''
+      const promptText = typeof ip.prompt === 'string' ? ip.prompt : ''
+      if (!style || !promptText) return
+      const lower = style.toLowerCase()
       if (!ecommerceKeywords.some((k) => lower.includes(k))) return
-      if (!ip.prompt.toLowerCase().includes('rm')) {
-        ip.prompt += ` Price shown must be exactly "${priceTag}" — do NOT display any other price.`
+      if (!promptText.toLowerCase().includes('rm')) {
+        ip.prompt = promptText + ` Price shown must be exactly "${priceTag}" — do NOT display any other price.`
       } else {
         // Replace any hallucinated RM price with the correct one
-        ip.prompt = ip.prompt.replace(/RM\s*\d+(?:\.\d{1,2})?/gi, priceTag)
-        if (!ip.prompt.includes('do NOT display any other price')) {
-          ip.prompt += ` (show only ${priceTag})`
+        let next = promptText.replace(/RM\s*\d+(?:\.\d{1,2})?/gi, priceTag)
+        if (!next.includes('do NOT display any other price')) {
+          next += ` (show only ${priceTag})`
         }
+        ip.prompt = next
       }
     })
   })
