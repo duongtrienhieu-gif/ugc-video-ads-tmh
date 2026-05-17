@@ -225,7 +225,18 @@ const DIVERSITY_SUPPRESSED_SECTIONS: ReadonlySet<SectionType> = new Set<SectionT
 
 // Z24 — diversity directive with COMPOSITION axis added. Suppressed for
 // sections where structure is locked by spec (see set above).
+//
+// Phase 3 — when pack.form === 'advertorial' AND pack.characterProfile is
+// set, the diversity directive is REPLACED by a character-continuity
+// directive: same person, same environment, varying ONLY by emotional
+// state per section. The COMPOSITION_POOL/BG_POOL/etc shotgun approach
+// would fight the storytelling intent (we WANT the same room across
+// sections — that's the whole point of "kể chuyện hành trình").
 function buildDiversityDirective(job: ImageJob): string {
+  // Storytelling override — character lock, no random pool
+  if (job.pack.form === 'advertorial' && job.pack.characterProfile) {
+    return buildStorytellingContinuityDirective(job)
+  }
   if (DIVERSITY_SUPPRESSED_SECTIONS.has(job.section.type)) return ''
   if (!job.prompt.variationSeed) job.prompt.variationSeed = makeVariationSeed()
   const seed = `${job.section.type}-${job.imageIdx}-${job.prompt.variationSeed}`
@@ -235,6 +246,26 @@ function buildDiversityDirective(job: ImageJob): string {
   const hand        = hashPick(HAND_POOL,        seed, 3)
   const light       = hashPick(LIGHT_POOL,       seed, 4)
   return `COMPOSITION: ${composition}. SHOT: ${angle}, in ${bg}, ${hand}, ${light}. Render as INDEPENDENT phone photo — do not mimic the side-by-side box+bottle composition of the reference image; pick the COMPOSITION above. Seed: ${job.prompt.variationSeed}.`
+}
+
+/** Phase 3 — character continuity directive for the advertorial form.
+ *  Pastes the locked appearance + environment + per-section mood verbatim
+ *  into every people-shot prompt so KIE produces the same person across
+ *  the entire pack. */
+function buildStorytellingContinuityDirective(job: ImageJob): string {
+  const char = job.pack.characterProfile
+  if (!char) return ''
+  const arc = char.emotionalArc.find((e) => e.sectionType === job.section.type)
+  const mood = arc?.mood ?? 'natural neutral expression'
+  return (
+    `CHARACTER CONTINUITY LOCK (advertorial form — same person every shot):\n`
+    + `  • Person: ${char.name} — ${char.archetype}\n`
+    + `  • Appearance (KEEP EXACT across all renders in this pack): ${char.appearanceLock}\n`
+    + `  • Environment (consistent home/room across the pack): ${char.environmentLock}\n`
+    + `  • Mood for this section (${job.section.type}): ${mood}\n`
+    + `  • Cinematic lifestyle photography — documentary feel, natural skin texture, soft DOF. NO studio glamour. NO commercial gloss. NO designed text overlays (except SEBELUM/SELEPAS labels on before-after pair if section type is before-after).\n`
+    + `  • DO NOT introduce a different woman. DO NOT change face / hair / hijab style / outfit family between sections — only mood + posture + light vary.`
+  )
 }
 
 // Z24 — strengthened negatives per user list. Covers all known failure
@@ -276,6 +307,10 @@ async function resolveRefs(refs: string[]): Promise<string[]> {
 }
 
 interface ImageJob {
+  /** Phase 3 — pack reference so form-aware logic (character continuity,
+   *  per-form image strategy) can read pack.form + pack.characterProfile
+   *  without threading extra params through every helper. */
+  pack: LandingPagePack
   sectionIdx: number
   imageIdx: number
   prompt: ImagePrompt
@@ -299,12 +334,20 @@ interface QueueOptions {
 // ─────────────────────────────────────────────────────────────────────────
 function buildFinalPrompt(job: ImageJob, hasProductRefs: boolean): string {
   const parts: string[] = []
-  // Hero ALWAYS gets the character lock (even without product refs)
-  if (job.section.type === 'hero') parts.push(HERO_CHARACTER_LOCK)
+  // Hero gets the default UGC-Malaysia character lock UNLESS the pack
+  // declares its own character profile (advertorial storytelling form).
+  // Storytelling's per-section continuity directive (further down) covers
+  // the character spec — stacking both would conflict ("hijab Muslim
+  // woman" vs character.archetype="Chinese woman").
+  const hasCharacterProfile = !!job.pack.characterProfile
+  if (job.section.type === 'hero' && !hasCharacterProfile) {
+    parts.push(HERO_CHARACTER_LOCK)
+  }
   if (hasProductRefs) parts.push(PRODUCT_IDENTITY_PREFIX)
   parts.push(job.prompt.prompt)
 
-  // Z22 — per-image diversity directive (suppressed for before-after)
+  // Z22 — per-image diversity directive (replaced by continuity directive
+  // for advertorial form via buildDiversityDirective branch logic).
   const diversity = buildDiversityDirective(job)
   if (diversity) parts.push(diversity)
 
@@ -454,7 +497,7 @@ function collectJobs(pack: LandingPagePack): ImageJob[] {
     const section = pack.sections[si]
     if (!section.imagePrompts) continue
     for (let ii = 0; ii < section.imagePrompts.length; ii++) {
-      jobs.push({ sectionIdx: si, imageIdx: ii, prompt: section.imagePrompts[ii], section })
+      jobs.push({ pack, sectionIdx: si, imageIdx: ii, prompt: section.imagePrompts[ii], section })
     }
   }
 
@@ -595,7 +638,7 @@ export async function regenerateSingleImage(
   onTaskUpdate(sectionIdx, imageIdx, { status: 'generating', error: undefined })
   try {
     const { assetRef } = await runWithCreditSafeRetry(
-      { sectionIdx, imageIdx, prompt, section },
+      { pack, sectionIdx, imageIdx, prompt, section },
       pack.visualMemory,
       kieApiKey,
       (patch) => onTaskUpdate(sectionIdx, imageIdx, patch),

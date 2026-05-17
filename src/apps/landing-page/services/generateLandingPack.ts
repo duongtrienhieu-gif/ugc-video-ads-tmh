@@ -501,7 +501,7 @@ const FORM_BLUEPRINTS: Record<LandingForm, FormBlueprint> = {
   },
 }
 
-function getGeminiKey(): string {
+export function getGeminiKey(): string {
   const s = useSettingsStore.getState()
   if (!s.hasGeminiKey()) {
     throw new Error('Chưa có Google Gemini API key. Vào Cài đặt → nhập key từ aistudio.google.com')
@@ -510,7 +510,7 @@ function getGeminiKey(): string {
 }
 
 /** Extract the first RM price string from the product offer field. */
-function extractPriceTag(offer: string): string | null {
+export function extractPriceTag(offer: string): string | null {
   if (!offer) return null
   const match = offer.match(/RM\s*\d+(?:\.\d{1,2})?/i)
   return match ? match[0].replace(/\s+/, '') : null
@@ -639,7 +639,7 @@ function buildUserPrompt(params: LandingGenParams): string {
 
 // ─────────────────────────────────────────────────────────────────────
 
-function extractJson(raw: string): string {
+export function extractJson(raw: string): string {
   let s = raw.trim()
   const fence = s.match(/```(?:json)?\s*([\s\S]+?)```/)
   if (fence) s = fence[1].trim()
@@ -649,9 +649,9 @@ function extractJson(raw: string): string {
   return s
 }
 
-type RawSection = Omit<Partial<LandingSection>, 'type'> & { type?: string }
+export type RawSection = Omit<Partial<LandingSection>, 'type'> & { type?: string }
 
-interface RawPack {
+export interface RawPack {
   language?: string
   sections?: RawSection[]
 }
@@ -696,7 +696,7 @@ const ALLOWED_RATIOS_BY_SECTION: Partial<Record<SectionType, ReadonlyArray<Locke
 }
 const DEFAULT_ALLOWED: ReadonlyArray<LockedRatio> = ['1:1', '4:5']
 
-function normalizeSection(s: RawSection): LandingSection | null {
+export function normalizeSection(s: RawSection): LandingSection | null {
   const type = SECTION_ORDER.find((t) => t === s.type)
   if (!type) return null
 
@@ -757,7 +757,7 @@ function normalizeSection(s: RawSection): LandingSection | null {
 // Runs after normalizeSection so we catch prompts Gemini hallucinated
 // wrong prices into.
 // ─────────────────────────────────────────────────────────────────────
-function injectPriceIntoPrompts(sections: LandingSection[], priceTag: string | null): void {
+export function injectPriceIntoPrompts(sections: LandingSection[], priceTag: string | null): void {
   if (!priceTag) return
   const ecommerceKeywords = ['tiktok', 'shopee', 'promo', 'banner', 'offer', 'cta hero']
   sections.forEach((section) => {
@@ -851,6 +851,7 @@ export async function legacyGenerateUgcMalaysiaPack(params: LandingGenParams): P
     sections,
     visualMemory: params.visualMemory ?? [],
     generatedAt: Date.now(),
+    form: 'ugc-malaysia',  // Phase 3 — tag pack so downstream image logic knows form context
   }
 }
 

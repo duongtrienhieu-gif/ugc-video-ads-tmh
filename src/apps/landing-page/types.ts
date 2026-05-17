@@ -119,6 +119,34 @@ export interface LandingPagePack {
   sections: LandingSection[]
   visualMemory: VisualMemoryItem[]
   generatedAt: number
+  // ── Phase 3 — form metadata baked onto the pack so downstream image
+  // generation can adapt strategy (eg storytelling → character continuity).
+  // Optional for backward compat with packs saved before Phase 3.
+  form?: LandingForm
+  /** Phase 3 storytelling engine — full character profile (name, age,
+   *  appearance, environment) shared across all people-shots so the same
+   *  person threads through the entire narrative. Set by the advertorial
+   *  form module. Other forms leave it undefined. */
+  characterProfile?: CharacterProfile
+}
+
+/** Storytelling character — one consistent person across all section
+ *  imagePrompts. Used by the advertorial form's image continuity engine.
+ *  Phase 3 introduces this; later forms (premium narrative variants) may
+ *  reuse it. */
+export interface CharacterProfile {
+  /** Display name — only used in copy, never as a real brand customer. */
+  name: string
+  /** Locale label e.g. "Malaysian Muslim woman, mid-30s". */
+  archetype: string
+  /** Compact appearance lock — same description copy-pasted into every
+   *  imagePrompt that involves this person. ~80-120 words. */
+  appearanceLock: string
+  /** Compact environment lock — same home/room context shared across
+   *  shots. ~40-80 words. */
+  environmentLock: string
+  /** Emotional arc points — used to vary expression per section. */
+  emotionalArc: { sectionType: string; mood: string }[]
 }
 
 export interface LandingGenParams {
