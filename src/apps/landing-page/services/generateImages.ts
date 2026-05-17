@@ -93,32 +93,19 @@ const SECTION_PRIORITY: Record<SectionType, number> = {
 // EXPLICITLY allow every other axis to vary so the section feels like real
 // customer photos taken on different days in different rooms.
 // ─────────────────────────────────────────────────────────────────────────
+// Z23 — compressed from ~700 chars to ~280. Same semantic content, fewer
+// tokens for KIE to process = faster response.
 const PRODUCT_IDENTITY_PREFIX =
-  'PRODUCT IDENTITY (NARROW LOCK) — match the reference image on these axes ONLY:\n' +
-  '  • Brand name TEXT on the label (exact letters, exact spelling)\n' +
-  '  • Label typography, label colors, label graphic layout\n' +
-  '  • Bottle/jar/sachet SHAPE + cap style + packaging ratio\n' +
-  '  • Logo design and placement on the packaging\n' +
-  'EXPLICITLY VARY (do NOT copy from any reference or previous render):\n' +
-  '  • Background / room / surface / props\n' +
-  '  • Hand pose, body position, who is holding the product (if anyone)\n' +
-  '  • Lighting direction, color temperature, mood\n' +
-  '  • Camera angle, framing, depth-of-field\n' +
-  '  • Bottle rotation and angle relative to camera\n' +
-  'Do NOT invent a fake brand name (no "OXEVIN" / "DOSPRO" / "VITALEX" / etc.) — use the exact brand from the reference.\n' +
-  'Do NOT redesign the label even slightly.\n'
+  'PRODUCT LOCK: match reference EXACTLY on brand text, label typography/colors, bottle shape, cap, logo. VARY freely: background, hand pose, lighting, camera angle, bottle rotation. Use the exact brand from reference — no fake brand substitution. Do not redesign the label.'
 
 // ─────────────────────────────────────────────────────────────────────────
 // SECTION-1 HERO CHARACTER LOCK — Malaysian Muslim hijab women only.
 // Brand persona consistency across hero variants. No men, no Western faces,
 // no Chinese influencer aesthetic.
 // ─────────────────────────────────────────────────────────────────────────
+// Z23 — compressed from ~330 to ~150 chars.
 const HERO_CHARACTER_LOCK =
-  'CHARACTER LOCK: Malaysian Muslim woman in modest hijab, mid 30s, ' +
-  'natural Southeast-Asian features, warm friendly expression, ' +
-  'authentic ecommerce-native UGC aesthetic. ' +
-  'STRICTLY NO men, NO Western/Caucasian faces, NO Chinese influencer-style faces, ' +
-  'NO Korean/Japanese aesthetic. Same ethnicity and hijab style across hero variants. '
+  'CHARACTER: Malaysian Muslim woman in modest hijab, mid-30s, Southeast-Asian features, warm UGC selfie aesthetic. NO men, NO Western/Chinese/Korean faces. '
 
 // ─────────────────────────────────────────────────────────────────────────
 // Z22 — DIVERSITY ENGINE: 4 axis pools rotated deterministically per image.
@@ -202,6 +189,7 @@ function makeVariationSeed(): string {
 /** Z22 — per-image diversity directive.
  *  Suppressed for `before-after` (which has its own same-scene lock spec
  *  written by Gemini into the imagePrompt body). */
+// Z23 — single-line compact directive (~180 chars vs old ~380).
 function buildDiversityDirective(job: ImageJob): string {
   if (job.section.type === 'before-after') return ''
   if (!job.prompt.variationSeed) job.prompt.variationSeed = makeVariationSeed()
@@ -210,30 +198,12 @@ function buildDiversityDirective(job: ImageJob): string {
   const angle  = hashPick(ANGLE_POOL, seed, 1)
   const hand   = hashPick(HAND_POOL,  seed, 2)
   const light  = hashPick(LIGHT_POOL, seed, 3)
-  return (
-    'AUTHENTICITY DIRECTIVE — render this as if a DIFFERENT person took this photo on a DIFFERENT day in a DIFFERENT room than any other image in the pack:\n'
-    + `  • Background: ${bg}\n`
-    + `  • Camera angle: ${angle}\n`
-    + `  • Hand pose: ${hand}\n`
-    + `  • Lighting: ${light}\n`
-    + `  • Fresh latent seed: ${job.prompt.variationSeed}\n`
-    + '  • Render as an INDEPENDENT phone photo — do NOT echo composition, hand pose, or background from any reference image; only the PRODUCT identity is copied from the reference.'
-  )
+  return `SHOT: ${angle}, in ${bg}, ${hand}, ${light}. Render as INDEPENDENT phone photo — do not echo composition from any reference. Seed: ${job.prompt.variationSeed}.`
 }
 
-/** Negative-prompt block listing every AI-clone failure mode we want KIE to avoid. */
+// Z23 — compressed from ~600 to ~200 chars. Same bans, fewer tokens.
 const NEGATIVE_PROMPT_BLOCK =
-  'AVOID (hard negatives — these make the image look AI-generated and fail the ad):\n'
-  + '  • Duplicate background or same room repeated across renders\n'
-  + '  • Same hand pose / same finger arrangement / same body position\n'
-  + '  • Same lighting direction / same time of day across all images\n'
-  + '  • Same camera angle / same composition twice in a row\n'
-  + '  • Product rendered as a cut-out PNG pasted over the background (floating packshot)\n'
-  + '  • Two product variants stacked or composited into one frame\n'
-  + '  • Cinematic / studio / editorial / luxury aesthetic (we want phone-quality UGC)\n'
-  + '  • Hyper-perfect skin, hyper-perfect lighting, AI-glossy texture\n'
-  + '  • Symmetrical perfect composition (real phone photos are slightly imperfect)\n'
-  + '  • Fake brand substitution or invented label text'
+  'AVOID: duplicate background or hand pose across renders; floating cut-out product PNG; stacked product composites; cinematic/studio/luxury look; AI-glossy hyper-perfect skin; symmetrical perfect composition; fake brand text substitution.'
 
 /** Pick the asset refs (if any) to pass into KIE filesUrl for this section. */
 function selectRefsForSection(type: SectionType, memory: VisualMemoryItem[]): string[] {
@@ -316,9 +286,15 @@ function buildFinalPrompt(job: ImageJob, hasProductRefs: boolean): string {
 // Retry attempt: re-poll the OLD taskId for 60s. If KIE eventually returns
 // success → no new credit. If still stuck/failed → submit a fresh task.
 // ─────────────────────────────────────────────────────────────────────────
-const MAX_ATTEMPTS = 4
-const RECOVERY_POLL_MS = 60_000   // give an in-flight task another 60s
-const FRESH_POLL_MS    = 5 * 60_000
+// Z23 — tighter timeouts so a single stuck KIE task no longer drags the
+// whole queue. Typical KIE GPT-4o render: 40-75s. We give 100s (FRESH) for
+// the first attempt; if that times out, recovery-poll the SAME taskId for
+// another 30s; otherwise re-submit. MAX_ATTEMPTS dropped 4→2 so we fail
+// fast on broken tasks and free the slot for the next image. Same credit
+// safety semantics (recovery-poll before re-submit).
+const MAX_ATTEMPTS     = 2
+const RECOVERY_POLL_MS = 30_000   // was 60s
+const FRESH_POLL_MS    = 100_000  // was 5min
 
 async function runWithCreditSafeRetry(
   job: ImageJob,
@@ -494,7 +470,9 @@ export async function generatePackImages(
   options.onProgress?.(done, failed, total, totalRetries)
 
   // ── Z8: concurrency 2 → 6 (3x throughput) ────────────────────────────
-  const concurrency = options.concurrency ?? 6
+  // Z23 — concurrency 6 → 8. KIE backend tolerates 8 parallel /gpt4o-image
+  // submissions; bottleneck is per-image latency, not API rate limit.
+  const concurrency = options.concurrency ?? 8
   let cursor = 0
 
   await new Promise<void>((resolve) => {
