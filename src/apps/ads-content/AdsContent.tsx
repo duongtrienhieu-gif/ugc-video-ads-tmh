@@ -10,10 +10,6 @@ import InputPanel from './components/InputPanel'
 import OutputPanel from './components/OutputPanel'
 import AutoSaveIndicator from '../../components/AutoSaveIndicator'
 import { useSessionPersist } from '../../services/sessionPersistence'
-import {
-  mapFormulaToAdsPreset, mapLabToneToAdsTones,
-} from '../lab-content/services/handoffMapping'
-import type { LabBriefHandoff } from '../lab-content/types'
 
 interface AdsContentSnapshot {
   selectedProductId: string | null
@@ -92,27 +88,13 @@ export default function AdsContent() {
     deps: [selectedProduct?.id, result, isGenerating, presetId, platform, lengthMode, toneIds, ctaStrength, educationalMode],
   })
 
-  // Accept productId / lab-brief hand-off from other apps
+  // Accept productId hand-off from other apps (e.g. Finder → Ads Content)
   useEffect(() => {
     if (activeApp !== 'ads-content') return
     if (!interAppPayload || interAppPayload.targetApp !== 'ads-content') return
     if (interAppPayload.targetField === 'productId') {
       const product = getProductById(interAppPayload.data as string)
       if (product) setSelectedProduct(product)
-    } else if (interAppPayload.targetField === 'lab-brief') {
-      // Pre-fill form from a Lab Content strategic brief.
-      const handoff = interAppPayload.data as LabBriefHandoff
-      const product = getProductById(handoff.productId)
-      if (product) setSelectedProduct(product)
-      setPresetId(mapFormulaToAdsPreset(handoff.angle.recommendedFormula))
-      const mappedTones = mapLabToneToAdsTones(handoff.toneId) as ToneId[]
-      if (mappedTones.length > 0) setToneIds(mappedTones)
-      // Conversion / retargeting goal → harder CTA; awareness / engagement → softer.
-      if (handoff.goal === 'conversion' || handoff.goal === 'retargeting') {
-        setCtaStrength('hard')
-      } else {
-        setCtaStrength('soft')
-      }
     }
     consumePayload()
   }, [interAppPayload, activeApp, consumePayload, getProductById])

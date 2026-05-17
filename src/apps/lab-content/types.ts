@@ -84,6 +84,46 @@ export interface LabBriefParams {
   customToneNote?: string
 }
 
+// ── Inline content generation per angle ───────────────────────────────────
+// Phase 1.5 — Lab Content now generates caption + script INTERNALLY (no
+// hand-off to Ads Content / Script Architect). Results are cached per angle
+// so closing+reopening the modal shows the previous output; only the
+// "Tạo lại" button forces a fresh generation.
+
+export interface CaptionVariation {
+  id: string
+  /** 3-6 word English label for this variation's hook angle (badge text). */
+  hookLabel: string
+  vietnamese: string
+  malay: string
+}
+
+export interface ScriptVariation {
+  id: string
+  /** Vietnamese full UGC video script (voice-over, 25-35s). */
+  vietnamese: string
+  /** Malaysian Malay version. */
+  malay: string
+  /** Optional short label for the variation's angle/pacing. */
+  variantLabel: string
+}
+
+export interface CaptionOutput {
+  variations: CaptionVariation[]
+  generatedAt: number
+}
+
+export interface ScriptOutput {
+  variations: ScriptVariation[]
+  generatedAt: number
+}
+
+/** Per-angle cache of generated outputs. Keyed by `ContentAngle.id`. */
+export type AngleOutputs = Record<string, {
+  caption?: CaptionOutput
+  script?: ScriptOutput
+}>
+
 // ── Output ────────────────────────────────────────────────────────────────
 export interface LabBriefResult {
   /** Product link */
@@ -110,6 +150,9 @@ export interface LabBriefResult {
   /** Why this tone fits this product+goal — Vietnamese */
   toneRationaleVi: string
 
+  /** Cached per-angle caption + script outputs. Empty by default. */
+  angleOutputs: AngleOutputs
+
   generatedAt: number
 }
 
@@ -119,15 +162,4 @@ export interface SavedLabBrief extends LabBriefResult {
   /** Friendly user-set title; defaults to "${productName} — ${goalLabel}". */
   title: string
   createdAt: number
-}
-
-// ── Inter-app handoff payload (sent to Ads Content / Script Architect) ────
-export interface LabBriefHandoff {
-  productId: string
-  goal: Goal
-  toneId: ToneId
-  /** The picked angle the user wants to write from. */
-  angle: ContentAngle
-  /** Optional: a specific hook the user pre-selected. */
-  hook?: HookCandidate
 }

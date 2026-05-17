@@ -448,6 +448,7 @@ export async function generateBrief(params: LabBriefParams): Promise<LabBriefRes
     strategySummaryVi: strategyVi || '',
     strategySummaryMy: strategyMy || strategyVi || '',
     toneRationaleVi: toneRationale || '',
+    angleOutputs: {},
     generatedAt: Date.now(),
   }
 }

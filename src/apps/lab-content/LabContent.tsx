@@ -3,13 +3,16 @@ import { useAppStore } from '../../stores/appStore'
 import { useBankStore } from '../../stores/bankStore'
 import type { Product } from '../../stores/types'
 import type {
-  Goal, LabBriefHandoff, LabBriefParams, LabBriefResult, ToneId,
+  ContentAngle, Goal, LabBriefParams, LabBriefResult, ToneId,
 } from './types'
 import { generateBrief } from './services/generateBrief'
+import { generateLabCaption } from './services/generateLabCaption'
+import { generateLabScript } from './services/generateLabScript'
 import { getGoalById } from './services/presets'
 import { useLabContentStore } from './store'
 import InputPanel from './components/InputPanel'
 import OutputPanel from './components/OutputPanel'
+import AngleOutputModal, { type OutputMode } from './components/AngleOutputModal'
 import AutoSaveIndicator from '../../components/AutoSaveIndicator'
 import { useSessionPersist } from '../../services/sessionPersistence'
 
@@ -20,7 +23,7 @@ interface LabContentSnapshot {
   customToneNote: string
   result: LabBriefResult | null
   lastParams: Omit<LabBriefParams, 'productId'> | null
-  savedBriefId: string | null  // if user already pressed "Lưu brief", remember which save
+  savedBriefId: string | null
 }
 
 const DEFAULT_GOAL: Goal = 'conversion'
@@ -37,13 +40,18 @@ export default function LabContent() {
 
   const [savedBriefId, setSavedBriefId] = useState<string | null>(null)
 
+  // ── Inline output modal state ──────────────────────────────────────────
+  const [modalOpen, setModalOpen] = useState(false)
+  const [modalMode, setModalMode] = useState<OutputMode>('caption')
+  const [modalAngle, setModalAngle] = useState<ContentAngle | null>(null)
+  const [modalGenerating, setModalGenerating] = useState(false)
+  const [modalError, setModalError] = useState<string | null>(null)
+
   const lastParamsRef = useRef<Omit<LabBriefParams, 'productId'> | null>(null)
 
   const interAppPayload = useAppStore((s) => s.interAppPayload)
   const consumePayload  = useAppStore((s) => s.consumePayload)
   const activeApp       = useAppStore((s) => s.activeApp)
-  const sendToApp       = useAppStore((s) => s.sendToApp)
-  const openApp         = useAppStore((s) => s.openApp)
   const addToast        = useAppStore((s) => s.addToast)
   const getProductById  = useBankStore((s) => s.getProductById)
   const addSaved        = useLabContentStore((s) => s.add)
@@ -68,7 +76,10 @@ export default function LabContent() {
       if (data.goal)                        setGoal(data.goal)
       if (data.toneId)                      setToneId(data.toneId)
       if (typeof data.customToneNote === 'string') setCustomToneNote(data.customToneNote)
-      if (data.result)                      setResult(data.result)
+      if (data.result) {
+        // Migrate older snapshots that pre-date angleOutputs
+        setResult({ ...data.result, angleOutputs: data.result.angleOutputs ?? {} })
+      }
       if (data.lastParams)                  lastParamsRef.current = data.lastParams
       if (data.savedBriefId)                setSavedBriefId(data.savedBriefId)
     },
@@ -76,7 +87,7 @@ export default function LabContent() {
     getTitleVi: () => selectedProduct?.productName,
     getProgressVi: () =>
       result
-        ? 'Đã có brief — sẵn sàng push sang Ads / Kịch bản'
+        ? 'Đã có brief — sẵn sàng tạo caption / kịch bản'
         : isGenerating
           ? 'Đang phân tích chiến lược...'
           : selectedProduct
@@ -99,6 +110,7 @@ export default function LabContent() {
     consumePayload()
   }, [interAppPayload, activeApp, consumePayload, getProductById])
 
+  // ── Brief generation ────────────────────────────────────────────────────
   const runGeneration = async (params: Omit<LabBriefParams, 'productId'>) => {
     if (!selectedProduct) return
     lastParamsRef.current = params
@@ -117,7 +129,7 @@ export default function LabContent() {
     }
   }
 
-  const handleRegenerate = () => {
+  const handleRegenerateBrief = () => {
     if (!lastParamsRef.current) return
     void runGeneration(lastParamsRef.current)
   }
@@ -133,25 +145,93 @@ export default function LabContent() {
     addToast('Đã lưu brief vào History', 'success')
   }
 
-  const handlePushToAdsContent = (handoff: LabBriefHandoff) => {
-    sendToApp({
-      targetApp: 'ads-content',
-      targetField: 'lab-brief',
-      data: handoff,
-    })
-    openApp('ads-content')
-    addToast(`Đã mở Ads Content với góc "${handoff.angle.titleVi}"`, 'info')
+  // ── Modal open + generation ────────────────────────────────────────────
+  const handleOpenCaption = (angle: ContentAngle) => {
+    setModalAngle(angle)
+    setModalMode('caption')
+    setModalError(null)
+    setModalOpen(true)
+    // Auto-generate if no cached output exists for this angle
+    const cached = result?.angleOutputs?.[angle.id]?.caption
+    if (!cached) void runCaptionGeneration(angle, false)
   }
 
-  const handlePushToScriptArchitect = (handoff: LabBriefHandoff) => {
-    sendToApp({
-      targetApp: 'script-architect',
-      targetField: 'lab-brief',
-      data: handoff,
-    })
-    openApp('script-architect')
-    addToast(`Đã mở Kịch bản UGC với góc "${handoff.angle.titleVi}"`, 'info')
+  const handleOpenScript = (angle: ContentAngle) => {
+    setModalAngle(angle)
+    setModalMode('script')
+    setModalError(null)
+    setModalOpen(true)
+    const cached = result?.angleOutputs?.[angle.id]?.script
+    if (!cached) void runScriptGeneration(angle, false)
   }
+
+  const runCaptionGeneration = async (angle: ContentAngle, isRetry: boolean) => {
+    if (!result) return
+    setModalGenerating(true)
+    setModalError(null)
+    try {
+      const output = await generateLabCaption(result, angle)
+      // Merge into angleOutputs
+      setResult((prev) => {
+        if (!prev) return prev
+        const existing = prev.angleOutputs[angle.id] ?? {}
+        return {
+          ...prev,
+          angleOutputs: {
+            ...prev.angleOutputs,
+            [angle.id]: { ...existing, caption: output },
+          },
+        }
+      })
+      sessionApi.forceSave()
+      if (isRetry) addToast('Đã tạo lại caption', 'success')
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      setModalError(msg)
+    } finally {
+      setModalGenerating(false)
+    }
+  }
+
+  const runScriptGeneration = async (angle: ContentAngle, isRetry: boolean) => {
+    if (!result) return
+    setModalGenerating(true)
+    setModalError(null)
+    try {
+      const output = await generateLabScript(result, angle)
+      setResult((prev) => {
+        if (!prev) return prev
+        const existing = prev.angleOutputs[angle.id] ?? {}
+        return {
+          ...prev,
+          angleOutputs: {
+            ...prev.angleOutputs,
+            [angle.id]: { ...existing, script: output },
+          },
+        }
+      })
+      sessionApi.forceSave()
+      if (isRetry) addToast('Đã tạo lại kịch bản', 'success')
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      setModalError(msg)
+    } finally {
+      setModalGenerating(false)
+    }
+  }
+
+  const handleModalRegenerate = () => {
+    if (!modalAngle) return
+    if (modalMode === 'caption') void runCaptionGeneration(modalAngle, true)
+    else                          void runScriptGeneration(modalAngle, true)
+  }
+
+  const cachedModalOutput = (() => {
+    if (!modalAngle || !result) return null
+    const slot = result.angleOutputs?.[modalAngle.id]
+    if (!slot) return null
+    return modalMode === 'caption' ? slot.caption ?? null : slot.script ?? null
+  })()
 
   return (
     <div className="flex h-full flex-col lg:flex-row">
@@ -178,12 +258,23 @@ export default function LabContent() {
           result={result}
           isGenerating={isGenerating}
           isAlreadySaved={!!savedBriefId}
-          onRegenerate={handleRegenerate}
+          onRegenerate={handleRegenerateBrief}
           onSave={handleSave}
-          onPushToAdsContent={handlePushToAdsContent}
-          onPushToScriptArchitect={handlePushToScriptArchitect}
+          onOpenCaption={handleOpenCaption}
+          onOpenScript={handleOpenScript}
         />
       </div>
+
+      <AngleOutputModal
+        open={modalOpen}
+        mode={modalMode}
+        angle={modalAngle}
+        cachedOutput={cachedModalOutput}
+        isGenerating={modalGenerating}
+        error={modalError}
+        onClose={() => setModalOpen(false)}
+        onRegenerate={handleModalRegenerate}
+      />
     </div>
   )
 }

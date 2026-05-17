@@ -1,4 +1,4 @@
-import { Flame, Sparkles, Zap, Megaphone, PenLine } from 'lucide-react'
+import { Flame, Sparkles, Zap, Megaphone, PenLine, CheckCircle2 } from 'lucide-react'
 import type { ElementType } from 'react'
 import type { ContentAngle, AngleType } from '../types'
 
@@ -30,11 +30,15 @@ interface Props {
   angle: ContentAngle
   index: number  // 1, 2, 3
   lang: 'vi' | 'my'
+  /** Whether a caption has already been generated for this angle. */
+  hasCaption?: boolean
+  /** Whether a script has already been generated for this angle. */
+  hasScript?: boolean
   onWriteCaption: () => void
   onWriteScript: () => void
 }
 
-export default function AngleCard({ angle, index, lang, onWriteCaption, onWriteScript }: Props) {
+export default function AngleCard({ angle, index, lang, hasCaption, hasScript, onWriteCaption, onWriteScript }: Props) {
   const meta = TYPE_META[angle.type]
   const Icon = meta.icon
 
@@ -85,23 +89,25 @@ export default function AngleCard({ angle, index, lang, onWriteCaption, onWriteS
         )}
       </div>
 
-      {/* Push-to-tool buttons */}
+      {/* Generate buttons (open modal, content stays inside Lab) */}
       <div className="mt-auto flex gap-1.5">
         <button
           onClick={onWriteCaption}
-          className="flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-pink-300 bg-white px-2 py-1.5 text-[11px] font-semibold text-pink-700 transition-colors hover:bg-pink-50"
-          title="Mở Ads Content với góc này"
+          className="relative flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-pink-300 bg-white px-2 py-1.5 text-[11px] font-semibold text-pink-700 transition-colors hover:bg-pink-50"
+          title={hasCaption ? 'Xem caption đã tạo (có thể tạo lại)' : 'Tạo caption cho góc này'}
         >
           <Megaphone className="h-3 w-3" />
           Caption
+          {hasCaption && <CheckCircle2 className="h-3 w-3 text-emerald-500" />}
         </button>
         <button
           onClick={onWriteScript}
-          className="flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-blue-300 bg-white px-2 py-1.5 text-[11px] font-semibold text-blue-700 transition-colors hover:bg-blue-50"
-          title="Mở Kịch bản UGC với góc này"
+          className="relative flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-blue-300 bg-white px-2 py-1.5 text-[11px] font-semibold text-blue-700 transition-colors hover:bg-blue-50"
+          title={hasScript ? 'Xem kịch bản đã tạo (có thể tạo lại)' : 'Tạo kịch bản cho góc này'}
         >
           <PenLine className="h-3 w-3" />
           Kịch bản
+          {hasScript && <CheckCircle2 className="h-3 w-3 text-emerald-500" />}
         </button>
       </div>
     </div>

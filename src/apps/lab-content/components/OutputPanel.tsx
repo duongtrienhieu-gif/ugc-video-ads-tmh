@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { Sparkles, Save, RefreshCw, Brain, Target, Anchor, Compass } from 'lucide-react'
-import type { LabBriefResult, LabBriefHandoff } from '../types'
+import type { ContentAngle, LabBriefResult } from '../types'
 import { getGoalById, getToneById } from '../services/presets'
 import PainPointCard from './PainPointCard'
 import AngleCard from './AngleCard'
@@ -12,13 +12,13 @@ interface OutputPanelProps {
   isAlreadySaved: boolean
   onRegenerate: () => void
   onSave: () => void
-  onPushToAdsContent: (handoff: LabBriefHandoff) => void
-  onPushToScriptArchitect: (handoff: LabBriefHandoff) => void
+  onOpenCaption: (angle: ContentAngle) => void
+  onOpenScript: (angle: ContentAngle) => void
 }
 
 export default function OutputPanel({
   result, isGenerating, isAlreadySaved,
-  onRegenerate, onSave, onPushToAdsContent, onPushToScriptArchitect,
+  onRegenerate, onSave, onOpenCaption, onOpenScript,
 }: OutputPanelProps) {
   const [lang, setLang] = useState<'vi' | 'my'>('vi')
 
@@ -162,24 +162,17 @@ export default function OutputPanel({
           <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
             {result.angles.map((angle, idx) => {
               const i = (idx + 1) as 1 | 2 | 3
+              const slot = result.angleOutputs?.[angle.id]
               return (
                 <AngleCard
                   key={angle.id}
                   angle={angle}
                   index={i}
                   lang={lang}
-                  onWriteCaption={() => onPushToAdsContent({
-                    productId: result.productId,
-                    goal: result.goal,
-                    toneId: result.toneId,
-                    angle,
-                  })}
-                  onWriteScript={() => onPushToScriptArchitect({
-                    productId: result.productId,
-                    goal: result.goal,
-                    toneId: result.toneId,
-                    angle,
-                  })}
+                  hasCaption={!!slot?.caption}
+                  hasScript={!!slot?.script}
+                  onWriteCaption={() => onOpenCaption(angle)}
+                  onWriteScript={() => onOpenScript(angle)}
                 />
               )
             })}
