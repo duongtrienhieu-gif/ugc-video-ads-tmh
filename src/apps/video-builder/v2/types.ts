@@ -434,6 +434,97 @@ export type EditorialPacingDensity = 'high' | 'medium' | 'low'
  *  60s UGC ad: 0-8% hook, 8-65% body, 65-80% breath, 80-100% CTA. */
 export type EditorialPhase = 'hook' | 'body' | 'education' | 'recovery' | 'cta'
 
+// ═════════════════════════════════════════════════════════════════════════
+// Z22 — TIMELINE RENDERER PHASE
+// ═════════════════════════════════════════════════════════════════════════
+//
+// Consumes EditorialBlueprint (timelineCuts, coverageShots, motion
+// blueprints, transitionGraph, continuityGroups) → produces 25-35 Kling
+// video clips at CUT level (NOT master level). Each cut renders the same
+// master image with DIFFERENT motion / pacing / duration so the final
+// video feels edited, not slideshow.
+
+/** Kling-safe motion grammar. Editorial motion (smash/whip/parallax/...)
+ *  gets normalized to one of these BEFORE sending to Kling. */
+export type KlingSafeMotion =
+  | 'zoom_in'
+  | 'zoom_out'
+  | 'pan_left'
+  | 'pan_right'
+  | 'tilt_up'
+  | 'tilt_down'
+  | 'dolly_in'
+  | 'dolly_out'
+  | 'static'
+  | 'handheld'
+
+/** Status of a single cut render. */
+export type TimelineRenderStatus =
+  | 'pending'
+  | 'queued'
+  | 'generating'
+  | 'completed'
+  | 'failed'
+  | 'cancelled'
+
+/** A single cut waiting to render OR already rendered. Pairs the
+ *  EditorialBlueprint's TimelineCut metadata with the actual Kling job
+ *  state (taskId, videoRef) so the UI can track per-cut progress. */
+export interface TimelineRenderItem {
+  /** 1-indexed cut id — matches TimelineCut.cutId */
+  cutId: number
+  /** Reference to CoverageShot.shotId */
+  coverageShotId: number
+  /** Master scene id (for continuity grouping) */
+  masterSceneId: number
+  /** Start time in seconds (from t=0) */
+  startSec: number
+  /** End time in seconds */
+  endSec: number
+  /** Cut duration */
+  durationSec: number
+  /** asset:xxx ref of the source keyframe (the parent master's approved image) */
+  parentKeyframeRef: string
+  /** Compiled cut-level prompt (single-line, Kling-safe) */
+  prompt: string
+  /** Compiled negative prompt — short, Kling-safe */
+  negativePrompt: string
+  /** Kling-safe motion grammar */
+  klingMotion: KlingSafeMotion
+  /** Visual role for ordering / UI grouping */
+  visualRole: VisualRole
+  /** Editorial phase */
+  phase?: EditorialPhase
+  /** Editorial cut type — for analytics, not sent to Kling */
+  cutType?: EditorialCutType
+  /** Render status */
+  status: TimelineRenderStatus
+  /** Kling task id (when submitted) */
+  taskId?: string
+  /** asset:xxx ref of the rendered video clip (when completed) */
+  videoRef?: string
+  /** Error message on failure */
+  error?: string
+  /** Retry attempts */
+  retryCount?: number
+}
+
+/** Top-level timeline render job. 1:1 with EditorialBlueprint.timelineCuts. */
+export interface TimelineRenderJob {
+  id: string
+  /** Map masterSceneId → keyframe asset ref. Lookup table for resolving
+   *  each cut's parentKeyframeRef. */
+  masterKeyframeRefs: Record<number, string>
+  /** One render item per timelineCut */
+  items: TimelineRenderItem[]
+  isRunning: boolean
+  isPaused: boolean
+  providerLabel: string
+  creditPerClip: number
+  /** Sum of all cut durations — what the final assembled video will be */
+  estimatedDurationSec: number
+}
+
 /** Motion blueprint per coverage shot — drives the downstream video animator
  *  (Kling / Veo / Runway). Static keyframe becomes an animated cut. */
 export interface MotionBlueprint {
