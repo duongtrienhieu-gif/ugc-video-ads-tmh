@@ -201,6 +201,14 @@ export default function OutputPanel({
         />
       </div>
 
+      {/* Z26 — Saved projects pinned at TOP, collapsible. Previously buried
+          at the bottom of the scrollable section list (2000+ px scroll). */}
+      <SavedHistorySection
+        onLoadProject={onLoadProject}
+        loadedFromId={loadedFromId}
+        variant="collapsible"
+      />
+
       <div className="flex-1 overflow-y-auto p-4">
         {/* Section cards */}
         <div className="space-y-3">
@@ -214,8 +222,6 @@ export default function OutputPanel({
             />
           ))}
         </div>
-
-        <SavedHistorySection onLoadProject={onLoadProject} loadedFromId={loadedFromId} />
       </div>
     </div>
   )
@@ -388,10 +394,13 @@ function ProgressMeter({ progress }: { progress: ImageProgress }) {
 // ─────────────────────────────────────────────────────────────────────
 
 function SavedHistorySection({
-  onLoadProject, loadedFromId,
+  onLoadProject, loadedFromId, variant = 'expanded',
 }: {
   onLoadProject?: (id: string) => void
   loadedFromId?: string | null
+  /** 'expanded' = legacy full view (empty state). 'collapsible' = pinned-
+   *  top mini panel that user clicks to expand. Z26. */
+  variant?: 'expanded' | 'collapsible'
 }) {
   const items = useLandingPageStore((s) => s.items)
   const remove = useLandingPageStore((s) => s.remove)
@@ -399,46 +408,114 @@ function SavedHistorySection({
   const updateTitle = useLandingPageStore((s) => s.updateTitle)
   const addToast = useAppStore((s) => s.addToast)
   const [expandedId, setExpandedId] = useState<string | null>(null)
+  // Z26 — collapsible panel: default collapsed when a pack is loaded,
+  // default expanded otherwise. User clicks header to toggle.
+  const [panelOpen, setPanelOpen] = useState(variant === 'expanded')
+  const [search, setSearch] = useState('')
 
   if (items.length === 0) return null
 
-  return (
-    <div className="mt-6 border-t border-black/8 pt-5">
-      <h3 className="mb-2 flex items-center gap-2 text-[11px] font-bold uppercase tracking-widest text-gray-500">
-        <FolderOpen className="h-3.5 w-3.5" />
-        Project → Landing Pages ({items.length})
-      </h3>
-      <p className="mb-3 text-[10px] text-gray-400">
-        Click "Mở" để tiếp tục chỉnh sửa — mọi thay đổi tự lưu lại project.
-      </p>
-      <div className="space-y-2">
-        {items.map((item) => (
-          <SavedRow
-            key={item.id}
-            item={item}
-            isOpen={expandedId === item.id}
-            isLoaded={loadedFromId === item.id}
-            onToggle={() => setExpandedId(expandedId === item.id ? null : item.id)}
-            onRemove={() => remove(item.id)}
-            onOpen={onLoadProject ? () => onLoadProject(item.id) : undefined}
-            onDuplicate={() => {
-              const copy = duplicate(item.id)
-              if (copy) addToast(`✓ Đã nhân bản → "${copy.title}"`)
-            }}
-            onRename={(title) => updateTitle(item.id, title)}
-            onExportJson={() => {
-              const blob = new Blob([JSON.stringify(item, null, 2)], { type: 'application/json' })
-              const url = URL.createObjectURL(blob)
-              const a = document.createElement('a')
-              a.href = url
-              a.download = `${item.title.replace(/[^\w\d-]+/g, '_')}.json`
-              a.click()
-              setTimeout(() => URL.revokeObjectURL(url), 1000)
-              addToast('✓ Đã xuất JSON')
-            }}
-          />
-        ))}
+  // Pin currently-loaded project at the top, then preserve newest-first order
+  const sortedItems = [...items].sort((a, b) => {
+    if (a.id === loadedFromId) return -1
+    if (b.id === loadedFromId) return 1
+    return 0
+  })
+  const filteredItems = search.trim()
+    ? sortedItems.filter((x) => x.title.toLowerCase().includes(search.trim().toLowerCase()))
+    : sortedItems
+
+  const handleExportJson = (item: SavedLandingPack) => {
+    const blob = new Blob([JSON.stringify(item, null, 2)], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `${item.title.replace(/[^\w\d-]+/g, '_')}.json`
+    a.click()
+    setTimeout(() => URL.revokeObjectURL(url), 1000)
+    addToast('✓ Đã xuất JSON')
+  }
+
+  const rows = (
+    <div className={variant === 'collapsible' ? 'max-h-64 space-y-2 overflow-y-auto pr-1' : 'space-y-2'}>
+      {filteredItems.map((item) => (
+        <SavedRow
+          key={item.id}
+          item={item}
+          isOpen={expandedId === item.id}
+          isLoaded={loadedFromId === item.id}
+          onToggle={() => setExpandedId(expandedId === item.id ? null : item.id)}
+          onRemove={() => remove(item.id)}
+          onOpen={onLoadProject ? () => onLoadProject(item.id) : undefined}
+          onDuplicate={() => {
+            const copy = duplicate(item.id)
+            if (copy) addToast(`✓ Đã nhân bản → "${copy.title}"`)
+          }}
+          onRename={(title) => updateTitle(item.id, title)}
+          onExportJson={() => handleExportJson(item)}
+        />
+      ))}
+      {filteredItems.length === 0 && (
+        <p className="px-2 py-3 text-center text-[11px] text-gray-400">
+          Không có project nào khớp "{search}"
+        </p>
+      )}
+    </div>
+  )
+
+  // ── Variant: legacy expanded (empty-state) ─────────────────────────
+  if (variant === 'expanded') {
+    return (
+      <div className="mt-6 border-t border-black/8 pt-5">
+        <h3 className="mb-2 flex items-center gap-2 text-[11px] font-bold uppercase tracking-widest text-gray-500">
+          <FolderOpen className="h-3.5 w-3.5" />
+          Project → Landing Pages ({items.length})
+        </h3>
+        <p className="mb-3 text-[10px] text-gray-400">
+          Click "Mở" để tiếp tục chỉnh sửa — mọi thay đổi tự lưu lại project.
+        </p>
+        {rows}
       </div>
+    )
+  }
+
+  // ── Variant: collapsible (pinned-top, default closed) ──────────────
+  return (
+    <div className="shrink-0 border-b border-black/8 bg-violet-50/30 px-5 py-2">
+      <button
+        type="button"
+        onClick={() => setPanelOpen((v) => !v)}
+        className="flex w-full items-center gap-2 text-left"
+      >
+        <FolderOpen className="h-3.5 w-3.5 text-violet-600" />
+        <span className="text-[11px] font-bold uppercase tracking-widest text-gray-700">
+          Project → Landing Pages
+        </span>
+        <span className="rounded-full bg-violet-100 px-2 py-0.5 text-[10px] font-bold text-violet-700">
+          {items.length}
+        </span>
+        {loadedFromId && (
+          <span className="hidden sm:inline text-[10px] text-violet-600/70">
+            · đang chỉnh: {items.find((x) => x.id === loadedFromId)?.title ?? '?'}
+          </span>
+        )}
+        <ChevronDown className={`ml-auto h-3.5 w-3.5 text-gray-400 transition-transform ${panelOpen ? 'rotate-180' : ''}`} />
+      </button>
+
+      {panelOpen && (
+        <div className="mt-2 space-y-2">
+          {items.length > 4 && (
+            <input
+              type="search"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Tìm project theo tên..."
+              className="w-full rounded-lg border border-black/10 bg-white px-2.5 py-1.5 text-[11px] outline-none focus:border-violet-500/40"
+            />
+          )}
+          {rows}
+        </div>
+      )}
     </div>
   )
 }
