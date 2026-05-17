@@ -43,6 +43,10 @@ function loadFromStorage(): SceneGenJob | null {
       return item
     })
     if (job.status === 'running') job.status = 'paused'
+    // Z9 back-compat: jobs persisted before the parallel-runner upgrade have
+    // no `concurrency` field. Default to 3 (Z9 worker-pool size) so the UI
+    // doesn't render NaN.
+    if (typeof job.concurrency !== 'number') job.concurrency = 3
     return job
   } catch { return null }
 }

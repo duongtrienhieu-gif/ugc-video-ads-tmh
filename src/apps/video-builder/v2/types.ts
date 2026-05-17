@@ -631,11 +631,17 @@ export interface SceneGenJob {
   consistency: ConsistencyConfig
   /** Visual style DNA snapshot */
   dna: VisualStyleDna
-  /** Cost control: skip QC retry loop entirely (1 attempt per scene) */
+  /** Cost control + speed: skip QC retry loop entirely (1 attempt per scene).
+   *  Effectively the "Fast Mode" toggle — defaults to ON in VideoBuilderV2. */
   lowCostMode: boolean
+  /** Z9 perf: number of scenes generated in parallel. KIE comfortably handles
+   *  ~3 concurrent image-edit calls. */
+  concurrency: number
   /** 9 scene items in order */
   items: SceneGenItem[]
-  /** Index of the scene currently being processed (-1 = idle/done) */
+  /** Index of the scene currently being processed (-1 = idle/done).
+   *  In Z9 parallel mode this points at the LAST scene to enter the worker pool
+   *  so the legacy "Đang xử lý cảnh X/N" header still moves forward. */
   currentIdx: number
   /** Overall queue status */
   status: 'idle' | 'running' | 'paused' | 'completed' | 'failed' | 'cancelled'

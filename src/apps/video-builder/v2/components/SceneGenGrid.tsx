@@ -10,13 +10,13 @@
 // Subscribes to sceneGenJobStore — UI updates reactively as the queue runs.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { useState } from 'react'
-import { Loader2, Check, X, RotateCcw, FileText, AlertCircle, Download, Sparkles } from 'lucide-react'
+import { useState, useEffect } from 'react'
+import { Loader2, Check, X, RotateCcw, FileText, AlertCircle, Download, Sparkles, Clock, Zap, Activity } from 'lucide-react'
 import { useSceneGenJobStore } from '../stores/sceneGenJobStore'
 import { useAssetUrl } from '../../../../hooks/useAssetUrl'
 import { QcBadge } from './QcScorePanel'
 import { SCENE_STATUS_LABEL_VI } from '../types'
-import type { SceneGenItem, SceneGenItemStatus } from '../types'
+import type { SceneGenItem, SceneGenItemStatus, SceneGenJob } from '../types'
 
 interface Props {
   onRegenerate: (idx: number) => void
@@ -237,6 +237,88 @@ function SceneCard({
   )
 }
 
+// ─── Z9: ProgressMeter — ETA + scenes/min + active count ──────────────────
+// Shows live throughput so the user trusts the new parallel pipeline and can
+// see exactly how long is left. 1s tick keeps elapsed / ETA fresh between
+// completion events.
+function SceneProgressMeter({ job }: { job: SceneGenJob }) {
+  // `now` lives in state so the component is pure under React 19's purity rule
+  const [now, setNow] = useState(() => Date.now())
+  useEffect(() => {
+    if (job.status !== 'running') return
+    const id = setInterval(() => setNow(Date.now()), 1000)
+    return () => clearInterval(id)
+  }, [job.status])
+
+  const total = job.items.length
+  const approved  = job.items.filter((it) => it.status === 'approved').length
+  const failed    = job.items.filter((it) => it.status === 'failed').length
+  const cancelled = job.items.filter((it) => it.status === 'cancelled').length
+  const finished  = approved + failed + cancelled
+
+  const active = job.items.filter((it) =>
+    it.status === 'generating' || it.status === 'auto_validating' || it.status === 'retrying'
+  ).length
+
+  const elapsedMs  = Math.max(1, now - job.startedAt)
+  const elapsedSec = elapsedMs / 1000
+
+  const scenesPerMin = finished > 0 ? (finished / elapsedSec) * 60 : 0
+
+  let etaText = '…'
+  const remaining = Math.max(0, total - finished)
+  if (finished > 0 && remaining > 0) {
+    const avgMs = elapsedMs / finished
+    // Effective concurrency adjustment: remaining work splits across `active`
+    // (or full concurrency once the pipeline is saturated) so the ETA
+    // reflects parallel throughput, not single-scene time.
+    const effectiveParallel = Math.max(1, Math.min(remaining, job.concurrency))
+    const etaSec = Math.round((remaining * avgMs) / 1000 / effectiveParallel)
+    etaText = etaSec >= 60 ? `${Math.floor(etaSec / 60)}m ${etaSec % 60}s` : `${etaSec}s`
+  } else if (remaining === 0) {
+    etaText = 'xong'
+  }
+
+  const pct = Math.round((finished / Math.max(1, total)) * 100)
+
+  return (
+    <div className="mt-2 space-y-1">
+      <div className="h-1.5 w-full overflow-hidden rounded-full bg-white">
+        <div
+          className="h-full bg-gradient-to-r from-violet-500 to-purple-500 transition-all duration-500"
+          style={{ width: `${pct}%` }}
+        />
+      </div>
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[10px]">
+        <span className="font-bold tabular-nums text-violet-700">
+          {approved}/{total} duyệt
+        </span>
+        {failed > 0 && (
+          <span className="font-bold text-red-600">· {failed} fail</span>
+        )}
+        {active > 0 && (
+          <span className="flex items-center gap-0.5 font-semibold text-violet-700">
+            <Activity className="h-2.5 w-2.5 animate-pulse" /> {active} đang render
+          </span>
+        )}
+        {scenesPerMin > 0 && (
+          <span className="flex items-center gap-0.5 text-violet-600">
+            <Zap className="h-2.5 w-2.5" /> {scenesPerMin.toFixed(1)} cảnh/phút
+          </span>
+        )}
+        {job.status === 'running' && (
+          <span className="flex items-center gap-0.5 font-semibold text-violet-700">
+            <Clock className="h-2.5 w-2.5" /> còn {etaText}
+          </span>
+        )}
+        <span className="ml-auto tabular-nums text-gray-400">
+          {Math.round(elapsedSec)}s đã chạy
+        </span>
+      </div>
+    </div>
+  )
+}
+
 // ── Tiny hover-overlay action button ─────────────────────────────────────
 function IconAction({
   label, color, disabled, onClick, children,
@@ -286,10 +368,7 @@ export default function SceneGenGrid({ onRegenerate, onApprove, onReject, onCanc
   const total = job.items.length
   const approved = job.items.filter((it) => it.status === 'approved').length
   const failed = job.items.filter((it) => it.status === 'failed').length
-  const inFlight = job.currentIdx >= 0 ? job.currentIdx + 1 : 0
   const isRunning = job.status === 'running'
-
-  const overallPct = Math.round((approved / total) * 100)
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
@@ -301,12 +380,21 @@ export default function SceneGenGrid({ onRegenerate, onApprove, onReject, onCanc
               <Sparkles className="h-4 w-4" />
             </div>
             <div>
-              <h2 className="text-base font-bold text-gray-900">Bước 3: Sinh B-Roll từ Master Frame</h2>
+              <h2 className="flex items-center gap-2 text-base font-bold text-gray-900">
+                Bước 3: Sinh B-Roll từ Master Frame
+                <span className={`rounded-full px-2 py-0.5 text-[9px] font-bold ${
+                  job.lowCostMode
+                    ? 'bg-amber-100 text-amber-700'
+                    : 'bg-violet-100 text-violet-700'
+                }`}>
+                  {job.lowCostMode ? '⚡ FAST' : '🎬 HQ'} · ×{job.concurrency}
+                </span>
+              </h2>
               <p className="text-xs text-gray-500">
-                {isRunning && `Đang xử lý cảnh ${inFlight}/${total}... (sequential queue)`}
+                {isRunning && `Parallel × ${job.concurrency} · ưu tiên hook / pain / discovery trước`}
                 {!isRunning && job.status === 'completed' && `✓ Đã xong ${approved}/${total} cảnh${failed > 0 ? ` · ${failed} fail` : ''}`}
                 {!isRunning && job.status === 'failed' && `Hoàn tất nhưng có ${failed} cảnh fail — gen lại từng cảnh nếu cần`}
-                {!isRunning && job.status === 'cancelled' && `Đã hủy ở cảnh ${inFlight}/${total}`}
+                {!isRunning && job.status === 'cancelled' && `Đã hủy queue`}
                 {job.status === 'paused' && `Đã pause`}
               </p>
             </div>
@@ -321,16 +409,8 @@ export default function SceneGenGrid({ onRegenerate, onApprove, onReject, onCanc
           )}
         </div>
 
-        {/* Progress bar */}
-        <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-white">
-          <div
-            className="h-full bg-gradient-to-r from-violet-500 to-purple-500 transition-all duration-500"
-            style={{ width: `${overallPct}%` }}
-          />
-        </div>
-        <p className="mt-1 text-[10px] text-gray-500">
-          {approved}/{total} duyệt · {failed} fail · low-cost mode: {job.lowCostMode ? 'BẬT (1 lần / cảnh)' : 'TẮT (QC + retry)'}
-        </p>
+        {/* Z9: rich progress meter — ETA + active count + scenes/min */}
+        <SceneProgressMeter job={job} />
       </div>
 
       {/* Compact 5-col gallery grid (Midjourney-style scan-and-compare layout) */}

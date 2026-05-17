@@ -422,15 +422,26 @@ export default function StoryboardEditor({
             <ArrowLeft className="h-3.5 w-3.5" /> Quay lại Master Frame
           </button>
           <div className="flex items-center gap-2">
-            {/* Cost-control toggle */}
-            <label className="flex cursor-pointer items-center gap-1.5 rounded-lg border border-amber-300 bg-amber-50/60 px-2 py-1.5 text-[10px] font-semibold text-amber-700">
+            {/* Z9: Fast vs HQ Mode toggle.
+                Fast Mode (default) = no QC retry, single shot per scene → hits
+                the <90s-for-all-scenes target. HQ Mode = full QC + smart retry. */}
+            <label
+              className={`flex cursor-pointer items-center gap-1.5 rounded-lg border px-2 py-1.5 text-[10px] font-semibold transition-colors ${
+                lowCostMode
+                  ? 'border-amber-300 bg-amber-50/60 text-amber-700'
+                  : 'border-violet-300 bg-violet-50/60 text-violet-700'
+              }`}
+              title={lowCostMode
+                ? 'Fast Mode: render nhanh nhất, 1 lần / cảnh (bỏ QC). Tốt cho draft / preview.'
+                : 'HQ Mode: full QC + smart retry. Chậm hơn nhưng identity / packaging chuẩn hơn.'}
+            >
               <input
                 type="checkbox"
                 checked={lowCostMode}
                 onChange={(e) => onLowCostModeChange(e.target.checked)}
-                className="h-3 w-3 accent-amber-600"
+                className={`h-3 w-3 ${lowCostMode ? 'accent-amber-600' : 'accent-violet-600'}`}
               />
-              Low-cost mode (bỏ QC retry)
+              {lowCostMode ? '⚡ Fast Mode (draft nhanh)' : '🎬 HQ Mode (chuẩn QC)'}
             </label>
             <button
               onClick={onContinue}

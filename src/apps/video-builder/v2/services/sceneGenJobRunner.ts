@@ -1,15 +1,18 @@
 // ── Scene Gen Job Runner ─────────────────────────────────────────────────────
-// Orchestrates the sequential 9-scene generation queue. Each scene runs through
+// Orchestrates the 9-scene generation queue. Each scene runs through
 // generateScene() (gen + QC + smart-retry), updates the store on every status
-// change, then moves to the next scene.
+// change.
 //
-// Sequential = 1-by-1, NOT parallel. Reasons:
-//   • KIE rate limits — burst calls trigger 429s
-//   • User can observe progress + abort mid-queue
-//   • Failed scenes don't waste credit if user wants to bail early
+// Z9 PERFORMANCE FIX — was sequential, now PARALLEL:
+//   • Worker-pool concurrency (default 3) — was 1-by-1
+//   • Priority queue — narrative-critical beats render first so the user
+//     sees hero / pain / discovery scenes before fillers
+//   • Each scene still cancellable via job.status='cancelled' between
+//     iterations of the pump (not mid-network-call)
 //
-// Cancellation: setting job.status to 'cancelled' or 'paused' breaks the loop
-// at the next iteration boundary (between scenes, not mid-gen).
+// Cancellation: setting job.status='cancelled' stops the pump from launching
+// any further scenes. In-flight scenes continue to completion (KIE doesn't
+// expose abort) — their results still land in the store.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { useSceneGenJobStore } from '../stores/sceneGenJobStore'
@@ -21,6 +24,7 @@ import type {
   VisualStyleDna,
   SceneGenJob,
   SceneGenItem,
+  SceneType,
 } from '../types'
 
 export interface StartSceneQueueParams {
@@ -32,18 +36,49 @@ export interface StartSceneQueueParams {
   productName: string
   consistency: ConsistencyConfig
   dna: VisualStyleDna
-  /** Cost control: skip QC retry per scene */
+  /** Cost control: skip QC retry per scene (also the "Fast Mode" switch) */
   lowCostMode?: boolean
+  /** Z9: max scenes in flight simultaneously. Default 3 — KIE happily handles
+   *  3 concurrent /gpt4o-image/generate calls. Higher risks 429s. */
+  concurrency?: number
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Z9 PRIORITY QUEUE — lower number = higher priority.
+// Order chosen so the user sees the most-narratively-critical beats first:
+//   hook → pain/frustration/failed_solution → discovery → social_proof/recovery → explanation → lifestyle/cta
+// CTA intentionally LATE — it's a closer, not a hook.
+// ─────────────────────────────────────────────────────────────────────────
+const SCENE_PRIORITY: Record<SceneType, number> = {
+  'hook':            0,
+  'pain':            1,
+  'frustration':     1,
+  'failed_solution': 1,
+  'discovery':       2,
+  'social_proof':    3,
+  'recovery':        3,
+  'explanation':     4,
+  'lifestyle':       5,
+  'cta':             5,
+}
+
+const DEFAULT_PRIORITY = 9  // unknown / missing sceneType falls to bottom
+
+function priorityFor(sceneType: SceneType | undefined): number {
+  if (!sceneType) return DEFAULT_PRIORITY
+  return SCENE_PRIORITY[sceneType] ?? DEFAULT_PRIORITY
 }
 
 /**
- * Initialize the queue store + kick off the sequential runner.
+ * Initialize the queue store + kick off the parallel runner.
  * Returns immediately; the runner runs as a detached promise.
  */
 export function startSceneGenQueue(params: StartSceneQueueParams): void {
   const store = useSceneGenJobStore.getState()
 
-  // Build initial job
+  // Build initial job — items keep storyboard order in the STORE (so the UI
+  // grid still scans left-to-right in narrative order). The runner sorts
+  // INTERNALLY by priority for dispatch.
   const items: SceneGenItem[] = params.blueprints.map((blueprint) => ({
     sceneId: blueprint.sceneId,
     blueprint,
@@ -51,6 +86,8 @@ export function startSceneGenQueue(params: StartSceneQueueParams): void {
     imageUrl: null,
     retryCount: 0,
   }))
+
+  const concurrency = Math.max(1, Math.min(6, params.concurrency ?? 3))
 
   const job: SceneGenJob = {
     startedAt: Date.now(),
@@ -60,6 +97,7 @@ export function startSceneGenQueue(params: StartSceneQueueParams): void {
     consistency: params.consistency,
     dna: params.dna,
     lowCostMode: params.lowCostMode ?? false,
+    concurrency,
     items,
     currentIdx: -1,
     status: 'running',
@@ -67,102 +105,167 @@ export function startSceneGenQueue(params: StartSceneQueueParams): void {
   store.createQueue(job)
 
   // Detached runner — caller does NOT await
-  runQueue(params).catch((err) => {
+  runQueue(params, concurrency).catch((err) => {
     console.error('[sceneGenJobRunner] uncaught error:', err)
     useSceneGenJobStore.getState().setQueueState({ status: 'failed' })
   })
 }
 
-// ── Internal sequential loop ─────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────
+// Z9: PARALLEL WORKER POOL (replaces sequential for-loop).
+// Up to `concurrency` scenes run simultaneously. As each completes, the
+// pump launches the next-priority scene until the queue drains.
+// ─────────────────────────────────────────────────────────────────────────
 
-async function runQueue(params: StartSceneQueueParams): Promise<void> {
-  const store = useSceneGenJobStore.getState
+async function runQueue(params: StartSceneQueueParams, concurrency: number): Promise<void> {
+  const storeGet = useSceneGenJobStore.getState
   const blueprints = params.blueprints
 
-  for (let i = 0; i < blueprints.length; i++) {
-    const currentJob = store().job
-    if (!currentJob) return  // cleared externally — bail
+  // Build dispatch order: indices into `blueprints` sorted by priority.
+  // The store's `items` keeps storyboard order — we only re-order DISPATCH.
+  const dispatchOrder = blueprints
+    .map((bp, idx) => ({ idx, priority: priorityFor(bp.sceneType) }))
+    .sort((a, b) => a.priority - b.priority || a.idx - b.idx)
+    .map((x) => x.idx)
 
-    // User cancelled / paused — exit between iterations
-    if (currentJob.status === 'cancelled' || currentJob.status === 'paused') {
-      console.log(`[sceneGenJobRunner] queue ${currentJob.status} at scene ${i + 1}`)
-      return
-    }
+  console.log(
+    `[sceneGenJobRunner] Z9 parallel queue start: concurrency=${concurrency} · ` +
+    `dispatch order = [${dispatchOrder.map((i) => `${i + 1}(${blueprints[i].sceneType ?? 'na'})`).join(', ')}]`,
+  )
 
-    // Skip already-finished items (in case we're resuming a partial queue)
-    if (currentJob.items[i].status === 'approved' || currentJob.items[i].status === 'failed') {
-      continue
-    }
+  let cursor = 0
+  await new Promise<void>((resolve) => {
+    let active = 0
+    let resolved = false
 
-    store().setQueueState({ currentIdx: i })
-    store().patchItem(i, { status: 'generating', startedAt: Date.now() })
-
-    try {
-      const result = await generateScene({
-        kieApiKey: params.kieApiKey,
-        geminiKey: params.geminiKey,
-        blueprint: blueprints[i],
-        masterFrameUrl: params.masterFrameUrl,
-        identity: params.identity,
-        productName: params.productName,
-        consistency: params.consistency,
-        dna: params.dna,
-        lowCostMode: params.lowCostMode ?? false,
-        onAttempt: (attemptIdx, qc) => {
-          // attemptIdx > 0 → we're in a retry
-          if (attemptIdx === 0) {
-            store().patchItem(i, { status: 'generating' })
-          } else if (qc === null) {
-            store().patchItem(i, { status: 'retrying', retryCount: attemptIdx })
-          } else if (!qc.passed) {
-            store().patchItem(i, { status: 'auto_validating', retryCount: attemptIdx, qc })
-          } else {
-            store().patchItem(i, { status: 'auto_validating', qc })
-          }
-        },
-      })
-
-      // Final accepted (or best-of-N) — auto-approve if QC passed (or lowCostMode)
-      const autoApprove = result.passedOnLastTry || params.lowCostMode
-      store().patchItem(i, {
-        status: autoApprove ? 'approved' : 'rejected',
-        imageUrl: result.imageUrl,
-        promptUsed: result.promptUsed,
-        qc: result.qc,
-        retryCount: result.retryCount,
-        finishedAt: Date.now(),
-      })
-
-      console.log(`[sceneGenJobRunner] scene ${i + 1}/${blueprints.length} done, status=${autoApprove ? 'approved' : 'rejected'}`)
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err)
-      const isCancelled = msg.includes('CANCELLED')
-      store().patchItem(i, {
-        status: isCancelled ? 'cancelled' : 'failed',
-        error: msg.slice(0, 200),
-        finishedAt: Date.now(),
-      })
-      if (isCancelled) {
-        store().setQueueState({ status: 'cancelled' })
-        return
+    const finish = () => {
+      if (resolved) return
+      if (cursor >= dispatchOrder.length && active === 0) {
+        resolved = true
+        resolve()
       }
-      console.error(`[sceneGenJobRunner] scene ${i + 1} failed:`, msg)
-      // Continue to next scene even on failure — don't abandon the whole queue
     }
-  }
+
+    const pump = () => {
+      while (!resolved && active < concurrency && cursor < dispatchOrder.length) {
+        const current = storeGet().job
+        if (!current) { resolved = true; resolve(); return }
+
+        // User cancelled / paused — stop launching new scenes (in-flight ones
+        // finish on their own)
+        if (current.status === 'cancelled' || current.status === 'paused') {
+          console.log(`[sceneGenJobRunner] queue ${current.status} — stopped launching new scenes`)
+          cursor = dispatchOrder.length
+          finish()
+          return
+        }
+
+        const itemIdx = dispatchOrder[cursor++]
+
+        // Skip if this slot already has a terminal result (resume scenarios)
+        if (current.items[itemIdx]?.status === 'approved' || current.items[itemIdx]?.status === 'failed') {
+          continue
+        }
+
+        active++
+        // Move legacy "currentIdx" forward to the latest launched scene so the
+        // existing UI header keeps showing progress
+        storeGet().setQueueState({ currentIdx: itemIdx })
+        storeGet().patchItem(itemIdx, { status: 'generating', startedAt: Date.now() })
+
+        runOne(params, blueprints, itemIdx)
+          .finally(() => {
+            active--
+            pump()
+            finish()
+          })
+      }
+      finish()
+    }
+
+    pump()
+  })
 
   // Queue finished — set final status
-  const final = store().job
+  const final = storeGet().job
   if (final) {
     const anyFailed = final.items.some((it) => it.status === 'failed')
-    store().setQueueState({
+    const wasCancelled = final.status === 'cancelled'
+    storeGet().setQueueState({
       currentIdx: -1,
-      status: anyFailed ? 'failed' : 'completed',
+      status: wasCancelled ? 'cancelled' : anyFailed ? 'failed' : 'completed',
     })
   }
 }
 
+// ─────────────────────────────────────────────────────────────────────────
+// Run ONE scene end-to-end. Used by the worker pool above + manual regen.
+// Patches the store; never throws (errors land in item.error).
+// ─────────────────────────────────────────────────────────────────────────
+async function runOne(
+  params: StartSceneQueueParams,
+  blueprints: SceneBlueprint[],
+  itemIdx: number,
+): Promise<void> {
+  const storeGet = useSceneGenJobStore.getState
+
+  try {
+    const result = await generateScene({
+      kieApiKey: params.kieApiKey,
+      geminiKey: params.geminiKey,
+      blueprint: blueprints[itemIdx],
+      masterFrameUrl: params.masterFrameUrl,
+      identity: params.identity,
+      productName: params.productName,
+      consistency: params.consistency,
+      dna: params.dna,
+      lowCostMode: params.lowCostMode ?? false,
+      onAttempt: (attemptIdx, qc) => {
+        if (attemptIdx === 0) {
+          storeGet().patchItem(itemIdx, { status: 'generating' })
+        } else if (qc === null) {
+          storeGet().patchItem(itemIdx, { status: 'retrying', retryCount: attemptIdx })
+        } else if (!qc.passed) {
+          storeGet().patchItem(itemIdx, { status: 'auto_validating', retryCount: attemptIdx, qc })
+        } else {
+          storeGet().patchItem(itemIdx, { status: 'auto_validating', qc })
+        }
+      },
+    })
+
+    const autoApprove = result.passedOnLastTry || params.lowCostMode
+    storeGet().patchItem(itemIdx, {
+      status: autoApprove ? 'approved' : 'rejected',
+      imageUrl: result.imageUrl,
+      promptUsed: result.promptUsed,
+      qc: result.qc,
+      retryCount: result.retryCount,
+      finishedAt: Date.now(),
+    })
+    console.log(
+      `[sceneGenJobRunner] scene ${itemIdx + 1}/${blueprints.length} done — ` +
+      `status=${autoApprove ? 'approved' : 'rejected'}`,
+    )
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    const isCancelled = msg.includes('CANCELLED')
+    storeGet().patchItem(itemIdx, {
+      status: isCancelled ? 'cancelled' : 'failed',
+      error: msg.slice(0, 200),
+      finishedAt: Date.now(),
+    })
+    if (isCancelled) {
+      // Cancel cascades: mark whole queue cancelled (pump will stop next tick)
+      storeGet().setQueueState({ status: 'cancelled' })
+    } else {
+      console.error(`[sceneGenJobRunner] scene ${itemIdx + 1} failed:`, msg)
+    }
+  }
+}
+
 // ── Manual regen of a single scene (user clicks regen on a card) ─────────────
+// Unchanged — single-scene regen runs as its own detached promise; doesn't
+// touch the worker pool.
 
 export async function regenerateScene(idx: number, params: StartSceneQueueParams): Promise<void> {
   const store = useSceneGenJobStore.getState

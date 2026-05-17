@@ -468,7 +468,9 @@ export default function VideoBuilderV2({ onSwitchToV1 }: Props) {
   }
 
   // ── Module 7: Scene Generation Engine — start the queue ────────────────
-  const [lowCostMode, setLowCostMode] = useState(false)
+  // Z9: Fast Mode default ON — skips QC retry, parallel-friendly, hits the
+  // <90s-for-all-scenes target. User can flip to HQ Mode on the toggle.
+  const [lowCostMode, setLowCostMode] = useState(true)
 
   const handleContinueAfterStoryboard = () => {
     if (!state.identityPack || !state.inputs.product) return
@@ -498,8 +500,14 @@ export default function VideoBuilderV2({ onSwitchToV1 }: Props) {
       consistency: state.consistency,
       dna: defaultVisualStyleDna(),
       lowCostMode,
+      // Z9: parallel worker pool — 3 scenes in flight at once. KIE handles this
+      // comfortably; higher risks 429 rate-limits on the image-edit endpoint.
+      concurrency: 3,
     })
-    addToast(`✓ Đã bắt đầu queue ${state.blueprints.length} cảnh (sequential, ${lowCostMode ? 'low-cost' : 'với QC'})`, 'info')
+    addToast(
+      `⚡ Bắt đầu render ${state.blueprints.length} cảnh — ${lowCostMode ? 'Fast Mode' : 'HQ Mode'} · parallel × 3`,
+      'info',
+    )
   }
 
   // ── Scene Gen UI handlers ─────────────────────────────────────────────
