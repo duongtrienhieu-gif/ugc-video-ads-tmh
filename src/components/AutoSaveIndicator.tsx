@@ -36,24 +36,32 @@ export default function AutoSaveIndicator({
 
   if (hideUntilFirstSave && lastSavedAt === null) return null
 
+  // Mobile (<768px): icon-only pill — hides "Đã lưu tự động" + "x phút
+  // trước" text. Tooltip still shows the timestamp on long-press.
+  // Desktop (md+): full original layout unchanged.
   if (!lastSaveOk) {
     return (
-      <div className="flex items-center gap-1.5 rounded-full border border-red-200 bg-red-50 px-2.5 py-1 text-[11px] font-medium text-red-700">
+      <div
+        className="flex items-center gap-1.5 rounded-full border border-red-200 bg-red-50 px-1.5 py-1 md:px-2.5 text-[11px] font-medium text-red-700"
+        title={labelErr}
+        aria-label={labelErr}
+      >
         <AlertCircle className="h-3 w-3" />
-        {labelErr}
+        <span className="hidden md:inline">{labelErr}</span>
       </div>
     )
   }
 
   return (
     <div
-      className="flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50/60 px-2.5 py-1 text-[11px] font-medium text-emerald-700"
-      title={lastSavedAt ? `Lưu lần cuối: ${formatRelativeVi(lastSavedAt)}` : ''}
+      className="flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50/60 px-1.5 py-1 md:px-2.5 text-[11px] font-medium text-emerald-700"
+      title={lastSavedAt ? `${labelOk} — Lưu lần cuối: ${formatRelativeVi(lastSavedAt)}` : labelOk}
+      aria-label={labelOk}
     >
       <Check className="h-3 w-3" />
-      <span>{labelOk}</span>
+      <span className="hidden md:inline">{labelOk}</span>
       {lastSavedAt && (
-        <span className="text-[10px] font-normal text-emerald-500">· {formatRelativeVi(lastSavedAt)}</span>
+        <span className="hidden md:inline text-[10px] font-normal text-emerald-500">· {formatRelativeVi(lastSavedAt)}</span>
       )}
     </div>
   )

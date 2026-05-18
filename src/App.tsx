@@ -149,11 +149,18 @@ export default function App() {
     <div className="flex h-screen w-screen overflow-hidden bg-[#EEEEF2] text-gray-900 antialiased">
       <Sidebar activeApp={activeApp} onNavigate={openApp} />
       <main className="relative flex-1 overflow-hidden bg-white shadow-sm">
-        {/* API badges top-right */}
-        <div className="absolute right-4 top-3 z-50 flex items-center gap-2">
-          {/* Gemini badge */}
+        {/* API badges top-right.
+            Mobile (<768px): compact icon-only pills — hides "Gemini" word,
+            hides "Credit" suffix, drops the refresh button (status still
+            updates automatically on key change / refresh icon stays as
+            visual indicator). Saves ~50% horizontal space on phones.
+            Desktop (md+): full original layout unchanged. */}
+        <div className="absolute right-2 top-2 md:right-4 md:top-3 z-50 flex items-center gap-1.5 md:gap-2">
+          {/* Gemini badge — same preservation pattern as KIE: inner
+              refresh button only on desktop; mobile uses a full-pill
+              tap overlay so the smaller compact pill stays tappable. */}
           {geminiApiKey && (
-            <div className="flex items-center gap-1.5 rounded-full border border-emerald-200 bg-white px-3 py-1.5 shadow-sm">
+            <div className="relative flex items-center gap-1 md:gap-1.5 rounded-full border border-emerald-200 bg-white px-1.5 py-1 md:px-3 md:py-1.5 shadow-sm">
               {checkingGemini ? (
                 <RefreshCw className="h-3 w-3 animate-spin text-emerald-400" />
               ) : geminiOk === true ? (
@@ -163,33 +170,54 @@ export default function App() {
               ) : (
                 <div className="h-2 w-2 rounded-full bg-emerald-300" />
               )}
-              <span className="text-xs font-semibold text-emerald-600">Gemini</span>
+              <span className="hidden md:inline text-xs font-semibold text-emerald-600">Gemini</span>
+              <span className="md:hidden text-[10px] font-bold text-emerald-600">G</span>
               <button
                 onClick={handleCheckGemini}
                 title="Kiểm tra Gemini key"
-                className="rounded-full p-0.5 text-emerald-400 transition-colors hover:text-emerald-600"
+                className="hidden md:inline-flex rounded-full p-0.5 text-emerald-400 transition-colors hover:text-emerald-600"
               >
                 <RefreshCw className={`h-3 w-3 ${checkingGemini ? 'animate-spin' : ''}`} />
               </button>
+              <button
+                onClick={handleCheckGemini}
+                aria-label="Kiểm tra Gemini key"
+                title="Kiểm tra Gemini key"
+                className="md:hidden absolute inset-0 rounded-full"
+              />
             </div>
           )}
 
-          {/* KIE badge */}
+          {/* KIE badge — preserves the ORIGINAL desktop semantics
+              (outer div is non-clickable, inner refresh button handles
+              the action). On mobile the inner refresh icon is hidden
+              and a `md:hidden` button overlay is mounted instead so the
+              whole compact pill is tappable. */}
           {kieApiKey && (
-            <div className="flex items-center gap-1.5 rounded-full border border-indigo-200 bg-white px-3 py-1.5 shadow-sm">
+            <div className="relative flex items-center gap-1 md:gap-1.5 rounded-full border border-indigo-200 bg-white px-1.5 py-1 md:px-3 md:py-1.5 shadow-sm">
               <span className="text-[10px] font-bold uppercase tracking-wide text-indigo-400">KIE</span>
-              <span className="text-xs font-semibold tabular-nums text-indigo-600">
+              <span className="text-[11px] md:text-xs font-semibold tabular-nums text-indigo-600">
                 {kieCredits !== null
-                  ? `${kieCredits % 1 === 0 ? kieCredits.toLocaleString('vi-VN') : kieCredits.toFixed(2)} Credit`
-                  : '-- Credit'}
+                  ? (kieCredits % 1 === 0 ? kieCredits.toLocaleString('vi-VN') : kieCredits.toFixed(2))
+                  : '--'}
+                <span className="hidden md:inline"> Credit</span>
               </span>
               <button
                 onClick={handleRefreshKie}
                 title="Làm mới KIE credits"
-                className="rounded-full p-0.5 text-indigo-400 transition-colors hover:text-indigo-600"
+                className="hidden md:inline-flex rounded-full p-0.5 text-indigo-400 transition-colors hover:text-indigo-600"
               >
                 <RefreshCw className={`h-3 w-3 ${refreshingKie ? 'animate-spin' : ''}`} />
               </button>
+              {/* Mobile-only full-pill tap target — replaces the hidden
+                  inner refresh button on small screens so users can still
+                  refresh credits with a single tap. */}
+              <button
+                onClick={handleRefreshKie}
+                aria-label="Làm mới KIE credits"
+                title="Làm mới KIE credits"
+                className="md:hidden absolute inset-0 rounded-full"
+              />
             </div>
           )}
         </div>
