@@ -93,10 +93,19 @@ const SECTION_PRIORITY: Record<SectionType, number> = {
 // EXPLICITLY allow every other axis to vary so the section feels like real
 // customer photos taken on different days in different rooms.
 // ─────────────────────────────────────────────────────────────────────────
-// Z23 — compressed from ~700 chars to ~280. Same semantic content, fewer
-// tokens for KIE to process = faster response.
+// Phase 7 stabilization — hardened against fake-brand hallucination.
+// User reported pain/lifestyle sections producing Shaklee, Nutriplus,
+// random detox / supplement bottles instead of the uploaded product.
+// Now explicit fail-rather-than-substitute language + named examples
+// of forbidden hallucinations.
 const PRODUCT_IDENTITY_PREFIX =
-  'PRODUCT LOCK: match reference EXACTLY on brand text, label typography/colors, bottle shape, cap, logo. VARY freely: background, hand pose, lighting, camera angle, bottle rotation. Use the exact brand from reference — no fake brand substitution. Do not redesign the label.'
+  'ABSOLUTE PRODUCT IDENTITY LOCK — read this rule before anything else in the prompt:\n'
+  + '  • The product in this image MUST be PIXEL-FOR-PIXEL the EXACT product visible in the attached reference image(s) (filesUrl).\n'
+  + '  • Match EVERY detail: brand name TEXT on label, label typography, label colors, bottle/jar/sachet SHAPE, packaging proportions, cap style, cap color, logo placement.\n'
+  + '  • You may VARY freely: background scene, lighting, hand pose, camera angle, bottle rotation, scene context.\n'
+  + '  • NEVER invent a different brand. NEVER render a different label. NEVER swap to a similar-looking supplement. NEVER render: Shaklee, Nutriplus, Gastrofeed, Detox Juice, Triple Detox, generic "probiotic supplement bottle", random wellness bottle, fake medicine box, made-up brand text.\n'
+  + '  • If the reference image is not clear enough to replicate, fail rather than substitute. Do NOT hallucinate packaging.\n'
+  + '  • The uploaded reference product is the ONLY product allowed to appear in this generated image.\n'
 
 // ─────────────────────────────────────────────────────────────────────────
 // SECTION-1 HERO CHARACTER LOCK — Malaysian Muslim hijab women only.
@@ -538,29 +547,58 @@ const NEGATIVE_PROMPT_BLOCK =
 function selectRefsForSection(
   type: SectionType,
   pack: LandingPagePack,
+  promptBody?: string,
 ): string[] {
   const memory = pack.visualMemory ?? []
   const refs: string[] = []
 
   // Storytelling — inject hero asset as the master character reference.
-  // The hero section is rendered FIRST (stage-1 sequential dispatch in
-  // generatePackImages), so by the time non-hero people-shots dispatch
-  // the hero's generatedAssetRef is already populated.
   if (pack.form === 'advertorial' && type !== 'hero') {
     const heroSection = pack.sections.find((s) => s.type === 'hero')
     const heroRef = heroSection?.imagePrompts?.[0]?.generatedAssetRef
     if (heroRef) refs.push(heroRef)
   }
 
+  // ── Phase 7 CRITICAL FIX — product identity lock ─────────────────────
+  // User reported pain/lifestyle/before-after sections were producing
+  // RANDOM brands (Shaklee Gastrofeed, Nutriplus Detox Juice, etc) when
+  // the imagePrompt mentioned the product. Root cause: PEOPLE_FOCUS list
+  // excluded these sections from receiving product refs — KIE received
+  // no image reference and invented packaging.
+  //
+  // New rule: if the imagePrompt BODY mentions any product-related token
+  // OR the product's actual name, force-attach the product refs even if
+  // the section type is normally PEOPLE_FOCUS. This guarantees KIE has
+  // a visual reference for the brand whenever a brand is going to be
+  // depicted.
+  const promptLower = (promptBody ?? '').toLowerCase()
+  const productNameLower = (pack.productName ?? '').toLowerCase()
+  const PRODUCT_TOKENS = [
+    'bottle', 'capsule', 'tablet', 'sachet', 'packet', 'tube', 'jar',
+    'supplement', 'probiotic', 'product', 'packaging', 'label',
+    'serum', 'cream', 'gel', 'powder',
+  ]
+  const promptMentionsProduct = memory.length > 0 && (
+    PRODUCT_TOKENS.some((tok) => promptLower.includes(tok))
+    || (productNameLower.length > 3 && promptLower.includes(productNameLower))
+  )
+
+  if (promptMentionsProduct) {
+    // Force-attach product refs to lock identity. Even if the section is
+    // listed in PEOPLE_FOCUS, the imagePrompt explicitly references the
+    // product → we MUST send the reference image to KIE or it invents.
+    const room = Math.max(0, 3 - refs.length)
+    refs.push(...memory.slice(0, room).map((m) => m.ref))
+    return refs
+  }
+
   if (PEOPLE_FOCUS_SECTIONS.has(type)) {
-    // People-focused sections previously got NO refs — but for advertorial
-    // form they now get the hero ref (already pushed above). KIE supports
-    // up to 5 filesUrl so this stays within budget.
+    // Pure people-focused shot with no product mention — no product refs
+    // needed (story portrait, before-after pair, news article mock, etc).
     return refs
   }
 
   if (PRODUCT_FOCUS_SECTIONS.has(type)) {
-    // Cap total refs at 3: keep hero (if any) + up to 2 product memory refs
     const room = Math.max(0, 3 - refs.length)
     refs.push(...memory.slice(0, room).map((m) => m.ref))
   }
@@ -734,7 +772,10 @@ async function runWithCreditSafeRetry(
   onTaskUpdate: (patch: Partial<ImagePrompt>) => void,
   signal?: AbortSignal,
 ): Promise<{ assetRef: string; retries: number }> {
-  const refs = selectRefsForSection(job.section.type, job.pack)
+  // Phase 7 — pass prompt body so selectRefsForSection can auto-attach
+  // product refs when the imagePrompt mentions bottle / capsule / brand
+  // name (prevents KIE from inventing fake brands on people-focus shots).
+  const refs = selectRefsForSection(job.section.type, job.pack, job.prompt.prompt)
   const filesUrl = await resolveRefs(refs)
   const hasProductRefs = filesUrl.length > 0
 
