@@ -47,7 +47,11 @@ export async function listGenerations(limit = 100): Promise<GenerationRow[]> {
     .eq('user_id', userId)
     .order('created_at', { ascending: false })
     .limit(limit)
-  if (error) throw new Error(`[generationsAPI.list] ${error.message}`)
+  if (error) {
+    const code = error.code ? ` [${error.code}]` : ''
+    console.error('[generationsAPI.list] full error:', error)
+    throw new Error(`[generationsAPI.list]${code} ${error.message}`)
+  }
   return (data ?? []) as GenerationRow[]
 }
 
@@ -73,7 +77,17 @@ export async function insertGeneration(input: InsertGenerationInput): Promise<Ge
     })
     .select('*')
     .single()
-  if (error || !data) throw new Error(`[generationsAPI.insert] ${error?.message ?? 'no row returned'}`)
+  if (error || !data) {
+    // P17 fix: surface Supabase error code in the thrown message so
+    // CreativeStudio.tsx translateJobError can map it to a specific
+    // Vietnamese hint (eg 42P01 → "Apply migration SQL").
+    const code    = error?.code    ? ` [${error.code}]`   : ''
+    const details = error?.details ? ` — ${error.details}` : ''
+    const hint    = error?.hint    ? ` (hint: ${error.hint})` : ''
+    const reason  = error?.message ?? 'no row returned'
+    console.error('[generationsAPI.insert] full error:', error)
+    throw new Error(`[generationsAPI.insert]${code} ${reason}${details}${hint}`)
+  }
   return data as GenerationRow
 }
 

@@ -127,9 +127,10 @@ export default function CreativeStudio() {
   // ── Generations store — DB-backed job list (right panel) ───────────
   const jobs        = useGenerationsStore((s) => s.jobs)
   const hydrate     = useGenerationsStore((s) => s.hydrate)
-  const hydrated    = useGenerationsStore((s) => s.hydrated)
-  const hydrating   = useGenerationsStore((s) => s.hydrating)
-  const removeJob   = useGenerationsStore((s) => s.removeJob)
+  const hydrated     = useGenerationsStore((s) => s.hydrated)
+  const hydrating    = useGenerationsStore((s) => s.hydrating)
+  const hydrateError = useGenerationsStore((s) => s.hydrateError)
+  const removeJob    = useGenerationsStore((s) => s.removeJob)
 
   // Hydrate once on mount — pulls full history from Supabase
   useEffect(() => { void hydrate() }, [hydrate])
@@ -157,32 +158,65 @@ export default function CreativeStudio() {
   const canGenerate = !!selectedAssetTypeId && apiKeysOk && reqsMet
 
   // ── Fire a generation job (non-blocking) ───────────────────────────
+  //
+  // P17 fix: full pre-validation + structured error logging + specific
+  // Vietnamese error messages instead of generic "kiểm tra kết nối".
+  // Debounced via inFlightRef so spam-clicking doesn't double-create.
+
+  const inFlightRef = useRef(false)
+
   async function handleGenerate() {
-    if (!canGenerate || !selectedAssetTypeId) return
-    // P16 — DNA + Config decides realism / camera / mood automatically.
-    // The only thing UI passes through is OPTIONAL marketing copy
-    // overrides (headline / cta / notes) — the engine picks up these
-    // when its Config tells it to (cta-banner reads customHeadline,
-    // infographic reads userNotes, etc).
+    // ── Debounce: prevent double-create on rapid clicks ──────────
+    if (inFlightRef.current) {
+      console.warn('[CreativeStudio] generate already in-flight, ignoring click')
+      return
+    }
+
+    // ── Pre-validation: tell user EXACTLY what's missing ─────────
+    if (!selectedAssetTypeId) {
+      addToast('Vui lòng chọn loại creative ở Bước 1', 'error')
+      return
+    }
+    if (reqs?.requireProduct && !productImageRef) {
+      addToast('Vui lòng tải sản phẩm ở Bước 2', 'error')
+      return
+    }
+    if (needsKie && !kieApiKey) {
+      addToast('Thiếu KIE.ai API key — vào Cài đặt để thêm', 'error')
+      return
+    }
+    if (needsGemini && !geminiApiKey) {
+      addToast('Thiếu Gemini API key — vào Cài đặt để thêm', 'error')
+      return
+    }
+
+    // ── Build payload + log it for debug ─────────────────────────
     const options: Record<string, unknown> = {}
     if (optHeadline.trim()) options.customHeadline = optHeadline.trim()
     if (optCta.trim())      options.customCta      = optCta.trim()
     if (optNotes.trim())    options.userNotes      = optNotes.trim()
 
+    const payload = {
+      creativeType: selectedAssetTypeId,
+      inputs: {
+        productId:     selectedProduct?.id,
+        modelId:       reqs?.requireAvatar ? selectedAvatar?.id : undefined,
+        referenceRefs: reqs?.requireReference ? referenceRefs : undefined,
+        options,
+      },
+    }
+    console.info('[CreativeStudio] createJob payload', payload)
+
+    inFlightRef.current = true
     try {
-      await runGeneration({
-        creativeType: selectedAssetTypeId,
-        inputs: {
-          productId:     selectedProduct?.id,
-          modelId:       reqs?.requireAvatar ? selectedAvatar?.id : undefined,
-          referenceRefs: reqs?.requireReference ? referenceRefs : undefined,
-          options,
-        },
-      })
+      await runGeneration(payload)
       addToast(`Đã thêm vào hàng đợi: ${catalogEntry?.title.vi ?? selectedAssetTypeId}`, 'success')
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'unknown'
-      addToast(msg.includes('Phiên đăng nhập') ? msg : 'Không tạo được job — kiểm tra kết nối', 'error')
+      // Log FULL error to console for debug, then translate to actionable Vietnamese
+      console.error('[CreativeStudio] CREATE JOB ERROR', err)
+      addToast(translateJobError(err), 'error')
+    } finally {
+      inFlightRef.current = false
     }
   }
 
@@ -379,6 +413,22 @@ export default function CreativeStudio() {
             )}
           </div>
 
+          {/* P17 fix — surface hydrate error so user knows immediately
+              if the Supabase migration wasn't applied. */}
+          {hydrateError && (
+            <div className="mx-5 mt-3 rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-[11px] text-red-700">
+              <p className="font-bold">Không load được history</p>
+              <p className="mt-1 text-red-600">{translateJobError(new Error(hydrateError))}</p>
+              {hydrateError.toLowerCase().includes('does not exist') && (
+                <p className="mt-1 text-red-500/80">
+                  → Mở Supabase Dashboard → SQL Editor → paste{' '}
+                  <code className="rounded bg-red-100 px-1 py-0.5 font-mono">migrations/creative_generations.sql</code>{' '}
+                  → Run
+                </p>
+              )}
+            </div>
+          )}
+
           {/* Workspace grid */}
           <div className="flex-1 overflow-y-auto p-5">
             {hydrated && jobs.length === 0 ? (
@@ -417,6 +467,50 @@ export default function CreativeStudio() {
       />
     </div>
   )
+}
+
+// ── Error translation (P17 fix) ──────────────────────────────────────
+//
+// Map raw Supabase / API errors → actionable Vietnamese toast text.
+// Full error stays in console.error for diagnostic.
+
+function translateJobError(err: unknown): string {
+  const msg = err instanceof Error ? err.message : String(err)
+  const low = msg.toLowerCase()
+
+  // Most common cause after Phase 13 deploy — migration not applied
+  if (low.includes('relation') && low.includes('does not exist')) {
+    return 'Bảng creative_generations chưa tồn tại — apply file migrations/creative_generations.sql trên Supabase Dashboard rồi thử lại'
+  }
+  if (low.includes('42p01')) {
+    return 'Database chưa setup — chạy SQL migration cho creative_generations'
+  }
+  // RLS / permission
+  if (low.includes('row-level security') || low.includes('rls')) {
+    return 'Quyền truy cập DB bị từ chối — kiểm tra Supabase RLS policy của creative_generations'
+  }
+  // Auth
+  if (low.includes('phiên đăng nhập') || low.includes('jwt') || low.includes('not authenticated')) {
+    return 'Phiên đăng nhập đã hết — đăng nhập lại'
+  }
+  // API key
+  if (low.includes('api key')) {
+    return 'Thiếu API key — vào Cài đặt'
+  }
+  // Credit
+  if (low.includes('credit') || low.includes('insufficient')) {
+    return 'Hết KIE credit — nạp thêm rồi thử lại'
+  }
+  // Network
+  if (low.includes('network') || low.includes('fetch') || low.includes('timeout')) {
+    return `Lỗi mạng khi tạo job — thử lại (${msg.slice(0, 60)})`
+  }
+  // Validation
+  if (low.includes('null value') || low.includes('not-null') || low.includes('violates check')) {
+    return `Payload thiếu trường — ${msg.slice(0, 80)}`
+  }
+  // Default: surface raw message (clipped) — never the generic "kiểm tra kết nối"
+  return `Tạo job thất bại: ${msg.slice(0, 100)}`
 }
 
 // ── Job card wrapper — memoized so unrelated state changes don't re-render
