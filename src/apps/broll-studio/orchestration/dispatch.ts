@@ -61,8 +61,8 @@ const uiNativeDispatcher: EngineDispatcher = (module, params) =>
  * is no longer the generic notYetImplemented stub. P8 will only need
  * to fill the dispatcher body; this slot stays unchanged.
  */
-const designedGraphicDispatcher: EngineDispatcher = (module) =>
-  dispatchDesignedGraphic(module as DesignedGraphicModule)
+const designedGraphicDispatcher: EngineDispatcher = (module, params) =>
+  dispatchDesignedGraphic(module as DesignedGraphicModule, params)
 
 export const ENGINE_DISPATCH: Record<AssetModule['engineGroup'], EngineDispatcher> = {
   'photographic':      photographicDispatcher,

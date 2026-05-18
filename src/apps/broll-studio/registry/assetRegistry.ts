@@ -44,6 +44,10 @@ import { module as tiktokFeedbackModule }   from '../engines/ui-native/tiktok-fe
 import { module as facebookCommentModule }  from '../engines/ui-native/facebook-comment/module'
 import { module as tiktokCommentModule }    from '../engines/ui-native/tiktok-comment/module'
 
+// ── P8: Designed-Graphic modules — STATIC IMPORTS ONLY ────────────────────
+import { module as infographicModule }      from '../engines/designed-graphic/infographic/module'
+import { module as ctaBannerModule }        from '../engines/designed-graphic/cta-banner/module'
+
 /** Union of all module shapes — discriminated by engineGroup field. */
 export type AssetModule =
   | PhotographicModule
@@ -91,9 +95,9 @@ export const ASSET_REGISTRY: Partial<Record<AssetTypeId, AssetModule>> = {
   'facebook-comment':   facebookCommentModule,
   'tiktok-comment':     tiktokCommentModule,
 
-  // ── P8 will add designed-graphic modules here ──────────────────────
-  // 'infographic':        infographicModule,
-  // 'cta-banner':         ctaBannerModule,
+  // ── P8: Designed-Graphic modules ────────────────────────────────────
+  'infographic':        infographicModule,
+  'cta-banner':         ctaBannerModule,
 }
 
 /** List of asset ids currently implemented (registry has a value). */

@@ -1,37 +1,178 @@
-// ── Designed-Graphic Engine Dispatcher (P7 entry — scaffold for P8) ─────────
+// ── Designed-Graphic Engine Dispatcher (P8 — body filled) ───────────────────
 //
-// Runtime pipeline for designed-graphic modules. P7 lands the typed
-// entry point — replaces the notYetImplemented stub in
-// orchestration/dispatch.ts. P8 will flesh out the actual canvas
-// composition + KIE atomic background generation when the first
-// concrete modules (infographic / cta-banner) are wired.
+// Runtime pipeline for designed-graphic modules. Replaces the P7 stub.
 //
-// Why land a typed entry now rather than at P8:
-//   • Wiring is a one-line change in dispatch.ts — easier reviewed when
-//     paired with the QC v2 commit than later with the module commits
-//   • The error message becomes more useful (cites the resolved module
-//     id and points to the right phase) than a generic stub
-//   • Future P8 work doesn't need to touch orchestration
+// Flow:
+//   1. Resolve product context from bankStore (productId required)
+//   2. Resolve typography / layout / colorTheme via module builders
+//      (caller can override via params.options.{layoutId, typographyId,
+//      colorThemeId})
+//   3. Generate text content payload (Gemini Text) OR consume
+//      params.options.content (caller short-circuit)
+//   4. Resolve product image URL from bankStore
+//   5. Render canvas via the platform renderer
+//      (rendererKind from module.metadata.engineExtras)
+//   6. Save asset (JPEG, no post-process drift — designed assets
+//      should be pixel-clean unlike ui-native screenshots)
+//   7. Normalize output via factory
 
 import type { DesignedGraphicModule } from '../../types/designedGraphic'
-import type { GeneratedAsset } from '../../types/asset'
+import type { GenerateAssetParams, GeneratedAsset } from '../../types/asset'
+import type { UINativeLocale } from '../../types/uiNative'
+import { useSettingsStore } from '../../../../stores/settingsStore'
+import { useBankStore } from '../../../../stores/bankStore'
+import { saveAsset, getUrl, isAssetRef } from '../../../../utils/assetStore'
+import { canvasToBlob } from '../ui-native/_shared/canvas'
+import {
+  generateInfographicContent,
+  generateCtaBannerContent,
+  type InfographicContent,
+  type CtaBannerContent,
+  type ContentRequest,
+} from './_textPayload'
+import { renderInfographic } from './infographic/template'
+import { renderCtaBanner } from './cta-banner/template'
+
+async function toPublicUrl(ref: string): Promise<string | null> {
+  if (!ref) return null
+  if (isAssetRef(ref)) return await getUrl(ref)
+  if (ref.startsWith('blob:') || ref.startsWith('data:')) {
+    const r = await fetch(ref)
+    if (!r.ok) return null
+    const blob = await r.blob()
+    const assetId = await saveAsset(blob, blob.type || 'image/jpeg')
+    return await getUrl(assetId)
+  }
+  return ref
+}
 
 export async function dispatchDesignedGraphic(
   module: DesignedGraphicModule,
+  params: GenerateAssetParams = {},
 ): Promise<GeneratedAsset> {
-  // P8 will:
-  //   1. Resolve product + supporting refs from bankStore
-  //   2. Build layout + typography + colorTheme via module builders
-  //   3. Generate the background AI region (KIE GPT-4o atomic)
-  //   4. Compose the canvas (typography + layout + bg region)
-  //   5. Post-process + saveAsset
-  //   6. Normalize output
+  const settings = useSettingsStore.getState()
 
-  throw new Error(
-    `[designed-graphic dispatcher] Module "${module.id}" is registered, but the `
-    + 'designed-graphic runtime pipeline has not been implemented yet. '
-    + 'Pipeline lands in P8 (infographic + cta-banner). For now, the foundation '
-    + '(types, factory, design-system tokens) is in place — see '
-    + 'engines/designed-graphic/_buildModule.ts and shared/design-system/.',
+  // ── Step 1: resolve product context ────────────────────────────────
+  const bank = useBankStore.getState()
+  const product = params.productId ? bank.getProductById(params.productId) : null
+
+  // ── Step 2: build design tokens via the module's builders ──────────
+  const layout = module.buildLayout(params)
+  const typography = module.buildTypography(params)
+  const colorTheme = module.buildColorTheme(params)
+
+  // ── Step 3: text content ──────────────────────────────────────────
+  const opts = (params.options ?? {}) as Record<string, unknown>
+  const locale = (opts.locale as UINativeLocale | undefined) ?? 'vi-VN'
+
+  // Determine renderer kind from module engineExtras (set by the
+  // factory spec — eg 'infographic' or 'cta-banner')
+  const rendererKind = readRendererKind(module, params)
+
+  if (!settings.geminiApiKey && !opts.content) {
+    throw new Error('[designed-graphic dispatcher] Missing Gemini API key (or supply params.options.content to short-circuit text generation)')
+  }
+
+  const productImageRef = product?.productImage
+    ? await toPublicUrl(product.productImage)
+    : null
+  const productImageUrl = productImageRef ?? undefined
+
+  // ── Step 4: render the canvas ─────────────────────────────────────
+  let canvas: HTMLCanvasElement
+  if (rendererKind === 'infographic') {
+    const content = (opts.content as InfographicContent | undefined)
+      ?? await generateInfographicContent(settings.geminiApiKey, buildContentReq('infographic', product ?? null, opts, locale))
+    canvas = await renderInfographic({
+      content,
+      layout,
+      typography,
+      colorTheme,
+      productImageUrl,
+    })
+  } else if (rendererKind === 'cta-banner') {
+    const content = (opts.content as CtaBannerContent | undefined)
+      ?? await generateCtaBannerContent(settings.geminiApiKey, buildContentReq('cta-banner', product ?? null, opts, locale))
+    canvas = await renderCtaBanner({
+      content,
+      layout,
+      typography,
+      colorTheme,
+      productImageUrl,
+    })
+  } else {
+    throw new Error(`[designed-graphic dispatcher] Unknown rendererKind "${rendererKind}" — module "${module.id}" misconfigured engineExtras.rendererKind`)
+  }
+
+  // ── Step 5: save (no crop drift / authenticity post-process —
+  //     designed assets stay pixel-clean) ─────────────────────────────
+  const blob = await canvasToBlob(canvas, 'image/jpeg', 0.94)
+  const assetRef = await saveAsset(blob, 'image/jpeg')
+
+  console.info('[designed-graphic dispatcher]', {
+    assetType: module.id,
+    rendererKind,
+    canvasSize: layout.canvasSize,
+    blobSize: blob.size,
+  })
+
+  // ── Step 6: normalize output via factory ──────────────────────────
+  return module.normalizeOutput(
+    { outputUrl: assetRef, productId: params.productId },
+    params,
   )
+}
+
+// ── Helpers ────────────────────────────────────────────────────────────
+
+function readRendererKind(module: DesignedGraphicModule, params: GenerateAssetParams): string {
+  // First check the engineExtras encoded by the factory spec
+  const normalized = module.normalizeOutput({ outputUrl: 'unused' }, params)
+  const extras = normalized.metadata.engineExtras as Record<string, unknown> | undefined
+  const kind = extras?.['rendererKind']
+  if (typeof kind === 'string') return kind
+  // Fallback: map by module id (defensive default)
+  if (module.id === 'infographic') return 'infographic'
+  if (module.id === 'cta-banner')  return 'cta-banner'
+  return ''
+}
+
+interface BankProductLike {
+  productName?: string
+  productDescription?: string
+  targetMarket?: string
+  /** Freeform string from bankStore — newline / comma separated. */
+  benefits?: string
+  usps?: string
+  offer?: string
+}
+
+/** Split a freeform benefits / usps string into an array. Accepts
+ *  newline, semicolon, bullet glyphs, or commas as separators. */
+function splitList(s: string | undefined): string[] | undefined {
+  if (!s) return undefined
+  const parts = s
+    .split(/\n|;|•|·|—|\s\|\s/)
+    .map((p) => p.replace(/^\s*[-*•·]\s*/, '').trim())
+    .filter((p) => p.length > 1)
+  return parts.length ? parts : undefined
+}
+
+function buildContentReq(
+  kind: 'infographic' | 'cta-banner',
+  product: BankProductLike | null,
+  opts: Record<string, unknown>,
+  locale: UINativeLocale,
+): ContentRequest {
+  return {
+    kind,
+    locale,
+    productName:        product?.productName ?? (opts.productName as string | undefined) ?? 'this product',
+    productDescription: product?.productDescription ?? (opts.productDescription as string | undefined),
+    niche:              (opts.niche as string | undefined) ?? product?.targetMarket,
+    benefits:           (opts.benefits as string[] | undefined) ?? splitList(product?.benefits),
+    usps:               (opts.usps as string[] | undefined) ?? splitList(product?.usps),
+    offer:              (opts.offer as string | undefined) ?? product?.offer,
+    tone:               opts.tone as string | undefined,
+  }
 }

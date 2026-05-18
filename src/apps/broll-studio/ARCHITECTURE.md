@@ -1,11 +1,11 @@
 # Creative Studio Architecture (broll-studio app)
 
-> **Status**: Phase 7 — Authenticity QC v2 + designed-graphic group
-> entry. Every ui-native generation now runs through a two-tier QC
-> pipeline (local heuristics always, Gemini Vision opt-in). The
-> designed-graphic dispatcher is now a typed entry point (replaces the
-> last notYetImplemented stub) so P8 only needs to fill the body.
-> Existing `BrollStudio.tsx` still on its legacy direct-KIE path.
+> **Status**: Phase 8 — Designed-Graphic group complete (infographic +
+> cta-banner). Three engine groups all serving concrete modules:
+> photographic (9), ui-native (6), designed-graphic (2) = **17
+> implemented asset types**. Existing `BrollStudio.tsx` still on its
+> legacy direct-KIE path; new modules reachable only via
+> `generateAssets()`.
 
 ## Folder map
 
@@ -109,8 +109,8 @@ The orchestrator:
 | **P4** | ✅ done | Continuity engine + persona library + emotional beats (foundation) |
 | **P5** | ✅ done | UI-Native MVP: Chat Proof (WhatsApp + Messenger) |
 | **P6** | ✅ done | UI-Native expansion: Shopee + TikTok Shop + Facebook + TikTok comments |
-| **P7** | ✅ done (this commit) | Authenticity QC v2 + designed-graphic group entry |
-| **P8** | pending | Designed-Graphic group: Infographic + CTA Banner |
+| **P7** | ✅ done | Authenticity QC v2 + designed-graphic group entry |
+| **P8** | ✅ done (this commit) | Designed-Graphic group: Infographic + CTA Banner |
 | **P9** | pending | Shared utils cleanup + cross-app QC promotion |
 | **P10** | pending | App id rename (broll-studio → creative-studio) with alias |
 
@@ -492,6 +492,123 @@ shared/design-system/
 - `orchestration/generateAssets.ts` — byte-identical
 - `orchestration/generateAssetSequence.ts` — byte-identical
 - `registry/*` — byte-identical
+- `src/apps/landing-page/`, `src/apps/video-builder/` — untouched
+- `src/stores/*`, `src/utils/*`, `App.tsx`, `Sidebar.tsx` — untouched
+
+## P8 — Designed-Graphic Group (Infographic + CTA Banner)
+
+P8 fills the designed-graphic dispatcher body (P7 left it stubbed)
+and ships 2 concrete modules built via the
+`buildDesignedGraphicModule` factory. All three engine groups now
+have concrete modules and live dispatchers.
+
+ASSET_REGISTRY now has **17 implemented entries** (9 photographic +
+6 ui-native + 2 designed-graphic).
+
+### Pipeline
+
+```
+generateAssets('infographic', { productId, options })
+  → dispatchDesignedGraphic(module, params)
+      1. Resolve product context from bankStore
+      2. module.buildLayout / buildTypography / buildColorTheme
+         (caller overrides via opts.layoutId / typographyId /
+         colorThemeId)
+      3. Generate text content via Gemini Text — or short-circuit
+         via opts.content (typed InfographicContent | CtaBannerContent)
+      4. Resolve product image URL from bankStore for the hero visual
+      5. Render canvas via the platform renderer
+         (rendererKind 'infographic' → renderInfographic;
+          rendererKind 'cta-banner'  → renderCtaBanner)
+      6. canvasToBlob (JPEG, quality 0.94 — pixel-clean, no
+         authenticity post-process drift like ui-native does)
+      7. saveAsset → assetRef
+      8. module.normalizeOutput (factory-provided)
+```
+
+### New files
+
+```
+engines/designed-graphic/
+├─ _dispatcher.ts                BODY FILLED — see above pipeline
+├─ _buildModule.ts               (P7, unchanged)
+├─ _textPayload.ts               generateInfographicContent +
+│                                generateCtaBannerContent (Gemini text)
+├─ infographic/
+│  ├─ module.ts                  buildDesignedGraphicModule spec
+│  └─ template.ts                renderInfographic()
+└─ cta-banner/
+   ├─ module.ts
+   └─ template.ts                renderCtaBanner()
+```
+
+### Renderer architecture
+
+Each renderer is pure canvas — no Gemini, no KIE. Pulls the
+already-resolved content + design tokens and lays them out:
+
+**Infographic (4:5, 1080×1350)**
+- Background gradient from colorTheme.gradient
+- Uppercase title in primary color
+- Hero stat: large display value + accent unit suffix + label line
+- Accent divider bar
+- Numbered bullet rows (1-5 items, splitVertical layout)
+- Optional product image inset top-right (220px rounded square)
+- Footnote at bottom (caption typography, 55% alpha)
+
+**CTA Banner (4:5, 1080×1350)**
+- Background gradient
+- Product image hero on top 42% of canvas (rounded, cover-fit, clip)
+- Offer pill (uppercase caption, accent fill, primary text)
+- Display headline (left-aligned, 800 weight)
+- Subheadline (72% alpha, body size)
+- Full-width CTA button at bottom (primary fill, uppercase text,
+  arrow glyph on right)
+
+### Caller short-circuit
+
+```ts
+// Skip the Gemini call:
+generateAssets('infographic', {
+  productId: 'prod_xxx',
+  options: {
+    content: {
+      title: 'GIẢM 47% MẤT NGỦ',
+      heroStat: { value: '47', unit: '%', label: 'cải thiện sau 2 tuần' },
+      bullets: ['Ngủ sâu trong 7 phút', 'Tỉnh táo buổi sáng', 'Không phụ thuộc'],
+      footnote: 'Nghiên cứu nội bộ, 200 người dùng, 2024',
+    },
+    layoutId:     'infographic-4x5',
+    colorThemeId: 'wellness-clean',
+  },
+})
+```
+
+### Design token override knobs
+
+Caller can pass any of these via `params.options`:
+- `layoutId` → key in `LAYOUT_PRESETS`
+- `typographyId` → key in `TYPOGRAPHY_PRESETS`
+- `colorThemeId` → key in `COLOR_THEMES`
+- `content` → typed payload to short-circuit Gemini
+- `locale` → `'vi-VN'` (default) | `'my-MY'` | `'id-ID'` | `'global'`
+- `tone` → free-form tone hint for content generation
+- `benefits` / `usps` / `offer` / `niche` / `productName` /
+  `productDescription` → override the bankStore lookup
+
+### Boundaries — what P8 did NOT touch
+
+- `BrollStudio.tsx` — byte-identical (still legacy direct-KIE path)
+- `services/qcProduct.ts` — byte-identical
+- P3 photographic — byte-identical
+- P4 continuity / persona / beats — byte-identical
+- P5 / P6 ui-native modules + dispatcher — byte-identical
+- P7 QC pipeline — byte-identical (designed-graphic does not run
+  the ui-native authenticity QC; pixel-clean output is its own QC)
+- `orchestration/generateAssets.ts` — byte-identical
+- `orchestration/generateAssetSequence.ts` — byte-identical
+- `registry/groups.ts` — byte-identical (already declared
+  infographic + cta-banner in P2 ASSET_TO_GROUP)
 - `src/apps/landing-page/`, `src/apps/video-builder/` — untouched
 - `src/stores/*`, `src/utils/*`, `App.tsx`, `Sidebar.tsx` — untouched
 
