@@ -830,7 +830,10 @@ function buildFinalPrompt(job: ImageJob, hasProductRefs: boolean): string {
   // from the pair-mate so the same individual threads through BEFORE ↔
   // AFTER. Fixes the "random unrelated people" failure mode. ──────────────
   if (job.section.type === 'before-after') {
-    parts.push(BEFORE_AFTER_IDENTITY_LOCK_DIRECTIVE)
+    // Detect whether pair-mate's ref is already in filesUrl (selectRefsForSection
+    // injects it when generatedAssetRef is ready). Use this to switch the
+    // directive between strict image-to-image lock vs text-only fallback.
+    parts.push(buildBeforeAfterIdentityLock(job, hasProductRefs))
   }
 
   // ── Comparison section: inject structured comparisonData when available so
@@ -954,17 +957,52 @@ const EXPERT_FEEDBACK_DIRECTIVE =
  *  render" line. Combined with pair-ref injection (see selectRefsForSection
  *  before-after branch) this gives KIE a visual identity anchor instead of
  *  relying purely on text description. */
-const BEFORE_AFTER_IDENTITY_LOCK_DIRECTIVE =
-  'BEFORE/AFTER IDENTITY LOCK — non-negotiable per-pair rules:\n'
-  + '  • The BEFORE and AFTER images of EACH PAIR (ba_01↔ba_02, ba_03↔ba_04) MUST depict the SAME individual.\n'
-  + '  • Same face shape, same skin tone, same age, same ethnicity, same hairstyle / hijab style as their pair-mate.\n'
-  + '  • Same room background, same camera framing, same outfit family (slight color shift OK) as their pair-mate.\n'
-  + '  • If a reference image is attached (filesUrl), THAT REFERENCE IS THE BEFORE-STATE PERSON — the AFTER render MUST be visually recognizable as the same individual (same bone structure, same demographic identity).\n'
-  + '  • DIFFERENT clothing pieces between BEFORE and AFTER (no same exact shirt) — natural outfit evolution, no Photoshop split-clone.\n'
-  + '  • DIFFERENT expression: BEFORE = tired / slumped / low-energy; AFTER = relaxed / confident / brighter.\n'
-  + '  • DIFFERENT lighting: BEFORE = cooler dim; AFTER = warmer brighter (same window, different time of day).\n'
-  + '  • Render the Malay label "SEBELUM" (before) OR "SELEPAS" (after) in clean white sans-serif top-left.\n'
-  + '  • ABSOLUTELY FORBIDDEN: different face between BEFORE and AFTER of the same pair; race / body-type swap; gym-influencer transformation aesthetic; sports-bra / activewear / lingerie reveal; English "BEFORE" / "AFTER" labels; collage / split-frame / side-by-side in ONE image.'
+/** Phase 4 — STRENGTHENED before/after identity lock.
+ *  User report from Phase 3 testing: ba_01 vs ba_02 still drifting (skin
+ *  tone differs, hair length differs, perceived face structure differs)
+ *  despite the pair-seed reference image being attached. Needed much
+ *  more aggressive identity-lock language + explicit "fail rather than
+ *  drift" instruction for KIE. */
+function buildBeforeAfterIdentityLock(job: ImageJob, hasPairMateRef: boolean): string {
+  const idx = job.imageIdx
+  const isAfter = idx === 1 || idx === 3
+  const pairLabel = idx <= 1 ? 'A (ba_01 ↔ ba_02)' : 'B (ba_03 ↔ ba_04)'
+  const lines: string[] = []
+  lines.push('BEFORE/AFTER IDENTITY LOCK — STRICT (Phase 4 enforcement):')
+  lines.push(`  • This image belongs to pair ${pairLabel}. The two images in this pair MUST depict the EXACT same individual — only state of health / posture / lighting differ.`)
+
+  if (isAfter && hasPairMateRef) {
+    // AFTER shot WITH pair-mate reference attached as filesUrl[0]
+    lines.push('  • CRITICAL — REFERENCE IMAGE #1 (filesUrl[0]) IS THE SAME PERSON\'S BEFORE-STATE PORTRAIT. The output MUST be visually recognizable as the SAME individual:')
+    lines.push('      ✓ SAME face structure (same jaw line, same cheekbone shape, same nose, same lip shape, same eye distance)')
+    lines.push('      ✓ SAME skin tone (same undertone — warm-medium-tan stays warm-medium-tan; do not lighten / darken)')
+    lines.push('      ✓ SAME age (no 10-year jump — same wrinkle pattern, same age signals at temples / eyes)')
+    lines.push('      ✓ SAME ethnicity (Malay stays Malay; do not drift to Chinese-Malaysian or vice versa)')
+    lines.push('      ✓ SAME hair length + base hair colour (cut not allowed; only minor styling change OK)')
+    lines.push('      ✓ SAME hijab style (if hijab present — keep same coverage style, can change colour)')
+    lines.push('      ✓ SAME body proportions (height / shoulder width / bone frame)')
+    lines.push('  • If the face structure drifts from reference #1, the image is REJECTED. Render the SAME person — do not interpret "DIFFERENT expression" as license to change the face itself.')
+    lines.push('  • What CHANGES between BEFORE and AFTER (these are the ONLY allowed differences):')
+    lines.push('      • Expression: BEFORE = tired / slumped / low-energy; AFTER = relaxed / confident / brighter')
+    lines.push('      • Posture: BEFORE = slouched; AFTER = upright')
+    lines.push('      • Lighting: BEFORE = cooler / dimmer; AFTER = warmer / brighter (SAME window, SAME room)')
+    lines.push('      • Outfit colour / pattern: slight shift OK (same outfit family — both casual home tees, or both modest hijab + loose top); NO sports-bra / activewear swap')
+    lines.push('      • Skin glow: AFTER subtly healthier (no plastic surgery look, no 20-year reversal)')
+    lines.push('  • Render Malay label "SELEPAS" in clean white sans-serif top-left (NEVER English "AFTER").')
+  } else if (isAfter && !hasPairMateRef) {
+    // AFTER shot WITHOUT pair-mate ref (pair-mate failed to render first)
+    lines.push('  • Pair-mate BEFORE image not yet rendered as reference — fall back to TEXT-ONLY identity lock per the section spec.')
+    lines.push('  • This AFTER image MUST share identity with its pair-mate BEFORE image (same face / same age / same ethnicity / same hijab style described in the imagePrompt body).')
+    lines.push('  • Render Malay label "SELEPAS" top-left.')
+  } else {
+    // BEFORE shot (imageIdx 0 or 2) — establishes identity
+    lines.push('  • This is the BEFORE state — it ANCHORS the pair identity. Render a clear, well-lit face that the AFTER render can lock onto.')
+    lines.push('  • Pose: low-energy, slumped, tired expression — but the FACE must be clearly visible (no extreme angle hiding features).')
+    lines.push('  • Render Malay label "SEBELUM" in clean white sans-serif top-left (NEVER English "BEFORE").')
+  }
+  lines.push('  • ABSOLUTELY FORBIDDEN: different face between BEFORE and AFTER of the same pair; race / body-type swap; gym-influencer transformation; sports-bra / activewear / lingerie reveal; English "BEFORE" / "AFTER" labels; collage / split-frame / side-by-side composite in ONE image.')
+  return lines.join('\n')
+}
 
 /** Detect WhatsApp / Shopee / TikTok-Shop / Facebook screenshot jobs.
  *  Matches by section type + imagePrompt.style heuristic so we don't

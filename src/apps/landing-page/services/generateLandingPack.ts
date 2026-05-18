@@ -1017,6 +1017,103 @@ export function injectPriceIntoPrompts(sections: LandingSection[], priceTag: str
 }
 
 // ─────────────────────────────────────────────────────────────────────
+// Phase 4 — Section validation layer.
+//
+// After Gemini returns and sections have been normalised, check that
+// each section has the fields it's supposed to have for its type. If a
+// section is missing required fields, we DON'T drop the section (that
+// would shrink the pack) — instead we log a console warning so the user
+// can see which sections Gemini under-specified, and the renderer's
+// existing defensive fallbacks (free-form prompt for comparison missing
+// schema; text-only identity lock for before-after missing pair) keep
+// the pack functional.
+//
+// This is a NON-FATAL validator — never throws. Output: list of warnings
+// for debug log. ─────────────────────────────────────────────────────────
+
+export interface SectionValidationWarning {
+  sectionType: string
+  field: string
+  issue: string
+}
+
+export function validatePackSections(sections: LandingSection[]): SectionValidationWarning[] {
+  const warnings: SectionValidationWarning[] = []
+  const push = (sectionType: string, field: string, issue: string) =>
+    warnings.push({ sectionType, field, issue })
+
+  for (const s of sections) {
+    // ── comparison must carry structured comparisonData ──────────────
+    if (s.type === 'comparison') {
+      if (!s.comparisonData) {
+        push('comparison', 'comparisonData', 'missing — renderer will fall back to free-form prompt (may produce off-spec layout)')
+      } else {
+        const us = s.comparisonData.us, them = s.comparisonData.them
+        if (!us?.bullets?.length) push('comparison', 'comparisonData.us.bullets', 'empty array')
+        if (!them?.bullets?.length) push('comparison', 'comparisonData.them.bullets', 'empty array')
+        if (us?.bullets && them?.bullets && us.bullets.length !== them.bullets.length) {
+          push('comparison', 'comparisonData.us/them.bullets', `length mismatch us=${us.bullets.length} them=${them.bullets.length} — will be truncated to shorter`)
+        }
+      }
+    }
+    // ── expert-feedback must have 2 distinct reviewer entries ────────
+    if (s.type === 'expert-feedback') {
+      const reviews = s.reviews ?? []
+      if (reviews.length < 2) {
+        push('expert-feedback', 'reviews', `expected exactly 2 expert testimonials, got ${reviews.length}`)
+      } else {
+        if (reviews[0]!.author === reviews[1]!.author) {
+          push('expert-feedback', 'reviews', 'both experts have the same author — spec requires DIFFERENT people')
+        }
+        if (!reviews[0]!.meta || !reviews[1]!.meta) {
+          push('expert-feedback', 'reviews[].meta', 'missing specialty + years on at least one expert')
+        }
+      }
+    }
+    // ── before-after must have exactly 4 image prompts (2 pairs) ────
+    if (s.type === 'before-after') {
+      const n = s.imagePrompts?.length ?? 0
+      if (n !== 4) {
+        push('before-after', 'imagePrompts', `expected exactly 4 (2 pairs), got ${n} — pair-mate identity lock will misfire`)
+      }
+    }
+    // ── whatsapp-testimonials must have 4 prompts (4 chat variants) ─
+    if (s.type === 'whatsapp-testimonials') {
+      const n = s.imagePrompts?.length ?? 0
+      if (n !== 4) {
+        push('whatsapp-testimonials', 'imagePrompts', `expected exactly 4 (2 pure + 2 with attachment), got ${n}`)
+      }
+    }
+    // ── social-proof must have the 5 standard variants ──────────────
+    if (s.type === 'social-proof') {
+      const n = s.imagePrompts?.length ?? 0
+      if (n < 4) {
+        push('social-proof', 'imagePrompts', `expected ≥4 variants (fb + tiktok + shopee + selfie [+ crowd]), got ${n}`)
+      }
+    }
+    // ── Generic: hero/pain/etc that should have prompts have ≥1 ─────
+    const needsPrompts = new Set([
+      'hero', 'pain', 'product-discovery', 'ingredients', 'mechanism',
+      'benefits', 'comparison', 'lifestyle', 'news-proof', 'offer', 'final-cta',
+      'magazine-feature', 'stat-proof', 'web-authority-proof', 'expert-feedback',
+    ])
+    if (needsPrompts.has(s.type) && (!s.imagePrompts || s.imagePrompts.length === 0)) {
+      push(s.type, 'imagePrompts', 'no image prompts emitted — section will render text-only')
+    }
+  }
+
+  if (warnings.length > 0) {
+    console.warn(`[LandingPageAI] section validation: ${warnings.length} warning(s)`)
+    for (const w of warnings) {
+      console.warn(`  • ${w.sectionType}.${w.field}: ${w.issue}`)
+    }
+  } else {
+    console.info('[LandingPageAI] section validation: all OK')
+  }
+  return warnings
+}
+
+// ─────────────────────────────────────────────────────────────────────
 
 /**
  * Phase 2 — Form 1 LEGACY implementation.
@@ -1111,6 +1208,7 @@ export async function legacyGenerateUgcMalaysiaPack(params: LandingGenParams): P
 
   // ── Post-processing: lock price in ecommerce screenshot prompts ──────
   injectPriceIntoPrompts(sections, priceTag)
+  validatePackSections(sections)
 
   return {
     productId: params.productId,

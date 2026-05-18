@@ -31,7 +31,7 @@ import type {
 import type { FormBlueprintModule } from './_types'
 import {
   getGeminiKey, normalizeSection, injectPriceIntoPrompts,
-  extractPriceTag, callGeminiWithMsRetry,
+  extractPriceTag, callGeminiWithMsRetry, validatePackSections,
 } from '../generateLandingPack'
 import { buildProductIntelligence, buildIntelligencePromptBlock } from '../productIntelligence'
 import { useBankStore } from '../../../../stores/bankStore'
@@ -426,6 +426,7 @@ async function buildPack(params: LandingGenParams): Promise<LandingPagePack> {
 
   // 7. Post-process — price injection
   injectPriceIntoPrompts(sections, priceTag)
+  validatePackSections(sections)
 
   return {
     productId: params.productId,
