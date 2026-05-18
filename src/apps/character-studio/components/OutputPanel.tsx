@@ -406,8 +406,9 @@ export default function OutputPanel({ result, isGenerating, onGenerate, onCancel
                   a.download = `character-${Date.now()}.png`
                   a.click()
                 }}
-                className="absolute bottom-3 right-3 flex h-8 w-8 items-center justify-center rounded-full bg-black/60 text-white/70 opacity-0 backdrop-blur-sm transition-opacity group-hover:opacity-100 hover:bg-black/80 hover:text-white"
+                className="absolute bottom-3 right-3 flex h-9 w-9 md:h-8 md:w-8 items-center justify-center rounded-full bg-black/60 text-white/90 backdrop-blur-sm opacity-100 md:opacity-0 transition-opacity md:group-hover:opacity-100 hover:bg-black/80 hover:text-white"
                 title="Tải xuống ảnh"
+                aria-label="Tải xuống ảnh"
               >
                 <Download className="h-4 w-4" />
               </button>
@@ -449,11 +450,14 @@ export default function OutputPanel({ result, isGenerating, onGenerate, onCancel
             )}
           </div>
 
-          {/* Step 1: Generate 3 extra angles (only if not yet started) */}
-          {!hasExtras && (
+          {/* "Tạo 3 biến thể cùng người" — optional additive CTA.
+              Hidden once user has at least started generating extras
+              (the progress bar below replaces it during gen, the angle
+              thumbnails replace it after). */}
+          {!hasExtras && !isGeneratingExtras && (
             <button
               onClick={handleGenerateExtras}
-              disabled={isGeneratingExtras || !kieApiKey}
+              disabled={!kieApiKey}
               title={!kieApiKey ? 'Cần KIE.ai API key trong Cài đặt' : 'Lấy ảnh gốc làm reference, tạo 3 biến thể cùng người qua KIE GPT Image (image-edit, không phải text-to-image)'}
               className="flex w-full items-center justify-center gap-2 rounded-full border border-violet-300 bg-violet-50 px-6 py-3.5 text-[13px] font-semibold text-violet-700 transition-colors hover:bg-violet-100 disabled:opacity-50"
             >
@@ -478,38 +482,52 @@ export default function OutputPanel({ result, isGenerating, onGenerate, onCancel
             </div>
           )}
 
-          {/* Step 2: Save preset (all 4) — visible after extras are generated */}
-          {hasExtras && !isGeneratingExtras && (
-            <div className="flex flex-col gap-2 rounded-xl border border-emerald-200 bg-emerald-50/50 p-3">
-              <p className="text-xs font-semibold text-emerald-700">
-                💾 Lưu preset {allExtrasReady ? '4' : `${1 + extraAngles.filter(Boolean).length}`} ảnh vào Project
-              </p>
-              <input
-                value={presetName}
-                onChange={(e) => setPresetName(e.target.value)}
-                onKeyDown={(e) => { if (e.key === 'Enter' && presetName.trim()) handleSavePreset() }}
-                placeholder='Đặt tên preset, vd: "Sarah hijab - bếp"'
-                disabled={saved}
-                className="rounded-lg border border-emerald-300 bg-white px-3 py-2 text-sm text-gray-800 placeholder-gray-400 outline-none focus:border-emerald-500 disabled:opacity-60"
-              />
-              <button
-                onClick={handleSavePreset}
-                disabled={!presetName.trim() || isSavingPreset || saved}
-                className={`flex w-full items-center justify-center gap-2 rounded-full px-6 py-3 text-[13px] font-bold transition-colors ${saved
-                  ? 'bg-green-500/15 text-green-700'
-                  : 'bg-emerald-600 text-white hover:bg-emerald-700 disabled:bg-gray-200 disabled:text-gray-400'
-                }`}
-              >
-                {saved ? (
-                  <><Check className="h-4 w-4" /> Đã lưu vào Project</>
-                ) : isSavingPreset ? (
-                  <><Loader2 className="h-4 w-4 animate-spin" /> Đang lưu...</>
-                ) : (
-                  <><Save className="h-4 w-4" /> Lưu preset (cả {1 + extraAngles.filter(Boolean).length} ảnh)</>
-                )}
-              </button>
-            </div>
-          )}
+          {/* Save preset — ALWAYS visible once a main result exists,
+              regardless of whether the 3 extra angles have been
+              generated yet. Saves whatever variants are ready (1 main
+              + 0..3 extras). Previously this block was gated behind
+              `hasExtras`, which forced the user to generate 3 extras
+              (consuming credit) before they could save the first image
+              to Project — that was the bug. */}
+          {!isGeneratingExtras && (() => {
+            const validCount = extraAngles.filter(Boolean).length
+            const totalImagesToSave = 1 + validCount
+            const saveLabel = hasExtras
+              ? `Lưu preset (cả ${totalImagesToSave} ảnh)`
+              : 'Lưu ảnh vào Project'
+            const headerLabel = hasExtras
+              ? `💾 Lưu preset ${allExtrasReady ? '4' : totalImagesToSave} ảnh vào Project`
+              : '💾 Lưu ảnh chính vào Project'
+            return (
+              <div className="flex flex-col gap-2 rounded-xl border border-emerald-200 bg-emerald-50/50 p-3">
+                <p className="text-xs font-semibold text-emerald-700">{headerLabel}</p>
+                <input
+                  value={presetName}
+                  onChange={(e) => setPresetName(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter' && presetName.trim()) handleSavePreset() }}
+                  placeholder='Đặt tên, vd: "Sarah hijab - bếp"'
+                  disabled={saved}
+                  className="rounded-lg border border-emerald-300 bg-white px-3 py-2 text-sm text-gray-800 placeholder-gray-400 outline-none focus:border-emerald-500 disabled:opacity-60"
+                />
+                <button
+                  onClick={handleSavePreset}
+                  disabled={!presetName.trim() || isSavingPreset || saved}
+                  className={`flex w-full items-center justify-center gap-2 rounded-full px-6 py-3 text-[13px] font-bold transition-colors ${saved
+                    ? 'bg-green-500/15 text-green-700'
+                    : 'bg-emerald-600 text-white hover:bg-emerald-700 disabled:bg-gray-200 disabled:text-gray-400'
+                  }`}
+                >
+                  {saved ? (
+                    <><Check className="h-4 w-4" /> Đã lưu vào Project</>
+                  ) : isSavingPreset ? (
+                    <><Loader2 className="h-4 w-4 animate-spin" /> Đang lưu...</>
+                  ) : (
+                    <><Save className="h-4 w-4" /> {saveLabel}</>
+                  )}
+                </button>
+              </div>
+            )
+          })()}
         </div>
       </div>
 
@@ -543,7 +561,8 @@ function AngleSlot({
           <button
             onClick={onRegen}
             title={`Tạo lại biến thể ${label}`}
-            className="absolute right-1.5 top-1.5 flex h-7 w-7 items-center justify-center rounded-md bg-black/60 text-white opacity-0 backdrop-blur-sm transition-opacity hover:bg-violet-600 group-hover:opacity-100"
+            aria-label={`Tạo lại biến thể ${label}`}
+            className="absolute right-1.5 top-1.5 flex h-7 w-7 items-center justify-center rounded-md bg-black/60 text-white backdrop-blur-sm opacity-100 md:opacity-0 transition-opacity hover:bg-violet-600 md:group-hover:opacity-100"
           >
             <RotateCcw className="h-3.5 w-3.5" />
           </button>
