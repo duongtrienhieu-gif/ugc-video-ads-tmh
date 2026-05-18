@@ -53,11 +53,12 @@ function PickerTile({ imageUrl, label, hint, accent, onSelectFromBank, onUpload,
   const accentBg     = accent === 'product' ? 'bg-rose-50'      : 'bg-violet-50'
   const accentText   = accent === 'product' ? 'text-rose-700'   : 'text-violet-700'
 
-  // P20 — COMPACT layout: image strip aspect-[4/3], combined
-  // micro-buttons row, no verbose hint text. Optimized for side-by-side
-  // rendering in a 33% left panel.
+  // P24 — ULTRA compact layout (~50% of previous). Fixed h-16 image
+  // strip + tighter padding + smaller icons + hidden hint when filled.
+  // Total tile height ~110px (was ~200px). Keeps the input region from
+  // dominating the left panel.
   return (
-    <div className="flex flex-col gap-1.5 rounded-lg border border-black/10 bg-white p-2">
+    <div className="flex flex-col gap-1 rounded-lg border border-black/10 bg-white p-1.5">
       <div className="flex items-center justify-between">
         <p className="truncate text-[10px] font-bold uppercase tracking-wider text-gray-600">
           {label}
@@ -66,30 +67,30 @@ function PickerTile({ imageUrl, label, hint, accent, onSelectFromBank, onUpload,
           <button type="button" onClick={onClear} className="shrink-0 text-[9px] text-gray-400 hover:text-red-500">Bỏ</button>
         )}
       </div>
-      <div className="aspect-[4/3] w-full overflow-hidden rounded-md border border-dashed border-black/10 bg-gray-50">
+      <div className="h-16 w-full overflow-hidden rounded border border-dashed border-black/10 bg-gray-50">
         {display ? (
-          <img src={display} alt={label} className={`h-full w-full ${accent === 'product' ? 'object-contain p-1' : 'object-cover'}`} />
+          <img src={display} alt={label} className={`h-full w-full ${accent === 'product' ? 'object-contain p-0.5' : 'object-cover'}`} />
         ) : (
           <div className="flex h-full items-center justify-center text-gray-300">
-            {isAvatar ? <UserRound className="h-7 w-7" strokeWidth={1.2} /> : <Package className="h-7 w-7" strokeWidth={1.2} />}
+            {isAvatar ? <UserRound className="h-5 w-5" strokeWidth={1.2} /> : <Package className="h-5 w-5" strokeWidth={1.2} />}
           </div>
         )}
       </div>
-      {hint && <p className="line-clamp-1 text-[9px] text-gray-400">{hint}</p>}
+      {!display && hint && <p className="line-clamp-1 text-[9px] text-gray-400">{hint}</p>}
       <div className="flex gap-1">
         <button
           type="button"
           onClick={onSelectFromBank}
-          className={`flex flex-1 items-center justify-center rounded border ${accentBorder} ${accentBg} px-1.5 py-1 text-[10px] font-semibold ${accentText} hover:opacity-80`}
+          className={`flex flex-1 items-center justify-center rounded border ${accentBorder} ${accentBg} px-1 py-0.5 text-[10px] font-semibold ${accentText} hover:opacity-80`}
         >
           Project
         </button>
         <button
           type="button"
           onClick={() => inputRef.current?.click()}
-          className="flex flex-1 items-center justify-center gap-1 rounded border border-black/10 bg-white px-1.5 py-1 text-[10px] font-semibold text-gray-700 hover:bg-black/[0.04]"
+          className="flex flex-1 items-center justify-center gap-0.5 rounded border border-black/10 bg-white px-1 py-0.5 text-[10px] font-semibold text-gray-700 hover:bg-black/[0.04]"
         >
-          <Upload className="h-3 w-3" /> Upload
+          <Upload className="h-2.5 w-2.5" /> Upload
         </button>
       </div>
       <input
@@ -275,15 +276,16 @@ export default function CreativeStudio() {
       </div>
 
       {/* Body — workspace split (P16: 1fr/2fr = 33% / 67%) */}
-      <div className="grid min-h-0 flex-1 grid-cols-1 overflow-hidden lg:grid-cols-[1fr_2fr]">
+      <div className="grid min-h-0 flex-1 grid-rows-[minmax(0,1fr)] grid-cols-1 overflow-hidden lg:grid-cols-[1fr_2fr]">
         {/* ── LEFT: input panel ─────────────────────────────────
-               P23: aside is now a 2-region flex column:
-                 • TOP — sticky inputs (Product / Avatar / Tạo button)
-                   shrink-0, never scrolls out of view
-                 • BOTTOM — scrollable creative picker + optional copy
-               User can scroll the creative list while Tạo + inputs
-               stay locked in view. */}
-        <aside className="flex flex-col border-b border-r-0 border-black/8 bg-white/40 lg:border-b-0 lg:border-r">
+               P23: aside is a 2-region flex column with sticky top.
+               P24 fix: explicit `min-h-0 overflow-hidden` on the aside
+               itself — without this, the aside grows to fit its child
+               content (picker is long), so the inner flex-1 scroll
+               region has no constrained parent to scroll against. The
+               grid-rows-[minmax(0,1fr)] on the parent forces the row
+               to honor the parent's height instead of fitting content. */}
+        <aside className="flex min-h-0 flex-col overflow-hidden border-b border-r-0 border-black/8 bg-white/40 lg:border-b-0 lg:border-r">
           {/* ── STICKY INPUT REGION ──────────────────────────────── */}
           <div className="shrink-0 border-b border-black/8 bg-white/60 p-4 backdrop-blur-sm">
             <section>

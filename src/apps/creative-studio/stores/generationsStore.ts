@@ -1,19 +1,17 @@
-// ── Generations Store (P13) ────────────────────────────────────────────────
+// ── Generations Store (P13 + P24 resilient mode) ───────────────────────────
 //
-// Workspace-style job store, modeled after Midjourney / Krea / Leonardo:
-//   • Append-only — every "Tạo" click creates a new GenerationJob
-//   • Async — jobs progress through queued → generating → completed/failed
-//     without blocking the UI; user can fire more jobs while previous
-//     ones run
-//   • Persistent — hydrate from Supabase on mount, write through on
-//     every state change
+// Workspace job store. Architectural change in P24:
+//   • Generation NO LONGER depends on DB being available
+//   • createJob/patchJob/removeJob gracefully degrade when Supabase
+//     is unreachable (eg `creative_generations` table missing, RLS
+//     misconfigured, network down)
+//   • Failed DB ops are logged + the job continues in local-only mode
+//     (id prefixed `local_`; never written to DB; lost on F5)
+//   • When DB is healthy, jobs go through the full insert/update flow
+//     and persist across F5 / logout
 //
-// ARCHITECTURE RULE (per P13 spec §"Creative Studio và Landing Page"):
-//   • Does NOT share state with landing-page
-//   • Does NOT share store with landing-page
-//   • Does NOT share DB schema with landing-page
-//   • Tách hoàn toàn — this file lives entirely inside
-//     src/apps/creative-studio/
+// History is OPTIONAL infrastructure. Generation is CORE — never blocks
+// on DB issues.
 
 import { create } from 'zustand'
 import type { GeneratedAsset } from '../types/asset'
@@ -56,21 +54,26 @@ function rowToJob(row: GenerationRow): GenerationJob {
   }
 }
 
+/** True when the id was minted client-side (DB-less mode). */
+function isLocalId(id: string): boolean {
+  return id.startsWith('local_')
+}
+
+function mintLocalId(): string {
+  return `local_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`
+}
+
 // ── Store interface ──────────────────────────────────────────────────
 
 interface GenerationsState {
-  /** Newest first. */
   jobs: GenerationJob[]
   hydrated: boolean
   hydrating: boolean
   hydrateError: string | null
 
-  // ── Actions ────────────────────────────────────────────────────
   hydrate: () => Promise<void>
   createJob: (creativeType: AssetTypeId, inputs: GenerationInputs) => Promise<GenerationJob>
   patchJob: (id: string, patch: Partial<Pick<GenerationJob, 'status' | 'progress' | 'outputs' | 'errorMessage'>>) => Promise<void>
-  /** In-memory only patch — used during the high-frequency rendering
-   *  loop where we don't want a DB roundtrip per progress tick. */
   patchJobLocal: (id: string, patch: Partial<Pick<GenerationJob, 'status' | 'progress' | 'outputs' | 'errorMessage'>>) => void
   removeJob: (id: string) => Promise<void>
 }
@@ -87,40 +90,69 @@ export const useGenerationsStore = create<GenerationsState>((set, get) => ({
     try {
       const rows = await listGenerations()
       const jobs = rows.map(rowToJob)
-      // Any rows left in 'generating' / 'queued' from a previous tab
-      // crash are flattened to 'failed' so the UI doesn't render them
-      // as spinners forever.
       const flattened = jobs.map((j) =>
         j.status === 'generating' || j.status === 'queued'
           ? { ...j, status: 'failed' as const, errorMessage: j.errorMessage ?? 'Bị gián đoạn — thử lại' }
           : j,
       )
       set({ jobs: flattened, hydrated: true, hydrating: false })
+      console.info('[generationsStore.hydrate] loaded', flattened.length, 'jobs from DB')
     } catch (err) {
-      // P19 — failure must NEVER cascade to UI tree. Mark hydrated:true
-      // so the workspace shows the empty state + error banner instead of
-      // spinning forever. Input panel + creative picker continue to work
-      // regardless of history-load failure.
       const msg = err instanceof Error ? err.message : 'unknown'
-      console.error('[generationsStore.hydrate]', err)
+      console.error('[generationsStore.hydrate] DB unavailable — local-only mode active', err)
       set({ hydrating: false, hydrated: true, hydrateError: msg, jobs: [] })
     }
   },
 
+  // ── createJob — ALWAYS succeeds (resilient) ───────────────────────
   createJob: async (creativeType, inputs) => {
-    const row = await insertGeneration({ creativeType, inputs })
-    const job = rowToJob(row)
-    set((state) => ({ jobs: [job, ...state.jobs] }))
-    return job
+    console.info('[generationsStore.createJob] start', { creativeType, inputs })
+
+    // Step 1: append local job immediately so UI gets a card ASAP
+    const localId = mintLocalId()
+    const localJob: GenerationJob = {
+      id: localId,
+      creativeType,
+      status: 'queued',
+      progress: 0,
+      inputs,
+      outputs: [],
+      errorMessage: null,
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    }
+    set((state) => ({ jobs: [localJob, ...state.jobs] }))
+
+    // Step 2: try to upgrade to DB-backed job. If DB is unavailable,
+    // keep the local job. Generation continues either way.
+    try {
+      const row = await insertGeneration({ creativeType, inputs })
+      const dbJob = rowToJob(row)
+      console.info('[generationsStore.createJob] DB insert OK', { id: dbJob.id })
+      set((state) => ({
+        jobs: state.jobs.map((j) => j.id === localId ? dbJob : j),
+      }))
+      return dbJob
+    } catch (err) {
+      console.warn('[generationsStore.createJob] DB insert FAILED — keeping local job', err)
+      // Surface hydrateError so workspace shows the soft notice
+      if (!get().hydrateError) {
+        const msg = err instanceof Error ? err.message : 'DB unavailable'
+        set({ hydrateError: msg })
+      }
+      return localJob
+    }
   },
 
+  // ── patchJob — local-only jobs skip DB; DB-backed jobs write through
   patchJob: async (id, patch) => {
+    console.info('[generationsStore.patchJob]', { id, patch })
     set((state) => ({
       jobs: state.jobs.map((j) =>
         j.id === id ? { ...j, ...patch, updatedAt: Date.now() } : j,
       ),
     }))
-    // Fire-and-forget DB write — local UI already reflects the patch
+    if (isLocalId(id)) return  // local-only — no DB write
     try {
       await updateGeneration(id, {
         status:       patch.status,
@@ -129,7 +161,7 @@ export const useGenerationsStore = create<GenerationsState>((set, get) => ({
         errorMessage: patch.errorMessage,
       })
     } catch (err) {
-      console.error('[generationsStore.patchJob db write failed]', err)
+      console.warn('[generationsStore.patchJob] DB update failed; keeping local state', err)
     }
   },
 
@@ -142,13 +174,13 @@ export const useGenerationsStore = create<GenerationsState>((set, get) => ({
   },
 
   removeJob: async (id) => {
-    // Optimistic remove
     const previousJobs = get().jobs
     set({ jobs: previousJobs.filter((j) => j.id !== id) })
+    if (isLocalId(id)) return  // local-only — already removed from store
     try {
       await deleteGeneration(id)
     } catch (err) {
-      console.error('[generationsStore.removeJob db delete failed; restoring]', err)
+      console.error('[generationsStore.removeJob] DB delete failed; restoring local state', err)
       set({ jobs: previousJobs })
       throw err
     }
