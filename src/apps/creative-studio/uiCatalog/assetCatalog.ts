@@ -407,51 +407,11 @@ export const ASSET_CATALOG: AssetCatalogEntry[] = [
     },
     badges: ['needs-product', 'needs-avatar', 'engine-photo'],
   },
-  {
-    id: 'lifestyle-kitchen',
-    group: 'photographic',
-    categoryId: 'pro-photo',
-    title: { vi: 'Benefit Scene — bếp sáng', en: 'Benefit scene — kitchen' },
-    description: { vi: 'Sản phẩm trong context bếp ấm cúng — gắn vào routine sáng', en: 'Product in kitchen morning context' },
-    aspectRatio: '1:1',
-    iconKey: 'sun',
-    tooltip: {
-      what: 'Render sản phẩm đặt trên counter bếp sáng — nắng buổi sáng qua cửa sổ, người mờ ở hậu cảnh đang pha cà phê / chuẩn bị bữa sáng.',
-      marketingGoal: 'Gắn sản phẩm vào functional moment — khách tưởng tượng dùng SP mỗi sáng trong bếp nhà mình.',
-      suitableFor: ['Thực phẩm chức năng', 'Đồ uống', 'Coffee / matcha', 'Skincare buổi sáng'],
-    },
-    badges: ['needs-product', 'needs-avatar', 'engine-photo'],
-  },
-  {
-    id: 'bathroom-routine',
-    group: 'photographic',
-    categoryId: 'pro-photo',
-    title: { vi: 'Benefit Scene — bathroom', en: 'Benefit scene — bathroom' },
-    description: { vi: 'Counter marble bathroom — vibe self-care premium', en: 'Marble bathroom skincare scene' },
-    aspectRatio: '1:1',
-    iconKey: 'sparkles',
-    tooltip: {
-      what: 'Render sản phẩm trên counter marble bathroom, khăn tắm xếp gọn, người mờ ở hậu cảnh đang soi gương — vibe routine skincare premium.',
-      marketingGoal: 'Gợi cảm giác "self-care premium" — gắn sản phẩm vào nghi thức chăm sóc bản thân chuẩn beauty editorial.',
-      suitableFor: ['Skincare', 'Beauty', 'Premium grooming', 'Mỹ phẩm cao cấp'],
-    },
-    badges: ['needs-product', 'needs-avatar', 'engine-photo'],
-  },
-  {
-    id: 'cafe-lifestyle',
-    group: 'photographic',
-    categoryId: 'pro-photo',
-    title: { vi: 'Benefit Scene — cafe', en: 'Benefit scene — cafe' },
-    description: { vi: 'Bàn cafe + cappuccino + laptop + sản phẩm — vibe urban', en: 'Cafe table urban moment' },
-    aspectRatio: '1:1',
-    iconKey: 'coffee',
-    tooltip: {
-      what: 'Render người ngồi bàn cafe cầm sản phẩm, cappuccino + laptop trên bàn — vibe candid urban / freelancer lifestyle.',
-      marketingGoal: 'Gắn sản phẩm vào lối sống urban / freelancer / millennial — brand vibe trendy.',
-      suitableFor: ['Đồ uống', 'Vitamin', 'Wellness lifestyle', 'Brand trẻ trung'],
-    },
-    badges: ['needs-product', 'needs-avatar', 'engine-photo'],
-  },
+  // P31 — Cảm xúc & lối sống (kitchen / bathroom / cafe) removed from
+  // catalog per user spec: too generic, stock-photo feel, weak
+  // conversion. The underlying photographic configs + engine modules
+  // remain registered so older history rows still resolve, but the
+  // picker UI no longer surfaces them.
 
   // ═══════════════════════════════════════════════════════════════════
   // D. UGC & NGƯỜI THẬT — Photographic engine, people-led. Human trust.

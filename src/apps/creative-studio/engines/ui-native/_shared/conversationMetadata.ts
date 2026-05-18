@@ -48,6 +48,13 @@ export interface ConversationStrings {
   helpful: string
   /** Composer placeholder per platform. */
   composerPlaceholder: (platform: UINativePlatform) => string
+  /** P31 — marketplace app-bar title ("Đánh giá sản phẩm" / "Ulasan
+   *  produk" / "Ulasan produk" / "Product reviews"). Used by Shopee +
+   *  TikTok Shop review templates. */
+  productReviewsTitle: string
+  /** P31 — Messenger "Active now" presence subtitle ("Đang hoạt
+   *  động" / "Aktif sekarang" / "Sedang aktif" / "Active now"). */
+  activeNow: string
 }
 
 export const STRINGS_VI_VN: ConversationStrings = {
@@ -70,6 +77,8 @@ export const STRINGS_VI_VN: ConversationStrings = {
     p === 'facebook'  ? 'Viết bình luận...' :
     p === 'tiktok-comment' ? 'Thêm bình luận...' :
     'Viết...',
+  productReviewsTitle: 'Đánh giá sản phẩm',
+  activeNow: 'Đang hoạt động',
 }
 
 export const STRINGS_MY_MY: ConversationStrings = {
@@ -92,6 +101,8 @@ export const STRINGS_MY_MY: ConversationStrings = {
     p === 'facebook'  ? 'Tulis komen...' :
     p === 'tiktok-comment' ? 'Tambah komen...' :
     'Tulis...',
+  productReviewsTitle: 'Ulasan produk',
+  activeNow: 'Aktif sekarang',
 }
 
 export const STRINGS_ID_ID: ConversationStrings = {
@@ -114,6 +125,8 @@ export const STRINGS_ID_ID: ConversationStrings = {
     p === 'facebook'  ? 'Tulis komentar...' :
     p === 'tiktok-comment' ? 'Tambah komentar...' :
     'Tulis...',
+  productReviewsTitle: 'Ulasan produk',
+  activeNow: 'Sedang aktif',
 }
 
 export const STRINGS_GLOBAL: ConversationStrings = {
@@ -136,6 +149,8 @@ export const STRINGS_GLOBAL: ConversationStrings = {
     p === 'facebook'  ? 'Write a comment...' :
     p === 'tiktok-comment' ? 'Add comment...' :
     'Write...',
+  productReviewsTitle: 'Product reviews',
+  activeNow: 'Active now',
 }
 
 export function findStrings(locale: UINativeLocale): ConversationStrings {

@@ -17,6 +17,7 @@ import {
 } from '../../../shared/canvas'
 import { MESSENGER_LIGHT_2024 } from '../_shared/colors'
 import { renderStatusBar } from '../_shared/statusBar'
+import { findStrings } from '../_shared/conversationMetadata'
 import type { MessageTimeline } from '../_shared/timestamps'
 
 export const MESSENGER_CONVERSATION_TEMPLATE: UINativeTemplate = {
@@ -47,6 +48,8 @@ export async function renderMessengerConversation(
   const palette = MESSENGER_LIGHT_2024
   const size = MESSENGER_CONVERSATION_TEMPLATE.canvasSize
   const { canvas, ctx } = createCanvas(size)
+  // P31 — locale-aware UI strings
+  const S = findStrings(inputs.locale ?? 'vi-VN')
 
   // Background
   ctx.fillStyle = palette.conversationBg
@@ -118,7 +121,7 @@ export async function renderMessengerConversation(
   // "Active now" subtitle
   ctx.font = '400 22px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
   ctx.fillStyle = '#65676B'
-  ctx.fillText('Active now', avatarCx + avatarRadius + 22, avatarCy + 18)
+  ctx.fillText(S.activeNow, avatarCx + avatarRadius + 22, avatarCy + 18)
 
   // Right side icons — phone + video + info dots
   ctx.strokeStyle = '#0084FF'

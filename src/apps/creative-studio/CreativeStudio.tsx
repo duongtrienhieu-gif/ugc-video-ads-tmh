@@ -25,6 +25,7 @@ import BankPicker from '../../components/BankPicker'
 import type { Product, Model } from '../../stores/types'
 
 import type { AssetTypeId } from './types/asset'
+import type { UINativeLocale } from './types/uiNative'
 import { runGeneration } from './runtime/runGeneration'
 import { useGenerationsStore, type GenerationJob } from './stores/generationsStore'
 import AssetTypePicker from './uiCatalog/AssetTypePicker'
@@ -106,6 +107,18 @@ export default function CreativeStudio() {
   const [selectedAvatar, setSelectedAvatar]    = useState<Model | null>(null)
   const [selectedProduct, setSelectedProduct]  = useState<Product | null>(null)
   const [pickerMode, setPickerMode]            = useState<'avatar' | 'product' | null>(null)
+  // P31 — user-selected locale. Persisted to localStorage so the choice
+  // survives reload. Falls back to vi-VN on first visit.
+  const [selectedLocale, setSelectedLocale] = useState<UINativeLocale>(() => {
+    try {
+      const stored = localStorage.getItem('creative-studio:locale')
+      if (stored === 'vi-VN' || stored === 'my-MY' || stored === 'id-ID' || stored === 'global') return stored
+    } catch { /* localStorage unavailable */ }
+    return 'vi-VN'
+  })
+  useEffect(() => {
+    try { localStorage.setItem('creative-studio:locale', selectedLocale) } catch { /* silent */ }
+  }, [selectedLocale])
 
   // ── Bank / settings / toasts ───────────────────────────────────────
   const kieApiKey    = useSettingsStore((s) => s.kieApiKey)
@@ -230,7 +243,7 @@ export default function CreativeStudio() {
       inputs: {
         productId: selectedProduct?.id,
         modelId:   reqs?.requireAvatar ? selectedAvatar?.id : undefined,
-        options:   {},
+        options:   { locale: selectedLocale },   // P31 — user-chosen locale
       },
     }
     console.info('[CreativeStudio] createJob payload', payload)
@@ -335,6 +348,36 @@ export default function CreativeStudio() {
                   </p>
                 </div>
               )}
+            </section>
+
+            {/* P31 — Locale selector. Controls every Gemini call + Canvas
+                template UI string. Persisted to localStorage. */}
+            <section className="mt-3">
+              <p className="mb-1 text-[10px] font-bold uppercase tracking-widest text-gray-500">
+                Ngôn ngữ output
+              </p>
+              <div className="grid grid-cols-4 gap-1">
+                {([
+                  { code: 'vi-VN',  flag: '🇻🇳', label: 'VN' },
+                  { code: 'my-MY',  flag: '🇲🇾', label: 'MY' },
+                  { code: 'id-ID',  flag: '🇮🇩', label: 'ID' },
+                  { code: 'global', flag: '🌐', label: 'EN' },
+                ] as const).map((opt) => (
+                  <button
+                    key={opt.code}
+                    type="button"
+                    onClick={() => setSelectedLocale(opt.code)}
+                    className={`flex items-center justify-center gap-1 rounded-md border px-1.5 py-1 text-[10px] font-semibold transition-colors ${
+                      selectedLocale === opt.code
+                        ? 'border-violet-500 bg-violet-50 text-violet-700 ring-1 ring-violet-200'
+                        : 'border-black/10 bg-white text-gray-600 hover:bg-black/[0.04]'
+                    }`}
+                  >
+                    <span>{opt.flag}</span>
+                    <span>{opt.label}</span>
+                  </button>
+                ))}
+              </div>
             </section>
 
             {/* GENERATE button — premium compact action (P26)

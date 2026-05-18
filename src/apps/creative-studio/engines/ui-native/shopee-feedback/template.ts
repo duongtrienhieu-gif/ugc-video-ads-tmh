@@ -17,6 +17,7 @@ import {
 import { SHOPEE_LIGHT_2024 } from '../_shared/colors'
 import { renderStatusBar } from '../_shared/statusBar'
 import { readRating, readVariant, readHelpful } from '../_shared/textPayload'
+import { findStrings } from '../_shared/conversationMetadata'
 import type { MessageTimeline } from '../_shared/timestamps'
 
 export const SHOPEE_REVIEW_TEMPLATE: UINativeTemplate = {
@@ -47,6 +48,8 @@ export async function renderShopeeReview(
   const palette = SHOPEE_LIGHT_2024
   const size = SHOPEE_REVIEW_TEMPLATE.canvasSize
   const { canvas, ctx } = createCanvas(size)
+  // P31 — locale-aware UI strings (was hardcoded Vietnamese before)
+  const S = findStrings(inputs.locale ?? 'vi-VN')
 
   // Background
   ctx.fillStyle = palette.pageBg
@@ -83,7 +86,7 @@ export async function renderShopeeReview(
   ctx.font = '600 30px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
   ctx.textAlign = 'left'
   ctx.textBaseline = 'middle'
-  ctx.fillText('Đánh giá sản phẩm', 90, headerY + headerH / 2)
+  ctx.fillText(S.productReviewsTitle, 90, headerY + headerH / 2)
 
   // ── Rating summary card ────────────────────────────────────────────
   const summaryY = headerY + headerH + 24
