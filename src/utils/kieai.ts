@@ -187,12 +187,14 @@ export async function submitGptImage2(params: {
   prompt: string
   filesUrl?: string[]
   size: Gpt4oSize
-  /** Resolution — defaults to '2K' for landing-page quality. */
+  /** Resolution — defaults to '1K' (6 credits, same cost as old GPT-4o
+   *  path, faster gen, plenty sharp for landing-page web display). Pass
+   *  '2K' or '4K' explicitly when print-quality is required. */
   resolution?: '1K' | '2K' | '4K'
 }): Promise<{ taskId: string }> {
   const input: Record<string, unknown> = {
     prompt: params.prompt,
-    resolution: params.resolution ?? '2K',
+    resolution: params.resolution ?? '1K',
     aspect_ratio: params.size,
   }
   if (params.filesUrl && params.filesUrl.length > 0) {
