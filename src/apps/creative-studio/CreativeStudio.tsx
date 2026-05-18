@@ -104,6 +104,59 @@ function PickerTile({ imageUrl, label, hint, accent, onSelectFromBank, onUpload,
   )
 }
 
+// ── Inline migration SQL (P21 — Copy SQL button fallback) ──────────────
+// Mirrors migrations/creative_generations.sql so the in-app "Copy SQL"
+// button works even when the file isn't served as a static asset.
+const CREATIVE_GENERATIONS_SQL = `-- Creative Studio — Generations Table (Phase 13)
+-- Apply ONCE: Supabase Dashboard → SQL Editor → paste → Run
+
+create extension if not exists "pgcrypto";
+
+create table if not exists creative_generations (
+  id           uuid primary key default gen_random_uuid(),
+  user_id      uuid not null references auth.users(id) on delete cascade,
+  creative_type text not null,
+  status        text not null check (status in ('queued', 'generating', 'completed', 'failed')),
+  progress      smallint default 0 check (progress >= 0 and progress <= 100),
+  inputs_json   jsonb not null default '{}'::jsonb,
+  outputs_json  jsonb not null default '{}'::jsonb,
+  error_message text,
+  created_at    timestamptz not null default now(),
+  updated_at    timestamptz not null default now()
+);
+
+create index if not exists creative_generations_user_created
+  on creative_generations (user_id, created_at desc);
+
+create or replace function creative_generations_touch_updated_at()
+returns trigger language plpgsql as $$
+begin new.updated_at := now(); return new; end;
+$$;
+
+drop trigger if exists creative_generations_touch_updated_at on creative_generations;
+create trigger creative_generations_touch_updated_at
+  before update on creative_generations
+  for each row execute function creative_generations_touch_updated_at();
+
+alter table creative_generations enable row level security;
+
+drop policy if exists creative_generations_select_own on creative_generations;
+create policy creative_generations_select_own on creative_generations
+  for select using (auth.uid() = user_id);
+
+drop policy if exists creative_generations_insert_own on creative_generations;
+create policy creative_generations_insert_own on creative_generations
+  for insert with check (auth.uid() = user_id);
+
+drop policy if exists creative_generations_update_own on creative_generations;
+create policy creative_generations_update_own on creative_generations
+  for update using (auth.uid() = user_id);
+
+drop policy if exists creative_generations_delete_own on creative_generations;
+create policy creative_generations_delete_own on creative_generations
+  for delete using (auth.uid() = user_id);
+`
+
 // ── Main component ──────────────────────────────────────────────────────
 
 export default function CreativeStudio() {
@@ -225,6 +278,28 @@ export default function CreativeStudio() {
     }
   }
 
+  // ── Copy migration SQL to clipboard (P21 — help user apply table fast)
+  async function handleCopyMigration() {
+    try {
+      const res = await fetch('/migrations/creative_generations.sql')
+      const sql = res.ok
+        ? await res.text()
+        // Inline fallback so the button works even if the static file
+        // path isn't served at runtime (Vercel doesn't serve /migrations
+        // by default — file lives at repo root, not /public).
+        : CREATIVE_GENERATIONS_SQL
+      await navigator.clipboard.writeText(sql)
+      addToast('✓ Đã copy SQL — paste vào Supabase Dashboard → SQL Editor → Run', 'success')
+    } catch {
+      try {
+        await navigator.clipboard.writeText(CREATIVE_GENERATIONS_SQL)
+        addToast('✓ Đã copy SQL — paste vào Supabase Dashboard → SQL Editor → Run', 'success')
+      } catch {
+        addToast('Không copy được — mở file migrations/creative_generations.sql trong repo', 'error')
+      }
+    }
+  }
+
   // ── Per-job delete (DB + store) ────────────────────────────────────
   async function handleDeleteJob(jobId: string) {
     try {
@@ -268,8 +343,7 @@ export default function CreativeStudio() {
                  P20: per user feedback, inputs go ABOVE the creative
                  picker. Product is ALWAYS shown (every creative needs
                  it). Avatar is conditional — only shown when the
-                 selected creative requires it (Messenger / WhatsApp /
-                 etc don't need avatar; UGC selfie / lifestyle do). */}
+                 selected creative requires it. */}
           <section>
             <p className="mb-2 text-[11px] font-bold uppercase tracking-widest text-gray-500">
               {reqs?.requireAvatar ? 'Sản phẩm + Avatar' : 'Sản phẩm'}
@@ -311,6 +385,62 @@ export default function CreativeStudio() {
             )}
           </section>
 
+          {/* ── GENERATE button MOVED UP (P21) — right after inputs.
+                 When DB hasn't been migrated, replace button with an
+                 explicit blocker + "Copy SQL" action so user can
+                 resolve in <30 seconds without leaving the screen. */}
+          {hydrateError ? (
+            <section className="rounded-xl border border-red-300 bg-red-50 p-3">
+              <p className="text-[11px] font-bold uppercase tracking-widest text-red-700">
+                Database chưa setup
+              </p>
+              <p className="mt-1 text-[11px] leading-snug text-red-700">
+                Bảng <code className="rounded bg-red-100 px-1 font-mono">creative_generations</code> chưa tồn tại trên Supabase. Apply migration 1 lần để bắt đầu dùng.
+              </p>
+              <div className="mt-2.5 flex flex-col gap-1.5">
+                <button
+                  type="button"
+                  onClick={handleCopyMigration}
+                  className="flex w-full items-center justify-center gap-1.5 rounded-md bg-red-600 px-3 py-2 text-[11px] font-bold text-white transition-colors hover:bg-red-700"
+                >
+                  📋 Copy SQL migration
+                </button>
+                <p className="text-center text-[9px] leading-snug text-red-600/80">
+                  Rồi mở Supabase Dashboard → SQL Editor → New query → paste → Run → hard refresh trang này
+                </p>
+              </div>
+            </section>
+          ) : (
+            <>
+              <button
+                type="button"
+                onClick={handleGenerate}
+                disabled={!canGenerate}
+                className="flex w-full items-center justify-center gap-2 rounded-full bg-gradient-to-r from-violet-600 to-purple-500 px-6 py-3.5 text-sm font-bold text-white shadow-md transition-all hover:from-violet-700 hover:to-purple-600 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                <Sparkles className="h-4 w-4" /> Tạo asset
+              </button>
+
+              {/* Inline status hints — tell user exactly what's missing */}
+              {!selectedAssetTypeId && (
+                <p className="text-center text-[10px] text-gray-400">
+                  ↓ Chọn loại creative phía dưới
+                </p>
+              )}
+              {selectedAssetTypeId && reqs?.requireProduct && !productImageRef && (
+                <p className="text-center text-[10px] text-amber-600">
+                  ↑ Thêm sản phẩm phía trên
+                </p>
+              )}
+              {needsKie && !kieApiKey && (
+                <p className="text-center text-[10px] text-red-500">Cần KIE.ai API key trong Cài đặt</p>
+              )}
+              {needsGemini && !geminiApiKey && (
+                <p className="text-center text-[10px] text-red-500">Cần Gemini API key trong Cài đặt</p>
+              )}
+            </>
+          )}
+
           {/* ── CREATIVE PICKER (main browsing area, takes most space) */}
           <section>
             <p className="mb-2 text-[11px] font-bold uppercase tracking-widest text-gray-500">
@@ -319,7 +449,7 @@ export default function CreativeStudio() {
             <AssetTypePicker selectedId={selectedAssetTypeId} onSelect={setSelectedAssetTypeId} />
           </section>
 
-          {/* ── OPTIONAL marketing copy (collapsible) ─────────────── */}
+          {/* ── OPTIONAL marketing copy (collapsible, at bottom) ───── */}
           <section className="rounded-xl border border-black/10 bg-black/[0.02]">
             <button
               type="button"
@@ -370,33 +500,7 @@ export default function CreativeStudio() {
             )}
           </section>
 
-          {/* GENERATE button (always render; disabled when prereqs miss) */}
-          <button
-            type="button"
-            onClick={handleGenerate}
-            disabled={!canGenerate}
-            className="mt-1 flex w-full items-center justify-center gap-2 rounded-full bg-gradient-to-r from-violet-600 to-purple-500 px-6 py-3.5 text-sm font-bold text-white shadow-md transition-all hover:from-violet-700 hover:to-purple-600 disabled:cursor-not-allowed disabled:opacity-40"
-          >
-            <Sparkles className="h-4 w-4" /> Tạo asset
-          </button>
-
-          {/* Inline status hints — tell user exactly what's missing */}
-          {!selectedAssetTypeId && (
-            <p className="text-center text-[10px] text-gray-400">
-              ↓ Click "Chọn loại này" trong một card phía dưới
-            </p>
-          )}
-          {selectedAssetTypeId && reqs?.requireProduct && !productImageRef && (
-            <p className="text-center text-[10px] text-amber-600">
-              ↑ Thêm sản phẩm phía trên
-            </p>
-          )}
-          {needsKie && !kieApiKey && (
-            <p className="text-center text-[10px] text-red-500">Cần KIE.ai API key trong Cài đặt</p>
-          )}
-          {needsGemini && !geminiApiKey && (
-            <p className="text-center text-[10px] text-red-500">Cần Gemini API key trong Cài đặt</p>
-          )}
+          {/* (Generate button moved to top — right after inputs in P21) */}
         </aside>
 
         {/* ── RIGHT: output workspace ──────────────────────────── */}
