@@ -15,6 +15,7 @@ import { generateCoc } from './services/generateCoc'
 import { generateSalesLetter } from './services/generateSalesLetter'
 import { generateMultiAngle } from './services/generateMultiAngle'
 import { generateCarousel } from './services/generateCarousel'
+import { generateEngagement } from './services/generateEngagement'
 import { getGoalById } from './services/presets'
 import { useLabContentStore } from './store'
 import InputPanel from './components/InputPanel'
@@ -26,6 +27,7 @@ import CocModal from './components/CocModal'
 import SalesLetterModal from './components/SalesLetterModal'
 import MultiAngleModal from './components/MultiAngleModal'
 import CarouselModal from './components/CarouselModal'
+import EngagementModal from './components/EngagementModal'
 import AutoSaveIndicator from '../../components/AutoSaveIndicator'
 import { useSessionPersist } from '../../services/sessionPersistence'
 
@@ -91,6 +93,11 @@ export default function LabContent() {
   const [carouselOpen, setCarouselOpen] = useState(false)
   const [carouselGenerating, setCarouselGenerating] = useState(false)
   const [carouselError, setCarouselError] = useState<string | null>(null)
+
+  // ── Engagement Posts modal state ───────────────────────────────────────
+  const [engagementOpen, setEngagementOpen] = useState(false)
+  const [engagementGenerating, setEngagementGenerating] = useState(false)
+  const [engagementError, setEngagementError] = useState<string | null>(null)
 
   const lastParamsRef = useRef<Omit<LabBriefParams, 'productId'> | null>(null)
 
@@ -416,6 +423,30 @@ export default function LabContent() {
     }
   }
 
+  // ── Engagement Posts ───────────────────────────────────────────────────
+  const handleOpenEngagement = () => {
+    setEngagementError(null)
+    setEngagementOpen(true)
+    if (!result?.engagementOutput) void runEngagementGeneration()
+  }
+
+  const runEngagementGeneration = async () => {
+    if (!result) return
+    setEngagementGenerating(true)
+    setEngagementError(null)
+    try {
+      const output = await generateEngagement(result)
+      setResult((prev) => prev ? { ...prev, engagementOutput: output } : prev)
+      sessionApi.forceSave()
+      addToast(`Đã tạo ${output.posts.length} engagement posts`, 'success')
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      setEngagementError(msg)
+    } finally {
+      setEngagementGenerating(false)
+    }
+  }
+
   const cachedModalOutput = (() => {
     if (!modalAngle || !result) return null
     const slot = result.angleOutputs?.[modalAngle.id]
@@ -460,6 +491,7 @@ export default function LabContent() {
           onOpenSalesLetter={handleOpenSalesLetter}
           onOpenMultiAngle={handleOpenMultiAngle}
           onOpenCarousel={handleOpenCarousel}
+          onOpenEngagement={handleOpenEngagement}
         />
       </div>
 
@@ -532,6 +564,16 @@ export default function LabContent() {
         error={carouselError}
         onClose={() => setCarouselOpen(false)}
         onGenerate={(structureId) => void runCarouselGeneration(structureId)}
+      />
+
+      <EngagementModal
+        open={engagementOpen}
+        result={result}
+        cachedOutput={result?.engagementOutput ?? null}
+        isGenerating={engagementGenerating}
+        error={engagementError}
+        onClose={() => setEngagementOpen(false)}
+        onGenerate={() => void runEngagementGeneration()}
       />
     </div>
   )

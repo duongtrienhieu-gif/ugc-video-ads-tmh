@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { Sparkles, Save, RefreshCw, Brain, Target, Anchor, Compass, Layers, ScrollText, Layers3, GalleryHorizontal } from 'lucide-react'
+import { Sparkles, Save, RefreshCw, Brain, Target, Anchor, Compass, Layers, ScrollText, Layers3, GalleryHorizontal, MessageSquare } from 'lucide-react'
 import type { ContentAngle, LabBriefResult } from '../types'
 import { getGoalById, getToneById } from '../services/presets'
 import PainPointCard from './PainPointCard'
@@ -20,11 +20,12 @@ interface OutputPanelProps {
   onOpenSalesLetter: () => void
   onOpenMultiAngle: () => void
   onOpenCarousel: () => void
+  onOpenEngagement: () => void
 }
 
 export default function OutputPanel({
   result, isGenerating, isAlreadySaved,
-  onRegenerate, onSave, onOpenCaption, onOpenScript, onOpenHookLab, onOpenFunnel, onOpenCoc, onOpenSalesLetter, onOpenMultiAngle, onOpenCarousel,
+  onRegenerate, onSave, onOpenCaption, onOpenScript, onOpenHookLab, onOpenFunnel, onOpenCoc, onOpenSalesLetter, onOpenMultiAngle, onOpenCarousel, onOpenEngagement,
 }: OutputPanelProps) {
   const [lang, setLang] = useState<'vi' | 'my'>('vi')
 
@@ -239,6 +240,33 @@ export default function OutputPanel({
             >
               <Target className="h-3.5 w-3.5" />
               {result.funnelOutput ? 'Mở Phễu Content (9 caption)' : 'Tạo Phễu Content'}
+            </button>
+          </div>
+        </section>
+
+        {/* Comment Bait / Engagement Posts */}
+        <section>
+          <div className="rounded-2xl border border-emerald-200 bg-gradient-to-br from-emerald-50/60 to-teal-50/60 p-4">
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest text-gray-500">
+                <MessageSquare className="h-3 w-3" />
+                Comment Bait · Engagement Posts
+              </div>
+              {result.engagementOutput && (
+                <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">
+                  ✅ Đã tạo · {result.engagementOutput.posts.length} posts
+                </span>
+              )}
+            </div>
+            <p className="mb-3 text-[12px] leading-relaxed text-gray-700">
+              Sinh <b>12 post được engineered để EARN COMMENT</b> — algo signal mạnh nhất, warm audience trước paid ads → giảm CPM. 8 bait mechanic khác nhau (poll, controversial, rate 1-10, fill-blank...).
+            </p>
+            <button
+              onClick={onOpenEngagement}
+              className="flex w-full items-center justify-center gap-2 rounded-full bg-gradient-to-r from-emerald-600 to-teal-600 px-4 py-2.5 text-[12px] font-bold text-white shadow-sm transition-all hover:from-emerald-700 hover:to-teal-700"
+            >
+              <MessageSquare className="h-3.5 w-3.5" />
+              {result.engagementOutput ? 'Mở Engagement Posts' : 'Tạo Engagement Posts'}
             </button>
           </div>
         </section>

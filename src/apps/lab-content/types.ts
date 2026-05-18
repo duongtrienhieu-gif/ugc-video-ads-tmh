@@ -375,6 +375,46 @@ export interface CarouselOutput {
   generatedAt: number
 }
 
+// ── Comment Bait / Engagement Post ────────────────────────────────────────
+// Posts engineered to EARN COMMENTS (algo signal) — boost organic reach,
+// warm up the audience for paid ads, lower CPM. Each post uses a specific
+// bait mechanic: poll, controversial opinion, fill-in-the-blank, etc.
+
+export type BaitType =
+  | 'controversial'     // "Đại đa số mọi người sai về X"
+  | 'this-or-that'      // "Bạn chọn A hay B?"
+  | 'rate-scale'        // "Cho mình xin rating tình trạng của bạn từ 1-10"
+  | 'open-question'     // "Vấn đề lớn nhất của bạn về X là gì?"
+  | 'tag-friend'        // "Tag đứa bạn cần biết điều này"
+  | 'fill-blank'        // "Hồi 18 tuổi mình từng ___"
+  | 'unpopular-opinion' // "Unpopular opinion: X..."
+  | 'spot-the'          // "Spot ai từng/sẽ..."
+
+export interface BaitTypeOption {
+  id: BaitType
+  label: string
+  glyph: string
+  hint: string
+  briefEn: string
+}
+
+export interface EngagementPost {
+  id: string
+  baitType: BaitType
+  baitLabelVi: string
+  /** Vietnamese post text (50-150 words). */
+  vietnamese: string
+  /** Malay post text. */
+  malay: string
+  /** Expected engagement signal — what algo behavior this post triggers. */
+  expectedSignalVi: string
+}
+
+export interface EngagementOutput {
+  posts: EngagementPost[]   // ~12 posts mixed across bait types
+  generatedAt: number
+}
+
 // ── Output ────────────────────────────────────────────────────────────────
 export interface LabBriefResult {
   /** Product link */
@@ -424,6 +464,9 @@ export interface LabBriefResult {
 
   /** Cached Carousel Ad output. Optional. */
   carouselOutput?: CarouselOutput
+
+  /** Cached Engagement Post output. Optional. */
+  engagementOutput?: EngagementOutput
 
   generatedAt: number
 }

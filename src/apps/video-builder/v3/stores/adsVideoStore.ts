@@ -23,7 +23,10 @@ import {
   type AdStructure, type AdAngle, type ScriptTargetDurationSec,
   type GeneratedScript, type HookVariant, type VoiceCategoryId,
   type VoiceRecord,
+  // Z32 — Creator Video Engine
+  type CreatorPresetId, type CreatorVideoConfig,
 } from '../types'
+import { CREATOR_PRESETS } from '../services/creatorPresets'
 import type { Model, Product } from '../../../../stores/types'
 
 const STORAGE_KEY = 'ugc-lab-v3-ads-video-state'
@@ -47,8 +50,14 @@ interface AdsVideoStoreState {
 
   // ── Creator video ───────────────────────────────────────────────────────
 
-  setCreatorVideo:   (clip: CreatorVideoClip | null) => void
-  patchCreatorVideo: (patch: Partial<CreatorVideoClip>) => void
+  setCreatorVideo:       (clip: CreatorVideoClip | null) => void
+  patchCreatorVideo:     (patch: Partial<CreatorVideoClip>) => void
+  /** Z32 — set/replace creator video config (setting + energy + preset + wardrobe + resolution) */
+  setCreatorVideoConfig: (config: CreatorVideoConfig) => void
+  /** Z32 — apply a preset (writes setting + energy + wardrobeNote in one go) */
+  applyCreatorPreset:    (presetId: CreatorPresetId) => void
+  /** Z32 — partial config patch (e.g. only setting or only energy) */
+  patchCreatorVideoConfig: (patch: Partial<CreatorVideoConfig>) => void
 
   // ── Action inserts ──────────────────────────────────────────────────────
 
@@ -102,6 +111,17 @@ function loadFromStorage(): V3PipelineState | null {
     // Defensive: reset transient rendering flags so resume never deadlocks
     if (parsed.creatorVideo?.status === 'rendering') {
       parsed.creatorVideo = { ...parsed.creatorVideo, status: 'idle', startedAt: undefined }
+    }
+    // Z32 — also reset any in-flight stage. tts/keyframe/preview/lipsync
+    // get bumped back to 'idle' so the user can retry rather than seeing
+    // a stuck stage indicator.
+    if (parsed.creatorVideo && parsed.creatorVideo.stage !== 'completed' && parsed.creatorVideo.stage !== 'failed') {
+      parsed.creatorVideo = { ...parsed.creatorVideo, stage: 'idle' }
+    }
+    // Z32 — pre-Z32 saves won't have creatorVideoConfig; backfill it.
+    if (!parsed.creatorVideoConfig) {
+      const empty = createEmptyV3State()
+      parsed.creatorVideoConfig = empty.creatorVideoConfig
     }
     parsed.inserts = parsed.inserts.map((it) =>
       it.status === 'rendering'
@@ -183,6 +203,33 @@ export const useAdsVideoStore = create<AdsVideoStoreState>((set, get) => ({
       ...s,
       creatorVideo: s.creatorVideo ? { ...s.creatorVideo, ...patch } : s.creatorVideo,
     })),
+
+  // ── Z32 creator video config ───────────────────────────────────────────
+
+  setCreatorVideoConfig: (config) =>
+    commit(set, get, (s) => ({ ...s, creatorVideoConfig: config })),
+
+  patchCreatorVideoConfig: (patch) =>
+    commit(set, get, (s) => ({
+      ...s,
+      creatorVideoConfig: { ...s.creatorVideoConfig, ...patch },
+    })),
+
+  applyCreatorPreset: (presetId) =>
+    commit(set, get, (s) => {
+      const preset = CREATOR_PRESETS[presetId]
+      if (!preset) return s
+      return {
+        ...s,
+        creatorVideoConfig: {
+          ...s.creatorVideoConfig,
+          setting: preset.setting,
+          energy: preset.energy,
+          wardrobeNote: preset.wardrobeNote,
+          preset: presetId,
+        },
+      }
+    }),
 
   setInserts: (inserts) =>
     commit(set, get, (s) => ({ ...s, inserts })),

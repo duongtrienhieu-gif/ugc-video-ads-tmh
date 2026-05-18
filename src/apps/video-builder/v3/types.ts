@@ -192,25 +192,129 @@ export const V3_CLIP_STATUS_LABEL_VI: Record<V3ClipStatus, string> = {
   failed:    'Thất bại',
 }
 
+// ═════════════════════════════════════════════════════════════════════════
+// Z32 — Main Creator Video Engine (Phase 3)
+// ═════════════════════════════════════════════════════════════════════════
+// The "talking head" track — 70-80% of the final ad. Pipeline:
+//   1. TTS (ElevenLabs) → MP3 + measured duration
+//   2. Keyframe (KIE GPT-4o) → still with identity locked from avatar
+//   3. Preview-motion (KIE Kling Avatar) — 1-2s motion test
+//   4. Full lipsync (KIE Kling Avatar) → final talking video
+// ─────────────────────────────────────────────────────────────────────────
+
+// ── Creator settings — where the talking happens (Z32 §4) ─────────────────
+
+export type CreatorSettingId =
+  | 'selfie_handheld'
+  | 'desk_talking'
+  | 'couch_talking'
+  | 'bathroom_mirror'
+  | 'kitchen_talking'
+  | 'gym_selfie'
+  | 'walking_vlog'
+  | 'product_demo'
+
+export const DEFAULT_CREATOR_SETTING: CreatorSettingId = 'selfie_handheld'
+
+// ── Creator energy levels (Z32 §13) ───────────────────────────────────────
+
+export type CreatorEnergyLevel =
+  | 'calm'
+  | 'conversational'
+  | 'excited'
+  | 'emotional'
+  | 'authority'
+  | 'aggressive_tiktok'
+
+export const DEFAULT_CREATOR_ENERGY: CreatorEnergyLevel = 'conversational'
+
+// ── Creator presets — combos of setting + energy + wardrobe (Z32 §9) ──────
+
+export type CreatorPresetId =
+  | 'malay_mom_casual'
+  | 'skincare_creator'
+  | 'gym_coach'
+  | 'office_woman'
+  | 'tech_reviewer'
+  | 'young_tiktok_girl'
+
+// ── Render stage tracking ─────────────────────────────────────────────────
+
+export type CreatorVideoStage =
+  | 'idle'
+  | 'tts'
+  | 'keyframe'
+  | 'preview_motion'
+  | 'lipsync_full'
+  | 'completed'
+  | 'failed'
+
+export const CREATOR_VIDEO_STAGE_LABEL_VI: Record<CreatorVideoStage, string> = {
+  idle:           'Chưa bắt đầu',
+  tts:            'Đang tạo voice (ElevenLabs)...',
+  keyframe:       'Đang tạo keyframe (GPT-4o)...',
+  preview_motion: 'Đang tạo preview motion 1-2s...',
+  lipsync_full:   'Đang lipsync video đầy đủ...',
+  completed:      'Đã xong ✓',
+  failed:         'Lỗi',
+}
+
+// ── Creator video config (user's picks BEFORE rendering) ─────────────────
+
+export interface CreatorVideoConfig {
+  setting: CreatorSettingId
+  energy: CreatorEnergyLevel
+  /** Optional preset shortcut — null = customised manually */
+  preset: CreatorPresetId | null
+  /** Wardrobe override — empty = preset's default */
+  wardrobeNote: string
+  resolution: '480p' | '720p' | '1080p'
+}
+
+export function createDefaultCreatorVideoConfig(): CreatorVideoConfig {
+  return {
+    setting: DEFAULT_CREATOR_SETTING,
+    energy: DEFAULT_CREATOR_ENERGY,
+    preset: null,
+    wardrobeNote: '',
+    resolution: '480p',  // Z30 cheap-default
+  }
+}
+
 // ── Main Creator Video clip ─────────────────────────────────────────────────
 // The "talking head" — one per project. 15-45s lip-synced shot.
 
 export interface CreatorVideoClip {
-  /** asset:xxx of the rendered lip-synced video */
-  videoRef?: string
-  /** asset:xxx of the source still keyframe (avatar pose) */
-  keyframeRef?: string
-  /** Voice TTS asset ref */
-  voiceRef?: string
-  /** Status of the rendering */
+  /** Multi-stage status. Renderer flips through these on its way to 'completed'. */
+  stage: CreatorVideoStage
+  /** Legacy V3ClipStatus for back-compat — kept in sync with `stage`. */
   status: V3ClipStatus
+
+  /** Asset:xxx of the ElevenLabs TTS audio (MP3) */
+  voiceRef?: string
+  voiceDurationSec?: number
+  voiceId?: string
+
+  /** Asset:xxx of the still keyframe (avatar in setting + energy + wardrobe) */
+  keyframeRef?: string
+  keyframePromptUsed?: string
+
+  /** Asset:xxx of the 1-2s preview-motion test */
+  previewVideoRef?: string
+  /** Lipsync task id for the FULL render — used to re-poll if user refreshes */
+  fullLipsyncTaskId?: string
+  /** Asset:xxx of the FINAL full lipsync video */
+  videoRef?: string
+
+  /** Config used for this render — captured for re-render parity */
+  config: CreatorVideoConfig
+
   durationSec: number
-  /** Render profile used */
   resolution: '480p' | '720p' | '1080p'
   error?: string
   startedAt?: number
   finishedAt?: number
-  /** Z30 — Hero flag (only one clip can be HERO for the project) */
+  /** Z30 — Hero flag */
   hero?: boolean
 }
 
@@ -262,6 +366,10 @@ export interface V3PipelineState {
   /** Z31 Ad Brain — structure + angle + script + voice + master timeline */
   scriptBrain: ScriptBrain
 
+  /** Z32 — user's creator-video picks BEFORE rendering. Survives across
+   *  edits even when creatorVideo (the render output) is null. */
+  creatorVideoConfig: CreatorVideoConfig
+
   /** Main creator video (the talking head — single instance per project) */
   creatorVideo: CreatorVideoClip | null
 
@@ -285,6 +393,7 @@ export function createEmptyV3State(): V3PipelineState {
       voiceId: null,
     },
     scriptBrain: createEmptyScriptBrain(),
+    creatorVideoConfig: createDefaultCreatorVideoConfig(),
     creatorVideo: null,
     inserts: [],
     updatedAt: Date.now(),

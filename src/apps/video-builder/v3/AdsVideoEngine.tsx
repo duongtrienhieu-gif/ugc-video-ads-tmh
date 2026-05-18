@@ -33,6 +33,7 @@ import BankPicker from '../../../components/BankPicker'
 import type { Model, Product } from '../../../stores/types'
 import { useAdsVideoStore } from './stores/adsVideoStore'
 import ScriptVoicePhase from './components/ScriptVoicePhase'
+import CreatorVideoPhase from './components/CreatorVideoPhase'
 import {
   V3_PHASE_LABEL_VI,
   WORKFLOW_MODE_CONFIG, COST_MODE_CONFIG,
@@ -432,7 +433,9 @@ export default function AdsVideoEngine({ onSwitchToV2, onSwitchToV1 }: Props) {
   if (state.inputs.product) reachable.add('script-voice')
   // creator-video unlocks once we have a generated script (Ad Brain done)
   if (state.scriptBrain.script) reachable.add('creator-video')
-  if (state.creatorVideo?.status === 'completed' || state.creatorVideo?.status === 'approved' || state.creatorVideo?.status === 'locked') {
+  // Z32 — action-inserts unlocks once the creator video has a videoRef
+  // (completed lipsync, regardless of approval state)
+  if (state.creatorVideo?.videoRef) {
     reachable.add('action-inserts')
   }
   if (state.inserts.length > 0) {
@@ -525,17 +528,7 @@ export default function AdsVideoEngine({ onSwitchToV2, onSwitchToV1 }: Props) {
           <ScriptVoicePhase onContinue={() => setPhase('creator-video')} />
         )}
         {state.phase === 'creator-video' && (
-          <PhaseStub
-            title="Video creator chính"
-            summaryVi="Generate 1 video talking head lip-sync (15-45s) — đây là 70-80% video cuối. Render 480p mặc định, có thể upgrade FINAL sau."
-            plannedFeatures={[
-              'Generate avatar keyframe từ pose preset (ngồi/đứng) — Phase 2',
-              'TTS voice từ script + ElevenLabs',
-              'Lipsync avatar + voice qua KIE/Kling lip-sync — Phase 2',
-              'Preview, approve, lock — đã có infrastructure từ Z26 sẽ port qua',
-            ]}
-            icon={UserRound}
-          />
+          <CreatorVideoPhase onContinue={() => setPhase('action-inserts')} />
         )}
         {state.phase === 'action-inserts' && (
           <PhaseStub
