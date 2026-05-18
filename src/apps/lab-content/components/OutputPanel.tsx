@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { Sparkles, Save, RefreshCw, Brain, Target, Anchor, Compass, Layers, ScrollText, Layers3 } from 'lucide-react'
+import { Sparkles, Save, RefreshCw, Brain, Target, Anchor, Compass, Layers, ScrollText, Layers3, GalleryHorizontal } from 'lucide-react'
 import type { ContentAngle, LabBriefResult } from '../types'
 import { getGoalById, getToneById } from '../services/presets'
 import PainPointCard from './PainPointCard'
@@ -19,11 +19,12 @@ interface OutputPanelProps {
   onOpenCoc: () => void
   onOpenSalesLetter: () => void
   onOpenMultiAngle: () => void
+  onOpenCarousel: () => void
 }
 
 export default function OutputPanel({
   result, isGenerating, isAlreadySaved,
-  onRegenerate, onSave, onOpenCaption, onOpenScript, onOpenHookLab, onOpenFunnel, onOpenCoc, onOpenSalesLetter, onOpenMultiAngle,
+  onRegenerate, onSave, onOpenCaption, onOpenScript, onOpenHookLab, onOpenFunnel, onOpenCoc, onOpenSalesLetter, onOpenMultiAngle, onOpenCarousel,
 }: OutputPanelProps) {
   const [lang, setLang] = useState<'vi' | 'my'>('vi')
 
@@ -238,6 +239,33 @@ export default function OutputPanel({
             >
               <Target className="h-3.5 w-3.5" />
               {result.funnelOutput ? 'Mở Phễu Content (9 caption)' : 'Tạo Phễu Content'}
+            </button>
+          </div>
+        </section>
+
+        {/* Carousel Ad Generator */}
+        <section>
+          <div className="rounded-2xl border border-fuchsia-200 bg-gradient-to-br from-fuchsia-50/60 to-pink-50/60 p-4">
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest text-gray-500">
+                <GalleryHorizontal className="h-3 w-3" />
+                Carousel Ad Generator · IG/FB multi-slide
+              </div>
+              {result.carouselOutput && (
+                <span className="rounded-full bg-fuchsia-100 px-2 py-0.5 text-[10px] font-semibold text-fuchsia-700">
+                  ✅ Đã tạo · {result.carouselOutput.slides.length} slides
+                </span>
+              )}
+            </div>
+            <p className="mb-3 text-[12px] leading-relaxed text-gray-700">
+              Sinh <b>6-10 slide carousel</b> cho IG/FB ads — chọn 1 trong 4 cấu trúc: Problem-Solution · Before-After Story · Mechanism Explainer · Listicle 5 mục. Mỗi slide có caption + visual direction + background palette.
+            </p>
+            <button
+              onClick={onOpenCarousel}
+              className="flex w-full items-center justify-center gap-2 rounded-full bg-gradient-to-r from-fuchsia-600 to-pink-600 px-4 py-2.5 text-[12px] font-bold text-white shadow-sm transition-all hover:from-fuchsia-700 hover:to-pink-700"
+            >
+              <GalleryHorizontal className="h-3.5 w-3.5" />
+              {result.carouselOutput ? 'Mở Carousel' : 'Tạo Carousel Ad'}
             </button>
           </div>
         </section>

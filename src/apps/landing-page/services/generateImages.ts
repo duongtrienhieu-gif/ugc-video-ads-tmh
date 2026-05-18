@@ -796,8 +796,11 @@ function buildFinalPrompt(job: ImageJob, hasProductRefs: boolean): string {
   // to authentic phone screenshots — status bar, safe area, native UI
   // proportions. Eliminates the "poster layout / floating product card /
   // landscape composition" failure modes. ─────────────────────────────────
+  // Phase 3 — platform-specific screenshot directive (was 1 generic
+  // directive for all 4 platforms; now each platform gets its own UI rules,
+  // banned VN vocab list, and diversity directive).
   if (isMobileScreenshotJob(job)) {
-    parts.push(MOBILE_SCREENSHOT_DIRECTIVE)
+    parts.push(buildPlatformScreenshotDirective(job, job.pack.language))
   }
 
   // ── Expert-feedback section: premium editorial composition with badge +
@@ -982,27 +985,142 @@ function isMobileScreenshotJob(job: ImageJob): boolean {
   return false
 }
 
-/** Mobile-screenshot composition directive — prepended to ANY whatsapp /
- *  shopee / tiktok-shop / facebook-comment generation so KIE renders a
- *  TRUE mobile screenshot canvas, not a marketing poster.
- *
- *  Notes on aspect ratio: KIE GPT-4o's tallest portrait is 2:3 (≈ 1024×1536).
- *  We can't generate a literal 1080×1920 9:16 frame directly, but we CAN
- *  force KIE to compose the image as if it were a 9:16 phone screenshot —
- *  full-bleed UI, status bar at the top, safe-area padding at the bottom,
- *  native mobile typography. The user sees an authentic phone screenshot
- *  inside the available 2:3 canvas instead of a centered poster card. */
-const MOBILE_SCREENSHOT_DIRECTIVE =
+// ─────────────────────────────────────────────────────────────────────────
+// Phase 3 — Platform-locked screenshot directives.
+//
+// Each platform gets its own UI rules instead of sharing one generic block:
+//   • WhatsApp 2025
+//   • Shopee MY (orange)
+//   • TikTok Shop MY (dark)
+//   • Facebook comments
+//
+// All directives share a common screenshot-realism preamble + a Malay UI
+// vocabulary lock (when language='ms') that explicitly bans Vietnamese
+// phrases ("Mua ngay", "Đánh giá", etc.) and lists required Malay
+// equivalents ("Beli sekarang", "Penilaian", etc.).
+//
+// Aspect ratio note: KIE GPT-4o's tallest portrait is 2:3 (≈ 1024×1536) —
+// we can't literally output 1080×1920 9:16 but we force the COMPOSITION
+// to look like a 9:16 phone screenshot inside the 2:3 canvas.
+// ─────────────────────────────────────────────────────────────────────────
+
+const SCREENSHOT_REALISM_PREAMBLE =
   'MOBILE SCREENSHOT MODE — non-negotiable composition rules:\n'
   + '  • This is a REAL phone screenshot captured on a 2025 Android / iOS handset. Full-bleed mobile UI from edge to edge.\n'
   + '  • COMPOSITION: full-screen mobile screenshot occupying the ENTIRE canvas. NO centered card. NO floating poster. NO black/empty bands above or below. NO landscape composition.\n'
-  + '  • TOP: realistic mobile status bar — time (eg "11:47"), battery percentage, cellular signal icon (4G / 5G), wifi icon, notification badges. Native OS typography scale.\n'
-  + '  • SAFE AREA: ~4-6% top padding for status bar, ~3-5% bottom padding for home indicator. Content respects these margins like a real iOS / Android app.\n'
-  + '  • UI ELEMENTS: native typography hierarchy, icon scaling matching real apps (24-32px equivalent), authentic spacing (real apps have ORGANIC uneven spacing, never Figma-perfect equal margins).\n'
-  + '  • TIMESTAMPS, message ticks, delivery receipts, badges, ratings — ALL rendered with authentic positioning + sizing of the real app being mimicked.\n'
-  + '  • QUALITY: subtle JPEG compression, slight imperfections — looks like the user took a screenshot, then auto-saved it. NOT a designed graphic, NOT a marketing card, NOT a Figma mockup.\n'
-  + '  • ABSOLUTELY FORBIDDEN: poster layout, floating product PNG card, centered product packshot, black empty backgrounds, landscape composition, designed marketing graphic, advertisement-style overlay, fake / futuristic UI.\n'
-  + '  • The image fills the canvas fully like a phone screenshot. No decorative borders. No empty whitespace zones beyond the native safe areas.\n'
+  + '  • TOP STATUS BAR: realistic Android / iOS bar — time ("11:47"), battery % numeric, signal icon (4G/5G), wifi icon, notification badges. Native OS typography scale.\n'
+  + '  • SAFE AREA: ~4-6% top padding for status bar, ~3-5% bottom padding for home indicator. Content respects these margins.\n'
+  + '  • TYPOGRAPHY: native platform fonts, organic uneven spacing (real apps NEVER have Figma-perfect equal margins).\n'
+  + '  • QUALITY: subtle JPEG compression, slight blur in non-text regions, slight imperfect crop — looks like a real captured screenshot, NOT a designed graphic, NOT a Figma mockup.\n'
+  + '  • REVIEWER / AVATAR DIVERSITY: every visible reviewer / comment author MUST be a DIFFERENT person — different Malaysian ethnicity (Malay / Chinese-Malaysian / Indian-Malaysian / hijab variants), different age (20s/30s/40s/50s), different avatar colour. NO clone faces. NO repeated names.\n'
+  + '  • COMMENT LENGTH VARIATION: short emoji-only replies (5 words), medium reactions (15 words), longer paragraph reviews (3-4 lines) — mixed organically.\n'
+  + '  • ABSOLUTELY FORBIDDEN: poster layout, floating product PNG card, centered product packshot, black empty backgrounds, landscape composition, designed marketing graphic, advertisement-style overlay, fake / futuristic UI, clone avatars, repeated reviewer names.\n'
+
+/**
+ * Malay UI vocabulary lock — appended to platform directive when
+ * landing language = 'ms'. Explicit banned VN phrases + required MY
+ * equivalents so KIE doesn't render Vietnamese UI text into the
+ * screenshot canvas (a leak the user reported in the latest gel xương
+ * landing pack).
+ */
+const MALAY_UI_VOCAB_LOCK =
+  '\n  • LANGUAGE LOCK — Bahasa Melayu UI ONLY. Every label / button / timestamp / username / comment text rendered into the image MUST be in Malaysian Bahasa Melayu (or English loanwords commonly used in MY apps). Vietnamese is STRICTLY BANNED.\n'
+  + '  • BANNED Vietnamese phrases (these have leaked before — DO NOT render any of them into the screenshot):\n'
+  + '      ✗ "Mua ngay" / "Mua lẹ"           → use "Beli sekarang" / "Beli sekarang"\n'
+  + '      ✗ "Đánh giá" / "Bình luận"        → use "Penilaian" / "Komen" / "Ulasan"\n'
+  + '      ✗ "Thêm vào giỏ" / "Thêm giỏ"     → use "Tambah ke troli" / "Tambah ke keranjang"\n'
+  + '      ✗ "Chất lượng tốt"                → use "Kualiti baik" / "Kualiti tinggi"\n'
+  + '      ✗ "Khách mua tiếp"                → use "Pelanggan beli semula"\n'
+  + '      ✗ "Phân loại"                     → use "Variasi" / "Pilihan"\n'
+  + '      ✗ "Đặt hàng"                      → use "Tempah" / "Tempah sekarang"\n'
+  + '      ✗ "Giao hàng"                     → use "Penghantaran"\n'
+  + '      ✗ "Có hình"                       → use "Dengan media" / "Ada gambar"\n'
+  + '  • Use AUTHENTIC Malaysian timestamp formats: "2 hari lalu", "1 minggu lalu", "5 minit yang lalu", "Semalam".\n'
+  + '  • Use AUTHENTIC Malaysian reviewer names: "T**n H**u", "L**g T**m", "duc.l***ous" are FORBIDDEN (those are VN-style obfuscation). Use MY-style: "Aini bt M****", "Ahmad Z**", "Siti N****", "Wong M**", "Raj K****".\n'
+  + '  • All emoji + reaction text stay universal (👍 ❤️ 😍) — no language anchor needed.\n'
+
+function platformPostlude(language: 'ms' | 'vi' | 'en'): string {
+  return language === 'ms' ? MALAY_UI_VOCAB_LOCK : ''
+}
+
+const WHATSAPP_PLATFORM_BLOCK =
+  '\n— PLATFORM: WhatsApp 2025 (Malaysia) —\n'
+  + '  • TOP NAVBAR: dark green-teal bar, back arrow + circular contact avatar + contact name + "last seen X minit yang lalu" subtitle. Right side: video-call + voice-call + 3-dot menu icons.\n'
+  + '  • CHAT AREA: WhatsApp light cream / pale-yellow background (CSS-equivalent #ECE5DD or current 2025 theme). Soft pattern visible faintly.\n'
+  + '  • BUBBLES: outgoing messages on the right (light-green #DCF8C6 in light mode), incoming on the left (white). Rounded corners with little tail pointer on the first bubble of a series. Each bubble: 1-2 lines of text + tiny timestamp + double-check delivery ticks (blue ✓✓ for read).\n'
+  + '  • INPUT BAR: bottom — text-field with emoji/attach icons, microphone icon on the right.\n'
+  + '  • TYPOGRAPHY: WhatsApp font sizing — message ~14sp, timestamp ~10sp, contact name ~17sp.\n'
+  + '  • Status bar typography matches Android (numeric battery, 4G/5G).\n'
+  + '  • NO desktop WhatsApp Web UI. NO fake "WhatsApp Lite" / "GBWhatsApp" mods.\n'
+
+const SHOPEE_PLATFORM_BLOCK =
+  '\n— PLATFORM: Shopee Malaysia (orange theme) —\n'
+  + '  • TOP NAVBAR: white bar with back arrow, "Penilaian" title, share + cart icons on the right.\n'
+  + '  • RATING HEADER: large "★ 4.8" + "Penilaian (2.6K)" + tag row "5★ 4★ 3★ 2★ 1★" + "Dengan media" sub-filter.\n'
+  + '  • REVIEW CARDS: white background, each card has — circular avatar + masked Malay name + 5-star row + "Variasi: <colour/size>" line + timestamp ("2 hari lalu") + 2-4 line review text + 2-4 small thumbnail review photos.\n'
+  + '  • FLOATING BOTTOM CTA: chat icon + cart icon + bright pink "Beli Sekarang" button + price "RM<price>" — Shopee uses BRIGHT PINK CTA, not orange (orange is the brand header). Pink #EE4D2D / FF424F.\n'
+  + '  • TYPOGRAPHY: Shopee Sans / Helvetica Neue — review text ~13sp, headlines ~15sp.\n'
+  + '  • REVIEW THUMBNAIL ASPECT: preserve original aspect (object-fit: cover style) — never stretch horizontally / squash vertically.\n'
+  + '  • NO fake clean symmetry, NO Figma-perfect equal margins.\n'
+
+const TIKTOK_SHOP_PLATFORM_BLOCK =
+  '\n— PLATFORM: TikTok Shop Malaysia (dark theme) —\n'
+  + '  • TOP NAVBAR: BLACK bar, back arrow + product star rating "★ 4.8 Penilaian 2.6K" + share + cart icons.\n'
+  + '  • REVIEW FILTER ROW: pill tabs "Semua / Ada gambar / 5★ / 4★ / 3★" — selected tab has white outline on dark bg.\n'
+  + '  • REVIEW CARDS: dark / near-black background, white text. Each card: circular avatar + masked username + 5-star row + 2-4 line review in casual Bahasa Melayu mixing English loanwords + tiny timestamp + 2-4 small thumbnail review photos.\n'
+  + '  • FLOATING BOTTOM CTA: black bar with cart icon + bright red-orange "Beli Sekarang" button + price "RM<price>" + small "Tambah ke troli" secondary text.\n'
+  + '  • TYPOGRAPHY: TikTok Display / SF Pro — comment text ~13sp on dark bg.\n'
+  + '  • Uneven organic spacing — real TikTok feeds have inconsistent gaps.\n'
+  + '  • NO Shopee orange. NO WhatsApp green.\n'
+
+const FACEBOOK_COMMENT_PLATFORM_BLOCK =
+  '\n— PLATFORM: Facebook Mobile (Malaysia) —\n'
+  + '  • TOP NAVBAR: Facebook blue (#1877F2) — back arrow + page title (eg "INFINITY PROBIOTICS Malaysia") + 3-dot menu.\n'
+  + '  • POST HEADER: page avatar + page name + verified blue tick (if brand) + post timestamp + small globe "Public" badge.\n'
+  + '  • POST BODY: post text mentioning product + optional product image (preserve EXACT uploaded packaging). Reaction count row beneath ("👍 ❤️ 😍  1.2K   234 komen   58 kongsi").\n'
+  + '  • COMMENT THREAD: 4-6 comment cards stacked. Each: circular avatar + name + comment in casual Malay with emojis + reaction count + "Suka · Balas · Xs/menit/jam yang lalu". Some comments have nested 1-2 replies.\n'
+  + '  • COMMENT INPUT BAR: bottom — emoji + camera + gif icons on the right.\n'
+  + '  • TYPOGRAPHY: SF Pro / Roboto — comment text ~14sp, reaction count ~12sp.\n'
+  + '  • NO desktop Facebook UI. NO Facebook Lite / FB-Messenger UI.\n'
+
+const MESSENGER_PLATFORM_BLOCK =
+  '\n— PLATFORM: Messenger 2025 (Malaysia) —\n'
+  + '  • TOP NAVBAR: white bar + back arrow + circular contact avatar + contact name + tiny "Aktif sekarang" subtitle. Right: phone + video-call + info icons.\n'
+  + '  • CHAT AREA: white background — Messenger 2025 light theme.\n'
+  + '  • BUBBLES: outgoing messages on the right in Messenger BLUE GRADIENT (#0084FF), incoming on the left in light grey #E4E6EB. Rounded fully-pill shape. Tail pointer on first bubble of series.\n'
+  + '  • READ RECEIPT: tiny circular avatar at the bottom-right of the last outgoing message indicates "seen".\n'
+  + '  • TYPING INDICATOR: 3-dot animated bubble visible on some chats.\n'
+  + '  • INPUT BAR: bottom — camera + gif + emoji + microphone icons.\n'
+  + '  • NO WhatsApp green bubbles, NO Instagram DM gradient.\n'
+
+const TIKTOK_COMMENT_PLATFORM_BLOCK =
+  '\n— PLATFORM: TikTok Comments (Malaysia) —\n'
+  + '  • COMPOSITION: vertical full-bleed phone screenshot with a darkened video frame in the top 40% + comment section overlay rising from the bottom.\n'
+  + '  • COMMENT SECTION: white background sliding up from bottom edge. Title row "1.2K komen" + filter pill row.\n'
+  + '  • COMMENT CARDS: circular avatar + masked Malay username + casual Malay comment (1-3 lines, emoji-rich) + tiny "Suka X" + "Balas" + timestamp.\n'
+  + '  • SOME COMMENTS have 1-2 nested replies indented under them.\n'
+  + '  • RIGHT EDGE of video frame: TikTok action stack — heart + comment + share + bookmark icons + creator avatar.\n'
+  + '  • INPUT BAR: bottom — "Tambah komen..." placeholder + emoji shortcuts.\n'
+
+/** Pick the platform-specific block by job style + section type. */
+function pickPlatformBlock(job: ImageJob): string {
+  const t = job.section.type
+  const style = (job.prompt.style ?? '').toLowerCase()
+  if (t === 'whatsapp-testimonials') return WHATSAPP_PLATFORM_BLOCK
+  if (style.includes('messenger')) return MESSENGER_PLATFORM_BLOCK
+  if (style.includes('shopee')) return SHOPEE_PLATFORM_BLOCK
+  if (style.includes('tiktok shop')) return TIKTOK_SHOP_PLATFORM_BLOCK
+  if (style.includes('tiktok comment')) return TIKTOK_COMMENT_PLATFORM_BLOCK
+  if (style.includes('facebook')) return FACEBOOK_COMMENT_PLATFORM_BLOCK
+  // Fallback — generic mobile screenshot (no platform-specific UI rules).
+  return ''
+}
+
+/** Build the final screenshot directive: preamble + platform block +
+ *  language vocab lock (when ms). */
+function buildPlatformScreenshotDirective(job: ImageJob, language: 'ms' | 'vi' | 'en'): string {
+  return SCREENSHOT_REALISM_PREAMBLE + pickPlatformBlock(job) + platformPostlude(language)
+}
 
 /** Build a STRUCTURED comparison prompt that embeds the explicit
  *  US-vs-THEM bullet pairs inline. KIE renders the infographic directly

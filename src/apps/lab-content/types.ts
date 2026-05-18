@@ -334,6 +334,47 @@ export interface MultiAngleOutput {
   generatedAt: number
 }
 
+// ── Carousel Ad Generator ─────────────────────────────────────────────────
+// Multi-slide IG / FB carousel ad. User picks structure → AI generates the
+// 6-10 slide sequence with per-slide text + visual direction + background.
+// Output format mirrors how Canva carousel templates expect content.
+
+export type CarouselStructure =
+  | 'problem-solution'  // 6 slides: Hook → Pain 1 → Pain 2 → Reveal → Benefit → CTA
+  | 'before-after'      // 8 slides: Scene → Struggle 1 → Struggle 2 → Turning → Result → Proof → Offer → CTA
+  | 'mechanism'         // 8 slides: Hook → Why problem → How → Ingredient 1 → Ingredient 2 → Result → Proof → CTA
+  | 'listicle-five'     // 7 slides: Hook → 5 numbered ways → Summary CTA
+
+export interface CarouselStructureOption {
+  id: CarouselStructure
+  label: string
+  glyph: string
+  slideCount: number
+  hint: string
+  /** English instruction sent into Gemini to shape the slide sequence. */
+  briefEn: string
+}
+
+export interface CarouselSlide {
+  id: string
+  /** 1-based slide number in the carousel sequence. */
+  position: number
+  /** Vietnamese caption text on this slide (5-15 words). */
+  captionVi: string
+  /** Malay caption text. */
+  captionMy: string
+  /** Visual direction (Vietnamese) — 1 line describing image. */
+  visualDirectionVi: string
+  /** Suggested background color label (vd: "Cream + accent đỏ", "Đen + neon"). */
+  backgroundSuggest: string
+}
+
+export interface CarouselOutput {
+  structure: CarouselStructure
+  slides: CarouselSlide[]
+  generatedAt: number
+}
+
 // ── Output ────────────────────────────────────────────────────────────────
 export interface LabBriefResult {
   /** Product link */
@@ -380,6 +421,9 @@ export interface LabBriefResult {
 
   /** Cached Multi-Angle Ad Pack output (5 ads, 5 angles). Optional. */
   multiAngleOutput?: MultiAngleOutput
+
+  /** Cached Carousel Ad output. Optional. */
+  carouselOutput?: CarouselOutput
 
   generatedAt: number
 }
