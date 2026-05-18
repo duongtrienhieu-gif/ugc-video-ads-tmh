@@ -57,13 +57,17 @@ export const MODULE_REGISTRY: ModuleRegistration[] = [
     version: 1,
     maxAgeMs: DEFAULT_MAX_AGE_MS,
   },
-  // ── R4b — BrollStudio (migrated from bespoke pattern) ────────────────────
+  // ── R4b — Creative Studio (migrated from bespoke pattern) ───────────────
+  // moduleId + persistKey deliberately keep 'broll-studio' for back-compat
+  // with users' existing localStorage. The app id was renamed in P10
+  // (broll-studio → creative-studio) but this internal session-persistence
+  // contract stays stable so in-flight work is not orphaned.
   {
     moduleId: 'broll-studio',
-    moduleNameVi: 'Product AI',
+    moduleNameVi: 'Creative Studio',
     persistKey: 'ugc-lab:broll-studio:inflight-v1',
     version: 1,
-    maxAgeMs: 7 * 24 * 60 * 60 * 1000, // 7 days — original BrollStudio behavior
+    maxAgeMs: 7 * 24 * 60 * 60 * 1000,
   },
   // ── R6 ───────────────────────────────────────────────────────────────────
   {

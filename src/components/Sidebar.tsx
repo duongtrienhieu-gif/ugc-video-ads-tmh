@@ -26,7 +26,7 @@ const NAV_ITEMS: NavItem[] = [
   { id: 'lab-content',      label: 'Lab Content', icon: Brain },
   { id: 'landing-page',     label: 'Landing Page', icon: LayoutTemplate },
   { id: 'voice-studio', label: 'Giọng đọc', icon: Mic },
-  { id: 'broll-studio', label: 'Product AI', icon: Image },
+  { id: 'creative-studio', label: 'Creative Studio', icon: Image },
   { id: 'video-translate', label: 'Dịch Video',   icon: Languages },
   { id: 'video-builder',   label: 'UGC Builder',  icon: Sparkles },
   { id: 'ad-anatomy',      label: 'Phân tích QC', icon: Eye },

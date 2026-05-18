@@ -15,7 +15,7 @@
 //
 // Until then, the registry is INTENTIONALLY empty and `resolveAssetType`
 // throws a clear error when asked for an unimplemented asset type. The
-// existing BrollStudio.tsx app does NOT route through this registry yet
+// existing CreativeStudio.tsx app does NOT route through this registry yet
 // — it stays on the legacy direct-call path until P3 migration.
 
 import type { AssetTypeId } from '../types/asset'

@@ -9,7 +9,7 @@
 // Callers that want continuity opt-in by calling this entry point
 // instead.
 //
-// Wire-in to BrollStudio.tsx UI happens after the UI gets a "Sequence"
+// Wire-in to CreativeStudio.tsx UI happens after the UI gets a "Sequence"
 // mode toggle (planned for the next phase that owns UX changes).
 
 import type { AssetTypeId, GenerateAssetParams, GeneratedAsset } from '../types/asset'

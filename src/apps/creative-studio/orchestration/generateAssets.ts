@@ -9,7 +9,7 @@
 //     → engine pipeline (P3/P5/P8)
 //     → GeneratedAsset
 //
-// P2 stub only. The existing BrollStudio.tsx app does NOT call this entry
+// P2 stub. The existing CreativeStudio.tsx app does NOT call this entry
 // point yet — it continues to use its direct KIE calls until P3 migration.
 // This file is here so the architecture is in place; nothing in the
 // current bundle invokes it until a module is wired.

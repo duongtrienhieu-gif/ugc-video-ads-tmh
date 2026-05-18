@@ -22,7 +22,7 @@ import LandingPageAI from './apps/landing-page/LandingPageAI'
 import History from './apps/history/History'
 import CharacterStudio from './apps/character-studio/CharacterStudio'
 import VoiceStudio from './apps/voice-studio/VoiceStudio'
-import BrollStudio from './apps/broll-studio/BrollStudio'
+import CreativeStudio from './apps/creative-studio/CreativeStudio'
 import ImageDna from './apps/image-dna/ImageDna'
 import VideoTranslate from './apps/video-translate/VideoTranslate'
 import VideoBuilder from './apps/video-builder/VideoBuilder'
@@ -37,7 +37,11 @@ const APP_COMPONENTS: Record<string, React.ComponentType> = {
   'history': History,
   'character-studio': CharacterStudio,
   'voice-studio': VoiceStudio,
-  'broll-studio': BrollStudio,
+  // P10 canonical id (broll-studio kept below as alias so saved
+  // openApp() targets / inter-app sendTo links from before P10 still
+  // resolve to the same component).
+  'creative-studio': CreativeStudio,
+  'broll-studio':    CreativeStudio,
   'image-dna': ImageDna,
   'video-translate': VideoTranslate,
   'video-builder': VideoBuilder,
@@ -56,7 +60,8 @@ const APP_BOUNDARY_META: Record<string, { name: string; resetKeys: string[] }> =
   'history':           { name: 'Lịch sử',        resetKeys: [] },
   'character-studio':  { name: 'Character Studio', resetKeys: [] },
   'voice-studio':      { name: 'Voice Studio',   resetKeys: [] },
-  'broll-studio':      { name: 'Product AI',     resetKeys: [] },
+  'creative-studio':   { name: 'Creative Studio', resetKeys: [] },
+  'broll-studio':      { name: 'Creative Studio', resetKeys: [] },  // alias
   'image-dna':         { name: 'Image DNA',      resetKeys: [] },
   'video-translate':   { name: 'Dịch Video',     resetKeys: [] },
   'video-builder':     { name: 'UGC Builder',    resetKeys: [] },

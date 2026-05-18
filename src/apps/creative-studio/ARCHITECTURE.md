@@ -1,18 +1,21 @@
-# Creative Studio Architecture (broll-studio app)
+# Creative Studio Architecture
 
-> **Status**: Phase 9 — shared utils cleanup + cross-app QC promotion.
-> Canvas helpers hoisted from `engines/ui-native/_shared/` to
-> `shared/canvas/` (fixes the cross-engine import violation that P8
-> templates introduced). `toPublicUrl` deduped — one impl in
-> `shared/utils/refResolver.ts` instead of three. JSON envelope parsing
-> deduped into `shared/llm/jsonResponse.ts`. Baseline QC promoted to
-> `shared/qc/baselineQC.ts` and is now run by ALL three engine
-> dispatchers (was ui-native only before P9).
+> **Status**: Phase 10 — App id rename complete
+> (`broll-studio` → `creative-studio`). Folder moved to
+> `src/apps/creative-studio/`, component file renamed to
+> `CreativeStudio.tsx`. Old app id `'broll-studio'` kept as alias in
+> `APP_COMPONENTS` (App.tsx) so saved openApp() targets / inter-app
+> sendTo links from before P10 still resolve. Session-persistence
+> moduleId + persistKey deliberately keep `'broll-studio'` for
+> localStorage back-compat — users do not lose in-flight work.
+>
+> P10 closes the broll-studio → creative-studio migration ladder.
+> All ten phases (P1–P10) complete.
 
 ## Folder map
 
 ```
-src/apps/broll-studio/
+src/apps/creative-studio/
 │
 ├─ BrollStudio.tsx                  ← active legacy app entry (UNTOUCHED through P2)
 ├─ services/
@@ -113,8 +116,8 @@ The orchestrator:
 | **P6** | ✅ done | UI-Native expansion: Shopee + TikTok Shop + Facebook + TikTok comments |
 | **P7** | ✅ done | Authenticity QC v2 + designed-graphic group entry |
 | **P8** | ✅ done | Designed-Graphic group: Infographic + CTA Banner |
-| **P9** | ✅ done (this commit) | Shared utils cleanup + cross-app QC promotion |
-| **P10** | pending | App id rename (broll-studio → creative-studio) with alias |
+| **P9** | ✅ done | Shared utils cleanup + cross-app QC promotion |
+| **P10** | ✅ done (this commit) | App id rename (broll-studio → creative-studio) with alias |
 
 ## Boundaries — what P2 did NOT touch
 
@@ -709,6 +712,73 @@ the caller's POV. Goals:
 - ASSET_REGISTRY still serves 17 entries — no add / remove
 - `src/apps/landing-page/`, `src/apps/video-builder/` — untouched
 - `src/stores/*`, `src/utils/*`, `App.tsx`, `Sidebar.tsx` — untouched
+
+## P10 — App id rename (broll-studio → creative-studio)
+
+P10 is the final phase — closes the broll-studio → creative-studio
+migration ladder. Pure rename + alias for back-compat.
+
+### What changed
+
+| Surface | Before P10 | After P10 |
+|---|---|---|
+| Folder | `src/apps/broll-studio/` | `src/apps/creative-studio/` (`git mv` — history preserved) |
+| Component file | `BrollStudio.tsx` | `CreativeStudio.tsx` |
+| App.tsx import | `import BrollStudio from './apps/broll-studio/BrollStudio'` | `import CreativeStudio from './apps/creative-studio/CreativeStudio'` |
+| APP_COMPONENTS key | `'broll-studio'` only | `'creative-studio'` canonical + `'broll-studio'` alias |
+| APP_BOUNDARY_META | `'broll-studio': { name: 'Product AI' }` | `'creative-studio': { name: 'Creative Studio' }` + `'broll-studio'` alias |
+| Sidebar nav id | `'broll-studio'` (label: 'Product AI') | `'creative-studio'` (label: 'Creative Studio') |
+| constants.ts | `'broll-studio'` | `'creative-studio'` |
+| history sourceAppId stamp | `'broll-studio'` | `'creative-studio'` (new items; old items still resolve via alias) |
+
+### What deliberately stayed unchanged
+
+- **Session-persistence `moduleId` + `persistKey`** in
+  `services/sessionPersistence/registry.ts` still use `'broll-studio'` +
+  `'ugc-lab:broll-studio:inflight-v1'`. Changing them would orphan
+  users' in-flight work in localStorage. The internal label is now
+  decoupled from the app id by design — `moduleNameVi` updated to
+  'Creative Studio' for display.
+
+- **`CreativeStudio.tsx` still calls
+  `useSessionPersist({ moduleId: 'broll-studio' })`** — for the same
+  reason: existing users' localStorage key.
+
+- **React component export name** in `CreativeStudio.tsx` was
+  already `ProductAI` (a legacy artifact unrelated to the folder
+  name) — left as-is, not in P10 scope.
+
+- All internal relative imports inside the folder — unchanged
+  (folder rename preserves relative paths).
+
+### Alias resolution
+
+```ts
+// App.tsx — APP_COMPONENTS
+'creative-studio': CreativeStudio,   // canonical
+'broll-studio':    CreativeStudio,   // alias → same component
+```
+
+When a saved appStore state, a history item, or an inter-app
+sendTo() target points at `'broll-studio'`, the lookup in
+APP_COMPONENTS still resolves and the component renders. Users
+who reload after P10 keep their workflows.
+
+### Boundaries — what P10 did NOT touch
+
+- 17 asset modules — byte-identical
+- module contracts (PhotographicModule / UINativeModule /
+  DesignedGraphicModule) — byte-identical
+- orchestration (generateAssets / generateAssetSequence / dispatch)
+  — byte-identical
+- registry (assetRegistry / groups / resolveAssetType) — byte-identical
+- shared/ (canvas / qc / continuity / metadata / design-system /
+  llm / utils / prompts / transforms) — byte-identical
+- services/qcProduct.ts — byte-identical
+- session-persistence registry/migration entries — byte-identical
+  keys (only `moduleNameVi` updated for display)
+- src/apps/landing-page/, src/apps/video-builder/ — untouched
+- src/stores/* — untouched (appStore was not persisted; no migration needed)
 
 ### Boundaries — what P4 did NOT touch
 

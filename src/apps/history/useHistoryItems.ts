@@ -154,7 +154,7 @@ export function useHistoryItems(): HistoryItem[] {
         productName: productName(b.productId),
         thumbnail: b.imageUrl,
         createdAt: b.createdAt,
-        sourceAppId: 'broll-studio',
+        sourceAppId: 'creative-studio',
         sourceProductId: b.productId,
       })
     }
