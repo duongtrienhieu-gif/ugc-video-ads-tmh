@@ -207,26 +207,31 @@ export default function OutputPanel({ result, isGenerating, onGenerate, onCancel
   const allExtrasReady = hasExtras && extraAngles.every((v) => v !== null)
 
   // ── Shared bottom controls ────────────────────────────────────────────
+  //
+  // Compact spacing so the generated image (above this footer) stays
+  // dominant on a typical viewport. Inner sections use `space-y-2` (was
+  // `space-y-3`) and `py-1.5` buttons (was `py-2`) — saves ~40px of
+  // vertical real-estate without removing any control.
   function BottomControls() {
     return (
-      <div className="shrink-0 border-t border-black/8 p-4 space-y-3">
+      <div className="shrink-0 border-t border-black/8 p-2.5 md:p-3 space-y-2">
         {/* Aspect ratio selector */}
-        <div className="flex gap-2">
+        <div className="flex gap-1.5">
           <button
             onClick={() => onAspectRatioChange('Portrait (9:16)')}
-            className={`flex flex-1 items-center justify-center gap-1.5 rounded-lg border py-2 text-xs font-medium transition-colors ${aspectRatio.includes('9:16') ? 'border-sky-500/30 bg-sky-500/10 text-sky-400' : 'border-black/10 text-gray-500 hover:border-black/15 hover:text-gray-700'}`}
+            className={`flex flex-1 items-center justify-center gap-1 rounded-lg border py-1.5 text-[11px] font-medium transition-colors ${aspectRatio.includes('9:16') ? 'border-sky-500/30 bg-sky-500/10 text-sky-400' : 'border-black/10 text-gray-500 hover:border-black/15 hover:text-gray-700'}`}
           >
             <span>📱</span> Dọc 9:16
           </button>
           <button
             onClick={() => onAspectRatioChange('Square (1:1)')}
-            className={`flex flex-1 items-center justify-center gap-1.5 rounded-lg border py-2 text-xs font-medium transition-colors ${aspectRatio.includes('1:1') ? 'border-sky-500/30 bg-sky-500/10 text-sky-400' : 'border-black/10 text-gray-500 hover:border-black/15 hover:text-gray-700'}`}
+            className={`flex flex-1 items-center justify-center gap-1 rounded-lg border py-1.5 text-[11px] font-medium transition-colors ${aspectRatio.includes('1:1') ? 'border-sky-500/30 bg-sky-500/10 text-sky-400' : 'border-black/10 text-gray-500 hover:border-black/15 hover:text-gray-700'}`}
           >
             <span>⬜</span> Vuông 1:1
           </button>
           <button
             onClick={() => onAspectRatioChange('Landscape (16:9)')}
-            className={`flex flex-1 items-center justify-center gap-1.5 rounded-lg border py-2 text-xs font-medium transition-colors ${aspectRatio === 'Landscape (16:9)' ? 'border-sky-500/30 bg-sky-500/10 text-sky-400' : 'border-black/10 text-gray-500 hover:border-black/15 hover:text-gray-700'}`}
+            className={`flex flex-1 items-center justify-center gap-1 rounded-lg border py-1.5 text-[11px] font-medium transition-colors ${aspectRatio === 'Landscape (16:9)' ? 'border-sky-500/30 bg-sky-500/10 text-sky-400' : 'border-black/10 text-gray-500 hover:border-black/15 hover:text-gray-700'}`}
           >
             <span>🖥</span> Ngang 16:9
           </button>
@@ -236,7 +241,7 @@ export default function OutputPanel({ result, isGenerating, onGenerate, onCancel
         <div className="relative rounded-xl border border-black/10 bg-black/[0.02]">
           <button
             onClick={() => setModelDropOpen((v) => !v)}
-            className="flex w-full items-center gap-2.5 px-3 py-2.5 text-left"
+            className="flex w-full items-center gap-2.5 px-2.5 py-1.5 text-left"
           >
             <ProviderIcon provider={selectedModel.provider} />
             <div className="flex flex-1 flex-col">
@@ -278,24 +283,26 @@ export default function OutputPanel({ result, isGenerating, onGenerate, onCancel
         </div>
 
         {/* Resolution selector */}
-        <div className="flex gap-2">
+        <div className="flex gap-1.5">
           {(['1K', '2K', '4K'] as ImageResolution[]).map((r) => (
             <button
               key={r}
               onClick={() => setResolution(r)}
-              className={`flex flex-1 flex-col items-center rounded-lg border py-2 text-xs transition-colors ${resolution === r ? 'border-sky-500/30 bg-sky-500/10 text-sky-400' : 'border-black/10 text-gray-500 hover:border-black/15 hover:text-gray-700'}`}
+              className={`flex flex-1 items-center justify-center gap-1 rounded-lg border py-1.5 text-[11px] transition-colors ${resolution === r ? 'border-sky-500/30 bg-sky-500/10 text-sky-400' : 'border-black/10 text-gray-500 hover:border-black/15 hover:text-gray-700'}`}
             >
               <span className="font-semibold">{r}</span>
-              <span className="text-[10px] opacity-70">{selectedModel.credits[r]} Credit</span>
+              <span className="text-[10px] opacity-70">· {selectedModel.credits[r]} Credit</span>
             </button>
           ))}
         </div>
 
-        {/* Generate button */}
+        {/* Generate button — compact padding so it doesn't dominate the
+            footer; the user already generated a result above so this
+            is "regen with new settings" — secondary action. */}
         <button
           onClick={() => onGenerate(selectedModel.id, resolution)}
           disabled={!canGenerate || isGenerating}
-          className="flex w-full items-center justify-center gap-2.5 rounded-full border border-black/12 bg-sky-500 px-6 py-3.5 text-[13px] font-medium tracking-tight text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.1)] transition-all hover:bg-sky-400 disabled:cursor-not-allowed disabled:opacity-40"
+          className="flex w-full items-center justify-center gap-2 rounded-full border border-black/12 bg-sky-500 px-6 py-2.5 text-[13px] font-medium tracking-tight text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.1)] transition-all hover:bg-sky-400 disabled:cursor-not-allowed disabled:opacity-40"
         >
           {isGenerating ? (
             <>
@@ -366,9 +373,21 @@ export default function OutputPanel({ result, isGenerating, onGenerate, onCancel
   }
 
   // ── Result state ──────────────────────────────────────────────────────
+  //
+  // Image-priority layout: the generated avatar is the PRIMARY visual.
+  // We size the image area by an intrinsic aspect ratio (9:16 / 1:1 / 16:9)
+  // matching the user-selected aspect ratio, not by competing with the
+  // actions block for vertical flex space. This way the image stays large
+  // even when the save preset / 3-variants / JSON prompt blocks expand
+  // below it. User scrolls down to reach actions + BottomControls.
+  const aspectClass =
+    aspectRatio.includes('1:1')  ? 'aspect-square' :
+    aspectRatio.includes('16:9') ? 'aspect-video'  :
+                                   'aspect-[9/16]'
+
   return (
     <div className="flex h-full flex-col overflow-hidden">
-      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto p-4">
+      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto p-2.5 md:p-3">
         {/* ── Main image + 3 angle thumbnails (2x2 when extras present) ── */}
         {hasExtras ? (
           // 2x2 grid: main top-left + 3 angles
@@ -390,13 +409,19 @@ export default function OutputPanel({ result, isGenerating, onGenerate, onCancel
             ))}
           </div>
         ) : (
-          // Single image full-size before extras
-          <div className="flex min-h-0 flex-1 items-center justify-center">
-            <div className={`group relative overflow-hidden rounded-xl border border-black/10 bg-black ${isPortrait ? 'h-full max-h-full' : 'w-full'}`}>
+          // Single image — intrinsic aspect ratio sizing so the image
+          // always dominates the viewport. Width is responsive: fills
+          // the panel on phones, caps at 360px on wider panels so the
+          // save block + 3-variants button stay peek-visible below it
+          // without forcing a long scroll. Centered horizontally.
+          <div className="flex justify-center">
+            <div
+              className={`group relative w-full max-w-[360px] ${aspectClass} overflow-hidden rounded-xl border border-black/10 bg-black shrink-0`}
+            >
               <img
                 src={resolvedImageUrl}
                 alt="Generated character"
-                className={`${isPortrait ? 'h-full' : 'w-full'} object-contain`}
+                className="absolute inset-0 h-full w-full object-contain"
               />
               <button
                 onClick={() => {
@@ -417,7 +442,7 @@ export default function OutputPanel({ result, isGenerating, onGenerate, onCancel
         )}
 
         {/* ── Actions ── */}
-        <div className="mt-3 flex flex-col gap-2">
+        <div className="mt-2 flex flex-col gap-1.5">
           {/* Collapsible JSON (compact) */}
           <div className="rounded-xl border border-black/8 bg-black/[0.02]">
             <button
@@ -459,7 +484,7 @@ export default function OutputPanel({ result, isGenerating, onGenerate, onCancel
               onClick={handleGenerateExtras}
               disabled={!kieApiKey}
               title={!kieApiKey ? 'Cần KIE.ai API key trong Cài đặt' : 'Lấy ảnh gốc làm reference, tạo 3 biến thể cùng người qua KIE GPT Image (image-edit, không phải text-to-image)'}
-              className="flex w-full items-center justify-center gap-2 rounded-full border border-violet-300 bg-violet-50 px-6 py-3.5 text-[13px] font-semibold text-violet-700 transition-colors hover:bg-violet-100 disabled:opacity-50"
+              className="flex w-full items-center justify-center gap-2 rounded-full border border-violet-300 bg-violet-50 px-6 py-2 text-[13px] font-semibold text-violet-700 transition-colors hover:bg-violet-100 disabled:opacity-50"
             >
               <Sparkles className="h-4 w-4" />
               ✨ Tạo 3 biến thể cùng người {!kieApiKey && '— cần KIE key'}
@@ -499,20 +524,20 @@ export default function OutputPanel({ result, isGenerating, onGenerate, onCancel
               ? `💾 Lưu preset ${allExtrasReady ? '4' : totalImagesToSave} ảnh vào Project`
               : '💾 Lưu ảnh chính vào Project'
             return (
-              <div className="flex flex-col gap-2 rounded-xl border border-emerald-200 bg-emerald-50/50 p-3">
-                <p className="text-xs font-semibold text-emerald-700">{headerLabel}</p>
+              <div className="flex flex-col gap-1.5 rounded-xl border border-emerald-200 bg-emerald-50/50 p-2.5">
+                <p className="text-[11px] font-semibold text-emerald-700">{headerLabel}</p>
                 <input
                   value={presetName}
                   onChange={(e) => setPresetName(e.target.value)}
                   onKeyDown={(e) => { if (e.key === 'Enter' && presetName.trim()) handleSavePreset() }}
                   placeholder='Đặt tên, vd: "Sarah hijab - bếp"'
                   disabled={saved}
-                  className="rounded-lg border border-emerald-300 bg-white px-3 py-2 text-sm text-gray-800 placeholder-gray-400 outline-none focus:border-emerald-500 disabled:opacity-60"
+                  className="rounded-lg border border-emerald-300 bg-white px-2.5 py-1.5 text-[13px] text-gray-800 placeholder-gray-400 outline-none focus:border-emerald-500 disabled:opacity-60"
                 />
                 <button
                   onClick={handleSavePreset}
                   disabled={!presetName.trim() || isSavingPreset || saved}
-                  className={`flex w-full items-center justify-center gap-2 rounded-full px-6 py-3 text-[13px] font-bold transition-colors ${saved
+                  className={`flex w-full items-center justify-center gap-2 rounded-full px-6 py-2 text-[13px] font-bold transition-colors ${saved
                     ? 'bg-green-500/15 text-green-700'
                     : 'bg-emerald-600 text-white hover:bg-emerald-700 disabled:bg-gray-200 disabled:text-gray-400'
                   }`}
