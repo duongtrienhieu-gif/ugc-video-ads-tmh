@@ -27,9 +27,10 @@ export type AssetTypeId =
   // ── ui-native group (populated starting in P5) ─────────────────────
   | 'whatsapp-proof'
   | 'messenger-chat'
-  | 'tiktok-feedback'
-  | 'shopee-feedback'
-  | 'facebook-comment'
+  | 'tiktok-feedback'   // TikTok Shop product review
+  | 'shopee-feedback'   // Shopee product review
+  | 'facebook-comment'  // Facebook post comment thread
+  | 'tiktok-comment'    // TikTok video comment overlay
 
   // ── designed-graphic group (populated starting in P8) ──────────────
   | 'infographic'

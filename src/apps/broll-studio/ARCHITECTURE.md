@@ -1,11 +1,11 @@
 # Creative Studio Architecture (broll-studio app)
 
-> **Status**: Phase 5 — UI-Native MVP (WhatsApp + Messenger chat proof)
-> landed. Two ui-native modules wired into the registry, ui-native
-> dispatcher implemented end-to-end (Gemini text → KIE avatar → Canvas
-> template → JPEG post-process → asset). Existing `BrollStudio.tsx`
-> still runs on its legacy direct-KIE path; the new modules are reached
-> via `generateAssets()` only.
+> **Status**: Phase 6 — UI-Native expansion (Shopee + TikTok Shop +
+> Facebook + TikTok comments) landed. Six ui-native modules now wired
+> into the registry (2 chat-proof from P5 + 4 marketplace/social-comment
+> from P6). Existing `BrollStudio.tsx` still runs on its legacy
+> direct-KIE path; the new modules are reached via `generateAssets()`
+> only.
 
 ## Folder map
 
@@ -107,8 +107,8 @@ The orchestrator:
 | **P2** | ✅ done | Type contracts + registry + orchestration skeleton |
 | **P3** | ✅ done | Migrate current BrollStudio scenes → engines/photographic/ modules |
 | **P4** | ✅ done | Continuity engine + persona library + emotional beats (foundation) |
-| **P5** | ✅ done (this commit) | UI-Native MVP: Chat Proof (WhatsApp + Messenger) |
-| **P6** | pending | UI-Native expansion: Shopee + TikTok Shop + Facebook + TikTok comments |
+| **P5** | ✅ done | UI-Native MVP: Chat Proof (WhatsApp + Messenger) |
+| **P6** | ✅ done (this commit) | UI-Native expansion: Shopee + TikTok Shop + Facebook + TikTok comments |
 | **P7** | pending | Authenticity QC v2 + designed-graphic group entry |
 | **P8** | pending | Designed-Graphic group: Infographic + CTA Banner |
 | **P9** | pending | Shared utils cleanup + cross-app QC promotion |
@@ -316,6 +316,83 @@ P5 modules do not yet consume `params.options.personaId` /
 through its `TextPayloadRequest`, so this wiring is one small commit
 when the BrollStudio UI gains persona pickers (planned with the UI
 overhaul phase).
+
+## P6 — UI-Native expansion (Marketplace + Social Comment)
+
+P6 extends the ui-native engine with 4 new modules across 2 new
+content shapes. The dispatcher gained a `TextPayloadContentType`
+router (`chat` / `review` / `comment-thread`) so the same pipeline
+serves chat threads, marketplace reviews, and social comment lists
+without code duplication.
+
+ASSET_REGISTRY now has 15 implemented entries (9 photographic +
+6 ui-native).
+
+### New modules
+
+| Asset id | Platform | Category | Content shape | Renderer |
+|---|---|---|---|---|
+| `shopee-feedback` | Shopee | marketplace | single review | renderShopeeReview() |
+| `tiktok-feedback` | TikTok Shop | marketplace | single review | renderTikTokShopReview() |
+| `facebook-comment` | Facebook | social-comment | comment thread | renderFacebookComments() |
+| `tiktok-comment` | TikTok | social-comment | dark comment overlay | renderTikTokComments() |
+
+### New asset type id
+
+P6 adds one new id to the AssetTypeId union: `tiktok-comment`
+(P2 pre-declared only 3 of the 4 expansion targets). Also added
+to ASSET_TO_GROUP routing table.
+
+### New shared palettes (`_shared/colors.ts`)
+
+- `SHOPEE_LIGHT_2024`        — Shopee orange #EE4D2D + teal verified badge
+- `TIKTOK_SHOP_LIGHT_2024`   — TikTok pink-red #FE2C55 + cyan accent
+- `FACEBOOK_LIGHT_2024`      — Facebook blue #1B74E4 + grey divider
+- `TIKTOK_COMMENT_DARK_2024` — pure dark theme for the comment overlay
+
+### Extended `_shared/textPayload.ts`
+
+The Gemini text generator now routes by `TextPayloadContentType`:
+
+```ts
+// Chat (P5) — generateTextPayload returns dialog with side: incoming|outgoing
+// Review (P6) — generateTextPayload returns single review with star
+//   rating encoded as reactions[]: ['★5', 'variant:...', 'helpful:N']
+// Comment thread (P6) — generateTextPayload returns multi-author thread
+//   with likes + isReply encoded as reactions[]: ['likes:N', 'isReply:true']
+```
+
+Helper readers exposed: `readRating()`, `readVariant()`, `readHelpful()`,
+`readLikes()`, `readIsReply()` — templates use these to decode the
+reactions[] array without depending on the generator's internal shape.
+
+### Dispatcher upgrade
+
+`engines/ui-native/_dispatcher.ts` now ships:
+
+- `TEMPLATE_RENDERERS: Record<UINativePlatform, RendererFn>` — full
+  table, all 6 platforms wired
+- `PLATFORM_CONTENT_TYPE: Record<UINativePlatform, TextPayloadContentType>`
+  — default content type per platform (drives Gemini prompt selection)
+- `PLATFORM_DEFAULT_COUNT: Record<UINativePlatform, number>` — sensible
+  defaults (1 for review, 6 for FB comments, 8 for TikTok comments
+  + chat)
+- Product image URL resolved from bankStore.getProductById() and passed
+  to the renderer as `productImageUrl` (used by review templates for
+  the photo attachment thumb)
+
+### Boundaries — what P6 did NOT touch
+
+- `BrollStudio.tsx` — byte-identical
+- `services/qcProduct.ts` — byte-identical
+- P3 photographic engine — byte-identical
+- P4 continuity + persona + beats — byte-identical
+- P5 chat modules + their templates — byte-identical
+- `orchestration/generateAssets.ts` — byte-identical
+- `orchestration/generateAssetSequence.ts` — byte-identical
+- `orchestration/dispatch.ts` — byte-identical (P5 wired the slot)
+- `src/apps/landing-page/`, `src/apps/video-builder/` — untouched
+- `src/stores/*`, `src/utils/*`, `App.tsx`, `Sidebar.tsx` — untouched
 
 ### Boundaries — what P4 did NOT touch
 

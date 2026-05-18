@@ -38,6 +38,12 @@ import { module as ugcTiktokModule }        from '../engines/photographic/ugc-ti
 import { module as whatsappProofModule }    from '../engines/ui-native/whatsapp-proof/module'
 import { module as messengerChatModule }    from '../engines/ui-native/messenger-chat/module'
 
+// ── P6: UI-Native marketplace + social-comment modules ────────────────────
+import { module as shopeeFeedbackModule }   from '../engines/ui-native/shopee-feedback/module'
+import { module as tiktokFeedbackModule }   from '../engines/ui-native/tiktok-feedback/module'
+import { module as facebookCommentModule }  from '../engines/ui-native/facebook-comment/module'
+import { module as tiktokCommentModule }    from '../engines/ui-native/tiktok-comment/module'
+
 /** Union of all module shapes — discriminated by engineGroup field. */
 export type AssetModule =
   | PhotographicModule
@@ -79,10 +85,11 @@ export const ASSET_REGISTRY: Partial<Record<AssetTypeId, AssetModule>> = {
   'whatsapp-proof':     whatsappProofModule,
   'messenger-chat':     messengerChatModule,
 
-  // ── P6 will add the remaining ui-native modules here ───────────────
-  // 'tiktok-feedback':    tiktokFeedbackModule,
-  // 'shopee-feedback':    shopeeFeedbackModule,
-  // 'facebook-comment':   facebookCommentModule,
+  // ── P6: UI-Native marketplace + social-comment modules ─────────────
+  'shopee-feedback':    shopeeFeedbackModule,
+  'tiktok-feedback':    tiktokFeedbackModule,
+  'facebook-comment':   facebookCommentModule,
+  'tiktok-comment':     tiktokCommentModule,
 
   // ── P8 will add designed-graphic modules here ──────────────────────
   // 'infographic':        infographicModule,

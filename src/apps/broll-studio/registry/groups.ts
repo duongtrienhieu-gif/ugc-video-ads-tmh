@@ -32,6 +32,7 @@ export const ASSET_TO_GROUP: Record<AssetTypeId, EngineGroup> = {
   'tiktok-feedback':    'ui-native',
   'shopee-feedback':    'ui-native',
   'facebook-comment':   'ui-native',
+  'tiktok-comment':     'ui-native',
 
   // ── designed-graphic group ──────────────────────────────────────────
   'infographic':        'designed-graphic',
