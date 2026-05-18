@@ -11,6 +11,8 @@
 
 import type { AssetModule } from '../registry/assetRegistry'
 import type { GenerateAssetParams, GeneratedAsset } from '../types/asset'
+import { dispatchPhotographic } from '../engines/photographic/_dispatcher'
+import type { PhotographicModule } from '../types/photographic'
 
 /** Dispatch contract — every engine-group entry point matches this signature. */
 export type EngineDispatcher = (
@@ -45,8 +47,18 @@ function notYetImplemented(engineGroup: string): EngineDispatcher {
  * photographic; canvas template → atomic AI → post-process for ui-native;
  * etc.).
  */
+/**
+ * P3: wire the real photographic dispatcher. The narrower module type
+ * (PhotographicModule) is guaranteed by the engineGroup discrimination
+ * inside dispatchToEngine — the only way a module reaches the
+ * 'photographic' slot is if module.engineGroup === 'photographic',
+ * which in turn means module IS a PhotographicModule.
+ */
+const photographicDispatcher: EngineDispatcher = (module, params) =>
+  dispatchPhotographic(module as PhotographicModule, params)
+
 export const ENGINE_DISPATCH: Record<AssetModule['engineGroup'], EngineDispatcher> = {
-  'photographic':      notYetImplemented('photographic'),
+  'photographic':      photographicDispatcher,
   'ui-native':         notYetImplemented('ui-native'),
   'designed-graphic':  notYetImplemented('designed-graphic'),
 }

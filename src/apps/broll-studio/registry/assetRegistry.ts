@@ -23,6 +23,17 @@ import type { PhotographicModule } from '../types/photographic'
 import type { UINativeModule } from '../types/uiNative'
 import type { DesignedGraphicModule } from '../types/designedGraphic'
 
+// ── P3: Photographic engine modules — STATIC IMPORTS ONLY ──────────────────
+import { module as productShotModule }      from '../engines/photographic/product-shot/module'
+import { module as holdingProductModule }   from '../engines/photographic/holding-product/module'
+import { module as ugcSelfieModule }        from '../engines/photographic/ugc-selfie/module'
+import { module as reviewTableModule }      from '../engines/photographic/review-table/module'
+import { module as beforeAfterModule }      from '../engines/photographic/before-after/module'
+import { module as lifestyleKitchenModule } from '../engines/photographic/lifestyle-kitchen/module'
+import { module as bathroomRoutineModule }  from '../engines/photographic/bathroom-routine/module'
+import { module as cafeLifestyleModule }    from '../engines/photographic/cafe-lifestyle/module'
+import { module as ugcTiktokModule }        from '../engines/photographic/ugc-tiktok/module'
+
 /** Union of all module shapes — discriminated by engineGroup field. */
 export type AssetModule =
   | PhotographicModule
@@ -49,16 +60,16 @@ export type AssetModule =
  *   'product-shot': () => import(...)   // ← BANNED. Phase 7 lesson.
  */
 export const ASSET_REGISTRY: Partial<Record<AssetTypeId, AssetModule>> = {
-  // ── P3 will add photographic modules here ──────────────────────────
-  // 'product-shot':       productShotModule,
-  // 'ugc-selfie':         ugcSelfieModule,
-  // 'review-table':       reviewTableModule,
-  // 'holding-product':    holdingProductModule,
-  // 'before-after':       beforeAfterModule,
-  // 'lifestyle-kitchen':  lifestyleKitchenModule,
-  // 'bathroom-routine':   bathroomRoutineModule,
-  // 'cafe-lifestyle':     cafeLifestyleModule,
-  // 'ugc-tiktok':         ugcTiktokModule,
+  // ── P3: Photographic engine modules ────────────────────────────────
+  'product-shot':       productShotModule,
+  'holding-product':    holdingProductModule,
+  'ugc-selfie':         ugcSelfieModule,
+  'review-table':       reviewTableModule,
+  'before-after':       beforeAfterModule,
+  'lifestyle-kitchen':  lifestyleKitchenModule,
+  'bathroom-routine':   bathroomRoutineModule,
+  'cafe-lifestyle':     cafeLifestyleModule,
+  'ugc-tiktok':         ugcTiktokModule,
 
   // ── P5-P6 will add ui-native modules here ──────────────────────────
   // 'whatsapp-proof':     whatsappProofModule,
