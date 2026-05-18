@@ -17,11 +17,10 @@
 //   • No imports from landing-page anywhere in this file
 
 import { useState, useRef, useEffect, useMemo, memo } from 'react'
-import { Sparkles, Loader2, UserRound, Package, Upload } from 'lucide-react'
+import { Sparkles, Loader2, UserRound, Package, Zap } from 'lucide-react'
 import { useAppStore } from '../../stores/appStore'
 import { useSettingsStore } from '../../stores/settingsStore'
 import { useAssetUrl } from '../../hooks/useAssetUrl'
-import { saveAsset } from '../../utils/assetStore'
 import BankPicker from '../../components/BankPicker'
 import type { Product, Model } from '../../stores/types'
 
@@ -33,19 +32,24 @@ import ResultCard from './uiCatalog/ResultCard'
 import { findCatalogEntry, requirementsFor } from './uiCatalog/assetCatalog'
 
 // ── PickerTile (product / avatar) ──────────────────────────────────────
+//
+// P26 — Project-only selection. Spec: Creative Studio MUST NOT rely on
+// manual upload. User selects from the Project bank; we auto-load product
+// image + metadata + benefits + USPs + ingredients + audience + locale.
+// Upload entry-point removed entirely.
 
 interface PickerTileProps {
   imageUrl: string | null
   label: string
   hint: string
   accent: 'product' | 'avatar'
+  /** Display name pulled from the selected bank record. */
+  itemName?: string | null
   onSelectFromBank: () => void
-  onUpload: (file: File) => void
   onClear: () => void
 }
 
-function PickerTile({ imageUrl, label, hint, accent, onSelectFromBank, onUpload, onClear }: PickerTileProps) {
-  const inputRef = useRef<HTMLInputElement>(null)
+function PickerTile({ imageUrl, label, hint, accent, itemName, onSelectFromBank, onClear }: PickerTileProps) {
   const resolvedUrl = useAssetUrl(imageUrl ?? undefined)
   const display = imageUrl?.startsWith('http') || imageUrl?.startsWith('data:') || imageUrl?.startsWith('blob:') ? imageUrl : resolvedUrl
   const isAvatar = accent === 'avatar'
@@ -53,10 +57,6 @@ function PickerTile({ imageUrl, label, hint, accent, onSelectFromBank, onUpload,
   const accentBg     = accent === 'product' ? 'bg-rose-50'      : 'bg-violet-50'
   const accentText   = accent === 'product' ? 'text-rose-700'   : 'text-violet-700'
 
-  // P24 — ULTRA compact layout (~50% of previous). Fixed h-16 image
-  // strip + tighter padding + smaller icons + hidden hint when filled.
-  // Total tile height ~110px (was ~200px). Keeps the input region from
-  // dominating the left panel.
   return (
     <div className="flex flex-col gap-1 rounded-lg border border-black/10 bg-white p-1.5">
       <div className="flex items-center justify-between">
@@ -76,30 +76,17 @@ function PickerTile({ imageUrl, label, hint, accent, onSelectFromBank, onUpload,
           </div>
         )}
       </div>
+      {display && itemName && (
+        <p className="line-clamp-1 text-[10px] font-semibold text-gray-700">{itemName}</p>
+      )}
       {!display && hint && <p className="line-clamp-1 text-[9px] text-gray-400">{hint}</p>}
-      <div className="flex gap-1">
-        <button
-          type="button"
-          onClick={onSelectFromBank}
-          className={`flex flex-1 items-center justify-center rounded border ${accentBorder} ${accentBg} px-1 py-0.5 text-[10px] font-semibold ${accentText} hover:opacity-80`}
-        >
-          Project
-        </button>
-        <button
-          type="button"
-          onClick={() => inputRef.current?.click()}
-          className="flex flex-1 items-center justify-center gap-0.5 rounded border border-black/10 bg-white px-1 py-0.5 text-[10px] font-semibold text-gray-700 hover:bg-black/[0.04]"
-        >
-          <Upload className="h-2.5 w-2.5" /> Upload
-        </button>
-      </div>
-      <input
-        ref={inputRef}
-        type="file"
-        accept="image/jpeg,image/png,image/webp"
-        className="hidden"
-        onChange={(e) => { const f = e.target.files?.[0]; if (f) onUpload(f) }}
-      />
+      <button
+        type="button"
+        onClick={onSelectFromBank}
+        className={`flex w-full items-center justify-center rounded border ${accentBorder} ${accentBg} px-1 py-1 text-[10px] font-semibold ${accentText} hover:opacity-80`}
+      >
+        {display ? 'Đổi từ Project' : 'Chọn từ Project'}
+      </button>
     </div>
   )
 }
@@ -108,24 +95,15 @@ function PickerTile({ imageUrl, label, hint, accent, onSelectFromBank, onUpload,
 
 export default function CreativeStudio() {
   // ── Input panel state — left side ──────────────────────────────────
+  //
+  // P26 (Phase 2): project-only selection — no manual upload, no
+  // optional marketing-copy inputs. Product / Avatar come from the
+  // Project bank. Generation uses the full ProductKnowledge profile
+  // (P25) auto-loaded from the selected product.
   const [selectedAssetTypeId, setSelectedAssetTypeId] = useState<AssetTypeId | null>(null)
   const [selectedAvatar, setSelectedAvatar]    = useState<Model | null>(null)
   const [selectedProduct, setSelectedProduct]  = useState<Product | null>(null)
-  const [uploadedAvatarUrl, setUploadedAvatarUrl] = useState<string | null>(null)
-  const [uploadedProductUrl, setUploadedProductUrl] = useState<string | null>(null)
-  // P23 — referenceRefs kept on state for back-compat with runtime
-  // payload; setter unused since the picker UI was removed. setter
-  // eslint-disabled via destructure rename.
-  const [referenceRefs] = useState<string[]>([])
   const [pickerMode, setPickerMode]            = useState<'avatar' | 'product' | null>(null)
-
-  // P16 — optional marketing inputs (only used when the creative type
-  // benefits from them, eg cta-banner / infographic). System decides
-  // realism / mood / camera automatically from the Creative Config DNA.
-  const [optHeadline, setOptHeadline] = useState('')
-  const [optCta, setOptCta]           = useState('')
-  const [optNotes, setOptNotes]       = useState('')
-  const [optExpanded, setOptExpanded] = useState(false)
 
   // ── Bank / settings / toasts ───────────────────────────────────────
   const kieApiKey    = useSettingsStore((s) => s.kieApiKey)
@@ -150,8 +128,8 @@ export default function CreativeStudio() {
     [selectedAssetTypeId],
   )
 
-  const avatarImageRef  = selectedAvatar?.characterImage  ?? uploadedAvatarUrl
-  const productImageRef = selectedProduct?.productImage ?? uploadedProductUrl
+  const avatarImageRef  = selectedAvatar?.characterImage ?? null
+  const productImageRef = selectedProduct?.productImage ?? null
 
   // ── Generation gate — required inputs present + API keys configured ─
   const isPhotographic    = catalogEntry?.group === 'photographic'
@@ -211,18 +189,12 @@ export default function CreativeStudio() {
     }
 
     // ── Build payload + log it for debug ─────────────────────────
-    const options: Record<string, unknown> = {}
-    if (optHeadline.trim()) options.customHeadline = optHeadline.trim()
-    if (optCta.trim())      options.customCta      = optCta.trim()
-    if (optNotes.trim())    options.userNotes      = optNotes.trim()
-
     const payload = {
       creativeType: selectedAssetTypeId,
       inputs: {
-        productId:     selectedProduct?.id,
-        modelId:       reqs?.requireAvatar ? selectedAvatar?.id : undefined,
-        referenceRefs: reqs?.requireReference ? referenceRefs : undefined,
-        options,
+        productId: selectedProduct?.id,
+        modelId:   reqs?.requireAvatar ? selectedAvatar?.id : undefined,
+        options:   {},
       },
     }
     console.info('[CreativeStudio] createJob payload', payload)
@@ -249,17 +221,9 @@ export default function CreativeStudio() {
     }
   }
 
-  // ── File / bank handlers ───────────────────────────────────────────
-  const handleSelectAvatar  = (item: unknown) => { setSelectedAvatar(item as Model); setUploadedAvatarUrl(null); setPickerMode(null) }
-  const handleSelectProduct = (item: unknown) => { setSelectedProduct(item as Product); setUploadedProductUrl(null); setPickerMode(null) }
-  const handleUploadAvatar  = async (file: File) => {
-    try { const ref = await saveAsset(file, file.type || 'image/jpeg'); setUploadedAvatarUrl(ref); setSelectedAvatar(null) }
-    catch (err) { addToast(`Upload avatar lỗi: ${err instanceof Error ? err.message.slice(0, 60) : 'unknown'}`, 'error') }
-  }
-  const handleUploadProduct = async (file: File) => {
-    try { const ref = await saveAsset(file, file.type || 'image/jpeg'); setUploadedProductUrl(ref); setSelectedProduct(null) }
-    catch (err) { addToast(`Upload sản phẩm lỗi: ${err instanceof Error ? err.message.slice(0, 60) : 'unknown'}`, 'error') }
-  }
+  // ── Bank handlers (P26 — project-only) ─────────────────────────────
+  const handleSelectAvatar  = (item: unknown) => { setSelectedAvatar(item as Model);   setPickerMode(null) }
+  const handleSelectProduct = (item: unknown) => { setSelectedProduct(item as Product); setPickerMode(null) }
 
   // ── Render ─────────────────────────────────────────────────────────
   const activeCount    = jobs.filter((j) => j.status === 'generating' || j.status === 'queued').length
@@ -267,11 +231,16 @@ export default function CreativeStudio() {
 
   return (
     <div className="relative flex h-full flex-col overflow-hidden">
-      {/* Header */}
+      {/* Header — Creative Operating System tone (P26) */}
       <div className="shrink-0 border-b border-black/8 bg-gradient-to-r from-violet-50 to-pink-50 px-6 py-4">
-        <h1 className="text-xl font-bold tracking-tight text-gray-900">Creative Studio</h1>
-        <p className="mt-0.5 text-xs text-gray-500">
-          AI workspace — chọn loại creative, bấm Tạo, kết quả xuất hiện bên phải. UI không block khi đang render.
+        <div className="flex items-center gap-2">
+          <span className="rounded-md bg-violet-600 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-widest text-white">
+            AI
+          </span>
+          <h1 className="text-xl font-bold tracking-tight text-gray-900">Creative Studio</h1>
+        </div>
+        <p className="mt-1 text-xs text-gray-500">
+          Conversion creative workspace — chọn sản phẩm, chọn loại creative, render nhiều job song song.
         </p>
       </div>
 
@@ -296,38 +265,51 @@ export default function CreativeStudio() {
                 <div className={reqs?.requireAvatar ? 'flex-1 min-w-0' : 'w-full'}>
                   <PickerTile
                     label="Sản phẩm"
-                    hint="Ảnh rõ packaging"
+                    hint="Chọn từ Project"
                     accent="product"
                     imageUrl={productImageRef}
+                    itemName={selectedProduct?.productName}
                     onSelectFromBank={() => setPickerMode('product')}
-                    onUpload={handleUploadProduct}
-                    onClear={() => { setSelectedProduct(null); setUploadedProductUrl(null) }}
+                    onClear={() => setSelectedProduct(null)}
                   />
                 </div>
                 {reqs?.requireAvatar && (
                   <div className="flex-1 min-w-0">
                     <PickerTile
                       label="Avatar AI"
-                      hint="Khuyến nghị cho loại này"
+                      hint="Chọn từ Project"
                       accent="avatar"
                       imageUrl={avatarImageRef}
+                      itemName={selectedAvatar?.name}
                       onSelectFromBank={() => setPickerMode('avatar')}
-                      onUpload={handleUploadAvatar}
-                      onClear={() => { setSelectedAvatar(null); setUploadedAvatarUrl(null) }}
+                      onClear={() => setSelectedAvatar(null)}
                     />
                   </div>
                 )}
               </div>
+
+              {/* P26 — auto-loaded project intelligence hint. Surfaces
+                  that the system pulled benefits / USPs / audience /
+                  locale from the Project record (P25 ProductKnowledge). */}
+              {selectedProduct && (
+                <div className="mt-2 flex items-start gap-1.5 rounded-md border border-violet-100 bg-violet-50/50 px-2 py-1.5">
+                  <Zap className="mt-0.5 h-3 w-3 shrink-0 text-violet-500" strokeWidth={2.2} />
+                  <p className="text-[10px] leading-snug text-violet-700">
+                    Đã tải benefits · USP · pain points · audience · locale từ Project — AI dùng cho mọi creative.
+                  </p>
+                </div>
+              )}
             </section>
 
-            {/* GENERATE button — primary action, always reachable */}
+            {/* GENERATE button — premium compact action (P26)
+                48px height, rounded-xl, gradient + subtle inner ring. */}
             <button
               type="button"
               onClick={handleGenerate}
               disabled={!canGenerate}
-              className="mt-3 flex w-full items-center justify-center gap-2 rounded-full bg-gradient-to-r from-violet-600 to-purple-500 px-6 py-3 text-sm font-bold text-white shadow-md transition-all hover:from-violet-700 hover:to-purple-600 disabled:cursor-not-allowed disabled:opacity-40"
+              className="mt-3 flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-violet-600 to-fuchsia-600 px-5 text-[13px] font-bold tracking-wide text-white shadow-[0_4px_12px_-2px_rgba(124,58,237,0.4)] ring-1 ring-inset ring-white/10 transition-all hover:from-violet-700 hover:to-fuchsia-700 hover:shadow-[0_6px_16px_-2px_rgba(124,58,237,0.55)] disabled:cursor-not-allowed disabled:opacity-40 disabled:shadow-none"
             >
-              <Sparkles className="h-4 w-4" /> Tạo asset
+              <Sparkles className="h-4 w-4" /> Tạo creative
             </button>
 
             {/* Compact inline status hints */}
@@ -338,7 +320,7 @@ export default function CreativeStudio() {
             )}
             {selectedAssetTypeId && reqs?.requireProduct && !productImageRef && (
               <p className="mt-1.5 text-center text-[10px] text-amber-600">
-                ↑ Thêm sản phẩm phía trên
+                ↑ Chọn sản phẩm từ Project
               </p>
             )}
             {needsKie && !kieApiKey && (
@@ -349,64 +331,13 @@ export default function CreativeStudio() {
             )}
           </div>
 
-          {/* ── SCROLLABLE CREATIVE LIST + OPTIONAL ──────────────── */}
+          {/* ── SCROLLABLE CREATIVE LIST ────────────────────────── */}
           <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-4">
             <section>
               <p className="mb-2 text-[11px] font-bold uppercase tracking-widest text-gray-500">
                 Loại creative
               </p>
               <AssetTypePicker selectedId={selectedAssetTypeId} onSelect={setSelectedAssetTypeId} />
-            </section>
-
-            {/* OPTIONAL marketing copy (collapsible, at bottom) */}
-            <section className="rounded-xl border border-black/10 bg-black/[0.02]">
-              <button
-                type="button"
-                onClick={() => setOptExpanded((v) => !v)}
-                className="flex w-full items-center justify-between gap-2 px-3 py-2.5 text-left"
-              >
-                <span className="text-[11px] font-bold uppercase tracking-widest text-gray-500">
-                  Nội dung tuỳ chọn
-                </span>
-                <span className="text-[10px] text-gray-400">{optExpanded ? '▾' : '▸'}</span>
-              </button>
-              {optExpanded && (
-              <div className="flex flex-col gap-2 px-3 pb-3">
-                <label className="flex flex-col gap-1">
-                  <span className="text-[10px] font-semibold text-gray-600">Headline (tuỳ chọn)</span>
-                  <input
-                    type="text"
-                    value={optHeadline}
-                    onChange={(e) => setOptHeadline(e.target.value)}
-                    placeholder="VD: Giải pháp mất ngủ — hiệu quả sau 14 ngày"
-                    className="rounded-md border border-black/10 bg-white px-2.5 py-1.5 text-[12px] text-gray-800"
-                  />
-                </label>
-                <label className="flex flex-col gap-1">
-                  <span className="text-[10px] font-semibold text-gray-600">CTA (tuỳ chọn)</span>
-                  <input
-                    type="text"
-                    value={optCta}
-                    onChange={(e) => setOptCta(e.target.value)}
-                    placeholder="VD: Đặt ngay"
-                    className="rounded-md border border-black/10 bg-white px-2.5 py-1.5 text-[12px] text-gray-800"
-                  />
-                </label>
-                <label className="flex flex-col gap-1">
-                  <span className="text-[10px] font-semibold text-gray-600">Ghi chú cho AI (tuỳ chọn)</span>
-                  <textarea
-                    value={optNotes}
-                    onChange={(e) => setOptNotes(e.target.value)}
-                    placeholder="VD: nhấn mạnh tự nhiên, hữu cơ, không chứa hoá chất"
-                    rows={3}
-                    className="resize-none rounded-md border border-black/10 bg-white px-2.5 py-1.5 text-[12px] text-gray-800"
-                  />
-                </label>
-                <p className="text-[10px] text-gray-400">
-                  System tự quyết định realism / mood / lighting dựa trên loại creative — bạn chỉ cần viết content.
-                </p>
-              </div>
-            )}
             </section>
           </div>
         </aside>
@@ -438,12 +369,12 @@ export default function CreativeStudio() {
             )}
           </div>
 
-          {/* P22 — soft hydrate failure notice. Single-line, neutral,
-              no exposed DB / SQL / migration text. Tech detail stays
-              in console. */}
+          {/* P26 — soft hydrate failure notice. Single-line, neutral,
+              user-facing only. Spec: never expose schema / migration /
+              supabase / database. */}
           {hydrateError && (
             <div className="mx-5 mt-3 rounded-lg border border-amber-200 bg-amber-50/60 px-3 py-2 text-[11px] text-amber-700">
-              Workspace tạm thời chưa đồng bộ — bạn vẫn dùng được, lịch sử sẽ load lại sau.
+              Không tải được lịch sử render — bạn vẫn tạo creative mới được, lịch sử sẽ tự đồng bộ lại sau.
             </div>
           )}
 
@@ -453,9 +384,9 @@ export default function CreativeStudio() {
               <div className="flex h-full min-h-[400px] items-center justify-center rounded-xl border border-dashed border-black/10 bg-white">
                 <div className="flex flex-col items-center gap-3 px-6 text-center">
                   <Sparkles className="h-10 w-10 text-gray-200" />
-                  <p className="text-sm text-gray-400">Workspace trống</p>
-                  <p className="text-xs text-gray-300">
-                    Chọn loại creative ở panel trái → cấu hình → bấm "Tạo asset"
+                  <p className="text-sm font-semibold text-gray-500">Live creative board</p>
+                  <p className="max-w-[280px] text-xs leading-relaxed text-gray-400">
+                    Chọn sản phẩm + loại creative ở panel trái → bấm Tạo. Render chạy song song, kết quả hiện tại đây.
                   </p>
                 </div>
               </div>
