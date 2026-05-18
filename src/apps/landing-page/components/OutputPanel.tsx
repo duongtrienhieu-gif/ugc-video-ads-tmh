@@ -216,7 +216,7 @@ export default function OutputPanel({
         variant="collapsible"
       />
 
-      <div className="flex-1 overflow-y-auto p-4">
+      <div className="flex-1 overflow-y-auto p-2 md:p-4 pb-20 md:pb-4">
         {/* Section cards */}
         <div className="space-y-3">
           {pack.sections.map((section, i) => (
