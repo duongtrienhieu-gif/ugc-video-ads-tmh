@@ -163,9 +163,28 @@ SECTION SPEC — produce EXACTLY these 17 in this order
    • 1 imagePrompt: style="Comparison infographic MY ecommerce", aspectRatio="1:1"
      Malaysia ecommerce style comparison table infographic. STRUCTURE: 2-column split-screen. LEFT column = our product (use exact title from comparisonData.us.title), green checkmarks, emerald highlighted background. RIGHT column = competitor (use exact title from comparisonData.them.title), red X, gray background. Render the EXACT bullets from comparisonData verbatim — 1 row per bullet pair (same Y position for us.bullets[i] and them.bullets[i]). Clean mobile-readable typography, bold output-language labels. The imagePrompt MUST embed the actual us.bullets / them.bullets text inline so the image generator reads it directly — do NOT instruct the generator to "find" or "parse" bullet pairs.
 
-10. type="lifestyle", imageAspectRatio="4:5"
-    • copy: after-life paint — energetic mornings, confidence
-    • 1-2 imagePrompts: Malaysian family happy / woman laughing outdoors / energetic candid. style="Lifestyle transformation UGC", aspectRatio="4:5". NO product visible.
+10. type="expert-feedback", imageAspectRatio="9:16"
+    • copy: 1-2 short paragraphs framing the expert's professional take — written in the output language. Mention what kind of expert (digestive health specialist / pharmacist / dietitian / dermatologist — pick to match the product niche). Authority + warmth tone, NOT hard-sell.
+    • REQUIRED reviews array with EXACTLY 2 entries, each shaped as an expert testimonial:
+        - author: full doctor-style name + credentials (e.g. "Dr. Farid Hassan", "Pharmacist Aisyah Rahman", "Dietitian Wong Mei Ling") — choose ethnicity to fit Malaysia (Malay / Chinese-Malaysian / Indian-Malaysian mix). The two experts MUST be DIFFERENT people.
+        - meta: "<Specialty> · <X> Years Experience" (e.g. "Digestive Health Specialist · 12 Years Experience")
+        - rating: 5
+        - quote: 1-2 sentences of professional commentary about the product mechanism / ingredient quality / why it works — written in the output language. NO marketing hype. Sound like a real expert opinion.
+    • 2 imagePrompts BOTH aspectRatio="9:16", strict expert-feedback editorial composition (NOT lifestyle, NOT UGC):
+      - expert_01.jpg, style="Expert Authority Feedback card", aspectRatio="9:16":
+        Tall 9:16 editorial portrait poster. TOP 60% of frame: professional medical / clinic / lab scene — the FIRST expert (from reviews[0].author) photographed in their working environment (clinic consultation room / pharmacy counter / nutrition lab) wearing clean professional attire (white coat / pharmacist tunic / smart blouse). Soft natural daylight + subtle clinical color palette (cream / pale sage / off-white). Realistic Malaysian / Southeast-Asian features. Calm authoritative expression.
+        TOP-RIGHT corner overlay: small rounded "expert badge" card containing — circular avatar headshot of the same expert + bold name from reviews[0].author + thin small-cap specialty line from reviews[0].meta + "X Years Experience" line. Clean editorial sans-serif typography. Subtle drop-shadow on the badge.
+        BOTTOM 40%: light cream / off-white quote box overlay with a thin top divider line. Inside the quote box: italic blockquote of reviews[0].quote in the output language (rendered as visible text in the image), credited beneath with the expert's name in small caps. Bold opening quotation mark (").
+        VISUAL RULES: premium editorial magazine aesthetic, clean typography hierarchy, realistic spacing, medical-professional look. NO oversized text. NO TikTok visual style. NO UGC selfie. NO product packaging in this image — the focus is the expert, not the product.
+      - expert_02.jpg, style="Expert Authority Feedback card", aspectRatio="9:16":
+        Same template as expert_01 but featuring the SECOND expert (reviews[1]). DIFFERENT person, DIFFERENT face, DIFFERENT specialty environment from expert_01 (if expert_01 is clinic, make this pharmacy; if expert_01 is pharmacy, make this nutrition consultation room or lab). DIFFERENT outfit. SAME premium editorial template — clinic / lab scene top, badge overlay top-right with reviews[1] details, quote box bottom with reviews[1].quote italicized.
+    • STRICT BANS for the whole expert-feedback section:
+      ✗ Same person in expert_01 and expert_02
+      ✗ UGC selfie aesthetic / TikTok composition / phone-camera feel
+      ✗ Product bottle visible in the frame (expert IS the focus)
+      ✗ Cinematic glamour / fashion editorial styling
+      ✗ Oversized stamped text / marketing CTA buttons rendered into the image
+      ✗ English "Doctor" labels when output language is Bahasa Melayu — use Malay credentials (Dr. / Doktor / Ahli Farmasi / Ahli Pemakanan) appropriately
 
 11. type="social-proof", imageAspectRatio="9:16"
     • reviews: 4-6 realistic Malaysian reviews
@@ -375,7 +394,7 @@ const FORM_BLUEPRINTS: Record<LandingForm, FormBlueprint> = {
     label: 'UGC MALAYSIA — Default 17-section conversion-first',
     sections: [
       'hero', 'pain', 'why-happens', 'failed-solutions', 'product-discovery',
-      'ingredients', 'mechanism', 'benefits', 'comparison', 'lifestyle',
+      'ingredients', 'mechanism', 'benefits', 'comparison', 'expert-feedback',
       'social-proof', 'whatsapp-testimonials', 'news-proof', 'before-after',
       'faq', 'offer', 'final-cta',
     ],
@@ -748,7 +767,7 @@ export interface RawPack {
 const SECTION_ORDER: SectionType[] = [
   'hero', 'pain', 'why-happens', 'failed-solutions', 'product-discovery',
   'ingredients', 'mechanism', 'benefits', 'comparison', 'lifestyle',
-  'social-proof', 'whatsapp-testimonials', 'news-proof', 'before-after',
+  'expert-feedback', 'social-proof', 'whatsapp-testimonials', 'news-proof', 'before-after',
   'faq', 'offer', 'final-cta',
 ]
 
@@ -768,6 +787,7 @@ const SECTION_ASPECT_DEFAULTS: Partial<Record<SectionType, LockedRatio>> = {
   'benefits':                '1:1',
   'comparison':              '1:1',
   'lifestyle':               '4:5',
+  'expert-feedback':         '9:16',
   'social-proof':            '9:16',
   'whatsapp-testimonials':   '9:16',
   'news-proof':              '4:5',

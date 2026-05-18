@@ -52,6 +52,7 @@ const PEOPLE_FOCUS_SECTIONS: ReadonlySet<SectionType> = new Set<SectionType>([
   'lifestyle',
   'news-proof',
   'before-after',
+  'expert-feedback',  // expert IS the focus; product visibility banned by spec
 ])
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -75,6 +76,7 @@ const SECTION_PRIORITY: Record<SectionType, number> = {
   'product-discovery':     2,
   'lifestyle':             2,
   'news-proof':            2,
+  'expert-feedback':       2,
   'ingredients':           3,
   'mechanism':             3,
   'benefits':              3,
@@ -608,6 +610,7 @@ const NO_PRODUCT_SECTIONS: ReadonlySet<SectionType> = new Set<SectionType>([
   'pain',
   'failed-solutions',
   'why-happens',
+  'expert-feedback',  // expert IS the focus — product visibility banned by section spec
 ])
 
 /** Hard directive injected into pain / failed-solutions / why-happens
@@ -626,6 +629,7 @@ function selectRefsForSection(
   type: SectionType,
   pack: LandingPagePack,
   promptBody?: string,
+  imageIdx?: number,
 ): string[] {
   const memory = pack.visualMemory ?? []
   const refs: string[] = []
@@ -635,6 +639,18 @@ function selectRefsForSection(
     const heroSection = pack.sections.find((s) => s.type === 'hero')
     const heroRef = heroSection?.imagePrompts?.[0]?.generatedAssetRef
     if (heroRef) refs.push(heroRef)
+  }
+
+  // ── Before-after pair-ref injection. When generating the "after" image
+  // (imageIdx=1 ba_02 ↔ ba_01, imageIdx=3 ba_04 ↔ ba_03), prepend the
+  // already-generated "before" image so KIE has a visual identity anchor.
+  // Falls back to text-only identity lock when the pair-mate hasn't
+  // rendered yet (concurrent queue race). ─────────────────────────────────
+  if (type === 'before-after' && (imageIdx === 1 || imageIdx === 3)) {
+    const baSection = pack.sections.find((s) => s.type === 'before-after')
+    const pairMateIdx = imageIdx - 1   // 1→0, 3→2
+    const pairRef = baSection?.imagePrompts?.[pairMateIdx]?.generatedAssetRef
+    if (pairRef) refs.push(pairRef)
   }
 
   // ── PAIN-SECTION GUARD (Phase 7 stabilization) ────────────────────────
@@ -777,6 +793,22 @@ function buildFinalPrompt(job: ImageJob, hasProductRefs: boolean): string {
     parts.push(MOBILE_SCREENSHOT_DIRECTIVE)
   }
 
+  // ── Expert-feedback section: premium editorial composition with badge +
+  // quote-box overlay. Re-asserts the spec at runtime to avoid Gemini
+  // under-specification. ──────────────────────────────────────────────────
+  if (job.section.type === 'expert-feedback') {
+    parts.push(EXPERT_FEEDBACK_DIRECTIVE)
+  }
+
+  // ── Before-after section: identity-lock directive. Combined with pair-
+  // ref injection in selectRefsForSection, this gives KIE both a textual
+  // identity description AND (when available) a visual reference image
+  // from the pair-mate so the same individual threads through BEFORE ↔
+  // AFTER. Fixes the "random unrelated people" failure mode. ──────────────
+  if (job.section.type === 'before-after') {
+    parts.push(BEFORE_AFTER_IDENTITY_LOCK_DIRECTIVE)
+  }
+
   // ── Comparison section: inject structured comparisonData when available so
   // the image generator gets explicit US vs THEM bullet pairs rather than
   // trying to parse them out of the free-form imagePrompt body. Eliminates
@@ -811,6 +843,39 @@ function buildFinalPrompt(job: ImageJob, hasProductRefs: boolean): string {
 
   return parts.join('\n\n')
 }
+
+/** Expert-feedback section directive. Forces premium editorial composition
+ *  with badge overlay + quote box, NOT lifestyle / UGC. The section spec
+ *  in SYSTEM_PROMPT already describes the layout — this runtime block
+ *  re-asserts the rules at the KIE prompt level so they survive any
+ *  Gemini under-specification. */
+const EXPERT_FEEDBACK_DIRECTIVE =
+  'EXPERT AUTHORITY FEEDBACK COMPOSITION — non-negotiable layout rules:\n'
+  + '  • This is a PREMIUM EDITORIAL portrait poster, NOT a lifestyle UGC shot.\n'
+  + '  • 9:16 tall canvas. TOP 60% = professional medical / clinic / pharmacy / nutrition-lab environment with the expert in clean professional attire (white coat / pharmacist tunic / smart blouse). Calm authoritative expression. Soft natural daylight.\n'
+  + '  • TOP-RIGHT corner: small rounded "expert badge" card overlay. Inside: circular avatar headshot + bold expert name + thin small-cap specialty line + "X Years Experience" line. Clean editorial sans-serif typography. Subtle drop-shadow on the badge.\n'
+  + '  • BOTTOM 40%: light cream / off-white quote box overlay with a thin top divider line. Inside: italic blockquote of the expert\'s opinion text (rendered as visible image text), credited beneath with the expert\'s name in small caps. Bold opening quotation mark (").\n'
+  + '  • Aesthetic: premium magazine editorial, clinical-professional, magazine-clean typography hierarchy, realistic spacing.\n'
+  + '  • Realistic Malaysian / Southeast-Asian expert face. NO Western / Korean / Chinese-influencer aesthetic.\n'
+  + '  • ABSOLUTELY FORBIDDEN: product packaging visible (focus is expert, not product); TikTok visual style; UGC selfie aesthetic; phone-camera feel; fashion-editorial glamour; oversized stamped marketing text; CTA buttons / "ORDER" / "DISKAUN" rendered into image; cinematic gym-influencer transformation aesthetic.'
+
+/** Before-after identity-lock directive. Strengthens the per-pair identity
+ *  requirements in the imagePrompt body — explicit hard bans + explicit
+ *  "if reference image #1 is attached, IT IS the same person you must
+ *  render" line. Combined with pair-ref injection (see selectRefsForSection
+ *  before-after branch) this gives KIE a visual identity anchor instead of
+ *  relying purely on text description. */
+const BEFORE_AFTER_IDENTITY_LOCK_DIRECTIVE =
+  'BEFORE/AFTER IDENTITY LOCK — non-negotiable per-pair rules:\n'
+  + '  • The BEFORE and AFTER images of EACH PAIR (ba_01↔ba_02, ba_03↔ba_04) MUST depict the SAME individual.\n'
+  + '  • Same face shape, same skin tone, same age, same ethnicity, same hairstyle / hijab style as their pair-mate.\n'
+  + '  • Same room background, same camera framing, same outfit family (slight color shift OK) as their pair-mate.\n'
+  + '  • If a reference image is attached (filesUrl), THAT REFERENCE IS THE BEFORE-STATE PERSON — the AFTER render MUST be visually recognizable as the same individual (same bone structure, same demographic identity).\n'
+  + '  • DIFFERENT clothing pieces between BEFORE and AFTER (no same exact shirt) — natural outfit evolution, no Photoshop split-clone.\n'
+  + '  • DIFFERENT expression: BEFORE = tired / slumped / low-energy; AFTER = relaxed / confident / brighter.\n'
+  + '  • DIFFERENT lighting: BEFORE = cooler dim; AFTER = warmer brighter (same window, different time of day).\n'
+  + '  • Render the Malay label "SEBELUM" (before) OR "SELEPAS" (after) in clean white sans-serif top-left.\n'
+  + '  • ABSOLUTELY FORBIDDEN: different face between BEFORE and AFTER of the same pair; race / body-type swap; gym-influencer transformation aesthetic; sports-bra / activewear / lingerie reveal; English "BEFORE" / "AFTER" labels; collage / split-frame / side-by-side in ONE image.'
 
 /** Detect WhatsApp / Shopee / TikTok-Shop / Facebook screenshot jobs.
  *  Matches by section type + imagePrompt.style heuristic so we don't
@@ -1180,7 +1245,7 @@ async function runWithCreditSafeRetry(
   // Phase 7 — pass prompt body so selectRefsForSection can auto-attach
   // product refs when the imagePrompt mentions bottle / capsule / brand
   // name (prevents KIE from inventing fake brands on people-focus shots).
-  const refs = selectRefsForSection(job.section.type, job.pack, job.prompt.prompt)
+  const refs = selectRefsForSection(job.section.type, job.pack, job.prompt.prompt, job.imageIdx)
   const filesUrl = await resolveRefs(refs)
   const hasProductRefs = filesUrl.length > 0
 
@@ -1395,6 +1460,54 @@ export async function generatePackImages(
       }
       // Remove hero from the pool — already processed (success or fail)
       jobs = jobs.filter((_, i) => i !== heroIdx)
+    }
+  }
+
+  // ── Before/after PAIR-SEED render (Group 3 identity-lock) ────────────────
+  // Pre-render ba_01 (imageIdx=0) and ba_03 (imageIdx=2) sequentially so
+  // ba_02 (imageIdx=1) and ba_04 (imageIdx=3) can attach their pair-mate's
+  // generatedAssetRef as a reference image, locking identity across BEFORE
+  // ↔ AFTER. Both seeds run sequentially (low concurrency cost: 2 extra
+  // serial renders, ~3-5min worst case). After this stage the remaining
+  // jobs flow through the regular parallel queue.
+  const baSectionIdx = pack.sections.findIndex((s) => s.type === 'before-after')
+  if (baSectionIdx >= 0) {
+    const baSeeds = jobs.filter((j) =>
+      j.sectionIdx === baSectionIdx && (j.imageIdx === 0 || j.imageIdx === 2),
+    )
+    for (const seed of baSeeds) {
+      console.info(`[before-after] pair-seed render — ba_0${seed.imageIdx + 1} (imageIdx=${seed.imageIdx}) before its pair-mate`)
+      options.onTaskUpdate(seed.sectionIdx, seed.imageIdx, { status: 'generating' })
+      try {
+        const { assetRef, retries } = await runWithCreditSafeRetry(
+          seed,
+          pack.visualMemory,
+          kieApiKey,
+          (patch) => options.onTaskUpdate(seed.sectionIdx, seed.imageIdx, patch),
+          options.signal,
+        )
+        const sec = pack.sections[seed.sectionIdx]
+        if (sec && sec.imagePrompts?.[seed.imageIdx]) {
+          sec.imagePrompts[seed.imageIdx].generatedAssetRef = assetRef
+          sec.imagePrompts[seed.imageIdx].status = 'done'
+        }
+        options.onTaskUpdate(seed.sectionIdx, seed.imageIdx, {
+          status: 'done', generatedAssetRef: assetRef, error: undefined,
+        })
+        done++
+        totalRetries += retries
+        options.onProgress?.(done, failed, total, totalRetries)
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err)
+        console.warn(`[before-after] pair-seed ba_0${seed.imageIdx + 1} failed — pair-mate will fall back to text-only identity lock:`, msg)
+        options.onTaskUpdate(seed.sectionIdx, seed.imageIdx, { status: 'failed', error: msg })
+        failed++
+        options.onProgress?.(done, failed, total, totalRetries)
+      }
+    }
+    if (baSeeds.length > 0) {
+      const seedIdxSet = new Set(baSeeds.map((s) => `${s.sectionIdx}:${s.imageIdx}`))
+      jobs = jobs.filter((j) => !seedIdxSet.has(`${j.sectionIdx}:${j.imageIdx}`))
     }
   }
 

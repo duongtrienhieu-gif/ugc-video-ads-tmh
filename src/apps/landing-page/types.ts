@@ -14,6 +14,7 @@ export type SectionType =
   | 'benefits'
   | 'comparison'            // NEW — product vs competitor infographic
   | 'lifestyle'
+  | 'expert-feedback'       // NEW — clinical expert opinion / authority review
   | 'social-proof'
   | 'whatsapp-testimonials'
   | 'news-proof'            // NEW — authority / media proof screenshots

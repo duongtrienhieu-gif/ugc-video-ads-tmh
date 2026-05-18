@@ -17,6 +17,7 @@ const SECTION_GLYPH: Record<SectionType, string> = {
   benefits:                '✅',
   comparison:              '⚖️',
   lifestyle:               '🌅',
+  'expert-feedback':       '🩺',
   'social-proof':          '💬',
   'whatsapp-testimonials': '📱',
   'news-proof':            '📰',
@@ -37,6 +38,7 @@ const SECTION_ACCENT: Record<SectionType, string> = {
   benefits:                'border-teal-200 bg-teal-50/40',
   comparison:              'border-indigo-200 bg-indigo-50/40',
   lifestyle:               'border-pink-200 bg-pink-50/40',
+  'expert-feedback':       'border-stone-300 bg-stone-50/40',
   'social-proof':          'border-amber-200 bg-amber-50/40',
   'whatsapp-testimonials': 'border-green-200 bg-green-50/40',
   'news-proof':            'border-slate-200 bg-slate-50/40',
@@ -51,6 +53,7 @@ const NEW_SECTION_BADGE: Partial<Record<SectionType, string>> = {
   comparison:   'bg-indigo-100 text-indigo-700',
   'news-proof': 'bg-slate-100 text-slate-700',
   'before-after': 'bg-purple-100 text-purple-700',
+  'expert-feedback': 'bg-stone-100 text-stone-700',
 }
 
 interface SectionCardProps {
@@ -65,7 +68,7 @@ export default function SectionCard({ index, section, onRegenerateImage, onDelet
   const [showViTranslation, setShowViTranslation] = useState(false)
   const glyph = SECTION_GLYPH[section.type] ?? '📄'
   const accent = SECTION_ACCENT[section.type] ?? 'border-black/10 bg-white'
-  const isNewSection = section.type === 'comparison' || section.type === 'news-proof' || section.type === 'before-after'
+  const isNewSection = section.type === 'comparison' || section.type === 'news-proof' || section.type === 'before-after' || section.type === 'expert-feedback'
 
   return (
     <div className={`rounded-xl border ${accent} shadow-sm overflow-hidden`}>
