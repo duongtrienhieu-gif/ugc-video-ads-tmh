@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { Sparkles, Save, RefreshCw, Brain, Target, Anchor, Compass, Layers } from 'lucide-react'
+import { Sparkles, Save, RefreshCw, Brain, Target, Anchor, Compass, Layers, ScrollText } from 'lucide-react'
 import type { ContentAngle, LabBriefResult } from '../types'
 import { getGoalById, getToneById } from '../services/presets'
 import PainPointCard from './PainPointCard'
@@ -17,11 +17,12 @@ interface OutputPanelProps {
   onOpenHookLab: () => void
   onOpenFunnel: () => void
   onOpenCoc: () => void
+  onOpenSalesLetter: () => void
 }
 
 export default function OutputPanel({
   result, isGenerating, isAlreadySaved,
-  onRegenerate, onSave, onOpenCaption, onOpenScript, onOpenHookLab, onOpenFunnel, onOpenCoc,
+  onRegenerate, onSave, onOpenCaption, onOpenScript, onOpenHookLab, onOpenFunnel, onOpenCoc, onOpenSalesLetter,
 }: OutputPanelProps) {
   const [lang, setLang] = useState<'vi' | 'my'>('vi')
 
@@ -236,6 +237,33 @@ export default function OutputPanel({
             >
               <Target className="h-3.5 w-3.5" />
               {result.funnelOutput ? 'Mở Phễu Content (9 caption)' : 'Tạo Phễu Content'}
+            </button>
+          </div>
+        </section>
+
+        {/* Long-Form Sales Letter */}
+        <section>
+          <div className="rounded-2xl border border-amber-200 bg-gradient-to-br from-amber-50/60 to-orange-50/60 p-4">
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest text-gray-500">
+                <ScrollText className="h-3 w-3" />
+                Long-Form Sales Letter · 1000-2500 từ
+              </div>
+              {result.salesLetterOutput && (
+                <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-700">
+                  ✅ Đã tạo · {result.salesLetterOutput.targetLength} từ
+                </span>
+              )}
+            </div>
+            <p className="mb-3 text-[12px] leading-relaxed text-gray-700">
+              Sinh <b>advertorial / sales letter dài</b> 14 section (Hero → Pain → Story → Mechanism → Proof → Offer → Bonus → Anchoring → Risk Reversal → Urgency → FAQ → Recap → CTA) cho landing page hoặc paid native traffic.
+            </p>
+            <button
+              onClick={onOpenSalesLetter}
+              className="flex w-full items-center justify-center gap-2 rounded-full bg-gradient-to-r from-amber-600 to-orange-600 px-4 py-2.5 text-[12px] font-bold text-white shadow-sm transition-all hover:from-amber-700 hover:to-orange-700"
+            >
+              <ScrollText className="h-3.5 w-3.5" />
+              {result.salesLetterOutput ? 'Mở Sales Letter' : 'Tạo Long-Form Sales Letter'}
             </button>
           </div>
         </section>

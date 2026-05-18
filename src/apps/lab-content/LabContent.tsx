@@ -3,7 +3,7 @@ import { useAppStore } from '../../stores/appStore'
 import { useBankStore } from '../../stores/bankStore'
 import type { Product } from '../../stores/types'
 import type {
-  ContentAngle, Goal, LabBriefParams, LabBriefResult, PricingInfo, ToneId,
+  ContentAngle, Goal, LabBriefParams, LabBriefResult, PricingInfo, SalesLetterLength, ToneId,
 } from './types'
 import { DEFAULT_PRICING_INFO } from './types'
 import { generateBrief } from './services/generateBrief'
@@ -12,6 +12,7 @@ import { generateLabScript } from './services/generateLabScript'
 import { generateHookLab } from './services/generateHookLab'
 import { generateFunnel } from './services/generateFunnel'
 import { generateCoc } from './services/generateCoc'
+import { generateSalesLetter } from './services/generateSalesLetter'
 import { getGoalById } from './services/presets'
 import { useLabContentStore } from './store'
 import InputPanel from './components/InputPanel'
@@ -20,6 +21,7 @@ import AngleOutputModal, { type OutputMode } from './components/AngleOutputModal
 import HookLabModal from './components/HookLabModal'
 import FunnelModal from './components/FunnelModal'
 import CocModal from './components/CocModal'
+import SalesLetterModal from './components/SalesLetterModal'
 import AutoSaveIndicator from '../../components/AutoSaveIndicator'
 import { useSessionPersist } from '../../services/sessionPersistence'
 
@@ -70,6 +72,11 @@ export default function LabContent() {
   const [cocOpen, setCocOpen] = useState(false)
   const [cocGenerating, setCocGenerating] = useState(false)
   const [cocError, setCocError] = useState<string | null>(null)
+
+  // ── Long-Form Sales Letter modal state ─────────────────────────────────
+  const [salesLetterOpen, setSalesLetterOpen] = useState(false)
+  const [salesLetterGenerating, setSalesLetterGenerating] = useState(false)
+  const [salesLetterError, setSalesLetterError] = useState<string | null>(null)
 
   const lastParamsRef = useRef<Omit<LabBriefParams, 'productId'> | null>(null)
 
@@ -325,6 +332,29 @@ export default function LabContent() {
     }
   }
 
+  // ── Long-Form Sales Letter ─────────────────────────────────────────────
+  const handleOpenSalesLetter = () => {
+    setSalesLetterError(null)
+    setSalesLetterOpen(true)
+  }
+
+  const runSalesLetterGeneration = async (length: SalesLetterLength, focusAngle: ContentAngle | null) => {
+    if (!result) return
+    setSalesLetterGenerating(true)
+    setSalesLetterError(null)
+    try {
+      const output = await generateSalesLetter(result, length, focusAngle)
+      setResult((prev) => prev ? { ...prev, salesLetterOutput: output } : prev)
+      sessionApi.forceSave()
+      addToast(`Đã tạo sales letter ${output.wordCountVi} từ`, 'success')
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      setSalesLetterError(msg)
+    } finally {
+      setSalesLetterGenerating(false)
+    }
+  }
+
   const cachedModalOutput = (() => {
     if (!modalAngle || !result) return null
     const slot = result.angleOutputs?.[modalAngle.id]
@@ -366,6 +396,7 @@ export default function LabContent() {
           onOpenHookLab={handleOpenHookLab}
           onOpenFunnel={handleOpenFunnel}
           onOpenCoc={handleOpenCoc}
+          onOpenSalesLetter={handleOpenSalesLetter}
         />
       </div>
 
@@ -408,6 +439,16 @@ export default function LabContent() {
         error={cocError}
         onClose={() => setCocOpen(false)}
         onGenerate={(pillarText) => void runCocGeneration(pillarText)}
+      />
+
+      <SalesLetterModal
+        open={salesLetterOpen}
+        result={result}
+        cachedOutput={result?.salesLetterOutput ?? null}
+        isGenerating={salesLetterGenerating}
+        error={salesLetterError}
+        onClose={() => setSalesLetterOpen(false)}
+        onGenerate={(length, angle) => void runSalesLetterGeneration(length, angle)}
       />
     </div>
   )

@@ -264,6 +264,37 @@ export interface CocOutput {
   generatedAt: number
 }
 
+// ── Long-Form Sales Letter ────────────────────────────────────────────────
+// 1500-2500 word advertorial / sales letter using AIDA + PPPP + Storytelling
+// chain. 14-section blueprint. Output is full-length copy ready for landing
+// page / paid native traffic.
+
+export type SalesLetterLength = 1000 | 1500 | 2000 | 2500
+
+export interface SalesLetterSection {
+  id: string
+  /** Section type identifier — e.g. "hero", "pain", "story", "proof", "offer". */
+  sectionType: string
+  /** VN section label shown in UI. */
+  labelVi: string
+  /** Vietnamese section text. */
+  vietnamese: string
+  /** Malay section text. */
+  malay: string
+}
+
+export interface SalesLetterOutput {
+  /** Target length the user picked. */
+  targetLength: SalesLetterLength
+  /** 14 sections of the letter, in narrative order. */
+  sections: SalesLetterSection[]
+  /** Auto-calculated total word count (VI). */
+  wordCountVi: number
+  /** Auto-calculated total word count (MY). */
+  wordCountMy: number
+  generatedAt: number
+}
+
 // ── Output ────────────────────────────────────────────────────────────────
 export interface LabBriefResult {
   /** Product link */
@@ -304,6 +335,9 @@ export interface LabBriefResult {
 
   /** Cached COC Multiplier output (1 pillar → 7 micros). Optional. */
   cocOutput?: CocOutput
+
+  /** Cached Long-Form Sales Letter output. Optional. */
+  salesLetterOutput?: SalesLetterOutput
 
   generatedAt: number
 }
