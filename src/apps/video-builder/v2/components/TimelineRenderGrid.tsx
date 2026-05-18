@@ -24,12 +24,13 @@
 import { useState, useRef } from 'react'
 import {
   Loader2, AlertCircle, RotateCcw, Lock, Unlock, SkipForward, Undo2, Play,
-  Sparkles, ChevronsRight, X,
+  Sparkles, ChevronsRight, X, Check, ThumbsDown,
 } from 'lucide-react'
 import {
   useTimelineRenderJobStore,
   countPendingCuts, countFailedCuts, countLockedCuts,
   countCompletedCuts, countSkippedCuts,
+  countApprovedCuts, countRejectedCuts,
 } from '../stores/timelineRenderJobStore'
 import { useAssetUrl } from '../../../../hooks/useAssetUrl'
 import { TIMELINE_RENDER_STATUS_LABEL_VI } from '../types'
@@ -54,10 +55,21 @@ const STATUS_DOT: Record<string, string> = {
   queued:     'bg-slate-400 animate-pulse',
   generating: 'bg-violet-500 animate-pulse',
   completed:  'bg-emerald-500',
+  approved:   'bg-green-600',  // Z28 — stronger green than completed
+  rejected:   'bg-rose-500',   // Z28
   locked:     'bg-blue-600',
   skipped:    'bg-gray-400',
   failed:     'bg-red-500',
   cancelled:  'bg-gray-400',
+}
+
+// Z28 — phase chip colours (matches editorial palette in SceneGenGrid)
+const PHASE_BG: Record<string, string> = {
+  hook:      'bg-fuchsia-500/85',
+  body:      'bg-slate-600/85',
+  education: 'bg-blue-500/85',
+  recovery:  'bg-emerald-500/85',
+  cta:       'bg-pink-600/90',
 }
 
 interface TimelineRenderGridProps {
@@ -79,6 +91,11 @@ export default function TimelineRenderGrid(props: TimelineRenderGridProps) {
   const unlockCut = useTimelineRenderJobStore((s) => s.unlockCut)
   const skipCut = useTimelineRenderJobStore((s) => s.skipCut)
   const unskipCut = useTimelineRenderJobStore((s) => s.unskipCut)
+  // Z28 — approval verdict actions
+  const approveCut   = useTimelineRenderJobStore((s) => s.approveCut)
+  const unapproveCut = useTimelineRenderJobStore((s) => s.unapproveCut)
+  const rejectCut    = useTimelineRenderJobStore((s) => s.rejectCut)
+  const unrejectCut  = useTimelineRenderJobStore((s) => s.unrejectCut)
 
   if (!job) {
     return (
@@ -94,10 +111,12 @@ export default function TimelineRenderGrid(props: TimelineRenderGridProps) {
 
   const total      = job.items.length
   const pending    = countPendingCuts(job)
-  const completed  = countCompletedCuts(job)  // includes locked
+  const completed  = countCompletedCuts(job)  // includes locked + approved + rejected
   const locked     = countLockedCuts(job)
   const skipped    = countSkippedCuts(job)
   const failed     = countFailedCuts(job)
+  const approved   = countApprovedCuts(job)
+  const rejected   = countRejectedCuts(job)
   const running    = job.items.filter((i) => i.status === 'generating' || i.status === 'queued').length
 
   const pendingCost = pending * props.creditPerClip
@@ -132,6 +151,8 @@ export default function TimelineRenderGrid(props: TimelineRenderGridProps) {
           <Chip label="Chưa render" value={pending}   dot="bg-slate-300" emphasise={pending > 0 && !job.isRunning} />
           <Chip label="Đang chạy"   value={running}   dot="bg-violet-500 animate-pulse" hideIfZero />
           <Chip label="Đã xong"     value={completed} dot="bg-emerald-500" />
+          <Chip label="Đã duyệt"    value={approved}  dot="bg-green-600" hideIfZero />
+          <Chip label="Đã loại"     value={rejected}  dot="bg-rose-500" hideIfZero />
           <Chip label="Đã khoá"     value={locked}    dot="bg-blue-600" hideIfZero />
           <Chip label="Đã skip"     value={skipped}   dot="bg-gray-400" hideIfZero />
           <Chip label="Thất bại"    value={failed}    dot="bg-red-500" hideIfZero emphasise={failed > 0} />
@@ -173,6 +194,10 @@ export default function TimelineRenderGrid(props: TimelineRenderGridProps) {
               onUnlock={() => unlockCut(item.cutId)}
               onSkip={() => skipCut(item.cutId)}
               onUnskip={() => unskipCut(item.cutId)}
+              onApprove={() => approveCut(item.cutId)}
+              onUnapprove={() => unapproveCut(item.cutId)}
+              onReject={() => rejectCut(item.cutId)}
+              onUnreject={() => unrejectCut(item.cutId)}
             />
           ))}
         </div>
@@ -203,6 +228,7 @@ function Chip({
 function CutCard({
   item, creditPerClip,
   onRender, onLock, onUnlock, onSkip, onUnskip,
+  onApprove, onUnapprove, onReject, onUnreject,
 }: {
   item: TimelineRenderItem
   creditPerClip: number
@@ -211,6 +237,10 @@ function CutCard({
   onUnlock: () => void
   onSkip: () => void
   onUnskip: () => void
+  onApprove: () => void
+  onUnapprove: () => void
+  onReject: () => void
+  onUnreject: () => void
 }) {
   const videoRef = useRef<HTMLVideoElement>(null)
   const [isPlaying, setIsPlaying] = useState(false)
@@ -219,10 +249,12 @@ function CutCard({
   const keyframeUrl = item.parentKeyframeRef?.startsWith('http') ? item.parentKeyframeRef : resolvedKeyframe
   const videoUrl    = item.videoRef?.startsWith('http')         ? item.videoRef          : resolvedVideo
 
-  const isLoading = item.status === 'generating' || item.status === 'queued'
-  const hasVideo  = !!videoUrl
-  const isLocked  = item.status === 'locked'
-  const isSkipped = item.status === 'skipped'
+  const isLoading  = item.status === 'generating' || item.status === 'queued'
+  const hasVideo   = !!videoUrl
+  const isLocked   = item.status === 'locked'
+  const isSkipped  = item.status === 'skipped'
+  const isApproved = item.status === 'approved'
+  const isRejected = item.status === 'rejected'
 
   const togglePlay = () => {
     if (!videoRef.current) return
@@ -236,8 +268,10 @@ function CutCard({
   }
 
   const borderCls =
-    isLocked  ? 'border-blue-400 ring-2 ring-blue-200/60' :
-    isSkipped ? 'border-gray-300 opacity-60' :
+    isLocked   ? 'border-blue-400 ring-2 ring-blue-200/60' :
+    isApproved ? 'border-green-500 ring-2 ring-green-200/60' :
+    isRejected ? 'border-rose-400 border-dashed' :
+    isSkipped  ? 'border-gray-300 opacity-60' :
     item.status === 'completed' ? 'border-emerald-300' :
     item.status === 'failed'    ? 'border-red-300' :
     'border-black/10'
@@ -297,10 +331,20 @@ function CutCard({
           {item.klingMotion.replace('_', ' ')}
         </span>
 
-        {/* Lock badge overlay */}
+        {/* Verdict / state overlay strip */}
         {isLocked && (
           <div className="absolute inset-x-0 bottom-0 flex items-center justify-center gap-1 bg-blue-600/90 py-1 text-[10px] font-bold text-white backdrop-blur-sm">
-            <Lock className="h-3 w-3" /> Đã khoá — an toàn khỏi bulk render
+            <Lock className="h-3 w-3" /> Đã khoá — bỏ qua mọi bulk render
+          </div>
+        )}
+        {isApproved && (
+          <div className="absolute inset-x-0 bottom-0 flex items-center justify-center gap-1 bg-green-600/90 py-1 text-[10px] font-bold text-white backdrop-blur-sm">
+            <Check className="h-3 w-3" /> Đã duyệt — bỏ qua bulk
+          </div>
+        )}
+        {isRejected && (
+          <div className="absolute inset-x-0 bottom-0 flex items-center justify-center gap-1 bg-rose-500/90 py-1 text-[10px] font-bold text-white backdrop-blur-sm">
+            <ThumbsDown className="h-3 w-3" /> Đã loại — render lại nếu muốn
           </div>
         )}
         {isSkipped && (
@@ -308,6 +352,29 @@ function CutCard({
             <SkipForward className="h-3 w-3" /> Đã bỏ qua
           </div>
         )}
+      </div>
+
+      {/* ── Z28 metadata chip row ────────────────────────────────────────
+          shot# · phase · cutType (transition intent) · M{master-id} (continuity)
+          Helps the user understand each card is a DIFFERENT shot even when
+          the source-keyframe thumbnail makes them look similar pre-render. */}
+      <div className="flex flex-wrap items-center gap-1 border-t border-black/5 px-2 py-1.5 text-[9px]">
+        {item.phase && (
+          <span className={`rounded px-1.5 py-0.5 font-bold uppercase tracking-wide text-white ${PHASE_BG[item.phase] ?? 'bg-slate-500/85'}`}>
+            {item.phase}
+          </span>
+        )}
+        {item.cutType && (
+          <span className="rounded border border-violet-200 bg-violet-50 px-1.5 py-0.5 font-bold uppercase tracking-wide text-violet-700">
+            {item.cutType}
+          </span>
+        )}
+        <span className="rounded border border-gray-200 bg-white px-1.5 py-0.5 font-semibold text-gray-600">
+          M{item.masterSceneId}
+        </span>
+        <span className="ml-auto font-semibold text-gray-400">
+          shot-{item.coverageShotId}
+        </span>
       </div>
 
       {/* ── Meta row (status dot + duration + cost) ─────────────────────── */}
@@ -321,7 +388,10 @@ function CutCard({
         </span>
       </div>
 
-      {/* ── Action buttons — context-aware ──────────────────────────────── */}
+      {/* ── Z28 Action buttons — context-aware ──────────────────────────
+          Verdict states (locked / approved / rejected / skipped) collapse
+          to a single inverse-toggle button. Otherwise the full action set
+          (Render / Approve / Reject / Lock / Skip) is shown. */}
       <div className="flex flex-wrap gap-1 border-t border-black/5 bg-gray-50 px-1.5 py-1.5">
         {isLocked ? (
           <button
@@ -330,6 +400,45 @@ function CutCard({
           >
             <Unlock className="h-3 w-3" /> Mở khoá
           </button>
+        ) : isApproved ? (
+          <>
+            <button
+              onClick={onUnapprove}
+              className="flex flex-1 items-center justify-center gap-1 rounded-md border border-green-300 bg-white px-2 py-1 text-[10px] font-semibold text-green-700 hover:bg-green-50"
+            >
+              <Undo2 className="h-3 w-3" /> Bỏ duyệt
+            </button>
+            <button
+              onClick={onLock}
+              title="Khoá vĩnh viễn (mạnh hơn duyệt)"
+              className="flex items-center justify-center rounded-md border border-blue-300 bg-white px-2 py-1 text-[10px] font-semibold text-blue-700 hover:bg-blue-50"
+            >
+              <Lock className="h-3 w-3" />
+            </button>
+            <button
+              onClick={onRender}
+              title="Render lại"
+              className="flex items-center justify-center rounded-md border border-violet-300 bg-white px-2 py-1 text-[10px] font-semibold text-violet-700 hover:bg-violet-50"
+            >
+              <RotateCcw className="h-3 w-3" />
+            </button>
+          </>
+        ) : isRejected ? (
+          <>
+            <button
+              onClick={onRender}
+              title="Render lại — lấy take mới"
+              className="flex flex-1 items-center justify-center gap-1 rounded-md bg-violet-600 px-2 py-1 text-[10px] font-bold text-white hover:bg-violet-700"
+            >
+              <RotateCcw className="h-3 w-3" /> Render lại
+            </button>
+            <button
+              onClick={onUnreject}
+              className="flex items-center justify-center gap-1 rounded-md border border-gray-300 bg-white px-2 py-1 text-[10px] font-semibold text-gray-700 hover:bg-gray-100"
+            >
+              <Undo2 className="h-3 w-3" /> Bỏ loại
+            </button>
+          </>
         ) : isSkipped ? (
           <button
             onClick={onUnskip}
@@ -350,13 +459,29 @@ function CutCard({
               {hasVideo ? 'Render lại' : 'Render'}
             </button>
             {hasVideo && (
-              <button
-                onClick={onLock}
-                title="Khoá clip — không bị render lại khi bulk"
-                className="flex items-center justify-center gap-1 rounded-md border border-blue-300 bg-white px-2 py-1 text-[10px] font-semibold text-blue-700 hover:bg-blue-50"
-              >
-                <Lock className="h-3 w-3" /> Khoá
-              </button>
+              <>
+                <button
+                  onClick={onApprove}
+                  title="Duyệt — bỏ qua khi bulk"
+                  className="flex items-center justify-center rounded-md border border-green-300 bg-white px-2 py-1 text-[10px] font-semibold text-green-700 hover:bg-green-50"
+                >
+                  <Check className="h-3 w-3" /> Duyệt
+                </button>
+                <button
+                  onClick={onReject}
+                  title="Loại — đánh dấu không đạt"
+                  className="flex items-center justify-center rounded-md border border-rose-300 bg-white px-2 py-1 text-[10px] font-semibold text-rose-700 hover:bg-rose-50"
+                >
+                  <ThumbsDown className="h-3 w-3" />
+                </button>
+                <button
+                  onClick={onLock}
+                  title="Khoá — bỏ qua bulk + render lại"
+                  className="flex items-center justify-center rounded-md border border-blue-300 bg-white px-2 py-1 text-[10px] font-semibold text-blue-700 hover:bg-blue-50"
+                >
+                  <Lock className="h-3 w-3" />
+                </button>
+              </>
             )}
             <button
               onClick={onSkip}

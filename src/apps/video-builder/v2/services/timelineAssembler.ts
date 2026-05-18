@@ -182,12 +182,18 @@ export interface BuildTimelineOptions {
   ctaStart?: number
   /**
    * Z25 MVP COST CAP — hard ceiling on number of timeline cuts.
-   * Default 18 (the editorial-spec upper bound for the MVP density:
-   * Hook 2-3 · Body 2-3 · Reveal 2-3 · Proof 2 · CTA 1-2 + Recovery 1-2
-   * + a couple education beats). Each cut → one Kling clip → ~70 credits.
-   * Set to 0 to disable the cap (legacy "Hollywood" mode).
+   * Set to 0 to disable the cap. When `mode` is also passed, the mode
+   * config takes precedence over this field (kept for back-compat
+   * with pre-Z28 callers).
    */
   maxCuts?: number
+  /**
+   * Z28 — explicit mode override. When provided:
+   *   • maxCuts derived from mode.cuts.max (overrides options.maxCuts)
+   *   • PHASE_DURATION bands scaled to mode.durationBand
+   *   • Logs include the mode label for debugging
+   */
+  mode?: TimelineMode
 }
 
 export function buildTimelineCuts(
@@ -196,8 +202,18 @@ export function buildTimelineCuts(
 ): TimelineCut[] {
   const { voiceDurationSec } = options
   const ctaStart = options.ctaStart ?? 0.80
-  const maxCuts = options.maxCuts ?? 18
+  // Z28 — mode-driven caps take precedence over the legacy maxCuts option.
+  const modeConfig = options.mode ? getModeConfig(options.mode) : null
+  const maxCuts = modeConfig ? modeConfig.cuts.max : (options.maxCuts ?? 18)
   if (coverageShots.length === 0 || voiceDurationSec <= 0) return []
+
+  if (modeConfig) {
+    console.log(
+      `[TIMELINE Z28] mode=${modeConfig.mode} (${modeConfig.labelVi}) · ` +
+      `maxCuts=${maxCuts} · durationBand=${modeConfig.durationBand.min}-${modeConfig.durationBand.max}s · ` +
+      `voiceDur=${voiceDurationSec}s · coverage=${coverageShots.length}`,
+    )
+  }
 
   const energyCurve = buildEnergyCurve(voiceDurationSec)
   const cuts: TimelineCut[] = []
@@ -227,7 +243,15 @@ export function buildTimelineCuts(
     const pos = cursorSec / voiceDurationSec
     const phase = phaseAtPosition(pos, ctaStart)
     const energySample = energyCurve[Math.floor(cursorSec)] ?? 60
-    const baseDuration = computeCutDensity(phase, energySample)
+    let baseDuration = computeCutDensity(phase, energySample)
+    // Z28 — clamp phase-derived duration to the mode's band so SHORT
+    // stays punchy (1-2s) and FULL gets breathing room (1.5-3.5s).
+    if (modeConfig) {
+      baseDuration = Math.min(
+        Math.max(baseDuration, modeConfig.durationBand.min),
+        modeConfig.durationBand.max,
+      )
+    }
     const remaining = voiceDurationSec - cursorSec
     const duration = Math.min(baseDuration, remaining)
     if (duration < 0.3) break

@@ -50,6 +50,20 @@ interface TimelineRenderStoreState {
   /** Remove the skip flag — cut returns to 'pending'. */
   unskipCut: (cutId: number) => void
 
+  // ── Z28 approve / reject (cheap, no network) ────────────────────────────
+
+  /** User verdict OK. Only valid when item has videoRef. Excluded from
+   *  bulk auto-render; per-card rerender still works. */
+  approveCut: (cutId: number) => void
+  /** Reverse approval — returns to 'completed'. */
+  unapproveCut: (cutId: number) => void
+  /** User verdict NO. Only valid when item has videoRef. Excluded from
+   *  bulk auto-render; per-card rerender still works (so user can take
+   *  a fresh take without burning credit on the rest of the batch). */
+  rejectCut: (cutId: number) => void
+  /** Reverse rejection — returns to 'completed'. */
+  unrejectCut: (cutId: number) => void
+
   // ── Resume + clear ──────────────────────────────────────────────────────
 
   /** Try to resume from localStorage. Returns true if a job exists with
@@ -187,12 +201,85 @@ export const useTimelineRenderJobStore = create<TimelineRenderStoreState>((set, 
     console.log(`[TIMELINE_RENDER] cut-${cutId} UNSKIPPED`)
   },
 
+  // ── Z28 approve / reject ────────────────────────────────────────────
+
+  approveCut: (cutId) => {
+    const cur = get().job
+    if (!cur) return
+    const idx = findItemIdx(cur, cutId)
+    if (idx === -1) return
+    const item = cur.items[idx]
+    if (!item.videoRef) {
+      console.warn(`[TIMELINE_RENDER Z28] approveCut cutId=${cutId} skipped — no videoRef`)
+      return
+    }
+    if (item.status === 'locked' || item.status === 'skipped' || item.status === 'generating') return
+    const items = [...cur.items]
+    items[idx] = { ...item, status: 'approved', approvedAt: Date.now(), rejectedAt: undefined }
+    const next: TimelineRenderJob = { ...cur, items }
+    set({ job: next })
+    saveToStorage(next)
+    console.log(`[TIMELINE_RENDER Z28] cut-${cutId} APPROVED`)
+  },
+
+  unapproveCut: (cutId) => {
+    const cur = get().job
+    if (!cur) return
+    const idx = findItemIdx(cur, cutId)
+    if (idx === -1) return
+    const item = cur.items[idx]
+    if (item.status !== 'approved') return
+    const items = [...cur.items]
+    items[idx] = { ...item, status: 'completed', approvedAt: undefined }
+    const next: TimelineRenderJob = { ...cur, items }
+    set({ job: next })
+    saveToStorage(next)
+    console.log(`[TIMELINE_RENDER Z28] cut-${cutId} UN-APPROVED`)
+  },
+
+  rejectCut: (cutId) => {
+    const cur = get().job
+    if (!cur) return
+    const idx = findItemIdx(cur, cutId)
+    if (idx === -1) return
+    const item = cur.items[idx]
+    if (!item.videoRef) {
+      console.warn(`[TIMELINE_RENDER Z28] rejectCut cutId=${cutId} skipped — no videoRef`)
+      return
+    }
+    if (item.status === 'locked' || item.status === 'skipped' || item.status === 'generating') return
+    const items = [...cur.items]
+    items[idx] = { ...item, status: 'rejected', rejectedAt: Date.now(), approvedAt: undefined }
+    const next: TimelineRenderJob = { ...cur, items }
+    set({ job: next })
+    saveToStorage(next)
+    console.log(`[TIMELINE_RENDER Z28] cut-${cutId} REJECTED`)
+  },
+
+  unrejectCut: (cutId) => {
+    const cur = get().job
+    if (!cur) return
+    const idx = findItemIdx(cur, cutId)
+    if (idx === -1) return
+    const item = cur.items[idx]
+    if (item.status !== 'rejected') return
+    const items = [...cur.items]
+    items[idx] = { ...item, status: 'completed', rejectedAt: undefined }
+    const next: TimelineRenderJob = { ...cur, items }
+    set({ job: next })
+    saveToStorage(next)
+    console.log(`[TIMELINE_RENDER Z28] cut-${cutId} UN-REJECTED`)
+  },
+
   tryResumeFromStorage: () => {
     const job = loadFromStorage()
     if (!job) return false
     set({ job })
+    // Z28 — approved + rejected are terminal user verdicts; treat like completed
+    // for the "is there pending work?" check.
     return job.items.some((i) =>
-      i.status !== 'completed' && i.status !== 'locked' && i.status !== 'cancelled' && i.status !== 'skipped'
+      i.status !== 'completed' && i.status !== 'locked' && i.status !== 'cancelled' &&
+      i.status !== 'skipped' && i.status !== 'approved' && i.status !== 'rejected'
     )
   },
 
@@ -221,12 +308,28 @@ export function countLockedCuts(job: TimelineRenderJob | null): number {
   return job.items.filter((it) => it.status === 'locked').length
 }
 
+/** Counts ANYTHING with a rendered videoRef — completed / approved / rejected / locked. */
 export function countCompletedCuts(job: TimelineRenderJob | null): number {
   if (!job) return 0
-  return job.items.filter((it) => it.status === 'completed' || it.status === 'locked').length
+  return job.items.filter((it) =>
+    it.status === 'completed' || it.status === 'locked' ||
+    it.status === 'approved' || it.status === 'rejected'
+  ).length
 }
 
 export function countSkippedCuts(job: TimelineRenderJob | null): number {
   if (!job) return 0
   return job.items.filter((it) => it.status === 'skipped').length
+}
+
+/** Z28 — counts approved-verdict cuts (still has videoRef, immune to bulk). */
+export function countApprovedCuts(job: TimelineRenderJob | null): number {
+  if (!job) return 0
+  return job.items.filter((it) => it.status === 'approved').length
+}
+
+/** Z28 — counts rejected-verdict cuts (user said no, still has videoRef). */
+export function countRejectedCuts(job: TimelineRenderJob | null): number {
+  if (!job) return 0
+  return job.items.filter((it) => it.status === 'rejected').length
 }

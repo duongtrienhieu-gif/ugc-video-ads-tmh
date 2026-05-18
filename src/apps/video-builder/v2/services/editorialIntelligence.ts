@@ -35,6 +35,9 @@ import {
   buildEnergyCurve as tlBuildEnergyCurve,
   summarizePhaseDensities as tlSummarizePhaseDensities,
 } from './timelineAssembler'
+// Z28 — mode-driven duration scaling
+import type { TimelineMode } from './timelineMode'
+import { getModeConfig } from './timelineMode'
 
 // ═════════════════════════════════════════════════════════════════════════
 // P1 — VISUAL ROLE ENGINE
@@ -649,6 +652,10 @@ export interface BuildEditorialOptions {
   voiceDurationSec: number
   minShotsPerMaster?: number
   maxShotsPerMaster?: number
+  /** Z28 — explicit timeline mode. When set, overrides the Z25 default
+   *  fixed shotsPerMaster cap with mode-specific values, and propagates
+   *  to buildTimelineCuts for duration-band scaling. */
+  mode?: TimelineMode
 }
 
 export function buildEditorialBlueprint(
@@ -675,21 +682,21 @@ export function buildEditorialBlueprint(
   // ── 4. Build motion blueprint per master ─────────────────────────────
   masters = masters.map((m) => ({ ...m, motion: m.motion ?? buildMotionForMaster(m) }))
 
-  // ── 5. Z25 MVP COST CAP — coverage shots ────────────────────────────
-  // Was: 6-7 shots per master × 8 masters = 56 shots → ~3500 credits.
-  // Now: 2-3 shots per master × 4-6 masters = 10-15 shots → ~500-1200 credits.
-  //
-  // tlRecommendCoverageShotCount is kept for back-compat callers but the
-  // editorial blueprint no longer derives the cap from voice duration.
-  // The MVP cap is FIXED at 1-2 template shots per master (plus the
-  // master itself) regardless of voice length — cheap iteration first.
+  // ── 5. Z25/Z28 COST CAP — coverage shots ────────────────────────────
+  // Z25 baseline: 1-2 template shots per master + 1 master = 2-3 per master
+  // Z28: when mode is set, use mode.shotsPerMaster (SHORT 2-3 / MID 3-4
+  //      / FULL 4-5) so the cuts/master ratio matches the target output
+  //      duration. Without mode, the Z25 cheap defaults apply.
+  const modeConfig = options.mode ? getModeConfig(options.mode) : null
+  const minShots = options.minShotsPerMaster
+    ?? (modeConfig ? Math.max(1, modeConfig.shotsPerMaster.min - 1) : 1)
+  const maxShots = options.maxShotsPerMaster
+    ?? (modeConfig ? Math.max(1, modeConfig.shotsPerMaster.max - 1) : 2)
+
   const coverageShots: CoverageShot[] = []
   let shotIdCursor = 1
   for (const master of masters) {
-    const shots = ceDeriveCoverageShots(master, shotIdCursor, {
-      minShots: options.minShotsPerMaster ?? 1,
-      maxShots: options.maxShotsPerMaster ?? 2,
-    })
+    const shots = ceDeriveCoverageShots(master, shotIdCursor, { minShots, maxShots })
     coverageShots.push(...shots)
     shotIdCursor += shots.length
     console.log(`[COVERAGE] scene-${master.sceneId} (${master.visualRole}) generated ${shots.length} coverage shots`)
@@ -702,9 +709,10 @@ export function buildEditorialBlueprint(
   // ── 6. Assign continuity groups ──────────────────────────────────────
   const continuityGroups = assignContinuityGroups(masters, diverseShots)
 
-  // ── 7. Z21 — Assemble timeline via phase-aware assembler ─────────────
+  // ── 7. Z21/Z28 — Assemble timeline via phase-aware assembler ─────────
   const timelineCuts = tlBuildTimelineCuts(diverseShots, {
     voiceDurationSec: options.voiceDurationSec,
+    mode: options.mode,  // Z28 — drives maxCuts + duration band per mode
   })
 
   // ── 8. Build the cut-to-cut transition graph (Z17 — back-compat) ────

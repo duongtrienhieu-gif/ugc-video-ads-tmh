@@ -631,7 +631,7 @@ export default function VideoBuilderV2({ onSwitchToV1 }: Props) {
   //         produces EditorialBlueprint + TimelineRenderJob. NO Kling. ────
   const [isBuildingTimeline, setIsBuildingTimeline] = useState(false)
 
-  const handleBuildTimelinePlan = () => {
+  const handleBuildTimelinePlan = (modeOverride?: 'SHORT' | 'MID' | 'FULL') => {
     if (!sceneJob) return
     const approvedScenes = sceneJob.items
       .filter((it) => it.status === 'approved' && it.imageUrl)
@@ -640,9 +640,13 @@ export default function VideoBuilderV2({ onSwitchToV1 }: Props) {
       return
     }
 
-    // Jump to planning phase immediately + show loader
+    // Z28 — resolve the effective mode (override > stored > default SHORT)
+    const effectiveMode = modeOverride ?? state.timelineMode ?? 'SHORT'
+
+    // Jump to planning phase immediately + show loader. Persist the mode
+    // pick now so the picker UI reflects it even before the build finishes.
     setIsBuildingTimeline(true)
-    setState((s) => ({ ...s, phase: 'timeline-planning' }))
+    setState((s) => ({ ...s, phase: 'timeline-planning', timelineMode: effectiveMode }))
 
     // Run synchronously — pure logic, no network. Wrap in setTimeout(0)
     // so the loading UI gets a chance to paint first.
@@ -652,7 +656,11 @@ export default function VideoBuilderV2({ onSwitchToV1 }: Props) {
         const voiceDurationSec = estimateVoiceDuration(state.inputs.script)
 
         // Editorial brain — derive coverage + cuts + transitions + motion
-        const blueprint = buildEditorialBlueprint(state.blueprints, { voiceDurationSec })
+        // Z28: pass mode so master count / cuts / duration band scale together
+        const blueprint = buildEditorialBlueprint(state.blueprints, {
+          voiceDurationSec,
+          mode: effectiveMode,
+        })
 
         // Map masterSceneId → approved keyframe asset ref
         const masterKeyframeRefs: Record<number, string> = {}
@@ -1049,7 +1057,7 @@ export default function VideoBuilderV2({ onSwitchToV1 }: Props) {
                     </p>
                   </div>
                   <button
-                    onClick={handleBuildTimelinePlan}
+                    onClick={() => handleBuildTimelinePlan()}
                     className="flex items-center gap-2 rounded-full bg-gradient-to-r from-violet-600 to-pink-600 px-5 py-2 text-sm font-bold text-white shadow-md transition-colors hover:from-violet-700 hover:to-pink-700"
                   >
                     🧠 Build Coverage & Timeline
@@ -1069,6 +1077,8 @@ export default function VideoBuilderV2({ onSwitchToV1 }: Props) {
             onBack={() => setState((s) => ({ ...s, phase: 'scene-gen' }))}
             onRenderClips={handleNavigateToRender}
             voiceDurationSec={estimateVoiceDuration(state.inputs.script)}
+            timelineMode={state.timelineMode ?? 'SHORT'}
+            onModeChange={(mode) => handleBuildTimelinePlan(mode)}
           />
         )}
 

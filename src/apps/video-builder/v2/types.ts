@@ -463,9 +463,14 @@ export type TimelineRenderStatus =
   | 'pending'      // never rendered — eligible for next bulk render
   | 'queued'       // in runner's worker pool, waiting for a slot
   | 'generating'   // Kling clip in flight
-  | 'completed'    // has videoRef — can be locked, skipped, or rerendered
-  | 'locked'       // Z26 — user-locked: has videoRef + IMMUNE to all bulk operations
-  | 'skipped'      // Z26 — user-skipped: excluded from bulk renders (toggleable)
+  | 'completed'    // has videoRef — can be approved/rejected/locked/rerendered
+  | 'approved'     // Z28 — user verdict OK. Excluded from bulk auto-render;
+                   //         per-card rerender still allowed.
+  | 'rejected'     // Z28 — user verdict NO. Excluded from bulk auto-render;
+                   //         per-card rerender allowed (user can take another shot).
+  | 'locked'       // Z26 — has videoRef + IMMUNE to ALL bulk + rerender ops.
+                   //         Must unlock before any new render touches this cut.
+  | 'skipped'      // Z26 — excluded from bulk renders (toggleable)
   | 'failed'       // render attempt failed — eligible for retry
   | 'cancelled'    // user cancelled mid-flight
 
@@ -475,6 +480,8 @@ export const TIMELINE_RENDER_STATUS_LABEL_VI: Record<TimelineRenderStatus, strin
   'queued':     'Trong hàng đợi...',
   'generating': 'Đang render...',
   'completed':  'Đã xong ✓',
+  'approved':   'Đã duyệt ✓',
+  'rejected':   'Đã loại ✕',
   'locked':     'Đã khoá 🔒',
   'skipped':    'Đã bỏ qua',
   'failed':     'Thất bại',
@@ -525,6 +532,10 @@ export interface TimelineRenderItem {
   lockedAt?: number
   /** Z26 — timestamp when user skipped this cut. */
   skippedAt?: number
+  /** Z28 — timestamp when user approved this cut. */
+  approvedAt?: number
+  /** Z28 — timestamp when user rejected this cut. */
+  rejectedAt?: number
   /** Z26 — timestamp when render started (for "elapsed" UI). */
   startedAt?: number
   /** Z26 — timestamp when render completed. */
@@ -1245,6 +1256,11 @@ export interface V2PipelineState {
    *  Built alongside editorialBlueprint by the planning step. The renderer
    *  phase (video-gen) iterates these. */
   timelineRenderJob?: TimelineRenderJob | null
+  /** Z28 — explicit timeline mode (SHORT / MID / FULL). Drives master
+   *  count, cuts/master, cut duration band, and bulk-render cost.
+   *  Defaults to SHORT for cheap iteration. User can override via the
+   *  Mode picker in TimelinePlanningView. */
+  timelineMode?: 'SHORT' | 'MID' | 'FULL'
 }
 
 export function createEmptyV2State(): V2PipelineState {
@@ -1265,5 +1281,6 @@ export function createEmptyV2State(): V2PipelineState {
       product: null,
       script: '',
     },
+    timelineMode: 'SHORT',  // Z28 — cheap-iteration default
   }
 }

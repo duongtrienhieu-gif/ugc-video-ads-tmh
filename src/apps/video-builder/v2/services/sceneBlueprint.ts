@@ -1083,13 +1083,27 @@ function countWords(script: string): number {
   return script.trim().split(/\s+/).filter(Boolean).length
 }
 
-// Z25 MVP cost cap — was 8/24, now 4/6. The render cost scales linearly
-// with master count (each master → coverage shots → cuts → Kling clips).
+// Z25 MVP cost cap — was 8/24, now 4/8 (ceiling raised to support Z28 FULL).
+// The render cost scales linearly with master count
+// (each master → coverage shots → cuts → Kling clips).
 export const SCENE_COUNT_MIN = 4
-export const SCENE_COUNT_MAX = 6
+export const SCENE_COUNT_MAX = 8  // Z28 raised from 6 to support FULL mode
 const WORDS_PER_SCENE = 55  // was 35 — fewer, denser beats
 
-export function computeSceneCount(script: string): number {
+/**
+ * Compute the number of master scenes to generate.
+ *
+ * Z28 — if a TimelineMode is provided, use the mode's `masters` value
+ * directly (SHORT=4, MID=6, FULL=8). The legacy word-count formula is
+ * the fallback when no mode is provided.
+ */
+export function computeSceneCount(
+  script: string,
+  mode?: 'SHORT' | 'MID' | 'FULL',
+): number {
+  if (mode === 'SHORT') return 4
+  if (mode === 'MID')   return 6
+  if (mode === 'FULL')  return 8
   const words = countWords(script)
   const raw = Math.ceil(words / WORDS_PER_SCENE)
   return Math.max(SCENE_COUNT_MIN, Math.min(SCENE_COUNT_MAX, raw))

@@ -23,6 +23,8 @@ import {
 import type {
   EditorialBlueprint, TimelineRenderJob, CoverageShot, TimelineCut,
 } from '../types'
+import type { TimelineMode } from '../services/timelineMode'
+import { TIMELINE_MODE_CONFIG, ALL_TIMELINE_MODES } from '../services/timelineMode'
 
 interface Props {
   blueprint: EditorialBlueprint | null
@@ -32,10 +34,16 @@ interface Props {
   onRenderClips: () => void
   /** Voice duration estimate (seconds) — drives planning. */
   voiceDurationSec: number
+  /** Z28 — currently selected timeline mode (SHORT default). */
+  timelineMode: TimelineMode
+  /** Z28 — fires when user picks a different mode. Caller should
+   *  rebuild the editorial blueprint with the new mode. */
+  onModeChange: (mode: TimelineMode) => void
 }
 
 export default function TimelinePlanningView({
   blueprint, renderJob, isBuilding, onBack, onRenderClips, voiceDurationSec,
+  timelineMode, onModeChange,
 }: Props) {
   const [openSection, setOpenSection] = useState<'coverage' | 'cuts' | 'motion' | 'transitions' | null>('coverage')
 
@@ -98,6 +106,56 @@ export default function TimelinePlanningView({
 
       {/* Body — scrollable */}
       <div className="flex-1 overflow-y-auto p-6 space-y-4">
+        {/* Z28 — Timeline Mode picker (SHORT default; SHORT/MID/FULL).
+            Clicking a chip fires onModeChange → caller rebuilds planning
+            with the new mode. The currently-selected chip is highlighted.
+            Each chip shows: label · output duration · master+cut counts ·
+            estimated credit cost (so the cost trade-off is obvious). */}
+        <div className="rounded-lg border border-violet-200 bg-violet-50/40 px-4 py-3">
+          <div className="mb-2 flex items-baseline justify-between gap-3">
+            <p className="text-[10px] font-bold uppercase tracking-widest text-violet-700">
+              Chế độ Timeline
+            </p>
+            <p className="text-[10px] text-gray-500">
+              Voice ~{voiceDurationSec}s · mặc định SHORT cho test rẻ; chuyển sang MID/FULL khi muốn nhiều phase đầy đủ hơn
+            </p>
+          </div>
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+            {ALL_TIMELINE_MODES.map((m) => {
+              const cfg = TIMELINE_MODE_CONFIG[m]
+              const active = m === timelineMode
+              return (
+                <button
+                  key={m}
+                  onClick={() => { if (!active) onModeChange(m) }}
+                  className={`flex flex-col items-start gap-1 rounded-lg border-2 px-3 py-2 text-left transition-all ${
+                    active
+                      ? 'border-violet-500 bg-white shadow-sm'
+                      : 'border-gray-200 bg-white/60 hover:border-violet-300 hover:bg-white'
+                  }`}
+                >
+                  <div className="flex w-full items-center justify-between gap-2">
+                    <span className={`text-xs font-bold ${active ? 'text-violet-700' : 'text-gray-700'}`}>
+                      {cfg.labelVi}
+                    </span>
+                    {active && (
+                      <span className="rounded-full bg-violet-100 px-1.5 py-0.5 text-[9px] font-bold text-violet-700">
+                        ĐANG DÙNG
+                      </span>
+                    )}
+                  </div>
+                  <span className="text-[10px] leading-snug text-gray-500">
+                    {cfg.descriptionVi}
+                  </span>
+                  <span className="text-[10px] font-semibold text-gray-400">
+                    ~{cfg.estimatedCreditCost.min.toLocaleString()}-{cfg.estimatedCreditCost.max.toLocaleString()} credit (nếu render hết)
+                  </span>
+                </button>
+              )
+            })}
+          </div>
+        </div>
+
         {/* KPI strip */}
         <div className="grid grid-cols-2 gap-2 md:grid-cols-4 lg:grid-cols-6">
           <KpiCard icon={Layers}   label="Master scenes"   value={masterCount}    tone="violet" />

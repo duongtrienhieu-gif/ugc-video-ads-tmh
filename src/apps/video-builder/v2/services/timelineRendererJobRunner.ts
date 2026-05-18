@@ -188,16 +188,18 @@ export async function runTimelineRender(params: RunTimelineRenderParams): Promis
     `concurrency=${concurrency} estimated=${job.estimatedDurationSec.toFixed(1)}s`,
   )
 
-  // Queue index — only items not already terminal. Z26: also skip
-  // 'locked' + 'skipped' so any direct caller of the legacy entry point
-  // inherits the lock semantics for free.
+  // Queue index — only items not already terminal. Z26 also skips
+  // 'locked' + 'skipped'; Z28 adds 'approved' + 'rejected'. Every direct
+  // caller of the legacy entry point inherits the full skip semantics.
   const queueIndices: number[] = []
   items.forEach((it, idx) => {
     if (
       it.status !== 'completed' &&
       it.status !== 'cancelled' &&
       it.status !== 'locked' &&
-      it.status !== 'skipped'
+      it.status !== 'skipped' &&
+      it.status !== 'approved' &&  // Z28
+      it.status !== 'rejected'     // Z28
     ) queueIndices.push(idx)
   })
 
@@ -353,19 +355,23 @@ export async function startTimelineRender(
   // Build the eligible target set:
   //   1. Start with cutIds if provided, else all items.
   //   2. Filter out locked / skipped / completed (always).
-  //   3. Filter out failed unless includeFailed=true.
-  //   4. Filter out generating (already in flight from another caller).
+  //   3. Z28: also filter out approved + rejected (user verdicts excluded
+  //      from bulk by design — don't burn credit re-rendering work the
+  //      user already gave a verdict on).
+  //   4. Filter out failed unless includeFailed=true.
+  //   5. Filter out generating (already in flight from another caller).
   const requested = params.cutIds ? new Set(params.cutIds) : null
   const eligible = job.items.filter((it) => {
     if (requested && !requested.has(it.cutId)) return false
-    if (it.status === 'locked' || it.status === 'skipped' || it.status === 'completed') return false
+    if (it.status === 'locked'   || it.status === 'skipped'   || it.status === 'completed') return false
+    if (it.status === 'approved' || it.status === 'rejected') return false  // Z28
     if (it.status === 'generating') return false
     if (it.status === 'failed' && !params.includeFailed) return false
     return true
   })
 
   if (eligible.length === 0) {
-    console.log(`[TIMELINE_RENDER Z26] no eligible cuts to render — all locked/skipped/completed`)
+    console.log(`[TIMELINE_RENDER Z26/Z28] no eligible cuts to render — all locked/skipped/completed/approved/rejected`)
     return { done: 0, failed: 0, skipped: 0 }
   }
 
@@ -462,11 +468,13 @@ export async function renderSingleCut(
       await submitCutToKling(item, params.apiKey, params.signal)
     console.log(`[TIMELINE_RENDER Z26 cut-${cutId}] single-render DONE${usedFallback ? ' (via minimal fallback)' : ''}`)
 
-    // Z26 race guard — if the user locked this cut while it was rendering,
-    // honour the lock (keep their previous videoRef) and discard this one.
+    // Z26/Z28 race guard — if the user locked OR approved this cut while
+    // it was rendering, honour the verdict (keep previous videoRef) and
+    // discard this one. Rejected isn't checked because rejected → rerender
+    // is the EXPECTED flow ("user said no, take another shot").
     const after = store().job?.items.find((i) => i.cutId === cutId)
-    if (after?.status === 'locked') {
-      console.warn(`[TIMELINE_RENDER Z26] cut-${cutId} locked mid-flight — discarding new videoRef`)
+    if (after?.status === 'locked' || after?.status === 'approved') {
+      console.warn(`[TIMELINE_RENDER Z28] cut-${cutId} ${after.status} mid-flight — discarding new videoRef`)
       return
     }
     store().patchItem(cutId, {
