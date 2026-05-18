@@ -768,6 +768,15 @@ function buildFinalPrompt(job: ImageJob, hasProductRefs: boolean): string {
     parts.push(PAIN_NO_PRODUCT_DIRECTIVE)
   }
 
+  // ── Mobile-screenshot sections (whatsapp / shopee / tiktok / facebook):
+  // prepend a TRUE-9:16 mobile-screenshot directive that locks composition
+  // to authentic phone screenshots — status bar, safe area, native UI
+  // proportions. Eliminates the "poster layout / floating product card /
+  // landscape composition" failure modes. ─────────────────────────────────
+  if (isMobileScreenshotJob(job)) {
+    parts.push(MOBILE_SCREENSHOT_DIRECTIVE)
+  }
+
   // ── Comparison section: inject structured comparisonData when available so
   // the image generator gets explicit US vs THEM bullet pairs rather than
   // trying to parse them out of the free-form imagePrompt body. Eliminates
@@ -802,6 +811,47 @@ function buildFinalPrompt(job: ImageJob, hasProductRefs: boolean): string {
 
   return parts.join('\n\n')
 }
+
+/** Detect WhatsApp / Shopee / TikTok-Shop / Facebook screenshot jobs.
+ *  Matches by section type + imagePrompt.style heuristic so we don't
+ *  accidentally trigger on lifestyle / hero / before-after photos. */
+function isMobileScreenshotJob(job: ImageJob): boolean {
+  const t = job.section.type
+  if (t === 'whatsapp-testimonials') return true
+  if (t === 'social-proof') {
+    const style = (job.prompt.style ?? '').toLowerCase()
+    return (
+      style.includes('whatsapp') ||
+      style.includes('shopee') ||
+      style.includes('tiktok') ||
+      style.includes('facebook comment') ||
+      style.includes('fb comment')
+    )
+  }
+  return false
+}
+
+/** Mobile-screenshot composition directive — prepended to ANY whatsapp /
+ *  shopee / tiktok-shop / facebook-comment generation so KIE renders a
+ *  TRUE mobile screenshot canvas, not a marketing poster.
+ *
+ *  Notes on aspect ratio: KIE GPT-4o's tallest portrait is 2:3 (≈ 1024×1536).
+ *  We can't generate a literal 1080×1920 9:16 frame directly, but we CAN
+ *  force KIE to compose the image as if it were a 9:16 phone screenshot —
+ *  full-bleed UI, status bar at the top, safe-area padding at the bottom,
+ *  native mobile typography. The user sees an authentic phone screenshot
+ *  inside the available 2:3 canvas instead of a centered poster card. */
+const MOBILE_SCREENSHOT_DIRECTIVE =
+  'MOBILE SCREENSHOT MODE — non-negotiable composition rules:\n'
+  + '  • This is a REAL phone screenshot captured on a 2025 Android / iOS handset. Full-bleed mobile UI from edge to edge.\n'
+  + '  • COMPOSITION: full-screen mobile screenshot occupying the ENTIRE canvas. NO centered card. NO floating poster. NO black/empty bands above or below. NO landscape composition.\n'
+  + '  • TOP: realistic mobile status bar — time (eg "11:47"), battery percentage, cellular signal icon (4G / 5G), wifi icon, notification badges. Native OS typography scale.\n'
+  + '  • SAFE AREA: ~4-6% top padding for status bar, ~3-5% bottom padding for home indicator. Content respects these margins like a real iOS / Android app.\n'
+  + '  • UI ELEMENTS: native typography hierarchy, icon scaling matching real apps (24-32px equivalent), authentic spacing (real apps have ORGANIC uneven spacing, never Figma-perfect equal margins).\n'
+  + '  • TIMESTAMPS, message ticks, delivery receipts, badges, ratings — ALL rendered with authentic positioning + sizing of the real app being mimicked.\n'
+  + '  • QUALITY: subtle JPEG compression, slight imperfections — looks like the user took a screenshot, then auto-saved it. NOT a designed graphic, NOT a marketing card, NOT a Figma mockup.\n'
+  + '  • ABSOLUTELY FORBIDDEN: poster layout, floating product PNG card, centered product packshot, black empty backgrounds, landscape composition, designed marketing graphic, advertisement-style overlay, fake / futuristic UI.\n'
+  + '  • The image fills the canvas fully like a phone screenshot. No decorative borders. No empty whitespace zones beyond the native safe areas.\n'
 
 /** Build a STRUCTURED comparison prompt that embeds the explicit
  *  US-vs-THEM bullet pairs inline. KIE renders the infographic directly

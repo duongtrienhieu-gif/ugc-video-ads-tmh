@@ -95,10 +95,13 @@ export interface LandingSection {
    *  Always included regardless of output language. */
   viTranslation?: string
   /** Section-level aspect ratio — enforced on ALL images in this section.
-   *  '1:1' or '4:5' allowed for most sections (9:16 is banned globally).
-   *  '16:9' is allowed ONLY for banner sections (offer / final-cta) where it
-   *  better suits landscape promo banners. */
-  imageAspectRatio?: '1:1' | '4:5' | '16:9'
+   *  '1:1' or '4:5' allowed for most sections.
+   *  '16:9' allowed ONLY for banner sections (offer / final-cta).
+   *  '9:16' allowed ONLY for mobile-screenshot sections
+   *    (whatsapp-testimonials + social-proof screenshot variants).
+   *    KIE GPT-4o's tallest portrait is 2:3 — we display the card at 9:16
+   *    visually and let the mobile-screenshot directive lock composition. */
+  imageAspectRatio?: '1:1' | '4:5' | '16:9' | '9:16'
   headline?: string
   subheadline?: string
   cta?: string

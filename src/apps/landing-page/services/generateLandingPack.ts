@@ -42,7 +42,7 @@ Each section object:
   "copy": "main body copy in chosen language",
   "viTranslation": "ALWAYS REQUIRED — Vietnamese translation of copy (for the Vietnamese marketer). Never omit.",
   "layoutGuide": "VIETNAMESE — how to arrange this section in Ladipage",
-  "imageAspectRatio": "1:1" or "4:5" — REQUIRED on every section that has images. All images in the section MUST use this ratio. NEVER use 9:16 or 16:9.
+  "imageAspectRatio": "1:1" / "4:5" / "9:16" / "16:9" — REQUIRED on every section that has images. All images in the section MUST use this ratio. Allowed ratios depend on section type — see ASPECT RATIO LAW below.
   "headline": "optional",
   "headlineVi": "ALWAYS include when headline exists — Vietnamese translation of headline",
   "subheadline": "optional",
@@ -62,7 +62,7 @@ Each section object:
       "filename": "hero_01.jpg",
       "prompt": "English image-generation prompt 30-80 words. Include exact text overlay content where specified.",
       "style": "Asset-type label — see per-section spec",
-      "aspectRatio": "must match section imageAspectRatio — ONLY 1:1 or 4:5, NEVER 9:16 or 16:9"
+      "aspectRatio": "must match the section's imageAspectRatio (see ASPECT RATIO LAW for what's allowed per section type)"
     }
   ],
   "imageSizeHint": "optional"
@@ -72,16 +72,19 @@ Each section object:
 ASPECT RATIO LAW — READ CAREFULLY
 ═══════════════════════════════════════════════════════════════
 • Allowed ratios depend on section type:
-    - MOST sections: ONLY "1:1" (square) OR "4:5" (portrait)
+    - MOST sections: "1:1" (square) OR "4:5" (portrait)
     - BANNER sections (offer + final-cta) ONLY: "1:1" OR "16:9" (landscape)
       → 4:5 is FORBIDDEN for offer + final-cta
-• 9:16 is COMPLETELY BANNED everywhere — never use it
+    - MOBILE-SCREENSHOT sections (whatsapp-testimonials + social-proof FB/TikTok/Shopee screenshots): "9:16" REQUIRED for the screenshot images themselves
+      → these screenshots MUST be tall mobile-phone composition, full-bleed UI
+      → the section's selfie / crowd companion images (eg social_selfie, social_crowd) stay "4:5"
 • 16:9 is BANNED everywhere EXCEPT offer + final-cta (banner sections)
-• Every section's imageAspectRatio sets the ratio for ALL its images
-• Every individual imagePrompt's aspectRatio MUST match the section imageAspectRatio
+• 9:16 is BANNED everywhere EXCEPT mobile-screenshot images (wa_*, social_fb, social_tiktok, social_shopee)
+• Every section's imageAspectRatio sets the ratio for ALL its images EXCEPT social-proof which is mixed (screenshots 9:16, photos 4:5)
+• Every individual imagePrompt's aspectRatio MUST match what the per-section spec says (see below)
 • Per-section defaults: hero=4:5 | pain=4:5 | why-happens=1:1 | failed-solutions=4:5 |
   product-discovery=4:5 | ingredients=1:1 | mechanism=1:1 | benefits=1:1 | comparison=1:1 |
-  lifestyle=4:5 | social-proof=4:5 | whatsapp-testimonials=4:5 | news-proof=4:5 |
+  lifestyle=4:5 | social-proof=9:16 (mixed) | whatsapp-testimonials=9:16 | news-proof=4:5 |
   before-after=4:5 | offer=16:9 | final-cta=16:9
 
 ═══════════════════════════════════════════════════════════════
@@ -134,6 +137,7 @@ SECTION SPEC — produce EXACTLY these 17 in this order
    • copy: validate customer frustration
    • 1-2 imagePrompts: tired Malaysian surrounded by failed products / empty bottles. style="Failed solutions UGC", aspectRatio="4:5". NO our product visible.
 
+
 5. type="product-discovery", imageAspectRatio="4:5"
    • copy: "aha" moment — friend rec / Facebook / TikTok find
    • 1 imagePrompt: Malaysian person holding product first time, curious+hopeful, soft natural light. style="Product discovery UGC", aspectRatio="4:5"
@@ -163,29 +167,29 @@ SECTION SPEC — produce EXACTLY these 17 in this order
     • copy: after-life paint — energetic mornings, confidence
     • 1-2 imagePrompts: Malaysian family happy / woman laughing outdoors / energetic candid. style="Lifestyle transformation UGC", aspectRatio="4:5". NO product visible.
 
-11. type="social-proof", imageAspectRatio="4:5"
+11. type="social-proof", imageAspectRatio="9:16"
     • reviews: 4-6 realistic Malaysian reviews
     • copy: short framing
-    • 5 imagePrompts ALL REQUIRED — ALL aspectRatio="4:5":
-      - social_fb.jpg, style="Facebook comment screenshot", aspectRatio="4:5": realistic Facebook post comment section screenshot. Slightly JPEG-compressed quality, imperfect real-phone feel. Malay text + emojis. Multiple positive comments from Malaysian names. IMPORTANT: Product name visible in the post.
-      - social_tiktok.jpg, style="TikTok Shop review screenshot", aspectRatio="4:5":
+    • 5 imagePrompts ALL REQUIRED — screenshot 3 (fb/tiktok/shopee) use aspectRatio="9:16" (mobile full-screen screenshot); selfie/crowd photos use aspectRatio="4:5":
+      - social_fb.jpg, style="Facebook comment screenshot", aspectRatio="9:16": FULL-BLEED mobile Facebook screenshot. Top: realistic Android/iOS status bar (time, battery%, 4G/5G signal, wifi). Header: Facebook blue navigation bar with back arrow + page title. Body: original post header (page avatar + name + timestamp + "Public" badge), post image / text mentioning the product, then 4-6 comment cards underneath — each with circular avatar + Malaysian name + emoji-rich Malay comment + reaction counts + time stamp. Comments include 👍 ❤️ 😍 reactions. Bottom: comment input bar with camera/gif icons. Slightly JPEG-compressed phone-screenshot quality. NO poster layout, NO centered card, NO floating product PNG, NO desktop UI — this is a pure phone screenshot filling the entire 9:16 canvas edge-to-edge.
+      - social_tiktok.jpg, style="TikTok Shop review screenshot", aspectRatio="9:16":
         Ultra-realistic TikTok Shop Malaysia product review mobile screenshot. MUST look EXACTLY like a real screenshot captured from TikTok Shop app on Android. SCREEN STRUCTURE: TikTok Shop review page with black/dark UI, realistic Android top status bar (battery percentage shown numerically, 4G/5G signal icon, notification icons left), header showing product star rating (eg "★ 4.8 Đánh giá 2.6K"), review filter tabs ("Semua / Ada gambar / 5★ / 4★"), vertically scrolling review feed of multiple cards. PRODUCT: probiotics supplement. REVIEW CONTENT: 2-3 visible review cards with authentic Malaysian buyer reviews — masked usernames like "T**n H**u", "L**g T**m", casual Bahasa Melayu text mixing English loanwords, realistic emoji use 👍 ❤️ 😍, believable review lengths (2-4 lines each), star ratings shown. Each card has 2-4 small customer-uploaded review photo thumbnails of the product (different angles — some show 1 bottle, some show 2-4 bottles, some show product on dining table; NEVER all same composition). Bottom: floating CTA bar with shopping cart icon + "Mua ngay" button + price. IMAGE RULES: preserve original aspect ratio on review thumbnails, no horizontal stretching, no squashing. VISUAL: imperfect real-mobile-screenshot feel, authentic TikTok spacing (uneven organic spacing — not equal margins everywhere), native typography hierarchy, realistic icon sizes. DO NOT: centered layouts, fake ecommerce UI, oversized fonts, equal spacing everywhere, Figma-clean look, floating product PNG, designed graphic. Show EXACT PRODUCT PRICE from brief. Quality target: indistinguishable from a real TikTok Shop screenshot.
-      - social_shopee.jpg, style="Shopee review screenshot", aspectRatio="4:5":
+      - social_shopee.jpg, style="Shopee review screenshot", aspectRatio="9:16":
         Ultra-realistic Shopee Malaysia product review mobile screenshot. MUST look EXACTLY like a real Shopee app screenshot captured from a Malaysian Android phone. SCREEN STRUCTURE: Shopee review page with orange Shopee UI accents, realistic Android status bar (time, battery %, signal icons, notification badges), header with back arrow + star rating eg "★ 4.8 Đánh giá (2.6K)" + share + cart icon, review filter tabs MUST include "Semua / Dengan media / 5★ / 4★", review sub-filters ("Khách mua tiếp / Chất lượng tốt"), scrollable review feed. PRODUCT: probiotics supplement. REVIEW CONTENT: 2-3 review cards visible, each with masked username like "duc.l***ous" or "T**n H**u", authentic Malaysian customer review in casual Bahasa Melayu, "Phân loại" line showing variant, 5★ rating, believable timestamps (eg "2025-4-1"). Each card includes 2-4 small thumbnail photos of the product in different real-life compositions (bottle alone / 2-4 bottles / product in kitchen / on dining table — NEVER always box+bottle side-by-side). Floating bottom CTA bar with chat icon + cart + "Mua ngay" pink button + price. IMAGE RULES: review thumbnails preserve original aspect ratio (object-fit: cover style), NO horizontal stretching, NO vertical squashing. VISUAL: authentic Shopee spacing with natural mobile UI hierarchy, real screenshot feel with subtle JPEG compression. DO NOT: fake clean symmetry, generic ecommerce layouts, centered compositions, oversized fonts, fake Figma-clean UI, floating product packaging. Show EXACT PRODUCT PRICE from brief. Quality: must feel like a REAL phone screenshot.
       - social_selfie.jpg, style="Muslim woman selfie social proof", aspectRatio="4:5": Malaysian Muslim woman in hijab, mid-30s, holding product in selfie, genuine smile, casual home, natural daylight, UGC quality.
       - social_crowd.jpg, style="Crowd group social proof", aspectRatio="4:5": group of 3-4 Malaysian women different ages (some in hijab), each holding the product, smiling, casual outdoor, candid group photo feel, trust and community vibe.
 
-12. type="whatsapp-testimonials", imageAspectRatio="4:5"
+12. type="whatsapp-testimonials", imageAspectRatio="9:16"
     • reviews: 4 chat-style testimonials (multi-line, emojis, authentic Malay)
     • copy: short framing
-    • 4 imagePrompts ALL aspectRatio="4:5":
+    • 4 imagePrompts ALL aspectRatio="9:16" — FULL-BLEED MOBILE WHATSAPP SCREENSHOTS:
       ALL 4 ARE REAL WHATSAPP SCREENSHOTS — NOT marketing graphics. The image must look like "a real person opened WhatsApp and took a screenshot". Use authentic WhatsApp 2025 UI: status bar with battery/wifi/time, green header, contact name + avatar circle, message bubbles (green outgoing + white incoming), realistic timestamps, real font hierarchy, real spacing, input bar at bottom. Compressed mobile screenshot quality, subtle JPEG compression, slightly imperfect crop. Malay/English mix text, natural emoji use.
 
       MIX STRUCTURE — 2 pure chats + 2 chats WITH attached product photo (DIFFERENT compositions):
-      - wa_01.jpg, style="WhatsApp screenshot PURE — no attachment", aspectRatio="4:5": Pure chat screen — header, message bubbles, input bar. NO image attachment in chat. Malaysian sender, casual review text about product results.
-      - wa_02.jpg, style="WhatsApp screenshot PURE — different convo, no attachment", aspectRatio="4:5": DIFFERENT Malaysian sender name + DIFFERENT avatar color + DIFFERENT timestamps from wa_01. Different conversation flow, different emojis. Still pure chat, no attachment.
-      - wa_03.jpg, style="WhatsApp screenshot WITH single-bottle attachment", aspectRatio="4:5": Real WhatsApp chat where the user sent an image attachment of ONE bottle ONLY (no packaging box) on a casual home surface — kitchen counter or dining table. The attached image looks like a customer phone snap (slightly imperfect lighting, real home background). Surrounding chat: 2-3 Malay text messages discussing the product.
-      - wa_04.jpg, style="WhatsApp screenshot WITH multi-bottle attachment", aspectRatio="4:5": DIFFERENT chat partner from wa_03 (different name, different avatar, different timestamps). Image attachment shows 2-4 bottles together (family pack feel) — NO packaging box, just multiple bottles standing on a real surface (dining table / shelf / kitchen). Different home environment from wa_03. Surrounding chat: different message flow, different emojis.
+      - wa_01.jpg, style="WhatsApp screenshot PURE — no attachment", aspectRatio="9:16": Pure chat screen — header, message bubbles, input bar. NO image attachment in chat. Malaysian sender, casual review text about product results.
+      - wa_02.jpg, style="WhatsApp screenshot PURE — different convo, no attachment", aspectRatio="9:16": DIFFERENT Malaysian sender name + DIFFERENT avatar color + DIFFERENT timestamps from wa_01. Different conversation flow, different emojis. Still pure chat, no attachment.
+      - wa_03.jpg, style="WhatsApp screenshot WITH single-bottle attachment", aspectRatio="9:16": Real WhatsApp chat where the user sent an image attachment of ONE bottle ONLY (no packaging box) on a casual home surface — kitchen counter or dining table. The attached image looks like a customer phone snap (slightly imperfect lighting, real home background). Surrounding chat: 2-3 Malay text messages discussing the product.
+      - wa_04.jpg, style="WhatsApp screenshot WITH multi-bottle attachment", aspectRatio="9:16": DIFFERENT chat partner from wa_03 (different name, different avatar, different timestamps). Image attachment shows 2-4 bottles together (family pack feel) — NO packaging box, just multiple bottles standing on a real surface (dining table / shelf / kitchen). Different home environment from wa_03. Surrounding chat: different message flow, different emojis.
 
       STRICT BAN for the whole WhatsApp section:
         • Identical attached product photos across wa_03 and wa_04 (must be DIFFERENT composition: single vs multi)
@@ -272,7 +276,7 @@ SECTION SPEC — produce EXACTLY these 17 in this order
 CRITICAL IMAGE PROMPT RULES
 ═══════════════════════════════════════════════════════════════
 • ALWAYS English, 30-80 words
-• ASPECT RATIO: only "1:1" or "4:5" — 9:16 and 16:9 are completely banned
+• ASPECT RATIO: most images "1:1" or "4:5". "16:9" allowed ONLY on banner sections (offer / final-cta). "9:16" allowed ONLY on mobile-screenshot images (wa_*, social_fb, social_tiktok, social_shopee) — these screenshots MUST be full-bleed phone composition
 • All imagePrompts in a section must use the section's imageAspectRatio value
 • DEFAULT ETHNICITY: Malaysian native / Southeast Asian
 • NEVER cinematic / editorial / luxury / stock-photo
@@ -748,7 +752,7 @@ const SECTION_ORDER: SectionType[] = [
   'faq', 'offer', 'final-cta',
 ]
 
-type LockedRatio = '1:1' | '4:5' | '16:9'
+type LockedRatio = '1:1' | '4:5' | '16:9' | '9:16'
 
 /** Hardcoded fallback aspect ratios — applied even when Gemini omits the field.
  *  Guarantees no 9:16 ever makes it into the pack.
@@ -764,8 +768,8 @@ const SECTION_ASPECT_DEFAULTS: Partial<Record<SectionType, LockedRatio>> = {
   'benefits':                '1:1',
   'comparison':              '1:1',
   'lifestyle':               '4:5',
-  'social-proof':            '4:5',
-  'whatsapp-testimonials':   '4:5',
+  'social-proof':            '9:16',
+  'whatsapp-testimonials':   '9:16',
   'news-proof':              '4:5',
   'before-after':            '4:5',
   'offer':                   '16:9',
@@ -776,8 +780,13 @@ const SECTION_ASPECT_DEFAULTS: Partial<Record<SectionType, LockedRatio>> = {
  *  Banner sections (offer, final-cta): 1:1 or 16:9 only (no 4:5).
  *  Everything else: 1:1 or 4:5 only (no 16:9). */
 const ALLOWED_RATIOS_BY_SECTION: Partial<Record<SectionType, ReadonlyArray<LockedRatio>>> = {
-  'offer':     ['1:1', '16:9'],
-  'final-cta': ['1:1', '16:9'],
+  'offer':                  ['1:1', '16:9'],
+  'final-cta':              ['1:1', '16:9'],
+  // Mobile screenshot sections — 9:16 is REQUIRED for authentic phone
+  // screenshot composition. The actual KIE canvas is 2:3 (tallest portrait
+  // submitGpt4oImage supports); UI displays at 9:16 aspect.
+  'whatsapp-testimonials':  ['9:16', '4:5'],
+  'social-proof':           ['9:16', '4:5'],
 }
 const DEFAULT_ALLOWED: ReadonlyArray<LockedRatio> = ['1:1', '4:5']
 
@@ -789,7 +798,7 @@ export function normalizeSection(s: RawSection): LandingSection | null {
   const allowed = ALLOWED_RATIOS_BY_SECTION[type] ?? DEFAULT_ALLOWED
   const rawRatio = s.imageAspectRatio as string | undefined
   const lockedRatio: LockedRatio =
-    (rawRatio === '1:1' || rawRatio === '4:5' || rawRatio === '16:9') && allowed.includes(rawRatio as LockedRatio)
+    (rawRatio === '1:1' || rawRatio === '4:5' || rawRatio === '16:9' || rawRatio === '9:16') && allowed.includes(rawRatio as LockedRatio)
       ? (rawRatio as LockedRatio)
       : SECTION_ASPECT_DEFAULTS[type] ?? '4:5'
 
