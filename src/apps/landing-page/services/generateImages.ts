@@ -3,7 +3,7 @@ import type {
 } from '../types'
 import { useSettingsStore } from '../../../stores/settingsStore'
 import {
-  submitGpt4oImage, pollGpt4oUntilDone, type Gpt4oSize,
+  submitGptImage2, pollGptImage2UntilDone, type Gpt4oSize,
 } from '../../../utils/kieai'
 import { saveAsset, getUrl, isAssetRef } from '../../../utils/assetStore'
 import { recordAttempt, finalizeAttempt } from '../debugStore'
@@ -1510,7 +1510,7 @@ async function runWithCreditSafeRetry(
     if (lastTaskId) {
       try {
         onTaskUpdate({ status: 'retrying', error: undefined })
-        const recoveredUrl = await pollGpt4oUntilDone({
+        const recoveredUrl = await pollGptImage2UntilDone({
           apiKey: kieApiKey,
           taskId: lastTaskId,
           timeoutMs: RECOVERY_POLL_MS,
@@ -1532,7 +1532,7 @@ async function runWithCreditSafeRetry(
     recordAttempt({
       assetKey, sectionType: job.section.type, filename: job.prompt.filename,
       attempt: attemptNum, maxAttempts: MAX_ATTEMPTS,
-      provider: 'KIE GPT-4o',
+      provider: 'KIE gpt-image-2',
       prompt: finalPrompt,
       filesUrlCount: filesUrl.length,
       kieSize: size,
@@ -1543,7 +1543,7 @@ async function runWithCreditSafeRetry(
     try {
       onTaskUpdate({ status: attempt === 0 ? 'generating' : 'retrying', error: undefined })
 
-      const { taskId } = await submitGpt4oImage({
+      const { taskId } = await submitGptImage2({
         apiKey: kieApiKey,
         prompt: finalPrompt,
         filesUrl: filesUrl.length > 0 ? filesUrl : undefined,
@@ -1551,7 +1551,7 @@ async function runWithCreditSafeRetry(
       })
       lastTaskId = taskId
 
-      const remoteUrl = await pollGpt4oUntilDone({
+      const remoteUrl = await pollGptImage2UntilDone({
         apiKey: kieApiKey,
         taskId,
         timeoutMs: FRESH_POLL_MS,

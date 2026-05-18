@@ -168,6 +168,159 @@ export async function pollGpt4oUntilDone(params: {
   throw new Error(`TIMEOUT — KIE GPT-4o quá ${Math.round(timeout / 1000)}s chưa xong (task có thể bị stuck queue — retry tự động hoặc refresh + thử lại)`)
 }
 
+// ── gpt-image-2 (KIE /jobs/createTask) ──────────────────────────────────────
+// Strongest image model on KIE — used for ALL landing-page image generation
+// (replaces the older /gpt4o-image/generate path). Supports reference
+// images via `image_urls` for product / identity lock, same way /gpt4o-image
+// supported them via `filesUrl`.
+//
+// API shape:
+//   POST /jobs/createTask  { model: 'gpt-image-2-text-to-image', input: { ... } }
+//   Polling: /jobs/recordInfo?taskId=...  → state ∈ {success,fail,generating,queuing,waiting}
+
+const GPT_IMAGE_2_MODEL = 'gpt-image-2-text-to-image'
+
+/** Submit a gpt-image-2 task. Drop-in shape mirror of submitGpt4oImage so
+ *  landing-page callers swap with minimal changes. */
+export async function submitGptImage2(params: {
+  apiKey: string
+  prompt: string
+  filesUrl?: string[]
+  size: Gpt4oSize
+  /** Resolution — defaults to '2K' for landing-page quality. */
+  resolution?: '1K' | '2K' | '4K'
+}): Promise<{ taskId: string }> {
+  const input: Record<string, unknown> = {
+    prompt: params.prompt,
+    resolution: params.resolution ?? '2K',
+    aspect_ratio: params.size,
+  }
+  if (params.filesUrl && params.filesUrl.length > 0) {
+    input.image_urls = params.filesUrl.slice(0, 5)
+  }
+
+  const res = await fetch(`${KIE_BASE}/jobs/createTask`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${params.apiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ model: GPT_IMAGE_2_MODEL, input }),
+  })
+
+  if (res.status === 402) throw new Error('INSUFFICIENT_CREDITS')
+  if (!res.ok) {
+    const text = await res.text().catch(() => res.statusText)
+    throw new Error(`KIE gpt-image-2 submit lỗi (${res.status}): ${text.slice(0, 300)}`)
+  }
+  const data = await res.json() as { code?: number; msg?: string; message?: string; data?: { taskId?: string } | null }
+  if (data?.code !== undefined && data.code !== 200) {
+    throw new Error(data.msg ?? data.message ?? `KIE gpt-image-2 lỗi code ${data.code}`)
+  }
+  const taskId = data?.data?.taskId
+  if (!taskId) throw new Error(`KIE gpt-image-2 không trả về taskId: ${JSON.stringify(data).slice(0, 200)}`)
+  return { taskId }
+}
+
+/** Status fetch for a gpt-image-2 job. Hits /jobs/recordInfo. */
+export async function getGptImage2Status(params: {
+  apiKey: string
+  taskId: string
+}): Promise<{ status: ImageStatus; imageUrl?: string; error?: string; progress?: number }> {
+  const res = await fetch(
+    `${KIE_BASE}/jobs/recordInfo?taskId=${encodeURIComponent(params.taskId)}`,
+    { headers: { Authorization: `Bearer ${params.apiKey}` } },
+  )
+  if (!res.ok) throw new Error(`gpt-image-2 status check failed: ${res.status}`)
+
+  const data = await res.json() as {
+    data?: {
+      state?: string
+      resultJson?: string
+      failMsg?: string
+    }
+  }
+  const record = data.data ?? {}
+  const rawStatus = String(record.state ?? '').toLowerCase()
+
+  let status: ImageStatus = 'pending'
+  if (rawStatus === 'success') status = 'completed'
+  else if (rawStatus === 'fail') status = 'failed'
+  else if (rawStatus === 'generating' || rawStatus === 'queuing' || rawStatus === 'waiting') status = 'processing'
+
+  let imageUrl: string | undefined
+  if (status === 'completed' && record.resultJson) {
+    try {
+      const parsed = JSON.parse(record.resultJson) as { resultUrls?: string[] }
+      imageUrl = parsed.resultUrls?.[0]
+    } catch { /* ignore */ }
+  }
+
+  return {
+    status,
+    imageUrl,
+    error: status === 'failed'
+      ? String(record.failMsg ?? `Tạo ảnh thất bại (raw=${rawStatus || 'empty'})`)
+      : undefined,
+  }
+}
+
+/** Poll a gpt-image-2 task until done. Same diagnostic shape as pollGpt4oUntilDone. */
+export async function pollGptImage2UntilDone(params: {
+  apiKey: string
+  taskId: string
+  onStatusChange?: (status: ImageStatus, progress?: number) => void
+  timeoutMs?: number
+  signal?: AbortSignal
+}): Promise<string> {
+  const timeout = params.timeoutMs ?? 4 * 60 * 1000
+  const start = Date.now()
+  let lastStatus = ''
+  let sameStatusCount = 0
+  let pollCount = 0
+
+  const taskTag = params.taskId.slice(0, 12)
+  console.log(`[POLL_START gpt-image-2] task=${taskTag} timeout=${Math.round(timeout / 1000)}s`)
+
+  while (Date.now() - start < timeout) {
+    if (params.signal?.aborted) {
+      console.warn(`[POLL_FAIL gpt-image-2] task=${taskTag} reason=ABORTED`)
+      throw new Error('CANCELLED — user hủy task')
+    }
+    await new Promise<void>((r) => setTimeout(r, 2000))
+    pollCount++
+    const s = await getGptImage2Status({ apiKey: params.apiKey, taskId: params.taskId })
+    const elapsedSec = Math.round((Date.now() - start) / 1000)
+
+    if (s.status !== lastStatus) {
+      console.log(`[POLL_STATUS gpt-image-2] task=${taskTag} +${elapsedSec}s status=${s.status} (poll #${pollCount})`)
+      lastStatus = s.status
+      sameStatusCount = 0
+      params.onStatusChange?.(s.status, s.progress)
+    } else {
+      sameStatusCount++
+      if (sameStatusCount === 12) {
+        console.warn(`[POLL_STUCK_WARN gpt-image-2] task=${taskTag} +${elapsedSec}s status=${s.status} unchanged ~24s — KIE may be frozen`)
+      }
+      if (pollCount % 10 === 0) {
+        console.log(`[POLL_ELAPSED gpt-image-2] task=${taskTag} +${elapsedSec}s still ${s.status} (poll #${pollCount}, same#${sameStatusCount})`)
+      }
+    }
+
+    if (s.status === 'completed') {
+      if (!s.imageUrl) throw new Error('gpt-image-2 completed nhưng không trả về imageUrl')
+      console.log(`[POLL_COMPLETE gpt-image-2] task=${taskTag} +${elapsedSec}s url=${s.imageUrl.slice(0, 80)}`)
+      return s.imageUrl
+    }
+    if (s.status === 'failed') {
+      console.error(`[POLL_FAIL gpt-image-2] task=${taskTag} +${elapsedSec}s reason=${s.error}`)
+      throw new Error(s.error ?? 'gpt-image-2 gen thất bại')
+    }
+  }
+  console.error(`[POLL_FAIL gpt-image-2] task=${taskTag} +${Math.round(timeout / 1000)}s reason=TIMEOUT (final status=${lastStatus} sameCount=${sameStatusCount})`)
+  throw new Error(`TIMEOUT — KIE gpt-image-2 quá ${Math.round(timeout / 1000)}s chưa xong (task có thể bị stuck queue — retry tự động hoặc refresh + thử lại)`)
+}
+
 /** All-in-one: submit + poll + return final image URL. */
 export async function generateGpt4oImage(params: {
   apiKey: string

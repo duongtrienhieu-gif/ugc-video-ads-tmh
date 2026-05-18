@@ -6,8 +6,8 @@ import SectionCard from './SectionCard'
 import { useLandingPageStore } from '../store'
 import { useAppStore } from '../../../stores/appStore'
 
-/** KIE GPT-image-1 ~ 6 credits per call. Drives all cost hints in this module. */
-const CREDIT_PER_IMAGE = 6
+/** KIE gpt-image-2 @ 2K resolution ~ 10 credits per call. Drives all cost hints in this module. */
+const CREDIT_PER_IMAGE = 10
 
 interface OutputPanelProps {
   pack: LandingPagePack | null

@@ -11,7 +11,7 @@
 // are drawn by the canvas overlay step.
 // ─────────────────────────────────────────────────────────────────────
 
-import { submitGpt4oImage, pollGpt4oUntilDone } from '../../../../utils/kieai'
+import { submitGptImage2, pollGptImage2UntilDone } from '../../../../utils/kieai'
 import { saveAsset } from '../../../../utils/assetStore'
 import type { ComparisonCardVariant } from './types'
 
@@ -91,14 +91,14 @@ export async function generateComparisonScene(args: GenerateSceneArgs): Promise<
 
   const prompt = SCENE_PROMPT(args)
 
-  const { taskId } = await submitGpt4oImage({
+  const { taskId } = await submitGptImage2({
     apiKey: args.kieApiKey,
     prompt,
     filesUrl: args.productRefUrls.slice(0, 3),
     size: '2:3',
   })
 
-  const remoteUrl = await pollGpt4oUntilDone({
+  const remoteUrl = await pollGptImage2UntilDone({
     apiKey: args.kieApiKey,
     taskId,
     timeoutMs: 100_000,
