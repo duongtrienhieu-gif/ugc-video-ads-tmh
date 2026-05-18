@@ -36,6 +36,17 @@ export type AssetTypeId =
   | 'infographic'
   | 'cta-banner'
 
+  // ── P27 (Phase 3 taxonomy) — declared in catalog as "coming soon" ──
+  // Routed via ASSET_TO_GROUP for type-exhaustiveness, but intentionally
+  // NOT yet in ASSET_REGISTRY. Engine support ships in a later phase;
+  // the catalog cards advertise the type with a "Sắp ra mắt" badge.
+  | 'ingredients-explain'   // designed-graphic — composition / molecule map
+  | 'mechanism-explain'     // designed-graphic — body heatmap + arrows
+  | 'benefit-timeline'      // designed-graphic — 5 min / 7d / 30d
+  | 'group-holding'         // photographic — đám đông cầm sản phẩm
+  | 'collage-4-frames'      // composite — 4 portraits assembled
+  | 'expert-kol'            // photographic — fictional expert + quote card
+
 /**
  * High-level asset category — used for UI grouping in tabs, filtering,
  * analytics. Orthogonal to engineGroup (multiple categories can route to

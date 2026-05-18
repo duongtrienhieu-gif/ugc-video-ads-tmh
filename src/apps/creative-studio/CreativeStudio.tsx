@@ -141,7 +141,8 @@ export default function CreativeStudio() {
   const apiKeysOk   = (!needsKie || !!kieApiKey) && (!needsGemini || !!geminiApiKey)
 
   const reqsMet     = !reqs || (!reqs.requireProduct || !!productImageRef)
-  const canGenerate = !!selectedAssetTypeId && apiKeysOk && reqsMet
+  const isComingSoon = !!catalogEntry?.comingSoon
+  const canGenerate = !!selectedAssetTypeId && apiKeysOk && reqsMet && !isComingSoon
 
   // ── Fire a generation job (non-blocking) ───────────────────────────
   //

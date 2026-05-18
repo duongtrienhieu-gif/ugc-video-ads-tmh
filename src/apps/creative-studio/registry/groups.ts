@@ -37,6 +37,14 @@ export const ASSET_TO_GROUP: Record<AssetTypeId, EngineGroup> = {
   // ── designed-graphic group ──────────────────────────────────────────
   'infographic':        'designed-graphic',
   'cta-banner':         'designed-graphic',
+
+  // ── P27 — Phase 3 taxonomy (catalog-only; modules ship later) ──────
+  'ingredients-explain':'designed-graphic',
+  'mechanism-explain':  'designed-graphic',
+  'benefit-timeline':   'designed-graphic',
+  'group-holding':      'photographic',
+  'collage-4-frames':   'photographic',
+  'expert-kol':         'photographic',
 } as const
 
 /** Helper — get the engine group for an asset id (typed exhaustive). */

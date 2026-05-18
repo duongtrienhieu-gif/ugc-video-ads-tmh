@@ -42,6 +42,9 @@ const CARD_ICONS: Record<string, React.ElementType> = {
   messageSquare: MessageSquare,
   barChart3: BarChart3,
   megaphone: Megaphone,
+  // P27 — Phase 3 taxonomy
+  flask: FlaskConical,
+  users: Users,
 }
 
 const CATEGORY_ICONS: Record<string, React.ElementType> = {
@@ -165,33 +168,42 @@ function AssetCard({ entry, categoryAccent, categoryBg, selected, onSelect }: As
   const Icon = CARD_ICONS[entry.iconKey] ?? Package
   const cardRef = useRef<HTMLButtonElement>(null)
   const [popupOpen, setPopupOpen] = useState(false)
+  const isComingSoon = !!entry.comingSoon
 
+  // P27 — coming-soon cards: tooltip still shows so user can read the
+  // marketing intent, but the card is visually muted and cannot be
+  // selected. Click is a no-op (button disabled).
   return (
     <>
       <button
         ref={cardRef}
         type="button"
-        onClick={onSelect}
+        disabled={isComingSoon}
+        onClick={isComingSoon ? undefined : onSelect}
         onMouseEnter={() => setPopupOpen(true)}
         onMouseLeave={() => setPopupOpen(false)}
         onFocus={() => setPopupOpen(true)}
         onBlur={() => setPopupOpen(false)}
         className={`group flex w-full flex-col items-start gap-1.5 rounded-xl border p-2.5 text-left transition-all ${
-          selected
-            ? 'border-violet-500 bg-violet-50 ring-2 ring-violet-200'
-            : `${categoryAccent} ${categoryBg}`
+          isComingSoon
+            ? 'cursor-not-allowed border-dashed border-amber-200 bg-amber-50/30 opacity-75 hover:opacity-90'
+            : selected
+              ? 'border-violet-500 bg-violet-50 ring-2 ring-violet-200'
+              : `${categoryAccent} ${categoryBg}`
         }`}
       >
         <div className="flex w-full items-center justify-between">
           <Icon
-            className={`h-5 w-5 ${selected ? 'text-violet-600' : 'text-gray-600 group-hover:text-gray-900'}`}
+            className={`h-5 w-5 ${
+              isComingSoon ? 'text-amber-500' : selected ? 'text-violet-600' : 'text-gray-600 group-hover:text-gray-900'
+            }`}
             strokeWidth={1.6}
           />
           <span className="rounded-md bg-black/[0.06] px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wide text-gray-500">
             {entry.aspectRatio}
           </span>
         </div>
-        <span className="text-[12px] font-semibold leading-tight text-gray-900">
+        <span className={`text-[12px] font-semibold leading-tight ${isComingSoon ? 'text-amber-800' : 'text-gray-900'}`}>
           {entry.title.vi}
         </span>
         <span className="line-clamp-2 text-[10px] leading-snug text-gray-500">
@@ -213,7 +225,9 @@ function AssetCard({ entry, categoryAccent, categoryBg, selected, onSelect }: As
         </div>
       </button>
 
-      {/* Floating preview popup — portal-rendered, NEVER shifts grid */}
+      {/* Floating preview popup — portal-rendered, NEVER shifts grid.
+          Still shows for coming-soon so user can read the marketing
+          intent + decide if they want this in the roadmap. */}
       {popupOpen && <FloatingPreview entry={entry} anchorRef={cardRef} />}
     </>
   )

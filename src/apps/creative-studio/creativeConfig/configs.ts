@@ -160,7 +160,7 @@ const CONFIGS: CreativeConfig[] = [
     engine: 'photographic',
     model: 'gpt-image-2',
     dna: {
-      category: 'conversion',
+      category: 'pro-photo',
       marketingGoal: 'Strongest visual conversion driver — show kết quả cụ thể, tăng tỉ lệ click + CR.',
       emotion: 'aspiration',
       realism: 'highly-real',
@@ -194,7 +194,7 @@ const CONFIGS: CreativeConfig[] = [
     engine: 'photographic',
     model: 'gpt-image-2',
     dna: {
-      category: 'lifestyle',
+      category: 'pro-photo',
       marketingGoal: 'Gắn sản phẩm vào routine ấm cúng — khách tưởng tượng dùng SP mỗi sáng trong bếp nhà mình.',
       emotion: 'comfort',
       realism: 'highly-real',
@@ -226,7 +226,7 @@ const CONFIGS: CreativeConfig[] = [
     engine: 'photographic',
     model: 'gpt-image-2',
     dna: {
-      category: 'lifestyle',
+      category: 'pro-photo',
       marketingGoal: 'Gợi cảm giác self-care premium — gắn sản phẩm vào nghi thức chăm sóc bản thân.',
       emotion: 'comfort',
       realism: 'natural',
@@ -258,7 +258,7 @@ const CONFIGS: CreativeConfig[] = [
     engine: 'photographic',
     model: 'gpt-image-2',
     dna: {
-      category: 'lifestyle',
+      category: 'pro-photo',
       marketingGoal: 'Gắn sản phẩm vào lối sống urban / freelancer / millennial.',
       emotion: 'aspiration',
       realism: 'natural',
@@ -334,28 +334,28 @@ const CONFIGS: CreativeConfig[] = [
     platformStyle: 'messenger',
   }),
   ...uiNativeConfig('shopee-feedback', {
-    category: 'social-ui',
+    category: 'social-proof',
     marketingGoal: 'Trust signal từ Shopee — kênh Việt mặc định check trước khi mua.',
     emotion: 'trust',
     composition: 'mobile-screenshot',
     platformStyle: 'shopee',
   }),
   ...uiNativeConfig('tiktok-feedback', {
-    category: 'social-ui',
+    category: 'social-proof',
     marketingGoal: 'Trust signal cho audience Gen Z mua qua TikTok Shop.',
     emotion: 'aspiration',
     composition: 'mobile-screenshot',
     platformStyle: 'tiktok-shop',
   }),
   ...uiNativeConfig('facebook-comment', {
-    category: 'social-ui',
+    category: 'social-proof',
     marketingGoal: 'Engagement social proof — show bài post nhận phản hồi tích cực.',
     emotion: 'trust',
     composition: 'mobile-screenshot',
     platformStyle: 'facebook-ads',
   }),
   ...uiNativeConfig('tiktok-comment', {
-    category: 'social-ui',
+    category: 'social-proof',
     marketingGoal: 'Trigger FOMO — show video đang viral, engagement cao.',
     emotion: 'hype',
     composition: 'mobile-screenshot',
@@ -394,7 +394,7 @@ const CONFIGS: CreativeConfig[] = [
     engine: 'designed-graphic',
     model: 'gemini-text+canvas',
     dna: {
-      category: 'conversion',
+      category: 'product-explain',
       marketingGoal: 'Click-thru optimization — banner cho Facebook / Shopee / TikTok ads paid traffic.',
       emotion: 'urgency',
       realism: 'stylized',
