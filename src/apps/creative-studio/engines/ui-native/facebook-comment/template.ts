@@ -1,22 +1,23 @@
-// ── Facebook Comment Thread Canvas Template (P6) ────────────────────────────
+// ── Facebook Comment Thread Canvas Template (P12 authenticity refresh) ─────
 //
-// Renders a Facebook post + comment thread screenshot. Top portion shows
-// a minimal post header (author + time + body excerpt) so the comments
-// have context; bulk of the canvas is the comment list.
-//
-// Output: 9:16 portrait, 1080×1920.
+// P12 changes:
+//   • per-platform metrics (FACEBOOK_COMMENT_METRICS) — bubble proportions
+//     match real FB v420 screenshots
+//   • per-platform typography (FACEBOOK_TYPO) — Meta-stack 600/400 weights
+//   • iPhone 15 Pro device chrome (dynamic island + home indicator)
+//   • locale-aware metadata: "Like" / "Reply" / "Most relevant" / engagement
+//     count formats per locale
+//   • multi-avatar pool — each unique commenter has their own face,
+//     defeats the "all commenters look identical" bot-farm tell
 
-import type { UINativeTextContent, UINativeTemplate } from '../../../types/uiNative'
-import {
-  createCanvas,
-  loadImage,
-  drawCircularAvatar,
-  roundedRectPath,
-  wrapText,
-} from '../../../shared/canvas'
+import type { UINativeTextContent, UINativeTemplate, UINativeLocale } from '../../../types/uiNative'
+import { createCanvas, loadImage, drawCircularAvatar, roundedRectPath, wrapText } from '../../../shared/canvas'
 import { FACEBOOK_LIGHT_2024 } from '../_shared/colors'
-import { renderStatusBar } from '../_shared/statusBar'
+import { FACEBOOK_COMMENT_METRICS } from '../_shared/platformMetrics'
+import { FACEBOOK_TYPO, font } from '../_shared/platformTypography'
+import { IPHONE_15_PRO, renderDeviceChrome } from '../_shared/deviceChrome'
 import { readLikes, readIsReply } from '../_shared/textPayload'
+import { findStrings, fakeMetric } from '../_shared/conversationMetadata'
 import type { MessageTimeline } from '../_shared/timestamps'
 
 export const FACEBOOK_COMMENT_TEMPLATE: UINativeTemplate = {
@@ -25,78 +26,74 @@ export const FACEBOOK_COMMENT_TEMPLATE: UINativeTemplate = {
   variant: 'post-with-comments',
   canvasSize: { width: 1080, height: 1920 },
   theme: 'light',
-  statusBarStyle: 'android',
+  statusBarStyle: 'ios',
   uiVintage: '2024',
 }
 
 export interface RenderInputs {
   text: UINativeTextContent
   timeline: MessageTimeline
-  /** Avatar of the POST author (NOT a commenter). */
-  postAuthorAvatarUrl: string
-  /** Optional generic commenter avatar (reused for all commenters). */
-  commenterAvatarUrl?: string
+  customerAvatarUrl: string
+  avatarPool?: Map<number, string>
+  locale: UINativeLocale
+  productImageUrl?: string
 }
 
-export async function renderFacebookComments(
-  inputs: RenderInputs,
-): Promise<HTMLCanvasElement> {
+export async function renderFacebookComments(inputs: RenderInputs): Promise<HTMLCanvasElement> {
   const palette = FACEBOOK_LIGHT_2024
+  const M = FACEBOOK_COMMENT_METRICS
+  const T = FACEBOOK_TYPO
+  const S = findStrings(inputs.locale)
   const size = FACEBOOK_COMMENT_TEMPLATE.canvasSize
   const { canvas, ctx } = createCanvas(size)
 
   ctx.fillStyle = palette.pageBg
   ctx.fillRect(0, 0, size.width, size.height)
 
-  renderStatusBar(ctx, {
-    style: 'android',
-    fg: palette.headerFg,
-    bg: palette.headerBg,
+  // iPhone chrome — Facebook uses white header so status bar fg is dark
+  renderDeviceChrome(ctx, IPHONE_15_PRO, size.width, size.height, {
+    statusBarBg: palette.headerBg,
+    statusBarFg: palette.headerFg,
     timeLabel: inputs.timeline.statusBarTime,
-    width: size.width,
   })
 
-  // ── Page header — "Comments" label + back chevron ─────────────────
-  const headerY = 44
-  const headerH = 100
+  // Header — "Comments" + back chevron + sort label
+  const headerY = IPHONE_15_PRO.statusBarHeight + IPHONE_15_PRO.safeAreaTop
   ctx.fillStyle = palette.headerBg
-  ctx.fillRect(0, headerY, size.width, headerH)
+  ctx.fillRect(0, headerY, size.width, M.headerHeight)
   ctx.fillStyle = palette.divider
-  ctx.fillRect(0, headerY + headerH, size.width, 1)
+  ctx.fillRect(0, headerY + M.headerHeight, size.width, 1)
 
+  // Back chevron
   ctx.strokeStyle = palette.headerFg
-  ctx.lineWidth = 4
+  ctx.lineWidth = 3.5
   ctx.lineCap = 'round'
   ctx.beginPath()
-  ctx.moveTo(60, headerY + headerH / 2)
-  ctx.lineTo(34, headerY + headerH / 2)
-  ctx.moveTo(46, headerY + headerH / 2 - 14)
-  ctx.lineTo(34, headerY + headerH / 2)
-  ctx.lineTo(46, headerY + headerH / 2 + 14)
+  const chevY = headerY + M.headerHeight / 2
+  ctx.moveTo(58, chevY); ctx.lineTo(34, chevY)
+  ctx.moveTo(46, chevY - 12); ctx.lineTo(34, chevY); ctx.lineTo(46, chevY + 12)
   ctx.stroke()
 
   ctx.fillStyle = palette.headerFg
-  ctx.font = '600 30px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
+  ctx.font = font(T, 'header')
   ctx.textAlign = 'left'
   ctx.textBaseline = 'middle'
-  ctx.fillText('Comments', 90, headerY + headerH / 2)
+  ctx.fillText('Comments', 86, chevY)
 
-  // Sort pill (right)
+  // Sort pill right
   ctx.fillStyle = palette.mutedFg
-  ctx.font = '500 22px -apple-system, sans-serif'
+  ctx.font = font(T, 'meta')
   ctx.textAlign = 'right'
-  ctx.textBaseline = 'middle'
-  ctx.fillText('Most relevant ▾', size.width - 30, headerY + headerH / 2)
+  ctx.fillText(`${S.mostRelevant} ▾`, size.width - 28, chevY)
 
-  // ── Compact post stub (engagement bar) ────────────────────────────
-  const stubY = headerY + headerH
-  const stubH = 80
+  // Engagement stub bar
+  const stubY = headerY + M.headerHeight
+  const stubH = 78
   ctx.fillStyle = palette.pageBg
   ctx.fillRect(0, stubY, size.width, stubH)
   ctx.fillStyle = palette.divider
   ctx.fillRect(0, stubY + stubH, size.width, 1)
 
-  // Like + comment + share counters
   ctx.fillStyle = palette.likeAccent
   ctx.beginPath()
   ctx.arc(60, stubY + stubH / 2, 16, 0, Math.PI * 2)
@@ -107,81 +104,61 @@ export async function renderFacebookComments(
   ctx.textBaseline = 'middle'
   ctx.fillText('👍', 60, stubY + stubH / 2)
 
+  const totalLikes = inputs.text.items.reduce((s, c) => s + readLikes(c), 0) + fakeMetric(`${inputs.timeline.dateLabel}_likes`, 'medium')
   ctx.fillStyle = palette.pageFg
-  ctx.font = '500 26px -apple-system, sans-serif'
+  ctx.font = font(T, 'name')
   ctx.textAlign = 'left'
   ctx.textBaseline = 'middle'
-  ctx.fillText(`${countTotalLikes(inputs.text) + 218}`, 96, stubY + stubH / 2)
+  ctx.fillText(`${totalLikes}`, 92, stubY + stubH / 2)
 
   ctx.fillStyle = palette.mutedFg
-  ctx.font = '400 24px -apple-system, sans-serif'
+  ctx.font = font(T, 'meta')
   ctx.textAlign = 'right'
-  ctx.fillText(`${inputs.text.items.length} comments  ·  12 shares`, size.width - 30, stubY + stubH / 2)
+  ctx.fillText(
+    `${S.commentsCount(inputs.text.items.length + fakeMetric(`${inputs.timeline.dateLabel}_cmt`, 'small'))}  ·  ${fakeMetric(`${inputs.timeline.dateLabel}_share`, 'small')} shares`,
+    size.width - 28, stubY + stubH / 2,
+  )
 
-  // ── Comment list ──────────────────────────────────────────────────
-  let cursor = stubY + stubH + 24
-  const commenterImg = inputs.commenterAvatarUrl
-    ? await loadImageSafe(inputs.commenterAvatarUrl)
-    : null
+  // Pre-load all unique commenter avatars from pool
+  const avatarCache = new Map<number, HTMLImageElement | null>()
+  const uniqueAuthors = new Set(inputs.text.items.map((c) => c.authorIdx))
+  const poolSize = inputs.avatarPool?.size ?? 0
+  for (const idx of uniqueAuthors) {
+    const url = (poolSize > 0
+      ? inputs.avatarPool!.get(idx % poolSize)
+      : inputs.customerAvatarUrl) ?? inputs.customerAvatarUrl
+    avatarCache.set(idx, await loadImageSafe(url))
+  }
+
+  // Comment list
+  let cursor = stubY + stubH + 20
+  const cutoffY = size.height - M.footerHeight - 30
 
   for (let i = 0; i < inputs.text.items.length; i++) {
     const c = inputs.text.items[i]
-    const isReply = readIsReply(c)
+    const author = inputs.text.participants[c.authorIdx]
     cursor = await drawComment(ctx, {
-      palette,
+      palette, metrics: M, typo: T, strings: S,
       width: size.width,
       startY: cursor,
-      displayName: inputs.text.participants[c.authorIdx]?.displayName ?? 'user',
+      displayName: author?.displayName ?? 'user',
       body: c.text,
       timestamp: c.timestamp,
       likes: readLikes(c),
-      isReply,
-      avatarImg: commenterImg,
+      isReply: readIsReply(c),
+      avatarImg: avatarCache.get(c.authorIdx) ?? null,
     })
-
-    if (cursor > size.height - 200) break
+    if (cursor > cutoffY) break
   }
 
-  // ── Composer at bottom ────────────────────────────────────────────
-  const composerH = 130
-  const composerY = size.height - composerH
-  ctx.fillStyle = palette.composerBg
-  ctx.fillRect(0, composerY, size.width, composerH)
-  ctx.fillStyle = palette.divider
-  ctx.fillRect(0, composerY, size.width, 1)
-
-  // Reactions row (above input)
-  const reactionsY = composerY + 30
-  const reactions = ['👍', '❤️', '😆', '😮', '😢', '😡']
-  ctx.font = '400 26px -apple-system, sans-serif'
-  ctx.textAlign = 'left'
-  ctx.textBaseline = 'middle'
-  for (let i = 0; i < reactions.length; i++) {
-    ctx.fillText(reactions[i], 40 + i * 80, reactionsY)
-  }
-
-  // Input pill
-  const pillX = 40
-  const pillY = composerY + 70
-  const pillW = size.width - pillX - 100
-  const pillH = composerH - 78
-  roundedRectPath(ctx, pillX, pillY, pillW, pillH, pillH / 2)
-  ctx.fillStyle = palette.pageBg
-  ctx.fill()
-  ctx.strokeStyle = palette.divider
-  ctx.lineWidth = 1
-  ctx.stroke()
-
-  ctx.fillStyle = palette.composerPlaceholder
-  ctx.font = '400 24px -apple-system, sans-serif'
-  ctx.textBaseline = 'middle'
-  ctx.fillText('Write a comment...', pillX + 30, pillY + pillH / 2)
-
-  // Smiley icon (right of input)
-  ctx.fillStyle = palette.composerPlaceholder
-  ctx.beginPath()
-  ctx.arc(size.width - 60, pillY + pillH / 2, 22, 0, Math.PI * 2)
-  ctx.fill()
+  // Composer
+  drawFbComposer(ctx, {
+    palette, typo: T, strings: S,
+    width: size.width,
+    yOffset: size.height - M.footerHeight - IPHONE_15_PRO.safeAreaBottom,
+    height: M.footerHeight,
+    primaryAvatar: avatarCache.get(0) ?? null,
+  })
 
   return canvas
 }
@@ -190,6 +167,9 @@ export async function renderFacebookComments(
 
 interface CommentInputs {
   palette: typeof FACEBOOK_LIGHT_2024
+  metrics: typeof FACEBOOK_COMMENT_METRICS
+  typo: typeof FACEBOOK_TYPO
+  strings: ReturnType<typeof findStrings>
   width: number
   startY: number
   displayName: string
@@ -200,16 +180,13 @@ interface CommentInputs {
   avatarImg: HTMLImageElement | null
 }
 
-async function drawComment(
-  ctx: CanvasRenderingContext2D,
-  inputs: CommentInputs,
-): Promise<number> {
-  const { palette, width, startY, displayName, body, timestamp, likes, isReply, avatarImg } = inputs
+async function drawComment(ctx: CanvasRenderingContext2D, i: CommentInputs): Promise<number> {
+  const { palette, metrics: M, typo: T, strings: S, width, startY,
+          displayName, body, timestamp, likes, isReply, avatarImg } = i
 
-  const padX = 36
-  const indentX = isReply ? 90 : 0
-  const avatarRadius = isReply ? 22 : 28
-  const avatarCx = padX + indentX + avatarRadius
+  const indentX = isReply ? 78 : 0
+  const avatarRadius = isReply ? M.inlineAvatarRadius * 0.78 : M.inlineAvatarRadius
+  const avatarCx = M.sideMargin + indentX + avatarRadius
   const avatarCy = startY + avatarRadius
 
   if (avatarImg) {
@@ -221,82 +198,124 @@ async function drawComment(
     ctx.fill()
   }
 
-  // Bubble background
-  const bubbleX = avatarCx + avatarRadius + 14
-  const bubblePadX = 22
-  const bubblePadY = 14
-  const bubbleMaxW = width - bubbleX - padX
-  const nameFont = '600 24px -apple-system, sans-serif'
-  const bodyFont = '400 26px -apple-system, sans-serif'
+  const bubbleX = avatarCx + avatarRadius + 12
+  const bubbleMaxW = (width - bubbleX - M.sideMargin) * 0.95
 
-  ctx.font = bodyFont
-  const lines = wrapText(ctx, body, bubbleMaxW - bubblePadX * 2)
-  const lineH = 34
-  const textBlockH = lines.length * lineH
+  // Pre-measure body
+  ctx.font = font(T, 'body')
+  const lines = wrapText(ctx, body, bubbleMaxW - M.bubblePaddingX * 2)
+  const lh = T.bodySize * T.bodyLineHeight
+  const textBlockH = lines.length * lh
 
-  ctx.font = nameFont
+  ctx.font = font(T, 'name')
   const nameW = ctx.measureText(displayName).width
-  const longestBodyW = Math.max(...lines.map((l) => ctx.measureText(l).width))
+  const longestLineW = lines.length === 0 ? 0 : Math.max(...lines.map((l) => {
+    ctx.font = font(T, 'body')
+    return ctx.measureText(l).width
+  }))
+
   const bubbleW = Math.min(
     bubbleMaxW,
-    Math.max(nameW, longestBodyW) + bubblePadX * 2,
+    Math.max(nameW, longestLineW) + M.bubblePaddingX * 2,
   )
-  const bubbleH = 38 + textBlockH + bubblePadY  // header height + body
-  roundedRectPath(ctx, bubbleX, startY, bubbleW, bubbleH, 18)
+  const bubbleH = 34 + textBlockH + M.bubblePaddingY
+
+  roundedRectPath(ctx, bubbleX, startY, bubbleW, bubbleH, M.bubbleRadius)
   ctx.fillStyle = '#F0F2F5'
   ctx.fill()
 
-  // Display name (bold)
+  // Display name
   ctx.fillStyle = palette.authorFg
-  ctx.font = nameFont
+  ctx.font = font(T, 'name')
   ctx.textAlign = 'left'
   ctx.textBaseline = 'top'
-  ctx.fillText(displayName, bubbleX + bubblePadX, startY + bubblePadY)
+  ctx.fillText(displayName, bubbleX + M.bubblePaddingX, startY + M.bubblePaddingY)
 
   // Body
   ctx.fillStyle = palette.pageFg
-  ctx.font = bodyFont
+  ctx.font = font(T, 'body')
   for (let li = 0; li < lines.length; li++) {
-    ctx.fillText(lines[li], bubbleX + bubblePadX, startY + 38 + bubblePadY + li * lineH)
+    ctx.fillText(lines[li], bubbleX + M.bubblePaddingX, startY + 34 + M.bubblePaddingY + li * lh - 6)
   }
 
-  // Action row below bubble
-  const actionsY = startY + bubbleH + 8
-  ctx.font = '500 22px -apple-system, sans-serif'
+  // Action row
+  const actionsY = startY + bubbleH + 6
+  ctx.font = font(T, 'meta')
   ctx.fillStyle = palette.mutedFg
   ctx.textAlign = 'left'
   ctx.textBaseline = 'top'
-  ctx.fillText(timestamp, bubbleX + 6, actionsY)
+  ctx.fillText(timestamp, bubbleX + 4, actionsY)
   ctx.fillStyle = palette.likeAccent
-  ctx.fillText('Like', bubbleX + 110, actionsY)
+  ctx.fillText(S.like, bubbleX + 96, actionsY)
   ctx.fillStyle = palette.mutedFg
-  ctx.fillText('Reply', bubbleX + 200, actionsY)
+  ctx.fillText(S.reply, bubbleX + 168, actionsY)
 
   if (likes > 0) {
-    // Right-aligned like count badge
     ctx.fillStyle = palette.likeAccent
     ctx.beginPath()
-    ctx.arc(bubbleX + bubbleW - 60, actionsY + 12, 14, 0, Math.PI * 2)
+    ctx.arc(bubbleX + bubbleW - 52, actionsY + 11, 13, 0, Math.PI * 2)
     ctx.fill()
     ctx.fillStyle = '#FFFFFF'
-    ctx.font = '600 18px -apple-system, sans-serif'
+    ctx.font = '600 16px -apple-system, sans-serif'
     ctx.textAlign = 'center'
     ctx.textBaseline = 'middle'
-    ctx.fillText('👍', bubbleX + bubbleW - 60, actionsY + 12)
+    ctx.fillText('👍', bubbleX + bubbleW - 52, actionsY + 11)
     ctx.fillStyle = palette.mutedFg
-    ctx.font = '500 22px -apple-system, sans-serif'
+    ctx.font = font(T, 'meta')
     ctx.textAlign = 'left'
     ctx.textBaseline = 'top'
-    ctx.fillText(`${likes}`, bubbleX + bubbleW - 36, actionsY)
+    ctx.fillText(`${likes}`, bubbleX + bubbleW - 30, actionsY)
   }
 
-  return actionsY + 40
+  return actionsY + 32 + M.bubbleGap
+}
+
+function drawFbComposer(ctx: CanvasRenderingContext2D, i: {
+  palette: typeof FACEBOOK_LIGHT_2024
+  typo: typeof FACEBOOK_TYPO
+  strings: ReturnType<typeof findStrings>
+  width: number
+  yOffset: number
+  height: number
+  primaryAvatar: HTMLImageElement | null
+}) {
+  const { palette, typo: T, strings: S, width, yOffset, height, primaryAvatar } = i
+  ctx.fillStyle = palette.composerBg
+  ctx.fillRect(0, yOffset, width, height)
+  ctx.fillStyle = palette.divider
+  ctx.fillRect(0, yOffset, width, 1)
+
+  // Reactions row
+  const reactionsY = yOffset + 28
+  const reactions = ['👍', '❤️', '😆', '😮', '😢', '😡']
+  ctx.font = font(T, 'name')
+  ctx.textAlign = 'left'
+  ctx.textBaseline = 'middle'
+  for (let r = 0; r < reactions.length; r++) {
+    ctx.fillText(reactions[r], 36 + r * 72, reactionsY)
+  }
+
+  // Avatar + input pill row
+  const pillRowY = yOffset + 66
+  const pillH = height - 76
+  const ax = 36 + 24
+  if (primaryAvatar) drawCircularAvatar(ctx, primaryAvatar, ax, pillRowY + pillH / 2, 22)
+
+  const pillX = ax + 32
+  const pillW = width - pillX - 36
+  roundedRectPath(ctx, pillX, pillRowY, pillW, pillH, pillH / 2)
+  ctx.fillStyle = palette.pageBg
+  ctx.fill()
+  ctx.strokeStyle = palette.divider
+  ctx.lineWidth = 1
+  ctx.stroke()
+
+  ctx.fillStyle = palette.composerPlaceholder
+  ctx.font = font(T, 'body')
+  ctx.textBaseline = 'middle'
+  ctx.fillText(S.composerPlaceholder('facebook'), pillX + 26, pillRowY + pillH / 2)
 }
 
 async function loadImageSafe(url: string): Promise<HTMLImageElement | null> {
   try { return await loadImage(url) } catch { return null }
-}
-
-function countTotalLikes(text: UINativeTextContent): number {
-  return text.items.reduce((sum, c) => sum + readLikes(c), 0)
 }

@@ -1,23 +1,20 @@
-// ── TikTok Comment Overlay Canvas Template (P6) ─────────────────────────────
+// ── TikTok Comment Overlay Canvas Template (P12 authenticity refresh) ──────
 //
-// Renders the TikTok comment-section overlay that slides up over a video.
-// Pure dark theme — black background, white text, pink heart accents.
-// Comments are flat list (no reply nesting in this MVP — TikTok shows
-// reply count instead).
-//
-// Output: 9:16 portrait, 1080×1920.
+// P12 changes:
+//   • per-platform metrics (TIKTOK_COMMENT_METRICS) instead of inline numbers
+//   • per-platform typography (TIKTOK_TYPO)
+//   • iPhone 15 Pro device chrome (dynamic island + home indicator)
+//   • locale-aware metadata strings (sort label, comment count, reply)
+//   • multi-avatar pool — each unique commenter gets their own face
 
-import type { UINativeTextContent, UINativeTemplate } from '../../../types/uiNative'
-import {
-  createCanvas,
-  loadImage,
-  drawCircularAvatar,
-  roundedRectPath,
-  wrapText,
-} from '../../../shared/canvas'
+import type { UINativeTextContent, UINativeTemplate, UINativeLocale } from '../../../types/uiNative'
+import { createCanvas, loadImage, drawCircularAvatar, roundedRectPath, wrapText } from '../../../shared/canvas'
 import { TIKTOK_COMMENT_DARK_2024 } from '../_shared/colors'
-import { renderStatusBar } from '../_shared/statusBar'
+import { TIKTOK_COMMENT_METRICS } from '../_shared/platformMetrics'
+import { TIKTOK_TYPO, font } from '../_shared/platformTypography'
+import { IPHONE_15_PRO, renderDeviceChrome } from '../_shared/deviceChrome'
 import { readLikes, readIsReply } from '../_shared/textPayload'
+import { findStrings, fakeMetric } from '../_shared/conversationMetadata'
 import type { MessageTimeline } from '../_shared/timestamps'
 
 export const TIKTOK_COMMENT_TEMPLATE: UINativeTemplate = {
@@ -33,14 +30,16 @@ export const TIKTOK_COMMENT_TEMPLATE: UINativeTemplate = {
 export interface RenderInputs {
   text: UINativeTextContent
   timeline: MessageTimeline
-  /** Single shared commenter avatar — reused for all commenters. */
-  commenterAvatarUrl: string
+  customerAvatarUrl: string
+  avatarPool?: Map<number, string>
+  locale: UINativeLocale
 }
 
-export async function renderTikTokComments(
-  inputs: RenderInputs,
-): Promise<HTMLCanvasElement> {
+export async function renderTikTokComments(inputs: RenderInputs): Promise<HTMLCanvasElement> {
   const palette = TIKTOK_COMMENT_DARK_2024
+  const M = TIKTOK_COMMENT_METRICS
+  const T = TIKTOK_TYPO
+  const S = findStrings(inputs.locale)
   const size = TIKTOK_COMMENT_TEMPLATE.canvasSize
   const { canvas, ctx } = createCanvas(size)
 
@@ -48,127 +47,95 @@ export async function renderTikTokComments(
   ctx.fillStyle = palette.pageBg
   ctx.fillRect(0, 0, size.width, size.height)
 
-  // Status bar — white on black
-  renderStatusBar(ctx, {
-    style: 'ios',
-    fg: '#FFFFFF',
-    bg: palette.pageBg,
+  // Device chrome — dynamic island on top of dark video frame
+  renderDeviceChrome(ctx, IPHONE_15_PRO, size.width, size.height, {
+    statusBarBg: null,
+    statusBarFg: '#FFFFFF',
     timeLabel: inputs.timeline.statusBarTime,
-    width: size.width,
   })
 
-  // Top — a faint video peek frame (~25% of height) so the comment
-  // overlay context is obvious
+  // Top — faint video peek frame (~22% of height)
   const videoPeekH = 380
-  const videoY = 44
-  ctx.fillStyle = '#1A1A1F'
-  ctx.fillRect(0, videoY, size.width, videoPeekH)
-
-  // Mock video gradient
+  const videoY = IPHONE_15_PRO.statusBarHeight + IPHONE_15_PRO.safeAreaTop
   const grad = ctx.createLinearGradient(0, videoY, 0, videoY + videoPeekH)
   grad.addColorStop(0, '#1F1F25')
   grad.addColorStop(1, '#0A0A0D')
   ctx.fillStyle = grad
   ctx.fillRect(0, videoY, size.width, videoPeekH)
 
-  // Right rail icons (heart / comment / share — TikTok hallmark)
-  drawRightRailIcons(ctx, size.width - 110, videoY + 60, palette)
+  drawRightRail(ctx, size.width - 90, videoY + 60, inputs.timeline.dateLabel)
 
-  // ── Comment sheet handle + count label ────────────────────────────
+  // Comment sheet
   const sheetY = videoY + videoPeekH
-  const sheetH = size.height - sheetY - 140  // leave room for composer
   ctx.fillStyle = palette.pageBg
-  ctx.fillRect(0, sheetY, size.width, sheetH)
+  ctx.fillRect(0, sheetY, size.width, size.height - sheetY)
 
   // Drag handle
-  roundedRectPath(ctx, size.width / 2 - 40, sheetY + 16, 80, 6, 3)
+  roundedRectPath(ctx, size.width / 2 - 40, sheetY + 16, 80, 5, 2.5)
   ctx.fillStyle = palette.mutedFg
   ctx.fill()
 
-  // Count + sort label
+  // Comments count — locale-aware
   ctx.fillStyle = palette.pageFg
-  ctx.font = '600 30px -apple-system, sans-serif'
+  ctx.font = font(T, 'header')
   ctx.textAlign = 'center'
   ctx.textBaseline = 'top'
-  ctx.fillText(
-    `${inputs.text.items.length + 1.4 | 0}k comments`,
-    size.width / 2,
-    sheetY + 40,
-  )
+  const totalCommentCount = fakeMetric(`${inputs.timeline.dateLabel}_total`, 'large')
+  ctx.fillText(S.commentsCount(totalCommentCount), size.width / 2, sheetY + 36)
 
   // Sort row
-  ctx.fillStyle = palette.mutedFg
-  ctx.font = '500 22px -apple-system, sans-serif'
+  ctx.font = font(T, 'meta')
+  ctx.fillStyle = palette.pageFg
   ctx.textAlign = 'left'
-  ctx.fillText('Most relevant', 50, sheetY + 110)
+  ctx.fillText(S.mostRelevant, M.sideMargin, sheetY + 110)
   ctx.textAlign = 'right'
-  ctx.fillText('Newest', size.width - 50, sheetY + 110)
+  ctx.fillStyle = palette.mutedFg
+  ctx.fillText(S.newest, size.width - M.sideMargin, sheetY + 110)
 
-  // Divider
   ctx.fillStyle = palette.divider
-  ctx.fillRect(0, sheetY + 155, size.width, 1)
+  ctx.fillRect(0, sheetY + 152, size.width, 1)
 
-  // ── Comment list ──────────────────────────────────────────────────
-  let cursor = sheetY + 180
-  const commenterImg = await loadImageSafe(inputs.commenterAvatarUrl)
-  const cutoffY = size.height - 200
+  // Pre-load avatars from pool
+  const avatarCache = new Map<number, HTMLImageElement | null>()
+  const uniqueAuthors = new Set(inputs.text.items.map((c) => c.authorIdx))
+  const poolSize = inputs.avatarPool?.size ?? 0
+  for (const idx of uniqueAuthors) {
+    const url = (poolSize > 0
+      ? inputs.avatarPool!.get(idx % poolSize)
+      : inputs.customerAvatarUrl) ?? inputs.customerAvatarUrl
+    avatarCache.set(idx, await loadImageSafe(url))
+  }
+
+  // Comment list
+  let cursor = sheetY + 178
+  const cutoffY = size.height - M.footerHeight - 30
 
   for (let i = 0; i < inputs.text.items.length; i++) {
     const c = inputs.text.items[i]
-    cursor = await drawTikTokComment(ctx, {
-      palette,
+    const author = inputs.text.participants[c.authorIdx]
+    const displayName = author?.displayName ?? 'user'
+    const avatar = avatarCache.get(c.authorIdx) ?? null
+    cursor = drawTikTokComment(ctx, {
+      palette, metrics: M, typo: T, strings: S,
       width: size.width,
       startY: cursor,
-      displayName: inputs.text.participants[c.authorIdx]?.displayName ?? 'user',
+      displayName,
       body: c.text,
       timestamp: c.timestamp,
       likes: readLikes(c),
       isReply: readIsReply(c),
-      avatarImg: commenterImg,
+      avatarImg: avatar,
     })
     if (cursor > cutoffY) break
   }
 
-  // ── Composer ──────────────────────────────────────────────────────
-  const composerH = 140
-  const composerY = size.height - composerH
-  ctx.fillStyle = palette.composerBg
-  ctx.fillRect(0, composerY, size.width, composerH)
-  ctx.fillStyle = palette.divider
-  ctx.fillRect(0, composerY, size.width, 1)
-
-  // Avatar (left)
-  const myAvatarCx = 70
-  const myAvatarCy = composerY + composerH / 2
-  if (commenterImg) {
-    drawCircularAvatar(ctx, commenterImg, myAvatarCx, myAvatarCy, 30)
-  } else {
-    ctx.fillStyle = palette.divider
-    ctx.beginPath()
-    ctx.arc(myAvatarCx, myAvatarCy, 30, 0, Math.PI * 2)
-    ctx.fill()
-  }
-
-  // Input pill
-  const pillX = 130
-  const pillY = composerY + 30
-  const pillW = size.width - pillX - 50
-  const pillH = composerH - 60
-  roundedRectPath(ctx, pillX, pillY, pillW, pillH, pillH / 2)
-  ctx.fillStyle = '#1E1E22'
-  ctx.fill()
-
-  ctx.fillStyle = palette.composerPlaceholder
-  ctx.font = '400 26px -apple-system, sans-serif'
-  ctx.textAlign = 'left'
-  ctx.textBaseline = 'middle'
-  ctx.fillText('Add comment...', pillX + 28, pillY + pillH / 2)
-
-  // Right side glyph trio (@ # emoji)
-  ctx.fillStyle = palette.composerPlaceholder
-  ctx.font = '400 26px -apple-system, sans-serif'
-  ctx.textAlign = 'right'
-  ctx.fillText('@  #  😊', pillX + pillW - 30, pillY + pillH / 2)
+  drawComposer(ctx, {
+    palette, typo: T, strings: S,
+    width: size.width,
+    yOffset: size.height - M.footerHeight - IPHONE_15_PRO.safeAreaBottom,
+    height: M.footerHeight,
+    primaryAvatar: avatarCache.get(0) ?? null,
+  })
 
   return canvas
 }
@@ -177,6 +144,9 @@ export async function renderTikTokComments(
 
 interface CommentInputs {
   palette: typeof TIKTOK_COMMENT_DARK_2024
+  metrics: typeof TIKTOK_COMMENT_METRICS
+  typo: typeof TIKTOK_TYPO
+  strings: ReturnType<typeof findStrings>
   width: number
   startY: number
   displayName: string
@@ -187,16 +157,13 @@ interface CommentInputs {
   avatarImg: HTMLImageElement | null
 }
 
-async function drawTikTokComment(
-  ctx: CanvasRenderingContext2D,
-  inputs: CommentInputs,
-): Promise<number> {
-  const { palette, width, startY, displayName, body, timestamp, likes, isReply, avatarImg } = inputs
+function drawTikTokComment(ctx: CanvasRenderingContext2D, i: CommentInputs): number {
+  const { palette, metrics: M, typo: T, strings: S, width, startY,
+          displayName, body, timestamp, likes, isReply, avatarImg } = i
 
-  const padX = 30
-  const indentX = isReply ? 90 : 0
-  const avatarRadius = isReply ? 22 : 28
-  const avatarCx = padX + indentX + avatarRadius
+  const indentX = isReply ? 80 : 0
+  const avatarRadius = isReply ? M.inlineAvatarRadius * 0.78 : M.inlineAvatarRadius
+  const avatarCx = M.sideMargin + indentX + avatarRadius
   const avatarCy = startY + avatarRadius
 
   if (avatarImg) {
@@ -208,112 +175,138 @@ async function drawTikTokComment(
     ctx.fill()
   }
 
-  const textX = avatarCx + avatarRadius + 18
-  const textMaxW = width - textX - 120  // 120 reserved for right heart column
+  const textX = avatarCx + avatarRadius + 14
+  const textMaxW = width - textX - 110
 
-  // Display name + body — TikTok wraps name+body together
   ctx.fillStyle = palette.mutedFg
-  ctx.font = '500 22px -apple-system, sans-serif'
+  ctx.font = font(T, 'name')
   ctx.textAlign = 'left'
   ctx.textBaseline = 'top'
   ctx.fillText(displayName, textX, startY)
 
   ctx.fillStyle = palette.pageFg
-  ctx.font = '400 26px -apple-system, sans-serif'
+  ctx.font = font(T, 'body')
   const lines = wrapText(ctx, body, textMaxW)
-  const lineH = 34
+  const lh = T.bodySize * T.bodyLineHeight
   for (let li = 0; li < lines.length; li++) {
-    ctx.fillText(lines[li], textX, startY + 30 + li * lineH)
+    ctx.fillText(lines[li], textX, startY + 28 + li * lh)
   }
+  const bodyBottom = startY + 28 + lines.length * lh
 
-  const bodyBottomY = startY + 30 + lines.length * lineH
-
-  // Action row (timestamp + Reply)
+  // Action row: timestamp · Reply
   ctx.fillStyle = palette.mutedFg
-  ctx.font = '500 22px -apple-system, sans-serif'
-  ctx.fillText(`${timestamp}`, textX, bodyBottomY + 6)
-  ctx.fillText('Reply', textX + 110, bodyBottomY + 6)
+  ctx.font = font(T, 'meta')
+  ctx.fillText(timestamp, textX, bodyBottom + 6)
+  ctx.fillText(S.reply, textX + 92, bodyBottom + 6)
 
-  // Heart icon + count (right column)
-  const heartCx = width - 50
-  const heartCy = startY + 30
-  ctx.fillStyle = palette.likeAccent
-  drawHeartOutline(ctx, heartCx, heartCy, 16, palette.mutedFg)
+  // Right column: outlined heart + count
+  const heartCx = width - 48
+  const heartCy = startY + 28
+  drawHeartOutline(ctx, heartCx, heartCy, 14, palette.mutedFg)
   if (likes > 0) {
     ctx.fillStyle = palette.mutedFg
-    ctx.font = '500 22px -apple-system, sans-serif'
+    ctx.font = font(T, 'meta')
     ctx.textAlign = 'center'
     ctx.textBaseline = 'top'
-    ctx.fillText(formatTikTokCount(likes), heartCx, heartCy + 28)
+    ctx.fillText(formatCount(likes), heartCx, heartCy + 22)
   }
 
-  return bodyBottomY + 50
+  return bodyBottom + M.bubbleGap + 16
 }
 
-function drawHeartOutline(
-  ctx: CanvasRenderingContext2D,
-  cx: number, cy: number, r: number,
-  strokeColor: string,
-): void {
-  ctx.strokeStyle = strokeColor
-  ctx.lineWidth = 2.5
+function drawHeartOutline(ctx: CanvasRenderingContext2D, cx: number, cy: number, r: number, color: string) {
+  ctx.strokeStyle = color
+  ctx.lineWidth = 2.2
+  ctx.lineJoin = 'round'
   ctx.beginPath()
-  ctx.moveTo(cx, cy + r * 0.6)
-  ctx.bezierCurveTo(cx - r * 1.2, cy - r * 0.4, cx - r * 0.6, cy - r * 1.4, cx, cy - r * 0.4)
-  ctx.bezierCurveTo(cx + r * 0.6, cy - r * 1.4, cx + r * 1.2, cy - r * 0.4, cx, cy + r * 0.6)
+  ctx.moveTo(cx, cy + r * 0.55)
+  ctx.bezierCurveTo(cx - r * 1.18, cy - r * 0.4, cx - r * 0.55, cy - r * 1.32, cx, cy - r * 0.42)
+  ctx.bezierCurveTo(cx + r * 0.55, cy - r * 1.32, cx + r * 1.18, cy - r * 0.4, cx, cy + r * 0.55)
   ctx.closePath()
   ctx.stroke()
 }
 
-function drawRightRailIcons(
-  ctx: CanvasRenderingContext2D,
-  x: number,
-  y: number,
-  palette: { mutedFg: string; likeAccent: string },
-): void {
-  ctx.strokeStyle = '#FFFFFF'
-  ctx.lineWidth = 3
-  // heart
-  ctx.fillStyle = palette.likeAccent
+function drawRightRail(ctx: CanvasRenderingContext2D, x: number, y: number, dateLabelSeed: string) {
+  ctx.save()
+  ctx.fillStyle = '#FE2C55'
   ctx.beginPath()
   ctx.moveTo(x, y + 30)
-  ctx.bezierCurveTo(x - 36, y - 8, x - 16, y - 36, x, y - 8)
-  ctx.bezierCurveTo(x + 16, y - 36, x + 36, y - 8, x, y + 30)
+  ctx.bezierCurveTo(x - 34, y - 8, x - 16, y - 34, x, y - 8)
+  ctx.bezierCurveTo(x + 16, y - 34, x + 34, y - 8, x, y + 30)
   ctx.closePath()
   ctx.fill()
   ctx.fillStyle = '#FFFFFF'
-  ctx.font = '600 20px -apple-system, sans-serif'
+  ctx.font = '600 18px -apple-system, sans-serif'
   ctx.textAlign = 'center'
   ctx.textBaseline = 'top'
-  ctx.fillText('12.4k', x, y + 50)
+  ctx.fillText(formatCount(fakeMetric(`${dateLabelSeed}_heart`, 'large')), x, y + 48)
 
-  // comment glyph
   ctx.strokeStyle = '#FFFFFF'
-  ctx.lineWidth = 4
+  ctx.lineWidth = 3
   ctx.beginPath()
-  ctx.arc(x, y + 130, 28, 0.15 * Math.PI, 1.85 * Math.PI)
-  ctx.lineTo(x - 12, y + 170)
-  ctx.lineTo(x + 4, y + 158)
+  ctx.arc(x, y + 130, 24, Math.PI * 0.15, Math.PI * 1.85)
+  ctx.lineTo(x - 10, y + 160)
+  ctx.lineTo(x + 4, y + 150)
   ctx.stroke()
   ctx.fillStyle = '#FFFFFF'
-  ctx.fillText('842', x, y + 190)
+  ctx.fillText(formatCount(fakeMetric(`${dateLabelSeed}_cmt`, 'medium')), x, y + 174)
 
-  // share glyph
   ctx.beginPath()
-  ctx.moveTo(x - 18, y + 250)
-  ctx.lineTo(x + 18, y + 260)
-  ctx.lineTo(x - 18, y + 270)
+  ctx.moveTo(x - 16, y + 240)
+  ctx.lineTo(x + 16, y + 250)
+  ctx.lineTo(x - 16, y + 260)
   ctx.closePath()
   ctx.stroke()
-  ctx.fillStyle = '#FFFFFF'
-  ctx.fillText('Share', x, y + 290)
+  ctx.fillText('Share', x, y + 274)
+  ctx.restore()
+}
+
+function drawComposer(ctx: CanvasRenderingContext2D, i: {
+  palette: typeof TIKTOK_COMMENT_DARK_2024
+  typo: typeof TIKTOK_TYPO
+  strings: ReturnType<typeof findStrings>
+  width: number
+  yOffset: number
+  height: number
+  primaryAvatar: HTMLImageElement | null
+}) {
+  const { palette, typo: T, strings: S, width, yOffset, height, primaryAvatar } = i
+  ctx.fillStyle = palette.composerBg
+  ctx.fillRect(0, yOffset, width, height)
+  ctx.fillStyle = palette.divider
+  ctx.fillRect(0, yOffset, width, 1)
+
+  const cy = yOffset + height / 2
+  const ax = 60
+  if (primaryAvatar) {
+    drawCircularAvatar(ctx, primaryAvatar, ax, cy, 28)
+  } else {
+    ctx.fillStyle = palette.divider
+    ctx.beginPath()
+    ctx.arc(ax, cy, 28, 0, Math.PI * 2)
+    ctx.fill()
+  }
+
+  const pillX = 110, pillY = yOffset + 26, pillW = width - pillX - 50, pillH = height - 52
+  roundedRectPath(ctx, pillX, pillY, pillW, pillH, pillH / 2)
+  ctx.fillStyle = '#1E1E22'
+  ctx.fill()
+
+  ctx.fillStyle = palette.composerPlaceholder
+  ctx.font = font(T, 'body')
+  ctx.textAlign = 'left'
+  ctx.textBaseline = 'middle'
+  ctx.fillText(S.composerPlaceholder('tiktok-comment'), pillX + 24, pillY + pillH / 2)
+
+  ctx.textAlign = 'right'
+  ctx.fillText('@  #  😊', pillX + pillW - 24, pillY + pillH / 2)
 }
 
 async function loadImageSafe(url: string): Promise<HTMLImageElement | null> {
   try { return await loadImage(url) } catch { return null }
 }
 
-function formatTikTokCount(n: number): string {
+function formatCount(n: number): string {
   if (n >= 1000) return `${(n / 1000).toFixed(1)}k`
   return `${n}`
 }

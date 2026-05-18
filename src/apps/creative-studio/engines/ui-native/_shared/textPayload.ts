@@ -12,6 +12,7 @@ import type { UINativeTextContent, UINativeLocale, UINativePlatform } from '../.
 import { directGeminiText } from '../../../../../utils/gemini'
 import { findPersona } from '../../../shared/metadata/personaLibrary'
 import { stripJsonFence } from '../../../shared/llm/jsonResponse'
+import { buildArchetypeMix, describeMix } from './commentArchetypes'
 
 /** What kind of UI-native content we are generating text for. */
 export type TextPayloadContentType = 'chat' | 'review' | 'comment-thread'
@@ -266,13 +267,17 @@ function buildCommentPrompt(req: TextPayloadRequest): string {
     ? `Original post is by persona: ${persona.label.en}. Voice character: ${persona.voiceCharacter}. The comments are from OTHER users (not the persona).`
     : 'Original post is by a typical SEA UGC creator. Comments are from other casual users.'
   const localeMap: Record<UINativeLocale, string> = {
-    'my-MY':  'Malay (Bahasa Melayu) social media casual',
-    'vi-VN':  'Vietnamese social media casual with abbreviations',
-    'id-ID':  'Indonesian social media casual',
-    'global': 'English social media casual',
+    'my-MY':  'Malay (Bahasa Melayu) social media casual — drop standard punctuation often, use shorthand like "tak", "dah"',
+    'vi-VN':  'Vietnamese social media casual with HEAVY abbreviation: ko=không, vs=với, vay=vậy, dc=được, hum=hôm, bgio=bao giờ, nhin=nhìn — also drop tone marks sometimes (real users do)',
+    'id-ID':  'Indonesian social media casual with shorthand: yg=yang, dgn=dengan, krn=karena, jg=juga',
+    'global': 'English social media casual — lowercase, drops apostrophes ("its" not "it\'s"), short fragments',
   }
   const count = req.messageCount ?? 6
   const platformName = req.platform === 'facebook' ? 'Facebook' : 'TikTok'
+
+  // P12 — archetype-driven mix replaces "1-2 emojis, mix of question/testimonial" generic guidance
+  const mix = buildArchetypeMix(req.platform === 'facebook' ? 'facebook' : 'tiktok', count, `${req.productName}_${req.locale}`)
+  const mixDescription = describeMix(mix)
 
   return [
     `Generate ${count} ${platformName} comments on a UGC post about this product.`,
@@ -280,25 +285,28 @@ function buildCommentPrompt(req: TextPayloadRequest): string {
     personaBlock,
     `Language: ${localeMap[req.locale]}`,
     '',
+    'EACH comment must follow the archetype assigned below — this is what makes the thread feel MESSY and HUMAN instead of "8 variations of the same caption":',
+    mixDescription,
+    '',
     'STRICT JSON OUTPUT — no prose, no markdown fence:',
     '{',
     '  "comments": [',
-    '    { "username": "<believable casual username eg \\"thanh.nguyen\\" or \\"itsaishaa\\">",',
-    '      "text": "<one short comment 4-25 words>",',
+    '    { "username": "<lowercase casual username eg \\"thanh.nguyen\\", \\"linhng_98\\", \\"_mayhoang_\\">",',
+    '      "text": "<the comment, following its archetype rules>",',
     '      "likes": 12,',
     '      "isReply": false },',
     '    ...',
     '  ]',
     '}',
     '',
-    'Rules:',
-    '- 4-8 unique usernames across the comments (some can comment twice via a reply).',
-    `- ${Math.floor(count / 4)}-${Math.floor(count / 3)} of the comments may set isReply=true.`,
-    '- likes: realistic small numbers, mostly 0-25, 1-2 comments can have 30-200.',
-    '- Mix of: "where to buy?", "how long for results?", "tried it, works!", "tagging a friend".',
-    '- 1-2 comments may have a single emoji.',
-    '- NO links, NO phone numbers, NO prices, NO "DM me" or "check bio".',
-    '- NEVER include "advertisement", "sponsored", "ad", "promo".',
+    'Hard rules:',
+    `- Output ${count} comments in the order listed above.`,
+    '- Usernames: each comment gets a DIFFERENT username (it is fine if a reply quotes a previous username — that is what reply archetypes do).',
+    '- likes: realistic distribution — most 0..15, one or two can hit 60..400.',
+    '- NO links, NO phone numbers, NO prices, NO "DM me" / "check bio" / "link in profile".',
+    '- NEVER use words: advertisement, sponsored, ad, promo, paid, #ad.',
+    '- Casual punctuation: lowercase is fine, drop full stops at end of short reactions, double "!!" / "??" allowed for emphasis.',
+    '- For Vietnamese: real users mix tone-marked and tone-dropped forms — output should too.',
   ].join('\n')
 }
 

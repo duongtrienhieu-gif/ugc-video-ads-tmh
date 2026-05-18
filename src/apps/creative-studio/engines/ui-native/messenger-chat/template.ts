@@ -33,6 +33,12 @@ export interface RenderInputs {
   text: UINativeTextContent
   timeline: MessageTimeline
   customerAvatarUrl: string
+  /** P12 — accepted but not used (chat platform has single avatar). */
+  avatarPool?: Map<number, string>
+  /** P12 — locale for metadata strings. */
+  locale?: import('../../../types/uiNative').UINativeLocale
+  /** P12 — accepted but not used (no product thumb in messenger). */
+  productImageUrl?: string
 }
 
 export async function renderMessengerConversation(

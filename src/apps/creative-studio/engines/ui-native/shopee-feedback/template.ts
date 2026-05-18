@@ -35,6 +35,10 @@ export interface RenderInputs {
   customerAvatarUrl: string
   /** Optional product image URL — used as the review attachment thumb. */
   productImageUrl?: string
+  /** P12 — accepted but unused (single-buyer review). */
+  avatarPool?: Map<number, string>
+  /** P12 — locale for metadata strings. */
+  locale?: import('../../../types/uiNative').UINativeLocale
 }
 
 export async function renderShopeeReview(
