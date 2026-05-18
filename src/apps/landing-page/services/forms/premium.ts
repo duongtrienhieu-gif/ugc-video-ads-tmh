@@ -32,6 +32,7 @@ import {
   getGeminiKey, normalizeSection, injectPriceIntoPrompts,
   extractPriceTag, callGeminiWithMsRetry,
 } from '../generateLandingPack'
+import { buildProductIntelligence, buildIntelligencePromptBlock } from '../productIntelligence'
 import { useBankStore } from '../../../../stores/bankStore'
 
 // ── 14-section luxury editorial flow (Phase 7 — 3 new editorial visuals) ─
@@ -374,7 +375,15 @@ async function buildPack(params: LandingGenParams): Promise<LandingPagePack> {
 
   console.info('[FORM premium] generating luxury editorial pack for', product.productName)
 
-  const userPrompt = buildPremiumUserPrompt(params, product)
+  // Phase 2 — niche detection + intelligence block (overrides generic
+  // scenes in PREMIUM_SYSTEM_PROMPT with niche-specific pain / scenarios).
+  const intelligence = buildProductIntelligence({
+    product, language: params.language, nicheHint: params.nicheHint,
+  })
+  console.info(`[FORM premium] product intelligence niche=${intelligence.niche}`)
+  const intelligenceBlock = buildIntelligencePromptBlock(intelligence)
+
+  const userPrompt = buildPremiumUserPrompt(params, product) + '\n\n' + intelligenceBlock
   const priceTag = extractPriceTag(product.offer ?? '')
 
   const parsed = await callGeminiWithMsRetry({

@@ -35,6 +35,7 @@ import {
   getGeminiKey, normalizeSection, injectPriceIntoPrompts,
   extractPriceTag, callGeminiWithMsRetry,
 } from '../generateLandingPack'
+import { buildProductIntelligence, buildIntelligencePromptBlock } from '../productIntelligence'
 import { useBankStore } from '../../../../stores/bankStore'
 
 // ── Storytelling section blueprint — 12 emotional beats ──────────────────
@@ -358,7 +359,14 @@ async function buildPack(params: LandingGenParams): Promise<LandingPagePack> {
   console.info('[FORM advertorial] character locked:', character.name, '·', character.archetype)
 
   // 2. Build user prompt with character + product context baked in
+  // Phase 2 — niche detection + intelligence overlay.
+  const intelligence = buildProductIntelligence({
+    product, language: params.language, nicheHint: params.nicheHint,
+  })
+  console.info(`[FORM advertorial] product intelligence niche=${intelligence.niche}`)
+
   const userPrompt = buildStorytellingUserPrompt(params, product, character)
+    + '\n\n' + buildIntelligencePromptBlock(intelligence)
   const priceTag = extractPriceTag(product.offer ?? '')
 
   // 3. Gemini call w/ MS-leak validate + retry (centralized helper)

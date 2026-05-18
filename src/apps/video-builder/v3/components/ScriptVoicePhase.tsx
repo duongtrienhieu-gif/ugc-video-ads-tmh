@@ -108,7 +108,7 @@ export default function ScriptVoicePhase({ onContinue }: Props) {
         structure: brain.structure,
         angle: brain.angle,
         targetDurationSec: brain.targetDurationSec,
-        productName: state.inputs.product.name ?? 'Product',
+        productName: state.inputs.product.productName ?? 'Product',
         productPitch,
         creatorDescription,
       })

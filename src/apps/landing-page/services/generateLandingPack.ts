@@ -4,6 +4,7 @@ import type {
 import { useSettingsStore } from '../../../stores/settingsStore'
 import { useBankStore } from '../../../stores/bankStore'
 import { directGeminiVision } from '../../../utils/gemini'
+import { buildProductIntelligence, buildIntelligencePromptBlock } from './productIntelligence'
 
 // ─────────────────────────────────────────────────────────────────────
 // SYSTEM PROMPT — 17-section advertorial factory for Malaysian FB ads.
@@ -568,6 +569,19 @@ function buildUserPrompt(params: LandingGenParams): string {
     lines.push(`★ EXACT SELLING PRICE: ${priceTag} — ALL ecommerce screenshot image prompts (TikTok Shop, Shopee, promo banners) MUST display ONLY this price. Do NOT invent any other price.`)
   }
 
+  lines.push('')
+
+  // ── Phase 2 — PRODUCT INTELLIGENCE OVERRIDE ────────────────────────────
+  // Detect the product niche (joint-pain / digestive-gut / skincare / etc.)
+  // from the bank fields and inject niche-specific pain scenes, scenarios,
+  // emotional mapping and forbidden-scene bans. Overrides the generic
+  // hardcoded scenes in SYSTEM_PROMPT so a joint-pain gel doesn't get
+  // office-burnout pain shots.
+  const intelligence = buildProductIntelligence({
+    product, language: params.language, nicheHint: params.nicheHint,
+  })
+  console.info(`[LandingPageAI] product intelligence detected niche=${intelligence.niche} for "${product.productName}"`)
+  lines.push(buildIntelligencePromptBlock(intelligence))
   lines.push('')
 
   // ── LANGUAGE LOCK — strong explicit block prevents mixing ────────────

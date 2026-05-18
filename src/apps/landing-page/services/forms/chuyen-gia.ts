@@ -33,6 +33,7 @@ import {
   getGeminiKey, normalizeSection, injectPriceIntoPrompts,
   extractPriceTag, callGeminiWithMsRetry,
 } from '../generateLandingPack'
+import { buildProductIntelligence, buildIntelligencePromptBlock } from '../productIntelligence'
 import { useBankStore } from '../../../../stores/bankStore'
 
 // ── 13-section authority flow ────────────────────────────────────────────
@@ -380,7 +381,14 @@ async function buildPack(params: LandingGenParams): Promise<LandingPagePack> {
   console.info('[FORM chuyen-gia] expert locked:', expert.name, '·', expert.archetype)
 
   // 2. Build user prompt with expert profile + product brief
+  // Phase 2 — niche detection + intelligence overlay.
+  const intelligence = buildProductIntelligence({
+    product, language: params.language, nicheHint: params.nicheHint,
+  })
+  console.info(`[FORM chuyen-gia] product intelligence niche=${intelligence.niche}`)
+
   const userPrompt = buildExpertUserPrompt(params, product, expert)
+    + '\n\n' + buildIntelligencePromptBlock(intelligence)
   const priceTag = extractPriceTag(product.offer ?? '')
 
   // 3. Gemini call w/ MS-leak validate + retry (centralized helper)

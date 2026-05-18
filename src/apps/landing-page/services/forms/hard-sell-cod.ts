@@ -34,6 +34,7 @@ import {
   getGeminiKey, normalizeSection, injectPriceIntoPrompts,
   extractPriceTag, callGeminiWithMsRetry,
 } from '../generateLandingPack'
+import { buildProductIntelligence, buildIntelligencePromptBlock } from '../productIntelligence'
 import { useBankStore } from '../../../../stores/bankStore'
 
 // ── 14-section conversion funnel ─────────────────────────────────────────
@@ -338,7 +339,14 @@ async function buildPack(params: LandingGenParams): Promise<LandingPagePack> {
   console.info('[FORM hard-sell-cod] generating urgency-first conversion funnel for', product.productName)
 
   // 1. Build user prompt (no character profile — diverse reviewers desired)
+  // Phase 2 — niche detection + intelligence overlay.
+  const intelligence = buildProductIntelligence({
+    product, language: params.language, nicheHint: params.nicheHint,
+  })
+  console.info(`[FORM hard-sell-cod] product intelligence niche=${intelligence.niche}`)
+
   const userPrompt = buildHardSellUserPrompt(params, product)
+    + '\n\n' + buildIntelligencePromptBlock(intelligence)
   const priceTag = extractPriceTag(product.offer ?? '')
 
   // 2. Gemini call w/ MS-leak validate + retry (centralized helper)
