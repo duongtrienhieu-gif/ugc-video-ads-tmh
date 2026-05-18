@@ -21,6 +21,8 @@ import { useBankStore } from '../../../../stores/bankStore'
 import { useSettingsStore } from '../../../../stores/settingsStore'
 import { toPublicUrl } from '../../shared/utils/refResolver'
 import { runBaselineQC } from '../../shared/qc/baselineQC'
+import { findCreativeConfig } from '../../creativeConfig/configs'
+import { assemblePrompt } from '../../shared/prompt/promptAssembler'
 
 export async function dispatchPhotographic(
   module: PhotographicModule,
@@ -54,14 +56,38 @@ export async function dispatchPhotographic(
   if (avatarUrl) referenceUrls.push(avatarUrl)
   if (baseUrl) referenceUrls.push(baseUrl)
 
-  // Build the full prompt via the module's builder
-  const composition = module.buildComposition(params)
-  const finalPrompt = composition.prompt
+  // P15: prefer Creative Config + PromptAssembler when a config exists
+  // for this asset type. Falls back to legacy module.buildComposition()
+  // when no config registered yet (back-compat).
+  const config = findCreativeConfig(module.id)
+  let finalPrompt: string
+  let promptSource: 'config' | 'legacy'
+  let blocksUsed: string[] = []
+  if (config) {
+    const assembled = assemblePrompt(config, {
+      productName: product.productName,
+      productDescription: product.productDescription,
+      hasAvatar: !!avatarUrl,
+      hasBaseRef: !!baseUrl,
+      variationHint: (params.options?.variationHint as string | undefined) ?? null,
+      personaId: params.options?.personaId as string | undefined,
+      beatId:    params.options?.beatId    as string | undefined,
+    })
+    finalPrompt = assembled.prompt
+    blocksUsed = assembled.blocksUsed
+    promptSource = 'config'
+  } else {
+    const composition = module.buildComposition(params)
+    finalPrompt = composition.prompt
+    promptSource = 'legacy'
+  }
 
   console.info('[photographic dispatcher]', {
     assetType: module.id,
     refs: referenceUrls.length,
     promptLen: finalPrompt.length,
+    promptSource,
+    blocksUsed,
   })
 
   const remoteUrl = await generateGpt4oImage({
