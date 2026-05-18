@@ -19,6 +19,10 @@ import {
   createEmptyV3State,
   type V3PipelineState, type V3Phase, type WorkflowMode, type CostMode,
   type ActionInsertClip, type CreatorVideoClip,
+  // Z31 — Ad Brain
+  type AdStructure, type AdAngle, type ScriptTargetDurationSec,
+  type GeneratedScript, type HookVariant, type VoiceCategoryId,
+  type VoiceRecord,
 } from '../types'
 import type { Model, Product } from '../../../../stores/types'
 
@@ -57,6 +61,28 @@ interface AdsVideoStoreState {
   /** Remove one insert by insertId. */
   removeInsert: (insertId: number) => void
 
+  // ── Z31 Ad Brain (Script + Voice foundation) ────────────────────────────
+
+  setAdStructure:        (structure: AdStructure) => void
+  setAdAngle:            (angle: AdAngle) => void
+  setTargetDurationSec:  (sec: ScriptTargetDurationSec) => void
+  /** Set or replace the generated script (called after Gemini returns). */
+  setGeneratedScript:    (script: GeneratedScript | null) => void
+  /** Update one block's text + recompute its estDurationSec via the
+   *  caller (use voiceTimingEstimator). */
+  patchScriptBlock:      (blockIdx: number, patch: { text?: string; estDurationSec?: number }) => void
+  /** Replace the script's totalDurationSec — called after a recompute. */
+  setScriptTotalDuration: (sec: number) => void
+  setHookVariants:       (variants: HookVariant[]) => void
+  /** Pick which hook variant replaces the script's HOOK block. -1 = use
+   *  the script's own HOOK as generated. */
+  pickHookVariant:       (idx: number) => void
+  setVoiceCategory:      (cat: VoiceCategoryId | null) => void
+  setVoiceRecord:        (rec: VoiceRecord | null) => void
+  setIsGeneratingScript: (v: boolean) => void
+  setIsGeneratingVoice:  (v: boolean) => void
+  setScriptBrainError:   (err: string | null) => void
+
   // ── Resume / clear ──────────────────────────────────────────────────────
 
   tryResumeFromStorage: () => boolean
@@ -82,6 +108,18 @@ function loadFromStorage(): V3PipelineState | null {
         ? { ...it, status: 'idle', startedAt: undefined }
         : it
     )
+    // Z31 — defensive scriptBrain hydration. Old payloads (pre-Z31) won't
+    // have scriptBrain at all; fill in with empty defaults. Reset transient
+    // isGenerating* flags so a refresh during script gen doesn't deadlock.
+    if (!parsed.scriptBrain) {
+      // Lazy import to avoid circular deps at module-load time
+      const empty = createEmptyV3State()
+      parsed.scriptBrain = empty.scriptBrain
+    } else {
+      parsed.scriptBrain.isGeneratingScript = false
+      parsed.scriptBrain.isGeneratingVoice = false
+      parsed.scriptBrain.error = null
+    }
     return parsed
   } catch (err) {
     console.warn('[V3_STATE] load failed', err)
@@ -168,6 +206,131 @@ export const useAdsVideoStore = create<AdsVideoStoreState>((set, get) => ({
     commit(set, get, (s) => ({
       ...s,
       inserts: s.inserts.filter((it) => it.insertId !== insertId),
+    })),
+
+  // ── Z31 Ad Brain ────────────────────────────────────────────────────────
+
+  setAdStructure: (structure) =>
+    commit(set, get, (s) => ({
+      ...s,
+      scriptBrain: { ...s.scriptBrain, structure },
+    })),
+
+  setAdAngle: (angle) =>
+    commit(set, get, (s) => ({
+      ...s,
+      scriptBrain: { ...s.scriptBrain, angle },
+    })),
+
+  setTargetDurationSec: (targetDurationSec) =>
+    commit(set, get, (s) => ({
+      ...s,
+      scriptBrain: { ...s.scriptBrain, targetDurationSec },
+    })),
+
+  setGeneratedScript: (script) =>
+    commit(set, get, (s) => ({
+      ...s,
+      scriptBrain: { ...s.scriptBrain, script },
+    })),
+
+  patchScriptBlock: (blockIdx, patch) =>
+    commit(set, get, (s) => {
+      if (!s.scriptBrain.script) return s
+      const blocks = [...s.scriptBrain.script.blocks]
+      if (blockIdx < 0 || blockIdx >= blocks.length) return s
+      blocks[blockIdx] = { ...blocks[blockIdx], ...patch }
+      return {
+        ...s,
+        scriptBrain: {
+          ...s.scriptBrain,
+          script: { ...s.scriptBrain.script, blocks },
+        },
+      }
+    }),
+
+  setScriptTotalDuration: (sec) =>
+    commit(set, get, (s) => {
+      if (!s.scriptBrain.script) return s
+      return {
+        ...s,
+        scriptBrain: {
+          ...s.scriptBrain,
+          script: { ...s.scriptBrain.script, totalDurationSec: sec },
+        },
+      }
+    }),
+
+  setHookVariants: (variants) =>
+    commit(set, get, (s) => ({
+      ...s,
+      scriptBrain: { ...s.scriptBrain, hookVariants: variants },
+    })),
+
+  pickHookVariant: (idx) =>
+    commit(set, get, (s) => {
+      // When user picks a variant, also swap the HOOK block text to the variant.
+      const variants = s.scriptBrain.hookVariants
+      if (idx < -1 || idx >= variants.length) return s
+      // -1 means "use the script's original HOOK block, don't override"
+      if (idx === -1) {
+        return {
+          ...s,
+          scriptBrain: { ...s.scriptBrain, pickedHookIdx: -1 },
+        }
+      }
+      const variant = variants[idx]
+      const script = s.scriptBrain.script
+      let nextScript = script
+      if (script) {
+        const blocks = [...script.blocks]
+        const hookBlockIdx = blocks.findIndex((b) => b.id === 'hook')
+        if (hookBlockIdx >= 0) {
+          blocks[hookBlockIdx] = {
+            ...blocks[hookBlockIdx],
+            text: variant.text,
+            estDurationSec: variant.estDurationSec,
+          }
+          const totalDurationSec = Number(
+            blocks.reduce((sum, b) => sum + b.estDurationSec, 0).toFixed(2),
+          )
+          nextScript = { ...script, blocks, totalDurationSec }
+        }
+      }
+      return {
+        ...s,
+        scriptBrain: { ...s.scriptBrain, pickedHookIdx: idx, script: nextScript },
+      }
+    }),
+
+  setVoiceCategory: (cat) =>
+    commit(set, get, (s) => ({
+      ...s,
+      scriptBrain: { ...s.scriptBrain, voiceCategory: cat },
+    })),
+
+  setVoiceRecord: (rec) =>
+    commit(set, get, (s) => ({
+      ...s,
+      scriptBrain: { ...s.scriptBrain, voice: rec },
+    })),
+
+  setIsGeneratingScript: (v) =>
+    commit(set, get, (s) => ({
+      ...s,
+      scriptBrain: { ...s.scriptBrain, isGeneratingScript: v },
+    })),
+
+  setIsGeneratingVoice: (v) =>
+    commit(set, get, (s) => ({
+      ...s,
+      scriptBrain: { ...s.scriptBrain, isGeneratingVoice: v },
+    })),
+
+  setScriptBrainError: (err) =>
+    commit(set, get, (s) => ({
+      ...s,
+      scriptBrain: { ...s.scriptBrain, error: err },
     })),
 
   tryResumeFromStorage: () => {

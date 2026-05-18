@@ -22,7 +22,8 @@ import type { Model, Product } from '../../../stores/types'
 // Sequential workflow; each phase has its own view + persisted state.
 
 export type V3Phase =
-  | 'input'           // pick avatar + product + script + voice
+  | 'input'           // pick avatar + product (basic inputs only)
+  | 'script-voice'    // Z31 — Ad Brain: structure + angle + script + voice timing
   | 'creator-video'   // generate the main lip-synced avatar shot
   | 'action-inserts'  // pick + render 3-8 action preset clips
   | 'preview'         // play through all clips in sequence
@@ -33,6 +34,7 @@ export type V3Phase =
 
 export const V3_PHASE_LABEL_VI: Record<V3Phase, string> = {
   'input':          'Chọn input',
+  'script-voice':   'Script + Voice',
   'creator-video':  'Video creator chính',
   'action-inserts': 'Action inserts',
   'preview':        'Preview',
@@ -257,6 +259,9 @@ export interface V3PipelineState {
     voiceId: string | null
   }
 
+  /** Z31 Ad Brain — structure + angle + script + voice + master timeline */
+  scriptBrain: ScriptBrain
+
   /** Main creator video (the talking head — single instance per project) */
   creatorVideo: CreatorVideoClip | null
 
@@ -279,8 +284,197 @@ export function createEmptyV3State(): V3PipelineState {
       script: '',
       voiceId: null,
     },
+    scriptBrain: createEmptyScriptBrain(),
     creatorVideo: null,
     inserts: [],
     updatedAt: Date.now(),
+  }
+}
+
+// ═════════════════════════════════════════════════════════════════════════
+// Z31 — AD BRAIN (Phase 2: Script + Voice Foundation)
+// ═════════════════════════════════════════════════════════════════════════
+// Replaces the v2 "cinematic storyboard" with a lean TikTok-native ad
+// flow. The Ad Brain produces:
+//   • A script in 5 blocks (HOOK / PAIN / DISCOVERY / BENEFIT / CTA)
+//   • 3 hook variants the user picks from
+//   • Voice category + voice ID matched to the avatar
+//   • Per-block timing estimates (the MASTER TIMELINE — everything
+//     downstream syncs to this)
+//
+// NO scene generation. NO motion. Pure logic + Gemini text + ElevenLabs TTS.
+
+// ── Ad Structures (Z31 §2) ─────────────────────────────────────────────────
+
+export type AdStructure =
+  | 'PROBLEM_SOLUTION'
+  | 'STORY_CONFESSION'
+  | 'BEFORE_AFTER'
+  | 'AUTHORITY_EXPERT'
+  | 'PRODUCT_DEMO'
+  | 'SOCIAL_PROOF'
+  | 'PAIN_POINT_HOOK'
+  | 'LISTICLE_TIPS'
+
+export const DEFAULT_AD_STRUCTURE: AdStructure = 'PROBLEM_SOLUTION'
+
+// ── Ad Angles (Z31 §10) ────────────────────────────────────────────────────
+
+export type AdAngle =
+  | 'emotional'
+  | 'authority'
+  | 'testimonial'
+  | 'problem_solution'
+  | 'curiosity'
+  | 'direct_response'
+  | 'native_tiktok'
+  | 'educational'
+
+export const DEFAULT_AD_ANGLE: AdAngle = 'native_tiktok'
+
+// ── Target script duration (Z31 §5) ────────────────────────────────────────
+
+export type ScriptTargetDurationSec = 15 | 30 | 45 | 60
+
+export const DEFAULT_SCRIPT_DURATION_SEC: ScriptTargetDurationSec = 30
+
+// ── Voice categories (Z31 §7) ──────────────────────────────────────────────
+
+export type VoiceCategoryId =
+  | 'calm_female'
+  | 'energetic_creator'
+  | 'authority_male'
+  | 'emotional_mom'
+  | 'skincare_influencer'
+  | 'gym_creator'
+
+// ── Script blocks (Z31 §3) ─────────────────────────────────────────────────
+
+export type ScriptBlockId =
+  | 'hook'
+  | 'pain'
+  | 'discovery'
+  | 'benefit'
+  | 'cta'
+
+export const SCRIPT_BLOCK_ORDER: ScriptBlockId[] = [
+  'hook',
+  'pain',
+  'discovery',
+  'benefit',
+  'cta',
+]
+
+export const SCRIPT_BLOCK_LABEL_VI: Record<ScriptBlockId, string> = {
+  hook:      'HOOK',
+  pain:      'PAIN / CONTEXT',
+  discovery: 'DISCOVERY',
+  benefit:   'BENEFIT',
+  cta:       'CTA',
+}
+
+export interface ScriptBlock {
+  /** Which of the 5 ad sections this is */
+  id: ScriptBlockId
+  /** The actual text — Vietnamese or English, TikTok-native conversational */
+  text: string
+  /** Estimated read duration in seconds (from voiceTimingEstimator) */
+  estDurationSec: number
+}
+
+// ── Hook variants (Z31 §11) ────────────────────────────────────────────────
+// Generated alongside the main script; user picks 1 of 3.
+
+export type HookStyle = 'emotional' | 'shock' | 'curiosity'
+
+export const HOOK_STYLE_LABEL_VI: Record<HookStyle, string> = {
+  emotional: 'Cảm xúc',
+  shock:     'Sốc / Bất ngờ',
+  curiosity: 'Tò mò',
+}
+
+export interface HookVariant {
+  /** Tone of this hook */
+  style: HookStyle
+  /** The hook text — short, 1-2 lines */
+  text: string
+  /** Estimated read duration */
+  estDurationSec: number
+}
+
+// ── Generated script ───────────────────────────────────────────────────────
+
+export interface GeneratedScript {
+  /** Which structure was used to generate this */
+  structure: AdStructure
+  /** Which angle was used */
+  angle: AdAngle
+  /** Target duration the user picked (15/30/45/60) */
+  targetDurationSec: ScriptTargetDurationSec
+  /** 5 script blocks in order */
+  blocks: ScriptBlock[]
+  /** Sum of block durations — the MASTER TIMELINE LENGTH */
+  totalDurationSec: number
+  /** When the script was generated (resume / cache check) */
+  generatedAt: number
+}
+
+// ── Voice record ───────────────────────────────────────────────────────────
+// Output of the voice generation step. Caches the TTS asset + total duration
+// so all downstream rendering can sync to it.
+
+export interface VoiceRecord {
+  /** ElevenLabs voice id (or other provider id) used */
+  voiceId: string
+  /** Category metadata the matcher picked (for UI display) */
+  category: VoiceCategoryId
+  /** asset:xxx ref of the rendered MP3 in IndexedDB */
+  audioRef: string
+  /** Actual measured duration of the rendered audio (seconds) */
+  measuredDurationSec: number
+  /** When the voice was generated */
+  generatedAt: number
+}
+
+// ── Script Brain section on V3PipelineState ────────────────────────────────
+
+export interface ScriptBrain {
+  /** Which ad structure the user picked */
+  structure: AdStructure
+  /** Which angle */
+  angle: AdAngle
+  /** Target duration */
+  targetDurationSec: ScriptTargetDurationSec
+  /** The last generated script (null until first generation) */
+  script: GeneratedScript | null
+  /** 3 hook variants Gemini produced */
+  hookVariants: HookVariant[]
+  /** Index into hookVariants[] the user picked. -1 = use script's own hook block. */
+  pickedHookIdx: number
+  /** Voice category matched (auto-suggested from avatar metadata, user can override) */
+  voiceCategory: VoiceCategoryId | null
+  /** Generated voice record (null until voice TTS runs) */
+  voice: VoiceRecord | null
+  /** True while Gemini script generation is in flight (Z27 transient) */
+  isGeneratingScript: boolean
+  /** True while ElevenLabs TTS is in flight */
+  isGeneratingVoice: boolean
+  /** Last error (script gen or TTS) */
+  error: string | null
+}
+
+export function createEmptyScriptBrain(): ScriptBrain {
+  return {
+    structure: DEFAULT_AD_STRUCTURE,
+    angle: DEFAULT_AD_ANGLE,
+    targetDurationSec: DEFAULT_SCRIPT_DURATION_SEC,
+    script: null,
+    hookVariants: [],
+    pickedHookIdx: -1,
+    voiceCategory: null,
+    voice: null,
+    isGeneratingScript: false,
+    isGeneratingVoice: false,
+    error: null,
   }
 }

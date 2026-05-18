@@ -32,6 +32,7 @@ import { useAssetUrl } from '../../../hooks/useAssetUrl'
 import BankPicker from '../../../components/BankPicker'
 import type { Model, Product } from '../../../stores/types'
 import { useAdsVideoStore } from './stores/adsVideoStore'
+import ScriptVoicePhase from './components/ScriptVoicePhase'
 import {
   V3_PHASE_LABEL_VI,
   WORKFLOW_MODE_CONFIG, COST_MODE_CONFIG,
@@ -52,6 +53,7 @@ interface Props {
 
 const PHASE_ORDER: V3Phase[] = [
   'input',
+  'script-voice',     // Z31 — Ad Brain (script + voice timing)
   'creator-video',
   'action-inserts',
   'preview',
@@ -63,6 +65,7 @@ const PHASE_ORDER: V3Phase[] = [
 
 const PHASE_ICON: Record<V3Phase, React.ElementType> = {
   'input':          FileText,
+  'script-voice':   Wand2,   // Z31 — Ad Brain
   'creator-video':  UserRound,
   'action-inserts': Film,
   'preview':        PlayCircle,
@@ -395,7 +398,7 @@ function InputPhase({
             disabled={!canContinue}
             className="flex items-center gap-2 rounded-full bg-gradient-to-r from-violet-600 to-pink-600 px-5 py-2 text-sm font-bold text-white shadow-md transition-all hover:from-violet-700 hover:to-pink-700 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            Tiếp tục → Video creator <ChevronRight className="h-4 w-4" />
+            Tiếp tục → Script + Voice <ChevronRight className="h-4 w-4" />
           </button>
         </div>
       </div>
@@ -424,7 +427,11 @@ export default function AdsVideoEngine({ onSwitchToV2, onSwitchToV1 }: Props) {
   // creator-video reachable once inputs valid; rest reachable in narrative
   // order once their predecessor has output. Phase 2+ will tighten these.
   const reachable = new Set<V3Phase>(['input'])
-  if (state.inputs.product) reachable.add('creator-video')
+  // Z31 — script-voice phase unlocks once product is picked (avatar required
+  // only in HYBRID/ADVANCED modes — InputPhase already gates that)
+  if (state.inputs.product) reachable.add('script-voice')
+  // creator-video unlocks once we have a generated script (Ad Brain done)
+  if (state.scriptBrain.script) reachable.add('creator-video')
   if (state.creatorVideo?.status === 'completed' || state.creatorVideo?.status === 'approved' || state.creatorVideo?.status === 'locked') {
     reachable.add('action-inserts')
   }
@@ -512,7 +519,10 @@ export default function AdsVideoEngine({ onSwitchToV2, onSwitchToV1 }: Props) {
       {/* ── Body — switches by phase ────────────────────────────────────── */}
       <div className="flex-1 overflow-hidden">
         {state.phase === 'input' && (
-          <InputPhase onContinue={() => setPhase('creator-video')} />
+          <InputPhase onContinue={() => setPhase('script-voice')} />
+        )}
+        {state.phase === 'script-voice' && (
+          <ScriptVoicePhase onContinue={() => setPhase('creator-video')} />
         )}
         {state.phase === 'creator-video' && (
           <PhaseStub
