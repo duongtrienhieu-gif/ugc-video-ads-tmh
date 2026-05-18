@@ -61,14 +61,17 @@ export interface TimelineModeConfig {
 export const TIMELINE_MODE_CONFIG: Record<TimelineMode, TimelineModeConfig> = {
   SHORT: {
     mode: 'SHORT',
+    // Z29 tightened: 12 cuts → 8 cuts max (~$0.36 per full TEST_480 batch).
+    // Spec: "NEW SHORT TEST MODE — 4 masters · 8 coverage shots · 8 timeline
+    // cuts · target duration 12-20s. This becomes DEFAULT APP MODE."
     labelVi: 'NGẮN (test)',
-    descriptionVi: '15-25s · 4 master · ~12 cuts · 1-2s mỗi cut · MẶC ĐỊNH',
-    targetDurationSec: { min: 15, max: 25 },
+    descriptionVi: '12-20s · 4 master · 8 cuts · 1-2s mỗi cut · MẶC ĐỊNH',
+    targetDurationSec: { min: 12, max: 20 },
     masters: 4,
-    cuts: { min: 8, max: 12 },
+    cuts: { min: 6, max: 8 },
     durationBand: { min: 1.0, max: 2.0 },
-    shotsPerMaster: { min: 2, max: 3 },
-    estimatedCreditCost: { min: 560, max: 840 },
+    shotsPerMaster: { min: 2, max: 2 },
+    estimatedCreditCost: { min: 360, max: 560 },  // 8 × 45-70cr (TEST/STD)
   },
   MID: {
     mode: 'MID',

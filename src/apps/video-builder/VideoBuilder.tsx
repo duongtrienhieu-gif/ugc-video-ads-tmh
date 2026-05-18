@@ -701,17 +701,28 @@ function ReviewCard({
 
 // ── Main component ────────────────────────────────────────────────────────────
 
-// ── Outer dispatcher: routes to v1 (stable) or v2 (AI Director beta) ────────
+// ── Outer dispatcher: routes to v1 (stable) / v2 (AI Director) / v3 (Ads Video Engine).
+// Z30 PHASE 1 — v3 is the new default. v2 stays available as legacy
+// escape hatch. v1 stays available as the original stable pipeline.
 import VideoBuilderV2 from './v2/VideoBuilderV2'
+import AdsVideoEngine from './v3/AdsVideoEngine'
 
 export default function VideoBuilder() {
   const pipelineVersion = useSettingsStore((s) => s.pipelineVersion)
   const setPipelineVersion = useSettingsStore((s) => s.setPipelineVersion)
 
+  if (pipelineVersion === 'v3') {
+    return (
+      <AdsVideoEngine
+        onSwitchToV2={() => setPipelineVersion('v2')}
+        onSwitchToV1={() => setPipelineVersion('v1')}
+      />
+    )
+  }
   if (pipelineVersion === 'v2') {
     return <VideoBuilderV2 onSwitchToV1={() => setPipelineVersion('v1')} />
   }
-  return <VideoBuilderV1 onSwitchToV2={() => setPipelineVersion('v2')} />
+  return <VideoBuilderV1 onSwitchToV2={() => setPipelineVersion('v3')} />
 }
 
 function VideoBuilderV1({ onSwitchToV2 }: { onSwitchToV2: () => void }) {

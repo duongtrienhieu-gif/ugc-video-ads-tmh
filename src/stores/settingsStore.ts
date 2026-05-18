@@ -2,7 +2,13 @@ import { create } from 'zustand'
 
 const STORAGE_KEY = 'ai-ugc-lab-settings'
 
-export type PipelineVersion = 'v1' | 'v2'
+// Z30 — Phase 1 reset. v3 is the new creator-first Ads Video Engine.
+//   v1 = stable legacy pipeline
+//   v2 = AI Director (cinematic / coverage-graph — DEPRECATED, kept for
+//        reference + escape hatch; will be removed in a future cleanup)
+//   v3 = Ads Video — AI UGC Ad Engine (creator-first, preview-first,
+//        action-preset based — NEW DEFAULT)
+export type PipelineVersion = 'v1' | 'v2' | 'v3'
 
 interface SettingsState {
   kieApiKey: string
@@ -52,11 +58,17 @@ function loadFromStorage(): StoredSettings {
         elevenLabsApiKey: parsed.elevenLabsApiKey ?? '',
         falApiKey:        parsed.falApiKey        ?? '',
         shotstackApiKey:  parsed.shotstackApiKey  ?? '',
-        pipelineVersion:  (parsed.pipelineVersion === 'v2' ? 'v2' : 'v1'),
+        pipelineVersion:  (
+          parsed.pipelineVersion === 'v3' ? 'v3' :
+          parsed.pipelineVersion === 'v2' ? 'v2' :
+          parsed.pipelineVersion === 'v1' ? 'v1' :
+          'v3'  // Z30 — default new sessions to v3 Ads Video Engine
+        ),
       }
     }
   } catch { /* silent */ }
-  return { kieApiKey: '', geminiApiKey: '', elevenLabsApiKey: '', falApiKey: '', shotstackApiKey: '', pipelineVersion: 'v1' }
+  // Z30 — first-time users land on v3 (creator-first), not the legacy v1.
+  return { kieApiKey: '', geminiApiKey: '', elevenLabsApiKey: '', falApiKey: '', shotstackApiKey: '', pipelineVersion: 'v3' }
 }
 
 function saveToStorage(s: StoredSettings) {
