@@ -1,11 +1,13 @@
 # Creative Studio Architecture (broll-studio app)
 
-> **Status**: Phase 8 — Designed-Graphic group complete (infographic +
-> cta-banner). Three engine groups all serving concrete modules:
-> photographic (9), ui-native (6), designed-graphic (2) = **17
-> implemented asset types**. Existing `BrollStudio.tsx` still on its
-> legacy direct-KIE path; new modules reachable only via
-> `generateAssets()`.
+> **Status**: Phase 9 — shared utils cleanup + cross-app QC promotion.
+> Canvas helpers hoisted from `engines/ui-native/_shared/` to
+> `shared/canvas/` (fixes the cross-engine import violation that P8
+> templates introduced). `toPublicUrl` deduped — one impl in
+> `shared/utils/refResolver.ts` instead of three. JSON envelope parsing
+> deduped into `shared/llm/jsonResponse.ts`. Baseline QC promoted to
+> `shared/qc/baselineQC.ts` and is now run by ALL three engine
+> dispatchers (was ui-native only before P9).
 
 ## Folder map
 
@@ -110,8 +112,8 @@ The orchestrator:
 | **P5** | ✅ done | UI-Native MVP: Chat Proof (WhatsApp + Messenger) |
 | **P6** | ✅ done | UI-Native expansion: Shopee + TikTok Shop + Facebook + TikTok comments |
 | **P7** | ✅ done | Authenticity QC v2 + designed-graphic group entry |
-| **P8** | ✅ done (this commit) | Designed-Graphic group: Infographic + CTA Banner |
-| **P9** | pending | Shared utils cleanup + cross-app QC promotion |
+| **P8** | ✅ done | Designed-Graphic group: Infographic + CTA Banner |
+| **P9** | ✅ done (this commit) | Shared utils cleanup + cross-app QC promotion |
 | **P10** | pending | App id rename (broll-studio → creative-studio) with alias |
 
 ## Boundaries — what P2 did NOT touch
@@ -609,6 +611,102 @@ Caller can pass any of these via `params.options`:
 - `orchestration/generateAssetSequence.ts` — byte-identical
 - `registry/groups.ts` — byte-identical (already declared
   infographic + cta-banner in P2 ASSET_TO_GROUP)
+- `src/apps/landing-page/`, `src/apps/video-builder/` — untouched
+- `src/stores/*`, `src/utils/*`, `App.tsx`, `Sidebar.tsx` — untouched
+
+## P9 — Shared utils cleanup + cross-app QC promotion
+
+P9 is pure refactor — no new asset types, no behavior changes from
+the caller's POV. Goals:
+
+  1. Fix the cross-engine import violation P8 introduced
+     (designed-graphic templates were importing from ui-native/_shared/canvas)
+  2. Dedupe `toPublicUrl` (was copy-pasted across all 3 dispatchers)
+  3. Dedupe Gemini JSON envelope parsing (was copy-pasted across
+     ui-native + designed-graphic textPayload generators)
+  4. Promote baseline QC out of the ui-native-only path so every
+     engine attaches a `qcSummary` to its `GeneratedAsset`
+
+### Canvas helpers hoisted to engine-neutral location
+
+  shared/canvas/canvas.ts (moved from engines/ui-native/_shared/canvas.ts)
+  shared/canvas/index.ts  (barrel re-export)
+
+  Consumers updated to import from `shared/canvas/`:
+    • 6 ui-native templates
+    • engines/ui-native/_shared/postProcess.ts
+    • engines/designed-graphic/_dispatcher.ts
+    • engines/designed-graphic/infographic/template.ts
+    • engines/designed-graphic/cta-banner/template.ts
+
+  Result: the engine-isolation rule documented in
+  ARCHITECTURE.md §"Three engine groups — STRICT isolation" holds —
+  no cross-engine imports remain anywhere.
+
+### refResolver — `toPublicUrl` deduped
+
+  shared/utils/refResolver.ts → `toPublicUrl(ref): Promise<string|null>`
+
+  Three duplicate implementations removed:
+    • engines/photographic/_dispatcher.ts
+    • engines/ui-native/_dispatcher.ts (also un-exported as a side
+      effect — was leaking as a public helper)
+    • engines/designed-graphic/_dispatcher.ts
+
+### LLM JSON envelope helpers deduped
+
+  shared/llm/jsonResponse.ts:
+    • `stripJsonFence(raw)` — handles markdown code fence stripping
+    • `parseLLMJson<T>(raw, generatorLabel)` — typed parse with
+      tagged error including a payload preview
+
+  Removed local copies in:
+    • engines/ui-native/_shared/textPayload.ts (stripJsonFence)
+    • engines/designed-graphic/_textPayload.ts (stripFence)
+
+  Designed-graphic _textPayload.ts also adopted `parseLLMJson<T>()`
+  for cleaner error reporting; ui-native textPayload still inlines
+  its try/catch (reactions-channel routing makes a typed parse
+  awkward, future P-cleanup may revisit).
+
+### Baseline QC promoted to engine-neutral
+
+  shared/qc/baselineQC.ts → `runBaselineQC({ blob, expectedW/H, requireJpeg })`
+
+  Engine-agnostic checks only (size sanity + JPEG SOI peek when
+  required + decoded-dimensions sanity). Banned-aesthetic + vision-
+  rubric checks stay in `shared/qc/authenticityQC.ts` because those
+  only make sense for ui-native screenshots.
+
+  All three engine dispatchers now run baseline QC and attach the
+  `QCVerdict` to `asset.metadata.qcSummary`:
+
+    photographic dispatcher    — runBaselineQC with requireJpeg=false
+                                  (KIE can return PNG or JPEG)
+    designed-graphic dispatcher — runBaselineQC with requireJpeg=true
+                                  + template canvas dims for the
+                                  decoded-dimensions check
+    ui-native dispatcher        — UNCHANGED — still runs the full
+                                  `runAuthenticityQC` (which subsumes
+                                  baseline + adds vision-rubric +
+                                  banned-aesthetic checks)
+
+  Result: every asset emerging from `generateAssets()` now has a
+  `qcSummary` field on its metadata. Downstream consumers (gallery,
+  analytics) can rely on its presence without per-engine special
+  cases.
+
+### Boundaries — what P9 did NOT touch
+
+- `BrollStudio.tsx` — byte-identical (still legacy direct-KIE path)
+- `services/qcProduct.ts` — byte-identical
+- Asset module contracts (`PhotographicModule`, `UINativeModule`,
+  `DesignedGraphicModule`) — byte-identical
+- `orchestration/generateAssets.ts` — byte-identical
+- `orchestration/generateAssetSequence.ts` — byte-identical
+- `orchestration/dispatch.ts` — byte-identical
+- `registry/*` — byte-identical
+- ASSET_REGISTRY still serves 17 entries — no add / remove
 - `src/apps/landing-page/`, `src/apps/video-builder/` — untouched
 - `src/stores/*`, `src/utils/*`, `App.tsx`, `Sidebar.tsx` — untouched
 

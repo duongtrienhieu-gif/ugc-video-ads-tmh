@@ -21,8 +21,10 @@ import type { GenerateAssetParams, GeneratedAsset } from '../../types/asset'
 import type { UINativeLocale } from '../../types/uiNative'
 import { useSettingsStore } from '../../../../stores/settingsStore'
 import { useBankStore } from '../../../../stores/bankStore'
-import { saveAsset, getUrl, isAssetRef } from '../../../../utils/assetStore'
-import { canvasToBlob } from '../ui-native/_shared/canvas'
+import { saveAsset } from '../../../../utils/assetStore'
+import { canvasToBlob } from '../../shared/canvas'
+import { toPublicUrl } from '../../shared/utils/refResolver'
+import { runBaselineQC } from '../../shared/qc/baselineQC'
 import {
   generateInfographicContent,
   generateCtaBannerContent,
@@ -32,19 +34,6 @@ import {
 } from './_textPayload'
 import { renderInfographic } from './infographic/template'
 import { renderCtaBanner } from './cta-banner/template'
-
-async function toPublicUrl(ref: string): Promise<string | null> {
-  if (!ref) return null
-  if (isAssetRef(ref)) return await getUrl(ref)
-  if (ref.startsWith('blob:') || ref.startsWith('data:')) {
-    const r = await fetch(ref)
-    if (!r.ok) return null
-    const blob = await r.blob()
-    const assetId = await saveAsset(blob, blob.type || 'image/jpeg')
-    return await getUrl(assetId)
-  }
-  return ref
-}
 
 export async function dispatchDesignedGraphic(
   module: DesignedGraphicModule,
@@ -107,6 +96,15 @@ export async function dispatchDesignedGraphic(
   // ── Step 5: save (no crop drift / authenticity post-process —
   //     designed assets stay pixel-clean) ─────────────────────────────
   const blob = await canvasToBlob(canvas, 'image/jpeg', 0.94)
+
+  // ── Step 6: baseline QC (P9 — promoted shared, engine-agnostic) ───
+  const qc = await runBaselineQC({
+    blob,
+    expectedWidth:  layout.canvasSize.width,
+    expectedHeight: layout.canvasSize.height,
+    requireJpeg:    true,
+  })
+
   const assetRef = await saveAsset(blob, 'image/jpeg')
 
   console.info('[designed-graphic dispatcher]', {
@@ -114,13 +112,21 @@ export async function dispatchDesignedGraphic(
     rendererKind,
     canvasSize: layout.canvasSize,
     blobSize: blob.size,
+    qc: { passed: qc.passed, overall: qc.overall, issues: qc.issues.length },
   })
 
-  // ── Step 6: normalize output via factory ──────────────────────────
-  return module.normalizeOutput(
+  // ── Step 7: normalize output via factory + attach QC ──────────────
+  const asset = module.normalizeOutput(
     { outputUrl: assetRef, productId: params.productId },
     params,
   )
+  asset.metadata.qcSummary = {
+    passed:     qc.passed,
+    overall:    qc.overall,
+    issues:     qc.issues,
+    visionPass: qc.visionPass,
+  }
+  return asset
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────

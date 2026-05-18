@@ -10,7 +10,7 @@
 // just enough imperfection to pass at-a-glance authenticity without
 // destroying readability.
 
-import { canvasToBlob, createCanvas } from './canvas'
+import { canvasToBlob, createCanvas } from '../../../shared/canvas'
 import type { PostProcessIntensity } from '../../../types/uiNative'
 
 export interface PostProcessConfig {

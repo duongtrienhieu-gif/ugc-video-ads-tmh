@@ -10,6 +10,7 @@
 
 import type { UINativeLocale } from '../../types/uiNative'
 import { directGeminiText } from '../../../../utils/gemini'
+import { parseLLMJson } from '../../shared/llm/jsonResponse'
 
 export type DesignedGraphicContentKind = 'infographic' | 'cta-banner'
 
@@ -116,10 +117,6 @@ function buildCtaPrompt(req: ContentRequest): string {
   ].filter(Boolean).join('\n')
 }
 
-function stripFence(s: string): string {
-  return s.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/i, '')
-}
-
 export async function generateInfographicContent(
   apiKey: string,
   req: ContentRequest,
@@ -130,12 +127,7 @@ export async function generateInfographicContent(
     systemInstruction: INFO_SYSTEM_INSTRUCTION,
     maxOutputTokens: 1024,
   })
-  let parsed: InfographicContent
-  try {
-    parsed = JSON.parse(stripFence(raw).trim()) as InfographicContent
-  } catch (err) {
-    throw new Error(`[designed-graphic infographic] JSON parse failed: ${(err as Error).message}`)
-  }
+  const parsed = parseLLMJson<InfographicContent>(raw, 'designed-graphic infographic')
   if (!parsed.title || !parsed.heroStat || !Array.isArray(parsed.bullets)) {
     throw new Error('[designed-graphic infographic] missing required fields')
   }
@@ -152,12 +144,7 @@ export async function generateCtaBannerContent(
     systemInstruction: CTA_SYSTEM_INSTRUCTION,
     maxOutputTokens: 512,
   })
-  let parsed: CtaBannerContent
-  try {
-    parsed = JSON.parse(stripFence(raw).trim()) as CtaBannerContent
-  } catch (err) {
-    throw new Error(`[designed-graphic cta] JSON parse failed: ${(err as Error).message}`)
-  }
+  const parsed = parseLLMJson<CtaBannerContent>(raw, 'designed-graphic cta')
   if (!parsed.headline || !parsed.ctaText) {
     throw new Error('[designed-graphic cta] missing required fields')
   }

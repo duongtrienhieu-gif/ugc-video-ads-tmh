@@ -16,23 +16,11 @@
 import type { PhotographicModule } from '../../types/photographic'
 import type { GenerateAssetParams, GeneratedAsset } from '../../types/asset'
 import { generateGpt4oImage } from '../../../../utils/kieai'
-import { saveAsset, getUrl, isAssetRef } from '../../../../utils/assetStore'
+import { saveAsset } from '../../../../utils/assetStore'
 import { useBankStore } from '../../../../stores/bankStore'
 import { useSettingsStore } from '../../../../stores/settingsStore'
-
-/** Convert any URL form (asset:xxx / blob: / data: / https:) to a KIE-fetchable public URL. */
-async function toPublicUrl(ref: string): Promise<string | null> {
-  if (!ref) return null
-  if (isAssetRef(ref)) return await getUrl(ref)
-  if (ref.startsWith('blob:') || ref.startsWith('data:')) {
-    const r = await fetch(ref)
-    if (!r.ok) return null
-    const blob = await r.blob()
-    const assetId = await saveAsset(blob, blob.type || 'image/jpeg')
-    return await getUrl(assetId)
-  }
-  return ref
-}
+import { toPublicUrl } from '../../shared/utils/refResolver'
+import { runBaselineQC } from '../../shared/qc/baselineQC'
 
 export async function dispatchPhotographic(
   module: PhotographicModule,
@@ -88,10 +76,26 @@ export async function dispatchPhotographic(
   if (!resp.ok) throw new Error(`[photographic dispatcher] fetch ${resp.status}`)
   const blob = await resp.blob()
   if (blob.size < 1000) throw new Error('[photographic dispatcher] response too small — likely corrupt')
+
+  // P9 — baseline QC. Photographic accepts PNG OR JPEG from KIE, so do
+  // not force JPEG SOI here; the size + decoded-dimension checks still
+  // apply, dimensions are skipped (no fixed template size for KIE output).
+  const qc = await runBaselineQC({
+    blob,
+    requireJpeg: false,
+  })
+
   const assetRef = await saveAsset(blob, blob.type || 'image/png')
 
-  return module.normalizeOutput(
+  const asset = module.normalizeOutput(
     { outputUrl: assetRef, productId: params.productId, modelId: params.modelId },
     params,
   )
+  asset.metadata.qcSummary = {
+    passed:     qc.passed,
+    overall:    qc.overall,
+    issues:     qc.issues,
+    visionPass: qc.visionPass,
+  }
+  return asset
 }

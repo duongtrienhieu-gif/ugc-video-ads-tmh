@@ -14,7 +14,7 @@ import {
   drawCircularAvatar,
   roundedRectPath,
   wrapText,
-} from '../_shared/canvas'
+} from '../../../shared/canvas'
 import { WHATSAPP_LIGHT_2024 } from '../_shared/colors'
 import { renderStatusBar } from '../_shared/statusBar'
 import type { MessageTimeline } from '../_shared/timestamps'

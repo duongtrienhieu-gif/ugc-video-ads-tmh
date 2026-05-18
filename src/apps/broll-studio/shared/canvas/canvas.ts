@@ -1,8 +1,14 @@
-// ── UI-Native Canvas Helpers (P5) ───────────────────────────────────────────
+// ── Engine-Neutral Canvas Helpers (P9 — promoted from ui-native/_shared) ────
 //
-// Thin Canvas API utilities shared across whatsapp-proof + messenger-chat
-// + (later) shopee / tiktok / facebook templates. Browser-only — relies
-// on document.createElement('canvas'), no node fallback.
+// Thin Canvas API utilities shared across all engine groups
+// (ui-native chat / review / comment templates, designed-graphic
+// infographic / cta-banner templates, future templates). Browser-only —
+// relies on document.createElement('canvas'), no node fallback.
+//
+// Was at engines/ui-native/_shared/canvas.ts in P5–P8 (which forced a
+// cross-engine import from designed-graphic templates and violated the
+// engine-isolation rule). P9 hoists it to shared/canvas/ so all three
+// engine groups can import without crossing each other's folders.
 
 export interface CanvasSize {
   width: number

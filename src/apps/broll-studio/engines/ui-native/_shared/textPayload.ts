@@ -11,6 +11,7 @@
 import type { UINativeTextContent, UINativeLocale, UINativePlatform } from '../../../types/uiNative'
 import { directGeminiText } from '../../../../../utils/gemini'
 import { findPersona } from '../../../shared/metadata/personaLibrary'
+import { stripJsonFence } from '../../../shared/llm/jsonResponse'
 
 /** What kind of UI-native content we are generating text for. */
 export type TextPayloadContentType = 'chat' | 'review' | 'comment-thread'
@@ -135,9 +136,6 @@ export function parseTextPayloadResponse(
   }
 }
 
-function stripJsonFence(s: string): string {
-  return s.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/i, '')
-}
 
 // ── Marketplace review prompts (P6) ─────────────────────────────────────
 

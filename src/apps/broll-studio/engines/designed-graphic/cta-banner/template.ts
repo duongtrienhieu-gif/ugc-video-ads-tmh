@@ -9,7 +9,7 @@ import {
   loadImage,
   roundedRectPath,
   wrapText,
-} from '../../ui-native/_shared/canvas'
+} from '../../../shared/canvas'
 import type { DesignedGraphicLayout, DesignedGraphicTypography, DesignedGraphicColorTheme } from '../../../types/designedGraphic'
 import type { CtaBannerContent } from '../_textPayload'
 import { contentRect } from '../../../shared/design-system/grid'

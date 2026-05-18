@@ -22,7 +22,8 @@ import type { UINativeModule, UINativePlatform, UINativeTextContent, UINativeLoc
 import type { GenerateAssetParams, GeneratedAsset } from '../../types/asset'
 import { useSettingsStore } from '../../../../stores/settingsStore'
 import { useBankStore } from '../../../../stores/bankStore'
-import { saveAsset, getUrl, isAssetRef } from '../../../../utils/assetStore'
+import { saveAsset } from '../../../../utils/assetStore'
+import { toPublicUrl } from '../../shared/utils/refResolver'
 import { generateAvatar } from './_shared/avatarGen'
 import { generateTextPayload, type TextPayloadRequest, type TextPayloadContentType } from './_shared/textPayload'
 import { buildTimeline } from './_shared/timestamps'
@@ -86,19 +87,6 @@ const PLATFORM_DEFAULT_COUNT: Record<UINativePlatform, number> = {
   'tiktok-shop':    1,
   facebook:         6,
   'tiktok-comment': 8,
-}
-
-async function toPublicUrl(ref: string): Promise<string | null> {
-  if (!ref) return null
-  if (isAssetRef(ref)) return await getUrl(ref)
-  if (ref.startsWith('blob:') || ref.startsWith('data:')) {
-    const r = await fetch(ref)
-    if (!r.ok) return null
-    const blob = await r.blob()
-    const assetId = await saveAsset(blob, blob.type || 'image/jpeg')
-    return await getUrl(assetId)
-  }
-  return ref
 }
 
 export async function dispatchUINative(
@@ -227,5 +215,3 @@ export async function dispatchUINative(
   return asset
 }
 
-// Helper exposed for callers that want avatar conversion explicitly
-export { toPublicUrl }
