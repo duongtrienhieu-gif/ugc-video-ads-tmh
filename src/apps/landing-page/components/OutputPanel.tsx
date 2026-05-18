@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Loader2, LayoutTemplate, Save, Check, RotateCcw, Trash2, FolderOpen, ChevronDown, ImageIcon, Sparkles, AlertTriangle, Clock, Zap, RefreshCw, FilePlus, FileDown, Copy as CopyIcon, FolderInput } from 'lucide-react'
+import { Loader2, LayoutTemplate, Save, Check, RotateCcw, Trash2, FolderOpen, ChevronDown, ImageIcon, Sparkles, AlertTriangle, Clock, Zap, RefreshCw, FilePlus, FileDown, Copy as CopyIcon, FolderInput, X } from 'lucide-react'
 import type { LandingPagePack, SavedLandingPack } from '../types'
 import type { ImageProgress } from '../LandingPageAI'
 import SectionCard from './SectionCard'
@@ -407,7 +407,10 @@ function SavedHistorySection({
   const duplicate = useLandingPageStore((s) => s.duplicate)
   const updateTitle = useLandingPageStore((s) => s.updateTitle)
   const addToast = useAppStore((s) => s.addToast)
-  const [expandedId, setExpandedId] = useState<string | null>(null)
+  // Phase 7 stabilization — replaced inline expand (`expandedId`) with a
+  // right-side drawer preview (`previewPack`). User reported inline
+  // expansion took over the whole page; drawer keeps the list visible.
+  const [previewPack, setPreviewPack] = useState<SavedLandingPack | null>(null)
   // Z26 — collapsible panel: default collapsed when a pack is loaded,
   // default expanded otherwise. User clicks header to toggle.
   const [panelOpen, setPanelOpen] = useState(variant === 'expanded')
@@ -442,9 +445,11 @@ function SavedHistorySection({
         <SavedRow
           key={item.id}
           item={item}
-          isOpen={expandedId === item.id}
           isLoaded={loadedFromId === item.id}
-          onToggle={() => setExpandedId(expandedId === item.id ? null : item.id)}
+          // Phase 7 — clicking the row body opens the drawer preview
+          // instead of expanding inline. The chevron / "Xem trước" button
+          // both route to the same drawer-open action.
+          onPreview={() => setPreviewPack(item)}
           onRemove={() => remove(item.id)}
           onOpen={onLoadProject ? () => onLoadProject(item.id) : undefined}
           onDuplicate={() => {
@@ -463,70 +468,101 @@ function SavedHistorySection({
     </div>
   )
 
+  // Phase 7 — right-side drawer preview, mounted at the end of both
+  // variant returns so a single drawer covers the whole pack list.
+  const drawer = previewPack ? (
+    <SavedPackDrawer
+      pack={previewPack}
+      onClose={() => setPreviewPack(null)}
+      onOpen={onLoadProject ? () => { onLoadProject(previewPack.id); setPreviewPack(null) } : undefined}
+      onDuplicate={() => {
+        const copy = duplicate(previewPack.id)
+        if (copy) {
+          addToast(`✓ Đã nhân bản → "${copy.title}"`)
+          setPreviewPack(null)
+        }
+      }}
+      onExportJson={() => handleExportJson(previewPack)}
+      onRemove={() => {
+        if (confirm(`Xoá vĩnh viễn project "${previewPack.title}"?`)) {
+          remove(previewPack.id)
+          setPreviewPack(null)
+        }
+      }}
+    />
+  ) : null
+
   // ── Variant: legacy expanded (empty-state) ─────────────────────────
   if (variant === 'expanded') {
     return (
-      <div className="mt-6 border-t border-black/8 pt-5">
-        <h3 className="mb-2 flex items-center gap-2 text-[11px] font-bold uppercase tracking-widest text-gray-500">
-          <FolderOpen className="h-3.5 w-3.5" />
-          Landing Page đã lưu ({items.length})
-        </h3>
-        <p className="mb-3 text-[10px] text-gray-400">
-          Click "Mở" để tiếp tục chỉnh sửa — mọi thay đổi tự lưu lại project.
-        </p>
-        {rows}
-      </div>
+      <>
+        <div className="mt-6 border-t border-black/8 pt-5">
+          <h3 className="mb-2 flex items-center gap-2 text-[11px] font-bold uppercase tracking-widest text-gray-500">
+            <FolderOpen className="h-3.5 w-3.5" />
+            Landing Page đã lưu ({items.length})
+          </h3>
+          <p className="mb-3 text-[10px] text-gray-400">
+            Click vào landing page để xem nhanh. Bấm "Mở" để tiếp tục chỉnh sửa.
+          </p>
+          {rows}
+        </div>
+        {drawer}
+      </>
     )
   }
 
   // ── Variant: collapsible (pinned-top, default closed) ──────────────
   return (
-    <div className="shrink-0 border-b border-black/8 bg-violet-50/30 px-5 py-2">
-      <button
-        type="button"
-        onClick={() => setPanelOpen((v) => !v)}
-        className="flex w-full items-center gap-2 text-left"
-      >
-        <FolderOpen className="h-3.5 w-3.5 text-violet-600" />
-        <span className="text-[11px] font-bold uppercase tracking-widest text-gray-700">
-          Landing Page đã lưu
-        </span>
-        <span className="rounded-full bg-violet-100 px-2 py-0.5 text-[10px] font-bold text-violet-700">
-          {items.length}
-        </span>
-        {loadedFromId && (
-          <span className="hidden sm:inline text-[10px] text-violet-600/70">
-            · đang chỉnh: {items.find((x) => x.id === loadedFromId)?.title ?? '?'}
+    <>
+      <div className="shrink-0 border-b border-black/8 bg-violet-50/30 px-5 py-2">
+        <button
+          type="button"
+          onClick={() => setPanelOpen((v) => !v)}
+          className="flex w-full items-center gap-2 text-left"
+        >
+          <FolderOpen className="h-3.5 w-3.5 text-violet-600" />
+          <span className="text-[11px] font-bold uppercase tracking-widest text-gray-700">
+            Landing Page đã lưu
           </span>
-        )}
-        <ChevronDown className={`ml-auto h-3.5 w-3.5 text-gray-400 transition-transform ${panelOpen ? 'rotate-180' : ''}`} />
-      </button>
-
-      {panelOpen && (
-        <div className="mt-2 space-y-2">
-          {items.length > 4 && (
-            <input
-              type="search"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Tìm project theo tên..."
-              className="w-full rounded-lg border border-black/10 bg-white px-2.5 py-1.5 text-[11px] outline-none focus:border-violet-500/40"
-            />
+          <span className="rounded-full bg-violet-100 px-2 py-0.5 text-[10px] font-bold text-violet-700">
+            {items.length}
+          </span>
+          {loadedFromId && (
+            <span className="hidden sm:inline text-[10px] text-violet-600/70">
+              · đang chỉnh: {items.find((x) => x.id === loadedFromId)?.title ?? '?'}
+            </span>
           )}
-          {rows}
-        </div>
-      )}
-    </div>
+          <ChevronDown className={`ml-auto h-3.5 w-3.5 text-gray-400 transition-transform ${panelOpen ? 'rotate-180' : ''}`} />
+        </button>
+
+        {panelOpen && (
+          <div className="mt-2 space-y-2">
+            {items.length > 4 && (
+              <input
+                type="search"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Tìm theo tên landing page..."
+                className="w-full rounded-lg border border-black/10 bg-white px-2.5 py-1.5 text-[11px] outline-none focus:border-violet-500/40"
+              />
+            )}
+            {rows}
+          </div>
+        )}
+      </div>
+      {drawer}
+    </>
   )
 }
 
 function SavedRow({
-  item, isOpen, isLoaded, onToggle, onRemove, onOpen, onDuplicate, onRename, onExportJson,
+  item, isLoaded, onPreview, onRemove, onOpen, onDuplicate, onRename, onExportJson,
 }: {
   item: SavedLandingPack
-  isOpen: boolean
   isLoaded?: boolean
-  onToggle: () => void
+  /** Phase 7 — open the drawer preview. Replaces the legacy onToggle
+   *  inline-expand handler. Body click + chevron both call this. */
+  onPreview: () => void
   onRemove: () => void
   onOpen?: () => void
   onDuplicate?: () => void
@@ -549,7 +585,7 @@ function SavedRow({
       <div className="flex w-full items-center gap-2 px-3 py-2 hover:bg-black/[0.02]">
         <button
           type="button"
-          onClick={onToggle}
+          onClick={onPreview}
           className="flex flex-1 items-center gap-2 text-left min-w-0"
         >
           <LayoutTemplate className={`h-4 w-4 shrink-0 ${isLoaded ? 'text-violet-700' : 'text-violet-500'}`} />
@@ -625,11 +661,11 @@ function SavedRow({
           )}
           <button
             type="button"
-            onClick={(e) => { e.stopPropagation(); onToggle() }}
-            title={isOpen ? 'Thu gọn' : 'Xem trước'}
+            onClick={(e) => { e.stopPropagation(); onPreview() }}
+            title="Xem trước"
             className="rounded-md p-1 text-gray-400 hover:bg-black/5 hover:text-gray-700"
           >
-            <ChevronDown className={`h-3.5 w-3.5 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+            <ChevronDown className="h-3.5 w-3.5 -rotate-90" />
           </button>
           <button
             type="button"
@@ -641,13 +677,135 @@ function SavedRow({
           </button>
         </div>
       </div>
-      {isOpen && (
-        <div className="space-y-2 border-t border-black/8 bg-gray-50/40 p-3">
-          {item.sections.map((s, i) => (
-            <SectionCard key={`${s.type}-${i}`} index={i} section={s} />
-          ))}
+      {/* Phase 7 — inline expansion removed. Preview now opens in the
+          right-side drawer (see SavedPackDrawer below). */}
+    </div>
+  )
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Phase 7 — SavedPackDrawer
+//
+// Right-side overlay drawer that previews a saved landing pack without
+// taking over the whole page. Replaces the legacy inline-expand UX which
+// pushed the section content thousands of pixels down and made the list
+// useless when there were >1 saved packs.
+//
+// UX spec (per user):
+//   • Slides in from the right with a dark blur backdrop
+//   • Width: 75vw on desktop, 100vw on mobile
+//   • Close via: X button, ESC key, backdrop click
+//   • Header sticky with: title, sections count, created time, actions
+//     (Mở chỉnh sửa · Duplicate · Export · Delete · Close)
+//   • Body scrolls independently; main page underneath does NOT scroll
+//     (body overflow hidden while open)
+// ─────────────────────────────────────────────────────────────────────
+
+function SavedPackDrawer({
+  pack, onClose, onOpen, onDuplicate, onExportJson, onRemove,
+}: {
+  pack: SavedLandingPack
+  onClose: () => void
+  onOpen?: () => void
+  onDuplicate: () => void
+  onExportJson: () => void
+  onRemove: () => void
+}) {
+  // ESC to close
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onClose])
+
+  // Lock body scroll while open
+  useEffect(() => {
+    const prev = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => { document.body.style.overflow = prev }
+  }, [])
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex justify-end"
+      role="dialog"
+      aria-modal="true"
+      aria-label={`Xem trước ${pack.title}`}
+    >
+      {/* Backdrop — click to close */}
+      <button
+        type="button"
+        aria-label="Đóng"
+        onClick={onClose}
+        className="absolute inset-0 cursor-default bg-black/40 backdrop-blur-sm animate-in fade-in"
+      />
+
+      {/* Drawer panel */}
+      <div className="relative flex h-full w-full flex-col bg-white shadow-2xl animate-in slide-in-from-right md:w-[75vw] md:max-w-[1100px]">
+        {/* Sticky header */}
+        <div className="shrink-0 border-b border-black/8 bg-white px-5 py-3">
+          <div className="flex items-center gap-3">
+            <LayoutTemplate className="h-5 w-5 shrink-0 text-violet-500" />
+            <div className="min-w-0 flex-1">
+              <h2 className="truncate text-base font-bold text-gray-900">{pack.title}</h2>
+              <p className="text-[11px] text-gray-400">
+                {pack.language.toUpperCase()} · {pack.sections.length} sections · Tạo lúc {new Date(pack.createdAt).toLocaleString('vi-VN', { dateStyle: 'short', timeStyle: 'short' })}
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={onClose}
+              aria-label="Đóng"
+              className="rounded-full p-1.5 text-gray-400 hover:bg-black/5 hover:text-gray-700"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+
+          {/* Actions row */}
+          <div className="mt-2.5 flex flex-wrap gap-1.5">
+            {onOpen && (
+              <button
+                type="button"
+                onClick={onOpen}
+                className="flex items-center gap-1 rounded-full bg-violet-600 px-3 py-1.5 text-[11px] font-bold text-white hover:bg-violet-700"
+              >
+                <FolderInput className="h-3 w-3" /> Mở chỉnh sửa
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={onDuplicate}
+              className="flex items-center gap-1 rounded-full border border-black/10 bg-white px-3 py-1.5 text-[11px] font-medium text-gray-700 hover:bg-black/[0.04]"
+            >
+              <CopyIcon className="h-3 w-3" /> Nhân bản
+            </button>
+            <button
+              type="button"
+              onClick={onExportJson}
+              className="flex items-center gap-1 rounded-full border border-black/10 bg-white px-3 py-1.5 text-[11px] font-medium text-gray-700 hover:bg-black/[0.04]"
+            >
+              <FileDown className="h-3 w-3" /> Xuất JSON
+            </button>
+            <button
+              type="button"
+              onClick={onRemove}
+              className="ml-auto flex items-center gap-1 rounded-full border border-red-200 bg-white px-3 py-1.5 text-[11px] font-medium text-red-600 hover:bg-red-50"
+            >
+              <Trash2 className="h-3 w-3" /> Xoá
+            </button>
+          </div>
         </div>
-      )}
+
+        {/* Scrollable preview body */}
+        <div className="flex-1 overflow-y-auto bg-gray-50/40 px-5 py-4">
+          <div className="space-y-3">
+            {pack.sections.map((s, i) => (
+              <SectionCard key={`${s.type}-${i}`} index={i} section={s} />
+            ))}
+          </div>
+        </div>
+      </div>
     </div>
   )
 }
