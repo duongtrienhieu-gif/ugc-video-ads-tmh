@@ -20,6 +20,7 @@
 import { useBankStore } from '../../../stores/bankStore'
 import type { Product } from '../../../stores/types'
 import type { UINativeLocale } from '../types/uiNative'
+import { readLocalization } from './productLocalizations'
 
 export interface ProductKnowledge {
   /** Brand name as the user entered it in Project. */
@@ -93,24 +94,43 @@ export function loadProductKnowledge(
   return fromProduct(product, locale)
 }
 
-/** Build ProductKnowledge from a raw Product record + locale. */
+/** Build ProductKnowledge from a raw Product record + locale.
+ *
+ *  P32: when a localization exists for the target locale, its fields
+ *  OVERRIDE the legacy Vietnamese product fields. This is the key
+ *  mechanism that prevents Vietnamese leakage into my-MY / id-ID /
+ *  global generations — the LLM never sees the Vietnamese source when
+ *  a native-rewritten override is available. */
 export function fromProduct(product: Product, locale: UINativeLocale = 'vi-VN'): ProductKnowledge {
-  const benefits   = splitList(product.benefits)
-  const usps       = splitList(product.usps)
-  const painPoints = splitList(product.painPoints)
-  const ingredients = splitList(product.ingredients)
-  const niche      = product.targetMarket || 'general consumer'
+  const override = readLocalization(product.id, locale)
+
+  // Per-field resolution: localization wins, legacy is fallback.
+  const productName        = override?.productName        ?? product.productName
+  const productDescription = override?.productDescription ?? product.productDescription
+  const benefitsStr        = override?.benefits           ?? product.benefits
+  const uspsStr            = override?.usps               ?? product.usps
+  const painPointsStr      = override?.painPoints         ?? product.painPoints
+  const ingredientsStr     = override?.ingredients        ?? product.ingredients
+  const offerStr           = override?.offer              ?? product.offer
+  const niche              = override?.niche              ?? product.targetMarket ?? 'general consumer'
+  const audience           = override?.audience           ?? product.targetMarket ?? 'general SEA consumer'
+
+  const benefits    = splitList(benefitsStr)
+  const usps        = splitList(uspsStr)
+  const painPoints  = splitList(painPointsStr)
+  const ingredients = splitList(ingredientsStr)
+
   return {
-    productName:  product.productName,
-    description:  product.productDescription || '',
+    productName,
+    description:  productDescription || '',
     niche,
-    audience:     product.targetMarket || 'general SEA consumer',
+    audience,
     benefits,
     usps,
     painPoints,
     ingredients,
-    offer:        product.offer || '',
-    tone:         inferTone(niche, painPoints),
+    offer:        offerStr || '',
+    tone:         override?.tone ?? inferTone(niche, painPoints),
     market:       MARKET_BY_LOCALE[locale],
     productImage: product.productImage || null,
   }

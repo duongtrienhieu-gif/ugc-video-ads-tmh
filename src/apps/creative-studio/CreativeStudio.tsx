@@ -33,6 +33,8 @@ import ResultCard from './uiCatalog/ResultCard'
 import { findCatalogEntry, requirementsFor } from './uiCatalog/assetCatalog'
 import { rememberAvatarForProduct, recallAvatarForProduct } from './shared/recommendations/avatarMemory'
 import { useBankStore } from '../../stores/bankStore'
+import { readLocalization, writeLocalization } from './services/productLocalizations'
+import { nativeRewriteProduct } from './services/nativeRewrite'
 
 // ── PickerTile (product / avatar) ──────────────────────────────────────
 //
@@ -163,6 +165,43 @@ export default function CreativeStudio() {
   // P30 — input panel scroll target so suggestion clicks scroll back
   // to the top of the left panel after selecting a follow-up creative.
   const inputPanelRef = useRef<HTMLDivElement>(null)
+
+  // P32 — locale-native rewrite state. `localeStatus` tracks whether
+  // the selected product has a native rewrite for the selected locale.
+  // Bumped via `localeStatusBump` after rewrite completes so the UI
+  // re-reads localStorage.
+  const [localeStatusBump, setLocaleStatusBump] = useState(0)
+  const [isRewriting, setIsRewriting] = useState(false)
+  const hasNativeForLocale = useMemo(() => {
+    if (!selectedProduct?.id) return false
+    if (selectedLocale === 'vi-VN') return true   // source language — no rewrite needed
+    void localeStatusBump   // declare dependency
+    return !!readLocalization(selectedProduct.id, selectedLocale)
+  }, [selectedProduct?.id, selectedLocale, localeStatusBump])
+
+  async function handleNativeRewrite() {
+    if (!selectedProduct?.id || !geminiApiKey || isRewriting) return
+    setIsRewriting(true)
+    try {
+      console.info('[CreativeStudio] native-rewrite start', { productId: selectedProduct.id, locale: selectedLocale })
+      const { ok, fields, attempts } = await nativeRewriteProduct(geminiApiKey, {
+        product: selectedProduct,
+        targetLocale: selectedLocale,
+      })
+      writeLocalization(selectedProduct.id, selectedLocale, fields)
+      setLocaleStatusBump((n) => n + 1)
+      if (ok) {
+        addToast(`Đã tạo bản native ${selectedLocale} (${attempts} lượt LLM)`, 'success')
+      } else {
+        addToast(`Bản native ${selectedLocale} đã lưu nhưng LLM fallback — kiểm tra lại`, 'error')
+      }
+    } catch (err) {
+      console.error('[CreativeStudio] native-rewrite failed', err)
+      showErrorOnce(`Tạo bản native thất bại: ${err instanceof Error ? err.message.slice(0, 80) : 'unknown'}`)
+    } finally {
+      setIsRewriting(false)
+    }
+  }
 
   function handleSuggestion(id: AssetTypeId) {
     setSelectedAssetTypeId(id)
@@ -350,8 +389,11 @@ export default function CreativeStudio() {
               )}
             </section>
 
-            {/* P31 — Locale selector. Controls every Gemini call + Canvas
-                template UI string. Persisted to localStorage. */}
+            {/* P31 + P32 — Locale selector + native-rewrite status. The
+                checkmark next to each locale shows whether Product has
+                native-rewritten copy for that locale (P32 architecture
+                rule: NOT translation — native rewriting). vi-VN always
+                shows green because it's the source language. */}
             <section className="mt-3">
               <p className="mb-1 text-[10px] font-bold uppercase tracking-widest text-gray-500">
                 Ngôn ngữ output
@@ -362,22 +404,61 @@ export default function CreativeStudio() {
                   { code: 'my-MY',  flag: '🇲🇾', label: 'MY' },
                   { code: 'id-ID',  flag: '🇮🇩', label: 'ID' },
                   { code: 'global', flag: '🌐', label: 'EN' },
-                ] as const).map((opt) => (
-                  <button
-                    key={opt.code}
-                    type="button"
-                    onClick={() => setSelectedLocale(opt.code)}
-                    className={`flex items-center justify-center gap-1 rounded-md border px-1.5 py-1 text-[10px] font-semibold transition-colors ${
-                      selectedLocale === opt.code
-                        ? 'border-violet-500 bg-violet-50 text-violet-700 ring-1 ring-violet-200'
-                        : 'border-black/10 bg-white text-gray-600 hover:bg-black/[0.04]'
-                    }`}
-                  >
-                    <span>{opt.flag}</span>
-                    <span>{opt.label}</span>
-                  </button>
-                ))}
+                ] as const).map((opt) => {
+                  const hasNative = !selectedProduct?.id
+                    ? false
+                    : opt.code === 'vi-VN'
+                      ? true
+                      : (void localeStatusBump, !!readLocalization(selectedProduct.id, opt.code))
+                  return (
+                    <button
+                      key={opt.code}
+                      type="button"
+                      onClick={() => setSelectedLocale(opt.code)}
+                      className={`relative flex items-center justify-center gap-1 rounded-md border px-1.5 py-1 text-[10px] font-semibold transition-colors ${
+                        selectedLocale === opt.code
+                          ? 'border-violet-500 bg-violet-50 text-violet-700 ring-1 ring-violet-200'
+                          : 'border-black/10 bg-white text-gray-600 hover:bg-black/[0.04]'
+                      }`}
+                    >
+                      <span>{opt.flag}</span>
+                      <span>{opt.label}</span>
+                      {selectedProduct?.id && hasNative && (
+                        <span className="absolute -right-0.5 -top-0.5 h-1.5 w-1.5 rounded-full bg-emerald-500 ring-2 ring-white" title={`Native ${opt.code} ready`} />
+                      )}
+                    </button>
+                  )
+                })}
               </div>
+
+              {/* P32 — Native-rewrite CTA when selected locale lacks
+                  a native rewrite. KHÔNG TRANSLATE — Gemini rewrites
+                  the brief in the target market's authentic ad voice. */}
+              {selectedProduct?.id && selectedLocale !== 'vi-VN' && !hasNativeForLocale && (
+                <button
+                  type="button"
+                  onClick={handleNativeRewrite}
+                  disabled={!geminiApiKey || isRewriting}
+                  className="mt-1.5 flex w-full items-center justify-center gap-1.5 rounded-md border border-amber-200 bg-amber-50/60 px-2 py-1.5 text-[10px] font-semibold text-amber-700 transition-colors hover:bg-amber-100/60 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {isRewriting ? (
+                    <>
+                      <Loader2 className="h-3 w-3 animate-spin" />
+                      Đang viết lại bản native {selectedLocale}…
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="h-3 w-3" />
+                      Tạo bản native {selectedLocale} (rewrite, KHÔNG translate)
+                    </>
+                  )}
+                </button>
+              )}
+              {selectedProduct?.id && selectedLocale !== 'vi-VN' && hasNativeForLocale && (
+                <p className="mt-1 text-center text-[9px] text-emerald-600">
+                  ✓ Đã có bản native {selectedLocale} — AI dùng làm source thay vì tiếng Việt
+                </p>
+              )}
             </section>
 
             {/* GENERATE button — premium compact action (P26)
