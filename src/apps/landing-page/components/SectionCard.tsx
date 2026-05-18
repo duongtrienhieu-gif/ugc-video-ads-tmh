@@ -1,7 +1,11 @@
-import { useState } from 'react'
-import { Copy, Check, ChevronDown, Image as ImageIcon, Loader2, RotateCcw, Download, AlertCircle, Sparkles, Trash2, Globe2 } from 'lucide-react'
+import { memo, useState, useSyncExternalStore } from 'react'
+import { Copy, Check, ChevronDown, Image as ImageIcon, Loader2, RotateCcw, Download, AlertCircle, Sparkles, Trash2, Globe2, Bug } from 'lucide-react'
 import type { LandingSection, ImagePrompt, SectionType } from '../types'
 import { useAssetUrl } from '../../../hooks/useAssetUrl'
+import {
+  getAttemptsForAsset, subscribeDebug, isDebugMode,
+  type DebugAttempt,
+} from '../debugStore'
 
 /** KIE GPT-image-1 ~ 6 credits per call. */
 const CREDIT_PER_IMAGE = 6
@@ -72,7 +76,7 @@ interface SectionCardProps {
   onDeleteImage?: (sectionIdx: number, imageIdx: number) => void
 }
 
-export default function SectionCard({ index, section, onRegenerateImage, onDeleteImage }: SectionCardProps) {
+function SectionCardImpl({ index, section, onRegenerateImage, onDeleteImage }: SectionCardProps) {
   const [expanded, setExpanded] = useState(true)
   const [showViTranslation, setShowViTranslation] = useState(false)
   const glyph = SECTION_GLYPH[section.type] ?? '📄'
@@ -262,6 +266,7 @@ export default function SectionCard({ index, section, onRegenerateImage, onDelet
                   <ImagePromptCard
                     key={i}
                     prompt={p}
+                    assetKey={`${index}:${i}`}
                     onRegenerate={onRegenerateImage ? () => onRegenerateImage(index, i) : undefined}
                     onDelete={onDeleteImage ? () => onDeleteImage(index, i) : undefined}
                   />
@@ -275,17 +280,27 @@ export default function SectionCard({ index, section, onRegenerateImage, onDelet
   )
 }
 
+// Task 8 — memoize so SectionCard only re-renders when its own section/
+// handlers actually change. With 17 sections × 4 cards average = ~70
+// children, this avoids a full sub-tree re-render every time the parent
+// updates a single imagePrompt status.
+const SectionCard = memo(SectionCardImpl)
+export default SectionCard
+
 // ─────────────────────────────────────────────────────────────────────
 
-function ImagePromptCard({
-  prompt, onRegenerate, onDelete,
+function ImagePromptCardImpl({
+  prompt, assetKey, onRegenerate, onDelete,
 }: {
   prompt: ImagePrompt
+  assetKey: string
   onRegenerate?: () => void
   onDelete?: () => void
 }) {
   const [showPrompt, setShowPrompt] = useState(false)
+  const [showDebug, setShowDebug] = useState(false)
   const resolvedUrl = useAssetUrl(prompt.generatedAssetRef ?? undefined)
+  const debugMode = isDebugMode()
 
   const isLoading = prompt.status === 'queued' || prompt.status === 'generating' || prompt.status === 'retrying'
   const hasImage = prompt.status === 'done' && prompt.generatedAssetRef
@@ -424,7 +439,72 @@ function ImagePromptCard({
             {prompt.prompt}
           </p>
         )}
+
+        {/* Task 5 — Debug panel (only when ?debug=1 or localStorage.lp_debug='1') */}
+        {debugMode && (
+          <>
+            <button
+              type="button"
+              onClick={() => setShowDebug((v) => !v)}
+              className="flex w-full items-center gap-1 text-[10px] text-violet-600 hover:text-violet-700"
+              title="Hiển thị log debug — raw prompt, retry history, fail reason"
+            >
+              <Bug className="h-3 w-3" />
+              <span>{showDebug ? '− Ẩn debug log' : '+ Debug log'}</span>
+            </button>
+            {showDebug && <DebugAttemptsList assetKey={assetKey} />}
+          </>
+        )}
       </div>
+    </div>
+  )
+}
+
+const ImagePromptCard = memo(ImagePromptCardImpl)
+
+// ─────────────────────────────────────────────────────────────────────
+// Task 5 — Debug attempts list. Subscribes to debugStore via
+// useSyncExternalStore so any new attempt re-renders the panel. Cheap —
+// most users never enable debug mode so this never mounts.
+// ─────────────────────────────────────────────────────────────────────
+function DebugAttemptsList({ assetKey }: { assetKey: string }) {
+  const attempts = useSyncExternalStore(
+    subscribeDebug,
+    () => getAttemptsForAsset(assetKey),
+    () => [] as DebugAttempt[],
+  )
+  if (attempts.length === 0) {
+    return <p className="text-[10px] italic text-gray-400">Chưa có log — bấm Thử lại để chạy.</p>
+  }
+  return (
+    <div className="space-y-1 rounded border border-violet-200 bg-violet-50/40 p-1.5">
+      {attempts.map((a, i) => (
+        <div key={i} className="text-[10px] leading-snug text-gray-700">
+          <div className="flex items-center justify-between gap-2">
+            <span className="font-mono">
+              attempt {a.attempt}/{a.maxAttempts} · {a.provider} · {a.kieSize} · refs={a.filesUrlCount}
+            </span>
+            <span className={
+              a.status === 'success'   ? 'rounded bg-green-100 px-1 font-bold text-green-700' :
+              a.status === 'started'   ? 'rounded bg-blue-100 px-1 font-bold text-blue-700' :
+              a.status === 'recovered' ? 'rounded bg-amber-100 px-1 font-bold text-amber-700' :
+              a.status === 'timeout'   ? 'rounded bg-orange-100 px-1 font-bold text-orange-700' :
+              a.status === 'cancelled' ? 'rounded bg-gray-100 px-1 font-bold text-gray-600' :
+                                          'rounded bg-red-100 px-1 font-bold text-red-700'
+            }>{a.status}</span>
+          </div>
+          <div className="font-mono text-[9px] text-gray-500">
+            taskId: {a.taskId ?? '—'}
+            {' · '}duration: {a.durationMs ? (a.durationMs / 1000).toFixed(1) + 's' : 'in-flight'}
+            {' · '}started: {new Date(a.startedAt).toLocaleTimeString()}
+          </div>
+          {a.errorReason && (
+            <div className="mt-0.5 rounded bg-red-50 px-1 py-0.5 font-mono text-[9px] leading-tight text-red-700 break-all">
+              {a.errorReason.slice(0, 200)}
+            </div>
+          )}
+        </div>
+      ))}
     </div>
   )
 }

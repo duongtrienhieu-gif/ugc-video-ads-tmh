@@ -6,6 +6,7 @@ import {
   submitGpt4oImage, pollGpt4oUntilDone, type Gpt4oSize,
 } from '../../../utils/kieai'
 import { saveAsset, getUrl, isAssetRef } from '../../../utils/assetStore'
+import { recordAttempt, finalizeAttempt } from '../debugStore'
 import { renderForLandingSlot } from './chat-proof'
 import { renderForLandingSlot as renderIngredientCardForSlot } from './ingredient-card'
 import { renderForLandingSlot as renderComparisonCardForSlot } from './comparison-card'
@@ -1343,6 +1344,9 @@ async function runWithCreditSafeRetry(
   let lastError: Error | null = null
   let retries = 0
 
+  // ── Task 5 debug capture: per-asset attempt log ─────────────────────────
+  const assetKey = `${job.sectionIdx}:${job.imageIdx}`
+
   for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
     if (signal?.aborted) throw new Error('Đã huỷ')
 
@@ -1367,6 +1371,19 @@ async function runWithCreditSafeRetry(
     }
 
     // ── Submit a brand-new task ────────────────────────────────────────
+    const startedAt = Date.now()
+    const attemptNum = attempt + 1
+    recordAttempt({
+      assetKey, sectionType: job.section.type, filename: job.prompt.filename,
+      attempt: attemptNum, maxAttempts: MAX_ATTEMPTS,
+      provider: 'KIE GPT-4o',
+      prompt: finalPrompt,
+      filesUrlCount: filesUrl.length,
+      kieSize: size,
+      status: 'started',
+      startedAt,
+    })
+
     try {
       onTaskUpdate({ status: attempt === 0 ? 'generating' : 'retrying', error: undefined })
 
@@ -1386,11 +1403,24 @@ async function runWithCreditSafeRetry(
       })
 
       const assetRef = await downloadAndStore(remoteUrl)
+      finalizeAttempt({ assetKey, attempt: attemptNum, startedAt }, {
+        status: 'success', taskId, assetRef,
+        durationMs: Date.now() - startedAt,
+      })
       // Success → clear the in-flight tracker
       lastTaskId = null
       return { assetRef, retries }
 
     } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      const outcome =
+        msg.includes('Đã huỷ') || msg.includes('CANCELLED') ? 'cancelled' as const :
+        msg.toLowerCase().includes('timeout') || msg.includes('90s') ? 'timeout' as const :
+        'failed' as const
+      finalizeAttempt({ assetKey, attempt: attemptNum, startedAt }, {
+        status: outcome, taskId: lastTaskId ?? undefined,
+        errorReason: msg, durationMs: Date.now() - startedAt,
+      })
       lastError = err instanceof Error ? err : new Error(String(err))
 
       // Hard failures — never retry (don't burn credit on something that

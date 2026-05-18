@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Sliders, X as XIcon } from 'lucide-react'
 import { useAppStore } from '../../stores/appStore'
 import { useBankStore } from '../../stores/bankStore'
@@ -161,7 +161,9 @@ export default function LandingPageAI() {
 
   // ── Session persistence (Phase R3 pilot) ──────────────────────────────
   // Counts how many sections + images are complete — drives the modal preview.
-  const computeProgress = () => {
+  // Task 8 — useMemo so the reducer doesn't re-walk every section on every
+  // render. Pack changes infrequently relative to status flicker.
+  const computedProgress = useMemo(() => {
     if (!pack) return undefined
     const totalSections = pack.sections.length
     const totalImages = pack.sections.reduce((sum, s) => sum + s.imagePrompts.length, 0)
@@ -173,7 +175,8 @@ export default function LandingPageAI() {
       return `${totalSections} section · chưa render ảnh`
     }
     return `${totalSections} section · ${doneImages}/${totalImages} ảnh đã render`
-  }
+  }, [pack])
+  const computeProgress = () => computedProgress
 
   const sessionApi = useSessionPersist<LandingPageSnapshot>({
     moduleId: 'landing-page',
@@ -322,7 +325,10 @@ export default function LandingPageAI() {
 
   // ── Per-image patch — used by queue workers + single regen ──────────
   // Each successful image patch triggers the debounced auto-save (via deps).
-  const patchImagePrompt = (sectionIdx: number, imageIdx: number, patch: Partial<ImagePrompt>) => {
+  // Task 8 — useCallback so the memoized SectionCard children don't
+  // re-render on every parent state change. Stable reference between
+  // renders since setPack is stable.
+  const patchImagePrompt = useCallback((sectionIdx: number, imageIdx: number, patch: Partial<ImagePrompt>) => {
     setPack((prev) => {
       if (!prev) return prev
       return {
@@ -335,7 +341,7 @@ export default function LandingPageAI() {
         ),
       }
     })
-  }
+  }, [])
 
   // ── Phase B — batch image generation (Z8 perf upgrade) ──────────────
   const handleGenerateAllImages = async () => {
