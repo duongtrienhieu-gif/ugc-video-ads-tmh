@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Package, Loader2, Sparkles, Tag, ChevronDown, ChevronRight } from 'lucide-react'
+import { Package, Loader2, Sparkles } from 'lucide-react'
 import type { Product } from '../../../stores/types'
 import type { Goal, LabBriefParams, PricingInfo, PricingStrategy, ToneId } from '../types'
 import { useBankStore } from '../../../stores/bankStore'
@@ -32,7 +32,6 @@ export default function InputPanel({
   pricing, onPricingChange,
 }: InputPanelProps) {
   const [pickerOpen, setPickerOpen] = useState(false)
-  const [pricingExpanded, setPricingExpanded] = useState(false)
 
   const resolvedProductImage = useAssetUrl(selectedProduct?.productImage)
   const hasGeminiKey = useSettingsStore((s) => s.hasGeminiKey())
@@ -49,11 +48,13 @@ export default function InputPanel({
 
   const handleClickGenerate = () => {
     if (!canGenerate) return
+    // Pricing is "enabled" purely by having at least 1 strategy picked.
+    const pricingEnabled = pricing.preferredStrategies.length > 0
     onGenerate({
       goal,
       toneId,
       customToneNote: toneId === 'custom' ? customToneNote.trim() : undefined,
-      pricing: pricing.enabled ? pricing : undefined,
+      pricing: pricingEnabled ? { ...pricing, enabled: true } : undefined,
     })
   }
 
@@ -61,6 +62,7 @@ export default function InputPanel({
     const exists = pricing.preferredStrategies.includes(id)
     onPricingChange({
       ...pricing,
+      enabled: !exists || pricing.preferredStrategies.length > 1,
       preferredStrategies: exists
         ? pricing.preferredStrategies.filter((x) => x !== id)
         : [...pricing.preferredStrategies, id],
@@ -183,115 +185,39 @@ export default function InputPanel({
           )}
         </Section>
 
-        {/* STEP 4 — Pricing layer (optional, collapsible) */}
-        <Section step={4} title="Pricing layer (tùy chọn)">
-          <label className={`flex cursor-pointer items-start gap-2.5 rounded-xl border p-3 transition-colors ${
-            pricing.enabled ? 'border-amber-300 bg-amber-50' : 'border-black/10 bg-white hover:bg-black/[0.02]'
-          }`}>
-            <input
-              type="checkbox"
-              checked={pricing.enabled}
-              onChange={(e) => onPricingChange({ ...pricing, enabled: e.target.checked })}
-              className="mt-0.5 accent-amber-600"
-            />
-            <div className="min-w-0 flex-1">
-              <p className="flex items-center gap-1.5 text-xs font-semibold text-gray-900">
-                <Tag className="h-3.5 w-3.5 text-amber-600" />
-                Bật chiến lược giá cho BOFU caption
-              </p>
-              <p className="mt-0.5 text-[10px] text-gray-500">
-                Inject pricing facts + 7 chiến lược neo tâm lý (Anchoring, Daily Cost, Value Stacking...) vào Caption / Phễu / Hook BOFU.
-              </p>
-            </div>
-          </label>
-
-          {pricing.enabled && (
-            <div className="space-y-3 rounded-xl border border-amber-200 bg-white p-3">
-              {/* Prices */}
-              <div className="grid grid-cols-2 gap-2">
-                <PriceField
-                  label="Giá hiện tại"
-                  value={pricing.currentPrice}
-                  placeholder="490000"
-                  onChange={(v) => onPricingChange({ ...pricing, currentPrice: v })}
-                />
-                <PriceField
-                  label="Giá gốc / so sánh"
-                  value={pricing.anchorPrice}
-                  placeholder="990000"
-                  onChange={(v) => onPricingChange({ ...pricing, anchorPrice: v })}
-                />
-              </div>
-
-              {/* Offer + bonus */}
-              <div>
-                <label className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-gray-500">
-                  Mô tả ưu đãi (optional)
-                </label>
-                <textarea
-                  value={pricing.offerDescription}
-                  onChange={(e) => onPricingChange({ ...pricing, offerDescription: e.target.value })}
-                  placeholder="vd: Mua 2 tặng 1, freeship toàn quốc, COD"
-                  rows={2}
-                  className="w-full resize-none rounded-lg border border-black/10 bg-white px-2.5 py-1.5 text-[11px] placeholder:text-gray-400 focus:border-amber-400 focus:outline-none"
-                />
-              </div>
-              <div>
-                <label className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-gray-500">
-                  Bonus tặng kèm (optional)
-                </label>
-                <textarea
-                  value={pricing.bonusDescription}
-                  onChange={(e) => onPricingChange({ ...pricing, bonusDescription: e.target.value })}
-                  placeholder="vd: Tặng ebook 'Lộ trình giảm cân 30 ngày' trị giá 990K"
-                  rows={2}
-                  className="w-full resize-none rounded-lg border border-black/10 bg-white px-2.5 py-1.5 text-[11px] placeholder:text-gray-400 focus:border-amber-400 focus:outline-none"
-                />
-              </div>
-
-              {/* Strategy selection */}
-              <div>
+        {/* STEP 4 — Chiến lược bán (chip multi-select, no price inputs) */}
+        <Section step={4} title="Chiến lược bán hàng (tùy chọn)">
+          <p className="mb-2 text-[10px] leading-relaxed text-gray-500">
+            Chọn cách AI thuyết phục khách bằng giá / ưu đãi trong caption.
+            Bỏ trống = AI không dùng đòn giá. Có thể chọn nhiều.
+          </p>
+          <div className="grid grid-cols-2 gap-1.5">
+            {PRICING_STRATEGY_OPTIONS.map((s) => {
+              const isActive = pricing.preferredStrategies.includes(s.id)
+              return (
                 <button
-                  onClick={() => setPricingExpanded((v) => !v)}
-                  className="flex w-full items-center justify-between gap-2 text-left"
+                  key={s.id}
+                  onClick={() => togglePricingStrategy(s.id)}
+                  title={s.hint}
+                  className={`flex items-start gap-2 rounded-lg border px-2.5 py-2 text-left transition-colors ${
+                    isActive ? 'border-amber-400 bg-amber-50' : 'border-black/10 bg-white hover:bg-black/[0.03]'
+                  }`}
                 >
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-gray-500">
-                    Chiến lược ưu tiên {pricing.preferredStrategies.length > 0 ? `(${pricing.preferredStrategies.length})` : '· AI tự chọn'}
-                  </span>
-                  {pricingExpanded ? <ChevronDown className="h-3 w-3 text-gray-400" /> : <ChevronRight className="h-3 w-3 text-gray-400" />}
-                </button>
-                {pricingExpanded && (
-                  <div className="mt-2 grid grid-cols-2 gap-1.5">
-                    {PRICING_STRATEGY_OPTIONS.map((s) => {
-                      const isActive = pricing.preferredStrategies.includes(s.id)
-                      return (
-                        <button
-                          key={s.id}
-                          onClick={() => togglePricingStrategy(s.id)}
-                          title={s.hint}
-                          className={`flex items-start gap-1.5 rounded-lg border px-2 py-1.5 text-left transition-colors ${
-                            isActive ? 'border-amber-400 bg-amber-50' : 'border-black/10 bg-white hover:bg-black/[0.03]'
-                          }`}
-                        >
-                          <span className="text-sm leading-none">{s.glyph}</span>
-                          <div className="min-w-0 flex-1">
-                            <p className={`truncate text-[10px] font-semibold ${isActive ? 'text-amber-800' : 'text-gray-800'}`}>
-                              {s.label}
-                            </p>
-                            <p className="truncate text-[9px] text-gray-500">{s.hint}</p>
-                          </div>
-                        </button>
-                      )
-                    })}
+                  <span className="text-base leading-none">{s.glyph}</span>
+                  <div className="min-w-0 flex-1">
+                    <p className={`truncate text-[11px] font-semibold ${isActive ? 'text-amber-800' : 'text-gray-800'}`}>
+                      {s.label}
+                    </p>
+                    <p className="truncate text-[10px] text-gray-500">{s.hint}</p>
                   </div>
-                )}
-                {pricing.preferredStrategies.length === 0 && (
-                  <p className="mt-1.5 text-[10px] italic text-gray-500">
-                    Bỏ trống = AI tự chọn 2-3 chiến lược phù hợp nhất.
-                  </p>
-                )}
-              </div>
-            </div>
+                </button>
+              )
+            })}
+          </div>
+          {pricing.preferredStrategies.length > 0 && (
+            <p className="mt-2 text-[10px] font-semibold text-amber-700">
+              ✓ Đã chọn {pricing.preferredStrategies.length} chiến lược — sẽ áp dụng vào Caption / Phễu / Sales Letter
+            </p>
           )}
         </Section>
       </div>
@@ -333,32 +259,6 @@ function Section({ step, title, children }: { step: number; title: string; child
         Bước {step} · {title}
       </p>
       <div className="space-y-1.5">{children}</div>
-    </div>
-  )
-}
-
-function PriceField({ label, value, placeholder, onChange }: {
-  label: string
-  value: number
-  placeholder: string
-  onChange: (v: number) => void
-}) {
-  return (
-    <div>
-      <label className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-gray-500">
-        {label}
-      </label>
-      <div className="flex items-center gap-1.5 rounded-lg border border-black/10 bg-white px-2.5 py-1.5 focus-within:border-amber-400">
-        <input
-          type="number"
-          min={0}
-          value={value === 0 ? '' : value}
-          onChange={(e) => onChange(parseInt(e.target.value, 10) || 0)}
-          placeholder={placeholder}
-          className="min-w-0 flex-1 bg-transparent text-[11px] placeholder:text-gray-300 focus:outline-none"
-        />
-        <span className="shrink-0 text-[10px] font-semibold text-gray-400">đ</span>
-      </div>
     </div>
   )
 }
