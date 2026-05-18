@@ -54,38 +54,43 @@ function PickerTile({ imageUrl, label, hint, accent, onSelectFromBank, onUpload,
   const accentBg     = accent === 'product' ? 'bg-rose-50'      : 'bg-violet-50'
   const accentText   = accent === 'product' ? 'text-rose-700'   : 'text-violet-700'
 
+  // P20 — COMPACT layout: image strip aspect-[4/3], combined
+  // micro-buttons row, no verbose hint text. Optimized for side-by-side
+  // rendering in a 33% left panel.
   return (
-    <div className="flex flex-col gap-2 rounded-xl border border-black/10 bg-black/[0.02] p-3">
+    <div className="flex flex-col gap-1.5 rounded-lg border border-black/10 bg-white p-2">
       <div className="flex items-center justify-between">
-        <p className="text-[11px] font-bold uppercase tracking-widest text-gray-500">{label}</p>
+        <p className="truncate text-[10px] font-bold uppercase tracking-wider text-gray-600">
+          {label}
+        </p>
         {imageUrl && (
-          <button type="button" onClick={onClear} className="text-[10px] text-gray-400 hover:text-red-500">Bỏ chọn</button>
+          <button type="button" onClick={onClear} className="shrink-0 text-[9px] text-gray-400 hover:text-red-500">Bỏ</button>
         )}
       </div>
-      <div className="aspect-square w-full overflow-hidden rounded-lg border border-dashed border-black/10 bg-white">
+      <div className="aspect-[4/3] w-full overflow-hidden rounded-md border border-dashed border-black/10 bg-gray-50">
         {display ? (
-          <img src={display} alt={label} className={`h-full w-full ${accent === 'product' ? 'object-contain p-2' : 'object-cover'}`} />
+          <img src={display} alt={label} className={`h-full w-full ${accent === 'product' ? 'object-contain p-1' : 'object-cover'}`} />
         ) : (
           <div className="flex h-full items-center justify-center text-gray-300">
-            {isAvatar ? <UserRound className="h-10 w-10" strokeWidth={1.2} /> : <Package className="h-10 w-10" strokeWidth={1.2} />}
+            {isAvatar ? <UserRound className="h-7 w-7" strokeWidth={1.2} /> : <Package className="h-7 w-7" strokeWidth={1.2} />}
           </div>
         )}
       </div>
-      <p className="text-[10px] text-gray-400">{hint}</p>
-      <div className="flex gap-2">
+      {hint && <p className="line-clamp-1 text-[9px] text-gray-400">{hint}</p>}
+      <div className="flex gap-1">
         <button
           type="button"
           onClick={onSelectFromBank}
-          className={`flex flex-1 items-center justify-center gap-1.5 rounded-lg border ${accentBorder} ${accentBg} px-3 py-2 text-xs font-semibold ${accentText} hover:opacity-80`}
+          className={`flex flex-1 items-center justify-center rounded border ${accentBorder} ${accentBg} px-1.5 py-1 text-[10px] font-semibold ${accentText} hover:opacity-80`}
         >
-          Từ Project
+          Project
         </button>
         <button
           type="button"
           onClick={() => inputRef.current?.click()}
-          className="flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-black/10 bg-white px-3 py-2 text-xs font-semibold text-gray-700 hover:bg-black/[0.04]"
+          className="flex flex-1 items-center justify-center gap-1 rounded border border-black/10 bg-white px-1.5 py-1 text-[10px] font-semibold text-gray-700 hover:bg-black/[0.04]"
         >
-          <Upload className="h-3.5 w-3.5" /> Tải lên
+          <Upload className="h-3 w-3" /> Upload
         </button>
       </div>
       <input
@@ -259,70 +264,62 @@ export default function CreativeStudio() {
       <div className="grid min-h-0 flex-1 grid-cols-1 overflow-hidden lg:grid-cols-[1fr_2fr]">
         {/* ── LEFT: input panel (always usable, 33% on lg) ──────── */}
         <aside className="flex flex-col gap-3 overflow-y-auto border-b border-r-0 border-black/8 bg-white/40 p-4 lg:border-b-0 lg:border-r">
-          {/* ── STEP 1: pick creative type ────────────────────────── */}
+          {/* ── ASSETS AT TOP (compact, side-by-side row) ──────────
+                 P20: per user feedback, inputs go ABOVE the creative
+                 picker. Product is ALWAYS shown (every creative needs
+                 it). Avatar is conditional — only shown when the
+                 selected creative requires it (Messenger / WhatsApp /
+                 etc don't need avatar; UGC selfie / lifestyle do). */}
           <section>
             <p className="mb-2 text-[11px] font-bold uppercase tracking-widest text-gray-500">
-              1 · Chọn loại creative
+              {reqs?.requireAvatar ? 'Sản phẩm + Avatar' : 'Sản phẩm'}
+            </p>
+            <div className="flex gap-2">
+              <div className={reqs?.requireAvatar ? 'flex-1 min-w-0' : 'w-full'}>
+                <PickerTile
+                  label="Sản phẩm"
+                  hint="Ảnh rõ packaging"
+                  accent="product"
+                  imageUrl={productImageRef}
+                  onSelectFromBank={() => setPickerMode('product')}
+                  onUpload={handleUploadProduct}
+                  onClear={() => { setSelectedProduct(null); setUploadedProductUrl(null) }}
+                />
+              </div>
+              {reqs?.requireAvatar && (
+                <div className="flex-1 min-w-0">
+                  <PickerTile
+                    label="Avatar AI"
+                    hint="Khuyến nghị cho loại này"
+                    accent="avatar"
+                    imageUrl={avatarImageRef}
+                    onSelectFromBank={() => setPickerMode('avatar')}
+                    onUpload={handleUploadAvatar}
+                    onClear={() => { setSelectedAvatar(null); setUploadedAvatarUrl(null) }}
+                  />
+                </div>
+              )}
+            </div>
+            {reqs?.requireReference && (
+              <div className="mt-2">
+                <ReferencePicker
+                  refs={referenceRefs}
+                  onAdd={(ref) => setReferenceRefs((prev) => [...prev, ref])}
+                  onRemove={(ref) => setReferenceRefs((prev) => prev.filter((r) => r !== ref))}
+                />
+              </div>
+            )}
+          </section>
+
+          {/* ── CREATIVE PICKER (main browsing area, takes most space) */}
+          <section>
+            <p className="mb-2 text-[11px] font-bold uppercase tracking-widest text-gray-500">
+              Loại creative
             </p>
             <AssetTypePicker selectedId={selectedAssetTypeId} onSelect={setSelectedAssetTypeId} />
           </section>
 
-          {/* ── STEP 2+: inputs ALWAYS render, regardless of selection ──
-                 P19 fix — input panel must NEVER disappear. Previously
-                 the whole block was wrapped in `{catalogEntry && reqs &&
-                 (...)}` which meant nothing rendered until the user
-                 committed a creative selection. Now everything renders
-                 always; sections that depend on selection (eg reference
-                 picker) show a hint when no creative is picked yet. */}
-
-          {/* STEP 2 — Sản phẩm (always — every creative needs product) */}
-          <section>
-            <p className="mb-2 text-[11px] font-bold uppercase tracking-widest text-gray-500">
-              2 · Sản phẩm (bắt buộc)
-            </p>
-            <PickerTile
-              label=""
-              hint="Ảnh rõ packaging / logo / label"
-              accent="product"
-              imageUrl={productImageRef}
-              onSelectFromBank={() => setPickerMode('product')}
-              onUpload={handleUploadProduct}
-              onClear={() => { setSelectedProduct(null); setUploadedProductUrl(null) }}
-            />
-          </section>
-
-          {/* STEP 3 — Avatar AI (always render — used by photographic
-              with people; ignored by chat/screenshot/banner creatives) */}
-          <section>
-            <p className="mb-2 text-[11px] font-bold uppercase tracking-widest text-gray-500">
-              3 · Avatar AI (tuỳ chọn)
-            </p>
-            <PickerTile
-              label=""
-              hint={reqs?.requireAvatar
-                ? 'Khuyến nghị cho loại creative này'
-                : reqs
-                  ? 'Loại creative đã chọn không cần avatar'
-                  : 'Có thể chuẩn bị sẵn — sẽ dùng nếu creative cần người'}
-              accent="avatar"
-              imageUrl={avatarImageRef}
-              onSelectFromBank={() => setPickerMode('avatar')}
-              onUpload={handleUploadAvatar}
-              onClear={() => { setSelectedAvatar(null); setUploadedAvatarUrl(null) }}
-            />
-          </section>
-
-          {/* STEP 3.5 — Reference (only shown when creative actually
-              uses it; otherwise pointless to expose) */}
-          {reqs?.requireReference && (
-            <ReferencePicker
-              refs={referenceRefs}
-              onAdd={(ref) => setReferenceRefs((prev) => [...prev, ref])}
-              onRemove={(ref) => setReferenceRefs((prev) => prev.filter((r) => r !== ref))}
-            />
-          )}
-
-          {/* STEP 4 — Optional marketing copy (collapsible, always) */}
+          {/* ── OPTIONAL marketing copy (collapsible) ─────────────── */}
           <section className="rounded-xl border border-black/10 bg-black/[0.02]">
             <button
               type="button"
@@ -330,7 +327,7 @@ export default function CreativeStudio() {
               className="flex w-full items-center justify-between gap-2 px-3 py-2.5 text-left"
             >
               <span className="text-[11px] font-bold uppercase tracking-widest text-gray-500">
-                4 · Nội dung tuỳ chọn
+                Nội dung tuỳ chọn
               </span>
               <span className="text-[10px] text-gray-400">{optExpanded ? '▾' : '▸'}</span>
             </button>
@@ -373,8 +370,7 @@ export default function CreativeStudio() {
             )}
           </section>
 
-          {/* STEP 5 — Generate button (always render; disabled +
-              dynamic hint when prerequisites not met) */}
+          {/* GENERATE button (always render; disabled when prereqs miss) */}
           <button
             type="button"
             onClick={handleGenerate}
@@ -387,12 +383,12 @@ export default function CreativeStudio() {
           {/* Inline status hints — tell user exactly what's missing */}
           {!selectedAssetTypeId && (
             <p className="text-center text-[10px] text-gray-400">
-              ↑ Click "Chọn loại này" trong một card ở Bước 1
+              ↓ Click "Chọn loại này" trong một card phía dưới
             </p>
           )}
           {selectedAssetTypeId && reqs?.requireProduct && !productImageRef && (
             <p className="text-center text-[10px] text-amber-600">
-              ↑ Thêm sản phẩm ở Bước 2
+              ↑ Thêm sản phẩm phía trên
             </p>
           )}
           {needsKie && !kieApiKey && (
@@ -436,13 +432,20 @@ export default function CreativeStudio() {
             <div className="mx-5 mt-3 rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-[11px] text-red-700">
               <p className="font-bold">Không load được history</p>
               <p className="mt-1 text-red-600">{translateJobError(new Error(hydrateError))}</p>
-              {hydrateError.toLowerCase().includes('does not exist') && (
-                <p className="mt-1 text-red-500/80">
-                  → Mở Supabase Dashboard → SQL Editor → paste{' '}
-                  <code className="rounded bg-red-100 px-1 py-0.5 font-mono">migrations/creative_generations.sql</code>{' '}
-                  → Run
-                </p>
-              )}
+              {(() => {
+                const low = hydrateError.toLowerCase()
+                const isTableMissing =
+                  low.includes('pgrst205')
+                  || (low.includes('could not find') && low.includes('table'))
+                  || low.includes('does not exist')
+                return isTableMissing ? (
+                  <p className="mt-1 text-red-500/80">
+                    → Mở Supabase Dashboard → SQL Editor → paste{' '}
+                    <code className="rounded bg-red-100 px-1 py-0.5 font-mono">migrations/creative_generations.sql</code>{' '}
+                    → Run
+                  </p>
+                ) : null
+              })()}
             </div>
           )}
 
@@ -495,12 +498,17 @@ function translateJobError(err: unknown): string {
   const msg = err instanceof Error ? err.message : String(err)
   const low = msg.toLowerCase()
 
-  // Most common cause after Phase 13 deploy — migration not applied
-  if (low.includes('relation') && low.includes('does not exist')) {
-    return 'Bảng creative_generations chưa tồn tại — apply file migrations/creative_generations.sql trên Supabase Dashboard rồi thử lại'
-  }
-  if (low.includes('42p01')) {
-    return 'Database chưa setup — chạy SQL migration cho creative_generations'
+  // Most common cause after Phase 13 deploy — migration not applied.
+  // Patterns seen in the wild:
+  //   • PostgreSQL direct:  "42P01: relation ... does not exist"
+  //   • PostgREST API:      "PGRST205: Could not find the table 'public.X' in the schema cache"
+  if (
+    low.includes('pgrst205')
+    || (low.includes('could not find') && low.includes('table'))
+    || (low.includes('relation') && low.includes('does not exist'))
+    || low.includes('42p01')
+  ) {
+    return 'Bảng creative_generations chưa tồn tại — apply file migrations/creative_generations.sql trên Supabase Dashboard (SQL Editor → Run) rồi thử lại'
   }
   // RLS / permission
   if (low.includes('row-level security') || low.includes('rls')) {
