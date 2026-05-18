@@ -292,36 +292,6 @@ SECTION SPEC — produce EXACTLY these 17 in this order
       overlay, random supplement bottle, overdesigned layout, plain solo product shot with no social proof.
 
 ═══════════════════════════════════════════════════════════════
-PREMIUM-FORM ADDITIONAL SECTION TYPES (only emit when blueprint requests them)
-═══════════════════════════════════════════════════════════════
-
-P1. type="magazine-feature", imageAspectRatio="4:5"
-    • copy: 2-3 short editorial paragraphs framing the product as a featured wellness brand of the year. Magazine-journalist voice — calm, authoritative, aspirational. Mention concrete wellness benefits in elegant prose. NO emoji. NO urgency.
-    • headline: short magazine-cover-style headline (3-6 words, all caps OK), eg "DAILY GREENS. MAXIMUM YOU." / "POWERING MODERN WELLNESS."
-    • subheadline: short tagline below the headline (5-10 words), magazine subhead voice
-    • 1 imagePrompt aspectRatio="4:5":
-      - magcover_01.jpg, style="Premium magazine cover feature", aspectRatio="4:5":
-        Fake premium wellness magazine cover mockup featuring the EXACT uploaded product packaging. Magazine name (invent something like "VITAL" / "WELLNESS" / "GREEN BRIEF" — short, bold, editorial). Below the masthead: small "POWERING MODERN WELLNESS" tagline + tiny "ISSUE 47 · MAY 2026" line. CENTER: the EXACT product packaging large, hero-positioned on a clean editorial set (linen, stone, soft daylight, blueberries / lemon / botanical garnish — premium product photography). BIG editorial headline overlay: render the section's headline + subheadline as visible image text in clean magazine sans-serif typography (eg "DAILY GREENS. MAXIMUM YOU." stacked). RIGHT EDGE: 2-3 small sub-article callout cards in slanted ribbon style (eg "BIOHACK YOUR ROUTINE", "GUT HEALTH UPGRADED", "EXCLUSIVE INTERVIEW"). BOTTOM corner: small "REAL NUTRITION. REAL RESULTS." tagline.
-        VISUAL RULES: premium editorial magazine aesthetic (Huel / Spacegoods / Apple-brochure reference). Clean typography hierarchy. Generous whitespace. Soft natural lighting. Palette: cream / sage / soft green accents (match product packaging color). NO oversized marketing text. NO TikTok aesthetic. NO UGC selfie. NO discount banners. NO HARI INI / DISKAUN urgency. NO emoji. The product is the hero — magazine layout is the frame.
-
-P2. type="stat-proof", imageAspectRatio="1:1"
-    • copy: 2-3 short paragraphs explaining the headline statistic — what was measured, who participated, time-period. Plain confident wellness-science voice. Cite study methodology naturally (eg "Based on a 14-day consumer study with 120 participants"). NO urgency, NO hype.
-    • REQUIRED field: bullets (3-4 short methodology / disclaimer notes, eg "*Based on a 14-day consumer study", "Not intended to diagnose, treat, cure, or prevent any disease.", "Self-reported user data, May 2026")
-    • headline: short stat headline, eg "87% lapor fokus tanpa kemerosotan." — the BIG NUMBER should be in headline so the renderer renders it huge
-    • 1 imagePrompt aspectRatio="1:1":
-      - statproof_01.jpg, style="Stat hero infographic with growth chart", aspectRatio="1:1":
-        Dark modern infographic poster. BACKGROUND: deep charcoal / near-black with very subtle purple-pink gradient hint. HERO: extract the BIG NUMBER from the headline (eg "87%") and render it MASSIVE, top-left or center, in bold sans-serif typography — gradient fill (purple → pink) on the number itself. Below the number, render the rest of the headline phrase as visible text in clean white sans-serif (eg "of users reported laser focus without the crash"). Smaller subtitle line below in light gray small-caps (eg "SELF-REPORTED FOCUS & PRODUCTIVITY AFTER 14 DAYS OF USE"). RIGHT or BOTTOM half: a clean line chart on grid showing growth over 14 days — Day 1 / Day 4 / Day 7 / Day 10 / Day 14 x-axis, 0% / 50% / 100% y-axis, the curve trending upward smoothly to the headline percentage at the right edge. The line itself: glowing purple-pink gradient. The EXACT uploaded product packaging visible bottom-right, sized small-to-medium, with subtle product glow. BOTTOM-LEFT or BOTTOM-CENTER: tiny disclaimer text in light gray (use the bullets field verbatim — "*Based on a 14-day consumer study..."). Optional cursor / click icon hint.
-        VISUAL RULES: modern Spacegoods / Huel / Hims-Hers infographic reference. Premium dark-mode aesthetic. Clean typography hierarchy — the big number dominates, supporting text is small. Chart axis labels readable but understated. NO emoji. NO TikTok / Shopee badges. NO marketing urgency. NO HARI INI. The infographic feels like a science-paper findings card.
-
-P3. type="web-authority-proof", imageAspectRatio="4:5"
-    • copy: 1-2 short paragraphs framing the brand's web reputation — search-engine visibility, third-party coverage, organic trust signal. Calm authoritative voice. NO hype.
-    • headline: short authority headline, eg "Brand yang dicari, dipercayai."
-    • 1-2 imagePrompts aspectRatio="4:5":
-      - serp_01.jpg, style="Google SERP screenshot with Knowledge Panel", aspectRatio="4:5":
-        Fake desktop Google search results page screenshot mockup. TOP: realistic Google search bar with the product / brand name typed in (use the actual product name from brief), small "All / Images / Shopping / News / Videos" tab row below. LEFT 60% (organic results column): 4-5 organic result entries — each with site favicon + breadcrumb URL (eg "huel.com › daily-greens", "healthline.com › nutrition", "vogue.co.uk › wellness", "berita-harian.com.my › kesihatan") + bold blue article title relevant to the product / niche (eg "Daily Greens — 41 Vitamins, Minerals & Superfoods", "Are X Greens Worth the Hype?", "Why Daily Greens Can Renew The Ultimate On-The-Go Superfood") + 2-line snippet excerpt below. Include one "People Also Ask" expandable widget with 3 collapsed questions about the product. RIGHT 40% (Knowledge Panel sidebar): a clean white card containing — EXACT uploaded product packaging as the panel image, bold product name below it, then "★ 4.7  1,248 Google reviews" line, then a compact info table "Ingredients: ..." "Category: Health drink", and a primary blue "Visit official site" CTA button. BOTTOM-LEFT corner: tiny "About this result" / share / feedback icons matching real Google UI.
-        VISUAL RULES: pixel-perfect Google SERP mimicry (2026 desktop UI), authentic Google Sans typography, realistic favicons, real spacing. Light theme. Slight subtle browser chrome / scrollbar hint at the edges. NO oversized marketing text. NO TikTok aesthetic. NO mobile UI. NO floating product PNG outside the Knowledge Panel. Looks like a real screenshot a researcher took.
-
-═══════════════════════════════════════════════════════════════
 CRITICAL IMAGE PROMPT RULES
 ═══════════════════════════════════════════════════════════════
 • ALWAYS English, 30-80 words
@@ -472,25 +442,27 @@ const FORM_BLUEPRINTS: Record<LandingForm, FormBlueprint> = {
   },
 
   // Luxury / lifestyle / brand-building — no urgency, no spam proof.
+  // NOTE: This entry is a LEGACY-COMPAT STUB. The real premium engine
+  // lives in services/forms/premium.ts with its OWN system prompt, OWN
+  // section list (PREMIUM_SECTIONS) and OWN buildPack. Per-form isolation
+  // policy — DO NOT add visual / section logic here. Edit premium.ts.
   'premium': {
-    label: 'PREMIUM BRAND — editorial wellness, magazine-grade visuals',
+    label: 'PREMIUM BRAND — clean lifestyle, brand-first',
     sections: [
-      'hero',                // premium hero — annotated UGC poster (Huel-style)
-      'magazine-feature',    // NEW — fake magazine cover editorial feature
-      'pain',                // subtle problem framing (not panicky)
-      'ingredients',         // ingredient showcase as quality story
-      'mechanism',           // refined explanation, not technical spam
-      'stat-proof',          // NEW — "87% reported X" stat hero + growth chart
-      'benefits',            // elegant benefit list
-      'lifestyle',           // aspirational lifestyle moment
-      'web-authority-proof', // NEW — Google SERP screenshot w/ Knowledge Panel
-      'final-cta',           // premium invitation CTA
+      'hero',
+      'pain',
+      'ingredients',
+      'mechanism',
+      'benefits',
+      'lifestyle',
+      'social-proof',
+      'final-cta',
     ],
     styleNotes: [
-      'Editorial wellness magazine aesthetic — Huel / Spacegoods / Aesop / Tatcha references',
+      'Luxury / clean spacing / minimalist tone — Apple/Dyson vibe',
       'Aspirational lifestyle, quality ingredients, brand heritage focus',
       'Max 1-2 emojis per section, elegant flowing prose',
-      'Magazine-cover + Google-SERP + stat-hero + annotated-poster visuals replace marketplace screenshots',
+      'Curated quality testimonials over quantity screenshots',
       'Premium framing: value, exclusivity, quality promise — no cheap discount',
       'CTA tone: invitation, not command',
       'Cinematic studio-clean image visuals OK for premium (deviates from default UGC rule)',
@@ -503,7 +475,6 @@ const FORM_BLUEPRINTS: Record<LandingForm, FormBlueprint> = {
       '"HARI INI SAHAJA", "STOK TERHAD", FOMO language',
       'Heavy emoji use 🔥 🚨 💥',
       'Hard-sell offer stack with bonus expiry warnings',
-      'social-proof section with marketplace screenshots (premium uses web-authority-proof instead)',
     ],
   },
 

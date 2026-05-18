@@ -35,37 +35,55 @@ import {
 import { useBankStore } from '../../../../stores/bankStore'
 import { directGeminiVision } from '../../../../utils/gemini'
 
-// ── 11-section luxury editorial flow ─────────────────────────────────────
+// ── 14-section luxury editorial flow (Phase 7 — 3 new editorial visuals) ─
+//
+// Phase 7 (2026-05) adds 3 magazine-grade visuals exclusive to this form:
+//   • magazine-feature    — fake premium wellness magazine cover featuring
+//                            the product (Huel / VITAL reference)
+//   • stat-proof          — big-stat hero infographic + growth chart
+//                            (Spacegoods / Hims-Hers reference)
+//   • web-authority-proof — Google SERP screenshot mockup w/ Knowledge
+//                            Panel (organic trust signal)
+//
+// Inserted at editorial-natural positions: magazine-feature right after
+// hero, stat-proof between mechanism & benefits, web-authority-proof
+// between social-proof & news-proof. No other form sees these sections.
 const PREMIUM_SECTIONS: SectionType[] = [
-  'hero',               // 1. Luxury hero statement (cinematic)
-  'pain',               // 2. Brand philosophy / "the gap we noticed" (NOT clinical pain)
-  'lifestyle',          // 3. Aspirational lifestyle moment
-  'product-discovery',  // 4. Product identity reveal (studio premium)
-  'ingredients',        // 5. Ingredient spotlight (single hero compound)
-  'mechanism',          // 6. Texture / sensorial experience (NOT clinical)
-  'benefits',           // 7. Premium benefits (3-4 elegant phrases)
-  'social-proof',       // 8. Refined editorial testimonials (curated, NOT spam)
-  'news-proof',         // 9. Premium press editorial (Vogue / Tatler / lifestyle mag style)
-  'faq',                // 10. Minimal FAQ (3-4 sophisticated Q&A)
-  'final-cta',          // 11. Premium soft CTA — single elegant invitation
+  'hero',                // 1. Luxury hero statement (annotated UGC poster — Huel reference)
+  'magazine-feature',    // 2. NEW — fake magazine cover editorial feature
+  'pain',                // 3. Brand philosophy / "the gap we noticed"
+  'lifestyle',           // 4. Aspirational lifestyle moment
+  'product-discovery',   // 5. Product identity reveal (studio premium)
+  'ingredients',         // 6. Ingredient spotlight (single hero compound)
+  'mechanism',           // 7. Texture / sensorial experience
+  'stat-proof',          // 8. NEW — big-stat infographic + growth chart
+  'benefits',            // 9. Premium benefits (3-4 elegant phrases)
+  'social-proof',        // 10. Refined editorial testimonials (curated)
+  'web-authority-proof', // 11. NEW — Google SERP screenshot w/ Knowledge Panel
+  'news-proof',          // 12. Premium press editorial (Vogue / Tatler style)
+  'faq',                 // 13. Minimal FAQ (3-4 sophisticated Q&A)
+  'final-cta',           // 14. Premium soft CTA — single elegant invitation
 ]
 
 // ── Image budget — LIGHT, LARGE, EDITORIAL ───────────────────────────────
 const IMAGES_PER_SECTION: Partial<Record<SectionType, number>> = {
-  'hero':              1,  // single cinematic hero
-  'pain':              1,  // moody portrait or environmental
-  'lifestyle':         2,  // aspirational lifestyle moments
-  'product-discovery': 1,  // studio product reveal
-  'ingredients':       2,  // hero ingredient + supporting macro
-  'mechanism':         2,  // texture macro + ritual moment
-  'benefits':          1,  // editorial benefit composition
-  'social-proof':      2,  // editorial portrait testimonials
-  'news-proof':        2,  // premium press editorial mocks
-  'faq':               0,  // text-only
-  'final-cta':         1,  // premium product hero
+  'hero':                  1,  // single annotated UGC poster (Huel reference)
+  'magazine-feature':      1,  // NEW — fake magazine cover
+  'pain':                  1,  // moody portrait or environmental
+  'lifestyle':             2,  // aspirational lifestyle moments
+  'product-discovery':     1,  // studio product reveal
+  'ingredients':           2,  // hero ingredient + supporting macro
+  'mechanism':             2,  // texture macro + ritual moment
+  'stat-proof':            1,  // NEW — big-stat infographic + growth chart
+  'benefits':              1,  // editorial benefit composition
+  'social-proof':          2,  // editorial portrait testimonials
+  'web-authority-proof':   1,  // NEW — Google SERP screenshot mockup
+  'news-proof':            2,  // premium press editorial mocks
+  'faq':                   0,  // text-only
+  'final-cta':             1,  // premium product hero
 }
-// Total ≈ 15 images — fewest of any form. Each image larger and more
-// emotional than form 1's UGC quantity strategy.
+// Total ≈ 18 images. Each image larger and more emotional than form 1's
+// UGC quantity strategy.
 
 // ── Premium system prompt — OWN SYSTEM ───────────────────────────────────
 
@@ -78,30 +96,54 @@ OUTPUT FORMAT — STRICT JSON ONLY
 ═══════════════════════════════════════════════════════════════
 {
   "language": "ms" | "vi" | "en",
-  "sections": [ ...exactly 11 section objects in the order below... ]
+  "sections": [ ...exactly 14 section objects in the order below... ]
 }
 
 Each section has standard shape: type, title, titleVi, copy, viTranslation, layoutGuide, imageAspectRatio, optionally headline / subheadline / cta / bullets / faqs / reviews / imagePrompts. ALL imageAspectRatio = "1:1" or "4:5" — NO 16:9 banners (premium is editorial, not promo).
 
 ═══════════════════════════════════════════════════════════════
-11-SECTION LUXURY EDITORIAL FLOW — produce EXACTLY in order
+14-SECTION LUXURY EDITORIAL FLOW — produce EXACTLY in order
 ═══════════════════════════════════════════════════════════════
 
-1. type="hero" — PREMIUM WELLNESS STATEMENT
+1. type="hero" — PREMIUM ANNOTATED POSTER (Huel / Daily Greens reference)
    • headline = a confident wellness-brand line (6-10 words). Calm, aspirational. NO emoji. NO ALL-CAPS. NO product name. Example: "Satu ritual harian, satu pelaburan jangka panjang" / "Wellness yang anda layak"
    • subheadline = 1-line brand promise in refined prose
    • copy = 2-3 line paragraph setting tone — confident, elegant, understated. NO marketing hype. Speak as the brand voice, not first-person diary.
    • DO NOT include cta in hero (premium is sparse — no early CTA).
    • DO NOT include urgencyText / offerStrip (zero urgency for this form).
-   • 1 imagePrompt: cinematic premium WELLNESS lifestyle hero shot — elegant Malaysian woman in her tasteful affluent home (marble kitchen counter / linen-dressed bedroom / sunlit bathroom shelf) with the PRODUCT clearly visible naturally in the scene (eg held softly while she has morning coffee, or placed on her wellness shelf next to fresh fruit). NOT a fashion model pose. NOT a perfume / beauty / cosmetic campaign. NOT empty-room posing. PRODUCT MUST BE VISIBLE. Soft natural daylight, beige/cream/dusty rose/warm linen palette. Reference aesthetic: Aman / Aesop / Tatcha / Japanese wellness brand / Scandinavian wellness — NOT Vogue editorial / Zara campaign.
+   • 1 imagePrompt aspectRatio="4:5", style="Premium annotated UGC poster":
+     Annotated brand-first poster (Huel Daily Greens / Spacegoods Instagram-creative reference). The EXACT uploaded product packaging center-frame, held by a hand entering from the bottom OR resting on a clean stone / linen / kitchen surface with subtle natural garnish (lemon slice, blueberries, herbs, fresh wellness ingredients). Soft natural daylight wellness scene background, slightly out-of-focus.
+     CALLOUT LABELS — render 4-5 handwritten / casual marker callouts arranged around the product, each connected to the product / scene point with a thin curved hand-drawn arrow. Each callout 3-6 Malay words in casual script font:
+       • One ingredient highlight (eg "Lion's mane")
+       • One benefit (eg "Tenaga, imuniti & pemulihan")
+       • One spec / metric (eg "41 vitamin & SuperFoods")
+       • One low-calorie / unique-claim chip (eg "Cuma 25 kalori")
+       • Optional brand domain url at one corner (eg invented "brandname.com")
+     DECORATIVE: small hand-drawn stars / sparkles / dots scattered. Top corner: thin script product wordmark with a small ⭐ doodle.
+     PALETTE: cream / sage / soft green accents matching the product packaging. Not high-contrast.
+     ABSOLUTE: aesthetic = Huel / Spacegoods premium wellness Instagram creative. NOT TikTok. NOT cinematic luxury studio. NOT UGC selfie with face dominating. NOT floating product PNG with no scene. NO harsh marketing typography. NO HARI INI / DISKAUN urgency. NO multi-bottle stack.
 
-2. type="pain" — BRAND PHILOSOPHY ("the gap we noticed")
+2. type="magazine-feature" — FAKE PREMIUM MAGAZINE COVER (VITAL reference)
+   • headline = short magazine-cover-style headline (3-6 words, all caps OK). Example: "DAILY GREENS. MAXIMUM YOU." / "WELLNESS BERMULA DI SINI."
+   • subheadline = magazine tagline 5-10 words. Example: "41 vitamin. Zero karut. Semua manfaat."
+   • copy = 2-3 short editorial paragraphs in magazine-journalist voice — calm, authoritative, aspirational. Frame the product as a featured wellness brand of the year. Mention concrete wellness benefits in elegant prose. NO emoji. NO urgency.
+   • DO NOT include cta.
+   • 1 imagePrompt aspectRatio="4:5", style="Premium magazine cover feature":
+     Fake premium wellness magazine COVER mockup featuring the EXACT uploaded product packaging. Magazine masthead at top in bold condensed serif or display sans-serif — invent a name like "VITAL" / "WELLNESS" / "GREEN BRIEF". Below masthead: small "POWERING MODERN WELLNESS" (or similar) tagline + tiny "ISSUE 47 · MAY 2026" line + small barcode hint at one corner.
+     CENTER: the EXACT uploaded product packaging hero-positioned on a clean editorial set — linen / stone / soft daylight / blueberries / lemon / botanical garnish. Premium magazine product photography quality.
+     BIG EDITORIAL HEADLINE OVERLAY (lower half): render the headline + subheadline as visible image text in clean magazine sans-serif (stacked, eg "DAILY GREENS. MAXIMUM YOU." with subhead "41 vitamins. Zero nonsense. All benefit." underneath in lighter weight).
+     RIGHT EDGE (or LEFT EDGE): 2-3 small slanted ribbon callout cards in green / cream accent, each teasing a sub-article (eg "BIOHACK YOUR ROUTINE", "GUT HEALTH UPGRADED", "EXCLUSIVE INTERVIEW WITH X").
+     BOTTOM corner: small "REAL NUTRITION. REAL RESULTS." (or similar) tagline in elegant small-caps.
+     PALETTE: cream / soft sage / green / off-white — matching product packaging color family.
+     ABSOLUTE: aesthetic = Huel-magazine / Spacegoods-magazine / Apple-brochure / premium wellness editorial. Generous whitespace. Clean typography hierarchy. NOT TikTok. NOT UGC selfie. NO discount banners. NO HARI INI / DISKAUN. NO emoji. NO oversized red CTA buttons.
+
+3. type="pain" — BRAND PHILOSOPHY ("the gap we noticed")
    • copy = 3-4 line refined paragraph framing the brand's WHY. Not "Anda penat?" — more "Kami percaya bahawa…", "Dalam dunia yang sentiasa pantas, …". Aspirational + observational tone. NEVER capslock. NEVER emoji.
    • DO NOT include bullets (premium prefers prose over bulleted lists)
    • DO NOT include cta in this section.
    • 1 imagePrompt: a moody atmospheric photograph that evokes the gap the brand fills — could be a quiet morning routine, a hand on glass, a candle moment, an empty luxe bathroom — NOT showing the product yet. Editorial fashion-magazine mood photograph. Soft natural light. Restrained palette.
 
-3. type="lifestyle" — PREMIUM WELLNESS RITUAL
+4. type="lifestyle" — PREMIUM WELLNESS RITUAL
    • copy = 3-4 line refined paragraph evoking the wellness lifestyle the product fits. "Untuk pagi yang tenang", "Untuk seorang yang menghargai detik kecil dan kesihatan jangka panjang". NO bullets, no emoji.
    • DO NOT include cta.
    • 2 imagePrompts — BOTH MUST SHOW THE PRODUCT NATURALLY IN FRAME (this is the user's #1 fix priority — premium form was generating fashion-empty rooms; product MUST be visible in lifestyle):
@@ -109,13 +151,13 @@ Each section has standard shape: type, title, titleVi, copy, viTranslation, layo
        (b) Evening wellness routine — same OR different elegant Malaysian woman in her bathroom shelf moment OR bedside ritual with the EXACT product clearly visible. Soft warm evening light, candle / linen / muted tones. Reference: Aesop bathroom aesthetic / Scandinavian wellness home.
      BOTH: subtle quietly-confident demeanor (NOT broad smile, NOT phone selfie, NOT fashion-model pose). NOT empty-room standing pose. NOT perfume-ad aesthetic.
 
-4. type="product-discovery" — PRODUCT IDENTITY REVEAL
+5. type="product-discovery" — PRODUCT IDENTITY REVEAL
    • headline = product introduction line in confident editorial register (eg "Hadir dengan satu janji.")
    • copy = 4-5 line paragraph introducing the product as a piece of considered design — formulation philosophy, intentional sourcing, craftsmanship. NOT bulleted ingredients. Aspirational language.
    • DO NOT include cta.
    • 1 imagePrompt: luxury studio product photography — the EXACT uploaded product on a premium surface (raw silk, soft marble, dusty linen, sculpted shadow). Cinematic studio lighting with controlled gradient background. Editorial fashion-still-life aesthetic. NO designed text overlay. NO badges.
 
-5. type="ingredients" — INGREDIENT SPOTLIGHT (the hero compound)
+6. type="ingredients" — INGREDIENT SPOTLIGHT (the hero compound)
    • copy = 3-4 line refined paragraph telling the story of ONE hero ingredient — provenance, why selected, what it does in poetic-clinical language. Lift the ingredient into a story, not a bullet.
    • bullets = optional 2-3 supporting ingredients each in single-line "Compound — what it does" prose
    • DO NOT include cta.
@@ -123,38 +165,66 @@ Each section has standard shape: type, title, titleVi, copy, viTranslation, layo
        (a) Hero ingredient macro — natural close-up of the source (eg ginseng root on a linen square, marine algae texture, rosehip macro, ginger slice) on a luxe neutral background. Fashion-editorial still life, premium soft lighting.
        (b) Supporting macro — a different ingredient texture (eg powder swatch, oil drop on glass, capsule cross-section). Editorial still-life style.
 
-6. type="mechanism" — TEXTURE / SENSORIAL EXPERIENCE (NOT clinical mechanism)
+7. type="mechanism" — TEXTURE / SENSORIAL EXPERIENCE (NOT clinical mechanism)
    • copy = 3-4 line refined paragraph describing how the product feels — application moment, sensory experience, the small ritual. Replace "how it works" mechanism with "how it feels". NO biology jargon. NO bulleted process steps.
    • DO NOT include cta.
    • 2 imagePrompts:
        (a) Texture macro — close-up of the product's actual texture (cream swatch on fingertips, oil dripping, capsule on porcelain dish, serum on smooth surface). Premium editorial macro photography.
        (b) Ritual moment — model's hands using the product OR the product in a serene bathroom shelf moment. Cinematic intimate composition. NO face needed.
 
-7. type="benefits" — REFINED BENEFITS (NOT bullet spam)
+8. type="stat-proof" — BIG-STAT INFOGRAPHIC + GROWTH CHART (Spacegoods / Hims-Hers reference)
+   • headline = short stat headline embedding the BIG NUMBER. Example: "87% lapor fokus tanpa kemerosotan." / "92% rasa perubahan ketara dalam 14 hari."
+   • copy = 2-3 short paragraphs explaining the headline statistic — what was measured, who participated, time-period. Plain confident wellness-science voice. Cite study methodology naturally (eg "Berdasarkan kajian pengguna 14-hari dengan 120 peserta"). NO urgency, NO hype.
+   • bullets = REQUIRED 3-4 short methodology / disclaimer notes (eg "*Berdasarkan kajian pengguna 14 hari, Mei 2026", "Data laporan pengguna sendiri", "Bukan diagnosis perubatan / tidak menggantikan nasihat doktor")
+   • DO NOT include cta.
+   • 1 imagePrompt aspectRatio="1:1", style="Stat hero infographic with growth chart":
+     Dark modern infographic poster. BACKGROUND: deep charcoal / near-black with very subtle purple-pink gradient hint (subtle, not loud).
+     HERO: extract the BIG NUMBER from headline (eg "87%") — render MASSIVE in top-left or top-center, bold modern sans-serif typography, gradient fill purple → pink on the number itself, occupying ~40% of canvas height.
+     Below the number: render the rest of the headline phrase as visible image text in clean white sans-serif (eg "of users reported laser focus without the crash" or Malay equivalent from headline). Smaller subtitle line below in light gray small-caps reading the study methodology (eg "SELF-REPORTED FOCUS & PRODUCTIVITY AFTER 14 DAYS OF USE").
+     RIGHT-BOTTOM or BOTTOM HALF: clean line CHART on soft grid. X-axis labels "DAY 1 · DAY 4 · DAY 7 · DAY 10 · DAY 14". Y-axis labels "0% · 50% · 100%". Line itself: glowing purple-pink gradient stroke, trending smoothly upward to ~headline percentage at right edge.
+     EXACT uploaded product packaging bottom-right corner, small-to-medium sized, subtle product glow / soft halo. Render the actual brand label faithfully.
+     BOTTOM-LEFT or BOTTOM-CENTER: tiny disclaimer text in light-gray small-caps — use the bullets field verbatim (eg "*Based on a 14-day consumer study, May 2026").
+     Optional small cursor / click icon hint as subtle decorative element.
+     ABSOLUTE: modern dark-mode wellness science infographic aesthetic (Spacegoods / Hims-Hers / Huel-data reference). Big number dominates. NO emoji. NO TikTok badges. NO HARI INI / DISKAUN urgency. NO loud red/yellow marketing colors.
+
+9. type="benefits" — REFINED BENEFITS (NOT bullet spam)
    • copy = 3-4 line paragraph framing 3-4 benefits AS ELEGANT PHRASES, not bullets. "Tenaga yang stabil. Tidur yang lebih lena. Pagi yang lebih ringan." Sentence fragments allowed for rhythm.
    • bullets = optional 3-4 short single-line refined benefit phrases (no emoji, no ✅, no urgency)
    • DO NOT include cta.
    • 1 imagePrompt: PREMIUM WELLNESS LIFESTYLE benefit composition — elegant Malaysian woman in a quietly confident moment that conveys the benefit (eg energetic morning glow, peaceful evening, healthy active life) with the PRODUCT VISIBLE NATURALLY in the scene (held / on shelf / on table). Premium wellness-brand aesthetic. NOT icon grid. NOT infographic. NOT a fashion-model headshot. Reference: premium wellness brand campaign (Aman / Tatcha / Goop), NOT Vogue editorial.
 
-8. type="social-proof" — CURATED EDITORIAL TESTIMONIALS
+10. type="social-proof" — CURATED EDITORIAL TESTIMONIALS
    • reviews = 3 ONLY (NOT 10 — premium is curation, not quantity). Each testimonial in refined prose (2-3 sentences each), reviewer with a single-name byline ("— Sarah K., Kuala Lumpur" / "— Ahmad N., Penang"). NO star ratings. NO emoji. NO "Verified Purchase" badge.
    • copy = 1-2 line framing line introducing the testimonials
    • DO NOT include cta.
    • 2 imagePrompts: two editorial portrait testimonials — elegant Malaysian women (or men) in soft natural light, candid moment (NOT looking at camera, NOT smiling broadly), perhaps holding a coffee or sitting near a window. Fashion-magazine portrait quality. NO Shopee/TikTok/Facebook screenshot UI. NO marketplace badges.
 
-9. type="news-proof" — PREMIUM PRESS EDITORIAL
+11. type="web-authority-proof" — GOOGLE SERP SCREENSHOT MOCKUP
+    • headline = short authority headline. Example: "Jenama yang dicari, dipercayai."
+    • copy = 1-2 short paragraphs framing the brand's web reputation — search-engine visibility, third-party coverage, organic trust signal. Calm authoritative voice. NO hype.
+    • DO NOT include cta.
+    • 1 imagePrompt aspectRatio="4:5", style="Google SERP screenshot with Knowledge Panel":
+      Fake DESKTOP Google search results page screenshot mockup (cropped to 4:5 portrait). Pixel-perfect Google SERP mimicry — 2026 desktop UI.
+      TOP: realistic Google search bar with the EXACT product / brand name from brief typed in. Small nav tab row beneath ("All · Images · Shopping · News · Videos · Forums").
+      LEFT 60% (organic results column): 4-5 organic result entries. Each: small site favicon + breadcrumb URL (mix authoritative-looking Malaysian / international domains: brand official site, healthline / berita-harian.com.my / health.com.my / hellodoktor.com / vogue-asia / mens-health) + bold blue clickable title relevant to the product niche (eg "[Brand Name] — 41 Vitamins, Minerals & Superfoods", "Are [Brand] Greens Worth The Hype?") + 2-line gray snippet excerpt beneath. Include one "People Also Ask" expandable widget with 3 collapsed questions about the product / niche.
+      RIGHT 40% (Knowledge Panel sidebar): clean white panel card containing — the EXACT uploaded product packaging as the panel's hero image at top + bold product name below + "★ 4.7  1,248 Google reviews" rating line + compact key-value info table ("Ingredients: ...", "Category: Health drink") + primary blue "Visit official site" CTA button.
+      BOTTOM-LEFT corner: tiny "About this result" / share / feedback icons matching real Google UI.
+      Light Google theme. Authentic Google Sans typography. Real spacing. Subtle browser chrome / scrollbar hint at edges. Subtle JPEG compression hint so it feels like a real screenshot.
+      ABSOLUTE: NO TikTok aesthetic; NO mobile UI (DESKTOP only); NO oversized marketing text; NO floating product PNG outside the Knowledge Panel; NO fake Google logo deformations; NO HARI INI / DISKAUN urgency; NO emoji rendered as Google emoji; NO cartoonish Google styling.
+
+12. type="news-proof" — PREMIUM PRESS EDITORIAL
    • copy = 2-3 line paragraph framing press recognition in refined language ("Diiktiraf oleh editor kecantikan", "Terpilih dalam senarai…").
    • DO NOT include cta.
    • 2 imagePrompts:
        (a) Mock premium press editorial — Vogue / Tatler / Harper's Bazaar / Female Malaysia style article layout (clean serif typography, generous whitespace, single product feature image). NOT mStar / Berita Harian style (those are mass-market — wrong register for premium).
        (b) Award / recognition badge mock — minimal editorial design, neutral palette, single line of recognition text. NO loud color, NO starbursts, NO discount badges.
 
-10. type="faq" — MINIMAL SOPHISTICATED Q&A
+13. type="faq" — MINIMAL SOPHISTICATED Q&A
     • faqs = 3-4 ONLY. Questions phrased in refined register ("Bagaimana saya boleh memasukkan ritual ini dalam rutin saya?", "Adakah formulasi ini sesuai untuk kulit sensitif?"). Answers in brand voice, 2-3 lines each. NO sales push in answers.
     • imagePrompts = [] (text-only)
     • DO NOT include cta in this section.
 
-11. type="final-cta" — PREMIUM SOFT INVITATION
+14. type="final-cta" — PREMIUM SOFT INVITATION
     • headline = elegant closing line (eg "Hadiahkan diri anda satu permulaan baru.")
     • copy = 3-4 line closing paragraph in brand voice — invitation rather than command. Aspirational, confident, calm.
     • cta = ONE soft elegant CTA button text:
@@ -266,7 +336,7 @@ function buildPremiumUserPrompt(
   lines.push('═══════════════════════════════════════════════════════════════')
   lines.push('CRITICAL FOR THIS FORM')
   lines.push('═══════════════════════════════════════════════════════════════')
-  lines.push('  • ONLY ONE CTA — in section 11 (final-cta). Other 10 sections have NO cta field.')
+  lines.push('  • ONLY ONE CTA — in section 14 (final-cta). Other 13 sections have NO cta field.')
   lines.push('  • NO emoji ANYWHERE — not in headlines, not in copy, not in bullets, not in CTA text.')
   lines.push('  • NO ALL-CAPS. Refined editorial typography.')
   lines.push('  • NO urgencyText / offerStrip / scarcity / countdown.')
@@ -275,7 +345,7 @@ function buildPremiumUserPrompt(
   lines.push('  • Social proof = 3 curated editorial testimonials with name byline, NO star ratings, NO marketplace badges.')
   lines.push('')
 
-  lines.push('Now produce the 11-section premium luxury JSON.')
+  lines.push('Now produce the 14-section premium luxury JSON.')
 
   return lines.join('\n')
 }
