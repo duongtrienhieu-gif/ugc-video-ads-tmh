@@ -13,6 +13,7 @@ import { generateHookLab } from './services/generateHookLab'
 import { generateFunnel } from './services/generateFunnel'
 import { generateCoc } from './services/generateCoc'
 import { generateSalesLetter } from './services/generateSalesLetter'
+import { generateMultiAngle } from './services/generateMultiAngle'
 import { getGoalById } from './services/presets'
 import { useLabContentStore } from './store'
 import InputPanel from './components/InputPanel'
@@ -22,6 +23,7 @@ import HookLabModal from './components/HookLabModal'
 import FunnelModal from './components/FunnelModal'
 import CocModal from './components/CocModal'
 import SalesLetterModal from './components/SalesLetterModal'
+import MultiAngleModal from './components/MultiAngleModal'
 import AutoSaveIndicator from '../../components/AutoSaveIndicator'
 import { useSessionPersist } from '../../services/sessionPersistence'
 
@@ -77,6 +79,11 @@ export default function LabContent() {
   const [salesLetterOpen, setSalesLetterOpen] = useState(false)
   const [salesLetterGenerating, setSalesLetterGenerating] = useState(false)
   const [salesLetterError, setSalesLetterError] = useState<string | null>(null)
+
+  // ── Multi-Angle Ad Pack modal state ────────────────────────────────────
+  const [multiAngleOpen, setMultiAngleOpen] = useState(false)
+  const [multiAngleGenerating, setMultiAngleGenerating] = useState(false)
+  const [multiAngleError, setMultiAngleError] = useState<string | null>(null)
 
   const lastParamsRef = useRef<Omit<LabBriefParams, 'productId'> | null>(null)
 
@@ -355,6 +362,30 @@ export default function LabContent() {
     }
   }
 
+  // ── Multi-Angle Ad Pack ────────────────────────────────────────────────
+  const handleOpenMultiAngle = () => {
+    setMultiAngleError(null)
+    setMultiAngleOpen(true)
+    if (!result?.multiAngleOutput) void runMultiAngleGeneration()
+  }
+
+  const runMultiAngleGeneration = async () => {
+    if (!result) return
+    setMultiAngleGenerating(true)
+    setMultiAngleError(null)
+    try {
+      const output = await generateMultiAngle(result)
+      setResult((prev) => prev ? { ...prev, multiAngleOutput: output } : prev)
+      sessionApi.forceSave()
+      addToast(`Đã tạo ${output.ads.length} ads`, 'success')
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      setMultiAngleError(msg)
+    } finally {
+      setMultiAngleGenerating(false)
+    }
+  }
+
   const cachedModalOutput = (() => {
     if (!modalAngle || !result) return null
     const slot = result.angleOutputs?.[modalAngle.id]
@@ -397,6 +428,7 @@ export default function LabContent() {
           onOpenFunnel={handleOpenFunnel}
           onOpenCoc={handleOpenCoc}
           onOpenSalesLetter={handleOpenSalesLetter}
+          onOpenMultiAngle={handleOpenMultiAngle}
         />
       </div>
 
@@ -449,6 +481,16 @@ export default function LabContent() {
         error={salesLetterError}
         onClose={() => setSalesLetterOpen(false)}
         onGenerate={(length, angle) => void runSalesLetterGeneration(length, angle)}
+      />
+
+      <MultiAngleModal
+        open={multiAngleOpen}
+        result={result}
+        cachedOutput={result?.multiAngleOutput ?? null}
+        isGenerating={multiAngleGenerating}
+        error={multiAngleError}
+        onClose={() => setMultiAngleOpen(false)}
+        onGenerate={() => void runMultiAngleGeneration()}
       />
     </div>
   )

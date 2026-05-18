@@ -295,6 +295,45 @@ export interface SalesLetterOutput {
   generatedAt: number
 }
 
+// ── Multi-Angle Ad Pack ───────────────────────────────────────────────────
+// 5 ready-to-run paid ads, each engineered around a DIFFERENT psychological
+// door: Logical, Emotional, Social Proof, Fear/Loss, Aspirational.
+// This is the "test pack" that real media buyers run — 5 angles at once,
+// let the algo pick the winner.
+
+export type AdAngleType =
+  | 'logical'      // data, mechanism, ingredient stats
+  | 'emotional'    // storytelling, vulnerability, struggle
+  | 'social-proof' // testimonials, "X people use this"
+  | 'fear-loss'    // loss aversion, cost of inaction
+  | 'aspirational' // future pacing, lifestyle, who you'll become
+
+export interface MultiAngleAd {
+  id: string
+  angleType: AdAngleType
+  /** VN label for the angle (shown on the card). */
+  angleLabelVi: string
+  /** Vietnamese hook (1-2 lines, opens the ad). */
+  hookVi: string
+  /** Malay hook. */
+  hookMy: string
+  /** Vietnamese body (60-100 words). */
+  bodyVi: string
+  /** Malay body. */
+  bodyMy: string
+  /** Vietnamese CTA line. */
+  ctaVi: string
+  /** Malay CTA line. */
+  ctaMy: string
+  /** Visual direction (Vietnamese) — 1-2 lines describing creative. */
+  visualDirectionVi: string
+}
+
+export interface MultiAngleOutput {
+  ads: MultiAngleAd[]    // 5 ads, one per angle type
+  generatedAt: number
+}
+
 // ── Output ────────────────────────────────────────────────────────────────
 export interface LabBriefResult {
   /** Product link */
@@ -338,6 +377,9 @@ export interface LabBriefResult {
 
   /** Cached Long-Form Sales Letter output. Optional. */
   salesLetterOutput?: SalesLetterOutput
+
+  /** Cached Multi-Angle Ad Pack output (5 ads, 5 angles). Optional. */
+  multiAngleOutput?: MultiAngleOutput
 
   generatedAt: number
 }

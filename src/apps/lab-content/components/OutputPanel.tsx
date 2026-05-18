@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { Sparkles, Save, RefreshCw, Brain, Target, Anchor, Compass, Layers, ScrollText } from 'lucide-react'
+import { Sparkles, Save, RefreshCw, Brain, Target, Anchor, Compass, Layers, ScrollText, Layers3 } from 'lucide-react'
 import type { ContentAngle, LabBriefResult } from '../types'
 import { getGoalById, getToneById } from '../services/presets'
 import PainPointCard from './PainPointCard'
@@ -18,11 +18,12 @@ interface OutputPanelProps {
   onOpenFunnel: () => void
   onOpenCoc: () => void
   onOpenSalesLetter: () => void
+  onOpenMultiAngle: () => void
 }
 
 export default function OutputPanel({
   result, isGenerating, isAlreadySaved,
-  onRegenerate, onSave, onOpenCaption, onOpenScript, onOpenHookLab, onOpenFunnel, onOpenCoc, onOpenSalesLetter,
+  onRegenerate, onSave, onOpenCaption, onOpenScript, onOpenHookLab, onOpenFunnel, onOpenCoc, onOpenSalesLetter, onOpenMultiAngle,
 }: OutputPanelProps) {
   const [lang, setLang] = useState<'vi' | 'my'>('vi')
 
@@ -237,6 +238,33 @@ export default function OutputPanel({
             >
               <Target className="h-3.5 w-3.5" />
               {result.funnelOutput ? 'Mở Phễu Content (9 caption)' : 'Tạo Phễu Content'}
+            </button>
+          </div>
+        </section>
+
+        {/* Multi-Angle Ad Pack */}
+        <section>
+          <div className="rounded-2xl border border-violet-200 bg-gradient-to-br from-blue-50/40 via-violet-50/40 to-rose-50/40 p-4">
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest text-gray-500">
+                <Layers3 className="h-3 w-3" />
+                Multi-Angle Ad Pack · 5 góc paid ads
+              </div>
+              {result.multiAngleOutput && (
+                <span className="rounded-full bg-violet-100 px-2 py-0.5 text-[10px] font-semibold text-violet-700">
+                  ✅ Đã tạo · {result.multiAngleOutput.ads.length} ads
+                </span>
+              )}
+            </div>
+            <p className="mb-3 text-[12px] leading-relaxed text-gray-700">
+              5 ad ready-to-run, mỗi cái 1 cửa tâm lý khác: <b>Logical · Emotional · Social Proof · Fear · Aspirational</b>. Mỗi ad có Hook + Body + CTA + Visual direction. Đủ test winner trên Meta/TikTok.
+            </p>
+            <button
+              onClick={onOpenMultiAngle}
+              className="flex w-full items-center justify-center gap-2 rounded-full bg-gradient-to-r from-blue-600 via-violet-600 to-rose-600 px-4 py-2.5 text-[12px] font-bold text-white shadow-sm transition-all hover:opacity-90"
+            >
+              <Layers3 className="h-3.5 w-3.5" />
+              {result.multiAngleOutput ? 'Mở Multi-Angle Pack (5 ads)' : 'Tạo Multi-Angle Ad Pack'}
             </button>
           </div>
         </section>
