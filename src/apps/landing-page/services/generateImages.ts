@@ -768,7 +768,15 @@ function buildFinalPrompt(job: ImageJob, hasProductRefs: boolean): string {
     parts.push(PAIN_NO_PRODUCT_DIRECTIVE)
   }
 
-  parts.push(job.prompt.prompt)
+  // ── Comparison section: inject structured comparisonData when available so
+  // the image generator gets explicit US vs THEM bullet pairs rather than
+  // trying to parse them out of the free-form imagePrompt body. Eliminates
+  // the "Không tìm được cặp bullet THEM/US" failure mode. ───────────────────
+  if (job.section.type === 'comparison' && job.section.comparisonData) {
+    parts.push(buildComparisonStructuredPrompt(job.section.comparisonData, job.prompt.prompt))
+  } else {
+    parts.push(job.prompt.prompt)
+  }
 
   // Z22 — per-image diversity directive (replaced by continuity directive
   // for advertorial form via buildDiversityDirective branch logic).
@@ -793,6 +801,35 @@ function buildFinalPrompt(job: ImageJob, hasProductRefs: boolean): string {
   }
 
   return parts.join('\n\n')
+}
+
+/** Build a STRUCTURED comparison prompt that embeds the explicit
+ *  US-vs-THEM bullet pairs inline. KIE renders the infographic directly
+ *  from this data — no parser, no regex, no "find THEM/US" instruction.
+ *  Caller falls back to the free-form prompt when comparisonData is absent. */
+function buildComparisonStructuredPrompt(
+  data: import('../types').ComparisonSchema,
+  freeFormBody: string,
+): string {
+  const rows = data.us.bullets.map((u, i) => {
+    const t = data.them.bullets[i] ?? ''
+    return `   • Row ${i + 1}:  US="${u.replace(/"/g, '\\"')}"  |  THEM="${t.replace(/"/g, '\\"')}"`
+  }).join('\n')
+  return (
+    `STRUCTURED COMPARISON DATA — render this verbatim, do NOT paraphrase, do NOT add rows, do NOT skip rows:\n`
+    + `LEFT COLUMN (us):  title="${data.us.title}"\n`
+    + `RIGHT COLUMN (them):  title="${data.them.title}"\n`
+    + `ROW PAIRS (render each row at the SAME y-position across both columns):\n${rows}\n`
+    + `RENDER RULES:\n`
+    + `   • 2-column split-screen comparison infographic, 1:1 aspect.\n`
+    + `   • Left column: emerald/green highlighted background, green checkmark icon next to each US bullet.\n`
+    + `   • Right column: muted gray background, red X icon next to each THEM bullet.\n`
+    + `   • Top row: column titles ("${data.us.title}" left, "${data.them.title}" right) in bold sans-serif heading typography.\n`
+    + `   • One row per bullet pair, vertically aligned. Same row-height across both columns.\n`
+    + `   • Clean mobile-readable typography (16-22px equivalent). Bold labels.\n`
+    + `   • NO text outside the listed rows. NO error messages. NO placeholders. NO "find bullet" / "parse" instructions.\n`
+    + `Original image-prompt body (for additional aesthetic context only — the row data above OVERRIDES any conflicting instruction): ${freeFormBody}`
+  )
 }
 
 // Phase 4 (stabilization update) — expert-form-specific negative prompt.
@@ -858,9 +895,14 @@ const HARDSELL_NEGATIVE_BLOCK =
 // another 30s; otherwise re-submit. MAX_ATTEMPTS dropped 4→2 so we fail
 // fast on broken tasks and free the slot for the next image. Same credit
 // safety semantics (recovery-poll before re-submit).
-const MAX_ATTEMPTS     = 2
-const RECOVERY_POLL_MS = 30_000   // was 60s
-const FRESH_POLL_MS    = 100_000  // was 5min
+// Group-1 watchdog tightening (2026-05-18):
+//   • FRESH_POLL_MS 100s → 90s — spec target was "if >90s auto retry".
+//   • RECOVERY_POLL_MS 30s → 25s — same task rarely unsticks past 25s.
+//   • MAX_ATTEMPTS 2 → 3 — extra attempt with simplified prompt fallback.
+// Worst-case wall time: 90 + 25 + 90 + 25 + 90 ≈ 5 min before final fail.
+const MAX_ATTEMPTS     = 3
+const RECOVERY_POLL_MS = 25_000
+const FRESH_POLL_MS    = 90_000
 
 // ─────────────────────────────────────────────────────────────────────────
 // UI-NATIVE CHAT PROOF — handler invoked for every imagePrompt in the

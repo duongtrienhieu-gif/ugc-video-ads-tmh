@@ -154,8 +154,10 @@ SECTION SPEC — produce EXACTLY these 17 in this order
 
 9. type="comparison", imageAspectRatio="1:1"
    • copy: why our product vs generics
+   • REQUIRED structured field "comparisonData": { "us": { "title": "<our product name>", "bullets": ["<short claim 1>", ...4-6 total] }, "them": { "title": "<Suplemen Lain / Produk Biasa>", "bullets": ["<weakness 1>", ...4-6 total, INDEX-ALIGNED with us.bullets — bullet[0] of us vs bullet[0] of them must be the SAME dimension] } }
+   • Each bullet 3-7 words, written in the OUTPUT LANGUAGE. NEVER prose. NEVER markdown. NEVER nested objects. NEVER skip "comparisonData" — the renderer requires it.
    • 1 imagePrompt: style="Comparison infographic MY ecommerce", aspectRatio="1:1"
-     Malaysia ecommerce style comparison table infographic. Left column: our product name, green checkmarks, emerald highlighted background. Right: "Suplemen Lain" / "Produk Biasa", red X, gray background. Rows: ingredient quality, absorption, certifications, side effects, manufacturing, price value. Clean mobile-readable design, bold Bahasa Melayu labels.
+     Malaysia ecommerce style comparison table infographic. STRUCTURE: 2-column split-screen. LEFT column = our product (use exact title from comparisonData.us.title), green checkmarks, emerald highlighted background. RIGHT column = competitor (use exact title from comparisonData.them.title), red X, gray background. Render the EXACT bullets from comparisonData verbatim — 1 row per bullet pair (same Y position for us.bullets[i] and them.bullets[i]). Clean mobile-readable typography, bold output-language labels. The imagePrompt MUST embed the actual us.bullets / them.bullets text inline so the image generator reads it directly — do NOT instruct the generator to "find" or "parse" bullet pairs.
 
 10. type="lifestyle", imageAspectRatio="4:5"
     • copy: after-life paint — energetic mornings, confidence
@@ -560,6 +562,20 @@ function buildUserPrompt(params: LandingGenParams): string {
   lines.push(`bulletsVi MUST be the same length as bullets (index-aligned 1:1 translation).`)
   lines.push(`Output language field in JSON: "${params.language}"`)
 
+  if (params.language === 'ms') {
+    lines.push('')
+    lines.push('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
+    lines.push('BAHASA MELAYU HARD LOCK — non-negotiable, non-overridable')
+    lines.push('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
+    lines.push('ZERO Vietnamese characters in ANY user-facing field. Specifically banned:')
+    lines.push('  ✗ Vietnamese diacritics: ă â đ ê ô ơ ư á à ả ã ạ é è ẻ ẽ ẹ í ì ỉ ĩ ị ó ò ỏ õ ọ ú ù ủ ũ ụ ý ỳ ỷ ỹ ỵ')
+    lines.push('  ✗ Vietnamese function words anywhere: "của", "và", "với", "cho", "là", "đang", "được", "này", "đó", "không", "chỉ", "tôi", "bạn", "anh", "chị", "em", "rồi", "đã"')
+    lines.push('  ✗ Mixed bilingual sentences. ✗ "Vietnamese ngôn ngữ" style code-switching. ✗ Even ONE Vietnamese sentence is a hard failure.')
+    lines.push('IF YOU PRODUCE ANY VIETNAMESE TEXT IN A MS-LOCKED FIELD: the entire pack is rejected and regenerated. Cost is on you.')
+    lines.push('The ONLY exception fields that may contain Vietnamese: layoutGuide, viTranslation, titleVi, headlineVi, subheadlineVi, ctaVi, offerStripVi, urgencyTextVi, bulletsVi (these are by design VN translations for the marketer).')
+    lines.push('Write authentic colloquial Malaysian Bahasa Melayu. Allowed English loanwords (sparing): "detox", "supplement", "OK", brand names. Forbidden: full English sentences.')
+  }
+
   if (params.nicheHint) {
     lines.push('')
     lines.push(`Niche hint: ${params.nicheHint}`)
@@ -638,6 +654,75 @@ function buildUserPrompt(params: LandingGenParams): string {
 }
 
 // ─────────────────────────────────────────────────────────────────────
+
+// ─────────────────────────────────────────────────────────────────────
+// Bahasa Melayu language lock — post-Gemini validator.
+//
+// Detects Vietnamese leakage in MS packs by counting Vietnamese-specific
+// diacritic chars + Vietnamese function words across user-facing fields.
+// If >15% of inspected fields trip the detector → caller retries with a
+// strengthened prompt. Vietnamese-only translation fields (viTranslation,
+// *Vi, layoutGuide) are EXCLUDED from inspection.
+// ─────────────────────────────────────────────────────────────────────
+
+const VIETNAMESE_DIACRITICS_RE = /[ăâđêôơưĂÂĐÊÔƠƯáàảãạéèẻẽẹíìỉĩịóòỏõọúùủũụýỳỷỹỵ]/i
+const VIETNAMESE_FUNCTION_WORDS = [
+  'của', 'và', 'với', 'cho', 'là', 'đang', 'được', 'này', 'đó',
+  'không', 'chỉ', 'tôi', 'bạn', 'anh', 'chị', 'rồi', 'đã', 'những',
+  'thì', 'phải', 'cũng', 'mà', 'nhưng', 'hoặc',
+]
+
+function looksVietnamese(text: string | undefined | null): boolean {
+  if (!text || typeof text !== 'string') return false
+  if (VIETNAMESE_DIACRITICS_RE.test(text)) return true
+  const lower = text.toLowerCase()
+  // Word-boundary match — protects against false positives like "la" inside
+  // an ms word.
+  return VIETNAMESE_FUNCTION_WORDS.some((w) => new RegExp(`(^|[^\\p{L}])${w}([^\\p{L}]|$)`, 'iu').test(lower))
+}
+
+/** Collect every user-facing string from a section that MUST be in the
+ *  output language (excludes vi-translation fields by design). */
+function collectMsLockedStrings(section: RawSection): string[] {
+  const out: string[] = []
+  const push = (v: unknown) => { if (typeof v === 'string' && v.trim()) out.push(v) }
+  push(section.title); push(section.copy); push(section.headline); push(section.subheadline)
+  push(section.cta); push(section.offerStrip); push(section.urgencyText)
+  if (Array.isArray(section.bullets)) section.bullets.forEach(push)
+  if (Array.isArray(section.faqs)) section.faqs.forEach((f) => { push(f.question); push(f.answer) })
+  if (Array.isArray(section.reviews)) section.reviews.forEach((r) => { push(r.quote); push(r.author) })
+  return out
+}
+
+interface LanguageLeakReport {
+  totalFields: number
+  leakedFields: number
+  ratio: number
+  sampleLeaks: string[]
+}
+
+export function validateMsLanguage(parsed: RawPack): LanguageLeakReport {
+  const allStrings: string[] = []
+  if (Array.isArray(parsed.sections)) {
+    parsed.sections.forEach((s) => allStrings.push(...collectMsLockedStrings(s)))
+  }
+  const leaks = allStrings.filter(looksVietnamese)
+  return {
+    totalFields: allStrings.length,
+    leakedFields: leaks.length,
+    ratio: allStrings.length === 0 ? 0 : leaks.length / allStrings.length,
+    sampleLeaks: leaks.slice(0, 3),
+  }
+}
+
+const MS_RETRY_REINFORCEMENT =
+  '\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n'
+  + 'PREVIOUS ATTEMPT LEAKED VIETNAMESE TEXT — REJECTED.\n'
+  + '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n'
+  + 'You output Vietnamese text in a Bahasa-Melayu-locked field. This is a HARD FAILURE.\n'
+  + 'REGENERATE from scratch. Every user-facing field MUST be 100% Bahasa Melayu.\n'
+  + 'No Vietnamese diacritics. No Vietnamese function words. No bilingual sentences.\n'
+  + 'The Vietnamese translation fields (viTranslation, titleVi, *Vi, layoutGuide) ARE allowed in Vietnamese — only those.\n'
 
 export function extractJson(raw: string): string {
   let s = raw.trim()
@@ -759,6 +844,31 @@ export function normalizeSection(s: RawSection): LandingSection | null {
     offerStripVi:   s.offerStripVi,
     urgencyTextVi:  s.urgencyTextVi,
     bulletsVi,
+    // ── Comparison schema — preserved verbatim when present ────────────
+    comparisonData: validateComparisonSchema((s as RawSection & { comparisonData?: unknown }).comparisonData, type),
+  }
+}
+
+/** Validate + normalize structured comparison data emitted by Gemini.
+ *  Returns the schema only when both us+them have non-empty bullet arrays
+ *  of matching length. Otherwise returns undefined and the image prompt
+ *  finalizer falls back to free-form prompt (existing behavior). */
+function validateComparisonSchema(raw: unknown, sectionType: SectionType): import('../types').ComparisonSchema | undefined {
+  if (sectionType !== 'comparison') return undefined
+  if (!raw || typeof raw !== 'object') return undefined
+  const obj = raw as { us?: { title?: unknown; bullets?: unknown }; them?: { title?: unknown; bullets?: unknown } }
+  const us = obj.us, them = obj.them
+  if (!us || !them) return undefined
+  const usTitle = typeof us.title === 'string' ? us.title.trim() : ''
+  const themTitle = typeof them.title === 'string' ? them.title.trim() : ''
+  const usBullets = Array.isArray(us.bullets) ? us.bullets.filter((b): b is string => typeof b === 'string' && b.trim().length > 0) : []
+  const themBullets = Array.isArray(them.bullets) ? them.bullets.filter((b): b is string => typeof b === 'string' && b.trim().length > 0) : []
+  if (!usTitle || !themTitle || usBullets.length === 0 || themBullets.length === 0) return undefined
+  // Truncate to the shorter array so rows are paired 1:1.
+  const len = Math.min(usBullets.length, themBullets.length)
+  return {
+    us:   { title: usTitle,   bullets: usBullets.slice(0, len) },
+    them: { title: themTitle, bullets: themBullets.slice(0, len) },
   }
 }
 
@@ -818,25 +928,53 @@ export async function legacyGenerateUgcMalaysiaPack(params: LandingGenParams): P
   const userPrompt = buildUserPrompt(params)
   const priceTag = extractPriceTag(product.offer ?? '')
 
-  const raw = await directGeminiVision({
-    apiKey,
-    parts: [{ text: userPrompt }],
-    systemInstruction: SYSTEM_PROMPT,
-    // 17 sections × rich content + viTranslation + image prompts
-    maxOutputTokens: 32768,
-    responseMimeType: 'application/json',
-  })
+  // ── Generate + MS language-lock validate + retry-once ────────────────
+  // For Bahasa Melayu packs: if >15% of user-facing strings contain
+  // Vietnamese diacritics or function words, regenerate ONCE with a
+  // reinforced "you leaked Vietnamese" reminder appended to the system
+  // prompt. Costs one extra Gemini call in the worst case; saves the
+  // user from having to manually scrap + retry a broken MY pack.
+  const MAX_ATTEMPTS = params.language === 'ms' ? 2 : 1
+  let parsed: RawPack | null = null
+  let lastLeak: LanguageLeakReport | null = null
 
-  let parsed: RawPack
-  try {
-    parsed = JSON.parse(extractJson(raw)) as RawPack
-  } catch {
-    console.error('[LandingPageAI] JSON parse failed. Raw:', raw.slice(0, 500))
-    throw new Error('Gemini trả về JSON không hợp lệ — thử lại')
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    const sys = attempt === 1 ? SYSTEM_PROMPT : SYSTEM_PROMPT + MS_RETRY_REINFORCEMENT
+    const raw = await directGeminiVision({
+      apiKey,
+      parts: [{ text: userPrompt }],
+      systemInstruction: sys,
+      maxOutputTokens: 32768,
+      responseMimeType: 'application/json',
+    })
+
+    try {
+      parsed = JSON.parse(extractJson(raw)) as RawPack
+    } catch {
+      console.error('[LandingPageAI] JSON parse failed. Raw:', raw.slice(0, 500))
+      throw new Error('Gemini trả về JSON không hợp lệ — thử lại')
+    }
+
+    if (!Array.isArray(parsed.sections) || parsed.sections.length === 0) {
+      throw new Error('Gemini không trả về section nào — thử lại')
+    }
+
+    if (params.language === 'ms') {
+      lastLeak = validateMsLanguage(parsed)
+      if (lastLeak.ratio > 0.15) {
+        console.warn(`[LandingPageAI] MS leak detected — attempt ${attempt}/${MAX_ATTEMPTS}, ratio=${(lastLeak.ratio * 100).toFixed(1)}%, ${lastLeak.leakedFields}/${lastLeak.totalFields} fields. Samples:`, lastLeak.sampleLeaks)
+        if (attempt < MAX_ATTEMPTS) continue
+        // Final attempt also leaked — keep result + warn
+        console.error(`[LandingPageAI] MS leak persists after ${MAX_ATTEMPTS} attempts — flagging for manual review`)
+      } else if (lastLeak.ratio > 0) {
+        console.info(`[LandingPageAI] MS minor leak (${(lastLeak.ratio * 100).toFixed(1)}%) within tolerance`)
+      }
+    }
+    break  // success or last attempt — exit loop
   }
 
-  if (!Array.isArray(parsed.sections) || parsed.sections.length === 0) {
-    throw new Error('Gemini không trả về section nào — thử lại')
+  if (!parsed) {
+    throw new Error('Gemini không trả về kết quả hợp lệ — thử lại')
   }
 
   // Z25 fix — post-processing must respect the FORM BLUEPRINT order, not
@@ -847,8 +985,9 @@ export async function legacyGenerateUgcMalaysiaPack(params: LandingGenParams): P
   const selectedForm = params.form ?? 'ugc-malaysia'
   const orderList: SectionType[] = FORM_BLUEPRINTS[selectedForm]?.sections ?? SECTION_ORDER
   const sections: LandingSection[] = []
+  const parsedSections = parsed.sections ?? []
   for (const ord of orderList) {
-    const found = parsed.sections.find((s) => s.type === ord)
+    const found = parsedSections.find((s) => s.type === ord)
     if (found) {
       const norm = normalizeSection(found)
       if (norm) sections.push(norm)
