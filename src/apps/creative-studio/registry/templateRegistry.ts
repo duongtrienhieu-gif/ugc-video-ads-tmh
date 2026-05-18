@@ -103,14 +103,17 @@ export const TEMPLATE_REGISTRY: Record<AssetTypeId, TemplateRegistryEntry> = {
   'infographic':        { id: 'infographic',        engine: 'designed-graphic', template: 'infographic-stats', composition: 'designed-canvas-template', localeValidation: true, qcRules: { baseline: true, localeText: true } },
   'cta-banner':         { id: 'cta-banner',         engine: 'designed-graphic', template: 'cta-banner',        composition: 'designed-canvas-template', localeValidation: true, qcRules: { baseline: true, localeText: true } },
 
-  // ── P27 roadmap — declared in registry, comingSoon flag — engines
-  //                  ship in a later phase ─────────────────────────────
+  // ── P27 roadmap — still coming soon ────────────────────────────────
   'ingredients-explain':{ id: 'ingredients-explain',engine: 'designed-graphic', template: 'infographic-ingredients', composition: 'designed-canvas-template', localeValidation: true, qcRules: { baseline: true, localeText: true }, comingSoon: true },
   'mechanism-explain':  { id: 'mechanism-explain',  engine: 'designed-graphic', template: 'infographic-mechanism',   composition: 'designed-canvas-template', localeValidation: true, qcRules: { baseline: true, localeText: true }, comingSoon: true },
   'benefit-timeline':   { id: 'benefit-timeline',   engine: 'designed-graphic', template: 'infographic-timeline',    composition: 'designed-canvas-template', localeValidation: true, qcRules: { baseline: true, localeText: true }, comingSoon: true },
-  'group-holding':      { id: 'group-holding',      engine: 'photographic',     template: 'photographic-prompt',     composition: 'single-pass-prompt',        localeValidation: false, qcRules: { baseline: true },                         comingSoon: true },
   'collage-4-frames':   { id: 'collage-4-frames',   engine: 'photographic',     template: 'collage-grid',            composition: 'multi-asset-composite',     localeValidation: false, qcRules: { baseline: true },                         comingSoon: true },
-  'expert-kol':         { id: 'expert-kol',         engine: 'photographic',     template: 'expert-card',             composition: 'multi-asset-composite',     localeValidation: false, qcRules: { baseline: true, localeText: true },       comingSoon: true },
+
+  // ── P33 — Phase 3 pro-photo + UGC shipped ──────────────────────────
+  'floating-product':       { id: 'floating-product',       engine: 'photographic', template: 'photographic-prompt', composition: 'single-pass-prompt', localeValidation: false, qcRules: { baseline: true, vision: true } },
+  'ingredient-composition': { id: 'ingredient-composition', engine: 'photographic', template: 'photographic-prompt', composition: 'single-pass-prompt', localeValidation: false, qcRules: { baseline: true } },
+  'group-holding':          { id: 'group-holding',          engine: 'photographic', template: 'photographic-prompt', composition: 'single-pass-prompt', localeValidation: false, qcRules: { baseline: true } },
+  'expert-kol':             { id: 'expert-kol',             engine: 'photographic', template: 'photographic-prompt', composition: 'single-pass-prompt', localeValidation: false, qcRules: { baseline: true } },
 }
 
 export function findTemplateBinding(id: AssetTypeId): TemplateRegistryEntry | null {

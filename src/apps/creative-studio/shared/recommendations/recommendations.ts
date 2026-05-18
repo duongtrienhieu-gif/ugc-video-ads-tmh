@@ -84,6 +84,16 @@ const FOLLOW_UPS: Record<AssetTypeId, Suggestion[]> = {
     { id: 'holding-product',  reason: 'Thêm trust qua bàn tay người dùng' },
     { id: 'infographic',      reason: 'Visualize công dụng — từ texture sang số liệu' },
   ],
+  'floating-product': [
+    { id: 'product-shot',          reason: 'Pair premium ad creative với clean packshot ecommerce' },
+    { id: 'cta-banner',            reason: 'Combo hero floating + banner ưu đãi sẵn sàng cho ads' },
+    { id: 'ingredient-composition', reason: 'Bổ sung context provenance + science vibe' },
+  ],
+  'ingredient-composition': [
+    { id: 'infographic',     reason: 'Justify ingredient bằng số liệu — bullet công dụng' },
+    { id: 'product-shot',    reason: 'Pair với hero packshot studio cho full product set' },
+    { id: 'expert-kol',      reason: 'Thêm authority — chuyên gia xác thực thành phần' },
+  ],
   'before-after': [
     { id: 'infographic',      reason: 'Justify visual delta bằng số liệu thống kê' },
     { id: 'whatsapp-proof',   reason: 'Customer kể lại quá trình — pair text với hình' },

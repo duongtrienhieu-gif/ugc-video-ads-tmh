@@ -42,9 +42,12 @@ export const ASSET_TO_GROUP: Record<AssetTypeId, EngineGroup> = {
   'ingredients-explain':'designed-graphic',
   'mechanism-explain':  'designed-graphic',
   'benefit-timeline':   'designed-graphic',
-  'group-holding':      'photographic',
   'collage-4-frames':   'photographic',
-  'expert-kol':         'photographic',
+  // ── P33 — Phase 3 shipped ──────────────────────────────────────────
+  'group-holding':           'photographic',
+  'expert-kol':              'photographic',
+  'floating-product':        'photographic',
+  'ingredient-composition':  'photographic',
 } as const
 
 /** Helper — get the engine group for an asset id (typed exhaustive). */

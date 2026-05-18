@@ -407,6 +407,36 @@ export const ASSET_CATALOG: AssetCatalogEntry[] = [
     },
     badges: ['needs-product', 'needs-avatar', 'engine-photo'],
   },
+  {
+    id: 'floating-product',
+    group: 'photographic',
+    categoryId: 'pro-photo',
+    title: { vi: 'Floating Product Ad', en: 'Floating Product Ad' },
+    description: { vi: 'Splash + glow + particles — thumb-stop hero cho paid ads', en: 'Dynamic ad packshot with splash + glow' },
+    aspectRatio: '1:1',
+    iconKey: 'sparkles',
+    tooltip: {
+      what: 'Render premium ad packshot — sản phẩm floating mid-frame, splash / glow / particles xung quanh. Vibe luxury hero shot.',
+      marketingGoal: 'Thumb-stop hook cho paid Facebook / TikTok ads — premium ad creative chứ không phải ecommerce thumbnail.',
+      suitableFor: ['Facebook ads', 'TikTok ads', 'Instagram paid', 'Premium brand campaigns'],
+    },
+    badges: ['needs-product', 'engine-photo'],
+  },
+  {
+    id: 'ingredient-composition',
+    group: 'photographic',
+    categoryId: 'pro-photo',
+    title: { vi: 'Sản phẩm + Nguyên liệu', en: 'Product + Ingredient' },
+    description: { vi: 'Hero + herbs / botanicals — vibe editorial wellness', en: 'Product hero with botanical composition' },
+    aspectRatio: '1:1',
+    iconKey: 'flask',
+    tooltip: {
+      what: 'Render sản phẩm hero + arrangement nguyên liệu tự nhiên (lá, hoa, raw extracts) — vibe editorial wellness magazine.',
+      marketingGoal: 'Justify purchase qua ingredient provenance — show "có thành phần thật, có khoa học" để build trust.',
+      suitableFor: ['Skincare', 'Mỹ phẩm', 'Supplement', 'Herbal', 'Wellness', 'Detail page'],
+    },
+    badges: ['needs-product', 'engine-photo'],
+  },
   // P31 — Cảm xúc & lối sống (kitchen / bathroom / cafe) removed from
   // catalog per user spec: too generic, stock-photo feel, weak
   // conversion. The underlying photographic configs + engine modules
@@ -474,8 +504,7 @@ export const ASSET_CATALOG: AssetCatalogEntry[] = [
       marketingGoal: 'Mass trust + social adoption — "nhiều người cùng dùng = sản phẩm hot", trigger herd behavior.',
       suitableFor: ['Brand awareness', 'Bài đăng cộng đồng', 'Story group', 'Carousel social proof'],
     },
-    badges: ['needs-product', 'needs-avatar', 'engine-photo', 'coming-soon'],
-    comingSoon: true,
+    badges: ['needs-product', 'needs-avatar', 'engine-photo'],
   },
   {
     id: 'collage-4-frames',
@@ -506,8 +535,7 @@ export const ASSET_CATALOG: AssetCatalogEntry[] = [
       marketingGoal: 'Authority signal — chuyên gia bảo "có hiệu quả" mạnh hơn shop tự bảo. Phù hợp niche y tế / health / skincare.',
       suitableFor: ['Health & wellness', 'Skincare cao cấp', 'Supplement', 'Landing page authority'],
     },
-    badges: ['needs-product', 'expert', 'engine-photo', 'coming-soon'],
-    comingSoon: true,
+    badges: ['needs-product', 'expert', 'engine-photo'],
   },
 
   // ═══════════════════════════════════════════════════════════════════
@@ -587,6 +615,8 @@ const REQUIREMENTS: Partial<Record<AssetTypeId, CreativeRequirements>> = {
   'product-shot':          REQ_PHOTO_NO_PERSON,
   'review-table':          REQ_PHOTO_NO_PERSON,
   'before-after':          REQ_PHOTO_PERSON,
+  'floating-product':      REQ_PHOTO_NO_PERSON,
+  'ingredient-composition':REQ_PHOTO_NO_PERSON,
   'lifestyle-kitchen':     REQ_PHOTO_PERSON,
   'bathroom-routine':      REQ_PHOTO_PERSON,
   'cafe-lifestyle':        REQ_PHOTO_PERSON,

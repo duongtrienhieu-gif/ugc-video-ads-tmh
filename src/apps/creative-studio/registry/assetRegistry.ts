@@ -33,6 +33,11 @@ import { module as lifestyleKitchenModule } from '../engines/photographic/lifest
 import { module as bathroomRoutineModule }  from '../engines/photographic/bathroom-routine/module'
 import { module as cafeLifestyleModule }    from '../engines/photographic/cafe-lifestyle/module'
 import { module as ugcTiktokModule }        from '../engines/photographic/ugc-tiktok/module'
+// ── P33: Phase 3 taxonomy shipped — new photographic types ─────────────────
+import { module as floatingProductModule }       from '../engines/photographic/floating-product/module'
+import { module as ingredientCompositionModule } from '../engines/photographic/ingredient-composition/module'
+import { module as groupHoldingModule }          from '../engines/photographic/group-holding/module'
+import { module as expertKolModule }             from '../engines/photographic/expert-kol/module'
 
 // ── P5: UI-Native chat-proof modules — STATIC IMPORTS ONLY ─────────────────
 import { module as whatsappProofModule }    from '../engines/ui-native/whatsapp-proof/module'
@@ -84,6 +89,11 @@ export const ASSET_REGISTRY: Partial<Record<AssetTypeId, AssetModule>> = {
   'bathroom-routine':   bathroomRoutineModule,
   'cafe-lifestyle':     cafeLifestyleModule,
   'ugc-tiktok':         ugcTiktokModule,
+  // ── P33: Phase 3 taxonomy — newly shipped ──────────────────────────
+  'floating-product':       floatingProductModule,
+  'ingredient-composition': ingredientCompositionModule,
+  'group-holding':          groupHoldingModule,
+  'expert-kol':             expertKolModule,
 
   // ── P5: UI-Native chat-proof modules ───────────────────────────────
   'whatsapp-proof':     whatsappProofModule,

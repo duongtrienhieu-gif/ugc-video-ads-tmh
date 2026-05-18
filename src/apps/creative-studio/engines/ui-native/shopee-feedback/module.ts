@@ -54,7 +54,7 @@ export const module: UINativeModule = {
     return null
   },
 
-  postProcess: 'medium',
+  postProcess: 'heavy',
 
   normalizeOutput(raw, params): GeneratedAsset {
     const now = Date.now()

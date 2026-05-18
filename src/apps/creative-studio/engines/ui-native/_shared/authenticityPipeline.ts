@@ -21,7 +21,7 @@
 
 import { canvasToBlob, createCanvas } from '../../../shared/canvas'
 
-export type AuthenticityIntensity = 'subtle' | 'medium' | 'heavy'
+export type AuthenticityIntensity = 'subtle' | 'medium' | 'heavy' | 'extreme'
 
 export interface AuthenticityConfig {
   intensity: AuthenticityIntensity
@@ -35,10 +35,15 @@ export interface AuthenticityConfig {
   chromaNoise?: number
 }
 
+// P34: tightened presets per "too clean → AI feel" review feedback.
+// heavy now bites harder (jpeg 0.68, noise 8). extreme tier added for
+// users who need maximum phone-screenshot grit — at the cost of some
+// label sharpness loss. Defaults to heavy in module specs (P34).
 const INTENSITY_DEFAULTS: Record<AuthenticityIntensity, Required<Omit<AuthenticityConfig, 'intensity'>>> = {
-  subtle: { jpegQuality: 0.88, maxCropDriftPx: 4,  blurPx: 0.25, chromaNoise: 2 },
-  medium: { jpegQuality: 0.80, maxCropDriftPx: 8,  blurPx: 0.40, chromaNoise: 4 },
-  heavy:  { jpegQuality: 0.72, maxCropDriftPx: 14, blurPx: 0.55, chromaNoise: 6 },
+  subtle:  { jpegQuality: 0.88, maxCropDriftPx: 4,  blurPx: 0.25, chromaNoise: 2 },
+  medium:  { jpegQuality: 0.80, maxCropDriftPx: 8,  blurPx: 0.40, chromaNoise: 4 },
+  heavy:   { jpegQuality: 0.68, maxCropDriftPx: 16, blurPx: 0.60, chromaNoise: 8 },
+  extreme: { jpegQuality: 0.60, maxCropDriftPx: 22, blurPx: 0.75, chromaNoise: 11 },
 }
 
 /**
