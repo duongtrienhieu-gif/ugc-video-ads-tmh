@@ -6,6 +6,9 @@ import {
   submitGpt4oImage, pollGpt4oUntilDone, type Gpt4oSize,
 } from '../../../utils/kieai'
 import { saveAsset, getUrl, isAssetRef } from '../../../utils/assetStore'
+import { renderForLandingSlot } from './chat-proof'
+import { renderForLandingSlot as renderIngredientCardForSlot } from './ingredient-card'
+import { renderForLandingSlot as renderComparisonCardForSlot } from './comparison-card'
 
 // ─────────────────────────────────────────────────────────────────────────
 // IMAGE GENERATION QUEUE for landing-page packs.
@@ -859,6 +862,189 @@ const MAX_ATTEMPTS     = 2
 const RECOVERY_POLL_MS = 30_000   // was 60s
 const FRESH_POLL_MS    = 100_000  // was 5min
 
+// ─────────────────────────────────────────────────────────────────────────
+// UI-NATIVE CHAT PROOF — handler invoked for every imagePrompt in the
+// whatsapp-testimonials section. Replaces the old "ask KIE to render a
+// full WhatsApp screenshot" path with a Canvas UI template + AI atomic
+// thumbnail pipeline. Output looks like a real phone screenshot instead
+// of an AI-warped fake UI.
+// ─────────────────────────────────────────────────────────────────────────
+async function runChatProofRender(
+  job: ImageJob,
+  kieApiKey: string,
+  onTaskUpdate: (patch: Partial<ImagePrompt>) => void,
+  signal?: AbortSignal,
+): Promise<{ assetRef: string; retries: number }> {
+  if (signal?.aborted) throw new Error('Đã huỷ')
+
+  const settings = useSettingsStore.getState()
+  const geminiKey = settings.geminiApiKey
+  if (!geminiKey) {
+    throw new Error('Chưa có Gemini API key — vào Cài đặt để nhập (chat proof cần Gemini cho nội dung tin nhắn).')
+  }
+
+  // Resolve product reference URLs from visualMemory (KIE needs absolute
+  // URLs, not asset: refs).
+  const productRefUrls: string[] = []
+  for (const m of job.pack.visualMemory ?? []) {
+    if (!m.ref) continue
+    if (isAssetRef(m.ref)) {
+      const u = await getUrl(m.ref)
+      if (u) productRefUrls.push(u)
+    } else if (m.ref.startsWith('http')) {
+      productRefUrls.push(m.ref)
+    }
+  }
+
+  if (!job.prompt.variationSeed) job.prompt.variationSeed = makeVariationSeed()
+
+  // Derive a pain-point hint from the section copy (Gemini uses it to
+  // colour the opening message).
+  const painSection = job.pack.sections.find((s) => s.type === 'pain')
+  const productPainPoint = painSection?.copy?.slice(0, 200)
+
+  // Locale → 'my' for ms, 'vi' for vi, 'en' otherwise.
+  const locale: 'my' | 'vi' | 'en' = job.pack.language === 'vi'
+    ? 'vi'
+    : job.pack.language === 'ms'
+      ? 'my'
+      : 'en'
+
+  onTaskUpdate({ status: 'generating', error: undefined })
+
+  try {
+    const { assetRef } = await renderForLandingSlot({
+      slotIdx: job.imageIdx,
+      productName: job.pack.productName,
+      productPainPoint,
+      productRefUrls,
+      locale,
+      geminiApiKey: geminiKey,
+      kieApiKey,
+      realism: 'medium',
+      variationSeed: job.prompt.variationSeed,
+    })
+    return { assetRef, retries: 0 }
+  } catch (err) {
+    // Rethrow with a clearer message — caller's catch will mark status: failed.
+    const msg = err instanceof Error ? err.message : String(err)
+    throw new Error(`Chat proof render lỗi: ${msg}`)
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// UI-NATIVE INGREDIENT CARD — handler for ingredients section. Generates
+// the photographic scene via KIE (product centered + ingredients
+// arranged around it, NO text), then overlays labels / connector lines /
+// carousel chrome via canvas. Result: real-looking carousel ad frame
+// instead of warped AI label typography.
+// ─────────────────────────────────────────────────────────────────────────
+async function runIngredientCardRender(
+  job: ImageJob,
+  kieApiKey: string,
+  onTaskUpdate: (patch: Partial<ImagePrompt>) => void,
+  signal?: AbortSignal,
+): Promise<{ assetRef: string; retries: number }> {
+  if (signal?.aborted) throw new Error('Đã huỷ')
+
+  // Resolve product reference URLs from visualMemory
+  const productRefUrls: string[] = []
+  for (const m of job.pack.visualMemory ?? []) {
+    if (!m.ref) continue
+    if (isAssetRef(m.ref)) {
+      const u = await getUrl(m.ref)
+      if (u) productRefUrls.push(u)
+    } else if (m.ref.startsWith('http')) {
+      productRefUrls.push(m.ref)
+    }
+  }
+
+  if (productRefUrls.length === 0) {
+    throw new Error('Cần ảnh sản phẩm (Visual Memory) để render ingredient card.')
+  }
+
+  if (!job.prompt.variationSeed) job.prompt.variationSeed = makeVariationSeed()
+
+  // Bullets from the section = ingredient → benefit pairs. Fall back to
+  // an empty list if Gemini hasn't filled them yet (renderer will fail
+  // gracefully with a clear error).
+  const bullets = job.section.bullets ?? []
+  const totalSlides = job.section.imagePrompts?.length ?? 5
+
+  onTaskUpdate({ status: 'generating', error: undefined })
+
+  try {
+    const { assetRef } = await renderIngredientCardForSlot({
+      slotIdx: job.imageIdx,
+      productName: job.pack.productName,
+      sectionBullets: bullets,
+      totalSlides,
+      productRefUrls,
+      kieApiKey,
+      variationSeed: job.prompt.variationSeed,
+    })
+    return { assetRef, retries: 0 }
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    throw new Error(`Ingredient card render lỗi: ${msg}`)
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// UI-NATIVE COMPARISON CARD — handler for comparison section. Generates
+// the side-by-side photographic split via KIE (left = dull generic
+// competitor, right = bright uploaded product, no text), then overlays
+// THEM/US headers, bullet rows with check/X icons, the VS badge, and
+// carousel chrome via canvas. Result: TikTok-ad-creative quality
+// comparison frame instead of warped AI infographic typography.
+// ─────────────────────────────────────────────────────────────────────────
+async function runComparisonCardRender(
+  job: ImageJob,
+  kieApiKey: string,
+  onTaskUpdate: (patch: Partial<ImagePrompt>) => void,
+  signal?: AbortSignal,
+): Promise<{ assetRef: string; retries: number }> {
+  if (signal?.aborted) throw new Error('Đã huỷ')
+
+  const productRefUrls: string[] = []
+  for (const m of job.pack.visualMemory ?? []) {
+    if (!m.ref) continue
+    if (isAssetRef(m.ref)) {
+      const u = await getUrl(m.ref)
+      if (u) productRefUrls.push(u)
+    } else if (m.ref.startsWith('http')) {
+      productRefUrls.push(m.ref)
+    }
+  }
+
+  if (productRefUrls.length === 0) {
+    throw new Error('Cần ảnh sản phẩm (Visual Memory) để render comparison card.')
+  }
+
+  if (!job.prompt.variationSeed) job.prompt.variationSeed = makeVariationSeed()
+
+  const bullets = job.section.bullets ?? []
+  const totalSlides = job.section.imagePrompts?.length ?? 5
+
+  onTaskUpdate({ status: 'generating', error: undefined })
+
+  try {
+    const { assetRef } = await renderComparisonCardForSlot({
+      slotIdx: job.imageIdx,
+      productName: job.pack.productName,
+      sectionBullets: bullets,
+      totalSlides,
+      productRefUrls,
+      kieApiKey,
+      variationSeed: job.prompt.variationSeed,
+    })
+    return { assetRef, retries: 0 }
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    throw new Error(`Comparison card render lỗi: ${msg}`)
+  }
+}
+
 async function runWithCreditSafeRetry(
   job: ImageJob,
   _memory: VisualMemoryItem[],  // legacy param — kept for callers, pack now used directly
@@ -866,6 +1052,39 @@ async function runWithCreditSafeRetry(
   onTaskUpdate: (patch: Partial<ImagePrompt>) => void,
   signal?: AbortSignal,
 ): Promise<{ assetRef: string; retries: number }> {
+  // ── UI-NATIVE CHAT PROOF ROUTING ─────────────────────────────────────
+  // whatsapp-testimonials no longer goes through KIE for the full
+  // screenshot. We render the chat UI on canvas (deterministic typography
+  // / icons / spacing) and only ask KIE for the SMALL product thumb that
+  // sits inside the chat product card. This eliminates the fake-UI /
+  // warped-text failure mode that plagued the previous KIE-only path.
+  if (job.section.type === 'whatsapp-testimonials') {
+    return runChatProofRender(job, kieApiKey, onTaskUpdate, signal)
+  }
+
+  // ── UI-NATIVE INGREDIENT CARD ROUTING ────────────────────────────────
+  // ingredients no longer asks KIE to render label text — that produced
+  // warped fake typography ("Niacinamide 0.5%" → "Niacimaide o.5x"). We
+  // ask KIE only for the photographic composition (product centered +
+  // ingredients orbiting on a clean surface, NO text), then overlay the
+  // labels / connectors / carousel chrome with canvas. Skip the form-
+  // override sections (chuyen-gia uses scientific infographic style which
+  // is a separate aesthetic).
+  if (job.section.type === 'ingredients' && job.pack.form !== 'chuyen-gia') {
+    return runIngredientCardRender(job, kieApiKey, onTaskUpdate, signal)
+  }
+
+  // ── UI-NATIVE COMPARISON CARD ROUTING ────────────────────────────────
+  // comparison section asks KIE only for the side-by-side photographic
+  // split (THEM dark product on left, US bright product on right, no
+  // text). Canvas overlays THEM/US headers, bullet rows with X / check
+  // icons, the VS badge, and carousel chrome. Replaces the previous
+  // path which had KIE render a full comparison infographic with text —
+  // that produced warped fake labels, mismatched icons, broken hierarchy.
+  if (job.section.type === 'comparison' && job.pack.form !== 'chuyen-gia') {
+    return runComparisonCardRender(job, kieApiKey, onTaskUpdate, signal)
+  }
+
   // Phase 7 — pass prompt body so selectRefsForSection can auto-attach
   // product refs when the imagePrompt mentions bottle / capsule / brand
   // name (prevents KIE from inventing fake brands on people-focus shots).
