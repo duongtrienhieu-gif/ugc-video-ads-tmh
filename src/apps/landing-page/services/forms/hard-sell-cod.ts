@@ -109,13 +109,13 @@ Each section has standard shape: type, title, titleVi, copy, viTranslation, layo
    • copy = 3-4 line paragraph (SHORT punchy sentences, NOT long paragraphs). 1-2 emoji per section. Direct hits.
    • bullets = 4 sharp pain bullets each with ⚠️ or 😩 prefix
    • cta = repeat CTA chip
-   • 4 imagePrompts: pain visualizations — different angles (close-up of pain area, person grimacing, environmental detail of the problem, day-in-the-life frustration). VARIED people (multiple different Malaysian reviewers — diversity desirable).
+   • 4 imagePrompts: PURE pain / problem visualizations. EACH prompt must EXPLICITLY state "NO product, NO supplement bottle, NO testimonial framing, NO smiling pose — this is a problem scene". Show 4 different Malaysian people in pain moments: (a) close-up of person holding stomach in discomfort, (b) tired exhausted worker slumped at desk, (c) frustrated mother on couch with messy living room, (d) bloated body posture in mirror or person curled up in pain. DIVERSE people across the 4 shots. NO product can appear in any of these images.
 
 3. type="failed-solutions", imageAspectRatio="4:5"
    • copy = "Anda dah cuba semua ni — kenapa tak jalan?" tone. 3-4 lines.
    • bullets = 3-4 things they tried ("Diet je tak cukup", "Supplement je tak berkesan", "Senaman tak ada masa")
    • cta = repeat CTA chip
-   • 2 imagePrompts: discarded alternatives / frustrated person / before products on shelf.
+   • 2 imagePrompts: frustration with OTHER alternatives (NOT our product). EACH prompt must state "NO uploaded product visible — this is a section about FAILED OTHER solutions". Show: (a) discarded random supplement bottles / diet shakes on a counter (these are OTHER brands the user tried, NOT our product), (b) frustrated person with messy collection of failed solutions OR exhausted person who has given up. Our uploaded product DOES NOT appear in this section.
 
 4. type="product-discovery", imageAspectRatio="4:5"
    • copy = FAST reveal — 3 lines. "Inilah jawapannya — [PRODUCT_NAME]". Confident tone.
@@ -142,7 +142,30 @@ Each section has standard shape: type, title, titleVi, copy, viTranslation, layo
 
 8. type="before-after", imageAspectRatio="4:5"
    • copy = "Dalam 14 hari — tengok beza" — dramatic but believable transformation framing.
-   • 4 imagePrompts: 2 same-person pairs (ba_01/02 face pair + ba_03/04 body pair). RENDER "SEBELUM"/"SELEPAS" labels stamped top-left. SAME person within each pair, same camera angle, same room, brighter light on AFTER.
+   • 4 imagePrompts: 2 same-person pairs (ba_01/02 face/upper-body pair + ba_03/04 full-body pair). RENDER "SEBELUM"/"SELEPAS" labels stamped top-left.
+
+   AUTHENTIC TRANSFORMATION RULES — CRITICAL (user reported the pairs looked like Photoshop edits):
+     • Within each pair the SAME PERSON must appear (same face identity, same Malaysian ethnicity).
+     • BUT the BEFORE and AFTER images must look like they were TAKEN ON DIFFERENT DAYS — they MUST DIFFER on every other axis:
+         - OUTFIT — BEFORE: homewear / oversized t-shirt / darker / faded / casual tired look. AFTER: cleaner fit / brighter color / neater styling / healthier outfit. NEVER the same shirt in both photos.
+         - HAIRSTYLE / HIJAB STYLING — BEFORE: lazy tied / messy / simple wrap. AFTER: brushed / neater wrap / styled. NEVER identical hair.
+         - POSTURE — BEFORE: slouched / belly relaxed / low confidence. AFTER: straighter / shoulders back / confident stance.
+         - EXPRESSION — BEFORE: tired / no smile / dull eyes / dark circles. AFTER: gentle natural smile / brighter eyes / healthier complexion.
+         - LIGHTING — BEFORE: flat dim indoor / harsh phone flash / overcast. AFTER: brighter natural daylight / warmer / uplifting mood.
+         - ROOM ANGLE / BACKGROUND — different corner of the same home OR slightly different angle (NOT a pixel-identical Photoshop overlay).
+         - ENERGY LEVEL — BEFORE: low energy / sluggish / exhausted. AFTER: energetic / alert / quietly confident.
+     • Identity stays consistent (same face structure, same ethnicity, similar body type — realistic 14-day change, NOT extreme slimming swap). Do NOT swap to a different person, do NOT do extreme face-swap-style edit.
+     • NO uploaded product visible in any of the 4 shots (this is a transformation evidence section, NOT a product showcase).
+
+   STRICTLY FORBIDDEN:
+     ✗ Same outfit in BEFORE and AFTER (immediate fake giveaway)
+     ✗ Same hair / hijab styling
+     ✗ Same posture / same pose
+     ✗ Same lighting in both
+     ✗ Pixel-identical background (Photoshop overlay look)
+     ✗ Extreme fake slimming that no one would believe
+     ✗ Beauty-filter swap aesthetic
+     ✗ AI-cloned face on different body
 
 9. type="offer", imageAspectRatio="16:9"
    • headline = "DISKAUN 50% HARI INI SAHAJA"
@@ -228,7 +251,7 @@ IMAGE RULES — CONVERSION AESTHETIC ALLOWED
 • Promo graphics / urgency badges / CTA button shapes ALLOWED
 • Designed CTA in image OK (eg "DISKAUN 50% — ORDER SEKARANG" rendered into the banner)
 • Social proof screenshots (FB/TikTok/Shopee/WhatsApp) MUST mimic real platform UI per the standard spec (native status bar, real spacing, varied review thumbnails)
-• Before/after: SAME person same scene within each pair, but allow dramatic light shift + posture shift. RENDER "SEBELUM"/"SELEPAS" labels.
+• Before/after: SAME PERSON / SAME FACE identity within each pair — but DIFFERENT outfit, DIFFERENT hairstyle/hijab styling, DIFFERENT posture, DIFFERENT expression, DIFFERENT lighting, DIFFERENT room angle between BEFORE and AFTER (looks like 14 days apart, NOT Photoshop overlay). RENDER "SEBELUM"/"SELEPAS" labels.
 • DIVERSITY OF REVIEWER PEOPLE desired — Malaysian Muslim hijab woman, Malaysian Chinese man, Malaysian Malay woman, etc. NOT one consistent character (that's storytelling form's job).
 • COD delivery / courier handover / package opening imagery encouraged in lifestyle section.
 

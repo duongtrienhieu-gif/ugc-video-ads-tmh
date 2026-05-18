@@ -257,6 +257,13 @@ function buildDiversityDirective(job: ImageJob): string {
   if (job.pack.form === 'premium') {
     return buildPremiumLuxuryDirective(job)
   }
+  // Phase 7 stabilization — hard-sell-cod before-after gets AUTHENTIC
+  // TRANSFORMATION directive (different outfit / pose / lighting between
+  // BEFORE and AFTER, same identity). User reported pairs looking like
+  // Photoshop edits — this fights that.
+  if (job.pack.form === 'hard-sell-cod' && job.section.type === 'before-after') {
+    return buildAuthenticTransformationDirective(job)
+  }
   if (DIVERSITY_SUPPRESSED_SECTIONS.has(job.section.type)) return ''
   if (!job.prompt.variationSeed) job.prompt.variationSeed = makeVariationSeed()
   const seed = `${job.section.type}-${job.imageIdx}-${job.prompt.variationSeed}`
@@ -266,6 +273,50 @@ function buildDiversityDirective(job: ImageJob): string {
   const hand        = hashPick(HAND_POOL,        seed, 3)
   const light       = hashPick(LIGHT_POOL,       seed, 4)
   return `COMPOSITION: ${composition}. SHOT: ${angle}, in ${bg}, ${hand}, ${light}. Render as INDEPENDENT phone photo — do not mimic the side-by-side box+bottle composition of the reference image; pick the COMPOSITION above. Seed: ${job.prompt.variationSeed}.`
+}
+
+/** Phase 7 stabilization — hard-sell-cod before-after authentic
+ *  transformation directive. Pairs are ba_01 (BEFORE) + ba_02 (AFTER),
+ *  ba_03 (BEFORE) + ba_04 (AFTER). Within each pair: SAME face identity
+ *  but DIFFERENT outfit / hair / posture / expression / lighting / room
+ *  angle / energy. Makes the transformation look like 14 days apart, NOT
+ *  a Photoshop overlay. */
+function buildAuthenticTransformationDirective(job: ImageJob): string {
+  // ba_01 (idx 0) + ba_03 (idx 2) = BEFORE shots
+  // ba_02 (idx 1) + ba_04 (idx 3) = AFTER shots
+  const isBefore = job.imageIdx % 2 === 0
+  const isPairA = job.imageIdx < 2
+  const role = isBefore ? 'BEFORE (SEBELUM)' : 'AFTER (SELEPAS)'
+  const pairLabel = isPairA ? 'PAIR A (face / upper-body)' : 'PAIR B (full-body)'
+
+  if (isBefore) {
+    return (
+      `AUTHENTIC TRANSFORMATION — ${pairLabel} ${role} SHOT:\n`
+      + `  • Malaysian person showing the PROBLEM state — tired posture, dull skin, low energy.\n`
+      + `  • OUTFIT: homewear / oversized t-shirt / darker faded colors / casual tired look. NEVER fitted activewear, NEVER bare arms / sports bra.\n`
+      + `  • HAIR / HIJAB: lazy tied / messy bun / simple plain wrap.\n`
+      + `  • POSTURE: slouched shoulders / belly relaxed / low confidence.\n`
+      + `  • EXPRESSION: tired neutral / no smile / dull eyes / slight dark circles.\n`
+      + `  • LIGHTING: flat dim indoor / harsh phone flash / overcast — NOT bright daylight.\n`
+      + `  • SETTING: lived-in home corner — slightly cluttered, real not staged.\n`
+      + `  • RENDER "SEBELUM" label stamped top-left in clean white bold sans-serif.\n`
+      + `  • NO product / supplement / bottle in frame.\n`
+      + `  • The AFTER shot (next image in this pair) will use the SAME face identity but DIFFERENT outfit / hair / lighting — design THIS shot with that contrast in mind.`
+    )
+  }
+  return (
+    `AUTHENTIC TRANSFORMATION — ${pairLabel} ${role} SHOT:\n`
+    + `  • SAME face identity as the BEFORE shot (same Malaysian person, same ethnicity, same face structure) — BUT EVERY OTHER axis MUST DIFFER to look like 14 days later, NOT a Photoshop overlay.\n`
+    + `  • OUTFIT: CLEANER FIT / BRIGHTER color / neater styling / healthier outfit (eg fresh cotton top, neatly tucked, slightly more put-together). NEVER the same shirt as the BEFORE shot.\n`
+    + `  • HAIR / HIJAB: brushed / neater wrap / styled. NEVER identical to BEFORE.\n`
+    + `  • POSTURE: straighter / shoulders back / quietly confident stance.\n`
+    + `  • EXPRESSION: gentle natural smile / brighter eyes / healthier complexion.\n`
+    + `  • LIGHTING: BRIGHTER natural daylight / warmer / uplifting mood — NOT the flat dim of the BEFORE.\n`
+    + `  • SETTING: same home but a different corner OR slightly different angle (the room is the same household, but NOT a pixel-identical Photoshop overlay).\n`
+    + `  • RENDER "SELEPAS" label stamped top-left in clean white bold sans-serif.\n`
+    + `  • NO product / supplement / bottle in frame.\n`
+    + `  • Realistic 14-day change: slight slimmer waist / better skin / better posture — NOT extreme fake slimming, NOT face swap.`
+  )
 }
 
 /** Phase 6 — Premium / luxury form directive.
@@ -544,6 +595,30 @@ const NEGATIVE_PROMPT_BLOCK =
  *    • advertorial: if hero asset is ready → prepend it as ref[0] for
  *      EVERY people-shot. Then add up to 2 product refs (cap total at 3).
  *    • other forms: existing behavior (product refs only). */
+/** Sections that depict the PROBLEM, not the product. User explicitly
+ *  reported pain/symptom shots showing person holding product like a
+ *  testimonial — breaking the emotional setup. Even if the imagePrompt
+ *  body mentions product tokens, these sections must NEVER have product
+ *  refs attached to filesUrl AND must inject a "NO PRODUCT IN SCENE"
+ *  directive into the final prompt. */
+const NO_PRODUCT_SECTIONS: ReadonlySet<SectionType> = new Set<SectionType>([
+  'pain',
+  'failed-solutions',
+  'why-happens',
+])
+
+/** Hard directive injected into pain / failed-solutions / why-happens
+ *  prompts. Forces KIE to render the PROBLEM scene, not a product shot
+ *  or testimonial framing. */
+const PAIN_NO_PRODUCT_DIRECTIVE =
+  'PAIN / PROBLEM SCENE — ABSOLUTE NO PRODUCT RULE:\n'
+  + '  • This is a PROBLEM / SYMPTOM / STRUGGLE scene. Focus on the person\'s discomfort and daily struggle.\n'
+  + '  • DO NOT show any supplement / bottle / pill / capsule / packet / sachet / product in this image — NOT in hand, NOT on counter, NOT in frame at all.\n'
+  + '  • DO NOT create a testimonial-style composition.\n'
+  + '  • DO NOT smile, do not pose like an advertisement, do not look at camera holding anything promotional.\n'
+  + '  • Mood: emotional realism, documentary candid. Examples: woman holding stomach in discomfort, tired office worker slumped at desk, stressed mother on couch, bathroom discomfort posture, bloated body posture, lying exhausted on couch, frustrated grimace.\n'
+  + '  • The product belongs in product-discovery / lifestyle / final-cta sections — NEVER here.'
+
 function selectRefsForSection(
   type: SectionType,
   pack: LandingPagePack,
@@ -557,6 +632,15 @@ function selectRefsForSection(
     const heroSection = pack.sections.find((s) => s.type === 'hero')
     const heroRef = heroSection?.imagePrompts?.[0]?.generatedAssetRef
     if (heroRef) refs.push(heroRef)
+  }
+
+  // ── PAIN-SECTION GUARD (Phase 7 stabilization) ────────────────────────
+  // Pain / problem / symptom sections must NEVER receive the product as
+  // visual reference — even if Gemini's imagePrompt leaked product tokens.
+  // KIE with a product ref would render the person holding the product
+  // (testimonial framing) which kills the emotional pain setup.
+  if (NO_PRODUCT_SECTIONS.has(type)) {
+    return refs   // returns ONLY hero ref (for advertorial), no product refs
   }
 
   // ── Phase 7 CRITICAL FIX — product identity lock ─────────────────────
@@ -671,6 +755,16 @@ function buildFinalPrompt(job: ImageJob, hasProductRefs: boolean): string {
     parts.push(HERO_CHARACTER_LOCK)
   }
   if (hasProductRefs) parts.push(PRODUCT_IDENTITY_PREFIX)
+
+  // Phase 7 stabilization — pain / problem / symptom sections must NEVER
+  // depict the product. User reported pain-section shots with person
+  // holding product like a testimonial, which kills the emotional
+  // problem-awareness setup. Inject a hard "no product in scene"
+  // directive that overrides anything Gemini may have put in the prompt.
+  if (NO_PRODUCT_SECTIONS.has(job.section.type)) {
+    parts.push(PAIN_NO_PRODUCT_DIRECTIVE)
+  }
+
   parts.push(job.prompt.prompt)
 
   // Z22 — per-image diversity directive (replaced by continuity directive
