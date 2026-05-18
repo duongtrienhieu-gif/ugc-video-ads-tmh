@@ -1,16 +1,18 @@
-// ── Asset-Type Picker (P14 — marketing-mindset library) ───────────────────
+// ── Asset-Type Picker (P22 — floating popup, no layout shift) ──────────
 //
-// Now grouped by 8 marketing categories (NOT 3 engine groups):
-//   • Bằng chứng xã hội · Giải thích sản phẩm · Cảm xúc & Lối sống ·
-//     Quảng cáo chuyển đổi · Giao diện mạng xã hội · Ảnh sản phẩm
-//     chuyên nghiệp · UGC & Người thật · AI Visual Magic
+// Per spec — explanation appears as FLOATING ABSOLUTE LAYER (not
+// inline below the card). Positioned via portal so:
+//   • Grid layout never shifts when popup appears
+//   • Card heights stay uniform
+//   • Popup auto-flips left if it would overflow the right edge
+//   • Desktop only — mobile (< md) skips popup; card click still works
 //
-// Each card shows:
-//   • icon + Vietnamese marketing title + 1-line subtitle
-//   • badges (Sản phẩm / Avatar AI / TikTok / Shopee / ...)
-//   • hover tooltip (long-form: what + marketing goal + suitable platforms)
+// Style reference: Notion AI hover preview / Script Architect preview
+// (dark rounded card, subtle shadow, max-width 340px, fade+slide
+// animation 150-200ms).
 
-import { useState } from 'react'
+import { useState, useRef, useLayoutEffect } from 'react'
+import { createPortal } from 'react-dom'
 import {
   Package, UserRound, LayoutGrid, ArrowRightLeft, Sun, Sparkles, Coffee,
   Video, MessageCircle, MessagesSquare, ShoppingBag, MessageSquare,
@@ -59,7 +61,6 @@ interface AssetTypePickerProps {
 }
 
 export default function AssetTypePicker({ selectedId, onSelect }: AssetTypePickerProps) {
-  // Categories collapsible (default: all open)
   const [openCategories, setOpenCategories] = useState<Set<CategoryId>>(
     () => new Set(MARKETING_CATEGORIES.map((c) => c.id)),
   )
@@ -157,38 +158,29 @@ interface AssetCardProps {
   categoryAccent: string
   categoryBg: string
   selected: boolean
-  /** Click selects the creative directly (no intermediate expand step). */
   onSelect: () => void
 }
 
 function AssetCard({ entry, categoryAccent, categoryBg, selected, onSelect }: AssetCardProps) {
   const Icon = CARD_ICONS[entry.iconKey] ?? Package
-
-  // P21 — HOVER triggers inline explanation BELOW the card (not click).
-  // Restores the snappier P14 hover UX, but positions the panel BELOW
-  // the card (animated grow) instead of floating to the right. Click
-  // directly selects (no "Chọn loại này" intermediate button).
-  const [hovered, setHovered] = useState(false)
+  const cardRef = useRef<HTMLButtonElement>(null)
+  const [popupOpen, setPopupOpen] = useState(false)
 
   return (
-    <div
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
-      onFocus={() => setHovered(true)}
-      onBlur={() => setHovered(false)}
-      className={`overflow-hidden rounded-xl border transition-all ${
-        selected
-          ? 'border-violet-500 bg-violet-50 ring-2 ring-violet-200'
-          : hovered
-            ? 'border-gray-300 bg-white shadow-sm'
-            : `${categoryAccent} ${categoryBg}`
-      }`}
-    >
-      {/* Card head — click selects */}
+    <>
       <button
+        ref={cardRef}
         type="button"
         onClick={onSelect}
-        className="group flex w-full flex-col items-start gap-1.5 p-2.5 text-left"
+        onMouseEnter={() => setPopupOpen(true)}
+        onMouseLeave={() => setPopupOpen(false)}
+        onFocus={() => setPopupOpen(true)}
+        onBlur={() => setPopupOpen(false)}
+        className={`group flex w-full flex-col items-start gap-1.5 rounded-xl border p-2.5 text-left transition-all ${
+          selected
+            ? 'border-violet-500 bg-violet-50 ring-2 ring-violet-200'
+            : `${categoryAccent} ${categoryBg}`
+        }`}
       >
         <div className="flex w-full items-center justify-between">
           <Icon
@@ -205,7 +197,6 @@ function AssetCard({ entry, categoryAccent, categoryBg, selected, onSelect }: As
         <span className="line-clamp-2 text-[10px] leading-snug text-gray-500">
           {entry.description.vi}
         </span>
-        {/* Badges */}
         <div className="mt-1 flex flex-wrap gap-1">
           {entry.badges.map((b) => {
             const meta = BADGE_META[b]
@@ -222,46 +213,116 @@ function AssetCard({ entry, categoryAccent, categoryBg, selected, onSelect }: As
         </div>
       </button>
 
-      {/* Hover panel BELOW card — animated grow + fade.
-          grid-template-rows: 0fr ↔ 1fr trick for smooth auto-height
-          animation in modern browsers. Card grows downward; grid handles
-          staggered heights naturally. */}
-      <div
-        className={`grid transition-[grid-template-rows,opacity] duration-150 ease-out ${
-          hovered ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'
-        }`}
-      >
-        <div className="overflow-hidden">
-          <div className="border-t border-black/8 bg-white/80 p-3">
-            <p className="text-[10px] leading-snug text-gray-700">
-              {entry.tooltip.what}
-            </p>
+      {/* Floating preview popup — portal-rendered, NEVER shifts grid */}
+      {popupOpen && <FloatingPreview entry={entry} anchorRef={cardRef} />}
+    </>
+  )
+}
 
-            <p className="mt-2.5 text-[9px] font-bold uppercase tracking-wide text-gray-400">
-              Mục tiêu marketing
-            </p>
-            <p className="mt-0.5 text-[10px] leading-snug text-gray-600">
-              {entry.tooltip.marketingGoal}
-            </p>
+// ── Floating preview popup (P22) ──────────────────────────────────────
+// Renders via portal to document.body — guarantees:
+//   • Card grid never shifts
+//   • z-index always sits above other UI
+//   • Auto-flips left when card is near right viewport edge
+//   • Desktop only (md+); mobile hover events don't fire so this is
+//     effectively gated to non-touch devices
 
-            {entry.tooltip.suitableFor.length > 0 && (
-              <>
-                <p className="mt-2.5 text-[9px] font-bold uppercase tracking-wide text-gray-400">
-                  Phù hợp
-                </p>
-                <ul className="mt-0.5 space-y-0.5">
-                  {entry.tooltip.suitableFor.map((s) => (
-                    <li key={s} className="flex gap-1 text-[10px] text-gray-600">
-                      <span className="text-gray-400">•</span>
-                      <span>{s}</span>
-                    </li>
-                  ))}
-                </ul>
-              </>
-            )}
-          </div>
-        </div>
+const POPUP_WIDTH = 340
+const POPUP_GAP = 12
+
+interface FloatingPreviewProps {
+  entry: AssetCatalogEntry
+  anchorRef: React.RefObject<HTMLButtonElement | null>
+}
+
+function FloatingPreview({ entry, anchorRef }: FloatingPreviewProps) {
+  const [style, setStyle] = useState<{ top: number; left: number; placement: 'right' | 'left' } | null>(null)
+
+  useLayoutEffect(() => {
+    const el = anchorRef.current
+    if (!el) return
+    const rect = el.getBoundingClientRect()
+    const wouldOverflowRight = rect.right + POPUP_GAP + POPUP_WIDTH > window.innerWidth - 16
+    const placement: 'right' | 'left' = wouldOverflowRight ? 'left' : 'right'
+    const left = placement === 'right'
+      ? rect.right + POPUP_GAP
+      : Math.max(16, rect.left - POPUP_GAP - POPUP_WIDTH)
+    // Vertically align top of popup with top of card, clamped to viewport
+    const maxTop = Math.max(16, window.innerHeight - 16 - 380)
+    const top = Math.max(16, Math.min(maxTop, rect.top))
+    setStyle({ top, left, placement })
+  }, [anchorRef])
+
+  if (!style) return null
+
+  // Skip popup rendering on small viewports — hover doesn't fire on
+  // touch devices anyway, but this is an extra safety net for fold/
+  // small-window edge cases.
+  if (typeof window !== 'undefined' && window.innerWidth < 768) return null
+
+  const Icon = CARD_ICONS[entry.iconKey] ?? Package
+
+  return createPortal(
+    <div
+      style={{ top: style.top, left: style.left, width: POPUP_WIDTH }}
+      className="pointer-events-none fixed z-[60] animate-[fade-slide_180ms_ease-out] rounded-xl border border-white/10 bg-gray-900/95 p-4 text-white shadow-2xl backdrop-blur-sm"
+    >
+      {/* Header: icon + title */}
+      <div className="flex items-center gap-2">
+        <span className="flex h-7 w-7 items-center justify-center rounded-md bg-white/10">
+          <Icon className="h-4 w-4 text-white" strokeWidth={1.8} />
+        </span>
+        <h4 className="text-sm font-bold tracking-tight text-white">
+          {entry.title.vi}
+        </h4>
       </div>
-    </div>
+
+      {/* WHAT */}
+      <p className="mt-3 text-[11px] leading-relaxed text-gray-200">
+        {entry.tooltip.what}
+      </p>
+
+      {/* MỤC TIÊU MARKETING */}
+      <p className="mt-3 text-[9px] font-bold uppercase tracking-widest text-gray-400">
+        Mục tiêu marketing
+      </p>
+      <p className="mt-1 text-[11px] leading-relaxed text-gray-300">
+        {entry.tooltip.marketingGoal}
+      </p>
+
+      {/* PHÙ HỢP */}
+      {entry.tooltip.suitableFor.length > 0 && (
+        <>
+          <p className="mt-3 text-[9px] font-bold uppercase tracking-widest text-gray-400">
+            Phù hợp
+          </p>
+          <ul className="mt-1 space-y-0.5">
+            {entry.tooltip.suitableFor.map((s) => (
+              <li key={s} className="flex gap-1.5 text-[11px] text-gray-300">
+                <span className="text-gray-500">•</span>
+                <span>{s}</span>
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+
+      {/* Badges (compact) */}
+      <div className="mt-3 flex flex-wrap gap-1">
+        {entry.badges.map((b) => {
+          const meta = BADGE_META[b]
+          if (!meta) return null
+          return (
+            <span
+              key={b}
+              className="rounded bg-white/10 px-1.5 py-0.5 text-[8px] font-semibold uppercase tracking-wide text-gray-200"
+            >
+              {meta.label}
+            </span>
+          )
+        })}
+      </div>
+    </div>,
+    document.body,
   )
 }
