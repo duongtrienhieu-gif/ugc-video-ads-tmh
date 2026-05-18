@@ -15,6 +15,7 @@
 
 import type { CreativeConfig, PromptContext, PromptBlock } from '../../types/creativeDNA'
 import { ASSEMBLE_ORDER } from '../../types/creativeDNA'
+import { assembleDnaDirective } from './dnaDirective'
 
 export interface AssembleResult {
   prompt: string
@@ -26,9 +27,21 @@ export function assemblePrompt(
   config: CreativeConfig,
   ctx: PromptContext,
 ): AssembleResult {
+  // P28 — auto-prepend a Creative DNA directive when the DNA declares
+  // any Phase 4 rule arrays (layoutRules / contentRules / visualRules
+  // / qualityRules / failureModes / emotionalGoal / typographyStyle /
+  // platformBehavior). Legacy configs without these declared get no
+  // DNA block — back-compat preserved. Engines no longer need to wire
+  // BLOCKS.dnaRules() manually in each config.
+  const blocks: PromptBlock[] = [...config.promptBlocks]
+  const dnaText = assembleDnaDirective(config.dna)
+  if (dnaText) {
+    blocks.unshift({ kind: 'dnaRules', text: dnaText })
+  }
+
   // Resolve each block's text
   const resolved: { block: PromptBlock; text: string }[] = []
-  for (const block of config.promptBlocks) {
+  for (const block of blocks) {
     const text = typeof block.text === 'function' ? block.text(ctx) : block.text
     if (text && text.trim().length > 0) {
       resolved.push({ block, text: text.trim() })

@@ -35,7 +35,10 @@ import {
 import { renderInfographic } from './infographic/template'
 import { renderCtaBanner } from './cta-banner/template'
 import { fromProduct, type ProductKnowledge } from '../../services/productKnowledge'
+import { findCreativeConfig } from '../../creativeConfig/configs'
+import { dnaSummary } from '../../shared/prompt/dnaDirective'
 import type { Product } from '../../../../stores/types'
+import type { CreativeDNA } from '../../types/creativeDNA'
 
 export async function dispatchDesignedGraphic(
   module: DesignedGraphicModule,
@@ -72,11 +75,16 @@ export async function dispatchDesignedGraphic(
   // P25 — load product knowledge once, share across both renderers
   const productKnowledge = product ? fromProduct(product as Product, locale) : undefined
 
+  // P28 — load Creative DNA so its hard rule arrays append to the
+  // Gemini system instruction during content generation.
+  const config = findCreativeConfig(module.id)
+  const dna = config?.dna
+
   // ── Step 4: render the canvas ─────────────────────────────────────
   let canvas: HTMLCanvasElement
   if (rendererKind === 'infographic') {
     const content = (opts.content as InfographicContent | undefined)
-      ?? await generateInfographicContent(settings.geminiApiKey, buildContentReq('infographic', product ?? null, opts, locale, productKnowledge))
+      ?? await generateInfographicContent(settings.geminiApiKey, buildContentReq('infographic', product ?? null, opts, locale, productKnowledge, dna))
     canvas = await renderInfographic({
       content,
       layout,
@@ -86,7 +94,7 @@ export async function dispatchDesignedGraphic(
     })
   } else if (rendererKind === 'cta-banner') {
     const content = (opts.content as CtaBannerContent | undefined)
-      ?? await generateCtaBannerContent(settings.geminiApiKey, buildContentReq('cta-banner', product ?? null, opts, locale, productKnowledge))
+      ?? await generateCtaBannerContent(settings.geminiApiKey, buildContentReq('cta-banner', product ?? null, opts, locale, productKnowledge, dna))
     canvas = await renderCtaBanner({
       content,
       layout,
@@ -130,6 +138,13 @@ export async function dispatchDesignedGraphic(
     overall:    qc.overall,
     issues:     qc.issues,
     visionPass: qc.visionPass,
+  }
+  // P28 — surface DNA rule snapshot on the asset.
+  if (dna) {
+    asset.metadata.engineExtras = {
+      ...(asset.metadata.engineExtras ?? {}),
+      creativeDna: dnaSummary(dna),
+    }
   }
   return asset
 }
@@ -175,6 +190,7 @@ function buildContentReq(
   opts: Record<string, unknown>,
   locale: UINativeLocale,
   productKnowledge?: ProductKnowledge,
+  dna?: CreativeDNA,
 ): ContentRequest {
   return {
     kind,
@@ -187,5 +203,6 @@ function buildContentReq(
     offer:              (opts.offer as string | undefined) ?? product?.offer,
     tone:               opts.tone as string | undefined,
     productKnowledge,
+    dna,
   }
 }

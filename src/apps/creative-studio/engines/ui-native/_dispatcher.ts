@@ -26,6 +26,8 @@ import { toPublicUrl } from '../../shared/utils/refResolver'
 import { generateAvatar, generateAvatarBatch } from './_shared/avatarGen'
 import { generateTextPayload, type TextPayloadRequest, type TextPayloadContentType } from './_shared/textPayload'
 import { fromProduct } from '../../services/productKnowledge'
+import { findCreativeConfig } from '../../creativeConfig/configs'
+import { dnaSummary } from '../../shared/prompt/dnaDirective'
 import { buildTimeline } from './_shared/timestamps'
 import { applyAuthenticityPipeline } from './_shared/authenticityPipeline'
 import { generateParticipantPool, buildAvatarHint, type ChatParticipant } from './_shared/participants'
@@ -126,6 +128,13 @@ export async function dispatchUINative(
 
   const timeline = buildTimeline(messageCount, locale, seed)
 
+  // P28 — load Creative DNA from creativeConfig once. Used by the text
+  // generator (system instruction append) and recorded on the asset
+  // metadata at the end so downstream consumers can see the active
+  // rule set.
+  const config = findCreativeConfig(module.id)
+  const dna = config?.dna
+
   // ── Step 3: text payload ───────────────────────────────────────────
   let textPayload: UINativeTextContent
   if (opts.textPayload) {
@@ -145,6 +154,7 @@ export async function dispatchUINative(
       tone: opts.tone as string | undefined,
       contentType,
       productKnowledge,
+      dna,
     }
     textPayload = await generateTextPayload(settings.geminiApiKey, textReq, timeline.perMessage)
   }
@@ -252,6 +262,15 @@ export async function dispatchUINative(
     overall:    qcVerdict.overall,
     issues:     qcVerdict.issues,
     visionPass: qcVerdict.visionPass,
+  }
+  // P28 — record the DNA rule snapshot on the asset so downstream
+  // consumers (debug panels, analytics, future QC vision pass) can see
+  // which intelligence rules were active for this generation.
+  if (dna) {
+    asset.metadata.engineExtras = {
+      ...(asset.metadata.engineExtras ?? {}),
+      creativeDna: dnaSummary(dna),
+    }
   }
   return asset
 }

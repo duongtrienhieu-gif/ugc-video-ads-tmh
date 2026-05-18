@@ -23,6 +23,7 @@ import { toPublicUrl } from '../../shared/utils/refResolver'
 import { runBaselineQC } from '../../shared/qc/baselineQC'
 import { findCreativeConfig } from '../../creativeConfig/configs'
 import { assemblePrompt } from '../../shared/prompt/promptAssembler'
+import { dnaSummary } from '../../shared/prompt/dnaDirective'
 import { fromProduct } from '../../services/productKnowledge'
 import type { UINativeLocale } from '../../types/uiNative'
 
@@ -133,6 +134,13 @@ export async function dispatchPhotographic(
     overall:    qc.overall,
     issues:     qc.issues,
     visionPass: qc.visionPass,
+  }
+  // P28 — surface DNA rule snapshot on the asset.
+  if (config?.dna) {
+    asset.metadata.engineExtras = {
+      ...(asset.metadata.engineExtras ?? {}),
+      creativeDna: dnaSummary(config.dna),
+    }
   }
   return asset
 }

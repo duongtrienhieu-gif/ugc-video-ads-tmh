@@ -54,8 +54,19 @@ export type RenderStyle =
   | 'clinical-pharma' | 'infographic-vector' | 'mobile-ui-screenshot'
   | 'cinematic-still'
 
-/** 10 attributes — the marketing brain summary of an asset type. */
+/** Marketing brain for a creative type.
+ *
+ *  Core 10 attributes (P15) describe the angle. Phase 4 (P28) adds the
+ *  INTELLIGENCE LAYER — typed rule arrays that engines feed into prompt
+ *  assembly, content generation, layout enforcement, and QC validation.
+ *
+ *  ARCHITECTURE RULE: CreativeDNA is the SOURCE OF TRUTH. It is NOT
+ *  prompt text. Prompt assemblers consume the DNA and structure the
+ *  output. QC validators consume `qualityRules` + `failureModes` to
+ *  decide pass / fail. Model drift cannot override DNA — DNA is hard. */
 export interface CreativeDNA {
+  // ── Core descriptive attributes (P15) ────────────────────────────────
+
   /** Marketing category this DNA belongs to (matches UI picker). */
   category: CategoryId
   /** What conversion / trust outcome the asset is designed to drive. */
@@ -76,6 +87,43 @@ export interface CreativeDNA {
   cameraStyle: CameraStyle
   /** Top-level render style. */
   renderStyle: RenderStyle
+
+  // ── P28 (Phase 4) — Intelligence Layer (all optional for back-compat)
+
+  /** Free-text emotional goal humanizing the marketing target.
+   *  Example: 'casual authenticity, private recommendation vibe' */
+  emotionalGoal?: string
+
+  /** Typography directive — only meaningful for engines that render
+   *  typography (designed-graphic, ui-native canvas).
+   *  Example: 'ecommerce readable, bold benefit emphasis, mobile-safe 14px+' */
+  typographyStyle?: string
+
+  /** Platform-specific behavioral guidance — beyond visual style.
+   *  Guides voice, density, tempo, demographic expectation.
+   *  Example for TikTok: 'chaotic engagement, casual tone, emoji-heavy,
+   *  younger Gen Z phrasing' */
+  platformBehavior?: string
+
+  /** Hard layout rules the renderer / prompt MUST enforce.
+   *  Example: ['portrait mobile screenshot', 'WhatsApp-safe margins'] */
+  layoutRules?: string[]
+
+  /** Hard content rules for text-bearing creatives.
+   *  Example: ['believable Malay phrasing', 'non-salesy tone'] */
+  contentRules?: string[]
+
+  /** Hard visual rules. Example: ['native WhatsApp green'] */
+  visualRules?: string[]
+
+  /** Hard quality bar — QC must verify these hold.
+   *  Example: ['text fully readable', 'UI pixel-correct'] */
+  qualityRules?: string[]
+
+  /** What the model MUST NEVER produce — feeds the negative block
+   *  AND the QC failure detector.
+   *  Example: ['AI gibberish text', 'centered chat layout'] */
+  failureModes?: string[]
 }
 
 // ── Prompt blocks ──────────────────────────────────────────────────────
@@ -83,7 +131,7 @@ export interface CreativeDNA {
 export type PromptBlockKind =
   | 'scene' | 'lighting' | 'camera' | 'emotion' | 'socialProof'
   | 'ugc' | 'platform' | 'textRendering' | 'product' | 'negative'
-  | 'continuity' | 'composition'
+  | 'continuity' | 'composition' | 'dnaRules'
 
 /** A single text fragment with a kind tag. The assembler concatenates
  *  these in a stable order (defined by ASSEMBLE_ORDER). */
@@ -151,7 +199,12 @@ export interface CreativeConfig {
 /** Standard block assembly order. The assembler concatenates blocks
  *  whose kind appears in this list, in this order.  Blocks of any
  *  other kind are emitted last. */
+/** P28 — `dnaRules` is placed FIRST. The Creative DNA is the SOURCE OF
+ *  TRUTH; everything else (scene / lighting / camera) is descriptive
+ *  texture. Putting the hard rule block at the top of the prompt makes
+ *  the model treat it as system-level constraints, not flavor. */
 export const ASSEMBLE_ORDER: PromptBlockKind[] = [
+  'dnaRules',
   'product',
   'composition',
   'scene',

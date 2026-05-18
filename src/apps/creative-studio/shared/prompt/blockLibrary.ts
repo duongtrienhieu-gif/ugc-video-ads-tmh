@@ -19,8 +19,9 @@
 //     ...
 //   }
 
-import type { PromptBlock, PromptContext, PlatformStyle } from '../../types/creativeDNA'
+import type { PromptBlock, PromptContext, PlatformStyle, CreativeDNA } from '../../types/creativeDNA'
 import { formatProductKnowledgeForPrompt } from '../../services/productKnowledge'
+import { assembleDnaDirective } from './dnaDirective'
 
 // ── Product / Avatar identity locks ──────────────────────────────────
 
@@ -87,6 +88,19 @@ const GLOBAL_NEGATIVE_TEXT =
 export const BLOCKS = {
   productLock(): PromptBlock {
     return { kind: 'product', text: PRODUCT_LOCK_TEXT }
+  },
+
+  // ── P28 — DNA hard-rule directive ─────────────────────────────────
+  /** Emits the full Creative DNA as a structured "[CREATIVE DNA — HARD
+   *  RULES SOURCE OF TRUTH]" block at the TOP of the prompt (per
+   *  ASSEMBLE_ORDER). The block bundles marketing goal + emotional
+   *  goal + typography + platform behavior + layout / content / visual
+   *  / failure-mode / quality-bar rules.
+   *
+   *  Pass the active CreativeDNA when constructing the block — the
+   *  prompt assembler does not have access to the DNA otherwise. */
+  dnaRules(dna: CreativeDNA): PromptBlock {
+    return { kind: 'dnaRules', text: assembleDnaDirective(dna) }
   },
 
   /** Continuity for sequential renders + avatar lock conditional on

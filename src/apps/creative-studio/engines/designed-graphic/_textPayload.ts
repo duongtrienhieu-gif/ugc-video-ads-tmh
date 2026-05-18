@@ -9,8 +9,10 @@
 // params.options.content, exactly like ui-native textPayload.
 
 import type { UINativeLocale } from '../../types/uiNative'
+import type { CreativeDNA } from '../../types/creativeDNA'
 import { safeGenerateStructured } from '../../shared/llm/safeGenerateStructured'
 import { formatProductKnowledgeForPrompt, type ProductKnowledge } from '../../services/productKnowledge'
+import { assembleDnaDirective } from '../../shared/prompt/dnaDirective'
 
 export type DesignedGraphicContentKind = 'infographic' | 'cta-banner'
 
@@ -51,6 +53,8 @@ export interface ContentRequest {
   tone?: string
   /** P25 — full product knowledge profile loaded from bankStore. */
   productKnowledge?: ProductKnowledge
+  /** P28 — Creative DNA appended to system instruction. */
+  dna?: CreativeDNA
 }
 
 // ── P25 — locale hard-lock appended to system instructions ───────────
@@ -216,10 +220,12 @@ export async function generateInfographicContent(
   apiKey: string,
   req: ContentRequest,
 ): Promise<InfographicContent> {
+  const dnaDirective = req.dna ? assembleDnaDirective(req.dna) : ''
+  const dnaAppend = dnaDirective ? '\n\n' + dnaDirective : ''
   const result = await safeGenerateStructured<InfographicContent>({
     apiKey,
     prompt: buildInfographicPrompt(req),
-    systemInstruction: INFO_SYSTEM_INSTRUCTION + '\n\n' + localeRule(req.locale),
+    systemInstruction: INFO_SYSTEM_INSTRUCTION + '\n\n' + localeRule(req.locale) + dnaAppend,
     // P12-fix: bump token budget — previous 1024 was getting truncated
     // mid-string with "Unexpected end of JSON input" errors
     maxOutputTokens: 2048,
@@ -234,10 +240,12 @@ export async function generateCtaBannerContent(
   apiKey: string,
   req: ContentRequest,
 ): Promise<CtaBannerContent> {
+  const dnaDirective = req.dna ? assembleDnaDirective(req.dna) : ''
+  const dnaAppend = dnaDirective ? '\n\n' + dnaDirective : ''
   const result = await safeGenerateStructured<CtaBannerContent>({
     apiKey,
     prompt: buildCtaPrompt(req),
-    systemInstruction: CTA_SYSTEM_INSTRUCTION + '\n\n' + localeRule(req.locale),
+    systemInstruction: CTA_SYSTEM_INSTRUCTION + '\n\n' + localeRule(req.locale) + dnaAppend,
     maxOutputTokens: 1024,   // P12-fix: was 512 (too tight)
     schema: { name: 'CtaBannerContent', validate: isCtaBannerContent },
     fallback: ctaFallback(req),

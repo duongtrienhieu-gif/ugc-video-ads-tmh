@@ -9,8 +9,10 @@
 // where the user already wrote the dialogue manually.
 
 import type { UINativeTextContent, UINativeLocale, UINativePlatform } from '../../../types/uiNative'
+import type { CreativeDNA } from '../../../types/creativeDNA'
 import { findPersona } from '../../../shared/metadata/personaLibrary'
 import { safeGenerateStructured } from '../../../shared/llm/safeGenerateStructured'
+import { assembleDnaDirective } from '../../../shared/prompt/dnaDirective'
 import { buildArchetypeMix, describeMix } from './commentArchetypes'
 
 /** What kind of UI-native content we are generating text for. */
@@ -34,6 +36,11 @@ export interface TextPayloadRequest {
    *  into the LLM prompt so chat / review / comment text references
    *  real benefits + pain points + USPs instead of inventing them. */
   productKnowledge?: import('../../../services/productKnowledge').ProductKnowledge
+  /** P28 — Creative DNA. When provided, its hard rule arrays get
+   *  appended to every system instruction so generated chat / review
+   *  / comment text honors contentRules, platformBehavior, and never
+   *  produces failureModes. */
+  dna?: CreativeDNA
 }
 
 // ── Locale hard-lock for Gemini system instructions ──────────────────
@@ -471,11 +478,17 @@ export async function generateTextPayload(
   // prompt for Gemini models.
   const localeAppend = '\n\n' + localeRule(req.locale)
 
+  // P28 — append Creative DNA directive when a dna is provided. The
+  // DNA carries content rules / platform behavior / failure modes that
+  // the chat / review / comment generator MUST honor.
+  const dnaDirective = req.dna ? assembleDnaDirective(req.dna) : ''
+  const dnaAppend = dnaDirective ? '\n\n' + dnaDirective : ''
+
   if (contentType === 'review') {
     const result = await safeGenerateStructured<LLMReviewResponse>({
       apiKey,
       prompt: buildReviewPrompt(req),
-      systemInstruction: REVIEW_SYSTEM_INSTRUCTION + localeAppend,
+      systemInstruction: REVIEW_SYSTEM_INSTRUCTION + localeAppend + dnaAppend,
       maxOutputTokens: 1024,
       schema: { name: 'LLMReviewResponse', validate: isReviewResponse },
       fallback: reviewFallback(req),
@@ -488,7 +501,7 @@ export async function generateTextPayload(
     const result = await safeGenerateStructured<LLMCommentResponse>({
       apiKey,
       prompt: buildCommentPrompt(req),
-      systemInstruction: COMMENT_SYSTEM_INSTRUCTION + localeAppend,
+      systemInstruction: COMMENT_SYSTEM_INSTRUCTION + localeAppend + dnaAppend,
       maxOutputTokens: 2048,
       schema: { name: 'LLMCommentResponse', validate: isCommentResponse },
       fallback: commentFallback(req),
@@ -501,7 +514,7 @@ export async function generateTextPayload(
   const result = await safeGenerateStructured<LLMResponse>({
     apiKey,
     prompt: buildTextPayloadPrompt(req),
-    systemInstruction: SYSTEM_INSTRUCTION + localeAppend,
+    systemInstruction: SYSTEM_INSTRUCTION + localeAppend + dnaAppend,
     maxOutputTokens: 2048,
     schema: { name: 'LLMResponse', validate: isChatResponse },
     fallback: chatFallback(req),

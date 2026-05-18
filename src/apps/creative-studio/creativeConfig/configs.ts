@@ -32,6 +32,30 @@ const CONFIGS: CreativeConfig[] = [
       platformStyle: 'ecommerce-thumbnail',
       cameraStyle: 'tripod-studio',
       renderStyle: 'studio-clean',
+      emotionalGoal: 'Premium ecommerce confidence — label đáng tin, packaging chỉn chu',
+      platformBehavior: 'Ecommerce thumbnail — sharp at small size, label readable when zoomed out',
+      layoutRules: [
+        'product centered hero',
+        'negative space all around for cropping flexibility',
+        'no props, no people, no environmental context',
+      ],
+      visualRules: [
+        'dramatic key + fill studio lighting',
+        'premium shadow with clear feet placement on the surface',
+        'subtle reflection plane acceptable',
+        'seamless near-white background',
+      ],
+      qualityRules: [
+        'label fully readable at thumbnail size',
+        'sharp focus end-to-end on the packaging',
+        'packaging proportions accurate to reference image',
+      ],
+      failureModes: [
+        'lifestyle clutter or environmental props',
+        'colored gradient or photographic backgrounds',
+        'visible hands or people in frame',
+        'distorted packaging proportions',
+      ],
     },
     promptBlocks: [
       BLOCKS.productLock(),
@@ -69,6 +93,29 @@ const CONFIGS: CreativeConfig[] = [
       platformStyle: 'landing-page',
       cameraStyle: 'handheld-smartphone',
       renderStyle: 'ugc-realism',
+      emotionalGoal: 'Authentic human trust — "khách hàng thật cầm sản phẩm", non-influencer feel',
+      platformBehavior: 'Landing page + social — works as hero or scrollable testimonial slot',
+      layoutRules: [
+        'person at chest level, both hands grip product',
+        'label faces camera at eye level',
+        'eye-level framing, slight asymmetric off-center',
+      ],
+      visualRules: [
+        'natural skin texture with visible pores',
+        'soft indoor daylight (no studio key light)',
+        'authentic non-influencer feel',
+      ],
+      qualityRules: [
+        'both hands visible holding the product',
+        'product label readable',
+        'genuine human skin (not plastic AI smoothness)',
+      ],
+      failureModes: [
+        'studio softbox glow',
+        'magazine retouching / plastic skin',
+        'over-symmetric model pose',
+        'influencer-perfect aesthetic',
+      ],
     },
     promptBlocks: [
       BLOCKS.productLock(),
@@ -103,6 +150,28 @@ const CONFIGS: CreativeConfig[] = [
       platformStyle: 'tiktok',
       cameraStyle: 'selfie-ring-light',
       renderStyle: 'ugc-realism',
+      emotionalGoal: 'Private creator-customer authenticity — looks like a real selfie',
+      platformBehavior: 'TikTok / Reels — handheld smartphone aesthetic, off-center framing OK',
+      layoutRules: [
+        'phone-camera angle slightly elevated',
+        'product near face / cheek',
+        'asymmetric framing, not centered',
+      ],
+      visualRules: [
+        'ring-light reflection in eyes acceptable',
+        'raw smartphone aesthetic with slight digital grain',
+        'phone-screen glare or natural shadows acceptable',
+      ],
+      qualityRules: [
+        'product visible alongside face with label readable',
+        'genuine relaxed expression, not posed model smile',
+      ],
+      failureModes: [
+        'professional studio key-light setup',
+        'symmetric posed magazine shot',
+        'editorial portrait lighting',
+        'plastic-smooth skin',
+      ],
     },
     promptBlocks: [
       BLOCKS.productLock(),
@@ -128,15 +197,37 @@ const CONFIGS: CreativeConfig[] = [
     model: 'gpt-image-2',
     dna: {
       category: 'pro-photo',
-      marketingGoal: 'Aesthetic Instagram-grid-friendly review unboxing shot — bố cục clean cho lifestyle feed.',
+      marketingGoal: 'Macro detail shot — chứng minh chất lượng cao qua texture cận cảnh.',
       emotion: 'aspiration',
       realism: 'natural',
       composition: 'flat-lay',
       productVisibility: 'hero-dominant',
       textImportance: 'minimal',
       platformStyle: 'instagram-feed',
-      cameraStyle: 'overhead-flatlay',
+      cameraStyle: 'macro-detail',
       renderStyle: 'editorial-beauty',
+      emotionalGoal: 'Tactile premium quality — khách thấy texture là tin "có hàng thật"',
+      platformBehavior: 'Detail page + carousel — works for ingredient close-ups and texture proof',
+      layoutRules: [
+        'macro close-up, very tight framing',
+        'product texture in foreground focus plane',
+        'optional ingredient swatch alongside packaging',
+      ],
+      visualRules: [
+        'shallow depth of field with sharp focal point',
+        'soft daylight, no harsh studio key',
+        'natural surface (wood / marble / linen)',
+      ],
+      qualityRules: [
+        'label readable when label is in frame',
+        'texture / material clearly visible',
+        'one sharp focal point — no everything-in-focus look',
+      ],
+      failureModes: [
+        'wide-angle environmental shot',
+        'busy background props',
+        'overprocessed digital glow',
+      ],
     },
     promptBlocks: [
       BLOCKS.productLock(),
@@ -170,6 +261,33 @@ const CONFIGS: CreativeConfig[] = [
       platformStyle: 'facebook-ads',
       cameraStyle: 'tripod-studio',
       renderStyle: 'ugc-realism',
+      emotionalGoal: 'Concrete transformation evidence — set realistic before/after expectation',
+      platformBehavior: 'Performance ads — thumb-stop hook with clear visual delta',
+      layoutRules: [
+        'strict 50/50 vertical split frame',
+        'SAME person both halves',
+        'identical lighting, backdrop, and camera angle both halves',
+      ],
+      contentRules: [
+        'optional small SEBELUM/SELEPAS or TRƯỚC/SAU label at the bottom edge',
+        'no overlay text covering the subject',
+      ],
+      visualRules: [
+        'left half: dull / tired / withdrawn',
+        'right half: refreshed / confident / open',
+        'neutral backdrop — change comes from the SUBJECT not the lighting',
+      ],
+      qualityRules: [
+        'left+right halves pixel-aligned',
+        'same camera angle both halves',
+        'continuity of clothing and hairstyle',
+      ],
+      failureModes: [
+        'two different people on each side',
+        'Photoshop blur / glow filter divide',
+        'beauty filter smoothing only on the "after" side',
+        'different lighting between halves',
+      ],
     },
     promptBlocks: [
       BLOCKS.productLock(),
@@ -195,7 +313,7 @@ const CONFIGS: CreativeConfig[] = [
     model: 'gpt-image-2',
     dna: {
       category: 'pro-photo',
-      marketingGoal: 'Gắn sản phẩm vào routine ấm cúng — khách tưởng tượng dùng SP mỗi sáng trong bếp nhà mình.',
+      marketingGoal: 'Benefit scene — gắn sản phẩm vào morning routine, khách tưởng tượng dùng SP mỗi sáng.',
       emotion: 'comfort',
       realism: 'highly-real',
       composition: 'lifestyle-environmental',
@@ -204,6 +322,27 @@ const CONFIGS: CreativeConfig[] = [
       platformStyle: 'instagram-feed',
       cameraStyle: 'wide-environmental',
       renderStyle: 'editorial-beauty',
+      emotionalGoal: 'Warm domestic comfort — sản phẩm thuộc về bếp nhà mình',
+      platformBehavior: 'Instagram + lifestyle ads — narrative scene, scroll-stop emotion',
+      layoutRules: [
+        'product on counter foreground',
+        'person blurred in background, candid action',
+        'natural depth of field — label sharp, scene soft',
+      ],
+      visualRules: [
+        'warm morning sunlight through a window',
+        'authentic lived-in kitchen (slight clutter acceptable)',
+        'soft warm color grade',
+      ],
+      qualityRules: [
+        'product label readable in foreground',
+        'kitchen context clearly recognizable',
+      ],
+      failureModes: [
+        'staged perfect magazine kitchen',
+        'over-produced photo-studio look',
+        'dark moody mood lighting',
+      ],
     },
     promptBlocks: [
       BLOCKS.productLock(),
@@ -227,7 +366,7 @@ const CONFIGS: CreativeConfig[] = [
     model: 'gpt-image-2',
     dna: {
       category: 'pro-photo',
-      marketingGoal: 'Gợi cảm giác self-care premium — gắn sản phẩm vào nghi thức chăm sóc bản thân.',
+      marketingGoal: 'Benefit scene — gợi cảm giác self-care premium, sản phẩm trong morning routine.',
       emotion: 'comfort',
       realism: 'natural',
       composition: 'lifestyle-environmental',
@@ -236,6 +375,27 @@ const CONFIGS: CreativeConfig[] = [
       platformStyle: 'instagram-feed',
       cameraStyle: 'tripod-studio',
       renderStyle: 'editorial-beauty',
+      emotionalGoal: 'Premium self-care ritual — beauty editorial vibe, slow morning',
+      platformBehavior: 'Instagram + skincare ads — clean editorial composition',
+      layoutRules: [
+        'product hero on marble counter foreground',
+        'optional person blurred in mirror reflection or background',
+        'neatly folded towels as supporting prop',
+      ],
+      visualRules: [
+        'white marble or clean tile surface',
+        'soft warm natural light, morning skincare vibe',
+        'minimal counter clutter — premium not cluttered',
+      ],
+      qualityRules: [
+        'product label sharp and readable',
+        'bathroom context clearly recognizable as upscale',
+      ],
+      failureModes: [
+        'cluttered or dirty bathroom',
+        'industrial / institutional bathroom feel',
+        'dim or moody lighting',
+      ],
     },
     promptBlocks: [
       BLOCKS.productLock(),
@@ -259,7 +419,7 @@ const CONFIGS: CreativeConfig[] = [
     model: 'gpt-image-2',
     dna: {
       category: 'pro-photo',
-      marketingGoal: 'Gắn sản phẩm vào lối sống urban / freelancer / millennial.',
+      marketingGoal: 'Benefit scene — gắn sản phẩm vào lối sống urban / freelancer / millennial.',
       emotion: 'aspiration',
       realism: 'natural',
       composition: 'lifestyle-environmental',
@@ -268,6 +428,27 @@ const CONFIGS: CreativeConfig[] = [
       platformStyle: 'instagram-feed',
       cameraStyle: 'handheld-smartphone',
       renderStyle: 'ugc-realism',
+      emotionalGoal: 'Candid urban moment — sản phẩm thuộc về freelancer/digital nomad lifestyle',
+      platformBehavior: 'Instagram lifestyle + brand-vibe ads',
+      layoutRules: [
+        'cafe table in foreground',
+        'product + cappuccino + laptop / notebook as supporting props',
+        'candid handheld eye-level framing',
+      ],
+      visualRules: [
+        'ambient cafe light + warm window backlight',
+        'natural bokeh-free background',
+        'product label angled toward camera',
+      ],
+      qualityRules: [
+        'product clearly visible with label readable',
+        'cafe context unambiguously recognizable',
+      ],
+      failureModes: [
+        'hotel-restaurant or fine-dining look',
+        'overstaged influencer-shoot composition',
+        'tripod-studio precision (this is candid)',
+      ],
     },
     promptBlocks: [
       BLOCKS.productLock(),
@@ -300,6 +481,27 @@ const CONFIGS: CreativeConfig[] = [
       platformStyle: 'tiktok',
       cameraStyle: 'selfie-ring-light',
       renderStyle: 'ugc-realism',
+      emotionalGoal: 'TikTok creator review still — feels like a frame plucked from a viral video',
+      platformBehavior: 'TikTok / Reels — vertical-thinking framing, raw smartphone aesthetic',
+      layoutRules: [
+        'vertical-thinking framing (works cropped to 9:16)',
+        'bedroom / vanity / desk setup as context',
+        'product near face at handheld arm distance',
+      ],
+      visualRules: [
+        'ring-light reflection in eyes',
+        'phone smartphone camera aesthetic',
+        'mild digital grain and slight handheld jitter',
+      ],
+      qualityRules: [
+        'authentic creator-review feel',
+        'product label visible at frame center',
+      ],
+      failureModes: [
+        'cinematic studio mood lighting',
+        'professional camera DSLR aesthetic',
+        'editorial model pose',
+      ],
     },
     promptBlocks: [
       BLOCKS.productLock(),
@@ -325,6 +527,41 @@ const CONFIGS: CreativeConfig[] = [
     emotion: 'trust',
     composition: 'mobile-screenshot',
     platformStyle: 'whatsapp',
+    emotionalGoal: 'Casual authenticity — private recommendation between two people',
+    typographyStyle: 'native WhatsApp system font sizes, no custom typography',
+    platformBehavior: 'WhatsApp 1-on-1 chat — customer + shop, casual conversational',
+    layoutRules: [
+      'portrait mobile screenshot',
+      'WhatsApp-safe margins (16px side gutters)',
+      'realistic chat bubble spacing',
+      'proper bubble padding, never centered',
+    ],
+    contentRules: [
+      'believable conversational tone',
+      'imperfect grammar acceptable',
+      'non-salesy — NEVER marketing copy',
+      'casual emoji 0-2 per chat, never spammy',
+      'mix message lengths — 4-25 words each',
+    ],
+    visualRules: [
+      'native WhatsApp green for outgoing bubbles',
+      'realistic avatar crops',
+      'correct timestamp spacing under bubble groups',
+      'double blue tick for read messages',
+    ],
+    qualityRules: [
+      'all text fully readable',
+      'UI pixel-correct to WhatsApp 2024',
+      'no icon distortion',
+    ],
+    failureModes: [
+      'AI gibberish text or broken Unicode',
+      'overly clean Figma-perfect UI',
+      'fake typography that does not match WhatsApp',
+      'centered chat bubble layout',
+      'landscape screenshot orientation',
+      'language leakage (e.g. Vietnamese in a my-MY locale)',
+    ],
   }),
   ...uiNativeConfig('messenger-chat', {
     category: 'social-proof',
@@ -332,6 +569,36 @@ const CONFIGS: CreativeConfig[] = [
     emotion: 'trust',
     composition: 'mobile-screenshot',
     platformStyle: 'messenger',
+    emotionalGoal: 'Customer-to-page trust — show shop active and replying',
+    typographyStyle: 'native Messenger system font, blue gradient outgoing bubbles',
+    platformBehavior: 'Messenger buyer ↔ page — customer inquiry then shop response',
+    layoutRules: [
+      'portrait mobile screenshot',
+      'Messenger header with page name + avatar at top',
+      'Messenger-blue outgoing bubble gradient',
+      'realistic bubble spacing',
+    ],
+    contentRules: [
+      'casual buyer asking + page replying',
+      'short conversational messages',
+      'Seen indicator after page replies',
+      'mix of question + helpful response',
+    ],
+    visualRules: [
+      'Messenger blue gradient for outgoing',
+      'realistic Seen indicator with page profile thumb',
+      'system timestamp formatting',
+    ],
+    qualityRules: [
+      'text readable, no broken glyphs',
+      'realistic timestamps and Seen states',
+    ],
+    failureModes: [
+      'WhatsApp green color leakage (this is Messenger blue)',
+      'landscape orientation',
+      'centered bubble layout',
+      'corporate marketing copy in customer voice',
+    ],
   }),
   ...uiNativeConfig('shopee-feedback', {
     category: 'social-proof',
@@ -339,6 +606,36 @@ const CONFIGS: CreativeConfig[] = [
     emotion: 'trust',
     composition: 'mobile-screenshot',
     platformStyle: 'shopee',
+    emotionalGoal: 'Buyer testimonial confidence — "đã mua, đã dùng, đã thấy kết quả"',
+    typographyStyle: 'Shopee marketplace native — rating stars + variant tag + helpful count',
+    platformBehavior: 'Shopee review — short review density, rating-first emphasis',
+    layoutRules: [
+      'Shopee orange brand header',
+      'star rating block at top of card',
+      'review body 60-160 words',
+      'variant string and helpful count visible',
+    ],
+    contentRules: [
+      'specific buyer details — when used, what changed, sensory detail',
+      'casual reviewer tone',
+      '0-2 emojis max — no emoji spam',
+      'rating usually 5, sometimes 4 (never 1-3 in testimonial use)',
+    ],
+    visualRules: [
+      'Shopee brand orange consistent',
+      'realistic helpful count (3-80)',
+      'product variant text feels like a real SKU choice',
+    ],
+    qualityRules: [
+      'rating stars clearly visible',
+      'variant string realistic',
+      'review text fully readable',
+    ],
+    failureModes: [
+      'corporate shop-generated marketing copy in buyer voice',
+      'rating below 4 (testimonial use case is 4-5)',
+      'links, phone numbers, prices',
+    ],
   }),
   ...uiNativeConfig('tiktok-feedback', {
     category: 'social-proof',
@@ -346,6 +643,33 @@ const CONFIGS: CreativeConfig[] = [
     emotion: 'aspiration',
     composition: 'mobile-screenshot',
     platformStyle: 'tiktok-shop',
+    emotionalGoal: 'Gen Z buyer confidence — TikTok Shop is the new ecommerce default',
+    typographyStyle: 'TikTok Shop UI 2024 — pink-red accents, sans-serif',
+    platformBehavior: 'TikTok Shop — younger voice, mobile-vertical buy-now context',
+    layoutRules: [
+      'TikTok pink-red chrome header',
+      'star rating block prominent',
+      'buy-now button visible',
+      'mobile-vertical 9:16 framing',
+    ],
+    contentRules: [
+      'Gen Z casual tone, light slang',
+      'short body with one specific result detail',
+      '0-1 emojis',
+    ],
+    visualRules: [
+      'TikTok Shop 2024 UI chrome',
+      'pink-red brand accents (NOT Shopee orange)',
+    ],
+    qualityRules: [
+      'UI realistic to current TikTok Shop',
+      'review text readable',
+    ],
+    failureModes: [
+      'Shopee orange color leakage',
+      'corporate older-demographic voice',
+      'long-essay review (this is short)',
+    ],
   }),
   ...uiNativeConfig('facebook-comment', {
     category: 'social-proof',
@@ -353,6 +677,35 @@ const CONFIGS: CreativeConfig[] = [
     emotion: 'trust',
     composition: 'mobile-screenshot',
     platformStyle: 'facebook-ads',
+    emotionalGoal: 'Community endorsement — strangers vouching publicly',
+    typographyStyle: 'Facebook native sans-serif, like + reply buttons',
+    platformBehavior: 'Facebook comments — older demographic tone, longer conversational comments',
+    layoutRules: [
+      'portrait screenshot',
+      'thread of 4-6 comments stacked',
+      'each comment: avatar + name + body + like count + reply count',
+    ],
+    contentRules: [
+      'older demographic tone acceptable (vs TikTok Gen Z)',
+      'longer conversational comments OK',
+      'mix question + testimonial + reaction across the thread',
+      'one or two viral comments with high like counts',
+      'each commenter has a DIFFERENT username',
+    ],
+    visualRules: [
+      'Facebook blue accents',
+      'realistic timestamps ("2h", "1d", "5d")',
+      'like + reply controls under each comment',
+    ],
+    qualityRules: [
+      'every commenter username unique',
+      'realistic like distribution — most 0..15, one or two 60..400',
+    ],
+    failureModes: [
+      '8 near-identical variations of the same comment',
+      'shop self-commenting under own post',
+      'sponsored / ad / promo language',
+    ],
   }),
   ...uiNativeConfig('tiktok-comment', {
     category: 'social-proof',
@@ -360,6 +713,37 @@ const CONFIGS: CreativeConfig[] = [
     emotion: 'hype',
     composition: 'mobile-screenshot',
     platformStyle: 'tiktok',
+    emotionalGoal: 'Viral FOMO — "ai cũng comment, mình cũng phải xem"',
+    typographyStyle: 'TikTok dark UI — white text on dark overlay, pink heart icons',
+    platformBehavior: 'TikTok comment overlay — chaotic engagement, casual tone, emoji-heavy, Gen Z phrasing',
+    layoutRules: [
+      'dark TikTok overlay theme',
+      '"9.4k bình luận" header at top',
+      'heart count visible per comment',
+      'overlay layered on bottom of a video frame',
+    ],
+    contentRules: [
+      'chaotic engagement — short fragments, drop punctuation',
+      'casual lowercase tone, emoji-heavy 1-3 per comment',
+      'younger Gen Z phrasing, light slang',
+      'mix reaction + question + tag-a-friend',
+      'one or two reply chains where a username quotes another',
+    ],
+    visualRules: [
+      'dark theme TikTok 2024 chrome',
+      'pink/red heart icons',
+      'realistic like spread — some 0, some viral 200+',
+    ],
+    qualityRules: [
+      'authentic Gen Z voice across the thread',
+      'high engagement signaling — not boring',
+    ],
+    failureModes: [
+      'older formal tone or full sentences',
+      'long-essay comments',
+      'corporate marketing voice',
+      'Shopee/Facebook UI leakage',
+    ],
   }),
 
   // ═══════════════ DESIGNED-GRAPHIC (2) — template + Gemini text ═════
@@ -379,6 +763,36 @@ const CONFIGS: CreativeConfig[] = [
       platformStyle: 'landing-page',
       cameraStyle: 'tripod-studio',
       renderStyle: 'infographic-vector',
+      emotionalGoal: 'Educational confidence — justify purchase with cứng numbers',
+      typographyStyle: 'Ecommerce readability, bold benefit emphasis, mobile-safe 14px+ minimum',
+      platformBehavior: 'Landing page section + ad carousel — 5-second scan readability',
+      layoutRules: [
+        'hierarchy-first composition',
+        'large headline at top',
+        'hero stat dominant in center',
+        'clean section dividers between bullets and footnote',
+      ],
+      contentRules: [
+        'specific numbers, never vague claims',
+        '3-5 supporting bullet points, each 4-9 words',
+        'footnote: source / timeframe / methodology hint',
+      ],
+      visualRules: [
+        'icon-driven sections',
+        'clean limited color palette',
+        'high-contrast typography',
+      ],
+      qualityRules: [
+        'hero stat readable at thumbnail size',
+        'bullets parseable in a 5-second scan',
+        'mobile-safe minimum font sizes',
+      ],
+      failureModes: [
+        'cluttered layout',
+        'tiny unreadable text',
+        'random photo as background',
+        'stock-photo collage feel',
+      ],
     },
     promptBlocks: [],
     negativeBlocks: ['cluttered layout', 'gradient noise overlays'],
@@ -404,6 +818,36 @@ const CONFIGS: CreativeConfig[] = [
       platformStyle: 'facebook-ads',
       cameraStyle: 'tripod-studio',
       renderStyle: 'editorial-beauty',
+      emotionalGoal: 'Action-trigger urgency — pull the click without feeling spammy',
+      typographyStyle: 'Bold headline readable at thumbnail size, CTA button contrasts background',
+      platformBehavior: 'Paid ads — Facebook + Shopee + TikTok thumb-stop hook',
+      layoutRules: [
+        'product hero on one side (left or right)',
+        'headline + offer + CTA stacked on the opposite side',
+        'CTA button visually anchored at the bottom',
+      ],
+      contentRules: [
+        'headline: 4-9 words',
+        'subheadline: 6-12 words',
+        'offer line: single benefit ("Giảm 30%", "Giao 24h")',
+        'CTA: 2-3 word action verb ("Đặt ngay", "Xem chi tiết")',
+      ],
+      visualRules: [
+        'brand palette consistent',
+        'clean composition without bg noise',
+        'CTA button contrasts background',
+      ],
+      qualityRules: [
+        'headline readable at thumbnail size',
+        'CTA button strongly contrasts background',
+        'offer pill visible at a glance',
+      ],
+      failureModes: [
+        'busy gradient background',
+        'low-contrast CTA button',
+        'crowded multi-element layout',
+        'corporate stock-template feel',
+      ],
     },
     promptBlocks: [],
     negativeBlocks: ['busy gradient', 'low-contrast CTA'],
@@ -416,7 +860,11 @@ const CONFIGS: CreativeConfig[] = [
 ]
 
 /** UI-native configs share most DNA shape — generate via helper.
- *  Returns a 1-element array so the spread above stays flat. */
+ *  Returns a 1-element array so the spread above stays flat.
+ *
+ *  P28: helper now accepts Phase 4 rule arrays so each UI-native creative
+ *  declares its layout / content / visual / quality / failure rules
+ *  inline alongside the shared screenshot DNA. */
 function uiNativeConfig(
   id: AssetTypeId,
   partial: {
@@ -425,6 +873,14 @@ function uiNativeConfig(
     emotion: import('../types/creativeDNA').EmotionTone
     composition: import('../types/creativeDNA').CompositionKind
     platformStyle: import('../types/creativeDNA').PlatformStyle
+    emotionalGoal?: string
+    typographyStyle?: string
+    platformBehavior?: string
+    layoutRules?: string[]
+    contentRules?: string[]
+    visualRules?: string[]
+    qualityRules?: string[]
+    failureModes?: string[]
   },
 ): CreativeConfig[] {
   return [{
@@ -442,6 +898,14 @@ function uiNativeConfig(
       platformStyle: partial.platformStyle,
       cameraStyle: 'handheld-smartphone',
       renderStyle: 'mobile-ui-screenshot',
+      emotionalGoal:    partial.emotionalGoal,
+      typographyStyle:  partial.typographyStyle,
+      platformBehavior: partial.platformBehavior,
+      layoutRules:      partial.layoutRules,
+      contentRules:     partial.contentRules,
+      visualRules:      partial.visualRules,
+      qualityRules:     partial.qualityRules,
+      failureModes:     partial.failureModes,
     },
     promptBlocks: [],   // template-rendered, not prompt-driven
     negativeBlocks: ['figma-perfect-edges', 'studio-clean-screenshot', 'png-export'],
