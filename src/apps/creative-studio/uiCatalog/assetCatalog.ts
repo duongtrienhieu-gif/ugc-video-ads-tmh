@@ -32,6 +32,55 @@ export interface AssetCatalogEntry {
   iconKey: string
 }
 
+// ── P13 — dynamic input requirements ──────────────────────────────────
+// UI shows / hides product / avatar / reference inputs per asset type.
+// Stored as a separate map (instead of inline on AssetCatalogEntry) so
+// the requirement matrix is auditable in one place.
+
+export interface CreativeRequirements {
+  /** Must have a product image to generate. */
+  requireProduct: boolean
+  /** Avatar is meaningful for this creative — show the picker. */
+  requireAvatar: boolean
+  /** Optional reference image input (mood board / brand reference). */
+  requireReference: boolean
+}
+
+const REQ_PHOTO_PERSON: CreativeRequirements = { requireProduct: true, requireAvatar: true,  requireReference: false }
+const REQ_PHOTO_NO_PERSON: CreativeRequirements = { requireProduct: true, requireAvatar: false, requireReference: false }
+const REQ_UI_NATIVE: CreativeRequirements = { requireProduct: true, requireAvatar: false, requireReference: false }
+const REQ_DESIGNED: CreativeRequirements = { requireProduct: true, requireAvatar: false, requireReference: true }
+
+const REQUIREMENTS: Partial<Record<AssetTypeId, CreativeRequirements>> = {
+  // photographic — person-required scenes
+  'holding-product':    REQ_PHOTO_PERSON,
+  'ugc-selfie':         REQ_PHOTO_PERSON,
+  'before-after':       REQ_PHOTO_PERSON,
+  'lifestyle-kitchen':  REQ_PHOTO_PERSON,
+  'bathroom-routine':   REQ_PHOTO_PERSON,
+  'cafe-lifestyle':     REQ_PHOTO_PERSON,
+  'ugc-tiktok':         REQ_PHOTO_PERSON,
+  // photographic — product-only (no person required)
+  'product-shot':       REQ_PHOTO_NO_PERSON,
+  'review-table':       REQ_PHOTO_NO_PERSON,
+  // ui-native — text-driven, product context only
+  'whatsapp-proof':     REQ_UI_NATIVE,
+  'messenger-chat':     REQ_UI_NATIVE,
+  'shopee-feedback':    REQ_UI_NATIVE,
+  'tiktok-feedback':    REQ_UI_NATIVE,
+  'facebook-comment':   REQ_UI_NATIVE,
+  'tiktok-comment':     REQ_UI_NATIVE,
+  // designed-graphic — product + optional reference (mood board)
+  'infographic':        REQ_DESIGNED,
+  'cta-banner':         REQ_DESIGNED,
+}
+
+const DEFAULT_REQ: CreativeRequirements = { requireProduct: true, requireAvatar: false, requireReference: false }
+
+export function requirementsFor(id: AssetTypeId): CreativeRequirements {
+  return REQUIREMENTS[id] ?? DEFAULT_REQ
+}
+
 /**
  * 17 entries — one per ASSET_REGISTRY key. Ordered within each group by
  * "most common use case first". P11 ships labels matching the user spec

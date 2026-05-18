@@ -1,44 +1,40 @@
-// ── Creative Studio — Engine-Routed UI (P11 cutover) ────────────────────────
+// ── Creative Studio — Workspace Layout (P13 rebuild) ───────────────────────
 //
-// Replaces the legacy ProductAI scene/style/4-variations UX with the
-// asset-type registry pipeline:
+// AI workspace inspired by Midjourney / Krea / Leonardo:
+//   • LEFT PANEL always usable — config inputs + controls + Generate
+//   • RIGHT PANEL — render history (queued / generating / completed / failed)
+//   • Async non-blocking — clicking "Tạo asset" creates a job + returns
+//     immediately; user can change creative type, queue more jobs,
+//     delete old ones while previous jobs render in background
+//   • PERSISTENT via Supabase — F5 / logout / new browser restores
+//     the full history (image blobs in IndexedDB; metadata in DB)
 //
-//   user picks asset type
-//   user picks product (required) + avatar (photographic only)
-//   user adjusts engine-aware controls (locale / persona / color theme / ...)
-//   user clicks "Tạo asset"
-//     → generateAssets(assetTypeId, { productId, modelId, options })
-//     → resolveAssetType → dispatch by engine group
-//     → returns GeneratedAsset (with qcSummary in metadata)
-//   typed result card appended to the result list
-//
-// The UI layer does NOT:
-//   • build prompts
-//   • call KIE or Gemini directly
-//   • know which engine handles which asset type
-//
-// All routing happens inside the registry (P3 / P5 / P6 / P8).
+// State boundaries (per P13 spec §"Architecture Rule"):
+//   • generationsStore is Creative Studio-only — does NOT share state
+//     with landing-page (which has its own landingPageStore)
+//   • generationsAPI hits a dedicated `creative_generations` table —
+//     does NOT share DB schema with landing-page
+//   • No imports from landing-page anywhere in this file
 
-import { useState, useRef, useEffect } from 'react'
-import { Sparkles, Loader2, UserRound, Package, Upload, ChevronLeft, Sliders, X as XIcon } from 'lucide-react'
+import { useState, useRef, useEffect, useMemo, memo } from 'react'
+import { Sparkles, Loader2, UserRound, Package, Upload } from 'lucide-react'
 import { useAppStore } from '../../stores/appStore'
-import { useBankStore } from '../../stores/bankStore'
 import { useSettingsStore } from '../../stores/settingsStore'
 import { useAssetUrl } from '../../hooks/useAssetUrl'
 import { saveAsset } from '../../utils/assetStore'
 import BankPicker from '../../components/BankPicker'
-import AutoSaveIndicator from '../../components/AutoSaveIndicator'
-import { useSessionPersist } from '../../services/sessionPersistence'
 import type { Product, Model } from '../../stores/types'
 
 import type { AssetTypeId } from './types/asset'
-import { generateAssets } from './orchestration/generateAssets'
+import { runGeneration } from './runtime/runGeneration'
+import { useGenerationsStore, type GenerationJob } from './stores/generationsStore'
 import AssetTypePicker from './uiCatalog/AssetTypePicker'
 import AssetControls, { type AssetOptions } from './uiCatalog/AssetControls'
-import ResultCard, { type ResultRow } from './uiCatalog/ResultCard'
-import { findCatalogEntry } from './uiCatalog/assetCatalog'
+import ResultCard from './uiCatalog/ResultCard'
+import ReferencePicker from './uiCatalog/ReferencePicker'
+import { findCatalogEntry, requirementsFor } from './uiCatalog/assetCatalog'
 
-// ── Picker tile (reusable for product + avatar) ─────────────────────────────
+// ── PickerTile (product / avatar) ──────────────────────────────────────
 
 interface PickerTileProps {
   imageUrl: string | null
@@ -104,307 +100,137 @@ function PickerTile({ imageUrl, label, hint, accent, onSelectFromBank, onUpload,
   )
 }
 
-// ── Session persisted snapshot (P11 — v2 schema) ────────────────────────────
-// Bumped version from 1 → 2: old v1 state (sceneId/styleId/tiles) is
-// ignored automatically by useSessionPersist's version check.
-
-interface CreativeStudioPersistedV2 {
-  v: 2
-  selectedAssetTypeId: AssetTypeId | null
-  selectedAvatarId: string | null
-  selectedProductId: string | null
-  uploadedAvatarRef: string | null
-  uploadedProductRef: string | null
-  options: AssetOptions
-  /** Saved completed asset rows. Pending rows are flattened to error. */
-  results: ResultRow[]
-  savedRowIds: string[]
-}
-
-// ── Main component ──────────────────────────────────────────────────────────
+// ── Main component ──────────────────────────────────────────────────────
 
 export default function CreativeStudio() {
+  // ── Input panel state — left side ──────────────────────────────────
   const [selectedAssetTypeId, setSelectedAssetTypeId] = useState<AssetTypeId | null>(null)
-  const [selectedAvatar, setSelectedAvatar] = useState<Model | null>(null)
-  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null)
+  const [selectedAvatar, setSelectedAvatar]    = useState<Model | null>(null)
+  const [selectedProduct, setSelectedProduct]  = useState<Product | null>(null)
   const [uploadedAvatarUrl, setUploadedAvatarUrl] = useState<string | null>(null)
   const [uploadedProductUrl, setUploadedProductUrl] = useState<string | null>(null)
-  const [pickerMode, setPickerMode] = useState<'avatar' | 'product' | null>(null)
-  const [options, setOptions] = useState<AssetOptions>({ styleId: 'realistic' })
-  const [results, setResults] = useState<ResultRow[]>([])
-  const [savedRowIds, setSavedRowIds] = useState<Set<string>>(new Set())
-  const [isGenerating, setIsGenerating] = useState(false)
+  const [referenceRefs, setReferenceRefs]      = useState<string[]>([])
+  const [pickerMode, setPickerMode]            = useState<'avatar' | 'product' | null>(null)
+  const [options, setOptions]                  = useState<AssetOptions>({ styleId: 'realistic' })
 
+  // ── Bank / settings / toasts ───────────────────────────────────────
   const kieApiKey    = useSettingsStore((s) => s.kieApiKey)
   const geminiApiKey = useSettingsStore((s) => s.geminiApiKey)
   const addToast     = useAppStore((s) => s.addToast)
-  const addBRoll     = useBankStore((s) => s.addBRoll)
-  const models       = useBankStore((s) => s.models)
-  const products     = useBankStore((s) => s.products)
 
+  // ── Generations store — DB-backed job list (right panel) ───────────
+  const jobs        = useGenerationsStore((s) => s.jobs)
+  const hydrate     = useGenerationsStore((s) => s.hydrate)
+  const hydrated    = useGenerationsStore((s) => s.hydrated)
+  const hydrating   = useGenerationsStore((s) => s.hydrating)
+  const removeJob   = useGenerationsStore((s) => s.removeJob)
+
+  // Hydrate once on mount — pulls full history from Supabase
+  useEffect(() => { void hydrate() }, [hydrate])
+
+  // ── Derived: requirements drive which input tiles to render ────────
   const catalogEntry = selectedAssetTypeId ? findCatalogEntry(selectedAssetTypeId) : null
-  const isPhotographic   = catalogEntry?.group === 'photographic'
-  const isUiNative       = catalogEntry?.group === 'ui-native'
-  const isDesignedGraphic = catalogEntry?.group === 'designed-graphic'
+  const reqs = useMemo(
+    () => selectedAssetTypeId ? requirementsFor(selectedAssetTypeId) : null,
+    [selectedAssetTypeId],
+  )
 
   const avatarImageRef  = selectedAvatar?.characterImage  ?? uploadedAvatarUrl
   const productImageRef = selectedProduct?.productImage ?? uploadedProductUrl
-  const productSelected = !!productImageRef
 
-  // Engine-specific API key requirements
-  const needsGemini = isUiNative || isDesignedGraphic  // text generation
-  const needsKie    = isPhotographic || isUiNative      // image generation (avatar for ui-native)
-  const apiKeysOk   =
-    (!needsKie    || !!kieApiKey) &&
-    (!needsGemini || !!geminiApiKey)
-  const canGenerate = !!selectedAssetTypeId && productSelected && apiKeysOk && !isGenerating
+  // ── Generation gate — required inputs present + API keys configured ─
+  const isPhotographic    = catalogEntry?.group === 'photographic'
+  const isUiNative        = catalogEntry?.group === 'ui-native'
+  const isDesignedGraphic = catalogEntry?.group === 'designed-graphic'
 
-  // ── Session persistence ───────────────────────────────────────────────
-  const flattenPending = (rs: ResultRow[]): ResultRow[] => rs.map((r) =>
-    r.status === 'pending'
-      ? { ...r, status: 'error', errorMessage: 'Bị gián đoạn — thử lại' }
-      : r,
-  )
+  const needsGemini = isUiNative || isDesignedGraphic
+  const needsKie    = isPhotographic || isUiNative
+  const apiKeysOk   = (!needsKie || !!kieApiKey) && (!needsGemini || !!geminiApiKey)
 
-  const sessionApi = useSessionPersist<CreativeStudioPersistedV2>({
-    moduleId: 'broll-studio',  // persistKey 'ugc-lab:broll-studio:inflight-v1' kept for back-compat
-    version: 2,
-    snapshot: () => ({
-      v: 2,
-      selectedAssetTypeId,
-      selectedAvatarId: selectedAvatar?.id ?? null,
-      selectedProductId: selectedProduct?.id ?? null,
-      uploadedAvatarRef: uploadedAvatarUrl,
-      uploadedProductRef: uploadedProductUrl,
-      options,
-      results: flattenPending(results),
-      savedRowIds: [...savedRowIds],
-    }),
-    hydrate: (data) => {
-      if (data.v !== 2) return  // old v1 schema — discard, user starts fresh
-      setSelectedAssetTypeId(data.selectedAssetTypeId)
-      if (data.selectedAvatarId) {
-        const m = models.find((x) => x.id === data.selectedAvatarId)
-        if (m) setSelectedAvatar(m)
-      }
-      if (data.selectedProductId) {
-        const p = products.find((x) => x.id === data.selectedProductId)
-        if (p) setSelectedProduct(p)
-      }
-      setUploadedAvatarUrl(data.uploadedAvatarRef)
-      setUploadedProductUrl(data.uploadedProductRef)
-      setOptions(data.options ?? { styleId: 'realistic' })
-      setResults(flattenPending(data.results ?? []))
-      setSavedRowIds(new Set(data.savedRowIds ?? []))
-      addToast('✓ Đã khôi phục Creative Studio từ phiên trước', 'success')
-    },
-    getStatus: () => (
-      isGenerating ? 'in-progress'
-        : results.length > 0 ? 'paused'
-        : 'completed'
-    ),
-    getProgressVi: () => {
-      if (isGenerating) return 'Đang tạo asset...'
-      if (results.length > 0) return `${results.filter((r) => r.status === 'done').length}/${results.length} asset`
-      return undefined
-    },
-    getTitleVi: () => {
-      const label = catalogEntry?.title.vi
-      const product = selectedProduct?.productName
-      if (label && product) return `${label} — ${product}`
-      return label ?? product
-    },
-    shouldPersist: () =>
-      results.length > 0 || !!productImageRef || !!avatarImageRef || !!selectedAssetTypeId || isGenerating,
-    deps: [
-      selectedAssetTypeId, selectedAvatar?.id, selectedProduct?.id,
-      uploadedAvatarUrl, uploadedProductUrl, options, results, savedRowIds, isGenerating,
-    ],
-  })
+  const reqsMet     = !reqs || (!reqs.requireProduct || !!productImageRef)
+  const canGenerate = !!selectedAssetTypeId && apiKeysOk && reqsMet
 
-  // ── Generation flow — ALL through generateAssets() ────────────────────
-  const handleGenerate = async () => {
-    if (!canGenerate || !selectedAssetTypeId || !selectedProduct) return
-    const entry = catalogEntry!
-    setIsGenerating(true)
-
-    const rowId = `row_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`
-    const pendingRow: ResultRow = {
-      rowId,
-      status: 'pending',
-      requestedAt: Date.now(),
-      assetTypeId: selectedAssetTypeId,
-    }
-    setResults((prev) => [pendingRow, ...prev])
-
+  // ── Fire a generation job (non-blocking) ───────────────────────────
+  async function handleGenerate() {
+    if (!canGenerate || !selectedAssetTypeId) return
     try {
-      // UI builds the payload. Registry handles routing. Engine handles
-      // KIE / Gemini / canvas. No prompt logic here.
-      const asset = await generateAssets(selectedAssetTypeId, {
-        productId: selectedProduct.id,
-        modelId: entry.group === 'photographic' ? selectedAvatar?.id : undefined,
-        options: options as Record<string, unknown>,
+      await runGeneration({
+        creativeType: selectedAssetTypeId,
+        inputs: {
+          productId:     selectedProduct?.id,
+          modelId:       reqs?.requireAvatar ? selectedAvatar?.id : undefined,
+          referenceRefs: reqs?.requireReference ? referenceRefs : undefined,
+          options:       options as Record<string, unknown>,
+        },
       })
-      setResults((prev) => prev.map((r) => r.rowId === rowId ? { ...r, status: 'done', asset } : r))
-      addToast(`✓ Đã tạo ${entry.title.vi}`)
+      addToast(`Đã thêm vào hàng đợi: ${catalogEntry?.title.vi ?? selectedAssetTypeId}`, 'success')
     } catch (err) {
-      // P12-fix: hide raw technical errors from users. Full detail stays
-      // in console + on the result card's errorMessage for diagnostics.
       const msg = err instanceof Error ? err.message : 'unknown'
-      console.error('[CreativeStudio] generateAssets failed:', err)
-      setResults((prev) => prev.map((r) => r.rowId === rowId ? { ...r, status: 'error', errorMessage: msg } : r))
-      const friendly = msg.toLowerCase().includes('api key')
-        ? 'Thiếu API key — vào Cài đặt để thêm'
-        : msg.toLowerCase().includes('credit') || msg.toLowerCase().includes('insufficient')
-        ? 'Hết KIE credit — nạp thêm rồi thử lại'
-        : 'Tạo asset chưa thành công — vui lòng thử lại'
-      addToast(friendly, 'error')
-    } finally {
-      setIsGenerating(false)
+      addToast(msg.includes('Phiên đăng nhập') ? msg : 'Không tạo được job — kiểm tra kết nối', 'error')
     }
   }
 
-  // ── Save handler — persist generated asset into bankStore B-Roll ──────
-  const handleSaveRow = async (row: ResultRow) => {
-    if (!row.asset || savedRowIds.has(row.rowId)) return
-    const entry = findCatalogEntry(row.assetTypeId as AssetTypeId)
+  // ── Per-job delete (DB + store) ────────────────────────────────────
+  async function handleDeleteJob(jobId: string) {
     try {
-      await addBRoll({
-        imageUrl: row.asset.outputUrl,
-        prompt: `Creative Studio — ${entry?.title.vi ?? row.assetTypeId} (${row.asset.metadata.engineGroup})`,
-        productId: row.asset.metadata.productId,
-        modelId: row.asset.metadata.modelId,
-      })
-      setSavedRowIds((prev) => new Set(prev).add(row.rowId))
-      addToast('✓ Đã lưu vào Project → Creative Studio')
-    } catch (err) {
-      addToast(`Lưu thất bại: ${err instanceof Error ? err.message.slice(0, 60) : 'unknown'}`, 'error')
+      await removeJob(jobId)
+    } catch {
+      addToast('Xoá thất bại — thử lại', 'error')
     }
   }
 
-  const handleDeleteRow = (rowId: string) => {
-    setResults((prev) => prev.filter((r) => r.rowId !== rowId))
-    setSavedRowIds((prev) => { const next = new Set(prev); next.delete(rowId); return next })
-  }
-
-  // ── File handlers (asset:// persisted refs) ───────────────────────────
-  const handleSelectAvatar = (item: unknown) => {
-    setSelectedAvatar(item as Model)
-    setUploadedAvatarUrl(null)
-    setPickerMode(null)
-  }
-  const handleSelectProduct = (item: unknown) => {
-    setSelectedProduct(item as Product)
-    setUploadedProductUrl(null)
-    setPickerMode(null)
-  }
-  const handleUploadAvatar = async (file: File) => {
-    try {
-      const ref = await saveAsset(file, file.type || 'image/jpeg')
-      setUploadedAvatarUrl(ref)
-      setSelectedAvatar(null)
-    } catch (err) {
-      addToast(`Upload avatar lỗi: ${err instanceof Error ? err.message.slice(0, 60) : 'unknown'}`, 'error')
-    }
+  // ── File / bank handlers ───────────────────────────────────────────
+  const handleSelectAvatar  = (item: unknown) => { setSelectedAvatar(item as Model); setUploadedAvatarUrl(null); setPickerMode(null) }
+  const handleSelectProduct = (item: unknown) => { setSelectedProduct(item as Product); setUploadedProductUrl(null); setPickerMode(null) }
+  const handleUploadAvatar  = async (file: File) => {
+    try { const ref = await saveAsset(file, file.type || 'image/jpeg'); setUploadedAvatarUrl(ref); setSelectedAvatar(null) }
+    catch (err) { addToast(`Upload avatar lỗi: ${err instanceof Error ? err.message.slice(0, 60) : 'unknown'}`, 'error') }
   }
   const handleUploadProduct = async (file: File) => {
-    try {
-      const ref = await saveAsset(file, file.type || 'image/jpeg')
-      setUploadedProductUrl(ref)
-      setSelectedProduct(null)
-    } catch (err) {
-      addToast(`Upload sản phẩm lỗi: ${err instanceof Error ? err.message.slice(0, 60) : 'unknown'}`, 'error')
-    }
+    try { const ref = await saveAsset(file, file.type || 'image/jpeg'); setUploadedProductUrl(ref); setSelectedProduct(null) }
+    catch (err) { addToast(`Upload sản phẩm lỗi: ${err instanceof Error ? err.message.slice(0, 60) : 'unknown'}`, 'error') }
   }
 
-  // ── Mobile output-first viewport (M4) ────────────────────────────────
-  //
-  // Mirror of the Landing Page M3 pattern: after a result lands, the
-  // input + controls panel auto-collapses on mobile so the result grid
-  // owns the viewport. A floating "Tuỳ chỉnh" FAB re-opens the controls
-  // when the user wants to regenerate / change settings. Desktop (lg+)
-  // keeps the side-by-side layout unchanged.
-  const [mobileControlsVisible, setMobileControlsVisible] = useState(true)
-  const prevResultsCountRef = useRef(results.length)
-  useEffect(() => {
-    // Detect first result transition (0 → 1+). Auto-hide controls so
-    // the user lands directly in the gallery on mobile.
-    if (prevResultsCountRef.current === 0 && results.length > 0) {
-      setMobileControlsVisible(false)
-    }
-    prevResultsCountRef.current = results.length
-  }, [results.length])
+  // ── Render ─────────────────────────────────────────────────────────
+  const activeCount    = jobs.filter((j) => j.status === 'generating' || j.status === 'queued').length
+  const completedCount = jobs.filter((j) => j.status === 'completed').length
 
-  // Controls panel always visible when there are NO results yet (user
-  // must fill the form to generate anything) OR on desktop.
-  const showControlsOnMobile = results.length === 0 || mobileControlsVisible
-
-  // ── Render ────────────────────────────────────────────────────────────
   return (
     <div className="relative flex h-full flex-col overflow-hidden">
-      <div className="absolute right-4 top-4 z-30">
-        <AutoSaveIndicator lastSavedAt={sessionApi.lastSavedAt} lastSaveOk={sessionApi.lastSaveOk} />
-      </div>
-
-      {/* Header — compact padding + smaller title + hidden description
-          on mobile. Description provides context but burns ~60px vertical
-          on phones; users only need it once and can reopen the app to
-          re-read. */}
-      <div className="shrink-0 border-b border-black/8 bg-gradient-to-r from-violet-50 to-pink-50 px-3 md:px-6 py-2 md:py-4">
-        <h1 className="text-base md:text-xl font-bold tracking-tight text-gray-900">Creative Studio</h1>
-        <p className="hidden md:block mt-0.5 text-xs text-gray-500">
-          AI conversion creative operating system — photographic / UI-native / designed-graphic, mỗi loại đi qua engine riêng.
+      {/* Header */}
+      <div className="shrink-0 border-b border-black/8 bg-gradient-to-r from-violet-50 to-pink-50 px-6 py-4">
+        <h1 className="text-xl font-bold tracking-tight text-gray-900">Creative Studio</h1>
+        <p className="mt-0.5 text-xs text-gray-500">
+          AI workspace — chọn loại creative, bấm Tạo, kết quả xuất hiện bên phải. UI không block khi đang render.
         </p>
       </div>
 
-      {/* Body */}
-      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto p-3 md:p-6 pb-20 lg:pb-6 lg:flex-row lg:gap-5">
-        {/* ── STEP 1: Asset type picker — full width when no selection ── */}
-        {!selectedAssetTypeId ? (
-          <div className="flex w-full flex-col gap-4">
-            <div className="flex flex-col gap-1">
-              <p className="text-[11px] font-bold uppercase tracking-widest text-gray-500">Bước 1</p>
-              <h2 className="text-lg font-semibold tracking-tight text-gray-900">Chọn loại creative bạn muốn tạo</h2>
-              <p className="text-xs text-gray-500">
-                Mỗi loại đi qua một engine riêng (photographic / UI-native / designed-graphic) — không còn scene + style chips chung.
-              </p>
-            </div>
-            <AssetTypePicker selectedId={null} onSelect={setSelectedAssetTypeId} />
-          </div>
-        ) : (
-          <>
-            {/* ── STEP 2+: Left panel (inputs + controls) ─────────────
-                On mobile, hidden after first result lands (user can
-                re-open via floating FAB). On lg+ always visible at
-                the 320px sidebar width. */}
-            <div className={`${showControlsOnMobile ? 'flex' : 'hidden'} lg:flex w-full shrink-0 flex-col gap-3 lg:w-80`}>
-              {/* Selected asset type pill + change */}
-              <div className="flex items-center justify-between gap-2 rounded-xl border border-violet-200 bg-violet-50 px-3 py-2.5">
-                <div className="flex min-w-0 flex-col">
-                  <span className="text-[10px] font-bold uppercase tracking-widest text-violet-700">Đang tạo</span>
-                  <span className="truncate text-sm font-semibold text-gray-900">{catalogEntry?.title.vi}</span>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setSelectedAssetTypeId(null)}
-                  className="flex shrink-0 items-center gap-1 rounded-md bg-white px-2 py-1 text-[10px] font-semibold text-violet-700 hover:bg-violet-100"
-                >
-                  <ChevronLeft className="h-3 w-3" /> Đổi loại
-                </button>
-              </div>
+      {/* Body — split workspace */}
+      <div className="flex min-h-0 flex-1 overflow-hidden">
+        {/* ── LEFT: input panel (always usable) ─────────────────── */}
+        <aside className="flex w-full max-w-[360px] shrink-0 flex-col gap-3 overflow-y-auto border-r border-black/8 bg-white/40 p-4">
+          {/* Step 1 — pick creative type */}
+          <section>
+            <p className="mb-2 text-[11px] font-bold uppercase tracking-widest text-gray-500">Loại creative</p>
+            <AssetTypePicker selectedId={selectedAssetTypeId} onSelect={setSelectedAssetTypeId} />
+          </section>
 
-              <PickerTile
-                label="Sản phẩm (bắt buộc)"
-                hint="Ảnh sản phẩm rõ packaging / logo / label"
-                accent="product"
-                imageUrl={productImageRef}
-                onSelectFromBank={() => setPickerMode('product')}
-                onUpload={handleUploadProduct}
-                onClear={() => { setSelectedProduct(null); setUploadedProductUrl(null) }}
-              />
+          {/* Step 2+ — dynamic inputs per requirements */}
+          {catalogEntry && reqs && (
+            <>
+              {reqs.requireProduct && (
+                <PickerTile
+                  label="Sản phẩm (bắt buộc)"
+                  hint="Ảnh sản phẩm rõ packaging / logo / label"
+                  accent="product"
+                  imageUrl={productImageRef}
+                  onSelectFromBank={() => setPickerMode('product')}
+                  onUpload={handleUploadProduct}
+                  onClear={() => { setSelectedProduct(null); setUploadedProductUrl(null) }}
+                />
+              )}
 
-              {/* Avatar — only relevant for photographic */}
-              {isPhotographic && (
+              {reqs.requireAvatar && (
                 <PickerTile
                   label="Avatar AI (tuỳ chọn)"
                   hint="Có thể bỏ trống — không cần người"
@@ -416,71 +242,94 @@ export default function CreativeStudio() {
                 />
               )}
 
-              {/* Engine-aware controls */}
-              {catalogEntry && (
-                <div className="rounded-xl border border-black/10 bg-black/[0.02] p-3">
-                  <p className="mb-2 text-[11px] font-bold uppercase tracking-widest text-gray-500">
-                    Cài đặt — {catalogEntry.group}
-                  </p>
-                  <AssetControls
-                    group={catalogEntry.group}
-                    options={options}
-                    onChange={(patch) => setOptions((prev) => ({ ...prev, ...patch }))}
-                  />
-                </div>
+              {reqs.requireReference && (
+                <ReferencePicker
+                  refs={referenceRefs}
+                  onAdd={(ref) => setReferenceRefs((prev) => [...prev, ref])}
+                  onRemove={(ref) => setReferenceRefs((prev) => prev.filter((r) => r !== ref))}
+                />
               )}
 
-              {/* Generate button */}
+              {/* Engine-aware controls */}
+              <div className="rounded-xl border border-black/10 bg-black/[0.02] p-3">
+                <p className="mb-2 text-[11px] font-bold uppercase tracking-widest text-gray-500">
+                  Cài đặt — {catalogEntry.group}
+                </p>
+                <AssetControls
+                  group={catalogEntry.group}
+                  options={options}
+                  onChange={(patch) => setOptions((prev) => ({ ...prev, ...patch }))}
+                />
+              </div>
+
+              {/* Generate button — always usable, never disabled while jobs run */}
               <button
                 type="button"
                 onClick={handleGenerate}
                 disabled={!canGenerate}
                 className="mt-1 flex w-full items-center justify-center gap-2 rounded-full bg-gradient-to-r from-violet-600 to-purple-500 px-6 py-3.5 text-sm font-bold text-white shadow-md transition-all hover:from-violet-700 hover:to-purple-600 disabled:cursor-not-allowed disabled:opacity-40"
               >
-                {isGenerating ? (
-                  <><Loader2 className="h-4 w-4 animate-spin" /> Đang tạo qua engine...</>
-                ) : (
-                  <><Sparkles className="h-4 w-4" /> Tạo asset</>
-                )}
+                <Sparkles className="h-4 w-4" /> Tạo asset
               </button>
 
-              {/* API key warnings */}
               {needsKie && !kieApiKey && (
                 <p className="text-center text-[10px] text-red-500">Cần KIE.ai API key trong Cài đặt</p>
               )}
               {needsGemini && !geminiApiKey && (
                 <p className="text-center text-[10px] text-red-500">Cần Gemini API key trong Cài đặt</p>
               )}
-            </div>
+            </>
+          )}
+        </aside>
 
-            {/* ── Right: typed result list ─────────────────────────── */}
-            <div className="flex-1">
-              {results.length === 0 ? (
-                <div className="flex h-full min-h-[400px] items-center justify-center rounded-xl border border-dashed border-black/10 bg-white">
-                  <div className="flex flex-col items-center gap-3 px-6 text-center">
-                    <Sparkles className="h-10 w-10 text-gray-200" />
-                    <p className="text-sm text-gray-400">Chọn Sản phẩm + cài đặt rồi nhấn "Tạo asset"</p>
-                    <p className="text-xs text-gray-300">
-                      Asset sẽ đi qua engine <span className="font-mono">{catalogEntry?.group}</span> — không qua legacy GPT direct call
-                    </p>
-                  </div>
+        {/* ── RIGHT: output workspace ──────────────────────────── */}
+        <main className="flex min-w-0 flex-1 flex-col overflow-hidden">
+          {/* Workspace toolbar */}
+          <div className="flex shrink-0 items-center gap-3 border-b border-black/8 bg-white/60 px-5 py-2.5">
+            <span className="text-[11px] font-bold uppercase tracking-widest text-gray-500">
+              Lịch sử render
+            </span>
+            <span className="rounded-full bg-violet-100 px-2 py-0.5 text-[10px] font-bold text-violet-700">
+              {jobs.length} job
+            </span>
+            {activeCount > 0 && (
+              <span className="flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold text-amber-700">
+                <Loader2 className="h-2.5 w-2.5 animate-spin" /> {activeCount} đang chạy
+              </span>
+            )}
+            {completedCount > 0 && (
+              <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-700">
+                ✓ {completedCount} xong
+              </span>
+            )}
+            {hydrating && (
+              <span className="ml-auto flex items-center gap-1 text-[10px] text-gray-400">
+                <Loader2 className="h-3 w-3 animate-spin" /> Đang load history...
+              </span>
+            )}
+          </div>
+
+          {/* Workspace grid */}
+          <div className="flex-1 overflow-y-auto p-5">
+            {hydrated && jobs.length === 0 ? (
+              <div className="flex h-full min-h-[400px] items-center justify-center rounded-xl border border-dashed border-black/10 bg-white">
+                <div className="flex flex-col items-center gap-3 px-6 text-center">
+                  <Sparkles className="h-10 w-10 text-gray-200" />
+                  <p className="text-sm text-gray-400">Workspace trống</p>
+                  <p className="text-xs text-gray-300">
+                    Chọn loại creative ở panel trái → cấu hình → bấm "Tạo asset"
+                  </p>
                 </div>
-              ) : (
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
-                  {results.map((row) => (
-                    <ResultCard
-                      key={row.rowId}
-                      row={row}
-                      saved={savedRowIds.has(row.rowId)}
-                      onSave={() => handleSaveRow(row)}
-                      onDelete={() => handleDeleteRow(row.rowId)}
-                    />
-                  ))}
-                </div>
-              )}
-            </div>
-          </>
-        )}
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
+                {jobs.map((job) => (
+                  <JobCardWrapper key={job.id} job={job} onDelete={() => handleDeleteJob(job.id)} />
+                ))}
+              </div>
+            )}
+          </div>
+        </main>
       </div>
 
       {/* Bank pickers */}
@@ -496,24 +345,19 @@ export default function CreativeStudio() {
         onSelect={handleSelectProduct}
         onClose={() => setPickerMode(null)}
       />
-
-      {/* Mobile-only floating "Tuỳ chỉnh / Đóng" FAB — same UX pattern as
-          Landing Page M3. Only rendered after an asset type is picked AND
-          at least one result exists, so the user has something to flip
-          between. Hidden on lg+ since the side-by-side layout doesn't
-          need a toggle. */}
-      {selectedAssetTypeId && results.length > 0 && (
-        <button
-          onClick={() => setMobileControlsVisible((v) => !v)}
-          aria-label={showControlsOnMobile ? 'Đóng tuỳ chỉnh' : 'Mở tuỳ chỉnh'}
-          title={showControlsOnMobile ? 'Đóng tuỳ chỉnh' : 'Mở tuỳ chỉnh'}
-          className="lg:hidden fixed bottom-4 right-4 z-40 flex items-center gap-1.5 rounded-full bg-violet-600 px-4 py-3 text-[12px] font-bold text-white shadow-lg shadow-violet-900/30 hover:bg-violet-700 active:scale-95 transition-transform"
-        >
-          {showControlsOnMobile
-            ? <><XIcon className="h-4 w-4" /> Đóng</>
-            : <><Sliders className="h-4 w-4" /> Tuỳ chỉnh</>}
-        </button>
-      )}
     </div>
   )
 }
+
+// ── Job card wrapper — memoized so unrelated state changes don't re-render
+//    every card in the workspace ────────────────────────────────────────
+
+const JobCardWrapper = memo(function JobCardWrapper({
+  job,
+  onDelete,
+}: {
+  job: GenerationJob
+  onDelete: () => void
+}) {
+  return <ResultCard job={job} onDelete={onDelete} />
+})
