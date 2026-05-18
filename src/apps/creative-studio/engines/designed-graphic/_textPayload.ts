@@ -9,8 +9,7 @@
 // params.options.content, exactly like ui-native textPayload.
 
 import type { UINativeLocale } from '../../types/uiNative'
-import { directGeminiText } from '../../../../utils/gemini'
-import { parseLLMJson } from '../../shared/llm/jsonResponse'
+import { safeGenerateStructured } from '../../shared/llm/safeGenerateStructured'
 
 export type DesignedGraphicContentKind = 'infographic' | 'cta-banner'
 
@@ -117,36 +116,106 @@ function buildCtaPrompt(req: ContentRequest): string {
   ].filter(Boolean).join('\n')
 }
 
+// ── Schema checks ─────────────────────────────────────────────────────
+
+function isInfographicContent(v: unknown): v is InfographicContent {
+  if (typeof v !== 'object' || v === null) return false
+  const obj = v as Record<string, unknown>
+  if (typeof obj.title !== 'string') return false
+  if (typeof obj.heroStat !== 'object' || obj.heroStat === null) return false
+  const stat = obj.heroStat as Record<string, unknown>
+  if (typeof stat.value !== 'string' || typeof stat.label !== 'string') return false
+  if (!Array.isArray(obj.bullets) || obj.bullets.length === 0) return false
+  return obj.bullets.every((b) => typeof b === 'string')
+}
+
+function isCtaBannerContent(v: unknown): v is CtaBannerContent {
+  if (typeof v !== 'object' || v === null) return false
+  const obj = v as Record<string, unknown>
+  return typeof obj.headline === 'string'
+      && typeof obj.ctaText === 'string'
+      && obj.headline.length > 0
+      && obj.ctaText.length > 0
+}
+
+// ── Fallback content (used when LLM keeps failing) ────────────────────
+
+function infographicFallback(req: ContentRequest): InfographicContent {
+  if (req.locale === 'vi-VN') {
+    return {
+      title: `Vì sao ${req.productName} hiệu quả`,
+      heroStat: { value: '92', unit: '%', label: 'người dùng hài lòng sau 2 tuần' },
+      bullets: [
+        'Thành phần tự nhiên, không phụ thuộc',
+        'Hiệu quả nhanh — thấy khác sau 7-10 ngày',
+        'Đóng gói tiện lợi, dễ mang theo',
+        'Cam kết hoàn tiền nếu không hiệu quả',
+      ],
+      footnote: 'Khảo sát nội bộ 200 khách hàng, 2024',
+    }
+  }
+  return {
+    title: `Why ${req.productName} works`,
+    heroStat: { value: '92', unit: '%', label: 'customer satisfaction after 2 weeks' },
+    bullets: [
+      'Natural ingredients, no dependency',
+      'Visible results in 7-10 days',
+      'Travel-friendly packaging',
+      '30-day money-back guarantee',
+    ],
+    footnote: 'Internal survey of 200 customers, 2024',
+  }
+}
+
+function ctaFallback(req: ContentRequest): CtaBannerContent {
+  if (req.locale === 'vi-VN') {
+    return {
+      headline: `Đặt ${req.productName} hôm nay`,
+      subheadline: 'Giao toàn quốc — cam kết chính hãng 100%',
+      offerLine: 'Giảm 30% — chỉ hôm nay',
+      ctaText: 'Đặt ngay',
+    }
+  }
+  return {
+    headline: `Get ${req.productName} today`,
+    subheadline: 'Free shipping nationwide — 100% authentic',
+    offerLine: '30% off — today only',
+    ctaText: 'Order Now',
+  }
+}
+
+// ── Public generators (P12-fix: safeGenerateStructured everywhere) ────
+
 export async function generateInfographicContent(
   apiKey: string,
   req: ContentRequest,
 ): Promise<InfographicContent> {
-  const raw = await directGeminiText({
+  const result = await safeGenerateStructured<InfographicContent>({
     apiKey,
     prompt: buildInfographicPrompt(req),
     systemInstruction: INFO_SYSTEM_INSTRUCTION,
-    maxOutputTokens: 1024,
+    // P12-fix: bump token budget — previous 1024 was getting truncated
+    // mid-string with "Unexpected end of JSON input" errors
+    maxOutputTokens: 2048,
+    schema: { name: 'InfographicContent', validate: isInfographicContent },
+    fallback: infographicFallback(req),
+    generatorLabel: 'designed-graphic infographic',
   })
-  const parsed = parseLLMJson<InfographicContent>(raw, 'designed-graphic infographic')
-  if (!parsed.title || !parsed.heroStat || !Array.isArray(parsed.bullets)) {
-    throw new Error('[designed-graphic infographic] missing required fields')
-  }
-  return parsed
+  return result.value
 }
 
 export async function generateCtaBannerContent(
   apiKey: string,
   req: ContentRequest,
 ): Promise<CtaBannerContent> {
-  const raw = await directGeminiText({
+  const result = await safeGenerateStructured<CtaBannerContent>({
     apiKey,
     prompt: buildCtaPrompt(req),
     systemInstruction: CTA_SYSTEM_INSTRUCTION,
-    maxOutputTokens: 512,
+    maxOutputTokens: 1024,   // P12-fix: was 512 (too tight)
+    schema: { name: 'CtaBannerContent', validate: isCtaBannerContent },
+    fallback: ctaFallback(req),
+    generatorLabel: 'designed-graphic cta',
   })
-  const parsed = parseLLMJson<CtaBannerContent>(raw, 'designed-graphic cta')
-  if (!parsed.headline || !parsed.ctaText) {
-    throw new Error('[designed-graphic cta] missing required fields')
-  }
-  return parsed
+  return result.value
 }

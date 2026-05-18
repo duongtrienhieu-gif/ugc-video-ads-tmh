@@ -248,10 +248,17 @@ export default function CreativeStudio() {
       setResults((prev) => prev.map((r) => r.rowId === rowId ? { ...r, status: 'done', asset } : r))
       addToast(`✓ Đã tạo ${entry.title.vi}`)
     } catch (err) {
+      // P12-fix: hide raw technical errors from users. Full detail stays
+      // in console + on the result card's errorMessage for diagnostics.
       const msg = err instanceof Error ? err.message : 'unknown'
       console.error('[CreativeStudio] generateAssets failed:', err)
       setResults((prev) => prev.map((r) => r.rowId === rowId ? { ...r, status: 'error', errorMessage: msg } : r))
-      addToast(`Tạo thất bại: ${msg.slice(0, 80)}`, 'error')
+      const friendly = msg.toLowerCase().includes('api key')
+        ? 'Thiếu API key — vào Cài đặt để thêm'
+        : msg.toLowerCase().includes('credit') || msg.toLowerCase().includes('insufficient')
+        ? 'Hết KIE credit — nạp thêm rồi thử lại'
+        : 'Tạo asset chưa thành công — vui lòng thử lại'
+      addToast(friendly, 'error')
     } finally {
       setIsGenerating(false)
     }

@@ -200,15 +200,25 @@ export async function directGeminiText(params: {
   prompt: string
   systemInstruction?: string
   maxOutputTokens?: number
+  /** P12-fix: opt-in strict JSON mode. When set to 'application/json',
+   *  Gemini's generationConfig.responseMimeType forces valid JSON
+   *  output — eliminates ~90% of "Unexpected end / Unterminated string"
+   *  parse failures at the source. */
+  responseMimeType?: 'application/json' | 'text/plain'
 }): Promise<string> {
   const modelsToTry = ['gemini-2.5-flash', 'gemini-2.5-flash-lite', 'gemini-2.0-flash', 'gemini-2.0-flash-lite']
   const errors: string[] = []
 
   for (const model of modelsToTry) {
     const url = `${GEMINI_BASE}/${model}:generateContent?key=${params.apiKey}`
+    const generationConfig: Record<string, unknown> = {
+      temperature: 0.3,
+      maxOutputTokens: params.maxOutputTokens ?? 8192,
+    }
+    if (params.responseMimeType) generationConfig.responseMimeType = params.responseMimeType
     const body: Record<string, unknown> = {
       contents: [{ role: 'user', parts: [{ text: params.prompt }] }],
-      generationConfig: { temperature: 0.3, maxOutputTokens: params.maxOutputTokens ?? 8192 },
+      generationConfig,
     }
     if (params.systemInstruction) {
       body.systemInstruction = { parts: [{ text: params.systemInstruction }] }

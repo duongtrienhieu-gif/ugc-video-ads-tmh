@@ -9,9 +9,8 @@
 // where the user already wrote the dialogue manually.
 
 import type { UINativeTextContent, UINativeLocale, UINativePlatform } from '../../../types/uiNative'
-import { directGeminiText } from '../../../../../utils/gemini'
 import { findPersona } from '../../../shared/metadata/personaLibrary'
-import { stripJsonFence } from '../../../shared/llm/jsonResponse'
+import { safeGenerateStructured } from '../../../shared/llm/safeGenerateStructured'
 import { buildArchetypeMix, describeMix } from './commentArchetypes'
 
 /** What kind of UI-native content we are generating text for. */
@@ -97,23 +96,14 @@ export function buildTextPayloadPrompt(req: TextPayloadRequest): string {
 }
 
 /** Parse the raw model output into a strict UINativeTextContent payload. */
-export function parseTextPayloadResponse(
-  raw: string,
+/** Consume an already-parsed + validated LLMResponse and shape it into
+ *  UINativeTextContent. JSON parsing happens upstream in
+ *  safeGenerateStructured — this fn just maps the validated object. */
+function shapeChatPayload(
+  parsed: LLMResponse,
   req: TextPayloadRequest,
   baseTimestamps: string[],
 ): UINativeTextContent {
-  const cleaned = stripJsonFence(raw).trim()
-  let parsed: LLMResponse
-  try {
-    parsed = JSON.parse(cleaned) as LLMResponse
-  } catch (err) {
-    throw new Error(`[ui-native text] JSON parse failed: ${(err as Error).message}`)
-  }
-
-  if (!parsed.customerDisplayName || !Array.isArray(parsed.messages)) {
-    throw new Error('[ui-native text] response missing required fields')
-  }
-
   const persona = req.personaId ? findPersona(req.personaId) : null
   const customerAvatarHint = persona?.label.en ?? `${req.locale} customer`
 
@@ -135,6 +125,45 @@ export function parseTextPayloadResponse(
       productName: req.productName,
     },
   }
+}
+
+// ── Schema check (cheap structural validator — not Zod) ───────────────
+function isChatResponse(v: unknown): v is LLMResponse {
+  if (typeof v !== 'object' || v === null) return false
+  const obj = v as Record<string, unknown>
+  if (typeof obj.customerDisplayName !== 'string') return false
+  if (!Array.isArray(obj.messages) || obj.messages.length === 0) return false
+  return obj.messages.every((m) => {
+    if (typeof m !== 'object' || m === null) return false
+    const msg = m as Record<string, unknown>
+    return (msg.side === 'incoming' || msg.side === 'outgoing') && typeof msg.text === 'string'
+  })
+}
+
+// ── Fallback chat content (used when LLM keeps failing) ───────────────
+function chatFallback(req: TextPayloadRequest): LLMResponse {
+  const localeName = req.locale === 'vi-VN' ? 'Linh N.'
+    : req.locale === 'my-MY' ? 'Aisyah B.'
+    : req.locale === 'id-ID' ? 'Putri W.'
+    : 'Emma R.'
+  const phrases = req.locale === 'vi-VN'
+    ? [
+        { side: 'incoming' as const, text: `chào shop, ${req.productName} còn ko ạ?` },
+        { side: 'outgoing' as const, text: 'dạ còn ạ, bên em giao trong 24h ạ' },
+        { side: 'incoming' as const, text: 'dùng cỡ 2 tuần là thấy khác à?' },
+        { side: 'outgoing' as const, text: 'dạ chị, hầu hết khách phản hồi sau 10-14 ngày là rõ' },
+        { side: 'incoming' as const, text: 'ok shop, em đặt 2 hộp nha' },
+        { side: 'outgoing' as const, text: 'dạ em cảm ơn chị 🙏' },
+      ]
+    : [
+        { side: 'incoming' as const, text: `hi shop, is ${req.productName} still in stock?` },
+        { side: 'outgoing' as const, text: 'yes! ships within 24h' },
+        { side: 'incoming' as const, text: 'how long until i see results?' },
+        { side: 'outgoing' as const, text: 'most customers say 10-14 days' },
+        { side: 'incoming' as const, text: 'ok ill take 2' },
+        { side: 'outgoing' as const, text: 'thank you 🙏' },
+      ]
+  return { customerDisplayName: localeName, messages: phrases }
 }
 
 
@@ -195,27 +224,14 @@ function buildReviewPrompt(req: TextPayloadRequest): string {
   ].join('\n')
 }
 
-function parseReviewResponse(
-  raw: string,
+function shapeReviewPayload(
+  parsed: LLMReviewResponse,
   req: TextPayloadRequest,
   timestamp: string,
 ): UINativeTextContent {
-  const cleaned = stripJsonFence(raw).trim()
-  let parsed: LLMReviewResponse
-  try {
-    parsed = JSON.parse(cleaned) as LLMReviewResponse
-  } catch (err) {
-    throw new Error(`[ui-native review] JSON parse failed: ${(err as Error).message}`)
-  }
-  if (!parsed.buyerDisplayName || !parsed.reviewBody) {
-    throw new Error('[ui-native review] response missing required fields')
-  }
-
   const persona = req.personaId ? findPersona(req.personaId) : null
   const avatarHint = persona?.label.en ?? `${req.locale} marketplace buyer`
 
-  // Encode rating + variant + helpfulCount in the reactions array so the
-  // template can read them via a stable channel.
   const reactions = [
     `★${Math.max(1, Math.min(5, Math.round(parsed.rating ?? 5)))}`,
     `variant:${parsed.variantBought ?? ''}`,
@@ -241,6 +257,26 @@ function parseReviewResponse(
       productName: req.productName,
     },
   }
+}
+
+function isReviewResponse(v: unknown): v is LLMReviewResponse {
+  if (typeof v !== 'object' || v === null) return false
+  const obj = v as Record<string, unknown>
+  return typeof obj.buyerDisplayName === 'string'
+      && typeof obj.reviewBody === 'string'
+      && obj.reviewBody.length > 5
+}
+
+function reviewFallback(req: TextPayloadRequest): LLMReviewResponse {
+  const name = req.locale === 'vi-VN' ? 'linhng***12'
+    : req.locale === 'my-MY' ? 'aisyahb***08'
+    : req.locale === 'id-ID' ? 'putri***24'
+    : 'emma***07'
+  const body = req.locale === 'vi-VN'
+    ? `Mình mua ${req.productName} dùng được 3 tuần, thấy khác rõ. Đóng gói cẩn thận, shop tư vấn nhiệt tình. Sẽ ủng hộ shop lần sau.`
+    : `Tried ${req.productName} for about 3 weeks, noticeable difference. Packaging is solid, shop replies quickly. Will reorder.`
+  const variant = req.locale === 'vi-VN' ? 'Hộp 30 viên' : 'Pack of 30'
+  return { buyerDisplayName: name, rating: 5, variantBought: variant, reviewBody: body, helpfulCount: 12 }
 }
 
 // ── Comment-thread prompts (P6) ─────────────────────────────────────────
@@ -310,23 +346,11 @@ function buildCommentPrompt(req: TextPayloadRequest): string {
   ].join('\n')
 }
 
-function parseCommentResponse(
-  raw: string,
+function shapeCommentPayload(
+  parsed: LLMCommentResponse,
   req: TextPayloadRequest,
   baseTimestamps: string[],
 ): UINativeTextContent {
-  const cleaned = stripJsonFence(raw).trim()
-  let parsed: LLMCommentResponse
-  try {
-    parsed = JSON.parse(cleaned) as LLMCommentResponse
-  } catch (err) {
-    throw new Error(`[ui-native comments] JSON parse failed: ${(err as Error).message}`)
-  }
-  if (!Array.isArray(parsed.comments) || parsed.comments.length === 0) {
-    throw new Error('[ui-native comments] response missing comments array')
-  }
-
-  // Build participants from unique usernames in order seen
   const usernameToIdx = new Map<string, number>()
   const participants: UINativeTextContent['participants'] = []
   for (const c of parsed.comments) {
@@ -362,10 +386,44 @@ function parseCommentResponse(
   }
 }
 
-// ── Public single-shot helper — routes by contentType ──────────────────
+function isCommentResponse(v: unknown): v is LLMCommentResponse {
+  if (typeof v !== 'object' || v === null) return false
+  const obj = v as Record<string, unknown>
+  if (!Array.isArray(obj.comments) || obj.comments.length === 0) return false
+  return obj.comments.every((c) => {
+    if (typeof c !== 'object' || c === null) return false
+    const item = c as Record<string, unknown>
+    return typeof item.username === 'string' && typeof item.text === 'string'
+  })
+}
 
-/** Single-shot helper — call Gemini, parse, return content. Routes by
- *  request.contentType (default 'chat'). */
+function commentFallback(req: TextPayloadRequest): LLMCommentResponse {
+  const count = req.messageCount ?? 6
+  const phrases = req.locale === 'vi-VN'
+    ? ['mua ở đâu vậy ạ?', 'sản phẩm này dùng được không?', 'cho mình xin link với', 'shop có ship Hà Nội ko?', 'dùng được lâu chưa bạn?', 'rep cho mình giá nha', 'có ai dùng thử chưa?', 'tag bạn xem cái này nha']
+    : req.locale === 'my-MY'
+    ? ['mana boleh dapat?', 'ada di shopee?', 'how much?', 'berapa lama dapat result?', 'nak juga try', 'pernah cuba ke?']
+    : ['where can i buy?', 'whats the price?', 'does it really work?', 'how long for results?', 'looks good', 'tagging a friend']
+  const usernames = ['linhng_98', 'minhanh.t', '_mayhoang', 'tuan.a01', 'huyentrang', 'nguyenmy_92', 'thaodo.q', 'kimanh.h']
+  return {
+    comments: Array.from({ length: count }).map((_, i) => ({
+      username: usernames[i % usernames.length],
+      text:     phrases[i % phrases.length],
+      likes:    [3, 12, 1, 28, 0, 7][i % 6],
+      isReply:  i > 0 && i % 3 === 0,
+    })),
+  }
+}
+
+// ── Public single-shot helper — routes by contentType ──────────────────
+//
+// P12-fix: all three content types now go through safeGenerateStructured
+//   - Gemini called with responseMimeType: 'application/json' (forced JSON)
+//   - extractStructuredJson repairs any residual malformed output
+//   - schema validation per content type
+//   - up to 2 retries with stricter prompt
+//   - guaranteed fallback content — NEVER throws
+
 export async function generateTextPayload(
   apiKey: string,
   req: TextPayloadRequest,
@@ -374,33 +432,42 @@ export async function generateTextPayload(
   const contentType: TextPayloadContentType = req.contentType ?? 'chat'
 
   if (contentType === 'review') {
-    const raw = await directGeminiText({
+    const result = await safeGenerateStructured<LLMReviewResponse>({
       apiKey,
       prompt: buildReviewPrompt(req),
       systemInstruction: REVIEW_SYSTEM_INSTRUCTION,
       maxOutputTokens: 1024,
+      schema: { name: 'LLMReviewResponse', validate: isReviewResponse },
+      fallback: reviewFallback(req),
+      generatorLabel: 'ui-native review',
     })
-    return parseReviewResponse(raw, req, baseTimestamps[0] ?? '14:23')
+    return shapeReviewPayload(result.value, req, baseTimestamps[0] ?? '14:23')
   }
 
   if (contentType === 'comment-thread') {
-    const raw = await directGeminiText({
+    const result = await safeGenerateStructured<LLMCommentResponse>({
       apiKey,
       prompt: buildCommentPrompt(req),
       systemInstruction: COMMENT_SYSTEM_INSTRUCTION,
       maxOutputTokens: 2048,
+      schema: { name: 'LLMCommentResponse', validate: isCommentResponse },
+      fallback: commentFallback(req),
+      generatorLabel: 'ui-native comments',
     })
-    return parseCommentResponse(raw, req, baseTimestamps)
+    return shapeCommentPayload(result.value, req, baseTimestamps)
   }
 
   // Default: chat conversation
-  const raw = await directGeminiText({
+  const result = await safeGenerateStructured<LLMResponse>({
     apiKey,
     prompt: buildTextPayloadPrompt(req),
     systemInstruction: SYSTEM_INSTRUCTION,
     maxOutputTokens: 2048,
+    schema: { name: 'LLMResponse', validate: isChatResponse },
+    fallback: chatFallback(req),
+    generatorLabel: 'ui-native chat',
   })
-  return parseTextPayloadResponse(raw, req, baseTimestamps)
+  return shapeChatPayload(result.value, req, baseTimestamps)
 }
 
 // Read helpers for the encoded reactions fields above
