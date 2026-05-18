@@ -1537,51 +1537,55 @@ export async function generatePackImages(
     }
   }
 
-  // ── Before/after PAIR-SEED render (Group 3 identity-lock) ────────────────
-  // Pre-render ba_01 (imageIdx=0) and ba_03 (imageIdx=2) sequentially so
-  // ba_02 (imageIdx=1) and ba_04 (imageIdx=3) can attach their pair-mate's
-  // generatedAssetRef as a reference image, locking identity across BEFORE
-  // ↔ AFTER. Both seeds run sequentially (low concurrency cost: 2 extra
-  // serial renders, ~3-5min worst case). After this stage the remaining
-  // jobs flow through the regular parallel queue.
+  // ── Before/after PAIR-SEED stage (Group 3 identity-lock, hotfix v2) ─────
+  //
+  // Goal: ba_02 (imageIdx=1) and ba_04 (imageIdx=3) should attach their
+  // pair-mate's generatedAssetRef so KIE locks identity across BEFORE ↔
+  // AFTER via image-to-image.
+  //
+  // v1 BUG: ran ba_01 + ba_03 SEQUENTIALLY before the parallel pool
+  // started → entire queue stalled 1-3 min before ANY image dispatched
+  // (user-visible "0/37 ảnh, 141s đã chạy"). Fixed in v2 by:
+  //   • Running pair-seed jobs (ba_01, ba_03) INSIDE the parallel pool —
+  //     they get dispatched immediately alongside hero / pain / etc.
+  //   • Pulling pair jobs (ba_02, ba_04) out of the initial pool and
+  //     queueing them AFTER their pair-mate's promise resolves (deferred
+  //     dispatch). When a seed completes, its pair-mate gets pushed onto
+  //     the queue and picked up by the next pump() tick.
+  //   • If a seed FAILS, the pair-mate is still released (falls back to
+  //     text-only identity lock per BEFORE_AFTER_IDENTITY_LOCK_DIRECTIVE).
+  //
+  // Net effect: parallel concurrency=8 from t=0; identity-lock preserved.
   const baSectionIdx = pack.sections.findIndex((s) => s.type === 'before-after')
+  let deferredJobs: ImageJob[] = []
+  const pairMatePromises = new Map<string, Promise<void>>()
   if (baSectionIdx >= 0) {
-    const baSeeds = jobs.filter((j) =>
-      j.sectionIdx === baSectionIdx && (j.imageIdx === 0 || j.imageIdx === 2),
+    deferredJobs = jobs.filter((j) =>
+      j.sectionIdx === baSectionIdx && (j.imageIdx === 1 || j.imageIdx === 3),
     )
-    for (const seed of baSeeds) {
-      console.info(`[before-after] pair-seed render — ba_0${seed.imageIdx + 1} (imageIdx=${seed.imageIdx}) before its pair-mate`)
-      options.onTaskUpdate(seed.sectionIdx, seed.imageIdx, { status: 'generating' })
-      try {
-        const { assetRef, retries } = await runWithCreditSafeRetry(
-          seed,
-          pack.visualMemory,
-          kieApiKey,
-          (patch) => options.onTaskUpdate(seed.sectionIdx, seed.imageIdx, patch),
-          options.signal,
-        )
-        const sec = pack.sections[seed.sectionIdx]
-        if (sec && sec.imagePrompts?.[seed.imageIdx]) {
-          sec.imagePrompts[seed.imageIdx].generatedAssetRef = assetRef
-          sec.imagePrompts[seed.imageIdx].status = 'done'
+    if (deferredJobs.length > 0) {
+      const deferredKeys = new Set(deferredJobs.map((j) => `${j.sectionIdx}:${j.imageIdx}`))
+      jobs = jobs.filter((j) => !deferredKeys.has(`${j.sectionIdx}:${j.imageIdx}`))
+      // Pre-create resolver promises keyed by SEED imageIdx (0 or 2). The
+      // parallel pool's .finally() handler for seeds will resolve these,
+      // unblocking the matching pair-mate dispatch.
+      for (const def of deferredJobs) {
+        const seedIdx = def.imageIdx - 1   // 1 -> 0, 3 -> 2
+        const key = `${baSectionIdx}:${seedIdx}`
+        if (!pairMatePromises.has(key)) {
+          let resolveFn: () => void = () => {}
+          pairMatePromises.set(key, new Promise<void>((r) => { resolveFn = r }))
+          // Stash resolver on the map value for the pool to retrieve.
+          // (We attach it via a side-channel: rebind .then on the promise.)
+          ;(pairMatePromises.get(key) as Promise<void> & { _resolve?: () => void })._resolve = resolveFn
         }
-        options.onTaskUpdate(seed.sectionIdx, seed.imageIdx, {
-          status: 'done', generatedAssetRef: assetRef, error: undefined,
-        })
-        done++
-        totalRetries += retries
-        options.onProgress?.(done, failed, total, totalRetries)
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err)
-        console.warn(`[before-after] pair-seed ba_0${seed.imageIdx + 1} failed — pair-mate will fall back to text-only identity lock:`, msg)
-        options.onTaskUpdate(seed.sectionIdx, seed.imageIdx, { status: 'failed', error: msg })
-        failed++
-        options.onProgress?.(done, failed, total, totalRetries)
       }
-    }
-    if (baSeeds.length > 0) {
-      const seedIdxSet = new Set(baSeeds.map((s) => `${s.sectionIdx}:${s.imageIdx}`))
-      jobs = jobs.filter((j) => !seedIdxSet.has(`${j.sectionIdx}:${j.imageIdx}`))
+      console.info(`[before-after] pair-seed stage (parallel) — deferred ${deferredJobs.length} pair-mate jobs (ba_02/ba_04) until their seeds resolve`)
+      // Append deferred jobs at the END so they get dispatched LAST by the
+      // pool. Their `gate` Promise blocks the actual KIE submit until the
+      // pair-mate seed resolves — but the slot opens up immediately so
+      // OTHER jobs aren't starved.
+      jobs = [...jobs, ...deferredJobs]
     }
   }
 
@@ -1620,15 +1624,47 @@ export async function generatePackImages(
         active++
         options.onTaskUpdate(job.sectionIdx, job.imageIdx, { status: 'generating' })
 
-        runWithCreditSafeRetry(
-          job,
-          pack.visualMemory,
-          kieApiKey,
-          (patch) => options.onTaskUpdate(job.sectionIdx, job.imageIdx, patch),
-          options.signal,
-        )
+        // Capture job locally for the .then/.catch closure binding.
+        const jobRef = job
+        const isBeforeAfterSeed =
+          jobRef.section.type === 'before-after' &&
+          (jobRef.imageIdx === 0 || jobRef.imageIdx === 2)
+
+        // If this is a deferred pair-mate (ba_02 / ba_04), wait for the
+        // seed promise to resolve before actually dispatching the retry.
+        // This is a no-op when the pair-mate isn't deferred (the promise
+        // is undefined and we proceed immediately).
+        const pairKey = jobRef.section.type === 'before-after' && (jobRef.imageIdx === 1 || jobRef.imageIdx === 3)
+          ? `${jobRef.sectionIdx}:${jobRef.imageIdx - 1}`
+          : null
+        const gate = pairKey ? pairMatePromises.get(pairKey) : null
+
+        const dispatch = gate
+          ? gate.then(() => runWithCreditSafeRetry(
+              jobRef,
+              pack.visualMemory,
+              kieApiKey,
+              (patch) => options.onTaskUpdate(jobRef.sectionIdx, jobRef.imageIdx, patch),
+              options.signal,
+            ))
+          : runWithCreditSafeRetry(
+              jobRef,
+              pack.visualMemory,
+              kieApiKey,
+              (patch) => options.onTaskUpdate(jobRef.sectionIdx, jobRef.imageIdx, patch),
+              options.signal,
+            )
+
+        dispatch
           .then(({ assetRef, retries }) => {
-            options.onTaskUpdate(job.sectionIdx, job.imageIdx, {
+            // CRITICAL — mutate pack so selectRefsForSection sees ba_01/03
+            // generatedAssetRef when ba_02/04 dispatch later.
+            const sec = pack.sections[jobRef.sectionIdx]
+            if (sec && sec.imagePrompts?.[jobRef.imageIdx]) {
+              sec.imagePrompts[jobRef.imageIdx].generatedAssetRef = assetRef
+              sec.imagePrompts[jobRef.imageIdx].status = 'done'
+            }
+            options.onTaskUpdate(jobRef.sectionIdx, jobRef.imageIdx, {
               status: 'done', generatedAssetRef: assetRef, error: undefined,
             })
             done++
@@ -1636,12 +1672,23 @@ export async function generatePackImages(
           })
           .catch((err) => {
             const msg = err instanceof Error ? err.message : String(err)
-            options.onTaskUpdate(job.sectionIdx, job.imageIdx, {
+            options.onTaskUpdate(jobRef.sectionIdx, jobRef.imageIdx, {
               status: 'failed', error: msg,
             })
             failed++
           })
           .finally(() => {
+            // Release the gate for the pair-mate (ba_02 / ba_04) when a
+            // seed (ba_01 / ba_03) finishes — success OR failure. On
+            // failure the pair-mate falls back to text-only identity lock.
+            if (isBeforeAfterSeed) {
+              const seedKey = `${jobRef.sectionIdx}:${jobRef.imageIdx}`
+              const seedPromise = pairMatePromises.get(seedKey) as Promise<void> & { _resolve?: () => void }
+              if (seedPromise?._resolve) {
+                seedPromise._resolve()
+                pairMatePromises.delete(seedKey)
+              }
+            }
             active--
             options.onProgress?.(done, failed, total, totalRetries)
             pump()
