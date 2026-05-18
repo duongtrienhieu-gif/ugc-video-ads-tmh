@@ -8,17 +8,23 @@
 //   • Per-job actions: Download / Delete (delete cascades to DB)
 //   • QC badge when present in completed asset metadata
 
-import { Download, Trash2, ShieldCheck, ShieldAlert, AlertTriangle, Loader2, Clock } from 'lucide-react'
+import { Download, Trash2, ShieldCheck, ShieldAlert, AlertTriangle, Loader2, Clock, Sparkles, ArrowRight } from 'lucide-react'
 import { useAssetUrl } from '../../../hooks/useAssetUrl'
 import { findCatalogEntry } from './assetCatalog'
+import { suggestFollowUps } from '../shared/recommendations/recommendations'
+import type { AssetTypeId } from '../types/asset'
 import type { GenerationJob } from '../stores/generationsStore'
 
 interface ResultCardProps {
   job: GenerationJob
   onDelete: () => void
+  /** P30 — fires when user clicks a follow-up suggestion chip. Parent
+   *  (CreativeStudio) sets selectedAssetTypeId + scrolls to the input
+   *  panel so the user can hit Tạo creative immediately. */
+  onSuggest?: (id: AssetTypeId) => void
 }
 
-export default function ResultCard({ job, onDelete }: ResultCardProps) {
+export default function ResultCard({ job, onDelete, onSuggest }: ResultCardProps) {
   const entry = findCatalogEntry(job.creativeType)
   const firstAsset = job.outputs[0]
   const displayUrl = useAssetUrl(firstAsset?.outputUrl)
@@ -46,8 +52,21 @@ export default function ResultCard({ job, onDelete }: ResultCardProps) {
 
   const qc = firstAsset?.metadata.qcSummary
 
+  // P30 — smart recommendations shown when the job completes
+  const suggestions = job.status === 'completed' && onSuggest
+    ? suggestFollowUps(job.creativeType, { limit: 3 })
+    : []
+
+  // P30 — currently-rendering job gets a visual priority ring so the
+  // user can spot "what's active" at a glance in a busy workspace.
+  const isActive = job.status === 'generating'
+
   return (
-    <div className="flex flex-col overflow-hidden rounded-xl border border-black/10 bg-white shadow-sm transition-shadow hover:shadow-md">
+    <div className={`flex flex-col overflow-hidden rounded-xl border bg-white shadow-sm transition-all ${
+      isActive
+        ? 'border-violet-300 shadow-[0_0_0_3px_rgba(139,92,246,0.15)] ring-1 ring-violet-200'
+        : 'border-black/10 hover:shadow-md'
+    }`}>
       {/* Card header */}
       <div className="flex items-center justify-between gap-2 border-b border-black/8 bg-gray-50/60 px-3 py-2">
         <div className="flex min-w-0 items-center gap-1.5">
@@ -57,6 +76,11 @@ export default function ResultCard({ job, onDelete }: ResultCardProps) {
           {firstAsset && (
             <span className={`shrink-0 rounded px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wide ${groupBadgeClass}`}>
               {firstAsset.metadata.engineGroup}
+            </span>
+          )}
+          {isActive && (
+            <span className="shrink-0 rounded bg-violet-100 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-violet-700">
+              Ưu tiên
             </span>
           )}
         </div>
@@ -140,6 +164,34 @@ export default function ResultCard({ job, onDelete }: ResultCardProps) {
           </button>
         </div>
       </div>
+
+      {/* P30 — Smart recommendation strip. Shows 3 marketing-logical
+          follow-ups so the user keeps building as a CAMPAIGN. Each
+          chip carries a Vietnamese rationale via the title attribute. */}
+      {suggestions.length > 0 && onSuggest && (
+        <div className="border-t border-black/8 bg-violet-50/30 px-3 py-2">
+          <div className="mb-1 flex items-center gap-1 text-[9px] font-bold uppercase tracking-widest text-violet-700">
+            <Sparkles className="h-2.5 w-2.5" /> Tạo tiếp trong campaign
+          </div>
+          <div className="flex flex-wrap gap-1">
+            {suggestions.map((s) => {
+              const sEntry = findCatalogEntry(s.id)
+              return (
+                <button
+                  key={s.id}
+                  type="button"
+                  onClick={() => onSuggest(s.id)}
+                  title={s.reason}
+                  className="group inline-flex items-center gap-1 rounded-full border border-violet-200 bg-white px-2 py-0.5 text-[10px] font-medium text-violet-700 transition-colors hover:bg-violet-100 hover:border-violet-300"
+                >
+                  <span className="truncate max-w-[140px]">{sEntry?.title.vi ?? s.id}</span>
+                  <ArrowRight className="h-2.5 w-2.5 opacity-60 group-hover:translate-x-0.5 transition-transform" />
+                </button>
+              )
+            })}
+          </div>
+        </div>
+      )}
     </div>
   )
 }

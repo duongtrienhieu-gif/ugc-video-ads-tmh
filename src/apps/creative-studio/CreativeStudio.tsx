@@ -30,6 +30,8 @@ import { useGenerationsStore, type GenerationJob } from './stores/generationsSto
 import AssetTypePicker from './uiCatalog/AssetTypePicker'
 import ResultCard from './uiCatalog/ResultCard'
 import { findCatalogEntry, requirementsFor } from './uiCatalog/assetCatalog'
+import { rememberAvatarForProduct, recallAvatarForProduct } from './shared/recommendations/avatarMemory'
+import { useBankStore } from '../../stores/bankStore'
 
 // ── PickerTile (product / avatar) ──────────────────────────────────────
 //
@@ -109,6 +111,7 @@ export default function CreativeStudio() {
   const kieApiKey    = useSettingsStore((s) => s.kieApiKey)
   const geminiApiKey = useSettingsStore((s) => s.geminiApiKey)
   const addToast     = useAppStore((s) => s.addToast)
+  const allModels    = useBankStore((s) => s.models)
 
   // ── Generations store — DB-backed job list (right panel) ───────────
   const jobs        = useGenerationsStore((s) => s.jobs)
@@ -120,6 +123,38 @@ export default function CreativeStudio() {
 
   // Hydrate once on mount — pulls full history from Supabase
   useEffect(() => { void hydrate() }, [hydrate])
+
+  // P30 — Avatar consistency memory. When the user picks an avatar
+  // for a product, remember it; when they re-select the same product,
+  // auto-recall the last avatar so multi-creative campaigns share
+  // the same AI persona across creatives.
+  useEffect(() => {
+    if (selectedProduct?.id && selectedAvatar?.id) {
+      rememberAvatarForProduct(selectedProduct.id, selectedAvatar.id)
+    }
+  }, [selectedProduct?.id, selectedAvatar?.id])
+
+  // Recall the remembered avatar when product changes and the user
+  // hasn't picked an avatar yet. Don't overwrite an explicit choice.
+  useEffect(() => {
+    if (!selectedProduct?.id || selectedAvatar) return
+    const rememberedId = recallAvatarForProduct(selectedProduct.id)
+    if (!rememberedId) return
+    const found = allModels.find((m) => m.id === rememberedId)
+    if (found) {
+      setSelectedAvatar(found)
+      console.info('[CreativeStudio] avatar consistency memory — recalled', { productId: selectedProduct.id, modelId: found.id })
+    }
+  }, [selectedProduct?.id, allModels, selectedAvatar])
+
+  // P30 — input panel scroll target so suggestion clicks scroll back
+  // to the top of the left panel after selecting a follow-up creative.
+  const inputPanelRef = useRef<HTMLDivElement>(null)
+
+  function handleSuggestion(id: AssetTypeId) {
+    setSelectedAssetTypeId(id)
+    inputPanelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }
 
   // ── Derived: requirements drive which input tiles to render ────────
   const catalogEntry = selectedAssetTypeId ? findCatalogEntry(selectedAssetTypeId) : null
@@ -257,7 +292,7 @@ export default function CreativeStudio() {
                to honor the parent's height instead of fitting content. */}
         <aside className="flex min-h-0 flex-col overflow-hidden border-b border-r-0 border-black/8 bg-white/40 lg:border-b-0 lg:border-r">
           {/* ── STICKY INPUT REGION ──────────────────────────────── */}
-          <div className="shrink-0 border-b border-black/8 bg-white/60 p-4 backdrop-blur-sm">
+          <div ref={inputPanelRef} className="shrink-0 border-b border-black/8 bg-white/60 p-4 backdrop-blur-sm">
             <section>
               <p className="mb-2 text-[11px] font-bold uppercase tracking-widest text-gray-500">
                 {reqs?.requireAvatar ? 'Sản phẩm + Avatar' : 'Sản phẩm'}
@@ -379,7 +414,7 @@ export default function CreativeStudio() {
             </div>
           )}
 
-          {/* Workspace grid */}
+          {/* Workspace grid — P30: campaign auto-grouped by productId */}
           <div className="flex-1 overflow-y-auto p-5">
             {hydrated && jobs.length === 0 ? (
               <div className="flex h-full min-h-[400px] items-center justify-center rounded-xl border border-dashed border-black/10 bg-white">
@@ -392,11 +427,11 @@ export default function CreativeStudio() {
                 </div>
               </div>
             ) : (
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
-                {jobs.map((job) => (
-                  <JobCardWrapper key={job.id} job={job} onDelete={() => handleDeleteJob(job.id)} />
-                ))}
-              </div>
+              <CampaignGroupedHistory
+                jobs={jobs}
+                onDelete={handleDeleteJob}
+                onSuggest={handleSuggestion}
+              />
             )}
           </div>
         </main>
@@ -473,9 +508,101 @@ function translateJobError(err: unknown): string {
 const JobCardWrapper = memo(function JobCardWrapper({
   job,
   onDelete,
+  onSuggest,
 }: {
   job: GenerationJob
   onDelete: () => void
+  onSuggest?: (id: AssetTypeId) => void
 }) {
-  return <ResultCard job={job} onDelete={onDelete} />
+  return <ResultCard job={job} onDelete={onDelete} onSuggest={onSuggest} />
 })
+
+// ── Campaign auto-grouped history (P30) ──────────────────────────────
+//
+// Groups workspace jobs by productId so multi-creative campaigns
+// surface as visual clusters in the right panel. Each group renders a
+// product header (thumb + name + counts) followed by its jobs in a
+// responsive grid. Jobs without a product land in a "Không sản phẩm"
+// bucket at the end.
+
+function CampaignGroupedHistory({
+  jobs,
+  onDelete,
+  onSuggest,
+}: {
+  jobs: GenerationJob[]
+  onDelete: (id: string) => void
+  onSuggest: (id: AssetTypeId) => void
+}) {
+  const bank = useBankStore.getState()
+  const groups = useMemo(() => {
+    const map = new Map<string, { productId: string | null; jobs: GenerationJob[] }>()
+    for (const job of jobs) {
+      const pid = job.inputs?.productId ?? null
+      const key = pid ?? '__no_product__'
+      const bucket = map.get(key)
+      if (bucket) {
+        bucket.jobs.push(job)
+      } else {
+        map.set(key, { productId: pid, jobs: [job] })
+      }
+    }
+    return Array.from(map.values())
+  }, [jobs])
+
+  return (
+    <div className="flex flex-col gap-5">
+      {groups.map((group, idx) => {
+        const product = group.productId ? bank.getProductById(group.productId) : null
+        const completed = group.jobs.filter((j) => j.status === 'completed').length
+        const active    = group.jobs.filter((j) => j.status === 'generating' || j.status === 'queued').length
+        return (
+          <section key={group.productId ?? `no-product-${idx}`}>
+            <header className="mb-2 flex items-center gap-2.5">
+              {product?.productImage ? (
+                <CampaignThumb assetRef={product.productImage} />
+              ) : (
+                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-dashed border-black/15 bg-gray-50 text-gray-400">
+                  <Package className="h-4 w-4" strokeWidth={1.4} />
+                </div>
+              )}
+              <div className="flex min-w-0 flex-1 items-baseline gap-2">
+                <h3 className="truncate text-[13px] font-bold text-gray-800">
+                  {product?.productName ?? 'Không sản phẩm'}
+                </h3>
+                <span className="text-[10px] text-gray-400">
+                  {group.jobs.length} creative · {completed} xong
+                  {active > 0 ? ` · ${active} đang chạy` : ''}
+                </span>
+              </div>
+            </header>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
+              {group.jobs.map((job) => (
+                <JobCardWrapper
+                  key={job.id}
+                  job={job}
+                  onDelete={() => onDelete(job.id)}
+                  onSuggest={onSuggest}
+                />
+              ))}
+            </div>
+          </section>
+        )
+      })}
+    </div>
+  )
+}
+
+function CampaignThumb({ assetRef }: { assetRef: string }) {
+  const url = useAssetUrl(assetRef)
+  if (!url) return (
+    <div className="h-8 w-8 shrink-0 rounded-md bg-gray-100" />
+  )
+  return (
+    <img
+      src={url}
+      alt=""
+      className="h-8 w-8 shrink-0 rounded-md object-cover ring-1 ring-black/10"
+    />
+  )
+}
