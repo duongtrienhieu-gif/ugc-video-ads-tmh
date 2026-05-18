@@ -25,6 +25,7 @@ import { saveAsset } from '../../../../utils/assetStore'
 import { toPublicUrl } from '../../shared/utils/refResolver'
 import { generateAvatar, generateAvatarBatch } from './_shared/avatarGen'
 import { generateTextPayload, type TextPayloadRequest, type TextPayloadContentType } from './_shared/textPayload'
+import { fromProduct } from '../../services/productKnowledge'
 import { buildTimeline } from './_shared/timestamps'
 import { applyAuthenticityPipeline } from './_shared/authenticityPipeline'
 import { generateParticipantPool, buildAvatarHint, type ChatParticipant } from './_shared/participants'
@@ -130,6 +131,10 @@ export async function dispatchUINative(
   if (opts.textPayload) {
     textPayload = opts.textPayload as UINativeTextContent
   } else {
+    // P25 — load full product knowledge from bankStore so chat / review /
+    // comment generation references real benefits + pain points + USPs.
+    const productKnowledge = product ? fromProduct(product, locale) : undefined
+
     const textReq: TextPayloadRequest = {
       platform: module.platform as UINativePlatform,
       locale,
@@ -139,6 +144,7 @@ export async function dispatchUINative(
       messageCount,
       tone: opts.tone as string | undefined,
       contentType,
+      productKnowledge,
     }
     textPayload = await generateTextPayload(settings.geminiApiKey, textReq, timeline.perMessage)
   }

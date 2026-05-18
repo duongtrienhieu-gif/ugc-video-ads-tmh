@@ -23,6 +23,8 @@ import { toPublicUrl } from '../../shared/utils/refResolver'
 import { runBaselineQC } from '../../shared/qc/baselineQC'
 import { findCreativeConfig } from '../../creativeConfig/configs'
 import { assemblePrompt } from '../../shared/prompt/promptAssembler'
+import { fromProduct } from '../../services/productKnowledge'
+import type { UINativeLocale } from '../../types/uiNative'
 
 export async function dispatchPhotographic(
   module: PhotographicModule,
@@ -64,6 +66,13 @@ export async function dispatchPhotographic(
   let promptSource: 'config' | 'legacy'
   let blocksUsed: string[] = []
   if (config) {
+    // P25 — load FULL product knowledge from bankStore (USPs / benefits
+    // / pain points / audience / offer / tone) so the prompt assembler
+    // can bake context into the scene composition. Locale defaults to
+    // 'vi-VN' but can be overridden via params.options.locale.
+    const locale = (params.options?.locale as UINativeLocale | undefined) ?? 'vi-VN'
+    const productKnowledge = fromProduct(product, locale)
+
     const assembled = assemblePrompt(config, {
       productName: product.productName,
       productDescription: product.productDescription,
@@ -72,6 +81,8 @@ export async function dispatchPhotographic(
       variationHint: (params.options?.variationHint as string | undefined) ?? null,
       personaId: params.options?.personaId as string | undefined,
       beatId:    params.options?.beatId    as string | undefined,
+      locale,
+      productKnowledge,
     })
     finalPrompt = assembled.prompt
     blocksUsed = assembled.blocksUsed

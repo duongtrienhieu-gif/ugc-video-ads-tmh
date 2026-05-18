@@ -10,6 +10,7 @@
 
 import type { UINativeLocale } from '../../types/uiNative'
 import { safeGenerateStructured } from '../../shared/llm/safeGenerateStructured'
+import { formatProductKnowledgeForPrompt, type ProductKnowledge } from '../../services/productKnowledge'
 
 export type DesignedGraphicContentKind = 'infographic' | 'cta-banner'
 
@@ -48,6 +49,27 @@ export interface ContentRequest {
   offer?: string
   /** Optional tone hint, default 'confident-natural'. */
   tone?: string
+  /** P25 — full product knowledge profile loaded from bankStore. */
+  productKnowledge?: ProductKnowledge
+}
+
+// ── P25 — locale hard-lock appended to system instructions ───────────
+
+function localeRule(locale: UINativeLocale): string {
+  const map: Record<UINativeLocale, string> = {
+    'vi-VN':  'ALL output text must be in Vietnamese (Tiếng Việt with diacritics — không bỏ dấu). NEVER mix English unless quoting an approved brand term. NEVER output Chinese, Korean, or Malay.',
+    'my-MY':  'ALL output text must be in Bahasa Melayu. NEVER output Vietnamese, Chinese, English (except approved brand terms), or Korean.',
+    'id-ID':  'ALL output text must be in Bahasa Indonesia. NEVER output Vietnamese, Chinese, Malay (Bahasa Melayu has subtle differences), or English.',
+    'global': 'ALL output text must be in plain casual English. NEVER output Vietnamese, Chinese, Korean, or Malay.',
+  }
+  return `[LOCALE HARD LOCK]\n${map[locale]}`
+}
+
+function productKnowledgeBlock(req: ContentRequest): string {
+  if (!req.productKnowledge) return ''
+  return `[PRODUCT KNOWLEDGE — reference real benefits / pain points, do NOT invent]\n`
+    + formatProductKnowledgeForPrompt(req.productKnowledge)
+    + '\n'
 }
 
 const LOCALE_LANG: Record<UINativeLocale, string> = {
@@ -70,10 +92,12 @@ const CTA_SYSTEM_INSTRUCTION =
   + 'verb phrase 2-3 words ("Đặt ngay", "Xem chi tiết"). Plain confident voice, NOT salesy.'
 
 function buildInfographicPrompt(req: ContentRequest): string {
+  const knowledge = productKnowledgeBlock(req)
   return [
     'Generate infographic copy for this product.',
     `Product: ${req.productName}${req.niche ? ` (niche: ${req.niche})` : ''}`,
     req.productDescription ? `Description: ${req.productDescription}` : '',
+    knowledge,
     req.benefits?.length    ? `Stated benefits: ${req.benefits.join('; ')}` : '',
     req.usps?.length        ? `USPs: ${req.usps.join('; ')}`              : '',
     `Language: ${LOCALE_LANG[req.locale]}`,
@@ -97,10 +121,12 @@ function buildInfographicPrompt(req: ContentRequest): string {
 }
 
 function buildCtaPrompt(req: ContentRequest): string {
+  const knowledge = productKnowledgeBlock(req)
   return [
     'Generate CTA banner copy for this product.',
     `Product: ${req.productName}${req.niche ? ` (niche: ${req.niche})` : ''}`,
     req.productDescription ? `Description: ${req.productDescription}` : '',
+    knowledge,
     req.benefits?.length    ? `Benefits: ${req.benefits.join('; ')}` : '',
     req.offer               ? `Offer terms: ${req.offer}` : '',
     `Language: ${LOCALE_LANG[req.locale]}`,
@@ -193,7 +219,7 @@ export async function generateInfographicContent(
   const result = await safeGenerateStructured<InfographicContent>({
     apiKey,
     prompt: buildInfographicPrompt(req),
-    systemInstruction: INFO_SYSTEM_INSTRUCTION,
+    systemInstruction: INFO_SYSTEM_INSTRUCTION + '\n\n' + localeRule(req.locale),
     // P12-fix: bump token budget — previous 1024 was getting truncated
     // mid-string with "Unexpected end of JSON input" errors
     maxOutputTokens: 2048,
@@ -211,7 +237,7 @@ export async function generateCtaBannerContent(
   const result = await safeGenerateStructured<CtaBannerContent>({
     apiKey,
     prompt: buildCtaPrompt(req),
-    systemInstruction: CTA_SYSTEM_INSTRUCTION,
+    systemInstruction: CTA_SYSTEM_INSTRUCTION + '\n\n' + localeRule(req.locale),
     maxOutputTokens: 1024,   // P12-fix: was 512 (too tight)
     schema: { name: 'CtaBannerContent', validate: isCtaBannerContent },
     fallback: ctaFallback(req),

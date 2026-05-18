@@ -20,6 +20,7 @@
 //   }
 
 import type { PromptBlock, PromptContext, PlatformStyle } from '../../types/creativeDNA'
+import { formatProductKnowledgeForPrompt } from '../../services/productKnowledge'
 
 // ── Product / Avatar identity locks ──────────────────────────────────
 
@@ -169,5 +170,64 @@ export const BLOCKS = {
   /** Free-form custom block — escape hatch when none of the above fits. */
   custom(kind: PromptBlock['kind'], text: string): PromptBlock {
     return { kind, text }
+  },
+
+  // ── P25 — Product knowledge block ───────────────────────────────
+  /** Embeds the full product profile (niche / benefits / pain points /
+   *  audience / offer / tone) from bankStore into the prompt so the
+   *  model picks scene context aligned with marketing reality —
+   *  not what it guesses from the product image. */
+  productContext(): PromptBlock {
+    return {
+      kind: 'product',
+      text: (ctx: PromptContext) => {
+        if (!ctx.productKnowledge) return ''
+        return `[PRODUCT KNOWLEDGE]\n${formatProductKnowledgeForPrompt(ctx.productKnowledge)}\n\n`
+          + `Use this product knowledge to choose appropriate scene context, persona, and mood. `
+          + `DO NOT render benefits / pain points / offer as text overlays in the image (unless `
+          + `a separate [TEXT RENDERING] block explicitly calls for it).`
+      },
+    }
+  },
+
+  // ── P25 — Locale hard-lock ──────────────────────────────────────
+  /** Hard system rule: visible text in the generated image MUST be in
+   *  the locale's native language. The ONLY exception is the product
+   *  label (fixed by reference image — reproduced exactly). */
+  localeHardLock(): PromptBlock {
+    return {
+      kind: 'negative',
+      text: (ctx: PromptContext) => {
+        const locale = (ctx.locale ?? 'vi-VN') as 'vi-VN' | 'my-MY' | 'id-ID' | 'global'
+        const map: Record<typeof locale, { native: string; ban: string }> = {
+          'vi-VN': {
+            native: 'Vietnamese (Tiếng Việt with diacritics)',
+            ban: 'NOT English, NOT Chinese, NOT Malay, NOT Korean',
+          },
+          'my-MY': {
+            native: 'Bahasa Melayu',
+            ban: 'NOT Vietnamese, NOT Chinese, NOT English (except approved brand terms), NOT Korean',
+          },
+          'id-ID': {
+            native: 'Bahasa Indonesia',
+            ban: 'NOT Vietnamese, NOT Chinese, NOT Malay (Bahasa Melayu has subtle differences), NOT English',
+          },
+          'global': {
+            native: 'plain English',
+            ban: 'NOT Vietnamese, NOT Chinese, NOT Korean, NOT Malay',
+          },
+        }
+        const cfg = map[locale]
+        return `[LOCALE HARD LOCK — ${locale}]\n`
+          + `ALL visible text in the generated image MUST be in ${cfg.native}. ${cfg.ban}.\n`
+          + `Exception: the product label/packaging is fixed by the reference image and must be reproduced EXACTLY (do not translate it).\n`
+          + `This locale rule applies to:\n`
+          + `  • captions, callouts, headlines if any\n`
+          + `  • street signs, café chalkboards, magazine covers in the background\n`
+          + `  • handwritten notes, post-it stickers, sticky tabs\n`
+          + `  • price tags / sale badges if shown\n`
+          + `  • on-package secondary text NOT in the reference (eg shelf labels)`
+      },
+    }
   },
 }

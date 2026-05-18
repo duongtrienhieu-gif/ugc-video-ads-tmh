@@ -30,6 +30,22 @@ export interface TextPayloadRequest {
   tone?: string
   /** Which content shape to ask the LLM for. Default 'chat'. */
   contentType?: TextPayloadContentType
+  /** P25 — full product knowledge profile. When provided, gets baked
+   *  into the LLM prompt so chat / review / comment text references
+   *  real benefits + pain points + USPs instead of inventing them. */
+  productKnowledge?: import('../../../services/productKnowledge').ProductKnowledge
+}
+
+// ── Locale hard-lock for Gemini system instructions ──────────────────
+
+function localeRule(locale: UINativeLocale): string {
+  const map: Record<UINativeLocale, string> = {
+    'vi-VN':  'ALL output must be in Vietnamese (Tiếng Việt with diacritics — không bỏ dấu). NEVER mix English unless quoting an approved brand term. NEVER output Chinese, Korean, or Malay.',
+    'my-MY':  'ALL output must be in Bahasa Melayu. NEVER output Vietnamese, Chinese, English (except approved brand terms), or Korean.',
+    'id-ID':  'ALL output must be in Bahasa Indonesia. NEVER output Vietnamese, Chinese, Malay (Bahasa Melayu has subtle differences), or English.',
+    'global': 'ALL output must be in plain casual English. NEVER output Vietnamese, Chinese, Korean, or Malay.',
+  }
+  return `[LOCALE HARD LOCK]\n${map[locale]}`
 }
 
 const SYSTEM_INSTRUCTION =
@@ -49,10 +65,23 @@ interface LLMResponse {
 }
 
 /** Build the Gemini prompt for a conversation payload request. */
+function productKnowledgeBlock(req: TextPayloadRequest): string {
+  if (!req.productKnowledge) return ''
+  const k = req.productKnowledge
+  const lines: string[] = ['[PRODUCT KNOWLEDGE — reference these in the generated text]']
+  if (k.benefits.length)   lines.push(`Real benefits: ${k.benefits.slice(0, 4).join(' · ')}`)
+  if (k.usps.length)       lines.push(`USPs: ${k.usps.slice(0, 3).join(' · ')}`)
+  if (k.painPoints.length) lines.push(`Pain points: ${k.painPoints.slice(0, 3).join(' · ')}`)
+  if (k.offer)             lines.push(`Offer: ${k.offer.slice(0, 100)}`)
+  lines.push('Reference these naturally — do NOT list them verbatim. NEVER invent fake claims.')
+  return lines.join('\n') + '\n'
+}
+
 export function buildTextPayloadPrompt(req: TextPayloadRequest): string {
   const persona = req.personaId ? findPersona(req.personaId) : null
   const count = req.messageCount ?? 8
   const tone = req.tone ?? 'natural-warm'
+  const knowledge = productKnowledgeBlock(req)
 
   const personaBlock = persona
     ? `Customer persona: ${persona.label.en}. Voice character: ${persona.voiceCharacter}`
@@ -68,6 +97,7 @@ export function buildTextPayloadPrompt(req: TextPayloadRequest): string {
   return [
     `Generate a ${req.platform} chat conversation that looks like a real customer testimonial.`,
     `Product: ${req.productName}${req.niche ? ` (niche: ${req.niche})` : ''}`,
+    knowledge,
     personaBlock,
     `Language: ${localeMap[req.locale]}`,
     `Tone: ${tone}`,
@@ -198,10 +228,12 @@ function buildReviewPrompt(req: TextPayloadRequest): string {
     'id-ID':  'Indonesian (Bahasa Indonesia) marketplace review style',
     'global': 'English casual review style',
   }
+  const knowledge = productKnowledgeBlock(req)
 
   return [
     `Generate a ${req.platform === 'shopee' ? 'Shopee' : 'TikTok Shop'} product review that looks authentic.`,
     `Product: ${req.productName}${req.niche ? ` (niche: ${req.niche})` : ''}`,
+    knowledge,
     personaBlock,
     `Language: ${localeMap[req.locale]}`,
     '',
@@ -310,6 +342,7 @@ function buildCommentPrompt(req: TextPayloadRequest): string {
   }
   const count = req.messageCount ?? 6
   const platformName = req.platform === 'facebook' ? 'Facebook' : 'TikTok'
+  const knowledge = productKnowledgeBlock(req)
 
   // P12 — archetype-driven mix replaces "1-2 emojis, mix of question/testimonial" generic guidance
   const mix = buildArchetypeMix(req.platform === 'facebook' ? 'facebook' : 'tiktok', count, `${req.productName}_${req.locale}`)
@@ -318,6 +351,7 @@ function buildCommentPrompt(req: TextPayloadRequest): string {
   return [
     `Generate ${count} ${platformName} comments on a UGC post about this product.`,
     `Product: ${req.productName}${req.niche ? ` (niche: ${req.niche})` : ''}`,
+    knowledge,
     personaBlock,
     `Language: ${localeMap[req.locale]}`,
     '',
@@ -431,11 +465,17 @@ export async function generateTextPayload(
 ): Promise<UINativeTextContent> {
   const contentType: TextPayloadContentType = req.contentType ?? 'chat'
 
+  // P25 — append locale hard-lock to ALL system instructions so the
+  // LLM cannot drift into the wrong language. Tech detail: appending
+  // to systemInstruction is more reliable than embedding in the user
+  // prompt for Gemini models.
+  const localeAppend = '\n\n' + localeRule(req.locale)
+
   if (contentType === 'review') {
     const result = await safeGenerateStructured<LLMReviewResponse>({
       apiKey,
       prompt: buildReviewPrompt(req),
-      systemInstruction: REVIEW_SYSTEM_INSTRUCTION,
+      systemInstruction: REVIEW_SYSTEM_INSTRUCTION + localeAppend,
       maxOutputTokens: 1024,
       schema: { name: 'LLMReviewResponse', validate: isReviewResponse },
       fallback: reviewFallback(req),
@@ -448,7 +488,7 @@ export async function generateTextPayload(
     const result = await safeGenerateStructured<LLMCommentResponse>({
       apiKey,
       prompt: buildCommentPrompt(req),
-      systemInstruction: COMMENT_SYSTEM_INSTRUCTION,
+      systemInstruction: COMMENT_SYSTEM_INSTRUCTION + localeAppend,
       maxOutputTokens: 2048,
       schema: { name: 'LLMCommentResponse', validate: isCommentResponse },
       fallback: commentFallback(req),
@@ -461,7 +501,7 @@ export async function generateTextPayload(
   const result = await safeGenerateStructured<LLMResponse>({
     apiKey,
     prompt: buildTextPayloadPrompt(req),
-    systemInstruction: SYSTEM_INSTRUCTION,
+    systemInstruction: SYSTEM_INSTRUCTION + localeAppend,
     maxOutputTokens: 2048,
     schema: { name: 'LLMResponse', validate: isChatResponse },
     fallback: chatFallback(req),

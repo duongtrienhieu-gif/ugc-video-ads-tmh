@@ -107,6 +107,10 @@ export interface PromptContext {
   personaId?: string
   beatId?: string
   locale?: string
+  /** P25 — full product knowledge profile, loaded from bankStore.
+   *  Blocks that need niche / benefits / pain points / audience read
+   *  from here instead of inferring from the product image. */
+  productKnowledge?: import('../services/productKnowledge').ProductKnowledge
 }
 
 // ── Output rules ───────────────────────────────────────────────────────
