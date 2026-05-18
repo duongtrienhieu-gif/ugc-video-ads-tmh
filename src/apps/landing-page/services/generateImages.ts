@@ -43,6 +43,9 @@ const PRODUCT_FOCUS_SECTIONS: ReadonlySet<SectionType> = new Set<SectionType>([
   'whatsapp-testimonials',
   'offer',
   'final-cta',
+  'magazine-feature',     // premium magazine cover features the product hero
+  'stat-proof',           // stat infographic includes product packaging bottom-right
+  'web-authority-proof',  // Knowledge Panel renders product packaging
 ])
 
 // People / lifestyle / editorial — do NOT pass product refs.
@@ -77,6 +80,9 @@ const SECTION_PRIORITY: Record<SectionType, number> = {
   'lifestyle':             2,
   'news-proof':            2,
   'expert-feedback':       2,
+  'magazine-feature':      2,
+  'stat-proof':            2,
+  'web-authority-proof':   2,
   'ingredients':           3,
   'mechanism':             3,
   'benefits':              3,
@@ -800,6 +806,20 @@ function buildFinalPrompt(job: ImageJob, hasProductRefs: boolean): string {
     parts.push(EXPERT_FEEDBACK_DIRECTIVE)
   }
 
+  // ── Premium-form upgrades (3 new visual styles + annotated hero) ────────
+  if (job.pack.form === 'premium' && job.section.type === 'hero') {
+    parts.push(PREMIUM_ANNOTATED_HERO_DIRECTIVE)
+  }
+  if (job.section.type === 'magazine-feature') {
+    parts.push(MAGAZINE_FEATURE_DIRECTIVE)
+  }
+  if (job.section.type === 'stat-proof') {
+    parts.push(STAT_PROOF_DIRECTIVE)
+  }
+  if (job.section.type === 'web-authority-proof') {
+    parts.push(WEB_AUTHORITY_PROOF_DIRECTIVE)
+  }
+
   // ── Before-after section: identity-lock directive. Combined with pair-
   // ref injection in selectRefsForSection, this gives KIE both a textual
   // identity description AND (when available) a visual reference image
@@ -843,6 +863,60 @@ function buildFinalPrompt(job: ImageJob, hasProductRefs: boolean): string {
 
   return parts.join('\n\n')
 }
+
+/** Premium-form hero variant directive — "Annotated UGC Poster" style
+ *  (Daily Greens / Huel reference). Applied ONLY when pack.form === 'premium'
+ *  AND section.type === 'hero'. Overrides the default UGC-selfie hero with
+ *  a brand-first annotated product poster: product center-frame, multi
+ *  callout labels around it in handwritten / sketchy script with curved
+ *  arrows, decorative stars, domain url at corner. */
+const PREMIUM_ANNOTATED_HERO_DIRECTIVE =
+  'PREMIUM ANNOTATED POSTER (Huel / Daily Greens reference) — non-negotiable composition:\n'
+  + '  • This is a BRAND-FIRST poster, not a UGC selfie. The EXACT uploaded product packaging is CENTER-FRAME, held by a hand entering from the bottom OR resting on a clean stone / linen / kitchen surface with subtle natural garnish (lemon slice, blueberries, herbs).\n'
+  + '  • Background: soft natural daylight, slightly out-of-focus styled wellness scene (kitchen counter / morning window light / clean stone surface).\n'
+  + '  • Around the product: 4-5 HANDWRITTEN CALLOUT LABELS in a casual marker / script font. Each label connects to a point on the product / scene with a thin curved hand-drawn arrow. Example callout content: ingredient highlight ("Lion\'s mane"), benefit ("Supports energy, immunity & recovery"), spec ("41 vitamins & SuperFoods!"), low-calorie claim ("Only 25 calories!").\n'
+  + '  • Decorative elements: small hand-drawn stars / sparkles / dots scattered. A tiny brand domain URL at one corner (eg "huel.com" or invented brand domain).\n'
+  + '  • Top-left or top-right corner: thin script "Product Name" wordmark in casual marker style with a small ⭐ doodle.\n'
+  + '  • Palette: cream / sage / soft green accents that complement the product packaging. Not high-contrast, not loud.\n'
+  + '  • Aesthetic reference: Huel Daily Greens / Spacegoods / premium wellness brand Instagram creative. Editorial premium feel — NOT TikTok, NOT marketplace promo.\n'
+  + '  • ABSOLUTELY FORBIDDEN: poster glossy commercial ad styling; cinematic luxury studio; UGC selfie with face dominating frame; floating product PNG with no scene; harsh marketing typography; HARI INI / DISKAUN / urgency text; multi-bottle promotional layout.'
+
+/** Magazine-feature section directive. Premium magazine cover mockup. */
+const MAGAZINE_FEATURE_DIRECTIVE =
+  'PREMIUM MAGAZINE COVER MOCKUP (VITAL / Wellness Magazine reference) — non-negotiable composition:\n'
+  + '  • Render as a fake premium wellness magazine COVER (4:5 portrait magazine proportions). The EXACT uploaded product packaging is the centerpiece of the cover image.\n'
+  + '  • TOP of cover: a bold short editorial masthead (invent a name like "VITAL" / "WELLNESS" / "GREEN BRIEF") in clean condensed serif or bold sans-serif. Below the masthead: tiny "POWERING MODERN WELLNESS" tagline + small "ISSUE 47 · MAY 2026" line + a tiny barcode hint at one corner.\n'
+  + '  • CENTER: the EXACT uploaded product packaging on a premium editorial set — linen / stone surface / blueberries / lemon / soft botanical garnish, magazine-quality product photography. Soft natural daylight. Generous whitespace.\n'
+  + '  • BIG EDITORIAL HEADLINE OVERLAY across the lower half of the cover: render the section\'s headline + subheadline as visible image text in clean magazine-style typography. Example: "DAILY GREENS. MAXIMUM YOU." stacked, with subhead "41 vitamins. Zero nonsense. All benefit." underneath in lighter weight.\n'
+  + '  • RIGHT EDGE or LEFT EDGE: 2-3 small slanted ribbon callout cards in green / cream accent, each containing a short sub-article tease (eg "BIOHACK YOUR ROUTINE", "GUT HEALTH UPGRADED", "EXCLUSIVE INTERVIEW WITH X").\n'
+  + '  • BOTTOM corner: small "REAL NUTRITION. REAL RESULTS." or similar tagline in elegant small caps.\n'
+  + '  • Palette: cream / soft sage / green / off-white — match the product packaging color family.\n'
+  + '  • Aesthetic: Huel-magazine / Spacegoods-magazine / Apple-brochure / premium wellness editorial. Generous negative space. Clean typography hierarchy.\n'
+  + '  • ABSOLUTELY FORBIDDEN: TikTok visual style; UGC selfie; discount banner overlay; HARI INI / DISKAUN urgency text; emoji; oversized red CTA buttons; cluttered marketplace layout. This is an EDITORIAL MAGAZINE COVER, not an ad.'
+
+/** Stat-proof section directive. Big-number infographic + growth chart. */
+const STAT_PROOF_DIRECTIVE =
+  'STAT-HERO INFOGRAPHIC (Spacegoods / Hims-Hers / Huel-data reference) — non-negotiable composition:\n'
+  + '  • 1:1 square infographic poster. BACKGROUND: deep charcoal / near-black with a very subtle purple-pink gradient hint at one corner (NOT loud, NOT pure black).\n'
+  + '  • HERO ELEMENT: extract the BIG NUMBER from the section headline (eg "87%" / "92%" / "3x") and render it MASSIVE in the top-left or top-center — bold modern sans-serif typography, gradient fill running from purple to pink on the number itself. Big enough to occupy ~40% of the canvas height.\n'
+  + '  • Directly below the big number: render the rest of the headline phrase as visible text in clean white sans-serif (eg "of users reported laser focus without the crash"). Smaller subtitle line below in light gray small-caps reading the study methodology (eg "SELF-REPORTED FOCUS & PRODUCTIVITY AFTER 14 DAYS OF USE").\n'
+  + '  • RIGHT-BOTTOM or BOTTOM HALF: a clean line CHART on a soft grid. X-axis labels "DAY 1 · DAY 4 · DAY 7 · DAY 10 · DAY 14". Y-axis labels "0% · 50% · 100%". The line itself: glowing purple-pink gradient stroke, trending smoothly upward to approximately the headline percentage at the right edge.\n'
+  + '  • EXACT uploaded product packaging in the bottom-right corner, small-to-medium sized, with subtle product glow / soft halo. Render the actual brand label faithfully.\n'
+  + '  • BOTTOM-LEFT or BOTTOM-CENTER: tiny disclaimer text in light-gray small caps — use the bullets field verbatim (eg "*Based on a 14-day consumer study with 120 participants", "Not intended to diagnose, treat, cure, or prevent any disease").\n'
+  + '  • Optional small cursor / click icon hint as a subtle decorative element.\n'
+  + '  • Aesthetic: modern dark-mode wellness science infographic. Premium clean typography. The big number dominates; everything else supports it.\n'
+  + '  • ABSOLUTELY FORBIDDEN: TikTok / Shopee badges; HARI INI / DISKAUN urgency; emoji; UGC selfie; floating product PNG dominating the frame (product is supportive, the stat is the hero); loud red / yellow marketing colors; chaotic chart with multiple lines.'
+
+/** Web-authority-proof section directive. Google SERP screenshot mockup. */
+const WEB_AUTHORITY_PROOF_DIRECTIVE =
+  'GOOGLE SERP SCREENSHOT MOCKUP (Google 2026 desktop reference) — non-negotiable composition:\n'
+  + '  • Render as a 4:5 portrait crop of a desktop Google Search results page screenshot. Pixel-perfect Google SERP mimicry.\n'
+  + '  • TOP: realistic Google search bar with the EXACT product / brand name typed in (use the actual product name from brief). Small navigation tab row beneath ("All · Images · Shopping · News · Videos · Forums").\n'
+  + '  • LEFT 60% (organic results column): 4-5 organic result entries. Each entry has: small site favicon + breadcrumb URL (mix authoritative-looking domains: brand official site, healthline / berita-harian / vogue / health.com.my / mens-health) + bold blue clickable title relevant to the product niche (eg "Daily Greens — 41 Vitamins, Minerals & Superfoods", "Are X Greens Worth The Hype?") + 2-line gray snippet excerpt beneath. Include one "People Also Ask" expandable widget showing 3 collapsed questions about the product / niche.\n'
+  + '  • RIGHT 40% (Knowledge Panel sidebar): a clean white panel card containing — the EXACT uploaded product packaging as the panel\'s hero image at the top; bold product name below it; "★ 4.7  1,248 Google reviews" rating line; a compact key-value info table ("Ingredients: ...", "Category: Health drink"); a primary blue "Visit official site" CTA button.\n'
+  + '  • BOTTOM-LEFT corner: tiny "About this result" / share / feedback icons matching real Google UI.\n'
+  + '  • Light Google theme. Authentic Google Sans typography. Real spacing. Subtle browser chrome / scrollbar hint at edges. Subtle JPEG compression hint so it feels like a real screenshot.\n'
+  + '  • ABSOLUTELY FORBIDDEN: TikTok aesthetic; mobile UI (this is DESKTOP); oversized marketing text; floating product PNG outside the Knowledge Panel; fake Google logo deformations; HARI INI / DISKAUN urgency; emoji rendered as Google emoji; cartoonish Google styling.'
 
 /** Expert-feedback section directive. Forces premium editorial composition
  *  with badge overlay + quote box, NOT lifestyle / UGC. The section spec

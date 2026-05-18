@@ -18,6 +18,9 @@ const SECTION_GLYPH: Record<SectionType, string> = {
   comparison:              '⚖️',
   lifestyle:               '🌅',
   'expert-feedback':       '🩺',
+  'magazine-feature':      '📖',
+  'stat-proof':            '📈',
+  'web-authority-proof':   '🔎',
   'social-proof':          '💬',
   'whatsapp-testimonials': '📱',
   'news-proof':            '📰',
@@ -39,6 +42,9 @@ const SECTION_ACCENT: Record<SectionType, string> = {
   comparison:              'border-indigo-200 bg-indigo-50/40',
   lifestyle:               'border-pink-200 bg-pink-50/40',
   'expert-feedback':       'border-stone-300 bg-stone-50/40',
+  'magazine-feature':      'border-emerald-300 bg-emerald-50/40',
+  'stat-proof':            'border-fuchsia-300 bg-fuchsia-50/40',
+  'web-authority-proof':   'border-blue-200 bg-blue-50/40',
   'social-proof':          'border-amber-200 bg-amber-50/40',
   'whatsapp-testimonials': 'border-green-200 bg-green-50/40',
   'news-proof':            'border-slate-200 bg-slate-50/40',
@@ -54,6 +60,9 @@ const NEW_SECTION_BADGE: Partial<Record<SectionType, string>> = {
   'news-proof': 'bg-slate-100 text-slate-700',
   'before-after': 'bg-purple-100 text-purple-700',
   'expert-feedback': 'bg-stone-100 text-stone-700',
+  'magazine-feature': 'bg-emerald-100 text-emerald-700',
+  'stat-proof': 'bg-fuchsia-100 text-fuchsia-700',
+  'web-authority-proof': 'bg-blue-100 text-blue-700',
 }
 
 interface SectionCardProps {
@@ -68,7 +77,14 @@ export default function SectionCard({ index, section, onRegenerateImage, onDelet
   const [showViTranslation, setShowViTranslation] = useState(false)
   const glyph = SECTION_GLYPH[section.type] ?? '📄'
   const accent = SECTION_ACCENT[section.type] ?? 'border-black/10 bg-white'
-  const isNewSection = section.type === 'comparison' || section.type === 'news-proof' || section.type === 'before-after' || section.type === 'expert-feedback'
+  const isNewSection =
+    section.type === 'comparison' ||
+    section.type === 'news-proof' ||
+    section.type === 'before-after' ||
+    section.type === 'expert-feedback' ||
+    section.type === 'magazine-feature' ||
+    section.type === 'stat-proof' ||
+    section.type === 'web-authority-proof'
 
   return (
     <div className={`rounded-xl border ${accent} shadow-sm overflow-hidden`}>

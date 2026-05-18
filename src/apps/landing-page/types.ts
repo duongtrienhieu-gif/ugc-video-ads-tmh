@@ -15,6 +15,9 @@ export type SectionType =
   | 'comparison'            // NEW — product vs competitor infographic
   | 'lifestyle'
   | 'expert-feedback'       // NEW — clinical expert opinion / authority review
+  | 'magazine-feature'      // NEW (premium) — fake premium magazine cover featuring the product
+  | 'stat-proof'            // NEW (premium) — big-stat hero infographic with growth chart
+  | 'web-authority-proof'   // NEW (premium) — Google SERP screenshot w/ Knowledge Panel
   | 'social-proof'
   | 'whatsapp-testimonials'
   | 'news-proof'            // NEW — authority / media proof screenshots
