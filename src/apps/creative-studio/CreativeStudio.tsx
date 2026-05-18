@@ -1,500 +1,46 @@
-// ── PRODUCT AI — Product Lifestyle Generator ─────────────────────────────────
-// Generate 4 UGC-style lifestyle / e-commerce / advertorial photos (1:1 square)
-// derived from a single base image so the 4 variants stay cohesive instead of
-// looking like 4 random shoots. NOT a cinematic pipeline — purely meant for
-// website / landing page / Shopee / TikTok product photography.
+// ── Creative Studio — Engine-Routed UI (P11 cutover) ────────────────────────
 //
-// Architecture:
-//   PRODUCT LOCK   (highest priority — exact packaging/logo/label preserved)
-//   AVATAR REF     (loose — same approximate person is enough)
-//   SCENE PRESET   (user picks 1 of 10)
-//   STYLE          (user picks 1 of 6 modifiers)
-//   NEGATIVE       (explicit no-no list — no re-designed packaging, no random
-//                   different person, no text overlays)
+// Replaces the legacy ProductAI scene/style/4-variations UX with the
+// asset-type registry pipeline:
 //
-// Generation:
-//   Image #1 (base)     — filesUrl: [product, avatar]
-//   Image #2/3/4 (vars) — filesUrl: [product, avatar, base]  + variation hint
+//   user picks asset type
+//   user picks product (required) + avatar (photographic only)
+//   user adjusts engine-aware controls (locale / persona / color theme / ...)
+//   user clicks "Tạo asset"
+//     → generateAssets(assetTypeId, { productId, modelId, options })
+//     → resolveAssetType → dispatch by engine group
+//     → returns GeneratedAsset (with qcSummary in metadata)
+//   typed result card appended to the result list
 //
-// Each image runs through Gemini Vision QC: pass/fail badge with similarity
-// scores. Strict mode auto-regens once on QC fail.
+// The UI layer does NOT:
+//   • build prompts
+//   • call KIE or Gemini directly
+//   • know which engine handles which asset type
+//
+// All routing happens inside the registry (P3 / P5 / P6 / P8).
 
 import { useState, useRef } from 'react'
-import { Sparkles, Loader2, RotateCcw, UserRound, Package, Upload, Check, Download, Save, ShieldCheck, Trash2, AlertTriangle } from 'lucide-react'
+import { Sparkles, Loader2, UserRound, Package, Upload, ChevronLeft } from 'lucide-react'
 import { useAppStore } from '../../stores/appStore'
 import { useBankStore } from '../../stores/bankStore'
 import { useSettingsStore } from '../../stores/settingsStore'
 import { useAssetUrl } from '../../hooks/useAssetUrl'
-import { generateGpt4oImage } from '../../utils/kieai'
-import { saveAsset, getUrl, isAssetRef } from '../../utils/assetStore'
+import { saveAsset } from '../../utils/assetStore'
 import BankPicker from '../../components/BankPicker'
 import AutoSaveIndicator from '../../components/AutoSaveIndicator'
 import { useSessionPersist } from '../../services/sessionPersistence'
 import type { Product, Model } from '../../stores/types'
-import { qcProduct, type ProductQC } from './services/qcProduct'
 
-// ── Scene presets ────────────────────────────────────────────────────────────
+import type { AssetTypeId } from './types/asset'
+import { generateAssets } from './orchestration/generateAssets'
+import AssetTypePicker from './uiCatalog/AssetTypePicker'
+import AssetControls, { type AssetOptions } from './uiCatalog/AssetControls'
+import ResultCard, { type ResultRow } from './uiCatalog/ResultCard'
+import { findCatalogEntry } from './uiCatalog/assetCatalog'
 
-interface ScenePreset {
-  id: string
-  label: string
-  hint: string                  // short tooltip-style description
-  scenePrompt: string           // injected into the SCENE block
-}
+// ── Picker tile (reusable for product + avatar) ─────────────────────────────
 
-const SCENE_PRESETS: ScenePreset[] = [
-  {
-    id: 'hold-camera',
-    label: 'Cầm sản phẩm',
-    hint: 'Cầm SP trước camera',
-    scenePrompt: 'The person holds the product at chest level with both hands, label fully facing the camera at eye level, gentle confident smile, looking directly at the lens. Neutral indoor background with soft daylight.',
-  },
-  {
-    id: 'selfie',
-    label: 'Selfie cùng SP',
-    hint: 'Selfie style cầm SP',
-    scenePrompt: 'Smartphone-selfie composition from slightly above, the person holds the product right next to their cheek with one hand, faint genuine smile, soft window light. The product label faces the camera and is clearly readable.',
-  },
-  {
-    id: 'point-at',
-    label: 'Chỉ vào SP',
-    hint: 'Review style — chỉ vào nhãn',
-    scenePrompt: 'The person holds the product in one hand and uses the index finger of the other to point at a specific feature on the label, looking down at it with a focused interested expression, as if explaining to a friend on camera. Soft natural daylight.',
-  },
-  {
-    id: 'desk-flat',
-    label: 'Review trên bàn',
-    hint: 'Flat-lay trên bàn gỗ',
-    scenePrompt: 'The product is placed on a clean wooden desk with the person\'s hands visible holding or arranging it. Three-quarter overhead angle, soft daylight, no shadow obscuring the label.',
-  },
-  {
-    id: 'using',
-    label: 'Đang dùng SP',
-    hint: 'Mid-action sử dụng',
-    scenePrompt: 'The person is actively using the product in a way appropriate to its category — opening a jar and dispensing onto a finger, taking a capsule from a bottle, squeezing a tube onto the back of the hand, or holding it near the face/skin. Genuine engaged expression looking at the product. Soft daylight in a real home setting.',
-  },
-  {
-    id: 'multi',
-    label: 'Bàn nhiều SP',
-    hint: '3-5 SP trên bàn',
-    scenePrompt: 'The person sits at a clean wooden or marble table with 3 to 5 IDENTICAL units of this exact product arranged in a tidy row in front of them. They lean slightly forward picking up one unit while smiling at the camera. Soft side window light.',
-  },
-  {
-    id: 'before-after',
-    label: 'Before / After',
-    hint: 'Split frame trước/sau',
-    scenePrompt: 'Split-frame 1:1 composition. Left half: the person before using the product, looking tired or dull. Right half: the same person after using the product, looking glowing and refreshed, holding the product. Identical framing on both halves, neutral backdrop.',
-  },
-  {
-    id: 'kitchen',
-    label: 'Lifestyle kitchen',
-    hint: 'Bếp sáng / morning',
-    scenePrompt: 'The product placed on a bright modern kitchen counter, morning sunlight through a window. The person is in the background slightly out of focus pouring coffee or preparing breakfast. The product label is sharp and clearly readable in the foreground.',
-  },
-  {
-    id: 'bathroom',
-    label: 'Bathroom routine',
-    hint: 'Skincare routine vibe',
-    scenePrompt: 'The product on a white marble bathroom counter with neatly folded towels. The person softly out of focus in the background looking into a mirror. Morning skincare routine vibe, warm soft light.',
-  },
-  {
-    id: 'cafe',
-    label: 'Cafe lifestyle',
-    hint: 'Bàn cafe có cappuccino',
-    scenePrompt: 'The person seated at a cafe table holding the product, a cappuccino and a laptop on the table, warm bokeh-free background, candid lifestyle moment, product label rotated toward the camera.',
-  },
-  {
-    id: 'tiktok',
-    label: 'UGC TikTok',
-    hint: 'Phone selfie review',
-    scenePrompt: 'Phone-camera-style review shot, the person holds the product up to the camera in a bedroom or vanity setup, ring-light reflection visible in their eyes, raw smartphone aesthetic, looks like a real TikTok review still frame.',
-  },
-]
-
-// ── Style modifiers ──────────────────────────────────────────────────────────
-
-interface StyleOption {
-  id: string
-  label: string
-  swatch: string
-  stylePrompt: string
-}
-
-const STYLE_OPTIONS: StyleOption[] = [
-  {
-    id: 'realistic',
-    label: 'Realistic',
-    swatch: '#94a3b8',
-    stylePrompt: 'Photorealistic, natural skin texture with pores and minor imperfections, real human, candid feel, no AI-rendered look, no plastic skin. Sharp focus across the entire frame, zero bokeh.',
-  },
-  {
-    id: 'iphone',
-    label: 'iPhone',
-    swatch: '#60a5fa',
-    stylePrompt: 'Authentic iPhone photo, slight digital grain, real consumer smartphone aesthetic, natural color science, unedited skin, no studio look.',
-  },
-  {
-    id: 'ecommerce',
-    label: 'Ecommerce',
-    swatch: '#e2e8f0',
-    stylePrompt: 'Clean e-commerce product photography, seamless near-white background, even studio softbox light, product hero centered, very sharp focus on the label, no harsh shadows.',
-  },
-  {
-    id: 'luxury',
-    label: 'Luxury',
-    swatch: '#d4b483',
-    stylePrompt: 'High-end luxury beauty editorial, marble surface or muted neutrals, soft moody key light, premium magazine quality, refined and elegant.',
-  },
-  {
-    id: 'beauty',
-    label: 'Beauty',
-    swatch: '#f9a8d4',
-    stylePrompt: 'Beauty campaign aesthetic, glowing dewy skin, soft pink and peach color palette, dreamy diffuse light, subtle glow.',
-  },
-  {
-    id: 'clinical',
-    label: 'Clinical',
-    swatch: '#67e8f9',
-    stylePrompt: 'Clinical pharmaceutical aesthetic, cool white and pale blue tones, sterile uncluttered background, scientific authority feel, crisp and sharp.',
-  },
-]
-
-// ── Variation hints ──────────────────────────────────────────────────────────
-// Index 0 is the base (no extra hint). Variants 1-3 derive from the base.
-
-interface VariationDef {
-  label: string
-  hint: string | null
-}
-
-const VARIATIONS: VariationDef[] = [
-  { label: 'Base',  hint: null },
-  { label: 'Var A', hint: 'Shift the camera angle by roughly 20 degrees, change the head tilt slightly and let the facial expression soften. Keep the product, person, outfit, and background identical to the previous shot.' },
-  { label: 'Var B', hint: 'Crop tighter — closer to the subject and product, with a slightly different head tilt. Same outfit, same background, same product label orientation.' },
-  { label: 'Var C', hint: 'Wider framing showing more of the surrounding scene. The person looks at the product instead of the camera. Same product, same outfit, same setting.' },
-]
-
-// ── Prompt builder ───────────────────────────────────────────────────────────
-
-function buildPrompt(opts: {
-  scene: ScenePreset
-  style: StyleOption
-  hasAvatar: boolean
-  hasBaseRef: boolean
-  variationHint: string | null
-}): string {
-  const { scene, style, hasAvatar, hasBaseRef, variationHint } = opts
-
-  const refMap = hasBaseRef
-    ? hasAvatar
-      ? 'The FIRST reference image is the product. The SECOND reference image is the person (avatar). The THIRD reference image is the previously generated photo from this same shoot — use it as a cohesion anchor for outfit, background, and overall look.'
-      : 'The FIRST reference image is the product. The SECOND reference image is the previously generated photo from this same shoot — use it as a cohesion anchor.'
-    : hasAvatar
-      ? 'The FIRST reference image is the product. The SECOND reference image is the person (avatar).'
-      : 'The FIRST reference image is the product.'
-
-  const productLock = `[PRODUCT LOCK — HIGHEST PRIORITY]
-The product in the FIRST reference image must be reproduced EXACTLY:
-- Same container shape (jar / bottle / tube / box / pouch as shown)
-- Same colors on the packaging
-- Same logo / brand mark — do not redraw
-- Same label text, same typography, same wording — do not rewrite or invent text
-- Same proportions and silhouette
-This product MUST be recognizable as the SAME real-world item. Do NOT substitute a similar product, do NOT redesign the packaging, do NOT invent new label copy.`
-
-  const avatarLock = hasAvatar
-    ? `\n\n[AVATAR REFERENCE — RELAXED]
-Generate a person who resembles the SECOND reference image:
-- Same approximate age, gender, ethnicity, skin tone
-- Similar hair / hijab color and overall hairstyle
-- Similar body type
-An approximate resemblance is enough — a perfect face match is NOT required, but do NOT generate an obviously different random person.`
-    : ''
-
-  const sceneBlock = `\n\n[SCENE]\n${scene.scenePrompt}`
-  const styleBlock = `\n\n[STYLE]\n${style.stylePrompt}`
-
-  const variationBlock = variationHint
-    ? `\n\n[VARIATION]\n${variationHint}\nThe product must remain pixel-faithful to the FIRST reference. The person must remain the same individual as in the previous shot.`
-    : ''
-
-  const formatBlock = `\n\n[FORMAT]
-1:1 square composition. The product label must be fully readable and unobstructed. Exactly one product instance unless the scene explicitly calls for multiple. ${hasAvatar ? 'Exactly one person.' : ''}`
-
-  const negativeBlock = `\n\n[NEGATIVE — DO NOT]
-- Do NOT modify the product packaging in any way.
-- Do NOT invent new packaging, new label text, new colors, new logo.
-- Do NOT add captions, callouts, price tags, sale badges, or any text overlay.
-- Do NOT add watermarks or other brand logos.
-- Do NOT duplicate the product unless the scene explicitly says multi-product.
-${hasAvatar ? '- Do NOT generate a different random person — the person must resemble the avatar reference.\n' : ''}- No extra hands, no deformed fingers, no warped bottles, no melted labels, no garbled letters.`
-
-  return `IMAGE-EDITING TASK: ${refMap}
-
-${productLock}${avatarLock}${sceneBlock}${styleBlock}${variationBlock}${formatBlock}${negativeBlock}`
-}
-
-// ── Helper: take any URL (asset:// / blob: / data: / https:) and return one
-//    KIE backend can actually fetch. ────────────────────────────────────────
-async function toPublicUrl(ref: string): Promise<string | null> {
-  if (!ref) return null
-  if (isAssetRef(ref)) return await getUrl(ref)
-  if (ref.startsWith('blob:') || ref.startsWith('data:')) {
-    const r = await fetch(ref)
-    if (!r.ok) return null
-    const blob = await r.blob()
-    const assetId = await saveAsset(blob, blob.type || 'image/jpeg')
-    return await getUrl(assetId)
-  }
-  return ref
-}
-
-// ── State per result tile ───────────────────────────────────────────────────
-//
-// Each tile snapshots its scene / style / product / avatar at the moment of
-// generation. Regenerate ALWAYS uses these locked values — never the current
-// global selection.
-//
-// IMPORTANT: lock stores ASSET REFS (asset:xxx), not signed Supabase URLs.
-// Signed URLs expire after 1 hour, so persisting them across a refresh (or
-// even a long-running session) would break regen. We resolve refs to fresh
-// public URLs right before each KIE call via `resolveLockToPublic`.
-
-interface TileLock {
-  sceneId: string
-  styleId: string
-  /** asset:xxx ref — stable, survives refresh and URL expiry. */
-  productRef: string
-  /** asset:xxx ref or null if no avatar selected. */
-  avatarRef: string | null
-}
-
-interface TileState {
-  url: string | null
-  qc: ProductQC | null
-  status: 'idle' | 'generating' | 'qc' | 'done' | 'error'
-  error?: string
-  /** Snapshot of generation params taken at generate-time. Regen reuses these. */
-  lock?: TileLock
-}
-
-const EMPTY_TILES: TileState[] = VARIATIONS.map(() => ({ url: null, qc: null, status: 'idle' }))
-
-/** Resolve a lock's asset refs into freshly-signed public URLs that KIE can fetch. */
-async function resolveLockToPublic(
-  lock: TileLock,
-): Promise<{ productUrl: string; avatarUrl: string | null } | null> {
-  const productUrl = await getUrl(lock.productRef)
-  if (!productUrl) return null
-  const avatarUrl = lock.avatarRef ? await getUrl(lock.avatarRef) : null
-  return { productUrl, avatarUrl }
-}
-
-// ── Auto-save / restore (Phase R4b — migrated to useSessionPersist) ─────────
-// Snapshot shape persists across F5. Image blobs never stored here — only
-// asset:xxx refs that round-trip cleanly via utils/assetStore.ts.
-// Legacy key 'product-ai-state-v1' is auto-migrated on app boot.
-
-interface ProductAIPersisted {
-  selectedAvatarId: string | null
-  selectedProductId: string | null
-  uploadedAvatarRef: string | null
-  uploadedProductRef: string | null
-  sceneId: string
-  styleId: string
-  strictQC: boolean
-  tiles: TileState[]
-  savedIdx: number[]
-}
-
-// ── Result tile ─────────────────────────────────────────────────────────────
-// Each tile manages its own lifecycle independently. One tile's failure must
-// NEVER cascade into another tile's UI — that's why the parent uses
-// Promise.allSettled and each generateTile call has internal try/catch.
-
-interface ResultTileProps {
-  state: TileState
-  label: string
-  /** Re-run generation for THIS tile only (same product / avatar / scene / style). */
-  onRegen: () => void
-  /** Clear this tile back to the empty placeholder. Does NOT affect other tiles. */
-  onDelete: () => void
-  /** Persist this tile's image into the Project bank. */
-  onSave: () => void
-  saved: boolean
-  /** Whether this slot can be filled from the idle state (product is selected). */
-  canGenerate: boolean
-  /** Human-readable scene label resolved from the tile's lock (e.g. "Review trên bàn"). */
-  lockedSceneLabel?: string
-}
-
-function ResultTile({ state, label, onRegen, onDelete, onSave, saved, canGenerate, lockedSceneLabel }: ResultTileProps) {
-  const resolvedUrl = useAssetUrl(state.url ?? undefined)
-  const displayUrl = state.url?.startsWith('http') || state.url?.startsWith('data:') ? state.url : resolvedUrl
-
-  const handleDownload = () => {
-    if (!displayUrl) return
-    const a = document.createElement('a')
-    a.href = displayUrl
-    a.download = `product-ai-${label}-${Date.now()}.png`
-    a.click()
-  }
-
-  // ── Border + background reflect status so failure is visually distinct ───
-  const containerClass =
-    state.status === 'error'
-      ? 'border-red-300 bg-red-50/40'
-      : state.status === 'done'
-        ? 'border-black/10 bg-gray-100'
-        : 'border-dashed border-black/10 bg-gradient-to-br from-gray-50 to-gray-100'
-
-  return (
-    <div className={`relative aspect-square overflow-hidden rounded-xl border ${containerClass}`}>
-      {/* ── Variant + scene badges — always visible top-left ──────────── */}
-      <div className="absolute left-2 top-2 z-10 flex flex-col items-start gap-1">
-        <span
-          className={`rounded px-1.5 py-0.5 text-[10px] font-semibold backdrop-blur-sm ${
-            state.status === 'done' ? 'bg-black/60 text-white' : 'bg-white/80 text-gray-600'
-          }`}
-        >
-          {label}
-        </span>
-        {lockedSceneLabel && state.status !== 'idle' && (
-          <span
-            className={`max-w-[160px] truncate rounded px-1.5 py-0.5 text-[9px] font-medium backdrop-blur-sm ${
-              state.status === 'done' ? 'bg-violet-500/85 text-white' : 'bg-violet-100 text-violet-700'
-            }`}
-            title={`Scene đã lock: ${lockedSceneLabel}`}
-          >
-            🎬 {lockedSceneLabel}
-          </span>
-        )}
-      </div>
-
-      {/* ── IDLE STATE (initial placeholder OR after delete) ──────────── */}
-      {state.status === 'idle' && (
-        <div className="flex h-full flex-col items-center justify-center gap-3 p-4 text-center">
-          <Sparkles className="h-6 w-6 text-gray-300" />
-          <p className="text-[11px] text-gray-400">Chưa có ảnh</p>
-          {canGenerate && (
-            <button
-              onClick={onRegen}
-              className="rounded-full bg-violet-600 px-3 py-1.5 text-[11px] font-semibold text-white hover:bg-violet-700"
-            >
-              ▶ Tạo ảnh này
-            </button>
-          )}
-        </div>
-      )}
-
-      {/* ── LOADING STATE (generating or running QC) ──────────────────── */}
-      {(state.status === 'generating' || state.status === 'qc') && (
-        <div className="relative flex h-full flex-col items-center justify-center gap-2">
-          {/* Skeleton shimmer behind the spinner */}
-          <div className="absolute inset-0 animate-pulse bg-gradient-to-br from-violet-50 via-gray-100 to-violet-50" />
-          <Loader2 className="relative h-7 w-7 animate-spin text-violet-500" />
-          <span className="relative text-[11px] font-medium text-violet-700">
-            {state.status === 'qc' ? 'Đang QC sản phẩm…' : 'Đang render…'}
-          </span>
-        </div>
-      )}
-
-      {/* ── ERROR STATE — gray placeholder + prominent retry ──────────── */}
-      {state.status === 'error' && (
-        <div className="flex h-full flex-col items-center justify-center gap-3 p-4 text-center">
-          <AlertTriangle className="h-7 w-7 text-red-400" />
-          <div>
-            <p className="text-xs font-semibold text-red-700">Tạo ảnh thất bại</p>
-            {state.error && (
-              <p className="mt-0.5 line-clamp-3 text-[10px] text-red-500/80">
-                {state.error.slice(0, 120)}
-              </p>
-            )}
-          </div>
-          <button
-            onClick={onRegen}
-            className="flex items-center gap-1.5 rounded-full bg-red-500 px-4 py-1.5 text-[11px] font-semibold text-white hover:bg-red-600"
-          >
-            <RotateCcw className="h-3 w-3" />
-            Thử lại
-          </button>
-        </div>
-      )}
-
-      {/* ── DONE STATE — image + always-visible action buttons ────────── */}
-      {state.status === 'done' && displayUrl && (
-        <>
-          <img src={displayUrl} alt={label} className="h-full w-full object-cover" />
-
-          {/* QC badge — bottom-left so it never clashes with the top-right action bar */}
-          {state.qc && (
-            <span
-              title={
-                state.qc.issues.length > 0
-                  ? state.qc.issues.join(' · ')
-                  : `Label ${state.qc.labelSimilarity} · Logo ${state.qc.logoSimilarity} · Bottle ${state.qc.bottleSimilarity}`
-              }
-              className="absolute bottom-12 left-2 z-10 rounded px-1.5 py-0.5 text-[10px] font-semibold text-white backdrop-blur-sm"
-              style={{ background: state.qc.pass ? 'rgba(16,185,129,0.85)' : 'rgba(239,68,68,0.85)' }}
-            >
-              {state.qc.pass ? `✓ QC ${state.qc.overall}` : `✗ QC ${state.qc.overall}`}
-            </span>
-          )}
-
-          {/* Always-visible top-right action bar */}
-          <div className="absolute right-2 top-2 z-10 flex gap-1">
-            <button
-              onClick={onRegen}
-              title="Tạo lại ảnh này (giữ nguyên người + sản phẩm)"
-              className="flex h-7 w-7 items-center justify-center rounded-md bg-black/55 text-white shadow-sm backdrop-blur-sm hover:bg-violet-600"
-            >
-              <RotateCcw className="h-3.5 w-3.5" />
-            </button>
-            <button
-              onClick={handleDownload}
-              title="Tải ảnh xuống"
-              className="flex h-7 w-7 items-center justify-center rounded-md bg-black/55 text-white shadow-sm backdrop-blur-sm hover:bg-black/80"
-            >
-              <Download className="h-3.5 w-3.5" />
-            </button>
-            <button
-              onClick={onDelete}
-              title="Xoá ảnh này"
-              className="flex h-7 w-7 items-center justify-center rounded-md bg-black/55 text-white shadow-sm backdrop-blur-sm hover:bg-red-600"
-            >
-              <Trash2 className="h-3.5 w-3.5" />
-            </button>
-          </div>
-
-          {/* Bottom row: Save into Project */}
-          <div className="absolute inset-x-0 bottom-0 flex items-center gap-2 bg-gradient-to-t from-black/75 via-black/30 to-transparent p-2">
-            <button
-              onClick={onSave}
-              title={saved ? 'Đã lưu vào Project' : 'Lưu vào Project → Creative Studio'}
-              className={`flex items-center gap-1 rounded-md px-2 py-1 text-[10px] font-semibold backdrop-blur-sm transition-colors ${
-                saved ? 'bg-emerald-500 text-white' : 'bg-white/20 text-white hover:bg-emerald-600'
-              }`}
-            >
-              {saved ? <Check className="h-3 w-3" /> : <Save className="h-3 w-3" />}
-              {saved ? 'Đã lưu' : 'Lưu vào Project'}
-            </button>
-            {state.qc?.issues && state.qc.issues.length > 0 && !state.qc.pass && (
-              <span className="ml-auto truncate text-[9px] text-rose-200" title={state.qc.issues.join(' · ')}>
-                ⚠ {state.qc.issues[0]}
-              </span>
-            )}
-          </div>
-        </>
-      )}
-    </div>
-  )
-}
-
-// ── Picker tile ─────────────────────────────────────────────────────────────
-
-function PickerTile({
-  imageUrl, label, hint, accent, onSelectFromBank, onUpload, onClear,
-}: {
+interface PickerTileProps {
   imageUrl: string | null
   label: string
   hint: string
@@ -502,7 +48,9 @@ function PickerTile({
   onSelectFromBank: () => void
   onUpload: (file: File) => void
   onClear: () => void
-}) {
+}
+
+function PickerTile({ imageUrl, label, hint, accent, onSelectFromBank, onUpload, onClear }: PickerTileProps) {
   const inputRef = useRef<HTMLInputElement>(null)
   const resolvedUrl = useAssetUrl(imageUrl ?? undefined)
   const display = imageUrl?.startsWith('http') || imageUrl?.startsWith('data:') || imageUrl?.startsWith('blob:') ? imageUrl : resolvedUrl
@@ -516,7 +64,7 @@ function PickerTile({
       <div className="flex items-center justify-between">
         <p className="text-[11px] font-bold uppercase tracking-widest text-gray-500">{label}</p>
         {imageUrl && (
-          <button onClick={onClear} className="text-[10px] text-gray-400 hover:text-red-500">Bỏ chọn</button>
+          <button type="button" onClick={onClear} className="text-[10px] text-gray-400 hover:text-red-500">Bỏ chọn</button>
         )}
       </div>
       <div className="aspect-square w-full overflow-hidden rounded-lg border border-dashed border-black/10 bg-white">
@@ -531,12 +79,14 @@ function PickerTile({
       <p className="text-[10px] text-gray-400">{hint}</p>
       <div className="flex gap-2">
         <button
+          type="button"
           onClick={onSelectFromBank}
           className={`flex flex-1 items-center justify-center gap-1.5 rounded-lg border ${accentBorder} ${accentBg} px-3 py-2 text-xs font-semibold ${accentText} hover:opacity-80`}
         >
           Từ Project
         </button>
         <button
+          type="button"
           onClick={() => inputRef.current?.click()}
           className="flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-black/10 bg-white px-3 py-2 text-xs font-semibold text-gray-700 hover:bg-black/[0.04]"
         >
@@ -554,23 +104,36 @@ function PickerTile({
   )
 }
 
+// ── Session persisted snapshot (P11 — v2 schema) ────────────────────────────
+// Bumped version from 1 → 2: old v1 state (sceneId/styleId/tiles) is
+// ignored automatically by useSessionPersist's version check.
+
+interface CreativeStudioPersistedV2 {
+  v: 2
+  selectedAssetTypeId: AssetTypeId | null
+  selectedAvatarId: string | null
+  selectedProductId: string | null
+  uploadedAvatarRef: string | null
+  uploadedProductRef: string | null
+  options: AssetOptions
+  /** Saved completed asset rows. Pending rows are flattened to error. */
+  results: ResultRow[]
+  savedRowIds: string[]
+}
+
 // ── Main component ──────────────────────────────────────────────────────────
 
-export default function ProductAI() {
+export default function CreativeStudio() {
+  const [selectedAssetTypeId, setSelectedAssetTypeId] = useState<AssetTypeId | null>(null)
   const [selectedAvatar, setSelectedAvatar] = useState<Model | null>(null)
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null)
   const [uploadedAvatarUrl, setUploadedAvatarUrl] = useState<string | null>(null)
   const [uploadedProductUrl, setUploadedProductUrl] = useState<string | null>(null)
   const [pickerMode, setPickerMode] = useState<'avatar' | 'product' | null>(null)
-
-  const [sceneId, setSceneId] = useState<string>('hold-camera')
-  const [styleId, setStyleId] = useState<string>('realistic')
-  const [strictQC, setStrictQC] = useState(true)
-
-  const [tiles, setTiles] = useState<TileState[]>(EMPTY_TILES)
-  const [isBatch, setIsBatch] = useState(false)
-  const [progress, setProgress] = useState({ done: 0, total: 0 })
-  const [savedIdx, setSavedIdx] = useState<Set<number>>(new Set())
+  const [options, setOptions] = useState<AssetOptions>({ styleId: 'realistic' })
+  const [results, setResults] = useState<ResultRow[]>([])
+  const [savedRowIds, setSavedRowIds] = useState<Set<string>>(new Set())
+  const [isGenerating, setIsGenerating] = useState(false)
 
   const kieApiKey    = useSettingsStore((s) => s.kieApiKey)
   const geminiApiKey = useSettingsStore((s) => s.geminiApiKey)
@@ -579,30 +142,47 @@ export default function ProductAI() {
   const models       = useBankStore((s) => s.models)
   const products     = useBankStore((s) => s.products)
 
-  // ── Session persistence (R4b — shared hook) ────────────────────────────
-  // In-flight tile statuses (generating/qc) cannot resume across refresh, so
-  // they're flattened to 'error' on save. This matches the legacy behavior.
-  const flattenInFlight = (ts: TileState[]): TileState[] => ts.map((t) =>
-    t.status === 'generating' || t.status === 'qc'
-      ? { ...t, status: 'error', error: 'Bị gián đoạn — thử lại' }
-      : t,
+  const catalogEntry = selectedAssetTypeId ? findCatalogEntry(selectedAssetTypeId) : null
+  const isPhotographic   = catalogEntry?.group === 'photographic'
+  const isUiNative       = catalogEntry?.group === 'ui-native'
+  const isDesignedGraphic = catalogEntry?.group === 'designed-graphic'
+
+  const avatarImageRef  = selectedAvatar?.characterImage  ?? uploadedAvatarUrl
+  const productImageRef = selectedProduct?.productImage ?? uploadedProductUrl
+  const productSelected = !!productImageRef
+
+  // Engine-specific API key requirements
+  const needsGemini = isUiNative || isDesignedGraphic  // text generation
+  const needsKie    = isPhotographic || isUiNative      // image generation (avatar for ui-native)
+  const apiKeysOk   =
+    (!needsKie    || !!kieApiKey) &&
+    (!needsGemini || !!geminiApiKey)
+  const canGenerate = !!selectedAssetTypeId && productSelected && apiKeysOk && !isGenerating
+
+  // ── Session persistence ───────────────────────────────────────────────
+  const flattenPending = (rs: ResultRow[]): ResultRow[] => rs.map((r) =>
+    r.status === 'pending'
+      ? { ...r, status: 'error', errorMessage: 'Bị gián đoạn — thử lại' }
+      : r,
   )
 
-  const sessionApi = useSessionPersist<ProductAIPersisted>({
-    moduleId: 'broll-studio',
-    version: 1,
+  const sessionApi = useSessionPersist<CreativeStudioPersistedV2>({
+    moduleId: 'broll-studio',  // persistKey 'ugc-lab:broll-studio:inflight-v1' kept for back-compat
+    version: 2,
     snapshot: () => ({
+      v: 2,
+      selectedAssetTypeId,
       selectedAvatarId: selectedAvatar?.id ?? null,
       selectedProductId: selectedProduct?.id ?? null,
       uploadedAvatarRef: uploadedAvatarUrl,
       uploadedProductRef: uploadedProductUrl,
-      sceneId,
-      styleId,
-      strictQC,
-      tiles: flattenInFlight(tiles),
-      savedIdx: [...savedIdx],
+      options,
+      results: flattenPending(results),
+      savedRowIds: [...savedRowIds],
     }),
     hydrate: (data) => {
+      if (data.v !== 2) return  // old v1 schema — discard, user starts fresh
+      setSelectedAssetTypeId(data.selectedAssetTypeId)
       if (data.selectedAvatarId) {
         const m = models.find((x) => x.id === data.selectedAvatarId)
         if (m) setSelectedAvatar(m)
@@ -613,315 +193,94 @@ export default function ProductAI() {
       }
       setUploadedAvatarUrl(data.uploadedAvatarRef)
       setUploadedProductUrl(data.uploadedProductRef)
-      setSceneId(data.sceneId)
-      setStyleId(data.styleId)
-      setStrictQC(data.strictQC)
-      setTiles(flattenInFlight(data.tiles))
-      setSavedIdx(new Set(data.savedIdx))
+      setOptions(data.options ?? { styleId: 'realistic' })
+      setResults(flattenPending(data.results ?? []))
+      setSavedRowIds(new Set(data.savedRowIds ?? []))
       addToast('✓ Đã khôi phục Creative Studio từ phiên trước', 'success')
     },
-    getStatus: () => (isBatch ? 'in-progress' : tiles.some((t) => t.url || t.lock) ? 'paused' : 'completed'),
+    getStatus: () => (
+      isGenerating ? 'in-progress'
+        : results.length > 0 ? 'paused'
+        : 'completed'
+    ),
     getProgressVi: () => {
-      const filled = tiles.filter((t) => t.url).length
-      if (isBatch) return `Đang gen ${progress.done}/${progress.total || 4} ảnh...`
-      if (filled > 0) return `${filled}/${tiles.length} tile đã tạo`
+      if (isGenerating) return 'Đang tạo asset...'
+      if (results.length > 0) return `${results.filter((r) => r.status === 'done').length}/${results.length} asset`
       return undefined
     },
-    getTitleVi: () => selectedProduct?.productName ?? undefined,
+    getTitleVi: () => {
+      const label = catalogEntry?.title.vi
+      const product = selectedProduct?.productName
+      if (label && product) return `${label} — ${product}`
+      return label ?? product
+    },
     shouldPersist: () =>
-      tiles.some((t) => t.url || t.lock) ||
-      !!uploadedAvatarUrl || !!uploadedProductUrl ||
-      !!selectedAvatar || !!selectedProduct ||
-      isBatch,
+      results.length > 0 || !!productImageRef || !!avatarImageRef || !!selectedAssetTypeId || isGenerating,
     deps: [
-      selectedAvatar?.id, selectedProduct?.id,
-      uploadedAvatarUrl, uploadedProductUrl,
-      sceneId, styleId, strictQC,
-      tiles, savedIdx, isBatch, progress,
+      selectedAssetTypeId, selectedAvatar?.id, selectedProduct?.id,
+      uploadedAvatarUrl, uploadedProductUrl, options, results, savedRowIds, isGenerating,
     ],
   })
 
-  const avatarImageRef  = selectedAvatar?.characterImage  ?? uploadedAvatarUrl
-  const productImageRef = selectedProduct?.productImage ?? uploadedProductUrl
-  const canGenerate     = !!productImageRef && !!kieApiKey
-  const canQC           = !!geminiApiKey
+  // ── Generation flow — ALL through generateAssets() ────────────────────
+  const handleGenerate = async () => {
+    if (!canGenerate || !selectedAssetTypeId || !selectedProduct) return
+    const entry = catalogEntry!
+    setIsGenerating(true)
 
-  const scene = SCENE_PRESETS.find((p) => p.id === sceneId) ?? SCENE_PRESETS[0]
-  const style = STYLE_OPTIONS.find((s) => s.id === styleId) ?? STYLE_OPTIONS[0]
+    const rowId = `row_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`
+    const pendingRow: ResultRow = {
+      rowId,
+      status: 'pending',
+      requestedAt: Date.now(),
+      assetTypeId: selectedAssetTypeId,
+    }
+    setResults((prev) => [pendingRow, ...prev])
 
-  const updateTile = (i: number, patch: Partial<TileState>) => {
-    setTiles((prev) => prev.map((t, idx) => (idx === i ? { ...t, ...patch } : t)))
-  }
-
-  // (Restore / discard / persist are all handled by useSessionPersist above
-  //  and the global RestoreSessionModal mounted in App.tsx)
-
-  // ── Single shot ───────────────────────────────────────────────────────────
-  // Scene/style are passed explicitly (not read from outer closure) so callers
-  // can lock them at generation time and reuse them on regen even if the user
-  // has since changed the global selection.
-  const genOneShot = async (args: {
-    sceneId: string
-    styleId: string
-    productUrl: string
-    avatarUrl: string | null
-    baseUrl: string | null
-    variationHint: string | null
-  }): Promise<string | null> => {
-    const scenePreset = SCENE_PRESETS.find((p) => p.id === args.sceneId) ?? SCENE_PRESETS[0]
-    const styleOpt    = STYLE_OPTIONS.find((s) => s.id === args.styleId) ?? STYLE_OPTIONS[0]
-
-    const prompt = buildPrompt({
-      scene: scenePreset,
-      style: styleOpt,
-      hasAvatar: !!args.avatarUrl,
-      hasBaseRef: !!args.baseUrl,
-      variationHint: args.variationHint,
-    })
-
-    // Order matters — product FIRST (priority anchor), then avatar, then base
-    const filesUrl = [args.productUrl]
-    if (args.avatarUrl) filesUrl.push(args.avatarUrl)
-    if (args.baseUrl)   filesUrl.push(args.baseUrl)
-
-    const url = await generateGpt4oImage({
-      apiKey: kieApiKey,
-      prompt,
-      filesUrl,
-      size: '1:1',
-      timeoutMs: 4 * 60 * 1000,
-    })
-
-    if (isAssetRef(url)) return url
-    const r = await fetch(url)
-    const b = await r.blob()
-    return await saveAsset(b, b.type || 'image/png')
-  }
-
-  // ── QC + optional auto-regen ──────────────────────────────────────────────
-  const runQC = async (idx: number, productUrl: string, generatedAssetUrl: string): Promise<ProductQC | null> => {
-    if (!canQC) return null
-    updateTile(idx, { status: 'qc' })
     try {
-      const generatedPublic = await toPublicUrl(generatedAssetUrl)
-      if (!generatedPublic) return null
-      return await qcProduct({
-        apiKey: geminiApiKey,
-        productUrl,
-        generatedUrl: generatedPublic,
+      // UI builds the payload. Registry handles routing. Engine handles
+      // KIE / Gemini / canvas. No prompt logic here.
+      const asset = await generateAssets(selectedAssetTypeId, {
+        productId: selectedProduct.id,
+        modelId: entry.group === 'photographic' ? selectedAvatar?.id : undefined,
+        options: options as Record<string, unknown>,
       })
-    } catch (err) {
-      console.error('[ProductAI] QC failed:', err)
-      return null
-    }
-  }
-
-  // ── Generate one tile (handles strict-mode retry) ─────────────────────────
-  // `lock` is the snapshot we persist into TileState.lock — it lets regen
-  // reuse exactly the same scene / style / product / avatar later.
-  const generateTile = async (idx: number, args: {
-    lock: TileLock
-    baseUrl: string | null
-    variationHint: string | null
-  }): Promise<string | null> => {
-    // Snapshot the lock into the tile state IMMEDIATELY so even a failed gen
-    // leaves enough metadata to regen with the right scene later.
-    updateTile(idx, {
-      status: 'generating',
-      error: undefined,
-      qc: null,
-      url: null,
-      lock: args.lock,
-    })
-
-    // Resolve asset refs → public URLs (KIE backend can't fetch asset:// directly)
-    const resolved = await resolveLockToPublic(args.lock)
-    if (!resolved) {
-      updateTile(idx, { status: 'error', error: 'Không resolve được URL sản phẩm' })
-      return null
-    }
-
-    const shotArgs = {
-      sceneId: args.lock.sceneId,
-      styleId: args.lock.styleId,
-      productUrl: resolved.productUrl,
-      avatarUrl: resolved.avatarUrl,
-      baseUrl: args.baseUrl,
-      variationHint: args.variationHint,
-    }
-
-    console.log('[ProductAI] generateTile', { idx, ...args.lock, variation: VARIATIONS[idx].label })
-
-    try {
-      const url = await genOneShot(shotArgs)
-      if (!url) {
-        updateTile(idx, { status: 'error', error: 'Không trả về ảnh' })
-        return null
-      }
-      updateTile(idx, { url })
-      const qc = await runQC(idx, resolved.productUrl, url)
-      updateTile(idx, { qc, status: 'done' })
-
-      // Strict mode: one auto-retry only for the BASE tile.
-      if (strictQC && qc && !qc.pass && idx === 0) {
-        updateTile(idx, { status: 'generating', error: undefined })
-        const retry = await genOneShot({
-          ...shotArgs,
-          variationHint: 'The product label and packaging must be preserved with pixel-level fidelity. Triple-check that every letter of the label text is correct and that the bottle shape exactly matches the reference.',
-        })
-        if (retry) {
-          updateTile(idx, { url: retry })
-          const qc2 = await runQC(idx, resolved.productUrl, retry)
-          updateTile(idx, { qc: qc2, status: 'done' })
-          return retry
-        }
-      }
-
-      return url
+      setResults((prev) => prev.map((r) => r.rowId === rowId ? { ...r, status: 'done', asset } : r))
+      addToast(`✓ Đã tạo ${entry.title.vi}`)
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'unknown'
-      console.error(`[ProductAI] tile ${idx} failed:`, err)
-      updateTile(idx, { status: 'error', error: msg })
-      return null
-    }
-  }
-
-  // ── Main flow: base → 3 derived variations ────────────────────────────────
-  const handleGenerate = async () => {
-    if (!canGenerate || !productImageRef) return
-    setIsBatch(true)
-    setTiles(EMPTY_TILES)
-    setSavedIdx(new Set())
-    setProgress({ done: 0, total: 4 })
-
-    try {
-      // batchLock stores asset:// refs (stable across signed-URL expiry).
-      // generateTile resolves them to public URLs internally per call via
-      // resolveLockToPublic. This is what lets locks survive a page refresh:
-      // any baked-in URL would be expired by then.
-      const batchLock: TileLock = {
-        sceneId,
-        styleId,
-        productRef: productImageRef,
-        avatarRef: avatarImageRef ?? null,
-      }
-      console.log('[ProductAI] handleGenerate batch lock', batchLock)
-
-      // 1. Base shot
-      const baseAssetUrl = await generateTile(0, {
-        lock: batchLock,
-        baseUrl: null,
-        variationHint: VARIATIONS[0].hint,
-      })
-      setProgress((p) => ({ ...p, done: p.done + 1 }))
-
-      if (!baseAssetUrl) {
-        addToast('Tạo ảnh gốc thất bại — không thể derive variations', 'error')
-        setIsBatch(false)
-        return
-      }
-
-      // 2. Resolve base to a public URL so KIE can fetch it as the 3rd ref
-      const basePublicUrl = await toPublicUrl(baseAssetUrl)
-      if (!basePublicUrl) {
-        addToast('Không upload được ảnh gốc cho variations', 'error')
-        setIsBatch(false)
-        return
-      }
-
-      // 3. Three variations in parallel — Promise.allSettled so one slot's
-      //    failure can never break the others. All four tiles share the same
-      //    batchLock (same scene / style / product / avatar).
-      const variationResults = await Promise.allSettled(
-        [1, 2, 3].map(async (i) => {
-          const url = await generateTile(i, {
-            lock: batchLock,
-            baseUrl: basePublicUrl,
-            variationHint: VARIATIONS[i].hint,
-          })
-          setProgress((p) => ({ ...p, done: p.done + 1 }))
-          return url
-        }),
-      )
-
-      // Count successes from the actual generateTile return values — the tiles
-      // state at this point is stale because React batches updates.
-      const variationOk = variationResults.filter(
-        (r) => r.status === 'fulfilled' && r.value !== null,
-      ).length
-      const ok = (baseAssetUrl ? 1 : 0) + variationOk
-
-      if (ok === 0) addToast('Tạo ảnh thất bại — kiểm tra KIE credit', 'error')
-      else if (ok < 4) addToast(`Đã tạo ${ok}/4 ảnh — slot lỗi có nút "Thử lại" trên ảnh`)
-      else addToast('✓ Đã tạo 4/4 ảnh')
+      console.error('[CreativeStudio] generateAssets failed:', err)
+      setResults((prev) => prev.map((r) => r.rowId === rowId ? { ...r, status: 'error', errorMessage: msg } : r))
+      addToast(`Tạo thất bại: ${msg.slice(0, 80)}`, 'error')
     } finally {
-      setIsBatch(false)
+      setIsGenerating(false)
     }
   }
 
-  // ── Manual regen for a single tile ─────────────────────────────────────────
-  // Regen ALWAYS uses the tile's locked snapshot (scene + style + refs taken
-  // at original generation time). The current global scene/style selection
-  // is intentionally ignored — changing the chip after generating must not
-  // silently mutate what regen produces. To switch scenes, the user re-runs
-  // the full "Tạo 4 ảnh" batch.
-  //
-  // For a tile that has never been generated (idle slot after delete), there
-  // is no lock yet, so we fall back to the current global selection — that's
-  // the "▶ Tạo ảnh này" first-fill case.
-  const handleRegen = async (idx: number) => {
-    const tile = tiles[idx]
-    let lock = tile.lock
-
-    if (!lock) {
-      // First-fill (idle slot) — capture current global selection as the lock.
-      // Store asset:// refs (not URLs) so the lock survives signed-URL expiry.
-      if (!productImageRef || !canGenerate) return
-      lock = {
-        sceneId,
-        styleId,
-        productRef: productImageRef,
-        avatarRef: avatarImageRef ?? null,
-      }
-    }
-
-    console.log('[ProductAI] handleRegen', {
-      idx,
-      variation: VARIATIONS[idx].label,
-      tileLock: lock,
-      currentGlobal: { sceneId, styleId },
-      preservingScene: lock.sceneId,
-    })
-
-    if (idx === 0) {
-      // Regenerating the base — variations still reference the OLD base URL
-      // via their own filesUrl ref (we don't cascade). User can manually
-      // regen variations after if they want to re-bind to the new base.
-      await generateTile(0, {
-        lock,
-        baseUrl: null,
-        variationHint: VARIATIONS[0].hint,
+  // ── Save handler — persist generated asset into bankStore B-Roll ──────
+  const handleSaveRow = async (row: ResultRow) => {
+    if (!row.asset || savedRowIds.has(row.rowId)) return
+    const entry = findCatalogEntry(row.assetTypeId as AssetTypeId)
+    try {
+      await addBRoll({
+        imageUrl: row.asset.outputUrl,
+        prompt: `Creative Studio — ${entry?.title.vi ?? row.assetTypeId} (${row.asset.metadata.engineGroup})`,
+        productId: row.asset.metadata.productId,
+        modelId: row.asset.metadata.modelId,
       })
-    } else {
-      const baseAssetUrl = tiles[0]?.url
-      const basePublicUrl = baseAssetUrl ? await toPublicUrl(baseAssetUrl) : null
-      await generateTile(idx, {
-        lock,
-        baseUrl: basePublicUrl,
-        variationHint: VARIATIONS[idx].hint,
-      })
+      setSavedRowIds((prev) => new Set(prev).add(row.rowId))
+      addToast('✓ Đã lưu vào Project → Creative Studio')
+    } catch (err) {
+      addToast(`Lưu thất bại: ${err instanceof Error ? err.message.slice(0, 60) : 'unknown'}`, 'error')
     }
-    setSavedIdx((prev) => { const next = new Set(prev); next.delete(idx); return next })
   }
 
-  // ── Delete a single tile — clears it back to idle so the user can decide
-  //    whether to re-fill the slot. Does NOT touch the other tiles. ────────
-  const handleDelete = (idx: number) => {
-    updateTile(idx, { url: null, qc: null, status: 'idle', error: undefined })
-    setSavedIdx((prev) => { const next = new Set(prev); next.delete(idx); return next })
+  const handleDeleteRow = (rowId: string) => {
+    setResults((prev) => prev.filter((r) => r.rowId !== rowId))
+    setSavedRowIds((prev) => { const next = new Set(prev); next.delete(rowId); return next })
   }
 
-  // ── File handlers ──────────────────────────────────────────────────────────
+  // ── File handlers (asset:// persisted refs) ───────────────────────────
   const handleSelectAvatar = (item: unknown) => {
     setSelectedAvatar(item as Model)
     setUploadedAvatarUrl(null)
@@ -932,9 +291,6 @@ export default function ProductAI() {
     setUploadedProductUrl(null)
     setPickerMode(null)
   }
-  // Uploads are persisted to the asset store immediately so they survive a
-  // page refresh. blob: URLs from URL.createObjectURL are session-scoped and
-  // disappear on reload, which would break locks pointing back at them.
   const handleUploadAvatar = async (file: File) => {
     try {
       const ref = await saveAsset(file, file.type || 'image/jpeg')
@@ -954,188 +310,145 @@ export default function ProductAI() {
     }
   }
 
-  // ── Save handlers ──────────────────────────────────────────────────────────
-  const handleSaveToProject = async (idx: number) => {
-    const tile = tiles[idx]
-    if (!tile.url) return
-    // Resolve labels from the tile's OWN lock so the saved note reflects what
-    // was actually used to generate this image — not whatever chip the user
-    // has selected now.
-    const lockedScene = tile.lock
-      ? SCENE_PRESETS.find((p) => p.id === tile.lock!.sceneId) ?? scene
-      : scene
-    const lockedStyle = tile.lock
-      ? STYLE_OPTIONS.find((s) => s.id === tile.lock!.styleId) ?? style
-      : style
-    try {
-      await addBRoll({
-        imageUrl: tile.url,
-        prompt: `Creative Studio — ${lockedScene.label} / ${lockedStyle.label}${VARIATIONS[idx].hint ? ` / ${VARIATIONS[idx].label}` : ''}`,
-        productId: selectedProduct?.id,
-        modelId: selectedAvatar?.id,
-      })
-      setSavedIdx((prev) => new Set(prev).add(idx))
-      addToast(`✓ Đã lưu ảnh #${idx + 1} vào Project → Creative Studio`)
-    } catch (err) {
-      addToast(`Lưu thất bại: ${err instanceof Error ? err.message.slice(0, 60) : 'unknown'}`, 'error')
-    }
-  }
-  const handleSaveAll = async () => {
-    const indices = tiles.map((t, i) => t.url && !savedIdx.has(i) ? i : -1).filter((i) => i >= 0)
-    for (const i of indices) await handleSaveToProject(i)
-  }
-
-  // ── Render ─────────────────────────────────────────────────────────────────
+  // ── Render ────────────────────────────────────────────────────────────
   return (
-    <div className="flex h-full flex-col overflow-hidden relative">
+    <div className="relative flex h-full flex-col overflow-hidden">
       <div className="absolute right-4 top-4 z-30">
         <AutoSaveIndicator lastSavedAt={sessionApi.lastSavedAt} lastSaveOk={sessionApi.lastSaveOk} />
       </div>
+
       {/* Header */}
       <div className="shrink-0 border-b border-black/8 bg-gradient-to-r from-violet-50 to-pink-50 px-6 py-4">
         <h1 className="text-xl font-bold tracking-tight text-gray-900">Creative Studio</h1>
         <p className="mt-0.5 text-xs text-gray-500">
-          Tạo 4 ảnh lifestyle vuông 1:1 cho website / landing / advertorial / Shopee / TikTok — không phải cinematic video pipeline.
+          AI conversion creative operating system — photographic / UI-native / designed-graphic, mỗi loại đi qua engine riêng.
         </p>
       </div>
 
       {/* Body */}
-      <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-6 lg:flex-row">
-        {/* Left: inputs */}
-        <div className="flex w-full shrink-0 flex-col gap-3 lg:w-80">
-          <PickerTile
-            label="Sản phẩm (bắt buộc)"
-            hint="Ảnh sản phẩm rõ packaging / logo / label"
-            accent="product"
-            imageUrl={productImageRef}
-            onSelectFromBank={() => setPickerMode('product')}
-            onUpload={handleUploadProduct}
-            onClear={() => { setSelectedProduct(null); setUploadedProductUrl(null) }}
-          />
-          <PickerTile
-            label="Avatar AI (tuỳ chọn)"
-            hint="Có thể bỏ trống — không cần người"
-            accent="avatar"
-            imageUrl={avatarImageRef}
-            onSelectFromBank={() => setPickerMode('avatar')}
-            onUpload={handleUploadAvatar}
-            onClear={() => { setSelectedAvatar(null); setUploadedAvatarUrl(null) }}
-          />
-
-          {/* Scene presets */}
-          <div className="rounded-xl border border-black/10 bg-black/[0.02] p-3">
-            <p className="mb-2 text-[11px] font-bold uppercase tracking-widest text-gray-500">Scene</p>
-            <div className="grid grid-cols-2 gap-1.5">
-              {SCENE_PRESETS.map((p) => (
-                <button
-                  key={p.id}
-                  onClick={() => setSceneId(p.id)}
-                  title={p.hint}
-                  className={`rounded-lg border px-2 py-1.5 text-left text-[11px] transition-colors ${sceneId === p.id ? 'border-violet-400 bg-violet-50 text-violet-800' : 'border-black/10 bg-white text-gray-700 hover:bg-black/[0.03]'}`}
-                >
-                  {p.label}
-                </button>
-              ))}
+      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto p-6 lg:flex-row lg:gap-5">
+        {/* ── STEP 1: Asset type picker — full width when no selection ── */}
+        {!selectedAssetTypeId ? (
+          <div className="flex w-full flex-col gap-4">
+            <div className="flex flex-col gap-1">
+              <p className="text-[11px] font-bold uppercase tracking-widest text-gray-500">Bước 1</p>
+              <h2 className="text-lg font-semibold tracking-tight text-gray-900">Chọn loại creative bạn muốn tạo</h2>
+              <p className="text-xs text-gray-500">
+                Mỗi loại đi qua một engine riêng (photographic / UI-native / designed-graphic) — không còn scene + style chips chung.
+              </p>
             </div>
+            <AssetTypePicker selectedId={null} onSelect={setSelectedAssetTypeId} />
           </div>
-
-          {/* Style chips */}
-          <div className="rounded-xl border border-black/10 bg-black/[0.02] p-3">
-            <p className="mb-2 text-[11px] font-bold uppercase tracking-widest text-gray-500">Style</p>
-            <div className="flex flex-wrap gap-1.5">
-              {STYLE_OPTIONS.map((s) => (
+        ) : (
+          <>
+            {/* ── STEP 2+: Left panel (inputs + controls) ───────────── */}
+            <div className="flex w-full shrink-0 flex-col gap-3 lg:w-80">
+              {/* Selected asset type pill + change */}
+              <div className="flex items-center justify-between gap-2 rounded-xl border border-violet-200 bg-violet-50 px-3 py-2.5">
+                <div className="flex min-w-0 flex-col">
+                  <span className="text-[10px] font-bold uppercase tracking-widest text-violet-700">Đang tạo</span>
+                  <span className="truncate text-sm font-semibold text-gray-900">{catalogEntry?.title.vi}</span>
+                </div>
                 <button
-                  key={s.id}
-                  onClick={() => setStyleId(s.id)}
-                  className={`flex items-center gap-1.5 rounded-md border px-2 py-1 text-[11px] transition-colors ${styleId === s.id ? 'border-violet-400 bg-violet-50 text-violet-800' : 'border-black/10 bg-white text-gray-700 hover:bg-black/[0.03]'}`}
+                  type="button"
+                  onClick={() => setSelectedAssetTypeId(null)}
+                  className="flex shrink-0 items-center gap-1 rounded-md bg-white px-2 py-1 text-[10px] font-semibold text-violet-700 hover:bg-violet-100"
                 >
-                  <span className="h-2 w-2 rounded-full" style={{ background: s.swatch }} />
-                  {s.label}
+                  <ChevronLeft className="h-3 w-3" /> Đổi loại
                 </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Strict QC */}
-          <label className="flex cursor-pointer items-center justify-between gap-2 rounded-xl border border-black/10 bg-black/[0.02] px-3 py-2.5">
-            <span className="flex items-center gap-2 text-xs text-gray-700">
-              <ShieldCheck className="h-4 w-4 text-emerald-600" />
-              Strict QC <span className="text-[10px] text-gray-400">(tự retry nếu product sai)</span>
-            </span>
-            <input
-              type="checkbox"
-              checked={strictQC}
-              onChange={(e) => setStrictQC(e.target.checked)}
-              className="accent-violet-600"
-              disabled={!canQC}
-            />
-          </label>
-          {!canQC && (
-            <p className="text-[10px] text-amber-600">QC cần Gemini API key — thêm trong Cài đặt</p>
-          )}
-
-          {/* Generate button */}
-          <button
-            onClick={handleGenerate}
-            disabled={!canGenerate || isBatch}
-            className="mt-1 flex w-full items-center justify-center gap-2 rounded-full bg-gradient-to-r from-violet-600 to-purple-500 px-6 py-3.5 text-sm font-bold text-white shadow-md transition-all hover:from-violet-700 hover:to-purple-600 disabled:cursor-not-allowed disabled:opacity-40"
-          >
-            {isBatch ? (
-              <><Loader2 className="h-4 w-4 animate-spin" /> Đang tạo {progress.done}/{progress.total}…</>
-            ) : (
-              <><Sparkles className="h-4 w-4" /> Tạo 4 ảnh (24 KIE credit)</>
-            )}
-          </button>
-
-          {!kieApiKey && (
-            <p className="text-center text-[10px] text-red-500">Cần KIE.ai API key trong Cài đặt</p>
-          )}
-
-          {/* Save all */}
-          {tiles.some((t) => t.url) && !isBatch && (
-            <button
-              onClick={handleSaveAll}
-              className="flex w-full items-center justify-center gap-2 rounded-full border border-emerald-300 bg-emerald-50 px-4 py-2.5 text-sm font-semibold text-emerald-700 hover:bg-emerald-100"
-            >
-              <Save className="h-4 w-4" /> Lưu tất cả vào Project → Creative Studio
-            </button>
-          )}
-        </div>
-
-        {/* Right: 4-image grid */}
-        <div className="flex-1">
-          {tiles.every((t) => t.status === 'idle') ? (
-            <div className="flex h-full min-h-[400px] items-center justify-center rounded-xl border border-dashed border-black/10 bg-white">
-              <div className="flex flex-col items-center gap-3 px-6 text-center">
-                <Sparkles className="h-10 w-10 text-gray-200" />
-                <p className="text-sm text-gray-400">Chọn Sản phẩm + Scene + Style rồi nhấn "Tạo 4 ảnh"</p>
-                <p className="text-xs text-gray-300">1 ảnh gốc + 3 variations derived from base — sản phẩm được lock pixel-faithful</p>
               </div>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              {tiles.map((t, i) => {
-                const lockedScene = t.lock ? SCENE_PRESETS.find((p) => p.id === t.lock!.sceneId) : undefined
-                return (
-                  <ResultTile
-                    key={i}
-                    state={t}
-                    label={VARIATIONS[i].label}
-                    onRegen={() => handleRegen(i)}
-                    onDelete={() => handleDelete(i)}
-                    onSave={() => handleSaveToProject(i)}
-                    saved={savedIdx.has(i)}
-                    canGenerate={canGenerate}
-                    lockedSceneLabel={lockedScene?.label}
+
+              <PickerTile
+                label="Sản phẩm (bắt buộc)"
+                hint="Ảnh sản phẩm rõ packaging / logo / label"
+                accent="product"
+                imageUrl={productImageRef}
+                onSelectFromBank={() => setPickerMode('product')}
+                onUpload={handleUploadProduct}
+                onClear={() => { setSelectedProduct(null); setUploadedProductUrl(null) }}
+              />
+
+              {/* Avatar — only relevant for photographic */}
+              {isPhotographic && (
+                <PickerTile
+                  label="Avatar AI (tuỳ chọn)"
+                  hint="Có thể bỏ trống — không cần người"
+                  accent="avatar"
+                  imageUrl={avatarImageRef}
+                  onSelectFromBank={() => setPickerMode('avatar')}
+                  onUpload={handleUploadAvatar}
+                  onClear={() => { setSelectedAvatar(null); setUploadedAvatarUrl(null) }}
+                />
+              )}
+
+              {/* Engine-aware controls */}
+              {catalogEntry && (
+                <div className="rounded-xl border border-black/10 bg-black/[0.02] p-3">
+                  <p className="mb-2 text-[11px] font-bold uppercase tracking-widest text-gray-500">
+                    Cài đặt — {catalogEntry.group}
+                  </p>
+                  <AssetControls
+                    group={catalogEntry.group}
+                    options={options}
+                    onChange={(patch) => setOptions((prev) => ({ ...prev, ...patch }))}
                   />
-                )
-              })}
+                </div>
+              )}
+
+              {/* Generate button */}
+              <button
+                type="button"
+                onClick={handleGenerate}
+                disabled={!canGenerate}
+                className="mt-1 flex w-full items-center justify-center gap-2 rounded-full bg-gradient-to-r from-violet-600 to-purple-500 px-6 py-3.5 text-sm font-bold text-white shadow-md transition-all hover:from-violet-700 hover:to-purple-600 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                {isGenerating ? (
+                  <><Loader2 className="h-4 w-4 animate-spin" /> Đang tạo qua engine...</>
+                ) : (
+                  <><Sparkles className="h-4 w-4" /> Tạo asset</>
+                )}
+              </button>
+
+              {/* API key warnings */}
+              {needsKie && !kieApiKey && (
+                <p className="text-center text-[10px] text-red-500">Cần KIE.ai API key trong Cài đặt</p>
+              )}
+              {needsGemini && !geminiApiKey && (
+                <p className="text-center text-[10px] text-red-500">Cần Gemini API key trong Cài đặt</p>
+              )}
             </div>
-          )}
-        </div>
+
+            {/* ── Right: typed result list ─────────────────────────── */}
+            <div className="flex-1">
+              {results.length === 0 ? (
+                <div className="flex h-full min-h-[400px] items-center justify-center rounded-xl border border-dashed border-black/10 bg-white">
+                  <div className="flex flex-col items-center gap-3 px-6 text-center">
+                    <Sparkles className="h-10 w-10 text-gray-200" />
+                    <p className="text-sm text-gray-400">Chọn Sản phẩm + cài đặt rồi nhấn "Tạo asset"</p>
+                    <p className="text-xs text-gray-300">
+                      Asset sẽ đi qua engine <span className="font-mono">{catalogEntry?.group}</span> — không qua legacy GPT direct call
+                    </p>
+                  </div>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                  {results.map((row) => (
+                    <ResultCard
+                      key={row.rowId}
+                      row={row}
+                      saved={savedRowIds.has(row.rowId)}
+                      onSave={() => handleSaveRow(row)}
+                      onDelete={() => handleDeleteRow(row.rowId)}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
+          </>
+        )}
       </div>
 
-      {/* Bank Pickers */}
+      {/* Bank pickers */}
       <BankPicker
         bankType="models"
         isOpen={pickerMode === 'avatar'}
@@ -1148,11 +461,6 @@ export default function ProductAI() {
         onSelect={handleSelectProduct}
         onClose={() => setPickerMode(null)}
       />
-
-      {/* Restore is now handled globally by RestoreSessionModal in App.tsx */}
     </div>
   )
 }
-
-// Old RestorePromptModal + formatAge helpers removed in R4b — replaced by
-// the global RestoreSessionModal + useSessionPersist hook.

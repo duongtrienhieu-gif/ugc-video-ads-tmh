@@ -1,6 +1,13 @@
 # Creative Studio Architecture
 
-> **Status**: Phase 10 — App id rename complete
+> **Status**: Phase 11 — UI cutover complete. Legacy ProductAI
+> scene/style/4-variations UX removed. Creative Studio now ships an
+> asset-type grouped picker + engine-aware controls + typed result
+> cards. ALL generation flows through `generateAssets(assetTypeId,
+> payload)` → `resolveAssetType` → `ASSET_REGISTRY` → engine dispatch.
+> The UI layer does not build prompts or call KIE / Gemini directly.
+>
+> Phase 10 — App id rename complete
 > (`broll-studio` → `creative-studio`). Folder moved to
 > `src/apps/creative-studio/`, component file renamed to
 > `CreativeStudio.tsx`. Old app id `'broll-studio'` kept as alias in
@@ -117,7 +124,8 @@ The orchestrator:
 | **P7** | ✅ done | Authenticity QC v2 + designed-graphic group entry |
 | **P8** | ✅ done | Designed-Graphic group: Infographic + CTA Banner |
 | **P9** | ✅ done | Shared utils cleanup + cross-app QC promotion |
-| **P10** | ✅ done (this commit) | App id rename (broll-studio → creative-studio) with alias |
+| **P10** | ✅ done | App id rename (broll-studio → creative-studio) with alias |
+| **P11** | ✅ done (this commit) | UI cutover — legacy ProductAI UX → engine-routed asset-type picker |
 
 ## Boundaries — what P2 did NOT touch
 
@@ -779,6 +787,103 @@ who reload after P10 keep their workflows.
   keys (only `moduleNameVi` updated for display)
 - src/apps/landing-page/, src/apps/video-builder/ — untouched
 - src/stores/* — untouched (appStore was not persisted; no migration needed)
+
+## P11 — UI cutover (legacy ProductAI UX → engine-routed)
+
+P11 rewrites `CreativeStudio.tsx` end-to-end so users access the asset
+registry pipeline that P3–P10 built. Legacy scene/style/4-variations
+mental model is gone — replaced by asset-type picker + engine-aware
+controls + typed result list.
+
+### What changed (UI surface)
+
+| Surface | Pre-P11 | Post-P11 |
+|---|---|---|
+| Asset selection | scene chips (11) × style chips (6) | grouped picker — 17 asset cards across 3 engine groups |
+| Generation entry | `generateGpt4oImage()` direct (inline prompts) | `generateAssets(assetTypeId, payload)` via registry |
+| Output | fixed 4-tile grid (1 base + 3 variations) | typed result list — 1 asset per click, append-only |
+| Controls | strict QC toggle | engine-aware: photographic / ui-native / designed-graphic each show different controls |
+| Result metadata | only `prompt` string when saved | full `GeneratedAsset` metadata: assetType, engineGroup, aspect, qcSummary, timestamp |
+| Empty state copy | "Chọn Scene + Style" | "Chọn loại creative bạn muốn tạo" |
+
+### Files created (P11)
+
+```
+src/apps/creative-studio/uiCatalog/
+  assetCatalog.ts          17 entries × { id, group, title, description,
+                                          aspect, platformBadge, iconKey }
+                           + 3 GROUP_META entries with visual identity
+  AssetTypePicker.tsx      grouped grid UI — 3 groups, hover/select states
+  AssetControls.tsx        engine-aware dynamic controls:
+                             photographic → realism preset + persona + beat
+                             ui-native    → locale + persona + tone +
+                                            message count + vision QC toggle
+                             designed-gfx → color theme + locale
+  ResultCard.tsx           typed asset card with QC badge + actions
+```
+
+### File rewritten (P11)
+
+`src/apps/creative-studio/CreativeStudio.tsx`
+  • Old: 1158 lines (scene/style chips + buildPrompt() + genOneShot() +
+    handleGenerate() with 4-variation fan-out + 4-tile grid)
+  • New: ~410 lines (asset-type picker + engine controls + typed
+    result list, all routed through `generateAssets()`)
+
+### Session persistence — v2 schema
+
+  moduleId    'broll-studio'              (back-compat, kept from P10)
+  persistKey  'ugc-lab:broll-studio:inflight-v1'  (back-compat)
+  version     2 (was 1)
+
+  Old v1 state (sceneId/styleId/tiles) discarded automatically by
+  `useSessionPersist`'s version mismatch check. User starts fresh on
+  upgrade — acceptable since legacy 4-tile mental model is gone.
+
+  New schema:
+    { v: 2, selectedAssetTypeId, selectedAvatarId, selectedProductId,
+      uploadedAvatarRef, uploadedProductRef, options, results[],
+      savedRowIds[] }
+
+### Architecture rule enforced
+
+UI layer NEVER:
+  • builds prompts
+  • calls KIE or Gemini directly
+  • mutates engine internals
+  • knows which engine handles which asset type
+
+UI layer ONLY:
+  • selects assetTypeId from the catalog
+  • builds AssetOptions payload via engine-aware controls
+  • calls `generateAssets(assetTypeId, { productId, modelId, options })`
+
+The registry layer does all routing. The engine dispatchers do all
+generation. This separation makes future engines / asset types a
+one-file-per-module addition with zero UI changes.
+
+### Bundle impact
+
+Bundle size: 1,730 kB → 1,825 kB (+95 kB / +5%, gzipped: +28 kB).
+Pre-P11 the engine modules were registered but tree-shaken because
+`CreativeStudio.tsx` did not import `generateAssets()`. Post-P11 the
+full engine graph reaches the bundle. Expected outcome — this is
+what "actually using the foundation" looks like.
+
+### Boundaries — what P11 did NOT touch
+
+- `services/qcProduct.ts` — kept (legacy photographic QC, still callable
+  by future enhancements; just not invoked by P11 UI)
+- `shared/qc/productMatch.ts` — kept (re-export of services/qcProduct.ts)
+- `engines/*` — byte-identical to P10
+- `shared/*` — byte-identical to P10
+- `registry/*` — byte-identical to P10
+- `orchestration/*` — byte-identical to P10
+- `types/*` — byte-identical to P10
+- `src/apps/landing-page/`, `src/apps/video-builder/` — untouched
+- `src/stores/*`, `src/utils/*`, `App.tsx`, `Sidebar.tsx` — untouched
+- session-persistence registry / persistKey — unchanged (only the
+  in-memory schema version bumped)
 
 ### Boundaries — what P4 did NOT touch
 
