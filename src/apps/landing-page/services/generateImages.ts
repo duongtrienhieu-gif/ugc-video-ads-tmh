@@ -832,17 +832,28 @@ function buildFinalPrompt(job: ImageJob, hasProductRefs: boolean): string {
   // ── Comparison section: inject structured comparisonData when available so
   // the image generator gets explicit US vs THEM bullet pairs rather than
   // trying to parse them out of the free-form imagePrompt body. Eliminates
-  // the "Không tìm được cặp bullet THEM/US" failure mode. ───────────────────
+  // the "Không tìm được cặp bullet THEM/US" failure mode.
+  // Phase 1 stability — defensive try/catch so a future schema mismatch
+  // never crashes the whole pack build. Falls back to free-form prompt. ────
   if (job.section.type === 'comparison' && job.section.comparisonData) {
-    parts.push(buildComparisonStructuredPrompt(job.section.comparisonData, job.prompt.prompt))
+    try {
+      parts.push(buildComparisonStructuredPrompt(job.section.comparisonData, job.prompt.prompt))
+    } catch (err) {
+      console.warn('[generateImages] comparison structured prompt builder threw — falling back to free-form prompt:', err)
+      parts.push(job.prompt.prompt)
+    }
   } else {
     parts.push(job.prompt.prompt)
   }
 
   // Z22 — per-image diversity directive (replaced by continuity directive
   // for advertorial form via buildDiversityDirective branch logic).
-  const diversity = buildDiversityDirective(job)
-  if (diversity) parts.push(diversity)
+  try {
+    const diversity = buildDiversityDirective(job)
+    if (diversity) parts.push(diversity)
+  } catch (err) {
+    console.warn('[generateImages] diversity directive builder threw — skipping:', err)
+  }
 
   // Z22 — hard negatives. Form-specific overrides:
   //   • chuyen-gia: allows editorial / clinical look
