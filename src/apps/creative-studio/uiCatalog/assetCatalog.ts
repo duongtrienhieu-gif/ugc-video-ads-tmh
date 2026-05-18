@@ -510,7 +510,11 @@ export interface CreativeRequirements {
 const REQ_PHOTO_PERSON: CreativeRequirements = { requireProduct: true, requireAvatar: true,  requireReference: false }
 const REQ_PHOTO_NO_PERSON: CreativeRequirements = { requireProduct: true, requireAvatar: false, requireReference: false }
 const REQ_UI_NATIVE: CreativeRequirements = { requireProduct: true, requireAvatar: false, requireReference: false }
-const REQ_DESIGNED: CreativeRequirements = { requireProduct: true, requireAvatar: false, requireReference: true }
+// P23: designed-graphic no longer requires reference picker (UI cleanup
+// per user — Reference was confusing and ate too much space). Field
+// kept on type for future re-introduction; everything now defaults to
+// requireReference=false.
+const REQ_DESIGNED: CreativeRequirements = { requireProduct: true, requireAvatar: false, requireReference: false }
 
 const REQUIREMENTS: Partial<Record<AssetTypeId, CreativeRequirements>> = {
   'holding-product':    REQ_PHOTO_PERSON,

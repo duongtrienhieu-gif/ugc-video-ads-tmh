@@ -30,7 +30,6 @@ import { runGeneration } from './runtime/runGeneration'
 import { useGenerationsStore, type GenerationJob } from './stores/generationsStore'
 import AssetTypePicker from './uiCatalog/AssetTypePicker'
 import ResultCard from './uiCatalog/ResultCard'
-import ReferencePicker from './uiCatalog/ReferencePicker'
 import { findCatalogEntry, requirementsFor } from './uiCatalog/assetCatalog'
 
 // ── PickerTile (product / avatar) ──────────────────────────────────────
@@ -113,7 +112,10 @@ export default function CreativeStudio() {
   const [selectedProduct, setSelectedProduct]  = useState<Product | null>(null)
   const [uploadedAvatarUrl, setUploadedAvatarUrl] = useState<string | null>(null)
   const [uploadedProductUrl, setUploadedProductUrl] = useState<string | null>(null)
-  const [referenceRefs, setReferenceRefs]      = useState<string[]>([])
+  // P23 — referenceRefs kept on state for back-compat with runtime
+  // payload; setter unused since the picker UI was removed. setter
+  // eslint-disabled via destructure rename.
+  const [referenceRefs] = useState<string[]>([])
   const [pickerMode, setPickerMode]            = useState<'avatar' | 'product' | null>(null)
 
   // P16 — optional marketing inputs (only used when the creative type
@@ -170,6 +172,18 @@ export default function CreativeStudio() {
 
   const inFlightRef = useRef(false)
 
+  // P23 — toast debounce: suppress identical error toasts within 10s
+  // window. Prevents the 5+ stacked "Workspace chưa sẵn sàng" cascade
+  // when user spam-clicks Tạo while DB is unreachable.
+  const lastToastRef = useRef<{ msg: string; time: number } | null>(null)
+  function showErrorOnce(msg: string) {
+    const now = Date.now()
+    const last = lastToastRef.current
+    if (last && last.msg === msg && now - last.time < 10000) return
+    lastToastRef.current = { msg, time: now }
+    addToast(msg, 'error')
+  }
+
   async function handleGenerate() {
     // ── Debounce: prevent double-create on rapid clicks ──────────
     if (inFlightRef.current) {
@@ -179,19 +193,19 @@ export default function CreativeStudio() {
 
     // ── Pre-validation: tell user EXACTLY what's missing ─────────
     if (!selectedAssetTypeId) {
-      addToast('Vui lòng chọn loại creative ở Bước 1', 'error')
+      showErrorOnce('Vui lòng chọn loại creative phía dưới')
       return
     }
     if (reqs?.requireProduct && !productImageRef) {
-      addToast('Vui lòng tải sản phẩm ở Bước 2', 'error')
+      showErrorOnce('Vui lòng tải sản phẩm phía trên')
       return
     }
     if (needsKie && !kieApiKey) {
-      addToast('Thiếu KIE.ai API key — vào Cài đặt để thêm', 'error')
+      showErrorOnce('Thiếu KIE.ai API key — vào Cài đặt để thêm')
       return
     }
     if (needsGemini && !geminiApiKey) {
-      addToast('Thiếu Gemini API key — vào Cài đặt để thêm', 'error')
+      showErrorOnce('Thiếu Gemini API key — vào Cài đặt để thêm')
       return
     }
 
@@ -217,9 +231,9 @@ export default function CreativeStudio() {
       await runGeneration(payload)
       addToast(`Đã thêm vào hàng đợi: ${catalogEntry?.title.vi ?? selectedAssetTypeId}`, 'success')
     } catch (err) {
-      // Log FULL error to console for debug, then translate to actionable Vietnamese
+      // Log FULL error to console; toast user-friendly message via debounce
       console.error('[CreativeStudio] CREATE JOB ERROR', err)
-      addToast(translateJobError(err), 'error')
+      showErrorOnce(translateJobError(err))
     } finally {
       inFlightRef.current = false
     }
@@ -262,105 +276,99 @@ export default function CreativeStudio() {
 
       {/* Body — workspace split (P16: 1fr/2fr = 33% / 67%) */}
       <div className="grid min-h-0 flex-1 grid-cols-1 overflow-hidden lg:grid-cols-[1fr_2fr]">
-        {/* ── LEFT: input panel (always usable, 33% on lg) ──────── */}
-        <aside className="flex flex-col gap-3 overflow-y-auto border-b border-r-0 border-black/8 bg-white/40 p-4 lg:border-b-0 lg:border-r">
-          {/* ── ASSETS AT TOP (compact, side-by-side row) ──────────
-                 P20: per user feedback, inputs go ABOVE the creative
-                 picker. Product is ALWAYS shown (every creative needs
-                 it). Avatar is conditional — only shown when the
-                 selected creative requires it. */}
-          <section>
-            <p className="mb-2 text-[11px] font-bold uppercase tracking-widest text-gray-500">
-              {reqs?.requireAvatar ? 'Sản phẩm + Avatar' : 'Sản phẩm'}
-            </p>
-            <div className="flex gap-2">
-              <div className={reqs?.requireAvatar ? 'flex-1 min-w-0' : 'w-full'}>
-                <PickerTile
-                  label="Sản phẩm"
-                  hint="Ảnh rõ packaging"
-                  accent="product"
-                  imageUrl={productImageRef}
-                  onSelectFromBank={() => setPickerMode('product')}
-                  onUpload={handleUploadProduct}
-                  onClear={() => { setSelectedProduct(null); setUploadedProductUrl(null) }}
-                />
-              </div>
-              {reqs?.requireAvatar && (
-                <div className="flex-1 min-w-0">
+        {/* ── LEFT: input panel ─────────────────────────────────
+               P23: aside is now a 2-region flex column:
+                 • TOP — sticky inputs (Product / Avatar / Tạo button)
+                   shrink-0, never scrolls out of view
+                 • BOTTOM — scrollable creative picker + optional copy
+               User can scroll the creative list while Tạo + inputs
+               stay locked in view. */}
+        <aside className="flex flex-col border-b border-r-0 border-black/8 bg-white/40 lg:border-b-0 lg:border-r">
+          {/* ── STICKY INPUT REGION ──────────────────────────────── */}
+          <div className="shrink-0 border-b border-black/8 bg-white/60 p-4 backdrop-blur-sm">
+            <section>
+              <p className="mb-2 text-[11px] font-bold uppercase tracking-widest text-gray-500">
+                {reqs?.requireAvatar ? 'Sản phẩm + Avatar' : 'Sản phẩm'}
+              </p>
+              <div className="flex gap-2">
+                <div className={reqs?.requireAvatar ? 'flex-1 min-w-0' : 'w-full'}>
                   <PickerTile
-                    label="Avatar AI"
-                    hint="Khuyến nghị cho loại này"
-                    accent="avatar"
-                    imageUrl={avatarImageRef}
-                    onSelectFromBank={() => setPickerMode('avatar')}
-                    onUpload={handleUploadAvatar}
-                    onClear={() => { setSelectedAvatar(null); setUploadedAvatarUrl(null) }}
+                    label="Sản phẩm"
+                    hint="Ảnh rõ packaging"
+                    accent="product"
+                    imageUrl={productImageRef}
+                    onSelectFromBank={() => setPickerMode('product')}
+                    onUpload={handleUploadProduct}
+                    onClear={() => { setSelectedProduct(null); setUploadedProductUrl(null) }}
                   />
                 </div>
-              )}
-            </div>
-            {reqs?.requireReference && (
-              <div className="mt-2">
-                <ReferencePicker
-                  refs={referenceRefs}
-                  onAdd={(ref) => setReferenceRefs((prev) => [...prev, ref])}
-                  onRemove={(ref) => setReferenceRefs((prev) => prev.filter((r) => r !== ref))}
-                />
+                {reqs?.requireAvatar && (
+                  <div className="flex-1 min-w-0">
+                    <PickerTile
+                      label="Avatar AI"
+                      hint="Khuyến nghị cho loại này"
+                      accent="avatar"
+                      imageUrl={avatarImageRef}
+                      onSelectFromBank={() => setPickerMode('avatar')}
+                      onUpload={handleUploadAvatar}
+                      onClear={() => { setSelectedAvatar(null); setUploadedAvatarUrl(null) }}
+                    />
+                  </div>
+                )}
               </div>
-            )}
-          </section>
+            </section>
 
-          {/* ── GENERATE button (P21: positioned right after inputs;
-                 P22: always renders — no DB-blocker UI exposed to
-                 user. Backend failures surface via friendly toast.) */}
-          <button
-            type="button"
-            onClick={handleGenerate}
-            disabled={!canGenerate}
-            className="flex w-full items-center justify-center gap-2 rounded-full bg-gradient-to-r from-violet-600 to-purple-500 px-6 py-3.5 text-sm font-bold text-white shadow-md transition-all hover:from-violet-700 hover:to-purple-600 disabled:cursor-not-allowed disabled:opacity-40"
-          >
-            <Sparkles className="h-4 w-4" /> Tạo asset
-          </button>
-
-          {/* Inline status hints — tell user what's missing */}
-          {!selectedAssetTypeId && (
-            <p className="text-center text-[10px] text-gray-400">
-              ↓ Chọn loại creative phía dưới
-            </p>
-          )}
-          {selectedAssetTypeId && reqs?.requireProduct && !productImageRef && (
-            <p className="text-center text-[10px] text-amber-600">
-              ↑ Thêm sản phẩm phía trên
-            </p>
-          )}
-          {needsKie && !kieApiKey && (
-            <p className="text-center text-[10px] text-red-500">Cần KIE.ai API key trong Cài đặt</p>
-          )}
-          {needsGemini && !geminiApiKey && (
-            <p className="text-center text-[10px] text-red-500">Cần Gemini API key trong Cài đặt</p>
-          )}
-
-          {/* ── CREATIVE PICKER (main browsing area, takes most space) */}
-          <section>
-            <p className="mb-2 text-[11px] font-bold uppercase tracking-widest text-gray-500">
-              Loại creative
-            </p>
-            <AssetTypePicker selectedId={selectedAssetTypeId} onSelect={setSelectedAssetTypeId} />
-          </section>
-
-          {/* ── OPTIONAL marketing copy (collapsible, at bottom) ───── */}
-          <section className="rounded-xl border border-black/10 bg-black/[0.02]">
+            {/* GENERATE button — primary action, always reachable */}
             <button
               type="button"
-              onClick={() => setOptExpanded((v) => !v)}
-              className="flex w-full items-center justify-between gap-2 px-3 py-2.5 text-left"
+              onClick={handleGenerate}
+              disabled={!canGenerate}
+              className="mt-3 flex w-full items-center justify-center gap-2 rounded-full bg-gradient-to-r from-violet-600 to-purple-500 px-6 py-3 text-sm font-bold text-white shadow-md transition-all hover:from-violet-700 hover:to-purple-600 disabled:cursor-not-allowed disabled:opacity-40"
             >
-              <span className="text-[11px] font-bold uppercase tracking-widest text-gray-500">
-                Nội dung tuỳ chọn
-              </span>
-              <span className="text-[10px] text-gray-400">{optExpanded ? '▾' : '▸'}</span>
+              <Sparkles className="h-4 w-4" /> Tạo asset
             </button>
-            {optExpanded && (
+
+            {/* Compact inline status hints */}
+            {!selectedAssetTypeId && (
+              <p className="mt-1.5 text-center text-[10px] text-gray-400">
+                ↓ Chọn loại creative phía dưới
+              </p>
+            )}
+            {selectedAssetTypeId && reqs?.requireProduct && !productImageRef && (
+              <p className="mt-1.5 text-center text-[10px] text-amber-600">
+                ↑ Thêm sản phẩm phía trên
+              </p>
+            )}
+            {needsKie && !kieApiKey && (
+              <p className="mt-1.5 text-center text-[10px] text-red-500">Cần KIE.ai API key trong Cài đặt</p>
+            )}
+            {needsGemini && !geminiApiKey && (
+              <p className="mt-1.5 text-center text-[10px] text-red-500">Cần Gemini API key trong Cài đặt</p>
+            )}
+          </div>
+
+          {/* ── SCROLLABLE CREATIVE LIST + OPTIONAL ──────────────── */}
+          <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-4">
+            <section>
+              <p className="mb-2 text-[11px] font-bold uppercase tracking-widest text-gray-500">
+                Loại creative
+              </p>
+              <AssetTypePicker selectedId={selectedAssetTypeId} onSelect={setSelectedAssetTypeId} />
+            </section>
+
+            {/* OPTIONAL marketing copy (collapsible, at bottom) */}
+            <section className="rounded-xl border border-black/10 bg-black/[0.02]">
+              <button
+                type="button"
+                onClick={() => setOptExpanded((v) => !v)}
+                className="flex w-full items-center justify-between gap-2 px-3 py-2.5 text-left"
+              >
+                <span className="text-[11px] font-bold uppercase tracking-widest text-gray-500">
+                  Nội dung tuỳ chọn
+                </span>
+                <span className="text-[10px] text-gray-400">{optExpanded ? '▾' : '▸'}</span>
+              </button>
+              {optExpanded && (
               <div className="flex flex-col gap-2 px-3 pb-3">
                 <label className="flex flex-col gap-1">
                   <span className="text-[10px] font-semibold text-gray-600">Headline (tuỳ chọn)</span>
@@ -397,9 +405,8 @@ export default function CreativeStudio() {
                 </p>
               </div>
             )}
-          </section>
-
-          {/* (Generate button moved to top — right after inputs in P21) */}
+            </section>
+          </div>
         </aside>
 
         {/* ── RIGHT: output workspace ──────────────────────────── */}
