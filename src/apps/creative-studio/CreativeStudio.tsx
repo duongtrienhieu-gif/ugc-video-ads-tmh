@@ -267,122 +267,139 @@ export default function CreativeStudio() {
             <AssetTypePicker selectedId={selectedAssetTypeId} onSelect={setSelectedAssetTypeId} />
           </section>
 
-          {/* ── STEP 2+: assets + optional + generate ─────────────── */}
-          {catalogEntry && reqs && (
-            <>
-              {/* STEP 2 — Sản phẩm (always show first if required) */}
-              {reqs.requireProduct && (
-                <section>
-                  <p className="mb-2 text-[11px] font-bold uppercase tracking-widest text-gray-500">
-                    2 · Sản phẩm (bắt buộc)
-                  </p>
-                  <PickerTile
-                    label=""
-                    hint="Ảnh rõ packaging / logo / label"
-                    accent="product"
-                    imageUrl={productImageRef}
-                    onSelectFromBank={() => setPickerMode('product')}
-                    onUpload={handleUploadProduct}
-                    onClear={() => { setSelectedProduct(null); setUploadedProductUrl(null) }}
+          {/* ── STEP 2+: inputs ALWAYS render, regardless of selection ──
+                 P19 fix — input panel must NEVER disappear. Previously
+                 the whole block was wrapped in `{catalogEntry && reqs &&
+                 (...)}` which meant nothing rendered until the user
+                 committed a creative selection. Now everything renders
+                 always; sections that depend on selection (eg reference
+                 picker) show a hint when no creative is picked yet. */}
+
+          {/* STEP 2 — Sản phẩm (always — every creative needs product) */}
+          <section>
+            <p className="mb-2 text-[11px] font-bold uppercase tracking-widest text-gray-500">
+              2 · Sản phẩm (bắt buộc)
+            </p>
+            <PickerTile
+              label=""
+              hint="Ảnh rõ packaging / logo / label"
+              accent="product"
+              imageUrl={productImageRef}
+              onSelectFromBank={() => setPickerMode('product')}
+              onUpload={handleUploadProduct}
+              onClear={() => { setSelectedProduct(null); setUploadedProductUrl(null) }}
+            />
+          </section>
+
+          {/* STEP 3 — Avatar AI (always render — used by photographic
+              with people; ignored by chat/screenshot/banner creatives) */}
+          <section>
+            <p className="mb-2 text-[11px] font-bold uppercase tracking-widest text-gray-500">
+              3 · Avatar AI (tuỳ chọn)
+            </p>
+            <PickerTile
+              label=""
+              hint={reqs?.requireAvatar
+                ? 'Khuyến nghị cho loại creative này'
+                : reqs
+                  ? 'Loại creative đã chọn không cần avatar'
+                  : 'Có thể chuẩn bị sẵn — sẽ dùng nếu creative cần người'}
+              accent="avatar"
+              imageUrl={avatarImageRef}
+              onSelectFromBank={() => setPickerMode('avatar')}
+              onUpload={handleUploadAvatar}
+              onClear={() => { setSelectedAvatar(null); setUploadedAvatarUrl(null) }}
+            />
+          </section>
+
+          {/* STEP 3.5 — Reference (only shown when creative actually
+              uses it; otherwise pointless to expose) */}
+          {reqs?.requireReference && (
+            <ReferencePicker
+              refs={referenceRefs}
+              onAdd={(ref) => setReferenceRefs((prev) => [...prev, ref])}
+              onRemove={(ref) => setReferenceRefs((prev) => prev.filter((r) => r !== ref))}
+            />
+          )}
+
+          {/* STEP 4 — Optional marketing copy (collapsible, always) */}
+          <section className="rounded-xl border border-black/10 bg-black/[0.02]">
+            <button
+              type="button"
+              onClick={() => setOptExpanded((v) => !v)}
+              className="flex w-full items-center justify-between gap-2 px-3 py-2.5 text-left"
+            >
+              <span className="text-[11px] font-bold uppercase tracking-widest text-gray-500">
+                4 · Nội dung tuỳ chọn
+              </span>
+              <span className="text-[10px] text-gray-400">{optExpanded ? '▾' : '▸'}</span>
+            </button>
+            {optExpanded && (
+              <div className="flex flex-col gap-2 px-3 pb-3">
+                <label className="flex flex-col gap-1">
+                  <span className="text-[10px] font-semibold text-gray-600">Headline (tuỳ chọn)</span>
+                  <input
+                    type="text"
+                    value={optHeadline}
+                    onChange={(e) => setOptHeadline(e.target.value)}
+                    placeholder="VD: Giải pháp mất ngủ — hiệu quả sau 14 ngày"
+                    className="rounded-md border border-black/10 bg-white px-2.5 py-1.5 text-[12px] text-gray-800"
                   />
-                </section>
-              )}
-
-              {/* STEP 3 — Avatar AI (only if creative requires) */}
-              {reqs.requireAvatar && (
-                <section>
-                  <p className="mb-2 text-[11px] font-bold uppercase tracking-widest text-gray-500">
-                    3 · Avatar AI (tuỳ chọn)
-                  </p>
-                  <PickerTile
-                    label=""
-                    hint="Có thể bỏ trống — system tự gen người"
-                    accent="avatar"
-                    imageUrl={avatarImageRef}
-                    onSelectFromBank={() => setPickerMode('avatar')}
-                    onUpload={handleUploadAvatar}
-                    onClear={() => { setSelectedAvatar(null); setUploadedAvatarUrl(null) }}
+                </label>
+                <label className="flex flex-col gap-1">
+                  <span className="text-[10px] font-semibold text-gray-600">CTA (tuỳ chọn)</span>
+                  <input
+                    type="text"
+                    value={optCta}
+                    onChange={(e) => setOptCta(e.target.value)}
+                    placeholder="VD: Đặt ngay"
+                    className="rounded-md border border-black/10 bg-white px-2.5 py-1.5 text-[12px] text-gray-800"
                   />
-                </section>
-              )}
+                </label>
+                <label className="flex flex-col gap-1">
+                  <span className="text-[10px] font-semibold text-gray-600">Ghi chú cho AI (tuỳ chọn)</span>
+                  <textarea
+                    value={optNotes}
+                    onChange={(e) => setOptNotes(e.target.value)}
+                    placeholder="VD: nhấn mạnh tự nhiên, hữu cơ, không chứa hoá chất"
+                    rows={3}
+                    className="resize-none rounded-md border border-black/10 bg-white px-2.5 py-1.5 text-[12px] text-gray-800"
+                  />
+                </label>
+                <p className="text-[10px] text-gray-400">
+                  System tự quyết định realism / mood / lighting dựa trên loại creative — bạn chỉ cần viết content.
+                </p>
+              </div>
+            )}
+          </section>
 
-              {/* STEP 3.5 — Reference (only when creative requires) */}
-              {reqs.requireReference && (
-                <ReferencePicker
-                  refs={referenceRefs}
-                  onAdd={(ref) => setReferenceRefs((prev) => [...prev, ref])}
-                  onRemove={(ref) => setReferenceRefs((prev) => prev.filter((r) => r !== ref))}
-                />
-              )}
+          {/* STEP 5 — Generate button (always render; disabled +
+              dynamic hint when prerequisites not met) */}
+          <button
+            type="button"
+            onClick={handleGenerate}
+            disabled={!canGenerate}
+            className="mt-1 flex w-full items-center justify-center gap-2 rounded-full bg-gradient-to-r from-violet-600 to-purple-500 px-6 py-3.5 text-sm font-bold text-white shadow-md transition-all hover:from-violet-700 hover:to-purple-600 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            <Sparkles className="h-4 w-4" /> Tạo asset
+          </button>
 
-              {/* STEP 4 — Optional marketing copy (collapsible) */}
-              <section className="rounded-xl border border-black/10 bg-black/[0.02]">
-                <button
-                  type="button"
-                  onClick={() => setOptExpanded((v) => !v)}
-                  className="flex w-full items-center justify-between gap-2 px-3 py-2.5 text-left"
-                >
-                  <span className="text-[11px] font-bold uppercase tracking-widest text-gray-500">
-                    4 · Nội dung tuỳ chọn
-                  </span>
-                  <span className="text-[10px] text-gray-400">{optExpanded ? '▾' : '▸'}</span>
-                </button>
-                {optExpanded && (
-                  <div className="flex flex-col gap-2 px-3 pb-3">
-                    <label className="flex flex-col gap-1">
-                      <span className="text-[10px] font-semibold text-gray-600">Headline (tuỳ chọn)</span>
-                      <input
-                        type="text"
-                        value={optHeadline}
-                        onChange={(e) => setOptHeadline(e.target.value)}
-                        placeholder="VD: Giải pháp mất ngủ — hiệu quả sau 14 ngày"
-                        className="rounded-md border border-black/10 bg-white px-2.5 py-1.5 text-[12px] text-gray-800"
-                      />
-                    </label>
-                    <label className="flex flex-col gap-1">
-                      <span className="text-[10px] font-semibold text-gray-600">CTA (tuỳ chọn)</span>
-                      <input
-                        type="text"
-                        value={optCta}
-                        onChange={(e) => setOptCta(e.target.value)}
-                        placeholder="VD: Đặt ngay"
-                        className="rounded-md border border-black/10 bg-white px-2.5 py-1.5 text-[12px] text-gray-800"
-                      />
-                    </label>
-                    <label className="flex flex-col gap-1">
-                      <span className="text-[10px] font-semibold text-gray-600">Ghi chú cho AI (tuỳ chọn)</span>
-                      <textarea
-                        value={optNotes}
-                        onChange={(e) => setOptNotes(e.target.value)}
-                        placeholder="VD: nhấn mạnh tự nhiên, hữu cơ, không chứa hoá chất"
-                        rows={3}
-                        className="resize-none rounded-md border border-black/10 bg-white px-2.5 py-1.5 text-[12px] text-gray-800"
-                      />
-                    </label>
-                    <p className="text-[10px] text-gray-400">
-                      System tự quyết định realism / mood / lighting dựa trên loại creative — bạn chỉ cần viết content.
-                    </p>
-                  </div>
-                )}
-              </section>
-
-              {/* STEP 5 — Generate button */}
-              <button
-                type="button"
-                onClick={handleGenerate}
-                disabled={!canGenerate}
-                className="mt-1 flex w-full items-center justify-center gap-2 rounded-full bg-gradient-to-r from-violet-600 to-purple-500 px-6 py-3.5 text-sm font-bold text-white shadow-md transition-all hover:from-violet-700 hover:to-purple-600 disabled:cursor-not-allowed disabled:opacity-40"
-              >
-                <Sparkles className="h-4 w-4" /> Tạo asset
-              </button>
-
-              {needsKie && !kieApiKey && (
-                <p className="text-center text-[10px] text-red-500">Cần KIE.ai API key trong Cài đặt</p>
-              )}
-              {needsGemini && !geminiApiKey && (
-                <p className="text-center text-[10px] text-red-500">Cần Gemini API key trong Cài đặt</p>
-              )}
-            </>
+          {/* Inline status hints — tell user exactly what's missing */}
+          {!selectedAssetTypeId && (
+            <p className="text-center text-[10px] text-gray-400">
+              ↑ Click "Chọn loại này" trong một card ở Bước 1
+            </p>
+          )}
+          {selectedAssetTypeId && reqs?.requireProduct && !productImageRef && (
+            <p className="text-center text-[10px] text-amber-600">
+              ↑ Thêm sản phẩm ở Bước 2
+            </p>
+          )}
+          {needsKie && !kieApiKey && (
+            <p className="text-center text-[10px] text-red-500">Cần KIE.ai API key trong Cài đặt</p>
+          )}
+          {needsGemini && !geminiApiKey && (
+            <p className="text-center text-[10px] text-red-500">Cần Gemini API key trong Cài đặt</p>
           )}
         </aside>
 

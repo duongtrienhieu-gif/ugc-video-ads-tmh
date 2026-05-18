@@ -97,9 +97,13 @@ export const useGenerationsStore = create<GenerationsState>((set, get) => ({
       )
       set({ jobs: flattened, hydrated: true, hydrating: false })
     } catch (err) {
+      // P19 — failure must NEVER cascade to UI tree. Mark hydrated:true
+      // so the workspace shows the empty state + error banner instead of
+      // spinning forever. Input panel + creative picker continue to work
+      // regardless of history-load failure.
       const msg = err instanceof Error ? err.message : 'unknown'
       console.error('[generationsStore.hydrate]', err)
-      set({ hydrating: false, hydrateError: msg })
+      set({ hydrating: false, hydrated: true, hydrateError: msg, jobs: [] })
     }
   },
 
