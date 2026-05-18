@@ -27,6 +27,9 @@ import {
   type CreatorPresetId, type CreatorVideoConfig,
   // Z33 — Action Inserts
   type ActionPresetId,
+  // Z34 — Auto Edit Engine
+  type EditingStyleId, type SubtitleStyleId, type BgmStyleId,
+  type AutoEditPlan,
 } from '../types'
 import { CREATOR_PRESETS } from '../services/creatorPresets'
 import type { Model, Product } from '../../../../stores/types'
@@ -79,6 +82,17 @@ interface AdsVideoStoreState {
   removeInsert: (insertId: number) => void
   /** Z33 — remove ALL inserts (used by "Clear inserts" button). */
   clearAllInserts: () => void
+
+  // ── Z34 Auto Edit Engine ────────────────────────────────────────────────
+
+  setEditingStyle:    (styleId: EditingStyleId) => void
+  setSubtitleStyle:   (styleId: SubtitleStyleId) => void
+  setBgmStyle:        (styleId: BgmStyleId | null) => void
+  setAutoEditPlan:    (plan: AutoEditPlan | null) => void
+  setIsGeneratingPlan: (v: boolean) => void
+  setIsExporting:     (v: boolean) => void
+  setExportedVideoRef: (ref: string | null) => void
+  setAutoEditError:   (err: string | null) => void
 
   // ── Z31 Ad Brain (Script + Voice foundation) ────────────────────────────
 
@@ -150,6 +164,17 @@ function loadFromStorage(): V3PipelineState | null {
       }
       return next
     })
+    // Z34 — defensive autoEdit hydration. Old payloads (pre-Z34) won't
+    // have autoEdit at all; fill with empty defaults. Reset transient
+    // isGenerating / isExporting flags so refresh mid-plan doesn't deadlock.
+    if (!parsed.autoEdit) {
+      const empty = createEmptyV3State()
+      parsed.autoEdit = empty.autoEdit
+    } else {
+      parsed.autoEdit.isGenerating = false
+      parsed.autoEdit.isExporting = false
+      parsed.autoEdit.error = null
+    }
     // Z31 — defensive scriptBrain hydration. Old payloads (pre-Z31) won't
     // have scriptBrain at all; fill in with empty defaults. Reset transient
     // isGenerating* flags so a refresh during script gen doesn't deadlock.
@@ -305,6 +330,56 @@ export const useAdsVideoStore = create<AdsVideoStoreState>((set, get) => ({
 
   clearAllInserts: () =>
     commit(set, get, (s) => ({ ...s, inserts: [] })),
+
+  // ── Z34 Auto Edit ──────────────────────────────────────────────────────
+
+  setEditingStyle: (styleId) =>
+    commit(set, get, (s) => ({
+      ...s,
+      autoEdit: { ...s.autoEdit, styleId },
+    })),
+
+  setSubtitleStyle: (styleId) =>
+    commit(set, get, (s) => ({
+      ...s,
+      autoEdit: { ...s.autoEdit, subtitleStyleId: styleId },
+    })),
+
+  setBgmStyle: (styleId) =>
+    commit(set, get, (s) => ({
+      ...s,
+      autoEdit: { ...s.autoEdit, bgmStyleId: styleId },
+    })),
+
+  setAutoEditPlan: (plan) =>
+    commit(set, get, (s) => ({
+      ...s,
+      autoEdit: { ...s.autoEdit, plan },
+    })),
+
+  setIsGeneratingPlan: (v) =>
+    commit(set, get, (s) => ({
+      ...s,
+      autoEdit: { ...s.autoEdit, isGenerating: v },
+    })),
+
+  setIsExporting: (v) =>
+    commit(set, get, (s) => ({
+      ...s,
+      autoEdit: { ...s.autoEdit, isExporting: v },
+    })),
+
+  setExportedVideoRef: (ref) =>
+    commit(set, get, (s) => ({
+      ...s,
+      autoEdit: { ...s.autoEdit, exportedVideoRef: ref },
+    })),
+
+  setAutoEditError: (err) =>
+    commit(set, get, (s) => ({
+      ...s,
+      autoEdit: { ...s.autoEdit, error: err },
+    })),
 
   // ── Z31 Ad Brain ────────────────────────────────────────────────────────
 

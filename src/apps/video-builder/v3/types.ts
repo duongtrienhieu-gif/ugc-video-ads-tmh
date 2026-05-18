@@ -434,6 +434,9 @@ export interface V3PipelineState {
   /** Action inserts — 3-8 short product moments */
   inserts: ActionInsertClip[]
 
+  /** Z34 — auto-edit plan state (style picks + last generated plan) */
+  autoEdit: AutoEditState
+
   /** Timestamp this state was last saved (informational) */
   updatedAt: number
 }
@@ -454,6 +457,7 @@ export function createEmptyV3State(): V3PipelineState {
     creatorVideoConfig: createDefaultCreatorVideoConfig(),
     creatorVideo: null,
     inserts: [],
+    autoEdit: createEmptyAutoEditState(),
     updatedAt: Date.now(),
   }
 }
@@ -642,6 +646,209 @@ export function createEmptyScriptBrain(): ScriptBrain {
     voice: null,
     isGeneratingScript: false,
     isGeneratingVoice: false,
+    error: null,
+  }
+}
+
+// ═════════════════════════════════════════════════════════════════════════
+// Z34 — Auto Edit Engine (Phase 5)
+// ═════════════════════════════════════════════════════════════════════════
+// The "conversion layer" of v3. Takes Phase 3 creator video + Phase 4
+// inserts + Phase 2 script timeline and produces an EDIT PLAN that the
+// preview player + final exporter consume.
+//
+// The plan is a DETERMINISTIC data structure — no AI calls during
+// editing. All decisions (where to cut, what to caption, when to zoom)
+// come from rule-based heuristics applied to the script's timing.
+//
+// This is the layer that "cheats perception" — fast cuts + captions +
+// zooms hide AI imperfections that would otherwise feel uncanny.
+// ─────────────────────────────────────────────────────────────────────────
+
+// ── Editing styles (Z34 §10) ──────────────────────────────────────────────
+
+export type EditingStyleId =
+  | 'native_tiktok'      // default — natural creator pacing
+  | 'fast_ugc'           // tight cuts, heavy captions, punchy
+  | 'emotional_story'    // slower pacing, breathing moments, soft captions
+  | 'authority_review'   // measured pacing, clean captions, sparse SFX
+  | 'soft_lifestyle'     // gentle pacing, minimal captions, ambient BGM
+  | 'aggressive_sales'   // cuts every 1-2s, all-caps captions, hard SFX
+  | 'clean_minimal'      // no SFX, sparse captions, no zooms
+
+export const DEFAULT_EDITING_STYLE: EditingStyleId = 'native_tiktok'
+
+// ── Subtitle styles (Z34 §5) ──────────────────────────────────────────────
+
+export type SubtitleStyleId =
+  | 'bold_creator'       // bold white text + black drop-shadow
+  | 'minimal'            // small clean white text bottom-third
+  | 'aggressive_tiktok'  // ALL CAPS yellow with hard shadow + emoji
+  | 'clean_ugc'          // medium weight, sentence-case, off-white
+  | 'none'               // captions off
+
+export const DEFAULT_SUBTITLE_STYLE: SubtitleStyleId = 'bold_creator'
+
+// ── BGM styles (Z34 §7) ───────────────────────────────────────────────────
+
+export type BgmStyleId =
+  | 'none'
+  | 'tiktok_upbeat'
+  | 'emotional_soft'
+  | 'authority_clean'
+  | 'energetic_creator'
+  | 'ambient_lifestyle'
+
+export const DEFAULT_BGM_STYLE: BgmStyleId = 'tiktok_upbeat'
+
+// ── SFX library (Z34 §6) ──────────────────────────────────────────────────
+
+export type SfxId =
+  | 'whoosh'        // transition between clips
+  | 'pop'           // word emphasis / hook
+  | 'click'         // subtle accent
+  | 'swipe'         // insert transition
+  | 'impact'        // CTA / shock moment
+  | 'notification' // phone scroll insert
+
+// ── Punch zoom cues (Z34 §4) ──────────────────────────────────────────────
+
+export interface PunchZoomCue {
+  /** When the zoom starts (seconds from edit timeline 0) */
+  startSec: number
+  /** Duration of the zoom effect (seconds) */
+  durationSec: number
+  /** Zoom-in target scale (1.0 = no zoom, 1.15 = subtle, 1.30 = strong) */
+  targetScale: number
+  /** Easing curve */
+  easing: 'ease-in' | 'ease-out' | 'ease-in-out' | 'linear'
+  /** Why this zoom was added — for debug */
+  reason: 'hook' | 'cta' | 'emphasis_keyword' | 'product_mention' | 'emotional_beat'
+}
+
+// ── Edit segments (Z34 §3) ────────────────────────────────────────────────
+// The plan's main backbone — a list of clip segments in playback order.
+// Each segment specifies WHICH source video to play + a time window.
+
+export type EditSegmentSource =
+  | { kind: 'creator_video'; videoRef: string }
+  | { kind: 'action_insert'; insertId: number; videoRef: string }
+
+export interface EditSegment {
+  /** Sequential id from 0 */
+  segmentId: number
+  /** Position in the edit timeline (cumulative) */
+  startSec: number
+  /** Duration of this segment (seconds shown to viewer) */
+  durationSec: number
+  /** Source video reference */
+  source: EditSegmentSource
+  /** Time offset INSIDE the source video to start from (for sub-clipping) */
+  sourceInSec: number
+  /** Why this segment exists — debug */
+  reason: 'narration_block' | 'insert_overlay' | 'transition_hide'
+  /** Optional transition INTO this segment */
+  transitionIn?: 'cut' | 'whoosh' | 'swipe' | 'crossfade'
+}
+
+// ── Caption segments (Z34 §5) ────────────────────────────────────────────
+// Word-level groups so captions can be highlighted as voice progresses.
+
+export interface CaptionSegment {
+  /** Position on the edit timeline */
+  startSec: number
+  endSec: number
+  /** Text shown */
+  text: string
+  /** Whether this caption should be EMPHASISED (larger / colored) */
+  emphasised: boolean
+  /** Why emphasised — debug */
+  emphasisReason?: 'hook' | 'cta' | 'keyword' | null
+}
+
+// ── SFX cues (Z34 §6) ─────────────────────────────────────────────────────
+
+export interface SfxCue {
+  /** When to fire (seconds on edit timeline) */
+  startSec: number
+  /** Which SFX */
+  sfxId: SfxId
+  /** Volume 0-1 (most should be 0.3-0.5 — voice priority) */
+  volume: number
+  /** Why fired — debug */
+  reason: 'transition' | 'hook_emphasis' | 'cta_emphasis' | 'punch_zoom'
+}
+
+// ── CTA overlay (Z34 §9) ──────────────────────────────────────────────────
+
+export interface CtaOverlay {
+  /** When to show */
+  startSec: number
+  /** How long visible */
+  durationSec: number
+  /** CTA text */
+  text: string
+  /** Animation entrance */
+  animation: 'fade_in' | 'slide_up' | 'pop_in' | 'shake'
+  /** Visual style */
+  style: 'sticker_bottom' | 'fullscreen_centered' | 'side_chip'
+}
+
+// ── Auto Edit Plan (the master output of Phase 5 planner) ─────────────────
+
+export interface AutoEditPlan {
+  /** Total wall-clock duration of the edited video */
+  totalDurationSec: number
+  /** Edit segments in playback order — backbone of the timeline */
+  segments: EditSegment[]
+  /** Caption segments in time order — separate from segments because
+   *  captions span across segment boundaries */
+  captions: CaptionSegment[]
+  /** Punch zoom cues — fired on top of segments */
+  punchZooms: PunchZoomCue[]
+  /** SFX cues — fired alongside segments */
+  sfxCues: SfxCue[]
+  /** Background music spec (or null for no BGM) */
+  bgm: { styleId: BgmStyleId; volume: number; fadeInSec: number; fadeOutSec: number } | null
+  /** CTA overlay shown at end of video */
+  cta: CtaOverlay | null
+  /** Style used to generate this plan */
+  styleId: EditingStyleId
+  /** Subtitle style chosen */
+  subtitleStyleId: SubtitleStyleId
+  /** Generation timestamp */
+  generatedAt: number
+}
+
+// ── Auto Edit state on V3PipelineState ────────────────────────────────────
+
+export interface AutoEditState {
+  /** Which style the user picked */
+  styleId: EditingStyleId
+  /** Which subtitle style */
+  subtitleStyleId: SubtitleStyleId
+  /** Which BGM style — overrides the style preset's default if set */
+  bgmStyleId: BgmStyleId | null
+  /** Last generated plan (null until user clicks Generate) */
+  plan: AutoEditPlan | null
+  /** Asset:xxx of the final exported MP4 (null until Phase 6 export runs) */
+  exportedVideoRef: string | null
+  /** True while planner is computing */
+  isGenerating: boolean
+  /** True while final export is running (Phase 6 wiring) */
+  isExporting: boolean
+  error: string | null
+}
+
+export function createEmptyAutoEditState(): AutoEditState {
+  return {
+    styleId: DEFAULT_EDITING_STYLE,
+    subtitleStyleId: DEFAULT_SUBTITLE_STYLE,
+    bgmStyleId: null,
+    plan: null,
+    exportedVideoRef: null,
+    isGenerating: false,
+    isExporting: false,
     error: null,
   }
 }

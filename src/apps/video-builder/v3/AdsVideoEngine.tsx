@@ -35,6 +35,7 @@ import { useAdsVideoStore } from './stores/adsVideoStore'
 import ScriptVoicePhase from './components/ScriptVoicePhase'
 import CreatorVideoPhase from './components/CreatorVideoPhase'
 import ActionInsertsPhase from './components/ActionInsertsPhase'
+import AutoEditPhase from './components/AutoEditPhase'
 import {
   V3_PHASE_LABEL_VI,
   WORKFLOW_MODE_CONFIG, COST_MODE_CONFIG,
@@ -444,9 +445,17 @@ export default function AdsVideoEngine({ onSwitchToV2, onSwitchToV1 }: Props) {
     reachable.add('preview')
     reachable.add('approve')
   }
+  // Z34 — auto-edit only needs creator video + script. Inserts are optional.
+  if (state.creatorVideo?.videoRef && state.scriptBrain.script) {
+    reachable.add('auto-edit')
+  }
+  // Final-render + export still require approved/locked inserts (Phase 6+ wiring)
   if (state.inserts.some((it) => it.status === 'approved' || it.status === 'locked')) {
     reachable.add('final-render')
-    reachable.add('auto-edit')
+    reachable.add('export')
+  }
+  // Export also reachable if auto-edit plan exists (Phase 6 will export from plan)
+  if (state.autoEdit.plan) {
     reachable.add('export')
   }
 
@@ -572,17 +581,7 @@ export default function AdsVideoEngine({ onSwitchToV2, onSwitchToV1 }: Props) {
           />
         )}
         {state.phase === 'auto-edit' && (
-          <PhaseStub
-            title="Auto Edit"
-            summaryVi="FFmpeg concat tất cả clip + transitions + subtitle burn-in + audio mix. KHÔNG dùng AI generation ở phase này — chi phí $0."
-            plannedFeatures={[
-              'FFmpeg.wasm concat main creator + inserts theo order',
-              'Subtitle burn-in từ script + timing TTS',
-              'Background music mix (volume ducking quanh voice)',
-              'Transition: cut mặc định, dissolve tuỳ chọn',
-            ]}
-            icon={Wand2}
-          />
+          <AutoEditPhase onContinue={() => setPhase('export')} />
         )}
         {state.phase === 'export' && (
           <PhaseStub
