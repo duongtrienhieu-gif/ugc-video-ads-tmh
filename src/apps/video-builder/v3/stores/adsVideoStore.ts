@@ -25,6 +25,8 @@ import {
   type VoiceRecord,
   // Z32 — Creator Video Engine
   type CreatorPresetId, type CreatorVideoConfig,
+  // Z33 — Action Inserts
+  type ActionPresetId,
 } from '../types'
 import { CREATOR_PRESETS } from '../services/creatorPresets'
 import type { Model, Product } from '../../../../stores/types'
@@ -65,10 +67,18 @@ interface AdsVideoStoreState {
   setInserts:   (inserts: ActionInsertClip[]) => void
   /** Add one insert to the end. Auto-assigns insertId. */
   addInsert:    (insert: Omit<ActionInsertClip, 'insertId'>) => void
+  /** Z33 — bulk-add a list of presets in one shot. Auto-assigns insertIds
+   *  + sensible defaults (stage='idle', status='idle', resolution from
+   *  current cost mode). Used by "Apply suggestions" button. */
+  bulkAddInsertsFromPresets: (
+    items: Array<{ presetId: ActionPresetId; durationSec: number; scriptKeyword?: string }>,
+  ) => void
   /** Patch one insert by insertId. */
   patchInsert:  (insertId: number, patch: Partial<ActionInsertClip>) => void
   /** Remove one insert by insertId. */
   removeInsert: (insertId: number) => void
+  /** Z33 — remove ALL inserts (used by "Clear inserts" button). */
+  clearAllInserts: () => void
 
   // ── Z31 Ad Brain (Script + Voice foundation) ────────────────────────────
 
@@ -123,11 +133,23 @@ function loadFromStorage(): V3PipelineState | null {
       const empty = createEmptyV3State()
       parsed.creatorVideoConfig = empty.creatorVideoConfig
     }
-    parsed.inserts = parsed.inserts.map((it) =>
-      it.status === 'rendering'
-        ? { ...it, status: 'idle', startedAt: undefined }
-        : it
-    )
+    parsed.inserts = parsed.inserts.map((it) => {
+      let next = it
+      // Reset legacy V3ClipStatus
+      if (next.status === 'rendering') {
+        next = { ...next, status: 'idle', startedAt: undefined }
+      }
+      // Z33 — reset in-flight insert stage so a refresh mid-render
+      // doesn't leave the UI stuck on "Đang preview 1s..."
+      if (next.stage === 'keyframe' || next.stage === 'preview_motion' || next.stage === 'video_full') {
+        next = { ...next, stage: 'idle' }
+      }
+      // Pre-Z33 inserts won't have `stage` at all — backfill
+      if (!('stage' in next) || !next.stage) {
+        next = { ...next, stage: next.videoRef ? 'completed' : 'idle' }
+      }
+      return next
+    })
     // Z31 — defensive scriptBrain hydration. Old payloads (pre-Z31) won't
     // have scriptBrain at all; fill in with empty defaults. Reset transient
     // isGenerating* flags so a refresh during script gen doesn't deadlock.
@@ -254,6 +276,35 @@ export const useAdsVideoStore = create<AdsVideoStoreState>((set, get) => ({
       ...s,
       inserts: s.inserts.filter((it) => it.insertId !== insertId),
     })),
+
+  // Z33 — bulk add from preset suggestions
+  bulkAddInsertsFromPresets: (items) =>
+    commit(set, get, (s) => {
+      // Pick resolution from current cost mode
+      const resolution: ActionInsertClip['resolution'] =
+        s.costMode === 'FULL' ? '1080p' :
+        s.costMode === 'STANDARD' ? '720p' :
+        '480p'
+      let nextId = s.inserts.reduce((m, it) => Math.max(m, it.insertId), 0)
+      const newInserts: ActionInsertClip[] = items.map((item, i) => {
+        nextId += 1
+        return {
+          insertId: nextId,
+          presetId: item.presetId,
+          order: s.inserts.length + i,
+          stage: 'idle' as const,
+          status: 'idle' as const,
+          durationSec: item.durationSec,
+          resolution,
+          scriptKeyword: item.scriptKeyword,
+          voiceTimestampSec: null,
+        }
+      })
+      return { ...s, inserts: [...s.inserts, ...newInserts] }
+    }),
+
+  clearAllInserts: () =>
+    commit(set, get, (s) => ({ ...s, inserts: [] })),
 
   // ── Z31 Ad Brain ────────────────────────────────────────────────────────
 

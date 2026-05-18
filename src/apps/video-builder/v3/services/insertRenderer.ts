@@ -1,0 +1,272 @@
+// ── Insert Renderer ──────────────────────────────────────────────────────────
+// Z33 §10/13/14 — Per-insert render pipeline. Preview-first, low-motion,
+// product-locked.
+//
+// Pipeline (3 stages — simpler than Phase 3 creator video):
+//   1. KEYFRAME  — KIE GPT-4o image-edit produces the still with avatar
+//                  + product references. Identity + product locks
+//                  applied via promptBuilder.
+//   2. PREVIEW   — 1s motion test at TEST_480. Cheap pre-flight check.
+//                  Fails-soft (skip if too unstable).
+//   3. VIDEO_FULL — KIE Kling image-to-video full insert (5s minimum,
+//                   trimmed by compositor to durationPreset).
+//
+// Single-cut runner. Caller invokes one per insert (no bulk runner — that's
+// the Z26 lesson: bulk burns credit). The ActionInsertsPhase UI provides
+// per-card render + bulk-pending button which fans out via this function.
+// ─────────────────────────────────────────────────────────────────────────────
+
+import {
+  generateGpt4oImageFast,
+  generateVideoJob, pollVideoJobUntilDone,
+} from '../../../../utils/kieai'
+import { saveAsset, getUrl, isAssetRef } from '../../../../utils/assetStore'
+import type { Model, Product } from '../../../../stores/types'
+import type {
+  ActionInsertClip, InsertRenderStage, ActionPresetId,
+} from '../types'
+import { ACTION_PRESETS } from './actionPresets'
+
+// ── Stage update callback ─────────────────────────────────────────────────
+
+export interface InsertStageUpdate {
+  stage: InsertRenderStage
+  keyframeRef?: string
+  keyframePromptUsed?: string
+  previewVideoRef?: string
+  fullTaskId?: string
+  videoRef?: string
+  error?: string
+}
+
+export interface RenderInsertParams {
+  kieApiKey: string
+  presetId: ActionPresetId
+  /** Product is required for needsProduct presets; null OK for scene-only
+   *  presets like PHONE_SCROLL or BEFORE_AFTER_REACTION. */
+  product: Product | null
+  /** Avatar ref — used when the insert features the speaker (e.g. DRINK,
+   *  TAKE_PILL, BEFORE_AFTER_REACTION). For product-only inserts (e.g.
+   *  PRODUCT_CLOSEUP, DESK_PRODUCT) the avatar ref is optional. */
+  avatar: Model | null
+  /** Resolution to render at — driven by cost mode */
+  resolution: '480p' | '720p' | '1080p'
+  /** Skip the cheap preview-motion test (Stage 2). Default false. */
+  skipPreview?: boolean
+  /** Per-stage status callback */
+  onStageUpdate: (update: InsertStageUpdate) => void
+  signal?: AbortSignal
+}
+
+export interface RenderInsertResult {
+  keyframeRef: string
+  keyframePromptUsed: string
+  previewVideoRef?: string
+  videoRef: string
+  fullTaskId: string
+}
+
+// ── Build keyframe prompt for the insert ──────────────────────────────────
+
+function buildInsertKeyframePrompt(
+  presetId: ActionPresetId,
+  product: Product | null,
+  hasAvatar: boolean,
+): string {
+  const preset = ACTION_PRESETS[presetId]
+  const paragraphs: string[] = []
+
+  // 1. Subject locks
+  if (preset.needsProduct && product) {
+    paragraphs.push(
+      `PRODUCT LOCK: ${product.productName ?? 'the product'} from reference image #1. ` +
+      preset.objectInteraction,
+    )
+  }
+  if (hasAvatar && presetUsesAvatar(presetId)) {
+    paragraphs.push(
+      `IDENTITY LOCK: Person from reference image #${preset.needsProduct ? '2' : '1'}. ` +
+      `Preserve EXACTLY face, hair, skin tone, body proportions. Do NOT redesign.`,
+    )
+  }
+
+  // 2. Composition
+  paragraphs.push(`COMPOSITION: ${preset.framingPreset} shot, vertical 9:16 aspect ratio.`)
+
+  // 3. Action prompt
+  paragraphs.push(`ACTION: ${preset.promptPreset}`)
+
+  // 4. Hand behaviour
+  paragraphs.push(`HANDS: ${preset.handBehavior}`)
+
+  // 5. Realism
+  paragraphs.push(
+    'STYLE: Authentic UGC iPhone photo — real lived-in moment, natural daylight, ' +
+    'subtle grain, real skin texture. NOT cinematic, NOT studio, NOT magazine.',
+  )
+
+  // 6. Negative
+  paragraphs.push(
+    'Avoid: malformed hands, extra fingers, distorted product, redesigned packaging, ' +
+    'cinematic lighting, 3D-render look, cartoon, beauty filter.',
+  )
+
+  return paragraphs.join('\n\n')
+}
+
+/** Which presets benefit from including the avatar reference */
+function presetUsesAvatar(presetId: ActionPresetId): boolean {
+  // Presets that feature the person's face / body
+  return ['HOLD_PRODUCT', 'DRINK', 'TAKE_PILL', 'BEFORE_AFTER_REACTION'].includes(presetId)
+}
+
+/** Pick which assets to send to KIE as filesUrl — product first, then avatar */
+async function resolveRefs(
+  preset: typeof ACTION_PRESETS[ActionPresetId],
+  product: Product | null,
+  avatar: Model | null,
+): Promise<string[]> {
+  const refs: string[] = []
+  if (preset.needsProduct && product?.productImage) {
+    const url = isAssetRef(product.productImage)
+      ? await getUrl(product.productImage)
+      : product.productImage
+    if (url) refs.push(url)
+  }
+  if (avatar?.characterImage && presetUsesAvatar(preset.id)) {
+    const url = isAssetRef(avatar.characterImage)
+      ? await getUrl(avatar.characterImage)
+      : avatar.characterImage
+    if (url) refs.push(url)
+  }
+  return refs
+}
+
+// ── Public: render a single insert end-to-end ──────────────────────────────
+
+export async function renderInsert(
+  params: RenderInsertParams,
+): Promise<RenderInsertResult> {
+  if (params.signal?.aborted) throw new Error('CANCELLED — user huỷ')
+
+  const preset = ACTION_PRESETS[params.presetId]
+  const filesUrl = await resolveRefs(preset, params.product, params.avatar)
+
+  // ── STAGE 1: KEYFRAME ─────────────────────────────────────────────────
+  params.onStageUpdate({ stage: 'keyframe' })
+
+  const keyframePromptUsed = buildInsertKeyframePrompt(
+    params.presetId, params.product, !!params.avatar,
+  )
+  console.log(`[INSERT ${params.presetId}] Stage 1 keyframe prompt len=${keyframePromptUsed.length}, refs=${filesUrl.length}`)
+
+  const keyframeRemoteUrl = await generateGpt4oImageFast({
+    apiKey: params.kieApiKey,
+    prompt: keyframePromptUsed,
+    filesUrl,
+    size: '2:3',  // closest GPT-4o supports to vertical 9:16
+    softTimeoutMs: 60_000,
+    attemptTimeoutMs: 90_000,
+    maxAttempts: 2,
+    signal: params.signal,
+  })
+
+  const keyframeBlob = await fetch(keyframeRemoteUrl).then((r) => r.blob())
+  const keyframeRef = await saveAsset(keyframeBlob, keyframeBlob.type || 'image/png')
+  params.onStageUpdate({ stage: 'keyframe', keyframeRef, keyframePromptUsed })
+
+  if (params.signal?.aborted) throw new Error('CANCELLED — user huỷ')
+
+  // ── STAGE 2: PREVIEW MOTION (optional) ─────────────────────────────────
+  let previewVideoRef: string | undefined
+  if (!params.skipPreview) {
+    params.onStageUpdate({ stage: 'preview_motion', keyframeRef, keyframePromptUsed })
+
+    try {
+      const keyframePublicUrl = await getUrl(keyframeRef)
+      if (!keyframePublicUrl) throw new Error('Không lấy được URL keyframe (asset store)')
+
+      // Submit a Kling i2v preview at 480p with the preset's motion verb
+      const previewSubmission = await generateVideoJob({
+        apiKey: params.kieApiKey,
+        jobModelId: 'kling-3.0/video',
+        prompt: `${preset.promptPreset} ${preset.cameraPreset === 'static' ? 'Locked-off camera.' : 'Subtle handheld micro-motion.'}`,
+        aspectRatio: '9:16',
+        resolution: '480p',
+        duration: 5,
+        referenceImageUrls: [keyframePublicUrl],
+      })
+      const previewRemoteUrl = await pollVideoJobUntilDone({
+        apiKey: params.kieApiKey,
+        taskId: previewSubmission.taskId,
+        timeoutMs: 6 * 60 * 1000,
+      })
+      const previewBlob = await fetch(previewRemoteUrl).then((r) => r.blob())
+      previewVideoRef = await saveAsset(previewBlob, previewBlob.type || 'video/mp4')
+      params.onStageUpdate({
+        stage: 'preview_motion', keyframeRef, keyframePromptUsed, previewVideoRef,
+      })
+    } catch (err) {
+      // Preview is OPTIONAL — log + continue
+      const msg = err instanceof Error ? err.message : String(err)
+      console.warn(`[INSERT ${params.presetId}] preview skipped: ${msg.slice(0, 200)}`)
+    }
+  }
+
+  if (params.signal?.aborted) throw new Error('CANCELLED — user huỷ')
+
+  // ── STAGE 3: FULL VIDEO ────────────────────────────────────────────────
+  params.onStageUpdate({
+    stage: 'video_full', keyframeRef, keyframePromptUsed, previewVideoRef,
+  })
+
+  const keyframePublicUrl = await getUrl(keyframeRef)
+  if (!keyframePublicUrl) throw new Error('Không lấy được URL keyframe (asset store)')
+
+  const fullSubmission = await generateVideoJob({
+    apiKey: params.kieApiKey,
+    jobModelId: 'kling-3.0/video',
+    prompt: `${preset.promptPreset} ${preset.cameraPreset === 'static' ? 'Locked-off camera.' : 'Subtle handheld micro-motion.'} ${preset.handBehavior}`,
+    aspectRatio: '9:16',
+    resolution: params.resolution,
+    duration: 5,
+    referenceImageUrls: [keyframePublicUrl],
+  })
+  params.onStageUpdate({
+    stage: 'video_full', keyframeRef, keyframePromptUsed, previewVideoRef,
+    fullTaskId: fullSubmission.taskId,
+  })
+
+  const fullRemoteUrl = await pollVideoJobUntilDone({
+    apiKey: params.kieApiKey,
+    taskId: fullSubmission.taskId,
+    timeoutMs: 6 * 60 * 1000,
+  })
+  const fullBlob = await fetch(fullRemoteUrl).then((r) => r.blob())
+  const videoRef = await saveAsset(fullBlob, fullBlob.type || 'video/mp4')
+
+  params.onStageUpdate({
+    stage: 'completed',
+    keyframeRef, keyframePromptUsed, previewVideoRef,
+    fullTaskId: fullSubmission.taskId, videoRef,
+  })
+
+  return {
+    keyframeRef,
+    keyframePromptUsed,
+    previewVideoRef,
+    videoRef,
+    fullTaskId: fullSubmission.taskId,
+  }
+}
+
+/** Helper: list cuts that are eligible for a bulk render call. Excludes
+ *  locked / approved / rejected / generating items (Z26 lesson). */
+export function listEligibleInsertsForBulk(inserts: ActionInsertClip[]): ActionInsertClip[] {
+  return inserts.filter((it) => {
+    if (it.status === 'locked' || it.status === 'approved' || it.status === 'rejected') return false
+    if (it.stage === 'keyframe' || it.stage === 'preview_motion' || it.stage === 'video_full') return false
+    // Idle + failed are eligible (failed inserts can be retried)
+    return it.stage === 'idle' || it.stage === 'failed'
+  })
+}

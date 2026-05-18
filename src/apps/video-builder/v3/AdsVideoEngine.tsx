@@ -34,6 +34,7 @@ import type { Model, Product } from '../../../stores/types'
 import { useAdsVideoStore } from './stores/adsVideoStore'
 import ScriptVoicePhase from './components/ScriptVoicePhase'
 import CreatorVideoPhase from './components/CreatorVideoPhase'
+import ActionInsertsPhase from './components/ActionInsertsPhase'
 import {
   V3_PHASE_LABEL_VI,
   WORKFLOW_MODE_CONFIG, COST_MODE_CONFIG,
@@ -438,7 +439,8 @@ export default function AdsVideoEngine({ onSwitchToV2, onSwitchToV1 }: Props) {
   if (state.creatorVideo?.videoRef) {
     reachable.add('action-inserts')
   }
-  if (state.inserts.length > 0) {
+  // Z33 — preview/approve unlock once at least one insert has been rendered
+  if (state.inserts.some((it) => !!it.videoRef)) {
     reachable.add('preview')
     reachable.add('approve')
   }
@@ -531,17 +533,7 @@ export default function AdsVideoEngine({ onSwitchToV2, onSwitchToV1 }: Props) {
           <CreatorVideoPhase onContinue={() => setPhase('action-inserts')} />
         )}
         {state.phase === 'action-inserts' && (
-          <PhaseStub
-            title="Action Inserts"
-            summaryVi={`Pick 3-8 action presets (HOLD_PRODUCT / OPEN_CAP / POINT_LABEL...) — cost mode ${COST_MODE_CONFIG[state.costMode].labelVi} cho ${COST_MODE_CONFIG[state.costMode].insertCount.min}-${COST_MODE_CONFIG[state.costMode].insertCount.max} inserts.`}
-            plannedFeatures={[
-              '8 preset reusable: HOLD_PRODUCT, OPEN_CAP, POINT_LABEL, DRINK, TAKE_PILL, UNBOX, PHONE_SCROLL, BEFORE_AFTER_REACTION (đã định nghĩa ở actionPresets.ts)',
-              'Grid pick inserts: emoji card + duration + cost',
-              'Render từng insert qua Kling 480p — Phase 3',
-              'Test Motion 0.7-1s preview trước khi render full',
-            ]}
-            icon={Film}
-          />
+          <ActionInsertsPhase onContinue={() => setPhase('preview')} />
         )}
         {state.phase === 'preview' && (
           <PhaseStub

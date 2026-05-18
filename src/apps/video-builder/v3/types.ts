@@ -156,8 +156,16 @@ export const COST_MODE_CONFIG: Record<CostMode, CostModeConfig> = {
 export const DEFAULT_COST_MODE: CostMode = 'TEST'
 
 // ── Action preset enum ──────────────────────────────────────────────────────
-// Z30 spec §7. The ONLY motion primitives the v3 engine emits. Every
-// action insert is one of these — no freeform motion.
+// Z30/Z33 — the ONLY motion primitives the v3 engine emits. Every action
+// insert is one of these — NO freeform motion. Z33 spec §5 expanded the
+// catalogue from 8 → 12 presets to cover the full "supporting B-roll"
+// vocabulary: opening cap, holding bottle, taking pill, pointing label,
+// phone scrolling, before/after reaction, product closeup, unbox,
+// show package, desk product, bag pull, etc.
+//
+// Stability rule (Z33 §7): all presets must remain slow + simple +
+// readable + low-motion. NO complex hand interactions, NO fast physics,
+// NO object deformation — AI video breaks on those.
 
 export type ActionPresetId =
   | 'HOLD_PRODUCT'
@@ -168,6 +176,11 @@ export type ActionPresetId =
   | 'UNBOX'
   | 'PHONE_SCROLL'
   | 'BEFORE_AFTER_REACTION'
+  // Z33 — Phase 4 additions
+  | 'PRODUCT_CLOSEUP'
+  | 'SHOW_PACKAGE'
+  | 'DESK_PRODUCT'
+  | 'BAG_PRODUCT_PULL'
 
 // ── Per-clip render status (v3) ─────────────────────────────────────────────
 // Simplified vs v2's TimelineRenderStatus — no queued/locked-vs-completed
@@ -318,8 +331,31 @@ export interface CreatorVideoClip {
   hero?: boolean
 }
 
+// ── Insert render stage ────────────────────────────────────────────────────
+// Z33 — Like CreatorVideoStage but for action inserts. Inserts are 2-stage
+// (keyframe → video) — no TTS, no lipsync. The preview is a 1-second
+// motion test rendered at TEST_480 BEFORE the full insert render.
+
+export type InsertRenderStage =
+  | 'idle'             // nothing started yet
+  | 'keyframe'         // KIE GPT-4o generating the still
+  | 'preview_motion'   // 1s motion test
+  | 'video_full'       // full insert clip
+  | 'completed'        // has videoRef
+  | 'failed'
+
+export const INSERT_STAGE_LABEL_VI: Record<InsertRenderStage, string> = {
+  idle:            'Chưa render',
+  keyframe:        'Đang tạo keyframe...',
+  preview_motion:  'Đang preview 1s...',
+  video_full:      'Đang render full...',
+  completed:       'Đã xong ✓',
+  failed:          'Lỗi',
+}
+
 // ── Action Insert clip ──────────────────────────────────────────────────────
-// One of N inserts. Each tied to a preset.
+// One of N inserts. Each tied to a preset. Z33: extended with multi-stage
+// + scriptKeyword (for timing engine traceability) + suggestedAt timestamp.
 
 export interface ActionInsertClip {
   /** Unique id within the project */
@@ -328,14 +364,36 @@ export interface ActionInsertClip {
   presetId: ActionPresetId
   /** Index in the planned timeline (after main creator video) */
   order: number
+
+  /** Z33 — render pipeline stage (orthogonal to verdict status) */
+  stage: InsertRenderStage
+
   /** asset:xxx of the source still (product or scene shot) */
   keyframeRef?: string
-  /** asset:xxx of the rendered insert clip */
+  /** Compiled keyframe prompt — exposed for debug */
+  keyframePromptUsed?: string
+
+  /** Z33 — 1s motion preview test (cheap pre-flight check) */
+  previewVideoRef?: string
+  /** Kling task id for the FULL render */
+  fullTaskId?: string
+  /** asset:xxx of the rendered insert clip (full version) */
   videoRef?: string
+
   /** Duration in seconds (preset default, may be tweaked by user) */
   durationSec: number
   /** Resolution used for this render */
   resolution: '480p' | '720p' | '1080p'
+
+  /** Z33 — script keyword that triggered this insert (from suggester).
+   *  Empty for manually-added inserts. Used by timing engine to anchor
+   *  the insert at the right voice timestamp. */
+  scriptKeyword?: string
+  /** Z33 — target timestamp within the voice timeline (seconds from 0).
+   *  null = no anchor, insert plays at natural position in `order`. */
+  voiceTimestampSec?: number | null
+
+  /** Verdict status (Z26-style approve / reject / lock) */
   status: V3ClipStatus
   error?: string
   startedAt?: number
