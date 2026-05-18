@@ -76,6 +76,15 @@ export interface AssetMetadata {
   qcSummary?: {
     passed: boolean
     overall: number  // 0-100
+    /** Issues raised during QC, if any. Optional for back-compat. */
+    issues?: {
+      code: string
+      message: string
+      severity: 'info' | 'warning' | 'error'
+      tier: 'local' | 'vision'
+    }[]
+    /** Whether the vision tier ran. null = not requested. */
+    visionPass?: boolean | null
   }
   /** Free-form tags for analytics / filtering */
   tags?: string[]

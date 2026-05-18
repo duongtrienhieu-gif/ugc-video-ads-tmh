@@ -1,11 +1,11 @@
 # Creative Studio Architecture (broll-studio app)
 
-> **Status**: Phase 6 — UI-Native expansion (Shopee + TikTok Shop +
-> Facebook + TikTok comments) landed. Six ui-native modules now wired
-> into the registry (2 chat-proof from P5 + 4 marketplace/social-comment
-> from P6). Existing `BrollStudio.tsx` still runs on its legacy
-> direct-KIE path; the new modules are reached via `generateAssets()`
-> only.
+> **Status**: Phase 7 — Authenticity QC v2 + designed-graphic group
+> entry. Every ui-native generation now runs through a two-tier QC
+> pipeline (local heuristics always, Gemini Vision opt-in). The
+> designed-graphic dispatcher is now a typed entry point (replaces the
+> last notYetImplemented stub) so P8 only needs to fill the body.
+> Existing `BrollStudio.tsx` still on its legacy direct-KIE path.
 
 ## Folder map
 
@@ -108,8 +108,8 @@ The orchestrator:
 | **P3** | ✅ done | Migrate current BrollStudio scenes → engines/photographic/ modules |
 | **P4** | ✅ done | Continuity engine + persona library + emotional beats (foundation) |
 | **P5** | ✅ done | UI-Native MVP: Chat Proof (WhatsApp + Messenger) |
-| **P6** | ✅ done (this commit) | UI-Native expansion: Shopee + TikTok Shop + Facebook + TikTok comments |
-| **P7** | pending | Authenticity QC v2 + designed-graphic group entry |
+| **P6** | ✅ done | UI-Native expansion: Shopee + TikTok Shop + Facebook + TikTok comments |
+| **P7** | ✅ done (this commit) | Authenticity QC v2 + designed-graphic group entry |
 | **P8** | pending | Designed-Graphic group: Infographic + CTA Banner |
 | **P9** | pending | Shared utils cleanup + cross-app QC promotion |
 | **P10** | pending | App id rename (broll-studio → creative-studio) with alias |
@@ -391,6 +391,107 @@ reactions[] array without depending on the generator's internal shape.
 - `orchestration/generateAssets.ts` — byte-identical
 - `orchestration/generateAssetSequence.ts` — byte-identical
 - `orchestration/dispatch.ts` — byte-identical (P5 wired the slot)
+- `src/apps/landing-page/`, `src/apps/video-builder/` — untouched
+- `src/stores/*`, `src/utils/*`, `App.tsx`, `Sidebar.tsx` — untouched
+
+## P7 — Authenticity QC v2 + Designed-Graphic Entry
+
+P7 ships two coupled deliverables: a two-tier authenticity QC pipeline
+running on every ui-native generation, and the typed entry point for
+the designed-graphic engine group (the last `notYetImplemented` stub
+in `orchestration/dispatch.ts` is gone).
+
+### Authenticity QC v2
+
+Pipeline runs inside `engines/ui-native/_dispatcher.ts` between
+post-process and `saveAsset`:
+
+```
+... → applyPostProcess(canvas) → blob
+  → runAuthenticityQC({ blob, expectedW/H, authenticity, platform, ... })
+      ├─ Tier 1 local heuristics (always, sync)
+      │     blob.size floor/ceiling, JPEG SOI marker, MIME match,
+      │     RGBA transparency sample (banned), decoded dimensions vs
+      │     template (drift > 30px = warning)
+      └─ Tier 2 vision QC (opt-in via params.options.runVisionQC)
+            Gemini Vision rubric per UINativeAuthenticity, returns
+            { pass, score, findings[] }
+  → saveAsset(blob) → assetRef
+  → normalizeOutput + attach qcSummary { passed, overall, issues, visionPass }
+```
+
+QC score policy (see `shared/qc/authenticityQC.ts`):
+
+- Start at 100, deduct per-issue penalty (local error -25, vision
+  error -20, local warning -8, vision warning -6, info -2/-1)
+- If vision tier ran, overall = (localScore + visionScore) / 2
+- `passed` = no error-severity issues AND overall >= minPassScore (default 70)
+  AND (vision tier did not run OR visionPass = true)
+
+### New files (QC)
+
+```
+shared/qc/
+├─ authenticityQC.ts         main orchestrator — runAuthenticityQC()
+├─ localHeuristics.ts        runLocalHeuristics() + checkDecodedDimensions()
+└─ visionQC.ts               runVisionQC() — Gemini Vision rubric + parse
+types/qc.ts                  QCVerdict, QCIssue, QCRunOptions, QCSeverity
+```
+
+### AssetMetadata.qcSummary expanded (additive, back-compat)
+
+```ts
+qcSummary?: {
+  passed: boolean
+  overall: number
+  issues?: { code, message, severity, tier }[]   // NEW in P7, optional
+  visionPass?: boolean | null                     // NEW in P7, optional
+}
+```
+
+P3/P5/P6 modules that did not previously set `qcSummary` keep working;
+the dispatcher attaches the verdict in normalizeOutput's wake.
+
+### Designed-Graphic group entry
+
+P7 lands the typed entry point for the designed-graphic engine group
+— the dispatcher itself still throws "P8 will fill this in" but the
+slot in `ENGINE_DISPATCH` is no longer the generic
+`notYetImplemented` stub. P8 only needs to fill the dispatcher body
+(no orchestration changes).
+
+### New files (designed-graphic foundation)
+
+```
+engines/designed-graphic/
+├─ _dispatcher.ts            typed entry — throws with helpful guidance
+└─ _buildModule.ts           DesignedGraphicModule factory (P8 modules
+                             will consume this)
+
+shared/design-system/
+├─ typography.ts             TYPOGRAPHY_PRESETS (4 preset scales),
+                             findTypography()
+├─ colorThemes.ts            COLOR_THEMES (5 preset palettes),
+                             findColorTheme()
+└─ grid.ts                   LAYOUT_PRESETS (infographic-1x1/4x5,
+                             cta-banner-16x9/4x5), contentRect(),
+                             columnRect(), spanColumns(),
+                             splitVertical(), findLayout()
+```
+
+### Boundaries — what P7 did NOT touch
+
+- `BrollStudio.tsx` — byte-identical
+- `services/qcProduct.ts` — byte-identical
+- P3 photographic engine — byte-identical (qcSummary attachment is
+  opt-in via normalizeOutput; current photographic.normalizeOutput
+  does not set it)
+- P4 continuity + persona + beats — byte-identical
+- P5 chat modules + their templates — byte-identical
+- P6 marketplace + comment modules + their templates — byte-identical
+- `orchestration/generateAssets.ts` — byte-identical
+- `orchestration/generateAssetSequence.ts` — byte-identical
+- `registry/*` — byte-identical
 - `src/apps/landing-page/`, `src/apps/video-builder/` — untouched
 - `src/stores/*`, `src/utils/*`, `App.tsx`, `Sidebar.tsx` — untouched
 

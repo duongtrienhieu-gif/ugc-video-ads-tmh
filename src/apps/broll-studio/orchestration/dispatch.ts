@@ -13,8 +13,10 @@ import type { AssetModule } from '../registry/assetRegistry'
 import type { GenerateAssetParams, GeneratedAsset } from '../types/asset'
 import { dispatchPhotographic } from '../engines/photographic/_dispatcher'
 import { dispatchUINative } from '../engines/ui-native/_dispatcher'
+import { dispatchDesignedGraphic } from '../engines/designed-graphic/_dispatcher'
 import type { PhotographicModule } from '../types/photographic'
 import type { UINativeModule } from '../types/uiNative'
+import type { DesignedGraphicModule } from '../types/designedGraphic'
 
 /** Dispatch contract — every engine-group entry point matches this signature. */
 export type EngineDispatcher = (
@@ -23,26 +25,12 @@ export type EngineDispatcher = (
 ) => Promise<GeneratedAsset>
 
 /**
- * Placeholder dispatcher — throws to make it obvious when something
- * tries to dispatch before the engine pipeline is implemented.
- */
-function notYetImplemented(engineGroup: string): EngineDispatcher {
-  return async (module, _params) => {
-    throw new Error(
-      `[Creative Studio dispatch] engine group "${engineGroup}" has no runtime `
-      + `implementation yet. Module "${module.id}" cannot be dispatched. `
-      + `Implementation lands in: ${engineGroup === 'photographic' ? 'P3' : engineGroup === 'ui-native' ? 'P5' : 'P8'}.`,
-    )
-  }
-}
-
-/**
- * Engine-group dispatch table. Each engine group fills its entry in its
- * implementation phase:
+ * Engine-group dispatch table. All three slots are now typed entry
+ * points (P7 replaced the last notYetImplemented stub).
  *
- *   P3 → replaces 'photographic' with the real photographic dispatcher
- *   P5 → replaces 'ui-native' with the real ui-native dispatcher
- *   P8 → replaces 'designed-graphic' with the real designed-graphic dispatcher
+ *   photographic     → engines/photographic/_dispatcher (P3)
+ *   ui-native        → engines/ui-native/_dispatcher    (P5 + P6 + P7 QC)
+ *   designed-graphic → engines/designed-graphic/_dispatcher (P7 entry, P8 body)
  *
  * The dispatcher functions consume the resolved module + params and
  * orchestrate that group's pipeline (prompt build → KIE → QC for
@@ -67,10 +55,19 @@ const photographicDispatcher: EngineDispatcher = (module, params) =>
 const uiNativeDispatcher: EngineDispatcher = (module, params) =>
   dispatchUINative(module as UINativeModule, params)
 
+/**
+ * P7: typed entry for designed-graphic — the dispatcher itself still
+ * throws "not implemented yet" until P8 wires modules, but the entry
+ * is no longer the generic notYetImplemented stub. P8 will only need
+ * to fill the dispatcher body; this slot stays unchanged.
+ */
+const designedGraphicDispatcher: EngineDispatcher = (module) =>
+  dispatchDesignedGraphic(module as DesignedGraphicModule)
+
 export const ENGINE_DISPATCH: Record<AssetModule['engineGroup'], EngineDispatcher> = {
   'photographic':      photographicDispatcher,
   'ui-native':         uiNativeDispatcher,
-  'designed-graphic':  notYetImplemented('designed-graphic'),
+  'designed-graphic':  designedGraphicDispatcher,
 }
 
 /**

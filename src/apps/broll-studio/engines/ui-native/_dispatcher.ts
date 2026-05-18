@@ -33,6 +33,8 @@ import { renderShopeeReview } from './shopee-feedback/template'
 import { renderTikTokShopReview } from './tiktok-feedback/template'
 import { renderFacebookComments } from './facebook-comment/template'
 import { renderTikTokComments } from './tiktok-comment/template'
+import { runAuthenticityQC } from '../../shared/qc/authenticityQC'
+import type { QCRunOptions } from '../../types/qc'
 
 /** Superset of inputs a renderer may need. Renderers pull what they use. */
 interface RendererInputs {
@@ -174,12 +176,31 @@ export async function dispatchUINative(
     productImageUrl: productImageUrl ?? undefined,
   })
 
-  // ── Step 6: post-process + persist ─────────────────────────────────
+  // ── Step 6: post-process ────────────────────────────────────────────
   const blob = await applyPostProcess(
     canvas,
     { intensity: module.postProcess },
     `${module.id}_${params.productId ?? 'no-product'}_${Date.now().toString(36)}`,
   )
+
+  // ── Step 7: authenticity QC ────────────────────────────────────────
+  const qcOpts: QCRunOptions = {
+    runVisionQC:  (opts.runVisionQC as boolean | undefined) ?? false,
+    minPassScore: opts.minPassScore as number | undefined,
+    geminiApiKey: settings.geminiApiKey,
+  }
+  const template = module.buildCanvasTemplate(params)
+  const qcVerdict = await runAuthenticityQC({
+    blob,
+    expectedWidth:  template.canvasSize.width,
+    expectedHeight: template.canvasSize.height,
+    authenticity:   module.authenticity,
+    platform:       module.platform,
+    canvasPeek:     canvas,
+    options:        qcOpts,
+  })
+
+  // ── Step 8: persist ────────────────────────────────────────────────
   const assetRef = await saveAsset(blob, 'image/jpeg')
 
   console.info('[ui-native dispatcher]', {
@@ -189,13 +210,21 @@ export async function dispatchUINative(
     items: textPayload.items.length,
     avatarsGenerated: 1,
     blobSize: blob.size,
+    qc: { passed: qcVerdict.passed, overall: qcVerdict.overall, issues: qcVerdict.issues.length, visionPass: qcVerdict.visionPass },
   })
 
-  // ── Step 7: normalize ──────────────────────────────────────────────
-  return module.normalizeOutput(
+  // ── Step 9: normalize + attach QC ──────────────────────────────────
+  const asset = module.normalizeOutput(
     { outputUrl: assetRef, productId: params.productId },
     params,
   )
+  asset.metadata.qcSummary = {
+    passed:     qcVerdict.passed,
+    overall:    qcVerdict.overall,
+    issues:     qcVerdict.issues,
+    visionPass: qcVerdict.visionPass,
+  }
+  return asset
 }
 
 // Helper exposed for callers that want avatar conversion explicitly
