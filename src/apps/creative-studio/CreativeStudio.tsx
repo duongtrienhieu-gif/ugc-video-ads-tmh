@@ -470,7 +470,7 @@ function ResultTile({ state, label, onRegen, onDelete, onSave, saved, canGenerat
           <div className="absolute inset-x-0 bottom-0 flex items-center gap-2 bg-gradient-to-t from-black/75 via-black/30 to-transparent p-2">
             <button
               onClick={onSave}
-              title={saved ? 'Đã lưu vào Project' : 'Lưu vào Project → Product AI'}
+              title={saved ? 'Đã lưu vào Project' : 'Lưu vào Project → Creative Studio'}
               className={`flex items-center gap-1 rounded-md px-2 py-1 text-[10px] font-semibold backdrop-blur-sm transition-colors ${
                 saved ? 'bg-emerald-500 text-white' : 'bg-white/20 text-white hover:bg-emerald-600'
               }`}
@@ -618,7 +618,7 @@ export default function ProductAI() {
       setStrictQC(data.strictQC)
       setTiles(flattenInFlight(data.tiles))
       setSavedIdx(new Set(data.savedIdx))
-      addToast('✓ Đã khôi phục Product AI từ phiên trước', 'success')
+      addToast('✓ Đã khôi phục Creative Studio từ phiên trước', 'success')
     },
     getStatus: () => (isBatch ? 'in-progress' : tiles.some((t) => t.url || t.lock) ? 'paused' : 'completed'),
     getProgressVi: () => {
@@ -970,12 +970,12 @@ export default function ProductAI() {
     try {
       await addBRoll({
         imageUrl: tile.url,
-        prompt: `Product AI — ${lockedScene.label} / ${lockedStyle.label}${VARIATIONS[idx].hint ? ` / ${VARIATIONS[idx].label}` : ''}`,
+        prompt: `Creative Studio — ${lockedScene.label} / ${lockedStyle.label}${VARIATIONS[idx].hint ? ` / ${VARIATIONS[idx].label}` : ''}`,
         productId: selectedProduct?.id,
         modelId: selectedAvatar?.id,
       })
       setSavedIdx((prev) => new Set(prev).add(idx))
-      addToast(`✓ Đã lưu ảnh #${idx + 1} vào Project → Product AI`)
+      addToast(`✓ Đã lưu ảnh #${idx + 1} vào Project → Creative Studio`)
     } catch (err) {
       addToast(`Lưu thất bại: ${err instanceof Error ? err.message.slice(0, 60) : 'unknown'}`, 'error')
     }
@@ -993,7 +993,7 @@ export default function ProductAI() {
       </div>
       {/* Header */}
       <div className="shrink-0 border-b border-black/8 bg-gradient-to-r from-violet-50 to-pink-50 px-6 py-4">
-        <h1 className="text-xl font-bold tracking-tight text-gray-900">Product AI</h1>
+        <h1 className="text-xl font-bold tracking-tight text-gray-900">Creative Studio</h1>
         <p className="mt-0.5 text-xs text-gray-500">
           Tạo 4 ảnh lifestyle vuông 1:1 cho website / landing / advertorial / Shopee / TikTok — không phải cinematic video pipeline.
         </p>
@@ -1097,7 +1097,7 @@ export default function ProductAI() {
               onClick={handleSaveAll}
               className="flex w-full items-center justify-center gap-2 rounded-full border border-emerald-300 bg-emerald-50 px-4 py-2.5 text-sm font-semibold text-emerald-700 hover:bg-emerald-100"
             >
-              <Save className="h-4 w-4" /> Lưu tất cả vào Project → Product AI
+              <Save className="h-4 w-4" /> Lưu tất cả vào Project → Creative Studio
             </button>
           )}
         </div>

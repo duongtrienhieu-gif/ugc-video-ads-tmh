@@ -147,7 +147,7 @@ export function useHistoryItems(): HistoryItem[] {
       items.push({
         id: `broll-${b.id}`,
         type: 'broll',
-        typeLabel: 'Product AI',
+        typeLabel: 'Creative Studio',
         typeIcon: '🛍️',
         typeAccent: 'orange',
         title: b.prompt?.slice(0, 60) || `B-Roll ${b.id.slice(0, 6)}`,

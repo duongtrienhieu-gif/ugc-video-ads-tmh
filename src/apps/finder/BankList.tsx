@@ -466,7 +466,7 @@ export default function BankList({ bankType, onEdit, onAdd }: BankListProps) {
   }
 
   // brolls (default)
-  if (brolls.length === 0) return <EmptyState icon={Film} label="Product AI" onAdd={onAdd} />
+  if (brolls.length === 0) return <EmptyState icon={Film} label="Creative Studio" onAdd={onAdd} />
   return (
     <div className="columns-2 sm:columns-3 md:columns-4 lg:columns-6 xl:columns-7 gap-2.5">
       {brolls.map((b) => (
