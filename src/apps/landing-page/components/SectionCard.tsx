@@ -117,7 +117,7 @@ export default function SectionCard({ index, section, onRegenerateImage, onDelet
       </div>
 
       {expanded && (
-        <div className="space-y-3 border-t border-black/8 bg-white p-4">
+        <div className="space-y-3 border-t border-black/8 bg-white p-2.5 md:p-4">
           {/* Layout guide */}
           {section.layoutGuide && (
             <InfoBlock label="Hướng dẫn layout" tone="violet">
@@ -336,9 +336,11 @@ function ImagePromptCard({
           </div>
         ) : null}
 
-        {/* Hover overlay actions — only when image exists */}
+        {/* Hover overlay actions — only when image exists.
+            Mobile (<md): always visible (no hover on touch devices).
+            Desktop (md+): preserves original hover-reveal behavior. */}
         {hasImage && (
-          <div className="absolute right-1.5 top-1.5 flex gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+          <div className="absolute right-1.5 top-1.5 flex gap-1 opacity-100 md:opacity-0 transition-opacity md:group-hover:opacity-100">
             <IconButton onClick={handleDownload} title="Tải xuống" color="black">
               <Download className="h-3 w-3" />
             </IconButton>

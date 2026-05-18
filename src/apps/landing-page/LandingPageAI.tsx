@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { Sliders, X as XIcon } from 'lucide-react'
 import { useAppStore } from '../../stores/appStore'
 import { useBankStore } from '../../stores/bankStore'
 import type { Product } from '../../stores/types'
@@ -348,9 +349,35 @@ export default function LandingPageAI() {
   const handleRetryFailedImages = () => runImageSubset((p) => p.status === 'failed')
   const handleGenerateRemaining  = () => runImageSubset((p) => p.status !== 'done' && p.status !== 'generating' && p.status !== 'queued')
 
+  // ── Mobile output-first viewport (M3) ──────────────────────────────────
+  //
+  // On mobile, after a landing pack exists the user is OUTPUT-focused —
+  // they want to see / regenerate / compare images, not stare at the
+  // input form. We auto-collapse the InputPanel when the pack transitions
+  // from null → set, and surface a floating "Sửa" FAB that re-expands the
+  // form on demand. Desktop (lg+) keeps the side-by-side layout untouched.
+  const [mobileFormVisible, setMobileFormVisible] = useState(true)
+  const prevPackRef = useRef<LandingPagePack | null>(null)
+  useEffect(() => {
+    // Auto-hide form on the transition null → pack (just generated). Do
+    // NOT hide on every render where pack exists, otherwise the user
+    // could never re-open it.
+    if (!prevPackRef.current && pack) {
+      setMobileFormVisible(false)
+    }
+    prevPackRef.current = pack
+  }, [pack])
+
+  // If there's no pack yet, always show the form (user needs to fill it
+  // to generate). This guard runs every render to keep behavior simple
+  // when the user clears the pack via "Project mới".
+  const showInputOnMobile = !pack || mobileFormVisible
+
   return (
     <div className="flex h-full flex-col lg:flex-row">
-      <div className="flex w-full lg:w-[360px] shrink-0 flex-col border-b lg:border-b-0 lg:border-r border-black/8">
+      <div
+        className={`${showInputOnMobile ? 'flex' : 'hidden'} lg:flex w-full lg:w-[360px] shrink-0 flex-col border-b lg:border-b-0 lg:border-r border-black/8`}
+      >
         <InputPanel
           selectedProduct={selectedProduct}
           onProductSelect={setSelectedProduct}
@@ -359,7 +386,7 @@ export default function LandingPageAI() {
         />
       </div>
 
-      <div className="flex w-full flex-1 flex-col min-h-[400px] lg:min-h-0">
+      <div className="relative flex w-full flex-1 flex-col min-h-[400px] lg:min-h-0">
         {/* Floating auto-save indicator — Canva-style */}
         <div className="absolute right-4 top-14 z-30">
           <AutoSaveIndicator
@@ -384,6 +411,23 @@ export default function LandingPageAI() {
           onSaveAsProject={handleSaveAsProject}
           onNewProject={handleNewProject}
         />
+
+        {/* Mobile-only Sửa FAB — visible when a pack exists. Tapping
+            re-opens the form. When the form is visible (showInputOnMobile),
+            the FAB switches to a close icon so the user can dismiss the
+            form again without scrolling. */}
+        {pack && (
+          <button
+            onClick={() => setMobileFormVisible((v) => !v)}
+            aria-label={showInputOnMobile ? 'Đóng cấu hình' : 'Sửa cấu hình'}
+            title={showInputOnMobile ? 'Đóng cấu hình' : 'Sửa cấu hình'}
+            className="lg:hidden fixed bottom-4 right-4 z-40 flex items-center gap-1.5 rounded-full bg-violet-600 px-4 py-3 text-[12px] font-bold text-white shadow-lg shadow-violet-900/30 hover:bg-violet-700 active:scale-95 transition-transform"
+          >
+            {showInputOnMobile
+              ? <><XIcon className="h-4 w-4" /> Đóng</>
+              : <><Sliders className="h-4 w-4" /> Sửa</>}
+          </button>
+        )}
       </div>
     </div>
   )
