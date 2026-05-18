@@ -742,7 +742,7 @@ export function validateMsLanguage(parsed: RawPack): LanguageLeakReport {
   }
 }
 
-const MS_RETRY_REINFORCEMENT =
+export const MS_RETRY_REINFORCEMENT =
   '\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n'
   + 'PREVIOUS ATTEMPT LEAKED VIETNAMESE TEXT — REJECTED.\n'
   + '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n'
@@ -750,6 +750,65 @@ const MS_RETRY_REINFORCEMENT =
   + 'REGENERATE from scratch. Every user-facing field MUST be 100% Bahasa Melayu.\n'
   + 'No Vietnamese diacritics. No Vietnamese function words. No bilingual sentences.\n'
   + 'The Vietnamese translation fields (viTranslation, titleVi, *Vi, layoutGuide) ARE allowed in Vietnamese — only those.\n'
+
+/**
+ * Reusable Gemini-call wrapper with MS language-lock validate + retry.
+ *
+ * Each form's buildPack() can call this to get the same MS-leak detection
+ * + auto-retry logic as legacyGenerateUgcMalaysiaPack. When language !== 'ms'
+ * it's effectively a single Gemini call (no validation, no retry).
+ *
+ * Returns the parsed RawPack object. Caller still does form-specific
+ * normalisation (mapping section types to the form's blueprint).
+ */
+export async function callGeminiWithMsRetry(args: {
+  apiKey: string
+  userPrompt: string
+  systemPrompt: string
+  language: LandingLanguage
+  maxOutputTokens?: number
+  formLabel?: string  // for log prefix
+}): Promise<RawPack> {
+  const MAX_ATTEMPTS = args.language === 'ms' ? 2 : 1
+  const tag = args.formLabel ? `[${args.formLabel}]` : '[LandingPageAI]'
+
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    const sys = attempt === 1
+      ? args.systemPrompt
+      : args.systemPrompt + MS_RETRY_REINFORCEMENT
+    const raw = await directGeminiVision({
+      apiKey: args.apiKey,
+      parts: [{ text: args.userPrompt }],
+      systemInstruction: sys,
+      maxOutputTokens: args.maxOutputTokens ?? 32768,
+      responseMimeType: 'application/json',
+    })
+
+    let parsed: RawPack
+    try {
+      parsed = JSON.parse(extractJson(raw)) as RawPack
+    } catch {
+      console.error(`${tag} JSON parse failed. Raw:`, raw.slice(0, 500))
+      throw new Error('Gemini trả về JSON không hợp lệ — thử lại')
+    }
+    if (!Array.isArray(parsed.sections) || parsed.sections.length === 0) {
+      throw new Error('Gemini không trả về section nào — thử lại')
+    }
+
+    if (args.language === 'ms') {
+      const leak = validateMsLanguage(parsed)
+      if (leak.ratio > 0.15) {
+        console.warn(`${tag} MS leak — attempt ${attempt}/${MAX_ATTEMPTS}, ratio=${(leak.ratio * 100).toFixed(1)}%, ${leak.leakedFields}/${leak.totalFields} fields. Samples:`, leak.sampleLeaks)
+        if (attempt < MAX_ATTEMPTS) continue
+        console.error(`${tag} MS leak persists after ${MAX_ATTEMPTS} attempts — flagging for manual review`)
+      } else if (leak.ratio > 0) {
+        console.info(`${tag} MS minor leak (${(leak.ratio * 100).toFixed(1)}%) within tolerance`)
+      }
+    }
+    return parsed
+  }
+  throw new Error('Gemini không trả về kết quả hợp lệ — thử lại')
+}
 
 export function extractJson(raw: string): string {
   let s = raw.trim()

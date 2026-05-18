@@ -12,8 +12,8 @@
 //   • Owns its own SYSTEM_PROMPT — refined editorial copywriting tone,
 //     calm confidence, understated persuasion, NO emoji spam, NO ALL-CAPS,
 //     NO urgency.
-//   • Fewest sections of any form (11 vs 17/14/13/12) — premium is
-//     about LESS, not more.
+//   • 14 sections — Huel-grade editorial visuals (annotated hero,
+//     magazine cover, stat-proof, Google SERP) replace simple lifestyle.
 //   • Image strategy: luxury-editorial. Studio look ALLOWED + encouraged.
 //     Cinematic lifestyle, premium flatlay, ingredient macros, fashion-
 //     editorial composition. NO UGC selfie. NO marketplace screenshots.
@@ -29,11 +29,10 @@ import type {
 } from '../../types'
 import type { FormBlueprintModule } from './_types'
 import {
-  getGeminiKey, extractJson, normalizeSection, injectPriceIntoPrompts,
-  extractPriceTag, type RawPack,
+  getGeminiKey, normalizeSection, injectPriceIntoPrompts,
+  extractPriceTag, callGeminiWithMsRetry,
 } from '../generateLandingPack'
 import { useBankStore } from '../../../../stores/bankStore'
-import { directGeminiVision } from '../../../../utils/gemini'
 
 // ── 14-section luxury editorial flow (Phase 7 — 3 new editorial visuals) ─
 //
@@ -248,14 +247,21 @@ COPY RULES — REFINED EDITORIAL VOICE
 ═══════════════════════════════════════════════════════════════
 IMAGE RULES — PREMIUM WELLNESS LIFESTYLE (NOT FASHION)
 ═══════════════════════════════════════════════════════════════
-• AESTHETIC TARGET: premium WELLNESS BRAND lifestyle photography. Reference brands: Aman, Aesop, Tatcha, Goop, Japanese wellness brands, Scandinavian wellness studios. NOT Vogue / Tatler / Zara campaign. NOT perfume / beauty / cosmetic advertising. NOT high fashion runway.
-• PRODUCT VISIBILITY: at least 80% of people-shots (hero, lifestyle ×2, product-discovery, mechanism (b), benefits, final-cta) MUST show the EXACT product naturally integrated in frame — held softly, on a shelf, on a marble counter, beside breakfast, on a bathroom counter, on a bedside table. Premium WELLNESS is product-anchored, not abstract fashion-mood-only.
-• Premium palette: cream / dusty rose / soft beige / linen / marble / pale sage / muted gold / warm grey. AVOID: hot red, neon orange, harsh contrast, loud gradients, dramatic dark moody.
+• AESTHETIC TARGET (people-shots + product photography): premium WELLNESS BRAND lifestyle photography. Reference brands: Aman, Aesop, Tatcha, Goop, Japanese wellness brands, Scandinavian wellness studios. NOT Vogue / Tatler / Zara campaign. NOT perfume / beauty / cosmetic advertising. NOT high fashion runway.
+• AESTHETIC TARGET (editorial / infographic / screenshot sections — magazine-feature, stat-proof, web-authority-proof, news-proof, hero annotated-poster): Huel / Spacegoods / Hims-Hers / premium-wellness-brand editorial-creative reference. These sections are allowed to use designed typography, big-stat overlays, magazine-cover masthead, Google SERP UI — they are NOT people-shots and NOT bound to the Aesop/Aman minimalist rule.
+• PRODUCT VISIBILITY: at least 80% of people-shots (hero, lifestyle ×2, product-discovery, mechanism (b), benefits, final-cta) MUST show the EXACT product naturally integrated in frame — held softly, on a shelf, on a marble counter, beside breakfast, on a bathroom counter, on a bedside table. Premium WELLNESS is product-anchored, not abstract fashion-mood-only. Editorial sections (magazine-feature / stat-proof / web-authority-proof) ALSO show product per their per-section spec (magazine cover hero, stat-proof bottom-right, Knowledge Panel image).
+• Premium palette (default for people-shots + product photography): cream / dusty rose / soft beige / linen / marble / pale sage / muted gold / warm grey. AVOID: hot red, neon orange, harsh contrast, loud gradients, dramatic dark moody. EXCEPTION: stat-proof section is allowed deep-charcoal / near-black background with subtle purple-pink gradient accent (dark-mode infographic — that section only).
 • Composition: generous whitespace, single subject, controlled natural environments (real-feeling affluent home — marble kitchen / linen bedroom / sunlit bathroom shelf), soft natural daylight preferred over harsh studio.
 • Models when present: elegant Malaysian women (or men) — SOUTHEAST ASIAN features, mid-30s to mid-40s, believable affluent-but-grounded lifestyle. NOT Western supermodels. NOT Korean idols. NOT influencer-styled. In refined casual / linen / silk / soft cotton wellness attire (NOT high fashion / NOT seductive / NOT runway). Candid contemplative expressions — quietly confident, no broad smile, no phone-selfie pose, no fashion-model stance.
 • Product photography: luxury still-life on raw silk / marble / linen / sculpted shadow / glass. Studio precision OK but should feel "wellness brand product page" not "perfume ad".
 • Ingredient macros: like premium wellness brand photography — close-up texture on neutral background. Aesop / Tatcha aesthetic, NOT Sephora ad.
-• NO UGC mobile-phone aesthetic. NO marketplace screenshot UI (TikTok / Shopee / Facebook comment). NO WhatsApp screenshot. NO "Trending #1" badges. NO discount banners. NO designed CTA overlays. NO "SEBELUM/SELEPAS" labels. NO crowd group photos.
+• NO UGC mobile-phone aesthetic (people-shots). NO marketplace screenshot UI (TikTok / Shopee / Facebook comment). NO WhatsApp screenshot. NO discount / "DISKAUN" / "HARI INI" banners. NO COD urgency strips. NO "SEBELUM/SELEPAS" labels. NO crowd group photos.
+• EXCEPTIONS (specific sections only — explicitly permitted by their per-section spec):
+    - hero: handwritten / casual marker callout labels around the product (annotated-poster style, Huel reference)
+    - magazine-feature: magazine masthead + big editorial headline overlay + slanted ribbon sub-article cards
+    - stat-proof: massive gradient stat number + line chart axis labels + tiny disclaimer text
+    - web-authority-proof: Google SERP UI elements — search bar, organic result titles, Knowledge Panel "★ rating · review count" + "Visit official site" CTA button (native Google chrome, NOT a marketing overlay)
+  These are NOT "marketing CTA overlays" or "Trending #1 badge graphics" — they are intentional editorial / native-UI elements native to their section type.
 • Press editorial: Vogue / Tatler / Female Malaysia register OK for the news-proof MOCK only — but the people-shots themselves are WELLNESS LIFESTYLE not fashion editorial.
 
 ═══════════════════════════════════════════════════════════════
@@ -271,28 +277,37 @@ LANGUAGE RULES
 ABSOLUTE BANS for this form
 ═══════════════════════════════════════════════════════════════
 ✗ Emoji anywhere (zero — not even one)
-✗ ALL-CAPS headlines / CTAs
+✗ ALL-CAPS headlines / CTAs (in copy text — magazine-feature image overlay typography MAY use all-caps editorial display lettering as a visual element)
 ✗ "HARI INI SAHAJA" / "STOK TERHAD" / countdown / scarcity language
 ✗ Discount stacks ("RM50 OFF" / "Bonus X percuma")
-✗ TikTok / Shopee / Facebook / WhatsApp screenshot imagery
-✗ "Trending #1" / "20,000+ ORDER" badge graphics
-✗ Star rating widgets / "Verified Purchase" badges
-✗ Multiple CTAs across sections — ONE soft CTA at the end only
+✗ TikTok / Shopee / Facebook / WhatsApp marketplace-screenshot imagery (Google SERP screenshot in web-authority-proof is EXPLICITLY ALLOWED — it's an organic authority signal, NOT a marketplace UI)
+✗ "Trending #1" / "20,000+ ORDER" marketing badge graphics
+    EXCEPTION: web-authority-proof Knowledge Panel "★ 4.7 · 1,248 Google reviews" is allowed — it's native Google UI, NOT a marketing badge
+    EXCEPTION: stat-proof big-number stat + small methodology disclaimer is allowed — it's a science findings card, NOT a marketing badge
+✗ Star rating widgets / "Verified Purchase" badges in marketplace contexts
+    EXCEPTION: Google Knowledge Panel rating (web-authority-proof only)
+✗ Multiple CTAs across sections — ONE soft CTA at the end (final-cta) only
+    EXCEPTION: web-authority-proof Knowledge Panel "Visit official site" button is native Google UI, NOT a brand CTA — does not count as a section CTA
 ✗ Hard before/after collage with dramatic labels
 ✗ COD reassurance section / delivery package proof imagery
 ✗ First-person diary voice ("saya pun rasa…")
 ✗ Clinical third-person voice ("kajian menunjukkan…", "pengguna melaporkan…")
-✗ Bulleted infographic icon grids
+    EXCEPTION: stat-proof copy CAN cite study methodology naturally ("Berdasarkan kajian pengguna 14-hari dengan 120 peserta") — a stat without methodology has no credibility
+✗ Bulleted infographic icon grids in BENEFITS section
+    NOT a ban for stat-proof (line chart) or magazine-feature (ribbon callouts) — those are different editorial formats
 ✗ Crowd group photos
-✗ UGC mobile-phone aesthetic
+✗ UGC mobile-phone aesthetic in PEOPLE-SHOTS (lifestyle / benefits / final-cta / product-discovery)
+    EXCEPTION: hero is now "annotated UGC poster" (Huel reference) — premium-creative aesthetic with brand-first composition, NOT a phone-selfie. Allowed.
 ✗ Studio gimmickry — gimbal-perfect spin shots / 360 product turns
-✗ Fashion-magazine / Vogue / runway / Zara campaign aesthetic on PEOPLE-SHOTS (the news-proof MOCK can use Vogue/Tatler layout, but lifestyle/hero/benefits/final-cta shots are PREMIUM WELLNESS lifestyle, NOT fashion photography)
+✗ Fashion-magazine / Vogue / runway / Zara campaign aesthetic on PEOPLE-SHOTS (the news-proof MOCK can use Vogue/Tatler layout, magazine-feature uses Huel/VITAL magazine aesthetic, but lifestyle/benefits/final-cta shots are PREMIUM WELLNESS lifestyle, NOT fashion photography)
 ✗ Perfume / cosmetic / beauty advertising aesthetic (seductive pose, glamour styling, over-styled hair, heavy makeup, fashion-model body language)
 ✗ Empty-room standing pose with no product (product MUST be naturally in-frame for hero / lifestyle / benefits / final-cta)
 ✗ Western / Caucasian / Korean idol / Chinese beauty influencer faces — use SOUTHEAST ASIAN Malaysian models with believable affluent-grounded look
 ✗ High-fashion styling (statement jewelry, designer logos, runway hair, beauty-shoot lighting)
 ✗ Cosmetic-product-page aesthetic (clinical glossy beauty ad) — premium WELLNESS is calm and grounded, not glossy
-✗ Generic "model staring out window with no product" composition — this was the user-reported failure mode this fix targets`
+✗ Generic "model staring out window with no product" composition — this was the user-reported failure mode this fix targets
+✗ Designed CTA overlays / discount banner overlays IN PEOPLE-SHOT IMAGES
+    EXCEPTION: magazine-feature editorial headline overlay (intentional cover layout), stat-proof number + chart text (intentional infographic), annotated-poster handwritten callouts (intentional brand-creative), web-authority-proof Google native UI — these are PER-SECTION SPEC, NOT marketing CTA overlays`
 
 // ── User prompt builder ──────────────────────────────────────────────────
 
@@ -362,29 +377,19 @@ async function buildPack(params: LandingGenParams): Promise<LandingPagePack> {
   const userPrompt = buildPremiumUserPrompt(params, product)
   const priceTag = extractPriceTag(product.offer ?? '')
 
-  const raw = await directGeminiVision({
+  const parsed = await callGeminiWithMsRetry({
     apiKey,
-    parts: [{ text: userPrompt }],
-    systemInstruction: PREMIUM_SYSTEM_PROMPT,
-    maxOutputTokens: 20000,  // smaller than other forms — premium is concise
-    responseMimeType: 'application/json',
+    userPrompt,
+    systemPrompt: PREMIUM_SYSTEM_PROMPT,
+    language: params.language,
+    maxOutputTokens: 20000,
+    formLabel: 'FORM premium',
   })
 
-  let parsed: RawPack
-  try {
-    parsed = JSON.parse(extractJson(raw)) as RawPack
-  } catch {
-    console.error('[FORM premium] JSON parse failed. Raw head:', raw.slice(0, 500))
-    throw new Error('Gemini trả về JSON không hợp lệ — thử lại')
-  }
-
-  if (!Array.isArray(parsed.sections) || parsed.sections.length === 0) {
-    throw new Error('Gemini không trả về section nào — thử lại')
-  }
-
   const sections: LandingSection[] = []
+  const parsedSections = parsed.sections ?? []
   for (const ord of PREMIUM_SECTIONS) {
-    const found = parsed.sections.find((s) => s.type === ord)
+    const found = parsedSections.find((s) => s.type === ord)
     if (found) {
       const norm = normalizeSection(found)
       if (norm) sections.push(norm)

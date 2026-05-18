@@ -31,11 +31,10 @@ import type {
 } from '../../types'
 import type { FormBlueprintModule } from './_types'
 import {
-  getGeminiKey, extractJson, normalizeSection, injectPriceIntoPrompts,
-  extractPriceTag, type RawPack,
+  getGeminiKey, normalizeSection, injectPriceIntoPrompts,
+  extractPriceTag, callGeminiWithMsRetry,
 } from '../generateLandingPack'
 import { useBankStore } from '../../../../stores/bankStore'
-import { directGeminiVision } from '../../../../utils/gemini'
 
 // ── 14-section conversion funnel ─────────────────────────────────────────
 const HARDSELL_SECTIONS: SectionType[] = [
@@ -342,32 +341,21 @@ async function buildPack(params: LandingGenParams): Promise<LandingPagePack> {
   const userPrompt = buildHardSellUserPrompt(params, product)
   const priceTag = extractPriceTag(product.offer ?? '')
 
-  // 2. Single Gemini call with hard-sell system prompt
-  const raw = await directGeminiVision({
+  // 2. Gemini call w/ MS-leak validate + retry (centralized helper)
+  const parsed = await callGeminiWithMsRetry({
     apiKey,
-    parts: [{ text: userPrompt }],
-    systemInstruction: HARDSELL_SYSTEM_PROMPT,
+    userPrompt,
+    systemPrompt: HARDSELL_SYSTEM_PROMPT,
+    language: params.language,
     maxOutputTokens: 28000,
-    responseMimeType: 'application/json',
+    formLabel: 'FORM hard-sell-cod',
   })
-
-  // 3. Parse + normalize
-  let parsed: RawPack
-  try {
-    parsed = JSON.parse(extractJson(raw)) as RawPack
-  } catch {
-    console.error('[FORM hard-sell-cod] JSON parse failed. Raw head:', raw.slice(0, 500))
-    throw new Error('Gemini trả về JSON không hợp lệ — thử lại')
-  }
-
-  if (!Array.isArray(parsed.sections) || parsed.sections.length === 0) {
-    throw new Error('Gemini không trả về section nào — thử lại')
-  }
 
   // 4. Iterate hard-sell section order
   const sections: LandingSection[] = []
+  const parsedSections = parsed.sections ?? []
   for (const ord of HARDSELL_SECTIONS) {
-    const found = parsed.sections.find((s) => s.type === ord)
+    const found = parsedSections.find((s) => s.type === ord)
     if (found) {
       const norm = normalizeSection(found)
       if (norm) sections.push(norm)
