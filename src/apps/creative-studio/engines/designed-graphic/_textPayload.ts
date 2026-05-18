@@ -13,6 +13,7 @@ import type { CreativeDNA } from '../../types/creativeDNA'
 import { safeGenerateStructured } from '../../shared/llm/safeGenerateStructured'
 import { formatProductKnowledgeForPrompt, type ProductKnowledge } from '../../services/productKnowledge'
 import { assembleDnaDirective } from '../../shared/prompt/dnaDirective'
+import { validateLocaleMany } from '../../shared/qc/localeValidator'
 
 export type DesignedGraphicContentKind = 'infographic' | 'cta-banner'
 
@@ -232,6 +233,13 @@ export async function generateInfographicContent(
     schema: { name: 'InfographicContent', validate: isInfographicContent },
     fallback: infographicFallback(req),
     generatorLabel: 'designed-graphic infographic',
+    // P29 — every visible text field must match the locale.
+    postValidate: (v) => validateLocaleMany([
+      v.title,
+      v.heroStat?.label ?? '',
+      ...v.bullets,
+      v.footnote,
+    ], req.locale),
   })
   return result.value
 }
@@ -250,6 +258,13 @@ export async function generateCtaBannerContent(
     schema: { name: 'CtaBannerContent', validate: isCtaBannerContent },
     fallback: ctaFallback(req),
     generatorLabel: 'designed-graphic cta',
+    // P29 — every CTA text field must match the locale.
+    postValidate: (v) => validateLocaleMany([
+      v.headline,
+      v.subheadline,
+      v.offerLine,
+      v.ctaText,
+    ], req.locale),
   })
   return result.value
 }

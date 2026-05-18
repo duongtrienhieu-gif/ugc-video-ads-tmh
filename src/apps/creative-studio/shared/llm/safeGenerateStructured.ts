@@ -41,6 +41,12 @@ export interface SafeGenerateOptions<T> {
   retries?: number
   /** Label for diagnostic logs. */
   generatorLabel: string
+  /** P29 — content-level validator that runs AFTER schema validation
+   *  succeeds. Returns { ok: false, reason } to force a retry — used
+   *  primarily for locale validation (reject output that contains the
+   *  wrong language). When postValidate fails on the last attempt,
+   *  the fallback is returned. */
+  postValidate?: (value: T) => { ok: boolean; reason?: string }
 }
 
 export interface SafeGenerateResult<T> {
@@ -94,6 +100,19 @@ export async function safeGenerateStructured<T>(
       if (ex.repairs.length > 0) {
         console.info(`[safeGenerateStructured:${opts.generatorLabel}] succeeded after repairs: ${ex.repairs.join(', ')}`)
       }
+
+      // P29 — content-level validation (locale, etc). If postValidate
+      // fails, treat the response as unparseable and retry. The
+      // STRICT_SUFFIX on subsequent attempts pushes the model harder.
+      if (opts.postValidate) {
+        const pv = opts.postValidate(ex.value)
+        if (!pv.ok) {
+          lastReason = `postValidate failed: ${pv.reason ?? 'unknown'}`
+          console.warn(`[safeGenerateStructured:${opts.generatorLabel}] attempt ${attempt}/${maxAttempts} ${lastReason}`)
+          continue
+        }
+      }
+
       return { ok: true, value: ex.value, attempts: attempt }
     }
     lastReason = ex.reason

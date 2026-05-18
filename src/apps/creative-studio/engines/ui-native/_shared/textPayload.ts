@@ -13,6 +13,7 @@ import type { CreativeDNA } from '../../../types/creativeDNA'
 import { findPersona } from '../../../shared/metadata/personaLibrary'
 import { safeGenerateStructured } from '../../../shared/llm/safeGenerateStructured'
 import { assembleDnaDirective } from '../../../shared/prompt/dnaDirective'
+import { validateLocaleMany } from '../../../shared/qc/localeValidator'
 import { buildArchetypeMix, describeMix } from './commentArchetypes'
 
 /** What kind of UI-native content we are generating text for. */
@@ -493,6 +494,8 @@ export async function generateTextPayload(
       schema: { name: 'LLMReviewResponse', validate: isReviewResponse },
       fallback: reviewFallback(req),
       generatorLabel: 'ui-native review',
+      // P29 — locale validation: review body must be in the right language.
+      postValidate: (v) => validateLocaleMany([v.reviewBody, v.variantBought], req.locale),
     })
     return shapeReviewPayload(result.value, req, baseTimestamps[0] ?? '14:23')
   }
@@ -506,6 +509,8 @@ export async function generateTextPayload(
       schema: { name: 'LLMCommentResponse', validate: isCommentResponse },
       fallback: commentFallback(req),
       generatorLabel: 'ui-native comments',
+      // P29 — every comment body must match the locale.
+      postValidate: (v) => validateLocaleMany(v.comments.map((c) => c.text), req.locale),
     })
     return shapeCommentPayload(result.value, req, baseTimestamps)
   }
@@ -519,6 +524,8 @@ export async function generateTextPayload(
     schema: { name: 'LLMResponse', validate: isChatResponse },
     fallback: chatFallback(req),
     generatorLabel: 'ui-native chat',
+    // P29 — every chat message must match the locale.
+    postValidate: (v) => validateLocaleMany(v.messages.map((m) => m.text), req.locale),
   })
   return shapeChatPayload(result.value, req, baseTimestamps)
 }
