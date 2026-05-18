@@ -8,6 +8,7 @@ import {
 import { saveAsset, getUrl, isAssetRef } from '../../../utils/assetStore'
 import { renderForLandingSlot } from './chat-proof'
 import { renderForLandingSlot as renderIngredientCardForSlot } from './ingredient-card'
+import { renderForLandingSlot as renderComparisonCardForSlot } from './comparison-card'
 
 // ─────────────────────────────────────────────────────────────────────────
 // IMAGE GENERATION QUEUE for landing-page packs.
@@ -989,6 +990,61 @@ async function runIngredientCardRender(
   }
 }
 
+// ─────────────────────────────────────────────────────────────────────────
+// UI-NATIVE COMPARISON CARD — handler for comparison section. Generates
+// the side-by-side photographic split via KIE (left = dull generic
+// competitor, right = bright uploaded product, no text), then overlays
+// THEM/US headers, bullet rows with check/X icons, the VS badge, and
+// carousel chrome via canvas. Result: TikTok-ad-creative quality
+// comparison frame instead of warped AI infographic typography.
+// ─────────────────────────────────────────────────────────────────────────
+async function runComparisonCardRender(
+  job: ImageJob,
+  kieApiKey: string,
+  onTaskUpdate: (patch: Partial<ImagePrompt>) => void,
+  signal?: AbortSignal,
+): Promise<{ assetRef: string; retries: number }> {
+  if (signal?.aborted) throw new Error('Đã huỷ')
+
+  const productRefUrls: string[] = []
+  for (const m of job.pack.visualMemory ?? []) {
+    if (!m.ref) continue
+    if (isAssetRef(m.ref)) {
+      const u = await getUrl(m.ref)
+      if (u) productRefUrls.push(u)
+    } else if (m.ref.startsWith('http')) {
+      productRefUrls.push(m.ref)
+    }
+  }
+
+  if (productRefUrls.length === 0) {
+    throw new Error('Cần ảnh sản phẩm (Visual Memory) để render comparison card.')
+  }
+
+  if (!job.prompt.variationSeed) job.prompt.variationSeed = makeVariationSeed()
+
+  const bullets = job.section.bullets ?? []
+  const totalSlides = job.section.imagePrompts?.length ?? 5
+
+  onTaskUpdate({ status: 'generating', error: undefined })
+
+  try {
+    const { assetRef } = await renderComparisonCardForSlot({
+      slotIdx: job.imageIdx,
+      productName: job.pack.productName,
+      sectionBullets: bullets,
+      totalSlides,
+      productRefUrls,
+      kieApiKey,
+      variationSeed: job.prompt.variationSeed,
+    })
+    return { assetRef, retries: 0 }
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    throw new Error(`Comparison card render lỗi: ${msg}`)
+  }
+}
+
 async function runWithCreditSafeRetry(
   job: ImageJob,
   _memory: VisualMemoryItem[],  // legacy param — kept for callers, pack now used directly
@@ -1016,6 +1072,17 @@ async function runWithCreditSafeRetry(
   // is a separate aesthetic).
   if (job.section.type === 'ingredients' && job.pack.form !== 'chuyen-gia') {
     return runIngredientCardRender(job, kieApiKey, onTaskUpdate, signal)
+  }
+
+  // ── UI-NATIVE COMPARISON CARD ROUTING ────────────────────────────────
+  // comparison section asks KIE only for the side-by-side photographic
+  // split (THEM dark product on left, US bright product on right, no
+  // text). Canvas overlays THEM/US headers, bullet rows with X / check
+  // icons, the VS badge, and carousel chrome. Replaces the previous
+  // path which had KIE render a full comparison infographic with text —
+  // that produced warped fake labels, mismatched icons, broken hierarchy.
+  if (job.section.type === 'comparison' && job.pack.form !== 'chuyen-gia') {
+    return runComparisonCardRender(job, kieApiKey, onTaskUpdate, signal)
   }
 
   // Phase 7 — pass prompt body so selectRefsForSection can auto-attach
