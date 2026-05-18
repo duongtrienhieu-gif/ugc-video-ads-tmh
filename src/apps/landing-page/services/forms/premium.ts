@@ -87,13 +87,13 @@ Each section has standard shape: type, title, titleVi, copy, viTranslation, layo
 11-SECTION LUXURY EDITORIAL FLOW — produce EXACTLY in order
 ═══════════════════════════════════════════════════════════════
 
-1. type="hero" — LUXURY STATEMENT
-   • headline = a confident editorial line (6-10 words). Calm, aspirational. NO emoji. NO ALL-CAPS. NO product name. Example: "Skincare yang ditakdirkan untuk kulit anda" / "Một ritual yang anda layak"
+1. type="hero" — PREMIUM WELLNESS STATEMENT
+   • headline = a confident wellness-brand line (6-10 words). Calm, aspirational. NO emoji. NO ALL-CAPS. NO product name. Example: "Satu ritual harian, satu pelaburan jangka panjang" / "Wellness yang anda layak"
    • subheadline = 1-line brand promise in refined prose
    • copy = 2-3 line paragraph setting tone — confident, elegant, understated. NO marketing hype. Speak as the brand voice, not first-person diary.
    • DO NOT include cta in hero (premium is sparse — no early CTA).
    • DO NOT include urgencyText / offerStrip (zero urgency for this form).
-   • 1 imagePrompt: cinematic full-bleed luxury hero shot — could be a model with the product softly framed (cinematic lifestyle, premium soft lighting, beige/cream/dusty-rose palette) OR a luxury still-life of the product on a marble / velvet / silk surface with natural light. Editorial fashion-campaign aesthetic. NO designed text overlay (text lives in the LANDING page UI, not in the image).
+   • 1 imagePrompt: cinematic premium WELLNESS lifestyle hero shot — elegant Malaysian woman in her tasteful affluent home (marble kitchen counter / linen-dressed bedroom / sunlit bathroom shelf) with the PRODUCT clearly visible naturally in the scene (eg held softly while she has morning coffee, or placed on her wellness shelf next to fresh fruit). NOT a fashion model pose. NOT a perfume / beauty / cosmetic campaign. NOT empty-room posing. PRODUCT MUST BE VISIBLE. Soft natural daylight, beige/cream/dusty rose/warm linen palette. Reference aesthetic: Aman / Aesop / Tatcha / Japanese wellness brand / Scandinavian wellness — NOT Vogue editorial / Zara campaign.
 
 2. type="pain" — BRAND PHILOSOPHY ("the gap we noticed")
    • copy = 3-4 line refined paragraph framing the brand's WHY. Not "Anda penat?" — more "Kami percaya bahawa…", "Dalam dunia yang sentiasa pantas, …". Aspirational + observational tone. NEVER capslock. NEVER emoji.
@@ -101,10 +101,13 @@ Each section has standard shape: type, title, titleVi, copy, viTranslation, layo
    • DO NOT include cta in this section.
    • 1 imagePrompt: a moody atmospheric photograph that evokes the gap the brand fills — could be a quiet morning routine, a hand on glass, a candle moment, an empty luxe bathroom — NOT showing the product yet. Editorial fashion-magazine mood photograph. Soft natural light. Restrained palette.
 
-3. type="lifestyle" — ASPIRATIONAL MOMENT
-   • copy = 3-4 line refined paragraph evoking the lifestyle the product fits. "Untuk pagi yang tenang", "Untuk seorang yang menghargai detik kecil". NO bullets, no emoji.
+3. type="lifestyle" — PREMIUM WELLNESS RITUAL
+   • copy = 3-4 line refined paragraph evoking the wellness lifestyle the product fits. "Untuk pagi yang tenang", "Untuk seorang yang menghargai detik kecil dan kesihatan jangka panjang". NO bullets, no emoji.
    • DO NOT include cta.
-   • 2 imagePrompts: two cinematic lifestyle moments showing different elegant Malaysian women (or contexts) in aspirational morning / evening rituals — coffee on a marble counter, a bathroom shelf with the product softly in frame, soft linen sheets, golden hour. Fashion-editorial composition. Premium soft lighting. Models look quietly confident — no big smile, no posed selfie.
+   • 2 imagePrompts — BOTH MUST SHOW THE PRODUCT NATURALLY IN FRAME (this is the user's #1 fix priority — premium form was generating fashion-empty rooms; product MUST be visible in lifestyle):
+       (a) Morning wellness ritual — elegant Malaysian woman at her marble kitchen counter with the EXACT product visible alongside breakfast / fresh fruit / herbal tea / coffee. She might be holding it gently OR it's placed naturally on the counter while she sips coffee. Sunlit warm morning light. Beige/cream/linen palette. Reference: Japanese wellness / Aman-spa morning aesthetic.
+       (b) Evening wellness routine — same OR different elegant Malaysian woman in her bathroom shelf moment OR bedside ritual with the EXACT product clearly visible. Soft warm evening light, candle / linen / muted tones. Reference: Aesop bathroom aesthetic / Scandinavian wellness home.
+     BOTH: subtle quietly-confident demeanor (NOT broad smile, NOT phone selfie, NOT fashion-model pose). NOT empty-room standing pose. NOT perfume-ad aesthetic.
 
 4. type="product-discovery" — PRODUCT IDENTITY REVEAL
    • headline = product introduction line in confident editorial register (eg "Hadir dengan satu janji.")
@@ -128,10 +131,10 @@ Each section has standard shape: type, title, titleVi, copy, viTranslation, layo
        (b) Ritual moment — model's hands using the product OR the product in a serene bathroom shelf moment. Cinematic intimate composition. NO face needed.
 
 7. type="benefits" — REFINED BENEFITS (NOT bullet spam)
-   • copy = 3-4 line paragraph framing 3-4 benefits AS ELEGANT PHRASES, not bullets. "Kulit yang lebih sihat. Tidur yang lebih lena. Pagi yang lebih ringan." Sentence fragments allowed for rhythm.
+   • copy = 3-4 line paragraph framing 3-4 benefits AS ELEGANT PHRASES, not bullets. "Tenaga yang stabil. Tidur yang lebih lena. Pagi yang lebih ringan." Sentence fragments allowed for rhythm.
    • bullets = optional 3-4 short single-line refined benefit phrases (no emoji, no ✅, no urgency)
    • DO NOT include cta.
-   • 1 imagePrompt: editorial benefit composition — could be a model in aspirational golden-hour light or an artful still-life conveying renewal. NO icon grid. NO infographic. Fashion-editorial photograph.
+   • 1 imagePrompt: PREMIUM WELLNESS LIFESTYLE benefit composition — elegant Malaysian woman in a quietly confident moment that conveys the benefit (eg energetic morning glow, peaceful evening, healthy active life) with the PRODUCT VISIBLE NATURALLY in the scene (held / on shelf / on table). Premium wellness-brand aesthetic. NOT icon grid. NOT infographic. NOT a fashion-model headshot. Reference: premium wellness brand campaign (Aman / Tatcha / Goop), NOT Vogue editorial.
 
 8. type="social-proof" — CURATED EDITORIAL TESTIMONIALS
    • reviews = 3 ONLY (NOT 10 — premium is curation, not quantity). Each testimonial in refined prose (2-3 sentences each), reviewer with a single-name byline ("— Sarah K., Kuala Lumpur" / "— Ahmad N., Penang"). NO star ratings. NO emoji. NO "Verified Purchase" badge.
@@ -173,16 +176,17 @@ COPY RULES — REFINED EDITORIAL VOICE
 • One soft CTA at the end (section 11). All other sections are CTA-free.
 
 ═══════════════════════════════════════════════════════════════
-IMAGE RULES — LUXURY EDITORIAL AESTHETIC
+IMAGE RULES — PREMIUM WELLNESS LIFESTYLE (NOT FASHION)
 ═══════════════════════════════════════════════════════════════
-• Studio / cinematic / editorial / fashion-campaign aesthetic ENCOURAGED (this is the ONLY form besides chuyen-gia where studio look is fully welcomed).
-• Premium palette: cream / dusty rose / soft beige / linen / marble / pale sage / muted gold / warm grey. AVOID: hot red, neon orange, harsh contrast, loud gradients.
-• Composition: generous whitespace, single subject, controlled gradient backgrounds, soft natural OR controlled studio lighting.
-• Models: when present — elegant Malaysian women (or men) in refined casual / linen / silk / soft cotton. Candid contemplative expressions, NOT broad smiles, NOT phone-selfie posing. Look like a fashion editorial.
-• Product photography: luxury still-life on raw silk / marble / linen / sculpted shadow / glass. Studio precision, editorial composition.
-• Ingredient macros: like premium beauty magazine photography — close-up texture, soft natural / studio light, neutral background.
+• AESTHETIC TARGET: premium WELLNESS BRAND lifestyle photography. Reference brands: Aman, Aesop, Tatcha, Goop, Japanese wellness brands, Scandinavian wellness studios. NOT Vogue / Tatler / Zara campaign. NOT perfume / beauty / cosmetic advertising. NOT high fashion runway.
+• PRODUCT VISIBILITY: at least 80% of people-shots (hero, lifestyle ×2, product-discovery, mechanism (b), benefits, final-cta) MUST show the EXACT product naturally integrated in frame — held softly, on a shelf, on a marble counter, beside breakfast, on a bathroom counter, on a bedside table. Premium WELLNESS is product-anchored, not abstract fashion-mood-only.
+• Premium palette: cream / dusty rose / soft beige / linen / marble / pale sage / muted gold / warm grey. AVOID: hot red, neon orange, harsh contrast, loud gradients, dramatic dark moody.
+• Composition: generous whitespace, single subject, controlled natural environments (real-feeling affluent home — marble kitchen / linen bedroom / sunlit bathroom shelf), soft natural daylight preferred over harsh studio.
+• Models when present: elegant Malaysian women (or men) — SOUTHEAST ASIAN features, mid-30s to mid-40s, believable affluent-but-grounded lifestyle. NOT Western supermodels. NOT Korean idols. NOT influencer-styled. In refined casual / linen / silk / soft cotton wellness attire (NOT high fashion / NOT seductive / NOT runway). Candid contemplative expressions — quietly confident, no broad smile, no phone-selfie pose, no fashion-model stance.
+• Product photography: luxury still-life on raw silk / marble / linen / sculpted shadow / glass. Studio precision OK but should feel "wellness brand product page" not "perfume ad".
+• Ingredient macros: like premium wellness brand photography — close-up texture on neutral background. Aesop / Tatcha aesthetic, NOT Sephora ad.
 • NO UGC mobile-phone aesthetic. NO marketplace screenshot UI (TikTok / Shopee / Facebook comment). NO WhatsApp screenshot. NO "Trending #1" badges. NO discount banners. NO designed CTA overlays. NO "SEBELUM/SELEPAS" labels. NO crowd group photos.
-• Press editorial: Vogue / Tatler / Harper's Bazaar / Female Malaysia register — NEVER mStar / Berita Harian / health.com.my (wrong magazine class).
+• Press editorial: Vogue / Tatler / Female Malaysia register OK for the news-proof MOCK only — but the people-shots themselves are WELLNESS LIFESTYLE not fashion editorial.
 
 ═══════════════════════════════════════════════════════════════
 LANGUAGE RULES
@@ -211,7 +215,14 @@ ABSOLUTE BANS for this form
 ✗ Bulleted infographic icon grids
 ✗ Crowd group photos
 ✗ UGC mobile-phone aesthetic
-✗ Studio gimmickry — gimbal-perfect spin shots / 360 product turns`
+✗ Studio gimmickry — gimbal-perfect spin shots / 360 product turns
+✗ Fashion-magazine / Vogue / runway / Zara campaign aesthetic on PEOPLE-SHOTS (the news-proof MOCK can use Vogue/Tatler layout, but lifestyle/hero/benefits/final-cta shots are PREMIUM WELLNESS lifestyle, NOT fashion photography)
+✗ Perfume / cosmetic / beauty advertising aesthetic (seductive pose, glamour styling, over-styled hair, heavy makeup, fashion-model body language)
+✗ Empty-room standing pose with no product (product MUST be naturally in-frame for hero / lifestyle / benefits / final-cta)
+✗ Western / Caucasian / Korean idol / Chinese beauty influencer faces — use SOUTHEAST ASIAN Malaysian models with believable affluent-grounded look
+✗ High-fashion styling (statement jewelry, designer logos, runway hair, beauty-shoot lighting)
+✗ Cosmetic-product-page aesthetic (clinical glossy beauty ad) — premium WELLNESS is calm and grounded, not glossy
+✗ Generic "model staring out window with no product" composition — this was the user-reported failure mode this fix targets`
 
 // ── User prompt builder ──────────────────────────────────────────────────
 

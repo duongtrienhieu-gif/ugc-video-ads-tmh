@@ -276,24 +276,81 @@ function buildPremiumLuxuryDirective(job: ImageJob): string {
   const sectionType = job.section.type
   const imageIdx = job.imageIdx
 
+  // Phase 7 stabilization — premium form was producing fashion-model
+  // energy with no product visible. User wants PREMIUM WELLNESS BRAND
+  // aesthetic (Aman / Aesop / Tatcha) NOT fashion editorial.
   const baseAesthetic =
-    'LUXURY EDITORIAL AESTHETIC (thuong-hieu-cao-cap form):\n'
-    + '  • Premium palette — cream / dusty rose / soft beige / linen / marble / pale sage / muted gold / warm grey. AVOID hot red, neon orange, harsh contrast.\n'
-    + '  • Generous whitespace, single subject, controlled gradient backgrounds.\n'
-    + '  • Soft natural OR controlled studio lighting — cinematic luxury campaign feel.\n'
-    + '  • NO designed text overlay (text lives in the landing UI, not in the photograph).\n'
-    + '  • NO discount badge, NO star rating widget, NO marketplace UI, NO emoji.\n'
+    'PREMIUM WELLNESS BRAND AESTHETIC (thuong-hieu-cao-cap form — NOT fashion editorial):\n'
+    + '  • TARGET reference: Aman / Aesop / Tatcha / Japanese wellness / Scandinavian wellness brand campaign. NOT Vogue / Tatler / Zara campaign. NOT perfume / cosmetic advertising. NOT high-fashion runway.\n'
+    + '  • Premium palette: cream / dusty rose / soft beige / linen / marble / pale sage / muted gold / warm grey. AVOID hot red, neon orange, harsh contrast.\n'
+    + '  • Composition: real-feeling affluent home (marble kitchen / linen bedroom / sunlit bathroom shelf) OR studio still-life. Generous whitespace, soft natural daylight preferred over harsh studio.\n'
+    + '  • Models: SOUTHEAST ASIAN Malaysian, mid-30s to mid-40s, refined casual wellness attire (linen / silk / soft cotton). Quietly confident demeanor. NO broad smile. NO phone-selfie. NO fashion-model stance. NO seductive pose. NO heavy makeup. NO statement jewelry / designer logos.\n'
+    + '  • NO designed text overlay (no discount badge, no CTA button, no star widget, no marketplace UI, no emoji rendered into image).\n'
+
+  // ── PRODUCT-VISIBLE sections — user said premium needs product in 80% of shots ──
+  if (sectionType === 'hero') {
+    return baseAesthetic + (
+      '  • Specific to hero: PRODUCT MUST BE VISIBLE in this shot. Elegant Malaysian woman in her tasteful affluent home — marble kitchen counter, linen-dressed bedroom, OR sunlit bathroom shelf — with the EXACT uploaded product naturally in frame (held softly, on the shelf next to fresh fruit, on a marble surface next to coffee). NOT empty-room standing pose. NOT fashion model headshot. Soft natural daylight. Wellness lifestyle mood.'
+    )
+  }
+
+  if (sectionType === 'lifestyle') {
+    if (imageIdx === 0) {
+      return baseAesthetic + (
+        '  • Specific to lifestyle (morning ritual): PRODUCT MUST BE VISIBLE. Elegant Malaysian woman at her marble kitchen counter — fresh fruit / herbal tea / coffee in frame, the EXACT uploaded product naturally placed or held. Sunlit warm morning light. Reference: Japanese wellness / Aman-spa morning aesthetic. NOT fashion editorial.'
+      )
+    }
+    return baseAesthetic + (
+      '  • Specific to lifestyle (evening ritual): PRODUCT MUST BE VISIBLE. Same OR different elegant Malaysian woman in her bathroom shelf moment OR bedside ritual with the EXACT product clearly in frame. Soft warm evening light, candle / linen / muted tones. Reference: Aesop bathroom / Scandinavian wellness home. NOT perfume ad.'
+    )
+  }
+
+  if (sectionType === 'benefits') {
+    return baseAesthetic + (
+      '  • Specific to benefits: PRODUCT MUST BE VISIBLE. Elegant Malaysian woman in a quietly-confident wellness moment that conveys renewal (energetic morning glow, peaceful evening, calm healthy life) with the product naturally held or placed in frame. NOT icon grid, NOT infographic, NOT a fashion-model headshot.'
+    )
+  }
+
+  if (sectionType === 'final-cta') {
+    return baseAesthetic + (
+      '  • Specific to final-cta: PRODUCT MUST BE PROMINENTLY VISIBLE. Closing premium wellness brand shot — the exact product elegantly displayed on a premium surface (marble / linen / glass) OR held by a relaxed model in golden-hour wellness lifestyle setting. Calm grounded mood. Wellness brand campaign aesthetic, NOT fashion close-up.'
+    )
+  }
+
+  if (sectionType === 'product-discovery') {
+    return baseAesthetic + (
+      '  • Specific to product-discovery: PRODUCT IS THE HERO. Luxury wellness-brand product photography — exact uploaded product on a premium surface (raw silk, soft marble, dusty linen, sculpted shadow). Soft natural daylight or controlled studio. Wellness-brand still-life aesthetic (Aesop / Tatcha / Goop product page register), NOT fashion still-life.'
+    )
+  }
+
+  if (sectionType === 'mechanism') {
+    return baseAesthetic + (
+      '  • Specific to mechanism (texture / ritual moment): close-up of the product\'s sensory experience — cream swatch on fingertips, capsule on porcelain dish, oil drop on glass — OR a serene wellness ritual moment with product visible. Editorial intimate composition. Premium wellness aesthetic, NOT cosmetic-ad gloss.'
+    )
+  }
+
+  if (sectionType === 'ingredients') {
+    return baseAesthetic + (
+      '  • Specific to ingredients: premium WELLNESS ingredient macro — natural source close-up (ginseng root on linen, marine algae texture, rosehip macro, ginger slice) on luxe neutral background. Wellness brand still-life (Aesop / Tatcha aesthetic), NOT cosmetic beauty-magazine.'
+    )
+  }
+
+  if (sectionType === 'pain') {
+    return baseAesthetic + (
+      '  • Specific to pain (brand philosophy mood): atmospheric photograph evoking the gap the brand fills — quiet morning routine, hand on glass, candle moment, empty wellness home corner. Does NOT need product in frame for this section only (mood philosophy). NOT fashion editorial mood. Soft contemplative wellness mood.'
+    )
+  }
 
   if (sectionType === 'social-proof') {
     return baseAesthetic + (
-      '  • Specific to social-proof: fashion-editorial portrait of an elegant Malaysian woman (or man) in soft natural light, candid contemplative moment (NOT looking at camera, NOT smiling broadly). Magazine portrait quality. NO Shopee/TikTok/Facebook screenshot UI. NO marketplace badges.'
+      '  • Specific to social-proof: refined editorial portrait of an elegant Malaysian woman (or man) in soft natural light, candid contemplative moment. Wellness lifestyle portrait — NOT fashion magazine. NOT looking at camera. NOT broad smile. NO Shopee/TikTok/Facebook UI. NO marketplace badges.'
     )
   }
 
   if (sectionType === 'news-proof') {
     if (imageIdx === 0) {
       return baseAesthetic + (
-        '  • Specific to news-proof (mock 1): premium press editorial layout — Vogue / Tatler / Harper\'s Bazaar / Female Malaysia register. Clean serif typography, generous whitespace, single product feature image. NEVER mStar / Berita Harian style (wrong register).'
+        '  • Specific to news-proof (mock 1): premium press editorial layout — Vogue / Tatler / Harper\'s Bazaar / Female Malaysia register OK for this MOCK only (this is a mock article, fashion-mag layout is appropriate for it). Clean serif typography, generous whitespace, single product feature image. NEVER mStar / Berita Harian style.'
       )
     }
     return baseAesthetic + (
@@ -301,33 +358,9 @@ function buildPremiumLuxuryDirective(job: ImageJob): string {
     )
   }
 
-  if (sectionType === 'ingredients') {
-    return baseAesthetic + (
-      '  • Specific to ingredients: luxury beauty-magazine ingredient macro — natural source close-up (ginseng root on linen, marine algae texture, rosehip macro, ginger slice) on a luxe neutral background. Fashion-editorial still-life, premium soft lighting.'
-    )
-  }
-
-  if (sectionType === 'mechanism') {
-    return baseAesthetic + (
-      '  • Specific to mechanism (texture / ritual): close-up of the product\'s actual sensory experience — cream swatch on fingertips, oil dripping, serum on smooth surface, OR a serene bathroom-shelf ritual moment. Editorial intimate composition. NO biology jargon, NO process arrows.'
-    )
-  }
-
-  if (sectionType === 'pain') {
-    return baseAesthetic + (
-      '  • Specific to pain (brand philosophy mood): atmospheric photograph evoking the gap the brand fills — quiet morning routine, hand on glass, candle moment, empty luxe bathroom. NOT showing the product yet. Editorial magazine mood photograph.'
-    )
-  }
-
-  if (sectionType === 'product-discovery') {
-    return baseAesthetic + (
-      '  • Specific to product-discovery: luxury studio product photography on a premium surface (raw silk, soft marble, dusty linen, sculpted shadow). Cinematic studio lighting with controlled gradient background. Editorial fashion-still-life aesthetic.'
-    )
-  }
-
-  // hero / lifestyle / benefits / final-cta — cinematic luxury campaign
+  // Fallback
   return baseAesthetic + (
-    `  • Specific to ${sectionType}: cinematic fashion-campaign aesthetic. When a model appears — elegant Malaysian person in refined casual / linen / silk / soft cotton, candid contemplative expression, NOT broad smile. When product appears — luxury still-life on premium surface OR softly held by model. Editorial luxury campaign mood.`
+    `  • Specific to ${sectionType}: premium wellness lifestyle composition. Product visible when contextually relevant. Quiet confident wellness mood, NOT fashion editorial.`
   )
 }
 
@@ -637,12 +670,34 @@ function buildFinalPrompt(job: ImageJob, hasProductRefs: boolean): string {
 const EXPERT_NEGATIVE_BLOCK =
   'AVOID HARD (chuyen-gia editorial-infographic form): UGC selfie phone-quality aesthetic; TikTok / Shopee / marketplace screenshot layout; floating product PNG; centered marketing composition; urgency badges / countdown / discount strips / CTA buttons / "DISKAUN" or "ORDER" text rendered into the image; emoji-heavy graphics; cartoonish or chibi illustration; harsh advertising lighting; dramatic gym-influencer transformation aesthetic; chaotic collage; fake brand text substitution; unlabeled generic stock powder photo (ingredient images MUST have compound name labels rendered into them); oversaturated colors. NOTE: scientific text labels (compound names like "Lactobacillus Acidophilus", mechanism step labels like "Bước 1", short benefit phrases like "Tenaga Stabil", anatomical callouts) ARE REQUIRED on infographic / ingredient / mechanism / benefits sections — these are scientific labels, NOT marketing overlays.'
 
-// Phase 6 — premium-form-specific negatives. EXPLICITLY allows
-// fashion-editorial / luxury studio / cinematic photography aesthetic
-// (which the default block bans). Bans the marketplace / UGC / urgency
-// patterns that would break the luxury reading experience.
+// Phase 6 → Phase 7 stabilization — premium form negative block REWRITTEN.
+// User reported the form was producing fashion-model / perfume-ad energy
+// with empty rooms and no product. Now explicitly bans fashion editorial
+// aesthetic on PEOPLE-SHOTS, requires product visibility, demands
+// Southeast Asian Malaysian models with grounded wellness affect.
+// Reference brands updated: Aman / Aesop / Tatcha / Japanese wellness /
+// Scandinavian wellness — NOT Vogue / Tatler / Zara.
 const PREMIUM_NEGATIVE_BLOCK =
-  'AVOID HARD (thuong-hieu-cao-cap luxury-editorial form): UGC mobile-phone selfie aesthetic; TikTok / Shopee / Facebook / WhatsApp screenshot UI; marketplace badges (Verified Purchase / 5-star widget / Trending #1); discount banners or urgency strips; designed CTA overlays in image (text belongs in landing UI, not in photograph); SEBELUM/SELEPAS dramatic before-after labels; crowd group photos; phone-selfie posing or broad smile; hot red / neon orange / harsh contrast palettes; loud starburst graphics; mStar / Berita Harian mass-market editorial register (use Vogue / Tatler / Female Malaysia register instead); floating cut-out product PNG; fake brand text substitution; clinical infographic icon grids; emoji rendered into image.'
+  'AVOID HARD (thuong-hieu-cao-cap premium-wellness form): '
+  + 'Fashion-magazine / Vogue / Zara campaign / runway aesthetic on PEOPLE-SHOTS; '
+  + 'perfume / cosmetic / beauty advertising aesthetic (seductive pose, glamour styling, heavy makeup, statement jewelry, designer logos visible); '
+  + 'fashion-model stance / posing / vacant-stare-at-window with no product visible; '
+  + 'empty-room standing pose with no product (lifestyle / hero / benefits / final-cta MUST have product naturally in frame); '
+  + 'Western / Caucasian / European / Korean idol / Chinese beauty influencer / Japanese anime face on Malaysian-target shots (use SOUTHEAST ASIAN Malaysian models with believable affluent-grounded look); '
+  + 'cosmetic-product-page glossy beauty ad aesthetic (premium WELLNESS is calm and grounded, not glossy); '
+  + 'broad-smile influencer pose or phone-selfie posing; '
+  + 'UGC mobile-phone aesthetic; '
+  + 'TikTok / Shopee / Facebook / WhatsApp screenshot UI; '
+  + 'marketplace badges (Verified Purchase / 5-star widget / Trending #1); '
+  + 'discount banners / urgency strips / countdown / CTA buttons / "DISKAUN" text rendered into image; '
+  + 'SEBELUM/SELEPAS dramatic before-after labels; '
+  + 'crowd group photos; '
+  + 'hot red / neon orange / harsh contrast palettes; '
+  + 'loud starburst graphics; '
+  + 'floating cut-out product PNG; '
+  + 'fake brand text substitution; '
+  + 'clinical infographic icon grids; '
+  + 'emoji rendered into image.'
 
 // Phase 5 — hard-sell-form-specific negatives. ALLOWS designed CTA
 // overlays / promo banners / urgency badges / ecommerce ad look on
