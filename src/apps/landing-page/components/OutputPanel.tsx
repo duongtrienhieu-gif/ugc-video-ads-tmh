@@ -112,13 +112,15 @@ export default function OutputPanel({
           (which live in App.tsx at position absolute right-4 top-3 z-50)
           so they no longer cover the save button. Below lg the layout
           collapses to a single column. */}
-      <div className="shrink-0 border-b border-black/8 bg-gradient-to-r from-violet-50/40 to-purple-50/30 px-5 py-3">
+      <div className="shrink-0 border-b border-black/8 bg-gradient-to-r from-violet-50/40 to-purple-50/30 px-3 md:px-5 py-2 md:py-3">
         <div className="grid grid-cols-1 gap-2 lg:grid-cols-[minmax(0,1fr)_auto_19rem] lg:items-center">
-          {/* Zone 1 — title + sync badge + meta */}
-          <div className="min-w-0">
+          {/* Zone 1 — title + sync badge + meta. On mobile right-pads
+              to leave room for the global Gemini/KIE badges that overlay
+              the top-right corner of the viewport. */}
+          <div className="min-w-0 pr-20 md:pr-0">
             <div className="flex flex-wrap items-center gap-1.5">
-              <p className="truncate text-sm font-bold text-gray-900">
-                {pack.productName} — {pack.sections.length} sections
+              <p className="truncate text-xs md:text-sm font-bold text-gray-900">
+                {pack.productName} <span className="text-gray-400 font-medium">— {pack.sections.length} sections</span>
               </p>
               {loadedFromId && loadedProjectTitle && (
                 <span
@@ -126,47 +128,52 @@ export default function OutputPanel({
                   title="Đang chỉnh sửa project — mọi thay đổi tự đồng bộ"
                 >
                   <FolderInput className="h-2.5 w-2.5" />
-                  {loadedProjectTitle}
+                  <span className="truncate max-w-[120px] md:max-w-none">{loadedProjectTitle}</span>
                 </span>
               )}
             </div>
-            <p className="text-[10px] text-gray-400">
+            <p className="hidden md:block text-[10px] text-gray-400">
               Ngôn ngữ: {pack.language.toUpperCase()} · Tạo lúc {new Date(pack.generatedAt).toLocaleTimeString('vi-VN')}
               {loadedFromId && ' · ✓ Tự đồng bộ project'}
             </p>
           </div>
 
-          {/* Zone 2 — action buttons (CENTERED on lg+) */}
-          <div className="flex flex-wrap items-center justify-center gap-1.5">
+          {/* Zone 2 — action buttons (CENTERED on lg+). On mobile,
+              action labels are hidden — icons only with title tooltips
+              so the row fits horizontally without wrapping into a
+              second line. */}
+          <div className="flex flex-wrap items-center justify-start lg:justify-center gap-1.5">
             {!loadedFromId && (
               <input
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
                 placeholder={`vd: "${pack.productName} v1"`}
-                className="w-44 rounded-lg border border-black/10 bg-white px-2 py-1.5 text-[11px] outline-none focus:border-violet-500/40"
+                className="w-28 md:w-44 rounded-lg border border-black/10 bg-white px-2 py-1.5 text-[11px] outline-none focus:border-violet-500/40"
               />
             )}
             {loadedFromId && onNewProject && (
               <button
                 onClick={onNewProject}
                 title="Thoát project và bắt đầu mới"
-                className="flex items-center gap-1 rounded-full border border-black/10 bg-white px-3 py-1.5 text-[11px] font-medium text-gray-700 hover:bg-black/[0.04]"
+                className="flex items-center gap-1 rounded-full border border-black/10 bg-white px-2.5 md:px-3 py-1.5 text-[11px] font-medium text-gray-700 hover:bg-black/[0.04]"
               >
-                <FilePlus className="h-3 w-3" /> Project mới
+                <FilePlus className="h-3 w-3" /> <span className="hidden md:inline">Project mới</span><span className="md:hidden">Mới</span>
               </button>
             )}
             <button
               onClick={onRegenerate}
               disabled={isGenerating}
-              className="flex items-center gap-1 rounded-full border border-black/10 bg-white px-3 py-1.5 text-[11px] font-medium text-gray-700 hover:bg-black/[0.04] disabled:opacity-40"
+              title="Tạo lại landing pack"
+              className="flex items-center gap-1 rounded-full border border-black/10 bg-white px-2.5 md:px-3 py-1.5 text-[11px] font-medium text-gray-700 hover:bg-black/[0.04] disabled:opacity-40"
             >
               {isGenerating ? <Loader2 className="h-3 w-3 animate-spin" /> : <RotateCcw className="h-3 w-3" />}
-              Tạo lại
+              <span className="hidden md:inline">Tạo lại</span>
             </button>
             <button
               onClick={handleSave}
               disabled={saving || saved}
-              className={`flex items-center gap-1 rounded-full px-4 py-1.5 text-[11px] font-bold shadow-sm transition-colors ${
+              title={loadedFromId ? 'Lưu thay đổi vào project' : 'Lưu landing page'}
+              className={`flex items-center gap-1 rounded-full px-3 md:px-4 py-1.5 text-[11px] font-bold shadow-sm transition-colors ${
                 saved
                   ? 'bg-emerald-500/15 text-emerald-700'
                   : loadedFromId
@@ -175,10 +182,10 @@ export default function OutputPanel({
               }`}
             >
               {saved
-                ? <><Check className="h-3 w-3" /> Đã lưu</>
+                ? <><Check className="h-3 w-3" /> <span className="hidden md:inline">Đã lưu</span><span className="md:hidden">✓</span></>
                 : loadedFromId
-                  ? <><Save className="h-3 w-3" /> Lưu thay đổi</>
-                  : <><Save className="h-3 w-3" /> Lưu LandingPage</>}
+                  ? <><Save className="h-3 w-3" /> <span className="hidden md:inline">Lưu thay đổi</span><span className="md:hidden">Lưu</span></>
+                  : <><Save className="h-3 w-3" /> <span className="hidden md:inline">Lưu LandingPage</span><span className="md:hidden">Lưu</span></>}
             </button>
           </div>
 
@@ -270,6 +277,10 @@ function ImageGenerationBar({
         </p>
       </div>
 
+      {/* Action buttons — on mobile we shrink labels aggressively so
+          all three (retry / missing / regen-all) fit on one row without
+          stacking into a giant vertical column. Full labels remain on
+          desktop via responsive `hidden md:inline`. */}
       <div className="flex flex-wrap items-center gap-1.5">
         {isGenerating && progress && (
           <ProgressMeter progress={progress} />
@@ -280,9 +291,11 @@ function ImageGenerationBar({
           <button
             onClick={onRetryFailed}
             title={`Chỉ tạo lại ${failedCount} ảnh lỗi (~${estCreditsFailed} credit)`}
-            className="flex items-center gap-1 rounded-full border border-red-200 bg-white px-3 py-1.5 text-[11px] font-bold text-red-700 hover:bg-red-50"
+            className="flex items-center gap-1 rounded-full border border-red-200 bg-white px-2.5 md:px-3 py-1.5 text-[11px] font-bold text-red-700 hover:bg-red-50"
           >
-            <AlertTriangle className="h-3 w-3" /> Tạo lại {failedCount} ảnh lỗi (~{estCreditsFailed} credit)
+            <AlertTriangle className="h-3 w-3" />
+            <span className="md:hidden">Lỗi {failedCount}</span>
+            <span className="hidden md:inline">Tạo lại {failedCount} ảnh lỗi (~{estCreditsFailed} credit)</span>
           </button>
         )}
 
@@ -291,9 +304,11 @@ function ImageGenerationBar({
           <button
             onClick={onGenerateRemaining}
             title={`Chỉ tạo ${remaining} ảnh còn thiếu (~${estCreditsRemaining} credit)`}
-            className="flex items-center gap-1 rounded-full border border-violet-200 bg-white px-3 py-1.5 text-[11px] font-bold text-violet-700 hover:bg-violet-50"
+            className="flex items-center gap-1 rounded-full border border-violet-200 bg-white px-2.5 md:px-3 py-1.5 text-[11px] font-bold text-violet-700 hover:bg-violet-50"
           >
-            <Sparkles className="h-3 w-3" /> Tạo {remaining} ảnh còn thiếu (~{estCreditsRemaining} credit)
+            <Sparkles className="h-3 w-3" />
+            <span className="md:hidden">Còn {remaining}</span>
+            <span className="hidden md:inline">Tạo {remaining} ảnh còn thiếu (~{estCreditsRemaining} credit)</span>
           </button>
         )}
 
@@ -302,14 +317,23 @@ function ImageGenerationBar({
           onClick={onGenerateAll}
           disabled={isGenerating || totalImages === 0}
           title={`Sinh toàn bộ ${totalImages} ảnh (~${estCreditsAll} credit)`}
-          className="flex items-center gap-1.5 rounded-full bg-amber-600 px-4 py-1.5 text-[11px] font-bold text-white shadow-sm hover:bg-amber-700 disabled:cursor-not-allowed disabled:opacity-40"
+          className="flex items-center gap-1.5 rounded-full bg-amber-600 px-3 md:px-4 py-1.5 text-[11px] font-bold text-white shadow-sm hover:bg-amber-700 disabled:cursor-not-allowed disabled:opacity-40"
         >
           {isGenerating ? <Loader2 className="h-3 w-3 animate-spin" /> : <Sparkles className="h-3 w-3" />}
-          {isGenerating
-            ? 'Đang sinh…'
-            : generated > 0
-              ? `Sinh lại tất cả ${totalImages} ảnh (~${estCreditsAll} credit)`
-              : `Sinh tất cả ${totalImages} ảnh (~${estCreditsAll} credit)`}
+          {isGenerating ? (
+            <span>Đang sinh…</span>
+          ) : (
+            <>
+              <span className="md:hidden">
+                {generated > 0 ? `Sinh lại ${totalImages}` : `Sinh ${totalImages} ảnh`}
+              </span>
+              <span className="hidden md:inline">
+                {generated > 0
+                  ? `Sinh lại tất cả ${totalImages} ảnh (~${estCreditsAll} credit)`
+                  : `Sinh tất cả ${totalImages} ảnh (~${estCreditsAll} credit)`}
+              </span>
+            </>
+          )}
         </button>
       </div>
     </div>

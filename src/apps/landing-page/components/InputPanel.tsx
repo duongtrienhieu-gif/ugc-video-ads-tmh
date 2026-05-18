@@ -1,5 +1,5 @@
 import { useState, useRef } from 'react'
-import { Package, Loader2, LayoutTemplate, Globe2, Upload, X, Image as ImageIcon, Link2 } from 'lucide-react'
+import { Package, Loader2, LayoutTemplate, Globe2, Upload, X, Image as ImageIcon, Link2, ChevronDown, Check } from 'lucide-react'
 import type { Product } from '../../../stores/types'
 import type { LandingGenParams, LandingLanguage, LandingForm, CompetitorInfluence, VisualMemoryItem } from '../types'
 import { useBankStore } from '../../../stores/bankStore'
@@ -137,6 +137,16 @@ export default function InputPanel({
   const [uploading, setUploading]             = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
+  // Mobile-only accordion state — step 1 expanded by default. Only ONE
+  // section open at a time on mobile. Desktop ignores this state (all
+  // sections render expanded regardless via `md:block`).
+  const [expandedStep, setExpandedStep] = useState<number | null>(1)
+
+  // Derived label for the selected form, used in the collapsed
+  // accordion header summary.
+  const selectedFormOption = FORM_OPTIONS.find((f) => f.id === form)
+  const selectedLanguageOption = LANGUAGE_OPTIONS.find((l) => l.id === language)
+
   const resolvedProductImage = useAssetUrl(selectedProduct?.productImage)
   const hasGeminiKey = useSettingsStore((s) => s.hasGeminiKey())
   const openApp  = useAppStore((s) => s.openApp)
@@ -202,10 +212,17 @@ export default function InputPanel({
         </p>
       </div>
 
-      <div className="flex-1 overflow-y-auto px-4 py-3 space-y-4">
+      <div className="flex-1 overflow-y-auto px-4 py-3 space-y-2 md:space-y-4">
 
         {/* STEP 1 — Product */}
-        <Section step={1} title="Chọn sản phẩm">
+        <Section
+          step={1}
+          title="Chọn sản phẩm"
+          summary={selectedProduct?.productName ?? 'Chưa chọn'}
+          completed={!!selectedProduct}
+          expandedStep={expandedStep}
+          onToggle={setExpandedStep}
+        >
           {selectedProduct ? (
             <div className="flex items-center gap-3 rounded-xl border border-black/10 bg-white p-2.5">
               <div className="h-12 w-12 shrink-0 overflow-hidden rounded-lg bg-gray-100">
@@ -245,7 +262,14 @@ export default function InputPanel({
         </Section>
 
         {/* STEP 2 — Visual Memory */}
-        <Section step={2} title="Ảnh tham chiếu sản phẩm (tuỳ chọn)">
+        <Section
+          step={2}
+          title="Ảnh tham chiếu sản phẩm (tuỳ chọn)"
+          summary={visualMemory.length > 0 ? `${visualMemory.length} ảnh` : 'Bỏ qua'}
+          completed={visualMemory.length > 0}
+          expandedStep={expandedStep}
+          onToggle={setExpandedStep}
+        >
           <p className="text-[10px] text-gray-500">
             Upload ảnh sản phẩm (packaging, label, logo…) để AI giữ identity nhất quán khi sinh ảnh. Tối đa 3 ảnh đầu được pass vào image generator.
           </p>
@@ -283,7 +307,14 @@ export default function InputPanel({
         </Section>
 
         {/* STEP 3 — Language */}
-        <Section step={3} title="Ngôn ngữ landing page">
+        <Section
+          step={3}
+          title="Ngôn ngữ landing page"
+          summary={selectedLanguageOption ? `${selectedLanguageOption.flag} ${selectedLanguageOption.label}` : undefined}
+          completed
+          expandedStep={expandedStep}
+          onToggle={setExpandedStep}
+        >
           <div className="grid grid-cols-3 gap-1.5">
             {LANGUAGE_OPTIONS.map((l) => (
               <button
@@ -308,7 +339,14 @@ export default function InputPanel({
         </Section>
 
         {/* STEP 4 — Form selector (Phase 7 — productized visual cards) */}
-        <Section step={4} title="Chọn kiểu landing page">
+        <Section
+          step={4}
+          title="Chọn kiểu landing page"
+          summary={selectedFormOption ? `${selectedFormOption.icon} ${selectedFormOption.title}` : undefined}
+          completed
+          expandedStep={expandedStep}
+          onToggle={setExpandedStep}
+        >
           <p className="mb-2 text-[10px] text-gray-400">
             Mỗi kiểu là một <strong>sales psychology engine riêng</strong> — chọn theo mục tiêu marketing, không chỉ theo giao diện.
           </p>
@@ -330,7 +368,14 @@ export default function InputPanel({
         </Section>
 
         {/* STEP 5 — Competitor URL (AI học từ đối thủ) */}
-        <Section step={5} title="Học từ landing page đối thủ (tuỳ chọn)">
+        <Section
+          step={5}
+          title="Học từ landing page đối thủ (tuỳ chọn)"
+          summary={competitorUrl.trim() ? competitorUrl.replace(/^https?:\/\//, '').slice(0, 28) + '…' : 'Bỏ qua'}
+          completed={!!competitorUrl.trim()}
+          expandedStep={expandedStep}
+          onToggle={setExpandedStep}
+        >
           <div className="flex items-center gap-2 rounded-lg border border-black/10 bg-white px-3 py-2">
             <Link2 className="h-3.5 w-3.5 shrink-0 text-gray-400" />
             <input
@@ -383,15 +428,18 @@ export default function InputPanel({
 
       </div>
 
-      {/* Bottom CTA */}
-      <div className="shrink-0 border-t border-black/8 p-4">
+      {/* Bottom CTA — sticky on mobile so the "Tạo Landing Pack" action
+          stays in reach regardless of how far the user scrolled the
+          collapsed-accordion form list above. On desktop (md+) keeps
+          the original non-sticky placement under the form. */}
+      <div className="shrink-0 sticky bottom-0 md:static border-t border-black/8 bg-white/95 md:bg-transparent backdrop-blur md:backdrop-blur-none p-3 md:p-4 z-10">
         {!hasGeminiKey && (
           <p className="mb-2 text-center text-[10px] text-red-500">Cần Gemini API key trong Cài đặt</p>
         )}
         <button
           onClick={handleClickGenerate}
           disabled={!canGenerate}
-          className="flex w-full items-center justify-center gap-2 rounded-full bg-gradient-to-r from-violet-600 to-purple-600 px-6 py-3.5 text-sm font-bold text-white shadow-md transition-all hover:from-violet-700 hover:to-purple-700 disabled:cursor-not-allowed disabled:opacity-40"
+          className="flex w-full items-center justify-center gap-2 rounded-full bg-gradient-to-r from-violet-600 to-purple-600 px-6 py-3 md:py-3.5 text-sm font-bold text-white shadow-md transition-all hover:from-violet-700 hover:to-purple-700 disabled:cursor-not-allowed disabled:opacity-40"
         >
           {isGenerating ? (
             <><Loader2 className="h-4 w-4 animate-spin" /> Đang tạo landing pack...</>
@@ -413,13 +461,85 @@ export default function InputPanel({
 
 // ── Helper components ─────────────────────────────────────────────────
 
-function Section({ step, title, children }: { step: number; title: string; children: React.ReactNode }) {
+/** Form section wrapper with mobile accordion behavior.
+ *
+ * Desktop (md+): renders the original layout — small "Bước N · Title"
+ * label followed by the content. All sections always expanded.
+ *
+ * Mobile (<md): renders a tappable header showing step number / check
+ * badge + title + selected-value summary + chevron. Only ONE section
+ * is expanded at a time (controlled by parent via `expandedStep`).
+ * Content shows below the header when expanded. */
+function Section({
+  step, title, children,
+  summary, completed,
+  expandedStep, onToggle,
+}: {
+  step: number
+  title: string
+  children: React.ReactNode
+  /** One-line preview shown in the collapsed mobile header. */
+  summary?: string
+  /** Drives the green check vs grey step-number badge. Optional steps
+   *  (eg visual memory) pass `completed={false}` to show grey badge.
+   *  Required steps with a default value (language / form) pass
+   *  `completed` because they always have a value. */
+  completed?: boolean
+  expandedStep: number | null
+  onToggle: (next: number | null) => void
+}) {
+  const isExpanded = expandedStep === step
+
   return (
-    <div>
-      <p className="mb-1.5 text-[10px] font-bold uppercase tracking-widest text-gray-400">
+    <div className="rounded-xl border border-transparent md:border-0 md:rounded-none">
+      {/* MOBILE collapsible header — tappable */}
+      <button
+        type="button"
+        onClick={() => onToggle(isExpanded ? null : step)}
+        className={`md:hidden flex w-full items-center justify-between gap-2 rounded-xl border px-3 py-2.5 text-left transition-colors ${
+          isExpanded
+            ? 'border-violet-300 bg-violet-50/40'
+            : 'border-black/10 bg-white hover:bg-black/[0.02]'
+        }`}
+        aria-expanded={isExpanded}
+      >
+        <div className="flex min-w-0 items-center gap-2.5">
+          <span
+            className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] font-bold ${
+              completed
+                ? 'bg-emerald-500 text-white'
+                : 'bg-gray-100 text-gray-500'
+            }`}
+          >
+            {completed ? <Check className="h-3 w-3" strokeWidth={3} /> : step}
+          </span>
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-[12px] font-bold leading-tight text-gray-900">{title}</p>
+            {summary && !isExpanded && (
+              <p className="truncate text-[10px] leading-tight text-gray-500">{summary}</p>
+            )}
+          </div>
+        </div>
+        <ChevronDown
+          className={`h-4 w-4 shrink-0 text-gray-400 transition-transform ${isExpanded ? 'rotate-180' : ''}`}
+        />
+      </button>
+
+      {/* DESKTOP label — unchanged from original */}
+      <p className="hidden md:block mb-1.5 text-[10px] font-bold uppercase tracking-widest text-gray-400">
         Bước {step} · {title}
       </p>
-      <div className="space-y-1.5">{children}</div>
+
+      {/* Content — visible only when expanded on mobile, always visible
+          on desktop. On mobile, content is indented under the header to
+          visually group it with the parent accordion item. */}
+      <div
+        className={`space-y-1.5 ${
+          isExpanded ? 'mt-2 px-1 md:mt-0 md:px-0' : 'hidden md:block'
+        }`}
+      >
+        {children}
+      </div>
     </div>
   )
 }
@@ -470,19 +590,22 @@ function FormCard({
           {option.description}
         </p>
 
-        {/* Row 3 — audience hint */}
-        <p className="text-[9px] leading-snug text-gray-400">
+        {/* Row 3 — audience hint — HIDDEN on mobile to save vertical space */}
+        <p className="hidden md:block text-[9px] leading-snug text-gray-400">
           <span className="font-semibold text-gray-500">Phù hợp:</span> {option.audience}
         </p>
 
-        {/* Row 4 — metrics */}
-        <p className="text-[9px] font-medium leading-none text-gray-400">
+        {/* Row 4 — metrics — HIDDEN on mobile (form metrics shown in
+            collapsed accordion summary instead) */}
+        <p className="hidden md:block text-[9px] font-medium leading-none text-gray-400">
           {option.metrics}
         </p>
       </button>
 
-      {/* Hover tooltip — full spec for power users */}
-      <div className="pointer-events-none absolute bottom-full left-0 z-20 mb-2 hidden w-64 rounded-xl border border-black/10 bg-white p-3 text-[11px] leading-relaxed text-gray-600 shadow-xl group-hover:block">
+      {/* Hover tooltip — full spec for power users. Hidden on mobile
+          since there's no hover; mobile users can tap the form card
+          itself which is already self-descriptive. */}
+      <div className="pointer-events-none absolute bottom-full left-0 z-20 mb-2 hidden md:group-hover:block w-64 rounded-xl border border-black/10 bg-white p-3 text-[11px] leading-relaxed text-gray-600 shadow-xl">
         <p className="mb-1.5 flex items-center gap-1.5 text-[12px] font-bold text-gray-800">
           <span>{option.icon}</span>
           <span>{option.title}</span>
