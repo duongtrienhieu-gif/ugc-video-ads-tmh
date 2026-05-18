@@ -12,7 +12,9 @@
 import type { AssetModule } from '../registry/assetRegistry'
 import type { GenerateAssetParams, GeneratedAsset } from '../types/asset'
 import { dispatchPhotographic } from '../engines/photographic/_dispatcher'
+import { dispatchUINative } from '../engines/ui-native/_dispatcher'
 import type { PhotographicModule } from '../types/photographic'
+import type { UINativeModule } from '../types/uiNative'
 
 /** Dispatch contract — every engine-group entry point matches this signature. */
 export type EngineDispatcher = (
@@ -57,9 +59,17 @@ function notYetImplemented(engineGroup: string): EngineDispatcher {
 const photographicDispatcher: EngineDispatcher = (module, params) =>
   dispatchPhotographic(module as PhotographicModule, params)
 
+/**
+ * P5: wire the real ui-native dispatcher. Same narrowing pattern as
+ * the photographic slot — engineGroup discrimination guarantees the
+ * module reaching this dispatcher IS a UINativeModule.
+ */
+const uiNativeDispatcher: EngineDispatcher = (module, params) =>
+  dispatchUINative(module as UINativeModule, params)
+
 export const ENGINE_DISPATCH: Record<AssetModule['engineGroup'], EngineDispatcher> = {
   'photographic':      photographicDispatcher,
-  'ui-native':         notYetImplemented('ui-native'),
+  'ui-native':         uiNativeDispatcher,
   'designed-graphic':  notYetImplemented('designed-graphic'),
 }
 

@@ -34,6 +34,10 @@ import { module as bathroomRoutineModule }  from '../engines/photographic/bathro
 import { module as cafeLifestyleModule }    from '../engines/photographic/cafe-lifestyle/module'
 import { module as ugcTiktokModule }        from '../engines/photographic/ugc-tiktok/module'
 
+// ── P5: UI-Native chat-proof modules — STATIC IMPORTS ONLY ─────────────────
+import { module as whatsappProofModule }    from '../engines/ui-native/whatsapp-proof/module'
+import { module as messengerChatModule }    from '../engines/ui-native/messenger-chat/module'
+
 /** Union of all module shapes — discriminated by engineGroup field. */
 export type AssetModule =
   | PhotographicModule
@@ -71,9 +75,11 @@ export const ASSET_REGISTRY: Partial<Record<AssetTypeId, AssetModule>> = {
   'cafe-lifestyle':     cafeLifestyleModule,
   'ugc-tiktok':         ugcTiktokModule,
 
-  // ── P5-P6 will add ui-native modules here ──────────────────────────
-  // 'whatsapp-proof':     whatsappProofModule,
-  // 'messenger-chat':     messengerChatModule,
+  // ── P5: UI-Native chat-proof modules ───────────────────────────────
+  'whatsapp-proof':     whatsappProofModule,
+  'messenger-chat':     messengerChatModule,
+
+  // ── P6 will add the remaining ui-native modules here ───────────────
   // 'tiktok-feedback':    tiktokFeedbackModule,
   // 'shopee-feedback':    shopeeFeedbackModule,
   // 'facebook-comment':   facebookCommentModule,

@@ -1,10 +1,11 @@
 # Creative Studio Architecture (broll-studio app)
 
-> **Status**: Phase 4 — continuity engine + persona library + emotional
-> beats foundation landed. Existing `BrollStudio.tsx` still runs on its
-> legacy direct-KIE path. The 9 photographic modules from P3 remain
-> byte-stable; opt-in wiring into persona / beat / continuity is deferred
-> to the phase that owns BrollStudio UI changes.
+> **Status**: Phase 5 — UI-Native MVP (WhatsApp + Messenger chat proof)
+> landed. Two ui-native modules wired into the registry, ui-native
+> dispatcher implemented end-to-end (Gemini text → KIE avatar → Canvas
+> template → JPEG post-process → asset). Existing `BrollStudio.tsx`
+> still runs on its legacy direct-KIE path; the new modules are reached
+> via `generateAssets()` only.
 
 ## Folder map
 
@@ -105,8 +106,8 @@ The orchestrator:
 | **P1** | ✅ done | Dead code cleanup (1062 lines → graveyard) |
 | **P2** | ✅ done | Type contracts + registry + orchestration skeleton |
 | **P3** | ✅ done | Migrate current BrollStudio scenes → engines/photographic/ modules |
-| **P4** | ✅ done (this commit) | Continuity engine + persona library + emotional beats (foundation) |
-| **P5** | pending | UI-Native MVP: Chat Proof (WhatsApp + Messenger) |
+| **P4** | ✅ done | Continuity engine + persona library + emotional beats (foundation) |
+| **P5** | ✅ done (this commit) | UI-Native MVP: Chat Proof (WhatsApp + Messenger) |
 | **P6** | pending | UI-Native expansion: Shopee + TikTok Shop + Facebook + TikTok comments |
 | **P7** | pending | Authenticity QC v2 + designed-graphic group entry |
 | **P8** | pending | Designed-Graphic group: Infographic + CTA Banner |
@@ -219,6 +220,102 @@ fields by design — their `_buildModule.ts` factory currently composes
 prompts from `PRODUCT_LOCK + AVATAR_LOCK + scene + style + variation +
 format` only. A later phase will extend the factory to consume the new
 options when present and to inject them ahead of the scene block.
+
+## P5 — UI-Native MVP (Chat Proof)
+
+P5 lands the first concrete ui-native engine modules — `whatsapp-proof`
+and `messenger-chat` — plus the full ui-native dispatcher pipeline.
+Pipeline is fundamentally different from photographic:
+
+```
+generateAssets('whatsapp-proof', params)
+  └─ dispatchUINative(module, params)
+      1. Determine template (canvas size, theme, palette)
+      2. Build message timeline (timestamps + date label, locale-aware)
+      3. Generate text payload (Gemini Text — conversation script)
+         OR consume params.options.textPayload (caller short-circuit)
+      4. Generate atomic avatar (KIE GPT-4o, 1:1)
+      5. Render conversation on HTMLCanvasElement
+         (status bar + header + bubbles + composer)
+      6. Post-process (crop drift + JPEG recompress)
+      7. saveAsset + normalizeOutput → GeneratedAsset
+```
+
+### Folder layout for P5
+
+```
+engines/ui-native/
+├─ _shared/                          shared helpers across all platforms
+│  ├─ canvas.ts                        create / load / wrap / blob helpers
+│  ├─ colors.ts                        WHATSAPP_LIGHT_2024 / MESSENGER_LIGHT_2024
+│  ├─ statusBar.ts                     iOS / Android status bar renderer
+│  ├─ timestamps.ts                    buildTimeline() + locale day labels
+│  ├─ postProcess.ts                   JPEG recompress + crop drift
+│  ├─ avatarGen.ts                     atomic KIE avatar generator
+│  └─ textPayload.ts                   Gemini conversation generator
+│
+├─ _dispatcher.ts                    public ui-native pipeline entry
+│
+├─ whatsapp-proof/
+│  ├─ module.ts                        UINativeModule export
+│  ├─ template.ts                      renderWhatsAppConversation()
+│  └─ exemplars.ts                     ReferenceExemplar pool (empty MVP)
+│
+└─ messenger-chat/
+   ├─ module.ts
+   ├─ template.ts                      renderMessengerConversation()
+   └─ exemplars.ts
+```
+
+### Authenticity rules
+
+Both modules declare the same `UINativeAuthenticity` ruleset:
+
+- `requireStatusBar: true`     — iOS notch + battery / wifi / signal glyphs
+- `requireRealisticTimestamps: true` — 24h time, locale day labels, 1-12 min message gaps
+- `requireImperfectCrop: true` — 4-14px drift on each edge per `postProcess` intensity
+- `requireJpegCompression: true` — JPEG output at quality 0.82 (medium intensity default)
+- `bannedAesthetics`           — figma-perfect-edges, studio-clean-screenshot,
+                                 png-export, desktop-screenshot, rgba-transparency
+
+### Locale support
+
+Text payload + timeline support 4 locales:
+
+- `my-MY`  Malay (Bahasa Melayu)
+- `vi-VN`  Vietnamese (default for both P5 modules)
+- `id-ID`  Indonesian
+- `global` English fallback
+
+### Caller short-circuit
+
+Callers can supply a pre-built `UINativeTextContent` via
+`params.options.textPayload` to skip the Gemini call. Useful for:
+
+- fixtures + visual regression testing
+- manual scripting where the user wrote the dialogue themselves
+- batch-rendering N variants of the same conversation
+
+### Boundaries — what P5 did NOT touch
+
+- `BrollStudio.tsx` — byte-identical (still legacy direct-KIE path)
+- `services/qcProduct.ts` — byte-identical
+- P3 photographic engine — byte-identical (zero new imports)
+- P4 continuity + persona + beats — byte-identical (not yet consumed)
+- `orchestration/generateAssets.ts` — byte-identical
+- `orchestration/generateAssetSequence.ts` — byte-identical
+- `registry/groups.ts` — byte-identical (already declared 'whatsapp-proof' + 'messenger-chat' in P2 ASSET_TO_GROUP map)
+- `src/apps/landing-page/`, `src/apps/video-builder/` — untouched
+- `src/stores/*`, `src/utils/*`, `App.tsx`, `Sidebar.tsx` — untouched
+
+### Wiring with P4 continuity
+
+P5 modules do not yet consume `params.options.personaId` /
+`params.options.beatId` / `params.options.continuityDirective`. The
+`textPayload` generator inside P5 already takes `personaId` directly
+through its `TextPayloadRequest`, so this wiring is one small commit
+when the BrollStudio UI gains persona pickers (planned with the UI
+overhaul phase).
 
 ### Boundaries — what P4 did NOT touch
 
