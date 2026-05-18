@@ -19,8 +19,8 @@
 //
 // All routing happens inside the registry (P3 / P5 / P6 / P8).
 
-import { useState, useRef } from 'react'
-import { Sparkles, Loader2, UserRound, Package, Upload, ChevronLeft } from 'lucide-react'
+import { useState, useRef, useEffect } from 'react'
+import { Sparkles, Loader2, UserRound, Package, Upload, ChevronLeft, Sliders, X as XIcon } from 'lucide-react'
 import { useAppStore } from '../../stores/appStore'
 import { useBankStore } from '../../stores/bankStore'
 import { useSettingsStore } from '../../stores/settingsStore'
@@ -310,6 +310,28 @@ export default function CreativeStudio() {
     }
   }
 
+  // ── Mobile output-first viewport (M4) ────────────────────────────────
+  //
+  // Mirror of the Landing Page M3 pattern: after a result lands, the
+  // input + controls panel auto-collapses on mobile so the result grid
+  // owns the viewport. A floating "Tuỳ chỉnh" FAB re-opens the controls
+  // when the user wants to regenerate / change settings. Desktop (lg+)
+  // keeps the side-by-side layout unchanged.
+  const [mobileControlsVisible, setMobileControlsVisible] = useState(true)
+  const prevResultsCountRef = useRef(results.length)
+  useEffect(() => {
+    // Detect first result transition (0 → 1+). Auto-hide controls so
+    // the user lands directly in the gallery on mobile.
+    if (prevResultsCountRef.current === 0 && results.length > 0) {
+      setMobileControlsVisible(false)
+    }
+    prevResultsCountRef.current = results.length
+  }, [results.length])
+
+  // Controls panel always visible when there are NO results yet (user
+  // must fill the form to generate anything) OR on desktop.
+  const showControlsOnMobile = results.length === 0 || mobileControlsVisible
+
   // ── Render ────────────────────────────────────────────────────────────
   return (
     <div className="relative flex h-full flex-col overflow-hidden">
@@ -317,16 +339,19 @@ export default function CreativeStudio() {
         <AutoSaveIndicator lastSavedAt={sessionApi.lastSavedAt} lastSaveOk={sessionApi.lastSaveOk} />
       </div>
 
-      {/* Header */}
-      <div className="shrink-0 border-b border-black/8 bg-gradient-to-r from-violet-50 to-pink-50 px-6 py-4">
-        <h1 className="text-xl font-bold tracking-tight text-gray-900">Creative Studio</h1>
-        <p className="mt-0.5 text-xs text-gray-500">
+      {/* Header — compact padding + smaller title + hidden description
+          on mobile. Description provides context but burns ~60px vertical
+          on phones; users only need it once and can reopen the app to
+          re-read. */}
+      <div className="shrink-0 border-b border-black/8 bg-gradient-to-r from-violet-50 to-pink-50 px-3 md:px-6 py-2 md:py-4">
+        <h1 className="text-base md:text-xl font-bold tracking-tight text-gray-900">Creative Studio</h1>
+        <p className="hidden md:block mt-0.5 text-xs text-gray-500">
           AI conversion creative operating system — photographic / UI-native / designed-graphic, mỗi loại đi qua engine riêng.
         </p>
       </div>
 
       {/* Body */}
-      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto p-6 lg:flex-row lg:gap-5">
+      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto p-3 md:p-6 pb-20 lg:pb-6 lg:flex-row lg:gap-5">
         {/* ── STEP 1: Asset type picker — full width when no selection ── */}
         {!selectedAssetTypeId ? (
           <div className="flex w-full flex-col gap-4">
@@ -341,8 +366,11 @@ export default function CreativeStudio() {
           </div>
         ) : (
           <>
-            {/* ── STEP 2+: Left panel (inputs + controls) ───────────── */}
-            <div className="flex w-full shrink-0 flex-col gap-3 lg:w-80">
+            {/* ── STEP 2+: Left panel (inputs + controls) ─────────────
+                On mobile, hidden after first result lands (user can
+                re-open via floating FAB). On lg+ always visible at
+                the 320px sidebar width. */}
+            <div className={`${showControlsOnMobile ? 'flex' : 'hidden'} lg:flex w-full shrink-0 flex-col gap-3 lg:w-80`}>
               {/* Selected asset type pill + change */}
               <div className="flex items-center justify-between gap-2 rounded-xl border border-violet-200 bg-violet-50 px-3 py-2.5">
                 <div className="flex min-w-0 flex-col">
@@ -461,6 +489,24 @@ export default function CreativeStudio() {
         onSelect={handleSelectProduct}
         onClose={() => setPickerMode(null)}
       />
+
+      {/* Mobile-only floating "Tuỳ chỉnh / Đóng" FAB — same UX pattern as
+          Landing Page M3. Only rendered after an asset type is picked AND
+          at least one result exists, so the user has something to flip
+          between. Hidden on lg+ since the side-by-side layout doesn't
+          need a toggle. */}
+      {selectedAssetTypeId && results.length > 0 && (
+        <button
+          onClick={() => setMobileControlsVisible((v) => !v)}
+          aria-label={showControlsOnMobile ? 'Đóng tuỳ chỉnh' : 'Mở tuỳ chỉnh'}
+          title={showControlsOnMobile ? 'Đóng tuỳ chỉnh' : 'Mở tuỳ chỉnh'}
+          className="lg:hidden fixed bottom-4 right-4 z-40 flex items-center gap-1.5 rounded-full bg-violet-600 px-4 py-3 text-[12px] font-bold text-white shadow-lg shadow-violet-900/30 hover:bg-violet-700 active:scale-95 transition-transform"
+        >
+          {showControlsOnMobile
+            ? <><XIcon className="h-4 w-4" /> Đóng</>
+            : <><Sliders className="h-4 w-4" /> Tuỳ chỉnh</>}
+        </button>
+      )}
     </div>
   )
 }
