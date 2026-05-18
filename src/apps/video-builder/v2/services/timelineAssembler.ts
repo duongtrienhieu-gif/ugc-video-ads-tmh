@@ -12,6 +12,8 @@ import type {
   CoverageShot, TimelineCut, EditorialTransition, EditorialCutType,
   EditorialPhase, EditorialPacingDensity, VisualRole,
 } from '../types'
+import type { TimelineMode } from './timelineMode'
+import { getModeConfig } from './timelineMode'
 
 // ═════════════════════════════════════════════════════════════════════════
 // P5 — VOICE DURATION ESTIMATOR

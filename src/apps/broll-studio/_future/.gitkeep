@@ -1,0 +1,4 @@
+// Future-phase work-in-progress. Drafts of upcoming engine modules,
+// experimental templates, prototypes that aren't ready for the active
+// registry yet. NOT imported anywhere. NOT included in any production
+// code path.

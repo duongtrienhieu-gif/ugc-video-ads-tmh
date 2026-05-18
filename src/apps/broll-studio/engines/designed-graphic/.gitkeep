@@ -1,0 +1,4 @@
+// Designed-Graphic engine modules will be created here in P8.
+// Each module: own folder (eg infographic/, cta-banner/) with layout +
+// typography + color theme + canvas render. Cross-engine imports
+// FORBIDDEN.

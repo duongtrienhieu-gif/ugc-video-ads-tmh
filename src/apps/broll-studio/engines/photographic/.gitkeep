@@ -1,0 +1,5 @@
+// Photographic engine modules will be created here in P3.
+// Each module: own folder (eg product-shot/), own module.ts + prompt.ts +
+// negative.ts + composition.ts + qc.ts + types.ts.
+// Cross-engine imports FORBIDDEN — do not import from ../ui-native or
+// ../designed-graphic.

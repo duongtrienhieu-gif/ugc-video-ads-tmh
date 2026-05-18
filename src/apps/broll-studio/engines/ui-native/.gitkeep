@@ -1,0 +1,6 @@
+// UI-Native engine modules will be created here in P5+.
+// Each module: own folder per platform (eg chat-proof/, marketplace-feedback/),
+// with template-*.ts canvas templates + content-generator.ts + module.ts.
+// Cross-engine imports FORBIDDEN — do not import from ../photographic or
+// ../designed-graphic. Cross-PLATFORM imports also forbidden within this
+// group (eg whatsapp can't import from messenger).

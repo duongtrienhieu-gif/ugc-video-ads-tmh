@@ -1,0 +1,4 @@
+// Shared QC infrastructure. Will host:
+//   - productMatch.ts   (moved from broll-studio/services/qcProduct.ts in P3)
+//   - uiNativeAuthenticity.ts (P5+ — status bar / spacing / typography QC)
+// Each engine module references this via its qc.ts config.

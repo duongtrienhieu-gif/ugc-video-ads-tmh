@@ -1,0 +1,4 @@
+// Shared metadata: persona profiles, locale dictionaries, brand palettes,
+// product-visibility matrix, scene-intent map. Read-only data tables
+// consumed by multiple engines. Populated as needed across P3-P4 (persona
+// library, visibility matrix) and P5+ (locale dictionaries for ui-native).

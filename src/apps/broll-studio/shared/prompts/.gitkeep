@@ -1,0 +1,3 @@
+// Shared prompt fragments — global negatives, identity locks, no-product
+// directives. Per-module prompts live inside each engine module folder.
+// Populated starting in P3 (extracting from current ProductAI logic).

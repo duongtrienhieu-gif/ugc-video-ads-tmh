@@ -1,0 +1,3 @@
+// Shared image transforms — jpeg recompression, blur overlay, imperfect
+// crop drift, sub-pixel offset. Used primarily by ui-native post-process
+// pipeline (P5+) but available to any engine that needs realism layers.
