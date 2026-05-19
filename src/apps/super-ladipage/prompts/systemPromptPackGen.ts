@@ -55,7 +55,7 @@ ${sectionTable}
     {
       "type":              "<from spec>",
       "title":             "<short section title in ${langName}>",
-      "layoutGuide":       "<1 sentence VI hint cho marketer about layout intent>",
+      "layoutGuide":       "<1 short sentence — ALWAYS IN VIETNAMESE (Tiếng Việt) regardless of section language. Internal hint cho marketer Việt Nam về ý đồ layout/visual. KHÔNG dịch sang Malay/English — đây là field duy nhất luôn tiếng Việt.>",
       "copy":              "<main body in ${langName}, 2-5 sentences (longer for hero/story)>",
       "headline":          "<headline if section.fields.headline>",
       "subheadline":       "<subheadline if applicable>",
@@ -119,7 +119,8 @@ R3. CONCEPT FORMAT
 - DO NOT redescribe the human subject — recipe injects identity.subjectIdentityLock via subjectLockKey.
 
 R4. COPY TONE — "BẠN / CHÚNG TÔI" (intimate sharing)
-- All copy text in ${langName} uses intimate voice: "anda/bạn" + "kami/chúng tôi".
+- All user-facing copy in ${langName} uses intimate voice: "anda/bạn" + "kami/chúng tôi".
+- EXCEPTION: layoutGuide field is internal Vietnamese hint — always Tiếng Việt, never translated.
 - TÂM SỰ tone — empathy first ("Anda pernah rasa...", "Kami faham..."), validate pain, share solution as "what we discovered".
 - NEVER corporate/cold third-person ("khách hàng", "pengguna", "users", "customers").
 - EVERY item in bullets[] MUST start with emoji icon prefix:
