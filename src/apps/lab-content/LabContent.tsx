@@ -3,9 +3,8 @@ import { useAppStore } from '../../stores/appStore'
 import { useBankStore } from '../../stores/bankStore'
 import type { Product } from '../../stores/types'
 import type {
-  CarouselStructure, ContentAngle, Goal, LabBriefParams, LabBriefResult, PricingInfo, SalesLetterLength, ToneId,
+  ContentAngle, Goal, LabBriefParams, LabBriefResult, SalesLetterLength, ToneId,
 } from './types'
-import { DEFAULT_PRICING_INFO } from './types'
 import { generateBrief } from './services/generateBrief'
 import { generateLabCaption } from './services/generateLabCaption'
 import { generateLabScript } from './services/generateLabScript'
@@ -13,9 +12,6 @@ import { generateHookLab } from './services/generateHookLab'
 import { generateFunnel } from './services/generateFunnel'
 import { generateCoc } from './services/generateCoc'
 import { generateSalesLetter } from './services/generateSalesLetter'
-import { generateMultiAngle } from './services/generateMultiAngle'
-import { generateCarousel } from './services/generateCarousel'
-import { generateEngagement } from './services/generateEngagement'
 import { getGoalById } from './services/presets'
 import { useLabContentStore } from './store'
 import InputPanel from './components/InputPanel'
@@ -25,9 +21,6 @@ import HookLabModal from './components/HookLabModal'
 import FunnelModal from './components/FunnelModal'
 import CocModal from './components/CocModal'
 import SalesLetterModal from './components/SalesLetterModal'
-import MultiAngleModal from './components/MultiAngleModal'
-import CarouselModal from './components/CarouselModal'
-import EngagementModal from './components/EngagementModal'
 import AutoSaveIndicator from '../../components/AutoSaveIndicator'
 import { useSessionPersist } from '../../services/sessionPersistence'
 
@@ -36,7 +29,6 @@ interface LabContentSnapshot {
   goal: Goal
   toneId: ToneId
   customToneNote: string
-  pricing: PricingInfo
   result: LabBriefResult | null
   lastParams: Omit<LabBriefParams, 'productId'> | null
   savedBriefId: string | null
@@ -53,7 +45,6 @@ export default function LabContent() {
   const [goal, setGoal] = useState<Goal>(DEFAULT_GOAL)
   const [toneId, setToneId] = useState<ToneId>(DEFAULT_TONE)
   const [customToneNote, setCustomToneNote] = useState('')
-  const [pricing, setPricing] = useState<PricingInfo>(DEFAULT_PRICING_INFO)
 
   const [savedBriefId, setSavedBriefId] = useState<string | null>(null)
 
@@ -84,21 +75,6 @@ export default function LabContent() {
   const [salesLetterGenerating, setSalesLetterGenerating] = useState(false)
   const [salesLetterError, setSalesLetterError] = useState<string | null>(null)
 
-  // ── Multi-Angle Ad Pack modal state ────────────────────────────────────
-  const [multiAngleOpen, setMultiAngleOpen] = useState(false)
-  const [multiAngleGenerating, setMultiAngleGenerating] = useState(false)
-  const [multiAngleError, setMultiAngleError] = useState<string | null>(null)
-
-  // ── Carousel Ad modal state ────────────────────────────────────────────
-  const [carouselOpen, setCarouselOpen] = useState(false)
-  const [carouselGenerating, setCarouselGenerating] = useState(false)
-  const [carouselError, setCarouselError] = useState<string | null>(null)
-
-  // ── Engagement Posts modal state ───────────────────────────────────────
-  const [engagementOpen, setEngagementOpen] = useState(false)
-  const [engagementGenerating, setEngagementGenerating] = useState(false)
-  const [engagementError, setEngagementError] = useState<string | null>(null)
-
   const lastParamsRef = useRef<Omit<LabBriefParams, 'productId'> | null>(null)
 
   const interAppPayload = useAppStore((s) => s.interAppPayload)
@@ -116,7 +92,6 @@ export default function LabContent() {
       goal,
       toneId,
       customToneNote,
-      pricing,
       result,
       lastParams: lastParamsRef.current,
       savedBriefId,
@@ -129,7 +104,6 @@ export default function LabContent() {
       if (data.goal)                        setGoal(data.goal)
       if (data.toneId)                      setToneId(data.toneId)
       if (typeof data.customToneNote === 'string') setCustomToneNote(data.customToneNote)
-      if (data.pricing && typeof data.pricing === 'object') setPricing({ ...DEFAULT_PRICING_INFO, ...data.pricing })
       if (data.result) {
         // Migrate older snapshots that pre-date angleOutputs
         setResult({ ...data.result, angleOutputs: data.result.angleOutputs ?? {} })
@@ -149,9 +123,8 @@ export default function LabContent() {
             : undefined,
     shouldPersist: () =>
       !!result || isGenerating || !!selectedProduct ||
-      goal !== DEFAULT_GOAL || toneId !== DEFAULT_TONE || customToneNote.trim().length > 0 ||
-      pricing.enabled,
-    deps: [selectedProduct?.id, result, isGenerating, goal, toneId, customToneNote, pricing, savedBriefId],
+      goal !== DEFAULT_GOAL || toneId !== DEFAULT_TONE || customToneNote.trim().length > 0,
+    deps: [selectedProduct?.id, result, isGenerating, goal, toneId, customToneNote, savedBriefId],
   })
 
   // Accept productId hand-off from other apps (e.g. Finder → Lab Content)
@@ -376,77 +349,6 @@ export default function LabContent() {
     }
   }
 
-  // ── Multi-Angle Ad Pack ────────────────────────────────────────────────
-  const handleOpenMultiAngle = () => {
-    setMultiAngleError(null)
-    setMultiAngleOpen(true)
-    if (!result?.multiAngleOutput) void runMultiAngleGeneration()
-  }
-
-  const runMultiAngleGeneration = async () => {
-    if (!result) return
-    setMultiAngleGenerating(true)
-    setMultiAngleError(null)
-    try {
-      const output = await generateMultiAngle(result)
-      setResult((prev) => prev ? { ...prev, multiAngleOutput: output } : prev)
-      sessionApi.forceSave()
-      addToast(`Đã tạo ${output.ads.length} ads`, 'success')
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err)
-      setMultiAngleError(msg)
-    } finally {
-      setMultiAngleGenerating(false)
-    }
-  }
-
-  // ── Carousel Ad ────────────────────────────────────────────────────────
-  const handleOpenCarousel = () => {
-    setCarouselError(null)
-    setCarouselOpen(true)
-  }
-
-  const runCarouselGeneration = async (structureId: CarouselStructure) => {
-    if (!result) return
-    setCarouselGenerating(true)
-    setCarouselError(null)
-    try {
-      const output = await generateCarousel(result, structureId)
-      setResult((prev) => prev ? { ...prev, carouselOutput: output } : prev)
-      sessionApi.forceSave()
-      addToast(`Đã tạo carousel ${output.slides.length} slide`, 'success')
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err)
-      setCarouselError(msg)
-    } finally {
-      setCarouselGenerating(false)
-    }
-  }
-
-  // ── Engagement Posts ───────────────────────────────────────────────────
-  const handleOpenEngagement = () => {
-    setEngagementError(null)
-    setEngagementOpen(true)
-    if (!result?.engagementOutput) void runEngagementGeneration()
-  }
-
-  const runEngagementGeneration = async () => {
-    if (!result) return
-    setEngagementGenerating(true)
-    setEngagementError(null)
-    try {
-      const output = await generateEngagement(result)
-      setResult((prev) => prev ? { ...prev, engagementOutput: output } : prev)
-      sessionApi.forceSave()
-      addToast(`Đã tạo ${output.posts.length} engagement posts`, 'success')
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err)
-      setEngagementError(msg)
-    } finally {
-      setEngagementGenerating(false)
-    }
-  }
-
   const cachedModalOutput = (() => {
     if (!modalAngle || !result) return null
     const slot = result.angleOutputs?.[modalAngle.id]
@@ -468,8 +370,6 @@ export default function LabContent() {
           onToneIdChange={setToneId}
           customToneNote={customToneNote}
           onCustomToneNoteChange={setCustomToneNote}
-          pricing={pricing}
-          onPricingChange={setPricing}
         />
       </div>
 
@@ -489,9 +389,6 @@ export default function LabContent() {
           onOpenFunnel={handleOpenFunnel}
           onOpenCoc={handleOpenCoc}
           onOpenSalesLetter={handleOpenSalesLetter}
-          onOpenMultiAngle={handleOpenMultiAngle}
-          onOpenCarousel={handleOpenCarousel}
-          onOpenEngagement={handleOpenEngagement}
         />
       </div>
 
@@ -544,36 +441,6 @@ export default function LabContent() {
         error={salesLetterError}
         onClose={() => setSalesLetterOpen(false)}
         onGenerate={(length, angle) => void runSalesLetterGeneration(length, angle)}
-      />
-
-      <MultiAngleModal
-        open={multiAngleOpen}
-        result={result}
-        cachedOutput={result?.multiAngleOutput ?? null}
-        isGenerating={multiAngleGenerating}
-        error={multiAngleError}
-        onClose={() => setMultiAngleOpen(false)}
-        onGenerate={() => void runMultiAngleGeneration()}
-      />
-
-      <CarouselModal
-        open={carouselOpen}
-        result={result}
-        cachedOutput={result?.carouselOutput ?? null}
-        isGenerating={carouselGenerating}
-        error={carouselError}
-        onClose={() => setCarouselOpen(false)}
-        onGenerate={(structureId) => void runCarouselGeneration(structureId)}
-      />
-
-      <EngagementModal
-        open={engagementOpen}
-        result={result}
-        cachedOutput={result?.engagementOutput ?? null}
-        isGenerating={engagementGenerating}
-        error={engagementError}
-        onClose={() => setEngagementOpen(false)}
-        onGenerate={() => void runEngagementGeneration()}
       />
     </div>
   )

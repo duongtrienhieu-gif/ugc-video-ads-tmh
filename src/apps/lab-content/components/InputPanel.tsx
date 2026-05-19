@@ -1,13 +1,13 @@
 import { useState } from 'react'
 import { Package, Loader2, Sparkles } from 'lucide-react'
 import type { Product } from '../../../stores/types'
-import type { Goal, LabBriefParams, PricingInfo, PricingStrategy, ToneId } from '../types'
+import type { Goal, LabBriefParams, ToneId } from '../types'
 import { useBankStore } from '../../../stores/bankStore'
 import { useSettingsStore } from '../../../stores/settingsStore'
 import { useAppStore } from '../../../stores/appStore'
 import { useAssetUrl } from '../../../hooks/useAssetUrl'
 import BankPicker from '../../../components/BankPicker'
-import { GOAL_OPTIONS, PRICING_STRATEGY_OPTIONS, TONE_OPTIONS } from '../services/presets'
+import { GOAL_OPTIONS, TONE_OPTIONS } from '../services/presets'
 
 interface InputPanelProps {
   selectedProduct: Product | null
@@ -20,8 +20,6 @@ interface InputPanelProps {
   onToneIdChange: (t: ToneId) => void
   customToneNote: string
   onCustomToneNoteChange: (s: string) => void
-  pricing: PricingInfo
-  onPricingChange: (p: PricingInfo) => void
 }
 
 export default function InputPanel({
@@ -29,7 +27,6 @@ export default function InputPanel({
   goal, onGoalChange,
   toneId, onToneIdChange,
   customToneNote, onCustomToneNoteChange,
-  pricing, onPricingChange,
 }: InputPanelProps) {
   const [pickerOpen, setPickerOpen] = useState(false)
 
@@ -48,24 +45,10 @@ export default function InputPanel({
 
   const handleClickGenerate = () => {
     if (!canGenerate) return
-    // Pricing is "enabled" purely by having at least 1 strategy picked.
-    const pricingEnabled = pricing.preferredStrategies.length > 0
     onGenerate({
       goal,
       toneId,
       customToneNote: toneId === 'custom' ? customToneNote.trim() : undefined,
-      pricing: pricingEnabled ? { ...pricing, enabled: true } : undefined,
-    })
-  }
-
-  const togglePricingStrategy = (id: PricingStrategy) => {
-    const exists = pricing.preferredStrategies.includes(id)
-    onPricingChange({
-      ...pricing,
-      enabled: !exists || pricing.preferredStrategies.length > 1,
-      preferredStrategies: exists
-        ? pricing.preferredStrategies.filter((x) => x !== id)
-        : [...pricing.preferredStrategies, id],
     })
   }
 
@@ -182,42 +165,6 @@ export default function InputPanel({
               rows={3}
               className="mt-2 w-full resize-none rounded-lg border border-black/10 bg-white px-2.5 py-2 text-[12px] placeholder:text-gray-400 focus:border-violet-400 focus:outline-none"
             />
-          )}
-        </Section>
-
-        {/* STEP 4 — Chiến lược bán (chip multi-select, no price inputs) */}
-        <Section step={4} title="Chiến lược bán hàng (tùy chọn)">
-          <p className="mb-2 text-[10px] leading-relaxed text-gray-500">
-            Chọn cách AI thuyết phục khách bằng giá / ưu đãi trong caption.
-            Bỏ trống = AI không dùng đòn giá. Có thể chọn nhiều.
-          </p>
-          <div className="grid grid-cols-2 gap-1.5">
-            {PRICING_STRATEGY_OPTIONS.map((s) => {
-              const isActive = pricing.preferredStrategies.includes(s.id)
-              return (
-                <button
-                  key={s.id}
-                  onClick={() => togglePricingStrategy(s.id)}
-                  title={s.hint}
-                  className={`flex items-start gap-2 rounded-lg border px-2.5 py-2 text-left transition-colors ${
-                    isActive ? 'border-amber-400 bg-amber-50' : 'border-black/10 bg-white hover:bg-black/[0.03]'
-                  }`}
-                >
-                  <span className="text-base leading-none">{s.glyph}</span>
-                  <div className="min-w-0 flex-1">
-                    <p className={`truncate text-[11px] font-semibold ${isActive ? 'text-amber-800' : 'text-gray-800'}`}>
-                      {s.label}
-                    </p>
-                    <p className="truncate text-[10px] text-gray-500">{s.hint}</p>
-                  </div>
-                </button>
-              )
-            })}
-          </div>
-          {pricing.preferredStrategies.length > 0 && (
-            <p className="mt-2 text-[10px] font-semibold text-amber-700">
-              ✓ Đã chọn {pricing.preferredStrategies.length} chiến lược — sẽ áp dụng vào Caption / Phễu / Sales Letter
-            </p>
           )}
         </Section>
       </div>
