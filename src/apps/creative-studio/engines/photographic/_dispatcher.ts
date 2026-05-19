@@ -23,6 +23,7 @@ import { toPublicUrl } from '../../shared/utils/refResolver'
 import { runBaselineQC } from '../../shared/qc/baselineQC'
 import { findCreativeConfig } from '../../creativeConfig/configs'
 import { assemblePrompt } from '../../shared/prompt/promptAssembler'
+import { assembleCompressedPrompt } from '../../shared/prompt/compressedPrompt'
 import { dnaSummary } from '../../shared/prompt/dnaDirective'
 import { fromProduct } from '../../services/productKnowledge'
 import type { UINativeLocale } from '../../types/uiNative'
@@ -64,7 +65,7 @@ export async function dispatchPhotographic(
   // when no config registered yet (back-compat).
   const config = findCreativeConfig(module.id)
   let finalPrompt: string
-  let promptSource: 'config' | 'legacy'
+  let promptSource: 'compressed' | 'structured' | 'legacy'
   let blocksUsed: string[] = []
   if (config) {
     // P25 — load FULL product knowledge from bankStore (USPs / benefits
@@ -74,7 +75,7 @@ export async function dispatchPhotographic(
     const locale = (params.options?.locale as UINativeLocale | undefined) ?? 'vi-VN'
     const productKnowledge = fromProduct(product, locale)
 
-    const assembled = assemblePrompt(config, {
+    const promptCtx = {
       productName: product.productName,
       productDescription: product.productDescription,
       hasAvatar: !!avatarUrl,
@@ -84,10 +85,22 @@ export async function dispatchPhotographic(
       beatId:    params.options?.beatId    as string | undefined,
       locale,
       productKnowledge,
-    })
-    finalPrompt = assembled.prompt
-    blocksUsed = assembled.blocksUsed
-    promptSource = 'config'
+    }
+
+    const { prompt: structuredPrompt, blocksUsed: structuredBlocks } = assemblePrompt(config, promptCtx)
+    const compressedPrompt = assembleCompressedPrompt(config, promptCtx)
+
+    // P42 — default to the compressed flat-paragraph prompt (Ladipage
+    // density profile, ~100-200 words). The structured multi-section
+    // prompt remains available behind params.options.useStructuredPrompt
+    // for A/B comparison + emergency rollback. blocksUsed is still
+    // reported (from the structured assembly) for diagnostics — the
+    // creative DNA snapshot persisted on the asset is independent of
+    // which prompt path the model saw.
+    const useCompressed = params.options?.useStructuredPrompt !== true
+    finalPrompt = useCompressed ? compressedPrompt : structuredPrompt
+    promptSource = useCompressed ? 'compressed' : 'structured'
+    blocksUsed = structuredBlocks
   } else {
     const composition = module.buildComposition(params)
     finalPrompt = composition.prompt
