@@ -957,50 +957,28 @@ const EXPERT_FEEDBACK_DIRECTIVE =
  *  render" line. Combined with pair-ref injection (see selectRefsForSection
  *  before-after branch) this gives KIE a visual identity anchor instead of
  *  relying purely on text description. */
-/** Phase 4 — STRENGTHENED before/after identity lock.
- *  User report from Phase 3 testing: ba_01 vs ba_02 still drifting (skin
- *  tone differs, hair length differs, perceived face structure differs)
- *  despite the pair-seed reference image being attached. Needed much
- *  more aggressive identity-lock language + explicit "fail rather than
- *  drift" instruction for KIE. */
-function buildBeforeAfterIdentityLock(job: ImageJob, hasPairMateRef: boolean): string {
-  const idx = job.imageIdx
-  const isAfter = idx === 1 || idx === 3
-  const pairLabel = idx <= 1 ? 'A (ba_01 ↔ ba_02)' : 'B (ba_03 ↔ ba_04)'
+/** Before/after identity lock — softened per ROLLBACK_HANDOFF mục 1+8.
+ *  Restored to the pre-Phase-4 lighter style: keep pair-identity guidance
+ *  + retain the ref-attached vs text-only branch, but drop the strict
+ *  "image is REJECTED if drifts" language and the explicit 7-item face-
+ *  feature checklist that was over-constraining KIE and producing rigid
+ *  unnatural pair outputs. */
+function buildBeforeAfterIdentityLock(_job: ImageJob, hasPairMateRef: boolean): string {
   const lines: string[] = []
-  lines.push('BEFORE/AFTER IDENTITY LOCK — STRICT (Phase 4 enforcement):')
-  lines.push(`  • This image belongs to pair ${pairLabel}. The two images in this pair MUST depict the EXACT same individual — only state of health / posture / lighting differ.`)
-
-  if (isAfter && hasPairMateRef) {
-    // AFTER shot WITH pair-mate reference attached as filesUrl[0]
-    lines.push('  • CRITICAL — REFERENCE IMAGE #1 (filesUrl[0]) IS THE SAME PERSON\'S BEFORE-STATE PORTRAIT. The output MUST be visually recognizable as the SAME individual:')
-    lines.push('      ✓ SAME face structure (same jaw line, same cheekbone shape, same nose, same lip shape, same eye distance)')
-    lines.push('      ✓ SAME skin tone (same undertone — warm-medium-tan stays warm-medium-tan; do not lighten / darken)')
-    lines.push('      ✓ SAME age (no 10-year jump — same wrinkle pattern, same age signals at temples / eyes)')
-    lines.push('      ✓ SAME ethnicity (Malay stays Malay; do not drift to Chinese-Malaysian or vice versa)')
-    lines.push('      ✓ SAME hair length + base hair colour (cut not allowed; only minor styling change OK)')
-    lines.push('      ✓ SAME hijab style (if hijab present — keep same coverage style, can change colour)')
-    lines.push('      ✓ SAME body proportions (height / shoulder width / bone frame)')
-    lines.push('  • If the face structure drifts from reference #1, the image is REJECTED. Render the SAME person — do not interpret "DIFFERENT expression" as license to change the face itself.')
-    lines.push('  • What CHANGES between BEFORE and AFTER (these are the ONLY allowed differences):')
-    lines.push('      • Expression: BEFORE = tired / slumped / low-energy; AFTER = relaxed / confident / brighter')
-    lines.push('      • Posture: BEFORE = slouched; AFTER = upright')
-    lines.push('      • Lighting: BEFORE = cooler / dimmer; AFTER = warmer / brighter (SAME window, SAME room)')
-    lines.push('      • Outfit colour / pattern: slight shift OK (same outfit family — both casual home tees, or both modest hijab + loose top); NO sports-bra / activewear swap')
-    lines.push('      • Skin glow: AFTER subtly healthier (no plastic surgery look, no 20-year reversal)')
-    lines.push('  • Render Malay label "SELEPAS" in clean white sans-serif top-left (NEVER English "AFTER").')
-  } else if (isAfter && !hasPairMateRef) {
-    // AFTER shot WITHOUT pair-mate ref (pair-mate failed to render first)
-    lines.push('  • Pair-mate BEFORE image not yet rendered as reference — fall back to TEXT-ONLY identity lock per the section spec.')
-    lines.push('  • This AFTER image MUST share identity with its pair-mate BEFORE image (same face / same age / same ethnicity / same hijab style described in the imagePrompt body).')
-    lines.push('  • Render Malay label "SELEPAS" top-left.')
+  lines.push('BEFORE/AFTER IDENTITY LOCK — non-negotiable per-pair rules:')
+  lines.push('  • The BEFORE and AFTER images of EACH PAIR (ba_01↔ba_02, ba_03↔ba_04) MUST depict the SAME individual.')
+  lines.push('  • Same face shape, same skin tone, same age, same ethnicity, same hairstyle / hijab style as their pair-mate.')
+  lines.push('  • Same room background, same camera framing, same outfit family (slight color shift OK) as their pair-mate.')
+  if (hasPairMateRef) {
+    lines.push('  • A reference image is attached (filesUrl) — THAT REFERENCE IS THE BEFORE-STATE PERSON; the AFTER render must be visually recognizable as the same individual (same bone structure, same demographic identity).')
   } else {
-    // BEFORE shot (imageIdx 0 or 2) — establishes identity
-    lines.push('  • This is the BEFORE state — it ANCHORS the pair identity. Render a clear, well-lit face that the AFTER render can lock onto.')
-    lines.push('  • Pose: low-energy, slumped, tired expression — but the FACE must be clearly visible (no extreme angle hiding features).')
-    lines.push('  • Render Malay label "SEBELUM" in clean white sans-serif top-left (NEVER English "BEFORE").')
+    lines.push('  • No pair-mate reference attached — fall back to text-only identity lock per the imagePrompt body (same face / age / ethnicity described there).')
   }
-  lines.push('  • ABSOLUTELY FORBIDDEN: different face between BEFORE and AFTER of the same pair; race / body-type swap; gym-influencer transformation; sports-bra / activewear / lingerie reveal; English "BEFORE" / "AFTER" labels; collage / split-frame / side-by-side composite in ONE image.')
+  lines.push('  • DIFFERENT clothing pieces between BEFORE and AFTER (no same exact shirt) — natural outfit evolution, no Photoshop split-clone.')
+  lines.push('  • DIFFERENT expression: BEFORE = tired / slumped / low-energy; AFTER = relaxed / confident / brighter.')
+  lines.push('  • DIFFERENT lighting: BEFORE = cooler dim; AFTER = warmer brighter (same window, different time of day).')
+  lines.push('  • Render the Malay label "SEBELUM" (before) OR "SELEPAS" (after) in clean white sans-serif top-left.')
+  lines.push('  • ABSOLUTELY FORBIDDEN: different face between BEFORE and AFTER of the same pair; race / body-type swap; gym-influencer transformation aesthetic; sports-bra / activewear / lingerie reveal; English "BEFORE" / "AFTER" labels; collage / split-frame / side-by-side in ONE image.')
   return lines.join('\n')
 }
 
@@ -1268,9 +1246,7 @@ const FRESH_POLL_MS    = 90_000
 // thumbnail pipeline. Output looks like a real phone screenshot instead
 // of an AI-warped fake UI.
 // ─────────────────────────────────────────────────────────────────────────
-// @ts-expect-error — preserved for future re-enable (currently bypassed; see
-// 2026-05-19 routing comment in runWithCreditSafeRetry)
-async function runChatProofRender( // eslint-disable-line @typescript-eslint/no-unused-vars
+async function runChatProofRender(
   job: ImageJob,
   kieApiKey: string,
   onTaskUpdate: (patch: Partial<ImagePrompt>) => void,
@@ -1454,19 +1430,14 @@ async function runWithCreditSafeRetry(
   signal?: AbortSignal,
 ): Promise<{ assetRef: string; retries: number }> {
   // ── UI-NATIVE CHAT PROOF ROUTING ─────────────────────────────────────
-  // 2026-05-19: whatsapp-testimonials REVERTED to pure KIE path.
-  //   • runChatProofRender (canvas hybrid) was producing broken layouts
-  //     — product floating on dark bg, no proper navbar, no attachment
-  //     bubble. User reported this in side-by-side compare with the
-  //     legacy JSON output that was generated by pure KIE (full chat UI
-  //     including navbar + avatar + bubbles + image attachment + input
-  //     bar). Reverting to the pure path + strengthening prompt detail
-  //     in the section spec gives the desired authentic-screenshot
-  //     output. Keep runChatProofRender function in source for now —
-  //     may be re-enabled per-form later.
-  // if (job.section.type === 'whatsapp-testimonials') {
-  //   return runChatProofRender(job, kieApiKey, onTaskUpdate, signal)
-  // }
+  // whatsapp-testimonials no longer goes through KIE for the full
+  // screenshot. We render the chat UI on canvas (deterministic typography
+  // / icons / spacing) and only ask KIE for the SMALL product thumb that
+  // sits inside the chat product card. This eliminates the fake-UI /
+  // warped-text failure mode that plagued the previous KIE-only path.
+  if (job.section.type === 'whatsapp-testimonials') {
+    return runChatProofRender(job, kieApiKey, onTaskUpdate, signal)
+  }
 
   // ── UI-NATIVE INGREDIENT CARD ROUTING ────────────────────────────────
   // ingredients no longer asks KIE to render label text — that produced
