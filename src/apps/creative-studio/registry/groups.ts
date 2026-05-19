@@ -38,12 +38,11 @@ export const ASSET_TO_GROUP: Record<AssetTypeId, EngineGroup> = {
   'infographic':        'designed-graphic',
   'cta-banner':         'designed-graphic',
 
-  // ── P27 — Phase 3 taxonomy (catalog-only; modules ship later) ──────
-  'ingredients-explain':'designed-graphic',
-  'mechanism-explain':  'designed-graphic',
-  'benefit-timeline':   'designed-graphic',
-  'collage-4-frames':   'photographic',
-  // ── P33 — Phase 3 shipped ──────────────────────────────────────────
+  // ── P33 / P35 — Phase 3 fully shipped ──────────────────────────────
+  'ingredients-explain':     'designed-graphic',
+  'mechanism-explain':       'designed-graphic',
+  'benefit-timeline':        'designed-graphic',
+  'collage-4-frames':        'photographic',
   'group-holding':           'photographic',
   'expert-kol':              'photographic',
   'floating-product':        'photographic',

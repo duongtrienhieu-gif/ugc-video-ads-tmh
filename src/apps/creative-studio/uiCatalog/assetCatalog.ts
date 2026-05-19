@@ -322,8 +322,7 @@ export const ASSET_CATALOG: AssetCatalogEntry[] = [
       marketingGoal: 'Justify purchase qua thành phần — khách thấy "có khoa học, có lý do" thay vì marketing copy chung chung.',
       suitableFor: ['Skincare', 'Thực phẩm chức năng', 'Supplement', 'Mỹ phẩm', 'Detail page Shopee'],
     },
-    badges: ['needs-product', 'infographic', 'engine-graphic', 'coming-soon'],
-    comingSoon: true,
+    badges: ['needs-product', 'infographic', 'engine-graphic'],
   },
   {
     id: 'mechanism-explain',
@@ -338,8 +337,7 @@ export const ASSET_CATALOG: AssetCatalogEntry[] = [
       marketingGoal: 'Conversion mạnh nhất cho pain relief / supplement / skincare — khách hiểu RÕ cơ chế là tin và mua.',
       suitableFor: ['Pain relief', 'Supplement', 'Skincare', 'Health & wellness', 'Landing page detail'],
     },
-    badges: ['needs-product', 'infographic', 'engine-graphic', 'coming-soon'],
-    comingSoon: true,
+    badges: ['needs-product', 'infographic', 'engine-graphic'],
   },
   {
     id: 'benefit-timeline',
@@ -354,8 +352,7 @@ export const ASSET_CATALOG: AssetCatalogEntry[] = [
       marketingGoal: 'Set expectation đúng + tạo cảm giác kết quả nhanh — khách nhìn timeline biết khi nào thấy đổi.',
       suitableFor: ['Skincare', 'Supplement', 'Hair care', 'Whitening', 'Detail page'],
     },
-    badges: ['needs-product', 'infographic', 'engine-graphic', 'coming-soon'],
-    comingSoon: true,
+    badges: ['needs-product', 'infographic', 'engine-graphic'],
   },
 
   // ═══════════════════════════════════════════════════════════════════
@@ -519,8 +516,7 @@ export const ASSET_CATALOG: AssetCatalogEntry[] = [
       marketingGoal: 'Diverse testimonial grid — show "nhiều demographic khác nhau đều dùng" trong 1 visual.',
       suitableFor: ['Landing page social proof grid', 'Carousel post', 'Story testimonial', 'Ad creative grid'],
     },
-    badges: ['needs-product', 'needs-avatar', 'collage', 'engine-photo', 'coming-soon'],
-    comingSoon: true,
+    badges: ['needs-product', 'collage', 'engine-photo'],
   },
   {
     id: 'expert-kol',
@@ -626,7 +622,9 @@ const REQUIREMENTS: Partial<Record<AssetTypeId, CreativeRequirements>> = {
   'ugc-selfie':            REQ_PHOTO_PERSON,
   'ugc-tiktok':            REQ_PHOTO_PERSON,
   'group-holding':         REQ_PHOTO_PERSON,
-  'collage-4-frames':      REQ_PHOTO_PERSON,
+  // P35 — collage generates 4 different faces inside ONE KIE call,
+  // no single avatar reference makes sense. Product only.
+  'collage-4-frames':      REQ_PHOTO_NO_PERSON,
   'expert-kol':            REQ_PHOTO_NO_PERSON,
 
   // social-proof (UI-native)

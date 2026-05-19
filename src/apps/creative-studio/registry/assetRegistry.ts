@@ -38,6 +38,11 @@ import { module as floatingProductModule }       from '../engines/photographic/f
 import { module as ingredientCompositionModule } from '../engines/photographic/ingredient-composition/module'
 import { module as groupHoldingModule }          from '../engines/photographic/group-holding/module'
 import { module as expertKolModule }             from '../engines/photographic/expert-kol/module'
+// ── P35: remaining roadmap types shipped ───────────────────────────────────
+import { module as ingredientsExplainModule } from '../engines/designed-graphic/ingredients-explain/module'
+import { module as mechanismExplainModule }   from '../engines/designed-graphic/mechanism-explain/module'
+import { module as benefitTimelineModule }    from '../engines/designed-graphic/benefit-timeline/module'
+import { module as collage4FramesModule }     from '../engines/photographic/collage-4-frames/module'
 
 // ── P5: UI-Native chat-proof modules — STATIC IMPORTS ONLY ─────────────────
 import { module as whatsappProofModule }    from '../engines/ui-native/whatsapp-proof/module'
@@ -108,6 +113,12 @@ export const ASSET_REGISTRY: Partial<Record<AssetTypeId, AssetModule>> = {
   // ── P8: Designed-Graphic modules ────────────────────────────────────
   'infographic':        infographicModule,
   'cta-banner':         ctaBannerModule,
+
+  // ── P35: remaining roadmap fully shipped ──────────────────────────
+  'ingredients-explain':    ingredientsExplainModule,
+  'mechanism-explain':      mechanismExplainModule,
+  'benefit-timeline':       benefitTimelineModule,
+  'collage-4-frames':       collage4FramesModule,
 }
 
 /** List of asset ids currently implemented (registry has a value). */

@@ -83,8 +83,14 @@ export async function dispatchDesignedGraphic(
   // ── Step 4: render the canvas ─────────────────────────────────────
   let canvas: HTMLCanvasElement
   if (rendererKind === 'infographic') {
+    // P35 — pull the variant flag (stats / ingredients / mechanism /
+    // timeline) so generateInfographicContent steers Gemini toward the
+    // right bullet structure for this creative type.
+    const infographicVariant = readInfographicVariant(module, params)
+    const req = buildContentReq('infographic', product ?? null, opts, locale, productKnowledge, dna)
+    req.infographicVariant = infographicVariant
     const content = (opts.content as InfographicContent | undefined)
-      ?? await generateInfographicContent(settings.geminiApiKey, buildContentReq('infographic', product ?? null, opts, locale, productKnowledge, dna))
+      ?? await generateInfographicContent(settings.geminiApiKey, req)
     canvas = await renderInfographic({
       content,
       layout,
@@ -161,6 +167,19 @@ function readRendererKind(module: DesignedGraphicModule, params: GenerateAssetPa
   if (module.id === 'infographic') return 'infographic'
   if (module.id === 'cta-banner')  return 'cta-banner'
   return ''
+}
+
+/** P35 — pull the infographic variant flag from engineExtras. Drives
+ *  variant-specific content prompt shaping in _textPayload.ts. */
+function readInfographicVariant(
+  module: DesignedGraphicModule,
+  params: GenerateAssetParams,
+): 'stats' | 'ingredients' | 'mechanism' | 'timeline' {
+  const normalized = module.normalizeOutput({ outputUrl: 'unused' }, params)
+  const extras = normalized.metadata.engineExtras as Record<string, unknown> | undefined
+  const v = extras?.['infographicVariant']
+  if (v === 'ingredients' || v === 'mechanism' || v === 'timeline' || v === 'stats') return v
+  return 'stats'
 }
 
 interface BankProductLike {

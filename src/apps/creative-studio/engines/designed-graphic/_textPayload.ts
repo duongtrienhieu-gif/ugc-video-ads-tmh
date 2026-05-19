@@ -41,6 +41,11 @@ export interface CtaBannerContent {
   ctaText: string
 }
 
+/** P35 — infographic variants share the same Canvas renderer but
+ *  steer Gemini to emit type-specific bullet structures + heroStat
+ *  semantics. */
+export type InfographicVariant = 'stats' | 'ingredients' | 'mechanism' | 'timeline'
+
 export interface ContentRequest {
   kind: DesignedGraphicContentKind
   locale: UINativeLocale
@@ -56,6 +61,8 @@ export interface ContentRequest {
   productKnowledge?: ProductKnowledge
   /** P28 — Creative DNA appended to system instruction. */
   dna?: CreativeDNA
+  /** P35 — infographic content variant (only meaningful when kind='infographic'). */
+  infographicVariant?: InfographicVariant
 }
 
 // ── P25 — locale hard-lock appended to system instructions ───────────
@@ -96,10 +103,84 @@ const CTA_SYSTEM_INSTRUCTION =
   + 'Offer line is a single clear benefit ("Tiết kiệm 30%", "Giao 24h"). CTA is an action '
   + 'verb phrase 2-3 words ("Đặt ngay", "Xem chi tiết"). Plain confident voice, NOT salesy.'
 
+/** P35 — variant-specific copy directives. Each variant reshapes the
+ *  example schema + bullet pattern Gemini sees, so the SAME JSON
+ *  structure carries different SEMANTICS. The Canvas renderer doesn't
+ *  need to change — heroStat + bullets + footnote already accommodate
+ *  ingredient pairs, mechanism steps, and time-anchored milestones. */
+const VARIANT_GUIDANCE: Record<InfographicVariant, {
+  bulletExamples: [string, string, string, string]
+  heroStatExample: { value: string; unit: string; label: string }
+  rules: string[]
+}> = {
+  'stats': {
+    heroStatExample: { value: '92', unit: '%', label: 'customer satisfaction after 2 weeks' },
+    bulletExamples: ['<short benefit 1>', '<short benefit 2>', '<short benefit 3>', '<short benefit 4>'],
+    rules: [
+      '- This is a STATS-driven infographic. Bullets = concise benefit claims (4-9 words each).',
+      '- heroStat = the single most impressive metric (rating / % satisfaction / time-to-result).',
+    ],
+  },
+  'ingredients': {
+    heroStatExample: { value: '5', unit: '', label: 'thành phần hoạt tính chính' },
+    bulletExamples: [
+      'Cúc La Mã — làm dịu da kích ứng',
+      'Vitamin C — sáng da, mờ thâm',
+      'Hyaluronic Acid — cấp ẩm sâu',
+      'Niacinamide — kiểm soát dầu',
+    ],
+    rules: [
+      '- This is an INGREDIENTS infographic. Each bullet MUST be "Ingredient name — its specific benefit".',
+      '- heroStat.value = number of key active ingredients. heroStat.unit = "" (empty). heroStat.label = "thành phần hoạt tính chính" or locale equivalent.',
+      '- Use REAL ingredient names from the product knowledge — do NOT invent. If product has no listed ingredients, infer plausibly from niche.',
+      '- 4-5 bullets total. Each ingredient + benefit pair.',
+      '- footnote = certification / sourcing line ("Chứng nhận organic" / "Nguyên liệu nhập khẩu" / etc.).',
+    ],
+  },
+  'mechanism': {
+    heroStatExample: { value: '3', unit: '', label: 'bước cơ chế hoạt động' },
+    bulletExamples: [
+      'Bước 1: Thẩm thấu nhanh qua lớp sừng da',
+      'Bước 2: Kích hoạt collagen tự nhiên',
+      'Bước 3: Phục hồi và làm sáng da từ bên trong',
+      'Bước 4: Bảo vệ khỏi tác hại môi trường',
+    ],
+    rules: [
+      '- This is a MECHANISM infographic. Each bullet = an ordered mechanism step starting with "Bước N:" or locale equivalent.',
+      '- heroStat.value = number of mechanism steps OR key delivery metric (e.g. "30s" absorption time).',
+      '- heroStat.label = describes the mechanism category ("bước cơ chế hoạt động" / "phút tác dụng" / etc.).',
+      '- Each step must describe HOW the product works on the body — not what the user feels.',
+      '- 3-5 steps total. Order matters.',
+      '- footnote = scientific source / proven mechanism / clinical reference cue.',
+    ],
+  },
+  'timeline': {
+    heroStatExample: { value: '30', unit: 'ngày', label: 'để đạt kết quả tối đa' },
+    bulletExamples: [
+      'Sau 5 phút: Da dịu, giảm đỏ rõ rệt',
+      'Sau 7 ngày: Da căng mịn hơn, lỗ chân lông se',
+      'Sau 14 ngày: Đốm thâm nhạt đi, da đều màu',
+      'Sau 30 ngày: Da săn chắc, sáng khỏe rõ rệt',
+    ],
+    rules: [
+      '- This is a TIMELINE infographic. Each bullet MUST start with a TIME MARKER like "Sau 5 phút:" / "Sau 7 ngày:" / "Sau 30 ngày:" / locale equivalent.',
+      '- heroStat.value = the TOTAL duration to reach full effect. heroStat.unit = "ngày" / "tuần" / "days" per locale.',
+      '- heroStat.label = "để đạt kết quả tối đa" or locale equivalent.',
+      '- 3-5 milestones, monotonically increasing time. Each describes a SPECIFIC visible / felt change.',
+      '- Set realistic expectations — never promise "instant cure" in the 5-min bullet.',
+      '- footnote = "Kết quả có thể khác nhau tùy cơ địa" or locale equivalent.',
+    ],
+  },
+}
+
 function buildInfographicPrompt(req: ContentRequest): string {
   const knowledge = productKnowledgeBlock(req)
+  const variant = req.infographicVariant ?? 'stats'
+  const guide = VARIANT_GUIDANCE[variant]
+  const heroExample = `{ "value": "${guide.heroStatExample.value}", "unit": "${guide.heroStatExample.unit}", "label": "${guide.heroStatExample.label}" }`
+  const bulletExample = guide.bulletExamples.map((b) => `"${b}"`).join(', ')
   return [
-    'Generate infographic copy for this product.',
+    `Generate ${variant.toUpperCase()} infographic copy for this product.`,
     `Product: ${req.productName}${req.niche ? ` (niche: ${req.niche})` : ''}`,
     req.productDescription ? `Description: ${req.productDescription}` : '',
     knowledge,
@@ -110,18 +191,20 @@ function buildInfographicPrompt(req: ContentRequest): string {
     '',
     'STRICT JSON OUTPUT:',
     '{',
-    '  "title": "<5-9 word headline>",',
-    '  "heroStat": { "value": "47", "unit": "%", "label": "improvement after 2 weeks" },',
-    '  "bullets": [ "<short benefit 1>", "<short benefit 2>", "<short benefit 3>", "<short benefit 4>" ],',
-    '  "footnote": "<one-line disclaimer or claim source>"',
+    '  "title": "<5-9 word headline matching the variant theme>",',
+    `  "heroStat": ${heroExample},`,
+    `  "bullets": [ ${bulletExample} ],`,
+    '  "footnote": "<one-line disclaimer / source / methodology>"',
     '}',
     '',
-    'Rules:',
-    '- heroStat.value: a number, can include a sign (eg "+47", "-3").',
-    '- heroStat.unit: short suffix ("%", "x", "days", "kg"). Pick what fits.',
-    '- heroStat.label: 3-7 words describing what the number means.',
-    '- bullets: 3-5 items, each 4-9 words. Pure benefit claims.',
-    '- footnote: 6-14 words. Source / timeframe / methodology hint.',
+    `Variant-specific rules (${variant}):`,
+    ...guide.rules,
+    '',
+    'Universal rules:',
+    '- heroStat.value: a number, can include a sign.',
+    '- heroStat.unit: short suffix that fits the variant ("%", "x", "ngày", or "" if no unit fits).',
+    '- bullets: 3-5 items. Each follows the variant rule above.',
+    '- footnote: 6-14 words. Source / timeframe / disclaimer / methodology hint.',
   ].filter(Boolean).join('\n')
 }
 
