@@ -168,7 +168,10 @@ export async function renderWhatsAppConversation(inputs: RenderInputs): Promise<
     if (isOutgoing) drawBlueChecks(ctx, bubbleX + bubbleW - M.bubblePaddingX, cursor + bubbleH - 12)
 
     cursor += bubbleH + M.bubbleGap
-    if (cursor > size.height - M.footerHeight - 80) break
+    // P51 — bubble cutoff is now raised by the iOS keyboard height so
+    // bubbles stop above the composer-keyboard stack instead of running
+    // into it. KEYBOARD_HEIGHT is defined below.
+    if (cursor > size.height - M.footerHeight - KEYBOARD_HEIGHT - 80) break
   }
 
   // "Seen at HH:MM" on the last outgoing message
@@ -181,8 +184,11 @@ export async function renderWhatsAppConversation(inputs: RenderInputs): Promise<
     ctx.fillText(`${S.seen} ${cadence.seenAtLast}`, size.width - M.sideMargin, cursor)
   }
 
-  // Composer (WhatsApp pill + mic)
-  const composerY = size.height - M.footerHeight - IPHONE_15_PRO.safeAreaBottom
+  // P51 — composer rises above the iOS keyboard. Real WhatsApp
+  // screenshots taken mid-conversation include the open keyboard; the
+  // empty band at the bottom of the canvas pre-P51 read as "fake — the
+  // user wasn't actually typing", so the keyboard fills that gap.
+  const composerY = size.height - M.footerHeight - KEYBOARD_HEIGHT - IPHONE_15_PRO.safeAreaBottom
   ctx.fillStyle = palette.composerBg
   ctx.fillRect(0, composerY, size.width, M.footerHeight)
 
@@ -210,7 +216,142 @@ export async function renderWhatsAppConversation(inputs: RenderInputs): Promise<
   ctx.beginPath(); ctx.arc(micCx, micCy, 12, 0.1 * Math.PI, 0.9 * Math.PI); ctx.stroke()
   ctx.beginPath(); ctx.moveTo(micCx, micCy + 12); ctx.lineTo(micCx, micCy + 20); ctx.stroke()
 
+  // P51 — iOS QWERTY keyboard below the composer
+  drawIOSKeyboard(ctx, {
+    x: 0,
+    y: composerY + M.footerHeight,
+    width: size.width,
+    height: KEYBOARD_HEIGHT,
+    safeAreaBottom: IPHONE_15_PRO.safeAreaBottom,
+  })
+
   return canvas
+}
+
+// ── P51 — iOS QWERTY keyboard (light theme, English layout) ────────────
+//
+// Rendered below the WhatsApp composer to give the impression that the
+// screenshot was captured while the user was actively typing — the most
+// common moment a real WhatsApp chat gets screenshotted for sharing.
+// Pre-P51 the bottom ~150-700px was empty white space which gave the
+// fake "scrolled-up chat with nothing happening" smell. The keyboard
+// adds the missing authenticity beat.
+
+const KEYBOARD_HEIGHT = 720
+
+interface KeyboardInputs {
+  x: number
+  y: number
+  width: number
+  height: number
+  safeAreaBottom: number
+}
+
+function drawIOSKeyboard(ctx: CanvasRenderingContext2D, k: KeyboardInputs): void {
+  const { x, y, width, height, safeAreaBottom } = k
+  // Backdrop — iOS keyboard pale gray
+  ctx.fillStyle = '#D1D5DB'
+  ctx.fillRect(x, y, width, height + safeAreaBottom)
+
+  // Predictive text bar at top
+  const predY = y + 8
+  const predH = 64
+  ctx.fillStyle = '#D1D5DB'
+  ctx.fillRect(x, predY, width, predH)
+  const predicts = ['hai', 'best', '👍']
+  ctx.font = '500 26px -apple-system, BlinkMacSystemFont, "SF Pro Text", Helvetica, sans-serif'
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  for (let i = 0; i < predicts.length; i++) {
+    const colX = x + (width / 3) * (i + 0.5)
+    if (i < predicts.length - 1) {
+      // Vertical divider
+      ctx.fillStyle = '#AEB3BA'
+      ctx.fillRect(x + (width / 3) * (i + 1) - 1, predY + 14, 2, predH - 28)
+    }
+    ctx.fillStyle = '#1C1C1E'
+    ctx.fillText(predicts[i], colX, predY + predH / 2)
+  }
+
+  // Key rows
+  const keyTop = predY + predH + 14
+  const keyAreaH = height - (keyTop - y) - 18
+  const rowH = keyAreaH / 4 - 6
+  const rowGap = 14
+
+  const row1 = ['q','w','e','r','t','y','u','i','o','p']
+  const row2 = ['a','s','d','f','g','h','j','k','l']
+  const row3 = ['z','x','c','v','b','n','m']
+
+  const keyW = (width - 22) / 10
+  drawKeyRow(ctx, x + 11, keyTop,                        keyW, rowH, row1)
+  drawKeyRow(ctx, x + 11 + keyW * 0.5, keyTop + rowH + rowGap, keyW, rowH, row2)
+
+  // Row 3 with shift (left) + 7 letters + backspace (right)
+  const r3Y = keyTop + (rowH + rowGap) * 2
+  const sideW = keyW * 1.4
+  drawSpecialKey(ctx, x + 11,           r3Y, sideW, rowH, '⇧')
+  drawKeyRow   (ctx, x + 11 + sideW + 6, r3Y, keyW, rowH, row3)
+  drawSpecialKey(ctx, x + width - 11 - sideW, r3Y, sideW, rowH, '⌫')
+
+  // Bottom row: 123 / 🌐 / space (long) / return
+  const r4Y = keyTop + (rowH + rowGap) * 3
+  const bottomKeyW = keyW * 1.4
+  const spaceW = width - 22 - bottomKeyW * 3 - 18
+  drawSpecialKey(ctx, x + 11,                                r4Y, bottomKeyW, rowH, '123')
+  drawSpecialKey(ctx, x + 11 + bottomKeyW + 6,               r4Y, bottomKeyW, rowH, '🌐')
+  drawSpecialKey(ctx, x + 11 + (bottomKeyW + 6) * 2,         r4Y, spaceW,     rowH, 'space', '#FFFFFF', true)
+  drawSpecialKey(ctx, x + width - 11 - bottomKeyW,           r4Y, bottomKeyW, rowH, 'return')
+
+  // iOS home indicator centered in the safe-area-bottom
+  const hiY = y + height + safeAreaBottom * 0.55
+  ctx.fillStyle = '#1C1C1E'
+  roundedRectPath(ctx, x + width / 2 - 70, hiY, 140, 5, 2.5)
+  ctx.fill()
+}
+
+function drawKeyRow(
+  ctx: CanvasRenderingContext2D,
+  startX: number, y: number, keyW: number, keyH: number,
+  letters: string[],
+): void {
+  const gap = 6
+  const usableW = (letters.length * keyW) + (letters.length - 1) * gap
+  // Start with no horizontal offset — caller positions startX precisely
+  void usableW
+  for (let i = 0; i < letters.length; i++) {
+    const kx = startX + i * (keyW + gap)
+    drawSpecialKey(ctx, kx, y, keyW, keyH, letters[i].toUpperCase())
+  }
+}
+
+function drawSpecialKey(
+  ctx: CanvasRenderingContext2D,
+  x: number, y: number, w: number, h: number,
+  label: string,
+  fill: string = '#FFFFFF',
+  isSpace: boolean = false,
+): void {
+  ctx.save()
+  ctx.shadowColor = 'rgba(0,0,0,0.18)'
+  ctx.shadowBlur = 0
+  ctx.shadowOffsetY = 2
+  roundedRectPath(ctx, x, y, w, h, 10)
+  ctx.fillStyle = fill
+  ctx.fill()
+  ctx.restore()
+
+  ctx.fillStyle = '#1C1C1E'
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  if (isSpace) {
+    ctx.font = '500 24px -apple-system, sans-serif'
+  } else if (label.length === 1) {
+    ctx.font = '500 32px -apple-system, sans-serif'
+  } else {
+    ctx.font = '500 26px -apple-system, sans-serif'
+  }
+  ctx.fillText(label, x + w / 2, y + h / 2 + 1)
 }
 
 function drawHeaderGlyph(ctx: CanvasRenderingContext2D, cx: number, cy: number, kind: 'video' | 'phone' | 'kebab') {

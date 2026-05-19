@@ -1671,16 +1671,24 @@ const CONFIGS: CreativeConfig[] = [
       BLOCKS.productLock(),
       BLOCKS.productContext(),
       BLOCKS.continuity(),
-      BLOCKS.composition('Last-scroll-stopper conversion banner. Product packaging centered with subtle glow halo. 4-6 floating metric chips around the product (rating stars, customer count, trust badges). Negative space for headline overlay + CTA button.'),
-      BLOCKS.scene('Premium ecommerce conversion banner — Malaysia / Vietnam / Indonesia hard-sell style, NOT luxury cinematic. Mobile-readable typography.'),
+      // P51 — banner zones explicit so the model stops emitting "ecommerce
+      // thumbnail with floating elements". Real Ladipage final-CTA banners
+      // have a clear LEFT (product + halo + metric chips) + RIGHT
+      // (headline + price + CTA + freeship) split on the 16:9 frame.
+      // CTA + freeship text is locale-native — the locale is locked by the
+      // single-line locale rule emitted at the end of the compressed prompt
+      // (no need to enumerate locales here and risk the model picking 4
+      // languages at once).
+      BLOCKS.composition('Last-scroll-stopper conversion BANNER at 16:9 landscape. Two zones split roughly 45/55: LEFT 45% = product packaging centered with a subtle white halo + 4-6 floating metric chips (rating ★ 4.8/5, customer-count, trust-badge "✓ Halal" or "✓ Verified", top-rated chip) orbiting around the product like sticker overlays — each chip on its own rounded pill with a faint drop shadow. RIGHT 55% = stacked text block in this top-to-bottom order: (1) BIG bold locale-native HEADLINE (3-6 words, ecommerce hard-sell voice), (2) a price PILL with the EXACT price token from the product offer field — never invented, (3) a 1-line locale-native subhead, (4) a bright contrasting full-width CTA BUTTON with a locale-native action verb (Beli sekarang / Mua ngay / Order now — single phrase, NOT a list) + forward-arrow icon, (5) a small locale-native free-shipping tag underneath the CTA. The banner is HORIZONTAL 16:9 — never a square or vertical thumbnail.'),
+      BLOCKS.scene('Premium ecommerce conversion banner — Malaysia / Vietnam / Indonesia hard-sell style, NOT luxury cinematic. Mobile-readable typography. The product must remain the EXACT product from the reference image (do not redesign packaging).'),
       BLOCKS.capture('tripod'),
-      BLOCKS.lighting('Clean premium gradient background. Subtle rim glow behind product. Metric chips catch a light highlight.'),
+      BLOCKS.lighting('Clean premium brand-color gradient background (cream → soft accent OR navy → urgency red for sale variants). Subtle rim glow behind product. Each metric chip catches a light highlight + tiny drop shadow. CTA button uses the brand accent at full saturation so it pops against the gradient.'),
       BLOCKS.designedOverlay('final-cta-metrics'),
       BLOCKS.priceLock(),
       BLOCKS.platform('facebook-ads'),
       BLOCKS.variation(),
       BLOCKS.localeHardLock(),
-      BLOCKS.negative(['invented prices', 'invented certifications', 'busy gradient', 'cinematic luxury vibe']),
+      BLOCKS.negative(['invented prices', 'invented certifications', 'busy gradient', 'cinematic luxury vibe', 'square thumbnail layout instead of 16:9 banner split', 'CTA button missing or hidden']),
     ],
     negativeBlocks: ['invented prices', 'invented certifications', 'cinematic luxury vibe'],
     outputRules: {
