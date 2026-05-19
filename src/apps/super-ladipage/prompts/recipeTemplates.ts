@@ -121,12 +121,10 @@ ${safeDecor(concept).map(formatDecor).join('\n')}`
     brandLockBlock(identity, concept.productInScene),
     textOverlay,
     decor,
-    `STYLE: UGC selfie / candid smartphone photo, natural indoor or real-life setting, soft daylight, slight grain, amateur authentic feel — NOT studio, NOT corporate, NOT overly polished.`,
-    `COMPOSITION: subject takes most of frame, text overlay placed clearly readable, decor elements do not obscure subject.`,
-    `STRICT TEXT RULE: do NOT render any price tag, currency symbol (RM/Rp/$/đ), or numeric price in this image.`,
+    `STYLE: candid UGC smartphone photo — natural light, slight grain, amateur authentic. Subject fills frame; overlay readable; decor doesn't obscure subject.`,
     technicalBlock(concept.aspectRatio),
     antiPatternBlock(identity),
-    `STRICT: no watermarks, no fake logos other than required brand badges.`,
+    `STRICT: no watermark, no price tag in image, no logos other than required brand badges.`,
   ].filter(Boolean).join('\n\n')
 }
 
@@ -141,12 +139,10 @@ function recipeB(input: RecipeInput): string {
     `SCENE: ${concept.conceptScene}.`,
     subject,
     brandLockBlock(identity, concept.productInScene),
-    `TEXT OVERLAY: ZERO text in image. Do NOT render any letters, words, signs, labels, or captions.`,
-    `STYLE: candid UGC photo, natural lighting, real-life setting, authentic amateur smartphone aesthetic, genuine moment, slight grain.`,
-    `COMPOSITION: human subject naturally framed, no posed studio look.`,
+    `STYLE: candid UGC photo — natural light, real-life setting, amateur smartphone aesthetic. Subject naturally framed.`,
     technicalBlock(concept.aspectRatio),
     antiPatternBlock(identity),
-    `STRICT: no text, no watermark, no decorative overlay.`,
+    `STRICT: ZERO text/letters/labels/captions in image. No watermark. No decorative overlay.`,
   ].filter(Boolean).join('\n\n')
 }
 
@@ -166,22 +162,20 @@ ${safeBlocks(concept).map(formatTextBlock).join('\n')}`
                        concept.roleLabel.toLowerCase().includes('nguyên nhân') ||
                        concept.roleLabel.toLowerCase().includes('why')
 
-  const compositionExtra = isWhyHappens
-    ? `COMPOSITION: title at top. Below: list of 4-6 DISTINCT CAUSE ITEMS, each one having: (a) a circular colored icon on the left (different color per cause: red/orange/blue/purple/green/pink), (b) a short Malay/target-language label next to icon, (c) brief 1-sentence explanation. Arrange in 2 columns OR vertical list. Modern editorial layout.`
-    : `COMPOSITION: title at top, side-by-side or before/after comparison panels with clear visual contrast (red/problem vs green/healthy), arrows or flow indicators between panels, supporting labels with icons, sub-caption at bottom.`
+  const layout = isWhyHappens
+    ? `LAYOUT: title at top. Below = 4-6 DISTINCT CAUSE ITEMS in 2-col or vertical list. Each item: circular colored icon (different color per cause: red/orange/blue/purple/green/pink) + short ${langLabel(language)} label + brief 1-sentence explanation.`
+    : `LAYOUT: title at top + side-by-side / before-after comparison panels (red problem vs green healthy) + flow arrows + supporting labels with icons + sub-caption.`
 
   return [
     `DIAGRAM CONCEPT: ${concept.conceptScene}.`,
     brandLockBlock(identity, concept.productInScene),
     labels,
-    `STYLE: clean mobile-friendly infographic illustration, vector / flat illustration style, soft pastel color palette (NOT photorealistic). Cartoon-style anatomical icons for organs/biology if relevant. Modern editorial layout with clear hierarchy.`,
-    compositionExtra,
-    safeDecor(concept).length > 0
-      ? `BRAND BADGES TO INCLUDE: ${safeDecor(concept).map(formatDecor).join('; ')}`
-      : '',
+    `STYLE: clean mobile-friendly infographic — vector/flat illustration, soft pastel palette (NOT photorealistic), cartoon-anatomical icons, editorial hierarchy.`,
+    layout,
+    safeDecor(concept).length > 0 ? `BRAND BADGES: ${safeDecor(concept).map(formatDecor).join('; ')}` : '',
     technicalBlock(concept.aspectRatio),
     antiPatternBlock(identity),
-    `STRICT: text must be perfectly legible (this is an infographic — text accuracy is critical). No watermarks.`,
+    `STRICT: text legibility is critical (infographic). No watermark.`,
   ].filter(Boolean).join('\n\n')
 }
 
@@ -201,14 +195,12 @@ ${safeBlocks(concept).map(formatTextBlock).join('\n')}`
     `INFOGRAPHIC CONCEPT: ${concept.conceptScene}.`,
     brandLockBlock(identity, concept.productInScene),
     labels,
-    `STYLE: clean modern product showcase infographic, soft inviting color palette (gradients matching product brand colors), subtle gradient background. Mobile-friendly readable typography. Icons in soft circular containers.`,
-    `COMPOSITION: prominent title at top, ${identity.coBrandBadges.length > 0 ? `brand badge "${identity.coBrandBadges.join(' + ')}" near title, ` : ''}product packaging centered (in proper SHAPE — see SHAPE LOCK above), 5-8 icon-with-label items arranged in grid or circular layout around product. Each item: distinct colored icon + short target-language label. Brief supporting description below.`,
-    safeDecor(concept).length > 0
-      ? `EXTRA ELEMENTS: ${safeDecor(concept).map(formatDecor).join('; ')}`
-      : '',
+    `STYLE: clean modern product showcase — soft inviting palette matching brand colors, gradient background, icons in soft circular containers, mobile-readable.`,
+    `LAYOUT: title top + ${identity.coBrandBadges.length > 0 ? `brand badge "${identity.coBrandBadges.join(' + ')}" near title + ` : ''}product packaging centered (SHAPE LOCK applied) + 5-8 icon+label items in grid/circular around product + brief description below.`,
+    safeDecor(concept).length > 0 ? `EXTRA: ${safeDecor(concept).map(formatDecor).join('; ')}` : '',
     technicalBlock(concept.aspectRatio),
     antiPatternBlock(identity),
-    `STRICT: ALL icon labels must be perfectly legible. Product MUST match SHAPE LOCK exactly. No watermark.`,
+    `STRICT: all icon labels legible. Product matches SHAPE LOCK. No watermark.`,
   ].filter(Boolean).join('\n\n')
 }
 
@@ -227,14 +219,12 @@ ${safeBlocks(concept).map(formatTextBlock).join('\n')}`
     `COMPARISON INFOGRAPHIC CONCEPT: ${concept.conceptScene}.`,
     brandLockBlock(identity, concept.productInScene),
     cells,
-    `STYLE: PREMIUM Malaysia ecommerce comparison table — clean modern luxury feel, NOT basic spreadsheet look. Bold typography hierarchy. Glassmorphism or soft-shadow card style for the table. Subtle gradient background.`,
-    `COMPOSITION: 2-column comparison table — LEFT COLUMN "${identity.productNameExact}" header with vibrant EMERALD/teal highlighted background + premium glow accent + green ✓ checkmark icons in each cell (each on a soft mint circular badge). RIGHT COLUMN "Suplemen Lain" / "Other products" with neutral GRAY background + red ✗ X mark icons (each on a soft pink/red circular badge). 5-7 rows of comparison attributes with bold target-language labels. Product image of "${identity.productNameExact}" placed prominently under left column header with subtle glow halo. Optional: small trust badges at bottom.`,
-    safeDecor(concept).length > 0
-      ? `EXTRA ELEMENTS: ${safeDecor(concept).map(formatDecor).join('; ')}`
-      : '',
+    `STYLE: PREMIUM Malaysia ecommerce comparison table — luxury feel (NOT spreadsheet). Glassmorphism / soft-shadow cards. Subtle gradient bg. Bold typography hierarchy.`,
+    `LAYOUT: 2-column table. LEFT "${identity.productNameExact}" with vibrant EMERALD/teal header + glow accent + green ✓ on soft mint circular badges. RIGHT "Suplemen Lain" with neutral gray + red ✗ on soft pink badges. 5-7 rows with bold ${langLabel(language)} labels. Product image under left column header with glow halo. Optional small trust badges at bottom.`,
+    safeDecor(concept).length > 0 ? `EXTRA: ${safeDecor(concept).map(formatDecor).join('; ')}` : '',
     technicalBlock(concept.aspectRatio),
     antiPatternBlock(identity),
-    `STRICT: premium polished aesthetic — NOT basic Excel-like grid. Row labels legible. Checkmarks emerald green, X marks soft red. No watermark.`,
+    `STRICT: premium polish (not Excel grid). Labels legible. Green ✓ + red ✗. No watermark.`,
   ].filter(Boolean).join('\n\n')
 }
 
@@ -252,52 +242,38 @@ function recipeF(input: RecipeInput): string {
 ${safeBlocks(concept).map(formatTextBlock).join('\n')}`
     : 'UI TEXT: empty.'
 
-  // Variant-specific composition + style
-  let variantBlock = ''
-  if (variant === 'warning-news') {
-    variantBlock = `
-LAYOUT (WARNING NEWS variant):
-  - Looks like a Malaysian news portal article OR viral Facebook health warning post.
-  - HEADER bar in RED or DARK URGENT color (NOT calm blue). Site name like "Berita Kesihatan", "Amaran Kesihatan MY", or "Mediahealth Malaysia".
-  - Headline LARGE BOLD reading like a warning/scare-tactic news article (e.g. "AMARAN! Ribuan rakyat Malaysia mengalami...", "Bahaya! Masalah ${identity.productCategory} jika tidak dirawat...")
-  - Hero photo shows a worried/concerned subject OR alarming visual (illustration of damage).
-  - Below: scary subheadline, fear-amplifying paragraph, scary statistics.
-  - Red highlight boxes, exclamation marks, warning emoji ⚠️ if appropriate.
-  - Authentic Malaysian news article layout — NOT promotional/marketing.
-  - Slight JPEG compression artifacts, real-phone screenshot aesthetic.`
-  } else if (variant === 'trust-news') {
-    variantBlock = `
-LAYOUT (TRUST NEWS variant):
-  - Authentic Malaysian news portal (e.g. mStar, Berita Harian) health section OR Kementerian Kesihatan Malaysia (KKM) website.
-  - Calm trustworthy layout with institutional branding.
-  - Headline informational/educational tone.
-  - Authoritative visuals.`
-  } else if (variant === 'whatsapp') {
-    variantBlock = `
-LAYOUT (WHATSAPP variant):
-  - Realistic WhatsApp chat screenshot — green bubbles.
-  - VIBE variation: each WhatsApp image in a section should have DIFFERENT vibe — vary by: (a) 1-on-1 chat vs group chat with many participants visible, (b) text-only message vs message with product photo embed vs voice message bubble, (c) different time-of-day timestamps, (d) different sender names (Malaysian: Kak Timah, Abang Joe, Siti Aminah, Khairul Nizam, Nurul Huda, Aishah, etc).
+  // Variant-specific layout (each variant self-contained — no duplicate outro)
+  const variantBlock =
+    variant === 'warning-news' ? `
+LAYOUT (WARNING NEWS):
+  - Looks like Malaysian news portal article OR viral FB health warning post. Real-phone screenshot, slight JPEG compression.
+  - HEADER bar RED/DARK URGENT (NOT calm blue). Site name e.g. "Berita Kesihatan", "Amaran Kesihatan MY".
+  - Headline LARGE BOLD warning/scare-tactic (e.g. "AMARAN! Ribuan rakyat Malaysia...", "Bahaya! Masalah ${identity.productCategory}...").
+  - Hero photo of worried subject OR alarming visual.
+  - Scary subheadline, fear-amplifying paragraph, scary stats. Red boxes, ⚠️ if fits.`
+  : variant === 'trust-news' ? `
+LAYOUT (TRUST NEWS):
+  - Malaysian news portal (mStar, Berita Harian) health section OR KKM portal.
+  - Calm trustworthy institutional layout. Educational headline.`
+  : variant === 'whatsapp' ? `
+LAYOUT (WHATSAPP):
+  - Realistic WhatsApp chat screenshot, green bubbles, real-phone aesthetic.
+  - VIBE varies per image in section: 1-on-1 vs group chat / text vs photo embed vs voice bubble / different timestamps / different sender names (Kak Timah, Abang Joe, Siti Aminah, Khairul Nizam, Nurul Huda, Aishah...).
   - Casual Malay text with emojis (🙏 ✨ 🤲 ❤️ 💪).`
-  } else {
-    variantBlock = `
-LAYOUT (SOCIAL PLATFORM variant):
-  - Authentic mobile UI of target platform (Facebook post + comments / TikTok Shop review / Shopee product page / Instagram post / Muslim selfie style UGC).
-  - Real-phone aesthetic with slight JPEG compression.
-  - Casual Malay UI text with emojis. Malaysian real-user-name placeholders. Realistic timestamps.`
-  }
+  : `
+LAYOUT (SOCIAL PLATFORM):
+  - Authentic mobile UI of target platform (FB post + comments / TikTok Shop review / Shopee product page / Instagram post / Muslim selfie UGC).
+  - Real-phone aesthetic, slight JPEG compression. Casual Malay UI text + emojis. Malaysian usernames + realistic timestamps.`
 
   return [
     `SCREENSHOT CONCEPT: ${concept.conceptScene}.`,
     brandLockBlock(identity, concept.productInScene),
     labels,
     variantBlock.trim(),
-    `STYLE: looks like a screenshot a real Malaysian user would have on their phone.`,
-    safeDecor(concept).length > 0
-      ? `EXTRA UI ELEMENTS: ${safeDecor(concept).map(formatDecor).join('; ')}`
-      : '',
+    safeDecor(concept).length > 0 ? `EXTRA UI: ${safeDecor(concept).map(formatDecor).join('; ')}` : '',
     technicalBlock(concept.aspectRatio),
     antiPatternBlock(identity),
-    `STRICT: All UI text legible. No watermark.`,
+    `STRICT: all UI text legible. No watermark.`,
   ].filter(Boolean).join('\n\n')
 }
 
@@ -319,23 +295,22 @@ ${safeBlocks(concept).map(formatTextBlock).join('\n')}`
     variantBlock = `
 LAYOUT (SOCIAL PROOF BANNER variant):
   - Bold trust-building banner with 4-6 customer testimonial cards arranged in 2x2 or 2x3 grid.
-  - HEADER: dark red or burgundy band at top with bold white headline (e.g. "BUKTI KEPERCAYAAN: RIBUAN RAKYAT MALAYSIA TELAH MENCUBA!").
-  - METRICS ROW just below header (3-4 large stat blocks): ⭐ 4.8/5 Rating + Sales count (e.g. "25,000+ KOTAK TERJUAL") + Satisfied customer count (e.g. "18,000+ PELANGGAN BERPUAS HATI") + optional trending badge.
-  - TESTIMONIAL CARDS: each card shows a small avatar (Malaysian — mix male + female + various ages including hijab women + uncles), full Malaysian name, location (e.g. "Kuala Lumpur", "Johor Bahru", "Penang"), 5-star rating, short Malay testimonial 1-2 sentences. Mini product thumbnail attached to some cards.
-  - PRODUCT IMAGE: small to mid-size in center or bottom — packaging in correct SHAPE LOCK.
-  - BOTTOM ROW: trust badges (delivery icon "Penghantaran Pantas 1-3 Hari", warranty icon "Jaminan Pulangan Wang 7 Hari", QR code "Pengesahan Keaslian", HALAL + KKM badges).
-  - Color palette: dark red/burgundy primary + cream/off-white secondary + gold accents. Premium hard-sell ecommerce feel.`
+  - HEADER: dark red/burgundy band + bold white headline (e.g. "BUKTI KEPERCAYAAN: RIBUAN RAKYAT MALAYSIA TELAH MENCUBA!").
+  - METRICS ROW (3-4 stat blocks): ⭐4.8/5 + sales count (e.g. "25,000+ KOTAK TERJUAL") + satisfied count ("18,000+ PELANGGAN BERPUAS HATI") + optional trending badge.
+  - 4-6 TESTIMONIAL CARDS: small Malaysian avatar (mix gender + age + hijab + uncles) + full name + location (KL/JB/Penang) + 5-star + 1-2 sentence Malay testimonial. Mini product thumbnail attached.
+  - PRODUCT IMAGE: small-mid size center/bottom, SHAPE LOCK applied.
+  - BOTTOM: trust badges (delivery "Penghantaran Pantas 1-3 Hari", warranty "Jaminan Pulangan Wang 7 Hari", QR + HALAL + KKM).
+  - PALETTE: dark red/burgundy + cream + gold. Premium hard-sell.`
   } else {
-    // promo variant
     variantBlock = `
-LAYOUT (PROMO BANNER variant):
-  - Native Malaysian Facebook/TikTok ecommerce promo banner. Bold hard-sell visual.
-  - Product packaging large and clearly centered or to one side — SHAPE LOCK must be respected.
-  - Multi-line stacked headlines in bold modern condensed sans-serif.
-  - PRICE TAG "${identity.priceTag}" prominently displayed (this is allowed — promo banner is the ONE place price is rendered in-image).
-  - Trust badges visible: ${identity.trustBadges.join(', ') || '(none)'}.
+LAYOUT (PROMO BANNER):
+  - Native Malaysian FB/TikTok ecommerce promo banner. Hard-sell visual.
+  - Product packaging large, centered or to one side, SHAPE LOCK applied.
+  - Multi-line stacked headlines in bold condensed sans-serif.
+  - PRICE "${identity.priceTag}" prominently displayed (promo is one of 2 places price is allowed in-image).
+  - Trust badges: ${identity.trustBadges.join(', ') || '(none)'}.
   - CTA button shape with directional arrow.
-  - Color palette: vibrant high-contrast (amber/red gradient OR violet/gold) matching ecommerce hard-sell aesthetic.`
+  - PALETTE: vibrant high-contrast (amber/red OR violet/gold), ecommerce hard-sell.`
   }
 
   return [
@@ -343,14 +318,12 @@ LAYOUT (PROMO BANNER variant):
     brandLockBlock(identity, concept.productInScene),
     banner,
     variantBlock.trim(),
-    safeDecor(concept).length > 0
-      ? `EXTRA ELEMENTS: ${safeDecor(concept).map(formatDecor).join('; ')}`
-      : '',
+    safeDecor(concept).length > 0 ? `EXTRA: ${safeDecor(concept).map(formatDecor).join('; ')}` : '',
     technicalBlock(concept.aspectRatio),
     antiPatternBlock(identity),
     variant === 'promo'
-      ? `STRICT: price must read EXACTLY "${identity.priceTag}". All banner text legible. Product exactly matches SHAPE LOCK. No watermark.`
-      : `STRICT: all metric numbers + testimonial text legible. Avatars look like real Malaysian people. No watermark.`,
+      ? `STRICT: price reads EXACTLY "${identity.priceTag}". Banner text legible. Product matches SHAPE LOCK. No watermark.`
+      : `STRICT: metric numbers + testimonial text legible. Avatars look like real Malaysians. No watermark.`,
   ].filter(Boolean).join('\n\n')
 }
 
@@ -369,35 +342,31 @@ function recipeH(input: RecipeInput): string {
 ${safeBlocks(concept).map(formatTextBlock).join('\n')}`
     : 'TEXT: empty (this should NOT happen — expert/KOL card requires text).'
 
-  let variantBlock = ''
-  if (variant === 'expert') {
-    variantBlock = `
-LAYOUT (EXPERT variant):
+  const variantBlock = variant === 'expert' ? `
+LAYOUT (EXPERT):
   - Professional editorial endorsement card — Malaysian dental/health expert.
-  - TOP half (~50%): clean head-and-shoulders portrait of expert in professional attire (white coat for dentist/doctor, OR smart business attire for nutritionist). Calm trustworthy expression. Clinical or office background, soft blur.
-  - CENTER overlay band: EXPERT NAME (e.g. "Dr. Siti Aminah binti Hassan"), specialty/title (e.g. "Pakar Pergigian / Dental Specialist"), years of experience (e.g. "15+ tahun pengalaman").
-  - BOTTOM half: clean quote box with professional Malay testimonial (2-4 sentences) — formal tone endorsing the product. Quotation marks decoration. Optional small "Pakar Disahkan" or verified badge.
-  - Color palette: clean white + soft teal/navy + cream. Editorial trust feel.`
-  } else {
-    variantBlock = `
-LAYOUT (KOL variant):
-  - Instagram-style influencer endorsement card — Malaysian KOL/celebrity.
-  - TOP half: stylish lifestyle photo of KOL (Malaysian, fashionable, smiling, modern setting like cafe / home / outdoor — could be hijab influencer OR male KOL). Vibrant aesthetic.
-  - CENTER overlay band: KOL NAME (e.g. "@nurul_aminah"), follower count badge (e.g. "1.2M Followers" or "850K Pengikut"), platform icon (Instagram/TikTok).
-  - BOTTOM half: casual quote box with friendly Malay testimonial (2-4 sentences) — informal personal recommendation tone. Emoji-rich (✨ 💕 🔥). Optional "Pilihan Aku" or hashtag.
-  - Color palette: warm pink/peach + cream + soft gold accents. Influencer aesthetic.`
-  }
+  - TOP half: head-and-shoulders portrait in professional attire (white coat for doctor/dentist OR smart attire for nutritionist), calm trustworthy expression, clinical/office bg with soft blur.
+  - CENTER band: EXPERT NAME (e.g. "Dr. Siti Aminah binti Hassan") + specialty ("Pakar Pergigian / Dental Specialist") + years exp ("15+ tahun pengalaman").
+  - BOTTOM half: clean quote box, professional Malay testimonial (2-4 sentences), formal endorsing tone, quotation marks decor. Optional "Pakar Disahkan" badge.
+  - PALETTE: white + soft teal/navy + cream. Editorial trust feel.`
+  : `
+LAYOUT (KOL):
+  - Instagram-style influencer endorsement card — Malaysian KOL.
+  - TOP half: stylish lifestyle photo (Malaysian fashionable smiling, cafe/home/outdoor, hijab influencer OR male KOL), vibrant.
+  - CENTER band: handle (e.g. "@nurul_aminah") + follower badge ("1.2M Followers" / "850K Pengikut") + platform icon (Instagram/TikTok).
+  - BOTTOM half: casual quote box, friendly Malay testimonial (2-4 sentences), emoji-rich (✨ 💕 🔥), optional "Pilihan Aku" hashtag.
+  - PALETTE: warm pink/peach + cream + gold. Influencer aesthetic.`
 
   return [
     `ENDORSEMENT CARD CONCEPT: ${concept.conceptScene}.`,
     subject,
-    `PRODUCT VISIBILITY: NO product packaging shown in this image — focus is on the PERSON and the QUOTE. Do NOT include the "${identity.productNameExact}" jar/box in this image. (The product name only appears as text mention within the quote.)`,
+    `PRODUCT VISIBILITY: NO product packaging in this image. Focus = person + quote. Product name only mentioned as text within the quote (NOT as visual packaging).`,
     labels,
     variantBlock.trim(),
-    `STYLE: editorial polish — looks like a magazine/feature endorsement card, NOT amateur UGC. Mobile-readable layout.`,
+    `STYLE: editorial polish (magazine/feature card, NOT amateur UGC). Mobile-readable.`,
     technicalBlock(concept.aspectRatio),
     antiPatternBlock(identity),
-    `STRICT: name + credentials/followers + quote text MUST all be legible. Person must match subject lock. No watermark.`,
+    `STRICT: name + credentials/followers + quote legible. Person matches subject lock. No watermark.`,
   ].filter(Boolean).join('\n\n')
 }
 
