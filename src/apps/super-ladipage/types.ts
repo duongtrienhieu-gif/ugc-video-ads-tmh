@@ -144,3 +144,127 @@ export interface SavedLandingPack extends LandingPagePack {
   title: string
   createdAt: number
 }
+
+// ═════════════════════════════════════════════════════════════════════
+// PHASE 3 — TYPES BỔ SUNG CHO ENGINE MỚI
+// (kế thừa từ kiến trúc đã chốt — không thay đổi gì ở UI types phía trên)
+// ═════════════════════════════════════════════════════════════════════
+
+/** Tier phân loại độ liên quan của pain / transformation tới ngách sản phẩm.
+ *  Tier 4 = OFF-NICHE (CẤM HOÀN TOÀN). */
+export interface FourTier<T = string> {
+  tier1_primary:  T[]
+  tier2_axis:     T[]
+  tier3_loose:    T[]
+  tier4_offniche: T[]
+}
+
+/** Identity tổng hợp sản phẩm — extract 1 LẦN / pack, dùng verbatim cho
+ *  mọi prompt sau này. Đây là chỗ chống identity drift cốt lõi. */
+export interface ProductIdentity {
+  // ─── Visual identity ───
+  productNameExact:       string
+  packagingDescription:   string
+  primaryColors:          string[]
+  productScale:           string
+  productPose:            string
+
+  // ─── Brand lock ───
+  coBrandBadges:          string[]
+  trustBadges:            string[]
+  priceTag:               string
+
+  // ─── Semantic identity (4-tier) ───
+  productCategory:        string
+  painPointsByTier:       FourTier<string>
+  transformationByTier:   FourTier<string>
+  visualAntiPatterns:     string[]
+}
+
+/** Recipe ID — 7 visual recipes cho preset ugc-malaysia. */
+export type RecipeId = 'A' | 'B' | 'C' | 'D' | 'E' | 'F' | 'G'
+
+/** Text block muốn render trong ảnh (do gpt-image-1 render). */
+export interface TextBlock {
+  text:     string
+  role:     'headline' | 'subheadline' | 'badge' | 'label' | 'cta' | 'price' | 'metric' | 'question' | 'beforeafter-label'
+  position: 'top' | 'middle' | 'bottom' | 'overlay-on-product' | 'corner' | 'center'
+  /** Style hint — code template chuyển thành prompt instruction. */
+  style?:   'bold-condensed' | 'italic-slanted' | 'ecommerce-banner' | 'glassmorphism-badge' | 'star-rating'
+}
+
+/** Decor element (badge, arrow, glow…) cho recipe A. */
+export interface DecorElement {
+  type:        'glassmorphism-badge' | 'arrow' | 'glow' | 'starburst' | 'checkmark' | 'cross' | 'emoji-prefix'
+  /** Text trên element (nếu có), vd "✅ Penghadaman Lancar". */
+  text?:       string
+  /** Vị trí gợi ý — không bắt buộc precise, chỉ hint. */
+  position?:   string
+  /** Màu hint cho glow / accent. */
+  color?:      string
+}
+
+/** 1 imageSlot trong section — đây là OUTPUT của Gemini text gen,
+ *  INPUT của prompt assembler. */
+export interface ImageSlotConcept {
+  recipeId:           RecipeId
+  /** Cảnh tổng quát 5-30 từ. KHÔNG bao gồm style/composition. */
+  conceptScene:       string
+  /** Mô tả vai trò để hiển thị ở UI (vd "Hero text overlay A"). */
+  roleLabel:          string
+  /** Filename gợi ý (vd "hero_01.jpg"). */
+  filename:           string
+  aspectRatio:        '1:1' | '4:5' | '16:9' | '9:16'
+  /** Có hiển thị sản phẩm trong ảnh này không. */
+  productInScene:     boolean
+  textOverlayBlocks:  TextBlock[]
+  decorElements:      DecorElement[]
+  /** Tier mà concept lấy ra (chỉ áp cho pain + before-after sections). */
+  sourceTier?:        'tier1_primary' | 'tier2_axis' | 'tier3_loose'
+}
+
+/** Spec định nghĩa 1 section trong 1 preset. */
+export interface SectionSpec {
+  type:           SectionType
+  /** Số ảnh sinh ra cho section này. */
+  imageCount:     number
+  recipeId:       RecipeId
+  aspectRatio:    '1:1' | '4:5' | '16:9' | '9:16'
+  /** Có require sản phẩm xuất hiện trong các imageSlot của section này? */
+  productPolicy:  'required' | 'forbidden' | 'optional'
+  /** Field nào của section có. */
+  textFields:     {
+    headline?:    boolean
+    subheadline?: boolean
+    cta?:         boolean
+    offerStrip?:  boolean
+    urgencyText?: boolean
+    bullets?:     boolean
+    faqs?:        boolean
+    reviews?:     boolean
+    bodyCopy?:    boolean
+    comparisonData?: boolean
+  }
+  /** Rules đặc biệt cho 4-tier semantic gate. */
+  tierRules?: {
+    /** Phân bố ảnh theo tier. */
+    distribution: {
+      tier1_primary:  { min: number; max: number }
+      tier2_axis:     { min: number; max: number }
+      tier3_loose:    { min: number; max: number }
+      tier4_offniche: { min: number; max: number }
+    }
+  }
+}
+
+/** Spec đầy đủ của 1 preset. */
+export interface PresetSpec {
+  id:           LandingForm
+  displayName:  string
+  totalSections: number
+  totalImages:   number
+  /** Hint cho text gen về sales psychology của preset. */
+  toneBrief:    string
+  sections:     SectionSpec[]
+}
+
