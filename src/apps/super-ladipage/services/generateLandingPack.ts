@@ -4,14 +4,13 @@ import type {
 } from '../types'
 import { useBankStore } from '../../../stores/bankStore'
 import { useSettingsStore } from '../../../stores/settingsStore'
-import { directGeminiText } from '../../../utils/gemini'
 import { getPresetSpec } from '../prompts/presetSpecs'
 import { buildSystemPromptPackGen } from '../prompts/systemPromptPackGen'
 import { extractProductIdentity } from './extractProductIdentity'
 import { translatePackToVi } from './translate'
 import { assembleImagePrompt } from '../assembler/assembleImagePrompt'
 import { semanticGateScan } from '../assembler/semanticGate'
-import { withTimeout } from './withTimeout'
+import { textGenWithFallback } from './textGenWithFallback'
 
 /** Timeout cho text gen lớn (pack 17 section). Output có thể tới ~16K
  *  token, Gemini 2.5 Flash sinh ~200 token/s → ~80s. Cho 150s safety. */
@@ -145,6 +144,7 @@ export async function generateLandingPack(params: LandingGenParams): Promise<Lan
     throw new Error('Vui lòng nhập kie.ai API key trong Cài đặt (cần để sinh ảnh sau bước này).')
   }
   const geminiKey = settings.getGeminiApiKey()
+  const kieApiKey = settings.getApiKey()  // for KIE text fallback when Gemini overloaded
   const language  = params.language
 
   const form = params.form ?? 'ugc-malaysia'
@@ -184,22 +184,21 @@ export async function generateLandingPack(params: LandingGenParams): Promise<Lan
         ? 'Generate the landing pack JSON now.'
         : `Previous attempt had these issues:\n${feedbackForRetry}\n\nFix them and regenerate the FULL pack JSON.`
 
-      console.log(`[SuperLadipage] pack gen attempt ${attempt}/3 — calling Gemini text (timeout ${PACK_GEN_TIMEOUT_MS / 1000}s, maxTokens=16384)...`)
+      console.log(`[SuperLadipage] pack gen attempt ${attempt}/3 — calling text gen (Gemini → KIE fallback, timeout ${PACK_GEN_TIMEOUT_MS / 1000}s)...`)
 
-      const raw = await withTimeout(
-        directGeminiText({
-          apiKey:             geminiKey,
-          prompt:             userPrompt,
-          systemInstruction:  systemPrompt,
-          responseMimeType:   'application/json',
-          maxOutputTokens:    16384,
-        }),
-        PACK_GEN_TIMEOUT_MS,
-        '[SuperLadipage pack gen]',
-      )
+      const raw = await textGenWithFallback({
+        geminiApiKey:       geminiKey,
+        kieApiKey,
+        prompt:             userPrompt,
+        systemInstruction:  systemPrompt,
+        jsonMode:           true,
+        maxOutputTokens:    16384,
+        timeoutMs:          PACK_GEN_TIMEOUT_MS,
+        label:              `pack-gen-${attempt}`,
+      })
 
       const elapsed = ((Date.now() - startedAt) / 1000).toFixed(1)
-      console.log(`[SuperLadipage] pack gen attempt ${attempt}/3 — Gemini returned ${raw.length} chars in ${elapsed}s, parsing JSON...`)
+      console.log(`[SuperLadipage] pack gen attempt ${attempt}/3 — text returned ${raw.length} chars in ${elapsed}s, parsing JSON...`)
 
       const parsed = parseRawPack(raw)
       const sections = rawToSections(parsed, identity, language)
@@ -271,8 +270,9 @@ export async function generateLandingPack(params: LandingGenParams): Promise<Lan
     console.info('[SuperLadipage] STAGE 3/4 — translating pack → VN...')
     try {
       validPack = await translatePackToVi({
-        apiKey: geminiKey,
-        pack: validPack,
+        apiKey:       geminiKey,
+        kieApiKey,
+        pack:         validPack,
         fromLanguage: language,
       })
       console.info('[SuperLadipage] STAGE 3/4 DONE — translation OK')

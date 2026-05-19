@@ -1,6 +1,5 @@
 import type { LandingPagePack, LandingLanguage } from '../types'
-import { directGeminiText } from '../../../utils/gemini'
-import { withTimeout } from './withTimeout'
+import { textGenWithFallback } from './textGenWithFallback'
 
 const TRANSLATE_TIMEOUT_MS = 90_000
 
@@ -79,6 +78,7 @@ function applyTranslations(pack: LandingPagePack, translations: TranslateSource)
 
 export async function translatePackToVi(args: {
   apiKey: string
+  kieApiKey: string
   pack: LandingPagePack
   fromLanguage: LandingLanguage
 }): Promise<LandingPagePack> {
@@ -126,19 +126,18 @@ Translate these fields to Vietnamese. Output JSON only:
 ${JSON.stringify(source, null, 2)}
 `.trim()
 
-  console.log(`[translate] ${sourceKeys.length} fields → VN, timeout ${TRANSLATE_TIMEOUT_MS / 1000}s...`)
-  const raw = await withTimeout(
-    directGeminiText({
-      apiKey: args.apiKey,
-      prompt: userPrompt,
-      systemInstruction: systemPrompt,
-      responseMimeType: 'application/json',
-      maxOutputTokens: 16384,
-    }),
-    TRANSLATE_TIMEOUT_MS,
-    '[translate]',
-  )
-  console.log(`[translate] Gemini returned ${raw.length} chars`)
+  console.log(`[translate] ${sourceKeys.length} fields → VN, timeout ${TRANSLATE_TIMEOUT_MS / 1000}s (Gemini → KIE fallback)...`)
+  const raw = await textGenWithFallback({
+    geminiApiKey:      args.apiKey,
+    kieApiKey:         args.kieApiKey,
+    prompt:            userPrompt,
+    systemInstruction: systemPrompt,
+    jsonMode:          true,
+    maxOutputTokens:   16384,
+    timeoutMs:         TRANSLATE_TIMEOUT_MS,
+    label:             'translate',
+  })
+  console.log(`[translate] returned ${raw.length} chars`)
 
   // Strip fences just in case
   let cleaned = raw.trim()
