@@ -57,6 +57,11 @@ export interface ImagePrompt {
   /** Token seeding diversity directive — buộc prompt hash khác nhau giữa các
    *  ảnh cùng prompt template, tránh image API trả về latent giống nhau. */
   variationSeed?: string
+  /** P5 — hybrid model routing. Derive từ spec.productPolicy ở rawToSections,
+   *  KHÔNG để AI quyết định. true = gpt-4o-image (true i2i với refs, identity
+   *  lock); false = gpt-image-2 (text-only, sharper polish, dùng cho sections
+   *  không có sản phẩm). Default true để fail-safe (giữ identity lock). */
+  useImageToImage?: boolean
 }
 
 export interface FaqItem {

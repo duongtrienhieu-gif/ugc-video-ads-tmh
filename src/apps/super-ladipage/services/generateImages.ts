@@ -61,6 +61,9 @@ async function runSingle(
       prompt: prompt.prompt,
       aspectRatio: (prompt.aspectRatio as '1:1' | '4:5' | '16:9' | '9:16') || (section.imageAspectRatio as '1:1' | '4:5' | '16:9' | '9:16') || '4:5',
       referenceAssetRefs,
+      // P5 hybrid routing — derive ở orchestrator từ spec.productPolicy.
+      // Default true (gpt-4o-image i2i) cho fail-safe nếu field missing.
+      useImageToImage: prompt.useImageToImage ?? true,
       signal,
     })
     onUpdate?.(sIdx, iIdx, {

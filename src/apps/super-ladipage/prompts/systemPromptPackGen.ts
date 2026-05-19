@@ -177,13 +177,13 @@ R9. SECTION-SPECIFIC BRIEFS (concise per-section overrides)
 
 §12 expert-kol (n=2, recipe H): Image 1 recipeVariant="expert" — top portrait of Malaysian dentist/doctor + name "Dr. [Malaysian name]" + "[Specialty] · [N]+ tahun pengalaman" + 2-4 sentence ${langName} quote. Image 2 recipeVariant="kol" — top lifestyle photo Malaysian KOL + "@[handle]" + "[N]M Followers / Pengikut" + casual ${langName} quote with emojis. NO product packaging in either image. reviews[] = 2 entries matching the 2 images.
 
-§13 social-proof (n=6): MIXED recipe per image —
-  social_fb.jpg       — recipeId="F", recipeVariant="social-platform" — Facebook post + comments layout.
-  social_tiktok.jpg   — recipeId="F", recipeVariant="social-platform" — TikTok Shop review page.
-  social_shopee.jpg   — recipeId="F", recipeVariant="social-platform" — Shopee product review page.
-  social_selfie.jpg   — recipeId="F", recipeVariant="social-platform" — hijab woman selfie holding product, social-feed style.
-  social_group.jpg    — recipeId="B" (clean UGC photo) — ONE candid group photo of 4-5 Malaysian family/friends standing together (mix gender + ages + hijab + uncles + younger), all holding the product, smiling at camera. Outdoor or casual indoor scene. NO Facebook/Instagram chrome, NO caption banner, NO text overlay — just the photo itself.
-  social_collage.jpg  — recipeId="B" with conceptScene describing collage layout — image is a 2x2 grid of 4 separate Malaysian people (each in own frame, different person + different setting per frame), each holding product. NO platform chrome, NO caption banner — just the 4-frame collage as a photo.
+§13 social-proof (n=6): MIXED recipe + aspect per image —
+  social_fb.jpg       — recipeId="F", recipeVariant="social-platform", aspectRatio="9:16" — Facebook post + comments, mobile phone screenshot.
+  social_tiktok.jpg   — recipeId="F", recipeVariant="social-platform", aspectRatio="9:16" — TikTok Shop review page, mobile phone screenshot.
+  social_shopee.jpg   — recipeId="F", recipeVariant="social-platform", aspectRatio="9:16" — Shopee product review page, mobile phone screenshot.
+  social_selfie.jpg   — recipeId="F", recipeVariant="social-platform", aspectRatio="9:16" — hijab woman selfie holding product in social-feed post style, mobile portrait.
+  social_group.jpg    — recipeId="B" (clean UGC photo), aspectRatio="4:5" — ONE candid group photo of 4-5 Malaysian family/friends together (mix gender + ages + hijab + uncles + younger), all holding the product, smiling at camera. Outdoor or casual indoor scene. NO Facebook/Instagram chrome, NO caption banner, NO text overlay — just the photo.
+  social_collage.jpg  — recipeId="B", aspectRatio="4:5" — conceptScene describing 2x2 grid of 4 separate Malaysian people (each in own frame, different person + different setting per frame), each holding product. NO platform chrome, NO caption banner — just the 4-frame collage.
 Images 1-4 may show price as part of authentic platform UI (Shopee/TikTok pages have prices natively). Images 5-6 (recipe B) ZERO text/overlay.
 
 §14 whatsapp-testimonials (n=4, recipeVariant="whatsapp"): 4 DIFFERENT vibes —

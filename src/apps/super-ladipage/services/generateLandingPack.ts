@@ -90,13 +90,22 @@ function parseRawPack(raw: string): RawPackOutput {
 
 /** Convert RawPackOutput → LandingSection[].
  *  Normalize undefined arrays trên concept (Gemini hay omit khi rỗng)
- *  để recipe templates không crash khi gọi .length / .map / .filter. */
+ *  để recipe templates không crash khi gọi .length / .map / .filter.
+ *
+ *  P5: Derive useImageToImage từ spec.productPolicy (code-driven, không
+ *  để AI quyết định). productPolicy='forbidden' → false (gpt-image-2);
+ *  'required' hoặc 'optional' → true (gpt-4o-image i2i — fail-safe). */
 function rawToSections(
   raw: RawPackOutput,
   identity: ProductIdentity,
   language: 'ms' | 'vi' | 'en',
+  specsBySectionType: Map<string, SectionSpec>,
 ): LandingSection[] {
   return raw.sections.map((s) => {
+    const spec = specsBySectionType.get(s.type)
+    // P5 routing: forbidden → gpt-image-2; required/optional → gpt-4o-image
+    const useImageToImage = spec?.productPolicy !== 'forbidden'
+
     const imagePrompts: (ImagePrompt & { __concept?: ImageSlotConcept })[] = (s.imagePrompts ?? []).map((p) => {
       // Normalize concept — Gemini may omit arrays/optional fields
       const concept: ImageSlotConcept = {
@@ -106,7 +115,7 @@ function rawToSections(
         roleLabel:          p.concept?.roleLabel ?? p.style ?? '',
         filename:           p.concept?.filename ?? p.filename ?? '',
         aspectRatio:        (p.concept?.aspectRatio ?? p.aspectRatio ?? '4:5') as ImageSlotConcept['aspectRatio'],
-        productInScene:     p.concept?.productInScene ?? false,
+        productInScene:     p.concept?.productInScene ?? (spec?.productPolicy === 'required'),
         subjectLockKey:     p.concept?.subjectLockKey,
         textOverlayBlocks:  p.concept?.textOverlayBlocks ?? [],
         decorElements:      p.concept?.decorElements ?? [],
@@ -114,12 +123,13 @@ function rawToSections(
       }
       const assembled = assembleImagePrompt({ identity, concept, language })
       return {
-        filename:     p.filename,
-        prompt:       assembled,
-        style:        p.style,
-        aspectRatio:  p.aspectRatio,
-        status:       'idle' as const,
-        __concept:    concept,
+        filename:        p.filename,
+        prompt:          assembled,
+        style:           p.style,
+        aspectRatio:     p.aspectRatio,
+        status:          'idle' as const,
+        useImageToImage,
+        __concept:       concept,
       }
     })
 
@@ -223,7 +233,7 @@ export async function generateLandingPack(params: LandingGenParams): Promise<Lan
       console.log(`[SuperLadipage] pack gen attempt ${attempt}/3 — text returned ${raw.length} chars in ${elapsed}s, parsing JSON...`)
 
       const parsed = parseRawPack(raw)
-      const sections = rawToSections(parsed, identity, language)
+      const sections = rawToSections(parsed, identity, language, specsMap)
 
       // Semantic gate scan
       const issues = semanticGateScan(
