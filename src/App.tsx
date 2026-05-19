@@ -19,6 +19,7 @@ import ScriptArchitect from './apps/script-architect/ScriptArchitect'
 import AdsContent from './apps/ads-content/AdsContent'
 import LabContent from './apps/lab-content/LabContent'
 import LandingPageAI from './apps/landing-page/LandingPageAI'
+import SuperLadipage from './apps/super-ladipage/SuperLadipage'
 import History from './apps/history/History'
 import CharacterStudio from './apps/character-studio/CharacterStudio'
 import VoiceStudio from './apps/voice-studio/VoiceStudio'
@@ -34,6 +35,7 @@ const APP_COMPONENTS: Record<string, React.ComponentType> = {
   'ads-content': AdsContent,
   'lab-content': LabContent,
   'landing-page': LandingPageAI,
+  'super-ladipage': SuperLadipage,
   'history': History,
   'character-studio': CharacterStudio,
   'voice-studio': VoiceStudio,
@@ -57,6 +59,7 @@ const APP_BOUNDARY_META: Record<string, { name: string; resetKeys: string[] }> =
   'ads-content':       { name: 'Ads Content',    resetKeys: [] },
   'lab-content':       { name: 'Lab Content',    resetKeys: [] },
   'landing-page':      { name: 'Landing Page AI', resetKeys: [] },
+  'super-ladipage':    { name: 'Super Ladipage',  resetKeys: [] },
   'history':           { name: 'Lịch sử',        resetKeys: [] },
   'character-studio':  { name: 'Character Studio', resetKeys: [] },
   'voice-studio':      { name: 'Voice Studio',   resetKeys: [] },
