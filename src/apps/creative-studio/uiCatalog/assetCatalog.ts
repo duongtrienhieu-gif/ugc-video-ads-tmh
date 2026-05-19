@@ -297,18 +297,20 @@ export const ASSET_CATALOG: AssetCatalogEntry[] = [
   // ═══════════════════════════════════════════════════════════════════
   {
     id: 'infographic',
-    group: 'designed-graphic',
+    // P43 — migrated to photographic engine for Ladipage-grade illustrated
+    // stat infographics. UI catalog updated to match runtime routing.
+    group: 'photographic',
     categoryId: 'product-explain',
     title: { vi: 'Thống kê & Số liệu', en: 'Stats infographic' },
     description: { vi: 'Hero stat ("92% hài lòng") + bullets + footnote — chứng minh bằng số', en: 'Stat-driven infographic' },
-    aspectRatio: '4:5',
+    aspectRatio: '1:1',
     iconKey: 'barChart3',
     tooltip: {
       what: 'Render infographic số liệu: hero stat lớn (vd "92% hài lòng sau 2 tuần") + 3-5 bullets điểm mạnh + footnote nguồn — clean modern layout.',
       marketingGoal: 'Tăng độ tin trong 5 giây — phù hợp người scroll nhanh. Số liệu cứng dễ nhớ hơn câu copy.',
       suitableFor: ['Landing page benefits', 'Bài đăng Facebook', 'Carousel Instagram', 'Slide trong video TikTok'],
     },
-    badges: ['needs-product', 'infographic', 'engine-graphic'],
+    badges: ['needs-product', 'infographic', 'engine-photo'],
   },
   {
     id: 'cta-banner',
@@ -375,48 +377,54 @@ export const ASSET_CATALOG: AssetCatalogEntry[] = [
   },
   {
     id: 'ingredients-explain',
-    group: 'designed-graphic',
+    // P43 — migrated to photographic engine (Ladipage "6 Strain Probiotik"
+    // style floating ingredient badges around product).
+    group: 'photographic',
     categoryId: 'product-explain',
     title: { vi: 'Thành phần sản phẩm', en: 'Ingredients map' },
-    description: { vi: 'Infographic phân tích thành phần — herb/molecule + benefit mapping', en: 'Ingredient composition infographic' },
-    aspectRatio: '4:5',
+    description: { vi: 'Sản phẩm trung tâm + huy hiệu thành phần xung quanh — illustrated infographic', en: 'Product center + floating ingredient badges' },
+    aspectRatio: '1:1',
     iconKey: 'flask',
     tooltip: {
-      what: 'Render infographic phân tích thành phần sản phẩm — molecule / herb illustration kết nối với benefit cụ thể, layout clean ecommerce readable.',
+      what: 'Render infographic thành phần: sản phẩm centered + 4-6 huy hiệu thành phần xung quanh (icon minh hoạ + tên thành phần + benefit ngắn). Pull đúng tên thành phần từ Project — KHÔNG invent.',
       marketingGoal: 'Justify purchase qua thành phần — khách thấy "có khoa học, có lý do" thay vì marketing copy chung chung.',
       suitableFor: ['Skincare', 'Thực phẩm chức năng', 'Supplement', 'Mỹ phẩm', 'Detail page Shopee'],
     },
-    badges: ['needs-product', 'infographic', 'engine-graphic'],
+    badges: ['needs-product', 'infographic', 'engine-photo'],
   },
   {
     id: 'mechanism-explain',
-    group: 'designed-graphic',
+    // P43 — migrated to photographic engine (Ladipage "Bagaimana Probiotik
+    // Bekerja" style before/after biological diagram).
+    group: 'photographic',
     categoryId: 'product-explain',
     title: { vi: 'Cơ chế hoạt động', en: 'How it works' },
-    description: { vi: 'Body heatmap + mũi tên — show cơ chế tác động lên cơ thể', en: 'Mechanism heatmap + arrows' },
-    aspectRatio: '4:5',
+    description: { vi: 'Before / after illustration + numbered steps — show cơ chế tác động', en: 'Mechanism diagram before/after' },
+    aspectRatio: '1:1',
     iconKey: 'sparkles',
     tooltip: {
-      what: 'Render infographic cơ chế hoạt động — body / skin / area diagram + arrows + heat zones giải thích sản phẩm tác động ở đâu, như thế nào.',
+      what: 'Render mechanism diagram: top half = "before" (problem state) / bottom half = "after" (restored state). Sản phẩm anchor bên phải + flow arrow + 3-5 numbered steps. Clinical illustration style.',
       marketingGoal: 'Conversion mạnh nhất cho pain relief / supplement / skincare — khách hiểu RÕ cơ chế là tin và mua.',
       suitableFor: ['Pain relief', 'Supplement', 'Skincare', 'Health & wellness', 'Landing page detail'],
     },
-    badges: ['needs-product', 'infographic', 'engine-graphic'],
+    badges: ['needs-product', 'infographic', 'engine-photo'],
   },
   {
     id: 'benefit-timeline',
-    group: 'designed-graphic',
+    // P43 — migrated to photographic engine (Ladipage "PERJALANAN
+    // KESIHATAN" style illustrated progression timeline).
+    group: 'photographic',
     categoryId: 'product-explain',
     title: { vi: 'Timeline kết quả', en: 'Benefit timeline' },
-    description: { vi: 'Sau 5 phút · sau 7 ngày · sau 30 ngày — visual tiến triển', en: 'Result progression timeline' },
-    aspectRatio: '4:5',
+    description: { vi: 'Sản phẩm + timeline ngang với icon từng mốc tiến triển', en: 'Product + horizontal timeline with milestone icons' },
+    aspectRatio: '1:1',
     iconKey: 'arrowRightLeft',
     tooltip: {
-      what: 'Render infographic timeline: "Sau 5 phút" / "Sau 7 ngày" / "Sau 30 ngày" với mô tả từng giai đoạn + visual progress.',
+      what: 'Render progression timeline: sản phẩm anchor bên trái + timeline ngang sang phải với 3-5 mốc thời gian (5 phút / 1 tuần / 30 ngày) — mỗi mốc có icon nhỏ + mô tả thay đổi cụ thể.',
       marketingGoal: 'Set expectation đúng + tạo cảm giác kết quả nhanh — khách nhìn timeline biết khi nào thấy đổi.',
       suitableFor: ['Skincare', 'Supplement', 'Hair care', 'Whitening', 'Detail page'],
     },
-    badges: ['needs-product', 'infographic', 'engine-graphic'],
+    badges: ['needs-product', 'infographic', 'engine-photo'],
   },
 
   // ═══════════════════════════════════════════════════════════════════
