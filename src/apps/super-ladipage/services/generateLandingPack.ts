@@ -320,8 +320,12 @@ export async function generateLandingPack(params: LandingGenParams): Promise<Lan
       })
       console.info('[SuperLadipage] STAGE 3/4 DONE — translation OK')
     } catch (err) {
-      console.warn('[SuperLadipage] STAGE 3/4 FAILED — pack returned without VN translation', err)
-      // KHÔNG block pack — user vẫn có copy native, chỉ thiếu dịch VN
+      // KHÔNG block pack (user vẫn có copy native). NHƯNG cảnh báo rõ thay
+      // vì silent. Pack được lưu kèm flag để UI có thể hiển thị nút dịch lại
+      // sau này nếu cần (Phase tới — chưa làm).
+      const msg = err instanceof Error ? err.message : String(err)
+      console.error('[SuperLadipage] STAGE 3/4 FAILED:', msg)
+      console.warn('[SuperLadipage] Pack returned with Malay copy only — VN translation missing. User cần tạo lại pack để có VN, hoặc đợi feature "dịch lại" ở phase sau.')
     }
   }
 

@@ -126,35 +126,57 @@ Translate these fields to Vietnamese. Output JSON only:
 ${JSON.stringify(source, null, 2)}
 `.trim()
 
-  console.log(`[translate] ${sourceKeys.length} fields → VN, timeout ${TRANSLATE_TIMEOUT_MS / 1000}s (Gemini → KIE fallback)...`)
-  const raw = await textGenWithFallback({
-    geminiApiKey:      args.apiKey,
-    kieApiKey:         args.kieApiKey,
-    prompt:            userPrompt,
-    systemInstruction: systemPrompt,
-    jsonMode:          true,
-    maxOutputTokens:   16384,
-    timeoutMs:         TRANSLATE_TIMEOUT_MS,
-    label:             'translate',
-  })
-  console.log(`[translate] returned ${raw.length} chars`)
+  // Retry 2x — JSON parse fail hoặc translate call lỗi sẽ retry với fresh call.
+  // Pattern này khớp với pack gen retry, đảm bảo translate không silent fail.
+  const MAX_ATTEMPTS = 2
+  let lastError: Error | null = null
 
-  // Strip fences just in case
-  let cleaned = raw.trim()
-  if (cleaned.startsWith('```')) {
-    cleaned = cleaned.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '').trim()
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    console.log(`[translate] attempt ${attempt}/${MAX_ATTEMPTS} — ${sourceKeys.length} fields → VN, timeout ${TRANSLATE_TIMEOUT_MS / 1000}s (Gemini → KIE fallback)...`)
+    try {
+      const raw = await textGenWithFallback({
+        geminiApiKey:      args.apiKey,
+        kieApiKey:         args.kieApiKey,
+        prompt:            userPrompt,
+        systemInstruction: systemPrompt,
+        jsonMode:          true,
+        maxOutputTokens:   16384,
+        timeoutMs:         TRANSLATE_TIMEOUT_MS,
+        label:             `translate-${attempt}`,
+      })
+      console.log(`[translate] attempt ${attempt} returned ${raw.length} chars, parsing JSON...`)
+
+      // Strip fences just in case
+      let cleaned = raw.trim()
+      if (cleaned.startsWith('```')) {
+        cleaned = cleaned.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '').trim()
+      }
+
+      const parsed = JSON.parse(cleaned)
+      if (!parsed || typeof parsed !== 'object') {
+        throw new Error(`Translate output không phải object — type=${typeof parsed}`)
+      }
+      const translations = parsed as TranslateSource
+
+      // Validate ít nhất 50% keys translated (defense vs silent partial fail)
+      const translatedKeys = Object.keys(translations).filter((k) => sourceKeys.includes(k))
+      const coverageRatio = translatedKeys.length / sourceKeys.length
+      if (coverageRatio < 0.5) {
+        throw new Error(`Translate coverage chỉ ${Math.round(coverageRatio * 100)}% (${translatedKeys.length}/${sourceKeys.length} keys) — quá thấp, retry`)
+      }
+
+      console.log(`[translate] ✓ attempt ${attempt} OK — ${translatedKeys.length}/${sourceKeys.length} fields translated (${Math.round(coverageRatio * 100)}%)`)
+      return applyTranslations(args.pack, translations)
+    } catch (err) {
+      lastError = err instanceof Error ? err : new Error(String(err))
+      console.warn(`[translate] attempt ${attempt}/${MAX_ATTEMPTS} FAILED: ${lastError.message.slice(0, 200)}`)
+    }
   }
 
-  let parsed: unknown
-  try {
-    parsed = JSON.parse(cleaned)
-  } catch (err) {
-    console.warn('[translate] JSON parse failed — returning original pack', err)
-    return args.pack
-  }
-
-  if (!parsed || typeof parsed !== 'object') return args.pack
-  const translations = parsed as TranslateSource
-
-  return applyTranslations(args.pack, translations)
+  // Cả 2 attempt fail → throw để orchestrator catch + toast error (KHÔNG silent)
+  throw new Error(
+    `Dịch sang tiếng Việt thất bại sau ${MAX_ATTEMPTS} lần thử. ` +
+    `Lỗi cuối: ${lastError?.message ?? 'không rõ'}. ` +
+    `Pack copy gốc vẫn dùng được, chỉ thiếu bản dịch VN — bấm tạo lại để retry.`,
+  )
 }
