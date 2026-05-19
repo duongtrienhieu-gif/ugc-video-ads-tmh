@@ -1010,8 +1010,11 @@ const CONFIGS: CreativeConfig[] = [
 
   {
     id: 'infographic',
-    engine: 'designed-graphic',
-    model: 'gemini-text+canvas',
+    // P43 — migrated to photographic (KIE gpt-image-2) for Ladipage-grade
+    // illustrated stat infographics. Old Canvas-template module retained
+    // on disk but unrouted.
+    engine: 'photographic',
+    model: 'gpt-image-2',
     dna: {
       category: 'product-explain',
       marketingGoal: 'Tăng độ tin tưởng + giải thích công dụng nhanh trong 5 giây.',
@@ -1027,10 +1030,9 @@ const CONFIGS: CreativeConfig[] = [
       typographyStyle: 'Ecommerce readability, bold benefit emphasis, mobile-safe 14px+ minimum',
       platformBehavior: 'Landing page section + ad carousel — 5-second scan readability',
       layoutRules: [
-        'hierarchy-first composition',
-        'large headline at top',
-        'hero stat dominant in center',
-        'clean section dividers between bullets and footnote',
+        'one BIG hero stat number anchored top-left',
+        'product packaging on the right side as anchor',
+        '3-5 supporting bullets with small flat icons stacked below the hero stat',
       ],
       contentRules: [
         'specific numbers, never vague claims',
@@ -1041,6 +1043,7 @@ const CONFIGS: CreativeConfig[] = [
         'icon-driven sections',
         'clean limited color palette',
         'high-contrast typography',
+        'hybrid photographic product + illustrated infographic feel',
       ],
       qualityRules: [
         'hero stat readable at thumbnail size',
@@ -1054,12 +1057,30 @@ const CONFIGS: CreativeConfig[] = [
         'stock-photo collage feel',
       ],
     },
-    promptBlocks: [],
-    negativeBlocks: ['cluttered layout', 'gradient noise overlays'],
+    promptBlocks: [
+      BLOCKS.productLock(),
+      BLOCKS.continuity(),
+      BLOCKS.composition(
+        'Premium ecommerce stat-driven infographic. One BIG bold hero stat number anchored at the top-left (e.g. "96%" or "30 hari") with a 2-4 word locale-native label beside it. Product packaging on the right side, label fully facing camera. 3-5 supporting bullets with small flat icons stacked below the hero stat. Hybrid photographic-product + illustrated-infographic feel.',
+      ),
+      BLOCKS.scene(
+        'Soft brand-color gradient background (cream / pearl / pastel teal / brand accent). Clean ecommerce-readable typography. Small subtle product brand badge or certification mark at the top if the product has one.',
+      ),
+      BLOCKS.factsList({ kind: 'benefits', max: 5, label: 'benefit phrases' }),
+      BLOCKS.capture('tripod'),
+      BLOCKS.lighting(
+        'Even soft studio lighting, subtle premium glow halo behind the product. No cinematic mood, no harsh shadows.',
+      ),
+      BLOCKS.platform('landing-page'),
+      BLOCKS.variation(),
+      BLOCKS.localeHardLock(),
+      BLOCKS.negative(['random photo as bg', 'multiple competing hero numbers', 'inventing statistics not in the brief']),
+    ],
+    negativeBlocks: ['cluttered layout', 'gradient noise overlays', 'invented statistics'],
     outputRules: {
-      aspectRatio: '4:5',
-      enforce: ['hero stat readable', '3-5 supporting bullets', 'footnote source'],
-      forbid: ['random photo as bg', 'unreadable typography'],
+      aspectRatio: '1:1',
+      enforce: ['hero stat readable', '3-5 supporting bullets', 'product label visible'],
+      forbid: ['random photo as bg', 'unreadable typography', 'invented statistics'],
     },
   },
 
@@ -1122,8 +1143,10 @@ const CONFIGS: CreativeConfig[] = [
 
   {
     id: 'ingredients-explain',
-    engine: 'designed-graphic',
-    model: 'gemini-text+canvas',
+    // P43 — migrated to photographic for Ladipage "6 Strain Probiotik"
+    // grade illustrated ingredient infographics.
+    engine: 'photographic',
+    model: 'gpt-image-2',
     dna: {
       category: 'product-explain',
       marketingGoal: 'Justify purchase qua ingredient provenance — show "có khoa học, có thành phần thật" thay vì marketing copy.',
@@ -1139,45 +1162,71 @@ const CONFIGS: CreativeConfig[] = [
       typographyStyle: 'Ecommerce readability, ingredient name bold + benefit subtler',
       platformBehavior: 'Detail page Shopee + landing-page ingredients section + ad carousel',
       layoutRules: [
-        'hero stat = number of key ingredients',
-        'bullets = "Ingredient name — its benefit" pairs',
-        'footnote = sourcing / certification line',
+        'product packaging CENTERED with subtle glow halo',
+        '4-6 illustrated ingredient badges arranged symmetrically AROUND the product',
+        'each badge = a small illustrated icon + ingredient name + 2-3 word benefit',
       ],
       contentRules: [
-        'each bullet MUST follow "Ingredient — benefit" format',
-        'use REAL ingredients from product knowledge — do not invent',
-        'benefit half stays 4-9 words',
-        '4-5 ingredient pairs total',
+        'use the EXACT ingredient names from the product brief — do not invent latin names or strains',
+        'each badge label has the ingredient name in bold + a 2-3 word locale-native benefit',
+        '4-6 badges total',
       ],
       visualRules: [
-        'clean ecommerce-readable layout',
-        'no random photo backgrounds',
-        'high-contrast typography',
+        'clinical medical-grade illustrated icon style — NOT cartoony',
+        'consistent badge shape across all ingredients',
+        'soft brand-color gradient background',
       ],
       qualityRules: [
-        'ingredient name + benefit pair clearly distinguishable',
-        'mobile-safe minimum font sizes',
+        'product label readable in the center',
+        'each ingredient badge readable at thumbnail size',
         'reads in a 5-second scan',
       ],
       failureModes: [
         'invented ingredients not in product brief',
-        'generic benefit claims without an ingredient anchor',
+        'badges overlapping the product',
+        'cartoony childish icon style',
         'cluttered layout',
       ],
     },
-    promptBlocks: [],
-    negativeBlocks: ['invented ingredients', 'generic benefit claims', 'cluttered layout'],
+    promptBlocks: [
+      BLOCKS.productLock(),
+      BLOCKS.continuity(),
+      BLOCKS.composition(
+        'Scientific ingredient infographic. Product packaging CENTERED with a subtle premium glow halo, label fully facing camera. 4-6 illustrated ingredient badges arranged symmetrically AROUND the product — top-left, top-right, mid-left, mid-right, bottom-left, bottom-right. Badges NEVER overlap the product or each other. Consistent badge shape across all ingredients.',
+      ),
+      BLOCKS.scene(
+        'Each badge pairs a flat illustrated icon matching the ingredient nature (microorganism cluster for probiotic strains, leaf for botanical, capsule for extract, molecule for active compound, drop for liquid) with the ingredient name in bold + a 2-3 word locale-native benefit phrase. Subtle product brand badge or certification mark at the top of the frame.',
+      ),
+      BLOCKS.factsList({ kind: 'ingredients', max: 6, label: 'ingredient names' }),
+      BLOCKS.capture('tripod'),
+      BLOCKS.lighting(
+        'Brand-color soft gradient background (white / pearl / soft teal / pastel). Premium clinical medical-grade aesthetic. Subtle inner shadow / rim light per badge for dimension. NOT cartoony, NOT cinematic.',
+      ),
+      BLOCKS.platform('landing-page'),
+      BLOCKS.variation(),
+      BLOCKS.localeHardLock(),
+      BLOCKS.negative([
+        'fewer than 4 ingredient badges visible',
+        'badges overlapping product',
+        'inventing ingredient names not in the brief',
+        'cartoony childish icon style',
+        'cluttered busy gradient',
+      ]),
+    ],
+    negativeBlocks: ['invented ingredients', 'cartoony icons', 'badges overlapping product', 'cluttered layout'],
     outputRules: {
-      aspectRatio: '4:5',
-      enforce: ['ingredient-benefit pairs visible', 'hero stat = ingredient count'],
-      forbid: ['invented ingredients', 'random photo bg'],
+      aspectRatio: '1:1',
+      enforce: ['4-6 ingredient badges visible', 'product centered', 'ingredient names from brief'],
+      forbid: ['invented ingredients', 'badges overlapping product', 'cartoony icons'],
     },
   },
 
   {
     id: 'mechanism-explain',
-    engine: 'designed-graphic',
-    model: 'gemini-text+canvas',
+    // P43 — migrated to photographic for Ladipage "Bagaimana Probiotik
+    // Bekerja" grade biological mechanism diagrams.
+    engine: 'photographic',
+    model: 'gpt-image-2',
     dna: {
       category: 'product-explain',
       marketingGoal: 'Conversion mạnh nhất cho pain relief / supplement / skincare — khách hiểu RÕ cơ chế là tin và mua.',
@@ -1193,43 +1242,73 @@ const CONFIGS: CreativeConfig[] = [
       typographyStyle: 'Step numbers bold, step description regular weight',
       platformBehavior: 'Landing-page detail section + health/wellness ads',
       layoutRules: [
-        'bullets = ordered "Bước N: ..." mechanism steps',
-        'hero stat = step count or key delivery metric',
-        'footnote = mechanism source / clinical reference cue',
+        'before / after biological illustration showing the mechanism',
+        'product packaging anchored on the right side',
+        '3-5 numbered stage labels along the flow path',
       ],
       contentRules: [
-        'every bullet MUST start with "Bước N:" or locale equivalent',
-        'steps describe HOW product acts on body, not what user feels',
+        'every stage label starts with "Bước N:" / "Step N:" / locale equivalent',
+        'steps describe HOW the product acts on the body, not what the user feels',
         '3-5 ordered mechanism steps',
         'monotonically ordered',
       ],
       visualRules: [
-        'clean layout with clear step hierarchy',
-        'each step visually distinct',
+        'clinical medical-grade illustration style',
+        'soft anatomical illustration, biology-grade detail, NOT cartoony',
+        'thin elegant flow line / arrow connecting product to body system',
       ],
       qualityRules: [
         'steps read in correct order',
         'mechanism feels scientific not magical',
+        'before / after halves visually contrast',
       ],
       failureModes: [
-        'steps reading as user-facing benefits ("you will feel calmer") rather than mechanism ("ingredient binds to receptor")',
-        'magical claims',
+        'cartoony childish illustration',
+        'horror / overly graphic anatomical detail',
+        'magical glow effects on the body illustration',
         'steps out of order',
+        'identical before / after halves',
       ],
     },
-    promptBlocks: [],
-    negativeBlocks: ['user-feeling bullets instead of mechanism', 'magical claims', 'unordered steps'],
+    promptBlocks: [
+      BLOCKS.productLock(),
+      BLOCKS.continuity(),
+      BLOCKS.composition(
+        'Scientific mechanism diagram. Top half shows the "before" state (problem) — a small flat illustration of the affected body system in trouble (e.g. inflamed gut wall with bad bacteria, clogged pore, dull skin layer). Bottom half shows the "after" state — same body system restored / balanced. Product packaging anchored on the right side, label fully facing camera, with a thin elegant arrow / flow line pointing from the product into the body-system illustration.',
+      ),
+      BLOCKS.scene(
+        '3-5 small numbered stage labels placed along the flow path, each stage in locale-native phrasing starting with the locale equivalent of "Bước N:" / "Step N:". Clinical premium medical-infographic aesthetic — soft anatomical illustration style with biology-grade detail, NOT cartoony, NOT horror.',
+      ),
+      BLOCKS.factsList({ kind: 'usps', max: 5, label: 'mechanism phrases' }),
+      BLOCKS.capture('tripod'),
+      BLOCKS.lighting(
+        'Brand-color light gradient background. Mobile-readable typography. Subtle premium glow behind the product. No cinematic mood, no harsh shadows.',
+      ),
+      BLOCKS.platform('landing-page'),
+      BLOCKS.variation(),
+      BLOCKS.localeHardLock(),
+      BLOCKS.negative([
+        'cartoony childish illustration',
+        'horror / overly graphic anatomical detail',
+        'magical glow effects on the body illustration',
+        'identical before / after halves',
+        'unordered or missing step numbers',
+      ]),
+    ],
+    negativeBlocks: ['cartoony icons', 'horror anatomy', 'magical claims', 'unordered steps'],
     outputRules: {
-      aspectRatio: '4:5',
-      enforce: ['ordered mechanism steps', 'each step describes how not what'],
-      forbid: ['magical claims', 'user-feeling instead of mechanism'],
+      aspectRatio: '1:1',
+      enforce: ['ordered mechanism steps', 'before / after halves contrast', 'product visible on right'],
+      forbid: ['cartoony illustration', 'horror anatomy', 'unordered steps'],
     },
   },
 
   {
     id: 'benefit-timeline',
-    engine: 'designed-graphic',
-    model: 'gemini-text+canvas',
+    // P43 — migrated to photographic for Ladipage "PERJALANAN KESIHATAN"
+    // grade illustrated progress timelines.
+    engine: 'photographic',
+    model: 'gpt-image-2',
     dna: {
       category: 'product-explain',
       marketingGoal: 'Set expectation đúng + tạo cảm giác kết quả nhanh — khách nhìn timeline biết khi nào thấy đổi.',
@@ -1245,37 +1324,62 @@ const CONFIGS: CreativeConfig[] = [
       typographyStyle: 'Time markers bold prominent, milestone description regular',
       platformBehavior: 'Detail page + skincare/supplement/hair-care landing sections',
       layoutRules: [
-        'bullets = time-stamped milestones "Sau N phút/ngày: ..."',
-        'hero stat = total duration to full effect',
-        'monotonic ascending time markers',
+        'product packaging anchored on the left side as origin',
+        'horizontal timeline flowing to the right',
+        '3-5 ascending time markers with small icons above + descriptions below',
       ],
       contentRules: [
-        'every bullet MUST start with "Sau N phút" / "Sau N ngày" / "Sau N tuần" or locale equivalent',
-        'first marker = small early effect (e.g. "Sau 5 phút: da dịu, giảm đỏ")',
+        'every marker uses locale-native time phrasing (e.g. "5 phút" / "3 hari" / "1 minggu" / "30 hari")',
+        'first marker = small early effect',
         'last marker = mature result',
-        '3-5 milestones',
+        '3-5 milestones, monotonically ascending',
         'realistic expectations — never promise instant cure',
       ],
       visualRules: [
-        'progress visualization clear',
-        'each time anchor visually distinct',
+        'each milestone icon visually distinct + matches the visible change',
+        'soft brand-color arrow line connecting all markers',
+        'hybrid photographic product + illustrated infographic feel',
       ],
       qualityRules: [
         'time markers ascending',
-        'milestones describe SPECIFIC visible/felt change',
+        'milestones describe SPECIFIC visible / felt change',
       ],
       failureModes: [
         'instant-cure promises in early markers',
         'identical changes across markers (no progression)',
         'time markers out of order',
+        'cluttered overlapping milestone icons',
       ],
     },
-    promptBlocks: [],
-    negativeBlocks: ['instant-cure overpromise', 'identical milestone descriptions', 'unordered time markers'],
+    promptBlocks: [
+      BLOCKS.productLock(),
+      BLOCKS.continuity(),
+      BLOCKS.composition(
+        'Premium ecommerce progress-timeline infographic. Product packaging anchored on the LEFT side as the visual origin, label fully facing camera. A clean horizontal timeline flows to the right, with 3-5 ASCENDING time markers (locale-native — e.g. "5 phút" / "3 hari" / "1 minggu" / "30 hari"). Each time marker has a small flat illustrated icon ABOVE it showing the visible change at that stage and a SHORT 4-9 word locale-native description BELOW it.',
+      ),
+      BLOCKS.scene(
+        'Earliest marker shows a SMALL early effect (gentle calming / soothing). Latest marker shows the mature result. Connected by a soft brand-color arrow line. Mobile-readable bold typography on the time markers, regular weight on the descriptions. Premium landing-page aesthetic, hybrid photographic product + illustrated infographic.',
+      ),
+      BLOCKS.factsList({ kind: 'benefits', max: 5, label: 'milestone descriptions' }),
+      BLOCKS.capture('tripod'),
+      BLOCKS.lighting(
+        'Soft brand-color gradient background. Subtle premium glow behind the product on the left. No cinematic mood, no harsh shadows.',
+      ),
+      BLOCKS.platform('landing-page'),
+      BLOCKS.variation(),
+      BLOCKS.localeHardLock(),
+      BLOCKS.negative([
+        'time markers out of order',
+        'identical icons across all milestones',
+        'instant-cure overpromise in the early marker',
+        'cluttered overlapping milestone icons',
+      ]),
+    ],
+    negativeBlocks: ['instant-cure overpromise', 'identical milestones', 'unordered time markers'],
     outputRules: {
-      aspectRatio: '4:5',
-      enforce: ['time markers ascending', 'each milestone specific'],
-      forbid: ['instant cure', 'unordered timeline'],
+      aspectRatio: '1:1',
+      enforce: ['time markers ascending', 'each milestone specific', 'product visible on left'],
+      forbid: ['instant cure', 'unordered timeline', 'identical milestone icons'],
     },
   },
 

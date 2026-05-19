@@ -38,10 +38,14 @@ import { module as floatingProductModule }       from '../engines/photographic/f
 import { module as ingredientCompositionModule } from '../engines/photographic/ingredient-composition/module'
 import { module as groupHoldingModule }          from '../engines/photographic/group-holding/module'
 import { module as expertKolModule }             from '../engines/photographic/expert-kol/module'
-// ── P35: remaining roadmap types shipped ───────────────────────────────────
-import { module as ingredientsExplainModule } from '../engines/designed-graphic/ingredients-explain/module'
-import { module as mechanismExplainModule }   from '../engines/designed-graphic/mechanism-explain/module'
-import { module as benefitTimelineModule }    from '../engines/designed-graphic/benefit-timeline/module'
+// ── P43: ingredients-explain / mechanism-explain / benefit-timeline /
+//        infographic — migrated from designed-graphic (Canvas template)
+//        to photographic (KIE gpt-image-2) to match Ladipage's
+//        illustrated infographic quality. Old designed-graphic modules
+//        retained on disk for reference but unrouted.
+import { module as ingredientsExplainModule } from '../engines/photographic/ingredients-explain/module'
+import { module as mechanismExplainModule }   from '../engines/photographic/mechanism-explain/module'
+import { module as benefitTimelineModule }    from '../engines/photographic/benefit-timeline/module'
 import { module as collage4FramesModule }     from '../engines/photographic/collage-4-frames/module'
 // ── P37: Ladipage-inspired creatives ──────────────────────────────────────
 import { module as painOverlayModule }       from '../engines/photographic/pain-overlay/module'
@@ -62,8 +66,12 @@ import { module as tiktokFeedbackModule }   from '../engines/ui-native/tiktok-fe
 import { module as facebookCommentModule }  from '../engines/ui-native/facebook-comment/module'
 import { module as tiktokCommentModule }    from '../engines/ui-native/tiktok-comment/module'
 
-// ── P8: Designed-Graphic modules — STATIC IMPORTS ONLY ────────────────────
-import { module as infographicModule }      from '../engines/designed-graphic/infographic/module'
+// ── P8 / P43: Designed-Graphic modules — STATIC IMPORTS ONLY ─────────────
+// P43 migrated `infographic` to photographic engine (KIE gpt-image-2). The
+// old Canvas-template module is retained on disk for reference but is no
+// longer routed. `cta-banner` stays on designed-graphic — banners are a
+// different beast than infographics and the Canvas template suits them.
+import { module as infographicModule }      from '../engines/photographic/infographic/module'
 import { module as ctaBannerModule }        from '../engines/designed-graphic/cta-banner/module'
 
 /** Union of all module shapes — discriminated by engineGroup field. */

@@ -333,4 +333,34 @@ export const BLOCKS = {
       },
     }
   },
+
+  // ── P43 — Inline product facts for infographic photographic prompts ─
+  /** Surface the actual benefit / ingredient / USP / pain-point list from
+   *  productKnowledge as a SHORT inline directive so KIE renders the
+   *  literal locale-native strings on badges / steps / time markers
+   *  instead of inventing plausible-but-fake claims. Emitted as `'scene'`
+   *  kind so it survives compressedPrompt's drop list (the [PRODUCT
+   *  KNOWLEDGE] block at kind:'product' is dropped). Returns '' when
+   *  productKnowledge has no items of the requested kind, so configs can
+   *  pre-declare a factsList without breaking when bankStore data is
+   *  sparse. */
+  factsList(opts: {
+    kind: 'benefits' | 'ingredients' | 'usps' | 'painPoints'
+    max?: number
+    /** Optional label override — defaults to the kind name. */
+    label?: string
+  }): PromptBlock {
+    const max = opts.max ?? 6
+    const label = opts.label ?? opts.kind
+    return {
+      kind: 'scene',
+      text: (ctx: PromptContext) => {
+        const k = ctx.productKnowledge
+        if (!k) return ''
+        const items = (k[opts.kind] ?? []).slice(0, max)
+        if (items.length === 0) return ''
+        return `Use EXACTLY these ${label} on the visible labels / badges / steps — do not invent or substitute: ${items.map((s) => `"${s}"`).join(', ')}.`
+      },
+    }
+  },
 }
