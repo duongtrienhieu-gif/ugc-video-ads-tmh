@@ -8,6 +8,11 @@ import { useAuthStore } from './stores/authStore'
 import { useBankStore } from './stores/bankStore'
 import { useLandingPageStore } from './apps/landing-page/store'
 import { useSuperLadipageStore } from './apps/super-ladipage/store'
+import { useAdTemplateStore } from './stores/adTemplateStore'
+import { useLabContentStore } from './apps/lab-content/store'
+import { useAdsContentStore } from './apps/ads-content/store'
+import { useLipSyncStore } from './stores/lipSyncStore'
+import { useVideoTranslateStore } from './stores/videoTranslateStore'
 import AuthScreen from './components/AuthScreen'
 import RestoreSessionModal from './components/RestoreSessionModal'
 import { RefreshCw, CheckCircle2, AlertCircle } from 'lucide-react'
@@ -122,14 +127,25 @@ export default function App() {
   }, [geminiApiKey])
 
   useEffect(() => {
-    // On login, hydrate both bank data (products / models / scripts / ...)
-    // AND the saved Landing Page / Super Ladipage projects from Supabase.
-    // The landing-page + super-ladipage stores fall back to localStorage
-    // cache if the Supabase fetch fails (table missing / network down).
+    // On login, hydrate all per-user persistent state from Supabase:
+    //   • bank data (products / models / scripts / voices / brolls)
+    //   • Landing Page AI saved projects (landing_projects)
+    //   • Super Ladipage saved projects (landing_projects, kind discriminator)
+    //   • Ad Win Templates / Lab Content / Ads Content / Lip Sync history /
+    //     Video Translate history (all in user_outputs, kind discriminator)
+    //
+    // Every hydrate() call falls back to localStorage cache if the
+    // Supabase fetch fails (table missing / network down / RLS) — the
+    // app keeps working with the data already on this device.
     const onLogin = () => {
       loadAll()
       void useLandingPageStore.getState().hydrate()
       void useSuperLadipageStore.getState().hydrate()
+      void useAdTemplateStore.getState().hydrate()
+      void useLabContentStore.getState().hydrate()
+      void useAdsContentStore.getState().hydrate()
+      void useLipSyncStore.getState().hydrate()
+      void useVideoTranslateStore.getState().hydrate()
     }
 
     supabase.auth.getSession().then(({ data: { session } }) => {
