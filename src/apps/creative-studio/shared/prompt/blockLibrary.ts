@@ -20,8 +20,18 @@
 //   }
 
 import type { PromptBlock, PromptContext, PlatformStyle, CreativeDNA } from '../../types/creativeDNA'
+import type { UINativeLocale } from '../../types/uiNative'
 import { formatProductKnowledgeForPrompt } from '../../services/productKnowledge'
 import { assembleDnaDirective } from './dnaDirective'
+import {
+  demographicAnchor,
+  settingPack,
+  screenshotFeel,
+  designedOverlay,
+  priceLockDirective,
+  culturalCueByLocale,
+  type DemographicOpts,
+} from './scenePatterns'
 
 // ── Product / Avatar identity locks ──────────────────────────────────
 
@@ -241,6 +251,85 @@ export const BLOCKS = {
           + `  • handwritten notes, post-it stickers, sticky tabs\n`
           + `  • price tags / sale badges if shown\n`
           + `  • on-package secondary text NOT in the reference (eg shelf labels)`
+      },
+    }
+  },
+
+  // ── P36 — Ladipage-style packed scene blocks ──────────────────────
+  //
+  // These factories produce richly-specific prompt fragments matching
+  // the Ladipage advertorial reference quality. Each reads ctx.locale
+  // so demographic / cultural / language details auto-adapt.
+
+  /** Locale-aware demographic anchor: "A Malaysian woman in her mid-30s
+   *  with a warm natural smile, wearing a hijab and modest casual
+   *  attire, looking like a real customer". */
+  demographic(opts: DemographicOpts = {}): PromptBlock {
+    return {
+      kind: 'composition',
+      text: (ctx: PromptContext) => {
+        const locale = (ctx.locale ?? 'vi-VN') as UINativeLocale
+        return `[DEMOGRAPHIC]\n${demographicAnchor(locale, opts)}.`
+      },
+    }
+  },
+
+  /** Locale-aware setting + lighting pack: kitchen-morning, bathroom-
+   *  routine, cafe-urban, etc. Mirrors Ladipage "casual indoor setting
+   *  with natural window light" specificity. */
+  setting(kind: Parameters<typeof settingPack>[0]): PromptBlock {
+    return {
+      kind: 'scene',
+      text: (ctx: PromptContext) => {
+        const locale = (ctx.locale ?? 'vi-VN') as UINativeLocale
+        return `[SETTING]\n${settingPack(kind, locale)}.`
+      },
+    }
+  },
+
+  /** UGC phone-screenshot authenticity directive — selfie / handheld /
+   *  tripod / macro / split-frame. */
+  capture(mode: Parameters<typeof screenshotFeel>[0]): PromptBlock {
+    return { kind: 'camera', text: `[CAPTURE]\n${screenshotFeel(mode)}.` }
+  },
+
+  /** Designed text-overlay layout directive — hero-hook, pain-italic,
+   *  ingredient-card, comparison-table, final-cta-metrics,
+   *  before-after-labels. Layout text auto-localizes via ctx.locale. */
+  designedOverlay(
+    layout: Parameters<typeof designedOverlay>[0],
+    extras: { headline?: string; badges?: string[] } = {},
+  ): PromptBlock {
+    return {
+      kind: 'textRendering',
+      text: (ctx: PromptContext) => {
+        const locale = (ctx.locale ?? 'vi-VN') as UINativeLocale
+        return `[DESIGNED OVERLAY]\n${designedOverlay(layout, { ...extras, locale })}`
+      },
+    }
+  },
+
+  /** Price-lock directive — extracts the price token from the product
+   *  knowledge offer field and emits "(show only RM59)" pattern. Skips
+   *  emission when no parseable price exists. */
+  priceLock(): PromptBlock {
+    return {
+      kind: 'textRendering',
+      text: (ctx: PromptContext) => {
+        const offer = ctx.productKnowledge?.offer ?? ''
+        return priceLockDirective(offer)
+      },
+    }
+  },
+
+  /** Subtle cultural anchor based on locale — Halal cues for my-MY,
+   *  batik for id-ID, Tết hint for vi-VN (seasonal only). */
+  culturalCue(): PromptBlock {
+    return {
+      kind: 'scene',
+      text: (ctx: PromptContext) => {
+        const locale = (ctx.locale ?? 'vi-VN') as UINativeLocale
+        return `[CULTURAL CONTEXT]\n${culturalCueByLocale(locale)}`
       },
     }
   },

@@ -210,23 +210,45 @@ function buildInfographicPrompt(req: ContentRequest): string {
 
 function buildCtaPrompt(req: ContentRequest): string {
   const knowledge = productKnowledgeBlock(req)
+  // P36 — Ladipage-style: thumb-stop conversion banner copy with hard
+  // urgency / scarcity language matching native MY-ID-VN ecommerce ads.
+  // Examples per locale match real top-converting promo banners.
+  const examplesByLocale: Record<UINativeLocale, { headline: string; sub: string; offer: string; cta: string }> = {
+    'vi-VN':  { headline: 'Ngủ Sâu Ngay Đêm Đầu — Thử Liền',  sub: 'Hết mất ngủ, dậy khỏe — ngàn người đã chọn',  offer: 'Giảm 50% hôm nay — Giao COD toàn quốc', cta: 'Đặt ngay' },
+    'my-MY':  { headline: 'Tidur Lena Malam Pertama — Cuba Sekarang', sub: 'Lupa insomnia, bangun segar — ribuan dah cuba', offer: 'Diskaun 50% hari ini — COD seluruh Malaysia', cta: 'Pesan Sekarang' },
+    'id-ID':  { headline: 'Tidur Pulas Malam Pertama — Coba Sekarang', sub: 'Bebas insomnia, bangun segar — ribuan sudah coba', offer: 'Diskon 50% hari ini — COD ke seluruh Indonesia', cta: 'Pesan Sekarang' },
+    'global': { headline: 'Sleep Deep From Night One — Try Now',  sub: 'No more sleepless nights — thousands trust it',  offer: '50% off today — Free delivery nationwide', cta: 'Order Now' },
+  }
+  const ex = examplesByLocale[req.locale]
   return [
-    'Generate CTA banner copy for this product.',
+    'Generate CTA promo banner copy for this product. Tone must match native SEA ecommerce ads — hard-sell urgency, NOT corporate luxury.',
     `Product: ${req.productName}${req.niche ? ` (niche: ${req.niche})` : ''}`,
     req.productDescription ? `Description: ${req.productDescription}` : '',
     knowledge,
     req.benefits?.length    ? `Benefits: ${req.benefits.join('; ')}` : '',
     req.offer               ? `Offer terms: ${req.offer}` : '',
     `Language: ${LOCALE_LANG[req.locale]}`,
-    `Tone: ${req.tone ?? 'confident-natural'}`,
+    `Tone: ${req.tone ?? 'thumb-stop-urgency'}`,
     '',
-    'STRICT JSON OUTPUT:',
+    'EXAMPLE for this locale (rewrite for the specific product — do not copy verbatim):',
+    `  headline    → "${ex.headline}"`,
+    `  subheadline → "${ex.sub}"`,
+    `  offerLine   → "${ex.offer}"`,
+    `  ctaText     → "${ex.cta}"`,
+    '',
+    'STRICT JSON OUTPUT — no prose, no markdown fence:',
     '{',
-    '  "headline": "<4-9 word attention line>",',
-    '  "subheadline": "<6-12 word supporting hook>",',
-    '  "offerLine": "<single benefit line, eg Tiết kiệm 30% — giao 24h>",',
-    '  "ctaText": "<2-3 word action verb phrase>"',
+    '  "headline":   "<4-9 word thumb-stop attention line, native ad voice>",',
+    '  "subheadline":"<6-12 word supporting hook with proof or urgency>",',
+    '  "offerLine":  "<single offer line — price/discount + delivery/COD when applicable>",',
+    '  "ctaText":    "<2-3 word action verb, all-caps acceptable>"',
     '}',
+    '',
+    'Hard rules:',
+    '- offerLine MUST reference the product\'s actual offer/pricing if provided — do NOT invent prices not in the offer field.',
+    '- Native ad clichés OK ("Stok terhad", "Jangan tunggu", "Chỉ hôm nay", "Hari ini sahaja").',
+    '- NEVER produce English boilerplate in non-global locales.',
+    '- NEVER use the words "advertisement", "sponsored", "ad", "promo".',
   ].filter(Boolean).join('\n')
 }
 
