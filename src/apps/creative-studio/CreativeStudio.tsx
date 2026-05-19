@@ -309,6 +309,26 @@ export default function CreativeStudio() {
     }
   }
 
+  // ── Per-job regenerate (P47) ───────────────────────────────────────
+  // Fires a fresh runGeneration with the SAME inputs as the source job.
+  // Does NOT delete the source job — both old + new live in the
+  // workspace so the user can pick the better output. Skips if the
+  // source job is still in-flight to avoid double-fire.
+  async function handleRegenerateJob(job: GenerationJob) {
+    if (job.status === 'generating' || job.status === 'queued') {
+      addToast('Job đang chạy — đợi xong rồi tạo lại', 'error')
+      return
+    }
+    console.info('[CreativeStudio] regenerate', { sourceJobId: job.id, creativeType: job.creativeType })
+    try {
+      await runGeneration({ creativeType: job.creativeType, inputs: job.inputs })
+      addToast(`Đã thêm vào hàng đợi: ${findCatalogEntry(job.creativeType)?.title.vi ?? job.creativeType} (tạo lại)`, 'success')
+    } catch (err) {
+      console.error('[CreativeStudio] REGENERATE ERROR', err)
+      showErrorOnce(translateJobError(err))
+    }
+  }
+
   // ── Bank handlers (P26 — project-only) ─────────────────────────────
   const handleSelectAvatar  = (item: unknown) => { setSelectedAvatar(item as Model);   setPickerMode(null) }
   const handleSelectProduct = (item: unknown) => { setSelectedProduct(item as Product); setPickerMode(null) }
@@ -555,6 +575,7 @@ export default function CreativeStudio() {
                 jobs={jobs}
                 onDelete={handleDeleteJob}
                 onSuggest={handleSuggestion}
+                onRegenerate={handleRegenerateJob}
               />
             )}
           </div>
@@ -633,12 +654,14 @@ const JobCardWrapper = memo(function JobCardWrapper({
   job,
   onDelete,
   onSuggest,
+  onRegenerate,
 }: {
   job: GenerationJob
   onDelete: () => void
   onSuggest?: (id: AssetTypeId) => void
+  onRegenerate?: () => void
 }) {
-  return <ResultCard job={job} onDelete={onDelete} onSuggest={onSuggest} />
+  return <ResultCard job={job} onDelete={onDelete} onSuggest={onSuggest} onRegenerate={onRegenerate} />
 })
 
 // ── Campaign auto-grouped history (P30) ──────────────────────────────
@@ -653,10 +676,12 @@ function CampaignGroupedHistory({
   jobs,
   onDelete,
   onSuggest,
+  onRegenerate,
 }: {
   jobs: GenerationJob[]
   onDelete: (id: string) => void
   onSuggest: (id: AssetTypeId) => void
+  onRegenerate: (job: GenerationJob) => void
 }) {
   const bank = useBankStore.getState()
   const groups = useMemo(() => {
@@ -707,6 +732,7 @@ function CampaignGroupedHistory({
                   job={job}
                   onDelete={() => onDelete(job.id)}
                   onSuggest={onSuggest}
+                  onRegenerate={() => onRegenerate(job)}
                 />
               ))}
             </div>

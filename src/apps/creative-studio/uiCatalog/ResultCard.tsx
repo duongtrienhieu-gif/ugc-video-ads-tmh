@@ -1,14 +1,16 @@
-// ── Job Result Card (P13 — consumes GenerationJob) ─────────────────────────
+// ── Job Result Card (P13 — consumes GenerationJob; P47 — regenerate) ──────
 //
 // Displays a single GenerationJob from the workspace store with:
 //   • Asset type label + engine group badge + aspect ratio
 //   • Status pill (queued / generating / completed / failed)
 //   • Image preview when completed (resolved via useAssetUrl from
 //     the asset:xxx ref in job.outputs[0].outputUrl)
-//   • Per-job actions: Download / Delete (delete cascades to DB)
+//   • Per-job actions: Regenerate / Download / Delete
+//     (delete cascades to DB; regenerate fires a fresh job with the
+//      same inputs and leaves the old one in the workspace for compare)
 //   • QC badge when present in completed asset metadata
 
-import { Download, Trash2, ShieldCheck, ShieldAlert, AlertTriangle, Loader2, Clock, Sparkles, ArrowRight } from 'lucide-react'
+import { Download, Trash2, RefreshCw, ShieldCheck, ShieldAlert, AlertTriangle, Loader2, Clock, Sparkles, ArrowRight } from 'lucide-react'
 import { useAssetUrl } from '../../../hooks/useAssetUrl'
 import { findCatalogEntry } from './assetCatalog'
 import { suggestFollowUps } from '../shared/recommendations/recommendations'
@@ -22,9 +24,13 @@ interface ResultCardProps {
    *  (CreativeStudio) sets selectedAssetTypeId + scrolls to the input
    *  panel so the user can hit Tạo creative immediately. */
   onSuggest?: (id: AssetTypeId) => void
+  /** P47 — fires when user clicks the regenerate icon. Parent fires
+   *  runGeneration() with the same inputs as this job. The old job
+   *  stays in the workspace so the user can compare old-vs-new. */
+  onRegenerate?: () => void
 }
 
-export default function ResultCard({ job, onDelete, onSuggest }: ResultCardProps) {
+export default function ResultCard({ job, onDelete, onSuggest, onRegenerate }: ResultCardProps) {
   const entry = findCatalogEntry(job.creativeType)
   const firstAsset = job.outputs[0]
   const displayUrl = useAssetUrl(firstAsset?.outputUrl)
@@ -145,6 +151,17 @@ export default function ResultCard({ job, onDelete, onSuggest }: ResultCardProps
           {new Date(job.createdAt).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}
         </span>
         <div className="flex items-center gap-1.5">
+          {onRegenerate && (
+            <button
+              type="button"
+              disabled={job.status === 'generating' || job.status === 'queued'}
+              onClick={onRegenerate}
+              title="Tạo lại với cùng input (job mới, giữ lại job cũ để so sánh)"
+              className="flex h-7 w-7 items-center justify-center rounded-md border border-black/10 bg-white text-gray-600 transition-colors hover:bg-violet-50 hover:text-violet-700 disabled:opacity-40"
+            >
+              <RefreshCw className="h-3 w-3" />
+            </button>
+          )}
           <button
             type="button"
             disabled={job.status !== 'completed'}
