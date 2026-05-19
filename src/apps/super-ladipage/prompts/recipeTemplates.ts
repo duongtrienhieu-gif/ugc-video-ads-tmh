@@ -300,6 +300,7 @@ LAYOUT (SOCIAL PROOF BANNER variant):
   - 4-6 TESTIMONIAL CARDS: small Malaysian avatar (mix gender + age + hijab + uncles) + full name + location (KL/JB/Penang) + 5-star + 1-2 sentence Malay testimonial. Mini product thumbnail attached.
   - PRODUCT IMAGE: small-mid size center/bottom, SHAPE LOCK applied.
   - BOTTOM: trust badges (delivery "Penghantaran Pantas 1-3 Hari", warranty "Jaminan Pulangan Wang 7 Hari", QR + HALAL + KKM).
+  - NO PRICE / NO currency symbol in this image — trust signals only.
   - PALETTE: dark red/burgundy + cream + gold. Premium hard-sell.`
   } else {
     variantBlock = `
@@ -323,7 +324,7 @@ LAYOUT (PROMO BANNER):
     antiPatternBlock(identity),
     variant === 'promo'
       ? `STRICT: price reads EXACTLY "${identity.priceTag}". Banner text legible. Product matches SHAPE LOCK. No watermark.`
-      : `STRICT: metric numbers + testimonial text legible. Avatars look like real Malaysians. No watermark.`,
+      : `STRICT: metric numbers + testimonial text legible. Avatars look like real Malaysians. NO PRICE / currency symbol in image. No watermark.`,
   ].filter(Boolean).join('\n\n')
 }
 

@@ -132,14 +132,14 @@ const UGC_MALAYSIA_SPEC: PresetSpec = {
     },
 
     // ═══════════════════════════════════════════════════════════════
-    // 8. INGREDIENTS — 1 ảnh (giảm từ 2), 1:1, recipe D
+    // 8. INGREDIENTS — 1 ảnh (giảm từ 2), 4:5 (đổi từ 1:1 theo user), recipe D
     //    Show ĐẦY ĐỦ thành phần khớp text
     // ═══════════════════════════════════════════════════════════════
     {
       type: 'ingredients',
       imageCount: 1,
       recipeId: 'D',
-      aspectRatio: '1:1',
+      aspectRatio: '4:5',
       productPolicy: 'required',
       textFields: { headline: true, bodyCopy: true, bullets: true },
     },
@@ -169,14 +169,14 @@ const UGC_MALAYSIA_SPEC: PresetSpec = {
     },
 
     // ═══════════════════════════════════════════════════════════════
-    // 11. COMPARISON — 1 ảnh, 1:1, recipe E
+    // 11. COMPARISON — 1 ảnh, 4:5 (đổi từ 1:1 theo user), recipe E
     //    Visual premium hơn (recipe E updated)
     // ═══════════════════════════════════════════════════════════════
     {
       type: 'comparison',
       imageCount: 1,
       recipeId: 'E',
-      aspectRatio: '1:1',
+      aspectRatio: '4:5',
       productPolicy: 'required',
       textFields: { headline: true, bodyCopy: true, comparisonData: true },
     },

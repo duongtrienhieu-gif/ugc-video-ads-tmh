@@ -1,13 +1,19 @@
-import { submitGptImage2, pollGptImage2UntilDone } from '../../../utils/kieai'
+import { submitGpt4oImage, pollGpt4oUntilDone } from '../../../utils/kieai'
 import { getUrl } from '../../../utils/assetStore'
 import { saveAsset } from '../../../utils/assetStore'
 import { mapAspectToKie } from '../assembler/assembleImagePrompt'
 
 // ─────────────────────────────────────────────────────────────────────
-// Super Ladipage — KIE gpt-image-2 provider (1K resolution, 6 credit/ảnh).
+// Super Ladipage — KIE gpt-image-1 provider (true i2i via /gpt4o-image/generate).
 //
-// Wrapper mỏng quanh utils/kieai.ts.submitGptImage2 + pollGptImage2UntilDone.
-// Phase 3: chỉ dùng provider này. Phase sau có thể thêm fallback.
+// CRITICAL: KIE comment cảnh báo rõ trong utils/kieai.ts:
+//   /jobs/createTask + gpt-image-2-text-to-image is TEXT-ONLY — silently
+//   ignores image_urls. For TRUE image editing with reference images,
+//   MUST use /gpt4o-image/generate with filesUrl.
+//
+// Phase 3 bug: dùng nhầm submitGptImage2 → reference image bị KIE bỏ qua
+// âm thầm → product packaging drift hoàn toàn (AI vẽ scratch theo text).
+// Fix: switch sang submitGpt4oImage + pollGpt4oUntilDone (true i2i).
 // ─────────────────────────────────────────────────────────────────────
 
 export interface KieImageGenInput {
@@ -61,14 +67,14 @@ export async function generateImageGptImage1(input: KieImageGenInput): Promise<K
     : undefined
 
   const tryOnce = async (): Promise<string> => {
-    const { taskId } = await submitGptImage2({
+    const { taskId } = await submitGpt4oImage({
       apiKey,
       prompt,
       size:       kieAspect,
-      resolution: '1K',
       filesUrl,
+      enableFallback: true,  // KIE auto-fallback GPT_IMAGE_1 nếu primary lỗi
     })
-    return pollGptImage2UntilDone({
+    return pollGpt4oUntilDone({
       apiKey,
       taskId,
       timeoutMs: 4 * 60 * 1000, // 4 phút

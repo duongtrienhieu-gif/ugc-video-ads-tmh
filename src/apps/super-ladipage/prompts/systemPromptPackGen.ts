@@ -99,10 +99,7 @@ ${sectionTable}
 
 R1. BRAND LOCK
 - productNameExact = "${identity.productNameExact}" verbatim everywhere. NEVER translate/paraphrase.
-- priceTag "${identity.priceTag}" verbatim. RENDERED IN-IMAGE ONLY in 2 places:
-    (a) section 17 imagePrompts → textOverlayBlocks role="price" + recipeVariant="promo"
-    (b) section 2 imagePrompts (final-cta social proof banner) → recipeVariant="social-proof-banner", price optional
-  NEVER include price text in textOverlayBlocks of any other image (hero, discovery, pain, etc).
+- priceTag "${identity.priceTag}" verbatim. RENDERED IN-IMAGE ONLY in section 17 (offer, recipeVariant="promo") via textOverlayBlocks role="price". NEVER in any other image — including section 2 (social-proof banner shows trust signals only, NO price), hero, discovery, pain, social-proof platform screenshots (Shopee/TikTok pages may show price as PART OF the platform UI screenshot, NOT as separate overlay).
 - trustBadges + coBrandBadges appear in banner sections (2, 17) image concepts.
 
 R2. 4-TIER SEMANTIC GATE (THE MOST IMPORTANT)
@@ -158,7 +155,7 @@ R9. SECTION-SPECIFIC BRIEFS (concise per-section overrides)
 
 §1 hero: UGC photo + 1-2 big condensed headline + 3 glassmorphism badges with emoji prefix + small arrow pointing to product. textOverlayBlocks NO price.
 
-§2 final-cta (social-proof-banner, recipeVariant="social-proof-banner"): bold trust banner. Header band ("BUKTI KEPERCAYAAN..."). 3-4 metric chips (⭐4.8/5, "25,000+ KOTAK", "18,000+ pelanggan", "TRENDING #1"). 4-6 mini testimonial cards (Malaysian avatar + name + location + 5-star + 1-sentence ${langName} review). Price + trust badges + CTA button at bottom.
+§2 final-cta (social-proof-banner, recipeVariant="social-proof-banner"): bold trust banner. Header band ("BUKTI KEPERCAYAAN..."). 3-4 metric chips (⭐4.8/5, "25,000+ KOTAK", "18,000+ pelanggan", "TRENDING #1"). 4-6 mini testimonial cards (Malaysian avatar + name + location + 5-star + 1-sentence ${langName} review). Trust badges + CTA button at bottom. NO PRICE in image — trust signals only, price comes later at section 17.
 
 §3 pain (n=6, tierRules): each = italic question with emoji prefix on glassmorphism panel + color glow accent near pain area. Mix subjectLockKey ~4 primary + ~2 secondary across 6 images.
 
@@ -180,14 +177,14 @@ R9. SECTION-SPECIFIC BRIEFS (concise per-section overrides)
 
 §12 expert-kol (n=2, recipe H): Image 1 recipeVariant="expert" — top portrait of Malaysian dentist/doctor + name "Dr. [Malaysian name]" + "[Specialty] · [N]+ tahun pengalaman" + 2-4 sentence ${langName} quote. Image 2 recipeVariant="kol" — top lifestyle photo Malaysian KOL + "@[handle]" + "[N]M Followers / Pengikut" + casual ${langName} quote with emojis. NO product packaging in either image. reviews[] = 2 entries matching the 2 images.
 
-§13 social-proof (n=6, recipe F): mix of 6 different formats —
-  social_fb.jpg = Facebook post + comments,
-  social_tiktok.jpg = TikTok Shop review,
-  social_shopee.jpg = Shopee product review,
-  social_selfie.jpg = hijab woman selfie holding product,
-  social_group.jpg = 4-5 Malaysians (mix gender + hijab + uncles) same background holding product smiling,
-  social_collage.jpg = collage 4 different Malaysians each holding product.
-All recipeVariant="social-platform" except group/collage which can omit variant. All show price "${identity.priceTag}" in screenshots where appropriate.
+§13 social-proof (n=6): MIXED recipe per image —
+  social_fb.jpg       — recipeId="F", recipeVariant="social-platform" — Facebook post + comments layout.
+  social_tiktok.jpg   — recipeId="F", recipeVariant="social-platform" — TikTok Shop review page.
+  social_shopee.jpg   — recipeId="F", recipeVariant="social-platform" — Shopee product review page.
+  social_selfie.jpg   — recipeId="F", recipeVariant="social-platform" — hijab woman selfie holding product, social-feed style.
+  social_group.jpg    — recipeId="B" (clean UGC photo) — ONE candid group photo of 4-5 Malaysian family/friends standing together (mix gender + ages + hijab + uncles + younger), all holding the product, smiling at camera. Outdoor or casual indoor scene. NO Facebook/Instagram chrome, NO caption banner, NO text overlay — just the photo itself.
+  social_collage.jpg  — recipeId="B" with conceptScene describing collage layout — image is a 2x2 grid of 4 separate Malaysian people (each in own frame, different person + different setting per frame), each holding product. NO platform chrome, NO caption banner — just the 4-frame collage as a photo.
+Images 1-4 may show price as part of authentic platform UI (Shopee/TikTok pages have prices natively). Images 5-6 (recipe B) ZERO text/overlay.
 
 §14 whatsapp-testimonials (n=4, recipeVariant="whatsapp"): 4 DIFFERENT vibes —
   wa_01.jpg = 1-on-1 chat text + product photo embed,
@@ -196,7 +193,7 @@ All recipeVariant="social-platform" except group/collage which can omit variant.
   wa_04.jpg = voice message bubbles + brief text mention.
 Different sender names + timestamps each image.
 
-§15 before-after (n=4, recipe A, tierRules): each image = SAME person in BEFORE and AFTER but DIFFERENT outfit (different shirt color/setting). textOverlayBlocks = "Sebelum"/"Selepas" labels + person name+age ("Kak Aishah, 38 tahun") + duration ("Selepas 21 hari guna"). Mix subjectLockKey across 4 images (primary hijab woman + secondary Malay male). Transformation MUST come from tier1_primary or tier2_axis — NEVER body-slimming/weight-loss.
+§15 before-after (n=4, recipe A, tierRules): each image = SAME person in BEFORE and AFTER, but MANDATORY DIFFERENT OUTFIT. AFTER shirt/top MUST be a different color AND style from BEFORE shirt — typically also different setting/background — because 3 weeks of usage means the person changed clothes. NEVER same outfit in both halves (illogical: nobody wears the same shirt for 3 weeks straight). conceptScene must explicitly mention the outfit change. textOverlayBlocks = "Sebelum"/"Selepas" labels + person name+age ("Kak Aishah, 38 tahun") + duration ("Selepas 21 hari guna"). Mix subjectLockKey across 4 images (primary hijab woman + secondary Malay male). Transformation MUST come from tier1_primary or tier2_axis — NEVER body-slimming/weight-loss.
 
 §16 faq (n=0): just text, faqs[] + faqsVi[] parallel index-aligned (Vietnamese translation). imagePrompts: [].
 
