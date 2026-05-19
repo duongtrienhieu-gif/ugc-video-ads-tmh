@@ -47,8 +47,19 @@ export async function saveAsset(blob: Blob, mimeType?: string): Promise<string> 
   })
   if (error) throw error
 
-  // 2. Persist the assetId→path mapping to Supabase DB (survives any browser state)
-  await supabase.from('asset_paths').upsert({ asset_id: assetId, user_id: userId, path })
+  // 2. Persist the assetId→path mapping to Supabase DB. P45: surface the
+  //    error if the upsert fails — previously it was silently swallowed,
+  //    which masked an "asset_paths table missing" misconfiguration: saves
+  //    appeared to succeed (binary was uploaded), but the path mapping was
+  //    never persisted, so cross-origin / cross-device path resolution
+  //    silently fell back to the storage-list scan (Tier 4) on every read.
+  //    We still don't THROW — the storage upload already landed and the
+  //    save is technically complete — but a warn surfaces the issue so the
+  //    user can fix the migration.
+  const upsertResult = await supabase.from('asset_paths').upsert({ asset_id: assetId, user_id: userId, path })
+  if (upsertResult.error) {
+    console.warn('[assetStore.saveAsset] asset_paths upsert failed — path mapping not persisted; reads will fall back to storage-list scan. Likely cause: asset_paths table missing or RLS denies INSERT.', upsertResult.error)
+  }
 
   // 3. Also cache locally for fast same-session lookups
   pathCache.set(assetId, path)
@@ -85,44 +96,63 @@ async function resolvePath(assetId: string): Promise<string | null> {
   const cached = pathCache.get(assetId)
   if (cached) return cached
 
-  // Tier 2: localStorage (survives F5 but not cross-device)
+  // Tier 2: localStorage (survives F5 but not cross-device, and NOT
+  // cross-origin — switching from project A's vercel URL to project B's
+  // resets this cache to empty)
   const local = getLocalPath(assetId)
   if (local) {
     pathCache.set(assetId, local)
     return local
   }
 
-  // Tier 3: Supabase DB (survives everything — different browser, device, after logout)
+  // Tier 3: Supabase DB asset_paths table (survives anything — different
+  // browser, device, after logout, cross-origin). Authoritative.
   try {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('asset_paths')
       .select('path')
       .eq('asset_id', assetId)
-      .single()
+      .maybeSingle()
 
-    if (data?.path) {
+    if (error) {
+      // P45 — surface the error instead of swallowing it silently. The
+      // previous "table might not exist yet" comment masked an actual
+      // misconfiguration (asset_paths schema missing on the new origin's
+      // Supabase project, or RLS deny). With a warn, the user sees it in
+      // F12 console and can fix the migration.
+      console.warn('[assetStore.resolvePath] tier-3 (asset_paths) query failed for', assetId, '— falling back to storage-list scan. Likely cause: asset_paths table missing or RLS denies SELECT.', error)
+    } else if (data?.path) {
       pathCache.set(assetId, data.path)
       saveLocalMap(assetId, data.path)
       return data.path
     }
-  } catch {
-    // table might not exist yet — fall through to storage list
+  } catch (err) {
+    console.warn('[assetStore.resolvePath] tier-3 (asset_paths) threw for', assetId, err)
   }
 
-  // Tier 4: Storage list fallback (legacy: finds assets saved before this update)
+  // Tier 4: Storage list fallback (legacy: finds assets saved before
+  // asset_paths was populated). Scans `<userId>/` folder for any file
+  // whose name contains the assetId.
   try {
     const userId = await getUserId()
-    const { data } = await supabase.storage.from('assets').list(userId, { search: assetId })
-    if (data && data.length > 0) {
+    const { data, error } = await supabase.storage.from('assets').list(userId, { search: assetId })
+    if (error) {
+      console.warn('[assetStore.resolvePath] tier-4 (storage.list) failed for', assetId, '— returning null; image will not load.', error)
+    } else if (data && data.length > 0) {
       const path = `${userId}/${data[0].name}`
       // Backfill into DB so next lookup is instant
-      await supabase.from('asset_paths').upsert({ asset_id: assetId, user_id: userId, path })
+      const backfill = await supabase.from('asset_paths').upsert({ asset_id: assetId, user_id: userId, path })
+      if (backfill.error) {
+        console.warn('[assetStore.resolvePath] tier-4 backfill to asset_paths failed; cache will live in localStorage only.', backfill.error)
+      }
       pathCache.set(assetId, path)
       saveLocalMap(assetId, path)
       return path
+    } else {
+      console.warn('[assetStore.resolvePath] tier-4 (storage.list) returned 0 results for', assetId, 'in folder', userId, '— the asset file is missing from Supabase Storage, OR you are signed in as a different user than the one who created this asset.')
     }
-  } catch {
-    // silent
+  } catch (err) {
+    console.warn('[assetStore.resolvePath] tier-4 (storage.list) threw for', assetId, '— likely cause: not authenticated. supabase.auth.getUser() returned null.', err)
   }
 
   return null
