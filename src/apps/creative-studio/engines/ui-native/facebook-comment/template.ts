@@ -111,8 +111,17 @@ export async function renderFacebookComments(inputs: RenderInputs): Promise<HTML
   const ownerAvatar = avatarCache.get(0)
     ?? await loadImageSafe(inputs.customerAvatarUrl)
 
-  // ── POST HEADER — page avatar + name + timestamp + caption + product image
-  let cursor = headerY + M.headerHeight + 16
+  // ── POST HEADER — page avatar + name + timestamp + caption + styled post photo
+  //
+  // P49 — the post photo is no longer a raw full-width 4:3 packshot. It's a
+  // styled "social-media post card" with a creative gradient background, a
+  // large person avatar on the left, and the product photo on the right.
+  // The avatar reuses the second avatar from the pool (a customer face,
+  // distinct from the page owner) so the post looks like "a happy customer
+  // showing the product they bought", not a sterile ecommerce packshot.
+  // Layout collapses to ~1/3 of canvas height (post zone) + 2/3 (comments).
+  const postPhotoAvatar = (poolSize > 1 ? await loadImageSafe((inputs.avatarPool!.get(1 % poolSize) ?? inputs.customerAvatarUrl)) : ownerAvatar) ?? ownerAvatar
+  let cursor = headerY + M.headerHeight + 14
   cursor = await drawPostHeader(ctx, {
     palette, metrics: M, typo: T,
     width: size.width,
@@ -122,6 +131,7 @@ export async function renderFacebookComments(inputs: RenderInputs): Promise<HTML
     caption: inputs.text.context.postCaption ?? defaultCaption(inputs.locale, inputs.text.context.productName),
     productImageUrl: inputs.productImageUrl,
     ownerAvatar,
+    postPhotoAvatar,
   })
 
   // ── ENGAGEMENT STRIP — reactions stack + counts row
@@ -208,14 +218,18 @@ interface PostHeaderInputs {
   caption: string
   productImageUrl?: string
   ownerAvatar: HTMLImageElement | null
+  /** P49 — a customer-face avatar (NOT the page owner) composited into
+   *  the styled post-photo card so the post reads as "a real customer
+   *  posing with the product" rather than a sterile ecommerce packshot. */
+  postPhotoAvatar: HTMLImageElement | null
 }
 
 async function drawPostHeader(ctx: CanvasRenderingContext2D, i: PostHeaderInputs): Promise<number> {
-  const { palette, metrics: M, typo: T, width, startY, ownerName, timestamp, caption, productImageUrl, ownerAvatar } = i
+  const { palette, metrics: M, typo: T, width, startY, ownerName, timestamp, caption, productImageUrl, ownerAvatar, postPhotoAvatar } = i
   const sideX = M.sideMargin
 
-  // Author row: avatar + name + timestamp + dot + "Đã được tài trợ"
-  const avatarR = 38
+  // ── Page author row: avatar + name + timestamp · 🌐 ──────────────────
+  const avatarR = 36
   const avatarCx = sideX + avatarR
   const avatarCy = startY + avatarR
   if (ownerAvatar) {
@@ -232,51 +246,109 @@ async function drawPostHeader(ctx: CanvasRenderingContext2D, i: PostHeaderInputs
     ctx.fillText(ownerName.charAt(0).toUpperCase(), avatarCx, avatarCy + 2)
   }
 
-  const nameX = avatarCx + avatarR + 18
+  const nameX = avatarCx + avatarR + 16
   ctx.fillStyle = palette.authorFg
   ctx.font = `700 ${T.nameSize}px ${T.nameFont}`
   ctx.textAlign = 'left'
   ctx.textBaseline = 'top'
-  ctx.fillText(truncate(ownerName, 40), nameX, startY + 4)
+  ctx.fillText(truncate(ownerName, 40), nameX, startY + 2)
 
   ctx.fillStyle = palette.mutedFg
   ctx.font = font(T, 'meta')
-  ctx.fillText(`${timestamp}  ·  🌐`, nameX, startY + 4 + T.nameSize + 8)
+  ctx.fillText(`${timestamp}  ·  🌐`, nameX, startY + 2 + T.nameSize + 6)
 
-  // Caption body
-  let cy = startY + 2 * avatarR + 16
+  // ── Caption (tight — keep visible above the post photo card) ─────────
+  let cy = startY + 2 * avatarR + 14
   if (caption) {
     ctx.fillStyle = palette.pageFg
     ctx.font = font(T, 'body')
     ctx.textAlign = 'left'
     ctx.textBaseline = 'top'
     const captionMaxW = width - sideX * 2
-    const captionLines = wrapText(ctx, caption, captionMaxW)
+    const captionLines = wrapText(ctx, caption, captionMaxW).slice(0, 3) // hard-cap at 3 lines so caption never eats into the comments zone
     const lh = T.bodySize * T.bodyLineHeight
     for (let li = 0; li < captionLines.length; li++) {
       ctx.fillText(captionLines[li], sideX, cy + li * lh)
     }
-    cy += captionLines.length * lh + 16
+    cy += captionLines.length * lh + 10
   }
 
-  // Attached product image — full-width 4:3
-  if (productImageUrl) {
-    try {
-      const img = await loadImage(productImageUrl)
-      const imgW = width
-      const imgH = Math.round((imgW * 3) / 4)
+  // ── P49 — styled post photo card (compact, ~440px tall instead of
+  //   the prior full-width 4:3 packshot which ate ~810px of the canvas).
+  //   Layout: brand-color gradient backdrop + large customer avatar on
+  //   the left half + product image on the right half. The two halves
+  //   share a soft white overlap so it reads as one composed shot, not
+  //   two disjoint inserts.
+  const cardH = 440
+  if (productImageUrl || postPhotoAvatar) {
+    // Backdrop gradient
+    const gradLeft  = '#E7DBFF'
+    const gradRight = '#F7F1FF'
+    const g = ctx.createLinearGradient(0, cy, width, cy + cardH)
+    g.addColorStop(0, gradLeft)
+    g.addColorStop(1, gradRight)
+    ctx.fillStyle = g
+    ctx.fillRect(0, cy, width, cardH)
+
+    // Subtle brand-accent diagonal strip behind the card
+    ctx.save()
+    ctx.globalAlpha = 0.08
+    ctx.fillStyle = '#7E22CE'
+    ctx.beginPath()
+    ctx.moveTo(0, cy + cardH * 0.55)
+    ctx.lineTo(width, cy + cardH * 0.35)
+    ctx.lineTo(width, cy + cardH * 0.45)
+    ctx.lineTo(0, cy + cardH * 0.65)
+    ctx.closePath()
+    ctx.fill()
+    ctx.restore()
+
+    // Left half: large customer avatar with soft white halo
+    if (postPhotoAvatar) {
+      const avX = Math.round(width * 0.28)
+      const avY = cy + Math.round(cardH / 2)
+      const avR = 170
       ctx.save()
-      ctx.fillStyle = '#000'
-      ctx.fillRect(0, cy, imgW, imgH)
-      const scale = Math.max(imgW / img.naturalWidth, imgH / img.naturalHeight)
-      const dw = img.naturalWidth * scale
-      const dh = img.naturalHeight * scale
-      ctx.drawImage(img, (imgW - dw) / 2, cy + (imgH - dh) / 2, dw, dh)
+      ctx.shadowColor = 'rgba(0,0,0,0.14)'
+      ctx.shadowBlur = 22
+      ctx.fillStyle = '#FFFFFF'
+      ctx.beginPath()
+      ctx.arc(avX, avY, avR + 10, 0, Math.PI * 2)
+      ctx.fill()
       ctx.restore()
-      cy += imgH
-    } catch {
-      // skip on load failure
+      drawCircularAvatar(ctx, postPhotoAvatar, avX, avY, avR)
     }
+
+    // Right half: product image in rounded white tile, light shadow
+    if (productImageUrl) {
+      try {
+        const img = await loadImage(productImageUrl)
+        const pW = 360
+        const pH = 360
+        const pX = Math.round(width * 0.72 - pW / 2)
+        const pY = cy + Math.round((cardH - pH) / 2)
+        ctx.save()
+        ctx.shadowColor = 'rgba(0,0,0,0.22)'
+        ctx.shadowBlur = 28
+        ctx.shadowOffsetY = 14
+        roundedRectPath(ctx, pX, pY, pW, pH, 28)
+        ctx.fillStyle = '#FFFFFF'
+        ctx.fill()
+        ctx.restore()
+        ctx.save()
+        roundedRectPath(ctx, pX, pY, pW, pH, 28)
+        ctx.clip()
+        const scale = Math.max(pW / img.naturalWidth, pH / img.naturalHeight)
+        const dw = img.naturalWidth * scale
+        const dh = img.naturalHeight * scale
+        ctx.drawImage(img, pX + (pW - dw) / 2, pY + (pH - dh) / 2, dw, dh)
+        ctx.restore()
+      } catch {
+        // silent — card backdrop still renders so the layout doesn't collapse
+      }
+    }
+
+    cy += cardH
   }
 
   return cy

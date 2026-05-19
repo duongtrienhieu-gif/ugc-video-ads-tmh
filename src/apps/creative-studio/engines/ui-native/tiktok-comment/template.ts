@@ -1,11 +1,16 @@
-// ── TikTok Comment Overlay Canvas Template (P12 authenticity refresh) ──────
+// ── TikTok Comment Overlay Canvas Template (P12 refresh, P49 video frame) ──
 //
-// P12 changes:
-//   • per-platform metrics (TIKTOK_COMMENT_METRICS) instead of inline numbers
+// P49 — the top "video peek" zone used to be a flat dark gradient. It now
+// renders a styled video still (creator avatar + product photo + caption
+// + creator handle) so the comments overlay reads as "a real TikTok post
+// with a video preview at the top", not a dark void with comments below.
+// Symmetric with the P49 Facebook comment template restructure.
+//
+// P12 baseline preserved:
+//   • per-platform metrics (TIKTOK_COMMENT_METRICS)
 //   • per-platform typography (TIKTOK_TYPO)
-//   • iPhone 15 Pro device chrome (dynamic island + home indicator)
-//   • locale-aware metadata strings (sort label, comment count, reply)
-//   • multi-avatar pool — each unique commenter gets their own face
+//   • iPhone 15 Pro device chrome
+//   • locale-aware metadata strings + per-comment avatar pool
 
 import type { UINativeTextContent, UINativeTemplate, UINativeLocale } from '../../../types/uiNative'
 import { createCanvas, loadImage, drawCircularAvatar, roundedRectPath, wrapText } from '../../../shared/canvas'
@@ -33,6 +38,10 @@ export interface RenderInputs {
   customerAvatarUrl: string
   avatarPool?: Map<number, string>
   locale: UINativeLocale
+  /** P49 — product image is now composited into the styled video peek
+   *  zone so the post reads as "a video about this product" rather than
+   *  a dark void with comments below. */
+  productImageUrl?: string
 }
 
 export async function renderTikTokComments(inputs: RenderInputs): Promise<HTMLCanvasElement> {
@@ -54,14 +63,38 @@ export async function renderTikTokComments(inputs: RenderInputs): Promise<HTMLCa
     timeLabel: inputs.timeline.statusBarTime,
   })
 
-  // Top — faint video peek frame (~22% of height)
-  const videoPeekH = 380
+  // Pre-load avatars (used by both the video peek post photo + the
+  // commenter avatars). The post-photo person is a customer face
+  // (avatarPool[1] when available) — distinct from the creator handle.
+  const avatarCache = new Map<number, HTMLImageElement | null>()
+  const uniqueAuthors = new Set(inputs.text.items.map((c) => c.authorIdx))
+  const poolSize = inputs.avatarPool?.size ?? 0
+  for (const idx of uniqueAuthors) {
+    const url = (poolSize > 0
+      ? inputs.avatarPool!.get(idx % poolSize)
+      : inputs.customerAvatarUrl) ?? inputs.customerAvatarUrl
+    avatarCache.set(idx, await loadImageSafe(url))
+  }
+  const creatorAvatar = avatarCache.get(0) ?? await loadImageSafe(inputs.customerAvatarUrl)
+  const postPhotoAvatar = (poolSize > 1 ? await loadImageSafe(inputs.avatarPool!.get(1 % poolSize) ?? inputs.customerAvatarUrl) : creatorAvatar) ?? creatorAvatar
+
+  // ── P49 — styled video peek: customer-face + product side-by-side
+  //   composited on a dark cinematic backdrop. Caption + creator handle
+  //   overlay at the bottom-left. Increases the video zone to 540px so
+  //   the post still + caption are legible.
+  const videoPeekH = 540
   const videoY = IPHONE_15_PRO.statusBarHeight + IPHONE_15_PRO.safeAreaTop
-  const grad = ctx.createLinearGradient(0, videoY, 0, videoY + videoPeekH)
-  grad.addColorStop(0, '#1F1F25')
-  grad.addColorStop(1, '#0A0A0D')
-  ctx.fillStyle = grad
-  ctx.fillRect(0, videoY, size.width, videoPeekH)
+  await drawTikTokVideoFrame(ctx, {
+    width: size.width,
+    startY: videoY,
+    height: videoPeekH,
+    productImageUrl: inputs.productImageUrl,
+    postPhotoAvatar,
+    creatorHandle: inputs.text.context.ownerName ?? defaultCreatorHandle(inputs.locale),
+    caption: inputs.text.context.postCaption ?? defaultTikTokCaption(inputs.locale, inputs.text.context.productName),
+    typo: T,
+    dateLabelSeed: inputs.timeline.dateLabel,
+  })
 
   drawRightRail(ctx, size.width - 90, videoY + 60, inputs.timeline.dateLabel)
 
@@ -95,18 +128,7 @@ export async function renderTikTokComments(inputs: RenderInputs): Promise<HTMLCa
   ctx.fillStyle = palette.divider
   ctx.fillRect(0, sheetY + 152, size.width, 1)
 
-  // Pre-load avatars from pool
-  const avatarCache = new Map<number, HTMLImageElement | null>()
-  const uniqueAuthors = new Set(inputs.text.items.map((c) => c.authorIdx))
-  const poolSize = inputs.avatarPool?.size ?? 0
-  for (const idx of uniqueAuthors) {
-    const url = (poolSize > 0
-      ? inputs.avatarPool!.get(idx % poolSize)
-      : inputs.customerAvatarUrl) ?? inputs.customerAvatarUrl
-    avatarCache.set(idx, await loadImageSafe(url))
-  }
-
-  // Comment list
+  // Comment list (avatars already pre-loaded above for the video peek)
   let cursor = sheetY + 178
   const cutoffY = size.height - M.footerHeight - 30
 
@@ -309,4 +331,151 @@ async function loadImageSafe(url: string): Promise<HTMLImageElement | null> {
 function formatCount(n: number): string {
   if (n >= 1000) return `${(n / 1000).toFixed(1)}k`
   return `${n}`
+}
+
+// ── P49 — Styled video peek (post photo with person + product + caption) ──
+
+interface TikTokVideoFrameInputs {
+  width: number
+  startY: number
+  height: number
+  productImageUrl?: string
+  postPhotoAvatar: HTMLImageElement | null
+  creatorHandle: string
+  caption: string
+  typo: typeof TIKTOK_TYPO
+  dateLabelSeed: string
+}
+
+async function drawTikTokVideoFrame(ctx: CanvasRenderingContext2D, i: TikTokVideoFrameInputs): Promise<void> {
+  const { width, startY, height, productImageUrl, postPhotoAvatar, creatorHandle, caption, typo: T, dateLabelSeed } = i
+
+  // Cinematic dark backdrop with vertical gradient (sim of a TikTok video still)
+  const grad = ctx.createLinearGradient(0, startY, 0, startY + height)
+  grad.addColorStop(0, '#171723')
+  grad.addColorStop(0.55, '#1B1224')
+  grad.addColorStop(1, '#080810')
+  ctx.fillStyle = grad
+  ctx.fillRect(0, startY, width, height)
+
+  // Subtle brand-accent diagonal beam
+  ctx.save()
+  ctx.globalAlpha = 0.10
+  ctx.fillStyle = '#FE2C55'
+  ctx.beginPath()
+  ctx.moveTo(0, startY + height * 0.65)
+  ctx.lineTo(width, startY + height * 0.30)
+  ctx.lineTo(width, startY + height * 0.42)
+  ctx.lineTo(0, startY + height * 0.77)
+  ctx.closePath()
+  ctx.fill()
+  ctx.restore()
+
+  // Vignette
+  ctx.save()
+  const vg = ctx.createRadialGradient(
+    width / 2, startY + height * 0.55, height * 0.25,
+    width / 2, startY + height * 0.55, height * 0.85,
+  )
+  vg.addColorStop(0, 'rgba(0,0,0,0)')
+  vg.addColorStop(1, 'rgba(0,0,0,0.55)')
+  ctx.fillStyle = vg
+  ctx.fillRect(0, startY, width, height)
+  ctx.restore()
+
+  // Left: large customer-face avatar (the "creator on camera")
+  if (postPhotoAvatar) {
+    const avX = Math.round(width * 0.30)
+    const avY = startY + Math.round(height * 0.48)
+    const avR = 175
+    ctx.save()
+    ctx.shadowColor = 'rgba(254,44,85,0.45)'
+    ctx.shadowBlur = 26
+    ctx.fillStyle = '#FFFFFF'
+    ctx.beginPath()
+    ctx.arc(avX, avY, avR + 8, 0, Math.PI * 2)
+    ctx.fill()
+    ctx.restore()
+    drawCircularAvatar(ctx, postPhotoAvatar, avX, avY, avR)
+  }
+
+  // Right: product image in a rounded white tile
+  if (productImageUrl) {
+    try {
+      const img = await loadImage(productImageUrl)
+      const pW = 340
+      const pH = 340
+      const pX = Math.round(width * 0.72 - pW / 2)
+      const pY = startY + Math.round((height - pH) / 2)
+      ctx.save()
+      ctx.shadowColor = 'rgba(0,0,0,0.45)'
+      ctx.shadowBlur = 30
+      ctx.shadowOffsetY = 14
+      roundedRectPath(ctx, pX, pY, pW, pH, 24)
+      ctx.fillStyle = '#FFFFFF'
+      ctx.fill()
+      ctx.restore()
+      ctx.save()
+      roundedRectPath(ctx, pX, pY, pW, pH, 24)
+      ctx.clip()
+      const scale = Math.max(pW / img.naturalWidth, pH / img.naturalHeight)
+      const dw = img.naturalWidth * scale
+      const dh = img.naturalHeight * scale
+      ctx.drawImage(img, pX + (pW - dw) / 2, pY + (pH - dh) / 2, dw, dh)
+      ctx.restore()
+    } catch {
+      // silent
+    }
+  }
+
+  // Bottom-left caption overlay: creator handle + caption + audio strip
+  const captionX = 36
+  const captionY = startY + height - 168
+  ctx.fillStyle = '#FFFFFF'
+  ctx.font = `700 ${T.nameSize + 4}px ${T.nameFont}`
+  ctx.textAlign = 'left'
+  ctx.textBaseline = 'top'
+  ctx.fillText(creatorHandle.startsWith('@') ? creatorHandle : `@${creatorHandle.replace(/\s+/g, '.').toLowerCase()}`, captionX, captionY)
+
+  ctx.font = font(T, 'body')
+  ctx.fillStyle = '#FFFFFF'
+  const captionLines = wrapText(ctx, caption, width - captionX * 2 - 130).slice(0, 2)
+  const lh = T.bodySize * T.bodyLineHeight
+  for (let li = 0; li < captionLines.length; li++) {
+    ctx.fillText(captionLines[li], captionX, captionY + T.nameSize + 14 + li * lh)
+  }
+
+  // Audio strip — music note + product handle as audio name
+  const audioY = captionY + T.nameSize + 14 + captionLines.length * lh + 10
+  ctx.font = font(T, 'meta')
+  ctx.fillStyle = '#FFFFFF'
+  ctx.fillText('🎵  Nguyên gốc · audio gốc', captionX, audioY)
+
+  // tiny dot-decorator on the right for cinematic balance
+  ctx.save()
+  ctx.fillStyle = 'rgba(255,255,255,0.18)'
+  for (let k = 0; k < 3; k++) {
+    ctx.beginPath()
+    ctx.arc(width - 36, audioY + 8 + k * 14, 3, 0, Math.PI * 2)
+    ctx.fill()
+  }
+  ctx.restore()
+
+  // silence the unused-var warning for dateLabelSeed (reserved for future use)
+  void dateLabelSeed
+}
+
+function defaultCreatorHandle(locale: UINativeLocale): string {
+  if (locale === 'vi-VN') return '@my.linh.review'
+  if (locale === 'my-MY') return '@aisyah.sihat'
+  if (locale === 'id-ID') return '@nadia.wellness'
+  return '@beauty.review'
+}
+
+function defaultTikTokCaption(locale: UINativeLocale, productName?: string): string {
+  const p = productName ?? 'sản phẩm'
+  if (locale === 'vi-VN') return `dùng ${p} được 2 tuần kết quả bất ngờ luôn 😱 ai cần inbox mình nha`
+  if (locale === 'my-MY') return `dah guna ${p} 2 minggu, hasil memang power gila 😱 sapa nak DM aku`
+  if (locale === 'id-ID') return `udah pake ${p} 2 minggu, hasilnya beneran kelihatan 😱 mau cobain? DM ya`
+  return `tried ${p} for 2 weeks and the result is wild 😱 dm if you want the link`
 }

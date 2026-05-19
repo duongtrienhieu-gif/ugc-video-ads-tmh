@@ -378,17 +378,28 @@ function buildCommentPrompt(req: TextPayloadRequest): string {
   // P41 — concrete per-locale comment voice samples
   const voiceRef = voiceSamplesComment(req.locale, `${req.productName}|${req.platform}|comment`)
 
-  // P48 — facebook-comment threads also need a post header on top of the
-  // comments. Ask the LLM to author the post caption + page / creator name
-  // + plausible like/share counts AND mark 1-2 comments as owner replies.
-  const facebookExtras = req.platform === 'facebook' ? [
+  // P48 + P49 — facebook-comment AND tiktok-comment threads need a post
+  // header on top of the comments (FB) or a styled video peek (TikTok).
+  // Ask the LLM to author the post caption + page / creator name + plausible
+  // engagement counts. FB also gets 1-2 owner-reply comments. TikTok uses
+  // the same fields but they're rendered differently (creator handle +
+  // video caption + audio strip) by the canvas template.
+  const needsPostHeader = req.platform === 'facebook' || req.platform === 'tiktok-comment'
+  const isFacebook = req.platform === 'facebook'
+  const facebookExtras = needsPostHeader ? [
     '',
-    'POST HEADER (Facebook only): Above the comments, the canvas renders the original post — a page / creator account that authored the post about this product. You also generate:',
-    '  • a SHORT 1-2 sentence post caption in locale voice about the product (NEVER salesy; sound like a customer-discovery share or a page review post)',
-    '  • a plausible locale-native page / creator display name (e.g. "Mỹ Phẩm Linh House" / "Sihat Bersama Aisyah" / "WellnessKita")',
-    '  • a plausible postLikes count (200-5000) and postShares count (10-300)',
-    '',
-    'OWNER REPLIES: 1-2 of the comments below MUST be marked `"isOwnerReply": true` and authored by the page owner (use ownerName as the username) — these are SHORT polite replies to a previous commenter that answer a question or thank them. Place them as isReply: true and isOwnerReply: true, immediately after the commenter they reply to.',
+    isFacebook
+      ? 'POST HEADER (Facebook): Above the comments, the canvas renders the original page post — a Facebook page that authored the post about this product. Also generate:'
+      : 'VIDEO PEEK (TikTok): Above the comments, the canvas renders a styled TikTok video still + caption. Also generate:',
+    '  • a SHORT 1-2 sentence locale-native post caption about the product (NEVER salesy; sound like a customer-discovery share OR a creator review)' + (isFacebook ? '' : '. TikTok captions can be more casual: lowercase, emoji-heavy, hashtags allowed.'),
+    isFacebook
+      ? '  • a plausible locale-native page / creator display name (e.g. "Mỹ Phẩm Linh House" / "Sihat Bersama Aisyah" / "WellnessKita")'
+      : '  • a plausible TikTok creator handle/display name (e.g. "@my.linh.review" / "@aisyah.sihat" / "@nadia.wellness") — output WITH the leading @ if natural for the locale',
+    '  • a plausible postLikes count (' + (isFacebook ? '200-5000' : '5000-200000') + ') and postShares count (' + (isFacebook ? '10-300' : '100-5000') + ')',
+    ...(isFacebook ? [
+      '',
+      'OWNER REPLIES: 1-2 of the comments below MUST be marked `"isOwnerReply": true` and authored by the page owner (use ownerName as the username) — these are SHORT polite replies to a previous commenter that answer a question or thank them. Place them as isReply: true and isOwnerReply: true, immediately after the commenter they reply to.',
+    ] : []),
   ] : []
 
   return [
@@ -405,17 +416,17 @@ function buildCommentPrompt(req: TextPayloadRequest): string {
     '',
     'STRICT JSON OUTPUT — no prose, no markdown fence:',
     '{',
-    ...(req.platform === 'facebook' ? [
+    ...(needsPostHeader ? [
       '  "postCaption": "<1-2 sentence locale-native post caption>",',
-      '  "ownerName": "<plausible page/creator display name>",',
-      '  "postLikes": 1234,',
-      '  "postShares": 56,',
+      '  "ownerName": "<plausible ' + (isFacebook ? 'page/creator display name' : 'TikTok creator handle (with leading @)') + '>",',
+      '  "postLikes": ' + (isFacebook ? '1234' : '12500') + ',',
+      '  "postShares": ' + (isFacebook ? '56' : '450') + ',',
     ] : []),
     '  "comments": [',
     '    { "username": "<lowercase casual username eg \\"thanh.nguyen\\", \\"linhng_98\\", \\"_mayhoang_\\">",',
     '      "text": "<the comment, following its archetype rules>",',
     '      "likes": 12,',
-    '      "isReply": false' + (req.platform === 'facebook' ? ', "isOwnerReply": false' : '') + ' },',
+    '      "isReply": false' + (isFacebook ? ', "isOwnerReply": false' : '') + ' },',
     '    ...',
     '  ]',
     '}',
