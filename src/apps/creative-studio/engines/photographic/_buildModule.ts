@@ -122,7 +122,7 @@ ${PRODUCT_LOCK_BLOCK}${avatarBlock}${sceneBlock}${styleBlock}${variationBlock}${
       }
     },
 
-    buildQC(_params: GenerateAssetParams): PhotographicQCConfig {
+    buildQC(): PhotographicQCConfig {
       return qc
     },
 

@@ -168,10 +168,16 @@ export const useGenerationsStore = create<GenerationsState>((set, get) => ({
           ? { ...j, status: 'failed' as const, errorMessage: j.errorMessage ?? 'Bị gián đoạn — thử lại' }
           : j,
       )
-      const merged = mergeJobs(cachedFlattened, dbJobs)
+      // P39 — race condition fix: use CURRENT in-memory jobs as the
+      // local side of the merge, NOT the stale `cachedFlattened` captured
+      // at hydrate-start. If the user kicked off a new job during the
+      // Supabase round-trip, that fresh job lives in `get().jobs` only.
+      // Using cachedFlattened here would clobber it from localStorage.
+      const currentJobs = get().jobs
+      const merged = mergeJobs(currentJobs, dbJobs)
       saveToLocalStorage(merged)
       set({ jobs: merged, hydrated: true, hydrating: false, hydrateError: null })
-      console.info('[generationsStore.hydrate] merged', dbJobs.length, 'DB jobs over', cachedFlattened.length, 'cached →', merged.length, 'total')
+      console.info('[generationsStore.hydrate] merged', dbJobs.length, 'DB jobs over', currentJobs.length, 'in-memory →', merged.length, 'total')
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'unknown'
       console.warn('[generationsStore.hydrate] DB unavailable — staying on localStorage cache', err)
