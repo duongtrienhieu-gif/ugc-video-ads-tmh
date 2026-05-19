@@ -19,8 +19,10 @@
 
 import type { UINativeModule, UINativePlatform, UINativeTextContent, UINativeLocale } from '../../types/uiNative'
 import type { GenerateAssetParams, GeneratedAsset } from '../../types/asset'
+import type { AssetTypeId } from '../../types/asset'
 import { useSettingsStore } from '../../../../stores/settingsStore'
 import { useBankStore } from '../../../../stores/bankStore'
+import { useGenerationsStore } from '../../stores/generationsStore'
 import { saveAsset } from '../../../../utils/assetStore'
 import { toPublicUrl } from '../../shared/utils/refResolver'
 import { generateAvatar, generateAvatarBatch } from './_shared/avatarGen'
@@ -53,8 +55,52 @@ export interface RendererInputs {
   avatarPool?: Map<number, string>
   /** Optional product image URL — reviews attach this as the photo thumb. */
   productImageUrl?: string
+  /** P50 — pool of OTHER previously-generated creative URLs for the
+   *  same product (ugc-selfie, holding-product, group-holding, ...).
+   *  shopee-feedback + tiktok-feedback fill each review's 2x2 photo
+   *  grid from this pool so reviews look like a real customer who
+   *  attached their own lifestyle photos. Falls back to product image
+   *  when pool is empty. */
+  reviewPhotoUrls?: string[]
   /** Locale — pulled by renderers for metadata strings. */
   locale: UINativeLocale
+}
+
+// ── P50 — Option C: reuse previously-generated person+product creatives
+//   from this product's workspace as review photo attachments. Filters
+//   the generations store for completed jobs of THIS product, of asset
+//   types that produced person-with-product imagery, then resolves each
+//   asset ref to a public URL via the existing toPublicUrl helper.
+
+const REVIEW_PHOTO_SOURCE_TYPES: ReadonlySet<AssetTypeId> = new Set<AssetTypeId>([
+  'holding-product',
+  'ugc-selfie',
+  'ugc-tiktok',
+  'group-holding',
+  'cafe-lifestyle',
+  'lifestyle-kitchen',
+  'bathroom-routine',
+  'collage-4-frames',
+  'expert-kol',
+  'before-after',
+])
+
+async function gatherReviewPhotos(productId: string | undefined, max: number): Promise<string[]> {
+  if (!productId) return []
+  const jobs = useGenerationsStore.getState().jobs
+  const urls: string[] = []
+  for (const job of jobs) {
+    if (urls.length >= max) break
+    if (job.status !== 'completed') continue
+    if (job.inputs?.productId !== productId) continue
+    if (!REVIEW_PHOTO_SOURCE_TYPES.has(job.creativeType)) continue
+    for (const out of job.outputs) {
+      const u = await toPublicUrl(out.outputUrl)
+      if (u) urls.push(u)
+      if (urls.length >= max) break
+    }
+  }
+  return urls
 }
 
 /** Renderer = pure rendering fn. Returns the finished canvas. */
@@ -81,8 +127,11 @@ const PLATFORM_CONTENT_TYPE: Record<UINativePlatform, TextPayloadContentType> = 
 const PLATFORM_DEFAULT_COUNT: Record<UINativePlatform, number> = {
   whatsapp:         8,
   messenger:        8,
-  shopee:           1,
-  'tiktok-shop':    1,
+  // P50 — Shopee/TikTok Shop screenshots now stack 2 reviews so the
+  // screen fills like a real marketplace review page (was 1 review with
+  // big empty space).
+  shopee:           2,
+  'tiktok-shop':    2,
   facebook:         6,
   'tiktok-comment': 8,
 }
@@ -92,8 +141,10 @@ const PLATFORM_DEFAULT_COUNT: Record<UINativePlatform, number> = {
 const PLATFORM_NEEDS_AVATAR_POOL: Record<UINativePlatform, boolean> = {
   whatsapp:         false,
   messenger:        false,
-  shopee:           false,
-  'tiktok-shop':    false,
+  // P50 — Shopee + TikTok Shop now show 2 stacked reviews each with a
+  // distinct avatar, so the pool is required.
+  shopee:           true,
+  'tiktok-shop':    true,
   facebook:         true,
   'tiktok-comment': true,
 }
@@ -206,6 +257,13 @@ export async function dispatchUINative(
     )
   }
 
+  // P50 — Option C: pull review photo grid from prior creatives. Only
+  // marketplace review platforms use this; chat / comment renderers
+  // ignore the field gracefully.
+  const reviewPhotoUrls = (module.platform === 'shopee' || module.platform === 'tiktok-shop')
+    ? await gatherReviewPhotos(params.productId, 6)
+    : undefined
+
   // ── Step 5: render canvas ──────────────────────────────────────────
   const canvas = await renderer({
     text: textPayload,
@@ -213,6 +271,7 @@ export async function dispatchUINative(
     customerAvatarUrl: primaryAvatarUrl,
     avatarPool,
     productImageUrl: productImageUrl ?? undefined,
+    reviewPhotoUrls,
     locale,
   })
 

@@ -18,7 +18,12 @@ export const module: UINativeModule = {
   label: { vi: 'Đánh giá Shopee', en: 'Shopee buyer review' },
   category: 'marketplace',
   platform: 'shopee',
-  defaultLocale: 'vi-VN',
+  // P50 — Malaysia is the primary market for the app's social-proof
+  // creatives; the user reported Vietnamese leaking into Shopee/TikTok
+  // Shop screenshots when the locale picker wasn't explicitly set. The
+  // default now matches the primary market so a fresh session never
+  // emits Vietnamese text in a my-MY ad.
+  defaultLocale: 'my-MY',
 
   authenticity: {
     requireStatusBar: true,

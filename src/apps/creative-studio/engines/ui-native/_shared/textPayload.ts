@@ -220,15 +220,28 @@ const REVIEW_SYSTEM_INSTRUCTION =
   + 'specific details, mild typos, real-life context. NEVER promotional corporate copy. '
   + 'NEVER mention the words "advertisement", "sponsored", "ad", "promo".'
 
-interface LLMReviewResponse {
+// P50 — review payload is now an ARRAY of reviews so shopee-feedback /
+// tiktok-feedback can stack 2-3 reviews per screenshot (matching real
+// marketplace UIs where the screen is full of stacked review cards, not
+// one card with empty space). buyerDisplayName is also Shopee/TikTok-
+// style masked ("T**n H**u" — initial + asterisks + last letter chunks)
+// so it reads as a real anonymised buyer, not a fake username.
+interface LLMReviewItem {
+  /** Shopee/TikTok-style masked name: "T**n H**u" or "L**g H**g ** T**". */
   buyerDisplayName: string
   /** Star rating out of 5, integer. Mostly 5, sometimes 4 for believability. */
   rating: number
   /** Variant the buyer bought (eg color, size, flavor). */
   variantBought: string
+  /** Body — 3-5 sentences, with line breaks between sentences so the
+   *  review renders as multi-paragraph (matches real review UX). */
   reviewBody: string
-  /** Optional short like-count badge string, eg "Helpful (12)". */
+  /** Realistic small helpful count 0-30 (mostly 0-5, occasional 20-30). */
   helpfulCount: number
+}
+
+interface LLMReviewResponse {
+  reviews: LLMReviewItem[]
 }
 
 function buildReviewPrompt(req: TextPayloadRequest): string {
@@ -237,17 +250,26 @@ function buildReviewPrompt(req: TextPayloadRequest): string {
     ? `Buyer persona: ${persona.label.en}. Voice character: ${persona.voiceCharacter}`
     : 'Buyer persona: typical authentic SEA marketplace shopper, casual review tone.'
   const localeMap: Record<UINativeLocale, string> = {
-    'my-MY':  'Malay (Bahasa Melayu) marketplace review style',
+    'my-MY':  'Malay (Bahasa Melayu) marketplace review style — casual conversational, may drop punctuation, shorthand like "tak", "dah", "memang", "best gila"',
     'vi-VN':  'Vietnamese marketplace review style (casual, may use abbreviations)',
     'id-ID':  'Indonesian (Bahasa Indonesia) marketplace review style',
     'global': 'English casual review style',
   }
   const knowledge = productKnowledgeBlock(req)
-  // P41 — concrete per-locale review voice samples
   const voiceRef = voiceSamplesReview(req.locale, `${req.productName}|${req.platform}|review`)
+  const count = req.messageCount ?? 2
+  const platformName = req.platform === 'shopee' ? 'Shopee' : 'TikTok Shop'
+
+  // P50 — Shopee/TikTok always show usernames in a masked format. The
+  // prompt instructs the LLM to mask the buyer name so the screenshots
+  // match the real marketplace UX.
+  const maskExamples = req.locale === 'vi-VN' ? '"T**n H**u", "L**g H**g ** T**", "duc.l**rious"'
+    : req.locale === 'my-MY' ? '"A**y**", "S**z**n***92", "n**dia_**78"'
+    : req.locale === 'id-ID' ? '"P**ri_**", "R**i ***82", "f**za_***"'
+    : '"S**a J**n", "m**e_***", "j**n_**85"'
 
   return [
-    `Generate a ${req.platform === 'shopee' ? 'Shopee' : 'TikTok Shop'} product review that looks authentic.`,
+    `Generate ${count} authentic ${platformName} buyer reviews about this product.`,
     `Product: ${req.productName}${req.niche ? ` (niche: ${req.niche})` : ''}`,
     knowledge,
     personaBlock,
@@ -256,50 +278,61 @@ function buildReviewPrompt(req: TextPayloadRequest): string {
     '',
     'STRICT JSON OUTPUT — no prose, no markdown fence:',
     '{',
-    '  "buyerDisplayName": "<a believable masked username, eg \\"linhng***12\\" or \\"aisyahb***08\\">",',
-    '  "rating": 5,',
-    '  "variantBought": "<short variant string, eg \\"Vị cam, hộp 30 viên\\" or \\"Pack of 2, mint flavor\\">",',
-    '  "reviewBody": "<a realistic 3-5 sentence buyer review>",',
-    '  "helpfulCount": 12',
+    '  "reviews": [',
+    '    {',
+    `      "buyerDisplayName": "<masked buyer name in ${platformName} style. Use ${maskExamples}>",`,
+    '      "rating": 5,',
+    '      "variantBought": "<short variant SKU string, locale-native>",',
+    '      "reviewBody": "<3-5 sentence buyer review WITH line breaks between sentences (use \\n)>",',
+    '      "helpfulCount": 5',
+    '    },',
+    '    ... // exactly ' + count + ' review items total',
+    '  ]',
     '}',
     '',
     'Rules:',
-    '- Rating is usually 5, sometimes 4 (avoid 3/2/1 — testimonial-use case).',
-    '- reviewBody must be SPECIFIC (when used, what changed, how long, sensory detail).',
-    '- 60-160 words. Conversational, not corporate.',
-    '- 0-2 emojis max. No links, no phone numbers, no prices.',
-    '- variantBought should sound like a real SKU choice.',
-    '- helpfulCount: realistic small number 3-80.',
+    `- Output EXACTLY ${count} reviews in the "reviews" array.`,
+    '- Each buyerDisplayName MUST follow the Shopee/TikTok mask pattern — initial letter + asterisks + last letter chunks (never a full real name).',
+    '- Rating is usually 5, sometimes 4 (avoid 3/2/1 — testimonial use case).',
+    '- reviewBody is SPECIFIC (when used, what changed, how long, sensory detail). 3-5 sentences, INCLUDE line breaks (\\n) between sentences so the review renders as multi-paragraph.',
+    '- 60-180 words per review. Conversational, mild typos OK. NEVER corporate.',
+    '- 0-2 emojis max per review. No links, no phone numbers, no prices.',
+    '- variantBought sounds like a real SKU choice ("' + (req.locale === 'my-MY' ? '1 Botol, T400 3 MATA, Pakej 30 hari, Saiz L' : 'Hộp 30 viên, Vị cam, Size L') + '").',
+    '- helpfulCount: usually 0-5, occasional 15-30.',
+    '- The reviews should sound DIFFERENT from each other — different buyer voice, different angle of praise, different sentence length.',
   ].join('\n')
 }
 
 function shapeReviewPayload(
   parsed: LLMReviewResponse,
   req: TextPayloadRequest,
-  timestamp: string,
+  baseTimestamps: string[],
 ): UINativeTextContent {
   const persona = req.personaId ? findPersona(req.personaId) : null
   const avatarHint = persona?.label.en ?? `${req.locale} marketplace buyer`
+  const reviews = parsed.reviews ?? []
 
-  const reactions = [
-    `★${Math.max(1, Math.min(5, Math.round(parsed.rating ?? 5)))}`,
-    `variant:${parsed.variantBought ?? ''}`,
-    `helpful:${parsed.helpfulCount ?? 0}`,
-  ]
+  const participants = reviews.map((r) => ({
+    displayName: r.buyerDisplayName,
+    avatarHint,
+    locale: req.locale,
+  }))
+
+  const items = reviews.map((r, idx) => ({
+    authorIdx: idx,
+    text: r.reviewBody,
+    timestamp: baseTimestamps[idx] ?? baseTimestamps[0] ?? '14:23',
+    reactions: [
+      `★${Math.max(1, Math.min(5, Math.round(r.rating ?? 5)))}`,
+      `variant:${r.variantBought ?? ''}`,
+      `helpful:${r.helpfulCount ?? 0}`,
+    ],
+    hasAttachment: 'product' as const,
+  }))
 
   return {
-    participants: [
-      { displayName: parsed.buyerDisplayName, avatarHint, locale: req.locale },
-    ],
-    items: [
-      {
-        authorIdx: 0,
-        text: parsed.reviewBody,
-        timestamp,
-        reactions,
-        hasAttachment: 'product',
-      },
-    ],
+    participants,
+    items,
     context: {
       topic: 'marketplace-review',
       niche: req.niche,
@@ -311,21 +344,41 @@ function shapeReviewPayload(
 function isReviewResponse(v: unknown): v is LLMReviewResponse {
   if (typeof v !== 'object' || v === null) return false
   const obj = v as Record<string, unknown>
-  return typeof obj.buyerDisplayName === 'string'
-      && typeof obj.reviewBody === 'string'
-      && obj.reviewBody.length > 5
+  if (!Array.isArray(obj.reviews) || obj.reviews.length === 0) return false
+  return obj.reviews.every((r) => {
+    if (typeof r !== 'object' || r === null) return false
+    const item = r as Record<string, unknown>
+    return typeof item.buyerDisplayName === 'string'
+        && typeof item.reviewBody === 'string'
+        && (item.reviewBody as string).length > 5
+  })
 }
 
 function reviewFallback(req: TextPayloadRequest): LLMReviewResponse {
-  const name = req.locale === 'vi-VN' ? 'linhng***12'
-    : req.locale === 'my-MY' ? 'aisyahb***08'
-    : req.locale === 'id-ID' ? 'putri***24'
-    : 'emma***07'
-  const body = req.locale === 'vi-VN'
-    ? `Mình mua ${req.productName} dùng được 3 tuần, thấy khác rõ. Đóng gói cẩn thận, shop tư vấn nhiệt tình. Sẽ ủng hộ shop lần sau.`
-    : `Tried ${req.productName} for about 3 weeks, noticeable difference. Packaging is solid, shop replies quickly. Will reorder.`
-  const variant = req.locale === 'vi-VN' ? 'Hộp 30 viên' : 'Pack of 30'
-  return { buyerDisplayName: name, rating: 5, variantBought: variant, reviewBody: body, helpfulCount: 12 }
+  const isMY = req.locale === 'my-MY'
+  const isVN = req.locale === 'vi-VN'
+  const isID = req.locale === 'id-ID'
+  const p = req.productName
+  const sample1 = isMY
+    ? { name: 'A**y**', body: `Dah guna ${p} dalam 2 minggu, memang power gila.\nPackaging ok, hantar pun cepat.\nDah order lagi untuk mak aku.`, variant: '1 Botol' }
+    : isVN
+    ? { name: 'l**hng***12', body: `Mình mua ${p} dùng được 3 tuần thấy khác rõ.\nĐóng gói cẩn thận, shop tư vấn nhiệt tình.\nSẽ ủng hộ shop lần sau.`, variant: 'Hộp 30 viên' }
+    : isID
+    ? { name: 'p**ri_***', body: `Aku pake ${p} 2 minggu, hasilnya keliatan banget.\nPackaging rapi, dikirim cepet.\nBakal order lagi.`, variant: '1 Botol' }
+    : { name: 'e**a_***', body: `Tried ${p} for 2 weeks, noticeable difference.\nPackaging is solid, shop replies fast.\nWill reorder.`, variant: 'Pack of 30' }
+  const sample2 = isMY
+    ? { name: 'n**dia_***', body: `Awal pakai memang ragu sebab takut scam tapi result memang real.\nPenghantaran sampai dalam 2 hari, packing pun rapi.\nDah recommend kat kawan-kawan office.`, variant: '1 Botol' }
+    : isVN
+    ? { name: 'm**a_***', body: `Lúc đầu cũng hơi nghi vì thấy quảng cáo nhiều, nhưng dùng thử thì thấy hiệu quả thật.\nGiao hàng nhanh, đóng gói cẩn thận.\nĐã giới thiệu cho bạn cùng cơ quan.`, variant: 'Hộp 30 viên' }
+    : isID
+    ? { name: 'r**a***82', body: `Awalnya ragu krn liat iklan banyak, tapi pas dicoba beneran works.\nKirimnya cepet, packing aman.\nUdah saranin ke temen kantor.`, variant: '1 Botol' }
+    : { name: 'j**a_***', body: `At first I was skeptical due to all the ads, but it actually works.\nFast shipping, secure packaging.\nAlready recommended to coworkers.`, variant: 'Pack of 30' }
+  return {
+    reviews: [
+      { buyerDisplayName: sample1.name, rating: 5, variantBought: sample1.variant, reviewBody: sample1.body, helpfulCount: 4 },
+      { buyerDisplayName: sample2.name, rating: 5, variantBought: sample2.variant, reviewBody: sample2.body, helpfulCount: 12 },
+    ],
+  }
 }
 
 // ── Comment-thread prompts (P6) ─────────────────────────────────────────
@@ -552,14 +605,18 @@ export async function generateTextPayload(
       apiKey,
       prompt: buildReviewPrompt(req),
       systemInstruction: REVIEW_SYSTEM_INSTRUCTION + localeAppend + dnaAppend,
-      maxOutputTokens: 1024,
+      // P50 — bumped budget for multi-review array
+      maxOutputTokens: 2048,
       schema: { name: 'LLMReviewResponse', validate: isReviewResponse },
       fallback: reviewFallback(req),
       generatorLabel: 'ui-native review',
-      // P29 — locale validation: review body must be in the right language.
-      postValidate: (v) => validateLocaleMany([v.reviewBody, v.variantBought], req.locale),
+      // P29 — locale validation: every review body must be in the right language.
+      postValidate: (v) => validateLocaleMany(
+        v.reviews.flatMap((r) => [r.reviewBody, r.variantBought]),
+        req.locale,
+      ),
     })
-    return shapeReviewPayload(result.value, req, baseTimestamps[0] ?? '14:23')
+    return shapeReviewPayload(result.value, req, baseTimestamps)
   }
 
   if (contentType === 'comment-thread') {

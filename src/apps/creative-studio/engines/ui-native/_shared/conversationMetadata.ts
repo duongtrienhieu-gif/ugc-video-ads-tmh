@@ -55,6 +55,52 @@ export interface ConversationStrings {
   /** P31 — Messenger "Active now" presence subtitle ("Đang hoạt
    *  động" / "Aktif sekarang" / "Sedang aktif" / "Active now"). */
   activeNow: string
+
+  // ── P50 — Marketplace authenticity strings ─────────────────────────
+  /** "Phân loại:" / "Pilihan:" — prefix for variant tag inside a review. */
+  variantLabel: string
+  /** "Mặt hàng:" / "Item:" — TikTok Shop variant prefix style. */
+  itemLabel: string
+  /** "Đánh giá xác thực từ khách hàng thật" / "Ulasan disahkan daripada pembeli sebenar". */
+  authenticDisclaimer: string
+  /** "Mua ngay" / "Beli sekarang" — primary CTA. */
+  buyNow: string
+  /** "Mua với voucher {price}" / "Beli dengan baucar {price}" — Shopee CTA with voucher. */
+  buyWithVoucher: (price: string) => string
+  /** "Freeship" / "Penghantaran Percuma" — TikTok Shop freeship tag. */
+  freeship: string
+  /** "Chat" / "Sembang" — shop chat icon label. */
+  chat: string
+  /** "Thêm vào giỏ" / "Tambah ke troli" — Shopee add-to-cart label. */
+  addToCart: string
+  /** "Cửa hàng" / "Kedai" — TikTok Shop "Shop home" tab. */
+  shopHome: string
+  /** "Hữu ích ({n})" / "Membantu ({n})". */
+  helpfulCount: (n: number) => string
+  /** "trên 5" / "daripada 5" — rating denominator suffix. */
+  outOfFive: string
+  /** "Đánh giá Sản phẩm" / "Ulasan Produk" — Shopee buyer-reviews tab. */
+  productReviewsTab: string
+  /** "Đánh giá Shop" / "Ulasan Kedai" — Shopee shop-reviews tab. */
+  shopReviewsTab: string
+  /** "Tất cả" / "Semua". */
+  filterAll: string
+  /** "Có hình ảnh" / "Ada gambar" — photos filter. */
+  filterWithPhotos: string
+  /** "Sao" / "Bintang" — star filter prefix. */
+  filterStarPrefix: string
+  /** "Phân loại" / "Pilihan" — variant filter prefix. */
+  filterVariant: string
+  /** "Khách mua tiếp" / "Pembeli berulang" — TikTok Shop repeat-buyer chip. */
+  filterRepeatBuyers: string
+  /** "Chất lượng tốt" / "Kualiti baik" — quality chip. */
+  filterQualityGood: string
+  /** "Đánh giá bổ sung" / "Ulasan tambahan" — TikTok Shop extra-reviews chip. */
+  filterExtraReviews: string
+  /** "Ảnh/video" / "Gambar/video" — TikTok Shop media chip prefix (used as `${prefix} (${n})`). */
+  filterImagesVideos: string
+  /** "đánh giá" / "ulasan" — generic word for the rating-summary line ("({count} đánh giá)"). */
+  reviewsWord: string
 }
 
 export const STRINGS_VI_VN: ConversationStrings = {
@@ -79,6 +125,28 @@ export const STRINGS_VI_VN: ConversationStrings = {
     'Viết...',
   productReviewsTitle: 'Đánh giá sản phẩm',
   activeNow: 'Đang hoạt động',
+  variantLabel: 'Phân loại:',
+  itemLabel: 'Mặt hàng:',
+  authenticDisclaimer: 'Đánh giá xác thực từ khách hàng thật',
+  buyNow: 'Mua ngay',
+  buyWithVoucher: (price) => `Mua với voucher ${price}`,
+  freeship: 'Freeship',
+  chat: 'Chat',
+  addToCart: 'Thêm vào giỏ',
+  shopHome: 'Cửa hàng',
+  helpfulCount: (n) => `Hữu ích (${n})`,
+  outOfFive: 'trên 5',
+  productReviewsTab: 'Đánh giá Sản phẩm',
+  shopReviewsTab: 'Đánh giá Shop',
+  filterAll: 'Tất cả',
+  filterWithPhotos: 'Có hình ảnh',
+  filterStarPrefix: 'Sao',
+  filterVariant: 'Phân loại',
+  filterRepeatBuyers: 'Khách mua tiếp',
+  filterQualityGood: 'Chất lượng tốt',
+  filterExtraReviews: 'Đánh giá bổ sung',
+  filterImagesVideos: 'Ảnh/video',
+  reviewsWord: 'đánh giá',
 }
 
 export const STRINGS_MY_MY: ConversationStrings = {
@@ -103,6 +171,28 @@ export const STRINGS_MY_MY: ConversationStrings = {
     'Tulis...',
   productReviewsTitle: 'Ulasan produk',
   activeNow: 'Aktif sekarang',
+  variantLabel: 'Pilihan:',
+  itemLabel: 'Item:',
+  authenticDisclaimer: 'Ulasan disahkan daripada pembeli sebenar',
+  buyNow: 'Beli sekarang',
+  buyWithVoucher: (price) => `Beli dengan baucar ${price}`,
+  freeship: 'Penghantaran Percuma',
+  chat: 'Sembang',
+  addToCart: 'Tambah ke troli',
+  shopHome: 'Kedai',
+  helpfulCount: (n) => `Membantu (${n})`,
+  outOfFive: 'daripada 5',
+  productReviewsTab: 'Ulasan Produk',
+  shopReviewsTab: 'Ulasan Kedai',
+  filterAll: 'Semua',
+  filterWithPhotos: 'Ada gambar',
+  filterStarPrefix: 'Bintang',
+  filterVariant: 'Pilihan',
+  filterRepeatBuyers: 'Pembeli berulang',
+  filterQualityGood: 'Kualiti baik',
+  filterExtraReviews: 'Ulasan tambahan',
+  filterImagesVideos: 'Gambar/video',
+  reviewsWord: 'ulasan',
 }
 
 export const STRINGS_ID_ID: ConversationStrings = {
@@ -127,6 +217,28 @@ export const STRINGS_ID_ID: ConversationStrings = {
     'Tulis...',
   productReviewsTitle: 'Ulasan produk',
   activeNow: 'Sedang aktif',
+  variantLabel: 'Pilihan:',
+  itemLabel: 'Item:',
+  authenticDisclaimer: 'Ulasan terverifikasi dari pembeli asli',
+  buyNow: 'Beli sekarang',
+  buyWithVoucher: (price) => `Beli pakai voucher ${price}`,
+  freeship: 'Gratis Ongkir',
+  chat: 'Chat',
+  addToCart: 'Tambah ke keranjang',
+  shopHome: 'Toko',
+  helpfulCount: (n) => `Membantu (${n})`,
+  outOfFive: 'dari 5',
+  productReviewsTab: 'Ulasan Produk',
+  shopReviewsTab: 'Ulasan Toko',
+  filterAll: 'Semua',
+  filterWithPhotos: 'Ada foto',
+  filterStarPrefix: 'Bintang',
+  filterVariant: 'Pilihan',
+  filterRepeatBuyers: 'Pembeli berulang',
+  filterQualityGood: 'Kualitas baik',
+  filterExtraReviews: 'Ulasan tambahan',
+  filterImagesVideos: 'Foto/video',
+  reviewsWord: 'ulasan',
 }
 
 export const STRINGS_GLOBAL: ConversationStrings = {
@@ -151,6 +263,28 @@ export const STRINGS_GLOBAL: ConversationStrings = {
     'Write...',
   productReviewsTitle: 'Product reviews',
   activeNow: 'Active now',
+  variantLabel: 'Variant:',
+  itemLabel: 'Item:',
+  authenticDisclaimer: 'Verified reviews from real buyers',
+  buyNow: 'Buy now',
+  buyWithVoucher: (price) => `Buy with voucher ${price}`,
+  freeship: 'Free shipping',
+  chat: 'Chat',
+  addToCart: 'Add to cart',
+  shopHome: 'Shop',
+  helpfulCount: (n) => `Helpful (${n})`,
+  outOfFive: 'out of 5',
+  productReviewsTab: 'Product reviews',
+  shopReviewsTab: 'Shop reviews',
+  filterAll: 'All',
+  filterWithPhotos: 'With photos',
+  filterStarPrefix: 'Star',
+  filterVariant: 'Variant',
+  filterRepeatBuyers: 'Repeat buyers',
+  filterQualityGood: 'Good quality',
+  filterExtraReviews: 'Extra reviews',
+  filterImagesVideos: 'Photos/video',
+  reviewsWord: 'reviews',
 }
 
 export function findStrings(locale: UINativeLocale): ConversationStrings {
