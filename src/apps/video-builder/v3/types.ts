@@ -950,6 +950,30 @@ export interface SavedProject {
   lastEditedAt: number
 }
 
+// ── Z36 — Export Render Stages (Phase 7) ──────────────────────────────────
+// Multi-stage state machine for the ffmpeg.wasm-driven final MP4 assembly.
+// Each stage can fail independently — failed-clip-skip preserves the rest
+// of the project.
+
+export type ExportRenderStage =
+  | 'idle'           // nothing in flight
+  | 'loading_ffmpeg' // first-time ~30MB wasm fetch
+  | 'preparing'      // resolving asset refs to blobs, writing to ffmpeg FS
+  | 'encoding'       // running the filter graph
+  | 'muxing'         // burning subtitles + mixing audio + final mp4 mux
+  | 'done'           // success — videoRef on package
+  | 'failed'         // last stage errored — error has details
+
+export const EXPORT_RENDER_STAGE_LABEL_VI: Record<ExportRenderStage, string> = {
+  idle:            'Chưa export',
+  loading_ffmpeg:  'Đang tải ffmpeg.wasm (~30MB, lần đầu)...',
+  preparing:       'Đang chuẩn bị assets...',
+  encoding:        'Đang encode video...',
+  muxing:          'Đang burn subtitles + mix audio...',
+  done:            'Hoàn tất ✓',
+  failed:          'Lỗi',
+}
+
 export interface ExportVariationState {
   formatId: ExportFormatId
   qualityId: ExportQualityId
@@ -966,6 +990,18 @@ export interface ExportVariationState {
   isGeneratingCtaVariations: boolean
   isBuildingPackage: boolean
   error: string | null
+
+  // ── Z36 — Final MP4 assembly state (Phase 7) ─────────────────────────
+  /** Current ffmpeg pipeline stage */
+  exportStage: ExportRenderStage
+  /** Progress 0-1 (rough — ffmpeg.wasm progress is approximate) */
+  exportProgress: number
+  /** Which preset: 'preview' = fast 480p draft / 'final' = full quality */
+  exportPreset: 'preview' | 'final'
+  /** asset:xxx of the LAST real assembled MP4 (preview or final) */
+  assembledVideoRef: string | null
+  /** Last failed clip ids (Z36 §18 — for skip-failed UX) */
+  failedClipIds: number[]
 }
 
 export function createEmptyExportVariationState(): ExportVariationState {
@@ -980,5 +1016,11 @@ export function createEmptyExportVariationState(): ExportVariationState {
     isGeneratingCtaVariations: false,
     isBuildingPackage: false,
     error: null,
+    // Z36 Phase 7
+    exportStage: 'idle',
+    exportProgress: 0,
+    exportPreset: 'preview',
+    assembledVideoRef: null,
+    failedClipIds: [],
   }
 }

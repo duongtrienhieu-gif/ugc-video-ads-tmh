@@ -41,12 +41,12 @@ import {
   getAllProjects, saveCurrentAsProject, deleteProject, toggleWinner,
   duplicateProject, hydrateProjectAsState,
 } from '../services/projectLibrary'
-// Z36 Phase 7 — real MP4 assembly (imports preserved for future wiring)
-// import {
-//   assembleFinalVideo, estimateExportSize, preflightCheckAssets,
-// } from '../services/finalVideoAssembler'
+// Z36 Phase 7 — real MP4 assembly
+import {
+  assembleFinalVideo, estimateExportSize, preflightCheckAssets,
+} from '../services/finalVideoAssembler'
 import { warmUpFFmpeg, isFFmpegLoaded } from '../services/ffmpegLoader'
-// import { EXPORT_RENDER_STAGE_LABEL_VI } from '../types'
+import { EXPORT_RENDER_STAGE_LABEL_VI } from '../types'
 
 const TONE_BG: Record<string, string> = {
   emerald: 'bg-emerald-100 text-emerald-800 border-emerald-300',
@@ -78,12 +78,12 @@ export default function ExportPhase() {
   const setIsBuildingPackage = useAdsVideoStore((s) => s.setIsBuildingPackage)
   const setExportError    = useAdsVideoStore((s) => s.setExportError)
   const hydrateFromSnapshot = useAdsVideoStore((s) => s.hydrateFromSnapshot)
-  // Z36 Phase 7 store hooks (preserved for future wiring)
-  // const setExportStage       = useAdsVideoStore((s) => s.setExportStage)
-  // const setExportProgress    = useAdsVideoStore((s) => s.setExportProgress)
-  // const setExportPreset      = useAdsVideoStore((s) => s.setExportPreset)
-  // const setAssembledVideoRef = useAdsVideoStore((s) => s.setAssembledVideoRef)
-  // const setFailedClipIds     = useAdsVideoStore((s) => s.setFailedClipIds)
+  // Z36 Phase 7 store hooks
+  const setExportStage       = useAdsVideoStore((s) => s.setExportStage)
+  const setExportProgress    = useAdsVideoStore((s) => s.setExportProgress)
+  const setExportPreset      = useAdsVideoStore((s) => s.setExportPreset)
+  const setAssembledVideoRef = useAdsVideoStore((s) => s.setAssembledVideoRef)
+  const setFailedClipIds     = useAdsVideoStore((s) => s.setFailedClipIds)
 
   const geminiKey = useSettingsStore((s) => s.geminiApiKey)
   const addToast = useAppStore((s) => s.addToast)
@@ -696,6 +696,139 @@ function LibraryModal({
           không cần re-generate script. Tiết kiệm credit Gemini.
         </p>
       </div>
+    </div>
+  )
+}
+
+// ── Z36 Phase 7 — Real MP4 Assembly Panel ────────────────────────────────
+
+function RealMp4AssemblyPanel({
+  plan, formatId, qualityId, stage, progress, preset,
+  assembledVideoRef, failedClipIds, onAssemble,
+}: {
+  plan: import('../types').AutoEditPlan
+  formatId: ExportFormatId
+  qualityId: ExportQualityId
+  stage: import('../types').ExportRenderStage
+  progress: number
+  preset: 'preview' | 'final'
+  assembledVideoRef: string | null
+  failedClipIds: number[]
+  onAssemble: (preset: 'preview' | 'final') => void
+}) {
+  const isBusy = stage !== 'idle' && stage !== 'done' && stage !== 'failed'
+  const isDone = stage === 'done' && !!assembledVideoRef
+  const isFailed = stage === 'failed'
+
+  const previewSize = estimateExportSize(plan, 'test_480')
+  const finalSize = estimateExportSize(plan, qualityId)
+
+  const resolvedAssembled = useAssetUrl(assembledVideoRef ?? undefined)
+  const assembledUrl = assembledVideoRef?.startsWith('http')
+    ? assembledVideoRef
+    : resolvedAssembled
+
+  return (
+    <div className="mt-4 rounded-xl border border-pink-300 bg-gradient-to-r from-pink-50 via-rose-50 to-violet-50 p-4">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-sm font-bold text-gray-900">
+            🎬 Real MP4 Assembly <span className="rounded-full bg-pink-100 px-1.5 py-0.5 text-[9px] font-bold text-pink-700">PHASE 7</span>
+          </p>
+          <p className="mt-0.5 text-[11px] text-gray-600">
+            Encode MP4 thật từ edit plan via <strong>ffmpeg.wasm</strong> — local browser, không tốn server.
+            Subtitle burn-in + segment concat + audio mux. Re-run cùng plan miễn phí.
+          </p>
+        </div>
+      </div>
+
+      {/* Action buttons + status */}
+      <div className="mt-3 flex flex-wrap items-center gap-2">
+        <button
+          onClick={() => onAssemble('preview')}
+          disabled={isBusy}
+          title={`Fast preview — 480p · ~${previewSize.mb}MB`}
+          className="flex items-center gap-1.5 rounded-full bg-gradient-to-r from-amber-500 to-orange-500 px-4 py-2 text-[12px] font-bold text-white shadow-sm hover:from-amber-600 hover:to-orange-600 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {isBusy && preset === 'preview'
+            ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Encoding...</>
+            : <><Sparkles className="h-3.5 w-3.5" /> Preview Export (480p · ~{previewSize.mb}MB)</>}
+        </button>
+        <button
+          onClick={() => onAssemble('final')}
+          disabled={isBusy}
+          title={`Final quality — ${EXPORT_QUALITIES[qualityId].resolutionPx}p · ~${finalSize.mb}MB`}
+          className="flex items-center gap-1.5 rounded-full bg-gradient-to-r from-violet-600 to-pink-600 px-4 py-2 text-[12px] font-bold text-white shadow-md hover:from-violet-700 hover:to-pink-700 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {isBusy && preset === 'final'
+            ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Encoding...</>
+            : <><Video className="h-3.5 w-3.5" /> Final Export ({EXPORT_QUALITIES[qualityId].labelVi} · ~{finalSize.mb}MB)</>}
+        </button>
+        <span className="text-[10px] text-gray-500">
+          {plan.segments.length} segments · {plan.captions.length} captions · {EXPORT_FORMATS[formatId].labelVi}
+        </span>
+      </div>
+
+      {/* Stage progress */}
+      {isBusy && (
+        <div className="mt-3 rounded-lg border border-pink-200 bg-white p-2.5">
+          <div className="flex items-center gap-2 text-[11px] font-semibold text-gray-700">
+            <Loader2 className="h-3.5 w-3.5 animate-spin text-pink-600" />
+            <span>{EXPORT_RENDER_STAGE_LABEL_VI[stage]}</span>
+            <span className="ml-auto tabular-nums text-pink-700">{Math.round(progress * 100)}%</span>
+          </div>
+          <div className="mt-1.5 h-1 w-full overflow-hidden rounded-full bg-pink-100">
+            <div
+              className="h-full bg-gradient-to-r from-pink-500 to-violet-600 transition-all"
+              style={{ width: `${Math.max(2, Math.round(progress * 100))}%` }}
+            />
+          </div>
+        </div>
+      )}
+
+      {isFailed && (
+        <div className="mt-3 flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 p-2.5 text-[11px] text-red-800">
+          <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
+          <span>Assembly thất bại — xem console / toast để biết chi tiết. ffmpeg.wasm cần Cross-Origin Isolation (CORS) headers ở dev server.</span>
+        </div>
+      )}
+
+      {failedClipIds.length > 0 && (
+        <div className="mt-2 rounded-lg border border-amber-200 bg-amber-50 p-2 text-[10px] text-amber-800">
+          <strong>{failedClipIds.length} clip skipped</strong> (asset fetch failed): cut IDs {failedClipIds.join(', ')}.
+          Video vẫn export với các segment còn lại.
+        </div>
+      )}
+
+      {isDone && assembledUrl && (
+        <div className="mt-3 rounded-lg border border-emerald-300 bg-white p-3">
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+            <video
+              src={assembledUrl}
+              controls
+              playsInline
+              className="aspect-[9/16] w-full max-w-[200px] rounded-lg bg-black"
+            />
+            <div className="flex flex-col gap-2">
+              <p className="text-[12px] font-bold text-emerald-900">
+                ✓ MP4 đã render ({preset} · {plan.totalDurationSec.toFixed(1)}s)
+              </p>
+              <button
+                onClick={() => downloadAssetAs(
+                  assembledUrl,
+                  `ad-${EXPORT_FORMATS[formatId].labelVi.toLowerCase()}-${preset}.mp4`,
+                )}
+                className="flex items-center gap-1.5 self-start rounded-lg bg-gradient-to-r from-emerald-600 to-teal-600 px-3 py-1.5 text-[12px] font-bold text-white hover:from-emerald-700 hover:to-teal-700"
+              >
+                <Download className="h-3.5 w-3.5" /> Download MP4
+              </button>
+              <p className="text-[10px] text-emerald-700">
+                Subtitle đã burn-in trực tiếp vào video. Audio = voice track. SFX/BGM mix sẽ wire ở Phase 7.5.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

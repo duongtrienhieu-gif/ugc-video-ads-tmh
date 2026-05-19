@@ -1,0 +1,13 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "comment": "Z36 — COOP+COEP headers required for ffmpeg.wasm SharedArrayBuffer. Without these, the browser refuses to enable cross-origin isolation and ffmpeg.wasm falls back to single-threaded mode (3x slower) or fails outright.",
+  "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [
+        { "key": "Cross-Origin-Opener-Policy",   "value": "same-origin" },
+        { "key": "Cross-Origin-Embedder-Policy", "value": "require-corp" }
+      ]
+    }
+  ]
+}

@@ -33,6 +33,8 @@ import {
   // Z35 — Export + Variation Engine
   type ExportFormatId, type ExportQualityId,
   type CtaVariation, type ExportPackage, type ThumbnailStyleId,
+  // Z36 — Final MP4 Assembly
+  type ExportRenderStage,
 } from '../types'
 import { CREATOR_PRESETS } from '../services/creatorPresets'
 import type { Model, Product } from '../../../../stores/types'
@@ -111,6 +113,14 @@ interface AdsVideoStoreState {
   setExportError:         (err: string | null) => void
   /** Z35 — hydrate state from a SavedProject (used by Library "Load" button). */
   hydrateFromSnapshot:    (partial: Partial<V3PipelineState>) => void
+
+  // ── Z36 Phase 7 final MP4 assembly state ───────────────────────────────
+
+  setExportStage:        (stage: ExportRenderStage) => void
+  setExportProgress:     (ratio: number) => void
+  setExportPreset:       (preset: 'preview' | 'final') => void
+  setAssembledVideoRef:  (ref: string | null) => void
+  setFailedClipIds:      (ids: number[]) => void
 
   // ── Z31 Ad Brain (Script + Voice foundation) ────────────────────────────
 
@@ -214,6 +224,22 @@ function loadFromStorage(): V3PipelineState | null {
       parsed.exportVariation.isGeneratingCtaVariations = false
       parsed.exportVariation.isBuildingPackage = false
       parsed.exportVariation.error = null
+      // Z36 — reset in-flight export stage (assembledVideoRef survives)
+      if (parsed.exportVariation.exportStage &&
+          parsed.exportVariation.exportStage !== 'done' &&
+          parsed.exportVariation.exportStage !== 'failed' &&
+          parsed.exportVariation.exportStage !== 'idle') {
+        parsed.exportVariation.exportStage = 'idle'
+        parsed.exportVariation.exportProgress = 0
+      }
+      // Backfill Z36 fields for pre-Z36 saves
+      if (parsed.exportVariation.exportStage === undefined) {
+        parsed.exportVariation.exportStage = 'idle'
+        parsed.exportVariation.exportProgress = 0
+        parsed.exportVariation.exportPreset = 'preview'
+        parsed.exportVariation.assembledVideoRef = null
+        parsed.exportVariation.failedClipIds = []
+      }
     }
     return parsed
   } catch (err) {
@@ -475,6 +501,38 @@ export const useAdsVideoStore = create<AdsVideoStoreState>((set, get) => ({
     commit(set, get, (s) => ({
       ...s,
       ...partial,
+    })),
+
+  // ── Z36 Phase 7 final MP4 assembly ──────────────────────────────────────
+
+  setExportStage: (stage) =>
+    commit(set, get, (s) => ({
+      ...s,
+      exportVariation: { ...s.exportVariation, exportStage: stage },
+    })),
+
+  setExportProgress: (ratio) =>
+    commit(set, get, (s) => ({
+      ...s,
+      exportVariation: { ...s.exportVariation, exportProgress: ratio },
+    })),
+
+  setExportPreset: (preset) =>
+    commit(set, get, (s) => ({
+      ...s,
+      exportVariation: { ...s.exportVariation, exportPreset: preset },
+    })),
+
+  setAssembledVideoRef: (ref) =>
+    commit(set, get, (s) => ({
+      ...s,
+      exportVariation: { ...s.exportVariation, assembledVideoRef: ref },
+    })),
+
+  setFailedClipIds: (ids) =>
+    commit(set, get, (s) => ({
+      ...s,
+      exportVariation: { ...s.exportVariation, failedClipIds: ids },
     })),
 
   // ── Z31 Ad Brain ────────────────────────────────────────────────────────
