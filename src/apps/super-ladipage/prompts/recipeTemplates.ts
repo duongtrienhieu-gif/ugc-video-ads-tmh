@@ -17,6 +17,11 @@ export interface RecipeInput {
   language: 'ms' | 'vi' | 'en'
 }
 
+/** Backstop: nếu concept arrays bị undefined (vd nếu rawToSections bypass),
+ *  trả về empty array thay vì crash khi gọi .length / .map / .filter. */
+function safeBlocks(c: ImageSlotConcept): TextBlock[] { return c.textOverlayBlocks ?? [] }
+function safeDecor(c: ImageSlotConcept):  DecorElement[] { return c.decorElements ?? [] }
+
 // ── Helpers ──────────────────────────────────────────────────────────
 
 function formatTextBlock(t: TextBlock): string {
@@ -95,16 +100,16 @@ function recipeA(input: RecipeInput): string {
   const { identity, concept, language } = input
 
   // Filter out price-role blocks from hero/discovery (price now lives in G recipes)
-  const filteredBlocks = concept.textOverlayBlocks.filter((b) => b.role !== 'price')
+  const filteredBlocks = safeBlocks(concept).filter((b) => b.role !== 'price')
 
   const textOverlay = filteredBlocks.length > 0
     ? `TEXT OVERLAY (render the following text PRECISELY as written, in ${langLabel(language)}, render every letter correctly):
 ${filteredBlocks.map(formatTextBlock).join('\n')}`
     : 'TEXT OVERLAY: none.'
 
-  const decor = concept.decorElements.length > 0
+  const decor = safeDecor(concept).length > 0
     ? `DECORATIVE ELEMENTS (compose on top of photo):
-${concept.decorElements.map(formatDecor).join('\n')}`
+${safeDecor(concept).map(formatDecor).join('\n')}`
     : 'DECORATIVE ELEMENTS: none.'
 
   // Subject lock only when image has a person (most recipe A scenes have people)
@@ -152,9 +157,9 @@ function recipeB(input: RecipeInput): string {
 // ═════════════════════════════════════════════════════════════════════
 function recipeC(input: RecipeInput): string {
   const { identity, concept, language } = input
-  const labels = concept.textOverlayBlocks.length > 0
+  const labels = safeBlocks(concept).length > 0
     ? `LABELS & TITLES (render PRECISELY in ${langLabel(language)}, every letter correct):
-${concept.textOverlayBlocks.map(formatTextBlock).join('\n')}`
+${safeBlocks(concept).map(formatTextBlock).join('\n')}`
     : 'LABELS: none.'
 
   const isWhyHappens = concept.roleLabel.toLowerCase().includes('cause') ||
@@ -171,8 +176,8 @@ ${concept.textOverlayBlocks.map(formatTextBlock).join('\n')}`
     labels,
     `STYLE: clean mobile-friendly infographic illustration, vector / flat illustration style, soft pastel color palette (NOT photorealistic). Cartoon-style anatomical icons for organs/biology if relevant. Modern editorial layout with clear hierarchy.`,
     compositionExtra,
-    concept.decorElements.length > 0
-      ? `BRAND BADGES TO INCLUDE: ${concept.decorElements.map(formatDecor).join('; ')}`
+    safeDecor(concept).length > 0
+      ? `BRAND BADGES TO INCLUDE: ${safeDecor(concept).map(formatDecor).join('; ')}`
       : '',
     technicalBlock(concept.aspectRatio),
     antiPatternBlock(identity),
@@ -187,9 +192,9 @@ ${concept.textOverlayBlocks.map(formatTextBlock).join('\n')}`
 // ═════════════════════════════════════════════════════════════════════
 function recipeD(input: RecipeInput): string {
   const { identity, concept, language } = input
-  const labels = concept.textOverlayBlocks.length > 0
+  const labels = safeBlocks(concept).length > 0
     ? `ICON LABELS (render PRECISELY in ${langLabel(language)}):
-${concept.textOverlayBlocks.map(formatTextBlock).join('\n')}`
+${safeBlocks(concept).map(formatTextBlock).join('\n')}`
     : 'LABELS: none.'
 
   return [
@@ -198,8 +203,8 @@ ${concept.textOverlayBlocks.map(formatTextBlock).join('\n')}`
     labels,
     `STYLE: clean modern product showcase infographic, soft inviting color palette (gradients matching product brand colors), subtle gradient background. Mobile-friendly readable typography. Icons in soft circular containers.`,
     `COMPOSITION: prominent title at top, ${identity.coBrandBadges.length > 0 ? `brand badge "${identity.coBrandBadges.join(' + ')}" near title, ` : ''}product packaging centered (in proper SHAPE — see SHAPE LOCK above), 5-8 icon-with-label items arranged in grid or circular layout around product. Each item: distinct colored icon + short target-language label. Brief supporting description below.`,
-    concept.decorElements.length > 0
-      ? `EXTRA ELEMENTS: ${concept.decorElements.map(formatDecor).join('; ')}`
+    safeDecor(concept).length > 0
+      ? `EXTRA ELEMENTS: ${safeDecor(concept).map(formatDecor).join('; ')}`
       : '',
     technicalBlock(concept.aspectRatio),
     antiPatternBlock(identity),
@@ -213,9 +218,9 @@ ${concept.textOverlayBlocks.map(formatTextBlock).join('\n')}`
 // ═════════════════════════════════════════════════════════════════════
 function recipeE(input: RecipeInput): string {
   const { identity, concept, language } = input
-  const cells = concept.textOverlayBlocks.length > 0
+  const cells = safeBlocks(concept).length > 0
     ? `TABLE CONTENT (render PRECISELY in ${langLabel(language)}):
-${concept.textOverlayBlocks.map(formatTextBlock).join('\n')}`
+${safeBlocks(concept).map(formatTextBlock).join('\n')}`
     : 'TABLE: empty (this should NOT happen).'
 
   return [
@@ -224,8 +229,8 @@ ${concept.textOverlayBlocks.map(formatTextBlock).join('\n')}`
     cells,
     `STYLE: PREMIUM Malaysia ecommerce comparison table — clean modern luxury feel, NOT basic spreadsheet look. Bold typography hierarchy. Glassmorphism or soft-shadow card style for the table. Subtle gradient background.`,
     `COMPOSITION: 2-column comparison table — LEFT COLUMN "${identity.productNameExact}" header with vibrant EMERALD/teal highlighted background + premium glow accent + green ✓ checkmark icons in each cell (each on a soft mint circular badge). RIGHT COLUMN "Suplemen Lain" / "Other products" with neutral GRAY background + red ✗ X mark icons (each on a soft pink/red circular badge). 5-7 rows of comparison attributes with bold target-language labels. Product image of "${identity.productNameExact}" placed prominently under left column header with subtle glow halo. Optional: small trust badges at bottom.`,
-    concept.decorElements.length > 0
-      ? `EXTRA ELEMENTS: ${concept.decorElements.map(formatDecor).join('; ')}`
+    safeDecor(concept).length > 0
+      ? `EXTRA ELEMENTS: ${safeDecor(concept).map(formatDecor).join('; ')}`
       : '',
     technicalBlock(concept.aspectRatio),
     antiPatternBlock(identity),
@@ -242,9 +247,9 @@ function recipeF(input: RecipeInput): string {
   const { identity, concept, language } = input
   const variant = concept.recipeVariant ?? 'social-platform'
 
-  const labels = concept.textOverlayBlocks.length > 0
+  const labels = safeBlocks(concept).length > 0
     ? `UI TEXT CONTENT (render PRECISELY in ${langLabel(language)}, every letter correct — this is a fake screenshot, text must look authentic to the platform):
-${concept.textOverlayBlocks.map(formatTextBlock).join('\n')}`
+${safeBlocks(concept).map(formatTextBlock).join('\n')}`
     : 'UI TEXT: empty.'
 
   // Variant-specific composition + style
@@ -287,8 +292,8 @@ LAYOUT (SOCIAL PLATFORM variant):
     labels,
     variantBlock.trim(),
     `STYLE: looks like a screenshot a real Malaysian user would have on their phone.`,
-    concept.decorElements.length > 0
-      ? `EXTRA UI ELEMENTS: ${concept.decorElements.map(formatDecor).join('; ')}`
+    safeDecor(concept).length > 0
+      ? `EXTRA UI ELEMENTS: ${safeDecor(concept).map(formatDecor).join('; ')}`
       : '',
     technicalBlock(concept.aspectRatio),
     antiPatternBlock(identity),
@@ -304,9 +309,9 @@ function recipeG(input: RecipeInput): string {
   const { identity, concept, language } = input
   const variant = concept.recipeVariant ?? 'promo'
 
-  const banner = concept.textOverlayBlocks.length > 0
+  const banner = safeBlocks(concept).length > 0
     ? `BANNER TEXT (render PRECISELY in ${langLabel(language)}, every letter correct):
-${concept.textOverlayBlocks.map(formatTextBlock).join('\n')}`
+${safeBlocks(concept).map(formatTextBlock).join('\n')}`
     : 'BANNER TEXT: empty.'
 
   let variantBlock = ''
@@ -338,8 +343,8 @@ LAYOUT (PROMO BANNER variant):
     brandLockBlock(identity, concept.productInScene),
     banner,
     variantBlock.trim(),
-    concept.decorElements.length > 0
-      ? `EXTRA ELEMENTS: ${concept.decorElements.map(formatDecor).join('; ')}`
+    safeDecor(concept).length > 0
+      ? `EXTRA ELEMENTS: ${safeDecor(concept).map(formatDecor).join('; ')}`
       : '',
     technicalBlock(concept.aspectRatio),
     antiPatternBlock(identity),
@@ -359,9 +364,9 @@ function recipeH(input: RecipeInput): string {
   const variant = concept.recipeVariant ?? 'expert'
   const subject = subjectLockBlock(identity, concept)
 
-  const labels = concept.textOverlayBlocks.length > 0
+  const labels = safeBlocks(concept).length > 0
     ? `TEXT CONTENT (render PRECISELY in ${langLabel(language)}, every letter correct):
-${concept.textOverlayBlocks.map(formatTextBlock).join('\n')}`
+${safeBlocks(concept).map(formatTextBlock).join('\n')}`
     : 'TEXT: empty (this should NOT happen — expert/KOL card requires text).'
 
   let variantBlock = ''

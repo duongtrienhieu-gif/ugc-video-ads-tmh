@@ -72,7 +72,15 @@ function parseRawPack(raw: string): RawPackOutput {
   try {
     parsed = JSON.parse(cleaned)
   } catch (err) {
-    throw new Error(`Pack JSON parse failed: ${err instanceof Error ? err.message : String(err)}. Raw start: ${cleaned.slice(0, 300)}`)
+    const errMsg = err instanceof Error ? err.message : String(err)
+    // Detect truncation case — Gemini hit maxOutputTokens và cắt giữa string
+    if (errMsg.toLowerCase().includes('unterminated') || errMsg.toLowerCase().includes('unexpected end')) {
+      throw new Error(
+        `Pack JSON bị cắt giữa chừng (${cleaned.length} chars output). ` +
+        `Gemini hit maxOutputTokens limit. Cần tăng maxOutputTokens hoặc giảm scope pack.`,
+      )
+    }
+    throw new Error(`Pack JSON parse failed: ${errMsg}. Raw start: ${cleaned.slice(0, 300)}`)
   }
   if (!parsed || typeof parsed !== 'object' || !Array.isArray((parsed as { sections?: unknown }).sections)) {
     throw new Error(`Pack output missing "sections" array. Got keys: ${Object.keys(parsed as object).join(', ')}`)
@@ -80,26 +88,38 @@ function parseRawPack(raw: string): RawPackOutput {
   return parsed as RawPackOutput
 }
 
-/** Convert RawPackOutput → LandingSection[] (apply concepts → assembled prompts later). */
+/** Convert RawPackOutput → LandingSection[].
+ *  Normalize undefined arrays trên concept (Gemini hay omit khi rỗng)
+ *  để recipe templates không crash khi gọi .length / .map / .filter. */
 function rawToSections(
   raw: RawPackOutput,
   identity: ProductIdentity,
   language: 'ms' | 'vi' | 'en',
 ): LandingSection[] {
   return raw.sections.map((s) => {
-    const imagePrompts: (ImagePrompt & { __concept?: ImageSlotConcept })[] = s.imagePrompts.map((p) => {
-      const assembled = assembleImagePrompt({
-        identity,
-        concept:  p.concept,
-        language,
-      })
+    const imagePrompts: (ImagePrompt & { __concept?: ImageSlotConcept })[] = (s.imagePrompts ?? []).map((p) => {
+      // Normalize concept — Gemini may omit arrays/optional fields
+      const concept: ImageSlotConcept = {
+        recipeId:           p.concept?.recipeId ?? 'A',
+        recipeVariant:      p.concept?.recipeVariant,
+        conceptScene:       p.concept?.conceptScene ?? '',
+        roleLabel:          p.concept?.roleLabel ?? p.style ?? '',
+        filename:           p.concept?.filename ?? p.filename ?? '',
+        aspectRatio:        (p.concept?.aspectRatio ?? p.aspectRatio ?? '4:5') as ImageSlotConcept['aspectRatio'],
+        productInScene:     p.concept?.productInScene ?? false,
+        subjectLockKey:     p.concept?.subjectLockKey,
+        textOverlayBlocks:  p.concept?.textOverlayBlocks ?? [],
+        decorElements:      p.concept?.decorElements ?? [],
+        sourceTier:         p.concept?.sourceTier,
+      }
+      const assembled = assembleImagePrompt({ identity, concept, language })
       return {
         filename:     p.filename,
         prompt:       assembled,
         style:        p.style,
         aspectRatio:  p.aspectRatio,
         status:       'idle' as const,
-        __concept:    p.concept,
+        __concept:    concept,
       }
     })
 
@@ -194,7 +214,7 @@ export async function generateLandingPack(params: LandingGenParams): Promise<Lan
         prompt:             userPrompt,
         systemInstruction:  systemPrompt,
         jsonMode:           true,
-        maxOutputTokens:    16384,
+        maxOutputTokens:    32768, // bumped from 16384 — 17 sec pack hit 64K char ≈ 16K tok limit
         timeoutMs:          PACK_GEN_TIMEOUT_MS,
         label:              `pack-gen-${attempt}`,
       })

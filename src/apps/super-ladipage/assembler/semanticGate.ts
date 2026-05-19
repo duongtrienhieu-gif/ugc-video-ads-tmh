@@ -95,7 +95,7 @@ export function semanticGateScan(
     // Collect concepts for tier-distribution check
     const sectionConcepts: ImageSlotConcept[] = []
 
-    section.imagePrompts.forEach((p, iIdx) => {
+    ;(section.imagePrompts ?? []).forEach((p, iIdx) => {
       const concept = p.__concept
       if (!concept) {
         issues.push({
