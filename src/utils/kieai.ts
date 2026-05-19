@@ -284,6 +284,7 @@ export async function pollGptImage2UntilDone(params: {
   const taskTag = params.taskId.slice(0, 12)
   console.log(`[POLL_START gpt-image-2] task=${taskTag} timeout=${Math.round(timeout / 1000)}s`)
 
+  let transientErrors = 0
   while (Date.now() - start < timeout) {
     if (params.signal?.aborted) {
       console.warn(`[POLL_FAIL gpt-image-2] task=${taskTag} reason=ABORTED`)
@@ -294,7 +295,26 @@ export async function pollGptImage2UntilDone(params: {
     // post-completion idle window per task → ~5-15% throughput gain).
     await new Promise<void>((r) => setTimeout(r, 1000))
     pollCount++
-    const s = await getGptImage2Status({ apiKey: params.apiKey, taskId: params.taskId })
+
+    // 2026-05-19: defensive try/catch around status check. With
+    // concurrency=12 + poll=1s, we issue ~12 status RPS to KIE. A single
+    // transient 429 / 5xx / network blip used to throw out of the entire
+    // poll loop → entire image fails → retry → wasted credit. Now we
+    // tolerate up to 5 consecutive errors before bailing.
+    let s: { status: ImageStatus; imageUrl?: string; error?: string; progress?: number }
+    try {
+      s = await getGptImage2Status({ apiKey: params.apiKey, taskId: params.taskId })
+      transientErrors = 0
+    } catch (err) {
+      transientErrors++
+      const msg = err instanceof Error ? err.message : String(err)
+      if (transientErrors >= 5) {
+        console.error(`[POLL_FAIL gpt-image-2] task=${taskTag} reason=STATUS_CHECK_FAILED_5x — last error: ${msg}`)
+        throw err
+      }
+      console.warn(`[POLL_TRANSIENT gpt-image-2] task=${taskTag} status-check error ${transientErrors}/5 — ${msg.slice(0, 100)} — retrying next tick`)
+      continue
+    }
     const elapsedSec = Math.round((Date.now() - start) / 1000)
 
     if (s.status !== lastStatus) {
