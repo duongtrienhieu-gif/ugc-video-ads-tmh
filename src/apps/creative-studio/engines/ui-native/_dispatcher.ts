@@ -125,8 +125,12 @@ const PLATFORM_CONTENT_TYPE: Record<UINativePlatform, TextPayloadContentType> = 
 }
 
 const PLATFORM_DEFAULT_COUNT: Record<UINativePlatform, number> = {
-  whatsapp:         8,
-  messenger:        8,
+  // P52 — bumped whatsapp/messenger 8 → 10 so the chat fills the
+  // vertical canvas with conversation density. 2 of the 10 messages
+  // are photo bubbles (per the updated Gemini prompt), which add
+  // height naturally.
+  whatsapp:         10,
+  messenger:        10,
   // P50 — Shopee/TikTok Shop screenshots now stack 2 reviews so the
   // screen fills like a real marketplace review page (was 1 review with
   // big empty space).
@@ -257,10 +261,12 @@ export async function dispatchUINative(
     )
   }
 
-  // P50 — Option C: pull review photo grid from prior creatives. Only
-  // marketplace review platforms use this; chat / comment renderers
-  // ignore the field gracefully.
-  const reviewPhotoUrls = (module.platform === 'shopee' || module.platform === 'tiktok-shop')
+  // P50 / P52 — Option C: pull a pool of person+product photos from
+  // prior creatives. P50 wired this for shopee/tiktok-shop review
+  // attachments. P52 extends it to whatsapp + messenger chats, which
+  // now render 2 photo bubbles (customer sending a quick photo of the
+  // product) — same data flow, different consumer template.
+  const reviewPhotoUrls = (module.platform === 'shopee' || module.platform === 'tiktok-shop' || module.platform === 'whatsapp' || module.platform === 'messenger')
     ? await gatherReviewPhotos(params.productId, 6)
     : undefined
 

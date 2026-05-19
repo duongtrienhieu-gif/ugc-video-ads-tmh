@@ -70,6 +70,12 @@ interface LLMResponse {
   messages: {
     side: 'incoming' | 'outgoing'  // incoming = customer; outgoing = shop
     text: string
+    /** P52 — optional. When true, the canvas renders this message as a
+     *  photo bubble (image from the workspace photo pool) with the text
+     *  used as the caption below the image. Real WhatsApp / Messenger
+     *  testimonials usually have the customer sending a quick photo of
+     *  the product they just received or a selfie after using it. */
+    hasPhoto?: boolean
   }[]
 }
 
@@ -121,7 +127,7 @@ export function buildTextPayloadPrompt(req: TextPayloadRequest): string {
     '{',
     '  "customerDisplayName": "<a believable name + last initial, eg \\"Linh N.\\" or \\"Aisyah B.\\">",',
     '  "messages": [',
-    '    { "side": "incoming" | "outgoing", "text": "<one short message>" },',
+    '    { "side": "incoming" | "outgoing", "text": "<one short message>", "hasPhoto": false },',
     '    ...',
     '  ]',
     '}',
@@ -136,6 +142,12 @@ export function buildTextPayloadPrompt(req: TextPayloadRequest): string {
     '- 1-2 messages may contain a single emoji. Do not overdo emojis.',
     '- NO links, NO phone numbers, NO prices, NO "DM me" or "click bio".',
     '- NEVER include the words "advertisement", "sponsored", "ad", "promo".',
+    '',
+    'P52 — PHOTO BUBBLES:',
+    '- Mark EXACTLY 2 of the customer ("incoming") messages with `"hasPhoto": true`. These render as photo bubbles in the canvas — a real WhatsApp/Messenger testimonial almost always has the customer sending a quick photo of the product they received or a selfie after using it.',
+    '- For a hasPhoto message, the `text` field is the photo CAPTION (short — 3-10 words, eg "tadaaa baru sampai!", "haha ni gambar lepas pakai", "tu ni dia, packaging cantik"). NOT a full sentence.',
+    '- Photo bubbles MUST be incoming side (customer-sent, not shop-sent).',
+    '- Spread the 2 photo bubbles across the conversation — one early-ish (around message 2-4) when the customer first shows the product, and one later (around message 6-8) when they show results.',
   ].join('\n')
 }
 
@@ -161,7 +173,9 @@ function shapeChatPayload(
       authorIdx: m.side === 'incoming' ? 0 : 1,
       text: m.text,
       timestamp: baseTimestamps[i] ?? baseTimestamps[baseTimestamps.length - 1] ?? '14:23',
-      hasAttachment: 'none' as const,
+      // P52 — propagate photo-bubble flag to the canvas template so it
+      // renders an image attachment instead of a plain text bubble.
+      hasAttachment: m.hasPhoto ? 'photo' as const : 'none' as const,
     })),
     context: {
       topic: 'product-testimonial',
@@ -190,22 +204,50 @@ function chatFallback(req: TextPayloadRequest): LLMResponse {
     : req.locale === 'my-MY' ? 'Aisyah B.'
     : req.locale === 'id-ID' ? 'Putri W.'
     : 'Emma R.'
-  const phrases = req.locale === 'vi-VN'
+  // P52 — fallback path also emits 2 photo bubbles so the chat doesn't
+  // fall back to an empty-feeling text-only thread when Gemini fails.
+  const phrases = req.locale === 'my-MY'
+    ? [
+        { side: 'incoming' as const, text: `Hai shop, ${req.productName} ada stok lagi?` },
+        { side: 'outgoing' as const, text: 'Hai sis, ada lagi. Penghantaran 24 jam ya' },
+        { side: 'incoming' as const, text: 'baru dapat tadi 🥰', hasPhoto: true },
+        { side: 'outgoing' as const, text: 'Wahh terima kasih sis 🙏 sila guna ikut arahan ya' },
+        { side: 'incoming' as const, text: 'dah guna 2 minggu, hasilnya power gila!' },
+        { side: 'incoming' as const, text: 'tu ni dia, lepas pakai 😍', hasPhoto: true },
+        { side: 'outgoing' as const, text: 'memang power kan sis 😍 terima kasih untuk feedback!' },
+        { side: 'incoming' as const, text: 'mau order 2 lagi untuk mak aku' },
+      ]
+    : req.locale === 'vi-VN'
     ? [
         { side: 'incoming' as const, text: `chào shop, ${req.productName} còn ko ạ?` },
         { side: 'outgoing' as const, text: 'dạ còn ạ, bên em giao trong 24h ạ' },
-        { side: 'incoming' as const, text: 'dùng cỡ 2 tuần là thấy khác à?' },
-        { side: 'outgoing' as const, text: 'dạ chị, hầu hết khách phản hồi sau 10-14 ngày là rõ' },
-        { side: 'incoming' as const, text: 'ok shop, em đặt 2 hộp nha' },
-        { side: 'outgoing' as const, text: 'dạ em cảm ơn chị 🙏' },
+        { side: 'incoming' as const, text: 'ảnh đơn em vừa nhận nè shop 😍', hasPhoto: true },
+        { side: 'outgoing' as const, text: 'dạ tuyệt vời ạ, chị dùng đúng cách nha' },
+        { side: 'incoming' as const, text: 'dùng cỡ 2 tuần là thấy khác rồi nè' },
+        { side: 'incoming' as const, text: 'shop xem em sau 2 tuần ạ', hasPhoto: true },
+        { side: 'outgoing' as const, text: 'dạ chị, cảm ơn chị nhiều! 🙏' },
+        { side: 'incoming' as const, text: 'ok shop, em đặt thêm 2 hộp nha' },
+      ]
+    : req.locale === 'id-ID'
+    ? [
+        { side: 'incoming' as const, text: `Hi kak, ${req.productName} masih ada stoknya?` },
+        { side: 'outgoing' as const, text: 'Hi kak, masih. Kirim H+1 ya' },
+        { side: 'incoming' as const, text: 'baru sampai nih 😍', hasPhoto: true },
+        { side: 'outgoing' as const, text: 'wah makasih kak, pakai sesuai petunjuk ya' },
+        { side: 'incoming' as const, text: 'udah 2 minggu, hasilnya kelihatan banget' },
+        { side: 'incoming' as const, text: 'liat deh kak hasilnya', hasPhoto: true },
+        { side: 'outgoing' as const, text: 'mantap kak makasih reviewnya! 🙏' },
+        { side: 'incoming' as const, text: 'mau order 2 lagi buat ibu aku' },
       ]
     : [
         { side: 'incoming' as const, text: `hi shop, is ${req.productName} still in stock?` },
         { side: 'outgoing' as const, text: 'yes! ships within 24h' },
-        { side: 'incoming' as const, text: 'how long until i see results?' },
-        { side: 'outgoing' as const, text: 'most customers say 10-14 days' },
-        { side: 'incoming' as const, text: 'ok ill take 2' },
-        { side: 'outgoing' as const, text: 'thank you 🙏' },
+        { side: 'incoming' as const, text: 'just got my order, thanks!', hasPhoto: true },
+        { side: 'outgoing' as const, text: 'thank you! follow the directions inside' },
+        { side: 'incoming' as const, text: '2 weeks in, results are real' },
+        { side: 'incoming' as const, text: 'look at this!', hasPhoto: true },
+        { side: 'outgoing' as const, text: 'amazing — thanks for sharing 🙏' },
+        { side: 'incoming' as const, text: 'ill take 2 more for my mom' },
       ]
   return { customerDisplayName: localeName, messages: phrases }
 }

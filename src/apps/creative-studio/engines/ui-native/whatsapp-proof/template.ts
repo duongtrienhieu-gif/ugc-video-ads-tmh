@@ -31,6 +31,11 @@ export interface RenderInputs {
   timeline: MessageTimeline
   customerAvatarUrl: string
   locale: UINativeLocale
+  /** P52 — pool of person+product photos from prior creatives. Each
+   *  message flagged `hasAttachment: 'photo'` picks one photo from this
+   *  pool to render as a WhatsApp image bubble. Falls back to no-photo
+   *  text-only bubble when the pool is empty. */
+  reviewPhotoUrls?: string[]
 }
 
 export async function renderWhatsAppConversation(inputs: RenderInputs): Promise<HTMLCanvasElement> {
@@ -115,6 +120,14 @@ export async function renderWhatsAppConversation(inputs: RenderInputs): Promise<
   ctx.fillText(dateText, size.width / 2, cursor + dateH / 2)
   cursor += dateH + 24
 
+  // P52 — Pre-load workspace photo pool for image bubbles (customer-sent
+  //   photos in the chat). Falls back to text-only bubble when empty.
+  const photoPool: HTMLImageElement[] = []
+  for (const url of inputs.reviewPhotoUrls ?? []) {
+    try { photoPool.push(await loadImage(url)) } catch { /* skip on failure */ }
+  }
+  let photoCursor = 0
+
   // Message bubbles
   const bubbleMaxW = size.width * M.bubbleMaxWidthFrac
 
@@ -124,6 +137,70 @@ export async function renderWhatsAppConversation(inputs: RenderInputs): Promise<
     const bubbleBg = isOutgoing ? palette.outgoingBubbleBg : palette.incomingBubbleBg
     const bubbleFg = isOutgoing ? palette.outgoingBubbleFg : palette.incomingBubbleFg
 
+    // ── P52 — Photo bubble path: image-first bubble with text as caption
+    //   underneath. Real WhatsApp image messages render this way. Skip
+    //   if the photo pool is empty (no prior workspace creatives) — fall
+    //   through to the text bubble code below.
+    if (msg.hasAttachment === 'photo' && photoPool.length > 0) {
+      const photoImg = photoPool[photoCursor % photoPool.length]
+      photoCursor++
+      const photoBubbleW = Math.round(bubbleMaxW * 0.78)
+      const imgPad = 8
+      const photoSize = photoBubbleW - imgPad * 2 // square image
+      ctx.font = font(T, 'body')
+      const captionMaxW = photoBubbleW - M.bubblePaddingX * 2
+      const captionLines = msg.text ? wrapText(ctx, msg.text, captionMaxW) : []
+      const captionLH = T.bodySize * T.bodyLineHeight
+      const captionH = captionLines.length * captionLH
+      const photoBubbleH = imgPad + photoSize + (captionH > 0 ? captionH + 8 : 0) + M.bubblePaddingY + 12
+      const photoBubbleX = isOutgoing
+        ? size.width - M.sideMargin - photoBubbleW
+        : M.sideMargin
+
+      // Bubble background with shadow
+      ctx.shadowColor = 'rgba(0,0,0,0.06)'
+      ctx.shadowBlur = 4
+      ctx.shadowOffsetY = 1
+      roundedRectPath(ctx, photoBubbleX, cursor, photoBubbleW, photoBubbleH, M.bubbleRadius)
+      ctx.fillStyle = bubbleBg
+      ctx.fill()
+      ctx.shadowColor = 'transparent'; ctx.shadowBlur = 0; ctx.shadowOffsetY = 0
+
+      // Image clipped to a rounded square
+      ctx.save()
+      roundedRectPath(ctx, photoBubbleX + imgPad, cursor + imgPad, photoSize, photoSize, M.bubbleRadius - 4)
+      ctx.clip()
+      const scale = Math.max(photoSize / photoImg.naturalWidth, photoSize / photoImg.naturalHeight)
+      const dw = photoImg.naturalWidth * scale
+      const dh = photoImg.naturalHeight * scale
+      ctx.drawImage(photoImg, photoBubbleX + imgPad + (photoSize - dw) / 2, cursor + imgPad + (photoSize - dh) / 2, dw, dh)
+      ctx.restore()
+
+      // Caption (if any)
+      if (captionLines.length > 0) {
+        ctx.fillStyle = bubbleFg
+        ctx.font = font(T, 'body')
+        ctx.textAlign = 'left'
+        ctx.textBaseline = 'top'
+        for (let li = 0; li < captionLines.length; li++) {
+          ctx.fillText(captionLines[li], photoBubbleX + M.bubblePaddingX, cursor + imgPad + photoSize + 8 + li * captionLH)
+        }
+      }
+
+      // Timestamp + ticks at bottom-right of the bubble
+      ctx.font = font(T, 'meta')
+      ctx.fillStyle = isOutgoing ? 'rgba(255,255,255,0.85)' : palette.bubbleMetaFg
+      ctx.textAlign = 'right'
+      ctx.textBaseline = 'bottom'
+      ctx.fillText(msg.timestamp, photoBubbleX + photoBubbleW - M.bubblePaddingX - (isOutgoing ? 26 : 0), cursor + photoBubbleH - 6)
+      if (isOutgoing) drawBlueChecks(ctx, photoBubbleX + photoBubbleW - M.bubblePaddingX, cursor + photoBubbleH - 12)
+
+      cursor += photoBubbleH + M.bubbleGap
+      if (cursor > size.height - M.footerHeight - 80) break
+      continue
+    }
+
+    // ── Text bubble (default path)
     ctx.font = font(T, 'body')
     const textMaxW = bubbleMaxW - M.bubblePaddingX * 2 - 100
     const lines = wrapText(ctx, msg.text, textMaxW)
@@ -168,10 +245,7 @@ export async function renderWhatsAppConversation(inputs: RenderInputs): Promise<
     if (isOutgoing) drawBlueChecks(ctx, bubbleX + bubbleW - M.bubblePaddingX, cursor + bubbleH - 12)
 
     cursor += bubbleH + M.bubbleGap
-    // P51 — bubble cutoff is now raised by the iOS keyboard height so
-    // bubbles stop above the composer-keyboard stack instead of running
-    // into it. KEYBOARD_HEIGHT is defined below.
-    if (cursor > size.height - M.footerHeight - KEYBOARD_HEIGHT - 80) break
+    if (cursor > size.height - M.footerHeight - 80) break
   }
 
   // "Seen at HH:MM" on the last outgoing message
@@ -184,11 +258,11 @@ export async function renderWhatsAppConversation(inputs: RenderInputs): Promise<
     ctx.fillText(`${S.seen} ${cadence.seenAtLast}`, size.width - M.sideMargin, cursor)
   }
 
-  // P51 — composer rises above the iOS keyboard. Real WhatsApp
-  // screenshots taken mid-conversation include the open keyboard; the
-  // empty band at the bottom of the canvas pre-P51 read as "fake — the
-  // user wasn't actually typing", so the keyboard fills that gap.
-  const composerY = size.height - M.footerHeight - KEYBOARD_HEIGHT - IPHONE_15_PRO.safeAreaBottom
+  // Composer back at the bottom (P52 reverted P51 keyboard — looked fake).
+  // P52 fills the bottom band instead by emitting more messages + photo
+  // bubbles inside the conversation itself, which is what real WhatsApp
+  // screenshots do (customer sends a quick selfie / product photo).
+  const composerY = size.height - M.footerHeight - IPHONE_15_PRO.safeAreaBottom
   ctx.fillStyle = palette.composerBg
   ctx.fillRect(0, composerY, size.width, M.footerHeight)
 
@@ -216,142 +290,7 @@ export async function renderWhatsAppConversation(inputs: RenderInputs): Promise<
   ctx.beginPath(); ctx.arc(micCx, micCy, 12, 0.1 * Math.PI, 0.9 * Math.PI); ctx.stroke()
   ctx.beginPath(); ctx.moveTo(micCx, micCy + 12); ctx.lineTo(micCx, micCy + 20); ctx.stroke()
 
-  // P51 — iOS QWERTY keyboard below the composer
-  drawIOSKeyboard(ctx, {
-    x: 0,
-    y: composerY + M.footerHeight,
-    width: size.width,
-    height: KEYBOARD_HEIGHT,
-    safeAreaBottom: IPHONE_15_PRO.safeAreaBottom,
-  })
-
   return canvas
-}
-
-// ── P51 — iOS QWERTY keyboard (light theme, English layout) ────────────
-//
-// Rendered below the WhatsApp composer to give the impression that the
-// screenshot was captured while the user was actively typing — the most
-// common moment a real WhatsApp chat gets screenshotted for sharing.
-// Pre-P51 the bottom ~150-700px was empty white space which gave the
-// fake "scrolled-up chat with nothing happening" smell. The keyboard
-// adds the missing authenticity beat.
-
-const KEYBOARD_HEIGHT = 720
-
-interface KeyboardInputs {
-  x: number
-  y: number
-  width: number
-  height: number
-  safeAreaBottom: number
-}
-
-function drawIOSKeyboard(ctx: CanvasRenderingContext2D, k: KeyboardInputs): void {
-  const { x, y, width, height, safeAreaBottom } = k
-  // Backdrop — iOS keyboard pale gray
-  ctx.fillStyle = '#D1D5DB'
-  ctx.fillRect(x, y, width, height + safeAreaBottom)
-
-  // Predictive text bar at top
-  const predY = y + 8
-  const predH = 64
-  ctx.fillStyle = '#D1D5DB'
-  ctx.fillRect(x, predY, width, predH)
-  const predicts = ['hai', 'best', '👍']
-  ctx.font = '500 26px -apple-system, BlinkMacSystemFont, "SF Pro Text", Helvetica, sans-serif'
-  ctx.textAlign = 'center'
-  ctx.textBaseline = 'middle'
-  for (let i = 0; i < predicts.length; i++) {
-    const colX = x + (width / 3) * (i + 0.5)
-    if (i < predicts.length - 1) {
-      // Vertical divider
-      ctx.fillStyle = '#AEB3BA'
-      ctx.fillRect(x + (width / 3) * (i + 1) - 1, predY + 14, 2, predH - 28)
-    }
-    ctx.fillStyle = '#1C1C1E'
-    ctx.fillText(predicts[i], colX, predY + predH / 2)
-  }
-
-  // Key rows
-  const keyTop = predY + predH + 14
-  const keyAreaH = height - (keyTop - y) - 18
-  const rowH = keyAreaH / 4 - 6
-  const rowGap = 14
-
-  const row1 = ['q','w','e','r','t','y','u','i','o','p']
-  const row2 = ['a','s','d','f','g','h','j','k','l']
-  const row3 = ['z','x','c','v','b','n','m']
-
-  const keyW = (width - 22) / 10
-  drawKeyRow(ctx, x + 11, keyTop,                        keyW, rowH, row1)
-  drawKeyRow(ctx, x + 11 + keyW * 0.5, keyTop + rowH + rowGap, keyW, rowH, row2)
-
-  // Row 3 with shift (left) + 7 letters + backspace (right)
-  const r3Y = keyTop + (rowH + rowGap) * 2
-  const sideW = keyW * 1.4
-  drawSpecialKey(ctx, x + 11,           r3Y, sideW, rowH, '⇧')
-  drawKeyRow   (ctx, x + 11 + sideW + 6, r3Y, keyW, rowH, row3)
-  drawSpecialKey(ctx, x + width - 11 - sideW, r3Y, sideW, rowH, '⌫')
-
-  // Bottom row: 123 / 🌐 / space (long) / return
-  const r4Y = keyTop + (rowH + rowGap) * 3
-  const bottomKeyW = keyW * 1.4
-  const spaceW = width - 22 - bottomKeyW * 3 - 18
-  drawSpecialKey(ctx, x + 11,                                r4Y, bottomKeyW, rowH, '123')
-  drawSpecialKey(ctx, x + 11 + bottomKeyW + 6,               r4Y, bottomKeyW, rowH, '🌐')
-  drawSpecialKey(ctx, x + 11 + (bottomKeyW + 6) * 2,         r4Y, spaceW,     rowH, 'space', '#FFFFFF', true)
-  drawSpecialKey(ctx, x + width - 11 - bottomKeyW,           r4Y, bottomKeyW, rowH, 'return')
-
-  // iOS home indicator centered in the safe-area-bottom
-  const hiY = y + height + safeAreaBottom * 0.55
-  ctx.fillStyle = '#1C1C1E'
-  roundedRectPath(ctx, x + width / 2 - 70, hiY, 140, 5, 2.5)
-  ctx.fill()
-}
-
-function drawKeyRow(
-  ctx: CanvasRenderingContext2D,
-  startX: number, y: number, keyW: number, keyH: number,
-  letters: string[],
-): void {
-  const gap = 6
-  const usableW = (letters.length * keyW) + (letters.length - 1) * gap
-  // Start with no horizontal offset — caller positions startX precisely
-  void usableW
-  for (let i = 0; i < letters.length; i++) {
-    const kx = startX + i * (keyW + gap)
-    drawSpecialKey(ctx, kx, y, keyW, keyH, letters[i].toUpperCase())
-  }
-}
-
-function drawSpecialKey(
-  ctx: CanvasRenderingContext2D,
-  x: number, y: number, w: number, h: number,
-  label: string,
-  fill: string = '#FFFFFF',
-  isSpace: boolean = false,
-): void {
-  ctx.save()
-  ctx.shadowColor = 'rgba(0,0,0,0.18)'
-  ctx.shadowBlur = 0
-  ctx.shadowOffsetY = 2
-  roundedRectPath(ctx, x, y, w, h, 10)
-  ctx.fillStyle = fill
-  ctx.fill()
-  ctx.restore()
-
-  ctx.fillStyle = '#1C1C1E'
-  ctx.textAlign = 'center'
-  ctx.textBaseline = 'middle'
-  if (isSpace) {
-    ctx.font = '500 24px -apple-system, sans-serif'
-  } else if (label.length === 1) {
-    ctx.font = '500 32px -apple-system, sans-serif'
-  } else {
-    ctx.font = '500 26px -apple-system, sans-serif'
-  }
-  ctx.fillText(label, x + w / 2, y + h / 2 + 1)
 }
 
 function drawHeaderGlyph(ctx: CanvasRenderingContext2D, cx: number, cy: number, kind: 'video' | 'phone' | 'kebab') {

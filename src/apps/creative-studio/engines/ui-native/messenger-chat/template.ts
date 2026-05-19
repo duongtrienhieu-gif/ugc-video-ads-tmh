@@ -40,6 +40,11 @@ export interface RenderInputs {
   locale?: import('../../../types/uiNative').UINativeLocale
   /** P12 — accepted but not used (no product thumb in messenger). */
   productImageUrl?: string
+  /** P52 — workspace photo pool for image-bubble messages. Matches the
+   *  WhatsApp template plumbing; messages flagged hasAttachment 'photo'
+   *  pick one image from this pool per render. Falls back to text-only
+   *  bubble when empty. */
+  reviewPhotoUrls?: string[]
 }
 
 export async function renderMessengerConversation(
@@ -161,12 +166,80 @@ export async function renderMessengerConversation(
     inlineAvatarImg = null
   }
 
+  // P52 — pre-load workspace photo pool for image bubbles
+  const photoPool: HTMLImageElement[] = []
+  for (const url of inputs.reviewPhotoUrls ?? []) {
+    try { photoPool.push(await loadImage(url)) } catch { /* skip on failure */ }
+  }
+  let photoCursor = 0
+
   for (let i = 0; i < inputs.text.items.length; i++) {
     const msg = inputs.text.items[i]
     const isOutgoing = msg.side === 'outgoing'
     const bubbleBg = isOutgoing ? palette.outgoingBubbleBg : palette.incomingBubbleBg
     const bubbleFg = isOutgoing ? palette.outgoingBubbleFg : palette.incomingBubbleFg
 
+    // ── P52 — Photo bubble path: rounded image + optional caption underneath
+    if (msg.hasAttachment === 'photo' && photoPool.length > 0) {
+      const photoImg = photoPool[photoCursor % photoPool.length]
+      photoCursor++
+      const photoBubbleW = Math.round(bubbleMaxW * 0.80)
+      const imgPad = 8
+      const photoSize = photoBubbleW - imgPad * 2
+      const captionLines = msg.text ? wrapText(ctx, msg.text, photoBubbleW - bubblePadX * 2) : []
+      const captionLH = 36
+      const captionH = captionLines.length * captionLH
+      const photoBubbleH = imgPad + photoSize + (captionH > 0 ? captionH + 6 : 0) + bubblePadY
+
+      const photoBubbleX = isOutgoing
+        ? size.width - sideMargin - photoBubbleW
+        : sideMargin + inlineAvatarRadius * 2 + inlineAvatarGap
+
+      // Avatar tail on incoming only when this is end-of-burst
+      const nextMsgPB = inputs.text.items[i + 1]
+      const isLastInBurstPB = !isOutgoing && (!nextMsgPB || nextMsgPB.side === 'outgoing')
+      if (isLastInBurstPB) {
+        if (inlineAvatarImg) {
+          drawCircularAvatar(ctx, inlineAvatarImg, sideMargin + inlineAvatarRadius, cursor + photoBubbleH - inlineAvatarRadius, inlineAvatarRadius)
+        } else {
+          ctx.fillStyle = '#BCC0C4'
+          ctx.beginPath()
+          ctx.arc(sideMargin + inlineAvatarRadius, cursor + photoBubbleH - inlineAvatarRadius, inlineAvatarRadius, 0, Math.PI * 2)
+          ctx.fill()
+        }
+      }
+
+      roundedRectPath(ctx, photoBubbleX, cursor, photoBubbleW, photoBubbleH, 22)
+      ctx.fillStyle = bubbleBg
+      ctx.fill()
+
+      // Image clipped to rounded square
+      ctx.save()
+      roundedRectPath(ctx, photoBubbleX + imgPad, cursor + imgPad, photoSize, photoSize, 18)
+      ctx.clip()
+      const scale = Math.max(photoSize / photoImg.naturalWidth, photoSize / photoImg.naturalHeight)
+      const dw = photoImg.naturalWidth * scale
+      const dh = photoImg.naturalHeight * scale
+      ctx.drawImage(photoImg, photoBubbleX + imgPad + (photoSize - dw) / 2, cursor + imgPad + (photoSize - dh) / 2, dw, dh)
+      ctx.restore()
+
+      // Caption text
+      if (captionLines.length > 0) {
+        ctx.fillStyle = bubbleFg
+        ctx.font = '400 28px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
+        ctx.textAlign = 'left'
+        ctx.textBaseline = 'top'
+        for (let li = 0; li < captionLines.length; li++) {
+          ctx.fillText(captionLines[li], photoBubbleX + bubblePadX, cursor + imgPad + photoSize + 6 + li * captionLH)
+        }
+      }
+
+      cursor += photoBubbleH + bubbleGap
+      if (cursor > size.height - 200) break
+      continue
+    }
+
+    // ── Text bubble (default path)
     const textMaxW = bubbleMaxW - bubblePadX * 2
     const lines = wrapText(ctx, msg.text, textMaxW)
     const lineH = 36
