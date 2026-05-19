@@ -169,6 +169,20 @@ export interface FourTier<T = string> {
   tier4_offniche: T[]
 }
 
+/** P5 — 1 combo deal tier extract từ product.offer text. */
+export interface ComboDeal {
+  /** Deal label (e.g. "BUY 1 GET 1 FREE" / "BELI 1 PERCUMA 1"). */
+  label:           string
+  /** Sale price verbatim with currency (e.g. "RM59"). */
+  price:           string
+  /** Original price gạch (e.g. "RM129"). Optional. */
+  originalPrice?:  string
+  /** Savings label tính được (e.g. "JIMAT RM70" or "50% OFF"). Optional. */
+  savingsLabel?:   string
+  /** Benefit bullets (e.g. ["Gejala lega 7 hari", "Penyelesaian dalam 14 hari"]). */
+  benefits?:       string[]
+}
+
 /** Identity tổng hợp sản phẩm — extract 1 LẦN / pack, dùng verbatim cho
  *  mọi prompt sau này. Đây là chỗ chống identity drift cốt lõi. */
 export interface ProductIdentity {
@@ -188,6 +202,11 @@ export interface ProductIdentity {
   coBrandBadges:          string[]
   trustBadges:            string[]
   priceTag:               string
+  /** P5 — structured combo deals extract từ product.offer text.
+   *  ORDERED: comboDeals[0] luôn là headline/primary deal (entry-level,
+   *  hấp dẫn nhất, dùng cho offer_01 banner). Full array dùng cho
+   *  offer_02 combo-vertical infographic. */
+  comboDeals:             ComboDeal[]
 
   // ─── Subject identity (P4 NEW — fix lỗi sec 4 AI ra đàn ông châu Âu) ───
   /** Lock chủ thể người trong ảnh theo target market. */

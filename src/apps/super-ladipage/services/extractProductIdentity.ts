@@ -100,7 +100,8 @@ function isValidIdentity(x: unknown): x is ProductIdentity {
     typeof subjLock.primary       === 'string' &&
     !!o.painPointsByTier &&
     !!o.transformationByTier &&
-    Array.isArray(o.visualAntiPatterns)
+    Array.isArray(o.visualAntiPatterns) &&
+    Array.isArray(o.comboDeals)
   )
 }
 
@@ -143,6 +144,11 @@ function parseIdentityJson(raw: string): ProductIdentity {
       primary: 'Malaysian Muslim woman wearing hijab, mid-20s to early 40s, warm friendly genuine look',
       secondary: 'Malaysian man, mid-30s to 50s, clean appearance',
     }
+  }
+
+  // P5 defensive — comboDeals luôn là array (Gemini có thể omit nếu offer rỗng)
+  if (!Array.isArray(id.comboDeals)) {
+    id.comboDeals = []
   }
 
   return parsed as ProductIdentity

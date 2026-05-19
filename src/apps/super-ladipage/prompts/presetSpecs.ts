@@ -258,11 +258,14 @@ const UGC_MALAYSIA_SPEC: PresetSpec = {
     },
 
     // ═══════════════════════════════════════════════════════════════
-    // 17. OFFER — 1 ảnh (giảm từ 2), 16:9, recipe G/promo
+    // 17. OFFER — 2 ảnh, recipe G mixed variants:
+    //   offer_01.jpg — 16:9 promo banner (recipeVariant="promo")
+    //   offer_02.jpg — 9:16 combo vertical (recipeVariant="combo-vertical")
+    // Section aspect mặc định 16:9; offer_02 override sang 9:16 trong R9 §17.
     // ═══════════════════════════════════════════════════════════════
     {
       type: 'offer',
-      imageCount: 1,
+      imageCount: 2,
       recipeId: 'G',
       aspectRatio: '16:9',
       productPolicy: 'required',

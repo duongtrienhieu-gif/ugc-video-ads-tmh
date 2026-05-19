@@ -130,7 +130,7 @@ R5. PRODUCT POLICY
 
 R6. RECIPE VARIANTS (set imagePrompts[i].concept.recipeVariant)
 - Recipe F: "warning-news" (news-proof sec 6) | "whatsapp" (sec 14) | "social-platform" (sec 13) | "trust-news"
-- Recipe G: "social-proof-banner" (sec 2) | "promo" (sec 17)
+- Recipe G: "social-proof-banner" (sec 2) | "promo" (sec 17 image 1, 16:9 banner) | "combo-vertical" (sec 17 image 2, 9:16 combo deals stack)
 - Recipe H: "expert" (1st image of sec 12) | "kol" (2nd image of sec 12)
 - Recipes A/B/C/D/E have NO variants — omit field.
 
@@ -197,7 +197,30 @@ Different sender names + timestamps each image.
 
 §16 faq (n=0): just text, faqs[] + faqsVi[] parallel index-aligned (Vietnamese translation). imagePrompts: [].
 
-§17 offer (n=1, recipeVariant="promo"): 16:9 promo banner. textOverlayBlocks = 3-line stacked headline + price "${identity.priceTag}" (role="price") + trust badges + CTA arrow. Heavy text.
+§17 offer (n=2): TWO images using recipe G with different variants —
+
+  offer_01.jpg — recipeVariant="promo", aspectRatio="16:9":
+    16:9 hard-sell promo banner. ⚠️ textOverlayBlocks MUST use ACTUAL data
+    from identity.comboDeals[0] (headline deal). DO NOT invent generic offers.
+    Required text blocks:
+      - Main headline: deal label translated to ${langName} (e.g. if
+        comboDeals[0].label="BUY 1 GET 1 FREE" → headline "BELI 1 PERCUMA 1!")
+      - Price block (role="price"): comboDeals[0].price verbatim (e.g. "RM59"),
+        plus originalPrice gạch nếu có
+      - Savings sticker: comboDeals[0].savingsLabel nếu có (e.g. "JIMAT RM70")
+      - Trust badges: ${'${identity.trustBadges.join'} pattern + CTA arrow
+    ⛔ KHÔNG bịa "DISKAUN 30%", "FREE SHIPPING" nếu không có trong data.
+
+  offer_02.jpg — recipeVariant="combo-vertical", aspectRatio="9:16":
+    9:16 vertical infographic stack 2-3 combo tiers. textOverlayBlocks MUST
+    cover ALL entries from identity.comboDeals — each tier becomes one
+    vertical block in image with: tier label, price, originalPrice gạch,
+    savings sticker, benefit bullets (all verbatim from comboDeals[i] data).
+    If comboDeals.length === 0 → skip this image (set imagePrompts.length=1
+    để fallback về 1 ảnh — fail-soft).
+    Header on top: "HARGA TERBAIK" or "TAWARAN COMBO HARI INI" in ${langName}.
+    Each tier visually distinct (different accent color) — AI creative,
+    NOT cloning any specific reference UI.
 
 Now generate the pack. Output JSON only.
 `.trim()

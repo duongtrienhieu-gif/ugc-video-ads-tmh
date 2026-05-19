@@ -290,41 +290,84 @@ function recipeG(input: RecipeInput): string {
 ${safeBlocks(concept).map(formatTextBlock).join('\n')}`
     : 'BANNER TEXT: empty.'
 
+  // Primary deal (used by promo variant) — comboDeals[0] hoặc fallback priceTag
+  const primaryDeal = identity.comboDeals?.[0]
+  const primaryDealLine = primaryDeal
+    ? `PRIMARY DEAL DATA (use this EXACTLY in banner text — NOT generic invented offers):
+  - Label: "${primaryDeal.label}"
+  - Price: "${primaryDeal.price}"${primaryDeal.originalPrice ? `\n  - Original price (gạch): "${primaryDeal.originalPrice}"` : ''}${primaryDeal.savingsLabel ? `\n  - Savings: "${primaryDeal.savingsLabel}"` : ''}`
+    : `PRICE: "${identity.priceTag}" (no combo deals — use single price).`
+
+  // Full combo deals list (used by combo-vertical variant)
+  const allDealsLines = (identity.comboDeals && identity.comboDeals.length > 0)
+    ? identity.comboDeals.map((d, i) =>
+        `  Tier ${i + 1}: label="${d.label}", price="${d.price}"${d.originalPrice ? `, original="${d.originalPrice}"` : ''}${d.savingsLabel ? `, savings="${d.savingsLabel}"` : ''}${d.benefits?.length ? `, benefits=[${d.benefits.map((b) => `"${b}"`).join(', ')}]` : ''}`,
+      ).join('\n')
+    : '  (no combo deals available)'
+
   let variantBlock = ''
   if (variant === 'social-proof-banner') {
     variantBlock = `
-LAYOUT (SOCIAL PROOF BANNER variant):
-  - Bold trust-building banner with 4-6 customer testimonial cards arranged in 2x2 or 2x3 grid.
+LAYOUT (SOCIAL PROOF BANNER):
+  - Bold trust-building banner with 4-6 customer testimonial cards in 2x2 or 2x3 grid.
   - HEADER: dark red/burgundy band + bold white headline (e.g. "BUKTI KEPERCAYAAN: RIBUAN RAKYAT MALAYSIA TELAH MENCUBA!").
-  - METRICS ROW (3-4 stat blocks): ⭐4.8/5 + sales count (e.g. "25,000+ KOTAK TERJUAL") + satisfied count ("18,000+ PELANGGAN BERPUAS HATI") + optional trending badge.
+  - METRICS ROW (3-4 stat blocks): ⭐4.8/5 + sales count ("25,000+ KOTAK TERJUAL") + satisfied count ("18,000+ PELANGGAN BERPUAS HATI") + optional trending badge.
   - 4-6 TESTIMONIAL CARDS: small Malaysian avatar (mix gender + age + hijab + uncles) + full name + location (KL/JB/Penang) + 5-star + 1-2 sentence Malay testimonial. Mini product thumbnail attached.
   - PRODUCT IMAGE: small-mid size center/bottom, SHAPE LOCK applied.
   - BOTTOM: trust badges (delivery "Penghantaran Pantas 1-3 Hari", warranty "Jaminan Pulangan Wang 7 Hari", QR + HALAL + KKM).
-  - NO PRICE / NO currency symbol in this image — trust signals only.
+  - NO PRICE / NO currency symbol — trust signals only.
   - PALETTE: dark red/burgundy + cream + gold. Premium hard-sell.`
+  } else if (variant === 'combo-vertical') {
+    variantBlock = `
+LAYOUT (COMBO DEALS VERTICAL):
+  - Vertical portrait infographic showing 2-3 combo deal tiers stacked top→bottom.
+  - HEADER: bold title at top (e.g. "HARGA TERBAIK" / "TAWARAN COMBO HARI INI" / "PILIH PAKEJ ANDA").
+  - EACH TIER BLOCK (use ALL data from FULL DEALS LIST above):
+      • Product packaging mockup (1-3 units depending on tier quantity, e.g. tier "BUY 2 GET 2" shows 4 boxes), SHAPE LOCK applied
+      • Tier name badge ("RAWATAN CEPAT" / "RAWATAN MENDALAMI" / "TERAPI SIHAT MAMPAN" or similar Malay action-naming)
+      • Deal label prominent (e.g. "BELI 1 PERCUMA 1")
+      • Original price gạch (if available) → Sale price LARGE highlight (e.g. "RM129 → RM59")
+      • Savings badge sticker (if available) — starburst shape with "JIMAT RM70" or "50% OFF"
+      • 2-4 benefit bullets with green checkmark icons (target language)
+  - Each tier visually DISTINCT (different accent color: tier 1=blue/teal, tier 2=red, tier 3=amber)
+  - "HOT DEAL" / "BEST SELLER" sticker on tier 2 or 3 (highest value combo)
+  - PALETTE: vibrant ecommerce — high contrast, NOT minimal. Stack with clear visual separation between tiers.
+  - AI CREATIVE: design fresh layout, do NOT clone any specific reference. Goal = clear hierarchy + strong sale visual.`
   } else {
     variantBlock = `
 LAYOUT (PROMO BANNER):
   - Native Malaysian FB/TikTok ecommerce promo banner. Hard-sell visual.
   - Product packaging large, centered or to one side, SHAPE LOCK applied.
-  - Multi-line stacked headlines in bold condensed sans-serif.
-  - PRICE "${identity.priceTag}" prominently displayed (promo is one of 2 places price is allowed in-image).
+  - Headlines: USE THE PRIMARY DEAL LABEL from data above (translated to target language).
+    Example if primary label is "BUY 1 GET 1 FREE" and language=ms:
+      headline = "BELI 1 PERCUMA 1!" (NOT generic "DISKAUN 30%").
+  - PRICE block: PRIMARY DEAL PRICE from data above, prominently displayed.
+    Use originalPrice (gạch) → price (highlight) format if both available.
+  - Savings sticker: use savingsLabel from data above if available (e.g. "JIMAT RM70" starburst).
   - Trust badges: ${identity.trustBadges.join(', ') || '(none)'}.
-  - CTA button shape with directional arrow.
-  - PALETTE: vibrant high-contrast (amber/red OR violet/gold), ecommerce hard-sell.`
+  - CTA button with directional arrow.
+  - PALETTE: vibrant high-contrast (amber/red OR violet/gold).
+  - ⛔ TUYỆT ĐỐI KHÔNG bịa generic offers ("DISKAUN 30%", "FREE SHIPPING")
+    nếu không có trong PRIMARY DEAL DATA. Chỉ dùng data exact.`
   }
 
   return [
     `BANNER CONCEPT: ${concept.conceptScene}.`,
     brandLockBlock(identity, concept.productInScene),
     banner,
+    // Inject deal data — recipe templates pull these into prompt
+    variant === 'combo-vertical'
+      ? `FULL DEALS LIST (use ALL tiers below — each as a separate vertical block):\n${allDealsLines}`
+      : primaryDealLine,
     variantBlock.trim(),
     safeDecor(concept).length > 0 ? `EXTRA: ${safeDecor(concept).map(formatDecor).join('; ')}` : '',
     technicalBlock(concept.aspectRatio),
     antiPatternBlock(identity),
     variant === 'promo'
-      ? `STRICT: price reads EXACTLY "${identity.priceTag}". Banner text legible. Product matches SHAPE LOCK. No watermark.`
-      : `STRICT: metric numbers + testimonial text legible. Avatars look like real Malaysians. NO PRICE / currency symbol in image. No watermark.`,
+      ? `STRICT: prices + deal label render EXACTLY from PRIMARY DEAL DATA above. Banner text legible. Product matches SHAPE LOCK. No watermark. No invented offers.`
+      : variant === 'combo-vertical'
+        ? `STRICT: all tier prices + labels render EXACTLY from FULL DEALS LIST above. Each tier visually distinct + readable. Product matches SHAPE LOCK in every tier mockup. No watermark.`
+        : `STRICT: metric numbers + testimonial text legible. Avatars look like real Malaysians. NO PRICE / currency symbol in image. No watermark.`,
   ].filter(Boolean).join('\n\n')
 }
 

@@ -28,6 +28,15 @@ SCHEMA:
   "coBrandBadges":          string[],
   "trustBadges":            string[],
   "priceTag":               string,
+  "comboDeals": [
+    {
+      "label":          string,    // "BUY 1 GET 1 FREE" / "BELI 1 PERCUMA 1"
+      "price":          string,    // "RM59"
+      "originalPrice":  string,    // "RM129" (optional, leave "" if none)
+      "savingsLabel":   string,    // "JIMAT RM70" or "50% OFF" (optional, leave "" if none)
+      "benefits":       string[]   // optional, leave [] if none
+    }
+  ],
 
   "subjectIdentityLock": {
     "primary":   string,
@@ -87,6 +96,26 @@ SCHEMA:
 9. priceTag — price string the user wants displayed in promo banners
    (e.g. "RM59", "Rp159.000", "299.000đ"). Use product.offer if available,
    else infer reasonable price for market+category.
+
+9b. comboDeals — STRUCTURED ARRAY of combo tiers parsed from product.offer
+    text. CRITICAL: this field drives offer banners. Wrong data = banner shows wrong prices.
+    Parsing rules:
+      - Split product.offer text by "," / "and" / "or" / newline into tiers.
+      - For each tier, extract:
+          label:          action + quantity in target market language
+                          (e.g. "BUY 1 GET 1 FREE" or "BELI 1 PERCUMA 1")
+          price:          currency code + number verbatim (e.g. "RM59")
+          originalPrice:  if mentioned (e.g. "was RM129"); else ""
+          savingsLabel:   computed if both prices known
+                          (e.g. originalPrice="RM129" + price="RM59" → "JIMAT RM70")
+                          OR percentage (e.g. "50% OFF"); else ""
+          benefits:       short benefit bullets in target language (if any), else []
+      - ORDER: entry-level / cheapest / most attractive tier FIRST → comboDeals[0].
+        comboDeals[0] is the HEADLINE deal, used by promo banner.
+      - Example input "BUY 1 GET 1 FREE for RM59, BUY 2 GET 2 FREE for RM99":
+          comboDeals[0] = { label: "BUY 1 GET 1 FREE", price: "RM59", ...}
+          comboDeals[1] = { label: "BUY 2 GET 2 FREE", price: "RM99", ...}
+      - If product.offer is empty / no combos → comboDeals = [].
 
 10. subjectIdentityLock — CRITICAL field to fix the "AI renders European
     man instead of Malaysian Muslim woman" bug.
