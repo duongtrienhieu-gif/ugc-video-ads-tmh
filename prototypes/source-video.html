@@ -1,0 +1,381 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Source Video — Prototype</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 24px;
+      color: #1f2937;
+      background: #fafafa;
+    }
+    h1 { margin: 0 0 4px; font-size: 24px; }
+    h2 { font-size: 18px; margin: 24px 0 8px; }
+    .subtitle { color: #6b7280; margin: 0 0 20px; font-size: 14px; }
+    .config {
+      background: white;
+      border: 1px solid #e5e7eb;
+      padding: 16px;
+      border-radius: 10px;
+      margin-bottom: 20px;
+    }
+    .config-row { display: grid; grid-template-columns: 200px 1fr; gap: 12px; align-items: center; margin-bottom: 8px; }
+    .config label { font-size: 13px; font-weight: 500; color: #374151; }
+    .config input, textarea {
+      width: 100%;
+      padding: 8px 10px;
+      border: 1px solid #d1d5db;
+      border-radius: 6px;
+      font-size: 14px;
+      font-family: inherit;
+    }
+    .config small { color: #9ca3af; font-size: 12px; }
+    textarea {
+      min-height: 220px;
+      font-family: ui-monospace, "Cascadia Code", Menlo, monospace;
+      line-height: 1.6;
+      background: white;
+    }
+    button {
+      background: #3b82f6;
+      color: white;
+      border: none;
+      padding: 12px 28px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 15px;
+      font-weight: 500;
+      transition: background 0.15s;
+    }
+    button:hover:not(:disabled) { background: #2563eb; }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
+    .scene {
+      background: white;
+      border: 1px solid #e5e7eb;
+      border-radius: 10px;
+      padding: 16px;
+      margin: 16px 0;
+    }
+    .scene-header { display: flex; align-items: baseline; gap: 8px; margin-bottom: 8px; }
+    .scene-num { background: #3b82f6; color: white; font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 999px; }
+    .scene-line { font-size: 16px; font-weight: 500; }
+    .intent {
+      background: #eff6ff;
+      border-left: 3px solid #3b82f6;
+      padding: 8px 12px;
+      border-radius: 4px;
+      font-size: 14px;
+      margin: 8px 0;
+      color: #1e40af;
+    }
+    .keywords { font-size: 13px; color: #6b7280; margin: 6px 0 12px; }
+    .keywords code { background: #f3f4f6; padding: 2px 6px; border-radius: 4px; font-size: 12px; }
+    .results {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+      gap: 12px;
+      margin-top: 12px;
+    }
+    .card {
+      border: 1px solid #e5e7eb;
+      border-radius: 8px;
+      padding: 8px;
+      transition: border-color 0.15s, transform 0.15s;
+      background: #fafbfc;
+    }
+    .card:hover { border-color: #3b82f6; transform: translateY(-1px); }
+    .card a { color: inherit; text-decoration: none; display: block; }
+    .card img {
+      width: 100%;
+      aspect-ratio: 16/9;
+      object-fit: cover;
+      border-radius: 4px;
+      background: #e5e7eb;
+    }
+    .card .title { font-size: 13px; font-weight: 500; margin: 8px 0 4px; line-height: 1.4; }
+    .card .why { font-size: 12px; color: #6b7280; font-style: italic; margin: 4px 0; }
+    .card .url-small { font-size: 11px; color: #9ca3af; word-break: break-all; }
+    .source-tag {
+      display: inline-block;
+      padding: 1px 6px;
+      border-radius: 4px;
+      font-size: 10px;
+      font-weight: 600;
+      margin-right: 4px;
+      vertical-align: middle;
+    }
+    .source-tag.youtube { background: #fee2e2; color: #dc2626; }
+    .source-tag.web { background: #dbeafe; color: #1d4ed8; }
+    .error { background: #fef2f2; color: #991b1b; padding: 10px 12px; border-radius: 6px; margin: 8px 0; font-size: 13px; }
+    .loading { color: #6b7280; font-style: italic; padding: 12px; }
+    .empty { color: #9ca3af; font-size: 13px; padding: 12px; text-align: center; }
+    .status-bar {
+      position: sticky;
+      top: 0;
+      background: white;
+      border: 1px solid #e5e7eb;
+      padding: 10px 14px;
+      border-radius: 8px;
+      margin-bottom: 12px;
+      font-size: 13px;
+      z-index: 10;
+    }
+  </style>
+</head>
+<body>
+  <h1>🎬 Source Video — Prototype</h1>
+  <p class="subtitle">Test xem AI có thực sự tìm được link video phù hợp với kịch bản UGC không. File HTML standalone — không cần build, mở trực tiếp trong browser.</p>
+
+  <div class="config">
+    <div class="config-row">
+      <label>Gemini API Key</label>
+      <input id="geminiKey" type="password" placeholder="AIza...">
+    </div>
+    <div class="config-row">
+      <label>YouTube Data API Key</label>
+      <input id="youtubeKey" type="password" placeholder="AIza...">
+    </div>
+    <small>Key được lưu trong <code>localStorage</code> của trình duyệt này, không gửi đi đâu khác.</small>
+  </div>
+
+  <h2>Kịch bản UGC</h2>
+  <textarea id="script" placeholder="Paste kịch bản vào đây...">Bạn có biết, sau tuổi 25, collagen trong cơ thể giảm 1.5% mỗi năm?
+Đó là lý do tại sao da bắt đầu xuất hiện nếp nhăn, chảy xệ, mất đàn hồi.
+Mình đã thử rất nhiều loại collagen nhưng hầu hết đều có vị tanh khó uống.
+Cho đến khi mình tìm thấy Collagen Peptide thế hệ mới của hãng X.
+Phân tử siêu nhỏ chỉ 2000 dalton, hấp thu trực tiếp vào lớp hạ bì.
+Sau 4 tuần dùng, da mình mịn hơn rõ rệt, nếp nhăn vùng mắt mờ đi.
+Hộp 30 gói chỉ 599k, dùng được cả tháng.
+Bấm vào giỏ hàng dưới đây để được giảm thêm 20% cho đơn đầu tiên nhé.</textarea>
+
+  <p style="margin-top: 16px;"><button id="runBtn" onclick="run()">🔍 Phân tích &amp; Tìm video</button></p>
+
+  <div id="output"></div>
+
+  <script>
+    // ── Persist API keys to localStorage ─────────────────────────────────────
+    const geminiInput = document.getElementById('geminiKey')
+    const ytInput = document.getElementById('youtubeKey')
+    geminiInput.value = localStorage.getItem('prototype_geminiKey') || ''
+    ytInput.value = localStorage.getItem('prototype_youtubeKey') || ''
+    geminiInput.addEventListener('change', e => localStorage.setItem('prototype_geminiKey', e.target.value))
+    ytInput.addEventListener('change', e => localStorage.setItem('prototype_youtubeKey', e.target.value))
+
+    // ── Main run flow ────────────────────────────────────────────────────────
+    async function run() {
+      const geminiKey = geminiInput.value.trim()
+      const youtubeKey = ytInput.value.trim()
+      const script = document.getElementById('script').value.trim()
+      const output = document.getElementById('output')
+      const btn = document.getElementById('runBtn')
+
+      if (!geminiKey || !youtubeKey || !script) {
+        output.innerHTML = '<div class="error">⚠️ Cần điền đủ Gemini key, YouTube key, và kịch bản.</div>'
+        return
+      }
+
+      btn.disabled = true
+      const startTime = Date.now()
+      output.innerHTML = '<div class="status-bar">⏳ Đang phân tích kịch bản thành scene...</div>'
+
+      try {
+        // Step 1: Parse script into scenes (no search, just JSON output)
+        const scenes = await parseScript(geminiKey, script)
+        if (!scenes.length) {
+          output.innerHTML = '<div class="error">❌ Gemini không tách được scene nào từ kịch bản này.</div>'
+          return
+        }
+
+        // Render scene skeletons immediately
+        let html = `<div class="status-bar">✅ Tách được <strong>${scenes.length} scene</strong>. Đang tìm video song song...</div>`
+        scenes.forEach((s, i) => {
+          html += `
+            <div class="scene" id="scene-${i}">
+              <div class="scene-header">
+                <span class="scene-num">Scene ${i + 1}</span>
+                <span class="scene-line">${escapeHtml(s.line)}</span>
+              </div>
+              <div class="intent">💡 ${escapeHtml(s.visualIntent)}</div>
+              <div class="keywords">
+                <strong>Keywords:</strong> ${escapeHtml(s.keywordVi)} · <code>${escapeHtml(s.keywordEn)}</code>
+              </div>
+              <div class="results" id="results-${i}"><div class="loading">⏳ Đang tìm YouTube + Web...</div></div>
+            </div>
+          `
+        })
+        output.innerHTML = html
+
+        // Step 2: Search YouTube + Web for each scene in parallel
+        await Promise.all(scenes.map(async (scene, i) => {
+          const container = document.getElementById(`results-${i}`)
+          const [ytResult, webResult] = await Promise.all([
+            searchYouTube(youtubeKey, scene.keywordEn).catch(e => ({ __error: e.message })),
+            searchWeb(geminiKey, scene.visualIntent).catch(e => ({ __error: e.message }))
+          ])
+          renderResults(container, ytResult, webResult)
+        }))
+
+        const elapsed = ((Date.now() - startTime) / 1000).toFixed(1)
+        document.querySelector('.status-bar').innerHTML = `✅ Hoàn tất ${scenes.length} scene trong ${elapsed}s. Click vào thumbnail để mở link.`
+      } catch (err) {
+        output.innerHTML = `<div class="error">❌ Lỗi: ${escapeHtml(err.message)}</div>`
+      } finally {
+        btn.disabled = false
+      }
+    }
+
+    // ── Step 1: Parse script ─────────────────────────────────────────────────
+    async function parseScript(apiKey, script) {
+      const prompt = `Bạn là chuyên gia phân tích kịch bản UGC bán hàng. Hãy tách kịch bản dưới đây thành các SCENE (mỗi câu thoại = 1 scene, trừ khi 2 câu liền cùng nói về 1 visual thì gộp lại).
+
+Với mỗi scene, trả về object với các field:
+- "line": câu thoại gốc tiếng Việt (giữ nguyên)
+- "visualIntent": 1 câu tiếng Việt mô tả CỤ THỂ hình ảnh/video cần để minh họa. Focus vào visual concept, KHÔNG lặp lại nội dung text. Ví dụ tốt: "Cảnh 3D mạch máu được làm sạch, các phân tử cholesterol bị cuốn trôi". Ví dụ tệ: "Nói về tác dụng giảm cholesterol".
+- "keywordVi": 2-4 từ khóa tiếng Việt để search (cách nhau dấu cách)
+- "keywordEn": 2-4 từ khóa tiếng Anh để search YouTube/web (cách nhau dấu cách)
+
+Trả về JSON array thuần, không kèm text khác.
+
+Kịch bản:
+${script}`
+
+      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }],
+          generationConfig: {
+            responseMimeType: 'application/json',
+            responseSchema: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  line: { type: 'string' },
+                  visualIntent: { type: 'string' },
+                  keywordVi: { type: 'string' },
+                  keywordEn: { type: 'string' }
+                },
+                required: ['line', 'visualIntent', 'keywordVi', 'keywordEn']
+              }
+            }
+          }
+        })
+      })
+      if (!res.ok) {
+        const errBody = await res.text().catch(() => '')
+        throw new Error(`Gemini parse error ${res.status}: ${errBody.slice(0, 200)}`)
+      }
+      const data = await res.json()
+      const text = data.candidates?.[0]?.content?.parts?.[0]?.text
+      if (!text) throw new Error('Gemini không trả về kết quả parse')
+      return JSON.parse(text)
+    }
+
+    // ── Step 2a: YouTube Data API search ─────────────────────────────────────
+    async function searchYouTube(apiKey, query) {
+      const url = `https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&maxResults=6&q=${encodeURIComponent(query)}&key=${apiKey}`
+      const res = await fetch(url)
+      if (!res.ok) {
+        const err = await res.json().catch(() => null)
+        throw new Error(err?.error?.message || `YouTube API ${res.status}`)
+      }
+      const data = await res.json()
+      return (data.items || []).map(item => ({
+        url: `https://www.youtube.com/watch?v=${item.id.videoId}`,
+        title: item.snippet.title,
+        thumbnail: item.snippet.thumbnails?.medium?.url || item.snippet.thumbnails?.default?.url,
+        channel: item.snippet.channelTitle
+      }))
+    }
+
+    // ── Step 2b: Gemini Google Search grounding ──────────────────────────────
+    async function searchWeb(apiKey, intent) {
+      const prompt = `Tìm trên Internet các video clip / animation / footage thật phù hợp để MINH HỌA cho concept hình ảnh sau:
+
+"${intent}"
+
+Yêu cầu:
+- Ưu tiên: TikTok videos, Pinterest videos, YouTube Shorts, Vimeo, các stock video sites (videvo, mixkit, coverr...), blog có embed video.
+- Tìm ít nhất 5 link CỤ THỂ (URL thật, không phải search query).
+- Mỗi link kèm: tiêu đề ngắn + 1 câu giải thích tại sao phù hợp với concept.
+
+Trả về JSON array với schema: [{"url": "https://...", "title": "...", "why": "..."}]. CHỈ trả JSON thuần, không kèm markdown code fence hay text giải thích. Nếu không tìm được link nào, trả về [].`
+
+      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }],
+          tools: [{ googleSearch: {} }]
+        })
+      })
+      if (!res.ok) {
+        const errBody = await res.text().catch(() => '')
+        throw new Error(`Gemini search error ${res.status}: ${errBody.slice(0, 200)}`)
+      }
+      const data = await res.json()
+      const text = data.candidates?.[0]?.content?.parts?.[0]?.text || ''
+      const cleaned = text.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/i, '').trim()
+      try {
+        return JSON.parse(cleaned)
+      } catch {
+        const match = cleaned.match(/\[[\s\S]*\]/)
+        if (match) {
+          try { return JSON.parse(match[0]) } catch {}
+        }
+        throw new Error('Gemini trả về format không parse được: ' + cleaned.slice(0, 200))
+      }
+    }
+
+    // ── Rendering ────────────────────────────────────────────────────────────
+    function renderResults(container, ytResult, webResult) {
+      let html = ''
+      const ytItems = Array.isArray(ytResult) ? ytResult : []
+      const webItems = Array.isArray(webResult) ? webResult : []
+
+      ytItems.forEach(r => {
+        html += `
+          <div class="card">
+            <a href="${escapeAttr(r.url)}" target="_blank" rel="noopener">
+              <img src="${escapeAttr(r.thumbnail || '')}" alt="" loading="lazy">
+              <div class="title"><span class="source-tag youtube">YT</span>${escapeHtml(r.title)}</div>
+              <div class="url-small">${escapeHtml(r.channel || '')}</div>
+            </a>
+          </div>
+        `
+      })
+      webItems.forEach(r => {
+        html += `
+          <div class="card">
+            <a href="${escapeAttr(r.url)}" target="_blank" rel="noopener">
+              <div class="title"><span class="source-tag web">WEB</span>${escapeHtml(r.title || r.url)}</div>
+              ${r.why ? `<div class="why">💡 ${escapeHtml(r.why)}</div>` : ''}
+              <div class="url-small">${escapeHtml(r.url)}</div>
+            </a>
+          </div>
+        `
+      })
+
+      if (ytResult?.__error) html += `<div class="error">YouTube: ${escapeHtml(ytResult.__error)}</div>`
+      if (webResult?.__error) html += `<div class="error">Web search: ${escapeHtml(webResult.__error)}</div>`
+
+      if (!html) html = '<div class="empty">Không tìm thấy link phù hợp cho scene này.</div>'
+      container.innerHTML = html
+    }
+
+    // ── Helpers ──────────────────────────────────────────────────────────────
+    function escapeHtml(s) {
+      return String(s ?? '').replace(/[&<>"']/g, c => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+      }[c]))
+    }
+    function escapeAttr(s) { return escapeHtml(s) }
+  </script>
+</body>
+</html>
