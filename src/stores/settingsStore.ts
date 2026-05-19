@@ -58,9 +58,14 @@ function loadFromStorage(): StoredSettings {
         elevenLabsApiKey: parsed.elevenLabsApiKey ?? '',
         falApiKey:        parsed.falApiKey        ?? '',
         shotstackApiKey:  parsed.shotstackApiKey  ?? '',
+        // Z37 — Auto-migrate v2 → v3. v2 cinematic pipeline is deprecated;
+        // the user wants the v3 Ads Video Engine. Existing v2 users get
+        // bumped forward on next load. v2 stays reachable via Legacy menu
+        // in the v3 shell for anyone with in-progress work.
+        // v1 stays as-is (truly stable legacy).
         pipelineVersion:  (
           parsed.pipelineVersion === 'v3' ? 'v3' :
-          parsed.pipelineVersion === 'v2' ? 'v2' :
+          parsed.pipelineVersion === 'v2' ? 'v3' :  // ← auto-migrate
           parsed.pipelineVersion === 'v1' ? 'v1' :
           'v3'  // Z30 — default new sessions to v3 Ads Video Engine
         ),

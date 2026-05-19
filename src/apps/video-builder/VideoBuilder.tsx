@@ -720,7 +720,12 @@ export default function VideoBuilder() {
     )
   }
   if (pipelineVersion === 'v2') {
-    return <VideoBuilderV2 onSwitchToV1={() => setPipelineVersion('v1')} />
+    return (
+      <VideoBuilderV2
+        onSwitchToV1={() => setPipelineVersion('v1')}
+        onSwitchToV3={() => setPipelineVersion('v3')}
+      />
+    )
   }
   return <VideoBuilderV1 onSwitchToV2={() => setPipelineVersion('v3')} />
 }
