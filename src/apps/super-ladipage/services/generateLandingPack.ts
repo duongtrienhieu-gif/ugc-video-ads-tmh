@@ -209,14 +209,18 @@ export async function generateLandingPack(params: LandingGenParams): Promise<Lan
   let validPack: LandingPagePack | null = null
   let feedbackForRetry = ''
 
-  for (let attempt = 1; attempt <= 3; attempt++) {
+  // Max 2 attempts. Attempt cuối luôn ACCEPT pack (kể cả còn issues nhỏ)
+  // để tránh đốt 3-5 phút regen toàn bộ chỉ vì 1 keyword tier4 leak.
+  const MAX_ATTEMPTS = 2
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
     const startedAt = Date.now()
+    const isLastAttempt = attempt === MAX_ATTEMPTS
     try {
       const userPrompt = attempt === 1
         ? 'Generate the landing pack JSON now.'
         : `Previous attempt had these issues:\n${feedbackForRetry}\n\nFix them and regenerate the FULL pack JSON.`
 
-      console.log(`[SuperLadipage] pack gen attempt ${attempt}/3 — calling text gen (Gemini → KIE fallback, timeout ${PACK_GEN_TIMEOUT_MS / 1000}s)...`)
+      console.log(`[SuperLadipage] pack gen attempt ${attempt}/${MAX_ATTEMPTS} — calling text gen (Gemini → KIE fallback, timeout ${PACK_GEN_TIMEOUT_MS / 1000}s)...`)
 
       const raw = await textGenWithFallback({
         geminiApiKey:       geminiKey,
@@ -224,13 +228,13 @@ export async function generateLandingPack(params: LandingGenParams): Promise<Lan
         prompt:             userPrompt,
         systemInstruction:  systemPrompt,
         jsonMode:           true,
-        maxOutputTokens:    32768, // bumped from 16384 — 17 sec pack hit 64K char ≈ 16K tok limit
+        maxOutputTokens:    32768, // 17 sec pack hit 64K char ≈ 16K tok limit
         timeoutMs:          PACK_GEN_TIMEOUT_MS,
         label:              `pack-gen-${attempt}`,
       })
 
       const elapsed = ((Date.now() - startedAt) / 1000).toFixed(1)
-      console.log(`[SuperLadipage] pack gen attempt ${attempt}/3 — text returned ${raw.length} chars in ${elapsed}s, parsing JSON...`)
+      console.log(`[SuperLadipage] attempt ${attempt}/${MAX_ATTEMPTS} — text returned ${raw.length} chars in ${elapsed}s, parsing JSON...`)
 
       const parsed = parseRawPack(raw)
       const sections = rawToSections(parsed, identity, language, specsMap)
@@ -250,8 +254,14 @@ export async function generateLandingPack(params: LandingGenParams): Promise<Lan
         specsMap,
       )
 
-      if (issues.length === 0) {
-        // Strip __concept (internal) trước khi return ra UI
+      // ACCEPT pack nếu: (a) không issues, HOẶC (b) là attempt cuối (avoid burning time)
+      if (issues.length === 0 || isLastAttempt) {
+        if (issues.length > 0) {
+          console.warn(`[SuperLadipage] ⚠️ accepting attempt ${attempt} with ${issues.length} known issues (last attempt — không retry để tránh tốn thêm thời gian):`)
+          issues.slice(0, 10).forEach((iss) => console.warn(`  - section ${iss.sectionIdx + 1}: ${iss.issue}`))
+        }
+
+        // Strip __concept trước khi return UI
         const cleanSections = sections.map((s) => ({
           ...s,
           imagePrompts: s.imagePrompts.map((p) => {
@@ -272,19 +282,20 @@ export async function generateLandingPack(params: LandingGenParams): Promise<Lan
           productPackagingDescription: identity.packagingDescription,
         }
         validPack = pack
-        console.info(`[SuperLadipage] STAGE 2/4 DONE — pack gen OK on attempt ${attempt} (${pack.sections.length} sections, ${pack.sections.reduce((sum, s) => sum + s.imagePrompts.length, 0)} image prompts)`)
+        const issuesNote = issues.length > 0 ? ` (${issues.length} minor issues accepted)` : ''
+        console.info(`[SuperLadipage] STAGE 2/4 DONE — attempt ${attempt}${issuesNote} (${pack.sections.length} sec, ${pack.sections.reduce((sum, s) => sum + s.imagePrompts.length, 0)} image prompts)`)
         break
       }
 
-      // Issues found → build feedback for retry
+      // Issues found AND not last attempt → build feedback for retry
       feedbackForRetry = issues.slice(0, 8).map((iss) =>
         `- Section ${iss.sectionIdx + 1}${iss.imageIdx >= 0 ? `, image ${iss.imageIdx + 1}` : ''}: ${iss.issue}. Fix: ${iss.remedy}`,
       ).join('\n')
-      console.warn(`[SuperLadipage] semantic gate failed on attempt ${attempt} — ${issues.length} issues. Retrying...`)
+      console.warn(`[SuperLadipage] semantic gate failed on attempt ${attempt} — ${issues.length} issues. Retrying (last chance)...`)
       lastError = new Error(`Semantic gate issues:\n${feedbackForRetry}`)
     } catch (err) {
       lastError = err instanceof Error ? err : new Error(String(err))
-      console.warn(`[SuperLadipage] attempt ${attempt}/3 errored: ${lastError.message.slice(0, 200)}`)
+      console.warn(`[SuperLadipage] attempt ${attempt}/${MAX_ATTEMPTS} errored: ${lastError.message.slice(0, 200)}`)
       feedbackForRetry = lastError.message
     }
   }
