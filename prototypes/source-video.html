@@ -244,7 +244,7 @@ Trả về JSON array thuần, không kèm text khác.
 Kịch bản:
 ${script}`
 
-      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`, {
+      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -307,7 +307,7 @@ Yêu cầu:
 
 Trả về JSON array với schema: [{"url": "https://...", "title": "...", "why": "..."}]. CHỈ trả JSON thuần, không kèm markdown code fence hay text giải thích. Nếu không tìm được link nào, trả về [].`
 
-      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`, {
+      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
