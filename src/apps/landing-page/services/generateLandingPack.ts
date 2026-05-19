@@ -96,22 +96,42 @@ SECTION SPEC — produce EXACTLY these 17 in this order
    • headline, subheadline, cta, offerStrip, urgencyText
    • copy: 2-3 short paragraphs reinforcing headline
    • 2 imagePrompts REQUIRED (both hero variants) — both must use DESIGNED text overlay (not plain text):
-     - hero_01.jpg, style="Hero text overlay A — designed decor", aspectRatio="4:5"
-       Malaysian woman mid-30s holding the product, natural window light, casual indoor background, iPhone selfie
-       quality, UGC style. DESIGNED text overlay with multi-layer hierarchy:
-         · BIG bold condensed main hook headline (top) — 5-8 Malay words from the product hook, white with subtle
-           glow / drop-shadow, font feels like a sans-serif display
-         · Below: 3-5 benefit bullets as glassmorphism rounded badges, each prefixed by a relevant emoji icon
-           from this pool: ⚡ tenaga / 🔥 metabolisme / ✅ berkesan / 💊 vitamin / 🧠 fokus / ❤️ kesihatan
-           Example layout: "⚡ Tenaga lebih stabil" "🧠 Fokus tajam" "✅ Bangun segar"
-         · Optional small CTA chip / arrow sticker pointing toward the product
-       Visual decor: subtle gradient panel behind text (NOT a flat black bar), depth — text mid-layer floating
-       above background. Soft particles or spark behind the headline. Mobile-readable, max 12 words total overlay.
-     - hero_02.jpg, style="Hero text overlay B — designed decor", aspectRatio="4:5"
-       Slightly different setting (outdoor morning light, or kitchen counter), same product held by a different
-       Malaysian woman, UGC selfie feel. Same DESIGNED overlay format (multi-layer hierarchy, glassmorphism
-       badges with emoji icons, subtle glow) but 3-5 DIFFERENT benefit bullets and a different main hook headline
-       from variant A. Different gradient color palette so the two hero variants feel distinct.
+
+     DEMOGRAPHIC SOURCING — NICHE-FIRST:
+       · The person in BOTH hero variants MUST match the targetAudience from the PRODUCT
+         INTELLIGENCE OVERRIDE block at the top (age range + gender hint + lifestyle).
+         Examples: joint-pain → elderly / middle-aged Malaysian (50-70, mixed gender);
+         skincare → Malaysian woman 18-35; men-vitality → Malaysian man 35-60;
+         women-health → Malaysian woman 30-60; digestive-gut → adult 25-55.
+       · DO NOT default to "Malaysian woman mid-30s" if that doesn't match the niche.
+       · Hijab presence: match niche cultural context (Muslim-targeted niches yes; men-
+         vitality / skincare-Chinese-Malaysian niches optional).
+
+     OVERLAY DESIGN RULES (both variants):
+       · BIG bold condensed main hook headline (top) — 5-8 Malay words from the product hook,
+         white with subtle glow / drop-shadow, sans-serif display
+       · Below: 3-5 benefit bullets as glassmorphism rounded badges, each prefixed by a
+         niche-relevant emoji icon. Pool examples (PICK what fits the niche, don't force):
+         ⚡ tenaga / 🔥 metabolisme / ✅ berkesan / 💊 vitamin / 🧠 fokus / ❤️ kesihatan /
+         🦴 sendi / 🌿 herba / 🩺 kesihatan-doktor / ✨ kulit-glow / 💪 vitaliti
+       · Optional small CTA chip / arrow sticker pointing toward the product
+       · Subtle gradient panel behind text (NOT flat black bar), depth — text mid-layer
+         floating. Soft particles / spark behind the headline. Mobile-readable, max 12 words
+         total overlay.
+
+     PROMPT SHAPE:
+       - hero_01.jpg, style="Hero text overlay A — designed decor", aspectRatio="4:5":
+         [niche-appropriate Malaysian person from targetAudience demographic] holding the
+         product, natural window light, casual indoor background, iPhone selfie quality, UGC
+         style. DESIGNED overlay per OVERLAY DESIGN RULES with 3-5 benefit badges chosen for
+         the niche.
+       - hero_02.jpg, style="Hero text overlay B — designed decor", aspectRatio="4:5":
+         DIFFERENT person from variant A (different demographic point within the same
+         targetAudience range — eg if variant A is woman 50s, variant B could be woman 60s
+         or another woman 50s in different setting). Slightly different environment (outdoor
+         morning / kitchen counter / bedroom shelf). Same DESIGNED overlay format but 3-5
+         DIFFERENT benefit bullets + different main hook headline + different gradient
+         palette so the two hero variants feel distinct.
 
 2. type="pain", imageAspectRatio="4:5"
    • copy: emotional pain agitation
@@ -154,12 +174,45 @@ SECTION SPEC — produce EXACTLY these 17 in this order
 
 3. type="why-happens", imageAspectRatio="1:1"
    • copy: root cause explanation, conversational NOT medical-textbook
-   • 1-2 imagePrompts: mechanism infographic (gut microbiome / skin layer / absorption — pick by niche). style="Mechanism infographic", aspectRatio="1:1"
+   • 1-2 imagePrompts: niche-appropriate root-cause infographic. style="Mechanism infographic",
+     aspectRatio="1:1". Pick the DIAGRAM TYPE based on the niche from PRODUCT INTELLIGENCE
+     OVERRIDE:
+       joint-pain → joint cartilage cross-section / inflammation site
+       digestive-gut → gut microbiome (good vs bad bacteria)
+       skincare → skin layer cross-section (epidermis / dermis / problem zone)
+       weight-loss → fat metabolism / hormone cycle diagram
+       hair-care → hair follicle cross-section / scalp anatomy
+       vision → eye anatomy / macula cross-section
+       cardio → cardiovascular flow / artery diagram
+       diabetes → glucose absorption / insulin pathway
+       women-health → hormone cycle / reproductive anatomy
+       men-vitality → testosterone pathway / prostate diagram
+       immunity-general → immune cell vs pathogen diagram
+       sleep-stress → cortisol / melatonin cycle / brain stress diagram
+       dental-oral → tooth + gum cross-section
+     Clean editorial/textbook style with output-language labels.
 
 4. type="failed-solutions", imageAspectRatio="4:5"
-   • bullets: 3-5 "❌ Tried X — didn't work" lines
+   • bullets: 3-5 "❌ Tried X — didn't work" lines — content MUST match niche failed
+     treatments (joint-pain → "Dah cuba minyak urut, tak berkesan"; skincare → "Dah cuba
+     kem mahal, jerawat masih datang"; digestive-gut → "Dah makan banyak serat, perut masih
+     kembung"; weight-loss → "Dah diet bagai, berat tak turun"; etc.)
    • copy: validate customer frustration
-   • 1-2 imagePrompts: tired Malaysian surrounded by failed products / empty bottles. style="Failed solutions UGC", aspectRatio="4:5". NO our product visible.
+   • 1-2 imagePrompts: NICHE-MATCHED failed-solutions scene. style="Failed solutions UGC",
+     aspectRatio="4:5". NO our product visible. The "surrounding failed products" MUST match
+     the niche category:
+       joint-pain → empty bottles of pain rubs / muscle balm / herbal oils / used heating pads
+       digestive-gut → empty supplement bottles / probiotic packs / digestive teas / antacid pills
+       skincare → used acne creams / serum bottles / face mask packs / failed concealer tubes
+       weight-loss → diet shake powders / slimming pill bottles / measuring tape / failed
+                     gym membership card / weight scale
+       hair-care → empty hair-growth tonic bottles / shampoo / scalp serum
+       vision → reading glasses pile / eye drop bottles
+       cardio / diabetes → BP monitor / glucose meter strips / pill bottles
+       sleep-stress → melatonin bottles / herbal tea / sleep masks / phone with sleep app
+       men-vitality / women-health → empty supplement bottles relevant to the area
+     Demographic of the tired person MUST match niche targetAudience (eg joint-pain → elderly
+     Malaysian; skincare → woman 18-35).
 
 
 5. type="product-discovery", imageAspectRatio="4:5"
@@ -173,7 +226,16 @@ SECTION SPEC — produce EXACTLY these 17 in this order
 
 7. type="mechanism", imageAspectRatio="1:1"
    • copy: step-by-step HOW the formula works — plain language
-   • 1-2 imagePrompts: science mechanism diagram (pick by niche). style="Science mechanism diagram", aspectRatio="1:1"
+   • 1-2 imagePrompts: niche-appropriate "HOW IT WORKS" diagram. style="Science mechanism
+     diagram", aspectRatio="1:1". Pick mechanism type based on niche from PRODUCT INTELLIGENCE
+     OVERRIDE (joint-pain → ingredient → cartilage/inflammation site → relief mechanism;
+     digestive-gut → probiotic strains → gut wall → balanced flora; skincare → active compound
+     → skin layer → cellular repair; weight-loss → metabolite → fat cell → energy release;
+     hair-care → nutrient → follicle → growth cycle; cardio → ingredient → bloodstream →
+     vessel relaxation; diabetes → compound → insulin receptor → glucose uptake;
+     women-health / men-vitality → hormone pathway diagram). Use numbered/labeled steps
+     1→2→3→4 in the output language. Clean editorial science illustration, NOT a marketing
+     poster.
 
 8. type="benefits", imageAspectRatio="1:1"
    • bullets: 5-7 benefits with leading emoji
@@ -183,7 +245,24 @@ SECTION SPEC — produce EXACTLY these 17 in this order
 9. type="comparison", imageAspectRatio="1:1"
    • copy: why our product vs generics
    • 1 imagePrompt: style="Comparison infographic MY ecommerce", aspectRatio="1:1"
-     Malaysia ecommerce style comparison table infographic. Left column: our product name, green checkmarks, emerald highlighted background. Right: "Suplemen Lain" / "Produk Biasa", red X, gray background. Rows: ingredient quality, absorption, certifications, side effects, manufacturing, price value. Clean mobile-readable design, bold Bahasa Melayu labels.
+     Malaysia ecommerce style comparison table infographic. Left column: our product name,
+     green checkmarks, emerald highlighted background. Right: "Suplemen Lain" / "Produk Biasa"
+     / "Krim Biasa" / "Gel Biasa" (label MUST match the product format — supplement bottle =
+     "Suplemen Lain", topical gel/cream = "Krim Biasa", probiotic = "Probiotik Biasa", drink =
+     "Minuman Lain", etc.), red X, gray background.
+     ROW SELECTION — choose 5-6 rows matching the product FORMAT + NICHE:
+       Oral supplement (capsule/tablet): ingredient quality, absorption rate, certifications
+         (Halal/KKM), side effects, manufacturing source, price value
+       Topical gel/cream (joint / muscle / skincare): absorption speed, lasting effect,
+         non-greasy texture, cooling/heating sensation, skin reaction, ingredient origin
+       Liquid drink / shot: taste, absorption speed, sugar content, natural ingredients,
+         storage convenience, value
+       Skincare serum/cream: skin penetration, irritation level, brightening efficacy,
+         certifications, active ingredient %, suitable skin types
+       Hair tonic / scalp serum: penetration to follicle, scent, oiliness, results timeline,
+         scalp irritation, natural composition
+     Pick rows that genuinely differentiate the product format. Clean mobile-readable design,
+     bold output-language labels.
 
 10. type="expert-feedback", imageAspectRatio="9:16"
     • copy: 1-2 short paragraphs framing the expert's professional take — written in the output language. Mention what kind of expert (digestive health specialist / pharmacist / dietitian / dermatologist — pick to match the product niche). Authority + warmth tone, NOT hard-sell.
@@ -215,8 +294,20 @@ SECTION SPEC — produce EXACTLY these 17 in this order
       - social_fb.jpg, style="Facebook comment screenshot", aspectRatio="4:5": realistic Facebook post comment section screenshot. Slightly JPEG-compressed quality, imperfect real-phone feel. Malay text + emojis. Multiple positive comments from Malaysian names. IMPORTANT: Product name visible in the post.
       - social_tiktok.jpg, style="TikTok Shop review screenshot", aspectRatio="4:5": realistic TikTok Shop product review screenshot. Visible product thumbnail in review card, 5-star rating, Malaysian reviewer name, Malay review text with emojis. Show EXACT PRODUCT PRICE from brief. Authentic phone-screenshot quality.
       - social_shopee.jpg, style="Shopee review screenshot", aspectRatio="4:5": realistic Shopee product page review screenshot. Visible product thumbnail (same packaging as reference), 5-star rating, "Verified Purchase" badge, Malaysian reviewer name, Malay review text. Show EXACT PRODUCT PRICE from brief. Authentic, slightly-compressed quality.
-      - social_selfie.jpg, style="Muslim woman selfie social proof", aspectRatio="4:5": Malaysian Muslim woman in hijab, mid-30s, holding product in selfie, genuine smile, casual home, natural daylight, UGC quality.
-      - social_crowd.jpg, style="Crowd group social proof", aspectRatio="4:5": group of 3-4 Malaysian women different ages (some in hijab), each holding the product, smiling, casual outdoor, candid group photo feel, trust and community vibe.
+      - social_selfie.jpg, style="Customer selfie social proof", aspectRatio="4:5": [Malaysian
+        person matching the niche targetAudience demographic — age + gender + cultural cues
+        from PRODUCT INTELLIGENCE OVERRIDE block]. Holding product in selfie, genuine smile,
+        casual home, natural daylight, UGC quality. Examples by niche: joint-pain → middle-aged
+        / elderly uncle or auntie (50-70); skincare → woman 18-35; men-vitality → man 35-60;
+        women-health → woman 30-60; digestive-gut → adult 25-55. Hijab presence only when
+        culturally appropriate to the niche audience.
+      - social_crowd.jpg, style="Crowd group social proof", aspectRatio="4:5": group of 3-4
+        Malaysian people [match the niche targetAudience — age range + gender mix from
+        PRODUCT INTELLIGENCE OVERRIDE]. Each holding the product, smiling, casual outdoor,
+        candid group photo feel, trust and community vibe. Examples: joint-pain → group of
+        elderly aunties + uncles (50-70 mixed); skincare → 3-4 young women 18-35;
+        men-vitality → group of 3-4 middle-aged men 35-60; digestive-gut → mixed-age adult
+        group. Hijab variety follows niche cultural context.
 
 12. type="whatsapp-testimonials", imageAspectRatio="4:5"
     • reviews: 4 chat-style testimonials (multi-line, emojis, authentic Malay)
@@ -236,10 +327,57 @@ SECTION SPEC — produce EXACTLY these 17 in this order
 14. type="before-after", imageAspectRatio="4:5"
     • copy: transformation narrative
     • 4 imagePrompts all aspectRatio="4:5":
-      - ba_01.jpg, style="Before after collage 1", aspectRatio="4:5": a side-by-side before/after collage featuring a Malaysian person in casual attire. "Sebelum" shows tired / problem appearance, plain expression. "Selepas" shows vibrant, more confident, clear improvement. Quality is amateur, not professional, reflecting an authentic COD ecommerce style.
-      - ba_02.jpg, style="Before after collage 2", aspectRatio="4:5": a side-by-side before/after collage featuring a DIFFERENT Malaysian person (different age/setting from ba_01). "Sebelum" shows discomforted state. "Selepas" shows much more comfortable, happy and relaxed face. Quality is amateur and authentic.
-      - ba_03.jpg, style="Before after collage 3", aspectRatio="4:5": a collage featuring 2-3 distinct before/after pairs of Malaysian individuals (mixed gender/age). Each pair shows a transformation relevant to the product. "Sebelum" and "Selepas" labels visible. Aesthetic is social-proof-by-numbers, amateur, real-person photos.
-      - ba_04.jpg, style="Before after collage 4", aspectRatio="4:5": a close-up transformation before/after collage focusing on the specific area the product addresses. "Sebelum" shows noticeable problem. "Selepas" shows significant improvement. Selfie-style comparison with "Sebelum" / "Selepas" labels. Quality is amateur and authentic.
+
+      TRANSFORMATION TYPE — pick by niche from PRODUCT INTELLIGENCE OVERRIDE.transformationOutcome:
+        joint-pain → mobility transformation: BEFORE clutching back/knee, struggling to stand /
+                     climb stairs / bow in prayer; AFTER upright posture, walking briskly,
+                     full sujud, carrying groceries with ease
+        digestive-gut → belly comfort transformation: BEFORE bloated belly visible under shirt,
+                        hunched, hand on stomach; AFTER flatter stomach, relaxed posture,
+                        enjoying meals freely
+        skincare → skin clarity transformation: BEFORE acne / dark spots / dull skin, heavy
+                   concealer, avoiding camera; AFTER clear glowing skin, bare-faced selfie,
+                   confident eye contact
+        weight-loss → body transformation: BEFORE tight jeans not fitting, side-belly visible,
+                      withdrawn; AFTER same jeans now fitting, slimmer waist, confident
+                      full-body selfie
+        hair-care → hair density transformation: BEFORE thinning crown / receding hairline,
+                    cap-covering; AFTER visibly thicker hair, confident overhead selfie
+        vision → reading confidence: BEFORE squinting at phone, glasses pushed up; AFTER
+                 comfortable reading at normal distance, no squinting
+        cardio → vitality: BEFORE chest-clutching on stairs, worried BP reading; AFTER active
+                 walk, normal BP, smiling
+        diabetes → control: BEFORE pricking finger anxious; AFTER stable reading, restored
+                   energy, enjoying family meal in moderation
+        women-health → comfort restored: BEFORE cramping curled on sofa with hot pad; AFTER
+                       relaxed, balanced, normal daily activity
+        men-vitality → energy restored: BEFORE morning fatigue sitting on bed edge; AFTER
+                       fresh awake morning, walking briskly, confident
+        sleep-stress → rest restored: BEFORE 3am phone-glow insomnia, dark circles; AFTER
+                       refreshed morning, smiling at breakfast
+        dental-oral → smile confidence: BEFORE covering mouth, yellow teeth visible; AFTER
+                      open wide smile, whiter teeth
+
+      Demographic of the person(s) in ALL 4 images MUST match the niche targetAudience (eg
+      joint-pain → 45-70 elderly Malaysian; skincare → 18-35 woman; men-vitality → 35-60 man).
+
+      - ba_01.jpg, style="Before after collage 1", aspectRatio="4:5": side-by-side before/after
+        collage of one [niche-matched demographic] Malaysian person showing the niche
+        transformation type above. "Sebelum" shows the niche-specific problem state; "Selepas"
+        shows the niche-specific improvement. Quality is amateur COD ecommerce, not professional.
+      - ba_02.jpg, style="Before after collage 2", aspectRatio="4:5": side-by-side before/after
+        collage of a DIFFERENT [niche-matched demographic] person from ba_01 (different age
+        point within the niche range, different setting). Same niche transformation type.
+      - ba_03.jpg, style="Before after collage 3", aspectRatio="4:5": collage featuring 2-3
+        distinct before/after pairs of [niche-matched demographic] individuals. Each pair
+        shows the SAME niche transformation type from a different angle. "Sebelum"/"Selepas"
+        labels visible. Social-proof-by-numbers, amateur, real-person photos.
+      - ba_04.jpg, style="Before after collage 4", aspectRatio="4:5": close-up transformation
+        focusing on the NICHE-SPECIFIC body area / activity the product addresses (joint-pain →
+        knee bending / back posture; skincare → face close-up; weight-loss → waist side
+        profile; hair-care → top-of-head crown; dental-oral → smile mouth zone). "Sebelum"
+        shows the noticeable problem area; "Selepas" shows clear improvement of the SAME area.
+        "Sebelum"/"Selepas" labels visible.
 
 15. type="faq"
     • faqs: 5-7 Malaysia FAQs (halal, side effects, "berapa lama nampak hasil", COD, shipping, return, allergies)
