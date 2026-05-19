@@ -4,6 +4,7 @@ import type {
 import { useSettingsStore } from '../../../stores/settingsStore'
 import {
   submitGptImage2, pollGptImage2UntilDone, type Gpt4oSize,
+  submitGpt4oImage, pollGpt4oUntilDone,
 } from '../../../utils/kieai'
 import { saveAsset, getUrl, isAssetRef } from '../../../utils/assetStore'
 import { recordAttempt, finalizeAttempt } from '../debugStore'
@@ -81,6 +82,32 @@ const WITH_PRODUCT_SECTIONS: ReadonlySet<SectionType> = new Set<SectionType>([
   'magazine-feature',
   'stat-proof',
   'web-authority-proof',
+])
+
+// ─────────────────────────────────────────────────────────────────────────
+// OPTION A (2026-05-19) — sections where product identity is CRITICAL and
+// gpt-image-2's TEXT-ONLY limitation produces unacceptable drift even with
+// FIX 1A packaging description injection. User reported drift to real
+// brands the model is trained on: PHARMANEX GUM HEALTH, Dr. White, GoPure,
+// biotopics, Nutriplus — KIE's training bias overrode the text prompt.
+//
+// For these sections we ROUTE to KIE's /gpt4o-image/generate endpoint
+// (submitGpt4oImage) which actually CONSUMES filesUrl reference images
+// (image-to-image editing under the hood). Higher per-image cost than
+// gpt-image-2 but the only way to lock identity on a no-name brand.
+//
+// Falls back to gpt-image-2 if pack has no uploaded refs (filesUrl empty
+// → no point in image-to-image, just use the cheaper text-to-image path).
+//
+// Violates ROLLBACK_HANDOFF mục 10 "KHÔNG đổi image model" — user approved
+// this trade-off explicitly after observing the PHARMANEX drift.
+// ─────────────────────────────────────────────────────────────────────────
+const CRITICAL_IDENTITY_SECTIONS: ReadonlySet<SectionType> = new Set<SectionType>([
+  'hero',
+  'product-discovery',
+  'social-proof',
+  'offer',
+  'final-cta',
 ])
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -1614,6 +1641,14 @@ async function runWithCreditSafeRetry(
 
   const finalPrompt = buildFinalPrompt(job, hasProductRefs)
 
+  // ── OPTION A — model routing for product identity-critical sections.
+  //   Use /gpt4o-image/generate (image-to-image, actually consumes filesUrl)
+  //   for sections where gpt-image-2's text-only mode causes brand drift.
+  //   Falls back to gpt-image-2 when no refs uploaded (image-to-image is
+  //   useless without a reference image).
+  const useGpt4oForIdentity = CRITICAL_IDENTITY_SECTIONS.has(job.section.type) && hasProductRefs
+  const providerTag = useGpt4oForIdentity ? 'KIE gpt-4o-image' : 'KIE gpt-image-2'
+
   let lastTaskId: string | null = null
   let lastError: Error | null = null
   let retries = 0
@@ -1628,12 +1663,19 @@ async function runWithCreditSafeRetry(
     if (lastTaskId) {
       try {
         onTaskUpdate({ status: 'retrying', error: undefined })
-        const recoveredUrl = await pollGptImage2UntilDone({
-          apiKey: kieApiKey,
-          taskId: lastTaskId,
-          timeoutMs: RECOVERY_POLL_MS,
-          signal,
-        })
+        const recoveredUrl = useGpt4oForIdentity
+          ? await pollGpt4oUntilDone({
+              apiKey: kieApiKey,
+              taskId: lastTaskId,
+              timeoutMs: RECOVERY_POLL_MS,
+              signal,
+            })
+          : await pollGptImage2UntilDone({
+              apiKey: kieApiKey,
+              taskId: lastTaskId,
+              timeoutMs: RECOVERY_POLL_MS,
+              signal,
+            })
         const assetRef = await downloadAndStore(recoveredUrl)
         return { assetRef, retries }
       } catch (err) {
@@ -1650,7 +1692,7 @@ async function runWithCreditSafeRetry(
     recordAttempt({
       assetKey, sectionType: job.section.type, filename: job.prompt.filename,
       attempt: attemptNum, maxAttempts: MAX_ATTEMPTS,
-      provider: 'KIE gpt-image-2',
+      provider: providerTag,
       prompt: finalPrompt,
       filesUrlCount: filesUrl.length,
       kieSize: size,
@@ -1661,20 +1703,48 @@ async function runWithCreditSafeRetry(
     try {
       onTaskUpdate({ status: attempt === 0 ? 'generating' : 'retrying', error: undefined })
 
-      const { taskId } = await submitGptImage2({
-        apiKey: kieApiKey,
-        prompt: finalPrompt,
-        filesUrl: filesUrl.length > 0 ? filesUrl : undefined,
-        size,
-      })
-      lastTaskId = taskId
+      let taskId: string
+      let remoteUrl: string
 
-      const remoteUrl = await pollGptImage2UntilDone({
-        apiKey: kieApiKey,
-        taskId,
-        timeoutMs: FRESH_POLL_MS,
-        signal,
-      })
+      if (useGpt4oForIdentity) {
+        // gpt-4o-image/generate — actually consumes filesUrl (image-to-image).
+        // Identity-critical sections route here so KIE renders the user's
+        // EXACT uploaded product packaging instead of inventing a similar
+        // brand from training data.
+        const submitted = await submitGpt4oImage({
+          apiKey: kieApiKey,
+          prompt: finalPrompt,
+          filesUrl,
+          size,
+          enableFallback: true,
+        })
+        taskId = submitted.taskId
+        lastTaskId = taskId
+        remoteUrl = await pollGpt4oUntilDone({
+          apiKey: kieApiKey,
+          taskId,
+          timeoutMs: FRESH_POLL_MS,
+          signal,
+        })
+      } else {
+        // gpt-image-2 text-to-image — default path for non-identity-critical
+        // sections (pain / lifestyle / news / before-after / FAQ / mechanism
+        // / benefits / etc.). Cheaper, no image-to-image overhead.
+        const submitted = await submitGptImage2({
+          apiKey: kieApiKey,
+          prompt: finalPrompt,
+          filesUrl: filesUrl.length > 0 ? filesUrl : undefined,
+          size,
+        })
+        taskId = submitted.taskId
+        lastTaskId = taskId
+        remoteUrl = await pollGptImage2UntilDone({
+          apiKey: kieApiKey,
+          taskId,
+          timeoutMs: FRESH_POLL_MS,
+          signal,
+        })
+      }
 
       const assetRef = await downloadAndStore(remoteUrl)
       finalizeAttempt({ assetKey, attempt: attemptNum, startedAt }, {
