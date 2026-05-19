@@ -9,6 +9,7 @@ import { getKieCredits } from '../utils/kieai'
 import { useAuthStore } from '../stores/authStore'
 import { scanForPendingSessions } from '../services/sessionPersistence'
 import { useLandingPageStore } from '../apps/landing-page/store'
+import { useSuperLadipageStore } from '../apps/super-ladipage/store'
 
 interface NavItem {
   id: string
@@ -48,6 +49,7 @@ export default function Sidebar({ activeApp, onNavigate }: SidebarProps) {
   const { user, signOut } = useAuthStore()
   const sendToApp = useAppStore((s) => s.sendToApp)
   const landingProjectCount = useLandingPageStore((s) => s.items.length)
+  const superLadipageCount = useSuperLadipageStore((s) => s.items.length)
 
   // Poll for drafts count every 10s to update the badge dot
   useEffect(() => {
@@ -105,7 +107,10 @@ export default function Sidebar({ activeApp, onNavigate }: SidebarProps) {
             // we just always show it as inactive (it's a shortcut, not a route)
             const isActive = id !== 'products-shortcut' && activeApp === id
             // Show project count badge on Landing Page nav (Canva-style)
-            const badge = id === 'landing-page' && landingProjectCount > 0 ? landingProjectCount : null
+            const badge =
+              id === 'landing-page'   && landingProjectCount > 0 ? landingProjectCount  :
+              id === 'super-ladipage' && superLadipageCount > 0  ? superLadipageCount   :
+              null
             return (
               <button
                 key={id}
