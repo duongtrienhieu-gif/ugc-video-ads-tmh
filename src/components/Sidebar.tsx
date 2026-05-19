@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { LayoutGrid, User, PenLine, Mic, Image, Eye, Settings, FlaskConical, RefreshCw, LogOut, Activity, Languages, Sparkles, Package, Megaphone, LayoutTemplate, FolderOpen, Brain, Rocket, History as HistoryIcon } from 'lucide-react'
+import { LayoutGrid, User, PenLine, Mic, Image, Eye, Settings, FlaskConical, RefreshCw, LogOut, Activity, Languages, Sparkles, Package, Megaphone, FolderOpen, Brain, Rocket, History as HistoryIcon } from 'lucide-react'
 import SettingsModal from './SettingsModal'
 import Diagnostic from './Diagnostic'
 import DraftsPanel from './DraftsPanel'
@@ -8,7 +8,6 @@ import { useAppStore } from '../stores/appStore'
 import { getKieCredits } from '../utils/kieai'
 import { useAuthStore } from '../stores/authStore'
 import { scanForPendingSessions } from '../services/sessionPersistence'
-import { useLandingPageStore } from '../apps/landing-page/store'
 import { useSuperLadipageStore } from '../apps/super-ladipage/store'
 
 interface NavItem {
@@ -25,7 +24,12 @@ const NAV_ITEMS: NavItem[] = [
   { id: 'script-architect', label: 'Kịch bản', icon: PenLine },
   { id: 'ads-content',      label: 'Ads Content', icon: Megaphone },
   { id: 'lab-content',      label: 'Lab Content', icon: Brain },
-  { id: 'landing-page',     label: 'Landing Page', icon: LayoutTemplate },
+  // 2026-05-20 — 'landing-page' entry hidden from sidebar so employees
+  // only see Super Ladipage (the newer rewrite with cleaner identity
+  // lock + recipe-based prompt assembly). Landing Page code + route in
+  // App.tsx kept intact for backward compat / direct-URL access if
+  // needed. Re-add this entry to restore the menu item.
+  // { id: 'landing-page',     label: 'Landing Page', icon: LayoutTemplate },
   { id: 'super-ladipage',   label: 'Super Ladipage', icon: Rocket },
   { id: 'voice-studio', label: 'Giọng đọc', icon: Mic },
   { id: 'creative-studio', label: 'Creative Studio', icon: Image },
@@ -48,7 +52,6 @@ export default function Sidebar({ activeApp, onNavigate }: SidebarProps) {
   const [refreshing, setRefreshing] = useState(false)
   const { user, signOut } = useAuthStore()
   const sendToApp = useAppStore((s) => s.sendToApp)
-  const landingProjectCount = useLandingPageStore((s) => s.items.length)
   const superLadipageCount = useSuperLadipageStore((s) => s.items.length)
 
   // Poll for drafts count every 10s to update the badge dot
@@ -106,11 +109,9 @@ export default function Sidebar({ activeApp, onNavigate }: SidebarProps) {
             // 'products-shortcut' lights up when finder shows products bank — but for simplicity
             // we just always show it as inactive (it's a shortcut, not a route)
             const isActive = id !== 'products-shortcut' && activeApp === id
-            // Show project count badge on Landing Page nav (Canva-style)
+            // Show project count badge on Super Ladipage nav (Canva-style)
             const badge =
-              id === 'landing-page'   && landingProjectCount > 0 ? landingProjectCount  :
-              id === 'super-ladipage' && superLadipageCount > 0  ? superLadipageCount   :
-              null
+              id === 'super-ladipage' && superLadipageCount > 0 ? superLadipageCount : null
             return (
               <button
                 key={id}
