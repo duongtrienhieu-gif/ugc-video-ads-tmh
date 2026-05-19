@@ -103,72 +103,114 @@ const CTA_SYSTEM_INSTRUCTION =
   + 'Offer line is a single clear benefit ("Tiết kiệm 30%", "Giao 24h"). CTA is an action '
   + 'verb phrase 2-3 words ("Đặt ngay", "Xem chi tiết"). Plain confident voice, NOT salesy.'
 
-/** P35 — variant-specific copy directives. Each variant reshapes the
- *  example schema + bullet pattern Gemini sees, so the SAME JSON
- *  structure carries different SEMANTICS. The Canvas renderer doesn't
- *  need to change — heroStat + bullets + footnote already accommodate
- *  ingredient pairs, mechanism steps, and time-anchored milestones. */
+/** P35 + P38 — variant-specific copy directives. Each variant reshapes
+ *  the example schema + bullet pattern Gemini sees + EXPLICITLY tells
+ *  it which product field is the PRIMARY SOURCE for that variant. The
+ *  SAME JSON structure carries different SEMANTICS based on which
+ *  source field the model leans on.
+ *
+ *  P38 fix — variants were producing similar output because all 4 pulled
+ *  generically from the full product knowledge dump. The new
+ *  `primarySource` directive forces each variant to LEAN on the right
+ *  product field exclusively. */
 const VARIANT_GUIDANCE: Record<InfographicVariant, {
   bulletExamples: [string, string, string, string]
   heroStatExample: { value: string; unit: string; label: string }
+  primarySource: string         // P38 — which product field is the source of truth
+  forbidPatterns: string[]      // P38 — patterns this variant must NOT produce
   rules: string[]
 }> = {
   'stats': {
-    heroStatExample: { value: '92', unit: '%', label: 'customer satisfaction after 2 weeks' },
-    bulletExamples: ['<short benefit 1>', '<short benefit 2>', '<short benefit 3>', '<short benefit 4>'],
+    heroStatExample: { value: '92', unit: '%', label: 'pengguna berpuas hati selepas 2 minggu' },
+    bulletExamples: [
+      '4.8/5 rating dari 20,000+ pengguna',
+      'Sah halal oleh JAKIM Malaysia',
+      'Lebih cepat 3x berbanding suplemen lain',
+      'Garansi pulangan dalam 30 hari',
+    ],
+    primarySource: 'CUSTOMER SOCIAL PROOF METRICS (satisfaction %, customer counts, ratings, certifications, money-back guarantee)',
+    forbidPatterns: [
+      'mechanism steps (those belong to mechanism variant)',
+      'time-anchored bullets (those belong to timeline variant)',
+      'ingredient names (those belong to ingredients variant)',
+    ],
     rules: [
-      '- This is a STATS-driven infographic. Bullets = concise benefit claims (4-9 words each).',
-      '- heroStat = the single most impressive metric (rating / % satisfaction / time-to-result).',
+      '- THIS IS STATS — bullets MUST be NUMERIC SOCIAL PROOF + CERTIFICATIONS, not mechanism explanations, not time milestones, not ingredient names.',
+      '- Each bullet should contain a NUMBER, a RATING, a CERTIFICATION BODY, or a GUARANTEE — never a process description.',
+      '- heroStat MUST be a satisfaction % / rating / customer count — NEVER a duration (timeline\'s job) or step count (mechanism\'s job).',
+      '- Pull bullets from any earned trust signal in the product brief: customer counts, satisfaction surveys, ratings, certifications, awards, guarantees.',
+      '- If the product brief lacks hard metrics, infer plausible market-norm metrics (e.g. "★ 4.8/5 dari 10,000+ pengguna") but stay realistic.',
     ],
   },
   'ingredients': {
-    heroStatExample: { value: '5', unit: '', label: 'thành phần hoạt tính chính' },
+    heroStatExample: { value: '6', unit: '', label: 'strain probiotik berfaedah' },
     bulletExamples: [
-      'Cúc La Mã — làm dịu da kích ứng',
-      'Vitamin C — sáng da, mờ thâm',
-      'Hyaluronic Acid — cấp ẩm sâu',
-      'Niacinamide — kiểm soát dầu',
+      'Lactobacillus acidophilus — keseimbangan flora usus',
+      'Bifidobacterium lactis — tingkatkan imuniti',
+      'Inulin (prebiotik) — makanan untuk probiotik',
+      'FloraFit™ formula — sains Denmark, penyerapan pantas',
+    ],
+    primarySource: 'PRODUCT INGREDIENTS FIELD — each ingredient name + its specific benefit',
+    forbidPatterns: [
+      'social proof metrics (those belong to stats variant)',
+      'mechanism steps (those belong to mechanism variant)',
+      'time-anchored milestones (those belong to timeline variant)',
+      'inventing ingredients not in the product brief',
     ],
     rules: [
-      '- This is an INGREDIENTS infographic. Each bullet MUST be "Ingredient name — its specific benefit".',
-      '- heroStat.value = number of key active ingredients. heroStat.unit = "" (empty). heroStat.label = "thành phần hoạt tính chính" or locale equivalent.',
-      '- Use REAL ingredient names from the product knowledge — do NOT invent. If product has no listed ingredients, infer plausibly from niche.',
-      '- 4-5 bullets total. Each ingredient + benefit pair.',
-      '- footnote = certification / sourcing line ("Chứng nhận organic" / "Nguyên liệu nhập khẩu" / etc.).',
+      '- THIS IS INGREDIENTS — bullets MUST follow "Ingredient name — its specific benefit" pattern, NEVER stats/mechanism/timeline.',
+      '- Pull ingredient names ONLY from the product\'s ingredients field. NEVER invent ingredients not in the brief.',
+      '- If the product\'s ingredients field is empty/sparse, infer 4-5 plausible ingredients from the niche (skincare → niacinamide / HA; supplement → vitamins; probiotic → strain names).',
+      '- heroStat.value = number of key ingredients counted, heroStat.unit = "" (empty), heroStat.label = "thành phần / strain / ingredient" per locale.',
+      '- footnote = certification / sourcing line tying back to the product brief if possible.',
     ],
   },
   'mechanism': {
-    heroStatExample: { value: '3', unit: '', label: 'bước cơ chế hoạt động' },
+    heroStatExample: { value: '4', unit: '', label: 'langkah cara kerja' },
     bulletExamples: [
-      'Bước 1: Thẩm thấu nhanh qua lớp sừng da',
-      'Bước 2: Kích hoạt collagen tự nhiên',
-      'Bước 3: Phục hồi và làm sáng da từ bên trong',
-      'Bước 4: Bảo vệ khỏi tác hại môi trường',
+      'Langkah 1: Probiotik mencapai usus melalui kapsul tahan asid',
+      'Langkah 2: Mengusir bakteria jahat & mengembalikan keseimbangan flora',
+      'Langkah 3: Menghasilkan enzim pencernaan secara semula jadi',
+      'Langkah 4: Menguatkan dinding usus & penyerapan nutrien',
+    ],
+    primarySource: 'PRODUCT USPS + HOW-IT-WORKS — ordered scientific steps describing the BODILY ACTION of the product',
+    forbidPatterns: [
+      'social proof metrics (stats variant)',
+      'time markers like "Sau 5 phút" / "Selepas 7 hari" (timeline variant)',
+      'ingredient → benefit pairs (ingredients variant)',
+      'user-feeling bullets like "you will feel calmer" (these belong nowhere here — must be process, not feeling)',
     ],
     rules: [
-      '- This is a MECHANISM infographic. Each bullet = an ordered mechanism step starting with "Bước N:" or locale equivalent.',
-      '- heroStat.value = number of mechanism steps OR key delivery metric (e.g. "30s" absorption time).',
-      '- heroStat.label = describes the mechanism category ("bước cơ chế hoạt động" / "phút tác dụng" / etc.).',
-      '- Each step must describe HOW the product works on the body — not what the user feels.',
-      '- 3-5 steps total. Order matters.',
-      '- footnote = scientific source / proven mechanism / clinical reference cue.',
+      '- THIS IS MECHANISM — bullets MUST be ordered "Bước N: / Langkah N: / Step N:" describing HOW the product physically acts on the body.',
+      '- Each step describes a BODILY ACTION (enzyme released, receptor activated, barrier penetrated) — NEVER what the user feels, NEVER a time marker, NEVER an ingredient list.',
+      '- Pull from product USPs field for science-grounded language. If absent, infer plausible mechanism for the niche.',
+      '- heroStat.value = step count. heroStat.unit = "" empty. heroStat.label = "step / langkah / bước" per locale.',
+      '- footnote = scientific reference cue tying back to product brief if possible.',
     ],
   },
   'timeline': {
-    heroStatExample: { value: '30', unit: 'ngày', label: 'để đạt kết quả tối đa' },
+    heroStatExample: { value: '30', unit: 'hari', label: 'untuk hasil optimum' },
     bulletExamples: [
-      'Sau 5 phút: Da dịu, giảm đỏ rõ rệt',
-      'Sau 7 ngày: Da căng mịn hơn, lỗ chân lông se',
-      'Sau 14 ngày: Đốm thâm nhạt đi, da đều màu',
-      'Sau 30 ngày: Da săn chắc, sáng khỏe rõ rệt',
+      'Selepas 3 hari: Rasa lebih ringan, kurang kembung',
+      'Selepas 7 hari: Pergerakan usus lebih teratur',
+      'Selepas 14 hari: Pencernaan bertambah baik, kurang sakit perut',
+      'Selepas 30 hari: Keseimbangan flora pulih, penyerapan nutrien optimum',
+    ],
+    primarySource: 'PRODUCT BENEFITS + PAIN POINTS — sequenced over time as progressive resolution milestones',
+    forbidPatterns: [
+      'social proof metrics (stats variant)',
+      'mechanism action steps (mechanism variant)',
+      'ingredient → benefit pairs (ingredients variant)',
+      'instant-cure promises in the first milestone',
     ],
     rules: [
-      '- This is a TIMELINE infographic. Each bullet MUST start with a TIME MARKER like "Sau 5 phút:" / "Sau 7 ngày:" / "Sau 30 ngày:" / locale equivalent.',
-      '- heroStat.value = the TOTAL duration to reach full effect. heroStat.unit = "ngày" / "tuần" / "days" per locale.',
-      '- heroStat.label = "để đạt kết quả tối đa" or locale equivalent.',
-      '- 3-5 milestones, monotonically increasing time. Each describes a SPECIFIC visible / felt change.',
-      '- Set realistic expectations — never promise "instant cure" in the 5-min bullet.',
-      '- footnote = "Kết quả có thể khác nhau tùy cơ địa" or locale equivalent.',
+      '- THIS IS TIMELINE — bullets MUST start with a TIME MARKER ("Sau / Selepas / Setelah / After N phút / ngày / hari / minggu / days").',
+      '- Each milestone describes ONE specific FELT or VISIBLE change anchored to that time — never a mechanism step, never an ingredient.',
+      '- Pull from product benefits + pain points fields — sequence them so early markers show modest early relief, late markers show full transformation.',
+      '- heroStat.value = TOTAL duration to peak effect. heroStat.unit = "hari / ngày / tuần / minggu / days". heroStat.label = "untuk hasil optimum" or locale equivalent.',
+      '- 3-5 monotonically increasing milestones.',
+      '- First milestone stays MODEST (e.g. "lighter feeling") — NEVER promise instant cure ("hết bệnh trong 5 phút").',
+      '- footnote = "Kết quả có thể khác nhau tùy cơ địa" / "Keputusan boleh berbeza ikut individu" per locale.',
     ],
   },
 }
@@ -178,9 +220,9 @@ function buildInfographicPrompt(req: ContentRequest): string {
   const variant = req.infographicVariant ?? 'stats'
   const guide = VARIANT_GUIDANCE[variant]
   const heroExample = `{ "value": "${guide.heroStatExample.value}", "unit": "${guide.heroStatExample.unit}", "label": "${guide.heroStatExample.label}" }`
-  const bulletExample = guide.bulletExamples.map((b) => `"${b}"`).join(', ')
+  const bulletExample = guide.bulletExamples.map((b) => `"${b}"`).join(',\n               ')
   return [
-    `Generate ${variant.toUpperCase()} infographic copy for this product.`,
+    `Generate ${variant.toUpperCase()} infographic copy. THIS IS NOT a generic benefit infographic — it is specifically the "${variant}" variant.`,
     `Product: ${req.productName}${req.niche ? ` (niche: ${req.niche})` : ''}`,
     req.productDescription ? `Description: ${req.productDescription}` : '',
     knowledge,
@@ -189,11 +231,16 @@ function buildInfographicPrompt(req: ContentRequest): string {
     `Language: ${LOCALE_LANG[req.locale]}`,
     `Tone: ${req.tone ?? 'confident-natural'}`,
     '',
-    'STRICT JSON OUTPUT:',
+    `★ PRIMARY SOURCE for this variant: ${guide.primarySource}`,
+    `★ MUST NOT produce: ${guide.forbidPatterns.join(' / ')}`,
+    '',
+    'STRICT JSON OUTPUT — note the bullet pattern carefully:',
     '{',
     '  "title": "<5-9 word headline matching the variant theme>",',
     `  "heroStat": ${heroExample},`,
-    `  "bullets": [ ${bulletExample} ],`,
+    '  "bullets": [',
+    `               ${bulletExample}`,
+    '             ],',
     '  "footnote": "<one-line disclaimer / source / methodology>"',
     '}',
     '',
