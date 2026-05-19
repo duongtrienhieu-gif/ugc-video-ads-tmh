@@ -41,6 +41,12 @@ import {
   getAllProjects, saveCurrentAsProject, deleteProject, toggleWinner,
   duplicateProject, hydrateProjectAsState,
 } from '../services/projectLibrary'
+// Z36 Phase 7 — real MP4 assembly (imports preserved for future wiring)
+// import {
+//   assembleFinalVideo, estimateExportSize, preflightCheckAssets,
+// } from '../services/finalVideoAssembler'
+import { warmUpFFmpeg, isFFmpegLoaded } from '../services/ffmpegLoader'
+// import { EXPORT_RENDER_STAGE_LABEL_VI } from '../types'
 
 const TONE_BG: Record<string, string> = {
   emerald: 'bg-emerald-100 text-emerald-800 border-emerald-300',
@@ -72,6 +78,12 @@ export default function ExportPhase() {
   const setIsBuildingPackage = useAdsVideoStore((s) => s.setIsBuildingPackage)
   const setExportError    = useAdsVideoStore((s) => s.setExportError)
   const hydrateFromSnapshot = useAdsVideoStore((s) => s.hydrateFromSnapshot)
+  // Z36 Phase 7 store hooks (preserved for future wiring)
+  // const setExportStage       = useAdsVideoStore((s) => s.setExportStage)
+  // const setExportProgress    = useAdsVideoStore((s) => s.setExportProgress)
+  // const setExportPreset      = useAdsVideoStore((s) => s.setExportPreset)
+  // const setAssembledVideoRef = useAdsVideoStore((s) => s.setAssembledVideoRef)
+  // const setFailedClipIds     = useAdsVideoStore((s) => s.setFailedClipIds)
 
   const geminiKey = useSettingsStore((s) => s.geminiApiKey)
   const addToast = useAppStore((s) => s.addToast)
@@ -85,6 +97,12 @@ export default function ExportPhase() {
   useEffect(() => {
     if (libraryOpen) setSavedProjects(getAllProjects())
   }, [libraryOpen])
+
+  // Z36 — eager warm-up of ffmpeg.wasm so it's cached by the time the
+  // user clicks Preview Export. Runs once when ExportPhase mounts.
+  useEffect(() => {
+    if (!isFFmpegLoaded()) warmUpFFmpeg()
+  }, [])
 
   // ── Pre-flight ──────────────────────────────────────────────────────────
   const canBuildPackage = !!plan && !!state.scriptBrain.script
@@ -167,6 +185,57 @@ export default function ExportPhase() {
     const saved = saveCurrentAsProject(state)
     addToast(`✓ Đã lưu "${saved.name}"`, 'success')
     setSavedProjects(getAllProjects())
+  }
+
+  // Z36 Phase 7 — REAL MP4 assembly via ffmpeg.wasm
+  const handleAssembleFinalVideo = async (preset: 'preview' | 'final') => {
+    if (!plan) return
+    setExportPreset(preset)
+    setExportProgress(0)
+    setFailedClipIds([])
+    setExportError(null)
+
+    // Preflight — surface missing assets early
+    try {
+      const preflight = await preflightCheckAssets(plan)
+      if (preflight.resolvedSegments === 0) {
+        addToast('Không có segment nào resolve được — không có clip để assemble', 'error')
+        setExportStage('failed')
+        return
+      }
+      if (preflight.missingClipIds.length > 0) {
+        addToast(`⚠ ${preflight.missingClipIds.length} insert thiếu — sẽ skip`, 'info')
+      }
+    } catch (err) {
+      console.warn('[EXPORT] preflight failed', err)
+    }
+
+    try {
+      const result = await assembleFinalVideo({
+        plan,
+        formatId: ev.formatId,
+        qualityId: ev.qualityId,
+        preset,
+        voiceRef: state.creatorVideo?.voiceRef ?? null,
+        onStage: (stage) => setExportStage(stage),
+        onProgress: (ratio) => setExportProgress(ratio),
+      })
+      setAssembledVideoRef(result.videoRef)
+      setFailedClipIds(result.failedClipIds)
+      setExportStage('done')
+      setExportProgress(1)
+      addToast(
+        `✓ MP4 ${preset} export xong (${(result.encodeMs / 1000).toFixed(1)}s` +
+        `${result.failedClipIds.length > 0 ? `, ${result.failedClipIds.length} clip skipped` : ''})`,
+        'success',
+      )
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      setExportError(msg.slice(0, 240))
+      setExportStage('failed')
+      setExportProgress(0)
+      addToast(`Assemble lỗi: ${msg}`, 'error')
+    }
   }
 
   // ── Render ──────────────────────────────────────────────────────────────
@@ -419,6 +488,19 @@ export default function ExportPhase() {
             ctaText={effectiveCtaText}
           />
         )}
+
+        {/* ── Z36 Phase 7 — REAL MP4 ASSEMBLY ───────────────────────────── */}
+        <RealMp4AssemblyPanel
+          plan={plan!}
+          formatId={ev.formatId}
+          qualityId={ev.qualityId}
+          stage={ev.exportStage}
+          progress={ev.exportProgress}
+          preset={ev.exportPreset}
+          assembledVideoRef={ev.assembledVideoRef}
+          failedClipIds={ev.failedClipIds}
+          onAssemble={handleAssembleFinalVideo}
+        />
 
         {/* ── Library modal ─────────────────────────────────────────────── */}
         {libraryOpen && (
