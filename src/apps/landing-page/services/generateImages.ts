@@ -85,29 +85,48 @@ const WITH_PRODUCT_SECTIONS: ReadonlySet<SectionType> = new Set<SectionType>([
 ])
 
 // ─────────────────────────────────────────────────────────────────────────
-// OPTION A (2026-05-19) — sections where product identity is CRITICAL and
-// gpt-image-2's TEXT-ONLY limitation produces unacceptable drift even with
-// FIX 1A packaging description injection. User reported drift to real
-// brands the model is trained on: PHARMANEX GUM HEALTH, Dr. White, GoPure,
-// biotopics, Nutriplus — KIE's training bias overrode the text prompt.
+// HYBRID ROUTING — match Super Ladipage's productPolicy-driven pattern.
 //
-// For these sections we ROUTE to KIE's /gpt4o-image/generate endpoint
-// (submitGpt4oImage) which actually CONSUMES filesUrl reference images
-// (image-to-image editing under the hood). Higher per-image cost than
-// gpt-image-2 but the only way to lock identity on a no-name brand.
+// Super Ladipage (the sibling app that battle-tested this issue) routes:
+//   • Sections WITH product (hero / product-discovery / ingredients /
+//     mechanism / benefits / comparison / social-proof / whatsapp /
+//     offer / final-cta) → gpt-4o-image via /gpt4o-image/generate.
+//     Endpoint actually CONSUMES filesUrl → identity locked.
+//   • Sections WITHOUT product (pain / why-happens / failed-solutions /
+//     expert-feedback / news-proof / before-after / lifestyle) →
+//     gpt-image-2 via /jobs/createTask. Cheaper + sharper photo realism
+//     for emotional candid / portrait / infographic shots.
+//   • FAQ → no images.
+//
+// Rationale: gpt-image-2 is TEXT-ONLY (silently ignores filesUrl) — using
+// it for product-bearing sections produces drift to real brands KIE knows
+// (PHARMANEX, Shaklee, Dr. White, GoPure, biotopics, Nutriplus). For
+// non-product sections, gpt-image-2 is actually PREFERRED because it's
+// newer + sharper for pure photo realism.
+//
+// Routing is CODE-DRIVEN per section type — AI never decides the model
+// → eliminates risk of misrouting a product section to text-only.
 //
 // Falls back to gpt-image-2 if pack has no uploaded refs (filesUrl empty
-// → no point in image-to-image, just use the cheaper text-to-image path).
-//
-// Violates ROLLBACK_HANDOFF mục 10 "KHÔNG đổi image model" — user approved
-// this trade-off explicitly after observing the PHARMANEX drift.
+// → image-to-image is useless, cheaper path is fine).
 // ─────────────────────────────────────────────────────────────────────────
-const CRITICAL_IDENTITY_SECTIONS: ReadonlySet<SectionType> = new Set<SectionType>([
+const ROUTE_TO_GPT4O_SECTIONS: ReadonlySet<SectionType> = new Set<SectionType>([
+  // 10 sections that always feature the product (per Super Ladipage map)
   'hero',
   'product-discovery',
+  'ingredients',
+  'mechanism',
+  'benefits',
+  'comparison',
   'social-proof',
+  'whatsapp-testimonials',
   'offer',
   'final-cta',
+  // Premium form sections (not in form 1 but defined in type) — also
+  // product-bearing per spec, included for cross-form consistency.
+  'magazine-feature',
+  'stat-proof',
+  'web-authority-proof',
 ])
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -1641,12 +1660,13 @@ async function runWithCreditSafeRetry(
 
   const finalPrompt = buildFinalPrompt(job, hasProductRefs)
 
-  // ── OPTION A — model routing for product identity-critical sections.
-  //   Use /gpt4o-image/generate (image-to-image, actually consumes filesUrl)
-  //   for sections where gpt-image-2's text-only mode causes brand drift.
-  //   Falls back to gpt-image-2 when no refs uploaded (image-to-image is
-  //   useless without a reference image).
-  const useGpt4oForIdentity = CRITICAL_IDENTITY_SECTIONS.has(job.section.type) && hasProductRefs
+  // ── HYBRID ROUTING per Super Ladipage pattern.
+  //   Product-bearing sections (ROUTE_TO_GPT4O_SECTIONS) → gpt-4o-image
+  //   /gpt4o-image/generate (TRUE i2i, identity locked via filesUrl).
+  //   Non-product sections → gpt-image-2 /jobs/createTask (cheaper +
+  //   sharper photo realism for emotional / portrait / infographic shots).
+  //   Falls back to gpt-image-2 if pack has no refs (i2i pointless).
+  const useGpt4oForIdentity = ROUTE_TO_GPT4O_SECTIONS.has(job.section.type) && hasProductRefs
   const providerTag = useGpt4oForIdentity ? 'KIE gpt-4o-image' : 'KIE gpt-image-2'
 
   let lastTaskId: string | null = null

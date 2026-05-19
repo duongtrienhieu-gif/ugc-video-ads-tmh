@@ -1,11 +1,17 @@
 // ─────────────────────────────────────────────────────────────────────
-// Photographic scene generator — single KIE GPT-image-1 call that
+// Photographic scene generator — single KIE gpt-4o-image call that
 // produces the photographic composition (product centered, ingredients
 // arranged around it on a clean background). NO text in this image —
 // text labels are drawn on top by the canvas renderer.
+//
+// 2026-05-20 — switched from submitGptImage2 → submitGpt4oImage to lock
+// product identity. gpt-image-2 is TEXT-ONLY and silently ignores the
+// filesUrl product refs we send, causing the ingredient-card backdrop
+// to render a random brand (Shaklee/PHARMANEX) instead of the user's
+// actual product. /gpt4o-image/generate is TRUE i2i and consumes refs.
 // ─────────────────────────────────────────────────────────────────────
 
-import { submitGptImage2, pollGptImage2UntilDone } from '../../../../utils/kieai'
+import { submitGpt4oImage, pollGpt4oUntilDone } from '../../../../utils/kieai'
 import { saveAsset } from '../../../../utils/assetStore'
 import type { IngredientCardVariant, IngredientItem } from './types'
 
@@ -72,14 +78,15 @@ export async function generateIngredientScene(args: GenerateSceneArgs): Promise<
 
   const prompt = SCENE_PROMPT(args)
 
-  const { taskId } = await submitGptImage2({
+  const { taskId } = await submitGpt4oImage({
     apiKey: args.kieApiKey,
     prompt,
     filesUrl: args.productRefUrls.slice(0, 3),
     size: '1:1',
+    enableFallback: true,
   })
 
-  const remoteUrl = await pollGptImage2UntilDone({
+  const remoteUrl = await pollGpt4oUntilDone({
     apiKey: args.kieApiKey,
     taskId,
     timeoutMs: 100_000,
