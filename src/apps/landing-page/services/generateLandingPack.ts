@@ -116,18 +116,41 @@ SECTION SPEC — produce EXACTLY these 17 in this order
 2. type="pain", imageAspectRatio="4:5"
    • copy: emotional pain agitation
    • 5 imagePrompts REQUIRED — each with DESIGNED text overlay (NOT plain centered text):
-     OVERLAY DESIGN RULES — apply to all 5:
+
+     SCENE SOURCING — NICHE-FIRST (critical):
+       · DO NOT use generic stress / office-burnout / sleepless / bloated-belly / weight-scale scenes
+         UNLESS those scenes match the product's actual niche.
+       · Pick all 5 pain scenes from the NICHE-SPECIFIC PAIN POINTS + SCENARIOS list provided
+         in the PRODUCT INTELLIGENCE OVERRIDE block at the top of this prompt. That list is
+         tailored to the product type (joint-pain → knee / back / stairs / prayer-mat scenes;
+         digestive-gut → bloating / bathroom mirror / dining gas scenes; skincare → mirror acne /
+         concealer / dark spots scenes; weight-loss → tight jeans / mirror belly / failed diet
+         scenes; etc.).
+       · All 5 prompts MUST depict the SAME niche but from 5 DIFFERENT angles — different
+         body part / different environment / different time of day / different posture.
+         Never repeat the same scene twice.
+       · If FORBIDDEN SCENES are listed in the intelligence block, DO NOT emit any prompt
+         that contains those scenes.
+       · Demographic (age / gender / ethnicity) MUST match the niche's targetAudience
+         (eg joint-pain → middle-aged / elderly Malaysian; skincare → 18-35 Malaysian woman).
+
+     OVERLAY DESIGN RULES — apply to all 5 (typography + decor stays consistent):
        · Use italic / slanted display font for the pain statement (conveys urgency / emotion)
        · Place overlay on a rounded glassmorphism or gradient panel (NOT plain text floating)
-       · Add a relevant emoji at the start: 😩 fatigue / 😣 pain / 💤 sleep / ⚠️ warning / 🤯 stress
+       · Add a relevant emoji at the start matching the pain type (eg 😩 fatigue / 😣 sharp pain /
+         💤 sleep / ⚠️ warning / 🤯 stress / 🦴 joint / 💢 ache — pick whatever fits the niche)
        · Subtle red / dark gradient shadow behind text for contrast
-       · Small decorative element (arrow, spark, burst) drawing attention to the face/body part the pain is about
-       · Max 4-6 Malay words per overlay — mobile-readable
-     - pain_01.jpg, style="Pain text overlay 1 — italic urgent decor", aspectRatio="4:5": tired Malaysian woman at office desk, head in hands, frustrated. Italic slanted Malay overlay on rounded dark glass panel, e.g. "😩 Penat walaupun dah rehat?" with subtle red glow + arrow pointing to her temple.
-     - pain_02.jpg, style="Pain text overlay 2 — italic urgent decor", aspectRatio="4:5": Malaysian person, bathroom mirror, bloated belly gesture. Italic Malay overlay on glassmorphism panel: second distinct pain statement starting with ⚠️ or 😣, with subtle red/orange gradient highlight near belly.
-     - pain_03.jpg, style="Pain text overlay 3 — italic urgent decor", aspectRatio="4:5": sleepless person, phone light on face at night, dark circles. Italic Malay overlay with 💤 or 😩 emoji on dark-blue glass panel, soft glow under the eyes, third pain statement.
-     - pain_04.jpg, style="Pain text overlay 4 — italic urgent decor", aspectRatio="4:5": person at dining table unable to eat, uncomfortable expression. Italic Malay overlay with 😣 or ⚠️ emoji, glassmorphism panel, subtle highlight near stomach, fourth pain statement.
-     - pain_05.jpg, style="Pain text overlay 5 — italic urgent decor", aspectRatio="4:5": Malaysian woman looking at scale sadly, plain clothes, honest moment. Italic Malay overlay with 🤯 or 😩 emoji on glass panel, soft red shadow, fifth pain statement.
+       · Small decorative element (arrow / spark / burst) drawing attention to the affected
+         body part for that scene
+       · Max 4-6 Malay words per overlay — mobile-readable, written in the output language
+
+     PROMPT SHAPE (apply to all 5, replace [scene] + [emoji] + [overlay] from intelligence block):
+       - pain_01.jpg, style="Pain text overlay 1 — italic urgent decor", aspectRatio="4:5":
+         [niche-specific scene #1 — describe person + environment + body language]. Italic
+         slanted Malay overlay on rounded glass panel reads "[emoji] [4-6 Malay words]" with
+         decorative element pointing to the affected body part.
+       - pain_02.jpg through pain_05.jpg follow the same shape — different niche-relevant
+         scene each, different emoji, different overlay text. Never duplicate.
 
 3. type="why-happens", imageAspectRatio="1:1"
    • copy: root cause explanation, conversational NOT medical-textbook

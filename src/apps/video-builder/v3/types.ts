@@ -437,6 +437,10 @@ export interface V3PipelineState {
   /** Z34 — auto-edit plan state (style picks + last generated plan) */
   autoEdit: AutoEditState
 
+  /** Z35 — export + variation state (format/quality + CTA variations
+   *  + last built export package) */
+  exportVariation: ExportVariationState
+
   /** Timestamp this state was last saved (informational) */
   updatedAt: number
 }
@@ -458,6 +462,7 @@ export function createEmptyV3State(): V3PipelineState {
     creatorVideo: null,
     inserts: [],
     autoEdit: createEmptyAutoEditState(),
+    exportVariation: createEmptyExportVariationState(),
     updatedAt: Date.now(),
   }
 }
@@ -849,6 +854,131 @@ export function createEmptyAutoEditState(): AutoEditState {
     exportedVideoRef: null,
     isGenerating: false,
     isExporting: false,
+    error: null,
+  }
+}
+
+// ═════════════════════════════════════════════════════════════════════════
+// Z35 — Export + Variation Engine (Phase 6)
+// ═════════════════════════════════════════════════════════════════════════
+// Turns Ads Video into an "AI performance ad factory" — fast variation
+// testing, project library, multi-format export. NOT a movie pipeline.
+// Z35 §14: optimised for iteration speed + low cost + creative reuse.
+
+export type ExportFormatId =
+  | 'tiktok_9x16'
+  | 'reels_9x16'
+  | 'shorts_9x16'
+  | 'square_1x1'
+  | 'story_9x16'
+  | 'feed_4x5'
+
+export const DEFAULT_EXPORT_FORMAT: ExportFormatId = 'tiktok_9x16'
+
+export type ExportQualityId =
+  | 'test_480'
+  | 'standard_720'
+  | 'final_1080'
+
+export const DEFAULT_EXPORT_QUALITY: ExportQualityId = 'test_480'
+
+export type HookVariantStyle = 'curiosity' | 'emotional' | 'shocking' | 'confession' | 'authority'
+
+export interface HookVariation {
+  style: HookVariantStyle
+  text: string
+  estDurationSec: number
+  generatedAt: number
+}
+
+export type CtaVariantStyle = 'soft' | 'urgency' | 'promo' | 'emotional' | 'testimonial'
+
+export interface CtaVariation {
+  style: CtaVariantStyle
+  text: string
+  estDurationSec: number
+  generatedAt: number
+}
+
+export type ThumbnailStyleId =
+  | 'tiktok_native'
+  | 'bold_text'
+  | 'clean_ugc'
+
+export interface ThumbnailPlan {
+  styleId: ThumbnailStyleId
+  sourceRef: string
+  headlineText: string
+  imageRef: string | null
+  generatedAt: number
+}
+
+export interface ExportPackage {
+  formatId: ExportFormatId
+  qualityId: ExportQualityId
+  /** asset:xxx of the final encoded MP4 (null until Phase 7 ffmpeg.wasm runs) */
+  videoRef: string | null
+  /** SRT subtitle file content */
+  srtContent: string
+  /** Plain-text script for ads ops + transcript */
+  plainTextScript: string
+  hookText: string
+  ctaText: string
+  thumbnail: ThumbnailPlan | null
+  durationSec: number
+  createdAt: number
+}
+
+export interface SavedProject {
+  id: string
+  name: string
+  productName: string
+  avatarName: string
+  snapshot: {
+    inputs: V3PipelineState['inputs']
+    scriptBrain: ScriptBrain
+    creatorVideoConfig: CreatorVideoConfig
+    creatorVideo: CreatorVideoClip | null
+    inserts: ActionInsertClip[]
+    autoEdit: AutoEditState
+  }
+  thumbRef?: string
+  tags: string[]
+  /** Z35 §7 — winning combo flag — bumps to top of library */
+  isWinner: boolean
+  createdAt: number
+  lastEditedAt: number
+}
+
+export interface ExportVariationState {
+  formatId: ExportFormatId
+  qualityId: ExportQualityId
+  /** Phase-6 CTA alternates (separate from scriptBrain.hookVariants which
+   *  is Phase-2 hooks). */
+  ctaVariations: CtaVariation[]
+  /** Index into ctaVariations[] (or -1 = use script's own CTA). */
+  pickedCtaIdx: number
+  /** Index into scriptBrain.hookVariants[] (or -1 = use script's own hook). */
+  pickedHookIdxForExport: number
+  /** Last built export package (null until user clicks Build) */
+  lastPackage: ExportPackage | null
+  thumbnailStyleId: ThumbnailStyleId
+  isGeneratingCtaVariations: boolean
+  isBuildingPackage: boolean
+  error: string | null
+}
+
+export function createEmptyExportVariationState(): ExportVariationState {
+  return {
+    formatId: DEFAULT_EXPORT_FORMAT,
+    qualityId: DEFAULT_EXPORT_QUALITY,
+    ctaVariations: [],
+    pickedCtaIdx: -1,
+    pickedHookIdxForExport: -1,
+    lastPackage: null,
+    thumbnailStyleId: 'tiktok_native',
+    isGeneratingCtaVariations: false,
+    isBuildingPackage: false,
     error: null,
   }
 }

@@ -30,6 +30,9 @@ import {
   // Z34 — Auto Edit Engine
   type EditingStyleId, type SubtitleStyleId, type BgmStyleId,
   type AutoEditPlan,
+  // Z35 — Export + Variation Engine
+  type ExportFormatId, type ExportQualityId,
+  type CtaVariation, type ExportPackage, type ThumbnailStyleId,
 } from '../types'
 import { CREATOR_PRESETS } from '../services/creatorPresets'
 import type { Model, Product } from '../../../../stores/types'
@@ -93,6 +96,21 @@ interface AdsVideoStoreState {
   setIsExporting:     (v: boolean) => void
   setExportedVideoRef: (ref: string | null) => void
   setAutoEditError:   (err: string | null) => void
+
+  // ── Z35 Export + Variation Engine ───────────────────────────────────────
+
+  setExportFormat:        (formatId: ExportFormatId) => void
+  setExportQuality:       (qualityId: ExportQualityId) => void
+  setCtaVariations:       (variations: CtaVariation[]) => void
+  pickCtaVariation:       (idx: number) => void
+  pickHookForExport:      (idx: number) => void
+  setExportPackage:       (pkg: ExportPackage | null) => void
+  setThumbnailStyle:      (styleId: ThumbnailStyleId) => void
+  setIsGeneratingCtaVars: (v: boolean) => void
+  setIsBuildingPackage:   (v: boolean) => void
+  setExportError:         (err: string | null) => void
+  /** Z35 — hydrate state from a SavedProject (used by Library "Load" button). */
+  hydrateFromSnapshot:    (partial: Partial<V3PipelineState>) => void
 
   // ── Z31 Ad Brain (Script + Voice foundation) ────────────────────────────
 
@@ -186,6 +204,16 @@ function loadFromStorage(): V3PipelineState | null {
       parsed.scriptBrain.isGeneratingScript = false
       parsed.scriptBrain.isGeneratingVoice = false
       parsed.scriptBrain.error = null
+    }
+    // Z35 — defensive exportVariation hydration. Pre-Z35 saves backfilled.
+    // Transient isGenerating / isBuilding reset to false on resume.
+    if (!parsed.exportVariation) {
+      const empty = createEmptyV3State()
+      parsed.exportVariation = empty.exportVariation
+    } else {
+      parsed.exportVariation.isGeneratingCtaVariations = false
+      parsed.exportVariation.isBuildingPackage = false
+      parsed.exportVariation.error = null
     }
     return parsed
   } catch (err) {
@@ -379,6 +407,74 @@ export const useAdsVideoStore = create<AdsVideoStoreState>((set, get) => ({
     commit(set, get, (s) => ({
       ...s,
       autoEdit: { ...s.autoEdit, error: err },
+    })),
+
+  // ── Z35 Export + Variation ─────────────────────────────────────────────
+
+  setExportFormat: (formatId) =>
+    commit(set, get, (s) => ({
+      ...s,
+      exportVariation: { ...s.exportVariation, formatId },
+    })),
+
+  setExportQuality: (qualityId) =>
+    commit(set, get, (s) => ({
+      ...s,
+      exportVariation: { ...s.exportVariation, qualityId },
+    })),
+
+  setCtaVariations: (variations) =>
+    commit(set, get, (s) => ({
+      ...s,
+      exportVariation: { ...s.exportVariation, ctaVariations: variations },
+    })),
+
+  pickCtaVariation: (idx) =>
+    commit(set, get, (s) => ({
+      ...s,
+      exportVariation: { ...s.exportVariation, pickedCtaIdx: idx },
+    })),
+
+  pickHookForExport: (idx) =>
+    commit(set, get, (s) => ({
+      ...s,
+      exportVariation: { ...s.exportVariation, pickedHookIdxForExport: idx },
+    })),
+
+  setExportPackage: (pkg) =>
+    commit(set, get, (s) => ({
+      ...s,
+      exportVariation: { ...s.exportVariation, lastPackage: pkg },
+    })),
+
+  setThumbnailStyle: (styleId) =>
+    commit(set, get, (s) => ({
+      ...s,
+      exportVariation: { ...s.exportVariation, thumbnailStyleId: styleId },
+    })),
+
+  setIsGeneratingCtaVars: (v) =>
+    commit(set, get, (s) => ({
+      ...s,
+      exportVariation: { ...s.exportVariation, isGeneratingCtaVariations: v },
+    })),
+
+  setIsBuildingPackage: (v) =>
+    commit(set, get, (s) => ({
+      ...s,
+      exportVariation: { ...s.exportVariation, isBuildingPackage: v },
+    })),
+
+  setExportError: (err) =>
+    commit(set, get, (s) => ({
+      ...s,
+      exportVariation: { ...s.exportVariation, error: err },
+    })),
+
+  hydrateFromSnapshot: (partial) =>
+    commit(set, get, (s) => ({
+      ...s,
+      ...partial,
     })),
 
   // ── Z31 Ad Brain ────────────────────────────────────────────────────────

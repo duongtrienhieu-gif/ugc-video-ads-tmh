@@ -36,6 +36,7 @@ import ScriptVoicePhase from './components/ScriptVoicePhase'
 import CreatorVideoPhase from './components/CreatorVideoPhase'
 import ActionInsertsPhase from './components/ActionInsertsPhase'
 import AutoEditPhase from './components/AutoEditPhase'
+import ExportPhase from './components/ExportPhase'
 import {
   V3_PHASE_LABEL_VI,
   WORKFLOW_MODE_CONFIG, COST_MODE_CONFIG,
@@ -584,16 +585,7 @@ export default function AdsVideoEngine({ onSwitchToV2, onSwitchToV1 }: Props) {
           <AutoEditPhase onContinue={() => setPhase('export')} />
         )}
         {state.phase === 'export' && (
-          <PhaseStub
-            title="Export"
-            summaryVi="Download MP4 final. Optionally export 9:16 (TikTok/Reels) + 16:9 cùng lúc."
-            plannedFeatures={[
-              'Download MP4 9:16 1080p',
-              'Save vào Project library để remix lần sau',
-              'Share link (Vercel-hosted, expires 7 ngày)',
-            ]}
-            icon={Download}
-          />
+          <ExportPhase />
         )}
       </div>
 
