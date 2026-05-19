@@ -3,6 +3,11 @@ import type { Product } from '../../../stores/types'
 import { directGeminiVision } from '../../../utils/gemini'
 import { getAsBase64 } from '../../../utils/assetStore'
 import { SYSTEM_PROMPT_IDENTITY } from '../prompts/systemPromptIdentity'
+import { withTimeout } from './withTimeout'
+
+/** Timeout cho Gemini Vision call — 60s đủ cho identity extract.
+ *  Nếu lâu hơn thì Gemini đang overload, không phải đang generate. */
+const VISION_TIMEOUT_MS = 60_000
 
 // ─────────────────────────────────────────────────────────────────────
 // Extract ProductIdentity — 1 LẦN / pack.
@@ -137,17 +142,28 @@ export async function extractProductIdentity(input: ExtractInput): Promise<Produ
 
   let lastError: Error | null = null
   for (let attempt = 1; attempt <= 2; attempt++) {
+    const startedAt = Date.now()
+    console.log(`[extractProductIdentity] attempt ${attempt}/2 — calling Gemini Vision (timeout ${VISION_TIMEOUT_MS / 1000}s)...`)
     try {
-      const raw = await directGeminiVision({
-        apiKey:             input.apiKey,
-        parts,
-        systemInstruction:  SYSTEM_PROMPT_IDENTITY,
-        responseMimeType:   'application/json',
-      })
-      return parseIdentityJson(raw)
+      const raw = await withTimeout(
+        directGeminiVision({
+          apiKey:             input.apiKey,
+          parts,
+          systemInstruction:  SYSTEM_PROMPT_IDENTITY,
+          responseMimeType:   'application/json',
+        }),
+        VISION_TIMEOUT_MS,
+        '[extractProductIdentity]',
+      )
+      const elapsed = ((Date.now() - startedAt) / 1000).toFixed(1)
+      console.log(`[extractProductIdentity] attempt ${attempt}/2 OK in ${elapsed}s — parsing JSON...`)
+      const identity = parseIdentityJson(raw)
+      console.log(`[extractProductIdentity] identity parsed OK — category="${identity.productCategory}"`)
+      return identity
     } catch (err) {
+      const elapsed = ((Date.now() - startedAt) / 1000).toFixed(1)
       lastError = err instanceof Error ? err : new Error(String(err))
-      console.warn(`[extractProductIdentity] attempt ${attempt}/2 failed: ${lastError.message.slice(0, 150)}`)
+      console.warn(`[extractProductIdentity] attempt ${attempt}/2 FAILED after ${elapsed}s: ${lastError.message.slice(0, 200)}`)
     }
   }
 

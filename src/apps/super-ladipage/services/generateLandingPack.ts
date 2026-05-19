@@ -11,6 +11,11 @@ import { extractProductIdentity } from './extractProductIdentity'
 import { translatePackToVi } from './translate'
 import { assembleImagePrompt } from '../assembler/assembleImagePrompt'
 import { semanticGateScan } from '../assembler/semanticGate'
+import { withTimeout } from './withTimeout'
+
+/** Timeout cho text gen lớn (pack 17 section). Output có thể tới ~16K
+ *  token, Gemini 2.5 Flash sinh ~200 token/s → ~80s. Cho 150s safety. */
+const PACK_GEN_TIMEOUT_MS = 150_000
 
 // ─────────────────────────────────────────────────────────────────────
 // Super Ladipage — Pass 1 orchestrator.
@@ -145,18 +150,21 @@ export async function generateLandingPack(params: LandingGenParams): Promise<Lan
   const form = params.form ?? 'ugc-malaysia'
   const preset = getPresetSpec(form)
 
-  console.info(`[SuperLadipage] start gen — product="${product.productName}", preset=${form}, language=${language}`)
+  console.info(`[SuperLadipage] ═══ START — product="${product.productName}", preset=${form}, language=${language} ═══`)
+  const totalStart = Date.now()
 
   // ─── 2. Extract ProductIdentity ───
+  console.info(`[SuperLadipage] STAGE 1/4 — extracting ProductIdentity via Gemini Vision...`)
   const identity = await extractProductIdentity({
     apiKey:       geminiKey,
     product,
     visualMemory: params.visualMemory ?? [],
     language,
   })
-  console.info(`[SuperLadipage] identity OK — category="${identity.productCategory}", name="${identity.productNameExact}"`)
+  console.info(`[SuperLadipage] STAGE 1/4 DONE — identity OK: category="${identity.productCategory}", name="${identity.productNameExact}"`)
 
   // ─── 3+4. Gen pack text + Semantic gate (max 2 retry) ───
+  console.info(`[SuperLadipage] STAGE 2/4 — generating pack text + image concepts...`)
   const systemPrompt = buildSystemPromptPackGen({
     identity,
     preset,
@@ -170,18 +178,28 @@ export async function generateLandingPack(params: LandingGenParams): Promise<Lan
   let feedbackForRetry = ''
 
   for (let attempt = 1; attempt <= 3; attempt++) {
+    const startedAt = Date.now()
     try {
       const userPrompt = attempt === 1
         ? 'Generate the landing pack JSON now.'
         : `Previous attempt had these issues:\n${feedbackForRetry}\n\nFix them and regenerate the FULL pack JSON.`
 
-      const raw = await directGeminiText({
-        apiKey:             geminiKey,
-        prompt:             userPrompt,
-        systemInstruction:  systemPrompt,
-        responseMimeType:   'application/json',
-        maxOutputTokens:    16384,
-      })
+      console.log(`[SuperLadipage] pack gen attempt ${attempt}/3 — calling Gemini text (timeout ${PACK_GEN_TIMEOUT_MS / 1000}s, maxTokens=16384)...`)
+
+      const raw = await withTimeout(
+        directGeminiText({
+          apiKey:             geminiKey,
+          prompt:             userPrompt,
+          systemInstruction:  systemPrompt,
+          responseMimeType:   'application/json',
+          maxOutputTokens:    16384,
+        }),
+        PACK_GEN_TIMEOUT_MS,
+        '[SuperLadipage pack gen]',
+      )
+
+      const elapsed = ((Date.now() - startedAt) / 1000).toFixed(1)
+      console.log(`[SuperLadipage] pack gen attempt ${attempt}/3 — Gemini returned ${raw.length} chars in ${elapsed}s, parsing JSON...`)
 
       const parsed = parseRawPack(raw)
       const sections = rawToSections(parsed, identity, language)
@@ -223,7 +241,7 @@ export async function generateLandingPack(params: LandingGenParams): Promise<Lan
           productPackagingDescription: identity.packagingDescription,
         }
         validPack = pack
-        console.info(`[SuperLadipage] pack gen OK on attempt ${attempt} — ${pack.sections.length} sections`)
+        console.info(`[SuperLadipage] STAGE 2/4 DONE — pack gen OK on attempt ${attempt} (${pack.sections.length} sections, ${pack.sections.reduce((sum, s) => sum + s.imagePrompts.length, 0)} image prompts)`)
         break
       }
 
@@ -247,17 +265,24 @@ export async function generateLandingPack(params: LandingGenParams): Promise<Lan
   }
 
   // ─── 5. Translate pack → VN ───
-  try {
-    validPack = await translatePackToVi({
-      apiKey: geminiKey,
-      pack: validPack,
-      fromLanguage: language,
-    })
-    console.info('[SuperLadipage] translation OK')
-  } catch (err) {
-    console.warn('[SuperLadipage] translation failed — pack returned without VN translation', err)
-    // KHÔNG block pack — user vẫn có copy native, chỉ thiếu dịch VN
+  if (language === 'vi') {
+    console.info('[SuperLadipage] STAGE 3/4 SKIP — language already VN')
+  } else {
+    console.info('[SuperLadipage] STAGE 3/4 — translating pack → VN...')
+    try {
+      validPack = await translatePackToVi({
+        apiKey: geminiKey,
+        pack: validPack,
+        fromLanguage: language,
+      })
+      console.info('[SuperLadipage] STAGE 3/4 DONE — translation OK')
+    } catch (err) {
+      console.warn('[SuperLadipage] STAGE 3/4 FAILED — pack returned without VN translation', err)
+      // KHÔNG block pack — user vẫn có copy native, chỉ thiếu dịch VN
+    }
   }
 
+  const totalElapsed = ((Date.now() - totalStart) / 1000).toFixed(1)
+  console.info(`[SuperLadipage] ═══ COMPLETE in ${totalElapsed}s — returning pack to UI ═══`)
   return validPack
 }

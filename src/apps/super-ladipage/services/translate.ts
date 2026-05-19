@@ -1,5 +1,8 @@
 import type { LandingPagePack, LandingLanguage } from '../types'
 import { directGeminiText } from '../../../utils/gemini'
+import { withTimeout } from './withTimeout'
+
+const TRANSLATE_TIMEOUT_MS = 90_000
 
 // ─────────────────────────────────────────────────────────────────────
 // Translate pack native → VN.
@@ -123,13 +126,19 @@ Translate these fields to Vietnamese. Output JSON only:
 ${JSON.stringify(source, null, 2)}
 `.trim()
 
-  const raw = await directGeminiText({
-    apiKey: args.apiKey,
-    prompt: userPrompt,
-    systemInstruction: systemPrompt,
-    responseMimeType: 'application/json',
-    maxOutputTokens: 16384,
-  })
+  console.log(`[translate] ${sourceKeys.length} fields → VN, timeout ${TRANSLATE_TIMEOUT_MS / 1000}s...`)
+  const raw = await withTimeout(
+    directGeminiText({
+      apiKey: args.apiKey,
+      prompt: userPrompt,
+      systemInstruction: systemPrompt,
+      responseMimeType: 'application/json',
+      maxOutputTokens: 16384,
+    }),
+    TRANSLATE_TIMEOUT_MS,
+    '[translate]',
+  )
+  console.log(`[translate] Gemini returned ${raw.length} chars`)
 
   // Strip fences just in case
   let cleaned = raw.trim()
