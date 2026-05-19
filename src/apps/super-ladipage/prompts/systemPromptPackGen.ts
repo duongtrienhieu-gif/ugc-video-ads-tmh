@@ -55,7 +55,7 @@ ${sectionTable}
     {
       "type":              "<from spec>",
       "title":             "<short section title in ${langName}>",
-      "layoutGuide":       "<1 short sentence — ALWAYS IN VIETNAMESE (Tiếng Việt) regardless of section language. Internal hint cho marketer Việt Nam về ý đồ layout/visual. KHÔNG dịch sang Malay/English — đây là field duy nhất luôn tiếng Việt.>",
+      "layoutGuide":       "<⚠️ FIELD NÀY BẮT BUỘC TIẾNG VIỆT (Tiếng Việt) — KHÔNG MALAY KHÔNG ENGLISH dù section language là gì. 1 câu ngắn ghi chú layout cho marketer người Việt. VÍ DỤ ĐÚNG: 'Bố cục UGC dọc với headline lớn ở đầu, sản phẩm cầm tay center, 3 badge tròn nổi.' VÍ DỤ SAI (Malay): 'Susun atur UGC menegak...' — TUYỆT ĐỐI KHÔNG. Đây là field duy nhất luôn dịch sang Vietnamese.>",
       "copy":              "<main body in ${langName}, 2-5 sentences (longer for hero/story)>",
       "headline":          "<headline if section.fields.headline>",
       "subheadline":       "<subheadline if applicable>",
@@ -117,7 +117,7 @@ R3. CONCEPT FORMAT
 
 R4. COPY TONE — "BẠN / CHÚNG TÔI" (intimate sharing)
 - All user-facing copy in ${langName} uses intimate voice: "anda/bạn" + "kami/chúng tôi".
-- EXCEPTION: layoutGuide field is internal Vietnamese hint — always Tiếng Việt, never translated.
+- ⚠️ STRICT EXCEPTION: layoutGuide field is the ONLY field ALWAYS in Vietnamese (Tiếng Việt) regardless of section language. Even when output language = "ms" (Malay), the layoutGuide value MUST be Vietnamese. Wrong Malay output = pack rejected. See schema line for ví dụ đúng.
 - TÂM SỰ tone — empathy first ("Anda pernah rasa...", "Kami faham..."), validate pain, share solution as "what we discovered".
 - NEVER corporate/cold third-person ("khách hàng", "pengguna", "users", "customers").
 - EVERY item in bullets[] MUST start with emoji icon prefix:
