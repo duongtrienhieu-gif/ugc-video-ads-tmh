@@ -172,27 +172,31 @@
       color: #075985;
       line-height: 1.5;
     }
-    .ts-btn {
-      display: block;
-      width: 100%;
-      padding: 6px 8px;
+    .ts-section {
       margin-top: 8px;
-      background: #f3f4f6;
-      color: #1f2937;
-      border: 1px solid #d1d5db;
-      border-radius: 4px;
+      padding-top: 8px;
+      border-top: 1px dashed #e5e7eb;
+    }
+    .ts-loading {
       font-size: 12px;
-      font-weight: 500;
-      cursor: pointer;
-      transition: background 0.15s, border-color 0.15s;
+      color: #6b7280;
+      font-style: italic;
+      padding: 4px 0;
     }
-    .ts-btn:hover:not(:disabled) {
-      background: #fef3c7;
-      border-color: #fbbf24;
+    .ts-found-label {
+      font-size: 11px;
+      font-weight: 600;
+      color: #b45309;
+      margin-bottom: 4px;
+      text-transform: uppercase;
+      letter-spacing: 0.3px;
     }
-    .ts-btn:disabled {
-      opacity: 0.7;
-      cursor: wait;
+    .ts-error {
+      font-size: 11px;
+      color: #991b1b;
+      padding: 4px 6px;
+      background: #fef2f2;
+      border-radius: 4px;
     }
     .timestamps {
       margin-top: 8px;
@@ -328,8 +332,8 @@ Bấm vào giỏ hàng dưới đây để được giảm thêm 20% cho đơn �
         })
         output.innerHTML = html
 
-        // Step 2: Search YouTube + TikTok + Web in parallel, then rank
-        await Promise.all(scenes.map(async (scene, i) => {
+        // Phase 1: Search + Rank per scene (parallel)
+        const sceneData = await Promise.all(scenes.map(async (scene, i) => {
           const container = document.getElementById(`results-${i}`)
           const [ytResult, tiktokResult, webResult] = await Promise.all([
             searchYouTube(youtubeKey, scene.keywordEn).catch(e => ({ __error: e.message })),
@@ -347,21 +351,64 @@ Bấm vào giỏ hàng dưới đây để được giảm thêm 20% cho đơn �
             ...(webResult.links || []).map(r => ({ ...r, source: 'web' }))
           ]
 
-          const statusEl = container.querySelector('.loading')
-          if (statusEl) statusEl.textContent = `⏳ Đã có ${allLinks.length} link. Đang xếp hạng độ phù hợp...`
+          let ranked = await rankLinks(geminiKey, scene.visualIntent, allLinks)
+          // Keep only top 12 with score >= 40
+          ranked = ranked
+            .filter(l => (l.score ?? 50) >= 40)
+            .slice(0, 12)
+            .map((l, j) => ({ ...l, _cardId: `s${i}_${j}` }))
 
-          const ranked = await rankLinks(geminiKey, scene.visualIntent, allLinks)
+          // Pick top 2 YouTube cards (score >= 60) for auto-timestamp
+          const toAnalyze = ranked
+            .filter(l => l.source === 'youtube' && (l.score ?? 0) >= 60)
+            .slice(0, 2)
+          const analyzingIds = new Set(toAnalyze.map(l => l._cardId))
 
           renderResults(container, ranked, scene.visualIntent, {
             ytError: ytResult?.__error,
             tiktokError: tiktokResult?.__error,
             webError: webResult?.__error,
-            narrative: [tiktokResult?.narrative, webResult?.narrative].filter(Boolean).join('\n\n')
+            narrative: [tiktokResult?.narrative, webResult?.narrative].filter(Boolean).join('\n\n'),
+            analyzingIds
           })
+
+          return { scene, ranked, container, toAnalyze, sceneIdx: i }
         }))
 
-        const elapsed = ((Date.now() - startTime) / 1000).toFixed(1)
-        document.querySelector('.status-bar').innerHTML = `✅ Hoàn tất ${scenes.length} scene trong ${elapsed}s. Click vào thumbnail để mở link.`
+        // Phase 2: Auto-analyze top YouTube videos with global concurrency limit
+        const allAnalyses = []
+        sceneData.forEach(sd => {
+          sd.toAnalyze.forEach(link => {
+            allAnalyses.push({ link, scene: sd.scene, container: sd.container })
+          })
+        })
+
+        const phase1Elapsed = ((Date.now() - startTime) / 1000).toFixed(1)
+        const statusEl = document.querySelector('.status-bar')
+        if (allAnalyses.length === 0) {
+          if (statusEl) statusEl.innerHTML = `✅ Hoàn tất ${scenes.length} scene trong ${phase1Elapsed}s. Không có YouTube video nào đạt score ≥ 60 để phân tích timestamp.`
+        } else {
+          if (statusEl) statusEl.innerHTML = `🎬 Phase 1 xong (${phase1Elapsed}s). Đang phân tích timestamp ${allAnalyses.length} YouTube video (0 / ${allAnalyses.length})...`
+
+          let done = 0
+          await processWithConcurrency(allAnalyses, async ({ link, scene, container }) => {
+            const card = container.querySelector(`[data-card-id="${link._cardId}"]`)
+            try {
+              const result = await analyzeYouTubeTimestamp(geminiKey, link.url, scene.visualIntent)
+              if (card) updateCardTimestamps(card, link.url, result)
+            } catch (err) {
+              if (card) {
+                const ph = card.querySelector('.ts-section')
+                if (ph) ph.innerHTML = `<div class="ts-error">⚠️ Lỗi phân tích: ${escapeHtml(err.message.slice(0, 100))}</div>`
+              }
+            }
+            done++
+            if (statusEl) statusEl.innerHTML = `🎬 Đang phân tích timestamp YouTube videos (${done} / ${allAnalyses.length})...`
+          }, 4)
+
+          const totalElapsed = ((Date.now() - startTime) / 1000).toFixed(1)
+          if (statusEl) statusEl.innerHTML = `✅ Hoàn tất ${scenes.length} scene + ${allAnalyses.length} video phân tích trong ${totalElapsed}s.`
+        }
       } catch (err) {
         output.innerHTML = `<div class="error">❌ Lỗi: ${escapeHtml(err.message)}</div>`
       } finally {
@@ -435,7 +482,7 @@ ${script}`
 
     // ── Step 2a: YouTube Data API search ─────────────────────────────────────
     async function searchYouTube(apiKey, query) {
-      const url = `https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&maxResults=6&q=${encodeURIComponent(query)}&key=${apiKey}`
+      const url = `https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&maxResults=5&q=${encodeURIComponent(query)}&key=${apiKey}`
       const res = await fetch(url)
       if (!res.ok) {
         const err = await res.json().catch(() => null)
@@ -460,7 +507,7 @@ Yêu cầu QUAN TRỌNG:
 1. CHỈ tìm trang có VIDEO play được — TikTok video, Vimeo, Pinterest video pin, YouTube Shorts, stock video sites (videvo, mixkit, coverr, motionarray, storyblocks free preview), blog có embed video. TUYỆT ĐỐI KHÔNG tìm article text / Wikipedia / Quora.
 2. ĐA DẠNG NGUỒN — không chỉ YouTube. Cố tìm ít nhất 2 platform khác YouTube (ưu tiên TikTok, Vimeo, stock sites).
 3. URL phải là TRANG CHI TIẾT của 1 video cụ thể, không phải homepage hay search results.
-4. Tìm 6-10 link cụ thể.
+4. Tìm CHỈ 4-5 link chất lượng cao (ưu tiên relevance hơn số lượng).
 
 Sau khi search, viết 2-3 câu tóm tắt các nguồn bạn tìm được và đánh giá ngắn nguồn nào match concept nhất.`
 
@@ -482,14 +529,14 @@ Sau khi search, viết 2-3 câu tóm tắt các nguồn bạn tìm được và 
       for (const c of chunks) {
         if (!c.web?.uri) continue
         if (seen.has(c.web.uri)) continue
+        if (links.length >= 5) break
         seen.add(c.web.uri)
         let domain = ''
         try { domain = new URL(c.web.uri).hostname.replace(/^www\./, '') } catch {}
-        links.push({
-          url: c.web.uri,
-          title: c.web.title || domain || c.web.uri,
-          domain
-        })
+        const title = c.web.title || domain || c.web.uri
+        // Skip if title is obviously YouTube (already covered by YT API)
+        if (/^youtube\.com$|^youtu\.be$/i.test(title.trim())) continue
+        links.push({ url: c.web.uri, title, domain })
       }
 
       return { links, narrative }
@@ -524,12 +571,12 @@ Viết 1-2 câu đánh giá ngắn về các TikTok bạn tìm được.`
       for (const c of chunks) {
         if (!c.web?.uri) continue
         if (seen.has(c.web.uri)) continue
+        if (links.length >= 5) break
         seen.add(c.web.uri)
-        const title = c.web.title || ''
-        if (!/tiktok/i.test(title)) continue
+        const title = (c.web.title || '').replace(/\s*\|\s*TikTok\s*$/i, '').trim()
         links.push({
           url: c.web.uri,
-          title: title.replace(/\s*\|\s*TikTok\s*$/i, '').trim() || 'TikTok video',
+          title: title || 'TikTok video',
           domain: 'tiktok.com'
         })
       }
@@ -632,42 +679,6 @@ Yêu cầu:
       return JSON.parse(text)
     }
 
-    // ── UI handler: analyze timestamp on button click ────────────────────────
-    async function analyzeTimestamp(btn, url, intent) {
-      const card = btn.closest('.card')
-      btn.disabled = true
-      const orig = btn.textContent
-      btn.textContent = '⏳ Đang xem video (~30s)...'
-      try {
-        const result = await analyzeYouTubeTimestamp(CURRENT_GEMINI_KEY, url, intent)
-        btn.remove()
-        let html = ''
-        if (result.found && result.timestamps?.length) {
-          html += '<div class="timestamps">'
-          result.timestamps.forEach(t => {
-            const seconds = parseTimeToSeconds(t.start)
-            const sep = url.includes('?') ? '&' : '?'
-            const deepLink = `${url}${sep}t=${seconds}s`
-            html += `<a href="${escapeAttr(deepLink)}" target="_blank" rel="noopener" class="ts-row">
-              <span class="ts-time">${escapeHtml(t.start)}–${escapeHtml(t.end)}</span>
-              <span class="ts-desc">${escapeHtml(t.description)}</span>
-            </a>`
-          })
-          html += '</div>'
-        } else {
-          html += `<div class="ts-notfound">❌ Video không chứa cảnh phù hợp</div>`
-        }
-        if (result.summary) {
-          html += `<div class="ts-summary">📝 ${escapeHtml(result.summary)}</div>`
-        }
-        card.insertAdjacentHTML('beforeend', html)
-      } catch (err) {
-        btn.disabled = false
-        btn.textContent = orig
-        card.insertAdjacentHTML('beforeend', `<div class="error">${escapeHtml(err.message)}</div>`)
-      }
-    }
-
     function parseTimeToSeconds(t) {
       const parts = String(t).split(':').map(s => parseInt(s, 10) || 0)
       if (parts.length === 2) return parts[0] * 60 + parts[1]
@@ -682,6 +693,8 @@ Yêu cầu:
       if (meta?.narrative) {
         html += `<div class="web-narrative">🌐 <strong>Gemini đánh giá:</strong> ${escapeHtml(meta.narrative)}</div>`
       }
+
+      const analyzingIds = meta?.analyzingIds || new Set()
 
       rankedLinks.forEach(r => {
         const isYT = r.source === 'youtube'
@@ -701,12 +714,12 @@ Yêu cầu:
           : score >= 40 ? '#f97316'
           : '#9ca3af'
         const faviconDomain = r.domain || 'web'
-        const btnLabel = isYT ? '🎯 Tìm timestamp' : '📺 Mở xem trực tiếp'
+        const willAnalyze = analyzingIds.has(r._cardId)
 
         html += `
-          <div class="card">
+          <div class="card" data-card-id="${escapeAttr(r._cardId)}">
             ${score !== null ? `<div class="score-badge" style="background:${scoreColor}" title="${escapeAttr(r.reason || '')}">⭐ ${score}</div>` : ''}
-            <a href="${escapeAttr(r.url)}" target="_blank" rel="noopener">
+            <a class="card-main" href="${escapeAttr(r.url)}" target="_blank" rel="noopener">
               <div class="thumb-wrap">
                 <img class="thumb" src="${escapeAttr(thumbUrl)}" alt="" loading="lazy"
                      onerror="this.style.display='none'; this.parentElement.querySelector('.thumb-fallback').style.display='flex'">
@@ -719,9 +732,7 @@ Yêu cầu:
               ${r.reason ? `<div class="why">💡 ${escapeHtml(r.reason)}</div>` : ''}
               <div class="url-small">${escapeHtml(r.meta || r.domain || '')}</div>
             </a>
-            <button class="ts-btn" data-url="${escapeAttr(r.url)}" data-intent="${escapeAttr(intent)}" data-source="${escapeAttr(r.source)}">
-              ${btnLabel}
-            </button>
+            ${willAnalyze ? `<div class="ts-section" data-url="${escapeAttr(r.url)}"><div class="ts-loading">⏳ Đang xem video tìm timestamp...</div></div>` : ''}
           </div>
         `
       })
@@ -736,16 +747,48 @@ Yêu cầu:
         html += '<div class="empty">Không tìm thấy link phù hợp cho scene này.</div>'
       }
       container.innerHTML = html
+    }
 
-      container.querySelectorAll('.ts-btn').forEach(btn => {
-        btn.addEventListener('click', () => {
-          if (btn.dataset.source === 'youtube') {
-            analyzeTimestamp(btn, btn.dataset.url, btn.dataset.intent)
-          } else {
-            window.open(btn.dataset.url, '_blank', 'noopener')
-          }
+    // ── Update a single card with auto-analyzed timestamps ───────────────────
+    function updateCardTimestamps(card, url, result) {
+      const section = card.querySelector('.ts-section')
+      if (!section) return
+      let html = ''
+      if (result.found && result.timestamps?.length) {
+        html += '<div class="ts-found-label">⏱️ Đoạn phù hợp:</div><div class="timestamps">'
+        result.timestamps.forEach(t => {
+          const seconds = parseTimeToSeconds(t.start)
+          const sep = url.includes('?') ? '&' : '?'
+          const deepLink = `${url}${sep}t=${seconds}s`
+          html += `<a href="${escapeAttr(deepLink)}" target="_blank" rel="noopener" class="ts-row">
+            <span class="ts-time">${escapeHtml(t.start)}–${escapeHtml(t.end)}</span>
+            <span class="ts-desc">${escapeHtml(t.description)}</span>
+          </a>`
         })
-      })
+        html += '</div>'
+      } else {
+        html += `<div class="ts-notfound">❌ Video này không chứa cảnh phù hợp</div>`
+      }
+      if (result.summary) {
+        html += `<div class="ts-summary">📝 ${escapeHtml(result.summary)}</div>`
+      }
+      section.innerHTML = html
+    }
+
+    // ── Concurrency limiter ──────────────────────────────────────────────────
+    async function processWithConcurrency(items, fn, limit = 4) {
+      const queue = [...items]
+      const workers = []
+      const workerCount = Math.min(limit, queue.length)
+      for (let i = 0; i < workerCount; i++) {
+        workers.push((async () => {
+          while (queue.length) {
+            const item = queue.shift()
+            if (item !== undefined) await fn(item)
+          }
+        })())
+      }
+      await Promise.all(workers)
     }
 
     // ── Helpers ──────────────────────────────────────────────────────────────
