@@ -355,7 +355,7 @@ export default function LandingPageAI() {
     setImageProgress({ done: 0, failed: 0, total: 0, retries: 0, startedAt })
     try {
       await generatePackImages(pack, {
-        concurrency: 12, // 2026-05-19 speed bump 8 → 12 — KIE backend tolerates 12+ parallel /jobs/createTask submissions on gpt-image-2; bumps throughput ~50% vs 8 (60s avg per image × 12 slots ≈ 12 images/min)
+        concurrency: 8, // Z8 → P4 hotfix: 6 → 8 — KIE backend tolerates 8 parallel /gpt4o-image submissions; bumps throughput ~33% vs the previous 6-slot cap
         signal: controller.signal,
         onTaskUpdate: (sIdx, iIdx, patch) =>
           patchImagePrompt(sIdx, iIdx, patch.error ? { ...patch, error: friendlyError(patch.error) } : patch),

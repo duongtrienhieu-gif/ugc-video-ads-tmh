@@ -290,10 +290,7 @@ export async function pollGptImage2UntilDone(params: {
       console.warn(`[POLL_FAIL gpt-image-2] task=${taskTag} reason=ABORTED`)
       throw new Error('CANCELLED — user hủy task')
     }
-    // 2026-05-19: poll interval tightened 2000ms → 1000ms so completed tasks
-    // get picked up ~1s faster (vs avg KIE 60-90s gen time, halves the
-    // post-completion idle window per task → ~5-15% throughput gain).
-    await new Promise<void>((r) => setTimeout(r, 1000))
+    await new Promise<void>((r) => setTimeout(r, 2000))
     pollCount++
 
     // 2026-05-19: defensive try/catch around status check. With
