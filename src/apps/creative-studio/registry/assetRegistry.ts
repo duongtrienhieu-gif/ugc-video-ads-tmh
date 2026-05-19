@@ -43,6 +43,12 @@ import { module as ingredientsExplainModule } from '../engines/designed-graphic/
 import { module as mechanismExplainModule }   from '../engines/designed-graphic/mechanism-explain/module'
 import { module as benefitTimelineModule }    from '../engines/designed-graphic/benefit-timeline/module'
 import { module as collage4FramesModule }     from '../engines/photographic/collage-4-frames/module'
+// ── P37: Ladipage-inspired creatives ──────────────────────────────────────
+import { module as painOverlayModule }       from '../engines/photographic/pain-overlay/module'
+import { module as newsMockModule }          from '../engines/photographic/news-mock/module'
+import { module as metricCtaModule }         from '../engines/photographic/metric-cta/module'
+import { module as failedSolutionsModule }   from '../engines/photographic/failed-solutions/module'
+import { module as comparisonTableModule }   from '../engines/photographic/comparison-table/module'
 
 // ── P5: UI-Native chat-proof modules — STATIC IMPORTS ONLY ─────────────────
 import { module as whatsappProofModule }    from '../engines/ui-native/whatsapp-proof/module'
@@ -119,6 +125,13 @@ export const ASSET_REGISTRY: Partial<Record<AssetTypeId, AssetModule>> = {
   'mechanism-explain':      mechanismExplainModule,
   'benefit-timeline':       benefitTimelineModule,
   'collage-4-frames':       collage4FramesModule,
+
+  // ── P37: Ladipage-inspired creatives ──────────────────────────────
+  'pain-overlay':           painOverlayModule,
+  'news-mock':              newsMockModule,
+  'metric-cta':             metricCtaModule,
+  'failed-solutions':       failedSolutionsModule,
+  'comparison-table':       comparisonTableModule,
 }
 
 /** List of asset ids currently implemented (registry has a value). */

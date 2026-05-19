@@ -47,6 +47,13 @@ export const ASSET_TO_GROUP: Record<AssetTypeId, EngineGroup> = {
   'expert-kol':              'photographic',
   'floating-product':        'photographic',
   'ingredient-composition':  'photographic',
+
+  // ── P37 — Ladipage-inspired creatives ──────────────────────────────
+  'pain-overlay':            'photographic',
+  'news-mock':               'photographic',
+  'metric-cta':              'photographic',
+  'failed-solutions':        'photographic',
+  'comparison-table':        'photographic',
 } as const
 
 /** Helper — get the engine group for an asset id (typed exhaustive). */

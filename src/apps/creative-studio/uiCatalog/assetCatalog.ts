@@ -274,6 +274,22 @@ export const ASSET_CATALOG: AssetCatalogEntry[] = [
     },
     badges: ['needs-product', 'tiktok', 'ecommerce', 'engine-ui'],
   },
+  // ── P37 — News authority mock ──────────────────────────────────────
+  {
+    id: 'news-mock',
+    group: 'photographic',
+    categoryId: 'social-proof',
+    title: { vi: 'Mock báo / cơ quan y tế', en: 'News / Authority Mock' },
+    description: { vi: 'Fake news screenshot — authority via media', en: 'Mock news article screenshot' },
+    aspectRatio: '4:5',
+    iconKey: 'megaphone',
+    tooltip: {
+      what: 'Render fake screenshot bài báo / health portal về niche sản phẩm — headline + article body + chrome neutral (KHÔNG copy outlet thật).',
+      marketingGoal: 'Authority via media — "có báo / cơ quan y tế nói" tăng độ tin cho audience cảnh giác.',
+      suitableFor: ['Landing page authority section', 'Facebook ad share', 'Advertorial credibility beat'],
+    },
+    badges: ['needs-product', 'engine-photo'],
+  },
 
   // ═══════════════════════════════════════════════════════════════════
   // B. GIẢI THÍCH SẢN PHẨM — Infographic / educational, designed-graphic
@@ -308,6 +324,37 @@ export const ASSET_CATALOG: AssetCatalogEntry[] = [
       suitableFor: ['Facebook ads', 'Instagram ads', 'Email blast', 'Shopee banner', 'Landing page hero'],
     },
     badges: ['needs-product', 'banner', 'engine-graphic'],
+  },
+  // ── P37 — Metric-Chip CTA + Comparison Table ───────────────────────
+  {
+    id: 'metric-cta',
+    group: 'photographic',
+    categoryId: 'product-explain',
+    title: { vi: 'Banner CTA + Metric Chip', en: 'Metric-Chip CTA' },
+    description: { vi: 'Product + halo metric chips + price-lock — last-scroll stopper', en: 'Product + halo metric chips banner' },
+    aspectRatio: '16:9',
+    iconKey: 'megaphone',
+    tooltip: {
+      what: 'Render banner conversion: product packaging centered + halo glow + 4-6 metric chips (★ 4.8/5, 20,000+ pengguna, ✓ Halal, TOP RATED). Price extracted từ offer field — không invent.',
+      marketingGoal: 'Last-scroll-stopper — trust via metrics + price-lock. Phù hợp final-stage paid ads + landing-page last CTA.',
+      suitableFor: ['Facebook paid ads', 'TikTok ads', 'Landing page bottom CTA', 'Retargeting'],
+    },
+    badges: ['needs-product', 'banner', 'engine-photo'],
+  },
+  {
+    id: 'comparison-table',
+    group: 'photographic',
+    categoryId: 'product-explain',
+    title: { vi: 'Bảng so sánh đối thủ', en: 'Comparison Table' },
+    description: { vi: '2-col VS — green ✓ vs red ✗, justify superiority', en: '2-column VS competitor table' },
+    aspectRatio: '1:1',
+    iconKey: 'arrowRightLeft',
+    tooltip: {
+      what: 'Render bảng so sánh 2 cột: trái = sản phẩm (emerald + ✓), phải = "competitor" (gray + ✗). 5-6 rows. KHÔNG name competitor brand cụ thể.',
+      marketingGoal: 'Justify purchase via head-to-head — clear-cut superiority. Phù hợp niche supplement / skincare / health.',
+      suitableFor: ['Detail page Shopee', 'Landing page comparison section', 'Carousel Facebook'],
+    },
+    badges: ['needs-product', 'infographic', 'engine-photo'],
   },
   {
     id: 'ingredients-explain',
@@ -533,6 +580,37 @@ export const ASSET_CATALOG: AssetCatalogEntry[] = [
     },
     badges: ['needs-product', 'expert', 'engine-photo'],
   },
+  // ── P37 — Ladipage-inspired UGC additions in ugc-real ──────────────
+  {
+    id: 'pain-overlay',
+    group: 'photographic',
+    categoryId: 'ugc-real',
+    title: { vi: 'Pain Point Overlay', en: 'Pain Point Overlay' },
+    description: { vi: 'Face mid-symptom + italic warning overlay — empathy hook', en: 'Pain face with italic warning overlay' },
+    aspectRatio: '4:5',
+    iconKey: 'sparkles',
+    tooltip: {
+      what: 'Render người đang mid-symptom (mệt mỏi / đầy hơi / mất ngủ / đau bụng / tăng cân) + italic Malay/Vietnamese overlay trên dark glass panel. NO product visible.',
+      marketingGoal: 'Pain-point empathy — khách nhận ra "đây là vấn đề của mình" → trigger emotional response trước khi reveal product.',
+      suitableFor: ['Top-funnel ads', 'Pain hook', 'Facebook scroll-stop', 'Advertorial mở đầu'],
+    },
+    badges: ['needs-product', 'engine-photo'],
+  },
+  {
+    id: 'failed-solutions',
+    group: 'photographic',
+    categoryId: 'ugc-real',
+    title: { vi: 'Đã thử nhiều mà thất bại', en: 'Failed Solutions' },
+    description: { vi: 'UGC customer bao quanh bottles thất bại — empathy bridge', en: 'Empathy UGC surrounded by failed bottles' },
+    aspectRatio: '4:5',
+    iconKey: 'arrowRightLeft',
+    tooltip: {
+      what: 'Render khách hàng disheartened, bao quanh bởi 4-8 chai thuốc / supplement / OTC thất bại. NO target product. Vibe candid UGC.',
+      marketingGoal: 'Empathy bridge — "I\'ve been there" moment trước khi reveal product. Pre-discovery funnel beat.',
+      suitableFor: ['Mid-funnel advertorial', 'Pain → solution transition', 'Facebook ads emotional'],
+    },
+    badges: ['needs-product', 'engine-photo'],
+  },
 
   // ═══════════════════════════════════════════════════════════════════
   // E. AI VISUAL MAGIC — experimental / attention-grabbing. Optional.
@@ -625,6 +703,13 @@ const REQUIREMENTS: Partial<Record<AssetTypeId, CreativeRequirements>> = {
   // P35 — collage generates 4 different faces inside ONE KIE call,
   // no single avatar reference makes sense. Product only.
   'collage-4-frames':      REQ_PHOTO_NO_PERSON,
+
+  // P37 — Ladipage-inspired creatives ──────────────────────────────
+  'pain-overlay':          REQ_PHOTO_NO_PERSON,
+  'news-mock':             REQ_PHOTO_NO_PERSON,
+  'metric-cta':            REQ_PHOTO_NO_PERSON,
+  'failed-solutions':      REQ_PHOTO_NO_PERSON,
+  'comparison-table':      REQ_PHOTO_NO_PERSON,
   'expert-kol':            REQ_PHOTO_NO_PERSON,
 
   // social-proof (UI-native)

@@ -157,6 +157,33 @@ const FOLLOW_UPS: Record<AssetTypeId, Suggestion[]> = {
     { id: 'infographic',      reason: 'Đang phát triển — dùng infographic authority trong khi chờ' },
     { id: 'whatsapp-proof',   reason: 'Customer testimonial — alternative authority signal' },
   ],
+
+  // ── P37 — Ladipage-inspired follow-ups ───────────────────────────
+  'pain-overlay': [
+    { id: 'failed-solutions',  reason: 'Pair pain với "đã thử nhiều thứ" → mạch empathy funnel' },
+    { id: 'before-after',      reason: 'Pain → transformation visual proof' },
+    { id: 'whatsapp-proof',    reason: 'Pain → customer chat về cùng vấn đề' },
+  ],
+  'news-mock': [
+    { id: 'expert-kol',        reason: 'Authority signal — báo + chuyên gia kết hợp' },
+    { id: 'infographic',       reason: 'Justify bằng số liệu sau khi đã build authority' },
+    { id: 'shopee-feedback',   reason: 'Trust signal đa kênh — báo + marketplace review' },
+  ],
+  'metric-cta': [
+    { id: 'cta-banner',        reason: 'Pair metric CTA với clean CTA banner — full conversion stack' },
+    { id: 'before-after',      reason: 'Justify metric chips bằng visual transformation' },
+    { id: 'comparison-table',  reason: 'Add comparison để củng cố "top rated" claim' },
+  ],
+  'failed-solutions': [
+    { id: 'pain-overlay',      reason: 'Pain → failed solutions là chuỗi empathy advertorial' },
+    { id: 'holding-product',   reason: 'Empathy → product discovery — reveal solution' },
+    { id: 'before-after',      reason: 'Show kết quả sau khi tìm được giải pháp đúng' },
+  ],
+  'comparison-table': [
+    { id: 'metric-cta',        reason: 'Pair so sánh với metric CTA cuối phễu' },
+    { id: 'infographic',       reason: 'Stats infographic củng cố comparison advantages' },
+    { id: 'expert-kol',        reason: 'Expert endorsement justify comparison claims' },
+  ],
 }
 
 /** Return follow-up suggestions for a given creative.

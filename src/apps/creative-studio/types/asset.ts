@@ -50,6 +50,13 @@ export type AssetTypeId =
   | 'floating-product'       // photographic — dynamic ad packshot
   | 'ingredient-composition' // photographic — product + herbs / botanicals
 
+  // ── P37 (Phase 37) — Ladipage-inspired creatives ─────────────────
+  | 'pain-overlay'           // photographic — face + italic warning overlay
+  | 'news-mock'              // photographic — fake news article screenshot
+  | 'metric-cta'             // photographic — product + floating metric chips + price
+  | 'failed-solutions'       // photographic — empathy UGC, NO target product
+  | 'comparison-table'       // photographic — 2-col VS competitor table
+
 /**
  * High-level asset category — used for UI grouping in tabs, filtering,
  * analytics. Orthogonal to engineGroup (multiple categories can route to

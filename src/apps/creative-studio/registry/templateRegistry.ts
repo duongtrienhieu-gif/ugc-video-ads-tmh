@@ -108,6 +108,12 @@ export const TEMPLATE_REGISTRY: Record<AssetTypeId, TemplateRegistryEntry> = {
   'mechanism-explain':  { id: 'mechanism-explain',  engine: 'designed-graphic', template: 'infographic-mechanism',   composition: 'designed-canvas-template', localeValidation: true, qcRules: { baseline: true, localeText: true } },
   'benefit-timeline':   { id: 'benefit-timeline',   engine: 'designed-graphic', template: 'infographic-timeline',    composition: 'designed-canvas-template', localeValidation: true, qcRules: { baseline: true, localeText: true } },
   'collage-4-frames':   { id: 'collage-4-frames',   engine: 'photographic',     template: 'collage-grid',            composition: 'single-pass-prompt',        localeValidation: false, qcRules: { baseline: true } },
+  // ── P37 — Ladipage-inspired ────────────────────────────────────────
+  'pain-overlay':       { id: 'pain-overlay',       engine: 'photographic',     template: 'photographic-prompt',     composition: 'single-pass-prompt',        localeValidation: false, qcRules: { baseline: true } },
+  'news-mock':          { id: 'news-mock',          engine: 'photographic',     template: 'photographic-prompt',     composition: 'single-pass-prompt',        localeValidation: false, qcRules: { baseline: true } },
+  'metric-cta':         { id: 'metric-cta',         engine: 'photographic',     template: 'photographic-prompt',     composition: 'single-pass-prompt',        localeValidation: false, qcRules: { baseline: true } },
+  'failed-solutions':   { id: 'failed-solutions',   engine: 'photographic',     template: 'photographic-prompt',     composition: 'single-pass-prompt',        localeValidation: false, qcRules: { baseline: true } },
+  'comparison-table':   { id: 'comparison-table',   engine: 'photographic',     template: 'photographic-prompt',     composition: 'single-pass-prompt',        localeValidation: false, qcRules: { baseline: true } },
 
   // ── P33 — Phase 3 pro-photo + UGC shipped ──────────────────────────
   'floating-product':       { id: 'floating-product',       engine: 'photographic', template: 'photographic-prompt', composition: 'single-pass-prompt', localeValidation: false, qcRules: { baseline: true, vision: true } },
