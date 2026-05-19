@@ -60,6 +60,51 @@ const PEOPLE_FOCUS_SECTIONS: ReadonlySet<SectionType> = new Set<SectionType>([
 ])
 
 // ─────────────────────────────────────────────────────────────────────────
+// FIX 1A — sections where the product is the FOCUS or a featured subject.
+// When pack.productPackagingDescription is available (extracted via Gemini
+// Vision at pack-creation time), inject it verbatim into every prompt so
+// KIE gpt-image-2 renders the EXACT user packaging instead of inventing
+// a similar-looking but wrong brand (Dr White / GoPure / biotopics).
+// Sections NOT in this set rely on FIX 1B (negative ban) or the existing
+// PAIN_NO_PRODUCT_DIRECTIVE.
+// ─────────────────────────────────────────────────────────────────────────
+const WITH_PRODUCT_SECTIONS: ReadonlySet<SectionType> = new Set<SectionType>([
+  'hero',
+  'product-discovery',
+  'ingredients',
+  'mechanism',
+  'comparison',
+  'social-proof',
+  'whatsapp-testimonials',
+  'offer',
+  'final-cta',
+  'magazine-feature',
+  'stat-proof',
+  'web-authority-proof',
+])
+
+// ─────────────────────────────────────────────────────────────────────────
+// FIX 1B — sections where KIE has been observed to ADD a random supplement
+// bottle as a prop, even when the prompt didn't ask for one. User observed:
+//   • benefits_01 prompt asked for 7-icon grid → KIE added "Nutriplus
+//     Gastro Feed" bottle
+//   • news-proof / before-after may render a stray random product
+// These sections get the soft "no random product" ban appended. If the
+// pack has a packaging description, the ban also tells KIE: "if a product
+// is truly unavoidable, use THIS exact packaging — never a random brand."
+//
+// NOT included: pain / failed-solutions / why-happens / expert-feedback —
+// those already have the stronger PAIN_NO_PRODUCT_DIRECTIVE (hard ban).
+// Stacking would be redundant noise in the prompt.
+// ─────────────────────────────────────────────────────────────────────────
+const SOFT_NO_RANDOM_PRODUCT_SECTIONS: ReadonlySet<SectionType> = new Set<SectionType>([
+  'benefits',
+  'news-proof',
+  'before-after',
+  'lifestyle',
+])
+
+// ─────────────────────────────────────────────────────────────────────────
 // PRIORITY QUEUE — lower number = higher priority.
 //
 // Tier 0 (HERO — non-negotiable first): hero
@@ -620,6 +665,40 @@ const NO_PRODUCT_SECTIONS: ReadonlySet<SectionType> = new Set<SectionType>([
   'expert-feedback',  // expert IS the focus — product visibility banned by section spec
 ])
 
+/** FIX 1A — build the per-prompt packaging description block.
+ *  Inserted near the top of every prompt for WITH_PRODUCT_SECTIONS so KIE
+ *  has a concrete, specific identity to render. Works around the gpt-image-2
+ *  "TEXT-ONLY ignores filesUrl" limitation that lets ref images be silently
+ *  dropped. */
+function buildPackagingDescriptionBlock(description: string): string {
+  return [
+    'PRODUCT PACKAGING — RENDER EXACTLY AS DESCRIBED (this is the user\'s ACTUAL uploaded product):',
+    description,
+    'USE THIS EXACT PACKAGING. Do NOT invent a different jar / bottle / brand / label / cap. Do NOT substitute with a similar-looking generic supplement. The packaging above is the ONLY valid product visual.',
+  ].join('\n')
+}
+
+/** FIX 1B — soft "no random product" ban for sections that should NOT
+ *  feature a product but where KIE has been observed to add a random
+ *  supplement bottle anyway (benefits icon grid, news article, before-after
+ *  transformation, lifestyle). When packaging description is available,
+ *  the ban routes any unavoidable product render through THAT description
+ *  rather than letting KIE invent. */
+function buildSoftNoRandomProductBlock(description?: string): string {
+  const lines: string[] = [
+    'NO RANDOM PRODUCT — STRICT:',
+    '  • Do NOT include any random supplement bottle, jar, capsule, sachet, tube, box, or generic health product as a prop in this image.',
+    '  • Specifically banned fake brands (KIE has invented these before): Shaklee, Nutriplus, Gastrofeed, Detox Juice, Triple Detox, Dr. White, GoPure, biotopics, biomatrix, "Wellness Pro", or any other made-up health brand.',
+  ]
+  if (description) {
+    lines.push('  • If the composition genuinely requires the product, render it as the EXACT user packaging below — NEVER a different brand:')
+    lines.push(`    ${description}`)
+  } else {
+    lines.push('  • The user has not uploaded a clear product reference — if KIE feels a product is needed for context, OMIT the product entirely rather than invent one.')
+  }
+  return lines.join('\n')
+}
+
 /** Hard directive injected into pain / failed-solutions / why-happens
  *  prompts. Forces KIE to render the PROBLEM scene, not a product shot
  *  or testimonial framing. */
@@ -782,6 +861,33 @@ function buildFinalPrompt(job: ImageJob, hasProductRefs: boolean): string {
   }
   if (hasProductRefs) parts.push(PRODUCT_IDENTITY_PREFIX)
 
+  // ── FIX 1A — POSITIVE: inject concrete packaging description so KIE
+  // has a stable identity to render (works around gpt-image-2 TEXT-ONLY
+  // limitation that silently drops filesUrl). Applies to sections that
+  // ALWAYS feature the product, OR any section whose Gemini-emitted prompt
+  // body explicitly mentions a product token (e.g. lifestyle person holding
+  // the product). Skipped when pack has no description (Vision call failed
+  // or no refs uploaded → graceful fallback to PRODUCT_IDENTITY_PREFIX above).
+  const packaging = job.pack.productPackagingDescription
+  if (packaging) {
+    const sectionAlwaysShowsProduct = WITH_PRODUCT_SECTIONS.has(job.section.type)
+    const promptLower = (job.prompt.prompt ?? '').toLowerCase()
+    const productNameLower = (job.pack.productName ?? '').toLowerCase()
+    const PRODUCT_MENTION_TOKENS = [
+      'bottle', 'capsule', 'tablet', 'sachet', 'packet', 'tube', 'jar',
+      'powder', 'cream', 'serum', 'gel', 'spray', 'product', 'packaging', 'label',
+    ]
+    const promptMentionsProduct = PRODUCT_MENTION_TOKENS.some((t) => promptLower.includes(t))
+      || (productNameLower.length > 3 && promptLower.includes(productNameLower))
+
+    // Do NOT inject into NO_PRODUCT_SECTIONS even if prompt leaked product
+    // tokens — PAIN_NO_PRODUCT_DIRECTIVE below is the source of truth there.
+    const allowedInThisSection = !NO_PRODUCT_SECTIONS.has(job.section.type)
+    if (allowedInThisSection && (sectionAlwaysShowsProduct || promptMentionsProduct)) {
+      parts.push(buildPackagingDescriptionBlock(packaging))
+    }
+  }
+
   // Phase 7 stabilization — pain / problem / symptom sections must NEVER
   // depict the product. User reported pain-section shots with person
   // holding product like a testimonial, which kills the emotional
@@ -789,6 +895,18 @@ function buildFinalPrompt(job: ImageJob, hasProductRefs: boolean): string {
   // directive that overrides anything Gemini may have put in the prompt.
   if (NO_PRODUCT_SECTIONS.has(job.section.type)) {
     parts.push(PAIN_NO_PRODUCT_DIRECTIVE)
+  }
+
+  // ── FIX 1B — NEGATIVE: ban random supplement bottles in sections where
+  // KIE has been observed to add stray product props (benefits icon grid,
+  // news article mock, before-after transformation, lifestyle scene). When
+  // the pack has a packaging description, the ban routes any unavoidable
+  // product render through THAT description rather than letting KIE
+  // invent. Skipped for NO_PRODUCT_SECTIONS — those already have the
+  // stronger PAIN_NO_PRODUCT_DIRECTIVE above.
+  if (SOFT_NO_RANDOM_PRODUCT_SECTIONS.has(job.section.type)
+      && !NO_PRODUCT_SECTIONS.has(job.section.type)) {
+    parts.push(buildSoftNoRandomProductBlock(packaging))
   }
 
   // ── Mobile-screenshot sections (whatsapp / shopee / tiktok / facebook):
@@ -1237,7 +1355,12 @@ const HARDSELL_NEGATIVE_BLOCK =
 // Worst-case wall time: 90 + 25 + 90 + 25 + 90 ≈ 5 min before final fail.
 const MAX_ATTEMPTS     = 3
 const RECOVERY_POLL_MS = 25_000
-const FRESH_POLL_MS    = 90_000
+// FIX 2 (2026-05-19) — bumped 90_000 → 150_000. User report 27% timeout rate
+// on Teeth Restoration pack (10/37 images). KIE backend often legitimately
+// needs 90-130s per gpt-image-2 render when busy; the previous 90s ceiling
+// false-failed those tasks and burned a retry attempt. 150s gives KIE one
+// extra breathing window without doubling retry storms.
+const FRESH_POLL_MS    = 150_000
 
 // ─────────────────────────────────────────────────────────────────────────
 // UI-NATIVE CHAT PROOF — handler invoked for every imagePrompt in the

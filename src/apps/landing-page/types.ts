@@ -148,6 +148,14 @@ export interface LandingPagePack {
    *  person threads through the entire narrative. Set by the advertorial
    *  form module. Other forms leave it undefined. */
   characterProfile?: CharacterProfile
+  /** Concrete textual description of the uploaded product packaging
+   *  (extracted once via Gemini Vision at pack creation). Injected into
+   *  every imagePrompt that depicts the product so KIE gpt-image-2 has
+   *  a stable identity to render — works around the model's text-only
+   *  limitation that silently ignores filesUrl reference images.
+   *  Undefined when no refs uploaded or extraction failed (graceful
+   *  fallback to the legacy PRODUCT_IDENTITY_PREFIX). */
+  productPackagingDescription?: string
 }
 
 /** Storytelling character — one consistent person across all section

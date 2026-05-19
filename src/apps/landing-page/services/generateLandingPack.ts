@@ -5,6 +5,7 @@ import { useSettingsStore } from '../../../stores/settingsStore'
 import { useBankStore } from '../../../stores/bankStore'
 import { directGeminiVision } from '../../../utils/gemini'
 import { buildProductIntelligence, buildIntelligencePromptBlock } from './productIntelligence'
+import { extractPackagingDescription } from './packagingExtractor'
 
 // ─────────────────────────────────────────────────────────────────────
 // SYSTEM PROMPT — 17-section advertorial factory for Malaysian FB ads.
@@ -1337,6 +1338,22 @@ export async function legacyGenerateUgcMalaysiaPack(params: LandingGenParams): P
   injectPriceIntoPrompts(sections, priceTag)
   validatePackSections(sections)
 
+  // ── Extract product packaging description (one Vision call) so KIE
+  // gpt-image-2 has a concrete textual identity to render. Without this,
+  // KIE invents random brands (Shaklee / Nutriplus / Dr White / GoPure /
+  // biotopics) because the model is TEXT-ONLY and ignores filesUrl. Fails
+  // gracefully → null on error; downstream falls back to legacy prefix.
+  let productPackagingDescription: string | undefined
+  try {
+    const desc = await extractPackagingDescription({
+      visualMemory: params.visualMemory ?? [],
+      apiKey,
+    })
+    if (desc) productPackagingDescription = desc
+  } catch (err) {
+    console.warn('[LandingPageAI] packaging extraction threw — continuing without it:', err)
+  }
+
   return {
     productId: params.productId,
     productName: product.productName,
@@ -1345,6 +1362,7 @@ export async function legacyGenerateUgcMalaysiaPack(params: LandingGenParams): P
     visualMemory: params.visualMemory ?? [],
     generatedAt: Date.now(),
     form: 'ugc-malaysia',  // Phase 3 — tag pack so downstream image logic knows form context
+    productPackagingDescription,
   }
 }
 
