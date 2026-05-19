@@ -159,10 +159,8 @@ SECTION SPEC — produce EXACTLY these 17 in this order
 
 9. type="comparison", imageAspectRatio="1:1"
    • copy: why our product vs generics
-   • REQUIRED structured field "comparisonData": { "us": { "title": "<our product name>", "bullets": ["<short claim 1>", ...4-6 total] }, "them": { "title": "<Suplemen Lain / Produk Biasa>", "bullets": ["<weakness 1>", ...4-6 total, INDEX-ALIGNED with us.bullets — bullet[0] of us vs bullet[0] of them must be the SAME dimension] } }
-   • Each bullet 3-7 words, written in the OUTPUT LANGUAGE. NEVER prose. NEVER markdown. NEVER nested objects. NEVER skip "comparisonData" — the renderer requires it.
    • 1 imagePrompt: style="Comparison infographic MY ecommerce", aspectRatio="1:1"
-     Malaysia ecommerce style comparison table infographic. STRUCTURE: 2-column split-screen. LEFT column = our product (use exact title from comparisonData.us.title), green checkmarks, emerald highlighted background. RIGHT column = competitor (use exact title from comparisonData.them.title), red X, gray background. Render the EXACT bullets from comparisonData verbatim — 1 row per bullet pair (same Y position for us.bullets[i] and them.bullets[i]). Clean mobile-readable typography, bold output-language labels. The imagePrompt MUST embed the actual us.bullets / them.bullets text inline so the image generator reads it directly — do NOT instruct the generator to "find" or "parse" bullet pairs.
+     Malaysia ecommerce style comparison table infographic. Left column: our product name, green checkmarks, emerald highlighted background. Right: "Suplemen Lain" / "Produk Biasa", red X, gray background. Rows: ingredient quality, absorption, certifications, side effects, manufacturing, price value. Clean mobile-readable design, bold Bahasa Melayu labels.
 
 10. type="expert-feedback", imageAspectRatio="9:16"
     • copy: 1-2 short paragraphs framing the expert's professional take — written in the output language. Mention what kind of expert (digestive health specialist / pharmacist / dietitian / dermatologist — pick to match the product niche). Authority + warmth tone, NOT hard-sell.
@@ -187,36 +185,24 @@ SECTION SPEC — produce EXACTLY these 17 in this order
       ✗ Oversized stamped text / marketing CTA buttons rendered into the image
       ✗ English "Doctor" labels when output language is Bahasa Melayu — use Malay credentials (Dr. / Doktor / Ahli Farmasi / Ahli Pemakanan) appropriately
 
-11. type="social-proof", imageAspectRatio="9:16"
+11. type="social-proof", imageAspectRatio="4:5"
     • reviews: 4-6 realistic Malaysian reviews
     • copy: short framing
-    • 5 imagePrompts ALL REQUIRED — screenshot 3 (fb/tiktok/shopee) use aspectRatio="9:16" (mobile full-screen screenshot); selfie/crowd photos use aspectRatio="4:5":
-      - social_fb.jpg, style="Facebook comment screenshot", aspectRatio="9:16": FULL-BLEED mobile Facebook screenshot. Top: realistic Android/iOS status bar (time, battery%, 4G/5G signal, wifi). Header: Facebook blue navigation bar with back arrow + page title. Body: original post header (page avatar + name + timestamp + "Public" badge), post image / text mentioning the product, then 4-6 comment cards underneath — each with circular avatar + Malaysian name + emoji-rich Malay comment + reaction counts + time stamp. Comments include 👍 ❤️ 😍 reactions. Bottom: comment input bar with camera/gif icons. Slightly JPEG-compressed phone-screenshot quality. NO poster layout, NO centered card, NO floating product PNG, NO desktop UI — this is a pure phone screenshot filling the entire 9:16 canvas edge-to-edge.
-      - social_tiktok.jpg, style="TikTok Shop review screenshot", aspectRatio="9:16":
-        Ultra-realistic TikTok Shop Malaysia product review mobile screenshot. MUST look EXACTLY like a real screenshot captured from TikTok Shop app on Android. SCREEN STRUCTURE: TikTok Shop review page with black/dark UI, realistic Android top status bar (battery percentage shown numerically, 4G/5G signal icon, notification icons left), header showing product star rating (eg "★ 4.8 Đánh giá 2.6K"), review filter tabs ("Semua / Ada gambar / 5★ / 4★"), vertically scrolling review feed of multiple cards. PRODUCT: probiotics supplement. REVIEW CONTENT: 2-3 visible review cards with authentic Malaysian buyer reviews — masked usernames like "T**n H**u", "L**g T**m", casual Bahasa Melayu text mixing English loanwords, realistic emoji use 👍 ❤️ 😍, believable review lengths (2-4 lines each), star ratings shown. Each card has 2-4 small customer-uploaded review photo thumbnails of the product (different angles — some show 1 bottle, some show 2-4 bottles, some show product on dining table; NEVER all same composition). Bottom: floating CTA bar with shopping cart icon + "Mua ngay" button + price. IMAGE RULES: preserve original aspect ratio on review thumbnails, no horizontal stretching, no squashing. VISUAL: imperfect real-mobile-screenshot feel, authentic TikTok spacing (uneven organic spacing — not equal margins everywhere), native typography hierarchy, realistic icon sizes. DO NOT: centered layouts, fake ecommerce UI, oversized fonts, equal spacing everywhere, Figma-clean look, floating product PNG, designed graphic. Show EXACT PRODUCT PRICE from brief. Quality target: indistinguishable from a real TikTok Shop screenshot.
-      - social_shopee.jpg, style="Shopee review screenshot", aspectRatio="9:16":
-        Ultra-realistic Shopee Malaysia product review mobile screenshot. MUST look EXACTLY like a real Shopee app screenshot captured from a Malaysian Android phone. SCREEN STRUCTURE: Shopee review page with orange Shopee UI accents, realistic Android status bar (time, battery %, signal icons, notification badges), header with back arrow + star rating eg "★ 4.8 Đánh giá (2.6K)" + share + cart icon, review filter tabs MUST include "Semua / Dengan media / 5★ / 4★", review sub-filters ("Khách mua tiếp / Chất lượng tốt"), scrollable review feed. PRODUCT: probiotics supplement. REVIEW CONTENT: 2-3 review cards visible, each with masked username like "duc.l***ous" or "T**n H**u", authentic Malaysian customer review in casual Bahasa Melayu, "Phân loại" line showing variant, 5★ rating, believable timestamps (eg "2025-4-1"). Each card includes 2-4 small thumbnail photos of the product in different real-life compositions (bottle alone / 2-4 bottles / product in kitchen / on dining table — NEVER always box+bottle side-by-side). Floating bottom CTA bar with chat icon + cart + "Mua ngay" pink button + price. IMAGE RULES: review thumbnails preserve original aspect ratio (object-fit: cover style), NO horizontal stretching, NO vertical squashing. VISUAL: authentic Shopee spacing with natural mobile UI hierarchy, real screenshot feel with subtle JPEG compression. DO NOT: fake clean symmetry, generic ecommerce layouts, centered compositions, oversized fonts, fake Figma-clean UI, floating product packaging. Show EXACT PRODUCT PRICE from brief. Quality: must feel like a REAL phone screenshot.
+    • 5 imagePrompts ALL REQUIRED — ALL aspectRatio="4:5":
+      - social_fb.jpg, style="Facebook comment screenshot", aspectRatio="4:5": realistic Facebook post comment section screenshot. Slightly JPEG-compressed quality, imperfect real-phone feel. Malay text + emojis. Multiple positive comments from Malaysian names. IMPORTANT: Product name visible in the post.
+      - social_tiktok.jpg, style="TikTok Shop review screenshot", aspectRatio="4:5": realistic TikTok Shop product review screenshot. Visible product thumbnail in review card, 5-star rating, Malaysian reviewer name, Malay review text with emojis. Show EXACT PRODUCT PRICE from brief. Authentic phone-screenshot quality.
+      - social_shopee.jpg, style="Shopee review screenshot", aspectRatio="4:5": realistic Shopee product page review screenshot. Visible product thumbnail (same packaging as reference), 5-star rating, "Verified Purchase" badge, Malaysian reviewer name, Malay review text. Show EXACT PRODUCT PRICE from brief. Authentic, slightly-compressed quality.
       - social_selfie.jpg, style="Muslim woman selfie social proof", aspectRatio="4:5": Malaysian Muslim woman in hijab, mid-30s, holding product in selfie, genuine smile, casual home, natural daylight, UGC quality.
       - social_crowd.jpg, style="Crowd group social proof", aspectRatio="4:5": group of 3-4 Malaysian women different ages (some in hijab), each holding the product, smiling, casual outdoor, candid group photo feel, trust and community vibe.
 
-12. type="whatsapp-testimonials", imageAspectRatio="9:16"
+12. type="whatsapp-testimonials", imageAspectRatio="4:5"
     • reviews: 4 chat-style testimonials (multi-line, emojis, authentic Malay)
     • copy: short framing
-    • 4 imagePrompts ALL aspectRatio="9:16" — FULL-BLEED MOBILE WHATSAPP SCREENSHOTS:
-      ALL 4 ARE REAL WHATSAPP SCREENSHOTS — NOT marketing graphics. The image must look like "a real person opened WhatsApp and took a screenshot". Use authentic WhatsApp 2025 UI: status bar with battery/wifi/time, green header, contact name + avatar circle, message bubbles (green outgoing + white incoming), realistic timestamps, real font hierarchy, real spacing, input bar at bottom. Compressed mobile screenshot quality, subtle JPEG compression, slightly imperfect crop. Malay/English mix text, natural emoji use.
-
-      MIX STRUCTURE — 2 pure chats + 2 chats WITH attached product photo (DIFFERENT compositions):
-      - wa_01.jpg, style="WhatsApp screenshot PURE — no attachment", aspectRatio="9:16": Pure chat screen — header, message bubbles, input bar. NO image attachment in chat. Malaysian sender, casual review text about product results.
-      - wa_02.jpg, style="WhatsApp screenshot PURE — different convo, no attachment", aspectRatio="9:16": DIFFERENT Malaysian sender name + DIFFERENT avatar color + DIFFERENT timestamps from wa_01. Different conversation flow, different emojis. Still pure chat, no attachment.
-      - wa_03.jpg, style="WhatsApp screenshot WITH single-bottle attachment", aspectRatio="9:16": Real WhatsApp chat where the user sent an image attachment of ONE bottle ONLY (no packaging box) on a casual home surface — kitchen counter or dining table. The attached image looks like a customer phone snap (slightly imperfect lighting, real home background). Surrounding chat: 2-3 Malay text messages discussing the product.
-      - wa_04.jpg, style="WhatsApp screenshot WITH multi-bottle attachment", aspectRatio="9:16": DIFFERENT chat partner from wa_03 (different name, different avatar, different timestamps). Image attachment shows 2-4 bottles together (family pack feel) — NO packaging box, just multiple bottles standing on a real surface (dining table / shelf / kitchen). Different home environment from wa_03. Surrounding chat: different message flow, different emojis.
-
-      STRICT BAN for the whole WhatsApp section:
-        • Identical attached product photos across wa_03 and wa_04 (must be DIFFERENT composition: single vs multi)
-        • Always-paired "box + bottle side-by-side" composition in the attachment (no box at all in wa_03/wa_04)
-        • Floating product PNG over the chat UI (the product appears ONLY as a natural image-message bubble)
-        • Fake / futuristic / AI-looking WhatsApp UI — must match real WhatsApp 2025 spacing and typography
-        • Poster / infographic / advertisement layout
+    • 4 imagePrompts ALL aspectRatio="4:5":
+      - wa_01.jpg, style="WhatsApp screenshot authentic 1", aspectRatio="4:5": realistic WhatsApp chat screenshot. Green chat bubbles, Malaysian sender name. Casual Malay text with emojis, expressing positive results about the product. Visible timestamp. Slightly JPEG-compressed real phone quality.
+      - wa_02.jpg, style="WhatsApp screenshot authentic 2", aspectRatio="4:5": realistic WhatsApp chat screenshot from a DIFFERENT user. More excited tone, more emojis. Different timestamp from wa_01. Authentic phone quality.
+      - wa_03.jpg, style="WhatsApp screenshot authentic 3", aspectRatio="4:5": realistic WhatsApp group chat screenshot (group name like "Ibu2 Sihat" or similar). Multiple positive replies from different Malaysian names visible, community discussing the product's benefits. Casual Malay with emojis. Authentic phone quality.
+      - wa_04.jpg, style="WhatsApp screenshot authentic 4", aspectRatio="4:5": realistic WhatsApp conversation showing a multi-exchange. One user shares a positive result, friend/family reacts positively. Conversation flows naturally with timestamps. Authentic phone quality.
 
 13. type="news-proof", imageAspectRatio="4:5"
     • copy: authority framing text about health concern
@@ -227,30 +213,10 @@ SECTION SPEC — produce EXACTLY these 17 in this order
 14. type="before-after", imageAspectRatio="4:5"
     • copy: transformation narrative
     • 4 imagePrompts all aspectRatio="4:5":
-      Z27 REWRITE — 4 photos in 2 same-person pairs. Per user spec: render WITH Malay text overlay "SEBELUM" / "SELEPAS" stamped at top of each image (previously banned — now required). Face must stay identical within each pair. The pair effect is built INTO each image (with the label), not from UI placement.
-
-      PAIR A IDENTITY LOCK (ba_01 + ba_02 = SAME WOMAN):
-        Identical face structure, identical hairstyle, identical skin tone, identical age. Same room background visible (same wall, same window, same furniture). Same camera framing (eye-level OR mirror selfie — pick ONE for the pair). Same outfit FAMILY (both casual home tees OR both modest hijab+loose top — slight color shift OK, NEVER swap to activewear/sports-bra).
-      - ba_01.jpg, style="Before portrait with SEBELUM label", aspectRatio="4:5":
-        Malaysian woman in casual home setting, cool dim window light, slouched tired posture, low-energy expression, slight bloat visible under loose tee. RENDER a clean white text label "SEBELUM" stamped at the top-left corner of the image in bold sans-serif font with subtle drop-shadow. Authentic smartphone selfie quality, realistic skin texture, NOT studio.
-      - ba_02.jpg, style="After portrait with SELEPAS label", aspectRatio="4:5":
-        SAME identical woman (same face / same hair / same identity as ba_01), SAME room corner, SAME camera angle, SAME outfit FAMILY. Warmer light through the SAME window. Relaxed upright posture, natural confident smile, brighter eyes, healthier skin glow, flatter stomach under same style top. RENDER a clean white text label "SELEPAS" stamped at the top-left corner in the SAME font and position as ba_01's SEBELUM label.
-
-      PAIR B IDENTITY LOCK (ba_03 + ba_04 = SAME DIFFERENT WOMAN):
-        Second Malaysian woman testimonial — DIFFERENT person from ba_01/02 but consistent between ba_03/04. THREE-QUARTER body framing showing head-to-waist (face visible + stomach visible together — DO NOT crop the face out). Same room, same wall background, same camera distance, same outfit family.
-      - ba_03.jpg, style="Before half-body with SEBELUM label", aspectRatio="4:5":
-        Three-quarter body shot, casual loose top, slight belly bloat visible under shirt, low-energy tired expression on her face. Dim same-room lighting, slumped posture. Face fully visible — no body-only crop. RENDER "SEBELUM" label top-left in matching font.
-      - ba_04.jpg, style="After half-body with SELEPAS label", aspectRatio="4:5":
-        SAME identical woman as ba_03 (same face / same hair), SAME three-quarter framing, SAME camera distance, SAME outfit family. Brighter same-window light. Natural confident smile, flatter stomach, improved posture. Face fully visible. RENDER "SELEPAS" label top-left in matching font.
-
-      ABSOLUTE BANS for the whole before-after section:
-        • Different face between pair members (ba_01 face ≠ ba_02 face is INVALID — must be identical person)
-        • Collages / split-frames / side-by-side composites in ONE image (the pair effect comes from 2 separate images, not from compositing)
-        • Sports-bra / activewear / lingerie reveal
-        • Gym influencer aesthetic, professional studio look
-        • Race / body-type swap between BEFORE and AFTER
-        • Different room / different camera angle / different outfit family between pair members
-        • English "BEFORE" / "AFTER" labels — must be Malay "SEBELUM" / "SELEPAS"
+      - ba_01.jpg, style="Before after collage 1", aspectRatio="4:5": a side-by-side before/after collage featuring a Malaysian person in casual attire. "Sebelum" shows tired / problem appearance, plain expression. "Selepas" shows vibrant, more confident, clear improvement. Quality is amateur, not professional, reflecting an authentic COD ecommerce style.
+      - ba_02.jpg, style="Before after collage 2", aspectRatio="4:5": a side-by-side before/after collage featuring a DIFFERENT Malaysian person (different age/setting from ba_01). "Sebelum" shows discomforted state. "Selepas" shows much more comfortable, happy and relaxed face. Quality is amateur and authentic.
+      - ba_03.jpg, style="Before after collage 3", aspectRatio="4:5": a collage featuring 2-3 distinct before/after pairs of Malaysian individuals (mixed gender/age). Each pair shows a transformation relevant to the product. "Sebelum" and "Selepas" labels visible. Aesthetic is social-proof-by-numbers, amateur, real-person photos.
+      - ba_04.jpg, style="Before after collage 4", aspectRatio="4:5": a close-up transformation before/after collage focusing on the specific area the product addresses. "Sebelum" shows noticeable problem. "Selepas" shows significant improvement. Selfie-style comparison with "Sebelum" / "Selepas" labels. Quality is amateur and authentic.
 
 15. type="faq"
     • faqs: 5-7 Malaysia FAQs (halal, side effects, "berapa lama nampak hasil", COD, shipping, return, allergies)
