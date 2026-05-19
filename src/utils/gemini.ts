@@ -205,6 +205,12 @@ export async function directGeminiText(params: {
    *  output — eliminates ~90% of "Unexpected end / Unterminated string"
    *  parse failures at the source. */
   responseMimeType?: 'application/json' | 'text/plain'
+  /** Z31-fix: schema-constrained decoding. When provided alongside
+   *  responseMimeType='application/json', Gemini guarantees the output
+   *  conforms to the schema — eliminates the remaining ~10% of malformed
+   *  JSON (unescaped newlines/quotes inside string values). */
+  responseSchema?: Record<string, unknown>
+  temperature?: number
 }): Promise<string> {
   const modelsToTry = ['gemini-2.5-flash', 'gemini-2.5-flash-lite', 'gemini-2.0-flash', 'gemini-2.0-flash-lite']
   const errors: string[] = []
@@ -212,10 +218,11 @@ export async function directGeminiText(params: {
   for (const model of modelsToTry) {
     const url = `${GEMINI_BASE}/${model}:generateContent?key=${params.apiKey}`
     const generationConfig: Record<string, unknown> = {
-      temperature: 0.3,
+      temperature: params.temperature ?? 0.3,
       maxOutputTokens: params.maxOutputTokens ?? 8192,
     }
     if (params.responseMimeType) generationConfig.responseMimeType = params.responseMimeType
+    if (params.responseSchema)   generationConfig.responseSchema   = params.responseSchema
     const body: Record<string, unknown> = {
       contents: [{ role: 'user', parts: [{ text: params.prompt }] }],
       generationConfig,

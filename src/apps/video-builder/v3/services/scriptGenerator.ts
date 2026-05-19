@@ -86,15 +86,16 @@ export async function generateScript(
     lang,
   })
 
-  const raw = await directGeminiText({
+  // Z31-fix: schema-constrained decoding + auto-retry on parse failure.
+  // Gemini's `responseMimeType: 'application/json'` alone leaves ~5% of
+  // outputs malformed (unescaped newlines / quotes inside Vietnamese
+  // string values). `responseSchema` forces shape conformance at decode
+  // time; the repair + retry path handles the edge cases that slip through.
+  const parsed = await callGeminiWithRetry({
     apiKey: params.geminiKey,
     systemInstruction,
-    prompt: userPrompt,
-    maxOutputTokens: 2048,
-    responseMimeType: 'application/json',
+    userPrompt,
   })
-
-  const parsed = parseAndValidate(raw)
   const blocks: ScriptBlock[] = SCRIPT_BLOCK_IDS.map((id) => ({
     id,
     text: parsed.blocks[id] ?? '',
@@ -212,6 +213,132 @@ Reading pace baseline: 150 words per minute. So a 3s block ≈ ~7-8 words.
 Hit the per-block budget within ±20%.
 
 Generate the JSON now.`
+}
+
+// ── Schema-constrained decoding (Gemini responseSchema) ───────────────────
+// Forces the model to emit a JSON value that matches this exact shape.
+// Without `propertyOrdering` Gemini may interleave block keys, but parsing
+// still succeeds — order only matters for downstream readability.
+const SCRIPT_RESPONSE_SCHEMA = {
+  type: 'object',
+  properties: {
+    blocks: {
+      type: 'object',
+      properties: {
+        hook:      { type: 'string' },
+        pain:      { type: 'string' },
+        discovery: { type: 'string' },
+        benefit:   { type: 'string' },
+        cta:       { type: 'string' },
+      },
+      required: ['hook', 'pain', 'discovery', 'benefit', 'cta'],
+    },
+    hookVariants: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          style: { type: 'string', enum: ['emotional', 'shock', 'curiosity'] },
+          text:  { type: 'string' },
+        },
+        required: ['style', 'text'],
+      },
+    },
+  },
+  required: ['blocks', 'hookVariants'],
+}
+
+async function callGeminiWithRetry(args: {
+  apiKey: string
+  systemInstruction: string
+  userPrompt: string
+}): Promise<GeminiOutput> {
+  const baseCall = (extraSuffix = '', schema = true) =>
+    directGeminiText({
+      apiKey: args.apiKey,
+      systemInstruction: args.systemInstruction,
+      prompt: args.userPrompt + extraSuffix,
+      maxOutputTokens: 2048,
+      responseMimeType: 'application/json',
+      ...(schema ? { responseSchema: SCRIPT_RESPONSE_SCHEMA } : {}),
+    })
+
+  // Attempt 1 — strict schema. Should succeed ~99% of the time.
+  let raw = await baseCall()
+  try {
+    return parseAndValidate(raw)
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.warn('[scriptGenerator] parse fail #1, repairing...', { err, raw: raw.slice(0, 400) })
+  }
+
+  // Attempt 2 — JSON repair (escape stray control chars inside strings).
+  try {
+    return parseAndValidate(repairJsonString(raw))
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.warn('[scriptGenerator] repair fail #2, retrying Gemini...', { err })
+  }
+
+  // Attempt 3 — retry Gemini with stricter instruction (no schema this time,
+  // in case the schema itself is causing decode pathology on a specific model).
+  raw = await baseCall(
+    '\n\nIMPORTANT: Output MUST be a single valid JSON object. Inside every string value, escape newlines as \\n and double quotes as \\". Do not break strings across lines.',
+    false,
+  )
+  try {
+    return parseAndValidate(raw)
+  } catch {
+    return parseAndValidate(repairJsonString(raw))
+  }
+}
+
+/**
+ * Best-effort JSON repair for Gemini outputs that contain unescaped
+ * newlines / tabs / carriage returns INSIDE string values. Walks the
+ * raw text char-by-char tracking string state and escapes control chars.
+ *
+ * Handles the most common Gemini failure mode:
+ *   "discovery": "thật ra
+ *    mình đã thử rất nhiều..."
+ * which is invalid JSON (raw \n inside the string). Output:
+ *   "discovery": "thật ra\n    mình đã thử rất nhiều..."
+ *
+ * Does NOT try to repair unterminated strings without a closing quote —
+ * those have to fall through to the retry path.
+ */
+function repairJsonString(raw: string): string {
+  // Strip code fences first (Gemini sometimes wraps JSON in ```json … ```)
+  let s = raw.replace(/^```(?:json)?\s*/m, '').replace(/```\s*$/m, '').trim()
+
+  let out = ''
+  let inString = false
+  let escapeNext = false
+  for (let i = 0; i < s.length; i++) {
+    const c = s[i]
+    if (escapeNext) {
+      out += c
+      escapeNext = false
+      continue
+    }
+    if (c === '\\') {
+      out += c
+      escapeNext = true
+      continue
+    }
+    if (c === '"') {
+      out += c
+      inString = !inString
+      continue
+    }
+    if (inString) {
+      if (c === '\n') { out += '\\n'; continue }
+      if (c === '\r') { out += '\\r'; continue }
+      if (c === '\t') { out += '\\t'; continue }
+    }
+    out += c
+  }
+  return out
 }
 
 // ── Output validation ──────────────────────────────────────────────────────
