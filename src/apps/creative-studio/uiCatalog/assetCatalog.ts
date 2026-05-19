@@ -325,6 +325,23 @@ export const ASSET_CATALOG: AssetCatalogEntry[] = [
     },
     badges: ['needs-product', 'banner', 'engine-graphic'],
   },
+  // ── P40 — Benefits Icon Grid (photographic) ───────────────────────
+  {
+    id: 'benefits-grid',
+    group: 'photographic',
+    categoryId: 'product-explain',
+    title: { vi: 'Lưới biểu tượng công dụng', en: 'Benefits Icon Grid' },
+    description: { vi: 'Sản phẩm trung tâm + 6 huy hiệu icon công dụng xung quanh', en: 'Product center + 6 surrounding benefit badges' },
+    aspectRatio: '1:1',
+    iconKey: 'layoutGrid',
+    tooltip: {
+      what: 'Render sản phẩm centered + 6 circular/hexagonal badges xung quanh, mỗi badge có icon + label công dụng ngắn (2-4 từ). Pull benefits từ product knowledge — KHÔNG invent.',
+      marketingGoal: 'Visual benefit at-a-glance — tất cả công dụng trong 1 visual. Scroll-stop hook mạnh cho detail page + ads carousel.',
+      suitableFor: ['Detail page Shopee', 'Landing page benefits section', 'Facebook carousel', 'TikTok Shop product detail'],
+    },
+    badges: ['needs-product', 'infographic', 'engine-photo'],
+  },
+
   // ── P37 — Metric-Chip CTA + Comparison Table ───────────────────────
   {
     id: 'metric-cta',
@@ -710,6 +727,9 @@ const REQUIREMENTS: Partial<Record<AssetTypeId, CreativeRequirements>> = {
   'metric-cta':            REQ_PHOTO_NO_PERSON,
   'failed-solutions':      REQ_PHOTO_NO_PERSON,
   'comparison-table':      REQ_PHOTO_NO_PERSON,
+
+  // P40 — Benefits Icon Grid ─────────────────────────────────────────
+  'benefits-grid':         REQ_PHOTO_NO_PERSON,
   'expert-kol':            REQ_PHOTO_NO_PERSON,
 
   // social-proof (UI-native)

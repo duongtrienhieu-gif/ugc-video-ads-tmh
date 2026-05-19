@@ -114,6 +114,8 @@ export const TEMPLATE_REGISTRY: Record<AssetTypeId, TemplateRegistryEntry> = {
   'metric-cta':         { id: 'metric-cta',         engine: 'photographic',     template: 'photographic-prompt',     composition: 'single-pass-prompt',        localeValidation: false, qcRules: { baseline: true } },
   'failed-solutions':   { id: 'failed-solutions',   engine: 'photographic',     template: 'photographic-prompt',     composition: 'single-pass-prompt',        localeValidation: false, qcRules: { baseline: true } },
   'comparison-table':   { id: 'comparison-table',   engine: 'photographic',     template: 'photographic-prompt',     composition: 'single-pass-prompt',        localeValidation: false, qcRules: { baseline: true } },
+  // ── P40 — Benefits Icon Grid ───────────────────────────────────────
+  'benefits-grid':      { id: 'benefits-grid',      engine: 'photographic',     template: 'photographic-prompt',     composition: 'single-pass-prompt',        localeValidation: false, qcRules: { baseline: true, vision: true } },
 
   // ── P33 — Phase 3 pro-photo + UGC shipped ──────────────────────────
   'floating-product':       { id: 'floating-product',       engine: 'photographic', template: 'photographic-prompt', composition: 'single-pass-prompt', localeValidation: false, qcRules: { baseline: true, vision: true } },

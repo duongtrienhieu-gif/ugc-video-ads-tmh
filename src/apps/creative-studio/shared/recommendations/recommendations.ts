@@ -184,6 +184,13 @@ const FOLLOW_UPS: Record<AssetTypeId, Suggestion[]> = {
     { id: 'infographic',       reason: 'Stats infographic củng cố comparison advantages' },
     { id: 'expert-kol',        reason: 'Expert endorsement justify comparison claims' },
   ],
+
+  // ── P40 — Benefits Icon Grid follow-ups ──────────────────────────
+  'benefits-grid': [
+    { id: 'ingredient-composition', reason: 'Pair benefits grid với product+ingredient — full feature set' },
+    { id: 'metric-cta',         reason: 'Justify benefits với metric CTA + price' },
+    { id: 'before-after',       reason: 'Visual proof của các benefit đã list' },
+  ],
 }
 
 /** Return follow-up suggestions for a given creative.

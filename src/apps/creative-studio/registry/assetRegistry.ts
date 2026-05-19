@@ -49,6 +49,8 @@ import { module as newsMockModule }          from '../engines/photographic/news-
 import { module as metricCtaModule }         from '../engines/photographic/metric-cta/module'
 import { module as failedSolutionsModule }   from '../engines/photographic/failed-solutions/module'
 import { module as comparisonTableModule }   from '../engines/photographic/comparison-table/module'
+// ── P40: Benefits Icon Grid (Ladipage benefits_01 style) ──────────────────
+import { module as benefitsGridModule }      from '../engines/photographic/benefits-grid/module'
 
 // ── P5: UI-Native chat-proof modules — STATIC IMPORTS ONLY ─────────────────
 import { module as whatsappProofModule }    from '../engines/ui-native/whatsapp-proof/module'
@@ -132,6 +134,9 @@ export const ASSET_REGISTRY: Partial<Record<AssetTypeId, AssetModule>> = {
   'metric-cta':             metricCtaModule,
   'failed-solutions':       failedSolutionsModule,
   'comparison-table':       comparisonTableModule,
+
+  // ── P40: Benefits Icon Grid ───────────────────────────────────────
+  'benefits-grid':          benefitsGridModule,
 }
 
 /** List of asset ids currently implemented (registry has a value). */

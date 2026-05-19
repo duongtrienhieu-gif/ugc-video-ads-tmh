@@ -1698,6 +1698,104 @@ const CONFIGS: CreativeConfig[] = [
       forbid: ['real competitor name', 'more than 6 rows'],
     },
   },
+
+  // ═══════════════ P40 — Benefits Icon Grid (photographic) ═══════════
+  //
+  // Photographic version of "benefit infographic" — product centered +
+  // 6 circular/hexagonal badges around it, each with an icon paired to
+  // a locale-native benefit label. Matches Ladipage benefits_01.jpg
+  // aesthetic. Replaces the Canvas-rendered designed-graphic look with
+  // a richer image-gen composition.
+
+  {
+    id: 'benefits-grid',
+    engine: 'photographic',
+    model: 'gpt-image-2',
+    dna: {
+      category: 'product-explain',
+      marketingGoal: 'Visual benefit at-a-glance — product center + 6 badges show ALL công dụng cùng lúc. Scroll-stop hook cho detail page + ads.',
+      emotion: 'trust',
+      realism: 'stylized',
+      composition: 'product-hero',
+      productVisibility: 'hero-dominant',
+      textImportance: 'critical',
+      platformStyle: 'landing-page',
+      cameraStyle: 'tripod-studio',
+      renderStyle: 'editorial-beauty',
+      emotionalGoal: 'Clear comprehensive benefit map — "tất cả công dụng trong 1 visual"',
+      typographyStyle: 'Short benefit labels mobile-readable, icon + text pair per badge',
+      platformBehavior: 'Detail page Shopee + landing-page benefits section + Facebook carousel slide',
+      layoutRules: [
+        'product packaging CENTERED with subtle glow halo',
+        '6 distinct badges arranged symmetrically AROUND the product (top-left / top-right / mid-left / mid-right / bottom-left / bottom-right)',
+        'each badge = a small icon + 2-4 word benefit label below or beside it',
+        'badges never overlap the product or each other',
+        'background = brand-color soft gradient (cream / pearl / soft teal / brand accent)',
+      ],
+      contentRules: [
+        'badge labels MUST come from product benefits / usps fields — never invent unrelated benefits',
+        'each label 2-4 words, locale-native',
+        'icon picks must MATCH the benefit (happy stomach for digestion, shield for immunity, lightning for energy, leaf for natural, bed for sleep, toilet for bowel)',
+      ],
+      visualRules: [
+        'product centered with subtle premium glow halo',
+        'badges visually distinct (circular OR hexagonal, consistent shape across all 6)',
+        'icons hand-illustrated lifestyle / health flat style, NOT generic stock icons',
+        'soft brand-color gradient background',
+      ],
+      qualityRules: [
+        'product label fully readable in center',
+        'all 6 badges visible at thumbnail size',
+        'each benefit label parseable in 5-second scan',
+      ],
+      failureModes: [
+        'fewer than 5 badges visible',
+        'badges overlapping product or each other',
+        'inventing benefit labels not in product brief',
+        'random unrelated icons (eg a fish for an immunity benefit)',
+        'unreadable mobile typography',
+        'cluttered busy gradient hiding product',
+      ],
+    },
+    promptBlocks: [
+      BLOCKS.productLock(),
+      BLOCKS.productContext(),
+      BLOCKS.continuity(),
+      BLOCKS.composition(
+        'Centered product hero with 6 circular OR hexagonal benefit badges arranged symmetrically AROUND it — top-left, top-right, mid-left, mid-right, bottom-left, bottom-right. Badges NEVER overlap the product or each other. Consistent shape across all 6 badges.'
+      ),
+      BLOCKS.scene(
+        'Clean modern benefits icon grid composition like a premium ecommerce ad. Each badge pairs ONE small lifestyle/health icon (happy stomach, strong shield, lightning bolt, leafy green, comfortable bed, toilet with checkmark, brain, water drop — match the benefit) with a SHORT 2-4 word benefit label in the target locale. Badge labels pulled from the product\'s benefits / USPs — NEVER invent unrelated claims. Subtle product brand badge at the top (eg "FloraFit DARI DENMARK" if the product has a formula brand).'
+      ),
+      BLOCKS.capture('tripod'),
+      BLOCKS.lighting(
+        'Brand-color soft gradient background (cream / pearl / soft teal / product-brand accent). Subtle premium glow halo behind the centered product. Each badge gets a soft inner shadow / rim light for dimension. Clean studio softbox feel, NOT cinematic mood.'
+      ),
+      BLOCKS.platform('landing-page'),
+      BLOCKS.variation(),
+      BLOCKS.localeHardLock(),
+      BLOCKS.negative([
+        'fewer than 5 badges visible',
+        'badges overlapping product',
+        'random unrelated icons',
+        'inventing benefit labels not in product brief',
+        'cluttered gradient hiding product',
+        'cinematic moody lighting',
+      ]),
+    ],
+    negativeBlocks: [
+      'fewer than 5 badges',
+      'badges overlapping product',
+      'invented benefits',
+      'random unrelated icons',
+      'cinematic moody lighting',
+    ],
+    outputRules: {
+      aspectRatio: '1:1',
+      enforce: ['6 badges visible', 'product centered', 'icons match benefit semantics', 'labels from product brief'],
+      forbid: ['fewer than 5 badges', 'badges overlapping product', 'invented benefits'],
+    },
+  },
 ]
 
 /** UI-native configs share most DNA shape — generate via helper.

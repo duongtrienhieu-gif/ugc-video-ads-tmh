@@ -54,6 +54,9 @@ export const ASSET_TO_GROUP: Record<AssetTypeId, EngineGroup> = {
   'metric-cta':              'photographic',
   'failed-solutions':        'photographic',
   'comparison-table':        'photographic',
+
+  // ── P40 — photographic benefits icon grid ──────────────────────────
+  'benefits-grid':           'photographic',
 } as const
 
 /** Helper — get the engine group for an asset id (typed exhaustive). */
