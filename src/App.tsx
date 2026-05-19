@@ -6,6 +6,8 @@ import { useAppStore } from './stores/appStore'
 import { supabase } from './lib/supabase'
 import { useAuthStore } from './stores/authStore'
 import { useBankStore } from './stores/bankStore'
+import { useLandingPageStore } from './apps/landing-page/store'
+import { useSuperLadipageStore } from './apps/super-ladipage/store'
 import AuthScreen from './components/AuthScreen'
 import RestoreSessionModal from './components/RestoreSessionModal'
 import { RefreshCw, CheckCircle2, AlertCircle } from 'lucide-react'
@@ -120,15 +122,25 @@ export default function App() {
   }, [geminiApiKey])
 
   useEffect(() => {
+    // On login, hydrate both bank data (products / models / scripts / ...)
+    // AND the saved Landing Page / Super Ladipage projects from Supabase.
+    // The landing-page + super-ladipage stores fall back to localStorage
+    // cache if the Supabase fetch fails (table missing / network down).
+    const onLogin = () => {
+      loadAll()
+      void useLandingPageStore.getState().hydrate()
+      void useSuperLadipageStore.getState().hydrate()
+    }
+
     supabase.auth.getSession().then(({ data: { session } }) => {
       setUser(session?.user ?? null)
       setLoading(false)
-      if (session?.user) loadAll()
+      if (session?.user) onLogin()
     })
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setUser(session?.user ?? null)
-      if (session?.user) loadAll()
+      if (session?.user) onLogin()
     })
 
     return () => subscription.unsubscribe()
