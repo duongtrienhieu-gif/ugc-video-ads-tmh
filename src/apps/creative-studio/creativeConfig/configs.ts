@@ -721,62 +721,67 @@ const CONFIGS: CreativeConfig[] = [
 
   {
     id: 'expert-kol',
+    // P48 — testimonial-card layout: portrait 9:16, headshot + info bar
+    // (name + role + years + follower count) + quote box. KIE will render
+    // at 2:3 (closest supported) and the UI displays at 9:16.
     engine: 'photographic',
     model: 'gpt-image-2',
     dna: {
       category: 'ugc-real',
-      marketingGoal: 'Authority signal — chuyên gia fictional khuyên dùng. Strongest for health / skincare / supplement.',
+      marketingGoal: 'Authority signal — chuyên gia fictional khuyên dùng, kèm danh tính + số năm kinh nghiệm + lượt theo dõi + câu trích dẫn để chốt trust. Strongest for health / skincare / supplement.',
       emotion: 'authority',
       realism: 'highly-real',
       composition: 'single-subject-centered',
       productVisibility: 'high',
-      textImportance: 'supporting',
+      textImportance: 'critical',
       platformStyle: 'landing-page',
       cameraStyle: 'tripod-studio',
       renderStyle: 'clinical-pharma',
-      emotionalGoal: 'Professional credibility — expert vouching with calm confidence',
-      platformBehavior: 'Landing-page authority section + health ads',
+      emotionalGoal: 'Professional credibility — expert vouching with calm confidence + verifiable-looking credentials',
+      platformBehavior: 'Landing-page authority section + health ads — portrait 9:16 testimonial-card framing for mobile feed',
       layoutRules: [
-        'fictional expert centered',
-        'product visible in hand or on a clean surface beside them',
-        'professional setting (clinic / consultation / clean office)',
+        'portrait 9:16 testimonial card with 3 stacked zones',
+        'upper 55% = chest-up expert headshot + product visible',
+        'middle strip = name + role title + years-of-experience pill + follower-count pill',
+        'lower 30% = italic-quote testimonial card',
       ],
       visualRules: [
         'role-appropriate attire (white coat / scrubs / smart professional)',
         'clean professional lighting',
         'direct calm eye contact with camera',
+        'rounded white info bar with brand-color accent on the quote card',
       ],
       qualityRules: [
         'expert appears credible for the niche',
         'product clearly visible and label readable',
-        'setting matches the role',
+        'name + role + years + followers + quote text all readable',
       ],
       failureModes: [
         'impersonating real doctors / real celebrities / named KOLs',
         'unrealistic fake credentials in frame',
-        'overly clinical sterile feeling that loses warmth',
+        'cluttered overlapping badges hiding the expert face',
+        'missing any of the 3 layout zones',
       ],
     },
     promptBlocks: [
       BLOCKS.productLock(),
       BLOCKS.productContext(),
       BLOCKS.continuity(),
-      // P36 + P41 — Ladipage expert / KOL style — fictional professional only, culturally-appropriate attire
       BLOCKS.demographic({ role: 'professional', gender: 'woman', age: 'mid-40s' }),
       BLOCKS.setting('clinic-clean'),
       BLOCKS.capture('tripod'),
-      BLOCKS.composition('Expert as the centered subject. Product visible in hand or on the surface beside them. Negative space for headline / credentials overlay.'),
-      BLOCKS.scene('Fictional professional spokesperson — doctor / pharmacist / nutritionist / wellness expert as fits the product niche. NEVER impersonate a real named doctor / KOL / celebrity. Composite fictional face only. Role-appropriate attire (white coat / scrubs / smart professional) — culturally-appropriate variant in the target locale.'),
+      BLOCKS.composition('Portrait 9:16 expert-testimonial-card layout with 3 stacked zones. UPPER 55%: chest-up shot of the fictional professional in a clean professional setting, product packaging visible in hand or on the surface beside them with label facing camera. MIDDLE STRIP: clean white rounded info bar with the expert\'s plausible locale-native FULL NAME in bold large type, role title below ("Bác sĩ răng hàm mặt" / "Doktor Pergigian" / "Dokter Gigi" — match the product niche), and TWO pill badges side-by-side: "X năm kinh nghiệm" / "X tahun pengalaman" (8-20 years plausible) and "Y followers" with a small verified tick (50K-500K plausible). LOWER 30%: a soft rounded-rectangle quote card with large italic opening + closing quotation marks framing a SHORT 1-2 sentence locale-native testimonial about the product, brand-color accent.'),
+      BLOCKS.scene('Fictional professional spokesperson — doctor / pharmacist / nutritionist / wellness expert matching the product niche. NEVER impersonate a real named doctor / KOL / celebrity. Composite fictional face only. Role-appropriate attire (white coat / scrubs / smart professional) — culturally-appropriate variant in the target locale.'),
       BLOCKS.emotion('Direct calm eye contact. Authoritative but warm. Genuine professional expression.'),
       BLOCKS.lighting('Clean professional lighting, soft balanced fill. No sterile clinical fluorescence.'),
-      BLOCKS.culturalCue(),   // P41 — attire / clinic decor vary per market (eg my-MY may show hijab + white coat combo, vi-VN may show conservative collared shirt)
+      BLOCKS.culturalCue(),
       BLOCKS.platform('landing-page'),
       BLOCKS.variation(),
       BLOCKS.localeHardLock(),
-      BLOCKS.negative(['impersonating real doctors / celebrities / KOLs', 'fake credentials in frame', 'sterile fluorescent clinical', 'cartoonish stock-photo expert']),
+      BLOCKS.negative(['impersonating real doctors / celebrities / KOLs', 'fake credentials or certificate plaques in frame', 'cluttered overlapping badges hiding the face', 'missing the name / years / followers / quote zones', 'quote text in the wrong locale']),
     ],
-    negativeBlocks: ['impersonating real doctors / celebrities / KOLs', 'fake credentials in frame', 'sterile clinical', 'cartoonish stock-photo expert'],
-    outputRules: { aspectRatio: '4:5', enforce: ['fictional expert credible for niche', 'product readable'], forbid: ['real-person impersonation', 'fake credentials'] },
+    negativeBlocks: ['impersonating real doctors / celebrities / KOLs', 'fake credentials in frame', 'missing testimonial-card zones', 'wrong locale quote'],
+    outputRules: { aspectRatio: '9:16', enforce: ['fictional expert credible for niche', 'name + years + followers + quote visible', 'product readable'], forbid: ['real-person impersonation', 'fake credentials', 'missing zones'] },
   },
 
   // ═══════════════ UI-NATIVE (6) — template-driven, DNA only ═════════
@@ -1515,14 +1520,21 @@ const CONFIGS: CreativeConfig[] = [
       BLOCKS.demographic({ role: 'customer', gender: 'woman', age: 'mid-30s' }),
       BLOCKS.setting('casual-home'),
       BLOCKS.capture('handheld'),
-      BLOCKS.scene('Person mid-symptom: tired at desk OR bloated belly in bathroom OR sleepless in bed OR painful after eating OR disheartened on a scale. Pick the symptom that matches the product\'s pain-point in product knowledge. Genuine frustrated exhausted expression — NOT acted. NO target product in frame.'),
-      BLOCKS.lighting('Soft natural light. Subtle warning-color glow (red / orange / blue) near the affected area to anchor the eye.'),
+      // P48 — depict the pain at the BODY LOCATION matching the product's
+      // actual pain-points (loaded from productKnowledge). Pre-P48 the
+      // prompt hardcoded "bloated belly / sleepless / disheartened on a
+      // scale" examples which biased the model toward abdomen-clutching
+      // poses even for dental / skincare / joint products. The factsList
+      // block below injects the EXACT painPoints from the brief.
+      BLOCKS.scene('Person mid-symptom at home expressing the EXACT pain point recorded for this product (provided inline below as "painPoints"). The body location MUST match the pain: dental / oral product → hand to cheek or jaw with wincing mouth; digestive / gut product → hand on stomach; headache / sleep product → hand to forehead or temples; joint / back product → hand to the affected joint; skin product → looking at affected skin in a mirror; hair / scalp product → hand through thinning hair. Genuine frustrated exhausted expression — NEVER acted, NEVER smiling. NO target product visible in frame (pre-discovery state).'),
+      BLOCKS.factsList({ kind: 'painPoints', max: 1, label: 'painPoints' }),
+      BLOCKS.lighting('Soft natural light. Subtle warning-color glow (red / orange / blue) near the affected body area to anchor the eye.'),
       BLOCKS.designedOverlay('pain-italic'),
       BLOCKS.culturalCue(),
       BLOCKS.platform('facebook-ads'),
       BLOCKS.variation(),
       BLOCKS.localeHardLock(),
-      BLOCKS.negative(['happy expression', 'target product visible', 'studio glamour', 'overlay in wrong language']),
+      BLOCKS.negative(['happy expression', 'target product visible', 'studio glamour', 'overlay in wrong language', 'pain location mismatched with product niche']),
     ],
     negativeBlocks: ['happy expression', 'target product visible', 'studio glamour', 'overlay in wrong language'],
     outputRules: {

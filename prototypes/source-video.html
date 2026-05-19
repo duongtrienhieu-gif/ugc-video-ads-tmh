@@ -556,49 +556,27 @@ Sau khi search, viết 2-3 câu tóm tắt các nguồn bạn tìm được và 
     }
 
     async function searchTikTok(geminiKey, intent, keywordEn) {
-      // Primary path: tikwm.com direct API → real thumbnails + structured data
+      // ONLY tikwm.com direct API — no Gemini fallback (Gemini grounding
+      // returns walmart/ebay/etc. with title-only "tiktok" tag, garbage data).
+      // If tikwm fails entirely, return empty rather than poison results.
       try {
         const data = await fetchTikwm(keywordEn)
         const videos = data?.data?.videos || []
-        if (videos.length) {
-          const links = videos.slice(0, 8).map(v => {
-            const uniqueId = v.author?.unique_id || 'user'
-            const videoId = v.video_id || v.aweme_id || ''
-            return {
-              url: `https://www.tiktok.com/@${uniqueId}/video/${videoId}`,
-              title: (v.title || v.author?.nickname || 'TikTok video').slice(0, 120),
-              thumbnail: v.cover || v.origin_cover || v.ai_dynamic_cover,
-              domain: 'tiktok.com',
-              meta: v.author?.nickname ? `@${uniqueId}` : ''
-            }
-          }).filter(l => l.url.includes('/video/'))
-          if (links.length) return { links, narrative: '' }
-        }
-      } catch (err) {
-        console.warn('tikwm fallback to Gemini:', err.message)
-      }
-
-      // Fallback: Gemini Google Search grounding
-      const prompt = `Bạn cần TÌM VIDEO TIKTOK phù hợp với concept hình ảnh: "${intent}". Dùng search "site:tiktok.com ${keywordEn}". Trả về URL TikTok video cụ thể. Tìm 5-8 link.`
-      try {
-        const data = await callGemini(geminiKey, {
-          contents: [{ parts: [{ text: prompt }] }],
-          tools: [{ googleSearch: {} }]
-        })
-        const chunks = data.candidates?.[0]?.groundingMetadata?.groundingChunks || []
-        const seen = new Set()
-        const links = []
-        for (const c of chunks) {
-          if (!c.web?.uri || seen.has(c.web.uri) || links.length >= 5) continue
-          seen.add(c.web.uri)
-          links.push({
-            url: c.web.uri,
-            title: (c.web.title || 'TikTok video').replace(/\s*\|\s*TikTok\s*$/i, '').trim(),
-            domain: 'tiktok.com'
-          })
-        }
+        if (!videos.length) return { links: [], narrative: '' }
+        const links = videos.slice(0, 8).map(v => {
+          const uniqueId = v.author?.unique_id || 'user'
+          const videoId = v.video_id || v.aweme_id || ''
+          return {
+            url: `https://www.tiktok.com/@${uniqueId}/video/${videoId}`,
+            title: (v.title || v.author?.nickname || 'TikTok video').slice(0, 120),
+            thumbnail: v.cover || v.origin_cover || v.ai_dynamic_cover,
+            domain: 'tiktok.com',
+            meta: v.author?.nickname ? `@${uniqueId}` : ''
+          }
+        }).filter(l => /\/video\/\d+/.test(l.url))
         return { links, narrative: '' }
-      } catch {
+      } catch (err) {
+        console.warn('tikwm failed (returning empty TikTok results):', err.message)
         return { links: [], narrative: '' }
       }
     }
@@ -612,14 +590,23 @@ Sau khi search, viết 2-3 câu tóm tắt các nguồn bạn tìm được và 
 Danh sách nguồn video tìm được (ID + nguồn + tiêu đề):
 ${items}
 
-Hãy chấm điểm MỖI link 0-100 theo độ phù hợp với concept dựa trên tiêu đề + nguồn:
-- 90-100: cực kỳ match, chắc chắn có cảnh y hệt
-- 70-89: rất phù hợp
-- 50-69: liên quan, có thể có vài giây dùng được
-- 30-49: liên quan xa
-- 0-29: không phù hợp
+Chấm điểm MỖI link 0-100 theo độ phù hợp. ÁP DỤNG NGHIÊM NGẶT các rule sau:
 
-Trả JSON array [{id, score, reason}] với reason là 1 câu ngắn (< 15 từ).`
+PHẠT MẠNH (score 0-15):
+- E-commerce listing: ebay, walmart, amazon, shopee, aliexpress, alibaba, temu, target, bestbuy → không phải video content, là trang bán hàng.
+- Homepage / category / search result page: title chỉ là tên domain (vd "shutterstock.com", "vecteezy.com") hoặc generic ("Stock Photos & Videos", "Royalty-free images") — KHÔNG dẫn tới 1 video cụ thể.
+- Anti-bot / verification pages: "Verification Required", "Robot or human", "Cloudflare", "Access denied".
+- Link không liên quan rõ tới concept.
+
+CHẤM CAO (70-100):
+- Title nói RÕ về 1 video/clip CỤ THỂ liên quan tới concept.
+- 90-100: chắc chắn chứa cảnh y hệt concept.
+- 70-89: rất phù hợp, đa số match.
+
+TRUNG BÌNH (30-69):
+- Có liên quan đến chủ đề chung nhưng chưa chắc match cảnh.
+
+Trả JSON array [{id, score, reason}]. Reason là 1 câu ngắn (< 15 từ) tiếng Việt giải thích vì sao score đó.`
 
       try {
         const data = await callGemini(apiKey, {

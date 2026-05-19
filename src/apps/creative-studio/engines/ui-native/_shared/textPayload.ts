@@ -338,11 +338,21 @@ const COMMENT_SYSTEM_INSTRUCTION =
   + 'corporate copy.'
 
 interface LLMCommentResponse {
+  // P48 — facebook-comment thread now also carries the original post
+  // metadata so the canvas template can render the post header
+  // (page name + post caption + product image) ABOVE the comments,
+  // and mark some replies as coming from the page owner.
+  postCaption?: string
+  ownerName?: string
+  postLikes?: number
+  postShares?: number
   comments: {
     username: string
     text: string
     likes: number
     isReply?: boolean
+    /** P48 — true when the page owner replies to a commenter. */
+    isOwnerReply?: boolean
   }[]
 }
 
@@ -368,6 +378,19 @@ function buildCommentPrompt(req: TextPayloadRequest): string {
   // P41 — concrete per-locale comment voice samples
   const voiceRef = voiceSamplesComment(req.locale, `${req.productName}|${req.platform}|comment`)
 
+  // P48 — facebook-comment threads also need a post header on top of the
+  // comments. Ask the LLM to author the post caption + page / creator name
+  // + plausible like/share counts AND mark 1-2 comments as owner replies.
+  const facebookExtras = req.platform === 'facebook' ? [
+    '',
+    'POST HEADER (Facebook only): Above the comments, the canvas renders the original post — a page / creator account that authored the post about this product. You also generate:',
+    '  • a SHORT 1-2 sentence post caption in locale voice about the product (NEVER salesy; sound like a customer-discovery share or a page review post)',
+    '  • a plausible locale-native page / creator display name (e.g. "Mỹ Phẩm Linh House" / "Sihat Bersama Aisyah" / "WellnessKita")',
+    '  • a plausible postLikes count (200-5000) and postShares count (10-300)',
+    '',
+    'OWNER REPLIES: 1-2 of the comments below MUST be marked `"isOwnerReply": true` and authored by the page owner (use ownerName as the username) — these are SHORT polite replies to a previous commenter that answer a question or thank them. Place them as isReply: true and isOwnerReply: true, immediately after the commenter they reply to.',
+  ] : []
+
   return [
     `Generate ${count} ${platformName} comments on a UGC post about this product.`,
     `Product: ${req.productName}${req.niche ? ` (niche: ${req.niche})` : ''}`,
@@ -375,17 +398,24 @@ function buildCommentPrompt(req: TextPayloadRequest): string {
     personaBlock,
     `Language: ${localeMap[req.locale]}`,
     voiceRef,
+    ...facebookExtras,
     '',
     'EACH comment must follow the archetype assigned below — this is what makes the thread feel MESSY and HUMAN instead of "8 variations of the same caption":',
     mixDescription,
     '',
     'STRICT JSON OUTPUT — no prose, no markdown fence:',
     '{',
+    ...(req.platform === 'facebook' ? [
+      '  "postCaption": "<1-2 sentence locale-native post caption>",',
+      '  "ownerName": "<plausible page/creator display name>",',
+      '  "postLikes": 1234,',
+      '  "postShares": 56,',
+    ] : []),
     '  "comments": [',
     '    { "username": "<lowercase casual username eg \\"thanh.nguyen\\", \\"linhng_98\\", \\"_mayhoang_\\">",',
     '      "text": "<the comment, following its archetype rules>",',
     '      "likes": 12,',
-    '      "isReply": false },',
+    '      "isReply": false' + (req.platform === 'facebook' ? ', "isOwnerReply": false' : '') + ' },',
     '    ...',
     '  ]',
     '}',
@@ -426,6 +456,9 @@ function shapeCommentPayload(
     reactions: [
       `likes:${Math.max(0, Math.round(c.likes ?? 0))}`,
       ...(c.isReply ? ['isReply:true'] : []),
+      // P48 — owner-reply flag flows into reactions so the canvas
+      // template can render a "Tác giả" / "Author" badge on the bubble.
+      ...(c.isOwnerReply ? ['isOwnerReply:true'] : []),
     ],
     hasAttachment: 'none' as const,
   }))
@@ -437,6 +470,11 @@ function shapeCommentPayload(
       topic: req.platform === 'facebook' ? 'facebook-comments' : 'tiktok-comments',
       niche: req.niche,
       productName: req.productName,
+      // P48 — facebook-comment post header data (undefined for other platforms)
+      postCaption: parsed.postCaption,
+      ownerName:   parsed.ownerName,
+      postLikes:   typeof parsed.postLikes  === 'number' ? Math.max(0, Math.round(parsed.postLikes))  : undefined,
+      postShares:  typeof parsed.postShares === 'number' ? Math.max(0, Math.round(parsed.postShares)) : undefined,
     },
   }
 }
@@ -567,4 +605,12 @@ export function readLikes(item: { reactions?: string[] }): number {
 
 export function readIsReply(item: { reactions?: string[] }): boolean {
   return !!item.reactions?.includes('isReply:true')
+}
+
+/** P48 — true when this comment was authored by the page owner replying
+ *  to a previous commenter (Facebook only). The facebook-comment canvas
+ *  template renders these with an "Tác giả" / "Author" badge to mirror
+ *  the page-owner badge on real Facebook threads. */
+export function readIsOwnerReply(item: { reactions?: string[] }): boolean {
+  return !!item.reactions?.includes('isOwnerReply:true')
 }

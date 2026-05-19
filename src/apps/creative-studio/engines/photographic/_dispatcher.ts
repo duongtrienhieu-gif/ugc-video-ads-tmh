@@ -107,19 +107,30 @@ export async function dispatchPhotographic(
     promptSource = 'legacy'
   }
 
+  // P48 — derive KIE size from the module's declared aspectRatio. KIE
+  // gpt-image-2 only supports '1:1' | '3:2' | '2:3', so map every UI
+  // aspect to the closest supported size. Portrait UI ratios (9:16, 4:5)
+  // collapse to '2:3'; landscape UI ratios (16:9, 3:2) collapse to '3:2'.
+  const kieSize: '1:1' | '3:2' | '2:3' =
+      module.aspectRatio === '3:2' || module.aspectRatio === '16:9' ? '3:2'
+    : module.aspectRatio === '9:16' || module.aspectRatio === '4:5' ? '2:3'
+    : '1:1'
+
   console.info('[photographic dispatcher]', {
     assetType: module.id,
     refs: referenceUrls.length,
     promptLen: finalPrompt.length,
     promptSource,
     blocksUsed,
+    moduleAspect: module.aspectRatio,
+    kieSize,
   })
 
   const remoteUrl = await generateGpt4oImage({
     apiKey,
     prompt: finalPrompt,
     filesUrl: referenceUrls,
-    size: '1:1',
+    size: kieSize,
   })
 
   // Persist the generated image
