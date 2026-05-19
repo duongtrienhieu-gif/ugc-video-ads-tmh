@@ -1,6 +1,10 @@
 // ─────────────────────────────────────────────────────────────────────
 // System prompt cho Gemini Vision extract ProductIdentity.
 // 1 call duy nhất / pack. Output JSON structured.
+//
+// P4 update: thêm 2 field
+//   - packagingShape (lock shape, fix lỗi dọc cao thay vì tròn dẹp)
+//   - subjectIdentityLock (lock chủ thể, fix lỗi AI ra đàn ông châu Âu)
 // ─────────────────────────────────────────────────────────────────────
 
 export const SYSTEM_PROMPT_IDENTITY = `
@@ -14,49 +18,118 @@ ONLY — no preamble, no markdown fences, no explanation.
 
 SCHEMA:
 {
-  "productNameExact":       string,    // verbatim brand+product name as on packaging — DO NOT translate or paraphrase
-  "packagingDescription":   string,    // 60-150 words ENG describing the actual physical product packaging: shape, color, label layout, logo placement, size hint. Be SPECIFIC so an image model can recreate it consistently.
-  "primaryColors":          string[],  // 2-4 colors prominent on packaging (e.g. ["dark navy", "white", "teal accent"])
-  "productScale":           string,    // size reference (e.g. "fits in adult palm, ~100g jar", "small handheld bottle ~50ml")
-  "productPose":            string,    // default pose hint (e.g. "label facing camera, slight tilt to show product front clearly")
+  "productNameExact":       string,
+  "packagingDescription":   string,
+  "packagingShape":         string,
+  "primaryColors":          string[],
+  "productScale":           string,
+  "productPose":            string,
 
-  "coBrandBadges":          string[],  // any co-brand or ingredient brand badges (e.g. ["FloraFit™ DARI DENMARK"]); [] if none
-  "trustBadges":            string[],  // regulatory / certification badges (e.g. ["HALAL", "KKM", "BPOM"]); infer from market+category if not explicit
-  "priceTag":               string,    // price as it should appear (e.g. "RM59", "Rp159.000", "299.000đ"); use offer or product info
+  "coBrandBadges":          string[],
+  "trustBadges":            string[],
+  "priceTag":               string,
 
-  "productCategory":        string,    // concise category (e.g. "probiotic / gut health supplement", "anti-aging skincare serum", "collagen drink")
+  "subjectIdentityLock": {
+    "primary":   string,
+    "secondary": string
+  },
+
+  "productCategory":        string,
 
   "painPointsByTier": {
-    "tier1_primary":  string[],  // 5-8 pain hooks directly caused by mechanism the product addresses. For probiotic: ["perut kembung", "sembelit", "gas berlebihan", "sakit perut lepas makan", "penghadaman tak lancar"]
-    "tier2_axis":     string[],  // 3-5 pains related via known biological axis (gut-skin, gut-immune, gut-brain). For probiotic: ["kulit kusam", "selalu sakit / immunity low", "jerawat"]
-    "tier3_loose":    string[],  // 2-4 weakly related (use sparingly). For probiotic: ["fatigue", "poor sleep"]
-    "tier4_offniche": string[]   // 3-6 pains that BELONG to OTHER categories — DO NOT include in section concepts. For probiotic: ["weight gain", "muscle weakness", "hair loss", "joint pain", "low libido"]
+    "tier1_primary":  string[],
+    "tier2_axis":     string[],
+    "tier3_loose":    string[],
+    "tier4_offniche": string[]
   },
 
   "transformationByTier": {
-    "tier1_primary":  string[],  // 4-6 before/after transformations directly tied to product mechanism. For probiotic: ["bloated belly → flat comfortable belly", "stomach pain → relaxed digestion"]
-    "tier2_axis":     string[],  // 2-4 axis-related (skin/immune). For probiotic: ["dull skin → bright skin", "frequent sick → strong immunity"]
-    "tier3_loose":    string[],  // 1-3 loose. For probiotic: ["tired face → fresh face"]
-    "tier4_offniche": string[]   // 3-5 off-niche transformations — DO NOT use. For probiotic: ["heavy → slim body", "weak → muscular", "wrinkles → tight skin"]
+    "tier1_primary":  string[],
+    "tier2_axis":     string[],
+    "tier3_loose":    string[],
+    "tier4_offniche": string[]
   },
 
-  "visualAntiPatterns":     string[]   // 4-8 short visual concepts the image model must NEVER include for this product. Examples for probiotic: ["weight loss", "body slimming", "muscle gain", "hair regrowth", "joint anatomy", "skincare serum bottle on face"]
+  "visualAntiPatterns":     string[]
 }
 
-RULES:
-1. productNameExact MUST be verbatim from packaging or product info. Do NOT translate to other languages. Do NOT add or remove words. If the name on packaging is "INFINITY PROBIOTICS PLUS", output "INFINITY PROBIOTICS PLUS" — not "Infinity Probiotic" or "Probiotik Infinity".
+═══ FIELD INSTRUCTIONS ═══
 
-2. priceTag MUST be the offer/sale price the user intends to display (check product.offer field). Format with currency symbol/code suffix correct to market (RM for Malaysia, Rp for Indonesia, đ for Vietnam, $ for US). If product.offer is absent, infer a reasonable price for the market+category.
+1. productNameExact — verbatim brand+product name as on packaging. DO NOT
+   translate or paraphrase. If label says "INFINITY PROBIOTICS PLUS" output
+   that exact casing.
 
-3. painPointsByTier and transformationByTier MUST be properly categorized. The hierarchy is:
-   - Tier 1 = DIRECT (caused by exactly the mechanism this product fixes)
-   - Tier 2 = AXIS (well-established secondary effect via known biological pathway)
-   - Tier 3 = LOOSE (marketing-defensible but weak link)
-   - Tier 4 = OFF-NICHE (belongs to a different product category — gut probiotic ≠ weight loss product ≠ hair growth product ≠ joint pain product)
+2. packagingDescription — 60-150 words ENG describing the actual physical
+   product packaging: label layout, logo placement, text on label, key
+   visual elements.
 
-4. visualAntiPatterns lists concrete VISUAL concepts (not vague terms). Used to block image generation if a concept drifts into another category.
+3. packagingShape — SHORT CANONICAL SHAPE TOKEN (1 sentence, 8-25 words).
+   This is injected into EVERY image prompt to lock packaging shape.
+   Examples:
+     - "round flat jar (squat cylinder, height ≈ half of diameter), with a screw-on lid, often paired with a matching square cardboard box"
+     - "tall thin glass bottle (height ≈ 3x diameter), narrow neck with dropper cap"
+     - "rectangular cardboard box, portrait orientation (height ≈ 1.5x width), no jar"
+     - "round flat tin (squat metal container, height ≈ third of diameter), with hinged lid"
+   Be PRECISE about HEIGHT:DIAMETER ratio so AI doesn't drift to wrong shape.
 
-5. Pain points and transformations MUST be written in the TARGET MARKET LANGUAGE if available (Malay for MY market, Vietnamese for VN, English for international). Mix is OK if product info is bilingual.
+4. primaryColors — 2-4 colors prominent on packaging.
 
-6. Output JSON ONLY. No markdown, no commentary, no "Here is the JSON:" prefix.
+5. productScale — size hint (e.g. "fits in adult palm, ~100g").
+
+6. productPose — default pose (e.g. "label facing camera, slight tilt").
+
+7. coBrandBadges — co-brand / ingredient brand badges visible on packaging
+   (e.g. ["FloraFit™ DARI DENMARK"]); [] if none.
+
+8. trustBadges — regulatory / certification badges visible on packaging OR
+   inferred from market+category (e.g. ["HALAL", "KKM", "BPOM"]).
+
+9. priceTag — price string the user wants displayed in promo banners
+   (e.g. "RM59", "Rp159.000", "299.000đ"). Use product.offer if available,
+   else infer reasonable price for market+category.
+
+10. subjectIdentityLock — CRITICAL field to fix the "AI renders European
+    man instead of Malaysian Muslim woman" bug.
+    - primary: the most common subject demographic for this product+market.
+      For Malaysian (MY) market: usually "Malaysian Muslim woman wearing
+      hijab, mid-20s to early 40s, warm friendly genuine look". Adjust
+      based on product category (men's grooming → Malaysian man; mom & baby
+      → Malaysian mother; etc).
+    - secondary: alternate demographic for variety (e.g. "Malaysian man,
+      mid-30s to 50s, clean look" if primary is woman). Used in 1-2 shots
+      for demographic diversity.
+    Write each as ONE complete sentence with: nationality + religion (if
+    relevant) + age range + visual identifier (hijab/clean-shaven/etc) +
+    expression hint.
+
+11. productCategory — concise category (e.g. "oral care / teeth whitening
+    powder", "probiotic / gut health supplement").
+
+12. painPointsByTier — 4-tier classification:
+    - tier1_primary (5-8): pain hooks DIRECTLY caused by mechanism this
+      product addresses. For teeth product: ["gigi kuning", "nafas berbau",
+      "karang gigi tebal", "gusi berdarah", "gigi sensitif"]
+    - tier2_axis (3-5): pains via known biological axis. For teeth:
+      ["senyum tak yakin", "selalu tutup mulut", "wajah kelihatan tua"]
+    - tier3_loose (2-4): weakly related (use sparingly).
+    - tier4_offniche (3-6): pains belonging to OTHER categories — DO NOT
+      include in concepts. For teeth: ["berat naik", "rambut gugur",
+      "sakit sendi", "kulit kering wajah"]
+
+13. transformationByTier — same 4-tier structure for before/after concepts.
+
+14. visualAntiPatterns — 4-8 short visual concepts the image model must
+    NEVER include. For teeth: ["weight loss", "body slimming", "muscle gain",
+    "hair regrowth", "skincare serum on face", "joint anatomy"]
+
+═══ ABSOLUTE RULES ═══
+
+- productNameExact MUST be verbatim from packaging.
+- priceTag MUST include currency symbol/code matching market.
+- subjectIdentityLock.primary MUST be appropriate for target market — for
+  MY market default Muslim woman with hijab unless product clearly targets
+  men (men's grooming, athletic supplement for men, etc).
+- All pain/transformation text MUST be in target market language (Malay
+  for MY, Vietnamese for VN, English for international).
+- Output JSON ONLY. No markdown fences. No commentary.
 `.trim()

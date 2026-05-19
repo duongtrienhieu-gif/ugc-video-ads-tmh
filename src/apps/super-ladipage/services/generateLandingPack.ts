@@ -43,6 +43,7 @@ interface RawPackOutput {
     urgencyText?: string
     bullets?:    string[]
     faqs?:       Array<{ question: string; answer: string }>
+    faqsVi?:     Array<{ question: string; answer: string }>
     reviews?:    Array<{ author: string; quote: string; meta?: string; rating?: number }>
     comparisonData?: {
       us: { title: string; bullets: string[] }
@@ -114,6 +115,7 @@ function rawToSections(
       urgencyText:  s.urgencyText,
       bullets:      s.bullets,
       faqs:         s.faqs,
+      faqsVi:       s.faqsVi,
       reviews:      s.reviews,
       imagePrompts,
       comparisonData: s.comparisonData,

@@ -1,10 +1,22 @@
 import type { PresetSpec, LandingForm } from '../types'
 
 // ─────────────────────────────────────────────────────────────────────
-// Preset specs — định nghĩa CỐ ĐỊNH section + image cho mỗi preset.
+// Preset specs — Phase 4 rewrite.
 //
-// Pha 3: chỉ implement ugc-malaysia. 4 preset còn lại stub disabled.
-// Sau khi anh test ugc-malaysia OK → bổ sung từng preset.
+// User feedback driven changes (17 section):
+//   - Reorder: final-cta (was 17, social-proof banner) → vị trí 2
+//   - Reorder: news-proof (was 13, warning/fear) → vị trí 6
+//   - Replace lifestyle (pos 10) → expert-kol (vị trí 12 mới)
+//   - hero: 2→1 ảnh, bỏ price khỏi text overlay
+//   - pain: 5→6 ảnh, 4:5→1:1
+//   - product-discovery: thêm text overlay + trust icons (như hero)
+//   - ingredients: 2→1 ảnh
+//   - news-proof: tone trust → warning/scare
+//   - social-proof: 4→6 ảnh
+//   - before-after: outfit khác + tên/tuổi/thời gian + Malay Muslim lock
+//   - faq: bilingual VN
+//   - offer: 2→1 ảnh
+//   - final-cta (giờ pos 2): 2→1 ảnh, 16:9→1:1, social proof banner style
 // ─────────────────────────────────────────────────────────────────────
 
 const UGC_MALAYSIA_SPEC: PresetSpec = {
@@ -13,34 +25,53 @@ const UGC_MALAYSIA_SPEC: PresetSpec = {
   totalSections: 17,
   totalImages: 34,
   toneBrief:
-    'High-conversion Malaysia ecommerce landing page. Sales psychology: ' +
-    'AIDA + heavy social proof + scarcity. Native Malay tone, real-person UGC ' +
-    'vibe (not corporate). Target: TikTok/FB Ads → COD checkout. Hook hard ' +
-    'in first 3s, validate problem, present solution, prove with testimonials, ' +
-    'close with urgency offer.',
+    'High-conversion Malaysia ecommerce landing page. Sales flow: ' +
+    'Hook → INSTANT TRUST (social proof banner) → Pain → Education → ' +
+    'Failed solutions → FEAR (news warning) → Solution → Proof stack → ' +
+    'Conversion. Tone: tâm sự "bạn / chúng tôi", chia sẻ thấu hiểu, ' +
+    'KHÔNG hardsell ngôn từ trung tính. Native Malay tone, real-person ' +
+    'UGC vibe (không corporate). Target: TikTok/FB Ads → COD checkout.',
   sections: [
-    // 1. HERO — 2 ảnh, recipe A (UGC photo + big text overlay + decor badges)
+    // ═══════════════════════════════════════════════════════════════
+    // 1. HERO — 1 ảnh (giảm từ 2), 4:5, recipe A
+    //    Bỏ giá khỏi text overlay (giá đã chuyển sang section 2 + 17)
+    // ═══════════════════════════════════════════════════════════════
     {
       type: 'hero',
-      imageCount: 2,
+      imageCount: 1,
       recipeId: 'A',
       aspectRatio: '4:5',
       productPolicy: 'required',
       textFields: { headline: true, subheadline: true, cta: true, offerStrip: true, urgencyText: true, bodyCopy: true },
     },
 
-    // 2. PAIN — 5 ảnh, recipe A (photo + small italic Q overlay + glow accent)
-    //    4-tier rule: ≥3 tier1, ≤1 tier3, 0 tier4
+    // ═══════════════════════════════════════════════════════════════
+    // 2. SOCIAL PROOF BANNER (was final-cta pos 17) — 1 ảnh, 1:1, recipe G/social-proof
+    //    Đẩy trust signal lên đầu sau hero
+    // ═══════════════════════════════════════════════════════════════
+    {
+      type: 'final-cta',
+      imageCount: 1,
+      recipeId: 'G',
+      aspectRatio: '1:1',
+      productPolicy: 'required',
+      textFields: { headline: true, subheadline: true, cta: true, offerStrip: true, bodyCopy: true },
+    },
+
+    // ═══════════════════════════════════════════════════════════════
+    // 3. PAIN — 6 ảnh (tăng từ 5), 1:1 (đổi từ 4:5), recipe A
+    //    4-tier rule: ≥4 tier1, ≤1 tier3, 0 tier4
+    // ═══════════════════════════════════════════════════════════════
     {
       type: 'pain',
-      imageCount: 5,
+      imageCount: 6,
       recipeId: 'A',
-      aspectRatio: '4:5',
+      aspectRatio: '1:1',
       productPolicy: 'forbidden',
       textFields: { headline: true, bodyCopy: true, bullets: true },
       tierRules: {
         distribution: {
-          tier1_primary:  { min: 3, max: 5 },
+          tier1_primary:  { min: 4, max: 6 },
           tier2_axis:     { min: 0, max: 2 },
           tier3_loose:    { min: 0, max: 1 },
           tier4_offniche: { min: 0, max: 0 },
@@ -48,17 +79,23 @@ const UGC_MALAYSIA_SPEC: PresetSpec = {
       },
     },
 
-    // 3. WHY-HAPPENS — 1 ảnh, recipe C (infographic illustration)
+    // ═══════════════════════════════════════════════════════════════
+    // 4. WHY-HAPPENS — 1 ảnh, 1:1, recipe C
+    //    Copy phải list 4-6 nguyên nhân cụ thể có icon prefix
+    // ═══════════════════════════════════════════════════════════════
     {
       type: 'why-happens',
       imageCount: 1,
       recipeId: 'C',
       aspectRatio: '1:1',
       productPolicy: 'forbidden',
-      textFields: { headline: true, bodyCopy: true },
+      textFields: { headline: true, bodyCopy: true, bullets: true },
     },
 
-    // 4. FAILED-SOLUTIONS — 1 ảnh, recipe B (UGC photo sạch, KHÔNG có sản phẩm)
+    // ═══════════════════════════════════════════════════════════════
+    // 5. FAILED-SOLUTIONS — 1 ảnh, 4:5, recipe B
+    //    Lock Malay Muslim hijab woman (fix lỗi AI ra đàn ông châu Âu)
+    // ═══════════════════════════════════════════════════════════════
     {
       type: 'failed-solutions',
       imageCount: 1,
@@ -68,87 +105,10 @@ const UGC_MALAYSIA_SPEC: PresetSpec = {
       textFields: { headline: true, bodyCopy: true, bullets: true },
     },
 
-    // 5. PRODUCT-DISCOVERY — 1 ảnh, recipe B (UGC photo sạch, CÓ sản phẩm)
-    {
-      type: 'product-discovery',
-      imageCount: 1,
-      recipeId: 'B',
-      aspectRatio: '4:5',
-      productPolicy: 'required',
-      textFields: { headline: true, subheadline: true, bodyCopy: true },
-    },
-
-    // 6. INGREDIENTS — 2 ảnh, recipe D (product showcase infographic)
-    {
-      type: 'ingredients',
-      imageCount: 2,
-      recipeId: 'D',
-      aspectRatio: '1:1',
-      productPolicy: 'required',
-      textFields: { headline: true, bodyCopy: true, bullets: true },
-    },
-
-    // 7. MECHANISM — 1 ảnh, recipe C (science mechanism diagram, có sản phẩm)
-    {
-      type: 'mechanism',
-      imageCount: 1,
-      recipeId: 'C',
-      aspectRatio: '1:1',
-      productPolicy: 'required',
-      textFields: { headline: true, bodyCopy: true },
-    },
-
-    // 8. BENEFITS — 1 ảnh, recipe D (benefit icon grid)
-    {
-      type: 'benefits',
-      imageCount: 1,
-      recipeId: 'D',
-      aspectRatio: '1:1',
-      productPolicy: 'required',
-      textFields: { headline: true, bodyCopy: true, bullets: true },
-    },
-
-    // 9. COMPARISON — 1 ảnh, recipe E (comparison table)
-    {
-      type: 'comparison',
-      imageCount: 1,
-      recipeId: 'E',
-      aspectRatio: '1:1',
-      productPolicy: 'required',
-      textFields: { headline: true, bodyCopy: true, comparisonData: true },
-    },
-
-    // 10. LIFESTYLE — 1 ảnh, recipe B (outdoor candid, KHÔNG sản phẩm)
-    {
-      type: 'lifestyle',
-      imageCount: 1,
-      recipeId: 'B',
-      aspectRatio: '4:5',
-      productPolicy: 'forbidden',
-      textFields: { headline: true, bodyCopy: true },
-    },
-
-    // 11. SOCIAL-PROOF — 4 ảnh, recipe F (platform UI screenshots)
-    {
-      type: 'social-proof',
-      imageCount: 4,
-      recipeId: 'F',
-      aspectRatio: '4:5',
-      productPolicy: 'required',
-      textFields: { headline: true, bodyCopy: true, reviews: true },
-    },
-
-    // 12. WHATSAPP-TESTIMONIALS — 4 ảnh, recipe F (WhatsApp chat screenshots)
-    {
-      type: 'whatsapp-testimonials',
-      imageCount: 4,
-      recipeId: 'F',
-      aspectRatio: '4:5',
-      productPolicy: 'required',
-      textFields: { headline: true, bodyCopy: true },
-    },
-
-    // 13. NEWS-PROOF — 2 ảnh, recipe F (news article + authority screenshots)
+    // ═══════════════════════════════════════════════════════════════
+    // 6. NEWS-PROOF (WARNING) — 2 ảnh, 4:5, recipe F/warning-news
+    //    Đổi tone từ "trust authority" → "warning/fear-mongering"
+    // ═══════════════════════════════════════════════════════════════
     {
       type: 'news-proof',
       imageCount: 2,
@@ -158,8 +118,116 @@ const UGC_MALAYSIA_SPEC: PresetSpec = {
       textFields: { headline: true, bodyCopy: true },
     },
 
-    // 14. BEFORE-AFTER — 4 ảnh, recipe A (transformation collage)
-    //    4-tier rule: ≥3 tier1, ≤1 tier2, 0 tier3/4 (TRÁNH lỗi weight-loss-for-gut)
+    // ═══════════════════════════════════════════════════════════════
+    // 7. PRODUCT-DISCOVERY — 1 ảnh, 4:5, recipe A (đổi từ B!)
+    //    User yêu cầu: hijab + text overlay (giống hero) + trust icons KKM/best seller
+    // ═══════════════════════════════════════════════════════════════
+    {
+      type: 'product-discovery',
+      imageCount: 1,
+      recipeId: 'A',
+      aspectRatio: '4:5',
+      productPolicy: 'required',
+      textFields: { headline: true, subheadline: true, cta: true, bodyCopy: true },
+    },
+
+    // ═══════════════════════════════════════════════════════════════
+    // 8. INGREDIENTS — 1 ảnh (giảm từ 2), 1:1, recipe D
+    //    Show ĐẦY ĐỦ thành phần khớp text
+    // ═══════════════════════════════════════════════════════════════
+    {
+      type: 'ingredients',
+      imageCount: 1,
+      recipeId: 'D',
+      aspectRatio: '1:1',
+      productPolicy: 'required',
+      textFields: { headline: true, bodyCopy: true, bullets: true },
+    },
+
+    // ═══════════════════════════════════════════════════════════════
+    // 9. MECHANISM — 1 ảnh, 1:1, recipe C (giữ nguyên)
+    // ═══════════════════════════════════════════════════════════════
+    {
+      type: 'mechanism',
+      imageCount: 1,
+      recipeId: 'C',
+      aspectRatio: '1:1',
+      productPolicy: 'required',
+      textFields: { headline: true, bodyCopy: true },
+    },
+
+    // ═══════════════════════════════════════════════════════════════
+    // 10. BENEFITS — 1 ảnh, 1:1, recipe D (giữ nguyên)
+    // ═══════════════════════════════════════════════════════════════
+    {
+      type: 'benefits',
+      imageCount: 1,
+      recipeId: 'D',
+      aspectRatio: '1:1',
+      productPolicy: 'required',
+      textFields: { headline: true, bodyCopy: true, bullets: true },
+    },
+
+    // ═══════════════════════════════════════════════════════════════
+    // 11. COMPARISON — 1 ảnh, 1:1, recipe E
+    //    Visual premium hơn (recipe E updated)
+    // ═══════════════════════════════════════════════════════════════
+    {
+      type: 'comparison',
+      imageCount: 1,
+      recipeId: 'E',
+      aspectRatio: '1:1',
+      productPolicy: 'required',
+      textFields: { headline: true, bodyCopy: true, comparisonData: true },
+    },
+
+    // ═══════════════════════════════════════════════════════════════
+    // 12. EXPERT + KOL ENDORSEMENT (NEW — thay lifestyle pos 10) —
+    //     2 ảnh, 1:1, recipe H (NEW)
+    //     Ảnh 1: chuyên gia (tên + ngành + năm KN + quote box)
+    //     Ảnh 2: KOL Malaysia (tên + followers + quote box)
+    // ═══════════════════════════════════════════════════════════════
+    {
+      type: 'expert-kol',
+      imageCount: 2,
+      recipeId: 'H',
+      aspectRatio: '1:1',
+      productPolicy: 'forbidden',
+      textFields: { headline: true, bodyCopy: true, reviews: true },
+    },
+
+    // ═══════════════════════════════════════════════════════════════
+    // 13. SOCIAL-PROOF — 6 ảnh (tăng từ 4), 4:5, recipe F
+    //     Mix: FB / TikTok / Shopee / Muslim selfie / group photo / collage
+    // ═══════════════════════════════════════════════════════════════
+    {
+      type: 'social-proof',
+      imageCount: 6,
+      recipeId: 'F',
+      aspectRatio: '4:5',
+      productPolicy: 'required',
+      textFields: { headline: true, bodyCopy: true, reviews: true },
+    },
+
+    // ═══════════════════════════════════════════════════════════════
+    // 14. WHATSAPP — 4 ảnh, 4:5, recipe F/whatsapp
+    //     Mix vibe khác nhau (1-1 chat, group chat đông, selfie + chat...)
+    // ═══════════════════════════════════════════════════════════════
+    {
+      type: 'whatsapp-testimonials',
+      imageCount: 4,
+      recipeId: 'F',
+      aspectRatio: '4:5',
+      productPolicy: 'required',
+      textFields: { headline: true, bodyCopy: true },
+    },
+
+    // ═══════════════════════════════════════════════════════════════
+    // 15. BEFORE-AFTER — 4 ảnh, 4:5, recipe A
+    //     Outfit khác + tên + tuổi + thời gian sử dụng overlay
+    //     Lock Malay Muslim hijab / Malay male
+    //     4-tier rule: ≥3 tier1, ≤1 tier2, 0 tier3/4
+    // ═══════════════════════════════════════════════════════════════
     {
       type: 'before-after',
       imageCount: 4,
@@ -177,47 +245,36 @@ const UGC_MALAYSIA_SPEC: PresetSpec = {
       },
     },
 
-    // 15. FAQ — 0 ảnh, chỉ text
+    // ═══════════════════════════════════════════════════════════════
+    // 16. FAQ — 0 ảnh, có bilingual VN toggle cho mỗi Q&A
+    // ═══════════════════════════════════════════════════════════════
     {
       type: 'faq',
       imageCount: 0,
-      recipeId: 'A', // không dùng — imageCount=0
+      recipeId: 'A',
       aspectRatio: '4:5',
       productPolicy: 'forbidden',
       textFields: { headline: true, bodyCopy: true, faqs: true },
     },
 
-    // 16. OFFER — 2 ảnh, recipe G (promo banner 16:9)
+    // ═══════════════════════════════════════════════════════════════
+    // 17. OFFER — 1 ảnh (giảm từ 2), 16:9, recipe G/promo
+    // ═══════════════════════════════════════════════════════════════
     {
       type: 'offer',
-      imageCount: 2,
+      imageCount: 1,
       recipeId: 'G',
       aspectRatio: '16:9',
       productPolicy: 'required',
       textFields: { headline: true, cta: true, offerStrip: true, urgencyText: true, bullets: true },
     },
-
-    // 17. FINAL-CTA — 2 ảnh, recipe G (banner + metric chips)
-    {
-      type: 'final-cta',
-      imageCount: 2,
-      recipeId: 'G',
-      aspectRatio: '16:9',
-      productPolicy: 'required',
-      textFields: { headline: true, subheadline: true, cta: true, offerStrip: true, urgencyText: true, bodyCopy: true },
-    },
   ],
 }
 
 /** Map từ LandingForm → PresetSpec.
- *  Phase 3: chỉ ugc-malaysia implement. */
+ *  Phase 3-4: chỉ ugc-malaysia implement. */
 export const PRESET_SPECS: Partial<Record<LandingForm, PresetSpec>> = {
   'ugc-malaysia': UGC_MALAYSIA_SPEC,
-  // 4 preset sau sẽ thêm khi user gửi visual reference
-  // 'advertorial':    ...,
-  // 'chuyen-gia':     ...,
-  // 'hard-sell-cod':  ...,
-  // 'premium':        ...,
 }
 
 export function getPresetSpec(form: LandingForm): PresetSpec {
@@ -225,7 +282,7 @@ export function getPresetSpec(form: LandingForm): PresetSpec {
   if (!spec) {
     throw new Error(
       `Super Ladipage: preset "${form}" chưa được implement. ` +
-      `Phase 3 hiện chỉ hỗ trợ "ugc-malaysia". ` +
+      `Hiện chỉ hỗ trợ "ugc-malaysia". ` +
       `Vui lòng chọn "UGC Chuyển Đổi Nhanh".`,
     )
   }

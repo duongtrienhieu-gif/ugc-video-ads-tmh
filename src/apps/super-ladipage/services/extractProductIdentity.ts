@@ -79,13 +79,16 @@ async function buildVisionParts(args: {
   return parts
 }
 
-/** Validate shape của ProductIdentity (lightweight type guard). */
+/** Validate shape của ProductIdentity (lightweight type guard).
+ *  P4: thêm check packagingShape + subjectIdentityLock. */
 function isValidIdentity(x: unknown): x is ProductIdentity {
   if (!x || typeof x !== 'object') return false
   const o = x as Record<string, unknown>
+  const subjLock = o.subjectIdentityLock as Record<string, unknown> | undefined
   return (
     typeof o.productNameExact     === 'string' &&
     typeof o.packagingDescription === 'string' &&
+    typeof o.packagingShape       === 'string' &&
     Array.isArray(o.primaryColors) &&
     typeof o.productScale         === 'string' &&
     typeof o.productPose          === 'string' &&
@@ -93,6 +96,8 @@ function isValidIdentity(x: unknown): x is ProductIdentity {
     Array.isArray(o.trustBadges) &&
     typeof o.priceTag             === 'string' &&
     typeof o.productCategory      === 'string' &&
+    !!subjLock &&
+    typeof subjLock.primary       === 'string' &&
     !!o.painPointsByTier &&
     !!o.transformationByTier &&
     Array.isArray(o.visualAntiPatterns)
@@ -126,6 +131,18 @@ function parseIdentityJson(raw: string): ProductIdentity {
   for (const tier of ['tier1_primary', 'tier2_axis', 'tier3_loose', 'tier4_offniche'] as const) {
     if (!Array.isArray(pbt[tier])) pbt[tier] = []
     if (!Array.isArray(tbt[tier])) tbt[tier] = []
+  }
+
+  // P4 defensive defaults
+  if (typeof id.packagingShape !== 'string' || !id.packagingShape) {
+    id.packagingShape = 'standard product container (shape inferred from description)'
+  }
+  const subj = id.subjectIdentityLock as Record<string, unknown> | undefined
+  if (!subj || typeof subj.primary !== 'string') {
+    id.subjectIdentityLock = {
+      primary: 'Malaysian Muslim woman wearing hijab, mid-20s to early 40s, warm friendly genuine look',
+      secondary: 'Malaysian man, mid-30s to 50s, clean appearance',
+    }
   }
 
   return parsed as ProductIdentity

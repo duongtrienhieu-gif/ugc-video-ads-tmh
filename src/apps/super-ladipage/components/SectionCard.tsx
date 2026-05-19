@@ -22,6 +22,7 @@ const SECTION_GLYPH: Record<SectionType, string> = {
   comparison:              '⚖️',
   lifestyle:               '🌅',
   'expert-feedback':       '🩺',
+  'expert-kol':            '🎓',
   'magazine-feature':      '📖',
   'stat-proof':            '📈',
   'web-authority-proof':   '🔎',
@@ -46,6 +47,7 @@ const SECTION_ACCENT: Record<SectionType, string> = {
   comparison:              'border-indigo-200 bg-indigo-50/40',
   lifestyle:               'border-pink-200 bg-pink-50/40',
   'expert-feedback':       'border-stone-300 bg-stone-50/40',
+  'expert-kol':            'border-amber-300 bg-amber-50/40',
   'magazine-feature':      'border-emerald-300 bg-emerald-50/40',
   'stat-proof':            'border-fuchsia-300 bg-fuchsia-50/40',
   'web-authority-proof':   'border-blue-200 bg-blue-50/40',
@@ -202,10 +204,12 @@ function SectionCardImpl({ index, section, onRegenerateImage, onDeleteImage }: S
               </div>
               <div className="space-y-2">
                 {section.faqs.map((f, i) => (
-                  <div key={i} className="rounded-md border border-black/8 bg-white p-2.5">
-                    <p className="text-[12px] font-semibold text-gray-900">{f.question}</p>
-                    <p className="mt-1 whitespace-pre-wrap text-[12px] leading-relaxed text-gray-700">{f.answer}</p>
-                  </div>
+                  <FaqItemBilingual
+                    key={i}
+                    question={f.question}
+                    answer={f.answer}
+                    vi={section.faqsVi?.[i]}
+                  />
                 ))}
               </div>
             </div>
@@ -611,6 +615,53 @@ interface CopyAllButtonProps {
   text: string
   compact?: boolean
   title?: string
+}
+
+/** P4 — FAQ item with bilingual VN translation toggle. Pattern mirrors
+ *  the "Xem bản dịch tiếng Việt" toggle for copy chính. */
+function FaqItemBilingual({
+  question, answer, vi,
+}: {
+  question: string
+  answer: string
+  vi?: { question: string; answer: string }
+}) {
+  const [showVi, setShowVi] = useState(false)
+  const hasVi = !!vi
+    && (vi.question.trim().toLowerCase() !== question.trim().toLowerCase()
+        || vi.answer.trim().toLowerCase() !== answer.trim().toLowerCase())
+
+  return (
+    <div className="rounded-md border border-black/8 bg-white p-2.5">
+      <div className="flex items-start justify-between gap-2">
+        <p className="flex-1 text-[12px] font-semibold text-gray-900">{question}</p>
+        <CopyAllButton text={`Q: ${question}\nA: ${answer}${hasVi ? `\n\n🇻🇳 Q: ${vi!.question}\n🇻🇳 A: ${vi!.answer}` : ''}`} compact />
+      </div>
+      <p className="mt-1 whitespace-pre-wrap text-[12px] leading-relaxed text-gray-700">{answer}</p>
+
+      {hasVi && (
+        <div className="mt-2 rounded-lg border border-blue-100 bg-blue-50/40">
+          <button
+            type="button"
+            onClick={() => setShowVi((v) => !v)}
+            className="flex w-full items-center gap-1.5 px-2.5 py-1.5 text-left text-[10px] font-semibold text-blue-700 hover:bg-blue-50/60"
+          >
+            <Globe2 className="h-3 w-3 shrink-0" />
+            <span className="flex-1">
+              {showVi ? '− Ẩn bản dịch tiếng Việt' : '🇻🇳 Xem bản dịch tiếng Việt'}
+            </span>
+            <ChevronDown className={`h-3 w-3 transition-transform ${showVi ? 'rotate-180' : ''}`} />
+          </button>
+          {showVi && (
+            <div className="border-t border-blue-100 px-2.5 pb-2 pt-1.5 space-y-1">
+              <p className="text-[11px] font-semibold italic text-blue-900">🇻🇳 {vi!.question}</p>
+              <p className="whitespace-pre-wrap text-[11px] italic leading-relaxed text-blue-800/90">{vi!.answer}</p>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
 }
 
 function CopyAllButton({ text, compact, title: titleProp }: CopyAllButtonProps) {

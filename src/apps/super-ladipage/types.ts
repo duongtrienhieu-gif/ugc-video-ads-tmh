@@ -16,6 +16,7 @@ export type SectionType =
   | 'comparison'
   | 'lifestyle'
   | 'expert-feedback'
+  | 'expert-kol'          // P4 NEW — Expert + KOL endorsement (thay vị trí lifestyle)
   | 'magazine-feature'
   | 'stat-proof'
   | 'web-authority-proof'
@@ -93,6 +94,10 @@ export interface LandingSection {
   urgencyText?: string
   bullets?: string[]
   faqs?: FaqItem[]
+  /** P4 — bilingual FAQ. Khi language != 'vi', mỗi FAQ kèm bản dịch VN
+   *  parallel index. UI hiển thị toggle "🇻🇳 Xem bản dịch tiếng Việt"
+   *  giống pattern copy chính. */
+  faqsVi?: Array<{ question: string; answer: string }>
   reviews?: ReviewItem[]
   imagePrompts: ImagePrompt[]
   imageSizeHint?: string
@@ -165,6 +170,11 @@ export interface ProductIdentity {
   // ─── Visual identity ───
   productNameExact:       string
   packagingDescription:   string
+  /** P4 NEW — short canonical shape token (e.g. "round flat jar (squat
+   *  cylinder, height ≈ half diameter)") to force consistent shape across
+   *  all renders. Dùng để fix lỗi AI render packaging dọc cao thay vì
+   *  tròn dẹp. Inject vào MỌI prompt có sản phẩm. */
+  packagingShape:         string
   primaryColors:          string[]
   productScale:           string
   productPose:            string
@@ -174,6 +184,16 @@ export interface ProductIdentity {
   trustBadges:            string[]
   priceTag:               string
 
+  // ─── Subject identity (P4 NEW — fix lỗi sec 4 AI ra đàn ông châu Âu) ───
+  /** Lock chủ thể người trong ảnh theo target market. */
+  subjectIdentityLock: {
+    /** Người chính thường xuất hiện. Vd "Malaysian Muslim woman wearing
+     *  hijab, mid-20s to 40s, warm friendly look". */
+    primary:   string
+    /** Người phụ (optional) — vd nam Malay cho 1-2 ảnh đa dạng demographic. */
+    secondary?: string
+  }
+
   // ─── Semantic identity (4-tier) ───
   productCategory:        string
   painPointsByTier:       FourTier<string>
@@ -181,8 +201,11 @@ export interface ProductIdentity {
   visualAntiPatterns:     string[]
 }
 
-/** Recipe ID — 7 visual recipes cho preset ugc-malaysia. */
-export type RecipeId = 'A' | 'B' | 'C' | 'D' | 'E' | 'F' | 'G'
+/** Recipe ID — 8 visual recipes cho preset ugc-malaysia.
+ *  P4 NEW: H = Expert/KOL endorsement card. G split internally:
+ *  - G + variant "promo"        (offer banner cũ)
+ *  - G + variant "social-proof"  (final-cta-now-position-2 banner) */
+export type RecipeId = 'A' | 'B' | 'C' | 'D' | 'E' | 'F' | 'G' | 'H'
 
 /** Text block muốn render trong ảnh (do gpt-image-1 render). */
 export interface TextBlock {
@@ -208,6 +231,12 @@ export interface DecorElement {
  *  INPUT của prompt assembler. */
 export interface ImageSlotConcept {
   recipeId:           RecipeId
+  /** P4 NEW — variant cho recipe đa-style:
+   *  - F: 'trust-news' | 'warning-news' | 'social-platform' | 'whatsapp'
+   *  - G: 'promo' | 'social-proof-banner'
+   *  - H: 'expert' | 'kol'
+   *  Recipes A/B/C/D/E không dùng variant. */
+  recipeVariant?:     string
   /** Cảnh tổng quát 5-30 từ. KHÔNG bao gồm style/composition. */
   conceptScene:       string
   /** Mô tả vai trò để hiển thị ở UI (vd "Hero text overlay A"). */
@@ -217,6 +246,10 @@ export interface ImageSlotConcept {
   aspectRatio:        '1:1' | '4:5' | '16:9' | '9:16'
   /** Có hiển thị sản phẩm trong ảnh này không. */
   productInScene:     boolean
+  /** P4 NEW — chỉ định subject identity nào dùng cho ảnh này (cho recipe
+   *  có người làm chủ thể). 'primary' = default (Malay hijab woman),
+   *  'secondary' = Malay male hoặc demographic phụ. */
+  subjectLockKey?:    'primary' | 'secondary'
   textOverlayBlocks:  TextBlock[]
   decorElements:      DecorElement[]
   /** Tier mà concept lấy ra (chỉ áp cho pain + before-after sections). */
