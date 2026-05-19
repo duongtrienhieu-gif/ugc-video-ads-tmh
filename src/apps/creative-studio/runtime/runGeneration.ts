@@ -26,16 +26,40 @@ import type { UINativeLocale } from '../types/uiNative'
 export interface RunGenerationArgs {
   creativeType: AssetTypeId
   inputs: GenerationInputs
+  /** P53 — regenerate path. When set, the runner does NOT create a new
+   *  job (which would prepend a fresh card to the top of the workspace
+   *  and "jump" the new render to the front). Instead it RESETS the
+   *  existing job's state (status=queued, progress=0, outputs cleared,
+   *  errorMessage cleared) and re-runs executeJob on the same job id.
+   *  The card stays in place; only its contents refresh. */
+  regenerateJobId?: string
 }
 
 export async function runGeneration(args: RunGenerationArgs): Promise<string> {
-  console.info('[runGeneration] STEP 1 — createJob', args)
   const store = useGenerationsStore.getState()
-  const job = await store.createJob(args.creativeType, args.inputs)
-  console.info('[runGeneration] STEP 1 — job created', { id: job.id, isLocal: job.id.startsWith('local_') })
+  let jobId: string
 
-  void executeJob(job.id, args)
-  return job.id
+  if (args.regenerateJobId) {
+    // P53 — in-place regenerate: reuse the existing job id, clear its
+    // output so the same card flips back to a loading state without
+    // shifting position in the workspace grid.
+    console.info('[runGeneration] STEP 1 — regenerate existing job in place', { jobId: args.regenerateJobId, creativeType: args.creativeType })
+    jobId = args.regenerateJobId
+    await store.patchJob(jobId, {
+      status:       'queued',
+      progress:     0,
+      outputs:      [],
+      errorMessage: null,
+    })
+  } else {
+    console.info('[runGeneration] STEP 1 — createJob', args)
+    const job = await store.createJob(args.creativeType, args.inputs)
+    console.info('[runGeneration] STEP 1 — job created', { id: job.id, isLocal: job.id.startsWith('local_') })
+    jobId = job.id
+  }
+
+  void executeJob(jobId, args)
+  return jobId
 }
 
 async function executeJob(jobId: string, args: RunGenerationArgs): Promise<void> {

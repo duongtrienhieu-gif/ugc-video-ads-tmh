@@ -309,20 +309,28 @@ export default function CreativeStudio() {
     }
   }
 
-  // ── Per-job regenerate (P47) ───────────────────────────────────────
-  // Fires a fresh runGeneration with the SAME inputs as the source job.
-  // Does NOT delete the source job — both old + new live in the
-  // workspace so the user can pick the better output. Skips if the
-  // source job is still in-flight to avoid double-fire.
+  // ── Per-job regenerate (P47, P53 in-place) ─────────────────────────
+  // P53 — regenerate now happens IN PLACE on the existing job card.
+  // Pre-P53 we called runGeneration without regenerateJobId, which
+  // CREATED a fresh job and prepended it to the workspace — the new
+  // render "jumped to the front" of the grid. The user wanted the new
+  // render to stay at the source job's position. Solution: pass
+  // regenerateJobId so the runner resets the existing job's state and
+  // re-executes against the SAME id. The card stays in its grid slot
+  // and just flips back to a loading state until the new render lands.
   async function handleRegenerateJob(job: GenerationJob) {
     if (job.status === 'generating' || job.status === 'queued') {
       addToast('Job đang chạy — đợi xong rồi tạo lại', 'error')
       return
     }
-    console.info('[CreativeStudio] regenerate', { sourceJobId: job.id, creativeType: job.creativeType })
+    console.info('[CreativeStudio] regenerate (in place)', { sourceJobId: job.id, creativeType: job.creativeType })
     try {
-      await runGeneration({ creativeType: job.creativeType, inputs: job.inputs })
-      addToast(`Đã thêm vào hàng đợi: ${findCatalogEntry(job.creativeType)?.title.vi ?? job.creativeType} (tạo lại)`, 'success')
+      await runGeneration({
+        creativeType: job.creativeType,
+        inputs:       job.inputs,
+        regenerateJobId: job.id,
+      })
+      addToast(`Đang tạo lại: ${findCatalogEntry(job.creativeType)?.title.vi ?? job.creativeType}`, 'success')
     } catch (err) {
       console.error('[CreativeStudio] REGENERATE ERROR', err)
       showErrorOnce(translateJobError(err))

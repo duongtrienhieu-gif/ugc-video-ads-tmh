@@ -1,4 +1,4 @@
-// ── Job Result Card (P13 — consumes GenerationJob; P47 — regenerate) ──────
+// ── Job Result Card (P13 — consumes GenerationJob; P47 / P53 regenerate) ──
 //
 // Displays a single GenerationJob from the workspace store with:
 //   • Asset type label + engine group badge + aspect ratio
@@ -6,8 +6,11 @@
 //   • Image preview when completed (resolved via useAssetUrl from
 //     the asset:xxx ref in job.outputs[0].outputUrl)
 //   • Per-job actions: Regenerate / Download / Delete
-//     (delete cascades to DB; regenerate fires a fresh job with the
-//      same inputs and leaves the old one in the workspace for compare)
+//     P53 — regenerate now updates THIS job in place (resets status +
+//     reruns with same inputs). The card keeps its position in the
+//     workspace grid and just flips back to a loading state. The old
+//     output is replaced when the new render lands. (Pre-P53 the
+//     regenerate created a new job that jumped to the front.)
 //   • QC badge when present in completed asset metadata
 
 import { Download, Trash2, RefreshCw, ShieldCheck, ShieldAlert, AlertTriangle, Loader2, Clock, Sparkles, ArrowRight } from 'lucide-react'
@@ -156,7 +159,7 @@ export default function ResultCard({ job, onDelete, onSuggest, onRegenerate }: R
               type="button"
               disabled={job.status === 'generating' || job.status === 'queued'}
               onClick={onRegenerate}
-              title="Tạo lại với cùng input (job mới, giữ lại job cũ để so sánh)"
+              title="Tạo lại tại chỗ với cùng input (card giữ nguyên vị trí, ảnh cũ được thay)"
               className="flex h-7 w-7 items-center justify-center rounded-md border border-black/10 bg-white text-gray-600 transition-colors hover:bg-violet-50 hover:text-violet-700 disabled:opacity-40"
             >
               <RefreshCw className="h-3 w-3" />
