@@ -314,10 +314,62 @@ SECTION SPEC — produce EXACTLY these 17 in this order
     • reviews: 4 chat-style testimonials (multi-line, emojis, authentic Malay)
     • copy: short framing
     • 4 imagePrompts ALL aspectRatio="4:5":
-      - wa_01.jpg, style="WhatsApp screenshot authentic 1", aspectRatio="4:5": realistic WhatsApp chat screenshot. Green chat bubbles, Malaysian sender name. Casual Malay text with emojis, expressing positive results about the product. Visible timestamp. Slightly JPEG-compressed real phone quality.
-      - wa_02.jpg, style="WhatsApp screenshot authentic 2", aspectRatio="4:5": realistic WhatsApp chat screenshot from a DIFFERENT user. More excited tone, more emojis. Different timestamp from wa_01. Authentic phone quality.
-      - wa_03.jpg, style="WhatsApp screenshot authentic 3", aspectRatio="4:5": realistic WhatsApp group chat screenshot (group name like "Ibu2 Sihat" or similar). Multiple positive replies from different Malaysian names visible, community discussing the product's benefits. Casual Malay with emojis. Authentic phone quality.
-      - wa_04.jpg, style="WhatsApp screenshot authentic 4", aspectRatio="4:5": realistic WhatsApp conversation showing a multi-exchange. One user shares a positive result, friend/family reacts positively. Conversation flows naturally with timestamps. Authentic phone quality.
+
+      UI RULES — apply to all 4 (CRITICAL — produces full authentic screenshot, not floating product card / dark designed banner):
+        · TOP NAVBAR visible: contact/group name in white text + back arrow + "online" / "last
+          seen" subtitle + phone/video/menu icons on the right. WhatsApp light theme.
+        · SENDER AVATAR circle visible at top-left of navbar (small profile photo of the sender).
+        · CHAT AREA: WhatsApp default light-cream (#ECE5DD) background, NOT dark / NOT black / NOT designed banner / NO diagonal streaks / NO gradients.
+        · MESSAGE BUBBLES: outgoing in light-green (#DCF8C6) on the right, incoming in white
+          on the left. Bubble corners rounded with tail pointer on first bubble of series.
+          Each bubble shows readable Malay text + emoji + tiny timestamp + double-check
+          delivery ticks (blue ✓✓) on outgoing.
+        · IMAGE ATTACHMENT: product photo MUST appear inside a chat image-message bubble as a REAL CANDID PHOTO (a person holding the product, OR a casual desk/table snapshot of the product). NOT a designed product card. NOT a link-preview banner. NOT a marketing graphic with title+description. NOT a floating product PNG on dark bg. The image-bubble is a rounded rectangle that fits naturally inside the conversation flow with its own timestamp + ticks.
+        · BOTTOM: WhatsApp input bar with emoji/attach icons on left + microphone on right.
+        · MOBILE STATUS BAR (top edge): time + battery + signal — slight visible at very top.
+        · Sender name + concrete Malay quote text MUST be readable in the bubble (not warped).
+        · Quality: slightly JPEG-compressed real phone screenshot, NOT designed marketing graphic.
+
+      - wa_01.jpg, style="WhatsApp screenshot authentic 1", aspectRatio="4:5":
+        Realistic WhatsApp 1-on-1 chat screenshot. Top navbar shows a Malaysian sender name (eg
+        "Kak Timah" / niche-appropriate name) + avatar circle + "online" status. Light-cream
+        chat background. Green outgoing bubbles + white incoming bubbles with readable casual
+        Malay text including the product name (eg "Salam sis, [product name] ni memang power!
+        [niche-specific result]. Terima kasih banyak! 🥰"). Image attachment bubble shows a REAL
+        candid photo of a Malaysian woman holding the EXACT uploaded product packaging in her
+        hand (NOT a designed card, NOT a banner). Visible timestamps + blue ✓✓ ticks. WhatsApp
+        input bar at bottom.
+      - wa_02.jpg, style="WhatsApp screenshot authentic 2", aspectRatio="4:5":
+        Same UI structure as wa_01 but DIFFERENT Malaysian sender name + DIFFERENT avatar +
+        DIFFERENT timestamp. Light-cream chat background. More excited tone, more emojis (eg
+        "Bro, [product name] ni memang padu! [niche result] 👍👍"). Image attachment is a
+        candid photo of a Malaysian man holding the EXACT product (different angle from wa_01).
+        Authentic phone screenshot quality.
+      - wa_03.jpg, style="WhatsApp screenshot authentic 3", aspectRatio="4:5":
+        Realistic WhatsApp GROUP chat screenshot. Light-cream chat background. Top navbar
+        shows a niche-relevant group name (eg digestive-gut → "Ibu2 Sihat" or "Kumpulan Usus
+        Sihat"; joint-pain → "Kelab Sendi Sihat"; skincare → "Glow Skin Squad"). Multiple
+        positive replies from DIFFERENT Malaysian named members visible (use 3-4 different
+        Malay names like "Puan Devi" / "Siti" / "Khairul" — each different avatar color).
+        Casual Malay text with emojis discussing the product's benefits. Image attachment of
+        the EXACT product inside one of the message bubbles (candid photo, not designed card).
+        WhatsApp input bar at bottom.
+      - wa_04.jpg, style="WhatsApp screenshot authentic 4", aspectRatio="4:5":
+        Realistic WhatsApp 1-on-1 conversation showing a multi-exchange. Light-cream chat
+        background. One user shares positive result text + a candid photo attachment of the
+        EXACT product ("Perut dah tak sakit langsung!" with product photo); friend/family
+        reacts positively in next bubbles ("Wah, bestnya! Nak cuba jugak!"). Conversation
+        flows naturally — 4-5 bubbles total mixing outgoing green + incoming white, with
+        timestamps. Different sender from wa_01. Authentic phone quality.
+
+      ABSOLUTE BANS for the WhatsApp section:
+        ✗ Designed product card / marketing banner / link-preview layout with title+description text under the product
+        ✗ Product on dark/black background with diagonal streaks, gradients, or design effects
+        ✗ Product floating loose on any non-cream WhatsApp background (must be a CANDID PHOTO inside a chat image-bubble)
+        ✗ Missing WhatsApp top navbar OR missing bottom input bar
+        ✗ Fake / futuristic / "WhatsApp Lite" / "GBWhatsApp" mod UI
+        ✗ Empty / partially-rendered chat (must have ≥3 readable message bubbles per screenshot)
+        ✗ Any product brand that is NOT the user's uploaded product (no Shaklee, Nutriplus, Dr White, GoPure, biotopics, biomatrix, made-up brand)
 
 13. type="news-proof", imageAspectRatio="4:5"
     • copy: authority framing text about health concern

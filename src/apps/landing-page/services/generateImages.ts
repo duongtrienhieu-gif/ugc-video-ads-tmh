@@ -1369,7 +1369,9 @@ const FRESH_POLL_MS    = 150_000
 // thumbnail pipeline. Output looks like a real phone screenshot instead
 // of an AI-warped fake UI.
 // ─────────────────────────────────────────────────────────────────────────
-async function runChatProofRender(
+// @ts-expect-error — preserved for future re-enable (currently bypassed; see
+// 2026-05-19 routing comment in runWithCreditSafeRetry)
+async function runChatProofRender( // eslint-disable-line @typescript-eslint/no-unused-vars
   job: ImageJob,
   kieApiKey: string,
   onTaskUpdate: (patch: Partial<ImagePrompt>) => void,
@@ -1553,14 +1555,29 @@ async function runWithCreditSafeRetry(
   signal?: AbortSignal,
 ): Promise<{ assetRef: string; retries: number }> {
   // ── UI-NATIVE CHAT PROOF ROUTING ─────────────────────────────────────
-  // whatsapp-testimonials no longer goes through KIE for the full
-  // screenshot. We render the chat UI on canvas (deterministic typography
-  // / icons / spacing) and only ask KIE for the SMALL product thumb that
-  // sits inside the chat product card. This eliminates the fake-UI /
-  // warped-text failure mode that plagued the previous KIE-only path.
-  if (job.section.type === 'whatsapp-testimonials') {
-    return runChatProofRender(job, kieApiKey, onTaskUpdate, signal)
-  }
+  // 2026-05-19 — whatsapp-testimonials BYPASSES canvas hybrid again.
+  //   User compared canvas output (designed link-preview-style product
+  //   card on a dark/streaked background) vs the desired INFINITY ref
+  //   output (authentic light-cream WhatsApp UI with a real photo of a
+  //   person holding the product inside an image-attachment bubble). The
+  //   canvas template produces the wrong style — even though the rollback
+  //   handoff claimed canvas was active when the INFINITY ref was created,
+  //   the actual output suggests INFINITY was rendered by pure KIE.
+  //
+  //   Falls through to pure KIE path. Identity is now stable because
+  //   buildPackagingDescriptionBlock (FIX 1A) injects the exact packaging
+  //   description into the prompt — KIE no longer invents a different
+  //   brand. Combined with the strengthened WhatsApp section 12 spec
+  //   (UI RULES + ABSOLUTE BANS in generateLandingPack.ts), KIE has both
+  //   the visual identity AND the layout rules to render the correct
+  //   authentic screenshot style.
+  //
+  //   runChatProofRender preserved in source under @ts-expect-error so
+  //   it can be re-enabled later if the canvas template is overhauled
+  //   to produce native-photo style WhatsApp output.
+  // if (job.section.type === 'whatsapp-testimonials') {
+  //   return runChatProofRender(job, kieApiKey, onTaskUpdate, signal)
+  // }
 
   // ── UI-NATIVE INGREDIENT CARD ROUTING ────────────────────────────────
   // ingredients no longer asks KIE to render label text — that produced
