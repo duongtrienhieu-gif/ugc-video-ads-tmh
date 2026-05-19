@@ -82,24 +82,60 @@
       margin-top: 12px;
     }
     .card {
+      position: relative;
       border: 1px solid #e5e7eb;
       border-radius: 8px;
       padding: 8px;
       transition: border-color 0.15s, transform 0.15s;
       background: #fafbfc;
+      display: flex;
+      flex-direction: column;
     }
     .card:hover { border-color: #3b82f6; transform: translateY(-1px); }
-    .card a { color: inherit; text-decoration: none; display: block; }
-    .card img {
+    .card a { color: inherit; text-decoration: none; display: block; flex: 1; }
+    .thumb-wrap {
+      position: relative;
       width: 100%;
       aspect-ratio: 16/9;
-      object-fit: cover;
       border-radius: 4px;
+      overflow: hidden;
       background: #e5e7eb;
     }
+    .thumb {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+    .thumb-fallback {
+      position: absolute;
+      inset: 0;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      background: linear-gradient(135deg, #f3f4f6 0%, #e5e7eb 100%);
+      color: #6b7280;
+      font-size: 13px;
+      font-weight: 500;
+    }
+    .thumb-fallback img { width: 36px; height: 36px; }
     .card .title { font-size: 13px; font-weight: 500; margin: 8px 0 4px; line-height: 1.4; }
     .card .why { font-size: 12px; color: #6b7280; font-style: italic; margin: 4px 0; }
     .card .url-small { font-size: 11px; color: #9ca3af; word-break: break-all; }
+    .score-badge {
+      position: absolute;
+      top: 12px;
+      right: 12px;
+      z-index: 2;
+      color: white;
+      font-size: 12px;
+      font-weight: 700;
+      padding: 3px 8px;
+      border-radius: 999px;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+      cursor: help;
+    }
     .source-tag {
       display: inline-block;
       padding: 1px 6px;
@@ -110,6 +146,7 @@
       vertical-align: middle;
     }
     .source-tag.youtube { background: #fee2e2; color: #dc2626; }
+    .source-tag.tiktok { background: #1f1f1f; color: #fff; }
     .source-tag.web { background: #dbeafe; color: #1d4ed8; }
     .error { background: #fef2f2; color: #991b1b; padding: 10px 12px; border-radius: 6px; margin: 8px 0; font-size: 13px; }
     .loading { color: #6b7280; font-style: italic; padding: 12px; }
@@ -291,14 +328,36 @@ Bấm vào giỏ hàng dưới đây để được giảm thêm 20% cho đơn �
         })
         output.innerHTML = html
 
-        // Step 2: Search YouTube + Web for each scene in parallel
+        // Step 2: Search YouTube + TikTok + Web in parallel, then rank
         await Promise.all(scenes.map(async (scene, i) => {
           const container = document.getElementById(`results-${i}`)
-          const [ytResult, webResult] = await Promise.all([
+          const [ytResult, tiktokResult, webResult] = await Promise.all([
             searchYouTube(youtubeKey, scene.keywordEn).catch(e => ({ __error: e.message })),
-            searchWeb(geminiKey, scene.visualIntent).catch(e => ({ __error: e.message }))
+            searchTikTok(geminiKey, scene.visualIntent, scene.keywordEn).catch(e => ({ __error: e.message, links: [] })),
+            searchWeb(geminiKey, scene.visualIntent).catch(e => ({ __error: e.message, links: [] }))
           ])
-          renderResults(container, ytResult, webResult, scene.visualIntent)
+
+          const ytArr = Array.isArray(ytResult) ? ytResult : []
+          const allLinks = [
+            ...ytArr.map(r => ({
+              url: r.url, title: r.title, thumbnail: r.thumbnail,
+              domain: 'youtube.com', source: 'youtube', meta: r.channel
+            })),
+            ...(tiktokResult.links || []).map(r => ({ ...r, source: 'tiktok' })),
+            ...(webResult.links || []).map(r => ({ ...r, source: 'web' }))
+          ]
+
+          const statusEl = container.querySelector('.loading')
+          if (statusEl) statusEl.textContent = `⏳ Đã có ${allLinks.length} link. Đang xếp hạng độ phù hợp...`
+
+          const ranked = await rankLinks(geminiKey, scene.visualIntent, allLinks)
+
+          renderResults(container, ranked, scene.visualIntent, {
+            ytError: ytResult?.__error,
+            tiktokError: tiktokResult?.__error,
+            webError: webResult?.__error,
+            narrative: [tiktokResult?.narrative, webResult?.narrative].filter(Boolean).join('\n\n')
+          })
         }))
 
         const elapsed = ((Date.now() - startTime) / 1000).toFixed(1)
@@ -436,6 +495,95 @@ Sau khi search, viết 2-3 câu tóm tắt các nguồn bạn tìm được và 
       return { links, narrative }
     }
 
+    // ── Step 2c: Dedicated TikTok search via Gemini grounding ────────────────
+    async function searchTikTok(apiKey, intent, keywordEn) {
+      const prompt = `Bạn cần TÌM VIDEO TIKTOK phù hợp với concept hình ảnh sau:
+
+"${intent}"
+
+YÊU CẦU NGHIÊM NGẶT:
+1. CHỈ tìm trên TikTok. Dùng query Google "site:tiktok.com" kết hợp với keywords liên quan tới concept (gợi ý: ${keywordEn}).
+2. Trả về URL của VIDEO TIKTOK CỤ THỂ (dạng tiktok.com/@username/video/numericId). KHÔNG trả về profile, hashtag page, hay homepage.
+3. Tìm 5-8 link.
+4. Nếu không tìm được TikTok video phù hợp, nói rõ "không tìm thấy" thay vì bịa.
+
+Viết 1-2 câu đánh giá ngắn về các TikTok bạn tìm được.`
+
+      const data = await callGemini(apiKey, {
+        contents: [{ parts: [{ text: prompt }] }],
+        tools: [{ googleSearch: {} }]
+      })
+
+      const candidate = data.candidates?.[0]
+      const narrative = (candidate?.content?.parts || [])
+        .map(p => p.text).filter(Boolean).join('\n').trim()
+      const chunks = candidate?.groundingMetadata?.groundingChunks || []
+
+      const seen = new Set()
+      const links = []
+      for (const c of chunks) {
+        if (!c.web?.uri) continue
+        if (seen.has(c.web.uri)) continue
+        seen.add(c.web.uri)
+        const title = c.web.title || ''
+        if (!/tiktok/i.test(title)) continue
+        links.push({
+          url: c.web.uri,
+          title: title.replace(/\s*\|\s*TikTok\s*$/i, '').trim() || 'TikTok video',
+          domain: 'tiktok.com'
+        })
+      }
+      return { links, narrative }
+    }
+
+    // ── Step 2d: Rank all collected links by relevance to scene intent ───────
+    async function rankLinks(apiKey, intent, links) {
+      if (!links.length) return links
+      const items = links.map((l, i) => `${i}. [${l.source}/${l.domain || ''}] ${l.title || ''}`).join('\n')
+      const prompt = `Concept hình ảnh cần tìm: "${intent}"
+
+Danh sách nguồn video tìm được (ID + nguồn + tiêu đề):
+${items}
+
+Hãy chấm điểm MỖI link 0-100 theo độ phù hợp với concept dựa trên tiêu đề + nguồn:
+- 90-100: cực kỳ match, chắc chắn có cảnh y hệt
+- 70-89: rất phù hợp
+- 50-69: liên quan, có thể có vài giây dùng được
+- 30-49: liên quan xa
+- 0-29: không phù hợp
+
+Trả JSON array [{id, score, reason}] với reason là 1 câu ngắn (< 15 từ).`
+
+      try {
+        const data = await callGemini(apiKey, {
+          contents: [{ parts: [{ text: prompt }] }],
+          generationConfig: {
+            responseMimeType: 'application/json',
+            responseSchema: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  id: { type: 'integer' },
+                  score: { type: 'integer' },
+                  reason: { type: 'string' }
+                },
+                required: ['id', 'score']
+              }
+            }
+          }
+        })
+        const text = data.candidates?.[0]?.content?.parts?.[0]?.text
+        const scores = JSON.parse(text || '[]')
+        const map = new Map(scores.map(s => [s.id, s]))
+        return links
+          .map((l, i) => ({ ...l, score: map.get(i)?.score ?? 50, reason: map.get(i)?.reason || '' }))
+          .sort((a, b) => (b.score || 0) - (a.score || 0))
+      } catch {
+        return links.map(l => ({ ...l, score: 50 }))
+      }
+    }
+
     // ── Step 3: Analyze YouTube video for timestamp matching intent ──────────
     async function analyzeYouTubeTimestamp(apiKey, youtubeUrl, intent) {
       const prompt = `Phân tích video YouTube này. Tôi cần tìm các ĐOẠN (timestamps) trong video có chứa cảnh sau:
@@ -528,48 +676,75 @@ Yêu cầu:
     }
 
     // ── Rendering ────────────────────────────────────────────────────────────
-    function renderResults(container, ytResult, webResult, intent) {
+    function renderResults(container, rankedLinks, intent, meta) {
       let html = ''
-      const ytItems = Array.isArray(ytResult) ? ytResult : []
-      const webData = (webResult && !webResult.__error) ? webResult : null
 
-      if (webData?.narrative) {
-        html += `<div class="web-narrative">🌐 <strong>Gemini đánh giá:</strong> ${escapeHtml(webData.narrative)}</div>`
+      if (meta?.narrative) {
+        html += `<div class="web-narrative">🌐 <strong>Gemini đánh giá:</strong> ${escapeHtml(meta.narrative)}</div>`
       }
 
-      ytItems.forEach(r => {
+      rankedLinks.forEach(r => {
+        const isYT = r.source === 'youtube'
+        const thumbUrl = isYT
+          ? (r.thumbnail || '')
+          : `https://image.thum.io/get/width/400/crop/225/noanimate/${r.url}`
+        const sourceLabel = r.source === 'youtube' ? 'YT'
+          : r.source === 'tiktok' ? 'TT'
+          : (r.domain || 'WEB').toUpperCase().slice(0, 12)
+        const sourceClass = r.source === 'youtube' ? 'youtube'
+          : r.source === 'tiktok' ? 'tiktok'
+          : 'web'
+        const score = typeof r.score === 'number' ? r.score : null
+        const scoreColor = score === null ? '#9ca3af'
+          : score >= 80 ? '#10b981'
+          : score >= 60 ? '#f59e0b'
+          : score >= 40 ? '#f97316'
+          : '#9ca3af'
+        const faviconDomain = r.domain || 'web'
+        const btnLabel = isYT ? '🎯 Tìm timestamp' : '📺 Mở xem trực tiếp'
+
         html += `
           <div class="card">
+            ${score !== null ? `<div class="score-badge" style="background:${scoreColor}" title="${escapeAttr(r.reason || '')}">⭐ ${score}</div>` : ''}
             <a href="${escapeAttr(r.url)}" target="_blank" rel="noopener">
-              <img src="${escapeAttr(r.thumbnail || '')}" alt="" loading="lazy">
-              <div class="title"><span class="source-tag youtube">YT</span>${escapeHtml(r.title)}</div>
-              <div class="url-small">${escapeHtml(r.channel || '')}</div>
+              <div class="thumb-wrap">
+                <img class="thumb" src="${escapeAttr(thumbUrl)}" alt="" loading="lazy"
+                     onerror="this.style.display='none'; this.parentElement.querySelector('.thumb-fallback').style.display='flex'">
+                <div class="thumb-fallback" style="display:none">
+                  <img src="https://www.google.com/s2/favicons?domain=${escapeAttr(faviconDomain)}&sz=64" alt="">
+                  <span>${escapeHtml(r.domain || sourceLabel)}</span>
+                </div>
+              </div>
+              <div class="title"><span class="source-tag ${sourceClass}">${escapeHtml(sourceLabel)}</span>${escapeHtml(r.title || r.url)}</div>
+              ${r.reason ? `<div class="why">💡 ${escapeHtml(r.reason)}</div>` : ''}
+              <div class="url-small">${escapeHtml(r.meta || r.domain || '')}</div>
             </a>
-            <button class="ts-btn" data-url="${escapeAttr(r.url)}" data-intent="${escapeAttr(intent)}">🎯 Tìm timestamp trong video</button>
+            <button class="ts-btn" data-url="${escapeAttr(r.url)}" data-intent="${escapeAttr(intent)}" data-source="${escapeAttr(r.source)}">
+              ${btnLabel}
+            </button>
           </div>
         `
       })
 
-      const webLinks = webData?.links || []
-      webLinks.forEach(r => {
-        html += `
-          <div class="card">
-            <a href="${escapeAttr(r.url)}" target="_blank" rel="noopener">
-              <div class="title"><span class="source-tag web">${escapeHtml(r.domain || 'WEB')}</span>${escapeHtml(r.title)}</div>
-              <div class="url-small">${escapeHtml(r.url)}</div>
-            </a>
-          </div>
-        `
-      })
+      const errors = []
+      if (meta?.ytError) errors.push(`YouTube: ${meta.ytError}`)
+      if (meta?.tiktokError) errors.push(`TikTok: ${meta.tiktokError}`)
+      if (meta?.webError) errors.push(`Web: ${meta.webError}`)
+      errors.forEach(e => { html += `<div class="error">${escapeHtml(e)}</div>` })
 
-      if (ytResult?.__error) html += `<div class="error">YouTube: ${escapeHtml(ytResult.__error)}</div>`
-      if (webResult?.__error) html += `<div class="error">Web search: ${escapeHtml(webResult.__error)}</div>`
-
-      if (!html) html = '<div class="empty">Không tìm thấy link phù hợp cho scene này.</div>'
+      if (!rankedLinks.length && !errors.length) {
+        html += '<div class="empty">Không tìm thấy link phù hợp cho scene này.</div>'
+      }
       container.innerHTML = html
 
       container.querySelectorAll('.ts-btn').forEach(btn => {
-        btn.addEventListener('click', () => analyzeTimestamp(btn, btn.dataset.url, btn.dataset.intent))
+        btn.addEventListener('click', () => {
+          if (btn.dataset.source === 'youtube') {
+            analyzeTimestamp(btn, btn.dataset.url, btn.dataset.intent)
+          } else {
+            window.open(btn.dataset.url, '_blank', 'noopener')
+          }
+        })
       })
     }
 
