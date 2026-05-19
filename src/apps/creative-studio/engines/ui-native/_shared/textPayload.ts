@@ -15,6 +15,7 @@ import { safeGenerateStructured } from '../../../shared/llm/safeGenerateStructur
 import { assembleDnaDirective } from '../../../shared/prompt/dnaDirective'
 import { validateLocaleMany } from '../../../shared/qc/localeValidator'
 import { buildArchetypeMix, describeMix } from './commentArchetypes'
+import { voiceSamplesChat, voiceSamplesReview, voiceSamplesComment } from './localeVoiceSamples'
 
 /** What kind of UI-native content we are generating text for. */
 export type TextPayloadContentType = 'chat' | 'review' | 'comment-thread'
@@ -102,6 +103,10 @@ export function buildTextPayloadPrompt(req: TextPayloadRequest): string {
     'global': 'English casual conversational',
   }
 
+  // P41 — concrete per-locale voice samples (Ladipage-style embedded
+  // examples rather than generic guidance).
+  const voiceRef = voiceSamplesChat(req.locale, `${req.productName}|${req.platform}`)
+
   return [
     `Generate a ${req.platform} chat conversation that looks like a real customer testimonial.`,
     `Product: ${req.productName}${req.niche ? ` (niche: ${req.niche})` : ''}`,
@@ -110,6 +115,7 @@ export function buildTextPayloadPrompt(req: TextPayloadRequest): string {
     `Language: ${localeMap[req.locale]}`,
     `Tone: ${tone}`,
     `Message count: ${count} total messages (mix of incoming/outgoing — customer says more than shop).`,
+    voiceRef,
     '',
     'STRICT JSON OUTPUT — return ONLY this shape, no prose, no markdown fence:',
     '{',
@@ -237,6 +243,8 @@ function buildReviewPrompt(req: TextPayloadRequest): string {
     'global': 'English casual review style',
   }
   const knowledge = productKnowledgeBlock(req)
+  // P41 — concrete per-locale review voice samples
+  const voiceRef = voiceSamplesReview(req.locale, `${req.productName}|${req.platform}|review`)
 
   return [
     `Generate a ${req.platform === 'shopee' ? 'Shopee' : 'TikTok Shop'} product review that looks authentic.`,
@@ -244,6 +252,7 @@ function buildReviewPrompt(req: TextPayloadRequest): string {
     knowledge,
     personaBlock,
     `Language: ${localeMap[req.locale]}`,
+    voiceRef,
     '',
     'STRICT JSON OUTPUT — no prose, no markdown fence:',
     '{',
@@ -356,12 +365,16 @@ function buildCommentPrompt(req: TextPayloadRequest): string {
   const mix = buildArchetypeMix(req.platform === 'facebook' ? 'facebook' : 'tiktok', count, `${req.productName}_${req.locale}`)
   const mixDescription = describeMix(mix)
 
+  // P41 — concrete per-locale comment voice samples
+  const voiceRef = voiceSamplesComment(req.locale, `${req.productName}|${req.platform}|comment`)
+
   return [
     `Generate ${count} ${platformName} comments on a UGC post about this product.`,
     `Product: ${req.productName}${req.niche ? ` (niche: ${req.niche})` : ''}`,
     knowledge,
     personaBlock,
     `Language: ${localeMap[req.locale]}`,
+    voiceRef,
     '',
     'EACH comment must follow the archetype assigned below — this is what makes the thread feel MESSY and HUMAN instead of "8 variations of the same caption":',
     mixDescription,

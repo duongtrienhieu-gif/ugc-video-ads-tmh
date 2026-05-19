@@ -66,6 +66,7 @@ const CONFIGS: CreativeConfig[] = [
       BLOCKS.setting('studio-clean'),
       BLOCKS.capture('tripod'),
       BLOCKS.lighting('Even softbox key + fill. Subtle reflection plane below the product. No bokeh, no environmental light leaks.'),
+      BLOCKS.priceLock(),   // P41 — extract price when product.offer has one; ecommerce thumbnails benefit from "(show only RM59)" anti-invention
       BLOCKS.platform('ecommerce-thumbnail'),
       BLOCKS.variation(),
       BLOCKS.localeHardLock(),
@@ -240,15 +241,17 @@ const CONFIGS: CreativeConfig[] = [
       BLOCKS.productLock(),
       BLOCKS.productContext(),
       BLOCKS.continuity(),
-      // P36 — Ladipage-style macro detail packed prompt
+      // P36 + P41 — packed prompt with optional UGC hand for review-style
       BLOCKS.composition('Macro close-up with very tight framing on the product texture / packaging detail. Shallow depth of field with one sharp focal point. Optional ingredient swatch (gel / cream / powder) alongside packaging.'),
-      BLOCKS.scene('Product placed on a clean natural surface (light wood / linen / marble). Optional hand grip just edge-of-frame — pure UGC review-style.'),
+      BLOCKS.demographic({ role: 'customer', gender: 'woman', age: 'mid-30s' }),   // P41 — hand-edge presence anchor (woman's hand grip when shown)
+      BLOCKS.scene('Product on a clean natural surface (light wood / linen / marble). The customer\'s hand may appear at the edge of the frame holding or arranging it — pure UGC review-still style. Otherwise pure flat-lay macro.'),
       BLOCKS.capture('macro'),
       BLOCKS.lighting('Soft daylight from a side window. No harsh studio key. Subtle shadow shows surface contact realistic.'),
+      BLOCKS.culturalCue(),   // P41 — surface texture / decor differs per market (wood grain vs marble vs linen weave)
       BLOCKS.platform('instagram-feed'),
       BLOCKS.variation(),
       BLOCKS.localeHardLock(),
-      BLOCKS.negative(['wide-angle environmental shot', 'busy props', 'overprocessed digital glow']),
+      BLOCKS.negative(['wide-angle environmental shot', 'busy props', 'overprocessed digital glow', 'studio-perfect cold lighting']),
     ],
     negativeBlocks: ['busy background props', 'overly stylized lifestyle clutter'],
     outputRules: { aspectRatio: '1:1', enforce: ['label unobstructed', 'three-quarter overhead'], forbid: ['busy props'] },
@@ -758,14 +761,15 @@ const CONFIGS: CreativeConfig[] = [
       BLOCKS.productLock(),
       BLOCKS.productContext(),
       BLOCKS.continuity(),
-      // P36 — Ladipage expert / KOL style — fictional professional only
+      // P36 + P41 — Ladipage expert / KOL style — fictional professional only, culturally-appropriate attire
       BLOCKS.demographic({ role: 'professional', gender: 'woman', age: 'mid-40s' }),
       BLOCKS.setting('clinic-clean'),
       BLOCKS.capture('tripod'),
       BLOCKS.composition('Expert as the centered subject. Product visible in hand or on the surface beside them. Negative space for headline / credentials overlay.'),
-      BLOCKS.scene('Fictional professional spokesperson — doctor / pharmacist / nutritionist / wellness expert as fits the product niche. NEVER impersonate a real named doctor / KOL / celebrity. Composite fictional face only.'),
+      BLOCKS.scene('Fictional professional spokesperson — doctor / pharmacist / nutritionist / wellness expert as fits the product niche. NEVER impersonate a real named doctor / KOL / celebrity. Composite fictional face only. Role-appropriate attire (white coat / scrubs / smart professional) — culturally-appropriate variant in the target locale.'),
       BLOCKS.emotion('Direct calm eye contact. Authoritative but warm. Genuine professional expression.'),
       BLOCKS.lighting('Clean professional lighting, soft balanced fill. No sterile clinical fluorescence.'),
+      BLOCKS.culturalCue(),   // P41 — attire / clinic decor vary per market (eg my-MY may show hijab + white coat combo, vi-VN may show conservative collared shirt)
       BLOCKS.platform('landing-page'),
       BLOCKS.variation(),
       BLOCKS.localeHardLock(),
@@ -1474,15 +1478,20 @@ const CONFIGS: CreativeConfig[] = [
       BLOCKS.productLock(),
       BLOCKS.productContext(),
       BLOCKS.continuity(),
-      BLOCKS.composition('Mobile screenshot of a generic regional health news article. Prominent headline at top + partial article body below + small article hero photo when natural. NOT a designed banner — looks like a real article screenshot.'),
-      BLOCKS.scene('Headline references the product\'s niche / pain point — eg "Kesihatan Usus Kunci Imuniti" for a gut-health product, "Bí mật mất ngủ kéo dài" for a sleep aid. Publication chrome neutralized — generic newspaper styling, NOT pixel-copying a specific real outlet.'),
+      BLOCKS.composition('Mobile screenshot of a regional health news article. Prominent headline at top + partial article body below + small article hero photo when natural. NOT a designed banner — looks like a real article screenshot.'),
+      // P41 — Ladipage references real regional outlets by NAME in the
+      // style hint but the chrome itself stays GENERIC. This gives the
+      // model a visual target ("looks like a Malaysian health portal")
+      // without pixel-copying any specific outlet's exact brand mark.
+      BLOCKS.scene('Aesthetic reminiscent of a regional health portal article for the target locale (eg mStar / Berita Harian / Sinar Harian / Hello Sehat / VnExpress Sức Khoẻ / Tuổi Trẻ Sức Khoẻ — STYLE INSPIRATION ONLY, NOT pixel-copying a specific outlet). Generic newspaper chrome with locally-appropriate typography. Headline references the product\'s niche / pain point — eg "Kesihatan Usus Kunci Imuniti" for a gut-health product, "Bí mật mất ngủ kéo dài" for a sleep aid.'),
       BLOCKS.capture('handheld'),
       BLOCKS.lighting('Mobile screenshot quality — slight JPEG compression, natural phone screen capture feel.'),
+      BLOCKS.culturalCue(),   // P41 — regional outlet typography / chrome cue
       BLOCKS.platform('landing-page'),
       BLOCKS.variation(),
       BLOCKS.localeHardLock(),
       BLOCKS.negative([
-        'pixel-copying a specific named real outlet',
+        'pixel-copying a specific named real outlet brand mark',
         'fake real-person credentials',
         'overly-designed banner aesthetic',
       ]),
