@@ -119,12 +119,11 @@ export async function generateImageGptImage1(input: KieImageGenInput): Promise<K
   const tryOnce = async (promptToUse: string): Promise<string> => {
     if (useImageToImage) {
       // gpt-4o-image — TRUE i2i với reference images (identity lock).
-      // Timeout 150s/attempt: bumped từ 90s (debug 2026-05-20). Console log
-      // [POLL_STUCK_WARN] cho thấy KIE thường stuck ở 'processing' >60s
-      // do backend degraded — task vẫn render nhưng cần thời gian self-
-      // unstuck. 150s cho slack đủ. 2 attempts × 150s = 300s worst case
-      // mỗi image (vẫn nhanh hơn user's 15-20 phút target /pack 35).
-      // enableFallback ON → KIE tự fallback GPT_IMAGE_1 nếu primary fail.
+      // Timeout 180s/attempt (bumped từ 150s 2026-05-21): KIE còn busy
+      // ngày nay, 180s slack cho task render xong trước khi abandon.
+      // Với smart retry (skip retry trên timeout), max wait per image
+      // = 180s (1 attempt cho timeout case). Pack 35 ảnh worst case
+      // chậm hơn ~12% so với 150s nhưng cứu được +5-10% ảnh.
       const { taskId } = await submitGpt4oImage({
         apiKey,
         prompt: promptToUse,
@@ -135,13 +134,13 @@ export async function generateImageGptImage1(input: KieImageGenInput): Promise<K
       return pollGpt4oUntilDone({
         apiKey,
         taskId,
-        timeoutMs: 150 * 1000,
+        timeoutMs: 180 * 1000,
         signal,
       })
     } else {
       // gpt-image-2 — text-only (sections không sản phẩm).
       // filesUrl SILENTLY IGNORED bởi endpoint này (KIE warning).
-      // Timeout 150s/attempt giống gpt-4o-image — endpoint này thậm chí
+      // Timeout 180s/attempt giống gpt-4o-image — endpoint này thậm chí
       // hay frozen hơn theo log [POLL_STUCK_WARN] gần đây.
       const { taskId } = await submitGptImage2({
         apiKey,
@@ -152,7 +151,7 @@ export async function generateImageGptImage1(input: KieImageGenInput): Promise<K
       return pollGptImage2UntilDone({
         apiKey,
         taskId,
-        timeoutMs: 150 * 1000,
+        timeoutMs: 180 * 1000,
         signal,
       })
     }
@@ -184,6 +183,17 @@ export async function generateImageGptImage1(input: KieImageGenInput): Promise<K
         msg.includes('insufficient_credits') ||
         msg.includes('huỷ')
       ) {
+        throw lastError
+      }
+      // SMART RETRY (2026-05-21): TIMEOUT fail = KIE backend slow ở thời
+      // điểm này. Retry attempt 2 với SAME prompt → KIE vẫn slow → fail
+      // tiếp → tốn 12 credit/ảnh nhưng cứu hiếm khi pass. Skip retry để
+      // tiết kiệm credit (-50% waste timeout). User có thể bấm "Thử lại"
+      // manual sau khi KIE recover. POLICY/generate_failed VẪN retry vì
+      // softened prompt có chance pass (~70%).
+      const isTimeoutFail = msg.includes('timeout') || msg.includes('quá ') || msg.includes('150s') || msg.includes('180s')
+      if (isTimeoutFail && attempt === 1) {
+        console.log(`[kieGptImage1] TIMEOUT on attempt 1 — skip retry (save credit, user can manual retry when KIE healthy)`)
         throw lastError
       }
       // Track: nếu attempt này fail vì Policy → attempt 2 sẽ dùng softened.

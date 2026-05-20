@@ -28,7 +28,7 @@ interface SuperLadipageSnapshot {
 export function friendlyError(raw: string): string {
   if (!raw) return 'Lỗi không xác định — bấm Thử lại'
   const m = raw.toLowerCase()
-  if (m.includes('timeout') || m.includes('quá') && (m.includes('90s') || m.includes('150s'))) {
+  if (m.includes('timeout') || m.includes('quá') && (m.includes('90s') || m.includes('150s') || m.includes('180s'))) {
     return '⏱️ Ảnh tạo lâu hơn dự kiến — bấm Thử lại'
   }
   if (m.includes('insufficient_credits') || m.includes('thiếu credit') || m.includes('hết credit')) {
