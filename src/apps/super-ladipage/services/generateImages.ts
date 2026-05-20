@@ -6,7 +6,9 @@ import { generateImageGptImage1 } from '../providers/kieGptImage1'
 // Super Ladipage — Pass 2: sinh ảnh thật.
 //
 // Single provider: KIE gpt-image-2 (1K, 6 credit/ảnh).
-// Queue concurrency 6. Retry 1 lần được handle bởi provider.
+// Queue concurrency 5 (default fallback). Caller (SuperLadipage) override
+// = 5 cũng — tuned cho setup 3 KIE acc / 7 user sporadic. Retry 1 lần
+// được handle bởi provider.
 // AbortSignal hỗ trợ user hủy.
 // ─────────────────────────────────────────────────────────────────────
 
@@ -88,7 +90,7 @@ async function runQueue(
   apiKey: string,
   opts: BatchOptions,
 ): Promise<{ done: number; failed: number }> {
-  const concurrency = opts.concurrency ?? 6
+  const concurrency = opts.concurrency ?? 5
   let done = 0
   let failed = 0
   let cursor = 0
