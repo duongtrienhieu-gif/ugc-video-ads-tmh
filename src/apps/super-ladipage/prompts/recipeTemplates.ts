@@ -237,8 +237,8 @@ ${safeBlocks(concept).map(formatTextBlock).join('\n')}`
     `COMPARISON INFOGRAPHIC CONCEPT: ${concept.conceptScene}.`,
     brandLockBlock(identity, concept.productInScene, false),  // recipeE: comparison table, no person holds
     cells,
-    `STYLE: PREMIUM Malaysia ecommerce comparison table, glassmorphism, soft-shadow cards, gradient bg, bold typography.`,
-    `LAYOUT: 2-column table. LEFT "${identity.productNameExact}" with vibrant EMERALD/teal header + glow accent + green ✓ on soft mint circular badges. RIGHT "Suplemen Lain" with neutral gray + red ✗ on soft pink badges. 3-5 rows MAX, each row = ONE bold headline label (max 3-5 words) in ${langLabel(language)} — NO sub-text, NO description, NO footnote under labels. Product image under left column header with glow halo.`,
+    `STYLE: 2-column marketing comparison table, clean modern design, solid white card panels with drop-shadow, emerald-green vs. gray column headers, bold sans-serif labels.`,
+    `LAYOUT: LEFT column: emerald-green header, product image centered below header, green ✓ on white rows. RIGHT column: neutral gray header, red ✗ on white rows. 3-5 rows MAX, each row = ONE bold label (max 5 words) — NO sub-text, NO annotations. Bold white header text for column titles.`,
     safeDecor(concept).length > 0 ? `EXTRA: ${safeDecor(concept).map(formatDecor).join('; ')}` : '',
     technicalBlock(concept.aspectRatio),
     `STRICT: labels legible. Green ✓ + red ✗. No watermark.`,
