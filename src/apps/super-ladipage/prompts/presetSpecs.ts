@@ -227,13 +227,20 @@ const UGC_MALAYSIA_SPEC: PresetSpec = {
     //     Outfit khác + tên + tuổi + thời gian sử dụng overlay
     //     Lock Malay Muslim hijab / Malay male
     //     4-tier rule: ≥3 tier1, ≤1 tier2, 0 tier3/4
+    //
+    //     2026-05-20 BUGFIX: productPolicy 'forbidden' → 'required' vì
+    //     AFTER half MUST show product (person holding bottle confident).
+    //     'forbidden' route → gpt-image-2 silent-ignores filesUrl → KIE
+    //     render WRONG/INVENTED bottle (user observed across all 4 ảnh).
+    //     'required' route → gpt-4o-image i2i với reference → product
+    //     identity locked correctly.
     // ═══════════════════════════════════════════════════════════════
     {
       type: 'before-after',
       imageCount: 4,
       recipeId: 'A',
       aspectRatio: '4:5',
-      productPolicy: 'forbidden',
+      productPolicy: 'required',
       textFields: { headline: true, bodyCopy: true },
       tierRules: {
         distribution: {
