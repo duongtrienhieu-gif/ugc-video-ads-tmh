@@ -39,7 +39,13 @@ Fields:
 - painPoints: customer problems/pain points this product solves
 - usps: unique selling points / competitive advantages
 - benefits: specific benefits of using the product
-- offer: ONLY the main product price and any discount/promotion (e.g. "RM59, 50% off for first 50 customers"). Do NOT include shipping fees, shipping conditions, regional shipping surcharges, delivery times, COD info, or address-related text. If the page has "Additional RM5 shipping cost for Sabah and Sarawak" or similar, OMIT it entirely. Keep this field FOCUSED on price + discount only.
+- offer: Product pricing — base price + ALL combo/bundle tiers if present. Extract ALL pricing options the page offers, NOT just one. Format as comma-separated. EXAMPLES:
+    • single tier: "RM59" or "RM55 (was RM109)"
+    • multi-tier combo: "RM55 (was RM109), BUY 2 RM95, BUY 3 RM145"
+    • bundle deal: "BUY 1 GET 1 FREE for RM59, BUY 2 GET 2 FREE for RM99"
+    • with discount: "RM59, 50% off for first 50 customers"
+  ⚠️ EXTRACT ALL TIERS — if the page shows multiple combo options (e.g. "1 UNIT - RM55", "2 UNIT - RM95", "3 UNIT - RM145"), include EVERY tier in the output. Do NOT pick only the first one.
+  Do NOT include: shipping fees, COD info, delivery times, regional shipping surcharges (e.g. "Sabah +RM5"), address fields. Keep FOCUSED on price + combo tiers only.
 - ingredients: PHYSICAL substances / compounds / active components actually INSIDE the product. Examples of CORRECT values: "Vitamin B12, A, E, biotin, iron, magnesium" or "Inulin prebiotic, FloraFit probiotic strains, Lactobacillus acidophilus, Bifidobacterium" or "Angelica sinensis, Motherwort herb, Dong Quai root" or "Hyaluronic acid, niacinamide, vitamin C, peptides".
   ❌ ABSOLUTE PROHIBITION: NEVER put marketing slogans, CTAs, call-to-action phrases, or promotional text here. The following are NOT ingredients and MUST NEVER appear in this field: "DAFTAR UNTUK DAPATKAN HARGA TAWARAN SEKARANG", "REGISTER TO GET THE OFFER PRICE NOW", "BUY NOW", "ORDER TODAY", "CLICK HERE", "SUBSCRIBE", "JOM BELI", "MUA NGAY", "ĐẶT HÀNG NGAY", "ĐĂNG KÝ", "Get yours now", "Shop now", etc.
   Ingredients = PHYSICAL THINGS inside the bottle/box (vitamins, herbs, probiotic strains, compounds, active molecules). CTAs = marketing actions for the customer to take. These are DIFFERENT.
@@ -58,7 +64,11 @@ Fields:
 - painPoints: customer problems/pain points this product solves
 - usps: unique selling points / competitive advantages
 - benefits: specific benefits of using the product
-- offer: ONLY the main product price and any discount/promotion (e.g. "RM59, 50% off for first 50 customers"). Do NOT include shipping fees, shipping conditions, regional shipping surcharges, delivery times, COD info, or address-related text. If the page has "Additional RM5 shipping cost for Sabah and Sarawak" or similar, OMIT it entirely. Keep this field FOCUSED on price + discount only.
+- offer: Product pricing — base price + ALL combo/bundle tiers if visible in screenshot. Extract ALL pricing options as comma-separated. EXAMPLES:
+    • single tier: "RM59" or "RM55 (was RM109)"
+    • multi-tier combo: "RM55 (was RM109), BUY 2 RM95, BUY 3 RM145"
+    • bundle: "BUY 1 GET 1 FREE for RM59, BUY 2 GET 2 FREE for RM99"
+  ⚠️ EXTRACT ALL TIERS — do NOT pick only the first. Do NOT include shipping fees, COD info, delivery times, regional surcharges. Keep FOCUSED on price + combo tiers.
 - ingredients: SPECIFIC ingredients / active components / key compounds in this product (e.g. "Vitamin B12, A, E, biotin, iron", "Inulin prebiotic, FloraFit probiotic strains, Lactobacillus acidophilus", "Angelica sinensis, Motherwort herb"). List the actual ingredient names — do not write generic descriptions. If the screenshot doesn't list ingredients explicitly, infer the most likely active components from product type.`
 
 // Jina Reader — renders JS pages and returns clean markdown. Handles LadiPage, Shopee, etc.
@@ -158,10 +168,14 @@ export function looksLikeCTA(text: string): boolean {
   return ctaKeywords.some((kw) => upper.includes(kw))
 }
 
-/** Strip shipping/delivery text from offer field. Keeps only price + discount. */
+/** Strip shipping/delivery text from offer field. Keeps only price + discount.
+ *
+ *  SAFETY: nếu strip làm string empty hoặc chỉ còn whitespace → ABORT,
+ *  return original. Tránh edge case offer có combo tier kèm "FREESHIP"
+ *  bị wipe toàn bộ (vd "BUY 1 RM55 + RM10 SHIP, BUY 2 RM95 FREESHIP"
+ *  bị regex match toàn bộ vì không có dấu chấm câu chia). */
 export function stripShippingFromOffer(text: string): string {
   if (!text) return ''
-  // Common shipping phrases across languages — remove the entire sentence containing them
   const shippingPatterns = [
     // English
     /[^.!?\n]*(?:shipping|delivery|deliver to|cod\b|cash on delivery|free ship|additional[^.!?\n]*RM|extra cost|surcharge)[^.!?\n]*[.!?\n]?/gi,
@@ -172,8 +186,17 @@ export function stripShippingFromOffer(text: string): string {
   ]
   let cleaned = text
   for (const pat of shippingPatterns) cleaned = cleaned.replace(pat, ' ')
-  // Collapse whitespace + remove dangling punctuation
   cleaned = cleaned.replace(/\s+/g, ' ').replace(/^[\s,.;:-]+|[\s,.;:-]+$/g, '').trim()
+
+  // SAFETY NET: nếu strip xóa hết → giữ original (có thể combo deal có
+  // "FREESHIP" kèm price, không muốn wipe). Re-check: nếu original có
+  // dấu hiệu price (RM/Rp/$/đ + số) mà cleaned không có → abort.
+  const hasPrice = (s: string) => /(?:RM|Rp|\$|đ|VND|IDR)\s*\d/i.test(s)
+  if (!cleaned || (hasPrice(text) && !hasPrice(cleaned))) {
+    console.warn('[stripShippingFromOffer] strip would wipe price info — keeping original:', text.slice(0, 100))
+    return text
+  }
+
   return cleaned
 }
 
