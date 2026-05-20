@@ -320,19 +320,24 @@ LAYOUT (SOCIAL PROOF BANNER):
   } else if (variant === 'combo-vertical') {
     variantBlock = `
 LAYOUT (COMBO DEALS VERTICAL):
-  - Vertical portrait infographic showing 2-3 combo deal tiers stacked top→bottom.
-  - HEADER: bold title at top (e.g. "HARGA TERBAIK" / "TAWARAN COMBO HARI INI" / "PILIH PAKEJ ANDA").
-  - EACH TIER BLOCK (use ALL data from FULL DEALS LIST above):
-      • Product packaging mockup (1-3 units depending on tier quantity, e.g. tier "BUY 2 GET 2" shows 4 boxes), SHAPE LOCK applied
-      • Tier name badge ("RAWATAN CEPAT" / "RAWATAN MENDALAMI" / "TERAPI SIHAT MAMPAN" or similar Malay action-naming)
-      • Deal label prominent (e.g. "BELI 1 PERCUMA 1")
-      • Original price gạch (if available) → Sale price LARGE highlight (e.g. "RM129 → RM59")
-      • Savings badge sticker (if available) — starburst shape with "JIMAT RM70" or "50% OFF"
-      • 2-4 benefit bullets with green checkmark icons (target language)
-  - Each tier visually DISTINCT (different accent color: tier 1=blue/teal, tier 2=red, tier 3=amber)
-  - "HOT DEAL" / "BEST SELLER" sticker on tier 2 or 3 (highest value combo)
-  - PALETTE: vibrant ecommerce — high contrast, NOT minimal. Stack with clear visual separation between tiers.
-  - AI CREATIVE: design fresh layout, do NOT clone any specific reference. Goal = clear hierarchy + strong sale visual.`
+  - Vertical portrait infographic stacking ALL combo tiers from FULL DEALS LIST (2-5 tiers).
+  - HEADER: bold title top (e.g. "HARGA TERBAIK" / "TAWARAN COMBO HARI INI" / "PILIH PAKEJ ANDA").
+  - EACH TIER BLOCK MUST INCLUDE (mandatory, in this order):
+      1. Tier name badge ("RAWATAN CEPAT" / "RAWATAN MENDALAMI" / "RAWATAN SIHAT MAMPAN" / "TERAPI MAKSIMUM" — escalating naming)
+      2. Product packaging mockup — show N units matching tier quantity (e.g. tier "BUY 2 GET 2" = 4 boxes visible). SHAPE LOCK applied to every unit.
+      3. Deal label prominent ("BELI 1 PERCUMA 1" / "BUY 1 GET 1")
+      4. PRICE COMPARISON BLOCK — ALWAYS show all 3 elements together:
+           • ORIGINAL PRICE gạch (red strikethrough) — vd "RM129" with line through
+           • SALE PRICE LARGE highlight (vibrant color box) — vd "RM59"
+           • SAVINGS sticker (starburst/explosion shape) — vd "JIMAT RM70!" or "50% OFF"
+         If originalPrice empty in data, AI must infer reasonable original (vd RM59 sale → "was RM99" implied).
+      5. 2-4 benefit bullets with ✅ green checkmark icons (target language).
+  - Each tier visually DISTINCT — different accent color per tier:
+      tier 1 = blue/teal (calm entry), tier 2 = red/orange (HOT DEAL),
+      tier 3 = amber/gold (BEST SELLER), tier 4 = purple (MAX VALUE).
+  - "HOT DEAL" / "BEST SELLER" / "JIMAT LEBIH" sticker on the higher-tier combos (tier 2+).
+  - PALETTE: vibrant ecommerce — high contrast, NOT minimal. Clear vertical separation between tiers.
+  - AI CREATIVE: design fresh layout, NOT clone specific reference. Goal = clear hierarchy + visual savings comparison so customer sees value of buying more.`
   } else {
     variantBlock = `
 LAYOUT (PROMO BANNER):

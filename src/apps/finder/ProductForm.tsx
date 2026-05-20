@@ -39,20 +39,32 @@ Fields:
 - painPoints: customer problems/pain points this product solves
 - usps: unique selling points / competitive advantages
 - benefits: specific benefits of using the product
-- offer: Product pricing — base price + ALL combo/bundle tiers if present. Extract ALL pricing options the page offers, NOT just one. Format as comma-separated. EXAMPLES:
+- offer: Product pricing — base price + ALL combo/bundle tiers visible on page. Extract EVERY pricing tier the page offers, no matter how many. Format CONCISE, comma-separated, no "for"/"FREE" filler words.
+  ⚠️ EXTRACT 100% OF TIERS — if page shows 4 tiers ("BELI 1 PERCUMA 1", "BELI 2 PERCUMA 2", "BELI 3 PERCUMA 3", "BELI 5 PERCUMA 5"), output ALL 4. Do NOT stop at 2.
+  ⚠️ INCLUDE originalPrice (gạch) when page shows "was RMxxx" or strikethrough price near the sale price — this is critical for the savings calculation.
+  CONCISE FORMAT examples:
     • single tier: "RM59" or "RM55 (was RM109)"
-    • multi-tier combo: "RM55 (was RM109), BUY 2 RM95, BUY 3 RM145"
-    • bundle deal: "BUY 1 GET 1 FREE for RM59, BUY 2 GET 2 FREE for RM99"
+    • multi-tier: "RM55 (was RM109), BUY 2 RM95, BUY 3 RM145"
+    • bundle (NO "FREE for" filler — use "GET" only):
+        "BUY 1 GET 1 RM59 (was RM129), BUY 2 GET 2 RM99, BUY 3 GET 3 RM129, BUY 5 GET 5 RM149"
     • with discount: "RM59, 50% off for first 50 customers"
-  ⚠️ EXTRACT ALL TIERS — if the page shows multiple combo options (e.g. "1 UNIT - RM55", "2 UNIT - RM95", "3 UNIT - RM145"), include EVERY tier in the output. Do NOT pick only the first one.
-  Do NOT include: shipping fees, COD info, delivery times, regional shipping surcharges (e.g. "Sabah +RM5"), address fields. Keep FOCUSED on price + combo tiers only.
+  Do NOT include: shipping fees, COD info, delivery times, regional surcharges (e.g. "Sabah +RM5"), address fields, "FREESHIP" word (shipping is implied for bundle, not part of price text).
+
+E-COMMERCE PLATFORM HANDLING (Shopee/Lazada/TikTok Shop/Tiki/...):
+The webpage may contain MULTIPLE products mixed together:
+  - MAIN product (focus of the page — usually first in markdown, has main image gallery + price + add-to-cart button + detailed description)
+  - "Sản phẩm khác của shop" / "Other products from this shop"
+  - "Có thể bạn cũng thích" / "You may also like" / "Sản phẩm liên quan"
+  - "Đã xem gần đây" / "Recently viewed"
+⚠️ EXTRACT ONLY THE MAIN PRODUCT. Ignore ALL related/recommended/other-shop sections completely.
+Identify the main product by: appears FIRST in page text + has price + has detailed description + has main image. If multiple products with similar prominence exist → still pick the first (top of page).
 - ingredients: PHYSICAL substances / compounds / active components actually INSIDE the product. Examples of CORRECT values: "Vitamin B12, A, E, biotin, iron, magnesium" or "Inulin prebiotic, FloraFit probiotic strains, Lactobacillus acidophilus, Bifidobacterium" or "Angelica sinensis, Motherwort herb, Dong Quai root" or "Hyaluronic acid, niacinamide, vitamin C, peptides".
   ❌ ABSOLUTE PROHIBITION: NEVER put marketing slogans, CTAs, call-to-action phrases, or promotional text here. The following are NOT ingredients and MUST NEVER appear in this field: "DAFTAR UNTUK DAPATKAN HARGA TAWARAN SEKARANG", "REGISTER TO GET THE OFFER PRICE NOW", "BUY NOW", "ORDER TODAY", "CLICK HERE", "SUBSCRIBE", "JOM BELI", "MUA NGAY", "ĐẶT HÀNG NGAY", "ĐĂNG KÝ", "Get yours now", "Shop now", etc.
   Ingredients = PHYSICAL THINGS inside the bottle/box (vitamins, herbs, probiotic strains, compounds, active molecules). CTAs = marketing actions for the customer to take. These are DIFFERENT.
   If the page does NOT list any actual ingredients/compounds and you cannot reasonably infer them from product type, return an EMPTY STRING "" — do NOT fill this field with marketing text, offer text, or CTAs.
 
 WEBPAGE TEXT:
-${pageText.slice(0, 8000)}`
+${pageText.slice(0, 16000)}`
 
 const IMAGE_EXTRACT_PROMPT = `Extract product information from this product page screenshot and fill in this JSON. ALL VALUES MUST BE IN ENGLISH (translate from source language if needed). Return ONLY the JSON, nothing else, all on one line:
 ${JSON_SCHEMA}
@@ -64,14 +76,20 @@ Fields:
 - painPoints: customer problems/pain points this product solves
 - usps: unique selling points / competitive advantages
 - benefits: specific benefits of using the product
-- offer: Product pricing — base price + ALL combo/bundle tiers if visible in screenshot. Extract ALL pricing options as comma-separated. EXAMPLES:
-    • single tier: "RM59" or "RM55 (was RM109)"
-    • multi-tier combo: "RM55 (was RM109), BUY 2 RM95, BUY 3 RM145"
-    • bundle: "BUY 1 GET 1 FREE for RM59, BUY 2 GET 2 FREE for RM99"
-  ⚠️ EXTRACT ALL TIERS — do NOT pick only the first. Do NOT include shipping fees, COD info, delivery times, regional surcharges. Keep FOCUSED on price + combo tiers.
+- offer: Product pricing — base price + ALL combo/bundle tiers visible in screenshot. Extract EVERY tier shown, no matter how many (4-5 tiers OK). Format CONCISE, comma-separated.
+  ⚠️ EXTRACT 100% OF TIERS — do NOT stop at 2. Include originalPrice (gạch) when shown.
+  Format examples:
+    • single: "RM59" or "RM55 (was RM109)"
+    • multi: "RM55 (was RM109), BUY 2 RM95, BUY 3 RM145"
+    • bundle (NO "FREE for" filler): "BUY 1 GET 1 RM59 (was RM129), BUY 2 GET 2 RM99, BUY 3 GET 3 RM129"
+  Do NOT include: shipping fees, COD info, delivery times, regional surcharges, "FREESHIP" word.
 - ingredients: SPECIFIC ingredients / active components / key compounds in this product (e.g. "Vitamin B12, A, E, biotin, iron", "Inulin prebiotic, FloraFit probiotic strains, Lactobacillus acidophilus", "Angelica sinensis, Motherwort herb"). List the actual ingredient names — do not write generic descriptions. If the screenshot doesn't list ingredients explicitly, infer the most likely active components from product type.`
 
 // Jina Reader — renders JS pages and returns clean markdown. Handles LadiPage, Shopee, etc.
+// 2026-05-20: limit 8000 → 16000 chars. Lý do: Ladipage thường có hero + marketing
+// content dài, form order với multi-tier combo nằm cuối page. 8000 chars cắt mất phần
+// form → chỉ extract được 1-2 tier đầu. 16000 chars (~4K tokens) đủ cover toàn page,
+// vẫn an toàn cho Gemini 2.5 Flash context window.
 async function fetchViaJina(url: string): Promise<string> {
   try {
     const r = await fetch(`https://r.jina.ai/${url}`, {
@@ -80,7 +98,7 @@ async function fetchViaJina(url: string): Promise<string> {
     })
     if (!r.ok) return ''
     const text = await r.text()
-    return text.slice(0, 8000)
+    return text.slice(0, 16000)
   } catch {
     return ''
   }

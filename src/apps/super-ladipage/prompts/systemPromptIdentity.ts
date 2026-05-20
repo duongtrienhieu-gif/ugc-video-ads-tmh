@@ -97,24 +97,34 @@ SCHEMA:
    (e.g. "RM59", "Rp159.000", "299.000đ"). Use product.offer if available,
    else infer reasonable price for market+category.
 
-9b. comboDeals — STRUCTURED ARRAY of combo tiers parsed from product.offer
-    text. CRITICAL: this field drives offer banners. Wrong data = banner shows wrong prices.
+9b. comboDeals — STRUCTURED ARRAY of combo tiers parsed from product.offer.
+    CRITICAL: drives offer banners. Wrong data = banner shows wrong prices.
     Parsing rules:
       - Split product.offer text by "," / "and" / "or" / newline into tiers.
       - For each tier, extract:
           label:          action + quantity in target market language
-                          (e.g. "BUY 1 GET 1 FREE" or "BELI 1 PERCUMA 1")
-          price:          currency code + number verbatim (e.g. "RM59")
-          originalPrice:  if mentioned (e.g. "was RM129"); else ""
-          savingsLabel:   computed if both prices known
-                          (e.g. originalPrice="RM129" + price="RM59" → "JIMAT RM70")
-                          OR percentage (e.g. "50% OFF"); else ""
+                          ("BUY 1 GET 1" or "BELI 1 PERCUMA 1" — CONCISE,
+                          no "FREE for" filler, just "BUY X GET Y")
+          price:          currency code + number verbatim ("RM59")
+          originalPrice:  ALWAYS try to fill — from "was RMxxx" / strikethrough mention.
+                          If tier 1 has originalPrice but later tiers don't, INFER:
+                          tier 2's implied originalPrice = tier1.originalPrice × (tier2 quantity).
+                          E.g. tier1="RM59 (was RM129)" → tier2 "RM99" implies original ≈ RM258
+                          (RM129 × 2) → set originalPrice="RM258".
+          savingsLabel:   ALWAYS COMPUTE if price + originalPrice both known.
+                          Math: savings = originalPrice − price.
+                          Format: "JIMAT RM{savings}" (Malay) or "TIẾT KIỆM {savings}đ" (Vietnamese)
+                          or "SAVE ${savings}" (English) — match output language of identity.
+                          E.g. "JIMAT RM70" if RM129−RM59=RM70. ALSO add "{percentage}% OFF" badge.
           benefits:       short benefit bullets in target language (if any), else []
-      - ORDER: entry-level / cheapest / most attractive tier FIRST → comboDeals[0].
-        comboDeals[0] is the HEADLINE deal, used by promo banner.
-      - Example input "BUY 1 GET 1 FREE for RM59, BUY 2 GET 2 FREE for RM99":
-          comboDeals[0] = { label: "BUY 1 GET 1 FREE", price: "RM59", ...}
-          comboDeals[1] = { label: "BUY 2 GET 2 FREE", price: "RM99", ...}
+      - ORDER: entry-level / cheapest tier FIRST → comboDeals[0] = headline.
+      - Example input "BUY 1 GET 1 RM59 (was RM129), BUY 2 GET 2 RM99, BUY 3 GET 3 RM129":
+          comboDeals[0] = { label: "BUY 1 GET 1", price: "RM59",
+                            originalPrice: "RM129", savingsLabel: "JIMAT RM70" }
+          comboDeals[1] = { label: "BUY 2 GET 2", price: "RM99",
+                            originalPrice: "RM258" (inferred), savingsLabel: "JIMAT RM159" }
+          comboDeals[2] = { label: "BUY 3 GET 3", price: "RM129",
+                            originalPrice: "RM387" (inferred), savingsLabel: "JIMAT RM258" }
       - If product.offer is empty / no combos → comboDeals = [].
 
 10. subjectIdentityLock — CRITICAL field to fix the "AI renders European
