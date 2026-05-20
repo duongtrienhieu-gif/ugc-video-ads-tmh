@@ -60,20 +60,27 @@ function brandLockBlock(
   if (!productInScene) {
     return `PRODUCT: not visible in this image. Do NOT render any "${identity.productNameExact}".`
   }
-  // Phase 3 Cut 2: brandLock compressed to single dense line. All info
-  // (name + shape + colors + scale) preserved. KIE reads filesUrl reference
-  // for visual identity lock; this line is just text backup.
-  // 2026-05-21: needsScaleAnchor conditional — chỉ inject SCALE ANCHOR khi
-  // recipe thực sự có person holding product (Recipe A/B + F whatsapp).
-  // Skip cho banner/infographic/icon-grid/table (no person holds → no
-  // oversize risk). Tiết kiệm ~15 dòng / prompt × ~15 ảnh = ~225 dòng pack.
-  const productLine = `PRODUCT (match reference image): "${identity.productNameExact}" — ${identity.packagingShape}. Colors: ${identity.primaryColors.join(', ')}. Scale: ${identity.productScale}.`
-
+  // 2026-05-21: 2 modes của PRODUCT block:
+  //
+  // Mode A (needsScaleAnchor=false) — MINIMAL:
+  //   Recipes: C (infographic), D (icon grid), E (table), G (banner),
+  //            F non-whatsapp (platform UI screenshot).
+  //   Logic: Product là thumbnail / decorative, KHÔNG có person interaction.
+  //   filesUrl reference image đã convey shape/scale tới KIE.
+  //   Output: chỉ name + colors (đảm bảo identity match + brand consistency).
+  //   Save: ~90 từ / prompt × ~16 ảnh = ~1,440 từ /pack.
+  //
+  // Mode B (needsScaleAnchor=true) — FULL:
+  //   Recipes: A (UGC photo), B (clean UGC group/collage), F whatsapp.
+  //   Logic: Person holds/wears product → cần SCALE ANCHOR để chống
+  //   "sản phẩm to nhỏ không đồng nhất" giữa các ảnh.
+  //   Output: full PRODUCT (name + shape + colors + scale) + SCALE ANCHOR.
+  //   Shape + scale text giúp SCALE ANCHOR có context cụ thể cho hand-product.
   if (!needsScaleAnchor) {
-    return productLine
+    return `PRODUCT (match reference image): "${identity.productNameExact}". Colors: ${identity.primaryColors.join(', ')}.`
   }
 
-  return `${productLine}
+  return `PRODUCT (match reference image): "${identity.productNameExact}" — ${identity.packagingShape}. Colors: ${identity.primaryColors.join(', ')}. Scale: ${identity.productScale}.
 
 SCALE ANCHOR (when product held by person):
   - Small products (sprays, drops, lip balm, vials, sample tubes): height SHORTER than hand span; width < 2 fingers. NEVER render as water-bottle-sized.
