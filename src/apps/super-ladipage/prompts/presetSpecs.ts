@@ -93,13 +93,15 @@ const UGC_MALAYSIA_SPEC: PresetSpec = {
     },
 
     // ═══════════════════════════════════════════════════════════════
-    // 5. FAILED-SOLUTIONS — 1 ảnh, 4:5, recipe B
+    // 5. FAILED-SOLUTIONS — 1 ảnh, 4:5, recipe A (changed from B 2026-05-21)
     //    Lock Malay Muslim hijab woman (fix lỗi AI ra đàn ông châu Âu)
+    //    Recipe A allows text overlay → headline "Đã thử đủ cách... vẫn..."
+    //    pattern to amplify failed-solutions narrative.
     // ═══════════════════════════════════════════════════════════════
     {
       type: 'failed-solutions',
       imageCount: 1,
-      recipeId: 'B',
+      recipeId: 'A',
       aspectRatio: '4:5',
       productPolicy: 'forbidden',
       textFields: { headline: true, bodyCopy: true, bullets: true },

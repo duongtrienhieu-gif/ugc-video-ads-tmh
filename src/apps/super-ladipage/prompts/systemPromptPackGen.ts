@@ -162,7 +162,7 @@ R9. SECTION-SPECIFIC BRIEFS (concise per-section overrides)
 
 §4 why-happens (n=1, recipe C): copy field MUST list 4-6 DISTINCT root causes appropriate to identity.productCategory, EACH STARTING with context-fit emoji icon (e.g. 🦠 microbial, ⚡ inflammatory, 🌡️ hormonal, 💊 medication, 🍔 dietary, 😰 stress). bullets[] mirrors 4-6 causes. conceptScene = "infographic listing 4-6 distinct causes with colored icons + short labels". (Language for textOverlayBlocks: see R3.)
 
-§5 failed-solutions (n=1, recipe B): UGC photo NO product NO text overlay. Subject = primary (hijab woman) by default.
+§5 failed-solutions (n=1, recipe A): UGC photo NO product, WITH text overlay headline (1-2 lines) following "Đã thử đủ cách... vẫn..." pattern — i.e. "Sudah cuba semua cara... masih sakit?" / "Habis duit untuk pelbagai rawatan... masih tak berkesan?" (target language). Amplifies failed-solutions frustration. Subject = primary (hijab woman) showing tired/frustrated mood.
 
 §6 news-proof WARNING (n=2, recipeVariant="warning-news"): tone ALARMING/FEAR (NOT trust news). Headlines like "AMARAN! Masalah... semakin meruncing!" or "Bahaya! Mengapa anda perlu bertindak SEKARANG!". Red header band. conceptScene mentions worried subject + scary stats + warning article layout.
 
@@ -174,7 +174,7 @@ R9. SECTION-SPECIFIC BRIEFS (concise per-section overrides)
 
 §10 benefits (n=1, recipe D): icon grid 6-8 benefits + product center + soft palette.
 
-§11 comparison (n=1, recipe E): 2-column premium table for QUICK overview (NOT detailed spec sheet). comparisonData filled with us.title=productNameExact + 3-5 SHORT bullets (max 4-6 words each — scannable in 5 seconds) vs them. ⛔ NO tiny sub-text/explanation/footnote under cells — keep cells big + readable.
+§11 comparison (n=1, recipe E): 2-column premium table for QUICK overview (NOT detailed spec sheet). comparisonData filled with us.title=productNameExact + 3-5 ROWS with HEADLINE LABEL ONLY (max 3-5 words each, vd "KOMPLEKS B LENGKAP") vs them. ⛔ EACH ROW = ONE bold headline + checkmark/X icon. ABSOLUTELY ZERO sub-text/description/explanation/annotation/footnote anywhere — only big readable headline labels.
 
 §12 expert-kol (n=2, recipe H): Image 1 recipeVariant="expert", subjectLockKey="primary" — top portrait of Malaysian specialist MATCHING identity.productCategory (NOT default to dentist — dental specialist ONLY if product is dental). See recipe H mapping for: dental→Pergigian, hair→Trikologi, probiotic→Pemakanan, nasal→ENT, skincare→Dermatologi, joint→Ortopedik, weight→Pemakanan, beauty→Dermatologi, default→Kesihatan. Format: name "Dr. [Malaysian name]" + "[Derived specialty] · [N]+ tahun pengalaman" + 2-4 sentence ${langName} quote endorsing this product. Image 2 recipeVariant="kol", subjectLockKey="secondary" — DIFFERENT person from expert (force secondary identity to avoid same-face bug). Top lifestyle photo Malaysian KOL + "@[handle]" + "[N]M Followers / Pengikut" + casual ${langName} quote with emojis. ⛔ BOTH quotes MUST mention identity.productNameExact VERBATIM at least once. NEVER invent other brand names (no "GlutaGlow", no skincare brand drift, no made-up products). NO product packaging visible in either image. reviews[] = 2 entries matching the 2 images.
 
