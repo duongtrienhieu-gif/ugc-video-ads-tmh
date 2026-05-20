@@ -76,6 +76,65 @@ async function fetchViaJina(url: string): Promise<string> {
   }
 }
 
+/** Extract image URLs from Jina markdown (![alt](url) and bare https links to image extensions). */
+function extractImageUrls(markdown: string): string[] {
+  const seen = new Set<string>()
+  const urls: string[] = []
+  // Markdown image syntax: ![alt](url)
+  const mdImg = /!\[[^\]]*\]\((https?:\/\/[^)\s"]+)\)/g
+  let m: RegExpExecArray | null
+  while ((m = mdImg.exec(markdown)) !== null) {
+    if (!seen.has(m[1])) { seen.add(m[1]); urls.push(m[1]) }
+  }
+  // Bare URLs ending in image extensions
+  const bareImg = /https?:\/\/[^\s")\]]+\.(?:jpg|jpeg|png|webp|gif)(?:[?#][^\s")\]]*)?/gi
+  while ((m = bareImg.exec(markdown)) !== null) {
+    if (!seen.has(m[0])) { seen.add(m[0]); urls.push(m[0]) }
+  }
+  return urls
+}
+
+/** Fetch an image URL and return { mimeType, data } for Gemini inlineData, or null on failure. */
+async function fetchImageAsBase64(url: string): Promise<{ mimeType: string; data: string } | null> {
+  try {
+    const r = await fetch(url, { signal: AbortSignal.timeout(10000) })
+    if (!r.ok) return null
+    const contentType = r.headers.get('content-type') ?? 'image/jpeg'
+    const mime = contentType.split(';')[0].trim()
+    if (!mime.startsWith('image/')) return null
+    const buf = await r.arrayBuffer()
+    if (buf.byteLength > 2_000_000) return null
+    // Chunked btoa to avoid call stack overflow on large Uint8Arrays
+    const bytes = new Uint8Array(buf)
+    let binary = ''
+    const chunk = 8192
+    for (let i = 0; i < bytes.length; i += chunk) {
+      binary += String.fromCharCode(...bytes.subarray(i, Math.min(i + chunk, bytes.length)))
+    }
+    return { mimeType: mime, data: btoa(binary) }
+  } catch {
+    return null
+  }
+}
+
+/** Fetch page via Jina with image summaries enabled — used for image-heavy pages. */
+async function fetchViaJinaWithImages(url: string): Promise<string> {
+  try {
+    const r = await fetch(`https://r.jina.ai/${url}`, {
+      headers: {
+        Accept: 'text/plain',
+        'X-With-Images-Summary': 'true',
+      },
+      signal: AbortSignal.timeout(30000),
+    })
+    if (!r.ok) return ''
+    const text = await r.text()
+    return text.slice(0, 12000)
+  } catch {
+    return ''
+  }
+}
+
 /** Escape raw control chars inside JSON string values so JSON.parse doesn't choke */
 function repairJsonStrings(s: string): string {
   let out = ''
@@ -290,12 +349,34 @@ export default function ProductForm({ item, onSave, onCancel }: ProductFormProps
 
       // Jina Reader handles JS-rendered pages (LadiPage, Shopee, etc.)
       addToast('Đang đọc trang sản phẩm...')
-      const pageText = await fetchViaJina(url)
+      let pageText = await fetchViaJina(url)
       if (!pageText) throw new Error('Không đọc được nội dung trang. Thử tải ảnh chụp màn hình thay thế.')
+
+      // For image-heavy pages (LadiPage, etc.) where most content lives in images,
+      // re-fetch via Jina with X-With-Images-Summary to get AI captions for the images,
+      // then also try direct image OCR via Gemini Vision for any images Jina exposes.
+      const IMAGE_FETCH_THRESHOLD = 600  // chars — below this, page is likely image-heavy
+      type GeminiPart = { text: string } | { inlineData: { mimeType: string; data: string } }
+      const parts: GeminiPart[] = []
+      if (pageText.length < IMAGE_FETCH_THRESHOLD) {
+        addToast('Trang chủ yếu là ảnh — đang quét OCR ảnh...')
+        // Re-fetch with image summaries enabled
+        const richText = await fetchViaJinaWithImages(url)
+        if (richText.length > pageText.length) pageText = richText
+
+        // Also try direct image fetch for up to 6 images found in the markdown
+        const imageUrls = extractImageUrls(pageText).slice(0, 6)
+        const imageResults = await Promise.all(imageUrls.map(fetchImageAsBase64))
+        const validImages = imageResults.filter((x): x is { mimeType: string; data: string } => x !== null)
+        for (const img of validImages) {
+          parts.push({ inlineData: img })
+        }
+      }
+      parts.push({ text: EXTRACT_PROMPT(pageText) })
 
       const response = await directGeminiVision({
         apiKey: geminiKey,
-        parts: [{ text: EXTRACT_PROMPT(pageText) }],
+        parts,
         systemInstruction: EXTRACT_SYSTEM,
         maxOutputTokens: 2048,
       })
