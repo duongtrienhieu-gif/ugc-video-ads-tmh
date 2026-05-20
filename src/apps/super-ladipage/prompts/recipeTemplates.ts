@@ -56,15 +56,11 @@ function brandLockBlock(identity: ProductIdentity, productInScene: boolean): str
   if (!productInScene) {
     return `PRODUCT: not visible in this image. Do NOT render any "${identity.productNameExact}".`
   }
-  // Compressed: 4 lines. packagingDescription removed (60-150 words duplicate
-  // of what KIE sees in filesUrl reference). productPose dropped (covered by
-  // conceptScene). SCALE ANCHOR retained per user direction (still needed —
-  // gpt-4o-image renders small products 2-3x oversized without it).
-  return `PRODUCT (match reference image):
-  - Label name: "${identity.productNameExact}"
-  - Shape: ${identity.packagingShape}
-  - Colors: ${identity.primaryColors.join(', ')}
-  - Scale: ${identity.productScale}
+  // Phase 3 Cut 2: brandLock compressed to single dense line. All info
+  // (name + shape + colors + scale) preserved. KIE reads filesUrl reference
+  // for visual identity lock; this line is just text backup. SCALE ANCHOR
+  // retained per user direction (Phase 3 user explicit preserve).
+  return `PRODUCT (match reference image): "${identity.productNameExact}" — ${identity.packagingShape}. Colors: ${identity.primaryColors.join(', ')}. Scale: ${identity.productScale}.
 
 SCALE ANCHOR (when product held by person):
   - Small products (sprays, drops, lip balm, vials, sample tubes): height SHORTER than hand span; width < 2 fingers. NEVER render as water-bottle-sized.
@@ -112,7 +108,7 @@ function recipeA(input: RecipeInput): string {
   const filteredBlocks = safeBlocks(concept).filter((b) => b.role !== 'price')
 
   const textOverlay = filteredBlocks.length > 0
-    ? `TEXT OVERLAY (render the following text PRECISELY as written, in ${langLabel(language)}, render every letter correctly):
+    ? `TEXT (in ${langLabel(language)}, exact spelling):
 ${filteredBlocks.map(formatTextBlock).join('\n')}`
     : 'TEXT OVERLAY: none.'
 
@@ -130,9 +126,9 @@ ${safeDecor(concept).map(formatDecor).join('\n')}`
     brandLockBlock(identity, concept.productInScene),
     textOverlay,
     decor,
-    `STYLE: candid UGC smartphone photo — natural light, slight grain, amateur authentic. Subject fills frame; overlay readable; decor doesn't obscure subject. If product is held by person, respect SCALE ANCHOR above (product proportional to hand, NOT oversized).`,
+    `STYLE: candid UGC smartphone photo, natural light, amateur authentic.`,
     technicalBlock(concept.aspectRatio),
-    `STRICT: no watermark, no price tag in image, no logos other than required brand badges.`,
+    `STRICT: no watermark.`,
   ].filter(Boolean).join('\n\n')
 }
 
@@ -147,9 +143,9 @@ function recipeB(input: RecipeInput): string {
     `SCENE: ${concept.conceptScene}.`,
     subject,
     brandLockBlock(identity, concept.productInScene),
-    `STYLE: candid UGC photo — natural light, real-life setting, amateur smartphone aesthetic. Subject naturally framed.`,
+    `STYLE: candid UGC photo, natural light, real-life setting, amateur smartphone aesthetic.`,
     technicalBlock(concept.aspectRatio),
-    `STRICT: ZERO text/letters/labels/captions in image. No watermark. No decorative overlay.`,
+    `STRICT: ZERO text/letters in image. No watermark.`,
   ].filter(Boolean).join('\n\n')
 }
 
@@ -161,7 +157,7 @@ function recipeB(input: RecipeInput): string {
 function recipeC(input: RecipeInput): string {
   const { identity, concept, language } = input
   const labels = safeBlocks(concept).length > 0
-    ? `LABELS & TITLES (render PRECISELY in ${langLabel(language)}, every letter correct):
+    ? `LABELS (in ${langLabel(language)}, exact spelling):
 ${safeBlocks(concept).map(formatTextBlock).join('\n')}`
     : 'LABELS: none.'
 
@@ -177,11 +173,11 @@ ${safeBlocks(concept).map(formatTextBlock).join('\n')}`
     `DIAGRAM CONCEPT: ${concept.conceptScene}.`,
     brandLockBlock(identity, concept.productInScene),
     labels,
-    `STYLE: clean mobile-friendly infographic — vector/flat illustration, soft pastel palette (NOT photorealistic), cartoon-anatomical icons, editorial hierarchy.`,
+    `STYLE: clean mobile-friendly infographic, vector/flat illustration, soft pastel palette, cartoon icons.`,
     layout,
     safeDecor(concept).length > 0 ? `BRAND BADGES: ${safeDecor(concept).map(formatDecor).join('; ')}` : '',
     technicalBlock(concept.aspectRatio),
-    `STRICT: text legibility is critical (infographic). No watermark.`,
+    `STRICT: text legible. No watermark.`,
   ].filter(Boolean).join('\n\n')
 }
 
@@ -193,7 +189,7 @@ ${safeBlocks(concept).map(formatTextBlock).join('\n')}`
 function recipeD(input: RecipeInput): string {
   const { identity, concept, language } = input
   const labels = safeBlocks(concept).length > 0
-    ? `ICON LABELS (render PRECISELY in ${langLabel(language)}):
+    ? `ICON LABELS (in ${langLabel(language)}):
 ${safeBlocks(concept).map(formatTextBlock).join('\n')}`
     : 'LABELS: none.'
 
@@ -201,11 +197,11 @@ ${safeBlocks(concept).map(formatTextBlock).join('\n')}`
     `INFOGRAPHIC CONCEPT: ${concept.conceptScene}.`,
     brandLockBlock(identity, concept.productInScene),
     labels,
-    `STYLE: clean modern product showcase — soft inviting palette matching brand colors, gradient background, icons in soft circular containers, mobile-readable.`,
+    `STYLE: clean modern product showcase, soft palette matching brand colors, gradient bg, icons in soft circles.`,
     `LAYOUT: title top + ${identity.coBrandBadges.length > 0 ? `brand badge "${identity.coBrandBadges.join(' + ')}" near title + ` : ''}product packaging centered (SHAPE LOCK applied) + 5-8 icon+label items in grid/circular around product + brief description below.`,
     safeDecor(concept).length > 0 ? `EXTRA: ${safeDecor(concept).map(formatDecor).join('; ')}` : '',
     technicalBlock(concept.aspectRatio),
-    `STRICT: all icon labels legible. Product matches SHAPE LOCK. No watermark.`,
+    `STRICT: icon labels legible. No watermark.`,
   ].filter(Boolean).join('\n\n')
 }
 
@@ -216,7 +212,7 @@ ${safeBlocks(concept).map(formatTextBlock).join('\n')}`
 function recipeE(input: RecipeInput): string {
   const { identity, concept, language } = input
   const cells = safeBlocks(concept).length > 0
-    ? `TABLE CONTENT (render PRECISELY in ${langLabel(language)}):
+    ? `TABLE (in ${langLabel(language)}):
 ${safeBlocks(concept).map(formatTextBlock).join('\n')}`
     : 'TABLE: empty (this should NOT happen).'
 
@@ -224,11 +220,11 @@ ${safeBlocks(concept).map(formatTextBlock).join('\n')}`
     `COMPARISON INFOGRAPHIC CONCEPT: ${concept.conceptScene}.`,
     brandLockBlock(identity, concept.productInScene),
     cells,
-    `STYLE: PREMIUM Malaysia ecommerce comparison table — luxury feel (NOT spreadsheet). Glassmorphism / soft-shadow cards. Subtle gradient bg. Bold typography hierarchy.`,
+    `STYLE: PREMIUM Malaysia ecommerce comparison table, glassmorphism, soft-shadow cards, gradient bg, bold typography.`,
     `LAYOUT: 2-column table. LEFT "${identity.productNameExact}" with vibrant EMERALD/teal header + glow accent + green ✓ on soft mint circular badges. RIGHT "Suplemen Lain" with neutral gray + red ✗ on soft pink badges. 5-7 rows with bold ${langLabel(language)} labels. Product image under left column header with glow halo. Optional small trust badges at bottom.`,
     safeDecor(concept).length > 0 ? `EXTRA: ${safeDecor(concept).map(formatDecor).join('; ')}` : '',
     technicalBlock(concept.aspectRatio),
-    `STRICT: premium polish (not Excel grid). Labels legible. Green ✓ + red ✗. No watermark.`,
+    `STRICT: labels legible. Green ✓ + red ✗. No watermark.`,
   ].filter(Boolean).join('\n\n')
 }
 
@@ -242,7 +238,7 @@ function recipeF(input: RecipeInput): string {
   const variant = concept.recipeVariant ?? 'social-platform'
 
   const labels = safeBlocks(concept).length > 0
-    ? `UI TEXT CONTENT (render PRECISELY in ${langLabel(language)}, every letter correct — this is a fake screenshot, text must look authentic to the platform):
+    ? `UI TEXT (in ${langLabel(language)}, exact spelling, authentic platform style):
 ${safeBlocks(concept).map(formatTextBlock).join('\n')}`
     : 'UI TEXT: empty.'
 
@@ -265,7 +261,7 @@ ${safeBlocks(concept).map(formatTextBlock).join('\n')}`
     variantBlock.trim(),
     safeDecor(concept).length > 0 ? `EXTRA UI: ${safeDecor(concept).map(formatDecor).join('; ')}` : '',
     technicalBlock(concept.aspectRatio),
-    `STRICT: all UI text legible. No watermark.`,
+    `STRICT: UI text legible. No watermark.`,
   ].filter(Boolean).join('\n\n')
 }
 
@@ -278,7 +274,7 @@ function recipeG(input: RecipeInput): string {
   const variant = concept.recipeVariant ?? 'promo'
 
   const banner = safeBlocks(concept).length > 0
-    ? `BANNER TEXT (render PRECISELY in ${langLabel(language)}, every letter correct):
+    ? `BANNER TEXT (in ${langLabel(language)}, exact spelling):
 ${safeBlocks(concept).map(formatTextBlock).join('\n')}`
     : 'BANNER TEXT: empty.'
 
@@ -318,10 +314,10 @@ ${safeBlocks(concept).map(formatTextBlock).join('\n')}`
     safeDecor(concept).length > 0 ? `EXTRA: ${safeDecor(concept).map(formatDecor).join('; ')}` : '',
     technicalBlock(concept.aspectRatio),
     variant === 'promo'
-      ? `STRICT: prices + deal label render EXACTLY from PRIMARY DEAL DATA above. Banner text legible. Product matches SHAPE LOCK. No watermark. No invented offers.`
+      ? `STRICT: prices + deal label EXACTLY from PRIMARY DEAL DATA. No watermark. No invented offers.`
       : variant === 'combo-vertical'
-        ? `STRICT: all tier prices + labels render EXACTLY from FULL DEALS LIST above. Each tier visually distinct + readable. Product matches SHAPE LOCK in every tier mockup. No watermark.`
-        : `STRICT: metric numbers + testimonial text legible. Avatars look like real Malaysians. NO PRICE / currency symbol in image. No watermark.`,
+        ? `STRICT: all tier prices + labels EXACTLY from FULL DEALS LIST. Each tier distinct + readable. No watermark.`
+        : `STRICT: metric numbers + testimonial text legible. NO PRICE. No watermark.`,
   ].filter(Boolean).join('\n\n')
 }
 
@@ -336,7 +332,7 @@ function recipeH(input: RecipeInput): string {
   const subject = subjectLockBlock(identity, concept)
 
   const labels = safeBlocks(concept).length > 0
-    ? `TEXT CONTENT (render PRECISELY in ${langLabel(language)}, every letter correct):
+    ? `TEXT (in ${langLabel(language)}, exact spelling):
 ${safeBlocks(concept).map(formatTextBlock).join('\n')}`
     : 'TEXT: empty (this should NOT happen — expert/KOL card requires text).'
 
@@ -365,9 +361,9 @@ ${safeBlocks(concept).map(formatTextBlock).join('\n')}`
     `PRODUCT VISIBILITY: NO product packaging in this image. Focus = person + quote. Product name only mentioned as text within the quote (NOT as visual packaging).`,
     labels,
     variantBlock.trim(),
-    `STYLE: editorial polish (magazine/feature card, NOT amateur UGC). Mobile-readable.`,
+    `STYLE: editorial polish (magazine/feature card, NOT amateur UGC).`,
     technicalBlock(concept.aspectRatio),
-    `STRICT: name + credentials/followers + quote legible. Person matches subject lock. No watermark.`,
+    `STRICT: name + credentials + quote legible. No watermark.`,
   ].filter(Boolean).join('\n\n')
 }
 
