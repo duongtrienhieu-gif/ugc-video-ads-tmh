@@ -209,39 +209,42 @@ export const V3_CLIP_STATUS_LABEL_VI: Record<V3ClipStatus, string> = {
 // Z32 — Main Creator Video Engine (Phase 3)
 // ═════════════════════════════════════════════════════════════════════════
 // The "talking head" track — 70-80% of the final ad. Pipeline:
-//   1. TTS (ElevenLabs) → MP3 + measured duration
-//   2. Keyframe (KIE GPT-4o) → still with identity locked from avatar
-//   3. Preview-motion (KIE Kling Avatar) — 1-2s motion test
-//   4. Full lipsync (KIE Kling Avatar) → final talking video
+//   1. TTS the locked script (ElevenLabs) → voice MP3 + measured duration
+//   2. Generate keyframe still (KIE GPT-4o img-edit with avatar + setting
+//      + energy prompts; preset / wardrobe / framing locked)
+//   3. Lipsync video (KIE Kling Avatar Std) image + audio → talking clip
+//   4. Preview-first: a 1-2s motion test BEFORE the full lipsync render
+//      so the user catches identity drift early without burning 60s of
+//      KIE credit.
 // ─────────────────────────────────────────────────────────────────────────
 
 // ── Creator settings — where the talking happens (Z32 §4) ─────────────────
 
 export type CreatorSettingId =
-  | 'selfie_handheld'
-  | 'desk_talking'
-  | 'couch_talking'
-  | 'bathroom_mirror'
-  | 'kitchen_talking'
-  | 'gym_selfie'
-  | 'walking_vlog'
-  | 'product_demo'
+  | 'selfie_handheld'    // phone-in-hand, casual selfie talking
+  | 'desk_talking'       // sitting at desk, mid-shot
+  | 'couch_talking'      // lounging on couch, casual
+  | 'bathroom_mirror'    // mirror selfie / morning routine vibe
+  | 'kitchen_talking'    // kitchen counter, mid-shot
+  | 'gym_selfie'         // gym phone-selfie, post-workout
+  | 'walking_vlog'       // walking + talking, vlogger pace
+  | 'product_demo'       // sitting with product in hand, demo-mode
 
 export const DEFAULT_CREATOR_SETTING: CreatorSettingId = 'selfie_handheld'
 
 // ── Creator energy levels (Z32 §13) ───────────────────────────────────────
 
 export type CreatorEnergyLevel =
-  | 'calm'
-  | 'conversational'
-  | 'excited'
-  | 'emotional'
-  | 'authority'
-  | 'aggressive_tiktok'
+  | 'calm'              // measured, soft pacing — for emotional / wellness
+  | 'conversational'    // natural everyday talking — default
+  | 'excited'           // upbeat, gestures, faster — for hooks
+  | 'emotional'         // vulnerable, slower, micro-pauses
+  | 'authority'         // confident, deliberate — expert content
+  | 'aggressive_tiktok' // high-energy TikTok creator — direct response
 
 export const DEFAULT_CREATOR_ENERGY: CreatorEnergyLevel = 'conversational'
 
-// ── Creator presets — combos of setting + energy + wardrobe (Z32 §9) ──────
+// ── Creator presets — combinations of setting + energy + wardrobe (Z32 §9) ─
 
 export type CreatorPresetId =
   | 'malay_mom_casual'
@@ -251,16 +254,17 @@ export type CreatorPresetId =
   | 'tech_reviewer'
   | 'young_tiktok_girl'
 
-// ── Render stage tracking ─────────────────────────────────────────────────
+// ── Render stage tracking (within the creator video render) ───────────────
+// The render is multi-stage. Each stage can fail/be retried independently.
 
 export type CreatorVideoStage =
-  | 'idle'
-  | 'tts'
-  | 'keyframe'
-  | 'preview_motion'
-  | 'lipsync_full'
-  | 'completed'
-  | 'failed'
+  | 'idle'             // nothing started
+  | 'tts'              // ElevenLabs running
+  | 'keyframe'         // KIE GPT-4o generating the still
+  | 'preview_motion'   // 1-2s preview test
+  | 'lipsync_full'     // KIE Kling Avatar full talking video
+  | 'completed'        // we have a full lipsync video
+  | 'failed'           // last stage errored — error field has reason
 
 export const CREATOR_VIDEO_STAGE_LABEL_VI: Record<CreatorVideoStage, string> = {
   idle:           'Chưa bắt đầu',
@@ -272,15 +276,19 @@ export const CREATOR_VIDEO_STAGE_LABEL_VI: Record<CreatorVideoStage, string> = {
   failed:         'Lỗi',
 }
 
-// ── Creator video config (user's picks BEFORE rendering) ─────────────────
+// ── Creator video config (the user's picks BEFORE rendering) ──────────────
 
 export interface CreatorVideoConfig {
+  /** Which setting (room/framing) to render */
   setting: CreatorSettingId
+  /** Which energy level for expression + pacing */
   energy: CreatorEnergyLevel
-  /** Optional preset shortcut — null = customised manually */
+  /** Optional preset shortcut — sets setting + energy + wardrobe in one click.
+   *  null = user customised manually. */
   preset: CreatorPresetId | null
-  /** Wardrobe override — empty = preset's default */
+  /** Wardrobe override — free text. Empty = preset's default. */
   wardrobeNote: string
+  /** Resolution to render at (controlled by costMode but user can bump). */
   resolution: '480p' | '720p' | '1080p'
 }
 
@@ -303,27 +311,33 @@ export interface CreatorVideoClip {
   /** Legacy V3ClipStatus for back-compat — kept in sync with `stage`. */
   status: V3ClipStatus
 
-  /** Asset:xxx of the ElevenLabs TTS audio (MP3) */
+  /** Asset:xxx of the ElevenLabs TTS audio (MP3). Set after TTS stage. */
   voiceRef?: string
+  /** Measured duration of the TTS audio in seconds. */
   voiceDurationSec?: number
+  /** ElevenLabs voice id used. */
   voiceId?: string
 
-  /** Asset:xxx of the still keyframe (avatar in setting + energy + wardrobe) */
+  /** Asset:xxx of the still keyframe (avatar in setting + energy + wardrobe). */
   keyframeRef?: string
+  /** Compiled keyframe prompt — exposed for debug. */
   keyframePromptUsed?: string
 
-  /** Asset:xxx of the 1-2s preview-motion test */
+  /** Asset:xxx of the 1-2s preview-motion test (cheap). */
   previewVideoRef?: string
-  /** Lipsync task id for the FULL render — used to re-poll if user refreshes */
+  /** Lipsync task id for the FULL render — used to re-poll if user refreshes. */
   fullLipsyncTaskId?: string
-  /** Asset:xxx of the FINAL full lipsync video */
+  /** Asset:xxx of the FINAL full lipsync video. */
   videoRef?: string
 
-  /** Config used for this render — captured for re-render parity */
+  /** Config used for this render — captured for re-render parity. */
   config: CreatorVideoConfig
 
+  /** Total wall-clock duration of the lip-synced talking video. */
   durationSec: number
+  /** Render profile used for the FINAL video. */
   resolution: '480p' | '720p' | '1080p'
+
   error?: string
   startedAt?: number
   finishedAt?: number
