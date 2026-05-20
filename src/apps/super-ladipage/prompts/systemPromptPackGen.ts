@@ -154,9 +154,9 @@ R8. OUTPUT HYGIENE
 
 R9. SECTION-SPECIFIC BRIEFS (concise per-section overrides)
 
-§1 hero: UGC photo + 1-2 big condensed headline + 3 glassmorphism badges with emoji prefix + small arrow pointing to product. textOverlayBlocks NO price.
+§1 hero: UGC photo + 1-2 big condensed headline + 3 glassmorphism badges with emoji prefix + small arrow pointing to product. ⛔ textOverlayBlocks ABSOLUTELY ZERO price/currency/discount/offer/sticker text — violation = section fails QA. Price reserved exclusively for section 17.
 
-§2 final-cta (social-proof-banner, recipeVariant="social-proof-banner"): bold trust banner. Header band ("BUKTI KEPERCAYAAN..."). 3-4 metric chips (⭐4.8/5, "25,000+ KOTAK", "18,000+ pelanggan", "TRENDING #1"). 4-6 mini testimonial cards (Malaysian avatar + name + location + 5-star + 1-sentence ${langName} review). Trust badges + CTA button at bottom. NO PRICE in image — trust signals only, price comes later at section 17.
+§2 final-cta (social-proof-banner, recipeVariant="social-proof-banner"): bold trust banner. Header band ("BUKTI KEPERCAYAAN..."). 3-4 metric chips (⭐4.8/5, "25,000+ KOTAK", "18,000+ pelanggan", "TRENDING #1"). 4-6 mini testimonial cards (Malaysian avatar + name + location + 5-star + 1-sentence ${langName} review). Trust badges + non-price CTA button at bottom (e.g. "Lihat semua review", NOT "Beli RM55"). ⛔ ABSOLUTELY ZERO price/currency/discount/savings-sticker/percent-off/offer-text in image. ONLY trust signals (testimonials + ratings + sales counts + badges). Violation = section fails QA. Price reserved exclusively for section 17.
 
 §3 pain (n=6, tierRules): each = italic question with emoji prefix on glassmorphism panel + color glow accent near pain area. Mix subjectLockKey ~4 primary + ~2 secondary across 6 images.
 
@@ -174,25 +174,25 @@ R9. SECTION-SPECIFIC BRIEFS (concise per-section overrides)
 
 §10 benefits (n=1, recipe D): icon grid 6-8 benefits + product center + soft palette.
 
-§11 comparison (n=1, recipe E): 2-column premium table. comparisonData filled with us.title=productNameExact + 5-7 bullets vs them.
+§11 comparison (n=1, recipe E): 2-column premium table for QUICK overview (NOT detailed spec sheet). comparisonData filled with us.title=productNameExact + 3-5 SHORT bullets (max 4-6 words each — scannable in 5 seconds) vs them. ⛔ NO tiny sub-text/explanation/footnote under cells — keep cells big + readable.
 
-§12 expert-kol (n=2, recipe H): Image 1 recipeVariant="expert" — top portrait of Malaysian specialist MATCHING identity.productCategory (NOT default to dentist — dental specialist ONLY if product is dental). See recipe H mapping for: dental→Pergigian, hair→Trikologi, probiotic→Pemakanan, nasal→ENT, skincare→Dermatologi, joint→Ortopedik, weight→Pemakanan, beauty→Dermatologi, default→Kesihatan. Format: name "Dr. [Malaysian name]" + "[Derived specialty] · [N]+ tahun pengalaman" + 2-4 sentence ${langName} quote endorsing this product. Image 2 recipeVariant="kol" — top lifestyle photo Malaysian KOL + "@[handle]" + "[N]M Followers / Pengikut" + casual ${langName} quote with emojis. NO product packaging in either image. reviews[] = 2 entries matching the 2 images.
+§12 expert-kol (n=2, recipe H): Image 1 recipeVariant="expert", subjectLockKey="primary" — top portrait of Malaysian specialist MATCHING identity.productCategory (NOT default to dentist — dental specialist ONLY if product is dental). See recipe H mapping for: dental→Pergigian, hair→Trikologi, probiotic→Pemakanan, nasal→ENT, skincare→Dermatologi, joint→Ortopedik, weight→Pemakanan, beauty→Dermatologi, default→Kesihatan. Format: name "Dr. [Malaysian name]" + "[Derived specialty] · [N]+ tahun pengalaman" + 2-4 sentence ${langName} quote endorsing this product. Image 2 recipeVariant="kol", subjectLockKey="secondary" — DIFFERENT person from expert (force secondary identity to avoid same-face bug). Top lifestyle photo Malaysian KOL + "@[handle]" + "[N]M Followers / Pengikut" + casual ${langName} quote with emojis. ⛔ BOTH quotes MUST mention identity.productNameExact VERBATIM at least once. NEVER invent other brand names (no "GlutaGlow", no skincare brand drift, no made-up products). NO product packaging visible in either image. reviews[] = 2 entries matching the 2 images.
 
 §13 social-proof (n=6): MIXED recipe + aspect per image —
   social_fb.jpg       — recipeId="F", recipeVariant="social-platform", aspectRatio="9:16" — Facebook post + comments, mobile phone screenshot.
   social_tiktok.jpg   — recipeId="F", recipeVariant="social-platform", aspectRatio="9:16" — TikTok Shop review page, mobile phone screenshot.
   social_shopee.jpg   — recipeId="F", recipeVariant="social-platform", aspectRatio="9:16" — Shopee product review page, mobile phone screenshot.
   social_selfie.jpg   — recipeId="F", recipeVariant="social-platform", aspectRatio="9:16" — hijab woman selfie holding product in social-feed post style, mobile portrait.
-  social_group.jpg    — recipeId="B" (clean UGC photo), aspectRatio="4:5" — ONE candid group photo of 4-5 Malaysian family/friends together (mix gender + ages + hijab + uncles + younger), all holding the product, smiling at camera. Outdoor or casual indoor scene. NO Facebook/Instagram chrome, NO caption banner, NO text overlay — just the photo.
-  social_collage.jpg  — recipeId="B", aspectRatio="4:5" — conceptScene describing 2x2 grid of 4 separate Malaysian people (each in own frame, different person + different setting per frame), each holding product. NO platform chrome, NO caption banner — just the 4-frame collage.
-Images 1-4 may show price as part of authentic platform UI (Shopee/TikTok pages have prices natively). Images 5-6 (recipe B) ZERO text/overlay.
+  social_group.jpg    — recipeId="B" (clean UGC photo), aspectRatio="4:5" — ONE candid group photo of 4-5 Malaysian family/friends together (mix gender + ages + hijab + uncles + younger). ⛔ EVERY PERSON in the group MUST be visibly holding the product at chest-level (NOT just 1 person with product while others empty-handed). Product clearly visible + readable in each hand (~10-15% frame per product, NOT background-tiny). Outdoor or casual indoor scene. NO Facebook/Instagram chrome, NO caption banner, NO text overlay — just the photo.
+  social_collage.jpg  — recipeId="B", aspectRatio="4:5" — conceptScene describing 2x2 grid of 4 separate Malaysian people (each in own frame, different person + different setting per frame). EACH person holds product at chest-level — product clearly visible + readable in each frame (~15-20% per frame, NOT blurry, NOT tiny). NO platform chrome, NO caption banner — just the 4-frame collage.
+⛔ Images 1-4 platform UI may show price — but ALL 4 MUST use IDENTICAL price = identity.priceTag (or identity.comboDeals[0].price) VERBATIM. NEVER different prices across platforms (e.g. RM45 on Shopee vs RM29 on TikTok = inconsistent = pack fail). Images 5-6 (recipe B) ZERO text/overlay.
 
 §14 whatsapp-testimonials (n=4, recipeVariant="whatsapp"): 4 DIFFERENT vibes —
   wa_01.jpg = 1-on-1 chat text + product photo embed,
   wa_02.jpg = group chat with many participants visible + multiple positive replies,
   wa_03.jpg = selfie photo with product shared as media in chat,
-  wa_04.jpg = voice message bubbles + brief text mention.
-Different sender names + timestamps each image.
+  wa_04.jpg = long reply chain — multiple Malaysian customers replying consecutively with positive feedback + 1 product photo embed (NO voice messages — illogical in static screenshot).
+Different sender names + timestamps each image. ⛔ ALL chat text + bubble content + overlay banners MUST be in ${langName} (casual Malay/Vietnamese with emojis 🙏 ✨ ❤️) — NEVER English ("Thank you", "Group Chat: Energy levels up", "User: Highly recommend" = pack fail). NO English overlay banners on top/bottom of screenshot.
 
 §15 before-after (n=4, recipe A, tierRules): each image = SAME person in BEFORE and AFTER, but MANDATORY DIFFERENT OUTFIT. AFTER shirt/top MUST be a different color AND style from BEFORE shirt — typically also different setting/background — because 3 weeks of usage means the person changed clothes. NEVER same outfit in both halves (illogical: nobody wears the same shirt for 3 weeks straight). conceptScene must explicitly mention the outfit change. textOverlayBlocks = "Sebelum"/"Selepas" labels + person name+age ("Kak Aishah, 38 tahun") + duration ("Selepas 21 hari guna"). Mix subjectLockKey across 4 images (primary hijab woman + secondary Malay male). Transformation MUST come from identity.transformationByTier — tier1_primary or tier2_axis ONLY. NEVER tier4_offniche (auto off-category for THIS product — examples vary per product: for gut/dental → never body-slimming; for weight-loss product → never hair regrowth; for skincare → never weight-loss; etc).
 
