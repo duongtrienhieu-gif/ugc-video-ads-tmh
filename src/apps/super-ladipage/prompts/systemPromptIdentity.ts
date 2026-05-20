@@ -159,25 +159,52 @@ SCHEMA:
     relevant) + age range + visual identifier (hijab/clean-shaven/etc) +
     expression hint.
 
-11. productCategory — concise category (e.g. "oral care / teeth whitening
-    powder", "probiotic / gut health supplement").
+11. productCategory — concise category. Examples cross categories:
+    "oral care / teeth whitening powder"
+    "probiotic / gut health supplement"
+    "hair oil / herbal hair growth"
+    "nasal spray / allergy relief"
+    "anti-aging serum / skincare"
+    "functional snack / heart + blood sugar support"
+    "weight management supplement"
+    "coffee with energy boost"
+    ⚠️ For DUAL-CATEGORY products (functional snacks, beauty supplements,
+    fortified beverages), include BOTH surface + functional layer. Example
+    for a snack with health claims: "functional snack / heart + blood sugar
+    support" — not just "snack".
 
-12. painPointsByTier — 4-tier classification:
+12. painPointsByTier — 4-tier classification. Examples per category (adapt
+    to actual product category — do NOT default to teeth):
     - tier1_primary (5-8): pain hooks DIRECTLY caused by mechanism this
-      product addresses. For teeth product: ["gigi kuning", "nafas berbau",
-      "karang gigi tebal", "gusi berdarah", "gigi sensitif"]
-    - tier2_axis (3-5): pains via known biological axis. For teeth:
-      ["senyum tak yakin", "selalu tutup mulut", "wajah kelihatan tua"]
+      product addresses.
+        Dental:    ["gigi kuning", "nafas berbau", "karang gigi tebal"]
+        Probiotic: ["perut kembung", "sembelit", "sakit perut lepas makan"]
+        Hair oil:  ["rambut gugur", "kulit kepala kering", "rambut tipis"]
+        Skincare:  ["jerawat", "kulit kusam", "kedutan halus"]
+        Func snack: ["paras gula darah tinggi", "kolesterol tinggi",
+                     "kurang serat dalam diet", "mengidam makanan manis tak sihat"]
+        Weight:    ["berat badan berlebih", "lemak perut", "metabolisme perlahan"]
+    - tier2_axis (3-5): pains via known biological/lifestyle axis.
+        Func snack: ["tenaga rendah", "fikiran tidak fokus"]
     - tier3_loose (2-4): weakly related (use sparingly).
     - tier4_offniche (3-6): pains belonging to OTHER categories — DO NOT
-      include in concepts. For teeth: ["berat naik", "rambut gugur",
-      "sakit sendi", "kulit kering wajah"]
+      include in concepts. Vary per product:
+        Dental → off-niche: ["berat naik", "rambut gugur", "sakit sendi"]
+        Probiotic → off-niche: ["weight loss", "hair regrowth"]
+        Func snack → off-niche: ["jerawat", "rambut gugur", "sakit sendi"]
+        Weight loss → off-niche: ["hair regrowth", "kembung perut"]
 
 13. transformationByTier — same 4-tier structure for before/after concepts.
+    Apply same per-category logic as painPointsByTier.
 
 14. visualAntiPatterns — 4-8 short visual concepts the image model must
-    NEVER include. For teeth: ["weight loss", "body slimming", "muscle gain",
-    "hair regrowth", "skincare serum on face", "joint anatomy"]
+    NEVER include. Vary per product category:
+        Dental → ["weight loss", "body slimming", "hair regrowth", "joint anatomy"]
+        Probiotic → ["body slimming for weight loss", "hair regrowth", "wrinkle treatment"]
+        Hair oil → ["weight loss", "body slimming", "joint anatomy", "dental treatment"]
+        Skincare → ["weight loss", "muscle gain", "hair regrowth", "joint anatomy"]
+        Func snack → ["body slimming as primary goal", "muscle gain workout"]
+    Goal: prevent AI from drifting into wrong category visuals.
 
 ═══ ABSOLUTE RULES ═══
 

@@ -38,7 +38,18 @@ Fields:
 - targetMarket: target customers (who should use this)
 - painPoints: customer problems/pain points this product solves
 - usps: unique selling points / competitive advantages
-- benefits: specific benefits of using the product
+- benefits: SPECIFIC benefits of using the product. CRITICAL for dual-category
+  products (functional foods, health snacks, beauty supplements, fortified
+  beverages, functional cosmetics) — EXTRACT BOTH layers:
+    (a) Surface benefits: "delicious", "convenient", "easy to eat", "no mess"
+    (b) FUNCTIONAL/HEALTH benefits with ingredient linkage if mentioned:
+        e.g. "Black sesame supports heart health", "Walnut + cranberry lower
+        cholesterol", "Fig provides natural fiber for blood sugar control",
+        "Collagen-infused for skin elasticity", "B vitamins for energy metabolism"
+  If the page mentions health claims, regulatory approvals (HALAL/KKM/FDA),
+  ingredient functional purposes, or scientific backing → EXTRACT ALL of them.
+  These are often the KEY SELLING POINTS hidden behind the surface description.
+  Do NOT just paraphrase surface description — dig for functional value-prop
 - offer: Product pricing — base price + ALL combo/bundle tiers visible on page. Extract EVERY pricing tier the page offers, no matter how many. Format CONCISE, comma-separated, no "for"/"FREE" filler words.
   ⚠️ EXTRACT 100% OF TIERS — if page shows 4 tiers ("BELI 1 PERCUMA 1", "BELI 2 PERCUMA 2", "BELI 3 PERCUMA 3", "BELI 5 PERCUMA 5"), output ALL 4. Do NOT stop at 2.
   ⚠️ INCLUDE originalPrice (gạch) when page shows "was RMxxx" or strikethrough price near the sale price — this is critical for the savings calculation.
@@ -82,7 +93,18 @@ Fields:
 - targetMarket: target customers (who should use this)
 - painPoints: customer problems/pain points this product solves
 - usps: unique selling points / competitive advantages
-- benefits: specific benefits of using the product
+- benefits: SPECIFIC benefits of using the product. CRITICAL for dual-category
+  products (functional foods, health snacks, beauty supplements, fortified
+  beverages, functional cosmetics) — EXTRACT BOTH layers:
+    (a) Surface benefits: "delicious", "convenient", "easy to eat", "no mess"
+    (b) FUNCTIONAL/HEALTH benefits with ingredient linkage if mentioned:
+        e.g. "Black sesame supports heart health", "Walnut + cranberry lower
+        cholesterol", "Fig provides natural fiber for blood sugar control",
+        "Collagen-infused for skin elasticity", "B vitamins for energy metabolism"
+  If the page mentions health claims, regulatory approvals (HALAL/KKM/FDA),
+  ingredient functional purposes, or scientific backing → EXTRACT ALL of them.
+  These are often the KEY SELLING POINTS hidden behind the surface description.
+  Do NOT just paraphrase surface description — dig for functional value-prop
 - offer: Product pricing — base price + ALL combo/bundle tiers visible in screenshot. Extract EVERY tier shown, no matter how many (4-5 tiers OK). Format CONCISE, comma-separated.
   ⚠️ EXTRACT 100% OF TIERS — do NOT stop at 2. Include originalPrice (gạch) when shown.
   Format examples:

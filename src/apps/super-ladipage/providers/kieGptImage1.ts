@@ -82,24 +82,29 @@ export async function generateImageGptImage1(input: KieImageGenInput): Promise<K
 
   const tryOnce = async (): Promise<string> => {
     if (useImageToImage) {
-      // gpt-4o-image — TRUE i2i với reference images (identity lock)
+      // gpt-4o-image — TRUE i2i với reference images (identity lock).
+      // Timeout 90s/attempt: nếu KIE stuck queue > 90s → abandon task,
+      // outer retry loop sẽ submit FRESH task. Hai attempts × 90s = 180s
+      // worst case mỗi image (vs cũ 4min × 2 = 8min). enableFallback
+      // vẫn ON → KIE tự fallback GPT_IMAGE_1 nếu primary fail.
       const { taskId } = await submitGpt4oImage({
         apiKey,
         prompt,
         size:       kieAspect,
         filesUrl,
-        enableFallback: true,  // KIE auto-fallback GPT_IMAGE_1
+        enableFallback: true,
       })
       return pollGpt4oUntilDone({
         apiKey,
         taskId,
-        timeoutMs: 4 * 60 * 1000,
+        timeoutMs: 90 * 1000,
         signal,
       })
     } else {
       // gpt-image-2 — text-only, sharper polish (sections không sản phẩm)
       // filesUrl SILENTLY IGNORED bởi endpoint này (KIE comment cảnh báo).
       // Không truyền refs để tránh nhầm lẫn.
+      // Timeout 90s/attempt giống gpt-4o-image cho consistent UX.
       const { taskId } = await submitGptImage2({
         apiKey,
         prompt,
@@ -109,7 +114,7 @@ export async function generateImageGptImage1(input: KieImageGenInput): Promise<K
       return pollGptImage2UntilDone({
         apiKey,
         taskId,
-        timeoutMs: 4 * 60 * 1000,
+        timeoutMs: 90 * 1000,
         signal,
       })
     }
