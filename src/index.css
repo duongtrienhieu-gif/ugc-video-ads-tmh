@@ -442,11 +442,28 @@ p, span, div, label, button, a, li, td, th, h1, h2, h3, h4, h5, h6 {
 [data-theme="dark"] .text-stone-700,
 [data-theme="dark"] .text-stone-600 { color: #D6D3D1 !important; }    /* stone-300 */
 
-/* Opacity-modified variants used for italic translations ("text-blue-700/85") */
+/* ─────────────────────────────────────────────────────────────────────
+ * VN translation italic text — user wants this MORE LEGIBLE in both
+ * modes. The original `/85` opacity dampens an already-soft blue so
+ * the translation looks like a hint. Bump to full saturation + medium
+ * weight (was 400 inherited) for clear hierarchy without making it
+ * compete with the primary copy.
+ *
+ * Applies in BOTH light + dark mode (intentional — user complained
+ * about light readability of the translation too).
+ * ─────────────────────────────────────────────────────────────────── */
+.text-blue-700\/85,
+.text-blue-700\/80,
+.text-blue-800\/85 {
+  color: #1D4ED8 !important;        /* blue-700 full opacity */
+  font-weight: 500 !important;
+}
 [data-theme="dark"] .text-blue-700\/85,
 [data-theme="dark"] .text-blue-700\/80,
-[data-theme="dark"] .text-blue-800\/85 { color: rgba(147, 197, 253, 0.85) !important; }  /* blue-300 */
-[data-theme="dark"] .text-blue-800\/85 { color: rgba(147, 197, 253, 0.90) !important; }
+[data-theme="dark"] .text-blue-800\/85 {
+  color: #BFDBFE !important;        /* blue-200 — brighter than 300 used earlier */
+  font-weight: 500 !important;
+}
 
 /* ── Tinted backgrounds — 100-shade (bigger emphasis blocks) ──────── */
 [data-theme="dark"] .bg-violet-100 { background-color: rgba(139, 92, 246, 0.18) !important; }
