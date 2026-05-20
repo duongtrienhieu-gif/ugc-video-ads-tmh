@@ -119,11 +119,12 @@ export async function generateImageGptImage1(input: KieImageGenInput): Promise<K
   const tryOnce = async (promptToUse: string): Promise<string> => {
     if (useImageToImage) {
       // gpt-4o-image — TRUE i2i với reference images (identity lock).
-      // Timeout 90s/attempt: sweet spot khi mỗi user 1 KIE key riêng
-      // (không còn nghẽn queue do dùng chung). Gen time bình thường
-      // 30-90s; 90s đủ cover phần lớn case mà không giết oan task
-      // genuine. Hai attempts × 90s = 180s worst case mỗi image.
-      // enableFallback vẫn ON → KIE tự fallback GPT_IMAGE_1 nếu primary fail.
+      // Timeout 150s/attempt: bumped từ 90s (debug 2026-05-20). Console log
+      // [POLL_STUCK_WARN] cho thấy KIE thường stuck ở 'processing' >60s
+      // do backend degraded — task vẫn render nhưng cần thời gian self-
+      // unstuck. 150s cho slack đủ. 2 attempts × 150s = 300s worst case
+      // mỗi image (vẫn nhanh hơn user's 15-20 phút target /pack 35).
+      // enableFallback ON → KIE tự fallback GPT_IMAGE_1 nếu primary fail.
       const { taskId } = await submitGpt4oImage({
         apiKey,
         prompt: promptToUse,
@@ -134,14 +135,14 @@ export async function generateImageGptImage1(input: KieImageGenInput): Promise<K
       return pollGpt4oUntilDone({
         apiKey,
         taskId,
-        timeoutMs: 90 * 1000,
+        timeoutMs: 150 * 1000,
         signal,
       })
     } else {
-      // gpt-image-2 — text-only, sharper polish (sections không sản phẩm)
-      // filesUrl SILENTLY IGNORED bởi endpoint này (KIE comment cảnh báo).
-      // Không truyền refs để tránh nhầm lẫn.
-      // Timeout 90s/attempt giống gpt-4o-image cho consistent UX.
+      // gpt-image-2 — text-only (sections không sản phẩm).
+      // filesUrl SILENTLY IGNORED bởi endpoint này (KIE warning).
+      // Timeout 150s/attempt giống gpt-4o-image — endpoint này thậm chí
+      // hay frozen hơn theo log [POLL_STUCK_WARN] gần đây.
       const { taskId } = await submitGptImage2({
         apiKey,
         prompt: promptToUse,
@@ -151,7 +152,7 @@ export async function generateImageGptImage1(input: KieImageGenInput): Promise<K
       return pollGptImage2UntilDone({
         apiKey,
         taskId,
-        timeoutMs: 90 * 1000,
+        timeoutMs: 150 * 1000,
         signal,
       })
     }
