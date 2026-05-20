@@ -62,6 +62,42 @@ async function downloadAndSaveAsset(url: string): Promise<string> {
   return saveAsset(blob, mimeType)
 }
 
+/** Auto-soften prompt khi KIE từ chối lần 1 vì content_policy / generate_failed.
+ *  Mục tiêu: giữ visual intent nhưng giảm các từ trigger Policy (medical
+ *  professional, đau đớn explicit, anatomy organ, disease/illness terms).
+ *  Coverage: EN + VI + MS — 3 ngôn ngữ pack output có thể có.
+ *  CHỈ apply trên attempt 2 sau khi attempt 1 hit Policy → 70-80% ảnh
+ *  giữ nguyên prompt mạnh, chỉ ảnh fail-retry mới soft. */
+function softenPromptForPolicy(prompt: string): string {
+  let soft = prompt
+  // Medical professional → generic health expert
+  soft = soft.replace(/\b(doctor|physician|surgeon|nurse|medical professional)\b/gi, 'health expert')
+  soft = soft.replace(/\b(bác sĩ|y tá|dược sĩ)\b/gi, 'chuyên gia sức khỏe')
+  soft = soft.replace(/\b(doktor|jururawat|pakar perubatan)\b/gi, 'pakar kesihatan')
+  soft = soft.replace(/\b(stethoscope|white coat|lab coat|medical scrubs|surgical mask)\b/gi, 'professional attire')
+  soft = soft.replace(/\b(ống nghe|áo blouse trắng|áo bác sĩ)\b/gi, 'trang phục chuyên gia')
+  soft = soft.replace(/\b(stetoskop|kot makmal|jubah doktor)\b/gi, 'pakaian profesional')
+  // Pain / suffering → discomfort / concern
+  soft = soft.replace(/\b(in (severe |intense |excruciating )?pain|writhing|clutching .* in pain|grimacing in pain|suffering)\b/gi, 'looking concerned')
+  soft = soft.replace(/\b(đau quằn quại|nhăn nhó vì đau|ôm bụng đau|đau đớn|đau dữ dội)\b/gi, 'nhăn mặt lo lắng')
+  soft = soft.replace(/\b(menyeringai kesakitan|menggenggam perut kesakitan|kesakitan teruk)\b/gi, 'kelihatan bimbang')
+  // Internal organs (anatomy explicit) → wellness focus area
+  soft = soft.replace(/\b(kidney|liver|colon|intestine|bladder|gut lining|stomach lining)\b/gi, 'core wellness area')
+  soft = soft.replace(/\b(thận|gan|đại tràng|ruột|bàng quang)\b/gi, 'vùng sức khỏe quan trọng')
+  soft = soft.replace(/\b(buah pinggang|hati|usus besar|usus|pundi kencing)\b/gi, 'kawasan kesihatan utama')
+  // Anatomical diagrams → abstract wellness
+  soft = soft.replace(/\b(anatomical diagram|cross-section|organ illustration|medical infographic)\b/gi, 'lifestyle wellness illustration')
+  // Disease / condition → wellness challenge
+  soft = soft.replace(/\b(disease|disorder|infection|inflammation|chronic condition)\b/gi, 'wellness challenge')
+  soft = soft.replace(/\b(bệnh tật|nhiễm trùng|viêm|rối loạn mãn tính)\b/gi, 'thử thách sức khỏe')
+  soft = soft.replace(/\b(penyakit|jangkitan|keradangan|gangguan kronik)\b/gi, 'cabaran kesihatan')
+  // Sick / ill → low energy
+  soft = soft.replace(/\b(sick|ill|unhealthy|frail|gaunt)\b/gi, 'low energy')
+  soft = soft.replace(/\b(bệnh hoạn|xanh xao bệnh tật|yếu ớt vì bệnh)\b/gi, 'thiếu sức sống')
+  soft = soft.replace(/\b(sakit teruk|lemah longlai|kelihatan tidak sihat)\b/gi, 'kurang bertenaga')
+  return soft
+}
+
 /** Sinh 1 ảnh qua KIE gpt-image-2 (1K, 6 credit).
  *  Tự retry 1 lần nếu fail vì timeout / transient error.
  *  Hard fail (insufficient credits / content policy) → throw ngay. */
@@ -80,7 +116,7 @@ export async function generateImageGptImage1(input: KieImageGenInput): Promise<K
   const modelTag = useImageToImage ? 'gpt-4o-image (i2i)' : 'gpt-image-2 (text-only)'
   console.log(`[kieImage] using ${modelTag} for prompt (${prompt.length} chars, ${filesUrl?.length ?? 0} refs)`)
 
-  const tryOnce = async (): Promise<string> => {
+  const tryOnce = async (promptToUse: string): Promise<string> => {
     if (useImageToImage) {
       // gpt-4o-image — TRUE i2i với reference images (identity lock).
       // Timeout 90s/attempt: sweet spot khi mỗi user 1 KIE key riêng
@@ -90,7 +126,7 @@ export async function generateImageGptImage1(input: KieImageGenInput): Promise<K
       // enableFallback vẫn ON → KIE tự fallback GPT_IMAGE_1 nếu primary fail.
       const { taskId } = await submitGpt4oImage({
         apiKey,
-        prompt,
+        prompt: promptToUse,
         size:       kieAspect,
         filesUrl,
         enableFallback: true,
@@ -108,7 +144,7 @@ export async function generateImageGptImage1(input: KieImageGenInput): Promise<K
       // Timeout 90s/attempt giống gpt-4o-image cho consistent UX.
       const { taskId } = await submitGptImage2({
         apiKey,
-        prompt,
+        prompt: promptToUse,
         size:       kieAspect,
         resolution: '1K',
       })
@@ -122,25 +158,41 @@ export async function generateImageGptImage1(input: KieImageGenInput): Promise<K
   }
 
   let lastError: Error | null = null
+  let lastWasPolicyFail = false
   for (let attempt = 1; attempt <= 2; attempt++) {
     if (signal?.aborted) throw new Error('CANCELLED — user hủy')
+    // Hybrid retry: attempt 2 dùng softened prompt CHỈ KHI attempt 1
+    // hit Policy / generate_failed. Còn lại (timeout / transient) thì
+    // retry với prompt gốc (giữ chất lượng visceral mạnh).
+    const currentPrompt = (attempt === 2 && lastWasPolicyFail)
+      ? softenPromptForPolicy(prompt)
+      : prompt
+    if (attempt === 2 && lastWasPolicyFail) {
+      console.log(`[kieGptImage1] attempt 2 dùng SOFTENED prompt (attempt 1 hit KIE Policy)`)
+    }
     try {
-      const url = await tryOnce()
+      const url = await tryOnce(currentPrompt)
       const assetRef = await downloadAndSaveAsset(url)
       return { assetRef, rawUrl: url }
     } catch (err) {
       lastError = err instanceof Error ? err : new Error(String(err))
       const msg = lastError.message.toLowerCase()
-      // Hard failures — không retry
+      // Hard failures — không retry kể cả softened (user huỷ / hết credit)
       if (
         msg.includes('cancelled') ||
         msg.includes('insufficient_credits') ||
-        msg.includes('content_policy') ||
         msg.includes('huỷ')
       ) {
         throw lastError
       }
-      console.warn(`[kieGptImage1] attempt ${attempt}/2 failed: ${lastError.message.slice(0, 120)} — ${attempt < 2 ? 'retrying' : 'giving up'}`)
+      // Track: nếu attempt này fail vì Policy → attempt 2 sẽ dùng softened.
+      // content_policy + generate_failed đều là KIE từ chối render — cả 2
+      // đều thử softer prompt vì có thể là Policy block ngầm.
+      lastWasPolicyFail = msg.includes('content_policy') || msg.includes('generate_failed')
+      const retryHint = attempt < 2
+        ? (lastWasPolicyFail ? 'retrying with softened prompt' : 'retrying with same prompt')
+        : 'giving up'
+      console.warn(`[kieGptImage1] attempt ${attempt}/2 failed: ${lastError.message.slice(0, 120)} — ${retryHint}`)
     }
   }
 

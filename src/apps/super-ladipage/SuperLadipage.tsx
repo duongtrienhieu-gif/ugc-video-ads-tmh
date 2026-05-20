@@ -306,12 +306,12 @@ export default function SuperLadipage() {
     setImageProgress({ done: 0, failed: 0, total: 0, retries: 0, startedAt })
     try {
       await generatePackImages(pack, {
-        // Concurrency 5: tuned cho setup 3 KIE account / 7 nhân viên
-        // (sporadic usage, ~1-2 user trùng acc cùng lúc). Per-account
-        // load tối đa 2×5=10 task — fit trong KIE per-account parallel
-        // limit ~10-15. Trước đây 8 gây 94% fail rate khi nhiều user
-        // dùng chung 1 account.
-        concurrency: 5,
+        // Concurrency 3: tuned cho setup 3 KIE account / 8 nhân viên
+        // (split 3-3-2). Per-account load max khi 3 user cùng burst =
+        // 3×3=9 task — fit thoải mái trong KIE per-account parallel
+        // limit ~10-15. Pack 35 ảnh mất ~15-18 phút/user (match
+        // expectation 15-20 phút của ops). Fail rate kỳ vọng <5%.
+        concurrency: 3,
         signal: controller.signal,
         onTaskUpdate: (sIdx, iIdx, patch) =>
           patchImagePrompt(sIdx, iIdx, patch.error ? { ...patch, error: friendlyError(patch.error) } : patch),
@@ -371,7 +371,7 @@ export default function SuperLadipage() {
     setImageProgress({ done: 0, failed: 0, total: targets.length, retries: 0, startedAt })
     let done = 0
     let failed = 0
-    const CONCURRENCY = 5  // match main batch — KIE per-account safe zone
+    const CONCURRENCY = 3  // match main batch — 3 user × 3 = 9/acc safe zone
     let cursor = 0
     await new Promise<void>((resolve) => {
       let active = 0
