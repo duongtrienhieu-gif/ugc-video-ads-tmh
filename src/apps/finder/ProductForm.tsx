@@ -28,25 +28,39 @@ const JSON_SCHEMA = `{"productName":"","productDescription":"","targetMarket":""
 
 const EXTRACT_SYSTEM = 'You are a product info extraction assistant. Return ONLY a raw minified JSON object on a single line — no markdown, no code fences, no explanation, no newlines inside values. Always respond in English.'
 
-const EXTRACT_PROMPT = (pageText: string) =>
-  `Extract product information from the webpage text below and fill in this JSON. ALL VALUES MUST BE IN ENGLISH (translate from source language if needed). Return ONLY the JSON, nothing else, all on one line:
-${JSON_SCHEMA}
-
-Fields:
+const FIELDS_SPEC = `Fields:
 - productName: main product name
 - productDescription: short description of what it is and does
 - targetMarket: target customers (who should use this)
 - painPoints: customer problems/pain points this product solves
 - usps: unique selling points / competitive advantages
 - benefits: specific benefits of using the product
-- offer: ONLY the main product price and any discount/promotion (e.g. "RM59, 50% off for first 50 customers"). Do NOT include shipping fees, shipping conditions, regional shipping surcharges, delivery times, COD info, or address-related text. If the page has "Additional RM5 shipping cost for Sabah and Sarawak" or similar, OMIT it entirely. Keep this field FOCUSED on price + discount only.
-- ingredients: PHYSICAL substances / compounds / active components actually INSIDE the product. Examples of CORRECT values: "Vitamin B12, A, E, biotin, iron, magnesium" or "Inulin prebiotic, FloraFit probiotic strains, Lactobacillus acidophilus, Bifidobacterium" or "Angelica sinensis, Motherwort herb, Dong Quai root" or "Hyaluronic acid, niacinamide, vitamin C, peptides".
-  ❌ ABSOLUTE PROHIBITION: NEVER put marketing slogans, CTAs, call-to-action phrases, or promotional text here. The following are NOT ingredients and MUST NEVER appear in this field: "DAFTAR UNTUK DAPATKAN HARGA TAWARAN SEKARANG", "REGISTER TO GET THE OFFER PRICE NOW", "BUY NOW", "ORDER TODAY", "CLICK HERE", "SUBSCRIBE", "JOM BELI", "MUA NGAY", "ĐẶT HÀNG NGAY", "ĐĂNG KÝ", "Get yours now", "Shop now", etc.
-  Ingredients = PHYSICAL THINGS inside the bottle/box (vitamins, herbs, probiotic strains, compounds, active molecules). CTAs = marketing actions for the customer to take. These are DIFFERENT.
-  If the page does NOT list any actual ingredients/compounds and you cannot reasonably infer them from product type, return an EMPTY STRING "" — do NOT fill this field with marketing text, offer text, or CTAs.
+- offer: ONLY the main product price and any discount/promotion (e.g. "RM59, 50% off for first 50 customers"). Do NOT include shipping fees, shipping conditions, regional shipping surcharges, delivery times, COD info, or address-related text. Keep this field FOCUSED on price + discount only.
+- ingredients: PHYSICAL substances / compounds / active components actually INSIDE the product. Examples: "Vitamin B12, A, E, biotin, iron, magnesium" or "Inulin prebiotic, FloraFit probiotic strains, Lactobacillus acidophilus" or "Angelica sinensis, Motherwort herb, Dong Quai root".
+  ❌ NEVER put marketing slogans, CTAs, or promotional text in ingredients. If no actual ingredients are listed, return "".`
+
+const EXTRACT_PROMPT = (pageText: string) =>
+  `Extract product information from the webpage text below and fill in this JSON. ALL VALUES MUST BE IN ENGLISH (translate from source language if needed). Return ONLY the JSON, nothing else, all on one line:
+${JSON_SCHEMA}
+
+${FIELDS_SPEC}
 
 WEBPAGE TEXT:
-${pageText.slice(0, 8000)}`
+${pageText.slice(0, 10000)}`
+
+/** Used when images are also sent — tells Gemini to read both sources and synthesize. */
+const EXTRACT_PROMPT_HYBRID = (pageText: string) =>
+  `You are analyzing a product landing page. You have been given BOTH the page text AND screenshots/images from the page.
+Synthesize ALL sources — text and images together — to extract complete product information.
+Images may contain prices, ingredient lists, benefit claims, and visuals not present in the text.
+Fill in this JSON with the most complete information you can find across ALL sources.
+ALL VALUES MUST BE IN ENGLISH (translate if needed). Return ONLY the JSON, nothing else, all on one line:
+${JSON_SCHEMA}
+
+${FIELDS_SPEC}
+
+WEBPAGE TEXT (use this together with the images above):
+${pageText.slice(0, 10000)}`
 
 const IMAGE_EXTRACT_PROMPT = `Extract product information from this product page screenshot and fill in this JSON. ALL VALUES MUST BE IN ENGLISH (translate from source language if needed). Return ONLY the JSON, nothing else, all on one line:
 ${JSON_SCHEMA}
@@ -61,40 +75,104 @@ Fields:
 - offer: ONLY the main product price and any discount/promotion (e.g. "RM59, 50% off for first 50 customers"). Do NOT include shipping fees, shipping conditions, regional shipping surcharges, delivery times, COD info, or address-related text. If the page has "Additional RM5 shipping cost for Sabah and Sarawak" or similar, OMIT it entirely. Keep this field FOCUSED on price + discount only.
 - ingredients: SPECIFIC ingredients / active components / key compounds in this product (e.g. "Vitamin B12, A, E, biotin, iron", "Inulin prebiotic, FloraFit probiotic strains, Lactobacillus acidophilus", "Angelica sinensis, Motherwort herb"). List the actual ingredient names — do not write generic descriptions. If the screenshot doesn't list ingredients explicitly, infer the most likely active components from product type.`
 
+interface JinaJsonData {
+  data?: { content?: string; images?: Record<string, string> }
+}
+
 /**
- * Fetch page via Jina Reader with X-With-Images-Summary enabled.
- * Jina processes images server-side and inlines their AI-generated descriptions
- * into the markdown — essential for image-heavy pages (LadiPage, etc.) where
- * product name, price, ingredients are shown in banner images, not DOM text.
- * Fallback: plain fetch without image summaries if the enhanced call fails.
+ * Fetch page via Jina Reader — returns page text AND image URLs found on the page.
+ * Tries JSON format first (gives structured images map); falls back to plain text.
+ * X-With-Images-Summary tells Jina to AI-caption every image server-side so text
+ * output includes descriptions of banner/infographic content even without direct OCR.
  */
-async function fetchViaJina(url: string): Promise<string> {
-  // Primary: with image summaries (Jina AI-captions every image on the page)
+async function fetchPageContent(url: string): Promise<{ text: string; imageUrls: string[] }> {
+  // Tier 1: JSON format + image summaries → structured text + image URL list
   try {
     const r = await fetch(`https://r.jina.ai/${url}`, {
       headers: {
-        Accept: 'text/plain',
+        Accept: 'application/json',
         'X-With-Images-Summary': 'true',
       },
+      signal: AbortSignal.timeout(35000),
+    })
+    if (r.ok) {
+      const json = await r.json() as JinaJsonData
+      const content = json.data?.content ?? ''
+      const imageUrls = Object.keys(json.data?.images ?? {})
+      if (content.trim()) {
+        return { text: content.slice(0, 14000), imageUrls }
+      }
+    }
+  } catch { /* fall through */ }
+
+  // Tier 2: plain text + image summaries → extract image URLs from markdown
+  try {
+    const r = await fetch(`https://r.jina.ai/${url}`, {
+      headers: { Accept: 'text/plain', 'X-With-Images-Summary': 'true' },
       signal: AbortSignal.timeout(30000),
     })
     if (r.ok) {
       const text = await r.text()
-      if (text.trim()) return text.slice(0, 12000)
+      if (text.trim()) {
+        const imageUrls = extractImageUrlsFromMarkdown(text)
+        return { text: text.slice(0, 12000), imageUrls }
+      }
     }
-  } catch { /* fall through to plain fetch */ }
+  } catch { /* fall through */ }
 
-  // Fallback: plain text (faster, no image processing)
+  // Tier 3: plain text, no image processing
   try {
     const r = await fetch(`https://r.jina.ai/${url}`, {
       headers: { Accept: 'text/plain' },
       signal: AbortSignal.timeout(20000),
     })
-    if (!r.ok) return ''
+    if (!r.ok) return { text: '', imageUrls: [] }
     const text = await r.text()
-    return text.slice(0, 8000)
+    return { text: text.slice(0, 8000), imageUrls: extractImageUrlsFromMarkdown(text) }
   } catch {
-    return ''
+    return { text: '', imageUrls: [] }
+  }
+}
+
+/** Extract image URLs from Jina markdown (![alt](url) syntax + bare image extension URLs). */
+function extractImageUrlsFromMarkdown(markdown: string): string[] {
+  const seen = new Set<string>()
+  const urls: string[] = []
+  const mdImg = /!\[[^\]]*\]\((https?:\/\/[^)\s"]+)\)/g
+  let m: RegExpExecArray | null
+  while ((m = mdImg.exec(markdown)) !== null) {
+    if (!seen.has(m[1])) { seen.add(m[1]); urls.push(m[1]) }
+  }
+  const bareImg = /https?:\/\/[^\s")\]]+\.(?:jpg|jpeg|png|webp|gif)(?:[?#][^\s")\]]*)?/gi
+  while ((m = bareImg.exec(markdown)) !== null) {
+    if (!seen.has(m[0])) { seen.add(m[0]); urls.push(m[0]) }
+  }
+  return urls
+}
+
+/**
+ * Fetch an image URL and return { mimeType, data } for Gemini inlineData.
+ * Many CDNs (Cloudinary, LadiPage CDN, etc.) allow CORS — those will succeed.
+ * Returns null on CORS block, timeout, or oversized image — caller skips silently.
+ */
+async function fetchImageAsBase64(url: string): Promise<{ mimeType: string; data: string } | null> {
+  try {
+    const r = await fetch(url, { signal: AbortSignal.timeout(10000) })
+    if (!r.ok) return null
+    const contentType = r.headers.get('content-type') ?? 'image/jpeg'
+    const mime = contentType.split(';')[0].trim()
+    if (!mime.startsWith('image/')) return null
+    const buf = await r.arrayBuffer()
+    if (buf.byteLength > 2_000_000) return null
+    const bytes = new Uint8Array(buf)
+    let binary = ''
+    const chunk = 8192
+    for (let i = 0; i < bytes.length; i += chunk) {
+      binary += String.fromCharCode(...bytes.subarray(i, Math.min(i + chunk, bytes.length)))
+    }
+    return { mimeType: mime, data: btoa(binary) }
+  } catch {
+    return null
   }
 }
 
@@ -310,15 +388,36 @@ export default function ProductForm({ item, onSave, onCancel }: ProductFormProps
     try {
       const geminiKey = getGeminiKey()
 
-      // Jina Reader with X-With-Images-Summary handles JS-rendered and image-heavy
-      // pages (LadiPage, Shopee, etc.) — Jina captions each image server-side.
-      addToast('Đang đọc trang sản phẩm (bao gồm ảnh)...')
-      const pageText = await fetchViaJina(url)
+      // Step 1: fetch page text + image URL list in parallel with image downloads
+      addToast('Đang đọc trang sản phẩm...')
+      const { text: pageText, imageUrls } = await fetchPageContent(url)
       if (!pageText) throw new Error('Không đọc được nội dung trang. Thử tải ảnh chụp màn hình thay thế.')
+
+      // Step 2: fetch page images in parallel (best-effort — CORS-friendly CDNs succeed)
+      type GeminiPart = { text: string } | { inlineData: { mimeType: string; data: string } }
+      let imageParts: GeminiPart[] = []
+      if (imageUrls.length > 0) {
+        addToast(`Đang tải ${Math.min(imageUrls.length, 6)} ảnh để phân tích...`)
+        const results = await Promise.allSettled(
+          imageUrls.slice(0, 6).map(fetchImageAsBase64)
+        )
+        imageParts = results
+          .filter((r): r is PromiseFulfilledResult<{ mimeType: string; data: string }> =>
+            r.status === 'fulfilled' && r.value !== null)
+          .map((r) => ({ inlineData: r.value }))
+      }
+
+      // Step 3: single Gemini call — images first so Gemini has visual context,
+      // then text. Use the hybrid prompt when we actually have images.
+      const hasImages = imageParts.length > 0
+      const parts: GeminiPart[] = [
+        ...imageParts,
+        { text: hasImages ? EXTRACT_PROMPT_HYBRID(pageText) : EXTRACT_PROMPT(pageText) },
+      ]
 
       const response = await directGeminiVision({
         apiKey: geminiKey,
-        parts: [{ text: EXTRACT_PROMPT(pageText) }],
+        parts,
         systemInstruction: EXTRACT_SYSTEM,
         maxOutputTokens: 2048,
       })
@@ -329,7 +428,8 @@ export default function ProductForm({ item, onSave, onCancel }: ProductFormProps
       const { next, count } = applyExtracted(extracted, form)
       if (count === 0) throw new Error('Không trích xuất được thông tin. Thử tải ảnh chụp màn hình.')
       setForm(next)
-      addToast(`Đã tự động điền ${count} trường thông tin`)
+      const imgNote = imageParts.length > 0 ? ` (text + ${imageParts.length} ảnh)` : ''
+      addToast(`Đã tự động điền ${count} trường thông tin${imgNote}`)
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
       addToast(`Không thể lấy thông tin: ${msg}`, 'error')
