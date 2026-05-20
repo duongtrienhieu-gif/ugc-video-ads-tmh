@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { X, Eye, EyeOff, Key, Check, HardDrive, RefreshCw, ChevronDown, ExternalLink } from 'lucide-react'
+import { X, Eye, EyeOff, Key, Check, HardDrive, RefreshCw, ChevronDown, ExternalLink, Sun, Moon, Monitor } from 'lucide-react'
 import { useSettingsStore } from '../stores/settingsStore'
 import { useAppStore } from '../stores/appStore'
 import { useBankStore } from '../stores/bankStore'
@@ -133,9 +133,9 @@ const BTN_CLASS: Record<string, string> = {
 export default function SettingsModal({ open, onClose }: SettingsModalProps) {
   const {
     kieApiKey, geminiApiKey, elevenLabsApiKey, falApiKey, shotstackApiKey,
-    kieCredits,
+    kieCredits, theme,
     setKieApiKey, setGeminiApiKey, setElevenLabsApiKey, setFalApiKey, setShotstackApiKey,
-    setKieCredits,
+    setKieCredits, setTheme,
   } = useSettingsStore()
   const addToast = useAppStore((s) => s.addToast)
 
@@ -404,6 +404,61 @@ export default function SettingsModal({ open, onClose }: SettingsModalProps) {
                 </div>
               )
             })}
+          </div>
+
+          {/* Giao diện (Theme) — Light / Dark / Theo hệ thống */}
+          <div className="border-t border-black/6 px-5 py-4">
+            <div className="flex items-center justify-between gap-3 flex-wrap">
+              <div>
+                <p className="flex items-center gap-1.5 text-xs font-semibold text-gray-600">
+                  <Sun className="h-3.5 w-3.5 text-gray-400" />
+                  Giao diện
+                </p>
+                <p className="mt-0.5 text-[11px] text-gray-400">
+                  {theme === 'light'  && 'Đang dùng giao diện sáng'}
+                  {theme === 'dark'   && 'Đang dùng giao diện tối — đỡ mỏi mắt khi làm khuya'}
+                  {theme === 'system' && 'Tự động theo hệ điều hành (sáng/tối)'}
+                </p>
+              </div>
+              <div className="flex shrink-0 items-center gap-1 rounded-lg border border-black/10 bg-black/[0.02] p-1">
+                <button
+                  onClick={() => setTheme('light')}
+                  title="Giao diện sáng"
+                  aria-pressed={theme === 'light'}
+                  className={`flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-[11px] font-semibold transition-colors ${
+                    theme === 'light'
+                      ? 'bg-white text-gray-900 shadow-sm'
+                      : 'text-gray-500 hover:text-gray-700'
+                  }`}
+                >
+                  <Sun className="h-3.5 w-3.5" /> Sáng
+                </button>
+                <button
+                  onClick={() => setTheme('dark')}
+                  title="Giao diện tối"
+                  aria-pressed={theme === 'dark'}
+                  className={`flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-[11px] font-semibold transition-colors ${
+                    theme === 'dark'
+                      ? 'bg-white text-gray-900 shadow-sm'
+                      : 'text-gray-500 hover:text-gray-700'
+                  }`}
+                >
+                  <Moon className="h-3.5 w-3.5" /> Tối
+                </button>
+                <button
+                  onClick={() => setTheme('system')}
+                  title="Theo hệ điều hành"
+                  aria-pressed={theme === 'system'}
+                  className={`flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-[11px] font-semibold transition-colors ${
+                    theme === 'system'
+                      ? 'bg-white text-gray-900 shadow-sm'
+                      : 'text-gray-500 hover:text-gray-700'
+                  }`}
+                >
+                  <Monitor className="h-3.5 w-3.5" /> Theo OS
+                </button>
+              </div>
+            </div>
           </div>
 
           {/* Storage section */}

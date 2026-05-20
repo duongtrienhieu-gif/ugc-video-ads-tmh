@@ -32,6 +32,9 @@ let suppressNextCloudPush = false
 //        action-preset based — NEW DEFAULT)
 export type PipelineVersion = 'v1' | 'v2' | 'v3'
 
+/** UI theme — 'system' resolves to OS preference at runtime. */
+export type ThemePreference = 'light' | 'dark' | 'system'
+
 interface SettingsState {
   kieApiKey: string
   geminiApiKey: string
@@ -41,6 +44,9 @@ interface SettingsState {
   kieCredits: number | null
   /** UGC Builder pipeline version. v1 = stable (production), v2 = AI Director beta. */
   pipelineVersion: PipelineVersion
+  /** UI theme — drives `data-theme="dark"` on <html>. Default 'light'
+   *  so existing users see no change until they opt in. */
+  theme: ThemePreference
   setKieApiKey: (key: string) => void
   setGeminiApiKey: (key: string) => void
   setElevenLabsApiKey: (key: string) => void
@@ -48,6 +54,7 @@ interface SettingsState {
   setShotstackApiKey: (key: string) => void
   setKieCredits: (credits: number | null) => void
   setPipelineVersion: (v: PipelineVersion) => void
+  setTheme: (t: ThemePreference) => void
   hasApiKey: () => boolean
   getApiKey: () => string
   getGeminiApiKey: () => string
@@ -67,6 +74,7 @@ interface StoredSettings {
   falApiKey: string
   shotstackApiKey: string
   pipelineVersion: PipelineVersion
+  theme: ThemePreference
 }
 
 function loadFromStorage(): StoredSettings {
@@ -91,11 +99,16 @@ function loadFromStorage(): StoredSettings {
           parsed.pipelineVersion === 'v1' ? 'v1' :
           'v3'  // Z30 — default new sessions to v3 Ads Video Engine
         ),
+        theme: (
+          parsed.theme === 'light' || parsed.theme === 'dark' || parsed.theme === 'system'
+            ? parsed.theme
+            : 'light'  // default — existing users see no change
+        ),
       }
     }
   } catch { /* silent */ }
   // Z30 — first-time users land on v3 (creator-first), not the legacy v1.
-  return { kieApiKey: '', geminiApiKey: '', elevenLabsApiKey: '', falApiKey: '', shotstackApiKey: '', pipelineVersion: 'v3' }
+  return { kieApiKey: '', geminiApiKey: '', elevenLabsApiKey: '', falApiKey: '', shotstackApiKey: '', pipelineVersion: 'v3', theme: 'light' }
 }
 
 function saveToStorage(s: StoredSettings) {
@@ -182,6 +195,11 @@ async function hydrateFromCloud(setStore: (patch: Partial<StoredSettings>) => vo
         cloud.pipelineVersion === 'v1' ? 'v1' :
         'v3'
       ),
+      theme: (
+        cloud.theme === 'light' || cloud.theme === 'dark' || cloud.theme === 'system'
+          ? cloud.theme
+          : 'light'
+      ),
     }
     // Push merged into local state + mirror to localStorage
     // Suppress the cloud-push that follows so we don't echo back
@@ -203,6 +221,7 @@ function getStored(get: () => SettingsState): StoredSettings {
     falApiKey:        s.falApiKey,
     shotstackApiKey:  s.shotstackApiKey,
     pipelineVersion:  s.pipelineVersion,
+    theme:            s.theme,
   }
 }
 
@@ -240,6 +259,11 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   setPipelineVersion: (v) => {
     set({ pipelineVersion: v })
     saveToStorage({ ...getStored(get), pipelineVersion: v })
+  },
+
+  setTheme: (t) => {
+    set({ theme: t })
+    saveToStorage({ ...getStored(get), theme: t })
   },
 
   hasApiKey: () => get().kieApiKey.length > 0,

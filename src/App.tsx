@@ -83,7 +83,32 @@ export default function App() {
   const openApp = useAppStore((s) => s.openApp)
   const { user, loading, setUser, setLoading } = useAuthStore()
   const loadAll = useBankStore((s) => s.loadAll)
-  const { kieApiKey, geminiApiKey, kieCredits, setKieCredits } = useSettingsStore()
+  const { kieApiKey, geminiApiKey, kieCredits, setKieCredits, theme } = useSettingsStore()
+
+  // ── Theme: apply `data-theme="dark"` to <html> based on user preference.
+  // 'system' resolves via prefers-color-scheme + lives-updates when the OS
+  // toggles between light/dark while the app is open. Default theme is
+  // 'light' so existing users see no change until they opt in via Settings.
+  useEffect(() => {
+    const apply = (mode: 'light' | 'dark') => {
+      const root = document.documentElement
+      if (mode === 'dark') {
+        root.setAttribute('data-theme', 'dark')
+      } else {
+        root.removeAttribute('data-theme')
+      }
+    }
+
+    if (theme === 'light') { apply('light'); return }
+    if (theme === 'dark')  { apply('dark');  return }
+
+    // theme === 'system' — follow OS, watch for changes
+    const mq = window.matchMedia('(prefers-color-scheme: dark)')
+    apply(mq.matches ? 'dark' : 'light')
+    const onChange = (e: MediaQueryListEvent) => apply(e.matches ? 'dark' : 'light')
+    mq.addEventListener('change', onChange)
+    return () => mq.removeEventListener('change', onChange)
+  }, [theme])
   const [refreshingKie, setRefreshingKie] = useState(false)
   const [geminiOk, setGeminiOk] = useState<boolean | null>(null)
   const [checkingGemini, setCheckingGemini] = useState(false)
