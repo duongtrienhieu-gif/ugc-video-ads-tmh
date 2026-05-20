@@ -66,7 +66,7 @@ SCALE ANCHOR (when product held by person):
   - Small products (sprays, drops, lip balm, vials, sample tubes): height SHORTER than hand span; width < 2 fingers. NEVER render as water-bottle-sized.
   - Medium (cream jars, serums ~100-200ml): fits one palm, smaller than face.
   - Large (500ml+ bottles, big boxes): full hand grip or 2 hands.
-  - Product occupies 10-25% of frame — NEVER center-stage dominating.
+  - Product occupies 15-20% of frame CONSISTENTLY — NEVER center-stage dominating, NEVER too small (under 10%).
   - Selfie/photo-share: arm's length medium shot, NOT close-up (perspective bias = 2-3x oversize).`
 }
 
@@ -93,7 +93,7 @@ function technicalBlock(aspectRatio: string): string {
     aspectRatio === '16:9' ? '1024×576 (mapped to 3:2 landscape)' :
     aspectRatio === '9:16' ? '832×1248 (mapped to 2:3 portrait)' :
                               '1024×1024'
-  return `TECHNICAL: ${dims}, 1K resolution, sharp focus, web-ready.`
+  return `TECHNICAL: ${dims}, 1K resolution, sharp focus, web-ready. Typography: consistent modern bold sans-serif (Inter/Helvetica-style) across pack — clean, professional, NOT cartoon/handwritten.`
 }
 
 // ═════════════════════════════════════════════════════════════════════
@@ -251,7 +251,7 @@ ${safeBlocks(concept).map(formatTextBlock).join('\n')}`
     : variant === 'trust-news'
       ? `LAYOUT (TRUST NEWS): Malaysian news portal (mStar / Berita Harian / KKM) health section. Calm institutional layout, educational headline.`
     : variant === 'whatsapp'
-      ? `LAYOUT (WHATSAPP): Realistic WhatsApp chat screenshot, green bubbles, mobile portrait. Casual Malay text with emojis (🙏 ✨ ❤️). Malaysian sender names + realistic timestamps. Vary vibe per image: 1-on-1 vs group, text vs photo embed vs voice bubble.`
+      ? `LAYOUT (WHATSAPP): Realistic WhatsApp chat screenshot, green bubbles, mobile portrait. Casual Malay text with emojis (🙏 ✨ ❤️). Malaysian sender names + realistic timestamps. Vary vibe per image: 1-on-1 vs group, text vs photo embed vs long reply chain. NO English overlay banners — ALL text in target language.`
       : `LAYOUT (SOCIAL PLATFORM): Authentic mobile UI of target platform (Facebook post / TikTok Shop review / Shopee product page / Instagram). Real-phone aesthetic, Casual Malay UI text + emojis, Malaysian usernames, realistic timestamps.`
 
   return [
