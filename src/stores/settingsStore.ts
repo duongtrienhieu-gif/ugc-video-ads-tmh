@@ -32,8 +32,10 @@ let suppressNextCloudPush = false
 //        action-preset based — NEW DEFAULT)
 export type PipelineVersion = 'v1' | 'v2' | 'v3'
 
-/** UI theme — 'system' resolves to OS preference at runtime. */
-export type ThemePreference = 'light' | 'dark' | 'system'
+/** UI theme — only 'light' or 'dark'. (Earlier draft had a 'system'
+ *  option but it was removed — users prefer an explicit toggle and the
+ *  OS-follow path complicated cross-device sync semantics.) */
+export type ThemePreference = 'light' | 'dark'
 
 interface SettingsState {
   kieApiKey: string
@@ -100,9 +102,10 @@ function loadFromStorage(): StoredSettings {
           'v3'  // Z30 — default new sessions to v3 Ads Video Engine
         ),
         theme: (
-          parsed.theme === 'light' || parsed.theme === 'dark' || parsed.theme === 'system'
-            ? parsed.theme
-            : 'light'  // default — existing users see no change
+          // Legacy: 'system' values from older settings → coerce to 'light'
+          // so the toggle has a deterministic default after the OS option
+          // was removed.
+          parsed.theme === 'dark' ? 'dark' : 'light'
         ),
       }
     }
@@ -195,11 +198,7 @@ async function hydrateFromCloud(setStore: (patch: Partial<StoredSettings>) => vo
         cloud.pipelineVersion === 'v1' ? 'v1' :
         'v3'
       ),
-      theme: (
-        cloud.theme === 'light' || cloud.theme === 'dark' || cloud.theme === 'system'
-          ? cloud.theme
-          : 'light'
-      ),
+      theme: (cloud.theme === 'dark' ? 'dark' : 'light'),
     }
     // Push merged into local state + mirror to localStorage
     // Suppress the cloud-push that follows so we don't echo back

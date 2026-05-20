@@ -178,38 +178,50 @@ p, span, div, label, button, a, li, td, th, h1, h2, h3, h4, h5, h6 {
 
 /* Accent surfaces (50-shade tints) get a faint dark equivalent so
    highlighted blocks stay perceptible without blasting light in
-   dark mode. We keep the hue but drop the lightness. */
-[data-theme="dark"] .bg-violet-50,
-[data-theme="dark"] .bg-violet-50\/40,
-[data-theme="dark"] .bg-violet-50\/60 { background-color: rgba(139, 92, 246, 0.10) !important; }
-[data-theme="dark"] .bg-emerald-50,
-[data-theme="dark"] .bg-emerald-50\/40,
-[data-theme="dark"] .bg-emerald-50\/50,
-[data-theme="dark"] .bg-emerald-50\/60 { background-color: rgba(16, 185, 129, 0.10) !important; }
-[data-theme="dark"] .bg-rose-50,
-[data-theme="dark"] .bg-rose-50\/40 { background-color: rgba(244, 63, 94, 0.10) !important; }
-[data-theme="dark"] .bg-amber-50,
-[data-theme="dark"] .bg-amber-50\/30,
-[data-theme="dark"] .bg-amber-50\/40 { background-color: rgba(245, 158, 11, 0.10) !important; }
-[data-theme="dark"] .bg-sky-50,
-[data-theme="dark"] .bg-sky-50\/30,
-[data-theme="dark"] .bg-sky-50\/40 { background-color: rgba(14, 165, 233, 0.10) !important; }
-[data-theme="dark"] .bg-indigo-50,
-[data-theme="dark"] .bg-indigo-50\/40 { background-color: rgba(99, 102, 241, 0.10) !important; }
-[data-theme="dark"] .bg-blue-50,
-[data-theme="dark"] .bg-blue-50\/30,
-[data-theme="dark"] .bg-blue-50\/40,
-[data-theme="dark"] .bg-blue-50\/60 { background-color: rgba(59, 130, 246, 0.10) !important; }
-[data-theme="dark"] .bg-red-50,
-[data-theme="dark"] .bg-red-50\/30 { background-color: rgba(239, 68, 68, 0.10) !important; }
-[data-theme="dark"] .bg-pink-50 { background-color: rgba(236, 72, 153, 0.10) !important; }
-[data-theme="dark"] .bg-cyan-50\/40 { background-color: rgba(6, 182, 212, 0.10) !important; }
-[data-theme="dark"] .bg-teal-50\/40 { background-color: rgba(20, 184, 166, 0.10) !important; }
-[data-theme="dark"] .bg-orange-50\/40 { background-color: rgba(249, 115, 22, 0.10) !important; }
-[data-theme="dark"] .bg-purple-50\/40 { background-color: rgba(168, 85, 247, 0.10) !important; }
-[data-theme="dark"] .bg-fuchsia-50\/40 { background-color: rgba(217, 70, 239, 0.10) !important; }
-[data-theme="dark"] .bg-stone-50\/40 { background-color: rgba(120, 113, 108, 0.15) !important; }
-[data-theme="dark"] .bg-slate-50\/40 { background-color: rgba(100, 116, 139, 0.15) !important; }
+   dark mode. We keep the hue but drop the lightness.
+   Opacity variants (50/30, 50/40, 50/50, 50/60, 50/70, 50/80) are
+   ALL listed because Tailwind generates distinct classes per variant
+   and CSS selectors need explicit matches. */
+[data-theme="dark"] [class*="bg-violet-50"] { background-color: rgba(139, 92, 246, 0.10) !important; }
+[data-theme="dark"] [class*="bg-emerald-50"] { background-color: rgba(16, 185, 129, 0.10) !important; }
+[data-theme="dark"] [class*="bg-rose-50"] { background-color: rgba(244, 63, 94, 0.10) !important; }
+[data-theme="dark"] [class*="bg-amber-50"] { background-color: rgba(245, 158, 11, 0.10) !important; }
+[data-theme="dark"] [class*="bg-sky-50"] { background-color: rgba(14, 165, 233, 0.10) !important; }
+[data-theme="dark"] [class*="bg-indigo-50"] { background-color: rgba(99, 102, 241, 0.10) !important; }
+[data-theme="dark"] [class*="bg-blue-50"] { background-color: rgba(59, 130, 246, 0.10) !important; }
+[data-theme="dark"] [class*="bg-red-50"] { background-color: rgba(239, 68, 68, 0.10) !important; }
+[data-theme="dark"] [class*="bg-pink-50"] { background-color: rgba(236, 72, 153, 0.10) !important; }
+[data-theme="dark"] [class*="bg-cyan-50"] { background-color: rgba(6, 182, 212, 0.10) !important; }
+[data-theme="dark"] [class*="bg-teal-50"] { background-color: rgba(20, 184, 166, 0.10) !important; }
+[data-theme="dark"] [class*="bg-orange-50"] { background-color: rgba(249, 115, 22, 0.10) !important; }
+[data-theme="dark"] [class*="bg-purple-50"] { background-color: rgba(168, 85, 247, 0.10) !important; }
+[data-theme="dark"] [class*="bg-fuchsia-50"] { background-color: rgba(217, 70, 239, 0.10) !important; }
+[data-theme="dark"] [class*="bg-stone-50"] { background-color: rgba(120, 113, 108, 0.15) !important; }
+[data-theme="dark"] [class*="bg-slate-50"] { background-color: rgba(100, 116, 139, 0.15) !important; }
+[data-theme="dark"] [class*="bg-green-50"] { background-color: rgba(34, 197, 94, 0.10) !important; }
+
+/* Gradient headers — `bg-gradient-to-r from-{color}-50 to-{color}-50`
+   stays light in dark mode because Tailwind's gradient-stop classes
+   set inline CSS vars. Override the resolved gradient by flattening
+   to a single dark surface tint via background-image: none + a tinted
+   surface. This catches headers like Creative Studio / Lab Content /
+   History / VoiceStudio / Ad Anatomy. */
+[data-theme="dark"] .bg-gradient-to-r[class*="from-violet-50"],
+[data-theme="dark"] .bg-gradient-to-r[class*="from-pink-50"],
+[data-theme="dark"] .bg-gradient-to-r[class*="from-emerald-50"],
+[data-theme="dark"] .bg-gradient-to-r[class*="from-teal-50"],
+[data-theme="dark"] .bg-gradient-to-r[class*="from-amber-50"],
+[data-theme="dark"] .bg-gradient-to-r[class*="from-rose-50"],
+[data-theme="dark"] .bg-gradient-to-r[class*="from-blue-50"],
+[data-theme="dark"] .bg-gradient-to-r[class*="from-purple-50"],
+[data-theme="dark"] .bg-gradient-to-r[class*="from-orange-50"],
+[data-theme="dark"] .bg-gradient-to-br[class*="from-violet-50"],
+[data-theme="dark"] .bg-gradient-to-br[class*="from-emerald-50"],
+[data-theme="dark"] .bg-gradient-to-br[class*="from-purple-50"],
+[data-theme="dark"] .bg-gradient-to-br[class*="from-gray-50"] {
+  background-image: none !important;
+  background-color: var(--color-surface) !important;
+}
 
 /* ── Borders ──────────────────────────────────────────────────────── */
 [data-theme="dark"] .border-black\/5,
