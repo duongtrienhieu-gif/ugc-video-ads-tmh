@@ -411,10 +411,20 @@ ${safeBlocks(concept).map(formatTextBlock).join('\n')}`
 
   const variantBlock = variant === 'expert' ? `
 LAYOUT (EXPERT):
-  - Professional editorial endorsement card — Malaysian dental/health expert.
-  - TOP half: head-and-shoulders portrait in professional attire (white coat for doctor/dentist OR smart attire for nutritionist), calm trustworthy expression, clinical/office bg with soft blur.
-  - CENTER band: EXPERT NAME (e.g. "Dr. Siti Aminah binti Hassan") + specialty ("Pakar Pergigian / Dental Specialist") + years exp ("15+ tahun pengalaman").
-  - BOTTOM half: clean quote box, professional Malay testimonial (2-4 sentences), formal endorsing tone, quotation marks decor. Optional "Pakar Disahkan" badge.
+  - Professional editorial endorsement card — Malaysian health/specialty expert MATCHING product category.
+  - ⚠️ SPECIALTY MUST MATCH identity.productCategory = "${identity.productCategory}". Reference mapping:
+      • Dental / oral care      → Pakar Pergigian / Dental Specialist (white coat + dental tools bg)
+      • Probiotic / gut health  → Pakar Pemakanan / Nutritionist or Gastroenterologist (white coat + clinic bg)
+      • Hair oil / hair growth  → Pakar Trikologi / Trichologist or Pakar Dermatologi (white coat + hair clinic bg)
+      • Nasal spray / allergy   → Pakar ENT / Otorhinolaryngologist (white coat + ENT tools bg)
+      • Skincare / anti-aging   → Pakar Dermatologi / Dermatologist (white coat + dermatology bg)
+      • Joint pain / orthopedic → Pakar Ortopedik / Physiotherapist (white coat + orthopedic bg)
+      • Weight management       → Pakar Pemakanan / Nutritionist (smart attire + nutrition bg)
+      • Beauty / cosmetics      → Pakar Dermatologi / Aesthetic Specialist (smart attire + beauty bg)
+      • Default (unknown)       → Pakar Kesihatan / Health Specialist (white coat + generic clinic bg)
+  - TOP half: head-and-shoulders portrait in attire matching the specialty above, calm trustworthy expression, clinical/office background with soft blur (background matches specialty: dental clinic for Pergigian, hair clinic for Trikologi, etc).
+  - CENTER band: EXPERT NAME ("Dr. [Malaysian name]") + specialty title (DERIVED from product category above) + years experience ("[N]+ tahun pengalaman").
+  - BOTTOM half: clean quote box, professional Malay testimonial (2-4 sentences) ENDORSING THIS specific product category, formal tone, quotation marks decor. Optional "Pakar Disahkan" badge.
   - PALETTE: white + soft teal/navy + cream. Editorial trust feel.`
   : `
 LAYOUT (KOL):

@@ -159,7 +159,7 @@ R9. SECTION-SPECIFIC BRIEFS (concise per-section overrides)
 
 §3 pain (n=6, tierRules): each = italic question with emoji prefix on glassmorphism panel + color glow accent near pain area. Mix subjectLockKey ~4 primary + ~2 secondary across 6 images.
 
-§4 why-happens (n=1, recipe C): copy field MUST list 4-6 DISTINCT root causes, EACH STARTING with emoji icon (e.g. "🦠 Pengumpulan plak..."). bullets[] mirrors 4-6 causes (icon + name + 1-sentence explain). conceptScene = "infographic listing 4-6 distinct causes with colored icons and short labels".
+§4 why-happens (n=1, recipe C): copy field MUST list 4-6 DISTINCT root causes appropriate to identity.productCategory, EACH STARTING with context-fit emoji icon (e.g. 🦠 microbial, ⚡ inflammatory, 🌡️ hormonal, 💊 medication, 🍔 dietary, 😰 stress — pick emoji matching the cause). bullets[] mirrors 4-6 causes (icon + name + 1-sentence explain). conceptScene = "infographic listing 4-6 distinct causes with colored icons and short labels".
 
 §5 failed-solutions (n=1, recipe B): UGC photo NO product NO text overlay. Subject = primary (hijab woman) by default.
 
@@ -169,13 +169,13 @@ R9. SECTION-SPECIFIC BRIEFS (concise per-section overrides)
 
 §8 ingredients (n=1, recipe D): 1 image showing ALL 5-8 key ingredients with strain codes + labels around product center.
 
-§9 mechanism (n=1, recipe C): science diagram + brand badge (FloraFit etc) + product at bottom.
+§9 mechanism (n=1, recipe C): science diagram + brand badge from identity.coBrandBadges (if any — skip badge if empty) + product at bottom.
 
 §10 benefits (n=1, recipe D): icon grid 6-8 benefits + product center + soft palette.
 
 §11 comparison (n=1, recipe E): 2-column premium table. comparisonData filled with us.title=productNameExact + 5-7 bullets vs them.
 
-§12 expert-kol (n=2, recipe H): Image 1 recipeVariant="expert" — top portrait of Malaysian dentist/doctor + name "Dr. [Malaysian name]" + "[Specialty] · [N]+ tahun pengalaman" + 2-4 sentence ${langName} quote. Image 2 recipeVariant="kol" — top lifestyle photo Malaysian KOL + "@[handle]" + "[N]M Followers / Pengikut" + casual ${langName} quote with emojis. NO product packaging in either image. reviews[] = 2 entries matching the 2 images.
+§12 expert-kol (n=2, recipe H): Image 1 recipeVariant="expert" — top portrait of Malaysian specialist MATCHING identity.productCategory (NOT default to dentist — dental specialist ONLY if product is dental). See recipe H mapping for: dental→Pergigian, hair→Trikologi, probiotic→Pemakanan, nasal→ENT, skincare→Dermatologi, joint→Ortopedik, weight→Pemakanan, beauty→Dermatologi, default→Kesihatan. Format: name "Dr. [Malaysian name]" + "[Derived specialty] · [N]+ tahun pengalaman" + 2-4 sentence ${langName} quote endorsing this product. Image 2 recipeVariant="kol" — top lifestyle photo Malaysian KOL + "@[handle]" + "[N]M Followers / Pengikut" + casual ${langName} quote with emojis. NO product packaging in either image. reviews[] = 2 entries matching the 2 images.
 
 §13 social-proof (n=6): MIXED recipe + aspect per image —
   social_fb.jpg       — recipeId="F", recipeVariant="social-platform", aspectRatio="9:16" — Facebook post + comments, mobile phone screenshot.
@@ -193,7 +193,7 @@ Images 1-4 may show price as part of authentic platform UI (Shopee/TikTok pages 
   wa_04.jpg = voice message bubbles + brief text mention.
 Different sender names + timestamps each image.
 
-§15 before-after (n=4, recipe A, tierRules): each image = SAME person in BEFORE and AFTER, but MANDATORY DIFFERENT OUTFIT. AFTER shirt/top MUST be a different color AND style from BEFORE shirt — typically also different setting/background — because 3 weeks of usage means the person changed clothes. NEVER same outfit in both halves (illogical: nobody wears the same shirt for 3 weeks straight). conceptScene must explicitly mention the outfit change. textOverlayBlocks = "Sebelum"/"Selepas" labels + person name+age ("Kak Aishah, 38 tahun") + duration ("Selepas 21 hari guna"). Mix subjectLockKey across 4 images (primary hijab woman + secondary Malay male). Transformation MUST come from tier1_primary or tier2_axis — NEVER body-slimming/weight-loss.
+§15 before-after (n=4, recipe A, tierRules): each image = SAME person in BEFORE and AFTER, but MANDATORY DIFFERENT OUTFIT. AFTER shirt/top MUST be a different color AND style from BEFORE shirt — typically also different setting/background — because 3 weeks of usage means the person changed clothes. NEVER same outfit in both halves (illogical: nobody wears the same shirt for 3 weeks straight). conceptScene must explicitly mention the outfit change. textOverlayBlocks = "Sebelum"/"Selepas" labels + person name+age ("Kak Aishah, 38 tahun") + duration ("Selepas 21 hari guna"). Mix subjectLockKey across 4 images (primary hijab woman + secondary Malay male). Transformation MUST come from identity.transformationByTier — tier1_primary or tier2_axis ONLY. NEVER tier4_offniche (auto off-category for THIS product — examples vary per product: for gut/dental → never body-slimming; for weight-loss product → never hair regrowth; for skincare → never weight-loss; etc).
 
 §16 faq (n=0): just text, faqs[] + faqsVi[] parallel index-aligned (Vietnamese translation). imagePrompts: [].
 
