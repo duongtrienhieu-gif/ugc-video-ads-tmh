@@ -114,6 +114,7 @@ R3. CONCEPT FORMAT
 - conceptScene = 5-30 words describing WHAT (subject, action, setting)
 - DO NOT include: style words, lighting words, "photorealistic", "soft light", "candid", "8k", "masterpiece", "((emphasized))" weights, "negative prompt:" syntax. Code template adds style.
 - DO NOT redescribe the human subject — recipe injects identity.subjectIdentityLock via subjectLockKey.
+- ⚠️ ALL textOverlayBlocks values MUST be in ${langName}. Medical / scientific / technical terms MUST be translated to ${langName} — do NOT default to English. Exceptions ONLY: brand names, product names, prices, certification codes (HALAL/KKM/FDA), social media handles.
 
 R4. COPY TONE — "BẠN / CHÚNG TÔI" (intimate sharing)
 - All user-facing copy in ${langName} uses intimate voice: "anda/bạn" + "kami/chúng tôi".
@@ -160,6 +161,14 @@ R9. SECTION-SPECIFIC BRIEFS (concise per-section overrides)
 §3 pain (n=6, tierRules): each = italic question with emoji prefix on glassmorphism panel + color glow accent near pain area. Mix subjectLockKey ~4 primary + ~2 secondary across 6 images.
 
 §4 why-happens (n=1, recipe C): copy field MUST list 4-6 DISTINCT root causes appropriate to identity.productCategory, EACH STARTING with context-fit emoji icon (e.g. 🦠 microbial, ⚡ inflammatory, 🌡️ hormonal, 💊 medication, 🍔 dietary, 😰 stress — pick emoji matching the cause). bullets[] mirrors 4-6 causes (icon + name + 1-sentence explain). conceptScene = "infographic listing 4-6 distinct causes with colored icons and short labels".
+  ⚠️ ALL textOverlayBlocks for this infographic MUST be in ${langName}. Medical/scientific terminology MUST be translated. Examples for language=ms (Bahasa Melayu):
+    Title: "6 PUNCA UTAMA MASALAH..." (NOT "6 ROOT CAUSES OF...")
+    Comparison labels: "BERMASALAH" / "SIHAT" (NOT "PROBLEM" / "HEALTHY")
+    Cause names: "Jangkitan virus/bakteria", "Alergi & lendir hidung", "Bahan pencemar persekitaran" (NOT "Viral or Bacterial Infections" etc)
+  Examples for language=vi (Tiếng Việt):
+    Title: "6 NGUYÊN NHÂN CHÍNH GÂY..."
+    Labels: "VẤN ĐỀ" / "KHỎE MẠNH"
+    Causes: "Nhiễm virus/vi khuẩn", "Dị ứng & viêm mũi" etc
 
 §5 failed-solutions (n=1, recipe B): UGC photo NO product NO text overlay. Subject = primary (hijab woman) by default.
 
@@ -170,6 +179,16 @@ R9. SECTION-SPECIFIC BRIEFS (concise per-section overrides)
 §8 ingredients (n=1, recipe D): 1 image showing ALL 5-8 key ingredients with strain codes + labels around product center.
 
 §9 mechanism (n=1, recipe C): science diagram + brand badge from identity.coBrandBadges (if any — skip badge if empty) + product at bottom.
+  ⚠️ ALL textOverlayBlocks (diagram labels, step captions, before/after markers, arrows) MUST be in ${langName}, NOT English. Translate ALL scientific/anatomical/mechanism terminology to target language.
+    Examples for language=ms (Bahasa Melayu):
+      Title: "BAGAIMANA IA BERFUNGSI" (NOT "HOW IT WORKS")
+      Step labels: "LANGKAH 1", "LANGKAH 2", "LANGKAH 3" (NOT "STEP 1/2/3")
+      Action labels: "Menyerap", "Memulihkan", "Melindungi" (NOT "Absorbs / Restores / Protects")
+    Examples for language=vi (Tiếng Việt):
+      Title: "CƠ CHẾ HOẠT ĐỘNG"
+      Step labels: "BƯỚC 1", "BƯỚC 2", "BƯỚC 3"
+      Action labels: "Hấp thu", "Phục hồi", "Bảo vệ"
+  Exceptions only: brand names, ingredient strain codes (e.g. "L. rhamnosus GG"), trademark symbols.
 
 §10 benefits (n=1, recipe D): icon grid 6-8 benefits + product center + soft palette.
 
