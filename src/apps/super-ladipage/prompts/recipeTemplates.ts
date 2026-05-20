@@ -52,15 +52,28 @@ function langLabel(lang: 'ms' | 'vi' | 'en'): string {
   return lang === 'ms' ? 'Bahasa Melayu' : lang === 'vi' ? 'Vietnamese' : 'English'
 }
 
-function brandLockBlock(identity: ProductIdentity, productInScene: boolean): string {
+function brandLockBlock(
+  identity: ProductIdentity,
+  productInScene: boolean,
+  needsScaleAnchor: boolean = true,
+): string {
   if (!productInScene) {
     return `PRODUCT: not visible in this image. Do NOT render any "${identity.productNameExact}".`
   }
   // Phase 3 Cut 2: brandLock compressed to single dense line. All info
   // (name + shape + colors + scale) preserved. KIE reads filesUrl reference
-  // for visual identity lock; this line is just text backup. SCALE ANCHOR
-  // retained per user direction (Phase 3 user explicit preserve).
-  return `PRODUCT (match reference image): "${identity.productNameExact}" — ${identity.packagingShape}. Colors: ${identity.primaryColors.join(', ')}. Scale: ${identity.productScale}.
+  // for visual identity lock; this line is just text backup.
+  // 2026-05-21: needsScaleAnchor conditional — chỉ inject SCALE ANCHOR khi
+  // recipe thực sự có person holding product (Recipe A/B + F whatsapp).
+  // Skip cho banner/infographic/icon-grid/table (no person holds → no
+  // oversize risk). Tiết kiệm ~15 dòng / prompt × ~15 ảnh = ~225 dòng pack.
+  const productLine = `PRODUCT (match reference image): "${identity.productNameExact}" — ${identity.packagingShape}. Colors: ${identity.primaryColors.join(', ')}. Scale: ${identity.productScale}.`
+
+  if (!needsScaleAnchor) {
+    return productLine
+  }
+
+  return `${productLine}
 
 SCALE ANCHOR (when product held by person):
   - Small products (sprays, drops, lip balm, vials, sample tubes): height SHORTER than hand span; width < 2 fingers. NEVER render as water-bottle-sized.
@@ -171,7 +184,7 @@ ${safeBlocks(concept).map(formatTextBlock).join('\n')}`
 
   return [
     `DIAGRAM CONCEPT: ${concept.conceptScene}.`,
-    brandLockBlock(identity, concept.productInScene),
+    brandLockBlock(identity, concept.productInScene, false),  // recipeC: infographic, no person holds
     labels,
     `STYLE: clean mobile-friendly infographic, vector/flat illustration, soft pastel palette, cartoon icons.`,
     layout,
@@ -195,7 +208,7 @@ ${safeBlocks(concept).map(formatTextBlock).join('\n')}`
 
   return [
     `INFOGRAPHIC CONCEPT: ${concept.conceptScene}.`,
-    brandLockBlock(identity, concept.productInScene),
+    brandLockBlock(identity, concept.productInScene, false),  // recipeD: icon grid, product center, no person holds
     labels,
     `STYLE: clean modern product showcase, soft palette matching brand colors, gradient bg, icons in soft circles.`,
     `LAYOUT: title top + ${identity.coBrandBadges.length > 0 ? `brand badge "${identity.coBrandBadges.join(' + ')}" near title + ` : ''}product packaging centered (SHAPE LOCK applied) + 5-8 icon+label items in grid/circular around product + brief description below.`,
@@ -218,7 +231,7 @@ ${safeBlocks(concept).map(formatTextBlock).join('\n')}`
 
   return [
     `COMPARISON INFOGRAPHIC CONCEPT: ${concept.conceptScene}.`,
-    brandLockBlock(identity, concept.productInScene),
+    brandLockBlock(identity, concept.productInScene, false),  // recipeE: comparison table, no person holds
     cells,
     `STYLE: PREMIUM Malaysia ecommerce comparison table, glassmorphism, soft-shadow cards, gradient bg, bold typography.`,
     `LAYOUT: 2-column table. LEFT "${identity.productNameExact}" with vibrant EMERALD/teal header + glow accent + green ✓ on soft mint circular badges. RIGHT "Suplemen Lain" with neutral gray + red ✗ on soft pink badges. 3-5 rows MAX, each row = ONE bold headline label (max 3-5 words) in ${langLabel(language)} — NO sub-text, NO description, NO footnote under labels. Product image under left column header with glow halo.`,
@@ -256,7 +269,10 @@ ${safeBlocks(concept).map(formatTextBlock).join('\n')}`
 
   return [
     `SCREENSHOT CONCEPT: ${concept.conceptScene}.`,
-    brandLockBlock(identity, concept.productInScene),
+    // recipeF: SCALE ANCHOR chỉ cần cho whatsapp (selfie có thể có người cầm)
+    // Trust-news / warning-news / social-platform = platform UI screenshot,
+    // product thumbnail không cần SCALE ANCHOR.
+    brandLockBlock(identity, concept.productInScene, variant === 'whatsapp'),
     labels,
     variantBlock.trim(),
     safeDecor(concept).length > 0 ? `EXTRA UI: ${safeDecor(concept).map(formatDecor).join('; ')}` : '',
@@ -304,12 +320,19 @@ ${safeBlocks(concept).map(formatTextBlock).join('\n')}`
 
   return [
     `BANNER CONCEPT: ${concept.conceptScene}.`,
-    brandLockBlock(identity, concept.productInScene),
+    // recipeG: banner composition, product thumbnail, no person holds → skip SCALE ANCHOR
+    brandLockBlock(identity, concept.productInScene, false),
     banner,
-    // Inject deal data — recipe templates pull these into prompt
-    variant === 'combo-vertical'
-      ? `FULL DEALS LIST (use ALL tiers below — each as a separate vertical block):\n${allDealsLines}`
-      : primaryDealLine,
+    // Deal data injection — CONDITIONAL by variant (2026-05-21):
+    // - social-proof-banner has "NO PRICE" rule → SKIP price block (was
+    //   creating conflict signal: data has price but layout says no price)
+    // - promo → inject primary deal (single headline price)
+    // - combo-vertical → inject full deals list (all tiers)
+    variant === 'social-proof-banner'
+      ? ''  // NO price for social proof banner
+      : variant === 'combo-vertical'
+        ? `FULL DEALS LIST (use ALL tiers below — each as a separate vertical block):\n${allDealsLines}`
+        : primaryDealLine,
     variantBlock.trim(),
     safeDecor(concept).length > 0 ? `EXTRA: ${safeDecor(concept).map(formatDecor).join('; ')}` : '',
     technicalBlock(concept.aspectRatio),
