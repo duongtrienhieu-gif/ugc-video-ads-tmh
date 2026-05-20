@@ -29,7 +29,7 @@ function formatTextBlock(t: TextBlock): string {
     t.style === 'bold-condensed'       ? 'big bold condensed sans-serif' :
     t.style === 'italic-slanted'       ? 'italic slanted modern sans-serif' :
     t.style === 'ecommerce-banner'     ? 'bold ecommerce banner typography' :
-    t.style === 'glassmorphism-badge'  ? 'small rounded glassmorphism badge with emoji prefix' :
+    t.style === 'glassmorphism-badge'  ? 'white solid-background rounded pill badge with drop-shadow, emoji prefix + bold text' :
     t.style === 'star-rating'          ? 'metric chip with star rating' :
                                           'clean readable sans-serif'
   return `  - "${t.text}" — role=${t.role}, position=${t.position}, style=${styleHint}`
@@ -37,8 +37,8 @@ function formatTextBlock(t: TextBlock): string {
 
 function formatDecor(d: DecorElement): string {
   const desc =
-    d.type === 'glassmorphism-badge'  ? `glassmorphism rounded badge "${d.text ?? ''}"` :
-    d.type === 'arrow'                ? `small decorative arrow sticker${d.text ? ` pointing to ${d.text}` : ''}` :
+    d.type === 'glassmorphism-badge'  ? `white pill badge, solid background, drop-shadow "${d.text ?? ''}"` :
+    d.type === 'arrow'                ? `bold curved arrow graphic${d.text ? ` pointing to ${d.text}` : ''}, clean design accent` :
     d.type === 'glow'                 ? `soft ${d.color ?? 'red'} glow accent${d.position ? ` near ${d.position}` : ''}` :
     d.type === 'starburst'            ? `bright starburst sticker${d.text ? ` reading "${d.text}"` : ''}` :
     d.type === 'checkmark'            ? `green checkmark icon` :
@@ -143,7 +143,7 @@ ${safeDecor(concept).map(formatDecor).join('\n')}`
     brandLockBlock(identity, concept.productInScene),
     textOverlay,
     decor,
-    `STYLE: candid UGC smartphone photo, natural light, amateur authentic.`,
+    `STYLE: candid UGC photo, natural light, authentic person; graphic overlays (badges, headline strip, arrow): sharp professional marketing design, high contrast.`,
     technicalBlock(concept.aspectRatio),
     `STRICT: no watermark.`,
   ].filter(Boolean).join('\n\n')
