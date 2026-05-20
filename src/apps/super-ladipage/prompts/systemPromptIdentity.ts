@@ -83,7 +83,25 @@ SCHEMA:
 
 4. primaryColors — 2-4 colors prominent on packaging.
 
-5. productScale — size hint (e.g. "fits in adult palm, ~100g").
+5. productScale — VISUAL size with comparison anchor. CRITICAL for image gen
+   accuracy: gpt-4o-image hay render product to gấp 2-3x thực tế khi không
+   có anchor rõ ràng. MUST include 3 components in description:
+     (a) Real dimensions (cm + volume/weight if visible on label)
+     (b) Comparison to common object (smartphone, palm, water bottle, finger)
+     (c) How it's held by adult hand (fits in palm / requires 2 hands)
+   Examples (keep in English):
+     - Nasal spray 50ml:  "small handheld spray bottle, ~10-12cm tall, 50ml,
+                          similar height to adult palm, fits comfortably
+                          between thumb and pinky"
+     - Cream jar 100g:    "round flat jar, ~7cm diameter × 5cm tall, 100g,
+                          similar size to tennis ball, sits flat on palm"
+     - Patch box small:   "small cardboard box, ~10cm × 7cm × 2cm, contains
+                          patches, fits in adult hand with fingers visible
+                          beyond the box edges"
+     - Lotion 500ml:      "tall pump bottle, ~22-25cm tall, 500ml, similar
+                          size to standard water bottle, requires full hand grip"
+   ⚠️ Always compare against ADULT HAND specifically — image models default
+   to making products too large; explicit hand-comparison anchors them correctly.
 
 6. productPose — default pose (e.g. "label facing camera, slight tilt").
 

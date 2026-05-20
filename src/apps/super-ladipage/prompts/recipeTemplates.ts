@@ -62,7 +62,22 @@ function brandLockBlock(identity: ProductIdentity, productInScene: boolean): str
   - Packaging details: ${identity.packagingDescription}
   - Primary colors: ${identity.primaryColors.join(', ')}
   - Scale: ${identity.productScale}
-  - Pose hint: ${identity.productPose}`
+  - Pose hint: ${identity.productPose}
+
+SCALE ANCHOR (MANDATORY when product held by person):
+  - Product MUST appear PROPORTIONALLY CORRECT to the holder's hand and body.
+  - Small products (spray bottles, eye drops, lip balm, vials, patch boxes,
+    sample tubes, small jars): product height SHORTER than hand span,
+    product width SMALLER than 2 fingers wide.
+    NEVER render small products as large as water bottles or lotion pumps.
+  - Medium products (cream jars, serum bottles, tubes ~100ml-200ml): fits
+    comfortably in one palm, smaller than person's face.
+  - Large products (500ml+ bottles, big boxes): requires full hand grip OR
+    held with 2 hands.
+  - The product occupies ~10-25% of the frame area when held by hand —
+    NEVER center-stage dominating the entire image.
+  - When in selfie/photo-share scenarios: hold at ARM'S LENGTH (medium shot),
+    NOT close-up to camera (which makes product look 2-3x bigger).`
 }
 
 /** Subject identity injection — chỉ dùng khi recipe có người làm chủ thể.
@@ -121,7 +136,7 @@ ${safeDecor(concept).map(formatDecor).join('\n')}`
     brandLockBlock(identity, concept.productInScene),
     textOverlay,
     decor,
-    `STYLE: candid UGC smartphone photo — natural light, slight grain, amateur authentic. Subject fills frame; overlay readable; decor doesn't obscure subject.`,
+    `STYLE: candid UGC smartphone photo — natural light, slight grain, amateur authentic. Subject fills frame; overlay readable; decor doesn't obscure subject. If product is held by person, respect SCALE ANCHOR above (product proportional to hand, NOT oversized).`,
     technicalBlock(concept.aspectRatio),
     antiPatternBlock(identity),
     `STRICT: no watermark, no price tag in image, no logos other than required brand badges.`,
@@ -259,7 +274,10 @@ LAYOUT (TRUST NEWS):
 LAYOUT (WHATSAPP):
   - Realistic WhatsApp chat screenshot, green bubbles, real-phone aesthetic.
   - VIBE varies per image in section: 1-on-1 vs group chat / text vs photo embed vs voice bubble / different timestamps / different sender names (Kak Timah, Abang Joe, Siti Aminah, Khairul Nizam, Nurul Huda, Aishah...).
-  - Casual Malay text with emojis (🙏 ✨ 🤲 ❤️ 💪).`
+  - Casual Malay text with emojis (🙏 ✨ 🤲 ❤️ 💪).
+  - INTRA-SECTION SCALE CONSISTENCY: this is 1 of 4 WhatsApp screenshots in same section. Product MUST appear at SIMILAR scale across all 4 — refer to SCALE ANCHOR above.
+    For "selfie photo with product as media in chat" vibe: hold product at arm's length (medium shot), NEVER close-up to camera (perspective bias = product 2-3x oversized).
+    For "chat thumbnail with product photo embed" vibe: product shown as small image preview inside chat bubble (~30-40% of bubble width).`
   : `
 LAYOUT (SOCIAL PLATFORM):
   - Authentic mobile UI of target platform (FB post + comments / TikTok Shop review / Shopee product page / Instagram post / Muslim selfie UGC).
