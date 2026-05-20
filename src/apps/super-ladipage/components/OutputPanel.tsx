@@ -226,7 +226,15 @@ function ImageGenerationBar({
 
   // Status chips dùng counter derive từ pack.sections — auto-update kể cả
   // khi gen từng ảnh thủ công (regenerateSingleImage cũng patch pack state).
-  const notStarted = Math.max(0, totalImages - generated - failedCount)
+  // inFlight = ảnh đang queued/generating/retrying — phải tách khỏi notStarted
+  // để user thấy ngay khi bấm Tạo ảnh (không bị lẫn vào "Chưa làm").
+  const inFlight = pack.sections.reduce(
+    (acc, s) => acc + (s.imagePrompts?.filter(
+      (p) => p.status === 'generating' || p.status === 'queued' || p.status === 'retrying',
+    ).length ?? 0),
+    0,
+  )
+  const notStarted = Math.max(0, totalImages - generated - failedCount - inFlight)
 
   return (
     <div className="flex flex-wrap items-center justify-between gap-2">
@@ -244,6 +252,15 @@ function ImageGenerationBar({
             <Check className="h-2.5 w-2.5" />
             Thành công: {generated}/{totalImages}
           </span>
+          {inFlight > 0 && (
+            <span
+              className="flex items-center gap-1 rounded-full border border-violet-200 bg-violet-50 px-2 py-0.5 text-[10px] font-bold text-violet-700"
+              title={`${inFlight} ảnh đang được tạo`}
+            >
+              <Loader2 className="h-2.5 w-2.5 animate-spin" />
+              Đang tạo: {inFlight}
+            </span>
+          )}
           {failedCount > 0 && (
             <span
               className="flex items-center gap-1 rounded-full border border-red-200 bg-red-50 px-2 py-0.5 text-[10px] font-bold text-red-700"
