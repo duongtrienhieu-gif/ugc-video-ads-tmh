@@ -110,7 +110,7 @@ function technicalBlock(aspectRatio: string): string {
     aspectRatio === '16:9' ? '1024×576 (mapped to 3:2 landscape)' :
     aspectRatio === '9:16' ? '832×1248 (mapped to 2:3 portrait)' :
                               '1024×1024'
-  return `TECHNICAL: ${dims}, 1K resolution, sharp focus, web-ready. Typography: consistent modern bold sans-serif (Inter/Helvetica-style) across pack — clean, professional, NOT cartoon/handwritten.`
+  return `TECHNICAL: ${dims}, 1K resolution, sharp focus, web-ready. Typography: Montserrat ExtraBold for headlines, Manrope for body text — bold, clean, professional, NOT cartoon/handwritten.`
 }
 
 // ═════════════════════════════════════════════════════════════════════
@@ -237,7 +237,7 @@ ${safeBlocks(concept).map(formatTextBlock).join('\n')}`
     `COMPARISON INFOGRAPHIC CONCEPT: ${concept.conceptScene}.`,
     brandLockBlock(identity, concept.productInScene, false),  // recipeE: comparison table, no person holds
     cells,
-    `STYLE: 2-column marketing comparison table, clean modern design, solid white card panels with drop-shadow, emerald-green vs. gray column headers, bold sans-serif labels.`,
+    `STYLE: 2-column marketing comparison table, clean modern design, solid white card panels with drop-shadow, emerald-green vs. gray column headers, Montserrat ExtraBold labels.`,
     `LAYOUT: LEFT column: emerald-green header, product image centered below header, green ✓ on white rows. RIGHT column: neutral gray header, red ✗ on white rows. 3-5 rows MAX, each row = ONE bold label (max 5 words) — NO sub-text, NO annotations. Bold white header text for column titles.`,
     safeDecor(concept).length > 0 ? `EXTRA: ${safeDecor(concept).map(formatDecor).join('; ')}` : '',
     technicalBlock(concept.aspectRatio),
