@@ -54,30 +54,24 @@ function langLabel(lang: 'ms' | 'vi' | 'en'): string {
 
 function brandLockBlock(identity: ProductIdentity, productInScene: boolean): string {
   if (!productInScene) {
-    return `PRODUCT VISIBILITY: NO product visible in this image. Do NOT render any "${identity.productNameExact}" or branded bottle.`
+    return `PRODUCT: not visible in this image. Do NOT render any "${identity.productNameExact}".`
   }
-  return `PRODUCT IDENTITY (MUST match exactly — DO NOT improvise packaging):
-  - Exact product name on label: "${identity.productNameExact}"
-  - SHAPE LOCK: ${identity.packagingShape}
-  - Packaging details: ${identity.packagingDescription}
-  - Primary colors: ${identity.primaryColors.join(', ')}
+  // Compressed: 4 lines. packagingDescription removed (60-150 words duplicate
+  // of what KIE sees in filesUrl reference). productPose dropped (covered by
+  // conceptScene). SCALE ANCHOR retained per user direction (still needed —
+  // gpt-4o-image renders small products 2-3x oversized without it).
+  return `PRODUCT (match reference image):
+  - Label name: "${identity.productNameExact}"
+  - Shape: ${identity.packagingShape}
+  - Colors: ${identity.primaryColors.join(', ')}
   - Scale: ${identity.productScale}
-  - Pose hint: ${identity.productPose}
 
-SCALE ANCHOR (MANDATORY when product held by person):
-  - Product MUST appear PROPORTIONALLY CORRECT to the holder's hand and body.
-  - Small products (spray bottles, eye drops, lip balm, vials, patch boxes,
-    sample tubes, small jars): product height SHORTER than hand span,
-    product width SMALLER than 2 fingers wide.
-    NEVER render small products as large as water bottles or lotion pumps.
-  - Medium products (cream jars, serum bottles, tubes ~100ml-200ml): fits
-    comfortably in one palm, smaller than person's face.
-  - Large products (500ml+ bottles, big boxes): requires full hand grip OR
-    held with 2 hands.
-  - The product occupies ~10-25% of the frame area when held by hand —
-    NEVER center-stage dominating the entire image.
-  - When in selfie/photo-share scenarios: hold at ARM'S LENGTH (medium shot),
-    NOT close-up to camera (which makes product look 2-3x bigger).`
+SCALE ANCHOR (when product held by person):
+  - Small products (sprays, drops, lip balm, vials, sample tubes): height SHORTER than hand span; width < 2 fingers. NEVER render as water-bottle-sized.
+  - Medium (cream jars, serums ~100-200ml): fits one palm, smaller than face.
+  - Large (500ml+ bottles, big boxes): full hand grip or 2 hands.
+  - Product occupies 10-25% of frame — NEVER center-stage dominating.
+  - Selfie/photo-share: arm's length medium shot, NOT close-up (perspective bias = 2-3x oversize).`
 }
 
 /** Subject identity injection — chỉ dùng khi recipe có người làm chủ thể.
@@ -257,31 +251,17 @@ function recipeF(input: RecipeInput): string {
 ${safeBlocks(concept).map(formatTextBlock).join('\n')}`
     : 'UI TEXT: empty.'
 
-  // Variant-specific layout (each variant self-contained — no duplicate outro)
+  // Variant-specific layout — compressed to keywords only.
+  // Detailed instructions (INTRA-SECTION consistency, vibe rotation) were
+  // verbose placebos KIE can't actually enforce per-image. Removed.
   const variantBlock =
-    variant === 'warning-news' ? `
-LAYOUT (WARNING NEWS):
-  - Looks like Malaysian news portal article OR viral FB health warning post. Real-phone screenshot, slight JPEG compression.
-  - HEADER bar RED/DARK URGENT (NOT calm blue). Site name e.g. "Berita Kesihatan", "Amaran Kesihatan MY".
-  - Headline LARGE BOLD warning/scare-tactic (e.g. "AMARAN! Ribuan rakyat Malaysia...", "Bahaya! Masalah ${identity.productCategory}...").
-  - Hero photo of worried subject OR alarming visual.
-  - Scary subheadline, fear-amplifying paragraph, scary stats. Red boxes, ⚠️ if fits.`
-  : variant === 'trust-news' ? `
-LAYOUT (TRUST NEWS):
-  - Malaysian news portal (mStar, Berita Harian) health section OR KKM portal.
-  - Calm trustworthy institutional layout. Educational headline.`
-  : variant === 'whatsapp' ? `
-LAYOUT (WHATSAPP):
-  - Realistic WhatsApp chat screenshot, green bubbles, real-phone aesthetic.
-  - VIBE varies per image in section: 1-on-1 vs group chat / text vs photo embed vs voice bubble / different timestamps / different sender names (Kak Timah, Abang Joe, Siti Aminah, Khairul Nizam, Nurul Huda, Aishah...).
-  - Casual Malay text with emojis (🙏 ✨ 🤲 ❤️ 💪).
-  - INTRA-SECTION SCALE CONSISTENCY: this is 1 of 4 WhatsApp screenshots in same section. Product MUST appear at SIMILAR scale across all 4 — refer to SCALE ANCHOR above.
-    For "selfie photo with product as media in chat" vibe: hold product at arm's length (medium shot), NEVER close-up to camera (perspective bias = product 2-3x oversized).
-    For "chat thumbnail with product photo embed" vibe: product shown as small image preview inside chat bubble (~30-40% of bubble width).`
-  : `
-LAYOUT (SOCIAL PLATFORM):
-  - Authentic mobile UI of target platform (FB post + comments / TikTok Shop review / Shopee product page / Instagram post / Muslim selfie UGC).
-  - Real-phone aesthetic, slight JPEG compression. Casual Malay UI text + emojis. Malaysian usernames + realistic timestamps.`
+    variant === 'warning-news'
+      ? `LAYOUT (WARNING NEWS): Malaysian health news portal screenshot. RED/dark urgent header. LARGE BOLD alarming headline ("AMARAN!" / "Bahaya!" / "${identity.productCategory}..."). Worried subject hero photo, scary stats, ⚠️ red boxes.`
+    : variant === 'trust-news'
+      ? `LAYOUT (TRUST NEWS): Malaysian news portal (mStar / Berita Harian / KKM) health section. Calm institutional layout, educational headline.`
+    : variant === 'whatsapp'
+      ? `LAYOUT (WHATSAPP): Realistic WhatsApp chat screenshot, green bubbles, mobile portrait. Casual Malay text with emojis (🙏 ✨ ❤️). Malaysian sender names + realistic timestamps. Vary vibe per image: 1-on-1 vs group, text vs photo embed vs voice bubble.`
+      : `LAYOUT (SOCIAL PLATFORM): Authentic mobile UI of target platform (Facebook post / TikTok Shop review / Shopee product page / Instagram). Real-phone aesthetic, Casual Malay UI text + emojis, Malaysian usernames, realistic timestamps.`
 
   return [
     `SCREENSHOT CONCEPT: ${concept.conceptScene}.`,
@@ -325,53 +305,11 @@ ${safeBlocks(concept).map(formatTextBlock).join('\n')}`
 
   let variantBlock = ''
   if (variant === 'social-proof-banner') {
-    variantBlock = `
-LAYOUT (SOCIAL PROOF BANNER):
-  - Bold trust-building banner with 4-6 customer testimonial cards in 2x2 or 2x3 grid.
-  - HEADER: dark red/burgundy band + bold white headline (e.g. "BUKTI KEPERCAYAAN: RIBUAN RAKYAT MALAYSIA TELAH MENCUBA!").
-  - METRICS ROW (3-4 stat blocks): ⭐4.8/5 + sales count ("25,000+ KOTAK TERJUAL") + satisfied count ("18,000+ PELANGGAN BERPUAS HATI") + optional trending badge.
-  - 4-6 TESTIMONIAL CARDS: small Malaysian avatar (mix gender + age + hijab + uncles) + full name + location (KL/JB/Penang) + 5-star + 1-2 sentence Malay testimonial. Mini product thumbnail attached.
-  - PRODUCT IMAGE: small-mid size center/bottom, SHAPE LOCK applied.
-  - BOTTOM: trust badges (delivery "Penghantaran Pantas 1-3 Hari", warranty "Jaminan Pulangan Wang 7 Hari", QR + HALAL + KKM).
-  - NO PRICE / NO currency symbol — trust signals only.
-  - PALETTE: dark red/burgundy + cream + gold. Premium hard-sell.`
+    variantBlock = `LAYOUT (SOCIAL PROOF BANNER): Bold trust banner, dark red/burgundy + cream + gold palette. Top: red header band + bold white headline. Below: 3-4 metric chips (⭐rating, "25,000+ KOTAK TERJUAL", "18,000+ PELANGGAN"). Center: 4-6 testimonial cards in 2x2/2x3 grid — Malaysian avatars (mix hijab + uncles + younger) + name + location (KL/JB/Penang) + 5-star + 1-sentence Malay quote + mini product thumb. Product image small-mid center/bottom. Trust badges bottom (HALAL, KKM, delivery, warranty). NO PRICE / currency symbol.`
   } else if (variant === 'combo-vertical') {
-    variantBlock = `
-LAYOUT (COMBO DEALS VERTICAL):
-  - Vertical portrait infographic stacking ALL combo tiers from FULL DEALS LIST (2-5 tiers).
-  - HEADER: bold title top (e.g. "HARGA TERBAIK" / "TAWARAN COMBO HARI INI" / "PILIH PAKEJ ANDA").
-  - EACH TIER BLOCK MUST INCLUDE (mandatory, in this order):
-      1. Tier name badge ("RAWATAN CEPAT" / "RAWATAN MENDALAMI" / "RAWATAN SIHAT MAMPAN" / "TERAPI MAKSIMUM" — escalating naming)
-      2. Product packaging mockup — show N units matching tier quantity (e.g. tier "BUY 2 GET 2" = 4 boxes visible). SHAPE LOCK applied to every unit.
-      3. Deal label prominent ("BELI 1 PERCUMA 1" / "BUY 1 GET 1")
-      4. PRICE COMPARISON BLOCK — ALWAYS show all 3 elements together:
-           • ORIGINAL PRICE gạch (red strikethrough) — vd "RM129" with line through
-           • SALE PRICE LARGE highlight (vibrant color box) — vd "RM59"
-           • SAVINGS sticker (starburst/explosion shape) — vd "JIMAT RM70!" or "50% OFF"
-         If originalPrice empty in data, AI must infer reasonable original (vd RM59 sale → "was RM99" implied).
-      5. 2-4 benefit bullets with ✅ green checkmark icons (target language).
-  - Each tier visually DISTINCT — different accent color per tier:
-      tier 1 = blue/teal (calm entry), tier 2 = red/orange (HOT DEAL),
-      tier 3 = amber/gold (BEST SELLER), tier 4 = purple (MAX VALUE).
-  - "HOT DEAL" / "BEST SELLER" / "JIMAT LEBIH" sticker on the higher-tier combos (tier 2+).
-  - PALETTE: vibrant ecommerce — high contrast, NOT minimal. Clear vertical separation between tiers.
-  - AI CREATIVE: design fresh layout, NOT clone specific reference. Goal = clear hierarchy + visual savings comparison so customer sees value of buying more.`
+    variantBlock = `LAYOUT (COMBO DEALS VERTICAL): Portrait infographic stacking ALL tiers from FULL DEALS LIST. Header bold title ("HARGA TERBAIK" / "TAWARAN COMBO" in target lang). Each tier block contains: tier badge (escalating naming "RAWATAN CEPAT / MENDALAMI / MAMPAN / MAKSIMUM") + product mockup (N units = tier quantity, SHAPE LOCK on each) + deal label + price block (originalPrice gạch + salePrice highlight + savings starburst) + 2-4 benefit bullets ✅. Tier 1=blue/teal, tier 2=red/orange "HOT DEAL", tier 3=amber/gold "BEST SELLER", tier 4=purple "MAX VALUE". Vibrant ecommerce palette, clear vertical separation.`
   } else {
-    variantBlock = `
-LAYOUT (PROMO BANNER):
-  - Native Malaysian FB/TikTok ecommerce promo banner. Hard-sell visual.
-  - Product packaging large, centered or to one side, SHAPE LOCK applied.
-  - Headlines: USE THE PRIMARY DEAL LABEL from data above (translated to target language).
-    Example if primary label is "BUY 1 GET 1 FREE" and language=ms:
-      headline = "BELI 1 PERCUMA 1!" (NOT generic "DISKAUN 30%").
-  - PRICE block: PRIMARY DEAL PRICE from data above, prominently displayed.
-    Use originalPrice (gạch) → price (highlight) format if both available.
-  - Savings sticker: use savingsLabel from data above if available (e.g. "JIMAT RM70" starburst).
-  - Trust badges: ${identity.trustBadges.join(', ') || '(none)'}.
-  - CTA button with directional arrow.
-  - PALETTE: vibrant high-contrast (amber/red OR violet/gold).
-  - ⛔ TUYỆT ĐỐI KHÔNG bịa generic offers ("DISKAUN 30%", "FREE SHIPPING")
-    nếu không có trong PRIMARY DEAL DATA. Chỉ dùng data exact.`
+    variantBlock = `LAYOUT (PROMO BANNER): Native Malaysian FB/TikTok promo banner, hard-sell. Product packaging large center/side (SHAPE LOCK). Headline from PRIMARY DEAL LABEL above (e.g. "BELI 1 PERCUMA 1!"). Price block: originalPrice gạch → salePrice highlight. Savings starburst if available. Trust badges: ${identity.trustBadges.join(', ') || '(none)'}. CTA arrow button. Vibrant amber/red or violet/gold palette. ⛔ KHÔNG bịa offers ngoài PRIMARY DEAL DATA above.`
   }
 
   return [
@@ -409,30 +347,24 @@ function recipeH(input: RecipeInput): string {
 ${safeBlocks(concept).map(formatTextBlock).join('\n')}`
     : 'TEXT: empty (this should NOT happen — expert/KOL card requires text).'
 
-  const variantBlock = variant === 'expert' ? `
-LAYOUT (EXPERT):
-  - Professional editorial endorsement card — Malaysian health/specialty expert MATCHING product category.
-  - ⚠️ SPECIALTY MUST MATCH identity.productCategory = "${identity.productCategory}". Reference mapping:
-      • Dental / oral care      → Pakar Pergigian / Dental Specialist (white coat + dental tools bg)
-      • Probiotic / gut health  → Pakar Pemakanan / Nutritionist or Gastroenterologist (white coat + clinic bg)
-      • Hair oil / hair growth  → Pakar Trikologi / Trichologist or Pakar Dermatologi (white coat + hair clinic bg)
-      • Nasal spray / allergy   → Pakar ENT / Otorhinolaryngologist (white coat + ENT tools bg)
-      • Skincare / anti-aging   → Pakar Dermatologi / Dermatologist (white coat + dermatology bg)
-      • Joint pain / orthopedic → Pakar Ortopedik / Physiotherapist (white coat + orthopedic bg)
-      • Weight management       → Pakar Pemakanan / Nutritionist (smart attire + nutrition bg)
-      • Beauty / cosmetics      → Pakar Dermatologi / Aesthetic Specialist (smart attire + beauty bg)
-      • Default (unknown)       → Pakar Kesihatan / Health Specialist (white coat + generic clinic bg)
-  - TOP half: head-and-shoulders portrait in attire matching the specialty above, calm trustworthy expression, clinical/office background with soft blur (background matches specialty: dental clinic for Pergigian, hair clinic for Trikologi, etc).
-  - CENTER band: EXPERT NAME ("Dr. [Malaysian name]") + specialty title (DERIVED from product category above) + years experience ("[N]+ tahun pengalaman").
-  - BOTTOM half: clean quote box, professional Malay testimonial (2-4 sentences) ENDORSING THIS specific product category, formal tone, quotation marks decor. Optional "Pakar Disahkan" badge.
-  - PALETTE: white + soft teal/navy + cream. Editorial trust feel.`
-  : `
-LAYOUT (KOL):
-  - Instagram-style influencer endorsement card — Malaysian KOL.
-  - TOP half: stylish lifestyle photo (Malaysian fashionable smiling, cafe/home/outdoor, hijab influencer OR male KOL), vibrant.
-  - CENTER band: handle (e.g. "@nurul_aminah") + follower badge ("1.2M Followers" / "850K Pengikut") + platform icon (Instagram/TikTok).
-  - BOTTOM half: casual quote box, friendly Malay testimonial (2-4 sentences), emoji-rich (✨ 💕 🔥), optional "Pilihan Aku" hashtag.
-  - PALETTE: warm pink/peach + cream + gold. Influencer aesthetic.`
+  // Specialty mapping kept (was anti-default-to-dentist fix). All other
+  // explanatory bullet expansion removed — KIE gets the keywords directly.
+  const specialtyHint = (() => {
+    const cat = identity.productCategory.toLowerCase()
+    if (cat.includes('dental') || cat.includes('oral') || cat.includes('teeth')) return 'Pakar Pergigian (white coat + dental clinic bg)'
+    if (cat.includes('probiotic') || cat.includes('gut') || cat.includes('digestive')) return 'Pakar Pemakanan / Gastroenterologist (white coat + clinic bg)'
+    if (cat.includes('hair'))                                                          return 'Pakar Trikologi / Dermatologi (white coat + hair clinic bg)'
+    if (cat.includes('nasal') || cat.includes('rhinitis') || cat.includes('allergy'))  return 'Pakar ENT (white coat + ENT tools bg)'
+    if (cat.includes('skincare') || cat.includes('anti-aging'))                        return 'Pakar Dermatologi (white coat + derm clinic bg)'
+    if (cat.includes('joint') || cat.includes('orthopedic'))                           return 'Pakar Ortopedik / Physio (white coat + ortho bg)'
+    if (cat.includes('weight'))                                                        return 'Pakar Pemakanan (smart attire + nutrition bg)'
+    if (cat.includes('beauty') || cat.includes('cosmetic'))                            return 'Pakar Dermatologi / Aesthetic (smart attire + beauty bg)'
+    return 'Pakar Kesihatan (white coat + clinic bg)'
+  })()
+
+  const variantBlock = variant === 'expert'
+    ? `LAYOUT (EXPERT): Editorial endorsement card — Malaysian ${specialtyHint}. Top half: head-and-shoulders portrait, calm trustworthy expression, clinical bg soft blur. Center band: "Dr. [Malaysian name]" + specialty title + "[N]+ tahun pengalaman". Bottom half: quote box with 2-4 sentence Malay testimonial endorsing this product. Optional "Pakar Disahkan" badge. Palette: white + soft teal/navy + cream.`
+    : `LAYOUT (KOL): Instagram-style influencer card — Malaysian KOL. Top half: lifestyle photo (Malaysian fashionable, cafe/home/outdoor, hijab or male KOL). Center band: "@handle" + "[N]M Followers / Pengikut" + IG/TikTok icon. Bottom half: casual Malay quote 2-4 sentences with emojis (✨ 💕 🔥), optional "Pilihan Aku" hashtag. Palette: warm pink/peach + cream + gold.`
 
   return [
     `ENDORSEMENT CARD CONCEPT: ${concept.conceptScene}.`,
