@@ -164,6 +164,49 @@ p, span, div, label, button, a, li, td, th, h1, h2, h3, h4, h5, h6 {
 [data-theme="dark"] .bg-gray-100 { background-color: var(--color-card-elevated) !important; }
 [data-theme="dark"] .bg-gray-200 { background-color: var(--color-card-elevated) !important; }
 
+/* Opacity-modified white — modal panels (BankPicker bg-white/95),
+   sub-card chips (Lab Content AngleCard bg-white/70), Voice Studio
+   header bg-white/60, etc. All collapse onto card color so they look
+   like elevated surfaces in dark mode instead of blasting bright. */
+[data-theme="dark"] [class*="bg-white/"] { background-color: var(--color-card) !important; }
+
+/* Slate / Stone neutral text shades — Voice Studio uses these instead
+   of gray-* for typography hierarchy. Map to the same tier ladder. */
+[data-theme="dark"] .text-slate-900,
+[data-theme="dark"] .text-slate-800 { color: var(--color-text-primary) !important; }
+[data-theme="dark"] .text-slate-700,
+[data-theme="dark"] .text-slate-600 { color: var(--color-text-secondary) !important; }
+[data-theme="dark"] .text-slate-500,
+[data-theme="dark"] .text-slate-400 { color: var(--color-text-tertiary) !important; }
+[data-theme="dark"] .text-slate-300,
+[data-theme="dark"] .text-slate-200 { color: var(--color-text-faint) !important; }
+
+/* Saturated tinted icon containers (bg-{color}-500/10..20) — keep the
+   hue but slightly lift opacity so the icon container stays visible
+   against the dark card. */
+[data-theme="dark"] [class*="bg-violet-500/"] { background-color: rgba(139, 92, 246, 0.18) !important; }
+[data-theme="dark"] [class*="bg-indigo-500/"] { background-color: rgba(99, 102, 241, 0.18) !important; }
+[data-theme="dark"] [class*="bg-blue-500/"] { background-color: rgba(59, 130, 246, 0.18) !important; }
+[data-theme="dark"] [class*="bg-sky-500/"] { background-color: rgba(14, 165, 233, 0.18) !important; }
+[data-theme="dark"] [class*="bg-emerald-500/"] { background-color: rgba(16, 185, 129, 0.18) !important; }
+[data-theme="dark"] [class*="bg-green-500/"] { background-color: rgba(34, 197, 94, 0.18) !important; }
+[data-theme="dark"] [class*="bg-amber-500/"] { background-color: rgba(245, 158, 11, 0.18) !important; }
+[data-theme="dark"] [class*="bg-orange-500/"] { background-color: rgba(249, 115, 22, 0.18) !important; }
+[data-theme="dark"] [class*="bg-rose-500/"] { background-color: rgba(244, 63, 94, 0.18) !important; }
+[data-theme="dark"] [class*="bg-red-500/"] { background-color: rgba(239, 68, 68, 0.18) !important; }
+[data-theme="dark"] [class*="bg-pink-500/"] { background-color: rgba(236, 72, 153, 0.18) !important; }
+[data-theme="dark"] [class*="bg-fuchsia-500/"] { background-color: rgba(217, 70, 239, 0.18) !important; }
+[data-theme="dark"] [class*="bg-purple-500/"] { background-color: rgba(168, 85, 247, 0.18) !important; }
+[data-theme="dark"] [class*="bg-teal-500/"] { background-color: rgba(20, 184, 166, 0.18) !important; }
+[data-theme="dark"] [class*="bg-cyan-500/"] { background-color: rgba(6, 182, 212, 0.18) !important; }
+
+/* Border variants — slate / stone */
+[data-theme="dark"] [class*="border-slate-200"],
+[data-theme="dark"] [class*="border-slate-100"] { border-color: var(--color-border) !important; }
+[data-theme="dark"] [class*="border-stone-200"] { border-color: var(--color-border) !important; }
+[data-theme="dark"] [class*="border-slate-300"],
+[data-theme="dark"] [class*="border-stone-300"] { border-color: var(--color-border-strong) !important; }
+
 /* Subtle gray-tinted backgrounds — collapse them onto the surface tone
    so faint card sub-regions remain visually grouped without a white
    pop-out in dark mode. Color-tinted ones (bg-violet-50, bg-rose-50,
@@ -200,25 +243,36 @@ p, span, div, label, button, a, li, td, th, h1, h2, h3, h4, h5, h6 {
 [data-theme="dark"] [class*="bg-slate-50"] { background-color: rgba(100, 116, 139, 0.15) !important; }
 [data-theme="dark"] [class*="bg-green-50"] { background-color: rgba(34, 197, 94, 0.10) !important; }
 
-/* Gradient headers — `bg-gradient-to-r from-{color}-50 to-{color}-50`
-   stays light in dark mode because Tailwind's gradient-stop classes
-   set inline CSS vars. Override the resolved gradient by flattening
-   to a single dark surface tint via background-image: none + a tinted
-   surface. This catches headers like Creative Studio / Lab Content /
-   History / VoiceStudio / Ad Anatomy. */
-[data-theme="dark"] .bg-gradient-to-r[class*="from-violet-50"],
-[data-theme="dark"] .bg-gradient-to-r[class*="from-pink-50"],
-[data-theme="dark"] .bg-gradient-to-r[class*="from-emerald-50"],
-[data-theme="dark"] .bg-gradient-to-r[class*="from-teal-50"],
-[data-theme="dark"] .bg-gradient-to-r[class*="from-amber-50"],
-[data-theme="dark"] .bg-gradient-to-r[class*="from-rose-50"],
-[data-theme="dark"] .bg-gradient-to-r[class*="from-blue-50"],
-[data-theme="dark"] .bg-gradient-to-r[class*="from-purple-50"],
-[data-theme="dark"] .bg-gradient-to-r[class*="from-orange-50"],
-[data-theme="dark"] .bg-gradient-to-br[class*="from-violet-50"],
-[data-theme="dark"] .bg-gradient-to-br[class*="from-emerald-50"],
-[data-theme="dark"] .bg-gradient-to-br[class*="from-purple-50"],
-[data-theme="dark"] .bg-gradient-to-br[class*="from-gray-50"] {
+/* Gradient backgrounds — ANY direction (to-r / to-br / to-b / to-l) that
+   has a light from-* or to-* stop stays bright in dark mode because
+   Tailwind sets gradient stops via inline CSS vars that bg-color
+   overrides don't touch. We flatten all such gradients to a single
+   dark surface color so they read as dark cards/headers/sections.
+   This catches every gradient pattern in the codebase: app headers
+   (Creative Studio / Lab Content / History / Voice Studio / Ad
+   Anatomy), gradient cards (Lab Content AngleCard, Creative Studio
+   AssetTypePicker, Lab Content section blocks), and any future
+   gradient that uses a *-50 stop or `to-white`. */
+[data-theme="dark"] [class*="bg-gradient-"][class*="from-violet-50"],
+[data-theme="dark"] [class*="bg-gradient-"][class*="from-pink-50"],
+[data-theme="dark"] [class*="bg-gradient-"][class*="from-emerald-50"],
+[data-theme="dark"] [class*="bg-gradient-"][class*="from-teal-50"],
+[data-theme="dark"] [class*="bg-gradient-"][class*="from-amber-50"],
+[data-theme="dark"] [class*="bg-gradient-"][class*="from-rose-50"],
+[data-theme="dark"] [class*="bg-gradient-"][class*="from-blue-50"],
+[data-theme="dark"] [class*="bg-gradient-"][class*="from-purple-50"],
+[data-theme="dark"] [class*="bg-gradient-"][class*="from-orange-50"],
+[data-theme="dark"] [class*="bg-gradient-"][class*="from-sky-50"],
+[data-theme="dark"] [class*="bg-gradient-"][class*="from-cyan-50"],
+[data-theme="dark"] [class*="bg-gradient-"][class*="from-indigo-50"],
+[data-theme="dark"] [class*="bg-gradient-"][class*="from-stone-50"],
+[data-theme="dark"] [class*="bg-gradient-"][class*="from-slate-50"],
+[data-theme="dark"] [class*="bg-gradient-"][class*="from-fuchsia-50"],
+[data-theme="dark"] [class*="bg-gradient-"][class*="from-gray-50"],
+[data-theme="dark"] [class*="bg-gradient-"][class*="from-red-50"],
+[data-theme="dark"] [class*="bg-gradient-"][class*="from-green-50"],
+[data-theme="dark"] [class*="bg-gradient-"][class*="from-yellow-50"],
+[data-theme="dark"] [class*="bg-gradient-"][class*="to-white"] {
   background-image: none !important;
   background-color: var(--color-surface) !important;
 }
