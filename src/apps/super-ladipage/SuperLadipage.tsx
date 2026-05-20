@@ -102,6 +102,33 @@ export default function SuperLadipage() {
   }, [])
   useEffect(() => () => { cancelInFlight('component unmount') }, [cancelInFlight])
 
+  // Global semaphore cho individual "Thử lại" clicks. Trước đây mỗi click
+  // fire regenerateSingleImage trực tiếp → user spam 10 cards = 10 KIE
+  // submits song song = vượt per-account limit → fail 100%. Giờ wrap qua
+  // queue: tối đa MAX_INDIVIDUAL_CONCURRENT chạy đồng thời, click thừa
+  // vào pendingQueueRef chờ slot. UI hiện chip "Đang tạo: N" tự update
+  // vì task được đánh dấu status='queued' ngay khi click.
+  const MAX_INDIVIDUAL_CONCURRENT = 4
+  const inFlightCountRef = useRef(0)
+  const pendingQueueRef  = useRef<Array<() => Promise<void>>>([])
+  const enqueueIndividualGen = useCallback(async (task: () => Promise<void>): Promise<void> => {
+    if (inFlightCountRef.current < MAX_INDIVIDUAL_CONCURRENT) {
+      inFlightCountRef.current++
+      try {
+        await task()
+      } finally {
+        inFlightCountRef.current--
+        const next = pendingQueueRef.current.shift()
+        if (next) {
+          // Fire-and-forget — next task tự xử lý try/finally của riêng nó
+          enqueueIndividualGen(next).catch(() => { /* error đã handle in task */ })
+        }
+      }
+    } else {
+      pendingQueueRef.current.push(task)
+    }
+  }, [])
+
   const interAppPayload = useAppStore((s) => s.interAppPayload)
   const consumePayload  = useAppStore((s) => s.consumePayload)
   const activeApp       = useAppStore((s) => s.activeApp)
@@ -338,16 +365,25 @@ export default function SuperLadipage() {
 
   const handleRegenerateOneImage = async (sectionIdx: number, imageIdx: number) => {
     if (!pack) return
-    try {
-      await regenerateSingleImage(
-        pack, sectionIdx, imageIdx,
-        (sIdx, iIdx, patch) =>
-          patchImagePrompt(sIdx, iIdx, patch.error ? { ...patch, error: friendlyError(patch.error) } : patch),
-      )
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err)
-      addToast(`Sinh ảnh lỗi: ${friendlyError(msg)}`, 'error')
-    }
+    // Mark ngay status='queued' để UI cập nhật chip "Đang tạo: N" + nút
+    // "Thử lại" thành spinner. User thấy phản hồi tức thời dù task có
+    // thể đang chờ trong queue. Xóa error cũ.
+    patchImagePrompt(sectionIdx, imageIdx, { status: 'queued', error: undefined })
+    // Wrap qua enqueueIndividualGen — nếu inFlight đã đầy (4), task
+    // chờ trong pendingQueueRef cho tới khi 1 slot free. Tránh user
+    // spam 10 click = 10 KIE submits song song.
+    await enqueueIndividualGen(async () => {
+      try {
+        await regenerateSingleImage(
+          pack, sectionIdx, imageIdx,
+          (sIdx, iIdx, patch) =>
+            patchImagePrompt(sIdx, iIdx, patch.error ? { ...patch, error: friendlyError(patch.error) } : patch),
+        )
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err)
+        addToast(`Sinh ảnh lỗi: ${friendlyError(msg)}`, 'error')
+      }
+    })
   }
 
   const handleDeleteOneImage = (sectionIdx: number, imageIdx: number) => {
