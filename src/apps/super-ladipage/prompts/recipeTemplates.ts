@@ -85,10 +85,10 @@ function subjectLockBlock(identity: ProductIdentity, concept: ImageSlotConcept):
   return `SUBJECT LOCK (the person in this image MUST match this description): ${lock}.`
 }
 
-function antiPatternBlock(identity: ProductIdentity): string {
-  if (identity.visualAntiPatterns.length === 0) return ''
-  return `ABSOLUTE AVOID (off-niche for "${identity.productCategory}"): ${identity.visualAntiPatterns.join('; ')}.`
-}
+// antiPatternBlock removed Phase 3 (Cut 1): off-niche prevention enforced
+// at Stage 2 (systemPromptPackGen R2 4-tier gate). Image gen Stage 3 just
+// renders what conceptScene says — Gemini already filtered tier4 there.
+// Save ~40 tokens × 35 ảnh = 1,400 tokens/pack.
 
 function technicalBlock(aspectRatio: string): string {
   const dims =
@@ -132,7 +132,6 @@ ${safeDecor(concept).map(formatDecor).join('\n')}`
     decor,
     `STYLE: candid UGC smartphone photo — natural light, slight grain, amateur authentic. Subject fills frame; overlay readable; decor doesn't obscure subject. If product is held by person, respect SCALE ANCHOR above (product proportional to hand, NOT oversized).`,
     technicalBlock(concept.aspectRatio),
-    antiPatternBlock(identity),
     `STRICT: no watermark, no price tag in image, no logos other than required brand badges.`,
   ].filter(Boolean).join('\n\n')
 }
@@ -150,7 +149,6 @@ function recipeB(input: RecipeInput): string {
     brandLockBlock(identity, concept.productInScene),
     `STYLE: candid UGC photo — natural light, real-life setting, amateur smartphone aesthetic. Subject naturally framed.`,
     technicalBlock(concept.aspectRatio),
-    antiPatternBlock(identity),
     `STRICT: ZERO text/letters/labels/captions in image. No watermark. No decorative overlay.`,
   ].filter(Boolean).join('\n\n')
 }
@@ -183,7 +181,6 @@ ${safeBlocks(concept).map(formatTextBlock).join('\n')}`
     layout,
     safeDecor(concept).length > 0 ? `BRAND BADGES: ${safeDecor(concept).map(formatDecor).join('; ')}` : '',
     technicalBlock(concept.aspectRatio),
-    antiPatternBlock(identity),
     `STRICT: text legibility is critical (infographic). No watermark.`,
   ].filter(Boolean).join('\n\n')
 }
@@ -208,7 +205,6 @@ ${safeBlocks(concept).map(formatTextBlock).join('\n')}`
     `LAYOUT: title top + ${identity.coBrandBadges.length > 0 ? `brand badge "${identity.coBrandBadges.join(' + ')}" near title + ` : ''}product packaging centered (SHAPE LOCK applied) + 5-8 icon+label items in grid/circular around product + brief description below.`,
     safeDecor(concept).length > 0 ? `EXTRA: ${safeDecor(concept).map(formatDecor).join('; ')}` : '',
     technicalBlock(concept.aspectRatio),
-    antiPatternBlock(identity),
     `STRICT: all icon labels legible. Product matches SHAPE LOCK. No watermark.`,
   ].filter(Boolean).join('\n\n')
 }
@@ -232,7 +228,6 @@ ${safeBlocks(concept).map(formatTextBlock).join('\n')}`
     `LAYOUT: 2-column table. LEFT "${identity.productNameExact}" with vibrant EMERALD/teal header + glow accent + green ✓ on soft mint circular badges. RIGHT "Suplemen Lain" with neutral gray + red ✗ on soft pink badges. 5-7 rows with bold ${langLabel(language)} labels. Product image under left column header with glow halo. Optional small trust badges at bottom.`,
     safeDecor(concept).length > 0 ? `EXTRA: ${safeDecor(concept).map(formatDecor).join('; ')}` : '',
     technicalBlock(concept.aspectRatio),
-    antiPatternBlock(identity),
     `STRICT: premium polish (not Excel grid). Labels legible. Green ✓ + red ✗. No watermark.`,
   ].filter(Boolean).join('\n\n')
 }
@@ -270,7 +265,6 @@ ${safeBlocks(concept).map(formatTextBlock).join('\n')}`
     variantBlock.trim(),
     safeDecor(concept).length > 0 ? `EXTRA UI: ${safeDecor(concept).map(formatDecor).join('; ')}` : '',
     technicalBlock(concept.aspectRatio),
-    antiPatternBlock(identity),
     `STRICT: all UI text legible. No watermark.`,
   ].filter(Boolean).join('\n\n')
 }
@@ -323,7 +317,6 @@ ${safeBlocks(concept).map(formatTextBlock).join('\n')}`
     variantBlock.trim(),
     safeDecor(concept).length > 0 ? `EXTRA: ${safeDecor(concept).map(formatDecor).join('; ')}` : '',
     technicalBlock(concept.aspectRatio),
-    antiPatternBlock(identity),
     variant === 'promo'
       ? `STRICT: prices + deal label render EXACTLY from PRIMARY DEAL DATA above. Banner text legible. Product matches SHAPE LOCK. No watermark. No invented offers.`
       : variant === 'combo-vertical'
@@ -374,7 +367,6 @@ ${safeBlocks(concept).map(formatTextBlock).join('\n')}`
     variantBlock.trim(),
     `STYLE: editorial polish (magazine/feature card, NOT amateur UGC). Mobile-readable.`,
     technicalBlock(concept.aspectRatio),
-    antiPatternBlock(identity),
     `STRICT: name + credentials/followers + quote legible. Person matches subject lock. No watermark.`,
   ].filter(Boolean).join('\n\n')
 }
