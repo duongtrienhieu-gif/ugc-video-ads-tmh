@@ -80,14 +80,11 @@ function brandLockBlock(
     return `PRODUCT (match reference image): "${identity.productNameExact}". Colors: ${identity.primaryColors.join(', ')}.`
   }
 
-  return `PRODUCT (match reference image): "${identity.productNameExact}" — ${identity.packagingShape}. Colors: ${identity.primaryColors.join(', ')}. Scale: ${identity.productScale}.
+  return `PRODUCT: match the uploaded reference image — same label, shape, proportions, lid, colors. (SKU: "${identity.productNameExact}".)
 
-SCALE ANCHOR (when product held by person):
-  - Small products (sprays, drops, lip balm, vials, sample tubes): height SHORTER than hand span; width < 2 fingers. NEVER render as water-bottle-sized.
-  - Medium (cream jars, serums ~100-200ml): fits one palm, smaller than face.
-  - Large (500ml+ bottles, big boxes): full hand grip or 2 hands.
-  - Product occupies 15-20% of frame CONSISTENTLY — NEVER center-stage dominating, NEVER too small (under 10%).
-  - Selfie/photo-share: arm's length medium shot, NOT close-up (perspective bias = 2-3x oversize).`
+HAND-ANCHORED SIZE (when held by person, universal across pack):
+  - Anchor sizing to the HAND, not frame %. Product MUST look smaller than the hand holding it.
+  - Natural arm's-length perspective, NOT macro close-up (close-up bias = 2-3x oversize).`
 }
 
 /** Subject identity injection — chỉ dùng khi recipe có người làm chủ thể.
