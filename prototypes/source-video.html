@@ -149,6 +149,26 @@
     .source-tag.tiktok { background: #1f1f1f; color: #fff; }
     .source-tag.web { background: #dbeafe; color: #1d4ed8; }
     .error { background: #fef2f2; color: #991b1b; padding: 10px 12px; border-radius: 6px; margin: 8px 0; font-size: 13px; }
+    .quota-warning {
+      background: #fffbeb;
+      border: 2px solid #f59e0b;
+      border-radius: 10px;
+      padding: 20px 24px;
+      margin: 16px 0;
+    }
+    .quota-title {
+      font-size: 18px;
+      font-weight: 700;
+      color: #b45309;
+      margin-bottom: 12px;
+    }
+    .quota-body {
+      font-size: 14px;
+      line-height: 1.6;
+      color: #78350f;
+    }
+    .quota-body a { color: #b45309; font-weight: 600; }
+    .quota-body small { color: #92400e; font-size: 12px; }
     .loading { color: #6b7280; font-style: italic; padding: 12px; }
     .empty { color: #9ca3af; font-size: 13px; padding: 12px; text-align: center; }
     .status-bar {
@@ -411,7 +431,21 @@ Bấm vào giỏ hàng dưới đây để được giảm thêm 20% cho đơn �
           if (statusEl) statusEl.innerHTML = `✅ Hoàn tất ${scenes.length} scene + ${allAnalyses.length} video phân tích trong ${totalElapsed}s.`
         }
       } catch (err) {
-        output.innerHTML = `<div class="error">❌ Lỗi: ${escapeHtml(err.message)}</div>`
+        if (err.code === 'QUOTA_EXHAUSTED') {
+          output.innerHTML = `
+            <div class="quota-warning">
+              <div class="quota-title">⛔ Quota Gemini Free Tier đã cạn</div>
+              <div class="quota-body">
+                Free tier giới hạn <strong>250 requests/ngày</strong>. Bạn đã chạy quá nhiều iteration hôm nay.<br><br>
+                <strong>Giải pháp:</strong><br>
+                • <strong>Đợi đến nửa đêm Pacific Time</strong> (khoảng 15:00 ICT) để quota reset, hoặc<br>
+                • <strong>Upgrade paid tier</strong> tại <a href="https://aistudio.google.com/billing" target="_blank">aistudio.google.com/billing</a> — tier 1 không có giới hạn ngặt như free<br><br>
+                <small>Mỗi lần chạy app ăn ~60-70 calls (parse + 3 search + rank + 3 video analyses/scene). 4-5 lần test = hết quota.</small>
+              </div>
+            </div>`
+        } else {
+          output.innerHTML = `<div class="error">❌ Lỗi: ${escapeHtml(err.message)}</div>`
+        }
       } finally {
         btn.disabled = false
       }
@@ -430,6 +464,13 @@ Bấm vào giỏ hàng dưới đây để được giảm thêm 20% cho đơn �
         })
         if (res.ok) return res.json()
         lastErr = await res.text().catch(() => '')
+        // 429 RESOURCE_EXHAUSTED = daily quota cạn, retry vô ích, propagate ngay
+        const isExhausted = res.status === 429 && /RESOURCE_EXHAUSTED|exhausted/i.test(lastErr)
+        if (isExhausted) {
+          const err = new Error(`QUOTA_EXHAUSTED: Gemini free tier (250 req/day) đã cạn. Đợi đến nửa đêm Pacific Time hoặc upgrade tại https://aistudio.google.com/billing`)
+          err.code = 'QUOTA_EXHAUSTED'
+          throw err
+        }
         const retryable = [429, 500, 502, 503, 504].includes(res.status) || /UNAVAILABLE|overload/i.test(lastErr)
         if (!retryable || attempt === maxRetries) {
           throw new Error(`Gemini ${res.status}: ${lastErr.slice(0, 200)}`)
@@ -525,6 +566,11 @@ Sau khi search, viết 2-3 câu tóm tắt các nguồn bạn tìm được và 
 
       const seen = new Set()
       const links = []
+      // Domains that almost never link to a specific video (e-commerce, stock homepages, etc.)
+      const BAD_DOMAIN_RE = /^(shutterstock|gettyimages|istockphoto|envato|vecteezy|123rf|dreamstime|fotolia|stockfresh|alamy|depositphotos|adobe\.stock|ebay|walmart|amazon|aliexpress|alibaba|shopee|temu|target|bestbuy|reddit|quora|pinterest)\.[a-z.]+$/i
+      // Generic bare-domain pattern (title is just "domain.com" — likely homepage)
+      const BARE_DOMAIN_RE = /^[a-z0-9-]+\.[a-z]{2,}(\.[a-z]{2,})?$/i
+
       for (const c of chunks) {
         if (!c.web?.uri) continue
         if (seen.has(c.web.uri)) continue
@@ -532,9 +578,13 @@ Sau khi search, viết 2-3 câu tóm tắt các nguồn bạn tìm được và 
         seen.add(c.web.uri)
         let domain = ''
         try { domain = new URL(c.web.uri).hostname.replace(/^www\./, '') } catch {}
-        const title = c.web.title || domain || c.web.uri
-        // Skip if title is obviously YouTube (already covered by YT API)
-        if (/^youtube\.com$|^youtu\.be$/i.test(title.trim())) continue
+        const title = (c.web.title || domain || c.web.uri).trim()
+        // Skip YouTube (already covered by YT API)
+        if (/^youtube\.com$|^youtu\.be$/i.test(title)) continue
+        // Skip known non-video domains
+        if (BAD_DOMAIN_RE.test(title)) continue
+        // Skip bare-domain titles (homepage indicators)
+        if (BARE_DOMAIN_RE.test(title)) continue
         links.push({ url: c.web.uri, title, domain })
       }
 
@@ -635,8 +685,13 @@ Trả JSON array [{id, score, reason}]. Reason là 1 câu ngắn (< 15 từ) ti�
         return links
           .map((l, i) => ({ ...l, score: map.get(i)?.score ?? 50, reason: map.get(i)?.reason || '' }))
           .sort((a, b) => (b.score || 0) - (a.score || 0))
-      } catch {
-        return links.map(l => ({ ...l, score: 50 }))
+      } catch (err) {
+        if (err.code === 'QUOTA_EXHAUSTED') throw err
+        // Fallback: source priority (YT > TikTok > Web) with descending pseudo-score
+        const priority = { youtube: 70, tiktok: 60, web: 40 }
+        return links
+          .map(l => ({ ...l, score: priority[l.source] ?? 50, reason: '(rank fail — sort theo nguồn)' }))
+          .sort((a, b) => (b.score || 0) - (a.score || 0))
       }
     }
 
