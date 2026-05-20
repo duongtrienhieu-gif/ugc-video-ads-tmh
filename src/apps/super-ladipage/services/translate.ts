@@ -29,6 +29,11 @@ function collectFieldsToTranslate(pack: LandingPagePack): TranslateSource {
     if (s.cta)          out[`${prefix}.cta`]          = s.cta
     if (s.offerStrip)   out[`${prefix}.offerStrip`]   = s.offerStrip
     if (s.urgencyText)  out[`${prefix}.urgencyText`]  = s.urgencyText
+    // P5 — layoutGuide phải LUÔN tiếng Việt bất kể section language. Gemini
+    // hay ignore instruction này → defense-in-depth: include vào translate
+    // batch, applyTranslations sẽ overwrite section.layoutGuide trực tiếp
+    // (không phải *Vi field) → enforce tiếng Việt sau pack gen.
+    if (s.layoutGuide)  out[`${prefix}.layoutGuide`]  = s.layoutGuide
     s.bullets?.forEach((b, bi) => { out[`${prefix}.bullets[${bi}]`] = b })
     s.faqs?.forEach((f, fi) => {
       out[`${prefix}.faqs[${fi}].question`] = f.question
@@ -63,6 +68,10 @@ function applyTranslations(pack: LandingPagePack, translations: TranslateSource)
     else if (sub === 'cta')          sec.ctaVi               = value
     else if (sub === 'offerStrip')   sec.offerStripVi        = value
     else if (sub === 'urgencyText')  sec.urgencyTextVi       = value
+    // P5 — overwrite layoutGuide trực tiếp (không có *Vi sibling vì
+    // field này LUÔN là Vietnamese, không bilingual). Defense-in-depth
+    // cho prompt instruction mà Gemini hay ignore.
+    else if (sub === 'layoutGuide')  sec.layoutGuide         = value
     else if (sub.startsWith('bullets[')) {
       const bi = Number(sub.match(/\[(\d+)\]/)?.[1] ?? -1)
       if (bi >= 0) {

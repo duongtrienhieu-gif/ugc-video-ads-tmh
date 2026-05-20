@@ -50,14 +50,21 @@ Fields:
     • with discount: "RM59, 50% off for first 50 customers"
   Do NOT include: shipping fees, COD info, delivery times, regional surcharges (e.g. "Sabah +RM5"), address fields, "FREESHIP" word (shipping is implied for bundle, not part of price text).
 
-E-COMMERCE PLATFORM HANDLING (Shopee/Lazada/TikTok Shop/Tiki/...):
-The webpage may contain MULTIPLE products mixed together:
-  - MAIN product (focus of the page — usually first in markdown, has main image gallery + price + add-to-cart button + detailed description)
-  - "Sản phẩm khác của shop" / "Other products from this shop"
-  - "Có thể bạn cũng thích" / "You may also like" / "Sản phẩm liên quan"
-  - "Đã xem gần đây" / "Recently viewed"
-⚠️ EXTRACT ONLY THE MAIN PRODUCT. Ignore ALL related/recommended/other-shop sections completely.
-Identify the main product by: appears FIRST in page text + has price + has detailed description + has main image. If multiple products with similar prominence exist → still pick the first (top of page).
+E-COMMERCE PLATFORM HANDLING:
+Supported platforms include:
+  - SEA: Shopee, Lazada, TikTok Shop, Tiki, Sendo
+  - Chinese: 1688, Alibaba, AliExpress, Taobao, Tmall, Pinduoduo, JD.com
+  - Western: Amazon, eBay, Walmart, Target, Best Buy, Etsy
+The webpage may contain MULTIPLE products mixed together. Common noise sections to IGNORE (any language):
+  - "Sản phẩm khác của shop" / "Other products from this shop" / "More from this seller"
+  - "Có thể bạn cũng thích" / "You may also like" / "Customers also bought" / "Frequently bought together"
+  - "Sản phẩm liên quan" / "Related products" / "Similar items" / "Recommended for you"
+  - "Đã xem gần đây" / "Recently viewed" / "Browsing history"
+  - "Sponsored" / "Quảng cáo" / "广告" / "推荐商品"
+  - "你可能还喜欢" / "店铺其他商品" / "猜你喜欢"
+⚠️ EXTRACT ONLY THE MAIN PRODUCT. Ignore ALL related/recommended/other-shop/sponsored sections completely.
+Identify the main product by: appears FIRST in page text + has price + has detailed description + has main image gallery + has add-to-cart button. If multiple products with similar prominence exist → still pick the first (top of page).
+For 1688/Alibaba B2B pages: focus on the main listing's price range / MOQ / specifications. Ignore "Recommended suppliers" / "Same category products".
 - ingredients: PHYSICAL substances / compounds / active components actually INSIDE the product. Examples of CORRECT values: "Vitamin B12, A, E, biotin, iron, magnesium" or "Inulin prebiotic, FloraFit probiotic strains, Lactobacillus acidophilus, Bifidobacterium" or "Angelica sinensis, Motherwort herb, Dong Quai root" or "Hyaluronic acid, niacinamide, vitamin C, peptides".
   ❌ ABSOLUTE PROHIBITION: NEVER put marketing slogans, CTAs, call-to-action phrases, or promotional text here. The following are NOT ingredients and MUST NEVER appear in this field: "DAFTAR UNTUK DAPATKAN HARGA TAWARAN SEKARANG", "REGISTER TO GET THE OFFER PRICE NOW", "BUY NOW", "ORDER TODAY", "CLICK HERE", "SUBSCRIBE", "JOM BELI", "MUA NGAY", "ĐẶT HÀNG NGAY", "ĐĂNG KÝ", "Get yours now", "Shop now", etc.
   Ingredients = PHYSICAL THINGS inside the bottle/box (vitamins, herbs, probiotic strains, compounds, active molecules). CTAs = marketing actions for the customer to take. These are DIFFERENT.
