@@ -113,9 +113,9 @@ SCHEMA:
                           (RM129 × 2) → set originalPrice="RM258".
           savingsLabel:   ALWAYS COMPUTE if price + originalPrice both known.
                           Math: savings = originalPrice − price.
-                          Format: "JIMAT RM{savings}" (Malay) or "TIẾT KIỆM {savings}đ" (Vietnamese)
-                          or "SAVE ${savings}" (English) — match output language of identity.
-                          E.g. "JIMAT RM70" if RM129−RM59=RM70. ALSO add "{percentage}% OFF" badge.
+                          Format: "JIMAT RM<savings>" (Malay) or "TIẾT KIỆM <savings>đ" (Vietnamese)
+                          or "SAVE $<savings>" (English) — match output language of identity.
+                          E.g. "JIMAT RM70" if RM129−RM59=RM70. ALSO add "<percentage>% OFF" badge.
           benefits:       short benefit bullets in target language (if any), else []
       - ORDER: entry-level / cheapest tier FIRST → comboDeals[0] = headline.
       - Example input "BUY 1 GET 1 RM59 (was RM129), BUY 2 GET 2 RM99, BUY 3 GET 3 RM129":
