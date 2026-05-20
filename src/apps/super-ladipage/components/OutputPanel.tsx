@@ -224,19 +224,49 @@ function ImageGenerationBar({
   const estCreditsRemaining = remaining * CREDIT_PER_IMAGE
   const estCreditsFailed    = failedCount * CREDIT_PER_IMAGE
 
+  // Status chips dùng counter derive từ pack.sections — auto-update kể cả
+  // khi gen từng ảnh thủ công (regenerateSingleImage cũng patch pack state).
+  const notStarted = Math.max(0, totalImages - generated - failedCount)
+
   return (
     <div className="flex flex-wrap items-center justify-between gap-2">
-      <div className="min-w-0">
+      <div className="min-w-0 flex-1">
         <p className="flex items-center gap-1.5 text-xs font-semibold text-gray-800">
           <ImageIcon className="h-3.5 w-3.5 text-amber-600" />
           Sinh ảnh thật cho landing pack
         </p>
-        <p className="text-[10px] text-gray-500">
-          {generated}/{totalImages} ảnh đã sinh
-          {failedCount > 0 && <span className="text-red-600"> · {failedCount} lỗi</span>}
-          {' '}· <span className="font-medium text-amber-700">1 ảnh ≈ {CREDIT_PER_IMAGE} credit</span>
-          {pack.visualMemory.length > 0 && ` · ${pack.visualMemory.length} ảnh tham chiếu`}
-        </p>
+        {/* Status chips — visible trong red-box area, auto-update từ pack state */}
+        <div className="mt-1 flex flex-wrap items-center gap-1.5">
+          <span
+            className="flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-700"
+            title={`${generated} ảnh đã render thành công`}
+          >
+            <Check className="h-2.5 w-2.5" />
+            Thành công: {generated}/{totalImages}
+          </span>
+          {failedCount > 0 && (
+            <span
+              className="flex items-center gap-1 rounded-full border border-red-200 bg-red-50 px-2 py-0.5 text-[10px] font-bold text-red-700"
+              title={`${failedCount} ảnh fail — bấm "Tạo lại N ảnh lỗi" để retry`}
+            >
+              <AlertTriangle className="h-2.5 w-2.5" />
+              Thất bại: {failedCount}
+            </span>
+          )}
+          {notStarted > 0 && (
+            <span
+              className="flex items-center gap-1 rounded-full border border-gray-200 bg-gray-100 px-2 py-0.5 text-[10px] font-bold text-gray-600"
+              title={`${notStarted} ảnh chưa được tạo`}
+            >
+              <Clock className="h-2.5 w-2.5" />
+              Chưa làm: {notStarted}
+            </span>
+          )}
+          <span className="text-[10px] text-gray-400">
+            · <span className="font-medium text-amber-700">1 ảnh ≈ {CREDIT_PER_IMAGE} credit</span>
+            {pack.visualMemory.length > 0 && ` · ${pack.visualMemory.length} ảnh tham chiếu`}
+          </span>
+        </div>
       </div>
 
       <div className="flex flex-wrap items-center gap-1.5">
