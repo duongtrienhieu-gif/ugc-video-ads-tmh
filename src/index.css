@@ -246,6 +246,160 @@ p, span, div, label, button, a, li, td, th, h1, h2, h3, h4, h5, h6 {
 [data-theme="dark"] .text-gray-300,
 [data-theme="dark"] .text-gray-200 { color: var(--color-text-faint) !important; }
 
+/* ─────────────────────────────────────────────────────────────────────
+ * TINTED TEXT — lighten brand colors in dark mode so they stay legible
+ * over dark surfaces. The 700-900 shades are too dark on bg #1F2024;
+ * lift them to the 300-400 range while preserving hue. The 500-600
+ * shades (used for icons + secondary tints) get a gentler lift.
+ *
+ * Why this matters: SectionCard's "Hướng dẫn layout" used
+ * `bg-violet-50 text-violet-900` — the background got darkened by the
+ * earlier rule, but `text-violet-900` (purple #4C1D95) stayed near
+ * black → invisible on dark surface. Same for blue-700 ("Bản dịch
+ * tiếng Việt"), orange-800 (CTA highlight), etc.
+ * ─────────────────────────────────────────────────────────────────── */
+
+/* Violet */
+[data-theme="dark"] .text-violet-900,
+[data-theme="dark"] .text-violet-800 { color: #DDD6FE !important; }   /* violet-200 */
+[data-theme="dark"] .text-violet-700,
+[data-theme="dark"] .text-violet-600 { color: #C4B5FD !important; }   /* violet-300 */
+[data-theme="dark"] .text-violet-500,
+[data-theme="dark"] .text-violet-400 { color: #A78BFA !important; }   /* violet-400 */
+
+/* Blue */
+[data-theme="dark"] .text-blue-900,
+[data-theme="dark"] .text-blue-800 { color: #BFDBFE !important; }     /* blue-200 */
+[data-theme="dark"] .text-blue-700,
+[data-theme="dark"] .text-blue-600 { color: #93C5FD !important; }     /* blue-300 */
+[data-theme="dark"] .text-blue-500,
+[data-theme="dark"] .text-blue-400 { color: #60A5FA !important; }     /* blue-400 */
+
+/* Rose */
+[data-theme="dark"] .text-rose-900,
+[data-theme="dark"] .text-rose-800 { color: #FECDD3 !important; }     /* rose-200 */
+[data-theme="dark"] .text-rose-700,
+[data-theme="dark"] .text-rose-600 { color: #FDA4AF !important; }     /* rose-300 */
+[data-theme="dark"] .text-rose-500,
+[data-theme="dark"] .text-rose-400 { color: #FB7185 !important; }     /* rose-400 */
+
+/* Orange */
+[data-theme="dark"] .text-orange-900,
+[data-theme="dark"] .text-orange-800 { color: #FED7AA !important; }   /* orange-200 */
+[data-theme="dark"] .text-orange-700,
+[data-theme="dark"] .text-orange-600 { color: #FDBA74 !important; }   /* orange-300 */
+[data-theme="dark"] .text-orange-500,
+[data-theme="dark"] .text-orange-400 { color: #FB923C !important; }   /* orange-400 */
+
+/* Amber */
+[data-theme="dark"] .text-amber-900,
+[data-theme="dark"] .text-amber-800 { color: #FDE68A !important; }    /* amber-200 */
+[data-theme="dark"] .text-amber-700,
+[data-theme="dark"] .text-amber-600 { color: #FCD34D !important; }    /* amber-300 */
+[data-theme="dark"] .text-amber-500,
+[data-theme="dark"] .text-amber-400 { color: #FBBF24 !important; }    /* amber-400 */
+
+/* Emerald */
+[data-theme="dark"] .text-emerald-900,
+[data-theme="dark"] .text-emerald-800 { color: #A7F3D0 !important; }  /* emerald-200 */
+[data-theme="dark"] .text-emerald-700,
+[data-theme="dark"] .text-emerald-600 { color: #6EE7B7 !important; }  /* emerald-300 */
+[data-theme="dark"] .text-emerald-500,
+[data-theme="dark"] .text-emerald-400 { color: #34D399 !important; }  /* emerald-400 */
+
+/* Green (some buttons / status use generic green) */
+[data-theme="dark"] .text-green-900,
+[data-theme="dark"] .text-green-800 { color: #BBF7D0 !important; }    /* green-200 */
+[data-theme="dark"] .text-green-700,
+[data-theme="dark"] .text-green-600 { color: #86EFAC !important; }    /* green-300 */
+[data-theme="dark"] .text-green-500,
+[data-theme="dark"] .text-green-400 { color: #4ADE80 !important; }    /* green-400 */
+
+/* Red */
+[data-theme="dark"] .text-red-900,
+[data-theme="dark"] .text-red-800 { color: #FECACA !important; }      /* red-200 */
+[data-theme="dark"] .text-red-700,
+[data-theme="dark"] .text-red-600 { color: #FCA5A5 !important; }      /* red-300 */
+[data-theme="dark"] .text-red-500,
+[data-theme="dark"] .text-red-400 { color: #F87171 !important; }      /* red-400 */
+
+/* Pink */
+[data-theme="dark"] .text-pink-900,
+[data-theme="dark"] .text-pink-800 { color: #FBCFE8 !important; }     /* pink-200 */
+[data-theme="dark"] .text-pink-700,
+[data-theme="dark"] .text-pink-600 { color: #F9A8D4 !important; }     /* pink-300 */
+[data-theme="dark"] .text-pink-500 { color: #F472B6 !important; }     /* pink-400 */
+
+/* Indigo */
+[data-theme="dark"] .text-indigo-900,
+[data-theme="dark"] .text-indigo-800 { color: #C7D2FE !important; }   /* indigo-200 */
+[data-theme="dark"] .text-indigo-700,
+[data-theme="dark"] .text-indigo-600 { color: #A5B4FC !important; }   /* indigo-300 */
+[data-theme="dark"] .text-indigo-500,
+[data-theme="dark"] .text-indigo-400 { color: #818CF8 !important; }   /* indigo-400 */
+
+/* Sky */
+[data-theme="dark"] .text-sky-700,
+[data-theme="dark"] .text-sky-600 { color: #7DD3FC !important; }      /* sky-300 */
+[data-theme="dark"] .text-sky-500,
+[data-theme="dark"] .text-sky-400 { color: #38BDF8 !important; }      /* sky-400 */
+
+/* Cyan */
+[data-theme="dark"] .text-cyan-900,
+[data-theme="dark"] .text-cyan-800 { color: #A5F3FC !important; }     /* cyan-200 */
+[data-theme="dark"] .text-cyan-700,
+[data-theme="dark"] .text-cyan-600 { color: #67E8F9 !important; }     /* cyan-300 */
+
+/* Teal */
+[data-theme="dark"] .text-teal-900,
+[data-theme="dark"] .text-teal-800 { color: #99F6E4 !important; }     /* teal-200 */
+[data-theme="dark"] .text-teal-700,
+[data-theme="dark"] .text-teal-600 { color: #5EEAD4 !important; }     /* teal-300 */
+
+/* Purple (some sections use generic purple) */
+[data-theme="dark"] .text-purple-900,
+[data-theme="dark"] .text-purple-800 { color: #E9D5FF !important; }   /* purple-200 */
+[data-theme="dark"] .text-purple-700,
+[data-theme="dark"] .text-purple-600 { color: #D8B4FE !important; }   /* purple-300 */
+
+/* Fuchsia */
+[data-theme="dark"] .text-fuchsia-700,
+[data-theme="dark"] .text-fuchsia-600 { color: #F0ABFC !important; }  /* fuchsia-300 */
+
+/* Slate / Stone (neutral accent for news / authority sections) */
+[data-theme="dark"] .text-slate-900,
+[data-theme="dark"] .text-slate-800 { color: #E2E8F0 !important; }    /* slate-200 */
+[data-theme="dark"] .text-slate-700,
+[data-theme="dark"] .text-slate-600 { color: #CBD5E1 !important; }    /* slate-300 */
+[data-theme="dark"] .text-stone-900,
+[data-theme="dark"] .text-stone-800 { color: #E7E5E4 !important; }    /* stone-200 */
+[data-theme="dark"] .text-stone-700,
+[data-theme="dark"] .text-stone-600 { color: #D6D3D1 !important; }    /* stone-300 */
+
+/* Opacity-modified variants used for italic translations ("text-blue-700/85") */
+[data-theme="dark"] .text-blue-700\/85,
+[data-theme="dark"] .text-blue-700\/80,
+[data-theme="dark"] .text-blue-800\/85 { color: rgba(147, 197, 253, 0.85) !important; }  /* blue-300 */
+[data-theme="dark"] .text-blue-800\/85 { color: rgba(147, 197, 253, 0.90) !important; }
+
+/* ── Tinted backgrounds — 100-shade (bigger emphasis blocks) ──────── */
+[data-theme="dark"] .bg-violet-100 { background-color: rgba(139, 92, 246, 0.18) !important; }
+[data-theme="dark"] .bg-emerald-100 { background-color: rgba(16, 185, 129, 0.18) !important; }
+[data-theme="dark"] .bg-rose-100 { background-color: rgba(244, 63, 94, 0.18) !important; }
+[data-theme="dark"] .bg-amber-100 { background-color: rgba(245, 158, 11, 0.18) !important; }
+[data-theme="dark"] .bg-blue-100 { background-color: rgba(59, 130, 246, 0.18) !important; }
+[data-theme="dark"] .bg-orange-100 { background-color: rgba(249, 115, 22, 0.18) !important; }
+[data-theme="dark"] .bg-pink-100 { background-color: rgba(236, 72, 153, 0.18) !important; }
+[data-theme="dark"] .bg-indigo-100 { background-color: rgba(99, 102, 241, 0.18) !important; }
+[data-theme="dark"] .bg-cyan-100 { background-color: rgba(6, 182, 212, 0.18) !important; }
+[data-theme="dark"] .bg-teal-100 { background-color: rgba(20, 184, 166, 0.18) !important; }
+[data-theme="dark"] .bg-fuchsia-100 { background-color: rgba(217, 70, 239, 0.18) !important; }
+[data-theme="dark"] .bg-slate-100 { background-color: rgba(100, 116, 139, 0.20) !important; }
+[data-theme="dark"] .bg-stone-100 { background-color: rgba(120, 113, 108, 0.20) !important; }
+[data-theme="dark"] .bg-purple-100 { background-color: rgba(168, 85, 247, 0.18) !important; }
+[data-theme="dark"] .bg-green-100 { background-color: rgba(34, 197, 94, 0.18) !important; }
+[data-theme="dark"] .bg-red-100 { background-color: rgba(239, 68, 68, 0.18) !important; }
+
 /* Inputs / textareas / selects */
 [data-theme="dark"] input,
 [data-theme="dark"] textarea,
