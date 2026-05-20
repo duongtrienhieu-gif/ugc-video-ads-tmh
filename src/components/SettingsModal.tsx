@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { X, Eye, EyeOff, Key, Check, HardDrive, RefreshCw, ChevronDown, ExternalLink, Sun, Moon } from 'lucide-react'
-import { useSettingsStore } from '../stores/settingsStore'
+import { useSettingsStore, flushPendingCloudPush } from '../stores/settingsStore'
 import { useAppStore } from '../stores/appStore'
 import { useBankStore } from '../stores/bankStore'
 import { getAllAssetIds, deleteAsset, isAssetRef } from '../utils/assetStore'
@@ -238,6 +238,17 @@ export default function SettingsModal({ open, onClose }: SettingsModalProps) {
     setElevenLabsApiKey(drafts.eleven.trim())
     setFalApiKey(drafts.fal.trim())
     setShotstackApiKey(drafts.shotstack.trim())
+
+    // RACE FIX (2026-05-20): setters schedule a 1.5s debounced cloud
+    // push. If the user clicked Lưu then F5'd within 1.5s, the new keys
+    // never reached Supabase + the next hydrateFromCloud would
+    // OVERWRITE localStorage with the stale cloud value, silently
+    // reverting the save. Bypass the debounce by flushing immediately
+    // BEFORE we tell the user "Đã lưu" so the toast is honest.
+    try {
+      await flushPendingCloudPush()
+    } catch { /* logged in flush fn */ }
+
     setSaved(true)
     addToast('Đã lưu cài đặt thành công')
     if (drafts.kie.trim()) {

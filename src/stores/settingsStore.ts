@@ -150,10 +150,63 @@ function schedulePushToCloud(s: StoredSettings): void {
     return
   }
   if (cloudPushTimer) clearTimeout(cloudPushTimer)
+  // Capture the latest snapshot so flushPendingCloudPush below can pick
+  // it up if the user navigates / F5 before the debounce fires.
+  pendingCloudSnapshot = s
   cloudPushTimer = setTimeout(() => {
     cloudPushTimer = null
-    pushSettingsToCloud(s).catch(() => { /* logged in push fn */ })
+    const snap = pendingCloudSnapshot
+    pendingCloudSnapshot = null
+    if (snap) pushSettingsToCloud(snap).catch(() => { /* logged in push fn */ })
   }, CLOUD_DEBOUNCE_MS)
+}
+
+/** Tracks the latest pending snapshot waiting to be debounce-pushed.
+ *  flushPendingCloudPush() reads this so an explicit Save / page unload
+ *  can fire the upload IMMEDIATELY instead of losing the new value to
+ *  the 1.5s debounce when the user F5s right after clicking Lưu. */
+let pendingCloudSnapshot: StoredSettings | null = null
+
+/** Force-push any pending settings to Supabase RIGHT NOW (bypass debounce).
+ *
+ *  Race fix: previously, clicking "Lưu cài đặt" then F5 within 1.5s
+ *  resulted in the new value sitting in localStorage but never reaching
+ *  cloud. On next page load, hydrateFromCloud() would then OVERWRITE
+ *  the local new value with the stale cloud value, silently reverting
+ *  the user's save.
+ *
+ *  Call sites:
+ *   • SettingsModal handleSave() — awaits before showing "Đã lưu" toast
+ *   • beforeunload / pagehide listener — best-effort flush on tab close
+ *
+ *  Resolves once the Supabase upsert completes (success or warning
+ *  logged). Safe to call multiple times — clears the timer + drops the
+ *  pending snapshot after pushing. */
+export async function flushPendingCloudPush(): Promise<void> {
+  if (cloudPushTimer) {
+    clearTimeout(cloudPushTimer)
+    cloudPushTimer = null
+  }
+  const snap = pendingCloudSnapshot
+  pendingCloudSnapshot = null
+  if (!snap) return
+  await pushSettingsToCloud(snap)
+}
+
+/** Best-effort beforeunload flush. Browsers DO NOT wait for async work
+ *  in pagehide, but the upsert is fire-and-forget — if the request
+ *  reaches the network layer before the tab dies, the server-side
+ *  upsert still completes. Catches the common "type key → close tab"
+ *  scenario without relying on debounce. */
+if (typeof window !== 'undefined') {
+  const flushOnUnload = () => {
+    if (cloudPushTimer || pendingCloudSnapshot) {
+      // Fire immediately — don't await (browser won't wait anyway)
+      void flushPendingCloudPush()
+    }
+  }
+  window.addEventListener('pagehide', flushOnUnload)
+  window.addEventListener('beforeunload', flushOnUnload)
 }
 
 /**
