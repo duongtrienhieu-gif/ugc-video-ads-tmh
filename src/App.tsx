@@ -85,29 +85,16 @@ export default function App() {
   const loadAll = useBankStore((s) => s.loadAll)
   const { kieApiKey, geminiApiKey, kieCredits, setKieCredits, theme } = useSettingsStore()
 
-  // ── Theme: apply `data-theme="dark"` to <html> based on user preference.
-  // 'system' resolves via prefers-color-scheme + lives-updates when the OS
-  // toggles between light/dark while the app is open. Default theme is
-  // 'light' so existing users see no change until they opt in via Settings.
+  // ── Theme: apply `data-theme="dark"` to <html> when user has opted in.
+  // Only 2 modes: 'light' (default — attribute removed) / 'dark' (attribute
+  // set). Existing users see no change until they toggle in Settings.
   useEffect(() => {
-    const apply = (mode: 'light' | 'dark') => {
-      const root = document.documentElement
-      if (mode === 'dark') {
-        root.setAttribute('data-theme', 'dark')
-      } else {
-        root.removeAttribute('data-theme')
-      }
+    const root = document.documentElement
+    if (theme === 'dark') {
+      root.setAttribute('data-theme', 'dark')
+    } else {
+      root.removeAttribute('data-theme')
     }
-
-    if (theme === 'light') { apply('light'); return }
-    if (theme === 'dark')  { apply('dark');  return }
-
-    // theme === 'system' — follow OS, watch for changes
-    const mq = window.matchMedia('(prefers-color-scheme: dark)')
-    apply(mq.matches ? 'dark' : 'light')
-    const onChange = (e: MediaQueryListEvent) => apply(e.matches ? 'dark' : 'light')
-    mq.addEventListener('change', onChange)
-    return () => mq.removeEventListener('change', onChange)
   }, [theme])
   const [refreshingKie, setRefreshingKie] = useState(false)
   const [geminiOk, setGeminiOk] = useState<boolean | null>(null)

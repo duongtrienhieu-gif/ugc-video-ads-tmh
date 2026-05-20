@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { X, Eye, EyeOff, Key, Check, HardDrive, RefreshCw, ChevronDown, ExternalLink, Sun, Moon, Monitor } from 'lucide-react'
+import { X, Eye, EyeOff, Key, Check, HardDrive, RefreshCw, ChevronDown, ExternalLink, Sun, Moon } from 'lucide-react'
 import { useSettingsStore } from '../stores/settingsStore'
 import { useAppStore } from '../stores/appStore'
 import { useBankStore } from '../stores/bankStore'
@@ -406,7 +406,7 @@ export default function SettingsModal({ open, onClose }: SettingsModalProps) {
             })}
           </div>
 
-          {/* Giao diện (Theme) — Light / Dark / Theo hệ thống */}
+          {/* Giao diện (Theme) — Sáng / Tối */}
           <div className="border-t border-black/6 px-5 py-4">
             <div className="flex items-center justify-between gap-3 flex-wrap">
               <div>
@@ -415,9 +415,9 @@ export default function SettingsModal({ open, onClose }: SettingsModalProps) {
                   Giao diện
                 </p>
                 <p className="mt-0.5 text-[11px] text-gray-400">
-                  {theme === 'light'  && 'Đang dùng giao diện sáng'}
-                  {theme === 'dark'   && 'Đang dùng giao diện tối — đỡ mỏi mắt khi làm khuya'}
-                  {theme === 'system' && 'Tự động theo hệ điều hành (sáng/tối)'}
+                  {theme === 'dark'
+                    ? 'Đang dùng giao diện tối — đỡ mỏi mắt khi làm khuya'
+                    : 'Đang dùng giao diện sáng'}
                 </p>
               </div>
               <div className="flex shrink-0 items-center gap-1 rounded-lg border border-black/10 bg-black/[0.02] p-1">
@@ -425,7 +425,7 @@ export default function SettingsModal({ open, onClose }: SettingsModalProps) {
                   onClick={() => setTheme('light')}
                   title="Giao diện sáng"
                   aria-pressed={theme === 'light'}
-                  className={`flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-[11px] font-semibold transition-colors ${
+                  className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-[11px] font-semibold transition-colors ${
                     theme === 'light'
                       ? 'bg-white text-gray-900 shadow-sm'
                       : 'text-gray-500 hover:text-gray-700'
@@ -437,25 +437,13 @@ export default function SettingsModal({ open, onClose }: SettingsModalProps) {
                   onClick={() => setTheme('dark')}
                   title="Giao diện tối"
                   aria-pressed={theme === 'dark'}
-                  className={`flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-[11px] font-semibold transition-colors ${
+                  className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-[11px] font-semibold transition-colors ${
                     theme === 'dark'
                       ? 'bg-white text-gray-900 shadow-sm'
                       : 'text-gray-500 hover:text-gray-700'
                   }`}
                 >
                   <Moon className="h-3.5 w-3.5" /> Tối
-                </button>
-                <button
-                  onClick={() => setTheme('system')}
-                  title="Theo hệ điều hành"
-                  aria-pressed={theme === 'system'}
-                  className={`flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-[11px] font-semibold transition-colors ${
-                    theme === 'system'
-                      ? 'bg-white text-gray-900 shadow-sm'
-                      : 'text-gray-500 hover:text-gray-700'
-                  }`}
-                >
-                  <Monitor className="h-3.5 w-3.5" /> Theo OS
                 </button>
               </div>
             </div>
