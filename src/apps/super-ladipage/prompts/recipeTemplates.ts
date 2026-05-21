@@ -58,12 +58,12 @@ function langLabel(lang: 'ms' | 'vi' | 'en'): string {
 // Each recipe draws a condensed line from this registry.
 // ─────────────────────────────────────────────────────────────────────
 const VISUAL_MODE_REGISTRY = {
-  'ugc-social':            'ugc-social — authentic person photo, ecommerce overlays, high contrast, clean badge system.',
-  'ugc-clean-photo':       'ugc-clean-photo — authentic candid photo, real-life setting, zero overlays.',
-  'ecommerce-infographic': 'ecommerce-infographic — flat icons, mobile-readable labels, soft pastel palette.',
-  'product-showcase':      'product-showcase — product-centered, brand colors, icon grid, soft circular badges.',
-  'comparison-card':       'comparison-card — two-column table, white panels with drop-shadow, emerald vs. gray headers.',
-  'editorial-card':        'editorial-card — magazine endorsement style, portrait + quote box, professional polish.',
+  'ugc-social':            'ugc-social — authentic person, natural framing, ecommerce overlays, high contrast, flat badge system. No cinematic poster look.',
+  'ugc-clean-photo':       'ugc-clean-photo — authentic candid photo, natural handheld framing, believable expression, zero overlays.',
+  'ecommerce-infographic': 'ecommerce-infographic — flat clean icons, mobile-readable labels, minimal effects, scannable layout.',
+  'product-showcase':      'product-showcase — product-centered, brand colors, icon grid, flat circular badges, minimal decorative FX.',
+  'comparison-card':       'comparison-card — two-column table, white panels with drop-shadow, emerald vs. gray headers, flat badge fills.',
+  'editorial-card':        'editorial-card — magazine endorsement style, portrait + quote box, professional polish. No cinematic FX.',
 } as const
 
 function visualModeBlock(mode: keyof typeof VISUAL_MODE_REGISTRY): string {
@@ -128,7 +128,7 @@ function technicalBlock(aspectRatio: string): string {
     aspectRatio === '16:9' ? '1024×576 (mapped to 3:2 landscape)' :
     aspectRatio === '9:16' ? '832×1248 (mapped to 2:3 portrait)' :
                               '1024×1024'
-  return `TECHNICAL: ${dims}, 1K, sharp focus. HIERARCHY: headline/CTA/price dominant; supporting text max 2 short lines, no dense paragraphs. MOBILE: bold phrases, no visual clutter, no overlapping overlays.`
+  return `TECHNICAL: ${dims}, 1K, sharp focus. HIERARCHY: one focal point, headline/CTA dominant, max 2 short lines supporting text, bold phrases. COLOR: max 3 brand colors, CTA/price highlights only. AVOID: cinematic FX, glow effects, floating particles, AI-collage composition.`
 }
 
 // ═════════════════════════════════════════════════════════════════════
@@ -287,7 +287,7 @@ ${safeBlocks(concept).map(formatTextBlock).join('\n')}`
       ? `LAYOUT (TRUST NEWS): Malaysian news portal (mStar / Berita Harian / KKM) health section. Calm institutional layout, educational headline.`
     : variant === 'whatsapp'
       ? `LAYOUT (WHATSAPP): Realistic WhatsApp chat screenshot, green bubbles, mobile portrait. Casual Malay text with emojis (🙏 ✨ ❤️). Malaysian sender names + realistic timestamps. Vary vibe per image: 1-on-1 vs group, text vs photo embed vs long reply chain. Max 2-4 short messages visible per screen focus — no bubble clutter. ⛔ CONSISTENT TYPOGRAPHY across all 4 ảnh trong section §14: SAME chat bubble font size, SAME text density, SAME bubble width proportion. NO oversized headline overlay, NO mixed-size text (chữ to chữ nhỏ lộn xộn). NO English overlay banners — ALL text in target language.`
-      : `LAYOUT (SOCIAL PLATFORM): Authentic mobile UI of target platform (Facebook post / TikTok Shop review / Shopee product page / Instagram). Real-phone aesthetic, Casual Malay UI text + emojis, Malaysian usernames, realistic timestamps.`
+      : `LAYOUT (SOCIAL PLATFORM): Authentic mobile UI of target platform (Facebook post / TikTok Shop review / Shopee product page / Instagram). Real-phone aesthetic, native platform spacing, casual Malay UI text + emojis, Malaysian usernames, realistic timestamps. No oversized floating typography, no cinematic overlay — realistic feed composition.`
 
   return [
     `SCREENSHOT CONCEPT: ${concept.conceptScene}.`,
@@ -337,7 +337,7 @@ ${safeBlocks(concept).map(formatTextBlock).join('\n')}`
   } else if (variant === 'combo-vertical') {
     variantBlock = `LAYOUT (COMBO DEALS VERTICAL): Portrait infographic stacking ALL tiers from FULL DEALS LIST. Header bold title ("HARGA TERBAIK" / "TAWARAN COMBO" in target lang). Each tier block contains: tier badge (escalating naming "RAWATAN CEPAT / MENDALAMI / MAMPAN / MAKSIMUM") + product mockup (N units = tier quantity, SHAPE LOCK on each) + deal label + price block (originalPrice gạch + salePrice highlight + savings starburst) + 2-4 benefit bullets ✅. Tier 1=blue/teal, tier 2=red/orange "HOT DEAL", tier 3=amber/gold "BEST SELLER", tier 4=purple "MAX VALUE". Vibrant ecommerce palette, clear vertical separation.`
   } else {
-    variantBlock = `LAYOUT (PROMO BANNER): Native Malaysian FB/TikTok promo banner, hard-sell. Product packaging large center/side (SHAPE LOCK). Headline from PRIMARY DEAL LABEL above (e.g. "BELI 1 PERCUMA 1!"). Price block: originalPrice gạch → salePrice highlight. Savings starburst if available. Trust badges: ${identity.trustBadges.join(', ') || '(none)'}. CTA arrow button. Vibrant amber/red or violet/gold palette. ⛔ KHÔNG bịa offers ngoài PRIMARY DEAL DATA above.`
+    variantBlock = `LAYOUT (PROMO BANNER): Native Malaysian FB/TikTok promo banner, hard-sell. Product packaging large center/side (SHAPE LOCK). Headline from PRIMARY DEAL LABEL above (e.g. "BELI 1 PERCUMA 1!"). Price block: originalPrice gạch → salePrice highlight — 1 dominant price only, visually separated from headline. Savings starburst if available. Trust badges (flat fills): ${identity.trustBadges.join(', ') || '(none)'}. CTA button visually separate. Vibrant amber/red or violet/gold palette. ⛔ KHÔNG bịa offers ngoài PRIMARY DEAL DATA above.`
   }
 
   return [
