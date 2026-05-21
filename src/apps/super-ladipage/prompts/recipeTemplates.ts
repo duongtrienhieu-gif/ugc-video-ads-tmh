@@ -1,14 +1,13 @@
 import type { RecipeId, ImageSlotConcept, ProductIdentity, TextBlock, DecorElement } from '../types'
 
 // ─────────────────────────────────────────────────────────────────────
-// 8 VISUAL RECIPE TEMPLATES (P4 update).
+// 8 VISUAL RECIPE TEMPLATES (P5 update).
 //
-// Changes from Phase 3:
-// - A: drop price-tag in hero/discovery; inject subjectIdentityLock + packagingShape
-// - C: enforce 4-6 cause icons for why-happens diagram
-// - F: split sub-variants 'trust-news' | 'warning-news' | 'social-platform' | 'whatsapp'
-// - G: split sub-variants 'promo' | 'social-proof-banner'
-// - H NEW: Expert/KOL endorsement card
+// Changes from Phase 4:
+// - All recipes: PRODUCT_LOCK_LEVEL NONE/MINIMAL/FULL (renamed from bool Mode A/B)
+// - All recipes: SIZE_LOCK separated into sizeLockBlock() — handheld-natural /
+//   infographic-mini / foreground-dominant / secondary-product / shelf-packshot
+// - G combo-vertical: lockLevel=FULL + multiProductBlock() for tier consistency
 // ─────────────────────────────────────────────────────────────────────
 
 export interface RecipeInput {
@@ -73,36 +72,37 @@ function visualModeBlock(mode: keyof typeof VISUAL_MODE_REGISTRY): string {
 function brandLockBlock(
   identity: ProductIdentity,
   productInScene: boolean,
-  needsScaleAnchor: boolean = true,
+  lockLevel: 'none' | 'minimal' | 'full' = 'full',
 ): string {
   if (!productInScene) {
     return `PRODUCT: not visible in this image. Do NOT render any "${identity.productNameExact}".`
   }
-  // 2026-05-21: 2 modes của PRODUCT block:
-  //
-  // Mode A (needsScaleAnchor=false) — MINIMAL:
-  //   Recipes: C (infographic), D (icon grid), E (table), G (banner),
-  //            F non-whatsapp (platform UI screenshot).
-  //   Logic: Product là thumbnail / decorative, KHÔNG có person interaction.
-  //   filesUrl reference image đã convey shape/scale tới KIE.
-  //   Output: chỉ name + colors (đảm bảo identity match + brand consistency).
-  //   Save: ~90 từ / prompt × ~16 ảnh = ~1,440 từ /pack.
-  //
-  // Mode B (needsScaleAnchor=true) — FULL:
-  //   Recipes: A (UGC photo), B (clean UGC group/collage), F whatsapp.
-  //   Logic: Person holds/wears product → cần SCALE ANCHOR để chống
-  //   "sản phẩm to nhỏ không đồng nhất" giữa các ảnh.
-  //   Output: full PRODUCT (name + shape + colors + scale) + SCALE ANCHOR.
-  //   Shape + scale text giúp SCALE ANCHOR có context cụ thể cho hand-product.
-  if (!needsScaleAnchor) {
+  // PRODUCT_LOCK_LEVEL MINIMAL:
+  //   Recipes: C (infographic), D (icon grid), E (table), G promo/banner,
+  //            F non-whatsapp. Product = thumbnail/decorative, no person holds.
+  //   Output: name + colors. SIZE_LOCK handled by sizeLockBlock().
+  if (lockLevel === 'minimal') {
     return `PRODUCT (match reference image): "${identity.productNameExact}". Colors: ${identity.primaryColors.join(', ')}.`
   }
+  // PRODUCT_LOCK_LEVEL FULL:
+  //   Recipes: A (UGC photo), B (clean UGC), F whatsapp, G combo-vertical.
+  //   Person interacts with product OR product is primary hero.
+  //   SIZE_LOCK handled separately by sizeLockBlock() at recipe level.
+  return `PRODUCT: match the uploaded reference image — same label, shape, proportions, lid, colors. (SKU: "${identity.productNameExact}".)`
+}
 
-  return `PRODUCT: match the uploaded reference image — same label, shape, proportions, lid, colors. (SKU: "${identity.productNameExact}".)
+type SizeLockMode = 'handheld-natural' | 'shelf-packshot' | 'infographic-mini' | 'foreground-dominant' | 'secondary-product'
 
-HAND-ANCHORED SIZE (when held by person, universal across pack):
-  - Anchor sizing to the HAND, not frame %. Product MUST look smaller than the hand holding it.
-  - Natural arm's-length perspective, NOT macro close-up (close-up bias = 2-3x oversize).`
+function sizeLockBlock(mode: SizeLockMode): string {
+  if (mode === 'handheld-natural')    return `SIZE_LOCK (handheld): Product must look smaller than the hand holding it. Natural arm's-length — NOT macro close-up (close-up = 2-3× oversize).`
+  if (mode === 'shelf-packshot')      return `SIZE_LOCK (shelf): Product at natural scene scale on surface/shelf. No hand anchor.`
+  if (mode === 'infographic-mini')    return `SIZE_LOCK (infographic): Product = small decorative element. Icons/labels are primary — product never dominates layout.`
+  if (mode === 'foreground-dominant') return `SIZE_LOCK (hero): Product IS the hero — fills 40-60% of frame, centered, sharp.`
+  /* secondary-product */              return `SIZE_LOCK (secondary): Product visible but secondary — small-mid scale, not competing with main subject.`
+}
+
+function multiProductBlock(): string {
+  return `MULTI-PRODUCT: All product units must match the same reference — identical label, shape, lid, colors. Scale units to match tier quantity. Consistent proportions across all tiers.`
 }
 
 /** Subject identity injection — chỉ dùng khi recipe có người làm chủ thể.
@@ -158,7 +158,8 @@ ${safeDecor(concept).map(formatDecor).join('\n')}`
   return [
     `SCENE: ${concept.conceptScene}.`,
     subject,
-    brandLockBlock(identity, concept.productInScene),
+    brandLockBlock(identity, concept.productInScene, 'full'),
+    concept.productInScene ? sizeLockBlock('handheld-natural') : '',
     textOverlay,
     decor,
     visualModeBlock('ugc-social'),
@@ -177,7 +178,8 @@ function recipeB(input: RecipeInput): string {
   return [
     `SCENE: ${concept.conceptScene}.`,
     subject,
-    brandLockBlock(identity, concept.productInScene),
+    brandLockBlock(identity, concept.productInScene, 'full'),
+    concept.productInScene ? sizeLockBlock('handheld-natural') : '',
     visualModeBlock('ugc-clean-photo'),
     technicalBlock(concept.aspectRatio),
     `STRICT: ZERO text/letters in image. No watermark.`,
@@ -206,7 +208,8 @@ ${safeBlocks(concept).map(formatTextBlock).join('\n')}`
 
   return [
     `DIAGRAM CONCEPT: ${concept.conceptScene}.`,
-    brandLockBlock(identity, concept.productInScene, false),  // recipeC: infographic, no person holds
+    brandLockBlock(identity, concept.productInScene, 'minimal'),
+    concept.productInScene ? sizeLockBlock('infographic-mini') : '',
     labels,
     visualModeBlock('ecommerce-infographic'),
     layout,
@@ -230,7 +233,8 @@ ${safeBlocks(concept).map(formatTextBlock).join('\n')}`
 
   return [
     `INFOGRAPHIC CONCEPT: ${concept.conceptScene}.`,
-    brandLockBlock(identity, concept.productInScene, false),  // recipeD: icon grid, product center, no person holds
+    brandLockBlock(identity, concept.productInScene, 'minimal'),
+    concept.productInScene ? sizeLockBlock('foreground-dominant') : '',
     labels,
     visualModeBlock('product-showcase'),
     `LAYOUT: title top + ${identity.coBrandBadges.length > 0 ? `brand badge "${identity.coBrandBadges.join(' + ')}" near title + ` : ''}product center (SHAPE LOCK) + 5-8 icon+label grid around product. Each item: ingredient/benefit name dominant + max 5-word benefit label. NO stacked text paragraphs.`,
@@ -253,7 +257,8 @@ ${safeBlocks(concept).map(formatTextBlock).join('\n')}`
 
   return [
     `COMPARISON INFOGRAPHIC CONCEPT: ${concept.conceptScene}.`,
-    brandLockBlock(identity, concept.productInScene, false),  // recipeE: comparison table, no person holds
+    brandLockBlock(identity, concept.productInScene, 'minimal'),
+    concept.productInScene ? sizeLockBlock('infographic-mini') : '',
     cells,
     visualModeBlock('comparison-card'),
     `LAYOUT: LEFT column: emerald-green header, product image centered below header, green ✓ on white rows. RIGHT column: neutral gray header, red ✗ on white rows. 3-5 rows MAX, each row = ONE bold label (max 5 words) — NO sub-text, NO annotations. Bold white header text for column titles.`,
@@ -289,12 +294,15 @@ ${safeBlocks(concept).map(formatTextBlock).join('\n')}`
       ? `LAYOUT (WHATSAPP): Realistic WhatsApp chat screenshot, green bubbles, mobile portrait. Casual Malay text with emojis (🙏 ✨ ❤️). Malaysian sender names + realistic timestamps. Vary vibe per image: 1-on-1 vs group, text vs photo embed vs long reply chain. Max 2-4 short messages visible per screen focus — no bubble clutter. ⛔ CONSISTENT TYPOGRAPHY across all 4 ảnh trong section §14: SAME chat bubble font size, SAME text density, SAME bubble width proportion. NO oversized headline overlay, NO mixed-size text (chữ to chữ nhỏ lộn xộn). NO English overlay banners — ALL text in target language.`
       : `LAYOUT (SOCIAL PLATFORM): Authentic mobile UI of target platform (Facebook post / TikTok Shop review / Shopee product page / Instagram). Real-phone aesthetic, native platform spacing, casual Malay UI text + emojis, Malaysian usernames, realistic timestamps. No oversized floating typography, no cinematic overlay — realistic feed composition.`
 
+  // whatsapp: person holds product → FULL + handheld-natural
+  // social-platform / news: product = thumbnail in UI screenshot → MINIMAL + secondary
+  const fLockLevel: 'full' | 'minimal' = variant === 'whatsapp' ? 'full' : 'minimal'
+  const fSizeMode: SizeLockMode = variant === 'whatsapp' ? 'handheld-natural' : 'secondary-product'
+
   return [
     `SCREENSHOT CONCEPT: ${concept.conceptScene}.`,
-    // recipeF: SCALE ANCHOR chỉ cần cho whatsapp (selfie có thể có người cầm)
-    // Trust-news / warning-news / social-platform = platform UI screenshot,
-    // product thumbnail không cần SCALE ANCHOR.
-    brandLockBlock(identity, concept.productInScene, variant === 'whatsapp'),
+    brandLockBlock(identity, concept.productInScene, fLockLevel),
+    concept.productInScene ? sizeLockBlock(fSizeMode) : '',
     labels,
     variantBlock.trim(),
     safeDecor(concept).length > 0 ? `EXTRA UI: ${safeDecor(concept).map(formatDecor).join('; ')}` : '',
@@ -340,12 +348,18 @@ ${safeBlocks(concept).map(formatTextBlock).join('\n')}`
     variantBlock = `LAYOUT (PROMO BANNER): Native Malaysian FB/TikTok promo banner, hard-sell. Product packaging large center/side (SHAPE LOCK). Headline from PRIMARY DEAL LABEL above (e.g. "BELI 1 PERCUMA 1!"). Price block: originalPrice gạch → salePrice highlight — 1 dominant price only, visually separated from headline. Savings starburst if available. Trust badges (flat fills): ${identity.trustBadges.join(', ') || '(none)'}. CTA button visually separate. Vibrant amber/red or violet/gold palette. ⛔ KHÔNG bịa offers ngoài PRIMARY DEAL DATA above.`
   }
 
+  // combo-vertical: product IS the hero of each tier block → FULL lock
+  // promo / social-proof-banner: product = banner element → MINIMAL
+  const gLockLevel: 'full' | 'minimal' = variant === 'combo-vertical' ? 'full' : 'minimal'
+  const gSizeMode: SizeLockMode = variant === 'social-proof-banner' ? 'secondary-product' : 'foreground-dominant'
+
   return [
     `BANNER CONCEPT: ${concept.conceptScene}.`,
-    // recipeG: banner composition, product thumbnail, no person holds → skip SCALE ANCHOR
-    brandLockBlock(identity, concept.productInScene, false),
+    brandLockBlock(identity, concept.productInScene, gLockLevel),
+    concept.productInScene ? sizeLockBlock(gSizeMode) : '',
+    variant === 'combo-vertical' ? multiProductBlock() : '',
     banner,
-    // Deal data injection — CONDITIONAL by variant (2026-05-21):
+    // Deal data injection — CONDITIONAL by variant:
     // - social-proof-banner has "NO PRICE" rule → SKIP price block (was
     //   creating conflict signal: data has price but layout says no price)
     // - promo → inject primary deal (single headline price)
