@@ -333,17 +333,12 @@ export default function SuperLadipage() {
     setImageProgress({ done: 0, failed: 0, total: 0, retries: 0, startedAt })
     try {
       await generatePackImages(pack, {
-        // Concurrency 4: balance giữa speed và safety cho setup 3 KIE
-        // account / 8 nhân viên (split 3-3-2). Per-account load:
-        //  - Solo user gen: 1×4 = 4 task → siêu safe
-        //  - 2 user trùng acc (bình thường): 2×4 = 8 task → safe
-        //  - 3 user trùng acc (rare burst): 3×4 = 12 task → sát trần
-        //    KIE per-account ~10-15, marginal nhưng acceptable
-        // Pack 35 ảnh mất ~9-13 phút/user khi KIE healthy, ~22-28
-        // phút khi KIE degraded (như tình trạng 2026-05-20). Fail
-        // rate kỳ vọng <10% bình thường, <20% khi burst hoặc
-        // KIE busy.
-        concurrency: 4,
+        // Phase 1 stability freeze: concurrency 2 (reduced from 4).
+        // Priority: stability > speed until render pipeline is deterministic.
+        // Solo user: 1×2 = 2 concurrent KIE tasks → low error rate.
+        // 3-user burst on same acc: 3×2 = 6 → well under KIE threshold ~10-15.
+        // Trade-off: pack 35 ảnh ~14-18 phút vs ~9-13 phút (concurrency 4).
+        concurrency: 2,
         signal: controller.signal,
         onTaskUpdate: (sIdx, iIdx, patch) =>
           patchImagePrompt(sIdx, iIdx, patch.error ? { ...patch, error: friendlyError(patch.error) } : patch),

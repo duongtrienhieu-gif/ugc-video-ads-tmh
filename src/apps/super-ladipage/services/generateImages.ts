@@ -6,12 +6,10 @@ import { generateImageGptImage1 } from '../providers/kieGptImage1'
 // Super Ladipage — Pass 2: sinh ảnh thật.
 //
 // Single provider: KIE gpt-image-2 (1K, 6 credit/ảnh).
-// Queue concurrency 4 (default fallback). Caller (SuperLadipage) override
-// = 4 cũng — bump từ 3 để cải thiện throughput (~30% faster). Setup
-// 3 KIE acc / 8 user (3-3-2 split): worst case 3 user × 4 = 12/acc,
-// vẫn dưới trần KIE ~10-15. Retry hybrid (timeout → same prompt,
-// Policy → softened prompt) handled bởi provider.
-// AbortSignal hỗ trợ user hủy.
+// Phase 1 stability freeze: concurrency 2 (caller override = 2).
+// Reduces KIE burst load; improves timeout/fail rate during migration.
+// Retry hybrid (timeout → same prompt, Policy → softened prompt)
+// handled bởi provider. AbortSignal hỗ trợ user hủy.
 // ─────────────────────────────────────────────────────────────────────
 
 export interface BatchOptions {
@@ -92,7 +90,7 @@ async function runQueue(
   apiKey: string,
   opts: BatchOptions,
 ): Promise<{ done: number; failed: number }> {
-  const concurrency = opts.concurrency ?? 4
+  const concurrency = opts.concurrency ?? 2
   let done = 0
   let failed = 0
   let cursor = 0

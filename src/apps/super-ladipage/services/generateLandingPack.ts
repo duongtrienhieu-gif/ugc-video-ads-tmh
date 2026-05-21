@@ -88,13 +88,29 @@ function parseRawPack(raw: string): RawPackOutput {
   return parsed as RawPackOutput
 }
 
+/** Phase 1 — Deterministic per-image model routing.
+ *  Rules (in priority order):
+ *  1. productPolicy='forbidden' → always gpt-image-2 (no product)
+ *  2. recipe C (diagrams/infographics) → gpt-image-2 (text-only renders sharper)
+ *  3. recipe G (banners) → gpt-image-2 (layout-heavy, no strict product ref needed)
+ *  4. recipe F + recipeVariant='social-platform' → gpt-image-2 (UI screenshots)
+ *  5. all others → gpt-4o-image i2i (fail-safe: keep product identity lock)
+ *
+ *  DO NOT let AI or dynamic logic override these rules. */
+function resolveUseI2I(spec: SectionSpec | undefined, concept: ImageSlotConcept): boolean {
+  if (spec?.productPolicy === 'forbidden') return false
+  if (concept.recipeId === 'C') return false
+  if (concept.recipeId === 'G') return false
+  if (concept.recipeId === 'F' && concept.recipeVariant === 'social-platform') return false
+  return true
+}
+
 /** Convert RawPackOutput → LandingSection[].
  *  Normalize undefined arrays trên concept (Gemini hay omit khi rỗng)
  *  để recipe templates không crash khi gọi .length / .map / .filter.
  *
- *  P5: Derive useImageToImage từ spec.productPolicy (code-driven, không
- *  để AI quyết định). productPolicy='forbidden' → false (gpt-image-2);
- *  'required' hoặc 'optional' → true (gpt-4o-image i2i — fail-safe). */
+ *  Phase 1: useImageToImage derived per-image via resolveUseI2I()
+ *  (code-driven, deterministic — AI không quyết định routing). */
 function rawToSections(
   raw: RawPackOutput,
   identity: ProductIdentity,
@@ -103,8 +119,6 @@ function rawToSections(
 ): LandingSection[] {
   return raw.sections.map((s) => {
     const spec = specsBySectionType.get(s.type)
-    // P5 routing: forbidden → gpt-image-2; required/optional → gpt-4o-image
-    const useImageToImage = spec?.productPolicy !== 'forbidden'
 
     const imagePrompts: (ImagePrompt & { __concept?: ImageSlotConcept })[] = (s.imagePrompts ?? []).map((p) => {
       // Normalize concept — Gemini may omit arrays/optional fields
@@ -128,7 +142,7 @@ function rawToSections(
         style:           p.style,
         aspectRatio:     p.aspectRatio,
         status:          'idle' as const,
-        useImageToImage,
+        useImageToImage: resolveUseI2I(spec, concept),
         __concept:       concept,
       }
     })
