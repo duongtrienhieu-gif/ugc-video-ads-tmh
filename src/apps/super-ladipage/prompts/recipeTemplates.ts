@@ -1,13 +1,15 @@
 import type { RecipeId, ImageSlotConcept, ProductIdentity, TextBlock, DecorElement } from '../types'
 
 // ─────────────────────────────────────────────────────────────────────
-// 8 VISUAL RECIPE TEMPLATES (P5 update).
+// 8 VISUAL RECIPE TEMPLATES (P6 update).
 //
-// Changes from Phase 4:
-// - All recipes: PRODUCT_LOCK_LEVEL NONE/MINIMAL/FULL (renamed from bool Mode A/B)
-// - All recipes: SIZE_LOCK separated into sizeLockBlock() — handheld-natural /
-//   infographic-mini / foreground-dominant / secondary-product / shelf-packshot
-// - G combo-vertical: lockLevel=FULL + multiProductBlock() for tier consistency
+// Changes from Phase 5:
+// - emotionConsistencyBlock(): pain / after / expert / whatsapp-social / neutral
+//   Injected SCENE → EMOTION → SUBJECT LOCK in recipes A, B, F, H.
+//   SUBJECT LOCK (Stage 1) cleaned of emotion words — identity only.
+// - technicalBlock(): TYPOGRAPHY rules (1 font system, mobile-readable).
+// - F whatsapp: clean mobile chat UI (less clutter, larger padding).
+// - C why-happens / before-after: dominant label vs secondary explanation.
 // ─────────────────────────────────────────────────────────────────────
 
 export interface RecipeInput {
@@ -105,6 +107,35 @@ function multiProductBlock(): string {
   return `MULTI-PRODUCT: All product units must match the same reference — identical label, shape, lid, colors. Scale units to match tier quantity. Consistent proportions across all tiers.`
 }
 
+// ─────────────────────────────────────────────────────────────────────
+// EMOTION CONSISTENCY — Phase 6.
+// SUBJECT LOCK = identity only (gender/age/ethnicity/clothing). Emotion
+// must come from this block so pain/after/expert images don't conflict
+// with a "warm friendly genuine" identity description.
+// ─────────────────────────────────────────────────────────────────────
+type EmotionMode = 'pain' | 'after' | 'expert' | 'whatsapp-social' | 'neutral'
+
+function detectEmotionMode(concept: ImageSlotConcept, variant?: string): EmotionMode {
+  // Variant takes priority (F + H carry explicit semantic)
+  if (variant === 'whatsapp' || variant === 'social-platform' || variant === 'kol') return 'whatsapp-social'
+  if (variant === 'warning-news') return 'pain'
+  if (variant === 'expert')       return 'expert'
+  if (variant === 'trust-news')   return 'neutral'
+
+  const text = `${concept.roleLabel ?? ''} ${concept.conceptScene ?? ''}`.toLowerCase()
+  if (/\bpain\b|problem|failed|why-happens|cause|congested|irritated|frustrated|worried|trước khi|khó chịu|đau/.test(text)) return 'pain'
+  if (/after|benefit|success|relief|relieved|smile|happy|sau khi|lợi ích|khỏe|relaxed/.test(text)) return 'after'
+  return 'neutral'
+}
+
+function emotionConsistencyBlock(mode: EmotionMode): string {
+  if (mode === 'pain')            return `EMOTION: discomfort match — uncomfortable / tired / irritated / congested / worried / frustrated. NO smiling, NO relaxed breathing, NO "healthy/comfy" wording.`
+  if (mode === 'after')           return `EMOTION: relaxed, relieved, breathing easily, smiling naturally.`
+  if (mode === 'expert')          return `EMOTION: confident, trustworthy, calm, professional.`
+  if (mode === 'whatsapp-social') return `EMOTION: casual natural expression. Avoid exaggerated influencer smile.`
+  /* neutral */                    return ''
+}
+
 /** Subject identity injection — chỉ dùng khi recipe có người làm chủ thể.
  *  productInScene = true → người + sản phẩm.
  *  productInScene = false → người không có sản phẩm. */
@@ -128,7 +159,7 @@ function technicalBlock(aspectRatio: string): string {
     aspectRatio === '16:9' ? '1024×576 (mapped to 3:2 landscape)' :
     aspectRatio === '9:16' ? '832×1248 (mapped to 2:3 portrait)' :
                               '1024×1024'
-  return `TECHNICAL: ${dims}, 1K, sharp focus. HIERARCHY: one focal point, headline/CTA dominant, max 2 short lines supporting text, bold phrases. COLOR: max 3 brand colors, CTA/price highlights only. AVOID: cinematic FX, glow effects, floating particles, AI-collage composition.`
+  return `TECHNICAL: ${dims}, 1K, sharp focus. HIERARCHY: one focal point, headline/CTA dominant, max 2 short lines supporting text, bold phrases. TYPOGRAPHY: ONE font system per image — condensed bold uppercase headlines + clean sans-serif body, consistent weight hierarchy, mobile-readable. NO mixed font aesthetics, NO tiny paragraphs. COLOR: max 3 brand colors, CTA/price highlights only. AVOID: cinematic FX, glow effects, floating particles, AI-collage composition.`
 }
 
 // ═════════════════════════════════════════════════════════════════════
@@ -157,6 +188,7 @@ ${safeDecor(concept).map(formatDecor).join('\n')}`
 
   return [
     `SCENE: ${concept.conceptScene}.`,
+    emotionConsistencyBlock(detectEmotionMode(concept)),
     subject,
     brandLockBlock(identity, concept.productInScene, 'full'),
     concept.productInScene ? sizeLockBlock('handheld-natural') : '',
@@ -177,6 +209,7 @@ function recipeB(input: RecipeInput): string {
   const subject = subjectLockBlock(identity, concept)
   return [
     `SCENE: ${concept.conceptScene}.`,
+    emotionConsistencyBlock(detectEmotionMode(concept)),
     subject,
     brandLockBlock(identity, concept.productInScene, 'full'),
     concept.productInScene ? sizeLockBlock('handheld-natural') : '',
@@ -203,8 +236,8 @@ ${safeBlocks(concept).map(formatTextBlock).join('\n')}`
                        concept.roleLabel.toLowerCase().includes('why')
 
   const layout = isWhyHappens
-    ? `LAYOUT: title at top. Below = 4-6 DISTINCT CAUSE ITEMS in 2-col or vertical list. Each item: colored icon + short ${langLabel(language)} label (max 8 words) + 1-line explanation. NO paragraph blocks, NO tiny dense text.`
-    : `LAYOUT: title at top + before-after panels (red problem vs green healthy) + flow arrows + short icon labels (max 8 words each). NO explanatory paragraphs.`
+    ? `LAYOUT: title at top. Below = 4-6 DISTINCT CAUSE ITEMS in 2-col or vertical list. Each item: colored icon + DOMINANT ${langLabel(language)} label (max 8 words) + secondary explanation (max 5 words). NO paragraph blocks, NO tiny dense text.`
+    : `LAYOUT: title at top + before-after panels (red problem vs green healthy) + flow arrows + DOMINANT icon labels (max 8 words). Supporting text secondary, max 5 words. NO explanatory paragraphs.`
 
   return [
     `DIAGRAM CONCEPT: ${concept.conceptScene}.`,
@@ -291,7 +324,7 @@ ${safeBlocks(concept).map(formatTextBlock).join('\n')}`
     : variant === 'trust-news'
       ? `LAYOUT (TRUST NEWS): Malaysian news portal (mStar / Berita Harian / KKM) health section. Calm institutional layout, educational headline.`
     : variant === 'whatsapp'
-      ? `LAYOUT (WHATSAPP): Realistic WhatsApp chat screenshot, green bubbles, mobile portrait. Casual Malay text with emojis (🙏 ✨ ❤️). Malaysian sender names + realistic timestamps. Vary vibe per image: 1-on-1 vs group, text vs photo embed vs long reply chain. Max 2-4 short messages visible per screen focus — no bubble clutter. ⛔ CONSISTENT TYPOGRAPHY across all 4 ảnh trong section §14: SAME chat bubble font size, SAME text density, SAME bubble width proportion. NO oversized headline overlay, NO mixed-size text (chữ to chữ nhỏ lộn xộn). NO English overlay banners — ALL text in target language.`
+      ? `LAYOUT (WHATSAPP): Clean mobile chat UI, green bubbles, portrait phone frame. Casual Malay text with emojis (🙏 ✨ ❤️). Malaysian sender names + readable timestamps. Max 2 conversation clusters visible — larger bubble padding, generous message spacing. NO dense long paragraphs, NO tiny timestamp overload, NO bubble clutter. Vary vibe per image: 1-on-1 vs group vs photo embed. Consistent bubble font + width across all images in section. NO oversized headline overlay, NO English banners — ALL text in target language.`
       : `LAYOUT (SOCIAL PLATFORM): Authentic mobile UI of target platform (Facebook post / TikTok Shop review / Shopee product page / Instagram). Real-phone aesthetic, native platform spacing, casual Malay UI text + emojis, Malaysian usernames, realistic timestamps. No oversized floating typography, no cinematic overlay — realistic feed composition.`
 
   // whatsapp: person holds product → FULL + handheld-natural
@@ -301,6 +334,7 @@ ${safeBlocks(concept).map(formatTextBlock).join('\n')}`
 
   return [
     `SCREENSHOT CONCEPT: ${concept.conceptScene}.`,
+    emotionConsistencyBlock(detectEmotionMode(concept, variant)),
     brandLockBlock(identity, concept.productInScene, fLockLevel),
     concept.productInScene ? sizeLockBlock(fSizeMode) : '',
     labels,
@@ -416,6 +450,7 @@ ${safeBlocks(concept).map(formatTextBlock).join('\n')}`
 
   return [
     `ENDORSEMENT CARD CONCEPT: ${concept.conceptScene}.`,
+    emotionConsistencyBlock(detectEmotionMode(concept, variant)),
     subject,
     `PRODUCT VISIBILITY: NO product packaging in this image. Focus = person + quote. Product name only mentioned as text within the quote (NOT as visual packaging).`,
     labels,

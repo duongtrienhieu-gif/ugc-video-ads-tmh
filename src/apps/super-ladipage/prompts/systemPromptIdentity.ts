@@ -149,15 +149,16 @@ SCHEMA:
     man instead of Malaysian Muslim woman" bug.
     - primary: the most common subject demographic for this product+market.
       For Malaysian (MY) market: usually "Malaysian Muslim woman wearing
-      hijab, mid-20s to early 40s, warm friendly genuine look". Adjust
-      based on product category (men's grooming → Malaysian man; mom & baby
-      → Malaysian mother; etc).
+      hijab, mid-20s to early 40s". Adjust based on product category
+      (men's grooming → Malaysian man; mom & baby → Malaysian mother; etc).
     - secondary: alternate demographic for variety (e.g. "Malaysian man,
       mid-30s to 50s, clean look" if primary is woman). Used in 1-2 shots
       for demographic diversity.
     Write each as ONE complete sentence with: nationality + religion (if
-    relevant) + age range + visual identifier (hijab/clean-shaven/etc) +
-    expression hint.
+    relevant) + age range + visual identifier (hijab/clean-shaven/etc).
+    ⛔ DO NOT include emotion/expression words (smile, friendly, warm,
+    relaxed, worried, etc) — emotion is controlled per-image downstream.
+    SUBJECT LOCK must only describe identity continuity, never mood.
 
 11. productCategory — concise category. Examples cross categories:
     "oral care / teeth whitening powder"
