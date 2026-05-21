@@ -88,21 +88,20 @@ function parseRawPack(raw: string): RawPackOutput {
   return parsed as RawPackOutput
 }
 
-/** Phase 1 — Deterministic per-image model routing.
- *  Rules (in priority order):
- *  1. productPolicy='forbidden' → always gpt-image-2 (no product)
- *  2. recipe C (diagrams/infographics) → gpt-image-2 (text-only renders sharper)
- *  3. recipe G (banners) → gpt-image-2 (layout-heavy, no strict product ref needed)
- *  4. recipe F + recipeVariant='social-platform' → gpt-image-2 (UI screenshots)
- *  5. all others → gpt-4o-image i2i (fail-safe: keep product identity lock)
+/** Phase 1.1 — Deterministic model routing based on productPolicy (source of truth).
  *
- *  DO NOT let AI or dynamic logic override these rules. */
-function resolveUseI2I(spec: SectionSpec | undefined, concept: ImageSlotConcept): boolean {
-  if (spec?.productPolicy === 'forbidden') return false
-  if (concept.recipeId === 'C') return false
-  if (concept.recipeId === 'G') return false
-  if (concept.recipeId === 'F' && concept.recipeVariant === 'social-platform') return false
-  return true
+ *  RULE: route by product VISIBILITY, not by recipe/section name.
+ *    productPolicy = 'forbidden'          → gpt-image-2 (text-only, no product)
+ *    productPolicy = 'required'|'optional' → gpt-4o-image i2i + filesUrl refs
+ *
+ *  Rationale: ANY section with a visible product (packshot, bottle, label,
+ *  logo, selfie cầm sản phẩm, Shopee/TikTok screenshot có bottle) MUST use
+ *  gpt-4o-image i2i to lock product identity. Routing by recipe name causes
+ *  label drift / shape mutation on social/banner sections that DO show product.
+ *
+ *  DO NOT route by recipeId or recipeVariant — section recipe ≠ product visibility. */
+function resolveUseI2I(spec: SectionSpec | undefined, _concept: ImageSlotConcept): boolean {
+  return spec?.productPolicy !== 'forbidden'
 }
 
 /** Convert RawPackOutput → LandingSection[].
