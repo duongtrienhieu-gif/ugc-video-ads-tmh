@@ -49,17 +49,27 @@ WEBPAGE TEXT:
 ${pageText.slice(0, 10000)}`
 
 /** Used when images are also sent — tells Gemini to read both sources and synthesize. */
-const EXTRACT_PROMPT_HYBRID = (pageText: string) =>
-  `You are analyzing a product landing page. You have been given BOTH the page text AND screenshots/images from the page.
-Synthesize ALL sources — text and images together — to extract complete product information.
-Images may contain prices, ingredient lists, benefit claims, and visuals not present in the text.
-Fill in this JSON with the most complete information you can find across ALL sources.
-ALL VALUES MUST BE IN ENGLISH (translate if needed). Return ONLY the JSON, nothing else, all on one line:
+const EXTRACT_PROMPT_HYBRID = (pageText: string, imageCount: number) =>
+  `You are analyzing a product page. You have been given BOTH the page text (below) AND ${imageCount} screenshot(s)/image(s) from the page (above).
+
+WORKS FOR: LadiPage landings, Amazon listings, Shopee/Lazada/TikTok Shop product pages, Shopify stores, any e-commerce product page.
+
+YOUR TASK — HYBRID SYNTHESIS:
+1. SCAN BOTH SOURCES in parallel: read the text AND look at every image carefully.
+2. EXTRACT key product info from each source independently — text often has descriptions/reviews/specs, images often have prices on banners, ingredient lists on packshots, benefit claims on infographics, customer testimonials.
+3. MERGE & DEDUPLICATE: if both text and an image say the same thing, list it ONCE (don't repeat). If they disagree, prefer the more specific / detailed value.
+4. FILL EVERY FIELD you can — do NOT leave fields blank when info exists in EITHER source. Common mistakes to avoid:
+   • targetMarket is often INFERRED from product type + imagery (e.g. cough gel for kids = "Parents of young children with coughs"; anti-aging cream = "Women 35+ concerned about wrinkles").
+   • usps come from images of comparison charts, badges ("100% natural", "Doctor approved"), or repeated claims.
+   • offer/price is almost always shown in a banner image, NOT in text. LOOK at the images for prices like "RM59", "₫299,000", "$29.99", discount stickers ("50% OFF").
+   • ingredients come from packshot photos showing the back label, or from "What's inside" infographics — read the image carefully.
+5. ALL VALUES MUST BE IN ENGLISH (translate from source language if needed).
+6. Return ONLY the JSON object, nothing else, all on one line:
 ${JSON_SCHEMA}
 
 ${FIELDS_SPEC}
 
-WEBPAGE TEXT (use this together with the images above):
+WEBPAGE TEXT (combine with the ${imageCount} image(s) above):
 ${pageText.slice(0, 10000)}`
 
 const IMAGE_EXTRACT_PROMPT = `Extract product information from this product page screenshot and fill in this JSON. ALL VALUES MUST BE IN ENGLISH (translate from source language if needed). Return ONLY the JSON, nothing else, all on one line:
@@ -98,7 +108,7 @@ async function fetchPageContent(url: string): Promise<{ text: string; imageUrls:
     if (r.ok) {
       const json = await r.json() as JinaJsonData
       const content = json.data?.content ?? ''
-      const imageUrls = Object.keys(json.data?.images ?? {})
+      const imageUrls = extractUrlsFromJinaImages(json.data?.images)
       if (content.trim()) {
         return { text: content.slice(0, 14000), imageUrls }
       }
@@ -134,6 +144,22 @@ async function fetchPageContent(url: string): Promise<{ text: string; imageUrls:
   }
 }
 
+/**
+ * Jina returns `images` as { [label]: url } e.g. { "Image 1": "https://...jpg" }.
+ * But some pages return { [url]: description }. Extract URLs from BOTH possible
+ * shapes — check keys + values, keep anything that looks like a URL.
+ */
+function extractUrlsFromJinaImages(images: Record<string, string> | undefined): string[] {
+  if (!images) return []
+  const seen = new Set<string>()
+  const urls: string[] = []
+  for (const [k, v] of Object.entries(images)) {
+    if (typeof k === 'string' && /^https?:\/\//.test(k) && !seen.has(k)) { seen.add(k); urls.push(k) }
+    if (typeof v === 'string' && /^https?:\/\//.test(v) && !seen.has(v)) { seen.add(v); urls.push(v) }
+  }
+  return urls
+}
+
 /** Extract image URLs from Jina markdown (![alt](url) syntax + bare image extension URLs). */
 function extractImageUrlsFromMarkdown(markdown: string): string[] {
   const seen = new Set<string>()
@@ -152,28 +178,53 @@ function extractImageUrlsFromMarkdown(markdown: string): string[] {
 
 /**
  * Fetch an image URL and return { mimeType, data } for Gemini inlineData.
- * Many CDNs (Cloudinary, LadiPage CDN, etc.) allow CORS — those will succeed.
- * Returns null on CORS block, timeout, or oversized image — caller skips silently.
+ *
+ * Two-tier fetch:
+ *   1. Direct fetch — fast path for CORS-friendly CDNs (Cloudinary etc.)
+ *   2. images.weserv.nl CORS proxy — bypasses CORS for any 3rd-party image
+ *      host (Amazon, Shopee, LadiPage CDN, raw shop CDNs). Free public
+ *      service that re-encodes to JPG with proper CORS headers, and resizes
+ *      to max 1024px so we stay under Gemini's inline image budget.
+ *
+ * Returns null only when BOTH tiers fail (truly unreachable image).
  */
 async function fetchImageAsBase64(url: string): Promise<{ mimeType: string; data: string } | null> {
+  // Tier 1: direct fetch (no CORS issues on friendly CDNs, faster)
   try {
-    const r = await fetch(url, { signal: AbortSignal.timeout(10000) })
-    if (!r.ok) return null
-    const contentType = r.headers.get('content-type') ?? 'image/jpeg'
-    const mime = contentType.split(';')[0].trim()
-    if (!mime.startsWith('image/')) return null
-    const buf = await r.arrayBuffer()
-    if (buf.byteLength > 2_000_000) return null
-    const bytes = new Uint8Array(buf)
-    let binary = ''
-    const chunk = 8192
-    for (let i = 0; i < bytes.length; i += chunk) {
-      binary += String.fromCharCode(...bytes.subarray(i, Math.min(i + chunk, bytes.length)))
+    const r = await fetch(url, { signal: AbortSignal.timeout(8000) })
+    if (r.ok) {
+      const result = await responseToBase64(r)
+      if (result) return result
     }
-    return { mimeType: mime, data: btoa(binary) }
+  } catch { /* CORS block or net error — try proxy */ }
+
+  // Tier 2: CORS proxy (works for any public image URL)
+  try {
+    // weserv expects URL without scheme prefix; resize to 1024px max + JPG
+    const cleanUrl = url.replace(/^https?:\/\//, '')
+    const proxyUrl = `https://images.weserv.nl/?url=${encodeURIComponent(cleanUrl)}&w=1024&output=jpg`
+    const r = await fetch(proxyUrl, { signal: AbortSignal.timeout(12000) })
+    if (!r.ok) return null
+    return await responseToBase64(r)
   } catch {
     return null
   }
+}
+
+/** Convert a fetched image Response → Gemini inlineData payload (base64-encoded). */
+async function responseToBase64(r: Response): Promise<{ mimeType: string; data: string } | null> {
+  const contentType = r.headers.get('content-type') ?? 'image/jpeg'
+  const mime = contentType.split(';')[0].trim()
+  if (!mime.startsWith('image/')) return null
+  const buf = await r.arrayBuffer()
+  if (buf.byteLength > 2_500_000) return null
+  const bytes = new Uint8Array(buf)
+  let binary = ''
+  const chunk = 8192
+  for (let i = 0; i < bytes.length; i += chunk) {
+    binary += String.fromCharCode(...bytes.subarray(i, Math.min(i + chunk, bytes.length)))
+  }
+  return { mimeType: mime, data: btoa(binary) }
 }
 
 /** Escape raw control chars inside JSON string values so JSON.parse doesn't choke */
