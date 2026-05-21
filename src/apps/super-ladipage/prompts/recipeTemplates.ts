@@ -1,15 +1,19 @@
 import type { RecipeId, ImageSlotConcept, ProductIdentity, TextBlock, DecorElement } from '../types'
 
 // ─────────────────────────────────────────────────────────────────────
-// 8 VISUAL RECIPE TEMPLATES (P6 update).
+// 8 VISUAL RECIPE TEMPLATES (P7 update).
 //
-// Changes from Phase 5:
-// - emotionConsistencyBlock(): pain / after / expert / whatsapp-social / neutral
-//   Injected SCENE → EMOTION → SUBJECT LOCK in recipes A, B, F, H.
-//   SUBJECT LOCK (Stage 1) cleaned of emotion words — identity only.
-// - technicalBlock(): TYPOGRAPHY rules (1 font system, mobile-readable).
-// - F whatsapp: clean mobile chat UI (less clutter, larger padding).
-// - C why-happens / before-after: dominant label vs secondary explanation.
+// Changes from Phase 6 — TOKEN NORMALIZATION:
+// - technicalBlock(): ultra-compact, absorbs "no watermark" global rule.
+// - emotionConsistencyBlock(): enum-style short tokens (pain/after/expert/social).
+// - VISUAL_MODE_REGISTRY: dedup with technicalBlock — unique essence only.
+// - F whatsapp / social-platform: compressed wording.
+// - All STRICT lines: drop redundant "No watermark" (handled in TECHNICAL).
+// - H: brandLockBlock(false) replaces hardcoded PRODUCT VISIBILITY line.
+// - C/D/E/G layouts: compact structure hints, no long-form prose.
+//
+// Logic untouched: routing, model, product lock, size lock, emotion modes,
+// hierarchy system, readability intent — all preserved, only wording compressed.
 // ─────────────────────────────────────────────────────────────────────
 
 export interface RecipeInput {
@@ -54,17 +58,16 @@ function langLabel(lang: 'ms' | 'vi' | 'en'): string {
 }
 
 // ─────────────────────────────────────────────────────────────────────
-// GLOBAL VISUAL STYLE — source of truth for all VISUAL_MODE values.
-// NOT injected directly (would bloat every prompt).
-// Each recipe draws a condensed line from this registry.
+// VISUAL_MODE — unique essence per mode. P7: deduped against technicalBlock
+// (which already handles no-clutter, mobile-readable, hierarchy, typography).
 // ─────────────────────────────────────────────────────────────────────
 const VISUAL_MODE_REGISTRY = {
-  'ugc-social':            'ugc-social — authentic person, natural framing, ecommerce overlays, high contrast, flat badge system. No cinematic poster look.',
-  'ugc-clean-photo':       'ugc-clean-photo — authentic candid photo, natural handheld framing, believable expression, zero overlays.',
-  'ecommerce-infographic': 'ecommerce-infographic — flat clean icons, mobile-readable labels, minimal effects, scannable layout.',
-  'product-showcase':      'product-showcase — product-centered, brand colors, icon grid, flat circular badges, minimal decorative FX.',
-  'comparison-card':       'comparison-card — two-column table, white panels with drop-shadow, emerald vs. gray headers, flat badge fills.',
-  'editorial-card':        'editorial-card — magazine endorsement style, portrait + quote box, professional polish. No cinematic FX.',
+  'ugc-social':            'authentic person, natural framing, ecommerce overlay badges',
+  'ugc-clean-photo':       'authentic candid photo, no overlays',
+  'ecommerce-infographic': 'flat icons, scannable label grid',
+  'product-showcase':      'product center, icon grid around',
+  'comparison-card':       'two-column table, emerald vs gray',
+  'editorial-card':        'magazine endorsement, portrait + quote box',
 } as const
 
 function visualModeBlock(mode: keyof typeof VISUAL_MODE_REGISTRY): string {
@@ -129,10 +132,10 @@ function detectEmotionMode(concept: ImageSlotConcept, variant?: string): Emotion
 }
 
 function emotionConsistencyBlock(mode: EmotionMode): string {
-  if (mode === 'pain')            return `EMOTION: discomfort match — uncomfortable / tired / irritated / congested / worried / frustrated. NO smiling, NO relaxed breathing, NO "healthy/comfy" wording.`
-  if (mode === 'after')           return `EMOTION: relaxed, relieved, breathing easily, smiling naturally.`
-  if (mode === 'expert')          return `EMOTION: confident, trustworthy, calm, professional.`
-  if (mode === 'whatsapp-social') return `EMOTION: casual natural expression. Avoid exaggerated influencer smile.`
+  if (mode === 'pain')            return `EMOTION: discomfort, congestion, irritation. No smile.`
+  if (mode === 'after')           return `EMOTION: relief, healthy breathing, natural smile.`
+  if (mode === 'expert')          return `EMOTION: confident, trustworthy, calm.`
+  if (mode === 'whatsapp-social') return `EMOTION: casual natural.`
   /* neutral */                    return ''
 }
 
@@ -159,7 +162,7 @@ function technicalBlock(aspectRatio: string): string {
     aspectRatio === '16:9' ? '1024×576 (mapped to 3:2 landscape)' :
     aspectRatio === '9:16' ? '832×1248 (mapped to 2:3 portrait)' :
                               '1024×1024'
-  return `TECHNICAL: ${dims}, 1K, sharp focus. HIERARCHY: one focal point, headline/CTA dominant, max 2 short lines supporting text, bold phrases. TYPOGRAPHY: ONE font system per image — condensed bold uppercase headlines + clean sans-serif body, consistent weight hierarchy, mobile-readable. NO mixed font aesthetics, NO tiny paragraphs. COLOR: max 3 brand colors, CTA/price highlights only. AVOID: cinematic FX, glow effects, floating particles, AI-collage composition.`
+  return `TECHNICAL: ${dims}, 1K mobile-first. Bold sans-serif, dominant headline/CTA, clean hierarchy, no clutter, no watermark.`
 }
 
 // ═════════════════════════════════════════════════════════════════════
@@ -196,7 +199,6 @@ ${safeDecor(concept).map(formatDecor).join('\n')}`
     decor,
     visualModeBlock('ugc-social'),
     technicalBlock(concept.aspectRatio),
-    `STRICT: no watermark.`,
   ].filter(Boolean).join('\n\n')
 }
 
@@ -215,7 +217,7 @@ function recipeB(input: RecipeInput): string {
     concept.productInScene ? sizeLockBlock('handheld-natural') : '',
     visualModeBlock('ugc-clean-photo'),
     technicalBlock(concept.aspectRatio),
-    `STRICT: ZERO text/letters in image. No watermark.`,
+    `STRICT: ZERO text/letters in image.`,
   ].filter(Boolean).join('\n\n')
 }
 
@@ -236,8 +238,8 @@ ${safeBlocks(concept).map(formatTextBlock).join('\n')}`
                        concept.roleLabel.toLowerCase().includes('why')
 
   const layout = isWhyHappens
-    ? `LAYOUT: title at top. Below = 4-6 DISTINCT CAUSE ITEMS in 2-col or vertical list. Each item: colored icon + DOMINANT ${langLabel(language)} label (max 8 words) + secondary explanation (max 5 words). NO paragraph blocks, NO tiny dense text.`
-    : `LAYOUT: title at top + before-after panels (red problem vs green healthy) + flow arrows + DOMINANT icon labels (max 8 words). Supporting text secondary, max 5 words. NO explanatory paragraphs.`
+    ? `LAYOUT: title top, 4-6 cause items (2-col/vertical). Each: colored icon + DOMINANT ${langLabel(language)} label (max 8w) + secondary text (max 5w). No paragraphs.`
+    : `LAYOUT: title top + before/after panels (red vs green) + flow arrows + DOMINANT icon labels (max 8w), supporting text max 5w. No paragraphs.`
 
   return [
     `DIAGRAM CONCEPT: ${concept.conceptScene}.`,
@@ -248,7 +250,7 @@ ${safeBlocks(concept).map(formatTextBlock).join('\n')}`
     layout,
     safeDecor(concept).length > 0 ? `BRAND BADGES: ${safeDecor(concept).map(formatDecor).join('; ')}` : '',
     technicalBlock(concept.aspectRatio),
-    `STRICT: text legible. No watermark.`,
+    `STRICT: text legible.`,
   ].filter(Boolean).join('\n\n')
 }
 
@@ -270,10 +272,10 @@ ${safeBlocks(concept).map(formatTextBlock).join('\n')}`
     concept.productInScene ? sizeLockBlock('foreground-dominant') : '',
     labels,
     visualModeBlock('product-showcase'),
-    `LAYOUT: title top + ${identity.coBrandBadges.length > 0 ? `brand badge "${identity.coBrandBadges.join(' + ')}" near title + ` : ''}product center (SHAPE LOCK) + 5-8 icon+label grid around product. Each item: ingredient/benefit name dominant + max 5-word benefit label. NO stacked text paragraphs.`,
+    `LAYOUT: title top${identity.coBrandBadges.length > 0 ? ` + brand badge "${identity.coBrandBadges.join(' + ')}"` : ''} + product center (SHAPE LOCK) + 5-8 icon+label grid. Each: DOMINANT name + max 5w benefit. No paragraphs.`,
     safeDecor(concept).length > 0 ? `EXTRA: ${safeDecor(concept).map(formatDecor).join('; ')}` : '',
     technicalBlock(concept.aspectRatio),
-    `STRICT: icon labels legible. No watermark.`,
+    `STRICT: icon labels legible.`,
   ].filter(Boolean).join('\n\n')
 }
 
@@ -297,7 +299,7 @@ ${safeBlocks(concept).map(formatTextBlock).join('\n')}`
     `LAYOUT: LEFT column: emerald-green header, product image centered below header, green ✓ on white rows. RIGHT column: neutral gray header, red ✗ on white rows. 3-5 rows MAX, each row = ONE bold label (max 5 words) — NO sub-text, NO annotations. Bold white header text for column titles.`,
     safeDecor(concept).length > 0 ? `EXTRA: ${safeDecor(concept).map(formatDecor).join('; ')}` : '',
     technicalBlock(concept.aspectRatio),
-    `STRICT: labels legible. Green ✓ + red ✗. No watermark.`,
+    `STRICT: labels legible. Green ✓ + red ✗.`,
   ].filter(Boolean).join('\n\n')
 }
 
@@ -341,7 +343,7 @@ ${safeBlocks(concept).map(formatTextBlock).join('\n')}`
     variantBlock.trim(),
     safeDecor(concept).length > 0 ? `EXTRA UI: ${safeDecor(concept).map(formatDecor).join('; ')}` : '',
     technicalBlock(concept.aspectRatio),
-    `STRICT: UI text legible. No watermark.`,
+    `STRICT: UI text legible.`,
   ].filter(Boolean).join('\n\n')
 }
 
@@ -407,10 +409,10 @@ ${safeBlocks(concept).map(formatTextBlock).join('\n')}`
     safeDecor(concept).length > 0 ? `EXTRA: ${safeDecor(concept).map(formatDecor).join('; ')}` : '',
     technicalBlock(concept.aspectRatio),
     variant === 'promo'
-      ? `STRICT: prices + deal label EXACTLY from PRIMARY DEAL DATA. No watermark. No invented offers.`
+      ? `STRICT: prices + deal label EXACTLY from PRIMARY DEAL DATA. No invented offers.`
       : variant === 'combo-vertical'
-        ? `STRICT: all tier prices + labels EXACTLY from FULL DEALS LIST. Each tier distinct + readable. No watermark.`
-        : `STRICT: metric numbers + testimonial text legible. NO PRICE. No watermark.`,
+        ? `STRICT: all tier prices + labels EXACTLY from FULL DEALS LIST. Each tier distinct + readable.`
+        : `STRICT: metric numbers + quote legible. NO PRICE.`,
   ].filter(Boolean).join('\n\n')
 }
 
@@ -457,7 +459,7 @@ ${safeBlocks(concept).map(formatTextBlock).join('\n')}`
     variantBlock.trim(),
     visualModeBlock('editorial-card'),
     technicalBlock(concept.aspectRatio),
-    `STRICT: name + credentials + quote legible. No watermark.`,
+    `STRICT: name + credentials + quote legible.`,
   ].filter(Boolean).join('\n\n')
 }
 
