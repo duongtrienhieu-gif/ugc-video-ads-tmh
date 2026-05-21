@@ -296,7 +296,7 @@ ${safeBlocks(concept).map(formatTextBlock).join('\n')}`
     concept.productInScene ? sizeLockBlock('infographic-mini') : '',
     cells,
     visualModeBlock('comparison-card'),
-    `LAYOUT: LEFT column: emerald-green header, product image centered below header, green ✓ on white rows. RIGHT column: neutral gray header, red ✗ on white rows. 3-5 rows MAX, each row = ONE bold label (max 5 words) — NO sub-text, NO annotations. Bold white header text for column titles.`,
+    `LAYOUT: LEFT col = emerald header + product image + green ✓ rows. RIGHT col = gray header + red ✗ rows. 3-5 rows, each = ONE bold label (max 5w). No sub-text.`,
     safeDecor(concept).length > 0 ? `EXTRA: ${safeDecor(concept).map(formatDecor).join('; ')}` : '',
     technicalBlock(concept.aspectRatio),
     `STRICT: labels legible. Green ✓ + red ✗.`,
@@ -322,12 +322,12 @@ ${safeBlocks(concept).map(formatTextBlock).join('\n')}`
   // verbose placebos KIE can't actually enforce per-image. Removed.
   const variantBlock =
     variant === 'warning-news'
-      ? `LAYOUT (WARNING NEWS): Malaysian health news portal screenshot. RED/dark urgent header. LARGE BOLD alarming headline ("AMARAN!" / "Bahaya!" / "${identity.productCategory}..."). Worried subject hero photo, scary stats, ⚠️ red boxes.`
+      ? `LAYOUT (WARNING NEWS): Malaysian health news portal. RED/dark urgent header + bold alarming headline ("AMARAN!" / "Bahaya!" / "${identity.productCategory}..."). Worried subject photo, scary stats, ⚠️ red boxes.`
     : variant === 'trust-news'
-      ? `LAYOUT (TRUST NEWS): Malaysian news portal (mStar / Berita Harian / KKM) health section. Calm institutional layout, educational headline.`
+      ? `LAYOUT (TRUST NEWS): Malaysian news portal (mStar / Berita Harian / KKM) health section. Calm institutional, educational headline.`
     : variant === 'whatsapp'
-      ? `LAYOUT (WHATSAPP): Clean mobile chat UI, green bubbles, portrait phone frame. Casual Malay text with emojis (🙏 ✨ ❤️). Malaysian sender names + readable timestamps. Max 2 conversation clusters visible — larger bubble padding, generous message spacing. NO dense long paragraphs, NO tiny timestamp overload, NO bubble clutter. Vary vibe per image: 1-on-1 vs group vs photo embed. Consistent bubble font + width across all images in section. NO oversized headline overlay, NO English banners — ALL text in target language.`
-      : `LAYOUT (SOCIAL PLATFORM): Authentic mobile UI of target platform (Facebook post / TikTok Shop review / Shopee product page / Instagram). Real-phone aesthetic, native platform spacing, casual Malay UI text + emojis, Malaysian usernames, realistic timestamps. No oversized floating typography, no cinematic overlay — realistic feed composition.`
+      ? `LAYOUT (WHATSAPP): Clean sparse mobile chat UI, green bubbles. Malaysian Malay text with emojis (🙏 ✨ ❤️), readable timestamps. Vary 1-on-1 / group / photo embed. Target language only.`
+      : `LAYOUT (SOCIAL PLATFORM): Authentic mobile UI (Facebook post / TikTok Shop review / Shopee product / Instagram). Native platform spacing, casual Malay text + emojis, Malaysian usernames, realistic timestamps.`
 
   // whatsapp: person holds product → FULL + handheld-natural
   // social-platform / news: product = thumbnail in UI screenshot → MINIMAL + secondary
@@ -377,11 +377,11 @@ ${safeBlocks(concept).map(formatTextBlock).join('\n')}`
 
   let variantBlock = ''
   if (variant === 'social-proof-banner') {
-    variantBlock = `LAYOUT (SOCIAL PROOF BANNER): Bold trust banner, dark red/burgundy + cream + gold palette. Top: red header band + bold white headline. Below: 3-4 metric chips (⭐rating, "25,000+ KOTAK TERJUAL", "18,000+ PELANGGAN"). Center: 4-6 testimonial cards in 2x2/2x3 grid — Malaysian avatars (mix hijab + uncles + younger) + name + location (KL/JB/Penang) + 5-star + 1-sentence Malay quote + mini product thumb. Product image small-mid center/bottom. Trust badges bottom (HALAL, KKM, delivery, warranty). NO PRICE / currency symbol.`
+    variantBlock = `LAYOUT (SOCIAL PROOF): Dark red/burgundy + cream + gold. Top: red header + white headline. 3-4 metric chips (⭐rating, "25,000+ KOTAK TERJUAL"). 4-6 testimonial cards 2x2/2x3 — Malaysian avatars (hijab + uncles + younger) + name + location (KL/JB/Penang) + 5-star + 1-line Malay quote + mini product thumb. Product small-mid. Trust badges (HALAL/KKM/delivery). NO PRICE.`
   } else if (variant === 'combo-vertical') {
-    variantBlock = `LAYOUT (COMBO DEALS VERTICAL): Portrait infographic stacking ALL tiers from FULL DEALS LIST. Header bold title ("HARGA TERBAIK" / "TAWARAN COMBO" in target lang). Each tier block contains: tier badge (escalating naming "RAWATAN CEPAT / MENDALAMI / MAMPAN / MAKSIMUM") + product mockup (N units = tier quantity, SHAPE LOCK on each) + deal label + price block (originalPrice gạch + salePrice highlight + savings starburst) + 2-4 benefit bullets ✅. Tier 1=blue/teal, tier 2=red/orange "HOT DEAL", tier 3=amber/gold "BEST SELLER", tier 4=purple "MAX VALUE". Vibrant ecommerce palette, clear vertical separation.`
+    variantBlock = `LAYOUT (COMBO VERTICAL): Portrait infographic stacking ALL tiers from FULL DEALS LIST. Bold title ("HARGA TERBAIK" / "TAWARAN COMBO" in target lang). Each tier: badge (RAWATAN CEPAT/MENDALAMI/MAMPAN/MAKSIMUM) + product mockup (N units = tier qty, SHAPE LOCK) + deal label + price block (originalPrice gạch + salePrice highlight + savings) + 2-4 ✅ benefits. T1=blue/teal, T2=red/orange "HOT DEAL", T3=amber/gold "BEST SELLER", T4=purple "MAX VALUE".`
   } else {
-    variantBlock = `LAYOUT (PROMO BANNER): Native Malaysian FB/TikTok promo banner, hard-sell. Product packaging large center/side (SHAPE LOCK). Headline from PRIMARY DEAL LABEL above (e.g. "BELI 1 PERCUMA 1!"). Price block: originalPrice gạch → salePrice highlight — 1 dominant price only, visually separated from headline. Savings starburst if available. Trust badges (flat fills): ${identity.trustBadges.join(', ') || '(none)'}. CTA button visually separate. Vibrant amber/red or violet/gold palette. ⛔ KHÔNG bịa offers ngoài PRIMARY DEAL DATA above.`
+    variantBlock = `LAYOUT (PROMO): Malaysian FB/TikTok promo banner. Product large center/side (SHAPE LOCK). Headline from PRIMARY DEAL LABEL. Price block: originalPrice gạch → salePrice highlight — 1 dominant price. Savings starburst if available. Trust badges: ${identity.trustBadges.join(', ') || '(none)'}. CTA separate. Amber/red or violet/gold palette. ⛔ KHÔNG bịa offers ngoài PRIMARY DEAL DATA.`
   }
 
   // combo-vertical: product IS the hero of each tier block → FULL lock
@@ -447,14 +447,16 @@ ${safeBlocks(concept).map(formatTextBlock).join('\n')}`
   })()
 
   const variantBlock = variant === 'expert'
-    ? `LAYOUT (EXPERT): Editorial endorsement card — Malaysian ${specialtyHint}. Top half: head-and-shoulders portrait, calm trustworthy expression, clinical bg soft blur. Center band: "Dr. [Malaysian name]" + specialty title + "[N]+ tahun pengalaman". Bottom half: quote box with 2-4 sentence Malay testimonial endorsing this product. Optional "Pakar Disahkan" badge. Palette: white + soft teal/navy + cream.`
-    : `LAYOUT (KOL): Instagram-style influencer card — Malaysian KOL. Top half: lifestyle photo (Malaysian fashionable, cafe/home/outdoor, hijab or male KOL). Center band: "@handle" + "[N]M Followers / Pengikut" + IG/TikTok icon. Bottom half: casual Malay quote 2-4 sentences with emojis (✨ 💕 🔥), optional "Pilihan Aku" hashtag. Palette: warm pink/peach + cream + gold.`
+    ? `LAYOUT (EXPERT): Editorial endorsement — Malaysian ${specialtyHint}. Top: head-and-shoulders portrait, clinical bg soft blur. Center band: "Dr. [Malaysian name]" + specialty title + "[N]+ tahun pengalaman". Bottom: quote box with 2-4 sentence Malay testimonial. Optional "Pakar Disahkan" badge. Palette: white + soft teal/navy + cream.`
+    : `LAYOUT (KOL): Instagram-style influencer card — Malaysian KOL. Top: lifestyle photo (hijab or male KOL, cafe/home/outdoor). Center band: "@handle" + "[N]M Followers / Pengikut" + IG/TikTok icon. Bottom: casual Malay quote 2-4 sentences with emojis (✨ 💕 🔥), optional "Pilihan Aku" hashtag. Palette: warm pink/peach + cream + gold.`
 
   return [
     `ENDORSEMENT CARD CONCEPT: ${concept.conceptScene}.`,
     emotionConsistencyBlock(detectEmotionMode(concept, variant)),
     subject,
-    `PRODUCT VISIBILITY: NO product packaging in this image. Focus = person + quote. Product name only mentioned as text within the quote (NOT as visual packaging).`,
+    // P7: replaces hardcoded PRODUCT VISIBILITY line — endorsement card
+    // is product-name-in-quote only (no packaging in image).
+    brandLockBlock(identity, false),
     labels,
     variantBlock.trim(),
     visualModeBlock('editorial-card'),
