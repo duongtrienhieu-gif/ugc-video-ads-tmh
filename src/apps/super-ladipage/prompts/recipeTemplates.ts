@@ -128,7 +128,7 @@ function technicalBlock(aspectRatio: string): string {
     aspectRatio === '16:9' ? '1024×576 (mapped to 3:2 landscape)' :
     aspectRatio === '9:16' ? '832×1248 (mapped to 2:3 portrait)' :
                               '1024×1024'
-  return `TECHNICAL: ${dims}, 1K, sharp focus. TYPOGRAPHY: consistent ecommerce sans-serif. MOBILE: all key text readable at portrait.`
+  return `TECHNICAL: ${dims}, 1K, sharp focus. HIERARCHY: headline/CTA/price dominant; supporting text max 2 short lines, no dense paragraphs. MOBILE: bold phrases, no visual clutter, no overlapping overlays.`
 }
 
 // ═════════════════════════════════════════════════════════════════════
@@ -201,8 +201,8 @@ ${safeBlocks(concept).map(formatTextBlock).join('\n')}`
                        concept.roleLabel.toLowerCase().includes('why')
 
   const layout = isWhyHappens
-    ? `LAYOUT: title at top. Below = 4-6 DISTINCT CAUSE ITEMS in 2-col or vertical list. Each item: circular colored icon (different color per cause: red/orange/blue/purple/green/pink) + short ${langLabel(language)} label + brief 1-sentence explanation.`
-    : `LAYOUT: title at top + side-by-side / before-after comparison panels (red problem vs green healthy) + flow arrows + supporting labels with icons + sub-caption.`
+    ? `LAYOUT: title at top. Below = 4-6 DISTINCT CAUSE ITEMS in 2-col or vertical list. Each item: colored icon + short ${langLabel(language)} label (max 8 words) + 1-line explanation. NO paragraph blocks, NO tiny dense text.`
+    : `LAYOUT: title at top + before-after panels (red problem vs green healthy) + flow arrows + short icon labels (max 8 words each). NO explanatory paragraphs.`
 
   return [
     `DIAGRAM CONCEPT: ${concept.conceptScene}.`,
@@ -233,7 +233,7 @@ ${safeBlocks(concept).map(formatTextBlock).join('\n')}`
     brandLockBlock(identity, concept.productInScene, false),  // recipeD: icon grid, product center, no person holds
     labels,
     visualModeBlock('product-showcase'),
-    `LAYOUT: title top + ${identity.coBrandBadges.length > 0 ? `brand badge "${identity.coBrandBadges.join(' + ')}" near title + ` : ''}product packaging centered (SHAPE LOCK applied) + 5-8 icon+label items in grid/circular around product + brief description below.`,
+    `LAYOUT: title top + ${identity.coBrandBadges.length > 0 ? `brand badge "${identity.coBrandBadges.join(' + ')}" near title + ` : ''}product center (SHAPE LOCK) + 5-8 icon+label grid around product. Each item: ingredient/benefit name dominant + max 5-word benefit label. NO stacked text paragraphs.`,
     safeDecor(concept).length > 0 ? `EXTRA: ${safeDecor(concept).map(formatDecor).join('; ')}` : '',
     technicalBlock(concept.aspectRatio),
     `STRICT: icon labels legible. No watermark.`,
@@ -286,7 +286,7 @@ ${safeBlocks(concept).map(formatTextBlock).join('\n')}`
     : variant === 'trust-news'
       ? `LAYOUT (TRUST NEWS): Malaysian news portal (mStar / Berita Harian / KKM) health section. Calm institutional layout, educational headline.`
     : variant === 'whatsapp'
-      ? `LAYOUT (WHATSAPP): Realistic WhatsApp chat screenshot, green bubbles, mobile portrait. Casual Malay text with emojis (🙏 ✨ ❤️). Malaysian sender names + realistic timestamps. Vary vibe per image: 1-on-1 vs group, text vs photo embed vs long reply chain. ⛔ CONSISTENT TYPOGRAPHY across all 4 ảnh trong section §14: SAME chat bubble font size, SAME text density, SAME bubble width proportion. NO oversized headline overlay, NO mixed-size text (chữ to chữ nhỏ lộn xộn). NO English overlay banners — ALL text in target language.`
+      ? `LAYOUT (WHATSAPP): Realistic WhatsApp chat screenshot, green bubbles, mobile portrait. Casual Malay text with emojis (🙏 ✨ ❤️). Malaysian sender names + realistic timestamps. Vary vibe per image: 1-on-1 vs group, text vs photo embed vs long reply chain. Max 2-4 short messages visible per screen focus — no bubble clutter. ⛔ CONSISTENT TYPOGRAPHY across all 4 ảnh trong section §14: SAME chat bubble font size, SAME text density, SAME bubble width proportion. NO oversized headline overlay, NO mixed-size text (chữ to chữ nhỏ lộn xộn). NO English overlay banners — ALL text in target language.`
       : `LAYOUT (SOCIAL PLATFORM): Authentic mobile UI of target platform (Facebook post / TikTok Shop review / Shopee product page / Instagram). Real-phone aesthetic, Casual Malay UI text + emojis, Malaysian usernames, realistic timestamps.`
 
   return [
