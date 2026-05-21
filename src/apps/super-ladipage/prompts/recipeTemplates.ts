@@ -1,19 +1,14 @@
 import type { RecipeId, ImageSlotConcept, ProductIdentity, TextBlock, DecorElement } from '../types'
 
 // ─────────────────────────────────────────────────────────────────────
-// 8 VISUAL RECIPE TEMPLATES (P7 update).
+// 8 VISUAL RECIPE TEMPLATES (P8 update).
 //
-// Changes from Phase 6 — TOKEN NORMALIZATION:
-// - technicalBlock(): ultra-compact, absorbs "no watermark" global rule.
-// - emotionConsistencyBlock(): enum-style short tokens (pain/after/expert/social).
-// - VISUAL_MODE_REGISTRY: dedup with technicalBlock — unique essence only.
-// - F whatsapp / social-platform: compressed wording.
-// - All STRICT lines: drop redundant "No watermark" (handled in TECHNICAL).
-// - H: brandLockBlock(false) replaces hardcoded PRODUCT VISIBILITY line.
-// - C/D/E/G layouts: compact structure hints, no long-form prose.
-//
-// Logic untouched: routing, model, product lock, size lock, emotion modes,
-// hierarchy system, readability intent — all preserved, only wording compressed.
+// Changes from Phase 7 — SCALE CONSISTENCY POLISH (micro-tuning):
+// - handheld-natural: stronger grip anchor ("smaller than palm, fingers
+//   visible around edges") for better hand-product realism.
+// - scaleAnchorSuffix(): concept-keyword-detected micro-anchor appended to
+//   handheld SIZE_LOCK output only — group / collage / before-after layouts.
+//   Token delta ~+1-2 tok/image avg. No architecture/routing/order changes.
 // ─────────────────────────────────────────────────────────────────────
 
 export interface RecipeInput {
@@ -98,8 +93,22 @@ function brandLockBlock(
 
 type SizeLockMode = 'handheld-natural' | 'shelf-packshot' | 'infographic-mini' | 'foreground-dominant' | 'secondary-product'
 
-function sizeLockBlock(mode: SizeLockMode): string {
-  if (mode === 'handheld-natural')    return `SIZE_LOCK (handheld): Product must look smaller than the hand holding it. Natural arm's-length — NOT macro close-up (close-up = 2-3× oversize).`
+// P8: micro-anchor for multi-subject / multi-panel handheld layouts.
+// Returns empty for single-subject single-panel concepts (~most images).
+// Only fires when mode === 'handheld-natural' (see sizeLockBlock).
+function scaleAnchorSuffix(concept: ImageSlotConcept): string {
+  const text = `${concept.roleLabel ?? ''} ${concept.conceptScene ?? ''}`.toLowerCase()
+  if (/before[\s\S]{0,15}after|side.?by.?side|ba.split/.test(text)) return ' Same package scale in both panels.'
+  if (/collage|\d+x\d+|multi.?panel/.test(text))                    return ' Equal package scale between panels.'
+  if (/\bgroup\b|\bfamily\b|\bfriends\b|together|crowd/.test(text)) return ' Consistent package scale across subjects.'
+  return ''
+}
+
+function sizeLockBlock(mode: SizeLockMode, concept?: ImageSlotConcept): string {
+  if (mode === 'handheld-natural') {
+    const anchor = concept ? scaleAnchorSuffix(concept) : ''
+    return `SIZE_LOCK (handheld): Product smaller than palm, fingers visible around edges. Natural arm's-length — NOT macro close-up (close-up = 2-3× oversize).${anchor}`
+  }
   if (mode === 'shelf-packshot')      return `SIZE_LOCK (shelf): Product at natural scene scale on surface/shelf. No hand anchor.`
   if (mode === 'infographic-mini')    return `SIZE_LOCK (infographic): Product = small decorative element. Icons/labels are primary — product never dominates layout.`
   if (mode === 'foreground-dominant') return `SIZE_LOCK (hero): Product IS the hero — fills 40-60% of frame, centered, sharp.`
@@ -194,7 +203,7 @@ ${safeDecor(concept).map(formatDecor).join('\n')}`
     emotionConsistencyBlock(detectEmotionMode(concept)),
     subject,
     brandLockBlock(identity, concept.productInScene, 'full'),
-    concept.productInScene ? sizeLockBlock('handheld-natural') : '',
+    concept.productInScene ? sizeLockBlock('handheld-natural', concept) : '',
     textOverlay,
     decor,
     visualModeBlock('ugc-social'),
@@ -214,7 +223,7 @@ function recipeB(input: RecipeInput): string {
     emotionConsistencyBlock(detectEmotionMode(concept)),
     subject,
     brandLockBlock(identity, concept.productInScene, 'full'),
-    concept.productInScene ? sizeLockBlock('handheld-natural') : '',
+    concept.productInScene ? sizeLockBlock('handheld-natural', concept) : '',
     visualModeBlock('ugc-clean-photo'),
     technicalBlock(concept.aspectRatio),
     `STRICT: ZERO text/letters in image.`,
@@ -338,7 +347,7 @@ ${safeBlocks(concept).map(formatTextBlock).join('\n')}`
     `SCREENSHOT CONCEPT: ${concept.conceptScene}.`,
     emotionConsistencyBlock(detectEmotionMode(concept, variant)),
     brandLockBlock(identity, concept.productInScene, fLockLevel),
-    concept.productInScene ? sizeLockBlock(fSizeMode) : '',
+    concept.productInScene ? sizeLockBlock(fSizeMode, concept) : '',
     labels,
     variantBlock.trim(),
     safeDecor(concept).length > 0 ? `EXTRA UI: ${safeDecor(concept).map(formatDecor).join('; ')}` : '',
