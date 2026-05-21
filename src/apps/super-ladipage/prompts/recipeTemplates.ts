@@ -52,6 +52,24 @@ function langLabel(lang: 'ms' | 'vi' | 'en'): string {
   return lang === 'ms' ? 'Bahasa Melayu' : lang === 'vi' ? 'Vietnamese' : 'English'
 }
 
+// ─────────────────────────────────────────────────────────────────────
+// GLOBAL VISUAL STYLE — source of truth for all VISUAL_MODE values.
+// NOT injected directly (would bloat every prompt).
+// Each recipe draws a condensed line from this registry.
+// ─────────────────────────────────────────────────────────────────────
+const VISUAL_MODE_REGISTRY = {
+  'ugc-social':            'ugc-social — authentic person photo, ecommerce overlays, high contrast, clean badge system.',
+  'ugc-clean-photo':       'ugc-clean-photo — authentic candid photo, real-life setting, zero overlays.',
+  'ecommerce-infographic': 'ecommerce-infographic — flat icons, mobile-readable labels, soft pastel palette.',
+  'product-showcase':      'product-showcase — product-centered, brand colors, icon grid, soft circular badges.',
+  'comparison-card':       'comparison-card — two-column table, white panels with drop-shadow, emerald vs. gray headers.',
+  'editorial-card':        'editorial-card — magazine endorsement style, portrait + quote box, professional polish.',
+} as const
+
+function visualModeBlock(mode: keyof typeof VISUAL_MODE_REGISTRY): string {
+  return `VISUAL_MODE: ${VISUAL_MODE_REGISTRY[mode]}`
+}
+
 function brandLockBlock(
   identity: ProductIdentity,
   productInScene: boolean,
@@ -110,7 +128,7 @@ function technicalBlock(aspectRatio: string): string {
     aspectRatio === '16:9' ? '1024×576 (mapped to 3:2 landscape)' :
     aspectRatio === '9:16' ? '832×1248 (mapped to 2:3 portrait)' :
                               '1024×1024'
-  return `TECHNICAL: ${dims}, 1K resolution, sharp focus, web-ready. Typography: Montserrat ExtraBold for headlines, Manrope for body text — bold, clean, professional, NOT cartoon/handwritten.`
+  return `TECHNICAL: ${dims}, 1K, sharp focus. TYPOGRAPHY: consistent ecommerce sans-serif. MOBILE: all key text readable at portrait.`
 }
 
 // ═════════════════════════════════════════════════════════════════════
@@ -143,7 +161,7 @@ ${safeDecor(concept).map(formatDecor).join('\n')}`
     brandLockBlock(identity, concept.productInScene),
     textOverlay,
     decor,
-    `STYLE: candid UGC photo, natural light, authentic person; graphic overlays (badges, headline strip, arrow): sharp professional marketing design, high contrast.`,
+    visualModeBlock('ugc-social'),
     technicalBlock(concept.aspectRatio),
     `STRICT: no watermark.`,
   ].filter(Boolean).join('\n\n')
@@ -160,7 +178,7 @@ function recipeB(input: RecipeInput): string {
     `SCENE: ${concept.conceptScene}.`,
     subject,
     brandLockBlock(identity, concept.productInScene),
-    `STYLE: candid UGC photo, natural light, real-life setting, amateur smartphone aesthetic.`,
+    visualModeBlock('ugc-clean-photo'),
     technicalBlock(concept.aspectRatio),
     `STRICT: ZERO text/letters in image. No watermark.`,
   ].filter(Boolean).join('\n\n')
@@ -190,7 +208,7 @@ ${safeBlocks(concept).map(formatTextBlock).join('\n')}`
     `DIAGRAM CONCEPT: ${concept.conceptScene}.`,
     brandLockBlock(identity, concept.productInScene, false),  // recipeC: infographic, no person holds
     labels,
-    `STYLE: clean mobile-friendly infographic, vector/flat illustration, soft pastel palette, cartoon icons.`,
+    visualModeBlock('ecommerce-infographic'),
     layout,
     safeDecor(concept).length > 0 ? `BRAND BADGES: ${safeDecor(concept).map(formatDecor).join('; ')}` : '',
     technicalBlock(concept.aspectRatio),
@@ -214,7 +232,7 @@ ${safeBlocks(concept).map(formatTextBlock).join('\n')}`
     `INFOGRAPHIC CONCEPT: ${concept.conceptScene}.`,
     brandLockBlock(identity, concept.productInScene, false),  // recipeD: icon grid, product center, no person holds
     labels,
-    `STYLE: clean modern product showcase, soft palette matching brand colors, gradient bg, icons in soft circles.`,
+    visualModeBlock('product-showcase'),
     `LAYOUT: title top + ${identity.coBrandBadges.length > 0 ? `brand badge "${identity.coBrandBadges.join(' + ')}" near title + ` : ''}product packaging centered (SHAPE LOCK applied) + 5-8 icon+label items in grid/circular around product + brief description below.`,
     safeDecor(concept).length > 0 ? `EXTRA: ${safeDecor(concept).map(formatDecor).join('; ')}` : '',
     technicalBlock(concept.aspectRatio),
@@ -237,7 +255,7 @@ ${safeBlocks(concept).map(formatTextBlock).join('\n')}`
     `COMPARISON INFOGRAPHIC CONCEPT: ${concept.conceptScene}.`,
     brandLockBlock(identity, concept.productInScene, false),  // recipeE: comparison table, no person holds
     cells,
-    `STYLE: 2-column marketing comparison table, clean modern design, solid white card panels with drop-shadow, emerald-green vs. gray column headers, Montserrat ExtraBold labels.`,
+    visualModeBlock('comparison-card'),
     `LAYOUT: LEFT column: emerald-green header, product image centered below header, green ✓ on white rows. RIGHT column: neutral gray header, red ✗ on white rows. 3-5 rows MAX, each row = ONE bold label (max 5 words) — NO sub-text, NO annotations. Bold white header text for column titles.`,
     safeDecor(concept).length > 0 ? `EXTRA: ${safeDecor(concept).map(formatDecor).join('; ')}` : '',
     technicalBlock(concept.aspectRatio),
@@ -388,7 +406,7 @@ ${safeBlocks(concept).map(formatTextBlock).join('\n')}`
     `PRODUCT VISIBILITY: NO product packaging in this image. Focus = person + quote. Product name only mentioned as text within the quote (NOT as visual packaging).`,
     labels,
     variantBlock.trim(),
-    `STYLE: editorial polish (magazine/feature card, NOT amateur UGC).`,
+    visualModeBlock('editorial-card'),
     technicalBlock(concept.aspectRatio),
     `STRICT: name + credentials + quote legible. No watermark.`,
   ].filter(Boolean).join('\n\n')
