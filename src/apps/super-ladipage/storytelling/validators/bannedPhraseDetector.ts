@@ -52,12 +52,12 @@ const BANNED_PHRASES: BannedPattern[] = [
   { pattern: 'bí mật kinh hoàng', reason: 'shocking-reveal trope' },
   { pattern: 'sẽ thay đổi tất cả', reason: 'plot-twist promise' },
   { pattern: 'điều ít ai biết', reason: 'secret-tease trope' },
-  { pattern: 'tiết lộ', reason: 'reveal-tease — too dramatic for storytelling' },
+  // 'tiết lộ' REMOVED — natural use in confession voice OK ("tôi tiết lộ với chồng")
 
   // ── Fake confession bait ──
-  { pattern: 'tôi đã từng nghĩ đến', reason: 'fake-trauma bait' },
   { pattern: 'cuộc đời tôi sụp đổ', reason: 'overdramatic trauma' },
   { pattern: 'không ai biết tôi đã', reason: 'manufactured confession' },
+  // 'tôi đã từng nghĩ đến' REMOVED — natural confession context OK
 ]
 
 export function bannedPhraseDetector(sections: ParsedSection[]): ValidatorResult {

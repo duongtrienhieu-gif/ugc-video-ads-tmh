@@ -1,11 +1,17 @@
 // ─────────────────────────────────────────────────────────────────────
-// Storytelling Engine — rhythm variance config
+// Storytelling Engine — rhythm variance config (P0.5.4 realignment)
 //
-// Per-rhythm-profile cadence constraints. Anti-monotony validator:
-// no 2 adjacent sections share rhythm profile.
+// Storyselling target: CONVERSATIONAL DEFAULT — sounds like a Vietnamese
+// friend casually sharing, NOT screenplay cadence.
 //
-// Runtime prompt builder inject 1-2 dòng compact constraint cho mỗi
-// section, KHÔNG dump full table.
+// Changes from P0.5.2:
+//   - 'fragmented' DROPPED (created AI-essay feel)
+//   - 'short-clipped' RESTRICTED to rare emphasis only
+//   - 'conversational' promoted to DEFAULT for most sections
+//   - Adjacent rhythm rule LOOSENED — 2 flowing sections OK if readable
+//
+// Validators no longer punish "similar rhythm" if both conversational —
+// readability > variance.
 // ─────────────────────────────────────────────────────────────────────
 
 import type { RhythmProfile, SectionId } from '../types'
@@ -21,63 +27,62 @@ export interface RhythmConstraints {
 }
 
 export const RHYTHM_PROFILES: Record<RhythmProfile, RhythmConstraints> = {
-  'short-clipped': {
-    profile: 'short-clipped',
-    sentenceLengthAvg: [5, 9],
-    paragraphLines: [1, 2],
-    styleMarkers: ['period-heavy', 'frequent-line-breaks', 'declarative'],
-    instruction: 'sentences 5-9 words avg, period-heavy, frequent breaks, declarative',
+  'conversational': {
+    profile: 'conversational',
+    sentenceLengthAvg: [12, 20],
+    paragraphLines: [2, 4],
+    styleMarkers: ['flowing', 'natural-spoken', 'medium-long', 'occasional-rhetorical'],
+    instruction:
+      'sentences 12-20 words avg, flowing natural conversation tone, 2-4 sentences per paragraph — sounds like talking to a friend',
   },
   'long-flowing': {
     profile: 'long-flowing',
     sentenceLengthAvg: [15, 22],
     paragraphLines: [3, 5],
-    styleMarkers: ['em-dash-rich', 'comma-rich', 'observational'],
-    instruction: 'sentences 15-22 words avg, em-dash/comma rich, observational',
+    styleMarkers: ['em-dash-rich', 'comma-rich', 'reflective-flow'],
+    instruction:
+      'sentences 15-22 words avg, em-dash/comma rich, reflective flowing prose — slightly longer breath',
   },
-  'fragmented': {
-    profile: 'fragmented',
-    sentenceLengthAvg: [3, 15],
-    paragraphLines: [1, 3],
-    styleMarkers: ['repetition-allowed', 'sentence-fragments', 'recurring-pattern'],
-    instruction: 'irregular 3-15 words, fragments OK, repetition mimics recurring pain',
-  },
-  'conversational': {
-    profile: 'conversational',
-    sentenceLengthAvg: [4, 18],
-    paragraphLines: [2, 4],
-    styleMarkers: ['rhetorical-questions', 'contractions', 'second-person-asides'],
-    instruction: 'rhetorical, contractions OK, occasional "bạn biết...", list-y',
+  'short-clipped': {
+    profile: 'short-clipped',
+    sentenceLengthAvg: [5, 12],
+    paragraphLines: [2, 3],
+    styleMarkers: ['emphasis-line', 'sparing-clipped', 'used-with-restraint'],
+    instruction:
+      'SHORTER sentences (5-12 words) used SPARINGLY — only as emphasis among flowing context. Not fragmented chops.',
   },
   'reflective-pause': {
     profile: 'reflective-pause',
-    sentenceLengthAvg: [10, 16],
+    sentenceLengthAvg: [12, 18],
     paragraphLines: [2, 3],
-    styleMarkers: ['trailing-ellipsis', 'interior-monologue', 'slow-cadence'],
-    instruction: 'longer sentences with trailing "…", interior monologue, slow',
+    styleMarkers: ['interior-monologue', 'occasional-trailing-thought', 'slow-flowing'],
+    instruction:
+      'flowing interior monologue, 12-18 word sentences, occasional trailing "…" — slow but NOT fragmented',
   },
   'mixed': {
     profile: 'mixed',
-    sentenceLengthAvg: [5, 22],
-    paragraphLines: [1, 5],
-    styleMarkers: ['variance-high', 'multi-tonal', 'dialogue-OK'],
-    instruction: 'high variance — short impact lines + longer descriptions + dialogue',
+    sentenceLengthAvg: [10, 22],
+    paragraphLines: [2, 5],
+    styleMarkers: ['variance-natural', 'multi-tonal', 'dialogue-OK'],
+    instruction:
+      'mixed cadence — combine medium-flowing with occasional dialogue/emphasis. NOT fragmented spam.',
   },
 }
 
-/** Anti-monotony validator: 2 adjacent sections KHÔNG được cùng rhythm. */
+/** P0.5.4 — Anti-monotony LOOSENED. Adjacent sections with both
+ *  'conversational' or both 'long-flowing' are OK if readable. We only
+ *  flag if rhythm choice produces unnatural cadence — but cadence is
+ *  enforced via prompt instruction, not validator regex.
+ *
+ *  Validator now informational — doesn't trigger retry. */
 export function validateAdjacentRhythms(
   sectionRhythms: Array<{ id: SectionId; rhythm: RhythmProfile }>,
 ): { valid: boolean; violations: Array<{ a: SectionId; b: SectionId; rhythm: RhythmProfile }> } {
-  const violations: Array<{ a: SectionId; b: SectionId; rhythm: RhythmProfile }> = []
-  for (let i = 0; i < sectionRhythms.length - 1; i++) {
-    const cur = sectionRhythms[i]
-    const next = sectionRhythms[i + 1]
-    if (cur.rhythm === next.rhythm) {
-      violations.push({ a: cur.id, b: next.id, rhythm: cur.rhythm })
-    }
-  }
-  return { valid: violations.length === 0, violations }
+  // Storyselling: we don't punish adjacent same-profile if both flowing.
+  // The OUTPUT-side adjacentRhythmDetector still checks actual sentence
+  // stats — but config-level rhythm reuse is fine.
+  void sectionRhythms
+  return { valid: true, violations: [] }
 }
 
 /** 1-line instruction for prompt injection per section. */

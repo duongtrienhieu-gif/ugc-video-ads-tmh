@@ -25,37 +25,49 @@ export interface ValidatorResult {
   violations: ValidatorViolation[]
 }
 
-/** First-line bio patterns. Tiếng Việt regex hơi loose — không quá strict
- *  để không catch hợp lệ. */
+/** P0.5.4 STORYSELLING REALIGNMENT — only flag 3RD PERSON observer-mode
+ *  bio intros. 1st person ID reveal ("Tôi 38 tuổi, mẹ 2 con — đã hơn nửa
+ *  năm nay tôi ngủ không sâu") IS ALLOWED — it's a natural confession
+ *  opener flowing into pain.
+ *
+ *  Patterns now require 3rd-person framing (cô / anh / chị / named) to
+ *  trigger. */
 const BIO_PATTERNS: Array<{ pattern: RegExp; reason: string }> = [
   {
-    // Name (capitalized word) + comma + age + tuổi
-    pattern: /^[A-ZÀ-Ỹ][\p{L}]+,\s*\d{2}\s*(tuổi|năm)/u,
-    reason: 'Mở bằng "Tên, X tuổi" — bio CV intro',
+    // Named character (not Tôi/Mình/Em) + comma + age → 3rd-person bio
+    // Negative lookahead excludes 1st-person openers.
+    pattern: /^(?!tôi|mình|em\b)[A-ZÀ-Ỹ][\p{L}]+,\s*\d{2}\s*(tuổi|năm)/iu,
+    reason: 'Mở bằng "Tên, X tuổi" 3rd-person — bio CV observer intro',
   },
   {
-    pattern: /^(sống|hiện sống|cô sống|anh sống|cô ở|anh ở|chị sống)\s+(ở|tại)/i,
-    reason: 'Mở bằng địa lý ("sống ở...") — bio intro',
+    // 3rd-person location bio ("Cô sống ở", "Anh hiện sống tại")
+    pattern: /^(cô|anh|chị)\s+(sống|hiện sống|ở)\s+(ở|tại)/i,
+    reason: 'Mở bằng 3rd-person địa lý — observer bio',
   },
   {
-    pattern: /^(mỗi sáng|mỗi ngày|hằng ngày|hàng ngày)/i,
-    reason: 'Mở bằng routine description — bio intro',
+    // 3rd-person routine ("Mỗi sáng cô dậy", "Hằng ngày anh đi")
+    pattern: /^(mỗi sáng|mỗi ngày|hằng ngày|hàng ngày)\s+(cô|anh|chị)\b/i,
+    reason: 'Mở bằng 3rd-person routine — observer bio',
   },
   {
-    pattern: /^(cô là kiểu người|anh là kiểu người|chị là kiểu người|cô là người|anh là người)/i,
-    reason: 'Mở bằng personality label — bio intro',
+    // 3rd-person personality label
+    pattern: /^(cô|anh|chị)\s+(là kiểu người|là người|thuộc kiểu)/i,
+    reason: 'Mở bằng 3rd-person personality label — observer bio',
   },
   {
-    pattern: /^sinh ra\s+(trong|tại|ở)/i,
-    reason: 'Mở bằng background exposition — bio intro',
+    // Background exposition still 3rd person
+    pattern: /^(cô|anh|chị)\s+sinh ra\s+(trong|tại|ở)/i,
+    reason: 'Mở bằng 3rd-person background exposition — observer bio',
   },
   {
+    // 3rd-person job
     pattern: /^(cô|anh|chị)\s+(làm|là)\s+(chủ|nhân viên|giáo viên|y tá)/i,
-    reason: 'Mở bằng job description — bio intro',
+    reason: 'Mở bằng 3rd-person job description — observer bio',
   },
   {
+    // 3rd-person family composition
     pattern: /^(cô|anh|chị)\s+(có|đang có)\s+\d+\s+(con|đứa)/i,
-    reason: 'Mở bằng family composition — bio intro',
+    reason: 'Mở bằng 3rd-person family composition — observer bio',
   },
 ]
 

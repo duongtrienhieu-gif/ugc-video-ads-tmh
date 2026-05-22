@@ -156,15 +156,19 @@ export type CuriosityMechanic =
   | 'time-jump-tease'          // "sau này...", "ngày đó..."
   | 'small-moment-magnification' // tiny detail given weight
 
-/** Sentence-length & cadence pattern. Anti-monotony — no 2 adjacent
- *  sections share rhythm profile. */
+/** Sentence-length & cadence pattern. Storyselling realignment: DROP
+ *  'fragmented' (creates AI-essay feel). 'conversational' is now the
+ *  default. 'short-clipped' restricted to rare emphasis — never section-
+ *  level rhythm.
+ *
+ *  Anti-monotony loosened: 2 adjacent conversational/flowing sections OK
+ *  if readable. We do NOT punish flowing similarity. */
 export type RhythmProfile =
-  | 'short-clipped'         // avg 5-9 words, period-heavy, frequent breaks
-  | 'long-flowing'          // avg 15-22 words, em-dash, observational
-  | 'fragmented'            // mix 3-15 irregular, repetition, fragments
-  | 'conversational'        // contractions, rhetorical, list-y
-  | 'reflective-pause'      // longer + trailing "…", interior monologue
-  | 'mixed'                 // combo — for multi-tonal sections
+  | 'conversational'        // DEFAULT — 12-20 word sentences, natural flow, 2-4 sentence paragraphs
+  | 'long-flowing'          // 15-22 words, em-dash, observational, longer paragraphs
+  | 'short-clipped'         // RARE emphasis only — 5-9 words. Not section-default.
+  | 'reflective-pause'      // longer sentences + occasional trailing "…", interior monologue
+  | 'mixed'                 // combo — for multi-tonal sections like discovery/payoff
 
 /** How section hands off to next. Anti-hard-cliffhanger. */
 export type TransitionPsychology =
@@ -411,6 +415,14 @@ export type BannedTextPattern =
   | 'fake-urgency'
   | 'giant-paragraph'
   | 'ai-essay-tone'
+  // P0.5.4 storyselling extremes — banned both ways
+  | 'fragmented-cinematic'    // screenplay chops ("Mệt. Rất mệt.")
+  | 'cinematic-blocking'      // novelistic action ("Vặn vòi nước. Quay lại bàn.")
+  | 'observer-3rd-person'     // named character as main subject
+  | 'copywriter-template'     // "Bạn xứng đáng...", "Đừng bỏ lỡ..."
+  | 'motivational-guru'       // "Hãy tin vào bản thân..."
+  | 'fake-empathy-script'     // "Tôi hiểu cảm giác của bạn..."
+  | 'formulaic-hook-spam'     // same "Bạn đã từng..." opener every pack
 
 export interface PacingRules {
   paragraphDensity: {

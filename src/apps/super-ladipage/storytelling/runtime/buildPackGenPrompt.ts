@@ -103,10 +103,13 @@ Section directives (in order):
 
 ${sections}
 
-REMEMBER:
-- adjacent sections PHẢI khác rhythm profile
-- KHÔNG ai-essay tone, KHÔNG enumerated structure
-- KHÔNG bio intro section 1
+CORE REMINDERS (storyselling):
+- 1st person "tôi" voice. NO 3rd person observer ("Cô ấy", "Anh ấy", named character).
+- Conversational flowing sentences (12-20 từ avg). NO fragmented chops ("Mệt. Rất mệt.").
+- Specific named pain — concrete symptoms reader recognizes.
+- Pull from RECOGNITION not drama. Reader thinks "ờ giống mình" not "writing đẹp".
+- NO bio CV intro section 1. NO copywriter templates ("Bạn xứng đáng...").
+- Read-aloud test: nghe như người Việt thật share với bạn thân.
 - Output JSON only${retryFeedback ?? ''}`
 }
 

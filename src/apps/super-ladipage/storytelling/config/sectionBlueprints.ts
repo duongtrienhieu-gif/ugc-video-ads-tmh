@@ -1,15 +1,19 @@
 // ─────────────────────────────────────────────────────────────────────
-// Storytelling Engine — section blueprints (v4)
+// Storytelling Engine — section blueprints (P0.5.4 realignment)
 //
-// 10 section metadata. Source of truth cho narrative structure +
-// narrative dynamics (role / function / curiosity / rhythm / transition
-// / tension / retention).
+// REALIGNED for storyselling: each section has sales-functional objective.
+// Question per section: "How does this section improve conversion?"
 //
-// Anti-monotony invariant: adjacent sections KHÔNG được cùng rhythmProfile.
-// Validator: rhythmVariance.validateAdjacentRhythms()
+// Rhythm changes:
+//   - 'fragmented' DROPPED entirely (no usage)
+//   - 'short-clipped' restricted to rare emphasis only (no section uses it
+//     as default rhythm)
+//   - 'conversational' now DEFAULT for most sections (was rare)
+//   - 'long-flowing' for reflective sections (was 'fragmented')
+//   - 'reflective-pause' for interior monologue sections
+//   - 'mixed' for sections needing dialogue + narrative
 //
-// Text gen runtime consume blueprint qua prompt builder — KHÔNG hardcode
-// text. KHÔNG hardcode philosophy.
+// Adjacent rhythm rule LOOSENED — readability > variance.
 // ─────────────────────────────────────────────────────────────────────
 
 import type { SectionBlueprint, SectionId } from '../types'
@@ -18,39 +22,38 @@ export const SECTION_BLUEPRINTS: Record<SectionId, SectionBlueprint> = {
   'intro-portrait': {
     id: 'intro-portrait',
     order: 1,
-    role: 'mở chuyện — observation hook',
+    role: 'self-insertion hook — reader recognizes self + pain',
     emotionalBeat: 'calm-curious',
     textDensity: 'medium',
     imageRequirement: { countDefault: 1, rangeMin: 1, rangeMax: 1, isOptional: false },
     continuityRequirement: 'anchor',
     productVisibility: 'forbidden',
     overlayAllowance: 'chapter-marker',
-    pacingPurpose: 'hook + identity-by-context (no bio intro)',
+    pacingPurpose: 'pull reader into recognition via 1st-person confession with named pain',
     curiosityGapAfter: true,
-    // ── v4 dynamics ──
+    // v4 dynamics — REALIGNED
     narrativeRole:        'hook',
-    emotionalFunction:    'create-unrest',
+    emotionalFunction:    'establish-recognition',  // was create-unrest — now recognition primary
     curiosityMechanic:    'observation-anomaly',
-    rhythmProfile:        'short-clipped',
-    transitionPsychology: 'open-loop',
+    rhythmProfile:        'conversational',         // was short-clipped — TOO clipped for storyselling
+    transitionPsychology: 'emotional-pull',
     tensionLevel:         4,
     retentionMechanic:    'micro-question',
-    hookPattern:          'observation-first',
+    hookPattern:          'subtle-detail',          // self-insertion confession (reuse enum)
   },
 
   'ordinary-life': {
     id: 'ordinary-life',
     order: 2,
-    role: 'cuộc sống bình thường + subtle wrongness',
+    role: 'shared context — daily moments reader knows',
     emotionalBeat: 'subtle-unease',
     textDensity: 'medium-high',
     imageRequirement: { countDefault: 1, rangeMin: 1, rangeMax: 1, isOptional: false },
     continuityRequirement: 'required',
     productVisibility: 'forbidden',
     overlayAllowance: 'never',
-    pacingPurpose: 'world + identity reveal via context, wrongness embedded',
+    pacingPurpose: 'build relatability via concrete daily details narrated in 1st person',
     curiosityGapAfter: true,
-    // ── v4 dynamics ──
     narrativeRole:        'orientation',
     emotionalFunction:    'establish-recognition',
     curiosityMechanic:    'unstated-cause',
@@ -63,21 +66,20 @@ export const SECTION_BLUEPRINTS: Record<SectionId, SectionBlueprint> = {
   'daily-friction': {
     id: 'daily-friction',
     order: 3,
-    role: 'khó chịu lặp lại — niche-calibrated intensity',
+    role: 'pain articulation — specific symptoms named',
     emotionalBeat: 'recurring-discomfort',
     textDensity: 'high',
     imageRequirement: { countDefault: 1, rangeMin: 0, rangeMax: 1, isOptional: true },
     continuityRequirement: 'required',
     productVisibility: 'forbidden',
     overlayAllowance: 'never',
-    pacingPurpose: 'friction loop — repetition IS the form, NOT trauma',
+    pacingPurpose: 'specific concrete pain symptoms — reader recognizes own experience',
     curiosityGapAfter: false,
-    // ── v4 dynamics ──
     narrativeRole:        'friction-loop',
     emotionalFunction:    'deepen-empathy',
     curiosityMechanic:    'small-moment-magnification',
-    rhythmProfile:        'fragmented',
-    transitionPsychology: 'silent-cut',
+    rhythmProfile:        'conversational',          // was 'fragmented' — DROPPED
+    transitionPsychology: 'emotional-pull',
     tensionLevel:         7,
     retentionMechanic:    'micro-question',
   },
@@ -85,16 +87,15 @@ export const SECTION_BLUEPRINTS: Record<SectionId, SectionBlueprint> = {
   'failed-attempts': {
     id: 'failed-attempts',
     order: 4,
-    role: 'đã thử nhiều cách — frustration anchor',
+    role: 'validate frustration — tôi đã thử X, Y, Z',
     emotionalBeat: 'frustration',
     textDensity: 'medium',
     imageRequirement: { countDefault: 1, rangeMin: 0, rangeMax: 1, isOptional: true },
     continuityRequirement: 'none',
     productVisibility: 'forbidden',
     overlayAllowance: 'never',
-    pacingPurpose: 'frustration anchor — quiet exhaustion, NOT dramatic',
+    pacingPurpose: 'validate reader effort — narrated failed attempts in conversational list',
     curiosityGapAfter: false,
-    // ── v4 dynamics ──
     narrativeRole:        'frustration-anchor',
     emotionalFunction:    'deepen-empathy',
     curiosityMechanic:    'unresolved-pronoun',
@@ -107,16 +108,15 @@ export const SECTION_BLUEPRINTS: Record<SectionId, SectionBlueprint> = {
   'inner-realization': {
     id: 'inner-realization',
     order: 5,
-    role: 'insight nội tâm — reflection pause',
+    role: 'permission to seek solution — quiet realization',
     emotionalBeat: 'quiet-reflection',
     textDensity: 'high',
     imageRequirement: { countDefault: 0, rangeMin: 0, rangeMax: 0, isOptional: false },
     continuityRequirement: 'none',
     productVisibility: 'mentioned-only',
     overlayAllowance: 'never',
-    pacingPurpose: 'pure text breathing — release valve in tension curve',
+    pacingPurpose: 'interior monologue giving permission to seek help — không drama, không enlightenment',
     curiosityGapAfter: true,
-    // ── v4 dynamics ──
     narrativeRole:        'reflection-pause',
     emotionalFunction:    'invite-reflection',
     curiosityMechanic:    'open-loop',
@@ -129,16 +129,15 @@ export const SECTION_BLUEPRINTS: Record<SectionId, SectionBlueprint> = {
   'discovery-moment': {
     id: 'discovery-moment',
     order: 6,
-    role: 'cơ duyên gặp giải pháp — curiosity spark',
+    role: 'natural bridge to product via trusted source',
     emotionalBeat: 'hesitant-curiosity',
     textDensity: 'medium-high',
     imageRequirement: { countDefault: 1, rangeMin: 1, rangeMax: 1, isOptional: false },
     continuityRequirement: 'optional',
     productVisibility: 'mentioned-only',
     overlayAllowance: 'never',
-    pacingPurpose: 'pivotal moment via someone close, NOT doctor/expert',
+    pacingPurpose: 'discovery via family/friend — natural mention, NOT doctor/expert authority',
     curiosityGapAfter: false,
-    // ── v4 dynamics ──
     narrativeRole:        'curiosity-spark',
     emotionalFunction:    'open-possibility',
     curiosityMechanic:    'unstated-cause',
@@ -151,20 +150,19 @@ export const SECTION_BLUEPRINTS: Record<SectionId, SectionBlueprint> = {
   'first-trial': {
     id: 'first-trial',
     order: 7,
-    role: 'lần đầu thử — tentative action',
+    role: 'honest tentative engagement — không kỳ vọng cao',
     emotionalBeat: 'tentative',
     textDensity: 'medium',
     imageRequirement: { countDefault: 1, rangeMin: 1, rangeMax: 1, isOptional: false },
     continuityRequirement: 'none',
     productVisibility: 'still-life',
     overlayAllowance: 'never',
-    pacingPurpose: 'product reveal — modest still-life, NOT hero shot',
+    pacingPurpose: 'first try with realistic low expectations — relatable hesitation',
     curiosityGapAfter: true,
-    // ── v4 dynamics ──
     narrativeRole:        'tentative-action',
     emotionalFunction:    'open-possibility',
     curiosityMechanic:    'open-loop',
-    rhythmProfile:        'short-clipped',
+    rhythmProfile:        'conversational',          // was short-clipped — too clipped
     transitionPsychology: 'time-jump',
     tensionLevel:         4,
     retentionMechanic:    'micro-question',
@@ -173,16 +171,15 @@ export const SECTION_BLUEPRINTS: Record<SectionId, SectionBlueprint> = {
   'subtle-change': {
     id: 'subtle-change',
     order: 8,
-    role: 'dấu hiệu đầu tiên — micro reward',
+    role: 'believable initial change — small specific wins',
     emotionalBeat: 'first-hope',
     textDensity: 'medium',
     imageRequirement: { countDefault: 1, rangeMin: 1, rangeMax: 1, isOptional: false },
     continuityRequirement: 'required',
     productVisibility: 'subtle-background',
     overlayAllowance: 'diary-timestamp',
-    pacingPurpose: 'first uptick — small, real, retroactively noticed',
+    pacingPurpose: 'small specific changes noticed retrospectively — believable, NOT miracle',
     curiosityGapAfter: false,
-    // ── v4 dynamics ──
     narrativeRole:        'micro-reward',
     emotionalFunction:    'reward-attention',
     curiosityMechanic:    'small-moment-magnification',
@@ -195,20 +192,15 @@ export const SECTION_BLUEPRINTS: Record<SectionId, SectionBlueprint> = {
   'new-normal': {
     id: 'new-normal',
     order: 9,
-    role: 'cuộc sống mới — calm payoff',
+    role: 'sustained result — daily life difference',
     emotionalBeat: 'acceptance-joy',
     textDensity: 'medium',
     imageRequirement: { countDefault: 1, rangeMin: 1, rangeMax: 2, isOptional: false },
     continuityRequirement: 'required',
     productVisibility: 'subtle-background',
     overlayAllowance: 'never',
-    pacingPurpose: 'sustained — callback to early motif, payoff felt not announced',
+    pacingPurpose: 'settled normal — payoff felt through daily detail, NOT announced',
     curiosityGapAfter: false,
-    // ── v4 dynamics ──
-    // Note: thematic callback (section 1 husband dialogue → section 9 settled
-    // dialogue) is handled at TransitionPsychology level. CuriosityMechanic
-    // here is small-moment-magnification — "Em ngủ ngon" carries weight
-    // disproportionate to its 3 words.
     narrativeRole:        'calm-payoff',
     emotionalFunction:    'settle-trust',
     curiosityMechanic:    'small-moment-magnification',
@@ -221,16 +213,15 @@ export const SECTION_BLUEPRINTS: Record<SectionId, SectionBlueprint> = {
   'sharing-invitation': {
     id: 'sharing-invitation',
     order: 10,
-    role: 'lời mời mở — quiet closure',
+    role: 'natural recommendation — warm invitation, NOT hard CTA',
     emotionalBeat: 'settled-resolve',
     textDensity: 'medium-high',
     imageRequirement: { countDefault: 1, rangeMin: 1, rangeMax: 1, isOptional: false },
     continuityRequirement: 'required',
     productVisibility: 'forbidden',
     overlayAllowance: 'never',
-    pacingPurpose: 'soft invitation — human peer, NEVER marketing CTA',
+    pacingPurpose: 'warm peer invitation — share what helped, không sales push',
     curiosityGapAfter: false,
-    // ── v4 dynamics ──
     narrativeRole:        'quiet-closure',
     emotionalFunction:    'invite-co-presence',
     curiosityMechanic:    null,

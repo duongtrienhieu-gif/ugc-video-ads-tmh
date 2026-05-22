@@ -1,9 +1,14 @@
 // ─────────────────────────────────────────────────────────────────────
-// Storytelling Engine — narrative hooks (section 1 only)
+// Storytelling Engine — section 1 hooks (P0.5.4 realignment)
 //
-// Opening hook patterns + banned bio-style framings. Enforced via
-// runtime self-test prompt: section 1 MUST open with anomaly/observation,
-// NEVER with name/age/routine/job/personality label.
+// REALIGNED for storyselling: hooks are SELF-INSERTION devices —
+// reader must instantly recognize themselves within first 3 lines.
+//
+// 1st person "tôi" is primary. "Bạn" mixed naturally when fits.
+//
+// Important: these are STYLE references, NOT mandatory templates.
+// Gemini chọn phrasing tự nhiên cho protagonist + niche — KHÔNG
+// repeat the same opener across every pack.
 // ─────────────────────────────────────────────────────────────────────
 
 import type { HookPattern, SectionId } from '../types'
@@ -11,88 +16,114 @@ import type { HookPattern, SectionId } from '../types'
 export interface HookPatternSpec {
   pattern: HookPattern
   description: string
-  /** 2-3 example opening lines (Vietnamese). Style demos, không phải template. */
+  /** Vietnamese style references — show TONE only, do NOT copy verbatim. */
   examples: string[]
 }
 
 export const HOOK_PATTERNS: Record<HookPattern, HookPatternSpec> = {
+  // Storyselling self-insertion hooks. We reuse the existing HookPattern
+  // enum keys but reinterpret each as a self-insertion style. New keys
+  // would require type union changes — we keep keys, change meaning.
+
   'observation-first': {
     pattern: 'observation-first',
-    description: 'Mở qua mắt ai đó khác — chứng kiến, để ý, nhận ra',
+    description: 'confession opener — 1st person sharing a vulnerable observation about self',
     examples: [
-      'Chồng cô là người đầu tiên nhận ra.',
-      'Em gái cô gọi điện vào một sáng và hỏi một câu rất lạ.',
-      'Hàng xóm có lẽ là người để ý trước cô.',
+      'Có một thời gian tôi gần như không dám nhìn vào gương mỗi sáng.',
+      'Tôi không nhớ chính xác từ khi nào mình bắt đầu mệt như vậy.',
+      'Mỗi sáng tôi ngồi ở bàn cả 5-10 phút mà không làm gì.',
     ],
   },
+
   'anomaly-first': {
     pattern: 'anomaly-first',
-    description: 'Mở bằng moment lạ nhỏ — hành vi bất thường, vắng mặt thói quen',
+    description: 'shared experience — "tôi cũng từng cảm thấy thế này" tone',
     examples: [
-      'Có một khoảng thời gian, cô bắt đầu tránh nhìn vào gương quá lâu.',
-      'Cô không nhớ chính xác lần cuối cùng mình ngồi xuống mà không nghĩ đến việc đứng dậy.',
-      'Buổi sáng hôm đó, lần đầu tiên trong nhiều tháng, cô không bấm "ngủ thêm".',
+      'Tôi từng nghĩ chuyện này chỉ là do mình mệt thôi — sau này mới biết không phải.',
+      'Tôi cũng từng tự thuyết phục mình rằng mọi thứ vẫn ổn.',
+      'Trước đây tôi nghĩ đây là chuyện ai cũng gặp ở tuổi 40.',
     ],
   },
+
   'negative-space': {
     pattern: 'negative-space',
-    description: 'Mở bằng điều gì missing/avoided — không nói ra, không làm',
+    description: 'vulnerable confession via what reader avoids/hides',
     examples: [
-      'Có những thứ thay đổi rất chậm — bạn không để ý cho đến khi đã quá muộn để giả vờ là không có.',
-      'Cô không nói với ai. Đó có lẽ là phần khó nhất.',
-      'Không phải cô không muốn nói. Chỉ là cô không biết nói như thế nào.',
+      'Không biết có ai giống tôi không — tôi gần như tránh nhắc chuyện này với chồng.',
+      'Tôi chưa từng nói thẳng với ai chuyện mình lúc nào cũng mệt.',
+      'Có những thứ tôi không nói ra — vì nói ra rồi cũng không biết làm gì.',
     ],
   },
+
   'time-blur': {
     pattern: 'time-blur',
-    description: 'Mở bằng không xác định bắt đầu khi nào — "không nhớ chính xác"',
+    description: 'time-anchored confession — when it started',
     examples: [
-      'Aishah không nhớ chính xác khi nào nó bắt đầu.',
-      'Có lẽ đã ba tháng. Có lẽ sáu tháng. Cô không đếm.',
-      'Sau này khi có người hỏi, cô vẫn không biết trả lời thế nào.',
+      'Sau tuổi 35 tôi bắt đầu để ý — sáng dậy mệt hơn, da xỉn màu hơn dù skincare đủ kiểu.',
+      'Khoảng 6 tháng trở lại đây tôi cứ mệt suốt, dù chẳng làm gì nặng.',
+      'Từ sau khi sinh đứa thứ hai, tôi cảm giác cơ thể mình không còn như trước.',
     ],
   },
+
   'subtle-detail': {
     pattern: 'subtle-detail',
-    description: 'Mở bằng magnify thứ rất nhỏ — chi tiết đời thường',
+    description: 'specific concrete pain detail opening — reader recognizes symptom',
     examples: [
-      'Ban đầu chỉ là một chuyện rất nhỏ.',
-      'Mọi chuyện lúc đầu thật ra không nghiêm trọng.',
-      'Cốc cà phê thứ ba — đó là dấu hiệu cô nhớ nhất.',
+      'Tôi 38 tuổi, mẹ 2 đứa con — và đã hơn nửa năm nay tôi ngủ không sâu giấc.',
+      'Cứ khoảng 3 giờ chiều mỗi ngày, tôi lại thấy như cơ thể mình hết pin.',
+      'Da tôi xỉn màu, mắt thâm rõ, lúc nào cũng như thiếu sức sống — dù tôi đã cố ngủ sớm.',
     ],
   },
+
   'third-person-witness': {
     pattern: 'third-person-witness',
-    description: 'Mở chứng kiến từ người khác — không phải bản thân nhân vật',
+    description: 'someone close mentioned it — bridges 1st person internal with external observation',
     examples: [
-      'Aida — em gái — là người đầu tiên dùng từ đó.',
-      'Chồng cô nói câu đó vào một sáng thứ Bảy.',
-      'Cô bạn thân từ thời cấp ba nhắn tin: "Mày dạo này sao vậy?"',
+      'Tuần trước chồng tôi hỏi: "Em ngủ không ngon à?" — và tôi giật mình nhận ra anh ấy đã hỏi câu này nhiều lần.',
+      'Em gái tôi nhắc một câu — và tôi mới chịu nhìn lại mấy tháng vừa qua.',
+      'Có lần con gái hỏi sao mẹ lúc nào cũng mệt — câu đó tôi nhớ mãi.',
     ],
   },
 }
 
-/** Banned opening patterns — runtime semantic gate sẽ reject section 1
- *  nếu mở bằng các pattern này. */
+/** Banned opening styles — these create observer mode or sales template feel. */
 export const BANNED_HOOK_PATTERNS = [
-  'name-age-intro',          // "Aishah, 38 tuổi"
-  'location-intro',          // "Sống ở Selangor..."
-  'routine-description',     // "Mỗi sáng cô dậy lúc..."
-  'job-description',         // "Cô làm chủ một cửa hàng nhỏ..."
-  'family-composition',      // "Cô sống cùng chồng và 2 con..."
-  'personality-label',       // "Cô là kiểu người..."
-  'background-exposition',   // "Sinh ra trong một gia đình..."
-  'demographic-statement',   // "Cô thuộc thế hệ phụ nữ Á Đông..."
+  '3rd-person-observer',     // "Cô ấy bước vào phòng" — observer mode
+  'name-age-bio',            // "Aishah, 38 tuổi, sống ở..."
+  'location-bio',            // "Sống ở Selangor..."
+  'routine-bio',             // "Mỗi sáng cô dậy lúc..."
+  'job-bio',                 // "Cô là chủ cửa hàng..."
+  'family-bio',              // "Cô có 2 con..."
+  'personality-label-bio',   // "Cô là kiểu người..."
+  'copywriter-bait',         // "Bạn xứng đáng với phiên bản tốt hơn..."
+  'motivational-guru',       // "Hãy tin vào bản thân..."
+  'fake-empathy',            // "Tôi hiểu cảm giác của bạn..."
+  'formulaic-template',      // every pack opens "Bạn đã từng..." — banned spam
 ] as const
 
-/** Inject vào pack-gen prompt cho section 1 only. */
+/** Inject vào pack-gen prompt cho section 1. Self-insertion enforcement. */
 export const HOOK_ENFORCEMENT_PROMPT =
-  `Section 1 (hook) opening rules:
-- OPEN with observation / anomaly / negative-space / time-blur / subtle-detail / third-person-witness
-- BANNED: name+age, location, routine, job, family composition, personality label
-- Identity reveal đến SAU hook — qua context (scene, dialogue), không qua statement
-- Hook line PHẢI tạo unresolved question trong 3 dòng đầu
-- Self-test: "Câu mở đầu có gây 'ủa, chuyện gì vậy?' cho reader không?"`
+  `Section 1 opening rules (storyselling self-insertion):
+
+GOAL: Within first 3 lines, reader thinks "ờ giống mình, đúng là tôi cũng vậy".
+
+POV: 1st person "tôi" primary. Optional "bạn" mixed naturally — NOT formula.
+
+PHẢI có:
+- 1st person voice ("tôi", "mình")
+- Specific concrete pain hinted (named symptoms — không abstract)
+- Conversational tone (như nói chuyện với bạn thân)
+
+KHÔNG được:
+- 3rd person observer mode ("Cô ấy...", "Anh ấy...", named character)
+- Bio CV intro ("Tôi 38 tuổi, sống ở..., làm...") as standalone — only OK nếu flow vào pain ngay
+- Copywriter bait ("Bạn xứng đáng...", "Đừng để X hủy hoại...")
+- Motivational guru tone
+- Formula spam — same opener across packs
+
+CHỌN style tự nhiên cho protagonist + niche. KHÔNG copy examples literally.
+
+Self-test: Nếu đọc lên có cảm giác "đây là một người bạn đang kể cho mình nghe", section 1 OK.`
 
 /** Section IDs có hook (chỉ section 1 hiện tại). */
 export const HOOK_REQUIRED_SECTIONS: SectionId[] = ['intro-portrait']

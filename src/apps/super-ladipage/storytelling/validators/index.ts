@@ -7,6 +7,7 @@ export { adjacentRhythmDetector } from './adjacentRhythmDetector'
 export { aiCadenceDetector } from './aiCadenceDetector'
 export { bannedPhraseDetector } from './bannedPhraseDetector'
 export { commercialToneDetector } from './commercialToneDetector'
+export { selfInsertionDetector } from './selfInsertionDetector'
 export { runValidators, logValidationResult } from './runValidators'
 
 export type {

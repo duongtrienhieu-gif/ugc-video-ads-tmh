@@ -47,11 +47,18 @@ function computeRhythmStats(copy: string): RhythmStats {
   }
 }
 
-/** Threshold for "too similar". Tuned conservative — false positives OK,
- *  false negatives bad. */
-const SENTENCE_LENGTH_THRESHOLD = 3      // < 3 words diff = too similar
-const FRAGMENT_RATIO_THRESHOLD = 0.15    // < 0.15 ratio diff = too similar
-const LONG_RATIO_THRESHOLD = 0.15
+/** P0.5.4 STORYSELLING REALIGNMENT — thresholds LOOSENED significantly.
+ *
+ *  Storyselling needs conversational flow throughout. Adjacent sections
+ *  both in flowing rhythm are OK — readability > variance.
+ *
+ *  Validator now flags only PATHOLOGICAL cases where 2 sections are
+ *  nearly identical in cadence (suggesting Gemini repeating structure).
+ *  False positives bad here — we don't want validator pressuring writer
+ *  into artificial variance. */
+const SENTENCE_LENGTH_THRESHOLD = 1.5    // tighter — only flag near-identical
+const FRAGMENT_RATIO_THRESHOLD = 0.08    // tighter
+const LONG_RATIO_THRESHOLD = 0.08
 
 export function adjacentRhythmDetector(sections: ParsedSection[]): ValidatorResult {
   const violations: ValidatorViolation[] = []
