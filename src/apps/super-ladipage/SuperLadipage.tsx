@@ -4,7 +4,11 @@ import { useAppStore } from '../../stores/appStore'
 import { useBankStore } from '../../stores/bankStore'
 import type { Product } from '../../stores/types'
 import type { LandingGenParams, LandingPagePack, ImagePrompt } from './types'
-import { generateLandingPack } from './services/generateLandingPack'
+// generateLandingPack giờ đi qua formDispatcher để route form 'advertorial'
+// sang storytelling engine. Drop-in replacement — signature identical,
+// behavior cho 4 form UGC khác (ugc-malaysia/premium/hard-sell-cod/chuyen-gia)
+// hoàn toàn unchanged.
+import { generateLandingPack } from './formDispatcher'
 import { generatePackImages, regenerateSingleImage } from './services/generateImages'
 import { useSessionPersist } from '../../services/sessionPersistence'
 import AutoSaveIndicator from '../../components/AutoSaveIndicator'
