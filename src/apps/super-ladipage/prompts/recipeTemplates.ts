@@ -1,14 +1,17 @@
 import type { RecipeId, ImageSlotConcept, ProductIdentity, TextBlock, DecorElement } from '../types'
 
 // ─────────────────────────────────────────────────────────────────────
-// 8 VISUAL RECIPE TEMPLATES (P9 update).
+// 8 VISUAL RECIPE TEMPLATES (P11 update).
 //
-// Changes from Phase 7/8 — SCALE + IDENTITY MICRO-TUNING:
+// Changes from Phase 7/8/9/11 — SCALE + IDENTITY MICRO-TUNING:
 // - P8: handheld-natural stronger grip anchor + scaleAnchorSuffix() for
 //   group / collage / before-after layouts.
 // - P9: append "Distinct facial identities across subjects." to multi-person
 //   branches (group/family/crowd + collage/multi-panel) — fixes same-face
-//   cloning bug. Token delta ~+0.5 tok/image avg. No architecture changes.
+//   cloning bug.
+// - P11: hair/scalp niche detector → subjectLockBlock appends "Visible long
+//   hair, no hijab" to override KIE's Malay+hijab default bias in MY market.
+//   Fires ONLY when productCategory matches hair/scalp keywords.
 // ─────────────────────────────────────────────────────────────────────
 
 export interface RecipeInput {
@@ -148,6 +151,14 @@ function emotionConsistencyBlock(mode: EmotionMode): string {
   /* neutral */                    return ''
 }
 
+// P11: hair/scalp niche detector. Hair products MUST show visible hair —
+// hijab/head covering hides the hero feature. Force lock at recipe time
+// to override KIE's default Malay+hijab bias in MY market.
+function isHairNiche(productCategory: string): boolean {
+  const c = (productCategory ?? '').toLowerCase()
+  return /\bhair\b|\bscalp\b|baldness|alopecia|hair.?growth|rambut|tóc/.test(c)
+}
+
 /** Subject identity injection — chỉ dùng khi recipe có người làm chủ thể.
  *  productInScene = true → người + sản phẩm.
  *  productInScene = false → người không có sản phẩm. */
@@ -156,7 +167,12 @@ function subjectLockBlock(identity: ProductIdentity, concept: ImageSlotConcept):
   const lock = which === 'secondary' && identity.subjectIdentityLock.secondary
     ? identity.subjectIdentityLock.secondary
     : identity.subjectIdentityLock.primary
-  return `SUBJECT LOCK (the person in this image MUST match this description): ${lock}.`
+  // P11: hair niches → enforce visible hair + forbid hijab (consistency
+  // across all sections in same pack). No-op for non-hair products.
+  const hairSuffix = isHairNiche(identity.productCategory)
+    ? ' Visible long hair down past shoulders, no hijab or head covering.'
+    : ''
+  return `SUBJECT LOCK (the person in this image MUST match this description): ${lock}.${hairSuffix}`
 }
 
 // antiPatternBlock removed Phase 3 (Cut 1): off-niche prevention enforced
