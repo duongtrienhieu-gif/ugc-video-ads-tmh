@@ -1,9 +1,9 @@
 import type { RecipeId, ImageSlotConcept, ProductIdentity, TextBlock, DecorElement } from '../types'
 
 // ─────────────────────────────────────────────────────────────────────
-// 8 VISUAL RECIPE TEMPLATES (P11 update).
+// 8 VISUAL RECIPE TEMPLATES (P12 update).
 //
-// Changes from Phase 7/8/9/11 — SCALE + IDENTITY MICRO-TUNING:
+// Changes from Phase 7/8/9/11/12 — SCALE + IDENTITY + STABILITY:
 // - P8: handheld-natural stronger grip anchor + scaleAnchorSuffix() for
 //   group / collage / before-after layouts.
 // - P9: append "Distinct facial identities across subjects." to multi-person
@@ -11,7 +11,9 @@ import type { RecipeId, ImageSlotConcept, ProductIdentity, TextBlock, DecorEleme
 //   cloning bug.
 // - P11: hair/scalp niche detector → subjectLockBlock appends "Visible long
 //   hair, no hijab" to override KIE's Malay+hijab default bias in MY market.
-//   Fires ONLY when productCategory matches hair/scalp keywords.
+// - P12: Recipe E simplified — comparison was failing/stalling due to dense
+//   table+✓✗ instructions. Switched to "simple 2-column visual comparison"
+//   phrasing, max 3 labels per side, dropped strict ✓/✗ enforcement.
 // ─────────────────────────────────────────────────────────────────────
 
 export interface RecipeInput {
@@ -64,7 +66,7 @@ const VISUAL_MODE_REGISTRY = {
   'ugc-clean-photo':       'authentic candid photo, no overlays',
   'ecommerce-infographic': 'flat icons, scannable label grid',
   'product-showcase':      'product center, icon grid around',
-  'comparison-card':       'two-column table, emerald vs gray',
+  'comparison-card':       'simple visual comparison, soft contrast',
   'editorial-card':        'magazine endorsement, portrait + quote box',
 } as const
 
@@ -305,26 +307,29 @@ ${safeBlocks(concept).map(formatTextBlock).join('\n')}`
 }
 
 // ═════════════════════════════════════════════════════════════════════
-// RECIPE E — Comparison table infographic (PREMIUM upgrade per P4)
+// RECIPE E — Comparison infographic
 // Sections: comparison
+// P12: simplified — dropped "table" + strict ✓/✗ + emerald/gray enforcement
+// because dense compare semantics + tabular structure caused stall/fail in
+// KIE. Switched to "simple 2-column visual comparison" phrasing.
 // ═════════════════════════════════════════════════════════════════════
 function recipeE(input: RecipeInput): string {
   const { identity, concept, language } = input
   const cells = safeBlocks(concept).length > 0
-    ? `TABLE (in ${langLabel(language)}):
+    ? `COMPARE LABELS (in ${langLabel(language)}):
 ${safeBlocks(concept).map(formatTextBlock).join('\n')}`
-    : 'TABLE: empty (this should NOT happen).'
+    : 'LABELS: empty.'
 
   return [
-    `COMPARISON INFOGRAPHIC CONCEPT: ${concept.conceptScene}.`,
+    `COMPARISON CONCEPT: ${concept.conceptScene}.`,
     brandLockBlock(identity, concept.productInScene, 'minimal'),
     concept.productInScene ? sizeLockBlock('infographic-mini') : '',
     cells,
     visualModeBlock('comparison-card'),
-    `LAYOUT: LEFT col = emerald header + product image + green ✓ rows. RIGHT col = gray header + red ✗ rows. 3-5 rows, each = ONE bold label (max 5w). No sub-text.`,
+    `LAYOUT: Simple 2-column visual comparison with clean benefit vs ordinary-option contrast. Max 3 short labels per side (max 4w each).`,
     safeDecor(concept).length > 0 ? `EXTRA: ${safeDecor(concept).map(formatDecor).join('; ')}` : '',
     technicalBlock(concept.aspectRatio),
-    `STRICT: labels legible. Green ✓ + red ✗.`,
+    `STRICT: labels legible.`,
   ].filter(Boolean).join('\n\n')
 }
 
