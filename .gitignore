@@ -5,3 +5,6 @@ dist/
 .env
 .env.*
 !.env.example
+
+# Test harness output (real Gemini packs for audit — never commit)
+test-output/

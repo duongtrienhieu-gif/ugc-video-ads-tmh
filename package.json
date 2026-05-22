@@ -7,7 +7,8 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test-storytelling": "tsx scripts/test-storytelling.ts"
   },
   "dependencies": {
     "@ffmpeg/ffmpeg": "^0.12.15",
@@ -30,6 +31,7 @@
     "eslint-plugin-react-refresh": "^0.4.24",
     "globals": "^16.5.0",
     "tailwindcss": "^4.1.18",
+    "tsx": "^4.19.2",
     "typescript": "~5.9.3",
     "typescript-eslint": "^8.48.0",
     "vite": "^7.3.1"
