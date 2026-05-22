@@ -117,6 +117,84 @@ export type EmotionalBeat =
   | 'settled-resolve'
 
 // ═════════════════════════════════════════════════════════════════════
+// NARRATIVE DYNAMICS — v4 layer
+//
+// Encode WHAT each section does (function) — không chỉ where it sits
+// on emotional curve (beat). Prevents AI-essay drift.
+// ═════════════════════════════════════════════════════════════════════
+
+/** Section's role trong narrative arc. Mỗi section có exactly 1 role. */
+export type NarrativeRole =
+  | 'hook'                  // section 1 only
+  | 'orientation'           // establish world/identity AFTER hook
+  | 'friction-loop'         // recurring micro-pain pattern
+  | 'frustration-anchor'    // emotional bottom — quiet, not dramatic
+  | 'reflection-pause'      // pure text breathing, insight emerges
+  | 'curiosity-spark'       // discovery / pivotal moment
+  | 'tentative-action'      // first try, uncertain
+  | 'micro-reward'          // first sign of change — small, real
+  | 'calm-payoff'           // sustained transformation
+  | 'quiet-closure'         // closing invitation, no resolution-bow
+
+/** What this section DOES to reader (≠ beat = what reader FEELS). */
+export type EmotionalFunction =
+  | 'create-unrest'         // unresolved tension — section 1 default
+  | 'establish-recognition' // reader sees themselves in protagonist
+  | 'deepen-empathy'        // empathy via repetition / small moments
+  | 'invite-reflection'     // pause, reader's mind wanders
+  | 'open-possibility'      // hope / new angle without promise
+  | 'reward-attention'      // pay off the patient reader
+  | 'settle-trust'          // bond stabilizes, payoff felt
+  | 'invite-co-presence'    // reader feels invited, not sold to
+
+/** Device pulling reader to next section. Subtle — anti-cliffhanger. */
+export type CuriosityMechanic =
+  | 'observation-anomaly'      // someone noticed something
+  | 'unresolved-pronoun'       // who? what? ai? cái gì?
+  | 'open-loop'                // ends mid-arc
+  | 'unstated-cause'           // effect shown, cause withheld
+  | 'time-jump-tease'          // "sau này...", "ngày đó..."
+  | 'small-moment-magnification' // tiny detail given weight
+
+/** Sentence-length & cadence pattern. Anti-monotony — no 2 adjacent
+ *  sections share rhythm profile. */
+export type RhythmProfile =
+  | 'short-clipped'         // avg 5-9 words, period-heavy, frequent breaks
+  | 'long-flowing'          // avg 15-22 words, em-dash, observational
+  | 'fragmented'            // mix 3-15 irregular, repetition, fragments
+  | 'conversational'        // contractions, rhetorical, list-y
+  | 'reflective-pause'      // longer + trailing "…", interior monologue
+  | 'mixed'                 // combo — for multi-tonal sections
+
+/** How section hands off to next. Anti-hard-cliffhanger. */
+export type TransitionPsychology =
+  | 'open-loop'             // unresolved phrase / unanswered observation
+  | 'silent-cut'            // hard stop, time-shift implicit
+  | 'time-jump'             // "đêm đó", "ba tuần sau"
+  | 'thematic-echo'         // motif from earlier returns subtly
+  | 'question-implicit'     // reader's own question forms
+  | 'emotional-pull'        // feeling carries forward
+  | 'resolution-settle'     // closing — no pull, just settle
+
+/** Opening hook pattern — only section 1 (narrativeRole='hook'). */
+export type HookPattern =
+  | 'observation-first'     // through someone else's noticing
+  | 'anomaly-first'         // small odd moment
+  | 'negative-space'        // what's missing / avoided
+  | 'time-blur'             // undefined when it started
+  | 'subtle-detail'         // tiny thing magnified
+  | 'third-person-witness'  // witnessed from outside
+
+/** Lightweight pull device — subtle continuation, NOT plot twist.
+ *  Each section optionally has 1. Section 10 typically null (closure). */
+export type RetentionMechanic =
+  | 'section-end-pull'       // last line creates quiet continuation
+  | 'reveal-delay'           // info dripped, not dumped
+  | 'curiosity-debt'         // unanswered question carried forward
+  | 'emotional-contrast'     // small mismatch (calm tone + unsettled fact)
+  | 'micro-question'         // implicit reader question formed
+
+// ═════════════════════════════════════════════════════════════════════
 // 2. PROTAGONIST PROFILE — identity anchor
 // ═════════════════════════════════════════════════════════════════════
 
@@ -207,7 +285,7 @@ export type OverlayAllowance =
 export interface SectionBlueprint {
   id: SectionId
   order: number                        // 1-10
-  role: string                          // short label, vd "mở chuyện"
+  role: string                          // short VN label, vd "mở chuyện"
   emotionalBeat: EmotionalBeat
   textDensity: TextDensity
   imageRequirement: {
@@ -220,8 +298,25 @@ export interface SectionBlueprint {
   productVisibility: ProductVisibility
   overlayAllowance: OverlayAllowance
   pacingPurpose: string                 // 1-line, vd "rock-bottom anchor"
-  /** Section kết thúc bằng open loop / curiosity gap kéo người đọc tiếp. */
   curiosityGapAfter: boolean
+
+  // ─── v4 Narrative Dynamics layer ───────────────────────────────────
+  /** Structured role (vs `role` which is VN human-readable label). */
+  narrativeRole: NarrativeRole
+  /** What section DOES to reader (≠ feeling reader gets). */
+  emotionalFunction: EmotionalFunction
+  /** Device pulling reader forward — null for closure section. */
+  curiosityMechanic: CuriosityMechanic | null
+  /** Cadence profile — adjacent sections MUST differ. */
+  rhythmProfile: RhythmProfile
+  /** Hand-off psychology to next section. */
+  transitionPsychology: TransitionPsychology
+  /** Tension/release graph position 0-10. */
+  tensionLevel: number
+  /** Optional retention micro-mechanic — null = no pull (closure). */
+  retentionMechanic: RetentionMechanic | null
+  /** Hook pattern — only section 1 (narrativeRole='hook'). */
+  hookPattern?: HookPattern
 }
 
 /** SectionPlan — output của resolveSectionPlan(). Drives prompt builder. */

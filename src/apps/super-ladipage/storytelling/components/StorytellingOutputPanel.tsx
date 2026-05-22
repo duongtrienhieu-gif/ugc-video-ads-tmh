@@ -241,13 +241,28 @@ function StorytellingSectionView({
         {cleanCopy}
       </div>
 
-      {/* Debug hint — emotional beat + treatment + product visibility */}
-      <p className="mt-6 text-[10px] italic text-stone-400">
-        beat: {blueprint.emotionalBeat}
-        {treatments.length > 0 && <> · visual: {treatments.join(' / ')}</>}
-        {' · '}sản phẩm: {blueprint.productVisibility}
-        {blueprint.curiosityGapAfter && <> · ↻ curiosity gap</>}
-      </p>
+      {/* Debug strip — v4 narrative dynamics. Helps verify rhythm/role
+          assignment trong khi engine wiring up. */}
+      <div className="mt-6 space-y-1 text-[10px] italic text-stone-400">
+        <p>
+          role: <span className="text-stone-500">{blueprint.narrativeRole}</span>
+          {' · '}function: <span className="text-stone-500">{blueprint.emotionalFunction}</span>
+          {blueprint.curiosityMechanic && (
+            <> · curiosity: <span className="text-stone-500">{blueprint.curiosityMechanic}</span></>
+          )}
+          {' · '}rhythm: <span className="text-stone-500">{blueprint.rhythmProfile}</span>
+          {' → '}<span className="text-stone-500">{blueprint.transitionPsychology}</span>
+        </p>
+        <p>
+          beat: {blueprint.emotionalBeat}
+          {' · '}tension: <span className="text-stone-500">{blueprint.tensionLevel}/10</span>
+          {blueprint.retentionMechanic && (
+            <> · retention: <span className="text-stone-500">{blueprint.retentionMechanic}</span></>
+          )}
+          {treatments.length > 0 && <> · visual: {treatments.join(' / ')}</>}
+          {' · '}sản phẩm: {blueprint.productVisibility}
+        </p>
+      </div>
     </section>
   )
 }

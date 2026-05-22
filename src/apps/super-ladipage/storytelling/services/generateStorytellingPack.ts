@@ -51,62 +51,75 @@ const SECTION_TYPE_MAP: Record<SectionId, SectionType> = {
   'sharing-invitation': 'final-cta',
 }
 
-// ── Mock copy per section ─────────────────────────────────────────────
+// ── Mock copy per section — v4 dynamics demonstration ─────────────────
+// Each section embodies its assigned rhythmProfile + retentionMechanic.
+// Section 1 = observation-first hook (NO bio intro). Anti-drama restraint.
+// Adjacent sections have different rhythm → anti-monotony validator passes.
 const MOCK_COPY: Record<SectionId, { title: string; copy: string }> = {
+  // ─── Section 1: observation hook · short-clipped · micro-question ──
   'intro-portrait': {
-    title: 'Cô ấy tên Aishah',
-    copy:
-`Aishah, 38 tuổi.
-
-Sống ở một thị trấn nhỏ ngoại ô Selangor cùng chồng và hai đứa con.
-
-Mỗi sáng cô dậy lúc 5h30 — chuẩn bị bữa sáng cho cả nhà, tiễn các con đi học, rồi mở cửa hàng nhỏ bán đồ ăn vặt trước nhà.
-
-Cô là kiểu người không kêu ca.
-
-"Mọi người đều mệt mà," cô hay nói vậy.
-
-Nhưng có những thứ — bạn không nói ra — không có nghĩa là nó không có.`,
-  },
-
-  'ordinary-life': {
     title: 'Một sáng tháng Ba',
     copy:
-`Buổi sáng hôm đó không khác gì những buổi sáng khác.
+`Chồng cô là người đầu tiên nhận ra.
 
-Cô pha cà phê. Sắp dĩa bánh ra bàn. Gọi tụi nhỏ xuống. Tiễn chồng đi làm.
+Một sáng tháng Ba, anh đứng ở cửa bếp, hỏi:
 
-Mọi thứ đúng nhịp.
+"Em ngủ không ngon à?"
 
-Chỉ là — khi đứng nhìn theo chiếc xe chồng cô rẽ ra khỏi ngõ, cô đứng đó lâu hơn bình thường.
+Cô lắc đầu. Bình thường.
 
-Cô không biết tại sao.
+Nhưng anh nhìn cô thêm một giây — kiểu nhìn của người đã sống cùng nhau mười lăm năm — rồi đi.
 
-Có lẽ chỉ là mệt một chút.`,
+Aishah đứng đó. Tay vẫn cầm muỗng.
+
+Cô không hiểu vì sao mình nhớ mãi câu hỏi đó.`,
   },
 
-  'daily-friction': {
-    title: 'Mỗi chiều khoảng 3 giờ',
+  // ─── Section 2: orientation · long-flowing · curiosity-debt ──────
+  'ordinary-life': {
+    title: 'Cuộc sống không có gì đặc biệt',
     copy:
-`Có một cảm giác đến.
+`Cuộc sống của Aishah không có gì đặc biệt — đúng theo nghĩa mà chính cô vẫn dùng khi ai đó hỏi.
 
-Không hẳn là mệt. Cũng không hẳn là buồn ngủ.
+Mỗi sáng cô dậy lúc năm rưỡi, pha cà phê cho chồng trước khi anh đi làm, đánh thức hai đứa nhỏ, đứng ở cửa nhìn theo xe của anh rẽ ra khỏi ngõ. Bảy giờ ba mươi cô mở cửa hàng nhỏ bán đồ ăn vặt trước nhà — một việc cô làm đã sáu năm, kể từ khi đứa thứ hai bắt đầu đi học mẫu giáo.
 
-Giống như cơ thể đang nói: "Đủ rồi nhé."
+Người ta vẫn nói cô may mắn. Chồng tốt. Con ngoan. Việc làm linh hoạt. Không có lý do gì để phàn nàn.
 
-Aishah pha thêm một ly cà phê. Rồi đôi khi một ly nữa.
+Cô đồng ý với họ.
 
-Khách vào cửa hàng — cô vẫn cười, vẫn nói chuyện. Nhưng tối về, cô nằm xuống và chỉ muốn không phải nghĩ gì nữa.
-
-Cô không nói ai biết.
-
-Vì có vẻ như đây là cảm giác mà tất cả phụ nữ ở tuổi của cô đều có.
-
-Có lẽ thế.`,
+Chỉ là — và cô không nhớ chính xác từ khi nào — buổi tối cô bắt đầu ngồi lâu hơn ở bàn trang điểm trước khi đi ngủ. Không làm gì. Chỉ ngồi.`,
   },
 
+  // ─── Section 3: friction-loop · fragmented · micro-question ──────
+  'daily-friction': {
+    title: 'Mỗi chiều khoảng ba giờ',
+    copy:
+`Mỗi chiều khoảng ba giờ.
+
+Một cảm giác đến.
+
+Không phải mệt. Cũng không phải buồn ngủ.
+
+Một cái gì đó ở giữa. Một cái gì đó cô không có từ để gọi tên.
+
+Cô pha thêm một ly cà phê. Khách vào — cô cười, gói bánh, đếm tiền lẻ. Khách ra — cô ngồi xuống chiếc ghế nhựa, tựa lưng vào tường.
+
+Đến năm giờ thì đỡ hơn.
+
+Sáu giờ tụi nhỏ về.
+
+Bảy giờ chồng về.
+
+Tám giờ dọn cơm.
+
+Chín giờ thì đôi khi cô tự hỏi cả ngày mình đã làm gì.
+
+Điều lạ là — chuyện này lặp lại mỗi ngày, và cô vẫn không nói ai biết.`,
+  },
+
+  // ─── Section 4: frustration-anchor · conversational · emotional-contrast ──
   'failed-attempts': {
-    title: 'Tôi đã thử',
+    title: 'Cô đã thử',
     copy:
 `Vitamin tổng hợp ở pharmacy. Đã thử.
 
@@ -114,109 +127,115 @@ Có lẽ thế.`,
 
 Uống nhiều nước. Đã thử.
 
-Tập thể dục buổi sáng — được 4 ngày.
+Mỗi lần cô đọc bài "5 cách có nhiều năng lượng hơn" — cô ghi lại. Mỗi lần thử được vài ngày. Có cách work một tuần. Có cách work ba ngày. Rồi quay lại điểm cũ.
 
-Mỗi lần cô đọc một bài báo nói về "5 cách để có nhiều năng lượng hơn", cô đều ghi lại. Đều thử.
+Tập thể dục buổi sáng — được bốn ngày. Aishah biết bốn ngày vì cô đếm.
 
-Có cách work một tuần. Có cách work vài ngày.
+Không phải cô lười. Bạn biết kiểu phụ nữ mở cửa hàng nhỏ từ bảy giờ sáng không? Không có ai trong số đó là người lười.
 
-Rồi quay lại điểm cũ.
-
-Cô bắt đầu nghĩ — có lẽ vấn đề không phải ở việc cô chưa đủ cố gắng.`,
+Vấn đề là — cô bắt đầu nghĩ — có lẽ vấn đề không nằm ở chỗ cô chưa đủ cố gắng.`,
   },
 
+  // ─── Section 5: reflection-pause · reflective-pause · reveal-delay ──
   'inner-realization': {
-    title: 'Có lẽ',
+    title: 'Một câu hỏi cô đã tránh',
     copy:
-`Có lẽ vấn đề không phải là cô lười.
+`Có một câu hỏi mà cô đã tránh trong vài tháng nay.
 
-Cũng không phải là cô không có kỷ luật.
+Không phải vì sợ. Mà vì cô không biết bắt đầu trả lời thế nào.
 
-Cô có cả hai.
+Có lẽ vấn đề không phải là cô lười. Cũng không phải là cô không kỷ luật. Cô có cả hai — quá nhiều nữa là khác.
 
-Có lẽ — cơ thể cô đang thiếu một thứ gì đó mà ly cà phê thứ ba không bù lại được.
+Có lẽ — cô nghĩ rất chậm, từng từ — cơ thể cô đang thiếu một thứ gì đó mà ly cà phê thứ ba không bù lại được.
 
-Một thứ gì đó nhỏ. Nhưng cụ thể.
+Một thứ rất nhỏ. Nhưng cụ thể.
 
 Cô không biết là thứ gì.
 
 Nhưng từ ngày đó, cô bắt đầu để ý hơn.`,
   },
 
+  // ─── Section 6: curiosity-spark · mixed · section-end-pull ───────
   'discovery-moment': {
-    title: 'Một buổi tối tháng Năm',
+    title: 'Một tối tháng Năm',
     copy:
-`Em gái cô — Aida — ghé qua chơi.
+`Em gái cô — Aida — ghé qua chơi một tối tháng Năm.
 
-Hai chị em ngồi ở hiên nhà, uống trà. Aida vừa quay lại đi làm sau 6 tháng nghỉ chăm con thứ hai.
+Aida vừa quay lại đi làm sau sáu tháng nghỉ chăm con thứ hai. Hai chị em ngồi ở hiên nhà, uống trà, nghe tụi nhỏ trong nhà cãi nhau về việc ai sẽ chọn phim trước.
 
-"Chị có biết — em từng tưởng mình bị burnout thật sự," Aida nói. "Mệt kiểu chết người. Sau đó em mới biết là…"
+"Chị có biết — em từng tưởng mình bị burnout thật sự," Aida nói, không nhìn cô, nhìn ra phía cổng. "Mệt kiểu chết người. Sáng dậy như xe chết máy. Sau đó em mới biết là…"
 
 Aida nhắc một cái tên.
 
-Aishah chưa từng nghe. Cô gật đầu lịch sự, nhớ trong đầu.
+Aishah chưa từng nghe.
+
+Cô gật đầu lịch sự — kiểu gật đầu của người không muốn em gái thấy mình đang chú ý hơn cô tỏ ra.
 
 Đêm đó cô tra Google.`,
   },
 
+  // ─── Section 7: tentative-action · short-clipped · micro-question ──
   'first-trial': {
-    title: 'Tuần đầu tiên',
+    title: 'Không kỳ vọng gì',
     copy:
 `Cô không kỳ vọng gì.
 
-Đặt mua. Chờ 2 ngày. Hộp đến.
+Đặt mua. Chờ hai ngày. Hộp đến.
 
-Cô mở ra, đọc hướng dẫn, đặt lên kệ bếp — cạnh bình cà phê.
+Cô mở ra. Đọc hướng dẫn. Đặt lên kệ bếp cạnh bình cà phê.
 
 Sáng hôm sau cô dùng theo hướng dẫn.
 
-Không cảm thấy gì đặc biệt ngày đầu. Không cảm thấy gì ngày thứ hai. Cũng không cảm thấy gì khác ngày thứ ba.
+Ngày đầu không cảm thấy gì. Ngày thứ hai cũng vậy. Ngày thứ ba cô gần như đã quên.
 
-Cô gần như đã quên.`,
+Aishah có thói quen quên đi những thứ không gây ra phản ứng tức thì.
+
+Có lẽ điều đó cũng giải thích nhiều chuyện khác.`,
   },
 
+  // ─── Section 8: micro-reward · long-flowing · emotional-contrast ──
   'subtle-change': {
-    title: 'Ba tuần sau',
+    title: 'Cô không nhớ chính xác ngày nào',
     copy:
-`Aishah không nhớ chính xác ngày nào nó bắt đầu khác đi.
+`Aishah không nhớ chính xác ngày nào mọi thứ bắt đầu khác đi — đó là điều cô vẫn nói khi sau này có ai hỏi.
 
-Có thể là sáng thứ Tư tuần đó — khi cô tỉnh dậy lúc 5h30 và không cần bấm "ngủ thêm 10 phút" trên đồng hồ.
+Có thể là sáng thứ Tư tuần thứ ba — khi cô tỉnh dậy lúc năm giờ ba mươi và không cần bấm "ngủ thêm mười phút" trên đồng hồ. Cô để ý điều đó nhưng không nghĩ nhiều — cứ tưởng là tình cờ.
 
-Hoặc chiều thứ Sáu — khi 3 giờ trôi qua, và cô không nghĩ đến ly cà phê thứ ba.
+Có thể là chiều thứ Sáu — khi ba giờ trôi qua, và cô không nghĩ đến ly cà phê thứ ba. Mãi đến chiều thứ Bảy cô mới nhận ra mình đã không pha cà phê chiều hai ngày liên tiếp.
 
-Hoặc tối Chủ Nhật — khi cô ngồi vẽ với con gái lớn đến 9 giờ, mà không thấy mí mắt nặng.
+Hoặc tối Chủ Nhật, khi cô ngồi vẽ với con gái lớn đến chín giờ, và mí mắt vẫn không nặng.
 
-Những thay đổi nhỏ.
+Những thay đổi nhỏ. Không kịch tính. Cũng không "khỏi hẳn".
 
-Không kịch tính. Không "khỏi hẳn".
-
-Nhưng có.`,
+Chỉ là — không còn ngồi lâu trước bàn trang điểm vào buổi tối.`,
   },
 
+  // ─── Section 9: calm-payoff · mixed · reveal-delay ───────────────
   'new-normal': {
-    title: 'Bây giờ',
+    title: 'Bây giờ là tháng Tám',
     copy:
 `Bây giờ là tháng Tám.
 
-Cửa hàng vẫn mở từ 7 giờ. Tụi nhỏ vẫn đi học. Chồng vẫn rẽ ra khỏi ngõ lúc 7h30.
+Cửa hàng vẫn mở từ bảy giờ. Tụi nhỏ vẫn đi học. Chồng vẫn rẽ ra khỏi ngõ lúc bảy giờ ba mươi.
 
 Khác là — Aishah không còn đứng nhìn theo lâu hơn cần thiết nữa.
 
-Cuối tuần cô đi chợ sớm, ghé hàng quen, mang hoa về cắm trên bàn ăn. Tối nấu nhiều món hơn một chút. Đi ngủ sớm hơn nếu thấy nên.
+Cuối tuần cô đi chợ sớm, ghé hàng quen, đôi khi mang hoa về cắm trên bàn ăn. Việc nhỏ — nhưng cô nhớ là sáu tháng trước cô không có sức để nghĩ đến chuyện hoa.
 
-Cô vẫn là Aishah. Vẫn không kêu ca.
+Tuần trước chồng cô có nói một câu. Anh không nhớ — Aishah hỏi lại và anh không nhớ.
 
-Chỉ là — bây giờ cô thực sự ổn.`,
+Cô nói: "Em ngủ ngon."`,
   },
 
+  // ─── Section 10: quiet-closure · conversational · null retention ──
   'sharing-invitation': {
     title: 'Nếu bạn cũng từng…',
     copy:
 `Câu chuyện của Aishah đến đây là hết.
 
-Nhưng có thể câu chuyện của bạn đang ở đâu đó — giữa Chương 3 và Chương 4.
+Tôi không biết câu chuyện của bạn đang ở đâu — giữa Chương Ba và Chương Bốn, có lẽ. Hoặc đâu đó cô không có tên.
 
-Nếu bạn cũng từng có cảm giác mệt vô cớ vào 3 giờ chiều, từng pha ly cà phê thứ ba và tự hỏi "có phải mình đang già rồi không" — có lẽ chúng ta hiểu nhau hơn bạn nghĩ.
+Nếu bạn cũng từng có cảm giác mệt vô cớ vào ba giờ chiều, từng pha ly cà phê thứ ba và tự hỏi "có phải mình đang già rồi không" — có lẽ chúng ta hiểu nhau hơn bạn nghĩ.
 
 Tôi chỉ muốn nói: bạn không một mình.`,
   },

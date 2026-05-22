@@ -21,6 +21,14 @@ export type {
   EmotionalIntensity,
   PacingType,
   ProductRevealSection,
+  // v4 narrative dynamics types
+  NarrativeRole,
+  EmotionalFunction,
+  CuriosityMechanic,
+  RhythmProfile,
+  TransitionPsychology,
+  HookPattern,
+  RetentionMechanic,
 } from './types'
 
 export { isStorytellingPack } from './types'
@@ -35,6 +43,18 @@ export {
   PACING_RULES,
   OVERLAY_RULES,
   ANTI_PATTERNS, ANTI_PATTERN_INSTRUCTIONS,
+  // v4 narrative dynamics layer
+  NARRATIVE_ROLE_INSTRUCTIONS,
+  EMOTIONAL_FUNCTION_INSTRUCTIONS,
+  CURIOSITY_MECHANIC_INSTRUCTIONS,
+  TRANSITION_PSYCHOLOGY_INSTRUCTIONS,
+  composeDynamicsDirective,
+  HOOK_PATTERNS, BANNED_HOOK_PATTERNS,
+  HOOK_ENFORCEMENT_PROMPT, HOOK_REQUIRED_SECTIONS,
+  TENSION_CURVE, detectFlatLine, detectSpike, renderTensionAscii,
+  RHYTHM_PROFILES, validateAdjacentRhythms, rhythmInstructionFor,
+  RETENTION_MECHANICS, BANNED_RETENTION_PATTERNS,
+  RETENTION_RESTRAINT_PROMPT, retentionInstructionFor,
 } from './config'
 
 // Resolvers (pure mapping functions — P2/P3 will expand)
