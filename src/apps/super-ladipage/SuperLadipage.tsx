@@ -13,7 +13,10 @@ import { generatePackImages, regenerateSingleImage } from './services/generateIm
 import { useSessionPersist } from '../../services/sessionPersistence'
 import AutoSaveIndicator from '../../components/AutoSaveIndicator'
 import InputPanel from './components/InputPanel'
-import OutputPanel from './components/OutputPanel'
+// OutputPanel giờ đi qua outputDispatcher để route StorytellingPack sang
+// renderer riêng (diary aesthetic). Drop-in replacement — default export
+// same name, props identical → JSX call site không đổi.
+import OutputPanel from './outputDispatcher'
 import { useSuperLadipageStore } from './store'
 
 // ── Session-persistence snapshot shape ─────────────────────────────────────

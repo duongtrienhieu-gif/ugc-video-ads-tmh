@@ -108,7 +108,7 @@ export const SECTION_BLUEPRINTS: Record<SectionId, SectionBlueprint> = {
     imageRequirement: { countDefault: 1, rangeMin: 1, rangeMax: 1, isOptional: false },
     continuityRequirement: 'required',
     productVisibility: 'subtle-background',
-    overlayAllowance: 'time-marker',
+    overlayAllowance: 'diary-timestamp',
     pacingPurpose: 'first uptick — quiet hope, not euphoria',
     curiosityGapAfter: false,
   },

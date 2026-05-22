@@ -11,14 +11,14 @@
 // ═════════════════════════════════════════════════════════════════════
 
 import type {
-  LandingPagePack, LandingGenParams, LandingLanguage,
+  LandingPagePack, LandingSection, LandingGenParams, LandingLanguage,
   CharacterProfile, VisualMemoryItem,
 } from '../types'
 
 // ── Re-exports for downstream consumers (so storytelling code chỉ cần
 //    import từ './types' thay vì xuyên qua barrel) ──────────────────────
 export type {
-  LandingPagePack, LandingGenParams, LandingLanguage,
+  LandingPagePack, LandingSection, LandingGenParams, LandingLanguage,
   CharacterProfile, VisualMemoryItem,
 }
 
@@ -193,7 +193,14 @@ export type ProductVisibility =
   | 'subtle-background'
   | 'still-life'
 
-export type OverlayAllowance = 'never' | 'chapter-marker' | 'time-marker' | 'caption'
+/** Section-level overlay allowance — values match AllowedOverlayType union
+ *  so blueprint hints map 1:1 to actual overlay types ở render time. */
+export type OverlayAllowance =
+  | 'never'
+  | 'chapter-marker'
+  | 'diary-timestamp'
+  | 'photobook-caption'
+  | 'film-subtitle'
 
 /** Metadata-only section spec — KHÔNG hardcode text. Runtime text gen
  *  consume blueprint via prompt builder. */
@@ -404,6 +411,13 @@ export interface StorytellingMeta {
   productRevealSection: ProductRevealSection
   niche: NicheKey
   overlayBudgetUsed: number
+  /** Parallel array với `pack.sections` — sectionIds[i] = storytelling
+   *  section ID của pack.sections[i]. Tránh pollute shared LandingSection
+   *  type với storytelling-specific field. */
+  sectionIds: SectionId[]
+  /** Per-section overlay assignment — null = no overlay (default).
+   *  Parallel với pack.sections. */
+  overlayPerSection: (AllowedOverlayType | null)[]
 }
 
 /** Pack output — extends LandingPagePack shape để OutputPanel render được
