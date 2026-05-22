@@ -477,8 +477,8 @@ ${safeBlocks(concept).map(formatTextBlock).join('\n')}`
   })()
 
   const variantBlock = variant === 'expert'
-    ? `LAYOUT (EXPERT): Editorial endorsement — Malaysian ${specialtyHint}. Top: head-and-shoulders portrait, clinical bg soft blur. Center band: "Dr. [Malaysian name]" + specialty title + "[N]+ tahun pengalaman". Bottom: quote box with 2-4 sentence Malay testimonial. Optional "Pakar Disahkan" badge. Palette: white + soft teal/navy + cream.`
-    : `LAYOUT (KOL): Instagram-style influencer card — Malaysian KOL. Top: lifestyle photo (hijab or male KOL, cafe/home/outdoor). Center band: "@handle" + "[N]M Followers / Pengikut" + IG/TikTok icon. Bottom: casual Malay quote 2-4 sentences with emojis (✨ 💕 🔥), optional "Pilihan Aku" hashtag. Palette: warm pink/peach + cream + gold.`
+    ? `LAYOUT (EXPERT): Editorial endorsement — Malaysian ${specialtyHint}. Top: head-and-shoulders portrait, clinical bg soft blur. Center band: doctor name + specialty title + experience years — use EXACT values from TEXT block above (do NOT invent, do NOT default). Bottom: quote box with 2-4 sentence Malay testimonial. Optional "Pakar Disahkan" badge. Palette: white + soft teal/navy + cream. ⛔ DO NOT default to "Dr. Siti Aisyah" / "Dr. Aminah" / "15 tahun" — render the unique name + years EXACTLY as TEXT block provides.`
+    : `LAYOUT (KOL): Instagram-style influencer card — Malaysian KOL. Top: lifestyle photo (varied gender + style, cafe/home/outdoor). Center band: handle + follower count + IG/TikTok icon — use EXACT values from TEXT block above (do NOT invent, do NOT default). Bottom: casual Malay quote 2-4 sentences with emojis (✨ 💕 🔥), optional "Pilihan Aku" hashtag. Palette: warm pink/peach + cream + gold. ⛔ DO NOT default to "@adamharith" / "@fatimahzahra_official" / "1.2M Pengikut" — render the unique handle + followers EXACTLY as TEXT block provides.`
 
   return [
     `ENDORSEMENT CARD CONCEPT: ${concept.conceptScene}.`,
