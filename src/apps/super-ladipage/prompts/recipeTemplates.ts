@@ -1,14 +1,14 @@
 import type { RecipeId, ImageSlotConcept, ProductIdentity, TextBlock, DecorElement } from '../types'
 
 // ─────────────────────────────────────────────────────────────────────
-// 8 VISUAL RECIPE TEMPLATES (P8 update).
+// 8 VISUAL RECIPE TEMPLATES (P9 update).
 //
-// Changes from Phase 7 — SCALE CONSISTENCY POLISH (micro-tuning):
-// - handheld-natural: stronger grip anchor ("smaller than palm, fingers
-//   visible around edges") for better hand-product realism.
-// - scaleAnchorSuffix(): concept-keyword-detected micro-anchor appended to
-//   handheld SIZE_LOCK output only — group / collage / before-after layouts.
-//   Token delta ~+1-2 tok/image avg. No architecture/routing/order changes.
+// Changes from Phase 7/8 — SCALE + IDENTITY MICRO-TUNING:
+// - P8: handheld-natural stronger grip anchor + scaleAnchorSuffix() for
+//   group / collage / before-after layouts.
+// - P9: append "Distinct facial identities across subjects." to multi-person
+//   branches (group/family/crowd + collage/multi-panel) — fixes same-face
+//   cloning bug. Token delta ~+0.5 tok/image avg. No architecture changes.
 // ─────────────────────────────────────────────────────────────────────
 
 export interface RecipeInput {
@@ -94,13 +94,13 @@ function brandLockBlock(
 type SizeLockMode = 'handheld-natural' | 'shelf-packshot' | 'infographic-mini' | 'foreground-dominant' | 'secondary-product'
 
 // P8: micro-anchor for multi-subject / multi-panel handheld layouts.
-// Returns empty for single-subject single-panel concepts (~most images).
-// Only fires when mode === 'handheld-natural' (see sizeLockBlock).
+// P9: append identity diversity for multi-person branches (NOT before/after,
+// since BA = same person before vs after). Only fires when mode === 'handheld-natural'.
 function scaleAnchorSuffix(concept: ImageSlotConcept): string {
   const text = `${concept.roleLabel ?? ''} ${concept.conceptScene ?? ''}`.toLowerCase()
   if (/before[\s\S]{0,15}after|side.?by.?side|ba.split/.test(text)) return ' Same package scale in both panels.'
-  if (/collage|\d+x\d+|multi.?panel/.test(text))                    return ' Equal package scale between panels.'
-  if (/\bgroup\b|\bfamily\b|\bfriends\b|together|crowd/.test(text)) return ' Consistent package scale across subjects.'
+  if (/collage|\d+x\d+|multi.?panel/.test(text))                    return ' Equal package scale between panels. Distinct facial identities across subjects.'
+  if (/\bgroup\b|\bfamily\b|\bfriends\b|together|crowd/.test(text)) return ' Consistent package scale across subjects. Distinct facial identities across subjects.'
   return ''
 }
 
