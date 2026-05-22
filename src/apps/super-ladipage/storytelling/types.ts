@@ -499,6 +499,12 @@ export interface NichePreset {
 // 11. OUTPUT SHAPE — StorytellingPack
 // ═════════════════════════════════════════════════════════════════════
 
+/** Per-section gen status — populated by runtime pipeline (P1+). */
+export type SectionGenStatus =
+  | { kind: 'pass' }
+  | { kind: 'retry-pass'; firstAttemptViolations: string[] }
+  | { kind: 'fallback'; violations: string[] }
+
 /** Storytelling-specific metadata attached to the pack output. */
 export interface StorytellingMeta {
   emotionalIntensity: EmotionalIntensity
@@ -513,6 +519,13 @@ export interface StorytellingMeta {
   /** Per-section overlay assignment — null = no overlay (default).
    *  Parallel với pack.sections. */
   overlayPerSection: (AllowedOverlayType | null)[]
+  /** Per-section gen status — P1 runtime. Optional cho backward compat
+   *  với mock packs / saved legacy packs. */
+  sectionStatus?: SectionGenStatus[]
+  /** Total Gemini attempts: 1 = clean first try, 2 = retried, 3 = fallback used. */
+  attempts?: number
+  /** Compact validation summary line — for UI strip + telemetry. */
+  validationSummary?: string
 }
 
 /** Pack output — extends LandingPagePack shape để OutputPanel render được

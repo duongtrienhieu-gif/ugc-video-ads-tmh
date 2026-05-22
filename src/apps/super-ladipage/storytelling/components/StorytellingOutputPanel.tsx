@@ -19,11 +19,12 @@
 
 import { useState } from 'react'
 import {
-  BookOpen, Check, FilePlus, ImageIcon, Loader2, RotateCcw, Save,
+  AlertTriangle, BookOpen, Check, FilePlus, ImageIcon, Loader2,
+  RotateCcw, Save, ShieldCheck, ShieldAlert,
 } from 'lucide-react'
 import type { LandingSection } from '../../types'
 import type {
-  AllowedOverlayType, SectionId, StorytellingPack, VisualTreatment,
+  AllowedOverlayType, SectionGenStatus, SectionId, StorytellingPack, VisualTreatment,
 } from '../types'
 import { SECTION_BLUEPRINTS } from '../config/sectionBlueprints'
 import { SECTION_VISUAL_MAP } from '../config/visualLanguage'
@@ -97,12 +98,7 @@ export default function StorytellingOutputPanel({
                 </>
               )}
             </div>
-            <span
-              className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-mono uppercase tracking-wider text-amber-700 shrink-0"
-              title="Mock data — Phase P0.5. AI generation chưa wired."
-            >
-              MOCK P0.5
-            </span>
+            <PipelineStatusBadge meta={meta} />
           </div>
 
           <div className="flex items-center gap-1.5 shrink-0">
@@ -151,6 +147,14 @@ export default function StorytellingOutputPanel({
           <span>sản phẩm xuất hiện: chương {meta.productRevealSection}</span>
           <span>·</span>
           <span>overlay used: {meta.overlayBudgetUsed}/2</span>
+          {meta.attempts !== undefined && (
+            <>
+              <span>·</span>
+              <span title={meta.validationSummary}>
+                attempts: {meta.attempts}
+              </span>
+            </>
+          )}
           {loadedFromId && loadedProjectTitle && (
             <>
               <span>·</span>
@@ -158,6 +162,13 @@ export default function StorytellingOutputPanel({
             </>
           )}
         </div>
+
+        {/* Validation summary strip — only show if pipeline ran (P1+) */}
+        {meta.validationSummary && (
+          <div className={`mt-1 text-[10px] italic ${meta.validationSummary.startsWith('✓') ? 'text-emerald-600' : 'text-amber-600'}`}>
+            {meta.validationSummary}
+          </div>
+        )}
       </div>
 
       {/* ── READING COLUMN ──────────────────────────────────────────── */}
@@ -172,6 +183,7 @@ export default function StorytellingOutputPanel({
               chapterNumber={idx + 1}
               isLast={idx === pack.sections.length - 1}
               characterName={character?.name}
+              status={meta.sectionStatus?.[idx]}
             />
           ))}
 
@@ -198,10 +210,11 @@ interface SectionViewProps {
   chapterNumber: number
   isLast: boolean
   characterName?: string
+  status?: SectionGenStatus
 }
 
 function StorytellingSectionView({
-  section, sectionId, overlayType, chapterNumber, isLast, characterName,
+  section, sectionId, overlayType, chapterNumber, isLast, characterName, status,
 }: SectionViewProps) {
   const blueprint = SECTION_BLUEPRINTS[sectionId]
   const treatments = SECTION_VISUAL_MAP[sectionId] ?? []
@@ -211,11 +224,14 @@ function StorytellingSectionView({
   return (
     <section className={isLast ? '' : 'mb-20 md:mb-28'}>
       {/* Chapter marker — tiny tracking-widest */}
-      <p className="text-[10px] uppercase tracking-[0.3em] text-stone-400 mb-3">
-        Chương {chapterNumber}
-        <span className="ml-2 text-stone-300 normal-case tracking-normal italic">
+      <p className="text-[10px] uppercase tracking-[0.3em] text-stone-400 mb-3 flex items-center gap-2 flex-wrap">
+        <span>Chương {chapterNumber}</span>
+        <span className="text-stone-300 normal-case tracking-normal italic">
           · {blueprint.role}
         </span>
+        {status && status.kind !== 'pass' && (
+          <SectionStatusInlineBadge status={status} />
+        )}
       </p>
 
       {/* Title — serif italic, diary-like */}
@@ -339,4 +355,96 @@ function renderOverlayText(
     default:
       return null
   }
+}
+
+// ═════════════════════════════════════════════════════════════════════
+// Pipeline status badge — header strip
+// ═════════════════════════════════════════════════════════════════════
+
+interface PipelineStatusBadgeProps {
+  meta: StorytellingPack['storytellingMeta']
+}
+
+function PipelineStatusBadge({ meta }: PipelineStatusBadgeProps) {
+  // No pipeline meta = mock/legacy pack
+  if (meta.attempts === undefined) {
+    return (
+      <span
+        className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-mono uppercase tracking-wider text-amber-700 shrink-0"
+        title="Mock/legacy pack — không có pipeline meta"
+      >
+        MOCK
+      </span>
+    )
+  }
+
+  const fallbackCount = meta.sectionStatus?.filter((s) => s.kind === 'fallback').length ?? 0
+  const retryPassCount = meta.sectionStatus?.filter((s) => s.kind === 'retry-pass').length ?? 0
+
+  if (fallbackCount > 0) {
+    return (
+      <span
+        className="flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-700 shrink-0"
+        title={`${fallbackCount} section(s) downgraded to fallback after ${meta.attempts} attempts`}
+      >
+        <ShieldAlert className="h-3 w-3" />
+        FALLBACK · {fallbackCount}
+      </span>
+    )
+  }
+  if (retryPassCount > 0 || meta.attempts > 1) {
+    return (
+      <span
+        className="flex items-center gap-1 rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-medium text-blue-700 shrink-0"
+        title={`Passed on attempt ${meta.attempts}`}
+      >
+        <ShieldCheck className="h-3 w-3" />
+        RETRY {meta.attempts}
+      </span>
+    )
+  }
+  return (
+    <span
+      className="flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-medium text-emerald-700 shrink-0"
+      title="All 5 validators passed on first attempt"
+    >
+      <ShieldCheck className="h-3 w-3" />
+      CLEAN
+    </span>
+  )
+}
+
+// ═════════════════════════════════════════════════════════════════════
+// Per-section status inline badge — only renders when status != 'pass'
+// ═════════════════════════════════════════════════════════════════════
+
+interface SectionStatusInlineBadgeProps {
+  status: SectionGenStatus
+}
+
+function SectionStatusInlineBadge({ status }: SectionStatusInlineBadgeProps) {
+  if (status.kind === 'pass') return null
+
+  if (status.kind === 'retry-pass') {
+    return (
+      <span
+        className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-1.5 py-0.5 text-[9px] font-medium text-blue-600 normal-case tracking-normal"
+        title={'First-attempt violations resolved on retry:\n' + status.firstAttemptViolations.join('\n')}
+      >
+        <Check className="h-2.5 w-2.5" />
+        retry-pass
+      </span>
+    )
+  }
+
+  // fallback
+  return (
+    <span
+      className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-1.5 py-0.5 text-[9px] font-medium text-amber-700 normal-case tracking-normal"
+      title={'Section downgraded to fallback after 2 failed attempts:\n' + status.violations.join('\n')}
+    >
+      <AlertTriangle className="h-2.5 w-2.5" />
+      fallback
+    </span>
+  )
 }

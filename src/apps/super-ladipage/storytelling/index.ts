@@ -13,6 +13,7 @@ export type {
   StorytellingInput,
   StorytellingPack,
   StorytellingMeta,
+  SectionGenStatus,
   ProtagonistProfile,
   SectionBlueprint,
   SectionPlan,
@@ -32,6 +33,12 @@ export type {
 } from './types'
 
 export { isStorytellingPack } from './types'
+
+// P1 runtime + validators (exposed for QA / future tooling)
+export { runValidators, logValidationResult } from './validators'
+export type { ValidatorName, AggregatedValidation } from './validators'
+
+export { FALLBACK_COPY } from './runtime/fallbackCopy'
 
 // Config (read-only data layer — exposed for QA/debugging)
 export {
