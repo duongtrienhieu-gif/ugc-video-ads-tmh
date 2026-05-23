@@ -105,6 +105,9 @@ export {
   // v5.4 — Rhythm engine
   RHYTHM_BY_PACING_CLASS, RHYTHM_ENGINE_PROMPT, SECTION_RHYTHM_HINTS,
   rhythmDirectiveFor, rhythmStatsFor, sectionRhythmHint,
+  // v5.5 — Trust realism + Visual story coupling
+  TRUST_REALISM_EXAMPLES, TRUST_REALISM_PROMPT,
+  composeVisualPrompt, visualCoherenceSummary, VISUAL_COHERENCE_PROMPT,
 } from './config'
 
 // v5.1 — Selector resolver

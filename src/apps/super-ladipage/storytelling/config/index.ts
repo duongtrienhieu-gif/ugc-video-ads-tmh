@@ -192,3 +192,24 @@ export {
 } from './rhythmEngine'
 
 export type { RhythmProfile as RhythmEngineProfile } from './rhythmEngine'
+
+// v5.5 — Trust realism + Visual story coupling
+export {
+  TRUST_REALISM_EXAMPLES,
+  TRUST_REALISM_PROMPT,
+} from './trustRealismLibrary'
+
+export type {
+  TrustRealismStyle,
+  TrustRealismExample,
+} from './trustRealismLibrary'
+
+export {
+  composeVisualPrompt,
+  visualCoherenceSummary,
+  VISUAL_COHERENCE_PROMPT,
+} from './visualStoryCoupling'
+
+export type {
+  VisualPromptFragment,
+} from './visualStoryCoupling'

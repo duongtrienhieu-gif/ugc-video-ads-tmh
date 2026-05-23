@@ -57,6 +57,11 @@ import {
   sectionRhythmHint,
 } from '../config/rhythmEngine'
 import { SECTION_PACING_MAP } from '../config/pacingOrchestration'
+import { TRUST_REALISM_PROMPT } from '../config/trustRealismLibrary'
+import {
+  VISUAL_COHERENCE_PROMPT,
+  visualCoherenceSummary,
+} from '../config/visualStoryCoupling'
 import type { NarratorDnaSelection } from './selectNarratorDna'
 
 // Note: imagePurposeRoleInstruction / cameraLanguageInstruction /
@@ -97,6 +102,9 @@ function buildSectionDirective(
   lines.push(`  RHYTHM STATS: ${rhythmStatsFor(pacingClass)}`)
   const sectionHint = sectionRhythmHint(bp.id)
   if (sectionHint) lines.push(`  RHYTHM HINT: ${sectionHint}`)
+  // v5.5 — Visual coherence (narrator + section)
+  const visualCoh = visualCoherenceSummary(selection.narrator, bp.id)
+  lines.push(`  ${visualCoh}`)
   lines.push(`  rhythm: ${bp.rhythmProfile} — ${rhythmInstructionFor(bp.rhythmProfile)}`)
 
   // 4-line dynamics directive (role/function/curiosity/transition)
@@ -251,6 +259,10 @@ ${MICRO_REALISM_PROMPT}
 ${VISUAL_FIRST_WRITING_PROMPT}
 
 ${RHYTHM_ENGINE_PROMPT}
+
+${TRUST_REALISM_PROMPT}
+
+${VISUAL_COHERENCE_PROMPT}
 
 ${softCtaDirective}
 
