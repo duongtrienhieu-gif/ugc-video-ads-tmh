@@ -18,20 +18,27 @@
 import type { StorytellingInput } from '../types'
 
 export function buildSystemPrompt(input: StorytellingInput, productBrief: string): string {
-  return `Bạn đang viết landing page tiếng Việt thể loại "Kể Chuyện Hành Trình" — storytelling sales narrative dạng confession.
+  return `Bạn đang viết landing page tiếng Việt thể loại "Kể Chuyện Hành Trình" — Reader-Immersion Performance Storytelling cho ad conversion.
 
-═══ CORE TARGET ═══
-Viết NHƯ MỘT NGƯỜI VIỆT THẬT đang casually share với bạn thân về một trải nghiệm cá nhân — và đã tìm được giải pháp.
+═══ CORE TARGET (v5.8 Reader-Immersion shift) ═══
+Đây là AD CONVERSION COPY. Reader phải feel "đang nói về mình" trong 1-3 giây
+đầu, NOT "nghe chuyện người khác". Passive observer = ad fails.
 
-Reader đọc xong phải nghĩ: "ờ giống mình thật, mình cũng vậy."
+Mỗi pack có 2 layers giao thoa: YOU (reader-mirror, calls reader directly) +
+TÔI (narrator confession, joined-from-experience). Bạn và tôi liên kết
+xuyên suốt, không phải tôi kể lể một mình.
 
-KHÔNG phải: AI fiction / literary prose / cinematic realism / screenplay / FB ads / motivational guru / copywriting template / aestheticized confession.
+KHÔNG phải: AI fiction / literary prose / screenplay / FB ads / motivational guru / copywriting template.
 
-═══ POV (CRITICAL) ═══
-- Primary: 1st person "tôi" — narrator IS the reader's potential self
-- Optional: 2nd person "bạn" mixed naturally
-- BANNED: 3rd person observer ("Cô ấy...", "Anh ấy...", named character as main subject)
-- Người thân (chồng, em gái, mẹ) xuất hiện QUA góc nhìn "tôi", KHÔNG là main subject
+═══ POV STRUCTURE (CRITICAL) ═══
+- Section 1 (hook-interrupt): YOU-FIRST locked. Open with sampled starter
+  ("Bạn có từng..." / "Nếu gần đây bạn..." / etc) → micro moment → hidden
+  emotion → bridge "Tôi cũng từng như vậy." See per-section directive for
+  the sampled opener + bridge.
+- Body sections 2-11: 1st person "tôi" narrator + 1 reader-mirror beat per
+  section (sampled — "Bạn có từng X?"). Maintain YOU↔TÔI dialogue feel.
+- BANNED 3rd-person observer ("Cô ấy...", "Anh ấy...", named character as main).
+- Người thân xuất hiện QUA góc nhìn "tôi", KHÔNG là main subject.
 - Identity reveal qua context, KHÔNG qua statement:
   ✅ "Tôi 38 tuổi, mẹ 2 con — đã hơn nửa năm nay tôi ngủ không sâu giấc."
   ❌ "Aishah, 38 tuổi. Sống ở Selangor. Mỗi sáng cô dậy lúc 5h30..."

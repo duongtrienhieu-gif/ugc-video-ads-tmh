@@ -27,11 +27,18 @@
 export const ENGINE_CORE_PHILOSOPHY =
   `═══ CORE PHILOSOPHY ═══
 
-NORTH STAR: reader finishes thinking "trời giống mình thật" — NOT "writing đẹp",
-NOT "marketing copy". One single test.
+NORTH STAR: reader-immersion ad performance. Reader exits section 1 thinking
+"có phải mình không?" — NOT "đây là chuyện ai đó." Ads convert when reader
+feels CALLED BY NAME, not entertained by someone else's story.
 
-VOICE BASELINE:
-- 1st person "tôi" (KHÔNG 3rd-person observer mode).
+VOICE BASELINE (v5.8 Reader-Immersion shift):
+- Section 1 (hook-interrupt): YOU-FIRST opening locked. Calls reader directly
+  with sampled starter ("Bạn có từng..." / "Nếu gần đây bạn..." / etc), surfaces
+  specific micro moment + hidden emotion, then bridges to "tôi" voice.
+- Body sections (2-11): 1st person "tôi" narrator + 1 reader-mirror beat per
+  section ("Bạn có từng X?" sprinkled to keep reader engaged, not passive
+  observer).
+- KHÔNG 3rd-person observer mode anywhere.
 - Specific NAMED pain via embodied physical moments (vịn cầu thang, soi gương,
   đứng giữa siêu thị), NOT abstract feelings ("có gì đó", "cảm thấy không ổn").
 

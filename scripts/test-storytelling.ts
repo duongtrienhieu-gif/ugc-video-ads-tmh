@@ -321,6 +321,8 @@ async function runPack(niche: TestNiche, outDir: string, idx: number, total: num
     mdLines.push(`- Discovery channel (s6): \`${result.selection.discoveryChannel}\``)
     mdLines.push(`- Review styles (s10): ${result.selection.reviewStyles.map((r) => `\`${r.id}\``).join(', ')}`)
     mdLines.push(`- Payoff archetype (s8/9/11): \`${result.selection.payoffArchetype.id}\` — ${result.selection.payoffArchetype.destination}`)
+    mdLines.push(`- You-first opener (s1): \`${result.selection.youFirstOpener.id}\` — starter "${result.selection.youFirstOpener.starter}..."`)
+    mdLines.push(`- Bridge phrase (s1 close): \`${result.selection.bridgePhrase.id}\` — "${result.selection.bridgePhrase.phrase}"`)
     mdLines.push(`- Memory snapshots: ${result.selection.memorySnapshots.map((m) => `\`${m.id}\``).join(', ')}`)
     if (result.reviewsCall) {
       const rc = result.reviewsCall

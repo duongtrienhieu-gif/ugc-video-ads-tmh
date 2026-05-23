@@ -43,6 +43,12 @@ import {
   samplePayoffArchetype,
   type PayoffArchetype,
 } from '../config/payoffArchetypes'
+import {
+  sampleYouFirstOpener,
+  sampleBridgePhrase,
+  type YouFirstOpener,
+  type BridgePhrase,
+} from '../config/performanceHookLayer'
 
 /** Simple deterministic hash — same string → same integer.
  *  Not cryptographic but suitable for pick-by-modulo. */
@@ -90,6 +96,12 @@ export interface NarratorDnaSelection {
    *  destination of sections 8 / 9 / 11. Replaces default "peaceful reflection"
    *  ending that every pack converged to. */
   payoffArchetype: PayoffArchetype
+  /** v5.8 — Performance Hook Layer: you-first opener for section 1.
+   *  Reader-immersion shift: reader feels "đang nói về mình" in 1-3s. */
+  youFirstOpener: YouFirstOpener
+  /** v5.8 — Bridge phrase from "you" to "tôi" closing section 1.
+   *  Without bridge, hook feels accusatory. */
+  bridgePhrase: BridgePhrase
 }
 
 export interface SelectArgs {
@@ -168,18 +180,26 @@ export function selectNarratorDna(args: SelectArgs): NarratorDnaSelection {
   //     Now: 12 archetypes (anger_regret / vanity_return / identity_return / etc).
   const payoffArchetype = samplePayoffArchetype(seed, args.niche)
 
+  // 11. v5.8 — Performance Hook Layer: you-first opener + bridge phrase.
+  //     Drives section 1 4-step structure (you-first → micro moment →
+  //     hidden emotion → bridge to tôi). Reader-immersion shift.
+  const youFirstOpener = sampleYouFirstOpener(seed)
+  const bridgePhrase = sampleBridgePhrase(seed)
+
   console.info(
     `[storytelling/selectNarratorDna] seed=${seed.slice(-12)} → narrator=${narrator.id}, ` +
     `dna=${emotionalDna?.niche ?? 'generic'}, curve=${energyCurve.id}, ` +
     `snapshots=${memorySnapshots.length}, hook=${hookAxis}, discovery=${discoveryChannel}, ` +
     `pattern=${hookPattern}, catalyst=${beliefCatalystType}, ` +
-    `reviews=[${reviewStyles.map((r) => r.id).join(', ')}], payoff=${payoffArchetype.id}`,
+    `reviews=[${reviewStyles.map((r) => r.id).join(', ')}], payoff=${payoffArchetype.id}, ` +
+    `youFirst=${youFirstOpener.id}, bridge=${bridgePhrase.id}`,
   )
 
   return {
     seed, narrator, emotionalDna, energyCurve, memorySnapshots,
     hookAxis, discoveryChannel, hookPattern, beliefCatalystType,
     reviewStyles, payoffArchetype,
+    youFirstOpener, bridgePhrase,
   }
 }
 

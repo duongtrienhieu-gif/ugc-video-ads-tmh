@@ -43,12 +43,13 @@ import { narratorBrief } from '../config/narratorArchetypes'
 import { emotionalDnaBrief } from '../config/personaEmotionalDNA'
 import { energyCurveBrief } from '../config/energyCurvePresets'
 import { snapshotsBrief } from '../config/memorySnapshots'
-import { hookAxisBrief } from '../config/hookVariation'
 import { discoveryChannelBrief } from '../config/discoveryChannels'
 import { paragraphCountTargetFor } from '../config/rhythmEngine'
 import { visualCoherenceSummary } from '../config/visualStoryCoupling'
 import { ENGINE_CORE_PHILOSOPHY } from '../config/enginePhilosophy'
 import { payoffArchetypeBrief, payoffSectionFlavor } from '../config/payoffArchetypes'
+import { performanceHookSection1Directive } from '../config/performanceHookLayer'
+import { sampleMirrorBeat, readerMirrorBeatDirective } from '../config/readerMirrorMoments'
 import type { NarratorDnaSelection } from './selectNarratorDna'
 
 /** Compose protagonist brief — 1-2 lines, used in system prompt context. */
@@ -104,15 +105,32 @@ function buildSectionDirective(
   lines.push(`  DYNAMICS: ${dynamics}`)
   lines.push(`  PULL: ${retentionInstructionFor(bp.retentionMechanic)} · ${pacingClassDirective(bp.id)}`)
 
-  // ─── Hook pattern (section 1 only) ─────────────────────────────────
-  // v5.7 — Dropped v5.6 anti-template ban lines. Per-pack hookPattern sampling
-  // (1 of 6 via seed) + hookAxis (1 of 10) = 60 combos → structural diversity.
+  // ─── Section 1 — Performance Hook Layer (v5.8) ────────────────────
+  // REPLACES old HOOK_PATTERNS injection. 4-step structure locked:
+  //   [1] You-first opener (sampled) → [2] Specific micro moment →
+  //   [3] Hidden emotion → [4] Bridge to tôi (sampled).
+  // hookPattern + hookAxis still inform emotional flavor (additional axes).
   if (bp.id === 'hook-interrupt') {
-    const hp = HOOK_PATTERNS[selection.hookPattern]
-    lines.push(`  HOOK PATTERN: ${selection.hookPattern} — ${hp.description}`)
-    lines.push(`  Sinh phrasing mới từ pain + narrator voice. Description-driven, KHÔNG dùng câu mẫu.`)
-    for (const line of hookAxisBrief(selection.hookAxis).split('\n')) {
+    for (const line of performanceHookSection1Directive(
+      selection.youFirstOpener, selection.bridgePhrase,
+    ).split('\n')) {
       lines.push(`  ${line}`)
+    }
+    // Keep hookPattern + hookAxis as emotional flavor axes layered on top.
+    const hp = HOOK_PATTERNS[selection.hookPattern]
+    lines.push(`  EMOTIONAL FLAVOR (additional axes): hookPattern=${selection.hookPattern} (${hp.description.slice(0, 60)}) | hookAxis=${selection.hookAxis}`)
+  }
+
+  // ─── Reader mirror beat (sections 2,3,4,5,7,8,9,11) ──────────────
+  // v5.8 — Each non-reveal body section weaves 1 sampled mirror question
+  // that calls reader directly, then narrator continues tôi voice.
+  // Sections 6 (soft-reveal) and 10 (trust-continuity) skipped.
+  if (bp.id !== 'hook-interrupt' && bp.id !== 'soft-reveal' && bp.id !== 'trust-continuity') {
+    const beat = sampleMirrorBeat(selection.seed, bp.id)
+    if (beat) {
+      for (const line of readerMirrorBeatDirective(beat).split('\n')) {
+        lines.push(`  ${line}`)
+      }
     }
   }
 
