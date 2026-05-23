@@ -50,7 +50,7 @@ import {
   rhythmDirectiveFor,
   sectionRhythmHint,
 } from '../config/rhythmEngine'
-import { TRUST_REALISM_PROMPT } from '../config/trustRealismLibrary'
+import { buildReviewBlockDirective } from '../config/reviewStyleProfiles'
 import { visualCoherenceSummary } from '../config/visualStoryCoupling'
 import { ENGINE_CORE_PHILOSOPHY } from '../config/enginePhilosophy'
 import type { NarratorDnaSelection } from './selectNarratorDna'
@@ -157,13 +157,15 @@ function buildSectionDirective(
   }
 
   // ─── Trust continuity (section 10) ─────────────────────────────────
-  // v5.7 — Kept generic directive for now. Phase B will replace with sampled
-  // reviewStyleProfiles → concrete style data per review slot.
+  // v5.7 Phase B — Inject 3 concrete reviewStyleProfile objects (per slot)
+  // instead of abstract "casual FB-comment" rules. Each review slot gets
+  // platform/age/energy/grammar/punctuation/typo/completeness as concrete data.
   if (bp.id === 'trust-continuity') {
-    lines.push(`  📋 OUTPUT FORMAT: { id, title, copy, reviews: [{ quote, author?, meta? }, ...] }`)
+    const reviewBlock = buildReviewBlockDirective(selection.reviewStyles)
+    for (const line of reviewBlock.split('\n')) {
+      lines.push(`  ${line}`)
+    }
     lines.push(`  copy: 5-15 từ intro phù hợp tone narrator dẫn vào quotes. Tự nhiên.`)
-    lines.push(`  reviews: 3 quotes — diff voices/ages/relationships, casual FB-comment vibe.`)
-    lines.push(`  author: short VN descriptor ("Chị Lan, 42" / "Hà, 30" / "Một bạn đọc").`)
   }
 
   // ─── Soft CTA (section 11) ─────────────────────────────────────────
@@ -217,8 +219,6 @@ NARRATOR USAGE:
 ${ENGINE_CORE_PHILOSOPHY}
 
 ${narratorBlock}
-
-${TRUST_REALISM_PROMPT}
 
 Section directives (in order):
 

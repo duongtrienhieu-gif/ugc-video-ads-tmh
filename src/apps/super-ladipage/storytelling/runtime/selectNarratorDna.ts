@@ -35,6 +35,10 @@ import {
   DISCOVERY_CHANNELS,
   type DiscoveryChannel,
 } from '../config/discoveryChannels'
+import {
+  sampleReviewStyles,
+  type ReviewStyleProfile,
+} from '../config/reviewStyleProfiles'
 
 /** Simple deterministic hash — same string → same integer.
  *  Not cryptographic but suitable for pick-by-modulo. */
@@ -74,6 +78,10 @@ export interface NarratorDnaSelection {
   /** v5.6 — Sampled belief shift catalyst type for section 5.
    *  Forces single deterministic catalyst per pack instead of letting Gemini pick from list. */
   beliefCatalystType: BeliefShiftCatalystType
+  /** v5.7 — Sampled review style profiles for section 10 (3 per pack).
+   *  Diversity-guaranteed across energy + optimism axes. Replaces abstract
+   *  TRUST_REALISM_PROMPT rules with concrete per-slot style data. */
+  reviewStyles: ReviewStyleProfile[]
 }
 
 export interface SelectArgs {
@@ -141,16 +149,24 @@ export function selectNarratorDna(args: SelectArgs): NarratorDnaSelection {
   const catalystKeys = Object.keys(BELIEF_SHIFT_CATALYSTS) as BeliefShiftCatalystType[]
   const beliefCatalystType = pickByHash(catalystKeys, seed, 'beliefCatalyst')
 
+  // 9. v5.7 — Sample 3 review styles for section 10 with diversity guarantee.
+  //    Replaces abstract TRUST_REALISM_PROMPT (was causing all reviews to converge
+  //    to "polished AI-trying-to-sound-human" voice). Now each review slot gets
+  //    a concrete style profile with platform/punctuation/grammar/energy/etc.
+  const reviewStyles = sampleReviewStyles(seed, 3)
+
   console.info(
     `[storytelling/selectNarratorDna] seed=${seed.slice(-12)} → narrator=${narrator.id}, ` +
     `dna=${emotionalDna?.niche ?? 'generic'}, curve=${energyCurve.id}, ` +
     `snapshots=${memorySnapshots.length}, hook=${hookAxis}, discovery=${discoveryChannel}, ` +
-    `pattern=${hookPattern}, catalyst=${beliefCatalystType}`,
+    `pattern=${hookPattern}, catalyst=${beliefCatalystType}, ` +
+    `reviews=[${reviewStyles.map((r) => r.id).join(', ')}]`,
   )
 
   return {
     seed, narrator, emotionalDna, energyCurve, memorySnapshots,
     hookAxis, discoveryChannel, hookPattern, beliefCatalystType,
+    reviewStyles,
   }
 }
 

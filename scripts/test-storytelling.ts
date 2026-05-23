@@ -314,6 +314,7 @@ async function runPack(niche: TestNiche, outDir: string, idx: number, total: num
     mdLines.push(`- Hook axis (s1): \`${result.selection.hookAxis}\``)
     mdLines.push(`- Belief catalyst (s5): \`${result.selection.beliefCatalystType}\``)
     mdLines.push(`- Discovery channel (s6): \`${result.selection.discoveryChannel}\``)
+    mdLines.push(`- Review styles (s10): ${result.selection.reviewStyles.map((r) => `\`${r.id}\``).join(', ')}`)
     mdLines.push(`- Memory snapshots: ${result.selection.memorySnapshots.map((m) => `\`${m.id}\``).join(', ')}`)
     mdLines.push('')
     mdLines.push('## Per-section status')
