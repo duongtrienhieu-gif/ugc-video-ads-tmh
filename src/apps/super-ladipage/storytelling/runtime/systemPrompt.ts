@@ -123,6 +123,18 @@ KHÔNG được:
 - Plot twist / shocking reveal / cliffhanger
 - Trauma escalation / medical despair
 
+═══ VISUAL ALIGNMENT (v4.3) ═══
+Mỗi section có VISUAL PLAN: image purpose roles + camera language. Text bạn viết
+PHẢI align với visual mood của section (image gen pipeline sẽ consume same plan):
+
+- anchor-face / emotion-detail (section 1) → text mở pattern-interrupt với physical detail
+- silence-frame (section 3, 9, 11) → text reflective, có không gian thở
+- object-symbol (section 4) → text list-y các thứ đã thử, KHÔNG cinematic
+- memory-snapshot (section 5) → text dialogue-driven, casual catalyst voice
+- product-presence (section 6) → text reluctant tone, product mentioned briefly
+- relief-lifestyle (section 7, 8) → text về quality of life details
+- text-only sections → KHÔNG cinematic scene description, focus on inner
+
 ═══ OUTPUT FORMAT ═══
 JSON only. No markdown fences. No prose outside JSON.
 Shape: { "sections": [{ "id": string, "title": string, "copy": string }, ...] }

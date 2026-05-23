@@ -71,3 +71,25 @@ export type {
   BeliefShiftReframe,
   BeliefShiftPermission,
 } from './beliefShiftEngine'
+
+// v4.3 — Visual role system
+export {
+  IMAGE_PURPOSE_ROLES,
+  imagePurposeRoleInstruction,
+  NECESSITY_TEST_PROMPT,
+} from './imagePurposeRoles'
+
+export type {
+  ImagePurposeRoleSpec,
+} from './imagePurposeRoles'
+
+export {
+  CAMERA_LANGUAGES,
+  CAMERA_LANGUAGE_BY_BEAT,
+  cameraLanguageInstruction,
+  CAMERA_ANTI_DRIFT_PROMPT,
+} from './cameraLanguage'
+
+export type {
+  CameraLanguageSpec,
+} from './cameraLanguage'

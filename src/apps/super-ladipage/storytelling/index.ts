@@ -30,6 +30,9 @@ export type {
   TransitionPsychology,
   HookPattern,
   RetentionMechanic,
+  // v4.3 visual role types
+  ImagePurposeRole,
+  CameraLanguage,
 } from './types'
 
 export { isStorytellingPack } from './types'
@@ -65,6 +68,10 @@ export {
   // v4.2 — Belief shift engine
   BELIEF_SHIFT_CATALYSTS, NICHE_REFRAME_EXAMPLES,
   PERMISSION_PATTERNS, BELIEF_SHIFT_PROMPT, getReframeForNiche,
+  // v4.3 — Visual role system
+  IMAGE_PURPOSE_ROLES, imagePurposeRoleInstruction, NECESSITY_TEST_PROMPT,
+  CAMERA_LANGUAGES, CAMERA_LANGUAGE_BY_BEAT,
+  cameraLanguageInstruction, CAMERA_ANTI_DRIFT_PROMPT,
 } from './config'
 
 // Resolvers (pure mapping functions — P2/P3 will expand)

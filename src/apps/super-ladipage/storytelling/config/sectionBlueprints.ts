@@ -37,7 +37,10 @@ export const SECTION_BLUEPRINTS: Record<SectionId, SectionBlueprint> = {
     transitionPsychology: 'emotional-pull',
     tensionLevel:         6,
     retentionMechanic:    'micro-question',
-    hookPattern:          'emotional-rejection',  // v4 pattern-interrupt
+    hookPattern:          'emotional-rejection',
+    // v4.3 visual
+    imagePurposeRoles:    ['anchor-face', 'emotion-detail'],
+    cameraLanguage:       ['partial-face-observational', 'domestic-realism'],
   },
 
   'daily-friction': {
@@ -59,6 +62,9 @@ export const SECTION_BLUEPRINTS: Record<SectionId, SectionBlueprint> = {
     transitionPsychology: 'thematic-echo',
     tensionLevel:         5,
     retentionMechanic:    'curiosity-debt',
+    // v4.3 visual
+    imagePurposeRoles:    ['emotion-detail'],
+    cameraLanguage:       ['domestic-realism', 'partial-face-observational'],
   },
 
   'internal-fear': {
@@ -81,6 +87,9 @@ export const SECTION_BLUEPRINTS: Record<SectionId, SectionBlueprint> = {
     transitionPsychology: 'emotional-pull',
     tensionLevel:         7,
     retentionMechanic:    'micro-question',
+    // v4.3 visual
+    imagePurposeRoles:    ['silence-frame'],
+    cameraLanguage:       ['static-quiet-frame', 'environmental-distance'],
   },
 
   'failed-attempts': {
@@ -102,6 +111,9 @@ export const SECTION_BLUEPRINTS: Record<SectionId, SectionBlueprint> = {
     transitionPsychology: 'emotional-pull',
     tensionLevel:         7,
     retentionMechanic:    'emotional-contrast',
+    // v4.3 visual — flat-lay of failed attempts
+    imagePurposeRoles:    ['object-symbol'],
+    cameraLanguage:       ['domestic-realism'],
   },
 
   // 🆕 v4 — CONVERSION CORE
@@ -125,6 +137,9 @@ export const SECTION_BLUEPRINTS: Record<SectionId, SectionBlueprint> = {
     transitionPsychology: 'question-implicit',
     tensionLevel:         4,
     retentionMechanic:    'reveal-delay',
+    // v4.3 visual — cafe scene memory-snapshot
+    imagePurposeRoles:    ['memory-snapshot'],
+    cameraLanguage:       ['over-shoulder-peripheral', 'static-quiet-frame'],
   },
 
   'soft-reveal': {
@@ -146,6 +161,9 @@ export const SECTION_BLUEPRINTS: Record<SectionId, SectionBlueprint> = {
     transitionPsychology: 'time-jump',
     tensionLevel:         5,
     retentionMechanic:    'micro-question',
+    // v4.3 visual — product 15% frame in kitchen
+    imagePurposeRoles:    ['product-presence'],
+    cameraLanguage:       ['domestic-realism'],
   },
 
   'micro-reward': {
@@ -167,6 +185,9 @@ export const SECTION_BLUEPRINTS: Record<SectionId, SectionBlueprint> = {
     transitionPsychology: 'resolution-settle',
     tensionLevel:         4,
     retentionMechanic:    'emotional-contrast',
+    // v4.3 visual — morning rèm + walking outdoor
+    imagePurposeRoles:    ['relief-lifestyle', 'environment'],
+    cameraLanguage:       ['softer-wider-composition', 'breathing-warm-space'],
   },
 
   'emotional-payoff': {
@@ -188,6 +209,9 @@ export const SECTION_BLUEPRINTS: Record<SectionId, SectionBlueprint> = {
     transitionPsychology: 'thematic-echo',
     tensionLevel:         3,
     retentionMechanic:    'reveal-delay',
+    // v4.3 visual — siêu thị with kids + cooking
+    imagePurposeRoles:    ['relief-lifestyle', 'environment'],
+    cameraLanguage:       ['breathing-warm-space', 'domestic-realism'],
   },
 
   // 🆕 v4 — Reflection + maturity
@@ -210,6 +234,9 @@ export const SECTION_BLUEPRINTS: Record<SectionId, SectionBlueprint> = {
     transitionPsychology: 'emotional-pull',
     tensionLevel:         3,
     retentionMechanic:    'emotional-contrast',
+    // v4.3 visual — quiet ban công / cửa sổ
+    imagePurposeRoles:    ['silence-frame'],
+    cameraLanguage:       ['static-quiet-frame', 'breathing-warm-space'],
   },
 
   // 🆕 v4 — Mini testimonials block
@@ -232,6 +259,9 @@ export const SECTION_BLUEPRINTS: Record<SectionId, SectionBlueprint> = {
     transitionPsychology: 'resolution-settle',
     tensionLevel:         2,
     retentionMechanic:    null,
+    // v4.3 visual — 3 mini images: emotion-detail (lifestyle candid) + relief-lifestyle (action) + product-presence (clean shot)
+    imagePurposeRoles:    ['emotion-detail', 'relief-lifestyle', 'product-presence'],
+    cameraLanguage:       ['domestic-realism', 'breathing-warm-space'],
   },
 
   'soft-cta': {
@@ -253,6 +283,9 @@ export const SECTION_BLUEPRINTS: Record<SectionId, SectionBlueprint> = {
     transitionPsychology: 'resolution-settle',
     tensionLevel:         2,
     retentionMechanic:    null,
+    // v4.3 visual — landscape closure OR window-out
+    imagePurposeRoles:    ['silence-frame'],
+    cameraLanguage:       ['breathing-warm-space', 'static-quiet-frame'],
   },
 }
 

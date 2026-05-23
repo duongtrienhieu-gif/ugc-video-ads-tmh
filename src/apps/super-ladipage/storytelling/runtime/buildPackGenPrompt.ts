@@ -31,6 +31,11 @@ import {
   getReframeForNiche,
 } from '../config/beliefShiftEngine'
 
+// Note: imagePurposeRoleInstruction / cameraLanguageInstruction /
+// NECESSITY_TEST_PROMPT / CAMERA_ANTI_DRIFT_PROMPT are used by Phase 4
+// image gen pipeline (not text gen). Imported via barrel by image gen.
+// In text-gen we inject 1-line VISUAL PLAN per section only.
+
 /** Compose protagonist brief — 1-2 lines, used in system prompt context. */
 export function buildProtagonistBrief(p: ProtagonistProfile): string {
   const hijab = p.cultural.hijabState === 'always' ? 'hijab always' :
@@ -92,6 +97,14 @@ function buildSectionDirective(
     lines.push(`    OLD BELIEF (reader carries): ${reframe.oldBelief}`)
     lines.push(`    NEW FRAME (open door): ${reframe.newFrame}`)
     lines.push(`  PRODUCT NAME: KHÔNG mention in this section. Save for next section (soft-reveal).`)
+  }
+
+  // v4.3 — Visual plan per section (for text/visual alignment)
+  if (bp.imagePurposeRoles && bp.imagePurposeRoles.length > 0) {
+    const camera = bp.cameraLanguage?.length ? `, camera=[${bp.cameraLanguage.join(', ')}]` : ''
+    lines.push(`  VISUAL PLAN: roles=[${bp.imagePurposeRoles.join(', ')}]${camera}`)
+  } else if (bp.imageRequirement.countDefault === 0) {
+    lines.push(`  VISUAL PLAN: text-only — no image generation for this section`)
   }
 
   return lines.join('\n')

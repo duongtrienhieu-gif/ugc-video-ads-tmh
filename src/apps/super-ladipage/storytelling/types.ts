@@ -199,6 +199,32 @@ export type HookPattern =
   | 'pattern-disruption'    // "Trước đây tôi không để ý — nhưng dạo này..."
   | 'self-question'         // "Có ai giống tôi không — sáng dậy mệt hơn đêm trước?"
 
+// ═════════════════════════════════════════════════════════════════════
+// VISUAL ROLE SYSTEM (v4.3)
+// ═════════════════════════════════════════════════════════════════════
+
+/** Image purpose role — every image MUST belong to one role. If image
+ *  doesn't fit any → don't generate (necessity test). */
+export type ImagePurposeRole =
+  | 'anchor-face'           // identity lock — section 1 hero
+  | 'environment'           // wide context, no face, place sense
+  | 'emotion-detail'        // partial face / hands / micro discomfort
+  | 'memory-snapshot'       // candid, slightly blurred, peripheral angle
+  | 'object-symbol'         // flat-lay objects (dầu nóng, miếng dán, ly cà phê...)
+  | 'product-presence'      // product in domestic context (~15% frame, NOT hero)
+  | 'relief-lifestyle'      // post-recovery candid (đi chợ, nấu ăn, đi bộ)
+  | 'silence-frame'         // landscape / window / no character (breathing CTA)
+
+/** Camera language — per emotional beat. Storyselling visual grammar. */
+export type CameraLanguage =
+  | 'partial-face-observational'    // pain/friction — không full face, không hero shot
+  | 'static-quiet-frame'            // reflection/belief-shift — still, contemplative
+  | 'softer-wider-composition'      // hope/discovery — wider breathing room
+  | 'breathing-warm-space'          // relief/payoff — warm tone, lifestyle
+  | 'environmental-distance'        // internal-fear — observed from outside
+  | 'domestic-realism'              // micro-reward — kitchen / home everyday
+  | 'over-shoulder-peripheral'      // discovery — not center, casual catch
+
 /** Lightweight pull device — subtle continuation, NOT plot twist.
  *  Each section optionally has 1. Section 10 typically null (closure). */
 export type RetentionMechanic =
@@ -331,6 +357,14 @@ export interface SectionBlueprint {
   retentionMechanic: RetentionMechanic | null
   /** Hook pattern — only section 1 (narrativeRole='hook'). */
   hookPattern?: HookPattern
+
+  // ─── v4.3 Visual Role System ──────────────────────────────────────
+  /** Image purpose roles for this section (parallel to imageRequirement.countDefault).
+   *  Every generated image MUST belong to one role — necessity test. */
+  imagePurposeRoles?: ImagePurposeRole[]
+  /** Camera language styles preferred for this section. Image gen prompts
+   *  inject these as visual treatment directives. */
+  cameraLanguage?: CameraLanguage[]
 }
 
 /** SectionPlan — output của resolveSectionPlan(). Drives prompt builder. */
