@@ -99,6 +99,9 @@ export {
   // v5.2 — Memory snapshots + Visual-First Writing
   MEMORY_SNAPSHOTS, snapshotsForNiche, snapshotsBrief,
   VISUAL_FIRST_WRITING_PROMPT,
+  // v5.3 — Hook variation + Discovery channels
+  HOOK_AXES, NICHE_HOOK_AXIS_BIAS, hookAxisBrief,
+  DISCOVERY_CHANNELS, discoveryChannelBrief,
 } from './config'
 
 // v5.1 — Selector resolver

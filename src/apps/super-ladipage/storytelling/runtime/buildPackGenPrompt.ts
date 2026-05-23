@@ -48,6 +48,8 @@ import {
   snapshotsBrief,
   VISUAL_FIRST_WRITING_PROMPT,
 } from '../config/memorySnapshots'
+import { hookAxisBrief } from '../config/hookVariation'
+import { discoveryChannelBrief } from '../config/discoveryChannels'
 import type { NarratorDnaSelection } from './selectNarratorDna'
 
 // Note: imagePurposeRoleInstruction / cameraLanguageInstruction /
@@ -73,6 +75,7 @@ function buildSectionDirective(
   plan: SectionPlan,
   index: number,
   input: StorytellingInput,
+  selection: NarratorDnaSelection,
 ): string {
   const bp = plan.blueprint
   const sectionNum = index + 1
@@ -106,6 +109,17 @@ function buildSectionDirective(
     const hp = HOOK_PATTERNS[bp.hookPattern]
     lines.push(`  HOOK PATTERN: ${bp.hookPattern} — ${hp.description}`)
     lines.push(`  HOOK EXAMPLES (style only, do not copy): ${hp.examples.slice(0, 2).join(' / ')}`)
+    // v5.3 — Hook emotional axis per pack (combined with pattern = unique combo)
+    for (const line of hookAxisBrief(selection.hookAxis).split('\n')) {
+      lines.push(`  ${line}`)
+    }
+  }
+
+  // v5.3 — Discovery channel for section 6 (soft-reveal)
+  if (bp.id === 'soft-reveal') {
+    for (const line of discoveryChannelBrief(selection.discoveryChannel).split('\n')) {
+      lines.push(`  ${line}`)
+    }
   }
 
   // 🔥 v4.2 — Belief shift specific directive for section 5
@@ -172,7 +186,7 @@ export function buildPackGenUserPrompt(
   selection: NarratorDnaSelection,
   retryFeedback?: string,
 ): string {
-  const sections = plan.map((p, i) => buildSectionDirective(p, i, input)).join('\n\n')
+  const sections = plan.map((p, i) => buildSectionDirective(p, i, input, selection)).join('\n\n')
 
   const hookEnforcement = plan[0]?.blueprint.hookPattern ? HOOK_ENFORCEMENT_PROMPT : ''
 

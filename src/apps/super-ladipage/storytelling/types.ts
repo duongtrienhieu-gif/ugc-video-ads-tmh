@@ -706,6 +706,12 @@ export interface StorytellingMeta {
   /** IDs of memory snapshots sampled for this pack. For telemetry + future
    *  anti-repetition tracker. */
   memorySnapshotIds?: string[]
+
+  // v5.3 — Hook + Discovery variation
+  /** Selected hook emotional axis for section 1. */
+  hookAxisId?: string
+  /** Selected discovery channel for section 6. */
+  discoveryChannelId?: string
 }
 
 /** Pack output — extends LandingPagePack shape để OutputPanel render được

@@ -22,6 +22,14 @@ import {
 } from '../config/personaEmotionalDNA'
 import { ENERGY_CURVE_PRESETS } from '../config/energyCurvePresets'
 import { snapshotsForNiche } from '../config/memorySnapshots'
+import {
+  HOOK_AXES, NICHE_HOOK_AXIS_BIAS,
+  type HookEmotionalAxis,
+} from '../config/hookVariation'
+import {
+  DISCOVERY_CHANNELS,
+  type DiscoveryChannel,
+} from '../config/discoveryChannels'
 
 /** Simple deterministic hash — same string → same integer.
  *  Not cryptographic but suitable for pick-by-modulo. */
@@ -51,6 +59,10 @@ export interface NarratorDnaSelection {
   energyCurve: EnergyCurvePreset
   /** v5.2 — Sampled memory snapshots from niche library (5 per pack, deduped). */
   memorySnapshots: MemorySnapshot[]
+  /** v5.3 — Sampled hook emotional axis for section 1. */
+  hookAxis: HookEmotionalAxis
+  /** v5.3 — Sampled discovery channel for section 6. */
+  discoveryChannel: DiscoveryChannel
 }
 
 export interface SelectArgs {
@@ -95,13 +107,27 @@ export function selectNarratorDna(args: SelectArgs): NarratorDnaSelection {
     }
   }
 
+  // 5. v5.3 — Sample hook emotional axis. Niche bias if mapped.
+  const biasedAxes = NICHE_HOOK_AXIS_BIAS[args.niche]
+  const axesPool: HookEmotionalAxis[] = biasedAxes && biasedAxes.length > 0
+    ? biasedAxes
+    : Object.keys(HOOK_AXES) as HookEmotionalAxis[]
+  const hookAxis = pickByHash(axesPool, seed, 'hookAxis')
+
+  // 6. v5.3 — Sample discovery channel from 13 channels.
+  const channels = Object.keys(DISCOVERY_CHANNELS) as DiscoveryChannel[]
+  const discoveryChannel = pickByHash(channels, seed, 'discovery')
+
   console.info(
     `[storytelling/selectNarratorDna] seed=${seed.slice(-12)} → narrator=${narrator.id}, ` +
     `dna=${emotionalDna?.niche ?? 'generic'}, curve=${energyCurve.id}, ` +
-    `snapshots=${memorySnapshots.length} (${memorySnapshots.map((s) => s.id).join(', ')})`,
+    `snapshots=${memorySnapshots.length}, hook=${hookAxis}, discovery=${discoveryChannel}`,
   )
 
-  return { seed, narrator, emotionalDna, energyCurve, memorySnapshots }
+  return {
+    seed, narrator, emotionalDna, energyCurve, memorySnapshots,
+    hookAxis, discoveryChannel,
+  }
 }
 
 /** Verify all niches have at least one compatible archetype.

@@ -218,6 +218,9 @@ export async function generateStorytellingPack(
       randomSeed:           selection.seed,
       // v5.2 — Memory snapshot IDs sampled for this pack
       memorySnapshotIds:    selection.memorySnapshots.map((s) => s.id),
+      // v5.3 — Hook + Discovery variation
+      hookAxisId:           selection.hookAxis,
+      discoveryChannelId:   selection.discoveryChannel,
     },
   }
 

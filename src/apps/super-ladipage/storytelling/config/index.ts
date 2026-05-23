@@ -158,3 +158,25 @@ export {
   snapshotsBrief,
   VISUAL_FIRST_WRITING_PROMPT,
 } from './memorySnapshots'
+
+// v5.3 — Hook variation + Discovery channels
+export {
+  HOOK_AXES,
+  NICHE_HOOK_AXIS_BIAS,
+  hookAxisBrief,
+} from './hookVariation'
+
+export type {
+  HookEmotionalAxis,
+  HookAxisSpec,
+} from './hookVariation'
+
+export {
+  DISCOVERY_CHANNELS,
+  discoveryChannelBrief,
+} from './discoveryChannels'
+
+export type {
+  DiscoveryChannel,
+  DiscoveryChannelSpec,
+} from './discoveryChannels'
