@@ -6,10 +6,10 @@
 // KHÔNG overlay budget allocation.
 //
 // Phase 2 sẽ:
-//   - reorder/drop section theo niche preset (vd 'quicker' → drop inner-realization)
-//   - tính productRevealSection adjustment (nếu input.productRevealSection ≠ 7,
-//     swap first-trial vị trí)
-//   - allocate overlay budget (2 slots) ưu tiên intro-portrait + subtle-change
+//   - reorder/drop section theo niche preset (vd 'quicker' → drop internal-fear)
+//   - tính productRevealSection adjustment (nếu input.productRevealSection ≠ 6,
+//     swap soft-reveal vị trí)
+//   - allocate overlay budget (2 slots) ưu tiên hook-interrupt + micro-reward
 //   - validate image count tổng không vượt PACK_LIMITS.imageMax
 // ─────────────────────────────────────────────────────────────────────
 

@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────
-// bioIntroDetector — chỉ check section 1 (intro-portrait)
+// bioIntroDetector — chỉ check section 1 (hook-interrupt)
 //
 // BANNED opening patterns:
 //   - name + age ("Aishah, 38 tuổi")
@@ -72,7 +72,7 @@ const BIO_PATTERNS: Array<{ pattern: RegExp; reason: string }> = [
 ]
 
 export function bioIntroDetector(section: ParsedSection): ValidatorResult {
-  if (section.id !== 'intro-portrait') {
+  if (section.id !== 'hook-interrupt') {
     return { pass: true, violations: [] }
   }
 

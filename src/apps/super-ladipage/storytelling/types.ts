@@ -92,17 +92,24 @@ export type HomeSettingKey =
 export type FamilyStructureKey = 'single' | 'partnered' | 'with-children' | 'multigenerational'
 
 /** Section IDs nội bộ storytelling engine. KHÔNG dùng SectionType của UGC. */
+/** v4 section IDs — 11 sections, sales-functional conversion flow:
+ *  Hook → Friction → Fear → Failed → BeliefShift → SoftReveal →
+ *  MicroReward → Payoff → Reflection → TrustContinuity → SoftCTA
+ *
+ *  Belief-shift = CONVERSION CORE (not product reveal).
+ *  Trust-continuity uses LandingSection.reviews field for 3 mini quotes. */
 export type SectionId =
-  | 'intro-portrait'
-  | 'ordinary-life'
-  | 'daily-friction'
-  | 'failed-attempts'
-  | 'inner-realization'
-  | 'discovery-moment'
-  | 'first-trial'
-  | 'subtle-change'
-  | 'new-normal'
-  | 'sharing-invitation'
+  | 'hook-interrupt'        // pattern-interrupt hook + identity anchor
+  | 'daily-friction'        // relatable daily struggles
+  | 'internal-fear'         // escalation + fear of decline
+  | 'failed-attempts'       // frustration loop
+  | 'belief-shift'          // 🆕 AHA reinterpretation — conversion core
+  | 'soft-reveal'           // reluctant product mention, low expectation
+  | 'micro-reward'          // subtle initial improvement
+  | 'emotional-payoff'      // life feels lighter
+  | 'reflection-trust'      // 🆕 looking back maturity
+  | 'trust-continuity'      // 🆕 3 mini testimonial quotes (uses reviews field)
+  | 'soft-cta'              // human emotional invitation
 
 export type EmotionalBeat =
   | 'calm-curious'
@@ -181,13 +188,16 @@ export type TransitionPsychology =
   | 'resolution-settle'     // closing — no pull, just settle
 
 /** Opening hook pattern — only section 1 (narrativeRole='hook'). */
+/** v4 hook patterns — pattern interrupt + emotional snap.
+ *  Section 1 (hook-interrupt) MUST create immediate recognition + fear within
+ *  3 lines. NO smooth/descriptive/bio openers. */
 export type HookPattern =
-  | 'observation-first'     // through someone else's noticing
-  | 'anomaly-first'         // small odd moment
-  | 'negative-space'        // what's missing / avoided
-  | 'time-blur'             // undefined when it started
-  | 'subtle-detail'         // tiny thing magnified
-  | 'third-person-witness'  // witnessed from outside
+  | 'emotional-rejection'   // "Tôi bắt đầu ghét buổi sáng."
+  | 'specific-fear-moment'  // "Có sáng tôi đứng cạnh mép giường 3 phút..."
+  | 'physical-immediacy'    // "Sáng nay đầu gối tôi lại nhói lên..."
+  | 'internal-confession'   // "Tôi không nói điều đó với ai..."
+  | 'pattern-disruption'    // "Trước đây tôi không để ý — nhưng dạo này..."
+  | 'self-question'         // "Có ai giống tôi không — sáng dậy mệt hơn đêm trước?"
 
 /** Lightweight pull device — subtle continuation, NOT plot twist.
  *  Each section optionally has 1. Section 10 typically null (closure). */

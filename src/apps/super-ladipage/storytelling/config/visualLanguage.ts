@@ -44,17 +44,18 @@ export const VISUAL_LANGUAGE: VisualLanguageConfig = {
     'Would a real family member post this photo on Facebook? Or only a brand stylist? If only a brand stylist — reject.',
 }
 
-/** Map section → preferred visual treatments. Image prompt assembler
- *  pick 1-2 treatments từ list này. Niche preset có thể override. */
+/** v4.1 — 11 sections. Image purpose roles + camera language come in v4.3.
+ *  For now, baseline preferred treatments per section. */
 export const SECTION_VISUAL_MAP: Record<SectionId, VisualTreatment[]> = {
-  'intro-portrait':      ['family-album', 'domestic-observational'],
-  'ordinary-life':       ['environmental-wide', 'smartphone-candid'],
-  'daily-friction':      ['photojournalism-light', 'imperfect-real'],
-  'failed-attempts':     ['flat-lay-natural'],
-  'inner-realization':   [],  // no image
-  'discovery-moment':    ['memory-snapshot', 'smartphone-candid'],
-  'first-trial':         ['still-life-domestic'],
-  'subtle-change':       ['domestic-observational', 'imperfect-real'],
-  'new-normal':          ['family-album', 'environmental-wide'],
-  'sharing-invitation':  ['family-album', 'landscape-quiet'],
+  'hook-interrupt':      ['family-album', 'domestic-observational'],   // anchor-face + emotion-detail
+  'daily-friction':      ['photojournalism-light', 'imperfect-real'],  // daily struggle candid
+  'internal-fear':       ['imperfect-real'],                            // silence-frame, partial face
+  'failed-attempts':     ['flat-lay-natural'],                          // object-symbol
+  'belief-shift':        ['memory-snapshot', 'smartphone-candid'],      // cafe scene with friend
+  'soft-reveal':         ['still-life-domestic'],                       // product ~15% frame
+  'micro-reward':        ['domestic-observational', 'imperfect-real'],  // mở rèm, đi bộ
+  'emotional-payoff':    ['family-album', 'environmental-wide'],        // siêu thị, nấu ăn
+  'reflection-trust':    ['landscape-quiet', 'imperfect-real'],         // ban công, cửa sổ
+  'trust-continuity':    ['smartphone-candid', 'still-life-domestic'],  // FB feedback + product clean
+  'soft-cta':            ['landscape-quiet', 'family-album'],           // landscape OR window
 }

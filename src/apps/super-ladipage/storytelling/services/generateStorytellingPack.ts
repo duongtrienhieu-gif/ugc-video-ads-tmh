@@ -38,17 +38,21 @@ import type { GeneratedPackResult } from '../runtime/retryWithFeedback'
 // ── Map storytelling SectionId → existing UGC SectionType for
 //    LandingSection.type compat. Storytelling section ID stored
 //    separately trong storytellingMeta.sectionIds. ───────────────────
+/** v4.1 — 11 storytelling section IDs → existing UGC SectionType (for
+ *  LandingSection.type compat). Storytelling SectionId is stored in
+ *  storytellingMeta.sectionIds parallel array. */
 const SECTION_TYPE_MAP: Record<SectionId, SectionType> = {
-  'intro-portrait':     'hero',
-  'ordinary-life':      'lifestyle',
-  'daily-friction':     'pain',
-  'failed-attempts':    'failed-solutions',
-  'inner-realization':  'why-happens',
-  'discovery-moment':   'product-discovery',
-  'first-trial':        'lifestyle',
-  'subtle-change':      'lifestyle',
-  'new-normal':         'lifestyle',
-  'sharing-invitation': 'final-cta',
+  'hook-interrupt':    'hero',
+  'daily-friction':    'pain',
+  'internal-fear':     'pain',
+  'failed-attempts':   'failed-solutions',
+  'belief-shift':      'why-happens',         // AHA reinterpretation
+  'soft-reveal':       'product-discovery',
+  'micro-reward':      'lifestyle',
+  'emotional-payoff':  'lifestyle',
+  'reflection-trust':  'lifestyle',
+  'trust-continuity':  'social-proof',        // mini testimonials in reviews field
+  'soft-cta':          'final-cta',
 }
 
 /** Build CharacterProfile từ resolved ProtagonistProfile. P1: name là
@@ -73,10 +77,13 @@ function buildCharacterProfile(p: ProtagonistProfile): CharacterProfile {
 
 /** Allocate overlay per section. P1: hardcoded heuristic (chapter @ s1,
  *  diary @ s8). Phase 5 (CTA system) sẽ make overlay allocation niche-aware. */
+/** v4.1 — 11 sections. Overlay budget = 2/14 ảnh.
+ *  Chapter-marker on hook-interrupt (section 1), diary-timestamp on
+ *  micro-reward (section 7) — feels like photo book page break. */
 function allocateOverlay(sectionIds: SectionId[]): (AllowedOverlayType | null)[] {
   return sectionIds.map((sid) => {
-    if (sid === 'intro-portrait') return 'chapter-marker'
-    if (sid === 'subtle-change')  return 'diary-timestamp'
+    if (sid === 'hook-interrupt') return 'chapter-marker'
+    if (sid === 'micro-reward')   return 'diary-timestamp'
     return null
   })
 }

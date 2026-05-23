@@ -8,18 +8,22 @@
 import type { SectionId } from '../types'
 import { DEFAULT_SECTION_ORDER } from './sectionBlueprints'
 
-/** Per-section tension level. Curve thiết kế theo blueprint v4. */
+/** Per-section tension level (v4.1 — 11 sections).
+ *  Curve: hook snap → friction → fear escalation → frustration peak
+ *  → BELIEF SHIFT release valve → soft reveal → micro reward → payoff
+ *  → reflection settle → trust continuity → soft CTA closure. */
 export const TENSION_CURVE: Record<SectionId, number> = {
-  'intro-portrait':     4,   // hook unrest — subtle
-  'ordinary-life':      5,   // wrongness embedded in normalcy
-  'daily-friction':     7,   // friction peak — empathy tension
-  'failed-attempts':    8,   // frustration peak — quiet, not dramatic
-  'inner-realization':  3,   // release / breathing pause
-  'discovery-moment':   5,   // curiosity reactivate
-  'first-trial':        4,   // tentative
-  'subtle-change':      3,   // relief uptick
-  'new-normal':         2,   // calm payoff
-  'sharing-invitation': 2,   // quiet closure
+  'hook-interrupt':    6,   // immediate emotional snap
+  'daily-friction':    5,   // relatable struggles
+  'internal-fear':     7,   // escalation peak (inward fear)
+  'failed-attempts':   7,   // frustration loop
+  'belief-shift':      4,   // 🆕 RELEASE VALVE — AHA reframe, permission to seek
+  'soft-reveal':       5,   // reluctant hope returns
+  'micro-reward':      4,   // subtle uptick (dopamine)
+  'emotional-payoff':  3,   // lightening, life feels lighter
+  'reflection-trust':  3,   // 🆕 settled maturity
+  'trust-continuity':  2,   // 🆕 mini testimonials, calm validation
+  'soft-cta':          2,   // soft closure
 }
 
 /** Detect flat-line (3+ consecutive sections same tension). Flag warning

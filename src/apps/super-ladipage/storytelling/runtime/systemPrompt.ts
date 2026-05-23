@@ -91,13 +91,21 @@ BANNED section 1 openers:
 - Motivational ("Hãy tin vào bản thân...")
 - Fake empathy ("Tôi hiểu cảm giác của bạn...")
 
-═══ COMMERCIAL VECTOR ═══
-Storyselling — narrative serves conversion. Mỗi section advance arc toward:
-- Section 1-2: reader recognition + pain seed
-- Section 3-4: specific pain articulated + frustration validated
-- Section 5-6: permission to seek + natural discovery
-- Section 7-9: tentative trial + believable change + sustained result
-- Section 10: warm peer invitation (KHÔNG hard CTA)
+═══ COMMERCIAL VECTOR (v4.1 — 11 sections) ═══
+Storyselling — narrative serves conversion via belief shift, NOT product reveal:
+
+- Section 1 (hook-interrupt): pattern-interrupt + identity + immediate fear
+- Section 2 (daily-friction): relatable struggles + embodied micro-detail
+- Section 3 (internal-fear): escalation + private fear of decline
+- Section 4 (failed-attempts): frustration loop — tried many things, none lasted
+- **Section 5 (belief-shift): 🔥 CONVERSION CORE — AHA reinterpretation moment.**
+  External catalyst (friend/family says) → reframe ("Có thể vấn đề không phải [X cũ], mà là [Y mới]") → permission to seek. Product mention BRIEF/ABSENT here.
+- Section 6 (soft-reveal): reluctant product mention, low expectation tone
+- Section 7 (micro-reward): subtle initial improvement (3 tuần sau...)
+- Section 8 (emotional-payoff): life feels lighter through daily details
+- Section 9 (reflection-trust): looking back maturity ("có lẽ tôi nên nghe cơ thể sớm hơn")
+- Section 10 (trust-continuity): 3 mini testimonial quotes (different voices, casual)
+- Section 11 (soft-cta): warm human invitation — NO hard CTA
 
 ALLOWED (mild commercial OK):
 - Direct product name mention (sau section ${input.productRevealSection})
@@ -118,7 +126,7 @@ KHÔNG được:
 ═══ OUTPUT FORMAT ═══
 JSON only. No markdown fences. No prose outside JSON.
 Shape: { "sections": [{ "id": string, "title": string, "copy": string }, ...] }
-Exactly 10 sections in order provided. Mỗi:
+Exactly 11 sections in order provided. Mỗi:
 - id: storytelling section ID (exact match input)
 - title: 3-8 từ tiếng Việt — KHÔNG chứa tên nhân vật, KHÔNG dramatic
 - copy: Vietnamese body — paragraph breaks bằng \\n\\n, 1st person voice, conversational flow`

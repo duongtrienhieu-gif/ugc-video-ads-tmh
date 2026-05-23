@@ -1,20 +1,15 @@
 // ═════════════════════════════════════════════════════════════════════
-// Storytelling Engine — fallback copy (P0.5.4 STORYSELLING REALIGNMENT)
+// Storytelling Engine — fallback copy (v4.1 — 11 sections)
 //
-// Section-level safe fallback. Used khi retry vẫn fail validators.
-// Strategy: NO drama escalation — degrade to simpler, safer content.
+// Used khi retry vẫn fail validators. Pre-validated content embodying
+// v4 voice — pattern-interrupt hook, daily friction with embodied detail,
+// internal fear, failed attempts, belief-shift reframe, reluctant soft
+// reveal, micro reward, emotional payoff, reflection, mini testimonials,
+// soft CTA.
 //
-// REWRITTEN for storyselling: 1st person "tôi" voice, conversational
-// flow, specific named pain, sales-functional per section.
-//
-// These copy đã được handcrafted để:
-//   - Pass all 5 hard validators (bio-intro, adjacent-rhythm, ai-cadence,
-//     banned-phrase, commercial-tone)
-//   - Pass selfInsertion soft warning (1st person from line 1)
-//   - Demonstrate the storyselling voice target
-//
-// Generic enough cho nhiều niche, restraint maintained, NOT copywriter
-// template.
+// Generic enough for cross-niche use. Will be polished further in v4.6.
+// Trust-continuity section uses copy field for fallback (real engine
+// uses reviews field).
 // ═════════════════════════════════════════════════════════════════════
 
 import type { SectionId } from '../types'
@@ -25,87 +20,140 @@ export interface FallbackSection {
 }
 
 export const FALLBACK_COPY: Record<SectionId, FallbackSection> = {
-  'intro-portrait': {
-    title: 'Có một thời gian',
+  'hook-interrupt': {
+    title: 'Tôi bắt đầu ghét buổi sáng',
     copy:
-`Có một thời gian tôi gần như không dám nhìn vào gương mỗi sáng. Không phải vì tôi ghét bản thân mình, mà vì càng nhìn tôi càng thấy mệt — da xỉn màu, mắt thâm, lúc nào cũng như thiếu sức sống dù đã cố ngủ sớm và chăm sóc đủ kiểu.
+`Tôi bắt đầu ghét buổi sáng.
 
-Tôi đã ngoài 35, có gia đình nhỏ, công việc tạm ổn. Cuộc sống không có gì để than phiền — nhưng có một điều tôi vẫn không hiểu sao mình lại cảm thấy như vậy mỗi ngày.`,
-  },
+Không phải vì thiếu ngủ. Mà vì mỗi lần thức dậy, cơ thể tôi lại nhắc tôi rằng nó không còn như trước nữa.
 
-  'ordinary-life': {
-    title: 'Mọi thứ vẫn diễn ra bình thường',
-    copy:
-`Tôi không nhớ chính xác mọi chuyện bắt đầu từ khi nào. Có lẽ là sau tuổi 35, khi mọi thứ vẫn diễn ra bình thường ở bên ngoài — đi làm, lo cho gia đình, dọn dẹp nhà cửa — nhưng ở bên trong tôi có cảm giác như đang lái xe với phanh tay kéo lên nhẹ.
+Có hôm tôi đứng cạnh mép giường gần ba phút chỉ để lấy can đảm bước xuống đất.
 
-Ai nhìn vào cuộc sống của tôi cũng nói tôi may mắn. Tôi cũng đồng ý. Chỉ là có những buổi tối tôi ngồi ở bàn lâu hơn cần thiết, không làm gì cả — và tôi không biết tại sao.`,
+Ban đầu tôi nghĩ chắc do tuổi tác thôi. Nhưng càng ngày tôi càng thấy không yên tâm.
+
+Tôi không nói điều đó với ai.`,
   },
 
   'daily-friction': {
-    title: 'Khoảng 3 giờ chiều mỗi ngày',
+    title: 'Mọi thứ nhỏ dần trở nên khó khăn',
     copy:
-`Khoảng 3 giờ chiều mỗi ngày, tôi sẽ thấy cơ thể mình như hết pin. Không phải mệt theo kiểu thiếu ngủ, mà là một cảm giác trống rỗng khó tả — tôi vẫn làm việc, vẫn cười với mọi người, nhưng phải gồng lên rất nhiều.
+`Tôi chưa tới mức "có bệnh". Vẫn đi làm, vẫn lo cho gia đình, vẫn nấu ăn mỗi ngày.
 
-Tối về thì khá hơn một chút, nhưng sáng dậy tôi lại bắt đầu chu kỳ đó từ đầu. Đôi khi tôi nhìn vào gương thấy da mình xỉn màu hơn, mắt có quầng thâm rõ, và tôi nghĩ "ơ sao trông mình hôm nay khác vậy". Điều lạ là tôi không nói với ai chuyện này — vì kể ra cũng không biết bắt đầu từ đâu.`,
+Nhưng cơ thể bắt đầu khác đi rất nhiều. Mỗi sáng tôi phải ngồi yên vài giây mới đứng dậy nổi. Đi cầu thang phải vịn tay. Ngồi lâu một chút thì người cứng lại.
+
+Có hôm đang bê đồ ngoài siêu thị, tôi phải đứng khựng giữa lối đi vì tự nhiên cảm thấy không ổn.
+
+Điều khó chịu nhất không phải là đau. Mà là cảm giác cơ thể mình đang yếu đi nhanh hơn tôi nghĩ.`,
+  },
+
+  'internal-fear': {
+    title: 'Có lẽ tôi đã bỏ qua tín hiệu quá lâu',
+    copy:
+`Tôi bắt đầu để ý kỹ hơn vào những gì mình từng coi là "chuyện nhỏ".
+
+Chiều nào người cũng nặng như đeo chì. Đêm ngủ không sâu. Sáng dậy vẫn mệt như chưa từng nghỉ.
+
+Có hôm đang ngồi làm việc, tôi nhìn bàn tay mình rồi tự hỏi: không lẽ mới từng này tuổi mà cơ thể đã xuống nhanh vậy sao?
+
+Tôi không nói điều đó với ai. Nhưng cảm giác bất an cứ lớn dần lên mỗi ngày — như một thứ tôi đang cố giả vờ không thấy.`,
   },
 
   'failed-attempts': {
-    title: 'Tôi đã thử nhiều cách',
+    title: 'Tôi đã thử đủ thứ',
     copy:
-`Tôi đã thử nhiều cách. Đi ngủ sớm hơn — được 1 tuần. Vitamin tổng hợp ở hiệu thuốc — uống được 2 tháng không thấy khác. Tập thể dục buổi sáng — được 5 ngày. Tôi cũng đổi nhiều dòng mỹ phẩm, chăm sóc da kỹ hơn, uống nước nhiều hơn.
+`Tôi thử đủ kiểu rồi. Ngâm chân buổi tối. Massage. Dầu nóng. Yoga theo YouTube. Vitamin tổng hợp. Miếng dán giảm đau.
 
-Mỗi cách work được vài ngày rồi tôi lại quay về trạng thái cũ. Đến lúc đó tôi bắt đầu nghĩ — có lẽ vấn đề không nằm ở việc tôi chưa đủ cố gắng. Có lẽ tôi đang thiếu một thứ gì đó nhỏ thôi, nhưng cụ thể, mà tôi chưa biết là gì.`,
+Lúc đầu thấy đỡ một chút. Rồi vài hôm sau lại quay về như cũ.
+
+Cái cảm giác hy vọng rồi thất vọng liên tục đó — thật ra mới là thứ khiến tôi mệt nhất. Mệt hơn cả bản thân triệu chứng.
+
+Đến lúc đó tôi mới nghĩ — có lẽ tôi đang giải quyết sai chỗ.`,
   },
 
-  'inner-realization': {
-    title: 'Một câu hỏi tôi đã tránh',
+  // 🆕 CONVERSION CORE — Belief shift
+  'belief-shift': {
+    title: 'Một câu nói khiến tôi nghĩ lại',
     copy:
-`Có một câu hỏi tôi đã tránh trong vài tháng nay. Không phải vì tôi sợ trả lời, mà vì tôi không biết bắt đầu từ đâu. Cơ thể tôi đang nói với tôi điều gì đó mà tôi chưa lắng nghe đủ kỹ.
+`Một người bạn cũ hỏi tôi: "Mày có chắc đó chỉ là chuyện tuổi tác không?"
 
-Sau tuổi 35, có những thứ không thể giải quyết chỉ bằng ngủ thêm một tiếng hay uống thêm một ly cà phê. Tôi nghĩ mình cần một cái gì đó hỗ trợ từ bên trong — không phải để khoẻ tức thì, mà để cơ thể có đủ những thứ nó cần để hoạt động bình thường trở lại.`,
+Câu đó làm tôi suy nghĩ mãi mấy hôm liền.
+
+Vì trước giờ tôi luôn mặc định: lớn tuổi rồi thì cơ thể tự nhiên xuống — đau nhức, cứng khớp, mệt mỏi… là chuyện không tránh được.
+
+Nhưng nó nói thêm một câu khiến tôi khựng lại: "Nhiều khi không phải mình già đi quá nhanh. Mà là cơ thể không còn phục hồi tốt như trước."
+
+Lần đầu tiên tôi bắt đầu nghĩ — có lẽ tôi đã hiểu sai vấn đề suốt thời gian qua.`,
   },
 
-  'discovery-moment': {
-    title: 'Một tối tháng năm',
+  'soft-reveal': {
+    title: 'Cũng không kỳ vọng gì nhiều',
     copy:
-`Em gái tôi ghé qua chơi vào một tối tháng 5. Hai chị em ngồi ngoài hiên uống trà, nghe tụi nhỏ trong nhà cãi nhau chuyện xem phim. Em tôi vừa quay lại đi làm sau mấy tháng nghỉ chăm con.
+`Hôm đó nó đưa tôi xem loại nó đang dùng.
 
-"Em từng tưởng mình bị burnout thật sự," nó nói, không nhìn tôi. "Mệt kiểu chết người. Sau đó em mới biết là cơ thể em đang thiếu một số chất. Em uống một dòng bổ sung khoảng 6 tuần thì khác hẳn."
+Thật lòng tôi không kỳ vọng gì nhiều. Vì tôi đã thử không ít thứ trước đó rồi.
 
-Em tôi nhắc tên một sản phẩm. Tôi chưa từng nghe. Đêm đó tôi mở điện thoại tra thử.`,
+Nhưng có một câu nó nói khiến tôi chú ý: không phải để giảm đau tức thời, mà là để hỗ trợ cơ thể hoạt động ổn định hơn từ bên trong.
+
+Nghe thực tế hơn tất cả những gì tôi từng thử. Thôi thử xem sao.`,
   },
 
-  'first-trial': {
-    title: 'Tôi không kỳ vọng gì cao',
+  'micro-reward': {
+    title: 'Ba tuần sau',
     copy:
-`Thú thật là tôi không kỳ vọng gì cao. Mua online, chờ 2 ngày, hộp đến, tôi mở ra đọc hướng dẫn rồi đặt lên kệ. Sáng hôm sau bắt đầu dùng theo hướng dẫn.
+`Khoảng tuần thứ ba, tôi bắt đầu nhận ra vài thay đổi rất nhỏ.
 
-Ngày đầu tôi không cảm thấy gì. Ngày thứ ba cũng vậy. Tôi gần như đã quên là mình đang dùng — vì tôi vốn không tin lắm vào những thứ "sẽ thay đổi cuộc sống bạn".`,
+Một sáng tôi đứng dậy nhẹ hơn — không phải kiểu thần kỳ, chỉ là không còn cảm giác "phải lấy can đảm" như trước.
+
+Rồi có hôm tôi chợt nhận ra: mình không còn nghĩ tới cơ thể liên tục nữa.
+
+Ngủ sâu hơn một chút. Người bớt nặng nề hơn.
+
+Không phải "khỏi". Mà giống cảm giác cơ thể đang quay lại trạng thái bình thường từng chút một.`,
   },
 
-  'subtle-change': {
-    title: 'Khoảng tuần thứ ba',
+  'emotional-payoff': {
+    title: 'Cuộc sống nhẹ hơn',
     copy:
-`Khoảng tuần thứ 3, tôi mới nhận ra mọi thứ đang khác đi. Không phải kiểu "tôi cảm thấy tràn đầy năng lượng" như quảng cáo hay nói — mà nhỏ hơn rất nhiều.
+`Điều tôi thích nhất bây giờ không phải là "hết khó chịu".
 
-Một sáng thứ Tư tôi tỉnh dậy lúc 5h30 và không cần bấm "ngủ thêm 10 phút". Tôi để ý nhưng nghĩ chắc tình cờ. Chiều thứ Sáu, 3 giờ trôi qua mà tôi không nghĩ đến ly cà phê thứ ba. Đến chiều thứ Bảy tôi mới chợt nhận ra mình đã không pha cà phê chiều suốt 2 ngày.
+Mà là cảm giác cơ thể không còn kéo tụt cuộc sống mình xuống nữa.
 
-Da thì sáng hơn một chút. Mắt đỡ thâm. Nhưng quan trọng hơn — tôi không còn cảm giác trống rỗng vào 3 giờ chiều nữa.`,
+Tôi có thể đi siêu thị lâu hơn. Nấu ăn mà không phải ngồi nghỉ giữa chừng. Đưa con đi chơi mà vẫn còn sức lúc về nhà.
+
+Mọi thứ rất nhỏ thôi. Nhưng khi cơ thể nhẹ hơn, cuộc sống tự nhiên cũng nhẹ hơn rất nhiều.`,
   },
 
-  'new-normal': {
-    title: 'Bây giờ',
+  // 🆕 Reflection + maturity
+  'reflection-trust': {
+    title: 'Có lẽ tôi nên nghe cơ thể mình sớm hơn',
     copy:
-`Bây giờ là vài tháng sau. Cuộc sống vẫn diễn ra như trước — vẫn những công việc đó, vẫn những người đó, vẫn những ngày đó. Khác là tôi không còn phải gồng lên để đi qua từng buổi chiều nữa.
+`Nhìn lại, tôi nghĩ điều tiếc nhất là mình đã cố chịu quá lâu.
 
-Cuối tuần tôi đi chợ sớm hơn, đôi khi mang hoa về cắm trên bàn ăn. Việc rất nhỏ — nhưng tôi nhớ là vài tháng trước tôi không có đủ sức để nghĩ đến chuyện hoa. Hôm rồi chồng tôi hỏi: "Em dạo này nhìn khác hẳn nhỉ?" Tôi cười, không nói gì nhiều — vì câu trả lời rất đơn giản: tôi ngủ ngon hơn, ăn ngon hơn, và không còn lo lắng vô cớ.`,
+Tôi cứ nghĩ "rồi sẽ tự hết thôi" — cho tới khi cơ thể bắt đầu ảnh hưởng cả giấc ngủ, tâm trạng, và cuộc sống mỗi ngày.
+
+Tôi không nghĩ đây là phép màu. Cũng không phải giải pháp tức thì.
+
+Nhưng ít nhất, đó là thứ đầu tiên khiến tôi cảm thấy cơ thể mình đang tốt lên — thay vì tệ đi từng ngày.`,
   },
 
-  'sharing-invitation': {
-    title: 'Nếu bạn cũng từng',
+  // 🆕 Mini testimonials — real engine uses reviews field; fallback uses copy
+  'trust-continuity': {
+    title: 'Vài chia sẻ tôi nhận được',
     copy:
-`Tôi viết những dòng này không phải để quảng cáo gì. Câu chuyện của tôi đến đây là hết — nhưng có thể câu chuyện của bạn đang ở đâu đó giữa chương 3 và chương 4.
+`"Tôi ngủ ngon hơn sau khoảng ba tuần."
 
-Nếu bạn cũng từng có cảm giác mệt vô cớ vào 3 giờ chiều, từng nhìn vào gương và tự hỏi "có phải mình đang già rồi không" — có lẽ chúng ta hiểu nhau hơn bạn nghĩ. Tôi chỉ muốn nói: bạn không một mình. Và đôi khi cơ thể chỉ cần một thứ rất nhỏ để quay lại bình thường thôi.`,
+"Mẹ mình đi cầu thang đỡ mỏi hơn."
+
+"Không hết ngay, nhưng cơ thể nhẹ dần lên thật."`,
+  },
+
+  'soft-cta': {
+    title: 'Nếu bạn cũng đang ở giai đoạn đó',
+    copy:
+`Nếu bạn cũng đang ở giai đoạn mà sáng thức dậy thấy người nặng nề hơn, đầu gối khó chịu hơn, hay cơ thể không còn hồi phục như trước — thì có lẽ điều bạn cần không phải là "cố chịu thêm".
+
+Tôi chỉ muốn nói: bạn không phải người duy nhất trải qua cảm giác đó.
+
+Có những thứ rất nhỏ thôi cũng đủ để cơ thể quay lại bình thường — chỉ là mình cần biết là có cách.`,
   },
 }
