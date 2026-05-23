@@ -517,15 +517,25 @@ async function main() {
     ? Number(process.env.INTER_PACK_DELAY_SEC)
     : 60
 
-  // SINGLE_NICHE=skincare → only run that 1 niche (for debugging)
-  // SINGLE_NICHE=2 → only run niche at index 2 (1-based)
+  // SINGLE_NICHE=skincare              → only run that 1 niche by slug/key (for debugging)
+  // SINGLE_NICHE=2                     → only run niche at index 2 (1-based)
+  // SINGLE_NICHE=2,3,9,10              → run multiple niches (comma-separated, any mix of indices/slugs)
   let activeNiches = NICHES
   if (process.env.SINGLE_NICHE) {
-    const key = process.env.SINGLE_NICHE
-    const byIdx = NICHES[parseInt(key, 10) - 1]
-    const bySlug = NICHES.find((n) => n.slug.includes(key) || n.input.niche.includes(key))
-    activeNiches = byIdx ? [byIdx] : bySlug ? [bySlug] : NICHES
-    console.log(`[storytelling-test] SINGLE_NICHE=${key} → only running: ${activeNiches.map((n) => n.label).join(', ')}`)
+    const raw = process.env.SINGLE_NICHE
+    const keys = raw.split(',').map((k) => k.trim()).filter(Boolean)
+    const picked: TestNiche[] = []
+    const missing: string[] = []
+    for (const key of keys) {
+      const byIdx = NICHES[parseInt(key, 10) - 1]
+      const bySlug = NICHES.find((n) => n.slug.includes(key) || n.input.niche.includes(key))
+      const match = byIdx ?? bySlug
+      if (match && !picked.includes(match)) picked.push(match)
+      else if (!match) missing.push(key)
+    }
+    if (picked.length > 0) activeNiches = picked
+    if (missing.length > 0) console.warn(`[storytelling-test] SINGLE_NICHE: no match for ${missing.join(', ')} — skipped`)
+    console.log(`[storytelling-test] SINGLE_NICHE=${raw} → running ${activeNiches.length}: ${activeNiches.map((n) => n.label).join(', ')}`)
   }
 
   console.log(`[storytelling-test] starting run, output → ${outDir}/`)
