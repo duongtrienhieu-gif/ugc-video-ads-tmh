@@ -159,6 +159,13 @@ export async function generateStorytellingPack(
   // ─── 5. Assemble LandingSection[] ────────────────────────────────
   const sections: LandingSection[] = result.sections.map((s) => {
     const blueprint = SECTION_BLUEPRINTS[s.id]
+    // v4.5 — Trust-continuity section: map parsed reviews → LandingSection.reviews
+    // (uses existing UGC LandingSection.reviews field — no schema pollution)
+    const reviews = s.reviews?.map((r) => ({
+      author: r.author ?? 'Một bạn đọc',
+      quote:  r.quote,
+      meta:   r.meta,
+    }))
     return {
       type:        SECTION_TYPE_MAP[s.id],
       title:       s.title,
@@ -166,6 +173,7 @@ export async function generateStorytellingPack(
       copy:        s.copy,
       layoutGuide: blueprint.pacingPurpose,
       imagePrompts: [],  // image gen = Phase 4
+      reviews,             // v4.5 — undefined for non-trust-continuity sections
     }
   })
 

@@ -79,7 +79,13 @@ function applyFallback(
     sections: pack.sections.map((s) => {
       if (!failingSet.has(s.id)) return s
       const fb = FALLBACK_COPY[s.id]
-      return { id: s.id, title: fb.title, copy: fb.copy }
+      // v4.5 — preserve reviews from fallback (used by trust-continuity)
+      return {
+        id: s.id,
+        title: fb.title,
+        copy: fb.copy,
+        reviews: fb.reviews,
+      }
     }),
   }
 }

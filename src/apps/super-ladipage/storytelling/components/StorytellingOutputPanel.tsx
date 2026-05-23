@@ -257,6 +257,35 @@ function StorytellingSectionView({
         {cleanCopy}
       </div>
 
+      {/* v4.5 — Trust continuity mini reviews (section 10 only).
+          Casual FB-comment cards, NOT formal testimonials. NO star ratings. */}
+      {sectionId === 'trust-continuity' && section.reviews && section.reviews.length > 0 && (
+        <div className="mt-8 space-y-4">
+          {section.reviews.map((r, i) => (
+            <figure
+              key={i}
+              className="border-l-2 border-stone-300 pl-4 py-1 italic"
+            >
+              <blockquote className="font-serif text-base text-stone-700 leading-relaxed not-italic">
+                <span className="text-stone-400 mr-1">"</span>
+                {r.quote}
+                <span className="text-stone-400 ml-1">"</span>
+              </blockquote>
+              {(r.author || r.meta) && (
+                <figcaption className="mt-1 text-xs text-stone-500 not-italic">
+                  {r.author && <span>— {r.author}</span>}
+                  {r.meta && (
+                    <span className="text-stone-400">
+                      {r.author ? ' · ' : ''}{r.meta}
+                    </span>
+                  )}
+                </figcaption>
+              )}
+            </figure>
+          ))}
+        </div>
+      )}
+
       {/* Debug strip — v4 narrative dynamics. Helps verify rhythm/role
           assignment trong khi engine wiring up. */}
       <div className="mt-6 space-y-1 text-[10px] italic text-stone-400">

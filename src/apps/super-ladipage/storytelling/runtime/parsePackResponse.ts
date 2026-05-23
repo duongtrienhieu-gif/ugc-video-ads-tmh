@@ -11,10 +11,20 @@
 
 import type { SectionId } from '../types'
 
+/** Mini quote from trust-continuity section. */
+export interface ParsedReview {
+  quote: string
+  author?: string
+  meta?: string
+}
+
 export interface ParsedSection {
   id: SectionId
   title: string
   copy: string
+  /** v4.5 — optional reviews array. Used by trust-continuity (section 10)
+   *  for 3 mini quotes (different voices). Other sections leave undefined. */
+  reviews?: ParsedReview[]
 }
 
 export interface ParsedPack {
@@ -82,10 +92,29 @@ export function parsePackResponse(
         `Expected one of: ${[...expectedSet].join(', ')}`,
       )
     }
+    // v4.5 — parse optional reviews (trust-continuity section)
+    let reviews: ParsedReview[] | undefined
+    if (sec.id === 'trust-continuity' && Array.isArray(sec.reviews)) {
+      reviews = (sec.reviews as unknown[])
+        .map((r): ParsedReview | null => {
+          if (!r || typeof r !== 'object') return null
+          const rec = r as Record<string, unknown>
+          if (typeof rec.quote !== 'string') return null
+          return {
+            quote:  rec.quote.trim(),
+            author: typeof rec.author === 'string' ? rec.author.trim() : undefined,
+            meta:   typeof rec.meta === 'string'   ? rec.meta.trim()   : undefined,
+          }
+        })
+        .filter((r): r is ParsedReview => r !== null)
+      if (reviews.length === 0) reviews = undefined
+    }
+
     return {
       id:    sec.id as SectionId,
       title: sec.title.trim(),
       copy:  sec.copy.trim(),
+      reviews,
     }
   })
 

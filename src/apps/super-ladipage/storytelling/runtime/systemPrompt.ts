@@ -137,9 +137,18 @@ PHẢI align với visual mood của section (image gen pipeline sẽ consume sa
 
 ═══ OUTPUT FORMAT ═══
 JSON only. No markdown fences. No prose outside JSON.
-Shape: { "sections": [{ "id": string, "title": string, "copy": string }, ...] }
+
+Base shape: { "sections": [{ "id": string, "title": string, "copy": string }, ...] }
+
+Section 10 (trust-continuity) has EXTENDED shape — adds "reviews" array:
+{ "id": "trust-continuity", "title": "...", "copy": "[short intro line]",
+  "reviews": [{ "quote": string, "author"?: string, "meta"?: string }, ...] }
+
 Exactly 11 sections in order provided. Mỗi:
 - id: storytelling section ID (exact match input)
 - title: 3-8 từ tiếng Việt — KHÔNG chứa tên nhân vật, KHÔNG dramatic
-- copy: Vietnamese body — paragraph breaks bằng \\n\\n, 1st person voice, conversational flow`
+- copy: Vietnamese body — paragraph breaks bằng \\n\\n, 1st person voice, conversational flow
+  (cho section 10: copy chỉ là 1 ngắn intro line dẫn vào reviews)
+- reviews (section 10 only): 3 mini quotes — different voices (different ages/relationships),
+  casual FB-comment Vietnamese, NOT formal testimonials, NO star ratings, NO Shopee screenshot vibe`
 }

@@ -14,9 +14,18 @@
 
 import type { SectionId } from '../types'
 
+export interface FallbackReview {
+  quote: string
+  author?: string
+  meta?: string
+}
+
 export interface FallbackSection {
   title: string
   copy: string
+  /** v4.5 — optional reviews for trust-continuity section. Different
+   *  voices, FB-comment vibe, NOT formal testimonials. */
+  reviews?: FallbackReview[]
 }
 
 export const FALLBACK_COPY: Record<SectionId, FallbackSection> = {
@@ -136,15 +145,26 @@ Tôi không nghĩ đây là phép màu. Cũng không phải giải pháp tức t
 Nhưng ít nhất, đó là thứ đầu tiên khiến tôi cảm thấy cơ thể mình đang tốt lên — thay vì tệ đi từng ngày.`,
   },
 
-  // 🆕 Mini testimonials — real engine uses reviews field; fallback uses copy
+  // 🆕 v4.5 — Mini testimonials. Different voices, casual FB-comment vibe.
+  // copy field = intro hoặc fallback; reviews[] = structured mini quotes
   'trust-continuity': {
     title: 'Vài chia sẻ tôi nhận được',
-    copy:
-`"Tôi ngủ ngon hơn sau khoảng ba tuần."
-
-"Mẹ mình đi cầu thang đỡ mỏi hơn."
-
-"Không hết ngay, nhưng cơ thể nhẹ dần lên thật."`,
+    copy: 'Sau khi tôi share câu chuyện này, có vài bạn nhắn lại. Tôi xin phép share lại với bạn — đây là những điều họ nói:',
+    reviews: [
+      {
+        quote: 'Tôi ngủ ngon hơn sau khoảng ba tuần. Không phải kiểu thần kỳ, chỉ là buổi sáng không còn nặng nề như trước.',
+        author: 'Chị Lan, 42',
+        meta: 'Sau 3 tuần dùng',
+      },
+      {
+        quote: 'Mẹ mình đi cầu thang đỡ mỏi hơn rồi. Mẹ không hay nói nhưng mình thấy mẹ ít than đau hơn.',
+        author: 'Hà, 30',
+      },
+      {
+        quote: 'Không hết ngay đâu, mà cơ thể nhẹ dần lên thật. Mình vẫn uống đều, chưa nghĩ đến chuyện dừng.',
+        author: 'Một bạn đọc viết',
+      },
+    ],
   },
 
   'soft-cta': {

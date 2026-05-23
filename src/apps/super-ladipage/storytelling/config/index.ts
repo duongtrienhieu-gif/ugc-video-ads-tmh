@@ -106,3 +106,16 @@ export type {
   MicroRealismCategory,
   MicroRealismDetailSet,
 } from './microRealismHooks'
+
+// v4.5 — Soft CTA patterns
+export {
+  SOFT_CTA_TONES,
+  SOFT_CTA_BANNED_PATTERNS,
+  SOFT_CTA_PROMPT,
+  buildSoftCtaDirective,
+} from './softCtaPatterns'
+
+export type {
+  SoftCtaTone,
+  SoftCtaToneSpec,
+} from './softCtaPatterns'

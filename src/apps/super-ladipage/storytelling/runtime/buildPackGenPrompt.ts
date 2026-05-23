@@ -34,6 +34,10 @@ import {
   MICRO_REALISM_PROMPT,
   microRealismDirectiveFor,
 } from '../config/microRealismHooks'
+import {
+  SOFT_CTA_PROMPT,
+  buildSoftCtaDirective,
+} from '../config/softCtaPatterns'
 
 // Note: imagePurposeRoleInstruction / cameraLanguageInstruction /
 // NECESSITY_TEST_PROMPT / CAMERA_ANTI_DRIFT_PROMPT are used by Phase 4
@@ -117,6 +121,24 @@ function buildSectionDirective(
     lines.push(`  ${microRealism}`)
   }
 
+  // v4.5 — Trust continuity special output format (section 10)
+  if (bp.id === 'trust-continuity') {
+    lines.push(`  📋 OUTPUT FORMAT (trust-continuity): instead of long copy, output ALSO a "reviews" array of 3 mini quotes.`)
+    lines.push(`  Section JSON shape: { id: "trust-continuity", title: "...", copy: "[short intro line]", reviews: [{ quote, author?, meta? }, ...] }`)
+    lines.push(`  copy: 1 ngắn intro line dẫn vào quotes (vd: "Sau khi share câu chuyện này, có vài bạn nhắn lại...")`)
+    lines.push(`  reviews: 3 quotes DIFFERENT voices (different ages/relationships), casual FB-comment vibe`)
+    lines.push(`  author: short Vietnamese descriptor ("Chị Lan, 42" / "Hà, 30" / "Một bạn đọc")`)
+    lines.push(`  Quotes phải DIVERSE — different niches details, different lengths, casual imperfect Vietnamese`)
+    lines.push(`  KHÔNG: Shopee/TikTok screenshot vibe, star ratings, "5/5 sao", formal testimonial language`)
+  }
+
+  // v4.5 — Soft CTA specific directive (section 11)
+  if (bp.id === 'soft-cta') {
+    lines.push(`  💌 ${buildSoftCtaDirective()}`)
+    lines.push(`  Length: 60-100 từ. KHÔNG benefit push. KHÔNG urgency.`)
+    lines.push(`  Self-test: thay tên product bằng "cuốn sách tôi đọc" — section vẫn make sense → PASS. Nếu fail → too salesy.`)
+  }
+
   return lines.join('\n')
 }
 
@@ -142,6 +164,11 @@ export function buildPackGenUserPrompt(
     ? BELIEF_SHIFT_PROMPT
     : ''
 
+  // v4.5 — Soft CTA prompt if plan contains soft-cta section
+  const softCtaDirective = plan.some((p) => p.blueprint.id === 'soft-cta')
+    ? SOFT_CTA_PROMPT
+    : ''
+
   return `Generate ${plan.length} sections cho niche "${input.niche}" — emotional intensity ${input.emotionalIntensity}, pacing ${input.pacingType}.
 
 ${RETENTION_RESTRAINT_PROMPT}
@@ -151,6 +178,8 @@ ${hookEnforcement}
 ${beliefShiftDirective}
 
 ${MICRO_REALISM_PROMPT}
+
+${softCtaDirective}
 
 Section directives (in order):
 

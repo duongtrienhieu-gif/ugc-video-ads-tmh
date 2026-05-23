@@ -75,6 +75,9 @@ export {
   // v4.4 — Micro-realism injector
   MICRO_REALISM_HOOKS, SECTION_MICRO_REALISM_MAP,
   MICRO_REALISM_PROMPT, microRealismDirectiveFor,
+  // v4.5 — Soft CTA patterns
+  SOFT_CTA_TONES, SOFT_CTA_BANNED_PATTERNS,
+  SOFT_CTA_PROMPT, buildSoftCtaDirective,
 } from './config'
 
 // Resolvers (pure mapping functions — P2/P3 will expand)
