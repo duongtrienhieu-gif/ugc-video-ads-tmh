@@ -273,6 +273,11 @@ async function runPack(niche: TestNiche, outDir: string, idx: number, total: num
       productBrief,
       geminiApiKey: GEMINI_API_KEY!,
       kieApiKey: KIE_API_KEY!,
+      // v5.7 Phase B v2 — enables separate review-only Gemini call.
+      productInfo: {
+        productName: niche.productName,
+        painPoint: niche.painPoint,
+      },
     })
 
     const runtimeSec = (Date.now() - startedAt) / 1000
@@ -316,6 +321,14 @@ async function runPack(niche: TestNiche, outDir: string, idx: number, total: num
     mdLines.push(`- Discovery channel (s6): \`${result.selection.discoveryChannel}\``)
     mdLines.push(`- Review styles (s10): ${result.selection.reviewStyles.map((r) => `\`${r.id}\``).join(', ')}`)
     mdLines.push(`- Memory snapshots: ${result.selection.memorySnapshots.map((m) => `\`${m.id}\``).join(', ')}`)
+    if (result.reviewsCall) {
+      const rc = result.reviewsCall
+      const status = rc.status === 'ok' ? `✓ ok (${rc.reviews.length} reviews)`
+        : rc.status === 'parse-error' ? '⚠ parse-error'
+        : rc.status === 'call-error' ? '⚠ call-error'
+        : '⚠ empty'
+      mdLines.push(`- Review call (separate Gemini): ${status} · ${rc.runtimeSec.toFixed(1)}s${rc.errorMessage ? ` — ${rc.errorMessage.slice(0, 80)}` : ''}`)
+    }
     mdLines.push('')
     mdLines.push('## Per-section status')
     for (let i = 0; i < result.sections.length; i++) {

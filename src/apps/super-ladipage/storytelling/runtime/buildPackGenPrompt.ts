@@ -50,7 +50,6 @@ import {
   rhythmDirectiveFor,
   sectionRhythmHint,
 } from '../config/rhythmEngine'
-import { buildReviewBlockDirective } from '../config/reviewStyleProfiles'
 import { visualCoherenceSummary } from '../config/visualStoryCoupling'
 import { ENGINE_CORE_PHILOSOPHY } from '../config/enginePhilosophy'
 import type { NarratorDnaSelection } from './selectNarratorDna'
@@ -156,16 +155,14 @@ function buildSectionDirective(
     lines.push(`  ${microRealism}`)
   }
 
-  // ─── Trust continuity (section 10) ─────────────────────────────────
-  // v5.7 Phase B — Inject 3 concrete reviewStyleProfile objects (per slot)
-  // instead of abstract "casual FB-comment" rules. Each review slot gets
-  // platform/age/energy/grammar/punctuation/typo/completeness as concrete data.
+  // ─── Trust continuity (section 10) — v5.7 Phase B v2 ──────────────
+  // Reviews are generated in a SEPARATE Gemini call (runtime/generateReviews.ts)
+  // to isolate review voice from narrator/story prose voice. This main call
+  // ONLY produces the intro line. Leave `reviews` field empty/absent.
   if (bp.id === 'trust-continuity') {
-    const reviewBlock = buildReviewBlockDirective(selection.reviewStyles)
-    for (const line of reviewBlock.split('\n')) {
-      lines.push(`  ${line}`)
-    }
+    lines.push(`  📋 OUTPUT: { id: "trust-continuity", title, copy: "[5-15 từ intro]" }`)
     lines.push(`  copy: 5-15 từ intro phù hợp tone narrator dẫn vào quotes. Tự nhiên.`)
+    lines.push(`  reviews: DO NOT generate here — leave field absent or empty array. Reviews come from separate generation pass to keep them voice-isolated from story prose.`)
   }
 
   // ─── Soft CTA (section 11) ─────────────────────────────────────────

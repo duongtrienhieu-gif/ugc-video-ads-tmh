@@ -25,6 +25,11 @@ import type { AggregatedValidation } from '../validators'
 import { FALLBACK_COPY } from './fallbackCopy'
 import type { NarratorDnaSelection } from './selectNarratorDna'
 import { selectNarratorDna } from './selectNarratorDna'
+import {
+  generateReviews,
+  buildStoryContextLine,
+  type GenerateReviewsResult,
+} from './generateReviews'
 
 export type SectionGenStatus =
   | { kind: 'pass' }
@@ -42,6 +47,9 @@ export interface GeneratedPackResult {
   /** v5.1+ — narrator/DNA/curve/snapshots/hook/discovery selection used.
    *  Exposed so callers (CLI/UI) can log selection details. */
   selection: NarratorDnaSelection
+  /** v5.7 Phase B v2 — separate review-only Gemini call result.
+   *  Undefined if review productInfo was not provided to generatePackWithRetry. */
+  reviewsCall?: GenerateReviewsResult
 }
 
 interface RunArgs {
@@ -55,6 +63,12 @@ interface RunArgs {
    *  Top-level service (generateStorytellingPack) passes pre-derived
    *  selection; CLI test harness lets it auto-derive. */
   selection?: NarratorDnaSelection
+  /** v5.7 Phase B v2 — product info for SEPARATE review-only Gemini call.
+   *  If omitted, review call is skipped and trust-continuity reviews stay empty. */
+  productInfo?: {
+    productName: string
+    painPoint: string
+  }
 }
 
 /** Single Gemini call + parse. Throws on parse error.
@@ -104,8 +118,57 @@ function applyFallback(
 
 /** Top-level orchestrator. Always returns a usable pack — never throws
  *  on validation. Throws only if Gemini both Gemini+KIE fail OR JSON
- *  malformed beyond recovery. */
+ *  malformed beyond recovery.
+ *
+ *  v5.7 Phase B v2 — if args.productInfo provided, also runs SEPARATE
+ *  review-only Gemini call and merges results into trust-continuity section.
+ *  Review call failures are non-fatal (pack ships with empty reviews + warning). */
 export async function generatePackWithRetry(args: RunArgs): Promise<GeneratedPackResult> {
+  const mainResult = await generateMainPackOnly(args)
+
+  // ─── v5.7 Phase B v2 — Separate review-only call ─────────────────
+  if (!args.productInfo) {
+    // Caller (e.g. legacy UI service) didn't pass productInfo → skip review call.
+    return mainResult
+  }
+
+  const styles = mainResult.selection.reviewStyles
+  if (!styles || styles.length === 0) {
+    console.warn('[storytelling/runtime] no reviewStyles in selection — skipping separate review call')
+    return mainResult
+  }
+
+  const storyContext = buildStoryContextLine(
+    args.productInfo.productName,
+    args.input.niche,
+    args.productInfo.painPoint,
+  )
+  const reviewsCall = await generateReviews({
+    geminiApiKey:     args.geminiApiKey,
+    kieApiKey:        args.kieApiKey,
+    productName:      args.productInfo.productName,
+    productNiche:     args.input.niche,
+    painPoint:        args.productInfo.painPoint,
+    storyContextLine: storyContext,
+    styles,
+  })
+
+  // Merge reviews into trust-continuity section if call succeeded.
+  let mergedSections = mainResult.sections
+  if (reviewsCall.status === 'ok' && reviewsCall.reviews.length > 0) {
+    mergedSections = mainResult.sections.map((s) =>
+      s.id === 'trust-continuity'
+        ? { ...s, reviews: reviewsCall.reviews }
+        : s,
+    )
+  }
+
+  return { ...mainResult, sections: mergedSections, reviewsCall }
+}
+
+/** Internal: runs the main pack-gen Gemini call(s) only. v5.7 Phase B v2 split
+ *  this out so the wrapper can layer the separate review-only call on top. */
+async function generateMainPackOnly(args: RunArgs): Promise<GeneratedPackResult> {
   // v5.1 — Auto-derive narrator/DNA/curve selection if not provided.
   // Top-level service pre-derives; CLI test harness lets us derive here.
   const argsWithSelection: RunArgs & { selection: NarratorDnaSelection } = args.selection
