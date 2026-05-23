@@ -28,7 +28,6 @@ import type {
 import { SECTION_BLUEPRINTS } from '../config/sectionBlueprints'
 import { composeDynamicsDirective } from '../config/narrativeDynamics'
 import { HOOK_PATTERNS } from '../config/narrativeHooks'
-import { rhythmInstructionFor } from '../config/rhythmVariance'
 import { retentionInstructionFor } from '../config/retentionPatterns'
 import {
   BELIEF_SHIFT_CATALYSTS,
@@ -46,11 +45,7 @@ import { energyCurveBrief } from '../config/energyCurvePresets'
 import { snapshotsBrief } from '../config/memorySnapshots'
 import { hookAxisBrief } from '../config/hookVariation'
 import { discoveryChannelBrief } from '../config/discoveryChannels'
-import {
-  rhythmDirectiveFor,
-  sectionRhythmHint,
-  paragraphCountTargetFor,
-} from '../config/rhythmEngine'
+import { paragraphCountTargetFor } from '../config/rhythmEngine'
 import { visualCoherenceSummary } from '../config/visualStoryCoupling'
 import { ENGINE_CORE_PHILOSOPHY } from '../config/enginePhilosophy'
 import { payoffArchetypeBrief, payoffSectionFlavor } from '../config/payoffArchetypes'
@@ -89,17 +84,15 @@ function buildSectionDirective(
   const tensionDelta = selection.energyCurve.tensionDeltas[bp.id] ?? 0
   const adjustedTension = Math.max(0, Math.min(10, bp.tensionLevel + tensionDelta))
 
-  // META: rhythm + tension + density + pacing class + paragraph count target on one line.
-  // v5.7 Phase C — paragraph count target comes from RhythmProfile.paragraphDensity
-  // (existing sampling object data, just surfaced concretely so paragraphs[] count is enforced).
+  // META: structural-only target (paragraph count) + tension + density.
+  // v5.7 Chunk 4 — Dropped rhythm typography prescription. Cadence comes
+  // from narrator psychology, not per-section recipe. Only structural
+  // contract retained: paragraph count target enforced by paragraphCountDetector
+  // (soft warn) + paragraphs[] schema.
   const pacingClass = SECTION_PACING_MAP[bp.id]
   const densityNote = bp.imageRequirement.countDefault === 0 ? ' / text-only' : ''
   const paraTarget = paragraphCountTargetFor(pacingClass)
-  lines.push(`  META: rhythm=${bp.rhythmProfile} · tension=${adjustedTension}/10 · density=${bp.textDensity}${densityNote} · pacing=${pacingClass} · paragraphs=${paraTarget.min}-${paraTarget.max}`)
-
-  // RHYTHM (compressed: instruction + typography + section hint on one line).
-  const sectionHint = sectionRhythmHint(bp.id)
-  lines.push(`  RHYTHM: ${rhythmInstructionFor(bp.rhythmProfile)} | ${rhythmDirectiveFor(pacingClass)}${sectionHint ? ` | ${sectionHint}` : ''}`)
+  lines.push(`  META: tension=${adjustedTension}/10 · density=${bp.textDensity}${densityNote} · paragraphs=${paraTarget.min}-${paraTarget.max}`)
 
   // Visual coherence (narrator + section).
   lines.push(`  ${visualCoherenceSummary(selection.narrator, bp.id)}`)

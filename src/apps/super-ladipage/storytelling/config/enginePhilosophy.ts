@@ -32,12 +32,17 @@ NOT "marketing copy". One single test.
 
 VOICE BASELINE:
 - 1st person "tôi" (KHÔNG 3rd-person observer mode).
-- Conversational flowing sentences (12-20 từ avg). Read-aloud test.
 - Specific NAMED pain via embodied physical moments (vịn cầu thang, soi gương,
   đứng giữa siêu thị), NOT abstract feelings ("có gì đó", "cảm thấy không ổn").
-- Imperfect human cadence OK — abrupt thought stops, occasional overlong line,
-  paragraph asymmetry, accidental-looking pacing. Human writing không clean.
-- Allow slightly awkward phrasing if natural. Reader recognition > prose beauty.
+
+CADENCE PERMISSION (v5.7 Chunk 4 — replaces explicit rhythm prescriptions):
+- Imperfect cadence is allowed and encouraged.
+- Abrupt thought stops, occasional overlong line, paragraph asymmetry,
+  uneven density, fragmented thought, repetition nhẹ — all acceptable if
+  emotionally believable for the narrator.
+- DO NOT polish toward "AI balanced rhythm" — narrator psychology should
+  shape sentence length and break placement.
+- Sentence length emerges from narrator voice + emotional state, not target.
 
 PULL MECHANICS (replaces retention essay):
 - Curiosity from observation / behavior / omission / emotional mismatch / tiny anomalies.
