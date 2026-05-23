@@ -50,6 +50,13 @@ import {
 } from '../config/memorySnapshots'
 import { hookAxisBrief } from '../config/hookVariation'
 import { discoveryChannelBrief } from '../config/discoveryChannels'
+import {
+  RHYTHM_ENGINE_PROMPT,
+  rhythmDirectiveFor,
+  rhythmStatsFor,
+  sectionRhythmHint,
+} from '../config/rhythmEngine'
+import { SECTION_PACING_MAP } from '../config/pacingOrchestration'
 import type { NarratorDnaSelection } from './selectNarratorDna'
 
 // Note: imagePurposeRoleInstruction / cameraLanguageInstruction /
@@ -84,6 +91,12 @@ function buildSectionDirective(
   lines.push(`SECTION ${sectionNum} — id="${bp.id}" (${bp.role})`)
   // v4.6 — Pacing class (cross-pack rhythm orchestration)
   lines.push(`  ${pacingClassDirective(bp.id)}`)
+  // v5.4 — Rhythm engine (typography pacing per pacing class)
+  const pacingClass = SECTION_PACING_MAP[bp.id]
+  lines.push(`  RHYTHM TYPOGRAPHY: ${rhythmDirectiveFor(pacingClass)}`)
+  lines.push(`  RHYTHM STATS: ${rhythmStatsFor(pacingClass)}`)
+  const sectionHint = sectionRhythmHint(bp.id)
+  if (sectionHint) lines.push(`  RHYTHM HINT: ${sectionHint}`)
   lines.push(`  rhythm: ${bp.rhythmProfile} — ${rhythmInstructionFor(bp.rhythmProfile)}`)
 
   // 4-line dynamics directive (role/function/curiosity/transition)
@@ -236,6 +249,8 @@ ${beliefShiftDirective}
 ${MICRO_REALISM_PROMPT}
 
 ${VISUAL_FIRST_WRITING_PROMPT}
+
+${RHYTHM_ENGINE_PROMPT}
 
 ${softCtaDirective}
 

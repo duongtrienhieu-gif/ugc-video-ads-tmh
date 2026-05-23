@@ -180,3 +180,15 @@ export type {
   DiscoveryChannel,
   DiscoveryChannelSpec,
 } from './discoveryChannels'
+
+// v5.4 — Rhythm engine (typography pacing)
+export {
+  RHYTHM_BY_PACING_CLASS,
+  RHYTHM_ENGINE_PROMPT,
+  SECTION_RHYTHM_HINTS,
+  rhythmDirectiveFor,
+  rhythmStatsFor,
+  sectionRhythmHint,
+} from './rhythmEngine'
+
+export type { RhythmProfile as RhythmEngineProfile } from './rhythmEngine'

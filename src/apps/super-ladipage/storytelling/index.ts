@@ -102,6 +102,9 @@ export {
   // v5.3 — Hook variation + Discovery channels
   HOOK_AXES, NICHE_HOOK_AXIS_BIAS, hookAxisBrief,
   DISCOVERY_CHANNELS, discoveryChannelBrief,
+  // v5.4 — Rhythm engine
+  RHYTHM_BY_PACING_CLASS, RHYTHM_ENGINE_PROMPT, SECTION_RHYTHM_HINTS,
+  rhythmDirectiveFor, rhythmStatsFor, sectionRhythmHint,
 } from './config'
 
 // v5.1 — Selector resolver
