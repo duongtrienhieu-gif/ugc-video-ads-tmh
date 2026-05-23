@@ -93,3 +93,16 @@ export {
 export type {
   CameraLanguageSpec,
 } from './cameraLanguage'
+
+// v4.4 — Micro-realism injector
+export {
+  MICRO_REALISM_HOOKS,
+  SECTION_MICRO_REALISM_MAP,
+  MICRO_REALISM_PROMPT,
+  microRealismDirectiveFor,
+} from './microRealismHooks'
+
+export type {
+  MicroRealismCategory,
+  MicroRealismDetailSet,
+} from './microRealismHooks'

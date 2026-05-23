@@ -30,6 +30,10 @@ import {
   BELIEF_SHIFT_CATALYSTS,
   getReframeForNiche,
 } from '../config/beliefShiftEngine'
+import {
+  MICRO_REALISM_PROMPT,
+  microRealismDirectiveFor,
+} from '../config/microRealismHooks'
 
 // Note: imagePurposeRoleInstruction / cameraLanguageInstruction /
 // NECESSITY_TEST_PROMPT / CAMERA_ANTI_DRIFT_PROMPT are used by Phase 4
@@ -107,6 +111,12 @@ function buildSectionDirective(
     lines.push(`  VISUAL PLAN: text-only — no image generation for this section`)
   }
 
+  // v4.4 — Micro-realism injection (embodied lived moments)
+  const microRealism = microRealismDirectiveFor(bp.id)
+  if (microRealism) {
+    lines.push(`  ${microRealism}`)
+  }
+
   return lines.join('\n')
 }
 
@@ -140,6 +150,8 @@ ${hookEnforcement}
 
 ${beliefShiftDirective}
 
+${MICRO_REALISM_PROMPT}
+
 Section directives (in order):
 
 ${sections}
@@ -151,6 +163,7 @@ CORE REMINDERS (storyselling):
 - Pull from RECOGNITION not drama. Reader thinks "ờ giống mình" not "writing đẹp".
 - NO bio CV intro section 1. NO copywriter templates ("Bạn xứng đáng...").
 - Section 5 (belief-shift) = CONVERSION CORE — external catalyst + reframe + permission. NO product name.
+- Inject 1-2 micro-realism details per section from assigned category — embodied lived moments, NOT cinematic blocking.
 - Read-aloud test: nghe như người Việt thật share với bạn thân.
 - Output JSON only${retryFeedback ?? ''}`
 }

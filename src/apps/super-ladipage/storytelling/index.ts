@@ -72,6 +72,9 @@ export {
   IMAGE_PURPOSE_ROLES, imagePurposeRoleInstruction, NECESSITY_TEST_PROMPT,
   CAMERA_LANGUAGES, CAMERA_LANGUAGE_BY_BEAT,
   cameraLanguageInstruction, CAMERA_ANTI_DRIFT_PROMPT,
+  // v4.4 — Micro-realism injector
+  MICRO_REALISM_HOOKS, SECTION_MICRO_REALISM_MAP,
+  MICRO_REALISM_PROMPT, microRealismDirectiveFor,
 } from './config'
 
 // Resolvers (pure mapping functions — P2/P3 will expand)
