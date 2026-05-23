@@ -105,11 +105,17 @@ function applyFallback(
     sections: pack.sections.map((s) => {
       if (!failingSet.has(s.id)) return s
       const fb = FALLBACK_COPY[s.id]
-      // v4.5 — preserve reviews from fallback (used by trust-continuity)
+      // v5.7 Phase C — derive paragraphs[] from fb.copy by splitting on \n\n
+      // so ParsedSection contract holds (paragraphs required, copy derived).
+      const paragraphs = fb.copy
+        .split(/\n{2,}/)
+        .map((p) => p.trim())
+        .filter((p) => p.length > 0)
       return {
         id: s.id,
         title: fb.title,
-        copy: fb.copy,
+        paragraphs,
+        copy: paragraphs.join('\n\n'),
         reviews: fb.reviews,
       }
     }),

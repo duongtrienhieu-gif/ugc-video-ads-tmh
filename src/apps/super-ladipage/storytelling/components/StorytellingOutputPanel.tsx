@@ -218,7 +218,14 @@ function StorytellingSectionView({
 }: SectionViewProps) {
   const blueprint = SECTION_BLUEPRINTS[sectionId]
   const treatments = SECTION_VISUAL_MAP[sectionId] ?? []
-  const cleanCopy = section.copy.replace(MOCK_MARKER_REGEX, '')
+  // v5.7 Phase C — render each paragraph as a separate <p> for proper typography
+  // + breathing rhythm. Engine outputs copy with \n\n between paragraphs (parser
+  // joins paragraphs[] into copy at boundary). Split here to render as <p> each.
+  const cleanParagraphs = section.copy
+    .replace(MOCK_MARKER_REGEX, '')
+    .split(/\n{2,}/)
+    .map((p) => p.trim())
+    .filter((p) => p.length > 0)
   const hasImage = blueprint.imageRequirement.countDefault > 0
 
   return (
@@ -252,9 +259,11 @@ function StorytellingSectionView({
         />
       )}
 
-      {/* Body copy — generous leading, serif feel matches title */}
-      <div className="font-serif text-base md:text-[17px] text-stone-700 leading-[1.95] whitespace-pre-line">
-        {cleanCopy}
+      {/* Body copy — each paragraph as its own <p> for proper breathing space. */}
+      <div className="font-serif text-base md:text-[17px] text-stone-700 leading-[1.95]">
+        {cleanParagraphs.map((p, i) => (
+          <p key={i} className={i === cleanParagraphs.length - 1 ? '' : 'mb-5'}>{p}</p>
+        ))}
       </div>
 
       {/* v4.5 — Trust continuity mini reviews (section 10 only).

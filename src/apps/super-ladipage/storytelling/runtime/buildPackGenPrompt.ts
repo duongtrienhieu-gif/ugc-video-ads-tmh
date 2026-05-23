@@ -49,6 +49,7 @@ import { discoveryChannelBrief } from '../config/discoveryChannels'
 import {
   rhythmDirectiveFor,
   sectionRhythmHint,
+  paragraphCountTargetFor,
 } from '../config/rhythmEngine'
 import { visualCoherenceSummary } from '../config/visualStoryCoupling'
 import { ENGINE_CORE_PHILOSOPHY } from '../config/enginePhilosophy'
@@ -87,10 +88,13 @@ function buildSectionDirective(
   const tensionDelta = selection.energyCurve.tensionDeltas[bp.id] ?? 0
   const adjustedTension = Math.max(0, Math.min(10, bp.tensionLevel + tensionDelta))
 
-  // META: rhythm + tension + density + pacing class on one line.
+  // META: rhythm + tension + density + pacing class + paragraph count target on one line.
+  // v5.7 Phase C — paragraph count target comes from RhythmProfile.paragraphDensity
+  // (existing sampling object data, just surfaced concretely so paragraphs[] count is enforced).
   const pacingClass = SECTION_PACING_MAP[bp.id]
   const densityNote = bp.imageRequirement.countDefault === 0 ? ' / text-only' : ''
-  lines.push(`  META: rhythm=${bp.rhythmProfile} · tension=${adjustedTension}/10 · density=${bp.textDensity}${densityNote} · pacing=${pacingClass}`)
+  const paraTarget = paragraphCountTargetFor(pacingClass)
+  lines.push(`  META: rhythm=${bp.rhythmProfile} · tension=${adjustedTension}/10 · density=${bp.textDensity}${densityNote} · pacing=${pacingClass} · paragraphs=${paraTarget.min}-${paraTarget.max}`)
 
   // RHYTHM (compressed: instruction + typography + section hint on one line).
   const sectionHint = sectionRhythmHint(bp.id)
@@ -160,9 +164,9 @@ function buildSectionDirective(
   // to isolate review voice from narrator/story prose voice. This main call
   // ONLY produces the intro line. Leave `reviews` field empty/absent.
   if (bp.id === 'trust-continuity') {
-    lines.push(`  📋 OUTPUT: { id: "trust-continuity", title, copy: "[5-15 từ intro]" }`)
-    lines.push(`  copy: 5-15 từ intro phù hợp tone narrator dẫn vào quotes. Tự nhiên.`)
-    lines.push(`  reviews: DO NOT generate here — leave field absent or empty array. Reviews come from separate generation pass to keep them voice-isolated from story prose.`)
+    lines.push(`  📋 OUTPUT: { id: "trust-continuity", title, paragraphs: ["[5-15 từ intro]"] }`)
+    lines.push(`  paragraphs: array with 1 short intro string (5-15 từ) phù hợp tone narrator dẫn vào quotes. Tự nhiên.`)
+    lines.push(`  reviews: DO NOT generate here — omit field. Reviews come from separate generation pass to keep voice-isolated from story prose.`)
   }
 
   // ─── Soft CTA (section 11) ─────────────────────────────────────────

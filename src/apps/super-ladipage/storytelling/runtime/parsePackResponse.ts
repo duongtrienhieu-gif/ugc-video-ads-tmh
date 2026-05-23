@@ -21,6 +21,12 @@ export interface ParsedReview {
 export interface ParsedSection {
   id: SectionId
   title: string
+  /** v5.7 Phase C — structural paragraph array (source of truth for reading flow).
+   *  Gemini outputs as paragraphs[] field directly. Parser normalizes legacy
+   *  `copy: string` input into paragraphs by splitting on \n\n. */
+  paragraphs: string[]
+  /** Joined paragraphs.join('\n\n') — kept for backward-compat with 8+ existing
+   *  consumers (validators, UI renderer, services). Always derived from paragraphs. */
   copy: string
   /** v4.5 — optional reviews array. Used by trust-continuity (section 10)
    *  for 3 mini quotes (different voices). Other sections leave undefined. */
@@ -83,8 +89,24 @@ export function parsePackResponse(
     if (typeof sec.title !== 'string') {
       throw new Error(`Storytelling pack section #${idx + 1} missing/invalid "title"`)
     }
-    if (typeof sec.copy !== 'string') {
-      throw new Error(`Storytelling pack section #${idx + 1} missing/invalid "copy"`)
+    // v5.7 Phase C — accept either `paragraphs: string[]` (preferred, new schema)
+    // OR `copy: string` (legacy, split by \n\n). One must be present + non-empty.
+    let paragraphs: string[]
+    if (Array.isArray(sec.paragraphs)) {
+      paragraphs = (sec.paragraphs as unknown[])
+        .filter((p): p is string => typeof p === 'string')
+        .map((p) => p.trim())
+        .filter((p) => p.length > 0)
+    } else if (typeof sec.copy === 'string') {
+      paragraphs = sec.copy
+        .split(/\n{2,}/)
+        .map((p) => p.trim())
+        .filter((p) => p.length > 0)
+    } else {
+      throw new Error(`Storytelling pack section #${idx + 1} missing both "paragraphs" array and "copy" string`)
+    }
+    if (paragraphs.length === 0) {
+      throw new Error(`Storytelling pack section #${idx + 1} has empty content (no paragraphs)`)
     }
     if (!expectedSet.has(sec.id as SectionId)) {
       throw new Error(
@@ -111,9 +133,10 @@ export function parsePackResponse(
     }
 
     return {
-      id:    sec.id as SectionId,
-      title: sec.title.trim(),
-      copy:  sec.copy.trim(),
+      id:         sec.id as SectionId,
+      title:      sec.title.trim(),
+      paragraphs,
+      copy:       paragraphs.join('\n\n'),
       reviews,
     }
   })

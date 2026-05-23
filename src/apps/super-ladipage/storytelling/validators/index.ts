@@ -8,6 +8,7 @@ export { aiCadenceDetector } from './aiCadenceDetector'
 export { bannedPhraseDetector } from './bannedPhraseDetector'
 export { commercialToneDetector } from './commercialToneDetector'
 export { selfInsertionDetector } from './selfInsertionDetector'
+export { paragraphCountDetector } from './paragraphCountDetector'
 export { runValidators, logValidationResult } from './runValidators'
 
 export type {

@@ -17,6 +17,7 @@ import { aiCadenceDetector } from './aiCadenceDetector'
 import { bannedPhraseDetector } from './bannedPhraseDetector'
 import { commercialToneDetector } from './commercialToneDetector'
 import { selfInsertionDetector } from './selfInsertionDetector'
+import { paragraphCountDetector } from './paragraphCountDetector'
 import type { ValidatorResult, ValidatorViolation } from './bioIntroDetector'
 
 export type ValidatorName =
@@ -26,9 +27,10 @@ export type ValidatorName =
   | 'bannedPhrase'
   | 'commercialTone'
   | 'selfInsertion'    // soft warning — does NOT trigger retry
+  | 'paragraphCount'   // v5.7 Phase C — soft warning, structural rhythm
 
 /** Soft validators — flagged for visibility, not enforcement. */
-const SOFT_VALIDATORS: ReadonlySet<ValidatorName> = new Set(['selfInsertion'])
+const SOFT_VALIDATORS: ReadonlySet<ValidatorName> = new Set(['selfInsertion', 'paragraphCount'])
 
 export interface AggregatedValidation {
   pass: boolean
@@ -49,6 +51,7 @@ export function runValidators(parsed: ParsedPack): AggregatedValidation {
     bannedPhrase:   bannedPhraseDetector(parsed.sections),
     commercialTone: commercialToneDetector(parsed.sections),
     selfInsertion:  selfInsertionDetector(parsed.sections[0]),
+    paragraphCount: paragraphCountDetector(parsed.sections),
   }
 
   const violations: AggregatedValidation['violations'] = []
@@ -82,12 +85,12 @@ export function runValidators(parsed: ParsedPack): AggregatedValidation {
 /** Log validator results to console — for debug. */
 export function logValidationResult(result: AggregatedValidation) {
   if (result.pass && result.softWarnings.length === 0) {
-    console.info(`[storytelling/validators] ✓ all 5 hard validators passed, 0 soft warnings`)
+    console.info(`[storytelling/validators] ✓ all 5 hard validators passed (paragraphCount + selfInsertion = soft), 0 soft warnings`)
     return
   }
   if (result.pass) {
     console.info(
-      `[storytelling/validators] ✓ all 5 hard validators passed, ${result.softWarnings.length} soft warnings`,
+      `[storytelling/validators] ✓ all 5 hard validators passed (paragraphCount + selfInsertion = soft), ${result.softWarnings.length} soft warnings`,
     )
     for (const w of result.softWarnings) {
       console.info(`  [soft:${w.validator}] ${w.sectionId}: ${w.violation}`)

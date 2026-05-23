@@ -351,7 +351,9 @@ async function runPack(niche: TestNiche, outDir: string, idx: number, total: num
         ? `tension ${adjTension}/10`
         : `tension ${adjTension}/10 (base ${bp.tensionLevel}${tensionDelta > 0 ? '+' : ''}${tensionDelta})`
       mdLines.push(`## Chương ${i + 1} — ${s.title}`)
-      mdLines.push(`*\`${s.id}\` · ${bp.narrativeRole} · ${bp.rhythmProfile} · ${tensionLabel} · ${countWords(s.copy)} từ*`)
+      // v5.7 Phase C — surface paragraph count for audit (target vs actual).
+      const paraCount = s.paragraphs.length
+      mdLines.push(`*\`${s.id}\` · ${bp.narrativeRole} · ${bp.rhythmProfile} · ${tensionLabel} · ${countWords(s.copy)} từ · ${paraCount} đoạn*`)
       mdLines.push('')
       mdLines.push(s.copy)
       // v5.6 — Render reviews for trust-continuity (was invisible — only s.copy was shown).

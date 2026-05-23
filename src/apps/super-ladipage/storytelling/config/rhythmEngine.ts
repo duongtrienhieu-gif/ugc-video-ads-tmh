@@ -130,3 +130,16 @@ export const SECTION_RHYTHM_HINTS: Partial<Record<SectionId, string>> = {
 export function sectionRhythmHint(sectionId: SectionId): string | null {
   return SECTION_RHYTHM_HINTS[sectionId] ?? null
 }
+
+/** v5.7 Phase C — paragraph count target per pacing class, derived from
+ *  RhythmProfile.paragraphDensity. Used by prompt META line + paragraphCountValidator. */
+export function paragraphCountTargetFor(pacingClass: PacingClass): { min: number; max: number } {
+  const density = RHYTHM_BY_PACING_CLASS[pacingClass].paragraphDensity
+  switch (density) {
+    case 'tight':      return { min: 1, max: 2 }
+    case 'medium':     return { min: 2, max: 4 }
+    case 'airy':       return { min: 3, max: 5 }
+    case 'fragmented': return { min: 3, max: 6 }
+    case 'flowing':    return { min: 2, max: 4 }
+  }
+}
