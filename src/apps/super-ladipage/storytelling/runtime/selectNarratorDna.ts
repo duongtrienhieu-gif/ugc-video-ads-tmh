@@ -14,13 +14,14 @@
 // ─────────────────────────────────────────────────────────────────────
 
 import type {
-  EnergyCurvePreset, NarratorArchetype, NicheKey, PersonaEmotionalDNA,
+  EnergyCurvePreset, MemorySnapshot, NarratorArchetype, NicheKey, PersonaEmotionalDNA,
 } from '../types'
 import { NARRATOR_ARCHETYPES, archetypesForNiche } from '../config/narratorArchetypes'
 import {
   PERSONA_EMOTIONAL_DNA, getEmotionalDnaForNiche,
 } from '../config/personaEmotionalDNA'
 import { ENERGY_CURVE_PRESETS } from '../config/energyCurvePresets'
+import { snapshotsForNiche } from '../config/memorySnapshots'
 
 /** Simple deterministic hash — same string → same integer.
  *  Not cryptographic but suitable for pick-by-modulo. */
@@ -48,6 +49,8 @@ export interface NarratorDnaSelection {
   /** May be null if niche has no DNA mapped — caller falls back to generic. */
   emotionalDna: PersonaEmotionalDNA | null
   energyCurve: EnergyCurvePreset
+  /** v5.2 — Sampled memory snapshots from niche library (5 per pack, deduped). */
+  memorySnapshots: MemorySnapshot[]
 }
 
 export interface SelectArgs {
@@ -73,12 +76,32 @@ export function selectNarratorDna(args: SelectArgs): NarratorDnaSelection {
   // 3. Pick energy curve from 5 presets
   const energyCurve = pickByHash(ENERGY_CURVE_PRESETS, seed, 'curve')
 
+  // 4. v5.2 — Sample 5 memory snapshots from niche library (deduped via hash offsets)
+  const nicheSnapshots = snapshotsForNiche(args.niche)
+  const memorySnapshots: MemorySnapshot[] = []
+  const usedSnapshotIds = new Set<string>()
+  const targetCount = Math.min(5, nicheSnapshots.length)
+  for (let i = 0; i < targetCount; i++) {
+    let idx = hashSeed(`${seed}:snapshot:${i}`) % nicheSnapshots.length
+    // Avoid duplicates within same pack — linear probe
+    let attempts = 0
+    while (usedSnapshotIds.has(nicheSnapshots[idx].id) && attempts < nicheSnapshots.length) {
+      idx = (idx + 1) % nicheSnapshots.length
+      attempts++
+    }
+    if (!usedSnapshotIds.has(nicheSnapshots[idx].id)) {
+      memorySnapshots.push(nicheSnapshots[idx])
+      usedSnapshotIds.add(nicheSnapshots[idx].id)
+    }
+  }
+
   console.info(
     `[storytelling/selectNarratorDna] seed=${seed.slice(-12)} → narrator=${narrator.id}, ` +
-    `dna=${emotionalDna?.niche ?? 'generic'}, curve=${energyCurve.id}`,
+    `dna=${emotionalDna?.niche ?? 'generic'}, curve=${energyCurve.id}, ` +
+    `snapshots=${memorySnapshots.length} (${memorySnapshots.map((s) => s.id).join(', ')})`,
   )
 
-  return { seed, narrator, emotionalDna, energyCurve }
+  return { seed, narrator, emotionalDna, energyCurve, memorySnapshots }
 }
 
 /** Verify all niches have at least one compatible archetype.

@@ -41,6 +41,9 @@ export type {
   PersonaEmotionalDNA,
   EnergyCurveId,
   EnergyCurvePreset,
+  // v5.2 Memory snapshots
+  MemorySnapshot,
+  MemorySnapshotState,
 } from './types'
 
 export { isStorytellingPack } from './types'
@@ -93,6 +96,9 @@ export {
   NARRATOR_ARCHETYPES, archetypesForNiche, narratorBrief,
   PERSONA_EMOTIONAL_DNA, getEmotionalDnaForNiche, emotionalDnaBrief,
   ENERGY_CURVE_PRESETS, getEnergyCurvePreset, energyCurveBrief,
+  // v5.2 — Memory snapshots + Visual-First Writing
+  MEMORY_SNAPSHOTS, snapshotsForNiche, snapshotsBrief,
+  VISUAL_FIRST_WRITING_PROMPT,
 } from './config'
 
 // v5.1 — Selector resolver

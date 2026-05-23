@@ -216,6 +216,8 @@ export async function generateStorytellingPack(
       narratorArchetypeId:  selection.narrator.id,
       energyCurveId:        selection.energyCurve.id,
       randomSeed:           selection.seed,
+      // v5.2 — Memory snapshot IDs sampled for this pack
+      memorySnapshotIds:    selection.memorySnapshots.map((s) => s.id),
     },
   }
 

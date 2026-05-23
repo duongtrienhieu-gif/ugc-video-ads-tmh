@@ -150,3 +150,11 @@ export {
   getEnergyCurvePreset,
   energyCurveBrief,
 } from './energyCurvePresets'
+
+// v5.2 — Memory snapshots + Visual-First Writing
+export {
+  MEMORY_SNAPSHOTS,
+  snapshotsForNiche,
+  snapshotsBrief,
+  VISUAL_FIRST_WRITING_PROMPT,
+} from './memorySnapshots'

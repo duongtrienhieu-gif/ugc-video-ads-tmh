@@ -282,6 +282,30 @@ export interface EnergyCurvePreset {
   pacingFlavor: string
 }
 
+/** Memory snapshot emotional state — categorization for sampling.
+ *  Different from micro-realism (v4.4 — short embodied details).
+ *  Snapshots = FULL mini-scenes with setting + action + meaning. */
+export type MemorySnapshotState =
+  | 'physical-discomfort'   // body friction in concrete moment
+  | 'shame-mirror'          // mirror confrontation moments
+  | 'avoidance-public'      // public self-conscious avoidance
+  | 'family-witness'        // family member notices/asks
+  | 'private-moment'        // alone, intimate, hidden
+  | 'fatigue-cognitive'     // energy/cognitive collapse
+  | 'identity-shift'        // don't recognize self anymore
+  | 'failed-attempt-trace'  // objects/routines that failed
+  | 'social-comparison'     // comparing self to others
+  | 'narrative-pivot'       // moment of catalyst (discovery)
+
+/** Full memory snapshot — mini-scene with setting + action + meaning. */
+export interface MemorySnapshot {
+  id: string                    // 'haircare-shower-counting'
+  niche: NicheKey
+  emotionalState: MemorySnapshotState
+  /** Full Vietnamese scene — 1-2 sentences, embodied. */
+  scene: string
+}
+
 /** Pacing class — cross-pack rhythm orchestration. Different sections
  *  have different pacing density để chống monotony. v4.6. */
 export type PacingClass =
@@ -677,6 +701,11 @@ export interface StorytellingMeta {
   energyCurveId?: EnergyCurveId
   /** Random seed used for narrator/DNA/curve selection. Caller can re-use. */
   randomSeed?: string
+
+  // v5.2 — Memory Snapshot sampling
+  /** IDs of memory snapshots sampled for this pack. For telemetry + future
+   *  anti-repetition tracker. */
+  memorySnapshotIds?: string[]
 }
 
 /** Pack output — extends LandingPagePack shape để OutputPanel render được

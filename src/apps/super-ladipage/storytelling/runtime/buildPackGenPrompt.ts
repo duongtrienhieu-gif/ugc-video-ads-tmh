@@ -44,6 +44,10 @@ import {
 import { narratorBrief } from '../config/narratorArchetypes'
 import { emotionalDnaBrief } from '../config/personaEmotionalDNA'
 import { energyCurveBrief } from '../config/energyCurvePresets'
+import {
+  snapshotsBrief,
+  VISUAL_FIRST_WRITING_PROMPT,
+} from '../config/memorySnapshots'
 import type { NarratorDnaSelection } from './selectNarratorDna'
 
 // Note: imagePurposeRoleInstruction / cameraLanguageInstruction /
@@ -186,6 +190,7 @@ export function buildPackGenUserPrompt(
   //   Narrator identity drives wording / pacing / shame / lifestyle.
   //   DNA gives niche-specific emotional vocabulary.
   //   Energy curve sets emotional movement style.
+  // v5.2 — Memory snapshots library injected after DNA
   const narratorBlock = `═══ NARRATOR (v5.1 — human variation engine) ═══
 ${narratorBrief(selection.narrator)}
 
@@ -193,11 +198,15 @@ ${selection.emotionalDna ? emotionalDnaBrief(selection.emotionalDna) : '(no nich
 
 ${energyCurveBrief(selection.energyCurve)}
 
+═══ MEMORY SNAPSHOTS (v5.2 — scene library for this pack) ═══
+${snapshotsBrief(selection.memorySnapshots)}
+
 INSTRUCTION:
 - Embody this narrator's voice throughout. NOT a generic "tôi".
 - Use 1-2 shame patterns + 1-2 contradictions as story moments.
 - Surface social-context preferences naturally.
-- Sample 2-3 embodied vocabulary items across sections — vary across packs.
+- Weave 2-4 scenes from MEMORY SNAPSHOTS library across sections — vary across packs.
+- Sample 2-3 embodied vocabulary items from DNA across sections.
 - Energy curve guides emotional movement — don't force, but tendency.`
 
   return `Generate ${plan.length} sections cho niche "${input.niche}" — emotional intensity ${input.emotionalIntensity}, pacing ${input.pacingType}.
@@ -211,6 +220,8 @@ ${hookEnforcement}
 ${beliefShiftDirective}
 
 ${MICRO_REALISM_PROMPT}
+
+${VISUAL_FIRST_WRITING_PROMPT}
 
 ${softCtaDirective}
 
