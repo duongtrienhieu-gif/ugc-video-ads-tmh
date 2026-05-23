@@ -227,6 +227,28 @@ export type SocialContext =
   | 'solitary-internal'     // alone, mirror, bedroom, private moments
   | 'community-social'      // friends, neighbors, gatherings
 
+/** v5.7 Chunk 3 — Underlying psychology DRIVER (orthogonal to personalityVibe).
+ *  PersonalityVibe is surface tone (warm-maternal, gentle-introvert). Psychology
+ *  driver is the deeper FORCE shaping voice: what pulls this person forward
+ *  through the story, what they're defending, what they actually fear.
+ *
+ *  Without this axis, all narrators converge to "reflective-middle-aged-woman"
+ *  variants regardless of surface tone. */
+export type NarratorPsychologyDriver =
+  | 'reflective-acceptance'    // existing default — quiet self-acceptance
+  | 'practical-no-bullshit'    // doesn't tolerate fluff; gets to point
+  | 'skeptical-defensive'      // tests everything; assumes worst
+  | 'ego-driven-image'         // image-conscious; appearance matters
+  | 'emotionally-tired'        // depleted; can't muster strong emotions
+  | 'blunt-cộc'                // direct/sharp; doesn't soften
+  | 'oversharing-anxious'      // dumps too much context; needs to be heard
+  | 'socially-anxious'         // avoids judgment; comparing self constantly
+  | 'bitter-resentful'         // carries grievance; mild anger underneath
+  | 'vanity-sensitive'         // appearance is real stake; not minimized
+  | 'emotionally-detached'     // observes self from distance; flat affect
+  | 'insecure-doubting'        // questions own perception; needs validation
+  | 'driven-ambitious'         // hates downtime; sees mediocre as failure
+
 /** Narrator archetype — pre-selected per pack. Drives wording / pacing /
  *  shame / lifestyle / CTA tone / visual environment. */
 export interface NarratorArchetype {
@@ -237,6 +259,10 @@ export interface NarratorArchetype {
   occupation: string
   lifestyle: string                 // setting summary
   personalityVibe: PersonalityVibeKey
+  /** v5.7 Chunk 3 — underlying psychology force shaping voice.
+   *  Orthogonal to personalityVibe. Drives MEANING of shame patterns,
+   *  contradictions, voice. */
+  psychologyDriver: NarratorPsychologyDriver
   /** How they tend to phrase things. */
   wordingTendency: string
   /** What they're embarrassed about. Per-narrator concrete shame moments. */
