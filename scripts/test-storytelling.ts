@@ -25,8 +25,9 @@
 // Runtime estimate: 5-15 minutes (10 packs × 30-60s each)
 // ═════════════════════════════════════════════════════════════════════
 
-import { mkdirSync, writeFileSync, readFileSync, existsSync } from 'node:fs'
+import { mkdirSync, writeFileSync, existsSync } from 'node:fs'
 import { join, dirname } from 'node:path'
+import dotenv from 'dotenv'
 
 import type {
   ProtagonistProfile, StorytellingInput,
@@ -37,18 +38,7 @@ import { buildProductBrief } from '../src/apps/super-ladipage/storytelling/runti
 import { SECTION_BLUEPRINTS } from '../src/apps/super-ladipage/storytelling/config/sectionBlueprints'
 
 // ─── Load .env.local if present ──────────────────────────────────────
-function loadEnv() {
-  const envPath = '.env.local'
-  if (!existsSync(envPath)) return
-  const lines = readFileSync(envPath, 'utf-8').split('\n')
-  for (const line of lines) {
-    const m = line.match(/^([A-Z_]+)=(.*)$/)
-    if (m && !process.env[m[1]]) {
-      process.env[m[1]] = m[2].replace(/^["']|["']$/g, '')
-    }
-  }
-}
-loadEnv()
+dotenv.config({ path: '.env.local' })
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY
 const KIE_API_KEY    = process.env.KIE_API_KEY
@@ -476,21 +466,50 @@ function writeSummary(outDir: string, results: PackRunResult[], totalRuntimeSec:
   )
 }
 
+/** Sleep helper for inter-pack delays. */
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
 // ─── Main ────────────────────────────────────────────────────────────
 async function main() {
   const stamp = isoStamp()
   const outDir = join('test-output', stamp)
   ensureDir(outDir)
 
+  // Anti rate-limit: 60s delay between packs (Google Gemini free tier
+  // ~10 req/min — 10 packs × 2 attempts ÷ 60s = 20 calls/10min = OK)
+  // Override via INTER_PACK_DELAY_SEC env var. Set to 0 to disable.
+  const interPackDelaySec = process.env.INTER_PACK_DELAY_SEC !== undefined
+    ? Number(process.env.INTER_PACK_DELAY_SEC)
+    : 60
+
+  // SINGLE_NICHE=skincare → only run that 1 niche (for debugging)
+  // SINGLE_NICHE=2 → only run niche at index 2 (1-based)
+  let activeNiches = NICHES
+  if (process.env.SINGLE_NICHE) {
+    const key = process.env.SINGLE_NICHE
+    const byIdx = NICHES[parseInt(key, 10) - 1]
+    const bySlug = NICHES.find((n) => n.slug.includes(key) || n.input.niche.includes(key))
+    activeNiches = byIdx ? [byIdx] : bySlug ? [bySlug] : NICHES
+    console.log(`[storytelling-test] SINGLE_NICHE=${key} → only running: ${activeNiches.map((n) => n.label).join(', ')}`)
+  }
+
   console.log(`[storytelling-test] starting run, output → ${outDir}/`)
-  console.log(`[storytelling-test] generating ${NICHES.length} packs sequentially (~30-90s each)`)
+  console.log(`[storytelling-test] generating ${activeNiches.length} pack(s) sequentially (~30-90s each)`)
+  console.log(`[storytelling-test] inter-pack delay: ${interPackDelaySec}s (anti rate-limit)`)
   console.log('')
 
   const overallStart = Date.now()
   const results: PackRunResult[] = []
-  for (let i = 0; i < NICHES.length; i++) {
-    const r = await runPack(NICHES[i], outDir, i, NICHES.length)
+  for (let i = 0; i < activeNiches.length; i++) {
+    const r = await runPack(activeNiches[i], outDir, i, activeNiches.length)
     results.push(r)
+    // Inter-pack cooldown (skip after last pack)
+    if (i < activeNiches.length - 1 && interPackDelaySec > 0) {
+      console.log(`[storytelling-test]   ⏸ cooldown ${interPackDelaySec}s before next pack...`)
+      await sleep(interPackDelaySec * 1000)
+    }
   }
   const totalRuntimeSec = (Date.now() - overallStart) / 1000
 
