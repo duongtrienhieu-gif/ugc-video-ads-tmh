@@ -303,6 +303,19 @@ async function runPack(niche: TestNiche, outDir: string, idx: number, total: num
     mdLines.push(`- Runtime: ${runtimeSec.toFixed(1)}s`)
     mdLines.push(`- Total words: ${totalWords}`)
     mdLines.push('')
+    // v5.6 — Surface variation engine selection so duplicate-output audits can
+    // verify that different packs are actually getting different narrators/curves/hooks.
+    mdLines.push('## Variation selection (v5.6 audit trail)')
+    mdLines.push(`- Seed: \`${result.selection.seed.slice(-20)}\``)
+    mdLines.push(`- Narrator: \`${result.selection.narrator.id}\``)
+    mdLines.push(`- Emotional DNA: \`${result.selection.emotionalDna?.niche ?? 'generic'}\``)
+    mdLines.push(`- Energy curve: \`${result.selection.energyCurve.id}\` — ${result.selection.energyCurve.label}`)
+    mdLines.push(`- Hook pattern (s1): \`${result.selection.hookPattern}\``)
+    mdLines.push(`- Hook axis (s1): \`${result.selection.hookAxis}\``)
+    mdLines.push(`- Belief catalyst (s5): \`${result.selection.beliefCatalystType}\``)
+    mdLines.push(`- Discovery channel (s6): \`${result.selection.discoveryChannel}\``)
+    mdLines.push(`- Memory snapshots: ${result.selection.memorySnapshots.map((m) => `\`${m.id}\``).join(', ')}`)
+    mdLines.push('')
     mdLines.push('## Per-section status')
     for (let i = 0; i < result.sections.length; i++) {
       const s = result.sections[i]
@@ -317,10 +330,30 @@ async function runPack(niche: TestNiche, outDir: string, idx: number, total: num
     for (let i = 0; i < result.sections.length; i++) {
       const s = result.sections[i]
       const bp = SECTION_BLUEPRINTS[s.id]
+      // v5.6 — Adjusted tension reflects energy curve delta (was always baseline before).
+      const tensionDelta = result.selection.energyCurve.tensionDeltas[s.id] ?? 0
+      const adjTension = Math.max(0, Math.min(10, bp.tensionLevel + tensionDelta))
+      const tensionLabel = tensionDelta === 0
+        ? `tension ${adjTension}/10`
+        : `tension ${adjTension}/10 (base ${bp.tensionLevel}${tensionDelta > 0 ? '+' : ''}${tensionDelta})`
       mdLines.push(`## Chương ${i + 1} — ${s.title}`)
-      mdLines.push(`*\`${s.id}\` · ${bp.narrativeRole} · ${bp.rhythmProfile} · tension ${bp.tensionLevel}/10 · ${countWords(s.copy)} từ*`)
+      mdLines.push(`*\`${s.id}\` · ${bp.narrativeRole} · ${bp.rhythmProfile} · ${tensionLabel} · ${countWords(s.copy)} từ*`)
       mdLines.push('')
       mdLines.push(s.copy)
+      // v5.6 — Render reviews for trust-continuity (was invisible — only s.copy was shown).
+      if (s.reviews && s.reviews.length > 0) {
+        mdLines.push('')
+        mdLines.push('**Reviews (v5.5 Trust Realism):**')
+        mdLines.push('')
+        for (const r of s.reviews) {
+          mdLines.push(`> "${r.quote}"`)
+          if (r.author || r.meta) {
+            const tail = [r.author, r.meta].filter(Boolean).join(' · ')
+            mdLines.push(`> — ${tail}`)
+          }
+          mdLines.push('')
+        }
+      }
       mdLines.push('')
       mdLines.push('---')
       mdLines.push('')

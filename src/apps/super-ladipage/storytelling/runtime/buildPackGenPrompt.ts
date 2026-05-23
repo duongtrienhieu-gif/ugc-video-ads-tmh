@@ -53,7 +53,6 @@ import { discoveryChannelBrief } from '../config/discoveryChannels'
 import {
   RHYTHM_ENGINE_PROMPT,
   rhythmDirectiveFor,
-  rhythmStatsFor,
   sectionRhythmHint,
 } from '../config/rhythmEngine'
 import { SECTION_PACING_MAP } from '../config/pacingOrchestration'
@@ -82,7 +81,9 @@ export function buildProductBrief(productName: string, niche: string, painPoint?
   return `${productName} — ${niche}${pain}`
 }
 
-/** Per-section directive block. ~50-70 tokens, more for special sections. */
+/** Per-section directive block. ~40-55 tokens base, more for special sections.
+ *  v5.6 — Compressed static directives (was ~8 lines/section, now ~3-4) to lift
+ *  narrator/variation signal-to-noise. Rhythm + tension + density merged onto one line. */
 function buildSectionDirective(
   plan: SectionPlan,
   index: number,
@@ -94,97 +95,107 @@ function buildSectionDirective(
 
   const lines: string[] = []
   lines.push(`SECTION ${sectionNum} — id="${bp.id}" (${bp.role})`)
-  // v4.6 — Pacing class (cross-pack rhythm orchestration)
-  lines.push(`  ${pacingClassDirective(bp.id)}`)
-  // v5.4 — Rhythm engine (typography pacing per pacing class)
+
+  // v5.6 — Energy curve applies delta to baseline tension. 5 presets now meaningfully
+  // shift per-section tension targets instead of being prompt flavor.
+  const tensionDelta = selection.energyCurve.tensionDeltas[bp.id] ?? 0
+  const adjustedTension = Math.max(0, Math.min(10, bp.tensionLevel + tensionDelta))
+
+  // v5.6 — Consolidated meta line: rhythm + tension + density + pacing class.
   const pacingClass = SECTION_PACING_MAP[bp.id]
-  lines.push(`  RHYTHM TYPOGRAPHY: ${rhythmDirectiveFor(pacingClass)}`)
-  lines.push(`  RHYTHM STATS: ${rhythmStatsFor(pacingClass)}`)
+  const densityNote = bp.imageRequirement.countDefault === 0 ? ' / text-only' : ''
+  lines.push(`  META: rhythm=${bp.rhythmProfile} · tension=${adjustedTension}/10 · density=${bp.textDensity}${densityNote} · pacing=${pacingClass}`)
+
+  // v5.6 — Compressed rhythm guidance (was 3 lines: typography + stats + hint).
   const sectionHint = sectionRhythmHint(bp.id)
-  if (sectionHint) lines.push(`  RHYTHM HINT: ${sectionHint}`)
-  // v5.5 — Visual coherence (narrator + section)
-  const visualCoh = visualCoherenceSummary(selection.narrator, bp.id)
-  lines.push(`  ${visualCoh}`)
-  lines.push(`  rhythm: ${bp.rhythmProfile} — ${rhythmInstructionFor(bp.rhythmProfile)}`)
+  lines.push(`  RHYTHM: ${rhythmInstructionFor(bp.rhythmProfile)} | typography: ${rhythmDirectiveFor(pacingClass)}${sectionHint ? ` | ${sectionHint}` : ''}`)
 
-  // 4-line dynamics directive (role/function/curiosity/transition)
+  // v5.5 — Visual coherence (narrator + section).
+  lines.push(`  ${visualCoherenceSummary(selection.narrator, bp.id)}`)
+
+  // v5.6 — Compressed dynamics (was 4 lines: role + function + curiosity + transition).
   const dynamics = composeDynamicsDirective(
-    bp.narrativeRole,
-    bp.emotionalFunction,
-    bp.curiosityMechanic,
-    bp.transitionPsychology,
-  )
-  for (const line of dynamics.split('\n')) lines.push(`  ${line}`)
+    bp.narrativeRole, bp.emotionalFunction, bp.curiosityMechanic, bp.transitionPsychology,
+  ).split('\n').join(' | ')
+  lines.push(`  DYNAMICS: ${dynamics}`)
+  lines.push(`  RETENTION: ${retentionInstructionFor(bp.retentionMechanic)} | PACING: ${pacingClassDirective(bp.id)}`)
 
-  // Retention micro-pull (optional — null for closure)
-  lines.push(`  RETENTION: ${retentionInstructionFor(bp.retentionMechanic)}`)
-
-  // Tension target
-  lines.push(`  TENSION: ${bp.tensionLevel}/10`)
-
-  // Text density hint
-  lines.push(`  DENSITY: ${bp.textDensity}${bp.imageRequirement.countDefault === 0 ? ' (no image — pure text breathing)' : ''}`)
-
-  // Hook pattern enforcement for section 1 (hook-interrupt)
-  if (bp.hookPattern && bp.id === 'hook-interrupt') {
-    const hp = HOOK_PATTERNS[bp.hookPattern]
-    lines.push(`  HOOK PATTERN: ${bp.hookPattern} — ${hp.description}`)
-    lines.push(`  HOOK EXAMPLES (style only, do not copy): ${hp.examples.slice(0, 2).join(' / ')}`)
-    // v5.3 — Hook emotional axis per pack (combined with pattern = unique combo)
+  // ─── Hook pattern (section 1 only) ─────────────────────────────────
+  // v5.6 — Use seed-picked hookPattern (selection.hookPattern), NOT blueprint default.
+  //        Removed verbatim hp.examples leak — was causing every pack to start with
+  //        "Tôi bắt đầu ghét buổi sáng" because example #1 of 'emotional-rejection'
+  //        was injected and Gemini copied it. Description-only now.
+  if (bp.id === 'hook-interrupt') {
+    const hp = HOOK_PATTERNS[selection.hookPattern]
+    lines.push(`  HOOK PATTERN (per-pack): ${selection.hookPattern} — ${hp.description}`)
+    lines.push(`  ⛔ KHÔNG dùng câu mẫu cố định. Sinh phrasing mới từ pain + narrator's voice.`)
+    lines.push(`  ⛔ NEVER copy: "Tôi bắt đầu ghét buổi sáng" / "Tôi không còn thấy thoải mái khi soi gương" / bất kỳ phrase nào sound generic-template.`)
     for (const line of hookAxisBrief(selection.hookAxis).split('\n')) {
       lines.push(`  ${line}`)
     }
   }
 
-  // v5.3 — Discovery channel for section 6 (soft-reveal)
+  // ─── Discovery channel (section 6) ─────────────────────────────────
   if (bp.id === 'soft-reveal') {
     for (const line of discoveryChannelBrief(selection.discoveryChannel).split('\n')) {
       lines.push(`  ${line}`)
     }
+    // v5.6 — Anti-mechanical structure rule. Was: every pack ended with
+    // "Tôi tìm thấy một sản phẩm tên là [X]" mechanical phrasing.
+    lines.push(`  ⛔ STRUCTURE BAN: KHÔNG dùng template "tìm thấy/thấy một sản phẩm tên là [X]". `
+      + `Product name xuất hiện tự nhiên trong dòng narrator chia sẻ, không phải dòng giới thiệu mechanical.`)
   }
 
-  // 🔥 v4.2 — Belief shift specific directive for section 5
+  // ─── 🔥 Belief shift (section 5) ───────────────────────────────────
+  // v5.6 — Removed oldBelief/newFrame verbatim text leak (was causing
+  //        "cơ thể đang thiếu gì đó để giữ ổn định bên trong" / "nang tóc đang yếu đi"
+  //        to be copied word-for-word). Now: structure + niche topic hint only.
+  //        Catalyst is seed-picked (single catalyst per pack) instead of "choose 1 of".
   if (bp.id === 'belief-shift') {
     const reframe = getReframeForNiche(input.niche)
-    const catalystKeys = Object.keys(BELIEF_SHIFT_CATALYSTS) as Array<keyof typeof BELIEF_SHIFT_CATALYSTS>
-    lines.push(`  🔥 BELIEF SHIFT — CONVERSION CORE for this section`)
-    lines.push(`  STRUCTURE: [1] external catalyst (CHOOSE 1 of: ${catalystKeys.join(' / ')}) → [2] reframe → [3] permission`)
-    lines.push(`  REFRAME REFERENCE for niche "${input.niche}":`)
-    lines.push(`    OLD BELIEF (reader carries): ${reframe.oldBelief}`)
-    lines.push(`    NEW FRAME (open door): ${reframe.newFrame}`)
-    lines.push(`  PRODUCT NAME: KHÔNG mention in this section. Save for next section (soft-reveal).`)
+    const catalystSpec = BELIEF_SHIFT_CATALYSTS[selection.beliefCatalystType]
+    lines.push(`  🔥 BELIEF SHIFT — CONVERSION CORE`)
+    lines.push(`  [1] CATALYST (per-pack): ${selection.beliefCatalystType} — ${catalystSpec.description}`)
+    lines.push(`      ⛔ KHÔNG dùng catalyst examples nguyên xi. Sinh tình huống mới theo style.`)
+    lines.push(`  [2] REFRAME structure: "Có thể vấn đề không phải [old assumption reader holds about niche '${input.niche}'], `
+      + `mà là [new actionable frame — body-system-level cause that supplement/care can support]"`)
+    lines.push(`      ⛔ KHÔNG quote câu mẫu. KHÔNG copy phrasing "thiếu gì đó để giữ ổn định" / "nang tóc đang yếu đi" / "cơ thể không phục hồi như trước".`)
+    lines.push(`      Topic hint: reframe about ${reframe.oldBelief.slice(0, 40)}... → new frame open-door (KHÔNG miracle, KHÔNG promise).`)
+    lines.push(`  [3] PERMISSION: internal acceptance to seek solution — sinh từ narrator's contradictions, không dùng template line.`)
+    lines.push(`  ⛔ KHÔNG mention product name in this section. Reveal lives in next section.`)
+    lines.push(`  ⛔ KHÔNG end with "Câu nói đó cứ ám ảnh tôi" template — that phrase is banned cross-pack.`)
   }
 
-  // v4.3 — Visual plan per section (for text/visual alignment)
+  // v4.3 — Visual plan per section (for text/visual alignment).
   if (bp.imagePurposeRoles && bp.imagePurposeRoles.length > 0) {
     const camera = bp.cameraLanguage?.length ? `, camera=[${bp.cameraLanguage.join(', ')}]` : ''
-    lines.push(`  VISUAL PLAN: roles=[${bp.imagePurposeRoles.join(', ')}]${camera}`)
+    lines.push(`  VISUAL: roles=[${bp.imagePurposeRoles.join(', ')}]${camera}`)
   } else if (bp.imageRequirement.countDefault === 0) {
-    lines.push(`  VISUAL PLAN: text-only — no image generation for this section`)
+    lines.push(`  VISUAL: text-only`)
   }
 
-  // v4.4 — Micro-realism injection (embodied lived moments)
+  // v4.4 — Micro-realism injection.
   const microRealism = microRealismDirectiveFor(bp.id)
   if (microRealism) {
     lines.push(`  ${microRealism}`)
   }
 
-  // v4.5 — Trust continuity special output format (section 10)
+  // ─── Trust continuity (section 10) — v5.6 cleanup ──────────────────
+  // Removed verbatim example "(vd: 'Sau khi share câu chuyện này...')" which
+  // caused Pack 02 to output near-identical phrasing.
   if (bp.id === 'trust-continuity') {
-    lines.push(`  📋 OUTPUT FORMAT (trust-continuity): instead of long copy, output ALSO a "reviews" array of 3 mini quotes.`)
-    lines.push(`  Section JSON shape: { id: "trust-continuity", title: "...", copy: "[short intro line]", reviews: [{ quote, author?, meta? }, ...] }`)
-    lines.push(`  copy: 1 ngắn intro line dẫn vào quotes (vd: "Sau khi share câu chuyện này, có vài bạn nhắn lại...")`)
-    lines.push(`  reviews: 3 quotes DIFFERENT voices (different ages/relationships), casual FB-comment vibe`)
+    lines.push(`  📋 OUTPUT FORMAT: { id, title, copy, reviews: [{ quote, author?, meta? }, ...] }`)
+    lines.push(`  copy: 5-15 từ intro phù hợp tone narrator dẫn vào quotes. Phrasing tự nhiên, KHÔNG dùng câu mẫu.`)
+    lines.push(`  reviews: 3 quotes — DIFFERENT voices (ages, relationships, niches details), casual FB-comment vibe`)
     lines.push(`  author: short Vietnamese descriptor ("Chị Lan, 42" / "Hà, 30" / "Một bạn đọc")`)
-    lines.push(`  Quotes phải DIVERSE — different niches details, different lengths, casual imperfect Vietnamese`)
-    lines.push(`  KHÔNG: Shopee/TikTok screenshot vibe, star ratings, "5/5 sao", formal testimonial language`)
+    lines.push(`  Quotes phải casual imperfect Vietnamese — KHÔNG Shopee/TikTok rating, KHÔNG "5/5 sao", KHÔNG formal testimonial.`)
   }
 
-  // v4.5 — Soft CTA specific directive (section 11)
+  // ─── Soft CTA (section 11) ─────────────────────────────────────────
   if (bp.id === 'soft-cta') {
     lines.push(`  💌 ${buildSoftCtaDirective()}`)
     lines.push(`  Length: 60-100 từ. KHÔNG benefit push. KHÔNG urgency.`)
-    lines.push(`  Self-test: thay tên product bằng "cuốn sách tôi đọc" — section vẫn make sense → PASS. Nếu fail → too salesy.`)
+    lines.push(`  Self-test: thay tên product bằng "cuốn sách tôi đọc" — section vẫn make sense → PASS.`)
   }
 
   return lines.join('\n')

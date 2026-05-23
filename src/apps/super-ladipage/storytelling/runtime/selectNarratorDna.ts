@@ -14,7 +14,7 @@
 // ─────────────────────────────────────────────────────────────────────
 
 import type {
-  EnergyCurvePreset, MemorySnapshot, NarratorArchetype, NicheKey, PersonaEmotionalDNA,
+  EnergyCurvePreset, HookPattern, MemorySnapshot, NarratorArchetype, NicheKey, PersonaEmotionalDNA,
 } from '../types'
 import { NARRATOR_ARCHETYPES, archetypesForNiche } from '../config/narratorArchetypes'
 import {
@@ -26,6 +26,11 @@ import {
   HOOK_AXES, NICHE_HOOK_AXIS_BIAS,
   type HookEmotionalAxis,
 } from '../config/hookVariation'
+import { HOOK_PATTERNS } from '../config/narrativeHooks'
+import {
+  BELIEF_SHIFT_CATALYSTS,
+  type BeliefShiftCatalystType,
+} from '../config/beliefShiftEngine'
 import {
   DISCOVERY_CHANNELS,
   type DiscoveryChannel,
@@ -63,6 +68,12 @@ export interface NarratorDnaSelection {
   hookAxis: HookEmotionalAxis
   /** v5.3 — Sampled discovery channel for section 6. */
   discoveryChannel: DiscoveryChannel
+  /** v5.6 — Sampled hook pattern for section 1 (overrides blueprint default).
+   *  Per-pack variation across all 6 patterns instead of hardcoded 'emotional-rejection'. */
+  hookPattern: HookPattern
+  /** v5.6 — Sampled belief shift catalyst type for section 5.
+   *  Forces single deterministic catalyst per pack instead of letting Gemini pick from list. */
+  beliefCatalystType: BeliefShiftCatalystType
 }
 
 export interface SelectArgs {
@@ -118,15 +129,28 @@ export function selectNarratorDna(args: SelectArgs): NarratorDnaSelection {
   const channels = Object.keys(DISCOVERY_CHANNELS) as DiscoveryChannel[]
   const discoveryChannel = pickByHash(channels, seed, 'discovery')
 
+  // 7. v5.6 — Sample hook pattern per pack (6 patterns).
+  //    Blueprint's hardcoded hookPattern was causing every pack across niches
+  //    to repeat the same example phrase ("Tôi bắt đầu ghét buổi sáng"). Now varies per seed.
+  const hookPatternKeys = Object.keys(HOOK_PATTERNS) as HookPattern[]
+  const hookPattern = pickByHash(hookPatternKeys, seed, 'hookPattern')
+
+  // 8. v5.6 — Sample belief catalyst type per pack (5 catalyst types).
+  //    Previously prompt said "CHOOSE 1 of: ..." → Gemini converged to same catalyst.
+  //    Forced deterministic per-pack choice = diverse catalyst across packs.
+  const catalystKeys = Object.keys(BELIEF_SHIFT_CATALYSTS) as BeliefShiftCatalystType[]
+  const beliefCatalystType = pickByHash(catalystKeys, seed, 'beliefCatalyst')
+
   console.info(
     `[storytelling/selectNarratorDna] seed=${seed.slice(-12)} → narrator=${narrator.id}, ` +
     `dna=${emotionalDna?.niche ?? 'generic'}, curve=${energyCurve.id}, ` +
-    `snapshots=${memorySnapshots.length}, hook=${hookAxis}, discovery=${discoveryChannel}`,
+    `snapshots=${memorySnapshots.length}, hook=${hookAxis}, discovery=${discoveryChannel}, ` +
+    `pattern=${hookPattern}, catalyst=${beliefCatalystType}`,
   )
 
   return {
     seed, narrator, emotionalDna, energyCurve, memorySnapshots,
-    hookAxis, discoveryChannel,
+    hookAxis, discoveryChannel, hookPattern, beliefCatalystType,
   }
 }
 
