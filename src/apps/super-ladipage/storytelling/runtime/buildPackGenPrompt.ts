@@ -1,72 +1,59 @@
 // ═════════════════════════════════════════════════════════════════════
 // Storytelling Engine — pack-gen user prompt builder
 //
-// Compose per-section directives từ config layer. Each section ~50-70
-// tokens. Total ~600-700 tokens for 10 sections.
+// v5.7 architecture shift (per user feedback after first real test):
+//   KEEP CORE SYSTEM SMALL. Per-pack diversity lives in SAMPLING OBJECTS
+//   (narrator / hookAxis / memorySnapshot / reviewStyle / energyCurve /
+//   discoveryChannel), NOT in giant prompt rules.
 //
-// Directives consume v4 dynamics fields:
-//   - narrativeRole → 1-line role instruction
-//   - emotionalFunction → 1-line function instruction
-//   - curiosityMechanic → 1-line device instruction
-//   - rhythmProfile → 1-line cadence constraint
-//   - transitionPsychology → 1-line hand-off instruction
-//   - retentionMechanic → 1-line pull instruction
-//   - hookPattern (section 1 only) → enforcement
+// Dropped from top-level (were duplicating per-section directives):
+//   - HOOK_ENFORCEMENT_PROMPT      → covered by section 1 directive
+//   - BELIEF_SHIFT_PROMPT          → covered by section 5 directive
+//   - SOFT_CTA_PROMPT              → covered by section 11 directive
+//   - RHYTHM_ENGINE_PROMPT         → covered by per-section RHYTHM line
+//   - RETENTION_RESTRAINT_PROMPT   → covered by ENGINE_CORE_PHILOSOPHY
+//   - MICRO_REALISM_PROMPT         → covered by ENGINE_CORE_PHILOSOPHY + per-section micro-realism
+//   - VISUAL_FIRST_WRITING_PROMPT  → covered by ENGINE_CORE_PHILOSOPHY
+//   - VISUAL_COHERENCE_PROMPT      → was Phase 4 image gen; not needed for text gen
+//
+// Also dropped: v5.6 "⛔ KHÔNG copy ..." anti-template bans (hook + belief +
+// soft-reveal). Structural fix (per-pack hookPattern / beliefCatalystType
+// sampling + structure-only reframe) handles the leak — anti-rules were
+// belt-and-suspenders that contributed to prompt entropy.
 // ═════════════════════════════════════════════════════════════════════
 
 import type {
   ProtagonistProfile, SectionId, SectionPlan, StorytellingInput,
 } from '../types'
 import { SECTION_BLUEPRINTS } from '../config/sectionBlueprints'
-import {
-  composeDynamicsDirective,
-} from '../config/narrativeDynamics'
-import { HOOK_PATTERNS, HOOK_ENFORCEMENT_PROMPT } from '../config/narrativeHooks'
+import { composeDynamicsDirective } from '../config/narrativeDynamics'
+import { HOOK_PATTERNS } from '../config/narrativeHooks'
 import { rhythmInstructionFor } from '../config/rhythmVariance'
 import { retentionInstructionFor } from '../config/retentionPatterns'
-import { RETENTION_RESTRAINT_PROMPT } from '../config/retentionPatterns'
 import {
-  BELIEF_SHIFT_PROMPT,
   BELIEF_SHIFT_CATALYSTS,
   getReframeForNiche,
 } from '../config/beliefShiftEngine'
-import {
-  MICRO_REALISM_PROMPT,
-  microRealismDirectiveFor,
-} from '../config/microRealismHooks'
-import {
-  SOFT_CTA_PROMPT,
-  buildSoftCtaDirective,
-} from '../config/softCtaPatterns'
+import { microRealismDirectiveFor } from '../config/microRealismHooks'
+import { buildSoftCtaDirective } from '../config/softCtaPatterns'
 import {
   pacingClassDirective,
+  SECTION_PACING_MAP,
 } from '../config/pacingOrchestration'
 import { narratorBrief } from '../config/narratorArchetypes'
 import { emotionalDnaBrief } from '../config/personaEmotionalDNA'
 import { energyCurveBrief } from '../config/energyCurvePresets'
-import {
-  snapshotsBrief,
-  VISUAL_FIRST_WRITING_PROMPT,
-} from '../config/memorySnapshots'
+import { snapshotsBrief } from '../config/memorySnapshots'
 import { hookAxisBrief } from '../config/hookVariation'
 import { discoveryChannelBrief } from '../config/discoveryChannels'
 import {
-  RHYTHM_ENGINE_PROMPT,
   rhythmDirectiveFor,
   sectionRhythmHint,
 } from '../config/rhythmEngine'
-import { SECTION_PACING_MAP } from '../config/pacingOrchestration'
 import { TRUST_REALISM_PROMPT } from '../config/trustRealismLibrary'
-import {
-  VISUAL_COHERENCE_PROMPT,
-  visualCoherenceSummary,
-} from '../config/visualStoryCoupling'
+import { visualCoherenceSummary } from '../config/visualStoryCoupling'
+import { ENGINE_CORE_PHILOSOPHY } from '../config/enginePhilosophy'
 import type { NarratorDnaSelection } from './selectNarratorDna'
-
-// Note: imagePurposeRoleInstruction / cameraLanguageInstruction /
-// NECESSITY_TEST_PROMPT / CAMERA_ANTI_DRIFT_PROMPT are used by Phase 4
-// image gen pipeline (not text gen). Imported via barrel by image gen.
-// In text-gen we inject 1-line VISUAL PLAN per section only.
 
 /** Compose protagonist brief — 1-2 lines, used in system prompt context. */
 export function buildProtagonistBrief(p: ProtagonistProfile): string {
@@ -81,9 +68,10 @@ export function buildProductBrief(productName: string, niche: string, painPoint?
   return `${productName} — ${niche}${pain}`
 }
 
-/** Per-section directive block. ~40-55 tokens base, more for special sections.
- *  v5.6 — Compressed static directives (was ~8 lines/section, now ~3-4) to lift
- *  narrator/variation signal-to-noise. Rhythm + tension + density merged onto one line. */
+/** Per-section directive block. ~30-45 tokens base, more for special sections.
+ *  v5.7 — Further compression after Phase A audit. Removed v5.6 anti-template
+ *  bans (sampling architecture handles diversity now). Merged dynamics +
+ *  retention + pacing onto 1 line. */
 function buildSectionDirective(
   plan: SectionPlan,
   index: number,
@@ -96,40 +84,36 @@ function buildSectionDirective(
   const lines: string[] = []
   lines.push(`SECTION ${sectionNum} — id="${bp.id}" (${bp.role})`)
 
-  // v5.6 — Energy curve applies delta to baseline tension. 5 presets now meaningfully
-  // shift per-section tension targets instead of being prompt flavor.
+  // Energy curve applies delta to baseline tension.
   const tensionDelta = selection.energyCurve.tensionDeltas[bp.id] ?? 0
   const adjustedTension = Math.max(0, Math.min(10, bp.tensionLevel + tensionDelta))
 
-  // v5.6 — Consolidated meta line: rhythm + tension + density + pacing class.
+  // META: rhythm + tension + density + pacing class on one line.
   const pacingClass = SECTION_PACING_MAP[bp.id]
   const densityNote = bp.imageRequirement.countDefault === 0 ? ' / text-only' : ''
   lines.push(`  META: rhythm=${bp.rhythmProfile} · tension=${adjustedTension}/10 · density=${bp.textDensity}${densityNote} · pacing=${pacingClass}`)
 
-  // v5.6 — Compressed rhythm guidance (was 3 lines: typography + stats + hint).
+  // RHYTHM (compressed: instruction + typography + section hint on one line).
   const sectionHint = sectionRhythmHint(bp.id)
-  lines.push(`  RHYTHM: ${rhythmInstructionFor(bp.rhythmProfile)} | typography: ${rhythmDirectiveFor(pacingClass)}${sectionHint ? ` | ${sectionHint}` : ''}`)
+  lines.push(`  RHYTHM: ${rhythmInstructionFor(bp.rhythmProfile)} | ${rhythmDirectiveFor(pacingClass)}${sectionHint ? ` | ${sectionHint}` : ''}`)
 
-  // v5.5 — Visual coherence (narrator + section).
+  // Visual coherence (narrator + section).
   lines.push(`  ${visualCoherenceSummary(selection.narrator, bp.id)}`)
 
-  // v5.6 — Compressed dynamics (was 4 lines: role + function + curiosity + transition).
+  // v5.7 — DYNAMICS + RETENTION + PACING merged onto 1-2 lines.
   const dynamics = composeDynamicsDirective(
     bp.narrativeRole, bp.emotionalFunction, bp.curiosityMechanic, bp.transitionPsychology,
   ).split('\n').join(' | ')
   lines.push(`  DYNAMICS: ${dynamics}`)
-  lines.push(`  RETENTION: ${retentionInstructionFor(bp.retentionMechanic)} | PACING: ${pacingClassDirective(bp.id)}`)
+  lines.push(`  PULL: ${retentionInstructionFor(bp.retentionMechanic)} · ${pacingClassDirective(bp.id)}`)
 
   // ─── Hook pattern (section 1 only) ─────────────────────────────────
-  // v5.6 — Use seed-picked hookPattern (selection.hookPattern), NOT blueprint default.
-  //        Removed verbatim hp.examples leak — was causing every pack to start with
-  //        "Tôi bắt đầu ghét buổi sáng" because example #1 of 'emotional-rejection'
-  //        was injected and Gemini copied it. Description-only now.
+  // v5.7 — Dropped v5.6 anti-template ban lines. Per-pack hookPattern sampling
+  // (1 of 6 via seed) + hookAxis (1 of 10) = 60 combos → structural diversity.
   if (bp.id === 'hook-interrupt') {
     const hp = HOOK_PATTERNS[selection.hookPattern]
-    lines.push(`  HOOK PATTERN (per-pack): ${selection.hookPattern} — ${hp.description}`)
-    lines.push(`  ⛔ KHÔNG dùng câu mẫu cố định. Sinh phrasing mới từ pain + narrator's voice.`)
-    lines.push(`  ⛔ NEVER copy: "Tôi bắt đầu ghét buổi sáng" / "Tôi không còn thấy thoải mái khi soi gương" / bất kỳ phrase nào sound generic-template.`)
+    lines.push(`  HOOK PATTERN: ${selection.hookPattern} — ${hp.description}`)
+    lines.push(`  Sinh phrasing mới từ pain + narrator voice. Description-driven, KHÔNG dùng câu mẫu.`)
     for (const line of hookAxisBrief(selection.hookAxis).split('\n')) {
       lines.push(`  ${line}`)
     }
@@ -140,33 +124,25 @@ function buildSectionDirective(
     for (const line of discoveryChannelBrief(selection.discoveryChannel).split('\n')) {
       lines.push(`  ${line}`)
     }
-    // v5.6 — Anti-mechanical structure rule. Was: every pack ended with
-    // "Tôi tìm thấy một sản phẩm tên là [X]" mechanical phrasing.
-    lines.push(`  ⛔ STRUCTURE BAN: KHÔNG dùng template "tìm thấy/thấy một sản phẩm tên là [X]". `
-      + `Product name xuất hiện tự nhiên trong dòng narrator chia sẻ, không phải dòng giới thiệu mechanical.`)
+    // Note: structural ban "tìm thấy một sản phẩm tên là X" dropped — relies on
+    // discovery channel diversity + narrator voice for natural product mention.
   }
 
   // ─── 🔥 Belief shift (section 5) ───────────────────────────────────
-  // v5.6 — Removed oldBelief/newFrame verbatim text leak (was causing
-  //        "cơ thể đang thiếu gì đó để giữ ổn định bên trong" / "nang tóc đang yếu đi"
-  //        to be copied word-for-word). Now: structure + niche topic hint only.
-  //        Catalyst is seed-picked (single catalyst per pack) instead of "choose 1 of".
+  // v5.7 — Structure + topic hint only. Reframe text NEVER pasted verbatim.
   if (bp.id === 'belief-shift') {
     const reframe = getReframeForNiche(input.niche)
     const catalystSpec = BELIEF_SHIFT_CATALYSTS[selection.beliefCatalystType]
     lines.push(`  🔥 BELIEF SHIFT — CONVERSION CORE`)
-    lines.push(`  [1] CATALYST (per-pack): ${selection.beliefCatalystType} — ${catalystSpec.description}`)
-    lines.push(`      ⛔ KHÔNG dùng catalyst examples nguyên xi. Sinh tình huống mới theo style.`)
-    lines.push(`  [2] REFRAME structure: "Có thể vấn đề không phải [old assumption reader holds about niche '${input.niche}'], `
+    lines.push(`  [1] CATALYST: ${selection.beliefCatalystType} — ${catalystSpec.description}`)
+    lines.push(`  [2] REFRAME structure: "Có thể vấn đề không phải [old assumption about niche '${input.niche}'], `
       + `mà là [new actionable frame — body-system-level cause that supplement/care can support]"`)
-    lines.push(`      ⛔ KHÔNG quote câu mẫu. KHÔNG copy phrasing "thiếu gì đó để giữ ổn định" / "nang tóc đang yếu đi" / "cơ thể không phục hồi như trước".`)
-    lines.push(`      Topic hint: reframe about ${reframe.oldBelief.slice(0, 40)}... → new frame open-door (KHÔNG miracle, KHÔNG promise).`)
-    lines.push(`  [3] PERMISSION: internal acceptance to seek solution — sinh từ narrator's contradictions, không dùng template line.`)
-    lines.push(`  ⛔ KHÔNG mention product name in this section. Reveal lives in next section.`)
-    lines.push(`  ⛔ KHÔNG end with "Câu nói đó cứ ám ảnh tôi" template — that phrase is banned cross-pack.`)
+    lines.push(`      Topic hint (DO NOT QUOTE): reframe around "${reframe.oldBelief.slice(0, 40)}..."`)
+    lines.push(`  [3] PERMISSION: internal acceptance to seek solution — sinh từ narrator's contradictions.`)
+    lines.push(`  KHÔNG mention product name. Reveal lives in section 6.`)
   }
 
-  // v4.3 — Visual plan per section (for text/visual alignment).
+  // Visual plan (Phase 4 image gen alignment).
   if (bp.imagePurposeRoles && bp.imagePurposeRoles.length > 0) {
     const camera = bp.cameraLanguage?.length ? `, camera=[${bp.cameraLanguage.join(', ')}]` : ''
     lines.push(`  VISUAL: roles=[${bp.imagePurposeRoles.join(', ')}]${camera}`)
@@ -174,28 +150,27 @@ function buildSectionDirective(
     lines.push(`  VISUAL: text-only`)
   }
 
-  // v4.4 — Micro-realism injection.
+  // Micro-realism injection.
   const microRealism = microRealismDirectiveFor(bp.id)
   if (microRealism) {
     lines.push(`  ${microRealism}`)
   }
 
-  // ─── Trust continuity (section 10) — v5.6 cleanup ──────────────────
-  // Removed verbatim example "(vd: 'Sau khi share câu chuyện này...')" which
-  // caused Pack 02 to output near-identical phrasing.
+  // ─── Trust continuity (section 10) ─────────────────────────────────
+  // v5.7 — Kept generic directive for now. Phase B will replace with sampled
+  // reviewStyleProfiles → concrete style data per review slot.
   if (bp.id === 'trust-continuity') {
     lines.push(`  📋 OUTPUT FORMAT: { id, title, copy, reviews: [{ quote, author?, meta? }, ...] }`)
-    lines.push(`  copy: 5-15 từ intro phù hợp tone narrator dẫn vào quotes. Phrasing tự nhiên, KHÔNG dùng câu mẫu.`)
-    lines.push(`  reviews: 3 quotes — DIFFERENT voices (ages, relationships, niches details), casual FB-comment vibe`)
-    lines.push(`  author: short Vietnamese descriptor ("Chị Lan, 42" / "Hà, 30" / "Một bạn đọc")`)
-    lines.push(`  Quotes phải casual imperfect Vietnamese — KHÔNG Shopee/TikTok rating, KHÔNG "5/5 sao", KHÔNG formal testimonial.`)
+    lines.push(`  copy: 5-15 từ intro phù hợp tone narrator dẫn vào quotes. Tự nhiên.`)
+    lines.push(`  reviews: 3 quotes — diff voices/ages/relationships, casual FB-comment vibe.`)
+    lines.push(`  author: short VN descriptor ("Chị Lan, 42" / "Hà, 30" / "Một bạn đọc").`)
   }
 
   // ─── Soft CTA (section 11) ─────────────────────────────────────────
   if (bp.id === 'soft-cta') {
     lines.push(`  💌 ${buildSoftCtaDirective()}`)
     lines.push(`  Length: 60-100 từ. KHÔNG benefit push. KHÔNG urgency.`)
-    lines.push(`  Self-test: thay tên product bằng "cuốn sách tôi đọc" — section vẫn make sense → PASS.`)
+    lines.push(`  Self-test: thay product bằng "cuốn sách tôi đọc" — vẫn make sense → PASS.`)
   }
 
   return lines.join('\n')
@@ -207,11 +182,11 @@ export function buildRetryFeedback(violations: string[]): string {
   return `\n\nPREVIOUS ATTEMPT FAILED. Fix these violations:\n${violations.map((v) => `- ${v}`).join('\n')}\n\nKeep all other rules. Regenerate the entire pack.`
 }
 
-/** Top-level user prompt builder. Returns the full prompt body that
- *  goes after the system prompt.
+/** Top-level user prompt builder.
  *
- *  v5.1 — accepts NarratorDnaSelection. Narrator brief + DNA brief +
- *  energy curve brief injected at top of user prompt. */
+ *  v5.7 architecture: small core philosophy (~30 lines) + narrator/sampling
+ *  brief at top + per-section directives + brief reminders at bottom.
+ *  Total target: ~3000-4000 tokens (down from ~5000-6000 in v5.6). */
 export function buildPackGenUserPrompt(
   input: StorytellingInput,
   plan: SectionPlan[],
@@ -220,84 +195,42 @@ export function buildPackGenUserPrompt(
 ): string {
   const sections = plan.map((p, i) => buildSectionDirective(p, i, input, selection)).join('\n\n')
 
-  const hookEnforcement = plan[0]?.blueprint.hookPattern ? HOOK_ENFORCEMENT_PROMPT : ''
-
-  // Belief shift directive — inject if plan contains belief-shift section
-  const beliefShiftDirective = plan.some((p) => p.blueprint.id === 'belief-shift')
-    ? BELIEF_SHIFT_PROMPT
-    : ''
-
-  // v4.5 — Soft CTA prompt if plan contains soft-cta section
-  const softCtaDirective = plan.some((p) => p.blueprint.id === 'soft-cta')
-    ? SOFT_CTA_PROMPT
-    : ''
-
-  // v5.1 — Narrator DNA + Energy Curve at TOP of user prompt
-  //   Narrator identity drives wording / pacing / shame / lifestyle.
-  //   DNA gives niche-specific emotional vocabulary.
-  //   Energy curve sets emotional movement style.
-  // v5.2 — Memory snapshots library injected after DNA
-  const narratorBlock = `═══ NARRATOR (v5.1 — human variation engine) ═══
+  // Narrator block — drives voice. Diversity engine output lives here.
+  const narratorBlock = `═══ NARRATOR (per-pack DNA) ═══
 ${narratorBrief(selection.narrator)}
 
 ${selection.emotionalDna ? emotionalDnaBrief(selection.emotionalDna) : '(no niche-specific DNA — use generic embodied vocabulary)'}
 
 ${energyCurveBrief(selection.energyCurve)}
 
-═══ MEMORY SNAPSHOTS (v5.2 — scene library for this pack) ═══
+═══ MEMORY SNAPSHOTS (scene library) ═══
 ${snapshotsBrief(selection.memorySnapshots)}
 
-INSTRUCTION:
-- Embody this narrator's voice throughout. NOT a generic "tôi".
+NARRATOR USAGE:
+- Embody this narrator's voice throughout. NOT generic "tôi".
 - Use 1-2 shame patterns + 1-2 contradictions as story moments.
-- Surface social-context preferences naturally.
-- Weave 2-4 scenes from MEMORY SNAPSHOTS library across sections — vary across packs.
-- Sample 2-3 embodied vocabulary items from DNA across sections.
-- Energy curve guides emotional movement — don't force, but tendency.`
+- Weave 2-4 scenes from MEMORY SNAPSHOTS library across sections.
+- Energy curve guides emotional movement — tendency, not force.`
 
   return `Generate ${plan.length} sections cho niche "${input.niche}" — emotional intensity ${input.emotionalIntensity}, pacing ${input.pacingType}.
 
+${ENGINE_CORE_PHILOSOPHY}
+
 ${narratorBlock}
 
-${RETENTION_RESTRAINT_PROMPT}
-
-${hookEnforcement}
-
-${beliefShiftDirective}
-
-${MICRO_REALISM_PROMPT}
-
-${VISUAL_FIRST_WRITING_PROMPT}
-
-${RHYTHM_ENGINE_PROMPT}
-
 ${TRUST_REALISM_PROMPT}
-
-${VISUAL_COHERENCE_PROMPT}
-
-${softCtaDirective}
 
 Section directives (in order):
 
 ${sections}
 
-CORE REMINDERS (storyselling + v5.1 human variation):
-- Embody the NARRATOR ARCHETYPE — voice, wording, shame, contradictions. NOT generic "tôi".
-- 1st person voice. NO 3rd person observer ("Cô ấy", "Anh ấy", named character).
-- Conversational flowing sentences (12-20 từ avg). NO fragmented chops.
-- Specific NAMED pain — concrete embodied vocabulary from DNA. NOT abstract.
-- Pull from RECOGNITION not drama. Reader thinks "ờ giống mình" not "writing đẹp".
-- NO bio CV intro section 1. NO copywriter templates.
-- Section 5 (belief-shift) = CONVERSION CORE — external catalyst + reframe + permission. NO product name.
-- Inject 1-2 micro-realism + embodied vocabulary per section. NO cinematic blocking.
-- ANTI-BEAUTIFUL: allow slightly awkward phrasing if natural. Don't polish to literary perfection.
-  Human voices are imperfect. Reader recognition > prose beauty.
-- MICRO-CONTRADICTIONS: surface 1-2 narrator contradictions as story moments.
-  Humans are emotionally inconsistent — embody that.
-- SOCIAL-CONTEXT: surface narrator's preferred social contexts naturally
-  (family-centered uses family scenes; public-self-conscious uses public moments).
-- Read-aloud test: nghe như NARRATOR THẬT đang share với bạn thân — NOT generic Vietnamese voice.
-- Output JSON only${retryFeedback ?? ''}`
+CLOSING REMINDERS:
+- Embody the NARRATOR ARCHETYPE — not generic "tôi". Voice, wording, shame, contradictions.
+- 1st person only. No 3rd-person observer mode.
+- Section 5 (belief-shift) = CONVERSION CORE — no product name in this section.
+- Section 10 reviews must feel like real DMs/comments — different voices, casual, imperfect.
+- Allow awkward phrasing if natural — reader recognition > polished prose.
+- Output JSON only.${retryFeedback ?? ''}`
 }
 
 /** Section IDs trong plan — for prompt to reference exact IDs in output. */
