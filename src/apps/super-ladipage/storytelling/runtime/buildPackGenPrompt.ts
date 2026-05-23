@@ -53,6 +53,7 @@ import {
 } from '../config/rhythmEngine'
 import { visualCoherenceSummary } from '../config/visualStoryCoupling'
 import { ENGINE_CORE_PHILOSOPHY } from '../config/enginePhilosophy'
+import { payoffArchetypeBrief, payoffSectionFlavor } from '../config/payoffArchetypes'
 import type { NarratorDnaSelection } from './selectNarratorDna'
 
 /** Compose protagonist brief — 1-2 lines, used in system prompt context. */
@@ -159,6 +160,15 @@ function buildSectionDirective(
     lines.push(`  ${microRealism}`)
   }
 
+  // ─── v5.7 Chunk 2 — Payoff archetype flavor for s8/s9/s11 ──────────
+  // Drives emotional destination of each ending section per per-pack archetype.
+  // Replaces default "peaceful reflection" convergence across all packs.
+  if (bp.id === 'emotional-payoff' || bp.id === 'reflection-trust' || bp.id === 'soft-cta') {
+    for (const line of payoffSectionFlavor(selection.payoffArchetype, bp.id).split('\n')) {
+      lines.push(`  ${line}`)
+    }
+  }
+
   // ─── Trust continuity (section 10) — v5.7 Phase B v2 ──────────────
   // Reviews are generated in a SEPARATE Gemini call (runtime/generateReviews.ts)
   // to isolate review voice from narrator/story prose voice. This main call
@@ -198,6 +208,10 @@ export function buildPackGenUserPrompt(
 ): string {
   const sections = plan.map((p, i) => buildSectionDirective(p, i, input, selection)).join('\n\n')
 
+  // Payoff archetype block — drives emotional destination (s8/s9/s11).
+  // Surfaced at top so narrator voice knows where the arc is heading.
+  const payoffBlock = payoffArchetypeBrief(selection.payoffArchetype)
+
   // Narrator block — drives voice. Diversity engine output lives here.
   const narratorBlock = `═══ NARRATOR (per-pack DNA) ═══
 ${narratorBrief(selection.narrator)}
@@ -218,6 +232,8 @@ NARRATOR USAGE:
   return `Generate ${plan.length} sections cho niche "${input.niche}" — emotional intensity ${input.emotionalIntensity}, pacing ${input.pacingType}.
 
 ${ENGINE_CORE_PHILOSOPHY}
+
+${payoffBlock}
 
 ${narratorBlock}
 

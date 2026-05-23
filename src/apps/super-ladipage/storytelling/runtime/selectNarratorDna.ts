@@ -39,6 +39,10 @@ import {
   sampleReviewStyles,
   type ReviewStyleProfile,
 } from '../config/reviewStyleProfiles'
+import {
+  samplePayoffArchetype,
+  type PayoffArchetype,
+} from '../config/payoffArchetypes'
 
 /** Simple deterministic hash — same string → same integer.
  *  Not cryptographic but suitable for pick-by-modulo. */
@@ -82,6 +86,10 @@ export interface NarratorDnaSelection {
    *  Diversity-guaranteed across energy + optimism axes. Replaces abstract
    *  TRUST_REALISM_PROMPT rules with concrete per-slot style data. */
   reviewStyles: ReviewStyleProfile[]
+  /** v5.7 Chunk 2 — Sampled payoff archetype (1 per pack). Drives emotional
+   *  destination of sections 8 / 9 / 11. Replaces default "peaceful reflection"
+   *  ending that every pack converged to. */
+  payoffArchetype: PayoffArchetype
 }
 
 export interface SelectArgs {
@@ -155,18 +163,23 @@ export function selectNarratorDna(args: SelectArgs): NarratorDnaSelection {
   //    a concrete style profile with platform/punctuation/grammar/energy/etc.
   const reviewStyles = sampleReviewStyles(seed, 3)
 
+  // 10. v5.7 Chunk 2 — Sample 1 payoff archetype for emotional destination.
+  //     Previously every pack ended in "quiet peace / nhẹ hơn / lắng nghe cơ thể".
+  //     Now: 12 archetypes (anger_regret / vanity_return / identity_return / etc).
+  const payoffArchetype = samplePayoffArchetype(seed, args.niche)
+
   console.info(
     `[storytelling/selectNarratorDna] seed=${seed.slice(-12)} → narrator=${narrator.id}, ` +
     `dna=${emotionalDna?.niche ?? 'generic'}, curve=${energyCurve.id}, ` +
     `snapshots=${memorySnapshots.length}, hook=${hookAxis}, discovery=${discoveryChannel}, ` +
     `pattern=${hookPattern}, catalyst=${beliefCatalystType}, ` +
-    `reviews=[${reviewStyles.map((r) => r.id).join(', ')}]`,
+    `reviews=[${reviewStyles.map((r) => r.id).join(', ')}], payoff=${payoffArchetype.id}`,
   )
 
   return {
     seed, narrator, emotionalDna, energyCurve, memorySnapshots,
     hookAxis, discoveryChannel, hookPattern, beliefCatalystType,
-    reviewStyles,
+    reviewStyles, payoffArchetype,
   }
 }
 
