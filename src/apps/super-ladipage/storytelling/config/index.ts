@@ -55,3 +55,19 @@ export {
 } from './retentionPatterns'
 
 export type { RetentionMechanicSpec } from './retentionPatterns'
+
+// v4.2 — Belief shift engine
+export {
+  BELIEF_SHIFT_CATALYSTS,
+  NICHE_REFRAME_EXAMPLES,
+  PERMISSION_PATTERNS,
+  BELIEF_SHIFT_PROMPT,
+  getReframeForNiche,
+} from './beliefShiftEngine'
+
+export type {
+  BeliefShiftCatalystType,
+  BeliefShiftCatalystSpec,
+  BeliefShiftReframe,
+  BeliefShiftPermission,
+} from './beliefShiftEngine'

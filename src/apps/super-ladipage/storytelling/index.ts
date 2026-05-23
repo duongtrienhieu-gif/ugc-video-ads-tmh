@@ -62,6 +62,9 @@ export {
   RHYTHM_PROFILES, validateAdjacentRhythms, rhythmInstructionFor,
   RETENTION_MECHANICS, BANNED_RETENTION_PATTERNS,
   RETENTION_RESTRAINT_PROMPT, retentionInstructionFor,
+  // v4.2 — Belief shift engine
+  BELIEF_SHIFT_CATALYSTS, NICHE_REFRAME_EXAMPLES,
+  PERMISSION_PATTERNS, BELIEF_SHIFT_PROMPT, getReframeForNiche,
 } from './config'
 
 // Resolvers (pure mapping functions — P2/P3 will expand)

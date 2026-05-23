@@ -25,6 +25,11 @@ import { HOOK_PATTERNS, HOOK_ENFORCEMENT_PROMPT } from '../config/narrativeHooks
 import { rhythmInstructionFor } from '../config/rhythmVariance'
 import { retentionInstructionFor } from '../config/retentionPatterns'
 import { RETENTION_RESTRAINT_PROMPT } from '../config/retentionPatterns'
+import {
+  BELIEF_SHIFT_PROMPT,
+  BELIEF_SHIFT_CATALYSTS,
+  getReframeForNiche,
+} from '../config/beliefShiftEngine'
 
 /** Compose protagonist brief — 1-2 lines, used in system prompt context. */
 export function buildProtagonistBrief(p: ProtagonistProfile): string {
@@ -39,8 +44,12 @@ export function buildProductBrief(productName: string, niche: string, painPoint?
   return `${productName} — ${niche}${pain}`
 }
 
-/** Per-section directive block. ~50-70 tokens. */
-function buildSectionDirective(plan: SectionPlan, index: number): string {
+/** Per-section directive block. ~50-70 tokens, more for special sections. */
+function buildSectionDirective(
+  plan: SectionPlan,
+  index: number,
+  input: StorytellingInput,
+): string {
   const bp = plan.blueprint
   const sectionNum = index + 1
 
@@ -66,11 +75,23 @@ function buildSectionDirective(plan: SectionPlan, index: number): string {
   // Text density hint
   lines.push(`  DENSITY: ${bp.textDensity}${bp.imageRequirement.countDefault === 0 ? ' (no image — pure text breathing)' : ''}`)
 
-  // Hook pattern enforcement for section 1
-  if (bp.hookPattern && sectionNum === 1) {
+  // Hook pattern enforcement for section 1 (hook-interrupt)
+  if (bp.hookPattern && bp.id === 'hook-interrupt') {
     const hp = HOOK_PATTERNS[bp.hookPattern]
     lines.push(`  HOOK PATTERN: ${bp.hookPattern} — ${hp.description}`)
     lines.push(`  HOOK EXAMPLES (style only, do not copy): ${hp.examples.slice(0, 2).join(' / ')}`)
+  }
+
+  // 🔥 v4.2 — Belief shift specific directive for section 5
+  if (bp.id === 'belief-shift') {
+    const reframe = getReframeForNiche(input.niche)
+    const catalystKeys = Object.keys(BELIEF_SHIFT_CATALYSTS) as Array<keyof typeof BELIEF_SHIFT_CATALYSTS>
+    lines.push(`  🔥 BELIEF SHIFT — CONVERSION CORE for this section`)
+    lines.push(`  STRUCTURE: [1] external catalyst (CHOOSE 1 of: ${catalystKeys.join(' / ')}) → [2] reframe → [3] permission`)
+    lines.push(`  REFRAME REFERENCE for niche "${input.niche}":`)
+    lines.push(`    OLD BELIEF (reader carries): ${reframe.oldBelief}`)
+    lines.push(`    NEW FRAME (open door): ${reframe.newFrame}`)
+    lines.push(`  PRODUCT NAME: KHÔNG mention in this section. Save for next section (soft-reveal).`)
   }
 
   return lines.join('\n')
@@ -89,15 +110,22 @@ export function buildPackGenUserPrompt(
   plan: SectionPlan[],
   retryFeedback?: string,
 ): string {
-  const sections = plan.map((p, i) => buildSectionDirective(p, i)).join('\n\n')
+  const sections = plan.map((p, i) => buildSectionDirective(p, i, input)).join('\n\n')
 
   const hookEnforcement = plan[0]?.blueprint.hookPattern ? HOOK_ENFORCEMENT_PROMPT : ''
+
+  // Belief shift directive — inject if plan contains belief-shift section
+  const beliefShiftDirective = plan.some((p) => p.blueprint.id === 'belief-shift')
+    ? BELIEF_SHIFT_PROMPT
+    : ''
 
   return `Generate ${plan.length} sections cho niche "${input.niche}" — emotional intensity ${input.emotionalIntensity}, pacing ${input.pacingType}.
 
 ${RETENTION_RESTRAINT_PROMPT}
 
 ${hookEnforcement}
+
+${beliefShiftDirective}
 
 Section directives (in order):
 
@@ -109,6 +137,7 @@ CORE REMINDERS (storyselling):
 - Specific named pain — concrete symptoms reader recognizes.
 - Pull from RECOGNITION not drama. Reader thinks "ờ giống mình" not "writing đẹp".
 - NO bio CV intro section 1. NO copywriter templates ("Bạn xứng đáng...").
+- Section 5 (belief-shift) = CONVERSION CORE — external catalyst + reframe + permission. NO product name.
 - Read-aloud test: nghe như người Việt thật share với bạn thân.
 - Output JSON only${retryFeedback ?? ''}`
 }
