@@ -33,6 +33,8 @@ export type {
   // v4.3 visual role types
   ImagePurposeRole,
   CameraLanguage,
+  // v4.6 pacing
+  PacingClass,
 } from './types'
 
 export { isStorytellingPack } from './types'
@@ -78,6 +80,9 @@ export {
   // v4.5 — Soft CTA patterns
   SOFT_CTA_TONES, SOFT_CTA_BANNED_PATTERNS,
   SOFT_CTA_PROMPT, buildSoftCtaDirective,
+  // v4.6 — Pacing orchestration
+  PACING_CLASSES, SECTION_PACING_MAP,
+  pacingClassDirective, validatePacingVariety,
 } from './config'
 
 // Resolvers (pure mapping functions — P2/P3 will expand)

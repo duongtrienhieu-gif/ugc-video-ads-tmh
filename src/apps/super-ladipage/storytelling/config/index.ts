@@ -119,3 +119,15 @@ export type {
   SoftCtaTone,
   SoftCtaToneSpec,
 } from './softCtaPatterns'
+
+// v4.6 — Pacing orchestration
+export {
+  PACING_CLASSES,
+  SECTION_PACING_MAP,
+  pacingClassDirective,
+  validatePacingVariety,
+} from './pacingOrchestration'
+
+export type {
+  PacingClassSpec,
+} from './pacingOrchestration'

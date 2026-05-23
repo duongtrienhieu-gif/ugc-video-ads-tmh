@@ -215,6 +215,15 @@ export type ImagePurposeRole =
   | 'relief-lifestyle'      // post-recovery candid (đi chợ, nấu ăn, đi bộ)
   | 'silence-frame'         // landscape / window / no character (breathing CTA)
 
+/** Pacing class — cross-pack rhythm orchestration. Different sections
+ *  have different pacing density để chống monotony. v4.6. */
+export type PacingClass =
+  | 'impact'           // strong opening (section 1) — emotional snap + anchor image
+  | 'text-breathing'   // high text + minimal/no image (sections 3, 5, 11)
+  | 'dense-narrative'  // solid text + 1 image (sections 2, 9)
+  | 'mixed'            // balanced text + 1-2 image (sections 4, 6, 7, 8)
+  | 'image-led'        // multiple images + low text (section 10 only)
+
 /** Camera language — per emotional beat. Storyselling visual grammar. */
 export type CameraLanguage =
   | 'partial-face-observational'    // pain/friction — không full face, không hero shot
@@ -365,6 +374,11 @@ export interface SectionBlueprint {
   /** Camera language styles preferred for this section. Image gen prompts
    *  inject these as visual treatment directives. */
   cameraLanguage?: CameraLanguage[]
+
+  // ─── v4.6 Pacing Orchestration ────────────────────────────────────
+  /** Cross-pack rhythm class. Variety required across pack — no 3 adjacent
+   *  sections share class. */
+  pacingClass?: PacingClass
 }
 
 /** SectionPlan — output của resolveSectionPlan(). Drives prompt builder. */

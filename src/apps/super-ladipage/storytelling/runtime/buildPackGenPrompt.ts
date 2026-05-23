@@ -38,6 +38,9 @@ import {
   SOFT_CTA_PROMPT,
   buildSoftCtaDirective,
 } from '../config/softCtaPatterns'
+import {
+  pacingClassDirective,
+} from '../config/pacingOrchestration'
 
 // Note: imagePurposeRoleInstruction / cameraLanguageInstruction /
 // NECESSITY_TEST_PROMPT / CAMERA_ANTI_DRIFT_PROMPT are used by Phase 4
@@ -68,6 +71,8 @@ function buildSectionDirective(
 
   const lines: string[] = []
   lines.push(`SECTION ${sectionNum} — id="${bp.id}" (${bp.role})`)
+  // v4.6 — Pacing class (cross-pack rhythm orchestration)
+  lines.push(`  ${pacingClassDirective(bp.id)}`)
   lines.push(`  rhythm: ${bp.rhythmProfile} — ${rhythmInstructionFor(bp.rhythmProfile)}`)
 
   // 4-line dynamics directive (role/function/curiosity/transition)
