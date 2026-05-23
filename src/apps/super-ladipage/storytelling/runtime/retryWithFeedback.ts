@@ -24,6 +24,7 @@ import { runValidators, logValidationResult } from '../validators'
 import type { AggregatedValidation } from '../validators'
 import { FALLBACK_COPY } from './fallbackCopy'
 import type { NarratorDnaSelection } from './selectNarratorDna'
+import { selectNarratorDna } from './selectNarratorDna'
 
 export type SectionGenStatus =
   | { kind: 'pass' }
@@ -38,6 +39,9 @@ export interface GeneratedPackResult {
   finalValidation: AggregatedValidation
   /** Initial validation (attempt 1) — for telemetry. */
   initialValidation: AggregatedValidation
+  /** v5.1+ — narrator/DNA/curve/snapshots/hook/discovery selection used.
+   *  Exposed so callers (CLI/UI) can log selection details. */
+  selection: NarratorDnaSelection
 }
 
 interface RunArgs {
@@ -46,13 +50,18 @@ interface RunArgs {
   productBrief: string
   geminiApiKey: string
   kieApiKey: string
-  /** v5.1 — Narrator/DNA/curve selection. Required for prompt build. */
-  selection: NarratorDnaSelection
+  /** v5.1 — Narrator/DNA/curve selection. OPTIONAL — if undefined,
+   *  generatePackWithRetry auto-derives from input via selectNarratorDna.
+   *  Top-level service (generateStorytellingPack) passes pre-derived
+   *  selection; CLI test harness lets it auto-derive. */
+  selection?: NarratorDnaSelection
 }
 
-/** Single Gemini call + parse. Throws on parse error. */
+/** Single Gemini call + parse. Throws on parse error.
+ *  Selection MUST be defined when runOnce called (generatePackWithRetry
+ *  ensures via argsWithSelection narrowing). */
 async function runOnce(
-  args: RunArgs,
+  args: RunArgs & { selection: NarratorDnaSelection },
   retryFeedback?: string,
   label = 'storytelling-packgen',
 ): Promise<ParsedPack> {
@@ -97,11 +106,24 @@ function applyFallback(
  *  on validation. Throws only if Gemini both Gemini+KIE fail OR JSON
  *  malformed beyond recovery. */
 export async function generatePackWithRetry(args: RunArgs): Promise<GeneratedPackResult> {
+  // v5.1 — Auto-derive narrator/DNA/curve selection if not provided.
+  // Top-level service pre-derives; CLI test harness lets us derive here.
+  const argsWithSelection: RunArgs & { selection: NarratorDnaSelection } = args.selection
+    ? { ...args, selection: args.selection }
+    : {
+        ...args,
+        selection: selectNarratorDna({
+          niche:     args.input.niche,
+          productId: args.input.productId,
+          seed:      args.input.randomSeed,
+        }),
+      }
+
   // ─── Attempt 1 ────────────────────────────────────────────────
   console.info(`[storytelling/runtime] attempt 1 — initial Gemini call`)
   let pack: ParsedPack
   try {
-    pack = await runOnce(args, undefined, 'storytelling-packgen-1')
+    pack = await runOnce(argsWithSelection, undefined, 'storytelling-packgen-1')
   } catch (err) {
     // Parse / Gemini error — try retry with explicit JSON-mode reminder
     const msg = err instanceof Error ? err.message : String(err)
@@ -110,7 +132,7 @@ export async function generatePackWithRetry(args: RunArgs): Promise<GeneratedPac
       `Previous attempt errored: ${msg.slice(0, 150)}`,
       'Output MUST be valid JSON only — no markdown fences, no prose outside JSON',
     ])
-    pack = await runOnce(args, feedback, 'storytelling-packgen-1-retry')
+    pack = await runOnce(argsWithSelection, feedback, 'storytelling-packgen-1-retry')
   }
 
   const initialValidation = runValidators(pack)
@@ -123,6 +145,7 @@ export async function generatePackWithRetry(args: RunArgs): Promise<GeneratedPac
       attempts: 1,
       initialValidation,
       finalValidation: initialValidation,
+      selection: argsWithSelection.selection,
     }
   }
 
@@ -133,12 +156,12 @@ export async function generatePackWithRetry(args: RunArgs): Promise<GeneratedPac
   const feedback = buildRetryFeedback(initialValidation.retryFeedback)
   let pack2: ParsedPack
   try {
-    pack2 = await runOnce(args, feedback, 'storytelling-packgen-2')
+    pack2 = await runOnce(argsWithSelection, feedback, 'storytelling-packgen-2')
   } catch (err) {
     // Retry call errored — fall back to attempt 1 result + downgrade failing sections
     const msg = err instanceof Error ? err.message : String(err)
     console.warn(`[storytelling/runtime] attempt 2 errored: ${msg.slice(0, 200)} — using attempt 1 + fallback`)
-    return buildFallbackResult(pack, initialValidation, 2)
+    return buildFallbackResult(pack, initialValidation, 2, argsWithSelection.selection)
   }
 
   const secondValidation = runValidators(pack2)
@@ -158,6 +181,7 @@ export async function generatePackWithRetry(args: RunArgs): Promise<GeneratedPac
       attempts: 2,
       initialValidation,
       finalValidation: secondValidation,
+      selection: argsWithSelection.selection,
     }
   }
 
@@ -165,7 +189,7 @@ export async function generatePackWithRetry(args: RunArgs): Promise<GeneratedPac
   console.warn(
     `[storytelling/runtime] attempt 2 still had ${secondValidation.violations.length} violations — applying fallback to failing sections`,
   )
-  return buildFallbackResult(pack2, secondValidation, 3)
+  return buildFallbackResult(pack2, secondValidation, 3, argsWithSelection.selection)
 }
 
 /** When both attempts fail: keep passing sections from last attempt,
@@ -174,6 +198,7 @@ function buildFallbackResult(
   pack: ParsedPack,
   failedValidation: AggregatedValidation,
   attempts: number,
+  selection: NarratorDnaSelection,
 ): GeneratedPackResult {
   const violationsById = groupViolationsBySection(failedValidation)
   const fixed = applyFallback(pack, failedValidation.failingSections)
@@ -192,6 +217,7 @@ function buildFallbackResult(
     attempts,
     initialValidation: failedValidation,
     finalValidation,
+    selection,
   }
 }
 
