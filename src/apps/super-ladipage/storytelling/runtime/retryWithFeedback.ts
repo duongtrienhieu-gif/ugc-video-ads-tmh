@@ -23,6 +23,7 @@ import type { ParsedPack, ParsedSection } from './parsePackResponse'
 import { runValidators, logValidationResult } from '../validators'
 import type { AggregatedValidation } from '../validators'
 import { FALLBACK_COPY } from './fallbackCopy'
+import type { NarratorDnaSelection } from './selectNarratorDna'
 
 export type SectionGenStatus =
   | { kind: 'pass' }
@@ -45,6 +46,8 @@ interface RunArgs {
   productBrief: string
   geminiApiKey: string
   kieApiKey: string
+  /** v5.1 — Narrator/DNA/curve selection. Required for prompt build. */
+  selection: NarratorDnaSelection
 }
 
 /** Single Gemini call + parse. Throws on parse error. */
@@ -54,7 +57,7 @@ async function runOnce(
   label = 'storytelling-packgen',
 ): Promise<ParsedPack> {
   const systemPrompt = buildSystemPrompt(args.input, args.productBrief)
-  const userPrompt = buildPackGenUserPrompt(args.input, args.plan, retryFeedback)
+  const userPrompt = buildPackGenUserPrompt(args.input, args.plan, args.selection, retryFeedback)
   logPromptStats(systemPrompt, userPrompt, args.plan)
 
   const raw = await callGeminiForPack({

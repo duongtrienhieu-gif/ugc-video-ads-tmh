@@ -34,6 +34,7 @@ import { resolveSectionPlan } from '../resolvers/resolveSectionPlan'
 import { buildProductBrief } from '../runtime/buildPackGenPrompt'
 import { generatePackWithRetry } from '../runtime/retryWithFeedback'
 import type { GeneratedPackResult } from '../runtime/retryWithFeedback'
+import { selectNarratorDna } from '../runtime/selectNarratorDna'
 
 // ── Map storytelling SectionId → existing UGC SectionType for
 //    LandingSection.type compat. Storytelling section ID stored
@@ -141,6 +142,13 @@ export async function generateStorytellingPack(
   // ─── 3. Build product brief ───────────────────────────────────────
   const productBrief = buildProductBrief(product.productName, input.niche, product.painPoints)
 
+  // ─── 3.5 v5.1 — Select narrator/DNA/curve (human variation engine) ──
+  const selection = selectNarratorDna({
+    niche: input.niche,
+    productId: input.productId,
+    seed: input.randomSeed,
+  })
+
   // ─── 4. Generate with retry + fallback ───────────────────────────
   const result = await generatePackWithRetry({
     input,
@@ -148,6 +156,7 @@ export async function generateStorytellingPack(
     productBrief,
     geminiApiKey,
     kieApiKey,
+    selection,
   })
 
   const elapsedSec = ((Date.now() - totalStart) / 1000).toFixed(1)
@@ -203,6 +212,10 @@ export async function generateStorytellingPack(
       sectionStatus:        result.perSectionStatus,
       attempts:             result.attempts,
       validationSummary:    buildValidationSummary(result),
+      // v5.1 — Human Variation Engine selections
+      narratorArchetypeId:  selection.narrator.id,
+      energyCurveId:        selection.energyCurve.id,
+      randomSeed:           selection.seed,
     },
   }
 

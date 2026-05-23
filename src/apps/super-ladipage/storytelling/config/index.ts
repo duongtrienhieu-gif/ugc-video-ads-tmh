@@ -131,3 +131,22 @@ export {
 export type {
   PacingClassSpec,
 } from './pacingOrchestration'
+
+// v5.1 — Human Variation Engine (P0.6)
+export {
+  NARRATOR_ARCHETYPES,
+  archetypesForNiche,
+  narratorBrief,
+} from './narratorArchetypes'
+
+export {
+  PERSONA_EMOTIONAL_DNA,
+  getEmotionalDnaForNiche,
+  emotionalDnaBrief,
+} from './personaEmotionalDNA'
+
+export {
+  ENERGY_CURVE_PRESETS,
+  getEnergyCurvePreset,
+  energyCurveBrief,
+} from './energyCurvePresets'

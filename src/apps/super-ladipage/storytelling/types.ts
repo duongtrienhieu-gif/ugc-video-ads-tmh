@@ -215,6 +215,73 @@ export type ImagePurposeRole =
   | 'relief-lifestyle'      // post-recovery candid (đi chợ, nấu ăn, đi bộ)
   | 'silence-frame'         // landscape / window / no character (breathing CTA)
 
+// ═════════════════════════════════════════════════════════════════════
+// HUMAN VARIATION ENGINE (v5.1 — P0.6)
+// ═════════════════════════════════════════════════════════════════════
+
+/** Social context where narrator's life unfolds — variation across packs. */
+export type SocialContext =
+  | 'family-centered'       // home, kids, spouse, family meals
+  | 'work-centered'         // office, customers, colleagues
+  | 'public-self-conscious' // siêu thị, đám đông, restaurant, ánh sáng public
+  | 'solitary-internal'     // alone, mirror, bedroom, private moments
+  | 'community-social'      // friends, neighbors, gatherings
+
+/** Narrator archetype — pre-selected per pack. Drives wording / pacing /
+ *  shame / lifestyle / CTA tone / visual environment. */
+export interface NarratorArchetype {
+  id: string                        // 'female-housewife-suburban-38'
+  label: string                     // 'Nữ nội trợ ngoại ô 38 tuổi'
+  gender: 'female' | 'male'
+  ageRange: AgeRangeKey
+  occupation: string
+  lifestyle: string                 // setting summary
+  personalityVibe: PersonalityVibeKey
+  /** How they tend to phrase things. */
+  wordingTendency: string
+  /** What they're embarrassed about. Per-narrator concrete shame moments. */
+  shamePatterns: string[]
+  /** Micro-contradictions — humans aren't internally consistent. */
+  contradictions: string[]
+  /** Which social contexts most surface in this archetype's story. */
+  socialContextPreference: SocialContext[]
+  /** Which niches this archetype fits naturally. */
+  compatibleNiches: NicheKey[]
+}
+
+/** Per-niche emotional DNA — niche-specific vocabulary, fears, avoidance. */
+export interface PersonaEmotionalDNA {
+  niche: NicheKey
+  /** Primary emotions surface for this niche. */
+  primaryEmotions: string[]
+  /** Hidden fears reader carries (rarely articulated). */
+  hiddenFears: string[]
+  /** Behaviors of avoidance (what they STOP doing). */
+  avoidanceBehaviors: string[]
+  /** Identity threats this niche represents. */
+  identityThreats: string[]
+  /** Niche-specific embodied vocabulary — memory snapshot seeds. */
+  embodiedVocabulary: string[]
+}
+
+/** Energy curve preset — different emotional movement styles per pack. */
+export type EnergyCurveId =
+  | 'steady-decline-recovery'    // slow down, then up
+  | 'oscillating-frustration'    // try-fail-try-fail-breakthrough
+  | 'sudden-realization'         // plateau, sudden insight
+  | 'gradual-acceptance'         // slow evidence accumulation
+  | 'reluctant-trust-building'   // many small wins before belief shifts
+
+export interface EnergyCurvePreset {
+  id: EnergyCurveId
+  label: string
+  description: string
+  /** Per-section tension delta (added to base TENSION_CURVE). */
+  tensionDeltas: Partial<Record<SectionId, number>>
+  /** Pacing flavor for prompt — 1-line emotional movement style. */
+  pacingFlavor: string
+}
+
 /** Pacing class — cross-pack rhythm orchestration. Different sections
  *  have different pacing density để chống monotony. v4.6. */
 export type PacingClass =
@@ -301,6 +368,12 @@ export interface StorytellingInput {
   // Visual / overlay
   visualRealismLevel: VisualRealismKey
   overlayMode: OverlayModeKey
+
+  // v5.1 — Human Variation Engine
+  /** Optional seed for deterministic narrator/DNA/curve selection.
+   *  If undefined, derived from productId + timestamp.
+   *  Logged so caller can re-use for reproducibility. */
+  randomSeed?: string
 
   // Optional carry-over from LandingGenParams
   visualMemory?: VisualMemoryItem[]
@@ -596,6 +669,14 @@ export interface StorytellingMeta {
   attempts?: number
   /** Compact validation summary line — for UI strip + telemetry. */
   validationSummary?: string
+
+  // v5.1 — Human Variation Engine selections
+  /** Selected narrator archetype ID. Used for logging + future anti-repetition. */
+  narratorArchetypeId?: string
+  /** Selected energy curve preset ID. */
+  energyCurveId?: EnergyCurveId
+  /** Random seed used for narrator/DNA/curve selection. Caller can re-use. */
+  randomSeed?: string
 }
 
 /** Pack output — extends LandingPagePack shape để OutputPanel render được

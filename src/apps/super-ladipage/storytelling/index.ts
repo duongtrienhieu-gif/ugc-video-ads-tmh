@@ -35,6 +35,12 @@ export type {
   CameraLanguage,
   // v4.6 pacing
   PacingClass,
+  // v5.1 Human Variation Engine
+  SocialContext,
+  NarratorArchetype,
+  PersonaEmotionalDNA,
+  EnergyCurveId,
+  EnergyCurvePreset,
 } from './types'
 
 export { isStorytellingPack } from './types'
@@ -83,7 +89,15 @@ export {
   // v4.6 — Pacing orchestration
   PACING_CLASSES, SECTION_PACING_MAP,
   pacingClassDirective, validatePacingVariety,
+  // v5.1 — Human Variation Engine
+  NARRATOR_ARCHETYPES, archetypesForNiche, narratorBrief,
+  PERSONA_EMOTIONAL_DNA, getEmotionalDnaForNiche, emotionalDnaBrief,
+  ENERGY_CURVE_PRESETS, getEnergyCurvePreset, energyCurveBrief,
 } from './config'
+
+// v5.1 — Selector resolver
+export { selectNarratorDna, verifyNicheCoverage } from './runtime/selectNarratorDna'
+export type { NarratorDnaSelection } from './runtime/selectNarratorDna'
 
 // Resolvers (pure mapping functions — P2/P3 will expand)
 export { resolveStorytellingInput } from './resolvers/resolveStorytellingInput'

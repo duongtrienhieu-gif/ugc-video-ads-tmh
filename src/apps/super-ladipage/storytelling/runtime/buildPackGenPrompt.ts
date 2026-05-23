@@ -41,6 +41,10 @@ import {
 import {
   pacingClassDirective,
 } from '../config/pacingOrchestration'
+import { narratorBrief } from '../config/narratorArchetypes'
+import { emotionalDnaBrief } from '../config/personaEmotionalDNA'
+import { energyCurveBrief } from '../config/energyCurvePresets'
+import type { NarratorDnaSelection } from './selectNarratorDna'
 
 // Note: imagePurposeRoleInstruction / cameraLanguageInstruction /
 // NECESSITY_TEST_PROMPT / CAMERA_ANTI_DRIFT_PROMPT are used by Phase 4
@@ -154,10 +158,14 @@ export function buildRetryFeedback(violations: string[]): string {
 }
 
 /** Top-level user prompt builder. Returns the full prompt body that
- *  goes after the system prompt. */
+ *  goes after the system prompt.
+ *
+ *  v5.1 — accepts NarratorDnaSelection. Narrator brief + DNA brief +
+ *  energy curve brief injected at top of user prompt. */
 export function buildPackGenUserPrompt(
   input: StorytellingInput,
   plan: SectionPlan[],
+  selection: NarratorDnaSelection,
   retryFeedback?: string,
 ): string {
   const sections = plan.map((p, i) => buildSectionDirective(p, i, input)).join('\n\n')
@@ -174,7 +182,27 @@ export function buildPackGenUserPrompt(
     ? SOFT_CTA_PROMPT
     : ''
 
+  // v5.1 — Narrator DNA + Energy Curve at TOP of user prompt
+  //   Narrator identity drives wording / pacing / shame / lifestyle.
+  //   DNA gives niche-specific emotional vocabulary.
+  //   Energy curve sets emotional movement style.
+  const narratorBlock = `═══ NARRATOR (v5.1 — human variation engine) ═══
+${narratorBrief(selection.narrator)}
+
+${selection.emotionalDna ? emotionalDnaBrief(selection.emotionalDna) : '(no niche-specific DNA — use generic embodied vocabulary)'}
+
+${energyCurveBrief(selection.energyCurve)}
+
+INSTRUCTION:
+- Embody this narrator's voice throughout. NOT a generic "tôi".
+- Use 1-2 shame patterns + 1-2 contradictions as story moments.
+- Surface social-context preferences naturally.
+- Sample 2-3 embodied vocabulary items across sections — vary across packs.
+- Energy curve guides emotional movement — don't force, but tendency.`
+
   return `Generate ${plan.length} sections cho niche "${input.niche}" — emotional intensity ${input.emotionalIntensity}, pacing ${input.pacingType}.
+
+${narratorBlock}
 
 ${RETENTION_RESTRAINT_PROMPT}
 
@@ -190,15 +218,22 @@ Section directives (in order):
 
 ${sections}
 
-CORE REMINDERS (storyselling):
-- 1st person "tôi" voice. NO 3rd person observer ("Cô ấy", "Anh ấy", named character).
-- Conversational flowing sentences (12-20 từ avg). NO fragmented chops ("Mệt. Rất mệt.").
-- Specific named pain — concrete symptoms reader recognizes.
+CORE REMINDERS (storyselling + v5.1 human variation):
+- Embody the NARRATOR ARCHETYPE — voice, wording, shame, contradictions. NOT generic "tôi".
+- 1st person voice. NO 3rd person observer ("Cô ấy", "Anh ấy", named character).
+- Conversational flowing sentences (12-20 từ avg). NO fragmented chops.
+- Specific NAMED pain — concrete embodied vocabulary from DNA. NOT abstract.
 - Pull from RECOGNITION not drama. Reader thinks "ờ giống mình" not "writing đẹp".
-- NO bio CV intro section 1. NO copywriter templates ("Bạn xứng đáng...").
+- NO bio CV intro section 1. NO copywriter templates.
 - Section 5 (belief-shift) = CONVERSION CORE — external catalyst + reframe + permission. NO product name.
-- Inject 1-2 micro-realism details per section from assigned category — embodied lived moments, NOT cinematic blocking.
-- Read-aloud test: nghe như người Việt thật share với bạn thân.
+- Inject 1-2 micro-realism + embodied vocabulary per section. NO cinematic blocking.
+- ANTI-BEAUTIFUL: allow slightly awkward phrasing if natural. Don't polish to literary perfection.
+  Human voices are imperfect. Reader recognition > prose beauty.
+- MICRO-CONTRADICTIONS: surface 1-2 narrator contradictions as story moments.
+  Humans are emotionally inconsistent — embody that.
+- SOCIAL-CONTEXT: surface narrator's preferred social contexts naturally
+  (family-centered uses family scenes; public-self-conscious uses public moments).
+- Read-aloud test: nghe như NARRATOR THẬT đang share với bạn thân — NOT generic Vietnamese voice.
 - Output JSON only${retryFeedback ?? ''}`
 }
 

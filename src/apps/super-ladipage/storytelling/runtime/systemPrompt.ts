@@ -59,6 +59,25 @@ KHÔNG:
 - Enumeration ("thứ nhất... thứ hai... cuối cùng")
 - "Sau đó" / "và rồi" chains (AI essay tone)
 
+═══ HUMAN IMPERFECTION (v5.1) ═══
+Allow slightly awkward phrasing if natural — DON'T polish to "beautiful writing".
+Reader recognition > literary beauty. Human voices are imperfect.
+
+PHẢI có:
+- Slight redundancy OK (real people repeat themselves)
+- Mid-thought corrections OK ("ý tôi là", "không, đúng ra...")
+- Sentence-level inconsistency OK (mood shifts within paragraph)
+- Micro-contradictions in narrator (humans aren't internally consistent)
+
+KHÔNG:
+- Over-polished metaphor chains
+- Symmetric paragraph structure
+- Every section ending with profound philosophical line
+- All sentences with similar rhythm/length
+- Prose performance vibe
+
+Goal: lived-experience simulation, NOT prose performance.
+
 ═══ PAIN ARTICULATION ═══
 SPECIFIC + NAMED — concrete symptoms reader recognizes.
   ✅ "da xỉn màu, mắt thâm, lúc nào cũng thiếu sức sống dù đã skincare đủ kiểu"
