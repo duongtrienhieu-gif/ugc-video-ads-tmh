@@ -32,10 +32,9 @@ import dotenv from 'dotenv'
 import type {
   ProtagonistProfile, StorytellingInput,
 } from '../src/apps/super-ladipage/storytelling/types'
-import { resolveSectionPlan } from '../src/apps/super-ladipage/storytelling/resolvers/resolveSectionPlan'
+import { resolveBlockPlan } from '../src/apps/super-ladipage/storytelling/resolvers/resolveBlockPlan'
 import { generatePackWithRetry } from '../src/apps/super-ladipage/storytelling/runtime/retryWithFeedback'
 import { buildProductBrief } from '../src/apps/super-ladipage/storytelling/runtime/buildPackGenPrompt'
-import { SECTION_BLUEPRINTS } from '../src/apps/super-ladipage/storytelling/config/sectionBlueprints'
 
 // ─── Load .env.local if present ──────────────────────────────────────
 dotenv.config({ path: '.env.local' })
@@ -264,7 +263,7 @@ async function runPack(niche: TestNiche, outDir: string, idx: number, total: num
   const startedAt = Date.now()
 
   try {
-    const plan = resolveSectionPlan(niche.input)
+    const plan = resolveBlockPlan(niche.input)
     const productBrief = buildProductBrief(niche.productName, niche.input.niche, niche.painPoint)
 
     const result = await generatePackWithRetry({
@@ -346,17 +345,13 @@ async function runPack(niche: TestNiche, outDir: string, idx: number, total: num
 
     for (let i = 0; i < result.sections.length; i++) {
       const s = result.sections[i]
-      const bp = SECTION_BLUEPRINTS[s.id]
-      // v5.6 — Adjusted tension reflects energy curve delta (was always baseline before).
-      const tensionDelta = result.selection.energyCurve.tensionDeltas[s.id] ?? 0
-      const adjTension = Math.max(0, Math.min(10, bp.tensionLevel + tensionDelta))
-      const tensionLabel = tensionDelta === 0
-        ? `tension ${adjTension}/10`
-        : `tension ${adjTension}/10 (base ${bp.tensionLevel}${tensionDelta > 0 ? '+' : ''}${tensionDelta})`
+      const bp = plan[i]?.blueprint
       mdLines.push(`## Chương ${i + 1} — ${s.title}`)
-      // v5.7 Phase C — surface paragraph count for audit (target vs actual).
       const paraCount = s.paragraphs.length
-      mdLines.push(`*\`${s.id}\` · ${bp.narrativeRole} · ${bp.rhythmProfile} · ${tensionLabel} · ${countWords(s.copy)} từ · ${paraCount} đoạn*`)
+      const blockMeta = bp
+        ? `\`${s.id}\` · phase=${bp.phase} · function=${bp.psychologicalFunction} · balance=${bp.youIBalance}`
+        : `\`${s.id}\``
+      mdLines.push(`*${blockMeta} · ${countWords(s.copy)} từ · ${paraCount} đoạn*`)
       mdLines.push('')
       mdLines.push(s.copy)
       // v5.6 — Render reviews for trust-continuity (was invisible — only s.copy was shown).
@@ -388,9 +383,9 @@ async function runPack(niche: TestNiche, outDir: string, idx: number, total: num
         input: niche.input,
         plan: plan.map((p) => ({
           id: p.blueprint.id,
-          rhythm: p.blueprint.rhythmProfile,
-          role: p.blueprint.narrativeRole,
-          tension: p.blueprint.tensionLevel,
+          phase: p.blueprint.phase,
+          psychologicalFunction: p.blueprint.psychologicalFunction,
+          youIBalance: p.blueprint.youIBalance,
         })),
         sections: result.sections,
         perSectionStatus: result.perSectionStatus,

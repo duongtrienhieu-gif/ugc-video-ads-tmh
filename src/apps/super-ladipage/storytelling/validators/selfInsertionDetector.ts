@@ -31,8 +31,8 @@ const OBSERVER_MARKERS = [
 ]
 
 export function selfInsertionDetector(section: ParsedSection): ValidatorResult {
-  // Only checks section 1
-  if (section.id !== 'hook-interrupt') {
+  // Only checks block 1 (self-recognition-hook)
+  if (section.id !== 'self-recognition-hook') {
     return { pass: true, violations: [] }
   }
 

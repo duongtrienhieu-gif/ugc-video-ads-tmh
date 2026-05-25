@@ -1,16 +1,14 @@
 // ─────────────────────────────────────────────────────────────────────
-// Storytelling Engine — config barrel
+// Storytelling Engine — config barrel (Reader-Immersion architecture)
 //
-// Single import surface cho mọi consumer của config layer:
-//   import { SECTION_BLUEPRINTS, CONTINUITY_RULES, ... } from '../config'
+// Single import surface for config layer. Post-rebuild: legacy per-section
+// directives (narrativeDynamics / retentionPatterns / pacingOrchestration /
+// rhythmEngine / microRealismHooks / tensionReleaseMap / sectionBlueprints)
+// were obsolete (narrator-protagonist-arc tuned) and have been deleted.
+// New architecture lives in blockPool + per-block samplingHooks.
 // ─────────────────────────────────────────────────────────────────────
 
 export { STORYTELLING_DEFAULTS, PACK_LIMITS } from './defaults'
-export { SECTION_BLUEPRINTS, DEFAULT_SECTION_ORDER } from './sectionBlueprints'
-
-// Reader-Immersion block architecture (post-v5.8 rebuild — additive in
-// Chunk B1, wired through pipeline in Chunk B2).
-export { BLOCK_POOL, ALL_BLOCK_IDS, blocksForPhase } from './blockPool'
 export { NICHE_PRESETS, getNichePreset } from './nicheMap'
 export { CONTINUITY_RULES } from './continuityRules'
 export { VISUAL_LANGUAGE, SECTION_VISUAL_MAP } from './visualLanguage'
@@ -18,17 +16,11 @@ export { PACING_RULES } from './pacingRules'
 export { OVERLAY_RULES } from './overlayRules'
 export { ANTI_PATTERNS, ANTI_PATTERN_INSTRUCTIONS } from './antiPatterns'
 
-// v4 narrative dynamics layer
-export {
-  NARRATIVE_ROLE_INSTRUCTIONS,
-  EMOTIONAL_FUNCTION_INSTRUCTIONS,
-  CURIOSITY_MECHANIC_INSTRUCTIONS,
-  TRANSITION_PSYCHOLOGY_INSTRUCTIONS,
-  composeDynamicsDirective,
-} from './narrativeDynamics'
+// Reader-Immersion block architecture (replaces SECTION_BLUEPRINTS).
+export { BLOCK_POOL, ALL_BLOCK_IDS, blocksForPhase } from './blockPool'
 
 // Performance Hook Layer (consolidated v5.8+): owns YouFirstOpeners,
-// BridgePhrases, HOOK_PATTERNS (s1 flavor), HOOK_AXES (pack theme).
+// BridgePhrases, HOOK_PATTERNS (block-1 flavor), HOOK_AXES (pack theme).
 export {
   YOU_FIRST_OPENERS,
   BRIDGE_PHRASES,
@@ -50,13 +42,6 @@ export type {
 } from './performanceHookLayer'
 
 export {
-  TENSION_CURVE,
-  detectFlatLine,
-  detectSpike,
-  renderTensionAscii,
-} from './tensionReleaseMap'
-
-export {
   RHYTHM_PROFILES,
   validateAdjacentRhythms,
   rhythmInstructionFor,
@@ -64,16 +49,7 @@ export {
 
 export type { RhythmConstraints } from './rhythmVariance'
 
-export {
-  RETENTION_MECHANICS,
-  BANNED_RETENTION_PATTERNS,
-  RETENTION_RESTRAINT_PROMPT,
-  retentionInstructionFor,
-} from './retentionPatterns'
-
-export type { RetentionMechanicSpec } from './retentionPatterns'
-
-// v4.2 — Belief shift engine
+// Belief shift engine (drives belief-shift block)
 export {
   BELIEF_SHIFT_CATALYSTS,
   NICHE_REFRAME_EXAMPLES,
@@ -89,7 +65,7 @@ export type {
   BeliefShiftPermission,
 } from './beliefShiftEngine'
 
-// v4.3 — Visual role system
+// Visual role system (Chunk E rebuilds)
 export {
   IMAGE_PURPOSE_ROLES,
   imagePurposeRoleInstruction,
@@ -111,20 +87,7 @@ export type {
   CameraLanguageSpec,
 } from './cameraLanguage'
 
-// v4.4 — Micro-realism injector
-export {
-  MICRO_REALISM_HOOKS,
-  SECTION_MICRO_REALISM_MAP,
-  MICRO_REALISM_PROMPT,
-  microRealismDirectiveFor,
-} from './microRealismHooks'
-
-export type {
-  MicroRealismCategory,
-  MicroRealismDetailSet,
-} from './microRealismHooks'
-
-// v4.5 — Soft CTA patterns
+// Soft CTA patterns (drives future-self-cta block)
 export {
   SOFT_CTA_TONES,
   SOFT_CTA_BANNED_PATTERNS,
@@ -137,19 +100,7 @@ export type {
   SoftCtaToneSpec,
 } from './softCtaPatterns'
 
-// v4.6 — Pacing orchestration
-export {
-  PACING_CLASSES,
-  SECTION_PACING_MAP,
-  pacingClassDirective,
-  validatePacingVariety,
-} from './pacingOrchestration'
-
-export type {
-  PacingClassSpec,
-} from './pacingOrchestration'
-
-// v5.1 — Human Variation Engine (P0.6)
+// Human Variation Engine sampling pools
 export {
   NARRATOR_ARCHETYPES,
   archetypesForNiche,
@@ -168,7 +119,7 @@ export {
   energyCurveBrief,
 } from './energyCurvePresets'
 
-// v5.2 — Memory snapshots + Visual-First Writing
+// Memory snapshots
 export {
   MEMORY_SNAPSHOTS,
   snapshotsForNiche,
@@ -176,7 +127,7 @@ export {
   VISUAL_FIRST_WRITING_PROMPT,
 } from './memorySnapshots'
 
-// Discovery channels (s6 product reveal sampling)
+// Discovery channels (drives natural-product-discovery block)
 export {
   DISCOVERY_CHANNELS,
   discoveryChannelBrief,
@@ -187,19 +138,7 @@ export type {
   DiscoveryChannelSpec,
 } from './discoveryChannels'
 
-// v5.4 — Rhythm engine (typography pacing)
-export {
-  RHYTHM_BY_PACING_CLASS,
-  RHYTHM_ENGINE_PROMPT,
-  SECTION_RHYTHM_HINTS,
-  rhythmDirectiveFor,
-  rhythmStatsFor,
-  sectionRhythmHint,
-} from './rhythmEngine'
-
-export type { RhythmProfile as RhythmEngineProfile } from './rhythmEngine'
-
-// Visual story coupling (narrator + section visual coherence)
+// Visual story coupling (narrator + section visual coherence — Chunk E)
 export {
   composeVisualPrompt,
   visualCoherenceSummary,

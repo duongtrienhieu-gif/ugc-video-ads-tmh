@@ -9,7 +9,7 @@
 // drivers shaping every output.
 // ─────────────────────────────────────────────────────────────────────
 
-import type { SectionId } from '../types'
+import type { BlockId } from '../types'
 import type { ParsedPack } from '../runtime/parsePackResponse'
 import { bioIntroDetector } from './bioIntroDetector'
 import { adjacentRhythmDetector } from './adjacentRhythmDetector'
@@ -37,7 +37,7 @@ export interface AggregatedValidation {
   violations: Array<ValidatorViolation & { validator: ValidatorName }>
   /** Soft warnings — informational, don't affect retry logic. */
   softWarnings: Array<ValidatorViolation & { validator: ValidatorName }>
-  failingSections: SectionId[]
+  failingSections: BlockId[]
   byValidator: Record<ValidatorName, ValidatorResult>
   /** Compact feedback string for retry prompt injection — only from HARD violations. */
   retryFeedback: string[]
@@ -56,7 +56,7 @@ export function runValidators(parsed: ParsedPack): AggregatedValidation {
 
   const violations: AggregatedValidation['violations'] = []
   const softWarnings: AggregatedValidation['softWarnings'] = []
-  const failingSet = new Set<SectionId>()
+  const failingSet = new Set<BlockId>()
   const retryFeedback: string[] = []
 
   for (const [name, result] of Object.entries(byValidator) as [ValidatorName, ValidatorResult][]) {
@@ -66,8 +66,8 @@ export function runValidators(parsed: ParsedPack): AggregatedValidation {
         softWarnings.push({ validator: name, ...v })
       } else {
         violations.push({ validator: name, ...v })
-        failingSet.add(v.sectionId)
-        retryFeedback.push(`Section "${v.sectionId}" failed ${name}: ${v.violation}`)
+        failingSet.add(v.sectionId as BlockId)
+        retryFeedback.push(`Block "${v.sectionId}" failed ${name}: ${v.violation}`)
       }
     }
   }

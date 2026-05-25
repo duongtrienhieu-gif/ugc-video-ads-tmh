@@ -1,20 +1,19 @@
 // ─────────────────────────────────────────────────────────────────────
-// Storytelling Engine — VISUAL STORY COUPLING (v5.5)
+// Storytelling Engine — VISUAL STORY COUPLING (Chunk E rebuilds)
 //
-// Coherence helper for Phase 4 image generation pipeline.
-// Combines narrator archetype + section's emotional state + image purpose
-// role + camera language → coherent image prompt fragment.
-//
-// Current Phase = data layer only. Phase 4 image gen will CONSUME these
-// helpers when wiring KIE image generation per section.
+// Coherence helper for image generation pipeline. Post-Reader-Immersion
+// rebuild: block-keyed instead of section-keyed. Per-block image plan now
+// lives in SECTION_VISUAL_MAP (visualLanguage.ts). Detailed per-block
+// image purpose roles + camera language assignments deferred to Chunk E
+// (visual system rebuild).
 // ─────────────────────────────────────────────────────────────────────
 
 import type {
-  CameraLanguage, ImagePurposeRole, NarratorArchetype, SectionId,
+  BlockId, CameraLanguage, ImagePurposeRole, NarratorArchetype,
 } from '../types'
 import { IMAGE_PURPOSE_ROLES } from './imagePurposeRoles'
 import { CAMERA_LANGUAGES } from './cameraLanguage'
-import { SECTION_BLUEPRINTS } from './sectionBlueprints'
+import { BLOCK_POOL } from './blockPool'
 
 export interface VisualPromptFragment {
   /** Subject description — derived from narrator. */
@@ -33,26 +32,24 @@ export interface VisualPromptFragment {
   lighting: string
 }
 
-/** Compose image prompt fragment from narrator + section. */
+/** Compose image prompt fragment from narrator + block. */
 export function composeVisualPrompt(
   narrator: NarratorArchetype,
-  sectionId: SectionId,
+  blockId: BlockId,
   purposeRole: ImagePurposeRole,
   cameraStyle: CameraLanguage,
 ): VisualPromptFragment {
   const roleSpec = IMAGE_PURPOSE_ROLES[purposeRole]
   const cameraSpec = CAMERA_LANGUAGES[cameraStyle]
-  const blueprint = SECTION_BLUEPRINTS[sectionId]
+  const blueprint = BLOCK_POOL[blockId]
 
-  // Subject derived from narrator
   const subject = `${narrator.gender === 'female' ? 'Vietnamese woman' : 'Vietnamese man'} ` +
                   `age ${narrator.ageRange}, ${narrator.personalityVibe} vibe`
 
-  // Setting from narrator lifestyle (extract key element)
   const setting = narrator.lifestyle
 
-  // Mood from blueprint's emotionalBeat
-  const mood = `mood: ${blueprint.emotionalBeat}`
+  // Mood derived from block phase + psychologicalFunction (Chunk E will refine).
+  const mood = `mood: ${blueprint?.phase ?? 'recognition'}/${blueprint?.psychologicalFunction ?? ''}`
 
   return {
     subject,
@@ -65,31 +62,25 @@ export function composeVisualPrompt(
   }
 }
 
-/** Compose 1-line summary for prompt injection (text gen consume too). */
-export function visualCoherenceSummary(narrator: NarratorArchetype, sectionId: SectionId): string {
-  const blueprint = SECTION_BLUEPRINTS[sectionId]
-  const roles = blueprint.imagePurposeRoles ?? []
-  const cameras = blueprint.cameraLanguage ?? []
-  if (roles.length === 0 || cameras.length === 0) {
-    return `(no visual plan for this section)`
-  }
+/** Compose 1-line visual coherence summary — text gen consume too. */
+export function visualCoherenceSummary(narrator: NarratorArchetype, blockId: BlockId): string {
+  const blueprint = BLOCK_POOL[blockId]
+  if (!blueprint) return `(no visual plan for block "${blockId}")`
   return `Image coherence: ${narrator.gender === 'female' ? 'female' : 'male'} ${narrator.ageRange} in ${narrator.lifestyle.split(',')[0]}, ` +
-         `role=[${roles.join(', ')}], camera=[${cameras.join(', ')}], mood=${blueprint.emotionalBeat}`
+         `phase=${blueprint.phase}, function=${blueprint.psychologicalFunction}`
 }
 
 export const VISUAL_COHERENCE_PROMPT =
-  `═══ VISUAL STORY COUPLING (v5.5) ═══
+  `═══ VISUAL STORY COUPLING ═══
 
 Mỗi image must be consistent với:
 1. NARRATOR identity (gender / age / lifestyle / personality vibe)
-2. Section emotional state (mood from blueprint)
+2. Block phase + psychologicalFunction
 3. Image purpose role (anchor-face / environment / emotion-detail / etc.)
 4. Camera language (partial-face / static-quiet / softer-wider / etc.)
 
-Image gen pipeline (Phase 4) consumes:
-- composeVisualPrompt(narrator, sectionId, role, camera) → VisualPromptFragment
-- visualCoherenceSummary(narrator, sectionId) → 1-line summary
-
 For text gen NOW: align text mood + setting với narrator's lifestyle context.
-KHÔNG describe a scene that contradicts narrator's identity (vd: narrator là
-female-driver-fatigue-45 NHƯNG text mô tả ngồi office sang trọng).`
+KHÔNG describe a scene that contradicts narrator's identity.
+
+Chunk E (visual rebuild) will replace per-block visual taxonomy with
+psychological mirror visual archetypes — POV/candid/handheld/everyday-mess.`

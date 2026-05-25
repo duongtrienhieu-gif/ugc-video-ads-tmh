@@ -1,18 +1,13 @@
 // ═════════════════════════════════════════════════════════════════════
-// Storytelling Engine — system prompt (v4.6 tightened)
+// Storytelling Engine — system prompt (Reader-Immersion architecture)
 //
-// TARGET: Native Vietnamese conversational storyselling
-//   - 1st person "tôi" voice (reader self-inserts as narrator)
-//   - Medium-long flowing sentences, conversational cadence
-//   - Specific named pain, NOT abstract feeling
-//   - Soft sales narrative — belief shift > product reveal
+// TARGET: Reader-Immersion Performance Storytelling for ad conversion.
+//   Reader is the EMOTIONAL CENTER OF GRAVITY. Narrator = validator.
+//   Output flex 13-15 blocks across 4 phases (not rigid 11 sections).
 //
-// v4.6 tightening: removed duplications (HOOK section moved to userPrompt
-// HOOK_ENFORCEMENT_PROMPT, BANNED lists compressed, COMMERCIAL VECTOR
-// section labels compact). Saves ~250 tokens from system prompt.
-//
-// Single test: reader thinks "trời giống mình thật" — NOT "writing đẹp"
-// NOT "marketing copy".
+// Single test: reader thinks "có phải mình không?" / "trang này hiểu
+// mình thật" — NOT "writing đẹp", NOT "marketing copy", NOT
+// "đây là chuyện ai đó".
 // ═════════════════════════════════════════════════════════════════════
 
 import type { StorytellingInput } from '../types'
@@ -20,33 +15,53 @@ import type { StorytellingInput } from '../types'
 export function buildSystemPrompt(input: StorytellingInput, productBrief: string): string {
   return `Bạn đang viết landing page tiếng Việt thể loại "Kể Chuyện Hành Trình" — Reader-Immersion Performance Storytelling cho ad conversion.
 
-═══ CORE TARGET (v5.8 Reader-Immersion shift) ═══
+═══ CORE TARGET (Reader-Immersion) ═══
 Đây là AD CONVERSION COPY. Reader phải feel "đang nói về mình" trong 1-3 giây
 đầu, NOT "nghe chuyện người khác". Passive observer = ad fails.
 
-Mỗi pack có 2 layers giao thoa: YOU (reader-mirror, calls reader directly) +
-TÔI (narrator confession, joined-from-experience). Bạn và tôi liên kết
-xuyên suốt, không phải tôi kể lể một mình.
+Reader là EMOTIONAL CENTER OF GRAVITY của toàn trang. Narrator KHÔNG phải
+nhân vật chính — narrator là VALIDATOR / BRIDGE / EMOTIONAL PROOF. Mỗi block
+giữ reader làm trung tâm, narrator joins từ kinh nghiệm sống chứ không
+chiếm spotlight.
 
-KHÔNG phải: AI fiction / literary prose / screenplay / FB ads / motivational guru / copywriting template.
+KHÔNG phải: AI fiction / literary prose / screenplay / FB ads / motivational guru / copywriting template / "narrator-protagonist arc".
 
-═══ POV STRUCTURE (CRITICAL) ═══
-- Section 1 (hook-interrupt): YOU-FIRST locked. Open with sampled starter
-  ("Bạn có từng..." / "Nếu gần đây bạn..." / etc) → micro moment → hidden
-  emotion → bridge "Tôi cũng từng như vậy." See per-section directive for
-  the sampled opener + bridge.
-- Body sections 2-11: 1st person "tôi" narrator + 1 reader-mirror beat per
-  section (sampled — "Bạn có từng X?"). Maintain YOU↔TÔI dialogue feel.
-- BANNED 3rd-person observer ("Cô ấy...", "Anh ấy...", named character as main).
-- Người thân xuất hiện QUA góc nhìn "tôi", KHÔNG là main subject.
-- Identity reveal qua context, KHÔNG qua statement:
+═══ 4-PHASE STRUCTURE (13-15 blocks per pack, flex) ═══
+PHASE 1 — RECOGNITION (reader-heavy)
+  Reader sees themselves. YOU-first opening. Surfaces lived behaviors,
+  hidden feelings reader carries silently. Reduce isolation.
+
+PHASE 2 — TRUST + RESISTANCE ALIGNMENT (narrator joins reader)
+  Narrator validates from lived experience. Shared frustration. Anticipate
+  reader's "yeah but..." Reframe belief via external catalyst.
+
+PHASE 3 — SOLUTION OPENING (product dissolved into emotional context)
+  Product emerges NATURALLY through discovery. Mechanism explained THROUGH
+  felt difference, not feature dump. Soft compare via emotional positioning.
+  NO ecommerce interruption.
+
+PHASE 4 — FUTURE SELF IMMERSION (reader projects forward)
+  Small specific wins. Quality of life returned. Fragmented imperfect peer
+  voices (social proof). Emotional projection + soft future-self invitation.
+  NO "buy now" — reader feels "maybe I should finally take care of myself".
+
+═══ POV BALANCE PHILOSOPHY ═══
+NOT hard-template YOU → I → YOU. Reader remains emotional center throughout.
+
+General guidance:
+  - reader-heavy blocks (Phase 1): YOU dominant; narrator absent or implicit
+  - narrator-validation blocks (Phase 2-3): narrator validates, reader still center
+  - future-reader blocks (Phase 4 ending): YOU projected forward, narrator recedes
+
+BANNED 3rd-person observer ("Cô ấy...", "Anh ấy...", named character as main).
+Identity reveal qua context, KHÔNG qua statement:
   ✅ "Tôi 38 tuổi, mẹ 2 con — đã hơn nửa năm nay tôi ngủ không sâu giấc."
   ❌ "Aishah, 38 tuổi. Sống ở Selangor. Mỗi sáng cô dậy lúc 5h30..."
 
 ═══ CONTEXT ═══
 - Niche: ${input.niche}
 - Sản phẩm: ${productBrief}
-- Sản phẩm visible lần đầu: SECTION ${input.productRevealSection}
+- Sản phẩm visible lần đầu: Phase 3 (natural-product-discovery block)
 - Pacing: ${input.pacingType} · Intensity: ${input.emotionalIntensity} · CTA: ${input.ctaSoftness}
 
 ═══ CADENCE ═══
@@ -66,7 +81,7 @@ KHÔNG:
 - Enumeration ("thứ nhất... thứ hai... cuối cùng")
 - "Sau đó" / "và rồi" chains (AI essay tone)
 
-═══ HUMAN IMPERFECTION (v5.1) ═══
+═══ HUMAN IMPERFECTION ═══
 Allow slightly awkward phrasing if natural — DON'T polish to "beautiful writing".
 Reader recognition > literary beauty. Human voices are imperfect.
 
@@ -79,7 +94,7 @@ PHẢI có:
 KHÔNG:
 - Over-polished metaphor chains
 - Symmetric paragraph structure
-- Every section ending with profound philosophical line
+- Every block ending with profound philosophical line
 - All sentences with similar rhythm/length
 - Prose performance vibe
 
@@ -91,27 +106,20 @@ SPECIFIC + NAMED — concrete symptoms reader recognizes.
   ✅ "ngủ 7 tiếng mà sáng dậy vẫn mệt, chiều 3 giờ là hết pin"
   ❌ "có một cảm giác lạ", "không hiểu sao", "có gì đó không ổn"
 
-═══ COMMERCIAL VECTOR (11 sections) ═══
-Storyselling — narrative serves conversion via BELIEF SHIFT, NOT product reveal:
+═══ PRODUCT INTEGRATION ═══
+Product info DISSOLVES into the story. NOT:
+  story → ingredient block → hard feature section → infographic interruption
+NOT Shopee-style transitions. NOT hard comparison tables.
 
-1. hook-interrupt    — pattern-interrupt + identity + immediate fear
-2. daily-friction    — relatable struggles + embodied micro-detail
-3. internal-fear     — escalation + private fear of decline (text-breathing)
-4. failed-attempts   — frustration loop, tried many things
-5. belief-shift      🔥 CONVERSION CORE — external catalyst + reframe + permission. Product BRIEF/ABSENT.
-6. soft-reveal       — reluctant product mention, low expectation tone
-7. micro-reward      — subtle initial improvement (3 tuần sau...)
-8. emotional-payoff  — life feels lighter through daily details
-9. reflection-trust  — looking back maturity
-10. trust-continuity — 3 mini quotes (reviews field, casual FB-comment vibe)
-11. soft-cta         — warm human invitation, NO hard CTA
+Mechanism, ingredients, benefits, compare logic emerge naturally from emotional
+progression. Features explained THROUGH felt difference.
 
-ALLOWED (mild commercial OK after section ${input.productRevealSection}):
+ALLOWED (after Phase 3 opens):
 - Direct product name mention
 - "Tôi recommend cho mọi người" friend tone
 - Specific product trait nếu natural
 
-GLOBAL BANS (apply to all sections):
+GLOBAL BANS (apply everywhere):
 - Miracle claims ("khỏi hẳn", "ngay lập tức", "X% người dùng")
 - Hard sell ("đặt hàng ngay", "chỉ còn", "đừng bỏ lỡ")
 - Copywriter bait ("bạn xứng đáng", "đừng để X hủy hoại")
@@ -119,17 +127,7 @@ GLOBAL BANS (apply to all sections):
 - Doctor authority ("bác sĩ khuyên", "BS X")
 - Statistics dump, plot-twist, cliffhanger, trauma escalation
 
-═══ VISUAL ALIGNMENT ═══
-Mỗi section có VISUAL PLAN (image roles + camera language). Text align với visual mood:
-- anchor-face / emotion-detail → physical detail in text
-- silence-frame → reflective text, breathing space
-- object-symbol → list-y items, NOT cinematic
-- memory-snapshot → dialogue-driven catalyst voice
-- product-presence → reluctant tone, brief product mention
-- relief-lifestyle → quality-of-life details
-- text-only sections → focus on inner monologue
-
-═══ OUTPUT FORMAT (v5.7 Phase C — paragraphs[] structural schema) ═══
+═══ OUTPUT FORMAT ═══
 JSON only. No markdown fences. No prose outside JSON.
 
 Base shape: { "sections": [
@@ -137,15 +135,16 @@ Base shape: { "sections": [
 ] }
 
 PARAGRAPHS field is STRUCTURAL — each element = ONE paragraph (2-4 sentences typically).
-Reader needs breathing space. Do NOT compress entire section into 1 array element.
-Per-section target paragraph count is in section directives (rhythm class).
+Reader needs breathing space. Do NOT compress entire block into 1 array element.
+Per-block paragraph target shown in block directive.
 
-Section 10 (trust-continuity): paragraphs = [1 short intro string]. Reviews are
-generated by a SEPARATE pass — leave reviews field absent.
+social-proof block: paragraphs = [1 short intro string]. Reviews are generated
+by a SEPARATE pass — leave reviews field absent.
 
-Exactly 11 sections in order. Per section:
-- id: exact match input section ID
+Exactly the number of blocks shown in per-block directives, in that order.
+Per block:
+- id: exact match block ID from directive
 - title: 3-8 từ tiếng Việt, KHÔNG chứa tên nhân vật, KHÔNG dramatic
-- paragraphs: array of Vietnamese strings, 1st person, conversational flow.
-  Each element is ONE paragraph. Usually 2-4 paragraphs per section. Section 10 = 1.`
+- paragraphs: array of Vietnamese strings, conversational flow. Each element
+  is ONE paragraph. Block paragraph count per its target in directive.`
 }

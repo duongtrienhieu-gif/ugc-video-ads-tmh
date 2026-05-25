@@ -14,7 +14,7 @@
 // fail — graceful degradation via fallback.
 // ═════════════════════════════════════════════════════════════════════
 
-import type { SectionId, SectionPlan, StorytellingInput } from '../types'
+import type { BlockId, BlockPlan, StorytellingInput } from '../types'
 import { buildSystemPrompt } from './systemPrompt'
 import { buildPackGenUserPrompt, buildRetryFeedback, logPromptStats } from './buildPackGenPrompt'
 import { callGeminiForPack } from './callGemini'
@@ -54,7 +54,7 @@ export interface GeneratedPackResult {
 
 interface RunArgs {
   input: StorytellingInput
-  plan: SectionPlan[]
+  plan: BlockPlan[]
   productBrief: string
   geminiApiKey: string
   kieApiKey: string
@@ -95,10 +95,10 @@ async function runOnce(
   return parsePackResponse(raw, expectedIds)
 }
 
-/** Apply fallback copy to specific sections. Returns mutated pack. */
+/** Apply fallback copy to specific blocks. Returns mutated pack. */
 function applyFallback(
   pack: ParsedPack,
-  failingIds: SectionId[],
+  failingIds: BlockId[],
 ): ParsedPack {
   const failingSet = new Set(failingIds)
   return {
@@ -159,11 +159,11 @@ export async function generatePackWithRetry(args: RunArgs): Promise<GeneratedPac
     styles,
   })
 
-  // Merge reviews into trust-continuity section if call succeeded.
+  // Merge reviews into social-proof block if call succeeded.
   let mergedSections = mainResult.sections
   if (reviewsCall.status === 'ok' && reviewsCall.reviews.length > 0) {
     mergedSections = mainResult.sections.map((s) =>
-      s.id === 'trust-continuity'
+      s.id === 'social-proof'
         ? { ...s, reviews: reviewsCall.reviews }
         : s,
     )
@@ -292,12 +292,12 @@ function buildFallbackResult(
 
 function groupViolationsBySection(
   validation: AggregatedValidation,
-): Map<SectionId, string[]> {
-  const map = new Map<SectionId, string[]>()
+): Map<BlockId, string[]> {
+  const map = new Map<BlockId, string[]>()
   for (const v of validation.violations) {
-    const arr = map.get(v.sectionId) ?? []
+    const arr = map.get(v.sectionId as BlockId) ?? []
     arr.push(`[${v.validator}] ${v.violation}`)
-    map.set(v.sectionId, arr)
+    map.set(v.sectionId as BlockId, arr)
   }
   return map
 }

@@ -196,105 +196,11 @@ export interface BlockPlan {
 }
 
 // ═════════════════════════════════════════════════════════════════════
-// LEGACY v4-v5.8 SECTION SYSTEM — kept for shared UGC compat fields only.
-// SectionId still appears in StorytellingMeta.sectionIds for backward
-// compat with persisted v5.8 packs. New packs use BlockId.
+// HOOK PATTERN — emotional posture for Phase-1 Block-1 (sampled per pack)
 // ═════════════════════════════════════════════════════════════════════
 
-/** @deprecated — kept for back-compat with v5.8 persisted packs. Use BlockId. */
-export type SectionId =
-  | 'hook-interrupt'        // pattern-interrupt hook + identity anchor
-  | 'daily-friction'        // relatable daily struggles
-  | 'internal-fear'         // escalation + fear of decline
-  | 'failed-attempts'       // frustration loop
-  | 'belief-shift'          // AHA reinterpretation
-  | 'soft-reveal'           // reluctant product mention
-  | 'micro-reward'          // subtle initial improvement
-  | 'emotional-payoff'      // life feels lighter
-  | 'reflection-trust'      // looking back maturity
-  | 'trust-continuity'      // 3 mini testimonial quotes
-  | 'soft-cta'              // human emotional invitation
-
-export type EmotionalBeat =
-  | 'calm-curious'
-  | 'subtle-unease'
-  | 'recurring-discomfort'
-  | 'frustration'
-  | 'quiet-reflection'
-  | 'hesitant-curiosity'
-  | 'tentative'
-  | 'first-hope'
-  | 'acceptance-joy'
-  | 'settled-resolve'
-
-// ═════════════════════════════════════════════════════════════════════
-// NARRATIVE DYNAMICS — v4 layer
-//
-// Encode WHAT each section does (function) — không chỉ where it sits
-// on emotional curve (beat). Prevents AI-essay drift.
-// ═════════════════════════════════════════════════════════════════════
-
-/** Section's role trong narrative arc. Mỗi section có exactly 1 role. */
-export type NarrativeRole =
-  | 'hook'                  // section 1 only
-  | 'orientation'           // establish world/identity AFTER hook
-  | 'friction-loop'         // recurring micro-pain pattern
-  | 'frustration-anchor'    // emotional bottom — quiet, not dramatic
-  | 'reflection-pause'      // pure text breathing, insight emerges
-  | 'curiosity-spark'       // discovery / pivotal moment
-  | 'tentative-action'      // first try, uncertain
-  | 'micro-reward'          // first sign of change — small, real
-  | 'calm-payoff'           // sustained transformation
-  | 'quiet-closure'         // closing invitation, no resolution-bow
-
-/** What this section DOES to reader (≠ beat = what reader FEELS). */
-export type EmotionalFunction =
-  | 'create-unrest'         // unresolved tension — section 1 default
-  | 'establish-recognition' // reader sees themselves in protagonist
-  | 'deepen-empathy'        // empathy via repetition / small moments
-  | 'invite-reflection'     // pause, reader's mind wanders
-  | 'open-possibility'      // hope / new angle without promise
-  | 'reward-attention'      // pay off the patient reader
-  | 'settle-trust'          // bond stabilizes, payoff felt
-  | 'invite-co-presence'    // reader feels invited, not sold to
-
-/** Device pulling reader to next section. Subtle — anti-cliffhanger. */
-export type CuriosityMechanic =
-  | 'observation-anomaly'      // someone noticed something
-  | 'unresolved-pronoun'       // who? what? ai? cái gì?
-  | 'open-loop'                // ends mid-arc
-  | 'unstated-cause'           // effect shown, cause withheld
-  | 'time-jump-tease'          // "sau này...", "ngày đó..."
-  | 'small-moment-magnification' // tiny detail given weight
-
-/** Sentence-length & cadence pattern. Storyselling realignment: DROP
- *  'fragmented' (creates AI-essay feel). 'conversational' is now the
- *  default. 'short-clipped' restricted to rare emphasis — never section-
- *  level rhythm.
- *
- *  Anti-monotony loosened: 2 adjacent conversational/flowing sections OK
- *  if readable. We do NOT punish flowing similarity. */
-export type RhythmProfile =
-  | 'conversational'        // DEFAULT — 12-20 word sentences, natural flow, 2-4 sentence paragraphs
-  | 'long-flowing'          // 15-22 words, em-dash, observational, longer paragraphs
-  | 'short-clipped'         // RARE emphasis only — 5-9 words. Not section-default.
-  | 'reflective-pause'      // longer sentences + occasional trailing "…", interior monologue
-  | 'mixed'                 // combo — for multi-tonal sections like discovery/payoff
-
-/** How section hands off to next. Anti-hard-cliffhanger. */
-export type TransitionPsychology =
-  | 'open-loop'             // unresolved phrase / unanswered observation
-  | 'silent-cut'            // hard stop, time-shift implicit
-  | 'time-jump'             // "đêm đó", "ba tuần sau"
-  | 'thematic-echo'         // motif from earlier returns subtly
-  | 'question-implicit'     // reader's own question forms
-  | 'emotional-pull'        // feeling carries forward
-  | 'resolution-settle'     // closing — no pull, just settle
-
-/** Opening hook pattern — only section 1 (narrativeRole='hook'). */
-/** v4 hook patterns — pattern interrupt + emotional snap.
- *  Section 1 (hook-interrupt) MUST create immediate recognition + fear within
- *  3 lines. NO smooth/descriptive/bio openers. */
+/** 6 emotional postures for the self-recognition-hook block.
+ *  Layered as flavor on top of YOU-first opener (sampled separately). */
 export type HookPattern =
   | 'emotional-rejection'   // "Tôi bắt đầu ghét buổi sáng."
   | 'specific-fear-moment'  // "Có sáng tôi đứng cạnh mép giường 3 phút..."
@@ -406,8 +312,6 @@ export interface EnergyCurvePreset {
   id: EnergyCurveId
   label: string
   description: string
-  /** Per-section tension delta (added to base TENSION_CURVE). */
-  tensionDeltas: Partial<Record<SectionId, number>>
   /** Pacing flavor for prompt — 1-line emotional movement style. */
   pacingFlavor: string
 }
@@ -436,16 +340,7 @@ export interface MemorySnapshot {
   scene: string
 }
 
-/** Pacing class — cross-pack rhythm orchestration. Different sections
- *  have different pacing density để chống monotony. v4.6. */
-export type PacingClass =
-  | 'impact'           // strong opening (section 1) — emotional snap + anchor image
-  | 'text-breathing'   // high text + minimal/no image (sections 3, 5, 11)
-  | 'dense-narrative'  // solid text + 1 image (sections 2, 9)
-  | 'mixed'            // balanced text + 1-2 image (sections 4, 6, 7, 8)
-  | 'image-led'        // multiple images + low text (section 10 only)
-
-/** Camera language — per emotional beat. Storyselling visual grammar. */
+/** Camera language — visual grammar (Chunk E rebuilds taxonomy). */
 export type CameraLanguage =
   | 'partial-face-observational'    // pain/friction — không full face, không hero shot
   | 'static-quiet-frame'            // reflection/belief-shift — still, contemplative
@@ -454,15 +349,6 @@ export type CameraLanguage =
   | 'environmental-distance'        // internal-fear — observed from outside
   | 'domestic-realism'              // micro-reward — kitchen / home everyday
   | 'over-shoulder-peripheral'      // discovery — not center, casual catch
-
-/** Lightweight pull device — subtle continuation, NOT plot twist.
- *  Each section optionally has 1. Section 10 typically null (closure). */
-export type RetentionMechanic =
-  | 'section-end-pull'       // last line creates quiet continuation
-  | 'reveal-delay'           // info dripped, not dumped
-  | 'curiosity-debt'         // unanswered question carried forward
-  | 'emotional-contrast'     // small mismatch (calm tone + unsettled fact)
-  | 'micro-question'         // implicit reader question formed
 
 // ═════════════════════════════════════════════════════════════════════
 // 2. PROTAGONIST PROFILE — identity anchor
@@ -531,90 +417,6 @@ export interface StorytellingInput {
 
   // Optional carry-over from LandingGenParams
   visualMemory?: VisualMemoryItem[]
-}
-
-// ═════════════════════════════════════════════════════════════════════
-// 4. SECTION BLUEPRINT METADATA
-// ═════════════════════════════════════════════════════════════════════
-
-export type TextDensity = 'none' | 'low' | 'medium' | 'medium-high' | 'high'
-
-export type ContinuityRequirement = 'anchor' | 'required' | 'optional' | 'none'
-
-export type ProductVisibility =
-  | 'forbidden'
-  | 'mentioned-only'
-  | 'subtle-background'
-  | 'still-life'
-
-/** Section-level overlay allowance — values match AllowedOverlayType union
- *  so blueprint hints map 1:1 to actual overlay types ở render time. */
-export type OverlayAllowance =
-  | 'never'
-  | 'chapter-marker'
-  | 'diary-timestamp'
-  | 'photobook-caption'
-  | 'film-subtitle'
-
-/** Metadata-only section spec — KHÔNG hardcode text. Runtime text gen
- *  consume blueprint via prompt builder. */
-export interface SectionBlueprint {
-  id: SectionId
-  order: number                        // 1-10
-  role: string                          // short VN label, vd "mở chuyện"
-  emotionalBeat: EmotionalBeat
-  textDensity: TextDensity
-  imageRequirement: {
-    countDefault: number               // 0 | 1 | 2
-    rangeMin: number
-    rangeMax: number
-    isOptional: boolean
-  }
-  continuityRequirement: ContinuityRequirement
-  productVisibility: ProductVisibility
-  overlayAllowance: OverlayAllowance
-  pacingPurpose: string                 // 1-line, vd "rock-bottom anchor"
-  curiosityGapAfter: boolean
-
-  // ─── v4 Narrative Dynamics layer ───────────────────────────────────
-  /** Structured role (vs `role` which is VN human-readable label). */
-  narrativeRole: NarrativeRole
-  /** What section DOES to reader (≠ feeling reader gets). */
-  emotionalFunction: EmotionalFunction
-  /** Device pulling reader forward — null for closure section. */
-  curiosityMechanic: CuriosityMechanic | null
-  /** Cadence profile — adjacent sections MUST differ. */
-  rhythmProfile: RhythmProfile
-  /** Hand-off psychology to next section. */
-  transitionPsychology: TransitionPsychology
-  /** Tension/release graph position 0-10. */
-  tensionLevel: number
-  /** Optional retention micro-mechanic — null = no pull (closure). */
-  retentionMechanic: RetentionMechanic | null
-  /** Hook pattern — only section 1 (narrativeRole='hook'). */
-  hookPattern?: HookPattern
-
-  // ─── v4.3 Visual Role System ──────────────────────────────────────
-  /** Image purpose roles for this section (parallel to imageRequirement.countDefault).
-   *  Every generated image MUST belong to one role — necessity test. */
-  imagePurposeRoles?: ImagePurposeRole[]
-  /** Camera language styles preferred for this section. Image gen prompts
-   *  inject these as visual treatment directives. */
-  cameraLanguage?: CameraLanguage[]
-
-  // ─── v4.6 Pacing Orchestration ────────────────────────────────────
-  /** Cross-pack rhythm class. Variety required across pack — no 3 adjacent
-   *  sections share class. */
-  pacingClass?: PacingClass
-}
-
-/** SectionPlan — output của resolveSectionPlan(). Drives prompt builder. */
-export interface SectionPlan {
-  blueprint: SectionBlueprint
-  imageCount: number
-  hasImage: boolean
-  showsProduct: boolean
-  overlayType: AllowedOverlayType | null
 }
 
 // ═════════════════════════════════════════════════════════════════════
@@ -787,7 +589,10 @@ export interface NichePreset {
   preferredTreatments: VisualTreatment[]
   ctaSoftness: CtaSoftnessKey
   supportingCharacter: SupportingCharacterMode
-  sectionCount: 9 | 10 | 11
+  /** Block count is now flex 13-15 driven by resolveBlockPlan. Kept for
+   *  legacy NICHE_PRESETS data which may still set this number; resolver
+   *  ignores it (block plan is intensity + niche driven). */
+  sectionCount: number
   imageCount: number
   recommendedCulturalWorld: CulturalWorldKey[]
 }
@@ -810,9 +615,10 @@ export interface StorytellingMeta {
   niche: NicheKey
   overlayBudgetUsed: number
   /** Parallel array với `pack.sections` — sectionIds[i] = storytelling
-   *  section ID của pack.sections[i]. Tránh pollute shared LandingSection
-   *  type với storytelling-specific field. */
-  sectionIds: SectionId[]
+   *  block ID của pack.sections[i]. Tránh pollute shared LandingSection
+   *  type với storytelling-specific field. (Field name kept for back-compat
+   *  with v5.8 persisted packs; values are BlockId post-Reader-Immersion rebuild.) */
+  sectionIds: BlockId[]
   /** Per-section overlay assignment — null = no overlay (default).
    *  Parallel với pack.sections. */
   overlayPerSection: (AllowedOverlayType | null)[]

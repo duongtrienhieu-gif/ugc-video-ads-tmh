@@ -9,7 +9,7 @@
 // at blueprint level via rhythmVariance.validateAdjacentRhythms).
 // ─────────────────────────────────────────────────────────────────────
 
-import type { SectionId } from '../types'
+import type { BlockId } from '../types'
 import type { ParsedSection } from '../runtime/parsePackResponse'
 import type { ValidatorResult, ValidatorViolation } from './bioIntroDetector'
 
@@ -63,7 +63,7 @@ const LONG_RATIO_THRESHOLD = 0.08
 export function adjacentRhythmDetector(sections: ParsedSection[]): ValidatorResult {
   const violations: ValidatorViolation[] = []
 
-  const stats: Array<{ id: SectionId; stats: RhythmStats }> = sections.map((s) => ({
+  const stats: Array<{ id: BlockId; stats: RhythmStats }> = sections.map((s) => ({
     id: s.id,
     stats: computeRhythmStats(s.copy),
   }))

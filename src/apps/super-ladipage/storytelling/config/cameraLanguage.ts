@@ -9,7 +9,11 @@
 // prompt injects these as visual treatment directives.
 // ─────────────────────────────────────────────────────────────────────
 
-import type { CameraLanguage, EmotionalBeat } from '../types'
+import type { CameraLanguage } from '../types'
+
+/** Free-form emotional beat key used by CAMERA_LANGUAGE_BY_BEAT.
+ *  Replaces deleted v4 EmotionalBeat enum — Chunk E will rebuild taxonomy. */
+type EmotionalBeat = string
 
 export interface CameraLanguageSpec {
   style: CameraLanguage

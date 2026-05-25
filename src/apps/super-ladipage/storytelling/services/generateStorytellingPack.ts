@@ -22,44 +22,67 @@
 // ═════════════════════════════════════════════════════════════════════
 
 import type {
-  AllowedOverlayType, CharacterProfile, LandingGenParams, LandingPagePack,
-  LandingSection, ProtagonistProfile, SectionId, StorytellingPack,
+  AllowedOverlayType, BlockId, CharacterProfile, LandingGenParams, LandingPagePack,
+  LandingSection, ProtagonistProfile, StorytellingPack,
 } from '../types'
 import type { SectionType } from '../../types'
 import { useBankStore } from '../../../../stores/bankStore'
 import { useSettingsStore } from '../../../../stores/settingsStore'
-import { DEFAULT_SECTION_ORDER, SECTION_BLUEPRINTS } from '../config/sectionBlueprints'
 import { resolveStorytellingInput } from '../resolvers/resolveStorytellingInput'
-import { resolveSectionPlan } from '../resolvers/resolveSectionPlan'
+import { resolveBlockPlan } from '../resolvers/resolveBlockPlan'
 import { buildProductBrief } from '../runtime/buildPackGenPrompt'
 import { generatePackWithRetry } from '../runtime/retryWithFeedback'
 import type { GeneratedPackResult } from '../runtime/retryWithFeedback'
 import { selectNarratorDna } from '../runtime/selectNarratorDna'
 
-// ── Map storytelling SectionId → existing UGC SectionType for
-//    LandingSection.type compat. Storytelling section ID stored
+// ── Map storytelling BlockId → existing UGC SectionType for
+//    LandingSection.type compat. Storytelling block ID stored
 //    separately trong storytellingMeta.sectionIds. ───────────────────
-/** v4.1 — 11 storytelling section IDs → existing UGC SectionType (for
- *  LandingSection.type compat). Storytelling SectionId is stored in
- *  storytellingMeta.sectionIds parallel array. */
-const SECTION_TYPE_MAP: Record<SectionId, SectionType> = {
-  'hook-interrupt':    'hero',
-  'daily-friction':    'pain',
-  'internal-fear':     'pain',
-  'failed-attempts':   'failed-solutions',
-  'belief-shift':      'why-happens',         // AHA reinterpretation
-  'soft-reveal':       'product-discovery',
-  'micro-reward':      'lifestyle',
-  'emotional-payoff':  'lifestyle',
-  'reflection-trust':  'lifestyle',
-  'trust-continuity':  'social-proof',        // mini testimonials in reviews field
-  'soft-cta':          'final-cta',
+const BLOCK_TYPE_MAP: Record<BlockId, SectionType> = {
+  // Phase 1 — RECOGNITION
+  'self-recognition-hook':     'hero',
+  'daily-micro-friction':      'pain',
+  'hidden-emotional-truth':    'pain',
+  'not-alone-bridge':          'pain',
+  // Phase 2 — TRUST + RESISTANCE ALIGNMENT
+  'narrator-validation-entry': 'pain',
+  'shared-failed-attempts':    'failed-solutions',
+  'skepticism-alignment':      'failed-solutions',
+  'belief-shift':              'why-happens',         // AHA reinterpretation
+  // Phase 3 — SOLUTION OPENING
+  'natural-product-discovery': 'product-discovery',
+  'why-this-felt-different':   'product-discovery',
+  'soft-mechanism-compare':    'product-discovery',
+  // Phase 4 — FUTURE SELF IMMERSION
+  'micro-transformation':      'lifestyle',
+  'emotional-wins':            'lifestyle',
+  'social-proof':              'social-proof',        // separate review call
+  'future-self-cta':           'final-cta',
 }
 
-/** Build CharacterProfile từ resolved ProtagonistProfile. P1: name là
- *  placeholder "Nhân vật chính"; Phase 3 (Character Engine) sẽ extract
- *  name từ product/niche hoặc cho Gemini quyết. */
-function buildCharacterProfile(p: ProtagonistProfile): CharacterProfile {
+/** Block → emotional arc mood (for UGC CharacterProfile.emotionalArc).
+ *  String free-form per parent CharacterProfile.emotionalArc.mood: string. */
+const BLOCK_EMOTIONAL_MOOD: Record<BlockId, string> = {
+  'self-recognition-hook':     'calm-curious',
+  'daily-micro-friction':      'subtle-unease',
+  'hidden-emotional-truth':    'recurring-discomfort',
+  'not-alone-bridge':          'quiet-relief',
+  'narrator-validation-entry': 'companion-warmth',
+  'shared-failed-attempts':    'frustration',
+  'skepticism-alignment':      'guarded-curiosity',
+  'belief-shift':              'quiet-reflection',
+  'natural-product-discovery': 'tentative',
+  'why-this-felt-different':   'hesitant-curiosity',
+  'soft-mechanism-compare':    'quiet-reflection',
+  'micro-transformation':      'first-hope',
+  'emotional-wins':            'acceptance-joy',
+  'social-proof':              'settled-resolve',
+  'future-self-cta':           'settled-resolve',
+}
+
+/** Build CharacterProfile từ resolved ProtagonistProfile + actual blockIds
+ *  ordered by plan. Emotional arc length matches pack's block count (13-15). */
+function buildCharacterProfile(p: ProtagonistProfile, blockIds: BlockId[]): CharacterProfile {
   const hijab = p.cultural.hijabState === 'always' ? ', hijab always' :
                 p.cultural.hijabState === 'never'  ? '' : ', hijab sometimes'
   return {
@@ -69,22 +92,19 @@ function buildCharacterProfile(p: ProtagonistProfile): CharacterProfile {
       `${p.cultural.world}, age ${p.ageRange}${hijab}, ${p.cultural.modestyLevel} dress, ${p.wardrobeWorld} wardrobe, ${p.personalityVibe} vibe`,
     environmentLock:
       `${p.homeLifestyle.setting} setting, family: ${p.homeLifestyle.familyStructure}`,
-    emotionalArc: DEFAULT_SECTION_ORDER.map((sid) => ({
-      sectionType: SECTION_TYPE_MAP[sid],
-      mood: SECTION_BLUEPRINTS[sid].emotionalBeat,
+    emotionalArc: blockIds.map((id) => ({
+      sectionType: BLOCK_TYPE_MAP[id],
+      mood: BLOCK_EMOTIONAL_MOOD[id],
     })),
   }
 }
 
-/** Allocate overlay per section. P1: hardcoded heuristic (chapter @ s1,
- *  diary @ s8). Phase 5 (CTA system) sẽ make overlay allocation niche-aware. */
-/** v4.1 — 11 sections. Overlay budget = 2/14 ảnh.
- *  Chapter-marker on hook-interrupt (section 1), diary-timestamp on
- *  micro-reward (section 7) — feels like photo book page break. */
-function allocateOverlay(sectionIds: SectionId[]): (AllowedOverlayType | null)[] {
-  return sectionIds.map((sid) => {
-    if (sid === 'hook-interrupt') return 'chapter-marker'
-    if (sid === 'micro-reward')   return 'diary-timestamp'
+/** Allocate overlay per block. Chapter-marker on Phase-1 first block only.
+ *  Chunk E (visual rebuild) will expand to phase-aware overlay budget. */
+function allocateOverlay(blockIds: BlockId[]): (AllowedOverlayType | null)[] {
+  return blockIds.map((id, idx) => {
+    if (idx === 0 && id === 'self-recognition-hook') return 'chapter-marker'
+    if (id === 'micro-transformation') return 'diary-timestamp'
     return null
   })
 }
@@ -130,13 +150,13 @@ export async function generateStorytellingPack(
   )
   const totalStart = Date.now()
 
-  // ─── 2. Resolve input + section plan ──────────────────────────────
+  // ─── 2. Resolve input + block plan ────────────────────────────────
   const input = resolveStorytellingInput(params)
-  const plan = resolveSectionPlan(input)
+  const plan = resolveBlockPlan(input)
   console.info(
     `[storytelling] resolved input: niche=${input.niche}, pacing=${input.pacingType}, ` +
     `intensity=${input.emotionalIntensity}, productReveal=section ${input.productRevealSection}, ` +
-    `sections planned=${plan.length}`,
+    `blocks planned=${plan.length}`,
   )
 
   // ─── 3. Build product brief ───────────────────────────────────────
@@ -167,8 +187,7 @@ export async function generateStorytellingPack(
 
   // ─── 5. Assemble LandingSection[] ────────────────────────────────
   const sections: LandingSection[] = result.sections.map((s) => {
-    const blueprint = SECTION_BLUEPRINTS[s.id]
-    // v4.5 — Trust-continuity section: map parsed reviews → LandingSection.reviews
+    // social-proof block: map parsed reviews → LandingSection.reviews
     // (uses existing UGC LandingSection.reviews field — no schema pollution)
     const reviews = s.reviews?.map((r) => ({
       author: r.author ?? 'Một bạn đọc',
@@ -176,20 +195,20 @@ export async function generateStorytellingPack(
       meta:   r.meta,
     }))
     return {
-      type:        SECTION_TYPE_MAP[s.id],
+      type:        BLOCK_TYPE_MAP[s.id],
       title:       s.title,
       titleVi:     s.title,  // copy is already Vietnamese
       copy:        s.copy,
-      layoutGuide: blueprint.pacingPurpose,
-      imagePrompts: [],  // image gen = Phase 4
-      reviews,             // v4.5 — undefined for non-trust-continuity sections
+      layoutGuide: '',       // Chunk E (visual rebuild) will repopulate
+      imagePrompts: [],      // image gen = Chunk E
+      reviews,
     }
   })
 
   // ─── 6. Build character profile + overlay allocation ─────────────
-  const characterProfile = buildCharacterProfile(input.protagonistProfile)
-  const sectionIds = result.sections.map((s) => s.id)
-  const overlayPerSection = allocateOverlay(sectionIds)
+  const blockIds = result.sections.map((s) => s.id)
+  const characterProfile = buildCharacterProfile(input.protagonistProfile, blockIds)
+  const overlayPerSection = allocateOverlay(blockIds)
 
   // ─── 7. Assemble StorytellingPack ────────────────────────────────
   const pack: StorytellingPack = {
@@ -207,7 +226,7 @@ export async function generateStorytellingPack(
       productRevealSection: input.productRevealSection,
       niche:                input.niche,
       overlayBudgetUsed:    overlayPerSection.filter((o) => o !== null).length,
-      sectionIds,
+      sectionIds:           blockIds,
       overlayPerSection,
       sectionStatus:        result.perSectionStatus,
       attempts:             result.attempts,

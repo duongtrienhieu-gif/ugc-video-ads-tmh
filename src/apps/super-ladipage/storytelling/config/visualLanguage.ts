@@ -7,7 +7,7 @@
 // ─────────────────────────────────────────────────────────────────────
 
 import type {
-  SectionId, VisualLanguageConfig, VisualTreatment,
+  BlockId, VisualLanguageConfig, VisualTreatment,
 } from '../types'
 
 export const VISUAL_LANGUAGE: VisualLanguageConfig = {
@@ -44,18 +44,25 @@ export const VISUAL_LANGUAGE: VisualLanguageConfig = {
     'Would a real family member post this photo on Facebook? Or only a brand stylist? If only a brand stylist — reject.',
 }
 
-/** v4.1 — 11 sections. Image purpose roles + camera language come in v4.3.
- *  For now, baseline preferred treatments per section. */
-export const SECTION_VISUAL_MAP: Record<SectionId, VisualTreatment[]> = {
-  'hook-interrupt':      ['family-album', 'domestic-observational'],   // anchor-face + emotion-detail
-  'daily-friction':      ['photojournalism-light', 'imperfect-real'],  // daily struggle candid
-  'internal-fear':       ['imperfect-real'],                            // silence-frame, partial face
-  'failed-attempts':     ['flat-lay-natural'],                          // object-symbol
-  'belief-shift':        ['memory-snapshot', 'smartphone-candid'],      // cafe scene with friend
-  'soft-reveal':         ['still-life-domestic'],                       // product ~15% frame
-  'micro-reward':        ['domestic-observational', 'imperfect-real'],  // mở rèm, đi bộ
-  'emotional-payoff':    ['family-album', 'environmental-wide'],        // siêu thị, nấu ăn
-  'reflection-trust':    ['landscape-quiet', 'imperfect-real'],         // ban công, cửa sổ
-  'trust-continuity':    ['smartphone-candid', 'still-life-domestic'],  // FB feedback + product clean
-  'soft-cta':            ['landscape-quiet', 'family-album'],           // landscape OR window
+/** Baseline preferred visual treatments per block (Chunk E rebuilds taxonomy). */
+export const SECTION_VISUAL_MAP: Record<BlockId, VisualTreatment[]> = {
+  // Phase 1 — RECOGNITION
+  'self-recognition-hook':     ['family-album', 'domestic-observational'],
+  'daily-micro-friction':      ['photojournalism-light', 'imperfect-real'],
+  'hidden-emotional-truth':    ['imperfect-real'],
+  'not-alone-bridge':          ['smartphone-candid', 'imperfect-real'],
+  // Phase 2 — TRUST + RESISTANCE ALIGNMENT
+  'narrator-validation-entry': ['family-album', 'domestic-observational'],
+  'shared-failed-attempts':    ['flat-lay-natural'],
+  'skepticism-alignment':      ['imperfect-real'],
+  'belief-shift':              ['memory-snapshot', 'smartphone-candid'],
+  // Phase 3 — SOLUTION OPENING
+  'natural-product-discovery': ['still-life-domestic'],
+  'why-this-felt-different':   ['still-life-domestic', 'imperfect-real'],
+  'soft-mechanism-compare':    ['flat-lay-natural', 'still-life-domestic'],
+  // Phase 4 — FUTURE SELF IMMERSION
+  'micro-transformation':      ['domestic-observational', 'imperfect-real'],
+  'emotional-wins':            ['family-album', 'environmental-wide'],
+  'social-proof':              ['smartphone-candid', 'still-life-domestic'],
+  'future-self-cta':           ['landscape-quiet', 'family-album'],
 }

@@ -1,33 +1,26 @@
 // ─────────────────────────────────────────────────────────────────────
-// Storytelling Engine — READER MIRROR MOMENTS (v5.8)
+// Storytelling Engine — READER MIRROR MOMENTS (Reader-Immersion architecture)
 //
-// Per user direction: "Reader mirror moments xuyên suốt" + "1 câu chuyện
-// hoàn chỉnh có nhiều hơn sự tương tác, liên kết giữa 'bạn' và 'tôi'."
+// Each block whose samplingHooks.readerMirrorBeat = true gets 1 SAMPLED
+// mirror moment — a question that addresses reader directly ("Bạn có
+// từng X?") woven into the block's narrative.
 //
-// Each non-reveal body section gets 1 SAMPLED mirror beat — a moment where
-// narrator addresses reader directly ("Bạn có từng X?") then continues their
-// own story. Keeps reader emotionally hooked beyond section 1.
-//
-// SAMPLING:
-//   - 1 mirror beat type per section (sections 2,3,4,5,7,8,9,11 — skip s6+s10)
-//   - Sampled deterministically per pack via seed
-//   - Each beat has STRUCTURAL TEMPLATE + 3 niche-mismatched example questions
-//
-// SKIP sections:
-//   - s6 (soft-reveal): mirror beat would feel weird mid-product-mention
-//   - s10 (trust-continuity): handled by separate review-only call
+// Reader-Immersion rebuild: keys are now BlockId (post-v5.8) instead of
+// legacy SectionId. Phase 1 blocks lean heavy on mirror beats (reader is
+// emotional center); Phase 2 blocks use them sparingly as narrator joins
+// reader; Phase 3-4 use them at strategic projection moments.
 //
 // Per engineering rule: SAMPLING OBJECT with concrete niche-mismatched data,
-// NOT prose advisory. Same anti-leak pattern as Chunk 1 reviewStyleProfiles +
+// NOT prose advisory. Same anti-leak pattern as reviewStyleProfiles +
 // performanceHookLayer.
 // ─────────────────────────────────────────────────────────────────────
 
-import type { SectionId } from '../types'
+import type { BlockId } from '../types'
 
 export interface ReaderMirrorBeat {
   id: string
-  /** Which section this beat fits into. */
-  section: SectionId
+  /** Which block this beat fits into. */
+  block: BlockId
   /** Structural posture of the mirror beat. */
   posture: 'recognition' | 'memory-recall' | 'comparison' | 'permission' | 'absence-aware' | 'projection'
   /** 1-line vibe summary of when this beat lands. */
@@ -36,12 +29,14 @@ export interface ReaderMirrorBeat {
   exampleQuestions: string[]
 }
 
-/** Pool of mirror beats per section. Sampler picks 1 per section per pack. */
+/** Pool of mirror beats per block. Sampler picks 1 per block per pack.
+ *  Coverage: 6 blocks have beats. Blocks without beats → sampler returns
+ *  null gracefully (no beat injected). Pool can expand per phase later. */
 export const READER_MIRROR_BEATS: ReaderMirrorBeat[] = [
-  // ─── Section 2 — daily-friction ───────────────────────────────────
+  // ─── Phase 1 — daily-micro-friction (block 2) ─────────────────────
   {
-    id: 's2-daily-recognition-1',
-    section: 'daily-friction',
+    id: 'p1-friction-recognition',
+    block: 'daily-micro-friction',
     posture: 'recognition',
     vibe: 'name a daily micro-moment reader knows from inside',
     exampleQuestions: [
@@ -51,8 +46,8 @@ export const READER_MIRROR_BEATS: ReaderMirrorBeat[] = [
     ],
   },
   {
-    id: 's2-daily-recognition-2',
-    section: 'daily-friction',
+    id: 'p1-friction-absence',
+    block: 'daily-micro-friction',
     posture: 'absence-aware',
     vibe: 'highlight what reader stopped doing without noticing',
     exampleQuestions: [
@@ -62,10 +57,10 @@ export const READER_MIRROR_BEATS: ReaderMirrorBeat[] = [
     ],
   },
 
-  // ─── Section 3 — internal-fear ────────────────────────────────────
+  // ─── Phase 1 — hidden-emotional-truth (block 3) ───────────────────
   {
-    id: 's3-fear-memory-recall',
-    section: 'internal-fear',
+    id: 'p1-truth-memory-recall',
+    block: 'hidden-emotional-truth',
     posture: 'memory-recall',
     vibe: 'surface a private night-time fear reader carries silently',
     exampleQuestions: [
@@ -75,8 +70,8 @@ export const READER_MIRROR_BEATS: ReaderMirrorBeat[] = [
     ],
   },
   {
-    id: 's3-fear-projection',
-    section: 'internal-fear',
+    id: 'p1-truth-projection',
+    block: 'hidden-emotional-truth',
     posture: 'projection',
     vibe: 'surface the fear without naming it directly',
     exampleQuestions: [
@@ -86,10 +81,36 @@ export const READER_MIRROR_BEATS: ReaderMirrorBeat[] = [
     ],
   },
 
-  // ─── Section 4 — failed-attempts ──────────────────────────────────
+  // ─── Phase 1 — not-alone-bridge (block 4) ─────────────────────────
   {
-    id: 's4-failed-companion',
-    section: 'failed-attempts',
+    id: 'p1-not-alone-recognition',
+    block: 'not-alone-bridge',
+    posture: 'recognition',
+    vibe: 'frame the shared experience as relief, not statistic',
+    exampleQuestions: [
+      'Bạn có từng nghĩ "chỉ mỗi mình mình bị thế" — rồi vô tình đọc được câu chuyện của người khác y chang mình?',
+      'Bạn có từng giấu chuyện này lâu đến mức quên mất có thể có ai đó cũng đang sống y vậy?',
+      'Bạn có từng cảm thấy nhẹ đi một chút chỉ vì biết người khác cũng đang trải qua điều đó?',
+    ],
+  },
+
+  // ─── Phase 2 — narrator-validation-entry (block 5) ────────────────
+  {
+    id: 'p2-validation-recognition',
+    block: 'narrator-validation-entry',
+    posture: 'recognition',
+    vibe: 'narrator joins reader by naming the exact felt moment',
+    exampleQuestions: [
+      'Bạn cũng từng đứng đó đúng không — tự nhủ "có lẽ là do thời tiết" rồi quay đi?',
+      'Bạn cũng từng pha ly cà phê thứ 3 lúc 3 giờ chiều rồi tự thuyết phục mình "không sao đâu"?',
+      'Bạn cũng từng nhìn ngăn kéo đầy vitamin chưa uống hết rồi nghĩ "lần này chắc cũng vậy" đúng không?',
+    ],
+  },
+
+  // ─── Phase 2 — shared-failed-attempts (block 6) ───────────────────
+  {
+    id: 'p2-failed-companion',
+    block: 'shared-failed-attempts',
     posture: 'recognition',
     vibe: 'validate reader\'s past attempts as not-their-fault',
     exampleQuestions: [
@@ -99,10 +120,10 @@ export const READER_MIRROR_BEATS: ReaderMirrorBeat[] = [
     ],
   },
 
-  // ─── Section 5 — belief-shift ─────────────────────────────────────
+  // ─── Phase 2 — belief-shift (block 8) ─────────────────────────────
   {
-    id: 's5-belief-permission',
-    section: 'belief-shift',
+    id: 'p2-belief-permission',
+    block: 'belief-shift',
     posture: 'permission',
     vibe: 'invite reader to question their own assumption',
     exampleQuestions: [
@@ -112,23 +133,10 @@ export const READER_MIRROR_BEATS: ReaderMirrorBeat[] = [
     ],
   },
 
-  // ─── Section 7 — micro-reward ─────────────────────────────────────
+  // ─── Phase 4 — emotional-wins (block 13) ──────────────────────────
   {
-    id: 's7-micro-comparison',
-    section: 'micro-reward',
-    posture: 'memory-recall',
-    vibe: 'invite reader to remember pre-decline state',
-    exampleQuestions: [
-      'Bạn còn nhớ cảm giác sáng dậy không nặng đầu là thế nào không?',
-      'Bạn còn nhớ lần cuối tóc bạn không rụng nắm khi gội đầu là khi nào không?',
-      'Bạn còn nhớ cảm giác đứng dậy mà không phải vịn vào đâu là như thế nào không?',
-    ],
-  },
-
-  // ─── Section 8 — emotional-payoff ─────────────────────────────────
-  {
-    id: 's8-payoff-absence-aware',
-    section: 'emotional-payoff',
+    id: 'p4-wins-absence-aware',
+    block: 'emotional-wins',
     posture: 'absence-aware',
     vibe: 'name what reader has been living without',
     exampleQuestions: [
@@ -137,30 +145,15 @@ export const READER_MIRROR_BEATS: ReaderMirrorBeat[] = [
       'Đã bao lâu rồi bạn không ngồi yên 30 phút mà không cảm thấy đang lãng phí thời gian?',
     ],
   },
-
-  // ─── Section 9 — reflection-trust ─────────────────────────────────
   {
-    id: 's9-reflection-comparison',
-    section: 'reflection-trust',
+    id: 'p4-wins-comparison',
+    block: 'emotional-wins',
     posture: 'comparison',
     vibe: 'invite reader to project to their own potential later-self',
     exampleQuestions: [
       'Bạn có từng nhìn lại mình cách đây vài tháng và thấy mình khác hẳn không?',
       'Bạn có từng đọc lại một dòng note tự ghi cho mình cách đây 6 tháng và thấy nó như là người khác viết không?',
       'Bạn có từng tự nhủ "không biết 3 tháng nữa mình sẽ ra sao" — và rồi thật sự khác?',
-    ],
-  },
-
-  // ─── Section 11 — soft-cta ────────────────────────────────────────
-  {
-    id: 's11-cta-projection',
-    section: 'soft-cta',
-    posture: 'projection',
-    vibe: 'invite reader to imagine being in narrator\'s current state',
-    exampleQuestions: [
-      'Nếu bạn cũng đang ở giai đoạn đó — chỉ cần một thay đổi nhỏ thôi cũng đủ để thấy khác.',
-      'Nếu bạn cũng đang cảm thấy giống tôi 6 tháng trước — thì có lẽ đã đến lúc thử một cách khác.',
-      'Nếu bạn cũng đang đếm từng ngày chờ cảm giác nhẹ nhõm trở lại — thì bạn không phải đợi mãi.',
     ],
   },
 ]
@@ -173,22 +166,21 @@ function hashSeed(s: string): number {
   return Math.abs(h)
 }
 
-/** Sample 1 mirror beat for a given section. Deterministic per seed.
- *  Returns null if section has no beats (e.g. soft-reveal s6, trust-continuity s10). */
-export function sampleMirrorBeat(seed: string, section: SectionId): ReaderMirrorBeat | null {
-  const candidates = READER_MIRROR_BEATS.filter((b) => b.section === section)
+/** Sample 1 mirror beat for a given block. Deterministic per seed.
+ *  Returns null if block has no beats — caller skips injection. */
+export function sampleMirrorBeat(seed: string, block: BlockId): ReaderMirrorBeat | null {
+  const candidates = READER_MIRROR_BEATS.filter((b) => b.block === block)
   if (candidates.length === 0) return null
-  const idx = hashSeed(`${seed}:mirror:${section}`) % candidates.length
+  const idx = hashSeed(`${seed}:mirror:${block}`) % candidates.length
   return candidates[idx]
 }
 
-/** Per-section directive injection. Compact — shape + 1 example.
- *  Inject 1 line per section telling Gemini to weave a reader-mirror beat
- *  in this section's structural pattern. */
+/** Per-block directive injection. Compact — shape + 1 example.
+ *  Inject 1 line per block telling Gemini to weave a reader-mirror beat. */
 export function readerMirrorBeatDirective(beat: ReaderMirrorBeat): string {
   const ex = beat.exampleQuestions[0]
-  return `READER MIRROR BEAT (weave 1 question + transition back to tôi voice):
+  return `READER MIRROR BEAT (weave 1 question + transition back to narrator voice if appropriate):
   posture: ${beat.posture} — ${beat.vibe}
   shape example (NEVER copy — niche-mismatched): "${ex}"
-  Generate new question fitting THIS pack's niche + narrator pain, then continue tôi voice.`
+  Generate new question fitting THIS pack's niche + narrator pain.`
 }

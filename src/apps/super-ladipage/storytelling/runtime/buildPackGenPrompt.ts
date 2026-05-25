@@ -1,53 +1,40 @@
 // ═════════════════════════════════════════════════════════════════════
-// Storytelling Engine — pack-gen user prompt builder
+// Storytelling Engine — pack-gen user prompt builder (Reader-Immersion)
 //
-// v5.7 architecture shift (per user feedback after first real test):
-//   KEEP CORE SYSTEM SMALL. Per-pack diversity lives in SAMPLING OBJECTS
-//   (narrator / hookAxis / memorySnapshot / reviewStyle / energyCurve /
-//   discoveryChannel), NOT in giant prompt rules.
+// Iterates BlockPlan, builds per-block directives driven by:
+//   - phase                  → which conversion phase
+//   - psychologicalFunction  → what this block does to reader's mind
+//   - youIBalance            → reader-heavy / narrator-validation / future-reader
+//   - intent                 → 1-line psychological purpose
+//   - paragraphTarget        → soft pacing target
+//   - samplingHooks          → which sampling objects to inject
 //
-// Dropped from top-level (were duplicating per-section directives):
-//   - HOOK_ENFORCEMENT_PROMPT      → covered by section 1 directive
-//   - BELIEF_SHIFT_PROMPT          → covered by section 5 directive
-//   - SOFT_CTA_PROMPT              → covered by section 11 directive
-//   - RHYTHM_ENGINE_PROMPT         → covered by per-section RHYTHM line
-//   - RETENTION_RESTRAINT_PROMPT   → covered by ENGINE_CORE_PHILOSOPHY
-//   - MICRO_REALISM_PROMPT         → covered by ENGINE_CORE_PHILOSOPHY + per-section micro-realism
-//   - VISUAL_FIRST_WRITING_PROMPT  → covered by ENGINE_CORE_PHILOSOPHY
-//   - VISUAL_COHERENCE_PROMPT      → was Phase 4 image gen; not needed for text gen
-//
-// Also dropped: v5.6 "⛔ KHÔNG copy ..." anti-template bans (hook + belief +
-// soft-reveal). Structural fix (per-pack hookPattern / beliefCatalystType
-// sampling + structure-only reframe) handles the leak — anti-rules were
-// belt-and-suspenders that contributed to prompt entropy.
+// Each block is a PSYCHOLOGICAL TRANSITION carried by the reader, NOT a
+// story scene carried by the narrator. Per-block directive injects ONLY
+// what that block's samplingHooks call for — keeps prompt mass small.
 // ═════════════════════════════════════════════════════════════════════
 
 import type {
-  ProtagonistProfile, SectionId, SectionPlan, StorytellingInput,
+  BlockPlan, ProtagonistProfile, StorytellingInput,
 } from '../types'
-import { SECTION_BLUEPRINTS } from '../config/sectionBlueprints'
-import { composeDynamicsDirective } from '../config/narrativeDynamics'
-import { retentionInstructionFor } from '../config/retentionPatterns'
 import {
   BELIEF_SHIFT_CATALYSTS,
   getReframeForNiche,
 } from '../config/beliefShiftEngine'
-import { microRealismDirectiveFor } from '../config/microRealismHooks'
 import { buildSoftCtaDirective } from '../config/softCtaPatterns'
-import {
-  pacingClassDirective,
-  SECTION_PACING_MAP,
-} from '../config/pacingOrchestration'
 import { narratorBrief } from '../config/narratorArchetypes'
 import { emotionalDnaBrief } from '../config/personaEmotionalDNA'
 import { energyCurveBrief } from '../config/energyCurvePresets'
 import { snapshotsBrief } from '../config/memorySnapshots'
 import { discoveryChannelBrief } from '../config/discoveryChannels'
-import { paragraphCountTargetFor } from '../config/rhythmEngine'
-import { visualCoherenceSummary } from '../config/visualStoryCoupling'
 import { ENGINE_CORE_PHILOSOPHY } from '../config/enginePhilosophy'
-import { payoffArchetypeBrief, payoffSectionFlavor } from '../config/payoffArchetypes'
-import { performanceHookSection1Directive, HOOK_PATTERNS } from '../config/performanceHookLayer'
+import {
+  payoffArchetypeBrief, payoffSectionFlavor,
+} from '../config/payoffArchetypes'
+import {
+  performanceHookSection1Directive,
+  HOOK_PATTERNS,
+} from '../config/performanceHookLayer'
 import { sampleMirrorBeat, readerMirrorBeatDirective } from '../config/readerMirrorMoments'
 import type { NarratorDnaSelection } from './selectNarratorDna'
 
@@ -64,68 +51,37 @@ export function buildProductBrief(productName: string, niche: string, painPoint?
   return `${productName} — ${niche}${pain}`
 }
 
-/** Per-section directive block. ~30-45 tokens base, more for special sections.
- *  v5.7 — Further compression after Phase A audit. Removed v5.6 anti-template
- *  bans (sampling architecture handles diversity now). Merged dynamics +
- *  retention + pacing onto 1 line. */
-function buildSectionDirective(
-  plan: SectionPlan,
-  index: number,
+/** Per-block directive block. Lean — only what this block's
+ *  psychologicalFunction + samplingHooks call for. */
+function buildBlockDirective(
+  plan: BlockPlan,
   input: StorytellingInput,
   selection: NarratorDnaSelection,
 ): string {
-  const bp = plan.blueprint
-  const sectionNum = index + 1
+  const block = plan.blueprint
 
   const lines: string[] = []
-  lines.push(`SECTION ${sectionNum} — id="${bp.id}" (${bp.role})`)
+  lines.push(`BLOCK ${plan.order} — id="${block.id}" (phase=${block.phase})`)
+  lines.push(`  PSYCHOLOGICAL FUNCTION: ${block.psychologicalFunction}`)
+  lines.push(`  INTENT: ${block.intent}`)
+  lines.push(`  YOU/I BALANCE: ${block.youIBalance}`)
+  lines.push(`  PARAGRAPHS: ${block.paragraphTarget.min}-${block.paragraphTarget.max}`)
 
-  // Energy curve applies delta to baseline tension.
-  const tensionDelta = selection.energyCurve.tensionDeltas[bp.id] ?? 0
-  const adjustedTension = Math.max(0, Math.min(10, bp.tensionLevel + tensionDelta))
-
-  // META: structural-only target (paragraph count) + tension + density.
-  // v5.7 Chunk 4 — Dropped rhythm typography prescription. Cadence comes
-  // from narrator psychology, not per-section recipe. Only structural
-  // contract retained: paragraph count target enforced by paragraphCountDetector
-  // (soft warn) + paragraphs[] schema.
-  const pacingClass = SECTION_PACING_MAP[bp.id]
-  const densityNote = bp.imageRequirement.countDefault === 0 ? ' / text-only' : ''
-  const paraTarget = paragraphCountTargetFor(pacingClass)
-  lines.push(`  META: tension=${adjustedTension}/10 · density=${bp.textDensity}${densityNote} · paragraphs=${paraTarget.min}-${paraTarget.max}`)
-
-  // Visual coherence (narrator + section).
-  lines.push(`  ${visualCoherenceSummary(selection.narrator, bp.id)}`)
-
-  // v5.7 — DYNAMICS + RETENTION + PACING merged onto 1-2 lines.
-  const dynamics = composeDynamicsDirective(
-    bp.narrativeRole, bp.emotionalFunction, bp.curiosityMechanic, bp.transitionPsychology,
-  ).split('\n').join(' | ')
-  lines.push(`  DYNAMICS: ${dynamics}`)
-  lines.push(`  PULL: ${retentionInstructionFor(bp.retentionMechanic)} · ${pacingClassDirective(bp.id)}`)
-
-  // ─── Section 1 — Performance Hook Layer (v5.8) ────────────────────
-  // REPLACES old HOOK_PATTERNS injection. 4-step structure locked:
-  //   [1] You-first opener (sampled) → [2] Specific micro moment →
-  //   [3] Hidden emotion → [4] Bridge to tôi (sampled).
-  // hookPattern + hookAxis still inform emotional flavor (additional axes).
-  if (bp.id === 'hook-interrupt') {
+  // ─── Phase 1 Block 1 — Performance Hook Layer ────────────────────
+  if (block.samplingHooks.performanceHookLayer) {
     for (const line of performanceHookSection1Directive(
       selection.youFirstOpener, selection.bridgePhrase,
     ).split('\n')) {
       lines.push(`  ${line}`)
     }
-    // Keep hookPattern + hookAxis as emotional flavor axes layered on top.
+    // hookPattern + hookAxis as additional emotional flavor (sampled per pack)
     const hp = HOOK_PATTERNS[selection.hookPattern]
-    lines.push(`  EMOTIONAL FLAVOR (additional axes): hookPattern=${selection.hookPattern} (${hp.description.slice(0, 60)}) | hookAxis=${selection.hookAxis}`)
+    lines.push(`  EMOTIONAL FLAVOR: hookPattern=${selection.hookPattern} (${hp.description.slice(0, 60)}) | hookAxis=${selection.hookAxis}`)
   }
 
-  // ─── Reader mirror beat (sections 2,3,4,5,7,8,9,11) ──────────────
-  // v5.8 — Each non-reveal body section weaves 1 sampled mirror question
-  // that calls reader directly, then narrator continues tôi voice.
-  // Sections 6 (soft-reveal) and 10 (trust-continuity) skipped.
-  if (bp.id !== 'hook-interrupt' && bp.id !== 'soft-reveal' && bp.id !== 'trust-continuity') {
-    const beat = sampleMirrorBeat(selection.seed, bp.id)
+  // ─── Reader mirror beat (any block where samplingHooks.readerMirrorBeat) ──
+  if (block.samplingHooks.readerMirrorBeat) {
+    const beat = sampleMirrorBeat(selection.seed, block.id)
     if (beat) {
       for (const line of readerMirrorBeatDirective(beat).split('\n')) {
         lines.push(`  ${line}`)
@@ -133,18 +89,15 @@ function buildSectionDirective(
     }
   }
 
-  // ─── Discovery channel (section 6) ─────────────────────────────────
-  if (bp.id === 'soft-reveal') {
+  // ─── Discovery channel (natural-product-discovery block) ─────────
+  if (block.samplingHooks.discoveryChannel) {
     for (const line of discoveryChannelBrief(selection.discoveryChannel).split('\n')) {
       lines.push(`  ${line}`)
     }
-    // Note: structural ban "tìm thấy một sản phẩm tên là X" dropped — relies on
-    // discovery channel diversity + narrator voice for natural product mention.
   }
 
-  // ─── 🔥 Belief shift (section 5) ───────────────────────────────────
-  // v5.7 — Structure + topic hint only. Reframe text NEVER pasted verbatim.
-  if (bp.id === 'belief-shift') {
+  // ─── Belief shift (belief-shift block) ────────────────────────────
+  if (block.samplingHooks.beliefCatalyst) {
     const reframe = getReframeForNiche(input.niche)
     const catalystSpec = BELIEF_SHIFT_CATALYSTS[selection.beliefCatalystType]
     lines.push(`  🔥 BELIEF SHIFT — CONVERSION CORE`)
@@ -152,136 +105,107 @@ function buildSectionDirective(
     lines.push(`  [2] REFRAME structure: "Có thể vấn đề không phải [old assumption about niche '${input.niche}'], `
       + `mà là [new actionable frame — body-system-level cause that supplement/care can support]"`)
     lines.push(`      Topic hint (DO NOT QUOTE): reframe around "${reframe.oldBelief.slice(0, 40)}..."`)
-    lines.push(`  [3] PERMISSION: internal acceptance to seek solution — sinh từ narrator's contradictions.`)
-    lines.push(`  KHÔNG mention product name. Reveal lives in section 6.`)
+    lines.push(`  [3] PERMISSION: internal acceptance to seek solution.`)
+    lines.push(`  KHÔNG mention product name. Reveal lives in Phase-3 natural-product-discovery block.`)
   }
 
-  // Visual plan (Phase 4 image gen alignment).
-  if (bp.imagePurposeRoles && bp.imagePurposeRoles.length > 0) {
-    const camera = bp.cameraLanguage?.length ? `, camera=[${bp.cameraLanguage.join(', ')}]` : ''
-    lines.push(`  VISUAL: roles=[${bp.imagePurposeRoles.join(', ')}]${camera}`)
-  } else if (bp.imageRequirement.countDefault === 0) {
-    lines.push(`  VISUAL: text-only`)
-  }
-
-  // Micro-realism injection.
-  const microRealism = microRealismDirectiveFor(bp.id)
-  if (microRealism) {
-    lines.push(`  ${microRealism}`)
-  }
-
-  // ─── v5.7 Chunk 2 — Payoff archetype flavor for s8/s9/s11 ──────────
-  // Drives emotional destination of each ending section per per-pack archetype.
-  // Replaces default "peaceful reflection" convergence across all packs.
-  if (bp.id === 'emotional-payoff' || bp.id === 'reflection-trust' || bp.id === 'soft-cta') {
-    for (const line of payoffSectionFlavor(selection.payoffArchetype, bp.id).split('\n')) {
-      lines.push(`  ${line}`)
+  // ─── Payoff archetype flavor (Phase-4 blocks with payoffArchetype hook) ─
+  if (block.samplingHooks.payoffArchetype) {
+    if (block.id === 'micro-transformation' || block.id === 'emotional-wins' || block.id === 'future-self-cta') {
+      for (const line of payoffSectionFlavor(selection.payoffArchetype, block.id).split('\n')) {
+        lines.push(`  ${line}`)
+      }
     }
   }
 
-  // ─── Trust continuity (section 10) — v5.7 Phase B v2 ──────────────
-  // Reviews are generated in a SEPARATE Gemini call (runtime/generateReviews.ts)
-  // to isolate review voice from narrator/story prose voice. This main call
-  // ONLY produces the intro line. Leave `reviews` field empty/absent.
-  if (bp.id === 'trust-continuity') {
-    lines.push(`  📋 OUTPUT: { id: "trust-continuity", title, paragraphs: ["[5-15 từ intro]"] }`)
-    lines.push(`  paragraphs: array with 1 short intro string (5-15 từ) phù hợp tone narrator dẫn vào quotes. Tự nhiên.`)
-    lines.push(`  reviews: DO NOT generate here — omit field. Reviews come from separate generation pass to keep voice-isolated from story prose.`)
+  // ─── Social proof (separate review-only call) ────────────────────
+  if (block.samplingHooks.reviewSlot) {
+    lines.push(`  📋 OUTPUT: { id: "social-proof", title, paragraphs: ["[5-15 từ intro]"] }`)
+    lines.push(`  paragraphs: 1 short intro string (5-15 từ) phù hợp tone narrator dẫn vào quotes.`)
+    lines.push(`  reviews: DO NOT generate here — omit field. Reviews come from separate generation pass.`)
   }
 
-  // ─── Soft CTA (section 11) ─────────────────────────────────────────
-  if (bp.id === 'soft-cta') {
+  // ─── Soft CTA (future-self-cta block) ─────────────────────────────
+  if (block.samplingHooks.softCta) {
     lines.push(`  💌 ${buildSoftCtaDirective()}`)
-    lines.push(`  Length: 60-100 từ. KHÔNG benefit push. KHÔNG urgency.`)
+    lines.push(`  Length: 60-100 từ. KHÔNG benefit push. KHÔNG urgency. KHÔNG "buy now".`)
+    lines.push(`  Reader feels "maybe I should finally take care of myself" — NOT "buy now".`)
     lines.push(`  Self-test: thay product bằng "cuốn sách tôi đọc" — vẫn make sense → PASS.`)
   }
 
   return lines.join('\n')
 }
 
-/** Compose retry feedback — used when validators fail attempt 1. */
-export function buildRetryFeedback(violations: string[]): string {
-  if (violations.length === 0) return ''
-  return `\n\nPREVIOUS ATTEMPT FAILED. Fix these violations:\n${violations.map((v) => `- ${v}`).join('\n')}\n\nKeep all other rules. Regenerate the entire pack.`
-}
-
-/** Top-level user prompt builder.
- *
- *  v5.7 architecture: small core philosophy (~30 lines) + narrator/sampling
- *  brief at top + per-section directives + brief reminders at bottom.
- *  Total target: ~3000-4000 tokens (down from ~5000-6000 in v5.6). */
+/** Top-level user prompt builder. */
 export function buildPackGenUserPrompt(
   input: StorytellingInput,
-  plan: SectionPlan[],
+  plan: BlockPlan[],
   selection: NarratorDnaSelection,
   retryFeedback?: string,
 ): string {
-  const sections = plan.map((p, i) => buildSectionDirective(p, i, input, selection)).join('\n\n')
+  const lines: string[] = []
 
-  // Payoff archetype block — drives emotional destination (s8/s9/s11).
-  // Surfaced at top so narrator voice knows where the arc is heading.
-  const payoffBlock = payoffArchetypeBrief(selection.payoffArchetype)
+  lines.push(ENGINE_CORE_PHILOSOPHY)
+  lines.push('')
 
-  // Narrator block — drives voice. Diversity engine output lives here.
-  const narratorBlock = `═══ NARRATOR (per-pack DNA) ═══
-${narratorBrief(selection.narrator)}
+  // ─── Per-pack archetype + DNA briefs ─────────────────────────────
+  lines.push(payoffArchetypeBrief(selection.payoffArchetype))
+  lines.push('')
 
-${selection.emotionalDna ? emotionalDnaBrief(selection.emotionalDna) : '(no niche-specific DNA — use generic embodied vocabulary)'}
-
-${energyCurveBrief(selection.energyCurve)}
-
-═══ MEMORY SNAPSHOTS (scene library) ═══
-${snapshotsBrief(selection.memorySnapshots)}
-
-NARRATOR USAGE:
-- Embody this narrator's voice throughout. NOT generic "tôi".
-- Use 1-2 shame patterns + 1-2 contradictions as story moments.
-- Weave 2-4 scenes from MEMORY SNAPSHOTS library across sections.
-- Energy curve guides emotional movement — tendency, not force.`
-
-  return `Generate ${plan.length} sections cho niche "${input.niche}" — emotional intensity ${input.emotionalIntensity}, pacing ${input.pacingType}.
-
-${ENGINE_CORE_PHILOSOPHY}
-
-${payoffBlock}
-
-${narratorBlock}
-
-Section directives (in order):
-
-${sections}
-
-CLOSING REMINDERS:
-- Embody the NARRATOR ARCHETYPE — not generic "tôi". Voice, wording, shame, contradictions.
-- 1st person only. No 3rd-person observer mode.
-- Section 5 (belief-shift) = CONVERSION CORE — no product name in this section.
-- Section 10 reviews must feel like real DMs/comments — different voices, casual, imperfect.
-- Allow awkward phrasing if natural — reader recognition > polished prose.
-- Output JSON only.${retryFeedback ?? ''}`
-}
-
-/** Section IDs trong plan — for prompt to reference exact IDs in output. */
-export function planToSectionIds(plan: SectionPlan[]): SectionId[] {
-  return plan.map((p) => p.blueprint.id)
-}
-
-/** Approximate token count helper — for logging/safety. */
-export function approximateTokenCount(text: string): number {
-  // Rough estimate: 1 token ≈ 4 chars for English / Vietnamese mix
-  return Math.ceil(text.length / 4)
-}
-
-/** Sanity check — load blueprint to verify all 10 sections + dynamics encoded. */
-export function logPromptStats(systemPrompt: string, userPrompt: string, plan: SectionPlan[]) {
-  const sysTokens = approximateTokenCount(systemPrompt)
-  const userTokens = approximateTokenCount(userPrompt)
-  console.info(
-    `[storytelling/runtime] prompt stats — system ~${sysTokens}t, user ~${userTokens}t, total ~${sysTokens + userTokens}t, sections=${plan.length}`,
-  )
-  // Verify all sections have blueprints
-  for (const p of plan) {
-    if (!SECTION_BLUEPRINTS[p.blueprint.id]) {
-      console.warn(`[storytelling/runtime] section ${p.blueprint.id} missing blueprint`)
-    }
+  lines.push('═══ NARRATOR DNA (per-pack — sampled deterministically) ═══')
+  lines.push(narratorBrief(selection.narrator))
+  if (selection.emotionalDna) {
+    lines.push('')
+    lines.push(emotionalDnaBrief(selection.emotionalDna))
   }
+  lines.push('')
+  lines.push(energyCurveBrief(selection.energyCurve))
+  lines.push('')
+  lines.push(snapshotsBrief(selection.memorySnapshots))
+  lines.push('')
+
+  // ─── Per-block directives ────────────────────────────────────────
+  lines.push(`═══ ${plan.length} BLOCKS — generate ALL in order ═══`)
+  for (const bp of plan) {
+    lines.push('')
+    lines.push(buildBlockDirective(bp, input, selection))
+  }
+
+  // ─── Optional retry feedback ─────────────────────────────────────
+  if (retryFeedback && retryFeedback.trim().length > 0) {
+    lines.push('')
+    lines.push('═══ RETRY FEEDBACK ═══')
+    lines.push(retryFeedback)
+  }
+
+  // ─── Closing reminders (brief) ───────────────────────────────────
+  lines.push('')
+  lines.push(`═══ CLOSING REMINDERS ═══
+- Output JSON ONLY (no markdown fences, no prose outside JSON).
+- Exactly ${plan.length} blocks in this exact order.
+- Each block: { id, title, paragraphs: [string, ...] }
+- social-proof block: paragraphs = [1 short intro], reviews field absent.
+- Reader is emotional center — narrator validates, doesn't dominate.
+- KHÔNG "buy now" / KHÔNG aspirational copywriter bait / KHÔNG fake empathy.`)
+
+  return lines.join('\n')
+}
+
+/** Build retry feedback string for second-attempt prompt injection. */
+export function buildRetryFeedback(items: string[]): string {
+  if (items.length === 0) return ''
+  return [
+    'Previous attempt had violations. Fix the following and regenerate:',
+    ...items.map((it) => `  - ${it}`),
+    'Output the SAME structure (same block ids in same order). Only fix the violations.',
+  ].join('\n')
+}
+
+/** Log prompt stats for telemetry/debugging. */
+export function logPromptStats(systemPrompt: string, userPrompt: string, plan: BlockPlan[]): void {
+  const sysTokens = Math.round(systemPrompt.length / 4)
+  const userTokens = Math.round(userPrompt.length / 4)
+  console.info(
+    `[storytelling/buildPackGenPrompt] prompt stats — system≈${sysTokens}tok, user≈${userTokens}tok, total≈${sysTokens + userTokens}tok, blocks=${plan.length}`,
+  )
 }

@@ -1,11 +1,13 @@
 // ─────────────────────────────────────────────────────────────────────
-// Storytelling Engine — ENERGY CURVE PRESETS (v5.1)
+// Storytelling Engine — ENERGY CURVE PRESETS
 //
-// 5 different emotional movement styles per pack. Selected per pack
-// to vary how the emotional arc moves through 11 sections.
+// 5 different emotional movement styles. Sampled per pack to vary how
+// the emotional arc moves across phases.
 //
-// Each curve applies DELTA on top of base TENSION_CURVE (v4.1).
-// Goal: same product different curve = different feel.
+// Post-rebuild: tensionDeltas (per-SectionId numeric overlay) dropped —
+// the new architecture's emotional movement comes from phase + block
+// psychologicalFunction + narrator psychology, not per-section tension
+// numbers. pacingFlavor remains as 1-line prompt directive.
 // ─────────────────────────────────────────────────────────────────────
 
 import type { EnergyCurvePreset } from '../types'
@@ -14,64 +16,36 @@ export const ENERGY_CURVE_PRESETS: EnergyCurvePreset[] = [
   {
     id: 'steady-decline-recovery',
     label: 'Slow down then up',
-    description: 'Steady downward arc through sections 1-4, valley at belief-shift, gradual recovery — classic narrative',
-    tensionDeltas: {
-      // Baseline curve OK — slight steady decline + recovery
-    },
-    pacingFlavor: 'steady tension build-up through friction, valley at section 5, gradual recovery — most natural movement',
+    description: 'Steady downward arc through Phase 1-2, valley at belief-shift, gradual recovery — classic narrative',
+    pacingFlavor: 'steady tension build-up through friction blocks, valley at belief-shift, gradual recovery — most natural movement',
   },
 
   {
     id: 'oscillating-frustration',
     label: 'Try-fail-try-fail-breakthrough',
-    description: 'Multiple ups and downs through frustration sections, breakthrough at belief-shift',
-    tensionDeltas: {
-      'daily-friction':  -1,  // brief moment of "maybe OK"
-      'internal-fear':   +1,  // then escalate
-      'failed-attempts': -1,  // false hope between attempts
-      'belief-shift':    -1,  // bigger valley relief
-    },
-    pacingFlavor: 'oscillating up-down through frustration — each failed attempt has brief false hope, breakthrough at section 5',
+    description: 'Multiple ups and downs through frustration blocks, breakthrough at belief-shift',
+    pacingFlavor: 'oscillating up-down through frustration — each failed attempt has brief false hope, breakthrough at belief-shift',
   },
 
   {
     id: 'sudden-realization',
     label: 'Long plateau, sudden insight',
-    description: 'Tension plateau through sections 1-4 then sharp drop at belief-shift — abrupt awakening',
-    tensionDeltas: {
-      'daily-friction':  +1,  // higher sustained tension
-      'internal-fear':   +1,
-      'failed-attempts': +1,
-      'belief-shift':    -2,  // sharp drop, sudden insight
-      'soft-reveal':     -1,
-    },
-    pacingFlavor: 'sustained plateau of friction through sections 2-4, then sudden drop at section 5 — clarity arrives abruptly',
+    description: 'Tension plateau through Phase 1-2 then sharp drop at belief-shift — abrupt awakening',
+    pacingFlavor: 'sustained plateau of friction through recognition + early trust-alignment, then sudden drop at belief-shift — clarity arrives abruptly',
   },
 
   {
     id: 'gradual-acceptance',
     label: 'Slow evidence accumulation',
     description: 'Gentle curve, no peaks — accumulating evidence leads to soft realization',
-    tensionDeltas: {
-      'daily-friction':  -1,  // lower friction sustained
-      'internal-fear':   -1,
-      'failed-attempts': -1,
-      'belief-shift':    +1,  // less dramatic relief
-    },
     pacingFlavor: 'gentle accumulation of small evidence — no dramatic peaks, no sharp valleys, slow acceptance',
   },
 
   {
     id: 'reluctant-trust-building',
     label: 'Many small wins before belief shifts',
-    description: 'Skeptical narrator, slow belief shift, micro-rewards more pronounced',
-    tensionDeltas: {
-      'belief-shift':    +1,  // belief shift LESS pronounced (still doubting)
-      'soft-reveal':     +1,  // still skeptical
-      'micro-reward':    -1,  // small wins more impactful
-      'emotional-payoff': -1,
-    },
-    pacingFlavor: 'narrator stays skeptical longer — belief shift quieter, micro-rewards carry more weight to convince them',
+    description: 'Skeptical narrator, slow belief shift, micro-transformation more pronounced',
+    pacingFlavor: 'narrator stays skeptical longer — belief shift quieter, Phase 4 micro-transformation carries more weight to convince them',
   },
 ]
 

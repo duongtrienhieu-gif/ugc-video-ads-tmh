@@ -24,9 +24,9 @@ import {
 } from 'lucide-react'
 import type { LandingSection } from '../../types'
 import type {
-  AllowedOverlayType, SectionGenStatus, SectionId, StorytellingPack, VisualTreatment,
+  AllowedOverlayType, BlockId, SectionGenStatus, StorytellingPack, VisualTreatment,
 } from '../types'
-import { SECTION_BLUEPRINTS } from '../config/sectionBlueprints'
+import { BLOCK_POOL } from '../config/blockPool'
 import { SECTION_VISUAL_MAP } from '../config/visualLanguage'
 import { useAppStore } from '../../../../stores/appStore'
 
@@ -205,7 +205,7 @@ export default function StorytellingOutputPanel({
 
 interface SectionViewProps {
   section: LandingSection
-  sectionId: SectionId
+  sectionId: BlockId
   overlayType: AllowedOverlayType | null
   chapterNumber: number
   isLast: boolean
@@ -216,17 +216,18 @@ interface SectionViewProps {
 function StorytellingSectionView({
   section, sectionId, overlayType, chapterNumber, isLast, characterName, status,
 }: SectionViewProps) {
-  const blueprint = SECTION_BLUEPRINTS[sectionId]
+  const blueprint = BLOCK_POOL[sectionId]
   const treatments = SECTION_VISUAL_MAP[sectionId] ?? []
-  // v5.7 Phase C — render each paragraph as a separate <p> for proper typography
-  // + breathing rhythm. Engine outputs copy with \n\n between paragraphs (parser
-  // joins paragraphs[] into copy at boundary). Split here to render as <p> each.
+  // Render each paragraph as a separate <p> for proper typography +
+  // breathing rhythm. Engine outputs paragraphs[] joined into copy.
   const cleanParagraphs = section.copy
     .replace(MOCK_MARKER_REGEX, '')
     .split(/\n{2,}/)
     .map((p) => p.trim())
     .filter((p) => p.length > 0)
-  const hasImage = blueprint.imageRequirement.countDefault > 0
+  // Image presence: Chunk E (visual rebuild) will redesign image plan per
+  // block. For now, all blocks except social-proof get an image placeholder.
+  const hasImage = sectionId !== 'social-proof'
 
   return (
     <section className={isLast ? '' : 'mb-20 md:mb-28'}>
@@ -234,7 +235,7 @@ function StorytellingSectionView({
       <p className="text-[10px] uppercase tracking-[0.3em] text-stone-400 mb-3 flex items-center gap-2 flex-wrap">
         <span>Chương {chapterNumber}</span>
         <span className="text-stone-300 normal-case tracking-normal italic">
-          · {blueprint.role}
+          · {blueprint?.phase ?? sectionId}
         </span>
         {status && status.kind !== 'pass' && (
           <SectionStatusInlineBadge status={status} />
@@ -246,7 +247,7 @@ function StorytellingSectionView({
         {section.titleVi ?? section.title}
       </h2>
 
-      {/* Image placeholder — appears ABOVE body cho sections has image */}
+      {/* Image placeholder — appears ABOVE body cho blocks has image */}
       {hasImage && (
         <ImagePlaceholder
           chapterNumber={chapterNumber}
@@ -254,8 +255,8 @@ function StorytellingSectionView({
           sectionTitle={section.titleVi ?? section.title}
           overlayType={overlayType}
           treatments={treatments}
-          continuityRequirement={blueprint.continuityRequirement}
-          productVisibility={blueprint.productVisibility}
+          continuityRequirement="optional"
+          productVisibility="forbidden"
         />
       )}
 
@@ -266,9 +267,9 @@ function StorytellingSectionView({
         ))}
       </div>
 
-      {/* v4.5 — Trust continuity mini reviews (section 10 only).
+      {/* Social proof mini reviews (block 14 only).
           Casual FB-comment cards, NOT formal testimonials. NO star ratings. */}
-      {sectionId === 'trust-continuity' && section.reviews && section.reviews.length > 0 && (
+      {sectionId === 'social-proof' && section.reviews && section.reviews.length > 0 && (
         <div className="mt-8 space-y-4">
           {section.reviews.map((r, i) => (
             <figure
@@ -295,28 +296,22 @@ function StorytellingSectionView({
         </div>
       )}
 
-      {/* Debug strip — v4 narrative dynamics. Helps verify rhythm/role
-          assignment trong khi engine wiring up. */}
-      <div className="mt-6 space-y-1 text-[10px] italic text-stone-400">
-        <p>
-          role: <span className="text-stone-500">{blueprint.narrativeRole}</span>
-          {' · '}function: <span className="text-stone-500">{blueprint.emotionalFunction}</span>
-          {blueprint.curiosityMechanic && (
-            <> · curiosity: <span className="text-stone-500">{blueprint.curiosityMechanic}</span></>
-          )}
-          {' · '}rhythm: <span className="text-stone-500">{blueprint.rhythmProfile}</span>
-          {' → '}<span className="text-stone-500">{blueprint.transitionPsychology}</span>
-        </p>
-        <p>
-          beat: {blueprint.emotionalBeat}
-          {' · '}tension: <span className="text-stone-500">{blueprint.tensionLevel}/10</span>
-          {blueprint.retentionMechanic && (
-            <> · retention: <span className="text-stone-500">{blueprint.retentionMechanic}</span></>
-          )}
-          {treatments.length > 0 && <> · visual: {treatments.join(' / ')}</>}
-          {' · '}sản phẩm: {blueprint.productVisibility}
-        </p>
-      </div>
+      {/* Debug strip — block architecture. Helps verify phase/function
+          assignment during Reader-Immersion engine development. */}
+      {blueprint && (
+        <div className="mt-6 space-y-1 text-[10px] italic text-stone-400">
+          <p>
+            phase: <span className="text-stone-500">{blueprint.phase}</span>
+            {' · '}function: <span className="text-stone-500">{blueprint.psychologicalFunction}</span>
+            {' · '}balance: <span className="text-stone-500">{blueprint.youIBalance}</span>
+          </p>
+          <p>
+            paragraphs target: <span className="text-stone-500">{blueprint.paragraphTarget.min}-{blueprint.paragraphTarget.max}</span>
+            {' · '}actual: <span className="text-stone-500">{cleanParagraphs.length}</span>
+            {treatments.length > 0 && <> · visual: {treatments.join(' / ')}</>}
+          </p>
+        </div>
+      )}
     </section>
   )
 }

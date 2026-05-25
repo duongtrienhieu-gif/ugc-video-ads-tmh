@@ -12,11 +12,11 @@
 // Hook PHẢI mở bằng observation/anomaly/negative-space/etc — không phải bio.
 // ─────────────────────────────────────────────────────────────────────
 
-import type { SectionId } from '../types'
+import type { BlockId } from '../types'
 import type { ParsedSection } from '../runtime/parsePackResponse'
 
 export interface ValidatorViolation {
-  sectionId: SectionId
+  sectionId: BlockId
   violation: string
 }
 
@@ -72,7 +72,7 @@ const BIO_PATTERNS: Array<{ pattern: RegExp; reason: string }> = [
 ]
 
 export function bioIntroDetector(section: ParsedSection): ValidatorResult {
-  if (section.id !== 'hook-interrupt') {
+  if (section.id !== 'self-recognition-hook') {
     return { pass: true, violations: [] }
   }
 

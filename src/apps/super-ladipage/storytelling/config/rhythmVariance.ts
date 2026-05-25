@@ -14,7 +14,18 @@
 // readability > variance.
 // ─────────────────────────────────────────────────────────────────────
 
-import type { RhythmProfile, SectionId } from '../types'
+import type { BlockId } from '../types'
+
+/** Cadence profile key. Legacy v4-v5.8 RhythmProfile union was tuned for
+ *  per-section narrator-arc rhythm; Reader-Immersion architecture lets
+ *  cadence emerge from narrator psychology + paragraphTarget. Kept as
+ *  free-form string for validator + sampling object compat. */
+export type RhythmProfile =
+  | 'conversational'
+  | 'long-flowing'
+  | 'short-clipped'
+  | 'reflective-pause'
+  | 'mixed'
 
 export interface RhythmConstraints {
   profile: RhythmProfile
@@ -76,8 +87,8 @@ export const RHYTHM_PROFILES: Record<RhythmProfile, RhythmConstraints> = {
  *
  *  Validator now informational — doesn't trigger retry. */
 export function validateAdjacentRhythms(
-  sectionRhythms: Array<{ id: SectionId; rhythm: RhythmProfile }>,
-): { valid: boolean; violations: Array<{ a: SectionId; b: SectionId; rhythm: RhythmProfile }> } {
+  sectionRhythms: Array<{ id: BlockId; rhythm: RhythmProfile }>,
+): { valid: boolean; violations: Array<{ a: BlockId; b: BlockId; rhythm: RhythmProfile }> } {
   // Storyselling: we don't punish adjacent same-profile if both flowing.
   // The OUTPUT-side adjacentRhythmDetector still checks actual sentence
   // stats — but config-level rhythm reuse is fine.

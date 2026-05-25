@@ -1,17 +1,18 @@
 // ═════════════════════════════════════════════════════════════════════
-// Storytelling Engine — pack response parser
+// Storytelling Engine — pack response parser (Reader-Immersion architecture)
 //
-// Parse raw Gemini JSON output into typed sections. Strips markdown
+// Parse raw Gemini JSON output into typed blocks. Strips markdown
 // fences if any (KIE fallback sometimes wraps despite instructions).
 // Validates shape — throws if malformed.
 //
-// Section content validation lives in /validators/ — this layer only
-// checks JSON structure correctness.
+// Block count is flex (13-15 per pack) — parser enforces match with
+// caller-provided expected BlockIds. Block content validation lives in
+// /validators/ — this layer only checks JSON structure correctness.
 // ═════════════════════════════════════════════════════════════════════
 
-import type { SectionId } from '../types'
+import type { BlockId } from '../types'
 
-/** Mini quote from trust-continuity section. */
+/** Mini quote from social-proof block. */
 export interface ParsedReview {
   quote: string
   author?: string
@@ -19,17 +20,17 @@ export interface ParsedReview {
 }
 
 export interface ParsedSection {
-  id: SectionId
+  id: BlockId
   title: string
-  /** v5.7 Phase C — structural paragraph array (source of truth for reading flow).
+  /** Structural paragraph array (source of truth for reading flow).
    *  Gemini outputs as paragraphs[] field directly. Parser normalizes legacy
    *  `copy: string` input into paragraphs by splitting on \n\n. */
   paragraphs: string[]
-  /** Joined paragraphs.join('\n\n') — kept for backward-compat with 8+ existing
+  /** Joined paragraphs.join('\n\n') — kept for backward-compat with existing
    *  consumers (validators, UI renderer, services). Always derived from paragraphs. */
   copy: string
-  /** v4.5 — optional reviews array. Used by trust-continuity (section 10)
-   *  for 3 mini quotes (different voices). Other sections leave undefined. */
+  /** Optional reviews array. Used by social-proof block for 3 mini quotes
+   *  (different voices). Other blocks leave undefined. */
   reviews?: ParsedReview[]
 }
 
@@ -50,7 +51,7 @@ function stripFences(raw: string): string {
 /** Parse raw Gemini output. Throws if malformed. */
 export function parsePackResponse(
   raw: string,
-  expectedSectionIds: SectionId[],
+  expectedBlockIds: BlockId[],
 ): ParsedPack {
   const cleaned = stripFences(raw)
 
@@ -77,7 +78,7 @@ export function parsePackResponse(
     throw new Error(`Storytelling pack missing "sections" array. Got keys: ${Object.keys(obj).join(', ')}`)
   }
 
-  const expectedSet = new Set(expectedSectionIds)
+  const expectedSet = new Set(expectedBlockIds)
   const sections: ParsedSection[] = obj.sections.map((s, idx) => {
     if (!s || typeof s !== 'object') {
       throw new Error(`Storytelling pack section #${idx + 1} is not an object`)
@@ -108,15 +109,15 @@ export function parsePackResponse(
     if (paragraphs.length === 0) {
       throw new Error(`Storytelling pack section #${idx + 1} has empty content (no paragraphs)`)
     }
-    if (!expectedSet.has(sec.id as SectionId)) {
+    if (!expectedSet.has(sec.id as BlockId)) {
       throw new Error(
-        `Storytelling pack section #${idx + 1} has unexpected id "${sec.id}". ` +
+        `Storytelling pack block #${idx + 1} has unexpected id "${sec.id}". ` +
         `Expected one of: ${[...expectedSet].join(', ')}`,
       )
     }
-    // v4.5 — parse optional reviews (trust-continuity section)
+    // Parse optional reviews (social-proof block only)
     let reviews: ParsedReview[] | undefined
-    if (sec.id === 'trust-continuity' && Array.isArray(sec.reviews)) {
+    if (sec.id === 'social-proof' && Array.isArray(sec.reviews)) {
       reviews = (sec.reviews as unknown[])
         .map((r): ParsedReview | null => {
           if (!r || typeof r !== 'object') return null
@@ -133,7 +134,7 @@ export function parsePackResponse(
     }
 
     return {
-      id:         sec.id as SectionId,
+      id:         sec.id as BlockId,
       title:      sec.title.trim(),
       paragraphs,
       copy:       paragraphs.join('\n\n'),
@@ -141,18 +142,18 @@ export function parsePackResponse(
     }
   })
 
-  // Verify count matches
-  if (sections.length !== expectedSectionIds.length) {
+  // Verify count matches (flex 13-15 — driven by expected ids from caller)
+  if (sections.length !== expectedBlockIds.length) {
     throw new Error(
-      `Storytelling pack section count mismatch — expected ${expectedSectionIds.length}, got ${sections.length}`,
+      `Storytelling pack block count mismatch — expected ${expectedBlockIds.length}, got ${sections.length}`,
     )
   }
 
   // Verify order matches expected
-  for (let i = 0; i < expectedSectionIds.length; i++) {
-    if (sections[i].id !== expectedSectionIds[i]) {
+  for (let i = 0; i < expectedBlockIds.length; i++) {
+    if (sections[i].id !== expectedBlockIds[i]) {
       throw new Error(
-        `Storytelling pack section #${i + 1} order mismatch — expected "${expectedSectionIds[i]}", got "${sections[i].id}"`,
+        `Storytelling pack block #${i + 1} order mismatch — expected "${expectedBlockIds[i]}", got "${sections[i].id}"`,
       )
     }
   }

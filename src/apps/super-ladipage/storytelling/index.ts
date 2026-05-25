@@ -1,11 +1,11 @@
 // ─────────────────────────────────────────────────────────────────────
-// Storytelling Engine — public API barrel
+// Storytelling Engine — public API barrel (Reader-Immersion architecture)
 //
 // Sandbox riêng cho form 'advertorial' ("Kể Chuyện Hành Trình").
 // Consumer chỉ cần import từ đây — không cần biết internal structure.
 // ─────────────────────────────────────────────────────────────────────
 
-// Entry point — service (P0.5 = mock, P2+ = real)
+// Entry point — service
 export { generateStorytellingPack } from './services/generateStorytellingPack'
 
 // Types (re-export so consumers chỉ cần 1 import path)
@@ -15,33 +15,19 @@ export type {
   StorytellingMeta,
   SectionGenStatus,
   ProtagonistProfile,
-  SectionBlueprint,
-  SectionPlan,
-  SectionId,
   NicheKey,
   EmotionalIntensity,
   PacingType,
   ProductRevealSection,
-  // v4 narrative dynamics types
-  NarrativeRole,
-  EmotionalFunction,
-  CuriosityMechanic,
-  RhythmProfile,
-  TransitionPsychology,
+  // Hook + visual + variation types still referenced by consumers
   HookPattern,
-  RetentionMechanic,
-  // v4.3 visual role types
   ImagePurposeRole,
   CameraLanguage,
-  // v4.6 pacing
-  PacingClass,
-  // v5.1 Human Variation Engine
   SocialContext,
   NarratorArchetype,
   PersonaEmotionalDNA,
   EnergyCurveId,
   EnergyCurvePreset,
-  // v5.2 Memory snapshots
   MemorySnapshot,
   MemorySnapshotState,
   // Reader-Immersion block architecture (post-v5.8 rebuild)
@@ -56,7 +42,7 @@ export type {
 
 export { isStorytellingPack } from './types'
 
-// P1 runtime + validators (exposed for QA / future tooling)
+// Runtime + validators (exposed for QA / future tooling)
 export { runValidators, logValidationResult } from './validators'
 export type { ValidatorName, AggregatedValidation } from './validators'
 
@@ -65,63 +51,49 @@ export { FALLBACK_COPY } from './runtime/fallbackCopy'
 // Config (read-only data layer — exposed for QA/debugging)
 export {
   STORYTELLING_DEFAULTS, PACK_LIMITS,
-  SECTION_BLUEPRINTS, DEFAULT_SECTION_ORDER,
   NICHE_PRESETS, getNichePreset,
   CONTINUITY_RULES,
   VISUAL_LANGUAGE, SECTION_VISUAL_MAP,
   PACING_RULES,
   OVERLAY_RULES,
   ANTI_PATTERNS, ANTI_PATTERN_INSTRUCTIONS,
-  // v4 narrative dynamics layer
-  NARRATIVE_ROLE_INSTRUCTIONS,
-  EMOTIONAL_FUNCTION_INSTRUCTIONS,
-  CURIOSITY_MECHANIC_INSTRUCTIONS,
-  TRANSITION_PSYCHOLOGY_INSTRUCTIONS,
-  composeDynamicsDirective,
-  HOOK_PATTERNS,
-  TENSION_CURVE, detectFlatLine, detectSpike, renderTensionAscii,
+  // Reader-Immersion block architecture
+  BLOCK_POOL, ALL_BLOCK_IDS, blocksForPhase,
+  // Performance Hook Layer (consolidated)
+  YOU_FIRST_OPENERS, BRIDGE_PHRASES,
+  sampleYouFirstOpener, sampleBridgePhrase,
+  performanceHookSection1Directive,
+  HOOK_PATTERNS, HOOK_AXES, NICHE_HOOK_AXIS_BIAS,
+  // Rhythm variance validator
   RHYTHM_PROFILES, validateAdjacentRhythms, rhythmInstructionFor,
-  RETENTION_MECHANICS, BANNED_RETENTION_PATTERNS,
-  RETENTION_RESTRAINT_PROMPT, retentionInstructionFor,
-  // v4.2 — Belief shift engine
+  // Belief shift engine (drives belief-shift block)
   BELIEF_SHIFT_CATALYSTS, NICHE_REFRAME_EXAMPLES,
   PERMISSION_PATTERNS, BELIEF_SHIFT_PROMPT, getReframeForNiche,
-  // v4.3 — Visual role system
+  // Visual role system (Chunk E rebuilds)
   IMAGE_PURPOSE_ROLES, imagePurposeRoleInstruction, NECESSITY_TEST_PROMPT,
   CAMERA_LANGUAGES, CAMERA_LANGUAGE_BY_BEAT,
   cameraLanguageInstruction, CAMERA_ANTI_DRIFT_PROMPT,
-  // v4.4 — Micro-realism injector
-  MICRO_REALISM_HOOKS, SECTION_MICRO_REALISM_MAP,
-  MICRO_REALISM_PROMPT, microRealismDirectiveFor,
-  // v4.5 — Soft CTA patterns
+  // Soft CTA patterns (drives future-self-cta block)
   SOFT_CTA_TONES, SOFT_CTA_BANNED_PATTERNS,
   SOFT_CTA_PROMPT, buildSoftCtaDirective,
-  // v4.6 — Pacing orchestration
-  PACING_CLASSES, SECTION_PACING_MAP,
-  pacingClassDirective, validatePacingVariety,
-  // v5.1 — Human Variation Engine
+  // Human Variation Engine sampling pools
   NARRATOR_ARCHETYPES, archetypesForNiche, narratorBrief,
   PERSONA_EMOTIONAL_DNA, getEmotionalDnaForNiche, emotionalDnaBrief,
   ENERGY_CURVE_PRESETS, getEnergyCurvePreset, energyCurveBrief,
-  // v5.2 — Memory snapshots + Visual-First Writing
+  // Memory snapshots
   MEMORY_SNAPSHOTS, snapshotsForNiche, snapshotsBrief,
   VISUAL_FIRST_WRITING_PROMPT,
-  // v5.3 — Hook axes (pack-level emotional theme) + Discovery channels
-  HOOK_AXES, NICHE_HOOK_AXIS_BIAS,
+  // Discovery channels (drives natural-product-discovery block)
   DISCOVERY_CHANNELS, discoveryChannelBrief,
-  // v5.4 — Rhythm engine
-  RHYTHM_BY_PACING_CLASS, RHYTHM_ENGINE_PROMPT, SECTION_RHYTHM_HINTS,
-  rhythmDirectiveFor, rhythmStatsFor, sectionRhythmHint,
-  // v5.5 — Visual story coupling
+  // Visual story coupling
   composeVisualPrompt, visualCoherenceSummary, VISUAL_COHERENCE_PROMPT,
 } from './config'
 
-// v5.1 — Selector resolver
+// Selector resolver
 export { selectNarratorDna, verifyNicheCoverage } from './runtime/selectNarratorDna'
 export type { NarratorDnaSelection } from './runtime/selectNarratorDna'
 
-// Resolvers (pure mapping functions — P2/P3 will expand)
+// Resolvers (pure mapping functions)
 export { resolveStorytellingInput } from './resolvers/resolveStorytellingInput'
 export { resolveProtagonistProfile } from './resolvers/resolveProtagonistProfile'
-export { resolveSectionPlan } from './resolvers/resolveSectionPlan'
 export { resolveBlockPlan } from './resolvers/resolveBlockPlan'
