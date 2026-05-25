@@ -91,24 +91,128 @@ export type HomeSettingKey =
 
 export type FamilyStructureKey = 'single' | 'partnered' | 'with-children' | 'multigenerational'
 
-/** Section IDs nội bộ storytelling engine. KHÔNG dùng SectionType của UGC. */
-/** v4 section IDs — 11 sections, sales-functional conversion flow:
- *  Hook → Friction → Fear → Failed → BeliefShift → SoftReveal →
- *  MicroReward → Payoff → Reflection → TrustContinuity → SoftCTA
- *
- *  Belief-shift = CONVERSION CORE (not product reveal).
- *  Trust-continuity uses LandingSection.reviews field for 3 mini quotes. */
+// ═════════════════════════════════════════════════════════════════════
+// READER-IMMERSION ARCHITECTURE — Phase-based blocks (post-v5.8 rebuild)
+//
+// Architecture shift: each block is a PSYCHOLOGICAL TRANSITION carried
+// by the reader, NOT a "story scene" carried by the narrator. Reader
+// becomes the emotional center of gravity; narrator = validator.
+//
+// Output per pack: flex 13-15 blocks (never rigid). 4 phases stable.
+// ═════════════════════════════════════════════════════════════════════
+
+/** 4 phases of reader-immersion conversion psychology. */
+export type Phase =
+  | 'recognition'        // Phase 1 — reader sees themselves
+  | 'trust-alignment'    // Phase 2 — narrator joins, resistance softens
+  | 'solution-opening'   // Phase 3 — product emerges from emotional context
+  | 'future-self'        // Phase 4 — reader projects forward + soft invitation
+
+/** YOU/I balance per block. NOT a hard template — opening reader-heavy,
+ *  middle narrator-validation, ending future-reader. */
+export type YouIBalance =
+  | 'reader-heavy'         // YOU dominant; narrator absent or implicit
+  | 'narrator-validation'  // narrator validates, reader still emotional center
+  | 'future-reader'        // YOU projected forward; narrator recedes
+
+/** Psychological function — what each block DOES to reader's mind.
+ *  Drives directive content, not just labeling. */
+export type PsychologicalFunction =
+  | 'mirror-recognition'         // reader sees self in micro-moment
+  | 'surface-friction'           // expose lived behaviors reader normalizes
+  | 'name-hidden-feeling'        // surface unspoken emotion reader carries
+  | 'reduce-isolation'           // "I'm not the only one" — relief
+  | 'narrator-join'              // narrator validates by joining reader
+  | 'shared-frustration'         // both have tried, both failed
+  | 'anticipate-resistance'      // surface reader's skepticism, validate
+  | 'reframe-belief'             // catalyst-triggered new understanding
+  | 'organic-discovery'          // product emerges naturally, no announcement
+  | 'mechanism-through-emotion'  // explain why through felt difference
+  | 'emotional-compare'          // soft positioning vs old approach
+  | 'specific-micro-win'         // tangible small change noticed retrospectively
+  | 'quality-of-life-shift'      // daily ease returned
+  | 'normalize-via-others'       // imperfect peer voices
+  | 'future-self-invitation'     // reader projects forward, soft action
+
+/** 15 canonical blocks across 4 phases. Resolver picks 13-15 per pack.
+ *  Phase architecture stable; block count flex by niche / intensity. */
+export type BlockId =
+  // Phase 1 — Recognition (4 blocks, all reader-heavy)
+  | 'self-recognition-hook'        // Block 1 — you-first opener + mirror beat
+  | 'daily-micro-friction'         // Block 2 — lived behaviors reader recognizes
+  | 'hidden-emotional-truth'       // Block 3 — unspoken feelings reader carries
+  | 'not-alone-bridge'             // Block 4 — "I'm not the only one" → narrator joins
+
+  // Phase 2 — Trust + Resistance Alignment (3-4 blocks)
+  | 'narrator-validation-entry'    // Block 5 — narrator validates from lived experience
+  | 'shared-failed-attempts'       // Block 6 — frustration loop, you+I together
+  | 'skepticism-alignment'         // Block 7 — anticipate reader's "yeah but..." (OPTIONAL)
+  | 'belief-shift'                 // Block 8 — catalyst + reframe
+
+  // Phase 3 — Solution Opening (2-3 blocks)
+  | 'natural-product-discovery'    // Block 9 — organic mention, low expectation
+  | 'why-this-felt-different'      // Block 10 — mechanism through emotional context
+  | 'soft-mechanism-compare'       // Block 11 — emotional compare (OPTIONAL)
+
+  // Phase 4 — Future Self Immersion (4 blocks)
+  | 'micro-transformation'         // Block 12 — small specific wins
+  | 'emotional-wins'               // Block 13 — quality of life returned
+  | 'social-proof'                 // Block 14 — anti-polished reviews
+  | 'future-self-cta'              // Block 15 — emotional projection + soft invitation
+
+/** Sampling injection hooks per block — which sampling objects to weave in. */
+export interface BlockSamplingHooks {
+  performanceHookLayer?: boolean   // Block 1 only — you-first opener + bridge
+  readerMirrorBeat?: boolean       // recognition + trust-alignment blocks
+  discoveryChannel?: boolean       // natural-product-discovery only
+  beliefCatalyst?: boolean         // belief-shift only
+  payoffArchetype?: boolean        // future-self blocks
+  reviewSlot?: boolean             // social-proof only
+  softCta?: boolean                // future-self-cta only
+}
+
+/** Block blueprint — lean philosophy-driven section spec.
+ *  Replaces v4-v5.8 SectionBlueprint which carried narrator-scene-arc fields. */
+export interface BlockBlueprint {
+  id: BlockId
+  phase: Phase
+  psychologicalFunction: PsychologicalFunction
+  youIBalance: YouIBalance
+  /** 1-line description of what this block does psychologically. */
+  intent: string
+  /** Required = always in pack. Optional = resolver may skip based on niche/intensity. */
+  required: boolean
+  /** Paragraph count target (soft guidance, paragraphCountDetector warns). */
+  paragraphTarget: { min: number; max: number }
+  /** Which sampling objects this block weaves in. */
+  samplingHooks: BlockSamplingHooks
+}
+
+/** BlockPlan — resolved per-pack ordering with metadata. */
+export interface BlockPlan {
+  blueprint: BlockBlueprint
+  /** 1-indexed position in this pack's ordering. */
+  order: number
+}
+
+// ═════════════════════════════════════════════════════════════════════
+// LEGACY v4-v5.8 SECTION SYSTEM — kept for shared UGC compat fields only.
+// SectionId still appears in StorytellingMeta.sectionIds for backward
+// compat with persisted v5.8 packs. New packs use BlockId.
+// ═════════════════════════════════════════════════════════════════════
+
+/** @deprecated — kept for back-compat with v5.8 persisted packs. Use BlockId. */
 export type SectionId =
   | 'hook-interrupt'        // pattern-interrupt hook + identity anchor
   | 'daily-friction'        // relatable daily struggles
   | 'internal-fear'         // escalation + fear of decline
   | 'failed-attempts'       // frustration loop
-  | 'belief-shift'          // 🆕 AHA reinterpretation — conversion core
-  | 'soft-reveal'           // reluctant product mention, low expectation
+  | 'belief-shift'          // AHA reinterpretation
+  | 'soft-reveal'           // reluctant product mention
   | 'micro-reward'          // subtle initial improvement
   | 'emotional-payoff'      // life feels lighter
-  | 'reflection-trust'      // 🆕 looking back maturity
-  | 'trust-continuity'      // 🆕 3 mini testimonial quotes (uses reviews field)
+  | 'reflection-trust'      // looking back maturity
+  | 'trust-continuity'      // 3 mini testimonial quotes
   | 'soft-cta'              // human emotional invitation
 
 export type EmotionalBeat =

@@ -44,6 +44,14 @@ export type {
   // v5.2 Memory snapshots
   MemorySnapshot,
   MemorySnapshotState,
+  // Reader-Immersion block architecture (post-v5.8 rebuild)
+  Phase,
+  YouIBalance,
+  PsychologicalFunction,
+  BlockId,
+  BlockBlueprint,
+  BlockPlan,
+  BlockSamplingHooks,
 } from './types'
 
 export { isStorytellingPack } from './types'
@@ -116,3 +124,4 @@ export type { NarratorDnaSelection } from './runtime/selectNarratorDna'
 export { resolveStorytellingInput } from './resolvers/resolveStorytellingInput'
 export { resolveProtagonistProfile } from './resolvers/resolveProtagonistProfile'
 export { resolveSectionPlan } from './resolvers/resolveSectionPlan'
+export { resolveBlockPlan } from './resolvers/resolveBlockPlan'
