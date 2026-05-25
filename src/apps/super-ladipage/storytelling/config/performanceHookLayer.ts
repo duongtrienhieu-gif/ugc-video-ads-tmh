@@ -1,9 +1,15 @@
 // ─────────────────────────────────────────────────────────────────────
-// Storytelling Engine — PERFORMANCE HOOK LAYER (v5.8 / Reader-Immersion)
+// Storytelling Engine — PERFORMANCE HOOK LAYER
 //
-// Per user direction: shift from "Narrator Storytelling" → "Reader-Immersion
-// Performance Storytelling". Goal: ad conversion. Reader must feel
-// "đang nói về mình" within 1-3 seconds, NOT "nghe chuyện người khác".
+// Consolidated section-1 hook architecture + emotional-flavor axes for
+// the whole pack. Reader-immersion goal: reader feels "đang nói về mình"
+// within 1-3 seconds, NOT "nghe chuyện người khác".
+//
+// THIS FILE OWNS:
+//   1. YouFirstOpeners + BridgePhrases — section-1 4-step structure
+//   2. HOOK_PATTERNS — emotional posture flavor (drives s1 additional axis)
+//   3. HOOK_AXES + NICHE_HOOK_AXIS_BIAS — pack-level emotional theme
+//      (drives which emotional drawer the pack pulls from; niche-biased)
 //
 // Section 1 (hook-interrupt) STRUCTURE LOCKED to 4-step:
 //   [1] YOU-FIRST opening — calls reader by name ("Bạn có từng...")
@@ -14,24 +20,19 @@
 // Steps 1 and 4 are MANDATORY structural. Steps 2-3 emerge from
 // narrator psychology + niche pain (sampled elsewhere).
 //
-// SAMPLING:
-//   - 1 youFirstOpener per pack (8 options) — drives starter family
-//   - 1 bridgePhrase per pack (6 options) — drives step 4 transition
+// SAMPLING per pack:
+//   - 1 youFirstOpener (8 options) — drives starter family
+//   - 1 bridgePhrase (6 options) — drives step 4 transition
+//   - 1 hookPattern (6 emotional postures) — flavor axis
+//   - 1 hookAxis (10 emotional themes, niche-biased) — pack theme
 //
-// CRITICAL: example questions are NICHE-MISMATCHED across products. Gemini
-// learns STRUCTURAL PATTERN (starter family + question shape) without
-// being able to copy any quote verbatim (niche won't match the pack).
-// Same pattern as Chunk 1 reviewStyleProfiles to prevent verbatim leak.
-//
-// REPLACES (not adds):
-//   - HOOK_PATTERNS injection in section 1 directive (downgraded to flavor only)
-//   - HOOK_ENFORCEMENT_PROMPT (already removed in v5.7 Phase A)
-//
-// KEEPS intact:
-//   - hookPattern selection (still drives emotional flavor as ADDITIONAL axis)
-//   - hookAxis selection (still drives emotional axis)
-//   - All other sampling objects
+// CRITICAL: youFirstOpener example questions are NICHE-MISMATCHED across
+// products. Gemini learns STRUCTURAL PATTERN without being able to copy
+// quotes verbatim (niche won't match the pack). Same anti-leak pattern
+// as reviewStyleProfiles.
 // ─────────────────────────────────────────────────────────────────────
+
+import type { HookPattern, NicheKey } from '../types'
 
 export type YouFirstStarter =
   | 'have-you-ever'        // "Bạn có từng..."
@@ -215,4 +216,94 @@ CONSTRAINTS:
 - KHÔNG skip step [4] — without bridge, section feels accusatory.
 - KHÔNG "Bạn xứng đáng" / "Đừng để X hủy hoại" / aspirational copywriter bait.
 - KHÔNG "Tôi hiểu cảm giác của bạn" / fake empathy.`
+}
+
+// ═══ EMOTIONAL FLAVOR AXES ════════════════════════════════════════════
+// Layered on top of the 4-step structure. Each pack samples ONE pattern
+// + ONE axis. Inject into s1 directive as additional flavor (not as
+// opener content — opener is driven by youFirstOpener above).
+//
+// Examples fields removed: never read by runtime (only `.description`
+// was injected). Narrator-first sentence examples (legacy v4.x) would
+// also conflict with v5.8 YOU-first opening lock.
+// ─────────────────────────────────────────────────────────────────────
+
+export interface HookPatternSpec {
+  pattern: HookPattern
+  description: string
+}
+
+/** 6 narrator emotional postures. Sampled per-pack via NarratorDna.hookPattern.
+ *  Layered as flavor axis on top of YOU-first opener (does NOT drive opener
+ *  content — opener is locked to YouFirstOpener.starter). */
+export const HOOK_PATTERNS: Record<HookPattern, HookPatternSpec> = {
+  'emotional-rejection': {
+    pattern: 'emotional-rejection',
+    description: 'Direct emotional rejection — instant pattern interrupt, "I begin to hate X"',
+  },
+  'specific-fear-moment': {
+    pattern: 'specific-fear-moment',
+    description: 'Single concrete moment of internal fear — short, embodied, specific',
+  },
+  'physical-immediacy': {
+    pattern: 'physical-immediacy',
+    description: 'Body sensation in the present — sharp, immediate, sensory',
+  },
+  'internal-confession': {
+    pattern: 'internal-confession',
+    description: 'Silent admission carried alone — "Tôi không nói với ai" tone',
+  },
+  'pattern-disruption': {
+    pattern: 'pattern-disruption',
+    description: 'Sudden change in established pattern noticed — break of routine',
+  },
+  'self-question': {
+    pattern: 'self-question',
+    description: 'Internal question reader can ask of themselves — reflective probe',
+  },
+}
+
+export type HookEmotionalAxis =
+  | 'identity-collapse'        // "không nhận ra mình"
+  | 'embarrassment'            // public/social shame
+  | 'silence'                  // "không nói với ai"
+  | 'frustration'              // tried many things, none lasted
+  | 'vanity'                   // mirror, ảnh, attractiveness
+  | 'exhaustion'               // chronic fatigue body collapse
+  | 'relationship'             // chồng/vợ/family witness
+  | 'social-discomfort'        // group, friends, public moments
+  | 'aging-realization'        // "tôi đang già đi"
+  | 'hidden-fear'              // afraid but hide
+
+export interface HookAxisSpec {
+  axis: HookEmotionalAxis
+  description: string
+}
+
+/** 10 emotional themes that color the entire pack. Sampled per-pack via
+ *  NarratorDna.hookAxis (niche-biased). Drives which emotional drawer the
+ *  pack pulls memories/pains from — NOT a per-section directive. */
+export const HOOK_AXES: Record<HookEmotionalAxis, HookAxisSpec> = {
+  'identity-collapse':  { axis: 'identity-collapse',  description: 'Không nhận ra phiên bản mình — face/body/voice changed' },
+  'embarrassment':      { axis: 'embarrassment',      description: 'Public/social shame moment' },
+  'silence':            { axis: 'silence',            description: 'Carrying alone, not telling anyone' },
+  'frustration':        { axis: 'frustration',        description: 'Tried many things, all failed — frustration loop' },
+  'vanity':             { axis: 'vanity',             description: 'Mirror / appearance / attractiveness preoccupation' },
+  'exhaustion':         { axis: 'exhaustion',         description: 'Chronic fatigue body collapse' },
+  'relationship':       { axis: 'relationship',       description: 'Spouse/family witness / catalyst' },
+  'social-discomfort':  { axis: 'social-discomfort',  description: 'Group / friends / public moments awkwardness' },
+  'aging-realization':  { axis: 'aging-realization',  description: 'Sudden awareness "tôi đang già đi"' },
+  'hidden-fear':        { axis: 'hidden-fear',        description: 'Afraid but hiding — silent anxiety' },
+}
+
+/** Niche-specific axis bias — selector samples from preferred pool when available. */
+export const NICHE_HOOK_AXIS_BIAS: Partial<Record<NicheKey, HookEmotionalAxis[]>> = {
+  'haircare':            ['vanity', 'identity-collapse', 'embarrassment', 'social-discomfort', 'hidden-fear'],
+  'skincare':            ['vanity', 'identity-collapse', 'aging-realization', 'social-discomfort', 'embarrassment'],
+  'health-functional':   ['exhaustion', 'embarrassment', 'aging-realization', 'relationship', 'hidden-fear'],
+  'supplement-wellness': ['exhaustion', 'silence', 'frustration', 'aging-realization', 'hidden-fear'],
+  'mom-baby':            ['identity-collapse', 'silence', 'relationship', 'social-discomfort', 'hidden-fear'],
+  'beauty-confidence':   ['vanity', 'identity-collapse', 'social-discomfort', 'embarrassment'],
+  'relationship':        ['silence', 'relationship', 'hidden-fear', 'frustration'],
+  'fitness-recovery':    ['frustration', 'embarrassment', 'aging-realization', 'exhaustion'],
 }

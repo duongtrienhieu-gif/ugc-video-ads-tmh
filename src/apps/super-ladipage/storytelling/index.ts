@@ -70,8 +70,7 @@ export {
   CURIOSITY_MECHANIC_INSTRUCTIONS,
   TRANSITION_PSYCHOLOGY_INSTRUCTIONS,
   composeDynamicsDirective,
-  HOOK_PATTERNS, BANNED_HOOK_PATTERNS,
-  HOOK_ENFORCEMENT_PROMPT, HOOK_REQUIRED_SECTIONS,
+  HOOK_PATTERNS,
   TENSION_CURVE, detectFlatLine, detectSpike, renderTensionAscii,
   RHYTHM_PROFILES, validateAdjacentRhythms, rhythmInstructionFor,
   RETENTION_MECHANICS, BANNED_RETENTION_PATTERNS,
@@ -99,14 +98,13 @@ export {
   // v5.2 — Memory snapshots + Visual-First Writing
   MEMORY_SNAPSHOTS, snapshotsForNiche, snapshotsBrief,
   VISUAL_FIRST_WRITING_PROMPT,
-  // v5.3 — Hook variation + Discovery channels
-  HOOK_AXES, NICHE_HOOK_AXIS_BIAS, hookAxisBrief,
+  // v5.3 — Hook axes (pack-level emotional theme) + Discovery channels
+  HOOK_AXES, NICHE_HOOK_AXIS_BIAS,
   DISCOVERY_CHANNELS, discoveryChannelBrief,
   // v5.4 — Rhythm engine
   RHYTHM_BY_PACING_CLASS, RHYTHM_ENGINE_PROMPT, SECTION_RHYTHM_HINTS,
   rhythmDirectiveFor, rhythmStatsFor, sectionRhythmHint,
-  // v5.5 — Trust realism + Visual story coupling
-  TRUST_REALISM_EXAMPLES, TRUST_REALISM_PROMPT,
+  // v5.5 — Visual story coupling
   composeVisualPrompt, visualCoherenceSummary, VISUAL_COHERENCE_PROMPT,
 } from './config'
 

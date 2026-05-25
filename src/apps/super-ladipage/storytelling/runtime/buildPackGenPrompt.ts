@@ -27,7 +27,6 @@ import type {
 } from '../types'
 import { SECTION_BLUEPRINTS } from '../config/sectionBlueprints'
 import { composeDynamicsDirective } from '../config/narrativeDynamics'
-import { HOOK_PATTERNS } from '../config/narrativeHooks'
 import { retentionInstructionFor } from '../config/retentionPatterns'
 import {
   BELIEF_SHIFT_CATALYSTS,
@@ -48,7 +47,7 @@ import { paragraphCountTargetFor } from '../config/rhythmEngine'
 import { visualCoherenceSummary } from '../config/visualStoryCoupling'
 import { ENGINE_CORE_PHILOSOPHY } from '../config/enginePhilosophy'
 import { payoffArchetypeBrief, payoffSectionFlavor } from '../config/payoffArchetypes'
-import { performanceHookSection1Directive } from '../config/performanceHookLayer'
+import { performanceHookSection1Directive, HOOK_PATTERNS } from '../config/performanceHookLayer'
 import { sampleMirrorBeat, readerMirrorBeatDirective } from '../config/readerMirrorMoments'
 import type { NarratorDnaSelection } from './selectNarratorDna'
 

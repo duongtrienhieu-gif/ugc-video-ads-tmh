@@ -23,11 +23,6 @@ import {
 import { ENERGY_CURVE_PRESETS } from '../config/energyCurvePresets'
 import { snapshotsForNiche } from '../config/memorySnapshots'
 import {
-  HOOK_AXES, NICHE_HOOK_AXIS_BIAS,
-  type HookEmotionalAxis,
-} from '../config/hookVariation'
-import { HOOK_PATTERNS } from '../config/narrativeHooks'
-import {
   BELIEF_SHIFT_CATALYSTS,
   type BeliefShiftCatalystType,
 } from '../config/beliefShiftEngine'
@@ -46,8 +41,12 @@ import {
 import {
   sampleYouFirstOpener,
   sampleBridgePhrase,
+  HOOK_PATTERNS,
+  HOOK_AXES,
+  NICHE_HOOK_AXIS_BIAS,
   type YouFirstOpener,
   type BridgePhrase,
+  type HookEmotionalAxis,
 } from '../config/performanceHookLayer'
 
 /** Simple deterministic hash — same string → same integer.

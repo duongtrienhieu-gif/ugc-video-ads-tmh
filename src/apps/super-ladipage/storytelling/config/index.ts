@@ -23,14 +23,27 @@ export {
   composeDynamicsDirective,
 } from './narrativeDynamics'
 
+// Performance Hook Layer (consolidated v5.8+): owns YouFirstOpeners,
+// BridgePhrases, HOOK_PATTERNS (s1 flavor), HOOK_AXES (pack theme).
 export {
+  YOU_FIRST_OPENERS,
+  BRIDGE_PHRASES,
+  sampleYouFirstOpener,
+  sampleBridgePhrase,
+  performanceHookSection1Directive,
   HOOK_PATTERNS,
-  BANNED_HOOK_PATTERNS,
-  HOOK_ENFORCEMENT_PROMPT,
-  HOOK_REQUIRED_SECTIONS,
-} from './narrativeHooks'
+  HOOK_AXES,
+  NICHE_HOOK_AXIS_BIAS,
+} from './performanceHookLayer'
 
-export type { HookPatternSpec } from './narrativeHooks'
+export type {
+  YouFirstStarter,
+  YouFirstOpener,
+  BridgePhrase,
+  HookPatternSpec,
+  HookEmotionalAxis,
+  HookAxisSpec,
+} from './performanceHookLayer'
 
 export {
   TENSION_CURVE,
@@ -159,18 +172,7 @@ export {
   VISUAL_FIRST_WRITING_PROMPT,
 } from './memorySnapshots'
 
-// v5.3 — Hook variation + Discovery channels
-export {
-  HOOK_AXES,
-  NICHE_HOOK_AXIS_BIAS,
-  hookAxisBrief,
-} from './hookVariation'
-
-export type {
-  HookEmotionalAxis,
-  HookAxisSpec,
-} from './hookVariation'
-
+// Discovery channels (s6 product reveal sampling)
 export {
   DISCOVERY_CHANNELS,
   discoveryChannelBrief,
@@ -193,17 +195,7 @@ export {
 
 export type { RhythmProfile as RhythmEngineProfile } from './rhythmEngine'
 
-// v5.5 — Trust realism + Visual story coupling
-export {
-  TRUST_REALISM_EXAMPLES,
-  TRUST_REALISM_PROMPT,
-} from './trustRealismLibrary'
-
-export type {
-  TrustRealismStyle,
-  TrustRealismExample,
-} from './trustRealismLibrary'
-
+// Visual story coupling (narrator + section visual coherence)
 export {
   composeVisualPrompt,
   visualCoherenceSummary,
