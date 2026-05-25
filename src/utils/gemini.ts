@@ -268,6 +268,62 @@ export async function directGeminiText(params: {
 }
 
 /**
+ * Batched embedding via text-embedding-004. Free tier ≈ 1500 RPM (vs 10 RPM
+ * for Gemini Flash), so semantic similarity scoring runs on a separate budget
+ * from generation. Use `taskType` to optimise asymmetric retrieval —
+ * 'RETRIEVAL_QUERY' for the search intent, 'RETRIEVAL_DOCUMENT' for the items
+ * being ranked.
+ */
+export async function geminiEmbedBatch(params: {
+  apiKey: string
+  texts: string[]
+  taskType?: 'RETRIEVAL_QUERY' | 'RETRIEVAL_DOCUMENT' | 'SEMANTIC_SIMILARITY'
+  signal?: AbortSignal
+}): Promise<number[][]> {
+  if (params.texts.length === 0) return []
+  const url = `${GEMINI_BASE}/text-embedding-004:batchEmbedContents?key=${params.apiKey}`
+  const taskType = params.taskType ?? 'SEMANTIC_SIMILARITY'
+  const body = {
+    requests: params.texts.map(text => ({
+      model: 'models/text-embedding-004',
+      content: { parts: [{ text }] },
+      taskType,
+    })),
+  }
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+    signal: params.signal,
+  })
+  if (!res.ok) {
+    const err = await res.text().catch(() => res.statusText)
+    if (res.status === 429) {
+      const { isDailyExhausted } = classifyGemini429(err)
+      const e = new Error(`Embedding ${res.status}: ${err.slice(0, 200)}`) as Error & { code?: string }
+      e.code = isDailyExhausted ? 'QUOTA_DAILY' : 'RATE_LIMIT'
+      throw e
+    }
+    throw new Error(`Embedding lỗi (${res.status}): ${err.slice(0, 200)}`)
+  }
+  const data = await res.json() as { embeddings?: Array<{ values: number[] }> }
+  return (data.embeddings || []).map(e => e.values)
+}
+
+/** Cosine similarity of two equal-length numeric vectors. Returns 0 for empty. */
+export function cosineSimilarity(a: number[], b: number[]): number {
+  if (a.length === 0 || b.length === 0 || a.length !== b.length) return 0
+  let dot = 0, na = 0, nb = 0
+  for (let i = 0; i < a.length; i++) {
+    dot += a[i] * b[i]
+    na += a[i] * a[i]
+    nb += b[i] * b[i]
+  }
+  const denom = Math.sqrt(na) * Math.sqrt(nb)
+  return denom === 0 ? 0 : dot / denom
+}
+
+/**
  * Classify a 429 response body from Gemini. Exported because both
  * `searchWithGrounding` (here) and the app-level callGemini wrapper need
  * the SAME taxonomy so per-minute rate-limits don't get mistakenly surfaced

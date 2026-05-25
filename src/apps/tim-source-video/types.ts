@@ -1,41 +1,39 @@
 // ── Tìm Source Video — types, config, error taxonomy ────────────────────────
-// Mirror of the standalone prototype in /prototypes/source-video.html, ported
-// to TypeScript modules + React. Single source of truth for thresholds, retry
-// params, score color tiers, and the error code enum that downstream UI
-// branches on.
+// V2.0 pivot: dropped Gemini Google-Search grounding (expensive, returned
+// homepage/e-commerce noise) and per-call Gemini rank (replaced with batched
+// embedding similarity). Deep video analysis is now LAZY — user clicks a
+// "Verify content" button per card instead of auto-running on top-N.
 
 export const CONFIG = {
   search: {
-    ytMaxResults: 5,
+    ytMaxResults: 8,            // bumped from 5 — more candidates per scene
     tiktokCount: 8,
-    webMaxLinks: 5,
-    /** Max scenes processed in parallel during Phase 1. Each scene fires up
-     *  to 2 Gemini calls (web search + rank). Gemini free tier = 10 RPM, so
-     *  keep this low enough that the steady-state burst stays under it. */
-    sceneConcurrency: 4,
+    /** Scene-level parallelism. Phase-2 search is non-Gemini (YouTube Data
+     *  API + tikwm), so we can fan out fully — no Gemini RPM concern. */
+    sceneConcurrency: 8,
   },
   rank: {
-    minScoreShow: 30,           // filter cards below this
-    minScoreAnalyzeTs: 50,      // YouTube cards eligible for timestamp analysis
+    /** Drop links scoring below this percentile (cosine 0-100 scale). */
+    minScoreShow: 25,
     maxCardsPerScene: 8,
-    fallbackPriority: { youtube: 70, tiktok: 60, web: 40 } as Record<SourceId, number>,
   },
-  timestamp: {
-    maxVideosPerScene: 3,
-    concurrency: 2,
-  },
-  retry: {
-    maxAttempts: 6,
-    baseDelayMs: 2000,
-    factor: 1.7,
+  cache: {
+    /** parseScript output cached for 1 day — same script → instant rerun. */
+    parseScriptTtlMs:    24 * 60 * 60 * 1000,
+    /** YouTube + TikTok search results cached for 1 day. */
+    searchTtlMs:         24 * 60 * 60 * 1000,
+    /** Embedding vectors cached for 7 days (content semantics stable). */
+    embeddingTtlMs: 7 * 24 * 60 * 60 * 1000,
+    /** Timestamp analysis cached for 7 days (videos rarely change). */
+    timestampTtlMs: 7 * 24 * 60 * 60 * 1000,
   },
   scoreColor: [
-    { min: 80, color: '#10b981' },  // excellent — green
-    { min: 60, color: '#f59e0b' },  // good — amber
-    { min: 40, color: '#f97316' },  // ok — orange
-    { min: 30, color: '#dc2626' },  // low but shown — red
+    { min: 75, color: '#10b981' },  // excellent — green
+    { min: 55, color: '#f59e0b' },  // good — amber
+    { min: 35, color: '#f97316' },  // ok — orange
+    { min: 25, color: '#dc2626' },  // low but shown — red
   ],
-  scoreColorNone: '#9ca3af',         // gray — used when score is null
+  scoreColorNone: '#9ca3af',         // gray — when score missing
 } as const
 
 export function colorForScore(score: number | null | undefined): string {
@@ -46,7 +44,7 @@ export function colorForScore(score: number | null | undefined): string {
   return CONFIG.scoreColorNone
 }
 
-// ── Error taxonomy: every API call throws ApiError with a stable code. ──────
+// ── Error taxonomy ──────────────────────────────────────────────────────────
 export const ERR = {
   QUOTA_GEMINI:  'QUOTA_GEMINI',
   QUOTA_YOUTUBE: 'QUOTA_YOUTUBE',
@@ -68,7 +66,8 @@ export class ApiError extends Error {
 }
 
 // ── Domain types ────────────────────────────────────────────────────────────
-export type SourceId = 'youtube' | 'tiktok' | 'web'
+// V2: Web source dropped — only YouTube (content-verifiable) + TikTok (title-only).
+export type SourceId = 'youtube' | 'tiktok'
 
 export interface Scene {
   line: string
@@ -80,6 +79,8 @@ export interface Scene {
 export interface Link {
   url: string
   title: string
+  /** YouTube only — description from Data API snippet (semantic signal). */
+  description?: string
   thumbnail?: string
   domain: string
   meta?: string
@@ -87,9 +88,11 @@ export interface Link {
 
 export interface RankedLink extends Link {
   source: SourceId
+  /** Cosine similarity scaled to 0-100. */
   score: number
+  /** Optional short Vietnamese explanation. */
   reason?: string
-  /** Stable id for DOM diffing during Phase 2 timestamp updates. */
+  /** Stable id for tracking timestamp-verify state. */
   _cardId: string
 }
 
@@ -110,13 +113,18 @@ export interface TimestampResult {
   summary?: string
 }
 
+/** Per-card verify state — 'idle' default, transitions on user click. */
+export type VerifyState =
+  | { kind: 'idle' }
+  | { kind: 'loading' }
+  | { kind: 'done'; result: TimestampResult }
+  | { kind: 'error'; message: string }
+
 export interface SceneState {
   scene: Scene
   ranked: RankedLink[]
-  /** card-ids of YouTube videos selected for Phase 2 timestamp analysis */
-  analyzingIds: Set<string>
-  /** keyed by _cardId — result or in-flight/error marker */
-  timestamps: Record<string, TimestampResult | { error: string } | 'loading'>
+  /** keyed by _cardId — verify state per card */
+  verify: Record<string, VerifyState>
   /** per-source errors (so 1 source fail doesn't poison the scene) */
   errors: Partial<Record<SourceId, string>>
 }
