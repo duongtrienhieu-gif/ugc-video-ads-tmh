@@ -94,9 +94,10 @@ export default function TimSourceVideo() {
       setSceneStates(skeletons)
       setStatus(`✅ Tách được ${scenes.length} scene. Đang tìm video song song...`)
 
-      // Phase 1: per-scene search + rank (parallel).
-      // Adapter failures localize to per-source inline error; quota / abort
-      // codes bubble up to the outer catch which routes to a banner.
+      // Phase 1: per-scene search + rank.
+      // Throttle to CONFIG.search.sceneConcurrency to keep Gemini RPM burst
+      // under the free-tier limit. Adapter failures localize to per-source
+      // inline error; quota / abort codes bubble up to the outer catch.
       type SearchOrErr = SearchResult & { __error?: string }
       const wrapErr = (source: SourceId) => (e: unknown): SearchOrErr => {
         const code = (e as ApiError)?.code
@@ -104,7 +105,8 @@ export default function TimSourceVideo() {
         return { source, links: [], __error: (e as Error).message }
       }
       const phase2Tasks: Array<{ link: RankedLink; sceneIdx: number; intent: string }> = []
-      await Promise.all(scenes.map(async (scene, i) => {
+      const sceneJobs = scenes.map((scene, i) => ({ scene, i }))
+      await processWithConcurrency(sceneJobs, async ({ scene, i }) => {
         const results: SearchOrErr[] = await Promise.all([
           searchYouTube(youtubeKey, scene.keywordEn, controller.signal).catch(wrapErr('youtube')),
           searchTikTok(scene.keywordEn, controller.signal).catch(wrapErr('tiktok')),
@@ -137,7 +139,7 @@ export default function TimSourceVideo() {
           next[i] = { scene, ranked, analyzingIds, timestamps: initialTimestamps, errors: errorsBySource }
           return next
         })
-      }))
+      }, CONFIG.search.sceneConcurrency)
 
       // Phase 2: analyze top YouTube videos for timestamps
       const phase1Elapsed = ((Date.now() - startTime) / 1000).toFixed(1)

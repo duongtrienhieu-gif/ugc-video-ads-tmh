@@ -9,6 +9,10 @@ export const CONFIG = {
     ytMaxResults: 5,
     tiktokCount: 8,
     webMaxLinks: 5,
+    /** Max scenes processed in parallel during Phase 1. Each scene fires up
+     *  to 2 Gemini calls (web search + rank). Gemini free tier = 10 RPM, so
+     *  keep this low enough that the steady-state burst stays under it. */
+    sceneConcurrency: 4,
   },
   rank: {
     minScoreShow: 30,           // filter cards below this

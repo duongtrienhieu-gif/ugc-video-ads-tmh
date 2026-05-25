@@ -11,7 +11,36 @@ import {
   type TimestampResult, type SourceId,
 } from './types'
 
-// ── Gemini call wrapper: retry on 429/5xx, ApiError on failure ──────────────
+// ── Gemini call wrapper: retry on transient 429/5xx, ApiError on failure ────
+// Gemini's 429 has TWO distinct meanings:
+//   • Per-minute rate-limit (free tier = 10 RPM) — RECOVERABLE, retry with
+//     backoff. Response usually carries RetryInfo with a retryDelay hint.
+//   • Per-day token / request quota — NOT recoverable until midnight PT.
+// We MUST distinguish these by parsing error.details[].violations[].quotaId.
+// Treating per-minute as per-day was the bug that surfaced as "Quota cạn"
+// after a single run with many scenes in parallel.
+function classify429(rawBody: string): { isDailyExhausted: boolean; retryDelayMs: number | null } {
+  let isDailyExhausted = false
+  let retryDelayMs: number | null = null
+  try {
+    const parsed = JSON.parse(rawBody) as { error?: { details?: Array<{ '@type'?: string; violations?: Array<{ quotaId?: string; quotaMetric?: string }>; retryDelay?: string }> } }
+    const details = parsed.error?.details || []
+    for (const d of details) {
+      if (d['@type']?.includes('QuotaFailure')) {
+        for (const v of d.violations || []) {
+          const ident = `${v.quotaId || ''} ${v.quotaMetric || ''}`
+          if (/PerDay|daily|input_token_count/i.test(ident)) isDailyExhausted = true
+        }
+      }
+      if (d['@type']?.includes('RetryInfo') && d.retryDelay) {
+        const m = String(d.retryDelay).match(/^(\d+(?:\.\d+)?)s/)
+        if (m) retryDelayMs = Math.ceil(parseFloat(m[1]) * 1000)
+      }
+    }
+  } catch { /* unparseable body — fall through with defaults */ }
+  return { isDailyExhausted, retryDelayMs }
+}
+
 async function callGemini(apiKey: string, body: unknown, signal: AbortSignal, model = 'gemini-2.5-flash'): Promise<unknown> {
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`
   const { maxAttempts, baseDelayMs, factor } = CONFIG.retry
@@ -32,16 +61,27 @@ async function callGemini(apiKey: string, body: unknown, signal: AbortSignal, mo
     }
     if (res.ok) return res.json()
     lastErr = await res.text().catch(() => '')
-    const isExhausted = res.status === 429 && /RESOURCE_EXHAUSTED|exhausted/i.test(lastErr)
-    if (isExhausted) throw new ApiError(ERR.QUOTA_GEMINI, 'Gemini free tier (250 req/day) đã cạn')
-    const retryable = [429, 500, 502, 503, 504].includes(res.status) || /UNAVAILABLE|overload/i.test(lastErr)
+
+    if (res.status === 429) {
+      const { isDailyExhausted, retryDelayMs } = classify429(lastErr)
+      if (isDailyExhausted) throw new ApiError(ERR.QUOTA_GEMINI, 'Gemini free tier (250 req/day) đã cạn')
+      if (attempt === maxAttempts) {
+        // Exhausted retries on a per-minute 429 — surface as generic fail (NOT QUOTA banner)
+        throw new ApiError(ERR.GEMINI_FAIL, `Gemini rate-limit kéo dài (đã thử ${maxAttempts + 1} lần): ${lastErr.slice(0, 200)}`)
+      }
+      const delay = retryDelayMs ?? (baseDelayMs * Math.pow(factor, attempt) + Math.random() * 1000)
+      await new Promise(r => setTimeout(r, delay))
+      continue
+    }
+
+    const retryable = [500, 502, 503, 504].includes(res.status) || /UNAVAILABLE|overload/i.test(lastErr)
     if (!retryable || attempt === maxAttempts) {
       throw new ApiError(ERR.GEMINI_FAIL, `Gemini ${res.status}: ${lastErr.slice(0, 200)}`)
     }
     const delay = baseDelayMs * Math.pow(factor, attempt) + Math.random() * 1000
     await new Promise(r => setTimeout(r, delay))
   }
-  throw new ApiError(ERR.GEMINI_FAIL, `Gemini failed after ${maxAttempts} retries: ${lastErr.slice(0, 200)}`)
+  throw new ApiError(ERR.GEMINI_FAIL, `Gemini failed after ${maxAttempts + 1} attempts: ${lastErr.slice(0, 200)}`)
 }
 
 // ── Step 1: Parse script → scenes ───────────────────────────────────────────
