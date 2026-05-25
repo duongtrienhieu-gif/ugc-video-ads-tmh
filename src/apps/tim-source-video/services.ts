@@ -4,7 +4,7 @@
 // Signal-aware: passing a fresh AbortController.signal lets the UI cancel
 // in-flight requests via the Hủy button.
 
-import { searchWithGrounding } from '../../utils/gemini'
+import { searchWithGrounding, classifyGemini429 } from '../../utils/gemini'
 import {
   ApiError, CONFIG, ERR,
   type Scene, type Link, type SearchResult, type RankedLink,
@@ -16,31 +16,9 @@ import {
 //   • Per-minute rate-limit (free tier = 10 RPM) — RECOVERABLE, retry with
 //     backoff. Response usually carries RetryInfo with a retryDelay hint.
 //   • Per-day token / request quota — NOT recoverable until midnight PT.
-// We MUST distinguish these by parsing error.details[].violations[].quotaId.
-// Treating per-minute as per-day was the bug that surfaced as "Quota cạn"
-// after a single run with many scenes in parallel.
-function classify429(rawBody: string): { isDailyExhausted: boolean; retryDelayMs: number | null } {
-  let isDailyExhausted = false
-  let retryDelayMs: number | null = null
-  try {
-    const parsed = JSON.parse(rawBody) as { error?: { details?: Array<{ '@type'?: string; violations?: Array<{ quotaId?: string; quotaMetric?: string }>; retryDelay?: string }> } }
-    const details = parsed.error?.details || []
-    for (const d of details) {
-      if (d['@type']?.includes('QuotaFailure')) {
-        for (const v of d.violations || []) {
-          const ident = `${v.quotaId || ''} ${v.quotaMetric || ''}`
-          if (/PerDay|daily|input_token_count/i.test(ident)) isDailyExhausted = true
-        }
-      }
-      if (d['@type']?.includes('RetryInfo') && d.retryDelay) {
-        const m = String(d.retryDelay).match(/^(\d+(?:\.\d+)?)s/)
-        if (m) retryDelayMs = Math.ceil(parseFloat(m[1]) * 1000)
-      }
-    }
-  } catch { /* unparseable body — fall through with defaults */ }
-  return { isDailyExhausted, retryDelayMs }
-}
-
+// We MUST distinguish these by parsing error.details[].violations[].quotaId
+// — see classifyGemini429() in utils/gemini.ts (shared with searchWithGrounding
+// so per-minute rate-limits never get surfaced as daily-quota banners).
 async function callGemini(apiKey: string, body: unknown, signal: AbortSignal, model = 'gemini-2.5-flash'): Promise<unknown> {
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`
   const { maxAttempts, baseDelayMs, factor } = CONFIG.retry
@@ -63,7 +41,7 @@ async function callGemini(apiKey: string, body: unknown, signal: AbortSignal, mo
     lastErr = await res.text().catch(() => '')
 
     if (res.status === 429) {
-      const { isDailyExhausted, retryDelayMs } = classify429(lastErr)
+      const { isDailyExhausted, retryDelayMs } = classifyGemini429(lastErr)
       if (isDailyExhausted) throw new ApiError(ERR.QUOTA_GEMINI, 'Gemini free tier (250 req/day) đã cạn')
       if (attempt === maxAttempts) {
         // Exhausted retries on a per-minute 429 — surface as generic fail (NOT QUOTA banner)
@@ -229,11 +207,12 @@ Yêu cầu QUAN TRỌNG:
   try {
     result = await searchWithGrounding({ apiKey, prompt, signal })
   } catch (err) {
-    if ((err as Error)?.name === 'AbortError') throw new ApiError(ERR.ABORTED, 'Đã hủy')
-    // Detect quota inside Gemini error message
-    if (/RESOURCE_EXHAUSTED|exhausted/i.test((err as Error)?.message || '')) {
-      throw new ApiError(ERR.QUOTA_GEMINI, 'Gemini free tier đã cạn')
-    }
+    // searchWithGrounding now throws Error with `.code` indicating intent.
+    // 'ABORTED' → cancel; 'QUOTA_DAILY' → daily exhausted (fatal banner);
+    // anything else → generic fail (post-retry rate-limit, parse errors, etc).
+    const code = (err as { code?: string })?.code
+    if (code === 'ABORTED' || (err as Error)?.name === 'AbortError') throw new ApiError(ERR.ABORTED, 'Đã hủy')
+    if (code === 'QUOTA_DAILY') throw new ApiError(ERR.QUOTA_GEMINI, 'Gemini free tier (250 req/day) đã cạn')
     throw new ApiError(ERR.GEMINI_FAIL, (err as Error)?.message || 'Web search failed')
   }
 
