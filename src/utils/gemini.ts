@@ -291,8 +291,13 @@ export function classifyGemini429(rawBody: string): {
     for (const d of details) {
       if (d['@type']?.includes('QuotaFailure')) {
         for (const v of d.violations || []) {
-          const ident = `${v.quotaId || ''} ${v.quotaMetric || ''}`
-          if (/PerDay|daily|input_token_count/i.test(ident)) isDailyExhausted = true
+          // The PerDay/PerMinute discriminator lives ONLY in quotaId (e.g.
+          // "GenerateContentRequestsPerDayPerProjectPerTier-FreeTier" vs
+          // "...PerMinute..."). quotaMetric only says WHICH resource (requests
+          // vs token_count) and matching on its substrings (e.g.
+          // "input_token_count") wrongly flagged per-minute token limits as
+          // daily exhaustion — earlier false-positive bug.
+          if (/PerDay/i.test(v.quotaId || '')) isDailyExhausted = true
         }
       }
       if (d['@type']?.includes('RetryInfo') && d.retryDelay) {
