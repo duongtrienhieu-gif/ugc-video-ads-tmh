@@ -6,9 +6,10 @@
 // overwrite already-rendered scene results.
 
 import { useState, useRef } from 'react'
-import { Search, Play, X, Loader2 } from 'lucide-react'
+import { Search, Play, X, Loader2, FileText } from 'lucide-react'
 import { useSettingsStore } from '../../stores/settingsStore'
 import { useAppStore } from '../../stores/appStore'
+import { useBankStore } from '../../stores/bankStore'
 import {
   parseScript, searchYouTube, searchTikTok, searchWeb, rankLinks,
   analyzeYouTubeTimestamp, processWithConcurrency, parseTimeToSeconds,
@@ -29,8 +30,10 @@ export default function TimSourceVideo() {
   const geminiKey = useSettingsStore((s) => s.geminiApiKey)
   const youtubeKey = useSettingsStore((s) => s.youtubeApiKey)
   const addToast = useAppStore((s) => s.addToast)
+  const savedScripts = useBankStore((s) => s.scripts)
 
   const [script, setScript] = useState(DEFAULT_SCRIPT)
+  const [pickedScriptId, setPickedScriptId] = useState<string>('')
   const [running, setRunning] = useState(false)
   const [status, setStatus] = useState('')
   const [banners, setBanners] = useState<BannerSpec[]>([])
@@ -199,10 +202,43 @@ export default function TimSourceVideo() {
       )}
 
       <div className="mb-4">
-        <label className="mb-1 block text-xs font-semibold text-gray-600">Kịch bản UGC</label>
+        <div className="mb-1 flex items-center justify-between gap-2">
+          <label className="text-xs font-semibold text-gray-600">Kịch bản UGC</label>
+          {savedScripts.length > 0 && (
+            <div className="flex items-center gap-1.5">
+              <FileText className="h-3.5 w-3.5 text-gray-400" />
+              <select
+                value={pickedScriptId}
+                onChange={(e) => {
+                  const id = e.target.value
+                  setPickedScriptId(id)
+                  if (id) {
+                    const found = savedScripts.find((s) => s.id === id)
+                    if (found) {
+                      setScript(found.scriptText)
+                      addToast(`Đã nạp kịch bản: ${found.title}`)
+                    }
+                  }
+                }}
+                disabled={running}
+                className="rounded border border-gray-200 bg-white px-2 py-1 text-xs text-gray-700 focus:border-violet-300 focus:outline-none disabled:opacity-60"
+              >
+                <option value="">📂 Nạp từ Kịch bản đã lưu ({savedScripts.length})</option>
+                {savedScripts.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.title}{s.source === 'script-architect' ? ' · AI' : ''}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+        </div>
         <textarea
           value={script}
-          onChange={(e) => setScript(e.target.value)}
+          onChange={(e) => {
+            setScript(e.target.value)
+            if (pickedScriptId) setPickedScriptId('')  // user edited → unlink from saved script
+          }}
           disabled={running}
           className="h-64 w-full resize-y rounded-lg border border-gray-200 bg-white p-3 font-mono text-sm leading-relaxed text-gray-800 focus:border-violet-300 focus:outline-none disabled:opacity-60"
           placeholder="Paste kịch bản UGC vào đây..."

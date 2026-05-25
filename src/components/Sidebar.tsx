@@ -23,6 +23,7 @@ const NAV_ITEMS: NavItem[] = [
   { id: 'character-studio', label: 'Avatar AI', icon: User },
   { id: 'script-architect', label: 'Kịch bản', icon: PenLine },
   { id: 'ads-content',      label: 'Ads Content', icon: Megaphone },
+  { id: 'tim-source-video', label: 'Tìm Source Video', icon: Search },
   { id: 'lab-content',      label: 'Lab Content', icon: Brain },
   // 2026-05-20 — 'landing-page' entry hidden from sidebar so employees
   // only see Super Ladipage (the newer rewrite with cleaner identity
@@ -35,7 +36,6 @@ const NAV_ITEMS: NavItem[] = [
   { id: 'creative-studio', label: 'Creative Studio', icon: Image },
   { id: 'video-translate', label: 'Dịch Video',   icon: Languages },
   { id: 'video-builder',   label: 'UGC Builder',  icon: Sparkles },
-  { id: 'tim-source-video', label: 'Tìm Source Video', icon: Search },
   { id: 'ad-anatomy',      label: 'Phân tích QC', icon: Eye },
 ]
 
