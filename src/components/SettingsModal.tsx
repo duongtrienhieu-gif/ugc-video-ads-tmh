@@ -15,7 +15,7 @@ interface SettingsModalProps {
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-type SectionId = 'kie' | 'gemini' | 'eleven' | 'fal' | 'shotstack'
+type SectionId = 'kie' | 'gemini' | 'eleven' | 'fal' | 'shotstack' | 'youtube'
 
 interface ServiceConfig {
   id: SectionId
@@ -91,6 +91,18 @@ const SERVICES: ServiceConfig[] = [
     getKeyUrl: 'https://dashboard.shotstack.io/register',
     getKeyLabel: 'Đăng ký →',
   },
+  {
+    id: 'youtube',
+    label: 'YouTube Data API',
+    sublabel: 'Tìm Source Video · YT Search',
+    color: 'sky',
+    borderColor: 'border-sky-200',
+    bgColor: 'bg-sky-50',
+    keyHint: 'Miễn phí · 10,000 units/ngày (~100 search) · Cần bật YouTube Data API v3 trong Google Cloud Console',
+    placeholder: 'AIza...',
+    getKeyUrl: 'https://console.cloud.google.com/apis/library/youtube.googleapis.com',
+    getKeyLabel: 'Lấy key →',
+  },
 ]
 
 // ── Color maps ─────────────────────────────────────────────────────────────────
@@ -132,9 +144,9 @@ const BTN_CLASS: Record<string, string> = {
 
 export default function SettingsModal({ open, onClose }: SettingsModalProps) {
   const {
-    kieApiKey, geminiApiKey, elevenLabsApiKey, falApiKey, shotstackApiKey,
+    kieApiKey, geminiApiKey, elevenLabsApiKey, falApiKey, shotstackApiKey, youtubeApiKey,
     kieCredits, theme,
-    setKieApiKey, setGeminiApiKey, setElevenLabsApiKey, setFalApiKey, setShotstackApiKey,
+    setKieApiKey, setGeminiApiKey, setElevenLabsApiKey, setFalApiKey, setShotstackApiKey, setYoutubeApiKey,
     setKieCredits, setTheme,
   } = useSettingsStore()
   const addToast = useAppStore((s) => s.addToast)
@@ -146,9 +158,10 @@ export default function SettingsModal({ open, onClose }: SettingsModalProps) {
     eleven: elevenLabsApiKey,
     fal: falApiKey,
     shotstack: shotstackApiKey,
+    youtube: youtubeApiKey,
   })
   const [shows, setShows] = useState<Record<SectionId, boolean>>({
-    kie: false, gemini: false, eleven: false, fal: false, shotstack: false,
+    kie: false, gemini: false, eleven: false, fal: false, shotstack: false, youtube: false,
   })
   const [openSection, setOpenSection] = useState<SectionId | null>(null)
   const [saved, setSaved] = useState(false)
@@ -160,12 +173,12 @@ export default function SettingsModal({ open, onClose }: SettingsModalProps) {
 
   useEffect(() => {
     if (open) {
-      setDrafts({ kie: kieApiKey, gemini: geminiApiKey, eleven: elevenLabsApiKey, fal: falApiKey, shotstack: shotstackApiKey })
+      setDrafts({ kie: kieApiKey, gemini: geminiApiKey, eleven: elevenLabsApiKey, fal: falApiKey, shotstack: shotstackApiKey, youtube: youtubeApiKey })
       setSaved(false)
       setTestResults({})
       setOpenSection(null)
     }
-  }, [open, kieApiKey, geminiApiKey, elevenLabsApiKey, falApiKey, shotstackApiKey])
+  }, [open, kieApiKey, geminiApiKey, elevenLabsApiKey, falApiKey, shotstackApiKey, youtubeApiKey])
 
   if (!open) return null
 
@@ -179,7 +192,7 @@ export default function SettingsModal({ open, onClose }: SettingsModalProps) {
   const isSaved = (id: SectionId): boolean => {
     const map: Record<SectionId, string> = {
       kie: kieApiKey, gemini: geminiApiKey, eleven: elevenLabsApiKey,
-      fal: falApiKey, shotstack: shotstackApiKey,
+      fal: falApiKey, shotstack: shotstackApiKey, youtube: youtubeApiKey,
     }
     return map[id].length > 0
   }
@@ -214,6 +227,14 @@ export default function SettingsModal({ open, onClose }: SettingsModalProps) {
         } else {
           setTestResults((r) => ({ ...r, fal: { ok: true, message: 'Kết nối thành công — API key hợp lệ' } }))
         }
+      } else if (id === 'youtube') {
+        const res = await fetch(`https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&maxResults=1&q=test&key=${encodeURIComponent(key)}`)
+        if (res.ok) {
+          setTestResults((r) => ({ ...r, youtube: { ok: true, message: 'Kết nối thành công — YouTube Data API v3 sẵn sàng' } }))
+        } else {
+          const body = await res.json().catch(() => null) as { error?: { message?: string } } | null
+          setTestResults((r) => ({ ...r, youtube: { ok: false, message: body?.error?.message || `Lỗi ${res.status}` } }))
+        }
       } else if (id === 'shotstack') {
         const res = await fetch('https://api.shotstack.io/edit/v1/render?limit=1', {
           headers: { 'x-api-key': key },
@@ -238,6 +259,7 @@ export default function SettingsModal({ open, onClose }: SettingsModalProps) {
     setElevenLabsApiKey(drafts.eleven.trim())
     setFalApiKey(drafts.fal.trim())
     setShotstackApiKey(drafts.shotstack.trim())
+    setYoutubeApiKey(drafts.youtube.trim())
 
     // RACE FIX (2026-05-20): setters schedule a 1.5s debounced cloud
     // push. If the user clicked Lưu then F5'd within 1.5s, the new keys
@@ -300,7 +322,7 @@ export default function SettingsModal({ open, onClose }: SettingsModalProps) {
           <div>
             <h2 className="text-base font-bold text-gray-900">Cài đặt</h2>
             <p className="mt-0.5 text-[11px] text-gray-400">
-              {[kieApiKey, geminiApiKey, elevenLabsApiKey, falApiKey, shotstackApiKey].filter(Boolean).length}/5 dịch vụ đã kết nối
+              {[kieApiKey, geminiApiKey, elevenLabsApiKey, falApiKey, shotstackApiKey, youtubeApiKey].filter(Boolean).length}/6 dịch vụ đã kết nối
             </p>
           </div>
           <button

@@ -43,6 +43,7 @@ interface SettingsState {
   elevenLabsApiKey: string
   falApiKey: string
   shotstackApiKey: string
+  youtubeApiKey: string
   kieCredits: number | null
   /** UGC Builder pipeline version. v1 = stable (production), v2 = AI Director beta. */
   pipelineVersion: PipelineVersion
@@ -54,6 +55,7 @@ interface SettingsState {
   setElevenLabsApiKey: (key: string) => void
   setFalApiKey: (key: string) => void
   setShotstackApiKey: (key: string) => void
+  setYoutubeApiKey: (key: string) => void
   setKieCredits: (credits: number | null) => void
   setPipelineVersion: (v: PipelineVersion) => void
   setTheme: (t: ThemePreference) => void
@@ -67,6 +69,8 @@ interface SettingsState {
   hasFalKey: () => boolean
   getShotstackApiKey: () => string
   hasShotstackKey: () => boolean
+  getYoutubeApiKey: () => string
+  hasYoutubeKey: () => boolean
 }
 
 interface StoredSettings {
@@ -75,6 +79,7 @@ interface StoredSettings {
   elevenLabsApiKey: string
   falApiKey: string
   shotstackApiKey: string
+  youtubeApiKey: string
   pipelineVersion: PipelineVersion
   theme: ThemePreference
 }
@@ -90,6 +95,7 @@ function loadFromStorage(): StoredSettings {
         elevenLabsApiKey: parsed.elevenLabsApiKey ?? '',
         falApiKey:        parsed.falApiKey        ?? '',
         shotstackApiKey:  parsed.shotstackApiKey  ?? '',
+        youtubeApiKey:    parsed.youtubeApiKey    ?? '',
         // Z37 — Auto-migrate v2 → v3. v2 cinematic pipeline is deprecated;
         // the user wants the v3 Ads Video Engine. Existing v2 users get
         // bumped forward on next load. v2 stays reachable via Legacy menu
@@ -111,7 +117,7 @@ function loadFromStorage(): StoredSettings {
     }
   } catch { /* silent */ }
   // Z30 — first-time users land on v3 (creator-first), not the legacy v1.
-  return { kieApiKey: '', geminiApiKey: '', elevenLabsApiKey: '', falApiKey: '', shotstackApiKey: '', pipelineVersion: 'v3', theme: 'light' }
+  return { kieApiKey: '', geminiApiKey: '', elevenLabsApiKey: '', falApiKey: '', shotstackApiKey: '', youtubeApiKey: '', pipelineVersion: 'v3', theme: 'light' }
 }
 
 function saveToStorage(s: StoredSettings) {
@@ -245,6 +251,7 @@ async function hydrateFromCloud(setStore: (patch: Partial<StoredSettings>) => vo
       elevenLabsApiKey: cloud.elevenLabsApiKey ?? '',
       falApiKey:        cloud.falApiKey        ?? '',
       shotstackApiKey:  cloud.shotstackApiKey  ?? '',
+      youtubeApiKey:    cloud.youtubeApiKey    ?? '',
       pipelineVersion:  (
         cloud.pipelineVersion === 'v3' ? 'v3' :
         cloud.pipelineVersion === 'v2' ? 'v3' :  // Z37 — auto-migrate
@@ -272,6 +279,7 @@ function getStored(get: () => SettingsState): StoredSettings {
     elevenLabsApiKey: s.elevenLabsApiKey,
     falApiKey:        s.falApiKey,
     shotstackApiKey:  s.shotstackApiKey,
+    youtubeApiKey:    s.youtubeApiKey,
     pipelineVersion:  s.pipelineVersion,
     theme:            s.theme,
   }
@@ -304,6 +312,11 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   setShotstackApiKey: (key) => {
     set({ shotstackApiKey: key })
     saveToStorage({ ...getStored(get), shotstackApiKey: key })
+  },
+
+  setYoutubeApiKey: (key) => {
+    set({ youtubeApiKey: key })
+    saveToStorage({ ...getStored(get), youtubeApiKey: key })
   },
 
   setKieCredits: (credits) => set({ kieCredits: credits }),
@@ -357,6 +370,14 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   },
 
   hasShotstackKey: () => get().shotstackApiKey.length > 0,
+
+  getYoutubeApiKey: () => {
+    const key = get().youtubeApiKey
+    if (!key) throw new Error('Vui lòng nhập YouTube Data API key trong Cài đặt')
+    return key
+  },
+
+  hasYoutubeKey: () => get().youtubeApiKey.length > 0,
 }))
 
 // ── Z38 — Wire Supabase auth state ──────────────────────────────────────

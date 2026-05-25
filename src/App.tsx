@@ -34,6 +34,7 @@ import CreativeStudio from './apps/creative-studio/CreativeStudio'
 import ImageDna from './apps/image-dna/ImageDna'
 import VideoTranslate from './apps/video-translate/VideoTranslate'
 import VideoBuilder from './apps/video-builder/VideoBuilder'
+import TimSourceVideo from './apps/tim-source-video/TimSourceVideo'
 
 const APP_COMPONENTS: Record<string, React.ComponentType> = {
   'finder': Finder,
@@ -54,6 +55,7 @@ const APP_COMPONENTS: Record<string, React.ComponentType> = {
   'image-dna': ImageDna,
   'video-translate': VideoTranslate,
   'video-builder': VideoBuilder,
+  'tim-source-video': TimSourceVideo,
 }
 
 /** VN label + cache keys used by the per-app ErrorBoundary fallback so the
@@ -75,6 +77,7 @@ const APP_BOUNDARY_META: Record<string, { name: string; resetKeys: string[] }> =
   'image-dna':         { name: 'Image DNA',      resetKeys: [] },
   'video-translate':   { name: 'Dịch Video',     resetKeys: [] },
   'video-builder':     { name: 'UGC Builder',    resetKeys: [] },
+  'tim-source-video':  { name: 'Tìm Source Video', resetKeys: [] },
 }
 
 export default function App() {

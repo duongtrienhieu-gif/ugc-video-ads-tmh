@@ -267,6 +267,49 @@ export async function directGeminiText(params: {
   throw new Error(errors.length ? errors.join(' | ') : 'Gemini text: không có model khả dụng')
 }
 
+/**
+ * Gemini text call with Google Search grounding enabled.
+ * Returns the model's narrative + the grounding chunks (web search results).
+ * Separate from `directGeminiText` because grounding response has a different
+ * shape (groundingMetadata) and is incompatible with `responseSchema`.
+ */
+export async function searchWithGrounding(params: {
+  apiKey: string
+  prompt: string
+  signal?: AbortSignal
+}): Promise<{ narrative: string; chunks: Array<{ uri: string; title?: string }> }> {
+  const url = `${GEMINI_BASE}/gemini-2.5-flash:generateContent?key=${params.apiKey}`
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      contents: [{ parts: [{ text: params.prompt }] }],
+      tools: [{ googleSearch: {} }],
+    }),
+    signal: params.signal,
+  })
+  if (!res.ok) {
+    const err = await res.text().catch(() => res.statusText)
+    throw new Error(`Gemini grounding lỗi (${res.status}): ${err.slice(0, 200)}`)
+  }
+  const data = await res.json() as {
+    candidates?: Array<{
+      content?: { parts?: Array<{ text?: string }> }
+      groundingMetadata?: { groundingChunks?: Array<{ web?: { uri: string; title?: string } }> }
+    }>
+  }
+  const candidate = data.candidates?.[0]
+  const narrative = (candidate?.content?.parts || [])
+    .map(p => p.text)
+    .filter(Boolean)
+    .join('\n')
+    .trim()
+  const chunks = (candidate?.groundingMetadata?.groundingChunks || [])
+    .map(c => c.web)
+    .filter((w): w is { uri: string; title?: string } => !!w?.uri)
+  return { narrative, chunks }
+}
+
 import {
   kieTextGenerate,
   kieAnalyzeImage,
