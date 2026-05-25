@@ -146,7 +146,7 @@ export default function TimSourceVideo() {
     } catch (err) {
       const spec = classifyError(err)
       addBanner(spec)
-      if (spec.kind === 'aborted') setStatus('')
+      setStatus('')   // banner indicates run stopped — don't leave a stale "Đang..." message
     } finally {
       setRunning(false)
       abortRef.current = null

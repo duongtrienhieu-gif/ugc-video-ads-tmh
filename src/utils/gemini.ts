@@ -268,12 +268,19 @@ export async function directGeminiText(params: {
 }
 
 /**
- * Batched embedding via text-embedding-004. Free tier ≈ 1500 RPM (vs 10 RPM
- * for Gemini Flash), so semantic similarity scoring runs on a separate budget
- * from generation. Use `taskType` to optimise asymmetric retrieval —
- * 'RETRIEVAL_QUERY' for the search intent, 'RETRIEVAL_DOCUMENT' for the items
- * being ranked.
+ * Batched embedding. Free tier ≈ 1500 RPM (vs 10 RPM for Gemini Flash), so
+ * semantic similarity scoring runs on a separate budget from generation. Use
+ * `taskType` to optimise asymmetric retrieval — 'RETRIEVAL_QUERY' for the
+ * search intent, 'RETRIEVAL_DOCUMENT' for the items being ranked.
+ *
+ * Model fallback chain: tries the GA model first (`gemini-embedding-001`,
+ * the current default since mid-2025) and falls back to `text-embedding-004`
+ * if the new model returns 404 — covers regions / accounts where the GA
+ * model rollout hasn't reached yet, AND vice versa for legacy keys still
+ * pinned to the old endpoint.
  */
+const EMBED_MODELS = ['gemini-embedding-001', 'text-embedding-004']
+
 export async function geminiEmbedBatch(params: {
   apiKey: string
   texts: string[]
@@ -281,23 +288,31 @@ export async function geminiEmbedBatch(params: {
   signal?: AbortSignal
 }): Promise<number[][]> {
   if (params.texts.length === 0) return []
-  const url = `${GEMINI_BASE}/text-embedding-004:batchEmbedContents?key=${params.apiKey}`
   const taskType = params.taskType ?? 'SEMANTIC_SIMILARITY'
-  const body = {
-    requests: params.texts.map(text => ({
-      model: 'models/text-embedding-004',
-      content: { parts: [{ text }] },
-      taskType,
-    })),
-  }
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-    signal: params.signal,
-  })
-  if (!res.ok) {
+  const errors: string[] = []
+  for (const model of EMBED_MODELS) {
+    const url = `${GEMINI_BASE}/${model}:batchEmbedContents?key=${params.apiKey}`
+    const body = {
+      requests: params.texts.map(text => ({
+        model: `models/${model}`,
+        content: { parts: [{ text }] },
+        taskType,
+      })),
+    }
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+      signal: params.signal,
+    })
+    if (res.ok) {
+      const data = await res.json() as { embeddings?: Array<{ values: number[] }> }
+      return (data.embeddings || []).map(e => e.values)
+    }
     const err = await res.text().catch(() => res.statusText)
+    // 404 = model not available → try next model in chain
+    if (res.status === 404) { errors.push(`${model}: 404`); continue }
+    // Quota / rate-limit → throw immediately, don't fall through to next model
     if (res.status === 429) {
       const { isDailyExhausted } = classifyGemini429(err)
       const e = new Error(`Embedding ${res.status}: ${err.slice(0, 200)}`) as Error & { code?: string }
@@ -306,8 +321,7 @@ export async function geminiEmbedBatch(params: {
     }
     throw new Error(`Embedding lỗi (${res.status}): ${err.slice(0, 200)}`)
   }
-  const data = await res.json() as { embeddings?: Array<{ values: number[] }> }
-  return (data.embeddings || []).map(e => e.values)
+  throw new Error(`Embedding: không model nào khả dụng — ${errors.join(' | ')}`)
 }
 
 /** Cosine similarity of two equal-length numeric vectors. Returns 0 for empty. */
