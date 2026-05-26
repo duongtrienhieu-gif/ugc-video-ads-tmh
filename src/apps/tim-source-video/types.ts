@@ -24,8 +24,6 @@ export const CONFIG = {
     searchTtlMs:         24 * 60 * 60 * 1000,
     /** Embedding vectors cached for 7 days (content semantics stable). */
     embeddingTtlMs: 7 * 24 * 60 * 60 * 1000,
-    /** Timestamp analysis cached for 7 days (videos rarely change). */
-    timestampTtlMs: 7 * 24 * 60 * 60 * 1000,
   },
   scoreColor: [
     { min: 75, color: '#10b981' },  // excellent — green
@@ -101,30 +99,9 @@ export interface SearchResult {
   links: Link[]
 }
 
-export interface TimestampRow {
-  start: string
-  end: string
-  description: string
-}
-
-export interface TimestampResult {
-  found: boolean
-  timestamps?: TimestampRow[]
-  summary?: string
-}
-
-/** Per-card verify state — 'idle' default, transitions on user click. */
-export type VerifyState =
-  | { kind: 'idle' }
-  | { kind: 'loading' }
-  | { kind: 'done'; result: TimestampResult }
-  | { kind: 'error'; message: string }
-
 export interface SceneState {
   scene: Scene
   ranked: RankedLink[]
-  /** keyed by _cardId — verify state per card */
-  verify: Record<string, VerifyState>
   /** per-source errors (so 1 source fail doesn't poison the scene) */
   errors: Partial<Record<SourceId, string>>
 }

@@ -1,22 +1,24 @@
-// ── Tìm Source Video — main component (V2) ──────────────────────────────────
-// V2 pipeline: parseScript → parallel search (no Gemini) → batched embedding
-// rerank (2 calls total for whole run) → render. Per-card "Verify content"
-// button triggers Gemini fileData on demand instead of auto-verifying top-N.
+// ── Tìm Source Video — main component (V3) ──────────────────────────────────
+// V3 pivot: dropped Gemini fileData verify (too expensive — burned daily
+// quota in 3 clicks for ~0% useful matches). UGC-native source mix instead:
+// YouTube Shorts (videoDuration=short filter) + TikTok via tikwm. AI ranks
+// semantically with embeddings; user filters visually by clicking through.
+// Honest UX: no "verified content" badge — user always self-checks.
 
 import { useState, useRef } from 'react'
-import { Search, Play, X, Loader2, FileText, ShieldCheck, Database } from 'lucide-react'
+import { Search, Play, X, Loader2, FileText, Database, ExternalLink } from 'lucide-react'
 import { useSettingsStore } from '../../stores/settingsStore'
 import { useAppStore } from '../../stores/appStore'
 import { useBankStore } from '../../stores/bankStore'
 import {
   parseScript, searchYouTube, searchTikTok, embeddingRank,
-  analyzeYouTubeTimestamp, processWithConcurrency, parseTimeToSeconds,
+  processWithConcurrency,
 } from './services'
 import { cacheClear } from './cache'
 import {
   CONFIG, ERR, ApiError, colorForScore,
-  type Scene, type Link, type SceneState, type BannerSpec,
-  type RankedLink, type SourceId, type SearchResult, type VerifyState,
+  type Link, type SceneState, type BannerSpec,
+  type SourceId, type SearchResult,
 } from './types'
 
 const DEFAULT_SCRIPT = `Bạn có biết, sau tuổi 25, collagen trong cơ thể giảm 1.5% mỗi năm?
@@ -92,10 +94,7 @@ export default function TimSourceVideo() {
         return
       }
 
-      // Render skeletons immediately
-      const skeletons: SceneState[] = scenes.map((scene) => ({
-        scene, ranked: [], verify: {}, errors: {},
-      }))
+      const skeletons: SceneState[] = scenes.map((scene) => ({ scene, ranked: [], errors: {} }))
       setSceneStates(skeletons)
       setStatus(`✅ Tách được ${scenes.length} scene. Đang tìm video...`)
 
@@ -125,72 +124,26 @@ export default function TimSourceVideo() {
       }, CONFIG.search.sceneConcurrency)
 
       // ── Phase 3: batched embedding rerank for ALL scenes (2 calls) ───────
-      setStatus(`🧮 Đang chấm điểm bằng embedding similarity (1 batch call cho toàn run)...`)
-      const rankedPerScene = await embeddingRank(geminiKey, {
-        scenes,
-        linksPerScene,
-      }, controller.signal)
+      setStatus('🧮 Đang chấm điểm bằng embedding similarity...')
+      const rankedPerScene = await embeddingRank(geminiKey, { scenes, linksPerScene }, controller.signal)
 
-      // Commit to state
       const finalStates: SceneState[] = scenes.map((scene, i) => ({
         scene,
         ranked: rankedPerScene[i],
-        verify: {},
         errors: errorsPerScene[i],
       }))
       setSceneStates(finalStates)
 
       const elapsed = ((Date.now() - startTime) / 1000).toFixed(1)
-      const ytCount = finalStates.flatMap(s => s.ranked).filter(l => l.source === 'youtube').length
-      setStatus(`✅ Hoàn tất ${scenes.length} scene trong ${elapsed}s. Click "🔍 Xem nội dung" trên card YouTube để Gemini xác minh có cảnh phù hợp không (${ytCount} card có thể verify).`)
+      const totalCards = finalStates.reduce((sum, s) => sum + s.ranked.length, 0)
+      setStatus(`✅ Hoàn tất ${scenes.length} scene trong ${elapsed}s · ${totalCards} card tìm được. Click thumbnail để mở video tab mới — bạn tự xem thử có phù hợp không (AI chỉ rank theo title+description, không verify nội dung).`)
     } catch (err) {
       const spec = classifyError(err)
       addBanner(spec)
-      setStatus('')   // banner indicates run stopped — don't leave a stale "Đang..." message
+      setStatus('')
     } finally {
       setRunning(false)
       abortRef.current = null
-    }
-  }
-
-  // ── Per-card lazy verify ─────────────────────────────────────────────────
-  async function verifyCard(sceneIdx: number, link: RankedLink) {
-    if (!geminiKey) { addToast('Cần Gemini key', 'error'); return }
-    if (link.source !== 'youtube') {
-      addToast('TikTok không thể verify nội dung — Gemini chỉ đọc được URL YouTube', 'error')
-      return
-    }
-
-    setSceneStates((prev) => {
-      const next = [...prev]
-      if (next[sceneIdx]) {
-        next[sceneIdx] = { ...next[sceneIdx], verify: { ...next[sceneIdx].verify, [link._cardId]: { kind: 'loading' } } }
-      }
-      return next
-    })
-
-    const controller = new AbortController()
-    try {
-      const result = await analyzeYouTubeTimestamp(geminiKey, link.url, sceneStates[sceneIdx].scene.visualIntent, controller.signal)
-      setSceneStates((prev) => {
-        const next = [...prev]
-        if (next[sceneIdx]) {
-          next[sceneIdx] = { ...next[sceneIdx], verify: { ...next[sceneIdx].verify, [link._cardId]: { kind: 'done', result } } }
-        }
-        return next
-      })
-    } catch (err) {
-      const code = (err as ApiError)?.code
-      if (code === ERR.QUOTA_GEMINI) {
-        addBanner({ kind: 'quota_gemini' })
-      }
-      setSceneStates((prev) => {
-        const next = [...prev]
-        if (next[sceneIdx]) {
-          next[sceneIdx] = { ...next[sceneIdx], verify: { ...next[sceneIdx].verify, [link._cardId]: { kind: 'error', message: (err as Error).message.slice(0, 120) } } }
-        }
-        return next
-      })
     }
   }
 
@@ -203,12 +156,12 @@ export default function TimSourceVideo() {
             Tìm Source Video
           </h1>
           <p className="mt-1 text-sm text-gray-500">
-            Nhập kịch bản UGC → tách scene → tìm link YouTube + TikTok khớp ý. Click <strong>🔍 Xem nội dung</strong> trên card để Gemini xác minh có cảnh thật trong video không.
+            Nhập kịch bản UGC → tách scene → tìm link <strong>YouTube Shorts</strong> + <strong>TikTok</strong> khớp ý (UGC-native sources, &lt; 4 phút). AI rank theo semantic similarity. <strong>Bạn tự xem thử</strong> — app không verify nội dung video.
           </p>
         </div>
         <button
           onClick={handleClearCache}
-          title="Xóa cache (parseScript / search / embedding / timestamp)"
+          title="Xóa cache (parseScript / search / embedding)"
           className="flex shrink-0 items-center gap-1 rounded-lg border border-gray-200 px-3 py-1.5 text-xs text-gray-500 hover:bg-gray-50"
         >
           <Database className="h-3.5 w-3.5" />
@@ -294,9 +247,7 @@ export default function TimSourceVideo() {
         </div>
       )}
 
-      {sceneStates.map((s, i) => (
-        <SceneCard key={i} idx={i} state={s} onVerify={(link) => verifyCard(i, link)} />
-      ))}
+      {sceneStates.map((s, i) => <SceneCard key={i} idx={i} state={s} />)}
     </div>
   )
 }
@@ -309,10 +260,10 @@ function Banner({ spec }: { spec: BannerSpec }) {
         <div className="mb-2 text-base font-bold text-amber-900">⛔ Quota Gemini Free Tier đã cạn</div>
         <div className="text-sm leading-relaxed text-amber-800">
           Free tier giới hạn <strong>250 requests/ngày</strong>.<br /><br />
-          <strong>Giải pháp:</strong> đợi đến nửa đêm Pacific Time (~15:00 ICT) hoặc upgrade tại{' '}
+          Đợi đến nửa đêm Pacific Time (~15:00 ICT) hoặc upgrade tại{' '}
           <a className="font-semibold underline" href="https://aistudio.google.com/billing" target="_blank" rel="noreferrer">aistudio.google.com/billing</a>.
           <br /><br />
-          <small>Tip: bấm <strong>Phân tích</strong> lại — V2 cache parseScript + search + embedding, run lặp lại không tốn quota nếu cùng script.</small>
+          <small>Tip: V3 cache parseScript + search + embedding theo hash. Rerun cùng script = 0 call.</small>
         </div>
       </div>
     )
@@ -322,7 +273,7 @@ function Banner({ spec }: { spec: BannerSpec }) {
       <div className="mb-4 rounded-lg border-2 border-amber-300 bg-amber-50 p-5">
         <div className="mb-2 text-base font-bold text-amber-900">⛔ Quota YouTube Data API đã cạn</div>
         <div className="text-sm leading-relaxed text-amber-800">
-          Mặc định <strong>10,000 units/ngày</strong>, mỗi search = 100 units → tối đa ~100 search/ngày.
+          Mặc định 10,000 units/ngày · search = 100 units → ~100 search/ngày.
         </div>
       </div>
     )
@@ -334,8 +285,8 @@ function Banner({ spec }: { spec: BannerSpec }) {
 }
 
 // ── SceneCard ───────────────────────────────────────────────────────────────
-function SceneCard({ idx, state, onVerify }: { idx: number; state: SceneState; onVerify: (link: RankedLink) => void }) {
-  const { scene, ranked, errors, verify } = state
+function SceneCard({ idx, state }: { idx: number; state: SceneState }) {
+  const { scene, ranked, errors } = state
   return (
     <div className="mb-4 rounded-xl border border-gray-200 bg-white p-4">
       <div className="mb-2 flex items-baseline gap-2">
@@ -356,9 +307,7 @@ function SceneCard({ idx, state, onVerify }: { idx: number; state: SceneState; o
 
       {ranked.length > 0 && (
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {ranked.map((r) => (
-            <ResultCard key={r._cardId} link={r} verify={verify[r._cardId]} onVerify={() => onVerify(r)} />
-          ))}
+          {ranked.map((r) => <ResultCard key={r._cardId} link={r} />)}
         </div>
       )}
 
@@ -377,98 +326,44 @@ const SOURCE_TAG_STYLE: Record<SourceId, string> = {
   tiktok:  'bg-gray-900 text-white',
 }
 const SOURCE_TAG_LABEL: Record<SourceId, string> = {
-  youtube: 'YT', tiktok: 'TT',
+  youtube: 'YT Shorts', tiktok: 'TikTok',
 }
 
-function ResultCard({ link, verify, onVerify }: {
-  link: RankedLink
-  verify: VerifyState | undefined
-  onVerify: () => void
-}) {
+function ResultCard({ link }: { link: import('./types').RankedLink }) {
   const thumbUrl = link.thumbnail ?? `https://image.thum.io/get/width/400/crop/225/noanimate/${link.url}`
   const scoreColor = colorForScore(link.score)
-  const canVerify = link.source === 'youtube'
 
   return (
-    <div className="relative flex flex-col rounded-lg border border-gray-200 bg-gray-50 p-2 transition-all hover:-translate-y-0.5 hover:border-violet-400">
+    <a
+      href={link.url}
+      target="_blank"
+      rel="noreferrer"
+      className="group relative flex flex-col rounded-lg border border-gray-200 bg-gray-50 p-2 transition-all hover:-translate-y-0.5 hover:border-violet-400 hover:shadow-md"
+    >
       <div
         className="absolute right-2 top-2 z-10 rounded-full px-2 py-0.5 text-xs font-bold text-white shadow-sm"
         style={{ backgroundColor: scoreColor }}
-        title={`Embedding similarity score: ${link.score}/100`}
+        title={`Embedding similarity: ${link.score}/100`}
       >
         ⭐ {link.score}
       </div>
-      <a href={link.url} target="_blank" rel="noreferrer" className="block flex-1">
-        <div className="aspect-video w-full overflow-hidden rounded bg-gray-200">
-          <img src={thumbUrl} alt="" loading="lazy" className="h-full w-full object-cover" onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none' }} />
-        </div>
-        <div className="mt-2 text-sm font-medium leading-snug text-gray-800">
-          <span className={`mr-1 inline-block rounded px-1.5 py-0.5 text-[10px] font-semibold ${SOURCE_TAG_STYLE[link.source]}`}>
-            {SOURCE_TAG_LABEL[link.source]}
-          </span>
-          {link.title || link.url}
-        </div>
-        {link.meta && <div className="mt-0.5 truncate text-xs text-gray-400">{link.meta}</div>}
-      </a>
-
-      {/* Verify CTA — YouTube only */}
-      {canVerify && (!verify || verify.kind === 'idle') && (
-        <button
-          onClick={onVerify}
-          className="mt-2 flex items-center justify-center gap-1.5 rounded border border-violet-200 bg-violet-50 px-2 py-1.5 text-xs font-semibold text-violet-700 transition-colors hover:bg-violet-100"
-          title="Gemini sẽ xem video và tìm timestamp khớp với scene"
-        >
-          <ShieldCheck className="h-3.5 w-3.5" />
-          Xem nội dung
-        </button>
-      )}
-      {!canVerify && (
-        <div className="mt-2 rounded bg-gray-100 px-2 py-1 text-center text-[10px] italic text-gray-500">
-          Chỉ rank theo title — không verify được TikTok
-        </div>
-      )}
-
-      {verify && <VerifySection url={link.url} state={verify} />}
-    </div>
+      <div className="aspect-video w-full overflow-hidden rounded bg-gray-200">
+        <img
+          src={thumbUrl}
+          alt=""
+          loading="lazy"
+          className="h-full w-full object-cover"
+          onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none' }}
+        />
+      </div>
+      <div className="mt-2 flex items-start gap-1 text-sm font-medium leading-snug text-gray-800">
+        <span className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold ${SOURCE_TAG_STYLE[link.source]}`}>
+          {SOURCE_TAG_LABEL[link.source]}
+        </span>
+        <span className="flex-1">{link.title || link.url}</span>
+        <ExternalLink className="mt-0.5 h-3 w-3 shrink-0 text-gray-400 opacity-0 transition-opacity group-hover:opacity-100" />
+      </div>
+      {link.meta && <div className="mt-0.5 truncate text-xs text-gray-400">{link.meta}</div>}
+    </a>
   )
 }
-
-// ── VerifySection ───────────────────────────────────────────────────────────
-function VerifySection({ url, state }: { url: string; state: VerifyState }) {
-  if (state.kind === 'loading') {
-    return <div className="mt-2 border-t border-dashed border-gray-200 pt-2 text-xs italic text-gray-500">⏳ Gemini đang xem video...</div>
-  }
-  if (state.kind === 'error') {
-    return <div className="mt-2 rounded bg-red-50 px-2 py-1 text-xs text-red-700">⚠️ {state.message}</div>
-  }
-  if (state.kind === 'idle') return null
-
-  const { result } = state
-  return (
-    <div className="mt-2 border-t border-dashed border-gray-200 pt-2">
-      {result.found && result.timestamps && result.timestamps.length > 0 ? (
-        <>
-          <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-emerald-700">⏱️ Đoạn phù hợp</div>
-          <div className="flex flex-col gap-1">
-            {result.timestamps.map((t, j) => {
-              const sep = url.includes('?') ? '&' : '?'
-              const deepLink = `${url}${sep}t=${parseTimeToSeconds(t.start)}s`
-              return (
-                <a key={j} href={deepLink} target="_blank" rel="noreferrer" className="flex gap-2 rounded border border-emerald-200 bg-emerald-50 px-2 py-1.5 text-xs text-gray-800 transition-colors hover:bg-emerald-100">
-                  <span className="whitespace-nowrap font-mono font-bold text-emerald-700">{t.start}–{t.end}</span>
-                  <span className="flex-1 leading-snug">{t.description}</span>
-                </a>
-              )
-            })}
-          </div>
-        </>
-      ) : (
-        <div className="rounded bg-red-50 px-2 py-1 text-xs text-red-700">❌ Video không chứa cảnh phù hợp</div>
-      )}
-      {result.summary && <div className="mt-1 text-[11px] italic leading-snug text-gray-500">📝 {result.summary}</div>}
-    </div>
-  )
-}
-
-// Suppress unused-import warning for Scene (re-exported from types for callers)
-void (null as unknown as Scene)

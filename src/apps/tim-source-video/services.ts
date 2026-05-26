@@ -1,21 +1,24 @@
-// ── Tìm Source Video — service functions (V2) ───────────────────────────────
-// V2 pipeline (cost-optimised + content-aware via embeddings):
+// ── Tìm Source Video — service functions (V3) ───────────────────────────────
+// V3 pivot: dropped Gemini fileData verify entirely (single video analysis
+// burned 75-150K tokens — wiped daily quota in ~3 clicks). Source mix
+// retargeted at UGC-native short content via YouTube `videoDuration=short`
+// filter + TikTok. User self-filters by clicking cards in a new tab; AI
+// ranks semantically, no claim of "verified content".
 //
-//   parseScript            ← 1 Gemini call (cached by script hash)
-//   searchYouTube/TikTok   ← 0 Gemini (own APIs, cached by keyword)
-//   embeddingRank          ← 2 batched embedding calls (cheap, 1500 RPM tier)
-//                            replaces the old per-scene rankLinks Gemini call
-//   analyzeYouTubeTimestamp ← lazy: only when user clicks "Verify" on a card
+//   parseScript     ← 1 Gemini call (cached by script hash)
+//   searchYouTube   ← 0 Gemini, shorts-biased (videoDuration=short, < 4min)
+//   searchTikTok    ← 0 Gemini (tikwm + corsproxy fallback)
+//   embeddingRank   ← 2 batched embedding calls TOTAL (cheap, 1500 RPM tier)
 //
-// Per-run cost: ~1 Gemini Flash + 2 embedding (vs ~51 Gemini in V1).
-// Cached re-run: 0 calls.
+// Per fresh run: 1 Gemini Flash + 2 embedding. Cached re-run: 0 calls.
+// Free tier 250 RPD → ~80 fresh runs/day, or unlimited cached re-runs.
 
-import { searchWithGrounding, classifyGemini429, geminiEmbedBatch, cosineSimilarity } from '../../utils/gemini'
+import { classifyGemini429, geminiEmbedBatch, cosineSimilarity } from '../../utils/gemini'
 import { cached, hash } from './cache'
 import {
   ApiError, CONFIG, ERR,
   type Scene, type Link, type SearchResult, type RankedLink,
-  type TimestampResult, type SourceId,
+  type SourceId,
 } from './types'
 
 // ── Gemini call wrapper for STRUCTURED text (parseScript / verify). ─────────
@@ -116,10 +119,13 @@ ${script}`
   })
 }
 
-// ── Step 2a: YouTube Data API (CACHED, now includes description) ────────────
+// ── Step 2a: YouTube Data API (CACHED, includes description, SHORTS-biased) ─
+// videoDuration=short → filters to videos < 4 minutes. Biases results toward
+// YouTube Shorts + short-form UGC content where actual scene-specific B-roll
+// lives, instead of 15-min explainer videos that match topic but not scene.
 export async function searchYouTube(apiKey: string, query: string, signal: AbortSignal): Promise<SearchResult> {
-  return cached(`yt:${hash(query)}`, CONFIG.cache.searchTtlMs, async () => {
-    const url = `https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&maxResults=${CONFIG.search.ytMaxResults}&q=${encodeURIComponent(query)}&key=${apiKey}`
+  return cached(`yt:short:${hash(query)}`, CONFIG.cache.searchTtlMs, async () => {
+    const url = `https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&videoDuration=short&maxResults=${CONFIG.search.ytMaxResults}&q=${encodeURIComponent(query)}&key=${apiKey}`
     let res: Response
     try {
       res = await fetch(url, { signal })
@@ -325,58 +331,6 @@ export async function embeddingRank(
   )
 }
 
-// ── Step 4: Lazy timestamp verify (CACHED — only on user click) ─────────────
-export async function analyzeYouTubeTimestamp(apiKey: string, youtubeUrl: string, intent: string, signal: AbortSignal): Promise<TimestampResult> {
-  return cached(`ts:${hash(youtubeUrl + '|' + intent)}`, CONFIG.cache.timestampTtlMs, async () => {
-    const prompt = `Phân tích video YouTube này. Tôi cần tìm các ĐOẠN (timestamps) trong video có chứa cảnh sau:
-
-"${intent}"
-
-Yêu cầu:
-- Nếu video CÓ chứa cảnh đó → liệt kê các đoạn timestamp (định dạng MM:SS hoặc HH:MM:SS) và mô tả ngắn (1 câu) mỗi đoạn.
-- Nếu video KHÔNG chứa cảnh phù hợp → trả về found: false và summary giải thích video thật sự nói về gì.
-- TUYỆT ĐỐI KHÔNG bịa timestamp. Chỉ liệt kê đoạn bạn thực sự thấy trong video.
-- Mỗi đoạn nên 3-15 giây, đủ để dùng cho UGC edit.`
-
-    const data = await callGemini(apiKey, {
-      contents: [{
-        parts: [
-          { fileData: { fileUri: youtubeUrl } },
-          { text: prompt },
-        ],
-      }],
-      generationConfig: {
-        responseMimeType: 'application/json',
-        responseSchema: {
-          type: 'object',
-          properties: {
-            found: { type: 'boolean' },
-            timestamps: {
-              type: 'array',
-              items: {
-                type: 'object',
-                properties: {
-                  start:       { type: 'string' },
-                  end:         { type: 'string' },
-                  description: { type: 'string' },
-                },
-                required: ['start', 'end', 'description'],
-              },
-            },
-            summary: { type: 'string' },
-          },
-          required: ['found', 'summary'],
-        },
-      },
-    }, signal) as { candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }> }
-
-    const text = data.candidates?.[0]?.content?.parts?.[0]?.text
-    if (!text) throw new ApiError(ERR.PARSE_FAIL, 'Gemini không trả kết quả phân tích video')
-    try { return JSON.parse(text) as TimestampResult }
-    catch { throw new ApiError(ERR.PARSE_FAIL, 'Gemini trả JSON phân tích không hợp lệ') }
-  })
-}
-
 // ── Concurrency limiter (still useful for parallel adapter dispatch) ────────
 export async function processWithConcurrency<T>(items: T[], fn: (item: T) => Promise<void>, limit: number): Promise<void> {
   const queue = [...items]
@@ -392,14 +346,3 @@ export async function processWithConcurrency<T>(items: T[], fn: (item: T) => Pro
   }
   await Promise.all(workers)
 }
-
-export function parseTimeToSeconds(t: string): number {
-  const parts = String(t).split(':').map(s => parseInt(s, 10) || 0)
-  if (parts.length === 2) return parts[0] * 60 + parts[1]
-  if (parts.length === 3) return parts[0] * 3600 + parts[1] * 60 + parts[2]
-  return 0
-}
-
-// Re-export utils so unused-import warnings don't fire after we dropped searchWeb.
-// (searchWithGrounding stays in utils/gemini.ts for potential future use.)
-void searchWithGrounding

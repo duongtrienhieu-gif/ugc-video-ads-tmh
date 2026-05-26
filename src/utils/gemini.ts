@@ -338,10 +338,10 @@ export function cosineSimilarity(a: number[], b: number[]): number {
 }
 
 /**
- * Classify a 429 response body from Gemini. Exported because both
- * `searchWithGrounding` (here) and the app-level callGemini wrapper need
- * the SAME taxonomy so per-minute rate-limits don't get mistakenly surfaced
- * as "daily quota exhausted" banners.
+ * Classify a 429 response body from Gemini. Exported so app-level Gemini
+ * wrappers (e.g. tim-source-video/services.ts callGemini, and the local
+ * geminiEmbedBatch above) share the SAME taxonomy — per-minute rate-limits
+ * never get mistakenly surfaced as "daily quota exhausted" banners.
  *
  * Gemini's 429 has TWO distinct meanings:
  *   • Per-minute rate-limit (free tier ~10 RPM) — RECOVERABLE; response
@@ -377,89 +377,6 @@ export function classifyGemini429(rawBody: string): {
     }
   } catch { /* unparseable body — fall through with defaults */ }
   return { isDailyExhausted, retryDelayMs }
-}
-
-/**
- * Gemini text call with Google Search grounding enabled.
- * Returns the model's narrative + the grounding chunks (web search results).
- *
- * Throws plain Error with `.code` field — caller maps to its own error
- * taxonomy. Codes: `QUOTA_DAILY` (per-day exhausted, fatal) | `ABORTED`
- * (signal cancelled) | undefined (other failure, retry exhausted or non-429).
- *
- * Separate from `directGeminiText` because grounding response has a
- * different shape (groundingMetadata) and is incompatible with responseSchema.
- */
-export async function searchWithGrounding(params: {
-  apiKey: string
-  prompt: string
-  signal?: AbortSignal
-}): Promise<{ narrative: string; chunks: Array<{ uri: string; title?: string }> }> {
-  const url = `${GEMINI_BASE}/gemini-2.5-flash:generateContent?key=${params.apiKey}`
-  const MAX_ATTEMPTS = 6
-  const BASE_DELAY_MS = 2000
-  const FACTOR = 1.7
-  let lastErr = ''
-  for (let attempt = 0; attempt <= MAX_ATTEMPTS; attempt++) {
-    if (params.signal?.aborted) {
-      const e = new Error('Đã hủy') as Error & { code?: string }
-      e.code = 'ABORTED'
-      throw e
-    }
-    let res: Response
-    try {
-      res = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: params.prompt }] }],
-          tools: [{ googleSearch: {} }],
-        }),
-        signal: params.signal,
-      })
-    } catch (err) {
-      if ((err as Error)?.name === 'AbortError') {
-        const e = new Error('Đã hủy') as Error & { code?: string }
-        e.code = 'ABORTED'
-        throw e
-      }
-      throw err
-    }
-    if (res.ok) {
-      const data = await res.json() as {
-        candidates?: Array<{
-          content?: { parts?: Array<{ text?: string }> }
-          groundingMetadata?: { groundingChunks?: Array<{ web?: { uri: string; title?: string } }> }
-        }>
-      }
-      const candidate = data.candidates?.[0]
-      const narrative = (candidate?.content?.parts || []).map(p => p.text).filter(Boolean).join('\n').trim()
-      const chunks = (candidate?.groundingMetadata?.groundingChunks || []).map(c => c.web).filter((w): w is { uri: string; title?: string } => !!w?.uri)
-      return { narrative, chunks }
-    }
-    lastErr = await res.text().catch(() => '')
-    if (res.status === 429) {
-      const { isDailyExhausted, retryDelayMs } = classifyGemini429(lastErr)
-      if (isDailyExhausted) {
-        const e = new Error('Gemini quota daily exhausted') as Error & { code?: string }
-        e.code = 'QUOTA_DAILY'
-        throw e
-      }
-      if (attempt === MAX_ATTEMPTS) {
-        throw new Error(`Gemini grounding rate-limit kéo dài (đã thử ${MAX_ATTEMPTS + 1} lần)`)
-      }
-      const delay = retryDelayMs ?? (BASE_DELAY_MS * Math.pow(FACTOR, attempt) + Math.random() * 1000)
-      await new Promise(r => setTimeout(r, delay))
-      continue
-    }
-    const retryable = [500, 502, 503, 504].includes(res.status)
-    if (!retryable || attempt === MAX_ATTEMPTS) {
-      throw new Error(`Gemini grounding lỗi (${res.status}): ${lastErr.slice(0, 200)}`)
-    }
-    const delay = BASE_DELAY_MS * Math.pow(FACTOR, attempt) + Math.random() * 1000
-    await new Promise(r => setTimeout(r, delay))
-  }
-  throw new Error(`Gemini grounding failed after ${MAX_ATTEMPTS + 1} attempts`)
 }
 
 import {
