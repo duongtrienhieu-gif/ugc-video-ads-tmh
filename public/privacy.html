@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Privacy Policy — UGC Lab</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      max-width: 760px;
+      margin: 0 auto;
+      padding: 40px 24px 80px;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+      color: #1f2937;
+      line-height: 1.7;
+      font-size: 15px;
+    }
+    h1 { font-size: 28px; margin: 0 0 8px; }
+    h2 { font-size: 18px; margin-top: 32px; color: #111827; }
+    h3 { font-size: 15px; margin-top: 20px; color: #374151; }
+    .meta { color: #6b7280; font-size: 13px; margin-bottom: 32px; }
+    ul { padding-left: 24px; }
+    li { margin: 6px 0; }
+    a { color: #7c3aed; text-decoration: underline; }
+    code { background: #f3f4f6; padding: 2px 6px; border-radius: 4px; font-size: 13px; }
+    .lang-toggle { float: right; font-size: 13px; }
+    .section { margin-top: 28px; }
+    .highlight { background: #fef3c7; padding: 12px 16px; border-left: 3px solid #f59e0b; border-radius: 4px; }
+  </style>
+</head>
+<body>
+
+<a class="lang-toggle" href="#en">English ↓</a>
+<h1>Privacy Policy</h1>
+<p class="meta">UGC Lab — AI Video Ads Studio · Cập nhật: 27 tháng 5, 2026</p>
+
+<div class="section">
+  <h2>1. Thông tin chúng tôi thu thập</h2>
+  <p>UGC Lab thu thập các thông tin sau khi bạn sử dụng app:</p>
+  <ul>
+    <li><strong>Email + mật khẩu</strong> — qua Supabase Auth, để bạn đăng nhập</li>
+    <li><strong>API keys</strong> bạn cung cấp (Gemini, KIE, ElevenLabs, YouTube Data API, v.v.) — lưu <em>chỉ trong browser của bạn</em> (localStorage) + sync sang Supabase row của bạn để dùng cross-device</li>
+    <li><strong>Nội dung bạn tạo</strong> — kịch bản, avatar, voice clip, video render — lưu vào Supabase account của bạn</li>
+    <li><strong>Settings ứng dụng</strong> — preferences, draft state — localStorage</li>
+  </ul>
+</div>
+
+<div class="section">
+  <h2>2. Cách chúng tôi sử dụng YouTube Data</h2>
+  <div class="highlight">
+    Tính năng "Tìm Source Video" sử dụng <strong>YouTube Data API v3</strong> theo cách sau:
+  </div>
+  <ul>
+    <li>Khi bạn submit kịch bản → AI tách scene → app gọi <code>search.list</code> để tìm video YouTube Shorts liên quan</li>
+    <li>Kết quả hiển thị dạng <strong>thumbnail + link tới YouTube</strong> — click sẽ mở video TRÊN trang youtube.com</li>
+    <li>App có thể fetch transcript (auto-captions công khai) qua serverless proxy để rank kết quả tốt hơn</li>
+  </ul>
+  <p><strong>Chúng tôi KHÔNG:</strong></p>
+  <ul>
+    <li>Download, lưu trữ, hoặc redistribute video YouTube</li>
+    <li>Modify metadata YouTube</li>
+    <li>Truy cập data riêng tư của user YouTube (không dùng OAuth, chỉ API key)</li>
+    <li>Scrape hoặc harvest content YouTube ngoài mục đích discovery</li>
+  </ul>
+</div>
+
+<div class="section">
+  <h2>3. Lưu trữ và Cache</h2>
+  <ul>
+    <li><strong>Browser cache</strong>: kết quả search YouTube + Gemini parsing được cache trong localStorage 1-7 ngày để giảm chi phí API. Bạn có thể clear bằng nút "Xóa cache" trong app.</li>
+    <li><strong>Supabase</strong>: data bạn tạo (avatar, script, render output) lưu vào account riêng. Bạn có quyền xóa anytime.</li>
+    <li><strong>Không có server-side cache</strong> của YouTube data ngoài CDN edge cache 24h của serverless function (chỉ chứa transcript text công khai).</li>
+  </ul>
+</div>
+
+<div class="section">
+  <h2>4. Bên thứ ba</h2>
+  <p>Chúng tôi dùng các dịch vụ sau, mỗi dịch vụ có policy riêng:</p>
+  <ul>
+    <li><a href="https://ai.google.dev/gemini-api/terms">Google Gemini API</a> — parse kịch bản, embedding, image gen</li>
+    <li><a href="https://developers.google.com/youtube/terms/api-services-terms-of-service">YouTube Data API v3</a> — discovery video công khai</li>
+    <li><a href="https://kie.ai">KIE.AI</a> — image + video generation</li>
+    <li><a href="https://elevenlabs.io/privacy">ElevenLabs</a> — text-to-speech</li>
+    <li><a href="https://supabase.com/privacy">Supabase</a> — auth + data storage</li>
+    <li><a href="https://vercel.com/legal/privacy-policy">Vercel</a> — hosting + serverless functions</li>
+  </ul>
+</div>
+
+<div class="section">
+  <h2>5. YouTube API Services Terms</h2>
+  <p>Khi sử dụng tính năng "Tìm Source Video", bạn đồng ý chịu thêm:</p>
+  <ul>
+    <li><a href="https://www.youtube.com/t/terms">YouTube Terms of Service</a></li>
+    <li><a href="https://policies.google.com/privacy">Google Privacy Policy</a></li>
+  </ul>
+  <p>App tuân thủ <a href="https://developers.google.com/youtube/terms/required-minimum-functionality">YouTube API Services — Required Minimum Functionality</a>.</p>
+</div>
+
+<div class="section">
+  <h2>6. Quyền của bạn</h2>
+  <ul>
+    <li>Xem data đã lưu (qua app UI)</li>
+    <li>Xóa data anytime (Settings → xóa account)</li>
+    <li>Export data (Supabase backup)</li>
+    <li>Revoke API keys anytime (clear trong Settings)</li>
+  </ul>
+</div>
+
+<div class="section">
+  <h2>7. Liên hệ</h2>
+  <p>Câu hỏi về privacy → <a href="mailto:duongtrienhieu@gmail.com">duongtrienhieu@gmail.com</a></p>
+</div>
+
+<hr style="margin: 60px 0 32px; border: none; border-top: 1px solid #e5e7eb;">
+
+<h1 id="en">Privacy Policy (English)</h1>
+<p class="meta">UGC Lab — AI Video Ads Studio · Last updated: May 27, 2026</p>
+
+<h2>1. Information We Collect</h2>
+<ul>
+  <li><strong>Email + password</strong> via Supabase Auth for login</li>
+  <li><strong>API keys</strong> you provide — stored in your browser's localStorage and synced to your Supabase row for cross-device use</li>
+  <li><strong>Content you create</strong> — scripts, avatars, voice clips, rendered videos — stored in your Supabase account</li>
+  <li><strong>App settings</strong> — preferences and draft state in localStorage</li>
+</ul>
+
+<h2>2. YouTube Data Usage</h2>
+<p>The "Tìm Source Video" feature uses YouTube Data API v3:</p>
+<ul>
+  <li>Calls <code>search.list</code> to find publicly available short-form videos matching scene concepts</li>
+  <li>Displays results as thumbnails with deep-links to youtube.com</li>
+  <li>May fetch public auto-captions (transcripts) via serverless proxy to improve ranking</li>
+</ul>
+<p><strong>We do NOT:</strong></p>
+<ul>
+  <li>Download, store, or redistribute YouTube content</li>
+  <li>Modify YouTube metadata</li>
+  <li>Access private YouTube user data (no OAuth — API key only)</li>
+  <li>Scrape or harvest content beyond discovery purposes</li>
+</ul>
+
+<h2>3. Caching</h2>
+<ul>
+  <li>Search results cached in browser localStorage for 1-7 days to reduce API costs. Users can clear via the "Xóa cache" button.</li>
+  <li>No server-side caching beyond Vercel edge cache (24h) of public transcript text only.</li>
+</ul>
+
+<h2>4. Third Parties</h2>
+<p>We use Google Gemini API, YouTube Data API v3, KIE.AI, ElevenLabs, Supabase, and Vercel — each with their own policies linked in the Vietnamese section above.</p>
+
+<h2>5. YouTube API Compliance</h2>
+<p>By using the "Tìm Source Video" feature, you also agree to <a href="https://www.youtube.com/t/terms">YouTube ToS</a> and <a href="https://policies.google.com/privacy">Google Privacy Policy</a>. The app complies with YouTube API Services — Required Minimum Functionality.</p>
+
+<h2>6. Your Rights</h2>
+<p>View / delete / export your data anytime via the app. Revoke API keys via Settings.</p>
+
+<h2>7. Contact</h2>
+<p>Privacy questions: <a href="mailto:duongtrienhieu@gmail.com">duongtrienhieu@gmail.com</a></p>
+
+</body>
+</html>
