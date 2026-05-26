@@ -26,10 +26,10 @@ import { FALLBACK_COPY } from './fallbackCopy'
 import type { NarratorDnaSelection } from './selectNarratorDna'
 import { selectNarratorDna } from './selectNarratorDna'
 import {
-  generateReviews,
+  generateProofSet,
   buildStoryContextLine,
-  type GenerateReviewsResult,
-} from './generateReviews'
+  type GenerateProofSetResult,
+} from '../../proof'
 
 export type SectionGenStatus =
   | { kind: 'pass' }
@@ -47,9 +47,9 @@ export interface GeneratedPackResult {
   /** v5.1+ — narrator/DNA/curve/snapshots/hook/discovery selection used.
    *  Exposed so callers (CLI/UI) can log selection details. */
   selection: NarratorDnaSelection
-  /** v5.7 Phase B v2 — separate review-only Gemini call result.
-   *  Undefined if review productInfo was not provided to generatePackWithRetry. */
-  reviewsCall?: GenerateReviewsResult
+  /** Proof System P1 — separate proof Gemini call result.
+   *  Replaces legacy reviewsCall. Undefined if productInfo was not provided. */
+  reviewsCall?: GenerateProofSetResult
 }
 
 interface RunArgs {
@@ -126,21 +126,16 @@ function applyFallback(
  *  on validation. Throws only if Gemini both Gemini+KIE fail OR JSON
  *  malformed beyond recovery.
  *
- *  v5.7 Phase B v2 — if args.productInfo provided, also runs SEPARATE
- *  review-only Gemini call and merges results into trust-continuity section.
- *  Review call failures are non-fatal (pack ships with empty reviews + warning). */
+ *  Proof System P1 — if args.productInfo provided, also runs SEPARATE
+ *  proof Gemini call (replaces legacy generateReviews). Result merges
+ *  into social-proof block. Proof call failures non-fatal (pack ships
+ *  with empty reviews + warning). */
 export async function generatePackWithRetry(args: RunArgs): Promise<GeneratedPackResult> {
   const mainResult = await generateMainPackOnly(args)
 
-  // ─── v5.7 Phase B v2 — Separate review-only call ─────────────────
+  // ─── Separate proof call (Proof System P1) ───────────────────────
   if (!args.productInfo) {
-    // Caller (e.g. legacy UI service) didn't pass productInfo → skip review call.
-    return mainResult
-  }
-
-  const styles = mainResult.selection.reviewStyles
-  if (!styles || styles.length === 0) {
-    console.warn('[storytelling/runtime] no reviewStyles in selection — skipping separate review call')
+    // Caller didn't pass productInfo → skip proof call.
     return mainResult
   }
 
@@ -149,22 +144,27 @@ export async function generatePackWithRetry(args: RunArgs): Promise<GeneratedPac
     args.input.niche,
     args.productInfo.painPoint,
   )
-  const reviewsCall = await generateReviews({
+  const reviewsCall = await generateProofSet({
     geminiApiKey:     args.geminiApiKey,
     kieApiKey:        args.kieApiKey,
     productName:      args.productInfo.productName,
     productNiche:     args.input.niche,
     painPoint:        args.productInfo.painPoint,
     storyContextLine: storyContext,
-    styles,
+    seed:             mainResult.selection.seed,
   })
 
-  // Merge reviews into social-proof block if call succeeded.
+  // Merge proof pieces into social-proof block if call succeeded.
   let mergedSections = mainResult.sections
-  if (reviewsCall.status === 'ok' && reviewsCall.reviews.length > 0) {
+  if (reviewsCall.status === 'ok' && reviewsCall.pieces.length > 0) {
+    // Strip telemetry fields (stanceId, phaseResonance) when assigning to
+    // section.reviews (ParsedReview shape) — keep only quote/author/meta.
+    const reviews = reviewsCall.pieces.map((p) => ({
+      quote: p.quote, author: p.author, meta: p.meta,
+    }))
     mergedSections = mainResult.sections.map((s) =>
       s.id === 'social-proof'
-        ? { ...s, reviews: reviewsCall.reviews }
+        ? { ...s, reviews }
         : s,
     )
   }

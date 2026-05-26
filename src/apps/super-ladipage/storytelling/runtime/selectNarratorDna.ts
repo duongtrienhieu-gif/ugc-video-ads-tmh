@@ -31,10 +31,6 @@ import {
   type DiscoveryChannel,
 } from '../config/discoveryChannels'
 import {
-  sampleReviewStyles,
-  type ReviewStyleProfile,
-} from '../config/reviewStyleProfiles'
-import {
   samplePayoffArchetype,
   type PayoffArchetype,
 } from '../config/payoffArchetypes'
@@ -112,12 +108,8 @@ export interface NarratorDnaSelection {
   /** v5.6 — Sampled belief shift catalyst type for section 5.
    *  Forces single deterministic catalyst per pack instead of letting Gemini pick from list. */
   beliefCatalystType: BeliefShiftCatalystType
-  /** v5.7 — Sampled review style profiles for section 10 (3 per pack).
-   *  Diversity-guaranteed across energy + optimism axes. Replaces abstract
-   *  TRUST_REALISM_PROMPT rules with concrete per-slot style data. */
-  reviewStyles: ReviewStyleProfile[]
   /** v5.7 Chunk 2 — Sampled payoff archetype (1 per pack). Drives emotional
-   *  destination of sections 8 / 9 / 11. Replaces default "peaceful reflection"
+   *  destination of Phase-4 blocks. Replaces default "peaceful reflection"
    *  ending that every pack converged to. */
   payoffArchetype: PayoffArchetype
   /** v5.8 — Performance Hook Layer: you-first opener for section 1.
@@ -208,11 +200,9 @@ export function selectNarratorDna(args: SelectArgs): NarratorDnaSelection {
   const catalystKeys = Object.keys(BELIEF_SHIFT_CATALYSTS) as BeliefShiftCatalystType[]
   const beliefCatalystType = pickByHash(catalystKeys, seed, 'beliefCatalyst')
 
-  // 9. v5.7 — Sample 3 review styles for section 10 with diversity guarantee.
-  //    Replaces abstract TRUST_REALISM_PROMPT (was causing all reviews to converge
-  //    to "polished AI-trying-to-sound-human" voice). Now each review slot gets
-  //    a concrete style profile with platform/punctuation/grammar/energy/etc.
-  const reviewStyles = sampleReviewStyles(seed, 3)
+  // 9. Proof System P1 — proof config (stances + entropy + objections + texture)
+  //    is sampled inside generateProofSet on demand (per-pack, separate Gemini call).
+  //    Pack-level seed propagated to proof module via generatePackWithRetry.
 
   // 10. v5.7 Chunk 2 — Sample 1 payoff archetype for emotional destination.
   //     Previously every pack ended in "quiet peace / nhẹ hơn / lắng nghe cơ thể".
@@ -244,7 +234,7 @@ export function selectNarratorDna(args: SelectArgs): NarratorDnaSelection {
     `dna=${emotionalDna?.niche ?? 'generic'}, curve=${energyCurve.id}, ` +
     `snapshots=${memorySnapshots.length}, hook=${hookAxis}, discovery=${discoveryChannel}, ` +
     `pattern=${hookPattern}, catalyst=${beliefCatalystType}, ` +
-    `reviews=[${reviewStyles.map((r) => r.id).join(', ')}], payoff=${payoffArchetype.id}, ` +
+    `payoff=${payoffArchetype.id}, ` +
     `youFirst=${youFirstOpener.id}, bridge=${bridgePhrase.id}, ` +
     `memAnchor=${memoryAnchor.id}, mechFrame="${mechanismFrame.slice(0, 40)}...", ` +
     `dissolve=${dissolutionPattern.id}, compare=${comparePattern.id}`,
@@ -253,7 +243,7 @@ export function selectNarratorDna(args: SelectArgs): NarratorDnaSelection {
   return {
     seed, narrator, emotionalDna, energyCurve, memorySnapshots,
     hookAxis, discoveryChannel, hookPattern, beliefCatalystType,
-    reviewStyles, payoffArchetype,
+    payoffArchetype,
     youFirstOpener, bridgePhrase,
     domainLock, mechanismVocab, mechanismFrame, desireArchitecture, memoryAnchor,
     dissolutionPattern, comparePattern,

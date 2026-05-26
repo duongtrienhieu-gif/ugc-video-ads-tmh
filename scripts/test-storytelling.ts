@@ -318,18 +318,18 @@ async function runPack(niche: TestNiche, outDir: string, idx: number, total: num
     mdLines.push(`- Hook axis (s1): \`${result.selection.hookAxis}\``)
     mdLines.push(`- Belief catalyst (s5): \`${result.selection.beliefCatalystType}\``)
     mdLines.push(`- Discovery channel (s6): \`${result.selection.discoveryChannel}\``)
-    mdLines.push(`- Review styles (s10): ${result.selection.reviewStyles.map((r) => `\`${r.id}\``).join(', ')}`)
-    mdLines.push(`- Payoff archetype (s8/9/11): \`${result.selection.payoffArchetype.id}\` — ${result.selection.payoffArchetype.destination}`)
-    mdLines.push(`- You-first opener (s1): \`${result.selection.youFirstOpener.id}\` — starter "${result.selection.youFirstOpener.starter}..."`)
-    mdLines.push(`- Bridge phrase (s1 close): \`${result.selection.bridgePhrase.id}\` — "${result.selection.bridgePhrase.phrase}"`)
+    mdLines.push(`- Payoff archetype: \`${result.selection.payoffArchetype.id}\` — ${result.selection.payoffArchetype.destination}`)
+    mdLines.push(`- You-first opener (Block 1): \`${result.selection.youFirstOpener.id}\` — starter "${result.selection.youFirstOpener.starter}..."`)
+    mdLines.push(`- Bridge phrase (Block 1 close): \`${result.selection.bridgePhrase.id}\` — "${result.selection.bridgePhrase.phrase}"`)
     mdLines.push(`- Memory snapshots: ${result.selection.memorySnapshots.map((m) => `\`${m.id}\``).join(', ')}`)
     if (result.reviewsCall) {
       const rc = result.reviewsCall
-      const status = rc.status === 'ok' ? `✓ ok (${rc.reviews.length} reviews)`
+      const status = rc.status === 'ok' ? `✓ ok (${rc.pieces.length} proof pieces)`
         : rc.status === 'parse-error' ? '⚠ parse-error'
         : rc.status === 'call-error' ? '⚠ call-error'
         : '⚠ empty'
-      mdLines.push(`- Review call (separate Gemini): ${status} · ${rc.runtimeSec.toFixed(1)}s${rc.errorMessage ? ` — ${rc.errorMessage.slice(0, 80)}` : ''}`)
+      const stances = rc.sampledStances ? ` · stances=[${rc.sampledStances.join(', ')}]` : ''
+      mdLines.push(`- Proof call (separate Gemini): ${status} · ${rc.runtimeSec.toFixed(1)}s${stances}${rc.errorMessage ? ` — ${rc.errorMessage.slice(0, 80)}` : ''}`)
     }
     mdLines.push('')
     mdLines.push('## Per-section status')
