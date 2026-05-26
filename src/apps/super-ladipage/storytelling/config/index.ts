@@ -19,6 +19,42 @@ export { ANTI_PATTERNS, ANTI_PATTERN_INSTRUCTIONS } from './antiPatterns'
 // Reader-Immersion block architecture (replaces SECTION_BLUEPRINTS).
 export { BLOCK_POOL, ALL_BLOCK_IDS, blocksForPhase } from './blockPool'
 
+// Chunk C2 Stabilization — niche-domain locks + commercial anchors.
+export {
+  NICHE_DOMAIN_LOCK,
+  getDomainLockForNiche,
+  nicheDomainLockBrief,
+} from './nicheDomainLock'
+
+export type { NicheDomainLock } from './nicheDomainLock'
+
+export {
+  NICHE_MECHANISM_VOCAB,
+  sampleMechanismFrame,
+  nicheMechanismBrief,
+} from './nicheMechanismVocab'
+
+export type { NicheMechanismVocab } from './nicheMechanismVocab'
+
+export {
+  NICHE_DESIRE_ARCHITECTURE,
+  getDesireForNiche,
+  nicheDesireBrief,
+} from './nicheDesireArchitecture'
+
+export type { NicheDesireArchitecture } from './nicheDesireArchitecture'
+
+export {
+  COMMERCIAL_MEMORY_ANCHORS,
+  sampleMemoryAnchor,
+  memoryAnchorBrief,
+} from './commercialMemoryAnchors'
+
+export type {
+  AnchorPosture,
+  MemoryAnchorPattern,
+} from './commercialMemoryAnchors'
+
 // Performance Hook Layer (consolidated v5.8+): owns YouFirstOpeners,
 // BridgePhrases, HOOK_PATTERNS (block-1 flavor), HOOK_AXES (pack theme).
 export {

@@ -182,6 +182,105 @@ export const PERSONA_EMOTIONAL_DNA: Partial<Record<NicheKey, PersonaEmotionalDNA
       'mua áo size cũ về và nhét vào ngăn dưới cùng',
     ],
   },
+
+  'beauty-confidence': {
+    niche: 'beauty-confidence',
+    primaryEmotions: [
+      'attractiveness-anxiety',
+      'social-visibility-fear',
+      'attention-loss',
+      'peer-comparison-fatigue',
+    ],
+    hiddenFears: [
+      'mình đang xuống cấp nhanh hơn bạn cùng tuổi',
+      'không còn được nhìn như trước',
+      'sự attractiveness của mình đang fade',
+      'lần gặp lại bạn cũ — họ sẽ nhận ra',
+    ],
+    avoidanceBehaviors: [
+      'né bữa tụ tập đông người',
+      'né selfie cùng bạn trẻ hơn',
+      'mở filter app trước khi chụp ảnh',
+      'lùi 1 bước khi soi gương buổi sáng',
+    ],
+    identityThreats: [
+      'mất sự attention từ chồng/bạn trai',
+      'không còn cảm thấy mình "looked-at"',
+    ],
+    embodiedVocabulary: [
+      'mở camera lên — tắt — mở lại lần nữa',
+      'chuyển ánh sáng phòng để selfie sáng hơn',
+      'tay che cằm khi nói chuyện',
+      'nghiêng đầu khi đứng cạnh bạn trẻ hơn',
+      'cảm giác da căng + thô khi vừa rửa mặt',
+    ],
+  },
+
+  'relationship': {
+    niche: 'relationship',
+    primaryEmotions: [
+      'emotional-flatness',
+      'snapping-guilt',
+      'overstimulation-fatigue',
+      'warmth-loss',
+    ],
+    hiddenFears: [
+      'mình đang trở thành người cộc tính',
+      'chồng/bạn trai bắt đầu để ý mình thay đổi',
+      'sẽ mất kết nối với con vì không có patience',
+      'mình không còn là người ấm như trước',
+    ],
+    avoidanceBehaviors: [
+      'né cuộc gọi từ mẹ hoặc bạn thân',
+      'lấy cớ bận để không đi tụ tập',
+      'vào phòng riêng sau bữa tối',
+      'ngồi lâu trong xe trước khi vào nhà',
+    ],
+    identityThreats: [
+      'không còn là người ấm áp như trước',
+      'sẽ cô đơn dù xung quanh có người',
+    ],
+    embodiedVocabulary: [
+      'ngồi 10 phút trong xe trước khi xuống đón con',
+      'đeo tai nghe khi đi siêu thị để giảm noise',
+      'cười nhanh rồi quay đi — không kéo dài',
+      'thở ra dài khi nghe ai bắt đầu kể chuyện',
+      'né ăn tối cùng cả nhà — viện cớ bận',
+    ],
+  },
+
+  'fitness-recovery': {
+    niche: 'fitness-recovery',
+    primaryEmotions: [
+      'mobility-loss-fear',
+      'aging-body-shame',
+      'capacity-erosion',
+      'medication-dependency-anxiety',
+    ],
+    hiddenFears: [
+      'không còn vận động như trước',
+      'sẽ bị ràng buộc với thuốc giảm đau dài hạn',
+      'không leo núi / đi xa được nữa',
+      'phải phẫu thuật khớp trong tương lai gần',
+    ],
+    avoidanceBehaviors: [
+      'không nhận lời đi du lịch dài ngày',
+      'tránh mang vác đồ nặng',
+      'né tham gia môn thể thao bạn rủ',
+      'né cầu thang ở nơi công cộng',
+    ],
+    identityThreats: [
+      'cảm giác cơ thể không còn phục hồi nhanh như xưa',
+      'sợ trở thành "người đau ốm" trong mắt mọi người',
+    ],
+    embodiedVocabulary: [
+      'đầu gối nhói khi xuống cầu thang',
+      'phải ngồi vài giây trước khi đứng',
+      'mua dầu nóng / miếng dán dự trữ',
+      'tự massage đầu gối/lưng mỗi tối',
+      'né đi du lịch trekking với bạn',
+    ],
+  },
 }
 
 /** Get DNA for niche — falls back to generic if niche not mapped. */

@@ -1,15 +1,17 @@
 // ─────────────────────────────────────────────────────────────────────
-// runValidators — orchestrate all detectors (P0.5.4 realignment)
+// runValidators — orchestrate all detectors
 //
-// 6 validators total. 5 = strict (trigger retry on violation). 1 =
-// soft warning (informational only, doesn't trigger retry).
+// 12 validators total. 5 hard (trigger retry on violation). 7 soft
+// (informational, don't trigger retry).
 //
 // Soft warning philosophy: stylistic finesse comes from prompt + Gemini
 // judgment. Validators are SAFETY NET catching obvious failures, NOT
-// drivers shaping every output.
+// drivers shaping every output. C2 added 4 philosophy-enforcement
+// detectors (all soft): nicheContamination, genericWellnessDensity,
+// memoryAnchor, emotionalFlattening.
 // ─────────────────────────────────────────────────────────────────────
 
-import type { BlockId } from '../types'
+import type { BlockId, NicheKey } from '../types'
 import type { ParsedPack } from '../runtime/parsePackResponse'
 import { bioIntroDetector } from './bioIntroDetector'
 import { adjacentRhythmDetector } from './adjacentRhythmDetector'
@@ -19,6 +21,10 @@ import { commercialToneDetector } from './commercialToneDetector'
 import { selfInsertionDetector } from './selfInsertionDetector'
 import { paragraphCountDetector } from './paragraphCountDetector'
 import { narratorCentricDetector } from './narratorCentricDetector'
+import { nicheContaminationDetector } from './nicheContaminationDetector'
+import { genericWellnessDensityDetector } from './genericWellnessDensityDetector'
+import { memoryAnchorDetector } from './memoryAnchorDetector'
+import { emotionalFlatteningDetector } from './emotionalFlatteningDetector'
 import type { ValidatorResult, ValidatorViolation } from './bioIntroDetector'
 
 export type ValidatorName =
@@ -27,12 +33,19 @@ export type ValidatorName =
   | 'aiCadence'
   | 'bannedPhrase'
   | 'commercialTone'
-  | 'selfInsertion'      // soft warning — does NOT trigger retry
-  | 'paragraphCount'     // soft warning — structural rhythm
-  | 'narratorCentric'    // soft warning — narrator dominating reader-heavy block
+  | 'selfInsertion'              // soft
+  | 'paragraphCount'             // soft
+  | 'narratorCentric'            // soft — Chunk C
+  | 'nicheContamination'         // soft — Chunk C2
+  | 'genericWellnessDensity'     // soft — Chunk C2
+  | 'memoryAnchor'               // soft — Chunk C2
+  | 'emotionalFlattening'        // soft — Chunk C2
 
 /** Soft validators — flagged for visibility, not enforcement. */
-const SOFT_VALIDATORS: ReadonlySet<ValidatorName> = new Set(['selfInsertion', 'paragraphCount', 'narratorCentric'])
+const SOFT_VALIDATORS: ReadonlySet<ValidatorName> = new Set([
+  'selfInsertion', 'paragraphCount', 'narratorCentric',
+  'nicheContamination', 'genericWellnessDensity', 'memoryAnchor', 'emotionalFlattening',
+])
 
 export interface AggregatedValidation {
   pass: boolean
@@ -45,16 +58,24 @@ export interface AggregatedValidation {
   retryFeedback: string[]
 }
 
-export function runValidators(parsed: ParsedPack): AggregatedValidation {
+export function runValidators(parsed: ParsedPack, niche?: NicheKey): AggregatedValidation {
   const byValidator: Record<ValidatorName, ValidatorResult> = {
-    bioIntro:         bioIntroDetector(parsed.sections[0]),
-    adjacentRhythm:   adjacentRhythmDetector(parsed.sections),
-    aiCadence:        aiCadenceDetector(parsed.sections),
-    bannedPhrase:     bannedPhraseDetector(parsed.sections),
-    commercialTone:   commercialToneDetector(parsed.sections),
-    selfInsertion:    selfInsertionDetector(parsed.sections[0]),
-    paragraphCount:   paragraphCountDetector(parsed.sections),
-    narratorCentric:  narratorCentricDetector(parsed.sections),
+    bioIntro:                bioIntroDetector(parsed.sections[0]),
+    adjacentRhythm:          adjacentRhythmDetector(parsed.sections),
+    aiCadence:               aiCadenceDetector(parsed.sections),
+    bannedPhrase:            bannedPhraseDetector(parsed.sections),
+    commercialTone:          commercialToneDetector(parsed.sections),
+    selfInsertion:           selfInsertionDetector(parsed.sections[0]),
+    paragraphCount:          paragraphCountDetector(parsed.sections),
+    narratorCentric:         narratorCentricDetector(parsed.sections),
+    nicheContamination:      niche
+      ? nicheContaminationDetector(parsed.sections, niche)
+      : { pass: true, violations: [] },
+    genericWellnessDensity:  genericWellnessDensityDetector(parsed.sections),
+    memoryAnchor:            memoryAnchorDetector(parsed.sections),
+    emotionalFlattening:     niche
+      ? emotionalFlatteningDetector(parsed.sections, niche)
+      : { pass: true, violations: [] },
   }
 
   const violations: AggregatedValidation['violations'] = []
@@ -87,13 +108,14 @@ export function runValidators(parsed: ParsedPack): AggregatedValidation {
 
 /** Log validator results to console — for debug. */
 export function logValidationResult(result: AggregatedValidation) {
+  const softLabel = '(paragraphCount + selfInsertion + narratorCentric + nicheContamination + genericWellnessDensity + memoryAnchor + emotionalFlattening = soft)'
   if (result.pass && result.softWarnings.length === 0) {
-    console.info(`[storytelling/validators] ✓ all 5 hard validators passed (paragraphCount + selfInsertion + narratorCentric = soft), 0 soft warnings`)
+    console.info(`[storytelling/validators] ✓ all 5 hard validators passed ${softLabel}, 0 soft warnings`)
     return
   }
   if (result.pass) {
     console.info(
-      `[storytelling/validators] ✓ all 5 hard validators passed (paragraphCount + selfInsertion + narratorCentric = soft), ${result.softWarnings.length} soft warnings`,
+      `[storytelling/validators] ✓ all 5 hard validators passed ${softLabel}, ${result.softWarnings.length} soft warnings`,
     )
     for (const w of result.softWarnings) {
       console.info(`  [soft:${w.validator}] ${w.sectionId}: ${w.violation}`)

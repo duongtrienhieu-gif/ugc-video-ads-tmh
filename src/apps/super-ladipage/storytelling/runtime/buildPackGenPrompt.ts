@@ -36,6 +36,10 @@ import {
   HOOK_PATTERNS,
 } from '../config/performanceHookLayer'
 import { sampleMirrorBeat, readerMirrorBeatDirective } from '../config/readerMirrorMoments'
+import { nicheDomainLockBrief } from '../config/nicheDomainLock'
+import { nicheMechanismBrief } from '../config/nicheMechanismVocab'
+import { nicheDesireBrief } from '../config/nicheDesireArchitecture'
+import { memoryAnchorBrief } from '../config/commercialMemoryAnchors'
 import type { NarratorDnaSelection } from './selectNarratorDna'
 
 /** Compose protagonist brief — 1-2 lines, used in system prompt context. */
@@ -138,6 +142,22 @@ function buildBlockDirective(
     lines.push(`  reviews: DO NOT generate here — omit field. Reviews come from separate generation pass.`)
   }
 
+  // ─── C2: Commercial memory anchor — STATE in Block 10 ──────────────
+  if (block.id === 'why-this-felt-different') {
+    lines.push(`  📌 STATE MEMORY ANCHOR HERE — the SHARP differentiator reader will remember.`)
+    lines.push(`  Anchor frame: ${selection.memoryAnchor.frame}`)
+    lines.push(`  Posture: ${selection.memoryAnchor.posture}`)
+    lines.push(`  Generate niche-fit version (NOT verbatim copy of example).`)
+    lines.push(`  KHÔNG ingredient list, feature comparison, hard table, "vs sản phẩm khác".`)
+  }
+
+  // ─── C2: Commercial memory anchor — ECHO in sampled echo block ──────
+  if (block.id === selection.memoryAnchor.echoBlock) {
+    lines.push(`  🔁 ECHO MEMORY ANCHOR lightly here — callback to Block 10\'s differentiator.`)
+    lines.push(`  Brief mention or reframe — reader recognizes it returning, memory locks.`)
+    lines.push(`  KHÔNG repeat verbatim. KHÔNG re-explain. Just trigger recognition.`)
+  }
+
   // ─── Soft CTA (future-self-cta block) ─────────────────────────────
   if (block.samplingHooks.softCta) {
     lines.push(`  💌 ${buildSoftCtaDirective()}`)
@@ -159,6 +179,22 @@ export function buildPackGenUserPrompt(
   const lines: string[] = []
 
   lines.push(ENGINE_CORE_PHILOSOPHY)
+  lines.push('')
+
+  // ─── C2: Niche-domain lock (anti-contamination) — FIRST priority ────
+  lines.push(nicheDomainLockBrief(selection.domainLock))
+  lines.push('')
+
+  // ─── C2: Niche desire architecture (anti-flattening) ────────────────
+  lines.push(nicheDesireBrief(selection.desireArchitecture))
+  lines.push('')
+
+  // ─── C2: Niche mechanism vocab (anti-generic-wellness) ──────────────
+  lines.push(nicheMechanismBrief(selection.domainLock.niche, selection.mechanismFrame))
+  lines.push('')
+
+  // ─── C2: Commercial memory anchor (anti-product-forgetting) ─────────
+  lines.push(memoryAnchorBrief(selection.memoryAnchor))
   lines.push('')
 
   // ─── Per-pack archetype + DNA briefs ─────────────────────────────

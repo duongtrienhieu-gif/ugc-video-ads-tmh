@@ -48,6 +48,23 @@ import {
   type BridgePhrase,
   type HookEmotionalAxis,
 } from '../config/performanceHookLayer'
+import {
+  getDomainLockForNiche,
+  type NicheDomainLock,
+} from '../config/nicheDomainLock'
+import {
+  sampleMechanismFrame,
+  NICHE_MECHANISM_VOCAB,
+  type NicheMechanismVocab,
+} from '../config/nicheMechanismVocab'
+import {
+  getDesireForNiche,
+  type NicheDesireArchitecture,
+} from '../config/nicheDesireArchitecture'
+import {
+  sampleMemoryAnchor,
+  type MemoryAnchorPattern,
+} from '../config/commercialMemoryAnchors'
 
 /** Simple deterministic hash — same string → same integer.
  *  Not cryptographic but suitable for pick-by-modulo. */
@@ -101,6 +118,17 @@ export interface NarratorDnaSelection {
   /** v5.8 — Bridge phrase from "you" to "tôi" closing section 1.
    *  Without bridge, hook feels accusatory. */
   bridgePhrase: BridgePhrase
+  /** C2 — Niche domain lock: strict per-niche concrete data pools.
+   *  Prevents cross-niche contamination. */
+  domainLock: NicheDomainLock
+  /** C2 — Niche mechanism vocab (vocab + banned generics + sampled frame). */
+  mechanismVocab: NicheMechanismVocab
+  /** C2 — Sampled mechanism frame for THIS pack (1 of 3 niche-specific frames). */
+  mechanismFrame: string
+  /** C2 — Niche desire architecture: emotional gravity per niche. */
+  desireArchitecture: NicheDesireArchitecture
+  /** C2 — Sampled commercial memory anchor pattern for THIS pack. */
+  memoryAnchor: MemoryAnchorPattern
 }
 
 export interface SelectArgs {
@@ -185,13 +213,24 @@ export function selectNarratorDna(args: SelectArgs): NarratorDnaSelection {
   const youFirstOpener = sampleYouFirstOpener(seed)
   const bridgePhrase = sampleBridgePhrase(seed)
 
+  // 12. C2 — Niche domain lock + mechanism vocab + desire architecture (per-niche
+  //     deterministic — same niche always gets same data, no random selection).
+  const domainLock = getDomainLockForNiche(args.niche)
+  const mechanismVocab = NICHE_MECHANISM_VOCAB[args.niche]
+  const mechanismFrame = sampleMechanismFrame(seed, args.niche)
+  const desireArchitecture = getDesireForNiche(args.niche)
+
+  // 13. C2 — Commercial memory anchor (sampled per pack).
+  const memoryAnchor = sampleMemoryAnchor(seed)
+
   console.info(
     `[storytelling/selectNarratorDna] seed=${seed.slice(-12)} → narrator=${narrator.id}, ` +
     `dna=${emotionalDna?.niche ?? 'generic'}, curve=${energyCurve.id}, ` +
     `snapshots=${memorySnapshots.length}, hook=${hookAxis}, discovery=${discoveryChannel}, ` +
     `pattern=${hookPattern}, catalyst=${beliefCatalystType}, ` +
     `reviews=[${reviewStyles.map((r) => r.id).join(', ')}], payoff=${payoffArchetype.id}, ` +
-    `youFirst=${youFirstOpener.id}, bridge=${bridgePhrase.id}`,
+    `youFirst=${youFirstOpener.id}, bridge=${bridgePhrase.id}, ` +
+    `memAnchor=${memoryAnchor.id}, mechFrame="${mechanismFrame.slice(0, 40)}..."`,
   )
 
   return {
@@ -199,6 +238,7 @@ export function selectNarratorDna(args: SelectArgs): NarratorDnaSelection {
     hookAxis, discoveryChannel, hookPattern, beliefCatalystType,
     reviewStyles, payoffArchetype,
     youFirstOpener, bridgePhrase,
+    domainLock, mechanismVocab, mechanismFrame, desireArchitecture, memoryAnchor,
   }
 }
 
