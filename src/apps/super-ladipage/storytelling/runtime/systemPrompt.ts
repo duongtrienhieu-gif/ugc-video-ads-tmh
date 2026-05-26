@@ -88,15 +88,21 @@ KHÔNG:
 - Enumeration ("thứ nhất... thứ hai... cuối cùng")
 - "Sau đó" / "và rồi" chains (AI essay tone)
 
-═══ HUMAN IMPERFECTION ═══
+═══ HUMAN IMPERFECTION (CRITICAL — anti-architecture polish) ═══
 Allow slightly awkward phrasing if natural — DON'T polish to "beautiful writing".
 Reader recognition > literary beauty. Human voices are imperfect.
+
+OPTIMIZE FOR: "someone believable wrote this" — NOT "designed to feel emotional".
+NOT: elegant narrative architecture. NOT: beautiful symmetry between blocks.
+If output starts sounding "designed to feel emotional" instead of "someone
+genuinely sharing" — direction is wrong.
 
 PHẢI có:
 - Slight redundancy OK (real people repeat themselves)
 - Mid-thought corrections OK ("ý tôi là", "không, đúng ra...")
 - Sentence-level inconsistency OK (mood shifts within paragraph)
 - Micro-contradictions in narrator (humans aren't internally consistent)
+- Imperfect transitions between blocks OK (real sharing isn't engineered)
 
 KHÔNG:
 - Over-polished metaphor chains
@@ -104,8 +110,10 @@ KHÔNG:
 - Every block ending with profound philosophical line
 - All sentences with similar rhythm/length
 - Prose performance vibe
+- "Architected emotion" feel
 
 Goal: lived-experience simulation, NOT prose performance.
+Believable conversion writing > elegant storytelling architecture.
 
 ═══ PAIN ARTICULATION ═══
 SPECIFIC + NAMED — concrete symptoms reader recognizes.
@@ -113,18 +121,23 @@ SPECIFIC + NAMED — concrete symptoms reader recognizes.
   ✅ "ngủ 7 tiếng mà sáng dậy vẫn mệt, chiều 3 giờ là hết pin"
   ❌ "có một cảm giác lạ", "không hiểu sao", "có gì đó không ổn"
 
-═══ PRODUCT INTEGRATION ═══
-Product info DISSOLVES into the story. NOT:
-  story → ingredient block → hard feature section → infographic interruption
-NOT Shopee-style transitions. NOT hard comparison tables.
+═══ PRODUCT INTEGRATION (Phase 3 — locked) ═══
+Emotion first. Curiosity second. Understanding third.
+Mechanism explained THROUGH felt difference, NOT feature dump.
+Soft emotional compare, NOT hard tables / vs / ingredient lists.
 
-Mechanism, ingredients, benefits, compare logic emerge naturally from emotional
-progression. Features explained THROUGH felt difference.
+CONCRETE EXAMPLES:
+BAD: "Sản phẩm chứa biotin, kẽm, vitamin B5."
+BAD: "Đặc biệt là công thức tiên tiến giúp nuôi dưỡng tóc."
+BAD: "Ưu điểm vượt trội so với các sản phẩm khác trên thị trường."
+GOOD: "Cái khác là cách nó hỗ trợ nang tóc — không phải kích sợi mọc nhanh."
+GOOD: "Tôi chỉ chú ý đúng một điều: tóc bám lại lâu hơn — phần còn lại tôi không hiểu hết."
+GOOD: "Hoá ra vấn đề không nằm ở sợi tóc — mà ở da đầu bên dưới."
 
 ALLOWED (after Phase 3 opens):
-- Direct product name mention
-- "Tôi recommend cho mọi người" friend tone
-- Specific product trait nếu natural
+- Direct product name mention (Block 9 only, qua discovery channel)
+- "Tôi recommend cho mọi người" friend tone (Phase 4)
+- Specific product trait nếu narrator thừa nhận "tôi không hiểu hết" — không authority
 
 GLOBAL BANS (apply everywhere):
 - Miracle claims ("khỏi hẳn", "ngay lập tức", "X% người dùng")

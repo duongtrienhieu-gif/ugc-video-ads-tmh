@@ -169,6 +169,8 @@ export interface BlockSamplingHooks {
   payoffArchetype?: boolean        // future-self blocks
   reviewSlot?: boolean             // social-proof only
   softCta?: boolean                // future-self-cta only
+  productDissolution?: boolean     // natural-product-discovery only (Chunk D)
+  softCompare?: boolean            // soft-mechanism-compare only (Chunk D, optional block)
 }
 
 /** Block blueprint — lean philosophy-driven section spec.

@@ -55,6 +55,29 @@ export type {
   MemoryAnchorPattern,
 } from './commercialMemoryAnchors'
 
+// Chunk D — Phase 3 product integration.
+export {
+  PRODUCT_DISSOLUTION_PATTERNS,
+  sampleDissolutionPattern,
+  dissolutionBrief,
+} from './productDissolutionPatterns'
+
+export type {
+  DissolutionPosture,
+  DissolutionPattern,
+} from './productDissolutionPatterns'
+
+export {
+  SOFT_COMPARE_PATTERNS,
+  sampleComparePattern,
+  softCompareBrief,
+} from './softComparePatterns'
+
+export type {
+  ComparePosture,
+  ComparePattern,
+} from './softComparePatterns'
+
 // Performance Hook Layer (consolidated v5.8+): owns YouFirstOpeners,
 // BridgePhrases, HOOK_PATTERNS (block-1 flavor), HOOK_AXES (pack theme).
 export {

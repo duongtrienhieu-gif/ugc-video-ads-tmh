@@ -40,6 +40,8 @@ import { nicheDomainLockBrief } from '../config/nicheDomainLock'
 import { nicheMechanismBrief } from '../config/nicheMechanismVocab'
 import { nicheDesireBrief } from '../config/nicheDesireArchitecture'
 import { memoryAnchorBrief } from '../config/commercialMemoryAnchors'
+import { dissolutionBrief } from '../config/productDissolutionPatterns'
+import { softCompareBrief } from '../config/softComparePatterns'
 import type { NarratorDnaSelection } from './selectNarratorDna'
 
 /** Compose protagonist brief — 1-2 lines, used in system prompt context. */
@@ -113,6 +115,20 @@ function buildBlockDirective(
     }
   }
 
+  // ─── D: Product dissolution (Block 9 ONLY) ──────────────────────
+  if (block.samplingHooks.productDissolution) {
+    for (const line of dissolutionBrief(selection.dissolutionPattern).split('\n')) {
+      lines.push(`  ${line}`)
+    }
+  }
+
+  // ─── D: Soft compare (Block 11 ONLY, when included) ─────────────
+  if (block.samplingHooks.softCompare) {
+    for (const line of softCompareBrief(selection.comparePattern).split('\n')) {
+      lines.push(`  ${line}`)
+    }
+  }
+
   // ─── Belief shift (belief-shift block) ────────────────────────────
   if (block.samplingHooks.beliefCatalyst) {
     const reframe = getReframeForNiche(input.niche)
@@ -142,13 +158,28 @@ function buildBlockDirective(
     lines.push(`  reviews: DO NOT generate here — omit field. Reviews come from separate generation pass.`)
   }
 
-  // ─── C2: Commercial memory anchor — STATE in Block 10 ──────────────
+  // ─── D: Block 10 — 3-BEAT STRUCTURE (emotion → curiosity → understanding) ──
   if (block.id === 'why-this-felt-different') {
-    lines.push(`  📌 STATE MEMORY ANCHOR HERE — the SHARP differentiator reader will remember.`)
-    lines.push(`  Anchor frame: ${selection.memoryAnchor.frame}`)
-    lines.push(`  Posture: ${selection.memoryAnchor.posture}`)
-    lines.push(`  Generate niche-fit version (NOT verbatim copy of example).`)
-    lines.push(`  KHÔNG ingredient list, feature comparison, hard table, "vs sản phẩm khác".`)
+    lines.push(`  📐 BLOCK 10 — 3-BEAT SEQUENCE (locked, ordered):`)
+    lines.push(``)
+    lines.push(`  [BEAT 1] EMOTION FIRST — start with FELT difference`)
+    lines.push(`    "Cảm giác/cái khác là [felt change reader can recognize]"`)
+    lines.push(`    KHÔNG mở bằng mechanism. KHÔNG ingredient. KHÔNG "Sản phẩm...".`)
+    lines.push(``)
+    lines.push(`  [BEAT 2] CURIOSITY SECOND — surface "vì sao khác"`)
+    lines.push(`    "Tôi bắt đầu tò mò vì sao lần này khác / tại sao không quay lại"`)
+    lines.push(`    KHÔNG feature dump. KHÔNG pseudo-science.`)
+    lines.push(``)
+    lines.push(`  [BEAT 3] UNDERSTANDING THIRD — mechanism THROUGH emotional context`)
+    lines.push(`    "Hoá ra [single-axis mechanism in plain felt terms]"`)
+    lines.push(`    📌 STATE MEMORY ANCHOR HERE — anchor lives in BEAT 3:`)
+    lines.push(`        Frame: ${selection.memoryAnchor.frame}`)
+    lines.push(`        Posture: ${selection.memoryAnchor.posture}`)
+    lines.push(`        Generate niche-fit version (NEVER verbatim copy example).`)
+    lines.push(``)
+    lines.push(`  ⛔ Block 10 forbids: ingredient lists, pseudo-science authority,`)
+    lines.push(`     ad-copy mechanism tone, "Sản phẩm chứa X, Y, Z", "công thức tiên tiến".`)
+    lines.push(`  ✅ Block 10 allows: felt experience → curiosity → realization sequence only.`)
   }
 
   // ─── C2: Commercial memory anchor — ECHO in sampled echo block ──────

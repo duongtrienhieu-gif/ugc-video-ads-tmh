@@ -122,10 +122,10 @@ export const BLOCK_POOL: Record<BlockId, BlockBlueprint> = {
     phase: 'solution-opening',
     psychologicalFunction: 'organic-discovery',
     youIBalance: 'narrator-validation',
-    intent: 'Product emerges naturally through discovery channel. Low expectation, reluctant tone. NO ecommerce interruption.',
+    intent: 'Product emerges naturally through discovery channel + dissolution pattern. Low expectation, reluctant tone. NO ecommerce interruption.',
     required: true,
     paragraphTarget: { min: 2, max: 4 },
-    samplingHooks: { discoveryChannel: true },
+    samplingHooks: { discoveryChannel: true, productDissolution: true },
   },
 
   'why-this-felt-different': {
@@ -144,10 +144,10 @@ export const BLOCK_POOL: Record<BlockId, BlockBlueprint> = {
     phase: 'solution-opening',
     psychologicalFunction: 'emotional-compare',
     youIBalance: 'narrator-validation',
-    intent: 'Soft compare vs old approach via emotional positioning. "Trước, tôi cố che bên ngoài; cơ thể bên trong vẫn mệt."',
+    intent: 'Soft emotional compare vs old approach. "Trước, tôi cố che bên ngoài; cơ thể bên trong vẫn mệt." KHÔNG hard tables / brand-name compare / ingredient-vs-ingredient.',
     required: false,
     paragraphTarget: { min: 2, max: 3 },
-    samplingHooks: {},
+    samplingHooks: { softCompare: true },
   },
 
   // ─── Phase 4 — FUTURE SELF IMMERSION (4 blocks) ─────────────────────

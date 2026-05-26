@@ -67,4 +67,11 @@ PULL MECHANICS (replaces retention essay):
 - Tone: diary / confession / documentary — NEVER serialized fiction.
 - No drama escalation, no fake suspense, no plot-twist energy.
 
+PRODUCT DISSOLUTION (Phase 3 only): product info appears via narrator's
+felt difference + retrospective reading. NEVER as feature/ingredient block.
+
+ANTI-ARCHITECTURE LOCK: optimize for "someone believable wrote this" — NOT
+"designed to feel emotional". Slight messiness > polished symmetry.
+Believable conversion writing > elegant storytelling architecture.
+
 OUTPUT: valid JSON only — no markdown fences, no prose outside JSON.`

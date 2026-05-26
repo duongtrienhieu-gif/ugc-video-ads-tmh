@@ -65,6 +65,14 @@ import {
   sampleMemoryAnchor,
   type MemoryAnchorPattern,
 } from '../config/commercialMemoryAnchors'
+import {
+  sampleDissolutionPattern,
+  type DissolutionPattern,
+} from '../config/productDissolutionPatterns'
+import {
+  sampleComparePattern,
+  type ComparePattern,
+} from '../config/softComparePatterns'
 
 /** Simple deterministic hash — same string → same integer.
  *  Not cryptographic but suitable for pick-by-modulo. */
@@ -129,6 +137,10 @@ export interface NarratorDnaSelection {
   desireArchitecture: NicheDesireArchitecture
   /** C2 — Sampled commercial memory anchor pattern for THIS pack. */
   memoryAnchor: MemoryAnchorPattern
+  /** D — Sampled product dissolution pattern (Block 9 ONLY). */
+  dissolutionPattern: DissolutionPattern
+  /** D — Sampled soft compare pattern (Block 11 if included). */
+  comparePattern: ComparePattern
 }
 
 export interface SelectArgs {
@@ -223,6 +235,10 @@ export function selectNarratorDna(args: SelectArgs): NarratorDnaSelection {
   // 13. C2 — Commercial memory anchor (sampled per pack).
   const memoryAnchor = sampleMemoryAnchor(seed)
 
+  // 14. D — Product dissolution (Block 9) + soft compare (Block 11).
+  const dissolutionPattern = sampleDissolutionPattern(seed)
+  const comparePattern = sampleComparePattern(seed)
+
   console.info(
     `[storytelling/selectNarratorDna] seed=${seed.slice(-12)} → narrator=${narrator.id}, ` +
     `dna=${emotionalDna?.niche ?? 'generic'}, curve=${energyCurve.id}, ` +
@@ -230,7 +246,8 @@ export function selectNarratorDna(args: SelectArgs): NarratorDnaSelection {
     `pattern=${hookPattern}, catalyst=${beliefCatalystType}, ` +
     `reviews=[${reviewStyles.map((r) => r.id).join(', ')}], payoff=${payoffArchetype.id}, ` +
     `youFirst=${youFirstOpener.id}, bridge=${bridgePhrase.id}, ` +
-    `memAnchor=${memoryAnchor.id}, mechFrame="${mechanismFrame.slice(0, 40)}..."`,
+    `memAnchor=${memoryAnchor.id}, mechFrame="${mechanismFrame.slice(0, 40)}...", ` +
+    `dissolve=${dissolutionPattern.id}, compare=${comparePattern.id}`,
   )
 
   return {
@@ -239,6 +256,7 @@ export function selectNarratorDna(args: SelectArgs): NarratorDnaSelection {
     reviewStyles, payoffArchetype,
     youFirstOpener, bridgePhrase,
     domainLock, mechanismVocab, mechanismFrame, desireArchitecture, memoryAnchor,
+    dissolutionPattern, comparePattern,
   }
 }
 
