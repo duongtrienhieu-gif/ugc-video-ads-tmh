@@ -25,6 +25,7 @@ import { nicheContaminationDetector } from './nicheContaminationDetector'
 import { genericWellnessDensityDetector } from './genericWellnessDensityDetector'
 import { memoryAnchorDetector } from './memoryAnchorDetector'
 import { emotionalFlatteningDetector } from './emotionalFlatteningDetector'
+import { aggressiveSalesDetector } from '../../cta/validators/aggressiveSalesDetector'
 import type { ValidatorResult, ValidatorViolation } from './bioIntroDetector'
 
 export type ValidatorName =
@@ -40,11 +41,13 @@ export type ValidatorName =
   | 'genericWellnessDensity'     // soft — Chunk C2
   | 'memoryAnchor'               // soft — Chunk C2
   | 'emotionalFlattening'        // soft — Chunk C2
+  | 'aggressiveSales'            // soft — Chunk P3
 
 /** Soft validators — flagged for visibility, not enforcement. */
 const SOFT_VALIDATORS: ReadonlySet<ValidatorName> = new Set([
   'selfInsertion', 'paragraphCount', 'narratorCentric',
   'nicheContamination', 'genericWellnessDensity', 'memoryAnchor', 'emotionalFlattening',
+  'aggressiveSales',
 ])
 
 export interface AggregatedValidation {
@@ -76,6 +79,7 @@ export function runValidators(parsed: ParsedPack, niche?: NicheKey): AggregatedV
     emotionalFlattening:     niche
       ? emotionalFlatteningDetector(parsed.sections, niche)
       : { pass: true, violations: [] },
+    aggressiveSales:         aggressiveSalesDetector(parsed.sections),
   }
 
   const violations: AggregatedValidation['violations'] = []

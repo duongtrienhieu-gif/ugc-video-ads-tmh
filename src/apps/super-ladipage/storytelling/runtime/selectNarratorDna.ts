@@ -69,6 +69,10 @@ import {
   sampleComparePattern,
   type ComparePattern,
 } from '../config/softComparePatterns'
+import {
+  sampleCtaFlow,
+  type CtaFlow,
+} from '../../cta'
 
 /** Simple deterministic hash — same string → same integer.
  *  Not cryptographic but suitable for pick-by-modulo. */
@@ -133,6 +137,8 @@ export interface NarratorDnaSelection {
   dissolutionPattern: DissolutionPattern
   /** D — Sampled soft compare pattern (Block 11 if included). */
   comparePattern: ComparePattern
+  /** P3 — Sampled CTA orchestration flow (energy mode + 5 moment patterns). */
+  ctaFlow: CtaFlow
 }
 
 export interface SelectArgs {
@@ -229,6 +235,9 @@ export function selectNarratorDna(args: SelectArgs): NarratorDnaSelection {
   const dissolutionPattern = sampleDissolutionPattern(seed)
   const comparePattern = sampleComparePattern(seed)
 
+  // 15. P3 — CTA orchestration flow (energy mode + 5 moment patterns).
+  const ctaFlow = sampleCtaFlow(seed, args.niche)
+
   console.info(
     `[storytelling/selectNarratorDna] seed=${seed.slice(-12)} → narrator=${narrator.id}, ` +
     `dna=${emotionalDna?.niche ?? 'generic'}, curve=${energyCurve.id}, ` +
@@ -237,7 +246,8 @@ export function selectNarratorDna(args: SelectArgs): NarratorDnaSelection {
     `payoff=${payoffArchetype.id}, ` +
     `youFirst=${youFirstOpener.id}, bridge=${bridgePhrase.id}, ` +
     `memAnchor=${memoryAnchor.id}, mechFrame="${mechanismFrame.slice(0, 40)}...", ` +
-    `dissolve=${dissolutionPattern.id}, compare=${comparePattern.id}`,
+    `dissolve=${dissolutionPattern.id}, compare=${comparePattern.id}, ` +
+    `ctaMode=${ctaFlow.energyMode.id}, urgency=${ctaFlow.urgency.id}`,
   )
 
   return {
@@ -246,7 +256,7 @@ export function selectNarratorDna(args: SelectArgs): NarratorDnaSelection {
     payoffArchetype,
     youFirstOpener, bridgePhrase,
     domainLock, mechanismVocab, mechanismFrame, desireArchitecture, memoryAnchor,
-    dissolutionPattern, comparePattern,
+    dissolutionPattern, comparePattern, ctaFlow,
   }
 }
 

@@ -43,6 +43,7 @@ import { nicheDesireBrief } from '../config/nicheDesireArchitecture'
 import { memoryAnchorBrief } from '../config/commercialMemoryAnchors'
 import { dissolutionBrief } from '../config/productDissolutionPatterns'
 import { softCompareBrief } from '../config/softComparePatterns'
+import { buildCtaMomentsBrief } from '../../cta'
 import type { NarratorDnaSelection } from './selectNarratorDna'
 
 /** Compose protagonist brief — 1-2 lines, used in system prompt context. */
@@ -223,6 +224,10 @@ export function buildPackGenUserPrompt(
 
   // ─── C2: Commercial memory anchor (anti-product-forgetting) ─────────
   lines.push(memoryAnchorBrief(selection.memoryAnchor))
+  lines.push('')
+
+  // ─── P3: CTA orchestration (lightweight, sampling-driven) ───────────
+  lines.push(buildCtaMomentsBrief(selection.ctaFlow))
   lines.push('')
 
   // ─── Per-pack archetype + DNA briefs ─────────────────────────────
