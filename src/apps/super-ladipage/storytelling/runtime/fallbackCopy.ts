@@ -175,24 +175,36 @@ Không phải "khỏi". Mà giống cảm giác cơ thể đang quay lại trạ
 Mọi thứ rất nhỏ thôi. Nhưng khi cơ thể nhẹ hơn, cuộc sống tự nhiên cũng nhẹ hơn rất nhiều.`,
   },
 
-  'social-proof': {
-    title: 'Vài chia sẻ tôi nhận được',
-    copy: 'Sau khi tôi share câu chuyện này, có vài bạn nhắn lại. Tôi xin phép share lại với bạn — đây là những điều họ nói:',
-    reviews: [
-      {
-        quote: 'Tôi ngủ ngon hơn sau khoảng ba tuần. Không phải kiểu thần kỳ, chỉ là buổi sáng không còn nặng nề như trước.',
-        author: 'Chị Lan, 42',
-        meta: 'Sau 3 tuần dùng',
-      },
-      {
-        quote: 'Mẹ mình đi cầu thang đỡ mỏi hơn rồi. Mẹ không hay nói nhưng mình thấy mẹ ít than đau hơn.',
-        author: 'Hà, 30',
-      },
-      {
-        quote: 'Không hết ngay đâu, mà cơ thể nhẹ dần lên thật. Mình vẫn uống đều, chưa nghĩ đến chuyện dừng.',
-        author: 'Một bạn đọc viết',
-      },
-    ],
+  // ─── P2 — Proof callout fallbacks ───────────────────────────────────
+  // Used when generateProofSet fails — proof blocks ship with generic
+  // believable fallback content. Real proof content from Gemini ideally.
+
+  'proof-recognition': {
+    title: 'Một chia sẻ',
+    copy: 'Đọc xong tôi mới biết không phải mỗi mình mình bị. Cảm ơn chị share.',
+    reviews: [{
+      quote: 'Đọc xong tôi mới biết không phải mỗi mình mình bị. Cảm ơn chị share.',
+      author: 'Một bạn đọc',
+    }],
+  },
+
+  'proof-solution': {
+    title: 'Một chia sẻ',
+    copy: 'Mình lúc đầu cũng nghi nghi. Mà cách nó nói thì có cái gì đó khác. Thử rồi.',
+    reviews: [{
+      quote: 'Mình lúc đầu cũng nghi nghi. Mà cách nó nói thì có cái gì đó khác. Thử rồi.',
+      author: 'Trang, 35',
+    }],
+  },
+
+  'proof-future-self': {
+    title: 'Một chia sẻ',
+    copy: 'Tuần thứ 3 bắt đầu thấy khác thật. Không phải kiểu thần kỳ — chỉ là cơ thể nhẹ hơn.',
+    reviews: [{
+      quote: 'Tuần thứ 3 bắt đầu thấy khác thật. Không phải kiểu thần kỳ — chỉ là cơ thể nhẹ hơn.',
+      author: 'Chị Lan, 42',
+      meta: 'Sau 3 tuần dùng',
+    }],
   },
 
   'future-self-cta': {

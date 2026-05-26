@@ -29,7 +29,9 @@ import {
   generateProofSet,
   buildStoryContextLine,
   type GenerateProofSetResult,
+  type ProofPiece,
 } from '../../proof'
+import { isProofBlock } from '../config/blockPool'
 
 export type SectionGenStatus =
   | { kind: 'pass' }
@@ -91,8 +93,83 @@ async function runOnce(
     label,
   })
 
-  const expectedIds = args.plan.map((p) => p.blueprint.id)
+  // P2: filter out proof blocks — Gemini main call generates story only.
+  // Proof blocks filled by interleaveProofBlocks() after both calls complete.
+  const expectedIds = args.plan
+    .filter((p) => !isProofBlock(p.blueprint.id))
+    .map((p) => p.blueprint.id)
   return parsePackResponse(raw, expectedIds)
+}
+
+/** P2 — Interleave proof block placeholders into story sections.
+ *  Returns full pack sections in plan order. Proof blocks have empty
+ *  paragraphs until fillProofBlocks() runs. */
+function interleaveProofPlaceholders(
+  storyPack: ParsedPack,
+  plan: BlockPlan[],
+): ParsedPack {
+  const storyMap = new Map(storyPack.sections.map((s) => [s.id, s]))
+  const fullSections: ParsedSection[] = plan.map((bp) => {
+    if (isProofBlock(bp.blueprint.id)) {
+      return {
+        id: bp.blueprint.id,
+        title: '',
+        paragraphs: [],
+        copy: '',
+      }
+    }
+    const existing = storyMap.get(bp.blueprint.id)
+    if (existing) return existing
+    // Should not happen — story block missing from Gemini output.
+    return {
+      id: bp.blueprint.id,
+      title: '',
+      paragraphs: [],
+      copy: '',
+    }
+  })
+  return { sections: fullSections }
+}
+
+/** P2 — Fill proof block placeholders with proof pieces by phaseResonance.
+ *  Each proof block ID maps to a piece's phaseResonance:
+ *    proof-recognition  ← phaseResonance='recognition'
+ *    proof-solution     ← phaseResonance='solution'
+ *    proof-future-self  ← phaseResonance='future-self'
+ *  Unmatched proof blocks stay with empty content (no piece sampled for that phase). */
+function fillProofBlocks(pack: ParsedPack, pieces: ProofPiece[]): ParsedPack {
+  // Build phase → piece map
+  const pieceByPhase = new Map<string, ProofPiece>()
+  for (const piece of pieces) {
+    if (piece.phaseResonance) {
+      pieceByPhase.set(piece.phaseResonance, piece)
+    }
+  }
+
+  const proofIdToPhase: Record<string, string> = {
+    'proof-recognition':  'recognition',
+    'proof-solution':     'solution',
+    'proof-future-self':  'future-self',
+  }
+
+  return {
+    sections: pack.sections.map((s) => {
+      if (!isProofBlock(s.id as BlockId)) return s
+      const phase = proofIdToPhase[s.id]
+      const piece = phase ? pieceByPhase.get(phase) : undefined
+      if (!piece) return s  // no piece for this phase — placeholder stays empty
+      // Compose piece into block content. Title = author label, paragraphs = quote.
+      const authorTag = piece.author ? ` — ${piece.author}` : ''
+      const metaTag = piece.meta ? ` · ${piece.meta}` : ''
+      return {
+        id: s.id,
+        title: piece.author ?? 'Chia sẻ',
+        paragraphs: [piece.quote, `${authorTag}${metaTag}`.trim()].filter((p) => p.length > 0),
+        copy: `${piece.quote}\n\n${authorTag}${metaTag}`.trim(),
+        reviews: [{ quote: piece.quote, author: piece.author, meta: piece.meta }],
+      }
+    }),
+  }
 }
 
 /** Apply fallback copy to specific blocks. Returns mutated pack. */
@@ -154,19 +231,13 @@ export async function generatePackWithRetry(args: RunArgs): Promise<GeneratedPac
     seed:             mainResult.selection.seed,
   })
 
-  // Merge proof pieces into social-proof block if call succeeded.
+  // P2 — Distribute proof pieces into proof block placeholders by phaseResonance.
+  // proof-recognition ← phaseResonance='recognition', proof-solution ← 'solution',
+  // proof-future-self ← 'future-self'. Unmatched proof blocks stay empty (rare).
   let mergedSections = mainResult.sections
   if (reviewsCall.status === 'ok' && reviewsCall.pieces.length > 0) {
-    // Strip telemetry fields (stanceId, phaseResonance) when assigning to
-    // section.reviews (ParsedReview shape) — keep only quote/author/meta.
-    const reviews = reviewsCall.pieces.map((p) => ({
-      quote: p.quote, author: p.author, meta: p.meta,
-    }))
-    mergedSections = mainResult.sections.map((s) =>
-      s.id === 'social-proof'
-        ? { ...s, reviews }
-        : s,
-    )
+    const filled = fillProofBlocks({ sections: mainResult.sections }, reviewsCall.pieces)
+    mergedSections = filled.sections
   }
 
   return { ...mainResult, sections: mergedSections, reviewsCall }
@@ -208,9 +279,12 @@ async function generateMainPackOnly(args: RunArgs): Promise<GeneratedPackResult>
   logValidationResult(initialValidation)
 
   if (initialValidation.pass) {
+    // P2 — interleave proof block placeholders into final pack.sections.
+    // Proof content filled later by generatePackWithRetry after proof Gemini call.
+    const fullPack = interleaveProofPlaceholders(pack, args.plan)
     return {
-      sections: pack.sections,
-      perSectionStatus: pack.sections.map(() => ({ kind: 'pass' } as SectionGenStatus)),
+      sections: fullPack.sections,
+      perSectionStatus: fullPack.sections.map(() => ({ kind: 'pass' } as SectionGenStatus)),
       attempts: 1,
       initialValidation,
       finalValidation: initialValidation,
@@ -230,7 +304,7 @@ async function generateMainPackOnly(args: RunArgs): Promise<GeneratedPackResult>
     // Retry call errored — fall back to attempt 1 result + downgrade failing sections
     const msg = err instanceof Error ? err.message : String(err)
     console.warn(`[storytelling/runtime] attempt 2 errored: ${msg.slice(0, 200)} — using attempt 1 + fallback`)
-    return buildFallbackResult(pack, initialValidation, 2, argsWithSelection.selection, args.input.niche)
+    return buildFallbackResult(pack, initialValidation, 2, argsWithSelection.selection, args.input.niche, args.plan)
   }
 
   const secondValidation = runValidators(pack2, args.input.niche)
@@ -238,9 +312,11 @@ async function generateMainPackOnly(args: RunArgs): Promise<GeneratedPackResult>
 
   if (secondValidation.pass) {
     const violationsByIdInitial = groupViolationsBySection(initialValidation)
+    // P2 — interleave proof block placeholders into final pack.sections.
+    const fullPack = interleaveProofPlaceholders(pack2, args.plan)
     return {
-      sections: pack2.sections,
-      perSectionStatus: pack2.sections.map((s) => {
+      sections: fullPack.sections,
+      perSectionStatus: fullPack.sections.map((s) => {
         const violations = violationsByIdInitial.get(s.id) ?? []
         if (violations.length > 0) {
           return { kind: 'retry-pass', firstAttemptViolations: violations } as SectionGenStatus
@@ -258,26 +334,31 @@ async function generateMainPackOnly(args: RunArgs): Promise<GeneratedPackResult>
   console.warn(
     `[storytelling/runtime] attempt 2 still had ${secondValidation.violations.length} violations — applying fallback to failing sections`,
   )
-  return buildFallbackResult(pack2, secondValidation, 3, argsWithSelection.selection, args.input.niche)
+  return buildFallbackResult(pack2, secondValidation, 3, argsWithSelection.selection, args.input.niche, args.plan)
 }
 
 /** When both attempts fail: keep passing sections from last attempt,
- *  replace failing sections with FALLBACK_COPY. Result always validates. */
+ *  replace failing sections with FALLBACK_COPY. Result always validates.
+ *  P2 — interleaves proof block placeholders after fallback. */
 function buildFallbackResult(
   pack: ParsedPack,
   failedValidation: AggregatedValidation,
   attempts: number,
   selection: NarratorDnaSelection,
   niche: import('../types').NicheKey,
+  plan: BlockPlan[],
 ): GeneratedPackResult {
   const violationsById = groupViolationsBySection(failedValidation)
   const fixed = applyFallback(pack, failedValidation.failingSections)
   const finalValidation = runValidators(fixed, niche)
   logValidationResult(finalValidation)
 
+  // P2 — interleave proof block placeholders into final pack.
+  const fullPack = interleaveProofPlaceholders(fixed, plan)
+
   return {
-    sections: fixed.sections,
-    perSectionStatus: fixed.sections.map((s) => {
+    sections: fullPack.sections,
+    perSectionStatus: fullPack.sections.map((s) => {
       const violations = violationsById.get(s.id) ?? []
       if (violations.length > 0) {
         return { kind: 'fallback', violations } as SectionGenStatus

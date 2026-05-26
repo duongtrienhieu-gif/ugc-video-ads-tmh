@@ -33,8 +33,10 @@ export function nicheContaminationDetector(
   const violations: ValidatorViolation[] = []
 
   for (const s of sections) {
-    // Skip social-proof — reviews come from separate call, voice-isolated.
-    if (s.id === 'social-proof') continue
+    // Skip proof callout blocks — content comes from separate proof call,
+    // voice-isolated from storytelling. Niche contamination already enforced
+    // there via niche texture profile.
+    if (typeof s.id === 'string' && s.id.startsWith('proof-')) continue
     if (!BLOCK_POOL[s.id]) continue
 
     const lowerText = s.copy.toLowerCase()

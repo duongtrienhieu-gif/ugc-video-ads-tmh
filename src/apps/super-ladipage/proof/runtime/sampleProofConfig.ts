@@ -21,7 +21,13 @@ import { getTextureProfile } from '../config/proofTextureProfiles'
 import { sampleObjections } from '../config/objectionPatterns'
 import { sampleEntropyProfiles } from '../config/proofEntropyRules'
 
-const PHASE_POOL: ProofPhase[] = ['recognition', 'trust', 'solution', 'future-self', 'cta']
+// P2 — phase pool restricted to 3 phases matching proof block destinations
+// (proof-recognition / proof-solution / proof-future-self). Each proof piece
+// generated with a phaseResonance that maps to exactly 1 proof block slot.
+//
+// Trust + CTA phases not currently distributed (deferred; story narrative +
+// future-self-cta block carry those roles directly).
+const PHASE_POOL: ProofPhase[] = ['recognition', 'solution', 'future-self']
 
 function hashSeed(s: string): number {
   let h = 0

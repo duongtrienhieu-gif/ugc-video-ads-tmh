@@ -1,18 +1,17 @@
 // ═════════════════════════════════════════════════════════════════════
-// resolveBlockPlan — flex 13-15 blocks per pack
+// resolveBlockPlan — flex story blocks + interleaved proof callouts
 //
-// Block count flexes by emotional intensity + niche:
-//   intensity=low   → 13 blocks (skip both optional)
-//   intensity=med   → 14 blocks (include 1 optional by niche fit)
-//   intensity=high  → 15 blocks (include both optional)
+// Story block count flexes by emotional intensity + niche:
+//   intensity=low   → 12 story blocks (skip both optional)
+//   intensity=med   → 13 story blocks (include 1 optional by niche fit)
+//   intensity=high  → 14 story blocks (include both optional)
 //
-// Niche bias for optional blocks:
-//   - skepticism-alignment: niches with high vanity skepticism
-//     (skincare, haircare, beauty-confidence) — readers pre-disposed
-//     to "yeah but I've tried everything"
-//   - soft-mechanism-compare: niches with mechanism complexity
-//     (supplement-wellness, health-functional) — readers need to
-//     understand why this approach differs
+// + 3 proof callouts (P2) at phase boundaries:
+//   - proof-recognition (after Phase 1 not-alone-bridge)
+//   - proof-solution (after Phase 3 why-this-felt-different)
+//   - proof-future-self (after Phase 4 emotional-wins)
+//
+// Total pack: 15-17 blocks. Proof content from separate Gemini call.
 // ═════════════════════════════════════════════════════════════════════
 
 import type { BlockId, BlockPlan, NicheKey, StorytellingInput } from '../types'

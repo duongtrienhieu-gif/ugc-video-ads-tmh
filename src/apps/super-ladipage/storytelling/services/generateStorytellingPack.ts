@@ -44,6 +44,7 @@ const BLOCK_TYPE_MAP: Record<BlockId, SectionType> = {
   'daily-micro-friction':      'pain',
   'hidden-emotional-truth':    'pain',
   'not-alone-bridge':          'pain',
+  'proof-recognition':         'social-proof',        // P2 — distributed proof
   // Phase 2 — TRUST + RESISTANCE ALIGNMENT
   'narrator-validation-entry': 'pain',
   'shared-failed-attempts':    'failed-solutions',
@@ -52,11 +53,12 @@ const BLOCK_TYPE_MAP: Record<BlockId, SectionType> = {
   // Phase 3 — SOLUTION OPENING
   'natural-product-discovery': 'product-discovery',
   'why-this-felt-different':   'product-discovery',
+  'proof-solution':            'social-proof',        // P2 — distributed proof
   'soft-mechanism-compare':    'product-discovery',
   // Phase 4 — FUTURE SELF IMMERSION
   'micro-transformation':      'lifestyle',
   'emotional-wins':            'lifestyle',
-  'social-proof':              'social-proof',        // separate review call
+  'proof-future-self':         'social-proof',        // P2 — distributed proof
   'future-self-cta':           'final-cta',
 }
 
@@ -67,16 +69,18 @@ const BLOCK_EMOTIONAL_MOOD: Record<BlockId, string> = {
   'daily-micro-friction':      'subtle-unease',
   'hidden-emotional-truth':    'recurring-discomfort',
   'not-alone-bridge':          'quiet-relief',
+  'proof-recognition':         'shared-relief',
   'narrator-validation-entry': 'companion-warmth',
   'shared-failed-attempts':    'frustration',
   'skepticism-alignment':      'guarded-curiosity',
   'belief-shift':              'quiet-reflection',
   'natural-product-discovery': 'tentative',
   'why-this-felt-different':   'hesitant-curiosity',
+  'proof-solution':            'reduced-skepticism',
   'soft-mechanism-compare':    'quiet-reflection',
   'micro-transformation':      'first-hope',
   'emotional-wins':            'acceptance-joy',
-  'social-proof':              'settled-resolve',
+  'proof-future-self':         'transformation-witness',
   'future-self-cta':           'settled-resolve',
 }
 

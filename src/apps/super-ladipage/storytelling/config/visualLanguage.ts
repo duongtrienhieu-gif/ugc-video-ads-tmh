@@ -60,9 +60,12 @@ export const SECTION_VISUAL_MAP: Record<BlockId, VisualTreatment[]> = {
   'natural-product-discovery': ['still-life-domestic'],
   'why-this-felt-different':   ['still-life-domestic', 'imperfect-real'],
   'soft-mechanism-compare':    ['flat-lay-natural', 'still-life-domestic'],
+  // P2 — Proof callouts (no image — pure text callout)
+  'proof-recognition':         ['smartphone-candid'],
+  'proof-solution':            ['smartphone-candid'],
+  'proof-future-self':         ['smartphone-candid'],
   // Phase 4 — FUTURE SELF IMMERSION
   'micro-transformation':      ['domestic-observational', 'imperfect-real'],
   'emotional-wins':            ['family-album', 'environmental-wide'],
-  'social-proof':              ['smartphone-candid', 'still-life-domestic'],
   'future-self-cta':           ['landscape-quiet', 'family-album'],
 }

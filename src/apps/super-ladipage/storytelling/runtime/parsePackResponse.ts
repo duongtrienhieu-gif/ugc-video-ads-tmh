@@ -115,9 +115,11 @@ export function parsePackResponse(
         `Expected one of: ${[...expectedSet].join(', ')}`,
       )
     }
-    // Parse optional reviews (social-proof block only)
+    // Parse optional reviews (proof blocks — content interleaved post-parse
+    // from separate proof Gemini call, but Gemini main call doesn't emit these).
+    // Kept for legacy compatibility if Gemini accidentally emits reviews[].
     let reviews: ParsedReview[] | undefined
-    if (sec.id === 'social-proof' && Array.isArray(sec.reviews)) {
+    if (typeof sec.id === 'string' && sec.id.startsWith('proof-') && Array.isArray(sec.reviews)) {
       reviews = (sec.reviews as unknown[])
         .map((r): ParsedReview | null => {
           if (!r || typeof r !== 'object') return null

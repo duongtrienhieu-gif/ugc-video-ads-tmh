@@ -134,14 +134,20 @@ export type PsychologicalFunction =
   | 'normalize-via-others'       // imperfect peer voices
   | 'future-self-invitation'     // reader projects forward, soft action
 
-/** 15 canonical blocks across 4 phases. Resolver picks 13-15 per pack.
- *  Phase architecture stable; block count flex by niche / intensity. */
+/** Canonical blocks across 4 phases. Resolver picks story blocks (13-15)
+ *  + interleaves proof callouts (3) at phase boundaries.
+ *
+ *  Story blocks: phase architecture stable; count flex by niche/intensity.
+ *  Proof callouts (P2): inserted by resolveBlockPlan at phase boundaries.
+ *  Proof content comes from SEPARATE generateProofSet Gemini call (proof/
+ *  module), distributed via phaseResonance matching. */
 export type BlockId =
   // Phase 1 — Recognition (4 blocks, all reader-heavy)
   | 'self-recognition-hook'        // Block 1 — you-first opener + mirror beat
   | 'daily-micro-friction'         // Block 2 — lived behaviors reader recognizes
   | 'hidden-emotional-truth'       // Block 3 — unspoken feelings reader carries
   | 'not-alone-bridge'             // Block 4 — "I'm not the only one" → narrator joins
+  | 'proof-recognition'            // P2 — Phase 1 proof callout (after Block 4)
 
   // Phase 2 — Trust + Resistance Alignment (3-4 blocks)
   | 'narrator-validation-entry'    // Block 5 — narrator validates from lived experience
@@ -152,13 +158,14 @@ export type BlockId =
   // Phase 3 — Solution Opening (2-3 blocks)
   | 'natural-product-discovery'    // Block 9 — organic mention, low expectation
   | 'why-this-felt-different'      // Block 10 — mechanism through emotional context
+  | 'proof-solution'               // P2 — Phase 3 proof callout (after Block 10)
   | 'soft-mechanism-compare'       // Block 11 — emotional compare (OPTIONAL)
 
-  // Phase 4 — Future Self Immersion (4 blocks)
+  // Phase 4 — Future Self Immersion (3 story blocks + 1 proof + cta)
   | 'micro-transformation'         // Block 12 — small specific wins
   | 'emotional-wins'               // Block 13 — quality of life returned
-  | 'social-proof'                 // Block 14 — anti-polished reviews
-  | 'future-self-cta'              // Block 15 — emotional projection + soft invitation
+  | 'proof-future-self'            // P2 — Phase 4 proof callout (after Block 13)
+  | 'future-self-cta'              // Block 14 — emotional projection + soft invitation
 
 /** Sampling injection hooks per block — which sampling objects to weave in. */
 export interface BlockSamplingHooks {

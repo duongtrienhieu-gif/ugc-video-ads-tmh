@@ -18,9 +18,9 @@ export function paragraphCountDetector(sections: ParsedSection[]): ValidatorResu
   const violations: ValidatorViolation[] = []
 
   for (const s of sections) {
-    // Skip social-proof — intentionally has 1 paragraph (intro only,
-    // reviews live in separate field).
-    if (s.id === 'social-proof') continue
+    // Skip proof callout blocks — content comes from separate proof call,
+    // paragraph count not narrator-controlled.
+    if (typeof s.id === 'string' && s.id.startsWith('proof-')) continue
 
     const blueprint = BLOCK_POOL[s.id]
     if (!blueprint) continue

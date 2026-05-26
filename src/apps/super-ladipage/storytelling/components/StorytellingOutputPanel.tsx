@@ -200,6 +200,45 @@ export default function StorytellingOutputPanel({
 }
 
 // ═════════════════════════════════════════════════════════════════════
+// Proof callout — P2 distributed proof rendering (mid-page quote callout)
+//
+// Renders proof piece as a quiet quote-style callout. No chapter header,
+// no image, minimal visual chrome. Sits between story blocks at phase
+// boundaries (proof-recognition / proof-solution / proof-future-self).
+// ═════════════════════════════════════════════════════════════════════
+
+interface ProofCalloutProps {
+  section: LandingSection
+  isLast: boolean
+}
+
+function ProofCalloutView({ section, isLast }: ProofCalloutProps) {
+  const review = section.reviews?.[0]
+  if (!review) return null  // no proof piece for this phase — render nothing
+  return (
+    <aside
+      className={`${isLast ? '' : 'mb-20 md:mb-28'} border-l-2 border-stone-300 pl-5 py-3`}
+    >
+      <blockquote className="font-serif text-base md:text-[17px] text-stone-600 leading-[1.85] italic">
+        <span className="text-stone-400 mr-1">"</span>
+        {review.quote}
+        <span className="text-stone-400 ml-1">"</span>
+      </blockquote>
+      {(review.author || review.meta) && (
+        <figcaption className="mt-2 text-xs text-stone-500 not-italic">
+          {review.author && <span>— {review.author}</span>}
+          {review.meta && (
+            <span className="text-stone-400">
+              {review.author ? ' · ' : ''}{review.meta}
+            </span>
+          )}
+        </figcaption>
+      )}
+    </aside>
+  )
+}
+
+// ═════════════════════════════════════════════════════════════════════
 // Section view — text-led layout, image as supporting (not dominant)
 // ═════════════════════════════════════════════════════════════════════
 
@@ -218,6 +257,16 @@ function StorytellingSectionView({
 }: SectionViewProps) {
   const blueprint = BLOCK_POOL[sectionId]
   const treatments = SECTION_VISUAL_MAP[sectionId] ?? []
+
+  // P2 — Proof blocks (proof-recognition / proof-solution / proof-future-self):
+  // render as quote-callout, not regular story section. No image, no chapter
+  // header — minimal mid-page proof beat.
+  const isProof = typeof sectionId === 'string' && sectionId.startsWith('proof-')
+
+  if (isProof) {
+    return <ProofCalloutView section={section} isLast={isLast} />
+  }
+
   // Render each paragraph as a separate <p> for proper typography +
   // breathing rhythm. Engine outputs paragraphs[] joined into copy.
   const cleanParagraphs = section.copy
@@ -225,9 +274,8 @@ function StorytellingSectionView({
     .split(/\n{2,}/)
     .map((p) => p.trim())
     .filter((p) => p.length > 0)
-  // Image presence: Chunk E (visual rebuild) will redesign image plan per
-  // block. For now, all blocks except social-proof get an image placeholder.
-  const hasImage = sectionId !== 'social-proof'
+  // Image presence: Chunk E will redesign image plan per block.
+  const hasImage = true
 
   return (
     <section className={isLast ? '' : 'mb-20 md:mb-28'}>
@@ -266,35 +314,6 @@ function StorytellingSectionView({
           <p key={i} className={i === cleanParagraphs.length - 1 ? '' : 'mb-5'}>{p}</p>
         ))}
       </div>
-
-      {/* Social proof mini reviews (block 14 only).
-          Casual FB-comment cards, NOT formal testimonials. NO star ratings. */}
-      {sectionId === 'social-proof' && section.reviews && section.reviews.length > 0 && (
-        <div className="mt-8 space-y-4">
-          {section.reviews.map((r, i) => (
-            <figure
-              key={i}
-              className="border-l-2 border-stone-300 pl-4 py-1 italic"
-            >
-              <blockquote className="font-serif text-base text-stone-700 leading-relaxed not-italic">
-                <span className="text-stone-400 mr-1">"</span>
-                {r.quote}
-                <span className="text-stone-400 ml-1">"</span>
-              </blockquote>
-              {(r.author || r.meta) && (
-                <figcaption className="mt-1 text-xs text-stone-500 not-italic">
-                  {r.author && <span>— {r.author}</span>}
-                  {r.meta && (
-                    <span className="text-stone-400">
-                      {r.author ? ' · ' : ''}{r.meta}
-                    </span>
-                  )}
-                </figcaption>
-              )}
-            </figure>
-          ))}
-        </div>
-      )}
 
       {/* Debug strip — block architecture. Helps verify phase/function
           assignment during Reader-Immersion engine development. */}
