@@ -6,16 +6,20 @@
 
 export const CONFIG = {
   search: {
-    ytMaxResults: 8,            // bumped from 5 — more candidates per scene
-    tiktokCount: 8,
-    /** Scene-level parallelism. Phase-2 search is non-Gemini (YouTube Data
-     *  API + tikwm), so we can fan out fully — no Gemini RPM concern. */
-    sceneConcurrency: 8,
+    ytMaxResults: 5,            // 5 raw from YT Data API per query; cap 3 in mix
+    webMaxResults: 8,           // web grounding returns 5-10 chunks; cap 5/8 in mix
+    /** Scene-level parallelism — bounded by Gemini Flash 10 RPM (web search
+     *  uses 1 Gemini call per scene). 4 keeps burst under the ceiling. */
+    sceneConcurrency: 4,
   },
   rank: {
     /** Drop links scoring below this percentile (cosine 0-100 scale). */
     minScoreShow: 25,
     maxCardsPerScene: 8,
+    /** Per-source quota in final mix when includeYouTube=true.
+     *  3 YT + 5 Web = 8 cards (37.5% / 62.5% — close to user's 40/60 target). */
+    mixYouTubeMax: 3,
+    mixWebMax: 5,
   },
   cache: {
     /** parseScript output cached for 1 day — same script → instant rerun. */
@@ -77,8 +81,10 @@ export class ApiError extends Error {
 }
 
 // ── Domain types ────────────────────────────────────────────────────────────
-// V2: Web source dropped — only YouTube (content-verifiable) + TikTok (title-only).
-export type SourceId = 'youtube' | 'tiktok'
+// V3.2: TikTok scraper dropped (tikwm fragile). Sources now:
+//   - YouTube via Data API (when includeYouTube toggle is ON, capped 40%)
+//   - Web via Gemini Google Search grounding (any indexed page, 60% or 100%)
+export type SourceId = 'youtube' | 'web'
 
 /** Script-level language detection. Drives source-search strategy +
  *  transcript fetch priority. */
