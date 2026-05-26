@@ -397,6 +397,28 @@ export default function SuperLadipage() {
     })
   }
 
+  // Advanced edit — user sửa prompt qua textarea trong card.
+  // Lần đầu sửa: snapshot prompt gốc vào originalPrompt để hỗ trợ Khôi phục.
+  const handleUpdatePrompt = useCallback((sectionIdx: number, imageIdx: number, newPrompt: string) => {
+    if (!pack) return
+    const current = pack.sections[sectionIdx]?.imagePrompts[imageIdx]
+    if (!current) return
+    const patch: Partial<ImagePrompt> = current.originalPrompt
+      ? { prompt: newPrompt }
+      : { prompt: newPrompt, originalPrompt: current.prompt }
+    patchImagePrompt(sectionIdx, imageIdx, patch)
+  }, [pack, patchImagePrompt])
+
+  const handleRestorePrompt = useCallback((sectionIdx: number, imageIdx: number) => {
+    if (!pack) return
+    const current = pack.sections[sectionIdx]?.imagePrompts[imageIdx]
+    if (!current?.originalPrompt) return
+    patchImagePrompt(sectionIdx, imageIdx, {
+      prompt: current.originalPrompt,
+      originalPrompt: undefined,
+    })
+  }, [pack, patchImagePrompt])
+
   const runImageSubset = async (predicate: (p: ImagePrompt) => boolean) => {
     if (!pack) return
     setIsGeneratingImages(true)
@@ -484,6 +506,8 @@ export default function SuperLadipage() {
           onRetryFailed={handleRetryFailedImages}
           onRegenerateImage={handleRegenerateOneImage}
           onDeleteImage={handleDeleteOneImage}
+          onUpdatePrompt={handleUpdatePrompt}
+          onRestorePrompt={handleRestorePrompt}
           imageProgress={imageProgress}
           isGeneratingImages={isGeneratingImages}
           loadedFromId={loadedFromId}

@@ -62,6 +62,10 @@ export interface ImagePrompt {
    *  lock); false = gpt-image-2 (text-only, sharper polish, dùng cho sections
    *  không có sản phẩm). Default true để fail-safe (giữ identity lock). */
   useImageToImage?: boolean
+  /** Advanced edit — snapshot prompt gốc lúc pack được tạo. Set lần đầu khi
+   *  user sửa prompt qua "Chỉnh sửa nâng cao" để hỗ trợ nút Khôi phục.
+   *  undefined = prompt chưa từng bị user sửa. */
+  originalPrompt?: string
 }
 
 export interface FaqItem {

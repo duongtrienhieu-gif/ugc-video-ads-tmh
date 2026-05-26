@@ -18,6 +18,8 @@ interface OutputPanelProps {
   onRetryFailed: () => void
   onRegenerateImage: (sectionIdx: number, imageIdx: number) => void
   onDeleteImage: (sectionIdx: number, imageIdx: number) => void
+  onUpdatePrompt?: (sectionIdx: number, imageIdx: number, newPrompt: string) => void
+  onRestorePrompt?: (sectionIdx: number, imageIdx: number) => void
   imageProgress: ImageProgress | null
   isGeneratingImages: boolean
   loadedFromId?: string | null
@@ -31,6 +33,7 @@ export default function OutputPanel({
   pack, isGenerating, onRegenerate,
   onGenerateAllImages, onGenerateRemaining, onRetryFailed,
   onRegenerateImage, onDeleteImage,
+  onUpdatePrompt, onRestorePrompt,
   imageProgress, isGeneratingImages,
   loadedFromId, loadedProjectTitle,
   onLoadProject, onSaveAsProject, onNewProject,
@@ -190,6 +193,8 @@ export default function OutputPanel({
               section={section}
               onRegenerateImage={onRegenerateImage}
               onDeleteImage={onDeleteImage}
+              onUpdatePrompt={onUpdatePrompt}
+              onRestorePrompt={onRestorePrompt}
             />
           ))}
         </div>

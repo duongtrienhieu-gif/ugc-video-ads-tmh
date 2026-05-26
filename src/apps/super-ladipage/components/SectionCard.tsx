@@ -1,5 +1,5 @@
 import { memo, useState, useSyncExternalStore } from 'react'
-import { Copy, Check, ChevronDown, Image as ImageIcon, Loader2, RotateCcw, Download, AlertCircle, Sparkles, Trash2, Globe2, Bug } from 'lucide-react'
+import { Copy, Check, ChevronDown, Image as ImageIcon, Loader2, RotateCcw, Download, AlertCircle, AlertTriangle, Sparkles, Trash2, Globe2, Bug, Pencil, Undo2 } from 'lucide-react'
 import type { LandingSection, ImagePrompt, SectionType } from '../types'
 import { useAssetUrl } from '../../../hooks/useAssetUrl'
 import {
@@ -75,9 +75,11 @@ interface SectionCardProps {
   section: LandingSection
   onRegenerateImage?: (sectionIdx: number, imageIdx: number) => void
   onDeleteImage?: (sectionIdx: number, imageIdx: number) => void
+  onUpdatePrompt?: (sectionIdx: number, imageIdx: number, newPrompt: string) => void
+  onRestorePrompt?: (sectionIdx: number, imageIdx: number) => void
 }
 
-function SectionCardImpl({ index, section, onRegenerateImage, onDeleteImage }: SectionCardProps) {
+function SectionCardImpl({ index, section, onRegenerateImage, onDeleteImage, onUpdatePrompt, onRestorePrompt }: SectionCardProps) {
   const [expanded, setExpanded] = useState(true)
   const [showViTranslation, setShowViTranslation] = useState(false)
   const glyph = SECTION_GLYPH[section.type] ?? '📄'
@@ -261,6 +263,8 @@ function SectionCardImpl({ index, section, onRegenerateImage, onDeleteImage }: S
                     assetKey={`${index}:${i}`}
                     onRegenerate={onRegenerateImage ? () => onRegenerateImage(index, i) : undefined}
                     onDelete={onDeleteImage ? () => onDeleteImage(index, i) : undefined}
+                    onUpdatePrompt={onUpdatePrompt ? (newPrompt: string) => onUpdatePrompt(index, i, newPrompt) : undefined}
+                    onRestorePrompt={onRestorePrompt ? () => onRestorePrompt(index, i) : undefined}
                   />
                 ))}
               </div>
@@ -278,17 +282,25 @@ export default SectionCard
 // ─────────────────────────────────────────────────────────────────────
 
 function ImagePromptCardImpl({
-  prompt, assetKey, onRegenerate, onDelete,
+  prompt, assetKey, onRegenerate, onDelete, onUpdatePrompt, onRestorePrompt,
 }: {
   prompt: ImagePrompt
   assetKey: string
   onRegenerate?: () => void
   onDelete?: () => void
+  onUpdatePrompt?: (newPrompt: string) => void
+  onRestorePrompt?: () => void
 }) {
   const [showPrompt, setShowPrompt] = useState(false)
   const [showDebug, setShowDebug] = useState(false)
+  const [advancedEdit, setAdvancedEdit] = useState(false)
+  const [draftPrompt, setDraftPrompt] = useState(prompt.prompt)
   const resolvedUrl = useAssetUrl(prompt.generatedAssetRef ?? undefined)
   const debugMode = isDebugMode()
+
+  const wasEdited = !!prompt.originalPrompt && prompt.originalPrompt !== prompt.prompt
+  const draftDiffers = draftPrompt !== prompt.prompt
+  const canEdit = !!onUpdatePrompt
 
   const isLoading = prompt.status === 'queued' || prompt.status === 'generating' || prompt.status === 'retrying'
   const hasImage = prompt.status === 'done' && prompt.generatedAssetRef
@@ -410,13 +422,97 @@ function ImagePromptCardImpl({
           onClick={() => setShowPrompt((v) => !v)}
           className="flex w-full items-center justify-between gap-1 text-left text-[10px] text-gray-500 hover:text-gray-700"
         >
-          <span>{showPrompt ? '− Ẩn prompt' : '+ Xem prompt'}</span>
+          <span className="flex items-center gap-1">
+            {showPrompt ? '− Ẩn prompt' : '+ Xem prompt'}
+            {wasEdited && (
+              <span
+                className="rounded-full bg-amber-100 px-1.5 py-0.5 text-[9px] font-bold text-amber-700"
+                title="Prompt đã bị sửa khỏi bản gốc"
+              >
+                đã sửa
+              </span>
+            )}
+          </span>
           <CopyAllButton text={prompt.prompt} compact />
         </button>
-        {showPrompt && (
+        {showPrompt && !advancedEdit && (
           <p className="whitespace-pre-wrap rounded bg-gray-50 p-1.5 text-[10px] leading-snug text-gray-600">
             {prompt.prompt}
           </p>
+        )}
+        {showPrompt && advancedEdit && (
+          <div className="space-y-1.5">
+            <div className="flex items-start gap-1.5 rounded border border-red-300 bg-red-50 p-1.5">
+              <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0 text-red-600" />
+              <p className="text-[10px] leading-snug text-red-800">
+                <span className="font-bold">⚠️ Cảnh báo:</span> Sửa prompt có thể phá identity lock
+                (sản phẩm, nhân vật, brand badge, dáng bao bì, recipe layout) — ảnh sinh ra có thể
+                lệch khỏi thiết kế gốc. Chỉ nên sửa phần <span className="font-semibold">scene description</span>,
+                <span className="font-semibold"> mood/lighting</span>, hoặc <span className="font-semibold">text overlay nội dung</span>.
+                Sau khi sửa, bấm "Tạo lại" để render lại ảnh.
+              </p>
+            </div>
+            <textarea
+              value={draftPrompt}
+              onChange={(e) => setDraftPrompt(e.target.value)}
+              spellCheck={false}
+              rows={8}
+              className="w-full resize-y rounded border border-red-200 bg-white p-1.5 font-mono text-[10px] leading-snug text-gray-800 outline-none focus:border-red-400 focus:ring-1 focus:ring-red-200"
+            />
+            <div className="flex flex-wrap items-center gap-1.5">
+              <button
+                type="button"
+                onClick={() => { onUpdatePrompt?.(draftPrompt) }}
+                disabled={!draftDiffers}
+                className="flex items-center gap-1 rounded-md bg-red-600 px-2 py-1 text-[10px] font-bold text-white shadow-sm hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-40"
+                title="Lưu prompt đã sửa (tự đồng bộ vào project)"
+              >
+                <Check className="h-2.5 w-2.5" /> Lưu prompt
+              </button>
+              <button
+                type="button"
+                onClick={() => setDraftPrompt(prompt.prompt)}
+                disabled={!draftDiffers}
+                className="flex items-center gap-1 rounded-md border border-black/10 bg-white px-2 py-1 text-[10px] font-medium text-gray-600 hover:bg-black/[0.04] disabled:opacity-40"
+                title="Bỏ thay đổi chưa lưu"
+              >
+                Bỏ thay đổi
+              </button>
+              {wasEdited && onRestorePrompt && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (confirm('Khôi phục prompt về bản gốc lúc tạo pack? Mọi sửa đổi sẽ bị xoá.')) {
+                      onRestorePrompt()
+                      setDraftPrompt(prompt.originalPrompt ?? prompt.prompt)
+                    }
+                  }}
+                  className="ml-auto flex items-center gap-1 rounded-md border border-amber-300 bg-amber-50 px-2 py-1 text-[10px] font-bold text-amber-800 hover:bg-amber-100"
+                  title="Khôi phục prompt về bản gốc lúc pack được tạo"
+                >
+                  <Undo2 className="h-2.5 w-2.5" /> Khôi phục gốc
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+        {showPrompt && canEdit && (
+          <button
+            type="button"
+            onClick={() => {
+              setAdvancedEdit((v) => {
+                if (!v) setDraftPrompt(prompt.prompt)
+                return !v
+              })
+            }}
+            className={`flex w-full items-center gap-1 text-[10px] ${
+              advancedEdit ? 'text-red-600 hover:text-red-700' : 'text-gray-500 hover:text-gray-700'
+            }`}
+            title="Chỉnh sửa prompt tay (nâng cao — rủi ro phá identity lock)"
+          >
+            <Pencil className="h-2.5 w-2.5" />
+            <span>{advancedEdit ? '− Đóng chỉnh sửa nâng cao' : '+ Chỉnh sửa nâng cao'}</span>
+          </button>
         )}
 
         {debugMode && (

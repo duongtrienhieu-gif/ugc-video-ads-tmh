@@ -33,6 +33,8 @@ interface OutputDispatcherProps {
   onRetryFailed: () => void
   onRegenerateImage: (sectionIdx: number, imageIdx: number) => void
   onDeleteImage: (sectionIdx: number, imageIdx: number) => void
+  onUpdatePrompt?: (sectionIdx: number, imageIdx: number, newPrompt: string) => void
+  onRestorePrompt?: (sectionIdx: number, imageIdx: number) => void
   imageProgress: ImageProgress | null
   isGeneratingImages: boolean
   loadedFromId?: string | null
