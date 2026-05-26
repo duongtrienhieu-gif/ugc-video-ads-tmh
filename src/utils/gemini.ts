@@ -273,6 +273,11 @@ export async function directGeminiText(params: {
  * `taskType` to optimise asymmetric retrieval — 'RETRIEVAL_QUERY' for the
  * search intent, 'RETRIEVAL_DOCUMENT' for the items being ranked.
  *
+ * Auto-chunks into batches of 100 (Gemini's BatchEmbedContents hard limit).
+ * Chunks run sequentially to keep error handling simple; the per-minute
+ * rate-limit (1500 RPM) is far higher than any realistic chunk count, so the
+ * extra latency from sequential dispatch is negligible.
+ *
  * Model fallback chain: tries the GA model first (`gemini-embedding-001`,
  * the current default since mid-2025) and falls back to `text-embedding-004`
  * if the new model returns 404 — covers regions / accounts where the GA
@@ -280,6 +285,7 @@ export async function directGeminiText(params: {
  * pinned to the old endpoint.
  */
 const EMBED_MODELS = ['gemini-embedding-001', 'text-embedding-004']
+const EMBED_BATCH_LIMIT = 100  // Gemini BatchEmbedContents hard cap
 
 export async function geminiEmbedBatch(params: {
   apiKey: string
@@ -288,12 +294,24 @@ export async function geminiEmbedBatch(params: {
   signal?: AbortSignal
 }): Promise<number[][]> {
   if (params.texts.length === 0) return []
-  const taskType = params.taskType ?? 'SEMANTIC_SIMILARITY'
+  // Chunk caller-side so each upstream request stays under the API cap.
+  // Sequential to keep ordering deterministic and error handling cheap.
+  const out: number[][] = []
+  for (let i = 0; i < params.texts.length; i += EMBED_BATCH_LIMIT) {
+    const chunk = params.texts.slice(i, i + EMBED_BATCH_LIMIT)
+    const vecs = await embedChunk(params.apiKey, chunk, params.taskType ?? 'SEMANTIC_SIMILARITY', params.signal)
+    out.push(...vecs)
+  }
+  return out
+}
+
+/** One chunk → one `BatchEmbedContents` HTTP call, with model fallback chain. */
+async function embedChunk(apiKey: string, texts: string[], taskType: string, signal: AbortSignal | undefined): Promise<number[][]> {
   const errors: string[] = []
   for (const model of EMBED_MODELS) {
-    const url = `${GEMINI_BASE}/${model}:batchEmbedContents?key=${params.apiKey}`
+    const url = `${GEMINI_BASE}/${model}:batchEmbedContents?key=${apiKey}`
     const body = {
-      requests: params.texts.map(text => ({
+      requests: texts.map(text => ({
         model: `models/${model}`,
         content: { parts: [{ text }] },
         taskType,
@@ -303,16 +321,14 @@ export async function geminiEmbedBatch(params: {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
-      signal: params.signal,
+      signal,
     })
     if (res.ok) {
       const data = await res.json() as { embeddings?: Array<{ values: number[] }> }
       return (data.embeddings || []).map(e => e.values)
     }
     const err = await res.text().catch(() => res.statusText)
-    // 404 = model not available → try next model in chain
     if (res.status === 404) { errors.push(`${model}: 404`); continue }
-    // Quota / rate-limit → throw immediately, don't fall through to next model
     if (res.status === 429) {
       const { isDailyExhausted } = classifyGemini429(err)
       const e = new Error(`Embedding ${res.status}: ${err.slice(0, 200)}`) as Error & { code?: string }
