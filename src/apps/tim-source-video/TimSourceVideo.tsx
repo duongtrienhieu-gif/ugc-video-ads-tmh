@@ -1,24 +1,24 @@
-// ── Tìm Source Video — main component (V3) ──────────────────────────────────
-// V3 pivot: dropped Gemini fileData verify (too expensive — burned daily
-// quota in 3 clicks for ~0% useful matches). UGC-native source mix instead:
-// YouTube Shorts (videoDuration=short filter) + TikTok via tikwm. AI ranks
-// semantically with embeddings; user filters visually by clicking through.
-// Honest UX: no "verified content" badge — user always self-checks.
+// ── Tìm Source Video — main component (V3.1) ────────────────────────────────
+// V3.1 adds: language detection (vi/en/ms) + dual-lang YouTube search +
+// transcript phrase-matching via Vercel serverless function. Cards now show
+// matched transcript excerpts + timestamp deep-links to the moment the
+// speaker actually mentions the scene's concept.
 
 import { useState, useRef } from 'react'
-import { Search, Play, X, Loader2, FileText, Database, ExternalLink } from 'lucide-react'
+import { Search, Play, X, Loader2, FileText, Database, ExternalLink, Captions } from 'lucide-react'
 import { useSettingsStore } from '../../stores/settingsStore'
 import { useAppStore } from '../../stores/appStore'
 import { useBankStore } from '../../stores/bankStore'
 import {
   parseScript, searchYouTube, searchTikTok, embeddingRank,
-  processWithConcurrency,
+  batchFetchTranscripts, processWithConcurrency,
 } from './services'
 import { cacheClear } from './cache'
 import {
   CONFIG, ERR, ApiError, colorForScore,
   type Link, type SceneState, type BannerSpec,
-  type SourceId, type SearchResult,
+  type SourceId, type SearchResult, type ScriptLang,
+  type RankedLink, type TranscriptHit,
 } from './types'
 
 const DEFAULT_SCRIPT = `Bạn có biết, sau tuổi 25, collagen trong cơ thể giảm 1.5% mỗi năm?
@@ -28,6 +28,8 @@ Cho đến khi mình tìm thấy Collagen Peptide thế hệ mới của hãng X
 Phân tử siêu nhỏ chỉ 2000 dalton, hấp thu trực tiếp vào lớp hạ bì.
 Sau 4 tuần dùng, da mình mịn hơn rõ rệt, nếp nhăn vùng mắt mờ đi.`
 
+const LANG_LABEL: Record<ScriptLang, string> = { vi: '🇻🇳 Tiếng Việt', en: '🇺🇸 English', ms: '🇲🇾 Bahasa Melayu' }
+
 export default function TimSourceVideo() {
   const geminiKey = useSettingsStore((s) => s.geminiApiKey)
   const youtubeKey = useSettingsStore((s) => s.youtubeApiKey)
@@ -36,6 +38,7 @@ export default function TimSourceVideo() {
 
   const [script, setScript] = useState(DEFAULT_SCRIPT)
   const [pickedScriptId, setPickedScriptId] = useState<string>('')
+  const [scriptLang, setScriptLang] = useState<ScriptLang | null>(null)
   const [running, setRunning] = useState(false)
   const [status, setStatus] = useState('')
   const [banners, setBanners] = useState<BannerSpec[]>([])
@@ -46,9 +49,7 @@ export default function TimSourceVideo() {
   if (!geminiKey) missingKeys.push('Gemini')
   if (!youtubeKey) missingKeys.push('YouTube Data API')
 
-  function addBanner(b: BannerSpec) {
-    setBanners((prev) => [...prev, b])
-  }
+  function addBanner(b: BannerSpec) { setBanners((prev) => [...prev, b]) }
 
   function classifyError(err: unknown): BannerSpec {
     const e = err as ApiError
@@ -58,10 +59,7 @@ export default function TimSourceVideo() {
     return { kind: 'generic', message: (err as Error)?.message || String(err) }
   }
 
-  function cancel() {
-    abortRef.current?.abort()
-  }
-
+  function cancel() { abortRef.current?.abort() }
   function handleClearCache() {
     const n = cacheClear()
     addToast(`Đã xóa ${n} entry cache`)
@@ -81,14 +79,17 @@ export default function TimSourceVideo() {
     setRunning(true)
     setBanners([])
     setSceneStates([])
-    setStatus('⏳ Đang phân tích kịch bản thành scene...')
+    setScriptLang(null)
+    setStatus('⏳ Đang phát hiện ngôn ngữ + tách scene...')
 
     const controller = new AbortController()
     abortRef.current = controller
     const startTime = Date.now()
 
     try {
-      const scenes = await parseScript(geminiKey, script, controller.signal)
+      const parsed = await parseScript(geminiKey, script, controller.signal)
+      const { scriptLang: detectedLang, scenes } = parsed
+      setScriptLang(detectedLang)
       if (!scenes.length) {
         addBanner({ kind: 'generic', message: 'Gemini không tách được scene nào từ kịch bản này.' })
         return
@@ -96,7 +97,7 @@ export default function TimSourceVideo() {
 
       const skeletons: SceneState[] = scenes.map((scene) => ({ scene, ranked: [], errors: {} }))
       setSceneStates(skeletons)
-      setStatus(`✅ Tách được ${scenes.length} scene. Đang tìm video...`)
+      setStatus(`✅ Ngôn ngữ: ${LANG_LABEL[detectedLang]} · ${scenes.length} scene. Đang tìm video...`)
 
       // ── Phase 2: parallel non-Gemini search per scene ────────────────────
       type SearchOrErr = SearchResult & { __error?: string }
@@ -112,8 +113,8 @@ export default function TimSourceVideo() {
       const sceneJobs = scenes.map((scene, i) => ({ scene, i }))
       await processWithConcurrency(sceneJobs, async ({ scene, i }) => {
         const results: SearchOrErr[] = await Promise.all([
-          searchYouTube(youtubeKey, scene.keywordEn, controller.signal).catch(wrapErr('youtube')),
-          searchTikTok(scene.keywordEn, controller.signal).catch(wrapErr('tiktok')),
+          searchYouTube(youtubeKey, scene, detectedLang, controller.signal).catch(wrapErr('youtube')),
+          searchTikTok(scene, detectedLang, controller.signal).catch(wrapErr('tiktok')),
         ])
         linksPerScene[i] = results.flatMap((r) =>
           r.links.map((l) => ({ ...l, source: r.source }))
@@ -123,9 +124,17 @@ export default function TimSourceVideo() {
         ) as Partial<Record<SourceId, string>>
       }, CONFIG.search.sceneConcurrency)
 
-      // ── Phase 3: batched embedding rerank for ALL scenes (2 calls) ───────
-      setStatus('🧮 Đang chấm điểm bằng embedding similarity...')
-      const rankedPerScene = await embeddingRank(geminiKey, { scenes, linksPerScene }, controller.signal)
+      // ── Phase 3: fetch transcripts + match per scene ────────────────────
+      setStatus(`📜 Đang đọc transcript ${scenes.length} scene (qua Vercel function)...`)
+      const transcriptsPerScene = await Promise.all(scenes.map((scene, i) =>
+        batchFetchTranscripts(linksPerScene[i], scene, detectedLang, controller.signal)
+      ))
+
+      // ── Phase 4: embedding rerank with transcript hits as signal ─────────
+      setStatus('🧮 Đang chấm điểm bằng embedding + transcript boost...')
+      const rankedPerScene = await embeddingRank(geminiKey, {
+        scenes, linksPerScene, transcriptsPerScene,
+      }, controller.signal)
 
       const finalStates: SceneState[] = scenes.map((scene, i) => ({
         scene,
@@ -136,7 +145,8 @@ export default function TimSourceVideo() {
 
       const elapsed = ((Date.now() - startTime) / 1000).toFixed(1)
       const totalCards = finalStates.reduce((sum, s) => sum + s.ranked.length, 0)
-      setStatus(`✅ Hoàn tất ${scenes.length} scene trong ${elapsed}s · ${totalCards} card tìm được. Click thumbnail để mở video tab mới — bạn tự xem thử có phù hợp không (AI chỉ rank theo title+description, không verify nội dung).`)
+      const withTranscript = finalStates.reduce((sum, s) => sum + s.ranked.filter(r => r.transcriptHits && r.transcriptHits.length > 0).length, 0)
+      setStatus(`✅ Hoàn tất ${scenes.length} scene trong ${elapsed}s · ${totalCards} card (${withTranscript} có transcript match — bấm vào để xem đoạn được nói trong video).`)
     } catch (err) {
       const spec = classifyError(err)
       addBanner(spec)
@@ -156,12 +166,17 @@ export default function TimSourceVideo() {
             Tìm Source Video
           </h1>
           <p className="mt-1 text-sm text-gray-500">
-            Nhập kịch bản UGC → tách scene → tìm link <strong>YouTube Shorts</strong> + <strong>TikTok</strong> khớp ý (UGC-native sources, &lt; 4 phút). AI rank theo semantic similarity. <strong>Bạn tự xem thử</strong> — app không verify nội dung video.
+            Nhập kịch bản (Việt / Anh / Malay) → AI phát hiện ngôn ngữ + tách scene → tìm YouTube Shorts + TikTok khớp ý → <strong>đọc transcript</strong> tìm đoạn người trong video thực sự nói về cảnh này → rank theo semantic similarity.
           </p>
+          {scriptLang && (
+            <div className="mt-2 inline-block rounded bg-violet-50 px-2 py-0.5 text-xs font-semibold text-violet-700">
+              Ngôn ngữ phát hiện: {LANG_LABEL[scriptLang]}
+            </div>
+          )}
         </div>
         <button
           onClick={handleClearCache}
-          title="Xóa cache (parseScript / search / embedding)"
+          title="Xóa cache (parseScript / search / transcripts / embedding)"
           className="flex shrink-0 items-center gap-1 rounded-lg border border-gray-200 px-3 py-1.5 text-xs text-gray-500 hover:bg-gray-50"
         >
           <Database className="h-3.5 w-3.5" />
@@ -177,7 +192,7 @@ export default function TimSourceVideo() {
 
       <div className="mb-4">
         <div className="mb-1 flex items-center justify-between gap-2">
-          <label className="text-xs font-semibold text-gray-600">Kịch bản UGC</label>
+          <label className="text-xs font-semibold text-gray-600">Kịch bản UGC (Việt / Anh / Malay)</label>
           {savedScripts.length > 0 && (
             <div className="flex items-center gap-1.5">
               <FileText className="h-3.5 w-3.5 text-gray-400" />
@@ -215,7 +230,7 @@ export default function TimSourceVideo() {
           }}
           disabled={running}
           className="h-64 w-full resize-y rounded-lg border border-gray-200 bg-white p-3 font-mono text-sm leading-relaxed text-gray-800 focus:border-violet-300 focus:outline-none disabled:opacity-60"
-          placeholder="Paste kịch bản UGC vào đây..."
+          placeholder="Paste kịch bản UGC vào đây (tiếng Việt, Anh, hoặc Malay)..."
         />
       </div>
 
@@ -259,11 +274,8 @@ function Banner({ spec }: { spec: BannerSpec }) {
       <div className="mb-4 rounded-lg border-2 border-amber-300 bg-amber-50 p-5">
         <div className="mb-2 text-base font-bold text-amber-900">⛔ Quota Gemini Free Tier đã cạn</div>
         <div className="text-sm leading-relaxed text-amber-800">
-          Free tier giới hạn <strong>250 requests/ngày</strong>.<br /><br />
-          Đợi đến nửa đêm Pacific Time (~15:00 ICT) hoặc upgrade tại{' '}
+          Free tier giới hạn <strong>250 requests/ngày</strong>. Đợi đến nửa đêm Pacific Time (~15:00 ICT) hoặc upgrade tại{' '}
           <a className="font-semibold underline" href="https://aistudio.google.com/billing" target="_blank" rel="noreferrer">aistudio.google.com/billing</a>.
-          <br /><br />
-          <small>Tip: V3 cache parseScript + search + embedding theo hash. Rerun cùng script = 0 call.</small>
         </div>
       </div>
     )
@@ -273,7 +285,7 @@ function Banner({ spec }: { spec: BannerSpec }) {
       <div className="mb-4 rounded-lg border-2 border-amber-300 bg-amber-50 p-5">
         <div className="mb-2 text-base font-bold text-amber-900">⛔ Quota YouTube Data API đã cạn</div>
         <div className="text-sm leading-relaxed text-amber-800">
-          Mặc định 10,000 units/ngày · search = 100 units → ~100 search/ngày.
+          Mặc định 10,000 units/ngày · search = 100 units → ~100 search/ngày. V3.1 search dual-lang nên dùng nhiều hơn ~2x.
         </div>
       </div>
     )
@@ -296,9 +308,11 @@ function SceneCard({ idx, state }: { idx: number; state: SceneState }) {
       <div className="mb-2 rounded border-l-4 border-violet-400 bg-violet-50 px-3 py-1.5 text-sm text-violet-900">
         💡 {scene.visualIntent}
       </div>
-      <div className="mb-3 text-xs text-gray-500">
-        <strong>Keywords:</strong> {scene.keywordVi} ·{' '}
-        <code className="rounded bg-gray-100 px-1.5 py-0.5 text-xs">{scene.keywordEn}</code>
+      <div className="mb-3 flex flex-wrap gap-1.5 text-xs text-gray-500">
+        <strong>Keywords:</strong>
+        <code className="rounded bg-emerald-50 px-1.5 py-0.5 text-emerald-700">VI: {scene.keywordVi}</code>
+        <code className="rounded bg-blue-50 px-1.5 py-0.5 text-blue-700">EN: {scene.keywordEn}</code>
+        <code className="rounded bg-amber-50 px-1.5 py-0.5 text-amber-700">MS: {scene.keywordMs}</code>
       </div>
 
       {ranked.length === 0 && Object.keys(errors).length === 0 && (
@@ -329,41 +343,101 @@ const SOURCE_TAG_LABEL: Record<SourceId, string> = {
   youtube: 'YT Shorts', tiktok: 'TikTok',
 }
 
-function ResultCard({ link }: { link: import('./types').RankedLink }) {
+function ResultCard({ link }: { link: RankedLink }) {
   const thumbUrl = link.thumbnail ?? `https://image.thum.io/get/width/400/crop/225/noanimate/${link.url}`
   const scoreColor = colorForScore(link.score)
+  const hasTranscript = link.transcriptHits && link.transcriptHits.length > 0
+
+  // Build deep-link to best transcript timestamp if available
+  const bestHit = hasTranscript ? link.transcriptHits![0] : null
+  const deepLinkUrl = bestHit
+    ? `${link.url}${link.url.includes('?') ? '&' : '?'}t=${Math.floor(bestHit.start)}s`
+    : link.url
 
   return (
-    <a
-      href={link.url}
-      target="_blank"
-      rel="noreferrer"
-      className="group relative flex flex-col rounded-lg border border-gray-200 bg-gray-50 p-2 transition-all hover:-translate-y-0.5 hover:border-violet-400 hover:shadow-md"
-    >
+    <div className="relative flex flex-col rounded-lg border border-gray-200 bg-gray-50 p-2 transition-all hover:-translate-y-0.5 hover:border-violet-400 hover:shadow-md">
       <div
         className="absolute right-2 top-2 z-10 rounded-full px-2 py-0.5 text-xs font-bold text-white shadow-sm"
         style={{ backgroundColor: scoreColor }}
-        title={`Embedding similarity: ${link.score}/100`}
+        title={hasTranscript ? `Score ${link.score} (+${Math.round((CONFIG.transcript.hitScoreBoost - 1) * 100)}% transcript boost)` : `Score ${link.score} (title+desc only)`}
       >
         ⭐ {link.score}
       </div>
-      <div className="aspect-video w-full overflow-hidden rounded bg-gray-200">
-        <img
-          src={thumbUrl}
-          alt=""
-          loading="lazy"
-          className="h-full w-full object-cover"
-          onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none' }}
-        />
+      <a href={deepLinkUrl} target="_blank" rel="noreferrer" className="group block">
+        <div className="aspect-video w-full overflow-hidden rounded bg-gray-200">
+          <img
+            src={thumbUrl}
+            alt=""
+            loading="lazy"
+            className="h-full w-full object-cover"
+            onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none' }}
+          />
+        </div>
+        <div className="mt-2 flex items-start gap-1 text-sm font-medium leading-snug text-gray-800">
+          <span className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold ${SOURCE_TAG_STYLE[link.source]}`}>
+            {SOURCE_TAG_LABEL[link.source]}
+          </span>
+          <span className="flex-1">{link.title || link.url}</span>
+          <ExternalLink className="mt-0.5 h-3 w-3 shrink-0 text-gray-400 opacity-0 transition-opacity group-hover:opacity-100" />
+        </div>
+        {link.meta && <div className="mt-0.5 truncate text-xs text-gray-400">{link.meta}</div>}
+      </a>
+
+      {/* Transcript hits — only YouTube + only when transcript matched */}
+      {hasTranscript && <TranscriptHits hits={link.transcriptHits!} url={link.url} transcriptLang={link.transcriptLang} />}
+      {!hasTranscript && link.source === 'youtube' && (
+        <div className="mt-2 rounded bg-gray-100 px-2 py-1 text-center text-[10px] italic text-gray-500">
+          Không có transcript hoặc không match — chỉ rank theo title+desc
+        </div>
+      )}
+      {link.source === 'tiktok' && (
+        <div className="mt-2 rounded bg-gray-100 px-2 py-1 text-center text-[10px] italic text-gray-500">
+          TikTok — chỉ rank theo title (không có transcript API)
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── TranscriptHits — show matched moments with deep-link timestamps ─────────
+function fmtTime(s: number): string {
+  const total = Math.floor(s)
+  const m = Math.floor(total / 60)
+  const sec = total % 60
+  return `${m}:${sec.toString().padStart(2, '0')}`
+}
+
+function TranscriptHits({ hits, url, transcriptLang }: { hits: TranscriptHit[]; url: string; transcriptLang: string | undefined }) {
+  return (
+    <div className="mt-2 border-t border-dashed border-gray-200 pt-2">
+      <div className="mb-1 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-emerald-700">
+        <Captions className="h-3 w-3" />
+        Đoạn nói khớp
+        {transcriptLang && transcriptLang !== 'unknown' && (
+          <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-emerald-700">{transcriptLang.toUpperCase()}</span>
+        )}
       </div>
-      <div className="mt-2 flex items-start gap-1 text-sm font-medium leading-snug text-gray-800">
-        <span className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold ${SOURCE_TAG_STYLE[link.source]}`}>
-          {SOURCE_TAG_LABEL[link.source]}
-        </span>
-        <span className="flex-1">{link.title || link.url}</span>
-        <ExternalLink className="mt-0.5 h-3 w-3 shrink-0 text-gray-400 opacity-0 transition-opacity group-hover:opacity-100" />
+      <div className="flex flex-col gap-1">
+        {hits.slice(0, 3).map((h, j) => {
+          const sep = url.includes('?') ? '&' : '?'
+          const deepLink = `${url}${sep}t=${Math.floor(h.start)}s`
+          return (
+            <a
+              key={j}
+              href={deepLink}
+              target="_blank"
+              rel="noreferrer"
+              className="flex gap-2 rounded border border-emerald-200 bg-emerald-50 px-2 py-1.5 text-xs text-gray-800 transition-colors hover:bg-emerald-100"
+              title={`Match: "${h.matchedTerm}" (${h.matchedLang})`}
+            >
+              <span className="whitespace-nowrap font-mono font-bold text-emerald-700">
+                {fmtTime(h.start)}–{fmtTime(h.end)}
+              </span>
+              <span className="flex-1 leading-snug">"{h.excerpt}"</span>
+            </a>
+          )
+        })}
       </div>
-      {link.meta && <div className="mt-0.5 truncate text-xs text-gray-400">{link.meta}</div>}
-    </a>
+    </div>
   )
 }

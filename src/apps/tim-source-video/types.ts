@@ -24,6 +24,19 @@ export const CONFIG = {
     searchTtlMs:         24 * 60 * 60 * 1000,
     /** Embedding vectors cached for 7 days (content semantics stable). */
     embeddingTtlMs: 7 * 24 * 60 * 60 * 1000,
+    /** Transcript text cached 7 days (video captions rarely change). */
+    transcriptTtlMs: 7 * 24 * 60 * 60 * 1000,
+  },
+  transcript: {
+    /** Max parallel transcript fetches — Vercel free tier 100K/mo allows
+     *  burst, but YouTube IP rate-limit kicks in if we go too wide. */
+    concurrency: 6,
+    /** Boost applied to embedding score if at least 1 transcript hit found.
+     *  Multiplier (1.3 = +30% over base cosine). Keep modest so embedding
+     *  signal still dominates ranking. */
+    hitScoreBoost: 1.3,
+    /** Cues around a hit included as excerpt (each side). */
+    excerptCueWindow: 2,
   },
   scoreColor: [
     { min: 75, color: '#10b981' },  // excellent — green
@@ -67,11 +80,23 @@ export class ApiError extends Error {
 // V2: Web source dropped — only YouTube (content-verifiable) + TikTok (title-only).
 export type SourceId = 'youtube' | 'tiktok'
 
+/** Script-level language detection. Drives source-search strategy +
+ *  transcript fetch priority. */
+export type ScriptLang = 'vi' | 'en' | 'ms'
+
 export interface Scene {
   line: string
   visualIntent: string
+  /** Keywords in 3 languages so we can search English content (largest pool)
+   *  alongside native-lang content (more authentic UGC for the audience). */
   keywordVi: string
   keywordEn: string
+  keywordMs: string
+}
+
+export interface ParseResult {
+  scriptLang: ScriptLang
+  scenes: Scene[]
 }
 
 export interface Link {
@@ -82,15 +107,49 @@ export interface Link {
   thumbnail?: string
   domain: string
   meta?: string
+  /** YouTube only — videoId extracted for transcript fetch. */
+  videoId?: string
+}
+
+/** One transcript snippet (cue) — output of /api/yt-transcript. */
+export interface TranscriptSnippet {
+  /** Start time in seconds. */
+  start: number
+  /** Duration in seconds. */
+  duration: number
+  /** Caption text. */
+  text: string
+}
+
+/** Output of phrase-search over a transcript. Used to surface ONLY videos
+ *  where the spoken content actually mentions scene's keywords. */
+export interface TranscriptHit {
+  /** Start of matched window (seconds). */
+  start: number
+  /** End of matched window (seconds). */
+  end: number
+  /** ±2 cues of context around the match. */
+  excerpt: string
+  /** Which keyword variant fired the match. */
+  matchedTerm: string
+  /** Matched keyword's source language (so UI can tag VI/EN/MS). */
+  matchedLang: ScriptLang
+  /** Score for ranking: occurrences × keyword-specificity boost. */
+  score: number
 }
 
 export interface RankedLink extends Link {
   source: SourceId
-  /** Cosine similarity scaled to 0-100. */
+  /** Final score 0-100 = blend of embedding cosine + transcript-hit boost. */
   score: number
   /** Optional short Vietnamese explanation. */
   reason?: string
-  /** Stable id for tracking timestamp-verify state. */
+  /** Transcript matches if YouTube + transcript fetched successfully.
+   *  Empty array if no transcript OR no keyword hits in transcript. */
+  transcriptHits?: TranscriptHit[]
+  /** Language of the fetched transcript (informational only). */
+  transcriptLang?: ScriptLang | 'unknown'
+  /** Stable id for tracking state. */
   _cardId: string
 }
 
