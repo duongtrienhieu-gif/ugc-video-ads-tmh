@@ -538,12 +538,16 @@ export function archetypesForNiche(niche: string): NarratorArchetype[] {
 export function narratorBrief(archetype: NarratorArchetype): string {
   const lines = [
     `${archetype.label} — ${archetype.gender}, ${archetype.ageRange}`,
-    `🧠 PSYCHOLOGY DRIVER (most important — shapes everything): ${archetype.psychologyDriver}`,
+    `🎯 ROLE: VALIDATOR / BRIDGE — narrator joins reader from lived experience.`,
+    `   NOT protagonist. NOT main character. Reader is emotional center, not narrator.`,
+    `   Strongest in Phase 2 (narrator-validation blocks). Implicit/absent in Phase 1`,
+    `   (reader-heavy blocks). Recedes in late Phase 4 (future-reader projection).`,
+    `🧠 PSYCHOLOGY DRIVER (shapes voice when narrator surfaces): ${archetype.psychologyDriver}`,
     `Lifestyle: ${archetype.lifestyle}`,
     `Occupation: ${archetype.occupation}`,
     `Personality vibe (surface): ${archetype.personalityVibe}`,
     `Voice tendency: ${archetype.wordingTendency}`,
-    `Shame patterns (use 1-2 lived moments — these reflect the psychology driver):`,
+    `Shame patterns (use 1-2 lived moments to validate reader's similar experience):`,
     ...archetype.shamePatterns.slice(0, 3).map((s) => `  - ${s}`),
     `Micro-contradictions (humans are inconsistent — embody these):`,
     ...archetype.contradictions.map((c) => `  - ${c}`),

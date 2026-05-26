@@ -93,6 +93,28 @@ export const READER_MIRROR_BEATS: ReaderMirrorBeat[] = [
       'Bạn có từng cảm thấy nhẹ đi một chút chỉ vì biết người khác cũng đang trải qua điều đó?',
     ],
   },
+  {
+    id: 'p1-not-alone-permission',
+    block: 'not-alone-bridge',
+    posture: 'permission',
+    vibe: 'give reader permission to stop hiding the experience',
+    exampleQuestions: [
+      'Bạn có khi nào nghĩ "có lẽ mình nói ra cũng không sao" — rồi vẫn giấu vì sợ làm phiền người khác?',
+      'Bạn có khi nào muốn share với một người bạn — nhưng cuối cùng vẫn để cái cảm giác đó trôi qua một mình?',
+      'Bạn có để ý là chính việc giấu lâu mới làm điều đó nặng thêm, chứ không phải bản thân điều đó?',
+    ],
+  },
+  {
+    id: 'p1-not-alone-comparison',
+    block: 'not-alone-bridge',
+    posture: 'comparison',
+    vibe: 'mirror reader\'s experience in someone else\'s small detail',
+    exampleQuestions: [
+      'Bạn có từng đọc một dòng share của ai đó rồi tự nhủ "ơ, mình cũng vậy mà chưa biết gọi tên là gì"?',
+      'Bạn có từng nghe người quen kể chuyện họ rồi mới nhận ra: "à hoá ra cái này có tên" — không phải mình lạ?',
+      'Bạn có từng thấy nhẹ đi sau khi biết hoá ra cảm giác mình đang sống là một thứ rất bình thường?',
+    ],
+  },
 
   // ─── Phase 2 — narrator-validation-entry (block 5) ────────────────
   {
@@ -104,6 +126,76 @@ export const READER_MIRROR_BEATS: ReaderMirrorBeat[] = [
       'Bạn cũng từng đứng đó đúng không — tự nhủ "có lẽ là do thời tiết" rồi quay đi?',
       'Bạn cũng từng pha ly cà phê thứ 3 lúc 3 giờ chiều rồi tự thuyết phục mình "không sao đâu"?',
       'Bạn cũng từng nhìn ngăn kéo đầy vitamin chưa uống hết rồi nghĩ "lần này chắc cũng vậy" đúng không?',
+    ],
+  },
+  {
+    id: 'p2-validation-permission',
+    block: 'narrator-validation-entry',
+    posture: 'permission',
+    vibe: 'narrator validates the reader\'s right to feel this way',
+    exampleQuestions: [
+      'Bạn có khi nào nghĩ "mình đang phản ứng quá mức" — rồi nén lại như không có gì? Tôi cũng từng vậy.',
+      'Bạn có khi nào tự bảo bản thân "ai cũng vậy mà" rồi cố vượt qua một mình? Tôi đã ở đó rồi.',
+      'Bạn có khi nào cảm thấy mệt nhưng không cho phép mình mệt? Tôi hiểu cái mệt kép đó.',
+    ],
+  },
+  {
+    id: 'p2-validation-memory-recall',
+    block: 'narrator-validation-entry',
+    posture: 'memory-recall',
+    vibe: 'narrator surfaces a shared private moment without dramatizing',
+    exampleQuestions: [
+      'Bạn còn nhớ cái khoảnh khắc bạn đứng yên trong nhà tắm vài phút mà không nhớ định làm gì không? Tôi cũng có khoảnh khắc đó.',
+      'Bạn còn nhớ lần bạn đặt ly nước xuống rồi quên là mình vừa pha không? Tôi nhớ lần đầu tôi bắt được mình làm vậy.',
+      'Bạn còn nhớ cảm giác đứng lên rồi phải ngồi xuống lại vài giây không? Tôi nhớ — và tôi đã không nói với ai cả.',
+    ],
+  },
+
+  // ─── Phase 2 — skepticism-alignment (block 7, optional) ───────────
+  {
+    id: 'p2-skepticism-anticipate',
+    block: 'skepticism-alignment',
+    posture: 'recognition',
+    vibe: 'surface and validate reader\'s "yeah but I\'ve tried everything" objection',
+    exampleQuestions: [
+      'Đọc đến đây bạn có nghĩ "ờ thì cũng giống mấy bài quảng cáo khác" đúng không?',
+      'Bạn có đang nghĩ "tôi đã thử đủ kiểu rồi, cái này chắc cũng vậy thôi"?',
+      'Bạn có đang chờ phần "sản phẩm thần kỳ" rồi tắt trang đi?',
+    ],
+  },
+  {
+    id: 'p2-skepticism-permission',
+    block: 'skepticism-alignment',
+    posture: 'permission',
+    vibe: 'give reader permission to keep their skepticism',
+    exampleQuestions: [
+      'Bạn có quyền nghi ngờ. Sau bao nhiêu thứ đã thử mà không ăn thua — nghi ngờ là cách bảo vệ bản thân hợp lý.',
+      'Bạn cứ giữ cái doubt đó đi — tôi không cần bạn tin ngay. Tôi cũng đã không tin lần đầu.',
+      'Nếu bạn đang thấy "hứa hẹn quá" — đúng rồi đó, hứa hẹn quá là dấu hiệu cần tránh. Tôi cũng tránh.',
+    ],
+  },
+  {
+    id: 'p2-skepticism-memory-recall',
+    block: 'skepticism-alignment',
+    posture: 'memory-recall',
+    vibe: 'remind reader of past disappointments without piling on',
+    exampleQuestions: [
+      'Bạn còn nhớ lần gần nhất bạn tin một bài quảng cáo rồi thất vọng không? Cái nhói đó — tôi cũng có.',
+      'Bạn còn nhớ cảm giác đọc xong một bài share rồi nghĩ "lại nữa rồi" — và đóng tab không?',
+      'Bạn còn nhớ lần bạn đã thử rồi không ăn thua, mà người bán vẫn nói "tại bạn dùng chưa đúng cách"?',
+    ],
+  },
+
+  // ─── Phase 2 — belief-shift (block 8) — additional beat ───────────
+  {
+    id: 'p2-belief-comparison',
+    block: 'belief-shift',
+    posture: 'comparison',
+    vibe: 'invite reader to spot where their assumption might be wrong',
+    exampleQuestions: [
+      'Bạn có để ý là bạn luôn cố giải quyết triệu chứng bề mặt — chứ chưa hỏi cơ thể bên dưới đang thiếu gì?',
+      'Bạn có nhận ra: tất cả thứ bạn từng thử đều là "fix nhanh", chưa cái nào là "hỗ trợ cơ thể tự phục hồi"?',
+      'Bạn có để ý không — mỗi lần bạn "đỡ" được vài tuần rồi quay lại điểm cũ, đó là dấu hiệu vấn đề nằm ở chỗ khác?',
     ],
   },
 

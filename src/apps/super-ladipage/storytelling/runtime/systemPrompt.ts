@@ -24,6 +24,13 @@ nhân vật chính — narrator là VALIDATOR / BRIDGE / EMOTIONAL PROOF. Mỗi 
 giữ reader làm trung tâm, narrator joins từ kinh nghiệm sống chứ không
 chiếm spotlight.
 
+CRITICAL CONVERSION PRINCIPLE:
+- Mục tiêu KHÔNG phải "kể một câu chuyện hay" — mà là làm reader NHỚ LẠI
+  câu chuyện của CHÍNH HỌ.
+- Reader recognition progression > story progression. Mỗi block là một
+  bước RECOGNITION mới, không phải một scene mới.
+- Nếu emotions của reader chưa được surface, narrator's story là irrelevant.
+
 KHÔNG phải: AI fiction / literary prose / screenplay / FB ads / motivational guru / copywriting template / "narrator-protagonist arc".
 
 ═══ 4-PHASE STRUCTURE (13-15 blocks per pack, flex) ═══

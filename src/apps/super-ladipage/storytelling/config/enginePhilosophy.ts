@@ -1,58 +1,69 @@
 // ─────────────────────────────────────────────────────────────────────
-// Storytelling Engine — CORE PHILOSOPHY (v5.7)
+// Storytelling Engine — CORE PHILOSOPHY (Reader-Immersion)
 //
-// Single small global prompt. Replaces 7 separate global directives
-// (RETENTION_RESTRAINT / MICRO_REALISM / VISUAL_FIRST_WRITING /
-// RHYTHM_ENGINE / HOOK_ENFORCEMENT / BELIEF_SHIFT / SOFT_CTA) which
-// duplicated what's already in per-section directives and bloated prompt.
+// Single small global prompt. Behavior diversity lives in sampling
+// systems (narrator / hookAxis / memorySnapshot / reviewStyle /
+// energyCurve / discoveryChannel / payoffArchetype / readerMirrorBeat),
+// NOT in giant prompt rules.
 //
-// Architecture principle (per user direction):
-//   KEEP CORE SYSTEM SMALL.
-//   Per-pack diversity lives in sampling objects (narrator / hookAxis /
-//   memorySnapshot / reviewStyle / energyCurve / discoveryChannel),
-//   NOT in giant prompt rules.
-//
-// What stays in this core:
+// What stays here:
 //   - North star (what reader should feel)
-//   - Voice baseline (1st person, conversational cadence, embodied specifics)
-//   - Hard bans that ARE NOT covered by per-section directives or sampling
-//   - Output format
+//   - Conversion psychology principle
+//   - 4-phase structure (1 line each, no block-by-block detail)
+//   - Voice baseline (POV philosophy, cadence permission)
+//   - Hard bans NOT covered by per-block directives
 //
 // What does NOT belong here:
-//   - Per-section structure (lives in buildSectionDirective)
+//   - Per-block structure (lives in buildBlockDirective)
 //   - Per-pack variation flavor (lives in sampling object briefs)
-//   - Long anti-pattern lists (anti-rules → cause prompt entropy + flatten output)
+//   - Long anti-pattern lists (anti-rules → flatten output)
+//   - Narrator-scene-arc framing (obsoleted)
 // ─────────────────────────────────────────────────────────────────────
 
 export const ENGINE_CORE_PHILOSOPHY =
-  `═══ CORE PHILOSOPHY ═══
+  `═══ CORE PHILOSOPHY — Reader-Immersion Performance Storytelling ═══
 
-NORTH STAR: reader-immersion ad performance. Reader exits section 1 thinking
-"có phải mình không?" — NOT "đây là chuyện ai đó." Ads convert when reader
-feels CALLED BY NAME, not entertained by someone else's story.
+NORTH STAR: reader thinks "trang này hiểu mình" — KHÔNG "writing đẹp",
+KHÔNG "đây là chuyện ai đó". Ads convert when reader feels CALLED BY NAME,
+not entertained by someone else's story.
 
-VOICE BASELINE (v5.8 Reader-Immersion shift):
-- Section 1 (hook-interrupt): YOU-FIRST opening locked. Calls reader directly
-  with sampled starter ("Bạn có từng..." / "Nếu gần đây bạn..." / etc), surfaces
-  specific micro moment + hidden emotion, then bridges to "tôi" voice.
-- Body sections (2-11): 1st person "tôi" narrator + 1 reader-mirror beat per
-  section ("Bạn có từng X?" sprinkled to keep reader engaged, not passive
-  observer).
-- KHÔNG 3rd-person observer mode anywhere.
-- Specific NAMED pain via embodied physical moments (vịn cầu thang, soi gương,
-  đứng giữa siêu thị), NOT abstract feelings ("có gì đó", "cảm thấy không ổn").
+CONVERSION PRINCIPLE: high-converting storytelling không phải "kể chuyện
+hay" — mà là làm reader NHỚ LẠI câu chuyện của CHÍNH HỌ. Each line should
+let reader feel "ờ giống mình thật" / "tôi cũng vậy mà chưa nói ra".
 
-CADENCE PERMISSION (v5.7 Chunk 4 — replaces explicit rhythm prescriptions):
-- Imperfect cadence is allowed and encouraged.
-- Abrupt thought stops, occasional overlong line, paragraph asymmetry,
-  uneven density, fragmented thought, repetition nhẹ — all acceptable if
-  emotionally believable for the narrator.
-- DO NOT polish toward "AI balanced rhythm" — narrator psychology should
-  shape sentence length and break placement.
-- Sentence length emerges from narrator voice + emotional state, not target.
+RECOGNITION PROGRESSION (replaces story progression):
+  Phase 1 RECOGNITION  → "This is me. I do that too."
+  Phase 2 TRUST        → "This person understands me. Maybe I can too."
+  Phase 3 SOLUTION     → "Maybe there's another way I missed."
+  Phase 4 FUTURE-SELF  → "Maybe I should finally take care of myself."
+
+NARRATOR ROLE — locked:
+- Narrator is VALIDATOR / BRIDGE / EMOTIONAL PROOF / TRUST MECHANISM.
+- NOT protagonist. NOT main character. NOT center of attention.
+- Surfaces strongest in Phase 2 (narrator-validation). Implicit/absent in
+  Phase 1 (reader-heavy). Recedes in late Phase 4 (future-reader projection).
+- Narrator's job: "tôi cũng từng đứng đó" — joins reader's spot, doesn't
+  spotlight self.
+
+POV BALANCE: NOT hard-template YOU→I→YOU. Reader is emotional center
+throughout the page. Block-level youIBalance directives shape who carries
+each moment.
+
+VOICE BASELINE:
+- 1st/2nd person Vietnamese conversational confession. KHÔNG 3rd-person
+  observer ("Cô ấy..."), KHÔNG named character as main subject.
+- Specific NAMED pain via embodied physical moments (vịn cầu thang, soi
+  gương, đứng giữa siêu thị) — NOT abstract feelings ("có gì đó", "cảm
+  thấy không ổn").
+- Imperfect cadence allowed: abrupt thought stops, paragraph asymmetry,
+  uneven density. Narrator psychology shapes sentence length — NOT target.
+
+REALISM IS PSYCHOLOGICAL FIRST, stylistic second. True human voice comes
+from worldview / insecurity / personality contradiction / emotional intent —
+NOT random punctuation or random line breaks.
 
 PULL MECHANICS (replaces retention essay):
-- Curiosity from observation / behavior / omission / emotional mismatch / tiny anomalies.
+- Curiosity from observation / behavior / omission / emotional mismatch.
 - Tone: diary / confession / documentary — NEVER serialized fiction.
 - No drama escalation, no fake suspense, no plot-twist energy.
 

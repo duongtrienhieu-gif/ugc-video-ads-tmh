@@ -15,7 +15,7 @@
 // ═════════════════════════════════════════════════════════════════════
 
 import type {
-  BlockPlan, ProtagonistProfile, StorytellingInput,
+  BlockPlan, ProtagonistProfile, StorytellingInput, YouIBalance,
 } from '../types'
 import {
   BELIEF_SHIFT_CATALYSTS,
@@ -51,6 +51,18 @@ export function buildProductBrief(productName: string, niche: string, painPoint?
   return `${productName} — ${niche}${pain}`
 }
 
+/** 1-line directive cụ thể hóa YOU/I balance cho block. */
+function balanceFramingDirective(balance: YouIBalance): string {
+  switch (balance) {
+    case 'reader-heavy':
+      return 'PHẢI: YOU dominant. Narrator absent or implicit. Reader\'s emotions = block\'s center. Mở/đóng KHÔNG bằng "Tôi/Mình".'
+    case 'narrator-validation':
+      return 'PHẢI: narrator validates (joins reader\'s spot, NOT spotlights self). Reader still emotional center. "Tôi cũng từng X" tone, không monologue.'
+    case 'future-reader':
+      return 'PHẢI: YOU projected forward. Narrator recedes. Reader imagines own self-care, own future-self moment.'
+  }
+}
+
 /** Per-block directive block. Lean — only what this block's
  *  psychologicalFunction + samplingHooks call for. */
 function buildBlockDirective(
@@ -65,6 +77,7 @@ function buildBlockDirective(
   lines.push(`  PSYCHOLOGICAL FUNCTION: ${block.psychologicalFunction}`)
   lines.push(`  INTENT: ${block.intent}`)
   lines.push(`  YOU/I BALANCE: ${block.youIBalance}`)
+  lines.push(`  ${balanceFramingDirective(block.youIBalance)}`)
   lines.push(`  PARAGRAPHS: ${block.paragraphTarget.min}-${block.paragraphTarget.max}`)
 
   // ─── Phase 1 Block 1 — Performance Hook Layer ────────────────────
