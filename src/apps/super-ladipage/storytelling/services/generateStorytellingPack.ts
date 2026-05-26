@@ -36,6 +36,7 @@ import type { GeneratedPackResult } from '../runtime/retryWithFeedback'
 import { selectNarratorDna } from '../runtime/selectNarratorDna'
 import { composeMobilePage } from '../../composer'
 import { deriveRenderContractedPage } from '../../renderContract'
+import { deriveVisualSemanticsPage } from '../../visualSemantics'
 
 // ── Map storytelling BlockId → existing UGC SectionType for
 //    LandingSection.type compat. Storytelling block ID stored
@@ -242,6 +243,15 @@ export async function generateStorytellingPack(
     }
   }
 
+  // ─── 6.7 P6 — Derive visual semantics (visual psychology layer) ──────
+  const visualSemanticsPage = deriveVisualSemanticsPage(renderContractedPage)
+  if (visualSemanticsPage.semanticsWarnings.length > 0) {
+    console.warn(`[storytelling/visualSemantics] ${visualSemanticsPage.semanticsWarnings.length} semantics warning(s):`)
+    for (const w of visualSemanticsPage.semanticsWarnings) {
+      console.warn(`  ⚠ ${w}`)
+    }
+  }
+
   // ─── 7. Assemble StorytellingPack ────────────────────────────────
   const pack: StorytellingPack = {
     productId:   params.productId,
@@ -272,8 +282,8 @@ export async function generateStorytellingPack(
       // v5.3 — Hook + Discovery variation
       hookAxisId:           selection.hookAxis,
       discoveryChannelId:   selection.discoveryChannel,
-      // P5 — Render-contracted mobile page (composer + render intent contracts)
-      renderContractedPage,
+      // P6 — Visual semantics page (composer + renderContract + visual psychology)
+      visualSemanticsPage,
     },
   }
 

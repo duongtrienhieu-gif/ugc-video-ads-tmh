@@ -658,12 +658,12 @@ export interface StorytellingMeta {
   /** Selected discovery channel for section 6. */
   discoveryChannelId?: string
 
-  // P5 — Render-contracted mobile page (composer output + per-section
-  // render intent contracts). Replaces P4 composedPage field.
-  /** RenderContractedPage IS-A ComposedPage + per-section RenderContract.
-   *  Render-agnostic: future renderers (preview UI / Ladipage export /
-   *  HTML export) all consume same contract. */
-  renderContractedPage?: import('../renderContract').RenderContractedPage
+  // P6 — Visual semantics page (composer + renderContract + visual
+  // psychology). Replaces P5 renderContractedPage field.
+  /** VisualSemanticsPage IS-A RenderContractedPage + per-section
+   *  VisualSemantics. Renderer-agnostic, implementation-free.
+   *  Future renderers consume same semantic contract. */
+  visualSemanticsPage?: import('../visualSemantics').VisualSemanticsPage
 }
 
 /** Pack output — extends LandingPagePack shape để OutputPanel render được
