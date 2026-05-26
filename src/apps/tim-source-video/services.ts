@@ -25,48 +25,98 @@ import {
 } from './types'
 
 // ── Gemini call wrapper for STRUCTURED text (parseScript). ──────────────────
-async function callGemini(apiKey: string, body: unknown, signal: AbortSignal, model = 'gemini-2.5-flash'): Promise<unknown> {
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`
-  const MAX_ATTEMPTS = 6
+// Two layers of resilience:
+//   1. RETRY per model on transient 429 (per-minute) / 5xx (server overload),
+//      respecting RetryInfo.retryDelay when Gemini sends it.
+//   2. MODEL FALLBACK across the chain when one model is persistently
+//      503 UNAVAILABLE — Gemini periodically has spike-overloads on
+//      gemini-2.5-flash that don't affect lite variants. Fallback also
+//      buys us extra quota headroom on free tier (flash 250 RPD vs
+//      flash-lite 1000 RPD).
+// Per-day exhaustion (QUOTA_GEMINI) propagates immediately — no retry, no
+// fallback to next model (likely same daily cap).
+const CALL_GEMINI_MODELS = [
+  'gemini-2.5-flash',
+  'gemini-2.5-flash-lite',
+  'gemini-2.0-flash',
+  'gemini-2.0-flash-lite',
+]
+
+async function callGemini(apiKey: string, body: unknown, signal: AbortSignal): Promise<unknown> {
+  const MAX_ATTEMPTS_PER_MODEL = 3   // shorter than before — each model gets a fair shake, then move on
   const BASE_DELAY_MS = 2000
   const FACTOR = 1.7
-  let lastErr = ''
-  for (let attempt = 0; attempt <= MAX_ATTEMPTS; attempt++) {
-    if (signal.aborted) throw new ApiError(ERR.ABORTED, 'Đã hủy')
-    let res: Response
-    try {
-      res = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-        signal,
-      })
-    } catch (err) {
-      if ((err as Error)?.name === 'AbortError') throw new ApiError(ERR.ABORTED, 'Đã hủy')
-      throw err
-    }
-    if (res.ok) return res.json()
-    lastErr = await res.text().catch(() => '')
+  const failures: string[] = []
 
-    if (res.status === 429) {
-      const { isDailyExhausted, retryDelayMs } = classifyGemini429(lastErr)
-      if (isDailyExhausted) throw new ApiError(ERR.QUOTA_GEMINI, 'Gemini free tier (250 req/day) đã cạn')
-      if (attempt === MAX_ATTEMPTS) {
-        throw new ApiError(ERR.GEMINI_FAIL, `Gemini rate-limit kéo dài (đã thử ${MAX_ATTEMPTS + 1} lần)`)
+  for (const model of CALL_GEMINI_MODELS) {
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`
+    let lastErr = ''
+    let modelGaveUp = false
+
+    for (let attempt = 0; attempt <= MAX_ATTEMPTS_PER_MODEL; attempt++) {
+      if (signal.aborted) throw new ApiError(ERR.ABORTED, 'Đã hủy')
+      let res: Response
+      try {
+        res = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+          signal,
+        })
+      } catch (err) {
+        if ((err as Error)?.name === 'AbortError') throw new ApiError(ERR.ABORTED, 'Đã hủy')
+        throw err
       }
-      const delay = retryDelayMs ?? (BASE_DELAY_MS * Math.pow(FACTOR, attempt) + Math.random() * 1000)
-      await new Promise(r => setTimeout(r, delay))
-      continue
-    }
+      if (res.ok) return res.json()
+      lastErr = await res.text().catch(() => '')
 
-    const retryable = [500, 502, 503, 504].includes(res.status) || /UNAVAILABLE|overload/i.test(lastErr)
-    if (!retryable || attempt === MAX_ATTEMPTS) {
+      // 404 = model not available in this region/project — move to next model immediately
+      if (res.status === 404) {
+        failures.push(`${model}: 404 not found`)
+        modelGaveUp = true
+        break
+      }
+
+      if (res.status === 429) {
+        const { isDailyExhausted, retryDelayMs } = classifyGemini429(lastErr)
+        // Daily exhausted on ANY model usually means free-tier exhausted across — propagate
+        if (isDailyExhausted) throw new ApiError(ERR.QUOTA_GEMINI, 'Gemini free tier daily quota đã cạn')
+        if (attempt === MAX_ATTEMPTS_PER_MODEL) {
+          failures.push(`${model}: rate-limit persistent`)
+          modelGaveUp = true
+          break
+        }
+        const delay = retryDelayMs ?? (BASE_DELAY_MS * Math.pow(FACTOR, attempt) + Math.random() * 1000)
+        await new Promise(r => setTimeout(r, delay))
+        continue
+      }
+
+      // 5xx server overload — retry on same model with backoff; if persistent, move to next model
+      const retryable = [500, 502, 503, 504].includes(res.status) || /UNAVAILABLE|overload/i.test(lastErr)
+      if (retryable) {
+        if (attempt === MAX_ATTEMPTS_PER_MODEL) {
+          failures.push(`${model}: ${res.status} after ${MAX_ATTEMPTS_PER_MODEL + 1} attempts`)
+          modelGaveUp = true
+          break
+        }
+        const delay = BASE_DELAY_MS * Math.pow(FACTOR, attempt) + Math.random() * 1000
+        await new Promise(r => setTimeout(r, delay))
+        continue
+      }
+
+      // Non-retryable error (4xx other than 404/429) — likely auth / malformed
       throw new ApiError(ERR.GEMINI_FAIL, `Gemini ${res.status}: ${lastErr.slice(0, 200)}`)
     }
-    const delay = BASE_DELAY_MS * Math.pow(FACTOR, attempt) + Math.random() * 1000
-    await new Promise(r => setTimeout(r, delay))
+
+    if (!modelGaveUp) {
+      // Loop exited without returning or breaking — shouldn't happen but be safe
+      throw new ApiError(ERR.GEMINI_FAIL, `Gemini ${model}: unexpected exit · ${lastErr.slice(0, 200)}`)
+    }
+    // else: continue to next model in fallback chain
   }
-  throw new ApiError(ERR.GEMINI_FAIL, `Gemini failed after ${MAX_ATTEMPTS + 1} attempts: ${lastErr.slice(0, 200)}`)
+
+  // All models exhausted
+  throw new ApiError(ERR.GEMINI_FAIL, `Tất cả Gemini models đều fail — ${failures.join(' | ')}`)
 }
 
 function mapEmbedError(err: unknown): never {
