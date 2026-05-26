@@ -34,6 +34,7 @@ import { buildProductBrief } from '../runtime/buildPackGenPrompt'
 import { generatePackWithRetry } from '../runtime/retryWithFeedback'
 import type { GeneratedPackResult } from '../runtime/retryWithFeedback'
 import { selectNarratorDna } from '../runtime/selectNarratorDna'
+import { composeMobilePage } from '../../composer'
 
 // ── Map storytelling BlockId → existing UGC SectionType for
 //    LandingSection.type compat. Storytelling block ID stored
@@ -214,6 +215,23 @@ export async function generateStorytellingPack(
   const characterProfile = buildCharacterProfile(input.protagonistProfile, blockIds)
   const overlayPerSection = allocateOverlay(blockIds)
 
+  // ─── 6.5 P4 — Compose mobile page (headless translation layer) ──
+  const composedPage = composeMobilePage({
+    packSections: result.sections,
+    hasCtaFlow: true,  // CTA flow always sampled (P3)
+  })
+  console.info(
+    `[storytelling] composer: ${composedPage.sourcePackBlockCount} blocks → ` +
+    `${composedPage.totalSections} mobile sections, ` +
+    `${composedPage.totalWordCount} words, ~${composedPage.estimatedScrollTimeSec}s scroll`,
+  )
+  if (composedPage.fatigueWarnings.length > 0) {
+    console.warn(`[storytelling/composer] ${composedPage.fatigueWarnings.length} fatigue warning(s):`)
+    for (const w of composedPage.fatigueWarnings) {
+      console.warn(`  ⚠ ${w}`)
+    }
+  }
+
   // ─── 7. Assemble StorytellingPack ────────────────────────────────
   const pack: StorytellingPack = {
     productId:   params.productId,
@@ -244,6 +262,8 @@ export async function generateStorytellingPack(
       // v5.3 — Hook + Discovery variation
       hookAxisId:           selection.hookAxis,
       discoveryChannelId:   selection.discoveryChannel,
+      // P4 — Headless composer output (mobile-ready section orchestration)
+      composedPage,
     },
   }
 

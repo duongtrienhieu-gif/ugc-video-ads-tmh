@@ -657,6 +657,12 @@ export interface StorytellingMeta {
   hookAxisId?: string
   /** Selected discovery channel for section 6. */
   discoveryChannelId?: string
+
+  // P4 — Headless composer output (mobile-ready section orchestration)
+  /** ComposedPage from composer/composeMobilePage. Optional —
+   *  rendered alongside pack for future visual layer consumption.
+   *  Render-agnostic structure. */
+  composedPage?: import('../composer').ComposedPage
 }
 
 /** Pack output — extends LandingPagePack shape để OutputPanel render được
