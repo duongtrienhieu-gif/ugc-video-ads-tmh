@@ -35,6 +35,7 @@ import { generatePackWithRetry } from '../runtime/retryWithFeedback'
 import type { GeneratedPackResult } from '../runtime/retryWithFeedback'
 import { selectNarratorDna } from '../runtime/selectNarratorDna'
 import { composeMobilePage } from '../../composer'
+import { deriveRenderContractedPage } from '../../renderContract'
 
 // ── Map storytelling BlockId → existing UGC SectionType for
 //    LandingSection.type compat. Storytelling block ID stored
@@ -232,6 +233,15 @@ export async function generateStorytellingPack(
     }
   }
 
+  // ─── 6.6 P5 — Derive render contracts (mobile rendering intelligence) ──
+  const renderContractedPage = deriveRenderContractedPage(composedPage)
+  if (renderContractedPage.consistencyWarnings.length > 0) {
+    console.warn(`[storytelling/renderContract] ${renderContractedPage.consistencyWarnings.length} consistency warning(s):`)
+    for (const w of renderContractedPage.consistencyWarnings) {
+      console.warn(`  ⚠ ${w}`)
+    }
+  }
+
   // ─── 7. Assemble StorytellingPack ────────────────────────────────
   const pack: StorytellingPack = {
     productId:   params.productId,
@@ -262,8 +272,8 @@ export async function generateStorytellingPack(
       // v5.3 — Hook + Discovery variation
       hookAxisId:           selection.hookAxis,
       discoveryChannelId:   selection.discoveryChannel,
-      // P4 — Headless composer output (mobile-ready section orchestration)
-      composedPage,
+      // P5 — Render-contracted mobile page (composer + render intent contracts)
+      renderContractedPage,
     },
   }
 

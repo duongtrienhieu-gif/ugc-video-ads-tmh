@@ -658,11 +658,12 @@ export interface StorytellingMeta {
   /** Selected discovery channel for section 6. */
   discoveryChannelId?: string
 
-  // P4 — Headless composer output (mobile-ready section orchestration)
-  /** ComposedPage from composer/composeMobilePage. Optional —
-   *  rendered alongside pack for future visual layer consumption.
-   *  Render-agnostic structure. */
-  composedPage?: import('../composer').ComposedPage
+  // P5 — Render-contracted mobile page (composer output + per-section
+  // render intent contracts). Replaces P4 composedPage field.
+  /** RenderContractedPage IS-A ComposedPage + per-section RenderContract.
+   *  Render-agnostic: future renderers (preview UI / Ladipage export /
+   *  HTML export) all consume same contract. */
+  renderContractedPage?: import('../renderContract').RenderContractedPage
 }
 
 /** Pack output — extends LandingPagePack shape để OutputPanel render được
