@@ -305,9 +305,26 @@ export async function geminiEmbedBatch(params: {
   return out
 }
 
-/** One chunk → one `BatchEmbedContents` HTTP call, with model fallback chain. */
+/**
+ * One chunk → one `BatchEmbedContents` HTTP call.
+ *
+ * Two layers of resilience:
+ *   • MODEL FALLBACK: 404 on the GA model rotates to the legacy model in
+ *     EMBED_MODELS. Covers regions / accounts where the GA rollout hasn't
+ *     reached, and legacy keys pinned to text-embedding-004.
+ *   • 429 RETRY: per-minute rate-limit (gemini-embedding-001 free tier is
+ *     5 RPM, not the 1500 RPM documented for text-embedding-004 — Google
+ *     dropped the cap significantly on the new model). Retry with backoff,
+ *     respecting RetryInfo.retryDelay if Gemini provides it. Only after
+ *     max attempts do we surface as RATE_LIMIT.
+ *   • Per-day exhaustion (`QUOTA_DAILY`) propagates immediately — no retry.
+ */
 async function embedChunk(apiKey: string, texts: string[], taskType: string, signal: AbortSignal | undefined): Promise<number[][]> {
+  const MAX_ATTEMPTS = 5
+  const BASE_DELAY_MS = 3000  // higher base for embedding: per-minute is the
+  const FACTOR = 1.7          // bottleneck, not per-second, so wait longer
   const errors: string[] = []
+
   for (const model of EMBED_MODELS) {
     const url = `${GEMINI_BASE}/${model}:batchEmbedContents?key=${apiKey}`
     const body = {
@@ -317,27 +334,55 @@ async function embedChunk(apiKey: string, texts: string[], taskType: string, sig
         taskType,
       })),
     }
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-      signal,
-    })
-    if (res.ok) {
-      const data = await res.json() as { embeddings?: Array<{ values: number[] }> }
-      return (data.embeddings || []).map(e => e.values)
+    let modelExhaustedRetries = false
+    for (let attempt = 0; attempt <= MAX_ATTEMPTS; attempt++) {
+      if (signal?.aborted) {
+        const e = new Error('Đã hủy') as Error & { code?: string }
+        e.code = 'ABORTED'
+        throw e
+      }
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+        signal,
+      })
+      if (res.ok) {
+        const data = await res.json() as { embeddings?: Array<{ values: number[] }> }
+        return (data.embeddings || []).map(e => e.values)
+      }
+      const err = await res.text().catch(() => res.statusText)
+
+      if (res.status === 404) {
+        errors.push(`${model}: 404`)
+        break  // try next model
+      }
+      if (res.status === 429) {
+        const { isDailyExhausted, retryDelayMs } = classifyGemini429(err)
+        if (isDailyExhausted) {
+          const e = new Error(`Embedding daily quota exhausted (${model})`) as Error & { code?: string }
+          e.code = 'QUOTA_DAILY'
+          throw e
+        }
+        if (attempt === MAX_ATTEMPTS) {
+          modelExhaustedRetries = true
+          errors.push(`${model}: rate-limit (${MAX_ATTEMPTS + 1} attempts)`)
+          break  // try next model — maybe it has more headroom
+        }
+        const delay = retryDelayMs ?? (BASE_DELAY_MS * Math.pow(FACTOR, attempt) + Math.random() * 1000)
+        await new Promise(r => setTimeout(r, delay))
+        continue
+      }
+      // Other errors (auth, malformed, etc) — not worth retrying or trying next model
+      throw new Error(`Embedding lỗi (${res.status}): ${err.slice(0, 200)}`)
     }
-    const err = await res.text().catch(() => res.statusText)
-    if (res.status === 404) { errors.push(`${model}: 404`); continue }
-    if (res.status === 429) {
-      const { isDailyExhausted } = classifyGemini429(err)
-      const e = new Error(`Embedding ${res.status}: ${err.slice(0, 200)}`) as Error & { code?: string }
-      e.code = isDailyExhausted ? 'QUOTA_DAILY' : 'RATE_LIMIT'
-      throw e
-    }
-    throw new Error(`Embedding lỗi (${res.status}): ${err.slice(0, 200)}`)
+    if (modelExhaustedRetries) continue  // try next model in chain
   }
-  throw new Error(`Embedding: không model nào khả dụng — ${errors.join(' | ')}`)
+
+  // Both models exhausted
+  const e = new Error(`Embedding rate-limit kéo dài qua cả 2 model — ${errors.join(' | ')}`) as Error & { code?: string }
+  e.code = 'RATE_LIMIT'
+  throw e
 }
 
 /** Cosine similarity of two equal-length numeric vectors. Returns 0 for empty. */
