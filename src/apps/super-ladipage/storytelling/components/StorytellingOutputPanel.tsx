@@ -20,7 +20,7 @@
 import { useState } from 'react'
 import {
   AlertTriangle, BookOpen, Check, FilePlus, ImageIcon, Loader2,
-  RotateCcw, Save, ShieldCheck, ShieldAlert,
+  RotateCcw, Save, ShieldCheck, ShieldAlert, Smartphone, FileText,
 } from 'lucide-react'
 import type { LandingSection } from '../../types'
 import type {
@@ -29,6 +29,7 @@ import type {
 import { BLOCK_POOL } from '../config/blockPool'
 import { SECTION_VISUAL_MAP } from '../config/visualLanguage'
 import { useAppStore } from '../../../../stores/appStore'
+import { SemanticMobilePage } from '../../semanticRenderer'
 
 const MOCK_MARKER_REGEX = /^\[MOCK P0\.5\]\s*\n+/
 
@@ -48,11 +49,16 @@ export default function StorytellingOutputPanel({
 }: Props) {
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
+  // P7 — Toggle between legacy pack view and semantic mobile preview.
+  // Semantic preview only available when pack has visualSemanticsPage
+  // (post-P4/P5/P6 packs).
+  const [viewMode, setViewMode] = useState<'pack' | 'semantic'>('pack')
 
   const addToast = useAppStore((s) => s.addToast)
 
   const meta = pack.storytellingMeta
   const character = pack.characterProfile
+  const hasSemantic = Boolean(meta.visualSemanticsPage)
 
   const handleSave = () => {
     if (saving || saved || !onSaveAsProject) return
@@ -102,6 +108,25 @@ export default function StorytellingOutputPanel({
           </div>
 
           <div className="flex items-center gap-1.5 shrink-0">
+            {/* P7 — Semantic preview toggle (only if pack has visualSemanticsPage) */}
+            {hasSemantic && (
+              <div className="flex items-center rounded-lg border border-stone-300 bg-white overflow-hidden">
+                <button
+                  onClick={() => setViewMode('pack')}
+                  className={`flex items-center gap-1 px-2.5 py-1 text-[11px] ${viewMode === 'pack' ? 'bg-stone-200 text-stone-800' : 'text-stone-500 hover:bg-stone-50'}`}
+                  title="Xem pack đầy đủ"
+                >
+                  <FileText className="h-3 w-3" /> Pack
+                </button>
+                <button
+                  onClick={() => setViewMode('semantic')}
+                  className={`flex items-center gap-1 px-2.5 py-1 text-[11px] border-l border-stone-300 ${viewMode === 'semantic' ? 'bg-stone-200 text-stone-800' : 'text-stone-500 hover:bg-stone-50'}`}
+                  title="Xem semantic mobile preview (P7)"
+                >
+                  <Smartphone className="h-3 w-3" /> Semantic
+                </button>
+              </div>
+            )}
             {onRegenerate && (
               <button
                 onClick={onRegenerate}
@@ -173,27 +198,36 @@ export default function StorytellingOutputPanel({
 
       {/* ── READING COLUMN ──────────────────────────────────────────── */}
       <div className="flex-1 overflow-y-auto">
-        <article className="max-w-prose mx-auto px-5 md:px-8 py-12 md:py-20">
-          {pack.sections.map((section, idx) => (
-            <StorytellingSectionView
-              key={idx}
-              section={section}
-              sectionId={meta.sectionIds[idx]}
-              overlayType={meta.overlayPerSection[idx]}
-              chapterNumber={idx + 1}
-              isLast={idx === pack.sections.length - 1}
-              characterName={character?.name}
-              status={meta.sectionStatus?.[idx]}
-            />
-          ))}
+        {viewMode === 'semantic' && meta.visualSemanticsPage ? (
+          // P7 — Semantic mobile preview renderer
+          <SemanticMobilePage
+            page={meta.visualSemanticsPage}
+            characterName={character?.name}
+          />
+        ) : (
+          // Legacy pack view (default)
+          <article className="max-w-prose mx-auto px-5 md:px-8 py-12 md:py-20">
+            {pack.sections.map((section, idx) => (
+              <StorytellingSectionView
+                key={idx}
+                section={section}
+                sectionId={meta.sectionIds[idx]}
+                overlayType={meta.overlayPerSection[idx]}
+                chapterNumber={idx + 1}
+                isLast={idx === pack.sections.length - 1}
+                characterName={character?.name}
+                status={meta.sectionStatus?.[idx]}
+              />
+            ))}
 
-          {/* Footer breathing space */}
-          <div className="mt-32 mb-8 text-center">
-            <p className="font-serif italic text-xs text-stone-400">
-              — hết —
-            </p>
-          </div>
-        </article>
+            {/* Footer breathing space */}
+            <div className="mt-32 mb-8 text-center">
+              <p className="font-serif italic text-xs text-stone-400">
+                — hết —
+              </p>
+            </div>
+          </article>
+        )}
       </div>
     </div>
   )
