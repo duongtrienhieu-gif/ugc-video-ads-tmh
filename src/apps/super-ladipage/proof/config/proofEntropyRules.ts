@@ -67,40 +67,7 @@ function pickWithoutRepeat<T>(pool: T[], n: number, seed: string): T[] {
   return picks
 }
 
-/** Compose entropy directive for single proof piece prompt. */
-export function entropyDirective(profile: EntropyProfile): string {
-  const grammarMap: Record<EntropyGrammar, string> = {
-    'full':       'full grammar OK — complete sentences acceptable',
-    'casual':     'casual grammar — abbreviation OK (mn, ko, ko sao), slight typo OK',
-    'fragments':  'fragments OK — incomplete sentences, "Mệt. Đỡ rồi." style',
-  }
-  const certaintyMap: Record<CertaintyLevel, string> = {
-    'hedged':     'hedged tone — "chưa biết có phải nhờ nó không..."',
-    'mild':       'mild certainty — "tôi thấy đỡ hơn rõ"',
-    'strong':     'strong certainty — "đỡ thật sự"',
-    'uncertain':  'uncertain — "không khẳng định nhưng..."',
-  }
-  const effortMap: Record<EntropyEffort, string> = {
-    'one-sentence':       '1 sentence dry — không elaborate',
-    'two-sentence':       '2 sentences — setup + observation',
-    'paragraph-fragment': '3-4 short fragments — paragraph form, slightly rambling OK',
-  }
-  const emojiMap: Record<EntropyEmojiDensity, string> = {
-    'zero':       'NO emoji',
-    'one-max':    'optional 1 emoji max (😭 / ✨ / 🙏 — 1 only)',
-    'occasional': 'occasional emoji OK (max 2)',
-  }
-  const authorMap: Record<EntropyAuthorInfo, string> = {
-    'name-age':         'author "Tên + tuổi" (e.g. "Chị Lan, 42")',
-    'nickname-only':    'author nickname only (e.g. "Hà", "Mỹ", "Trang")',
-    'generic-reader':   'author generic ("Một bạn đọc", "Một bạn theo dõi")',
-  }
-
-  return [
-    `  grammar: ${grammarMap[profile.grammar]}`,
-    `  certainty: ${certaintyMap[profile.certainty]}`,
-    `  effort: ${effortMap[profile.effort]}`,
-    `  emoji: ${emojiMap[profile.emojiDensity]}`,
-    `  author: ${authorMap[profile.authorInfoRichness]}`,
-  ].join('\n')
-}
+// entropyDirective() removed — was prescriptive per-axis explanation
+// (governance §5 violation: sampling > instructions). proofPrompts.ts now
+// emits declarative config line: "grammar=X, certainty=Y, effort=Z, ..."
+// Gemini interprets enum values naturally without per-axis rule explanation.

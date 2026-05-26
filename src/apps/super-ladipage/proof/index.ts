@@ -53,7 +53,6 @@ export {
 
 export {
   sampleEntropyProfiles,
-  entropyDirective,
 } from './config/proofEntropyRules'
 
 // Runtime helpers
