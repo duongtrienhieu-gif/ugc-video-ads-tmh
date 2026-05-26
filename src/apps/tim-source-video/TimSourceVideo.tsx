@@ -346,12 +346,21 @@ function Banner({ spec }: { spec: BannerSpec }) {
 // ── SceneCard ───────────────────────────────────────────────────────────────
 function SceneCard({ idx, state }: { idx: number; state: SceneState }) {
   const { scene, ranked, errors } = state
+  // Show Vietnamese translation if line is in a different language (en/ms).
+  // Gemini sets lineVi === line when scriptLang === 'vi', so we just compare.
+  const showVietTranslation = scene.lineVi && scene.lineVi.trim() !== scene.line.trim()
   return (
     <div className="mb-4 rounded-xl border border-gray-200 bg-white p-4">
       <div className="mb-2 flex items-baseline gap-2">
         <span className="rounded-full bg-violet-500 px-2 py-0.5 text-xs font-semibold text-white">Scene {idx + 1}</span>
         <span className="text-base font-medium text-gray-900">{scene.line}</span>
       </div>
+      {showVietTranslation && (
+        <div className="mb-2 flex items-start gap-1.5 rounded border border-emerald-100 bg-emerald-50/60 px-3 py-1.5 text-sm text-emerald-900">
+          <span className="shrink-0 text-base leading-tight">🇻🇳</span>
+          <span className="leading-snug">{scene.lineVi}</span>
+        </div>
+      )}
       <div className="mb-2 rounded border-l-4 border-violet-400 bg-violet-50 px-3 py-1.5 text-sm text-violet-900">
         💡 {scene.visualIntent}
       </div>

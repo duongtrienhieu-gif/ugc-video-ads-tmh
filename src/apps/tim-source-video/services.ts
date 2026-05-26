@@ -85,8 +85,10 @@ function mapGroundingError(err: unknown): never {
 }
 
 // ── Step 1: Parse script → scenes (multi-lang, CACHED) ──────────────────────
+// Cache key v3 — Scene shape gained `lineVi` field. Old v2 cached entries
+// won't have it; bumping the key invalidates them safely without a migration.
 export async function parseScript(apiKey: string, script: string, signal: AbortSignal): Promise<ParseResult> {
-  return cached(`parse:v2:${hash(script)}`, CONFIG.cache.parseScriptTtlMs, async () => {
+  return cached(`parse:v3:${hash(script)}`, CONFIG.cache.parseScriptTtlMs, async () => {
     const prompt = `Bạn là chuyên gia phân tích kịch bản UGC bán hàng.
 
 ĐẦU TIÊN: phát hiện ngôn ngữ của kịch bản. Chỉ trả về 1 trong: "vi" (Vietnamese), "en" (English), "ms" (Malay).
@@ -95,6 +97,7 @@ SAU ĐÓ: tách kịch bản thành các SCENE (mỗi câu thoại = 1 scene, tr
 
 Với mỗi scene, trả về object với các field:
 - "line": câu thoại gốc (giữ nguyên ngôn ngữ kịch bản)
+- "lineVi": bản DỊCH SANG TIẾNG VIỆT của câu thoại trên. Nếu kịch bản đã là tiếng Việt, copy y nguyên "line". Nếu là English hoặc Malay, dịch sang Việt TỰ NHIÊN (không word-by-word, dịch nghĩa) để người Việt đọc hiểu.
 - "visualIntent": 1 câu tiếng Việt mô tả CỤ THỂ hình ảnh/video cần để minh họa. Focus vào visual concept, KHÔNG lặp lại nội dung text.
 - "keywordVi": 2-4 từ khóa tiếng Việt
 - "keywordEn": 2-4 từ khóa tiếng Anh
@@ -121,12 +124,13 @@ ${script}`
                 type: 'object',
                 properties: {
                   line:         { type: 'string' },
+                  lineVi:       { type: 'string' },
                   visualIntent: { type: 'string' },
                   keywordVi:    { type: 'string' },
                   keywordEn:    { type: 'string' },
                   keywordMs:    { type: 'string' },
                 },
-                required: ['line', 'visualIntent', 'keywordVi', 'keywordEn', 'keywordMs'],
+                required: ['line', 'lineVi', 'visualIntent', 'keywordVi', 'keywordEn', 'keywordMs'],
               },
             },
           },

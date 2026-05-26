@@ -91,7 +91,12 @@ export type SourceId = 'youtube' | 'web'
 export type ScriptLang = 'vi' | 'en' | 'ms'
 
 export interface Scene {
+  /** Original line in the script's language (vi / en / ms). */
   line: string
+  /** Vietnamese translation of `line` — for Vietnamese-speaking operator to
+   *  read along when the script is in English or Malay. Equal to `line`
+   *  when scriptLang === 'vi'. UI only renders if it differs from `line`. */
+  lineVi: string
   visualIntent: string
   /** Keywords in 3 languages so we can search English content (largest pool)
    *  alongside native-lang content (more authentic UGC for the audience). */
