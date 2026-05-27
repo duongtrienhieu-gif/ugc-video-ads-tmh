@@ -235,6 +235,49 @@ export default function StorytellingOutputPanel({
     }
     void imageGen.generateAll()
   }
+  /** UI-FIX8 (2026-05-28) — Retry only the sections whose regenStatus
+   *  is 'failed'. Iterates over session.sections and triggers
+   *  generateSection one-by-one (sequential so we don't spam the API).
+   *  Without this the user had to click each failed section's "Thử lại"
+   *  button individually — for a 7-section pack with 5 failures that
+   *  is 5 clicks just to recover. */
+  const handleRetryAllFailed = async () => {
+    if (!kieApiKey) {
+      addToast('Chưa có KIE API key — nhập trong Settings để generate ảnh.')
+      return
+    }
+    if (!session) return
+    const failedIds = Object.values(session.sections)
+      .filter((s) => s.regenStatus === 'failed')
+      .map((s) => s.sectionId)
+    if (failedIds.length === 0) return
+    addToast(`Đang thử lại ${failedIds.length} ảnh thất bại...`)
+    for (const id of failedIds) {
+      await imageGen.generateSection(id)
+    }
+  }
+
+  // UI-FIX8 (2026-05-28) — Live image-gen counters.
+  // - imageTotalCount  = number of composed sections that have an image plan
+  // - imageDoneCount   = how many of those now have a real outputImage URL
+  // - imageFailedCount = how many landed in regenStatus === 'failed'
+  // Surfaces these in the header so the user always knows where they
+  // stand without scrolling through every section.
+  const imageCounters = useMemo(() => {
+    if (!meta.exportablePage) return { total: 0, done: 0, failed: 0 }
+    const sections = meta.exportablePage.sections.filter((s) => s.generatedAsset)
+    const total = sections.length
+    let done = 0
+    let failed = 0
+    for (const s of sections) {
+      const overlay = assetOverlay[s.id]
+      const url = overlay?.outputImages?.[0]?.url ?? s.generatedAsset?.outputImages?.[0]?.url
+      const regen = session?.sections[s.id]?.regenStatus
+      if (url) done++
+      else if (regen === 'failed') failed++
+    }
+    return { total, done, failed }
+  }, [meta.exportablePage, assetOverlay, session])
 
   const handleSave = () => {
     if (saving || saved || !onSaveAsProject) return
@@ -403,6 +446,55 @@ export default function StorytellingOutputPanel({
                 </span>
               </>
             )}
+          </div>
+        )}
+
+        {/* UI-FIX8 (2026-05-28) — Image gen counter strip.
+            Shows total composed sections (= total image slots), how
+            many have a URL now, how many failed, and offers a one-
+            click "Thử lại các ảnh thất bại" action. Hidden when there
+            are no image plans at all. */}
+        {hasSemantic && kieApiKey && imageCounters.total > 0 && (
+          <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[10px]">
+            <span className="text-stone-600">
+              📷 Ảnh:{' '}
+              <span className="font-semibold text-emerald-700">{imageCounters.done}</span>
+              <span className="text-stone-400">/</span>
+              <span className="text-stone-700">{imageCounters.total}</span>
+              {' '}thành công
+              {imageCounters.failed > 0 && (
+                <>
+                  <span className="text-stone-400"> · </span>
+                  <span className="font-semibold text-rose-700">{imageCounters.failed}</span>
+                  {' '}thất bại
+                </>
+              )}
+              {imageGen.isGenerating && (
+                <>
+                  <span className="text-stone-400"> · </span>
+                  <span className="italic text-stone-500">
+                    đang chạy {imageGen.progress.done}/{imageGen.progress.total}
+                  </span>
+                </>
+              )}
+            </span>
+            {imageCounters.failed > 0 && !imageGen.isGenerating && (
+              <button
+                onClick={handleRetryAllFailed}
+                className="flex items-center gap-1 rounded-md border border-rose-300 bg-rose-50 px-2 py-0.5 text-[10px] text-rose-800 hover:bg-rose-100"
+                title={`Thử lại ${imageCounters.failed} ảnh thất bại`}
+              >
+                <RotateCcw className="h-2.5 w-2.5" />
+                Thử lại {imageCounters.failed} ảnh thất bại
+              </button>
+            )}
+            <span className="text-stone-400 italic">
+              {imageCounters.total < pack.sections.length && (
+                <>· Pack có {pack.sections.length} chương; {imageCounters.total} ảnh
+                  (các chương khác chia sẻ ảnh với chương đầu cùng nhóm)
+                </>
+              )}
+            </span>
           </div>
         )}
       </div>
@@ -740,26 +832,28 @@ function SectionCopyButtons({ nativeText, vnText, nativeLabel }: SectionCopyButt
   }
 
   return (
-    <div className="mb-4 flex flex-wrap items-center gap-1.5">
+    // UI-FIX8 (2026-05-28): trimmed mb-4 + slimmer padding so the
+    // buttons fit cleanly inside the new section-text box header.
+    <div className="flex flex-wrap items-center gap-1.5">
       <button
         onClick={() => copyText(nativeText, 'native')}
         className={
           copiedNative
-            ? 'flex items-center gap-1 rounded-md border border-emerald-300 bg-emerald-50 px-2 py-1 text-[10px] font-mono text-emerald-800'
-            : 'flex items-center gap-1 rounded-md border border-stone-300 bg-white px-2 py-1 text-[10px] font-mono text-stone-700 hover:bg-stone-100'
+            ? 'flex items-center gap-1 rounded border border-emerald-300 bg-emerald-50 px-1.5 py-0.5 text-[10px] font-mono text-emerald-800'
+            : 'flex items-center gap-1 rounded border border-stone-300 bg-white px-1.5 py-0.5 text-[10px] font-mono text-stone-700 hover:bg-stone-100'
         }
         title={`Copy native: ${nativeLabel.slice(0, 40)}`}
       >
         {copiedNative ? <Check className="h-3 w-3" /> : <FileText className="h-3 w-3" />}
-        {copiedNative ? 'Đã copy' : 'Copy bản gốc'}
+        {copiedNative ? 'Đã copy' : 'Copy gốc'}
       </button>
       {hasVn && (
         <button
           onClick={() => copyText(vnText!, 'vn')}
           className={
             copiedVn
-              ? 'flex items-center gap-1 rounded-md border border-emerald-300 bg-emerald-50 px-2 py-1 text-[10px] font-mono text-emerald-800'
-              : 'flex items-center gap-1 rounded-md border border-stone-300 bg-white px-2 py-1 text-[10px] font-mono text-stone-700 hover:bg-stone-100'
+              ? 'flex items-center gap-1 rounded border border-emerald-300 bg-emerald-50 px-1.5 py-0.5 text-[10px] font-mono text-emerald-800'
+              : 'flex items-center gap-1 rounded border border-rose-300 bg-white px-1.5 py-0.5 text-[10px] font-mono text-rose-700 hover:bg-rose-50'
           }
           title="Copy bản dịch tiếng Việt"
         >
@@ -913,12 +1007,11 @@ function StorytellingSectionView({
       )}
       {!hasVnTranslation && <div className="mb-4" />}
 
-      {/* Per-section copy buttons (native + VN if available) */}
-      <SectionCopyButtons
-        nativeText={section.copy}
-        vnText={section.viTranslation}
-        nativeLabel={section.title}
-      />
+      {/* UI-FIX8 (2026-05-28) — Per-section copy buttons MOVED INSIDE
+          the body text box below (so they sit with the content they
+          copy, not floating above the image). The old position above
+          the image meant marketers had to scroll up to find the copy
+          action — now the buttons are right where the text is. */}
 
       {/* Image placeholder — appears ABOVE body cho blocks has image.
           FIX 2026-05-27: passes generated image URL + prompt + KIE gen
@@ -940,13 +1033,12 @@ function StorytellingSectionView({
             canGenerate={canGenerateImage}
             onGenerate={onGenerateImage}
           />
-          {/* UX (2026-05-28) — Prompt viewer below image. Shows either:
-              - "đã dùng" (after gen, from generatedAsset.promptUsed)
-              - "sẽ dùng" (before gen, from pre-computed scene synthesis)
-              Both come from the SAME Gemini scene synthesis call —
-              difference is just timing. */}
+          {/* UI-FIX8 (2026-05-28) — Prompt viewer aligned left with the
+              image figure (no more mx-auto so it sits under the image
+              instead of drifting to the article centerline). Width
+              matches the image figure (max-w-sm) for visual unity. */}
           {imagePrompt && (
-            <details className="mt-2 max-w-sm mx-auto rounded-md border border-stone-200 bg-stone-50 px-3 py-2 text-[10px]">
+            <details className="mt-2 w-full max-w-sm rounded-md border border-stone-200 bg-stone-50 px-3 py-2 text-[10px]">
               <summary className="cursor-pointer text-stone-500 italic select-none">
                 {imageUrl ? '👁 Xem prompt đã dùng để tạo ảnh' : '👁 Xem prompt sẽ dùng để tạo ảnh'}
               </summary>
@@ -983,13 +1075,32 @@ function StorytellingSectionView({
         </>
       )}
 
-      {/* Body copy — each paragraph as its own <p> for proper breathing space.
-          UI-FIX (2026-05-28): break-words to prevent long unbreakable strings
-          from pushing column past viewport. */}
-      <div className="font-serif text-base md:text-[17px] text-stone-700 leading-[1.95] break-words">
-        {cleanParagraphs.map((p, i) => (
-          <p key={i} className={i === cleanParagraphs.length - 1 ? '' : 'mb-5'}>{p}</p>
-        ))}
+      {/* UI-FIX8 (2026-05-28) — Wrap body copy in a box matching the
+          VN translation box width (max-w-xl) so the original-language
+          column doesn't sprawl wider than its VN counterpart below.
+          The two boxes now share the same left edge AND the same right
+          edge — clean vertical alignment for the whole pack column.
+          Copy buttons sit at the TOP of this box for one-click access. */}
+      <div className="mt-2 w-full max-w-xl rounded-lg border border-stone-200 bg-white px-5 py-4">
+        {/* Header strip — section label + copy buttons */}
+        <div className="mb-3 flex items-center justify-between gap-2 border-b border-stone-100 pb-2">
+          <span className="text-[10px] uppercase tracking-wider text-stone-400 font-medium">
+            Bản gốc
+          </span>
+          <SectionCopyButtons
+            nativeText={section.copy}
+            vnText={section.viTranslation}
+            nativeLabel={section.title}
+          />
+        </div>
+        {/* Body copy — each paragraph as its own <p> for proper breathing space.
+            UI-FIX (2026-05-28): break-words to prevent long unbreakable strings
+            from pushing column past viewport. */}
+        <div className="font-serif text-base md:text-[17px] text-stone-700 leading-[1.95] break-words">
+          {cleanParagraphs.map((p, i) => (
+            <p key={i} className={i === cleanParagraphs.length - 1 ? '' : 'mb-5'}>{p}</p>
+          ))}
+        </div>
       </div>
 
       {/* VN translation box — collapsible. Only shows when target was MY/EN.
@@ -1047,7 +1158,7 @@ interface PlaceholderProps {
 function ImagePlaceholder({
   chapterNumber, characterName, sectionTitle, overlayType, treatments,
   continuityRequirement, productVisibility,
-  imageUrl, promptText, isGenerating, canGenerate, onGenerate,
+  imageUrl, isGenerating, canGenerate, onGenerate,
 }: PlaceholderProps) {
   const overlayText = renderOverlayText(overlayType, chapterNumber, characterName, sectionTitle)
   const aspectClass = productVisibility === 'still-life' ? 'aspect-square' : 'aspect-[4/5]'
@@ -1141,17 +1252,10 @@ function ImagePlaceholder({
         )}
       </div>
 
-      {/* Prompt display — below image, collapsible for QA */}
-      {promptText && (
-        <details className="mt-2 max-w-sm mx-auto">
-          <summary className="cursor-pointer text-[10px] uppercase tracking-wider text-stone-400 select-none hover:text-stone-600">
-            Prompt ↓
-          </summary>
-          <div className="mt-1.5 rounded border border-stone-200 bg-stone-50 px-3 py-2 font-mono text-[10px] text-stone-600 leading-relaxed">
-            {promptText}
-          </div>
-        </details>
-      )}
+      {/* UI-FIX8 (2026-05-28) — Removed the duplicate "Prompt ↓"
+          expandable that used to live here. The descriptive version
+          ("Xem prompt đã/sẽ dùng để tạo ảnh") rendered by the section
+          view immediately below the figure is now the single source. */}
     </figure>
   )
 }
