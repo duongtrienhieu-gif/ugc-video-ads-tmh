@@ -446,83 +446,126 @@ export function classifyGemini429(rawBody: string): {
  * indexed). Used by tim-source-video for finding scene-relevant web pages
  * BEYOND YouTube.
  *
- * Throws Error with `.code`: 'QUOTA_DAILY' (fatal), 'ABORTED' (cancelled),
- * undefined (transient — caller can fallback or surface generic fail).
- * Retries 429 with backoff respecting RetryInfo.
+ * Two layers of resilience (added Z4-fix after V3.2 ran with 100% YouTube /
+ * 0 Web — root cause: gemini-2.5-flash had spike-overloads, all retries hit
+ * same overloaded backend, every web search returned empty):
+ *   1. RETRY per model on 429 (per-minute) / 5xx (server overload) with
+ *      backoff, respecting RetryInfo.retryDelay when Gemini sends it.
+ *   2. MODEL FALLBACK across the chain when one model is persistently
+ *      503 / rate-limited. flash-lite + 2.0 variants typically aren't
+ *      affected by the same spike, AND they have higher daily quota too.
  *
- * Separate from `directGeminiText` because grounding response uses a
- * different shape (groundingMetadata) and is incompatible with responseSchema.
+ * Throws Error with `.code`: 'QUOTA_DAILY' (fatal — daily exhausted on free
+ * tier), 'ABORTED' (cancelled), undefined (other failure).
  */
+const GROUNDING_MODELS = [
+  'gemini-2.5-flash',
+  'gemini-2.5-flash-lite',
+  'gemini-2.0-flash',
+  'gemini-2.0-flash-lite',
+]
+
 export async function searchWithGrounding(params: {
   apiKey: string
   prompt: string
   signal?: AbortSignal
 }): Promise<{ narrative: string; chunks: Array<{ uri: string; title?: string }> }> {
-  const url = `${GEMINI_BASE}/gemini-2.5-flash:generateContent?key=${params.apiKey}`
-  const MAX_ATTEMPTS = 6
+  const MAX_ATTEMPTS_PER_MODEL = 3
   const BASE_DELAY_MS = 2000
   const FACTOR = 1.7
-  let lastErr = ''
-  for (let attempt = 0; attempt <= MAX_ATTEMPTS; attempt++) {
-    if (params.signal?.aborted) {
-      const e = new Error('Đã hủy') as Error & { code?: string }
-      e.code = 'ABORTED'
-      throw e
-    }
-    let res: Response
-    try {
-      res = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: params.prompt }] }],
-          tools: [{ googleSearch: {} }],
-        }),
-        signal: params.signal,
-      })
-    } catch (err) {
-      if ((err as Error)?.name === 'AbortError') {
+  const failures: string[] = []
+
+  for (const model of GROUNDING_MODELS) {
+    const url = `${GEMINI_BASE}/${model}:generateContent?key=${params.apiKey}`
+    let lastErr = ''
+    let modelGaveUp = false
+
+    for (let attempt = 0; attempt <= MAX_ATTEMPTS_PER_MODEL; attempt++) {
+      if (params.signal?.aborted) {
         const e = new Error('Đã hủy') as Error & { code?: string }
         e.code = 'ABORTED'
         throw e
       }
-      throw err
-    }
-    if (res.ok) {
-      const data = await res.json() as {
-        candidates?: Array<{
-          content?: { parts?: Array<{ text?: string }> }
-          groundingMetadata?: { groundingChunks?: Array<{ web?: { uri: string; title?: string } }> }
-        }>
+      let res: Response
+      try {
+        res = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: params.prompt }] }],
+            tools: [{ googleSearch: {} }],
+          }),
+          signal: params.signal,
+        })
+      } catch (err) {
+        if ((err as Error)?.name === 'AbortError') {
+          const e = new Error('Đã hủy') as Error & { code?: string }
+          e.code = 'ABORTED'
+          throw e
+        }
+        throw err
       }
-      const candidate = data.candidates?.[0]
-      const narrative = (candidate?.content?.parts || []).map(p => p.text).filter(Boolean).join('\n').trim()
-      const chunks = (candidate?.groundingMetadata?.groundingChunks || []).map(c => c.web).filter((w): w is { uri: string; title?: string } => !!w?.uri)
-      return { narrative, chunks }
-    }
-    lastErr = await res.text().catch(() => '')
-    if (res.status === 429) {
-      const { isDailyExhausted, retryDelayMs } = classifyGemini429(lastErr)
-      if (isDailyExhausted) {
-        const e = new Error('Gemini quota daily exhausted') as Error & { code?: string }
-        e.code = 'QUOTA_DAILY'
-        throw e
+      if (res.ok) {
+        const data = await res.json() as {
+          candidates?: Array<{
+            content?: { parts?: Array<{ text?: string }> }
+            groundingMetadata?: { groundingChunks?: Array<{ web?: { uri: string; title?: string } }> }
+          }>
+        }
+        const candidate = data.candidates?.[0]
+        const narrative = (candidate?.content?.parts || []).map(p => p.text).filter(Boolean).join('\n').trim()
+        const chunks = (candidate?.groundingMetadata?.groundingChunks || []).map(c => c.web).filter((w): w is { uri: string; title?: string } => !!w?.uri)
+        return { narrative, chunks }
       }
-      if (attempt === MAX_ATTEMPTS) {
-        throw new Error(`Gemini grounding rate-limit kéo dài (đã thử ${MAX_ATTEMPTS + 1} lần)`)
+      lastErr = await res.text().catch(() => '')
+
+      // 404 = model not available → try next model immediately
+      if (res.status === 404) {
+        failures.push(`${model}: 404 not found`)
+        modelGaveUp = true
+        break
       }
-      const delay = retryDelayMs ?? (BASE_DELAY_MS * Math.pow(FACTOR, attempt) + Math.random() * 1000)
-      await new Promise(r => setTimeout(r, delay))
-      continue
-    }
-    const retryable = [500, 502, 503, 504].includes(res.status)
-    if (!retryable || attempt === MAX_ATTEMPTS) {
+
+      if (res.status === 429) {
+        const { isDailyExhausted, retryDelayMs } = classifyGemini429(lastErr)
+        if (isDailyExhausted) {
+          const e = new Error('Gemini quota daily exhausted') as Error & { code?: string }
+          e.code = 'QUOTA_DAILY'
+          throw e
+        }
+        if (attempt === MAX_ATTEMPTS_PER_MODEL) {
+          failures.push(`${model}: rate-limit persistent`)
+          modelGaveUp = true
+          break
+        }
+        const delay = retryDelayMs ?? (BASE_DELAY_MS * Math.pow(FACTOR, attempt) + Math.random() * 1000)
+        await new Promise(r => setTimeout(r, delay))
+        continue
+      }
+
+      const retryable = [500, 502, 503, 504].includes(res.status) || /UNAVAILABLE|overload/i.test(lastErr)
+      if (retryable) {
+        if (attempt === MAX_ATTEMPTS_PER_MODEL) {
+          failures.push(`${model}: ${res.status} after ${MAX_ATTEMPTS_PER_MODEL + 1} attempts`)
+          modelGaveUp = true
+          break
+        }
+        const delay = BASE_DELAY_MS * Math.pow(FACTOR, attempt) + Math.random() * 1000
+        await new Promise(r => setTimeout(r, delay))
+        continue
+      }
+
+      // Non-retryable error (4xx auth/malformed) → throw, don't try next model
       throw new Error(`Gemini grounding lỗi (${res.status}): ${lastErr.slice(0, 200)}`)
     }
-    const delay = BASE_DELAY_MS * Math.pow(FACTOR, attempt) + Math.random() * 1000
-    await new Promise(r => setTimeout(r, delay))
+
+    if (!modelGaveUp) {
+      throw new Error(`Gemini grounding ${model}: unexpected exit · ${lastErr.slice(0, 200)}`)
+    }
   }
-  throw new Error(`Gemini grounding failed after ${MAX_ATTEMPTS + 1} attempts`)
+
+  // All models exhausted
+  throw new Error(`Gemini grounding: tất cả models đều fail — ${failures.join(' | ')}`)
 }
 
 import {
