@@ -218,6 +218,16 @@ PARAGRAPHS field is STRUCTURAL — each element = ONE paragraph (2-4 sentences t
 Reader needs breathing space. Do NOT compress entire block into 1 array element.
 Per-block paragraph target shown in block directive.
 
+⚠️ WORD-CAP per block (REBALANCE 2026-05-27 — product info layer interleaves):
+- HARD CAP: each block ≤ 180 words TOTAL across all its paragraphs.
+- TARGET: 120-170 words. Below 100 words OK if block is structurally short.
+- Reader fatigue is REAL — pack now interleaves with product info sections;
+  storytelling blocks must stay tight.
+- Phase 4 blocks (micro-transformation, emotional-wins, future-self-cta) lean
+  toward 100-140 words — pacing accelerates near close.
+- Anti-pattern: padding a block with redundant reflections, repeating same
+  insight 2-3 ways. Cut ruthlessly.
+
 social-proof block: paragraphs = [1 short intro string]. Reviews are generated
 by a SEPARATE pass — leave reviews field absent.
 

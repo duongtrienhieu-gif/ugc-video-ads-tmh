@@ -119,8 +119,11 @@ export default function StorytellingOutputPanel({
   }, [kieApiKey])
 
   // ── Scene synthesis context — niche + protagonist + product brief ──
+  // POST-REBUILD: KIE key is the hard requirement (image gen). Gemini key
+  // is SOFT — when missing, scene synthesis falls back to static prompts
+  // (locked visual genre preserved, just less specific to section text).
   const generationContext = useMemo<PageGenerationContext | null>(() => {
-    if (!geminiApiKey || !kieApiKey) return null
+    if (!kieApiKey) return null
     return {
       niche: meta.niche,
       protagonist: {
@@ -132,7 +135,7 @@ export default function StorytellingOutputPanel({
         ? { productIdentityForImage: meta.productIdentityForImage }
         : null,
       targetLanguage: pack.language,
-      geminiApiKey,
+      geminiApiKey: geminiApiKey ?? '',   // soft — empty triggers fallback path
       kieApiKey,
     }
   }, [
@@ -350,6 +353,35 @@ export default function StorytellingOutputPanel({
             {meta.validationSummary}
           </div>
         )}
+
+        {/* UX.2 (2026-05-27) — Image gen diagnostics. Tells marketer which
+            keys are configured + degraded mode active. */}
+        {hasSemantic && (
+          <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[10px]">
+            {!kieApiKey ? (
+              <span className="text-amber-600">
+                ⚠ Chưa cấu hình KIE API key — vào Cài đặt để bật tạo ảnh
+              </span>
+            ) : !geminiApiKey ? (
+              <span className="text-amber-600">
+                ⚠ Thiếu Gemini key — ảnh sẽ dùng prompt tổng quát (không khớp text từng section).
+                Bật Gemini key trong Cài đặt để có scene synthesis đầy đủ.
+              </span>
+            ) : (
+              <span className="text-emerald-600">
+                ✓ Tạo ảnh sẵn sàng — Gemini scene synthesis + KIE renderer
+              </span>
+            )}
+            {imageGen.isGenerating && imageGen.progress.isSynthesizing && (
+              <>
+                <span className="text-stone-400">·</span>
+                <span className="text-stone-500 italic">
+                  Đang phân tích nội dung từng section để tạo prompt ảnh khớp...
+                </span>
+              </>
+            )}
+          </div>
+        )}
       </div>
 
       {/* ── READING COLUMN ──────────────────────────────────────────── */}
@@ -377,9 +409,15 @@ export default function StorytellingOutputPanel({
           // diacritics cleanly (was broken with browser default serif).
           <article className="storytelling-article max-w-prose mx-auto px-5 md:px-8 py-12 md:py-20">
             {pack.sections.map((section, idx) => {
-              // FIX 2026-05-27 — Look up generatedAsset from exportablePage by
-              // matching section index (composer maps blocks → sections in order).
-              const exportSection = meta.exportablePage?.sections[idx]
+              // POST-PI (2026-05-27): pack.sections is now mixed storytelling +
+              // PI blocks. Look up by SECTION ID (not index) — meta.sectionIds[idx]
+              // gives the id; storytelling sections match against exportablePage,
+              // PI sections (id startsWith 'pi-') have no exportablePage entry.
+              const currentSectionId = meta.sectionIds[idx] as string | undefined
+              const isPIBlock = typeof currentSectionId === 'string' && currentSectionId.startsWith('pi-')
+              const exportSection = isPIBlock || !currentSectionId
+                ? undefined
+                : meta.exportablePage?.sections.find((s) => s.id === currentSectionId)
               const generatedAsset = exportSection?.generatedAsset
               const sectionRegenState = session?.sections[exportSection?.id ?? '']
               const isThisSectionGenerating =
@@ -406,6 +444,7 @@ export default function StorytellingOutputPanel({
                   onGenerateImage={
                     exportSection ? () => handleRegenerateImage(exportSection.id) : undefined
                   }
+                  isPIBlock={isPIBlock}
                 />
               )
             })}
@@ -677,14 +716,28 @@ interface SectionViewProps {
   isImageGenerating?: boolean
   canGenerateImage?: boolean
   onGenerateImage?: () => void
+  /** PI-LAYER 2026-05-27 — true when this section is a product-info block
+   *  (id starts with 'pi-'). Renders with subtle visual marker, no image. */
+  isPIBlock?: boolean
+}
+
+// ── PI-LAYER visual marker icon + label per type ─────────────────────
+const PI_BLOCK_MARKERS: Record<string, { icon: string; label: string }> = {
+  'pi-mechanism-personal':      { icon: '🔬', label: 'Cơ chế tôi mới hiểu' },
+  'pi-ingredients-usp-woven':   { icon: '📋', label: 'Cái tôi check kỹ trước khi dùng' },
+  'pi-usage-faq-personal':      { icon: '💬', label: 'Cách tôi dùng + câu hỏi thường gặp' },
+  'pi-social-proof-collective': { icon: '👥', label: 'Người quen tôi cũng đang dùng' },
+  'pi-pricing-narrator':        { icon: '🛒', label: 'Lúc tôi đặt' },
 }
 
 function StorytellingSectionView({
   section, sectionId, overlayType, chapterNumber, isLast, characterName, status,
   imageUrl, imagePrompt, isImageGenerating, canGenerateImage, onGenerateImage,
+  isPIBlock,
 }: SectionViewProps) {
-  const blueprint = BLOCK_POOL[sectionId]
-  const treatments = SECTION_VISUAL_MAP[sectionId] ?? []
+  const blueprint = isPIBlock ? undefined : BLOCK_POOL[sectionId]
+  const treatments = isPIBlock ? [] : (SECTION_VISUAL_MAP[sectionId] ?? [])
+  const piMarker = isPIBlock ? PI_BLOCK_MARKERS[sectionId as string] : undefined
 
   // P2 — Proof blocks (proof-recognition / proof-solution / proof-future-self):
   // render as quote-callout, not regular story section. No image, no chapter
@@ -715,21 +768,30 @@ function StorytellingSectionView({
         .map((p) => p.trim())
         .filter((p) => p.length > 0)
     : []
-  // Image presence: Chunk E will redesign image plan per block.
-  const hasImage = true
+  // Image presence: hidden for PI blocks (text-only by design).
+  const hasImage = !isPIBlock
 
   return (
     <section className={isLast ? '' : 'mb-20 md:mb-28'}>
-      {/* Chapter marker — tiny tracking-widest */}
-      <p className="text-[10px] uppercase tracking-[0.3em] text-stone-400 mb-3 flex items-center gap-2 flex-wrap">
-        <span>Chương {chapterNumber}</span>
-        <span className="text-stone-300 normal-case tracking-normal italic">
-          · {blueprint?.phase ?? sectionId}
-        </span>
-        {status && status.kind !== 'pass' && (
-          <SectionStatusInlineBadge status={status} />
-        )}
-      </p>
+      {/* Chapter marker — tiny tracking-widest. PI-blocks get a different
+          marker (small icon + label) to signal "narrator now sharing
+          knowledge" — same diary tone, just different beat. */}
+      {isPIBlock && piMarker ? (
+        <p className="text-[11px] tracking-wide text-stone-500 mb-3 flex items-center gap-2 italic">
+          <span className="text-base not-italic">{piMarker.icon}</span>
+          <span>{piMarker.label}</span>
+        </p>
+      ) : (
+        <p className="text-[10px] uppercase tracking-[0.3em] text-stone-400 mb-3 flex items-center gap-2 flex-wrap">
+          <span>Chương {chapterNumber}</span>
+          <span className="text-stone-300 normal-case tracking-normal italic">
+            · {blueprint?.phase ?? sectionId}
+          </span>
+          {status && status.kind !== 'pass' && (
+            <SectionStatusInlineBadge status={status} />
+          )}
+        </p>
+      )}
 
       {/* Title — serif italic, diary-like. FIX 2026-05-27: show NATIVE
           first, VN translation as small italic hint below (was previously
@@ -756,20 +818,34 @@ function StorytellingSectionView({
           callbacks. Per-section "Tạo ảnh"/"Tạo lại" buttons live inside
           ImagePlaceholder now. */}
       {hasImage && (
-        <ImagePlaceholder
-          chapterNumber={chapterNumber}
-          characterName={characterName}
-          sectionTitle={section.title}
-          overlayType={overlayType}
-          treatments={treatments}
-          continuityRequirement="optional"
-          productVisibility="forbidden"
-          imageUrl={imageUrl}
-          promptText={imagePrompt}
-          isGenerating={isImageGenerating}
-          canGenerate={canGenerateImage}
-          onGenerate={onGenerateImage}
-        />
+        <>
+          <ImagePlaceholder
+            chapterNumber={chapterNumber}
+            characterName={characterName}
+            sectionTitle={section.title}
+            overlayType={overlayType}
+            treatments={treatments}
+            continuityRequirement="optional"
+            productVisibility="forbidden"
+            imageUrl={imageUrl}
+            promptText={imagePrompt}
+            isGenerating={isImageGenerating}
+            canGenerate={canGenerateImage}
+            onGenerate={onGenerateImage}
+          />
+          {/* UX.1 (2026-05-27) — Prompt viewer below image. Shows the actual
+              scene-synthesis prompt used (debug + transparency for marketer). */}
+          {imagePrompt && (
+            <details className="mt-2 max-w-sm mx-auto rounded-md border border-stone-200 bg-stone-50 px-3 py-2 text-[10px]">
+              <summary className="cursor-pointer text-stone-500 italic select-none">
+                Xem prompt đã dùng để tạo ảnh
+              </summary>
+              <div className="mt-2 font-mono text-stone-600 leading-relaxed whitespace-pre-wrap break-words">
+                {imagePrompt}
+              </div>
+            </details>
+          )}
+        </>
       )}
 
       {/* Body copy — each paragraph as its own <p> for proper breathing space. */}
@@ -917,7 +993,7 @@ function ImagePlaceholder({
             )}
             {!canGenerate && (
               <p className="mt-3 text-[10px] text-stone-300">
-                [Cấu hình KIE key trong Settings để tạo ảnh]
+                [Section này chưa có plan tạo ảnh — kiểm tra KIE key trong Cài đặt]
               </p>
             )}
             {overlayText && (

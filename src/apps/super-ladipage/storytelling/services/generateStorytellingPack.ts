@@ -52,6 +52,7 @@ import { planImageGenerationPage } from '../../generationOrchestration'
 import { validateOrchestratedPage } from '../../validationCalibration'
 import { deriveExportPipelinePage } from '../../exportPipeline'
 import { translatePackToVi } from '../../services/translate'
+import { composePIBlocks, interleaveIntoPack } from '../../productInfoLayer'
 
 // ── Map storytelling BlockId → existing UGC SectionType for
 //    LandingSection.type compat. Storytelling block ID stored
@@ -349,9 +350,9 @@ export async function generateStorytellingPack(
   })
 
   // ─── 6. Build character profile + overlay allocation ─────────────
-  const blockIds = result.sections.map((s) => s.id)
-  const characterProfile = buildCharacterProfile(input.protagonistProfile, blockIds)
-  const overlayPerSection = allocateOverlay(blockIds)
+  const storytellingBlockIds = result.sections.map((s) => s.id)
+  const characterProfile = buildCharacterProfile(input.protagonistProfile, storytellingBlockIds)
+  const overlayPerSection = allocateOverlay(storytellingBlockIds)
 
   // ─── 6.5 P4 — Compose mobile page (headless translation layer) ──
   const composedPage = composeMobilePage({
@@ -471,13 +472,65 @@ export async function generateStorytellingPack(
     `[storytelling/export] Export pipeline ready · ${exportablePage.sections.length} sections with ExportGuide`,
   )
 
+  // ─── 6.14 PI-LAYER (2026-05-27) — Generate + interleave Product Info ──
+  // 5 short knowledge-transmission blocks (mechanism / ingredients-USP /
+  // usage-FAQ / social-proof / pricing) in continued diary voice. Interleaved
+  // at emotional-arc anchors in the FINAL pack.sections — NOT in the upstream
+  // image-gen orchestration pipeline (PI blocks are text-only by default).
+  // Skips blocks whose input data isn't supported.
+  let finalSections: LandingSection[] = sections
+  let finalSectionIds: string[] = storytellingBlockIds
+  let finalOverlay: (AllowedOverlayType | null)[] = overlayPerSection
+  try {
+    const piBatchStart = Date.now()
+    const piResult = await composePIBlocks(
+      {
+        niche: input.niche,
+        productPainPoints:  product.painPoints ?? '',
+        productBenefits:    product.benefits ?? '',
+        productUsp:         product.usps ?? '',
+        productPricing:     product.offer ?? '',
+        productIngredients: product.ingredients ?? '',
+        productName:        product.productName,
+        synthesizedBrief,
+        targetLanguage:     params.language,
+        character:          characterProfile,
+      },
+      { geminiApiKey, kieApiKey },
+      { concurrency: 3 },
+    )
+    console.info(
+      `[storytelling/PI] ${piResult.blocks.length} blocks ` +
+      `(${piResult.succeeded} gemini, ${piResult.fallbackCount} fallback, ` +
+      `${piResult.skippedCount} skipped) in ${((Date.now() - piBatchStart) / 1000).toFixed(1)}s`,
+    )
+
+    if (piResult.blocks.length > 0) {
+      const merged = interleaveIntoPack({
+        sections,
+        sectionIds: storytellingBlockIds,
+        piBlocks: piResult.blocks,
+      })
+      finalSections = merged.sections
+      finalSectionIds = merged.sectionIds
+      // Build parallel overlay array — null for PI blocks (no overlay budget)
+      finalOverlay = merged.sectionIds.map((id) => {
+        if (id.startsWith('pi-')) return null
+        const origIdx = (storytellingBlockIds as string[]).indexOf(id)
+        return origIdx >= 0 ? overlayPerSection[origIdx] : null
+      })
+    }
+  } catch (err) {
+    console.warn('[storytelling/PI] PI layer failed — pack ships without PI blocks:', err)
+  }
+
   // ─── 7. Assemble StorytellingPack ────────────────────────────────
   const pack: StorytellingPack = {
     productId:   params.productId,
     productName: product.productName,
     language:    params.language,
     form:        'advertorial',
-    sections,
+    sections:    finalSections,
     visualMemory: params.visualMemory ?? [],
     generatedAt: Date.now(),
     characterProfile,
@@ -486,9 +539,9 @@ export async function generateStorytellingPack(
       pacingType:           input.pacingType,
       productRevealSection: input.productRevealSection,
       niche:                input.niche,
-      overlayBudgetUsed:    overlayPerSection.filter((o) => o !== null).length,
-      sectionIds:           blockIds,
-      overlayPerSection,
+      overlayBudgetUsed:    finalOverlay.filter((o) => o !== null).length,
+      sectionIds:           finalSectionIds as never[],
+      overlayPerSection:    finalOverlay,
       sectionStatus:        result.perSectionStatus,
       attempts:             result.attempts,
       validationSummary:    buildValidationSummary(result),
