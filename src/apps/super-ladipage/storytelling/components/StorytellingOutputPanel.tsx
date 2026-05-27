@@ -205,8 +205,11 @@ export default function StorytellingOutputPanel({
 
   return (
     <div className="flex h-full flex-col overflow-hidden bg-stone-50">
-      {/* ── HEADER — minimal, không dominate ─────────────────────────── */}
-      <div className="shrink-0 border-b border-stone-200 bg-stone-50/95 backdrop-blur px-4 md:px-6 py-2.5">
+      {/* ── HEADER — minimal, không dominate ──────────────────────────────────
+           FIX 2026-05-27: right padding để chừa chỗ cho Gemini + KIE Credit
+           badges (positioned absolute top-2 right-2 z-50 trong App.tsx).
+           Mobile: ~140px reserved (2 compact pills). Desktop: ~280px (full pills). */}
+      <div className="shrink-0 border-b border-stone-200 bg-stone-50/95 backdrop-blur px-4 md:px-6 py-2.5 pr-32 md:pr-72">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-2 min-w-0 flex-1">
             <BookOpen className="h-4 w-4 text-stone-500 shrink-0" />
