@@ -839,7 +839,11 @@ function StorytellingSectionView({
   const hasImage = !isPIBlock && !hasNoOwnImage
 
   return (
-    <section className={isLast ? '' : 'mb-20 md:mb-28'}>
+    // UI-FIX4 (2026-05-28): trimmed section spacing mb-20/mb-28 → mb-10/mb-14
+    // (cut ~50%) per user feedback "khoảng cách giữa các chương quá lớn,
+    // tốn diện tích". Chapters still have visible separation but the page
+    // no longer wastes half the vertical real estate on whitespace.
+    <section className={isLast ? '' : 'mb-10 md:mb-14'}>
       {/* Chapter marker — tiny tracking-widest. PI-blocks get a different
           marker (small icon + label) to signal "narrator now sharing
           knowledge" — same diary tone, just different beat. */}
@@ -958,7 +962,11 @@ function StorytellingSectionView({
           dark surface). All rose-50 / border-rose-200 / text-rose-* tokens
           already have dark-mode overrides in src/index.css — no new CSS. */}
       {hasVnTranslation && (
-        <details className="mt-6 rounded-lg border border-rose-200 bg-rose-50 px-5 py-3 group">
+        // UI-FIX4 (2026-05-28): clamp VN box to max-w-2xl mx-auto so it
+        // doesn't stretch across the full article column (was visually
+        // overpowering on wide viewports). Body copy stays max-w-4xl;
+        // the translation aside sits centered + narrower like a callout.
+        <details className="mt-6 mx-auto max-w-2xl rounded-lg border border-rose-200 bg-rose-50 px-5 py-3 group">
           <summary className="cursor-pointer text-[11px] uppercase tracking-wider font-semibold text-rose-700 select-none flex items-center gap-2">
             <span>🇻🇳 Bản dịch tiếng Việt</span>
             <span className="text-rose-500 italic normal-case tracking-normal font-normal group-open:hidden">

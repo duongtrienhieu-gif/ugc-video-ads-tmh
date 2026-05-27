@@ -60,6 +60,14 @@ export interface ExecutePageGenerationOptions {
   onSectionComplete?: (sectionId: string, asset: GeneratedAsset) => void
   onSceneSynthesized?: (sectionId: string, scene: SceneDescription) => void
   filter?: (sectionId: string) => boolean
+  /** UI-FIX4 (2026-05-28) — When true, bypass the
+   *  `generationStatus === 'planned' | 'failed'` queue filter so an
+   *  explicit per-section regen click ALWAYS runs even if the section
+   *  is currently 'completed' (stale image / want a re-roll) or stuck
+   *  in 'generating' (previous attempt aborted before status update).
+   *  Without this flag those sections were silently filtered out and
+   *  the click did nothing — no toast, no error, no gen. */
+  forceRegenerate?: boolean
 }
 
 export interface ExecutePageGenerationResult {
@@ -86,9 +94,13 @@ export async function executePageGeneration(
   const cancelled: string[] = []
 
   // ── Build work queue (sections eligible for generation) ──────────
+  // UI-FIX4 (2026-05-28): when forceRegenerate is set (explicit single-
+  // section click), bypass the status filter so completed/generating
+  // sections still queue up. Avoids the "click does nothing" silent-fail.
   const queue = page.sections.filter((s) => {
     if (!s.generatedAsset) return false
     if (options.filter && !options.filter(s.id)) return false
+    if (options.forceRegenerate) return true
     const status = s.generatedAsset.generationStatus
     return status === 'planned' || status === 'failed'
   })
