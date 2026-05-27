@@ -364,6 +364,80 @@ export const NICHE_DESIRE_ARCHITECTURE: Record<NicheKey, NicheDesireArchitecture
       'youth-restoration voice',
     ],
   },
+
+  // ── SPEC-FIX (2026-05-27) — health-functional split ──
+
+  'health-respiratory': {
+    niche: 'health-respiratory',
+    primaryDesire: 'breath freedom return / quiet nights / no mouth-breathing',
+    desireTensions: [
+      'sleep disruption (đêm nào cũng há miệng thở)',
+      'social discomfort (hỉ mũi trong cuộc họp / tụ tập)',
+      'sinus surgery fear (sẽ phải mổ xoang vài năm tới)',
+      'spray-dependency anxiety (phụ thuộc thuốc co mạch)',
+    ],
+    emotionalGravity: 'breath-freedom + sleep-restoration (NOT vague "wellness from within")',
+    forbiddenDefaults: [
+      'generic wellness from within framing',
+      'instant unblock miracle tone',
+      'detox / cleanse narrative (wrong domain)',
+      'aesthetic / beauty framing',
+    ],
+  },
+
+  'health-joint': {
+    niche: 'health-joint',
+    primaryDesire: 'mobility restoration / dignity / not-a-burden',
+    desireTensions: [
+      'mobility loss fear (vịn cầu thang vĩnh viễn)',
+      'becoming a burden fear (gánh nặng cho con)',
+      'capacity loss (không chơi với cháu được)',
+      'aging body shame (cơ thể xuống nhanh hơn dự đoán)',
+    ],
+    emotionalGravity: 'mobility + dignity + independent capacity (NOT calm-acceptance-of-decline)',
+    forbiddenDefaults: [
+      'inner peace without mobility return',
+      'self-acceptance of decline',
+      'gentle resignation tone',
+      'emotional-only resolution without physical capacity',
+    ],
+  },
+
+  'health-digestive': {
+    niche: 'health-digestive',
+    primaryDesire: 'eat-without-fear / digestive ease / no food anxiety',
+    desireTensions: [
+      'food restriction fatigue (kiêng cay/chua/dầu mỡ mãi)',
+      'cancer fear (viêm → loét → ung thư)',
+      'medication dependency (omeprazole cả đời)',
+      'social meal anxiety (kén ăn → phiền người khác)',
+    ],
+    emotionalGravity: 'eat-freely + digestive-ease (NOT detox / cleanse / weight loss)',
+    forbiddenDefaults: [
+      'detox cleansing framing',
+      'weight-loss tone',
+      'beauty / aesthetic narrative',
+      'spiritual purification voice',
+    ],
+  },
+
+  'health-cardiovascular': {
+    niche: 'health-cardiovascular',
+    primaryDesire: 'stable numbers / peace of mind / years with family',
+    desireTensions: [
+      'mortality fear (đột quỵ / nhồi máu ban đêm)',
+      'medication-dependence anxiety (uống thuốc cả đời)',
+      'time-running-out (sợ không kịp xem con cháu lớn)',
+      'numbers anxiety (huyết áp lên xuống không kiểm soát)',
+    ],
+    emotionalGravity: 'cardiac-stability + peace-of-mind (NOT miracle cure / replacing medication)',
+    forbiddenDefaults: [
+      'miracle cure framing',
+      'replacement-of-medication promise',
+      'fearmongering tone',
+      'wellness influencer voice',
+    ],
+  },
 }
 
 /** Get desire architecture for niche — never null (8 niches covered). */

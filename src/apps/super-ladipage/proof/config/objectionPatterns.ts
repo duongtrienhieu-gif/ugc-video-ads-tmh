@@ -351,6 +351,80 @@ export const NICHE_OBJECTIONS: Record<NicheKey, NicheObjections> = {
       },
     ],
   },
+
+  // ── SPEC-FIX (2026-05-27) — health-functional split ──
+
+  'health-respiratory': {
+    niche: 'health-respiratory',
+    objections: [
+      {
+        objection: '"Phải mổ xoang mới khỏi hẳn"',
+        counterPosture: 'slow-converter — "tôi sợ mổ. 4 tháng dùng cái này — viêm xoang đỡ rõ. Bác sĩ bảo chưa cần mổ nữa"',
+      },
+      {
+        objection: '"Xịt mũi nào cũng làm phụ thuộc"',
+        counterPosture: 'gentle-correction — "thuốc co mạch như Otrivin có phụ thuộc thật. Cái này là dung dịch thảo dược + muối — không co mạch, không phụ thuộc"',
+      },
+      {
+        objection: '"Rửa mũi nước muối là đủ"',
+        counterPosture: 'both-and — "tôi vẫn rửa mũi mỗi sáng. Cái này dùng thêm khi cần — không thay thế nước muối, chỉ là tăng hiệu quả"',
+      },
+    ],
+  },
+
+  'health-joint': {
+    niche: 'health-joint',
+    objections: [
+      {
+        objection: '"Khớp đau do tuổi, không có cách"',
+        counterPosture: 'second-hand-reporter — "ba/mẹ tôi dùng, đi cầu thang đỡ rõ. Tuổi cao vẫn đỡ"',
+      },
+      {
+        objection: '"Thuốc giảm đau dễ hơn"',
+        counterPosture: 'slow-converter — "tôi cũng dùng thuốc giảm đau. Cái này khác — đỡ chậm nhưng không quay lại"',
+      },
+      {
+        objection: '"Glucosamine không có evidence mạnh"',
+        counterPosture: 'cautious-researcher — "tôi đọc nghiên cứu — glucosamine + chondroitin combine có evidence vừa phải. Đáng thử trước khi mổ"',
+      },
+    ],
+  },
+
+  'health-digestive': {
+    niche: 'health-digestive',
+    objections: [
+      {
+        objection: '"Phải uống omeprazole cả đời"',
+        counterPosture: 'both-and — "tôi vẫn uống omeprazole sáng. Cái này hỗ trợ niêm mạc + cân bằng acid — giảm liều omeprazole sau 3 tháng"',
+      },
+      {
+        objection: '"Chỉ cần kiêng cay + chua là hết"',
+        counterPosture: 'slow-converter — "tôi kiêng 1 năm vẫn đầy bụng. Cái này dùng thêm — ăn nhẹ cay vẫn ổn"',
+      },
+      {
+        objection: '"Dạ dày do stress, supplement vô ích"',
+        counterPosture: 'gentle-correction — "stress trigger thật, nhưng niêm mạc viêm sẵn cần phục hồi. Cái này là cho niêm mạc, không phải thuốc tâm lý"',
+      },
+    ],
+  },
+
+  'health-cardiovascular': {
+    niche: 'health-cardiovascular',
+    objections: [
+      {
+        objection: '"Phải uống thuốc huyết áp + statin theo đơn — supplement vô ích"',
+        counterPosture: 'both-and — "tôi vẫn uống thuốc theo đơn bác sĩ. Cái này là CoQ10 + omega — bác sĩ cho phép. Hỗ trợ thêm chứ không thay"',
+      },
+      {
+        objection: '"Huyết áp cao do tuổi, không cản được"',
+        counterPosture: 'slow-converter — "tôi cũng nghĩ vậy. 6 tháng dùng — huyết áp từ 150/95 về 135/85. Bác sĩ giảm liều thuốc"',
+      },
+      {
+        objection: '"CoQ10 / omega-3 chỉ là marketing"',
+        counterPosture: 'cautious-researcher — "tôi đọc — statin gây thiếu CoQ10, omega-3 chống viêm mạch. Có evidence vừa phải, đáng bổ sung"',
+      },
+    ],
+  },
 }
 
 function hashSeed(s: string): number {

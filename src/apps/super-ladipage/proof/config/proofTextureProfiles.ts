@@ -336,6 +336,80 @@ export const PROOF_TEXTURE_PROFILES: Record<NicheKey, ProofTextureProfile> = {
       'aspirational young-eye framing',
     ],
   },
+
+  // ── SPEC-FIX (2026-05-27) — health-functional split ──
+
+  'health-respiratory': {
+    niche: 'health-respiratory',
+    typicalVoice: '25-50yo any gender, mỗi đợt giao mùa khổ, allergy / sinus chronic',
+    platformFeel: 'FB nhóm dị ứng-xoang / Shopee xịt mũi review / Zalo gia đình',
+    textureCues: [
+      'mention timing cụ thể ("đêm phải há miệng thở" / "sáng dậy hỉ ra mới thở")',
+      'reference xịt mũi đã thử (Otrivin / Sterimar / nước muối)',
+      'mention vợ/chồng nhận xét ngáy đêm',
+      'reference giao mùa / đổi thời tiết / bụi mịn',
+    ],
+    avoidPatterns: [
+      'aggressive medical claim voice',
+      'generic wellness influencer tone',
+      'instant-cure miracle framing',
+      'aesthetic beauty voice',
+    ],
+  },
+
+  'health-joint': {
+    niche: 'health-joint',
+    typicalVoice: '45-65yo, mature thân thiện, family-witness OK ("mẹ tôi", "ba tôi"), Việt chuẩn ít abbreviation',
+    platformFeel: 'FB caretaker comment / Shopee glucosamine review / Zalo nhóm cao niên',
+    textureCues: [
+      'mention cụ thể ("đầu gối nhói lúc đứng dậy" / "vịn cầu thang từng bậc")',
+      'reference glucosamine / chondroitin / Sustagen đã thử',
+      'mention con/cháu/vợ chồng worry',
+      'reference đi siêu thị / đi chợ / leo cầu thang',
+    ],
+    avoidPatterns: [
+      'young trendy slang',
+      'beauty/skincare aesthetic',
+      'aggressive supplement-stack language',
+      'youth-recovery framing',
+    ],
+  },
+
+  'health-digestive': {
+    niche: 'health-digestive',
+    typicalVoice: '30-55yo office worker / stressed parent, GERD-savvy, practical food-anxious tone',
+    platformFeel: 'FB nhóm dạ dày-trào ngược / Shopee omeprazole review / Zalo bệnh nhân',
+    textureCues: [
+      'mention timing cụ thể ("đầy bụng 1 giờ sau ăn" / "ợ chua đêm")',
+      'reference omeprazole / esomeprazole / Yumangel đã uống',
+      'mention kiêng cay/chua/dầu mỡ',
+      'reference food triggers cụ thể (bia, cà phê đặc, đồ chiên)',
+    ],
+    avoidPatterns: [
+      'detox / cleanse marketing voice',
+      'weight-loss tone',
+      'beauty aesthetic narrative',
+      'fearmongering medical claim',
+    ],
+  },
+
+  'health-cardiovascular': {
+    niche: 'health-cardiovascular',
+    typicalVoice: '50-70yo, mature concerned voice, A1C/BP-savvy, family-context, Việt chuẩn',
+    platformFeel: 'FB nhóm huyết áp/tim mạch VN / Zalo bệnh nhân / Shopee CoQ10 review',
+    textureCues: [
+      'mention specific number ("huyết áp 150/95" / "cholesterol 4.5")',
+      'reference thuốc theo đơn (Concor / Amlor / atorvastatin)',
+      'mention kiêng muối / né đồ chiên / đo huyết áp 2 lần/ngày',
+      'reference bác sĩ tim mạch / phòng khám tuyến cao',
+    ],
+    avoidPatterns: [
+      'miracle cure marketing voice',
+      'aggressive medical claim',
+      'wellness influencer aspirational tone',
+      'youth-fitness energetic framing',
+    ],
+  },
 }
 
 /** Get texture profile for niche. */

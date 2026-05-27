@@ -235,6 +235,60 @@ export const CTA_ENERGY_MODES: Record<NicheKey, CtaEnergyMode> = {
       'youth-restoration voice',
     ],
   },
+
+  // ── SPEC-FIX (2026-05-27) — health-functional split ──
+
+  'health-respiratory': {
+    id: 'breath-freedom-return',
+    niche: 'health-respiratory',
+    description: 'Action push toward open airway + quiet nights — NOT generic wellness or instant unblock miracle.',
+    vibe: 'reader feels "đêm nay tôi có thể thở mũi / sáng dậy không cần hỉ mạnh"',
+    avoidPatterns: [
+      'instant-unblock miracle tone',
+      'generic wellness from within',
+      'detox / cleanse framing',
+      'aesthetic beauty narrative',
+    ],
+  },
+
+  'health-joint': {
+    id: 'mobility-dignity-return',
+    niche: 'health-joint',
+    description: 'Action push toward independent mobility + dignity — NOT calm acceptance of decline.',
+    vibe: 'reader feels "có thể leo cầu thang / chơi với cháu / không phụ thuộc"',
+    avoidPatterns: [
+      'gentle resignation tone',
+      'self-acceptance of decline',
+      'emotional-only resolution',
+      'youth-recovery promise',
+    ],
+  },
+
+  'health-digestive': {
+    id: 'digestive-ease-return',
+    niche: 'health-digestive',
+    description: 'Action push toward eating without fear + digestive ease — NOT detox or weight-loss.',
+    vibe: 'reader feels "có thể ăn cay nhẹ / cà phê sáng / không lo đầy bụng cả buổi"',
+    avoidPatterns: [
+      'detox cleansing framing',
+      'weight-loss tone',
+      'beauty aesthetic narrative',
+      'fearmongering medical claim',
+    ],
+  },
+
+  'health-cardiovascular': {
+    id: 'cardiac-stability',
+    niche: 'health-cardiovascular',
+    description: 'Action push toward stable numbers + peace of mind — NOT miracle cure or replacing medication.',
+    vibe: 'reader feels "huyết áp ổn định / có thể đi bộ với cháu / không lo đột quỵ đêm"',
+    avoidPatterns: [
+      'miracle cure framing',
+      'replacement-of-medication promise',
+      'fearmongering tone',
+      'aggressive health claim',
+    ],
+  },
 }
 
 /** Get CTA energy mode for niche. */

@@ -433,6 +433,100 @@ export const NICHE_MECHANISM_VOCAB: Record<NicheKey, NicheMechanismVocab> = {
       'sáng như đèn pha', 'thị lực thần kỳ',
     ],
   },
+
+  // ── SPEC-FIX (2026-05-27) — health-functional split ──
+
+  'health-respiratory': {
+    niche: 'health-respiratory',
+    mechanismVocab: [
+      'niêm mạc mũi viêm',
+      'xoang bị tắc do chất nhầy',
+      'vi khuẩn yếm khí trong xoang',
+      'lông mao mũi (cilia) yếu',
+      'allergen pollen / bụi mịn / mạt nhà',
+      'histamine release',
+      'nasal congestion cycle',
+      'thở miệng đêm — khô họng',
+    ],
+    mechanismFrames: [
+      'không phải "thông mũi tức thì" — mà là làm dịu niêm mạc + giảm sưng',
+      'cái nghẹt không phải do mũi tắc — là niêm mạc bị viêm phồng lên chèn vào đường thở',
+      'không co mạch — không gây phụ thuộc — chỉ làm sạch + dưỡng ẩm + giảm viêm',
+    ],
+    bannedGenericPhrases: [
+      'từ bên trong', 'gốc rễ vấn đề', 'nuôi dưỡng toàn diện',
+      'phục hồi tự nhiên', 'thông thoáng thần kỳ',
+    ],
+  },
+
+  'health-joint': {
+    niche: 'health-joint',
+    mechanismVocab: [
+      'sụn khớp mòn dần',
+      'collagen type 2 cartilage',
+      'glucosamine + chondroitin',
+      'dịch khớp synovial',
+      'viêm khớp osteoarthritis',
+      'mật độ xương loãng',
+      'compression patella tracking',
+      'pelvic alignment',
+    ],
+    mechanismFrames: [
+      'không phải "hết đau ngay" — mà là cho sụn đủ nguyên liệu để TỰ phục hồi',
+      'cái đau bề mặt chỉ là dấu hiệu — sụn bên trong mới là chỗ cần được hỗ trợ',
+      'không tê — không che — chỉ cung cấp đủ thứ cơ thể đang thiếu để tự fix',
+    ],
+    bannedGenericPhrases: [
+      'từ bên trong', 'gốc rễ vấn đề', 'nuôi dưỡng toàn diện',
+      'cân bằng cơ thể', 'phục hồi tự nhiên',
+    ],
+  },
+
+  'health-digestive': {
+    niche: 'health-digestive',
+    mechanismVocab: [
+      'niêm mạc dạ dày viêm',
+      'acid trào ngược (GERD)',
+      'vi khuẩn H. pylori',
+      'gut microbiome cân bằng',
+      'chậm tiêu hóa do enzyme thiếu',
+      'IBS triggers',
+      'lactose intolerance',
+      'inflammation đường ruột',
+    ],
+    mechanismFrames: [
+      'không phải "hết đầy bụng ngay" — mà là làm dịu niêm mạc + cân bằng acid',
+      'cái đau dạ dày không phải do ăn sai — là niêm mạc đã viêm sẵn',
+      'không kháng acid mạnh — chỉ là phục hồi niêm mạc + hỗ trợ enzyme',
+    ],
+    bannedGenericPhrases: [
+      'từ bên trong', 'gốc rễ vấn đề', 'nuôi dưỡng toàn diện',
+      'thanh lọc cơ thể', 'thải độc toàn diện',
+    ],
+  },
+
+  'health-cardiovascular': {
+    niche: 'health-cardiovascular',
+    mechanismVocab: [
+      'huyết áp tâm thu / tâm trương',
+      'cholesterol LDL / HDL',
+      'mỡ máu triglyceride',
+      'mạch máu xơ vữa',
+      'CoQ10 cardiac support',
+      'omega-3 chống viêm mạch',
+      'fibrinogen đông máu',
+      'arterial elasticity',
+    ],
+    mechanismFrames: [
+      'không phải "hạ huyết áp ngay" — mà là làm mạch máu đàn hồi lại',
+      'cái huyết áp cao không phải lỗi tim — là mạch máu xơ hóa làm tim phải bóp mạnh',
+      'không thay thuốc tim mạch — chỉ hỗ trợ chỉ số ổn định cùng đơn bác sĩ',
+    ],
+    bannedGenericPhrases: [
+      'từ bên trong', 'gốc rễ vấn đề', 'nuôi dưỡng toàn diện',
+      'tim mạch khỏe mạnh', 'chữa khỏi tim mạch',
+    ],
+  },
 }
 
 function hashSeed(s: string): number {

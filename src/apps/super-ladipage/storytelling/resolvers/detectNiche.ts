@@ -66,6 +66,11 @@ const VALID_NICHES: ReadonlyArray<NicheKey> = [
   'prostate-urology',
   'hemorrhoids-digestive-shame',
   'eye-vision-care',
+  // SPEC-FIX (2026-05-27) — health-functional split
+  'health-respiratory',
+  'health-joint',
+  'health-digestive',
+  'health-cardiovascular',
 ]
 
 // ─── Gemini classifier prompts ────────────────────────────────────
@@ -73,7 +78,11 @@ const VALID_NICHES: ReadonlyArray<NicheKey> = [
 const NICHE_DESCRIPTIONS = `
 - skincare: TOPICAL face skincare — acne cream, anti-aging cream (TOPICAL ONLY), whitening, serum, sunscreen, mặt da kem mụn
 - haircare: hair loss, dandruff, shampoo, scalp issues, baldness, tóc rụng gàu
-- health-functional: joint/knee/back/spine pain, orthopedic braces, nasal/sinus, respiratory/cough/allergy, digestive/stomach (NON-hemorrhoid), blood pressure (NON-diabetes), cholesterol, arthritis. GENERIC NON-AESTHETIC HEALTH PRODUCTS — use only if not fit specific niche below.
+- health-functional: GENERIC fallback only — use ONLY if product does NOT fit any of the focused health sub-niches below. (Split 2026-05-27: most products now go to health-respiratory / health-joint / health-digestive / health-cardiovascular instead.)
+- health-respiratory: NASAL / SINUS / RESPIRATORY — nasal spray, sinus rinse, anti-allergy spray, cough syrup, asthma support, decongestant. Pain points: nghẹt mũi / mũi tắc / xoang viêm / hắt hơi / dị ứng / khó thở / ngáy. Includes products like Otrivin / Sterimar / saline rinse / herbal nasal spray.
+- health-joint: JOINT / BACK / SPINE — knee brace, glucosamine, chondroitin, joint supplements, back support belt, posture corrector, anti-arthritis. Pain points: đau khớp / đầu gối / cột sống / thoái hóa khớp / cứng khớp / leo cầu thang khó / vịn lan can.
+- health-digestive: STOMACH / GERD / IBS — omeprazole-class, probiotics for gut, anti-acid, digestive enzyme, IBS support. Pain points: đau dạ dày / trào ngược / ợ chua / đầy bụng / khó tiêu / IBS. EXCLUDE hemorrhoids (separate niche) and liver (separate niche).
+- health-cardiovascular: BLOOD PRESSURE / CHOLESTEROL / HEART — BP support supplement, omega-3 cardiac, CoQ10, niacin for lipids, anti-hypertension herbal. Pain points: huyết áp cao / cholesterol cao / mỡ máu / nhịp tim không đều. EXCLUDE diabetes (separate niche) and stroke recovery.
 - supplement-wellness: GENERAL vitamins, oral collagen for beauty, omega, energy booster, immune support, antioxidants (use for generic supplement that doesn't fit specific niches below)
 - fitness-recovery: gym, weight loss, body fat, muscle building, workout supplements, cardio recovery
 - relationship: marriage/sexual health for COUPLES, libido, erectile, intimate products (NOT urinary / prostate)
@@ -92,7 +101,7 @@ const NICHE_DESCRIPTIONS = `
 `.trim()
 
 function buildClassifierPrompt(input: DetectInput): string {
-  return `Classify this product into EXACTLY ONE niche key from the 18 options below.
+  return `Classify this product into EXACTLY ONE niche key from the 22 options below.
 
 NICHE OPTIONS:
 ${NICHE_DESCRIPTIONS}
@@ -119,6 +128,11 @@ CRITICAL RULES:
 13. PROSTATE / TIỂU ĐÊM / MALE URINARY (saw palmetto / beta-sitosterol / BPH / tuyến tiền liệt) → prostate-urology (NOT relationship which is sexual, NOT health-functional)
 14. HEMORRHOIDS / TRĨ / TÁO BÓN MẠN (diosmin / hesperidin / preparation H / búi trĩ) → hemorrhoids-digestive-shame (NOT health-functional generic)
 15. EYE / MẮT products (lutein / zeaxanthin / eye drops / mắt khô / mỏi mắt / blue light) → eye-vision-care (NOT health-functional generic, NOT supplement-wellness)
+16. NASAL / SINUS / RESPIRATORY (nasal spray / sinus rinse / decongestant / anti-allergy / cough syrup / xịt mũi / nước rửa xoang / hắt hơi / nghẹt mũi) → health-respiratory (NOT health-functional generic)
+17. JOINT / KNEE / BACK / SPINE (knee brace / glucosamine / chondroitin / back belt / posture corrector / đai đầu gối / đai lưng / thoái hóa khớp) → health-joint (NOT health-functional generic)
+18. STOMACH / GERD / DIGESTIVE NON-HEMORRHOID (omeprazole-class / probiotic / digestive enzyme / acid / trào ngược / đau dạ dày / IBS) → health-digestive (NOT health-functional, NOT hemorrhoids-digestive-shame which is anal/bowel specifically)
+19. BP / CHOLESTEROL / HEART (huyết áp / cholesterol / mỡ máu / CoQ10 cardiac / omega-3 tim mạch) → health-cardiovascular (NOT health-functional generic, NOT diabetes which is glucose-specific)
+20. health-functional is now a FALLBACK only — use it ONLY when product is generic non-aesthetic health that doesn't fit any specific sub-niche above (eg general immunity, vitamin C, generic antioxidant). Most products should NOT need this fallback.
 
 OUTPUT FORMAT: Reply with EXACTLY ONE niche key. Just the key string, lowercase, hyphenated. NO explanation, NO quotes, NO markdown.
 
@@ -290,6 +304,54 @@ const NICHE_KEYWORDS: Array<{ niche: NicheKey; keywords: RegExp[] }> = [
       /\btóc\b/i, /\bhói\b/i, /\brụng tóc\b/i,
       /\brambut\b/i, /\bgugur\b/i, /\bbotak\b/i,
       /\bshampoo\b/i, /\bscalp\b/i, /\bdandruff\b/i, /\bgàu\b/i,
+    ],
+  },
+  // ── SPEC-FIX (2026-05-27) — health-functional split ──
+  // Order matters: respiratory/joint/digestive/cardiovascular checked BEFORE
+  // the generic health-functional fallback so specific products route correctly.
+  {
+    niche: 'health-respiratory',
+    keywords: [
+      /\bxịt mũi\b/i, /\bnghẹt mũi\b/i, /\bmũi tắc\b/i, /\bviêm xoang\b/i,
+      /\bxoang\b/i, /\bhắt hơi\b/i, /\bsổ mũi\b/i, /\bdị ứng mũi\b/i,
+      /\bnasal\b/i, /\bsinus\b/i, /\bdecongestant\b/i, /\ballergy\b/i, /\basthma\b/i,
+      /\botrivin\b/i, /\bsterimar\b/i, /\bafrin\b/i,
+      /\bho\b/i, /\bsiro ho\b/i, /\bcough\b/i,
+      /\bsemburan hidung\b/i, /\bresdung\b/i,
+    ],
+  },
+  {
+    niche: 'health-joint',
+    keywords: [
+      /\bglucosamine\b/i, /\bchondroitin\b/i, /\bcollagen type 2\b/i,
+      /\bđai đầu gối\b/i, /\bđai lưng\b/i, /\bnẹp gối\b/i,
+      /\bđau khớp\b/i, /\bthoái hóa khớp\b/i, /\bviêm khớp\b/i,
+      /\bcột sống\b/i, /\bđau lưng\b/i, /\bspine\b/i,
+      /\bknee brace\b/i, /\bback support\b/i, /\bposture corrector\b/i,
+      /\barthritis\b/i, /\bjoint pain\b/i, /\bcartilage\b/i,
+    ],
+  },
+  {
+    niche: 'health-digestive',
+    keywords: [
+      /\bdạ dày\b/i, /\btrào ngược\b/i, /\bợ chua\b/i, /\bợ nóng\b/i,
+      /\bđầy bụng\b/i, /\bkhó tiêu\b/i, /\bviêm dạ dày\b/i, /\bloét dạ dày\b/i,
+      /\bomeprazole\b/i, /\besomeprazole\b/i, /\byumangel\b/i, /\bgastrobutyl\b/i,
+      /\bgerd\b/i, /\bibs\b/i, /\bacid reflux\b/i, /\bheartburn\b/i,
+      /\bprobiotic\b/i, /\bdigestive enzyme\b/i,
+      /\bsakit perut\b/i, /\bnyeri lambung\b/i,
+    ],
+  },
+  {
+    niche: 'health-cardiovascular',
+    keywords: [
+      /\bhuyết áp\b/i, /\btăng huyết áp\b/i, /\bcao huyết áp\b/i,
+      /\bcholesterol\b/i, /\bmỡ máu\b/i, /\btriglyceride\b/i,
+      /\bblood pressure\b/i, /\bhypertension\b/i, /\bcardiac\b/i,
+      /\btim mạch\b/i, /\bxơ vữa mạch\b/i, /\bnhịp tim\b/i,
+      /\bcoq10\b/i, /\bomega.?3 tim\b/i, /\bstatin\b/i,
+      /\bamlor\b/i, /\bconcor\b/i, /\batorvastatin\b/i,
+      /\btekanan darah\b/i,
     ],
   },
   {

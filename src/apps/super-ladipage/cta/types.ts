@@ -48,6 +48,11 @@ export type CtaEnergyModeId =
   | 'silent-vitality-return'   // prostate-urology — quiet capacity / dignity in male body
   | 'discreet-comfort-return'  // hemorrhoids-digestive-shame — bathroom dignity back
   | 'clarity-return'           // eye-vision-care — visual clarity + screen endurance
+  // SPEC-FIX (2026-05-27) — health-functional split
+  | 'breath-freedom-return'    // health-respiratory — open airway, sleep through night
+  | 'mobility-dignity-return'  // health-joint — independent capacity, no caregiver burden
+  | 'digestive-ease-return'    // health-digestive — eat without fear, work without distraction
+  | 'cardiac-stability'        // health-cardiovascular — stable numbers, peace of mind
 
 export interface CtaEnergyMode {
   id: CtaEnergyModeId

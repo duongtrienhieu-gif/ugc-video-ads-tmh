@@ -933,6 +933,221 @@ export const NICHE_DOMAIN_LOCK: Record<NicheKey, NicheDomainLock> = {
     ],
   },
 
+  // ─── SPEC-FIX (2026-05-27) — health-functional split ────────────────
+
+  'health-respiratory': {
+    niche: 'health-respiratory',
+    symptomsPool: [
+      'sáng dậy mũi cứng, phải hỉ mạnh mới thở được',
+      'đêm phải há miệng thở vì mũi tắc',
+      'hắt hơi liên tục buổi sáng',
+      'chảy nước mũi trong / đặc khi đổi thời tiết',
+      'cảm giác đầu nặng + áp lực vùng trán do xoang',
+      'ngứa rát họng do thở miệng đêm',
+      'mũi tắc 1 bên / 2 bên luân phiên',
+    ],
+    frictionPool: [
+      'mang theo khăn giấy mọi lúc',
+      'né điều hòa lạnh quá hoặc bụi đường',
+      'né tụ tập đông người sợ lây thêm',
+      'thay thuốc xịt mũi liên tục — bị phụ thuộc',
+      'tránh nằm phẳng đêm vì khó thở',
+    ],
+    sensoryPool: [
+      'cảm giác áp lực ở vùng trán + thái dương',
+      'mùi không còn rõ — đồ ăn cũng nhạt đi',
+      'cảm giác chất nhầy chảy xuống cổ họng',
+      'mũi khô + đau khi hỉ mạnh',
+    ],
+    bodyLanguagePool: [
+      'đưa tay lên xoa cánh mũi vô thức',
+      'cúi đầu hắt hơi quay đi mỗi lần ở chỗ đông',
+      'lau mũi nhanh khi nói chuyện',
+      'sờ vùng trán khi căng thẳng',
+    ],
+    hiddenFearsPool: [
+      'sẽ phải phẫu thuật xoang trong vài năm tới',
+      'phụ thuộc thuốc xịt mũi co mạch vĩnh viễn',
+      'chồng / con phàn nàn ngáy + thở miệng đêm',
+      'không bao giờ thở mũi thoải mái như xưa',
+    ],
+    dailyBehaviorsPool: [
+      'rửa mũi nước muối sinh lý 2 lần/ngày',
+      'mua máy lọc không khí phòng ngủ',
+      'thử xịt mũi mới mỗi vài tháng',
+      'uống thuốc kháng histamine khi đổi mùa',
+    ],
+    forbiddenLeak: [
+      'đầu gối nhói', 'vịn cầu thang', 'tay tê',
+      'tóc rụng', 'da xỉn', 'mụn',
+      'bốc hỏa', 'kinh nguyệt',
+      'tiểu đêm tuyến tiền liệt', 'trĩ', 'táo bón',
+      'huyết áp', 'tiểu đường', 'gan nhiễm mỡ',
+      'mỗi cử động đều cảm thấy nỗ lực',  // joint-specific phrasing
+      'cơ thể không thuộc về mình',  // generic body language
+    ],
+  },
+
+  'health-joint': {
+    niche: 'health-joint',
+    symptomsPool: [
+      'đầu gối nhói khi đứng dậy bất chợt',
+      'cứng khớp khi mới thức dậy',
+      'phải vịn vào bàn / tường để đứng lên',
+      'đi cầu thang phải vịn lan can từng bậc',
+      'lưng đau khi cúi xuống nhặt đồ',
+      'vai gáy đau âm ỉ kéo dài',
+      'tay tê khi cầm điện thoại lâu',
+      'cảm giác khô khớp khi xoay cổ',
+    ],
+    frictionPool: [
+      'né cầu thang ở nơi công cộng — đi thang máy',
+      'không nhận lời đi du lịch dài ngày',
+      'giả vờ buộc dây giày để ngồi nghỉ',
+      'kéo ghế chậm khi ngồi xuống bàn ăn',
+      'né mang vác đồ nặng — ngại nhờ giúp',
+    ],
+    sensoryPool: [
+      'cảm giác cứng khớp 30 phút mỗi sáng',
+      'tê bì lan từ tay xuống các đầu ngón',
+      'nhói âm ỉ ở khớp khi thay đổi tư thế',
+      'cảm giác lưng nặng khi đứng quá 20 phút',
+    ],
+    bodyLanguagePool: [
+      'xoa đầu gối vô thức khi đang nói chuyện',
+      'đặt tay lên thắt lưng khi đứng dậy',
+      'lăn vai khi đang ngồi làm việc',
+      'đứng cạnh giường mấy giây trước khi bước xuống',
+    ],
+    hiddenFearsPool: [
+      'cơ thể đang xuống nhanh hơn dự đoán',
+      'sẽ trở thành gánh nặng cho gia đình',
+      'không còn chơi với cháu/con như muốn',
+      'phải phẫu thuật khớp trong tương lai gần',
+    ],
+    dailyBehaviorsPool: [
+      'đi siêu thị về phải nằm ngay',
+      'mua miếng dán giảm đau dự trữ trong túi xách',
+      'uống glucosamine / chondroitin đều mỗi sáng',
+      'massage đầu gối + lưng mỗi tối',
+    ],
+    forbiddenLeak: [
+      'tóc rụng', 'vùng đỉnh đầu', 'da đầu',
+      'da xỉn màu', 'quầng thâm mắt',
+      'cảm xúc phẳng', 'snapping at chồng', 'khóc với con',
+      'attractiveness anxiety', 'né camera',
+      'mũi tắc', 'hắt hơi liên tục', 'xoang viêm',
+      'tiểu đêm', 'trĩ', 'táo bón',
+      'huyết áp', 'tiểu đường',
+    ],
+  },
+
+  'health-digestive': {
+    niche: 'health-digestive',
+    symptomsPool: [
+      'đầy bụng sau bữa ăn 30-60 phút',
+      'ợ chua + trào ngược acid lên cổ họng',
+      'đau dạ dày khi đói (8-10h sáng)',
+      'tiêu hóa chậm — ăn xong vẫn nặng bụng cả buổi',
+      'phân không đều — lúc lỏng lúc cứng',
+      'cảm giác buồn nôn khi ngửi đồ chiên',
+      'khó ngủ vì ợ nóng nằm xuống',
+    ],
+    frictionPool: [
+      'né đồ cay / chua / nhiều dầu mỡ',
+      'mang thuốc dạ dày trong túi mọi lúc',
+      'né cà phê đặc + bia rượu',
+      'ăn ít một lần để không đầy',
+      'ngủ kê gối cao để giảm trào ngược',
+    ],
+    sensoryPool: [
+      'cảm giác nóng rát vùng thượng vị',
+      'vị chua trong miệng buổi sáng',
+      'cảm giác đầy hơi đẩy lên ngực',
+      'mùi đồ ăn cũ ám trong hơi thở',
+    ],
+    bodyLanguagePool: [
+      'xoa ngực trên / thượng vị khi đang ngồi',
+      'thở hắt khi đứng dậy sau bữa ăn',
+      'tránh cúi gập khi vừa ăn xong',
+      'cau mày khi nghe rủ ăn đồ cay',
+    ],
+    hiddenFearsPool: [
+      'viêm dạ dày → loét → ung thư',
+      'sẽ phải uống thuốc kháng acid cả đời',
+      'không bao giờ ăn thoải mái như xưa',
+      'mọi người thấy phiền khi mình kén ăn',
+    ],
+    dailyBehaviorsPool: [
+      'uống omeprazole / esomeprazole đều mỗi sáng',
+      'tránh nằm 2 giờ sau ăn',
+      'mua men vi sinh / probiotic',
+      'theo dõi food diary tìm triggers',
+    ],
+    forbiddenLeak: [
+      'tóc rụng', 'da xỉn', 'mụn',
+      'đầu gối nhói', 'đau khớp', 'tê tay',
+      'mũi tắc', 'xoang viêm', 'hắt hơi',
+      'bốc hỏa', 'kinh nguyệt',
+      'tiểu đêm', 'huyết áp',
+      'trĩ',  // separate niche
+      'gan nhiễm mỡ',  // separate niche
+    ],
+  },
+
+  'health-cardiovascular': {
+    niche: 'health-cardiovascular',
+    symptomsPool: [
+      'huyết áp 150/95 — bác sĩ nhắc 3 tháng',
+      'cholesterol LDL 4.5 — cao hơn ngưỡng',
+      'thỉnh thoảng đau nhói vùng tim khi gắng sức',
+      'khó thở khi leo 2 tầng cầu thang',
+      'mất ngủ vì lo chỉ số tim mạch',
+      'chân + cổ tay phù nhẹ vào chiều',
+      'chóng mặt khi thay đổi tư thế đột ngột',
+    ],
+    frictionPool: [
+      'kiêng muối + đồ chiên kỹ',
+      'mang máy đo huyết áp đi đâu cũng đo',
+      'né leo cầu thang — đi thang máy',
+      'không nâng vật nặng — sợ huyết áp tăng',
+      'tránh stress công việc — không nhận thêm dự án',
+    ],
+    sensoryPool: [
+      'cảm giác tim đập nhanh khi căng thẳng',
+      'cảm giác lành lạnh đầu ngón tay',
+      'nhức đầu vùng gáy vào sáng sớm',
+      'mệt khi đi bộ 200m liên tục',
+    ],
+    bodyLanguagePool: [
+      'tay sờ cổ tay đếm mạch vô thức',
+      'thở sâu khi cảm thấy hồi hộp',
+      'ngồi xuống ngay khi thấy chóng mặt',
+      'kiểm tra cổ chân xem có phù không',
+    ],
+    hiddenFearsPool: [
+      'đột quỵ / nhồi máu cơ tim ban đêm',
+      'phụ thuộc thuốc huyết áp cả đời',
+      'không kịp xem con cháu lớn',
+      'chỉ số ngày một xấu dù đã kiêng',
+    ],
+    dailyBehaviorsPool: [
+      'uống thuốc huyết áp + statin đều mỗi sáng',
+      'đo huyết áp 2 lần/ngày — ghi sổ',
+      'uống omega-3 / CoQ10 thêm',
+      'đi bộ 30 phút sau ăn — không gắng sức',
+    ],
+    forbiddenLeak: [
+      'tóc rụng', 'da xỉn', 'mụn',
+      'đầu gối nhói', 'đau khớp', 'tê tay',
+      'mũi tắc', 'xoang viêm',
+      'bốc hỏa', 'kinh nguyệt',
+      'tiểu đêm tuyến tiền liệt', 'trĩ', 'táo bón',
+      'tiểu đường',  // separate niche
+      'gan nhiễm mỡ',  // separate niche
+    ],
+  },
+
   // ─── EYE-VISION-CARE — screen fatigue / aging vision ───────────────
   'eye-vision-care': {
     niche: 'eye-vision-care',

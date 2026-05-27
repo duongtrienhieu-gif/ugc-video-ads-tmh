@@ -47,6 +47,11 @@ export type NicheKey =
   | 'prostate-urology'          // tuyến tiền liệt / tiểu đêm / tiết niệu nam
   | 'hemorrhoids-digestive-shame' // trĩ / táo bón mạn / đau hậu môn — silent shame
   | 'eye-vision-care'           // mắt khô / mỏi mắt / cận thị / thoái hóa điểm vàng
+  // SPEC-FIX (2026-05-27) — split 'health-functional' kitchen-sink into focused sub-niches
+  | 'health-respiratory'        // nasal / sinus / cough / allergy / asthma — xịt mũi, viêm xoang
+  | 'health-joint'              // knee / back / spine / arthritis — đau khớp, đai đầu gối, glucosamine
+  | 'health-digestive'          // stomach / IBS / acid / GERD — đau dạ dày, trào ngược (NON-hemorrhoid)
+  | 'health-cardiovascular'     // BP / cholesterol / heart — huyết áp, mỡ máu, tim mạch
 
 /** Country target — drives cultural defaults. */
 export type CountryCode = 'MY' | 'VN' | 'SG' | 'ID' | 'TH' | 'PH'

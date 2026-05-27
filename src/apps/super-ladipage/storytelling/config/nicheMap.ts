@@ -211,6 +211,64 @@ export const NICHE_PRESETS: Partial<Record<NicheKey, NichePreset>> = {
     imageCount: 9,
     recommendedCulturalWorld: ['vietnamese-urban', 'malay-muslim'],
   },
+
+  // ── SPEC-FIX (2026-05-27) — health-functional split ──
+
+  'health-respiratory': {
+    niche: 'health-respiratory',
+    emotionalIntensity: 'medium',       // chronic discomfort — sleep + breath disruption
+    productRevealSection: 7,
+    pacingType: 'slow-burn',
+    continuityPriority: 'high',
+    preferredTreatments: ['domestic-observational', 'memory-snapshot', 'imperfect-real'],
+    ctaSoftness: 'invitation-only',
+    supportingCharacter: 'family',      // partner/family notice snoring/mouth-breathing
+    sectionCount: 10,
+    imageCount: 9,
+    recommendedCulturalWorld: ['vietnamese-urban', 'malay-muslim'],
+  },
+
+  'health-joint': {
+    niche: 'health-joint',
+    emotionalIntensity: 'medium',       // mobility loss + dignity threat
+    productRevealSection: 7,
+    pacingType: 'slow-burn',
+    continuityPriority: 'high',
+    preferredTreatments: ['domestic-observational', 'environmental-wide', 'memory-snapshot'],
+    ctaSoftness: 'invitation-only',
+    supportingCharacter: 'family',      // children worry about parent
+    sectionCount: 10,
+    imageCount: 9,
+    recommendedCulturalWorld: ['vietnamese-urban', 'vietnamese-rural', 'malay-muslim'],
+  },
+
+  'health-digestive': {
+    niche: 'health-digestive',
+    emotionalIntensity: 'medium',       // food anxiety + work disruption
+    productRevealSection: 7,
+    pacingType: 'slow-burn',
+    continuityPriority: 'high',
+    preferredTreatments: ['domestic-observational', 'memory-snapshot', 'imperfect-real'],
+    ctaSoftness: 'invitation-only',
+    supportingCharacter: 'family',      // family adjust meals
+    sectionCount: 10,
+    imageCount: 9,
+    recommendedCulturalWorld: ['vietnamese-urban', 'malay-muslim'],
+  },
+
+  'health-cardiovascular': {
+    niche: 'health-cardiovascular',
+    emotionalIntensity: 'medium',       // mortality anxiety + lifestyle disruption
+    productRevealSection: 8,            // slow trust — serious health
+    pacingType: 'slow-burn',
+    continuityPriority: 'high',
+    preferredTreatments: ['domestic-observational', 'family-album', 'environmental-wide'],
+    ctaSoftness: 'invitation-only',
+    supportingCharacter: 'family',      // spouse/children worry
+    sectionCount: 11,
+    imageCount: 10,
+    recommendedCulturalWorld: ['vietnamese-urban', 'malay-muslim'],
+  },
 }
 
 /** Convenience getter — returns preset hoặc undefined nếu niche chưa có
