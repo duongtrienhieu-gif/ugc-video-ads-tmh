@@ -408,16 +408,32 @@ export default function StorytellingOutputPanel({
           // class enables Lora + Be Vietnam Pro fonts that render VN/MS
           // diacritics cleanly (was broken with browser default serif).
           <article className="storytelling-article max-w-prose mx-auto px-5 md:px-8 py-12 md:py-20">
-            {pack.sections.map((section, idx) => {
-              // POST-PI (2026-05-27): pack.sections is now mixed storytelling +
-              // PI blocks. Look up by SECTION ID (not index) — meta.sectionIds[idx]
-              // gives the id; storytelling sections match against exportablePage,
-              // PI sections (id startsWith 'pi-') have no exportablePage entry.
+            {(() => {
+              // POST-PI lookup fix (2026-05-27):
+              // pack.sections is 13-15 storytelling blocks + 5 PI blocks.
+              // exportablePage.sections is ~7 COMPOSED sections (composer merges
+              // multiple storytelling blocks into 1 composed section by role).
+              // For each pack section, find its composed section by checking if
+              // the storytelling blockId appears in any sourceBlockIds list.
+              // Image attaches at the FIRST pack section that maps to each
+              // composed section (avoids duplicate image renders for merged groups).
+              const seenComposedIds = new Set<string>()
+              return pack.sections.map((section, idx) => {
               const currentSectionId = meta.sectionIds[idx] as string | undefined
               const isPIBlock = typeof currentSectionId === 'string' && currentSectionId.startsWith('pi-')
-              const exportSection = isPIBlock || !currentSectionId
+              const composedSection = isPIBlock || !currentSectionId
                 ? undefined
-                : meta.exportablePage?.sections.find((s) => s.id === currentSectionId)
+                : meta.exportablePage?.sections.find(
+                    (s) => s.sourceBlockIds.some((bid) => bid === currentSectionId),
+                  )
+              // Only attach image to the FIRST pack section per composed section
+              const isPrimaryForComposed = composedSection
+                ? !seenComposedIds.has(composedSection.id)
+                : false
+              if (composedSection && isPrimaryForComposed) {
+                seenComposedIds.add(composedSection.id)
+              }
+              const exportSection = isPrimaryForComposed ? composedSection : undefined
               const generatedAsset = exportSection?.generatedAsset
               const sectionRegenState = session?.sections[exportSection?.id ?? '']
               const isThisSectionGenerating =
@@ -445,9 +461,11 @@ export default function StorytellingOutputPanel({
                     exportSection ? () => handleRegenerateImage(exportSection.id) : undefined
                   }
                   isPIBlock={isPIBlock}
+                  hasNoOwnImage={!isPIBlock && !exportSection}
                 />
               )
-            })}
+            })
+            })()}
 
             {/* Footer breathing space */}
             <div className="mt-32 mb-8 text-center">
@@ -719,6 +737,9 @@ interface SectionViewProps {
   /** PI-LAYER 2026-05-27 — true when this section is a product-info block
    *  (id starts with 'pi-'). Renders with subtle visual marker, no image. */
   isPIBlock?: boolean
+  /** Storytelling section that's PART of a composed group but NOT the primary.
+   *  Its image already appears at the primary section above — skip placeholder. */
+  hasNoOwnImage?: boolean
 }
 
 // ── PI-LAYER visual marker icon + label per type ─────────────────────
@@ -733,7 +754,7 @@ const PI_BLOCK_MARKERS: Record<string, { icon: string; label: string }> = {
 function StorytellingSectionView({
   section, sectionId, overlayType, chapterNumber, isLast, characterName, status,
   imageUrl, imagePrompt, isImageGenerating, canGenerateImage, onGenerateImage,
-  isPIBlock,
+  isPIBlock, hasNoOwnImage,
 }: SectionViewProps) {
   const blueprint = isPIBlock ? undefined : BLOCK_POOL[sectionId]
   const treatments = isPIBlock ? [] : (SECTION_VISUAL_MAP[sectionId] ?? [])
@@ -768,8 +789,12 @@ function StorytellingSectionView({
         .map((p) => p.trim())
         .filter((p) => p.length > 0)
     : []
-  // Image presence: hidden for PI blocks (text-only by design).
-  const hasImage = !isPIBlock
+  // Image presence:
+  //  - PI blocks: hidden (text-only by design)
+  //  - Non-primary storytelling blocks (already represented by an earlier
+  //    block's image in the same composed group): hidden too
+  //  - Otherwise: show placeholder/image
+  const hasImage = !isPIBlock && !hasNoOwnImage
 
   return (
     <section className={isLast ? '' : 'mb-20 md:mb-28'}>
