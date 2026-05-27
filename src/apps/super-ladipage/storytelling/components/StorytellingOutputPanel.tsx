@@ -951,12 +951,17 @@ function StorytellingSectionView({
         ))}
       </div>
 
-      {/* VN translation box — collapsible. Only shows when target was MY/EN. */}
+      {/* VN translation box — collapsible. Only shows when target was MY/EN.
+          UI-FIX3 (2026-05-28): switched from stone (gray) to rose (VN flag
+          tone) so box is clearly distinguishable from article body in BOTH
+          light mode (warm-red tint vs white) AND dark mode (rose glow vs
+          dark surface). All rose-50 / border-rose-200 / text-rose-* tokens
+          already have dark-mode overrides in src/index.css — no new CSS. */}
       {hasVnTranslation && (
-        <details className="mt-6 rounded-lg border border-stone-200 bg-stone-50 px-5 py-3 group">
-          <summary className="cursor-pointer text-[11px] uppercase tracking-wider text-stone-500 select-none flex items-center gap-2">
+        <details className="mt-6 rounded-lg border border-rose-200 bg-rose-50 px-5 py-3 group">
+          <summary className="cursor-pointer text-[11px] uppercase tracking-wider font-semibold text-rose-700 select-none flex items-center gap-2">
             <span>🇻🇳 Bản dịch tiếng Việt</span>
-            <span className="text-stone-400 italic normal-case tracking-normal group-open:hidden">
+            <span className="text-rose-500 italic normal-case tracking-normal font-normal group-open:hidden">
               (click để mở)
             </span>
           </summary>
