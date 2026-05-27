@@ -54,6 +54,8 @@ import { validateOrchestratedPage } from '../../validationCalibration'
 import { deriveExportPipelinePage } from '../../exportPipeline'
 import { translatePackToVi } from '../../services/translate'
 import { composePIBlocks, interleaveIntoPack } from '../../productInfoLayer'
+import { synthesizePageScenes } from '../../imageSceneSynthesis'
+import type { SceneDescription } from '../../imageSceneSynthesis'
 
 // ── Map storytelling BlockId → existing UGC SectionType for
 //    LandingSection.type compat. Storytelling block ID stored
@@ -574,6 +576,61 @@ export async function generateStorytellingPack(
     console.warn('[storytelling/PI] PI layer failed — pack ships without PI blocks:', err)
   }
 
+  // ─── 6.15 UI-FIX (2026-05-28) — Pre-compute scene prompts ─────────
+  // Run scene synthesis at PACK-GEN time so prompts are visible in UI
+  // BEFORE user clicks "Tạo ảnh" (matches UGC app preview pattern).
+  // Cost: +1 Gemini call/image (~9 calls, parallel, ~$0.001/pack).
+  // executePageGeneration will reuse these instead of re-synthesizing.
+  let imageScenes: Record<string, SceneDescription> | undefined = undefined
+  try {
+    if (exportablePage.sections.length > 0) {
+      const sceneSynthStart = Date.now()
+      const composedSectionsForSynth = exportablePage.sections
+        .filter((s) => s.imageRole !== 'none')
+        .map((s) => ({
+          id: s.id,
+          role: s.role,
+          sourceBlockIds: s.sourceBlockIds,
+          paragraphs: s.paragraphs,
+          inlineProof: s.inlineProof,
+          density: s.density,
+          pacingRole: s.pacingRole,
+          imageRole: s.imageRole,
+          scrollWeight: s.scrollWeight,
+          ctaInline: s.ctaInline,
+          spacingBefore: s.spacingBefore,
+          spacingAfter: s.spacingAfter,
+          transitionHint: s.transitionHint,
+          wordCount: s.wordCount,
+          paragraphCount: s.paragraphCount,
+        }))
+      const sceneBatch = await synthesizePageScenes(
+        composedSectionsForSynth,
+        {
+          niche: input.niche,
+          protagonist: {
+            archetype: characterProfile.archetype,
+            appearanceLock: characterProfile.appearanceLock,
+            environmentLock: characterProfile.environmentLock,
+          },
+          productContext: synthesizedBrief.productIdentityForImage
+            ? { productIdentityForImage: synthesizedBrief.productIdentityForImage }
+            : null,
+          targetLanguage: params.language,
+        },
+        { geminiApiKey, kieApiKey },
+        { concurrency: 4 },
+      )
+      imageScenes = sceneBatch.scenes
+      console.info(
+        `[storytelling/sceneSynth] pre-computed ${Object.keys(sceneBatch.scenes).length} scene prompts ` +
+        `(${sceneBatch.succeeded} gemini, ${sceneBatch.fallbackCount} fallback) in ${((Date.now() - sceneSynthStart) / 1000).toFixed(1)}s`,
+      )
+    }
+  } catch (err) {
+    console.warn('[storytelling/sceneSynth] Pre-compute failed — UI will request synthesis lazily at exec time:', err)
+  }
+
   // ─── 7. Assemble StorytellingPack ────────────────────────────────
   const pack: StorytellingPack = {
     productId:   params.productId,
@@ -610,6 +667,9 @@ export async function generateStorytellingPack(
                               || undefined,
       visionSource:         visionReality.source,
       synthesisSource:      synthesizedBrief.source,
+      // UI-FIX (2026-05-28) — pre-computed scene prompts per composed
+      // section so UI shows "Xem prompt" preview before user clicks gen.
+      imageScenes,
       // P14 — Exportable page (composer + renderContract + visualSemantics +
       // imageIntent + prompt fragments + renderer adapters + orchestration +
       // validation/calibration + ExportGuide per section). Full subtype chain:

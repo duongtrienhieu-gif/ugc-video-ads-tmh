@@ -697,6 +697,12 @@ export interface StorytellingMeta {
   /** ExportablePage IS-A ValidatedPage + per-section ExportGuide
    *  (design-intent metadata for marketer Ladipage assembly). */
   exportablePage?: import('../exportPipeline').ExportablePage
+
+  /** UI-FIX (2026-05-28) — Pre-computed image scene prompts per
+   *  composed section. Generated at pack-gen time via synthesizePageScenes
+   *  so UI can show "Xem prompt sẽ dùng" preview BEFORE user clicks
+   *  "Tạo ảnh" (matches UGC app pattern). Keyed by composedSectionId. */
+  imageScenes?: Record<string, import('../imageSceneSynthesis').SceneDescription>
 }
 
 /** Pack output — extends LandingPagePack shape để OutputPanel render được

@@ -234,88 +234,81 @@ export default function StorytellingOutputPanel({
 
   return (
     <div className="flex h-full flex-col overflow-hidden bg-stone-50">
-      {/* ── HEADER — minimal, không dominate ──────────────────────────────────
-           FIX 2026-05-27: right padding để chừa chỗ cho Gemini + KIE Credit
-           badges (positioned absolute top-2 right-2 z-50 trong App.tsx).
-           Mobile: ~140px reserved (2 compact pills). Desktop: ~280px (full pills). */}
+      {/* ── HEADER — title row + action row layout ────────────────────────────
+           UI-FIX (2026-05-28): action buttons moved to SECOND ROW to avoid
+           overlap with absolute-positioned Gemini + KIE Credit badges
+           (top-right z-50 in App.tsx). Title + meta on row 1 with truncation,
+           action buttons stacked on row 2 below. */}
       <div className="shrink-0 border-b border-stone-200 bg-stone-50/95 backdrop-blur px-4 md:px-6 py-2.5 pr-32 md:pr-72">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <div className="flex items-center gap-2 min-w-0 flex-1">
-            <BookOpen className="h-4 w-4 text-stone-500 shrink-0" />
-            <div className="min-w-0 truncate text-xs md:text-sm">
-              <span className="font-serif italic text-stone-800">Kể Chuyện Hành Trình</span>
-              <span className="text-stone-400 mx-2">·</span>
-              <span className="text-stone-600">{pack.productName}</span>
-              {character && (
-                <>
-                  <span className="text-stone-400 mx-2">·</span>
-                  <span className="text-stone-500 italic">Nhân vật: {character.name}</span>
-                </>
-              )}
-            </div>
-            <PipelineStatusBadge meta={meta} />
+        {/* ROW 1 — title + meta + status badge */}
+        <div className="flex items-center gap-2 min-w-0">
+          <BookOpen className="h-4 w-4 text-stone-500 shrink-0" />
+          <div className="min-w-0 truncate text-xs md:text-sm">
+            <span className="font-serif italic text-stone-800">Kể Chuyện Hành Trình</span>
+            <span className="text-stone-400 mx-2">·</span>
+            <span className="text-stone-600">{pack.productName}</span>
+            {character && (
+              <>
+                <span className="text-stone-400 mx-2">·</span>
+                <span className="text-stone-500 italic">Nhân vật: {character.name}</span>
+              </>
+            )}
           </div>
+          <PipelineStatusBadge meta={meta} />
+        </div>
 
-          <div className="flex items-center gap-1.5 shrink-0">
-            {/* FIX 2026-05-27 — Pack/Semantic toggle removed per user request.
-                Pack view (article) is now the only view. All image gen +
-                review actions live inline in the article via ImagePlaceholder.
-                Export buttons moved to article footer. */}
-            {/* INT — Generate all images button (live KIE execution).
-                FIX 2026-05-27: removed VITE_INTERNAL_BETA gate — button always
-                visible when pack has exportablePage AND KIE API key set.
-                Production users had no way to trigger image gen otherwise. */}
-            {hasSemantic && kieApiKey && (
-              imageGen.isGenerating ? (
-                <button
-                  onClick={imageGen.cancel}
-                  className="flex items-center gap-1 rounded-lg border border-amber-300 bg-amber-50 px-2.5 py-1 text-[11px] text-amber-800 hover:bg-amber-100"
-                  title="Hủy generation đang chạy"
-                >
-                  <X className="h-3 w-3" />
-                  Hủy ({imageGen.progress.done}/{imageGen.progress.total})
-                </button>
-              ) : (
-                <button
-                  onClick={handleGenerateAll}
-                  className="flex items-center gap-1 rounded-lg border border-emerald-300 bg-emerald-50 px-2.5 py-1 text-[11px] text-emerald-800 hover:bg-emerald-100"
-                  title="Tạo ảnh cho tất cả section (KIE gpt-image-2)"
-                >
-                  <Sparkles className="h-3 w-3" />
-                  Tạo ảnh
-                </button>
-              )
-            )}
-            {onRegenerate && (
+        {/* ROW 2 — action buttons (below row 1, no badge overlap) */}
+        <div className="mt-2 flex flex-wrap items-center gap-1.5">
+          {hasSemantic && kieApiKey && (
+            imageGen.isGenerating ? (
               <button
-                onClick={onRegenerate}
-                className="flex items-center gap-1 rounded-lg border border-stone-300 bg-white px-2.5 py-1 text-[11px] text-stone-700 hover:bg-stone-100"
-                title="Tạo lại mock"
+                onClick={imageGen.cancel}
+                className="flex items-center gap-1 rounded-lg border border-amber-300 bg-amber-50 px-2.5 py-1 text-[11px] text-amber-800 hover:bg-amber-100"
+                title="Hủy generation đang chạy"
               >
-                <RotateCcw className="h-3 w-3" /> Tạo lại
+                <X className="h-3 w-3" />
+                Hủy ({imageGen.progress.done}/{imageGen.progress.total})
               </button>
-            )}
-            {onSaveAsProject && !loadedFromId && (
+            ) : (
               <button
-                onClick={handleSave}
-                disabled={saving || saved}
-                className="flex items-center gap-1 rounded-lg border border-stone-300 bg-white px-2.5 py-1 text-[11px] text-stone-700 hover:bg-stone-100 disabled:opacity-40"
-                title="Lưu vào lịch sử"
+                onClick={handleGenerateAll}
+                className="flex items-center gap-1 rounded-lg border border-emerald-300 bg-emerald-50 px-2.5 py-1 text-[11px] text-emerald-800 hover:bg-emerald-100"
+                title="Tạo ảnh cho tất cả section (KIE)"
               >
-                {saved ? <Check className="h-3 w-3 text-emerald-600" /> : <Save className="h-3 w-3" />}
-                {saved ? 'Đã lưu' : 'Lưu'}
+                <Sparkles className="h-3 w-3" />
+                Tạo tất cả ảnh
               </button>
-            )}
-            {onNewProject && (
-              <button
-                onClick={onNewProject}
-                className="flex items-center gap-1 rounded-lg border border-stone-300 bg-white px-2.5 py-1 text-[11px] text-stone-700 hover:bg-stone-100"
-                title="Tạo project mới"
-              >
-                <FilePlus className="h-3 w-3" /> Mới
-              </button>
-            )}
-          </div>
+            )
+          )}
+          {onRegenerate && (
+            <button
+              onClick={onRegenerate}
+              className="flex items-center gap-1 rounded-lg border border-stone-300 bg-white px-2.5 py-1 text-[11px] text-stone-700 hover:bg-stone-100"
+              title="Tạo lại pack"
+            >
+              <RotateCcw className="h-3 w-3" /> Tạo lại
+            </button>
+          )}
+          {onSaveAsProject && !loadedFromId && (
+            <button
+              onClick={handleSave}
+              disabled={saving || saved}
+              className="flex items-center gap-1 rounded-lg border border-stone-300 bg-white px-2.5 py-1 text-[11px] text-stone-700 hover:bg-stone-100 disabled:opacity-40"
+              title="Lưu vào lịch sử"
+            >
+              {saved ? <Check className="h-3 w-3 text-emerald-600" /> : <Save className="h-3 w-3" />}
+              {saved ? 'Đã lưu' : 'Lưu'}
+            </button>
+          )}
+          {onNewProject && (
+            <button
+              onClick={onNewProject}
+              className="flex items-center gap-1 rounded-lg border border-stone-300 bg-white px-2.5 py-1 text-[11px] text-stone-700 hover:bg-stone-100"
+              title="Tạo project mới"
+            >
+              <FilePlus className="h-3 w-3" /> Mới
+            </button>
+          )}
         </div>
 
         {/* Meta strip (debug — helpful while engine wiring lên) */}
@@ -385,7 +378,10 @@ export default function StorytellingOutputPanel({
       </div>
 
       {/* ── READING COLUMN ──────────────────────────────────────────── */}
-      <div className="flex-1 overflow-y-auto">
+      {/* UI-FIX (2026-05-28): added overflow-x-hidden so long unbroken
+          strings can't push content past viewport. w-full ensures column
+          fills available width before max-w-prose centers article. */}
+      <div className="flex-1 overflow-y-auto overflow-x-hidden w-full">
         {viewMode === 'semantic' && meta.exportablePage ? (
           // P7 — Semantic mobile preview renderer (consumes ExportablePage
           // via subtype assignability to VisualSemanticsPage prop, P14).
@@ -439,6 +435,14 @@ export default function StorytellingOutputPanel({
               const isThisSectionGenerating =
                 imageGen.isGenerating &&
                 imageGen.progress.currentSectionId === exportSection?.id
+              // UI-FIX (2026-05-28): pre-computed scene prompt from pack-gen
+              // time. Shown in "Xem prompt" expandable even BEFORE user clicks
+              // "Tạo ảnh" (matches UGC pattern). Falls back to generated
+              // prompt after actual gen completes.
+              const preComputedScenePrompt = exportSection
+                ? meta.imageScenes?.[exportSection.id]?.prompt
+                : undefined
+              const promptForUI = generatedAsset?.promptUsed?.prompt || preComputedScenePrompt
               return (
                 <StorytellingSectionView
                   key={idx}
@@ -450,7 +454,7 @@ export default function StorytellingOutputPanel({
                   characterName={character?.name}
                   status={meta.sectionStatus?.[idx]}
                   imageUrl={generatedAsset?.outputImages?.[0]?.url}
-                  imagePrompt={generatedAsset?.promptUsed?.prompt}
+                  imagePrompt={promptForUI}
                   isImageGenerating={
                     isThisSectionGenerating ||
                     sectionRegenState?.regenStatus === 'generating' ||
@@ -858,12 +862,15 @@ function StorytellingSectionView({
             canGenerate={canGenerateImage}
             onGenerate={onGenerateImage}
           />
-          {/* UX.1 (2026-05-27) — Prompt viewer below image. Shows the actual
-              scene-synthesis prompt used (debug + transparency for marketer). */}
+          {/* UX (2026-05-28) — Prompt viewer below image. Shows either:
+              - "đã dùng" (after gen, from generatedAsset.promptUsed)
+              - "sẽ dùng" (before gen, from pre-computed scene synthesis)
+              Both come from the SAME Gemini scene synthesis call —
+              difference is just timing. */}
           {imagePrompt && (
             <details className="mt-2 max-w-sm mx-auto rounded-md border border-stone-200 bg-stone-50 px-3 py-2 text-[10px]">
               <summary className="cursor-pointer text-stone-500 italic select-none">
-                Xem prompt đã dùng để tạo ảnh
+                {imageUrl ? '👁 Xem prompt đã dùng để tạo ảnh' : '👁 Xem prompt sẽ dùng để tạo ảnh'}
               </summary>
               <div className="mt-2 font-mono text-stone-600 leading-relaxed whitespace-pre-wrap break-words">
                 {imagePrompt}
@@ -873,8 +880,10 @@ function StorytellingSectionView({
         </>
       )}
 
-      {/* Body copy — each paragraph as its own <p> for proper breathing space. */}
-      <div className="font-serif text-base md:text-[17px] text-stone-700 leading-[1.95]">
+      {/* Body copy — each paragraph as its own <p> for proper breathing space.
+          UI-FIX (2026-05-28): break-words to prevent long unbreakable strings
+          from pushing column past viewport. */}
+      <div className="font-serif text-base md:text-[17px] text-stone-700 leading-[1.95] break-words">
         {cleanParagraphs.map((p, i) => (
           <p key={i} className={i === cleanParagraphs.length - 1 ? '' : 'mb-5'}>{p}</p>
         ))}
