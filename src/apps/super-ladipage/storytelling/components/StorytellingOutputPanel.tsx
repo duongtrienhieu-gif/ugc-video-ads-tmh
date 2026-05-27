@@ -526,13 +526,14 @@ export default function StorytellingOutputPanel({
               </p>
             </div>
 
-            {/* FIX 2026-05-27 — Export panel in article footer.
-                Replaces Semantic-view Export tab. Marketer can copy
-                markdown / Ladipage HTML / Ladipage guidance / download
-                bundle without leaving the article view. */}
-            {meta.exportablePage && (
-              <PackExportFooter page={meta.exportablePage} />
-            )}
+            {/* UI-FIX7 (2026-05-28) — Simplified export footer.
+                Replaced the old multi-format export (Markdown / Ladipage
+                guide / Ladipage HTML / JSON / Ladipage bundle) with two
+                plain-text copy buttons per user request:
+                  - "COPY toàn bộ bản gốc"  → original-language copy
+                  - "COPY toàn bộ bản dịch (VN)" → VN translation copy
+                Hidden when pack is already VN (no separate dịch needed). */}
+            <PackExportFooter pack={pack} />
           </article>
         )}
       </div>
@@ -580,125 +581,127 @@ function ProofCalloutView({ section, isLast }: ProofCalloutProps) {
 }
 
 // ═════════════════════════════════════════════════════════════════════
-// PackExportFooter — page-level export buttons in Pack view (FIX 2026-05-27)
+// PackExportFooter — UI-FIX7 (2026-05-28)
 //
-// Replaces Semantic-view Export tab. Marketer copies markdown / Ladipage
-// HTML / Ladipage guidance / downloads JSON bundle from here.
+// Replaced the previous 5-button Ladipage export panel (Markdown /
+// Ladipage HTML / Ladipage guide / JSON / Ladipage bundle) with two
+// plain-text clipboard buttons per user request:
+//
+//   - COPY toàn bộ bản gốc       — original-language stitch of every
+//                                   section (title + body), joined with
+//                                   blank lines between sections.
+//   - COPY toàn bộ bản dịch (VN) — Vietnamese-translation stitch using
+//                                   each section's viTranslation / titleVi
+//                                   when available, falling back to the
+//                                   original copy so the output is never
+//                                   empty. Hidden when pack.language is
+//                                   already 'vi' (no separate dịch needed).
 // ═════════════════════════════════════════════════════════════════════
 
 interface PackExportFooterProps {
-  page: import('../../exportPipeline').ExportablePage
+  pack: StorytellingPack
 }
 
-function PackExportFooter({ page }: PackExportFooterProps) {
+function PackExportFooter({ pack }: PackExportFooterProps) {
   const [toast, setToast] = useState<string | null>(null)
   const flash = (label: string) => {
     setToast(label)
     setTimeout(() => setToast(null), 1500)
   }
 
-  const copyMarkdown = async () => {
-    const { serializeToMarkdown } = await import('../../exportPipeline')
-    const md = serializeToMarkdown(page)
-    await navigator.clipboard.writeText(md).catch(() => {})
-    flash('markdown')
+  const isVnPack = pack.language === 'vi'
+  const langLabel = pack.language === 'ms' ? 'MY'
+                  : pack.language === 'en' ? 'EN'
+                  : 'VN'
+
+  /** Stitch every section as "title\n\nbody" joined by blank lines.
+   *  Skips empty sections defensively. */
+  const buildOriginalText = (): string => {
+    return pack.sections
+      .map((s) => {
+        const title = (s.title || '').trim()
+        const body = (s.copy || '').trim()
+        if (!title && !body) return ''
+        return title ? `${title}\n\n${body}` : body
+      })
+      .filter((block) => block.length > 0)
+      .join('\n\n')
   }
-  const copyLadipageGuide = async () => {
-    const { serializeToLadipageGuidance } = await import('../../exportPipeline')
-    const guide = serializeToLadipageGuidance(page)
-    await navigator.clipboard.writeText(guide).catch(() => {})
-    flash('ladipage-guide')
+
+  /** Same shape as original, but each field prefers its VN sibling.
+   *  Falls back to the original field when the translation is missing
+   *  so partial coverage still produces useful output. */
+  const buildVnText = (): string => {
+    return pack.sections
+      .map((s) => {
+        const title = (s.titleVi || s.title || '').trim()
+        const body = (s.viTranslation || s.copy || '').trim()
+        if (!title && !body) return ''
+        return title ? `${title}\n\n${body}` : body
+      })
+      .filter((block) => block.length > 0)
+      .join('\n\n')
   }
-  const copyLadipageHtml = async () => {
-    const { adaptToLadipage, serializeBundleHtml } = await import('../../ladipageAdapter')
-    const bundle = adaptToLadipage(page)
-    const html = serializeBundleHtml(bundle)
-    await navigator.clipboard.writeText(html).catch(() => {})
-    flash('ladipage-html')
+
+  const copyOriginal = async () => {
+    const text = buildOriginalText()
+    if (!text) return
+    await navigator.clipboard.writeText(text).catch(() => {})
+    flash('original')
   }
-  const downloadJson = async () => {
-    const { serializeToJsonString } = await import('../../exportPipeline')
-    const json = serializeToJsonString(page)
-    const blob = new Blob([json], { type: 'application/json' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = 'storytelling-pack.json'
-    document.body.appendChild(a)
-    a.click()
-    document.body.removeChild(a)
-    setTimeout(() => URL.revokeObjectURL(url), 1000)
-    flash('json')
-  }
-  const downloadLadipageBundle = async () => {
-    const { adaptToLadipage, serializeBundleJson } = await import('../../ladipageAdapter')
-    const bundle = adaptToLadipage(page)
-    const json = serializeBundleJson(bundle)
-    const blob = new Blob([json], { type: 'application/json' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `${bundle.bundleId}.json`
-    document.body.appendChild(a)
-    a.click()
-    document.body.removeChild(a)
-    setTimeout(() => URL.revokeObjectURL(url), 1000)
-    flash('ladipage-bundle')
+
+  const copyVn = async () => {
+    const text = buildVnText()
+    if (!text) return
+    await navigator.clipboard.writeText(text).catch(() => {})
+    flash('vn')
   }
 
   return (
-    <div className="mt-16 rounded-lg border border-stone-200 bg-stone-50 p-6">
-      <p className="font-serif italic text-base text-stone-800 mb-1">
-        Export — sẵn sàng paste vào Ladipage
+    <div className="mt-16 w-full max-w-2xl rounded-lg border border-stone-200 bg-stone-50 p-5">
+      <p className="text-[11px] uppercase tracking-wider text-stone-500 mb-3">
+        Xuất pack
       </p>
-      <p className="text-xs text-stone-500 mb-4">
-        {page.sections.length} section · {page.totalWordCount} từ · {page.estimatedScrollTimeSec}s scroll
-      </p>
-
-      <div className="space-y-3">
-        <div>
-          <p className="text-[10px] font-mono uppercase tracking-wider text-stone-500 mb-2">Copy clipboard</p>
-          <div className="flex flex-wrap gap-2">
-            <FooterButton onClick={copyMarkdown} label="Markdown" success={toast === 'markdown'} />
-            <FooterButton onClick={copyLadipageGuide} label="Hướng dẫn Ladipage" success={toast === 'ladipage-guide'} />
-            <FooterButton onClick={copyLadipageHtml} label="Ladipage HTML" success={toast === 'ladipage-html'} />
-          </div>
-        </div>
-        <div>
-          <p className="text-[10px] font-mono uppercase tracking-wider text-stone-500 mb-2">Tải xuống</p>
-          <div className="flex flex-wrap gap-2">
-            <FooterButton onClick={downloadJson} label="JSON" icon="download" success={toast === 'json'} />
-            <FooterButton onClick={downloadLadipageBundle} label="Ladipage bundle" icon="download" success={toast === 'ladipage-bundle'} />
-          </div>
-        </div>
+      <div className="flex flex-wrap gap-2">
+        <ExportCopyButton
+          onClick={copyOriginal}
+          label={`COPY toàn bộ bản gốc (${langLabel})`}
+          success={toast === 'original'}
+        />
+        {!isVnPack && (
+          <ExportCopyButton
+            onClick={copyVn}
+            label="COPY toàn bộ bản dịch (VN)"
+            success={toast === 'vn'}
+            tone="vn"
+          />
+        )}
       </div>
-
-      <p className="mt-4 text-[10px] italic text-stone-400 leading-relaxed">
-        Hệ thống KHÔNG auto-publish, KHÔNG auto-build HTML.
-        Bạn là final layout controller — paste copy + apply layout
-        theo "Hướng dẫn Ladipage" trong khối Ladipage thật.
+      <p className="mt-3 text-[10px] italic text-stone-400 leading-relaxed">
+        Copy thẳng vào Ladipage / Notion / Word — text thuần,
+        giữ thứ tự section + xuống dòng giữa các chương.
       </p>
     </div>
   )
 }
 
-function FooterButton({ onClick, label, success, icon = 'copy' }: {
+function ExportCopyButton({ onClick, label, success, tone = 'default' }: {
   onClick: () => void
   label: string
   success?: boolean
-  icon?: 'copy' | 'download'
+  tone?: 'default' | 'vn'
 }) {
-  const Icon = icon === 'download' ? RotateCcw : FileText
+  const baseClasses = success
+    ? 'border-emerald-300 bg-emerald-50 text-emerald-800'
+    : tone === 'vn'
+      ? 'border-rose-300 bg-white text-rose-700 hover:bg-rose-50'
+      : 'border-stone-300 bg-white text-stone-700 hover:bg-stone-100'
   return (
     <button
       onClick={onClick}
-      className={
-        success
-          ? 'flex items-center gap-1.5 rounded-md border border-emerald-300 bg-emerald-50 px-3 py-1.5 text-xs font-mono text-emerald-800'
-          : 'flex items-center gap-1.5 rounded-md border border-stone-300 bg-white px-3 py-1.5 text-xs font-mono text-stone-700 hover:bg-stone-100'
-      }
+      className={`flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs font-medium ${baseClasses}`}
     >
-      {success ? <Check className="h-3 w-3" /> : <Icon className="h-3 w-3" />}
+      {success ? <Check className="h-3.5 w-3.5" /> : <FileText className="h-3.5 w-3.5" />}
       {success ? 'Đã copy' : label}
     </button>
   )
