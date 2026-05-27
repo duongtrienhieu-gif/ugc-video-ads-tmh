@@ -46,7 +46,6 @@ import {
   useImageGeneration,
   type ExecutorRegistry,
 } from '../../generationOrchestration'
-import { isInternalBeta } from '../../featureFlags'
 
 const MOCK_MARKER_REGEX = /^\[MOCK P0\.5\]\s*\n+/
 
@@ -246,9 +245,10 @@ export default function StorytellingOutputPanel({
               </div>
             )}
             {/* INT — Generate all images button (live KIE execution).
-                Visible only when pack has exportablePage AND KIE API key set.
-                Gated by INTERNAL_BETA flag during initial rollout. */}
-            {hasSemantic && kieApiKey && (isInternalBeta() || import.meta.env.DEV) && (
+                FIX 2026-05-27: removed VITE_INTERNAL_BETA gate — button always
+                visible when pack has exportablePage AND KIE API key set.
+                Production users had no way to trigger image gen otherwise. */}
+            {hasSemantic && kieApiKey && (
               imageGen.isGenerating ? (
                 <button
                   onClick={imageGen.cancel}
@@ -426,6 +426,70 @@ function ProofCalloutView({ section, isLast }: ProofCalloutProps) {
 }
 
 // ═════════════════════════════════════════════════════════════════════
+// SectionCopyButtons — per-section dual-language copy actions (FIX 2026-05-27)
+//
+// Native always present. VN only shown when section has viTranslation
+// (i.e., source language was MY/EN and translatePackToVi ran).
+// ═════════════════════════════════════════════════════════════════════
+
+interface SectionCopyButtonsProps {
+  nativeText: string
+  vnText?: string
+  /** Label for accessibility / tooltip. */
+  nativeLabel: string
+}
+
+function SectionCopyButtons({ nativeText, vnText, nativeLabel }: SectionCopyButtonsProps) {
+  const [copiedNative, setCopiedNative] = useState(false)
+  const [copiedVn, setCopiedVn] = useState(false)
+  const hasVn = Boolean(vnText && vnText.trim() !== nativeText.trim())
+
+  const copyText = async (text: string, kind: 'native' | 'vn') => {
+    try {
+      await navigator.clipboard.writeText(text.replace(MOCK_MARKER_REGEX, ''))
+      if (kind === 'native') {
+        setCopiedNative(true)
+        setTimeout(() => setCopiedNative(false), 1500)
+      } else {
+        setCopiedVn(true)
+        setTimeout(() => setCopiedVn(false), 1500)
+      }
+    } catch { /* clipboard blocked — silent */ }
+  }
+
+  return (
+    <div className="mb-4 flex flex-wrap items-center gap-1.5">
+      <button
+        onClick={() => copyText(nativeText, 'native')}
+        className={
+          copiedNative
+            ? 'flex items-center gap-1 rounded-md border border-emerald-300 bg-emerald-50 px-2 py-1 text-[10px] font-mono text-emerald-800'
+            : 'flex items-center gap-1 rounded-md border border-stone-300 bg-white px-2 py-1 text-[10px] font-mono text-stone-700 hover:bg-stone-100'
+        }
+        title={`Copy native: ${nativeLabel.slice(0, 40)}`}
+      >
+        {copiedNative ? <Check className="h-3 w-3" /> : <FileText className="h-3 w-3" />}
+        {copiedNative ? 'Đã copy' : 'Copy bản gốc'}
+      </button>
+      {hasVn && (
+        <button
+          onClick={() => copyText(vnText!, 'vn')}
+          className={
+            copiedVn
+              ? 'flex items-center gap-1 rounded-md border border-emerald-300 bg-emerald-50 px-2 py-1 text-[10px] font-mono text-emerald-800'
+              : 'flex items-center gap-1 rounded-md border border-stone-300 bg-white px-2 py-1 text-[10px] font-mono text-stone-700 hover:bg-stone-100'
+          }
+          title="Copy bản dịch tiếng Việt"
+        >
+          {copiedVn ? <Check className="h-3 w-3" /> : <FileText className="h-3 w-3" />}
+          {copiedVn ? 'Đã copy VN' : '🇻🇳 Copy VN'}
+        </button>
+      )}
+    </div>
+  )
+}
+
+// ═════════════════════════════════════════════════════════════════════
 // Section view — text-led layout, image as supporting (not dominant)
 // ═════════════════════════════════════════════════════════════════════
 
@@ -461,6 +525,19 @@ function StorytellingSectionView({
     .split(/\n{2,}/)
     .map((p) => p.trim())
     .filter((p) => p.length > 0)
+  // FIX 2026-05-27 — Dual-language: when section.viTranslation exists
+  // (only set when target language !== 'vi'), show VN translation in a
+  // collapsible box below native body. Independent copy buttons for each.
+  const hasVnTranslation = Boolean(
+    section.viTranslation &&
+    section.viTranslation.trim() !== section.copy.trim(),
+  )
+  const vnParagraphs = hasVnTranslation
+    ? section.viTranslation!
+        .split(/\n{2,}/)
+        .map((p) => p.trim())
+        .filter((p) => p.length > 0)
+    : []
   // Image presence: Chunk E will redesign image plan per block.
   const hasImage = true
 
@@ -477,17 +554,32 @@ function StorytellingSectionView({
         )}
       </p>
 
-      {/* Title — serif italic, diary-like */}
-      <h2 className="font-serif italic text-3xl md:text-4xl text-stone-900 leading-tight mb-6">
-        {section.titleVi ?? section.title}
+      {/* Title — serif italic, diary-like. FIX 2026-05-27: show NATIVE
+          first, VN translation as small italic hint below (was previously
+          showing VN as primary which confused MY/EN marketers). */}
+      <h2 className="font-serif italic text-3xl md:text-4xl text-stone-900 leading-tight mb-2">
+        {section.title}
       </h2>
+      {hasVnTranslation && section.titleVi && section.titleVi !== section.title && (
+        <p className="text-sm italic text-stone-500 mb-4">
+          🇻🇳 {section.titleVi}
+        </p>
+      )}
+      {!hasVnTranslation && <div className="mb-4" />}
+
+      {/* Per-section copy buttons (native + VN if available) */}
+      <SectionCopyButtons
+        nativeText={section.copy}
+        vnText={section.viTranslation}
+        nativeLabel={section.title}
+      />
 
       {/* Image placeholder — appears ABOVE body cho blocks has image */}
       {hasImage && (
         <ImagePlaceholder
           chapterNumber={chapterNumber}
           characterName={characterName}
-          sectionTitle={section.titleVi ?? section.title}
+          sectionTitle={section.title}
           overlayType={overlayType}
           treatments={treatments}
           continuityRequirement="optional"
@@ -501,6 +593,23 @@ function StorytellingSectionView({
           <p key={i} className={i === cleanParagraphs.length - 1 ? '' : 'mb-5'}>{p}</p>
         ))}
       </div>
+
+      {/* VN translation box — collapsible. Only shows when target was MY/EN. */}
+      {hasVnTranslation && (
+        <details className="mt-6 rounded-lg border border-stone-200 bg-stone-50 px-5 py-3 group">
+          <summary className="cursor-pointer text-[11px] uppercase tracking-wider text-stone-500 select-none flex items-center gap-2">
+            <span>🇻🇳 Bản dịch tiếng Việt</span>
+            <span className="text-stone-400 italic normal-case tracking-normal group-open:hidden">
+              (click để mở)
+            </span>
+          </summary>
+          <div className="mt-3 font-serif text-[15px] text-stone-700 leading-[1.85]">
+            {vnParagraphs.map((p, i) => (
+              <p key={i} className={i === vnParagraphs.length - 1 ? '' : 'mb-4'}>{p}</p>
+            ))}
+          </div>
+        </details>
+      )}
 
       {/* Debug strip — block architecture. Helps verify phase/function
           assignment during Reader-Immersion engine development. */}

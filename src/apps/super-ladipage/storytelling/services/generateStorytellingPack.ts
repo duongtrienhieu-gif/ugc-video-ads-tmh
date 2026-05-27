@@ -29,6 +29,7 @@ import type { SectionType } from '../../types'
 import { useBankStore } from '../../../../stores/bankStore'
 import { useSettingsStore } from '../../../../stores/settingsStore'
 import { resolveStorytellingInput } from '../resolvers/resolveStorytellingInput'
+import { detectNiche } from '../resolvers/detectNiche'
 import { resolveBlockPlan } from '../resolvers/resolveBlockPlan'
 import { buildProductBrief } from '../runtime/buildPackGenPrompt'
 import { generatePackWithRetry } from '../runtime/retryWithFeedback'
@@ -43,6 +44,7 @@ import { adaptRenderContractedPage } from '../../rendererAdapters'
 import { planImageGenerationPage } from '../../generationOrchestration'
 import { validateOrchestratedPage } from '../../validationCalibration'
 import { deriveExportPipelinePage } from '../../exportPipeline'
+import { translatePackToVi } from '../../services/translate'
 
 // ── Map storytelling BlockId → existing UGC SectionType for
 //    LandingSection.type compat. Storytelling block ID stored
@@ -164,7 +166,19 @@ export async function generateStorytellingPack(
   const totalStart = Date.now()
 
   // ─── 2. Resolve input + block plan ────────────────────────────────
-  const input = resolveStorytellingInput(params)
+  // FIX (2026-05-27): detect niche from product BEFORE resolving input.
+  // Previously niche defaulted to 'skincare' → nasal spray products were
+  // mislabeled, story arc generated wrong-niche framing (face/skin
+  // vocabulary for sinus products).
+  const nicheDetection = detectNiche({
+    productName: product.productName,
+    painPoints: product.painPoints,
+  })
+  console.info(
+    `[storytelling] niche detection: ${nicheDetection.niche} (confidence=${nicheDetection.confidence}, ` +
+    `matched=[${nicheDetection.matchedKeywords.join(', ')}])`,
+  )
+  const input = resolveStorytellingInput(params, nicheDetection.niche)
   const plan = resolveBlockPlan(input)
   console.info(
     `[storytelling] resolved input: niche=${input.niche}, pacing=${input.pacingType}, ` +
@@ -381,5 +395,31 @@ export async function generateStorytellingPack(
     },
   }
 
+  // ─── 8. FIX 2026-05-27 — Auto-translate to VN when target !== vi ─
+  // Marketer working on MY/EN packs wants VN translation alongside
+  // for QA + paste-into-VN-Ladipage workflow. translatePackToVi adds
+  // viTranslation / titleVi / headlineVi / etc to each section in-place.
+  if (params.language !== 'vi') {
+    try {
+      const settings = useSettingsStore.getState()
+      const translated = await translatePackToVi({
+        apiKey:        settings.geminiApiKey,
+        kieApiKey:     settings.kieApiKey,
+        pack,
+        fromLanguage:  params.language,
+      })
+      // Replace pack.sections with translated versions
+      pack.sections = translated.sections
+      console.log(`[storytelling/translate] Bản dịch VN sẵn sàng cho ${pack.sections.length} sections`)
+    } catch (err) {
+      console.warn(`[storytelling/translate] Dịch VN thất bại — pack vẫn ship native-only:`, err)
+      // Non-fatal — pack ships without VN translation, UI gracefully hides
+      // the VN box per section
+    }
+  } else {
+    console.log(`[storytelling/translate] language='vi' — không cần dịch`)
+  }
+
+  console.log(`[storytelling] ═══ DONE in ${Math.round((Date.now() - totalStart) / 1000)}s ═══`)
   return pack
 }

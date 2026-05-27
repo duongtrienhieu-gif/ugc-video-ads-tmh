@@ -1,14 +1,13 @@
 // ─────────────────────────────────────────────────────────────────────
-// resolveStorytellingInput — STUB cho P0.5
+// resolveStorytellingInput — input resolution
 //
-// P0.5: trả về StorytellingInput dựng từ defaults + niche preset (nếu có).
-// KHÔNG đụng product info, KHÔNG inspect competitor URL, KHÔNG derive
-// niche từ product category. Đó là việc của P2+.
+// FIX (2026-05-27): niche no longer hardcoded 'skincare'. Caller can
+// pass detected niche from detectNiche(product). If omitted, falls
+// back to 'health-functional' (safe generic) — NOT 'skincare' which
+// was causing nasal-spray-as-skincare bug.
 //
-// Phase 2 sẽ:
-//   - derive niche từ product.painPoints / product.benefits
-//   - merge user override params nếu có
-//   - validate input boundaries (productRevealSection trong section count)
+// Cultural world defaults to MY mapping when targetLanguage='ms', VN
+// mapping for 'vi', else SG/global. Honored downstream by Gemini prompt.
 // ─────────────────────────────────────────────────────────────────────
 
 import type {
@@ -18,13 +17,12 @@ import { STORYTELLING_DEFAULTS } from '../config/defaults'
 import { getNichePreset } from '../config/nicheMap'
 import { resolveProtagonistProfile } from './resolveProtagonistProfile'
 
-/** P0.5 stub: tạo StorytellingInput compact với defaults + niche preset.
- *  Real logic sẽ đến ở P2 (Story arc system). */
 export function resolveStorytellingInput(
   params: LandingGenParams,
-  /** P0.5: niche hardcode 'skincare' nếu caller không truyền. Phase 2
-   *  sẽ derive từ product semantic. */
-  niche: NicheKey = 'skincare',
+  /** Detected niche from product. Caller (generateStorytellingPack) runs
+   *  detectNiche() and passes the result. Falls back to 'health-functional'
+   *  if not provided — generic enough to avoid wrong-niche framing. */
+  niche: NicheKey = 'health-functional',
 ): StorytellingInput {
   const preset = getNichePreset(niche)
 
@@ -39,7 +37,13 @@ export function resolveStorytellingInput(
     emotionalIntensity:      preset?.emotionalIntensity      ?? STORYTELLING_DEFAULTS.emotionalIntensity,
     pacingType:              preset?.pacingType              ?? STORYTELLING_DEFAULTS.pacingType,
     productRevealSection:    preset?.productRevealSection    ?? STORYTELLING_DEFAULTS.productRevealSection,
-    culturalWorld:           preset?.recommendedCulturalWorld?.[0] ?? 'malay-muslim',
+    culturalWorld:           preset?.recommendedCulturalWorld?.find(
+                               // Pick the cultural world matching target language
+                               (c) =>
+                                 (params.language === 'ms' && c === 'malay-muslim') ||
+                                 (params.language === 'vi' && c === 'vietnamese-urban'),
+                             ) ?? preset?.recommendedCulturalWorld?.[0]
+                               ?? (params.language === 'ms' ? 'malay-muslim' : 'vietnamese-urban'),
     ctaSoftness:             preset?.ctaSoftness             ?? STORYTELLING_DEFAULTS.ctaSoftness,
     supportingCharacterMode: preset?.supportingCharacter     ?? STORYTELLING_DEFAULTS.supportingCharacterMode,
 

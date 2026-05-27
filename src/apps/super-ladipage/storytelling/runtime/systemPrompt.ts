@@ -12,8 +12,55 @@
 
 import type { StorytellingInput } from '../types'
 
+// FIX (2026-05-27): Honor input.targetLanguage. Previously hardcoded
+// Vietnamese — Malay/English requests came out Vietnamese, breaking
+// SEA marketer workflow. Instructions stay Vietnamese (developer-facing)
+// but OUTPUT FIELDS are written in target language per explicit directive.
+
+function getLanguageDirective(lang: StorytellingInput['targetLanguage']): {
+  langLabel: string
+  outputDirective: string
+} {
+  if (lang === 'ms') {
+    return {
+      langLabel: 'Bahasa Melayu (Malaysian Malay)',
+      outputDirective:
+        '⚠️ CRITICAL — OUTPUT LANGUAGE = BAHASA MELAYU.\n' +
+        'TẤT CẢ user-visible fields (title, paragraphs, headline, copy, FAQ, CTA, ' +
+        'bullet, character.name) PHẢI viết bằng Bahasa Melayu (Malaysian Malay).\n' +
+        'KHÔNG được dùng tiếng Việt cho copy. KHÔNG được dùng English (trừ brand name).\n' +
+        'Văn phong: Malay natural conversational, KHÔNG formal Bahasa Indonesia.\n' +
+        'Cultural references: Malaysian context (hijab, raya, ramadan, mamak nếu phù hợp).',
+    }
+  }
+  if (lang === 'en') {
+    return {
+      langLabel: 'English',
+      outputDirective:
+        '⚠️ CRITICAL — OUTPUT LANGUAGE = ENGLISH.\n' +
+        'ALL user-visible fields (title, paragraphs, headline, copy, FAQ, CTA, ' +
+        'bullet, character.name) MUST be written in natural conversational English.\n' +
+        'NO Vietnamese, NO Malay in user-facing copy (brand names OK).',
+    }
+  }
+  // 'vi' default
+  return {
+    langLabel: 'Tiếng Việt (Vietnamese)',
+    outputDirective:
+      'OUTPUT LANGUAGE = TIẾNG VIỆT. Mọi field user-visible viết bằng tiếng Việt ' +
+      'tự nhiên, conversational, người-bình-thường — KHÔNG dịch máy, KHÔNG English ' +
+      'hỗn loạn vào câu (trừ brand name riêng).',
+  }
+}
+
 export function buildSystemPrompt(input: StorytellingInput, productBrief: string): string {
-  return `Bạn đang viết landing page tiếng Việt thể loại "Kể Chuyện Hành Trình" — Reader-Immersion Performance Storytelling cho ad conversion.
+  const { langLabel, outputDirective } = getLanguageDirective(input.targetLanguage)
+  return `Bạn đang viết landing page thể loại "Kể Chuyện Hành Trình" — Reader-Immersion Performance Storytelling cho ad conversion.
+
+═══ OUTPUT LANGUAGE LOCK (${langLabel}) ═══
+${outputDirective}
+Instructions dưới đây viết bằng tiếng Việt cho developer hiểu — nhưng OUTPUT phải đúng target language.
+═══════════════════════════════════════════════════════════
 
 ═══ CORE TARGET (Reader-Immersion) ═══
 Đây là AD CONVERSION COPY. Reader phải feel "đang nói về mình" trong 1-3 giây
@@ -164,7 +211,7 @@ by a SEPARATE pass — leave reviews field absent.
 Exactly the number of blocks shown in per-block directives, in that order.
 Per block:
 - id: exact match block ID from directive
-- title: 3-8 từ tiếng Việt, KHÔNG chứa tên nhân vật, KHÔNG dramatic
-- paragraphs: array of Vietnamese strings, conversational flow. Each element
+- title: 3-8 words in ${langLabel}, KHÔNG chứa tên nhân vật, KHÔNG dramatic
+- paragraphs: array of strings in ${langLabel}, conversational flow. Each element
   is ONE paragraph. Block paragraph count per its target in directive.`
 }
