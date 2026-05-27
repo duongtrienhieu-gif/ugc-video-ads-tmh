@@ -63,6 +63,10 @@ interface RunArgs {
    *  context) — injected INTO system prompt as context, not rules.
    *  Optional: omitted = pack ships with niche-only context (legacy path). */
   realityBrief?: string
+  /** P-SYNTHESIS (2026-05-27) — Deep product synthesis brief.
+   *  PRIMARY context — leads system prompt before niche pool data.
+   *  Contains forbiddenDriftSymptoms guardrail. Highest accuracy layer. */
+  synthesizedBrief?: string
   geminiApiKey: string
   kieApiKey: string
   /** v5.1 — Narrator/DNA/curve selection. OPTIONAL — if undefined,
@@ -86,7 +90,12 @@ async function runOnce(
   retryFeedback?: string,
   label = 'storytelling-packgen',
 ): Promise<ParsedPack> {
-  const systemPrompt = buildSystemPrompt(args.input, args.productBrief, args.realityBrief)
+  const systemPrompt = buildSystemPrompt(
+    args.input,
+    args.productBrief,
+    args.realityBrief,
+    args.synthesizedBrief,
+  )
   const userPrompt = buildPackGenUserPrompt(args.input, args.plan, args.selection, retryFeedback)
   logPromptStats(systemPrompt, userPrompt, args.plan)
 

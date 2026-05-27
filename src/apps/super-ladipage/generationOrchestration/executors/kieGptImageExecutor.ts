@@ -43,6 +43,11 @@ export interface KieGptImageExecutorOptions {
   timeoutMs?: number
   /** Optional abort signal for cancel. */
   signal?: AbortSignal
+  /** P-VISION (2026-05-27) — product identity descriptor from vision +
+   *  synthesis. Prepended to KIE prompt for sections needing product
+   *  visibility (proof-callout / object-trace / lifestyle-context) so
+   *  rendered images match ACTUAL product (color, shape, label). */
+  productIdentityHint?: string
 }
 
 export function createKieGptImageExecutor(
@@ -81,12 +86,29 @@ export function createKieGptImageExecutor(
         .filter(Boolean)
         .slice(0, 5)
 
+      // ── P-VISION (2026-05-27) — Prepend product identity hint for
+      // product-visible sections. Roles that show product physically:
+      // proof-callout (proof image), object-trace (failed attempts vis),
+      // lifestyle-context (lifestyle uplift). Hero/mood-supporting are
+      // human-emotion focused — don't show product, so no hint needed.
+      const PRODUCT_VISIBLE_ROLES = new Set([
+        'proof-callout',
+        'object-trace',
+        'lifestyle-context',
+      ])
+      const shouldInjectProductHint =
+        options.productIdentityHint &&
+        PRODUCT_VISIBLE_ROLES.has(input.imageRole)
+      const finalPrompt = shouldInjectProductHint
+        ? `Product to show: ${options.productIdentityHint}. ${input.prompt.prompt}`
+        : input.prompt.prompt
+
       // ── Submit task ────────────────────────────────────────────
       let taskId: string
       try {
         const submission = await submitGptImage2({
           apiKey: options.apiKey,
-          prompt: input.prompt.prompt,
+          prompt: finalPrompt,
           filesUrl: filesUrl.length > 0 ? filesUrl : undefined,
           size,
           resolution: options.resolution ?? '1K',

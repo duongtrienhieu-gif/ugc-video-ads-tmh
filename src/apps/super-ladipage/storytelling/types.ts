@@ -663,6 +663,19 @@ export interface StorytellingMeta {
   /** Selected discovery channel for section 6. */
   discoveryChannelId?: string
 
+  // P-VISION + P-SYNTHESIS (2026-05-27) — vision-extracted product identity
+  // for downstream image generation accuracy. Image executor prepends this
+  // to KIE prompts for sections needing product visibility (proof-callout,
+  // object-trace, lifestyle-context).
+  /** 1 detailed sentence describing visual product identity from images +
+   *  synthesis. Reused by image generation to keep CTA/proof images
+   *  matching ACTUAL product (color, shape, label features). */
+  productIdentityForImage?: string
+  /** Vision source — for QA telemetry. */
+  visionSource?: 'gemini-vision' | 'no-images' | 'vision-failed'
+  /** Synthesis source — for QA telemetry. */
+  synthesisSource?: 'gemini-synthesis' | 'fallback'
+
   // P14 — Exportable page (composer + renderContract + visualSemantics +
   // imageSemantics + promptTranslation + rendererAdapters + orchestration +
   // validation/calibration + export pipeline). Replaces P13 validatedPage

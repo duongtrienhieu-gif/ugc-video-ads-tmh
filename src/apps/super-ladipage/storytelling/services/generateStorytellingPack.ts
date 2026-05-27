@@ -36,6 +36,8 @@ import {
   buildRealityBrief,
   PACING_OVERRIDES,
 } from '../../productClass'
+import { readProductImages } from '../../productVision'
+import { synthesizeProductBrief, buildSynthesizedBrief } from '../../productSynthesis'
 import { buildProductBrief } from '../runtime/buildPackGenPrompt'
 import { generatePackWithRetry } from '../runtime/retryWithFeedback'
 import type { GeneratedPackResult } from '../runtime/retryWithFeedback'
@@ -234,10 +236,65 @@ export async function generateStorytellingPack(
     `blocks planned=${plan.length} (pacing override: ${pacingOverride.rationale})`,
   )
 
+  // ─── 2.7 P-VISION (2026-05-27) — Read product images via Gemini Vision ──
+  // CRITICAL: input.visualMemory contains user-uploaded packaging/label/
+  // product images. Reading them solves:
+  //   1. Storytelling drift (knew product visually, no wrong-niche bleed)
+  //   2. Image generation accuracy (product identity preserved in CTA images)
+  const visionReality = await readProductImages(
+    {
+      visualMemory: params.visualMemory ?? [],
+      productName: product.productName,
+      productPainPoints: product.painPoints,
+    },
+    { geminiApiKey: settingsForNiche.geminiApiKey },
+  )
+  console.info(
+    `[storytelling] vision: ${visionReality.source}, images=${visionReality.imageCount}, ` +
+    `form="${visionReality.formFactor.slice(0, 60)}", ` +
+    `brand="${visionReality.brandTone.slice(0, 40)}"` +
+    (visionReality.inconsistencyFlags.length > 0
+      ? ` // ⚠ inconsistencies: ${visionReality.inconsistencyFlags.join('; ')}`
+      : ''),
+  )
+
+  // ─── 2.8 P-SYNTHESIS (2026-05-27) — Deep product brief synthesis ─
+  // Single Gemini deep-call combining ALL upstream: text + vision +
+  // niche + reality. Output: SynthesizedProductBrief = tight 3-5 line
+  // product reality with forbiddenDriftSymptoms (anti-drift guardrail).
+  const synthesizedBrief = await synthesizeProductBrief(
+    {
+      productName: product.productName,
+      productPainPoints: product.painPoints,
+      productBenefits: (product as { benefits?: string }).benefits,
+      productUsp: (product as { usp?: string; uniqueSellingPoints?: string }).usp
+        ?? (product as { usp?: string; uniqueSellingPoints?: string }).uniqueSellingPoints,
+      productPricing: (product as { offerPricing?: string; pricing?: string }).offerPricing
+        ?? (product as { offerPricing?: string; pricing?: string }).pricing,
+      visionReality,
+      niche: nicheDetection.niche,
+      productReality,
+      targetLanguage: params.language,
+    },
+    {
+      geminiApiKey: settingsForNiche.geminiApiKey,
+      kieApiKey: settingsForNiche.kieApiKey,
+    },
+  )
+  console.info(
+    `[storytelling] synthesized brief: ${synthesizedBrief.source}, ` +
+    `essence_length=${synthesizedBrief.productEssence.length}, ` +
+    `reader_symptoms=${synthesizedBrief.readerSpecificSymptoms.length}, ` +
+    `forbidden_drift=${synthesizedBrief.forbiddenDriftSymptoms.length}` +
+    (synthesizedBrief.rationale ? ` // ${synthesizedBrief.rationale.slice(0, 80)}` : ''),
+  )
+
   // ─── 3. Build product brief ───────────────────────────────────────
-  // FIX 2026-05-27: also inject product reality brief (mechanism + hero
-  // triggers + failed attempts + discovery context) — positive injection,
-  // not rule stacking. Gemini follows ACCURATE description naturally.
+  // Brief composition (PRIMARY → SECONDARY context order):
+  //   1. synthesizedBriefText (PRIMARY — tight product reality + drift guardrails)
+  //   2. realityBrief (mechanism description + library defaults)
+  //   3. legacy productBrief (niche-level summary)
+  const synthesizedBriefText = buildSynthesizedBrief(synthesizedBrief)
   const productBrief = buildProductBrief(product.productName, input.niche, product.painPoints)
   const realityBrief = buildRealityBrief(productReality)
 
@@ -249,14 +306,17 @@ export async function generateStorytellingPack(
   })
 
   // ─── 4. Generate with retry + fallback ───────────────────────────
-  // FIX 2026-05-27: pass realityBrief (product reality model) — injected
-  // into Gemini system prompt as POSITIVE context block. Solves knee-brace-
-  // described-as-glucosamine drift at semantic level (data, not rules).
+  // P-SYNTHESIS (2026-05-27): pass synthesizedBriefText as PRIMARY context.
+  // Combined with vision-extracted reality + product class reality, gives
+  // Gemini deep accurate product understanding with explicit forbidden-
+  // DriftSymptoms guardrail. Solves multi-sub-niche pool pollution
+  // (e.g., nasal spray drift to knee/joint).
   const result = await generatePackWithRetry({
     input,
     plan,
     productBrief,
     realityBrief,
+    synthesizedBrief: synthesizedBriefText,
     geminiApiKey,
     kieApiKey,
     selection,
@@ -441,6 +501,12 @@ export async function generateStorytellingPack(
       // v5.3 — Hook + Discovery variation
       hookAxisId:           selection.hookAxis,
       discoveryChannelId:   selection.discoveryChannel,
+      // P-VISION + P-SYNTHESIS (2026-05-27) — image accuracy
+      productIdentityForImage: synthesizedBrief.productIdentityForImage
+                              || visionReality.productIdentityForImage
+                              || undefined,
+      visionSource:         visionReality.source,
+      synthesisSource:      synthesizedBrief.source,
       // P14 — Exportable page (composer + renderContract + visualSemantics +
       // imageIntent + prompt fragments + renderer adapters + orchestration +
       // validation/calibration + ExportGuide per section). Full subtype chain:

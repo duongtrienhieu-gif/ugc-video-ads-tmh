@@ -108,13 +108,21 @@ export default function StorytellingOutputPanel({
     // KIE.ai is the canonical image-gen gateway for this codebase.
     // We wrap it once as a 'gptImage' RendererExecutor. Future iterations
     // can map flux/sdxl renderer keys to KIE's other model endpoints.
+    //
+    // P-VISION (2026-05-27): pass productIdentityHint so KIE prompts for
+    // product-visible sections (proof-callout / object-trace / lifestyle-
+    // context) get prepended with accurate product description from
+    // vision + synthesis. Ensures rendered images match actual product.
     return {
-      gptImage: createKieGptImageExecutor({ apiKey: kieApiKey }),
+      gptImage: createKieGptImageExecutor({
+        apiKey: kieApiKey,
+        productIdentityHint: meta.productIdentityForImage,
+      }),
       // No flux/sdxl executors yet — sections routed to those renderers
       // will surface 'No executor registered' in their generatedAsset.failureReason
       // until INT follow-up adds KIE-Flux + KIE-SDXL wrappers.
     }
-  }, [kieApiKey])
+  }, [kieApiKey, meta.productIdentityForImage])
 
   const imageGen = useImageGeneration({
     page: meta.exportablePage ?? null,

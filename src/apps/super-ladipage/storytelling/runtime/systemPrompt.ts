@@ -56,11 +56,14 @@ function getLanguageDirective(lang: StorytellingInput['targetLanguage']): {
 export function buildSystemPrompt(
   input: StorytellingInput,
   productBrief: string,
-  /** P-PRODUCT-CLASS (2026-05-27) — optional product reality block.
-   *  When provided, injected as PRODUCT REALITY MODEL section near top
-   *  of prompt. Positive description (what product IS, how it works,
-   *  realistic discovery/failed-attempts) — NOT rules. */
+  /** P-PRODUCT-CLASS — optional reality block (mechanism family +
+   *  hero triggers + failed-attempts library). Secondary context. */
   realityBrief?: string,
+  /** P-SYNTHESIS (2026-05-27) — PRIMARY product reality block.
+   *  Deep Gemini synthesis combining text + vision + niche + reality.
+   *  Contains readerSpecificSymptoms + forbiddenDriftSymptoms (anti-drift
+   *  guardrail). Injected at TOP — highest-priority context. */
+  synthesizedBrief?: string,
 ): string {
   const { langLabel, outputDirective } = getLanguageDirective(input.targetLanguage)
   return `Bạn đang viết landing page thể loại "Kể Chuyện Hành Trình" — Reader-Immersion Performance Storytelling cho ad conversion.
@@ -69,6 +72,7 @@ export function buildSystemPrompt(
 ${outputDirective}
 Instructions dưới đây viết bằng tiếng Việt cho developer hiểu — nhưng OUTPUT phải đúng target language.
 ═══════════════════════════════════════════════════════════
+${synthesizedBrief ? '\n' + synthesizedBrief + '\n' : ''}
 ${realityBrief ? '\n' + realityBrief + '\n' : ''}
 
 ═══ CORE TARGET (Reader-Immersion) ═══
