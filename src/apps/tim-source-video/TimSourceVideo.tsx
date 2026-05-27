@@ -48,10 +48,14 @@ export default function TimSourceVideo() {
   const [status, setStatus] = useState('')
   const [banners, setBanners] = useState<BannerSpec[]>([])
   const [sceneStates, setSceneStates] = useState<SceneState[]>([])
-  // Persist toggle across reloads
+  // Persist toggle across reloads.
+  // V3.2.2 — flipped default to OFF (Web-only): user feedback that YouTube
+  // dominated results 100% even with 40% cap, and Gemini grounding alone
+  // gives more diverse domains anyway (Google index includes YouTube URLs
+  // when relevant). Users who want YT pipeline back explicitly opt in.
   const [includeYouTube, setIncludeYouTube] = useState<boolean>(() => {
-    try { return localStorage.getItem(INCLUDE_YT_LS_KEY) !== 'false' }
-    catch { return true }
+    try { return localStorage.getItem(INCLUDE_YT_LS_KEY) === 'true' }
+    catch { return false }
   })
   const abortRef = useRef<AbortController | null>(null)
 

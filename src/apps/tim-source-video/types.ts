@@ -7,7 +7,9 @@
 export const CONFIG = {
   search: {
     ytMaxResults: 5,            // 5 raw from YT Data API per query; cap 3 in mix
-    webMaxResults: 8,           // web grounding returns 5-10 chunks; cap 5/8 in mix
+    webMaxResults: 12,          // V3.2.2 — bumped 8→12. Gemini grounding sometimes
+                                // returns 8-10 chunks; strict filters drop many, so
+                                // higher ceiling means more reach the UI.
     /** Scene-level parallelism — bounded by Gemini Flash 10 RPM (web search
      *  uses 1 Gemini call per scene). 4 keeps burst under the ceiling. */
     sceneConcurrency: 4,
