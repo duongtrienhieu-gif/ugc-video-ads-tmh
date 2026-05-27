@@ -31,6 +31,9 @@ export interface UseImageGenerationOptions {
   /** Required post-rebuild — synthesis + cultural + API keys context. */
   context: PageGenerationContext | null
   concurrency?: number
+  /** OPT.4 (2026-05-28) — Toast callback on image gen failure so user knows
+   *  WHY it failed (not silent). Receives section id + reason text. */
+  onFailureToast?: (sectionId: string, reason: string) => void
 }
 
 export interface UseImageGenerationState {
@@ -121,7 +124,8 @@ export function useImageGeneration(opts: UseImageGenerationOptions): UseImageGen
               : s,
           )
         },
-        onSectionStart: (sectionId) => {
+        onSectionStart: (sectionId, renderer) => {
+          console.info(`[image-gen] section=${sectionId} renderer=${renderer} START`)
           workingSession = setRegenStatus(workingSession, sectionId, 'generating', 'image')
           opts.setSession(workingSession)
           void saveSession(workingSession)
@@ -132,14 +136,18 @@ export function useImageGeneration(opts: UseImageGenerationOptions): UseImageGen
         },
         onSectionComplete: (sectionId, asset) => {
           if (asset.generationStatus === 'completed') {
+            console.info(`[image-gen] section=${sectionId} renderer=${asset.renderer} COMPLETED url=${asset.outputImages[0]?.url.slice(0, 80)}`)
             workingSession = setRegenStatus(workingSession, sectionId, 'completed', 'image')
           } else {
+            const reason = asset.failureReason ?? 'unknown failure'
+            console.warn(`[image-gen] section=${sectionId} renderer=${asset.renderer} FAILED reason=${reason}`)
             workingSession = recordFailure(
               workingSession,
               sectionId,
-              asset.failureReason ?? 'unknown failure',
+              reason,
             )
             workingSession = incrementRetry(workingSession, sectionId)
+            opts.onFailureToast?.(sectionId, reason)
           }
           workingSession = recordGenerationEvent(workingSession, {
             durationMs:

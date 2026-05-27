@@ -11,7 +11,7 @@
 // ─────────────────────────────────────────────────────────────────────
 
 import { planPISections } from './planPISections'
-import { generatePISection } from './generatePISection'
+import { generatePIBatch } from './generatePIBatch'
 import type {
   PlannerInput,
   GeneratorKeys,
@@ -22,12 +22,14 @@ import type {
 import { PI_SECTION_TYPE_MAP } from '../types'
 import type { LandingSection } from '../../storytelling/types'
 
-const DEFAULT_CONCURRENCY = 3
-
+/** OPT.2 (2026-05-28): Batched PI generation — 1 Gemini call produces
+ *  ALL planned PI block types in single JSON response (was 5 calls).
+ *  Saves 4 Gemini calls per pack. Falls back to per-type defaults inside
+ *  generatePIBatch when the batch response is malformed for any type. */
 export async function composePIBlocks(
   input: PlannerInput,
   keys: GeneratorKeys,
-  options: { concurrency?: number; signal?: AbortSignal } = {},
+  _options: { concurrency?: number; signal?: AbortSignal } = {},
 ): Promise<PIBatchResult> {
   const startedAt = Date.now()
   const plan = planPISections(input)
@@ -42,47 +44,14 @@ export async function composePIBlocks(
     }
   }
 
-  // ── Concurrency-bounded parallel generation ────────────────────────
-  const concurrency = Math.max(1, options.concurrency ?? DEFAULT_CONCURRENCY)
-  const blocks: PIBlock[] = []
-  let succeeded = 0
-  let fallbackCount = 0
-  let nextIndex = 0
+  // ── Single batched Gemini call for all planned types ──
+  const result = await generatePIBatch(plan.sections, input, keys)
 
-  async function worker(): Promise<void> {
-    while (nextIndex < plan.sections.length) {
-      if (options.signal?.aborted) return
-      const sectionPlan = plan.sections[nextIndex++]
-      const block = await generatePISection(
-        {
-          type: sectionPlan.type,
-          niche: input.niche,
-          targetLanguage: input.targetLanguage,
-          productName: input.productName,
-          productPainPoints: input.productPainPoints,
-          productBenefits: input.productBenefits,
-          productUsp: input.productUsp,
-          productPricing: input.productPricing,
-          productIngredients: input.productIngredients,
-          synthesizedBrief: input.synthesizedBrief,
-          character: input.character,
-        },
-        keys,
-      )
-      blocks.push(block)
-      if (block.source === 'gemini') succeeded++
-      else fallbackCount++
-    }
-  }
-
-  const workers = Array.from(
-    { length: Math.min(concurrency, plan.sections.length) },
-    () => worker(),
-  )
-  await Promise.all(workers)
+  const succeeded = result.blocks.filter((b) => b.source === 'gemini').length
+  const fallbackCount = result.blocks.filter((b) => b.source === 'fallback').length
 
   return {
-    blocks,
+    blocks: result.blocks,
     succeeded,
     fallbackCount,
     skippedCount: plan.skipped.length,

@@ -37,9 +37,14 @@ export interface KieGptImageExecutorOptions {
   signal?: AbortSignal
 }
 
+/** OPT.5 (2026-05-28) — KIE gpt-image-2 executor with reduced timeout + retry.
+ *  Default timeout: 2min (was 4min). Auto-retry 1 lần on transient failures. */
 export function createKieGptImageExecutor(
   options: KieGptImageExecutorOptions,
 ): RendererExecutor {
+  const timeoutMs = options.timeoutMs ?? 120_000  // 2 min (was 4 min)
+  const MAX_ATTEMPTS = 2
+
   return {
     renderer: 'gptImage',
 
@@ -70,6 +75,11 @@ export function createKieGptImageExecutor(
         .filter(Boolean)
         .slice(0, 5)
 
+      let lastError: ExecutorOutput | null = null
+
+      for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+        console.info(`[kie-gptImage] attempt ${attempt}/${MAX_ATTEMPTS} section=${input.sectionId} promptLen=${input.prompt.prompt.length}`)
+
       let taskId: string
       try {
         const submission = await submitGptImage2({
@@ -89,18 +99,21 @@ export function createKieGptImageExecutor(
             failureReason: 'KIE: insufficient credits — top up before retrying',
           }
         }
-        return {
+        lastError = {
           status: 'failed',
           images: [],
           failureReason: `KIE submit failed: ${msg}`,
         }
+        console.warn(`[kie-gptImage] attempt ${attempt} submit error: ${msg.slice(0, 120)}`)
+        if (attempt < MAX_ATTEMPTS) continue
+        return lastError
       }
 
       try {
         const imageUrl = await pollGptImage2UntilDone({
           apiKey: options.apiKey,
           taskId,
-          timeoutMs: options.timeoutMs,
+          timeoutMs,
           signal: options.signal,
         })
         return {
@@ -117,17 +130,37 @@ export function createKieGptImageExecutor(
           }
         }
         if (msg.includes('TIMEOUT')) {
+          lastError = {
+            status: 'failed',
+            images: [],
+            failureReason: `KIE timeout (${Math.round(timeoutMs / 1000)}s) — task may be stuck`,
+          }
+          console.warn(`[kie-gptImage] attempt ${attempt} timeout`)
+          if (attempt < MAX_ATTEMPTS) continue
+          return lastError
+        }
+        if (msg.includes('GENERATE_FAILED') || msg.includes('content_policy')) {
           return {
             status: 'failed',
             images: [],
-            failureReason: `KIE timeout (${Math.round((options.timeoutMs ?? 240000) / 1000)}s) — task may be stuck`,
+            failureReason: `KIE gen rejected: ${msg.slice(0, 200)}`,
           }
         }
-        return {
+        lastError = {
           status: 'malformed',
           images: [],
           failureReason: msg.slice(0, 240),
         }
+        console.warn(`[kie-gptImage] attempt ${attempt} poll error: ${msg.slice(0, 120)}`)
+        if (attempt < MAX_ATTEMPTS) continue
+        return lastError
+      }
+      } // end for-loop
+
+      return lastError ?? {
+        status: 'failed',
+        images: [],
+        failureReason: 'KIE gpt-image-2 exhausted retries with no specific error',
       }
     },
   }

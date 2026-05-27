@@ -42,6 +42,11 @@ export interface PageGenerationContext {
   geminiApiKey: string
   /** KIE API key (for executor fallback inside scene synthesis). */
   kieApiKey: string
+  /** OPT.1 (2026-05-28) — Pre-computed scene prompts from pack-gen time.
+   *  When provided, executePageGeneration SKIPS its own synthesizePageScenes
+   *  call (saves 7-9 Gemini calls per "Tạo ảnh" click). Keyed by composed
+   *  section id matching exportablePage.sections[i].id. */
+  preComputedScenes?: Record<string, SceneDescription>
 }
 
 export interface ExecutePageGenerationOptions {
@@ -96,40 +101,70 @@ export async function executePageGeneration(
     }
   }
 
-  // ── STEP 1 — Scene synthesis batch (parallel Gemini calls) ───────
-  const composedSections = queue.map((s) => ({
-    id: s.id,
-    role: s.role,
-    sourceBlockIds: s.sourceBlockIds,
-    paragraphs: s.paragraphs,
-    inlineProof: s.inlineProof,
-    density: s.density,
-    pacingRole: s.pacingRole,
-    imageRole: s.imageRole,
-    scrollWeight: s.scrollWeight,
-    ctaInline: s.ctaInline,
-    spacingBefore: s.spacingBefore,
-    spacingAfter: s.spacingAfter,
-    transitionHint: s.transitionHint,
-    wordCount: s.wordCount,
-    paragraphCount: s.paragraphCount,
-  }))
+  // ── STEP 1 — Scene synthesis (OPT.1: reuse pre-computed when available) ──
+  // If meta.imageScenes pre-computed at pack-gen time exists for ALL queue
+  // sections, skip Gemini call entirely. Save 7-9 calls per "Tạo ảnh" click.
+  // Otherwise run synthesis for missing scenes only.
+  const preComputed = options.context.preComputedScenes
+  const allQueueHavePreComputed = preComputed
+    ? queue.every((s) => preComputed[s.id]?.prompt)
+    : false
 
-  const synthesis = await synthesizePageScenes(
-    composedSections,
-    {
-      niche: options.context.niche,
-      protagonist: options.context.protagonist,
-      productContext: options.context.productContext,
-      targetLanguage: options.context.targetLanguage,
-      onSectionSynthesized: options.onSceneSynthesized,
-    },
-    {
-      geminiApiKey: options.context.geminiApiKey,
-      kieApiKey: options.context.kieApiKey,
-    },
-    { signal: options.signal },
-  )
+  let synthesis: import('../../imageSceneSynthesis').PageSceneSynthesis
+  if (allQueueHavePreComputed && preComputed) {
+    // FAST PATH — no Gemini call, just reuse pre-computed scenes
+    const scenes: Record<string, SceneDescription> = {}
+    for (const s of queue) {
+      scenes[s.id] = preComputed[s.id]
+    }
+    synthesis = {
+      scenes,
+      succeeded: queue.length,
+      fallbackCount: 0,
+      durationMs: 0,
+    }
+    console.info(`[exec/scene-synth] OPT.1 fast path — reused ${queue.length} pre-computed scenes (skipped Gemini synthesis)`)
+    // Still call onSceneSynthesized callback for UI consistency
+    for (const s of queue) {
+      options.onSceneSynthesized?.(s.id, scenes[s.id])
+    }
+  } else {
+    // SLOW PATH — synthesize missing scenes via Gemini
+    const composedSections = queue.map((s) => ({
+      id: s.id,
+      role: s.role,
+      sourceBlockIds: s.sourceBlockIds,
+      paragraphs: s.paragraphs,
+      inlineProof: s.inlineProof,
+      density: s.density,
+      pacingRole: s.pacingRole,
+      imageRole: s.imageRole,
+      scrollWeight: s.scrollWeight,
+      ctaInline: s.ctaInline,
+      spacingBefore: s.spacingBefore,
+      spacingAfter: s.spacingAfter,
+      transitionHint: s.transitionHint,
+      wordCount: s.wordCount,
+      paragraphCount: s.paragraphCount,
+    }))
+
+    synthesis = await synthesizePageScenes(
+      composedSections,
+      {
+        niche: options.context.niche,
+        protagonist: options.context.protagonist,
+        productContext: options.context.productContext,
+        targetLanguage: options.context.targetLanguage,
+        onSectionSynthesized: options.onSceneSynthesized,
+      },
+      {
+        geminiApiKey: options.context.geminiApiKey,
+        kieApiKey: options.context.kieApiKey,
+      },
+      { signal: options.signal },
+    )
+    console.info(`[exec/scene-synth] SLOW PATH — synthesized ${synthesis.succeeded}/${queue.length} via Gemini`)
+  }
 
   if (options.signal?.aborted) {
     queue.forEach((s) => cancelled.push(s.id))

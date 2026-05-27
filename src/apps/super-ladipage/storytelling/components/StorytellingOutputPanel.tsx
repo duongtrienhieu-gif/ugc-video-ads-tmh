@@ -120,8 +120,9 @@ export default function StorytellingOutputPanel({
 
   // ── Scene synthesis context — niche + protagonist + product brief ──
   // POST-REBUILD: KIE key is the hard requirement (image gen). Gemini key
-  // is SOFT — when missing, scene synthesis falls back to static prompts
-  // (locked visual genre preserved, just less specific to section text).
+  // is SOFT — when missing, scene synthesis falls back to static prompts.
+  // OPT.1 (2026-05-28): pass meta.imageScenes as preComputedScenes so
+  // executePageGeneration can skip duplicate Gemini synthesis at exec time.
   const generationContext = useMemo<PageGenerationContext | null>(() => {
     if (!kieApiKey) return null
     return {
@@ -137,11 +138,12 @@ export default function StorytellingOutputPanel({
       targetLanguage: pack.language,
       geminiApiKey: geminiApiKey ?? '',   // soft — empty triggers fallback path
       kieApiKey,
+      preComputedScenes: meta.imageScenes,
     }
   }, [
     geminiApiKey, kieApiKey, meta.niche, meta.productIdentityForImage,
     character.archetype, character.appearanceLock, character.environmentLock,
-    pack.language,
+    pack.language, meta.imageScenes,
   ])
 
   const imageGen = useImageGeneration({
@@ -151,6 +153,10 @@ export default function StorytellingOutputPanel({
     executors,
     context: generationContext,
     concurrency: 2,
+    // OPT.4 (2026-05-28) — surface failure reason to user via toast
+    onFailureToast: (sectionId, reason) => {
+      addToast(`⚠ Tạo ảnh thất bại (${sectionId.slice(0, 20)}): ${reason.slice(0, 120)}`)
+    },
   })
 
   // ── Session callback handlers ────────────────────────────────────
@@ -466,6 +472,11 @@ export default function StorytellingOutputPanel({
                   }
                   isPIBlock={isPIBlock}
                   hasNoOwnImage={!isPIBlock && !exportSection}
+                  imageFailureReason={
+                    sectionRegenState?.regenStatus === 'failed'
+                      ? sectionRegenState.lastFailureReason
+                      : undefined
+                  }
                 />
               )
             })
@@ -744,6 +755,9 @@ interface SectionViewProps {
   /** Storytelling section that's PART of a composed group but NOT the primary.
    *  Its image already appears at the primary section above — skip placeholder. */
   hasNoOwnImage?: boolean
+  /** OPT.4 (2026-05-28) — Last image gen failure reason. When set, shows
+   *  inline error box with retry button so user knows WHY gen failed. */
+  imageFailureReason?: string
 }
 
 // ── PI-LAYER visual marker icon + label per type ─────────────────────
@@ -758,7 +772,7 @@ const PI_BLOCK_MARKERS: Record<string, { icon: string; label: string }> = {
 function StorytellingSectionView({
   section, sectionId, overlayType, chapterNumber, isLast, characterName, status,
   imageUrl, imagePrompt, isImageGenerating, canGenerateImage, onGenerateImage,
-  isPIBlock, hasNoOwnImage,
+  isPIBlock, hasNoOwnImage, imageFailureReason,
 }: SectionViewProps) {
   const blueprint = isPIBlock ? undefined : BLOCK_POOL[sectionId]
   const treatments = isPIBlock ? [] : (SECTION_VISUAL_MAP[sectionId] ?? [])
@@ -876,6 +890,30 @@ function StorytellingSectionView({
                 {imagePrompt}
               </div>
             </details>
+          )}
+          {/* OPT.4 (2026-05-28) — Inline error box when last gen failed.
+              Surfaces the failure reason + retry button so user knows WHY
+              and can take action (instead of clicking "Tạo ảnh" blindly). */}
+          {imageFailureReason && !imageUrl && !isImageGenerating && (
+            <div className="mt-2 max-w-sm mx-auto rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-[11px]">
+              <div className="flex items-start gap-2 text-amber-800">
+                <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+                <div className="flex-1 min-w-0">
+                  <div className="font-semibold">Lỗi tạo ảnh lần trước</div>
+                  <div className="mt-0.5 text-[10px] text-amber-700 break-words">
+                    {imageFailureReason}
+                  </div>
+                  {canGenerateImage && onGenerateImage && (
+                    <button
+                      onClick={onGenerateImage}
+                      className="mt-1.5 inline-flex items-center gap-1 rounded border border-amber-400 bg-white px-2 py-0.5 text-[10px] text-amber-800 hover:bg-amber-100"
+                    >
+                      <RotateCcw className="h-2.5 w-2.5" /> Thử lại
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
           )}
         </>
       )}
