@@ -40,6 +40,7 @@ import { deriveVisualSemanticsPage } from '../../visualSemantics'
 import { deriveImageIntentPage } from '../../imageSemantics'
 import { translateImageIntentPage } from '../../promptTranslation'
 import { adaptRenderContractedPage } from '../../rendererAdapters'
+import { planImageGenerationPage } from '../../generationOrchestration'
 
 // ── Map storytelling BlockId → existing UGC SectionType for
 //    LandingSection.type compat. Storytelling block ID stored
@@ -297,6 +298,21 @@ export async function generateStorytellingPack(
     `[storytelling/rendererAdapters] ${rendererAdaptedPage.adaptedSectionCount}/${rendererAdaptedPage.totalSections} sections received rendererOutputs`,
   )
 
+  // ─── 6.11 P12 — Plan image generation orchestration ───────────────
+  // Sync deterministic plan: routing + reference selection + retry policy
+  // per section. NO API calls. NO auto-execution. References default empty
+  // — consumer re-plans when user uploads packaging/logo/product refs.
+  const orchestratedPage = planImageGenerationPage(rendererAdaptedPage, [])
+  if (orchestratedPage.orchestrationWarnings.length > 0) {
+    console.warn(`[storytelling/orchestration] ${orchestratedPage.orchestrationWarnings.length} orchestration warning(s):`)
+    for (const w of orchestratedPage.orchestrationWarnings) {
+      console.warn(`  ⚠ ${w}`)
+    }
+  }
+  console.log(
+    `[storytelling/orchestration] ${orchestratedPage.generationPlanCount}/${orchestratedPage.totalSections} sections planned for image generation`,
+  )
+
   // ─── 7. Assemble StorytellingPack ────────────────────────────────
   const pack: StorytellingPack = {
     productId:   params.productId,
@@ -327,11 +343,12 @@ export async function generateStorytellingPack(
       // v5.3 — Hook + Discovery variation
       hookAxisId:           selection.hookAxis,
       discoveryChannelId:   selection.discoveryChannel,
-      // P11 — Renderer-adapted page (composer + renderContract + visualSemantics
-      // + imageIntent + prompt fragments + 3 renderer adapters). Full subtype
-      // chain: RendererAdaptedPage IS-A ImagePromptPage IS-A ImageIntentPage
-      // IS-A VisualSemanticsPage — all upstream consumers continue working.
-      rendererAdaptedPage,
+      // P12 — Orchestrated page (composer + renderContract + visualSemantics
+      // + imageIntent + prompt fragments + renderer adapters + generation
+      // orchestration plan with status='planned'). Full subtype chain:
+      // OrchestratedPage IS-A RendererAdaptedPage IS-A ImagePromptPage IS-A
+      // ImageIntentPage IS-A VisualSemanticsPage.
+      orchestratedPage,
     },
   }
 

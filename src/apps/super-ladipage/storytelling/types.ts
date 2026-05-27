@@ -658,14 +658,15 @@ export interface StorytellingMeta {
   /** Selected discovery channel for section 6. */
   discoveryChannelId?: string
 
-  // P11 — Renderer-adapted page (composer + renderContract + visualSemantics
-  // + imageSemantics + prompt translation + 3 renderer adapters). Replaces
-  // P10 imagePromptPage field. RendererAdaptedPage IS-A ImagePromptPage
-  // IS-A ImageIntentPage IS-A VisualSemanticsPage — full subtype chain,
-  // all upstream consumers continue working via subtype assignability.
-  /** RendererAdaptedPage IS-A ImagePromptPage + per-section RendererOutputs
-   *  (gptImage / flux / sdxl). Pure syntax translation, no semantics drift. */
-  rendererAdaptedPage?: import('../rendererAdapters').RendererAdaptedPage
+  // P12 — Orchestrated page (composer + renderContract + visualSemantics +
+  // imageSemantics + promptTranslation + rendererAdapters + generation
+  // orchestration plan). Replaces P11 rendererAdaptedPage field.
+  // OrchestratedPage IS-A RendererAdaptedPage IS-A ImagePromptPage IS-A
+  // ImageIntentPage IS-A VisualSemanticsPage — full subtype chain.
+  /** OrchestratedPage IS-A RendererAdaptedPage + per-section GeneratedAsset
+   *  with status='planned' at pack gen time. Real execution is async +
+   *  consumer-triggered (separate API, NOT auto-invoked). */
+  orchestratedPage?: import('../generationOrchestration').OrchestratedPage
 }
 
 /** Pack output — extends LandingPagePack shape để OutputPanel render được
