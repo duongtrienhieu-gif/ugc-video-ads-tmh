@@ -281,7 +281,7 @@ export async function generatePISection(
 
     if (paragraphs.length === 0) {
       console.warn(`[PI/${input.type}] Gemini returned empty paragraphs — using fallback`)
-      return fallbackBlock(input)
+      return await translateFallbackIfNeeded(fallbackBlock(input), input, keys)
     }
 
     return {
@@ -297,6 +297,75 @@ export async function generatePISection(
     }
   } catch (err) {
     console.warn(`[PI/${input.type}] Generation failed — using fallback:`, err)
-    return fallbackBlock(input)
+    return await translateFallbackIfNeeded(fallbackBlock(input), input, keys)
+  }
+}
+
+// ─── LANG-FIX (2026-05-27) — PI fallback language safety ──────────────
+//
+// PI fallback blocks are hardcoded Vietnamese (consistent with storytelling
+// FALLBACK_COPY pattern). When pack target language is MS or EN, translate
+// the fallback heading + paragraphs in a single small Gemini call so the
+// PI block ships in target language (no mid-pack Vietnamese leak).
+async function translateFallbackIfNeeded(
+  block: PIBlock,
+  input: GeneratorInput,
+  keys: GeneratorKeys,
+): Promise<PIBlock> {
+  if (input.targetLanguage === 'vi') return block
+  if (!keys.geminiApiKey && !keys.kieApiKey) return block
+
+  const targetLangName = input.targetLanguage === 'ms'
+    ? 'Bahasa Melayu (Malaysian Malay, natural conversational, NOT formal Bahasa Indonesia)'
+    : 'natural conversational English'
+
+  const payload = {
+    heading: block.heading,
+    paragraphs: block.paragraphs,
+    subtleCallout: block.subtleCallout ?? '',
+  }
+
+  const prompt = `Translate this Vietnamese diary-tone product info fallback to ${targetLangName}.
+
+═══ RULES ═══
+- Keep first-person diary voice ("tôi/saya/I")
+- ${input.targetLanguage === 'ms' ? 'Use "saya" + reader address "anda" (NOT kamu/engkau)' : 'Use "I" + reader address "you"'}
+- Preserve paragraph breaks
+- Do NOT add marketing phrases
+- Do NOT invent product details
+
+═══ INPUT JSON ═══
+${JSON.stringify(payload, null, 2)}
+
+═══ OUTPUT ═══
+Same JSON shape with translated values. JSON only, no markdown.`
+
+  try {
+    const raw = await textGenWithFallback({
+      geminiApiKey: keys.geminiApiKey,
+      kieApiKey:    keys.kieApiKey,
+      prompt,
+      jsonMode:        true,
+      maxOutputTokens: 700,
+      timeoutMs:       20_000,
+      label:           `pi-fallback-translate-${input.type}`,
+    })
+    const cleaned = raw.trim().replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '').trim()
+    const parsed = JSON.parse(cleaned) as { heading?: string; paragraphs?: string[]; subtleCallout?: string }
+    const newHeading = typeof parsed.heading === 'string' && parsed.heading.length > 0 ? parsed.heading : block.heading
+    const newParagraphs = Array.isArray(parsed.paragraphs)
+      ? parsed.paragraphs.filter((p): p is string => typeof p === 'string' && p.trim().length > 0)
+      : block.paragraphs
+    return {
+      ...block,
+      heading: newHeading,
+      paragraphs: newParagraphs.length > 0 ? newParagraphs : block.paragraphs,
+      subtleCallout: typeof parsed.subtleCallout === 'string' && parsed.subtleCallout.length > 0
+        ? parsed.subtleCallout
+        : block.subtleCallout,
+    }
+  } catch (err) {
+    console.warn(`[PI/${input.type}] Fallback translate failed — keeping VN. ${err instanceof Error ? err.message : 'unknown'}`)
+    return block
   }
 }

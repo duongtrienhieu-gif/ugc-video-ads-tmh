@@ -23,6 +23,7 @@ import type { ParsedPack, ParsedSection } from './parsePackResponse'
 import { runValidators, logValidationResult } from '../validators'
 import type { AggregatedValidation } from '../validators'
 import { FALLBACK_COPY } from './fallbackCopy'
+import { translateFallbackToTarget } from './translateFallbackToTarget'
 import type { NarratorDnaSelection } from './selectNarratorDna'
 import { selectNarratorDna } from './selectNarratorDna'
 import {
@@ -328,7 +329,12 @@ async function generateMainPackOnly(args: RunArgs): Promise<GeneratedPackResult>
     // Retry call errored — fall back to attempt 1 result + downgrade failing sections
     const msg = err instanceof Error ? err.message : String(err)
     console.warn(`[storytelling/runtime] attempt 2 errored: ${msg.slice(0, 200)} — using attempt 1 + fallback`)
-    return buildFallbackResult(pack, initialValidation, 2, argsWithSelection.selection, args.input.niche, args.plan, args.synthesizedReaderSymptoms)
+    return buildFallbackResult(
+      pack, initialValidation, 2,
+      argsWithSelection.selection, args.input.niche, args.plan,
+      args.synthesizedReaderSymptoms,
+      args.input.targetLanguage, args.geminiApiKey, args.kieApiKey,
+    )
   }
 
   const secondValidation = runValidators(pack2, args.input.niche, args.synthesizedReaderSymptoms)
@@ -358,13 +364,18 @@ async function generateMainPackOnly(args: RunArgs): Promise<GeneratedPackResult>
   console.warn(
     `[storytelling/runtime] attempt 2 still had ${secondValidation.violations.length} violations — applying fallback to failing sections`,
   )
-  return buildFallbackResult(pack2, secondValidation, 3, argsWithSelection.selection, args.input.niche, args.plan, args.synthesizedReaderSymptoms)
+  return buildFallbackResult(
+    pack2, secondValidation, 3,
+    argsWithSelection.selection, args.input.niche, args.plan,
+    args.synthesizedReaderSymptoms,
+    args.input.targetLanguage, args.geminiApiKey, args.kieApiKey,
+  )
 }
 
 /** When both attempts fail: keep passing sections from last attempt,
  *  replace failing sections with FALLBACK_COPY. Result always validates.
  *  P2 — interleaves proof block placeholders after fallback. */
-function buildFallbackResult(
+async function buildFallbackResult(
   pack: ParsedPack,
   failedValidation: AggregatedValidation,
   attempts: number,
@@ -372,14 +383,47 @@ function buildFallbackResult(
   niche: import('../types').NicheKey,
   plan: BlockPlan[],
   readerSpecificSymptoms?: string[],
-): GeneratedPackResult {
+  /** LANG-FIX (2026-05-27) — target language + API keys for fallback translation.
+   *  When target ≠ vi AND fallback applied, VN fallback texts get translated
+   *  to target language in a single Gemini batch call so the pack ships in
+   *  one consistent language (no mid-pack Vietnamese leak). */
+  targetLanguage?: import('../types').LandingLanguage,
+  geminiApiKey?: string,
+  kieApiKey?: string,
+): Promise<GeneratedPackResult> {
   const violationsById = groupViolationsBySection(failedValidation)
   const fixed = applyFallback(pack, failedValidation.failingSections)
-  const finalValidation = runValidators(fixed, niche, readerSpecificSymptoms)
+
+  // LANG-FIX (2026-05-27): translate VN fallback to target language
+  let fixedTranslated = fixed
+  if (
+    targetLanguage && targetLanguage !== 'vi' &&
+    failedValidation.failingSections.length > 0 &&
+    (geminiApiKey || kieApiKey)
+  ) {
+    console.info(
+      `[storytelling/fallback-translate] Pack target=${targetLanguage}, ${failedValidation.failingSections.length} fallback sections — translating to target language`,
+    )
+    try {
+      const translatedSections = await translateFallbackToTarget(
+        fixed.sections,
+        failedValidation.failingSections,
+        targetLanguage,
+        { geminiApiKey: geminiApiKey ?? '', kieApiKey: kieApiKey ?? '' },
+      )
+      fixedTranslated = { sections: translatedSections }
+    } catch (err) {
+      console.warn(
+        `[storytelling/fallback-translate] Translation failed — pack ships with VN fallback (mixed-language). ${err instanceof Error ? err.message : 'unknown'}`,
+      )
+    }
+  }
+
+  const finalValidation = runValidators(fixedTranslated, niche, readerSpecificSymptoms)
   logValidationResult(finalValidation)
 
   // P2 — interleave proof block placeholders into final pack.
-  const fullPack = interleaveProofPlaceholders(fixed, plan)
+  const fullPack = interleaveProofPlaceholders(fixedTranslated, plan)
 
   return {
     sections: fullPack.sections,
