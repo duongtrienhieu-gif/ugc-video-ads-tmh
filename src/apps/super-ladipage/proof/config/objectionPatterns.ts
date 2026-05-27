@@ -167,6 +167,80 @@ export const NICHE_OBJECTIONS: Record<NicheKey, NicheObjections> = {
       },
     ],
   },
+
+  // ── Tier S extensions (2026-05-27) ──
+
+  'sleep-insomnia': {
+    niche: 'sleep-insomnia',
+    objections: [
+      {
+        objection: '"Thuốc ngủ Tây y mới đáng tin"',
+        counterPosture: 'cautious-trier — "tôi sợ phụ thuộc thuốc ngủ. Cái này không phải kéo cơ thể vào ngủ — nó giúp đầu yên xuống thôi"',
+      },
+      {
+        objection: '"Mất ngủ do stress việc làm, sản phẩm không sửa được"',
+        counterPosture: 'slow-converter — "tôi cũng nghĩ vậy. Nhưng 3 tuần dùng — không thay đổi công việc gì, nhưng đêm có thể ngủ"',
+      },
+      {
+        objection: '"Tôi thử melatonin rồi không tác dụng"',
+        counterPosture: 'accidentally-impressed — "tôi cũng dùng melatonin trước đây. Cái này khác công thức — combine với GABA và magie"',
+      },
+    ],
+  },
+
+  'menopause': {
+    niche: 'menopause',
+    objections: [
+      {
+        objection: '"Mãn kinh phải uống HRT mới khỏi"',
+        counterPosture: 'doctor-recommended-friend — "bác sĩ tôi không cho HRT vì tiền sử gia đình. Cái này là phyto, an toàn hơn"',
+      },
+      {
+        objection: '"Phyto-estrogen không đủ mạnh"',
+        counterPosture: 'second-hand-reporter — "bạn tôi 52 tuổi dùng 4 tháng. Bốc hỏa giảm rõ — không phải hết nhưng đỡ hẳn 70%"',
+      },
+      {
+        objection: '"Đợi vài năm sẽ tự qua"',
+        counterPosture: 'slow-converter — "tôi định đợi tự qua. Nhưng 2 năm rồi vẫn đêm đổ mồ hôi. Cái này giúp tôi ngủ lại được"',
+      },
+    ],
+  },
+
+  'mental-health': {
+    niche: 'mental-health',
+    objections: [
+      {
+        objection: '"Tôi cần đi gặp bác sĩ tâm lý, không phải supplement"',
+        counterPosture: 'both-and — "tôi vẫn đi therapy. Cái này là support cho thân thể — não chỉ nghỉ được khi thân không stress"',
+      },
+      {
+        objection: '"Ashwagandha thử rồi không khác"',
+        counterPosture: 'careful-trier — "tôi cũng dùng ashwagandha rẻ tiền không tác dụng. Cái này KSM-66 — extract chuẩn lâm sàng"',
+      },
+      {
+        objection: '"Cảm giác lo âu là tính cách, không sửa được"',
+        counterPosture: 'gentle-correction — "không phải sửa tính cách. Cortisol baseline cao 24/7 là khác — đo được, can thiệp được"',
+      },
+    ],
+  },
+
+  'anti-aging-longevity': {
+    niche: 'anti-aging-longevity',
+    objections: [
+      {
+        objection: '"NMN/NAD chỉ là marketing — chưa được FDA approve"',
+        counterPosture: 'cautious-researcher — "tôi đọc paper của Sinclair lab. Approve không có nghĩa hiệu quả — nhiều supplement chưa approve vẫn có evidence"',
+      },
+      {
+        objection: '"Đắt mà chưa chắc kéo dài tuổi thọ"',
+        counterPosture: 'reframe-from-quantity-to-quality — "không phải sống lâu hơn — là 10-20 năm tới sống TỐT hơn. Đáng đầu tư 1tr/tháng"',
+      },
+      {
+        objection: '"Tập gym và ngủ đủ là đủ rồi"',
+        counterPosture: 'both-and — "tôi vẫn tập gym + ngủ đủ. NMN bổ sung cho cellular machinery — không thay thế lifestyle"',
+      },
+    ],
+  },
 }
 
 function hashSeed(s: string): number {

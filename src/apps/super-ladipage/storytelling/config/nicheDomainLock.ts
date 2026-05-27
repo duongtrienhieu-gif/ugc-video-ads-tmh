@@ -451,6 +451,210 @@ export const NICHE_DOMAIN_LOCK: Record<NicheKey, NicheDomainLock> = {
       'attractiveness anxiety',
     ],
   },
+
+  // ── Tier S extensions (2026-05-27) ──
+
+  'sleep-insomnia': {
+    niche: 'sleep-insomnia',
+    symptomsPool: [
+      '2-3 giờ sáng nhìn trần nhà',
+      'mí mắt nặng nhưng não vẫn chạy',
+      'trở dậy đêm 2-3 lần',
+      'sáng dậy thấy mệt như chưa ngủ',
+      'cà phê thứ 2 trong buổi sáng không đủ tỉnh',
+      'cảm giác "thân tan thân ra" lúc 3 giờ chiều',
+    ],
+    frictionPool: [
+      'lướt điện thoại đến 1-2 giờ sáng vì không ngủ được',
+      'uống cà phê chiều để chống buồn ngủ',
+      'né cuộc họp sáng nếu được',
+      'từ chối đi chơi cuối tuần vì "phải bù ngủ"',
+      'mua nến/tinh dầu/bịt mắt với hy vọng ngủ được',
+    ],
+    sensoryPool: [
+      'cảm giác đồng hồ tích tắc quá rõ trong đêm',
+      'ánh đèn pho từ điện thoại lúc 3 giờ sáng',
+      'tiếng quạt máy chạy đều mà không ru ngủ được',
+      'cảm giác chăn nóng/lạnh không vừa cả đêm',
+    ],
+    bodyLanguagePool: [
+      'kiểm tra điện thoại liên tục giữa đêm',
+      'trở mình liên tục 30 phút trước khi thiếp',
+      'dụi mắt khi ngồi họp sáng',
+      'tay che miệng ngáp âm thầm trong cuộc trò chuyện',
+    ],
+    hiddenFearsPool: [
+      'tâm trí mình "khác" — không bao giờ ngủ thật được',
+      'cơ thể đang xuống cấp vì mất ngủ kéo dài',
+      'sợ buổi tối vì lại đối diện với chiếc gối',
+      'mất ngủ là dấu hiệu bệnh nặng nào đó',
+    ],
+    dailyBehaviorsPool: [
+      'mua nến thơm / tinh dầu / loa white noise',
+      'thử app meditation rồi bỏ',
+      'uống thuốc bổ thần kinh hy vọng có hiệu quả',
+      'tắt đèn 10 giờ tối nhưng nằm tới 1 giờ sáng',
+    ],
+    forbiddenLeak: [
+      'tóc rụng', 'vùng đỉnh đầu', 'da xỉn màu',
+      'tê tay chân', 'đau khớp', 'đau lưng',
+      'bốc hỏa', 'kinh nguyệt', 'libido',
+      'thâm nách', 'tẩy lông',
+    ],
+  },
+
+  'menopause': {
+    niche: 'menopause',
+    symptomsPool: [
+      'bốc hỏa đột ngột giữa cuộc họp',
+      'đổ mồ hôi đêm — tỉnh giấc với áo ướt',
+      'cáu vô cớ với chồng / con',
+      'kinh nguyệt đến muộn / không đều',
+      'khô âm đạo gây khó chịu',
+      'mất ham muốn với chồng',
+    ],
+    frictionPool: [
+      'mặc nhiều lớp áo để dễ tháo khi bốc hỏa',
+      'tránh váy ôm body vì sợ đổ mồ hôi lưng',
+      'từ chối ăn cay/uống rượu — sợ trigger bốc hỏa',
+      'né uống nước nóng / nóng phòng',
+      'tránh thân mật với chồng — sợ đau khô',
+    ],
+    sensoryPool: [
+      'cảm giác mặt nóng bừng đột ngột',
+      'lưng áo ướt giữa đêm',
+      'cổ và ngực đỏ rần khi bốc hỏa',
+      'tóc xõa đột nhiên nặng nóng',
+    ],
+    bodyLanguagePool: [
+      'tay quạt phần cổ ngầm',
+      'kéo cổ áo cao xuống thấp',
+      'mở cửa sổ giữa cuộc họp',
+      'cười gượng khi đồng nghiệp hỏi "có nóng không"',
+    ],
+    hiddenFearsPool: [
+      'không còn được nhìn là "phụ nữ" — chỉ là "bà"',
+      'chồng sẽ ngừng quan tâm',
+      'tôi đang mất đi bản thân từng có',
+      'những năm còn lại sẽ chỉ là già và mệt',
+    ],
+    dailyBehaviorsPool: [
+      'mua quạt cầm tay nhỏ giấu trong túi',
+      'kiểm tra thân nhiệt liên tục',
+      'thử phytoestrogen / dầu hoa anh thảo',
+      'tránh chụp ảnh chung — sợ thấy mặt đỏ',
+    ],
+    forbiddenLeak: [
+      'tóc rụng', 'vùng đỉnh đầu',
+      'mất ngủ chỉ vì stress công việc',
+      'da xỉn do thiếu skincare',
+      'đau khớp do vận động',
+      'tê tay chân',
+      'cảm xúc trẻ con buồn vu vơ',
+    ],
+  },
+
+  'mental-health': {
+    niche: 'mental-health',
+    symptomsPool: [
+      'chest tightness khi mở email buổi sáng',
+      'tỉnh giấc 4-5 giờ sáng với cảm giác lo',
+      'thở dồn khi ngồi trong cuộc họp',
+      'mệt nhưng không ngủ được — overtired',
+      'mất tập trung — đọc 1 trang phải đọc lại 3 lần',
+      'cười gượng khi bạn bè hỏi "có ổn không"',
+    ],
+    frictionPool: [
+      'né mở thông báo điện thoại buổi sáng',
+      'từ chối tụ tập bạn bè — lý do "bận"',
+      'hủy hẹn cuối phút — viết tin "thôi để hôm khác"',
+      'làm việc đến 11 giờ đêm để né suy nghĩ',
+      'lướt mạng xã hội vô thức 2-3 giờ liền',
+    ],
+    sensoryPool: [
+      'cảm giác chật ngực — phải hít thở sâu mới thoải mái',
+      'tay run nhẹ khi cầm cốc cà phê',
+      'tim đập nhanh khi điện thoại reo',
+      'cảm giác đầu nặng như có sương mù',
+    ],
+    bodyLanguagePool: [
+      'xoa ngực ngầm khi căng thẳng',
+      'bóp gáy / cổ trong cuộc họp',
+      'tay co lại khi nghe tin xấu',
+      'cười không tới mắt',
+    ],
+    hiddenFearsPool: [
+      'tôi đang "khác đi" — không còn là người tôi từng là',
+      'sẽ không bao giờ thoát được cảm giác này',
+      'nếu nói thật, ai cũng sẽ xa tôi',
+      'tôi yếu đuối — người khác chịu được sao tôi không',
+    ],
+    dailyBehaviorsPool: [
+      'thử app meditation / Calm / Headspace',
+      'mua trà giảm stress / ashwagandha',
+      'đọc sách self-help nhưng không áp dụng được',
+      'pha cốc cà phê thứ 3 vì "chỉ thế mới chịu được ngày"',
+    ],
+    forbiddenLeak: [
+      'tóc rụng', 'da xỉn', 'mụn',
+      'đau khớp', 'tê tay', 'lưng',
+      'bốc hỏa', 'kinh nguyệt',
+      'cân nặng', 'vóc dáng',
+      'libido', 'sexual',
+    ],
+  },
+
+  'anti-aging-longevity': {
+    niche: 'anti-aging-longevity',
+    symptomsPool: [
+      'soi gương sáng — "đây thật sự là tôi sao"',
+      'lấy ảnh CMND năm 30 tuổi ra ngắm',
+      'nhận ra bố mẹ già nhanh trong 1-2 năm gần đây',
+      'thức dậy mệt dù ngủ 8 tiếng',
+      'recovery sau 1 đêm ít ngủ — mất 3 ngày',
+      'nhìn bạn cùng tuổi rồi tự hỏi "sao họ trẻ vậy"',
+    ],
+    frictionPool: [
+      'tránh chụp ảnh chung với đồng nghiệp trẻ',
+      'giấu tuổi khi gặp người mới',
+      'tự nhủ "phải tập gym" rồi lại không',
+      'theo dõi biological age test mỗi vài tháng',
+      'tự đo body composition / chỉ số liên tục',
+    ],
+    sensoryPool: [
+      'cảm giác mỏi sâu trong khớp khi thay đổi thời tiết',
+      'da khô đột ngột — kem nào cũng không đủ',
+      'cảm giác cơ thể "chậm" hơn — đi bộ cũng phải nghỉ',
+      'mệt tinh thần đến mức nhìn vào TV còn thấy đuối',
+    ],
+    bodyLanguagePool: [
+      'sờ nếp nhăn dưới mắt khi soi gương',
+      'massage cổ ngầm khi ngồi máy tính',
+      'thở dài khi đứng dậy từ ghế thấp',
+      'che hai bàn tay khi chụp ảnh',
+    ],
+    hiddenFearsPool: [
+      'sẽ không còn 10-20 năm tốt nữa',
+      'cơ thể đang đi xuống nhanh hơn tôi nhận ra',
+      'sẽ là gánh nặng cho con cháu',
+      'những điều tôi muốn làm sẽ không kịp',
+      'biological age cao hơn chronological — tôi đã "già" rồi',
+    ],
+    dailyBehaviorsPool: [
+      'uống NMN / resveratrol / collagen mỗi sáng',
+      'theo dõi biological age test 3-6 tháng/lần',
+      'đo body comp / blood markers thường xuyên',
+      'subscribe podcast longevity (Peter Attia, Huberman)',
+    ],
+    forbiddenLeak: [
+      'tóc rụng chỉ vì stress',
+      'mụn da liễu',
+      'đau khớp do vận động sai',
+      'mất ngủ stress công việc',
+      'bốc hỏa', 'kinh nguyệt',
+      'lo âu', 'trầm cảm',
+    ],
+  },
 }
 
 /** Get domain lock for niche — never null (8 niches covered). */

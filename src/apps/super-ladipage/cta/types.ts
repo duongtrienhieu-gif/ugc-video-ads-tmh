@@ -36,6 +36,11 @@ export type CtaEnergyModeId =
   | 'attention-restoration'    // beauty-confidence — being looked at again
   | 'warmth-reconnection'      // relationship — emotional presence
   | 'activity-restoration'     // fitness-recovery — capacity return
+  // Tier S extensions (2026-05-27)
+  | 'restful-night-return'     // sleep-insomnia — sleep restoration as identity return
+  | 'identity-continuity'      // menopause — "tôi vẫn là tôi" through transition
+  | 'inner-calm-return'        // mental-health — emotional regulation return
+  | 'vitality-extension'       // anti-aging-longevity — vital years extension
 
 export interface CtaEnergyMode {
   id: CtaEnergyModeId

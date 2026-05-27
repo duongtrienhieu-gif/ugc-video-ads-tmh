@@ -199,6 +199,100 @@ export const NICHE_MECHANISM_VOCAB: Record<NicheKey, NicheMechanismVocab> = {
       'cân bằng cơ thể', 'phục hồi tự nhiên',
     ],
   },
+
+  // ── Tier S extensions (2026-05-27) ──
+
+  'sleep-insomnia': {
+    niche: 'sleep-insomnia',
+    mechanismVocab: [
+      'sleep cycle',
+      'melatonin rhythm',
+      'deep-sleep window',
+      'mind racing pattern',
+      'sleep latency (thời gian thiếp đi)',
+      'REM disruption',
+      'circadian shift',
+      'cortisol cao đêm',
+    ],
+    mechanismFrames: [
+      'không phải "knockout ngủ ngay" — mà là làm sleep cycle quay về tự nhiên',
+      'cái khó không phải đi ngủ — mà là MIND vẫn chạy khi cơ thể đã mệt',
+      'không thuốc ngủ — chỉ cho cơ thể đủ tín hiệu để chuyển sang chế độ nghỉ',
+    ],
+    bannedGenericPhrases: [
+      'từ bên trong', 'gốc rễ vấn đề', 'nuôi dưỡng toàn diện',
+      'thư giãn sâu sắc', 'cân bằng cơ thể',
+    ],
+  },
+
+  'menopause': {
+    niche: 'menopause',
+    mechanismVocab: [
+      'estrogen drop',
+      'hormone fluctuation',
+      'hot flash pattern',
+      'sleep-mood-hormone loop',
+      'phyto-estrogen',
+      'adrenal support',
+      'transition rhythm',
+      'menstrual irregularity',
+    ],
+    mechanismFrames: [
+      'không phải "stop menopause" — mà là làm phase transition êm hơn',
+      'cái thay đổi là hormone — body không sai, chỉ là đang chuyển sang phase khác',
+      'không hormone replacement — chỉ cung cấp đủ phytochemical để cơ thể tự điều chỉnh',
+    ],
+    bannedGenericPhrases: [
+      'từ bên trong', 'gốc rễ vấn đề', 'nuôi dưỡng toàn diện',
+      'thanh xuân vĩnh cửu', 'trẻ lại',
+    ],
+  },
+
+  'mental-health': {
+    niche: 'mental-health',
+    mechanismVocab: [
+      'cortisol baseline',
+      'GABA pathway',
+      'nervous system regulation',
+      'fight-or-flight stuck on',
+      'serotonin support',
+      'adaptogenic response',
+      'stress threshold',
+      'parasympathetic activation',
+    ],
+    mechanismFrames: [
+      'không phải "chữa lo âu" — mà là cho nervous system reset baseline',
+      'cái căng không phải tâm trí — mà là cơ thể stuck trong fight-or-flight',
+      'không thuốc thần kinh — chỉ cho cortisol pathway thời gian xuống',
+    ],
+    bannedGenericPhrases: [
+      'từ bên trong', 'gốc rễ vấn đề', 'nuôi dưỡng toàn diện',
+      'cân bằng tâm hồn', 'hạnh phúc bên trong',
+    ],
+  },
+
+  'anti-aging-longevity': {
+    niche: 'anti-aging-longevity',
+    mechanismVocab: [
+      'cellular senescence',
+      'mitochondrial decline',
+      'NAD+ depletion theo tuổi',
+      'autophagy slowdown',
+      'telomere shortening',
+      'oxidative stress accumulation',
+      'biological age vs chronological',
+      'healthspan window',
+    ],
+    mechanismFrames: [
+      'không phải "young forever" — mà là kéo dài healthspan (years lived vital)',
+      'cái già không phải bề mặt — mà là cellular machinery chậm dần từ tuổi 30+',
+      'không reverse aging — chỉ cung cấp đủ nguyên liệu cho cellular maintenance',
+    ],
+    bannedGenericPhrases: [
+      'từ bên trong', 'gốc rễ vấn đề', 'nuôi dưỡng toàn diện',
+      'thanh xuân vĩnh cửu', 'trẻ mãi không già',
+    ],
+  },
 }
 
 function hashSeed(s: string): number {

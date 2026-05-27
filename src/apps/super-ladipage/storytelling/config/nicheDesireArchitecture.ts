@@ -178,6 +178,80 @@ export const NICHE_DESIRE_ARCHITECTURE: Record<NicheKey, NicheDesireArchitecture
       'inner peace without physical capacity return',
     ],
   },
+
+  // ── Tier S extensions (2026-05-27) ──
+
+  'sleep-insomnia': {
+    niche: 'sleep-insomnia',
+    primaryDesire: 'restful nights + waking as yourself again',
+    desireTensions: [
+      'mind racing vs body exhausted (đầu chạy mà người mệt)',
+      'fear of bed (sợ buổi tối vì lại đối diện với gối)',
+      'dependency anxiety (gắn với thuốc ngủ dài hạn)',
+      'cognitive decline fear (mất ngủ kéo dài làm não yếu)',
+    ],
+    emotionalGravity: 'restful-night-return + waking-as-self (NOT knocked-out pharmaceutical sleep)',
+    forbiddenDefaults: [
+      'pharmaceutical-knockout framing',
+      'sleep-as-luxury tone',
+      'forced-relaxation narrative',
+      'sleep hygiene lecture',
+    ],
+  },
+
+  'menopause': {
+    niche: 'menopause',
+    primaryDesire: 'identity continuity through hormonal transition / "tôi vẫn là tôi"',
+    desireTensions: [
+      'identity loss fear (không còn là phụ nữ — chỉ là bà)',
+      'invisibility anxiety (chồng / xã hội ngừng quan tâm)',
+      'silent suffering (không dám kể với ai)',
+      'time anxiety (những năm còn lại chỉ là già + mệt)',
+    ],
+    emotionalGravity: 'identity-continuity / self-preservation through transition (NOT anti-aging miracle)',
+    forbiddenDefaults: [
+      'anti-aging miracle framing',
+      'youth-recovery narrative',
+      'pathologizing menopause as disease',
+      'shame-of-aging tone',
+    ],
+  },
+
+  'mental-health': {
+    niche: 'mental-health',
+    primaryDesire: 'inner calm return + functional regulation / "có thể thở lại"',
+    desireTensions: [
+      'high-functioning facade (mệt mà phải cười)',
+      'isolation fear (nói thật ai cũng xa)',
+      'weakness shame (yếu đuối — người khác chịu được sao mình không)',
+      'permanence fear (sẽ không bao giờ thoát được)',
+    ],
+    emotionalGravity: 'inner-calm-return / nervous system regulation (NOT happy-pill cure)',
+    forbiddenDefaults: [
+      'depression-cured framing',
+      'happy-pill tone',
+      'forced positivity ending',
+      'mental-illness-as-weakness narrative',
+    ],
+  },
+
+  'anti-aging-longevity': {
+    niche: 'anti-aging-longevity',
+    primaryDesire: 'vital years extension / healthspan over lifespan',
+    desireTensions: [
+      'time-not-enough fear (sẽ không kịp những điều muốn làm)',
+      'biological-decline anxiety (xuống nhanh hơn nhận ra)',
+      'caregiver burden fear (là gánh nặng cho con cháu)',
+      'invisibility-of-old-age (xã hội ngừng nhìn tôi)',
+    ],
+    emotionalGravity: 'vitality-extension / quality-years return (NOT immortality / fountain-of-youth)',
+    forbiddenDefaults: [
+      'vanity-aesthetic framing',
+      'fountain-of-youth tone',
+      'immortality narrative',
+      'youth-obsession trope',
+    ],
+  },
 }
 
 /** Get desire architecture for niche — never null (8 niches covered). */

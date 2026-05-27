@@ -152,6 +152,79 @@ export const PROOF_TEXTURE_PROFILES: Record<NicheKey, ProofTextureProfile> = {
       'aspirational fitness language ("đỉnh cao", "transformation")',
     ],
   },
+
+  // ── Tier S extensions (2026-05-27) ──
+
+  'sleep-insomnia': {
+    niche: 'sleep-insomnia',
+    typicalVoice: '30-55yo urban professional / parent, quietly desperate, late-night Facebook tone',
+    platformFeel: 'late-night FB group post / Zalo "có ai bị giống mình không" / Shopee review',
+    textureCues: [
+      'specific timestamp ("2h45 sáng nay lại mở mắt")',
+      'mention thử melatonin / Calm app / loa white noise rồi',
+      'reference cà phê thứ 2, thứ 3 buổi sáng',
+      'mention chồng/vợ nhận xét "lại trở mình cả đêm"',
+    ],
+    avoidPatterns: [
+      'medical clinical voice',
+      'sleep hygiene lecture tone',
+      'aspirational "best sleep of my life" rave',
+    ],
+  },
+
+  'menopause': {
+    niche: 'menopause',
+    typicalVoice: '45-58yo woman, hidden shame, kín đáo, half-confession tone',
+    platformFeel: 'private FB group phụ nữ U50 / Zalo nhóm bạn thân / Shopee comment',
+    textureCues: [
+      'mention bốc hỏa cụ thể ("giữa cuộc họp" / "trong xe ô tô")',
+      'reference đồ uống/đồ ăn cẩn thận né (cay, nóng, rượu)',
+      'mention chồng "không hiểu" hoặc "có chút thay đổi giữa hai vợ chồng"',
+      'reference tuổi cụ thể ("năm nay 49" / "vào tuổi 52")',
+    ],
+    avoidPatterns: [
+      'aggressive anti-aging tone',
+      'young-perspective voice',
+      'medical clinical lecture',
+      'pathologizing framing',
+    ],
+  },
+
+  'mental-health': {
+    niche: 'mental-health',
+    typicalVoice: '28-45yo high-functioning professional, masked exhaustion, "fine on outside" tone',
+    platformFeel: 'anonymous Reddit post / FB confession group / Threads quiet share',
+    textureCues: [
+      'specific physical anxiety symptom ("chest tightness mở email" / "tay run cầm cốc")',
+      'mention therapy / app Calm / Headspace đã thử',
+      'reference "fine với người ngoài, ở nhà mới khóc"',
+      'mention masked smiling / "cười không tới mắt"',
+    ],
+    avoidPatterns: [
+      'depression-cured euphoria',
+      'happy-pill testimonial tone',
+      'wellness influencer voice',
+      'forced gratitude framing',
+    ],
+  },
+
+  'anti-aging-longevity': {
+    niche: 'anti-aging-longevity',
+    typicalVoice: '40-60yo health-conscious professional, Peter Attia podcast reader, biological-age aware',
+    platformFeel: 'longevity Discord / FB group longevity VN / Reddit r/longevity Vietnamese',
+    textureCues: [
+      'mention specific biomarker ("biological age 47 so với chronological 52")',
+      'reference NMN / NAD / resveratrol brands đã thử',
+      'mention Peter Attia / Huberman / Sinclair khi research',
+      'reference parents aging quickly là motivation',
+    ],
+    avoidPatterns: [
+      'vanity-skincare voice',
+      'beauty-confidence framing',
+      'youth-obsession tone',
+      'fountain-of-youth marketing voice',
+    ],
+  },
 }
 
 /** Get texture profile for niche. */

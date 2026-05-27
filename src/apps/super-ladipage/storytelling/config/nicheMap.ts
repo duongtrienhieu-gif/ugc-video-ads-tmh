@@ -66,6 +66,65 @@ export const NICHE_PRESETS: Partial<Record<NicheKey, NichePreset>> = {
     imageCount: 9,
     recommendedCulturalWorld: ['malay-muslim', 'vietnamese-urban', 'vietnamese-rural'],
   },
+
+  // ── Tier S extensions (2026-05-27) — 4 new diary-fit niches ──
+
+  'sleep-insomnia': {
+    niche: 'sleep-insomnia',
+    emotionalIntensity: 'medium',       // exhausted but hidden — không kể với ai
+    productRevealSection: 7,            // slow reveal — trust-build vì sleep aid nhạy cảm
+    pacingType: 'slow-burn',
+    continuityPriority: 'high',
+    // Domestic + nighttime tones — bedroom / lamp / 2am clock
+    preferredTreatments: ['domestic-observational', 'family-album', 'memory-snapshot'],
+    ctaSoftness: 'invitation-only',
+    supportingCharacter: 'family',      // partner notices restlessness
+    sectionCount: 10,
+    imageCount: 9,
+    recommendedCulturalWorld: ['vietnamese-urban', 'malay-muslim'],
+  },
+
+  'menopause': {
+    niche: 'menopause',
+    emotionalIntensity: 'medium',       // hidden shame / identity shift
+    productRevealSection: 8,            // very slow — deep trust + identity arc
+    pacingType: 'slow-burn',
+    continuityPriority: 'high',
+    preferredTreatments: ['domestic-observational', 'family-album', 'environmental-wide'],
+    ctaSoftness: 'invitation-only',
+    supportingCharacter: 'friend',      // friend group conversation moment
+    sectionCount: 11,
+    imageCount: 10,
+    recommendedCulturalWorld: ['vietnamese-urban', 'malay-muslim'],
+  },
+
+  'mental-health': {
+    niche: 'mental-health',
+    emotionalIntensity: 'high',         // anxiety / depression — high emotional pitch
+    productRevealSection: 7,
+    pacingType: 'slow-burn',
+    continuityPriority: 'high',
+    preferredTreatments: ['domestic-observational', 'memory-snapshot', 'imperfect-real'],
+    ctaSoftness: 'invitation-only',     // mental health products = no pushy CTA
+    supportingCharacter: 'friend',
+    sectionCount: 11,
+    imageCount: 10,
+    recommendedCulturalWorld: ['vietnamese-urban', 'malay-muslim'],
+  },
+
+  'anti-aging-longevity': {
+    niche: 'anti-aging-longevity',
+    emotionalIntensity: 'medium',       // existential reflection, not crisis
+    productRevealSection: 7,
+    pacingType: 'steady',               // reflective but not slow-grind
+    continuityPriority: 'high',
+    preferredTreatments: ['family-album', 'domestic-observational', 'environmental-wide'],
+    ctaSoftness: 'invitation-only',
+    supportingCharacter: 'family',      // kids / parents mirror-moments
+    sectionCount: 10,
+    imageCount: 9,
+    recommendedCulturalWorld: ['vietnamese-urban', 'malay-muslim'],
+  },
 }
 
 /** Convenience getter — returns preset hoặc undefined nếu niche chưa có

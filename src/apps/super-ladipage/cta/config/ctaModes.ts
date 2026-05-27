@@ -108,6 +108,59 @@ export const CTA_ENERGY_MODES: Record<NicheKey, CtaEnergyMode> = {
       'emotional-only resolution',
     ],
   },
+
+  // ── Tier S extensions (2026-05-27) ──
+
+  'sleep-insomnia': {
+    id: 'restful-night-return',
+    niche: 'sleep-insomnia',
+    description: 'Action push toward "ngủ thật" — restful nights as foundation of waking life. NOT pharmaceutical knockout.',
+    vibe: 'reader feels "tối nay tôi có thể ngủ — sáng dậy thấy như chính mình"',
+    avoidPatterns: [
+      'pharmaceutical-knockout tone',
+      'forced-sleep narrative',
+      'sleep-as-luxury framing',
+    ],
+  },
+
+  'menopause': {
+    id: 'identity-continuity',
+    niche: 'menopause',
+    description: 'Action push toward "tôi vẫn là tôi" through hormonal transition — NOT "anti-aging" or "fix what is broken".',
+    vibe: 'reader feels "tôi không mất đi bản thân — đây vẫn là tôi, chỉ là phiên bản khác"',
+    avoidPatterns: [
+      'anti-aging miracle framing',
+      'youth-recovery narrative',
+      'shame-of-aging tone',
+      'pathologizing menopause as disease',
+    ],
+  },
+
+  'mental-health': {
+    id: 'inner-calm-return',
+    niche: 'mental-health',
+    description: 'Action push toward emotional regulation return — NOT "fixed your mental illness". Soft restoration of inner space.',
+    vibe: 'reader feels "có thể thở lại / có thể ngồi yên không thấy chật ngực"',
+    avoidPatterns: [
+      'depression-cured framing',
+      'happy-pill tone',
+      'anxiety-as-weakness narrative',
+      'forced positivity ending',
+    ],
+  },
+
+  'anti-aging-longevity': {
+    id: 'vitality-extension',
+    niche: 'anti-aging-longevity',
+    description: 'Action push toward vital years extension — life-quality over life-quantity. NOT "look younger" vanity.',
+    vibe: 'reader feels "tôi muốn 10-20 năm tới còn đi chơi với con/cháu, không ngồi nhà với thuốc"',
+    avoidPatterns: [
+      'vanity-aesthetic framing',
+      'fountain-of-youth tone',
+      'immortality narrative',
+      'youth-obsession trope',
+    ],
+  },
 }
 
 /** Get CTA energy mode for niche. */

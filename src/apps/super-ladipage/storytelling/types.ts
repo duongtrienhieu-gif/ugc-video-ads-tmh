@@ -35,6 +35,11 @@ export type NicheKey =
   | 'relationship'
   | 'fitness-recovery'
   | 'beauty-confidence'
+  // Tier S extensions (2026-05-27) — diary-fit niches per user request
+  | 'sleep-insomnia'            // mất ngủ / khó ngủ / sleep quality issues
+  | 'menopause'                 // mãn kinh / tiền mãn kinh / hormone phụ nữ
+  | 'mental-health'             // lo âu / stress / depression / burnout
+  | 'anti-aging-longevity'      // chống lão hóa B2C / NAD-NMN / biological age
 
 /** Country target — drives cultural defaults. */
 export type CountryCode = 'MY' | 'VN' | 'SG' | 'ID' | 'TH' | 'PH'

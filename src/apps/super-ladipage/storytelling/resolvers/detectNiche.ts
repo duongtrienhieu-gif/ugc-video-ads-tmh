@@ -54,23 +54,32 @@ const VALID_NICHES: ReadonlyArray<NicheKey> = [
   'relationship',
   'fitness-recovery',
   'beauty-confidence',
+  // Tier S extensions (2026-05-27)
+  'sleep-insomnia',
+  'menopause',
+  'mental-health',
+  'anti-aging-longevity',
 ]
 
 // ─── Gemini classifier prompts ────────────────────────────────────
 
 const NICHE_DESCRIPTIONS = `
-- skincare: face skincare, acne, anti-aging, whitening, serum, cream, sunscreen, mặt da kem mụn
+- skincare: TOPICAL face skincare — acne cream, anti-aging cream (TOPICAL ONLY), whitening, serum, sunscreen, mặt da kem mụn
 - haircare: hair loss, dandruff, shampoo, scalp issues, baldness, tóc rụng gàu
 - health-functional: joint/knee/back/spine pain, orthopedic braces, nasal/sinus, respiratory/cough/allergy, digestive/stomach, blood pressure, diabetes, cholesterol, eye/vision, arthritis. NON-AESTHETIC HEALTH PRODUCTS.
-- supplement-wellness: vitamins, collagen oral, omega, energy booster, immune support, antioxidants
+- supplement-wellness: GENERAL vitamins, oral collagen for beauty, omega, energy booster, immune support, antioxidants (use for generic supplement that doesn't fit specific niches below)
 - fitness-recovery: gym, weight loss, body fat, muscle building, workout supplements, cardio recovery
 - relationship: marriage/sexual health for COUPLES, libido, erectile, intimate products
 - mom-baby: pregnancy, infant care, baby food, mother postpartum
 - beauty-confidence: body shape, body confidence, hair removal, deodorant, breast care, posture confidence, weight-for-appearance
+- sleep-insomnia: SLEEP-SPECIFIC products — melatonin, sleep aid, anti-insomnia, sleep quality, orthopedic pillow for sleep, sleep mattress, weighted blanket, sleep app/tracker. Pain points: mất ngủ / khó ngủ / trằn trọc / dậy giữa đêm / sleep cycle disruption.
+- menopause: FEMALE HORMONAL TRANSITION — perimenopause/menopause supplements, hot flash relief, night sweats, hormone balance, mood swings for women 40-55. Pain points: bốc hỏa / đổ mồ hôi đêm / thay đổi tâm trạng / khô da đột ngột / mất libido / tiền mãn kinh.
+- mental-health: MENTAL/EMOTIONAL — anxiety relief, stress reduction (specifically psychological, NOT general energy), depression support, burnout recovery, ashwagandha for stress, magnesium for anxiety, meditation app. Pain points: lo âu / hoảng loạn / căng thẳng / trầm cảm / kiệt sức tâm lý / burnout.
+- anti-aging-longevity: LONGEVITY SCIENCE — NAD+/NMN, resveratrol, cellular senescence, biological age, mitochondrial health, autophagy, healthspan extension. Distinguished from skincare (topical aesthetic) and supplement-wellness (generic vitamins) by SPECIFIC cellular biology / longevity focus.
 `.trim()
 
 function buildClassifierPrompt(input: DetectInput): string {
-  return `Classify this product into EXACTLY ONE niche key from the 8 options below.
+  return `Classify this product into EXACTLY ONE niche key from the 12 options below.
 
 NICHE OPTIONS:
 ${NICHE_DESCRIPTIONS}
@@ -85,8 +94,12 @@ CRITICAL RULES:
 1. Knee/back/joint/spine braces or supports → health-functional (NOT beauty-confidence)
 2. Nasal/sinus/respiratory products → health-functional (NOT skincare)
 3. Generic "boost confidence" language does NOT make it beauty-confidence — look at WHAT the product does
-4. Vitamins/collagen taken orally → supplement-wellness, but topical creams → skincare
+4. Vitamins/collagen taken orally for general health → supplement-wellness, BUT see exceptions 6-9 below
 5. If multiple match, pick the MOST SPECIFIC niche to the product function (what the product physically does), NOT the marketing emotion
+6. SLEEP-SPECIFIC products (melatonin, sleep pillow, anti-insomnia) → sleep-insomnia (NOT supplement-wellness even though supplement form)
+7. FEMALE HORMONAL TRANSITION (hot flash, perimenopause, menopause-specific) → menopause (NOT supplement-wellness — life-stage specific)
+8. ANXIETY/STRESS/DEPRESSION specific products → mental-health (NOT supplement-wellness if product specifically targets psychological state)
+9. NMN/NAD/LONGEVITY-SCIENCE products → anti-aging-longevity (NOT skincare which is topical, NOT supplement-wellness which is generic)
 
 OUTPUT FORMAT: Reply with EXACTLY ONE niche key. Just the key string, lowercase, hyphenated. NO explanation, NO quotes, NO markdown.
 
@@ -152,6 +165,43 @@ const NICHE_KEYWORDS: Array<{ niche: NicheKey; keywords: RegExp[] }> = [
       /\bbaby\b/i, /\bsơ sinh\b/i, /\btrẻ sơ sinh\b/i,
       /\bbayi\b/i, /\bnewborn\b/i, /\bbỉm\b/i,
       /\bmang thai\b/i, /\bhamil\b/i, /\bpregnant\b/i,
+    ],
+  },
+  // ── Tier S extensions (regex fallback, checked BEFORE skincare/supplement) ──
+  {
+    niche: 'sleep-insomnia',
+    keywords: [
+      /\bmất ngủ\b/i, /\bkhó ngủ\b/i, /\btrằn trọc\b/i, /\bngủ không sâu\b/i,
+      /\binsomnia\b/i, /\bsleep aid\b/i, /\bmelatonin\b/i,
+      /\btidur\b/i, /\bsusah tidur\b/i,
+      /\bsleep mask\b/i, /\bweighted blanket\b/i, /\bsleep pillow\b/i,
+    ],
+  },
+  {
+    niche: 'menopause',
+    keywords: [
+      /\bmãn kinh\b/i, /\btiền mãn kinh\b/i, /\bperimenopause\b/i, /\bmenopause\b/i,
+      /\bbốc hỏa\b/i, /\bhot flash\b/i, /\bnight sweat\b/i, /\bđổ mồ hôi đêm\b/i,
+      /\bnội tiết tố\b/i, /\bestrogen\b/i, /\bhormone phụ nữ\b/i,
+      /\bmenopaus\b/i,
+    ],
+  },
+  {
+    niche: 'mental-health',
+    keywords: [
+      /\blo âu\b/i, /\bcăng thẳng\b/i, /\btrầm cảm\b/i, /\bstress\b/i,
+      /\banxiety\b/i, /\bdepression\b/i, /\bburnout\b/i, /\bkiệt sức\b/i,
+      /\bashwagandha\b/i, /\bcortisol\b/i, /\bgaba\b/i,
+      /\bmeditation\b/i, /\bmindful\b/i, /\bpanic attack\b/i, /\bhoảng loạn\b/i,
+    ],
+  },
+  {
+    niche: 'anti-aging-longevity',
+    keywords: [
+      /\bnmn\b/i, /\bnad\b/i, /\bresveratrol\b/i, /\blongevity\b/i,
+      /\btelomere\b/i, /\bautophagy\b/i, /\bmitochondria\b/i, /\bcellular\b/i,
+      /\bbiological age\b/i, /\bhealthspan\b/i, /\bsenescence\b/i,
+      /\bchống lão hóa\b/i, /\btrẻ hóa\b/i,
     ],
   },
   {
