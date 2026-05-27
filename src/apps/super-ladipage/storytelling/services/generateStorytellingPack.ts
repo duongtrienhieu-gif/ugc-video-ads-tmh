@@ -31,6 +31,11 @@ import { useSettingsStore } from '../../../../stores/settingsStore'
 import { resolveStorytellingInput } from '../resolvers/resolveStorytellingInput'
 import { detectNiche } from '../resolvers/detectNiche'
 import { resolveBlockPlan } from '../resolvers/resolveBlockPlan'
+import {
+  classifyProductReality,
+  buildRealityBrief,
+  PACING_OVERRIDES,
+} from '../../productClass'
 import { buildProductBrief } from '../runtime/buildPackGenPrompt'
 import { generatePackWithRetry } from '../runtime/retryWithFeedback'
 import type { GeneratedPackResult } from '../runtime/retryWithFeedback'
@@ -191,16 +196,50 @@ export async function generateStorytellingPack(
     `(source=${nicheDetection.source}, confidence=${nicheDetection.confidence}, ` +
     `matched=[${nicheDetection.matchedKeywords.join(', ')}])`,
   )
-  const input = resolveStorytellingInput(params, nicheDetection.niche)
+  // ─── 2.5 P-PRODUCT-CLASS (2026-05-27) — Product reality classifier ──
+  // Classifies product into 7-axis ProductRealityModel.
+  // Solves: knee brace vs glucosamine pill — both health-functional niche
+  // but completely different storytelling needs (form/pacing/discovery).
+  const productReality = await classifyProductReality(
+    {
+      productName: product.productName,
+      painPoints: product.painPoints,
+      benefits: (product as { benefits?: string }).benefits,
+      uniqueSellingPoints: (product as { usp?: string; uniqueSellingPoints?: string }).usp
+        ?? (product as { usp?: string; uniqueSellingPoints?: string }).uniqueSellingPoints,
+      offerPricing: (product as { offerPricing?: string; pricing?: string }).offerPricing
+        ?? (product as { offerPricing?: string; pricing?: string }).pricing,
+    },
+    {
+      geminiApiKey: settingsForNiche.geminiApiKey,
+      kieApiKey: settingsForNiche.kieApiKey,
+    },
+  )
+  console.info(
+    `[storytelling] product reality: form=${productReality.productForm}, ` +
+    `mechanism=${productReality.mechanismFamily}, ` +
+    `pacing=${productReality.pacingProfile}, ` +
+    `discovery=${productReality.discoveryContext}, ` +
+    `source=${productReality.source}` +
+    (productReality.rationale ? ` // ${productReality.rationale.slice(0, 80)}` : ''),
+  )
+
+  // ─── Resolve input WITH pacing override from product reality ──────
+  const pacingOverride = PACING_OVERRIDES[productReality.pacingProfile]
+  const input = resolveStorytellingInput(params, nicheDetection.niche, pacingOverride)
   const plan = resolveBlockPlan(input)
   console.info(
     `[storytelling] resolved input: niche=${input.niche}, pacing=${input.pacingType}, ` +
     `intensity=${input.emotionalIntensity}, productReveal=section ${input.productRevealSection}, ` +
-    `blocks planned=${plan.length}`,
+    `blocks planned=${plan.length} (pacing override: ${pacingOverride.rationale})`,
   )
 
   // ─── 3. Build product brief ───────────────────────────────────────
+  // FIX 2026-05-27: also inject product reality brief (mechanism + hero
+  // triggers + failed attempts + discovery context) — positive injection,
+  // not rule stacking. Gemini follows ACCURATE description naturally.
   const productBrief = buildProductBrief(product.productName, input.niche, product.painPoints)
+  const realityBrief = buildRealityBrief(productReality)
 
   // ─── 3.5 v5.1 — Select narrator/DNA/curve (human variation engine) ──
   const selection = selectNarratorDna({
@@ -210,10 +249,14 @@ export async function generateStorytellingPack(
   })
 
   // ─── 4. Generate with retry + fallback ───────────────────────────
+  // FIX 2026-05-27: pass realityBrief (product reality model) — injected
+  // into Gemini system prompt as POSITIVE context block. Solves knee-brace-
+  // described-as-glucosamine drift at semantic level (data, not rules).
   const result = await generatePackWithRetry({
     input,
     plan,
     productBrief,
+    realityBrief,
     geminiApiKey,
     kieApiKey,
     selection,

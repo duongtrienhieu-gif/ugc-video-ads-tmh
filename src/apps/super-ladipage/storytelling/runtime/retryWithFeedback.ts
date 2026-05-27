@@ -58,6 +58,11 @@ interface RunArgs {
   input: StorytellingInput
   plan: BlockPlan[]
   productBrief: string
+  /** P-PRODUCT-CLASS (2026-05-27) — Product reality block. Positive
+   *  description (mechanism / hero triggers / failed attempts / discovery
+   *  context) — injected INTO system prompt as context, not rules.
+   *  Optional: omitted = pack ships with niche-only context (legacy path). */
+  realityBrief?: string
   geminiApiKey: string
   kieApiKey: string
   /** v5.1 — Narrator/DNA/curve selection. OPTIONAL — if undefined,
@@ -81,7 +86,7 @@ async function runOnce(
   retryFeedback?: string,
   label = 'storytelling-packgen',
 ): Promise<ParsedPack> {
-  const systemPrompt = buildSystemPrompt(args.input, args.productBrief)
+  const systemPrompt = buildSystemPrompt(args.input, args.productBrief, args.realityBrief)
   const userPrompt = buildPackGenUserPrompt(args.input, args.plan, args.selection, retryFeedback)
   logPromptStats(systemPrompt, userPrompt, args.plan)
 

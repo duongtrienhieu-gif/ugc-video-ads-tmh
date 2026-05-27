@@ -11,11 +11,22 @@
 // ─────────────────────────────────────────────────────────────────────
 
 import type {
-  LandingGenParams, NicheKey, StorytellingInput,
+  LandingGenParams, NicheKey, StorytellingInput, PacingType, EmotionalIntensity,
+  ProductRevealSection,
 } from '../types'
 import { STORYTELLING_DEFAULTS } from '../config/defaults'
 import { getNichePreset } from '../config/nicheMap'
 import { resolveProtagonistProfile } from './resolveProtagonistProfile'
+
+/** Optional pacing override from productClass classifier — overrides
+ *  niche-preset defaults when product type demands different rhythm
+ *  (e.g., knee brace = quicker, glucosamine pill = slow-burn). */
+export interface PacingOverride {
+  sectionCount: number
+  productRevealSection: ProductRevealSection
+  pacingType: PacingType
+  emotionalIntensity: EmotionalIntensity
+}
 
 export function resolveStorytellingInput(
   params: LandingGenParams,
@@ -23,6 +34,9 @@ export function resolveStorytellingInput(
    *  detectNiche() and passes the result. Falls back to 'health-functional'
    *  if not provided — generic enough to avoid wrong-niche framing. */
   niche: NicheKey = 'health-functional',
+  /** P-PRODUCT-CLASS (2026-05-27) — pacing override from product reality
+   *  classifier. When provided, overrides niche-preset defaults. */
+  pacingOverride?: PacingOverride,
 ): StorytellingInput {
   const preset = getNichePreset(niche)
 
@@ -34,11 +48,20 @@ export function resolveStorytellingInput(
 
     protagonistProfile: resolveProtagonistProfile({ niche }),
 
-    emotionalIntensity:      preset?.emotionalIntensity      ?? STORYTELLING_DEFAULTS.emotionalIntensity,
-    pacingType:              preset?.pacingType              ?? STORYTELLING_DEFAULTS.pacingType,
-    productRevealSection:    preset?.productRevealSection    ?? STORYTELLING_DEFAULTS.productRevealSection,
+    // PACING OVERRIDE precedence: productClass > niche preset > defaults
+    emotionalIntensity:
+      pacingOverride?.emotionalIntensity
+      ?? preset?.emotionalIntensity
+      ?? STORYTELLING_DEFAULTS.emotionalIntensity,
+    pacingType:
+      pacingOverride?.pacingType
+      ?? preset?.pacingType
+      ?? STORYTELLING_DEFAULTS.pacingType,
+    productRevealSection:
+      pacingOverride?.productRevealSection
+      ?? preset?.productRevealSection
+      ?? STORYTELLING_DEFAULTS.productRevealSection,
     culturalWorld:           preset?.recommendedCulturalWorld?.find(
-                               // Pick the cultural world matching target language
                                (c) =>
                                  (params.language === 'ms' && c === 'malay-muslim') ||
                                  (params.language === 'vi' && c === 'vietnamese-urban'),
