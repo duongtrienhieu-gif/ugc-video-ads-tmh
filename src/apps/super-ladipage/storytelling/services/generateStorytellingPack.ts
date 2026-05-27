@@ -170,16 +170,25 @@ export async function generateStorytellingPack(
   // Previously niche defaulted to 'skincare' → nasal spray products were
   // mislabeled, story arc generated wrong-niche framing (face/skin
   // vocabulary for sinus products).
-  // FIX v2 — also pass product.benefits (previously missing → "boost
-  // confidence to walk again" in benefits falsely triggered beauty-
-  // confidence niche for knee/joint products).
-  const nicheDetection = detectNiche({
-    productName: product.productName,
-    painPoints: product.painPoints,
-    benefits: (product as { benefits?: string }).benefits,
-  })
+  // FIX v3 (2026-05-27) — Gemini classifier (Option A). Reads full
+  // product context (name + painPoints + benefits) and classifies to
+  // ONE of 8 NicheKey values. Same downstream pipeline (niche-keyed
+  // pools unchanged). Falls back to regex if Gemini fails.
+  const settingsForNiche = useSettingsStore.getState()
+  const nicheDetection = await detectNiche(
+    {
+      productName: product.productName,
+      painPoints: product.painPoints,
+      benefits: (product as { benefits?: string }).benefits,
+    },
+    {
+      geminiApiKey: settingsForNiche.geminiApiKey,
+      kieApiKey: settingsForNiche.kieApiKey,
+    },
+  )
   console.info(
-    `[storytelling] niche detection: ${nicheDetection.niche} (confidence=${nicheDetection.confidence}, ` +
+    `[storytelling] niche detection: ${nicheDetection.niche} ` +
+    `(source=${nicheDetection.source}, confidence=${nicheDetection.confidence}, ` +
     `matched=[${nicheDetection.matchedKeywords.join(', ')}])`,
   )
   const input = resolveStorytellingInput(params, nicheDetection.niche)
