@@ -418,23 +418,30 @@ function ImagePromptCardImpl({
             </button>
           )}
         </div>
-        <button
-          onClick={() => setShowPrompt((v) => !v)}
-          className="flex w-full items-center justify-between gap-1 text-left text-[10px] text-gray-500 hover:text-gray-700"
-        >
-          <span className="flex items-center gap-1">
-            {showPrompt ? '− Ẩn prompt' : '+ Xem prompt'}
-            {wasEdited && (
-              <span
-                className="rounded-full bg-amber-100 px-1.5 py-0.5 text-[9px] font-bold text-amber-700"
-                title="Prompt đã bị sửa khỏi bản gốc"
-              >
-                đã sửa
-              </span>
-            )}
-          </span>
+        {/* Fix nested-button bug (HTML invalid): tách CopyAllButton thành
+            sibling thay vì nest trong outer toggle button. Trước đây
+            <button><span/><CopyAllButton/></button> khiến browser parser
+            auto-spit-out inner button → layout vỡ + click copy không fire. */}
+        <div className="flex w-full items-center justify-between gap-1 text-[10px] text-gray-500">
+          <button
+            type="button"
+            onClick={() => setShowPrompt((v) => !v)}
+            className="flex flex-1 items-center gap-1 text-left hover:text-gray-700"
+          >
+            <span className="flex items-center gap-1">
+              {showPrompt ? '− Ẩn prompt' : '+ Xem prompt'}
+              {wasEdited && (
+                <span
+                  className="rounded-full bg-amber-100 px-1.5 py-0.5 text-[9px] font-bold text-amber-700"
+                  title="Prompt đã bị sửa khỏi bản gốc"
+                >
+                  đã sửa
+                </span>
+              )}
+            </span>
+          </button>
           <CopyAllButton text={prompt.prompt} compact />
-        </button>
+        </div>
         {showPrompt && !advancedEdit && (
           <p className="whitespace-pre-wrap rounded bg-gray-50 p-1.5 text-[10px] leading-snug text-gray-600">
             {prompt.prompt}
