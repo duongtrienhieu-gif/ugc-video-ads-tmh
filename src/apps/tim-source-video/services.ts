@@ -20,7 +20,7 @@ import { matchTranscript } from './transcriptMatcher'
 import {
   ApiError, CONFIG, ERR,
   type Scene, type Link, type SearchResult, type RankedLink,
-  type SourceId, type ScriptLang, type ParseResult,
+  type SourceId, type ScriptLang, type ParseResult, type ProductContext,
   type TranscriptSnippet, type TranscriptHit,
 } from './types'
 
@@ -134,28 +134,41 @@ function mapGroundingError(err: unknown): never {
   throw new ApiError(ERR.GEMINI_FAIL, (err as Error)?.message || 'Web search failed')
 }
 
-// ── Step 1: Parse script → scenes (multi-lang, CACHED) ──────────────────────
-// Cache key v3 — Scene shape gained `lineVi` field. Old v2 cached entries
-// won't have it; bumping the key invalidates them safely without a migration.
+// ── Step 1: Parse script → productContext + scenes (multi-lang, CACHED) ─────
+// Cache key v4 — schema gained productContext (script-level product/niche
+// extraction). v3 entries không có field này; bump key invalidates an toàn.
+//
+// F2 fix: extract productContext 1 lần/script để inject vào search query +
+// embedding query + transcript matching, giữ topical relevance. Trước đây
+// AI bị prompt "focus visual concept, KHÔNG lặp text" → strip product
+// context → score generic visual matches cao (Face Yoga match cho scene
+// Vitamin B). productContext giữ semantic sản phẩm xuyên suốt pipeline.
 export async function parseScript(apiKey: string, script: string, signal: AbortSignal): Promise<ParseResult> {
-  return cached(`parse:v3:${hash(script)}`, CONFIG.cache.parseScriptTtlMs, async () => {
+  return cached(`parse:v4:${hash(script)}`, CONFIG.cache.parseScriptTtlMs, async () => {
     const prompt = `Bạn là chuyên gia phân tích kịch bản UGC bán hàng.
 
-ĐẦU TIÊN: phát hiện ngôn ngữ của kịch bản. Chỉ trả về 1 trong: "vi" (Vietnamese), "en" (English), "ms" (Malay).
+BƯỚC 1 — phát hiện ngôn ngữ của kịch bản. Chỉ trả về 1 trong: "vi" (Vietnamese), "en" (English), "ms" (Malay).
 
-SAU ĐÓ: tách kịch bản thành các SCENE (mỗi câu thoại = 1 scene, trừ khi 2 câu liền cùng nói về 1 visual thì gộp lại).
+BƯỚC 2 — extract PRODUCT CONTEXT (làm 1 lần cho toàn bộ kịch bản):
+- "productName": tên sản phẩm/brand chính được nhắc (giữ verbatim, vd "9YOUNG-BASIC Vitamin B Complex", "LANZF Nasal Care Spray"). Nếu không có tên rõ ràng, dùng tên ngách chung (vd "vitamin B complex supplement").
+- "niche": 1-3 từ mô tả ngách sản phẩm bằng tiếng Anh (vd "vitamin supplement", "skincare collagen", "hair growth serum", "nasal spray").
+- "productKeywordsVi": 4-6 từ khóa tiếng VIỆT phản ánh BẢN CHẤT sản phẩm + ngách + cơ chế chính (vd "vitamin B, thực phẩm chức năng, mệt mỏi, năng lượng, B12, folic acid"). KHÔNG được dùng từ generic như "rạng rỡ", "hài lòng", "thay đổi tích cực" ở đây.
+- "productKeywordsEn": 4-6 từ khóa tiếng ANH tương đương (vd "vitamin B, supplement, fatigue, energy, B12, folic acid").
+- "productKeywordsMs": 4-6 từ khóa tiếng MALAY tương đương (vd "vitamin B, suplemen, keletihan, tenaga, B12, asid folik").
+
+BƯỚC 3 — tách kịch bản thành các SCENE (mỗi câu thoại = 1 scene, trừ khi 2 câu liền cùng nói về 1 visual thì gộp lại).
 
 Với mỗi scene, trả về object với các field:
 - "line": câu thoại gốc (giữ nguyên ngôn ngữ kịch bản)
 - "lineVi": bản DỊCH SANG TIẾNG VIỆT của câu thoại trên. Nếu kịch bản đã là tiếng Việt, copy y nguyên "line". Nếu là English hoặc Malay, dịch sang Việt TỰ NHIÊN (không word-by-word, dịch nghĩa) để người Việt đọc hiểu.
 - "visualIntent": 1 câu tiếng Việt mô tả CỤ THỂ hình ảnh/video cần để minh họa. Focus vào visual concept, KHÔNG lặp lại nội dung text.
-- "keywordVi": 2-4 từ khóa tiếng Việt
-- "keywordEn": 2-4 từ khóa tiếng Anh
-- "keywordMs": 2-4 từ khóa tiếng Malay
+- "keywordVi": 2-4 từ khóa tiếng Việt SCENE-SPECIFIC (không cần lặp product keywords)
+- "keywordEn": 2-4 từ khóa tiếng Anh SCENE-SPECIFIC
+- "keywordMs": 2-4 từ khóa tiếng Malay SCENE-SPECIFIC
 
 Mỗi keyword set phải là DỊCH NGHĨA TƯƠNG ĐƯƠNG, không phải dịch từ-từ.
 
-Trả về JSON object với 2 field: scriptLang + scenes.
+Trả về JSON object với 3 field: scriptLang + productContext + scenes.
 
 Kịch bản:
 ${script}`
@@ -168,6 +181,17 @@ ${script}`
           type: 'object',
           properties: {
             scriptLang: { type: 'string', enum: ['vi', 'en', 'ms'] },
+            productContext: {
+              type: 'object',
+              properties: {
+                productName:        { type: 'string' },
+                niche:              { type: 'string' },
+                productKeywordsVi:  { type: 'string' },
+                productKeywordsEn:  { type: 'string' },
+                productKeywordsMs:  { type: 'string' },
+              },
+              required: ['productName', 'niche', 'productKeywordsVi', 'productKeywordsEn', 'productKeywordsMs'],
+            },
             scenes: {
               type: 'array',
               items: {
@@ -184,7 +208,7 @@ ${script}`
               },
             },
           },
-          required: ['scriptLang', 'scenes'],
+          required: ['scriptLang', 'productContext', 'scenes'],
         },
       },
     }, signal) as { candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }> }
@@ -243,10 +267,24 @@ async function searchYouTubeOneLang(apiKey: string, query: string, signal: Abort
   })
 }
 
-export async function searchYouTube(apiKey: string, scene: Scene, scriptLang: ScriptLang, signal: AbortSignal): Promise<SearchResult> {
-  const queries: string[] = [scene.keywordEn]
-  if (scriptLang === 'vi' && scene.keywordVi) queries.push(scene.keywordVi)
-  else if (scriptLang === 'ms' && scene.keywordMs) queries.push(scene.keywordMs)
+export async function searchYouTube(
+  apiKey: string,
+  scene: Scene,
+  scriptLang: ScriptLang,
+  productContext: ProductContext,
+  signal: AbortSignal,
+): Promise<SearchResult> {
+  // F2 fix: compose query = productKeywords + sceneKeywords để giữ topical
+  // relevance. Trước đây chỉ dùng sceneKeywords (đã bị AI strip context sản
+  // phẩm) → YouTube trả về Face Yoga cho scene Vitamin B.
+  const compose = (productKw: string, sceneKw: string) => `${productKw} ${sceneKw}`.trim()
+
+  const queries: string[] = [compose(productContext.productKeywordsEn, scene.keywordEn)]
+  if (scriptLang === 'vi' && scene.keywordVi) {
+    queries.push(compose(productContext.productKeywordsVi, scene.keywordVi))
+  } else if (scriptLang === 'ms' && scene.keywordMs) {
+    queries.push(compose(productContext.productKeywordsMs, scene.keywordMs))
+  }
 
   const linkArrays = await Promise.all(
     queries.map(q => searchYouTubeOneLang(apiKey, q, signal).catch(() => [] as Link[]))
@@ -273,33 +311,54 @@ export async function searchYouTube(apiKey: string, scene: Scene, scriptLang: Sc
 const BAD_DOMAIN_RE = /^(shutterstock|gettyimages|istockphoto|envato|vecteezy|123rf|dreamstime|fotolia|stockfresh|alamy|depositphotos|adobe\.stock|ebay|walmart|amazon|aliexpress|alibaba|shopee|temu|target|bestbuy|wikipedia|wikia|quora)\.[a-z.]+$/i
 const BARE_DOMAIN_RE = /^[a-z0-9-]+\.[a-z]{2,}(\.[a-z]{2,})?$/i
 
-export async function searchWeb(apiKey: string, scene: Scene, scriptLang: ScriptLang, excludeYouTube: boolean, signal: AbortSignal): Promise<SearchResult> {
-  // Cache key includes excludeYouTube flag — different prompt → different results
-  const cacheKey = `web:v2:${excludeYouTube ? 'noyt' : 'all'}:${hash(scene.visualIntent + scriptLang)}`
+export async function searchWeb(
+  apiKey: string,
+  scene: Scene,
+  scriptLang: ScriptLang,
+  productContext: ProductContext,
+  excludeYouTube: boolean,
+  signal: AbortSignal,
+): Promise<SearchResult> {
+  // Cache key v3: bump v2→v3 vì prompt giờ thêm product context block.
+  // Old v2 entries dùng prompt không có product context → stale, bump key
+  // invalidate an toàn không cần migration. Cache key cũng hash product
+  // name để 2 sản phẩm khác cùng visualIntent vẫn cache riêng.
+  const cacheKey = `web:v3:${excludeYouTube ? 'noyt' : 'all'}:${hash(scene.visualIntent + scriptLang + productContext.productName)}`
 
   return cached(cacheKey, CONFIG.cache.searchTtlMs, async () => {
     const ytClause = excludeYouTube
-      ? '6. ❌ KHÔNG TRẢ về URL youtube.com / youtu.be (đã có nguồn riêng).'
-      : '6. ✓ Bao gồm cả YouTube URLs nếu phù hợp.'
+      ? '7. ❌ KHÔNG TRẢ về URL youtube.com / youtu.be (đã có nguồn riêng).'
+      : '7. ✓ Bao gồm cả YouTube URLs nếu phù hợp.'
 
+    // F2 fix: inject product context để Gemini grounding biết bias search
+    // sang topic sản phẩm thật, không chỉ visual concept generic.
     const prompt = `Bạn cần TÌM TRÊN INTERNET các trang web có nội dung phù hợp để MINH HỌA cho concept hình ảnh sau:
 
 "${scene.visualIntent}"
+
+CONTEXT SẢN PHẨM (BẮT BUỘC ƯU TIÊN):
+- Sản phẩm: ${productContext.productName}
+- Ngách: ${productContext.niche}
+- Từ khóa sản phẩm: ${productContext.productKeywordsEn} / ${scriptLang === 'vi' ? productContext.productKeywordsVi : scriptLang === 'ms' ? productContext.productKeywordsMs : ''}
+
+Trang web trả về phải TOPICALLY LIÊN QUAN tới ngách sản phẩm trên, KHÔNG chỉ visual concept generic.
+Ví dụ: scene về Vitamin B Complex thì KHÔNG trả về video Face Yoga chỉ vì cảnh "rạng rỡ tươi tắn".
 
 Ngôn ngữ kịch bản: ${scriptLang} → ưu tiên trang phục vụ audience cùng ngôn ngữ nếu có.
 
 YÊU CẦU:
 1. Trang có VIDEO play được HOẶC bài viết substantive với hình ảnh/animation minh họa cụ thể cho concept
-2. ĐA DẠNG NGUỒN: TikTok pages, Vimeo, Pinterest pins, Instagram public posts, Dailymotion, blog posts, news articles có embed video, stock sites (Pexels/Pixabay deep links), creator personal websites
-3. URL phải là TRANG CHI TIẾT của 1 video/article cụ thể, KHÔNG phải homepage hay search results
-4. TUYỆT ĐỐI KHÔNG trả về:
+2. TOPICALLY MATCH với ngách sản phẩm — đây là tiêu chí #1
+3. ĐA DẠNG NGUỒN: TikTok pages, Vimeo, Pinterest pins, Instagram public posts, Dailymotion, blog posts, news articles có embed video, stock sites (Pexels/Pixabay deep links), creator personal websites
+4. URL phải là TRANG CHI TIẾT của 1 video/article cụ thể, KHÔNG phải homepage hay search results
+5. TUYỆT ĐỐI KHÔNG trả về:
    - E-commerce listings (Amazon, Shopee, Walmart, Alibaba, eBay...)
    - Stock library homepages (shutterstock.com, gettyimages.com root)
    - Wikipedia generic article pages
    - Quora, Yahoo Answers listing pages
    - Anti-bot / CAPTCHA pages
    - Homepage / category page với title chỉ là tên domain
-5. Tìm 5-8 link chất lượng cao, ưu tiên relevance + visual content thực sự
+6. Tìm 5-8 link chất lượng cao, ưu tiên topical relevance + visual content thực sự
 ${ytClause}`
 
     let result: { narrative: string; chunks: Array<{ uri: string; title?: string }> }
@@ -352,6 +411,7 @@ export async function batchFetchTranscripts(
   links: Array<Link & { source: SourceId }>,
   scene: Scene,
   scriptLang: ScriptLang,
+  productContext: ProductContext,
   signal: AbortSignal,
 ): Promise<Map<string, { hits: TranscriptHit[]; lang: ScriptLang | 'unknown' }>> {
   const ytLinks = links.filter(l => l.source === 'youtube' && l.videoId)
@@ -367,7 +427,7 @@ export async function batchFetchTranscripts(
         if (!link?.videoId) continue
         const data = await fetchTranscriptOne(link.videoId, scriptLang, signal)
         if (!data) continue
-        const hits = matchTranscript(data.snippets, scene)
+        const hits = matchTranscript(data.snippets, scene, productContext)
         if (hits.length > 0) result.set(link.videoId, { hits, lang: data.lang })
       }
     })())
@@ -379,6 +439,9 @@ export async function batchFetchTranscripts(
 // ── Step 3: Embedding rerank with source-mix enforcement ────────────────────
 interface EmbedRankInput {
   scenes: Scene[]
+  /** F2 — script-level product context. Composed vào query embedding để
+   *  topical relevance dominate cosine similarity, không chỉ visual emotion. */
+  productContext: ProductContext
   linksPerScene: Array<Array<Link & { source: SourceId }>>
   transcriptsPerScene: Array<Map<string, { hits: TranscriptHit[]; lang: ScriptLang | 'unknown' }>>
   /** When true, final mix enforces YT-cap (3 YT + 5 Web). When false, take
@@ -391,7 +454,7 @@ export async function embeddingRank(
   input: EmbedRankInput,
   signal: AbortSignal,
 ): Promise<RankedLink[][]> {
-  const { scenes, linksPerScene, transcriptsPerScene, enforceSourceMix } = input
+  const { scenes, productContext, linksPerScene, transcriptsPerScene, enforceSourceMix } = input
 
   const docTexts: string[] = []
   const docIndex: Array<{ sceneIdx: number; linkIdx: number; transcriptHits: TranscriptHit[]; transcriptLang: ScriptLang | 'unknown' | undefined }> = []
@@ -419,8 +482,14 @@ export async function embeddingRank(
 
   if (docTexts.length === 0) return scenes.map(() => [])
 
-  const queryTexts = scenes.map(s => s.visualIntent)
-  const queryCacheKeys = queryTexts.map(t => `emb:q:v2:${hash(t)}`)
+  // F2 fix: compose query = productContext.productKeywordsEn + visualIntent.
+  // Trước đây query chỉ visualIntent (đã bị AI strip product context) → cosine
+  // similarity match Face Yoga cao cho scene Vitamin B. Inject English product
+  // keywords để max overlap với YouTube English title/description.
+  // Cache key bump v2→v3 vì query composition đổi — old vectors stale.
+  const productQuerySeed = `${productContext.productKeywordsEn} ${productContext.niche}`.trim()
+  const queryTexts = scenes.map(s => `${productQuerySeed} ${s.visualIntent}`.trim())
+  const queryCacheKeys = queryTexts.map(t => `emb:q:v3:${hash(t)}`)
   const docCacheKeys = docTexts.map(t => `emb:d:v2:${hash(t)}`)
 
   const queryVecs: (number[] | null)[] = queryCacheKeys.map(k => {

@@ -104,7 +104,7 @@ export default function TimSourceVideo() {
 
     try {
       const parsed = await parseScript(geminiKey, script, controller.signal)
-      const { scriptLang: detectedLang, scenes } = parsed
+      const { scriptLang: detectedLang, productContext, scenes } = parsed
       setScriptLang(detectedLang)
       if (!scenes.length) {
         addBanner({ kind: 'generic', message: 'Gemini không tách được scene nào từ kịch bản này.' })
@@ -114,7 +114,8 @@ export default function TimSourceVideo() {
       const skeletons: SceneState[] = scenes.map((scene) => ({ scene, ranked: [], errors: {} }))
       setSceneStates(skeletons)
       const modeMsg = includeYouTube ? 'YouTube + Web' : 'Web (no YouTube)'
-      setStatus(`✅ Ngôn ngữ: ${LANG_LABEL[detectedLang]} · ${scenes.length} scene · Mode: ${modeMsg}. Đang tìm video...`)
+      const productLabel = productContext.productName ? ` · 🎯 ${productContext.productName}` : ''
+      setStatus(`✅ Ngôn ngữ: ${LANG_LABEL[detectedLang]} · ${scenes.length} scene${productLabel} · Mode: ${modeMsg}. Đang tìm video...`)
 
       // ── Phase 2: parallel search per scene ───────────────────────────────
       type SearchOrErr = SearchResult & { __error?: string }
@@ -132,10 +133,10 @@ export default function TimSourceVideo() {
         // Build adapter list based on toggle
         const adapters: Array<Promise<SearchOrErr>> = []
         if (includeYouTube) {
-          adapters.push(searchYouTube(youtubeKey, scene, detectedLang, controller.signal).catch(wrapErr('youtube')))
+          adapters.push(searchYouTube(youtubeKey, scene, detectedLang, productContext, controller.signal).catch(wrapErr('youtube')))
         }
         // searchWeb always runs; excludeYouTube param tells it whether to filter out YT URLs
-        adapters.push(searchWeb(geminiKey, scene, detectedLang, /* excludeYouTube */ includeYouTube, controller.signal).catch(wrapErr('web')))
+        adapters.push(searchWeb(geminiKey, scene, detectedLang, productContext, /* excludeYouTube */ includeYouTube, controller.signal).catch(wrapErr('web')))
 
         const results = await Promise.all(adapters)
         linksPerScene[i] = results.flatMap((r) =>
@@ -151,7 +152,7 @@ export default function TimSourceVideo() {
         ? await (async () => {
             setStatus(`📜 Đang đọc transcript YouTube...`)
             return Promise.all(scenes.map((scene, i) =>
-              batchFetchTranscripts(linksPerScene[i], scene, detectedLang, controller.signal)
+              batchFetchTranscripts(linksPerScene[i], scene, detectedLang, productContext, controller.signal)
             ))
           })()
         : scenes.map(() => new Map<string, { hits: TranscriptHit[]; lang: ScriptLang | 'unknown' }>())
@@ -160,6 +161,7 @@ export default function TimSourceVideo() {
       setStatus('🧮 Đang chấm điểm bằng embedding similarity...')
       const rankedPerScene = await embeddingRank(geminiKey, {
         scenes,
+        productContext,
         linksPerScene,
         transcriptsPerScene,
         enforceSourceMix: includeYouTube,  // only enforce mix when YT is on

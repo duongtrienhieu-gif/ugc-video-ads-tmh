@@ -105,8 +105,26 @@ export interface Scene {
   keywordMs: string
 }
 
+/** Script-level product context extracted ONCE per script. Injected vào
+ *  search queries + embedding query + transcript matching để giữ topical
+ *  relevance — fix bug "scene-emotional-only" (visualIntent/keywords AI
+ *  generate quá generic, mất context sản phẩm thật). */
+export interface ProductContext {
+  /** Tên sản phẩm/brand verbatim trong kịch bản (vd "9YOUNG-BASIC Vitamin B Complex"). */
+  productName: string
+  /** 1-3 từ mô tả ngách (vd "vitamin supplement", "skincare collagen"). */
+  niche: string
+  /** 4-6 từ khóa Việt về sản phẩm + ngách + cơ chế chính. */
+  productKeywordsVi: string
+  /** 4-6 từ khóa Anh tương đương. */
+  productKeywordsEn: string
+  /** 4-6 từ khóa Malay tương đương. */
+  productKeywordsMs: string
+}
+
 export interface ParseResult {
   scriptLang: ScriptLang
+  productContext: ProductContext
   scenes: Scene[]
 }
 

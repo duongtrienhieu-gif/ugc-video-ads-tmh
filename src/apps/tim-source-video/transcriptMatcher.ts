@@ -11,7 +11,7 @@
 // keyword fired, not the transcript's source language.
 
 import type {
-  Scene, ScriptLang,
+  Scene, ScriptLang, ProductContext,
   TranscriptSnippet, TranscriptHit,
 } from './types'
 import { CONFIG } from './types'
@@ -33,12 +33,20 @@ function tokenize(keyword: string): string[] {
 }
 
 /** Collect all per-language keyword variants for a scene as flat list with
- *  language tags. */
-function expandKeywords(scene: Scene): KeywordVariant[] {
+ *  language tags. F2: gộp thêm productContext keywords để transcript search
+ *  cover cả product topic, không chỉ scene-specific. Cho Vitamin B scene,
+ *  variants giờ có cả "vitamin b", "supplement", "fatigue" + scene-specific
+ *  "positive change", "satisfied" → transcript phải match topic mới count. */
+function expandKeywords(scene: Scene, productContext?: ProductContext): KeywordVariant[] {
   const variants: KeywordVariant[] = []
   for (const tok of tokenize(scene.keywordVi)) variants.push({ term: tok, lang: 'vi' })
   for (const tok of tokenize(scene.keywordEn)) variants.push({ term: tok, lang: 'en' })
   for (const tok of tokenize(scene.keywordMs)) variants.push({ term: tok, lang: 'ms' })
+  if (productContext) {
+    for (const tok of tokenize(productContext.productKeywordsVi)) variants.push({ term: tok, lang: 'vi' })
+    for (const tok of tokenize(productContext.productKeywordsEn)) variants.push({ term: tok, lang: 'en' })
+    for (const tok of tokenize(productContext.productKeywordsMs)) variants.push({ term: tok, lang: 'ms' })
+  }
   // Dedupe identical terms (same lang or cross-lang accidentally matching)
   const seen = new Set<string>()
   return variants.filter(v => {
@@ -96,9 +104,10 @@ function buildExcerpt(snippets: TranscriptSnippet[], centerIdx: number): string 
 export function matchTranscript(
   snippets: TranscriptSnippet[],
   scene: Scene,
+  productContext?: ProductContext,
 ): TranscriptHit[] {
   if (!snippets || snippets.length === 0) return []
-  const variants = expandKeywords(scene)
+  const variants = expandKeywords(scene, productContext)
   if (variants.length === 0) return []
 
   // Pre-lowercase all cues once for O(N×K) phrase search
