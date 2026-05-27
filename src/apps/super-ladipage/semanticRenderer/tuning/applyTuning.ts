@@ -34,11 +34,7 @@ import type {
   CtaPlacement,
   SpacingPreset,
 } from '../../renderContract'
-import type {
-  RealismLevel,
-  PolishLevel,
-  ImageIntent,
-} from '../../imageSemantics'
+import type { ImageIntent } from '../../imageSemantics'
 import { isIdentityKnobs, type TuningKnobs } from './types'
 
 // ─── ordered enum tables (low → high on each axis) ────────────────
@@ -71,20 +67,10 @@ const CTA_PLACEMENT_ORDER: CtaPlacement[] = [
   'footer-emphasis',
   'sticky-low-friction',
 ]
-const REALISM_ORDER: RealismLevel[] = [
-  'documentary-realism',
-  'imperfect-realism',
-  'natural-realism',
-  'polished-realism',
-  'stylized',
-]
-const POLISH_ORDER: PolishLevel[] = [
-  'raw-handheld',
-  'low-polish',
-  'considered-natural',
-  'editorial',
-  'high-polish',
-]
+// REALISM_ORDER / POLISH_ORDER removed POST-REBUILD (2026-05-27) —
+// the 9-axis imageIntent system was deleted. Tuning knobs for visual
+// realism/polish are no-ops now; per-image visual genre is locked via
+// imageSceneSynthesis system instruction.
 
 // ─── shift helper (clamped, no wrap) ──────────────────────────────
 
@@ -171,21 +157,10 @@ function tuneSection(
   const newRecommendedImageCount =
     newImageRole === 'none' ? 0 : Math.max(1, s.renderContract.recommendedImageCount)
 
-  // ── P14: realismLevel + polishLevel → imageIntent fields ────────
-  let newImageIntent = s.imageIntent
-  if (s.imageIntent && (knobs.realismLevel !== 0 || knobs.polishLevel !== 0)) {
-    newImageIntent = {
-      ...s.imageIntent,
-      realismLevel:
-        knobs.realismLevel !== 0
-          ? shift(REALISM_ORDER, s.imageIntent.realismLevel, knobs.realismLevel)
-          : s.imageIntent.realismLevel,
-      polishLevel:
-        knobs.polishLevel !== 0
-          ? shift(POLISH_ORDER, s.imageIntent.polishLevel, knobs.polishLevel)
-          : s.imageIntent.polishLevel,
-    }
-  }
+  // POST-REBUILD: realismLevel/polishLevel knobs no-op'd — visual genre
+  // is locked via imageSceneSynthesis system instruction. imageIntent now
+  // only carries imageRole through the pipeline.
+  const newImageIntent: ImageIntent | undefined = s.imageIntent
 
   const tuned = {
     ...s,

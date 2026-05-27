@@ -1,33 +1,38 @@
 // ─────────────────────────────────────────────────────────────────────
-// Renderer Adapters — adaptRenderContractedPage (P11 top entry)
+// Renderer Adapters — adaptRenderContractedPage (POST-REBUILD no-op)
 //
-// ImagePromptPage → RendererAdaptedPage. Per-section adapter assembly.
-// Mirrors translateImageIntentPage shape. Pure function.
+// 3-renderer adapter pipeline (gptImage/flux/sdxl + fragment translation)
+// DELETED 2026-05-27. Per-image prompts now come from imageSceneSynthesis
+// at exec time. This function survives only as a pass-through to preserve
+// the export subtype chain (RendererAdaptedPage feeds orchestration +
+// exportPipeline).
+//
+// Each section with imagePromptContract gets empty rendererOutputs slots.
+// Real prompts flow through the orchestrator's scene synthesis layer.
 // ─────────────────────────────────────────────────────────────────────
 
 import type { ImagePromptPage } from '../../promptTranslation'
 import type { RendererAdaptedPage, RendererAdaptedSection } from '../types'
-import { adaptToRenderers } from './adaptToRenderers'
-import { rendererOutputValidator } from '../validators/rendererOutputValidator'
 
 export function adaptRenderContractedPage(page: ImagePromptPage): RendererAdaptedPage {
   const enriched: RendererAdaptedSection[] = page.sections.map((section) => {
     if (!section.imagePromptContract) {
-      return { ...section }  // no contract → no rendererOutputs
+      return { ...section }
     }
     return {
       ...section,
-      rendererOutputs: adaptToRenderers(section.imagePromptContract),
+      // Empty outputs — orchestrator overrides prompts at exec time from
+      // scene synthesis. Field kept for subtype-chain compatibility.
+      rendererOutputs: {},
     }
   })
 
   const adaptedSectionCount = enriched.filter((s) => s.rendererOutputs).length
-  const rendererAdapterWarnings = rendererOutputValidator(enriched)
 
   return {
     ...page,
     sections: enriched,
-    rendererAdapterWarnings,
+    rendererAdapterWarnings: [],
     adaptedSectionCount,
   }
 }

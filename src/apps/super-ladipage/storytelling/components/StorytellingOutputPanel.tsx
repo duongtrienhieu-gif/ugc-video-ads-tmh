@@ -43,8 +43,10 @@ import {
 } from '../../sessionRuntime'
 import {
   createKieGptImageExecutor,
+  createKieGpt4oImageExecutor,
   useImageGeneration,
   type ExecutorRegistry,
+  type PageGenerationContext,
 } from '../../generationOrchestration'
 
 const MOCK_MARKER_REGEX = /^\[MOCK P0\.5\]\s*\n+/
@@ -101,34 +103,50 @@ export default function StorytellingOutputPanel({
     void saveSession(fresh)
   }, [packKey, meta.exportablePage, meta.niche, pack.productName, session])
 
-  // ── INT — KIE executor + live image generation hook ────────────
+  // ── POST-REBUILD — KIE executors + live image generation hook ──
+  // Two renderers routed per imageRole inside the orchestrator:
+  //   - gptImage = KIE gpt-image-2 (cheap no-ref flat-lays)
+  //   - gpt4o    = KIE gpt-4o-image (character + product reference lock)
+  // Scene synthesis (Gemini) generates ONE prompt per image at exec time.
   const kieApiKey = useSettingsStore((s) => s.kieApiKey)
+  const geminiApiKey = useSettingsStore((s) => s.geminiApiKey)
   const executors = useMemo<ExecutorRegistry>(() => {
     if (!kieApiKey) return {}
-    // KIE.ai is the canonical image-gen gateway for this codebase.
-    // We wrap it once as a 'gptImage' RendererExecutor. Future iterations
-    // can map flux/sdxl renderer keys to KIE's other model endpoints.
-    //
-    // P-VISION (2026-05-27): pass productIdentityHint so KIE prompts for
-    // product-visible sections (proof-callout / object-trace / lifestyle-
-    // context) get prepended with accurate product description from
-    // vision + synthesis. Ensures rendered images match actual product.
     return {
-      gptImage: createKieGptImageExecutor({
-        apiKey: kieApiKey,
-        productIdentityHint: meta.productIdentityForImage,
-      }),
-      // No flux/sdxl executors yet — sections routed to those renderers
-      // will surface 'No executor registered' in their generatedAsset.failureReason
-      // until INT follow-up adds KIE-Flux + KIE-SDXL wrappers.
+      gptImage: createKieGptImageExecutor({ apiKey: kieApiKey }),
+      gpt4o:    createKieGpt4oImageExecutor({ apiKey: kieApiKey }),
     }
-  }, [kieApiKey, meta.productIdentityForImage])
+  }, [kieApiKey])
+
+  // ── Scene synthesis context — niche + protagonist + product brief ──
+  const generationContext = useMemo<PageGenerationContext | null>(() => {
+    if (!geminiApiKey || !kieApiKey) return null
+    return {
+      niche: meta.niche,
+      protagonist: {
+        archetype: character.archetype,
+        appearanceLock: character.appearanceLock,
+        environmentLock: character.environmentLock,
+      },
+      productContext: meta.productIdentityForImage
+        ? { productIdentityForImage: meta.productIdentityForImage }
+        : null,
+      targetLanguage: pack.language,
+      geminiApiKey,
+      kieApiKey,
+    }
+  }, [
+    geminiApiKey, kieApiKey, meta.niche, meta.productIdentityForImage,
+    character.archetype, character.appearanceLock, character.environmentLock,
+    pack.language,
+  ])
 
   const imageGen = useImageGeneration({
     page: meta.exportablePage ?? null,
     session,
     setSession,
     executors,
+    context: generationContext,
     concurrency: 2,
   })
 

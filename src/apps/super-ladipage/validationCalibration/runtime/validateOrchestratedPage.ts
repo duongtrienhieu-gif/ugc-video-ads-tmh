@@ -1,79 +1,60 @@
 // ─────────────────────────────────────────────────────────────────────
-// P13 — validateOrchestratedPage (top entry)
+// validateOrchestratedPage — POST-REBUILD slim
 //
-// OrchestratedPage → ValidatedPage. Runs all 6 detectors + computes
-// per-section calibrations + aggregates knob recommendations.
-// Pure, sync, no mutation. Mirrors planImageGenerationPage shape.
+// All 6 axis-based detectors are no-ops post-rebuild (the 9-axis system
+// was removed when fragment-stacking pipeline was deleted 2026-05-27).
+// Visual consistency / authenticity is now enforced UPSTREAM by the
+// locked imageSceneSynthesis system instruction.
+//
+// This function preserves the ValidatedPage subtype for downstream export
+// pipeline, returning identity validation report + per-section identity
+// calibrations.
 // ─────────────────────────────────────────────────────────────────────
 
 import type { OrchestratedPage } from '../../generationOrchestration'
-import type { RealismLevel } from '../../imageSemantics'
 import type {
   ValidatedPage,
   ValidatedSection,
   ValidationReport,
-  ValidationWarning,
   RiskLevel,
-  RiskCategory,
 } from '../types'
-import { consistencyDetector } from '../detectors/consistencyDetector'
 import { plausibilityDetector } from '../detectors/plausibilityDetector'
-import { fakeAiDetector } from '../detectors/fakeAiDetector'
-import { proofAuthenticityDetector } from '../detectors/proofAuthenticityDetector'
-import { repetitionDetector } from '../detectors/repetitionDetector'
-import { alignmentDetector } from '../detectors/alignmentDetector'
 import { computeSectionCalibration } from './computeSectionCalibration'
 import { buildKnobRecommendations } from '../config/recommendedKnobMap'
+
+const ALL_LOW: RiskLevel = 'low'
 
 export function validateOrchestratedPage(page: OrchestratedPage): ValidatedPage {
   const sections = page.sections
 
-  // ── Run all 6 detectors ─────────────────────────────────────────
-  const consistency = consistencyDetector(sections)
+  // ── Plausibility check still runs (text-pacing scope, not axis-based) ──
   const plausibility = plausibilityDetector(sections)
-  const fakeAi = fakeAiDetector(sections)
-  const proof = proofAuthenticityDetector(sections)
-  const repetition = repetitionDetector(sections)
-  const alignment = alignmentDetector(sections)
-
-  // ── Merge realism risk from consistency + fakeAi (highest wins) ─
-  const realismRisk = maxRisk(consistency.realismRisk, fakeAi.realismRisk)
-
-  const risks: Record<RiskCategory, RiskLevel> = {
-    realismRisk,
-    polishDrift: consistency.polishDrift,
-    proofAuthenticity: proof.proofAuthenticity,
-    scrollFatigue: plausibility.scrollFatigue,
-    consistencyRisk: consistency.consistencyRisk,
-    repetitionRisk: repetition.repetitionRisk,
-    ctaOverexposure: plausibility.ctaOverexposure,
-    sectionAlignment: alignment.sectionAlignment,
-  }
-
-  // ── Aggregate warnings ──────────────────────────────────────────
-  const warnings: ValidationWarning[] = [
-    ...consistency.warnings,
-    ...plausibility.warnings,
-    ...fakeAi.warnings,
-    ...proof.warnings,
-    ...repetition.warnings,
-    ...alignment.warnings,
-  ]
-
-  // ── Knob recommendations ────────────────────────────────────────
-  const recommendedKnobAdjustments = buildKnobRecommendations(risks)
 
   const validationReport: ValidationReport = {
-    ...risks,
-    warnings,
-    recommendedKnobAdjustments,
+    realismRisk: ALL_LOW,
+    polishDrift: ALL_LOW,
+    proofAuthenticity: ALL_LOW,
+    scrollFatigue: plausibility.scrollFatigue,
+    consistencyRisk: ALL_LOW,
+    repetitionRisk: ALL_LOW,
+    ctaOverexposure: plausibility.ctaOverexposure,
+    sectionAlignment: ALL_LOW,
+    warnings: [...plausibility.warnings],
+    recommendedKnobAdjustments: buildKnobRecommendations({
+      realismRisk: ALL_LOW,
+      polishDrift: ALL_LOW,
+      proofAuthenticity: ALL_LOW,
+      scrollFatigue: plausibility.scrollFatigue,
+      consistencyRisk: ALL_LOW,
+      repetitionRisk: ALL_LOW,
+      ctaOverexposure: plausibility.ctaOverexposure,
+      sectionAlignment: ALL_LOW,
+    }),
   }
 
-  // ── Per-section calibrations ───────────────────────────────────
-  const pageRealismMode = computeRealismMode(sections)
   const validatedSections: ValidatedSection[] = sections.map((s) => ({
     ...s,
-    sectionCalibration: computeSectionCalibration(s, sections, pageRealismMode),
+    sectionCalibration: computeSectionCalibration(s, sections, null),
   }))
 
   return {
@@ -81,33 +62,4 @@ export function validateOrchestratedPage(page: OrchestratedPage): ValidatedPage 
     sections: validatedSections,
     validationReport,
   }
-}
-
-// ─── helpers ──────────────────────────────────────────────────────
-
-const RISK_ORDER: RiskLevel[] = ['low', 'moderate', 'elevated', 'high']
-
-function maxRisk(a: RiskLevel, b: RiskLevel): RiskLevel {
-  return RISK_ORDER.indexOf(a) >= RISK_ORDER.indexOf(b) ? a : b
-}
-
-function computeRealismMode(
-  sections: import('../../generationOrchestration').OrchestratedSection[],
-): RealismLevel | null {
-  const withImage = sections.filter((s) => s.imageIntent)
-  if (withImage.length === 0) return null
-  const counts = new Map<RealismLevel, number>()
-  for (const s of withImage) {
-    const r = s.imageIntent!.realismLevel
-    counts.set(r, (counts.get(r) ?? 0) + 1)
-  }
-  let maxCount = 0
-  let mode: RealismLevel = withImage[0].imageIntent!.realismLevel
-  for (const [k, c] of counts) {
-    if (c > maxCount) {
-      maxCount = c
-      mode = k
-    }
-  }
-  return mode
 }

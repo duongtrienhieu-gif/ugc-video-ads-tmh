@@ -1,34 +1,40 @@
 // ─────────────────────────────────────────────────────────────────────
-// Prompt Translation — translateImageIntentPage (P10 top entry)
+// Prompt Translation — translateImageIntentPage (POST-REBUILD no-op)
 //
-// ImageIntentPage → ImagePromptPage. Per-section enrichment. Mirrors
-// deriveImageIntentPage shape. Pure function. Renderer-agnostic.
+// Fragment-stacking pipeline DELETED 2026-05-27. Per-image prompts now
+// come from imageSceneSynthesis at exec time. This function survives
+// only as a pass-through to preserve the export subtype chain.
+//
+// Each section with an imageIntent gets an EMPTY ImagePromptContract
+// (placeholder). Downstream uses sceneDescription, not these fragments.
 // ─────────────────────────────────────────────────────────────────────
 
 import type { ImageIntentPage } from '../../imageSemantics'
-import type { ImagePromptPage, ImagePromptSection } from '../types'
-import { translateImageIntent } from './translateImageIntent'
-import { promptContractValidator } from '../validators/promptContractValidator'
+import type { ImagePromptPage, ImagePromptSection, ImagePromptContract } from '../types'
 
-/** Enrich ImageIntentPage with per-section ImagePromptContract. */
+const EMPTY_CONTRACT: ImagePromptContract = {
+  positiveFragments: [],
+  negativeFragments: [],
+  realismFragments: [],
+  compositionFragments: [],
+  atmosphereFragments: [],
+  avoidanceFragments: [],
+}
+
 export function translateImageIntentPage(page: ImageIntentPage): ImagePromptPage {
   const enriched: ImagePromptSection[] = page.sections.map((section) => {
     if (!section.imageIntent) {
-      return { ...section }  // no imageIntent → no promptContract
+      return { ...section }
     }
-    return {
-      ...section,
-      imagePromptContract: translateImageIntent(section.imageIntent),
-    }
+    return { ...section, imagePromptContract: EMPTY_CONTRACT }
   })
 
   const promptBearingSectionCount = enriched.filter((s) => s.imagePromptContract).length
-  const promptContractWarnings = promptContractValidator(enriched)
 
   return {
     ...page,
     sections: enriched,
-    promptContractWarnings,
+    promptContractWarnings: [],
     promptBearingSectionCount,
   }
 }

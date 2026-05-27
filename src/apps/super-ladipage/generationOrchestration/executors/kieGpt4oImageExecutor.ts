@@ -1,26 +1,28 @@
 // ─────────────────────────────────────────────────────────────────────
-// Generation Orchestration — KIE gpt-image-2 executor (POST-REBUILD)
+// Generation Orchestration — KIE gpt-4o-image executor (POST-REBUILD)
 //
-// Wraps KIE.ai's /jobs/createTask + gpt-image-2-text-to-image. This is
-// the cheap text-to-image route — gpt-image-2 ignores reference images,
-// so only used for object-trace flat-lays WITHOUT product reference.
+// Wraps KIE.ai's /gpt4o-image/generate endpoint. This is the premium
+// route with TRUE image-to-image: it accepts up to 5 reference image
+// URLs via `filesUrl` and locks the output to match them.
 //
-// Sections needing character continuity OR product reference lock route
-// to kieGpt4oImageExecutor instead.
+// Used for:
+//   - hero-anchor (no refs initially → generates the anchor)
+//   - mood-supporting / lifestyle-context / proof-callout (character ref)
+//   - object-trace WHEN product reference is provided
 //
 // LOCKED: prompt is the SCENE DESCRIPTION from imageSceneSynthesis,
-// verbatim. NO prepend / append / hint stacking. (Old productIdentityHint
-// prepend hack removed — scene synthesis embeds product context directly
-// into the single prompt now.)
+// verbatim. NO prepend / append / hint stacking.
 // ─────────────────────────────────────────────────────────────────────
 
-import { submitGptImage2, pollGptImage2UntilDone } from '../../../../utils/kieai'
+import { submitGpt4oImage, pollGpt4oUntilDone } from '../../../../utils/kieai'
 import type {
   RendererExecutor,
   ExecutorInput,
   ExecutorOutput,
 } from '../types'
 import type { ImageAspectRatio } from '../../renderContract'
+
+// ─── Aspect ratio map (ImageAspectRatio → KIE Gpt4oSize) ───────────
 
 const ASPECT_MAP: Record<ImageAspectRatio, '1:1' | '3:2' | '2:3'> = {
   '1:1':  '1:1',
@@ -30,18 +32,17 @@ const ASPECT_MAP: Record<ImageAspectRatio, '1:1' | '3:2' | '2:3'> = {
   '16:9': '3:2',
 }
 
-export interface KieGptImageExecutorOptions {
+export interface KieGpt4oImageExecutorOptions {
   apiKey: string
-  resolution?: '1K' | '2K' | '4K'
   timeoutMs?: number
   signal?: AbortSignal
 }
 
-export function createKieGptImageExecutor(
-  options: KieGptImageExecutorOptions,
+export function createKieGpt4oImageExecutor(
+  options: KieGpt4oImageExecutorOptions,
 ): RendererExecutor {
   return {
-    renderer: 'gptImage',
+    renderer: 'gpt4o',
 
     async generate(input: ExecutorInput): Promise<ExecutorOutput> {
       if (!options.apiKey) {
@@ -63,8 +64,6 @@ export function createKieGptImageExecutor(
         ? ASPECT_MAP[input.aspectRatio]
         : '2:3'
 
-      // gpt-image-2 only used for no-reference flat-lays, but we still
-      // pass references when caller chose to send them (safety net).
       const filesUrl = input.references
         .map((r) => r.url)
         .filter(Boolean)
@@ -72,16 +71,15 @@ export function createKieGptImageExecutor(
 
       let taskId: string
       try {
-        const submission = await submitGptImage2({
+        const submission = await submitGpt4oImage({
           apiKey: options.apiKey,
           prompt: input.prompt.prompt,
           filesUrl: filesUrl.length > 0 ? filesUrl : undefined,
           size,
-          resolution: options.resolution ?? '1K',
         })
         taskId = submission.taskId
       } catch (err) {
-        const msg = err instanceof Error ? err.message : 'KIE submit threw'
+        const msg = err instanceof Error ? err.message : 'KIE gpt-4o submit threw'
         if (msg.includes('INSUFFICIENT_CREDITS')) {
           return {
             status: 'failed',
@@ -92,12 +90,12 @@ export function createKieGptImageExecutor(
         return {
           status: 'failed',
           images: [],
-          failureReason: `KIE submit failed: ${msg}`,
+          failureReason: `KIE gpt-4o submit failed: ${msg}`,
         }
       }
 
       try {
-        const imageUrl = await pollGptImage2UntilDone({
+        const imageUrl = await pollGpt4oUntilDone({
           apiKey: options.apiKey,
           taskId,
           timeoutMs: options.timeoutMs,
@@ -108,7 +106,7 @@ export function createKieGptImageExecutor(
           images: [{ url: imageUrl }],
         }
       } catch (err) {
-        const msg = err instanceof Error ? err.message : 'KIE poll threw'
+        const msg = err instanceof Error ? err.message : 'KIE gpt-4o poll threw'
         if (msg.includes('CANCELLED')) {
           return {
             status: 'failed',
@@ -120,7 +118,7 @@ export function createKieGptImageExecutor(
           return {
             status: 'failed',
             images: [],
-            failureReason: `KIE timeout (${Math.round((options.timeoutMs ?? 240000) / 1000)}s) — task may be stuck`,
+            failureReason: `KIE gpt-4o timeout (${Math.round((options.timeoutMs ?? 240000) / 1000)}s) — task may be stuck`,
           }
         }
         return {

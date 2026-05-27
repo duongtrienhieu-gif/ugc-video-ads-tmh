@@ -1,11 +1,9 @@
 // ─────────────────────────────────────────────────────────────────────
-// Generation Orchestration — useImageGeneration hook (LIVE)
+// Generation Orchestration — useImageGeneration hook (POST-REBUILD)
 //
 // React hook managing async batch generation state + session updates.
-// Consumer exposes 4 actions: generateAll / generateSection / cancel /
-// reset. State: isGenerating, progress, lastResult.
-//
-// Hook is renderer-agnostic — accepts ExecutorRegistry from caller.
+// Now requires PageGenerationContext (niche + protagonist + product +
+// API keys) so scene synthesis can run inside executePageGeneration.
 // ─────────────────────────────────────────────────────────────────────
 
 import { useCallback, useRef, useState } from 'react'
@@ -22,18 +20,16 @@ import { executePageGeneration } from './executePageGeneration'
 import type {
   ExecutePageGenerationOptions,
   ExecutePageGenerationResult,
+  PageGenerationContext,
 } from './executePageGeneration'
 
 export interface UseImageGenerationOptions {
-  /** Page to generate against (must have generatedAssets planned). */
   page: OrchestratedPage | null
-  /** Current session (for state transitions). */
   session: LandingSession | null
-  /** Session setter — hook updates session via this. */
   setSession: (s: LandingSession) => void
-  /** Executor registry — caller assembles based on available API keys. */
   executors: ExecutePageGenerationOptions['executors']
-  /** Concurrency cap. Default 2. */
+  /** Required post-rebuild — synthesis + cultural + API keys context. */
+  context: PageGenerationContext | null
   concurrency?: number
 }
 
@@ -43,26 +39,24 @@ export interface UseImageGenerationState {
     done: number
     total: number
     currentSectionId: string | null
+    /** True during scene synthesis phase (before any KIE call). */
+    isSynthesizing: boolean
   }
   lastResult: ExecutePageGenerationResult | null
   error: string | null
 }
 
 export interface UseImageGenerationApi extends UseImageGenerationState {
-  /** Generate all 'planned'/'queued'/'failed' sections of the page. */
   generateAll: () => Promise<void>
-  /** Generate a single section by ID. */
   generateSection: (sectionId: string) => Promise<void>
-  /** Cancel in-flight generation. */
   cancel: () => void
-  /** Reset state to initial. */
   reset: () => void
 }
 
 export function useImageGeneration(opts: UseImageGenerationOptions): UseImageGenerationApi {
   const [state, setState] = useState<UseImageGenerationState>({
     isGenerating: false,
-    progress: { done: 0, total: 0, currentSectionId: null },
+    progress: { done: 0, total: 0, currentSectionId: null, isSynthesizing: false },
     lastResult: null,
     error: null,
   })
@@ -76,7 +70,7 @@ export function useImageGeneration(opts: UseImageGenerationOptions): UseImageGen
     abortRef.current = null
     setState({
       isGenerating: false,
-      progress: { done: 0, total: 0, currentSectionId: null },
+      progress: { done: 0, total: 0, currentSectionId: null, isSynthesizing: false },
       lastResult: null,
       error: null,
     })
@@ -88,42 +82,52 @@ export function useImageGeneration(opts: UseImageGenerationOptions): UseImageGen
         setState((s) => ({ ...s, error: 'No page or session available' }))
         return
       }
+      if (!opts.context) {
+        setState((s) => ({ ...s, error: 'Missing generation context — refresh the pack' }))
+        return
+      }
       if (state.isGenerating) return
 
       const controller = new AbortController()
       abortRef.current = controller
 
-      // Compute total queue size for progress
       const total = opts.page.sections.filter((s) => {
         if (!s.generatedAsset) return false
         if (sectionFilter && !sectionFilter(s.id)) return false
         const st = s.generatedAsset.generationStatus
-        // Match the same eligibility rule as executePageGeneration
         return st === 'planned' || st === 'failed'
       }).length
 
       setState({
         isGenerating: true,
-        progress: { done: 0, total, currentSectionId: null },
+        progress: { done: 0, total, currentSectionId: null, isSynthesizing: true },
         lastResult: null,
         error: null,
       })
 
-      // Snapshot mutable session in closure
       let workingSession = opts.session
 
       const result = await executePageGeneration(opts.page, {
         executors: opts.executors,
+        context: opts.context,
         concurrency: opts.concurrency,
         signal: controller.signal,
         filter: sectionFilter,
+        onSceneSynthesized: () => {
+          // First time we see a synthesized scene, flip out of "synthesizing" UI state
+          setState((s) =>
+            s.progress.isSynthesizing
+              ? { ...s, progress: { ...s.progress, isSynthesizing: false } }
+              : s,
+          )
+        },
         onSectionStart: (sectionId) => {
           workingSession = setRegenStatus(workingSession, sectionId, 'generating', 'image')
           opts.setSession(workingSession)
           void saveSession(workingSession)
           setState((s) => ({
             ...s,
-            progress: { ...s.progress, currentSectionId: sectionId },
+            progress: { ...s.progress, currentSectionId: sectionId, isSynthesizing: false },
           }))
         },
         onSectionComplete: (sectionId, asset) => {
@@ -156,7 +160,7 @@ export function useImageGeneration(opts: UseImageGenerationOptions): UseImageGen
       setState((s) => ({
         ...s,
         isGenerating: false,
-        progress: { ...s.progress, currentSectionId: null },
+        progress: { ...s.progress, currentSectionId: null, isSynthesizing: false },
         lastResult: result,
       }))
       abortRef.current = null

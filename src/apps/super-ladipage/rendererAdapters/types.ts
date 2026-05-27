@@ -1,41 +1,41 @@
 // ═════════════════════════════════════════════════════════════════════
-// Renderer Adapters — type definitions (P11 renderer-native assembly)
+// Renderer Adapters — type definitions
 //
-// Translates ImagePromptContract → renderer-native prompts. Adapters
-// are pure SYNTAX TRANSLATORS, not creative writers. They preserve
-// upstream psychology and only change syntactic form per renderer.
+// POST-REBUILD (2026-05-27): the per-section prompt is now produced by
+// imageSceneSynthesis (single Gemini call per image) — NOT by fragment
+// translation. RendererOutputs is therefore a SLIM passthrough holder of
+// the synthesized scene prompt, indexed by the active renderer.
 //
-// LOCKED: 3 renderers only (gptImage / flux / sdxl). No Midjourney —
-// MJ drifts aesthetic-heavy and poisons governance.
-//
-// LOCKED: adapter input is the contract ONLY (6 fragment buckets).
-// Adapters do NOT see imageIntent, section role, or visualSemantics.
-// This prevents semantic re-interpretation by definition.
+// Routing now decides per-section whether 'gptImage' (gpt-image-2) or
+// 'gpt4o' (gpt-4o-image with reference lock) is used — old 'flux' / 'sdxl'
+// keys removed.
 // ═════════════════════════════════════════════════════════════════════
 
 import type { ImagePromptSection, ImagePromptPage } from '../promptTranslation'
 
-// ─── Renderer key (LOCKED — no expansion without governance) ───────
+// ─── Renderer key (LOCKED — 2 KIE-backed renderers) ───────────────
+//
+// gptImage = KIE gpt-image-2  → cheap no-reference flat-lays (object-trace
+//                                without product reference only)
+// gpt4o    = KIE gpt-4o-image → premium with up-to-5 reference URLs lock
+//                                (used for character continuity + product)
 
-export type RendererKey = 'gptImage' | 'flux' | 'sdxl'
+export type RendererKey = 'gptImage' | 'gpt4o'
 
-// ─── Single renderer output ───────────────────────────────────────
+// ─── Single renderer output (slim post-rebuild) ───────────────────
 
 export interface RendererPrompt {
-  /** Positive prompt in renderer-native syntax. */
+  /** The synthesized scene prompt (output of imageSceneSynthesis). */
   prompt: string
-  /** Negative prompt where supported. Undefined when renderer doesn't
-   *  accept a separate negative slot (e.g., gptImage embeds avoidance
-   *  inline in the positive prompt). */
+  /** Negative prompt where supported. Undefined for KIE endpoints. */
   negativePrompt?: string
 }
 
-// ─── Outputs for ALL renderers, per section ───────────────────────
+// ─── Outputs (one prompt per renderer route) ──────────────────────
 
 export interface RendererOutputs {
-  gptImage: RendererPrompt
-  flux: RendererPrompt
-  sdxl: RendererPrompt
+  gptImage?: RendererPrompt
+  gpt4o?: RendererPrompt
 }
 
 // ─── RendererAdaptedSection extends ImagePromptSection ─────────────

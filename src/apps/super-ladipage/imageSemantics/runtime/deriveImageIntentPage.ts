@@ -1,32 +1,32 @@
 // ─────────────────────────────────────────────────────────────────────
-// Image Semantics — deriveImageIntentPage (P9 top entry)
+// Image Semantics — deriveImageIntentPage (POST-REBUILD slim version)
 //
-// VisualSemanticsPage → ImageIntentPage. Per-section enrichment.
-// Mirrors deriveVisualSemanticsPage shape exactly. Pure function.
-// Renderer-agnostic. No prompt generation.
+// VisualSemanticsPage → ImageIntentPage. Slimmed to just carry imageRole
+// through. Per-image prompts are now produced by imageSceneSynthesis,
+// NOT by axis-driven fragment lookup tables.
 // ─────────────────────────────────────────────────────────────────────
 
 import type { VisualSemanticsPage } from '../../visualSemantics'
-import type { ImageIntentPage, ImageIntentSection } from '../types'
-import { deriveImageIntent } from './deriveImageIntent'
-import { imageIntentCoherenceDetector } from '../validators/imageIntentCoherenceDetector'
+import type { ImageIntentPage, ImageIntentSection, ImageIntent } from '../types'
 
-/** Enrich VisualSemanticsPage with per-section image intent. */
 export function deriveImageIntentPage(page: VisualSemanticsPage): ImageIntentPage {
   const enriched: ImageIntentSection[] = page.sections.map((section) => {
-    const imageIntent = deriveImageIntent(section)
-    return imageIntent === undefined
-      ? { ...section }  // imageRole === 'none' → no imageIntent attached
-      : { ...section, imageIntent }
+    if (section.imageRole === 'none') {
+      return { ...section }
+    }
+    const imageIntent: ImageIntent = {
+      imageRole: section.imageRole,
+      intentNote: `Image planned for section ${section.id} (role=${section.imageRole}). Prompt produced at exec-time by scene synthesis.`,
+    }
+    return { ...section, imageIntent }
   })
 
   const imageBearingSectionCount = enriched.filter((s) => s.imageIntent).length
-  const imageIntentWarnings = imageIntentCoherenceDetector(enriched)
 
   return {
     ...page,
     sections: enriched,
-    imageIntentWarnings,
+    imageIntentWarnings: [],
     imageBearingSectionCount,
   }
 }
