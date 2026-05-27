@@ -409,7 +409,11 @@ export default function StorytellingOutputPanel({
           // Legacy pack view (default). FIX 2026-05-27: storytelling-article
           // class enables Lora + Be Vietnam Pro fonts that render VN/MS
           // diacritics cleanly (was broken with browser default serif).
-          <article className="storytelling-article max-w-prose mx-auto px-5 md:px-8 py-12 md:py-20">
+          // UI-FIX2 (2026-05-28): max-w-prose (65ch ~700px) was too narrow
+          // on >1024px viewports — large empty gaps on both sides forced
+          // user to scroll. Bumped to max-w-4xl (~896px) for readable
+          // column without wasting screen real estate.
+          <article className="storytelling-article max-w-4xl mx-auto px-5 md:px-8 py-12 md:py-20">
             {(() => {
               // POST-PI lookup fix (2026-05-27):
               // pack.sections is 13-15 storytelling blocks + 5 PI blocks.
@@ -794,12 +798,32 @@ function StorytellingSectionView({
     .split(/\n{2,}/)
     .map((p) => p.trim())
     .filter((p) => p.length > 0)
-  // FIX 2026-05-27 — Dual-language: when section.viTranslation exists
-  // (only set when target language !== 'vi'), show VN translation in a
-  // collapsible box below native body. Independent copy buttons for each.
+  // UI-FIX2 (2026-05-28) — Language mismatch detection.
+  //
+  // BUG: when translateFallbackToTarget fails for a section, section.copy
+  // stays in VN (the hardcoded fallback language) even though pack.language
+  // is 'ms'/'en'. Then translatePackToVi creates a viTranslation that is
+  // ALSO VN (slightly reworded). hasVnTranslation = true → UI renders
+  // duplicate VN content (primary + expandable both VN). Confusing.
+  //
+  // FIX: detect Vietnamese diacritics density in section.copy. If pack
+  // target is MS/EN but copy IS Vietnamese-looking → suppress the VN
+  // expandable (no point — primary already VN).
+  const sectionCopyLooksVietnamese = (() => {
+    // Vietnamese-specific diacritics: ă â đ ê ô ơ ư + tone marks
+    const text = section.copy.toLowerCase()
+    if (text.length < 30) return false
+    const viChars = (text.match(/[ăâđêôơưáàảãạắằẳẵặấầẩẫậéèẻẽẹếềểễệíìỉĩịóòỏõọốồổỗộớờởỡợúùủũụứừửữựýỳỷỹỵ]/g) || []).length
+    const ratio = viChars / text.length
+    return ratio > 0.04   // ≥4% chars are VN-specific diacritics → likely VN
+  })()
+  // Render VN expandable only when:
+  //  - viTranslation exists + differs from copy (existing rule)
+  //  - copy is NOT already Vietnamese (new rule — language mismatch guard)
   const hasVnTranslation = Boolean(
     section.viTranslation &&
-    section.viTranslation.trim() !== section.copy.trim(),
+    section.viTranslation.trim() !== section.copy.trim() &&
+    !sectionCopyLooksVietnamese,
   )
   const vnParagraphs = hasVnTranslation
     ? section.viTranslation!
@@ -944,22 +968,8 @@ function StorytellingSectionView({
         </details>
       )}
 
-      {/* Debug strip — block architecture. Helps verify phase/function
-          assignment during Reader-Immersion engine development. */}
-      {blueprint && (
-        <div className="mt-6 space-y-1 text-[10px] italic text-stone-400">
-          <p>
-            phase: <span className="text-stone-500">{blueprint.phase}</span>
-            {' · '}function: <span className="text-stone-500">{blueprint.psychologicalFunction}</span>
-            {' · '}balance: <span className="text-stone-500">{blueprint.youIBalance}</span>
-          </p>
-          <p>
-            paragraphs target: <span className="text-stone-500">{blueprint.paragraphTarget.min}-{blueprint.paragraphTarget.max}</span>
-            {' · '}actual: <span className="text-stone-500">{cleanParagraphs.length}</span>
-            {treatments.length > 0 && <> · visual: {treatments.join(' / ')}</>}
-          </p>
-        </div>
-      )}
+      {/* UI-FIX2 (2026-05-28): removed debug strip (phase/function/balance/
+          paragraphs target/visual) per user request — not user-facing info. */}
     </section>
   )
 }
