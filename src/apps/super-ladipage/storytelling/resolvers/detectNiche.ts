@@ -59,6 +59,13 @@ const VALID_NICHES: ReadonlyArray<NicheKey> = [
   'menopause',
   'mental-health',
   'anti-aging-longevity',
+  // SEA-6 extensions (2026-05-27)
+  'dental-oral-care',
+  'diabetes-blood-sugar',
+  'liver-detox',
+  'prostate-urology',
+  'hemorrhoids-digestive-shame',
+  'eye-vision-care',
 ]
 
 // ─── Gemini classifier prompts ────────────────────────────────────
@@ -66,20 +73,26 @@ const VALID_NICHES: ReadonlyArray<NicheKey> = [
 const NICHE_DESCRIPTIONS = `
 - skincare: TOPICAL face skincare — acne cream, anti-aging cream (TOPICAL ONLY), whitening, serum, sunscreen, mặt da kem mụn
 - haircare: hair loss, dandruff, shampoo, scalp issues, baldness, tóc rụng gàu
-- health-functional: joint/knee/back/spine pain, orthopedic braces, nasal/sinus, respiratory/cough/allergy, digestive/stomach, blood pressure, diabetes, cholesterol, eye/vision, arthritis. NON-AESTHETIC HEALTH PRODUCTS.
+- health-functional: joint/knee/back/spine pain, orthopedic braces, nasal/sinus, respiratory/cough/allergy, digestive/stomach (NON-hemorrhoid), blood pressure (NON-diabetes), cholesterol, arthritis. GENERIC NON-AESTHETIC HEALTH PRODUCTS — use only if not fit specific niche below.
 - supplement-wellness: GENERAL vitamins, oral collagen for beauty, omega, energy booster, immune support, antioxidants (use for generic supplement that doesn't fit specific niches below)
 - fitness-recovery: gym, weight loss, body fat, muscle building, workout supplements, cardio recovery
-- relationship: marriage/sexual health for COUPLES, libido, erectile, intimate products
+- relationship: marriage/sexual health for COUPLES, libido, erectile, intimate products (NOT urinary / prostate)
 - mom-baby: pregnancy, infant care, baby food, mother postpartum
 - beauty-confidence: body shape, body confidence, hair removal, deodorant, breast care, posture confidence, weight-for-appearance
 - sleep-insomnia: SLEEP-SPECIFIC products — melatonin, sleep aid, anti-insomnia, sleep quality, orthopedic pillow for sleep, sleep mattress, weighted blanket, sleep app/tracker. Pain points: mất ngủ / khó ngủ / trằn trọc / dậy giữa đêm / sleep cycle disruption.
 - menopause: FEMALE HORMONAL TRANSITION — perimenopause/menopause supplements, hot flash relief, night sweats, hormone balance, mood swings for women 40-55. Pain points: bốc hỏa / đổ mồ hôi đêm / thay đổi tâm trạng / khô da đột ngột / mất libido / tiền mãn kinh.
 - mental-health: MENTAL/EMOTIONAL — anxiety relief, stress reduction (specifically psychological, NOT general energy), depression support, burnout recovery, ashwagandha for stress, magnesium for anxiety, meditation app. Pain points: lo âu / hoảng loạn / căng thẳng / trầm cảm / kiệt sức tâm lý / burnout.
 - anti-aging-longevity: LONGEVITY SCIENCE — NAD+/NMN, resveratrol, cellular senescence, biological age, mitochondrial health, autophagy, healthspan extension. Distinguished from skincare (topical aesthetic) and supplement-wellness (generic vitamins) by SPECIFIC cellular biology / longevity focus.
+- dental-oral-care: DENTAL / ORAL — teeth whitening (functional NOT cosmetic-only), toothpaste, mouthwash, breath freshener, gum care, tartar removal, oral probiotics, dental floss, tongue scraper. Pain points: hơi thở hôi / cao răng / nướu viêm / răng ố vàng / ê buốt răng / kem đánh răng / nước súc miệng.
+- diabetes-blood-sugar: BLOOD SUGAR / DIABETES — diabetes support supplement, chromium, berberine, glucose stabilizer, A1C support, insulin sensitivity. Pain points: tiểu đường / đường huyết cao / A1C / glucose / fasting glucose / kháng insulin. Distinguished from generic supplement-wellness by SPECIFIC glycemic focus.
+- liver-detox: LIVER SUPPORT / DETOX — silymarin / milk thistle / cây kế sữa, liver enzyme support, fatty liver supplement, hangover recovery, ALT/AST support. Pain points: men gan / gan nhiễm mỡ / ALT cao / hangover / nhậu nhiều / vàng da. Distinguished from generic detox/wellness by SPECIFIC hepatic focus.
+- prostate-urology: PROSTATE / MALE URINARY — saw palmetto, beta-sitosterol, prostate support, BPH supplement, frequent urination male, PSA support. Pain points: tiểu đêm / tia tiểu yếu / tuyến tiền liệt / phì đại tuyến tiền liệt / PSA / BPH. Distinguished from relationship (sexual) — this is URINARY function specifically.
+- hemorrhoids-digestive-shame: HEMORRHOIDS / CONSTIPATION — anti-hemorrhoid cream/suppository, diosmin/hesperidin vein support, fiber for chronic constipation, anal fissure relief. Pain points: trĩ / búi trĩ / chảy máu hậu môn / táo bón mạn / rặn đau / chảy máu khi đi vệ sinh.
+- eye-vision-care: EYE / VISION — eye drops, lutein/zeaxanthin supplement, blue light glasses, dry eye relief, macular degeneration support, screen fatigue. Pain points: mắt mỏi / mắt khô / nhìn mờ / cận thị / loạn / lutein / blue light / thoái hóa điểm vàng.
 `.trim()
 
 function buildClassifierPrompt(input: DetectInput): string {
-  return `Classify this product into EXACTLY ONE niche key from the 12 options below.
+  return `Classify this product into EXACTLY ONE niche key from the 18 options below.
 
 NICHE OPTIONS:
 ${NICHE_DESCRIPTIONS}
@@ -94,17 +107,23 @@ CRITICAL RULES:
 1. Knee/back/joint/spine braces or supports → health-functional (NOT beauty-confidence)
 2. Nasal/sinus/respiratory products → health-functional (NOT skincare)
 3. Generic "boost confidence" language does NOT make it beauty-confidence — look at WHAT the product does
-4. Vitamins/collagen taken orally for general health → supplement-wellness, BUT see exceptions 6-9 below
+4. Vitamins/collagen taken orally for general health → supplement-wellness, BUT see exceptions 6-15 below
 5. If multiple match, pick the MOST SPECIFIC niche to the product function (what the product physically does), NOT the marketing emotion
 6. SLEEP-SPECIFIC products (melatonin, sleep pillow, anti-insomnia) → sleep-insomnia (NOT supplement-wellness even though supplement form)
 7. FEMALE HORMONAL TRANSITION (hot flash, perimenopause, menopause-specific) → menopause (NOT supplement-wellness — life-stage specific)
 8. ANXIETY/STRESS/DEPRESSION specific products → mental-health (NOT supplement-wellness if product specifically targets psychological state)
 9. NMN/NAD/LONGEVITY-SCIENCE products → anti-aging-longevity (NOT skincare which is topical, NOT supplement-wellness which is generic)
+10. DENTAL products (kem đánh răng / nước súc miệng / cao răng / hơi thở) → dental-oral-care (NOT beauty-confidence cosmetic, NOT skincare)
+11. BLOOD SUGAR / DIABETES products (berberine / chromium / glucose / insulin support / A1C) → diabetes-blood-sugar (NOT health-functional generic, NOT supplement-wellness)
+12. LIVER / MEN GAN products (silymarin / milk thistle / cây kế sữa / gan nhiễm mỡ) → liver-detox (NOT health-functional generic, NOT supplement-wellness)
+13. PROSTATE / TIỂU ĐÊM / MALE URINARY (saw palmetto / beta-sitosterol / BPH / tuyến tiền liệt) → prostate-urology (NOT relationship which is sexual, NOT health-functional)
+14. HEMORRHOIDS / TRĨ / TÁO BÓN MẠN (diosmin / hesperidin / preparation H / búi trĩ) → hemorrhoids-digestive-shame (NOT health-functional generic)
+15. EYE / MẮT products (lutein / zeaxanthin / eye drops / mắt khô / mỏi mắt / blue light) → eye-vision-care (NOT health-functional generic, NOT supplement-wellness)
 
 OUTPUT FORMAT: Reply with EXACTLY ONE niche key. Just the key string, lowercase, hyphenated. NO explanation, NO quotes, NO markdown.
 
 Example correct output:
-health-functional
+dental-oral-care
 
 Now classify:`
 }
@@ -202,6 +221,67 @@ const NICHE_KEYWORDS: Array<{ niche: NicheKey; keywords: RegExp[] }> = [
       /\btelomere\b/i, /\bautophagy\b/i, /\bmitochondria\b/i, /\bcellular\b/i,
       /\bbiological age\b/i, /\bhealthspan\b/i, /\bsenescence\b/i,
       /\bchống lão hóa\b/i, /\btrẻ hóa\b/i,
+    ],
+  },
+  // ── SEA-6 extensions (regex fallback, checked BEFORE health-functional) ──
+  {
+    niche: 'dental-oral-care',
+    keywords: [
+      /\brăng\b/i, /\bnướu\b/i, /\bhơi thở\b/i, /\bcao răng\b/i,
+      /\btẩy trắng răng\b/i, /\bkem đánh răng\b/i, /\bnước súc miệng\b/i,
+      /\btoothpaste\b/i, /\bmouthwash\b/i, /\bgum\b/i, /\btartar\b/i,
+      /\bdental\b/i, /\boral care\b/i, /\bteeth\b/i, /\bbreath\b/i,
+      /\bgigi\b/i, /\bnafas\b/i,
+    ],
+  },
+  {
+    niche: 'diabetes-blood-sugar',
+    keywords: [
+      /\btiểu đường\b/i, /\bđường huyết\b/i, /\bđái tháo đường\b/i,
+      /\bblood sugar\b/i, /\bdiabetes\b/i, /\ba1c\b/i, /\bglucose\b/i,
+      /\binsulin\b/i, /\bberberine\b/i, /\bchromium\b/i,
+      /\bmetformin\b/i, /\bglucophage\b/i,
+      /\bkencing manis\b/i, /\bdiabetic\b/i,
+    ],
+  },
+  {
+    niche: 'liver-detox',
+    keywords: [
+      /\bgan\b/i, /\bmen gan\b/i, /\bgan nhiễm mỡ\b/i, /\bxơ gan\b/i,
+      /\bliver\b/i, /\bhepatic\b/i, /\bfatty liver\b/i,
+      /\bsilymarin\b/i, /\bmilk thistle\b/i, /\bcây kế sữa\b/i,
+      /\balt\b/i, /\bast\b/i, /\bdetox gan\b/i, /\bthải độc gan\b/i,
+      /\bhati\b/i,
+    ],
+  },
+  {
+    niche: 'prostate-urology',
+    keywords: [
+      /\btuyến tiền liệt\b/i, /\btiểu đêm\b/i, /\bphì đại tuyến\b/i,
+      /\bprostate\b/i, /\bbph\b/i, /\bpsa\b/i,
+      /\bsaw palmetto\b/i, /\bbeta-sitosterol\b/i, /\btamsulosin\b/i, /\bavodart\b/i,
+      /\btiểu rắt\b/i, /\btia tiểu\b/i, /\bbàng quang\b/i,
+      /\bprostat\b/i, /\bkencing malam\b/i,
+    ],
+  },
+  {
+    niche: 'hemorrhoids-digestive-shame',
+    keywords: [
+      /\btrĩ\b/i, /\bbúi trĩ\b/i, /\btáo bón\b/i, /\bchảy máu hậu môn\b/i,
+      /\bhemorrhoid\b/i, /\bpiles\b/i, /\bconstipation\b/i,
+      /\bdiosmin\b/i, /\bhesperidin\b/i, /\bpreparation h\b/i,
+      /\branal fissure\b/i, /\bhậu môn\b/i, /\brặn đau\b/i,
+      /\bbuasir\b/i,
+    ],
+  },
+  {
+    niche: 'eye-vision-care',
+    keywords: [
+      /\bmắt\b/i, /\bmỏi mắt\b/i, /\bkhô mắt\b/i, /\bcận thị\b/i,
+      /\beye\b/i, /\bvision\b/i, /\bdry eye\b/i, /\bblue light\b/i,
+      /\blutein\b/i, /\bzeaxanthin\b/i, /\bmacular\b/i,
+      /\bthoái hóa điểm vàng\b/i, /\bsystane\b/i, /\brefresh tears\b/i,
+      /\bmata\b/i, /\bpenglihatan\b/i,
     ],
   },
   {

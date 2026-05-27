@@ -41,6 +41,13 @@ export type CtaEnergyModeId =
   | 'identity-continuity'      // menopause — "tôi vẫn là tôi" through transition
   | 'inner-calm-return'        // mental-health — emotional regulation return
   | 'vitality-extension'       // anti-aging-longevity — vital years extension
+  // SEA-6 extensions (2026-05-27)
+  | 'social-smile-return'      // dental-oral-care — confident smile + breath, social re-entry
+  | 'health-stability-recovery' // diabetes-blood-sugar — stable numbers + food freedom
+  | 'internal-cleanse-relief'  // liver-detox — internal lightness + energy return
+  | 'silent-vitality-return'   // prostate-urology — quiet capacity / dignity in male body
+  | 'discreet-comfort-return'  // hemorrhoids-digestive-shame — bathroom dignity back
+  | 'clarity-return'           // eye-vision-care — visual clarity + screen endurance
 
 export interface CtaEnergyMode {
   id: CtaEnergyModeId

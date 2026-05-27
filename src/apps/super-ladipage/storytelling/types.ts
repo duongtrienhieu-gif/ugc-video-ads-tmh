@@ -40,6 +40,13 @@ export type NicheKey =
   | 'menopause'                 // mãn kinh / tiền mãn kinh / hormone phụ nữ
   | 'mental-health'             // lo âu / stress / depression / burnout
   | 'anti-aging-longevity'      // chống lão hóa B2C / NAD-NMN / biological age
+  // SEA-6 extensions (2026-05-27) — popular SEA market niches uncovered
+  | 'dental-oral-care'          // răng / nướu / hơi thở / nha khoa
+  | 'diabetes-blood-sugar'      // tiểu đường / đường huyết / insulin
+  | 'liver-detox'               // gan / men gan / thải độc gan / gan nhiễm mỡ
+  | 'prostate-urology'          // tuyến tiền liệt / tiểu đêm / tiết niệu nam
+  | 'hemorrhoids-digestive-shame' // trĩ / táo bón mạn / đau hậu môn — silent shame
+  | 'eye-vision-care'           // mắt khô / mỏi mắt / cận thị / thoái hóa điểm vàng
 
 /** Country target — drives cultural defaults. */
 export type CountryCode = 'MY' | 'VN' | 'SG' | 'ID' | 'TH' | 'PH'

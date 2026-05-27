@@ -161,6 +161,80 @@ export const CTA_ENERGY_MODES: Record<NicheKey, CtaEnergyMode> = {
       'youth-obsession trope',
     ],
   },
+
+  // ── SEA-6 extensions (2026-05-27) ──
+
+  'dental-oral-care': {
+    id: 'social-smile-return',
+    niche: 'dental-oral-care',
+    description: 'Action push toward confident close-distance social presence — NOT cosmetic whiteness only.',
+    vibe: 'reader feels "có thể cười to trong nhóm bạn / hôn con không ngại hơi thở"',
+    avoidPatterns: [
+      'cosmetic-white-teeth only framing',
+      'aesthetic smile-makeover tone',
+      'commercial dentist promotional voice',
+    ],
+  },
+
+  'diabetes-blood-sugar': {
+    id: 'health-stability-recovery',
+    niche: 'diabetes-blood-sugar',
+    description: 'Action push toward stable numbers + food flexibility — NOT miracle cure / replacing medication.',
+    vibe: 'reader feels "tôi có thể ăn cơm thoải mái lại / A1C ổn định / không sợ tiệc tùng"',
+    avoidPatterns: [
+      'miracle cure framing',
+      'replacement-of-medication promise',
+      'aggressive medical claim tone',
+    ],
+  },
+
+  'liver-detox': {
+    id: 'internal-cleanse-relief',
+    niche: 'liver-detox',
+    description: 'Action push toward internal lightness + energy return — NOT extreme detox / cleansing trend.',
+    vibe: 'reader feels "có thể đi nhậu lại nhẹ nhàng / sáng dậy không thấy nặng người"',
+    avoidPatterns: [
+      'extreme-detox cleansing framing',
+      'juice-fast tone',
+      'spiritual-purification narrative',
+    ],
+  },
+
+  'prostate-urology': {
+    id: 'silent-vitality-return',
+    niche: 'prostate-urology',
+    description: 'Action push toward quiet male dignity + nighttime sleep return — NOT viagra-style bravado.',
+    vibe: 'reader feels "có thể ngủ liền 7 tiếng / đi du lịch xa / không lén lút đi tiểu"',
+    avoidPatterns: [
+      'sexual-bravado framing',
+      'viagra-style masculine performance tone',
+      'youth-recovery promise',
+    ],
+  },
+
+  'hemorrhoids-digestive-shame': {
+    id: 'discreet-comfort-return',
+    niche: 'hemorrhoids-digestive-shame',
+    description: 'Action push toward discreet comfort + bathroom dignity — NOT trendy wellness tone or social-share framing.',
+    vibe: 'reader feels "có thể ngồi xe máy đi xa / đi vệ sinh không đau / không phải mang đệm donut"',
+    avoidPatterns: [
+      'cheerful-wellness framing',
+      'aspirational lifestyle tone',
+      'social-share testimonial voice',
+    ],
+  },
+
+  'eye-vision-care': {
+    id: 'clarity-return',
+    niche: 'eye-vision-care',
+    description: 'Action push toward visual clarity + screen endurance — NOT aspirational "perfect vision" laser-eye marketing.',
+    vibe: 'reader feels "cuối ngày mắt vẫn nhìn nổi màn hình / đọc menu không cần đưa xa"',
+    avoidPatterns: [
+      'perfect-vision miracle framing',
+      'laser-eye-surgery promotional tone',
+      'youth-restoration voice',
+    ],
+  },
 }
 
 /** Get CTA energy mode for niche. */

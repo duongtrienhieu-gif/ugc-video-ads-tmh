@@ -252,6 +252,118 @@ export const NICHE_DESIRE_ARCHITECTURE: Record<NicheKey, NicheDesireArchitecture
       'youth-obsession trope',
     ],
   },
+
+  // ── SEA-6 extensions (2026-05-27) ──
+
+  'dental-oral-care': {
+    niche: 'dental-oral-care',
+    primaryDesire: 'social smile return / confident close-distance presence',
+    desireTensions: [
+      'breath shame (sợ người gần để ý)',
+      'smile-hiding habit (che miệng khi cười)',
+      'photo avoidance (né cười hở răng trong selfie)',
+      'social intimacy loss (con/cháu né hôn má)',
+    ],
+    emotionalGravity: 'social smile + close-distance dignity (NOT cosmetic whiteness only)',
+    forbiddenDefaults: [
+      'cosmetic-white-teeth framing only',
+      'aesthetic smile-makeover tone',
+      'commercial dentist promotional voice',
+      'beauty-confidence aesthetic narrative',
+    ],
+  },
+
+  'diabetes-blood-sugar': {
+    niche: 'diabetes-blood-sugar',
+    primaryDesire: 'health stability + food freedom / "ăn cơm như bình thường lại"',
+    desireTensions: [
+      'food restriction fatigue (kiêng mãi không xong)',
+      'numbers anxiety (A1C lên xuống — không kiểm soát được)',
+      'complication fear (mắt / thận / chân — sợ đoạn chi)',
+      'social isolation (tiệc tùng phải né)',
+    ],
+    emotionalGravity: 'health-stability + food-freedom (NOT miracle cure / "chữa khỏi tiểu đường")',
+    forbiddenDefaults: [
+      'miracle cure framing',
+      'replacement-of-medication promise',
+      'aggressive medical claim tone',
+      'wellness influencer voice',
+    ],
+  },
+
+  'liver-detox': {
+    niche: 'liver-detox',
+    primaryDesire: 'internal cleansing + energy return / silent damage reversed',
+    desireTensions: [
+      'silent damage anxiety (chưa rõ — đã muộn rồi)',
+      'social pressure fatigue (bị rủ nhậu — không né được)',
+      'mortality fear (xơ gan → ung thư trong 5-10 năm)',
+      'fatigue without cause (mệt không lý do)',
+    ],
+    emotionalGravity: 'internal-cleanse + energy-back (NOT extreme detox / cleansing trend)',
+    forbiddenDefaults: [
+      'extreme-detox cleansing framing',
+      'juice-fast tone',
+      'spiritual-purification narrative',
+      'fearmongering medical claim',
+    ],
+  },
+
+  'prostate-urology': {
+    niche: 'prostate-urology',
+    primaryDesire: 'silent dignity / nighttime sleep return / quiet male capacity',
+    desireTensions: [
+      'masculine identity threat (không còn "đàn ông" như xưa)',
+      'silent shame (không kể với vợ)',
+      'sleep deprivation (tiểu đêm phá giấc)',
+      'travel anxiety (không dám đi xa)',
+      'BPH → cancer fear',
+    ],
+    emotionalGravity: 'silent-vitality + male-dignity (NOT viagra-style masculine bravado)',
+    forbiddenDefaults: [
+      'sexual-bravado framing',
+      'viagra-style masculine performance tone',
+      'aggressive masculine-power narrative',
+      'youth-recovery promise',
+    ],
+  },
+
+  'hemorrhoids-digestive-shame': {
+    niche: 'hemorrhoids-digestive-shame',
+    primaryDesire: 'discreet comfort return / bathroom dignity / no-one-knows healing',
+    desireTensions: [
+      'extreme privacy (kể với ai cũng nhục)',
+      'physical pain ongoing (đau khi ngồi / đi vệ sinh)',
+      'surgery fear (cắt trĩ — đau khủng khiếp)',
+      'social activity limitation (né xe máy / đi xa)',
+      'cancer confusion (sợ ung thư trực tràng vì máu)',
+    ],
+    emotionalGravity: 'discreet-comfort + bathroom-dignity (NOT trendy wellness tone)',
+    forbiddenDefaults: [
+      'cheerful-wellness framing',
+      'aspirational lifestyle tone',
+      'social-share testimonial voice',
+      'aesthetic photogenic narrative',
+    ],
+  },
+
+  'eye-vision-care': {
+    niche: 'eye-vision-care',
+    primaryDesire: 'visual clarity + screen endurance / "đọc chữ thoải mái lại"',
+    desireTensions: [
+      'screen-fatigue cumulative (cuối ngày mắt không nhìn nổi nữa)',
+      'aging vision fear (60 tuổi phẫu thuật)',
+      'work productivity loss (không nhìn rõ → làm chậm)',
+      'driving night fear (chói đèn không lái được)',
+    ],
+    emotionalGravity: 'clarity + capacity (NOT aspirational "perfect vision" / laser-eye marketing)',
+    forbiddenDefaults: [
+      'perfect-vision miracle framing',
+      'laser-eye-surgery promotional tone',
+      'beauty-aesthetic eye narrative',
+      'youth-restoration voice',
+    ],
+  },
 }
 
 /** Get desire architecture for niche — never null (8 niches covered). */

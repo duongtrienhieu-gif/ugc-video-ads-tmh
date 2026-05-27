@@ -293,6 +293,146 @@ export const NICHE_MECHANISM_VOCAB: Record<NicheKey, NicheMechanismVocab> = {
       'thanh xuân vĩnh cửu', 'trẻ mãi không già',
     ],
   },
+
+  // ── SEA-6 extensions (2026-05-27) ──
+
+  'dental-oral-care': {
+    niche: 'dental-oral-care',
+    mechanismVocab: [
+      'mảng bám vi khuẩn',
+      'vi khuẩn yếm khí kẽ răng',
+      'men răng yếu dần',
+      'nướu viêm âm thầm',
+      'pH miệng bị acid',
+      'oral microbiome',
+      'tartar / cao răng',
+      'tủy răng nhạy cảm',
+    ],
+    mechanismFrames: [
+      'không phải "trắng răng nhanh" — mà là làm môi trường miệng trở về sạch tự nhiên',
+      'cái hơi thở hôi không phải do thức ăn — là vi khuẩn yếm khí kẽ răng không bàn chải nào tới được',
+      'không tẩy — không bào mòn — chỉ là làm mảng bám không có chỗ bám',
+    ],
+    bannedGenericPhrases: [
+      'từ bên trong', 'gốc rễ vấn đề', 'nuôi dưỡng toàn diện',
+      'tươi mới sảng khoái', 'tỏa sáng nụ cười',
+    ],
+  },
+
+  'diabetes-blood-sugar': {
+    niche: 'diabetes-blood-sugar',
+    mechanismVocab: [
+      'glucose spike sau bữa ăn',
+      'insulin resistance',
+      'A1C chỉ số 3 tháng',
+      'fasting glucose buổi sáng',
+      'pancreas mệt mỏi',
+      'inflammation chuyển hóa',
+      'beta-cell function',
+      'sugar baseline ổn định',
+    ],
+    mechanismFrames: [
+      'không phải "hết tiểu đường" — mà là giúp glucose spike sau bữa ăn không bị quá cao',
+      'cái thiếu không phải insulin — mà là pancreas cần hỗ trợ + giảm tải đường',
+      'không thay thế thuốc — chỉ là làm cơ thể dễ xử lý đường hơn',
+    ],
+    bannedGenericPhrases: [
+      'từ bên trong', 'gốc rễ vấn đề', 'nuôi dưỡng toàn diện',
+      'chữa khỏi hoàn toàn', 'thần dược', 'sức khỏe vàng',
+    ],
+  },
+
+  'liver-detox': {
+    niche: 'liver-detox',
+    mechanismVocab: [
+      'men gan ALT / AST',
+      'gan nhiễm mỡ độ 1-2',
+      'phase 1 / phase 2 detox pathway',
+      'gan quá tải bia rượu',
+      'glutathione liver support',
+      'mỡ tích trong gan',
+      'liver filtration capacity',
+      'milk thistle / silymarin',
+    ],
+    mechanismFrames: [
+      'không phải "thải độc toàn cơ thể" — mà là hỗ trợ phase 2 detox của gan',
+      'cái mỡ tích trong gan không hiện ra ngoài — chỉ men gan tăng âm thầm 5-7 năm',
+      'không kích — không xổ — chỉ cung cấp đủ glutathione cho gan tự xử lý',
+    ],
+    bannedGenericPhrases: [
+      'từ bên trong', 'gốc rễ vấn đề', 'nuôi dưỡng toàn diện',
+      'thải độc tận gốc', 'lọc sạch cơ thể', 'tinh khiết',
+    ],
+  },
+
+  'prostate-urology': {
+    niche: 'prostate-urology',
+    mechanismVocab: [
+      'tuyến tiền liệt phì đại BPH',
+      'tiểu đêm 2-3 lần',
+      'tia tiểu yếu / ngắt quãng',
+      'PSA chỉ số',
+      'DHT chuyển hóa',
+      'saw palmetto / beta-sitosterol',
+      'bladder pressure',
+      'urinary flow rate',
+    ],
+    mechanismFrames: [
+      'không phải "trẻ lại sinh lý nam" — mà là làm tuyến tiền liệt không phì đại thêm',
+      'cái tiểu đêm 3 lần không phải do uống nhiều nước — là tuyến tiền liệt chèn vào bàng quang',
+      'không hormone — chỉ ức chế DHT chuyển hóa làm tuyến tiền liệt phì đại',
+    ],
+    bannedGenericPhrases: [
+      'từ bên trong', 'gốc rễ vấn đề', 'nuôi dưỡng toàn diện',
+      'phong độ đàn ông', 'sức mạnh nam giới', 'trở lại tuổi thanh xuân',
+    ],
+  },
+
+  'hemorrhoids-digestive-shame': {
+    niche: 'hemorrhoids-digestive-shame',
+    mechanismVocab: [
+      'búi trĩ nội / ngoại',
+      'tĩnh mạch hậu môn giãn',
+      'táo bón mạn 3-4 ngày',
+      'phân khô + cứng',
+      'rặn nhiều áp lực vùng chậu',
+      'diosmin / hesperidin (vein support)',
+      'pelvic floor pressure',
+      'chất xơ + nước không đủ',
+    ],
+    mechanismFrames: [
+      'không phải "hết trĩ ngay" — mà là làm tĩnh mạch hậu môn co lại + giảm viêm',
+      'cái đau khi đi vệ sinh không phải vệ sinh sai — là tĩnh mạch giãn không tự co được',
+      'không cắt — không đốt — chỉ là làm thành mạch khỏe để búi tự rút',
+    ],
+    bannedGenericPhrases: [
+      'từ bên trong', 'gốc rễ vấn đề', 'nuôi dưỡng toàn diện',
+      'thoải mái sảng khoái', 'tự tin trở lại',
+    ],
+  },
+
+  'eye-vision-care': {
+    niche: 'eye-vision-care',
+    mechanismVocab: [
+      'mỏi mắt screen-time',
+      'khô mắt do giảm chớp',
+      'lutein + zeaxanthin macular',
+      'blue light damage',
+      'eye fatigue pattern',
+      'thoái hóa điểm vàng (AMD)',
+      'tear film stability',
+      'ciliary muscle căng',
+    ],
+    mechanismFrames: [
+      'không phải "tăng thị lực" — mà là làm mắt chịu được screen-time dài hơn',
+      'cái mỏi mắt cuối ngày không phải do nhìn quá nhiều — là tear film bị bay hơi vì giảm chớp',
+      'không phẫu thuật — chỉ là cung cấp lutein + omega cho võng mạc',
+    ],
+    bannedGenericPhrases: [
+      'từ bên trong', 'gốc rễ vấn đề', 'nuôi dưỡng toàn diện',
+      'sáng như đèn pha', 'thị lực thần kỳ',
+    ],
+  },
 }
 
 function hashSeed(s: string): number {

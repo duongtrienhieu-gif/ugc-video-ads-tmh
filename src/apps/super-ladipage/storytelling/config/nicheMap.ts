@@ -125,6 +125,92 @@ export const NICHE_PRESETS: Partial<Record<NicheKey, NichePreset>> = {
     imageCount: 9,
     recommendedCulturalWorld: ['vietnamese-urban', 'malay-muslim'],
   },
+
+  // ── SEA-6 extensions (2026-05-27) — popular SEA market niches ──
+
+  'dental-oral-care': {
+    niche: 'dental-oral-care',
+    emotionalIntensity: 'medium',       // social embarrassment (hơi thở / màu răng)
+    productRevealSection: 6,            // dental is fast-acting trust — earlier reveal
+    pacingType: 'steady',
+    continuityPriority: 'high',
+    preferredTreatments: ['smartphone-candid', 'domestic-observational', 'memory-snapshot'],
+    ctaSoftness: 'quiet-suggestion',
+    supportingCharacter: 'friend',      // friend hints / kid laughs at breath
+    sectionCount: 10,
+    imageCount: 9,
+    recommendedCulturalWorld: ['vietnamese-urban', 'malay-muslim'],
+  },
+
+  'diabetes-blood-sugar': {
+    niche: 'diabetes-blood-sugar',
+    emotionalIntensity: 'medium',       // chronic anxiety, food anxiety
+    productRevealSection: 7,            // slower trust — health serious
+    pacingType: 'slow-burn',
+    continuityPriority: 'high',
+    preferredTreatments: ['domestic-observational', 'family-album', 'environmental-wide'],
+    ctaSoftness: 'invitation-only',
+    supportingCharacter: 'family',      // family worry, food cooked separately
+    sectionCount: 11,
+    imageCount: 10,
+    recommendedCulturalWorld: ['vietnamese-urban', 'vietnamese-rural', 'malay-muslim'],
+  },
+
+  'liver-detox': {
+    niche: 'liver-detox',
+    emotionalIntensity: 'low',          // hidden / no visible symptom — quiet anxiety
+    productRevealSection: 7,
+    pacingType: 'slow-burn',
+    continuityPriority: 'high',
+    preferredTreatments: ['domestic-observational', 'family-album', 'memory-snapshot'],
+    ctaSoftness: 'invitation-only',
+    supportingCharacter: 'family',      // wife/husband notice yellowness / fatigue
+    sectionCount: 10,
+    imageCount: 9,
+    recommendedCulturalWorld: ['vietnamese-urban', 'vietnamese-rural', 'malay-muslim'],
+  },
+
+  'prostate-urology': {
+    niche: 'prostate-urology',
+    emotionalIntensity: 'medium',       // silent shame male — urinary disruption
+    productRevealSection: 7,
+    pacingType: 'slow-burn',
+    continuityPriority: 'high',
+    preferredTreatments: ['domestic-observational', 'memory-snapshot', 'environmental-wide'],
+    ctaSoftness: 'invitation-only',
+    supportingCharacter: 'partner',     // wife notices nighttime trips
+    sectionCount: 10,
+    imageCount: 9,
+    recommendedCulturalWorld: ['vietnamese-urban', 'vietnamese-rural', 'malay-muslim'],
+  },
+
+  'hemorrhoids-digestive-shame': {
+    niche: 'hemorrhoids-digestive-shame',
+    emotionalIntensity: 'medium',       // very hidden shame, bathroom suffering
+    productRevealSection: 7,
+    pacingType: 'slow-burn',
+    continuityPriority: 'high',
+    preferredTreatments: ['domestic-observational', 'memory-snapshot', 'imperfect-real'],
+    ctaSoftness: 'invitation-only',
+    supportingCharacter: 'none',        // very private — no supporting character
+    sectionCount: 10,
+    imageCount: 9,
+    recommendedCulturalWorld: ['vietnamese-urban', 'vietnamese-rural', 'malay-muslim'],
+  },
+
+  'eye-vision-care': {
+    niche: 'eye-vision-care',
+    emotionalIntensity: 'low',          // screen fatigue — chronic but not crisis
+    productRevealSection: 6,            // common pain — faster reveal acceptable
+    pacingType: 'steady',
+    continuityPriority: 'high',
+    preferredTreatments: ['domestic-observational', 'smartphone-candid', 'memory-snapshot'],
+    ctaSoftness: 'quiet-suggestion',
+    supportingCharacter: 'family',      // kids noticing parent squinting
+    sectionCount: 10,
+    imageCount: 9,
+    recommendedCulturalWorld: ['vietnamese-urban', 'malay-muslim'],
+  },
 }
 
 /** Convenience getter — returns preset hoặc undefined nếu niche chưa có

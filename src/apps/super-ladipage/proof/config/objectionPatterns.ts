@@ -241,6 +241,116 @@ export const NICHE_OBJECTIONS: Record<NicheKey, NicheObjections> = {
       },
     ],
   },
+
+  // ── SEA-6 extensions (2026-05-27) ──
+
+  'dental-oral-care': {
+    niche: 'dental-oral-care',
+    objections: [
+      {
+        objection: '"Phải đi nha sĩ chuyên môn — sản phẩm tự dùng vô ích"',
+        counterPosture: 'both-and — "tôi vẫn đi cạo vôi 6 tháng/lần. Cái này là maintenance giữa các lần — sạch lâu hơn rõ"',
+      },
+      {
+        objection: '"Kem đánh răng nào cũng quảng cáo trắng răng — không có thật"',
+        counterPosture: 'skeptical-trier — "tôi đã thử Colgate Total / Sensodyne / Marvis... Cái này khác — không trắng nhanh nhưng cao răng ít rõ"',
+      },
+      {
+        objection: '"Hơi thở do dạ dày — không phải miệng"',
+        counterPosture: 'gentle-correction — "tôi cũng từng nghĩ vậy. Đi nội soi dạ dày sạch. Là vi khuẩn yếm khí ở kẽ răng — chỉ bàn chải không lấy được"',
+      },
+    ],
+  },
+
+  'diabetes-blood-sugar': {
+    niche: 'diabetes-blood-sugar',
+    objections: [
+      {
+        objection: '"Phải uống metformin — supplement vô ích"',
+        counterPosture: 'both-and — "tôi vẫn uống metformin theo đơn bác sĩ. Cái này là hỗ trợ — không thay thế. A1C giảm từ 7.8 xuống 6.9"',
+      },
+      {
+        objection: '"Tiểu đường type 2 phải kiêng tinh bột — không thuốc nào sửa được"',
+        counterPosture: 'slow-converter — "tôi kiêng cơm 2 năm vẫn không đỡ. Sau 3 tháng dùng — ăn nửa bát cơm vẫn ổn glucose"',
+      },
+      {
+        objection: '"Sợ uống thêm thứ làm hại gan/thận"',
+        counterPosture: 'cautious-trier — "tôi hỏi bác sĩ trước. Đây là phyto + chromium — không tương tác với metformin. Test men gan/creatinine sau 3 tháng vẫn ổn"',
+      },
+    ],
+  },
+
+  'liver-detox': {
+    niche: 'liver-detox',
+    objections: [
+      {
+        objection: '"Gan tự thải độc — không cần supplement"',
+        counterPosture: 'gentle-correction — "tôi cũng nghĩ vậy. Nhưng siêu âm gan nhiễm mỡ độ 2 thì gan đã quá tải. Đây là silymarin hỗ trợ phase 2 detox — có evidence"',
+      },
+      {
+        objection: '"Detox trà / nước chanh là đủ"',
+        counterPosture: 'slow-converter — "tôi uống nước chanh 2 năm — men gan vẫn 80. 4 tháng dùng cái này — ALT về 35 rõ"',
+      },
+      {
+        objection: '"Phải bỏ bia hoàn toàn mới hết gan nhiễm mỡ"',
+        counterPosture: 'both-and — "tôi giảm bia còn 1-2 lần/tháng + uống thêm cái này. Không hứa cứu được gan người nghiện rượu nặng — chỉ là maintenance"',
+      },
+    ],
+  },
+
+  'prostate-urology': {
+    niche: 'prostate-urology',
+    objections: [
+      {
+        objection: '"Tuyến tiền liệt phì đại do tuổi — không cản được"',
+        counterPosture: 'second-hand-reporter — "bố tôi 65 dùng saw palmetto 1 năm. PSA từ 5.5 về 3.8 — bác sĩ ngạc nhiên. Tuổi cao vẫn đỡ"',
+      },
+      {
+        objection: '"Phải đi tiểu đêm là do uống nhiều nước thôi"',
+        counterPosture: 'gentle-correction — "tôi cũng nghĩ vậy. Cắt nước sau 7h tối vẫn dậy 3 lần. Là tuyến tiền liệt chèn bàng quang — bác sĩ siêu âm xác định"',
+      },
+      {
+        objection: '"Saw palmetto là thảo dược — không mạnh bằng thuốc Tây"',
+        counterPosture: 'slow-converter — "tôi dùng Tamsulosin 6 tháng — có tác dụng phụ huyết áp tụt. Chuyển qua saw palmetto + beta-sitosterol — chậm hơn nhưng không phản ứng"',
+      },
+    ],
+  },
+
+  'hemorrhoids-digestive-shame': {
+    niche: 'hemorrhoids-digestive-shame',
+    objections: [
+      {
+        objection: '"Trĩ phải mổ — không có thuốc nào chữa được"',
+        counterPosture: 'slow-converter — "tôi sợ mổ trĩ — đau khủng khiếp. 3 tháng dùng diosmin + thuốc bôi — búi trĩ co lại 70%. Chưa cần mổ"',
+      },
+      {
+        objection: '"Mua thuốc bôi ở nhà thuốc là đủ"',
+        counterPosture: 'both-and — "tôi vẫn dùng thuốc bôi khi rát. Cái này uống vào để tĩnh mạch khỏe — bôi chỉ giảm triệu chứng tạm"',
+      },
+      {
+        objection: '"Trĩ do ngồi nhiều — chỉ cần đứng dậy thường xuyên"',
+        counterPosture: 'gentle-correction — "tôi làm văn phòng — đứng đứng đi đi vẫn không khá. Là tĩnh mạch đã giãn — cần hỗ trợ thành mạch co lại"',
+      },
+    ],
+  },
+
+  'eye-vision-care': {
+    niche: 'eye-vision-care',
+    objections: [
+      {
+        objection: '"Mỏi mắt là do screen-time nhiều — nghỉ là hết"',
+        counterPosture: 'slow-converter — "tôi cũng nghĩ vậy. Nghỉ cuối tuần vẫn mỏi từ tối thứ 2. Cái này có lutein + omega — 6 tuần khác rõ"',
+      },
+      {
+        objection: '"Phải đi đo độ + cắt kính mới — không phải uống thuốc"',
+        counterPosture: 'both-and — "tôi vẫn đeo kính theo độ. Cái này là cho võng mạc — chống thoái hóa điểm vàng (di truyền nhà tôi)"',
+      },
+      {
+        objection: '"Lutein supplement marketing — mắt vốn tự đủ"',
+        counterPosture: 'cautious-researcher — "AREDS-2 study (NIH) chứng minh lutein + zeaxanthin chống AMD. Tôi đọc nghiên cứu trước khi mua"',
+      },
+    ],
+  },
 }
 
 function hashSeed(s: string): number {

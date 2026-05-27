@@ -225,6 +225,117 @@ export const PROOF_TEXTURE_PROFILES: Record<NicheKey, ProofTextureProfile> = {
       'fountain-of-youth marketing voice',
     ],
   },
+
+  // ── SEA-6 extensions (2026-05-27) ──
+
+  'dental-oral-care': {
+    niche: 'dental-oral-care',
+    typicalVoice: '25-50yo working adult, casual confessional, social-anxiety undertone',
+    platformFeel: 'FB nha khoa group / Shopee dental review / Tiktok reply về hơi thở',
+    textureCues: [
+      'mention cao răng / đi cạo vôi 6 tháng',
+      'reference che miệng khi cười / không dám cười to',
+      'mention con / cháu / vợ chồng phản ứng',
+      'reference specific dental product đã thử (Colgate / Sensodyne)',
+    ],
+    avoidPatterns: [
+      'cosmetic-dentist marketing voice',
+      'aspirational smile-makeover tone',
+      'beauty-confidence aesthetic framing',
+      'aggressive medical claim',
+    ],
+  },
+
+  'diabetes-blood-sugar': {
+    niche: 'diabetes-blood-sugar',
+    typicalVoice: '45-65yo, mature concerned voice, family-context, A1C numbers literacy',
+    platformFeel: 'FB nhóm tiểu đường VN / Zalo nhóm bệnh nhân / Shopee comment',
+    textureCues: [
+      'mention specific number ("A1C 7.5%" / "glucose sáng 8.2")',
+      'reference cơm trắng / chè / bia bị kiêng',
+      'mention bác sĩ / metformin / Glucophage',
+      'reference vợ/chồng nấu riêng đồ ăn',
+    ],
+    avoidPatterns: [
+      'miracle cure marketing voice',
+      'wellness influencer aspirational tone',
+      'aggressive medical claim',
+      'youth-fitness energetic framing',
+    ],
+  },
+
+  'liver-detox': {
+    niche: 'liver-detox',
+    typicalVoice: '35-55yo, mostly male, post-drinking-age, silent worry tone',
+    platformFeel: 'FB nhóm gan mật / Zalo nam giới sức khỏe / Shopee men gan supplement',
+    textureCues: [
+      'mention men gan number ("ALT 80" / "AST 95")',
+      'reference siêu âm gan nhiễm mỡ độ 1-2',
+      'mention nhậu / bia / tiệc tùng đã bị né',
+      'reference silymarin / cây kế sữa / cardus marianus',
+    ],
+    avoidPatterns: [
+      'extreme-detox cleansing voice',
+      'juice-fast wellness tone',
+      'spiritual-purification framing',
+      'beauty-aesthetic narrative',
+    ],
+  },
+
+  'prostate-urology': {
+    niche: 'prostate-urology',
+    typicalVoice: '50-70yo male, reserved-quiet, dignity-preserved voice, family-context occasional',
+    platformFeel: 'FB nam giới sức khỏe / Zalo nhóm BPH / Shopee tuyến tiền liệt review',
+    textureCues: [
+      'mention specific number ("PSA 5.2" / "tiểu đêm 3 lần")',
+      'reference saw palmetto / Tamsulosin / Avodart',
+      'mention chuyến đi xa / phim dài bị né',
+      'reference vợ "nhắc đi khám" / "lo lắng"',
+    ],
+    avoidPatterns: [
+      'sexual-bravado masculine voice',
+      'viagra-style performance tone',
+      'aggressive masculine-power narrative',
+      'youth-recovery promise voice',
+    ],
+  },
+
+  'hemorrhoids-digestive-shame': {
+    niche: 'hemorrhoids-digestive-shame',
+    typicalVoice: '30-55yo, anonymous-feeling confession, kín đáo / xấu hổ undertone',
+    platformFeel: 'anonymous FB confession / Shopee comment ẩn danh / Reddit Vietnamese',
+    textureCues: [
+      'mention cụ thể ("rặn 5-10 phút" / "máu giấy vệ sinh")',
+      'reference không kể với ai (kể cả vợ/chồng)',
+      'mention né xe máy / đệm donut / thuốc bôi',
+      'reference diosmin / hesperidin / preparation H',
+    ],
+    avoidPatterns: [
+      'cheerful-wellness voice',
+      'aspirational lifestyle tone',
+      'social-share testimonial framing',
+      'aesthetic photogenic narrative',
+      'aggressive medical claim',
+    ],
+  },
+
+  'eye-vision-care': {
+    niche: 'eye-vision-care',
+    typicalVoice: '30-55yo office worker, screen-fatigue savvy, practical tone',
+    platformFeel: 'FB nhóm dân văn phòng / Shopee mắt review / Tiktok reply về screen-time',
+    textureCues: [
+      'mention specific ("8 tiếng máy tính" / "cuối ngày mắt mỏi")',
+      'reference nước mắt nhân tạo / Refresh / Systane',
+      'mention kính chống ánh sáng xanh đã đeo',
+      'reference độ cận / loạn tăng / đi đo mắt',
+    ],
+    avoidPatterns: [
+      'perfect-vision marketing voice',
+      'laser-eye-surgery promotional tone',
+      'beauty-aesthetic eye narrative',
+      'aspirational young-eye framing',
+    ],
+  },
 }
 
 /** Get texture profile for niche. */
