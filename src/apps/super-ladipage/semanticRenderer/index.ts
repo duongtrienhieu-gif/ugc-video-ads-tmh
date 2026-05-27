@@ -22,6 +22,9 @@ export { SectionStatusPill } from './components/SectionStatusPill'
 export { SectionReviewActions } from './components/SectionReviewActions'
 export { SectionFallback } from './components/SectionFallback'
 
+// INT: observability metrics panel
+export { SessionMetricsPanel } from './components/SessionMetricsPanel'
+
 // Types
 export type {
   SemanticMobilePageProps,

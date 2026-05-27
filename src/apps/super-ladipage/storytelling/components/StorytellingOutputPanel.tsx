@@ -21,6 +21,7 @@ import { useEffect, useMemo, useState } from 'react'
 import {
   AlertTriangle, BookOpen, Check, FilePlus, ImageIcon, Loader2,
   RotateCcw, Save, ShieldCheck, ShieldAlert, Smartphone, FileText,
+  Sparkles, X,
 } from 'lucide-react'
 import type { LandingSection } from '../../types'
 import type {
@@ -29,6 +30,7 @@ import type {
 import { BLOCK_POOL } from '../config/blockPool'
 import { SECTION_VISUAL_MAP } from '../config/visualLanguage'
 import { useAppStore } from '../../../../stores/appStore'
+import { useSettingsStore } from '../../../../stores/settingsStore'
 import { SemanticMobilePage } from '../../semanticRenderer'
 import {
   createLandingSession,
@@ -39,6 +41,12 @@ import {
   type LandingSession,
   type ReviewFlag,
 } from '../../sessionRuntime'
+import {
+  createKieGptImageExecutor,
+  useImageGeneration,
+  type ExecutorRegistry,
+} from '../../generationOrchestration'
+import { isInternalBeta } from '../../featureFlags'
 
 const MOCK_MARKER_REGEX = /^\[MOCK P0\.5\]\s*\n+/
 
@@ -94,27 +102,52 @@ export default function StorytellingOutputPanel({
     void saveSession(fresh)
   }, [packKey, meta.exportablePage, meta.niche, pack.productName, session])
 
+  // ── INT — KIE executor + live image generation hook ────────────
+  const kieApiKey = useSettingsStore((s) => s.kieApiKey)
+  const executors = useMemo<ExecutorRegistry>(() => {
+    if (!kieApiKey) return {}
+    // KIE.ai is the canonical image-gen gateway for this codebase.
+    // We wrap it once as a 'gptImage' RendererExecutor. Future iterations
+    // can map flux/sdxl renderer keys to KIE's other model endpoints.
+    return {
+      gptImage: createKieGptImageExecutor({ apiKey: kieApiKey }),
+      // No flux/sdxl executors yet — sections routed to those renderers
+      // will surface 'No executor registered' in their generatedAsset.failureReason
+      // until INT follow-up adds KIE-Flux + KIE-SDXL wrappers.
+    }
+  }, [kieApiKey])
+
+  const imageGen = useImageGeneration({
+    page: meta.exportablePage ?? null,
+    session,
+    setSession,
+    executors,
+    concurrency: 2,
+  })
+
   // ── Session callback handlers ────────────────────────────────────
   const handleRegenerateImage = (sectionId: string) => {
     if (!session) return
-    const next = setRegenStatus(session, sectionId, 'queued', 'image')
-    setSession(next)
-    void saveSession(next)
-    addToast(`Đã đặt regen ảnh cho section "${sectionId}". (Cần executor thực P12.5+ để chạy)`)
+    if (!kieApiKey) {
+      addToast('Chưa có KIE API key — nhập trong Settings để generate ảnh.')
+      return
+    }
+    void imageGen.generateSection(sectionId)
   }
   const handleRegenerateSection = (sectionId: string) => {
-    if (!session) return
-    const next = setRegenStatus(session, sectionId, 'queued', 'section')
-    setSession(next)
-    void saveSession(next)
-    addToast(`Đã đặt regen toàn bộ section "${sectionId}".`)
+    // For now 'regenerate section' = 'regenerate image' (text is locked
+    // post-storytelling generation per architectural lock).
+    handleRegenerateImage(sectionId)
   }
   const handleRegenerateProof = (sectionId: string) => {
     if (!session) return
+    // Proof regen requires text-level rerun (storytelling layer) which is
+    // out of scope for INT — queue the request so consumer/future P17
+    // can wire it without breaking session state.
     const next = setRegenStatus(session, sectionId, 'queued', 'proof')
     setSession(next)
     void saveSession(next)
-    addToast(`Đã đặt regen proof cho section "${sectionId}".`)
+    addToast(`Đã đặt regen proof cho section "${sectionId}". Cần text-level rerun (P17+).`)
   }
   const handleApproveSection = (sectionId: string) => {
     if (!session) return
@@ -135,11 +168,14 @@ export default function StorytellingOutputPanel({
     void saveSession(next)
   }
   const handleRetryFailed = (sectionId: string) => {
-    if (!session) return
-    const next = setRegenStatus(session, sectionId, 'queued', 'image')
-    setSession(next)
-    void saveSession(next)
-    addToast(`Đang thử lại section "${sectionId}"...`)
+    handleRegenerateImage(sectionId)
+  }
+  const handleGenerateAll = () => {
+    if (!kieApiKey) {
+      addToast('Chưa có KIE API key — nhập trong Settings để generate ảnh.')
+      return
+    }
+    void imageGen.generateAll()
   }
 
   const handleSave = () => {
@@ -208,6 +244,30 @@ export default function StorytellingOutputPanel({
                   <Smartphone className="h-3 w-3" /> Semantic
                 </button>
               </div>
+            )}
+            {/* INT — Generate all images button (live KIE execution).
+                Visible only when pack has exportablePage AND KIE API key set.
+                Gated by INTERNAL_BETA flag during initial rollout. */}
+            {hasSemantic && kieApiKey && (isInternalBeta() || import.meta.env.DEV) && (
+              imageGen.isGenerating ? (
+                <button
+                  onClick={imageGen.cancel}
+                  className="flex items-center gap-1 rounded-lg border border-amber-300 bg-amber-50 px-2.5 py-1 text-[11px] text-amber-800 hover:bg-amber-100"
+                  title="Hủy generation đang chạy"
+                >
+                  <X className="h-3 w-3" />
+                  Hủy ({imageGen.progress.done}/{imageGen.progress.total})
+                </button>
+              ) : (
+                <button
+                  onClick={handleGenerateAll}
+                  className="flex items-center gap-1 rounded-lg border border-emerald-300 bg-emerald-50 px-2.5 py-1 text-[11px] text-emerald-800 hover:bg-emerald-100"
+                  title="Tạo ảnh cho tất cả section (KIE gpt-image-2)"
+                >
+                  <Sparkles className="h-3 w-3" />
+                  Tạo ảnh
+                </button>
+              )
             )}
             {onRegenerate && (
               <button

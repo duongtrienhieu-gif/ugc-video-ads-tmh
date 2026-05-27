@@ -23,6 +23,7 @@ import { SemanticDebugOverlay } from './SemanticDebugOverlay'
 import { DiagnosticsPanel } from './DiagnosticsPanel'
 import { TuningPanel } from './TuningPanel'
 import { ExportPanel } from './ExportPanel'
+import { SessionMetricsPanel } from './SessionMetricsPanel'
 import { applyTuning } from '../tuning/applyTuning'
 import { IDENTITY_KNOBS, isIdentityKnobs, type TuningKnobs } from '../tuning/types'
 import { scrollDiagnostics } from '../diagnostics/scrollDiagnostics'
@@ -113,8 +114,15 @@ export function SemanticMobilePage({
         {/* P8 diagnostics panel — only in diagnostics view */}
         {showDiagnostics && report && <DiagnosticsPanel report={report} />}
 
-        {/* P14 export panel — only in export view */}
-        {showExport && exportablePage && <ExportPanel page={exportablePage} />}
+        {/* INT — session observability metrics panel (appended to
+            diagnostics view when session is available). */}
+        {showDiagnostics && session && <SessionMetricsPanel session={session} />}
+
+        {/* P14 export panel — only in export view.
+            INT: pass sessionId for hosted preview share buttons. */}
+        {showExport && exportablePage && (
+          <ExportPanel page={exportablePage} sessionId={session?.sessionId} />
+        )}
 
         {/* P7 debug footer — page metrics + validator warnings.
             Hidden in clean mode for Ladipage screenshot workflow. */}

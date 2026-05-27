@@ -20,9 +20,27 @@ export { planImageGenerationPage } from './runtime/planImageGenerationPage'
 export { executeSectionGeneration } from './runtime/executeSectionGeneration'
 export type { ExecuteSectionInput } from './runtime/executeSectionGeneration'
 
-// Executors
+// LIVE: page-level batch execution
+export { executePageGeneration } from './runtime/executePageGeneration'
+export type {
+  ExecutePageGenerationOptions,
+  ExecutePageGenerationResult,
+} from './runtime/executePageGeneration'
+
+// LIVE: React hook for UI integration
+export { useImageGeneration } from './runtime/useImageGeneration'
+export type {
+  UseImageGenerationOptions,
+  UseImageGenerationState,
+  UseImageGenerationApi,
+} from './runtime/useImageGeneration'
+
+// Executors — mock (for dev/test) + KIE (for production)
 export { createMockExecutor } from './executors/mockExecutor'
 export type { MockExecutorOptions } from './executors/mockExecutor'
+
+export { createKieGptImageExecutor } from './executors/kieGptImageExecutor'
+export type { KieGptImageExecutorOptions } from './executors/kieGptImageExecutor'
 
 // Config (read-only — for QA / dev introspection)
 export { selectRenderer } from './config/rendererRouting'
