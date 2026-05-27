@@ -48,12 +48,24 @@ function samplePhases(seed: string, count = 3): ProofPhase[] {
   return picked
 }
 
-/** Top-level sampler: 3 ProofPieceConfig + texture per pack. */
-export function sampleProofConfig(seed: string, niche: NicheKey): ProofConfig {
+/** Top-level sampler: 3 ProofPieceConfig + texture per pack.
+ *
+ *  CP-SYNTHESIS (2026-05-28): when commercialPsych provided, use its
+ *  topObjections as the sampling pool (product-specific) instead of
+ *  niche-table NICHE_OBJECTIONS. Voice texture override applies in
+ *  proofPrompts.buildProofSystemPrompt — caller passes through. */
+export function sampleProofConfig(
+  seed: string,
+  niche: NicheKey,
+  commercialPsych?: import('../../productSynthesis').SynthesizedCommercialPsychology,
+): ProofConfig {
   const stances = sampleStances(seed, 3)
   const phases = samplePhases(seed, 3)
   const entropies = sampleEntropyProfiles(seed, 3)
-  const objections = sampleObjections(seed, niche, 2)
+  const synthesizedObj = commercialPsych && commercialPsych.topObjections.length > 0
+    ? commercialPsych.topObjections
+    : undefined
+  const objections = sampleObjections(seed, niche, 2, synthesizedObj)
   const texture = getTextureProfile(niche)
 
   const pieces: ProofPieceConfig[] = []

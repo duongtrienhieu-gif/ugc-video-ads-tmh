@@ -48,6 +48,9 @@ export function buildProofUserPrompt(
     painPoint: string
     storyContextLine: string
     config: ProofConfig
+    /** CP-SYNTHESIS (2026-05-28) — synthesized voice texture overrides
+     *  niche-baseline texture in textureBrief when provided. */
+    commercialPsychology?: import('../../productSynthesis').SynthesizedCommercialPsychology
   },
 ): string {
   const lines: string[] = []
@@ -60,8 +63,15 @@ export function buildProofUserPrompt(
   lines.push(`- Story summary: ${args.storyContextLine}`)
   lines.push('')
 
-  // Niche texture brief (sampled data)
-  lines.push(textureBrief(args.config.texture))
+  // Niche texture brief (sampled data, synthesis-aware override)
+  lines.push(textureBrief(
+    args.config.texture,
+    args.commercialPsychology ? {
+      typicalVoice: args.commercialPsychology.voiceTextureHint.typicalVoice,
+      platformFeel: args.commercialPsychology.voiceTextureHint.platformFeel,
+      textureCues: args.commercialPsychology.voiceTextureHint.textureCues,
+    } : undefined,
+  ))
   lines.push('')
 
   // Per-piece directives

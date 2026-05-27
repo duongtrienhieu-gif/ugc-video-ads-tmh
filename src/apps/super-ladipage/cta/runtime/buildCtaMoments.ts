@@ -11,15 +11,35 @@
 
 import type { CtaFlow, CtaPattern } from '../types'
 
-export function buildCtaMomentsBrief(flow: CtaFlow): string {
+/** Compose CTA moments brief.
+ *
+ *  CP-SYNTHESIS (2026-05-28): when commercialPsych.ctaEnergyVibe is
+ *  provided (product-specific synthesized), it OVERRIDES the niche-table
+ *  energyMode.vibe. Avoid patterns merged from both sources. Pattern:
+ *  same as nicheDesireBrief override. */
+export function buildCtaMomentsBrief(
+  flow: CtaFlow,
+  commercialPsych?: {
+    ctaEnergyVibe?: string
+    ctaAvoidPatterns?: string[]
+  },
+): string {
   const lines: string[] = []
+
+  const useSynthesizedVibe = Boolean(
+    commercialPsych && commercialPsych.ctaEnergyVibe && commercialPsych.ctaEnergyVibe.length > 5,
+  )
+  const vibe = useSynthesizedVibe ? commercialPsych!.ctaEnergyVibe! : flow.energyMode.vibe
+  const avoidPatterns = useSynthesizedVibe && commercialPsych!.ctaAvoidPatterns && commercialPsych!.ctaAvoidPatterns!.length > 0
+    ? Array.from(new Set([...commercialPsych!.ctaAvoidPatterns!, ...flow.energyMode.avoidPatterns]))
+    : flow.energyMode.avoidPatterns
 
   lines.push(`═══ CTA ORCHESTRATION (per-pack — lightweight action momentum) ═══`)
   lines.push(``)
-  lines.push(`CTA energy mode: ${flow.energyMode.id} (${flow.energyMode.niche})`)
-  lines.push(`  Vibe: ${flow.energyMode.vibe}`)
+  lines.push(`CTA energy: ${useSynthesizedVibe ? 'product-synthesized — AUTHORITATIVE' : `niche-baseline ${flow.energyMode.id} (${flow.energyMode.niche})`}`)
+  lines.push(`  Vibe: ${vibe}`)
   lines.push(`  ⛔ Final block (future-self-cta) MUST NOT default to:`)
-  for (const avoid of flow.energyMode.avoidPatterns) {
+  for (const avoid of avoidPatterns) {
     lines.push(`     ✗ ${avoid}`)
   }
   lines.push(``)

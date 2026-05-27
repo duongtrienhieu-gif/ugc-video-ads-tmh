@@ -417,14 +417,40 @@ export function getTextureProfile(niche: NicheKey): ProofTextureProfile {
   return PROOF_TEXTURE_PROFILES[niche]
 }
 
-/** Compose texture brief for proof prompt injection. */
-export function textureBrief(texture: ProofTextureProfile): string {
+/** Compose texture brief for proof prompt injection.
+ *
+ *  CP-SYNTHESIS (2026-05-28): when synthesizedVoiceHint provided
+ *  (product-specific from synthesizeCommercialPsychology), USE THOSE
+ *  for typicalVoice / platformFeel / textureCues. Niche-table avoidPatterns
+ *  still apply (cultural drift guards). Same pattern as SPEC.1. */
+export function textureBrief(
+  texture: ProofTextureProfile,
+  synthesizedVoiceHint?: {
+    typicalVoice?: string
+    platformFeel?: string
+    textureCues?: string[]
+  },
+): string {
+  const useSynthesis = Boolean(
+    synthesizedVoiceHint
+    && synthesizedVoiceHint.typicalVoice
+    && synthesizedVoiceHint.typicalVoice.length > 5,
+  )
+
+  const typicalVoice = useSynthesis ? synthesizedVoiceHint!.typicalVoice! : texture.typicalVoice
+  const platformFeel = useSynthesis && synthesizedVoiceHint!.platformFeel && synthesizedVoiceHint!.platformFeel!.length > 5
+    ? synthesizedVoiceHint!.platformFeel!
+    : texture.platformFeel
+  const textureCues = useSynthesis && synthesizedVoiceHint!.textureCues && synthesizedVoiceHint!.textureCues!.length > 0
+    ? synthesizedVoiceHint!.textureCues!
+    : texture.textureCues
+
   return [
-    `═══ NICHE TEXTURE (${texture.niche}) ═══`,
-    `Typical voice: ${texture.typicalVoice}`,
-    `Platform feel: ${texture.platformFeel}`,
+    `═══ PROOF TEXTURE (${useSynthesis ? 'product-synthesized — AUTHORITATIVE' : `niche-baseline ${texture.niche}`}) ═══`,
+    `Typical voice: ${typicalVoice}`,
+    `Platform feel: ${platformFeel}`,
     `Texture cues (weave 1-2 across 3 pieces):`,
-    ...texture.textureCues.map((c) => `  - ${c}`),
+    ...textureCues.map((c) => `  - ${c}`),
     `⛔ AVOID (sai voice / sai niche):`,
     ...texture.avoidPatterns.map((p) => `  ✗ ${p}`),
   ].join('\n')

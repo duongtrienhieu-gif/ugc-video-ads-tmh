@@ -29,6 +29,10 @@ export interface GenerateProofSetArgs {
   storyContextLine: string
   /** Seed for deterministic sampling. */
   seed: string
+  /** CP-SYNTHESIS (2026-05-28) — Commercial psychology synthesis result.
+   *  When provided, objections sampling pool + voice texture come from
+   *  this product-specific synthesis instead of niche-table defaults. */
+  commercialPsychology?: import('../../productSynthesis').SynthesizedCommercialPsychology
 }
 
 export interface GenerateProofSetResult {
@@ -70,7 +74,7 @@ function parseProofResponse(raw: string): ProofPiece[] | null {
 export async function generateProofSet(args: GenerateProofSetArgs): Promise<GenerateProofSetResult> {
   const startedAt = Date.now()
 
-  const config = sampleProofConfig(args.seed, args.productNiche)
+  const config = sampleProofConfig(args.seed, args.productNiche, args.commercialPsychology)
   const sampledStances = config.pieces.map((p) => p.stance.id)
 
   const systemPrompt = buildProofSystemPrompt()
@@ -80,6 +84,7 @@ export async function generateProofSet(args: GenerateProofSetArgs): Promise<Gene
     painPoint: args.painPoint,
     storyContextLine: args.storyContextLine,
     config,
+    commercialPsychology: args.commercialPsychology,
   })
 
   console.info(

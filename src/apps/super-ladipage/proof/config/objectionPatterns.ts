@@ -434,9 +434,24 @@ function hashSeed(s: string): number {
 }
 
 /** Sample 1-2 objections per pack — counter-proof focus.
- *  Returns 1 or 2 (sometimes 0 if niche has only 3 objections — bias toward 1-2). */
-export function sampleObjections(seed: string, niche: NicheKey, count = 2): NicheObjections['objections'] {
-  const pool = NICHE_OBJECTIONS[niche]?.objections ?? []
+ *
+ *  CP-SYNTHESIS (2026-05-28): when synthesizedObjections provided (from
+ *  productSynthesis.synthesizeCommercialPsychology), USE THOSE as the
+ *  authoritative pool — these are product-specific. Niche pool falls
+ *  back when synthesis missing. Same pattern as SPEC.1.
+ *
+ *  Returns 1-2 objections — bias toward 2 when pool has ≥3 items. */
+export function sampleObjections(
+  seed: string,
+  niche: NicheKey,
+  count = 2,
+  synthesizedObjections?: NicheObjections['objections'],
+): NicheObjections['objections'] {
+  // Use synthesis-derived objections when available (product-specific)
+  const useSynthesis = Array.isArray(synthesizedObjections) && synthesizedObjections.length > 0
+  const pool: NicheObjections['objections'] = useSynthesis
+    ? synthesizedObjections!
+    : (NICHE_OBJECTIONS[niche]?.objections ?? [])
   if (pool.length === 0) return []
 
   const all = [...pool]

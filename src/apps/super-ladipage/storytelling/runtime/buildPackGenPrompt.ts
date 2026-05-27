@@ -211,6 +211,10 @@ export function buildPackGenUserPrompt(
   selection: NarratorDnaSelection,
   retryFeedback?: string,
   synthesizedReaderSymptoms?: string[],
+  /** CP-SYNTHESIS (2026-05-28) — Commercial psychology overrides niche
+   *  defaults in desire / cta / objections / proof texture briefs.
+   *  When provided, the niche-table values become fallback baseline. */
+  commercialPsychology?: import('../../productSynthesis').SynthesizedCommercialPsychology,
 ): string {
   const lines: string[] = []
 
@@ -224,8 +228,16 @@ export function buildPackGenUserPrompt(
   lines.push(nicheDomainLockBrief(selection.domainLock, synthesizedReaderSymptoms))
   lines.push('')
 
-  // ─── C2: Niche desire architecture (anti-flattening) ────────────────
-  lines.push(nicheDesireBrief(selection.desireArchitecture))
+  // ─── C2: Niche desire architecture (anti-flattening, synthesis-aware) ────
+  // CP-SYNTHESIS: commercial psychology overrides niche-baseline desire.
+  lines.push(nicheDesireBrief(
+    selection.desireArchitecture,
+    commercialPsychology ? {
+      primaryDesire: commercialPsychology.primaryDesire,
+      desireTensions: commercialPsychology.desireTensions,
+      emotionalGravity: commercialPsychology.emotionalGravity,
+    } : undefined,
+  ))
   lines.push('')
 
   // ─── C2: Niche mechanism vocab (anti-generic-wellness) ──────────────
@@ -236,8 +248,15 @@ export function buildPackGenUserPrompt(
   lines.push(memoryAnchorBrief(selection.memoryAnchor))
   lines.push('')
 
-  // ─── P3: CTA orchestration (lightweight, sampling-driven) ───────────
-  lines.push(buildCtaMomentsBrief(selection.ctaFlow))
+  // ─── P3: CTA orchestration (lightweight, sampling-driven, synthesis-aware) ─
+  // CP-SYNTHESIS: commercial psychology overrides niche-baseline CTA vibe.
+  lines.push(buildCtaMomentsBrief(
+    selection.ctaFlow,
+    commercialPsychology ? {
+      ctaEnergyVibe: commercialPsychology.ctaEnergyVibe,
+      ctaAvoidPatterns: commercialPsychology.ctaAvoidPatterns,
+    } : undefined,
+  ))
   lines.push('')
 
   // ─── Per-pack archetype + DNA briefs ─────────────────────────────

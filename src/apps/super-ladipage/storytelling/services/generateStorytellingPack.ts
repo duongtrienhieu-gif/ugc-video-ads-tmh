@@ -37,7 +37,8 @@ import {
   PACING_OVERRIDES,
 } from '../../productClass'
 import { readProductImages } from '../../productVision'
-import { synthesizeProductBrief, buildSynthesizedBrief } from '../../productSynthesis'
+import { synthesizeProductBrief, buildSynthesizedBrief, synthesizeCommercialPsychology } from '../../productSynthesis'
+import type { SynthesizedCommercialPsychology } from '../../productSynthesis'
 import { buildProductBrief } from '../runtime/buildPackGenPrompt'
 import { generatePackWithRetry } from '../runtime/retryWithFeedback'
 import type { GeneratedPackResult } from '../runtime/retryWithFeedback'
@@ -299,6 +300,44 @@ export async function generateStorytellingPack(
   const productBrief = buildProductBrief(product.productName, input.niche, product.painPoints)
   const realityBrief = buildRealityBrief(productReality)
 
+  // ─── 3.4 CP-SYNTHESIS (2026-05-28) — Commercial psychology synthesis ──
+  // Hybrid layered synthesis (Hướng B): derive product-specific commercial
+  // psychology (desire / CTA / objections / proof voice / mechanism vocab)
+  // that OVERRIDES niche-table defaults when present. Same pattern as
+  // SPEC.1 (synthesis symptoms override niche pool). Works for any product
+  // including those outside 22 known niches.
+  let commercialPsychology: SynthesizedCommercialPsychology | undefined = undefined
+  try {
+    commercialPsychology = await synthesizeCommercialPsychology(
+      {
+        productName: product.productName,
+        productPainPoints: product.painPoints,
+        productBenefits:   product.benefits,
+        productUsp:        product.usps,
+        productPricing:    product.offer,
+        niche: input.niche,
+        productEssence: synthesizedBrief.productEssence,
+        readerSpecificSymptoms: synthesizedBrief.readerSpecificSymptoms,
+        usageScene: synthesizedBrief.usageScene,
+        realisticFailedAttempts: synthesizedBrief.realisticFailedAttempts,
+        targetLanguage: params.language,
+      },
+      {
+        geminiApiKey: settingsForNiche.geminiApiKey,
+        kieApiKey: settingsForNiche.kieApiKey,
+      },
+    )
+    console.info(
+      `[storytelling] commercial psychology: ${commercialPsychology.source}, ` +
+      `desire=${commercialPsychology.primaryDesire.length}c, ` +
+      `objections=${commercialPsychology.topObjections.length}, ` +
+      `vocab_hints=${commercialPsychology.mechanismVocabHints.length}` +
+      (commercialPsychology.rationale ? ` // ${commercialPsychology.rationale.slice(0, 80)}` : ''),
+    )
+  } catch (err) {
+    console.warn(`[storytelling] Commercial psychology synthesis failed — pack uses niche-baseline only:`, err)
+  }
+
   // ─── 3.5 v5.1 — Select narrator/DNA/curve (human variation engine) ──
   const selection = selectNarratorDna({
     niche: input.niche,
@@ -325,6 +364,10 @@ export async function generateStorytellingPack(
     // PARADIGM-FIX (2026-05-27): pass full synthesis brief so fallback
     // content adapts to product paradigm (no more supplement hardcode).
     synthesisBriefObj: synthesizedBrief,
+    // CP-SYNTHESIS (2026-05-28): commercial psychology synthesis result
+    // overrides niche-table defaults in desireBrief / ctaBrief /
+    // objectionSampling / textureBrief.
+    commercialPsychology,
     geminiApiKey,
     kieApiKey,
     selection,

@@ -440,19 +440,45 @@ export const NICHE_DESIRE_ARCHITECTURE: Record<NicheKey, NicheDesireArchitecture
   },
 }
 
-/** Get desire architecture for niche — never null (8 niches covered). */
+/** Get desire architecture for niche — never null (22 niches covered). */
 export function getDesireForNiche(niche: NicheKey): NicheDesireArchitecture {
   return NICHE_DESIRE_ARCHITECTURE[niche]
 }
 
-/** Compose desire brief for prompt injection. */
-export function nicheDesireBrief(desire: NicheDesireArchitecture): string {
+/** Compose desire brief for prompt injection.
+ *
+ *  CP-SYNTHESIS (2026-05-28): when product-specific commercial psychology
+ *  is provided (primaryDesire / desireTensions / emotionalGravity from
+ *  synthesizeCommercialPsychology), THEY OVERRIDE niche-table defaults.
+ *  Niche table acts as fallback baseline. Same pattern as SPEC.1
+ *  (synthesis symptoms override niche pool). */
+export function nicheDesireBrief(
+  desire: NicheDesireArchitecture,
+  commercialPsych?: {
+    primaryDesire?: string
+    desireTensions?: string[]
+    emotionalGravity?: string
+  },
+): string {
+  const useSynthesis = Boolean(
+    commercialPsych
+    && commercialPsych.primaryDesire && commercialPsych.primaryDesire.length > 5,
+  )
+
+  const primaryDesire = useSynthesis ? commercialPsych!.primaryDesire! : desire.primaryDesire
+  const desireTensions = useSynthesis && commercialPsych!.desireTensions && commercialPsych!.desireTensions!.length > 0
+    ? commercialPsych!.desireTensions!
+    : desire.desireTensions
+  const emotionalGravity = useSynthesis && commercialPsych!.emotionalGravity && commercialPsych!.emotionalGravity!.length > 5
+    ? commercialPsych!.emotionalGravity!
+    : desire.emotionalGravity
+
   return [
-    `═══ DESIRE GRAVITY — niche-specific (${desire.niche}) ═══`,
-    `Primary desire: ${desire.primaryDesire}`,
-    `Emotional gravity (Phase 4 ending MUST land here): ${desire.emotionalGravity}`,
+    `═══ DESIRE GRAVITY (${useSynthesis ? 'product-synthesized — AUTHORITATIVE' : `niche-baseline ${desire.niche}`}) ═══`,
+    `Primary desire: ${primaryDesire}`,
+    `Emotional gravity (Phase 4 ending MUST land here): ${emotionalGravity}`,
     `Desire tensions (use 1-2 in Phase 1-2 to surface):`,
-    ...desire.desireTensions.map((t) => `  - ${t}`),
+    ...desireTensions.map((t) => `  - ${t}`),
     `⛔ FORBIDDEN Phase-4 defaults (anti-flattening — NEVER end pack with these):`,
     ...desire.forbiddenDefaults.map((d) => `  ✗ ${d}`),
   ].join('\n')

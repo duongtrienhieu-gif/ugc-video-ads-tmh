@@ -72,3 +72,88 @@ export interface SynthesizeProductBriefKeys {
   geminiApiKey: string
   kieApiKey: string
 }
+
+// ═════════════════════════════════════════════════════════════════════
+// CP-SYNTHESIS (2026-05-27) — Commercial Psychology synthesis
+//
+// Hybrid layered synthesis: niche tables (NICHE_DESIRE / CTA / OBJECTIONS
+// / PROOF_TEXTURE / MECHANISM_VOCAB) provide CULTURAL REGISTER baseline,
+// but per-pack commercial psychology is REFINED via 1 Gemini call from
+// product reality. Output OVERRIDES niche defaults when present —
+// same pattern as SPEC.1 (synthesis symptoms override niche pool).
+//
+// Result: pack adapts commercial psychology to ANY product including
+// products outside the 22 known niches, while preserving deterministic
+// anti-drift guardrails from niche tables when applicable.
+// ═════════════════════════════════════════════════════════════════════
+
+export interface CommercialObjection {
+  /** Reader's likely skeptical question. */
+  objection: string
+  /** Counter-posture — narrator's emotional response stance. */
+  counterPosture: string
+}
+
+export interface CommercialVoiceTexture {
+  /** Typical voice (age + demographic + register). */
+  typicalVoice: string
+  /** Platform feel where this voice lives. */
+  platformFeel: string
+  /** 3-5 texture cues — niche/product-specific phrases / references. */
+  textureCues: string[]
+}
+
+export interface SynthesizedCommercialPsychology {
+  /** Primary buying desire — what THIS reader actually wants emotionally.
+   *  Overrides NICHE_DESIRE_ARCHITECTURE.primaryDesire when more specific. */
+  primaryDesire: string
+  /** 3-5 product-specific desire tensions driving purchase. */
+  desireTensions: string[]
+  /** Where Phase 4 ending must land emotionally for THIS product. */
+  emotionalGravity: string
+
+  /** Action push energy for CTA — vibe description, NOT prescriptive rule.
+   *  Overrides CTA_ENERGY_MODES.vibe. */
+  ctaEnergyVibe: string
+  /** Anti-default CTA patterns for THIS product type. */
+  ctaAvoidPatterns: string[]
+
+  /** Top 3 objections + counter-postures specific to THIS product.
+   *  Overrides NICHE_OBJECTIONS sampling when present. */
+  topObjections: CommercialObjection[]
+
+  /** Voice texture for proof generation — overrides PROOF_TEXTURE_PROFILES. */
+  voiceTextureHint: CommercialVoiceTexture
+
+  /** Concrete mechanism vocabulary specific to THIS product.
+   *  AUGMENTS NICHE_MECHANISM_VOCAB (intersection used in prompt). */
+  mechanismVocabHints: string[]
+
+  /** Source — gemini synthesis (success) or fallback (call failed). */
+  source: 'gemini-synthesis' | 'fallback'
+
+  /** Optional rationale for QA. */
+  rationale?: string
+}
+
+export interface SynthesizeCommercialPsychologyInput {
+  productName: string
+  productPainPoints?: string
+  productBenefits?: string
+  productUsp?: string
+  productPricing?: string
+  niche: NicheKey
+  /** Reuse fields from productBrief — single source of truth. */
+  productEssence: string
+  readerSpecificSymptoms: string[]
+  usageScene: string
+  realisticFailedAttempts: string[]
+  /** Optional cultural anchor from existing niche tables (for register hint). */
+  nicheBaselineCulturalHint?: string
+  targetLanguage: 'vi' | 'ms' | 'en'
+}
+
+export interface SynthesizeCommercialPsychologyKeys {
+  geminiApiKey: string
+  kieApiKey: string
+}

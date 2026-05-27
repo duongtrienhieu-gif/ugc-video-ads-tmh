@@ -78,6 +78,11 @@ interface RunArgs {
    *  data (usageScene / realisticFailedAttempts / etc.) instead of static
    *  supplement-paradigm templates. */
   synthesisBriefObj?: SynthesizedProductBrief
+  /** CP-SYNTHESIS (2026-05-28) — Commercial psychology synthesis result.
+   *  Overrides niche-table defaults in 4 brief functions (desire / cta /
+   *  objections / proof texture). Same pattern as synthesisBriefObj for
+   *  symptoms. */
+  commercialPsychology?: import('../../productSynthesis').SynthesizedCommercialPsychology
   geminiApiKey: string
   kieApiKey: string
   /** v5.1 — Narrator/DNA/curve selection. OPTIONAL — if undefined,
@@ -113,6 +118,7 @@ async function runOnce(
     args.selection,
     retryFeedback,
     args.synthesizedReaderSymptoms,
+    args.commercialPsychology,
   )
   logPromptStats(systemPrompt, userPrompt, args.plan)
 
@@ -270,6 +276,7 @@ export async function generatePackWithRetry(args: RunArgs): Promise<GeneratedPac
     painPoint:        args.productInfo.painPoint,
     storyContextLine: storyContext,
     seed:             mainResult.selection.seed,
+    commercialPsychology: args.commercialPsychology,
   })
 
   // P2 — Distribute proof pieces into proof block placeholders by phaseResonance.
