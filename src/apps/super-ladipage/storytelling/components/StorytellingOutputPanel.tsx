@@ -50,15 +50,15 @@ export default function StorytellingOutputPanel({
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
   // P7 — Toggle between legacy pack view and semantic mobile preview.
-  // Semantic preview only available when pack has imagePromptPage
-  // (P10 superset of imageIntentPage — post-P4..P10 packs).
+  // Semantic preview only available when pack has rendererAdaptedPage
+  // (P11 superset of imagePromptPage — post-P4..P11 packs).
   const [viewMode, setViewMode] = useState<'pack' | 'semantic'>('pack')
 
   const addToast = useAppStore((s) => s.addToast)
 
   const meta = pack.storytellingMeta
   const character = pack.characterProfile
-  const hasSemantic = Boolean(meta.imagePromptPage)
+  const hasSemantic = Boolean(meta.rendererAdaptedPage)
 
   const handleSave = () => {
     if (saving || saved || !onSaveAsProject) return
@@ -108,7 +108,7 @@ export default function StorytellingOutputPanel({
           </div>
 
           <div className="flex items-center gap-1.5 shrink-0">
-            {/* P7 — Semantic preview toggle (only if pack has imagePromptPage / P10 superset) */}
+            {/* P7 — Semantic preview toggle (only if pack has rendererAdaptedPage / P11 superset) */}
             {hasSemantic && (
               <div className="flex items-center rounded-lg border border-stone-300 bg-white overflow-hidden">
                 <button
@@ -198,11 +198,11 @@ export default function StorytellingOutputPanel({
 
       {/* ── READING COLUMN ──────────────────────────────────────────── */}
       <div className="flex-1 overflow-y-auto">
-        {viewMode === 'semantic' && meta.imagePromptPage ? (
-          // P7 — Semantic mobile preview renderer (consumes ImagePromptPage
-          // via subtype assignability to VisualSemanticsPage prop, P10)
+        {viewMode === 'semantic' && meta.rendererAdaptedPage ? (
+          // P7 — Semantic mobile preview renderer (consumes RendererAdaptedPage
+          // via subtype assignability to VisualSemanticsPage prop, P11)
           <SemanticMobilePage
-            page={meta.imagePromptPage}
+            page={meta.rendererAdaptedPage}
             characterName={character?.name}
           />
         ) : (

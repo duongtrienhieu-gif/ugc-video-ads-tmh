@@ -658,14 +658,14 @@ export interface StorytellingMeta {
   /** Selected discovery channel for section 6. */
   discoveryChannelId?: string
 
-  // P10 — Image prompt page (composer + renderContract + visualSemantics
-  // + imageSemantics + prompt translation). Replaces P9 imageIntentPage
-  // field. ImagePromptPage IS-A ImageIntentPage IS-A VisualSemanticsPage,
-  // so all upstream consumers (renderer, debug overlays, diagnostics)
-  // continue to work via subtype assignability.
-  /** ImagePromptPage IS-A ImageIntentPage + per-section ImagePromptContract
-   *  (6 fragment buckets) when imageIntent exists. Renderer-agnostic. */
-  imagePromptPage?: import('../promptTranslation').ImagePromptPage
+  // P11 — Renderer-adapted page (composer + renderContract + visualSemantics
+  // + imageSemantics + prompt translation + 3 renderer adapters). Replaces
+  // P10 imagePromptPage field. RendererAdaptedPage IS-A ImagePromptPage
+  // IS-A ImageIntentPage IS-A VisualSemanticsPage — full subtype chain,
+  // all upstream consumers continue working via subtype assignability.
+  /** RendererAdaptedPage IS-A ImagePromptPage + per-section RendererOutputs
+   *  (gptImage / flux / sdxl). Pure syntax translation, no semantics drift. */
+  rendererAdaptedPage?: import('../rendererAdapters').RendererAdaptedPage
 }
 
 /** Pack output — extends LandingPagePack shape để OutputPanel render được

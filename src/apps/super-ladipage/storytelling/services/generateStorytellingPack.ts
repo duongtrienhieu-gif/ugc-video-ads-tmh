@@ -39,6 +39,7 @@ import { deriveRenderContractedPage } from '../../renderContract'
 import { deriveVisualSemanticsPage } from '../../visualSemantics'
 import { deriveImageIntentPage } from '../../imageSemantics'
 import { translateImageIntentPage } from '../../promptTranslation'
+import { adaptRenderContractedPage } from '../../rendererAdapters'
 
 // ── Map storytelling BlockId → existing UGC SectionType for
 //    LandingSection.type compat. Storytelling block ID stored
@@ -282,6 +283,20 @@ export async function generateStorytellingPack(
     `[storytelling/promptTranslation] ${imagePromptPage.promptBearingSectionCount}/${imagePromptPage.totalSections} sections received imagePromptContract`,
   )
 
+  // ─── 6.10 P11 — Renderer adapters (gptImage / flux / sdxl) ────────
+  // Pure SYNTAX translation per renderer. Psychology preserved across
+  // all 3 outputs. NO Midjourney. NO semantic re-interpretation.
+  const rendererAdaptedPage = adaptRenderContractedPage(imagePromptPage)
+  if (rendererAdaptedPage.rendererAdapterWarnings.length > 0) {
+    console.warn(`[storytelling/rendererAdapters] ${rendererAdaptedPage.rendererAdapterWarnings.length} adapter warning(s):`)
+    for (const w of rendererAdaptedPage.rendererAdapterWarnings) {
+      console.warn(`  ⚠ ${w}`)
+    }
+  }
+  console.log(
+    `[storytelling/rendererAdapters] ${rendererAdaptedPage.adaptedSectionCount}/${rendererAdaptedPage.totalSections} sections received rendererOutputs`,
+  )
+
   // ─── 7. Assemble StorytellingPack ────────────────────────────────
   const pack: StorytellingPack = {
     productId:   params.productId,
@@ -312,11 +327,11 @@ export async function generateStorytellingPack(
       // v5.3 — Hook + Discovery variation
       hookAxisId:           selection.hookAxis,
       discoveryChannelId:   selection.discoveryChannel,
-      // P10 — Image prompt page (composer + renderContract + visualSemantics +
-      // imageIntent + prompt fragment translation). ImagePromptPage IS-A
-      // ImageIntentPage IS-A VisualSemanticsPage — all upstream consumers
-      // continue to work via subtype assignability.
-      imagePromptPage,
+      // P11 — Renderer-adapted page (composer + renderContract + visualSemantics
+      // + imageIntent + prompt fragments + 3 renderer adapters). Full subtype
+      // chain: RendererAdaptedPage IS-A ImagePromptPage IS-A ImageIntentPage
+      // IS-A VisualSemanticsPage — all upstream consumers continue working.
+      rendererAdaptedPage,
     },
   }
 
