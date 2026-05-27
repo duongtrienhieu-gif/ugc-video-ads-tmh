@@ -65,6 +65,86 @@ const FALLBACK_HEADINGS: Record<PISectionType, string> = {
   'pricing-narrator': 'Lúc tôi đặt',
 }
 
+/** OPT.6 (2026-05-28) — Partial JSON recovery for batch Gemini outputs.
+ *
+ *  Gemini sometimes truncates mid-string (server-side limit or mid-stream
+ *  cut) leaving a JSON like:
+ *      { "type-a": { ... },
+ *        "type-b": { ... },
+ *        "type-c": { "heading": "...",  // ← truncated here
+ *  Standard JSON.parse throws on the whole document. This helper walks
+ *  the string, tracks brace depth + string state, and identifies every
+ *  complete `"key": { ...balanced }` entry that lives BEFORE the
+ *  truncation point. It then reassembles a valid root object containing
+ *  only those complete entries.
+ *
+ *  Returns null when nothing is recoverable, so the caller can decide
+ *  whether to fall back fully.
+ */
+function recoverPartialBatchJson(raw: string): BatchOutput | null {
+  // Find the opening root brace
+  const rootStart = raw.indexOf('{')
+  if (rootStart === -1) return null
+
+  const out: Record<string, unknown> = {}
+  let i = rootStart + 1
+
+  // Walk top-level entries: "key": { ... }
+  while (i < raw.length) {
+    // Skip whitespace + commas
+    while (i < raw.length && /[\s,]/.test(raw[i])) i++
+    if (i >= raw.length) break
+    if (raw[i] === '}') break   // root closes — done
+
+    // Expect a quoted key
+    if (raw[i] !== '"') return Object.keys(out).length > 0 ? (out as BatchOutput) : null
+    const keyStart = i + 1
+    i++
+    while (i < raw.length && raw[i] !== '"') {
+      if (raw[i] === '\\') i++
+      i++
+    }
+    if (i >= raw.length) break
+    const key = raw.slice(keyStart, i)
+    i++   // past closing quote
+
+    // Skip whitespace + colon
+    while (i < raw.length && /[\s:]/.test(raw[i])) i++
+    if (i >= raw.length) break
+
+    // Expect '{' to start value object
+    if (raw[i] !== '{') return Object.keys(out).length > 0 ? (out as BatchOutput) : null
+    const valStart = i
+    let depth = 0
+    let inString = false
+    let escape = false
+    let valEnd = -1
+    for (; i < raw.length; i++) {
+      const c = raw[i]
+      if (escape) { escape = false; continue }
+      if (c === '\\' && inString) { escape = true; continue }
+      if (c === '"') { inString = !inString; continue }
+      if (inString) continue
+      if (c === '{') depth++
+      else if (c === '}') {
+        depth--
+        if (depth === 0) { valEnd = i; break }
+      }
+    }
+    if (valEnd === -1) break   // truncated mid-value — can't include this entry
+
+    const valStr = raw.slice(valStart, valEnd + 1)
+    try {
+      out[key] = JSON.parse(valStr)
+    } catch {
+      // entry itself is malformed — skip, keep going for later complete ones
+    }
+    i = valEnd + 1
+  }
+
+  return Object.keys(out).length > 0 ? (out as BatchOutput) : null
+}
+
 /** Batch-generate ALL planned PI sections in ONE Gemini call.
  *  Returns array of PIBlocks in plan order. */
 export async function generatePIBatch(
@@ -144,7 +224,27 @@ NO markdown fences. NO prose outside JSON. JSON only.`
       cleaned = cleaned.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '').trim()
     }
 
-    const parsed = JSON.parse(cleaned) as BatchOutput
+    // OPT.6 (2026-05-28) — Partial JSON recovery.
+    // Gemini occasionally truncates mid-entry (saw position 2099 / 4 blocks
+    // at 3000 maxTokens — likely a server-side guard, not a token cap).
+    // Before this change a single SyntaxError dumped ALL 4 PI blocks to
+    // fallback. Now we try a strict parse first, and if that throws we
+    // attempt a brace-balanced slice that includes every complete entry
+    // BEFORE the truncation point. Worst case we still fall back per-block
+    // for the truncated entry, but the 3 complete ones keep Gemini quality.
+    let parsed: BatchOutput
+    try {
+      parsed = JSON.parse(cleaned) as BatchOutput
+    } catch (parseErr) {
+      const recovered = recoverPartialBatchJson(cleaned)
+      if (recovered) {
+        const recoveredCount = Object.keys(recovered).length
+        console.warn(`[PI/batch] strict parse failed (${(parseErr as Error).message.slice(0, 80)}); recovered ${recoveredCount} complete entries from partial JSON`)
+        parsed = recovered
+      } else {
+        throw parseErr   // Let outer catch trigger full fallback as before
+      }
+    }
     const blocks: PIBlock[] = []
     let fallbackUsedCount = 0
 

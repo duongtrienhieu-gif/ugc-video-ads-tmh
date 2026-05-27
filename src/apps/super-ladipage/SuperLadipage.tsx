@@ -490,7 +490,15 @@ export default function SuperLadipage() {
         />
       </div>
 
-      <div className="relative flex w-full flex-1 flex-col min-h-[400px] lg:min-h-0">
+      {/* UI-FIX6 (2026-05-28) — `min-w-0` + `overflow-x-hidden` are
+          REQUIRED on a flex-1 child. Without min-w-0, the default
+          min-width:auto refuses to shrink below content size and any
+          wide child (article column, long string, image) pushes the
+          whole page into a horizontal scrollbar. This was the real
+          reason the storytelling pack column extended past the right
+          edge on wide viewports — previous fixes inside the article
+          itself couldn't beat the unconstrained flex parent. */}
+      <div className="relative flex w-full flex-1 flex-col min-h-[400px] lg:min-h-0 min-w-0 overflow-x-hidden">
         <div className="absolute right-4 top-14 z-30">
           <AutoSaveIndicator
             lastSavedAt={sessionApi.lastSavedAt}

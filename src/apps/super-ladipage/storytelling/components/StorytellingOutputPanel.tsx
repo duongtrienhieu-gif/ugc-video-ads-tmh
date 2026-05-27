@@ -433,11 +433,14 @@ export default function StorytellingOutputPanel({
           // Legacy pack view (default). FIX 2026-05-27: storytelling-article
           // class enables Lora + Be Vietnam Pro fonts that render VN/MS
           // diacritics cleanly (was broken with browser default serif).
-          // UI-FIX2 (2026-05-28): max-w-prose (65ch ~700px) was too narrow
-          // on >1024px viewports — large empty gaps on both sides forced
-          // user to scroll. Bumped to max-w-4xl (~896px) for readable
-          // column without wasting screen real estate.
-          <article className="storytelling-article max-w-4xl mx-auto px-5 md:px-8 py-12 md:py-20">
+          // UI-FIX6 (2026-05-28) — Per user feedback (3rd time fixing
+          // this): drop mx-auto so the article hugs the LEFT edge of
+          // the panel, drop max-w from 4xl→3xl so the column never
+          // creeps past the panel's right edge (especially with the
+          // html { font-size: 20px } rem scaling), and add w-full so
+          // the article fills available space up to the cap without
+          // forcing a horizontal scroll.
+          <article className="storytelling-article w-full max-w-3xl px-5 md:px-8 py-12 md:py-20">
             {(() => {
               // POST-PI lookup fix (2026-05-27):
               // pack.sections is 13-15 storytelling blocks + 5 PI blocks.
@@ -953,7 +956,8 @@ function StorytellingSectionView({
               Surfaces the failure reason + retry button so user knows WHY
               and can take action (instead of clicking "Tạo ảnh" blindly). */}
           {imageFailureReason && !imageUrl && !isImageGenerating && (
-            <div className="mt-2 max-w-sm mx-auto rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-[11px]">
+            // UI-FIX6: left-align failure box with the rest of the column
+            <div className="mt-2 max-w-sm rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-[11px]">
               <div className="flex items-start gap-2 text-amber-800">
                 <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
                 <div className="flex-1 min-w-0">
@@ -992,11 +996,11 @@ function StorytellingSectionView({
           dark surface). All rose-50 / border-rose-200 / text-rose-* tokens
           already have dark-mode overrides in src/index.css — no new CSS. */}
       {hasVnTranslation && (
-        // UI-FIX4 (2026-05-28): clamp VN box to max-w-2xl mx-auto so it
-        // doesn't stretch across the full article column (was visually
-        // overpowering on wide viewports). Body copy stays max-w-4xl;
-        // the translation aside sits centered + narrower like a callout.
-        <details className="mt-6 mx-auto max-w-2xl rounded-lg border border-rose-200 bg-rose-50 px-5 py-3 group">
+        // UI-FIX6 (2026-05-28): drop mx-auto and clamp tighter to
+        // max-w-xl so the VN aside hugs the LEFT edge in line with
+        // the body column above it. User explicitly asked for "tất
+        // cả nằm dọc thẳng hàng, sát lề trái, lề phải không mở rộng".
+        <details className="mt-6 w-full max-w-xl rounded-lg border border-rose-200 bg-rose-50 px-5 py-3 group">
           <summary className="cursor-pointer text-[11px] uppercase tracking-wider font-semibold text-rose-700 select-none flex items-center gap-2">
             <span>🇻🇳 Bản dịch tiếng Việt</span>
             <span className="text-rose-500 italic normal-case tracking-normal font-normal group-open:hidden">
@@ -1048,8 +1052,12 @@ function ImagePlaceholder({
 
   return (
     <figure className="relative mb-8">
+      {/* UI-FIX6 (2026-05-28): drop mx-auto so the image/placeholder
+          left-aligns with the body column instead of centering inside
+          the article. Keeps the whole pack visually flush against the
+          left edge of the panel as user requested. */}
       <div
-        className={`relative ${aspectClass} w-full max-w-sm mx-auto rounded-sm border border-dashed border-stone-300 bg-stone-100/40 flex flex-col items-center justify-center text-center overflow-hidden`}
+        className={`relative ${aspectClass} w-full max-w-sm rounded-sm border border-dashed border-stone-300 bg-stone-100/40 flex flex-col items-center justify-center text-center overflow-hidden`}
       >
         {hasImage ? (
           // ── REAL IMAGE ─────────────────────────────────────────────
