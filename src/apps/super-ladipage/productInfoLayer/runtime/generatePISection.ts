@@ -193,33 +193,78 @@ const PROMPT_BUILDERS: Record<PISectionType, (input: GeneratorInput) => string> 
   'pricing-narrator':        buildPromptPricing,
 }
 
-// ─── Fallback paragraphs (when Gemini fails) ──────────────────────────
+// ─── Fallback paragraphs (when Gemini fails) — SYNTHESIS-AWARE ────────
+//
+// PARADIGM-FIX (2026-05-27): old fallback hardcoded SUPPLEMENT paradigm
+// ("Tôi uống đều mỗi sáng", "không tương tác mạnh với thuốc đang dùng")
+// → broke for non-supplement products (dental powder, eye drops, knee
+// brace, sleep pillow, etc.).
+//
+// New fallback READS from synthesisBrief — usageScene + productEssence +
+// realisticFailedAttempts — so output adapts to actual product paradigm.
+// When synthesis data missing, falls back to GENERIC neutral phrasing
+// that works across paradigms (no "uống" / "tiêm" / "đeo" assumption).
 
 function fallbackBlock(input: GeneratorInput): PIBlock {
+  const brief = input.synthesizedBrief
+  const hasUsageScene = brief.usageScene && brief.usageScene.length > 10
+  const hasEssence    = brief.productEssence && brief.productEssence.length > 10
+  const hasFailedAtt  = Array.isArray(brief.realisticFailedAttempts) && brief.realisticFailedAttempts.length > 0
+
   switch (input.type) {
-    case 'mechanism-personal':
-      return makeBlock(input.type, 'Cái cơ chế tôi mới hiểu', [
-        `Tôi tò mò nên đọc thêm về ${input.productName}. Hóa ra nó không phải kiểu kích thích ngắn hạn — mà là hỗ trợ cơ thể tự cân bằng lại nhịp điệu vốn có.`,
-        `Trước tôi cứ nghĩ là cứ uống vitamin tổng hợp là đủ. Lúc đó tôi mới hiểu, không phải lúc nào "đủ chất" cũng là "đúng cách cơ thể cần".`,
-      ])
-    case 'ingredients-usp-woven':
-      return makeBlock(input.type, 'Cái tôi check kỹ trước khi uống', [
-        `Tôi đọc kỹ hộp trước khi đặt. ${input.productIngredients ? 'Các thành phần liệt kê khá rõ — đầy đủ, không bị thiếu cái cơ thể cần.' : 'Thành phần liệt kê rõ ràng trên bao bì.'}`,
-        input.productUsp ? `Cái khác tôi nhận ra: ${input.productUsp.slice(0, 100)}. Đó là điểm tôi đánh giá cao so với mấy loại tôi đã thử trước.` : `Tôi cẩn thận vì đã thử nhiều thứ rồi — lần này tôi thấy yên tâm hơn.`,
-      ])
-    case 'usage-faq-personal':
-      return makeBlock(input.type, 'Cách tôi dùng + cái vợ tôi hỏi', [
-        `Tôi uống đều mỗi sáng, sau khi ăn — nguyên tắc đơn giản, không cần ép.`,
-        `Vợ tôi có hỏi, "Có an toàn không?". Tôi đã check trước rồi nên trả lời được — không tương tác mạnh với thuốc đang dùng. Bác sĩ confirm khi tôi đi tái khám.`,
-      ])
-    case 'social-proof-collective':
+    case 'mechanism-personal': {
+      // Mechanism explanation uses productEssence when available (knows actual
+      // product action mode). Otherwise generic paradigm-neutral phrasing.
+      const para1 = hasEssence
+        ? `Tôi tò mò nên đọc thêm về ${input.productName}. Hóa ra nó hoạt động khác hẳn so với cách tôi nghĩ trước đây.`
+        : `Tôi tò mò nên đọc thêm về ${input.productName}. Hóa ra cái cách nó hoạt động khác so với những gì tôi nghĩ trước đây.`
+      const para2 = hasEssence
+        ? `Cụ thể: ${brief.productEssence.slice(0, 220)}. Khi đọc tới đây tôi mới hiểu vì sao mấy thứ tôi thử trước không hiệu quả — tôi đã tập trung sai chỗ.`
+        : `Tôi không hiểu hết về mặt khoa học. Tôi chỉ biết cách tiếp cận này khác với những gì tôi đã thử trước đây — và đó là điều khiến tôi quyết định thử.`
+      return makeBlock(input.type, 'Cái cơ chế tôi mới hiểu', [para1, para2])
+    }
+
+    case 'ingredients-usp-woven': {
+      const para1 = input.productIngredients && input.productIngredients.trim().length > 5
+        ? `Tôi đọc kỹ hộp trước khi đặt. Thành phần liệt kê khá rõ: ${input.productIngredients.slice(0, 180)}. Không có cái gì làm tôi gợn nghi.`
+        : `Tôi đọc kỹ hộp trước khi đặt. Thành phần liệt kê rõ ràng trên bao bì — không có cái gì làm tôi gợn nghi.`
+      const para2 = input.productUsp && input.productUsp.trim().length > 5
+        ? `Cái khác tôi nhận ra: ${input.productUsp.slice(0, 160)}. Đó là điểm tôi đánh giá cao so với mấy loại tôi đã thử trước.`
+        : `Tôi cẩn thận vì đã thử nhiều thứ rồi — lần này tôi thấy yên tâm hơn.`
+      return makeBlock(input.type, 'Cái tôi check kỹ', [para1, para2])
+    }
+
+    case 'usage-faq-personal': {
+      // PARADIGM-FIX: usageScene from synthesis is product-specific
+      // (eg "đánh răng xong nhúng bột này 1-2 phút rồi súc miệng" for dental,
+      //  "xịt 2-3 nhát mỗi sáng" for nasal, "đeo 4-6 giờ/ngày" for brace).
+      // When synthesis missing, neutral "dùng đều theo hướng dẫn" works everywhere.
+      const para1 = hasUsageScene
+        ? brief.usageScene
+        : `Tôi dùng đều theo hướng dẫn — nguyên tắc đơn giản, không cần ép.`
+      const para2 = `Người nhà tôi có hỏi "Cái này có an toàn không?". Tôi đã check kỹ trước rồi — đọc nhãn, hỏi người đã dùng — không thấy cảnh báo gì bất thường. Cứ làm đúng hướng dẫn là OK.`
+      return makeBlock(input.type, 'Cách tôi dùng + cái người nhà hỏi', [para1, para2])
+    }
+
+    case 'social-proof-collective': {
+      // Use realisticFailedAttempts to anchor "đã thử" theme; else generic.
+      const failedAttRef = hasFailedAtt
+        ? ` Mọi người trước đây đã thử ${brief.realisticFailedAttempts.slice(0, 2).join(', ').slice(0, 120)} nhưng vẫn không đỡ.`
+        : ''
       return makeBlock(input.type, 'Mấy người quen tôi cũng đang dùng', [
-        `Sau khi tôi đỡ hơn, em gái cũng giới thiệu tiếp cho 2-3 chị ở chỗ làm. Có chị bảo tuần thứ 2 đã thấy khác. Có chị thì chậm hơn, tới tuần 4 mới chịu công nhận. Mỗi người mỗi nhịp.`,
+        `Sau khi tôi thấy đỡ hơn, mấy người trong nhóm chat cũng nhắn hỏi.${failedAttRef}`,
+        `Có chị bảo 2-3 tuần đầu đã khác. Có anh thì chậm hơn, tới tháng thứ 2 mới chịu công nhận. Mỗi người mỗi nhịp — không ai giống ai.`,
       ])
-    case 'pricing-narrator':
+    }
+
+    case 'pricing-narrator': {
+      const pricing = input.productPricing && input.productPricing.trim().length > 0
+        ? input.productPricing
+        : '(giá đợt khuyến mại)'
       return makeBlock(input.type, 'Lúc tôi đặt', [
-        `Tôi đặt qua... đợt đó đang giảm. ${input.productPricing}. Tôi mua liền 2 hộp vì sợ hết.`,
-      ], 'Giá hiện tại: ' + input.productPricing.split(/[(\n]/)[0].trim())
+        `Tôi đặt qua đợt đang giảm: ${pricing}. Tôi không phải kiểu shopping bốc đồng, nhưng đợt này đáng — tôi mua liền 2 sản phẩm để dùng kiên trì.`,
+      ], `Giá hiện tại: ${pricing.split(/[(\n]/)[0].trim()}`)
+    }
   }
 }
 

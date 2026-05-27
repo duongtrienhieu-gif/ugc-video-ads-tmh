@@ -322,6 +322,9 @@ export async function generateStorytellingPack(
     // so nicheDomainLockBrief can REPLACE its generic pool with these.
     // Resolves the two-competing-pools conflict that caused niche drift.
     synthesizedReaderSymptoms: synthesizedBrief.readerSpecificSymptoms,
+    // PARADIGM-FIX (2026-05-27): pass full synthesis brief so fallback
+    // content adapts to product paradigm (no more supplement hardcode).
+    synthesisBriefObj: synthesizedBrief,
     geminiApiKey,
     kieApiKey,
     selection,

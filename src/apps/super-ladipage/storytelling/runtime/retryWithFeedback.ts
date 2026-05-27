@@ -22,8 +22,9 @@ import { parsePackResponse } from './parsePackResponse'
 import type { ParsedPack, ParsedSection } from './parsePackResponse'
 import { runValidators, logValidationResult } from '../validators'
 import type { AggregatedValidation } from '../validators'
-import { FALLBACK_COPY } from './fallbackCopy'
+import { FALLBACK_COPY, buildFallbackCopy } from './fallbackCopy'
 import { translateFallbackToTarget } from './translateFallbackToTarget'
+import type { SynthesizedProductBrief } from '../../productSynthesis/types'
 import type { NarratorDnaSelection } from './selectNarratorDna'
 import { selectNarratorDna } from './selectNarratorDna'
 import {
@@ -72,6 +73,11 @@ interface RunArgs {
    *  passed structurally so nicheDomainLockBrief can REPLACE its generic
    *  symptom pool (single source of truth, no competing pools). */
   synthesizedReaderSymptoms?: string[]
+  /** PARADIGM-FIX (2026-05-27) — full synthesis brief object, passed to
+   *  applyFallback so fallback content can be built from product-specific
+   *  data (usageScene / realisticFailedAttempts / etc.) instead of static
+   *  supplement-paradigm templates. */
+  synthesisBriefObj?: SynthesizedProductBrief
   geminiApiKey: string
   kieApiKey: string
   /** v5.1 — Narrator/DNA/curve selection. OPTIONAL — if undefined,
@@ -197,16 +203,26 @@ function fillProofBlocks(pack: ParsedPack, pieces: ProofPiece[]): ParsedPack {
   }
 }
 
-/** Apply fallback copy to specific blocks. Returns mutated pack. */
+/** Apply fallback copy to specific blocks. Returns mutated pack.
+ *
+ *  PARADIGM-FIX (2026-05-27): when synthesisBrief is provided, fallback
+ *  content is built via buildFallbackCopy(brief) so it adapts to the
+ *  ACTUAL product paradigm (eg uses brief.usageScene for dental products,
+ *  brief.realisticFailedAttempts for niche-specific failed attempts).
+ *  Without brief, falls back to the legacy static table (supplement-leaning). */
 function applyFallback(
   pack: ParsedPack,
   failingIds: BlockId[],
+  synthesisBrief?: SynthesizedProductBrief,
 ): ParsedPack {
   const failingSet = new Set(failingIds)
+  const fallbackTable = synthesisBrief
+    ? buildFallbackCopy(synthesisBrief)
+    : FALLBACK_COPY
   return {
     sections: pack.sections.map((s) => {
       if (!failingSet.has(s.id)) return s
-      const fb = FALLBACK_COPY[s.id]
+      const fb = fallbackTable[s.id]
       // v5.7 Phase C — derive paragraphs[] from fb.copy by splitting on \n\n
       // so ParsedSection contract holds (paragraphs required, copy derived).
       const paragraphs = fb.copy
@@ -334,6 +350,7 @@ async function generateMainPackOnly(args: RunArgs): Promise<GeneratedPackResult>
       argsWithSelection.selection, args.input.niche, args.plan,
       args.synthesizedReaderSymptoms,
       args.input.targetLanguage, args.geminiApiKey, args.kieApiKey,
+      args.synthesisBriefObj,
     )
   }
 
@@ -369,6 +386,7 @@ async function generateMainPackOnly(args: RunArgs): Promise<GeneratedPackResult>
     argsWithSelection.selection, args.input.niche, args.plan,
     args.synthesizedReaderSymptoms,
     args.input.targetLanguage, args.geminiApiKey, args.kieApiKey,
+    args.synthesisBriefObj,
   )
 }
 
@@ -390,9 +408,11 @@ async function buildFallbackResult(
   targetLanguage?: import('../types').LandingLanguage,
   geminiApiKey?: string,
   kieApiKey?: string,
+  /** PARADIGM-FIX (2026-05-27) — synthesis brief for paradigm-aware fallback. */
+  synthesisBriefObj?: SynthesizedProductBrief,
 ): Promise<GeneratedPackResult> {
   const violationsById = groupViolationsBySection(failedValidation)
-  const fixed = applyFallback(pack, failedValidation.failingSections)
+  const fixed = applyFallback(pack, failedValidation.failingSections, synthesisBriefObj)
 
   // LANG-FIX (2026-05-27): translate VN fallback to target language
   let fixedTranslated = fixed
