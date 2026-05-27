@@ -37,6 +37,7 @@ import { selectNarratorDna } from '../runtime/selectNarratorDna'
 import { composeMobilePage } from '../../composer'
 import { deriveRenderContractedPage } from '../../renderContract'
 import { deriveVisualSemanticsPage } from '../../visualSemantics'
+import { deriveImageIntentPage } from '../../imageSemantics'
 
 // ── Map storytelling BlockId → existing UGC SectionType for
 //    LandingSection.type compat. Storytelling block ID stored
@@ -252,6 +253,20 @@ export async function generateStorytellingPack(
     }
   }
 
+  // ─── 6.8 P9 — Derive image intent (image orchestration governance) ───
+  // Pure declarative derivation. NO prompts, NO AI, NO image generation.
+  // Future P10+ phases consume imageIntent to build prompts.
+  const imageIntentPage = deriveImageIntentPage(visualSemanticsPage)
+  if (imageIntentPage.imageIntentWarnings.length > 0) {
+    console.warn(`[storytelling/imageSemantics] ${imageIntentPage.imageIntentWarnings.length} image intent warning(s):`)
+    for (const w of imageIntentPage.imageIntentWarnings) {
+      console.warn(`  ⚠ ${w}`)
+    }
+  }
+  console.log(
+    `[storytelling/imageSemantics] ${imageIntentPage.imageBearingSectionCount}/${imageIntentPage.totalSections} sections received imageIntent`,
+  )
+
   // ─── 7. Assemble StorytellingPack ────────────────────────────────
   const pack: StorytellingPack = {
     productId:   params.productId,
@@ -282,8 +297,10 @@ export async function generateStorytellingPack(
       // v5.3 — Hook + Discovery variation
       hookAxisId:           selection.hookAxis,
       discoveryChannelId:   selection.discoveryChannel,
-      // P6 — Visual semantics page (composer + renderContract + visual psychology)
-      visualSemanticsPage,
+      // P9 — Image intent page (composer + renderContract + visualSemantics + imageIntent).
+      // ImageIntentPage IS-A VisualSemanticsPage — renderer consumers reading sections
+      // / metrics / warnings continue to work via subtype assignability.
+      imageIntentPage,
     },
   }
 

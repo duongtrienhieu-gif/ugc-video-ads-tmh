@@ -50,15 +50,15 @@ export default function StorytellingOutputPanel({
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
   // P7 — Toggle between legacy pack view and semantic mobile preview.
-  // Semantic preview only available when pack has visualSemanticsPage
-  // (post-P4/P5/P6 packs).
+  // Semantic preview only available when pack has imageIntentPage
+  // (P9 superset of visualSemanticsPage — post-P4..P9 packs).
   const [viewMode, setViewMode] = useState<'pack' | 'semantic'>('pack')
 
   const addToast = useAppStore((s) => s.addToast)
 
   const meta = pack.storytellingMeta
   const character = pack.characterProfile
-  const hasSemantic = Boolean(meta.visualSemanticsPage)
+  const hasSemantic = Boolean(meta.imageIntentPage)
 
   const handleSave = () => {
     if (saving || saved || !onSaveAsProject) return
@@ -108,7 +108,7 @@ export default function StorytellingOutputPanel({
           </div>
 
           <div className="flex items-center gap-1.5 shrink-0">
-            {/* P7 — Semantic preview toggle (only if pack has visualSemanticsPage) */}
+            {/* P7 — Semantic preview toggle (only if pack has imageIntentPage / P9 superset) */}
             {hasSemantic && (
               <div className="flex items-center rounded-lg border border-stone-300 bg-white overflow-hidden">
                 <button
@@ -198,10 +198,11 @@ export default function StorytellingOutputPanel({
 
       {/* ── READING COLUMN ──────────────────────────────────────────── */}
       <div className="flex-1 overflow-y-auto">
-        {viewMode === 'semantic' && meta.visualSemanticsPage ? (
-          // P7 — Semantic mobile preview renderer
+        {viewMode === 'semantic' && meta.imageIntentPage ? (
+          // P7 — Semantic mobile preview renderer (consumes ImageIntentPage
+          // via subtype assignability to VisualSemanticsPage prop, P9)
           <SemanticMobilePage
-            page={meta.visualSemanticsPage}
+            page={meta.imageIntentPage}
             characterName={character?.name}
           />
         ) : (
