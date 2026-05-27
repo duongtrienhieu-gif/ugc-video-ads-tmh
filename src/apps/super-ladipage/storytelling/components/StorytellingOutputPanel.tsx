@@ -50,15 +50,15 @@ export default function StorytellingOutputPanel({
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
   // P7 — Toggle between legacy pack view and semantic mobile preview.
-  // Semantic preview only available when pack has validatedPage
-  // (P13 superset of orchestratedPage — post-P4..P13 packs).
+  // Semantic preview only available when pack has exportablePage
+  // (P14 superset of validatedPage — post-P4..P14 packs).
   const [viewMode, setViewMode] = useState<'pack' | 'semantic'>('pack')
 
   const addToast = useAppStore((s) => s.addToast)
 
   const meta = pack.storytellingMeta
   const character = pack.characterProfile
-  const hasSemantic = Boolean(meta.validatedPage)
+  const hasSemantic = Boolean(meta.exportablePage)
 
   const handleSave = () => {
     if (saving || saved || !onSaveAsProject) return
@@ -108,7 +108,7 @@ export default function StorytellingOutputPanel({
           </div>
 
           <div className="flex items-center gap-1.5 shrink-0">
-            {/* P7 — Semantic preview toggle (only if pack has validatedPage / P13 superset) */}
+            {/* P7 — Semantic preview toggle (only if pack has exportablePage / P14 superset) */}
             {hasSemantic && (
               <div className="flex items-center rounded-lg border border-stone-300 bg-white overflow-hidden">
                 <button
@@ -198,11 +198,13 @@ export default function StorytellingOutputPanel({
 
       {/* ── READING COLUMN ──────────────────────────────────────────── */}
       <div className="flex-1 overflow-y-auto">
-        {viewMode === 'semantic' && meta.validatedPage ? (
-          // P7 — Semantic mobile preview renderer (consumes ValidatedPage
-          // via subtype assignability to VisualSemanticsPage prop, P13)
+        {viewMode === 'semantic' && meta.exportablePage ? (
+          // P7 — Semantic mobile preview renderer (consumes ExportablePage
+          // via subtype assignability to VisualSemanticsPage prop, P14).
+          // Regenerate callbacks left undefined here — consumer of OutputPanel
+          // can wire them at a higher level when real executors land.
           <SemanticMobilePage
-            page={meta.validatedPage}
+            page={meta.exportablePage}
             characterName={character?.name}
           />
         ) : (

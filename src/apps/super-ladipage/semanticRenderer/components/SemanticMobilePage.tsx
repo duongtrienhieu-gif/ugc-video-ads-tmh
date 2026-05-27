@@ -16,24 +16,33 @@
 // ─────────────────────────────────────────────────────────────────────
 
 import { useMemo, useState } from 'react'
-import { AlertTriangle, Eye, Bug, Activity, Sliders } from 'lucide-react'
-import type { SemanticMobilePageProps, SemanticViewMode } from '../types'
+import { AlertTriangle, Eye, Bug, Activity, Sliders, Share2 } from 'lucide-react'
+import type { SemanticMobilePageProps, SemanticViewMode, VisualSemanticsPage } from '../types'
 import { SemanticSection } from './SemanticSection'
 import { SemanticDebugOverlay } from './SemanticDebugOverlay'
 import { DiagnosticsPanel } from './DiagnosticsPanel'
 import { TuningPanel } from './TuningPanel'
+import { ExportPanel } from './ExportPanel'
 import { applyTuning } from '../tuning/applyTuning'
 import { IDENTITY_KNOBS, isIdentityKnobs, type TuningKnobs } from '../tuning/types'
 import { scrollDiagnostics } from '../diagnostics/scrollDiagnostics'
+import type { ExportablePage } from '../../exportPipeline'
 
 const VIEW_MODES: Array<{ key: SemanticViewMode; label: string; Icon: typeof Eye }> = [
   { key: 'clean', label: 'Clean', Icon: Eye },
   { key: 'debug', label: 'Debug', Icon: Bug },
   { key: 'diagnostics', label: 'Diagnostics', Icon: Activity },
   { key: 'tuning', label: 'Tuning', Icon: Sliders },
+  { key: 'export', label: 'Export', Icon: Share2 },
 ]
 
-export function SemanticMobilePage({ page, characterName }: SemanticMobilePageProps) {
+export function SemanticMobilePage({
+  page,
+  characterName,
+  onRegenerateImage,
+  onRegenerateSection,
+  onRegenerateProof,
+}: SemanticMobilePageProps) {
   const [viewMode, setViewMode] = useState<SemanticViewMode>('clean')
   const [knobs, setKnobs] = useState<TuningKnobs>(IDENTITY_KNOBS)
 
@@ -49,7 +58,11 @@ export function SemanticMobilePage({ page, characterName }: SemanticMobilePagePr
   const showDebug = viewMode === 'debug'
   const showDiagnostics = viewMode === 'diagnostics'
   const showTuning = viewMode === 'tuning'
+  const showExport = viewMode === 'export'
   const isClean = viewMode === 'clean'
+
+  // P14 — ExportPanel needs an ExportablePage. Use runtime narrowing.
+  const exportablePage = hasExportGuide(tunedPage) ? (tunedPage as ExportablePage) : null
 
   return (
     <div className="bg-stone-50 min-h-full">
@@ -73,6 +86,10 @@ export function SemanticMobilePage({ page, characterName }: SemanticMobilePagePr
             section={section}
             characterName={characterName}
             showDebug={showDebug}
+            showExportActions={showExport}
+            onRegenerateImage={onRegenerateImage}
+            onRegenerateSection={onRegenerateSection}
+            onRegenerateProof={onRegenerateProof}
           />
         ))}
 
@@ -84,6 +101,9 @@ export function SemanticMobilePage({ page, characterName }: SemanticMobilePagePr
 
         {/* P8 diagnostics panel — only in diagnostics view */}
         {showDiagnostics && report && <DiagnosticsPanel report={report} />}
+
+        {/* P14 export panel — only in export view */}
+        {showExport && exportablePage && <ExportPanel page={exportablePage} />}
 
         {/* P7 debug footer — page metrics + validator warnings.
             Hidden in clean mode for Ladipage screenshot workflow. */}
@@ -179,6 +199,15 @@ function WarningList({ label, items }: WarningListProps) {
       </ul>
     </div>
   )
+}
+
+// ─── helpers ──────────────────────────────────────────────────────
+
+/** Runtime type guard — P14. Checks whether sections carry exportGuide
+ *  (i.e., the upstream pack went through the full P14 derivation). */
+function hasExportGuide(page: VisualSemanticsPage): boolean {
+  const first = page.sections[0] as { exportGuide?: unknown } | undefined
+  return Boolean(first?.exportGuide)
 }
 
 // Re-export overlay so consumers wanting standalone debug have it

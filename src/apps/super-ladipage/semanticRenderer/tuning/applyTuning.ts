@@ -1,16 +1,18 @@
 // ─────────────────────────────────────────────────────────────────────
-// Semantic Renderer — applyTuning (P8 validation loop)
+// Semantic Renderer — applyTuning (P8 + P14)
 //
 // Pure deterministic page transformer. (page, knobs) → tunedPage.
 // Knob = integer in [-2, +2]. 0 = identity. Negative = down-shift,
 // positive = up-shift along each axis's existing enum order.
 //
+// P8: density / breathing / proofVisibility / ctaAggression / imageFrequency
+// P14: + realismLevel / polishLevel (shift imageIntent fields when present)
+//
+// Generic over input page type — preserves subtype on output, so callers
+// passing OrchestratedPage / ExportablePage get the same shape back.
+//
 // LOCKED: only shifts EXISTING enum values. No paragraph mutation,
 // no new derivation, no prompt change. Immutable output.
-//
-// Tuning is intentionally CLAMPED. Values fall off the enum end stay
-// at the boundary (no wrap). Identity knobs return the original page
-// reference unchanged (perf shortcut).
 // ─────────────────────────────────────────────────────────────────────
 
 import type {
@@ -32,6 +34,11 @@ import type {
   CtaPlacement,
   SpacingPreset,
 } from '../../renderContract'
+import type {
+  RealismLevel,
+  PolishLevel,
+  ImageIntent,
+} from '../../imageSemantics'
 import { isIdentityKnobs, type TuningKnobs } from './types'
 
 // ─── ordered enum tables (low → high on each axis) ────────────────
@@ -64,6 +71,20 @@ const CTA_PLACEMENT_ORDER: CtaPlacement[] = [
   'footer-emphasis',
   'sticky-low-friction',
 ]
+const REALISM_ORDER: RealismLevel[] = [
+  'documentary-realism',
+  'imperfect-realism',
+  'natural-realism',
+  'polished-realism',
+  'stylized',
+]
+const POLISH_ORDER: PolishLevel[] = [
+  'raw-handheld',
+  'low-polish',
+  'considered-natural',
+  'editorial',
+  'high-polish',
+]
 
 // ─── shift helper (clamped, no wrap) ──────────────────────────────
 
@@ -74,30 +95,30 @@ function shift<T>(order: readonly T[], current: T, delta: number): T {
   return order[next]
 }
 
-// ─── main entry ───────────────────────────────────────────────────
+// ─── main entry (generic — preserves subtype) ──────────────────────
 
-export function applyTuning(
-  page: VisualSemanticsPage,
+export function applyTuning<P extends VisualSemanticsPage>(
+  page: P,
   knobs: TuningKnobs,
-): VisualSemanticsPage {
+): P {
   if (isIdentityKnobs(knobs)) return page
 
-  const tunedSections: VisualSemanticsSection[] = page.sections.map((s, idx) =>
-    tuneSection(s, knobs, idx, page.sections.length),
+  const tunedSections = page.sections.map((s, idx) =>
+    tuneSection(s as VisualSemanticsSection & { imageIntent?: ImageIntent }, knobs, idx, page.sections.length),
   )
 
   return {
     ...page,
     sections: tunedSections,
-  }
+  } as P
 }
 
 function tuneSection(
-  s: VisualSemanticsSection,
+  s: VisualSemanticsSection & { imageIntent?: ImageIntent },
   knobs: TuningKnobs,
   idx: number,
   total: number,
-): VisualSemanticsSection {
+): VisualSemanticsSection & { imageIntent?: ImageIntent } {
   // ── density knob → SectionDensity + TextChunking ─────────────────
   const newDensity =
     knobs.density !== 0 ? shift(DENSITY_ORDER, s.density, knobs.density) : s.density
@@ -141,8 +162,6 @@ function tuneSection(
       : s.renderContract.ctaPlacement
 
   // ── imageFrequency knob → ImageRole muting / promotion ──────────
-  // Negative = mute non-hero images. Positive = promote 'none' to mood.
-  // Hero section (idx 0) is never muted — identity-lock.
   const newImageRole = applyImageFrequency(
     s.imageRole,
     knobs.imageFrequency,
@@ -152,7 +171,23 @@ function tuneSection(
   const newRecommendedImageCount =
     newImageRole === 'none' ? 0 : Math.max(1, s.renderContract.recommendedImageCount)
 
-  return {
+  // ── P14: realismLevel + polishLevel → imageIntent fields ────────
+  let newImageIntent = s.imageIntent
+  if (s.imageIntent && (knobs.realismLevel !== 0 || knobs.polishLevel !== 0)) {
+    newImageIntent = {
+      ...s.imageIntent,
+      realismLevel:
+        knobs.realismLevel !== 0
+          ? shift(REALISM_ORDER, s.imageIntent.realismLevel, knobs.realismLevel)
+          : s.imageIntent.realismLevel,
+      polishLevel:
+        knobs.polishLevel !== 0
+          ? shift(POLISH_ORDER, s.imageIntent.polishLevel, knobs.polishLevel)
+          : s.imageIntent.polishLevel,
+    }
+  }
+
+  const tuned = {
     ...s,
     density: newDensity,
     imageRole: newImageRole,
@@ -170,7 +205,12 @@ function tuneSection(
       ctaPlacement: newCtaPlacement,
       recommendedImageCount: newRecommendedImageCount,
     },
+  } as VisualSemanticsSection & { imageIntent?: ImageIntent }
+
+  if (newImageIntent) {
+    tuned.imageIntent = newImageIntent
   }
+  return tuned
 }
 
 function applyImageFrequency(
@@ -184,26 +224,20 @@ function applyImageFrequency(
   const isClose = idx === total - 1
 
   if (knob < 0) {
-    // Mute non-hero, non-proof images progressively
     if (isHero) return role
     if (knob === -1) {
-      // Mute 'mood-supporting' and 'lifestyle-context' only
       if (role === 'mood-supporting' || role === 'lifestyle-context') return 'none'
       return role
     }
-    // knob === -2: mute everything except hero-anchor + proof-callout
     if (role === 'hero-anchor' || role === 'proof-callout') return role
     return 'none'
   }
 
-  // knob > 0: promote 'none' to mood-supporting (except close)
   if (role === 'none' && !isClose) {
     if (knob === 1) {
-      // Only promote middle sections
       if (idx > 0 && idx < total - 2) return 'mood-supporting'
       return role
     }
-    // knob === 2: promote everything except close
     return 'mood-supporting'
   }
   return role

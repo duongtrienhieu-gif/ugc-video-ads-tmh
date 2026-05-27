@@ -16,10 +16,19 @@ import type { SemanticSectionProps } from '../types'
 import { ImageSlot } from './ImageSlot'
 import { ProofCallout } from './ProofCallout'
 import { SemanticDebugOverlay } from './SemanticDebugOverlay'
+import { SectionExportActions } from './SectionExportActions'
 import { spacingToMbClass, breathingToPyClass } from '../translators/spacingTranslator'
 import { headlineClasses, paragraphClasses, readableMaxWidth } from '../translators/typographyTranslator'
 
-export function SemanticSection({ section, characterName, showDebug = false }: SemanticSectionProps) {
+export function SemanticSection({
+  section,
+  characterName,
+  showDebug = false,
+  showExportActions = false,
+  onRegenerateImage,
+  onRegenerateSection,
+  onRegenerateProof,
+}: SemanticSectionProps) {
   const { renderContract: rc, visualSemantics: vs } = section
   const mbClass = spacingToMbClass(rc.spacingPreset)
   const pyClass = breathingToPyClass(vs.sectionBreathing)
@@ -28,11 +37,19 @@ export function SemanticSection({ section, characterName, showDebug = false }: S
   // Headline placeholder — composed section doesn't carry title currently
   const headline = section.id
 
-  // Wrap helper: prepends debug overlay when enabled.
+  // Wrap helper: prepends debug overlay + appends export actions when enabled.
   const wrap = (content: ReactNode): ReactNode => (
     <>
       {showDebug && <SemanticDebugOverlay section={section} />}
       {content}
+      {showExportActions && (
+        <SectionExportActions
+          section={section}
+          onRegenerateImage={onRegenerateImage}
+          onRegenerateSection={onRegenerateSection}
+          onRegenerateProof={onRegenerateProof}
+        />
+      )}
     </>
   )
 

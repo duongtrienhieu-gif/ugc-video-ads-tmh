@@ -13,11 +13,16 @@ export { SemanticDebugOverlay } from './components/SemanticDebugOverlay'
 export { DiagnosticsPanel } from './components/DiagnosticsPanel'
 export { TuningPanel } from './components/TuningPanel'
 
+// P14: export workflow components
+export { SectionExportActions } from './components/SectionExportActions'
+export { ExportPanel } from './components/ExportPanel'
+
 // Types
 export type {
   SemanticMobilePageProps,
   SemanticSectionProps,
   SemanticViewMode,
+  RegenerateCallbacks,
   VisualSemanticsPage,
   VisualSemanticsSection,
 } from './types'

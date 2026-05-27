@@ -658,16 +658,15 @@ export interface StorytellingMeta {
   /** Selected discovery channel for section 6. */
   discoveryChannelId?: string
 
-  // P13 — Validated page (composer + renderContract + visualSemantics +
+  // P14 — Exportable page (composer + renderContract + visualSemantics +
   // imageSemantics + promptTranslation + rendererAdapters + orchestration +
-  // validation/calibration report). Replaces P12 orchestratedPage field.
-  // ValidatedPage IS-A OrchestratedPage IS-A RendererAdaptedPage IS-A
-  // ImagePromptPage IS-A ImageIntentPage IS-A VisualSemanticsPage — full
-  // subtype chain preserved. All upstream consumers continue working.
-  /** ValidatedPage IS-A OrchestratedPage + per-section SectionCalibration +
-   *  page-level ValidationReport (8 risk axes + warnings + advisory
-   *  knob recommendations). Observation only — no mutation. */
-  validatedPage?: import('../validationCalibration').ValidatedPage
+  // validation/calibration + export pipeline). Replaces P13 validatedPage
+  // field. ExportablePage IS-A ValidatedPage IS-A OrchestratedPage IS-A
+  // RendererAdaptedPage IS-A ImagePromptPage IS-A ImageIntentPage IS-A
+  // VisualSemanticsPage — full subtype chain preserved.
+  /** ExportablePage IS-A ValidatedPage + per-section ExportGuide
+   *  (design-intent metadata for marketer Ladipage assembly). */
+  exportablePage?: import('../exportPipeline').ExportablePage
 }
 
 /** Pack output — extends LandingPagePack shape để OutputPanel render được

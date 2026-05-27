@@ -42,6 +42,7 @@ import { translateImageIntentPage } from '../../promptTranslation'
 import { adaptRenderContractedPage } from '../../rendererAdapters'
 import { planImageGenerationPage } from '../../generationOrchestration'
 import { validateOrchestratedPage } from '../../validationCalibration'
+import { deriveExportPipelinePage } from '../../exportPipeline'
 
 // ── Map storytelling BlockId → existing UGC SectionType for
 //    LandingSection.type compat. Storytelling block ID stored
@@ -331,6 +332,15 @@ export async function generateStorytellingPack(
     }
   }
 
+  // ─── 6.13 P14 — Derive ExportGuide per section (productization) ───
+  // Pure declarative derivation. NO HTML auto-generation, NO publishing.
+  // Output is design-intent metadata that marketers consume during
+  // Ladipage assembly via the Export view + serializers.
+  const exportablePage = deriveExportPipelinePage(validatedPage)
+  console.log(
+    `[storytelling/export] Export pipeline ready · ${exportablePage.sections.length} sections with ExportGuide`,
+  )
+
   // ─── 7. Assemble StorytellingPack ────────────────────────────────
   const pack: StorytellingPack = {
     productId:   params.productId,
@@ -361,12 +371,13 @@ export async function generateStorytellingPack(
       // v5.3 — Hook + Discovery variation
       hookAxisId:           selection.hookAxis,
       discoveryChannelId:   selection.discoveryChannel,
-      // P13 — Validated page (composer + renderContract + visualSemantics +
+      // P14 — Exportable page (composer + renderContract + visualSemantics +
       // imageIntent + prompt fragments + renderer adapters + orchestration +
-      // validation/calibration report). Full subtype chain:
-      // ValidatedPage IS-A OrchestratedPage IS-A RendererAdaptedPage IS-A
-      // ImagePromptPage IS-A ImageIntentPage IS-A VisualSemanticsPage.
-      validatedPage,
+      // validation/calibration + ExportGuide per section). Full subtype chain:
+      // ExportablePage IS-A ValidatedPage IS-A OrchestratedPage IS-A
+      // RendererAdaptedPage IS-A ImagePromptPage IS-A ImageIntentPage IS-A
+      // VisualSemanticsPage.
+      exportablePage,
     },
   }
 

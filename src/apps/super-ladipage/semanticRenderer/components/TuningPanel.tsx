@@ -21,11 +21,14 @@ const KNOB_DEFS: Array<{
   hintLow: string
   hintHigh: string
 }> = [
-  { key: 'density', label: 'Density', hintLow: 'airy', hintHigh: 'tight' },
+  // P14 — productization knobs (realism + polish first, per marketer priority)
+  { key: 'realismLevel', label: 'Realism', hintLow: 'documentary', hintHigh: 'stylized' },
+  { key: 'polishLevel', label: 'Polish', hintLow: 'raw-handheld', hintHigh: 'high-polish' },
   { key: 'breathing', label: 'Breathing', hintLow: 'cramped', hintHigh: 'vast' },
+  { key: 'density', label: 'Density', hintLow: 'airy', hintHigh: 'tight' },
   { key: 'proofVisibility', label: 'Proof visibility', hintLow: 'invisible', hintHigh: 'spotlight' },
-  { key: 'ctaAggression', label: 'CTA aggression', hintLow: 'hidden', hintHigh: 'urgent' },
   { key: 'imageFrequency', label: 'Image frequency', hintLow: 'text-only', hintHigh: 'image-heavy' },
+  { key: 'ctaAggression', label: 'CTA aggression', hintLow: 'hidden', hintHigh: 'urgent' },
 ]
 
 const STEPS: TuningKnobValue[] = [-2, -1, 0, 1, 2]
