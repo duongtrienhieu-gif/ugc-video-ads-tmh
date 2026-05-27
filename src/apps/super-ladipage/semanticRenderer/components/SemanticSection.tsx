@@ -17,6 +17,9 @@ import { ImageSlot } from './ImageSlot'
 import { ProofCallout } from './ProofCallout'
 import { SemanticDebugOverlay } from './SemanticDebugOverlay'
 import { SectionExportActions } from './SectionExportActions'
+import { SectionStatusPill } from './SectionStatusPill'
+import { SectionReviewActions } from './SectionReviewActions'
+import { SectionFallback } from './SectionFallback'
 import { spacingToMbClass, breathingToPyClass } from '../translators/spacingTranslator'
 import { headlineClasses, paragraphClasses, readableMaxWidth } from '../translators/typographyTranslator'
 
@@ -25,9 +28,15 @@ export function SemanticSection({
   characterName,
   showDebug = false,
   showExportActions = false,
+  showSessionUI = false,
+  sectionState,
   onRegenerateImage,
   onRegenerateSection,
   onRegenerateProof,
+  onApproveSection,
+  onRejectSection,
+  onToggleReviewFlag,
+  onRetryFailedSection,
 }: SemanticSectionProps) {
   const { renderContract: rc, visualSemantics: vs } = section
   const mbClass = spacingToMbClass(rc.spacingPreset)
@@ -37,11 +46,47 @@ export function SemanticSection({
   // Headline placeholder — composed section doesn't carry title currently
   const headline = section.id
 
-  // Wrap helper: prepends debug overlay + appends export actions when enabled.
+  // P16A — Fallback for sections that are mid-regen or failed.
+  // When section is generating, render loading skeleton instead of body.
+  const isRegenerating =
+    showSessionUI &&
+    sectionState &&
+    (sectionState.regenStatus === 'generating' || sectionState.regenStatus === 'queued')
+
+  // Wrap helper: prepends debug overlay + status pill, appends export
+  // actions + review UI when enabled.
   const wrap = (content: ReactNode): ReactNode => (
     <>
       {showDebug && <SemanticDebugOverlay section={section} />}
-      {content}
+      {showSessionUI && sectionState && (
+        <SectionStatusPill
+          state={sectionState}
+          onRetry={
+            onRetryFailedSection ? () => onRetryFailedSection(section.id) : undefined
+          }
+        />
+      )}
+      {isRegenerating ? (
+        <SectionFallback variant="loading" sectionId={section.id} />
+      ) : (
+        content
+      )}
+      {showSessionUI && sectionState && (showExportActions || sectionState.regenStatus !== 'idle' || sectionState.review.verdict !== 'pending' || sectionState.review.flags.length > 0) && (
+        <SectionReviewActions
+          review={sectionState.review}
+          onApprove={
+            onApproveSection ? () => onApproveSection(section.id) : undefined
+          }
+          onReject={
+            onRejectSection ? () => onRejectSection(section.id) : undefined
+          }
+          onToggleFlag={
+            onToggleReviewFlag
+              ? (flag) => onToggleReviewFlag(section.id, flag)
+              : undefined
+          }
+        />
+      )}
       {showExportActions && (
         <SectionExportActions
           section={section}

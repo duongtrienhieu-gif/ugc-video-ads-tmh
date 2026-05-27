@@ -12,19 +12,24 @@
 // ─────────────────────────────────────────────────────────────────────
 
 import { useState } from 'react'
-import { Copy, Download, FileText, Check, BookOpen } from 'lucide-react'
+import { Copy, Download, FileText, Check, BookOpen, Code2, Layers } from 'lucide-react'
 import type { ExportablePage } from '../../exportPipeline'
 import {
   serializeToMarkdown,
   serializeToJsonString,
   serializeToLadipageGuidance,
 } from '../../exportPipeline'
+import {
+  adaptToLadipage,
+  serializeBundleHtml,
+  serializeBundleJson,
+} from '../../ladipageAdapter'
 
 interface Props {
   page: ExportablePage
 }
 
-type Toast = null | 'markdown' | 'json' | 'ladipage'
+type Toast = null | 'markdown' | 'json' | 'ladipage' | 'ladipage-html' | 'ladipage-json'
 
 export function ExportPanel({ page }: Props) {
   const [toast, setToast] = useState<Toast>(null)
@@ -57,6 +62,21 @@ export function ExportPanel({ page }: Props) {
     triggerDownload(md, 'storytelling-pack.md', 'text/markdown')
   }
 
+  // ── P16A — Ladipage bundle exports ─────────────────────────────
+  const copyLadipageHtml = async () => {
+    const bundle = adaptToLadipage(page)
+    const html = serializeBundleHtml(bundle)
+    await navigator.clipboard.writeText(html).catch(() => {})
+    flash('ladipage-html')
+  }
+
+  const downloadLadipageJson = () => {
+    const bundle = adaptToLadipage(page)
+    const json = serializeBundleJson(bundle)
+    triggerDownload(json, `${bundle.bundleId}.json`, 'application/json')
+    flash('ladipage-json')
+  }
+
   return (
     <div className="px-6 py-4 border-t border-stone-200 bg-stone-100 space-y-3">
       <div>
@@ -74,6 +94,7 @@ export function ExportPanel({ page }: Props) {
           <div className="flex flex-wrap gap-1.5">
             <ExportButton onClick={copyMarkdown} icon={Copy} label="Markdown" success={toast === 'markdown' ? 'Đã copy' : null} />
             <ExportButton onClick={copyLadipageGuide} icon={BookOpen} label="Hướng dẫn Ladipage" success={toast === 'ladipage' ? 'Đã copy' : null} />
+            <ExportButton onClick={copyLadipageHtml} icon={Code2} label="Ladipage HTML" success={toast === 'ladipage-html' ? 'Đã copy' : null} />
           </div>
         </div>
 
@@ -82,6 +103,7 @@ export function ExportPanel({ page }: Props) {
           <div className="flex flex-wrap gap-1.5">
             <ExportButton onClick={downloadJson} icon={Download} label="JSON" success={toast === 'json' ? 'Đã tải' : null} />
             <ExportButton onClick={downloadMarkdown} icon={FileText} label="Markdown" />
+            <ExportButton onClick={downloadLadipageJson} icon={Layers} label="Ladipage bundle" success={toast === 'ladipage-json' ? 'Đã tải' : null} />
           </div>
         </div>
       </div>
@@ -89,6 +111,7 @@ export function ExportPanel({ page }: Props) {
       <p className="font-mono text-[9px] italic leading-snug text-stone-500">
         Hệ thống KHÔNG auto-publish, KHÔNG auto-build HTML. Bạn là final layout controller —
         paste copy + apply layout theo "Hướng dẫn Ladipage" trong khối Ladipage thật.
+        Ladipage HTML / bundle là gợi ý cấu trúc — Ladipage block editor luôn quyết định cuối cùng.
       </p>
     </div>
   )

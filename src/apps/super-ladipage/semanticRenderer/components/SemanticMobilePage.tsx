@@ -39,9 +39,14 @@ const VIEW_MODES: Array<{ key: SemanticViewMode; label: string; Icon: typeof Eye
 export function SemanticMobilePage({
   page,
   characterName,
+  session,
   onRegenerateImage,
   onRegenerateSection,
   onRegenerateProof,
+  onApproveSection,
+  onRejectSection,
+  onToggleReviewFlag,
+  onRetryFailedSection,
 }: SemanticMobilePageProps) {
   const [viewMode, setViewMode] = useState<SemanticViewMode>('clean')
   const [knobs, setKnobs] = useState<TuningKnobs>(IDENTITY_KNOBS)
@@ -87,9 +92,15 @@ export function SemanticMobilePage({
             characterName={characterName}
             showDebug={showDebug}
             showExportActions={showExport}
+            showSessionUI={Boolean(session) && (showDebug || showExport)}
+            sectionState={session?.sections[section.id]}
             onRegenerateImage={onRegenerateImage}
             onRegenerateSection={onRegenerateSection}
             onRegenerateProof={onRegenerateProof}
+            onApproveSection={onApproveSection}
+            onRejectSection={onRejectSection}
+            onToggleReviewFlag={onToggleReviewFlag}
+            onRetryFailedSection={onRetryFailedSection}
           />
         ))}
 

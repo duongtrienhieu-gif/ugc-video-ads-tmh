@@ -17,7 +17,7 @@
 // Image pipeline + identity lock sẽ đến ở Phase 3-4.
 // ═════════════════════════════════════════════════════════════════════
 
-import { useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import {
   AlertTriangle, BookOpen, Check, FilePlus, ImageIcon, Loader2,
   RotateCcw, Save, ShieldCheck, ShieldAlert, Smartphone, FileText,
@@ -30,6 +30,15 @@ import { BLOCK_POOL } from '../config/blockPool'
 import { SECTION_VISUAL_MAP } from '../config/visualLanguage'
 import { useAppStore } from '../../../../stores/appStore'
 import { SemanticMobilePage } from '../../semanticRenderer'
+import {
+  createLandingSession,
+  saveSession,
+  setRegenStatus,
+  setReviewVerdict,
+  toggleReviewFlag,
+  type LandingSession,
+  type ReviewFlag,
+} from '../../sessionRuntime'
 
 const MOCK_MARKER_REGEX = /^\[MOCK P0\.5\]\s*\n+/
 
@@ -59,6 +68,79 @@ export default function StorytellingOutputPanel({
   const meta = pack.storytellingMeta
   const character = pack.characterProfile
   const hasSemantic = Boolean(meta.exportablePage)
+
+  // ── P16A — Landing session state ─────────────────────────────────
+  // Auto-create session when pack becomes available. Persist to IDB
+  // best-effort. Mutations are in-memory; persistence happens on
+  // significant events (regen / review).
+  const [session, setSession] = useState<LandingSession | null>(null)
+
+  // Initial session creation (and re-creation if pack identity changes)
+  const packKey = useMemo(() => {
+    if (!meta.exportablePage) return null
+    return `${pack.productName}::${meta.niche}::${meta.exportablePage.sourcePackBlockCount}`
+  }, [pack.productName, meta.niche, meta.exportablePage])
+
+  useEffect(() => {
+    if (!meta.exportablePage || !packKey) return
+    // Skip if session already matches this pack
+    if (session && session.packIdentity.productName === pack.productName &&
+        session.packIdentity.niche === meta.niche) return
+    const fresh = createLandingSession(meta.exportablePage, {
+      productName: pack.productName,
+      niche: meta.niche,
+    })
+    setSession(fresh)
+    void saveSession(fresh)
+  }, [packKey, meta.exportablePage, meta.niche, pack.productName, session])
+
+  // ── Session callback handlers ────────────────────────────────────
+  const handleRegenerateImage = (sectionId: string) => {
+    if (!session) return
+    const next = setRegenStatus(session, sectionId, 'queued', 'image')
+    setSession(next)
+    void saveSession(next)
+    addToast(`Đã đặt regen ảnh cho section "${sectionId}". (Cần executor thực P12.5+ để chạy)`)
+  }
+  const handleRegenerateSection = (sectionId: string) => {
+    if (!session) return
+    const next = setRegenStatus(session, sectionId, 'queued', 'section')
+    setSession(next)
+    void saveSession(next)
+    addToast(`Đã đặt regen toàn bộ section "${sectionId}".`)
+  }
+  const handleRegenerateProof = (sectionId: string) => {
+    if (!session) return
+    const next = setRegenStatus(session, sectionId, 'queued', 'proof')
+    setSession(next)
+    void saveSession(next)
+    addToast(`Đã đặt regen proof cho section "${sectionId}".`)
+  }
+  const handleApproveSection = (sectionId: string) => {
+    if (!session) return
+    const next = setReviewVerdict(session, sectionId, 'approved')
+    setSession(next)
+    void saveSession(next)
+  }
+  const handleRejectSection = (sectionId: string) => {
+    if (!session) return
+    const next = setReviewVerdict(session, sectionId, 'rejected')
+    setSession(next)
+    void saveSession(next)
+  }
+  const handleToggleReviewFlag = (sectionId: string, flag: ReviewFlag) => {
+    if (!session) return
+    const next = toggleReviewFlag(session, sectionId, flag)
+    setSession(next)
+    void saveSession(next)
+  }
+  const handleRetryFailed = (sectionId: string) => {
+    if (!session) return
+    const next = setRegenStatus(session, sectionId, 'queued', 'image')
+    setSession(next)
+    void saveSession(next)
+    addToast(`Đang thử lại section "${sectionId}"...`)
+  }
 
   const handleSave = () => {
     if (saving || saved || !onSaveAsProject) return
@@ -201,11 +283,19 @@ export default function StorytellingOutputPanel({
         {viewMode === 'semantic' && meta.exportablePage ? (
           // P7 — Semantic mobile preview renderer (consumes ExportablePage
           // via subtype assignability to VisualSemanticsPage prop, P14).
-          // Regenerate callbacks left undefined here — consumer of OutputPanel
-          // can wire them at a higher level when real executors land.
+          // P16A — Session-driven regenerate + review callbacks wired in.
+          // Real execution stays in caller's domain (P12 mock for now).
           <SemanticMobilePage
             page={meta.exportablePage}
             characterName={character?.name}
+            session={session ?? undefined}
+            onRegenerateImage={handleRegenerateImage}
+            onRegenerateSection={handleRegenerateSection}
+            onRegenerateProof={handleRegenerateProof}
+            onApproveSection={handleApproveSection}
+            onRejectSection={handleRejectSection}
+            onToggleReviewFlag={handleToggleReviewFlag}
+            onRetryFailedSection={handleRetryFailed}
           />
         ) : (
           // Legacy pack view (default)

@@ -17,12 +17,18 @@ export { TuningPanel } from './components/TuningPanel'
 export { SectionExportActions } from './components/SectionExportActions'
 export { ExportPanel } from './components/ExportPanel'
 
+// P16A: session-driven components (status / review / fallback)
+export { SectionStatusPill } from './components/SectionStatusPill'
+export { SectionReviewActions } from './components/SectionReviewActions'
+export { SectionFallback } from './components/SectionFallback'
+
 // Types
 export type {
   SemanticMobilePageProps,
   SemanticSectionProps,
   SemanticViewMode,
   RegenerateCallbacks,
+  SessionCallbacks,
   VisualSemanticsPage,
   VisualSemanticsSection,
 } from './types'
