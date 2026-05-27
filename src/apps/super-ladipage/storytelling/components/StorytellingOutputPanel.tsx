@@ -50,15 +50,15 @@ export default function StorytellingOutputPanel({
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
   // P7 — Toggle between legacy pack view and semantic mobile preview.
-  // Semantic preview only available when pack has imageIntentPage
-  // (P9 superset of visualSemanticsPage — post-P4..P9 packs).
+  // Semantic preview only available when pack has imagePromptPage
+  // (P10 superset of imageIntentPage — post-P4..P10 packs).
   const [viewMode, setViewMode] = useState<'pack' | 'semantic'>('pack')
 
   const addToast = useAppStore((s) => s.addToast)
 
   const meta = pack.storytellingMeta
   const character = pack.characterProfile
-  const hasSemantic = Boolean(meta.imageIntentPage)
+  const hasSemantic = Boolean(meta.imagePromptPage)
 
   const handleSave = () => {
     if (saving || saved || !onSaveAsProject) return
@@ -108,7 +108,7 @@ export default function StorytellingOutputPanel({
           </div>
 
           <div className="flex items-center gap-1.5 shrink-0">
-            {/* P7 — Semantic preview toggle (only if pack has imageIntentPage / P9 superset) */}
+            {/* P7 — Semantic preview toggle (only if pack has imagePromptPage / P10 superset) */}
             {hasSemantic && (
               <div className="flex items-center rounded-lg border border-stone-300 bg-white overflow-hidden">
                 <button
@@ -198,11 +198,11 @@ export default function StorytellingOutputPanel({
 
       {/* ── READING COLUMN ──────────────────────────────────────────── */}
       <div className="flex-1 overflow-y-auto">
-        {viewMode === 'semantic' && meta.imageIntentPage ? (
-          // P7 — Semantic mobile preview renderer (consumes ImageIntentPage
-          // via subtype assignability to VisualSemanticsPage prop, P9)
+        {viewMode === 'semantic' && meta.imagePromptPage ? (
+          // P7 — Semantic mobile preview renderer (consumes ImagePromptPage
+          // via subtype assignability to VisualSemanticsPage prop, P10)
           <SemanticMobilePage
-            page={meta.imageIntentPage}
+            page={meta.imagePromptPage}
             characterName={character?.name}
           />
         ) : (

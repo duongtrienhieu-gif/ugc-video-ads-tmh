@@ -38,6 +38,7 @@ import { composeMobilePage } from '../../composer'
 import { deriveRenderContractedPage } from '../../renderContract'
 import { deriveVisualSemanticsPage } from '../../visualSemantics'
 import { deriveImageIntentPage } from '../../imageSemantics'
+import { translateImageIntentPage } from '../../promptTranslation'
 
 // ── Map storytelling BlockId → existing UGC SectionType for
 //    LandingSection.type compat. Storytelling block ID stored
@@ -267,6 +268,20 @@ export async function generateStorytellingPack(
     `[storytelling/imageSemantics] ${imageIntentPage.imageBearingSectionCount}/${imageIntentPage.totalSections} sections received imageIntent`,
   )
 
+  // ─── 6.9 P10 — Translate image intent → prompt fragment contract ──
+  // Pure deterministic translator. NO prompt engineering, NO model syntax.
+  // Fragment system: 6 buckets per section, renderer-agnostic.
+  const imagePromptPage = translateImageIntentPage(imageIntentPage)
+  if (imagePromptPage.promptContractWarnings.length > 0) {
+    console.warn(`[storytelling/promptTranslation] ${imagePromptPage.promptContractWarnings.length} contract warning(s):`)
+    for (const w of imagePromptPage.promptContractWarnings) {
+      console.warn(`  ⚠ ${w}`)
+    }
+  }
+  console.log(
+    `[storytelling/promptTranslation] ${imagePromptPage.promptBearingSectionCount}/${imagePromptPage.totalSections} sections received imagePromptContract`,
+  )
+
   // ─── 7. Assemble StorytellingPack ────────────────────────────────
   const pack: StorytellingPack = {
     productId:   params.productId,
@@ -297,10 +312,11 @@ export async function generateStorytellingPack(
       // v5.3 — Hook + Discovery variation
       hookAxisId:           selection.hookAxis,
       discoveryChannelId:   selection.discoveryChannel,
-      // P9 — Image intent page (composer + renderContract + visualSemantics + imageIntent).
-      // ImageIntentPage IS-A VisualSemanticsPage — renderer consumers reading sections
-      // / metrics / warnings continue to work via subtype assignability.
-      imageIntentPage,
+      // P10 — Image prompt page (composer + renderContract + visualSemantics +
+      // imageIntent + prompt fragment translation). ImagePromptPage IS-A
+      // ImageIntentPage IS-A VisualSemanticsPage — all upstream consumers
+      // continue to work via subtype assignability.
+      imagePromptPage,
     },
   }
 
