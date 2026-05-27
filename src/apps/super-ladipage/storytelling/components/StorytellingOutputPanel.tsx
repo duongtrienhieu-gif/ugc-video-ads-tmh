@@ -46,6 +46,7 @@ import {
   createKieGpt4oImageExecutor,
   useImageGeneration,
   type ExecutorRegistry,
+  type GeneratedAsset,
   type PageGenerationContext,
 } from '../../generationOrchestration'
 
@@ -84,6 +85,17 @@ export default function StorytellingOutputPanel({
   // significant events (regen / review).
   const [session, setSession] = useState<LandingSession | null>(null)
 
+  // ── UI-FIX5 (2026-05-28) — Local asset overlay map ───────────────
+  // CRITICAL fix for the "click 4-5 lần ko ra ảnh" silent-fail.
+  // meta.exportablePage is captured at pack-gen time and never
+  // re-built when an image is generated, so the URL coming back from
+  // executePageGeneration → onSectionComplete had nowhere to land.
+  // We keep a per-section overlay map keyed by composed section id;
+  // useImageGeneration.onAssetUpdated writes into it, and the render
+  // path below prefers this overlay over the stale meta asset.
+  // (Reset effect lives below — once packKey is in scope.)
+  const [assetOverlay, setAssetOverlay] = useState<Record<string, GeneratedAsset>>({})
+
   // Initial session creation (and re-creation if pack identity changes)
   const packKey = useMemo(() => {
     if (!meta.exportablePage) return null
@@ -102,6 +114,12 @@ export default function StorytellingOutputPanel({
     setSession(fresh)
     void saveSession(fresh)
   }, [packKey, meta.exportablePage, meta.niche, pack.productName, session])
+
+  // UI-FIX5 (2026-05-28) — clear the asset overlay when pack identity
+  // changes so a fresh pack doesn't reuse the previous pack's image URLs.
+  useEffect(() => {
+    setAssetOverlay({})
+  }, [packKey])
 
   // ── POST-REBUILD — KIE executors + live image generation hook ──
   // Two renderers routed per imageRole inside the orchestrator:
@@ -156,6 +174,12 @@ export default function StorytellingOutputPanel({
     // OPT.4 (2026-05-28) — surface failure reason to user via toast
     onFailureToast: (sectionId, reason) => {
       addToast(`⚠ Tạo ảnh thất bại (${sectionId.slice(0, 20)}): ${reason.slice(0, 120)}`)
+    },
+    // UI-FIX5 (2026-05-28) — receive the full updated asset (with
+    // outputImages[].url) so the UI can actually display the image.
+    // Without this the URL was discarded silently every time.
+    onAssetUpdated: (sectionId, asset) => {
+      setAssetOverlay((prev) => ({ ...prev, [sectionId]: asset }))
     },
   })
 
@@ -440,7 +464,13 @@ export default function StorytellingOutputPanel({
                 seenComposedIds.add(composedSection.id)
               }
               const exportSection = isPrimaryForComposed ? composedSection : undefined
-              const generatedAsset = exportSection?.generatedAsset
+              // UI-FIX5 (2026-05-28): prefer the live overlay (populated
+              // by onAssetUpdated after each gen) over the stale
+              // meta.exportablePage asset — that's the only path that
+              // carries the actual KIE outputImages[].url back to the UI.
+              const generatedAsset = exportSection
+                ? assetOverlay[exportSection.id] ?? exportSection.generatedAsset
+                : undefined
               const sectionRegenState = session?.sections[exportSection?.id ?? '']
               const isThisSectionGenerating =
                 imageGen.isGenerating &&

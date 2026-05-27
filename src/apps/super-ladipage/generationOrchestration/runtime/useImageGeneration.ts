@@ -7,7 +7,7 @@
 // ─────────────────────────────────────────────────────────────────────
 
 import { useCallback, useRef, useState } from 'react'
-import type { OrchestratedPage } from '../types'
+import type { GeneratedAsset, OrchestratedPage } from '../types'
 import type { LandingSession } from '../../sessionRuntime'
 import {
   setRegenStatus,
@@ -34,6 +34,15 @@ export interface UseImageGenerationOptions {
   /** OPT.4 (2026-05-28) — Toast callback on image gen failure so user knows
    *  WHY it failed (not silent). Receives section id + reason text. */
   onFailureToast?: (sectionId: string, reason: string) => void
+  /** UI-FIX5 (2026-05-28) — CRITICAL: callback fired whenever an executor
+   *  finishes a section (success OR failure) with the FULL updated asset
+   *  including outputImages[].url. Without this hook the parent has no
+   *  way to learn the image URL — onSectionComplete previously only
+   *  wrote regenStatus into the session, the URL was discarded after
+   *  the inner callback returned, and the UI (which reads from
+   *  meta.exportablePage.sections[i].generatedAsset.outputImages) never
+   *  saw a URL → "Tạo ảnh" silently appeared to do nothing forever. */
+  onAssetUpdated?: (sectionId: string, asset: GeneratedAsset) => void
 }
 
 export interface UseImageGenerationState {
@@ -151,6 +160,11 @@ export function useImageGeneration(opts: UseImageGenerationOptions): UseImageGen
             }))
           },
           onSectionComplete: (sectionId, asset) => {
+            // UI-FIX5 (2026-05-28) — propagate the updated asset (with
+            // outputImages[].url) to the parent BEFORE touching session
+            // state. Without this the URL was thrown away on every gen.
+            opts.onAssetUpdated?.(sectionId, asset)
+
             if (asset.generationStatus === 'completed') {
               console.info(`[image-gen] section=${sectionId} renderer=${asset.renderer} COMPLETED url=${asset.outputImages[0]?.url.slice(0, 80)}`)
               workingSession = setRegenStatus(workingSession, sectionId, 'completed', 'image')
