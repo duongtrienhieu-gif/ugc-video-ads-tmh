@@ -658,15 +658,16 @@ export interface StorytellingMeta {
   /** Selected discovery channel for section 6. */
   discoveryChannelId?: string
 
-  // P12 — Orchestrated page (composer + renderContract + visualSemantics +
-  // imageSemantics + promptTranslation + rendererAdapters + generation
-  // orchestration plan). Replaces P11 rendererAdaptedPage field.
-  // OrchestratedPage IS-A RendererAdaptedPage IS-A ImagePromptPage IS-A
-  // ImageIntentPage IS-A VisualSemanticsPage — full subtype chain.
-  /** OrchestratedPage IS-A RendererAdaptedPage + per-section GeneratedAsset
-   *  with status='planned' at pack gen time. Real execution is async +
-   *  consumer-triggered (separate API, NOT auto-invoked). */
-  orchestratedPage?: import('../generationOrchestration').OrchestratedPage
+  // P13 — Validated page (composer + renderContract + visualSemantics +
+  // imageSemantics + promptTranslation + rendererAdapters + orchestration +
+  // validation/calibration report). Replaces P12 orchestratedPage field.
+  // ValidatedPage IS-A OrchestratedPage IS-A RendererAdaptedPage IS-A
+  // ImagePromptPage IS-A ImageIntentPage IS-A VisualSemanticsPage — full
+  // subtype chain preserved. All upstream consumers continue working.
+  /** ValidatedPage IS-A OrchestratedPage + per-section SectionCalibration +
+   *  page-level ValidationReport (8 risk axes + warnings + advisory
+   *  knob recommendations). Observation only — no mutation. */
+  validatedPage?: import('../validationCalibration').ValidatedPage
 }
 
 /** Pack output — extends LandingPagePack shape để OutputPanel render được

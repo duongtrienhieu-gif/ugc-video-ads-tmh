@@ -41,6 +41,7 @@ import { deriveImageIntentPage } from '../../imageSemantics'
 import { translateImageIntentPage } from '../../promptTranslation'
 import { adaptRenderContractedPage } from '../../rendererAdapters'
 import { planImageGenerationPage } from '../../generationOrchestration'
+import { validateOrchestratedPage } from '../../validationCalibration'
 
 // ── Map storytelling BlockId → existing UGC SectionType for
 //    LandingSection.type compat. Storytelling block ID stored
@@ -313,6 +314,23 @@ export async function generateStorytellingPack(
     `[storytelling/orchestration] ${orchestratedPage.generationPlanCount}/${orchestratedPage.totalSections} sections planned for image generation`,
   )
 
+  // ─── 6.12 P13 — Validation + calibration loop ────────────────────
+  // Soft governance: 6 detectors + per-section calibration + advisory
+  // knob recommendations. NO mutation, NO redesign, NO AI taste engine.
+  const validatedPage = validateOrchestratedPage(orchestratedPage)
+  if (validatedPage.validationReport.warnings.length > 0) {
+    console.warn(`[storytelling/validation] ${validatedPage.validationReport.warnings.length} validation warning(s):`)
+    for (const w of validatedPage.validationReport.warnings) {
+      console.warn(`  ⚠ [${w.severity}][${w.category}] ${w.message}`)
+    }
+  }
+  if (validatedPage.validationReport.recommendedKnobAdjustments.length > 0) {
+    console.log(`[storytelling/validation] ${validatedPage.validationReport.recommendedKnobAdjustments.length} advisory knob recommendation(s):`)
+    for (const rec of validatedPage.validationReport.recommendedKnobAdjustments) {
+      console.log(`  ↳ ${rec.knob} ${rec.direction > 0 ? '+' : ''}${rec.direction} — ${rec.reason}`)
+    }
+  }
+
   // ─── 7. Assemble StorytellingPack ────────────────────────────────
   const pack: StorytellingPack = {
     productId:   params.productId,
@@ -343,12 +361,12 @@ export async function generateStorytellingPack(
       // v5.3 — Hook + Discovery variation
       hookAxisId:           selection.hookAxis,
       discoveryChannelId:   selection.discoveryChannel,
-      // P12 — Orchestrated page (composer + renderContract + visualSemantics
-      // + imageIntent + prompt fragments + renderer adapters + generation
-      // orchestration plan with status='planned'). Full subtype chain:
-      // OrchestratedPage IS-A RendererAdaptedPage IS-A ImagePromptPage IS-A
-      // ImageIntentPage IS-A VisualSemanticsPage.
-      orchestratedPage,
+      // P13 — Validated page (composer + renderContract + visualSemantics +
+      // imageIntent + prompt fragments + renderer adapters + orchestration +
+      // validation/calibration report). Full subtype chain:
+      // ValidatedPage IS-A OrchestratedPage IS-A RendererAdaptedPage IS-A
+      // ImagePromptPage IS-A ImageIntentPage IS-A VisualSemanticsPage.
+      validatedPage,
     },
   }
 
