@@ -170,9 +170,13 @@ export async function generateStorytellingPack(
   // Previously niche defaulted to 'skincare' → nasal spray products were
   // mislabeled, story arc generated wrong-niche framing (face/skin
   // vocabulary for sinus products).
+  // FIX v2 — also pass product.benefits (previously missing → "boost
+  // confidence to walk again" in benefits falsely triggered beauty-
+  // confidence niche for knee/joint products).
   const nicheDetection = detectNiche({
     productName: product.productName,
     painPoints: product.painPoints,
+    benefits: (product as { benefits?: string }).benefits,
   })
   console.info(
     `[storytelling] niche detection: ${nicheDetection.niche} (confidence=${nicheDetection.confidence}, ` +

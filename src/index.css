@@ -92,6 +92,26 @@ body,
   color: var(--color-text-primary);
 }
 
+/* ────────────────────────────────────────────────────────────────
+ * FIX 2026-05-27 — Vietnamese-friendly fonts for storytelling output.
+ *
+ * Problem: Tailwind's `font-serif` defaults to browser system serif
+ * (often Times New Roman) which renders Vietnamese diacritics poorly
+ * (xương khớp / ếô look broken). Same for Malay nasalized vowels.
+ *
+ * Fix: override `font-serif` inside .storytelling-article scope only
+ * (so other apps' typography unchanged) to Lora — designed for VN/MS
+ * diacritics. Body sans-serif uses Be Vietnam Pro (purpose-built VN).
+ * ──────────────────────────────────────────────────────────────── */
+.storytelling-article {
+  font-family: 'Be Vietnam Pro', 'Plus Jakarta Sans', sans-serif;
+}
+
+.storytelling-article .font-serif,
+.storytelling-article [class*="font-serif"] {
+  font-family: 'Lora', 'Be Vietnam Pro', Georgia, serif !important;
+}
+
 /* Form inputs */
 input,
 textarea,

@@ -20,7 +20,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
   AlertTriangle, BookOpen, Check, FilePlus, ImageIcon, Loader2,
-  RotateCcw, Save, ShieldCheck, ShieldAlert, Smartphone, FileText,
+  RotateCcw, Save, ShieldCheck, ShieldAlert, FileText,
   Sparkles, X,
 } from 'lucide-react'
 import type { LandingSection } from '../../types'
@@ -65,10 +65,10 @@ export default function StorytellingOutputPanel({
 }: Props) {
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
-  // P7 — Toggle between legacy pack view and semantic mobile preview.
-  // Semantic preview only available when pack has exportablePage
-  // (P14 superset of validatedPage — post-P4..P14 packs).
-  const [viewMode, setViewMode] = useState<'pack' | 'semantic'>('pack')
+  // FIX 2026-05-27 — Semantic view removed per user request. Pack view
+  // (article) is the only view now. Keeping state stub for minimal diff
+  // to legacy conditional render path below; always 'pack'.
+  const [viewMode] = useState<'pack' | 'semantic'>('pack')
 
   const addToast = useAppStore((s) => s.addToast)
 
@@ -228,25 +228,10 @@ export default function StorytellingOutputPanel({
           </div>
 
           <div className="flex items-center gap-1.5 shrink-0">
-            {/* P7 — Semantic preview toggle (only if pack has exportablePage / P14 superset) */}
-            {hasSemantic && (
-              <div className="flex items-center rounded-lg border border-stone-300 bg-white overflow-hidden">
-                <button
-                  onClick={() => setViewMode('pack')}
-                  className={`flex items-center gap-1 px-2.5 py-1 text-[11px] ${viewMode === 'pack' ? 'bg-stone-200 text-stone-800' : 'text-stone-500 hover:bg-stone-50'}`}
-                  title="Xem pack đầy đủ"
-                >
-                  <FileText className="h-3 w-3" /> Pack
-                </button>
-                <button
-                  onClick={() => setViewMode('semantic')}
-                  className={`flex items-center gap-1 px-2.5 py-1 text-[11px] border-l border-stone-300 ${viewMode === 'semantic' ? 'bg-stone-200 text-stone-800' : 'text-stone-500 hover:bg-stone-50'}`}
-                  title="Xem semantic mobile preview (P7)"
-                >
-                  <Smartphone className="h-3 w-3" /> Semantic
-                </button>
-              </div>
-            )}
+            {/* FIX 2026-05-27 — Pack/Semantic toggle removed per user request.
+                Pack view (article) is now the only view. All image gen +
+                review actions live inline in the article via ImagePlaceholder.
+                Export buttons moved to article footer. */}
             {/* INT — Generate all images button (live KIE execution).
                 FIX 2026-05-27: removed VITE_INTERNAL_BETA gate — button always
                 visible when pack has exportablePage AND KIE API key set.
@@ -361,20 +346,43 @@ export default function StorytellingOutputPanel({
             onRetryFailedSection={handleRetryFailed}
           />
         ) : (
-          // Legacy pack view (default)
-          <article className="max-w-prose mx-auto px-5 md:px-8 py-12 md:py-20">
-            {pack.sections.map((section, idx) => (
-              <StorytellingSectionView
-                key={idx}
-                section={section}
-                sectionId={meta.sectionIds[idx]}
-                overlayType={meta.overlayPerSection[idx]}
-                chapterNumber={idx + 1}
-                isLast={idx === pack.sections.length - 1}
-                characterName={character?.name}
-                status={meta.sectionStatus?.[idx]}
-              />
-            ))}
+          // Legacy pack view (default). FIX 2026-05-27: storytelling-article
+          // class enables Lora + Be Vietnam Pro fonts that render VN/MS
+          // diacritics cleanly (was broken with browser default serif).
+          <article className="storytelling-article max-w-prose mx-auto px-5 md:px-8 py-12 md:py-20">
+            {pack.sections.map((section, idx) => {
+              // FIX 2026-05-27 — Look up generatedAsset from exportablePage by
+              // matching section index (composer maps blocks → sections in order).
+              const exportSection = meta.exportablePage?.sections[idx]
+              const generatedAsset = exportSection?.generatedAsset
+              const sectionRegenState = session?.sections[exportSection?.id ?? '']
+              const isThisSectionGenerating =
+                imageGen.isGenerating &&
+                imageGen.progress.currentSectionId === exportSection?.id
+              return (
+                <StorytellingSectionView
+                  key={idx}
+                  section={section}
+                  sectionId={meta.sectionIds[idx]}
+                  overlayType={meta.overlayPerSection[idx]}
+                  chapterNumber={idx + 1}
+                  isLast={idx === pack.sections.length - 1}
+                  characterName={character?.name}
+                  status={meta.sectionStatus?.[idx]}
+                  imageUrl={generatedAsset?.outputImages?.[0]?.url}
+                  imagePrompt={generatedAsset?.promptUsed?.prompt}
+                  isImageGenerating={
+                    isThisSectionGenerating ||
+                    sectionRegenState?.regenStatus === 'generating' ||
+                    sectionRegenState?.regenStatus === 'queued'
+                  }
+                  canGenerateImage={Boolean(kieApiKey && exportSection)}
+                  onGenerateImage={
+                    exportSection ? () => handleRegenerateImage(exportSection.id) : undefined
+                  }
+                />
+              )
+            })}
 
             {/* Footer breathing space */}
             <div className="mt-32 mb-8 text-center">
@@ -382,6 +390,14 @@ export default function StorytellingOutputPanel({
                 — hết —
               </p>
             </div>
+
+            {/* FIX 2026-05-27 — Export panel in article footer.
+                Replaces Semantic-view Export tab. Marketer can copy
+                markdown / Ladipage HTML / Ladipage guidance / download
+                bundle without leaving the article view. */}
+            {meta.exportablePage && (
+              <PackExportFooter page={meta.exportablePage} />
+            )}
           </article>
         )}
       </div>
@@ -425,6 +441,131 @@ function ProofCalloutView({ section, isLast }: ProofCalloutProps) {
         </figcaption>
       )}
     </aside>
+  )
+}
+
+// ═════════════════════════════════════════════════════════════════════
+// PackExportFooter — page-level export buttons in Pack view (FIX 2026-05-27)
+//
+// Replaces Semantic-view Export tab. Marketer copies markdown / Ladipage
+// HTML / Ladipage guidance / downloads JSON bundle from here.
+// ═════════════════════════════════════════════════════════════════════
+
+interface PackExportFooterProps {
+  page: import('../../exportPipeline').ExportablePage
+}
+
+function PackExportFooter({ page }: PackExportFooterProps) {
+  const [toast, setToast] = useState<string | null>(null)
+  const flash = (label: string) => {
+    setToast(label)
+    setTimeout(() => setToast(null), 1500)
+  }
+
+  const copyMarkdown = async () => {
+    const { serializeToMarkdown } = await import('../../exportPipeline')
+    const md = serializeToMarkdown(page)
+    await navigator.clipboard.writeText(md).catch(() => {})
+    flash('markdown')
+  }
+  const copyLadipageGuide = async () => {
+    const { serializeToLadipageGuidance } = await import('../../exportPipeline')
+    const guide = serializeToLadipageGuidance(page)
+    await navigator.clipboard.writeText(guide).catch(() => {})
+    flash('ladipage-guide')
+  }
+  const copyLadipageHtml = async () => {
+    const { adaptToLadipage, serializeBundleHtml } = await import('../../ladipageAdapter')
+    const bundle = adaptToLadipage(page)
+    const html = serializeBundleHtml(bundle)
+    await navigator.clipboard.writeText(html).catch(() => {})
+    flash('ladipage-html')
+  }
+  const downloadJson = async () => {
+    const { serializeToJsonString } = await import('../../exportPipeline')
+    const json = serializeToJsonString(page)
+    const blob = new Blob([json], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = 'storytelling-pack.json'
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    setTimeout(() => URL.revokeObjectURL(url), 1000)
+    flash('json')
+  }
+  const downloadLadipageBundle = async () => {
+    const { adaptToLadipage, serializeBundleJson } = await import('../../ladipageAdapter')
+    const bundle = adaptToLadipage(page)
+    const json = serializeBundleJson(bundle)
+    const blob = new Blob([json], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `${bundle.bundleId}.json`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    setTimeout(() => URL.revokeObjectURL(url), 1000)
+    flash('ladipage-bundle')
+  }
+
+  return (
+    <div className="mt-16 rounded-lg border border-stone-200 bg-stone-50 p-6">
+      <p className="font-serif italic text-base text-stone-800 mb-1">
+        Export — sẵn sàng paste vào Ladipage
+      </p>
+      <p className="text-xs text-stone-500 mb-4">
+        {page.sections.length} section · {page.totalWordCount} từ · {page.estimatedScrollTimeSec}s scroll
+      </p>
+
+      <div className="space-y-3">
+        <div>
+          <p className="text-[10px] font-mono uppercase tracking-wider text-stone-500 mb-2">Copy clipboard</p>
+          <div className="flex flex-wrap gap-2">
+            <FooterButton onClick={copyMarkdown} label="Markdown" success={toast === 'markdown'} />
+            <FooterButton onClick={copyLadipageGuide} label="Hướng dẫn Ladipage" success={toast === 'ladipage-guide'} />
+            <FooterButton onClick={copyLadipageHtml} label="Ladipage HTML" success={toast === 'ladipage-html'} />
+          </div>
+        </div>
+        <div>
+          <p className="text-[10px] font-mono uppercase tracking-wider text-stone-500 mb-2">Tải xuống</p>
+          <div className="flex flex-wrap gap-2">
+            <FooterButton onClick={downloadJson} label="JSON" icon="download" success={toast === 'json'} />
+            <FooterButton onClick={downloadLadipageBundle} label="Ladipage bundle" icon="download" success={toast === 'ladipage-bundle'} />
+          </div>
+        </div>
+      </div>
+
+      <p className="mt-4 text-[10px] italic text-stone-400 leading-relaxed">
+        Hệ thống KHÔNG auto-publish, KHÔNG auto-build HTML.
+        Bạn là final layout controller — paste copy + apply layout
+        theo "Hướng dẫn Ladipage" trong khối Ladipage thật.
+      </p>
+    </div>
+  )
+}
+
+function FooterButton({ onClick, label, success, icon = 'copy' }: {
+  onClick: () => void
+  label: string
+  success?: boolean
+  icon?: 'copy' | 'download'
+}) {
+  const Icon = icon === 'download' ? RotateCcw : FileText
+  return (
+    <button
+      onClick={onClick}
+      className={
+        success
+          ? 'flex items-center gap-1.5 rounded-md border border-emerald-300 bg-emerald-50 px-3 py-1.5 text-xs font-mono text-emerald-800'
+          : 'flex items-center gap-1.5 rounded-md border border-stone-300 bg-white px-3 py-1.5 text-xs font-mono text-stone-700 hover:bg-stone-100'
+      }
+    >
+      {success ? <Check className="h-3 w-3" /> : <Icon className="h-3 w-3" />}
+      {success ? 'Đã copy' : label}
+    </button>
   )
 }
 
@@ -504,10 +645,17 @@ interface SectionViewProps {
   isLast: boolean
   characterName?: string
   status?: SectionGenStatus
+  // FIX 2026-05-27 — per-section image gen integration
+  imageUrl?: string
+  imagePrompt?: string
+  isImageGenerating?: boolean
+  canGenerateImage?: boolean
+  onGenerateImage?: () => void
 }
 
 function StorytellingSectionView({
   section, sectionId, overlayType, chapterNumber, isLast, characterName, status,
+  imageUrl, imagePrompt, isImageGenerating, canGenerateImage, onGenerateImage,
 }: SectionViewProps) {
   const blueprint = BLOCK_POOL[sectionId]
   const treatments = SECTION_VISUAL_MAP[sectionId] ?? []
@@ -577,7 +725,10 @@ function StorytellingSectionView({
         nativeLabel={section.title}
       />
 
-      {/* Image placeholder — appears ABOVE body cho blocks has image */}
+      {/* Image placeholder — appears ABOVE body cho blocks has image.
+          FIX 2026-05-27: passes generated image URL + prompt + KIE gen
+          callbacks. Per-section "Tạo ảnh"/"Tạo lại" buttons live inside
+          ImagePlaceholder now. */}
       {hasImage && (
         <ImagePlaceholder
           chapterNumber={chapterNumber}
@@ -587,6 +738,11 @@ function StorytellingSectionView({
           treatments={treatments}
           continuityRequirement="optional"
           productVisibility="forbidden"
+          imageUrl={imageUrl}
+          promptText={imagePrompt}
+          isGenerating={isImageGenerating}
+          canGenerate={canGenerateImage}
+          onGenerate={onGenerateImage}
         />
       )}
 
@@ -646,39 +802,118 @@ interface PlaceholderProps {
   treatments: VisualTreatment[]
   continuityRequirement: 'anchor' | 'required' | 'optional' | 'none'
   productVisibility: 'forbidden' | 'mentioned-only' | 'subtle-background' | 'still-life'
+  // FIX 2026-05-27 — per-section image gen UI (matches UGC app pattern)
+  imageUrl?: string
+  promptText?: string
+  isGenerating?: boolean
+  canGenerate?: boolean
+  onGenerate?: () => void
 }
 
 function ImagePlaceholder({
   chapterNumber, characterName, sectionTitle, overlayType, treatments,
   continuityRequirement, productVisibility,
+  imageUrl, promptText, isGenerating, canGenerate, onGenerate,
 }: PlaceholderProps) {
   const overlayText = renderOverlayText(overlayType, chapterNumber, characterName, sectionTitle)
   const aspectClass = productVisibility === 'still-life' ? 'aspect-square' : 'aspect-[4/5]'
+  const hasImage = Boolean(imageUrl)
 
   return (
     <figure className="relative mb-8">
       <div
-        className={`relative ${aspectClass} w-full max-w-sm mx-auto rounded-sm border border-dashed border-stone-300 bg-stone-100/40 flex flex-col items-center justify-center text-center px-4`}
+        className={`relative ${aspectClass} w-full max-w-sm mx-auto rounded-sm border border-dashed border-stone-300 bg-stone-100/40 flex flex-col items-center justify-center text-center overflow-hidden`}
       >
-        <ImageIcon className="h-7 w-7 text-stone-300 mb-2" strokeWidth={1.5} />
-        <p className="text-[11px] italic text-stone-500 leading-relaxed">
-          {treatments.length > 0 ? treatments.join(' · ') : 'visual treatment'}
-        </p>
-        <p className="mt-1 text-[10px] text-stone-400">
-          {continuityRequirement === 'anchor' && 'identity anchor — define lock'}
-          {continuityRequirement === 'required' && 'continuity face required'}
-          {continuityRequirement === 'optional' && 'face optional (peripheral OK)'}
-          {continuityRequirement === 'none' && 'no face — object/landscape'}
-        </p>
-        <p className="mt-3 text-[10px] text-stone-300">[ảnh sẽ render ở Phase 3-4]</p>
-
-        {/* Overlay simulation — italic serif, photo-book style */}
-        {overlayText && (
-          <span className="absolute bottom-3 left-3 max-w-[70%] rounded-sm bg-stone-50/85 backdrop-blur-sm px-2 py-0.5 font-serif italic text-[11px] text-stone-700">
-            {overlayText}
-          </span>
+        {hasImage ? (
+          // ── REAL IMAGE ─────────────────────────────────────────────
+          <>
+            <img
+              src={imageUrl}
+              alt={sectionTitle}
+              className="absolute inset-0 w-full h-full object-cover"
+              loading="lazy"
+            />
+            {/* Regenerate button — top-right, visible on hover */}
+            {canGenerate && (
+              <button
+                onClick={onGenerate}
+                disabled={isGenerating}
+                className="absolute top-2 right-2 flex items-center gap-1 rounded-md bg-white/90 backdrop-blur-sm border border-stone-300 px-2 py-1 text-[10px] font-mono text-stone-700 hover:bg-white shadow-sm disabled:opacity-50"
+                title="Tạo lại ảnh"
+              >
+                {isGenerating ? (
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                ) : (
+                  <RotateCcw className="h-3 w-3" />
+                )}
+                {isGenerating ? 'Đang tạo...' : 'Tạo lại'}
+              </button>
+            )}
+            {/* Overlay caption — bottom-left */}
+            {overlayText && (
+              <span className="absolute bottom-3 left-3 max-w-[70%] rounded-sm bg-stone-50/85 backdrop-blur-sm px-2 py-0.5 font-serif italic text-[11px] text-stone-700">
+                {overlayText}
+              </span>
+            )}
+          </>
+        ) : (
+          // ── PLACEHOLDER (no image yet) ─────────────────────────────
+          <div className="absolute inset-0 flex flex-col items-center justify-center px-4">
+            <ImageIcon className="h-7 w-7 text-stone-300 mb-2" strokeWidth={1.5} />
+            <p className="text-[11px] italic text-stone-500 leading-relaxed">
+              {treatments.length > 0 ? treatments.join(' · ') : 'visual treatment'}
+            </p>
+            <p className="mt-1 text-[10px] text-stone-400">
+              {continuityRequirement === 'anchor' && 'identity anchor — define lock'}
+              {continuityRequirement === 'required' && 'continuity face required'}
+              {continuityRequirement === 'optional' && 'face optional (peripheral OK)'}
+              {continuityRequirement === 'none' && 'no face — object/landscape'}
+            </p>
+            {/* Generate button — center, prominent */}
+            {canGenerate && onGenerate && (
+              <button
+                onClick={onGenerate}
+                disabled={isGenerating}
+                className="mt-3 flex items-center gap-1 rounded-md bg-stone-800 px-3 py-1.5 text-[11px] font-mono text-white hover:bg-stone-900 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isGenerating ? (
+                  <>
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                    Đang tạo...
+                  </>
+                ) : (
+                  <>
+                    <ImageIcon className="h-3 w-3" />
+                    Tạo ảnh
+                  </>
+                )}
+              </button>
+            )}
+            {!canGenerate && (
+              <p className="mt-3 text-[10px] text-stone-300">
+                [Cấu hình KIE key trong Settings để tạo ảnh]
+              </p>
+            )}
+            {overlayText && (
+              <span className="absolute bottom-3 left-3 max-w-[70%] rounded-sm bg-stone-50/85 backdrop-blur-sm px-2 py-0.5 font-serif italic text-[11px] text-stone-700">
+                {overlayText}
+              </span>
+            )}
+          </div>
         )}
       </div>
+
+      {/* Prompt display — below image, collapsible for QA */}
+      {promptText && (
+        <details className="mt-2 max-w-sm mx-auto">
+          <summary className="cursor-pointer text-[10px] uppercase tracking-wider text-stone-400 select-none hover:text-stone-600">
+            Prompt ↓
+          </summary>
+          <div className="mt-1.5 rounded border border-stone-200 bg-stone-50 px-3 py-2 font-mono text-[10px] text-stone-600 leading-relaxed">
+            {promptText}
+          </div>
+        </details>
+      )}
     </figure>
   )
 }
