@@ -995,19 +995,65 @@ export function getDomainLockForNiche(niche: NicheKey): NicheDomainLock {
   return NICHE_DOMAIN_LOCK[niche]
 }
 
-/** Compose domain lock brief — surfaces forbidden-leak prominently. */
-export function nicheDomainLockBrief(lock: NicheDomainLock): string {
-  return [
+/** Compose domain lock brief — synthesis-aware.
+ *
+ *  POST-FIX (2026-05-27): When `synthesizedReaderSymptoms` is provided
+ *  (i.e., product synthesis pipeline succeeded), this brief REPLACES the
+ *  niche-pool symptoms with synthesis-derived product-specific symptoms.
+ *  This resolves the OLD conflict where two competing pools (synthesis
+ *  in system prompt + niche-pool in user prompt) caused Gemini to pick
+ *  the niche pool — which for kitchen-sink niches (eg health-functional
+ *  contains knee/back/nasal/digestive) led to wrong-symptom drift.
+ *
+ *  Generic for ALL products: when synthesis brief is empty/fallback,
+ *  reverts to original niche-pool behaviour (legacy compatibility). */
+export function nicheDomainLockBrief(
+  lock: NicheDomainLock,
+  /** Product-specific symptoms from synthesizedBrief. When non-empty,
+   *  these REPLACE the niche-pool symptoms as the authoritative source. */
+  synthesizedReaderSymptoms?: string[],
+): string {
+  const hasSynthesis = Array.isArray(synthesizedReaderSymptoms) && synthesizedReaderSymptoms.length > 0
+  const lines: string[] = [
     `═══ NICHE DOMAIN LOCK (${lock.niche}) — strict separation ═══`,
-    `Concrete symptoms (use 2-3 across pack — NEVER paraphrase generically):`,
-    ...lock.symptomsPool.slice(0, 4).map((s) => `  - ${s}`),
-    `Friction behaviors (sample 1-2 per recognition block):`,
-    ...lock.frictionPool.slice(0, 3).map((b) => `  - ${b}`),
-    `Body language cues (weave subtly):`,
-    ...lock.bodyLanguagePool.slice(0, 3).map((c) => `  - ${c}`),
-    `Hidden fears (surface 1 in Phase 1 hidden-emotional-truth block):`,
-    ...lock.hiddenFearsPool.slice(0, 3).map((f) => `  - ${f}`),
+  ]
+
+  if (hasSynthesis) {
+    // ── SYNTHESIS PATH: product-specific symptoms are authoritative ──
+    lines.push(
+      `⭐ AUTHORITATIVE pain symptoms for THIS specific product (use 2-3 across Phase 1-2 — NEVER substitute with generic body-discomfort):`,
+      ...synthesizedReaderSymptoms!.slice(0, 6).map((s) => `  ✓ ${s}`),
+      ``,
+      `These symptoms come from THIS product's reality model (text + vision + niche synthesis).`,
+      `If Phase 1-2 blocks talk about ANY other physical symptom not in this list,`,
+      `the pack FAILS reader recognition. Reader must match "this is MY problem" by Block 2.`,
+      ``,
+      `Generic niche-pool supporting cues — use ONLY if they naturally fit THIS product reality.`,
+      `Skip any cue that drifts to a different sub-niche (eg joint cues on a nasal product).`,
+      `  Friction behaviors:`,
+      ...lock.frictionPool.slice(0, 3).map((b) => `    · ${b}`),
+      `  Body language cues:`,
+      ...lock.bodyLanguagePool.slice(0, 3).map((c) => `    · ${c}`),
+      `  Hidden fears:`,
+      ...lock.hiddenFearsPool.slice(0, 3).map((f) => `    · ${f}`),
+    )
+  } else {
+    // ── LEGACY PATH: pure niche-pool (synthesis unavailable / fallback) ──
+    lines.push(
+      `Concrete symptoms (use 2-3 across pack — NEVER paraphrase generically):`,
+      ...lock.symptomsPool.slice(0, 4).map((s) => `  - ${s}`),
+      `Friction behaviors (sample 1-2 per recognition block):`,
+      ...lock.frictionPool.slice(0, 3).map((b) => `  - ${b}`),
+      `Body language cues (weave subtly):`,
+      ...lock.bodyLanguagePool.slice(0, 3).map((c) => `  - ${c}`),
+      `Hidden fears (surface 1 in Phase 1 hidden-emotional-truth block):`,
+      ...lock.hiddenFearsPool.slice(0, 3).map((f) => `  - ${f}`),
+    )
+  }
+
+  lines.push(
     `⛔ FORBIDDEN cross-niche phrases (NEVER appear in this pack):`,
     `  ${lock.forbiddenLeak.join(' / ')}`,
-  ].join('\n')
+  )
+  return lines.join('\n')
 }

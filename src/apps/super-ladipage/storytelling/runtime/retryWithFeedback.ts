@@ -67,6 +67,10 @@ interface RunArgs {
    *  PRIMARY context — leads system prompt before niche pool data.
    *  Contains forbiddenDriftSymptoms guardrail. Highest accuracy layer. */
   synthesizedBrief?: string
+  /** SPEC-FIX (2026-05-27) — Reader-specific symptoms from synthesis,
+   *  passed structurally so nicheDomainLockBrief can REPLACE its generic
+   *  symptom pool (single source of truth, no competing pools). */
+  synthesizedReaderSymptoms?: string[]
   geminiApiKey: string
   kieApiKey: string
   /** v5.1 — Narrator/DNA/curve selection. OPTIONAL — if undefined,
@@ -96,7 +100,13 @@ async function runOnce(
     args.realityBrief,
     args.synthesizedBrief,
   )
-  const userPrompt = buildPackGenUserPrompt(args.input, args.plan, args.selection, retryFeedback)
+  const userPrompt = buildPackGenUserPrompt(
+    args.input,
+    args.plan,
+    args.selection,
+    retryFeedback,
+    args.synthesizedReaderSymptoms,
+  )
   logPromptStats(systemPrompt, userPrompt, args.plan)
 
   const raw = await callGeminiForPack({
@@ -289,7 +299,7 @@ async function generateMainPackOnly(args: RunArgs): Promise<GeneratedPackResult>
     pack = await runOnce(argsWithSelection, feedback, 'storytelling-packgen-1-retry')
   }
 
-  const initialValidation = runValidators(pack, args.input.niche)
+  const initialValidation = runValidators(pack, args.input.niche, args.synthesizedReaderSymptoms)
   logValidationResult(initialValidation)
 
   if (initialValidation.pass) {
@@ -318,10 +328,10 @@ async function generateMainPackOnly(args: RunArgs): Promise<GeneratedPackResult>
     // Retry call errored — fall back to attempt 1 result + downgrade failing sections
     const msg = err instanceof Error ? err.message : String(err)
     console.warn(`[storytelling/runtime] attempt 2 errored: ${msg.slice(0, 200)} — using attempt 1 + fallback`)
-    return buildFallbackResult(pack, initialValidation, 2, argsWithSelection.selection, args.input.niche, args.plan)
+    return buildFallbackResult(pack, initialValidation, 2, argsWithSelection.selection, args.input.niche, args.plan, args.synthesizedReaderSymptoms)
   }
 
-  const secondValidation = runValidators(pack2, args.input.niche)
+  const secondValidation = runValidators(pack2, args.input.niche, args.synthesizedReaderSymptoms)
   logValidationResult(secondValidation)
 
   if (secondValidation.pass) {
@@ -348,7 +358,7 @@ async function generateMainPackOnly(args: RunArgs): Promise<GeneratedPackResult>
   console.warn(
     `[storytelling/runtime] attempt 2 still had ${secondValidation.violations.length} violations — applying fallback to failing sections`,
   )
-  return buildFallbackResult(pack2, secondValidation, 3, argsWithSelection.selection, args.input.niche, args.plan)
+  return buildFallbackResult(pack2, secondValidation, 3, argsWithSelection.selection, args.input.niche, args.plan, args.synthesizedReaderSymptoms)
 }
 
 /** When both attempts fail: keep passing sections from last attempt,
@@ -361,10 +371,11 @@ function buildFallbackResult(
   selection: NarratorDnaSelection,
   niche: import('../types').NicheKey,
   plan: BlockPlan[],
+  readerSpecificSymptoms?: string[],
 ): GeneratedPackResult {
   const violationsById = groupViolationsBySection(failedValidation)
   const fixed = applyFallback(pack, failedValidation.failingSections)
-  const finalValidation = runValidators(fixed, niche)
+  const finalValidation = runValidators(fixed, niche, readerSpecificSymptoms)
   logValidationResult(finalValidation)
 
   // P2 — interleave proof block placeholders into final pack.

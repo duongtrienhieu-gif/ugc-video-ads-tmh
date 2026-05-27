@@ -26,6 +26,8 @@ import { genericWellnessDensityDetector } from './genericWellnessDensityDetector
 import { memoryAnchorDetector } from './memoryAnchorDetector'
 import { emotionalFlatteningDetector } from './emotionalFlatteningDetector'
 import { aggressiveSalesDetector } from '../../cta/validators/aggressiveSalesDetector'
+import { phaseOneSpecificityDetector } from './phaseOneSpecificityDetector'
+import { duplicateContentDetector } from './duplicateContentDetector'
 import type { ValidatorResult, ValidatorViolation } from './bioIntroDetector'
 
 export type ValidatorName =
@@ -34,6 +36,8 @@ export type ValidatorName =
   | 'aiCadence'
   | 'bannedPhrase'
   | 'commercialTone'
+  | 'phaseOneSpecificity'        // hard — SPEC-FIX 2026-05-27
+  | 'duplicateContent'           // hard — SPEC-FIX 2026-05-27
   | 'selfInsertion'              // soft
   | 'paragraphCount'             // soft
   | 'narratorCentric'            // soft — Chunk C
@@ -61,13 +65,24 @@ export interface AggregatedValidation {
   retryFeedback: string[]
 }
 
-export function runValidators(parsed: ParsedPack, niche?: NicheKey): AggregatedValidation {
+export function runValidators(
+  parsed: ParsedPack,
+  niche?: NicheKey,
+  /** SPEC-FIX (2026-05-27) — synthesis-derived product-specific symptoms.
+   *  When provided, phaseOneSpecificityDetector hard-checks that Phase 1-2
+   *  sections anchor to these terms (no abstract emotional drift). */
+  readerSpecificSymptoms?: string[],
+): AggregatedValidation {
   const byValidator: Record<ValidatorName, ValidatorResult> = {
     bioIntro:                bioIntroDetector(parsed.sections[0]),
     adjacentRhythm:          adjacentRhythmDetector(parsed.sections),
     aiCadence:               aiCadenceDetector(parsed.sections),
     bannedPhrase:            bannedPhraseDetector(parsed.sections),
     commercialTone:          commercialToneDetector(parsed.sections),
+    phaseOneSpecificity:     readerSpecificSymptoms
+      ? phaseOneSpecificityDetector(parsed.sections, readerSpecificSymptoms)
+      : { pass: true, violations: [] },
+    duplicateContent:        duplicateContentDetector(parsed.sections),
     selfInsertion:           selfInsertionDetector(parsed.sections[0]),
     paragraphCount:          paragraphCountDetector(parsed.sections),
     narratorCentric:         narratorCentricDetector(parsed.sections),

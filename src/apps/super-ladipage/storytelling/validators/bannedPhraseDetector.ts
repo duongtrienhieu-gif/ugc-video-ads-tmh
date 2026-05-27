@@ -58,6 +58,16 @@ const BANNED_PHRASES: BannedPattern[] = [
   { pattern: 'cuộc đời tôi sụp đổ', reason: 'overdramatic trauma' },
   { pattern: 'không ai biết tôi đã', reason: 'manufactured confession' },
   // 'tôi đã từng nghĩ đến' REMOVED — natural confession context OK
+
+  // ── Generic-wellness AI fingerprints (SPEC-FIX 2026-05-27) ──
+  // These phrases are explicitly in nicheMechanismVocab.bannedGenericPhrases
+  // for EVERY niche but Gemini still drifts to them. Hard ban now.
+  { pattern: 'phục hồi từ bên trong', reason: 'generic wellness fingerprint — banned across all niches' },
+  { pattern: 'từ bên trong ra ngoài', reason: 'generic wellness fingerprint — banned across all niches' },
+  { pattern: 'cân bằng cơ thể', reason: 'generic wellness fingerprint — banned across all niches' },
+  { pattern: 'nuôi dưỡng toàn diện', reason: 'generic wellness fingerprint — banned across all niches' },
+  { pattern: 'phục hồi tự nhiên', reason: 'generic wellness fingerprint — banned across all niches' },
+  { pattern: 'gốc rễ vấn đề', reason: 'generic wellness fingerprint — banned across all niches' },
 ]
 
 export function bannedPhraseDetector(sections: ParsedSection[]): ValidatorResult {

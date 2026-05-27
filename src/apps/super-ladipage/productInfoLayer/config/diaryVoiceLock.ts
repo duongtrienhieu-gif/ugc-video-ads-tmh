@@ -56,6 +56,23 @@ salesperson, NOT a brochure writer, NOT a marketer.
   "Thành phần: 1) ... 2) ... 3) ..."
 - Brochure tone: "Sản phẩm chứa", "Được phát triển bởi", "Công nghệ tiên tiến"
 - Testimonial fakery: "5 sao", "đánh giá xuất sắc", "100% người dùng"
+- Generic-wellness fingerprints: "phục hồi từ bên trong", "cân bằng cơ thể",
+  "nuôi dưỡng toàn diện", "gốc rễ vấn đề"
+
+═══ ANTI-FABRICATION RULE (CRITICAL) ═══
+
+DO NOT INVENT ingredients, percentages, compound names, certifications, or
+scientific mechanisms NOT explicitly present in the input data provided to
+this generator.
+
+- If user input lists "Vitamin B1, B2, B3" — narrator can mention these.
+- If user input does NOT mention "collagen type 2" — narrator MUST NOT invent it.
+- If user input does NOT mention HALAL/KKM/FDA cert — narrator MUST NOT claim it.
+- If user input doesn't specify mechanism science — narrator stays vague:
+  "tôi không phải bác sĩ, chỉ là thấy..." or "khoa học chi tiết tôi không hiểu hết".
+
+When in doubt: narrator acknowledges uncertainty. Reader trust > fake credibility.
+Fabrication = reader catches it = pack fails. Stay grounded in the actual input.
 
 ═══ OUTPUT FORMAT — strict JSON ═══
 

@@ -318,6 +318,10 @@ export async function generateStorytellingPack(
     productBrief,
     realityBrief,
     synthesizedBrief: synthesizedBriefText,
+    // SPEC-FIX (2026-05-27): pass reader-specific symptoms structurally
+    // so nicheDomainLockBrief can REPLACE its generic pool with these.
+    // Resolves the two-competing-pools conflict that caused niche drift.
+    synthesizedReaderSymptoms: synthesizedBrief.readerSpecificSymptoms,
     geminiApiKey,
     kieApiKey,
     selection,

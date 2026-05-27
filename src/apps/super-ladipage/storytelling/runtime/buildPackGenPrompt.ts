@@ -198,20 +198,30 @@ function buildBlockDirective(
   return lines.join('\n')
 }
 
-/** Top-level user prompt builder. */
+/** Top-level user prompt builder.
+ *
+ *  POST-FIX (2026-05-27): accepts optional `synthesizedReaderSymptoms` —
+ *  when provided, the nicheDomainLockBrief switches to synthesis-aware
+ *  mode (product-specific symptoms replace generic niche-pool symptoms).
+ *  This resolves the two-competing-pools conflict that caused niche drift
+ *  in kitchen-sink niches like 'health-functional'. */
 export function buildPackGenUserPrompt(
   input: StorytellingInput,
   plan: BlockPlan[],
   selection: NarratorDnaSelection,
   retryFeedback?: string,
+  synthesizedReaderSymptoms?: string[],
 ): string {
   const lines: string[] = []
 
   lines.push(ENGINE_CORE_PHILOSOPHY)
   lines.push('')
 
-  // ─── C2: Niche-domain lock (anti-contamination) — FIRST priority ────
-  lines.push(nicheDomainLockBrief(selection.domainLock))
+  // ─── C2: Niche-domain lock (synthesis-aware, anti-contamination) ────
+  // When synthesis brief provides product-specific symptoms, the brief
+  // uses THOSE as the authoritative pain symptom list and downgrades the
+  // niche-generic pools to "supporting cues, filter to current product".
+  lines.push(nicheDomainLockBrief(selection.domainLock, synthesizedReaderSymptoms))
   lines.push('')
 
   // ─── C2: Niche desire architecture (anti-flattening) ────────────────
