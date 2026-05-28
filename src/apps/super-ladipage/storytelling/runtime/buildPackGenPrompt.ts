@@ -102,7 +102,10 @@ function buildBlockDirective(
   lines.push(`  POV: ${block.youIBalance} — ${balanceFramingDirective(block.youIBalance)}`)
   lines.push(`  Paragraphs: ${paragraphMin}-${paragraphMax}`)
   if (lengthSpec) {
-    lines.push(`  Word cap: ${lengthSpec.wordCapMin}-${lengthSpec.wordCapMax} words total for this block.`)
+    // 2026-05-29 (re-cal) — Strong MIN floor language; previous "60-100"
+    // phrasing made Gemini write 30-word blocks. New version treats MIN
+    // as a HARD FLOOR.
+    lines.push(`  ⚠️ Words: MIN ${lengthSpec.wordCapMin} (FLOOR — do NOT go below), MAX ${lengthSpec.wordCapMax}. Aim ${Math.round((lengthSpec.wordCapMin + lengthSpec.wordCapMax) / 2)}-${lengthSpec.wordCapMax}.`)
     lines.push(`  Sentences per paragraph: 1-${lengthSpec.sentencesPerParagraphMax} MAX (1-sentence paragraphs OK for impact).`)
     lines.push(`  Sentence length: ≤ ${lengthSpec.wordsPerSentenceMax} words avg — mobile reader scrolls fast.`)
   }

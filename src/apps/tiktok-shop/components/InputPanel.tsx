@@ -19,7 +19,7 @@ import {
   estimateListingCredits,
   snapToPaletteFamily,
 } from '../constants'
-import { useResolvedBrandKit } from '../canvas/useResolvedBrandKit'
+import { useResolvedBrandKit } from '../hooks/useResolvedBrandKit'
 import { generateAllSlots } from '../services/generateAllSlots'
 import { generateDescription } from '../services/generateDescription'
 import { friendlyErrorMessage } from '../services/generateSlot'

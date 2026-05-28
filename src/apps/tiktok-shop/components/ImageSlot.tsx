@@ -1,62 +1,61 @@
-// ImageSlot — single card in the 9-slot grid.
-// Phase 2: renders via ListingCanvas (real Konva).
-// Phase 3: Re-roll visual button now calls real kie.ai for slot 1.
+// ImageSlot — Phase 6 (full AI). Renders plain <img> from Supabase signed URL.
+// AI handles the entire image including text + brand + trust bar.
+// No more Konva canvas.
 
-import { useEffect, useRef, useState } from 'react'
-import { RefreshCw, Pencil, Download, Loader2 } from 'lucide-react'
-import type Konva from 'konva'
+import { useEffect, useState } from 'react'
+import { RefreshCw, Download, Loader2, ImageOff, Sparkles } from 'lucide-react'
 import { useAppStore } from '../../../stores/appStore'
 import { useBankStore } from '../../../stores/bankStore'
 import { useSettingsStore } from '../../../stores/settingsStore'
-import type { ListingImage, PaletteFamily } from '../types'
-import type { ResolvedBrandKit } from '../../../types/brandKit'
-import { COMPOSITION_FAMILY_LABELS, ATMOSPHERE_VARIANTS } from '../constants'
-import ListingCanvas from '../canvas/ListingCanvas'
-import { downloadStage } from '../services/exportImage'
-import { generateSlotImage, friendlyErrorMessage } from '../services/generateSlot'
+import { getUrl } from '../../../utils/assetStore'
 import { getKieCredits } from '../../../utils/kieai'
+import type { ListingImage } from '../types'
+import { ATMOSPHERE_VARIANTS, snapToPaletteFamily, TPCN_PALETTES } from '../constants'
+import { useResolvedBrandKit } from '../hooks/useResolvedBrandKit'
 import { useTikTokShopStore } from '../store'
+import { generateSlotImage, friendlyErrorMessage } from '../services/generateSlot'
+import { downloadAssetAsImage } from '../services/exportImage'
 
 interface Props {
   image: ListingImage
-  paletteFamily: PaletteFamily
-  brandKit: ResolvedBrandKit
-  fallbackSceneUrl?: string | null
 }
 
-export default function ImageSlot({ image, paletteFamily, brandKit, fallbackSceneUrl }: Props) {
+export default function ImageSlot({ image }: Props) {
   const addToast = useAppStore((s) => s.addToast)
-  const stageRef = useRef<Konva.Stage | null>(null)
-  const [wrapRef, displayWidth] = useElementWidth<HTMLDivElement>()
 
-  const draft           = useTikTokShopStore((s) => s.draft)
-  const setSlotStatus   = useTikTokShopStore((s) => s.setSlotStatus)
-  const setSlotImage    = useTikTokShopStore((s) => s.setSlotImage)
-  const getProductById  = useBankStore((s) => s.getProductById)
-  const kieApiKey       = useSettingsStore((s) => s.kieApiKey)
-  const setKieCredits   = useSettingsStore((s) => s.setKieCredits)
+  const draft          = useTikTokShopStore((s) => s.draft)
+  const setSlotStatus  = useTikTokShopStore((s) => s.setSlotStatus)
+  const setSlotImage   = useTikTokShopStore((s) => s.setSlotImage)
+  const getProductById = useBankStore((s) => s.getProductById)
+  const kieApiKey      = useSettingsStore((s) => s.kieApiKey)
+  const setKieCredits  = useSettingsStore((s) => s.setKieCredits)
+
+  const resolvedBrandKit = useResolvedBrandKit(draft.brandKitId, draft.market)
+  const paletteFamily = snapToPaletteFamily(resolvedBrandKit.palette.primary)
 
   const atmosphere = ATMOSPHERE_VARIANTS[image.config.atmosphere]
+  const palette = TPCN_PALETTES[paletteFamily]
   const isGenerating = image.status === 'generating'
+  const isFailed = image.status === 'failed'
+
+  // Resolve image URL when assetId is set
+  const [imgUrl, setImgUrl] = useState<string | null>(null)
+  useEffect(() => {
+    if (!image.imageAssetId) { setImgUrl(null); return }
+    let alive = true
+    getUrl(image.imageAssetId)
+      .then((u) => { if (alive) setImgUrl(u) })
+      .catch(() => { if (alive) setImgUrl(null) })
+    return () => { alive = false }
+  }, [image.imageAssetId])
 
   async function handleRerollVisual() {
-    if (image.config.visualMode === 'canvas-only') {
-      addToast('Slot này là canvas-only — chỉ cần sửa text overlay', 'info')
-      return
-    }
     if (!draft.brandKitId || !draft.productId) {
       addToast('Cần chọn Brand Kit + Sản phẩm trước khi re-roll', 'error')
       return
     }
-    if (!draft.output) {
-      addToast('Bấm "Tạo Listing" ở panel trái trước', 'error')
-      return
-    }
     const product = getProductById(draft.productId)
-    if (!product) {
-      addToast('Không tìm thấy sản phẩm', 'error')
-      return
-    }
+    if (!product) { addToast('Không tìm thấy sản phẩm', 'error'); return }
     if (draft.referenceImageAssetIds.length < 2) {
       addToast('Cần ít nhất 2 ảnh tham chiếu', 'error')
       return
@@ -66,7 +65,7 @@ export default function ImageSlot({ image, paletteFamily, brandKit, fallbackScen
     try {
       const { assetId, prompt } = await generateSlotImage({
         apiKey: kieApiKey,
-        brandKit,
+        brandKit: resolvedBrandKit,
         product,
         slotConfig: image.config,
         paletteFamily,
@@ -75,11 +74,9 @@ export default function ImageSlot({ image, paletteFamily, brandKit, fallbackScen
       })
       setSlotImage(image.slot, assetId, prompt)
       addToast(`Đã tạo lại Slot ${image.slot}`, 'success')
-
-      // Refresh credits
       try {
-        const newCredits = await getKieCredits(kieApiKey)
-        setKieCredits(newCredits)
+        const c = await getKieCredits(kieApiKey)
+        setKieCredits(c)
       } catch { /* silent */ }
     } catch (err) {
       const msg = friendlyErrorMessage(err)
@@ -88,19 +85,13 @@ export default function ImageSlot({ image, paletteFamily, brandKit, fallbackScen
     }
   }
 
-  function handleRerollText() {
-    addToast('Re-roll text — wire ở Phase 4 (khi text gen có)', 'info')
-  }
-
-  const handleDownload = async () => {
-    if (!stageRef.current) return
+  async function handleDownload() {
+    if (!image.imageAssetId) {
+      addToast('Chưa có ảnh để tải', 'error')
+      return
+    }
     try {
-      // Export at native 1080×1080 regardless of display size — we ALWAYS
-      // ship customers the full-res image. pixelRatio=1 because the Stage
-      // is already 1080 in internal coords; we just scale up from the
-      // displayed (shrunk) size back to native by dividing by the scale.
-      const scale = displayWidth / 1080
-      await downloadStage(stageRef.current, `tiktok-shop-slot${image.slot}`, { pixelRatio: 1 / scale })
+      await downloadAssetAsImage(image.imageAssetId, `tiktok-shop-slot${image.slot}`)
       addToast('Đã tải ảnh xuống', 'success')
     } catch (err) {
       addToast(`Tải xuống lỗi: ${err instanceof Error ? err.message : String(err)}`, 'error')
@@ -122,33 +113,39 @@ export default function ImageSlot({ image, paletteFamily, brandKit, fallbackScen
         </span>
       </div>
 
-      {/* Canvas preview — aspect 1:1 */}
-      <div ref={wrapRef} className="relative aspect-square w-full overflow-hidden bg-gray-100">
-        {displayWidth > 0 && (
-          <ListingCanvas
-            ref={stageRef}
-            image={image}
-            paletteFamily={paletteFamily}
-            brandKit={brandKit}
-            fallbackSceneUrl={fallbackSceneUrl}
-            displayWidth={displayWidth}
-            listening={false}
+      {/* Image preview area — aspect 1:1 */}
+      <div className="relative aspect-square w-full overflow-hidden bg-gray-100">
+        {imgUrl ? (
+          <img
+            src={imgUrl}
+            alt={`Slot ${image.slot} ${image.config.intentLabel}`}
+            className="h-full w-full object-cover"
+            loading="lazy"
           />
-        )}
-        {image.status === 'generating' && (
-          <div className="absolute inset-0 flex items-center justify-center bg-black/30 text-white">
-            <Loader2 className="h-6 w-6 animate-spin" />
+        ) : isGenerating ? (
+          <div
+            className="flex h-full flex-col items-center justify-center gap-2"
+            style={{ background: `linear-gradient(135deg, ${palette.primary} 0%, ${palette.secondary} 100%)` }}
+          >
+            <Loader2 className="h-7 w-7 animate-spin text-white" />
+            <span className="text-[11px] font-medium text-white/85">Đang tạo...</span>
           </div>
+        ) : isFailed ? (
+          <div className="flex h-full flex-col items-center justify-center gap-2 bg-red-50 text-red-600">
+            <ImageOff className="h-7 w-7" />
+            <span className="px-3 text-center text-[10px] leading-tight">
+              {image.error ?? 'Lỗi gen'}
+            </span>
+          </div>
+        ) : (
+          <EmptyPlaceholder paletteFamily={paletteFamily} />
         )}
       </div>
 
       {/* Action bar */}
       <div className="flex items-center justify-between gap-1 border-t border-gray-100 bg-white px-2 py-1.5">
-        <span
-          className="truncate text-[9px] text-gray-400"
-          title={COMPOSITION_FAMILY_LABELS[image.config.composition]}
-        >
-          {COMPOSITION_FAMILY_LABELS[image.config.composition]}
+        <span className="truncate text-[9px] text-gray-400">
+          Slot {image.slot}
         </span>
         <div className="flex shrink-0 items-center gap-0.5">
           <IconBtn
@@ -158,22 +155,16 @@ export default function ImageSlot({ image, paletteFamily, brandKit, fallbackScen
             disabled={isGenerating}
           />
           <IconBtn
-            icon={<Pencil className="h-3 w-3" />}
-            title="Sửa text"
-            onClick={handleRerollText}
-          />
-          <IconBtn
             icon={<Download className="h-3 w-3" />}
-            title="Tải xuống (1080×1080)"
+            title="Tải xuống"
             onClick={handleDownload}
+            disabled={!imgUrl}
           />
         </div>
       </div>
     </div>
   )
 }
-
-// ── Helpers ──────────────────────────────────────────────────────────────
 
 function IconBtn({ icon, title, onClick, disabled }: {
   icon: React.ReactNode
@@ -193,21 +184,17 @@ function IconBtn({ icon, title, onClick, disabled }: {
   )
 }
 
-// Track an element's rendered width so the inner Stage can use a numeric
-// width matching its container. ResizeObserver updates on column reflow.
-function useElementWidth<T extends HTMLElement>(): [React.RefObject<T | null>, number] {
-  const ref = useRef<T | null>(null)
-  const [width, setWidth] = useState(0)
-  useEffect(() => {
-    const el = ref.current
-    if (!el) return
-    setWidth(el.clientWidth)
-    const ro = new ResizeObserver((entries) => {
-      const w = entries[0].contentRect.width
-      if (w > 0) setWidth(Math.round(w))
-    })
-    ro.observe(el)
-    return () => ro.disconnect()
-  }, [])
-  return [ref, width]
+function EmptyPlaceholder({ paletteFamily }: { paletteFamily: ReturnType<typeof snapToPaletteFamily> }) {
+  const palette = TPCN_PALETTES[paletteFamily]
+  return (
+    <div
+      className="flex h-full flex-col items-center justify-center gap-2 px-4 text-center"
+      style={{ background: `linear-gradient(135deg, ${palette.primary}22 0%, ${palette.secondary} 100%)` }}
+    >
+      <Sparkles className="h-6 w-6 opacity-40" style={{ color: palette.primary }} />
+      <p className="text-[10px] leading-snug opacity-60" style={{ color: palette.primary }}>
+        Bấm "Tạo Listing" để AI tạo ảnh
+      </p>
+    </div>
+  )
 }

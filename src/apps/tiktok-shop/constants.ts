@@ -17,16 +17,19 @@ import type {
 // pre-assigned. Tier 3: only overlay text + AI scene vary per generation.
 // ─────────────────────────────────────────────────────────────────────────
 
+// Phase 6 pivot: ALL 9 slots are AI-gen now (no canvas-only). highRes=false
+// for everything since Nano Banana 2 @ 1K (8 credits) is plenty for TikTok
+// Shop thumbnails. Hero/Offer can bump to highRes=true later if needed.
 export const SLOT_MAP: SlotConfig[] = [
-  { slot: 1, intent: 'hero-hook',      intentLabel: 'Hero Hook',          composition: 'pill-bottle-hero-centered',  atmosphere: 'classic',   visualMode: 'ai-gen',      highRes: true  },
-  { slot: 2, intent: 'pain-point',     intentLabel: 'Pain Point',         composition: 'split-screen-before-after',  atmosphere: 'soft',      visualMode: 'ai-gen',      highRes: false },
-  { slot: 3, intent: 'transformation', intentLabel: 'Kết quả',            composition: 'split-screen-before-after',  atmosphere: 'energetic', visualMode: 'ai-gen',      highRes: false },
-  { slot: 4, intent: 'usp-mechanism',  intentLabel: 'USP / Cơ chế',       composition: 'floating-ingredients-bottle', atmosphere: 'classic',   visualMode: 'ai-gen',      highRes: false },
-  { slot: 5, intent: 'social-proof',   intentLabel: 'Đánh giá khách',     composition: 'testimonial-card-overlay',   atmosphere: 'soft',      visualMode: 'canvas-only', highRes: false },
-  { slot: 6, intent: 'usage-demo',     intentLabel: 'Hướng dẫn dùng',     composition: 'step-infographic',           atmosphere: 'soft',      visualMode: 'ai-gen',      highRes: false },
-  { slot: 7, intent: 'comparison',     intentLabel: 'So sánh',            composition: 'cert-lab-report-stack',      atmosphere: 'energetic', visualMode: 'ai-gen',      highRes: false },
-  { slot: 8, intent: 'offer-combo',    intentLabel: 'Ưu đãi',             composition: 'pill-bottle-hero-centered',  atmosphere: 'energetic', visualMode: 'ai-gen',      highRes: true  },
-  { slot: 9, intent: 'faq-assurance',  intentLabel: 'FAQ & Cam kết',      composition: 'cert-lab-report-stack',      atmosphere: 'soft',      visualMode: 'canvas-only', highRes: false },
+  { slot: 1, intent: 'hero-hook',      intentLabel: 'Hero Hook',          composition: 'pill-bottle-hero-centered',  atmosphere: 'classic',   visualMode: 'ai-gen', highRes: false },
+  { slot: 2, intent: 'pain-point',     intentLabel: 'Pain Point',         composition: 'split-screen-before-after',  atmosphere: 'soft',      visualMode: 'ai-gen', highRes: false },
+  { slot: 3, intent: 'transformation', intentLabel: 'Kết quả',            composition: 'split-screen-before-after',  atmosphere: 'energetic', visualMode: 'ai-gen', highRes: false },
+  { slot: 4, intent: 'usp-mechanism',  intentLabel: 'USP / Cơ chế',       composition: 'floating-ingredients-bottle', atmosphere: 'classic',   visualMode: 'ai-gen', highRes: false },
+  { slot: 5, intent: 'social-proof',   intentLabel: 'Đánh giá khách',     composition: 'testimonial-card-overlay',   atmosphere: 'soft',      visualMode: 'ai-gen', highRes: false },
+  { slot: 6, intent: 'usage-demo',     intentLabel: 'Hướng dẫn dùng',     composition: 'step-infographic',           atmosphere: 'soft',      visualMode: 'ai-gen', highRes: false },
+  { slot: 7, intent: 'comparison',     intentLabel: 'So sánh',            composition: 'cert-lab-report-stack',      atmosphere: 'energetic', visualMode: 'ai-gen', highRes: false },
+  { slot: 8, intent: 'offer-combo',    intentLabel: 'Ưu đãi',             composition: 'pill-bottle-hero-centered',  atmosphere: 'energetic', visualMode: 'ai-gen', highRes: false },
+  { slot: 9, intent: 'faq-assurance',  intentLabel: 'FAQ & Cam kết',      composition: 'cert-lab-report-stack',      atmosphere: 'soft',      visualMode: 'ai-gen', highRes: false },
 ]
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -132,14 +135,15 @@ export const COMPOSITION_FAMILY_LABELS: Record<CompositionFamily, string> = {
 }
 
 // ─────────────────────────────────────────────────────────────────────────
-// COST ESTIMATION — kie.ai credit math.
-// Confirmed from utils/kieai.ts:
-//   gpt-image-2-text-to-image: 6 credits @ 1K, 10 credits @ 2K, 16 @ 4K
+// COST ESTIMATION — Phase 6 pivot uses Nano Banana 2 (strong ref preservation).
+// Per kie.ai pricing:
+//   nano-banana-2: 8 credits @ 1K, 12 @ 2K, 20 @ 4K
 //   Text gen via Gemini Flash ≈ 1 credit per listing
+// 9 AI slots × 8 + 1 text = ~73 credits/listing (~$0.37 / RM 1.70)
 // ─────────────────────────────────────────────────────────────────────────
 
-export const CREDIT_COST_PER_IMAGE_1K = 6
-export const CREDIT_COST_PER_IMAGE_2K = 10
+export const CREDIT_COST_PER_IMAGE_1K = 8
+export const CREDIT_COST_PER_IMAGE_2K = 12
 export const ESTIMATED_TEXT_CREDITS = 1
 
 export function estimateListingCredits(slots: SlotConfig[] = SLOT_MAP): number {

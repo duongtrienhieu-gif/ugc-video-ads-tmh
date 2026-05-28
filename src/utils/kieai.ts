@@ -490,7 +490,91 @@ export interface ImageModel {
 
 export const IMAGE_MODELS: ImageModel[] = [
   { id: 'gpt-image-2-text-to-image', name: 'GPT Image 2',   provider: 'OpenAI', credits: { '1K': 6,  '2K': 10, '4K': 16 }, starred: true },
+  { id: 'nano-banana-2',             name: 'Nano Banana 2', provider: 'Google', credits: { '1K': 8,  '2K': 12, '4K': 20 } },
 ]
+
+// ── Nano Banana 2 (Gemini 3.1 Flash Image) ───────────────────────────────
+// Specialized for STRONG reference preservation (better than gpt-image-2
+// for "keep this exact product, just change the scene around it").
+//
+// API shape:
+//   POST /jobs/createTask  { model: 'nano-banana-2', input: { ... } }
+//   input fields: prompt, image_input (array of URLs, ref preservation),
+//                 aspect_ratio, resolution, output_format
+//
+// Polling: /jobs/recordInfo (same endpoint as gpt-image-2 — getGptImage2Status
+// already handles this shape, so we reuse it.)
+
+const NANO_BANANA_2_MODEL = 'nano-banana-2'
+
+export async function submitNanoBanana2(params: {
+  apiKey: string
+  prompt: string
+  /** Reference images (URLs) — Nano Banana 2's strength is preserving these.
+   *  Pass actual product photos here for product-fidelity gen. */
+  imageInput?: string[]
+  /** Aspect ratio of the output. TikTok Shop = '1:1'. */
+  aspectRatio?: string
+  /** Defaults to '1K' (cheapest, 8 credits). '2K' = 12, '4K' = 20. */
+  resolution?: ImageResolution
+  outputFormat?: 'jpeg' | 'png'
+}): Promise<{ taskId: string }> {
+  const input: Record<string, unknown> = {
+    prompt: params.prompt,
+    aspect_ratio: params.aspectRatio ?? '1:1',
+    resolution: params.resolution ?? '1K',
+    output_format: params.outputFormat ?? 'jpeg',
+  }
+  if (params.imageInput?.length) {
+    input.image_input = params.imageInput
+  }
+
+  const res = await fetch(`${KIE_BASE}/jobs/createTask`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${params.apiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ model: NANO_BANANA_2_MODEL, input }),
+  })
+
+  if (res.status === 402) throw new Error('INSUFFICIENT_CREDITS')
+  if (!res.ok) {
+    const text = await res.text().catch(() => res.statusText)
+    throw new Error(`Nano Banana 2 submit lỗi (${res.status}): ${text.slice(0, 300)}`)
+  }
+  const data = await res.json() as { code?: number; msg?: string; message?: string; data?: { taskId?: string } | null }
+  if (data?.code !== undefined && data.code !== 200) {
+    throw new Error(data.msg ?? data.message ?? `Nano Banana 2 lỗi code ${data.code}`)
+  }
+  const taskId = data?.data?.taskId
+  if (!taskId) throw new Error(`Nano Banana 2 không trả về taskId: ${JSON.stringify(data).slice(0, 200)}`)
+  return { taskId }
+}
+
+/** All-in-one: submit + poll + return final image URL. Reuses the gpt-image-2
+ *  polling helpers since both go through /jobs/recordInfo with the same shape. */
+export async function generateNanoBanana2(params: {
+  apiKey: string
+  prompt: string
+  imageInput?: string[]
+  aspectRatio?: string
+  resolution?: ImageResolution
+  outputFormat?: 'jpeg' | 'png'
+  onStatusChange?: (status: ImageStatus, progress?: number) => void
+  timeoutMs?: number
+  signal?: AbortSignal
+}): Promise<string> {
+  console.log(`[nano-banana-2] submit prompt=${params.prompt.length} chars · refs=${params.imageInput?.length ?? 0} · ${params.resolution ?? '1K'} ${params.aspectRatio ?? '1:1'}`)
+  const { taskId } = await submitNanoBanana2(params)
+  return await pollGptImage2UntilDone({
+    apiKey: params.apiKey,
+    taskId,
+    onStatusChange: params.onStatusChange,
+    timeoutMs: params.timeoutMs,
+    signal: params.signal,
+  })
+}
 
 export type ImageResolution = '1K' | '2K' | '4K'
 export type ImageStatus = 'pending' | 'processing' | 'completed' | 'failed'

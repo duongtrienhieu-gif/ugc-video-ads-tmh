@@ -1,6 +1,6 @@
-// Resolves a Brand Kit by id → ResolvedBrandKit ready for canvas rendering.
-// Falls back to a built-in MOCK_BRAND_KIT so previews always have something
-// to render, even before the user has created any brand kit.
+// Resolves a Brand Kit by id → ResolvedBrandKit usable by the AI prompt builder
+// (and any UI that displays brand identity). Falls back to MOCK_BRAND_KIT so
+// the UI has something coherent before the user picks one.
 
 import { useEffect, useState } from 'react'
 import {
@@ -32,19 +32,14 @@ export const MOCK_BRAND_KIT: ResolvedBrandKit = {
   market: 'ms',
 }
 
-/** Returns a resolved brand kit ready for ListingCanvas.
- *  When id is null OR the kit fails to resolve, returns MOCK_BRAND_KIT so
- *  the canvas always has something to draw. */
+/** Returns a resolved brand kit; falls back to MOCK_BRAND_KIT when id is null
+ *  or the kit fails to resolve. */
 export function useResolvedBrandKit(id: string | null, market: Market): ResolvedBrandKit {
-  // Subscribe to brandKits list so re-resolution fires when the underlying
-  // kit metadata changes (logo swap, palette edit, etc.)
   const brandKits = useBrandKitStore((s) => s.brandKits)
   const [resolved, setResolved] = useState<ResolvedBrandKit | null>(null)
 
   useEffect(() => {
     if (!id) { setResolved(null); return }
-    // Verify the kit still exists in store before resolving — if it was
-    // deleted, fall through to mock instead of throwing.
     if (!brandKits.find((k) => k.id === id)) { setResolved(null); return }
 
     let alive = true

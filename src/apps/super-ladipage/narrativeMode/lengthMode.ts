@@ -101,51 +101,67 @@ export interface LengthModeSpec {
   label: string
 }
 
+// 2026-05-29 (re-cal) — First production run came back at 358 words for
+// an 11-block SHORT pack (target was 700). Gemini severely under-produced
+// — when given "60-100 words / block" it read the lower bound as a free
+// pass to write 30 words/block. User feedback: 1,200-1,500 is the sweet
+// spot for impulse COD on FB/TikTok ads. Re-calibrated:
+//   - Word caps raised across all modes (Gemini under-produces ~30-50%)
+//   - MIN treated as a HARD FLOOR not a suggestion (enforced in prompt)
+//   - SHORT target expectedPackWords: 700 → 1,400 to match user benchmark
 export const LENGTH_MODE_SPEC: Record<LengthMode, LengthModeSpec> = {
   short: {
-    wordCapMin: 60,
-    wordCapMax: 100,
+    wordCapMin: 130,
+    wordCapMax: 170,
     paragraphMin: 3,
     paragraphMax: 5,
     sentencesPerParagraphMax: 2,
-    wordsPerSentenceMax: 15,
-    expectedPackWords: 700,
-    label: 'SHORT — impulse COD, mobile scroll < 2 min, punchy cadence',
+    wordsPerSentenceMax: 16,
+    expectedPackWords: 1400,
+    label: 'SHORT — impulse COD, 1,200-1,500w mobile-tight cadence',
   },
   medium: {
-    wordCapMin: 100,
-    wordCapMax: 140,
+    wordCapMin: 150,
+    wordCapMax: 190,
     paragraphMin: 3,
     paragraphMax: 5,
     sentencesPerParagraphMax: 2,
     wordsPerSentenceMax: 18,
-    expectedPackWords: 1400,
-    label: 'MEDIUM — considered purchase, tighter than legacy long-form',
+    expectedPackWords: 1900,
+    label: 'MEDIUM — considered purchase, 1,700-2,000w balanced flow',
   },
   long: {
-    wordCapMin: 120,
-    wordCapMax: 180,
-    paragraphMin: 2,
-    paragraphMax: 4,
+    wordCapMin: 170,
+    wordCapMax: 210,
+    paragraphMin: 3,
+    paragraphMax: 5,
     sentencesPerParagraphMax: 3,
     wordsPerSentenceMax: 20,
-    expectedPackWords: 2400,
-    label: 'LONG — high-ticket / education, full recognition arc',
+    expectedPackWords: 2700,
+    label: 'LONG — high-ticket / education, 2,500-3,000w full arc',
   },
 }
 
 /** Build the cadence hint block injected into the system prompt.
  *  Tells Gemini explicit per-block word cap + paragraph rules + sentence
- *  rules for this length mode. Critical for mobile-friendly output. */
+ *  rules for this length mode. Critical for mobile-friendly output.
+ *
+ *  2026-05-29 (re-cal) — Strengthened MIN-floor language. Previous version
+ *  said "words per block: 60-100" → Gemini wrote 30-word blocks. New
+ *  version: "MINIMUM N words. Writing below this is REJECTED." */
 export function buildLengthModeHint(mode: LengthMode): string {
   const spec = LENGTH_MODE_SPEC[mode]
   return [
     `═══ LENGTH MODE: ${mode.toUpperCase()} (${spec.label}) ═══`,
     ``,
-    `PER-BLOCK BUDGET — apply to every storytelling block:`,
-    `- Words per block: ${spec.wordCapMin}-${spec.wordCapMax} (HARD CAP at ${spec.wordCapMax + 20}).`,
+    `⚠️ PER-BLOCK WORD BUDGET — STRICT FLOOR + CEILING:`,
+    `   MINIMUM ${spec.wordCapMin} words per block. This is a HARD FLOOR — do NOT go below.`,
+    `   MAXIMUM ${spec.wordCapMax} words per block. Aim for the upper half (${Math.round((spec.wordCapMin + spec.wordCapMax) / 2)}-${spec.wordCapMax}).`,
+    `   Writing a block under ${spec.wordCapMin} words is REJECTED — block has not delivered its psychological function.`,
+    ``,
+    `STRUCTURE per block:`,
     `- Paragraphs per block: ${spec.paragraphMin}-${spec.paragraphMax}.`,
-    `- Sentences per paragraph: 1-${spec.sentencesPerParagraphMax} MAX. 1-sentence paragraphs ALLOWED + ENCOURAGED for impact.`,
+    `- Sentences per paragraph: 1-${spec.sentencesPerParagraphMax} MAX. 1-sentence paragraphs ENCOURAGED for impact moments.`,
     `- Words per sentence: ≤ ${spec.wordsPerSentenceMax} avg. Mobile reader scrolls fast — short sentences breathe.`,
     ``,
     `MOBILE RHYTHM — reader is on phone, ~50 chars/line:`,
@@ -154,18 +170,17 @@ export function buildLengthModeHint(mode: LengthMode): string {
     `- Mix sentence lengths: short impact + medium flow + occasional very short ("3 giờ sáng.").`,
     `- Avoid 3+ consecutive long sentences — reader eyes fatigue, scrolls past.`,
     ``,
+    `TOTAL PACK TARGET: ${spec.expectedPackWords} words across all storytelling blocks (PI layer adds on top).`,
     mode === 'short'
-      ? `IMPULSE COD CONSTRAINT — buyer scrolls fast on FB/TikTok ads:
-- Total pack target ~${spec.expectedPackWords} words story + PI layer = readable in 90-120s mobile.
-- Each block must EARN its place. No filler validation, no philosophical asides.
-- Get to product reveal by Phase 3, get to close by Phase 4. No detours.`
+      ? `Sweet spot ~1,200-1,500 words readable in 3-4 min mobile scroll.
+Each block must EARN its place — but each block must also REACH its word floor.
+A 30-word block does not deliver its psychological function. Write the full ${spec.wordCapMin}-${spec.wordCapMax}.`
       : mode === 'medium'
-      ? `CONSIDERED PURCHASE CONSTRAINT — buyer wants enough to decide:
-- Total pack target ~${spec.expectedPackWords} words story + PI layer = 3-4 min mobile read.
-- More space for narrator validation + failed-attempts than SHORT, less than LONG.`
-      : `HIGH-TICKET CONSTRAINT — buyer needs full education + emotional arc:
-- Total pack target ~${spec.expectedPackWords} words story + PI layer = full recognition journey.
-- Allow narrative depth, but still enforce per-paragraph mobile rhythm.`,
+      ? `Sweet spot ~1,700-2,000 words for considered purchase decisions.
+More space for narrator validation + failed-attempts than SHORT.
+Still enforce mobile rhythm — DR voice with breathing room.`
+      : `Sweet spot ~2,500-3,000 words for high-ticket / education products.
+Full recognition arc; allow narrative depth; still mobile-tight cadence per paragraph.`,
     `═══════════════════════════════════════════════════════════`,
   ].join('\n')
 }

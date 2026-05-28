@@ -1,11 +1,12 @@
-// ImageGrid — middle column showing the 9 listing image cards in 3×3.
-// Phase 2: each card renders via real Konva canvas (ListingCanvas).
-// Brand kit + fallback scene URL resolved here once, passed to all 9 cards.
+// ImageGrid — middle column showing the 9 AI-generated listing image cards.
+// Phase 6 simplified: AI handles the full image (text + product + brand),
+// so the grid is just a dumb container — each ImageSlot self-manages its
+// own data + re-roll logic.
 
 import { LayoutGrid, Eye, EyeOff } from 'lucide-react'
 import ImageSlot from './ImageSlot'
 import { useTikTokShopStore, buildMockListing } from '../store'
-import { useResolvedBrandKit } from '../canvas/useResolvedBrandKit'
+import { useResolvedBrandKit } from '../hooks/useResolvedBrandKit'
 import { snapToPaletteFamily } from '../constants'
 
 export default function ImageGrid() {
@@ -13,17 +14,10 @@ export default function ImageGrid() {
   const showMock = useTikTokShopStore((s) => s.showMockPreview)
   const toggleMock = useTikTokShopStore((s) => s.toggleMockPreview)
 
-  // Resolve brand kit (or fall back to mock so canvas always has something)
+  // Resolve brand kit just to show the snapped palette family chip in the
+  // header — actual rendering is handled by AI.
   const brandKit = useResolvedBrandKit(draft.brandKitId, draft.market)
   const paletteFamily = snapToPaletteFamily(brandKit.palette.primary)
-
-  // NOTE: Earlier Phase 2 used the first reference image as a fallback
-  // "product scene" in Slot 1 preview — but the raw ref photo (which
-  // includes its own background, often a full ad mockup) looked like an
-  // "ad inside an ad" and confused users. Now we only show the clean
-  // dashed placeholder until AI actually generates the scene in Phase 3+.
-  // If we later add background-removal, we can re-introduce ref previews.
-  const fallbackSceneUrl: string | null = null
 
   const output = draft.output ?? (showMock ? buildMockListing() : null)
 
@@ -59,13 +53,7 @@ export default function ImageGrid() {
         {output ? (
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {output.images.map((img) => (
-              <ImageSlot
-                key={img.slot}
-                image={img}
-                paletteFamily={paletteFamily}
-                brandKit={brandKit}
-                fallbackSceneUrl={fallbackSceneUrl}
-              />
+              <ImageSlot key={img.slot} image={img} />
             ))}
           </div>
         ) : (
@@ -86,9 +74,6 @@ function EmptyState() {
         <h3 className="mb-1 text-sm font-semibold text-gray-900">Chưa có listing nào</h3>
         <p className="text-xs text-gray-500">
           Chọn Brand Kit + sản phẩm + tải ảnh tham chiếu → bấm "Tạo Listing".
-        </p>
-        <p className="mt-3 text-[11px] text-gray-400">
-          (Hoặc bật "Mock preview" ở trên để xem layout)
         </p>
       </div>
     </div>

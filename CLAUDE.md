@@ -108,52 +108,69 @@ hiện đang yếu hơn storytelling layer.
 
 ---
 
-## TikTok Shop App — Listing Generator (Phase 1-5 complete, 2026-05-28)
+## TikTok Shop App — Listing Generator (Phase 1-6 complete, 2026-05-28)
 
 App `src/apps/tiktok-shop/` — generates a 9-image conversion-arc listing +
 11-block product description for TikTok Shop Malaysia/Vietnam. Niche-locked
 to TPCN (health supplements) in Phase 1.
 
-### Architecture (3-tier consistency engine)
+### Architecture pivot (Phase 6): Full AI, no canvas
 
-- **Tier 1 — Brand Signature (LOCKED identical across all 9 slots)**: logo
-  position/size, typography (Plus Jakarta Sans), trust footer bar, header
-  strip, 8px grid, palette pool. Built once in `<ListingFrame>` (HeaderStrip
-  + FooterTrustBar).
-- **Tier 2 — Brand Atmosphere (3 background variants per palette family)**:
-  `classic` (slot 1, 4), `soft` (slot 2, 5, 6, 9), `energetic` (slot 3, 7, 8).
-  Implemented in `AtmosphereBackground.tsx`.
-- **Tier 3 — Slot content (varies per slot)**: composition, overlay text,
-  AI scene vs canvas-only mode. 8 slot renderers in `canvas/slots/`.
+**Earlier (Phase 2-5)**: 3-tier canvas overlay system (Konva-based) layered
+text + brand + logo on top of AI-generated background scenes. Got to ~60%
+quality. Failed at:
+- Product fidelity (gpt-image-2 drifted from references — purple jar became
+  white/orange bottle)
+- Text contrast (white-on-white invisible overlays on soft atmosphere)
+- "Stuck-on" feel of overlay vs integrated designer typography
+
+**Now (Phase 6)**: full-AI generation per slot. One prompt to Nano Banana 2
+(Gemini 3.1 Flash Image) renders the ENTIRE image — product + text + brand
+identity + trust bar — all integrated. Canvas folder + Konva deleted.
+
+Reason for pivot:
+- Nano Banana 2 specializes in strong reference preservation (the main miss
+  with gpt-image-2)
+- Modern image gen handles Latin text rendering well (BM is Latin) — VN dấu
+  is secondary market risk
+- Cost only ~73 credits/listing (~$0.37) — affordable for TPCN margin
+- Simpler codebase (~3000 lines of canvas deleted)
+- Better "designer feel" — integrated typography vs overlay watermark feel
 
 ### Hard rules (DO NOT VIOLATE — see memory rules linked below)
 
+- **Product fidelity NON-NEGOTIABLE** — AI MUST replicate the exact product
+  from reference images (color, shape, label, brand name). NO drift, NO
+  reinterpretation. Use Nano Banana 2 (preservation-strong) over gpt-image-2
+  (drift-prone). Drop "matte plastic / editorial / premium catalog" aesthetic
+  prescriptions — they conflict with actual product appearance and cause
+  drift. See `[[feedback-product-fidelity-mandate]]`.
 - **No fake certs** — never auto-render Halal/KKM/GMP/FDA badges; only render
   badges user explicitly uploaded in Brand Kit. See `[[feedback-no-fake-certs]]`.
 - **Language isolation** — 1 output language per generate (default Bahasa
-  Malaysia per `[[project-target-market]]`); prompt hard-locks language 2x
-  per slot (system + body). See `[[feedback-language-isolation]]`.
-- **Master template consistency** — every slot prompt prepends the same
-  locked-style block; QA gate validates 2 random slots look like same brand.
-  See `[[feedback-master-template-consistency]]`.
+  Malaysia per `[[project-target-market]]`); prompt hard-locks language. See
+  `[[feedback-language-isolation]]`.
+- **Master template consistency** — every slot prompt prepends the same brand
+  identity + trust bar block so all 9 images share the same seller voice. See
+  `[[feedback-master-template-consistency]]`.
 - **No raw ref in preview** — never nest user-uploaded reference photos into
-  the final canvas preview; show clean placeholder rect until AI generates.
-  See `[[feedback-no-raw-ref-in-preview]]`.
+  the final canvas preview; show clean placeholder until AI generates. See
+  `[[feedback-no-raw-ref-in-preview]]`.
 
-### Generation pipeline (Phase 4)
+### Generation pipeline (Phase 6 — full AI)
 
 ```
-User → "Tạo Listing (9 ảnh + mô tả)" → CostEstimator confirms (~43 credits)
+User → "Tạo Listing (9 ảnh + mô tả)" → CostEstimator confirms (~73 credits)
   ↓
 initializeListingOutput → 9 ListingImage stubs
   ↓ parallel:
-  ├─ generateDescription (Gemini Flash JSON, ~5s)
-  └─ generateAllSlots (max 3 concurrent, ~2-3min)
-       ├─ slot 1 Hero (2K), 2 Pain, 3 Result, 4 USP, 6 Usage, 7 Compare, 8 Offer (2K)
-       └─ skips slot 5 (canvas-only quote card) + 9 (canvas-only FAQ)
+  ├─ generateDescription (Gemini Flash JSON, ~5s, ~1 credit)
+  └─ generateAllSlots (max 3 concurrent, ~3-5min, 9 × ~8 credits)
+       └─ slots 1-9 ALL go through Nano Banana 2 with full-text prompts
   ↓
-Each slot: kie.ai gpt-image-2 with refs + prompt → poll → save to Supabase Storage
-  ↓ assetId set → ListingCanvas renders AI scene as bg + canvas overlays
+Each slot: kie.ai nano-banana-2 with image_input refs + detailed prompt
+  (embedded text + brand + trust bar) → poll → save to Supabase Storage
+  ↓ assetId set → ImageSlot renders plain <img src={signedUrl} />
 ```
 
 ### Persistence (Phase 5)

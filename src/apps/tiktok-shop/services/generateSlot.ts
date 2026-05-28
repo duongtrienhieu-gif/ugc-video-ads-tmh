@@ -1,18 +1,17 @@
 // generateSlot — end-to-end image generation for ONE listing slot.
+// Phase 6 pivot: uses Nano Banana 2 (Gemini 3.1 Flash Image) for stronger
+// product reference preservation per [[feedback-product-fidelity-mandate]].
+//
 // Flow:
 //   1. Resolve reference image assetIds → public signed URLs (kie.ai needs URLs)
-//   2. Build slot-specific prompt (prompts/promptBuilder.ts)
-//   3. POST to kie.ai gpt-image-2 with reference images
-//   4. Poll until done (kieai.ts pollImageUntilDone)
+//   2. Build slot-specific prompt with EMBEDDED text + brand identity
+//   3. POST to kie.ai nano-banana-2 with image_input refs
+//   4. Poll until done (reuses gpt-image-2 polling — same /jobs/recordInfo shape)
 //   5. Download from kie URL → save to our Supabase Storage as asset
 //   6. Return the new assetId for ListingImage.imageAssetId
-//
-// Errors are bubbled up — the calling component decides whether to retry,
-// show toast, mark slot failed, etc.
 
 import {
-  generateImage,
-  pollImageUntilDone,
+  generateNanoBanana2,
   type ImageStatus,
 } from '../../../utils/kieai'
 import { getUrl, saveFromBlobUrl } from '../../../utils/assetStore'
@@ -38,7 +37,6 @@ export interface GenerateSlotResult {
   prompt: string         // saved on ListingImage for re-roll diagnostics
 }
 
-const KIE_MODEL = 'gpt-image-2-text-to-image'
 const TIMEOUT_MS = 5 * 60 * 1000
 
 export async function generateSlotImage(params: GenerateSlotParams): Promise<GenerateSlotResult> {
@@ -48,7 +46,7 @@ export async function generateSlotImage(params: GenerateSlotParams): Promise<Gen
     throw new Error('Cần ít nhất 1 ảnh tham chiếu hợp lệ để generate')
   }
 
-  // 2. Build prompt
+  // 2. Build prompt with embedded text + brand
   const prompt = buildPromptForSlot({
     brandKit: params.brandKit,
     product: params.product,
@@ -57,32 +55,25 @@ export async function generateSlotImage(params: GenerateSlotParams): Promise<Gen
     language: params.language,
   })
 
-  // Lightweight prompt-language sanity log (memory rule: avoid mixed-language drift).
-  // Doesn't block — just surfaces in F12 if the prompt accidentally leaks the wrong tongue.
   if (typeof console !== 'undefined') {
-    console.log(`[tiktok-shop] slot=${params.slotConfig.slot} lang=${params.language} promptLen=${prompt.length} refs=${refUrls.length}`)
+    console.log(`[tiktok-shop] slot=${params.slotConfig.slot} lang=${params.language} model=nano-banana-2 promptLen=${prompt.length} refs=${refUrls.length}`)
   }
 
-  // 3. Submit to kie.ai
+  // 3. Submit + poll Nano Banana 2 (Gemini 3.1 Flash Image)
   const resolution = params.slotConfig.highRes ? '2K' : '1K'
-  const { taskId } = await generateImage({
+  const kieImageUrl = await generateNanoBanana2({
     apiKey: params.apiKey,
-    model: KIE_MODEL,
     prompt,
-    resolution,
+    imageInput: refUrls,
     aspectRatio: '1:1',
-    referenceImageUrls: refUrls,
-  })
-
-  // 4. Poll until done
-  const kieImageUrl = await pollImageUntilDone({
-    apiKey: params.apiKey,
-    taskId,
+    resolution,
+    outputFormat: 'jpeg',
     onStatusChange: params.onStatus,
     timeoutMs: TIMEOUT_MS,
+    signal: params.signal,
   })
 
-  // 5. Copy from kie's CDN → our Supabase Storage so the URL doesn't expire
+  // 4. Copy from kie's CDN → our Supabase Storage so the URL doesn't expire
   //    + our user owns the asset
   const assetId = await saveFromBlobUrl(kieImageUrl)
 
