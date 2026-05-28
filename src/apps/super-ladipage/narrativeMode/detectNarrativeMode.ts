@@ -26,8 +26,26 @@ import type { HookAngle } from '../packBrainstorm'
 export type NarrativeMode = 'pain-driven-DR' | 'aspiration-led' | 'recognition-soft'
 
 /** Niches that default to pain-driven-DR mode. Sharp acute pain, compounding
- *  condition, time-sensitive buyer. Hook should HIT pain in first 2 sentences. */
+ *  condition, time-sensitive buyer. Hook should HIT pain in first 2 sentences.
+ *
+ *  OPT-DIAG2 Fix A (2026-05-28): EXPANDED. Original list missed many niches
+ *  that LOOK soft on the surface but actually have a pain-driven buyer:
+ *  dental (social shame — yellow teeth), mental-health (anxiety),
+ *  menopause (physical + identity), diabetes / liver / prostate /
+ *  hemorrhoids / eye-vision (all chronic health), sleep-insomnia (sleep
+ *  loss), mom-baby (postpartum identity), fitness-recovery (body pain),
+ *  beauty-confidence (identity), anti-aging (time anxiety).
+ *
+ *  Console showed a dental-oral-care pack defaulted to recognition-soft
+ *  → F2 skipped brainstorm → no hookDraft / painLadder / agitateBeats
+ *  anchor → Gemini produced homogeneous blocks → duplicateContent
+ *  violations exploded → 11/20 sections fallback.
+ *
+ *  After this fix, ~90% of packs run brainstorm (the anchor that
+ *  guarantees per-block variety). Only purely-aesthetic niches stay
+ *  recognition-soft. */
 const PAIN_DRIVEN_NICHES: ReadonlyArray<NicheKey> = [
+  // Original 10
   'health-respiratory',
   'health-joint',
   'health-digestive',
@@ -38,6 +56,20 @@ const PAIN_DRIVEN_NICHES: ReadonlyArray<NicheKey> = [
   'sleep-fatigue',
   'weight-loss',
   'financial-debt',
+  // Added 12 (Fix A 2026-05-28)
+  'dental-oral-care',           // răng vàng = social shame, breath = social rejection
+  'anti-aging-longevity',       // time anxiety, mortality salience
+  'mental-health',              // anxiety / depression, daily distress
+  'menopause',                  // physical pain + identity disruption
+  'diabetes-blood-sugar',       // chronic health management, complications fear
+  'liver-detox',                // chronic health + lifestyle guilt
+  'prostate-urology',           // health + social shame (sex / urinary)
+  'hemorrhoids-digestive-shame',// LITERALLY has 'shame' in the niche key
+  'eye-vision-care',            // age-related decline + daily friction
+  'sleep-insomnia',             // daily sleep deprivation pain
+  'fitness-recovery',           // body pain + injury frustration
+  'mom-baby',                   // postpartum identity + sleep loss
+  'beauty-confidence',          // identity pain (covers blemish / skin shame)
 ] as unknown as NicheKey[]
 
 /** Niches that default to aspiration-led mode. Reader buys for the future
