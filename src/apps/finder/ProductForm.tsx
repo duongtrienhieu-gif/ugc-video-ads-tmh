@@ -457,7 +457,7 @@ export default function ProductForm({ item, onSave, onCancel }: ProductFormProps
       const hasImages = imageParts.length > 0
       const parts: GeminiPart[] = [
         ...imageParts,
-        { text: hasImages ? EXTRACT_PROMPT_HYBRID(pageText) : EXTRACT_PROMPT(pageText) },
+        { text: hasImages ? EXTRACT_PROMPT_HYBRID(pageText, imageParts.length) : EXTRACT_PROMPT(pageText) },
       ]
 
       const response = await directGeminiVision({
