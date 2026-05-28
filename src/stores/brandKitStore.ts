@@ -141,17 +141,17 @@ function reportError(action: string, err: unknown) {
 // When localStorage is full (eg other UGC Lab stores have eaten most of
 // the 5-10MB), persist's setItem throws. We swallow the throw and just
 // keep the in-memory state — better than blowing up the save altogether.
-const safeStorage = createJSONStorage<{ state: { brandKits: BrandKit[] } }>(() => ({
-  getItem: (name) => {
+const safeStorage = createJSONStorage(() => ({
+  getItem: (name: string) => {
     try { return localStorage.getItem(name) } catch { return null }
   },
-  setItem: (name, value) => {
+  setItem: (name: string, value: string) => {
     try { localStorage.setItem(name, value) }
     catch (e) {
       console.warn('[brandKitStore] localStorage write skipped — quota likely exceeded', e)
     }
   },
-  removeItem: (name) => {
+  removeItem: (name: string) => {
     try { localStorage.removeItem(name) } catch { /* silent */ }
   },
 }))
@@ -314,7 +314,7 @@ export const useBrandKitStore = create<BrandKitStore>()(
       name: 'ugc-lab:brand-kits',
       storage: safeStorage,
       // Only persist the array — hydrated/hydrating flags are session state.
-      partialize: (s) => ({ brandKits: s.brandKits }) as unknown as { state: { brandKits: BrandKit[] } },
+      partialize: (s) => ({ brandKits: s.brandKits }),
     },
   ),
 )
