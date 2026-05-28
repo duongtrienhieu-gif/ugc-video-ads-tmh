@@ -6,6 +6,84 @@
 import { create } from 'zustand'
 import { persist, createJSONStorage } from 'zustand/middleware'
 import type { Market } from '../../types/brandKit'
+
+// ── IndexedDB storage adapter (avoids localStorage 5-10MB quota) ──
+// Same pattern brandKitStore uses. Listing output (9 image refs + description
+// + brief) is ~100KB which would fit localStorage in isolation, but localStorage
+// is shared across all apps in the codebase — quota gets exceeded after a few
+// listings. IDB has effectively unlimited quota per origin.
+
+const IDB_NAME  = 'ugc-lab-tiktok-shop'
+const IDB_STORE = 'kv'
+
+function openTiktokIDB(): Promise<IDBDatabase> {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(IDB_NAME, 1)
+    req.onupgradeneeded = () => req.result.createObjectStore(IDB_STORE)
+    req.onsuccess = () => resolve(req.result)
+    req.onerror = () => reject(req.error)
+  })
+}
+
+async function idbGet(key: string): Promise<string | null> {
+  try {
+    const db = await openTiktokIDB()
+    return new Promise((resolve) => {
+      const tx = db.transaction(IDB_STORE, 'readonly')
+      const req = tx.objectStore(IDB_STORE).get(key)
+      req.onsuccess = () => resolve((req.result as string | undefined) ?? null)
+      req.onerror = () => resolve(null)
+    })
+  } catch { return null }
+}
+
+async function idbSet(key: string, value: string): Promise<void> {
+  try {
+    const db = await openTiktokIDB()
+    await new Promise<void>((resolve, reject) => {
+      const tx = db.transaction(IDB_STORE, 'readwrite')
+      tx.objectStore(IDB_STORE).put(value, key)
+      tx.oncomplete = () => resolve()
+      tx.onerror = () => reject(tx.error)
+    })
+  } catch (err) {
+    console.warn('[tiktok-shop store] IDB set failed', err)
+  }
+}
+
+async function idbDel(key: string): Promise<void> {
+  try {
+    const db = await openTiktokIDB()
+    await new Promise<void>((resolve, reject) => {
+      const tx = db.transaction(IDB_STORE, 'readwrite')
+      tx.objectStore(IDB_STORE).delete(key)
+      tx.oncomplete = () => resolve()
+      tx.onerror = () => reject(tx.error)
+    })
+  } catch (err) {
+    console.warn('[tiktok-shop store] IDB del failed', err)
+  }
+}
+
+const idbStorage = createJSONStorage(() => ({
+  getItem:    (name: string) => idbGet(name),
+  setItem:    (name: string, value: string) => idbSet(name, value),
+  removeItem: (name: string) => idbDel(name),
+}))
+
+// One-shot cleanup: remove the old localStorage entry from the broken
+// commit 1ba13f7 (caused QuotaExceededError). After this runs once, the
+// orphaned localStorage space is freed up.
+;(function clearLegacyLocalStorage() {
+  if (typeof window === 'undefined') return
+  try {
+    const KEY = 'ugc-lab:tiktok-shop'
+    if (localStorage.getItem(KEY)) {
+      localStorage.removeItem(KEY)
+      console.info('[tiktok-shop store] removed legacy localStorage entry, migrated to IDB')
+    }
+  } catch { /* silent — already broken state, ignore */ }
+})()
 import type {
   ListingDraft,
   ListingOutput,
@@ -336,7 +414,7 @@ export const useTikTokShopStore = create<TikTokShopState>()(
     }),
     {
       name: 'ugc-lab:tiktok-shop',
-      storage: createJSONStorage(() => localStorage),
+      storage: idbStorage,  // IDB instead of localStorage (avoid quota errors)
       // Persist working draft (output + brief cache + selections + market)
       // so a hard refresh doesn't wipe the generated listing. isGenerating
       // and showMockPreview are transient/UI state — don't persist them.
