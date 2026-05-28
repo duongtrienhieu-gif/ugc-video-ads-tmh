@@ -122,12 +122,15 @@ const RESPONSE_SCHEMA: Record<string, unknown> = {
     typography: {
       type: 'object',
       properties: {
-        display: { type: 'string' },
-        body:    { type: 'string' },
+        display: { type: 'string', enum: [...FONT_WHITELIST] },
+        body:    { type: 'string', enum: [...FONT_WHITELIST] },
       },
       required: ['display', 'body'],
     },
-    voiceTone:           { type: 'string' },
+    voiceTone: {
+      type: 'string',
+      enum: ['formal', 'casual', 'playful', 'premium', 'clinical', 'gen-z'],
+    },
     tagline:             { type: 'string' },
     storeName:           { type: 'string' },
     samplePhrases:       { type: 'array', items: { type: 'string' } },
@@ -171,17 +174,19 @@ ${nicheBlock}
 
 Sinh JSON theo schema. Brand "${brandName}" phải có cá tính riêng — KHÔNG generic, không clone brand khác.`
 
-  const raw = await directGeminiText({
+  // Up to 2 attempts. Gemini's schema-constrained decoding eliminates most
+  // malformed-JSON cases but ~2-5% slip through (truncation, unescaped
+  // quotes/newlines inside string values). Retry once with lower temp +
+  // larger token budget before surfacing to the user.
+  const parsed = await callJsonWithRetry<InferredBrandFields>({
     apiKey,
     prompt,
     systemInstruction: buildSystemInstruction(market),
-    responseMimeType: 'application/json',
     responseSchema: RESPONSE_SCHEMA,
     temperature: 0.8,
     maxOutputTokens: 2048,
   })
 
-  const parsed = JSON.parse(raw) as InferredBrandFields
   return sanitizeInferred(parsed, brandName)
 }
 
@@ -235,18 +240,87 @@ Trả về JSON với CHỈ field "${field}" — không thêm field khác. Schem
     required: [field],
   }
 
-  const raw = await directGeminiText({
+  const parsed = await callJsonWithRetry<Partial<InferredBrandFields>>({
     apiKey,
     prompt,
     systemInstruction: buildSystemInstruction(market),
-    responseMimeType: 'application/json',
     responseSchema: fieldSchema,
     temperature: 0.9,
     maxOutputTokens: 1024,
   })
 
-  const parsed = JSON.parse(raw) as Partial<InferredBrandFields>
-  return sanitizeInferred({ ...current, ...parsed }, brandName)
+  return sanitizeInferred({ ...current, ...parsed } as InferredBrandFields, brandName)
+}
+
+// ── JSON helpers — tolerate Gemini quirks ────────────────────────────────
+//
+// Gemini's schema-constrained decoding is good but not perfect. Failure
+// modes we've seen:
+//   • Markdown fences wrapping the JSON when the model falls back to a
+//     non-structured response (rare, but possible on cold model routes).
+//   • Truncation at maxOutputTokens — closing braces missing.
+//   • Unescaped quotes/newlines inside string values when the model
+//     re-enters greedy mode.
+//
+// Strategy: try strict JSON.parse first. On fail, strip markdown fences,
+// then try slicing from first `{` to last `}`. Retry once at lower temp
+// if still bad — temperature 0.2 usually produces clean JSON.
+
+async function callJsonWithRetry<T>(params: {
+  apiKey: string
+  prompt: string
+  systemInstruction: string
+  responseSchema: Record<string, unknown>
+  temperature: number
+  maxOutputTokens: number
+}): Promise<T> {
+  const attempts: { temp: number; tokens: number }[] = [
+    { temp: params.temperature, tokens: params.maxOutputTokens },
+    { temp: 0.2, tokens: Math.max(params.maxOutputTokens, 3072) },
+  ]
+  let lastErr: Error | null = null
+  for (const a of attempts) {
+    try {
+      const raw = await directGeminiText({
+        apiKey: params.apiKey,
+        prompt: params.prompt,
+        systemInstruction: params.systemInstruction,
+        responseMimeType: 'application/json',
+        responseSchema: params.responseSchema,
+        temperature: a.temp,
+        maxOutputTokens: a.tokens,
+      })
+      return safeJsonParse<T>(raw)
+    } catch (e) {
+      lastErr = e instanceof Error ? e : new Error(String(e))
+      console.warn('[StudioBrandKit] JSON attempt failed, will retry', lastErr.message)
+    }
+  }
+  throw lastErr ?? new Error('Gemini trả JSON không hợp lệ — vui lòng thử lại.')
+}
+
+function safeJsonParse<T>(raw: string): T {
+  // Quick path
+  try { return JSON.parse(raw) as T } catch { /* fall through */ }
+
+  // Strip markdown fences ` ```json ... ``` `
+  let cleaned = raw.trim()
+  const fence = cleaned.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/i)
+  if (fence) cleaned = fence[1].trim()
+
+  try { return JSON.parse(cleaned) as T } catch { /* fall through */ }
+
+  // Slice between first `{` and last `}`
+  const first = cleaned.indexOf('{')
+  const last  = cleaned.lastIndexOf('}')
+  if (first !== -1 && last > first) {
+    const sliced = cleaned.slice(first, last + 1)
+    try { return JSON.parse(sliced) as T } catch { /* fall through */ }
+  }
+
+  // Last resort: throw with a sample of what we got so user can report
+  const preview = raw.slice(0, 300).replace(/\s+/g, ' ')
+  throw new Error(`Gemini trả JSON sai cú pháp. Preview: ${preview}…`)
 }
 
 function describeField(field: RerollField): string {
