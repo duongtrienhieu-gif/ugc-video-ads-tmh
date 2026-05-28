@@ -26,7 +26,6 @@ export default function DescriptionEditor() {
   const setDescription = useTikTokShopStore((s) => s.setDescription)
   const addToast = useAppStore((s) => s.addToast)
   const getProductById = useBankStore((s) => s.getProductById)
-  const kieApiKey = useSettingsStore((s) => s.kieApiKey)
   const geminiApiKey = useSettingsStore((s) => s.geminiApiKey)
   const resolvedBrandKit = useResolvedBrandKit(draft.brandKitId, draft.market)
 
