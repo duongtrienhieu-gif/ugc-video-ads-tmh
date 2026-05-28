@@ -72,6 +72,7 @@ export default function ImageSlot({ image }: Props) {
         paletteFamily,
         language: draft.market,
         referenceImageAssetIds: draft.referenceImageAssetIds,
+        brief: draft.productBrief ?? undefined,
       })
       setSlotImage(image.slot, assetId, prompt)
       addToast(`Đã tạo lại Slot ${image.slot}`, 'success')

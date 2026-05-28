@@ -149,6 +149,7 @@ function ComboCard({ combo }: { combo: ComboOption }) {
         paletteFamily,
         language: draft.market,
         referenceImageAssetIds: draft.referenceImageAssetIds,
+        brief: draft.productBrief ?? undefined,
       })
       setComboImage(combo.id, assetId, prompt)
       addToast(`Đã tạo ${combo.name}`, 'success')

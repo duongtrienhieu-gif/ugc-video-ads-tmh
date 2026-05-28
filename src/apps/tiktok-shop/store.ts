@@ -16,6 +16,7 @@ import type {
   DescriptionBlock,
   ListingDescription,
   ComboOption,
+  TiktokShopProductBrief,
 } from './types'
 import {
   SLOT_MAP,
@@ -50,6 +51,9 @@ interface TikTokShopState {
   setSlotStatus: (slot: SlotNumber, status: ImageGenStatus, error?: string) => void
   setSlotImage: (slot: SlotNumber, assetId: string, prompt?: string) => void
 
+  // ── Vision brief cache (Phase 10) ──
+  setProductBrief: (brief: TiktokShopProductBrief | null, cacheKey: string | null) => void
+
   // ── Description editing (Phase 4) ──
   setDescription: (description: ListingDescription) => void
   updateDescriptionBlock: (index: number, block: DescriptionBlock) => void
@@ -74,6 +78,8 @@ function createEmptyDraft(): ListingDraft {
     market: 'ms',     // default MY per [[project-target-market]] memory
     output: null,
     isGenerating: false,
+    productBrief: null,
+    productBriefKey: null,
   }
 }
 
@@ -92,17 +98,40 @@ export const useTikTokShopStore = create<TikTokShopState>((set) => ({
   showMockPreview: true,
 
   selectBrandKit: (id) => set((s) => ({ draft: { ...s.draft, brandKitId: id } })),
-  selectProduct:  (id) => set((s) => ({ draft: { ...s.draft, productId: id } })),
+  // Selecting a different product invalidates the cached brief (it was Vision-
+  // analyzed for a different product).
+  selectProduct:  (id) => set((s) => ({
+    draft: {
+      ...s.draft,
+      productId: id,
+      productBrief: id === s.draft.productId ? s.draft.productBrief : null,
+      productBriefKey: id === s.draft.productId ? s.draft.productBriefKey : null,
+    },
+  })),
   setLanguage:    (m)  => set((s) => ({ draft: { ...s.draft, market: m } })),
 
+  // Adding/removing reference images invalidates the cached brief (refs changed
+  // → Vision analysis is stale).
   addReferenceImage: (assetId) => set((s) => {
     if (s.draft.referenceImageAssetIds.includes(assetId)) return s
     if (s.draft.referenceImageAssetIds.length >= 5) return s
-    return { draft: { ...s.draft, referenceImageAssetIds: [...s.draft.referenceImageAssetIds, assetId] } }
+    return {
+      draft: {
+        ...s.draft,
+        referenceImageAssetIds: [...s.draft.referenceImageAssetIds, assetId],
+        productBrief: null,
+        productBriefKey: null,
+      },
+    }
   }),
 
   removeReferenceImage: (assetId) => set((s) => ({
-    draft: { ...s.draft, referenceImageAssetIds: s.draft.referenceImageAssetIds.filter((a) => a !== assetId) },
+    draft: {
+      ...s.draft,
+      referenceImageAssetIds: s.draft.referenceImageAssetIds.filter((a) => a !== assetId),
+      productBrief: null,
+      productBriefKey: null,
+    },
   })),
 
   toggleMockPreview: () => set((s) => ({ showMockPreview: !s.showMockPreview })),
@@ -133,6 +162,10 @@ export const useTikTokShopStore = create<TikTokShopState>((set) => ({
   }),
 
   setIsGenerating: (val) => set((s) => ({ draft: { ...s.draft, isGenerating: val } })),
+
+  setProductBrief: (brief, cacheKey) => set((s) => ({
+    draft: { ...s.draft, productBrief: brief, productBriefKey: cacheKey },
+  })),
 
   setSlotStatus: (slot, status, error) => set((s) => {
     if (!s.draft.output) return s

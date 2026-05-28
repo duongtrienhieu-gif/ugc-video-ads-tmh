@@ -7,7 +7,7 @@
 
 import type { ResolvedBrandKit, Market } from '../../../types/brandKit'
 import type { Product } from '../../../stores/types'
-import type { SlotConfig, PaletteFamily, SlotNumber, SlotTexts } from '../types'
+import type { SlotConfig, PaletteFamily, SlotNumber, SlotTexts, TiktokShopProductBrief } from '../types'
 import { SLOT_MAP } from '../constants'
 import { generateSlotImage, friendlyErrorMessage } from './generateSlot'
 
@@ -34,6 +34,9 @@ export interface OrchestrateParams {
   /** AI-generated per-slot text — forwarded to every slot generator so all
    *  9 images use the same product-specific copy. */
   slotTexts?: SlotTexts
+  /** Phase 10 — Vision-extracted brief, forwarded to every slot for identity
+   *  consistency across the 9-image set. */
+  brief?: TiktokShopProductBrief
   callbacks?: OrchestratorCallbacks
   signal?: AbortSignal
 }
@@ -71,6 +74,7 @@ export async function generateAllSlots(params: OrchestrateParams): Promise<Orche
         language: params.language,
         referenceImageAssetIds: params.referenceImageAssetIds,
         slotTexts: params.slotTexts,
+        brief: params.brief,
         signal: params.signal,
       })
       params.callbacks?.onSlotSuccess?.(slotConfig.slot, assetId, prompt)
@@ -116,6 +120,8 @@ export interface RegenSingleSlotParams {
   paletteFamily: PaletteFamily
   language: Market
   referenceImageAssetIds: string[]
+  slotTexts?: SlotTexts
+  brief?: TiktokShopProductBrief
 }
 
 export async function regenerateSingleSlot(
@@ -133,6 +139,8 @@ export async function regenerateSingleSlot(
       paletteFamily: params.paletteFamily,
       language: params.language,
       referenceImageAssetIds: params.referenceImageAssetIds,
+      slotTexts: params.slotTexts,
+      brief: params.brief,
     })
     return { success: true, assetId, prompt }
   } catch (err) {

@@ -12,7 +12,7 @@ import {
 } from '../../../utils/kieai'
 import { getUrl, saveAsset } from '../../../utils/assetStore'
 import type { ResolvedBrandKit, Market } from '../../../types/brandKit'
-import type { ComboOption, PaletteFamily } from '../types'
+import type { ComboOption, PaletteFamily, TiktokShopProductBrief } from '../types'
 import { TPCN_PALETTES, getComboLabel } from '../constants'
 
 export interface GenerateComboParams {
@@ -23,6 +23,8 @@ export interface GenerateComboParams {
   language: Market
   /** Same product photo refs the main slots use — for product fidelity. */
   referenceImageAssetIds: string[]
+  /** Phase 10 — Vision brief for identity consistency with the main 9 slots. */
+  brief?: TiktokShopProductBrief
   onStatus?: (status: ImageStatus) => void
   signal?: AbortSignal
 }
@@ -85,6 +87,14 @@ function buildComboPrompt(params: GenerateComboParams, hasLogoRef: boolean): str
     ? 'Reference 1 = brand logo (render EXACTLY as shown — preserve shape, colors, no redraw). References 2+ = product photos.'
     : 'All references are product photos.'
 
+  // Inline brief context — same identity lock as the main 9 slots
+  const briefBlock = params.brief ? `\nPRODUCT BRIEF (Vision-extracted, identity lock — same as main 9 slots):
+- Name (exact): "${params.brief.productNameExact}"
+- Subtype: ${params.brief.productSubtype}
+- Packaging: ${params.brief.packagingDescription}
+- Primary colors: ${params.brief.primaryColors.join(', ')}
+` : ''
+
   // Count enforcement. productCount is the authoritative source (user input);
   // fall back to parsing the description ("2 jars" → 2), then to 1.
   const count = c.productCount ?? extractCountFromDescription(c.description) ?? 1
@@ -110,7 +120,7 @@ PRODUCT FIDELITY (CRITICAL):
 - Render ONLY the inner product container (bottle, jar, tube, or primary container — the actual product item).
 - DO NOT include the outer cardboard packaging box/carton, even if the reference photos show it.
 - Each bottle must replicate refs EXACTLY: same color, shape, label, brand name. Do NOT redesign.
-- ${countInstruction}
+- ${countInstruction}${briefBlock}
 
 ═══ BRAND SEAL — IDENTICAL spec to the main 9 listing slots (no white banner, integrated) ═══
 - LAYER 1 — LOGO: Render Reference 1 (brand logo) LARGE and CENTERED at the top. Logo size ~280px wide × 120px tall, at y≈40-160. NO white box, NO banner — logo sits directly on the brand-color gradient. Preserve logo EXACTLY from Reference 1.

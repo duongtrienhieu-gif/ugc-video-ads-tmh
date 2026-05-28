@@ -7,7 +7,7 @@
 
 import type { ResolvedBrandKit, Market } from '../../../types/brandKit'
 import type { Product } from '../../../stores/types'
-import type { SlotConfig, PaletteFamily, SlotTexts } from '../types'
+import type { SlotConfig, PaletteFamily, SlotTexts, TiktokShopProductBrief } from '../types'
 import { TPCN_PALETTES } from '../constants'
 
 export interface PromptContext {
@@ -22,6 +22,10 @@ export interface PromptContext {
    *  (description failed or hadn't run yet), prompts fall back to product
    *  field derivation. */
   slotTexts?: SlotTexts
+  /** Phase 10 — Vision-extracted brief, shared across all 9 slots for identity
+   *  consistency. When present, the brief block is prepended to each slot prompt
+   *  so the AI image generator has the same product understanding everywhere. */
+  brief?: TiktokShopProductBrief
 }
 
 // ── Shared header — same across every slot ──────────────────────────────
@@ -34,9 +38,21 @@ function header(ctx: PromptContext): string {
   const langName = ctx.language === 'ms' ? 'Bahasa Malaysia' : 'Vietnamese'
   const marketBadge = ctx.language === 'ms' ? '🇲🇾 MY' : '🇻🇳 VN'
 
+  // Brief block — render compact summary inline so AI has shared product
+  // understanding across all 9 slots (mirrors Super Ladipage identity pattern).
+  const briefBlock = ctx.brief ? `\nPRODUCT BRIEF (Vision-extracted, READ-ONLY identity lock for all slots):
+- Name (exact as on label): "${ctx.brief.productNameExact}"
+- Category: ${ctx.brief.productCategory} (subtype: ${ctx.brief.productSubtype})
+- Packaging: ${ctx.brief.packagingDescription}
+- Primary colors: ${ctx.brief.primaryColors.join(', ')}
+- Target customer: ${ctx.brief.targetCustomer.ageRange} ${ctx.brief.targetCustomer.primaryGender} · ${ctx.brief.targetCustomer.dailyContext}
+- Transformation: ${ctx.brief.transformationPromise}
+- Key edge: ${ctx.brief.keyDifferentiator}
+` : ''
+
   return `1:1 square TikTok Shop image (1024×1024). ${productRefHint}
 
-PRODUCT FIDELITY: Replicate the product EXACTLY from product refs — same color, shape, label, brand name. Do NOT redesign or substitute.
+PRODUCT FIDELITY: Replicate the product EXACTLY from product refs — same color, shape, label, brand name. Do NOT redesign or substitute.${briefBlock}
 
 ═══ BRAND SEAL — MANDATORY, IDENTICAL on all 9 slots (universal master spec, no white banner) ═══
 - LAYER 1 — LOGO: Render Reference 1 (brand logo) LARGE and CENTERED at the top of the canvas. Logo size ~280px wide × 120px tall, positioned at y≈40-160. NO white box, NO banner background — the logo sits directly on the brand-color gradient. Logo must be preserved EXACTLY from Reference 1 (no redraw, no recoloring, no shape change).

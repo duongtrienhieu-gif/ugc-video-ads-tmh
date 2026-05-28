@@ -6,7 +6,7 @@
 
 import type { ResolvedBrandKit, Market } from '../../../types/brandKit'
 import type { Product } from '../../../stores/types'
-import type { DescriptionBlock, ListingDescription, SlotTexts } from '../types'
+import type { DescriptionBlock, ListingDescription, SlotTexts, TiktokShopProductBrief } from '../types'
 import { kieTextGenerate } from '../../../utils/kieai'
 import { MOCK_DESCRIPTION_BLOCKS } from '../constants'
 
@@ -15,6 +15,10 @@ export interface GenerateDescriptionParams {
   brandKit: ResolvedBrandKit
   product: Product
   language: Market
+  /** Phase 10 — Vision-extracted brief. When present, AI gets pre-analyzed
+   *  product understanding as READ-ONLY context and just fills the JSON shape.
+   *  When absent (Vision failed), AI falls back to deriving from product fields. */
+  brief?: TiktokShopProductBrief
 }
 
 export async function generateDescription(
@@ -31,36 +35,43 @@ export async function generateDescription(
 
 function buildSystemInstruction(params: GenerateDescriptionParams): string {
   const lang = params.language === 'ms' ? 'Bahasa Malaysia' : 'Vietnamese'
-  return `You are a TikTok Shop conversion copywriter for the Malaysia/Vietnam market. Read PRODUCT DATA carefully, identify the target customer + core pain, then write conversion copy that fits THIS specific product. The product can be ANY niche — never assume.
+  const briefBlock = params.brief
+    ? `\n═══ PRODUCT BRIEF (READ-ONLY — already analyzed by Vision; do NOT re-analyze, just write copy matching this) ═══\n${JSON.stringify(params.brief, null, 2)}\n═══ END BRIEF ═══\n`
+    : ''
 
+  return `You are a TikTok Shop conversion copywriter for the Malaysia/Vietnam market. ${params.brief ? 'The PRODUCT BRIEF below has already been extracted from the product photos — use it as ground truth and write JSON copy that anchors to it.' : 'Read PRODUCT DATA carefully and write conversion copy that fits THIS specific product.'} The product can be ANY niche — never assume.
+${briefBlock}
 LANGUAGE LOCK: every string value in your JSON must be in ${lang}. Even if product name/ingredients/refs contain other languages, output is ${lang} ONLY.
 
-OUTPUT FORMAT: a single strict JSON object. No markdown fences, no preamble, no text after the closing brace. The FIRST field is "reasoning" (your strategic analysis); the following "blocks" and "slotTexts" MUST derive from your reasoning.
+OUTPUT FORMAT: a single strict JSON object. No markdown fences, no preamble, no text after the closing brace.
 
 COPYWRITING RULES:
-• Pain bullets: customer-voice self-question ending '?', max 10 words. Feeling, not clinical label.
+• Pain bullets: customer-voice self-question ending '?', max 10 words. Feeling, not clinical label. Use brief.corePains as anchor.
 • Usage steps: SPECIFIC verb + object + amount/duration, max 12 words each.
-• Testimonials: before→after with concrete time marker.
-• Comparison points: measurable or observable differentiators (numbers, time, materials, mechanism). Never vague quality claims.
-• Slot 1 headline: 4-6 words ALL CAPS, the product's single strongest transformation promise.
-• Slot 3 metric: specific number+unit or timeframe, ALL CAPS max 4 words. NOT vague superlatives.
+• Testimonials: before→after with concrete time marker. Use brief.targetCustomer + brief.transformationPromise.
+• Comparison points: measurable or observable differentiators. Use brief.keyDifferentiator. Never vague quality claims.
+• Slot 1 headline: 4-6 words ALL CAPS, derived from brief.transformationPromise.
+• Slot 3 metric: must equal brief.specificMetric (already specific & measurable).
+• Slot 4 ingredients: must equal brief.visibleIngredients exactly. If brief.visibleIngredients is [], slot4.ingredients MUST be [] (do NOT invent).
 
-DATA INTEGRITY: derive all copy from PRODUCT DATA only. If product.ingredients is empty → slot4.ingredients MUST be [] (do NOT invent ingredient names).
+DATA INTEGRITY: anchor everything to the brief. If a field isn't covered by the brief, derive from PRODUCT DATA. NEVER fabricate ingredient names, cert claims, lab numbers, or clinical specifics.
 
-LEGAL: no cert claims (Halal JAKIM/KKM/GMP/FDA/BYT/ISO). Soft language only: "membantu/menyokong/hỗ trợ", never "rawat/sembuh/cure/treat".`
+LEGAL: respect brief.forbiddenClaims. Use brief.nicheSafeClaims as the safe-language toolkit. No cert claims (Halal JAKIM/KKM/GMP/FDA/BYT/ISO). Soft language only: "membantu/menyokong/hỗ trợ", never "rawat/sembuh/cure/treat".`
 }
 
 function buildDescriptionPrompt(params: GenerateDescriptionParams): string {
-  const { product, brandKit, language } = params
+  const { product, brandKit, language, brief } = params
   const voiceTone = brandKit.voice.tone ?? 'friendly + premium'
   const voiceSamples = brandKit.voice.samplePhrases?.length
     ? brandKit.voice.samplePhrases.join(' / ')
     : 'N/A'
   const langName = language === 'ms' ? 'Bahasa Malaysia' : 'Vietnamese'
-  const hasIngredients = !!(product.ingredients?.trim())
-  const ingredientsList = hasIngredients ? product.ingredients : '[NOT PROVIDED]'
+  // Ingredients source: brief (Vision-read from label) > product.ingredients (seller-typed) > none
+  const visibleIngs = brief?.visibleIngredients ?? []
+  const sellerIngs = (product.ingredients?.trim() ?? '').length > 0
+  const hasIngredients = visibleIngs.length > 0 || sellerIngs
   const slot4IngShape = hasIngredients
-    ? `[{"name": "<ingredient name from PRODUCT DATA list only>", "pct": "<% if stated, else omit pct>"}]`
+    ? `[{"name": "<ingredient name — must come from brief.visibleIngredients or seller-provided list>", "pct": "<% if known, else omit pct>"}]`
     : `[]`
   const reviewerNameHint = language === 'ms'
     ? 'MY-market names: Aisyah, Siti, Faridah, Hanim, Nurliyana + city KL / JB / Penang / Shah Alam'
@@ -69,20 +80,29 @@ function buildDescriptionPrompt(params: GenerateDescriptionParams): string {
   const faqTitle = language === 'ms' ? 'SOALAN LAZIM' : 'CÂU HỎI THƯỜNG GẶP'
   const beforeLabel = language === 'ms' ? 'SEBELUM' : 'TRƯỚC'
   const afterLabel = language === 'ms' ? 'SELEPAS' : 'SAU'
-  const ingredientsGuard = hasIngredients
-    ? `SLOT 4 GUARD: Use ONLY the ingredients listed in PRODUCT DATA above. Do not add extras.`
-    : `SLOT 4 GUARD: No ingredients were provided — slot4.ingredients MUST be [] in your output. Do NOT invent any ingredient names.`
+  const ingredientsGuard = brief
+    ? (visibleIngs.length > 0
+        ? `SLOT 4 GUARD: Use ONLY ingredients from brief.visibleIngredients (Vision-read from label). Do not add extras.`
+        : `SLOT 4 GUARD: brief.visibleIngredients is empty (no ingredients visible on label) — slot4.ingredients MUST be [] in your output. Do NOT invent any ingredient names.`)
+    : (sellerIngs
+        ? `SLOT 4 GUARD: Use ONLY the ingredients listed in PRODUCT DATA above. Do not add extras.`
+        : `SLOT 4 GUARD: No ingredients were provided — slot4.ingredients MUST be [] in your output. Do NOT invent any ingredient names.`)
 
-  return `Generate the JSON object below for this product.
-
-PRODUCT DATA (derive ALL copy ONLY from this):
+  const productDataBlock = brief
+    ? `(See PRODUCT BRIEF in system prompt for the authoritative analysis. Below is seller-provided supplemental data — use it but the brief is ground truth.)
+- Name: ${product.productName}${product.offer ? `\n- Pricing / Offer: ${product.offer}` : ''}`
+    : `PRODUCT DATA (derive ALL copy ONLY from this):
 - Name: ${product.productName}
 ${product.productDescription ? `- Description: ${product.productDescription}` : ''}
 ${product.painPoints ? `- Customer pain points: ${product.painPoints}` : ''}
 ${product.usps ? `- USPs / key differentiators: ${product.usps}` : ''}
 ${product.benefits ? `- Benefits: ${product.benefits}` : ''}
-- Ingredients: ${ingredientsList}
-${product.offer ? `- Pricing / Offer: ${product.offer}` : ''}
+- Ingredients: ${product.ingredients || '[NOT PROVIDED]'}
+${product.offer ? `- Pricing / Offer: ${product.offer}` : ''}`
+
+  return `Generate the JSON object below for this product.
+
+${productDataBlock}
 
 BRAND:
 - Tone: ${voiceTone}
@@ -94,45 +114,29 @@ REVIEWER NAMES: ${reviewerNameHint}
 
 JSON SHAPE (return EXACTLY this structure — single JSON object, all string values in ${langName}):
 {
-  "reasoning": {
-    "customer": "<who they are — age/gender/daily context, 1-2 sentences>",
-    "pain": "<the FEELING they live with daily — emotional, NOT clinical label>",
-    "promise": "<what specifically and observably changes after using this product>",
-    "differentiator": "<what makes this different from the generic category alternative>",
-    "slotPlan": {
-      "s1Headline": "<4-6 word ALL CAPS — single strongest transformation>",
-      "s2Question": "<most emotional pain as customer self-question ending '?'>",
-      "s3Metric": "<SPECIFIC number+unit or timeframe ALL CAPS max 4 words>",
-      "s4Focus": "<ingredients to feature from PRODUCT DATA, or 'none — return []'>",
-      "s5Story": "<before→after angle with time marker>",
-      "s6KeyStep": "<most specific physical usage action>",
-      "s7Edge": "<strongest measurable differentiator>",
-      "s9Objection": "<main buyer concern — safety/timing/returns>"
-    }
-  },
   "blocks": [
-    {"kind": "hook", "text": "<emoji + opener using your reasoning.promise; **bold** strongest claim; max 130 chars>"},
-    {"kind": "pain", "bullets": ["<reasoning.slotPlan.s2Question or related self-question, max 10 words>", "<related pain question>", "<related pain question>"]},
-    {"kind": "solution", "text": "<introduce product as answer to reasoning.pain; **bold** product name + reasoning.differentiator; max 160 chars>"},
-    {"kind": "benefits", "bullets": ["<concrete outcome tied to reasoning.promise — number or timeframe, max 15 words>", "<benefit>", "<benefit>", "<benefit>", "<benefit>"]},
-    {"kind": "specs", "rows": [["<ingredient/spec from PRODUCT DATA only>", "<brief function>"]]},
+    {"kind": "hook", "text": "<emoji + opener using ${brief ? 'brief.transformationPromise' : "product's main benefit"}; **bold** strongest claim; max 130 chars>"},
+    {"kind": "pain", "bullets": ["<${brief ? 'use brief.corePains' : 'customer self-question'}, max 10 words>", "<related pain question>", "<related pain question>"]},
+    {"kind": "solution", "text": "<introduce product as answer to pain; **bold** product name + ${brief ? 'brief.keyDifferentiator' : 'main mechanism'}; max 160 chars>"},
+    {"kind": "benefits", "bullets": ["<concrete outcome tied to ${brief ? 'brief.transformationPromise' : 'promise'} — number or timeframe, max 15 words>", "<benefit>", "<benefit>", "<benefit>", "<benefit>"]},
+    {"kind": "specs", "rows": [["<ingredient/spec from ${brief ? 'brief.visibleIngredients' : 'PRODUCT DATA'} only>", "<brief function>"]]},
     {"kind": "reviews", "quotes": [{"text": "<before→after story with time marker, max 100 chars>", "author": "<Name, City>"}, {"text": "<second review with time marker>", "author": "<Name, City>"}]},
     {"kind": "usage", "steps": ["<SPECIFIC verb + object + amount/duration, max 12 words>", "<step>", "<step>"]},
     {"kind": "offer", "text": "<offer; **bold** price or discount; max 100 chars>"},
-    {"kind": "faq", "items": [{"q": "<safety or ingredients question>", "a": "<answer>"}, {"q": "<results timing>", "a": "<specific timeframe>"}, {"q": "<return or refund>", "a": "<answer>"}]},
+    {"kind": "faq", "items": [{"q": "<${brief ? 'from brief.commonObjections' : 'safety/ingredients question'}>", "a": "<answer>"}, {"q": "<results timing>", "a": "<specific timeframe>"}, {"q": "<return or refund>", "a": "<answer>"}]},
     {"kind": "promise", "bullets": ["<service promise — shipping/return/packaging ONLY, max 10 words>", "<promise>", "<promise>"]},
     {"kind": "cta", "text": "<**bold** action verb; mild urgency; max 80 chars>"}
   ],
   "slotTexts": {
-    "slot1": {"headline": "<must equal reasoning.slotPlan.s1Headline>", "tagline": "<8-12 words expanding headline — specific mechanism>"},
-    "slot2": {"question": "<must equal reasoning.slotPlan.s2Question>", "painBullets": ["<self-question max 8 words ends '?'>", "<question>", "<question>"]},
-    "slot3": {"beforeLabel": "${beforeLabel}", "afterLabel": "${afterLabel}", "metric": "<must equal reasoning.slotPlan.s3Metric>", "metricSubtitle": "<context max 5 words>", "disclaimer": "<results-may-vary, max 8 words>"},
+    "slot1": {"headline": "<4-6 word ALL CAPS — ${brief ? 'derived from brief.transformationPromise' : "product's single strongest promise"}>", "tagline": "<8-12 words expanding headline — specific mechanism>"},
+    "slot2": {"question": "<${brief ? 'use brief.corePains[0]' : 'core pain as self-question'}, max 10 words ends '?'>", "painBullets": ["<self-question max 8 words ends '?'>", "<question>", "<question>"]},
+    "slot3": {"beforeLabel": "${beforeLabel}", "afterLabel": "${afterLabel}", "metric": "<${brief ? 'must equal brief.specificMetric' : 'SPECIFIC number+unit ALL CAPS max 4 words'}>", "metricSubtitle": "<context max 5 words>", "disclaimer": "<results-may-vary, max 8 words>"},
     "slot4": {"title": "<formula panel title ALL CAPS>", "ingredients": ${slot4IngShape}, "tagline": "<safety/natural claim, max 8 words>"},
-    "slot5": {"quote": "<must reflect reasoning.slotPlan.s5Story — before→after with time, max 100 chars>", "author": "<${reviewerNameHint}>", "verifiedNote": "<verified-review label>"},
-    "slot6": {"title": "<how-to-use title with step count>", "steps": ["<must match reasoning.slotPlan.s6KeyStep>", "<next step — specific>", "<next step — specific>"], "timing": "<usage timing e.g. '🌅 Pagi • 🌙 Malam'>"},
-    "slot7": {"title": "<comparison title>", "usLabel": "<our product label>", "themLabel": "<generic alternative label>", "points": [["<must reflect reasoning.slotPlan.s7Edge>", "<generic equivalent>"], ["<specific>", "<generic>"], ["<specific>", "<generic>"], ["<specific>", "<generic>"]]},
+    "slot5": {"quote": "<before→after with time, anchor to ${brief ? 'brief.targetCustomer + brief.transformationPromise' : "customer transformation"}, max 100 chars>", "author": "<${reviewerNameHint}>", "verifiedNote": "<verified-review label>"},
+    "slot6": {"title": "<how-to-use title with step count>", "steps": ["<SPECIFIC action verb + object + amount/duration, max 10 words>", "<step>", "<step>"], "timing": "<usage timing e.g. '🌅 Pagi • 🌙 Malam'>"},
+    "slot7": {"title": "<comparison title>", "usLabel": "<our product label>", "themLabel": "<generic alternative label>", "points": [["<${brief ? 'must reflect brief.keyDifferentiator' : 'specific measurable differentiator'}>", "<generic equivalent>"], ["<specific>", "<generic>"], ["<specific>", "<generic>"], ["<specific>", "<generic>"]]},
     "slot8": {"originalPrice": "<original price if mentioned, else omit key>", "currentPrice": "<from product.offer or '(Harga)'>", "discount": "<if available, else omit>", "combo": "<combo line if applicable, else omit>", "cta": "${ctaDefault}", "urgency": "<urgency max 6 words>"},
-    "slot9": {"title": "${faqTitle}", "items": [{"q": "<must reflect reasoning.slotPlan.s9Objection>", "a": "<answer>"}, {"q": "<results timing>", "a": "<specific timeframe>"}, {"q": "<return/refund>", "a": "<answer>"}]}
+    "slot9": {"title": "${faqTitle}", "items": [{"q": "<${brief ? 'from brief.commonObjections[0]' : 'main safety concern'}>", "a": "<answer>"}, {"q": "<results timing>", "a": "<specific timeframe>"}, {"q": "<return/refund>", "a": "<answer>"}]}
   }
 }
 
@@ -155,19 +159,7 @@ function parseOrFallback(raw: string): { blocks: DescriptionBlock[]; slotTexts: 
     return { blocks: MOCK_DESCRIPTION_BLOCKS, slotTexts: undefined }
   }
   try {
-    const payload = JSON.parse(json) as RawPayload & { reasoning?: unknown }
-
-    // Log AI's reasoning field so developers can verify brainstorm quality in DevTools Console
-    if (payload.reasoning && typeof payload.reasoning === 'object') {
-      try {
-        console.log('[generateDescription] 🧠 AI REASONING:\n' + JSON.stringify(payload.reasoning, null, 2))
-      } catch {
-        console.log('[generateDescription] 🧠 AI REASONING (raw):', payload.reasoning)
-      }
-    } else {
-      console.warn('[generateDescription] ⚠️ No "reasoning" field in JSON — AI skipped the brainstorm step')
-    }
-
+    const payload = JSON.parse(json) as RawPayload
     const rawBlocks = payload.blocks
     if (!Array.isArray(rawBlocks) || rawBlocks.length === 0) {
       console.warn('[generateDescription] JSON has no blocks array — using placeholder. Payload keys:', Object.keys(payload))

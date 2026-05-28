@@ -22,7 +22,7 @@ import {
 import { getUrl, saveAsset } from '../../../utils/assetStore'
 import type { ResolvedBrandKit, Market } from '../../../types/brandKit'
 import type { Product } from '../../../stores/types'
-import type { SlotConfig, PaletteFamily, SlotTexts } from '../types'
+import type { SlotConfig, PaletteFamily, SlotTexts, TiktokShopProductBrief } from '../types'
 import { buildPromptForSlot } from './promptBuilder'
 
 export interface GenerateSlotParams {
@@ -36,6 +36,9 @@ export interface GenerateSlotParams {
   /** AI-generated per-slot text (from description gen). When omitted, image
    *  prompts fall back to product field derivation — works but lower quality. */
   slotTexts?: SlotTexts
+  /** Phase 10 — Vision-extracted brief. Shared across all 9 slots for identity
+   *  consistency. */
+  brief?: TiktokShopProductBrief
   onStatus?: (status: ImageStatus) => void
   signal?: AbortSignal
 }
@@ -63,7 +66,7 @@ export async function generateSlotImage(params: GenerateSlotParams): Promise<Gen
   }
   const refUrls = hasLogoRef ? [logoUrl, ...productRefUrls] : productRefUrls
 
-  // 2. Build prompt with embedded text + brand
+  // 2. Build prompt with embedded text + brand + brief identity context
   const prompt = buildPromptForSlot({
     brandKit: params.brandKit,
     product: params.product,
@@ -72,6 +75,7 @@ export async function generateSlotImage(params: GenerateSlotParams): Promise<Gen
     language: params.language,
     hasLogoRef,
     slotTexts: params.slotTexts,
+    brief: params.brief,
   })
 
   if (typeof console !== 'undefined') {

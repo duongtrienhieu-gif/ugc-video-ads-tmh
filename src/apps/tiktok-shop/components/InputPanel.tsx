@@ -23,6 +23,7 @@ import { useResolvedBrandKit } from '../hooks/useResolvedBrandKit'
 import { generateAllSlots } from '../services/generateAllSlots'
 import { generateDescription } from '../services/generateDescription'
 import { friendlyErrorMessage } from '../services/generateSlot'
+import { extractProductBrief, buildBriefCacheKey } from '../services/extractProductBrief'
 import CostEstimator from './CostEstimator'
 
 export default function InputPanel() {
@@ -37,6 +38,7 @@ export default function InputPanel() {
   const setSlotImage     = useTikTokShopStore((s) => s.setSlotImage)
   const setIsGenerating  = useTikTokShopStore((s) => s.setIsGenerating)
   const setDescription   = useTikTokShopStore((s) => s.setDescription)
+  const setProductBrief  = useTikTokShopStore((s) => s.setProductBrief)
   const isGenerating     = useTikTokShopStore((s) => s.draft.isGenerating)
 
   const brandKits   = useBrandKitStore((s) => s.brandKits)
@@ -118,10 +120,37 @@ export default function InputPanel() {
     })
     setIsGenerating(true)
 
-    // 2. Generate description FIRST — it produces slotTexts that the image
-    //    prompts NEED to render product-specific copy instead of generic
-    //    fallback. ~10s wait but ensures images don't show hardcoded text
-    //    that doesn't match the actual product (per Phase 8 fix).
+    // 2. PHASE 1 — Extract Vision brief (Super Ladipage pattern, Phase 10).
+    //    ONE upfront Gemini Vision call analyzes product photos + metadata,
+    //    returns structured brief. Cached across re-rolls — if user clicks
+    //    "Tạo Listing" again with the same product + same refs, reuse cached
+    //    brief instead of re-paying ~3-5 credits for Vision.
+    let brief = draft.productBrief ?? undefined
+    const newCacheKey = buildBriefCacheKey(draft.productId, draft.referenceImageAssetIds)
+    const briefIsCached = brief && draft.productBriefKey === newCacheKey
+    if (briefIsCached) {
+      console.log(`[tiktok-shop] ✓ reusing cached product brief (key=${newCacheKey.slice(0, 40)}...)`)
+    } else {
+      try {
+        addToast('Đang phân tích sản phẩm (Vision)...', 'info')
+        brief = await extractProductBrief({
+          apiKey: kieApiKey,
+          product,
+          referenceImageAssetIds: draft.referenceImageAssetIds,
+          language: draft.market,
+        })
+        setProductBrief(brief, newCacheKey)
+        console.log(`[tiktok-shop] ✓ Vision brief extracted: name="${brief.productNameExact}" category="${brief.productCategory}" ingredients=${brief.visibleIngredients.length}`)
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err)
+        console.warn('[tiktok-shop] Vision brief failed — continuing without:', err)
+        addToast(`Vision phân tích sản phẩm lỗi: ${msg.slice(0, 80)} — dùng fallback từ field sản phẩm.`, 'error')
+        brief = undefined  // downstream falls back to product fields
+      }
+    }
+
+    // 3. PHASE 2 — Generate description, passing brief as ground truth.
+    //    Produces slotTexts that the image prompts use for in-image text.
     let slotTexts: import('../types').SlotTexts | undefined = undefined
     try {
       const desc = await generateDescription({
@@ -129,6 +158,7 @@ export default function InputPanel() {
         brandKit: resolvedBrandKit,
         product,
         language: draft.market,
+        brief,
       })
       setDescription(desc)
       slotTexts = desc.slotTexts
@@ -139,8 +169,8 @@ export default function InputPanel() {
       addToast(`Mô tả gen lỗi: ${msg.slice(0, 80)} — dùng fallback. Bấm "Tạo lại" ở panel mô tả để retry.`, 'error')
     }
 
-    // 3. Now generate images, passing slotTexts so all 9 slots use the same
-    //    product-specific copy.
+    // 4. PHASE 3 — Generate images, passing both brief + slotTexts so all 9
+    //    slots share the same product identity AND copy.
     try {
       const imageResult = await generateAllSlots({
         apiKey: kieApiKey,
@@ -150,6 +180,7 @@ export default function InputPanel() {
         language: draft.market,
         referenceImageAssetIds: draft.referenceImageAssetIds,
         slotTexts,
+        brief,
         callbacks: {
           onSlotStart:   (slot) => setSlotStatus(slot, 'generating'),
           onSlotSuccess: (slot, assetId, prompt) => setSlotImage(slot, assetId, prompt),
