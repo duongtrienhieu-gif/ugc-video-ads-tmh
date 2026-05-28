@@ -27,6 +27,7 @@ export type OutputKind =
   | 'lab-content'
   | 'lip-sync-history'
   | 'video-translate-history'
+  | 'brand-kit'
 
 /** Minimum required fields any output item must expose. The full body
  *  lives in `payload_json`; the row-level fields are for fast listing

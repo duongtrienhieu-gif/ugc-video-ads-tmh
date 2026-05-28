@@ -13,6 +13,7 @@ import { useLabContentStore } from './apps/lab-content/store'
 import { useAdsContentStore } from './apps/ads-content/store'
 import { useLipSyncStore } from './stores/lipSyncStore'
 import { useVideoTranslateStore } from './stores/videoTranslateStore'
+import { useBrandKitStore } from './stores/brandKitStore'
 import AuthScreen from './components/AuthScreen'
 import RestoreSessionModal from './components/RestoreSessionModal'
 import { RefreshCw, CheckCircle2, AlertCircle } from 'lucide-react'
@@ -164,6 +165,7 @@ export default function App() {
       void useAdsContentStore.getState().hydrate()
       void useLipSyncStore.getState().hydrate()
       void useVideoTranslateStore.getState().hydrate()
+      void useBrandKitStore.getState().hydrate()
     }
 
     supabase.auth.getSession().then(({ data: { session } }) => {
