@@ -16,6 +16,7 @@ import type { Market } from '../../../types/brandKit'
 import { generateDescription, assembleFullText } from '../services/generateDescription'
 import { translateDescriptionText } from '../services/translateDescription'
 import { MARKET_LABELS } from '../../../types/brandKit'
+import { useGeminiUsageStore } from '../geminiUsageStore'
 
 type ViewMode = 'blocks' | 'fulltext'
 
@@ -27,6 +28,7 @@ export default function DescriptionEditor() {
   const addToast = useAppStore((s) => s.addToast)
   const getProductById = useBankStore((s) => s.getProductById)
   const geminiApiKey = useSettingsStore((s) => s.geminiApiKey)
+  const incrementGeminiCalls = useGeminiUsageStore((s) => s.increment)
   const resolvedBrandKit = useResolvedBrandKit(draft.brandKitId, draft.market)
 
   const [regenerating, setRegenerating] = useState(false)
@@ -66,6 +68,7 @@ export default function DescriptionEditor() {
         sourceLang: draft.market,
         targetLang,
       })
+      incrementGeminiCalls()  // count translate against daily quota
       setTranslateState({ open: true, loading: false, text: translated, targetLang })
     } catch (err) {
       setTranslateState({ open: false, loading: false, text: '', targetLang })
@@ -97,6 +100,7 @@ export default function DescriptionEditor() {
         language: draft.market,
         brief: draft.productBrief ?? undefined,
       })
+      incrementGeminiCalls()  // count re-roll against daily quota
       setDescription(desc)
       addToast('Đã tạo lại mô tả', 'success')
     } catch (err) {

@@ -108,11 +108,15 @@ export async function uploadFileToGemini(params: {
  * Direct Google Gemini vision call.
  * Sends one or more base64 images and returns the model's text response.
  */
-// Models tried in order — newest first, more fallbacks for high-load periods
+// Models tried in order — newest first, more fallbacks for high-load periods.
+// gemini-2.5-pro REMOVED from cascade (Phase 10.3): free tier limit is only
+// 50 RPD which is exhausted by ~1 day of normal testing — having it in the
+// fallback chain means a single bad day's Vision attempts permanently locks
+// out pro quota and can also cascade-spam other models. The remaining 4
+// (flash + flash-lite + 2.0-flash + 2.0-flash-lite) all have 1500 RPD.
 const GEMINI_MODELS = [
   'gemini-2.5-flash',
   'gemini-2.5-flash-lite',
-  'gemini-2.5-pro',
   'gemini-2.0-flash',
   'gemini-2.0-flash-lite',
 ]
@@ -147,18 +151,28 @@ export async function directGeminiVision(params: {
       body.systemInstruction = { parts: [{ text: params.systemInstruction }] }
     }
 
-    // Retry same model up to 2 times on 503 overload
+    // Retry same model on transient errors before cascading to next model.
+    // Phase 10.3 fix: on 429 (rate limit), wait 5s + retry SAME model up to 2x.
+    // Previous code immediately cascaded to next model on 429 — that spammed
+    // all 5 models within 1-2 seconds, hitting per-minute rate limits faster.
+    // 5s backoff gives the RPM window time to refresh.
     let res: Response | null = null
     let attempts = 0
-    while (attempts < 2) {
+    while (attempts < 3) {
       res = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       })
-      if (res.status !== 503 || attempts === 1) break
-      attempts++
-      await sleep(3000) // back off before retrying overloaded model
+      // Transient: 429 (rate limit) and 503 (overload) — wait + retry
+      if ((res.status === 429 || res.status === 503) && attempts < 2) {
+        attempts++
+        const backoff = res.status === 429 ? 5000 : 3000  // 5s for rate limit, 3s for overload
+        console.warn(`[directGeminiVision] ${model} ${res.status} — backoff ${backoff}ms then retry (${attempts}/2)`)
+        await sleep(backoff)
+        continue
+      }
+      break
     }
     if (!res) continue
 
@@ -169,8 +183,8 @@ export async function directGeminiVision(params: {
         continue
       }
       if (res.status === 429 || res.status === 503) {
-        errors.push(`${model}: ${res.status === 503 ? 'quá tải' : 'rate limit'}`)
-        await sleep(1500) // brief pause before trying next model
+        // Still failing after retries — cascade to next model
+        errors.push(`${model}: ${res.status === 503 ? 'quá tải' : 'rate limit (hết quota)'}`)
         continue
       }
       throw new Error(`Gemini API lỗi (${res.status}): ${err.slice(0, 200)}`)
@@ -231,17 +245,23 @@ export async function directGeminiText(params: {
       body.systemInstruction = { parts: [{ text: params.systemInstruction }] }
     }
 
+    // Phase 10.3 — retry same model on 429/503 with backoff before cascading.
     let res: Response | null = null
     let attempts = 0
-    while (attempts < 2) {
+    while (attempts < 3) {
       res = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       })
-      if (res.status !== 503 || attempts === 1) break
-      attempts++
-      await sleep(3000)
+      if ((res.status === 429 || res.status === 503) && attempts < 2) {
+        attempts++
+        const backoff = res.status === 429 ? 5000 : 3000
+        console.warn(`[directGeminiText] ${model} ${res.status} — backoff ${backoff}ms then retry (${attempts}/2)`)
+        await sleep(backoff)
+        continue
+      }
+      break
     }
     if (!res) continue
 
@@ -249,8 +269,7 @@ export async function directGeminiText(params: {
       const err = await res.text().catch(() => res!.statusText)
       if (res.status === 404) { errors.push(`${model}: không khả dụng`); continue }
       if (res.status === 429 || res.status === 503) {
-        errors.push(`${model}: ${res.status === 503 ? 'quá tải' : 'rate limit'}`)
-        await sleep(1500)
+        errors.push(`${model}: ${res.status === 503 ? 'quá tải' : 'rate limit (hết quota)'}`)
         continue
       }
       throw new Error(`Gemini text API lỗi (${res.status}): ${err.slice(0, 200)}`)

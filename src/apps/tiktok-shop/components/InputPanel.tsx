@@ -24,6 +24,7 @@ import { generateAllSlots } from '../services/generateAllSlots'
 import { generateDescription } from '../services/generateDescription'
 import { friendlyErrorMessage } from '../services/generateSlot'
 import { extractProductBrief, buildBriefCacheKey } from '../services/extractProductBrief'
+import { useGeminiUsageStore, GEMINI_DAILY_LIMIT } from '../geminiUsageStore'
 import CostEstimator from './CostEstimator'
 
 export default function InputPanel() {
@@ -49,6 +50,9 @@ export default function InputPanel() {
   const geminiApiKey = useSettingsStore((s) => s.geminiApiKey)
   const kieCredits  = useSettingsStore((s) => s.kieCredits)
   const setKieCredits = useSettingsStore((s) => s.setKieCredits)
+  const geminiCallsToday = useGeminiUsageStore((s) => s.callsToday)
+  const incrementGeminiCalls = useGeminiUsageStore((s) => s.increment)
+  const geminiIsCritical = useGeminiUsageStore((s) => s.isCritical())
   const openApp     = useAppStore((s) => s.openApp)
   const addToast    = useAppStore((s) => s.addToast)
 
@@ -143,6 +147,7 @@ export default function InputPanel() {
           referenceImageAssetIds: draft.referenceImageAssetIds,
           language: draft.market,
         })
+        incrementGeminiCalls()  // count Vision call against daily quota
         setProductBrief(brief, newCacheKey)
         console.log(`[tiktok-shop] ✓ Vision brief extracted: name="${brief.productNameExact}" category="${brief.productCategory}" ingredients=${brief.visibleIngredients.length}`)
       } catch (err) {
@@ -164,6 +169,7 @@ export default function InputPanel() {
         language: draft.market,
         brief,
       })
+      incrementGeminiCalls()  // count description gen against daily quota
       setDescription(desc)
       slotTexts = desc.slotTexts
       console.log(`[tiktok-shop] description done. slotTexts=${slotTexts ? 'present' : 'MISSING (images will derive from product fields)'}`)
@@ -342,6 +348,27 @@ export default function InputPanel() {
           </div>
           <p className="mt-1 text-[10px] leading-snug text-indigo-500">
             7 ảnh AI + 1 text gen. Re-roll tốn thêm credit/slot.
+          </p>
+        </div>
+
+        {/* Gemini free tier usage tracker (Phase 10.3) */}
+        <div className={`mt-2 rounded-lg border p-3 ${
+          geminiIsCritical
+            ? 'border-rose-300 bg-rose-50'
+            : 'border-emerald-200 bg-emerald-50'
+        }`}>
+          <div className="flex items-baseline justify-between">
+            <span className={`text-[11px] font-semibold ${geminiIsCritical ? 'text-rose-700' : 'text-emerald-700'}`}>
+              Gemini free tier
+            </span>
+            <span className={`text-[11px] ${geminiIsCritical ? 'text-rose-600' : 'text-emerald-600'}`}>
+              {geminiCallsToday} / {GEMINI_DAILY_LIMIT} calls hôm nay
+            </span>
+          </div>
+          <p className={`mt-1 text-[10px] leading-snug ${geminiIsCritical ? 'text-rose-500' : 'text-emerald-500'}`}>
+            {geminiIsCritical
+              ? '⚠️ Còn ít quota! Upgrade hoặc đợi đến ngày mai.'
+              : '1 listing ≈ 2 Gemini calls (Vision + Description). Reset 0h UTC.'}
           </p>
         </div>
       </Section>
