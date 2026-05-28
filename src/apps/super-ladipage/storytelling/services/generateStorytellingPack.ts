@@ -37,7 +37,7 @@ import {
   PACING_OVERRIDES,
 } from '../../productClass'
 import { readProductImages } from '../../productVision'
-import { synthesizeProductBrief, buildSynthesizedBrief, synthesizeCommercialPsychology } from '../../productSynthesis'
+import { buildSynthesizedBrief, synthesizeBriefAndCP } from '../../productSynthesis'
 import type { SynthesizedCommercialPsychology } from '../../productSynthesis'
 import { buildProductBrief } from '../runtime/buildPackGenPrompt'
 import { generatePackWithRetry } from '../runtime/retryWithFeedback'
@@ -464,7 +464,13 @@ export async function generateStorytellingPack(
   // Single Gemini deep-call combining ALL upstream: text + vision +
   // niche + reality. Output: SynthesizedProductBrief = tight 3-5 line
   // product reality with forbiddenDriftSymptoms (anti-drift guardrail).
-  const synthesizedBrief = await synthesizeProductBrief(
+  // OPT-F5 (2026-05-28): merged brief + commercial-psychology into ONE
+  // Gemini call. CP previously ran sequentially after Brief because it
+  // needed Brief outputs as inputs — now they're produced together in a
+  // single combined JSON. Fail-safe: synthesizeBriefAndCP internally falls
+  // back to the 2 sequential calls if the combined call fails / truncates.
+  const briefAndCpStart = Date.now()
+  const synthCombined = await synthesizeBriefAndCP(
     {
       productName: product.productName,
       productPainPoints: product.painPoints,
@@ -483,12 +489,15 @@ export async function generateStorytellingPack(
       kieApiKey: settingsForNiche.kieApiKey,
     },
   )
+  const synthesizedBrief = synthCombined.brief
+  const commercialPsychologyFromCombined = synthCombined.commercialPsychology
   console.info(
-    `[storytelling] synthesized brief: ${synthesizedBrief.source}, ` +
+    `[storytelling] synthesized brief+CP: path=${synthCombined.source} (${((Date.now() - briefAndCpStart) / 1000).toFixed(1)}s) ` +
     `essence_length=${synthesizedBrief.productEssence.length}, ` +
     `reader_symptoms=${synthesizedBrief.readerSpecificSymptoms.length}, ` +
     `forbidden_drift=${synthesizedBrief.forbiddenDriftSymptoms.length}` +
-    (synthesizedBrief.rationale ? ` // ${synthesizedBrief.rationale.slice(0, 80)}` : ''),
+    (commercialPsychologyFromCombined ? `, CP desire=${commercialPsychologyFromCombined.primaryDesire.length}c, objections=${commercialPsychologyFromCombined.topObjections.length}` : ', CP=undefined') +
+    (synthesizedBrief.rationale ? ` // ${synthesizedBrief.rationale.slice(0, 60)}` : ''),
   )
 
   // ─── 3. Build product brief ───────────────────────────────────────
@@ -500,43 +509,12 @@ export async function generateStorytellingPack(
   const productBrief = buildProductBrief(product.productName, input.niche, product.painPoints)
   const realityBrief = buildRealityBrief(productReality)
 
-  // ─── 3.4 CP-SYNTHESIS (2026-05-28) — Commercial psychology synthesis ──
-  // Hybrid layered synthesis (Hướng B): derive product-specific commercial
-  // psychology (desire / CTA / objections / proof voice / mechanism vocab)
-  // that OVERRIDES niche-table defaults when present. Same pattern as
-  // SPEC.1 (synthesis symptoms override niche pool). Works for any product
-  // including those outside 22 known niches.
-  let commercialPsychology: SynthesizedCommercialPsychology | undefined = undefined
-  try {
-    commercialPsychology = await synthesizeCommercialPsychology(
-      {
-        productName: product.productName,
-        productPainPoints: product.painPoints,
-        productBenefits:   product.benefits,
-        productUsp:        product.usps,
-        productPricing:    product.offer,
-        niche: input.niche,
-        productEssence: synthesizedBrief.productEssence,
-        readerSpecificSymptoms: synthesizedBrief.readerSpecificSymptoms,
-        usageScene: synthesizedBrief.usageScene,
-        realisticFailedAttempts: synthesizedBrief.realisticFailedAttempts,
-        targetLanguage: params.language,
-      },
-      {
-        geminiApiKey: settingsForNiche.geminiApiKey,
-        kieApiKey: settingsForNiche.kieApiKey,
-      },
-    )
-    console.info(
-      `[storytelling] commercial psychology: ${commercialPsychology.source}, ` +
-      `desire=${commercialPsychology.primaryDesire.length}c, ` +
-      `objections=${commercialPsychology.topObjections.length}, ` +
-      `vocab_hints=${commercialPsychology.mechanismVocabHints.length}` +
-      (commercialPsychology.rationale ? ` // ${commercialPsychology.rationale.slice(0, 80)}` : ''),
-    )
-  } catch (err) {
-    console.warn(`[storytelling] Commercial psychology synthesis failed — pack uses niche-baseline only:`, err)
-  }
+  // ─── 3.4 CP-SYNTHESIS (now from combined call — OPT-F5 2026-05-28) ──
+  // commercialPsychology was previously a SEPARATE Gemini call that ran
+  // sequentially after synthesizeProductBrief. F5 merged the two into
+  // synthesizeBriefAndCP — the CP output now arrives bundled with the
+  // brief, saving 1 Gemini call. We just alias for downstream readers.
+  const commercialPsychology: SynthesizedCommercialPsychology | undefined = commercialPsychologyFromCombined
 
   // ─── 3.45 REBUILD Sprint 1 (2026-05-28) — Pre-write brainstorm ───
   // Runs AFTER productSynthesis + commercialPsychology because it needs
