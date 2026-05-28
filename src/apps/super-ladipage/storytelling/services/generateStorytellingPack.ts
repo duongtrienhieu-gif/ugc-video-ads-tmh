@@ -63,6 +63,33 @@ import type { SceneDescription } from '../../imageSceneSynthesis'
 // "soft diary nostalgia" for every niche.
 import { synthesizePackBrainstorm } from '../../packBrainstorm'
 import type { PackBrainstorm } from '../../packBrainstorm'
+// REBUILD Sprint 4 (2026-05-28) — Anti-repeat memory helpers (Layer E).
+// Persists the last N hook fingerprints per productId in localStorage so
+// subsequent regenerations of the SAME product pick a different hook
+// candidate from the brainstorm pool.
+const HOOK_MEMORY_PREFIX = 'super-ladipage:hookMemory:'
+const HOOK_MEMORY_MAX = 5
+function readHookMemory(productId: string): string[] {
+  try {
+    if (typeof window === 'undefined') return []
+    const raw = window.localStorage.getItem(HOOK_MEMORY_PREFIX + productId)
+    if (!raw) return []
+    const parsed = JSON.parse(raw) as unknown
+    if (!Array.isArray(parsed)) return []
+    return parsed.filter((s): s is string => typeof s === 'string').slice(0, HOOK_MEMORY_MAX)
+  } catch {
+    return []
+  }
+}
+function pushHookMemory(productId: string, fingerprint: string): void {
+  try {
+    if (typeof window === 'undefined' || !fingerprint) return
+    const existing = readHookMemory(productId)
+    // Move to front + de-dupe + cap
+    const next = [fingerprint, ...existing.filter((f) => f !== fingerprint)].slice(0, HOOK_MEMORY_MAX)
+    window.localStorage.setItem(HOOK_MEMORY_PREFIX + productId, JSON.stringify(next))
+  } catch { /* localStorage may be blocked — ignore */ }
+}
 // REBUILD Sprint 2 (2026-05-28) — Narrative mode detector + filter.
 import { detectNarrativeMode, getSkippedBlocksForMode } from '../../narrativeMode'
 import type { NarrativeMode } from '../../narrativeMode'
@@ -361,6 +388,23 @@ export async function generateStorytellingPack(
   // kept defaulting to "soft diary nostalgia recall" for every niche
   // regardless of input — the universal lan-man bug across all packs.
   let packBrainstorm: PackBrainstorm | undefined = undefined
+  // REBUILD Sprint 4 (Layer E): read past hook fingerprints for this product
+  // so the brainstorm + picker can avoid recently-used patterns.
+  const avoidedHookFingerprints = readHookMemory(product.id)
+  // Sprint 4: seed is taken from input.randomSeed (string — hashed to int)
+  // or Date.now() if absent, so click-after-click still rotates candidates.
+  const brainstormSeed = (() => {
+    const raw = input.randomSeed
+    if (typeof raw === 'string' && raw.length > 0) {
+      let h = 0
+      for (let i = 0; i < raw.length; i++) {
+        h = ((h << 5) - h) + raw.charCodeAt(i)
+        h |= 0
+      }
+      return h >>> 0
+    }
+    return Date.now() >>> 0
+  })()
   try {
     const brainstormStart = Date.now()
     packBrainstorm = await synthesizePackBrainstorm(
@@ -379,15 +423,23 @@ export async function generateStorytellingPack(
         rawUsp: product.usps ?? '',
         rawPricing: product.offer ?? '',
         targetLanguage: params.language,
+        // Sprint 4 — variety inputs
+        avoidedHookFingerprints,
+        seed: brainstormSeed,
       },
       { geminiApiKey, kieApiKey },
     )
     console.info(
       `[storytelling/brainstorm] ${packBrainstorm.source} · angle=${packBrainstorm.chosenAngle} · ` +
+      `subVariant=${packBrainstorm.chosenSubVariant} · candidates=${packBrainstorm.hookCandidates.length} · ` +
       `pains=${packBrainstorm.painLadder.length} · beats=${packBrainstorm.agitateBeats.length} · ` +
       `personas=${packBrainstorm.socialProofPersonas.length} in ${((Date.now() - brainstormStart) / 1000).toFixed(1)}s` +
+      (avoidedHookFingerprints.length > 0 ? ` · avoiding ${avoidedHookFingerprints.length} past fingerprints` : '') +
+      ` · fp=${packBrainstorm.hookFingerprint}` +
       (packBrainstorm.rationale ? ` // ${packBrainstorm.rationale.slice(0, 80)}` : ''),
     )
+    // Sprint 4 (Layer E): persist this fingerprint so next regen avoids it.
+    pushHookMemory(product.id, packBrainstorm.hookFingerprint)
   } catch (err) {
     console.warn('[storytelling/brainstorm] Brainstorm synthesis failed — pack uses niche-baseline only:', err)
   }

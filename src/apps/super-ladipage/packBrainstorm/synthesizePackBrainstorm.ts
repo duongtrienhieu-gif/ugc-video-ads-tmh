@@ -24,11 +24,14 @@ import { textGenWithFallback } from '../services/textGenWithFallback'
 import type {
   PackBrainstorm,
   HookAngle,
+  HookCandidate,
   PainLadderEntry,
   SocialProofPersonaSeed,
   SynthesizePackBrainstormInput,
   SynthesizePackBrainstormKeys,
 } from './types'
+import { listSubVariants } from './hookSubVariants'
+import { pickHookCandidate } from './pickHookCandidate'
 
 const BRAINSTORM_SYSTEM = `You are a pre-write reasoning assistant for a Vietnamese / Malay / English marketing copy pipeline.
 
@@ -50,7 +53,12 @@ interface BrainstormJSON {
   }>
   chosenAngle: string
   chosenAngleCandidates: string[]
-  hookDraft: string
+  /** Sprint 4 — array of N hook candidates, each with its own sub-variant. */
+  hookCandidates: Array<{
+    subVariant: string
+    hookDraft: string
+    flavor?: string
+  }>
   agitateBeats: string[]
   socialProofPersonas: Array<{ label: string; angle: string }>
   rationale: string
@@ -68,6 +76,20 @@ const VALID_LOSS_TYPES: PainLadderEntry['lossType'][] = [
   'sleep', 'health', 'time', 'money', 'pride', 'social', 'future',
 ]
 
+/** Sprint 4 — list ALL sub-variants Gemini can pick from across the 5 angles.
+ *  Compact list so the prompt doesn't blow up. */
+function buildSubVariantMenu(): string {
+  const lines: string[] = []
+  const ANGLES: HookAngle[] = ['pain-immediate-scene', 'social-shame', 'future-fear', 'wasted-effort', 'soft-recognition']
+  for (const angle of ANGLES) {
+    const variants = listSubVariants(angle)
+    if (variants.length === 0) continue
+    const items = variants.map((v) => `${v.id} (${v.label})`).join(' | ')
+    lines.push(`  ${angle}: ${items}`)
+  }
+  return lines.join('\n')
+}
+
 function buildBrainstormPrompt(input: SynthesizePackBrainstormInput): string {
   const lang =
     input.targetLanguage === 'ms' ? 'Bahasa Melayu' :
@@ -78,7 +100,16 @@ function buildBrainstormPrompt(input: SynthesizePackBrainstormInput): string {
     ? input.topObjections.slice(0, 3).map((o) => `- ${o.objection}`).join('\n')
     : '(commercial-psychology synthesis unavailable)'
 
+  const avoidBlock = (input.avoidedHookFingerprints && input.avoidedHookFingerprints.length > 0)
+    ? `\n═══ ANTI-REPEAT MEMORY (DO NOT MATCH) ═══
+Recent packs of THIS product already used these hook patterns (fingerprint format = subVariant-hash):
+${input.avoidedHookFingerprints.slice(0, 5).map((f) => `  - ${f}`).join('\n')}
+AVOID producing hookCandidates that would match these. Vary BOTH the sub-variant AND the wording.
+`
+    : ''
+
   return `Read the product reality below and brainstorm the pre-write plan for ONE landing page pack.
+${avoidBlock}
 
 ═══ PRODUCT REALITY ═══
 Name: ${input.productName}
@@ -121,15 +152,24 @@ Pricing offer: ${input.rawPricing.slice(0, 300)}
   "chosenAngleCandidates": ["...", "..."],
   // 2-3 angles you considered. Always include the chosen one first.
 
-  "hookDraft": "...",
-  // 2-4 sentence opening paragraph in ${lang}. THIS is the seed for Block 1 of the pack.
-  // RULES:
-  //  - The downstream writer MUST start the pack from this seed.
-  //  - Use the chosenAngle's pattern (scene for pain-immediate, identity-question for social-shame, etc.)
-  //  - Reference at least ONE concrete specific from the rank-1 pain (a time, a symptom name, a number)
-  //  - DO NOT open with nostalgia recall ("bạn còn nhớ cảm giác...") UNLESS chosenAngle = soft-recognition
-  //  - DO NOT use generic openers ("có những điều rất nhỏ", "bạn có phải là người này")
-  //  - 1st-person ("tôi") narrator may appear but reader (YOU) must be the emotional center
+  "hookCandidates": [
+    { "subVariant": "...", "hookDraft": "...", "flavor": "..." }
+    // EXACTLY 3 candidates. ALL three MUST use the SAME chosenAngle but DIFFERENT sub-variants from this menu:
+    //
+    // ─── SUB-VARIANT MENU per angle (PICK 3 DIFFERENT ones from the chosenAngle's list) ───
+${buildSubVariantMenu()}
+    //
+    // RULES for each candidate's hookDraft:
+    //  - 2-4 sentence opening paragraph in ${lang}. Block 1 of the pack will be anchored to the PICKED candidate (selected by seed downstream).
+    //  - The downstream writer MUST start the pack from the picked candidate's seed.
+    //  - Use the candidate's sub-variant pattern (see SUB-VARIANT MENU hint above).
+    //  - Reference at least ONE concrete specific from the rank-1 pain (a time, a symptom name, a number).
+    //  - DO NOT open with nostalgia recall ("bạn còn nhớ cảm giác...") UNLESS chosenAngle = soft-recognition.
+    //  - DO NOT use generic openers ("có những điều rất nhỏ", "bạn có phải là người này").
+    //  - 1st-person ("tôi") narrator may appear but reader (YOU) must be the emotional center.
+    //  - Each of the 3 candidates MUST FEEL meaningfully different — different opening word, different sensory channel, different micro-moment.
+    //  - "flavor" = 1 short phrase ("3am scene", "money inventory", "kids witness") so telemetry can tell them apart.
+  ],
 
   "agitateBeats": [
     "...", "...", "..."
@@ -172,7 +212,8 @@ function asValidLossType(
 }
 
 /** Build a deterministic fallback when Gemini is unavailable or returns garbage.
- *  Uses the upstream synthesis data verbatim — no static templates. */
+ *  Uses the upstream synthesis data verbatim — no static templates.
+ *  Sprint 4: returns 3 candidates so the picker still has a pool. */
 function buildFallbackBrainstorm(input: SynthesizePackBrainstormInput): PackBrainstorm {
   const symptoms = input.readerSpecificSymptoms.slice(0, 5)
   const failedAttempts = input.realisticFailedAttempts.slice(0, 3)
@@ -190,14 +231,50 @@ function buildFallbackBrainstorm(input: SynthesizePackBrainstormInput): PackBrai
     lossType: 'health',
   }))
 
-  // Compose a very basic hook seed — the storytelling generator will
-  // expand it. We deliberately stay terse so the writer adds detail.
+  // Compose 3 basic candidates using the first 3 sub-variants of the
+  // chosen angle so the picker still has a pool. Deliberately terse —
+  // the storytelling generator expands later.
+  const variants = listSubVariants(angle).slice(0, 3)
   const topSymptom = symptoms[0] ?? input.productEssence.slice(0, 80)
-  const hookDraft = input.targetLanguage === 'ms'
-    ? `Awak masih ingat tak — bila kali terakhir awak rasa tenang tanpa ${topSymptom}? Bukan satu hari je, ${input.usageScene || 'setiap hari'} pun rasa benda yang sama.`
-    : input.targetLanguage === 'en'
-    ? `Honestly — when was the last time a full day went by without ${topSymptom}? Not one day. Most days lately.`
-    : `Bạn còn nhớ lần cuối cùng một ngày trôi qua mà không có ${topSymptom} không? Tôi cũng từng cố đếm — và đã không nhớ ra nổi.`
+  const hookCandidates: HookCandidate[] = variants.map((v, i) => {
+    const draftSeed = input.targetLanguage === 'ms'
+      ? [
+          `Awak masih ingat tak — bila kali terakhir awak tidur lena tanpa ${topSymptom}?`,
+          `Pernah tak terasa ${topSymptom}, lepas tu tak boleh tidur balik?`,
+          `Setiap kali ${input.usageScene || 'pagi'}, awak terasa ${topSymptom} lagi sekali.`,
+        ][i]
+      : input.targetLanguage === 'en'
+      ? [
+          `When was the last time a full day went by without ${topSymptom}?`,
+          `Three nights a week now you wake up at 3am because of ${topSymptom}.`,
+          `Every ${input.usageScene || 'morning'}, you check whether ${topSymptom} is back. It always is.`,
+        ][i]
+      : [
+          `Bạn còn nhớ lần cuối cùng một ngày trôi qua mà không có ${topSymptom} không?`,
+          `Ba đêm trong tuần bạn lại thức dậy vì ${topSymptom}. Bạn đã đếm.`,
+          `Sáng nay, lại là ${topSymptom}. Như mọi sáng tuần này. Như mọi sáng tháng trước.`,
+        ][i]
+    return {
+      subVariant: v.id,
+      hookDraft: draftSeed,
+      flavor: v.label,
+    }
+  })
+  if (hookCandidates.length === 0) {
+    // Angle has no sub-variants — emit one inline.
+    hookCandidates.push({
+      subVariant: 'fallback',
+      hookDraft: `Tôi đã sống với ${topSymptom} đủ lâu để biết nó không tự khỏi.`,
+      flavor: 'fallback',
+    })
+  }
+
+  // Pick first candidate by default for fallback
+  const picked = pickHookCandidate({
+    candidates: hookCandidates,
+    seed: input.seed ?? 0,
+    avoidedFingerprints: input.avoidedHookFingerprints,
+  })
 
   const agitateBeats: string[] = []
   if (symptoms.length >= 3) agitateBeats.push('stack symptoms 3-5 thật cụ thể')
@@ -214,11 +291,14 @@ function buildFallbackBrainstorm(input: SynthesizePackBrainstormInput): PackBrai
     painLadder,
     chosenAngle: angle,
     chosenAngleCandidates: [angle],
-    hookDraft,
+    hookCandidates,
+    chosenSubVariant: picked.picked.subVariant,
+    hookDraft: picked.picked.hookDraft,
     agitateBeats,
     socialProofPersonas,
     rationale: 'Fallback brainstorm — Gemini call failed or skipped. Used synthesis-derived symptoms + simple angle heuristic.',
     source: 'fallback',
+    hookFingerprint: picked.fingerprint,
   }
 }
 
@@ -240,7 +320,9 @@ export async function synthesizePackBrainstorm(
       prompt: buildBrainstormPrompt(input),
       systemInstruction: BRAINSTORM_SYSTEM,
       jsonMode: true,
-      maxOutputTokens: 1800,
+      // Sprint 4: bumped from 1800 → 2800 to accommodate 3 hook candidates
+      // (each 2-4 sentences + flavor + subVariant) without truncation.
+      maxOutputTokens: 2800,
       timeoutMs: 45_000,
       label: 'pack-brainstorm',
     })
@@ -275,9 +357,43 @@ export async function synthesizePackBrainstorm(
           .slice(0, 3)
       : [chosenAngle]
 
-    const hookDraft = typeof parsed.hookDraft === 'string' && parsed.hookDraft.trim().length >= 20
-      ? parsed.hookDraft.trim().slice(0, 800)
-      : fallback.hookDraft
+    // Sprint 4 — normalize hookCandidates[] (Gemini returns 3, we validate
+    // and pick 1 via seed + avoid list).
+    const validVariantIds = new Set(listSubVariants(chosenAngle).map((v) => v.id))
+    const hookCandidates: HookCandidate[] = Array.isArray(parsed.hookCandidates)
+      ? parsed.hookCandidates
+          .filter((c) => c && typeof c.hookDraft === 'string' && c.hookDraft.trim().length >= 20)
+          .map((c) => ({
+            subVariant: validVariantIds.has(String(c.subVariant)) ? String(c.subVariant) : (listSubVariants(chosenAngle)[0]?.id ?? 'unknown'),
+            hookDraft: c.hookDraft.trim().slice(0, 800),
+            flavor: typeof c.flavor === 'string' ? c.flavor.trim().slice(0, 80) : undefined,
+          }))
+          .slice(0, 5)
+      : []
+
+    // De-duplicate by subVariant — if Gemini reused a variant, keep first.
+    const seenVariants = new Set<string>()
+    const uniqueCandidates: HookCandidate[] = []
+    for (const c of hookCandidates) {
+      if (seenVariants.has(c.subVariant)) continue
+      seenVariants.add(c.subVariant)
+      uniqueCandidates.push(c)
+    }
+
+    // If we ended up with < 1 candidate from Gemini, fall back entirely.
+    if (uniqueCandidates.length === 0) return fallback
+
+    // Pick 1 via seed-based picker (Sprint 4 Layer A+E).
+    const pickResult = pickHookCandidate({
+      candidates: uniqueCandidates,
+      seed: input.seed ?? 0,
+      avoidedFingerprints: input.avoidedHookFingerprints,
+    })
+    if (pickResult.bypassed) {
+      console.info(
+        `[brainstorm/pick] All ${uniqueCandidates.length} candidates matched the avoid list — picker bypassed memory. Consider widening the sub-variant pool for this angle.`,
+      )
+    }
 
     const agitateBeats: string[] = Array.isArray(parsed.agitateBeats)
       ? parsed.agitateBeats
@@ -300,14 +416,21 @@ export async function synthesizePackBrainstorm(
       painLadder,
       chosenAngle,
       chosenAngleCandidates,
-      hookDraft,
+      hookCandidates: uniqueCandidates,
+      chosenSubVariant: pickResult.picked.subVariant,
+      hookDraft: pickResult.picked.hookDraft,
       agitateBeats: agitateBeats.length > 0 ? agitateBeats : fallback.agitateBeats,
       socialProofPersonas: socialProofPersonas.length > 0 ? socialProofPersonas : fallback.socialProofPersonas,
       rationale: typeof parsed.rationale === 'string' ? parsed.rationale.slice(0, 280) : '',
       source: 'gemini',
+      hookFingerprint: pickResult.fingerprint,
     }
   } catch (err) {
     console.warn('[brainstorm] Gemini brainstorm failed — using fallback:', err)
     return fallback
   }
 }
+
+// Re-export the hash helper so callers (e.g. generateStorytellingPack)
+// can verify or build fingerprints without depending on the picker file.
+export { hookFingerprint } from './pickHookCandidate'

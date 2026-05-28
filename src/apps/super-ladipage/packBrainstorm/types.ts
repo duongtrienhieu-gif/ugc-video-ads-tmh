@@ -59,6 +59,22 @@ export interface SocialProofPersonaSeed {
   angle: string
 }
 
+/** REBUILD Sprint 4 (2026-05-28) — One hook candidate produced by the
+ *  brainstormer. The brainstormer now returns N candidates (default 3)
+ *  and a seed-based picker chooses 1 of them so the same product
+ *  regenerated multiple times yields different openings.
+ *  Each candidate uses a DIFFERENT sub-variant of the chosen angle. */
+export interface HookCandidate {
+  /** Sub-variant id (from hookSubVariants.ts) — e.g. "timed-scene",
+   *  "sensory-stack", "mirror-scene". Used for anti-repeat memory + UI
+   *  telemetry. */
+  subVariant: string
+  /** The drafted 2-4 sentence opening. */
+  hookDraft: string
+  /** Optional one-line description what makes this candidate distinct. */
+  flavor?: string
+}
+
 /** Final brainstorm output passed into the storytelling system prompt. */
 export interface PackBrainstorm {
   /** Pain ladder sorted by intensity, max 5. Hook + agitate beats draw
@@ -68,10 +84,22 @@ export interface PackBrainstorm {
   chosenAngle: HookAngle
   /** Alternative angles considered — kept for telemetry only. */
   chosenAngleCandidates: HookAngle[]
+  /** REBUILD Sprint 4 (2026-05-28) — All candidate hooks the brainstormer
+   *  generated. Default 3. Each candidate uses a DIFFERENT sub-variant.
+   *  The picker (pickHookCandidate.ts) selects 1 based on seed + avoid
+   *  list. Kept on the brainstorm object so UI/telemetry can show "we
+   *  considered N candidates, picked sub-variant X" rather than hiding
+   *  the selection. */
+  hookCandidates: HookCandidate[]
+  /** The chosen hook candidate's sub-variant id (after picker runs).
+   *  Sprint 4. Filled by synthesizePackBrainstorm before returning. */
+  chosenSubVariant: string
   /** A drafted opening paragraph (2-4 sentences) in the target language.
    *  The storytelling generator is told to use this as a STARTING POINT
    *  for Block 1 (`self-recognition-hook`). It may polish but must not
-   *  defang it back into the soft nostalgia pattern. */
+   *  defang it back into the soft nostalgia pattern.
+   *  Sprint 4: this is now the PICKED candidate's hookDraft (not the
+   *  first/only one). */
   hookDraft: string
   /** Sequence of 3-5 short beats the agitation phase must hit. e.g.
    *  ["stack symptoms", "negative future 5 năm", "money already spent"]. */
@@ -84,6 +112,11 @@ export interface PackBrainstorm {
   /** Pipeline source — 'gemini' = real synthesis, 'fallback' = static
    *  niche default when Gemini failed / no API key. */
   source: 'gemini' | 'fallback'
+  /** REBUILD Sprint 4 (2026-05-28) — Fingerprint hash of the chosen
+   *  hookDraft + sub-variant. The caller persists this in localStorage
+   *  per product so subsequent regenerations can request a DIFFERENT
+   *  candidate (anti-repeat memory). */
+  hookFingerprint: string
 }
 
 export interface SynthesizePackBrainstormInput {
@@ -105,6 +138,17 @@ export interface SynthesizePackBrainstormInput {
   rawPricing: string
   /** Output language for the drafted hook + persona labels. */
   targetLanguage: LandingLanguage
+  /** REBUILD Sprint 4 (2026-05-28) — Anti-repeat memory.
+   *  Hook fingerprints used by THIS PRODUCT in recent past packs (most
+   *  recent first, max 5). Brainstorm tells Gemini to AVOID matching any
+   *  of these patterns. Picker also skips candidates whose fingerprint
+   *  appears in this list when possible. */
+  avoidedHookFingerprints?: string[]
+  /** REBUILD Sprint 4 (2026-05-28) — Deterministic seed for candidate
+   *  selection. When same product is regenerated 3-5x, this changes per
+   *  call (typically wired to LandingGenParams.randomSeed) so the picker
+   *  yields a different candidate each time. */
+  seed?: number
 }
 
 export interface SynthesizePackBrainstormKeys {

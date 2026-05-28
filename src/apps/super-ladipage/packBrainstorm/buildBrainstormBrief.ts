@@ -10,6 +10,7 @@
 // ─────────────────────────────────────────────────────────────────────
 
 import type { PackBrainstorm, HookAngle } from './types'
+import { getSubVariantSpec } from './hookSubVariants'
 
 const ANGLE_GUIDANCE: Record<HookAngle, string> = {
   'pain-immediate-scene':
@@ -30,6 +31,15 @@ export function buildBrainstormBrief(brainstorm: PackBrainstorm): string {
   lines.push('')
   lines.push(`Chosen hook angle: ${brainstorm.chosenAngle}`)
   lines.push(`Angle guidance: ${ANGLE_GUIDANCE[brainstorm.chosenAngle]}`)
+  // Sprint 4: surface the sub-variant the picker chose so the writer
+  // knows WHICH flavor of the angle to use.
+  const subSpec = getSubVariantSpec(brainstorm.chosenAngle, brainstorm.chosenSubVariant)
+  if (subSpec) {
+    lines.push(`Chosen sub-variant: ${subSpec.id} (${subSpec.label})`)
+    lines.push(`Sub-variant hint: ${subSpec.hint}`)
+  } else if (brainstorm.chosenSubVariant) {
+    lines.push(`Chosen sub-variant: ${brainstorm.chosenSubVariant}`)
+  }
   lines.push('')
 
   if (brainstorm.painLadder.length > 0) {

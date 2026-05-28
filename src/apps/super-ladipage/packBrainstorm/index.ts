@@ -9,10 +9,16 @@
 
 export { synthesizePackBrainstorm } from './synthesizePackBrainstorm'
 export { buildBrainstormBrief } from './buildBrainstormBrief'
+// Sprint 4 — picker + fingerprint helpers exposed for the caller's
+// localStorage-based anti-repeat memory.
+export { pickHookCandidate, hookFingerprint } from './pickHookCandidate'
+export { listSubVariants, getSubVariantSpec, HOOK_SUB_VARIANTS } from './hookSubVariants'
+export type { HookSubVariantSpec, HookSubVariant } from './hookSubVariants'
 export type {
   PackBrainstorm,
   PainLadderEntry,
   HookAngle,
+  HookCandidate,
   SocialProofPersonaSeed,
   SynthesizePackBrainstormInput,
   SynthesizePackBrainstormKeys,
