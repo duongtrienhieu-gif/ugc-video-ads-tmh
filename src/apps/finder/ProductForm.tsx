@@ -79,6 +79,121 @@ ${FIELDS_SPEC}
 
 Nếu screenshot không liệt kê thành phần rõ ràng, suy luận hoạt chất khả thi nhất từ loại sản phẩm.`
 
+// ── Shopee marketplace fetch ────────────────────────────────────────────
+// Jina/Cloudflare can't read Shopee SPA pages (anti-bot wall). Instead we
+// parse the shop_id + item_id out of the URL, then hit Shopee's internal
+// public API (`api/v4/item/get`) via a CORS proxy. Returns structured JSON
+// with name/description/price/attributes — much cleaner than scraping.
+//
+// Reliability ~30-60%: Shopee rotates auth headers + blocks proxy IPs.
+// On failure we throw a Shopee-specific error pointing the user to the
+// screenshot upload fallback.
+
+interface ShopeeItem {
+  name?: string
+  description?: string
+  price?: number              // micro units (×100,000)
+  price_min?: number
+  price_max?: number
+  price_before_discount?: number
+  raw_discount?: number       // 0-100 percent
+  historical_sold?: number
+  item_rating?: { rating_star?: number; rating_count?: number[] }
+  categories?: Array<{ display_name?: string }>
+  attributes?: Array<{ name?: string; value?: string }>
+  brand?: string
+}
+
+interface ShopeeApiResponse {
+  data?: { item?: ShopeeItem }
+  error?: number
+}
+
+/** Parse `shopee.vn/<slug>-i.<shop_id>.<item_id>(?...)` → { shopId, itemId }. */
+function parseShopeeUrl(url: string): { shopId: string; itemId: string } | null {
+  try {
+    const u = new URL(url)
+    if (!/(^|\.)shopee\./i.test(u.hostname)) return null
+    const m = u.pathname.match(/-i\.(\d+)\.(\d+)/)
+    if (!m) return null
+    return { shopId: m[1], itemId: m[2] }
+  } catch {
+    return null
+  }
+}
+
+/** Format Shopee API price (micro units) → display string like "430.000đ". */
+function formatShopeePrice(micro?: number): string {
+  if (typeof micro !== 'number' || micro <= 0) return ''
+  const vnd = Math.round(micro / 100000)
+  return `${vnd.toLocaleString('vi-VN')}đ`
+}
+
+/**
+ * Fetch Shopee item via CORS proxy chain. Tries 2 proxies in order; returns
+ * the first successful response or null. Shopee API is brittle — sometimes
+ * a proxy IP gets blacklisted, so we fall back to a second.
+ */
+async function fetchShopeeItem(shopId: string, itemId: string): Promise<ShopeeItem | null> {
+  const apiUrl = `https://shopee.vn/api/v4/item/get?itemid=${itemId}&shopid=${shopId}`
+  const proxies = [
+    (u: string) => `https://corsproxy.io/?url=${encodeURIComponent(u)}`,
+    (u: string) => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`,
+  ]
+  for (const wrap of proxies) {
+    try {
+      const r = await fetch(wrap(apiUrl), { signal: AbortSignal.timeout(15000) })
+      if (!r.ok) continue
+      const json = await r.json() as ShopeeApiResponse
+      if (json.error === 0 && json.data?.item) return json.data.item
+    } catch {
+      /* try next proxy */
+    }
+  }
+  return null
+}
+
+/**
+ * Convert Shopee item JSON → compact text block we feed to Gemini for
+ * the same VN extraction prompt used elsewhere. Lets Gemini infer
+ * targetMarket / painPoints / usps / benefits from name + description,
+ * while we pre-format the price field.
+ */
+function shopeeItemToText(item: ShopeeItem): string {
+  const lines: string[] = []
+  if (item.name) lines.push(`Tên sản phẩm: ${item.name}`)
+  if (item.brand) lines.push(`Thương hiệu: ${item.brand}`)
+  if (item.description) lines.push(`Mô tả:\n${item.description}`)
+
+  // Price + discount → one neat line
+  const cur = formatShopeePrice(item.price ?? item.price_min)
+  const before = formatShopeePrice(item.price_before_discount)
+  const disc = item.raw_discount
+  if (cur) {
+    let priceLine = `Giá: ${cur}`
+    if (before && disc) priceLine += ` (giảm ${disc}% từ ${before})`
+    else if (before) priceLine += ` (giá gốc ${before})`
+    lines.push(priceLine)
+  }
+
+  if (item.historical_sold) lines.push(`Đã bán: ${item.historical_sold.toLocaleString('vi-VN')}`)
+  if (item.item_rating?.rating_star) lines.push(`Đánh giá: ${item.item_rating.rating_star.toFixed(1)}/5`)
+
+  if (item.categories && item.categories.length > 0) {
+    const cats = item.categories.map((c) => c.display_name).filter(Boolean).join(' › ')
+    if (cats) lines.push(`Danh mục: ${cats}`)
+  }
+
+  if (item.attributes && item.attributes.length > 0) {
+    lines.push('Thuộc tính:')
+    for (const a of item.attributes) {
+      if (a.name && a.value) lines.push(`  • ${a.name}: ${a.value}`)
+    }
+  }
+
+  return lines.join('\n')
+}
+
 interface JinaJsonData {
   data?: { content?: string; images?: Record<string, string> }
 }
@@ -432,6 +547,32 @@ export default function ProductForm({ item, onSave, onCancel }: ProductFormProps
     setIsFetching(true)
     try {
       const geminiKey = getGeminiKey()
+
+      // Shopee URLs bypass Jina (Cloudflare wall) — go straight to the
+      // Shopee internal API via CORS proxy. Returns structured JSON we
+      // then pass to Gemini for VN normalization + field inference.
+      const shopeeIds = parseShopeeUrl(url)
+      if (shopeeIds) {
+        addToast('Đang đọc Shopee qua API...')
+        const item = await fetchShopeeItem(shopeeIds.shopId, shopeeIds.itemId)
+        if (!item) {
+          throw new Error('Shopee API không phản hồi (anti-bot chặn ngẫu nhiên). Vui lòng dùng "Tải ảnh chụp màn hình" bên dưới.')
+        }
+        const pageText = shopeeItemToText(item)
+        const response = await directGeminiVision({
+          apiKey: geminiKey,
+          parts: [{ text: EXTRACT_PROMPT(pageText) }],
+          systemInstruction: EXTRACT_SYSTEM,
+          maxOutputTokens: 2048,
+        })
+        const extracted = parseExtracted(response)
+        if (!extracted) throw new Error('AI không trích xuất được thông tin từ dữ liệu Shopee.')
+        const { next, count } = applyExtracted(extracted, form)
+        if (count === 0) throw new Error('Không trích xuất được thông tin.')
+        setForm(next)
+        addToast(`Đã tự động điền ${count} trường từ Shopee`)
+        return
+      }
 
       // Step 1: fetch page text + image URL list in parallel with image downloads
       addToast('Đang đọc trang sản phẩm...')
