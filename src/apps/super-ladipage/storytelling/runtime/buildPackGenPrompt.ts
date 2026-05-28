@@ -161,14 +161,36 @@ function buildBlockDirective(
     }
   }
 
-  // ─── Failed-attempts block: concrete cost rule (condensed from Sprint 5 E2) ──
+  // ─── Failed-attempts block: concrete cost rule (full enforcement) ──
+  // 2026-05-29: restored full Sprint 5 E2 enforcement after v6 condensed
+  // version got ignored by Gemini (output stayed generic — "thuốc kháng
+  // histamine" without brand/cost/duration). Block-specific rule does not
+  // contradict any architecture; condensing it was over-pruning.
   if (block.id === 'shared-failed-attempts') {
-    lines.push(`  Concrete-cost rule: each failed attempt MUST include at least ONE cost dimension —`)
-    lines.push(`    • money (specific amount, eg "4 thang × 80 RM = 320 RM"),`)
-    lines.push(`    • time wasted (specific duration), or`)
-    lines.push(`    • brand/method name (concrete reference).`)
-    lines.push(`  3-5 attempts total. Avoid "thử đủ mọi cách" without specifics.`)
-    lines.push(`  Optional 1-line total: "cộng lại, hơn 900 RM ném vào những thứ không giải quyết gốc rễ".`)
+    lines.push(`  💸 CONCRETE COST RULE — STRICT (this is the strongest signal in this block):`)
+    lines.push(`  HARD RULE: Each failed attempt MUST include a CONCRETE COST signal in at least ONE of these dimensions.`)
+    lines.push(`  Generic phrasing without specifics WILL be rejected.`)
+    lines.push(`    1. MONEY — specific amount, real or plausibly invented`)
+    lines.push(`         e.g. "4 thang nước thuốc Bắc × 80 RM = 320 RM"`)
+    lines.push(`         e.g. "máy xịt mũi 180 RM, dùng 2 tháng đã hỏng"`)
+    lines.push(`         e.g. "3 hộp viên uống × 65 RM = gần 200 RM"`)
+    lines.push(`    2. TIME WASTED — specific duration the attempt was tried`)
+    lines.push(`         e.g. "uống đều 3 tháng, không kết quả"`)
+    lines.push(`         e.g. "kiên trì xông hơi 6 tuần liền"`)
+    lines.push(`         e.g. "dùng liên tục nửa năm rồi từ bỏ"`)
+    lines.push(`    3. BRAND / METHOD NAME — concrete real or plausibly local reference`)
+    lines.push(`         e.g. "siro Bisolvon — vị ngọt, không hiệu quả"`)
+    lines.push(`         e.g. "Otrivin xịt mũi, làm khô niêm mạc"`)
+    lines.push(`         e.g. "miếng dán Trung Quốc trên Shopee 35 RM"`)
+    lines.push(`  ✅ Total inventory: 3-5 attempts. EACH one MUST carry at least 1 cost dimension above.`)
+    lines.push(`  ⛔ FORBIDDEN openers / phrasings — REJECT these patterns:`)
+    lines.push(`     - "Tôi đã thử đủ mọi cách" (no specifics following)`)
+    lines.push(`     - "Thử nhiều loại / Dùng viên ngậm hoặc..." (no brand, no number)`)
+    lines.push(`     - "thuốc kháng histamine" / "thuốc xịt mũi" / "nước muối sinh lý" alone (category-only, NO brand, NO RM, NO duration)`)
+    lines.push(`     - Bullet-only lists without one micro-detail per item`)
+    lines.push(`  ✅ STRONGLY recommended close: 1-line total cost summary —`)
+    lines.push(`     e.g. "Cộng lại, hơn 900 RM ném vào những thứ không giải quyết gốc rễ."`)
+    lines.push(`     e.g. "Tính ra gần 1.500 RM cho những thứ chỉ đỡ tạm thời."`)
   }
 
   // ─── Block 10 (why-this-felt-different): 2-beat + tease handoff to PI ──

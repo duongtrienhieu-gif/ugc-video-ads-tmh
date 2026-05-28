@@ -1,13 +1,36 @@
 // ImageGrid — middle column showing the 9 listing image cards in 3×3.
+// Phase 2: each card renders via real Konva canvas (ListingCanvas).
+// Brand kit + fallback scene URL resolved here once, passed to all 9 cards.
 
+import { useEffect, useState } from 'react'
 import { LayoutGrid, Eye, EyeOff } from 'lucide-react'
 import ImageSlot from './ImageSlot'
 import { useTikTokShopStore, buildMockListing } from '../store'
+import { useResolvedBrandKit } from '../canvas/useResolvedBrandKit'
+import { snapToPaletteFamily } from '../constants'
+import { getUrl } from '../../../utils/assetStore'
 
 export default function ImageGrid() {
   const draft = useTikTokShopStore((s) => s.draft)
   const showMock = useTikTokShopStore((s) => s.showMockPreview)
   const toggleMock = useTikTokShopStore((s) => s.toggleMockPreview)
+
+  // Resolve brand kit (or fall back to mock so canvas always has something)
+  const brandKit = useResolvedBrandKit(draft.brandKitId, draft.market)
+  const paletteFamily = snapToPaletteFamily(brandKit.palette.primary)
+
+  // Load first reference image as the fallback "product scene" — Phase 2 uses
+  // this in Slot 1 instead of an AI-generated background. Phase 3 swaps in AI.
+  const firstRefId = draft.referenceImageAssetIds[0]
+  const [fallbackSceneUrl, setFallbackSceneUrl] = useState<string | null>(null)
+  useEffect(() => {
+    if (!firstRefId) { setFallbackSceneUrl(null); return }
+    let alive = true
+    getUrl(firstRefId)
+      .then((u) => { if (alive) setFallbackSceneUrl(u) })
+      .catch(() => { if (alive) setFallbackSceneUrl(null) })
+    return () => { alive = false }
+  }, [firstRefId])
 
   const output = draft.output ?? (showMock ? buildMockListing() : null)
 
@@ -18,9 +41,12 @@ export default function ImageGrid() {
         <div className="flex items-center gap-2">
           <LayoutGrid className="h-4 w-4 text-gray-600" />
           <h2 className="text-sm font-semibold text-gray-900">Bộ 9 ảnh</h2>
-          {output && (
-            <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-medium text-gray-600">
-              {output.paletteFamily}
+          <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-medium text-gray-600">
+            {paletteFamily}
+          </span>
+          {!draft.brandKitId && (
+            <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-700">
+              brand kit demo
             </span>
           )}
         </div>
@@ -40,7 +66,13 @@ export default function ImageGrid() {
         {output ? (
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {output.images.map((img) => (
-              <ImageSlot key={img.slot} image={img} paletteFamily={output.paletteFamily} />
+              <ImageSlot
+                key={img.slot}
+                image={img}
+                paletteFamily={paletteFamily}
+                brandKit={brandKit}
+                fallbackSceneUrl={fallbackSceneUrl}
+              />
             ))}
           </div>
         ) : (

@@ -1,41 +1,30 @@
 // ImageSlot — single card in the 9-slot grid.
-// Phase 1: renders mock overlay text + atmosphere background CSS gradient.
-// Phase 2 will replace the placeholder with real canvas-rendered preview.
+// Phase 2: renders via ListingCanvas (real Konva). Slot 1 gets full content;
+// slots 2-9 show a placeholder until Phase 4 wires their renderers.
 
-import { useEffect, useState } from 'react'
-import { RefreshCw, Pencil, Download, Loader2, ImageOff } from 'lucide-react'
-import { getUrl } from '../../../utils/assetStore'
+import { useEffect, useRef, useState } from 'react'
+import { RefreshCw, Pencil, Download, Loader2 } from 'lucide-react'
+import type Konva from 'konva'
 import { useAppStore } from '../../../stores/appStore'
-import type { ListingImage } from '../types'
-import {
-  ATMOSPHERE_VARIANTS,
-  TPCN_PALETTES,
-  COMPOSITION_FAMILY_LABELS,
-} from '../constants'
-import type { PaletteFamily } from '../types'
+import type { ListingImage, PaletteFamily } from '../types'
+import type { ResolvedBrandKit } from '../../../types/brandKit'
+import { COMPOSITION_FAMILY_LABELS, ATMOSPHERE_VARIANTS } from '../constants'
+import ListingCanvas from '../canvas/ListingCanvas'
+import { downloadStage } from '../services/exportImage'
 
 interface Props {
   image: ListingImage
   paletteFamily: PaletteFamily
+  brandKit: ResolvedBrandKit
+  fallbackSceneUrl?: string | null
 }
 
-export default function ImageSlot({ image, paletteFamily }: Props) {
+export default function ImageSlot({ image, paletteFamily, brandKit, fallbackSceneUrl }: Props) {
   const addToast = useAppStore((s) => s.addToast)
-  const [imageUrl, setImageUrl] = useState<string | null>(null)
+  const stageRef = useRef<Konva.Stage | null>(null)
+  const [wrapRef, displayWidth] = useElementWidth<HTMLDivElement>()
 
-  // Lazy-load the rendered image URL (Phase 3+ populates imageAssetId).
-  useEffect(() => {
-    if (!image.imageAssetId) { setImageUrl(null); return }
-    let cancelled = false
-    getUrl(image.imageAssetId)
-      .then((u) => { if (!cancelled) setImageUrl(u) })
-      .catch(() => { if (!cancelled) setImageUrl(null) })
-    return () => { cancelled = true }
-  }, [image.imageAssetId])
-
-  const palette = TPCN_PALETTES[paletteFamily]
   const atmosphere = ATMOSPHERE_VARIANTS[image.config.atmosphere]
-  const backgroundStyle = { background: atmosphere.cssGradient(palette) }
 
   const phaseStubAction = (kind: 'visual' | 'text') => {
     addToast(
@@ -44,6 +33,21 @@ export default function ImageSlot({ image, paletteFamily }: Props) {
         : 'Re-roll text — wire ở Phase 4',
       'info',
     )
+  }
+
+  const handleDownload = async () => {
+    if (!stageRef.current) return
+    try {
+      // Export at native 1080×1080 regardless of display size — we ALWAYS
+      // ship customers the full-res image. pixelRatio=1 because the Stage
+      // is already 1080 in internal coords; we just scale up from the
+      // displayed (shrunk) size back to native by dividing by the scale.
+      const scale = displayWidth / 1080
+      await downloadStage(stageRef.current, `tiktok-shop-slot${image.slot}`, { pixelRatio: 1 / scale })
+      addToast('Đã tải ảnh xuống', 'success')
+    } catch (err) {
+      addToast(`Tải xuống lỗi: ${err instanceof Error ? err.message : String(err)}`, 'error')
+    }
   }
 
   return (
@@ -61,41 +65,57 @@ export default function ImageSlot({ image, paletteFamily }: Props) {
         </span>
       </div>
 
-      {/* Image preview area — aspect 1:1 */}
-      <div className="relative aspect-square w-full overflow-hidden" style={backgroundStyle}>
-        {imageUrl ? (
-          <img src={imageUrl} alt={image.config.intentLabel} className="h-full w-full object-cover" />
-        ) : image.status === 'generating' ? (
-          <div className="flex h-full items-center justify-center text-white/80">
+      {/* Canvas preview — aspect 1:1 */}
+      <div ref={wrapRef} className="relative aspect-square w-full overflow-hidden bg-gray-100">
+        {displayWidth > 0 && (
+          <ListingCanvas
+            ref={stageRef}
+            image={image}
+            paletteFamily={paletteFamily}
+            brandKit={brandKit}
+            fallbackSceneUrl={fallbackSceneUrl}
+            displayWidth={displayWidth}
+            listening={false}
+          />
+        )}
+        {image.status === 'generating' && (
+          <div className="absolute inset-0 flex items-center justify-center bg-black/30 text-white">
             <Loader2 className="h-6 w-6 animate-spin" />
           </div>
-        ) : image.status === 'failed' ? (
-          <div className="flex h-full flex-col items-center justify-center gap-1 text-white/90">
-            <ImageOff className="h-5 w-5" />
-            <span className="text-[10px]">Lỗi gen</span>
-          </div>
-        ) : (
-          // Phase 1 mock: render overlay text directly on gradient bg.
-          // Phase 2 replaces this with proper Konva canvas render.
-          <MockOverlayPreview image={image} paletteFamily={paletteFamily} />
         )}
       </div>
 
       {/* Action bar */}
       <div className="flex items-center justify-between gap-1 border-t border-gray-100 bg-white px-2 py-1.5">
-        <span className="truncate text-[9px] text-gray-400" title={COMPOSITION_FAMILY_LABELS[image.config.composition]}>
+        <span
+          className="truncate text-[9px] text-gray-400"
+          title={COMPOSITION_FAMILY_LABELS[image.config.composition]}
+        >
           {COMPOSITION_FAMILY_LABELS[image.config.composition]}
         </span>
         <div className="flex shrink-0 items-center gap-0.5">
-          <IconBtn icon={<RefreshCw className="h-3 w-3" />} title="Tạo lại ảnh" onClick={() => phaseStubAction('visual')} />
-          <IconBtn icon={<Pencil className="h-3 w-3" />}    title="Sửa text"     onClick={() => phaseStubAction('text')}   />
-          <IconBtn icon={<Download className="h-3 w-3" />}  title="Tải xuống"
-            onClick={() => addToast('Tải xuống — wire ở Phase 4', 'info')} disabled={!imageUrl} />
+          <IconBtn
+            icon={<RefreshCw className="h-3 w-3" />}
+            title="Tạo lại ảnh"
+            onClick={() => phaseStubAction('visual')}
+          />
+          <IconBtn
+            icon={<Pencil className="h-3 w-3" />}
+            title="Sửa text"
+            onClick={() => phaseStubAction('text')}
+          />
+          <IconBtn
+            icon={<Download className="h-3 w-3" />}
+            title="Tải xuống (1080×1080)"
+            onClick={handleDownload}
+          />
         </div>
       </div>
     </div>
   )
 }
+
+// ── Helpers ──────────────────────────────────────────────────────────────
 
 function IconBtn({ icon, title, onClick, disabled }: {
   icon: React.ReactNode
@@ -115,139 +135,21 @@ function IconBtn({ icon, title, onClick, disabled }: {
   )
 }
 
-// ── Mock overlay renderer — Phase 1 ─────────────────────────────────────
-// Just enough to visualize the slot's purpose. Real rendering comes in Phase 2
-// via Konva canvas with proper typography, logo, badges, trust footer, etc.
-
-function MockOverlayPreview({ image, paletteFamily }: Props) {
-  const palette = TPCN_PALETTES[paletteFamily]
-  const o = image.overlay
-  const isLightBg = image.config.atmosphere === 'soft'
-  const textColor = isLightBg ? palette.primary : '#FFFFFF'
-  const subtleColor = isLightBg ? '#666' : 'rgba(255,255,255,0.85)'
-
-  return (
-    <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 p-4 text-center" style={{ color: textColor }}>
-      {/* Headline */}
-      {o.headline && (
-        <div className="text-[11px] font-extrabold leading-tight tracking-tight">
-          {o.headline}
-        </div>
-      )}
-
-      {/* Subheadline */}
-      {o.subheadline && (
-        <div className="text-[9px] font-medium leading-tight" style={{ color: subtleColor }}>
-          {o.subheadline}
-        </div>
-      )}
-
-      {/* Metric (giant number) */}
-      {o.metric && (
-        <div className="flex flex-col items-center">
-          <div className="text-2xl font-black leading-none tracking-tight">{o.metric.value}</div>
-          {o.metric.label && (
-            <div className="mt-0.5 text-[8px] font-semibold uppercase tracking-wider" style={{ color: subtleColor }}>
-              {o.metric.label}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Bullets */}
-      {o.bullets && o.bullets.length > 0 && (
-        <ul className="space-y-0.5 text-[8px] leading-tight">
-          {o.bullets.slice(0, 4).map((b, i) => (
-            <li key={i}>• {b}</li>
-          ))}
-        </ul>
-      )}
-
-      {/* Testimonial */}
-      {o.testimonial && (
-        <div className="space-y-1 rounded-lg bg-white/95 p-2 text-gray-800 shadow-sm" style={{ color: '#1f2937' }}>
-          {o.testimonial.rating && (
-            <div className="text-[10px] text-amber-400">
-              {'★'.repeat(o.testimonial.rating)}
-            </div>
-          )}
-          <p className="text-[8px] italic leading-snug">"{o.testimonial.quote}"</p>
-          <p className="text-[8px] font-semibold">— {o.testimonial.author}</p>
-        </div>
-      )}
-
-      {/* Steps */}
-      {o.steps && (
-        <div className="flex w-full justify-around text-[8px]">
-          {o.steps.map((s) => (
-            <div key={s.number} className="flex flex-col items-center gap-0.5">
-              <span className="flex h-4 w-4 items-center justify-center rounded-full bg-white/90 text-[8px] font-bold" style={{ color: palette.primary }}>
-                {s.number}
-              </span>
-              <span className="px-1 text-center leading-tight">{s.text}</span>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* Comparison */}
-      {o.comparison && (
-        <table className="w-full text-[7px]">
-          <thead>
-            <tr style={{ borderBottom: `1px solid ${subtleColor}` }}>
-              {o.comparison.headers.map((h, i) => (
-                <th key={i} className="px-1 py-0.5 font-bold">{h}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {o.comparison.rows.slice(0, 4).map((row, i) => (
-              <tr key={i}>
-                {row.map((cell, j) => (
-                  <td key={j} className="px-1 py-0.5">{cell}</td>
-                ))}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      )}
-
-      {/* Price + CTA */}
-      {o.price && (
-        <div className="space-y-1">
-          {o.price.original && (
-            <span className="text-[8px] line-through opacity-70">{o.price.original}</span>
-          )}
-          <div className="text-xl font-black leading-none">{o.price.current}</div>
-          {o.price.discount && (
-            <span className="rounded-full px-1.5 py-0.5 text-[7px] font-bold" style={{ background: palette.cta, color: '#FFF' }}>
-              {o.price.discount}
-            </span>
-          )}
-        </div>
-      )}
-      {o.cta && (
-        <div className="rounded-md px-3 py-1 text-[9px] font-bold" style={{ background: palette.cta, color: '#FFF' }}>
-          {o.cta}
-        </div>
-      )}
-
-      {/* FAQ */}
-      {o.faq && (
-        <div className="w-full space-y-1 text-left">
-          {o.faq.slice(0, 3).map((item, i) => (
-            <div key={i} className="text-[7px] leading-tight">
-              <p className="font-bold">Q: {item.q}</p>
-              <p style={{ color: subtleColor }}>A: {item.a}</p>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* Disclaimer */}
-      {o.disclaimer && (
-        <p className="absolute bottom-1 text-[6px] opacity-70">{o.disclaimer}</p>
-      )}
-    </div>
-  )
+// Track an element's rendered width so the inner Stage can use a numeric
+// width matching its container. ResizeObserver updates on column reflow.
+function useElementWidth<T extends HTMLElement>(): [React.RefObject<T | null>, number] {
+  const ref = useRef<T | null>(null)
+  const [width, setWidth] = useState(0)
+  useEffect(() => {
+    const el = ref.current
+    if (!el) return
+    setWidth(el.clientWidth)
+    const ro = new ResizeObserver((entries) => {
+      const w = entries[0].contentRect.width
+      if (w > 0) setWidth(Math.round(w))
+    })
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [])
+  return [ref, width]
 }
