@@ -35,6 +35,7 @@ import ImageDna from './apps/image-dna/ImageDna'
 import VideoTranslate from './apps/video-translate/VideoTranslate'
 import VideoBuilder from './apps/video-builder/VideoBuilder'
 import TimSourceVideo from './apps/tim-source-video/TimSourceVideo'
+import StudioBrandKit from './apps/studio-brand-kit/StudioBrandKit'
 
 const APP_COMPONENTS: Record<string, React.ComponentType> = {
   'finder': Finder,
@@ -56,6 +57,7 @@ const APP_COMPONENTS: Record<string, React.ComponentType> = {
   'video-translate': VideoTranslate,
   'video-builder': VideoBuilder,
   'tim-source-video': TimSourceVideo,
+  'studio-brand-kit': StudioBrandKit,
 }
 
 /** VN label + cache keys used by the per-app ErrorBoundary fallback so the
@@ -78,6 +80,7 @@ const APP_BOUNDARY_META: Record<string, { name: string; resetKeys: string[] }> =
   'video-translate':   { name: 'Dịch Video',     resetKeys: [] },
   'video-builder':     { name: 'UGC Builder',    resetKeys: [] },
   'tim-source-video':  { name: 'Tìm Source Video', resetKeys: [] },
+  'studio-brand-kit':  { name: 'Studio Brand Kit', resetKeys: ['ugc-lab:brand-kits'] },
 }
 
 export default function App() {
