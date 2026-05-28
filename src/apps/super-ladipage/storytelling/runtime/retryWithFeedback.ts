@@ -92,6 +92,9 @@ interface RunArgs {
    *  per-mode cadence hint block to systemPrompt right under the brainstorm
    *  anchor. Mode also determined the plan's culled filler blocks upstream. */
   narrativeMode?: import('../../narrativeMode').NarrativeMode
+  /** 2026-05-29 — Length mode (short/medium/long). Drives per-block word cap
+   *  + mobile rhythm rules in system prompt. SHORT for impulse COD products. */
+  lengthMode?: import('../../narrativeMode').LengthMode
   geminiApiKey: string
   kieApiKey: string
   /** v5.1 — Narrator/DNA/curve selection. OPTIONAL — if undefined,
@@ -127,6 +130,7 @@ async function runOnce(
     args.synthesizedBrief,
     args.packBrainstorm,
     args.narrativeMode,
+    args.lengthMode,
   )
   const userPrompt = buildPackGenUserPrompt(
     args.input,
@@ -139,6 +143,8 @@ async function runOnce(
     // Phase 1-2 blocks pin specific agitate beats + Block 4 enforces
     // the concrete cost rule.
     args.packBrainstorm,
+    // 2026-05-29 — Length mode: per-block word cap override.
+    args.lengthMode,
   )
   logPromptStats(systemPrompt, userPrompt, args.plan)
 

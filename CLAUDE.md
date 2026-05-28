@@ -105,3 +105,77 @@ hiện đang yếu hơn storytelling layer.
 
 - `../STORYTELLING_HANDOFF.md` — comprehensive state snapshot for machine transfer + agent handoff
 - `../../Desktop/CLAUDE_PROJECT_RULES/ENGINE_GOVERNANCE.md.txt` — engineering governance (AUDIT → PRUNE → REBUILD → VERIFY)
+
+---
+
+## TikTok Shop App — Listing Generator (Phase 1-5 complete, 2026-05-28)
+
+App `src/apps/tiktok-shop/` — generates a 9-image conversion-arc listing +
+11-block product description for TikTok Shop Malaysia/Vietnam. Niche-locked
+to TPCN (health supplements) in Phase 1.
+
+### Architecture (3-tier consistency engine)
+
+- **Tier 1 — Brand Signature (LOCKED identical across all 9 slots)**: logo
+  position/size, typography (Plus Jakarta Sans), trust footer bar, header
+  strip, 8px grid, palette pool. Built once in `<ListingFrame>` (HeaderStrip
+  + FooterTrustBar).
+- **Tier 2 — Brand Atmosphere (3 background variants per palette family)**:
+  `classic` (slot 1, 4), `soft` (slot 2, 5, 6, 9), `energetic` (slot 3, 7, 8).
+  Implemented in `AtmosphereBackground.tsx`.
+- **Tier 3 — Slot content (varies per slot)**: composition, overlay text,
+  AI scene vs canvas-only mode. 8 slot renderers in `canvas/slots/`.
+
+### Hard rules (DO NOT VIOLATE — see memory rules linked below)
+
+- **No fake certs** — never auto-render Halal/KKM/GMP/FDA badges; only render
+  badges user explicitly uploaded in Brand Kit. See `[[feedback-no-fake-certs]]`.
+- **Language isolation** — 1 output language per generate (default Bahasa
+  Malaysia per `[[project-target-market]]`); prompt hard-locks language 2x
+  per slot (system + body). See `[[feedback-language-isolation]]`.
+- **Master template consistency** — every slot prompt prepends the same
+  locked-style block; QA gate validates 2 random slots look like same brand.
+  See `[[feedback-master-template-consistency]]`.
+- **No raw ref in preview** — never nest user-uploaded reference photos into
+  the final canvas preview; show clean placeholder rect until AI generates.
+  See `[[feedback-no-raw-ref-in-preview]]`.
+
+### Generation pipeline (Phase 4)
+
+```
+User → "Tạo Listing (9 ảnh + mô tả)" → CostEstimator confirms (~43 credits)
+  ↓
+initializeListingOutput → 9 ListingImage stubs
+  ↓ parallel:
+  ├─ generateDescription (Gemini Flash JSON, ~5s)
+  └─ generateAllSlots (max 3 concurrent, ~2-3min)
+       ├─ slot 1 Hero (2K), 2 Pain, 3 Result, 4 USP, 6 Usage, 7 Compare, 8 Offer (2K)
+       └─ skips slot 5 (canvas-only quote card) + 9 (canvas-only FAQ)
+  ↓
+Each slot: kie.ai gpt-image-2 with refs + prompt → poll → save to Supabase Storage
+  ↓ assetId set → ListingCanvas renders AI scene as bg + canvas overlays
+```
+
+### Persistence (Phase 5)
+
+- Table: `user_outputs` with `kind = 'tiktok-shop-listing'`
+- Store: `apps/tiktok-shop/listingsStore.ts` (mirrors brand-kit pattern)
+- Auto-save: debounced 2s on `draft.output` change (in `TikTokShop.tsx`)
+- Restore: on mount, load most-recent listing into draft so refresh = no work lost
+
+### What NOT to change without explicit user approval
+
+- The 9-slot arc intent map in `constants.ts SLOT_MAP` — locked conversion framework
+- The TPCN palette families (`TPCN_PALETTES`) — 4 fixed options the brand kit snaps to
+- The font whitelist (mirrors Brand Kit's `FONT_WHITELIST`)
+- The trust footer assurance items — service claims only, never cert claims
+
+### Allowed to touch
+
+- Per-slot prompt refinements (`services/promptBuilder.ts`) — tune output quality
+- Per-slot canvas layout tweaks (overlay positions, font sizes) for readability
+- Adding slot 5/9 variants (different testimonial card style, FAQ accordion)
+- Bug fixes (canvas render glitches, kie.ai polling edge cases)
+- Cost-optimization (caching, skip-re-gen-if-same-input)
+
+Anything beyond → discuss + audit before touching.

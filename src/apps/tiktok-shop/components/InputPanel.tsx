@@ -16,13 +16,13 @@ import { saveAsset, getUrl } from '../../../utils/assetStore'
 import { getKieCredits } from '../../../utils/kieai'
 import { useTikTokShopStore, checkDraftReadiness } from '../store'
 import {
-  CREDIT_COST_PER_IMAGE_1K,
-  CREDIT_COST_PER_IMAGE_2K,
-  SLOT_MAP,
+  estimateListingCredits,
   snapToPaletteFamily,
 } from '../constants'
 import { useResolvedBrandKit } from '../canvas/useResolvedBrandKit'
-import { generateSlotImage, friendlyErrorMessage } from '../services/generateSlot'
+import { generateAllSlots } from '../services/generateAllSlots'
+import { generateDescription } from '../services/generateDescription'
+import { friendlyErrorMessage } from '../services/generateSlot'
 import CostEstimator from './CostEstimator'
 
 export default function InputPanel() {
@@ -36,6 +36,7 @@ export default function InputPanel() {
   const setSlotStatus    = useTikTokShopStore((s) => s.setSlotStatus)
   const setSlotImage     = useTikTokShopStore((s) => s.setSlotImage)
   const setIsGenerating  = useTikTokShopStore((s) => s.setIsGenerating)
+  const setDescription   = useTikTokShopStore((s) => s.setDescription)
   const isGenerating     = useTikTokShopStore((s) => s.draft.isGenerating)
 
   const brandKits   = useBrandKitStore((s) => s.brandKits)
@@ -65,10 +66,8 @@ export default function InputPanel() {
 
   const readiness = checkDraftReadiness(draft, kitReady, hasApiKey)
 
-  // Phase 3: only Slot 1 generates → cost is just that one image.
-  // Phase 4 will switch to full-9-slot cost via estimateListingCredits().
-  const slot1Config = SLOT_MAP[0]
-  const estimatedCost = slot1Config.highRes ? CREDIT_COST_PER_IMAGE_2K : CREDIT_COST_PER_IMAGE_1K
+  // Phase 4: full 9-slot cost (7 AI gens + 1 text gen; slots 5,9 canvas-only free).
+  const estimatedCost = estimateListingCredits()
 
   async function handleUpload(files: FileList | null) {
     if (!files || files.length === 0) return
@@ -108,7 +107,8 @@ export default function InputPanel() {
       return
     }
 
-    // 1. Initialize 9-slot output (Phase 3 only fills slot 1; others stay pending)
+    // 1. Initialize fresh 9-slot output (wipes previous if any — user is
+    //    starting a new listing). Canvas-only slots (5, 9) start completed.
     initializeOutput({
       productId: draft.productId,
       brandKitId: draft.brandKitId,
@@ -117,31 +117,58 @@ export default function InputPanel() {
       paletteFamily,
     })
     setIsGenerating(true)
-    setSlotStatus(1, 'generating')
+
+    // 2. Kick off text gen + image orchestration in parallel.
+    //    Text gen is cheap (~1 credit), image gen is expensive — they don't
+    //    block each other.
+    const textPromise = generateDescription({
+      apiKey: kieApiKey,
+      brandKit: resolvedBrandKit,
+      product,
+      language: draft.market,
+    })
+      .then((desc) => {
+        setDescription(desc)
+        console.log('[tiktok-shop] description generated')
+      })
+      .catch((err) => {
+        console.warn('[tiktok-shop] description gen failed:', err)
+        addToast('Mô tả gen lỗi — dùng mẫu mặc định. Bạn có thể chỉnh sau.', 'error')
+      })
+
+    const imagePromise = generateAllSlots({
+      apiKey: kieApiKey,
+      brandKit: resolvedBrandKit,
+      product,
+      paletteFamily,
+      language: draft.market,
+      referenceImageAssetIds: draft.referenceImageAssetIds,
+      callbacks: {
+        onSlotStart:   (slot) => setSlotStatus(slot, 'generating'),
+        onSlotSuccess: (slot, assetId, prompt) => setSlotImage(slot, assetId, prompt),
+        onSlotError:   (slot, msg) => setSlotStatus(slot, 'failed', msg),
+      },
+    })
 
     try {
-      const { assetId, prompt } = await generateSlotImage({
-        apiKey: kieApiKey,
-        brandKit: resolvedBrandKit,
-        product,
-        slotConfig: slot1Config,
-        paletteFamily,
-        language: draft.market,
-        referenceImageAssetIds: draft.referenceImageAssetIds,
-        onStatus: (s) => console.log('[tiktok-shop] slot 1 status:', s),
-      })
-      setSlotImage(1, assetId, prompt)
-      addToast('Đã tạo Slot 1 — kiểm tra grid giữa', 'success')
+      const [imageResult] = await Promise.all([imagePromise, textPromise])
+      const { successCount, failCount } = imageResult
+      if (failCount === 0) {
+        addToast(`Hoàn thành: ${successCount} ảnh + mô tả ✓`, 'success')
+      } else if (successCount === 0) {
+        addToast(`Tất cả ${failCount} slot lỗi — kiểm tra credit + key`, 'error')
+      } else {
+        addToast(`${successCount} ảnh OK, ${failCount} lỗi — re-roll từng slot lỗi`, 'info')
+      }
 
-      // Refresh credit balance so the sidebar number updates
+      // Refresh credit balance once
       try {
         const newCredits = await getKieCredits(kieApiKey)
         setKieCredits(newCredits)
-      } catch { /* silent — UI just shows stale number */ }
+      } catch { /* silent */ }
     } catch (err) {
       const msg = friendlyErrorMessage(err)
-      setSlotStatus(1, 'failed', msg)
-      addToast(`Slot 1 lỗi: ${msg}`, 'error')
+      addToast(`Lỗi orchestrator: ${msg}`, 'error')
     } finally {
       setIsGenerating(false)
     }
@@ -275,7 +302,7 @@ export default function InputPanel() {
             </span>
           </div>
           <p className="mt-1 text-[10px] leading-snug text-indigo-500">
-            Phase 3: chỉ Slot 1 (Hero Hook, 2K). Re-roll tốn thêm credit.
+            7 ảnh AI + 1 text gen. Re-roll tốn thêm credit/slot.
           </p>
         </div>
       </Section>
@@ -304,10 +331,10 @@ export default function InputPanel() {
           className="flex w-full items-center justify-center gap-2 rounded-lg bg-violet-600 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-violet-700 disabled:bg-gray-300 disabled:text-gray-500"
         >
           {isGenerating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
-          {isGenerating ? 'Đang tạo Slot 1...' : 'Tạo Slot 1'}
+          {isGenerating ? 'Đang tạo 9 ảnh...' : 'Tạo Listing (9 ảnh + mô tả)'}
         </button>
         <p className="text-center text-[10px] text-gray-400">
-          Phase 3: chỉ Slot 1 — Phase 4 sẽ scale 9 slot
+          Parallel 3 concurrent · re-roll từng slot riêng nếu cần
         </p>
       </div>
 
@@ -318,7 +345,7 @@ export default function InputPanel() {
         onConfirm={handleConfirmGenerate}
         estimatedCredits={estimatedCost}
         currentBalance={kieCredits}
-        scope="slot-1"
+        scope="all-slots"
         busy={isGenerating}
       />
     </div>

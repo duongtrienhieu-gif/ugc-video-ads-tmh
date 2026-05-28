@@ -41,6 +41,8 @@ import { softCompareBrief } from '../config/softComparePatterns'
 import { buildCtaMomentsBrief } from '../../cta'
 import type { NarratorDnaSelection } from './selectNarratorDna'
 import type { PackBrainstorm } from '../../packBrainstorm'
+import type { LengthMode } from '../../narrativeMode'
+import { LENGTH_MODE_SPEC } from '../../narrativeMode'
 
 /** Compose protagonist brief — 1-2 lines, used in system prompt context. */
 export function buildProtagonistBrief(p: ProtagonistProfile): string {
@@ -81,15 +83,29 @@ function buildBlockDirective(
   input: StorytellingInput,
   selection: NarratorDnaSelection,
   brainstorm?: PackBrainstorm,
+  /** 2026-05-29 — When provided, overrides default paragraphTarget with
+   *  length-mode-aware bounds + injects explicit per-block word cap. */
+  lengthMode?: LengthMode,
 ): string {
   const block = plan.blueprint
   const lines: string[] = []
+
+  // 2026-05-29 — Per-block paragraph + word cap from length mode (if set).
+  // SHORT mode tightens both for mobile-friendly output.
+  const lengthSpec = lengthMode ? LENGTH_MODE_SPEC[lengthMode] : null
+  const paragraphMin = lengthSpec ? lengthSpec.paragraphMin : block.paragraphTarget.min
+  const paragraphMax = lengthSpec ? lengthSpec.paragraphMax : block.paragraphTarget.max
 
   lines.push(`BLOCK ${plan.order} — id="${block.id}" (phase=${block.phase})`)
   lines.push(`  Function: ${block.psychologicalFunction}`)
   lines.push(`  Intent: ${block.intent}`)
   lines.push(`  POV: ${block.youIBalance} — ${balanceFramingDirective(block.youIBalance)}`)
-  lines.push(`  Paragraphs: ${block.paragraphTarget.min}-${block.paragraphTarget.max}`)
+  lines.push(`  Paragraphs: ${paragraphMin}-${paragraphMax}`)
+  if (lengthSpec) {
+    lines.push(`  Word cap: ${lengthSpec.wordCapMin}-${lengthSpec.wordCapMax} words total for this block.`)
+    lines.push(`  Sentences per paragraph: 1-${lengthSpec.sentencesPerParagraphMax} MAX (1-sentence paragraphs OK for impact).`)
+    lines.push(`  Sentence length: ≤ ${lengthSpec.wordsPerSentenceMax} words avg — mobile reader scrolls fast.`)
+  }
 
   // ─── Phase 1-2 agitate beat assignment (from brainstorm) ────────────
   // Each Phase 1-2 block gets ONE beat to execute (no blur across blocks).
@@ -232,6 +248,8 @@ export function buildPackGenUserPrompt(
   synthesizedReaderSymptoms?: string[],
   commercialPsychology?: import('../../productSynthesis').SynthesizedCommercialPsychology,
   brainstorm?: PackBrainstorm,
+  /** 2026-05-29 — Length mode for per-block word cap + mobile rhythm. */
+  lengthMode?: LengthMode,
 ): string {
   const lines: string[] = []
 
@@ -288,7 +306,7 @@ export function buildPackGenUserPrompt(
   lines.push(`═══ ${storyBlocks.length} BLOCKS — generate ALL in order ═══`)
   for (const bp of storyBlocks) {
     lines.push('')
-    lines.push(buildBlockDirective(bp, input, selection, brainstorm))
+    lines.push(buildBlockDirective(bp, input, selection, brainstorm, lengthMode))
   }
 
   // ─── Optional retry feedback ────────────────────────────────────────

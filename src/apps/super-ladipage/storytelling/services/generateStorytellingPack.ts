@@ -270,7 +270,14 @@ function writeRealityCache(
   safeSetItem(REALITY_CACHE_PREFIX + productId, JSON.stringify(entry))
 }
 // REBUILD Sprint 2 (2026-05-28) — Narrative mode detector + filter.
-import { detectNarrativeMode, getSkippedBlocksForMode } from '../../narrativeMode'
+import {
+  detectNarrativeMode,
+  getSkippedBlocksForMode,
+  detectLengthMode,
+  getSkippedBlocksForLength,
+  LENGTH_MODE_SPEC,
+} from '../../narrativeMode'
+import type { LengthMode } from '../../narrativeMode'
 import type { NarrativeMode } from '../../narrativeMode'
 
 // ── Map storytelling BlockId → existing UGC SectionType for
@@ -667,17 +674,28 @@ export async function generateStorytellingPack(
   })
   const narrativeMode: NarrativeMode = narrativeModeDecision.mode
   const skippedForMode = getSkippedBlocksForMode(narrativeMode)
-  const planAfterMode = resolveBlockPlan(input, narrativeMode)
+
+  // 2026-05-29 — Length Mode (adaptive pack length).
+  // Driven by productClass.pacingProfile: fast-cod → short, medium-narrative
+  // → medium, slow-burn → long. SHORT mode trims 2-3 additional non-critical
+  // blocks (hidden-emotional-truth merges into Block 1, soft-mechanism-compare
+  // dropped, skepticism-alignment optional anyway). Empathy + cost rule +
+  // narrator validation + mechanism + transformation + CTA all preserved.
+  const lengthMode: LengthMode = detectLengthMode(productReality.pacingProfile)
+  const lengthSpec = LENGTH_MODE_SPEC[lengthMode]
+  const skippedForLength = getSkippedBlocksForLength(lengthMode)
+  const planAfterMode = resolveBlockPlan(input, narrativeMode, lengthMode)
   if (planAfterMode.length !== plan.length) {
     console.info(
-      `[storytelling/narrativeMode] mode=${narrativeMode} (${narrativeModeDecision.source}) — ` +
+      `[storytelling/narrativeMode] mode=${narrativeMode} (${narrativeModeDecision.source}) + ` +
+      `length=${lengthMode} (~${lengthSpec.expectedPackWords}w target) — ` +
       `re-resolved plan: ${plan.length} → ${planAfterMode.length} blocks ` +
-      `(skipped: ${skippedForMode.join(', ') || 'none'})`,
+      `(skipped mode=[${skippedForMode.join(', ') || 'none'}], length=[${skippedForLength.join(', ') || 'none'}])`,
     )
   } else {
     console.info(
-      `[storytelling/narrativeMode] mode=${narrativeMode} (${narrativeModeDecision.source}) — ` +
-      `plan unchanged at ${plan.length} blocks`,
+      `[storytelling/narrativeMode] mode=${narrativeMode} (${narrativeModeDecision.source}) + ` +
+      `length=${lengthMode} — plan unchanged at ${plan.length} blocks`,
     )
   }
   plan = planAfterMode
@@ -740,6 +758,10 @@ export async function generateStorytellingPack(
     // REBUILD Sprint 2 (2026-05-28): narrative mode for per-mode cadence
     // guidance pasted into systemPrompt under the brainstorm anchor.
     narrativeMode,
+    // 2026-05-29 — Length Mode: adaptive pack length + mobile rhythm rules
+    // injected into systemPrompt + per-block word cap honored in
+    // buildPackGenPrompt directive.
+    lengthMode,
     geminiApiKey,
     kieApiKey,
     selection,

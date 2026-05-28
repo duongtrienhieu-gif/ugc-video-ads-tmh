@@ -15,3 +15,13 @@ export type {
 } from './detectNarrativeMode'
 
 export { isBlockSkippedForMode, getSkippedBlocksForMode } from './modeBlockFilter'
+
+// 2026-05-29 — Length Mode (adaptive pack length)
+export {
+  detectLengthMode,
+  isBlockSkippedForLength,
+  getSkippedBlocksForLength,
+  buildLengthModeHint,
+  LENGTH_MODE_SPEC,
+} from './lengthMode'
+export type { LengthMode, LengthModeSpec } from './lengthMode'

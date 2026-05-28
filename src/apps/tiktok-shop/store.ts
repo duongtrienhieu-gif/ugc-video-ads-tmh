@@ -13,6 +13,8 @@ import type {
   SlotNumber,
   DraftReadiness,
   PaletteFamily,
+  DescriptionBlock,
+  ListingDescription,
 } from './types'
 import {
   SLOT_MAP,
@@ -46,6 +48,14 @@ interface TikTokShopState {
   setIsGenerating: (val: boolean) => void
   setSlotStatus: (slot: SlotNumber, status: ImageGenStatus, error?: string) => void
   setSlotImage: (slot: SlotNumber, assetId: string, prompt?: string) => void
+
+  // ── Description editing (Phase 4) ──
+  setDescription: (description: ListingDescription) => void
+  updateDescriptionBlock: (index: number, block: DescriptionBlock) => void
+
+  // ── Persistence restore (Phase 5) ──
+  /** Replace draft.output with a previously-saved listing (loaded from Supabase) */
+  loadSavedOutput: (listing: ListingOutput) => void
 }
 
 function createEmptyDraft(): ListingDraft {
@@ -157,6 +167,49 @@ export const useTikTokShopStore = create<TikTokShopState>((set) => ({
       },
     }
   }),
+
+  setDescription: (description) => set((s) => {
+    if (!s.draft.output) return s
+    return {
+      draft: {
+        ...s.draft,
+        output: {
+          ...s.draft.output,
+          updatedAt: new Date().toISOString(),
+          description,
+        },
+      },
+    }
+  }),
+
+  updateDescriptionBlock: (index, block) => set((s) => {
+    if (!s.draft.output) return s
+    const blocks = [...s.draft.output.description.blocks]
+    if (index < 0 || index >= blocks.length) return s
+    blocks[index] = block
+    return {
+      draft: {
+        ...s.draft,
+        output: {
+          ...s.draft.output,
+          updatedAt: new Date().toISOString(),
+          description: { ...s.draft.output.description, blocks },
+        },
+      },
+    }
+  }),
+
+  loadSavedOutput: (listing) => set((s) => ({
+    draft: {
+      ...s.draft,
+      brandKitId: listing.brandKitId,
+      productId: listing.productId,
+      market: listing.market,
+      output: listing,
+      isGenerating: false,
+    },
+    showMockPreview: false,
+  })),
 }))
 
 // ── Validation helper ────────────────────────────────────────────────────

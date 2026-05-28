@@ -23,7 +23,8 @@
 import type { StorytellingInput } from '../types'
 import type { PackBrainstorm } from '../../packBrainstorm'
 import { buildBrainstormBrief } from '../../packBrainstorm'
-import type { NarrativeMode } from '../../narrativeMode'
+import type { NarrativeMode, LengthMode } from '../../narrativeMode'
+import { buildLengthModeHint } from '../../narrativeMode'
 
 function getLanguageDirective(lang: StorytellingInput['targetLanguage']): {
   langLabel: string
@@ -267,6 +268,11 @@ export function buildSystemPrompt(
   synthesizedBrief?: string,
   packBrainstorm?: PackBrainstorm,
   narrativeMode?: NarrativeMode,
+  /** 2026-05-29 — Length mode (short/medium/long). When provided, injects
+   *  per-block word cap + mobile rhythm rules into the prompt. SHORT mode
+   *  produces ~700w packs for impulse COD; LONG matches the legacy
+   *  ~2,400w behavior for high-ticket products. */
+  lengthMode?: LengthMode,
 ): string {
   const { langLabel, outputDirective } = getLanguageDirective(input.targetLanguage)
   const mode = resolveMode(narrativeMode)
@@ -325,6 +331,14 @@ Instructions dưới đây viết bằng tiếng Việt cho developer — nhưng
 
   // 6. Cadence (mode-specific)
   sections.push(cadenceBlock)
+
+  // 6b. Length mode + mobile rhythm rules (when length mode resolved)
+  // This block enforces per-block word cap, paragraph count, sentence
+  // length — critical for mobile-readable output. Without it, Gemini
+  // defaults to wall-of-text paragraphs that fatigue mobile readers.
+  if (lengthMode) {
+    sections.push(buildLengthModeHint(lengthMode))
+  }
 
   // 7. POV philosophy (shared — same across modes)
   sections.push(POV_PHILOSOPHY)

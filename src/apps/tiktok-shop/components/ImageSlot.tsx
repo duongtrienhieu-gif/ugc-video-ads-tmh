@@ -40,12 +40,16 @@ export default function ImageSlot({ image, paletteFamily, brandKit, fallbackScen
   const isGenerating = image.status === 'generating'
 
   async function handleRerollVisual() {
+    if (image.config.visualMode === 'canvas-only') {
+      addToast('Slot này là canvas-only — chỉ cần sửa text overlay', 'info')
+      return
+    }
     if (!draft.brandKitId || !draft.productId) {
       addToast('Cần chọn Brand Kit + Sản phẩm trước khi re-roll', 'error')
       return
     }
     if (!draft.output) {
-      addToast('Bấm "Tạo Slot 1" ở panel trái trước', 'error')
+      addToast('Bấm "Tạo Listing" ở panel trái trước', 'error')
       return
     }
     const product = getProductById(draft.productId)
