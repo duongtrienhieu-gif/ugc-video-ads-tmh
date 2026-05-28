@@ -31,44 +31,23 @@ export async function generateDescription(
 
 function buildSystemInstruction(params: GenerateDescriptionParams): string {
   const lang = params.language === 'ms' ? 'Bahasa Malaysia' : 'Vietnamese'
-  return `You are a TikTok Shop conversion copywriter for the Malaysia/Vietnam market. Your FIRST job is to UNDERSTAND the product from PRODUCT DATA, reason about the target customer and their core pain, then write conversion copy that fits THIS specific product. The product can be ANY niche — never assume or copy from prior examples.
+  return `You are a TikTok Shop conversion copywriter for the Malaysia/Vietnam market. Read PRODUCT DATA carefully, identify the target customer + core pain, then write conversion copy that fits THIS specific product. The product can be ANY niche — never assume.
 
-LANGUAGE LOCK — three rules, zero exceptions:
-1. Every string value in your JSON output must be written in ${lang}.
-2. Even if the product name, ingredient list, or image refs contain English, Chinese, or any other language — your JSON output is ${lang} only.
-3. If you cannot find a natural ${lang} word, transliterate or use an equivalent. Do not fall back to English anywhere in the output.
+LANGUAGE LOCK: every string value in your JSON must be in ${lang}. Even if product name/ingredients/refs contain other languages, output is ${lang} ONLY.
 
-OUTPUT FORMAT: TWO sections in this exact order, nothing else:
-1. A <REASONING> block (plain text, ~10 lines) — your strategic analysis of this product
-2. The JSON object — copy that must be consistent with and derived from your <REASONING> above
-No markdown fences. No text after the closing JSON brace.
+OUTPUT FORMAT: a single strict JSON object. No markdown fences, no preamble, no text after the closing brace. The FIRST field is "reasoning" (your strategic analysis); the following "blocks" and "slotTexts" MUST derive from your reasoning.
 
-CONVERSION COPYWRITING RULES (universal — applies to all niches, all product types):
-• Pain bullets: write as the customer's OWN internal voice — a self-question they ask themselves daily. Ends with "?", max 10 words. Write the FEELING, not the clinical label.
-  — GOOD pattern: "[Feeling/situation they experience]?" (customer-voice question)
-  — BAD pattern: "[Clinical or medical description of symptom]" (third-person description)
-• Usage steps: SPECIFIC physical action + object + amount or duration. Max 12 words per step.
-  — GOOD pattern: "[Verb] [specific object] [amount/duration/frequency]"
-  — BAD pattern: "Use as directed" / "Apply to affected area" (generic non-instruction)
-• Testimonials: concrete before→after story with a TIME MARKER. Must include something specific that changed.
-  — GOOD pattern: "After [N days/weeks], [specific observable change]"
-  — BAD pattern: "Very satisfied with this product" (no specifics, no timeline)
-• Comparison points: measurable or observable differentiators. NOT vague quality claims.
-  — GOOD: "[Specific metric e.g. time, %, measurement, mechanism]" vs "[generic equivalent]"
-  — BAD: "High quality" vs "Normal quality"
-• Slot 1 headline: the product's SINGLE strongest transformation in 4-6 words ALL CAPS. Ask yourself: what is the customer's life like after Day 14 of using this product?
-• Slot 3 metric: a SPECIFIC measurable outcome tied to this product's mechanism. ALL CAPS, max 4 words. Numbers + units preferred.
-  — GOOD: "3× LEBIH LANCAR" / "DALAM 7 HARI" / "−2KG SEBULAN"
-  — BAD: "HASIL TERBAIK" / "SANGAT BERKESAN" (vague superlatives)
+COPYWRITING RULES:
+• Pain bullets: customer-voice self-question ending '?', max 10 words. Feeling, not clinical label.
+• Usage steps: SPECIFIC verb + object + amount/duration, max 12 words each.
+• Testimonials: before→after with concrete time marker.
+• Comparison points: measurable or observable differentiators (numbers, time, materials, mechanism). Never vague quality claims.
+• Slot 1 headline: 4-6 words ALL CAPS, the product's single strongest transformation promise.
+• Slot 3 metric: specific number+unit or timeframe, ALL CAPS max 4 words. NOT vague superlatives.
 
-DATA INTEGRITY — never fabricate beyond what is given:
-• Derive all copy from the PRODUCT DATA provided. If a product field is empty, infer from context in other fields, or use a safe generic label.
-• slot4.ingredients: if product.ingredients is absent or empty in PRODUCT DATA → output "ingredients": [] (empty array). NEVER invent ingredient names not explicitly mentioned in PRODUCT DATA.
-• Do not add clinical studies, certificates, specific brand claims, or ingredient names that are not stated in PRODUCT DATA.
+DATA INTEGRITY: derive all copy from PRODUCT DATA only. If product.ingredients is empty → slot4.ingredients MUST be [] (do NOT invent ingredient names).
 
-LEGAL:
-• No cert claims (Halal JAKIM, KKM, GMP, FDA, BYT, ISO) — not verified by user.
-• Soft claim language only: "membantu", "menyokong", "hỗ trợ" — never "rawat", "sembuh", "cure", "treat".`
+LEGAL: no cert claims (Halal JAKIM/KKM/GMP/FDA/BYT/ISO). Soft language only: "membantu/menyokong/hỗ trợ", never "rawat/sembuh/cure/treat".`
 }
 
 function buildDescriptionPrompt(params: GenerateDescriptionParams): string {
@@ -94,9 +73,9 @@ function buildDescriptionPrompt(params: GenerateDescriptionParams): string {
     ? `SLOT 4 GUARD: Use ONLY the ingredients listed in PRODUCT DATA above. Do not add extras.`
     : `SLOT 4 GUARD: No ingredients were provided — slot4.ingredients MUST be [] in your output. Do NOT invent any ingredient names.`
 
-  return `Generate a TikTok Shop listing description + per-slot image text. Output format: <REASONING> block first, then the JSON object (as instructed in system prompt).
+  return `Generate the JSON object below for this product.
 
-PRODUCT DATA (read carefully — ALL copy must derive ONLY from this):
+PRODUCT DATA (derive ALL copy ONLY from this):
 - Name: ${product.productName}
 ${product.productDescription ? `- Description: ${product.productDescription}` : ''}
 ${product.painPoints ? `- Customer pain points: ${product.painPoints}` : ''}
@@ -110,145 +89,56 @@ BRAND:
 - Sample phrases: ${voiceSamples}
 - Store: ${brandKit.storeName}
 
-REQUIRED OUTPUT — write BOTH sections in this exact order:
+INGREDIENTS RULE: ${ingredientsGuard}
+REVIEWER NAMES: ${reviewerNameHint}
 
-SECTION 1 — write <REASONING> block FIRST (before the JSON):
-<REASONING>
-Customer: [who they are — age/gender/daily life context, 1-2 sentences]
-Pain: [the FEELING they live with daily — emotional experience, NOT clinical label]
-Promise: [what specifically and observably changes after using this product]
-Differentiator: [what makes this different from the generic category alternative — specific]
-Slot plan:
-  S1 headline: [4-6 word ALL CAPS claim — the single strongest transformation]
-  S2 question: [most emotionally resonant pain as a customer self-question ending '?']
-  S3 metric: [specific number + unit or timeframe from Promise — e.g. '3× LEBIH LANCAR' or 'DALAM 7 HARI']
-  S4 focus: [ingredients to feature from PRODUCT DATA, or 'none provided — return []']
-  S5 story: [before→after angle with time marker — what story arc fits this product]
-  S6 key step: [the most specific physical action for using this product]
-  S7 edge: [strongest measurable differentiator for the comparison slot]
-  S9 objection: [main buyer concern — safety, timing, or returns]
-</REASONING>
-
-SECTION 2 — write JSON object AFTER the <REASONING> block.
-Every JSON field value MUST follow the Slot plan above. If a value contradicts your REASONING, rewrite it.
-
-JSON SHAPE (all values in ${langName}):
+JSON SHAPE (return EXACTLY this structure — single JSON object, all string values in ${langName}):
 {
+  "reasoning": {
+    "customer": "<who they are — age/gender/daily context, 1-2 sentences>",
+    "pain": "<the FEELING they live with daily — emotional, NOT clinical label>",
+    "promise": "<what specifically and observably changes after using this product>",
+    "differentiator": "<what makes this different from the generic category alternative>",
+    "slotPlan": {
+      "s1Headline": "<4-6 word ALL CAPS — single strongest transformation>",
+      "s2Question": "<most emotional pain as customer self-question ending '?'>",
+      "s3Metric": "<SPECIFIC number+unit or timeframe ALL CAPS max 4 words>",
+      "s4Focus": "<ingredients to feature from PRODUCT DATA, or 'none — return []'>",
+      "s5Story": "<before→after angle with time marker>",
+      "s6KeyStep": "<most specific physical usage action>",
+      "s7Edge": "<strongest measurable differentiator>",
+      "s9Objection": "<main buyer concern — safety/timing/returns>"
+    }
+  },
   "blocks": [
-    {"kind": "hook", "text": "<emoji + opener using your Promise from REASONING; **bold** strongest claim; max 130 chars>"},
-    {"kind": "pain", "bullets": [
-      "<S2 question from REASONING — customer self-question ending '?', max 10 words>",
-      "<related pain self-question, max 10 words>",
-      "<related pain self-question, max 10 words>"
-    ]},
-    {"kind": "solution", "text": "<introduce product as answer to Pain; **bold** product name + Differentiator mechanism; max 160 chars>"},
-    {"kind": "benefits", "bullets": [
-      "<concrete outcome tied to Promise from REASONING — number or timeframe, max 15 words>",
-      "<benefit>", "<benefit>", "<benefit>", "<benefit>"
-    ]},
-    {"kind": "specs", "rows": [
-      ["<ingredient or key spec — ONLY from PRODUCT DATA; if none use generic feature>", "<brief function or benefit>"]
-    ]},
-    {"kind": "reviews", "quotes": [
-      {"text": "<before→after story with time marker, max 100 chars>", "author": "<Name, City — see REVIEWER NAMES below>"},
-      {"text": "<second review with time marker>", "author": "<Name, City>"}
-    ]},
-    {"kind": "usage", "steps": [
-      "<SPECIFIC action verb + object + amount/duration, max 12 words>",
-      "<step>",
-      "<step>"
-    ]},
-    {"kind": "offer", "text": "<offer line; **bold** price or discount amount; max 100 chars>"},
-    {"kind": "faq", "items": [
-      {"q": "<safety or ingredients question>", "a": "<answer>"},
-      {"q": "<results timing question>", "a": "<specific timeframe answer>"},
-      {"q": "<return or refund question>", "a": "<answer>"}
-    ]},
-    {"kind": "promise", "bullets": [
-      "<service promise — shipping/return/packaging ONLY, max 10 words>",
-      "<promise>", "<promise>"
-    ]},
-    {"kind": "cta", "text": "<**bold** the action verb; mild urgency; max 80 chars>"}
+    {"kind": "hook", "text": "<emoji + opener using your reasoning.promise; **bold** strongest claim; max 130 chars>"},
+    {"kind": "pain", "bullets": ["<reasoning.slotPlan.s2Question or related self-question, max 10 words>", "<related pain question>", "<related pain question>"]},
+    {"kind": "solution", "text": "<introduce product as answer to reasoning.pain; **bold** product name + reasoning.differentiator; max 160 chars>"},
+    {"kind": "benefits", "bullets": ["<concrete outcome tied to reasoning.promise — number or timeframe, max 15 words>", "<benefit>", "<benefit>", "<benefit>", "<benefit>"]},
+    {"kind": "specs", "rows": [["<ingredient/spec from PRODUCT DATA only>", "<brief function>"]]},
+    {"kind": "reviews", "quotes": [{"text": "<before→after story with time marker, max 100 chars>", "author": "<Name, City>"}, {"text": "<second review with time marker>", "author": "<Name, City>"}]},
+    {"kind": "usage", "steps": ["<SPECIFIC verb + object + amount/duration, max 12 words>", "<step>", "<step>"]},
+    {"kind": "offer", "text": "<offer; **bold** price or discount; max 100 chars>"},
+    {"kind": "faq", "items": [{"q": "<safety or ingredients question>", "a": "<answer>"}, {"q": "<results timing>", "a": "<specific timeframe>"}, {"q": "<return or refund>", "a": "<answer>"}]},
+    {"kind": "promise", "bullets": ["<service promise — shipping/return/packaging ONLY, max 10 words>", "<promise>", "<promise>"]},
+    {"kind": "cta", "text": "<**bold** action verb; mild urgency; max 80 chars>"}
   ],
   "slotTexts": {
-    "slot1": {
-      "headline": "<S1 headline from REASONING — 4-6 words ALL CAPS, the single strongest transformation>",
-      "tagline": "<8-12 words expanding the headline — specific mechanism or customer outcome, NOT generic>"
-    },
-    "slot2": {
-      "question": "<S2 question from REASONING — core pain as customer self-question, max 10 words, ends '?'>",
-      "painBullets": [
-        "<customer-voice self-question max 8 words ends '?'>",
-        "<question ends '?'>",
-        "<question ends '?'>"
-      ]
-    },
-    "slot3": {
-      "beforeLabel": "${beforeLabel}",
-      "afterLabel": "${afterLabel}",
-      "metric": "<S3 metric from REASONING — SPECIFIC number+unit or timeframe ALL CAPS max 4 words>",
-      "metricSubtitle": "<context period e.g. 'DALAM 14 HARI', max 5 words>",
-      "disclaimer": "<results-may-vary disclaimer, max 8 words>"
-    },
-    "slot4": {
-      "title": "<formula / active ingredients panel title ALL CAPS>",
-      "ingredients": ${slot4IngShape},
-      "tagline": "<short safety or natural-formula claim derived from product data, max 8 words>"
-    },
-    "slot5": {
-      "quote": "<S5 story from REASONING — before→after with time marker, max 100 chars>",
-      "author": "<${reviewerNameHint}>",
-      "verifiedNote": "<verified-review label>"
-    },
-    "slot6": {
-      "title": "<how-to-use title with step count e.g. '3 LANGKAH MUDAH' or '3 BƯỚC ĐƠN GIẢN'>",
-      "steps": [
-        "<S6 key step from REASONING — SPECIFIC action verb + object + amount/duration, max 10 words>",
-        "<next step — specific action>",
-        "<next step — specific action>"
-      ],
-      "timing": "<usage timing e.g. '🌅 Pagi • 🌙 Malam'>"
-    },
-    "slot7": {
-      "title": "<comparison section title>",
-      "usLabel": "<our product short label>",
-      "themLabel": "<generic or competitor short label>",
-      "points": [
-        ["<S7 edge from REASONING — specific measurable differentiator>", "<their generic equivalent>"],
-        ["<specific differentiator — number/time/mechanism>", "<generic>"],
-        ["<specific>", "<generic>"],
-        ["<specific>", "<generic>"]
-      ]
-    },
-    "slot8": {
-      "originalPrice": "<original price from pricing data if mentioned, else omit this key>",
-      "currentPrice": "<current sale price from product.offer; use '(Harga)' if not provided>",
-      "discount": "<discount amount or % if available, else omit>",
-      "combo": "<combo or bonus line if applicable, else omit>",
-      "cta": "${ctaDefault}",
-      "urgency": "<urgency line max 6 words>"
-    },
-    "slot9": {
-      "title": "${faqTitle}",
-      "items": [
-        {"q": "<S9 main objection from REASONING — safety or ingredients concern>", "a": "<short answer>"},
-        {"q": "<results timing — when will they see the change from Promise>", "a": "<specific timeframe>"},
-        {"q": "<return or refund question>", "a": "<answer>"}
-      ]
-    }
+    "slot1": {"headline": "<must equal reasoning.slotPlan.s1Headline>", "tagline": "<8-12 words expanding headline — specific mechanism>"},
+    "slot2": {"question": "<must equal reasoning.slotPlan.s2Question>", "painBullets": ["<self-question max 8 words ends '?'>", "<question>", "<question>"]},
+    "slot3": {"beforeLabel": "${beforeLabel}", "afterLabel": "${afterLabel}", "metric": "<must equal reasoning.slotPlan.s3Metric>", "metricSubtitle": "<context max 5 words>", "disclaimer": "<results-may-vary, max 8 words>"},
+    "slot4": {"title": "<formula panel title ALL CAPS>", "ingredients": ${slot4IngShape}, "tagline": "<safety/natural claim, max 8 words>"},
+    "slot5": {"quote": "<must reflect reasoning.slotPlan.s5Story — before→after with time, max 100 chars>", "author": "<${reviewerNameHint}>", "verifiedNote": "<verified-review label>"},
+    "slot6": {"title": "<how-to-use title with step count>", "steps": ["<must match reasoning.slotPlan.s6KeyStep>", "<next step — specific>", "<next step — specific>"], "timing": "<usage timing e.g. '🌅 Pagi • 🌙 Malam'>"},
+    "slot7": {"title": "<comparison title>", "usLabel": "<our product label>", "themLabel": "<generic alternative label>", "points": [["<must reflect reasoning.slotPlan.s7Edge>", "<generic equivalent>"], ["<specific>", "<generic>"], ["<specific>", "<generic>"], ["<specific>", "<generic>"]]},
+    "slot8": {"originalPrice": "<original price if mentioned, else omit key>", "currentPrice": "<from product.offer or '(Harga)'>", "discount": "<if available, else omit>", "combo": "<combo line if applicable, else omit>", "cta": "${ctaDefault}", "urgency": "<urgency max 6 words>"},
+    "slot9": {"title": "${faqTitle}", "items": [{"q": "<must reflect reasoning.slotPlan.s9Objection>", "a": "<answer>"}, {"q": "<results timing>", "a": "<specific timeframe>"}, {"q": "<return/refund>", "a": "<answer>"}]}
   }
 }
 
-${ingredientsGuard}
+BOLD: use **markdown bold** for 1-2 emphasis points per block (result claim, product name, action verb, price). Never bold filler.
 
-BOLD FORMATTING (use **markdown bold** — TikTok Shop renders it):
-- Pick 1–2 emphasis points per block: the result claim, product name, action verb, price/discount.
-- Never bold filler words or full sentences. Never bold inside specs rows (UI styles them).
-- ALL wording must derive from PRODUCT DATA above. Do not copy placeholder words from this template.
-
-REVIEWER NAMES: ${reviewerNameHint}
-
-FINAL REMINDER: Output = <REASONING> block THEN JSON object. All JSON string values in ${langName}. Zero text after the closing JSON brace.`
+Return ONLY this JSON object. No preamble, no markdown fences, no text after the closing brace.`
 }
 
 // ── Parsing ──────────────────────────────────────────────────────────────
@@ -258,27 +148,26 @@ interface RawPayload {
   slotTexts?: unknown
 }
 
-function extractReasoning(raw: string): string | null {
-  const m = raw.match(/<REASONING>([\s\S]*?)<\/REASONING>/)
-  return m ? m[1].trim() : null
-}
-
 function parseOrFallback(raw: string): { blocks: DescriptionBlock[]; slotTexts: SlotTexts | undefined } {
-  // Log the AI's reasoning block so developers can verify brainstorming quality
-  const reasoning = extractReasoning(raw)
-  if (reasoning) {
-    console.log('[generateDescription] 🧠 AI REASONING:\n' + reasoning)
-  } else {
-    console.warn('[generateDescription] ⚠️ No <REASONING> block found in response — AI skipped brainstorm step')
-  }
-
   const json = extractJsonObject(raw)
   if (!json) {
     console.warn('[generateDescription] could not extract JSON from response — using placeholder. Raw response first 500 chars:', raw.slice(0, 500))
     return { blocks: MOCK_DESCRIPTION_BLOCKS, slotTexts: undefined }
   }
   try {
-    const payload = JSON.parse(json) as RawPayload
+    const payload = JSON.parse(json) as RawPayload & { reasoning?: unknown }
+
+    // Log AI's reasoning field so developers can verify brainstorm quality in DevTools Console
+    if (payload.reasoning && typeof payload.reasoning === 'object') {
+      try {
+        console.log('[generateDescription] 🧠 AI REASONING:\n' + JSON.stringify(payload.reasoning, null, 2))
+      } catch {
+        console.log('[generateDescription] 🧠 AI REASONING (raw):', payload.reasoning)
+      }
+    } else {
+      console.warn('[generateDescription] ⚠️ No "reasoning" field in JSON — AI skipped the brainstorm step')
+    }
+
     const rawBlocks = payload.blocks
     if (!Array.isArray(rawBlocks) || rawBlocks.length === 0) {
       console.warn('[generateDescription] JSON has no blocks array — using placeholder. Payload keys:', Object.keys(payload))
