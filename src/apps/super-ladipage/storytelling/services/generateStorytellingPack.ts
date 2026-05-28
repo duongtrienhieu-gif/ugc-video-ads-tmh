@@ -467,6 +467,14 @@ export async function generateStorytellingPack(
   // Block 1 hook + Phase 1-2 agitate beats. Without this stage Gemini
   // kept defaulting to "soft diary nostalgia recall" for every niche
   // regardless of input — the universal lan-man bug across all packs.
+  //
+  // OPT-F2 (2026-05-28): preliminary mode check from niche alone — if
+  // niche default is recognition-soft (beauty / lifestyle / luxury),
+  // brainstorm pain-anchor isn't useful (those packs WANT the soft
+  // diary opener). Skip the entire Gemini brainstorm call for those
+  // niches. The narrative mode hint pasted into systemPrompt later
+  // still tells the writer to use the soft opener directly.
+  const preliminaryMode = detectNarrativeMode({ niche: input.niche }).mode
   let packBrainstorm: PackBrainstorm | undefined = undefined
   // REBUILD Sprint 4 (Layer E): read past hook fingerprints for this product
   // so the brainstorm + picker can avoid recently-used patterns.
@@ -485,7 +493,12 @@ export async function generateStorytellingPack(
     }
     return Date.now() >>> 0
   })()
-  try {
+  if (preliminaryMode === 'recognition-soft') {
+    console.info(
+      `[storytelling/brainstorm] SKIPPED — niche=${input.niche} default mode is recognition-soft. ` +
+      `Soft niches use the diary nostalgia opener directly; no pain-anchor brainstorm needed.`,
+    )
+  } else try {
     const brainstormStart = Date.now()
     packBrainstorm = await synthesizePackBrainstorm(
       {
