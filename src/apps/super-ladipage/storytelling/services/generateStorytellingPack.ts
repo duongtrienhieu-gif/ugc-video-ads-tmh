@@ -23,7 +23,7 @@
 
 import type {
   AllowedOverlayType, BlockId, CharacterProfile, LandingGenParams, LandingPagePack,
-  LandingSection, ProtagonistProfile, StorytellingPack,
+  LandingSection, NicheKey, ProtagonistProfile, StorytellingPack,
 } from '../types'
 import type { SectionType } from '../../types'
 import { useBankStore } from '../../../../stores/bankStore'
@@ -89,6 +89,65 @@ function pushHookMemory(productId: string, fingerprint: string): void {
     const next = [fingerprint, ...existing.filter((f) => f !== fingerprint)].slice(0, HOOK_MEMORY_MAX)
     window.localStorage.setItem(HOOK_MEMORY_PREFIX + productId, JSON.stringify(next))
   } catch { /* localStorage may be blocked — ignore */ }
+}
+
+// OPT-F1 (2026-05-28) — Niche detection cache.
+// detectNiche is deterministic per product (niche depends only on
+// productName + painPoints + benefits which don't change between packs
+// of the same product). Caching saves ~1 Gemini call per regeneration.
+// TTL 7 days so a user editing product input gets a fresh classification.
+const NICHE_CACHE_PREFIX = 'super-ladipage:nicheCache:'
+const NICHE_CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000   // 7 days
+interface NicheCacheEntry {
+  niche: string
+  source: string
+  matchedKeywords: string[]
+  confidence: string
+  /** Hash of (productName + painPoints + benefits) — invalidates cache
+   *  when user edits product. */
+  inputHash: string
+  savedAt: number
+}
+function hashProductInput(p: { productName: string; painPoints?: string; benefits?: string }): string {
+  const raw = `${p.productName}|${p.painPoints ?? ''}|${p.benefits ?? ''}`
+  let h = 0
+  for (let i = 0; i < raw.length; i++) {
+    h = ((h << 5) - h) + raw.charCodeAt(i)
+    h |= 0
+  }
+  return (h >>> 0).toString(36)
+}
+function readNicheCache(
+  productId: string,
+  input: { productName: string; painPoints?: string; benefits?: string },
+): NicheCacheEntry | null {
+  try {
+    if (typeof window === 'undefined') return null
+    const raw = window.localStorage.getItem(NICHE_CACHE_PREFIX + productId)
+    if (!raw) return null
+    const entry = JSON.parse(raw) as NicheCacheEntry
+    if (typeof entry?.niche !== 'string' || typeof entry.savedAt !== 'number') return null
+    if (Date.now() - entry.savedAt > NICHE_CACHE_TTL_MS) return null
+    if (entry.inputHash !== hashProductInput(input)) return null
+    return entry
+  } catch {
+    return null
+  }
+}
+function writeNicheCache(
+  productId: string,
+  input: { productName: string; painPoints?: string; benefits?: string },
+  result: { niche: string; source: string; matchedKeywords: string[]; confidence: string },
+): void {
+  try {
+    if (typeof window === 'undefined') return
+    const entry: NicheCacheEntry = {
+      ...result,
+      inputHash: hashProductInput(input),
+      savedAt: Date.now(),
+    }
+    window.localStorage.setItem(NICHE_CACHE_PREFIX + productId, JSON.stringify(entry))
+  } catch { /* ignore */ }
 }
 // REBUILD Sprint 2 (2026-05-28) — Narrative mode detector + filter.
 import { detectNarrativeMode, getSkippedBlocksForMode } from '../../narrativeMode'
@@ -223,22 +282,43 @@ export async function generateStorytellingPack(
   // ONE of 8 NicheKey values. Same downstream pipeline (niche-keyed
   // pools unchanged). Falls back to regex if Gemini fails.
   const settingsForNiche = useSettingsStore.getState()
-  const nicheDetection = await detectNiche(
-    {
-      productName: product.productName,
-      painPoints: product.painPoints,
-      benefits: (product as { benefits?: string }).benefits,
-    },
-    {
-      geminiApiKey: settingsForNiche.geminiApiKey,
-      kieApiKey: settingsForNiche.kieApiKey,
-    },
-  )
-  console.info(
-    `[storytelling] niche detection: ${nicheDetection.niche} ` +
-    `(source=${nicheDetection.source}, confidence=${nicheDetection.confidence}, ` +
-    `matched=[${nicheDetection.matchedKeywords.join(', ')}])`,
-  )
+  const nicheClassifierInput = {
+    productName: product.productName,
+    painPoints: product.painPoints,
+    benefits: (product as { benefits?: string }).benefits,
+  }
+  // OPT-F1 (2026-05-28) — Read from localStorage cache first. Niche is
+  // deterministic per product input, so any prior detection is reusable
+  // until the user edits product fields (input hash mismatch = cache miss).
+  let nicheDetection: import('../resolvers/detectNiche').DetectResult | null = null
+  const cachedNiche = readNicheCache(product.id, nicheClassifierInput)
+  if (cachedNiche) {
+    nicheDetection = {
+      niche: cachedNiche.niche as NicheKey,
+      source: cachedNiche.source as 'gemini' | 'regex-fallback' | 'safe-default',
+      matchedKeywords: cachedNiche.matchedKeywords,
+      confidence: cachedNiche.confidence as 'high' | 'medium' | 'low',
+    }
+    console.info(
+      `[storytelling] niche detection: ${nicheDetection.niche} ` +
+      `(source=${nicheDetection.source}+cache, confidence=${nicheDetection.confidence}, ` +
+      `cached at ${new Date(cachedNiche.savedAt).toISOString().slice(0, 16)})`,
+    )
+  } else {
+    nicheDetection = await detectNiche(
+      nicheClassifierInput,
+      {
+        geminiApiKey: settingsForNiche.geminiApiKey,
+        kieApiKey: settingsForNiche.kieApiKey,
+      },
+    )
+    writeNicheCache(product.id, nicheClassifierInput, nicheDetection)
+    console.info(
+      `[storytelling] niche detection: ${nicheDetection.niche} ` +
+      `(source=${nicheDetection.source}, confidence=${nicheDetection.confidence}, ` +
+      `matched=[${nicheDetection.matchedKeywords.join(', ')}])`,
+    )
+  }
   // ─── 2.5 P-PRODUCT-CLASS (2026-05-27) — Product reality classifier ──
   // Classifies product into 7-axis ProductRealityModel.
   // Solves: knee brace vs glucosamine pill — both health-functional niche

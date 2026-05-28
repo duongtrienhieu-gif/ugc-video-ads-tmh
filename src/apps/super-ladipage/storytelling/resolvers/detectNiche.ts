@@ -30,7 +30,7 @@ interface DetectInput {
   category?: string
 }
 
-interface DetectResult {
+export interface DetectResult {
   niche: NicheKey
   confidence: 'high' | 'medium' | 'low'
   matchedKeywords: string[]
