@@ -254,12 +254,24 @@ export default function SettingsModal({ open, onClose }: SettingsModalProps) {
   }
 
   async function handleSave() {
-    setKieApiKey(drafts.kie.trim())
-    setGeminiApiKey(drafts.gemini.trim())
-    setElevenLabsApiKey(drafts.eleven.trim())
-    setFalApiKey(drafts.fal.trim())
-    setShotstackApiKey(drafts.shotstack.trim())
-    setYoutubeApiKey(drafts.youtube.trim())
+    // Phase 10.3 fix: wrap setters in try/catch — when localStorage is full
+    // (QuotaExceededError), the setters throw and the function crashes silently
+    // before reaching the success toast. User then thought save succeeded but
+    // F5 reverted to old key (still hitting rate limit). Now we catch and
+    // surface a clear error.
+    try {
+      setKieApiKey(drafts.kie.trim())
+      setGeminiApiKey(drafts.gemini.trim())
+      setElevenLabsApiKey(drafts.eleven.trim())
+      setFalApiKey(drafts.fal.trim())
+      setShotstackApiKey(drafts.shotstack.trim())
+      setYoutubeApiKey(drafts.youtube.trim())
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      console.error('[SettingsModal] save failed', err)
+      addToast(`Lưu thất bại: ${msg.slice(0, 200)}`, 'error')
+      return  // don't show success — save did NOT happen
+    }
 
     // RACE FIX (2026-05-20): setters schedule a 1.5s debounced cloud
     // push. If the user clicked Lưu then F5'd within 1.5s, the new keys

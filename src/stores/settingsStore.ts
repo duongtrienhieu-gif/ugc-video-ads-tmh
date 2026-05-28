@@ -121,7 +121,36 @@ function loadFromStorage(): StoredSettings {
 }
 
 function saveToStorage(s: StoredSettings) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(s))
+  const payload = JSON.stringify(s)
+  try {
+    localStorage.setItem(STORAGE_KEY, payload)
+  } catch (err) {
+    // QuotaExceededError — localStorage is full from accumulated app state.
+    // Auto-cleanup known legacy keys that we've already migrated to IndexedDB
+    // and retry once. Throws clear error if still fails so caller can warn user.
+    console.warn('[settingsStore] localStorage write failed, attempting auto-cleanup', err)
+    const legacyKeysToClear = [
+      'ugc-lab:tiktok-shop',     // migrated to IDB in commit 69ed7d9
+      'ugc-lab:gemini-usage',    // migrated to IDB in commit 4031d85
+      'ugc-lab-brand-kits',      // brand kit legacy localStorage entry
+    ]
+    let freed = 0
+    for (const key of legacyKeysToClear) {
+      try {
+        if (localStorage.getItem(key)) {
+          localStorage.removeItem(key)
+          freed++
+        }
+      } catch { /* silent */ }
+    }
+    if (freed > 0) console.info(`[settingsStore] freed ${freed} legacy keys, retrying save`)
+    try {
+      localStorage.setItem(STORAGE_KEY, payload)
+    } catch (err2) {
+      console.error('[settingsStore] localStorage save still failed after cleanup', err2)
+      throw new Error('Không lưu được cài đặt — bộ nhớ trình duyệt đầy. Mở F12 → Application → Storage → "Clear site data", rồi reload và thử lại.')
+    }
+  }
   // Z38 — also push to cloud (debounced)
   schedulePushToCloud(s)
 }
@@ -263,7 +292,11 @@ async function hydrateFromCloud(setStore: (patch: Partial<StoredSettings>) => vo
     // Push merged into local state + mirror to localStorage
     // Suppress the cloud-push that follows so we don't echo back
     suppressNextCloudPush = true
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(merged))
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(merged))
+    } catch (err) {
+      console.warn('[SETTINGS_SYNC] mirror to localStorage failed (in-memory still updated)', err)
+    }
     setStore(merged)
     console.log('[SETTINGS_SYNC] hydrated from cloud · pipelineVersion=' + merged.pipelineVersion)
   } catch (err) {
