@@ -26,64 +26,58 @@ const FIELDS: { key: keyof Product; label: string; type: 'text' | 'textarea'; re
 
 const JSON_SCHEMA = `{"productName":"","productDescription":"","targetMarket":"","painPoints":"","usps":"","benefits":"","offer":"","ingredients":""}`
 
-const EXTRACT_SYSTEM = 'You are a product info extraction assistant. Return ONLY a raw minified JSON object on a single line — no markdown, no code fences, no explanation, no newlines inside values. Always respond in English.'
+const EXTRACT_SYSTEM = 'You are a product info extraction assistant. Return ONLY a raw minified JSON object on a single line — no markdown, no code fences, no explanation, no newlines inside values. Always respond in VIETNAMESE.'
 
-const FIELDS_SPEC = `Fields:
-- productName: main product name
-- productDescription: short description of what it is and does
-- targetMarket: target customers (who should use this)
-- painPoints: customer problems/pain points this product solves
-- usps: unique selling points / competitive advantages
-- benefits: specific benefits of using the product
-- offer: ONLY the main product price and any discount/promotion (e.g. "RM59, 50% off for first 50 customers"). Do NOT include shipping fees, shipping conditions, regional shipping surcharges, delivery times, COD info, or address-related text. Keep this field FOCUSED on price + discount only.
-- ingredients: PHYSICAL substances / compounds / active components actually INSIDE the product. Examples: "Vitamin B12, A, E, biotin, iron, magnesium" or "Inulin prebiotic, FloraFit probiotic strains, Lactobacillus acidophilus" or "Angelica sinensis, Motherwort herb, Dong Quai root".
-  ❌ NEVER put marketing slogans, CTAs, or promotional text in ingredients. If no actual ingredients are listed, return "".`
+const FIELDS_SPEC = `Fields (ALL values must be written in NATURAL VIETNAMESE — translate from any source language; keep brand/product proper nouns as-is, keep original currency tokens like RM, ₫, $, ฿):
+- productName: tên chính của sản phẩm (giữ nguyên tên thương hiệu nếu là proper noun, vd "LANZF", "Manuka")
+- productDescription: mô tả ngắn về sản phẩm và công dụng
+- targetMarket: khách hàng mục tiêu (ai nên dùng sản phẩm này)
+- painPoints: vấn đề / nỗi đau khách hàng mà sản phẩm giải quyết
+- usps: điểm bán hàng độc đáo / lợi thế cạnh tranh
+- benefits: lợi ích cụ thể khi sử dụng sản phẩm
+- offer: CHỈ giá sản phẩm chính + khuyến mãi/giảm giá (vd "RM59 mua 1 tặng 1", "299.000đ giảm 50% cho 50 khách đầu"). GIỮ NGUYÊN đơn vị tiền tệ gốc. KHÔNG đưa phí ship, điều kiện ship, phụ phí vùng miền, thời gian giao hàng, COD, địa chỉ.
+- ingredients: thành phần vật lý / hoạt chất CÓ THẬT trong sản phẩm. Ví dụ: "Vitamin B12, A, E, biotin, sắt, magie" hoặc "Inulin prebiotic, chủng probiotic FloraFit, Lactobacillus acidophilus" hoặc "Đương quy, Ích mẫu thảo, rễ Dong Quai". GIỮ NGUYÊN tên hoạt chất khoa học chuẩn quốc tế (Latin/English).
+  ❌ TUYỆT ĐỐI KHÔNG đưa slogan marketing, CTA, lời kêu gọi hành động vào ingredients. Nếu sản phẩm không liệt kê thành phần thật, trả "".`
 
 const EXTRACT_PROMPT = (pageText: string) =>
-  `Extract product information from the webpage text below and fill in this JSON. ALL VALUES MUST BE IN ENGLISH (translate from source language if needed). Return ONLY the JSON, nothing else, all on one line:
+  `Trích xuất thông tin sản phẩm từ nội dung trang web bên dưới và điền vào JSON. TẤT CẢ giá trị PHẢI viết bằng TIẾNG VIỆT TỰ NHIÊN (dịch từ ngôn ngữ gốc nếu cần). Chỉ trả về JSON, không gì khác, tất cả trên 1 dòng:
 ${JSON_SCHEMA}
 
 ${FIELDS_SPEC}
 
-WEBPAGE TEXT:
+NỘI DUNG TRANG WEB:
 ${pageText.slice(0, 10000)}`
 
 /** Used when images are also sent — tells Gemini to read both sources and synthesize. */
 const EXTRACT_PROMPT_HYBRID = (pageText: string, imageCount: number) =>
-  `You are analyzing a product page. You have been given BOTH the page text (below) AND ${imageCount} screenshot(s)/image(s) from the page (above).
+  `Bạn đang phân tích một trang sản phẩm. Bạn nhận được CẢ nội dung text trang web (bên dưới) VÀ ${imageCount} ảnh/screenshot từ trang (bên trên).
 
-WORKS FOR: LadiPage landings, Amazon listings, Shopee/Lazada/TikTok Shop product pages, Shopify stores, any e-commerce product page.
+HOẠT ĐỘNG VỚI: LadiPage landings, Amazon listings, Shopee/Lazada/TikTok Shop, Shopify stores, mọi trang sản phẩm e-commerce.
 
-YOUR TASK — HYBRID SYNTHESIS:
-1. SCAN BOTH SOURCES in parallel: read the text AND look at every image carefully.
-2. EXTRACT key product info from each source independently — text often has descriptions/reviews/specs, images often have prices on banners, ingredient lists on packshots, benefit claims on infographics, customer testimonials.
-3. MERGE & DEDUPLICATE: if both text and an image say the same thing, list it ONCE (don't repeat). If they disagree, prefer the more specific / detailed value.
-4. FILL EVERY FIELD you can — do NOT leave fields blank when info exists in EITHER source. Common mistakes to avoid:
-   • targetMarket is often INFERRED from product type + imagery (e.g. cough gel for kids = "Parents of young children with coughs"; anti-aging cream = "Women 35+ concerned about wrinkles").
-   • usps come from images of comparison charts, badges ("100% natural", "Doctor approved"), or repeated claims.
-   • offer/price is almost always shown in a banner image, NOT in text. LOOK at the images for prices like "RM59", "₫299,000", "$29.99", discount stickers ("50% OFF").
-   • ingredients come from packshot photos showing the back label, or from "What's inside" infographics — read the image carefully.
-5. ALL VALUES MUST BE IN ENGLISH (translate from source language if needed).
-6. Return ONLY the JSON object, nothing else, all on one line:
+NHIỆM VỤ — HYBRID SYNTHESIS:
+1. SCAN CẢ HAI NGUỒN song song: đọc text VÀ nhìn kỹ TỪNG ảnh.
+2. TRÍCH XUẤT thông tin sản phẩm từ mỗi nguồn độc lập — text thường có mô tả/review/spec; ảnh thường có giá trên banner, danh sách thành phần trên bao bì, claim lợi ích trên infographic, testimonial khách hàng.
+3. MERGE & LOẠI BỎ TRÙNG: nếu cả text và ảnh nói cùng 1 thông tin, ghi 1 LẦN duy nhất. Nếu mâu thuẫn, ưu tiên giá trị cụ thể/chi tiết hơn.
+4. ĐIỀN MỌI FIELD có thể — KHÔNG để field trống nếu thông tin có ở 1 trong 2 nguồn. Lưu ý sai lầm phổ biến:
+   • targetMarket thường SUY LUẬN từ loại sản phẩm + hình ảnh (vd gel ho cho trẻ em = "Phụ huynh có con nhỏ bị ho"; kem chống lão hoá = "Phụ nữ 35+ quan tâm nếp nhăn").
+   • usps đến từ ảnh bảng so sánh, badge ("100% tự nhiên", "Được bác sĩ khuyên dùng"), hoặc claim lặp lại.
+   • offer/giá hầu như luôn ở banner ảnh, KHÔNG ở text. NHÌN ảnh để tìm giá kiểu "RM59", "₫299.000", "$29.99", sticker giảm giá ("50% OFF").
+   • ingredients đến từ ảnh bao bì hiển thị nhãn sau, hoặc infographic "Thành phần" — đọc ảnh kỹ.
+5. TẤT CẢ GIÁ TRỊ PHẢI VIẾT BẰNG TIẾNG VIỆT TỰ NHIÊN (dịch từ ngôn ngữ gốc nếu cần). Giữ nguyên tên thương hiệu, đơn vị tiền tệ, tên khoa học chuẩn quốc tế.
+6. Chỉ trả về JSON, không gì khác, tất cả trên 1 dòng:
 ${JSON_SCHEMA}
 
 ${FIELDS_SPEC}
 
-WEBPAGE TEXT (combine with the ${imageCount} image(s) above):
+NỘI DUNG TRANG WEB (kết hợp với ${imageCount} ảnh ở trên):
 ${pageText.slice(0, 10000)}`
 
-const IMAGE_EXTRACT_PROMPT = `Extract product information from this product page screenshot and fill in this JSON. ALL VALUES MUST BE IN ENGLISH (translate from source language if needed). Return ONLY the JSON, nothing else, all on one line:
+const IMAGE_EXTRACT_PROMPT = `Trích xuất thông tin sản phẩm từ screenshot trang sản phẩm này và điền vào JSON. TẤT CẢ giá trị PHẢI viết bằng TIẾNG VIỆT TỰ NHIÊN (dịch từ ngôn ngữ gốc nếu cần). Chỉ trả về JSON, không gì khác, tất cả trên 1 dòng:
 ${JSON_SCHEMA}
 
-Fields:
-- productName: main product name
-- productDescription: short description of what it is and does
-- targetMarket: target customers (who should use this)
-- painPoints: customer problems/pain points this product solves
-- usps: unique selling points / competitive advantages
-- benefits: specific benefits of using the product
-- offer: ONLY the main product price and any discount/promotion (e.g. "RM59, 50% off for first 50 customers"). Do NOT include shipping fees, shipping conditions, regional shipping surcharges, delivery times, COD info, or address-related text. If the page has "Additional RM5 shipping cost for Sabah and Sarawak" or similar, OMIT it entirely. Keep this field FOCUSED on price + discount only.
-- ingredients: SPECIFIC ingredients / active components / key compounds in this product (e.g. "Vitamin B12, A, E, biotin, iron", "Inulin prebiotic, FloraFit probiotic strains, Lactobacillus acidophilus", "Angelica sinensis, Motherwort herb"). List the actual ingredient names — do not write generic descriptions. If the screenshot doesn't list ingredients explicitly, infer the most likely active components from product type.`
+${FIELDS_SPEC}
+
+Nếu screenshot không liệt kê thành phần rõ ràng, suy luận hoạt chất khả thi nhất từ loại sản phẩm.`
 
 interface JinaJsonData {
   data?: { content?: string; images?: Record<string, string> }

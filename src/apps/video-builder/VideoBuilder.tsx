@@ -1093,6 +1093,8 @@ function VideoBuilderV1({ onSwitchToV2 }: { onSwitchToV2: () => void }) {
 ═══════════════════════════════════════════════════════════════
 PRODUCT MARKETING CONTEXT (use this to inform every shot's emotional beat)
 ═══════════════════════════════════════════════════════════════
+NOTE: Product fields below may be written in VIETNAMESE — the operator's working language. Read and understand them as native VN text, then write your image generation prompts in ENGLISH (the standard language for image gen models). Any TEXT OVERLAY visible in the output images should be in the target market's language (Malay / Vietnamese / etc. per the script). Keep brand names, currencies, and scientific ingredient names as-is.
+
 Product name: ${bankProduct.productName}
 ${bankProduct.productDescription ? `Description: ${bankProduct.productDescription}` : ''}
 ${bankProduct.targetMarket       ? `Target market: ${bankProduct.targetMarket}` : ''}
