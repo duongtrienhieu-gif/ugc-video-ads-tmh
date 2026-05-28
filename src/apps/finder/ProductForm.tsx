@@ -113,11 +113,14 @@ interface ShopeeApiResponse {
 function parseShopeeUrl(url: string): { shopId: string; itemId: string } | null {
   try {
     const u = new URL(url)
-    if (!/(^|\.)shopee\./i.test(u.hostname)) return null
+    const hostnameOk = /(^|\.)shopee\./i.test(u.hostname)
     const m = u.pathname.match(/-i\.(\d+)\.(\d+)/)
+    console.log('[SHOPEE-PARSE]', { hostname: u.hostname, pathname: u.pathname.slice(0, 100), hostnameOk, match: m })
+    if (!hostnameOk) return null
     if (!m) return null
     return { shopId: m[1], itemId: m[2] }
-  } catch {
+  } catch (err) {
+    console.warn('[SHOPEE-PARSE] threw', err)
     return null
   }
 }
@@ -137,17 +140,21 @@ function formatShopeePrice(micro?: number): string {
 async function fetchShopeeItem(shopId: string, itemId: string): Promise<ShopeeItem | null> {
   const apiUrl = `https://shopee.vn/api/v4/item/get?itemid=${itemId}&shopid=${shopId}`
   const proxies = [
-    (u: string) => `https://corsproxy.io/?url=${encodeURIComponent(u)}`,
-    (u: string) => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`,
+    { name: 'corsproxy.io', wrap: (u: string) => `https://corsproxy.io/?url=${encodeURIComponent(u)}` },
+    { name: 'allorigins',   wrap: (u: string) => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}` },
   ]
-  for (const wrap of proxies) {
+  for (const p of proxies) {
     try {
-      const r = await fetch(wrap(apiUrl), { signal: AbortSignal.timeout(15000) })
+      const proxiedUrl = p.wrap(apiUrl)
+      console.log(`[SHOPEE-FETCH] trying ${p.name}:`, proxiedUrl.slice(0, 120))
+      const r = await fetch(proxiedUrl, { signal: AbortSignal.timeout(15000) })
+      console.log(`[SHOPEE-FETCH] ${p.name} status:`, r.status, r.statusText)
       if (!r.ok) continue
       const json = await r.json() as ShopeeApiResponse
+      console.log(`[SHOPEE-FETCH] ${p.name} json keys:`, Object.keys(json), '· error:', json.error, '· hasItem:', !!json.data?.item)
       if (json.error === 0 && json.data?.item) return json.data.item
-    } catch {
-      /* try next proxy */
+    } catch (err) {
+      console.warn(`[SHOPEE-FETCH] ${p.name} threw`, err)
     }
   }
   return null
