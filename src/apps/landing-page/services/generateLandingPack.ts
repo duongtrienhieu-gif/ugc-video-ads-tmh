@@ -4,6 +4,8 @@ import type {
 import { useSettingsStore } from '../../../stores/settingsStore'
 import { useBankStore } from '../../../stores/bankStore'
 import { directGeminiVision } from '../../../utils/gemini'
+import { buildProductIntelligence, buildIntelligencePromptBlock } from './productIntelligence'
+import { extractPackagingDescription } from './packagingExtractor'
 
 // ─────────────────────────────────────────────────────────────────────
 // SYSTEM PROMPT — 17-section advertorial factory for Malaysian FB ads.
@@ -47,7 +49,7 @@ Each section object:
   "copy": "main body copy in chosen language",
   "viTranslation": "ALWAYS REQUIRED — Vietnamese translation of copy (for the Vietnamese marketer). Never omit.",
   "layoutGuide": "VIETNAMESE — how to arrange this section in Ladipage",
-  "imageAspectRatio": "1:1" or "4:5" — REQUIRED on every section that has images. All images in the section MUST use this ratio. NEVER use 9:16 or 16:9.
+  "imageAspectRatio": "1:1" / "4:5" / "9:16" / "16:9" — REQUIRED on every section that has images. All images in the section MUST use this ratio. Allowed ratios depend on section type — see ASPECT RATIO LAW below.
   "headline": "optional",
   "headlineVi": "ALWAYS include when headline exists — Vietnamese translation of headline",
   "subheadline": "optional",
@@ -67,7 +69,7 @@ Each section object:
       "filename": "hero_01.jpg",
       "prompt": "English image-generation prompt 30-80 words. Include exact text overlay content where specified.",
       "style": "Asset-type label — see per-section spec",
-      "aspectRatio": "must match section imageAspectRatio — ONLY 1:1 or 4:5, NEVER 9:16 or 16:9"
+      "aspectRatio": "must match the section's imageAspectRatio (see ASPECT RATIO LAW for what's allowed per section type)"
     }
   ],
   "imageSizeHint": "optional"
@@ -77,16 +79,19 @@ Each section object:
 ASPECT RATIO LAW — READ CAREFULLY
 ═══════════════════════════════════════════════════════════════
 • Allowed ratios depend on section type:
-    - MOST sections: ONLY "1:1" (square) OR "4:5" (portrait)
+    - MOST sections: "1:1" (square) OR "4:5" (portrait)
     - BANNER sections (offer + final-cta) ONLY: "1:1" OR "16:9" (landscape)
       → 4:5 is FORBIDDEN for offer + final-cta
-• 9:16 is COMPLETELY BANNED everywhere — never use it
+    - MOBILE-SCREENSHOT sections (whatsapp-testimonials + social-proof FB/TikTok/Shopee screenshots): "9:16" REQUIRED for the screenshot images themselves
+      → these screenshots MUST be tall mobile-phone composition, full-bleed UI
+      → the section's selfie / crowd companion images (eg social_selfie, social_crowd) stay "4:5"
 • 16:9 is BANNED everywhere EXCEPT offer + final-cta (banner sections)
-• Every section's imageAspectRatio sets the ratio for ALL its images
-• Every individual imagePrompt's aspectRatio MUST match the section imageAspectRatio
+• 9:16 is BANNED everywhere EXCEPT mobile-screenshot images (wa_*, social_fb, social_tiktok, social_shopee)
+• Every section's imageAspectRatio sets the ratio for ALL its images EXCEPT social-proof which is mixed (screenshots 9:16, photos 4:5)
+• Every individual imagePrompt's aspectRatio MUST match what the per-section spec says (see below)
 • Per-section defaults: hero=4:5 | pain=4:5 | why-happens=1:1 | failed-solutions=4:5 |
   product-discovery=4:5 | ingredients=1:1 | mechanism=1:1 | benefits=1:1 | comparison=1:1 |
-  lifestyle=4:5 | social-proof=4:5 | whatsapp-testimonials=4:5 | news-proof=4:5 |
+  lifestyle=4:5 | social-proof=9:16 (mixed) | whatsapp-testimonials=9:16 | news-proof=4:5 |
   before-after=4:5 | offer=16:9 | final-cta=16:9
 
 ═══════════════════════════════════════════════════════════════
@@ -97,47 +102,124 @@ SECTION SPEC — produce EXACTLY these 17 in this order
    • headline, subheadline, cta, offerStrip, urgencyText
    • copy: 2-3 short paragraphs reinforcing headline
    • 2 imagePrompts REQUIRED (both hero variants) — both must use DESIGNED text overlay (not plain text):
-     - hero_01.jpg, style="Hero text overlay A — designed decor", aspectRatio="4:5"
-       Malaysian woman mid-30s holding the product, natural window light, casual indoor background, iPhone selfie
-       quality, UGC style. DESIGNED text overlay with multi-layer hierarchy:
-         · BIG bold condensed main hook headline (top) — 5-8 Malay words from the product hook, white with subtle
-           glow / drop-shadow, font feels like a sans-serif display
-         · Below: 3-5 benefit bullets as glassmorphism rounded badges, each prefixed by a relevant emoji icon
-           from this pool: ⚡ tenaga / 🔥 metabolisme / ✅ berkesan / 💊 vitamin / 🧠 fokus / ❤️ kesihatan
-           Example layout: "⚡ Tenaga lebih stabil" "🧠 Fokus tajam" "✅ Bangun segar"
-         · Optional small CTA chip / arrow sticker pointing toward the product
-       Visual decor: subtle gradient panel behind text (NOT a flat black bar), depth — text mid-layer floating
-       above background. Soft particles or spark behind the headline. Mobile-readable, max 12 words total overlay.
-     - hero_02.jpg, style="Hero text overlay B — designed decor", aspectRatio="4:5"
-       Slightly different setting (outdoor morning light, or kitchen counter), same product held by a different
-       Malaysian woman, UGC selfie feel. Same DESIGNED overlay format (multi-layer hierarchy, glassmorphism
-       badges with emoji icons, subtle glow) but 3-5 DIFFERENT benefit bullets and a different main hook headline
-       from variant A. Different gradient color palette so the two hero variants feel distinct.
+
+     DEMOGRAPHIC SOURCING — NICHE-FIRST:
+       · The person in BOTH hero variants MUST match the targetAudience from the PRODUCT
+         INTELLIGENCE OVERRIDE block at the top (age range + gender hint + lifestyle).
+         Examples: joint-pain → elderly / middle-aged Malaysian (50-70, mixed gender);
+         skincare → Malaysian woman 18-35; men-vitality → Malaysian man 35-60;
+         women-health → Malaysian woman 30-60; digestive-gut → adult 25-55.
+       · DO NOT default to "Malaysian woman mid-30s" if that doesn't match the niche.
+       · Hijab presence: match niche cultural context (Muslim-targeted niches yes; men-
+         vitality / skincare-Chinese-Malaysian niches optional).
+
+     OVERLAY DESIGN RULES (both variants):
+       · BIG bold condensed main hook headline (top) — 5-8 Malay words from the product hook,
+         white with subtle glow / drop-shadow, sans-serif display
+       · Below: 3-5 benefit bullets as glassmorphism rounded badges, each prefixed by a
+         niche-relevant emoji icon. Pool examples (PICK what fits the niche, don't force):
+         ⚡ tenaga / 🔥 metabolisme / ✅ berkesan / 💊 vitamin / 🧠 fokus / ❤️ kesihatan /
+         🦴 sendi / 🌿 herba / 🩺 kesihatan-doktor / ✨ kulit-glow / 💪 vitaliti
+       · Optional small CTA chip / arrow sticker pointing toward the product
+       · Subtle gradient panel behind text (NOT flat black bar), depth — text mid-layer
+         floating. Soft particles / spark behind the headline. Mobile-readable, max 12 words
+         total overlay.
+
+     PROMPT SHAPE:
+       - hero_01.jpg, style="Hero text overlay A — designed decor", aspectRatio="4:5":
+         [niche-appropriate Malaysian person from targetAudience demographic] holding the
+         product, natural window light, casual indoor background, iPhone selfie quality, UGC
+         style. DESIGNED overlay per OVERLAY DESIGN RULES with 3-5 benefit badges chosen for
+         the niche.
+       - hero_02.jpg, style="Hero text overlay B — designed decor", aspectRatio="4:5":
+         DIFFERENT person from variant A (different demographic point within the same
+         targetAudience range — eg if variant A is woman 50s, variant B could be woman 60s
+         or another woman 50s in different setting). Slightly different environment (outdoor
+         morning / kitchen counter / bedroom shelf). Same DESIGNED overlay format but 3-5
+         DIFFERENT benefit bullets + different main hook headline + different gradient
+         palette so the two hero variants feel distinct.
 
 2. type="pain", imageAspectRatio="4:5"
    • copy: emotional pain agitation
    • 5 imagePrompts REQUIRED — each with DESIGNED text overlay (NOT plain centered text):
-     OVERLAY DESIGN RULES — apply to all 5:
+
+     SCENE SOURCING — NICHE-FIRST (critical):
+       · DO NOT use generic stress / office-burnout / sleepless / bloated-belly / weight-scale scenes
+         UNLESS those scenes match the product's actual niche.
+       · Pick all 5 pain scenes from the NICHE-SPECIFIC PAIN POINTS + SCENARIOS list provided
+         in the PRODUCT INTELLIGENCE OVERRIDE block at the top of this prompt. That list is
+         tailored to the product type (joint-pain → knee / back / stairs / prayer-mat scenes;
+         digestive-gut → bloating / bathroom mirror / dining gas scenes; skincare → mirror acne /
+         concealer / dark spots scenes; weight-loss → tight jeans / mirror belly / failed diet
+         scenes; etc.).
+       · All 5 prompts MUST depict the SAME niche but from 5 DIFFERENT angles — different
+         body part / different environment / different time of day / different posture.
+         Never repeat the same scene twice.
+       · If FORBIDDEN SCENES are listed in the intelligence block, DO NOT emit any prompt
+         that contains those scenes.
+       · Demographic (age / gender / ethnicity) MUST match the niche's targetAudience
+         (eg joint-pain → middle-aged / elderly Malaysian; skincare → 18-35 Malaysian woman).
+
+     OVERLAY DESIGN RULES — apply to all 5 (typography + decor stays consistent):
        · Use italic / slanted display font for the pain statement (conveys urgency / emotion)
        · Place overlay on a rounded glassmorphism or gradient panel (NOT plain text floating)
-       · Add a relevant emoji at the start: 😩 fatigue / 😣 pain / 💤 sleep / ⚠️ warning / 🤯 stress
+       · Add a relevant emoji at the start matching the pain type (eg 😩 fatigue / 😣 sharp pain /
+         💤 sleep / ⚠️ warning / 🤯 stress / 🦴 joint / 💢 ache — pick whatever fits the niche)
        · Subtle red / dark gradient shadow behind text for contrast
-       · Small decorative element (arrow, spark, burst) drawing attention to the face/body part the pain is about
-       · Max 4-6 Malay words per overlay — mobile-readable
-     - pain_01.jpg, style="Pain text overlay 1 — italic urgent decor", aspectRatio="4:5": tired Malaysian woman at office desk, head in hands, frustrated. Italic slanted Malay overlay on rounded dark glass panel, e.g. "😩 Penat walaupun dah rehat?" with subtle red glow + arrow pointing to her temple.
-     - pain_02.jpg, style="Pain text overlay 2 — italic urgent decor", aspectRatio="4:5": Malaysian person, bathroom mirror, bloated belly gesture. Italic Malay overlay on glassmorphism panel: second distinct pain statement starting with ⚠️ or 😣, with subtle red/orange gradient highlight near belly.
-     - pain_03.jpg, style="Pain text overlay 3 — italic urgent decor", aspectRatio="4:5": sleepless person, phone light on face at night, dark circles. Italic Malay overlay with 💤 or 😩 emoji on dark-blue glass panel, soft glow under the eyes, third pain statement.
-     - pain_04.jpg, style="Pain text overlay 4 — italic urgent decor", aspectRatio="4:5": person at dining table unable to eat, uncomfortable expression. Italic Malay overlay with 😣 or ⚠️ emoji, glassmorphism panel, subtle highlight near stomach, fourth pain statement.
-     - pain_05.jpg, style="Pain text overlay 5 — italic urgent decor", aspectRatio="4:5": Malaysian woman looking at scale sadly, plain clothes, honest moment. Italic Malay overlay with 🤯 or 😩 emoji on glass panel, soft red shadow, fifth pain statement.
+       · Small decorative element (arrow / spark / burst) drawing attention to the affected
+         body part for that scene
+       · Max 4-6 Malay words per overlay — mobile-readable, written in the output language
+
+     PROMPT SHAPE (apply to all 5, replace [scene] + [emoji] + [overlay] from intelligence block):
+       - pain_01.jpg, style="Pain text overlay 1 — italic urgent decor", aspectRatio="4:5":
+         [niche-specific scene #1 — describe person + environment + body language]. Italic
+         slanted Malay overlay on rounded glass panel reads "[emoji] [4-6 Malay words]" with
+         decorative element pointing to the affected body part.
+       - pain_02.jpg through pain_05.jpg follow the same shape — different niche-relevant
+         scene each, different emoji, different overlay text. Never duplicate.
 
 3. type="why-happens", imageAspectRatio="1:1"
    • copy: root cause explanation, conversational NOT medical-textbook
-   • 1-2 imagePrompts: mechanism infographic (gut microbiome / skin layer / absorption — pick by niche). style="Mechanism infographic", aspectRatio="1:1"
+   • 1-2 imagePrompts: niche-appropriate root-cause infographic. style="Mechanism infographic",
+     aspectRatio="1:1". Pick the DIAGRAM TYPE based on the niche from PRODUCT INTELLIGENCE
+     OVERRIDE:
+       joint-pain → joint cartilage cross-section / inflammation site
+       digestive-gut → gut microbiome (good vs bad bacteria)
+       skincare → skin layer cross-section (epidermis / dermis / problem zone)
+       weight-loss → fat metabolism / hormone cycle diagram
+       hair-care → hair follicle cross-section / scalp anatomy
+       vision → eye anatomy / macula cross-section
+       cardio → cardiovascular flow / artery diagram
+       diabetes → glucose absorption / insulin pathway
+       women-health → hormone cycle / reproductive anatomy
+       men-vitality → testosterone pathway / prostate diagram
+       immunity-general → immune cell vs pathogen diagram
+       sleep-stress → cortisol / melatonin cycle / brain stress diagram
+       dental-oral → tooth + gum cross-section
+     Clean editorial/textbook style with output-language labels.
 
 4. type="failed-solutions", imageAspectRatio="4:5"
-   • bullets: 3-5 "❌ Tried X — didn't work" lines
+   • bullets: 3-5 "❌ Tried X — didn't work" lines — content MUST match niche failed
+     treatments (joint-pain → "Dah cuba minyak urut, tak berkesan"; skincare → "Dah cuba
+     kem mahal, jerawat masih datang"; digestive-gut → "Dah makan banyak serat, perut masih
+     kembung"; weight-loss → "Dah diet bagai, berat tak turun"; etc.)
    • copy: validate customer frustration
-   • 1-2 imagePrompts: tired Malaysian surrounded by failed products / empty bottles. style="Failed solutions UGC", aspectRatio="4:5". NO our product visible.
+   • 1-2 imagePrompts: NICHE-MATCHED failed-solutions scene. style="Failed solutions UGC",
+     aspectRatio="4:5". NO our product visible. The "surrounding failed products" MUST match
+     the niche category:
+       joint-pain → empty bottles of pain rubs / muscle balm / herbal oils / used heating pads
+       digestive-gut → empty supplement bottles / probiotic packs / digestive teas / antacid pills
+       skincare → used acne creams / serum bottles / face mask packs / failed concealer tubes
+       weight-loss → diet shake powders / slimming pill bottles / measuring tape / failed
+                     gym membership card / weight scale
+       hair-care → empty hair-growth tonic bottles / shampoo / scalp serum
+       vision → reading glasses pile / eye drop bottles
+       cardio / diabetes → BP monitor / glucose meter strips / pill bottles
+       sleep-stress → melatonin bottles / herbal tea / sleep masks / phone with sleep app
+       men-vitality / women-health → empty supplement bottles relevant to the area
+     Demographic of the tired person MUST match niche targetAudience (eg joint-pain → elderly
+     Malaysian; skincare → woman 18-35).
+
 
 5. type="product-discovery", imageAspectRatio="4:5"
    • copy: "aha" moment — friend rec / Facebook / TikTok find
@@ -150,7 +232,16 @@ SECTION SPEC — produce EXACTLY these 17 in this order
 
 7. type="mechanism", imageAspectRatio="1:1"
    • copy: step-by-step HOW the formula works — plain language
-   • 1-2 imagePrompts: science mechanism diagram (pick by niche). style="Science mechanism diagram", aspectRatio="1:1"
+   • 1-2 imagePrompts: niche-appropriate "HOW IT WORKS" diagram. style="Science mechanism
+     diagram", aspectRatio="1:1". Pick mechanism type based on niche from PRODUCT INTELLIGENCE
+     OVERRIDE (joint-pain → ingredient → cartilage/inflammation site → relief mechanism;
+     digestive-gut → probiotic strains → gut wall → balanced flora; skincare → active compound
+     → skin layer → cellular repair; weight-loss → metabolite → fat cell → energy release;
+     hair-care → nutrient → follicle → growth cycle; cardio → ingredient → bloodstream →
+     vessel relaxation; diabetes → compound → insulin receptor → glucose uptake;
+     women-health / men-vitality → hormone pathway diagram). Use numbered/labeled steps
+     1→2→3→4 in the output language. Clean editorial science illustration, NOT a marketing
+     poster.
 
 8. type="benefits", imageAspectRatio="1:1"
    • bullets: 5-7 benefits with leading emoji
@@ -160,42 +251,130 @@ SECTION SPEC — produce EXACTLY these 17 in this order
 9. type="comparison", imageAspectRatio="1:1"
    • copy: why our product vs generics
    • 1 imagePrompt: style="Comparison infographic MY ecommerce", aspectRatio="1:1"
-     Malaysia ecommerce style comparison table infographic. Left column: our product name, green checkmarks, emerald highlighted background. Right: "Suplemen Lain" / "Produk Biasa", red X, gray background. Rows: ingredient quality, absorption, certifications, side effects, manufacturing, price value. Clean mobile-readable design, bold Bahasa Melayu labels.
+     Malaysia ecommerce style comparison table infographic. Left column: our product name,
+     green checkmarks, emerald highlighted background. Right: "Suplemen Lain" / "Produk Biasa"
+     / "Krim Biasa" / "Gel Biasa" (label MUST match the product format — supplement bottle =
+     "Suplemen Lain", topical gel/cream = "Krim Biasa", probiotic = "Probiotik Biasa", drink =
+     "Minuman Lain", etc.), red X, gray background.
+     ROW SELECTION — choose 5-6 rows matching the product FORMAT + NICHE:
+       Oral supplement (capsule/tablet): ingredient quality, absorption rate, certifications
+         (Halal/KKM), side effects, manufacturing source, price value
+       Topical gel/cream (joint / muscle / skincare): absorption speed, lasting effect,
+         non-greasy texture, cooling/heating sensation, skin reaction, ingredient origin
+       Liquid drink / shot: taste, absorption speed, sugar content, natural ingredients,
+         storage convenience, value
+       Skincare serum/cream: skin penetration, irritation level, brightening efficacy,
+         certifications, active ingredient %, suitable skin types
+       Hair tonic / scalp serum: penetration to follicle, scent, oiliness, results timeline,
+         scalp irritation, natural composition
+     Pick rows that genuinely differentiate the product format. Clean mobile-readable design,
+     bold output-language labels.
 
-10. type="lifestyle", imageAspectRatio="4:5"
-    • copy: after-life paint — energetic mornings, confidence
-    • 1-2 imagePrompts: Malaysian family happy / woman laughing outdoors / energetic candid. style="Lifestyle transformation UGC", aspectRatio="4:5". NO product visible.
+10. type="expert-feedback", imageAspectRatio="9:16"
+    • copy: 1-2 short paragraphs framing the expert's professional take — written in the output language. Mention what kind of expert (digestive health specialist / pharmacist / dietitian / dermatologist — pick to match the product niche). Authority + warmth tone, NOT hard-sell.
+    • REQUIRED reviews array with EXACTLY 2 entries, each shaped as an expert testimonial:
+        - author: full doctor-style name + credentials (e.g. "Dr. Farid Hassan", "Pharmacist Aisyah Rahman", "Dietitian Wong Mei Ling") — choose ethnicity to fit Malaysia (Malay / Chinese-Malaysian / Indian-Malaysian mix). The two experts MUST be DIFFERENT people.
+        - meta: "<Specialty> · <X> Years Experience" (e.g. "Digestive Health Specialist · 12 Years Experience")
+        - rating: 5
+        - quote: 1-2 sentences of professional commentary about the product mechanism / ingredient quality / why it works — written in the output language. NO marketing hype. Sound like a real expert opinion.
+    • 2 imagePrompts BOTH aspectRatio="9:16", strict expert-feedback editorial composition (NOT lifestyle, NOT UGC):
+      - expert_01.jpg, style="Expert Authority Feedback card", aspectRatio="9:16":
+        Tall 9:16 editorial portrait poster. TOP 60% of frame: professional medical / clinic / lab scene — the FIRST expert (from reviews[0].author) photographed in their working environment (clinic consultation room / pharmacy counter / nutrition lab) wearing clean professional attire (white coat / pharmacist tunic / smart blouse). Soft natural daylight + subtle clinical color palette (cream / pale sage / off-white). Realistic Malaysian / Southeast-Asian features. Calm authoritative expression.
+        TOP-RIGHT corner overlay: small rounded "expert badge" card containing — circular avatar headshot of the same expert + bold name from reviews[0].author + thin small-cap specialty line from reviews[0].meta + "X Years Experience" line. Clean editorial sans-serif typography. Subtle drop-shadow on the badge.
+        BOTTOM 40%: light cream / off-white quote box overlay with a thin top divider line. Inside the quote box: italic blockquote of reviews[0].quote in the output language (rendered as visible text in the image), credited beneath with the expert's name in small caps. Bold opening quotation mark (").
+        VISUAL RULES: premium editorial magazine aesthetic, clean typography hierarchy, realistic spacing, medical-professional look. NO oversized text. NO TikTok visual style. NO UGC selfie. NO product packaging in this image — the focus is the expert, not the product.
+      - expert_02.jpg, style="Expert Authority Feedback card", aspectRatio="9:16":
+        Same template as expert_01 but featuring the SECOND expert (reviews[1]). DIFFERENT person, DIFFERENT face, DIFFERENT specialty environment from expert_01 (if expert_01 is clinic, make this pharmacy; if expert_01 is pharmacy, make this nutrition consultation room or lab). DIFFERENT outfit. SAME premium editorial template — clinic / lab scene top, badge overlay top-right with reviews[1] details, quote box bottom with reviews[1].quote italicized.
+    • STRICT BANS for the whole expert-feedback section:
+      ✗ Same person in expert_01 and expert_02
+      ✗ UGC selfie aesthetic / TikTok composition / phone-camera feel
+      ✗ Product bottle visible in the frame (expert IS the focus)
+      ✗ Cinematic glamour / fashion editorial styling
+      ✗ Oversized stamped text / marketing CTA buttons rendered into the image
+      ✗ English "Doctor" labels when output language is Bahasa Melayu — use Malay credentials (Dr. / Doktor / Ahli Farmasi / Ahli Pemakanan) appropriately
 
 11. type="social-proof", imageAspectRatio="4:5"
     • reviews: 4-6 realistic Malaysian reviews
     • copy: short framing
     • 5 imagePrompts ALL REQUIRED — ALL aspectRatio="4:5":
       - social_fb.jpg, style="Facebook comment screenshot", aspectRatio="4:5": realistic Facebook post comment section screenshot. Slightly JPEG-compressed quality, imperfect real-phone feel. Malay text + emojis. Multiple positive comments from Malaysian names. IMPORTANT: Product name visible in the post.
-      - social_tiktok.jpg, style="TikTok Shop review screenshot", aspectRatio="4:5":
-        Ultra-realistic TikTok Shop Malaysia product review mobile screenshot. MUST look EXACTLY like a real screenshot captured from TikTok Shop app on Android. SCREEN STRUCTURE: TikTok Shop review page with black/dark UI, realistic Android top status bar (battery percentage shown numerically, 4G/5G signal icon, notification icons left), header showing product star rating (eg "★ 4.8 Đánh giá 2.6K"), review filter tabs ("Semua / Ada gambar / 5★ / 4★"), vertically scrolling review feed of multiple cards. PRODUCT: probiotics supplement. REVIEW CONTENT: 2-3 visible review cards with authentic Malaysian buyer reviews — masked usernames like "T**n H**u", "L**g T**m", casual Bahasa Melayu text mixing English loanwords, realistic emoji use 👍 ❤️ 😍, believable review lengths (2-4 lines each), star ratings shown. Each card has 2-4 small customer-uploaded review photo thumbnails of the product (different angles — some show 1 bottle, some show 2-4 bottles, some show product on dining table; NEVER all same composition). Bottom: floating CTA bar with shopping cart icon + "Mua ngay" button + price. IMAGE RULES: preserve original aspect ratio on review thumbnails, no horizontal stretching, no squashing. VISUAL: imperfect real-mobile-screenshot feel, authentic TikTok spacing (uneven organic spacing — not equal margins everywhere), native typography hierarchy, realistic icon sizes. DO NOT: centered layouts, fake ecommerce UI, oversized fonts, equal spacing everywhere, Figma-clean look, floating product PNG, designed graphic. Show EXACT PRODUCT PRICE from brief. Quality target: indistinguishable from a real TikTok Shop screenshot.
-      - social_shopee.jpg, style="Shopee review screenshot", aspectRatio="4:5":
-        Ultra-realistic Shopee Malaysia product review mobile screenshot. MUST look EXACTLY like a real Shopee app screenshot captured from a Malaysian Android phone. SCREEN STRUCTURE: Shopee review page with orange Shopee UI accents, realistic Android status bar (time, battery %, signal icons, notification badges), header with back arrow + star rating eg "★ 4.8 Đánh giá (2.6K)" + share + cart icon, review filter tabs MUST include "Semua / Dengan media / 5★ / 4★", review sub-filters ("Khách mua tiếp / Chất lượng tốt"), scrollable review feed. PRODUCT: probiotics supplement. REVIEW CONTENT: 2-3 review cards visible, each with masked username like "duc.l***ous" or "T**n H**u", authentic Malaysian customer review in casual Bahasa Melayu, "Phân loại" line showing variant, 5★ rating, believable timestamps (eg "2025-4-1"). Each card includes 2-4 small thumbnail photos of the product in different real-life compositions (bottle alone / 2-4 bottles / product in kitchen / on dining table — NEVER always box+bottle side-by-side). Floating bottom CTA bar with chat icon + cart + "Mua ngay" pink button + price. IMAGE RULES: review thumbnails preserve original aspect ratio (object-fit: cover style), NO horizontal stretching, NO vertical squashing. VISUAL: authentic Shopee spacing with natural mobile UI hierarchy, real screenshot feel with subtle JPEG compression. DO NOT: fake clean symmetry, generic ecommerce layouts, centered compositions, oversized fonts, fake Figma-clean UI, floating product packaging. Show EXACT PRODUCT PRICE from brief. Quality: must feel like a REAL phone screenshot.
-      - social_selfie.jpg, style="Muslim woman selfie social proof", aspectRatio="4:5": Malaysian Muslim woman in hijab, mid-30s, holding product in selfie, genuine smile, casual home, natural daylight, UGC quality.
-      - social_crowd.jpg, style="Crowd group social proof", aspectRatio="4:5": group of 3-4 Malaysian women different ages (some in hijab), each holding the product, smiling, casual outdoor, candid group photo feel, trust and community vibe.
+      - social_tiktok.jpg, style="TikTok Shop review screenshot", aspectRatio="4:5": realistic TikTok Shop product review screenshot. Visible product thumbnail in review card, 5-star rating, Malaysian reviewer name, Malay review text with emojis. Show EXACT PRODUCT PRICE from brief. Authentic phone-screenshot quality.
+      - social_shopee.jpg, style="Shopee review screenshot", aspectRatio="4:5": realistic Shopee product page review screenshot. Visible product thumbnail (same packaging as reference), 5-star rating, "Verified Purchase" badge, Malaysian reviewer name, Malay review text. Show EXACT PRODUCT PRICE from brief. Authentic, slightly-compressed quality.
+      - social_selfie.jpg, style="Customer selfie social proof", aspectRatio="4:5": [Malaysian
+        person matching the niche targetAudience demographic — age + gender + cultural cues
+        from PRODUCT INTELLIGENCE OVERRIDE block]. Holding product in selfie, genuine smile,
+        casual home, natural daylight, UGC quality. Examples by niche: joint-pain → middle-aged
+        / elderly uncle or auntie (50-70); skincare → woman 18-35; men-vitality → man 35-60;
+        women-health → woman 30-60; digestive-gut → adult 25-55. Hijab presence only when
+        culturally appropriate to the niche audience.
+      - social_crowd.jpg, style="Crowd group social proof", aspectRatio="4:5": group of 3-4
+        Malaysian people [match the niche targetAudience — age range + gender mix from
+        PRODUCT INTELLIGENCE OVERRIDE]. Each holding the product, smiling, casual outdoor,
+        candid group photo feel, trust and community vibe. Examples: joint-pain → group of
+        elderly aunties + uncles (50-70 mixed); skincare → 3-4 young women 18-35;
+        men-vitality → group of 3-4 middle-aged men 35-60; digestive-gut → mixed-age adult
+        group. Hijab variety follows niche cultural context.
 
 12. type="whatsapp-testimonials", imageAspectRatio="4:5"
     • reviews: 4 chat-style testimonials (multi-line, emojis, authentic Malay)
     • copy: short framing
     • 4 imagePrompts ALL aspectRatio="4:5":
-      ALL 4 ARE REAL WHATSAPP SCREENSHOTS — NOT marketing graphics. The image must look like "a real person opened WhatsApp and took a screenshot". Use authentic WhatsApp 2025 UI: status bar with battery/wifi/time, green header, contact name + avatar circle, message bubbles (green outgoing + white incoming), realistic timestamps, real font hierarchy, real spacing, input bar at bottom. Compressed mobile screenshot quality, subtle JPEG compression, slightly imperfect crop. Malay/English mix text, natural emoji use.
 
-      MIX STRUCTURE — 2 pure chats + 2 chats WITH attached product photo (DIFFERENT compositions):
-      - wa_01.jpg, style="WhatsApp screenshot PURE — no attachment", aspectRatio="4:5": Pure chat screen — header, message bubbles, input bar. NO image attachment in chat. Malaysian sender, casual review text about product results.
-      - wa_02.jpg, style="WhatsApp screenshot PURE — different convo, no attachment", aspectRatio="4:5": DIFFERENT Malaysian sender name + DIFFERENT avatar color + DIFFERENT timestamps from wa_01. Different conversation flow, different emojis. Still pure chat, no attachment.
-      - wa_03.jpg, style="WhatsApp screenshot WITH single-bottle attachment", aspectRatio="4:5": Real WhatsApp chat where the user sent an image attachment of ONE bottle ONLY (no packaging box) on a casual home surface — kitchen counter or dining table. The attached image looks like a customer phone snap (slightly imperfect lighting, real home background). Surrounding chat: 2-3 Malay text messages discussing the product.
-      - wa_04.jpg, style="WhatsApp screenshot WITH multi-bottle attachment", aspectRatio="4:5": DIFFERENT chat partner from wa_03 (different name, different avatar, different timestamps). Image attachment shows 2-4 bottles together (family pack feel) — NO packaging box, just multiple bottles standing on a real surface (dining table / shelf / kitchen). Different home environment from wa_03. Surrounding chat: different message flow, different emojis.
+      UI RULES — apply to all 4 (CRITICAL — produces full authentic screenshot, not floating product card / dark designed banner):
+        · TOP NAVBAR visible: contact/group name in white text + back arrow + "online" / "last
+          seen" subtitle + phone/video/menu icons on the right. WhatsApp light theme.
+        · SENDER AVATAR circle visible at top-left of navbar (small profile photo of the sender).
+        · CHAT AREA: WhatsApp default light-cream (#ECE5DD) background, NOT dark / NOT black / NOT designed banner / NO diagonal streaks / NO gradients.
+        · MESSAGE BUBBLES: outgoing in light-green (#DCF8C6) on the right, incoming in white
+          on the left. Bubble corners rounded with tail pointer on first bubble of series.
+          Each bubble shows readable Malay text + emoji + tiny timestamp + double-check
+          delivery ticks (blue ✓✓) on outgoing.
+        · IMAGE ATTACHMENT: product photo MUST appear inside a chat image-message bubble as a REAL CANDID PHOTO (a person holding the product, OR a casual desk/table snapshot of the product). NOT a designed product card. NOT a link-preview banner. NOT a marketing graphic with title+description. NOT a floating product PNG on dark bg. The image-bubble is a rounded rectangle that fits naturally inside the conversation flow with its own timestamp + ticks.
+        · BOTTOM: WhatsApp input bar with emoji/attach icons on left + microphone on right.
+        · MOBILE STATUS BAR (top edge): time + battery + signal — slight visible at very top.
+        · Sender name + concrete Malay quote text MUST be readable in the bubble (not warped).
+        · Quality: slightly JPEG-compressed real phone screenshot, NOT designed marketing graphic.
 
-      STRICT BAN for the whole WhatsApp section:
-        • Identical attached product photos across wa_03 and wa_04 (must be DIFFERENT composition: single vs multi)
-        • Always-paired "box + bottle side-by-side" composition in the attachment (no box at all in wa_03/wa_04)
-        • Floating product PNG over the chat UI (the product appears ONLY as a natural image-message bubble)
-        • Fake / futuristic / AI-looking WhatsApp UI — must match real WhatsApp 2025 spacing and typography
-        • Poster / infographic / advertisement layout
+      - wa_01.jpg, style="WhatsApp screenshot authentic 1", aspectRatio="4:5":
+        Realistic WhatsApp 1-on-1 chat screenshot. Top navbar shows a Malaysian sender name (eg
+        "Kak Timah" / niche-appropriate name) + avatar circle + "online" status. Light-cream
+        chat background. Green outgoing bubbles + white incoming bubbles with readable casual
+        Malay text including the product name (eg "Salam sis, [product name] ni memang power!
+        [niche-specific result]. Terima kasih banyak! 🥰"). Image attachment bubble shows a REAL
+        candid photo of a Malaysian woman holding the EXACT uploaded product packaging in her
+        hand (NOT a designed card, NOT a banner). Visible timestamps + blue ✓✓ ticks. WhatsApp
+        input bar at bottom.
+      - wa_02.jpg, style="WhatsApp screenshot authentic 2", aspectRatio="4:5":
+        Same UI structure as wa_01 but DIFFERENT Malaysian sender name + DIFFERENT avatar +
+        DIFFERENT timestamp. Light-cream chat background. More excited tone, more emojis (eg
+        "Bro, [product name] ni memang padu! [niche result] 👍👍"). Image attachment is a
+        candid photo of a Malaysian man holding the EXACT product (different angle from wa_01).
+        Authentic phone screenshot quality.
+      - wa_03.jpg, style="WhatsApp screenshot authentic 3", aspectRatio="4:5":
+        Realistic WhatsApp GROUP chat screenshot. Light-cream chat background. Top navbar
+        shows a niche-relevant group name (eg digestive-gut → "Ibu2 Sihat" or "Kumpulan Usus
+        Sihat"; joint-pain → "Kelab Sendi Sihat"; skincare → "Glow Skin Squad"). Multiple
+        positive replies from DIFFERENT Malaysian named members visible (use 3-4 different
+        Malay names like "Puan Devi" / "Siti" / "Khairul" — each different avatar color).
+        Casual Malay text with emojis discussing the product's benefits. Image attachment of
+        the EXACT product inside one of the message bubbles (candid photo, not designed card).
+        WhatsApp input bar at bottom.
+      - wa_04.jpg, style="WhatsApp screenshot authentic 4", aspectRatio="4:5":
+        Realistic WhatsApp 1-on-1 conversation showing a multi-exchange. Light-cream chat
+        background. One user shares positive result text + a candid photo attachment of the
+        EXACT product ("Perut dah tak sakit langsung!" with product photo); friend/family
+        reacts positively in next bubbles ("Wah, bestnya! Nak cuba jugak!"). Conversation
+        flows naturally — 4-5 bubbles total mixing outgoing green + incoming white, with
+        timestamps. Different sender from wa_01. Authentic phone quality.
+
+      ABSOLUTE BANS for the WhatsApp section:
+        ✗ Designed product card / marketing banner / link-preview layout with title+description text under the product
+        ✗ Product on dark/black background with diagonal streaks, gradients, or design effects
+        ✗ Product floating loose on any non-cream WhatsApp background (must be a CANDID PHOTO inside a chat image-bubble)
+        ✗ Missing WhatsApp top navbar OR missing bottom input bar
+        ✗ Fake / futuristic / "WhatsApp Lite" / "GBWhatsApp" mod UI
+        ✗ Empty / partially-rendered chat (must have ≥3 readable message bubbles per screenshot)
+        ✗ Any product brand that is NOT the user's uploaded product (no Shaklee, Nutriplus, Dr White, GoPure, biotopics, biomatrix, made-up brand)
 
 13. type="news-proof", imageAspectRatio="4:5"
     • copy: authority framing text about health concern
@@ -206,30 +385,57 @@ SECTION SPEC — produce EXACTLY these 17 in this order
 14. type="before-after", imageAspectRatio="4:5"
     • copy: transformation narrative
     • 4 imagePrompts all aspectRatio="4:5":
-      Z27 REWRITE — 4 photos in 2 same-person pairs. Per user spec: render WITH Malay text overlay "SEBELUM" / "SELEPAS" stamped at top of each image (previously banned — now required). Face must stay identical within each pair. The pair effect is built INTO each image (with the label), not from UI placement.
 
-      PAIR A IDENTITY LOCK (ba_01 + ba_02 = SAME WOMAN):
-        Identical face structure, identical hairstyle, identical skin tone, identical age. Same room background visible (same wall, same window, same furniture). Same camera framing (eye-level OR mirror selfie — pick ONE for the pair). Same outfit FAMILY (both casual home tees OR both modest hijab+loose top — slight color shift OK, NEVER swap to activewear/sports-bra).
-      - ba_01.jpg, style="Before portrait with SEBELUM label", aspectRatio="4:5":
-        Malaysian woman in casual home setting, cool dim window light, slouched tired posture, low-energy expression, slight bloat visible under loose tee. RENDER a clean white text label "SEBELUM" stamped at the top-left corner of the image in bold sans-serif font with subtle drop-shadow. Authentic smartphone selfie quality, realistic skin texture, NOT studio.
-      - ba_02.jpg, style="After portrait with SELEPAS label", aspectRatio="4:5":
-        SAME identical woman (same face / same hair / same identity as ba_01), SAME room corner, SAME camera angle, SAME outfit FAMILY. Warmer light through the SAME window. Relaxed upright posture, natural confident smile, brighter eyes, healthier skin glow, flatter stomach under same style top. RENDER a clean white text label "SELEPAS" stamped at the top-left corner in the SAME font and position as ba_01's SEBELUM label.
+      TRANSFORMATION TYPE — pick by niche from PRODUCT INTELLIGENCE OVERRIDE.transformationOutcome:
+        joint-pain → mobility transformation: BEFORE clutching back/knee, struggling to stand /
+                     climb stairs / bow in prayer; AFTER upright posture, walking briskly,
+                     full sujud, carrying groceries with ease
+        digestive-gut → belly comfort transformation: BEFORE bloated belly visible under shirt,
+                        hunched, hand on stomach; AFTER flatter stomach, relaxed posture,
+                        enjoying meals freely
+        skincare → skin clarity transformation: BEFORE acne / dark spots / dull skin, heavy
+                   concealer, avoiding camera; AFTER clear glowing skin, bare-faced selfie,
+                   confident eye contact
+        weight-loss → body transformation: BEFORE tight jeans not fitting, side-belly visible,
+                      withdrawn; AFTER same jeans now fitting, slimmer waist, confident
+                      full-body selfie
+        hair-care → hair density transformation: BEFORE thinning crown / receding hairline,
+                    cap-covering; AFTER visibly thicker hair, confident overhead selfie
+        vision → reading confidence: BEFORE squinting at phone, glasses pushed up; AFTER
+                 comfortable reading at normal distance, no squinting
+        cardio → vitality: BEFORE chest-clutching on stairs, worried BP reading; AFTER active
+                 walk, normal BP, smiling
+        diabetes → control: BEFORE pricking finger anxious; AFTER stable reading, restored
+                   energy, enjoying family meal in moderation
+        women-health → comfort restored: BEFORE cramping curled on sofa with hot pad; AFTER
+                       relaxed, balanced, normal daily activity
+        men-vitality → energy restored: BEFORE morning fatigue sitting on bed edge; AFTER
+                       fresh awake morning, walking briskly, confident
+        sleep-stress → rest restored: BEFORE 3am phone-glow insomnia, dark circles; AFTER
+                       refreshed morning, smiling at breakfast
+        dental-oral → smile confidence: BEFORE covering mouth, yellow teeth visible; AFTER
+                      open wide smile, whiter teeth
 
-      PAIR B IDENTITY LOCK (ba_03 + ba_04 = SAME DIFFERENT WOMAN):
-        Second Malaysian woman testimonial — DIFFERENT person from ba_01/02 but consistent between ba_03/04. THREE-QUARTER body framing showing head-to-waist (face visible + stomach visible together — DO NOT crop the face out). Same room, same wall background, same camera distance, same outfit family.
-      - ba_03.jpg, style="Before half-body with SEBELUM label", aspectRatio="4:5":
-        Three-quarter body shot, casual loose top, slight belly bloat visible under shirt, low-energy tired expression on her face. Dim same-room lighting, slumped posture. Face fully visible — no body-only crop. RENDER "SEBELUM" label top-left in matching font.
-      - ba_04.jpg, style="After half-body with SELEPAS label", aspectRatio="4:5":
-        SAME identical woman as ba_03 (same face / same hair), SAME three-quarter framing, SAME camera distance, SAME outfit family. Brighter same-window light. Natural confident smile, flatter stomach, improved posture. Face fully visible. RENDER "SELEPAS" label top-left in matching font.
+      Demographic of the person(s) in ALL 4 images MUST match the niche targetAudience (eg
+      joint-pain → 45-70 elderly Malaysian; skincare → 18-35 woman; men-vitality → 35-60 man).
 
-      ABSOLUTE BANS for the whole before-after section:
-        • Different face between pair members (ba_01 face ≠ ba_02 face is INVALID — must be identical person)
-        • Collages / split-frames / side-by-side composites in ONE image (the pair effect comes from 2 separate images, not from compositing)
-        • Sports-bra / activewear / lingerie reveal
-        • Gym influencer aesthetic, professional studio look
-        • Race / body-type swap between BEFORE and AFTER
-        • Different room / different camera angle / different outfit family between pair members
-        • English "BEFORE" / "AFTER" labels — must be Malay "SEBELUM" / "SELEPAS"
+      - ba_01.jpg, style="Before after collage 1", aspectRatio="4:5": side-by-side before/after
+        collage of one [niche-matched demographic] Malaysian person showing the niche
+        transformation type above. "Sebelum" shows the niche-specific problem state; "Selepas"
+        shows the niche-specific improvement. Quality is amateur COD ecommerce, not professional.
+      - ba_02.jpg, style="Before after collage 2", aspectRatio="4:5": side-by-side before/after
+        collage of a DIFFERENT [niche-matched demographic] person from ba_01 (different age
+        point within the niche range, different setting). Same niche transformation type.
+      - ba_03.jpg, style="Before after collage 3", aspectRatio="4:5": collage featuring 2-3
+        distinct before/after pairs of [niche-matched demographic] individuals. Each pair
+        shows the SAME niche transformation type from a different angle. "Sebelum"/"Selepas"
+        labels visible. Social-proof-by-numbers, amateur, real-person photos.
+      - ba_04.jpg, style="Before after collage 4", aspectRatio="4:5": close-up transformation
+        focusing on the NICHE-SPECIFIC body area / activity the product addresses (joint-pain →
+        knee bending / back posture; skincare → face close-up; weight-loss → waist side
+        profile; hair-care → top-of-head crown; dental-oral → smile mouth zone). "Sebelum"
+        shows the noticeable problem area; "Selepas" shows clear improvement of the SAME area.
+        "Sebelum"/"Selepas" labels visible.
 
 15. type="faq"
     • faqs: 5-7 Malaysia FAQs (halal, side effects, "berapa lama nampak hasil", COD, shipping, return, allergies)
@@ -275,7 +481,7 @@ SECTION SPEC — produce EXACTLY these 17 in this order
 CRITICAL IMAGE PROMPT RULES
 ═══════════════════════════════════════════════════════════════
 • ALWAYS English, 30-80 words
-• ASPECT RATIO: only "1:1" or "4:5" — 9:16 and 16:9 are completely banned
+• ASPECT RATIO: most images "1:1" or "4:5". "16:9" allowed ONLY on banner sections (offer / final-cta). "9:16" allowed ONLY on mobile-screenshot images (wa_*, social_fb, social_tiktok, social_shopee) — these screenshots MUST be full-bleed phone composition
 • All imagePrompts in a section must use the section's imageAspectRatio value
 • DEFAULT ETHNICITY: Malaysian native / Southeast Asian
 • NEVER cinematic / editorial / luxury / stock-photo
@@ -374,7 +580,7 @@ const FORM_BLUEPRINTS: Record<LandingForm, FormBlueprint> = {
     label: 'UGC MALAYSIA — Default 17-section conversion-first',
     sections: [
       'hero', 'pain', 'why-happens', 'failed-solutions', 'product-discovery',
-      'ingredients', 'mechanism', 'benefits', 'comparison', 'lifestyle',
+      'ingredients', 'mechanism', 'benefits', 'comparison', 'expert-feedback',
       'social-proof', 'whatsapp-testimonials', 'news-proof', 'before-after',
       'faq', 'offer', 'final-cta',
     ],
@@ -422,17 +628,21 @@ const FORM_BLUEPRINTS: Record<LandingForm, FormBlueprint> = {
   },
 
   // Luxury / lifestyle / brand-building — no urgency, no spam proof.
+  // NOTE: This entry is a LEGACY-COMPAT STUB. The real premium engine
+  // lives in services/forms/premium.ts with its OWN system prompt, OWN
+  // section list (PREMIUM_SECTIONS) and OWN buildPack. Per-form isolation
+  // policy — DO NOT add visual / section logic here. Edit premium.ts.
   'premium': {
     label: 'PREMIUM BRAND — clean lifestyle, brand-first',
     sections: [
-      'hero',              // premium hero, aspirational
-      'pain',              // subtle problem framing (not panicky)
-      'ingredients',       // ingredient showcase as quality story
-      'mechanism',         // refined explanation, not technical spam
-      'benefits',          // elegant benefit list
-      'lifestyle',         // aspirational lifestyle moment
-      'social-proof',      // curated tasteful testimonials only
-      'final-cta',         // premium invitation CTA
+      'hero',
+      'pain',
+      'ingredients',
+      'mechanism',
+      'benefits',
+      'lifestyle',
+      'social-proof',
+      'final-cta',
     ],
     styleNotes: [
       'Luxury / clean spacing / minimalist tone — Apple/Dyson vibe',
@@ -546,6 +756,19 @@ function buildUserPrompt(params: LandingGenParams): string {
 
   lines.push('')
 
+  // ── Phase 2 — PRODUCT INTELLIGENCE OVERRIDE ────────────────────────────
+  // Detect the product niche (joint-pain / digestive-gut / skincare / etc.)
+  // from the bank fields and inject niche-specific pain scenes, scenarios,
+  // emotional mapping and forbidden-scene bans. Overrides the generic
+  // hardcoded scenes in SYSTEM_PROMPT so a joint-pain gel doesn't get
+  // office-burnout pain shots.
+  const intelligence = buildProductIntelligence({
+    product, language: params.language, nicheHint: params.nicheHint,
+  })
+  console.info(`[LandingPageAI] product intelligence detected niche=${intelligence.niche} for "${product.productName}"`)
+  lines.push(buildIntelligencePromptBlock(intelligence))
+  lines.push('')
+
   // ── LANGUAGE LOCK — strong explicit block prevents mixing ────────────
   const langName =
     params.language === 'ms' ? 'Bahasa Melayu (Malaysia)' :
@@ -564,6 +787,20 @@ function buildUserPrompt(params: LandingGenParams): string {
   lines.push(`EXCEPTIONS (keep brand name as-is): product name, ingredient names`)
   lines.push(`bulletsVi MUST be the same length as bullets (index-aligned 1:1 translation).`)
   lines.push(`Output language field in JSON: "${params.language}"`)
+
+  if (params.language === 'ms') {
+    lines.push('')
+    lines.push('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
+    lines.push('BAHASA MELAYU HARD LOCK — non-negotiable, non-overridable')
+    lines.push('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
+    lines.push('ZERO Vietnamese characters in ANY user-facing field. Specifically banned:')
+    lines.push('  ✗ Vietnamese diacritics: ă â đ ê ô ơ ư á à ả ã ạ é è ẻ ẽ ẹ í ì ỉ ĩ ị ó ò ỏ õ ọ ú ù ủ ũ ụ ý ỳ ỷ ỹ ỵ')
+    lines.push('  ✗ Vietnamese function words anywhere: "của", "và", "với", "cho", "là", "đang", "được", "này", "đó", "không", "chỉ", "tôi", "bạn", "anh", "chị", "em", "rồi", "đã"')
+    lines.push('  ✗ Mixed bilingual sentences. ✗ "Vietnamese ngôn ngữ" style code-switching. ✗ Even ONE Vietnamese sentence is a hard failure.')
+    lines.push('IF YOU PRODUCE ANY VIETNAMESE TEXT IN A MS-LOCKED FIELD: the entire pack is rejected and regenerated. Cost is on you.')
+    lines.push('The ONLY exception fields that may contain Vietnamese: layoutGuide, viTranslation, titleVi, headlineVi, subheadlineVi, ctaVi, offerStripVi, urgencyTextVi, bulletsVi (these are by design VN translations for the marketer).')
+    lines.push('Write authentic colloquial Malaysian Bahasa Melayu. Allowed English loanwords (sparing): "detox", "supplement", "OK", brand names. Forbidden: full English sentences.')
+  }
 
   if (params.nicheHint) {
     lines.push('')
@@ -644,6 +881,134 @@ function buildUserPrompt(params: LandingGenParams): string {
 
 // ─────────────────────────────────────────────────────────────────────
 
+// ─────────────────────────────────────────────────────────────────────
+// Bahasa Melayu language lock — post-Gemini validator.
+//
+// Detects Vietnamese leakage in MS packs by counting Vietnamese-specific
+// diacritic chars + Vietnamese function words across user-facing fields.
+// If >15% of inspected fields trip the detector → caller retries with a
+// strengthened prompt. Vietnamese-only translation fields (viTranslation,
+// *Vi, layoutGuide) are EXCLUDED from inspection.
+// ─────────────────────────────────────────────────────────────────────
+
+const VIETNAMESE_DIACRITICS_RE = /[ăâđêôơưĂÂĐÊÔƠƯáàảãạéèẻẽẹíìỉĩịóòỏõọúùủũụýỳỷỹỵ]/i
+const VIETNAMESE_FUNCTION_WORDS = [
+  'của', 'và', 'với', 'cho', 'là', 'đang', 'được', 'này', 'đó',
+  'không', 'chỉ', 'tôi', 'bạn', 'anh', 'chị', 'rồi', 'đã', 'những',
+  'thì', 'phải', 'cũng', 'mà', 'nhưng', 'hoặc',
+]
+
+function looksVietnamese(text: string | undefined | null): boolean {
+  if (!text || typeof text !== 'string') return false
+  if (VIETNAMESE_DIACRITICS_RE.test(text)) return true
+  const lower = text.toLowerCase()
+  // Word-boundary match — protects against false positives like "la" inside
+  // an ms word.
+  return VIETNAMESE_FUNCTION_WORDS.some((w) => new RegExp(`(^|[^\\p{L}])${w}([^\\p{L}]|$)`, 'iu').test(lower))
+}
+
+/** Collect every user-facing string from a section that MUST be in the
+ *  output language (excludes vi-translation fields by design). */
+function collectMsLockedStrings(section: RawSection): string[] {
+  const out: string[] = []
+  const push = (v: unknown) => { if (typeof v === 'string' && v.trim()) out.push(v) }
+  push(section.title); push(section.copy); push(section.headline); push(section.subheadline)
+  push(section.cta); push(section.offerStrip); push(section.urgencyText)
+  if (Array.isArray(section.bullets)) section.bullets.forEach(push)
+  if (Array.isArray(section.faqs)) section.faqs.forEach((f) => { push(f.question); push(f.answer) })
+  if (Array.isArray(section.reviews)) section.reviews.forEach((r) => { push(r.quote); push(r.author) })
+  return out
+}
+
+interface LanguageLeakReport {
+  totalFields: number
+  leakedFields: number
+  ratio: number
+  sampleLeaks: string[]
+}
+
+export function validateMsLanguage(parsed: RawPack): LanguageLeakReport {
+  const allStrings: string[] = []
+  if (Array.isArray(parsed.sections)) {
+    parsed.sections.forEach((s) => allStrings.push(...collectMsLockedStrings(s)))
+  }
+  const leaks = allStrings.filter(looksVietnamese)
+  return {
+    totalFields: allStrings.length,
+    leakedFields: leaks.length,
+    ratio: allStrings.length === 0 ? 0 : leaks.length / allStrings.length,
+    sampleLeaks: leaks.slice(0, 3),
+  }
+}
+
+export const MS_RETRY_REINFORCEMENT =
+  '\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n'
+  + 'PREVIOUS ATTEMPT LEAKED VIETNAMESE TEXT — REJECTED.\n'
+  + '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n'
+  + 'You output Vietnamese text in a Bahasa-Melayu-locked field. This is a HARD FAILURE.\n'
+  + 'REGENERATE from scratch. Every user-facing field MUST be 100% Bahasa Melayu.\n'
+  + 'No Vietnamese diacritics. No Vietnamese function words. No bilingual sentences.\n'
+  + 'The Vietnamese translation fields (viTranslation, titleVi, *Vi, layoutGuide) ARE allowed in Vietnamese — only those.\n'
+
+/**
+ * Reusable Gemini-call wrapper with MS language-lock validate + retry.
+ *
+ * Each form's buildPack() can call this to get the same MS-leak detection
+ * + auto-retry logic as legacyGenerateUgcMalaysiaPack. When language !== 'ms'
+ * it's effectively a single Gemini call (no validation, no retry).
+ *
+ * Returns the parsed RawPack object. Caller still does form-specific
+ * normalisation (mapping section types to the form's blueprint).
+ */
+export async function callGeminiWithMsRetry(args: {
+  apiKey: string
+  userPrompt: string
+  systemPrompt: string
+  language: LandingLanguage
+  maxOutputTokens?: number
+  formLabel?: string  // for log prefix
+}): Promise<RawPack> {
+  const MAX_ATTEMPTS = args.language === 'ms' ? 2 : 1
+  const tag = args.formLabel ? `[${args.formLabel}]` : '[LandingPageAI]'
+
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    const sys = attempt === 1
+      ? args.systemPrompt
+      : args.systemPrompt + MS_RETRY_REINFORCEMENT
+    const raw = await directGeminiVision({
+      apiKey: args.apiKey,
+      parts: [{ text: args.userPrompt }],
+      systemInstruction: sys,
+      maxOutputTokens: args.maxOutputTokens ?? 32768,
+      responseMimeType: 'application/json',
+    })
+
+    let parsed: RawPack
+    try {
+      parsed = JSON.parse(extractJson(raw)) as RawPack
+    } catch {
+      console.error(`${tag} JSON parse failed. Raw:`, raw.slice(0, 500))
+      throw new Error('Gemini trả về JSON không hợp lệ — thử lại')
+    }
+    if (!Array.isArray(parsed.sections) || parsed.sections.length === 0) {
+      throw new Error('Gemini không trả về section nào — thử lại')
+    }
+
+    if (args.language === 'ms') {
+      const leak = validateMsLanguage(parsed)
+      if (leak.ratio > 0.15) {
+        console.warn(`${tag} MS leak — attempt ${attempt}/${MAX_ATTEMPTS}, ratio=${(leak.ratio * 100).toFixed(1)}%, ${leak.leakedFields}/${leak.totalFields} fields. Samples:`, leak.sampleLeaks)
+        if (attempt < MAX_ATTEMPTS) continue
+        console.error(`${tag} MS leak persists after ${MAX_ATTEMPTS} attempts — flagging for manual review`)
+      } else if (leak.ratio > 0) {
+        console.info(`${tag} MS minor leak (${(leak.ratio * 100).toFixed(1)}%) within tolerance`)
+      }
+    }
+    return parsed
+  }
+  throw new Error('Gemini không trả về kết quả hợp lệ — thử lại')
+}
+
 export function extractJson(raw: string): string {
   let s = raw.trim()
   const fence = s.match(/```(?:json)?\s*([\s\S]+?)```/)
@@ -664,11 +1029,12 @@ export interface RawPack {
 const SECTION_ORDER: SectionType[] = [
   'hero', 'pain', 'why-happens', 'failed-solutions', 'product-discovery',
   'ingredients', 'mechanism', 'benefits', 'comparison', 'lifestyle',
-  'social-proof', 'whatsapp-testimonials', 'news-proof', 'before-after',
+  'expert-feedback', 'social-proof', 'whatsapp-testimonials', 'news-proof', 'before-after',
+  'magazine-feature', 'stat-proof', 'web-authority-proof',
   'faq', 'offer', 'final-cta',
 ]
 
-type LockedRatio = '1:1' | '4:5' | '16:9'
+type LockedRatio = '1:1' | '4:5' | '16:9' | '9:16'
 
 /** Hardcoded fallback aspect ratios — applied even when Gemini omits the field.
  *  Guarantees no 9:16 ever makes it into the pack.
@@ -684,8 +1050,12 @@ const SECTION_ASPECT_DEFAULTS: Partial<Record<SectionType, LockedRatio>> = {
   'benefits':                '1:1',
   'comparison':              '1:1',
   'lifestyle':               '4:5',
-  'social-proof':            '4:5',
-  'whatsapp-testimonials':   '4:5',
+  'expert-feedback':         '9:16',
+  'magazine-feature':        '4:5',
+  'stat-proof':              '1:1',
+  'web-authority-proof':     '4:5',
+  'social-proof':            '9:16',
+  'whatsapp-testimonials':   '9:16',
   'news-proof':              '4:5',
   'before-after':            '4:5',
   'offer':                   '16:9',
@@ -696,8 +1066,13 @@ const SECTION_ASPECT_DEFAULTS: Partial<Record<SectionType, LockedRatio>> = {
  *  Banner sections (offer, final-cta): 1:1 or 16:9 only (no 4:5).
  *  Everything else: 1:1 or 4:5 only (no 16:9). */
 const ALLOWED_RATIOS_BY_SECTION: Partial<Record<SectionType, ReadonlyArray<LockedRatio>>> = {
-  'offer':     ['1:1', '16:9'],
-  'final-cta': ['1:1', '16:9'],
+  'offer':                  ['1:1', '16:9'],
+  'final-cta':              ['1:1', '16:9'],
+  // Mobile screenshot sections — 9:16 is REQUIRED for authentic phone
+  // screenshot composition. The actual KIE canvas is 2:3 (tallest portrait
+  // submitGpt4oImage supports); UI displays at 9:16 aspect.
+  'whatsapp-testimonials':  ['9:16', '4:5'],
+  'social-proof':           ['9:16', '4:5'],
 }
 const DEFAULT_ALLOWED: ReadonlyArray<LockedRatio> = ['1:1', '4:5']
 
@@ -709,7 +1084,7 @@ export function normalizeSection(s: RawSection): LandingSection | null {
   const allowed = ALLOWED_RATIOS_BY_SECTION[type] ?? DEFAULT_ALLOWED
   const rawRatio = s.imageAspectRatio as string | undefined
   const lockedRatio: LockedRatio =
-    (rawRatio === '1:1' || rawRatio === '4:5' || rawRatio === '16:9') && allowed.includes(rawRatio as LockedRatio)
+    (rawRatio === '1:1' || rawRatio === '4:5' || rawRatio === '16:9' || rawRatio === '9:16') && allowed.includes(rawRatio as LockedRatio)
       ? (rawRatio as LockedRatio)
       : SECTION_ASPECT_DEFAULTS[type] ?? '4:5'
 
@@ -764,6 +1139,31 @@ export function normalizeSection(s: RawSection): LandingSection | null {
     offerStripVi:   s.offerStripVi,
     urgencyTextVi:  s.urgencyTextVi,
     bulletsVi,
+    // ── Comparison schema — preserved verbatim when present ────────────
+    comparisonData: validateComparisonSchema((s as RawSection & { comparisonData?: unknown }).comparisonData, type),
+  }
+}
+
+/** Validate + normalize structured comparison data emitted by Gemini.
+ *  Returns the schema only when both us+them have non-empty bullet arrays
+ *  of matching length. Otherwise returns undefined and the image prompt
+ *  finalizer falls back to free-form prompt (existing behavior). */
+function validateComparisonSchema(raw: unknown, sectionType: SectionType): import('../types').ComparisonSchema | undefined {
+  if (sectionType !== 'comparison') return undefined
+  if (!raw || typeof raw !== 'object') return undefined
+  const obj = raw as { us?: { title?: unknown; bullets?: unknown }; them?: { title?: unknown; bullets?: unknown } }
+  const us = obj.us, them = obj.them
+  if (!us || !them) return undefined
+  const usTitle = typeof us.title === 'string' ? us.title.trim() : ''
+  const themTitle = typeof them.title === 'string' ? them.title.trim() : ''
+  const usBullets = Array.isArray(us.bullets) ? us.bullets.filter((b): b is string => typeof b === 'string' && b.trim().length > 0) : []
+  const themBullets = Array.isArray(them.bullets) ? them.bullets.filter((b): b is string => typeof b === 'string' && b.trim().length > 0) : []
+  if (!usTitle || !themTitle || usBullets.length === 0 || themBullets.length === 0) return undefined
+  // Truncate to the shorter array so rows are paired 1:1.
+  const len = Math.min(usBullets.length, themBullets.length)
+  return {
+    us:   { title: usTitle,   bullets: usBullets.slice(0, len) },
+    them: { title: themTitle, bullets: themBullets.slice(0, len) },
   }
 }
 
@@ -802,6 +1202,103 @@ export function injectPriceIntoPrompts(sections: LandingSection[], priceTag: str
 }
 
 // ─────────────────────────────────────────────────────────────────────
+// Phase 4 — Section validation layer.
+//
+// After Gemini returns and sections have been normalised, check that
+// each section has the fields it's supposed to have for its type. If a
+// section is missing required fields, we DON'T drop the section (that
+// would shrink the pack) — instead we log a console warning so the user
+// can see which sections Gemini under-specified, and the renderer's
+// existing defensive fallbacks (free-form prompt for comparison missing
+// schema; text-only identity lock for before-after missing pair) keep
+// the pack functional.
+//
+// This is a NON-FATAL validator — never throws. Output: list of warnings
+// for debug log. ─────────────────────────────────────────────────────────
+
+export interface SectionValidationWarning {
+  sectionType: string
+  field: string
+  issue: string
+}
+
+export function validatePackSections(sections: LandingSection[]): SectionValidationWarning[] {
+  const warnings: SectionValidationWarning[] = []
+  const push = (sectionType: string, field: string, issue: string) =>
+    warnings.push({ sectionType, field, issue })
+
+  for (const s of sections) {
+    // ── comparison must carry structured comparisonData ──────────────
+    if (s.type === 'comparison') {
+      if (!s.comparisonData) {
+        push('comparison', 'comparisonData', 'missing — renderer will fall back to free-form prompt (may produce off-spec layout)')
+      } else {
+        const us = s.comparisonData.us, them = s.comparisonData.them
+        if (!us?.bullets?.length) push('comparison', 'comparisonData.us.bullets', 'empty array')
+        if (!them?.bullets?.length) push('comparison', 'comparisonData.them.bullets', 'empty array')
+        if (us?.bullets && them?.bullets && us.bullets.length !== them.bullets.length) {
+          push('comparison', 'comparisonData.us/them.bullets', `length mismatch us=${us.bullets.length} them=${them.bullets.length} — will be truncated to shorter`)
+        }
+      }
+    }
+    // ── expert-feedback must have 2 distinct reviewer entries ────────
+    if (s.type === 'expert-feedback') {
+      const reviews = s.reviews ?? []
+      if (reviews.length < 2) {
+        push('expert-feedback', 'reviews', `expected exactly 2 expert testimonials, got ${reviews.length}`)
+      } else {
+        if (reviews[0]!.author === reviews[1]!.author) {
+          push('expert-feedback', 'reviews', 'both experts have the same author — spec requires DIFFERENT people')
+        }
+        if (!reviews[0]!.meta || !reviews[1]!.meta) {
+          push('expert-feedback', 'reviews[].meta', 'missing specialty + years on at least one expert')
+        }
+      }
+    }
+    // ── before-after must have exactly 4 image prompts (2 pairs) ────
+    if (s.type === 'before-after') {
+      const n = s.imagePrompts?.length ?? 0
+      if (n !== 4) {
+        push('before-after', 'imagePrompts', `expected exactly 4 (2 pairs), got ${n} — pair-mate identity lock will misfire`)
+      }
+    }
+    // ── whatsapp-testimonials must have 4 prompts (4 chat variants) ─
+    if (s.type === 'whatsapp-testimonials') {
+      const n = s.imagePrompts?.length ?? 0
+      if (n !== 4) {
+        push('whatsapp-testimonials', 'imagePrompts', `expected exactly 4 (2 pure + 2 with attachment), got ${n}`)
+      }
+    }
+    // ── social-proof must have the 5 standard variants ──────────────
+    if (s.type === 'social-proof') {
+      const n = s.imagePrompts?.length ?? 0
+      if (n < 4) {
+        push('social-proof', 'imagePrompts', `expected ≥4 variants (fb + tiktok + shopee + selfie [+ crowd]), got ${n}`)
+      }
+    }
+    // ── Generic: hero/pain/etc that should have prompts have ≥1 ─────
+    const needsPrompts = new Set([
+      'hero', 'pain', 'product-discovery', 'ingredients', 'mechanism',
+      'benefits', 'comparison', 'lifestyle', 'news-proof', 'offer', 'final-cta',
+      'magazine-feature', 'stat-proof', 'web-authority-proof', 'expert-feedback',
+    ])
+    if (needsPrompts.has(s.type) && (!s.imagePrompts || s.imagePrompts.length === 0)) {
+      push(s.type, 'imagePrompts', 'no image prompts emitted — section will render text-only')
+    }
+  }
+
+  if (warnings.length > 0) {
+    console.warn(`[LandingPageAI] section validation: ${warnings.length} warning(s)`)
+    for (const w of warnings) {
+      console.warn(`  • ${w.sectionType}.${w.field}: ${w.issue}`)
+    }
+  } else {
+    console.info('[LandingPageAI] section validation: all OK')
+  }
+  return warnings
+}
+
+// ─────────────────────────────────────────────────────────────────────
 
 /**
  * Phase 2 — Form 1 LEGACY implementation.
@@ -823,25 +1320,53 @@ export async function legacyGenerateUgcMalaysiaPack(params: LandingGenParams): P
   const userPrompt = buildUserPrompt(params)
   const priceTag = extractPriceTag(product.offer ?? '')
 
-  const raw = await directGeminiVision({
-    apiKey,
-    parts: [{ text: userPrompt }],
-    systemInstruction: SYSTEM_PROMPT,
-    // 17 sections × rich content + viTranslation + image prompts
-    maxOutputTokens: 32768,
-    responseMimeType: 'application/json',
-  })
+  // ── Generate + MS language-lock validate + retry-once ────────────────
+  // For Bahasa Melayu packs: if >15% of user-facing strings contain
+  // Vietnamese diacritics or function words, regenerate ONCE with a
+  // reinforced "you leaked Vietnamese" reminder appended to the system
+  // prompt. Costs one extra Gemini call in the worst case; saves the
+  // user from having to manually scrap + retry a broken MY pack.
+  const MAX_ATTEMPTS = params.language === 'ms' ? 2 : 1
+  let parsed: RawPack | null = null
+  let lastLeak: LanguageLeakReport | null = null
 
-  let parsed: RawPack
-  try {
-    parsed = JSON.parse(extractJson(raw)) as RawPack
-  } catch {
-    console.error('[LandingPageAI] JSON parse failed. Raw:', raw.slice(0, 500))
-    throw new Error('Gemini trả về JSON không hợp lệ — thử lại')
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    const sys = attempt === 1 ? SYSTEM_PROMPT : SYSTEM_PROMPT + MS_RETRY_REINFORCEMENT
+    const raw = await directGeminiVision({
+      apiKey,
+      parts: [{ text: userPrompt }],
+      systemInstruction: sys,
+      maxOutputTokens: 32768,
+      responseMimeType: 'application/json',
+    })
+
+    try {
+      parsed = JSON.parse(extractJson(raw)) as RawPack
+    } catch {
+      console.error('[LandingPageAI] JSON parse failed. Raw:', raw.slice(0, 500))
+      throw new Error('Gemini trả về JSON không hợp lệ — thử lại')
+    }
+
+    if (!Array.isArray(parsed.sections) || parsed.sections.length === 0) {
+      throw new Error('Gemini không trả về section nào — thử lại')
+    }
+
+    if (params.language === 'ms') {
+      lastLeak = validateMsLanguage(parsed)
+      if (lastLeak.ratio > 0.15) {
+        console.warn(`[LandingPageAI] MS leak detected — attempt ${attempt}/${MAX_ATTEMPTS}, ratio=${(lastLeak.ratio * 100).toFixed(1)}%, ${lastLeak.leakedFields}/${lastLeak.totalFields} fields. Samples:`, lastLeak.sampleLeaks)
+        if (attempt < MAX_ATTEMPTS) continue
+        // Final attempt also leaked — keep result + warn
+        console.error(`[LandingPageAI] MS leak persists after ${MAX_ATTEMPTS} attempts — flagging for manual review`)
+      } else if (lastLeak.ratio > 0) {
+        console.info(`[LandingPageAI] MS minor leak (${(lastLeak.ratio * 100).toFixed(1)}%) within tolerance`)
+      }
+    }
+    break  // success or last attempt — exit loop
   }
 
-  if (!Array.isArray(parsed.sections) || parsed.sections.length === 0) {
-    throw new Error('Gemini không trả về section nào — thử lại')
+  if (!parsed) {
+    throw new Error('Gemini không trả về kết quả hợp lệ — thử lại')
   }
 
   // Z25 fix — post-processing must respect the FORM BLUEPRINT order, not
@@ -852,8 +1377,9 @@ export async function legacyGenerateUgcMalaysiaPack(params: LandingGenParams): P
   const selectedForm = params.form ?? 'ugc-malaysia'
   const orderList: SectionType[] = FORM_BLUEPRINTS[selectedForm]?.sections ?? SECTION_ORDER
   const sections: LandingSection[] = []
+  const parsedSections = parsed.sections ?? []
   for (const ord of orderList) {
-    const found = parsed.sections.find((s) => s.type === ord)
+    const found = parsedSections.find((s) => s.type === ord)
     if (found) {
       const norm = normalizeSection(found)
       if (norm) sections.push(norm)
@@ -867,6 +1393,23 @@ export async function legacyGenerateUgcMalaysiaPack(params: LandingGenParams): P
 
   // ── Post-processing: lock price in ecommerce screenshot prompts ──────
   injectPriceIntoPrompts(sections, priceTag)
+  validatePackSections(sections)
+
+  // ── Extract product packaging description (one Vision call) so KIE
+  // gpt-image-2 has a concrete textual identity to render. Without this,
+  // KIE invents random brands (Shaklee / Nutriplus / Dr White / GoPure /
+  // biotopics) because the model is TEXT-ONLY and ignores filesUrl. Fails
+  // gracefully → null on error; downstream falls back to legacy prefix.
+  let productPackagingDescription: string | undefined
+  try {
+    const desc = await extractPackagingDescription({
+      visualMemory: params.visualMemory ?? [],
+      apiKey,
+    })
+    if (desc) productPackagingDescription = desc
+  } catch (err) {
+    console.warn('[LandingPageAI] packaging extraction threw — continuing without it:', err)
+  }
 
   return {
     productId: params.productId,
@@ -876,6 +1419,7 @@ export async function legacyGenerateUgcMalaysiaPack(params: LandingGenParams): P
     visualMemory: params.visualMemory ?? [],
     generatedAt: Date.now(),
     form: 'ugc-malaysia',  // Phase 3 — tag pack so downstream image logic knows form context
+    productPackagingDescription,
   }
 }
 

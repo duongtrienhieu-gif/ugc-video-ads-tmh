@@ -540,6 +540,20 @@ export interface TimelineRenderItem {
   startedAt?: number
   /** Z26 — timestamp when render completed. */
   finishedAt?: number
+  /** Z29 — user-marked HERO clip. Max 2 across the whole job (store
+   *  enforces). Hero clips: prioritised in final edit, prioritised for
+   *  rerender, eligible for thumbnail. Orthogonal to status. */
+  hero?: boolean
+  /** Z29 — asset:xxx ref of a Test Motion preview clip (cheap 480p
+   *  shot). Separate from videoRef so the real render isn't lost
+   *  when the user re-tests motion. */
+  previewVideoRef?: string
+  /** Z29 — timestamp when last Test Motion preview was rendered. */
+  previewedAt?: number
+  /** Z29 — which render profile produced the current videoRef.
+   *  Lets the UI show "TEST 480" / "STANDARD 720" / "FINAL 1080"
+   *  next to the rendered clip. Undefined for pre-Z29 renders. */
+  renderedAtProfile?: 'TEST_480' | 'STANDARD_720' | 'FINAL_1080'
 }
 
 /** Top-level timeline render job. 1:1 with EditorialBlueprint.timelineCuts. */

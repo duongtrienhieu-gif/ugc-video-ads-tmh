@@ -94,6 +94,14 @@ export interface UINativeTextContent {
     topic: string
     niche?: string
     productName?: string
+    /** P48 — for facebook-comment threads: the original post caption +
+     *  the page / creator name + post-engagement counts that appear
+     *  above the comments. Optional so chat / review payloads stay
+     *  unchanged. */
+    postCaption?: string
+    ownerName?: string
+    postLikes?: number
+    postShares?: number
   }
 }
 

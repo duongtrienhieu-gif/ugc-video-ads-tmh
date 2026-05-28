@@ -42,37 +42,68 @@ export async function renderCtaBanner(
 
   const inner = contentRect(layout)
 
-  // ── Product hero on top half ───────────────────────────────────────
+  // ── P51 — Product hero is now a STYLED ad card, not a bare packshot
+  //   on a white rounded rect. The hero zone now has: a brand-color
+  //   gradient backdrop, a soft glow halo behind the product, and the
+  //   product image cover-fit centered + clipped to a rounded tile.
+  //   This was the "wrong logic" the user reported on the cta-banner —
+  //   pre-P51 the hero looked like an ecommerce thumbnail dropped into
+  //   the banner instead of a real ad creative.
   const heroH = Math.round(inner.height * 0.42)
   const heroRect = { x: inner.x, y: inner.y, width: inner.width, height: heroH }
+
+  // Brand-color gradient backdrop for the hero zone
+  ctx.save()
+  roundedRectPath(ctx, heroRect.x, heroRect.y, heroRect.width, heroRect.height, 32)
+  ctx.clip()
+  const bg = ctx.createLinearGradient(heroRect.x, heroRect.y, heroRect.x + heroRect.width, heroRect.y + heroRect.height)
+  bg.addColorStop(0, colorTheme.primary + '24')   // 14% primary
+  bg.addColorStop(1, colorTheme.accent + '18')    // 9% accent
+  ctx.fillStyle = bg
+  ctx.fillRect(heroRect.x, heroRect.y, heroRect.width, heroRect.height)
+
+  // Soft radial glow halo behind product
+  const haloCx = heroRect.x + heroRect.width / 2
+  const haloCy = heroRect.y + heroRect.height / 2
+  const haloR  = Math.min(heroRect.width, heroRect.height) * 0.55
+  const halo = ctx.createRadialGradient(haloCx, haloCy, haloR * 0.2, haloCx, haloCy, haloR)
+  halo.addColorStop(0, colorTheme.accent + '4D') // 30% accent
+  halo.addColorStop(1, colorTheme.accent + '00') // transparent
+  ctx.fillStyle = halo
+  ctx.fillRect(heroRect.x, heroRect.y, heroRect.width, heroRect.height)
+  ctx.restore()
 
   if (inputs.productImageUrl) {
     try {
       const img = await loadImage(inputs.productImageUrl)
-      // Cover-fit centered, then rounded clip
+      // P51 — product image is now drawn smaller + centered (no full-bleed
+      // cover-fit) so the styled backdrop + halo show around it. Reads as
+      // "premium ad" instead of "raw packshot stretched to fill".
+      const pad = Math.round(Math.min(heroRect.width, heroRect.height) * 0.10)
+      const pxSize = Math.min(heroRect.width, heroRect.height) - pad * 2
+      const px = heroRect.x + (heroRect.width  - pxSize) / 2
+      const py = heroRect.y + (heroRect.height - pxSize) / 2
+      // Drop shadow under the product
       ctx.save()
-      roundedRectPath(ctx, heroRect.x, heroRect.y, heroRect.width, heroRect.height, 32)
+      ctx.shadowColor = 'rgba(0,0,0,0.20)'
+      ctx.shadowBlur = 26
+      ctx.shadowOffsetY = 14
+      roundedRectPath(ctx, px, py, pxSize, pxSize, 24)
       ctx.fillStyle = '#FFFFFF'
       ctx.fill()
+      ctx.restore()
+      // Product image clipped into the rounded tile
+      ctx.save()
+      roundedRectPath(ctx, px, py, pxSize, pxSize, 24)
       ctx.clip()
-      const scale = Math.max(heroRect.width / img.naturalWidth, heroRect.height / img.naturalHeight)
+      const scale = Math.max(pxSize / img.naturalWidth, pxSize / img.naturalHeight)
       const drawW = img.naturalWidth * scale
       const drawH = img.naturalHeight * scale
-      ctx.drawImage(
-        img,
-        heroRect.x + (heroRect.width - drawW) / 2,
-        heroRect.y + (heroRect.height - drawH) / 2,
-        drawW, drawH,
-      )
+      ctx.drawImage(img, px + (pxSize - drawW) / 2, py + (pxSize - drawH) / 2, drawW, drawH)
       ctx.restore()
     } catch {
-      // Fall through — header still renders without image
+      // Fall through — header still renders the gradient + halo
     }
-  } else {
-    // No image: render a soft accent rectangle as placeholder
-    roundedRectPath(ctx, heroRect.x, heroRect.y, heroRect.width, heroRect.height, 32)
-    ctx.fillStyle = colorTheme.accent + '22'  // 13% opacity hex append
-    ctx.fill()
   }
 
   let cursor = heroRect.y + heroRect.height + 56

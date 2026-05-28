@@ -168,6 +168,185 @@ export async function pollGpt4oUntilDone(params: {
   throw new Error(`TIMEOUT — KIE GPT-4o quá ${Math.round(timeout / 1000)}s chưa xong (task có thể bị stuck queue — retry tự động hoặc refresh + thử lại)`)
 }
 
+// ── gpt-image-2 (KIE /jobs/createTask) ──────────────────────────────────────
+// Strongest image model on KIE — used for ALL landing-page image generation
+// (replaces the older /gpt4o-image/generate path). Supports reference
+// images via `image_urls` for product / identity lock, same way /gpt4o-image
+// supported them via `filesUrl`.
+//
+// API shape:
+//   POST /jobs/createTask  { model: 'gpt-image-2-text-to-image', input: { ... } }
+//   Polling: /jobs/recordInfo?taskId=...  → state ∈ {success,fail,generating,queuing,waiting}
+
+const GPT_IMAGE_2_MODEL = 'gpt-image-2-text-to-image'
+
+/** Submit a gpt-image-2 task. Drop-in shape mirror of submitGpt4oImage so
+ *  landing-page callers swap with minimal changes. */
+export async function submitGptImage2(params: {
+  apiKey: string
+  prompt: string
+  filesUrl?: string[]
+  size: Gpt4oSize
+  /** Resolution — defaults to '1K' (6 credits, same cost as old GPT-4o
+   *  path, faster gen, plenty sharp for landing-page web display). Pass
+   *  '2K' or '4K' explicitly when print-quality is required. */
+  resolution?: '1K' | '2K' | '4K'
+}): Promise<{ taskId: string }> {
+  const input: Record<string, unknown> = {
+    prompt: params.prompt,
+    resolution: params.resolution ?? '1K',
+    aspect_ratio: params.size,
+  }
+  if (params.filesUrl && params.filesUrl.length > 0) {
+    input.image_urls = params.filesUrl.slice(0, 5)
+  }
+
+  const res = await fetch(`${KIE_BASE}/jobs/createTask`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${params.apiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ model: GPT_IMAGE_2_MODEL, input }),
+  })
+
+  if (res.status === 402) throw new Error('INSUFFICIENT_CREDITS')
+  if (!res.ok) {
+    const text = await res.text().catch(() => res.statusText)
+    throw new Error(`KIE gpt-image-2 submit lỗi (${res.status}): ${text.slice(0, 300)}`)
+  }
+  const data = await res.json() as { code?: number; msg?: string; message?: string; data?: { taskId?: string } | null }
+  if (data?.code !== undefined && data.code !== 200) {
+    throw new Error(data.msg ?? data.message ?? `KIE gpt-image-2 lỗi code ${data.code}`)
+  }
+  const taskId = data?.data?.taskId
+  if (!taskId) throw new Error(`KIE gpt-image-2 không trả về taskId: ${JSON.stringify(data).slice(0, 200)}`)
+  return { taskId }
+}
+
+/** Status fetch for a gpt-image-2 job. Hits /jobs/recordInfo. */
+export async function getGptImage2Status(params: {
+  apiKey: string
+  taskId: string
+}): Promise<{ status: ImageStatus; imageUrl?: string; error?: string; progress?: number }> {
+  const res = await fetch(
+    `${KIE_BASE}/jobs/recordInfo?taskId=${encodeURIComponent(params.taskId)}`,
+    { headers: { Authorization: `Bearer ${params.apiKey}` } },
+  )
+  if (!res.ok) throw new Error(`gpt-image-2 status check failed: ${res.status}`)
+
+  const data = await res.json() as {
+    data?: {
+      state?: string
+      resultJson?: string
+      failMsg?: string
+    }
+  }
+  const record = data.data ?? {}
+  const rawStatus = String(record.state ?? '').toLowerCase()
+
+  let status: ImageStatus = 'pending'
+  if (rawStatus === 'success') status = 'completed'
+  else if (rawStatus === 'fail') status = 'failed'
+  else if (rawStatus === 'generating' || rawStatus === 'queuing' || rawStatus === 'waiting') status = 'processing'
+
+  let imageUrl: string | undefined
+  if (status === 'completed' && record.resultJson) {
+    try {
+      const parsed = JSON.parse(record.resultJson) as { resultUrls?: string[] }
+      imageUrl = parsed.resultUrls?.[0]
+    } catch { /* ignore */ }
+  }
+
+  return {
+    status,
+    imageUrl,
+    error: status === 'failed'
+      ? String(record.failMsg ?? `Tạo ảnh thất bại (raw=${rawStatus || 'empty'})`)
+      : undefined,
+  }
+}
+
+/** Poll a gpt-image-2 task until done. Same diagnostic shape as pollGpt4oUntilDone. */
+export async function pollGptImage2UntilDone(params: {
+  apiKey: string
+  taskId: string
+  onStatusChange?: (status: ImageStatus, progress?: number) => void
+  timeoutMs?: number
+  signal?: AbortSignal
+}): Promise<string> {
+  const timeout = params.timeoutMs ?? 4 * 60 * 1000
+  const start = Date.now()
+  let lastStatus = ''
+  let sameStatusCount = 0
+  let pollCount = 0
+
+  const taskTag = params.taskId.slice(0, 12)
+  console.log(`[POLL_START gpt-image-2] task=${taskTag} timeout=${Math.round(timeout / 1000)}s`)
+
+  let transientErrors = 0
+  while (Date.now() - start < timeout) {
+    if (params.signal?.aborted) {
+      console.warn(`[POLL_FAIL gpt-image-2] task=${taskTag} reason=ABORTED`)
+      throw new Error('CANCELLED — user hủy task')
+    }
+    // Poll interval 1000ms (Option A): pure throughput knob — does NOT
+    // increase parallel submit load on KIE, only picks up completed tasks
+    // ~1s faster. Concurrency stays at 8. Gain ~5-15% throughput on top
+    // of the rollback baseline, no extra rate-limit pressure.
+    await new Promise<void>((r) => setTimeout(r, 1000))
+    pollCount++
+
+    // 2026-05-19: defensive try/catch around status check. With
+    // concurrency=12 + poll=1s, we issue ~12 status RPS to KIE. A single
+    // transient 429 / 5xx / network blip used to throw out of the entire
+    // poll loop → entire image fails → retry → wasted credit. Now we
+    // tolerate up to 5 consecutive errors before bailing.
+    let s: { status: ImageStatus; imageUrl?: string; error?: string; progress?: number }
+    try {
+      s = await getGptImage2Status({ apiKey: params.apiKey, taskId: params.taskId })
+      transientErrors = 0
+    } catch (err) {
+      transientErrors++
+      const msg = err instanceof Error ? err.message : String(err)
+      if (transientErrors >= 5) {
+        console.error(`[POLL_FAIL gpt-image-2] task=${taskTag} reason=STATUS_CHECK_FAILED_5x — last error: ${msg}`)
+        throw err
+      }
+      console.warn(`[POLL_TRANSIENT gpt-image-2] task=${taskTag} status-check error ${transientErrors}/5 — ${msg.slice(0, 100)} — retrying next tick`)
+      continue
+    }
+    const elapsedSec = Math.round((Date.now() - start) / 1000)
+
+    if (s.status !== lastStatus) {
+      console.log(`[POLL_STATUS gpt-image-2] task=${taskTag} +${elapsedSec}s status=${s.status} (poll #${pollCount})`)
+      lastStatus = s.status
+      sameStatusCount = 0
+      params.onStatusChange?.(s.status, s.progress)
+    } else {
+      sameStatusCount++
+      if (sameStatusCount === 12) {
+        console.warn(`[POLL_STUCK_WARN gpt-image-2] task=${taskTag} +${elapsedSec}s status=${s.status} unchanged ~24s — KIE may be frozen`)
+      }
+      if (pollCount % 10 === 0) {
+        console.log(`[POLL_ELAPSED gpt-image-2] task=${taskTag} +${elapsedSec}s still ${s.status} (poll #${pollCount}, same#${sameStatusCount})`)
+      }
+    }
+
+    if (s.status === 'completed') {
+      if (!s.imageUrl) throw new Error('gpt-image-2 completed nhưng không trả về imageUrl')
+      console.log(`[POLL_COMPLETE gpt-image-2] task=${taskTag} +${elapsedSec}s url=${s.imageUrl.slice(0, 80)}`)
+      return s.imageUrl
+    }
+    if (s.status === 'failed') {
+      console.error(`[POLL_FAIL gpt-image-2] task=${taskTag} +${elapsedSec}s reason=${s.error}`)
+      throw new Error(s.error ?? 'gpt-image-2 gen thất bại')
+    }
+  }
+  console.error(`[POLL_FAIL gpt-image-2] task=${taskTag} +${Math.round(timeout / 1000)}s reason=TIMEOUT (final status=${lastStatus} sameCount=${sameStatusCount})`)
+  throw new Error(`TIMEOUT — KIE gpt-image-2 quá ${Math.round(timeout / 1000)}s chưa xong (task có thể bị stuck queue — retry tự động hoặc refresh + thử lại)`)
+}
+
 /** All-in-one: submit + poll + return final image URL. */
 export async function generateGpt4oImage(params: {
   apiKey: string
@@ -311,7 +490,91 @@ export interface ImageModel {
 
 export const IMAGE_MODELS: ImageModel[] = [
   { id: 'gpt-image-2-text-to-image', name: 'GPT Image 2',   provider: 'OpenAI', credits: { '1K': 6,  '2K': 10, '4K': 16 }, starred: true },
+  { id: 'nano-banana-2',             name: 'Nano Banana 2', provider: 'Google', credits: { '1K': 8,  '2K': 12, '4K': 20 } },
 ]
+
+// ── Nano Banana 2 (Gemini 3.1 Flash Image) ───────────────────────────────
+// Specialized for STRONG reference preservation (better than gpt-image-2
+// for "keep this exact product, just change the scene around it").
+//
+// API shape:
+//   POST /jobs/createTask  { model: 'nano-banana-2', input: { ... } }
+//   input fields: prompt, image_input (array of URLs, ref preservation),
+//                 aspect_ratio, resolution, output_format
+//
+// Polling: /jobs/recordInfo (same endpoint as gpt-image-2 — getGptImage2Status
+// already handles this shape, so we reuse it.)
+
+const NANO_BANANA_2_MODEL = 'nano-banana-2'
+
+export async function submitNanoBanana2(params: {
+  apiKey: string
+  prompt: string
+  /** Reference images (URLs) — Nano Banana 2's strength is preserving these.
+   *  Pass actual product photos here for product-fidelity gen. */
+  imageInput?: string[]
+  /** Aspect ratio of the output. TikTok Shop = '1:1'. */
+  aspectRatio?: string
+  /** Defaults to '1K' (cheapest, 8 credits). '2K' = 12, '4K' = 20. */
+  resolution?: ImageResolution
+  outputFormat?: 'jpeg' | 'png'
+}): Promise<{ taskId: string }> {
+  const input: Record<string, unknown> = {
+    prompt: params.prompt,
+    aspect_ratio: params.aspectRatio ?? '1:1',
+    resolution: params.resolution ?? '1K',
+    output_format: params.outputFormat ?? 'jpeg',
+  }
+  if (params.imageInput?.length) {
+    input.image_input = params.imageInput
+  }
+
+  const res = await fetch(`${KIE_BASE}/jobs/createTask`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${params.apiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ model: NANO_BANANA_2_MODEL, input }),
+  })
+
+  if (res.status === 402) throw new Error('INSUFFICIENT_CREDITS')
+  if (!res.ok) {
+    const text = await res.text().catch(() => res.statusText)
+    throw new Error(`Nano Banana 2 submit lỗi (${res.status}): ${text.slice(0, 300)}`)
+  }
+  const data = await res.json() as { code?: number; msg?: string; message?: string; data?: { taskId?: string } | null }
+  if (data?.code !== undefined && data.code !== 200) {
+    throw new Error(data.msg ?? data.message ?? `Nano Banana 2 lỗi code ${data.code}`)
+  }
+  const taskId = data?.data?.taskId
+  if (!taskId) throw new Error(`Nano Banana 2 không trả về taskId: ${JSON.stringify(data).slice(0, 200)}`)
+  return { taskId }
+}
+
+/** All-in-one: submit + poll + return final image URL. Reuses the gpt-image-2
+ *  polling helpers since both go through /jobs/recordInfo with the same shape. */
+export async function generateNanoBanana2(params: {
+  apiKey: string
+  prompt: string
+  imageInput?: string[]
+  aspectRatio?: string
+  resolution?: ImageResolution
+  outputFormat?: 'jpeg' | 'png'
+  onStatusChange?: (status: ImageStatus, progress?: number) => void
+  timeoutMs?: number
+  signal?: AbortSignal
+}): Promise<string> {
+  console.log(`[nano-banana-2] submit prompt=${params.prompt.length} chars · refs=${params.imageInput?.length ?? 0} · ${params.resolution ?? '1K'} ${params.aspectRatio ?? '1:1'}`)
+  const { taskId } = await submitNanoBanana2(params)
+  return await pollGptImage2UntilDone({
+    apiKey: params.apiKey,
+    taskId,
+    onStatusChange: params.onStatusChange,
+    timeoutMs: params.timeoutMs,
+    signal: params.signal,
+  })
+}
 
 export type ImageResolution = '1K' | '2K' | '4K'
 export type ImageStatus = 'pending' | 'processing' | 'completed' | 'failed'
@@ -701,6 +964,50 @@ export async function pollVideoJobUntilDone(params: {
 
 const TEXT_TIMEOUT_MS = 60_000 // 60s per model attempt
 
+/** Tolerant text-content extractor. kie.ai's chat/completions response shape
+ *  has varied — depending on upstream model + kie.ai proxy version, the
+ *  generated text may live at any of: choices[0].message.content (OpenAI
+ *  standard), choices[0].text (older), data.text / data.message / data.reply
+ *  / data.output (proxy variants). Returns the first non-empty string found. */
+function extractTextContent(data: unknown): string {
+  if (!data || typeof data !== 'object') return ''
+  const root = data as Record<string, unknown>
+  // OpenAI-compatible: choices[0].message.content
+  const choices = root.choices
+  if (Array.isArray(choices) && choices.length > 0) {
+    const first = choices[0] as Record<string, unknown>
+    const message = first?.message as Record<string, unknown> | undefined
+    if (message) {
+      const mc = message.content
+      if (typeof mc === 'string' && mc.trim()) return mc.trim()
+      // Some Gemini-via-kie responses use parts[]
+      const parts = message.parts as unknown
+      if (Array.isArray(parts)) {
+        const joined = parts.map((p) => (p && typeof p === 'object' ? ((p as Record<string, unknown>).text as string | undefined) : undefined))
+          .filter((t): t is string => typeof t === 'string').join('\n').trim()
+        if (joined) return joined
+      }
+    }
+    // Legacy: choices[0].text
+    const ct = first?.text
+    if (typeof ct === 'string' && ct.trim()) return ct.trim()
+  }
+  // Proxy variants at root
+  for (const key of ['text', 'message', 'reply', 'output', 'content', 'response']) {
+    const v = root[key]
+    if (typeof v === 'string' && v.trim()) return v.trim()
+  }
+  // Nested: data.data.text etc.
+  const inner = root.data as Record<string, unknown> | undefined
+  if (inner && typeof inner === 'object') {
+    for (const key of ['text', 'message', 'reply', 'output', 'content', 'response']) {
+      const v = inner[key]
+      if (typeof v === 'string' && v.trim()) return v.trim()
+    }
+  }
+  return ''
+}
+
 async function fetchWithTimeout(url: string, init: RequestInit, timeoutMs: number): Promise<Response> {
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), timeoutMs)
@@ -743,16 +1050,28 @@ export async function kieTextGenerate(
         console.warn(`[kieTextGenerate] ${model} HTTP ${res.status}, trying next`)
         continue
       }
-      const data = await res.json() as { choices?: { message?: { content?: string | null; refusal?: string } }[] }
-      const msg = data.choices?.[0]?.message
-      const content = typeof msg?.content === 'string' ? msg.content.trim() : ''
+      // Read raw body once so we can both parse AND log it for diagnostics
+      const rawBody = await res.text()
+      let data: Record<string, unknown> = {}
+      try { data = JSON.parse(rawBody) as Record<string, unknown> } catch { /* leave empty */ }
+      // Try multiple known content paths (kie.ai response shapes have varied
+      // over time and across upstream models: OpenAI standard, Gemini variants,
+      // legacy proxy formats).
+      const content = extractTextContent(data)
       const elapsed = ((Date.now() - startedAt) / 1000).toFixed(1)
       if (content) {
         console.log(`[kieTextGenerate] ${model} OK in ${elapsed}s — ${content.length} chars`)
         return content
       }
+      // ── Empty-content diagnostic logging (Phase 10 debugging) ──
+      // Log the FULL raw response so we can see exactly what kie.ai is
+      // returning when content is empty. Truncate to 2KB to avoid spam.
+      const choices = (data as { choices?: unknown[] }).choices
+      const msg = Array.isArray(choices) && choices[0]
+        ? (choices[0] as { message?: { refusal?: string } }).message
+        : undefined
+      console.warn(`[kieTextGenerate] ${model} empty after ${elapsed}s — HTTP ${res.status} | response keys=[${Object.keys(data).join(',')}] | raw body (first 2KB):`, rawBody.slice(0, 2000))
       lastError = msg?.refusal ? `Model ${model} từ chối yêu cầu` : `Model ${model} trả về phản hồi rỗng`
-      console.warn(`[kieTextGenerate] ${model} empty after ${elapsed}s, trying next`)
     } catch (e) {
       const elapsed = ((Date.now() - startedAt) / 1000).toFixed(1)
       if (e instanceof Error && e.message === 'INSUFFICIENT_CREDITS') throw e
@@ -842,18 +1161,23 @@ export async function kieAnalyzeImage(
         console.warn(`[kieAnalyzeImage] ${model} HTTP ${res.status}, trying next`)
         continue
       }
-      const data = await res.json() as { choices?: { message?: { content?: string | null; refusal?: string } }[] }
-      const msg = data.choices?.[0]?.message
-      const content = typeof msg?.content === 'string' ? msg.content.trim() : ''
+      const rawBody = await res.text()
+      let data: Record<string, unknown> = {}
+      try { data = JSON.parse(rawBody) as Record<string, unknown> } catch { /* leave empty */ }
+      const content = extractTextContent(data)
       const elapsed = ((Date.now() - startedAt) / 1000).toFixed(1)
       if (content) {
         console.log(`[kieAnalyzeImage] ${model} OK in ${elapsed}s — ${content.length} chars`)
         return content
       }
+      const choices = (data as { choices?: unknown[] }).choices
+      const msg = Array.isArray(choices) && choices[0]
+        ? (choices[0] as { message?: { refusal?: string } }).message
+        : undefined
+      console.warn(`[kieAnalyzeImage] ${model} empty after ${elapsed}s — HTTP ${res.status} | response keys=[${Object.keys(data).join(',')}] | raw body (first 2KB):`, rawBody.slice(0, 2000))
       lastError = msg?.refusal
         ? `Model ${model} từ chối: ${msg.refusal.slice(0, 80)}`
         : `Model ${model} trả về phản hồi rỗng`
-      console.warn(`[kieAnalyzeImage] ${model} empty after ${elapsed}s, trying next`)
     } catch (e) {
       const elapsed = ((Date.now() - startedAt) / 1000).toFixed(1)
       if (e instanceof Error && e.message === 'INSUFFICIENT_CREDITS') throw e

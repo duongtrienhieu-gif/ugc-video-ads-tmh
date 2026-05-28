@@ -1,0 +1,964 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Source Video — Prototype</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 24px;
+      color: #1f2937;
+      background: #fafafa;
+    }
+    h1 { margin: 0 0 4px; font-size: 24px; }
+    h2 { font-size: 18px; margin: 24px 0 8px; }
+    .subtitle { color: #6b7280; margin: 0 0 20px; font-size: 14px; }
+    .config {
+      background: white;
+      border: 1px solid #e5e7eb;
+      padding: 16px;
+      border-radius: 10px;
+      margin-bottom: 20px;
+    }
+    .config-row { display: grid; grid-template-columns: 200px 1fr; gap: 12px; align-items: center; margin-bottom: 8px; }
+    .config label { font-size: 13px; font-weight: 500; color: #374151; }
+    .config input, textarea {
+      width: 100%;
+      padding: 8px 10px;
+      border: 1px solid #d1d5db;
+      border-radius: 6px;
+      font-size: 14px;
+      font-family: inherit;
+    }
+    .config small { color: #9ca3af; font-size: 12px; }
+    textarea {
+      min-height: 220px;
+      font-family: ui-monospace, "Cascadia Code", Menlo, monospace;
+      line-height: 1.6;
+      background: white;
+    }
+    button {
+      background: #3b82f6;
+      color: white;
+      border: none;
+      padding: 12px 28px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 15px;
+      font-weight: 500;
+      transition: background 0.15s;
+    }
+    button:hover:not(:disabled) { background: #2563eb; }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
+    .scene {
+      background: white;
+      border: 1px solid #e5e7eb;
+      border-radius: 10px;
+      padding: 16px;
+      margin: 16px 0;
+    }
+    .scene-header { display: flex; align-items: baseline; gap: 8px; margin-bottom: 8px; }
+    .scene-num { background: #3b82f6; color: white; font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 999px; }
+    .scene-line { font-size: 16px; font-weight: 500; }
+    .intent {
+      background: #eff6ff;
+      border-left: 3px solid #3b82f6;
+      padding: 8px 12px;
+      border-radius: 4px;
+      font-size: 14px;
+      margin: 8px 0;
+      color: #1e40af;
+    }
+    .keywords { font-size: 13px; color: #6b7280; margin: 6px 0 12px; }
+    .keywords code { background: #f3f4f6; padding: 2px 6px; border-radius: 4px; font-size: 12px; }
+    .results {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+      gap: 12px;
+      margin-top: 12px;
+    }
+    .card {
+      position: relative;
+      border: 1px solid #e5e7eb;
+      border-radius: 8px;
+      padding: 8px;
+      transition: border-color 0.15s, transform 0.15s;
+      background: #fafbfc;
+      display: flex;
+      flex-direction: column;
+    }
+    .card:hover { border-color: #3b82f6; transform: translateY(-1px); }
+    .card a { color: inherit; text-decoration: none; display: block; flex: 1; }
+    .thumb-wrap {
+      position: relative;
+      width: 100%;
+      aspect-ratio: 16/9;
+      border-radius: 4px;
+      overflow: hidden;
+      background: #e5e7eb;
+    }
+    .thumb {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+    .thumb-fallback {
+      position: absolute;
+      inset: 0;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      background: linear-gradient(135deg, #f3f4f6 0%, #e5e7eb 100%);
+      color: #6b7280;
+      font-size: 13px;
+      font-weight: 500;
+    }
+    .thumb-fallback img { width: 36px; height: 36px; }
+    .card .title { font-size: 13px; font-weight: 500; margin: 8px 0 4px; line-height: 1.4; }
+    .card .why { font-size: 12px; color: #6b7280; font-style: italic; margin: 4px 0; }
+    .card .url-small { font-size: 11px; color: #9ca3af; word-break: break-all; }
+    .score-badge {
+      position: absolute;
+      top: 12px;
+      right: 12px;
+      z-index: 2;
+      color: white;
+      font-size: 12px;
+      font-weight: 700;
+      padding: 3px 8px;
+      border-radius: 999px;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+      cursor: help;
+    }
+    .source-tag {
+      display: inline-block;
+      padding: 1px 6px;
+      border-radius: 4px;
+      font-size: 10px;
+      font-weight: 600;
+      margin-right: 4px;
+      vertical-align: middle;
+    }
+    .source-tag.youtube { background: #fee2e2; color: #dc2626; }
+    .source-tag.tiktok { background: #1f1f1f; color: #fff; }
+    .source-tag.web { background: #dbeafe; color: #1d4ed8; }
+    .error { background: #fef2f2; color: #991b1b; padding: 10px 12px; border-radius: 6px; margin: 8px 0; font-size: 13px; }
+    .quota-warning {
+      background: #fffbeb;
+      border: 2px solid #f59e0b;
+      border-radius: 10px;
+      padding: 20px 24px;
+      margin: 16px 0;
+    }
+    .quota-title {
+      font-size: 18px;
+      font-weight: 700;
+      color: #b45309;
+      margin-bottom: 12px;
+    }
+    .quota-body {
+      font-size: 14px;
+      line-height: 1.6;
+      color: #78350f;
+    }
+    .quota-body a { color: #b45309; font-weight: 600; }
+    .quota-body small { color: #92400e; font-size: 12px; }
+    .loading { color: #6b7280; font-style: italic; padding: 12px; }
+    .empty { color: #9ca3af; font-size: 13px; padding: 12px; text-align: center; }
+    .status-bar {
+      position: sticky;
+      top: 0;
+      background: white;
+      border: 1px solid #e5e7eb;
+      padding: 10px 14px;
+      border-radius: 8px;
+      margin-bottom: 12px;
+      font-size: 13px;
+      z-index: 10;
+    }
+    .ts-section {
+      margin-top: 8px;
+      padding-top: 8px;
+      border-top: 1px dashed #e5e7eb;
+    }
+    .ts-loading {
+      font-size: 12px;
+      color: #6b7280;
+      font-style: italic;
+      padding: 4px 0;
+    }
+    .ts-found-label {
+      font-size: 11px;
+      font-weight: 600;
+      color: #b45309;
+      margin-bottom: 4px;
+      text-transform: uppercase;
+      letter-spacing: 0.3px;
+    }
+    .ts-error {
+      font-size: 11px;
+      color: #991b1b;
+      padding: 4px 6px;
+      background: #fef2f2;
+      border-radius: 4px;
+    }
+    .timestamps {
+      margin-top: 8px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .ts-row {
+      display: flex;
+      gap: 8px;
+      padding: 6px 8px;
+      background: #fefce8;
+      border: 1px solid #fde68a;
+      border-radius: 4px;
+      font-size: 12px;
+      text-decoration: none;
+      color: #1f2937;
+      align-items: flex-start;
+    }
+    .ts-row:hover {
+      background: #fef3c7;
+      border-color: #fbbf24;
+    }
+    .ts-time {
+      font-weight: 700;
+      color: #b45309;
+      white-space: nowrap;
+      font-family: ui-monospace, "Cascadia Code", Menlo, monospace;
+    }
+    .ts-desc { flex: 1; line-height: 1.4; }
+    .ts-notfound {
+      font-size: 12px;
+      color: #991b1b;
+      padding: 6px 8px;
+      background: #fef2f2;
+      border-radius: 4px;
+      margin-top: 6px;
+    }
+    .ts-summary {
+      font-size: 11px;
+      color: #6b7280;
+      padding: 4px 0 0;
+      margin-top: 4px;
+      font-style: italic;
+      line-height: 1.4;
+    }
+  </style>
+</head>
+<body>
+  <h1>🎬 Source Video — Prototype</h1>
+  <p class="subtitle">Test xem AI có thực sự tìm được link video phù hợp với kịch bản UGC không. File HTML standalone — không cần build, mở trực tiếp trong browser.</p>
+
+  <div class="config">
+    <div class="config-row">
+      <label>Gemini API Key</label>
+      <input id="geminiKey" type="password" placeholder="AIza...">
+    </div>
+    <div class="config-row">
+      <label>YouTube Data API Key</label>
+      <input id="youtubeKey" type="password" placeholder="AIza...">
+    </div>
+    <small>Key được lưu trong <code>localStorage</code> của trình duyệt này, không gửi đi đâu khác.</small>
+  </div>
+
+  <h2>Kịch bản UGC</h2>
+  <textarea id="script" placeholder="Paste kịch bản vào đây...">Bạn có biết, sau tuổi 25, collagen trong cơ thể giảm 1.5% mỗi năm?
+Đó là lý do tại sao da bắt đầu xuất hiện nếp nhăn, chảy xệ, mất đàn hồi.
+Mình đã thử rất nhiều loại collagen nhưng hầu hết đều có vị tanh khó uống.
+Cho đến khi mình tìm thấy Collagen Peptide thế hệ mới của hãng X.
+Phân tử siêu nhỏ chỉ 2000 dalton, hấp thu trực tiếp vào lớp hạ bì.
+Sau 4 tuần dùng, da mình mịn hơn rõ rệt, nếp nhăn vùng mắt mờ đi.
+Hộp 30 gói chỉ 599k, dùng được cả tháng.
+Bấm vào giỏ hàng dưới đây để được giảm thêm 20% cho đơn đầu tiên nhé.</textarea>
+
+  <p style="margin-top: 16px;">
+    <button id="runBtn" onclick="run()">🔍 Phân tích &amp; Tìm video</button>
+    <button id="cancelBtn" onclick="cancelRun()" style="display:none; background:#dc2626; margin-left:8px;">⛔ Hủy</button>
+  </p>
+
+  <div id="output">
+    <div id="banners"></div>
+    <div id="status" class="status-bar" style="display:none"></div>
+    <div id="scenes"></div>
+  </div>
+
+  <script>
+    // ── CONFIG: single source of truth for thresholds, limits, retry ─────────
+    const CONFIG = {
+      search: {
+        ytMaxResults: 5,
+        tiktokCount: 8,
+        webMaxLinks: 5,
+      },
+      rank: {
+        minScoreShow: 30,            // filter cards below this score
+        minScoreAnalyzeTs: 50,       // YouTube cards eligible for timestamp analysis
+        maxCardsPerScene: 8,
+        fallbackPriority: { youtube: 70, tiktok: 60, web: 40 },
+      },
+      timestamp: {
+        maxVideosPerScene: 3,
+        concurrency: 2,
+      },
+      retry: {
+        maxAttempts: 6,
+        baseDelayMs: 2000,
+        factor: 1.7,
+      },
+      scoreColor: [
+        { min: 80, color: '#10b981' },  // excellent — green
+        { min: 60, color: '#f59e0b' },  // good — amber
+        { min: 40, color: '#f97316' },  // ok — orange
+        { min: 30, color: '#dc2626' },  // low but shown — red (distinguishable from "no score")
+      ],
+      scoreColorNone: '#9ca3af',         // gray — used when score is null
+    }
+
+    function colorForScore(score) {
+      if (typeof score !== 'number') return CONFIG.scoreColorNone
+      for (const tier of CONFIG.scoreColor) {
+        if (score >= tier.min) return tier.color
+      }
+      return CONFIG.scoreColorNone
+    }
+
+    // ── Error taxonomy: every API call throws ApiError with a stable code ────
+    // Codes used by classifyError to decide UI (banner vs inline).
+    const ERR = {
+      QUOTA_GEMINI:  'QUOTA_GEMINI',   // Gemini free tier 250 req/day exhausted
+      QUOTA_YOUTUBE: 'QUOTA_YOUTUBE',  // YouTube Data API daily quota exhausted
+      ABORTED:       'ABORTED',        // user clicked Cancel
+      GEMINI_FAIL:   'GEMINI_FAIL',    // other Gemini error (non-quota)
+      YOUTUBE_FAIL:  'YOUTUBE_FAIL',   // other YouTube error
+      PARSE_FAIL:    'PARSE_FAIL',     // Gemini response parse failed
+    }
+
+    class ApiError extends Error {
+      constructor(code, message) {
+        super(message)
+        this.code = code
+        this.name = 'ApiError'
+      }
+    }
+
+    // ── DOM helpers — only `output` sub-elements are touched, never replaced ─
+    const dom = {
+      get banners() { return document.getElementById('banners') },
+      get status()  { return document.getElementById('status') },
+      get scenes()  { return document.getElementById('scenes') },
+      get runBtn()  { return document.getElementById('runBtn') },
+      get cancelBtn() { return document.getElementById('cancelBtn') },
+    }
+
+    function setStatus(html) {
+      dom.status.innerHTML = html
+      dom.status.style.display = html ? '' : 'none'
+    }
+    function addBanner(html) {
+      dom.banners.insertAdjacentHTML('beforeend', html)  // APPEND — never replaces prior content
+    }
+    function clearAll() {
+      dom.banners.innerHTML = ''
+      dom.scenes.innerHTML = ''
+      setStatus('')
+    }
+
+    // ── Abort plumbing: one controller per run; all fetch() goes through this.
+    // AbortError → ApiError(ABORTED) at the source so downstream code only ever
+    // sees one error type.
+    let activeController = null
+    async function abortableFetch(input, init = {}) {
+      try {
+        return await fetch(input, { ...init, signal: activeController?.signal })
+      } catch (err) {
+        if (err?.name === 'AbortError') throw new ApiError(ERR.ABORTED, 'Đã hủy')
+        throw err
+      }
+    }
+    function throwIfAborted() {
+      if (activeController?.signal.aborted) throw new ApiError(ERR.ABORTED, 'Đã hủy')
+    }
+
+    // Map an ApiError code to a banner HTML block.
+    // Generic non-ApiError → inline error in scenes area (handled by caller).
+    function bannerForError(err) {
+      if (err?.code === ERR.QUOTA_GEMINI) {
+        return `
+          <div class="quota-warning">
+            <div class="quota-title">⛔ Quota Gemini Free Tier đã cạn</div>
+            <div class="quota-body">
+              Free tier giới hạn <strong>250 requests/ngày</strong>. Bạn đã chạy quá nhiều iteration hôm nay.<br><br>
+              <strong>Giải pháp:</strong><br>
+              • <strong>Đợi đến nửa đêm Pacific Time</strong> (khoảng 15:00 ICT) để quota reset, hoặc<br>
+              • <strong>Upgrade paid tier</strong> tại <a href="https://aistudio.google.com/billing" target="_blank">aistudio.google.com/billing</a> — tier 1 không có giới hạn ngặt như free<br><br>
+              <small>Mỗi lần chạy app ăn ~60-70 calls (parse + 3 search + rank + 3 video analyses/scene). 4-5 lần test = hết quota.</small>
+            </div>
+          </div>`
+      }
+      if (err?.code === ERR.QUOTA_YOUTUBE) {
+        return `
+          <div class="quota-warning">
+            <div class="quota-title">⛔ Quota YouTube Data API đã cạn</div>
+            <div class="quota-body">
+              YouTube Data API mặc định <strong>10,000 units/ngày</strong>, mỗi search = 100 units → tối đa ~100 search/ngày.<br><br>
+              <strong>Giải pháp:</strong><br>
+              • <strong>Đợi đến nửa đêm Pacific Time</strong> để quota reset, hoặc<br>
+              • <strong>Request tăng quota</strong> tại <a href="https://console.cloud.google.com/apis/api/youtube.googleapis.com/quotas" target="_blank">Google Cloud Console</a>.
+            </div>
+          </div>`
+      }
+      if (err?.code === ERR.ABORTED) {
+        return `<div class="error">⛔ Đã hủy theo yêu cầu.</div>`
+      }
+      return `<div class="error">❌ ${escapeHtml(err?.message || String(err))}</div>`
+    }
+
+    // ── Persist API keys to localStorage ─────────────────────────────────────
+    const geminiInput = document.getElementById('geminiKey')
+    const ytInput = document.getElementById('youtubeKey')
+    geminiInput.value = localStorage.getItem('prototype_geminiKey') || ''
+    ytInput.value = localStorage.getItem('prototype_youtubeKey') || ''
+    geminiInput.addEventListener('change', e => localStorage.setItem('prototype_geminiKey', e.target.value))
+    ytInput.addEventListener('change', e => localStorage.setItem('prototype_youtubeKey', e.target.value))
+
+    // ── Main run flow ────────────────────────────────────────────────────────
+    // UI invariant: scenes area is NEVER replaced once Phase 1 starts. Banners
+    // are inserted INTO #banners (top, above scenes). Status text lives in
+    // #status. Quota / network errors → banner. Per-scene-source errors →
+    // inline in scene's results area. Per-card timestamp errors → inline in
+    // card's ts-section.
+
+    function cancelRun() {
+      if (activeController) activeController.abort()
+    }
+
+    async function run() {
+      const geminiKey = geminiInput.value.trim()
+      const youtubeKey = ytInput.value.trim()
+      const script = document.getElementById('script').value.trim()
+
+      clearAll()
+      if (!geminiKey || !youtubeKey || !script) {
+        addBanner('<div class="error">⚠️ Cần điền đủ Gemini key, YouTube key, và kịch bản.</div>')
+        return
+      }
+
+      activeController = new AbortController()
+      dom.runBtn.disabled = true
+      dom.cancelBtn.style.display = ''
+      const startTime = Date.now()
+      setStatus('⏳ Đang phân tích kịch bản thành scene...')
+
+      try {
+        const scenes = await parseScript(geminiKey, script)
+        if (!scenes.length) {
+          addBanner('<div class="error">❌ Gemini không tách được scene nào từ kịch bản này.</div>')
+          return
+        }
+
+        // Render scene skeletons immediately into #scenes (never replaces #banners)
+        setStatus(`✅ Tách được <strong>${scenes.length} scene</strong>. Đang tìm video song song...`)
+        dom.scenes.innerHTML = scenes.map((s, i) => `
+          <div class="scene" id="scene-${i}">
+            <div class="scene-header">
+              <span class="scene-num">Scene ${i + 1}</span>
+              <span class="scene-line">${escapeHtml(s.line)}</span>
+            </div>
+            <div class="intent">💡 ${escapeHtml(s.visualIntent)}</div>
+            <div class="keywords">
+              <strong>Keywords:</strong> ${escapeHtml(s.keywordVi)} · <code>${escapeHtml(s.keywordEn)}</code>
+            </div>
+            <div class="results" id="results-${i}"><div class="loading">⏳ Đang tìm YouTube + Web...</div></div>
+          </div>
+        `).join('')
+
+        // Phase 1: Search + Rank per scene (parallel).
+        // Adapter failures are localized — they show inline as per-source error
+        // in the scene's results area. Quota errors bubble up to the outer catch.
+        const wrapErr = (source) => (e) => {
+          if (e?.code === ERR.QUOTA_GEMINI || e?.code === ERR.QUOTA_YOUTUBE || e?.code === ERR.ABORTED) throw e
+          return { source, links: [], __error: e.message }
+        }
+        const sceneData = await Promise.all(scenes.map(async (scene, i) => {
+          const container = document.getElementById(`results-${i}`)
+          const results = await Promise.all([
+            searchYouTube(youtubeKey, scene.keywordEn).catch(wrapErr('youtube')),
+            searchTikTok(scene.keywordEn).catch(wrapErr('tiktok')),
+            searchWeb(geminiKey, scene.visualIntent).catch(wrapErr('web')),
+          ])
+          const allLinks = results.flatMap(r => r.links.map(l => ({ ...l, source: r.source })))
+
+          let ranked = await rankLinks(geminiKey, scene.visualIntent, allLinks)
+          ranked = ranked
+            .filter(l => (l.score ?? 0) >= CONFIG.rank.minScoreShow)
+            .slice(0, CONFIG.rank.maxCardsPerScene)
+            .map((l, j) => ({ ...l, _cardId: `s${i}_${j}` }))
+
+          const toAnalyze = ranked
+            .filter(l => l.source === 'youtube' && (l.score ?? 0) >= CONFIG.rank.minScoreAnalyzeTs)
+            .slice(0, CONFIG.timestamp.maxVideosPerScene)
+          const analyzingIds = new Set(toAnalyze.map(l => l._cardId))
+
+          const errorsBySource = Object.fromEntries(
+            results.filter(r => r.__error).map(r => [r.source, r.__error])
+          )
+          renderResults(container, ranked, scene.visualIntent, { errors: errorsBySource, analyzingIds })
+
+          return { scene, ranked, container, toAnalyze, sceneIdx: i }
+        }))
+
+        // Phase 2: Auto-analyze top YouTube videos with global concurrency limit.
+        const allAnalyses = sceneData.flatMap(sd =>
+          sd.toAnalyze.map(link => ({ link, scene: sd.scene, container: sd.container }))
+        )
+
+        const phase1Elapsed = ((Date.now() - startTime) / 1000).toFixed(1)
+        if (allAnalyses.length === 0) {
+          setStatus(`✅ Hoàn tất ${scenes.length} scene trong ${phase1Elapsed}s. Không có YouTube video nào đạt score ≥ ${CONFIG.rank.minScoreAnalyzeTs} để phân tích timestamp.`)
+        } else {
+          setStatus(`🎬 Phase 1 xong (${phase1Elapsed}s). Đang phân tích timestamp ${allAnalyses.length} YouTube video (0 / ${allAnalyses.length})...`)
+
+          let done = 0
+          await processWithConcurrency(allAnalyses, async ({ link, scene, container }) => {
+            const card = container.querySelector(`[data-card-id="${link._cardId}"]`)
+            try {
+              const result = await analyzeYouTubeTimestamp(geminiKey, link.url, scene.visualIntent)
+              if (card) updateCardTimestamps(card, link.url, result)
+            } catch (err) {
+              // Bubble up fatal codes; localize everything else to the card.
+              if (err.code === ERR.QUOTA_GEMINI || err.code === ERR.QUOTA_YOUTUBE || err.code === ERR.ABORTED) throw err
+              if (card) {
+                const ph = card.querySelector('.ts-section')
+                if (ph) ph.innerHTML = `<div class="ts-error">⚠️ Lỗi phân tích: ${escapeHtml(err.message.slice(0, 100))}</div>`
+              }
+            }
+            done++
+            setStatus(`🎬 Đang phân tích timestamp YouTube videos (${done} / ${allAnalyses.length})...`)
+          }, CONFIG.timestamp.concurrency)
+
+          const totalElapsed = ((Date.now() - startTime) / 1000).toFixed(1)
+          setStatus(`✅ Hoàn tất ${scenes.length} scene + ${allAnalyses.length} video phân tích trong ${totalElapsed}s.`)
+        }
+      } catch (err) {
+        addBanner(bannerForError(err))   // APPENDS — scenes rendered so far stay visible
+        if (err?.code === ERR.ABORTED) setStatus('')
+      } finally {
+        dom.runBtn.disabled = false
+        dom.cancelBtn.style.display = 'none'
+        activeController = null
+      }
+    }
+
+    // ── Gemini call with auto-retry on 429/5xx ───────────────────────────────
+    async function callGemini(apiKey, body, model = 'gemini-2.5-flash') {
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`
+      const { maxAttempts, baseDelayMs, factor } = CONFIG.retry
+      let lastErr = ''
+      for (let attempt = 0; attempt <= maxAttempts; attempt++) {
+        throwIfAborted()
+        const res = await abortableFetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body)
+        })
+        if (res.ok) return res.json()
+        lastErr = await res.text().catch(() => '')
+        // 429 RESOURCE_EXHAUSTED = daily quota cạn, retry vô ích, propagate ngay
+        const isExhausted = res.status === 429 && /RESOURCE_EXHAUSTED|exhausted/i.test(lastErr)
+        if (isExhausted) {
+          throw new ApiError(ERR.QUOTA_GEMINI, `Gemini free tier (250 req/day) đã cạn`)
+        }
+        const retryable = [429, 500, 502, 503, 504].includes(res.status) || /UNAVAILABLE|overload/i.test(lastErr)
+        if (!retryable || attempt === maxAttempts) {
+          throw new ApiError(ERR.GEMINI_FAIL, `Gemini ${res.status}: ${lastErr.slice(0, 200)}`)
+        }
+        const delay = baseDelayMs * Math.pow(factor, attempt) + Math.random() * 1000
+        await new Promise(r => setTimeout(r, delay))
+      }
+      throw new ApiError(ERR.GEMINI_FAIL, `Gemini failed after ${maxAttempts} retries: ${lastErr.slice(0, 200)}`)
+    }
+
+    // ── Step 1: Parse script ─────────────────────────────────────────────────
+    async function parseScript(apiKey, script) {
+      const prompt = `Bạn là chuyên gia phân tích kịch bản UGC bán hàng. Hãy tách kịch bản dưới đây thành các SCENE (mỗi câu thoại = 1 scene, trừ khi 2 câu liền cùng nói về 1 visual thì gộp lại).
+
+Với mỗi scene, trả về object với các field:
+- "line": câu thoại gốc tiếng Việt (giữ nguyên)
+- "visualIntent": 1 câu tiếng Việt mô tả CỤ THỂ hình ảnh/video cần để minh họa. Focus vào visual concept, KHÔNG lặp lại nội dung text. Ví dụ tốt: "Cảnh 3D mạch máu được làm sạch, các phân tử cholesterol bị cuốn trôi". Ví dụ tệ: "Nói về tác dụng giảm cholesterol".
+- "keywordVi": 2-4 từ khóa tiếng Việt để search (cách nhau dấu cách)
+- "keywordEn": 2-4 từ khóa tiếng Anh để search YouTube/web (cách nhau dấu cách)
+
+Trả về JSON array thuần, không kèm text khác.
+
+Kịch bản:
+${script}`
+
+      const data = await callGemini(apiKey, {
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: {
+          responseMimeType: 'application/json',
+          responseSchema: {
+            type: 'array',
+            items: {
+              type: 'object',
+              properties: {
+                line: { type: 'string' },
+                visualIntent: { type: 'string' },
+                keywordVi: { type: 'string' },
+                keywordEn: { type: 'string' }
+              },
+              required: ['line', 'visualIntent', 'keywordVi', 'keywordEn']
+            }
+          }
+        }
+      })
+      const text = data.candidates?.[0]?.content?.parts?.[0]?.text
+      if (!text) throw new ApiError(ERR.PARSE_FAIL, 'Gemini không trả về kết quả parse')
+      try { return JSON.parse(text) }
+      catch { throw new ApiError(ERR.PARSE_FAIL, 'Gemini trả về JSON không hợp lệ') }
+    }
+
+    // ── Search adapters: uniform return shape `{ source, links: Link[] }` ────
+    // Link = { url, title, thumbnail?, domain, meta? }
+    // On error, throw — caller wraps with `.catch(...)` returning empty shape.
+
+    async function searchYouTube(apiKey, query) {
+      const url = `https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&maxResults=${CONFIG.search.ytMaxResults}&q=${encodeURIComponent(query)}&key=${apiKey}`
+      const res = await abortableFetch(url)
+      if (!res.ok) {
+        const errBody = await res.json().catch(() => null)
+        const msg = errBody?.error?.message || `YouTube API ${res.status}`
+        const reasons = (errBody?.error?.errors || []).map(e => e.reason)
+        const isQuota = res.status === 403 && reasons.some(r => r === 'quotaExceeded' || r === 'dailyLimitExceeded' || r === 'rateLimitExceeded')
+        throw new ApiError(isQuota ? ERR.QUOTA_YOUTUBE : ERR.YOUTUBE_FAIL, msg)
+      }
+      const data = await res.json()
+      const links = (data.items || []).map(item => ({
+        url: `https://www.youtube.com/watch?v=${item.id.videoId}`,
+        title: item.snippet.title,
+        thumbnail: item.snippet.thumbnails?.medium?.url || item.snippet.thumbnails?.default?.url,
+        domain: 'youtube.com',
+        meta: item.snippet.channelTitle,
+      }))
+      return { source: 'youtube', links }
+    }
+
+    async function searchWeb(apiKey, intent) {
+      const prompt = `Bạn cần TÌM TRÊN INTERNET các video / clip / animation phù hợp để MINH HỌA cho concept hình ảnh sau:
+
+"${intent}"
+
+Yêu cầu QUAN TRỌNG:
+1. CHỈ tìm trang có VIDEO play được — TikTok video, Vimeo, Pinterest video pin, YouTube Shorts, stock video sites (videvo, mixkit, coverr, motionarray, storyblocks free preview), blog có embed video. TUYỆT ĐỐI KHÔNG tìm article text / Wikipedia / Quora.
+2. ĐA DẠNG NGUỒN — không chỉ YouTube. Cố tìm ít nhất 2 platform khác YouTube (ưu tiên TikTok, Vimeo, stock sites).
+3. URL phải là TRANG CHI TIẾT của 1 video cụ thể, không phải homepage hay search results.
+4. Tìm CHỈ ${CONFIG.search.webMaxLinks} link chất lượng cao (ưu tiên relevance hơn số lượng).`
+
+      const data = await callGemini(apiKey, {
+        contents: [{ parts: [{ text: prompt }] }],
+        tools: [{ googleSearch: {} }]
+      })
+
+      const chunks = data.candidates?.[0]?.groundingMetadata?.groundingChunks || []
+      const seen = new Set()
+      const links = []
+      // Domains that almost never link to a specific video (e-commerce, stock homepages, etc.)
+      const BAD_DOMAIN_RE = /^(shutterstock|gettyimages|istockphoto|envato|vecteezy|123rf|dreamstime|fotolia|stockfresh|alamy|depositphotos|adobe\.stock|ebay|walmart|amazon|aliexpress|alibaba|shopee|temu|target|bestbuy|reddit|quora|pinterest)\.[a-z.]+$/i
+      // Generic bare-domain pattern (title is just "domain.com" — likely homepage)
+      const BARE_DOMAIN_RE = /^[a-z0-9-]+\.[a-z]{2,}(\.[a-z]{2,})?$/i
+
+      for (const c of chunks) {
+        if (!c.web?.uri || seen.has(c.web.uri)) continue
+        if (links.length >= CONFIG.search.webMaxLinks) break
+        seen.add(c.web.uri)
+        let domain = ''
+        try { domain = new URL(c.web.uri).hostname.replace(/^www\./, '') } catch {}
+        const title = (c.web.title || domain || c.web.uri).trim()
+        if (/^youtube\.com$|^youtu\.be$/i.test(title)) continue   // already covered by YT API
+        if (BAD_DOMAIN_RE.test(title)) continue
+        if (BARE_DOMAIN_RE.test(title)) continue
+        links.push({ url: c.web.uri, title, domain })
+      }
+
+      return { source: 'web', links }
+    }
+
+    // ── Step 2c: TikTok search via tikwm.com (direct + corsproxy fallback) ───
+    async function fetchTikwm(keyword) {
+      const target = `https://www.tikwm.com/api/feed/search?keywords=${encodeURIComponent(keyword)}&count=8&cursor=0&web=1`
+      try {
+        const res = await abortableFetch(target)
+        if (res.ok) {
+          const data = await res.json()
+          if (data && (data.code === 0 || data.data)) return data
+        }
+      } catch (e) {
+        if (e?.code === ERR.ABORTED) throw e   // propagate cancel; never silently swallow
+      }
+      const proxy = `https://corsproxy.io/?${encodeURIComponent(target)}`
+      const res = await abortableFetch(proxy)
+      if (!res.ok) throw new Error(`tikwm proxy ${res.status}`)
+      return res.json()
+    }
+
+    async function searchTikTok(query) {
+      // ONLY tikwm.com direct API — no Gemini fallback (Gemini grounding
+      // returns walmart/ebay/etc. with title-only "tiktok" tag, garbage data).
+      // If tikwm fails entirely, return empty rather than poison results.
+      try {
+        const data = await fetchTikwm(query)
+        const videos = data?.data?.videos || []
+        const links = videos.slice(0, CONFIG.search.tiktokCount).map(v => {
+          const uniqueId = v.author?.unique_id
+          const videoId = v.video_id || v.aweme_id
+          if (!uniqueId || !videoId) return null  // skip entries without valid identity
+          return {
+            url: `https://www.tiktok.com/@${uniqueId}/video/${videoId}`,
+            title: (v.title || v.author?.nickname || 'TikTok video').slice(0, 120),
+            thumbnail: v.cover || v.origin_cover || v.ai_dynamic_cover,
+            domain: 'tiktok.com',
+            meta: `@${uniqueId}`,
+          }
+        }).filter(Boolean)
+        return { source: 'tiktok', links }
+      } catch (err) {
+        if (err?.code === ERR.ABORTED) throw err
+        console.warn('tikwm failed (returning empty TikTok results):', err.message)
+        return { source: 'tiktok', links: [] }
+      }
+    }
+
+    // ── Step 2d: Rank all collected links by relevance to scene intent ───────
+    async function rankLinks(apiKey, intent, links) {
+      if (!links.length) return links
+      const items = links.map((l, i) => `${i}. [${l.source}/${l.domain || ''}] ${l.title || ''}`).join('\n')
+      const prompt = `Concept hình ảnh cần tìm: "${intent}"
+
+Danh sách nguồn video tìm được (ID + nguồn + tiêu đề):
+${items}
+
+Chấm điểm MỖI link 0-100 theo độ phù hợp. ÁP DỤNG NGHIÊM NGẶT các rule sau:
+
+PHẠT MẠNH (score 0-15):
+- E-commerce listing: ebay, walmart, amazon, shopee, aliexpress, alibaba, temu, target, bestbuy → không phải video content, là trang bán hàng.
+- Homepage / category / search result page: title chỉ là tên domain (vd "shutterstock.com", "vecteezy.com") hoặc generic ("Stock Photos & Videos", "Royalty-free images") — KHÔNG dẫn tới 1 video cụ thể.
+- Anti-bot / verification pages: "Verification Required", "Robot or human", "Cloudflare", "Access denied".
+- Link không liên quan rõ tới concept.
+
+CHẤM CAO (70-100):
+- Title nói RÕ về 1 video/clip CỤ THỂ liên quan tới concept.
+- 90-100: chắc chắn chứa cảnh y hệt concept.
+- 70-89: rất phù hợp, đa số match.
+
+TRUNG BÌNH (30-69):
+- Có liên quan đến chủ đề chung nhưng chưa chắc match cảnh.
+
+Trả JSON array [{id, score, reason}]. Reason là 1 câu ngắn (< 15 từ) tiếng Việt giải thích vì sao score đó.`
+
+      try {
+        const data = await callGemini(apiKey, {
+          contents: [{ parts: [{ text: prompt }] }],
+          generationConfig: {
+            responseMimeType: 'application/json',
+            responseSchema: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  id: { type: 'integer' },
+                  score: { type: 'integer' },
+                  reason: { type: 'string' }
+                },
+                required: ['id', 'score']
+              }
+            }
+          }
+        })
+        const text = data.candidates?.[0]?.content?.parts?.[0]?.text
+        const scores = JSON.parse(text || '[]')
+        const map = new Map(scores.map(s => [s.id, s]))
+        return links
+          .map((l, i) => ({ ...l, score: map.get(i)?.score ?? 50, reason: map.get(i)?.reason || '' }))
+          .sort((a, b) => (b.score || 0) - (a.score || 0))
+      } catch (err) {
+        // Fatal codes bubble up; non-fatal → graceful fallback (priority-based sort)
+        if (err?.code === ERR.QUOTA_GEMINI || err?.code === ERR.QUOTA_YOUTUBE || err?.code === ERR.ABORTED) throw err
+        return links
+          .map(l => ({ ...l, score: CONFIG.rank.fallbackPriority[l.source] ?? 50, reason: '(rank fail — sort theo nguồn)' }))
+          .sort((a, b) => (b.score || 0) - (a.score || 0))
+      }
+    }
+
+    // ── Step 3: Analyze YouTube video for timestamp matching intent ──────────
+    async function analyzeYouTubeTimestamp(apiKey, youtubeUrl, intent) {
+      const prompt = `Phân tích video YouTube này. Tôi cần tìm các ĐOẠN (timestamps) trong video có chứa cảnh sau:
+
+"${intent}"
+
+Yêu cầu:
+- Nếu video CÓ chứa cảnh đó → liệt kê các đoạn timestamp (định dạng MM:SS hoặc HH:MM:SS) và mô tả ngắn (1 câu) mỗi đoạn.
+- Nếu video KHÔNG chứa cảnh phù hợp → trả về found: false và summary giải thích video thật sự nói về gì.
+- TUYỆT ĐỐI KHÔNG bịa timestamp. Chỉ liệt kê đoạn bạn thực sự thấy trong video.
+- Mỗi đoạn nên 3-15 giây, đủ để dùng cho UGC edit.`
+
+      const data = await callGemini(apiKey, {
+        contents: [{
+          parts: [
+            { fileData: { fileUri: youtubeUrl } },
+            { text: prompt }
+          ]
+        }],
+        generationConfig: {
+          responseMimeType: 'application/json',
+          responseSchema: {
+            type: 'object',
+            properties: {
+              found: { type: 'boolean' },
+              timestamps: {
+                type: 'array',
+                items: {
+                  type: 'object',
+                  properties: {
+                    start: { type: 'string' },
+                    end: { type: 'string' },
+                    description: { type: 'string' }
+                  },
+                  required: ['start', 'end', 'description']
+                }
+              },
+              summary: { type: 'string' }
+            },
+            required: ['found', 'summary']
+          }
+        }
+      })
+      const text = data.candidates?.[0]?.content?.parts?.[0]?.text
+      if (!text) throw new ApiError(ERR.PARSE_FAIL, 'Gemini không trả kết quả phân tích video')
+      try { return JSON.parse(text) }
+      catch { throw new ApiError(ERR.PARSE_FAIL, 'Gemini trả JSON phân tích không hợp lệ') }
+    }
+
+    function parseTimeToSeconds(t) {
+      const parts = String(t).split(':').map(s => parseInt(s, 10) || 0)
+      if (parts.length === 2) return parts[0] * 60 + parts[1]
+      if (parts.length === 3) return parts[0] * 3600 + parts[1] * 60 + parts[2]
+      return 0
+    }
+
+    // ── Rendering ────────────────────────────────────────────────────────────
+    function renderResults(container, rankedLinks, intent, meta) {
+      let html = ''
+
+      const analyzingIds = meta?.analyzingIds || new Set()
+
+      rankedLinks.forEach(r => {
+        const isYT = r.source === 'youtube'
+        const thumbUrl = r.thumbnail
+          ? r.thumbnail
+          : `https://image.thum.io/get/width/400/crop/225/noanimate/${r.url}`
+        const sourceLabel = r.source === 'youtube' ? 'YT'
+          : r.source === 'tiktok' ? 'TT'
+          : (r.domain || 'WEB').toUpperCase().slice(0, 12)
+        const sourceClass = r.source === 'youtube' ? 'youtube'
+          : r.source === 'tiktok' ? 'tiktok'
+          : 'web'
+        const score = typeof r.score === 'number' ? r.score : null
+        const scoreColor = colorForScore(score)
+        const faviconDomain = r.domain || 'web'
+        const willAnalyze = analyzingIds.has(r._cardId)
+
+        html += `
+          <div class="card" data-card-id="${escapeAttr(r._cardId)}">
+            ${score !== null ? `<div class="score-badge" style="background:${scoreColor}" title="${escapeAttr(r.reason || '')}">⭐ ${score}</div>` : ''}
+            <a class="card-main" href="${escapeAttr(r.url)}" target="_blank" rel="noopener">
+              <div class="thumb-wrap">
+                <img class="thumb" src="${escapeAttr(thumbUrl)}" alt="" loading="lazy"
+                     onerror="this.style.display='none'; this.parentElement.querySelector('.thumb-fallback').style.display='flex'">
+                <div class="thumb-fallback" style="display:none">
+                  <img src="https://www.google.com/s2/favicons?domain=${escapeAttr(faviconDomain)}&sz=64" alt="">
+                  <span>${escapeHtml(r.domain || sourceLabel)}</span>
+                </div>
+              </div>
+              <div class="title"><span class="source-tag ${sourceClass}">${escapeHtml(sourceLabel)}</span>${escapeHtml(r.title || r.url)}</div>
+              ${r.reason ? `<div class="why">💡 ${escapeHtml(r.reason)}</div>` : ''}
+              <div class="url-small">${escapeHtml(r.meta || r.domain || '')}</div>
+            </a>
+            ${willAnalyze ? `<div class="ts-section" data-url="${escapeAttr(r.url)}"><div class="ts-loading">⏳ Đang xem video tìm timestamp...</div></div>` : ''}
+          </div>
+        `
+      })
+
+      const errorEntries = Object.entries(meta?.errors || {})
+      const LABEL = { youtube: 'YouTube', tiktok: 'TikTok', web: 'Web' }
+      errorEntries.forEach(([source, msg]) => {
+        html += `<div class="error">${escapeHtml(`${LABEL[source] || source}: ${msg}`)}</div>`
+      })
+
+      if (!rankedLinks.length && !errorEntries.length) {
+        html += '<div class="empty">Không tìm thấy link phù hợp cho scene này.</div>'
+      }
+      container.innerHTML = html
+    }
+
+    // ── Update a single card with auto-analyzed timestamps ───────────────────
+    function updateCardTimestamps(card, url, result) {
+      const section = card.querySelector('.ts-section')
+      if (!section) return
+      let html = ''
+      if (result.found && result.timestamps?.length) {
+        html += '<div class="ts-found-label">⏱️ Đoạn phù hợp:</div><div class="timestamps">'
+        result.timestamps.forEach(t => {
+          const seconds = parseTimeToSeconds(t.start)
+          const sep = url.includes('?') ? '&' : '?'
+          const deepLink = `${url}${sep}t=${seconds}s`
+          html += `<a href="${escapeAttr(deepLink)}" target="_blank" rel="noopener" class="ts-row">
+            <span class="ts-time">${escapeHtml(t.start)}–${escapeHtml(t.end)}</span>
+            <span class="ts-desc">${escapeHtml(t.description)}</span>
+          </a>`
+        })
+        html += '</div>'
+      } else {
+        html += `<div class="ts-notfound">❌ Video này không chứa cảnh phù hợp</div>`
+      }
+      if (result.summary) {
+        html += `<div class="ts-summary">📝 ${escapeHtml(result.summary)}</div>`
+      }
+      section.innerHTML = html
+    }
+
+    // ── Concurrency limiter ──────────────────────────────────────────────────
+    async function processWithConcurrency(items, fn, limit = 4) {
+      const queue = [...items]
+      const workers = []
+      const workerCount = Math.min(limit, queue.length)
+      for (let i = 0; i < workerCount; i++) {
+        workers.push((async () => {
+          while (queue.length) {
+            const item = queue.shift()
+            if (item !== undefined) await fn(item)
+          }
+        })())
+      }
+      await Promise.all(workers)
+    }
+
+    // ── Helpers ──────────────────────────────────────────────────────────────
+    function escapeHtml(s) {
+      return String(s ?? '').replace(/[&<>"']/g, c => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+      }[c]))
+    }
+    function escapeAttr(s) { return escapeHtml(s) }
+  </script>
+</body>
+</html>

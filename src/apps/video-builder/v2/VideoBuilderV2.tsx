@@ -197,9 +197,11 @@ function InputPickerTile({
 interface Props {
   /** Called when user clicks "Switch về Pipeline v1" — parent toggles version */
   onSwitchToV1: () => void
+  /** Z37 — Called when user clicks the new "🆕 Sang v3 Ads Video Engine" banner */
+  onSwitchToV3?: () => void
 }
 
-export default function VideoBuilderV2({ onSwitchToV1 }: Props) {
+export default function VideoBuilderV2({ onSwitchToV1, onSwitchToV3 }: Props) {
   // Z27 — hydrate from localStorage SYNCHRONOUSLY on first render so we
   // never paint an empty pipeline that the user already filled in a
   // previous session. Falls back to createEmptyV2State() on first ever
@@ -879,6 +881,18 @@ export default function VideoBuilderV2({ onSwitchToV1 }: Props) {
             >
               <RotateCcw className="h-3.5 w-3.5" /> Tạo lại từ đầu
             </button>
+            {/* Z37 — prominent "Sang v3 mới" button. v3 is the new default
+                Ads Video Engine; v2 cinematic is deprecated but kept as
+                Legacy for anyone with in-progress work. */}
+            {onSwitchToV3 && (
+              <button
+                onClick={onSwitchToV3}
+                title="Pipeline v3 Ads Video Engine — creator-first workflow, preview-first render, real MP4 export. v2 cinematic này đã DEPRECATED."
+                className="flex items-center gap-1.5 rounded-lg bg-gradient-to-r from-emerald-400 to-teal-500 px-3 py-1.5 text-xs font-bold text-white shadow-md ring-2 ring-emerald-300/50 transition-all hover:from-emerald-500 hover:to-teal-600"
+              >
+                🆕 Sang v3 Ads Video Engine
+              </button>
+            )}
             <button
               onClick={onSwitchToV1}
               className="flex items-center gap-1.5 rounded-lg bg-white/15 px-3 py-1.5 text-xs font-semibold backdrop-blur-sm hover:bg-white/25"

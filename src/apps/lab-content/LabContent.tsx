@@ -4,15 +4,15 @@ import { useAppStore } from '../../stores/appStore'
 import { useBankStore } from '../../stores/bankStore'
 import type { Product } from '../../stores/types'
 import type {
-  ContentAngle, Goal, LabBriefParams, LabBriefResult, PricingInfo, ToneId,
+  ContentAngle, Goal, LabBriefParams, LabBriefResult, SalesLetterLength, ToneId,
 } from './types'
-import { DEFAULT_PRICING_INFO } from './types'
 import { generateBrief } from './services/generateBrief'
 import { generateLabCaption } from './services/generateLabCaption'
 import { generateLabScript } from './services/generateLabScript'
 import { generateHookLab } from './services/generateHookLab'
 import { generateFunnel } from './services/generateFunnel'
 import { generateCoc } from './services/generateCoc'
+import { generateSalesLetter } from './services/generateSalesLetter'
 import { getGoalById } from './services/presets'
 import { useLabContentStore } from './store'
 import InputPanel from './components/InputPanel'
@@ -21,6 +21,7 @@ import AngleOutputModal, { type OutputMode } from './components/AngleOutputModal
 import HookLabModal from './components/HookLabModal'
 import FunnelModal from './components/FunnelModal'
 import CocModal from './components/CocModal'
+import SalesLetterModal from './components/SalesLetterModal'
 import AutoSaveIndicator from '../../components/AutoSaveIndicator'
 import { useSessionPersist } from '../../services/sessionPersistence'
 
@@ -29,7 +30,6 @@ interface LabContentSnapshot {
   goal: Goal
   toneId: ToneId
   customToneNote: string
-  pricing: PricingInfo
   result: LabBriefResult | null
   lastParams: Omit<LabBriefParams, 'productId'> | null
   savedBriefId: string | null
@@ -46,7 +46,6 @@ export default function LabContent() {
   const [goal, setGoal] = useState<Goal>(DEFAULT_GOAL)
   const [toneId, setToneId] = useState<ToneId>(DEFAULT_TONE)
   const [customToneNote, setCustomToneNote] = useState('')
-  const [pricing, setPricing] = useState<PricingInfo>(DEFAULT_PRICING_INFO)
 
   const [savedBriefId, setSavedBriefId] = useState<string | null>(null)
 
@@ -72,6 +71,11 @@ export default function LabContent() {
   const [cocGenerating, setCocGenerating] = useState(false)
   const [cocError, setCocError] = useState<string | null>(null)
 
+  // ── Long-Form Sales Letter modal state ─────────────────────────────────
+  const [salesLetterOpen, setSalesLetterOpen] = useState(false)
+  const [salesLetterGenerating, setSalesLetterGenerating] = useState(false)
+  const [salesLetterError, setSalesLetterError] = useState<string | null>(null)
+
   const lastParamsRef = useRef<Omit<LabBriefParams, 'productId'> | null>(null)
 
   const interAppPayload = useAppStore((s) => s.interAppPayload)
@@ -89,7 +93,6 @@ export default function LabContent() {
       goal,
       toneId,
       customToneNote,
-      pricing,
       result,
       lastParams: lastParamsRef.current,
       savedBriefId,
@@ -102,7 +105,6 @@ export default function LabContent() {
       if (data.goal)                        setGoal(data.goal)
       if (data.toneId)                      setToneId(data.toneId)
       if (typeof data.customToneNote === 'string') setCustomToneNote(data.customToneNote)
-      if (data.pricing && typeof data.pricing === 'object') setPricing({ ...DEFAULT_PRICING_INFO, ...data.pricing })
       if (data.result) {
         // Migrate older snapshots that pre-date angleOutputs
         setResult({ ...data.result, angleOutputs: data.result.angleOutputs ?? {} })
@@ -122,9 +124,8 @@ export default function LabContent() {
             : undefined,
     shouldPersist: () =>
       !!result || isGenerating || !!selectedProduct ||
-      goal !== DEFAULT_GOAL || toneId !== DEFAULT_TONE || customToneNote.trim().length > 0 ||
-      pricing.enabled,
-    deps: [selectedProduct?.id, result, isGenerating, goal, toneId, customToneNote, pricing, savedBriefId],
+      goal !== DEFAULT_GOAL || toneId !== DEFAULT_TONE || customToneNote.trim().length > 0,
+    deps: [selectedProduct?.id, result, isGenerating, goal, toneId, customToneNote, savedBriefId],
   })
 
   // Accept productId hand-off from other apps (e.g. Finder → Lab Content)
@@ -326,6 +327,29 @@ export default function LabContent() {
     }
   }
 
+  // ── Long-Form Sales Letter ─────────────────────────────────────────────
+  const handleOpenSalesLetter = () => {
+    setSalesLetterError(null)
+    setSalesLetterOpen(true)
+  }
+
+  const runSalesLetterGeneration = async (length: SalesLetterLength, focusAngle: ContentAngle | null) => {
+    if (!result) return
+    setSalesLetterGenerating(true)
+    setSalesLetterError(null)
+    try {
+      const output = await generateSalesLetter(result, length, focusAngle)
+      setResult((prev) => prev ? { ...prev, salesLetterOutput: output } : prev)
+      sessionApi.forceSave()
+      addToast(`Đã tạo sales letter ${output.wordCountVi} từ`, 'success')
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      setSalesLetterError(msg)
+    } finally {
+      setSalesLetterGenerating(false)
+    }
+  }
+
   const cachedModalOutput = (() => {
     if (!modalAngle || !result) return null
     const slot = result.angleOutputs?.[modalAngle.id]
@@ -357,8 +381,6 @@ export default function LabContent() {
           onToneIdChange={setToneId}
           customToneNote={customToneNote}
           onCustomToneNoteChange={setCustomToneNote}
-          pricing={pricing}
-          onPricingChange={setPricing}
         />
       </div>
 
@@ -377,6 +399,7 @@ export default function LabContent() {
           onOpenHookLab={handleOpenHookLab}
           onOpenFunnel={handleOpenFunnel}
           onOpenCoc={handleOpenCoc}
+          onOpenSalesLetter={handleOpenSalesLetter}
         />
 
         {result && (
@@ -432,6 +455,16 @@ export default function LabContent() {
         error={cocError}
         onClose={() => setCocOpen(false)}
         onGenerate={(pillarText) => void runCocGeneration(pillarText)}
+      />
+
+      <SalesLetterModal
+        open={salesLetterOpen}
+        result={result}
+        cachedOutput={result?.salesLetterOutput ?? null}
+        isGenerating={salesLetterGenerating}
+        error={salesLetterError}
+        onClose={() => setSalesLetterOpen(false)}
+        onGenerate={(length, angle) => void runSalesLetterGeneration(length, angle)}
       />
     </div>
   )

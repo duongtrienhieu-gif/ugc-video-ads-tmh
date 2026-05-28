@@ -1,0 +1,386 @@
+// ── Auto Edit Planner ────────────────────────────────────────────────────────
+// Z34 — The "conversion layer" planner. Deterministic, no AI calls.
+// Takes:
+//   • Phase 3 creator video (lipsync talking head, full duration)
+//   • Phase 4 approved/locked action inserts
+//   • Phase 2 script (master voice timeline)
+//   • Editing style + subtitle style + BGM style
+// Returns:
+//   • AutoEditPlan — segments + captions + zooms + SFX + BGM + CTA
+//
+// CORE PHILOSOPHY (Z34 §1):
+//   Editing's job is to CHEAT perception, not to create cinema. Fast
+//   cuts + captions + zooms hide AI imperfections. This planner is
+//   FAST + DETERMINISTIC so the user can re-roll instantly.
+//
+// HOOK / CTA emphasis (Z34 §8 + §9):
+//   First 1.5s gets a punch zoom + larger captions + stronger SFX.
+//   Last ~2s gets a CTA overlay sticker. Style-driven.
+//
+// REALISM FILTER (Z34 §12):
+//   Insert overlays are SHORT (1.5-3s based on style) — they DON'T
+//   replace the creator video, they layer over it briefly. The viewer
+//   still mostly sees the talking head. AI imperfections of the inserts
+//   are hidden by their short visible window.
+// ─────────────────────────────────────────────────────────────────────────────
+
+import type {
+  AutoEditPlan, EditSegment, SfxCue, CtaOverlay,
+  EditingStyleId, SubtitleStyleId, BgmStyleId,
+  CreatorVideoClip, ActionInsertClip, GeneratedScript,
+} from '../types'
+import { EDITING_STYLES } from './editingStyles'
+import { BGM_CATALOG } from './bgmCatalog'
+import { pickSfxFor } from './sfxCatalog'
+import { buildCaptionSegments } from './subtitleEngine'
+import { buildPunchZoomCues } from './punchZoomPlanner'
+
+// ── Public entry ───────────────────────────────────────────────────────────
+
+export interface BuildPlanParams {
+  creatorVideo: CreatorVideoClip
+  /** ALL inserts — planner filters to only approved + locked + completed.
+   *  Rejected / failed / skipped / idle are excluded. */
+  inserts: ActionInsertClip[]
+  /** Phase 2 script — drives captions + timing */
+  script: GeneratedScript
+  /** Phase 5 style picks */
+  styleId: EditingStyleId
+  subtitleStyleId: SubtitleStyleId
+  /** Optional BGM override (null = use style's default) */
+  bgmStyleId: BgmStyleId | null
+  /** CTA text — defaults to script's CTA block */
+  ctaTextOverride?: string
+}
+
+export function buildAutoEditPlan(params: BuildPlanParams): AutoEditPlan {
+  const style = EDITING_STYLES[params.styleId]
+  const bgmStyleId = params.bgmStyleId ?? style.defaultBgmStyle
+  const subtitleStyleId = params.subtitleStyleId
+
+  // Filter inserts to only those eligible (approved / locked / completed)
+  const eligibleInserts = params.inserts.filter((it) =>
+    (it.status === 'approved' || it.status === 'locked' || it.status === 'completed') &&
+    !!it.videoRef
+  ).sort((a, b) => a.order - b.order)
+
+  console.log(
+    `[AUTO_EDIT] style=${params.styleId} bgm=${bgmStyleId} ` +
+    `eligible-inserts=${eligibleInserts.length}/${params.inserts.length} ` +
+    `voice-duration=${params.creatorVideo.voiceDurationSec?.toFixed(1) ?? '?'}s`
+  )
+
+  // The total duration is anchored to the creator video duration (which
+  // matches the voice timeline). Inserts overlay ON TOP of the creator video.
+  const totalDurationSec = params.creatorVideo.voiceDurationSec ??
+    params.script.totalDurationSec ??
+    params.creatorVideo.durationSec
+
+  // ── 1. Build segments (creator + inserts) ────────────────────────────
+  const segments = buildSegments(
+    params.creatorVideo,
+    eligibleInserts,
+    style.insertOverlayDurationSec,
+    totalDurationSec,
+  )
+
+  // ── 2. Build captions ────────────────────────────────────────────────
+  const captions = subtitleStyleId === 'none'
+    ? []
+    : buildCaptionSegments({
+        script: params.script,
+        scriptStartSec: 0,
+        wordsPerChunk: 3,
+        emphasisRate: style.captionEmphasisRate,
+      })
+
+  // ── 3. Build punch zoom cues ─────────────────────────────────────────
+  const punchZooms = buildPunchZoomCues({
+    script: params.script,
+    scriptStartSec: 0,
+    styleId: params.styleId,
+    totalDurationSec,
+  })
+
+  // ── 4. Build SFX cues (transitions + zoom accents) ───────────────────
+  const sfxCues = buildSfxCues({
+    segments,
+    punchZooms,
+    totalDurationSec,
+    sfxDensity: style.sfxDensity,
+    styleAppliesCta: style.applyCtaOverlay,
+  })
+
+  // ── 5. CTA overlay ───────────────────────────────────────────────────
+  const cta: CtaOverlay | null = style.applyCtaOverlay
+    ? buildCtaOverlay({
+        script: params.script,
+        totalDurationSec,
+        styleId: params.styleId,
+        textOverride: params.ctaTextOverride,
+      })
+    : null
+
+  // ── 6. BGM spec ──────────────────────────────────────────────────────
+  const bgmCfg = BGM_CATALOG[bgmStyleId]
+  const bgm = bgmStyleId === 'none' ? null : {
+    styleId: bgmStyleId,
+    volume: Math.min(0.25, style.bgmVolume),  // voice always priority — hard cap 0.25
+    fadeInSec: bgmCfg.fadeInSec,
+    fadeOutSec: bgmCfg.fadeOutSec,
+  }
+
+  const plan: AutoEditPlan = {
+    totalDurationSec: round2(totalDurationSec),
+    segments,
+    captions,
+    punchZooms,
+    sfxCues,
+    bgm,
+    cta,
+    styleId: params.styleId,
+    subtitleStyleId,
+    generatedAt: Date.now(),
+  }
+
+  console.log(
+    `[AUTO_EDIT] plan built · segments=${plan.segments.length} ` +
+    `captions=${plan.captions.length} zooms=${plan.punchZooms.length} ` +
+    `sfx=${plan.sfxCues.length} cta=${plan.cta ? 'yes' : 'no'} ` +
+    `duration=${plan.totalDurationSec.toFixed(1)}s`
+  )
+
+  return plan
+}
+
+// ── Segment builder ────────────────────────────────────────────────────
+
+/**
+ * Build the segment timeline. Strategy:
+ *   • Start with one creator_video segment spanning the full duration
+ *   • For each eligible insert, INSERT an action_insert segment at its
+ *     voiceTimestampSec (or evenly spaced if no timestamp)
+ *   • Inserts replace the creator segment for their overlay duration
+ *
+ * This produces a sequence like:
+ *   creator [0-3.5s] → insert [3.5-5.0s] → creator [5.0-12.4s] → insert [12.4-13.9s] → ...
+ */
+function buildSegments(
+  creatorVideo: CreatorVideoClip,
+  inserts: ActionInsertClip[],
+  insertOverlayDurationSec: number,
+  totalDurationSec: number,
+): EditSegment[] {
+  if (!creatorVideo.videoRef) return []
+
+  // Compute insert timestamps — clamp to [1, totalDuration - 1] window
+  // so we don't insert in the first second (hook intact) or last second
+  // (CTA intact).
+  const usableStart = 1.0
+  const usableEnd = Math.max(usableStart + 1, totalDurationSec - 1)
+  const insertSlots: { insert: ActionInsertClip; tsSec: number; durSec: number }[] = []
+
+  for (const insert of inserts) {
+    let ts = insert.voiceTimestampSec ?? null
+    if (ts === null || ts === undefined) {
+      // Evenly distribute manually-added inserts that lack a timestamp
+      const fraction = insertSlots.length / Math.max(1, inserts.length)
+      ts = usableStart + fraction * (usableEnd - usableStart)
+    }
+    ts = Math.max(usableStart, Math.min(usableEnd - insertOverlayDurationSec, ts))
+    insertSlots.push({
+      insert,
+      tsSec: round2(ts),
+      durSec: insertOverlayDurationSec,
+    })
+  }
+
+  // Sort by timestamp + dedupe overlaps (push later inserts forward)
+  insertSlots.sort((a, b) => a.tsSec - b.tsSec)
+  for (let i = 1; i < insertSlots.length; i++) {
+    const prev = insertSlots[i - 1]
+    const cur = insertSlots[i]
+    const prevEnd = prev.tsSec + prev.durSec
+    if (cur.tsSec < prevEnd) {
+      cur.tsSec = round2(prevEnd + 0.1)
+    }
+  }
+  // Trim any that pushed past the end
+  const validSlots = insertSlots.filter((s) => s.tsSec + s.durSec <= totalDurationSec)
+
+  // Now build the actual segment list
+  const segments: EditSegment[] = []
+  let segmentId = 0
+  let cursor = 0
+
+  for (const slot of validSlots) {
+    // Creator segment from cursor → slot start
+    if (slot.tsSec > cursor) {
+      segments.push({
+        segmentId: segmentId++,
+        startSec: round2(cursor),
+        durationSec: round2(slot.tsSec - cursor),
+        source: { kind: 'creator_video', videoRef: creatorVideo.videoRef },
+        sourceInSec: round2(cursor),
+        reason: 'narration_block',
+        transitionIn: segments.length === 0 ? 'cut' : 'cut',
+      })
+    }
+    // Insert segment
+    if (slot.insert.videoRef) {
+      segments.push({
+        segmentId: segmentId++,
+        startSec: round2(slot.tsSec),
+        durationSec: round2(slot.durSec),
+        source: {
+          kind: 'action_insert',
+          insertId: slot.insert.insertId,
+          videoRef: slot.insert.videoRef,
+        },
+        sourceInSec: 0,
+        reason: 'insert_overlay',
+        transitionIn: 'whoosh',
+      })
+    }
+    cursor = round2(slot.tsSec + slot.durSec)
+  }
+
+  // Final creator segment from cursor → end
+  if (cursor < totalDurationSec) {
+    segments.push({
+      segmentId: segmentId++,
+      startSec: round2(cursor),
+      durationSec: round2(totalDurationSec - cursor),
+      source: { kind: 'creator_video', videoRef: creatorVideo.videoRef },
+      sourceInSec: round2(cursor),
+      reason: 'narration_block',
+      transitionIn: 'cut',
+    })
+  }
+
+  return segments
+}
+
+// ── SFX cue builder ────────────────────────────────────────────────────
+
+interface BuildSfxCuesParams {
+  segments: EditSegment[]
+  punchZooms: { startSec: number }[]
+  totalDurationSec: number
+  sfxDensity: number
+  styleAppliesCta: boolean
+}
+
+function buildSfxCues(params: BuildSfxCuesParams): SfxCue[] {
+  if (params.sfxDensity <= 0) return []
+  const cues: SfxCue[] = []
+
+  // 1. Transitions — fire SFX on every action_insert IN/OUT
+  for (const seg of params.segments) {
+    if (seg.source.kind === 'action_insert') {
+      cues.push({
+        startSec: round2(seg.startSec),
+        sfxId: pickSfxFor('transition'),
+        volume: 0.35 * params.sfxDensity,
+        reason: 'transition',
+      })
+    }
+  }
+
+  // 2. Punch-zoom accents — light click on each zoom (if density high enough)
+  if (params.sfxDensity > 0.4) {
+    for (const zoom of params.punchZooms) {
+      cues.push({
+        startSec: round2(zoom.startSec),
+        sfxId: pickSfxFor('punch_zoom'),
+        volume: 0.25 * params.sfxDensity,
+        reason: 'punch_zoom',
+      })
+    }
+  }
+
+  // 3. CTA hit — strong impact 0.5s before CTA shows (if style does CTA)
+  if (params.styleAppliesCta && params.totalDurationSec > 2) {
+    cues.push({
+      startSec: round2(params.totalDurationSec - 2.0),
+      sfxId: pickSfxFor('cta'),
+      volume: 0.45 * Math.max(0.5, params.sfxDensity),
+      reason: 'cta_emphasis',
+    })
+  }
+
+  // Sort + dedupe overlapping
+  cues.sort((a, b) => a.startSec - b.startSec)
+  const out: SfxCue[] = []
+  for (const c of cues) {
+    const last = out[out.length - 1]
+    // Don't fire two SFX within 0.2s of each other (too cluttered)
+    if (!last || c.startSec - last.startSec > 0.2) out.push(c)
+  }
+  return out
+}
+
+// ── CTA overlay builder ────────────────────────────────────────────────
+
+interface BuildCtaParams {
+  script: GeneratedScript
+  totalDurationSec: number
+  styleId: EditingStyleId
+  textOverride?: string
+}
+
+function buildCtaOverlay(params: BuildCtaParams): CtaOverlay {
+  // Extract CTA text from script — pick the script's CTA block first line.
+  const ctaBlock = params.script.blocks.find((b) => b.id === 'cta')
+  const fallbackText = ctaBlock?.text.split(/[.!?]/)[0].trim() || 'Try it now'
+  const text = (params.textOverride || fallbackText).slice(0, 80)
+
+  // Style decides animation
+  const style = EDITING_STYLES[params.styleId]
+  const animation: CtaOverlay['animation'] =
+    style.id === 'aggressive_sales' ? 'shake' :
+    style.id === 'fast_ugc'         ? 'pop_in' :
+    style.id === 'emotional_story'  ? 'fade_in' :
+    'slide_up'
+
+  // CTA duration = last 2s of video
+  return {
+    startSec: round2(Math.max(0, params.totalDurationSec - 2.0)),
+    durationSec: 2.0,
+    text,
+    animation,
+    style: style.id === 'aggressive_sales' ? 'fullscreen_centered' : 'sticker_bottom',
+  }
+}
+
+function round2(n: number): number {
+  return Math.round(n * 100) / 100
+}
+
+// ── Validation diagnostic ──────────────────────────────────────────────
+
+/** Z34 — Cheap sanity check on the generated plan. Returns warnings the
+ *  UI can show without blocking the user from previewing. */
+export function validatePlan(plan: AutoEditPlan): string[] {
+  const warnings: string[] = []
+
+  if (plan.segments.length === 0) {
+    warnings.push('Không có segment nào — plan rỗng.')
+  }
+  if (plan.totalDurationSec < 5) {
+    warnings.push(`Video chỉ ${plan.totalDurationSec.toFixed(1)}s — có thể quá ngắn cho TikTok hook.`)
+  }
+  if (plan.totalDurationSec > 90) {
+    warnings.push(`Video ${plan.totalDurationSec.toFixed(1)}s — vượt cap TikTok ad chuẩn (60s).`)
+  }
+  // Verify segment continuity
+  for (let i = 1; i < plan.segments.length; i++) {
+    const prev = plan.segments[i - 1]
+    const cur = plan.segments[i]
+    const expectedStart = prev.startSec + prev.durationSec
+    if (Math.abs(cur.startSec - expectedStart) > 0.05) {
+      warnings.push(`Gap timeline giữa segment ${prev.segmentId} → ${cur.segmentId}: ${(cur.startSec - expectedStart).toFixed(2)}s`)
+    }
+  }
+  return warnings
+}

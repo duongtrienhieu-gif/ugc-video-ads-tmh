@@ -37,6 +37,26 @@ export const ASSET_TO_GROUP: Record<AssetTypeId, EngineGroup> = {
   // ── designed-graphic group ──────────────────────────────────────────
   'infographic':        'designed-graphic',
   'cta-banner':         'designed-graphic',
+
+  // ── P33 / P35 — Phase 3 fully shipped ──────────────────────────────
+  'ingredients-explain':     'designed-graphic',
+  'mechanism-explain':       'designed-graphic',
+  'benefit-timeline':        'designed-graphic',
+  'collage-4-frames':        'photographic',
+  'group-holding':           'photographic',
+  'expert-kol':              'photographic',
+  'floating-product':        'photographic',
+  'ingredient-composition':  'photographic',
+
+  // ── P37 — Ladipage-inspired creatives ──────────────────────────────
+  'pain-overlay':            'photographic',
+  'news-mock':               'photographic',
+  'metric-cta':              'photographic',
+  'failed-solutions':        'photographic',
+  'comparison-table':        'photographic',
+
+  // ── P40 — photographic benefits icon grid ──────────────────────────
+  'benefits-grid':           'photographic',
 } as const
 
 /** Helper — get the engine group for an asset id (typed exhaustive). */

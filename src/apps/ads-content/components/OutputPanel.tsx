@@ -250,7 +250,7 @@ function SavedHistorySection() {
         📁 Project → Ads Content ({items.length})
       </h3>
       <p className="mb-3 text-[10px] text-gray-400">
-        Đã lưu local trong trình duyệt này — sẽ sync sang database khi backend bật bảng ads_content.
+        Tự động sync giữa các thiết bị qua Supabase (cùng email). Vẫn cache local để mở app nhanh khi offline.
       </p>
       <div className="space-y-2">
         {items.map((item) => {

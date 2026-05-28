@@ -34,6 +34,11 @@ import {
 } from './_textPayload'
 import { renderInfographic } from './infographic/template'
 import { renderCtaBanner } from './cta-banner/template'
+import { fromProduct, type ProductKnowledge } from '../../services/productKnowledge'
+import { findCreativeConfig } from '../../creativeConfig/configs'
+import { dnaSummary } from '../../shared/prompt/dnaDirective'
+import type { Product } from '../../../../stores/types'
+import type { CreativeDNA } from '../../types/creativeDNA'
 
 export async function dispatchDesignedGraphic(
   module: DesignedGraphicModule,
@@ -67,11 +72,25 @@ export async function dispatchDesignedGraphic(
     : null
   const productImageUrl = productImageRef ?? undefined
 
+  // P25 — load product knowledge once, share across both renderers
+  const productKnowledge = product ? fromProduct(product as Product, locale) : undefined
+
+  // P28 — load Creative DNA so its hard rule arrays append to the
+  // Gemini system instruction during content generation.
+  const config = findCreativeConfig(module.id)
+  const dna = config?.dna
+
   // ── Step 4: render the canvas ─────────────────────────────────────
   let canvas: HTMLCanvasElement
   if (rendererKind === 'infographic') {
+    // P35 — pull the variant flag (stats / ingredients / mechanism /
+    // timeline) so generateInfographicContent steers Gemini toward the
+    // right bullet structure for this creative type.
+    const infographicVariant = readInfographicVariant(module, params)
+    const req = buildContentReq('infographic', product ?? null, opts, locale, productKnowledge, dna)
+    req.infographicVariant = infographicVariant
     const content = (opts.content as InfographicContent | undefined)
-      ?? await generateInfographicContent(settings.geminiApiKey, buildContentReq('infographic', product ?? null, opts, locale))
+      ?? await generateInfographicContent(settings.geminiApiKey, req)
     canvas = await renderInfographic({
       content,
       layout,
@@ -81,7 +100,7 @@ export async function dispatchDesignedGraphic(
     })
   } else if (rendererKind === 'cta-banner') {
     const content = (opts.content as CtaBannerContent | undefined)
-      ?? await generateCtaBannerContent(settings.geminiApiKey, buildContentReq('cta-banner', product ?? null, opts, locale))
+      ?? await generateCtaBannerContent(settings.geminiApiKey, buildContentReq('cta-banner', product ?? null, opts, locale, productKnowledge, dna))
     canvas = await renderCtaBanner({
       content,
       layout,
@@ -126,6 +145,13 @@ export async function dispatchDesignedGraphic(
     issues:     qc.issues,
     visionPass: qc.visionPass,
   }
+  // P28 — surface DNA rule snapshot on the asset.
+  if (dna) {
+    asset.metadata.engineExtras = {
+      ...(asset.metadata.engineExtras ?? {}),
+      creativeDna: dnaSummary(dna),
+    }
+  }
   return asset
 }
 
@@ -141,6 +167,19 @@ function readRendererKind(module: DesignedGraphicModule, params: GenerateAssetPa
   if (module.id === 'infographic') return 'infographic'
   if (module.id === 'cta-banner')  return 'cta-banner'
   return ''
+}
+
+/** P35 — pull the infographic variant flag from engineExtras. Drives
+ *  variant-specific content prompt shaping in _textPayload.ts. */
+function readInfographicVariant(
+  module: DesignedGraphicModule,
+  params: GenerateAssetParams,
+): 'stats' | 'ingredients' | 'mechanism' | 'timeline' {
+  const normalized = module.normalizeOutput({ outputUrl: 'unused' }, params)
+  const extras = normalized.metadata.engineExtras as Record<string, unknown> | undefined
+  const v = extras?.['infographicVariant']
+  if (v === 'ingredients' || v === 'mechanism' || v === 'timeline' || v === 'stats') return v
+  return 'stats'
 }
 
 interface BankProductLike {
@@ -169,6 +208,8 @@ function buildContentReq(
   product: BankProductLike | null,
   opts: Record<string, unknown>,
   locale: UINativeLocale,
+  productKnowledge?: ProductKnowledge,
+  dna?: CreativeDNA,
 ): ContentRequest {
   return {
     kind,
@@ -180,5 +221,7 @@ function buildContentReq(
     usps:               (opts.usps as string[] | undefined) ?? splitList(product?.usps),
     offer:              (opts.offer as string | undefined) ?? product?.offer,
     tone:               opts.tone as string | undefined,
+    productKnowledge,
+    dna,
   }
 }

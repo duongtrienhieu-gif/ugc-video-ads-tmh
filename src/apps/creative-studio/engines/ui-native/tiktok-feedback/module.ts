@@ -18,7 +18,9 @@ export const module: UINativeModule = {
   label: { vi: 'Đánh giá TikTok Shop', en: 'TikTok Shop buyer review' },
   category: 'marketplace',
   platform: 'tiktok-shop',
-  defaultLocale: 'vi-VN',
+  // P50 — Malaysia primary market; see shopee-feedback/module.ts for
+  // the same fix and reasoning.
+  defaultLocale: 'my-MY',
 
   authenticity: {
     requireStatusBar: true,
@@ -52,7 +54,7 @@ export const module: UINativeModule = {
     return null
   },
 
-  postProcess: 'medium',
+  postProcess: 'heavy',
 
   normalizeOutput(raw, params): GeneratedAsset {
     const now = Date.now()
