@@ -16,26 +16,23 @@ import type { NarrativeMode } from './detectNarrativeMode'
 export function buildModeHint(mode: NarrativeMode): string {
   switch (mode) {
     case 'pain-driven-DR':
+      // OPT-F6 (2026-05-28): trimmed anti-soft-opening rules — they live
+      // in the brainstorm brief's ANGLE_GUIDANCE block already. Kept
+      // here are only the mode-specific bits: cadence pacing + the
+      // skipped-block list (which brainstorm doesn't know about).
       return [
         '═══ NARRATIVE MODE: pain-driven-DR ═══',
-        'Đây là PAIN-DRIVEN DR pack. Reader đang đau — cần feedback NHANH.',
+        'PAIN-DRIVEN DR pack. Cadence siết, không warm-up nostalgia, hit pain Block 1.',
         '',
         'CADENCE:',
-        '- Phase 1: HIT pain trong 2 câu đầu Block 1. KHÔNG warm-up nostalgia. KHÔNG soft philosophy mở đầu.',
-        '- Phase 1-2: STACK agitate beats (đếm symptoms, vẽ tương lai tệ hơn, inventory failed attempts). Mỗi block kế tiếp PHẢI deepen pain, không relief sớm.',
-        '- Phase 3: mechanism reveal nhanh — explain THROUGH felt difference + 1-2 concrete domain terms.',
-        '- Phase 4: micro-transformation + CTA ngắn. KHÔNG dùng filler "cuộc sống nhẹ nhàng hơn" generic.',
+        '- Phase 1-2: stack agitate beats; mỗi block deepen pain, không relief sớm.',
+        '- Phase 3: mechanism reveal nhanh — felt difference + 1-2 concrete domain terms.',
+        '- Phase 4: micro-transformation + CTA ngắn.',
         '',
-        'PACK ĐANG ĐƯỢC CẮT NHỮNG BLOCK SAU (compose ngắn hơn ~12 blocks):',
+        'PACK SKIPS (compose dense ~12 blocks vs full 17):',
         '- not-alone-bridge (filler "bạn không đơn độc")',
-        '- belief-shift (đã gộp vào shared-failed-attempts qua brainstorm reframe beat)',
+        '- belief-shift (gộp vào shared-failed-attempts)',
         '- emotional-wins (redundant với micro-transformation)',
-        '',
-        'TUYỆT ĐỐI KHÔNG:',
-        '- Mở pack bằng "Bạn còn nhớ cảm giác..." nostalgia recall.',
-        '- Mở pack bằng câu hỏi triết lý chung chung ("Có những điều rất nhỏ...").',
-        '- Đoạn validation "tôi cũng từng cảm thấy như vậy" trước khi đã hit pain rank-1.',
-        '- Cliché DR ("đặt hàng ngay", "đừng bỏ lỡ") — vẫn giữ diary tone, chỉ siết cadence.',
         '═══════════════════════════════════════════════════════════',
       ].join('\n')
 

@@ -42,11 +42,15 @@ export function buildBrainstormBrief(brainstorm: PackBrainstorm): string {
   }
   lines.push('')
 
-  if (brainstorm.painLadder.length > 0) {
-    lines.push('Pain ladder (rank 1 = sharpest — open the pack from this):')
-    for (const p of brainstorm.painLadder) {
-      lines.push(`  ${p.rank}. [${p.lossType}] ${p.pain}`)
-    }
+  // OPT-F4 (2026-05-28): the full pain list lives in PRODUCT ESSENCE's
+  // "Reader-specific symptoms" block below — listing all 5 ranks again
+  // here was a ~400-token duplicate. Keep just the rank-1 pain so the
+  // hook draft anchor stays clear, and the rest comes from the essence
+  // block (which also carries forbiddenDriftSymptoms — more useful).
+  const topPain = brainstorm.painLadder[0]
+  if (topPain) {
+    lines.push(`Rank-1 pain (Block 1 MUST hit this in first 2 sentences): [${topPain.lossType}] ${topPain.pain}`)
+    lines.push('(Full pain list is in the PRODUCT ESSENCE block below.)')
     lines.push('')
   }
 
