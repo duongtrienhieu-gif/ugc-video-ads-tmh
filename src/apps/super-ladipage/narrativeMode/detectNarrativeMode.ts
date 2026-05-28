@@ -45,18 +45,13 @@ export type NarrativeMode = 'pain-driven-DR' | 'aspiration-led' | 'recognition-s
  *  guarantees per-block variety). Only purely-aesthetic niches stay
  *  recognition-soft. */
 const PAIN_DRIVEN_NICHES: ReadonlyArray<NicheKey> = [
-  // Original 10
+  // ── Health / medical (chronic & shame-adjacent) ──
   'health-respiratory',
   'health-joint',
   'health-digestive',
   'health-cardiovascular',
   'health-functional',
   'supplement-wellness',
-  'hair-loss',
-  'sleep-fatigue',
-  'weight-loss',
-  'financial-debt',
-  // Added 12 (Fix A 2026-05-28)
   'dental-oral-care',           // răng vàng = social shame, breath = social rejection
   'anti-aging-longevity',       // time anxiety, mortality salience
   'mental-health',              // anxiety / depression, daily distress
@@ -70,6 +65,20 @@ const PAIN_DRIVEN_NICHES: ReadonlyArray<NicheKey> = [
   'fitness-recovery',           // body pain + injury frustration
   'mom-baby',                   // postpartum identity + sleep loss
   'beauty-confidence',          // identity pain (covers blemish / skin shame)
+
+  // ── Cosmetic niches that LOOK soft but most DR packs sell into pain ──
+  // OPT-DIAG2-C (2026-05-28): SEA marketers running landing packs for
+  // skincare / haircare almost always target a specific pain (acne, dark
+  // spots, aging, hair fall, dandruff) — NOT pure aesthetic luxury. Default
+  // them to pain-driven so brainstorm runs. Luxury-aesthetic edge cases
+  // still recover via brainstorm's chosenAngle='soft-recognition' override.
+  'skincare',                   // acne / dark spots / aging — pain-driven 95% of packs
+  'haircare',                   // hair loss / dandruff / scalp issues — pain-driven 95%
+
+  // Note: 'relationship' stays in recognition-soft default — identity /
+  // connection register, not health pain. Removed earlier dead entries
+  // (sleep-fatigue / weight-loss / financial-debt / hair-loss) that did
+  // not map to any real NicheKey.
 ] as unknown as NicheKey[]
 
 /** Niches that default to aspiration-led mode. Reader buys for the future
