@@ -54,12 +54,33 @@ export function buildBrainstormBrief(brainstorm: PackBrainstorm): string {
     lines.push('')
   }
 
-  lines.push('HOOK DRAFT — seed for Block 1 (self-recognition-hook):')
+  lines.push('HOOK DRAFT — Block 1 (self-recognition-hook) opening:')
   lines.push(`"""`)
   lines.push(brainstorm.hookDraft)
   lines.push(`"""`)
-  lines.push('Use this draft as the STARTING POINT for Block 1.')
-  lines.push('You may polish wording, add 1-2 connecting sentences, but DO NOT defang it back into nostalgia / "bạn còn nhớ" / philosophical pattern unless chosenAngle = soft-recognition.')
+
+  // Sprint 5 — E1 (2026-05-28): STRICT VERBATIM rule for non-soft angles.
+  // Previously this section said "STARTING POINT + may polish" which gave
+  // Gemini permission to soften the draft into a generic recall question
+  // ("Lần cuối bạn ngủ ngon là khi nào?"). The pain-driven draft was
+  // overridden by the system prompt's "Reader Immersion soft" architecture.
+  // For non-soft angles, the opening is now LOCKED.
+  if (brainstorm.chosenAngle === 'soft-recognition') {
+    lines.push('Use this draft as the STARTING POINT for Block 1. You may polish freely while keeping the recall feel.')
+  } else {
+    lines.push('═══ HARD RULE — BLOCK 1 OPENING IS LOCKED ═══')
+    lines.push('Block 1\'s FIRST 2-3 SENTENCES MUST be the hookDraft above, VERBATIM or near-verbatim (≤10% word change allowed only for minor flow fixes like pronoun/connector adjustments).')
+    lines.push('You may ADD 1-2 connecting sentences AFTER the locked opening, but the opening 2-3 are LOCKED to the draft.')
+    lines.push('')
+    lines.push('FORBIDDEN — DO NOT do any of these to Block 1 opening:')
+    lines.push('  ✗ Replace with a generic recall question ("Lần cuối bạn ngủ ngon là khi nào?", "Bạn còn nhớ cảm giác...?")')
+    lines.push('  ✗ Replace with a philosophical question ("Có những điều rất nhỏ nhặt...")')
+    lines.push('  ✗ Soften the draft into vague emotional language ("Có những ngày bạn cảm thấy như...")')
+    lines.push('  ✗ Strip out concrete details (times, numbers, sensory cues) from the draft')
+    lines.push('  ✗ Insert a soft narrator self-intro before the locked opening')
+    lines.push('')
+    lines.push('OVERRIDE NOTE: the system prompt\'s "Reader Immersion soft" rule ("recognition progression > story progression", "human imperfection") DOES NOT APPLY to Block 1 opening when this brainstorm anchor is present. Anchor wins.')
+  }
   lines.push('Block 1 must hit the rank-1 pain WITHIN THE FIRST 2 SENTENCES.')
   lines.push('')
 
