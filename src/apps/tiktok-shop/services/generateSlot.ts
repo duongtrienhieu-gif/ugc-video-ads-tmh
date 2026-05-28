@@ -22,7 +22,7 @@ import {
 import { getUrl, saveFromBlobUrl } from '../../../utils/assetStore'
 import type { ResolvedBrandKit, Market } from '../../../types/brandKit'
 import type { Product } from '../../../stores/types'
-import type { SlotConfig, PaletteFamily } from '../types'
+import type { SlotConfig, PaletteFamily, SlotTexts } from '../types'
 import { buildPromptForSlot } from './promptBuilder'
 
 export interface GenerateSlotParams {
@@ -33,6 +33,9 @@ export interface GenerateSlotParams {
   paletteFamily: PaletteFamily
   language: Market
   referenceImageAssetIds: string[]
+  /** AI-generated per-slot text (from description gen). When omitted, image
+   *  prompts fall back to product field derivation — works but lower quality. */
+  slotTexts?: SlotTexts
   onStatus?: (status: ImageStatus) => void
   signal?: AbortSignal
 }
@@ -68,6 +71,7 @@ export async function generateSlotImage(params: GenerateSlotParams): Promise<Gen
     paletteFamily: params.paletteFamily,
     language: params.language,
     hasLogoRef,
+    slotTexts: params.slotTexts,
   })
 
   if (typeof console !== 'undefined') {

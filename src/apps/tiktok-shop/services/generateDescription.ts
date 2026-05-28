@@ -6,7 +6,7 @@
 
 import type { ResolvedBrandKit, Market } from '../../../types/brandKit'
 import type { Product } from '../../../stores/types'
-import type { DescriptionBlock, ListingDescription } from '../types'
+import type { DescriptionBlock, ListingDescription, SlotTexts } from '../types'
 import { kieTextGenerate } from '../../../utils/kieai'
 import { MOCK_DESCRIPTION_BLOCKS } from '../constants'
 
@@ -24,9 +24,9 @@ export async function generateDescription(
   const systemInstruction = buildSystemInstruction(params)
 
   const raw = await kieTextGenerate(params.apiKey, prompt, systemInstruction)
-  const blocks = parseBlocksOrFallback(raw)
+  const { blocks, slotTexts } = parseOrFallback(raw)
   const fullText = assembleFullText(blocks)
-  return { blocks, fullText }
+  return { blocks, fullText, slotTexts }
 }
 
 function buildSystemInstruction(params: GenerateDescriptionParams): string {
@@ -51,23 +51,36 @@ function buildDescriptionPrompt(params: GenerateDescriptionParams): string {
 
   const langName = language === 'ms' ? 'Bahasa Malaysia' : 'Vietnamese'
 
-  return `Generate a complete TikTok Shop product listing description as JSON with EXACTLY 11 blocks aligned to the conversion arc.
+  return `Generate a complete TikTok Shop product listing description AND the per-slot text overlays for 9 images, all in one JSON response.
 
-JSON SHAPE (return THIS structure exactly):
+EVERYTHING you write must be SPECIFIC to the product below — NO generic "teeth whitening" copy, NO unrelated category content. Read product fields carefully and write copy that matches the actual product niche.
+
+JSON SHAPE (return THIS structure exactly — no extra fields, no commentary):
 {
   "blocks": [
-    {"kind": "hook", "text": "<emoji + 1-sentence attention-grabbing opener, must be visible in 2-3 lines>"},
-    {"kind": "pain", "bullets": ["<3 pain bullets, each a question or statement of the user's frustration>", "...", "..."]},
+    {"kind": "hook", "text": "<emoji + 1-sentence attention-grabbing opener; visible in 2-3 lines>"},
+    {"kind": "pain", "bullets": ["<3 pain bullets specific to this product's target user>", "...", "..."]},
     {"kind": "solution", "text": "<1-2 sentences introducing the product as the solution + key mechanism>"},
     {"kind": "benefits", "bullets": ["<4-5 benefit bullets — concrete outcomes>", "...", "...", "...", "..."]},
-    {"kind": "specs", "rows": [["<ingredient/key>", "<value/%>"], ["...", "..."], ...]},
-    {"kind": "reviews", "quotes": [{"text": "<realistic customer quote>", "author": "<Name, City>"}, {"text": "...", "author": "..."}]},
+    {"kind": "specs", "rows": [["<key>", "<value>"], ["...", "..."], ...]},
+    {"kind": "reviews", "quotes": [{"text": "<realistic customer quote about THIS product>", "author": "<Name, City>"}, {"text": "...", "author": "..."}]},
     {"kind": "usage", "steps": ["<step 1>", "<step 2>", "<step 3>"]},
     {"kind": "offer", "text": "<offer line with price discount + combo>"},
     {"kind": "faq", "items": [{"q": "<question>", "a": "<answer>"}, {"q": "...", "a": "..."}, {"q": "...", "a": "..."}]},
     {"kind": "promise", "bullets": ["<service promise like fast shipping/return>", "...", "..."]},
     {"kind": "cta", "text": "<final CTA with mild urgency>"}
-  ]
+  ],
+  "slotTexts": {
+    "slot1": {"headline": "<BIG hero claim ~6 words, ALL CAPS, specific to product>", "tagline": "<sub-claim ~8 words>"},
+    "slot2": {"question": "<pain question matching this product's user>", "painBullets": ["<short bullet 1>", "<bullet 2>", "<bullet 3>"]},
+    "slot3": {"beforeLabel": "<e.g. SEBELUM / TRƯỚC>", "afterLabel": "<e.g. SELEPAS / SAU>", "metric": "<specific outcome metric, e.g. +8 SHADE, -5KG, 3X MORE>", "metricSubtitle": "<period e.g. DALAM 14 HARI / SAU 30 NGÀY>", "disclaimer": "<results-may-vary disclaimer>"},
+    "slot4": {"title": "<formula/mechanism title, e.g. FORMULA AKTIF / CÔNG THỨC HOẠT TÍNH>", "ingredients": [{"name": "<ingredient1>", "pct": "<30%>"}, {"name": "<ing2>", "pct": "<25%>"}, {"name": "<ing3>", "pct": "<20%>"}, {"name": "<ing4>", "pct": "<15%>"}], "tagline": "<short safety/natural claim>"},
+    "slot5": {"quote": "<realistic customer testimonial about THIS product>", "author": "<Name, City>", "verifiedNote": "<small verified-review note>"},
+    "slot6": {"title": "<how-to-use title with step count>", "steps": ["<step1 verb phrase>", "<step2>", "<step3>"], "timing": "<usage timing line e.g. 🌅 Pagi • 🌙 Malam>"},
+    "slot7": {"title": "<choose-the-good title>", "usLabel": "<our category label>", "themLabel": "<competitor category label>", "points": [["<our val>", "<their val>"], ["...", "..."], ["...", "..."], ["...", "..."]]},
+    "slot8": {"originalPrice": "<orig price string e.g. RM 159 or empty>", "currentPrice": "<current price string e.g. RM 89>", "discount": "<e.g. -44% or empty>", "combo": "<combo/gift line e.g. + FREE Bonus Item>", "cta": "<BELI SEKARANG / MUA NGAY>", "urgency": "<short urgency line e.g. Stok terhad hari ini>"},
+    "slot9": {"title": "<FAQ title e.g. SOALAN LAZIM / CÂU HỎI THƯỜNG GẶP>", "items": [{"q": "<short safety/quality question>", "a": "<short answer>"}, {"q": "<results timing question>", "a": "<answer>"}, {"q": "<return policy question>", "a": "<answer>"}]}
+  }
 }
 
 PRODUCT DATA:
@@ -110,35 +123,143 @@ Return the JSON object only.`
 
 // ── Parsing ──────────────────────────────────────────────────────────────
 
-interface RawBlocksPayload {
+interface RawPayload {
   blocks?: unknown
+  slotTexts?: unknown
 }
 
-function parseBlocksOrFallback(raw: string): DescriptionBlock[] {
+function parseOrFallback(raw: string): { blocks: DescriptionBlock[]; slotTexts: SlotTexts | undefined } {
   const json = extractJsonObject(raw)
   if (!json) {
-    console.warn('[generateDescription] could not extract JSON from response — using mock')
-    return MOCK_DESCRIPTION_BLOCKS
+    console.warn('[generateDescription] could not extract JSON from response — using generic placeholder')
+    return { blocks: MOCK_DESCRIPTION_BLOCKS, slotTexts: undefined }
   }
   try {
-    const payload = JSON.parse(json) as RawBlocksPayload
-    const blocks = payload.blocks
-    if (!Array.isArray(blocks) || blocks.length === 0) {
-      console.warn('[generateDescription] JSON has no blocks array — using mock')
-      return MOCK_DESCRIPTION_BLOCKS
+    const payload = JSON.parse(json) as RawPayload
+    const rawBlocks = payload.blocks
+    if (!Array.isArray(rawBlocks) || rawBlocks.length === 0) {
+      console.warn('[generateDescription] JSON has no blocks array — using generic placeholder')
+      return { blocks: MOCK_DESCRIPTION_BLOCKS, slotTexts: undefined }
     }
-    const validated = blocks
+    const validated = rawBlocks
       .map(validateBlock)
       .filter((b): b is DescriptionBlock => b !== null)
     if (validated.length < 5) {
-      console.warn('[generateDescription] too few valid blocks — using mock', validated.length)
-      return MOCK_DESCRIPTION_BLOCKS
+      console.warn('[generateDescription] too few valid blocks — using generic placeholder', validated.length)
+      return { blocks: MOCK_DESCRIPTION_BLOCKS, slotTexts: undefined }
     }
-    return validated
+    const slotTexts = validateSlotTexts(payload.slotTexts)
+    return { blocks: validated, slotTexts }
   } catch (err) {
-    console.warn('[generateDescription] JSON parse failed — using mock', err)
-    return MOCK_DESCRIPTION_BLOCKS
+    console.warn('[generateDescription] JSON parse failed — using generic placeholder', err)
+    return { blocks: MOCK_DESCRIPTION_BLOCKS, slotTexts: undefined }
   }
+}
+
+// Validate slotTexts loosely — if the AI returned anything matching the
+// expected shape we keep it, otherwise drop the field entirely so image
+// prompts fall back to product-field derivation instead of bad data.
+function validateSlotTexts(raw: unknown): SlotTexts | undefined {
+  if (!raw || typeof raw !== 'object') return undefined
+  const r = raw as Record<string, unknown>
+  const out: SlotTexts = {}
+
+  const s1 = r.slot1 as { headline?: unknown; tagline?: unknown } | undefined
+  if (s1 && typeof s1.headline === 'string' && typeof s1.tagline === 'string') {
+    out.slot1 = { headline: s1.headline, tagline: s1.tagline }
+  }
+
+  const s2 = r.slot2 as { question?: unknown; painBullets?: unknown } | undefined
+  if (s2 && typeof s2.question === 'string' && Array.isArray(s2.painBullets)) {
+    const bullets = (s2.painBullets as unknown[]).filter((b): b is string => typeof b === 'string')
+    if (bullets.length > 0) out.slot2 = { question: s2.question, painBullets: bullets }
+  }
+
+  const s3 = r.slot3 as { beforeLabel?: unknown; afterLabel?: unknown; metric?: unknown; metricSubtitle?: unknown; disclaimer?: unknown } | undefined
+  if (s3 && typeof s3.metric === 'string') {
+    out.slot3 = {
+      beforeLabel:    typeof s3.beforeLabel === 'string' ? s3.beforeLabel : 'SEBELUM',
+      afterLabel:     typeof s3.afterLabel === 'string' ? s3.afterLabel : 'SELEPAS',
+      metric:         s3.metric,
+      metricSubtitle: typeof s3.metricSubtitle === 'string' ? s3.metricSubtitle : '',
+      disclaimer:     typeof s3.disclaimer === 'string' ? s3.disclaimer : '*Results may vary',
+    }
+  }
+
+  const s4 = r.slot4 as { title?: unknown; ingredients?: unknown; tagline?: unknown } | undefined
+  if (s4 && typeof s4.title === 'string' && Array.isArray(s4.ingredients)) {
+    const ings = (s4.ingredients as unknown[])
+      .map((x) => x as Record<string, unknown>)
+      .filter((x) => typeof x.name === 'string')
+      .map((x) => ({ name: x.name as string, pct: typeof x.pct === 'string' ? x.pct : undefined }))
+    if (ings.length > 0) {
+      out.slot4 = {
+        title: s4.title,
+        ingredients: ings,
+        tagline: typeof s4.tagline === 'string' ? s4.tagline : '',
+      }
+    }
+  }
+
+  const s5 = r.slot5 as { quote?: unknown; author?: unknown; verifiedNote?: unknown } | undefined
+  if (s5 && typeof s5.quote === 'string' && typeof s5.author === 'string') {
+    out.slot5 = {
+      quote:        s5.quote,
+      author:       s5.author,
+      verifiedNote: typeof s5.verifiedNote === 'string' ? s5.verifiedNote : '',
+    }
+  }
+
+  const s6 = r.slot6 as { title?: unknown; steps?: unknown; timing?: unknown } | undefined
+  if (s6 && typeof s6.title === 'string' && Array.isArray(s6.steps)) {
+    const steps = (s6.steps as unknown[]).filter((x): x is string => typeof x === 'string')
+    if (steps.length > 0) {
+      out.slot6 = {
+        title:  s6.title,
+        steps,
+        timing: typeof s6.timing === 'string' ? s6.timing : '',
+      }
+    }
+  }
+
+  const s7 = r.slot7 as { title?: unknown; usLabel?: unknown; themLabel?: unknown; points?: unknown } | undefined
+  if (s7 && typeof s7.title === 'string' && Array.isArray(s7.points)) {
+    const points = (s7.points as unknown[])
+      .filter((p): p is [string, string] => Array.isArray(p) && p.length === 2 && typeof p[0] === 'string' && typeof p[1] === 'string')
+    if (points.length > 0) {
+      out.slot7 = {
+        title:     s7.title,
+        usLabel:   typeof s7.usLabel === 'string' ? s7.usLabel : 'Lựa chọn của chúng tôi',
+        themLabel: typeof s7.themLabel === 'string' ? s7.themLabel : 'Đối thủ',
+        points,
+      }
+    }
+  }
+
+  const s8 = r.slot8 as { originalPrice?: unknown; currentPrice?: unknown; discount?: unknown; combo?: unknown; cta?: unknown; urgency?: unknown } | undefined
+  if (s8 && typeof s8.currentPrice === 'string') {
+    out.slot8 = {
+      originalPrice: typeof s8.originalPrice === 'string' ? s8.originalPrice : undefined,
+      currentPrice:  s8.currentPrice,
+      discount:      typeof s8.discount === 'string' ? s8.discount : undefined,
+      combo:         typeof s8.combo === 'string' ? s8.combo : undefined,
+      cta:           typeof s8.cta === 'string' ? s8.cta : 'BELI SEKARANG',
+      urgency:       typeof s8.urgency === 'string' ? s8.urgency : undefined,
+    }
+  }
+
+  const s9 = r.slot9 as { title?: unknown; items?: unknown } | undefined
+  if (s9 && typeof s9.title === 'string' && Array.isArray(s9.items)) {
+    const items = (s9.items as unknown[])
+      .map((x) => x as Record<string, unknown>)
+      .filter((x) => typeof x.q === 'string' && typeof x.a === 'string')
+      .map((x) => ({ q: x.q as string, a: x.a as string }))
+    if (items.length > 0) {
+      out.slot9 = { title: s9.title, items }
+    }
+  }
+
+  return Object.keys(out).length > 0 ? out : undefined
 }
 
 // Models occasionally wrap JSON in ```json fences or add commentary.

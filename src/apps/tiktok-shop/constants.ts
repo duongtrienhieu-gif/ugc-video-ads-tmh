@@ -166,70 +166,46 @@ export function estimateListingCredits(slots: SlotConfig[] = SLOT_MAP): number {
 // Bột làm trắng răng ("WhitePro") as the example product across all 9 slots.
 // ─────────────────────────────────────────────────────────────────────────
 
+// Generic placeholder overlays — kept around for the mock-preview empty
+// state, but NEVER injected into AI prompts. AI prompts pull their slot
+// texts from ListingDescription.slotTexts (which the description AI gens
+// based on the actual selected product). See [[feedback-product-fidelity-mandate]].
 export const MOCK_OVERLAY_BY_SLOT: Record<number, OverlayConfig> = {
-  1: { headline: 'GIGI PUTIH 3X LEBIH CEPAT', subheadline: 'Senyum yakin dalam 14 hari' },
-  2: { headline: 'Gigi kuning sebab kopi & rokok?', bullets: ['Tak yakin nak senyum', 'Bau mulut tak fresh', 'Whitening klinik RM500+'] },
-  3: { metric: { value: '+8 SHADE', label: 'DALAM 14 HARI' }, disclaimer: 'Hasil mungkin berbeza individu' },
-  4: { headline: 'FORMULA AKTIF', bullets: ['Activated Charcoal 30%', 'Hydroxyapatite 25%', 'Calcium Carbonate 20%', 'Mint Extract 15%'] },
-  5: { testimonial: { quote: 'Selepas 2 minggu, gigi saya jauh lebih putih. Suami pun perasan!', author: 'Aisyah, 34, KL', rating: 5 } },
-  6: { headline: 'CARA GUNA — 3 LANGKAH', steps: [{ number: 1, text: 'Basahkan berus gigi' }, { number: 2, text: 'Celup dalam serbuk' }, { number: 3, text: 'Berus 2 minit, 2x sehari' }] },
-  7: { comparison: { headers: ['Pilihan natural', 'Bahan kimia'], rows: [['RM 89', 'RM 250+'], ['14 hari', '30+ hari'], ['Tiada sakit', 'Sensitif'], ['Semula jadi', 'Kimia']] } },
-  8: { price: { current: 'RM 89', original: 'RM 159', discount: '-44%' }, headline: '+ FREE Berus Gigi Lembut', cta: 'BELI SEKARANG' },
-  9: { faq: [
-    { q: 'Selamat untuk enamel?',   a: 'Ya, pH neutral, formula lembut' },
-    { q: 'Bila nampak hasil?',      a: '7-14 hari, bergantung condition' },
-    { q: 'Boleh pulangkan?',        a: 'Ya, 7 hari tanpa soal' },
-  ] },
+  1: { headline: '(Hero claim)',              subheadline: '(Sub claim)' },
+  2: { headline: '(Pain question)',           bullets: ['(Pain 1)', '(Pain 2)', '(Pain 3)'] },
+  3: { metric: { value: '(metric)',           label: '(period)' }, disclaimer: '(disclaimer)' },
+  4: { headline: '(Formula title)',           bullets: ['(Ingredient 1)', '(Ingredient 2)', '(Ingredient 3)'] },
+  5: { testimonial: { quote: '(Quote)',       author: '(Author)', rating: 5 } },
+  6: { headline: '(Usage title)',             steps: [{ number: 1, text: '(Step 1)' }, { number: 2, text: '(Step 2)' }, { number: 3, text: '(Step 3)' }] },
+  7: { comparison: { headers: ['(Ours)', '(Theirs)'], rows: [['', ''], ['', '']] } },
+  8: { price: { current: '(price)',           original: '(orig)', discount: '(-X%)' }, headline: '(Combo)', cta: '(CTA)' },
+  9: { faq: [{ q: '(Q1)', a: '(A1)' }, { q: '(Q2)', a: '(A2)' }, { q: '(Q3)', a: '(A3)' }] },
 }
 
+// MOCK description blocks shown ONLY in the empty-state mock preview (before
+// the user generates anything real). NEVER used as a hardcoded fallback that
+// AI gen routes to — the description gen service has its own product-aware
+// fallback that synthesises placeholders from the actual product fields.
 export const MOCK_DESCRIPTION_BLOCKS: DescriptionBlock[] = [
-  { kind: 'hook',     text: '🦷 Senyum percaya diri dalam 14 hari — tanpa whitening klinik mahal!' },
-  { kind: 'pain',     bullets: [
-    'Tak yakin nak senyum sebab gigi kuning?',
-    'Selalu sapu mulut bila bercakap dekat?',
-    'Dah cuba whitening strip tapi gigi jadi sensitif?',
-  ] },
-  { kind: 'solution', text: 'WHITEPRO Whitening Powder — Serbuk pemutih gigi formula aktif dengan Activated Charcoal + Hydroxyapatite. Rawat puncanya, putih natural, kekal lama.' },
-  { kind: 'benefits', bullets: [
-    'Putihkan hingga 8 shade dalam 14 hari',
-    'Selamat untuk enamel — pH neutral',
-    'Tanpa sensitiviti seperti whitening strip',
-    'Bahan semula jadi',
-    '1 botol = 2 bulan guna',
-  ] },
-  { kind: 'specs',    rows: [
-    ['Activated Charcoal', '30%'],
-    ['Hydroxyapatite',     '25%'],
-    ['Calcium Carbonate',  '20%'],
-    ['Mint Extract',       '15%'],
-    ['Vitamin E',          '10%'],
-  ] },
-  { kind: 'reviews',  quotes: [
-    { text: 'Gigi saya jauh lebih putih selepas 2 minggu!', author: 'Aisyah, KL' },
-    { text: 'Tak sensitif macam whitening strip!',          author: 'Faridah, JB' },
-  ] },
-  { kind: 'usage',    steps: [
-    'Basahkan berus gigi',
-    'Celup dalam serbuk WhitePro',
-    'Berus 2 minit, 2x sehari (pagi & malam)',
-  ] },
-  { kind: 'offer',    text: 'RM 159 → RM 89 (jimat 44%) + FREE Berus Gigi Lembut (RM 25)' },
+  { kind: 'hook',     text: '🛒 (Hero claim — sẽ thay bằng nội dung sản phẩm sau khi tạo listing)' },
+  { kind: 'pain',     bullets: ['(Pain point 1)', '(Pain point 2)', '(Pain point 3)'] },
+  { kind: 'solution', text: '(Mô tả giải pháp + USP — sẽ generate từ thông tin sản phẩm)' },
+  { kind: 'benefits', bullets: ['(Lợi ích 1)', '(Lợi ích 2)', '(Lợi ích 3)'] },
+  { kind: 'specs',    rows: [['(Thành phần)', '(%)']] },
+  { kind: 'reviews',  quotes: [{ text: '(Quote khách hàng)', author: '(Tên, địa chỉ)' }] },
+  { kind: 'usage',    steps: ['(Bước 1)', '(Bước 2)', '(Bước 3)'] },
+  { kind: 'offer',    text: '(Ưu đãi giá + combo)' },
   { kind: 'faq',      items: [
-    { q: 'Selamat untuk gigi sensitif?', a: 'Ya, formula pH neutral.' },
-    { q: 'Bila nampak hasil?',           a: '7-14 hari.' },
-    { q: 'Boleh pulangkan?',             a: 'Ya, 7 hari tanpa soal.' },
+    { q: '(Câu hỏi 1)', a: '(Trả lời 1)' },
+    { q: '(Câu hỏi 2)', a: '(Trả lời 2)' },
   ] },
-  { kind: 'promise',  bullets: [
-    'Stok Malaysia (1-3 hari sampai)',
-    'Pulangan 7 hari',
-    'Pembungkusan diskret',
-  ] },
-  { kind: 'cta',      text: '📲 BELI SEKARANG — stok terhad!' },
+  { kind: 'promise',  bullets: ['(Cam kết 1)', '(Cam kết 2)'] },
+  { kind: 'cta',      text: '(CTA cuối)' },
 ]
 
 export const MOCK_DESCRIPTION: ListingDescription = {
   blocks: MOCK_DESCRIPTION_BLOCKS,
-  fullText: '',  // assembled by service in Phase 4
+  fullText: '',
 }
 
 // ─────────────────────────────────────────────────────────────────────────

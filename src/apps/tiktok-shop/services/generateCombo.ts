@@ -80,6 +80,14 @@ function buildComboPrompt(params: GenerateComboParams, hasLogoRef: boolean): str
     ? 'Reference 1 = brand logo (preserve exactly). References 2+ = product photos.'
     : 'All references are product photos.'
 
+  // Phase 8 fix: enforce explicit count. When user provides productCount,
+  // tell AI EXACTLY how many product instances to render. Without this,
+  // AI defaults to 1 even when description says "2 product unit".
+  const count = c.productCount ?? extractCountFromDescription(c.description) ?? 1
+  const countInstruction = count > 1
+    ? `Show EXACTLY ${count} instances of the product clearly visible, arranged side-by-side or in a small cluster (NOT just 1). Each instance must match the reference photos.`
+    : `Show exactly 1 instance of the product centered, matching the reference photos.`
+
   // Build the price block instruction dynamically based on what fields exist
   const priceBlock = c.originalPrice
     ? `Top-right corner: struck-through original price "${c.originalPrice}" (~32px light tint), below it GIANT current price "${c.price}" (~120px ExtraBold white with shadow)${c.discount ? `, plus an AMBER PILL BADGE "${c.discount}" (~36px dark bold) right below the price.` : '.'}`
@@ -94,7 +102,7 @@ function buildComboPrompt(params: GenerateComboParams, hasLogoRef: boolean): str
 PRODUCT: Replicate EXACTLY from refs — same color, shape, label, brand name. Do NOT redesign.
 
 VARIANT CONTENT: ${c.description}
-Arrange the items naturally side-by-side or in a small cluster, all clearly visible. Each product instance must match the reference photos.
+PRODUCT COUNT: ${countInstruction}
 
 LAYOUT:
 - Product configuration centered, occupying ~60% of canvas area
@@ -106,11 +114,21 @@ ${priceBlock}
 
 VARIANT LABEL: At bottom-center, white rounded rect with name "${c.name}" inside (~28px medium dark navy bold).
 
-STYLE: Same premium TPCN catalog aesthetic as the main 9 listing slots. Plus Jakarta Sans ExtraBold for prices. Saturated brand palette. Clean focus on product + price.
+STYLE: Same premium e-commerce aesthetic as the main 9 listing slots. Plus Jakarta Sans ExtraBold for prices. Saturated brand palette. Clean focus on product + price.
 
 LANGUAGE: ${langName} ONLY in any text. NO other languages.
 
 NO trust bar, NO cert badges, NO clutter.`
+}
+
+// Try to extract a leading number from a description string like
+// "2 product unit", "3 jars", "5 items" → 2, 3, 5. Returns null otherwise.
+function extractCountFromDescription(desc: string): number | null {
+  const match = desc.trim().match(/^(\d+)/)
+  if (!match) return null
+  const n = parseInt(match[1], 10)
+  if (Number.isNaN(n) || n < 1 || n > 20) return null
+  return n
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────

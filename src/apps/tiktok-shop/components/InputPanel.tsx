@@ -118,40 +118,43 @@ export default function InputPanel() {
     })
     setIsGenerating(true)
 
-    // 2. Kick off text gen + image orchestration in parallel.
-    //    Text gen is cheap (~1 credit), image gen is expensive — they don't
-    //    block each other.
-    const textPromise = generateDescription({
-      apiKey: kieApiKey,
-      brandKit: resolvedBrandKit,
-      product,
-      language: draft.market,
-    })
-      .then((desc) => {
-        setDescription(desc)
-        console.log('[tiktok-shop] description generated')
-      })
-      .catch((err) => {
-        console.warn('[tiktok-shop] description gen failed:', err)
-        addToast('Mô tả gen lỗi — dùng mẫu mặc định. Bạn có thể chỉnh sau.', 'error')
-      })
-
-    const imagePromise = generateAllSlots({
-      apiKey: kieApiKey,
-      brandKit: resolvedBrandKit,
-      product,
-      paletteFamily,
-      language: draft.market,
-      referenceImageAssetIds: draft.referenceImageAssetIds,
-      callbacks: {
-        onSlotStart:   (slot) => setSlotStatus(slot, 'generating'),
-        onSlotSuccess: (slot, assetId, prompt) => setSlotImage(slot, assetId, prompt),
-        onSlotError:   (slot, msg) => setSlotStatus(slot, 'failed', msg),
-      },
-    })
-
+    // 2. Generate description FIRST — it produces slotTexts that the image
+    //    prompts NEED to render product-specific copy instead of generic
+    //    fallback. ~10s wait but ensures images don't show hardcoded text
+    //    that doesn't match the actual product (per Phase 8 fix).
+    let slotTexts: import('../types').SlotTexts | undefined = undefined
     try {
-      const [imageResult] = await Promise.all([imagePromise, textPromise])
+      const desc = await generateDescription({
+        apiKey: kieApiKey,
+        brandKit: resolvedBrandKit,
+        product,
+        language: draft.market,
+      })
+      setDescription(desc)
+      slotTexts = desc.slotTexts
+      console.log(`[tiktok-shop] description done. slotTexts=${slotTexts ? 'present' : 'MISSING (images will derive from product fields)'}`)
+    } catch (err) {
+      console.warn('[tiktok-shop] description gen failed:', err)
+      addToast('Mô tả gen lỗi — dùng fallback từ thông tin sản phẩm', 'error')
+    }
+
+    // 3. Now generate images, passing slotTexts so all 9 slots use the same
+    //    product-specific copy.
+    try {
+      const imageResult = await generateAllSlots({
+        apiKey: kieApiKey,
+        brandKit: resolvedBrandKit,
+        product,
+        paletteFamily,
+        language: draft.market,
+        referenceImageAssetIds: draft.referenceImageAssetIds,
+        slotTexts,
+        callbacks: {
+          onSlotStart:   (slot) => setSlotStatus(slot, 'generating'),
+          onSlotSuccess: (slot, assetId, prompt) => setSlotImage(slot, assetId, prompt),
+          onSlotError:   (slot, msg) => setSlotStatus(slot, 'failed', msg),
+        },
+      })
       const { successCount, failCount } = imageResult
       if (failCount === 0) {
         addToast(`Hoàn thành: ${successCount} ảnh + mô tả ✓`, 'success')

@@ -36,11 +36,12 @@ export default function ComboPanel() {
     const n = combos.length + 1
     addCombo({
       name: `Combo ${n}`,
-      description: '1 product unit',
+      description: '',
       price: '',
       originalPrice: undefined,
       discount: undefined,
       isHot: false,
+      productCount: 1,
     })
   }
 
@@ -199,13 +200,27 @@ function ComboCard({ combo }: { combo: ComboOption }) {
           </button>
         </div>
 
-        <input
-          type="text"
-          value={combo.description}
-          onChange={(e) => updateCombo(combo.id, { description: e.target.value })}
-          placeholder="Mô tả config (vd: 1 jar + 1 spray bottle)"
-          className="w-full rounded border border-gray-200 px-2 py-1 text-[11px] text-gray-700 focus:border-violet-400 focus:outline-none"
-        />
+        <div className="flex items-center gap-2">
+          <input
+            type="text"
+            value={combo.description}
+            onChange={(e) => updateCombo(combo.id, { description: e.target.value })}
+            placeholder="Mô tả combo (vd: 2 jars side by side, hoặc 1 jar + 1 spray bottle)"
+            className="flex-1 rounded border border-gray-200 px-2 py-1 text-[11px] text-gray-700 focus:border-violet-400 focus:outline-none"
+          />
+          <div className="flex items-center gap-1">
+            <span className="text-[10px] font-semibold text-gray-500">×</span>
+            <input
+              type="number"
+              min={1}
+              max={10}
+              value={combo.productCount ?? 1}
+              onChange={(e) => updateCombo(combo.id, { productCount: Math.max(1, parseInt(e.target.value, 10) || 1) })}
+              title="Số lượng sản phẩm trong combo — AI sẽ render đúng số này"
+              className="w-12 rounded border border-violet-200 bg-violet-50 px-1 py-1 text-center text-[11px] font-bold text-violet-700 focus:border-violet-400 focus:outline-none"
+            />
+          </div>
+        </div>
 
         <div className="grid grid-cols-3 gap-2">
           <input
