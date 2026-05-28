@@ -138,7 +138,8 @@ export function buildPromptSlot4(ctx: PromptContext): string {
   const st = ctx.slotTexts?.slot4
   const derived = deriveSlot4(ctx)
   const title = st?.title ?? derived.title
-  const ingredients = st?.ingredients ?? derived.ingredients
+  // Use AI ingredients if non-empty; fall back to derived when AI returned [] (no ingredients in product data)
+  const ingredients = (st?.ingredients && st.ingredients.length > 0) ? st.ingredients : derived.ingredients
   const tagline = st?.tagline ?? derived.tagline
   const ingLine = ingredients
     .map((i, n) => `  ${n + 1}. ${i.name}${i.pct ? ` ${i.pct}` : ''}`)

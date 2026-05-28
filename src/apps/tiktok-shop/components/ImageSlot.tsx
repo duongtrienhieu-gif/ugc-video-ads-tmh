@@ -3,7 +3,7 @@
 // No more Konva canvas.
 
 import { useEffect, useState } from 'react'
-import { RefreshCw, Download, Loader2, ImageOff, Sparkles } from 'lucide-react'
+import { RefreshCw, Download, Loader2, ImageOff, Sparkles, FileText, X, Copy } from 'lucide-react'
 import { useAppStore } from '../../../stores/appStore'
 import { useBankStore } from '../../../stores/bankStore'
 import { useSettingsStore } from '../../../stores/settingsStore'
@@ -40,6 +40,7 @@ export default function ImageSlot({ image }: Props) {
 
   // Resolve image URL when assetId is set
   const [imgUrl, setImgUrl] = useState<string | null>(null)
+  const [showPrompt, setShowPrompt] = useState(false)
   useEffect(() => {
     if (!image.imageAssetId) { setImgUrl(null); return }
     let alive = true
@@ -98,7 +99,50 @@ export default function ImageSlot({ image }: Props) {
     }
   }
 
+  function handleCopyPrompt() {
+    if (!image.aiGenPrompt) return
+    navigator.clipboard.writeText(image.aiGenPrompt)
+      .then(() => addToast('Đã copy prompt', 'success'))
+      .catch(() => addToast('Copy thất bại', 'error'))
+  }
+
   return (
+    <>
+    {showPrompt && image.aiGenPrompt && (
+      <div
+        className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/60 p-4 pt-16"
+        onClick={(e) => { if (e.target === e.currentTarget) setShowPrompt(false) }}
+      >
+        <div className="flex w-full max-w-2xl flex-col rounded-xl bg-white shadow-2xl">
+          <div className="flex items-center justify-between border-b border-gray-200 px-4 py-3">
+            <span className="text-sm font-semibold text-gray-800">
+              Prompt Slot {image.slot} — {image.config.intentLabel}
+            </span>
+            <button
+              onClick={() => setShowPrompt(false)}
+              className="rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-700"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+          <div className="max-h-[60vh] overflow-y-auto p-4">
+            <pre className="whitespace-pre-wrap break-words font-mono text-[11px] leading-relaxed text-gray-700">
+              {image.aiGenPrompt}
+            </pre>
+          </div>
+          <div className="flex items-center justify-between border-t border-gray-100 px-4 py-2">
+            <span className="text-[10px] text-gray-400">{image.aiGenPrompt.length} ký tự</span>
+            <button
+              onClick={handleCopyPrompt}
+              className="flex items-center gap-1 rounded px-2 py-1 text-[11px] text-violet-600 hover:bg-violet-50 hover:text-violet-800"
+            >
+              <Copy className="h-3 w-3" />
+              Copy prompt
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
     <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm transition-shadow hover:shadow-md">
       {/* Slot label header */}
       <div className="flex items-center justify-between border-b border-gray-100 bg-gray-50 px-3 py-1.5">
@@ -155,6 +199,12 @@ export default function ImageSlot({ image }: Props) {
             disabled={isGenerating}
           />
           <IconBtn
+            icon={<FileText className="h-3 w-3" />}
+            title="Xem prompt"
+            onClick={() => setShowPrompt(true)}
+            disabled={!image.aiGenPrompt}
+          />
+          <IconBtn
             icon={<Download className="h-3 w-3" />}
             title="Tải xuống"
             onClick={handleDownload}
@@ -163,6 +213,7 @@ export default function ImageSlot({ image }: Props) {
         </div>
       </div>
     </div>
+    </>
   )
 }
 

@@ -31,15 +31,41 @@ export async function generateDescription(
 
 function buildSystemInstruction(params: GenerateDescriptionParams): string {
   const lang = params.language === 'ms' ? 'Bahasa Malaysia' : 'Vietnamese'
-  return `You are a TikTok Shop listing copywriter for the Malaysia/Vietnam market. The product can be ANY niche (supplement, beauty, skincare, oral care, cough patch, mom-baby, household, etc.) — read the PRODUCT DATA below carefully and write copy that matches THAT specific product. Never assume the niche.
+  return `You are a TikTok Shop conversion copywriter for the Malaysia/Vietnam market. Your FIRST job is to UNDERSTAND the product from PRODUCT DATA, reason about the target customer and their core pain, then write conversion copy that fits THIS specific product. The product can be ANY niche — never assume or copy from prior examples.
 
-OUTPUT LANGUAGE: ${lang} ONLY. NO English mixed in. NO Chinese, Japanese, Arabic, Thai characters.
-OUTPUT FORMAT: strict JSON only — no markdown fences, no preamble, no commentary, no trailing text.
+LANGUAGE LOCK — three rules, zero exceptions:
+1. Every string value in your JSON output must be written in ${lang}.
+2. Even if the product name, ingredient list, or image refs contain English, Chinese, or any other language — your JSON output is ${lang} only.
+3. If you cannot find a natural ${lang} word, transliterate or use an equivalent. Do not fall back to English anywhere in the output.
 
-LEGAL CONSTRAINTS (per [[feedback-no-fake-certs]]):
-- DO NOT mention any cert claims (Halal JAKIM, KKM, GMP, FDA, BYT, ISO) — user has not uploaded proof
-- DO NOT use strong clinical claims like "rawat", "sembuh", "cure", "treat" — use softer "membantu", "menyokong", "hỗ trợ"
-- DO NOT invent specific medical claims not supported by product data provided`
+OUTPUT FORMAT: strict JSON object only. No markdown fences, no preamble text, no commentary after the closing brace.
+
+CONVERSION COPYWRITING RULES (universal — applies to all niches, all product types):
+• Pain bullets: write as the customer's OWN internal voice — a self-question they ask themselves daily. Ends with "?", max 10 words. Write the FEELING, not the clinical label.
+  — GOOD pattern: "[Feeling/situation they experience]?" (customer-voice question)
+  — BAD pattern: "[Clinical or medical description of symptom]" (third-person description)
+• Usage steps: SPECIFIC physical action + object + amount or duration. Max 12 words per step.
+  — GOOD pattern: "[Verb] [specific object] [amount/duration/frequency]"
+  — BAD pattern: "Use as directed" / "Apply to affected area" (generic non-instruction)
+• Testimonials: concrete before→after story with a TIME MARKER. Must include something specific that changed.
+  — GOOD pattern: "After [N days/weeks], [specific observable change]"
+  — BAD pattern: "Very satisfied with this product" (no specifics, no timeline)
+• Comparison points: measurable or observable differentiators. NOT vague quality claims.
+  — GOOD: "[Specific metric e.g. time, %, measurement, mechanism]" vs "[generic equivalent]"
+  — BAD: "High quality" vs "Normal quality"
+• Slot 1 headline: the product's SINGLE strongest transformation in 4-6 words ALL CAPS. Ask yourself: what is the customer's life like after Day 14 of using this product?
+• Slot 3 metric: a SPECIFIC measurable outcome tied to this product's mechanism. ALL CAPS, max 4 words. Numbers + units preferred.
+  — GOOD: "3× LEBIH LANCAR" / "DALAM 7 HARI" / "−2KG SEBULAN"
+  — BAD: "HASIL TERBAIK" / "SANGAT BERKESAN" (vague superlatives)
+
+DATA INTEGRITY — never fabricate beyond what is given:
+• Derive all copy from the PRODUCT DATA provided. If a product field is empty, infer from context in other fields, or use a safe generic label.
+• slot4.ingredients: if product.ingredients is absent or empty in PRODUCT DATA → output "ingredients": [] (empty array). NEVER invent ingredient names not explicitly mentioned in PRODUCT DATA.
+• Do not add clinical studies, certificates, specific brand claims, or ingredient names that are not stated in PRODUCT DATA.
+
+LEGAL:
+• No cert claims (Halal JAKIM, KKM, GMP, FDA, BYT, ISO) — not verified by user.
+• Soft claim language only: "membantu", "menyokong", "hỗ trợ" — never "rawat", "sembuh", "cure", "treat".`
 }
 
 function buildDescriptionPrompt(params: GenerateDescriptionParams): string {
@@ -48,78 +74,164 @@ function buildDescriptionPrompt(params: GenerateDescriptionParams): string {
   const voiceSamples = brandKit.voice.samplePhrases?.length
     ? brandKit.voice.samplePhrases.join(' / ')
     : 'N/A'
-
   const langName = language === 'ms' ? 'Bahasa Malaysia' : 'Vietnamese'
+  const hasIngredients = !!(product.ingredients?.trim())
+  const ingredientsList = hasIngredients ? product.ingredients : '[NOT PROVIDED]'
+  const slot4IngShape = hasIngredients
+    ? `[{"name": "<ingredient name from PRODUCT DATA list only>", "pct": "<% if stated, else omit pct>"}]`
+    : `[]`
+  const reviewerNameHint = language === 'ms'
+    ? 'MY-market names: Aisyah, Siti, Faridah, Hanim, Nurliyana + city KL / JB / Penang / Shah Alam'
+    : 'VN-market names: Linh, Mai, Thu, Hương, Ngọc + thành phố Việt Nam'
+  const ctaDefault = language === 'ms' ? 'BELI SEKARANG' : 'MUA NGAY'
+  const faqTitle = language === 'ms' ? 'SOALAN LAZIM' : 'CÂU HỎI THƯỜNG GẶP'
+  const beforeLabel = language === 'ms' ? 'SEBELUM' : 'TRƯỚC'
+  const afterLabel = language === 'ms' ? 'SELEPAS' : 'SAU'
+  const ingredientsGuard = hasIngredients
+    ? `SLOT 4 GUARD: Use ONLY the ingredients listed in PRODUCT DATA above. Do not add extras.`
+    : `SLOT 4 GUARD: No ingredients were provided — slot4.ingredients MUST be [] in your output. Do NOT invent any ingredient names.`
 
-  return `Generate a complete TikTok Shop product listing description AND the per-slot text overlays for 9 images, all in one JSON response.
+  return `Generate a TikTok Shop listing description + per-slot image text. Return a single JSON object only.
 
-EVERYTHING you write must be SPECIFIC to the product below — NO generic "teeth whitening" copy, NO unrelated category content. Read product fields carefully and write copy that matches the actual product niche.
+PRODUCT DATA (read carefully — ALL copy must derive ONLY from this):
+- Name: ${product.productName}
+${product.productDescription ? `- Description: ${product.productDescription}` : ''}
+${product.painPoints ? `- Customer pain points: ${product.painPoints}` : ''}
+${product.usps ? `- USPs / key differentiators: ${product.usps}` : ''}
+${product.benefits ? `- Benefits: ${product.benefits}` : ''}
+- Ingredients: ${ingredientsList}
+${product.offer ? `- Pricing / Offer: ${product.offer}` : ''}
 
-JSON SHAPE (return THIS structure exactly — no extra fields, no commentary):
+BRAND:
+- Tone: ${voiceTone}
+- Sample phrases: ${voiceSamples}
+- Store: ${brandKit.storeName}
+
+REASONING STEP (mental only — do NOT include in output):
+Before writing a single word of copy, identify these 4 things from PRODUCT DATA above:
+(a) TARGET CUSTOMER — who is living this problem? Age range, gender, daily context?
+(b) CORE PAIN FEELING — the emotion/discomfort they experience daily. Not the clinical name, the FEELING.
+(c) #1 TRANSFORMATION PROMISE — what specifically changes for them after using this product? Be concrete.
+(d) KEY DIFFERENTIATOR — what makes this product different from the generic category alternative?
+Your answers to (a)–(d) must inform every field below. If you cannot answer (c) or (d) from PRODUCT DATA, derive the closest reasonable inference — do NOT invent clinical claims.
+
+JSON SHAPE (return exactly this structure — all values in ${langName}):
 {
   "blocks": [
-    {"kind": "hook", "text": "<emoji + 1-sentence attention-grabbing opener; visible in 2-3 lines>"},
-    {"kind": "pain", "bullets": ["<3 pain bullets specific to this product's target user>", "...", "..."]},
-    {"kind": "solution", "text": "<1-2 sentences introducing the product as the solution + key mechanism>"},
-    {"kind": "benefits", "bullets": ["<4-5 benefit bullets — concrete outcomes>", "...", "...", "...", "..."]},
-    {"kind": "specs", "rows": [["<key>", "<value>"], ["...", "..."], ...]},
-    {"kind": "reviews", "quotes": [{"text": "<realistic customer quote about THIS product>", "author": "<Name, City>"}, {"text": "...", "author": "..."}]},
-    {"kind": "usage", "steps": ["<step 1>", "<step 2>", "<step 3>"]},
-    {"kind": "offer", "text": "<offer line with price discount + combo>"},
-    {"kind": "faq", "items": [{"q": "<question>", "a": "<answer>"}, {"q": "...", "a": "..."}, {"q": "...", "a": "..."}]},
-    {"kind": "promise", "bullets": ["<service promise like fast shipping/return>", "...", "..."]},
-    {"kind": "cta", "text": "<final CTA with mild urgency>"}
+    {"kind": "hook", "text": "<emoji + 1-sentence opener; **bold** the strongest result/claim; max 130 chars>"},
+    {"kind": "pain", "bullets": [
+      "<customer self-question from reasoning (b), ending '?', max 10 words>",
+      "<another pain self-question, max 10 words>",
+      "<another pain self-question, max 10 words>"
+    ]},
+    {"kind": "solution", "text": "<introduce product as the answer to pain; **bold** product name + main mechanism; max 160 chars>"},
+    {"kind": "benefits", "bullets": [
+      "<concrete outcome with number or timeframe from reasoning (c), max 15 words>",
+      "<benefit>", "<benefit>", "<benefit>", "<benefit>"
+    ]},
+    {"kind": "specs", "rows": [
+      ["<ingredient or key spec — ONLY from PRODUCT DATA; if none use generic feature>", "<brief function or benefit>"]
+    ]},
+    {"kind": "reviews", "quotes": [
+      {"text": "<before→after story with time marker, max 100 chars>", "author": "<Name, City — see REVIEWER NAMES below>"},
+      {"text": "<second review with time marker>", "author": "<Name, City>"}
+    ]},
+    {"kind": "usage", "steps": [
+      "<SPECIFIC action verb + object + amount/duration, max 12 words>",
+      "<step>",
+      "<step>"
+    ]},
+    {"kind": "offer", "text": "<offer line; **bold** price or discount amount; max 100 chars>"},
+    {"kind": "faq", "items": [
+      {"q": "<safety or ingredients question>", "a": "<answer>"},
+      {"q": "<results timing question>", "a": "<specific timeframe answer>"},
+      {"q": "<return or refund question>", "a": "<answer>"}
+    ]},
+    {"kind": "promise", "bullets": [
+      "<service promise — shipping/return/packaging ONLY, max 10 words>",
+      "<promise>", "<promise>"
+    ]},
+    {"kind": "cta", "text": "<**bold** the action verb; mild urgency; max 80 chars>"}
   ],
   "slotTexts": {
-    "slot1": {"headline": "<BIG hero claim ~6 words, ALL CAPS, specific to product>", "tagline": "<sub-claim ~8 words>"},
-    "slot2": {"question": "<pain question matching this product's user>", "painBullets": ["<short bullet 1>", "<bullet 2>", "<bullet 3>"]},
-    "slot3": {"beforeLabel": "<e.g. SEBELUM / TRƯỚC>", "afterLabel": "<e.g. SELEPAS / SAU>", "metric": "<specific outcome metric, e.g. +8 SHADE, -5KG, 3X MORE>", "metricSubtitle": "<period e.g. DALAM 14 HARI / SAU 30 NGÀY>", "disclaimer": "<results-may-vary disclaimer>"},
-    "slot4": {"title": "<formula/mechanism title, e.g. FORMULA AKTIF / CÔNG THỨC HOẠT TÍNH>", "ingredients": [{"name": "<ingredient1>", "pct": "<30%>"}, {"name": "<ing2>", "pct": "<25%>"}, {"name": "<ing3>", "pct": "<20%>"}, {"name": "<ing4>", "pct": "<15%>"}], "tagline": "<short safety/natural claim>"},
-    "slot5": {"quote": "<realistic customer testimonial about THIS product>", "author": "<Name, City>", "verifiedNote": "<small verified-review note>"},
-    "slot6": {"title": "<how-to-use title with step count>", "steps": ["<step1 verb phrase>", "<step2>", "<step3>"], "timing": "<usage timing line e.g. 🌅 Pagi • 🌙 Malam>"},
-    "slot7": {"title": "<choose-the-good title>", "usLabel": "<our category label>", "themLabel": "<competitor category label>", "points": [["<our val>", "<their val>"], ["...", "..."], ["...", "..."], ["...", "..."]]},
-    "slot8": {"originalPrice": "<orig price string e.g. RM 159 or empty>", "currentPrice": "<current price string e.g. RM 89>", "discount": "<e.g. -44% or empty>", "combo": "<combo/gift line e.g. + FREE Bonus Item>", "cta": "<BELI SEKARANG / MUA NGAY>", "urgency": "<short urgency line e.g. Stok terhad hari ini>"},
-    "slot9": {"title": "<FAQ title e.g. SOALAN LAZIM / CÂU HỎI THƯỜNG GẶP>", "items": [{"q": "<short safety/quality question>", "a": "<short answer>"}, {"q": "<results timing question>", "a": "<answer>"}, {"q": "<return policy question>", "a": "<answer>"}]}
+    "slot1": {
+      "headline": "<4–6 words ALL CAPS — the #1 transformation from reasoning (c), derived from USPs/benefits>",
+      "tagline": "<8–12 words — specific mechanism or target customer outcome, NOT generic>"
+    },
+    "slot2": {
+      "question": "<core pain from reasoning (b) as a customer self-question, max 10 words, ends '?'>",
+      "painBullets": [
+        "<customer-voice self-question max 8 words ends '?'>",
+        "<question ends '?'>",
+        "<question ends '?'>"
+      ]
+    },
+    "slot3": {
+      "beforeLabel": "${beforeLabel}",
+      "afterLabel": "${afterLabel}",
+      "metric": "<SPECIFIC measurable outcome ALL CAPS max 4 words — number + unit or timeframe — from reasoning (c)>",
+      "metricSubtitle": "<supporting context e.g. 'DALAM 14 HARI', max 5 words>",
+      "disclaimer": "<results-may-vary disclaimer, max 8 words>"
+    },
+    "slot4": {
+      "title": "<formula / active ingredients panel title ALL CAPS>",
+      "ingredients": ${slot4IngShape},
+      "tagline": "<short safety or natural-formula claim derived from product data, max 8 words>"
+    },
+    "slot5": {
+      "quote": "<concrete before→after story with time marker, max 100 chars>",
+      "author": "<${reviewerNameHint}>",
+      "verifiedNote": "<verified-review label>"
+    },
+    "slot6": {
+      "title": "<how-to-use title with step count e.g. '3 LANGKAH MUDAH' or '3 BƯỚC ĐƠN GIẢN'>",
+      "steps": [
+        "<SPECIFIC action verb + exact object + amount/duration, max 10 words>",
+        "<step>",
+        "<step>"
+      ],
+      "timing": "<usage timing e.g. '🌅 Pagi • 🌙 Malam'>"
+    },
+    "slot7": {
+      "title": "<comparison section title>",
+      "usLabel": "<our product short label>",
+      "themLabel": "<generic or competitor short label>",
+      "points": [
+        ["<our SPECIFIC differentiator from reasoning (d) — number/material/time/mechanism>", "<their generic equivalent>"],
+        ["<specific>", "<generic>"],
+        ["<specific>", "<generic>"],
+        ["<specific>", "<generic>"]
+      ]
+    },
+    "slot8": {
+      "originalPrice": "<original price from pricing data if mentioned, else omit this key>",
+      "currentPrice": "<current sale price from product.offer; use '(Harga)' if not provided>",
+      "discount": "<discount amount or % if available, else omit>",
+      "combo": "<combo or bonus line if applicable, else omit>",
+      "cta": "${ctaDefault}",
+      "urgency": "<urgency line max 6 words>"
+    },
+    "slot9": {
+      "title": "${faqTitle}",
+      "items": [
+        {"q": "<safety or ingredients concern>", "a": "<answer>"},
+        {"q": "<results timing question>", "a": "<specific timeframe>"},
+        {"q": "<return or refund question>", "a": "<answer>"}
+      ]
+    }
   }
 }
 
-PRODUCT DATA:
-- Name: ${product.productName}
-${product.productDescription ? `- Description: ${product.productDescription}` : ''}
-${product.painPoints ? `- Pain points the user has: ${product.painPoints}` : ''}
-${product.usps ? `- USPs: ${product.usps}` : ''}
-${product.benefits ? `- Benefits: ${product.benefits}` : ''}
-${product.ingredients ? `- Ingredients: ${product.ingredients}` : ''}
-${product.offer ? `- Offer/Pricing context: ${product.offer}` : ''}
+${ingredientsGuard}
 
-BRAND VOICE:
-- Tone: ${voiceTone}
-- Sample brand voice phrases: ${voiceSamples}
-- Store name: ${brandKit.storeName}
+BOLD FORMATTING (use **markdown bold** — TikTok Shop renders it):
+- Pick 1–2 emphasis points per block: the result claim, product name, action verb, price/discount.
+- Never bold filler words or full sentences. Never bold inside specs rows (UI styles them).
+- ALL wording must derive from PRODUCT DATA above. Do not copy placeholder words from this template.
 
-WRITING RULES:
-- Total output ~800-1500 characters
-- Hook MUST fit in 2-3 lines and grab attention without using cert/clinical claims
-- Use ${langName} naturally, like a real seller — NOT machine-translated
-- Specs rows: use ACTUAL ingredients from product data; if missing, use generic placeholders
-- Reviews: 2 quotes with realistic local names (${langName === 'Bahasa Malaysia' ? 'Aisyah, Faridah, Aminah, Siti + city like KL, JB, Penang' : 'Linh, Mai, Thu, Hương + thành phố Việt Nam'})
-- FAQ: 3 common buyer concerns about safety, results timing, return policy
-- Promise: only SAFE service claims (shipping speed, return window, discreet packaging) — NO cert claims
+REVIEWER NAMES: ${reviewerNameHint}
 
-BOLD FORMATTING (use **markdown bold** strategically — TikTok Shop renders it):
-- Wrap KEY TERMS, not full sentences. Generic pattern (DO NOT copy these example strings — they are illustrative only, your content must match the ACTUAL product):
-  - benefits bullet: bold the result claim (e.g., "<verb> hingga **<concrete outcome with number>**")
-  - benefits bullet: bold the headline phrase (e.g., "**<short feature label>** — <expansion>")
-  - usage step: bold the action verb + duration (e.g., "**<verb> <duration>**, <frequency>")
-  - faq question: keep plain (UI styles it bold separately)
-  - hook: bold the strongest claim (e.g., "<context> **<key time/result claim>** <rest>")
-  - solution: bold product name + main mechanism (e.g., "**<actual product name>** — <category> với **<main mechanism/ingredients>**")
-  - cta: bold the verb (e.g., "**<Buy verb>** — <urgency>")
-- DO NOT bold every word — pick 1-2 emphasis points per block.
-- DO NOT bold inside specs rows (UI styles them).
-- CRITICAL: derive all wording from the actual PRODUCT DATA at the bottom of this prompt. Do NOT copy any words from these examples ("verb", "outcome", "duration", etc. are placeholders, not real copy).
-
-Return the JSON object only.`
+OUTPUT: JSON object only. Every string value in ${langName}. Zero preamble or text after closing brace.`
 }
 
 // ── Parsing ──────────────────────────────────────────────────────────────
@@ -196,12 +308,12 @@ function validateSlotTexts(raw: unknown): SlotTexts | undefined {
       .map((x) => x as Record<string, unknown>)
       .filter((x) => typeof x.name === 'string')
       .map((x) => ({ name: x.name as string, pct: typeof x.pct === 'string' ? x.pct : undefined }))
-    if (ings.length > 0) {
-      out.slot4 = {
-        title: s4.title,
-        ingredients: ings,
-        tagline: typeof s4.tagline === 'string' ? s4.tagline : '',
-      }
+    // Accept empty ingredients array — AI returns [] when product has no ingredients listed.
+    // Don't drop slot4 in that case; let promptBuilder use derived fallback instead of fake data.
+    out.slot4 = {
+      title: s4.title,
+      ingredients: ings,
+      tagline: typeof s4.tagline === 'string' ? s4.tagline : '',
     }
   }
 
