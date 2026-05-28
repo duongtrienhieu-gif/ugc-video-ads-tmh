@@ -964,6 +964,50 @@ export async function pollVideoJobUntilDone(params: {
 
 const TEXT_TIMEOUT_MS = 60_000 // 60s per model attempt
 
+/** Tolerant text-content extractor. kie.ai's chat/completions response shape
+ *  has varied — depending on upstream model + kie.ai proxy version, the
+ *  generated text may live at any of: choices[0].message.content (OpenAI
+ *  standard), choices[0].text (older), data.text / data.message / data.reply
+ *  / data.output (proxy variants). Returns the first non-empty string found. */
+function extractTextContent(data: unknown): string {
+  if (!data || typeof data !== 'object') return ''
+  const root = data as Record<string, unknown>
+  // OpenAI-compatible: choices[0].message.content
+  const choices = root.choices
+  if (Array.isArray(choices) && choices.length > 0) {
+    const first = choices[0] as Record<string, unknown>
+    const message = first?.message as Record<string, unknown> | undefined
+    if (message) {
+      const mc = message.content
+      if (typeof mc === 'string' && mc.trim()) return mc.trim()
+      // Some Gemini-via-kie responses use parts[]
+      const parts = message.parts as unknown
+      if (Array.isArray(parts)) {
+        const joined = parts.map((p) => (p && typeof p === 'object' ? ((p as Record<string, unknown>).text as string | undefined) : undefined))
+          .filter((t): t is string => typeof t === 'string').join('\n').trim()
+        if (joined) return joined
+      }
+    }
+    // Legacy: choices[0].text
+    const ct = first?.text
+    if (typeof ct === 'string' && ct.trim()) return ct.trim()
+  }
+  // Proxy variants at root
+  for (const key of ['text', 'message', 'reply', 'output', 'content', 'response']) {
+    const v = root[key]
+    if (typeof v === 'string' && v.trim()) return v.trim()
+  }
+  // Nested: data.data.text etc.
+  const inner = root.data as Record<string, unknown> | undefined
+  if (inner && typeof inner === 'object') {
+    for (const key of ['text', 'message', 'reply', 'output', 'content', 'response']) {
+      const v = inner[key]
+      if (typeof v === 'string' && v.trim()) return v.trim()
+    }
+  }
+  return ''
+}
+
 async function fetchWithTimeout(url: string, init: RequestInit, timeoutMs: number): Promise<Response> {
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), timeoutMs)
@@ -1006,16 +1050,28 @@ export async function kieTextGenerate(
         console.warn(`[kieTextGenerate] ${model} HTTP ${res.status}, trying next`)
         continue
       }
-      const data = await res.json() as { choices?: { message?: { content?: string | null; refusal?: string } }[] }
-      const msg = data.choices?.[0]?.message
-      const content = typeof msg?.content === 'string' ? msg.content.trim() : ''
+      // Read raw body once so we can both parse AND log it for diagnostics
+      const rawBody = await res.text()
+      let data: Record<string, unknown> = {}
+      try { data = JSON.parse(rawBody) as Record<string, unknown> } catch { /* leave empty */ }
+      // Try multiple known content paths (kie.ai response shapes have varied
+      // over time and across upstream models: OpenAI standard, Gemini variants,
+      // legacy proxy formats).
+      const content = extractTextContent(data)
       const elapsed = ((Date.now() - startedAt) / 1000).toFixed(1)
       if (content) {
         console.log(`[kieTextGenerate] ${model} OK in ${elapsed}s — ${content.length} chars`)
         return content
       }
+      // ── Empty-content diagnostic logging (Phase 10 debugging) ──
+      // Log the FULL raw response so we can see exactly what kie.ai is
+      // returning when content is empty. Truncate to 2KB to avoid spam.
+      const choices = (data as { choices?: unknown[] }).choices
+      const msg = Array.isArray(choices) && choices[0]
+        ? (choices[0] as { message?: { refusal?: string } }).message
+        : undefined
+      console.warn(`[kieTextGenerate] ${model} empty after ${elapsed}s — HTTP ${res.status} | response keys=[${Object.keys(data).join(',')}] | raw body (first 2KB):`, rawBody.slice(0, 2000))
       lastError = msg?.refusal ? `Model ${model} từ chối yêu cầu` : `Model ${model} trả về phản hồi rỗng`
-      console.warn(`[kieTextGenerate] ${model} empty after ${elapsed}s, trying next`)
     } catch (e) {
       const elapsed = ((Date.now() - startedAt) / 1000).toFixed(1)
       if (e instanceof Error && e.message === 'INSUFFICIENT_CREDITS') throw e
@@ -1105,18 +1161,23 @@ export async function kieAnalyzeImage(
         console.warn(`[kieAnalyzeImage] ${model} HTTP ${res.status}, trying next`)
         continue
       }
-      const data = await res.json() as { choices?: { message?: { content?: string | null; refusal?: string } }[] }
-      const msg = data.choices?.[0]?.message
-      const content = typeof msg?.content === 'string' ? msg.content.trim() : ''
+      const rawBody = await res.text()
+      let data: Record<string, unknown> = {}
+      try { data = JSON.parse(rawBody) as Record<string, unknown> } catch { /* leave empty */ }
+      const content = extractTextContent(data)
       const elapsed = ((Date.now() - startedAt) / 1000).toFixed(1)
       if (content) {
         console.log(`[kieAnalyzeImage] ${model} OK in ${elapsed}s — ${content.length} chars`)
         return content
       }
+      const choices = (data as { choices?: unknown[] }).choices
+      const msg = Array.isArray(choices) && choices[0]
+        ? (choices[0] as { message?: { refusal?: string } }).message
+        : undefined
+      console.warn(`[kieAnalyzeImage] ${model} empty after ${elapsed}s — HTTP ${res.status} | response keys=[${Object.keys(data).join(',')}] | raw body (first 2KB):`, rawBody.slice(0, 2000))
       lastError = msg?.refusal
         ? `Model ${model} từ chối: ${msg.refusal.slice(0, 80)}`
         : `Model ${model} trả về phản hồi rỗng`
-      console.warn(`[kieAnalyzeImage] ${model} empty after ${elapsed}s, trying next`)
     } catch (e) {
       const elapsed = ((Date.now() - startedAt) / 1000).toFixed(1)
       if (e instanceof Error && e.message === 'INSUFFICIENT_CREDITS') throw e
