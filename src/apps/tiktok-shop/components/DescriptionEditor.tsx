@@ -3,8 +3,8 @@
 // Phase 4: inline edit per block + "regen full description" button.
 // Per-block re-roll is Phase 5 polish.
 
-import { useState } from 'react'
-import { FileText, Copy, RefreshCw, Loader2, Check, X } from 'lucide-react'
+import { useMemo, useState } from 'react'
+import { FileText, Copy, RefreshCw, Loader2, Check, X, Languages, LayoutList, AlignLeft } from 'lucide-react'
 import { useTikTokShopStore, buildMockListing } from '../store'
 import { useAppStore } from '../../../stores/appStore'
 import { useBankStore } from '../../../stores/bankStore'
@@ -12,7 +12,12 @@ import { useSettingsStore } from '../../../stores/settingsStore'
 import { useResolvedBrandKit } from '../hooks/useResolvedBrandKit'
 import { DESCRIPTION_BLOCK_LABELS } from '../constants'
 import type { DescriptionBlock } from '../types'
+import type { Market } from '../../../types/brandKit'
 import { generateDescription, assembleFullText } from '../services/generateDescription'
+import { translateDescriptionText } from '../services/translateDescription'
+import { MARKET_LABELS } from '../../../types/brandKit'
+
+type ViewMode = 'blocks' | 'fulltext'
 
 export default function DescriptionEditor() {
   const draft = useTikTokShopStore((s) => s.draft)
@@ -25,14 +30,53 @@ export default function DescriptionEditor() {
   const resolvedBrandKit = useResolvedBrandKit(draft.brandKitId, draft.market)
 
   const [regenerating, setRegenerating] = useState(false)
+  const [viewMode, setViewMode] = useState<ViewMode>('blocks')
+  const [translateState, setTranslateState] = useState<{
+    open: boolean
+    loading: boolean
+    text: string
+    targetLang: Market
+  }>({ open: false, loading: false, text: '', targetLang: 'vi' })
+
   const isReal = !!draft.output  // we have a real output (not mock)
   const output = draft.output ?? (showMock ? buildMockListing() : null)
 
+  // Assemble full text once per blocks change — used in both fulltext view + copy + translate
+  const fullText = useMemo(
+    () => (output ? assembleFullText(output.description.blocks) : ''),
+    [output],
+  )
+
   function handleCopy() {
-    if (!output) return
-    const text = assembleFullText(output.description.blocks)
-    navigator.clipboard.writeText(text)
+    if (!fullText) return
+    navigator.clipboard.writeText(fullText)
       .then(() => addToast('Đã sao chép mô tả', 'success'))
+      .catch(() => addToast('Không sao chép được', 'error'))
+  }
+
+  async function handleTranslate() {
+    if (!fullText) { addToast('Chưa có mô tả để dịch', 'error'); return }
+    // Translate to the OTHER language than what the listing is currently in
+    const targetLang: Market = draft.market === 'ms' ? 'vi' : 'ms'
+    setTranslateState({ open: true, loading: true, text: '', targetLang })
+    try {
+      const translated = await translateDescriptionText({
+        apiKey: kieApiKey,
+        sourceText: fullText,
+        sourceLang: draft.market,
+        targetLang,
+      })
+      setTranslateState({ open: true, loading: false, text: translated, targetLang })
+    } catch (err) {
+      setTranslateState({ open: false, loading: false, text: '', targetLang })
+      addToast(`Dịch lỗi: ${err instanceof Error ? err.message : String(err)}`, 'error')
+    }
+  }
+
+  function handleCopyTranslation() {
+    if (!translateState.text) return
+    navigator.clipboard.writeText(translateState.text)
+      .then(() => addToast(`Đã sao chép bản ${MARKET_LABELS[translateState.targetLang]}`, 'success'))
       .catch(() => addToast('Không sao chép được', 'error'))
   }
 
@@ -61,20 +105,49 @@ export default function DescriptionEditor() {
     }
   }
 
+  const otherLangLabel = draft.market === 'ms' ? 'Tiếng Việt' : 'Bahasa Malaysia'
+
   return (
     <div className="flex h-full w-[360px] shrink-0 flex-col overflow-hidden border-l border-gray-200 bg-[#FAFAFA]">
       {/* Header */}
-      <div className="flex shrink-0 items-center justify-between border-b border-gray-200 bg-white px-4 py-3">
-        <div className="flex items-center gap-2">
-          <FileText className="h-4 w-4 text-gray-600" />
-          <h2 className="text-sm font-semibold text-gray-900">Mô tả chi tiết</h2>
+      <div className="flex shrink-0 flex-col gap-2 border-b border-gray-200 bg-white px-4 py-3">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <FileText className="h-4 w-4 text-gray-600" />
+            <h2 className="text-sm font-semibold text-gray-900">Mô tả chi tiết</h2>
+          </div>
+          {/* View mode toggle */}
+          <div className="flex rounded-md border border-gray-200 bg-gray-50 p-0.5">
+            <button
+              onClick={() => setViewMode('blocks')}
+              title="Xem theo từng block — sửa inline được"
+              className={`flex items-center gap-1 rounded px-2 py-0.5 text-[10px] font-semibold transition-colors ${
+                viewMode === 'blocks' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              <LayoutList className="h-2.5 w-2.5" />
+              Block
+            </button>
+            <button
+              onClick={() => setViewMode('fulltext')}
+              title="Xem toàn bộ text — dễ copy 1 phát"
+              className={`flex items-center gap-1 rounded px-2 py-0.5 text-[10px] font-semibold transition-colors ${
+                viewMode === 'fulltext' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              <AlignLeft className="h-2.5 w-2.5" />
+              Full text
+            </button>
+          </div>
         </div>
+
+        {/* Action buttons row */}
         <div className="flex items-center gap-1">
           <button
             onClick={handleRegenAll}
             disabled={!isReal || regenerating}
             title="Tạo lại toàn bộ mô tả"
-            className="flex items-center gap-1 rounded-md border border-gray-200 bg-white px-2 py-1 text-[11px] font-medium text-gray-600 transition-colors hover:bg-gray-50 disabled:opacity-50"
+            className="flex flex-1 items-center justify-center gap-1 rounded-md border border-gray-200 bg-white px-2 py-1 text-[11px] font-medium text-gray-600 transition-colors hover:bg-gray-50 disabled:opacity-50"
           >
             {regenerating
               ? <Loader2 className="h-3 w-3 animate-spin" />
@@ -84,32 +157,161 @@ export default function DescriptionEditor() {
           <button
             onClick={handleCopy}
             disabled={!output}
-            className="flex items-center gap-1 rounded-md border border-gray-200 bg-white px-2 py-1 text-[11px] font-medium text-gray-600 transition-colors hover:bg-gray-50 disabled:opacity-50"
+            className="flex flex-1 items-center justify-center gap-1 rounded-md border border-gray-200 bg-white px-2 py-1 text-[11px] font-medium text-gray-600 transition-colors hover:bg-gray-50 disabled:opacity-50"
           >
             <Copy className="h-3 w-3" />
             Sao chép
           </button>
+          <button
+            onClick={handleTranslate}
+            disabled={!output || translateState.loading}
+            title={`Dịch sang ${otherLangLabel} (~1 credit)`}
+            className="flex flex-1 items-center justify-center gap-1 rounded-md border border-violet-200 bg-violet-50 px-2 py-1 text-[11px] font-medium text-violet-700 transition-colors hover:bg-violet-100 disabled:opacity-50"
+          >
+            {translateState.loading
+              ? <Loader2 className="h-3 w-3 animate-spin" />
+              : <Languages className="h-3 w-3" />}
+            {draft.market === 'ms' ? 'Vietsub' : 'Dịch BM'}
+          </button>
         </div>
       </div>
 
-      {/* Blocks */}
+      {/* Content */}
       <div className="flex-1 overflow-y-auto p-4">
         {output ? (
-          <div className="space-y-2">
-            {output.description.blocks.map((block, i) => (
-              <BlockCard
-                key={i}
-                block={block}
-                editable={isReal}
-                onSave={(nextBlock) => updateBlock(i, nextBlock)}
-              />
-            ))}
-          </div>
+          viewMode === 'blocks' ? (
+            <div className="space-y-2">
+              {output.description.blocks.map((block, i) => (
+                <BlockCard
+                  key={i}
+                  block={block}
+                  editable={isReal}
+                  onSave={(nextBlock) => updateBlock(i, nextBlock)}
+                />
+              ))}
+            </div>
+          ) : (
+            <FullTextView text={fullText} />
+          )
         ) : (
           <div className="flex h-full items-center justify-center">
             <p className="max-w-[200px] text-center text-xs text-gray-500">
               Mô tả sẽ hiện sau khi tạo listing.
             </p>
+          </div>
+        )}
+      </div>
+
+      {/* Translate modal */}
+      <TranslateModal
+        open={translateState.open}
+        loading={translateState.loading}
+        text={translateState.text}
+        targetLang={translateState.targetLang}
+        onClose={() => setTranslateState((s) => ({ ...s, open: false }))}
+        onCopy={handleCopyTranslation}
+      />
+    </div>
+  )
+}
+
+// ── Full-text view (read-only assembled text for easy copy) ──────────────
+
+function FullTextView({ text }: { text: string }) {
+  return (
+    <div className="flex h-full flex-col">
+      <p className="mb-2 text-[10px] text-gray-500">
+        Read-only — sửa text trong tab Block, full text auto cập nhật. <strong>** markdown</strong> sẽ render bold khi paste vào TikTok Shop.
+      </p>
+      <textarea
+        readOnly
+        value={text}
+        className="flex-1 w-full resize-none rounded-md border border-gray-200 bg-white p-3 font-mono text-[11px] leading-relaxed text-gray-800"
+        spellCheck={false}
+      />
+    </div>
+  )
+}
+
+// ── Translate modal ──────────────────────────────────────────────────────
+
+function TranslateModal({
+  open,
+  loading,
+  text,
+  targetLang,
+  onClose,
+  onCopy,
+}: {
+  open: boolean
+  loading: boolean
+  text: string
+  targetLang: Market
+  onClose: () => void
+  onCopy: () => void
+}) {
+  if (!open) return null
+  const targetName = MARKET_LABELS[targetLang]
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+      onClick={loading ? undefined : onClose}
+    >
+      <div
+        className="flex max-h-[85vh] w-full max-w-2xl flex-col overflow-hidden rounded-xl bg-white shadow-2xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="flex shrink-0 items-center justify-between border-b border-gray-100 px-5 py-3">
+          <div className="flex items-center gap-2">
+            <Languages className="h-4 w-4 text-violet-600" />
+            <h3 className="text-sm font-semibold text-gray-900">
+              Bản dịch — {targetName}
+            </h3>
+          </div>
+          <button
+            onClick={onClose}
+            disabled={loading}
+            className="rounded p-1 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-700 disabled:opacity-30"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        {/* Body */}
+        <div className="flex-1 overflow-y-auto p-5">
+          {loading ? (
+            <div className="flex h-32 flex-col items-center justify-center gap-2 text-gray-500">
+              <Loader2 className="h-6 w-6 animate-spin text-violet-500" />
+              <span className="text-xs">Đang dịch sang {targetName}...</span>
+            </div>
+          ) : (
+            <textarea
+              readOnly
+              value={text}
+              className="h-[60vh] w-full resize-none rounded-md border border-gray-200 bg-gray-50 p-3 font-mono text-xs leading-relaxed text-gray-800"
+              spellCheck={false}
+            />
+          )}
+        </div>
+
+        {/* Footer */}
+        {!loading && (
+          <div className="flex items-center justify-end gap-2 border-t border-gray-100 bg-gray-50 px-5 py-3">
+            <button
+              onClick={onClose}
+              className="rounded-lg border border-gray-200 bg-white px-4 py-2 text-xs font-semibold text-gray-700 transition-colors hover:bg-gray-50"
+            >
+              Đóng
+            </button>
+            <button
+              onClick={onCopy}
+              className="flex items-center gap-1.5 rounded-lg bg-violet-600 px-4 py-2 text-xs font-semibold text-white transition-colors hover:bg-violet-700"
+            >
+              <Copy className="h-3 w-3" />
+              Sao chép bản dịch
+            </button>
           </div>
         )}
       </div>
