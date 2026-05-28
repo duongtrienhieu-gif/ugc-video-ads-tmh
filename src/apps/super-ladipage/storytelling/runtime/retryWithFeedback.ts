@@ -18,7 +18,7 @@ import type { BlockId, BlockPlan, StorytellingInput } from '../types'
 import { buildSystemPrompt } from './systemPrompt'
 import { buildPackGenUserPrompt, buildRetryFeedback, logPromptStats } from './buildPackGenPrompt'
 import { callGeminiForPack } from './callGemini'
-import { parsePackResponse } from './parsePackResponse'
+import { parsePackResponseRecoverable } from './parsePackResponse'
 import type { ParsedPack, ParsedSection } from './parsePackResponse'
 import { runValidators, logValidationResult } from '../validators'
 import type { AggregatedValidation } from '../validators'
@@ -107,14 +107,19 @@ interface RunArgs {
   }
 }
 
-/** Single Gemini call + parse. Throws on parse error.
+/** Single Gemini call + parse. Throws on Gemini error or non-recoverable
+ *  parse error. Returns { pack, recoveredMissingIds }: when Gemini truncated
+ *  mid-stream (Sprint 7) the pack contains empty placeholder sections for
+ *  the truncated slots — the caller must treat those IDs as failing so
+ *  applyFallback() fills them.
+ *
  *  Selection MUST be defined when runOnce called (generatePackWithRetry
  *  ensures via argsWithSelection narrowing). */
 async function runOnce(
   args: RunArgs & { selection: NarratorDnaSelection },
   retryFeedback?: string,
   label = 'storytelling-packgen',
-): Promise<ParsedPack> {
+): Promise<{ pack: ParsedPack; recoveredMissingIds: BlockId[] }> {
   const systemPrompt = buildSystemPrompt(
     args.input,
     args.productBrief,
@@ -150,7 +155,14 @@ async function runOnce(
   const expectedIds = args.plan
     .filter((p) => !isProofBlock(p.blueprint.id))
     .map((p) => p.blueprint.id)
-  return parsePackResponse(raw, expectedIds)
+
+  // Sprint 7 (2026-05-28) — Partial JSON recovery. parsePackResponseRecoverable
+  // tries strict parse first; on truncation it brace-walks the partial JSON,
+  // returns the N complete sections + (expected − recovered) IDs as missingIds.
+  // The caller merges missingIds into failingSections so fallback fills them
+  // instead of the whole pack dumping to template.
+  const result = parsePackResponseRecoverable(raw, expectedIds)
+  return { pack: result.pack, recoveredMissingIds: result.missingIds }
 }
 
 /** P2 — Interleave proof block placeholders into story sections.
@@ -325,8 +337,14 @@ async function generateMainPackOnly(args: RunArgs): Promise<GeneratedPackResult>
   // ─── Attempt 1 ────────────────────────────────────────────────
   console.info(`[storytelling/runtime] attempt 1 — initial Gemini call`)
   let pack: ParsedPack
+  /** Sprint 7 (2026-05-28) — IDs whose section bodies were truncated mid-stream
+   *  and recovered as empty placeholders. Merged into validation.failingSections
+   *  before fallback application so applyFallback() backfills them. */
+  let recoveredMissingIds: BlockId[] = []
   try {
-    pack = await runOnce(argsWithSelection, undefined, 'storytelling-packgen-1')
+    const result = await runOnce(argsWithSelection, undefined, 'storytelling-packgen-1')
+    pack = result.pack
+    recoveredMissingIds = result.recoveredMissingIds
   } catch (err) {
     // Parse / Gemini error — try retry with explicit JSON-mode reminder
     const msg = err instanceof Error ? err.message : String(err)
@@ -335,13 +353,18 @@ async function generateMainPackOnly(args: RunArgs): Promise<GeneratedPackResult>
       `Previous attempt errored: ${msg.slice(0, 150)}`,
       'Output MUST be valid JSON only — no markdown fences, no prose outside JSON',
     ])
-    pack = await runOnce(argsWithSelection, feedback, 'storytelling-packgen-1-retry')
+    const result = await runOnce(argsWithSelection, feedback, 'storytelling-packgen-1-retry')
+    pack = result.pack
+    recoveredMissingIds = result.recoveredMissingIds
   }
 
   const initialValidation = runValidators(pack, args.input.niche, args.synthesizedReaderSymptoms)
   logValidationResult(initialValidation)
 
-  if (initialValidation.pass) {
+  // Sprint 7 — if recovery filled empty placeholders, treat them as failing
+  // even if validators didn't naturally flag them (defensive). Force the
+  // fallback path so missing slots get backfilled instead of shipping empty.
+  if (initialValidation.pass && recoveredMissingIds.length === 0) {
     // P2 — interleave proof block placeholders into final pack.sections.
     // Proof content filled later by generatePackWithRetry after proof Gemini call.
     const fullPack = interleaveProofPlaceholders(pack, args.plan)
@@ -356,19 +379,28 @@ async function generateMainPackOnly(args: RunArgs): Promise<GeneratedPackResult>
   }
 
   // ─── Attempt 2 (retry with violation feedback) ────────────────
-  console.warn(
-    `[storytelling/runtime] attempt 1 had ${initialValidation.violations.length} violations — retrying with feedback`,
-  )
+  if (recoveredMissingIds.length > 0) {
+    console.warn(
+      `[storytelling/runtime] attempt 1 truncated — ${recoveredMissingIds.length} sections missing (${recoveredMissingIds.join(', ')}); retrying`,
+    )
+  } else {
+    console.warn(
+      `[storytelling/runtime] attempt 1 had ${initialValidation.violations.length} violations — retrying with feedback`,
+    )
+  }
   const feedback = buildRetryFeedback(initialValidation.retryFeedback)
   let pack2: ParsedPack
+  let recoveredMissingIds2: BlockId[] = []
   try {
-    pack2 = await runOnce(argsWithSelection, feedback, 'storytelling-packgen-2')
+    const result2 = await runOnce(argsWithSelection, feedback, 'storytelling-packgen-2')
+    pack2 = result2.pack
+    recoveredMissingIds2 = result2.recoveredMissingIds
   } catch (err) {
     // Retry call errored — fall back to attempt 1 result + downgrade failing sections
     const msg = err instanceof Error ? err.message : String(err)
     console.warn(`[storytelling/runtime] attempt 2 errored: ${msg.slice(0, 200)} — using attempt 1 + fallback`)
     return buildFallbackResult(
-      pack, initialValidation, 2,
+      pack, mergeMissingIntoValidation(initialValidation, recoveredMissingIds), 2,
       argsWithSelection.selection, args.input.niche, args.plan,
       args.synthesizedReaderSymptoms,
       args.input.targetLanguage, args.geminiApiKey, args.kieApiKey,
@@ -379,7 +411,7 @@ async function generateMainPackOnly(args: RunArgs): Promise<GeneratedPackResult>
   const secondValidation = runValidators(pack2, args.input.niche, args.synthesizedReaderSymptoms)
   logValidationResult(secondValidation)
 
-  if (secondValidation.pass) {
+  if (secondValidation.pass && recoveredMissingIds2.length === 0) {
     const violationsByIdInitial = groupViolationsBySection(initialValidation)
     // P2 — interleave proof block placeholders into final pack.sections.
     const fullPack = interleaveProofPlaceholders(pack2, args.plan)
@@ -400,16 +432,38 @@ async function generateMainPackOnly(args: RunArgs): Promise<GeneratedPackResult>
   }
 
   // ─── Both attempts failed — downgrade failing sections ───────
-  console.warn(
-    `[storytelling/runtime] attempt 2 still had ${secondValidation.violations.length} violations — applying fallback to failing sections`,
-  )
+  if (recoveredMissingIds2.length > 0) {
+    console.warn(
+      `[storytelling/runtime] attempt 2 truncated — ${recoveredMissingIds2.length} sections missing (${recoveredMissingIds2.join(', ')}); applying fallback`,
+    )
+  } else {
+    console.warn(
+      `[storytelling/runtime] attempt 2 still had ${secondValidation.violations.length} violations — applying fallback to failing sections`,
+    )
+  }
   return buildFallbackResult(
-    pack2, secondValidation, 3,
+    pack2, mergeMissingIntoValidation(secondValidation, recoveredMissingIds2), 3,
     argsWithSelection.selection, args.input.niche, args.plan,
     args.synthesizedReaderSymptoms,
     args.input.targetLanguage, args.geminiApiKey, args.kieApiKey,
     args.synthesisBriefObj,
   )
+}
+
+/** Sprint 7 — Merge truncation-recovered missing IDs into a validation's
+ *  failingSections list so applyFallback() backfills those slots. */
+function mergeMissingIntoValidation(
+  validation: AggregatedValidation,
+  missingIds: BlockId[],
+): AggregatedValidation {
+  if (missingIds.length === 0) return validation
+  const merged = new Set<BlockId>(validation.failingSections)
+  for (const id of missingIds) merged.add(id)
+  return {
+    ...validation,
+    pass: false,
+    failingSections: [...merged],
+  }
 }
 
 /** When both attempts fail: keep passing sections from last attempt,
