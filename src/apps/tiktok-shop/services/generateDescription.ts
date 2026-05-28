@@ -33,13 +33,35 @@ export async function generateDescription(
   return { blocks, fullText, slotTexts }
 }
 
+/** Compact, plain-text rendering of the brief — easier for models to parse
+ *  than a 1KB nested JSON.stringify. Each line is one fact. */
+function buildCompactBriefBlock(brief: TiktokShopProductBrief): string {
+  const ings = brief.visibleIngredients.length > 0 ? brief.visibleIngredients.join(', ') : '(none visible on label)'
+  const safe = brief.nicheSafeClaims.slice(0, 5).join(', ')
+  const forbidden = brief.forbiddenClaims.slice(0, 5).join(', ')
+  return `
+--- PRODUCT BRIEF (already analyzed; READ-ONLY ground truth) ---
+- Name: ${brief.productNameExact}
+- Category: ${brief.productCategory} (${brief.productSubtype})
+- Target customer: ${brief.targetCustomer.ageRange} ${brief.targetCustomer.primaryGender} · ${brief.targetCustomer.dailyContext}
+- Core pains: ${brief.corePains.join(' | ')}
+- Transformation promise: ${brief.transformationPromise}
+- Specific metric: ${brief.specificMetric}
+- Key differentiator: ${brief.keyDifferentiator}
+- Usage context: ${brief.usageContext}
+- Common objections: ${brief.commonObjections.join(' | ')}
+- Visible ingredients: ${ings}
+- Safe claims toolkit: ${safe}
+- Forbidden claims (avoid): ${forbidden}
+--- END BRIEF ---
+`
+}
+
 function buildSystemInstruction(params: GenerateDescriptionParams): string {
   const lang = params.language === 'ms' ? 'Bahasa Malaysia' : 'Vietnamese'
-  const briefBlock = params.brief
-    ? `\n═══ PRODUCT BRIEF (READ-ONLY — already analyzed by Vision; do NOT re-analyze, just write copy matching this) ═══\n${JSON.stringify(params.brief, null, 2)}\n═══ END BRIEF ═══\n`
-    : ''
+  const briefBlock = params.brief ? buildCompactBriefBlock(params.brief) : ''
 
-  return `You are a TikTok Shop conversion copywriter for the Malaysia/Vietnam market. ${params.brief ? 'The PRODUCT BRIEF below has already been extracted from the product photos — use it as ground truth and write JSON copy that anchors to it.' : 'Read PRODUCT DATA carefully and write conversion copy that fits THIS specific product.'} The product can be ANY niche — never assume.
+  return `You are a TikTok Shop conversion copywriter for the Malaysia/Vietnam market. ${params.brief ? 'The PRODUCT BRIEF below has already been extracted — use it as ground truth.' : 'Read PRODUCT DATA carefully and write conversion copy that fits THIS specific product.'} The product can be ANY niche — never assume.
 ${briefBlock}
 LANGUAGE LOCK: every string value in your JSON must be in ${lang}. Even if product name/ingredients/refs contain other languages, output is ${lang} ONLY.
 

@@ -122,13 +122,13 @@ PRODUCT FIDELITY (CRITICAL):
 - Each bottle must replicate refs EXACTLY: same color, shape, label, brand name. Do NOT redesign.
 - ${countInstruction}${briefBlock}
 
-═══ BRAND SEAL — IDENTICAL spec to the main 9 listing slots (no white banner, integrated) ═══
+=== BRAND SEAL — IDENTICAL spec to the main 9 listing slots (no white banner, integrated) ===
 - LAYER 1 — LOGO: Render Reference 1 (brand logo) LARGE and CENTERED at the top. Logo size ~280px wide × 120px tall, at y≈40-160. NO white box, NO banner — logo sits directly on the brand-color gradient. Preserve logo EXACTLY from Reference 1.
 - LAYER 2 — SUBTITLE: Below logo at y≈170-205, render "Official store | ${marketBadge}" in WHITE Plus Jakarta Sans Medium Italic ~28px. Center-aligned.
 - LAYER 3 — UNDERLINE: Thin horizontal white line ~140px wide at 50% opacity centered at y≈215.
 - DO NOT render the brand kit's store name as separate text — the logo carries it.
 
-═══ COUNT LABEL PILL — top-center, just below brand seal ═══
+=== COUNT LABEL PILL — top-center, just below brand seal ===
 ${labelPillSpec}
 
 LAYOUT (all combo content sits BELOW the brand seal + label pill, y≥360):

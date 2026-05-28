@@ -54,7 +54,7 @@ function header(ctx: PromptContext): string {
 
 PRODUCT FIDELITY: Replicate the product EXACTLY from product refs — same color, shape, label, brand name. Do NOT redesign or substitute.${briefBlock}
 
-═══ BRAND SEAL — MANDATORY, IDENTICAL on all 9 slots (universal master spec, no white banner) ═══
+=== BRAND SEAL — MANDATORY, IDENTICAL on all 9 slots (universal master spec, no white banner) ===
 - LAYER 1 — LOGO: Render Reference 1 (brand logo) LARGE and CENTERED at the top of the canvas. Logo size ~280px wide × 120px tall, positioned at y≈40-160. NO white box, NO banner background — the logo sits directly on the brand-color gradient. Logo must be preserved EXACTLY from Reference 1 (no redraw, no recoloring, no shape change).
 - LAYER 2 — SUBTITLE: Directly below the logo at y≈170-205, render the horizontal text line "Official store | ${marketBadge}" in WHITE Plus Jakarta Sans Medium Italic ~28px. The "|" separator is a thin vertical bar in white at 60% opacity. Center-aligned under the logo.
 - LAYER 3 — UNDERLINE: A thin horizontal white line ~140px wide at 50% opacity centered at y≈215, just below the subtitle. Provides clean visual closure.
