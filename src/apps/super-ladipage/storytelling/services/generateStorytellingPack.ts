@@ -149,6 +149,64 @@ function writeNicheCache(
     window.localStorage.setItem(NICHE_CACHE_PREFIX + productId, JSON.stringify(entry))
   } catch { /* ignore */ }
 }
+
+// OPT-F3 (2026-05-28) — Product reality cache.
+// classifyProductReality is deterministic per product (depends on
+// productName + painPoints + benefits + USP + offer). Same caching
+// pattern as F1: hash of input invalidates the entry when user edits
+// product, 7-day TTL is the belt-and-suspenders.
+const REALITY_CACHE_PREFIX = 'super-ladipage:realityCache:'
+const REALITY_CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000
+interface RealityCacheInputShape {
+  productName: string
+  painPoints?: string
+  benefits?: string
+  uniqueSellingPoints?: string
+  offerPricing?: string
+}
+function hashRealityInput(p: RealityCacheInputShape): string {
+  const raw = `${p.productName}|${p.painPoints ?? ''}|${p.benefits ?? ''}|${p.uniqueSellingPoints ?? ''}|${p.offerPricing ?? ''}`
+  let h = 0
+  for (let i = 0; i < raw.length; i++) {
+    h = ((h << 5) - h) + raw.charCodeAt(i)
+    h |= 0
+  }
+  return (h >>> 0).toString(36)
+}
+interface RealityCacheEntry {
+  reality: unknown   // serialized ProductReality — kept opaque for forward compat
+  inputHash: string
+  savedAt: number
+}
+function readRealityCache(productId: string, input: RealityCacheInputShape): RealityCacheEntry | null {
+  try {
+    if (typeof window === 'undefined') return null
+    const raw = window.localStorage.getItem(REALITY_CACHE_PREFIX + productId)
+    if (!raw) return null
+    const entry = JSON.parse(raw) as RealityCacheEntry
+    if (typeof entry?.savedAt !== 'number' || !entry.reality) return null
+    if (Date.now() - entry.savedAt > REALITY_CACHE_TTL_MS) return null
+    if (entry.inputHash !== hashRealityInput(input)) return null
+    return entry
+  } catch {
+    return null
+  }
+}
+function writeRealityCache(
+  productId: string,
+  input: RealityCacheInputShape,
+  reality: unknown,
+): void {
+  try {
+    if (typeof window === 'undefined') return
+    const entry: RealityCacheEntry = {
+      reality,
+      inputHash: hashRealityInput(input),
+      savedAt: Date.now(),
+    }
+    window.localStorage.setItem(REALITY_CACHE_PREFIX + productId, JSON.stringify(entry))
+  } catch { /* ignore */ }
+}
 // REBUILD Sprint 2 (2026-05-28) — Narrative mode detector + filter.
 import { detectNarrativeMode, getSkippedBlocksForMode } from '../../narrativeMode'
 import type { NarrativeMode } from '../../narrativeMode'
@@ -323,29 +381,49 @@ export async function generateStorytellingPack(
   // Classifies product into 7-axis ProductRealityModel.
   // Solves: knee brace vs glucosamine pill — both health-functional niche
   // but completely different storytelling needs (form/pacing/discovery).
-  const productReality = await classifyProductReality(
-    {
-      productName: product.productName,
-      painPoints: product.painPoints,
-      benefits: (product as { benefits?: string }).benefits,
-      uniqueSellingPoints: (product as { usp?: string; uniqueSellingPoints?: string }).usp
-        ?? (product as { usp?: string; uniqueSellingPoints?: string }).uniqueSellingPoints,
-      offerPricing: (product as { offerPricing?: string; pricing?: string }).offerPricing
-        ?? (product as { offerPricing?: string; pricing?: string }).pricing,
-    },
-    {
-      geminiApiKey: settingsForNiche.geminiApiKey,
-      kieApiKey: settingsForNiche.kieApiKey,
-    },
-  )
-  console.info(
-    `[storytelling] product reality: form=${productReality.productForm}, ` +
-    `mechanism=${productReality.mechanismFamily}, ` +
-    `pacing=${productReality.pacingProfile}, ` +
-    `discovery=${productReality.discoveryContext}, ` +
-    `source=${productReality.source}` +
-    (productReality.rationale ? ` // ${productReality.rationale.slice(0, 80)}` : ''),
-  )
+  //
+  // OPT-F3 (2026-05-28): cached in localStorage with same TTL+hash
+  // pattern as F1 (niche cache). Product reality is deterministic from
+  // product fields, so we skip the Gemini call on repeat packs.
+  const realityClassifierInput = {
+    productName: product.productName,
+    painPoints: product.painPoints,
+    benefits: (product as { benefits?: string }).benefits,
+    uniqueSellingPoints: (product as { usp?: string; uniqueSellingPoints?: string }).usp
+      ?? (product as { usp?: string; uniqueSellingPoints?: string }).uniqueSellingPoints,
+    offerPricing: (product as { offerPricing?: string; pricing?: string }).offerPricing
+      ?? (product as { offerPricing?: string; pricing?: string }).pricing,
+  }
+  const cachedReality = readRealityCache(product.id, realityClassifierInput)
+  let productReality: Awaited<ReturnType<typeof classifyProductReality>>
+  if (cachedReality) {
+    productReality = cachedReality.reality as Awaited<ReturnType<typeof classifyProductReality>>
+    console.info(
+      `[storytelling] product reality (cached): form=${productReality.productForm}, ` +
+      `mechanism=${productReality.mechanismFamily}, ` +
+      `pacing=${productReality.pacingProfile}, ` +
+      `discovery=${productReality.discoveryContext}, ` +
+      `source=${productReality.source}+cache, ` +
+      `cached at ${new Date(cachedReality.savedAt).toISOString().slice(0, 16)}`,
+    )
+  } else {
+    productReality = await classifyProductReality(
+      realityClassifierInput,
+      {
+        geminiApiKey: settingsForNiche.geminiApiKey,
+        kieApiKey: settingsForNiche.kieApiKey,
+      },
+    )
+    writeRealityCache(product.id, realityClassifierInput, productReality)
+    console.info(
+      `[storytelling] product reality: form=${productReality.productForm}, ` +
+      `mechanism=${productReality.mechanismFamily}, ` +
+      `pacing=${productReality.pacingProfile}, ` +
+      `discovery=${productReality.discoveryContext}, ` +
+      `source=${productReality.source}` +
+      (productReality.rationale ? ` // ${productReality.rationale.slice(0, 80)}` : ''),
+    )
+  }
 
   // ─── Resolve input WITH pacing override from product reality ──────
   const pacingOverride = PACING_OVERRIDES[productReality.pacingProfile]
