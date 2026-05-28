@@ -1,14 +1,17 @@
-// Description translator — sends the assembled description text through
-// kieTextGenerate (Gemini Flash via kie.ai) to convert MS ↔ VN while
-// preserving structure (emojis, headings, bullet markers, **bold** markdown).
+// Description translator — translates MS ↔ VN preserving structure (emojis,
+// headings, bullet markers, **bold** markdown).
 //
-// Cost: ~1 credit per translate. Single API call, no batching.
+// Routes via Gemini direct (directGeminiText) — same reason as
+// generateDescription: kie.ai chat/completions returns "Operation not found"
+// for our models, so we bypass it and call Google's API directly. Free tier
+// on Gemini = no credit cost for translation.
 
-import { kieTextGenerate } from '../../../utils/kieai'
+import { directGeminiText } from '../../../utils/gemini'
 import type { Market } from '../../../types/brandKit'
 
 export interface TranslateParams {
-  apiKey: string
+  /** Google AI Studio API key (NOT kie.ai). */
+  geminiApiKey: string
   /** The full assembled description text (with emojis, bullets, **bold**) */
   sourceText: string
   /** Source language — what the text is currently in */
@@ -19,6 +22,9 @@ export interface TranslateParams {
 
 export async function translateDescriptionText(params: TranslateParams): Promise<string> {
   if (params.sourceLang === params.targetLang) return params.sourceText
+  if (!params.geminiApiKey?.trim()) {
+    throw new Error('Cần Gemini API key trong Cài đặt để dịch')
+  }
 
   const sourceName = langName(params.sourceLang)
   const targetName = langName(params.targetLang)
@@ -46,7 +52,14 @@ ${params.sourceText}
 
 Output the translated text only, no preamble.`
 
-  const translated = await kieTextGenerate(params.apiKey, prompt, systemInstruction)
+  const translated = await directGeminiText({
+    apiKey: params.geminiApiKey,
+    prompt,
+    systemInstruction,
+    responseMimeType: 'text/plain',
+    maxOutputTokens: 4096,
+    temperature: 0.5,
+  })
   return translated.trim()
 }
 

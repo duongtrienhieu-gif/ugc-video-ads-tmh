@@ -62,7 +62,7 @@ export default function DescriptionEditor() {
     setTranslateState({ open: true, loading: true, text: '', targetLang })
     try {
       const translated = await translateDescriptionText({
-        apiKey: kieApiKey,
+        geminiApiKey,
         sourceText: fullText,
         sourceLang: draft.market,
         targetLang,
