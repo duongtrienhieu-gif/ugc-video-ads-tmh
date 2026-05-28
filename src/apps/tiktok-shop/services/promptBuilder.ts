@@ -29,25 +29,39 @@ export interface PromptContext {
 function header(ctx: PromptContext): string {
   const p = TPCN_PALETTES[ctx.paletteFamily]
   const productRefHint = ctx.hasLogoRef
-    ? 'Reference 1 = brand logo (preserve exactly). References 2+ = product photos.'
-    : 'All references are product photos.'
+    ? 'Reference 1 = brand logo (preserve EXACTLY inside the BRAND FRAME — same colors/shape, no redraw). References 2+ = product photos.'
+    : 'All references are product photos. (No brand logo ref — render store name as text only inside the frame.)'
   const langName = ctx.language === 'ms' ? 'Bahasa Malaysia' : 'Vietnamese'
+  const marketBadge = ctx.language === 'ms' ? '🇲🇾 MY' : '🇻🇳 VN'
+  const logoSlot = ctx.hasLogoRef
+    ? 'LEFT (16px padding): brand logo from Reference 1, ~64px tall, vertically centered'
+    : 'LEFT (16px padding): small brand mark icon ~48px in primary color (no logo ref provided)'
 
   return `1:1 square TikTok Shop image (1024×1024). ${productRefHint}
 
-PRODUCT: Replicate EXACTLY from refs — same color, shape, label, brand name. Do NOT redesign or substitute.
+PRODUCT FIDELITY: Replicate the product EXACTLY from product refs — same color, shape, label, brand name. Do NOT redesign or substitute.
 
-HEADER ZONE: Top 80px (~8% canvas height) MUST be LEFT BLANK with a solid clean background color (white or brand secondary). Do NOT render brand logo, store name, flag, or ANY text/decoration in this zone — a deterministic header strip will be composited on top after generation. Place product, headline, and other content STARTING FROM y=90 (just below the header zone).
+═══ BRAND FRAME — MANDATORY, IDENTICAL ON ALL 9 SLOTS (deterministic master seal) ═══
+- Position: TOP CENTER, horizontally centered on canvas (NOT top-left, NOT top-right)
+- Dimensions: ~720px wide × 90px tall, rounded corners 20px
+- Background INSIDE frame: clean WHITE (#FFFFFF) with subtle drop shadow below
+- Three elements arranged left → center → right INSIDE the frame:
+  • ${logoSlot}
+  • CENTER: store name "${ctx.brandKit.storeName}" in dark navy (#0E2A47), Plus Jakarta Sans ExtraBold, ~32px
+  • RIGHT (16px padding): small rounded pill badge "${marketBadge}" in accent color background with white bold text, ~28px height
+- The frame must look IDENTICAL in every slot — same width, same height, same white bg, same content arrangement. This is the brand seal that unifies the 9-image listing.
 
-STYLE: Premium e-commerce listing — match the aesthetic typical of top sellers IN THIS PRODUCT'S category (do not assume teeth/supplement). Saturated brand palette (NOT pastel), polished commercial photography, integrated decorative elements. Plus Jakarta Sans ExtraBold (weight 800-900) for headlines, Medium Italic for sub-text.
+LAYOUT: ALL other slot content (slot headline, product hero, decorations, price overlays) sits BELOW the brand frame — content area starts from y≈140 down to y≈980.
+
+STYLE: Premium e-commerce listing — top-seller aesthetic for this product's category. Saturated brand palette (NOT pastel), polished commercial photography, integrated decorative elements. Plus Jakarta Sans ExtraBold (weight 800-900) for headlines, Medium Italic for sub-text.
 
 PALETTE (use ONLY these): ${p.primary} primary, ${p.secondary} secondary, ${p.cta} accent. High saturation.
 
-BACKGROUND: Saturated brand-color gradient + subtle decorative elements (floating particles, soft glow, geometric accents). Balanced, not cluttered.
+BACKGROUND (the area surrounding the brand frame): saturated brand-color gradient + subtle decorative elements (floating particles, soft glow, geometric accents). Balanced, not cluttered.
 
-LANGUAGE: ${langName} ONLY in image. NO other language characters.
+LANGUAGE: ${langName} ONLY in any rendered text. NO other language characters.
 
-NO TRUST BAR at bottom — leave clean for visual breathing.`
+NO trust bar at bottom — leave clean for visual breathing.`
 }
 
 // ── Fallback helpers — derive text from product when slotTexts missing ──
@@ -96,10 +110,10 @@ export function buildPromptSlot1(ctx: PromptContext): string {
   return `${header(ctx)}
 
 SLOT 1 — HERO HOOK
-COMPOSITION: Product on transparent glass PODIUM, centered, slight 12° rotation. Soft brand-color SPOTLIGHT HALO from above. 3-5 floating decorative particles in accent color.
+COMPOSITION: Product on transparent glass PODIUM, centered horizontally, sits in lower-middle area (y≈400-780), slight 12° rotation. Soft brand-color SPOTLIGHT HALO from above. 3-5 floating decorative particles in accent color.
 TEXT in image:
-- TOP CENTER, giant bold (~140px) white with subtle shadow: "${headline}"
-- BELOW PRODUCT, italic medium (~46px) light tint with accent underline: "${tagline}"`
+- BELOW BRAND FRAME, centered (y≈160-300), giant bold (~140px) white with subtle shadow: "${headline}"
+- BELOW PRODUCT (y≈820), italic medium (~46px) light tint with accent underline: "${tagline}"`
 }
 
 export function buildPromptSlot2(ctx: PromptContext): string {
@@ -109,10 +123,10 @@ export function buildPromptSlot2(ctx: PromptContext): string {
   return `${header(ctx)}
 
 SLOT 2 — PAIN POINT
-COMPOSITION: Documentary close-up of the painful "before" state related to this product's category. Slight desaturation (-15%) to convey discomfort. The product (matching refs) floats in BOTTOM-RIGHT corner, small (~18%), tilted, glowing softly.
+COMPOSITION: Documentary close-up of the painful "before" state related to this product's category, sits in middle-right (y≈300-700). Slight desaturation (-15%) to convey discomfort. The product (matching refs) floats in BOTTOM-RIGHT corner, small (~18%), tilted, glowing softly.
 TEXT in image:
-- TOP CENTER bold (~90px) white with shadow: "${question}"
-- LEFT-SIDE STACK 3 bullets with red ✗ + bold (~42px each):
+- BELOW BRAND FRAME, centered (y≈150-240), bold (~90px) white with shadow: "${question}"
+- LEFT-SIDE STACK 3 bullets (y≈320-720) with red ✗ + bold (~42px each):
 ${bullets.map((b) => `  ✗ ${b}`).join('\n')}`
 }
 
@@ -126,12 +140,12 @@ export function buildPromptSlot3(ctx: PromptContext): string {
   return `${header(ctx)}
 
 SLOT 3 — TRANSFORMATION
-COMPOSITION: 50/50 SYMMETRIC vertical split — LEFT "before" state, RIGHT "after" state (both directly relevant to this product's effect). SAME camera angle + SAME lighting both halves (credibility critical). Thin accent-color vertical divider. Product floats lower-center over the divide, small.
+COMPOSITION: 50/50 SYMMETRIC vertical split (occupying y≈140-880) — LEFT "before" state, RIGHT "after" state (both directly relevant to this product's effect). SAME camera angle + SAME lighting both halves (credibility critical). Thin accent-color vertical divider. Product floats lower-center over the divide, small.
 TEXT in image:
-- TOP labels (~38px bold tracking-wide white with shadow): left="${beforeLabel}", right="${afterLabel}"
-- CENTER GIANT (~180px ExtraBold accent color with strong shadow): "${metric}"
-- Below metric (~46px bold uppercase white): "${metricSub}"
-- Bottom small italic (~24px tinted): "${disclaimer}"`
+- JUST BELOW BRAND FRAME (y≈150), two labels (~38px bold tracking-wide white with shadow): left half="${beforeLabel}", right half="${afterLabel}"
+- CENTER MIDDLE GIANT (y≈440, ~180px ExtraBold accent color with strong shadow): "${metric}"
+- Below the metric (y≈600, ~46px bold uppercase white): "${metricSub}"
+- Bottom (y≈930, ~24px italic tinted): "${disclaimer}"`
 }
 
 export function buildPromptSlot4(ctx: PromptContext): string {
@@ -148,9 +162,9 @@ export function buildPromptSlot4(ctx: PromptContext): string {
   return `${header(ctx)}
 
 SLOT 4 — INGREDIENTS / MECHANISM (ref style: BBOJI / EXOLABO ingredient panel with REAL photos)
-COMPOSITION: Product centered slightly LEFT on subtle podium. Around the product: natural decorative elements relevant to the ingredients (leaves, herbs, fruit pieces) grounding the scene.
+COMPOSITION: Product centered slightly LEFT on subtle podium (y≈340-820). Around the product: natural decorative elements relevant to the ingredients (leaves, herbs, fruit pieces) grounding the scene.
 TEXT in image:
-- Headline starts BELOW header zone (y≥110), giant bold (~120px) white: "${title}"
+- Headline JUST BELOW BRAND FRAME (y≈150-280), giant bold (~120px) white: "${title}"
 - RIGHT-SIDE STACK of pill-shaped chips (white rounded rect + soft shadow), each chip contains FOUR elements in order from left to right: (1) numbered accent badge 1-5, (2) ingredient name in bold dark navy ~30px, (3) percentage in accent color ~28px, (4) REAL MACRO PHOTOGRAPH of the actual ingredient material on the right side of the chip — e.g., real grape cluster + seeds for "Grape Seed Extract", real bamboo charcoal pieces for "Bamboo Charcoal", real mint leaves for "Mint Extract", real coconut shell for "Coconut Powder", real vitamin capsules for "Vitamin E". Commercial product catalog photography style. STRICTLY NOT abstract icons, NOT cartoon symbols, NOT generic geometric shapes.
 Chips list:
 ${ingLine}
@@ -185,12 +199,12 @@ export function buildPromptSlot6(ctx: PromptContext): string {
   return `${header(ctx)}
 
 SLOT 6 — USAGE DEMO
-COMPOSITION: TRIPTYCH — 3 instances of product in horizontal sequence, each in slightly different angle/state representing the step. Soft context bg (relevant to where product is used), NOT cluttered. Subtle accent-color vertical dividers between panels.
+COMPOSITION: TRIPTYCH — 3 instances of product in horizontal sequence (y≈320-780), each in slightly different angle/state representing the step. Soft context bg (relevant to where product is used), NOT cluttered. Subtle accent-color vertical dividers between panels.
 TEXT in image:
-- TOP CENTER bold (~110px) dark primary or white: "${title}"
-- BELOW EACH PRODUCT (3 columns): big accent-color circle (~90px) with white number, then bold step text (~36px):
+- BELOW BRAND FRAME, centered (y≈150-260), bold (~110px) dark primary or white: "${title}"
+- BELOW EACH PRODUCT (3 columns, y≈800): big accent-color circle (~90px) with white number, then bold step text (~36px):
 ${steps.map((s, i) => `  Col ${i + 1}: "${s}"`).join('\n')}
-- BOTTOM center (~32px) tinted: "${timing}"`
+- BOTTOM center (y≈960, ~32px) tinted: "${timing}"`
 }
 
 export function buildPromptSlot7(ctx: PromptContext): string {
@@ -206,10 +220,10 @@ export function buildPromptSlot7(ctx: PromptContext): string {
   return `${header(ctx)}
 
 SLOT 7 — COMPARISON (VS visual, NOT table)
-COMPOSITION: SIDE-BY-SIDE split — LEFT half shows our product (matching refs) on accent-tinted pedestal with confident lighting + "${us}" label badge top. RIGHT half shows a GENERIC unbranded competitor product on neutral pedestal with dimmer lighting + "${them}" label. Large bold "VS" in accent color sits at center between them.
+COMPOSITION: SIDE-BY-SIDE split (y≈320-720) — LEFT half shows our product (matching refs) on accent-tinted pedestal with confident lighting + "${us}" label badge top. RIGHT half shows a GENERIC unbranded competitor product on neutral pedestal with dimmer lighting + "${them}" label. Large bold "VS" in accent color sits at center between them.
 TEXT in image:
-- TOP CENTER bold (~110px) white with shadow: "${title}"
-- BELOW PEDESTALS, ${points.length} quick comparison rows with checkmark (left) vs cross (right), bold (~32px):
+- BELOW BRAND FRAME, centered (y≈150-280), bold (~110px) white with shadow: "${title}"
+- BELOW PEDESTALS (y≈760-940), ${points.length} quick comparison rows with checkmark (left) vs cross (right), bold (~32px):
   ${pointsStr}`
 }
 
@@ -224,19 +238,19 @@ export function buildPromptSlot8(ctx: PromptContext): string {
   const urgency = st?.urgency ?? derived.urgency
 
   const priceBlock = orig
-    ? `- AT y=110 (just below header zone), LEFT-HALF struck-through (~42px) light tint: "${orig}"\n- BELOW it (y=160, still LEFT), GIANT ExtraBold (~200px) white with shadow: "${cur}"`
-    : `- AT y=110 (just below header zone), LEFT-HALF GIANT ExtraBold (~200px) white with shadow: "${cur}"`
-  const discBlock = disc ? `\n- AMBER PILL BADGE next to or below price (~50px dark bold): "${disc}"` : ''
-  const comboBlock = combo ? `\n- MIDDLE band bold (~40px) white: "${combo}"` : ''
-  const urgBlock = urgency ? `\n- Below button italic (~28px) light tint: "⏰ ${urgency}"` : ''
+    ? `- BELOW BRAND FRAME, LEFT half (y≈160), struck-through (~42px) light tint: "${orig}"\n- DIRECTLY BELOW the strike-through (y≈220, still LEFT half), GIANT ExtraBold (~200px) white with shadow: "${cur}"`
+    : `- BELOW BRAND FRAME, LEFT half (y≈180), GIANT ExtraBold (~200px) white with shadow: "${cur}"`
+  const discBlock = disc ? `\n- AMBER PILL BADGE next to or below current price (~50px dark bold): "${disc}"` : ''
+  const comboBlock = combo ? `\n- MIDDLE band (y≈600) bold (~40px) white: "${combo}"` : ''
+  const urgBlock = urgency ? `\n- Below CTA button italic (~28px) light tint: "⏰ ${urgency}"` : ''
 
   return `${header(ctx)}
 
 SLOT 8 — OFFER (hero composition + price overlay)
-COMPOSITION: Product hero shot in BOTTOM-RIGHT third. Energetic saturated bg (primary → warm accent). Price block area sits in the LEFT half BELOW the header zone (y=110 onward).
+COMPOSITION: Product hero shot in BOTTOM-RIGHT third (y≈480-880). Energetic saturated bg (primary → warm accent). Price block sits in the LEFT half BELOW the brand frame.
 TEXT in image:
 ${priceBlock}${discBlock}${comboBlock}
-- BOTTOM wide rounded BUTTON in accent color, big bold white inside (~58px) with shadow: "${cta}"${urgBlock}`
+- BOTTOM (y≈920) wide rounded BUTTON in accent color, big bold white inside (~58px) with shadow: "${cta}"${urgBlock}`
 }
 
 export function buildPromptSlot9(ctx: PromptContext): string {
@@ -255,10 +269,10 @@ export function buildPromptSlot9(ctx: PromptContext): string {
   return `${header(ctx)}
 
 SLOT 9 — FAQ & ASSURANCE
-COMPOSITION: Soft light bg. Product small ~18% bottom-right corner. 3 white rounded cards stacked vertically center (each ~26% canvas height, soft shadow).
+COMPOSITION: Soft light bg. Product small ~18% bottom-right corner (y≈760-940). 3 white rounded cards stacked vertically centered (y≈300-840, each ~180px tall, soft shadow).
 TEXT in image:
-- TOP CENTER bold (~110px) dark primary: "${title}"
-- 3 cards content, each with accent-color "Q" badge square (~40px) on left, bold question (~38px) + answer prefixed with "→" (~30px gray):
+- BELOW BRAND FRAME, centered (y≈150-260), bold (~110px) dark primary: "${title}"
+- 3 cards content (stacked), each with accent-color "Q" badge square (~40px) on left, bold question (~38px) + answer prefixed with "→" (~30px gray):
   ${itemsStr}`
 }
 

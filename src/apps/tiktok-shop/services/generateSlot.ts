@@ -24,7 +24,6 @@ import type { ResolvedBrandKit, Market } from '../../../types/brandKit'
 import type { Product } from '../../../stores/types'
 import type { SlotConfig, PaletteFamily, SlotTexts } from '../types'
 import { buildPromptForSlot } from './promptBuilder'
-import { composeHeaderOverlay } from './composeHeaderOverlay'
 
 export interface GenerateSlotParams {
   apiKey: string
@@ -92,19 +91,15 @@ export async function generateSlotImage(params: GenerateSlotParams): Promise<Gen
     signal: params.signal,
   })
 
-  // 4. Composite deterministic brand header (logo + store name + flag) onto
-  //    top 80px of the AI image so the header is 100% identical across all 9
-  //    slots regardless of AI variance. Replaces the prior approach where AI
-  //    rendered its own (inconsistent) version of the brand identity.
-  const composedBlob = await composeHeaderOverlay({
-    aiImageUrl: kieImageUrl,
-    brandKit: params.brandKit,
-    paletteFamily: params.paletteFamily,
-  })
-
-  // 5. Save the composited image to our Supabase Storage. We do NOT keep
-  //    the raw AI output — the composited version is the canonical asset.
-  const assetId = await saveAsset(composedBlob, 'image/jpeg')
+  // 4. Download AI image and save directly to Supabase Storage.
+  //    Brand frame (top-center white rounded rect with logo + store name + flag)
+  //    is rendered by gpt-4o-image per the deterministic spec in header() — no
+  //    canvas overlay, no post-processing. Earlier overlay approach was cropping
+  //    content; AI now owns the full image.
+  const aiResp = await fetch(kieImageUrl)
+  if (!aiResp.ok) throw new Error(`Tải ảnh AI thất bại (HTTP ${aiResp.status})`)
+  const aiBlob = await aiResp.blob()
+  const assetId = await saveAsset(aiBlob, 'image/jpeg')
 
   return { assetId, prompt }
 }

@@ -14,7 +14,6 @@ import { getUrl, saveAsset } from '../../../utils/assetStore'
 import type { ResolvedBrandKit, Market } from '../../../types/brandKit'
 import type { ComboOption, PaletteFamily } from '../types'
 import { TPCN_PALETTES } from '../constants'
-import { composeHeaderOverlay } from './composeHeaderOverlay'
 
 export interface GenerateComboParams {
   apiKey: string
@@ -66,17 +65,12 @@ export async function generateComboImage(params: GenerateComboParams): Promise<G
     signal: params.signal,
   })
 
-  // 4. Composite brand header overlay — same deterministic strip as the
-  //    main 9 slots so combo thumbnails match the listing's brand identity
-  //    exactly.
-  const composedBlob = await composeHeaderOverlay({
-    aiImageUrl: kieImageUrl,
-    brandKit: params.brandKit,
-    paletteFamily: params.paletteFamily,
-  })
-
-  // 5. Save composited image
-  const assetId = await saveAsset(composedBlob, 'image/jpeg')
+  // 4. Download AI image and save directly. Brand frame is rendered by AI
+  //    per the deterministic spec inside buildComboPrompt (same as main slots).
+  const aiResp = await fetch(kieImageUrl)
+  if (!aiResp.ok) throw new Error(`Tải ảnh combo thất bại (HTTP ${aiResp.status})`)
+  const aiBlob = await aiResp.blob()
+  const assetId = await saveAsset(aiBlob, 'image/jpeg')
   return { assetId, prompt }
 }
 
@@ -86,9 +80,13 @@ function buildComboPrompt(params: GenerateComboParams, hasLogoRef: boolean): str
   const p = TPCN_PALETTES[params.paletteFamily]
   const c = params.combo
   const langName = params.language === 'ms' ? 'Bahasa Malaysia' : 'Vietnamese'
+  const marketBadge = params.language === 'ms' ? '🇲🇾 MY' : '🇻🇳 VN'
   const productRefHint = hasLogoRef
-    ? 'Reference 1 = brand logo (preserve exactly). References 2+ = product photos.'
-    : 'All references are product photos.'
+    ? 'Reference 1 = brand logo (preserve EXACTLY inside the BRAND FRAME). References 2+ = product photos.'
+    : 'All references are product photos. (No logo ref — render store name as text only in the frame.)'
+  const logoSlot = hasLogoRef
+    ? 'LEFT (16px padding): brand logo from Reference 1, ~64px tall, vertically centered'
+    : 'LEFT (16px padding): small brand mark icon ~48px (no logo ref provided)'
 
   // Count enforcement. productCount is the authoritative source (user input);
   // fall back to parsing the description ("2 jars" → 2), then to 1.
@@ -97,40 +95,48 @@ function buildComboPrompt(params: GenerateComboParams, hasLogoRef: boolean): str
     ? `Show EXACTLY ${count} instances of the product clearly visible, arranged side-by-side or in a small cluster (NOT just 1). Each instance must match the reference photos.`
     : `Show exactly 1 instance of the product centered, matching the reference photos.`
 
-  // Description is optional now (Phase 9 fix). Default from count so the
-  // prompt always has something concrete to render.
   const effectiveDescription = c.description.trim()
     || (count > 1 ? `${count} units of the product` : '1 unit of the product')
 
-  // Build the price block instruction dynamically based on what fields exist
+  // Price block sits BELOW the brand frame on the RIGHT side (NOT top-right —
+  // that area is now occupied by the centered brand frame).
   const priceBlock = c.originalPrice
-    ? `Top-right corner: struck-through original price "${c.originalPrice}" (~32px light tint), below it GIANT current price "${c.price}" (~120px ExtraBold white with shadow)${c.discount ? `, plus an AMBER PILL BADGE "${c.discount}" (~36px dark bold) right below the price.` : '.'}`
-    : `Top-right corner: GIANT price "${c.price}" (~120px ExtraBold white with shadow).`
+    ? `- BELOW BRAND FRAME, RIGHT half (y≈160), struck-through original price "${c.originalPrice}" (~32px light tint)\n- DIRECTLY BELOW the strike-through (y≈210, still RIGHT half), GIANT current price "${c.price}" (~140px ExtraBold white with strong shadow)${c.discount ? `\n- AMBER PILL BADGE next to/below current price (~36px dark bold): "${c.discount}"` : ''}`
+    : `- BELOW BRAND FRAME, RIGHT half (y≈180), GIANT price "${c.price}" (~140px ExtraBold white with strong shadow).`
 
   const hotBadge = c.isHot
-    ? '\nHOT BADGE: small red rounded-corner badge in top-left next to logo with text "🔥 HOT" (~24px white bold).'
+    ? '\nHOT BADGE: small red rounded-corner badge floating in upper-left content area (y≈140, NOT inside the brand frame) with text "🔥 HOT" (~24px white bold).'
     : ''
 
   return `1:1 square TikTok Shop VARIANT THUMBNAIL (1024×1024). ${productRefHint}
 
-PRODUCT: Replicate EXACTLY from refs — same color, shape, label, brand name. Do NOT redesign.
+PRODUCT FIDELITY: Replicate EXACTLY from product refs — same color, shape, label, brand name. Do NOT redesign.
 
 VARIANT CONTENT: ${effectiveDescription}
 PRODUCT COUNT: ${countInstruction}
 
-LAYOUT:
-- Product configuration centered, occupying ~60% of canvas area
-- Soft brand-color gradient background (${p.primary} → ${p.secondary}) with subtle decorative particles
-- BRAND LOGO + store name "${params.brandKit.storeName}" small top-left (~7% canvas height)${hotBadge}
+═══ BRAND FRAME — IDENTICAL spec to the main 9 listing slots (master seal) ═══
+- Position: TOP CENTER, horizontally centered on canvas
+- Dimensions: ~720px wide × 90px tall, rounded corners 20px
+- Background INSIDE: clean WHITE (#FFFFFF) with subtle drop shadow
+- Three elements left → center → right INSIDE the frame:
+  • ${logoSlot}
+  • CENTER: store name "${params.brandKit.storeName}" in dark navy (#0E2A47) Plus Jakarta Sans ExtraBold ~32px
+  • RIGHT (16px padding): rounded pill "${marketBadge}" in accent color with white bold text (~28px height)
+- Same exact size/shape/colors as the main 9 slots — unified brand identity.
+
+LAYOUT (all combo content sits BELOW the brand frame, y≥140):
+- Product configuration centered horizontally on canvas, occupying ~55% of total area (y≈380-820)
+- Saturated brand-color gradient background (${p.primary} → ${p.secondary}) with subtle decorative particles${hotBadge}
 
 PRICE OVERLAY (must appear, dominant):
 ${priceBlock}
 
-VARIANT LABEL: At bottom-center, white rounded rect with name "${c.name}" inside (~28px medium dark navy bold).
+VARIANT LABEL: At bottom-center (y≈900), white rounded rect with name "${c.name}" inside (~28px medium dark navy bold).
 
 STYLE: Same premium e-commerce aesthetic as the main 9 listing slots. Plus Jakarta Sans ExtraBold for prices. Saturated brand palette. Clean focus on product + price.
 
-LANGUAGE: ${langName} ONLY in any text. NO other languages.
+LANGUAGE: ${langName} ONLY in any rendered text. NO other languages.
 
 NO trust bar, NO cert badges, NO clutter.`
 }
