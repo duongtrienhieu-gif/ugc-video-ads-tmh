@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { persist, createJSONStorage } from 'zustand/middleware'
 import {
   FONT_WHITELIST,
   type BrandKit,
@@ -11,15 +12,20 @@ import { supabase, requireUserId } from '../lib/supabase'
 import { useAppStore } from './appStore'
 
 // ─────────────────────────────────────────────────────────────────────────
-// Brand Kit store — Supabase-backed (user_outputs table, kind='brand-kit').
+// Brand Kit store — Supabase + localStorage hybrid (mirrors lab-content).
 //
-// We DO NOT persist to localStorage. Earlier version used zustand persist
-// which led to "Setting the value of 'ugc-lab:brand-kits' exceeded the
-// quota" when localStorage was already nearly full from other UGC Lab
-// stores (lab-content, super-ladipage…). Supabase is the single source of
-// truth; in-memory state hydrates on login, gets rewritten on every CRUD.
+// Primary: in-memory state, mirrored to localStorage via zustand persist.
+// Secondary: Supabase user_outputs (kind='brand-kit') for cross-device sync.
 //
-// Pattern mirrors src/apps/lab-content/store.ts.
+// Why hybrid:
+//   • Pure localStorage hit "exceeded the quota" on busy installs.
+//   • Pure Supabase fails with "Could not find table user_outputs" until
+//     the user runs the migration in SUPABASE_USER_OUTPUTS_MIGRATION.md.
+//   • Hybrid: save lands locally instantly; Supabase sync is fire-and-
+//     forget; users without the migration still get a working app and
+//     a one-time toast pointing them at the migration.
+//
+// Migration SQL: see SUPABASE_USER_OUTPUTS_MIGRATION.md at repo root.
 // ─────────────────────────────────────────────────────────────────────────
 
 const KIND = 'brand-kit' as const
@@ -54,7 +60,6 @@ interface UserOutputRow {
 function rowToBrandKit(row: UserOutputRow): BrandKit {
   const payload = (row.payload_json ?? {}) as Partial<BrandKit>
   return {
-    // Row-level fields win over payload
     id: row.id,
     name: payload.name ?? row.title ?? '',
     category: payload.category ?? 'other',
@@ -78,183 +83,244 @@ function rowToBrandKit(row: UserOutputRow): BrandKit {
   }
 }
 
-function reportError(action: string, error: { message?: string } | null) {
-  if (!error) return
-  const msg = error.message ?? String(error)
-  console.error(`[brandKitStore] ${action}:`, msg)
+// ── Error formatting ─────────────────────────────────────────────────────
+
+function formatError(err: unknown): string {
+  if (!err) return 'Lỗi không xác định'
+  if (typeof err === 'string') return err
+  if (err instanceof Error) return err.message
+  if (typeof err === 'object') {
+    const e = err as { message?: string; error?: string; details?: string; hint?: string; code?: string }
+    if (e.message) return e.message
+    if (e.error) return e.error
+    if (e.details) return e.details
+    if (e.hint) return e.hint
+    if (e.code) return `code ${e.code}`
+    try { return JSON.stringify(err) } catch { return String(err) }
+  }
+  return String(err)
+}
+
+function isMissingTableError(err: unknown): boolean {
+  const msg = formatError(err).toLowerCase()
+  return msg.includes('user_outputs') && (msg.includes('schema cache') || msg.includes('does not exist'))
+}
+
+// One-shot flag so we only nag the user about the migration ONCE per session.
+let warnedAboutMigration = false
+
+function warnAboutMigrationOnce() {
+  if (warnedAboutMigration) return
+  warnedAboutMigration = true
+  try {
+    useAppStore.getState().addToast(
+      'Brand Kit lưu vào máy này, chưa đồng bộ. Mở SUPABASE_USER_OUTPUTS_MIGRATION.md ở repo và chạy SQL để bật sync đa thiết bị.',
+      'info',
+    )
+  } catch { /* appStore not ready */ }
+}
+
+function reportError(action: string, err: unknown) {
+  if (isMissingTableError(err)) {
+    // Don't spam the user with the same error for every CRUD. Show the
+    // migration hint once; subsequent failures stay silent (local save
+    // still works, sync is just disabled).
+    warnAboutMigrationOnce()
+    console.warn(`[brandKitStore] ${action}: table missing — running in local-only mode until migration applied.`)
+    return
+  }
+  const msg = formatError(err)
+  console.error(`[brandKitStore] ${action}:`, msg, err)
   try {
     useAppStore.getState().addToast(`${action} thất bại: ${msg}`, 'error')
   } catch { /* appStore not ready */ }
 }
 
-// Guard against concurrent hydrate calls (React StrictMode runs effects twice)
-let hydrateInFlight: Promise<void> | null = null
-
-export const useBrandKitStore = create<BrandKitStore>((set, get) => ({
-  brandKits: [],
-  hydrated: false,
-  hydrating: false,
-
-  hydrate: async () => {
-    if (hydrateInFlight) return hydrateInFlight
-    hydrateInFlight = (async () => {
-      set({ hydrating: true })
-      // One-shot cleanup of the deprecated zustand-persist key from the
-      // localStorage-only version. Frees quota for users who saw the
-      // 'exceeded the quota' error. Safe to delete: data was never
-      // persisting beyond this tab (or was failing to save outright).
-      try { localStorage.removeItem('ugc-lab:brand-kits') } catch { /* silent */ }
-      try {
-        const { data: { user } } = await supabase.auth.getUser()
-        if (!user) {
-          set({ hydrating: false, hydrated: true })
-          return
-        }
-        const { data, error } = await supabase
-          .from('user_outputs')
-          .select('*')
-          .eq('user_id', user.id)
-          .eq('kind', KIND)
-          .order('updated_at', { ascending: false })
-        if (error) {
-          reportError('Tải Brand Kit', error)
-          set({ hydrating: false, hydrated: true })
-          return
-        }
-        const kits = (data as UserOutputRow[]).map(rowToBrandKit)
-        set({ brandKits: kits, hydrating: false, hydrated: true })
-      } catch (e) {
-        reportError('Tải Brand Kit', { message: e instanceof Error ? e.message : String(e) })
-        set({ hydrating: false, hydrated: true })
-      } finally {
-        hydrateInFlight = null
-      }
-    })()
-    return hydrateInFlight
+// ── Safe localStorage wrapper — survive quota exceeded ───────────────────
+//
+// When localStorage is full (eg other UGC Lab stores have eaten most of
+// the 5-10MB), persist's setItem throws. We swallow the throw and just
+// keep the in-memory state — better than blowing up the save altogether.
+const safeStorage = createJSONStorage<{ state: { brandKits: BrandKit[] } }>(() => ({
+  getItem: (name) => {
+    try { return localStorage.getItem(name) } catch { return null }
   },
-
-  getById: (id) => get().brandKits.find((k) => k.id === id),
-
-  getActiveForMarket: (market) =>
-    get().brandKits.filter((k) => k.markets.includes(market)),
-
-  create: async (kit) => {
-    const id = crypto.randomUUID()
-    const nowIso = new Date().toISOString()
-    const next: BrandKit = {
-      ...kit,
-      id,
-      version: 1,
-      createdAt: nowIso,
-      updatedAt: nowIso,
-    }
-    // Optimistic insert
-    set((s) => ({ brandKits: [next, ...s.brandKits] }))
-    try {
-      const user_id = await requireUserId()
-      const { data: row, error } = await supabase
-        .from('user_outputs')
-        .insert({
-          id,
-          user_id,
-          kind: KIND,
-          title: next.name,
-          payload_json: next,
-        })
-        .select()
-        .single()
-      if (error) {
-        reportError('Lưu Brand Kit', error)
-        // Roll back optimistic state so the user can retry / see the
-        // error rather than thinking the save succeeded.
-        set((s) => ({ brandKits: s.brandKits.filter((k) => k.id !== id) }))
-        throw error
-      } else if (row) {
-        const persisted = rowToBrandKit(row as UserOutputRow)
-        set((s) => ({
-          brandKits: s.brandKits.map((k) => (k.id === id ? persisted : k)),
-        }))
-        return persisted
-      }
-    } catch (e) {
-      reportError('Lưu Brand Kit', { message: e instanceof Error ? e.message : String(e) })
-      set((s) => ({ brandKits: s.brandKits.filter((k) => k.id !== id) }))
-      throw e
-    }
-    return next
-  },
-
-  update: async (id, patch) => {
-    const nowIso = new Date().toISOString()
-    const current = get().brandKits.find((k) => k.id === id)
-    if (!current) return
-    const merged: BrandKit = { ...current, ...patch, id, version: 1, updatedAt: nowIso }
-    // Optimistic
-    set((s) => ({
-      brandKits: s.brandKits.map((k) => (k.id === id ? merged : k)),
-    }))
-    try {
-      const user_id = await requireUserId()
-      const { error } = await supabase
-        .from('user_outputs')
-        .update({ title: merged.name, payload_json: merged })
-        .eq('id', id)
-        .eq('user_id', user_id)
-        .eq('kind', KIND)
-      if (error) {
-        reportError('Cập nhật Brand Kit', error)
-        set((s) => ({
-          brandKits: s.brandKits.map((k) => (k.id === id ? current : k)),
-        }))
-      }
-    } catch (e) {
-      reportError('Cập nhật Brand Kit', { message: e instanceof Error ? e.message : String(e) })
+  setItem: (name, value) => {
+    try { localStorage.setItem(name, value) }
+    catch (e) {
+      console.warn('[brandKitStore] localStorage write skipped — quota likely exceeded', e)
     }
   },
-
-  delete: async (id) => {
-    const kit = get().brandKits.find((k) => k.id === id)
-    // Optimistic remove
-    set((s) => ({ brandKits: s.brandKits.filter((k) => k.id !== id) }))
-
-    if (kit) {
-      // Best-effort clean-up of orphaned assets. Errors swallowed —
-      // the metadata removal MUST proceed even if the asset store
-      // can't be reached.
-      const ids = [
-        kit.logoAssetId,
-        kit.logoMonoAssetId,
-        ...kit.badges.map((b) => b.assetId),
-      ].filter((v): v is string => !!v)
-      await Promise.all(ids.map((aid) => deleteAsset(aid).catch(() => {})))
-    }
-
-    try {
-      const user_id = await requireUserId()
-      const { error } = await supabase
-        .from('user_outputs')
-        .delete()
-        .eq('id', id)
-        .eq('user_id', user_id)
-        .eq('kind', KIND)
-      if (error) {
-        reportError('Xóa Brand Kit', error)
-        if (kit) set((s) => ({ brandKits: [kit, ...s.brandKits] }))
-      }
-    } catch (e) {
-      reportError('Xóa Brand Kit', { message: e instanceof Error ? e.message : String(e) })
-      if (kit) set((s) => ({ brandKits: [kit, ...s.brandKits] }))
-    }
+  removeItem: (name) => {
+    try { localStorage.removeItem(name) } catch { /* silent */ }
   },
 }))
 
+// Guard against concurrent hydrate calls (React StrictMode runs effects twice)
+let hydrateInFlight: Promise<void> | null = null
+
+export const useBrandKitStore = create<BrandKitStore>()(
+  persist(
+    (set, get) => ({
+      brandKits: [],
+      hydrated: false,
+      hydrating: false,
+
+      hydrate: async () => {
+        if (hydrateInFlight) return hydrateInFlight
+        hydrateInFlight = (async () => {
+          set({ hydrating: true })
+          try {
+            const { data: { user } } = await supabase.auth.getUser()
+            if (!user) {
+              set({ hydrating: false, hydrated: true })
+              return
+            }
+            const { data, error } = await supabase
+              .from('user_outputs')
+              .select('*')
+              .eq('user_id', user.id)
+              .eq('kind', KIND)
+              .order('updated_at', { ascending: false })
+            if (error) {
+              reportError('Tải Brand Kit', error)
+              // Keep whatever is already in localStorage cache.
+              set({ hydrating: false, hydrated: true })
+              return
+            }
+            const remote = (data as UserOutputRow[]).map(rowToBrandKit)
+            const local = get().brandKits
+            const remoteIds = new Set(remote.map((r) => r.id))
+            const localOnly = local.filter((l) => !remoteIds.has(l.id))
+
+            // First-sync: if we have local items the cloud doesn't, push
+            // them up so the next device load can see them too. Best
+            // effort — failures stay local-only.
+            if (localOnly.length > 0 && remote.length === 0) {
+              for (const kit of localOnly) {
+                await supabase
+                  .from('user_outputs')
+                  .insert({
+                    id: kit.id,
+                    user_id: user.id,
+                    kind: KIND,
+                    title: kit.name,
+                    payload_json: kit,
+                  })
+                  .then(({ error: insErr }) => {
+                    if (insErr) console.warn('[brandKitStore] first-sync insert failed', insErr.message)
+                  })
+              }
+            }
+
+            set({ brandKits: [...remote, ...localOnly], hydrating: false, hydrated: true })
+          } catch (e) {
+            reportError('Tải Brand Kit', e)
+            set({ hydrating: false, hydrated: true })
+          } finally {
+            hydrateInFlight = null
+          }
+        })()
+        return hydrateInFlight
+      },
+
+      getById: (id) => get().brandKits.find((k) => k.id === id),
+
+      getActiveForMarket: (market) =>
+        get().brandKits.filter((k) => k.markets.includes(market)),
+
+      create: async (kit) => {
+        const id = crypto.randomUUID()
+        const nowIso = new Date().toISOString()
+        const next: BrandKit = {
+          ...kit,
+          id,
+          version: 1,
+          createdAt: nowIso,
+          updatedAt: nowIso,
+        }
+        // Local-first. The user gets immediate feedback even if the
+        // cloud write fails / table is missing.
+        set((s) => ({ brandKits: [next, ...s.brandKits] }))
+        // Cloud sync, fire-and-forget but reportError() on failure.
+        try {
+          const user_id = await requireUserId()
+          const { error } = await supabase
+            .from('user_outputs')
+            .insert({
+              id,
+              user_id,
+              kind: KIND,
+              title: next.name,
+              payload_json: next,
+            })
+          if (error) reportError('Đồng bộ Brand Kit lên cloud', error)
+        } catch (e) {
+          reportError('Đồng bộ Brand Kit lên cloud', e)
+        }
+        return next
+      },
+
+      update: async (id, patch) => {
+        const nowIso = new Date().toISOString()
+        const current = get().brandKits.find((k) => k.id === id)
+        if (!current) return
+        const merged: BrandKit = { ...current, ...patch, id, version: 1, updatedAt: nowIso }
+        set((s) => ({
+          brandKits: s.brandKits.map((k) => (k.id === id ? merged : k)),
+        }))
+        try {
+          const user_id = await requireUserId()
+          const { error } = await supabase
+            .from('user_outputs')
+            .update({ title: merged.name, payload_json: merged })
+            .eq('id', id)
+            .eq('user_id', user_id)
+            .eq('kind', KIND)
+          if (error) reportError('Đồng bộ cập nhật Brand Kit', error)
+        } catch (e) {
+          reportError('Đồng bộ cập nhật Brand Kit', e)
+        }
+      },
+
+      delete: async (id) => {
+        const kit = get().brandKits.find((k) => k.id === id)
+        set((s) => ({ brandKits: s.brandKits.filter((k) => k.id !== id) }))
+
+        if (kit) {
+          const ids = [
+            kit.logoAssetId,
+            kit.logoMonoAssetId,
+            ...kit.badges.map((b) => b.assetId),
+          ].filter((v): v is string => !!v)
+          await Promise.all(ids.map((aid) => deleteAsset(aid).catch(() => {})))
+        }
+
+        try {
+          const user_id = await requireUserId()
+          const { error } = await supabase
+            .from('user_outputs')
+            .delete()
+            .eq('id', id)
+            .eq('user_id', user_id)
+            .eq('kind', KIND)
+          if (error) reportError('Đồng bộ xóa Brand Kit', error)
+        } catch (e) {
+          reportError('Đồng bộ xóa Brand Kit', e)
+        }
+      },
+    }),
+    {
+      name: 'ugc-lab:brand-kits',
+      storage: safeStorage,
+      // Only persist the array — hydrated/hydrating flags are session state.
+      partialize: (s) => ({ brandKits: s.brandKits }) as unknown as { state: { brandKits: BrandKit[] } },
+    },
+  ),
+)
+
 // ── Public helper: resolve assets → blob URLs + merge localization ──────
-//
-// TikTok Shop app (separate session) calls this when it needs to render
-// a kit. Returns ResolvedBrandKit with signed URLs ready for <img>.
-//
-// Falls back to empty string URLs for assets that can't be resolved —
-// caller should run `isBrandKitReady` first to surface those gaps to user.
+
 export async function getResolvedBrandKit(
   id: string,
   market: Market,
