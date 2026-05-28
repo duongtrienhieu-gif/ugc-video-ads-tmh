@@ -350,25 +350,30 @@ export interface LogoConcept {
 
 /**
  * Generate logo concepts via image-gen model.
+ *
+ * IMPORTANT: image generation routes through kie.ai (`geminiImageGenerate`
+ * → `kieGenerateImage`), so this needs the KIE API key (Bearer token),
+ * NOT the Gemini API key used by `inferBrandIdentity`.
+ *
  * Returns 3 concepts mặc định — UI cho user pick 1.
  * Mỗi concept dùng 1 prompt khác nhau (đã infer ở step 1).
  */
 export async function generateLogoConcepts(params: {
-  apiKey: string
+  kieApiKey: string                  // ← kie.ai Bearer token, NOT Gemini key
   brandName: string
   category: BrandCategory
   palette: InferredBrandFields['palette']
   conceptPrompts: string[]           // từ inferBrandIdentity().logoConceptPrompts
   count?: number                     // default 3
 }): Promise<LogoConcept[]> {
-  const { apiKey, brandName, category, palette, conceptPrompts } = params
+  const { kieApiKey, brandName, category, palette, conceptPrompts } = params
   const count = Math.min(params.count ?? 3, conceptPrompts.length)
 
   const tasks = conceptPrompts.slice(0, count).map(async (basePrompt) => {
     const fullPrompt = composeLogoPrompt({ brandName, category, palette, basePrompt })
     // kie/nano-banana only accepts 9:16 or 16:9 — pick portrait so the
     // brand wordmark + supporting elements have vertical room.
-    const result = await geminiImageGenerate(apiKey, fullPrompt, '9:16')
+    const result = await geminiImageGenerate(kieApiKey, fullPrompt, '9:16')
     const assetId = await saveBase64Asset(result.base64, result.mimeType)
     const { getUrl } = await import('../../utils/assetStore')
     const blobUrl = (await getUrl(assetId)) ?? ''

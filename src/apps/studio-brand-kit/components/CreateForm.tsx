@@ -42,6 +42,8 @@ export default function CreateForm({ onCancel, onReady }: Props) {
   const [error, setError] = useState<string | null>(null)
 
   const getGeminiApiKey = useSettingsStore((s) => s.getGeminiApiKey)
+  const getKieApiKey = useSettingsStore((s) => s.getApiKey)
+  const hasKieKey = useSettingsStore((s) => s.hasApiKey())
   const setSeed = useDraftStore((s) => s.setSeed)
   const setInferred = useDraftStore((s) => s.setInferred)
   const setLogoConcepts = useDraftStore((s) => s.setLogoConcepts)
@@ -73,22 +75,28 @@ export default function CreateForm({ onCancel, onReady }: Props) {
       setInferred(inferred)
 
       if (!isExistingBrand) {
-        setStage('rendering-logos')
-        try {
-          const concepts = await generateLogoConcepts({
-            apiKey,
-            brandName: trimmed,
-            category,
-            palette: inferred.palette,
-            conceptPrompts: inferred.logoConceptPrompts,
-            count: 3,
-          })
-          setLogoConcepts(concepts)
-        } catch (e) {
-          // Logo gen có thể fail (kie credit / vision overload).
-          // Cho user vào editor để upload thủ công.
-          console.warn('[StudioBrandKit] logo concept generation failed', e)
-          addToast('Không gen được logo concept — bạn có thể upload thủ công.', 'info')
+        if (!hasKieKey) {
+          addToast('Chưa có kie.ai API key — bỏ qua bước vẽ logo. Bạn có thể upload logo thủ công.', 'info')
+        } else {
+          setStage('rendering-logos')
+          try {
+            const kieKey = getKieApiKey()
+            const concepts = await generateLogoConcepts({
+              kieApiKey: kieKey,
+              brandName: trimmed,
+              category,
+              palette: inferred.palette,
+              conceptPrompts: inferred.logoConceptPrompts,
+              count: 3,
+            })
+            setLogoConcepts(concepts)
+          } catch (e) {
+            // Logo gen có thể fail (kie credit / vision overload).
+            // Cho user vào editor để upload thủ công hoặc re-roll.
+            console.warn('[StudioBrandKit] logo concept generation failed', e)
+            const msg = e instanceof Error ? e.message : String(e)
+            addToast(`Vẽ logo thất bại: ${msg}. Bạn có thể re-roll hoặc upload thủ công ở bước sau.`, 'error')
+          }
         }
       }
 

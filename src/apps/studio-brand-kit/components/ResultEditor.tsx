@@ -42,6 +42,8 @@ export default function ResultEditor({ onCancel, onSaved }: Props) {
   const resetDraft = useDraftStore((s) => s.reset)
 
   const getGeminiApiKey = useSettingsStore((s) => s.getGeminiApiKey)
+  const getKieApiKey = useSettingsStore((s) => s.getApiKey)
+  const hasKieKey = useSettingsStore((s) => s.hasApiKey())
   const addToast = useAppStore((s) => s.addToast)
   const createKit = useBrandKitStore((s) => s.create)
 
@@ -82,11 +84,15 @@ export default function ResultEditor({ onCancel, onSaved }: Props) {
   }
 
   const handleRegenLogos = async () => {
+    if (!hasKieKey) {
+      addToast('Vui lòng nhập kie.ai API key trong Cài đặt để AI vẽ logo. Hoặc upload logo thủ công.', 'error')
+      return
+    }
     setRegenLogos(true)
     try {
-      const apiKey = getGeminiApiKey()
+      const kieKey = getKieApiKey()
       const concepts = await generateLogoConcepts({
-        apiKey,
+        kieApiKey: kieKey,
         brandName: draft.brandName,
         category: draft.category,
         palette: inferred.palette,
