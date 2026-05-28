@@ -136,25 +136,112 @@ function reportError(action: string, err: unknown) {
   } catch { /* appStore not ready */ }
 }
 
-// ── Safe localStorage wrapper — survive quota exceeded ───────────────────
+// ── IndexedDB-backed storage ─────────────────────────────────────────────
 //
-// When localStorage is full (eg other UGC Lab stores have eaten most of
-// the 5-10MB), persist's setItem throws. We swallow the throw and just
-// keep the in-memory state — better than blowing up the save altogether.
-const safeStorage = createJSONStorage(() => ({
-  getItem: (name: string) => {
-    try { return localStorage.getItem(name) } catch { return null }
-  },
-  setItem: (name: string, value: string) => {
-    try { localStorage.setItem(name, value) }
-    catch (e) {
-      console.warn('[brandKitStore] localStorage write skipped — quota likely exceeded', e)
+// localStorage in this app is near-quota because other UGC Lab stores
+// (lab-content, super-ladipage, ads-content, settings…) compete for the
+// same 5-10MB. Brand Kit saves were silently dropped on quota errors
+// → kit appeared in memory, vanished on refresh.
+//
+// IndexedDB gives us 50MB+ per origin, on a completely separate quota
+// from localStorage, so brand kit metadata writes can't be starved by
+// any other store. One DB, one object store, one key per persist name.
+//
+// Sync getItem is impossible with IDB — we shim it by mirroring the
+// last-loaded value into an in-memory cache populated on first load.
+// zustand persist calls getItem at store create, async-waits on the
+// returned Promise.
+
+const IDB_NAME    = 'ugc-lab-kv'
+const IDB_STORE   = 'kv'
+const IDB_VERSION = 1
+
+let idbOpenPromise: Promise<IDBDatabase> | null = null
+
+function openIdb(): Promise<IDBDatabase> {
+  if (idbOpenPromise) return idbOpenPromise
+  idbOpenPromise = new Promise((resolve, reject) => {
+    try {
+      const req = indexedDB.open(IDB_NAME, IDB_VERSION)
+      req.onupgradeneeded = () => {
+        const db = req.result
+        if (!db.objectStoreNames.contains(IDB_STORE)) db.createObjectStore(IDB_STORE)
+      }
+      req.onsuccess = () => resolve(req.result)
+      req.onerror = () => reject(req.error)
+    } catch (err) {
+      reject(err)
     }
-  },
-  removeItem: (name: string) => {
-    try { localStorage.removeItem(name) } catch { /* silent */ }
-  },
+  })
+  return idbOpenPromise
+}
+
+async function idbGet(key: string): Promise<string | null> {
+  try {
+    const db = await openIdb()
+    return await new Promise<string | null>((resolve, reject) => {
+      const tx = db.transaction(IDB_STORE, 'readonly')
+      const req = tx.objectStore(IDB_STORE).get(key)
+      req.onsuccess = () => resolve((req.result as string | undefined) ?? null)
+      req.onerror = () => reject(req.error)
+    })
+  } catch (err) {
+    console.warn('[brandKitStore] IDB get failed', err)
+    return null
+  }
+}
+
+async function idbSet(key: string, value: string): Promise<void> {
+  try {
+    const db = await openIdb()
+    await new Promise<void>((resolve, reject) => {
+      const tx = db.transaction(IDB_STORE, 'readwrite')
+      tx.objectStore(IDB_STORE).put(value, key)
+      tx.oncomplete = () => resolve()
+      tx.onerror = () => reject(tx.error)
+    })
+  } catch (err) {
+    console.warn('[brandKitStore] IDB set failed', err)
+  }
+}
+
+async function idbDel(key: string): Promise<void> {
+  try {
+    const db = await openIdb()
+    await new Promise<void>((resolve, reject) => {
+      const tx = db.transaction(IDB_STORE, 'readwrite')
+      tx.objectStore(IDB_STORE).delete(key)
+      tx.oncomplete = () => resolve()
+      tx.onerror = () => reject(tx.error)
+    })
+  } catch (err) {
+    console.warn('[brandKitStore] IDB delete failed', err)
+  }
+}
+
+const idbStorage = createJSONStorage(() => ({
+  getItem:    (name: string) => idbGet(name),
+  setItem:    (name: string, value: string) => idbSet(name, value),
+  removeItem: (name: string) => idbDel(name),
 }))
+
+// One-shot migration: copy any kits previously stuck in localStorage
+// over to IDB so a hard refresh doesn't lose work. Runs at module load
+// before zustand persist calls getItem, so the IDB read picks it up.
+;(function migrateLegacyLocalStorage() {
+  if (typeof window === 'undefined') return
+  const key = 'ugc-lab:brand-kits'
+  let legacy: string | null = null
+  try { legacy = localStorage.getItem(key) } catch { /* silent */ }
+  if (!legacy) return
+  void idbGet(key).then((existing) => {
+    if (existing) return
+    void idbSet(key, legacy as string).then(() => {
+      try { localStorage.removeItem(key) } catch { /* silent */ }
+      console.info('[brandKitStore] migrated legacy localStorage entry to IndexedDB')
+    })
+  })
+})()
 
 // Guard against concurrent hydrate calls (React StrictMode runs effects twice)
 let hydrateInFlight: Promise<void> | null = null
@@ -312,7 +399,7 @@ export const useBrandKitStore = create<BrandKitStore>()(
     }),
     {
       name: 'ugc-lab:brand-kits',
-      storage: safeStorage,
+      storage: idbStorage,
       // Only persist the array — hydrated/hydrating flags are session state.
       partialize: (s) => ({ brandKits: s.brandKits }),
     },
