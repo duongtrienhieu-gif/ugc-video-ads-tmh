@@ -123,17 +123,19 @@ PRODUCT FIDELITY (CRITICAL):
 - Each bottle must replicate refs EXACTLY: same color, shape, label, brand name. Do NOT redesign.
 - ${countInstruction}${briefBlock}
 
-=== TWO-TONE BACKGROUND — MANDATORY canvas split ===
-- TOP ZONE (y=0 to y=200): solid clean WHITE (#FFFFFF) background. Brand seal lives here.
-- BOTTOM ZONE (y=200 to y=1024): saturated brand-color gradient (${p.primary} → ${p.secondary}) + subtle decorative particles. Count label pill, product, and price live here.
-- Optional 30px soft gradient blend at y=200-230 for clean transition.
+=== BACKGROUND — full canvas brand gradient ===
+- The ENTIRE canvas is filled with saturated brand-color gradient (${p.primary} → ${p.secondary}) with subtle decorative particles. Unified backdrop.
 
-=== BRAND SEAL — IDENTICAL spec to the main 9 listing slots (sits INSIDE the white top zone) ===
-- LAYER 1 — LOGO: Render Reference 1 at MODERATE size, centered. Logo ~170px wide × 72px tall, at y≈30-100. Sits on WHITE top zone — preserve logo's ORIGINAL colors EXACTLY (no recolor, no invert).
-- LAYER 2 — SUBTITLE: Below logo at y≈110-140, render "Official store | ${marketBadge}" in DARK NAVY (#0E2A47) Plus Jakarta Sans Medium Italic ~26px. Center-aligned.
-- LAYER 3 — UNDERLINE: Thin DARK NAVY line ~130px wide at 35% opacity centered at y≈150.
+=== BRAND SEAL CARD — IDENTICAL to the main 9 listing slots (white rounded CARD centered at top, NOT a full-width zone) ===
+- Render a WHITE (#FFFFFF) rounded rectangle CARD floating on the brand gradient.
+- Card dimensions: ~720px wide × 180px tall, rounded corners 24px, subtle drop shadow.
+- Card position: centered horizontally on canvas, y=20 to y=200 (brand gradient continues to the LEFT and RIGHT of the card).
+- Card contents (stacked vertically, centered):
+  - LAYER 1 — LOGO: Reference 1 at TOP-CENTER of card (~170×72px, y=40-110 inside card). Preserve ORIGINAL logo colors EXACTLY (no recolor).
+  - LAYER 2 — SUBTITLE: Below logo at y=120-150 inside card, render "Official store | ${marketBadge}" in DARK NAVY (#0E2A47) Plus Jakarta Sans Medium Italic ~26px.
+  - LAYER 3 — UNDERLINE: Thin DARK NAVY line ~130px wide at 35% opacity centered at y=165 inside card.
 - DO NOT render the brand kit's store name as separate text.
-- DO NOT add box/pill/banner around the brand seal.
+- DO NOT widen the card to full canvas width — gradient MUST show on left/right sides of card.
 
 === COUNT LABEL PILL — top-center, inside the brand gradient bottom zone ===
 ${labelPillSpec}

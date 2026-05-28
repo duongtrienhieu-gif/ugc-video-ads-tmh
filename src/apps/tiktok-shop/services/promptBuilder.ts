@@ -54,32 +54,47 @@ function header(ctx: PromptContext): string {
 
 PRODUCT FIDELITY: Replicate the product EXACTLY from product refs — same color, shape, label, brand name. Do NOT redesign or substitute.${briefBlock}
 
-=== TWO-TONE BACKGROUND — MANDATORY canvas split ===
-- TOP ZONE (y=0 to y=200): solid clean WHITE (#FFFFFF) background. The brand seal lives here.
-- BOTTOM ZONE (y=200 to y=1024): saturated brand-color gradient (${p.primary} → ${p.secondary}) + subtle decorative elements (particles, soft glow, geometric accents). All slot content lives here.
-- Optional soft 30px gradient blend at y=200-230 for clean transition (no hard edge line).
+=== BACKGROUND — full canvas brand gradient ===
+- The ENTIRE canvas (y=0 to y=1024) is filled with a saturated brand-color gradient (${p.primary} → ${p.secondary}) with subtle decorative elements (particles, soft glow, geometric accents). This is the unified backdrop.
 
-=== BRAND SEAL — IDENTICAL across all 9 slots (sits INSIDE the white top zone, NOT on the gradient) ===
-- LAYER 1 — LOGO: Render Reference 1 (brand logo) at MODERATE size, centered horizontally. Logo size ~170px wide × 72px tall, positioned at y≈30-100. The logo sits on the WHITE top zone — preserve the logo's ORIGINAL colors EXACTLY from Reference 1 (do NOT redraw, do NOT recolor, do NOT invert; the white background means original logo colors render naturally without modification).
-- LAYER 2 — SUBTITLE: Directly below the logo at y≈110-140, render text "Official store | ${marketBadge}" in DARK NAVY (#0E2A47) Plus Jakarta Sans Medium Italic ~26px. The "|" separator is a thin vertical bar in dark navy at 50% opacity. Center-aligned.
-- LAYER 3 — UNDERLINE: Thin horizontal DARK NAVY line ~130px wide at 35% opacity centered at y≈150.
-- DO NOT add the brand kit's store name as separate text — the logo carries it.
-- DO NOT add any pill, box, or banner around the brand seal — it's directly on the white top zone.
+=== BRAND SEAL CARD — IDENTICAL across all 9 slots (white rounded CARD centered at top, NOT a full-width zone) ===
+- Render a WHITE (#FFFFFF) rounded rectangle CARD floating on the brand gradient.
+- Card dimensions: ~720px wide × 180px tall, rounded corners 24px, subtle drop shadow below.
+- Card position: centered horizontally on canvas, y=20 to y=200 (the brand gradient continues to the LEFT and RIGHT of the card on the same row).
+- Card contents (stacked vertically, centered):
+  - LAYER 1 — LOGO: Reference 1 rendered at the TOP-CENTER of the card (~170px wide × 72px tall, y=40-110 inside the card). Preserve the logo's ORIGINAL colors EXACTLY from Reference 1 (do NOT redraw / recolor / invert; the white card background lets the original colors show naturally).
+  - LAYER 2 — SUBTITLE: Below the logo at y=120-150 inside the card, render "Official store | ${marketBadge}" in DARK NAVY (#0E2A47) Plus Jakarta Sans Medium Italic ~26px. The "|" separator is dark navy at 50% opacity.
+  - LAYER 3 — UNDERLINE: Thin DARK NAVY line ~130px wide at 35% opacity centered at y=165 inside the card.
+- DO NOT add the brand kit's store name as separate text — logo carries it.
+- DO NOT widen the card to full canvas width — brand gradient MUST be visible on the left and right sides of the card.
 
-LAYOUT: ALL slot content (headlines, product hero, price overlays, decorations) sits in the BOTTOM ZONE — content area starts y≈230 down to y≈980. Content text uses WHITE / light colors (since bottom zone is saturated brand gradient).
+LAYOUT: ALL slot content (headlines, product hero, price overlays, decorations) sits BELOW the brand seal card — content area starts y≈230 down to y≈980. Content text uses WHITE / light colors (it's on the brand gradient).
 
-STYLE: Premium e-commerce listing — top-seller aesthetic for this product's category. Saturated brand palette in BOTTOM zone (NOT pastel), polished commercial photography, integrated decorative elements. Plus Jakarta Sans ExtraBold (weight 800-900) for headlines, Medium Italic for sub-text.
+STYLE: Premium e-commerce listing — top-seller aesthetic for this product's category. Saturated brand palette (NOT pastel), polished commercial photography, integrated decorative elements. Plus Jakarta Sans ExtraBold (weight 800-900) for headlines, Medium Italic for sub-text.
 
-PALETTE (use ONLY these for bottom zone): ${p.primary} primary, ${p.secondary} secondary, ${p.cta} accent. High saturation.
+PALETTE (use ONLY these): ${p.primary} primary, ${p.secondary} secondary, ${p.cta} accent. High saturation.
 
 LANGUAGE: ${langName} ONLY in any rendered text (except "Official store" subtitle which stays English as universal e-commerce terminology). NO other language characters.
 
 NO trust bar at bottom — leave clean for visual breathing.`
 }
 
-// ── Fallback helpers — derive text from product when slotTexts missing ──
+// ── Fallback helpers — brief-aware when ctx.brief present, else product fields ──
+// Phase 10.2 fix: when Gemini's slotTexts output is missing/incomplete, fall
+// back to BRIEF data (BM/VN, customer-voice) instead of raw product fields
+// (often English). This is the safety net that ensures images stay product-
+// specific even when description-gen's slotTexts shape isn't perfect.
 
 function deriveSlot1(ctx: PromptContext): { headline: string; tagline: string } {
+  if (ctx.brief) {
+    // Brief.specificMetric is already ALL CAPS short metric (S1 headline anchor).
+    // Brief.transformationPromise is 1-2 sentence promise (S1 tagline expansion).
+    return {
+      headline: ctx.brief.specificMetric.toUpperCase().slice(0, 60),
+      tagline:  ctx.brief.transformationPromise.slice(0, 100),
+    }
+  }
+  // No brief — fall back to product fields (last resort).
   const name = ctx.product.productName || 'PRODUCT'
   const usps = (ctx.product.usps || '').split(/[\n,;.]/).map((s) => s.trim()).filter(Boolean)
   const headline = (usps[0] || name).toUpperCase().slice(0, 60)
@@ -88,6 +103,16 @@ function deriveSlot1(ctx: PromptContext): { headline: string; tagline: string } 
 }
 
 function deriveSlot2(ctx: PromptContext): { question: string; painBullets: string[] } {
+  if (ctx.brief) {
+    const pains = ctx.brief.corePains.slice(0, 3)
+    return {
+      question:    pains[0] || (ctx.language === 'ms' ? 'Mempunyai masalah?' : 'Đang gặp vấn đề?'),
+      painBullets: pains.length >= 3 ? pains : (ctx.language === 'ms'
+        ? pains.concat(['Cari penyelesaian?', 'Mahu hasil lebih baik?'].slice(0, 3 - pains.length))
+        : pains.concat(['Cần giải pháp?', 'Muốn kết quả tốt hơn?'].slice(0, 3 - pains.length))),
+    }
+  }
+  // No brief
   const pains = (ctx.product.painPoints || '').split(/[\n;.]|•/).map((s) => s.trim()).filter(Boolean).slice(0, 3)
   const fallback = ctx.language === 'ms'
     ? { q: `Mempunyai masalah dengan ${ctx.product.productName}?`, b: ['Cari penyelesaian?', 'Tidak puas hati?', 'Mencari yang lebih baik?'] }
@@ -98,9 +123,35 @@ function deriveSlot2(ctx: PromptContext): { question: string; painBullets: strin
   }
 }
 
+function deriveSlot3(ctx: PromptContext): { beforeLabel: string; afterLabel: string; metric: string; metricSubtitle: string; disclaimer: string } {
+  const beforeLabel = ctx.language === 'ms' ? 'SEBELUM' : 'TRƯỚC'
+  const afterLabel  = ctx.language === 'ms' ? 'SELEPAS' : 'SAU'
+  const disclaimer  = ctx.language === 'ms' ? '*Hasil mungkin berbeza individu' : '*Kết quả có thể khác tùy người'
+  if (ctx.brief) {
+    return {
+      beforeLabel, afterLabel,
+      metric: ctx.brief.specificMetric.toUpperCase().slice(0, 30),
+      metricSubtitle: ctx.brief.transformationPromise.slice(0, 50),
+      disclaimer,
+    }
+  }
+  return {
+    beforeLabel, afterLabel,
+    metric: ctx.language === 'ms' ? 'HASIL JELAS' : 'KẾT QUẢ RÕ RỆT',
+    metricSubtitle: ctx.language === 'ms' ? 'DALAM MASA SINGKAT' : 'TRONG THỜI GIAN NGẮN',
+    disclaimer,
+  }
+}
+
 function deriveSlot4(ctx: PromptContext): { title: string; ingredients: Array<{ name: string; pct?: string }>; tagline: string } {
   const title = ctx.language === 'ms' ? 'BAHAN AKTIF' : 'THÀNH PHẦN CHÍNH'
   const tagline = ctx.language === 'ms' ? 'Bahan berkualiti, selamat digunakan' : 'Thành phần chất lượng, an toàn'
+  if (ctx.brief) {
+    // Vision-read ingredients ONLY. Empty array = label has none → show empty (no fabrication).
+    const ings = ctx.brief.visibleIngredients.slice(0, 5).map((name) => ({ name }))
+    return { title, ingredients: ings, tagline }
+  }
+  // No brief — try product.ingredients (seller-typed)
   const ings = (ctx.product.ingredients || '').split(/[\n,]/).map((s) => s.trim()).filter(Boolean).slice(0, 5)
   return {
     title,
@@ -109,10 +160,131 @@ function deriveSlot4(ctx: PromptContext): { title: string; ingredients: Array<{ 
   }
 }
 
+function deriveSlot5(ctx: PromptContext): { quote: string; author: string; verifiedNote: string } {
+  const isMS = ctx.language === 'ms'
+  const verifiedNote = isMS ? 'Ulasan pelanggan sebenar' : 'Đánh giá khách hàng thật'
+  if (ctx.brief) {
+    // Build a concrete before→after quote from brief data
+    const pain = ctx.brief.corePains[0]?.replace(/\?$/, '') || (isMS ? 'masalah saya' : 'vấn đề của tôi')
+    const promise = ctx.brief.transformationPromise.slice(0, 60)
+    const quote = isMS
+      ? `Dulu ${pain.toLowerCase()}. Lepas guna ${ctx.brief.productNameExact}, ${promise.toLowerCase()}!`
+      : `Trước đây ${pain.toLowerCase()}. Sau khi dùng ${ctx.brief.productNameExact}, ${promise.toLowerCase()}!`
+    const author = isMS ? 'Aisyah, KL' : 'Mai, TP.HCM'
+    return { quote: quote.slice(0, 100), author, verifiedNote }
+  }
+  return {
+    quote: isMS
+      ? `Saya sangat berpuas hati dengan ${ctx.product.productName}!`
+      : `Tôi rất hài lòng với ${ctx.product.productName}!`,
+    author: isMS ? 'Pelanggan Sebenar' : 'Khách Hàng Thật',
+    verifiedNote,
+  }
+}
+
+function deriveSlot6(ctx: PromptContext): { title: string; steps: string[]; timing: string } {
+  const isMS = ctx.language === 'ms'
+  const title  = isMS ? '3 LANGKAH MUDAH' : '3 BƯỚC ĐƠN GIẢN'
+  const timing = isMS ? '🌅 Pagi • 🌙 Malam' : '🌅 Sáng • 🌙 Tối'
+  if (ctx.brief) {
+    // Use brief.usageContext to hint at usage; generate specific steps grounded in subtype
+    const subtype = ctx.brief.productSubtype.toLowerCase()
+    const steps = isMS
+      ? [
+          `Sediakan ${subtype}`,
+          ctx.brief.usageContext.slice(0, 60) || 'Gunakan mengikut keperluan',
+          'Ulang untuk hasil optimum',
+        ]
+      : [
+          `Chuẩn bị ${subtype}`,
+          ctx.brief.usageContext.slice(0, 60) || 'Sử dụng khi cần',
+          'Lặp lại để đạt hiệu quả tối ưu',
+        ]
+    return { title, steps, timing }
+  }
+  return {
+    title,
+    steps: isMS
+      ? ['Sediakan produk', 'Aplikasikan mengikut arahan', 'Ulang setiap hari']
+      : ['Chuẩn bị sản phẩm', 'Sử dụng theo hướng dẫn', 'Lặp lại hằng ngày'],
+    timing,
+  }
+}
+
+function deriveSlot7(ctx: PromptContext): { title: string; usLabel: string; themLabel: string; points: Array<[string, string]> } {
+  const isMS = ctx.language === 'ms'
+  const title    = isMS ? 'PILIH YANG BAIK' : 'LỰA CHỌN ĐÚNG'
+  const usLabel  = isMS ? 'Pilihan kami' : 'Lựa chọn của chúng tôi'
+  const themLabel = isMS ? 'Alternatif lain' : 'Lựa chọn khác'
+  if (ctx.brief) {
+    // Build comparison rows from brief.keyDifferentiator (our specific edge vs generic)
+    const edge = ctx.brief.keyDifferentiator.slice(0, 40)
+    const points: Array<[string, string]> = isMS
+      ? [
+          [edge,                       'Formula biasa'],
+          ['Bahan diuji nyahnyatakan', 'Bahan tidak jelas'],
+          [ctx.brief.specificMetric,   'Hasil tidak ditentukan'],
+          ['Selamat untuk harian',     'Kesan tidak diketahui'],
+        ]
+      : [
+          [edge,                       'Công thức thông thường'],
+          ['Thành phần kiểm chứng',    'Thành phần không rõ'],
+          [ctx.brief.specificMetric,   'Kết quả không xác định'],
+          ['An toàn dùng hằng ngày',   'Tác dụng không rõ'],
+        ]
+    return { title, usLabel, themLabel, points }
+  }
+  return {
+    title, usLabel, themLabel,
+    points: [[isMS ? 'Berkualiti tinggi' : 'Chất lượng cao', isMS ? 'Kualiti biasa' : 'Chất lượng thường']],
+  }
+}
+
 function deriveSlot8(ctx: PromptContext): { originalPrice?: string; currentPrice: string; discount?: string; combo?: string; cta: string; urgency?: string } {
   const offer = ctx.product.offer || ''
   const ctaText = ctx.language === 'ms' ? 'BELI SEKARANG' : 'MUA NGAY'
   return { currentPrice: offer || '(Giá)', cta: ctaText, urgency: ctx.language === 'ms' ? 'Stok terhad hari ini' : 'Số lượng có hạn' }
+}
+
+function deriveSlot9(ctx: PromptContext): { title: string; items: Array<{ q: string; a: string }> } {
+  const isMS = ctx.language === 'ms'
+  const title = isMS ? 'SOALAN LAZIM' : 'CÂU HỎI THƯỜNG GẶP'
+  if (ctx.brief) {
+    // Use brief.commonObjections as FAQ questions; build short answers from safe claims
+    const objections = ctx.brief.commonObjections.slice(0, 3)
+    const safeClaim = ctx.brief.nicheSafeClaims[0] || (isMS ? 'lembut digunakan' : 'an toàn')
+    const items = objections.length >= 3
+      ? objections.map((q): { q: string; a: string } => ({
+          q: q.slice(0, 50),
+          a: isMS ? `Ya, ${safeClaim}` : `Vâng, ${safeClaim}`,
+        }))
+      : (isMS
+          ? [
+              { q: 'Selamat digunakan?', a: 'Ya, formula lembut' },
+              { q: 'Bila nampak hasil?', a: 'Bergantung penggunaan' },
+              { q: 'Boleh pulangkan?',   a: 'Ya, dalam 7 hari' },
+            ]
+          : [
+              { q: 'Có an toàn không?',  a: 'Có, công thức lành tính' },
+              { q: 'Khi nào thấy kết quả?', a: 'Tùy cách dùng' },
+              { q: 'Có đổi trả không?',  a: 'Có, trong 7 ngày' },
+            ])
+    return { title, items }
+  }
+  return {
+    title,
+    items: isMS
+      ? [
+          { q: 'Selamat digunakan?', a: 'Ya, formula lembut' },
+          { q: 'Bila nampak hasil?', a: 'Bergantung penggunaan' },
+          { q: 'Boleh pulangkan?',   a: 'Ya, dalam 7 hari' },
+        ]
+      : [
+          { q: 'Có an toàn không?',  a: 'Có, công thức an toàn' },
+          { q: 'Khi nào thấy kết quả?', a: 'Tùy cách dùng' },
+          { q: 'Có đổi trả không?',  a: 'Có, trong 7 ngày' },
+        ],
+  }
 }
 
 // ── Per-slot prompts ────────────────────────────────────────────────────
@@ -145,11 +317,12 @@ ${bullets.map((b) => `  ✗ ${b}`).join('\n')}`
 
 export function buildPromptSlot3(ctx: PromptContext): string {
   const st = ctx.slotTexts?.slot3
-  const beforeLabel = st?.beforeLabel ?? (ctx.language === 'ms' ? 'SEBELUM' : 'TRƯỚC')
-  const afterLabel = st?.afterLabel ?? (ctx.language === 'ms' ? 'SELEPAS' : 'SAU')
-  const metric = st?.metric ?? (ctx.language === 'ms' ? 'HASIL JELAS' : 'KẾT QUẢ RÕ RỆT')
-  const metricSub = st?.metricSubtitle ?? (ctx.language === 'ms' ? 'DALAM MASA SINGKAT' : 'TRONG THỜI GIAN NGẮN')
-  const disclaimer = st?.disclaimer ?? (ctx.language === 'ms' ? '*Hasil mungkin berbeza individu' : '*Kết quả có thể khác tùy người')
+  const derived = deriveSlot3(ctx)
+  const beforeLabel  = st?.beforeLabel    ?? derived.beforeLabel
+  const afterLabel   = st?.afterLabel     ?? derived.afterLabel
+  const metric       = st?.metric         ?? derived.metric
+  const metricSub    = st?.metricSubtitle ?? derived.metricSubtitle
+  const disclaimer   = st?.disclaimer     ?? derived.disclaimer
   return `${header(ctx)}
 
 SLOT 3 — TRANSFORMATION
@@ -186,9 +359,10 @@ ${ingLine}
 
 export function buildPromptSlot5(ctx: PromptContext): string {
   const st = ctx.slotTexts?.slot5
-  const quote = st?.quote ?? (ctx.language === 'ms' ? `Saya sangat berpuas hati dengan ${ctx.product.productName}!` : `Tôi rất hài lòng với ${ctx.product.productName}!`)
-  const author = st?.author ?? (ctx.language === 'ms' ? 'Pelanggan Sebenar' : 'Khách Hàng Thật')
-  const verified = st?.verifiedNote ?? (ctx.language === 'ms' ? 'Ulasan pelanggan sebenar' : 'Đánh giá khách hàng thật')
+  const derived = deriveSlot5(ctx)
+  const quote    = st?.quote        ?? derived.quote
+  const author   = st?.author       ?? derived.author
+  const verified = st?.verifiedNote ?? derived.verifiedNote
   return `${header(ctx)}
 
 SLOT 5 — SOCIAL PROOF
@@ -202,13 +376,10 @@ TEXT in card:
 
 export function buildPromptSlot6(ctx: PromptContext): string {
   const st = ctx.slotTexts?.slot6
-  const title = st?.title ?? (ctx.language === 'ms' ? 'CARA GUNA' : 'CÁCH DÙNG')
-  const steps = (st?.steps ?? [
-    ctx.language === 'ms' ? 'Sediakan produk' : 'Chuẩn bị sản phẩm',
-    ctx.language === 'ms' ? 'Aplikasikan mengikut arahan' : 'Sử dụng theo hướng dẫn',
-    ctx.language === 'ms' ? 'Ulang setiap hari' : 'Lặp lại hằng ngày',
-  ]).slice(0, 3)
-  const timing = st?.timing ?? (ctx.language === 'ms' ? '🌅 Pagi • 🌙 Malam' : '🌅 Sáng • 🌙 Tối')
+  const derived = deriveSlot6(ctx)
+  const title  = st?.title  ?? derived.title
+  const steps  = (st?.steps && st.steps.length > 0 ? st.steps : derived.steps).slice(0, 3)
+  const timing = st?.timing ?? derived.timing
   return `${header(ctx)}
 
 SLOT 6 — USAGE DEMO
@@ -222,12 +393,11 @@ ${steps.map((s, i) => `  Col ${i + 1}: "${s}"`).join('\n')}
 
 export function buildPromptSlot7(ctx: PromptContext): string {
   const st = ctx.slotTexts?.slot7
-  const title = st?.title ?? (ctx.language === 'ms' ? 'PILIH YANG BAIK' : 'LỰA CHỌN ĐÚNG')
-  const us = st?.usLabel ?? (ctx.language === 'ms' ? 'Pilihan kami' : 'Lựa chọn của chúng tôi')
-  const them = st?.themLabel ?? (ctx.language === 'ms' ? 'Alternatif lain' : 'Lựa chọn khác')
-  const points = (st?.points ?? [
-    [ctx.language === 'ms' ? 'Berkualiti tinggi' : 'Chất lượng cao', ctx.language === 'ms' ? 'Kualiti biasa' : 'Chất lượng thường'],
-  ]).slice(0, 4)
+  const derived = deriveSlot7(ctx)
+  const title  = st?.title    ?? derived.title
+  const us     = st?.usLabel  ?? derived.usLabel
+  const them   = st?.themLabel ?? derived.themLabel
+  const points = (st?.points && st.points.length > 0 ? st.points : derived.points).slice(0, 4)
   const pointsStr = points.map(([a, b]) => `${a} vs ${b}`).join(' / ')
 
   return `${header(ctx)}
@@ -268,15 +438,9 @@ ${priceBlock}${discBlock}${comboBlock}
 
 export function buildPromptSlot9(ctx: PromptContext): string {
   const st = ctx.slotTexts?.slot9
-  const title = st?.title ?? (ctx.language === 'ms' ? 'SOALAN LAZIM' : 'CÂU HỎI THƯỜNG GẶP')
-  const items = (st?.items ?? [
-    { q: ctx.language === 'ms' ? 'Selamat digunakan?' : 'Có an toàn không?',
-      a: ctx.language === 'ms' ? 'Ya, formula lembut' : 'Có, công thức an toàn' },
-    { q: ctx.language === 'ms' ? 'Bila nampak hasil?' : 'Khi nào thấy kết quả?',
-      a: ctx.language === 'ms' ? 'Bergantung penggunaan' : 'Tùy cách dùng' },
-    { q: ctx.language === 'ms' ? 'Boleh pulangkan?' : 'Có đổi trả không?',
-      a: ctx.language === 'ms' ? 'Ya, dalam 7 hari' : 'Có, trong 7 ngày' },
-  ]).slice(0, 3)
+  const derived = deriveSlot9(ctx)
+  const title = st?.title ?? derived.title
+  const items = (st?.items && st.items.length > 0 ? st.items : derived.items).slice(0, 3)
   const itemsStr = items.map((it, i) => `Card ${i + 1}: Q: "${it.q}" → A: "${it.a}"`).join(' / ')
 
   return `${header(ctx)}

@@ -40,7 +40,7 @@ export async function generateDescription(
     prompt,
     systemInstruction,
     responseMimeType: 'application/json',
-    maxOutputTokens: 4096,
+    maxOutputTokens: 8192,  // Phase 10.2 — was 4096; full blocks + slotTexts JSON needs ~5-6K tokens; old limit was truncating slotTexts
     temperature: 0.7,
   })
   const { blocks, slotTexts } = parseOrFallback(raw)
