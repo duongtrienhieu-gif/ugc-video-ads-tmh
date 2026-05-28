@@ -126,18 +126,17 @@ PRODUCT FIDELITY (CRITICAL):
 === BACKGROUND — full canvas brand gradient ===
 - The ENTIRE canvas is filled with saturated brand-color gradient (${p.primary} → ${p.secondary}) with subtle decorative particles. Unified backdrop.
 
-=== BRAND SEAL — WHITE ROUNDED RECTANGLE CARD (vertical stack), IDENTICAL to the main 9 slots ===
-- Render a WHITE (#FFFFFF) rounded RECTANGLE card (NOT a horizontal pill, NOT a wide capsule).
-- Card shape: vertical rounded rectangle ~400px wide × 180px tall (aspect 2.2:1), rounded corners 24px, subtle drop shadow.
-- Card position: centered horizontally, y=30 to y=210 (brand gradient continues LEFT and RIGHT of card).
-- CONTENTS — VERTICAL STACK (2 elements):
-  - ROW 1 — LOGO: Reference 1, ~200×100px, centered horizontally inside card at y=20-120 inside card (upper 60% of card). Preserve ORIGINAL logo colors EXACTLY (no recolor / invert).
-  - 20px GAP between logo and subtitle.
-  - ROW 2 — SUBTITLE: "Official store | ${marketBadge}" in DARK NAVY (#0E2A47) Plus Jakarta Sans Medium ~26px, centered at y=140-170 inside card (lower 17%).
-- DO NOT make horizontal pill — keep rounded rectangle vertical stack.
-- DO NOT add underline / tagline / extra row.
+=== BRAND SEAL — COMPACT TOP-RIGHT CORNER BADGE, IDENTICAL to the main 9 slots ===
+- Render a SMALL WHITE (#FFFFFF) rounded rectangle badge in the TOP-RIGHT corner.
+- Dimensions: ~240px wide × 80px tall (3:1 aspect), rounded corners 16px, subtle drop shadow.
+- Position: top-right corner with 20px margin (x=764-1004, y=20-100). NOT centered.
+- CONTENTS — HORIZONTAL ROW (single row, vertically centered at y≈60):
+  - LEFT: Reference 1 logo ~50×50px at x≈778. Preserve ORIGINAL colors EXACTLY.
+  - MIDDLE: thin "|" separator (dark navy 40% opacity, ~30px tall) at x≈840.
+  - RIGHT: "Official | ${marketBadge}" in DARK NAVY Plus Jakarta Sans Medium ~14px at x≈856-990.
+- DO NOT enlarge the badge — small (~23% canvas width).
+- DO NOT center — must hug top-right corner.
 - DO NOT render store name as additional text.
-- DO NOT widen past ~400px — gradient must show on left/right.
 
 === COUNT LABEL PILL — top-center, inside the brand gradient bottom zone ===
 ${labelPillSpec}

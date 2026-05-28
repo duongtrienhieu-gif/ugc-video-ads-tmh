@@ -57,20 +57,20 @@ PRODUCT FIDELITY: Replicate the product EXACTLY from product refs — same color
 === BACKGROUND — full canvas brand gradient ===
 - The ENTIRE canvas (y=0 to y=1024) is filled with a saturated brand-color gradient (${p.primary} → ${p.secondary}) with subtle decorative elements (particles, soft glow, geometric accents). This is the unified backdrop.
 
-=== BRAND SEAL — WHITE ROUNDED RECTANGLE CARD (vertical stack), IDENTICAL across all 9 slots ===
-- Render a WHITE (#FFFFFF) rounded RECTANGLE card (NOT a horizontal pill, NOT a wide capsule) floating on the brand gradient.
-- Card shape: vertical rounded rectangle. Dimensions ~400px wide × 180px tall (aspect 2.2:1). Rounded corners 24px (visible curves but NOT pill-like). Subtle drop shadow below.
-- Card position: centered horizontally on canvas, y=30 to y=210 (brand gradient continues LEFT and RIGHT of the card).
-- CONTENTS — VERTICAL STACK (2 elements, NOT horizontal row):
-  - ROW 1 — LOGO: Reference 1 brand logo, ~200px wide × 100px tall, centered horizontally inside the card at y=20-120 inside the card (occupies upper 60% of card height). Preserve the logo's ORIGINAL colors EXACTLY from Reference 1 (do NOT recolor / invert / redraw; white card background lets the original navy + leaf colors render naturally).
-  - 20px GAP between logo and subtitle.
-  - ROW 2 — SUBTITLE: text "Official store | ${marketBadge}" in DARK NAVY (#0E2A47) Plus Jakarta Sans Medium ~26px, centered horizontally at y=140-170 inside the card (occupies lower 17% of card height). The "|" separator is a thin vertical bar in dark navy at 40% opacity.
-- DO NOT make the card a horizontal pill / capsule — keep it as a rounded rectangle with vertical stack inside.
-- DO NOT render the brand kit's store name as additional text — the logo carries it.
-- DO NOT add underline, tagline, or any extra row beyond logo + subtitle.
-- DO NOT widen the card past ~400px — brand gradient MUST be visible on the LEFT and RIGHT sides.
+=== BRAND SEAL — COMPACT TOP-RIGHT CORNER BADGE, IDENTICAL across all 9 slots ===
+- Render a SMALL WHITE (#FFFFFF) rounded rectangle badge tucked into the TOP-RIGHT corner of the canvas.
+- Badge dimensions (EXACT, identical on every slot — do NOT scale up or down per slot): ~240px wide × 80px tall (3:1 aspect ratio, compact). Rounded corners 16px. Subtle soft drop shadow below.
+- Badge position: top-right corner with 20px margin from the right edge and 20px margin from the top edge. So the badge spans approximately x=764 to x=1004 and y=20 to y=100. NOT centered on canvas — must hug the top-right corner.
+- CONTENTS — HORIZONTAL ROW (single row, vertically centered inside the badge at y≈60):
+  - LEFT: brand logo from Reference 1, ~50px wide × 50px tall, at x≈778 (just inside left padding 14px). Vertically centered. Preserve the logo's ORIGINAL colors EXACTLY from Reference 1 (no recolor / invert / redraw — white badge background lets original colors render naturally).
+  - MIDDLE: thin vertical "|" separator in DARK NAVY (#0E2A47) at 40% opacity, ~30px tall, at x≈840.
+  - RIGHT: text "Official | ${marketBadge}" in DARK NAVY (#0E2A47), Plus Jakarta Sans Medium ~14px, vertically centered, at x≈856-990 (compact text, not full "Official store").
+- This is a COMPACT CORNER badge — NOT a big centered brand frame, NOT a pill spanning the canvas width.
+- DO NOT enlarge the badge — keep it small (~23% canvas width) so most of the canvas is content.
+- DO NOT center the badge — must be in the TOP-RIGHT corner.
+- DO NOT render the brand kit's store name as additional text — the logo + small "Official" text are enough.
 
-LAYOUT: ALL slot content (headlines, product hero, price overlays, decorations) sits BELOW the brand seal card — content area starts y≈240 down to y≈980. Content text uses WHITE / light colors (it's on the brand gradient).
+LAYOUT: ALL slot content (headlines, product hero, price overlays, decorations) can now use ALMOST the full canvas — content area starts y≈110 (just below the corner badge) down to y≈980. Headlines centered at top should sit at y≈140-280 (avoid overlapping the corner badge on the right but otherwise free). Content text uses WHITE / light colors (it's on the brand gradient).
 
 STYLE: Premium e-commerce listing — top-seller aesthetic for this product's category. Saturated brand palette (NOT pastel), polished commercial photography, integrated decorative elements. Plus Jakarta Sans ExtraBold (weight 800-900) for headlines, Medium Italic for sub-text.
 
