@@ -185,10 +185,16 @@ function buildBlockDirective(
   // version got ignored by Gemini (output stayed generic — "thuốc kháng
   // histamine" without brand/cost/duration). Block-specific rule does not
   // contradict any architecture; condensing it was over-pruning.
+  //
+  // 2026-05-29 (Cost-Priority fix): cost rule was getting WEAKENED under
+  // SHORT length mode word cap (Gemini chose to drop cost specifics to
+  // fit 130-170 word budget). Now explicit: cost specifics OVERRIDE word
+  // cap if there's a conflict — write more words if needed.
   if (block.id === 'shared-failed-attempts') {
     lines.push(`  💸 CONCRETE COST RULE — STRICT (this is the strongest signal in this block):`)
     lines.push(`  HARD RULE: Each failed attempt MUST include a CONCRETE COST signal in at least ONE of these dimensions.`)
     lines.push(`  Generic phrasing without specifics WILL be rejected.`)
+    lines.push(`  ⚠️ COST RULE OVERRIDES WORD CAP. If the block's word budget would force you to drop cost details, EXCEED the word cap by 20-40 words instead. Cost specifics are the conversion engine of this block — never sacrifice them for brevity.`)
     lines.push(`    1. MONEY — specific amount, real or plausibly invented`)
     lines.push(`         e.g. "4 thang nước thuốc Bắc × 80 RM = 320 RM"`)
     lines.push(`         e.g. "máy xịt mũi 180 RM, dùng 2 tháng đã hỏng"`)
@@ -210,6 +216,10 @@ function buildBlockDirective(
     lines.push(`  ✅ STRONGLY recommended close: 1-line total cost summary —`)
     lines.push(`     e.g. "Cộng lại, hơn 900 RM ném vào những thứ không giải quyết gốc rễ."`)
     lines.push(`     e.g. "Tính ra gần 1.500 RM cho những thứ chỉ đỡ tạm thời."`)
+    lines.push(``)
+    lines.push(`  🔍 FINAL CHECK before emit: count how many attempts you wrote have a CONCRETE`)
+    lines.push(`     RM amount, TIME duration, OR specific BRAND name. If fewer than 3 have one,`)
+    lines.push(`     ADD specifics. A block with 5 attempts but zero RM/brand/time = REJECTED.`)
   }
 
   // ─── Block 10 (why-this-felt-different): 2-beat + tease handoff to PI ──

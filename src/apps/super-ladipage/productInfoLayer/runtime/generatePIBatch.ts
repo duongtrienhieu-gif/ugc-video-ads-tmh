@@ -35,6 +35,65 @@ interface BatchOutput {
   }
 }
 
+/** 2026-05-29 — Strip bracket placeholders from Gemini output.
+ *  Observed Pack 2 (cough patch) leaked "[tên thảo dược 1]" placeholders
+ *  in the mechanism-personal block when Gemini was rate-limited and KIE
+ *  fallback (gpt-4o-mini) under-performed. The placeholder syntax slips
+ *  through JSON parse because it's just a regular string.
+ *
+ *  Strategy:
+ *    1. Detect `[anything]` brackets
+ *    2. If bracket content includes "tên", "X", "Y", "placeholder", etc.
+ *       → clearly a template — strip entire bracket
+ *    3. If bracket content looks like real content (>= 4 chars + valid
+ *       prose) → keep it (might be a legit aside like "[chú thích]")
+ *    4. Log warning when any stripping happens
+ *
+ *  Worst case: real bracketed asides also get stripped — but PI blocks
+ *  almost never use brackets in production prose, so false-positive rate
+ *  is acceptable for the readability win. */
+function sanitizeBracketPlaceholders(text: string, blockType: string): string {
+  if (!text || typeof text !== 'string') return text
+  if (!text.includes('[')) return text
+
+  // Patterns that indicate template placeholder (always strip)
+  const PLACEHOLDER_PATTERNS = [
+    /\[t[êe]n\s+[^\]]*\]/gi,              // [tên thảo dược 1], [tên sản phẩm]
+    /\[(name|ingredient|placeholder|insert)[^\]]*\]/gi,  // [name X], [ingredient 2]
+    /\[X\]|\[Y\]|\[Z\]/g,                  // [X], [Y]
+    /\[(số|amount|price|cost|brand|nhãn)\s*[^\]]*\]/gi, // [số tiền], [brand X]
+    /\[\d+\]/g,                            // [1], [2] alone
+    /\[\.\.\.\]/g,                         // [...] ellipsis
+    /\[\?\]/g,                             // [?] unknown
+  ]
+
+  let cleaned = text
+  let strippedCount = 0
+  for (const pat of PLACEHOLDER_PATTERNS) {
+    const before = cleaned
+    cleaned = cleaned.replace(pat, '')
+    if (cleaned !== before) strippedCount++
+  }
+
+  // Clean up double spaces + dangling punctuation left by strips
+  cleaned = cleaned
+    .replace(/\s+,/g, ',')              // " ," → ","
+    .replace(/,\s*,/g, ',')             // ",," → ","
+    .replace(/\s+\./g, '.')             // " ." → "."
+    .replace(/\s+/g, ' ')               // multiple spaces → 1
+    .replace(/^\s*[,.]\s*/, '')         // leading comma/period
+    .trim()
+
+  if (strippedCount > 0) {
+    console.warn(
+      `[PI/batch] sanitized ${strippedCount} bracket placeholder(s) in ${blockType}. ` +
+      `Gemini likely emitted template syntax — output cleaned for production.`,
+    )
+  }
+
+  return cleaned
+}
+
 /** Build per-type micro-directive (compact — used inline in batch prompt).
  *
  *  Sprint 6 (2026-05-28) — Product Info Enforcement:
@@ -381,15 +440,24 @@ NO markdown fences. NO prose outside JSON. JSON only.`
         && Array.isArray(entry.paragraphs)
         && entry.paragraphs.filter((p) => typeof p === 'string' && p.trim().length > 5).length > 0
       ) {
-        const validParas = entry.paragraphs.filter((p): p is string => typeof p === 'string' && p.trim().length > 5)
+        // 2026-05-29 — Sanitize bracket placeholders. Gemini under load
+        // (rate limit / KIE fallback to weaker model) sometimes emits
+        // template syntax like "[tên thảo dược 1]" instead of filling it
+        // with concrete ingredient names. Stripping brackets is safer than
+        // shipping the placeholder visible to the buyer.
+        const validParas = entry.paragraphs
+          .filter((p): p is string => typeof p === 'string' && p.trim().length > 5)
+          .map((p) => sanitizeBracketPlaceholders(p, plan.type))
+        const sanitizedHeading = sanitizeBracketPlaceholders(entry.heading.slice(0, 120), plan.type)
+        const sanitizedCallout = typeof entry.subtleCallout === 'string' && entry.subtleCallout.length > 0
+          ? sanitizeBracketPlaceholders(entry.subtleCallout.slice(0, 140), plan.type)
+          : undefined
         blocks.push({
           id: `pi-${plan.type}`,
           type: plan.type,
-          heading: entry.heading.slice(0, 120),
+          heading: sanitizedHeading,
           paragraphs: validParas,
-          subtleCallout: typeof entry.subtleCallout === 'string' && entry.subtleCallout.length > 0
-            ? entry.subtleCallout.slice(0, 140)
-            : undefined,
+          subtleCallout: sanitizedCallout,
           anchor: PI_ANCHOR_BY_TYPE[plan.type],
           source: 'gemini',
         })
