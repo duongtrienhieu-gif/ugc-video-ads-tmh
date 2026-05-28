@@ -44,7 +44,7 @@ export async function generateDescription(
     temperature: 0.7,
   })
   const { blocks, slotTexts } = parseOrFallback(raw)
-  const fullText = assembleFullText(blocks)
+  const fullText = assembleFullText(blocks, params.language)
   return { blocks, fullText, slotTexts }
 }
 
@@ -419,17 +419,32 @@ const BLOCK_ICON: Record<DescriptionBlock['kind'], string> = {
   reviews: '👥', usage: '🎬', offer: '🎁', faq: '❓', promise: '🛡️', cta: '📲',
 }
 
-const BLOCK_HEADING: Record<DescriptionBlock['kind'], string> = {
+// Phase 10.3 — language-aware block headings. Previously hardcoded BM which
+// leaked into VN listings when user clicked Sao chép. Now map per market so
+// MS listing → BM headers, VI listing → VN headers.
+
+const BLOCK_HEADING_MS: Record<DescriptionBlock['kind'], string> = {
   hook: '', pain: 'ANDA SEDANG', solution: '', benefits: 'KENAPA PILIH KAMI',
   specs: 'BAHAN AKTIF', reviews: 'KATA PENGGUNA', usage: 'CARA GUNA',
   offer: '', faq: 'SOALAN LAZIM', promise: 'JANJI KAMI', cta: '',
 }
 
-export function assembleFullText(blocks: DescriptionBlock[]): string {
+const BLOCK_HEADING_VI: Record<DescriptionBlock['kind'], string> = {
+  hook: '', pain: 'BẠN ĐANG GẶP', solution: '', benefits: 'VÌ SAO CHỌN CHÚNG TÔI',
+  specs: 'THÀNH PHẦN CHÍNH', reviews: 'KHÁCH HÀNG NÓI', usage: 'CÁCH DÙNG',
+  offer: '', faq: 'CÂU HỎI THƯỜNG GẶP', promise: 'CAM KẾT CỦA CHÚNG TÔI', cta: '',
+}
+
+function getBlockHeading(kind: DescriptionBlock['kind'], market?: Market): string {
+  const table = market === 'vi' ? BLOCK_HEADING_VI : BLOCK_HEADING_MS
+  return table[kind]
+}
+
+export function assembleFullText(blocks: DescriptionBlock[], market?: Market): string {
   const parts: string[] = []
   for (const b of blocks) {
     const icon = BLOCK_ICON[b.kind]
-    const heading = BLOCK_HEADING[b.kind]
+    const heading = getBlockHeading(b.kind, market)
     switch (b.kind) {
       case 'hook':
       case 'solution':

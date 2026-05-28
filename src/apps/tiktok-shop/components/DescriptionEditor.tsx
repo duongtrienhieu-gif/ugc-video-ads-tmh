@@ -45,7 +45,7 @@ export default function DescriptionEditor() {
 
   // Assemble full text once per blocks change — used in both fulltext view + copy + translate
   const fullText = useMemo(
-    () => (output ? assembleFullText(output.description.blocks) : ''),
+    () => (output ? assembleFullText(output.description.blocks, output.market) : ''),
     [output],
   )
 
