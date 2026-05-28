@@ -103,16 +103,17 @@ function buildComboPrompt(params: GenerateComboParams, hasLogoRef: boolean): str
     : `Show exactly 1 bottle/jar of the product centered, matching the reference photos.`
 
   // Count label — top-center pill, universal label table by count + market.
+  // Sits on the BRAND GRADIENT (bottom zone), just below the white brand-seal zone.
   // HOT merges INTO the pill (red bg + 🔥 prefix) per user spec — no separate HOT badge.
   const countLabel = getComboLabel(count, params.language)
   const labelPillSpec = c.isHot
-    ? `LABEL PILL (HOT variant): rounded pill ~420px wide × 60px tall, rounded corners 30px, background SOLID RED (#DC2626), centered at top y≈260-320 (just below brand seal). Text "🔥 ${countLabel}" in WHITE Plus Jakarta Sans ExtraBold ~44px. Subtle drop shadow.`
-    : `LABEL PILL: rounded pill ~420px wide × 60px tall, rounded corners 30px, background accent color ${p.cta}, centered at top y≈260-320 (just below brand seal). Text "${countLabel}" in WHITE Plus Jakarta Sans ExtraBold ~44px. Subtle drop shadow.`
+    ? `LABEL PILL (HOT variant): rounded pill ~420px wide × 60px tall, rounded corners 30px, background SOLID RED (#DC2626), centered at y≈220-280 (just inside the brand gradient bottom zone). Text "🔥 ${countLabel}" in WHITE Plus Jakarta Sans ExtraBold ~44px. Subtle drop shadow.`
+    : `LABEL PILL: rounded pill ~420px wide × 60px tall, rounded corners 30px, background accent color ${p.cta}, centered at y≈220-280. Text "${countLabel}" in WHITE Plus Jakarta Sans ExtraBold ~44px. Subtle drop shadow.`
 
   // Price block sits on the RIGHT half, BELOW the count label pill.
   const priceBlock = c.originalPrice
-    ? `- RIGHT half (y≈360), struck-through original price "${c.originalPrice}" (~32px light tint)\n- DIRECTLY BELOW (y≈410, still RIGHT half), GIANT current price "${c.price}" (~140px ExtraBold white with strong shadow)${c.discount ? `\n- AMBER PILL BADGE next to/below current price (~36px dark bold): "${c.discount}"` : ''}`
-    : `- RIGHT half (y≈380), GIANT price "${c.price}" (~140px ExtraBold white with strong shadow).`
+    ? `- RIGHT half (y≈320), struck-through original price "${c.originalPrice}" (~32px light tint)\n- DIRECTLY BELOW (y≈370, still RIGHT half), GIANT current price "${c.price}" (~140px ExtraBold white with strong shadow)${c.discount ? `\n- AMBER PILL BADGE next to/below current price (~36px dark bold): "${c.discount}"` : ''}`
+    : `- RIGHT half (y≈340), GIANT price "${c.price}" (~140px ExtraBold white with strong shadow).`
 
   return `1:1 square TikTok Shop VARIANT THUMBNAIL (1024×1024). ${productRefHint}
 
@@ -122,18 +123,23 @@ PRODUCT FIDELITY (CRITICAL):
 - Each bottle must replicate refs EXACTLY: same color, shape, label, brand name. Do NOT redesign.
 - ${countInstruction}${briefBlock}
 
-=== BRAND SEAL — IDENTICAL spec to the main 9 listing slots (no white banner, integrated) ===
-- LAYER 1 — LOGO: Render Reference 1 (brand logo) LARGE and CENTERED at the top. Logo size ~280px wide × 120px tall, at y≈40-160. NO white box, NO banner — logo sits directly on the brand-color gradient. Preserve logo EXACTLY from Reference 1.
-- LAYER 2 — SUBTITLE: Below logo at y≈170-205, render "Official store | ${marketBadge}" in WHITE Plus Jakarta Sans Medium Italic ~28px. Center-aligned.
-- LAYER 3 — UNDERLINE: Thin horizontal white line ~140px wide at 50% opacity centered at y≈215.
-- DO NOT render the brand kit's store name as separate text — the logo carries it.
+=== TWO-TONE BACKGROUND — MANDATORY canvas split ===
+- TOP ZONE (y=0 to y=200): solid clean WHITE (#FFFFFF) background. Brand seal lives here.
+- BOTTOM ZONE (y=200 to y=1024): saturated brand-color gradient (${p.primary} → ${p.secondary}) + subtle decorative particles. Count label pill, product, and price live here.
+- Optional 30px soft gradient blend at y=200-230 for clean transition.
 
-=== COUNT LABEL PILL — top-center, just below brand seal ===
+=== BRAND SEAL — IDENTICAL spec to the main 9 listing slots (sits INSIDE the white top zone) ===
+- LAYER 1 — LOGO: Render Reference 1 at MODERATE size, centered. Logo ~170px wide × 72px tall, at y≈30-100. Sits on WHITE top zone — preserve logo's ORIGINAL colors EXACTLY (no recolor, no invert).
+- LAYER 2 — SUBTITLE: Below logo at y≈110-140, render "Official store | ${marketBadge}" in DARK NAVY (#0E2A47) Plus Jakarta Sans Medium Italic ~26px. Center-aligned.
+- LAYER 3 — UNDERLINE: Thin DARK NAVY line ~130px wide at 35% opacity centered at y≈150.
+- DO NOT render the brand kit's store name as separate text.
+- DO NOT add box/pill/banner around the brand seal.
+
+=== COUNT LABEL PILL — top-center, inside the brand gradient bottom zone ===
 ${labelPillSpec}
 
-LAYOUT (all combo content sits BELOW the brand seal + label pill, y≥360):
-- Saturated brand-color gradient background (${p.primary} → ${p.secondary}) with subtle decorative particles
-- Product zone: LEFT half + center (y≈400-870), ${count} bottle(s) side-by-side standing upright on a subtle podium/surface
+LAYOUT (combo product + price live in the brand gradient bottom zone, y≥300):
+- Product zone: LEFT half + center (y≈360-870), ${count} bottle(s) side-by-side standing upright on a subtle podium/surface
 
 PRICE OVERLAY (must appear, dominant — on the RIGHT half, parallel to product zone):
 ${priceBlock}

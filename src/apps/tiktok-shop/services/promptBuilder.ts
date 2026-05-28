@@ -54,20 +54,23 @@ function header(ctx: PromptContext): string {
 
 PRODUCT FIDELITY: Replicate the product EXACTLY from product refs — same color, shape, label, brand name. Do NOT redesign or substitute.${briefBlock}
 
-=== BRAND SEAL — MANDATORY, IDENTICAL on all 9 slots (universal master spec, no white banner) ===
-- LAYER 1 — LOGO: Render Reference 1 (brand logo) LARGE and CENTERED at the top of the canvas. Logo size ~280px wide × 120px tall, positioned at y≈40-160. NO white box, NO banner background — the logo sits directly on the brand-color gradient. Logo must be preserved EXACTLY from Reference 1 (no redraw, no recoloring, no shape change).
-- LAYER 2 — SUBTITLE: Directly below the logo at y≈170-205, render the horizontal text line "Official store | ${marketBadge}" in WHITE Plus Jakarta Sans Medium Italic ~28px. The "|" separator is a thin vertical bar in white at 60% opacity. Center-aligned under the logo.
-- LAYER 3 — UNDERLINE: A thin horizontal white line ~140px wide at 50% opacity centered at y≈215, just below the subtitle. Provides clean visual closure.
-- DO NOT add the brand kit's store name as a separate text element anywhere — the logo already carries the brand identity; adding text would duplicate it.
-- DO NOT enclose the brand seal in any box, banner, or pill background.
+=== TWO-TONE BACKGROUND — MANDATORY canvas split ===
+- TOP ZONE (y=0 to y=200): solid clean WHITE (#FFFFFF) background. The brand seal lives here.
+- BOTTOM ZONE (y=200 to y=1024): saturated brand-color gradient (${p.primary} → ${p.secondary}) + subtle decorative elements (particles, soft glow, geometric accents). All slot content lives here.
+- Optional soft 30px gradient blend at y=200-230 for clean transition (no hard edge line).
 
-LAYOUT: ALL slot content (headlines, product hero, price overlays, decorations) sits BELOW the brand seal — content area starts from y≈240 down to y≈980.
+=== BRAND SEAL — IDENTICAL across all 9 slots (sits INSIDE the white top zone, NOT on the gradient) ===
+- LAYER 1 — LOGO: Render Reference 1 (brand logo) at MODERATE size, centered horizontally. Logo size ~170px wide × 72px tall, positioned at y≈30-100. The logo sits on the WHITE top zone — preserve the logo's ORIGINAL colors EXACTLY from Reference 1 (do NOT redraw, do NOT recolor, do NOT invert; the white background means original logo colors render naturally without modification).
+- LAYER 2 — SUBTITLE: Directly below the logo at y≈110-140, render text "Official store | ${marketBadge}" in DARK NAVY (#0E2A47) Plus Jakarta Sans Medium Italic ~26px. The "|" separator is a thin vertical bar in dark navy at 50% opacity. Center-aligned.
+- LAYER 3 — UNDERLINE: Thin horizontal DARK NAVY line ~130px wide at 35% opacity centered at y≈150.
+- DO NOT add the brand kit's store name as separate text — the logo carries it.
+- DO NOT add any pill, box, or banner around the brand seal — it's directly on the white top zone.
 
-STYLE: Premium e-commerce listing — top-seller aesthetic for this product's category. Saturated brand palette (NOT pastel), polished commercial photography, integrated decorative elements. Plus Jakarta Sans ExtraBold (weight 800-900) for headlines, Medium Italic for sub-text.
+LAYOUT: ALL slot content (headlines, product hero, price overlays, decorations) sits in the BOTTOM ZONE — content area starts y≈230 down to y≈980. Content text uses WHITE / light colors (since bottom zone is saturated brand gradient).
 
-PALETTE (use ONLY these): ${p.primary} primary, ${p.secondary} secondary, ${p.cta} accent. High saturation.
+STYLE: Premium e-commerce listing — top-seller aesthetic for this product's category. Saturated brand palette in BOTTOM zone (NOT pastel), polished commercial photography, integrated decorative elements. Plus Jakarta Sans ExtraBold (weight 800-900) for headlines, Medium Italic for sub-text.
 
-BACKGROUND: saturated brand-color gradient + subtle decorative elements (floating particles, soft glow, geometric accents). Balanced, not cluttered. The brand seal sits on top of this gradient with no separating box.
+PALETTE (use ONLY these for bottom zone): ${p.primary} primary, ${p.secondary} secondary, ${p.cta} accent. High saturation.
 
 LANGUAGE: ${langName} ONLY in any rendered text (except "Official store" subtitle which stays English as universal e-commerce terminology). NO other language characters.
 
