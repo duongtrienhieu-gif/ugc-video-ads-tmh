@@ -45,6 +45,10 @@ import { dissolutionBrief } from '../config/productDissolutionPatterns'
 import { softCompareBrief } from '../config/softComparePatterns'
 import { buildCtaMomentsBrief } from '../../cta'
 import type { NarratorDnaSelection } from './selectNarratorDna'
+// Sprint 5 — E2 + E3 (2026-05-28): pull brainstorm into block directives
+// so Phase 1-2 blocks can pin specific agitate beats + failed-attempts
+// block gets explicit "concrete cost per attempt" rule.
+import type { PackBrainstorm } from '../../packBrainstorm'
 
 /** Compose protagonist brief — 1-2 lines, used in system prompt context. */
 export function buildProtagonistBrief(p: ProtagonistProfile): string {
@@ -71,12 +75,28 @@ function balanceFramingDirective(balance: YouIBalance): string {
   }
 }
 
+/** Sprint 5 — E3 (2026-05-28). Map Phase 1-2 block id → which agitate beat
+ *  it should execute. Order matches the natural flow:
+ *    daily-micro-friction  → beat 1 (stack daily symptoms)
+ *    hidden-emotional-truth → beat 2 (name the hidden feeling)
+ *    not-alone-bridge       → beat 3 (reduce isolation via shared)
+ *  Falls through to "first available beat" if a block doesn't have a
+ *  specific assignment. */
+const PHASE12_BEAT_ASSIGNMENT: Record<string, number> = {
+  'daily-micro-friction':   0,
+  'hidden-emotional-truth': 1,
+  'not-alone-bridge':       2,
+}
+
 /** Per-block directive block. Lean — only what this block's
  *  psychologicalFunction + samplingHooks call for. */
 function buildBlockDirective(
   plan: BlockPlan,
   input: StorytellingInput,
   selection: NarratorDnaSelection,
+  /** Sprint 5 — E2/E3 (2026-05-28). Optional brainstorm for per-block
+   *  beat assignment + concrete-cost rule on failed-attempts. */
+  brainstorm?: PackBrainstorm,
 ): string {
   const block = plan.blueprint
 
@@ -87,6 +107,23 @@ function buildBlockDirective(
   lines.push(`  YOU/I BALANCE: ${block.youIBalance}`)
   lines.push(`  ${balanceFramingDirective(block.youIBalance)}`)
   lines.push(`  PARAGRAPHS: ${block.paragraphTarget.min}-${block.paragraphTarget.max}`)
+
+  // ─── Sprint 5 — E3: pin specific agitate beat to Phase 1-2 blocks ──
+  // The brainstorm produces 3-5 agitate beats. Previously these were
+  // listed in the brief but no individual block was told WHICH beat
+  // belongs to it — Gemini sampled all beats per block → blurred
+  // content + duplicateContent across Phase 1-2 blocks. Now each block
+  // gets ONE assigned beat to execute.
+  if (brainstorm && block.id in PHASE12_BEAT_ASSIGNMENT) {
+    const beatIndex = PHASE12_BEAT_ASSIGNMENT[block.id]
+    const beat = brainstorm.agitateBeats[beatIndex] ?? brainstorm.agitateBeats[0]
+    if (beat) {
+      lines.push(`  🎯 ASSIGNED AGITATE BEAT — execute THIS beat in THIS block:`)
+      lines.push(`     "${beat}"`)
+      lines.push(`  HARD RULE: this block must CENTER on the beat above. Do not blur to other Phase 1-2 beats — each beat belongs to its own block.`)
+      lines.push(`  Each detail in this block should serve THIS beat. Use concrete sensory cue / number / micro-moment, not vague abstraction.`)
+    }
+  }
 
   // ─── Phase 1 Block 1 — Performance Hook Layer ────────────────────
   if (block.samplingHooks.performanceHookLayer) {
@@ -153,6 +190,32 @@ function buildBlockDirective(
     }
   }
 
+  // ─── Sprint 5 — E2 (2026-05-28): concrete cost rule for failed-attempts ──
+  // Without this, Gemini wrote vague lists like "thử nhiều loại siro ho.. dùng
+  // viên ngậm.." — zero specificity, reader doesn't feel the pain of wasted
+  // money/time. Real DR voice anchors failed attempts with concrete cost
+  // signals. This rule forces Gemini to add a cost dimension to each item.
+  if (block.id === 'shared-failed-attempts') {
+    lines.push(`  💸 CONCRETE COST RULE (Sprint 5 — E2):`)
+    lines.push(`  HARD RULE: Each failed attempt MUST include a CONCRETE COST signal in at least ONE of these dimensions:`)
+    lines.push(`    1. MONEY — specific amount, real or plausibly invented`)
+    lines.push(`         e.g. "4 thang nước thuốc Bắc × 80 RM = 320 RM"`)
+    lines.push(`         e.g. "máy xịt 180 RM, dùng 2 tháng đã hỏng"`)
+    lines.push(`         e.g. "3 hộp viên uống × 65 RM"`)
+    lines.push(`    2. TIME WASTED — specific duration the attempt was tried`)
+    lines.push(`         e.g. "uống đều 3 tháng, không kết quả"`)
+    lines.push(`         e.g. "kiên trì xông hơi 6 tuần"`)
+    lines.push(`    3. BRAND / METHOD NAME — concrete reference (real local product or method)`)
+    lines.push(`         e.g. "siro Bisolvon — vị ngọt, không hiệu quả"`)
+    lines.push(`         e.g. "miếng dán Trung Quốc trên Shopee 35 RM"`)
+    lines.push(`  ✅ Total inventory: 3-5 attempts. Each one MUST have at least 1 cost dimension above.`)
+    lines.push(`  ⛔ FORBIDDEN openers / phrasings for this block:`)
+    lines.push(`     - "Tôi đã thử đủ mọi cách" (no specifics following)`)
+    lines.push(`     - "Thử nhiều loại / Dùng viên ngậm hoặc..." (no brand, no number)`)
+    lines.push(`     - Bullet-only lists without one micro-detail per item`)
+    lines.push(`  ✅ Optional close: a 1-line total cost summary, e.g. "Cộng lại, hơn 900 RM ném vào những thứ không giải quyết gốc rễ."`)
+  }
+
   // (P2: proof blocks reviewSlot handled separately — not generated by main pass,
   //  content interleaved post-generation from proof Gemini call.)
 
@@ -215,6 +278,9 @@ export function buildPackGenUserPrompt(
    *  defaults in desire / cta / objections / proof texture briefs.
    *  When provided, the niche-table values become fallback baseline. */
   commercialPsychology?: import('../../productSynthesis').SynthesizedCommercialPsychology,
+  /** Sprint 5 — E2/E3 (2026-05-28): pass brainstorm into block directives
+   *  so Phase 1-2 blocks can pin specific agitate beats. */
+  brainstorm?: PackBrainstorm,
 ): string {
   const lines: string[] = []
 
@@ -280,7 +346,7 @@ export function buildPackGenUserPrompt(
   lines.push(`═══ ${storyBlocks.length} BLOCKS — generate ALL in order ═══`)
   for (const bp of storyBlocks) {
     lines.push('')
-    lines.push(buildBlockDirective(bp, input, selection))
+    lines.push(buildBlockDirective(bp, input, selection, brainstorm))
   }
 
   // ─── Optional retry feedback ─────────────────────────────────────

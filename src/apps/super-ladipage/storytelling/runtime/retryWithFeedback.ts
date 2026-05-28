@@ -130,6 +130,10 @@ async function runOnce(
     retryFeedback,
     args.synthesizedReaderSymptoms,
     args.commercialPsychology,
+    // Sprint 5 — E2/E3: thread brainstorm into per-block directives so
+    // Phase 1-2 blocks pin specific agitate beats + Block 4 enforces
+    // the concrete cost rule.
+    args.packBrainstorm,
   )
   logPromptStats(systemPrompt, userPrompt, args.plan)
 
