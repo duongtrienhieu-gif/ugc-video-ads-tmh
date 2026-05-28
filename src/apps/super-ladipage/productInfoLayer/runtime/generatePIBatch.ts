@@ -35,25 +35,123 @@ interface BatchOutput {
   }
 }
 
-/** Build per-type micro-directive (compact — used inline in batch prompt). */
+/** Build per-type micro-directive (compact — used inline in batch prompt).
+ *
+ *  Sprint 6 (2026-05-28) — Product Info Enforcement:
+ *  Previously each directive was a 1-2 line summary that Gemini softened
+ *  into vague "thảo dược chung", "thử nhiều cách"-style output. Each type
+ *  now ships HARD RULES that explicitly enforce input specifics
+ *  (ingredient names, ALL USPs, ALL pricing tiers, scarcity hooks, usage
+ *  detail, return policy). Goal: reader finishes pack feeling "I have
+ *  enough info, I want to try this NOW", not "interesting story, let me
+ *  think more". */
 function buildMicroDirective(type: PISectionType, input: PlannerInput): string {
   switch (type) {
     case 'mechanism-personal': {
+      // Sprint 6 P3 — receive Block 10 handoff + name specific ingredients
       const vocab = NICHE_MECHANISM_VOCAB[input.niche]
-      const concreteVocab = vocab.mechanismVocab.slice(0, 4).join(', ')
-      return `mechanism-personal: Narrator's RESEARCH MOMENT — how it works through their research/family-doctor/etc. Use 2-3 niche-specific vocab: ${concreteVocab}. Avoid generic AI: ${vocab.bannedGenericPhrases.join(', ')}. 100-160 words across 2-3 paragraphs.`
+      const concreteVocab = vocab.mechanismVocab.slice(0, 5).join(', ')
+      return `mechanism-personal: Narrator's RESEARCH MOMENT — mechanism deep-dive.
+
+⚠️ HANDOFF NOTE: storytelling Block 10 (why-this-felt-different) only teases
+mechanism (Beat 3 hand-off). THIS block carries the FULL deep-dive — reader
+is already curious, deliver the explanation here.
+
+HARD RULES:
+1. Name 2-3 SPECIFIC ingredient / mechanism terms (NOT generic "thảo dược").
+   For niche ${input.niche}, pick 2 from: ${concreteVocab}
+2. Frame: narrator learned from a credible source — em rể dược sĩ /
+   chị bác sĩ / nhà thuốc nói. 1 attribution line anchors authority.
+3. Explain HOW each ingredient works in plain felt terms (NOT pseudo-science).
+4. Close with 1 sentence linking mechanism → felt experience.
+
+⛔ FORBIDDEN generic phrases (anti-AI fingerprint): ${vocab.bannedGenericPhrases.join(', ')}
+⛔ FORBIDDEN: "tôi không hiểu rõ lắm về khoa học" only (you DO have an
+   authority source — actually explain).
+
+100-160 words across 2-3 paragraphs.`
     }
+
     case 'ingredients-usp-woven':
-      return `ingredients-usp-woven: Narrator examines product (reads label, checks with family). Weave ingredients + USP into PROSE (NO bullet list). Ingredients: ${input.productIngredients || '(not provided)'}. USP: ${input.productUsp || '(not provided)'}. 100-170 words across 2-3 paragraphs. Allow narrator uncertainty.`
+      // Sprint 6 P1 — enforce ALL USPs woven into prose
+      return `ingredients-usp-woven: Narrator examines product (reads label, checks with family).
+
+⚠️ HARD RULE — must touch ALL USPs from input, woven into diary prose (NOT bullet list).
+USPs from input: ${input.productUsp || '(not provided)'}
+Ingredients from input: ${input.productIngredients || '(not provided)'}
+
+EACH USP signal that appears in input MUST be acknowledged in this block:
+- "no sticky residue" / "không dính" → narrator notes peeling experience
+- "soothing herbal scent" / "mùi thảo dược" → narrator describes scent
+- "top-selling in [country]" / "bán chạy ở [nước]" → narrator references trust signal
+- "fast effects" / "tác dụng nhanh" → narrator notes onset moment
+- COD / free shipping / fast returns → save for the pricing-narrator block
+
+Style: diary voice, narrator uncertainty allowed ("tôi check kỹ vì lần đầu...").
+⛔ FORBIDDEN: bullet list, "Đặc điểm:", marketing-claim voice.
+100-170 words across 2-3 paragraphs.`
+
     case 'usage-faq-personal':
-      return `usage-faq-personal: Narrator describes WHEN+HOW they use product. Weave 1-2 common questions (asked by family). Use synthesisBrief.usageScene if available: ${input.synthesizedBrief.usageScene || '(none)'}. NO Q&A format. NO bullet. 110-170 words across 2-3 paragraphs.`
+      // Sprint 6 P4 — enforce specifics: WHEN/HOW LONG/FREQUENCY/WHERE/PRECAUTION
+      return `usage-faq-personal: Narrator describes WHEN + HOW they use product.
+
+⚠️ HARD RULES — must answer ALL 5 usage dimensions explicitly:
+1. WHEN: time of day (sáng / tối / trước ngủ) + trigger moment (khi ho / khi đau ngực).
+2. HOW LONG: duration to wear (4-8 tiếng / qua đêm / 30 phút).
+3. FREQUENCY: how often (1 lần/ngày / liên tục / khi cần thiết).
+4. WHERE: location on body (dán lên ngực / sau lưng / điểm cụ thể).
+5. PRECAUTION: 1 brief "không dùng khi..." (1 short sentence).
+
+Format: 1 paragraph for narrator's routine + 1 paragraph weaving 1-2 questions
+INLINE (asked by family / friend / colleague) — NOT Q&A list format.
+
+Synthesis usage scene (use if relevant): ${input.synthesizedBrief.usageScene || '(none)'}
+
+⛔ FORBIDDEN: bullet list, formal Q&A format, generic "dễ sử dụng" without specifics.
+110-170 words across 2-3 paragraphs.`
+
     case 'social-proof-collective': {
+      // (unchanged — already works; persona seeds come from brainstorm separately)
       const texture = PROOF_TEXTURE_PROFILES[input.niche]
       const cues = texture.textureCues.slice(0, 3).join('; ')
       return `social-proof-collective: 1 short narrator intro + 2-3 mini-voices (DIFFERENT personas, ~25-40 words each). Texture: ${texture.typicalVoice}. Platform: ${texture.platformFeel}. Cues: ${cues}. NO 5-star ratings. NO "TUYỆT VỜI!". 130-180 words.`
     }
+
     case 'pricing-narrator':
-      return `pricing-narrator: Narrator's PURCHASE MOMENT — how/why decided to order. Pricing info: ${input.productPricing || '(not provided)'}. SHORTEST block — 70-110 words across 1-2 paragraphs. Optional subtleCallout (1 short line, whispered).`
+      // Sprint 6 P2 + P5 — enforce ALL pricing dimensions + scarcity + COD + return
+      return `pricing-narrator: Narrator's PURCHASE MOMENT.
+
+⚠️ HARD RULE — must mention ALL pricing dimensions present in input.
+Pricing info from input: ${input.productPricing || '(not provided)'}
+
+REQUIRED COVERAGE — each dimension below MUST appear if input has it:
+1. ORIGINAL PRICE / discount magnitude — "giá gốc RM119" (sets value anchor).
+2. EACH PROMOTIONAL TIER — list all that apply (1+1 / 2+2 / 3+3),
+   then state which one the narrator picked + 1-line reason.
+3. TIME-BOUND SCARCITY HOOK — if input mentions "first N customers" /
+   "50% off first 200" / "limited time" — narrator MUST cite this
+   verbatim or near-verbatim. Example: "thấy có 50% cho 200 khách đầu
+   tiên, tôi quyết định luôn để không lỡ".
+4. SHIPPING perk — if input has free-shipping threshold, narrator notes
+   it as a small relief ("miễn ship nếu mua 2+ — đỡ tiếc").
+5. PAYMENT mode — if input has COD, narrator chooses COD ("đặt COD an
+   tâm hơn, lần đầu thử mà").
+6. RETURN / EXCHANGE perk — if input has "fast returns" or guarantee,
+   narrator closes with 1 sentence risk-reversal ("Mua thử 1 cái trước,
+   không hợp thì còn đổi được — không sợ mất tiền").
+
+Narrator template: "Lúc đặt tôi thấy [scarcity hook]. Giá gốc [X] nhưng
+giờ chỉ [Y] cho gói [tier picked] vì [reason]. Có [shipping/COD perk]
+nên tôi thấy [feeling]. Nếu [return perk available], thì cũng yên tâm
+hơn."
+
+⛔ FORBIDDEN: "MUA NGAY!" / "ưu đãi cực sốc!" / exclamation marks /
+   urgency caps / hard-sell voice.
+✅ ALLOWED: factual narrator observation of the deal + small relief feeling.
+Optional subtleCallout: 1 short whispered line.
+
+90-140 words across 1-2 paragraphs (allowing slight expansion vs old 70-110
+cap because we now require multiple pricing dimensions).`
   }
 }
 
