@@ -19,11 +19,12 @@ import {
   type ImageStatus,
   type Gpt4oSize,
 } from '../../../utils/kieai'
-import { getUrl, saveFromBlobUrl } from '../../../utils/assetStore'
+import { getUrl, saveAsset } from '../../../utils/assetStore'
 import type { ResolvedBrandKit, Market } from '../../../types/brandKit'
 import type { Product } from '../../../stores/types'
 import type { SlotConfig, PaletteFamily, SlotTexts } from '../types'
 import { buildPromptForSlot } from './promptBuilder'
+import { composeHeaderOverlay } from './composeHeaderOverlay'
 
 export interface GenerateSlotParams {
   apiKey: string
@@ -91,9 +92,19 @@ export async function generateSlotImage(params: GenerateSlotParams): Promise<Gen
     signal: params.signal,
   })
 
-  // 4. Copy from kie's CDN → our Supabase Storage so the URL doesn't expire
-  //    + our user owns the asset
-  const assetId = await saveFromBlobUrl(kieImageUrl)
+  // 4. Composite deterministic brand header (logo + store name + flag) onto
+  //    top 80px of the AI image so the header is 100% identical across all 9
+  //    slots regardless of AI variance. Replaces the prior approach where AI
+  //    rendered its own (inconsistent) version of the brand identity.
+  const composedBlob = await composeHeaderOverlay({
+    aiImageUrl: kieImageUrl,
+    brandKit: params.brandKit,
+    paletteFamily: params.paletteFamily,
+  })
+
+  // 5. Save the composited image to our Supabase Storage. We do NOT keep
+  //    the raw AI output — the composited version is the canonical asset.
+  const assetId = await saveAsset(composedBlob, 'image/jpeg')
 
   return { assetId, prompt }
 }

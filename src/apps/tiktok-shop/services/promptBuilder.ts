@@ -37,7 +37,7 @@ function header(ctx: PromptContext): string {
 
 PRODUCT: Replicate EXACTLY from refs — same color, shape, label, brand name. Do NOT redesign or substitute.
 
-BRAND IDENTITY: Small top-left zone (~8% canvas height) with brand logo + store name "${ctx.brandKit.storeName}"${ctx.brandKit.flagOrigin ? ` + ${ctx.brandKit.flagOrigin.toUpperCase()} flag chip` : ''}. Same position EVERY slot.
+HEADER ZONE: Top 80px (~8% canvas height) MUST be LEFT BLANK with a solid clean background color (white or brand secondary). Do NOT render brand logo, store name, flag, or ANY text/decoration in this zone — a deterministic header strip will be composited on top after generation. Place product, headline, and other content STARTING FROM y=90 (just below the header zone).
 
 STYLE: Premium e-commerce listing — match the aesthetic typical of top sellers IN THIS PRODUCT'S category (do not assume teeth/supplement). Saturated brand palette (NOT pastel), polished commercial photography, integrated decorative elements. Plus Jakarta Sans ExtraBold (weight 800-900) for headlines, Medium Italic for sub-text.
 
@@ -146,11 +146,12 @@ export function buildPromptSlot4(ctx: PromptContext): string {
 
   return `${header(ctx)}
 
-SLOT 4 — INGREDIENTS / MECHANISM
-COMPOSITION: Product centered slightly LEFT on subtle podium. Around it: 4-5 REAL-LOOKING ingredient elements (relevant to this product's actual ingredients) floating with realistic shadows — macro photography style, NOT cartoon icons.
+SLOT 4 — INGREDIENTS / MECHANISM (ref style: BBOJI / EXOLABO ingredient panel with REAL photos)
+COMPOSITION: Product centered slightly LEFT on subtle podium. Around the product: natural decorative elements relevant to the ingredients (leaves, herbs, fruit pieces) grounding the scene.
 TEXT in image:
-- TOP CENTER giant bold (~120px) white: "${title}"
-- RIGHT-SIDE STACK of pill-shaped chips (white rounded rect + soft shadow), each with custom-designed icon relevant to the ingredient type (leaf/drop/crystal/shield — NOT emoji), numbered badge, ingredient name + percentage in bold dark navy:
+- Headline starts BELOW header zone (y≥110), giant bold (~120px) white: "${title}"
+- RIGHT-SIDE STACK of pill-shaped chips (white rounded rect + soft shadow), each chip contains FOUR elements in order from left to right: (1) numbered accent badge 1-5, (2) ingredient name in bold dark navy ~30px, (3) percentage in accent color ~28px, (4) REAL MACRO PHOTOGRAPH of the actual ingredient material on the right side of the chip — e.g., real grape cluster + seeds for "Grape Seed Extract", real bamboo charcoal pieces for "Bamboo Charcoal", real mint leaves for "Mint Extract", real coconut shell for "Coconut Powder", real vitamin capsules for "Vitamin E". Commercial product catalog photography style. STRICTLY NOT abstract icons, NOT cartoon symbols, NOT generic geometric shapes.
+Chips list:
 ${ingLine}
 - BOTTOM italic (~26px) tinted: "${tagline}"`
 }
@@ -222,8 +223,8 @@ export function buildPromptSlot8(ctx: PromptContext): string {
   const urgency = st?.urgency ?? derived.urgency
 
   const priceBlock = orig
-    ? `- UPPER-LEFT struck-through (~42px) light tint: "${orig}"\n- BELOW it, GIANT ExtraBold (~200px) white with shadow: "${cur}"`
-    : `- UPPER-LEFT GIANT ExtraBold (~200px) white with shadow: "${cur}"`
+    ? `- AT y=110 (just below header zone), LEFT-HALF struck-through (~42px) light tint: "${orig}"\n- BELOW it (y=160, still LEFT), GIANT ExtraBold (~200px) white with shadow: "${cur}"`
+    : `- AT y=110 (just below header zone), LEFT-HALF GIANT ExtraBold (~200px) white with shadow: "${cur}"`
   const discBlock = disc ? `\n- AMBER PILL BADGE next to or below price (~50px dark bold): "${disc}"` : ''
   const comboBlock = combo ? `\n- MIDDLE band bold (~40px) white: "${combo}"` : ''
   const urgBlock = urgency ? `\n- Below button italic (~28px) light tint: "⏰ ${urgency}"` : ''
@@ -231,7 +232,7 @@ export function buildPromptSlot8(ctx: PromptContext): string {
   return `${header(ctx)}
 
 SLOT 8 — OFFER (hero composition + price overlay)
-COMPOSITION: Product hero shot in BOTTOM-RIGHT third. Energetic saturated bg (primary → warm accent). Top-left area clean for price block.
+COMPOSITION: Product hero shot in BOTTOM-RIGHT third. Energetic saturated bg (primary → warm accent). Price block area sits in the LEFT half BELOW the header zone (y=110 onward).
 TEXT in image:
 ${priceBlock}${discBlock}${comboBlock}
 - BOTTOM wide rounded BUTTON in accent color, big bold white inside (~58px) with shadow: "${cta}"${urgBlock}`

@@ -10,10 +10,11 @@ import {
   generateGpt4oImage,
   type ImageStatus,
 } from '../../../utils/kieai'
-import { getUrl, saveFromBlobUrl } from '../../../utils/assetStore'
+import { getUrl, saveAsset } from '../../../utils/assetStore'
 import type { ResolvedBrandKit, Market } from '../../../types/brandKit'
 import type { ComboOption, PaletteFamily } from '../types'
 import { TPCN_PALETTES } from '../constants'
+import { composeHeaderOverlay } from './composeHeaderOverlay'
 
 export interface GenerateComboParams {
   apiKey: string
@@ -65,8 +66,17 @@ export async function generateComboImage(params: GenerateComboParams): Promise<G
     signal: params.signal,
   })
 
-  // 4. Copy to Supabase Storage
-  const assetId = await saveFromBlobUrl(kieImageUrl)
+  // 4. Composite brand header overlay — same deterministic strip as the
+  //    main 9 slots so combo thumbnails match the listing's brand identity
+  //    exactly.
+  const composedBlob = await composeHeaderOverlay({
+    aiImageUrl: kieImageUrl,
+    brandKit: params.brandKit,
+    paletteFamily: params.paletteFamily,
+  })
+
+  // 5. Save composited image
+  const assetId = await saveAsset(composedBlob, 'image/jpeg')
   return { assetId, prompt }
 }
 
