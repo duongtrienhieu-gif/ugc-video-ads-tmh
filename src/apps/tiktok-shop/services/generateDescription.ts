@@ -38,7 +38,10 @@ LANGUAGE LOCK — three rules, zero exceptions:
 2. Even if the product name, ingredient list, or image refs contain English, Chinese, or any other language — your JSON output is ${lang} only.
 3. If you cannot find a natural ${lang} word, transliterate or use an equivalent. Do not fall back to English anywhere in the output.
 
-OUTPUT FORMAT: strict JSON object only. No markdown fences, no preamble text, no commentary after the closing brace.
+OUTPUT FORMAT: TWO sections in this exact order, nothing else:
+1. A <REASONING> block (plain text, ~10 lines) — your strategic analysis of this product
+2. The JSON object — copy that must be consistent with and derived from your <REASONING> above
+No markdown fences. No text after the closing JSON brace.
 
 CONVERSION COPYWRITING RULES (universal — applies to all niches, all product types):
 • Pain bullets: write as the customer's OWN internal voice — a self-question they ask themselves daily. Ends with "?", max 10 words. Write the FEELING, not the clinical label.
@@ -107,26 +110,40 @@ BRAND:
 - Sample phrases: ${voiceSamples}
 - Store: ${brandKit.storeName}
 
-REASONING STEP (mental only — do NOT include in output):
-Before writing a single word of copy, identify these 4 things from PRODUCT DATA above:
-(a) TARGET CUSTOMER — who is living this problem? Age range, gender, daily context?
-(b) CORE PAIN FEELING — the emotion/discomfort they experience daily. Not the clinical name, the FEELING.
-(c) #1 TRANSFORMATION PROMISE — what specifically changes for them after using this product? Be concrete.
-(d) KEY DIFFERENTIATOR — what makes this product different from the generic category alternative?
-Your answers to (a)–(d) must inform every field below. If you cannot answer (c) or (d) from PRODUCT DATA, derive the closest reasonable inference — do NOT invent clinical claims.
+REQUIRED OUTPUT — write BOTH sections in this exact order:
 
-JSON SHAPE (return exactly this structure — all values in ${langName}):
+SECTION 1 — write <REASONING> block FIRST (before the JSON):
+<REASONING>
+Customer: [who they are — age/gender/daily life context, 1-2 sentences]
+Pain: [the FEELING they live with daily — emotional experience, NOT clinical label]
+Promise: [what specifically and observably changes after using this product]
+Differentiator: [what makes this different from the generic category alternative — specific]
+Slot plan:
+  S1 headline: [4-6 word ALL CAPS claim — the single strongest transformation]
+  S2 question: [most emotionally resonant pain as a customer self-question ending '?']
+  S3 metric: [specific number + unit or timeframe from Promise — e.g. '3× LEBIH LANCAR' or 'DALAM 7 HARI']
+  S4 focus: [ingredients to feature from PRODUCT DATA, or 'none provided — return []']
+  S5 story: [before→after angle with time marker — what story arc fits this product]
+  S6 key step: [the most specific physical action for using this product]
+  S7 edge: [strongest measurable differentiator for the comparison slot]
+  S9 objection: [main buyer concern — safety, timing, or returns]
+</REASONING>
+
+SECTION 2 — write JSON object AFTER the <REASONING> block.
+Every JSON field value MUST follow the Slot plan above. If a value contradicts your REASONING, rewrite it.
+
+JSON SHAPE (all values in ${langName}):
 {
   "blocks": [
-    {"kind": "hook", "text": "<emoji + 1-sentence opener; **bold** the strongest result/claim; max 130 chars>"},
+    {"kind": "hook", "text": "<emoji + opener using your Promise from REASONING; **bold** strongest claim; max 130 chars>"},
     {"kind": "pain", "bullets": [
-      "<customer self-question from reasoning (b), ending '?', max 10 words>",
-      "<another pain self-question, max 10 words>",
-      "<another pain self-question, max 10 words>"
+      "<S2 question from REASONING — customer self-question ending '?', max 10 words>",
+      "<related pain self-question, max 10 words>",
+      "<related pain self-question, max 10 words>"
     ]},
-    {"kind": "solution", "text": "<introduce product as the answer to pain; **bold** product name + main mechanism; max 160 chars>"},
+    {"kind": "solution", "text": "<introduce product as answer to Pain; **bold** product name + Differentiator mechanism; max 160 chars>"},
     {"kind": "benefits", "bullets": [
-      "<concrete outcome with number or timeframe from reasoning (c), max 15 words>",
+      "<concrete outcome tied to Promise from REASONING — number or timeframe, max 15 words>",
       "<benefit>", "<benefit>", "<benefit>", "<benefit>"
     ]},
     {"kind": "specs", "rows": [
@@ -155,11 +172,11 @@ JSON SHAPE (return exactly this structure — all values in ${langName}):
   ],
   "slotTexts": {
     "slot1": {
-      "headline": "<4–6 words ALL CAPS — the #1 transformation from reasoning (c), derived from USPs/benefits>",
-      "tagline": "<8–12 words — specific mechanism or target customer outcome, NOT generic>"
+      "headline": "<S1 headline from REASONING — 4-6 words ALL CAPS, the single strongest transformation>",
+      "tagline": "<8-12 words expanding the headline — specific mechanism or customer outcome, NOT generic>"
     },
     "slot2": {
-      "question": "<core pain from reasoning (b) as a customer self-question, max 10 words, ends '?'>",
+      "question": "<S2 question from REASONING — core pain as customer self-question, max 10 words, ends '?'>",
       "painBullets": [
         "<customer-voice self-question max 8 words ends '?'>",
         "<question ends '?'>",
@@ -169,8 +186,8 @@ JSON SHAPE (return exactly this structure — all values in ${langName}):
     "slot3": {
       "beforeLabel": "${beforeLabel}",
       "afterLabel": "${afterLabel}",
-      "metric": "<SPECIFIC measurable outcome ALL CAPS max 4 words — number + unit or timeframe — from reasoning (c)>",
-      "metricSubtitle": "<supporting context e.g. 'DALAM 14 HARI', max 5 words>",
+      "metric": "<S3 metric from REASONING — SPECIFIC number+unit or timeframe ALL CAPS max 4 words>",
+      "metricSubtitle": "<context period e.g. 'DALAM 14 HARI', max 5 words>",
       "disclaimer": "<results-may-vary disclaimer, max 8 words>"
     },
     "slot4": {
@@ -179,16 +196,16 @@ JSON SHAPE (return exactly this structure — all values in ${langName}):
       "tagline": "<short safety or natural-formula claim derived from product data, max 8 words>"
     },
     "slot5": {
-      "quote": "<concrete before→after story with time marker, max 100 chars>",
+      "quote": "<S5 story from REASONING — before→after with time marker, max 100 chars>",
       "author": "<${reviewerNameHint}>",
       "verifiedNote": "<verified-review label>"
     },
     "slot6": {
       "title": "<how-to-use title with step count e.g. '3 LANGKAH MUDAH' or '3 BƯỚC ĐƠN GIẢN'>",
       "steps": [
-        "<SPECIFIC action verb + exact object + amount/duration, max 10 words>",
-        "<step>",
-        "<step>"
+        "<S6 key step from REASONING — SPECIFIC action verb + object + amount/duration, max 10 words>",
+        "<next step — specific action>",
+        "<next step — specific action>"
       ],
       "timing": "<usage timing e.g. '🌅 Pagi • 🌙 Malam'>"
     },
@@ -197,8 +214,8 @@ JSON SHAPE (return exactly this structure — all values in ${langName}):
       "usLabel": "<our product short label>",
       "themLabel": "<generic or competitor short label>",
       "points": [
-        ["<our SPECIFIC differentiator from reasoning (d) — number/material/time/mechanism>", "<their generic equivalent>"],
-        ["<specific>", "<generic>"],
+        ["<S7 edge from REASONING — specific measurable differentiator>", "<their generic equivalent>"],
+        ["<specific differentiator — number/time/mechanism>", "<generic>"],
         ["<specific>", "<generic>"],
         ["<specific>", "<generic>"]
       ]
@@ -214,8 +231,8 @@ JSON SHAPE (return exactly this structure — all values in ${langName}):
     "slot9": {
       "title": "${faqTitle}",
       "items": [
-        {"q": "<safety or ingredients concern>", "a": "<answer>"},
-        {"q": "<results timing question>", "a": "<specific timeframe>"},
+        {"q": "<S9 main objection from REASONING — safety or ingredients concern>", "a": "<short answer>"},
+        {"q": "<results timing — when will they see the change from Promise>", "a": "<specific timeframe>"},
         {"q": "<return or refund question>", "a": "<answer>"}
       ]
     }
@@ -231,7 +248,7 @@ BOLD FORMATTING (use **markdown bold** — TikTok Shop renders it):
 
 REVIEWER NAMES: ${reviewerNameHint}
 
-OUTPUT: JSON object only. Every string value in ${langName}. Zero preamble or text after closing brace.`
+FINAL REMINDER: Output = <REASONING> block THEN JSON object. All JSON string values in ${langName}. Zero text after the closing JSON brace.`
 }
 
 // ── Parsing ──────────────────────────────────────────────────────────────
@@ -241,7 +258,20 @@ interface RawPayload {
   slotTexts?: unknown
 }
 
+function extractReasoning(raw: string): string | null {
+  const m = raw.match(/<REASONING>([\s\S]*?)<\/REASONING>/)
+  return m ? m[1].trim() : null
+}
+
 function parseOrFallback(raw: string): { blocks: DescriptionBlock[]; slotTexts: SlotTexts | undefined } {
+  // Log the AI's reasoning block so developers can verify brainstorming quality
+  const reasoning = extractReasoning(raw)
+  if (reasoning) {
+    console.log('[generateDescription] 🧠 AI REASONING:\n' + reasoning)
+  } else {
+    console.warn('[generateDescription] ⚠️ No <REASONING> block found in response — AI skipped brainstorm step')
+  }
+
   const json = extractJsonObject(raw)
   if (!json) {
     console.warn('[generateDescription] could not extract JSON from response — using placeholder. Raw response first 500 chars:', raw.slice(0, 500))
