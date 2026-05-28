@@ -126,16 +126,17 @@ PRODUCT FIDELITY (CRITICAL):
 === BACKGROUND — full canvas brand gradient ===
 - The ENTIRE canvas is filled with saturated brand-color gradient (${p.primary} → ${p.secondary}) with subtle decorative particles. Unified backdrop.
 
-=== BRAND SEAL — COMPACT TOP-RIGHT CORNER BADGE, IDENTICAL to the main 9 slots ===
-- Render a SMALL WHITE (#FFFFFF) rounded rectangle badge in the TOP-RIGHT corner.
-- Dimensions: ~240px wide × 80px tall (3:1 aspect), rounded corners 16px, subtle drop shadow.
-- Position: top-right corner with 20px margin (x=764-1004, y=20-100). NOT centered.
-- CONTENTS — HORIZONTAL ROW (single row, vertically centered at y≈60):
-  - LEFT: Reference 1 logo ~50×50px at x≈778. Preserve ORIGINAL colors EXACTLY.
-  - MIDDLE: thin "|" separator (dark navy 40% opacity, ~30px tall) at x≈840.
-  - RIGHT: "Official | ${marketBadge}" in DARK NAVY Plus Jakarta Sans Medium ~14px at x≈856-990.
-- DO NOT enlarge the badge — small (~23% canvas width).
+=== BRAND SEAL — TOP-RIGHT CORNER BADGE (slightly larger for clean logo render), IDENTICAL to the main 9 slots ===
+- Render a WHITE (#FFFFFF) rounded rectangle badge in the TOP-RIGHT corner.
+- Dimensions: ~320px wide × 100px tall (3.2:1 aspect), rounded corners 18px, subtle drop shadow.
+- Position: top-right corner with 20px margin (x=684-1004, y=20-120). NOT centered.
+- CONTENTS — HORIZONTAL ROW (single row, vertically centered at y≈70):
+  - LEFT: Reference 1 logo ~80×80px at x≈700. Preserve ORIGINAL colors AND DETAILS EXACTLY — render every logo element (brand mark, decorations, subscript) crisply, do NOT simplify.
+  - MIDDLE: thin "|" separator (dark navy 40% opacity, ~40px tall) at x≈800.
+  - RIGHT: "Official | ${marketBadge}" in DARK NAVY Plus Jakarta Sans Medium ~16px at x≈820-990.
+- DO NOT enlarge past ~320px wide.
 - DO NOT center — must hug top-right corner.
+- DO NOT simplify or partially render the logo.
 - DO NOT render store name as additional text.
 
 === COUNT LABEL PILL — top-center, inside the brand gradient bottom zone ===
