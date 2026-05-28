@@ -134,8 +134,9 @@ export default function InputPanel() {
       slotTexts = desc.slotTexts
       console.log(`[tiktok-shop] description done. slotTexts=${slotTexts ? 'present' : 'MISSING (images will derive from product fields)'}`)
     } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
       console.warn('[tiktok-shop] description gen failed:', err)
-      addToast('Mô tả gen lỗi — dùng fallback từ thông tin sản phẩm', 'error')
+      addToast(`Mô tả gen lỗi: ${msg.slice(0, 80)} — dùng fallback. Bấm "Tạo lại" ở panel mô tả để retry.`, 'error')
     }
 
     // 3. Now generate images, passing slotTexts so all 9 slots use the same

@@ -132,27 +132,30 @@ interface RawPayload {
 function parseOrFallback(raw: string): { blocks: DescriptionBlock[]; slotTexts: SlotTexts | undefined } {
   const json = extractJsonObject(raw)
   if (!json) {
-    console.warn('[generateDescription] could not extract JSON from response — using generic placeholder')
+    console.warn('[generateDescription] could not extract JSON from response — using placeholder. Raw response first 500 chars:', raw.slice(0, 500))
     return { blocks: MOCK_DESCRIPTION_BLOCKS, slotTexts: undefined }
   }
   try {
     const payload = JSON.parse(json) as RawPayload
     const rawBlocks = payload.blocks
     if (!Array.isArray(rawBlocks) || rawBlocks.length === 0) {
-      console.warn('[generateDescription] JSON has no blocks array — using generic placeholder')
+      console.warn('[generateDescription] JSON has no blocks array — using placeholder. Payload keys:', Object.keys(payload))
       return { blocks: MOCK_DESCRIPTION_BLOCKS, slotTexts: undefined }
     }
     const validated = rawBlocks
       .map(validateBlock)
       .filter((b): b is DescriptionBlock => b !== null)
-    if (validated.length < 5) {
-      console.warn('[generateDescription] too few valid blocks — using generic placeholder', validated.length)
+    // Lowered threshold from 5 → 3. Even a partial 3-block description is
+    // more useful (and more product-specific) than the generic placeholder.
+    if (validated.length < 3) {
+      console.warn('[generateDescription] too few valid blocks — using placeholder', { validCount: validated.length, totalCount: rawBlocks.length })
       return { blocks: MOCK_DESCRIPTION_BLOCKS, slotTexts: undefined }
     }
     const slotTexts = validateSlotTexts(payload.slotTexts)
+    console.log(`[generateDescription] ✓ parsed ${validated.length}/${rawBlocks.length} blocks, slotTexts=${slotTexts ? 'present' : 'missing'}`)
     return { blocks: validated, slotTexts }
   } catch (err) {
-    console.warn('[generateDescription] JSON parse failed — using generic placeholder', err)
+    console.warn('[generateDescription] JSON parse failed — using placeholder', err, 'json snippet:', json.slice(0, 300))
     return { blocks: MOCK_DESCRIPTION_BLOCKS, slotTexts: undefined }
   }
 }
@@ -264,19 +267,32 @@ function validateSlotTexts(raw: unknown): SlotTexts | undefined {
 }
 
 // Models occasionally wrap JSON in ```json fences or add commentary.
-// Extract the first balanced JSON object from the response.
+// Extract the first balanced JSON object from the response — defensively
+// handles string literals (braces inside quoted values must not affect
+// depth counting) and escape characters.
 function extractJsonObject(raw: string): string | null {
-  // Strip code fences
-  const withoutFences = raw.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/i, '').trim()
-  // Find the first { and the matching closing }
-  const start = withoutFences.indexOf('{')
+  // Strip code fences anywhere in the string (not just start/end). Some
+  // models put preamble text before the opening fence.
+  const cleaned = raw.replace(/```(?:json)?\s*/gi, '').replace(/```/g, '').trim()
+  const start = cleaned.indexOf('{')
   if (start === -1) return null
+
   let depth = 0
-  for (let i = start; i < withoutFences.length; i++) {
-    if (withoutFences[i] === '{') depth++
-    else if (withoutFences[i] === '}') {
+  let inString = false
+  let escapeNext = false
+
+  for (let i = start; i < cleaned.length; i++) {
+    const ch = cleaned[i]
+
+    if (escapeNext) { escapeNext = false; continue }
+    if (ch === '\\') { escapeNext = true; continue }
+    if (ch === '"') { inString = !inString; continue }
+    if (inString) continue
+
+    if (ch === '{') depth++
+    else if (ch === '}') {
       depth--
-      if (depth === 0) return withoutFences.slice(start, i + 1)
+      if (depth === 0) return cleaned.slice(start, i + 1)
     }
   }
   return null

@@ -90,13 +90,17 @@ function buildComboPrompt(params: GenerateComboParams, hasLogoRef: boolean): str
     ? 'Reference 1 = brand logo (preserve exactly). References 2+ = product photos.'
     : 'All references are product photos.'
 
-  // Phase 8 fix: enforce explicit count. When user provides productCount,
-  // tell AI EXACTLY how many product instances to render. Without this,
-  // AI defaults to 1 even when description says "2 product unit".
+  // Count enforcement. productCount is the authoritative source (user input);
+  // fall back to parsing the description ("2 jars" → 2), then to 1.
   const count = c.productCount ?? extractCountFromDescription(c.description) ?? 1
   const countInstruction = count > 1
     ? `Show EXACTLY ${count} instances of the product clearly visible, arranged side-by-side or in a small cluster (NOT just 1). Each instance must match the reference photos.`
     : `Show exactly 1 instance of the product centered, matching the reference photos.`
+
+  // Description is optional now (Phase 9 fix). Default from count so the
+  // prompt always has something concrete to render.
+  const effectiveDescription = c.description.trim()
+    || (count > 1 ? `${count} units of the product` : '1 unit of the product')
 
   // Build the price block instruction dynamically based on what fields exist
   const priceBlock = c.originalPrice
@@ -111,7 +115,7 @@ function buildComboPrompt(params: GenerateComboParams, hasLogoRef: boolean): str
 
 PRODUCT: Replicate EXACTLY from refs — same color, shape, label, brand name. Do NOT redesign.
 
-VARIANT CONTENT: ${c.description}
+VARIANT CONTENT: ${effectiveDescription}
 PRODUCT COUNT: ${countInstruction}
 
 LAYOUT:

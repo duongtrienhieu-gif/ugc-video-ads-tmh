@@ -126,11 +126,14 @@ function ComboCard({ combo }: { combo: ComboOption }) {
   }, [combo.imageAssetId])
 
   const isGenerating = combo.status === 'generating'
-  const canGenerate = combo.name.trim() !== '' && combo.price.trim() !== '' && combo.description.trim() !== ''
+  // Description is now OPTIONAL — productCount alone tells AI how many to
+  // render. User can add description for finer control (e.g. "1 jar + 1
+  // spray") but isn't forced to.
+  const canGenerate = combo.name.trim() !== '' && combo.price.trim() !== ''
 
   async function handleGenerate() {
     if (!canGenerate) {
-      addToast('Cần điền Tên + Mô tả + Giá trước khi tạo', 'error')
+      addToast('Cần điền Tên + Giá trước khi tạo', 'error')
       return
     }
     if (draft.referenceImageAssetIds.length < 1) {
