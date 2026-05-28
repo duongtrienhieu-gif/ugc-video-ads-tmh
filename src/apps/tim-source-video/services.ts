@@ -35,11 +35,20 @@ import {
 //      flash-lite 1000 RPD).
 // Per-day exhaustion (QUOTA_GEMINI) propagates immediately — no retry, no
 // fallback to next model (likely same daily cap).
+// V3.2.3 — LITE-FIRST chain. Free tier capacity:
+//   gemini-2.5-flash-lite:  1000 RPD, 15 RPM ← primary (4x flash quota)
+//   gemini-2.5-flash:         250 RPD, 10 RPM ← quality fallback
+//   gemini-2.0-flash-lite:    200 RPD, 30 RPM
+//   gemini-2.0-flash:         200 RPD, 15 RPM
+//
+// Task profile for callGemini = structured JSON parse (parseScript). Flash-lite
+// handles JSON-schema-constrained outputs reliably. Worth the 4x capacity
+// vs marginal quality difference here.
 const CALL_GEMINI_MODELS = [
-  'gemini-2.5-flash',
   'gemini-2.5-flash-lite',
-  'gemini-2.0-flash',
+  'gemini-2.5-flash',
   'gemini-2.0-flash-lite',
+  'gemini-2.0-flash',
 ]
 
 async function callGemini(apiKey: string, body: unknown, signal: AbortSignal): Promise<unknown> {

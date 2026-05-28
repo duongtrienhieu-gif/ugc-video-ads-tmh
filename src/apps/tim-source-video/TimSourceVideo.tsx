@@ -122,10 +122,24 @@ export default function TimSourceVideo() {
       setStatus(`✅ Ngôn ngữ: ${LANG_LABEL[detectedLang]} · ${scenes.length} scene${productLabel} · Mode: ${modeMsg}. Đang tìm video...`)
 
       // ── Phase 2: parallel search per scene ───────────────────────────────
+      // V3.2.3 CIRCUIT BREAKER: when ANY scene hits a QUOTA error, flip
+      // `quotaTripped` + call controller.abort(). All remaining scenes (both
+      // queued and in-flight) bail out immediately instead of burning more
+      // quota on doomed calls. Saves ~80% of remaining run cost when the
+      // limit is hit early. Caught QUOTA also propagates so outer try/catch
+      // shows the banner.
+      let quotaTripped: ApiError | null = null
       type SearchOrErr = SearchResult & { __error?: string }
       const wrapErr = (source: SourceId) => (e: unknown): SearchOrErr => {
         const code = (e as ApiError)?.code
-        if (code === ERR.QUOTA_GEMINI || code === ERR.QUOTA_YOUTUBE || code === ERR.ABORTED) throw e
+        if (code === ERR.QUOTA_GEMINI || code === ERR.QUOTA_YOUTUBE) {
+          if (!quotaTripped) {
+            quotaTripped = e as ApiError
+            controller.abort()  // signal in-flight scenes to bail
+          }
+          throw e
+        }
+        if (code === ERR.ABORTED) throw e
         return { source, links: [], __error: (e as Error).message }
       }
 
@@ -134,6 +148,8 @@ export default function TimSourceVideo() {
 
       const sceneJobs = scenes.map((scene, i) => ({ scene, i }))
       await processWithConcurrency(sceneJobs, async ({ scene, i }) => {
+        // Circuit breaker — skip scene entirely if quota already tripped by a sibling
+        if (quotaTripped) return
         // Build adapter list based on toggle
         const adapters: Array<Promise<SearchOrErr>> = []
         if (includeYouTube) {
@@ -150,6 +166,12 @@ export default function TimSourceVideo() {
           results.filter((r) => r.__error).map((r) => [r.source, r.__error!])
         ) as Partial<Record<SourceId, string>>
       }, CONFIG.search.sceneConcurrency)
+
+      // If quota tripped mid-run, surface the original error to outer catch
+      // so the banner shows. processWithConcurrency itself returned cleanly
+      // (skipped scenes via early return) — without this, the run would
+      // continue to embedding/transcript phases on partial data.
+      if (quotaTripped) throw quotaTripped
 
       // ── Phase 3: fetch transcripts (YT only — skip if toggle off) ───────
       const transcriptsPerScene = includeYouTube

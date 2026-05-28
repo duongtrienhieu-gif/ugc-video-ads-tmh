@@ -458,11 +458,13 @@ export function classifyGemini429(rawBody: string): {
  * Throws Error with `.code`: 'QUOTA_DAILY' (fatal — daily exhausted on free
  * tier), 'ABORTED' (cancelled), undefined (other failure).
  */
+// V3.2.3 — LITE-FIRST chain (4x daily quota vs flash). Web grounding's task
+// is summarising search results into citations — flash-lite is plenty here.
 const GROUNDING_MODELS = [
-  'gemini-2.5-flash',
   'gemini-2.5-flash-lite',
-  'gemini-2.0-flash',
+  'gemini-2.5-flash',
   'gemini-2.0-flash-lite',
+  'gemini-2.0-flash',
 ]
 
 export async function searchWithGrounding(params: {
