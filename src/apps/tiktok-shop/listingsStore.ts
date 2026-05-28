@@ -45,6 +45,16 @@ function reportError(action: string, error: { message?: string } | null) {
   } catch { /* appStore not ready */ }
 }
 
+// Detect the specific "missing user_outputs table" error so we can
+// downgrade it to a silent local-only-mode warning instead of toasting
+// the user every few minutes on token refresh. Matches the pattern
+// brandKitStore uses.
+function isTableMissingError(error: { message?: string } | null): boolean {
+  if (!error) return false
+  const msg = (error.message ?? String(error)).toLowerCase()
+  return msg.includes('schema cache') || msg.includes('does not exist') || msg.includes('user_outputs')
+}
+
 interface ListingsStore {
   listings: ListingOutput[]
   hydrated: boolean
@@ -68,6 +78,10 @@ export const useTikTokShopListingsStore = create<ListingsStore>((set, get) => ({
   hydrating: false,
 
   hydrate: async () => {
+    // Skip if already hydrated this session — Supabase fires onLogin on every
+    // token refresh (~hourly), and we don't want to re-fetch + re-toast on
+    // every refresh. Caller can manually force-rehydrate by resetting hydrated.
+    if (get().hydrated) return
     if (hydrateInFlight) return hydrateInFlight
     hydrateInFlight = (async () => {
       set({ hydrating: true })
@@ -84,7 +98,14 @@ export const useTikTokShopListingsStore = create<ListingsStore>((set, get) => ({
           .eq('kind', KIND)
           .order('updated_at', { ascending: false })
         if (error) {
-          reportError('Tải listing', error)
+          // Silent fallback when the table simply isn't migrated yet — user
+          // can still use the app in-memory; saves will just not persist
+          // until they run migrations/user_outputs.sql in Supabase.
+          if (isTableMissingError(error)) {
+            console.warn('[tiktokShopListings] table missing — running in local-only mode until migrations/user_outputs.sql is applied')
+          } else {
+            reportError('Tải listing', error)
+          }
           set({ hydrating: false, hydrated: true })
           return
         }
@@ -92,7 +113,12 @@ export const useTikTokShopListingsStore = create<ListingsStore>((set, get) => ({
         const listings = rows.map(rowToListing).filter((l): l is ListingOutput => l !== null)
         set({ listings, hydrating: false, hydrated: true })
       } catch (e) {
-        reportError('Tải listing', { message: e instanceof Error ? e.message : String(e) })
+        const err = { message: e instanceof Error ? e.message : String(e) }
+        if (isTableMissingError(err)) {
+          console.warn('[tiktokShopListings] table missing — running in local-only mode')
+        } else {
+          reportError('Tải listing', err)
+        }
         set({ hydrating: false, hydrated: true })
       } finally {
         hydrateInFlight = null
@@ -130,7 +156,13 @@ export const useTikTokShopListingsStore = create<ListingsStore>((set, get) => ({
           .eq('id', listing.id)
           .eq('user_id', user_id)
           .eq('kind', KIND)
-        if (error) reportError('Cập nhật listing', error)
+        if (error) {
+          if (isTableMissingError(error)) {
+            console.warn('[tiktokShopListings] update skipped — table missing (local-only mode)')
+          } else {
+            reportError('Cập nhật listing', error)
+          }
+        }
       } else {
         const { error } = await supabase
           .from('user_outputs')
@@ -141,7 +173,13 @@ export const useTikTokShopListingsStore = create<ListingsStore>((set, get) => ({
             title,
             payload_json: listing,
           })
-        if (error) reportError('Lưu listing', error)
+        if (error) {
+          if (isTableMissingError(error)) {
+            console.warn('[tiktokShopListings] insert skipped — table missing (local-only mode)')
+          } else {
+            reportError('Lưu listing', error)
+          }
+        }
       }
     } catch (e) {
       reportError('Lưu listing', { message: e instanceof Error ? e.message : String(e) })
