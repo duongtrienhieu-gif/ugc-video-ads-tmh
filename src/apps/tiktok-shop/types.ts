@@ -113,6 +113,38 @@ export interface ListingDescription {
   fullText: string                // assembled copy-pasteable string
 }
 
+// ── Combo / variant option (Phase 7B) ────────────────────────────────────
+// Each ComboOption produces ONE separate thumbnail image (1024×1024) shown
+// in TikTok Shop's option picker. Independent from the 9-slot main listing.
+
+export interface ComboOption {
+  id: string
+  /** Variant display name shown on the thumbnail + variant picker.
+   *  E.g., "1 Kem trắng răng", "Combo 1: 1 kem + 1 xịt" */
+  name: string
+  /** Short visual description of what the combo contains — AI uses this
+   *  to compose the thumbnail. E.g., "1 jar of mineral powder",
+   *  "1 jar mineral powder + 1 spray bottle". */
+  description: string
+  /** Current sale price, free-form string. E.g., "359K", "RM 89", "508K". */
+  price: string
+  /** Optional original / struck-through price for discount badge. */
+  originalPrice?: string
+  /** Optional display label for discount badge. E.g., "-44%", "JIMAT 70K".
+   *  If user provides both price + originalPrice, UI can auto-suggest a value
+   *  but final string is what the user types. */
+  discount?: string
+  /** Highlight as "Hot" / featured variant. */
+  isHot?: boolean
+  /** Generated thumbnail asset (null until generated). */
+  imageAssetId: string | null
+  status: ImageGenStatus
+  error?: string
+  generatedAt?: string
+  /** Prompt used for the last gen — kept for re-roll diagnostics. */
+  aiGenPrompt?: string
+}
+
 // ── Saved listing output ─────────────────────────────────────────────────
 // Persisted to Supabase user_outputs (kind='tiktok-shop-listing') in Phase 4.
 
@@ -128,6 +160,8 @@ export interface ListingOutput {
   updatedAt: string
   images: ListingImage[]
   description: ListingDescription
+  /** Optional combo/variant thumbnails — Phase 7B addition. */
+  combos?: ComboOption[]
 }
 
 // ── Working draft (in-app state, not persisted as final) ─────────────────

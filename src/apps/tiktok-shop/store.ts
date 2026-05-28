@@ -15,6 +15,7 @@ import type {
   PaletteFamily,
   DescriptionBlock,
   ListingDescription,
+  ComboOption,
 } from './types'
 import {
   SLOT_MAP,
@@ -56,6 +57,13 @@ interface TikTokShopState {
   // ── Persistence restore (Phase 5) ──
   /** Replace draft.output with a previously-saved listing (loaded from Supabase) */
   loadSavedOutput: (listing: ListingOutput) => void
+
+  // ── Combo / variant thumbnails (Phase 7B) ──
+  addCombo: (combo: Omit<ComboOption, 'id' | 'imageAssetId' | 'status'>) => void
+  updateCombo: (id: string, patch: Partial<ComboOption>) => void
+  removeCombo: (id: string) => void
+  setComboStatus: (id: string, status: ImageGenStatus, error?: string) => void
+  setComboImage: (id: string, assetId: string, prompt?: string) => void
 }
 
 function createEmptyDraft(): ListingDraft {
@@ -210,6 +218,85 @@ export const useTikTokShopStore = create<TikTokShopState>((set) => ({
     },
     showMockPreview: false,
   })),
+
+  // ── Combos ─────────────────────────────────────────────────────────────
+
+  addCombo: (combo) => set((s) => {
+    if (!s.draft.output) return s
+    const next: ComboOption = {
+      ...combo,
+      id: crypto.randomUUID(),
+      imageAssetId: null,
+      status: 'pending',
+    }
+    const combos = [...(s.draft.output.combos ?? []), next]
+    return {
+      draft: {
+        ...s.draft,
+        output: { ...s.draft.output, updatedAt: new Date().toISOString(), combos },
+      },
+    }
+  }),
+
+  updateCombo: (id, patch) => set((s) => {
+    if (!s.draft.output) return s
+    const combos = (s.draft.output.combos ?? []).map((c) =>
+      c.id === id ? { ...c, ...patch } : c,
+    )
+    return {
+      draft: {
+        ...s.draft,
+        output: { ...s.draft.output, updatedAt: new Date().toISOString(), combos },
+      },
+    }
+  }),
+
+  removeCombo: (id) => set((s) => {
+    if (!s.draft.output) return s
+    const combos = (s.draft.output.combos ?? []).filter((c) => c.id !== id)
+    return {
+      draft: {
+        ...s.draft,
+        output: { ...s.draft.output, updatedAt: new Date().toISOString(), combos },
+      },
+    }
+  }),
+
+  setComboStatus: (id, status, error) => set((s) => {
+    if (!s.draft.output) return s
+    const combos = (s.draft.output.combos ?? []).map((c) =>
+      c.id === id ? { ...c, status, error: error ?? undefined } : c,
+    )
+    return {
+      draft: {
+        ...s.draft,
+        output: { ...s.draft.output, updatedAt: new Date().toISOString(), combos },
+      },
+    }
+  }),
+
+  setComboImage: (id, assetId, prompt) => set((s) => {
+    if (!s.draft.output) return s
+    const nowIso = new Date().toISOString()
+    const combos = (s.draft.output.combos ?? []).map((c) =>
+      c.id === id
+        ? {
+            ...c,
+            imageAssetId: assetId,
+            status: 'completed' as ImageGenStatus,
+            error: undefined,
+            aiGenPrompt: prompt ?? c.aiGenPrompt,
+            generatedAt: nowIso,
+          }
+        : c,
+    )
+    return {
+      draft: {
+        ...s.draft,
+        output: { ...s.draft.output, updatedAt: nowIso, combos },
+      },
+    }
+  }),
 }))
 
 // ── Validation helper ────────────────────────────────────────────────────

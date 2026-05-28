@@ -148,6 +148,10 @@ export const CREDIT_COST_PER_IMAGE_1K = 6
 export const CREDIT_COST_PER_IMAGE_2K = 10
 export const ESTIMATED_TEXT_CREDITS = 1
 
+// Combo thumbnails (Phase 7B) — same gpt-4o-image cost as 1K main slot.
+export const CREDIT_COST_PER_COMBO = 6
+export const MAX_COMBOS = 12
+
 export function estimateListingCredits(slots: SlotConfig[] = SLOT_MAP): number {
   const aiSlots = slots.filter((s) => s.visualMode === 'ai-gen')
   const imageCost = aiSlots.reduce(

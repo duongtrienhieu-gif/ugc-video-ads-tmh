@@ -5,6 +5,7 @@
 
 import { LayoutGrid, Eye, EyeOff } from 'lucide-react'
 import ImageSlot from './ImageSlot'
+import ComboPanel from './ComboPanel'
 import { useTikTokShopStore, buildMockListing } from '../store'
 import { useResolvedBrandKit } from '../hooks/useResolvedBrandKit'
 import { snapToPaletteFamily } from '../constants'
@@ -48,16 +49,21 @@ export default function ImageGrid() {
         </button>
       </div>
 
-      {/* Grid 3×3 */}
-      <div className="flex-1 overflow-y-auto p-5">
+      {/* Grid 3×3 + Combo panel below */}
+      <div className="flex-1 overflow-y-auto">
         {output ? (
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {output.images.map((img) => (
-              <ImageSlot key={img.slot} image={img} />
-            ))}
-          </div>
+          <>
+            <div className="grid grid-cols-1 gap-4 p-5 sm:grid-cols-2 lg:grid-cols-3">
+              {output.images.map((img) => (
+                <ImageSlot key={img.slot} image={img} />
+              ))}
+            </div>
+            <ComboPanel />
+          </>
         ) : (
-          <EmptyState />
+          <div className="p-5">
+            <EmptyState />
+          </div>
         )}
       </div>
     </div>

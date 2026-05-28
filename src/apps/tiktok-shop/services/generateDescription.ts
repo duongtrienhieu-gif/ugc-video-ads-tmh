@@ -93,6 +93,18 @@ WRITING RULES:
 - FAQ: 3 common buyer concerns about safety, results timing, return policy
 - Promise: only SAFE service claims (shipping speed, return window, discreet packaging) — NO cert claims
 
+BOLD FORMATTING (use **markdown bold** strategically — TikTok Shop renders it):
+- Wrap KEY TERMS, not full sentences. Examples:
+  - benefits bullet: "Putihkan hingga **8 shade dalam 14 hari**" (bold the result claim)
+  - benefits bullet: "**Selamat untuk enamel** — pH neutral, formula lembut" (bold the headline phrase)
+  - usage step: "**Berus 2 minit**, 2x sehari (pagi & malam)" (bold the action)
+  - faq question: keep plain (UI will style it bold separately)
+  - hook: 1 key claim bolded e.g. "Senyum percaya diri **dalam 14 hari** — tanpa whitening klinik mahal!"
+  - solution: bold product name + main mechanism — "**WHITEPRO Whitening Powder** — Serbuk pemutih gigi formula aktif dengan **Activated Charcoal + Hydroxyapatite**"
+  - cta: bold the verb — "**Beli sekarang** — stok terhad hari ini!"
+- DO NOT bold every word — that defeats the purpose. Pick 1-2 emphasis points per block.
+- DO NOT bold inside specs rows (the row labels render bold automatically in UI).
+
 Return the JSON object only.`
 }
 

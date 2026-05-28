@@ -164,20 +164,34 @@ function BlockCard({
   )
 }
 
+// Inline markdown bold renderer — supports the `**text**` syntax that
+// Gemini emits and that TikTok Shop's description editor renders. Keeps
+// the ** markers preserved in the underlying string (copy-to-clipboard
+// uses the raw text), only the React preview converts to <strong>.
+function renderInlineBold(text: string): React.ReactNode {
+  const parts = text.split(/(\*\*[^*\n]+\*\*)/g)
+  return parts.map((part, i) => {
+    if (part.startsWith('**') && part.endsWith('**') && part.length > 4) {
+      return <strong key={i} className="font-bold text-gray-900">{part.slice(2, -2)}</strong>
+    }
+    return <span key={i}>{part}</span>
+  })
+}
+
 function BlockBody({ block }: { block: DescriptionBlock }) {
   switch (block.kind) {
     case 'hook':
     case 'solution':
     case 'offer':
     case 'cta':
-      return <p className="text-xs leading-relaxed text-gray-700">{block.text}</p>
+      return <p className="text-xs leading-relaxed text-gray-700">{renderInlineBold(block.text)}</p>
 
     case 'pain':
     case 'benefits':
     case 'promise':
       return (
         <ul className="space-y-0.5 text-xs text-gray-700">
-          {block.bullets.map((b, i) => <li key={i}>• {b}</li>)}
+          {block.bullets.map((b, i) => <li key={i}>• {renderInlineBold(b)}</li>)}
         </ul>
       )
 
@@ -200,7 +214,7 @@ function BlockBody({ block }: { block: DescriptionBlock }) {
         <div className="space-y-1.5">
           {block.quotes.map((q, i) => (
             <div key={i} className="rounded bg-gray-50 p-2">
-              <p className="text-[11px] italic text-gray-700">"{q.text}"</p>
+              <p className="text-[11px] italic text-gray-700">"{renderInlineBold(q.text)}"</p>
               <p className="mt-0.5 text-[10px] font-semibold text-gray-500">— {q.author}</p>
             </div>
           ))}
@@ -211,7 +225,7 @@ function BlockBody({ block }: { block: DescriptionBlock }) {
       return (
         <ol className="space-y-0.5 text-xs text-gray-700">
           {block.steps.map((s, i) => (
-            <li key={i}>{i + 1}. {s}</li>
+            <li key={i}>{i + 1}. {renderInlineBold(s)}</li>
           ))}
         </ol>
       )
@@ -221,8 +235,8 @@ function BlockBody({ block }: { block: DescriptionBlock }) {
         <div className="space-y-1.5">
           {block.items.map((item, i) => (
             <div key={i}>
-              <p className="text-[11px] font-semibold text-gray-700">Q: {item.q}</p>
-              <p className="text-[11px] text-gray-600">A: {item.a}</p>
+              <p className="text-[11px] font-semibold text-gray-700">Q: {renderInlineBold(item.q)}</p>
+              <p className="text-[11px] text-gray-600">A: {renderInlineBold(item.a)}</p>
             </div>
           ))}
         </div>
