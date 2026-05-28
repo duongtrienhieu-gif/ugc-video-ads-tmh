@@ -1,5 +1,5 @@
 ﻿import { useState, useEffect, useRef, useCallback } from 'react'
-import { User, MapPin, Move, Camera, Upload, X, Loader2, Sparkles } from 'lucide-react'
+import { User, MapPin, Move, Camera, Upload, X, Loader2, Sparkles, Sliders } from 'lucide-react'
 import { useAppStore } from '../../stores/appStore'
 import type { CharacterProfile, TabId } from './types'
 import { createEmptyProfile, TABS } from './types'
@@ -230,6 +230,17 @@ export default function CharacterStudio() {
     return { filled, total: tab.fields.length }
   }
 
+  // Mobile output-first (M5): once a character has been generated, hide the
+  // controls panel (long form across multiple tabs) so the output preview
+  // owns the viewport. FAB toggles controls back open for re-tweaks.
+  const [mobileControlsVisible, setMobileControlsVisible] = useState(true)
+  const prevResultRef = useRef<GenerationResult | null>(null)
+  useEffect(() => {
+    if (!prevResultRef.current && result) setMobileControlsVisible(false)
+    prevResultRef.current = result
+  }, [result])
+  const showControlsOnMobile = !result || mobileControlsVisible
+
   return (
     <div className="flex h-full flex-col relative">
       {/* Auto-save chip — top right, above everything */}
@@ -308,8 +319,8 @@ export default function CharacterStudio() {
 
       {/* ── Main 3-column layout ── */}
       <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
-        {/* Side tabs */}
-        <div className="flex lg:w-44 shrink-0 flex-row lg:flex-col gap-1 overflow-x-auto lg:overflow-x-visible border-b lg:border-b-0 lg:border-r border-black/8 bg-black/[0.02] px-2 py-2 lg:py-3">
+        {/* Side tabs — hidden on mobile alongside controls (tabs are useless without the form) */}
+        <div className={`${showControlsOnMobile ? 'flex' : 'hidden'} lg:flex lg:w-44 shrink-0 flex-row lg:flex-col gap-1 overflow-x-auto lg:overflow-x-visible border-b lg:border-b-0 lg:border-r border-black/8 bg-black/[0.02] px-2 py-2 lg:py-3`}>
           {TABS.map((tab) => {
             const Icon = TAB_ICONS[tab.id]
             const isActive = activeTab === tab.id
@@ -333,8 +344,8 @@ export default function CharacterStudio() {
           })}
         </div>
 
-        {/* Controls panel */}
-        <div className="flex w-full lg:w-1/2 shrink-0 flex-col border-b lg:border-b-0 lg:border-r border-black/8">
+        {/* Controls panel — hidden on mobile after first generation */}
+        <div className={`${showControlsOnMobile ? 'flex' : 'hidden'} lg:flex w-full lg:w-1/2 shrink-0 flex-col border-b lg:border-b-0 lg:border-r border-black/8`}>
           <ControlsPanel
             profile={profile}
             onProfileChange={setProfile}
@@ -357,6 +368,19 @@ export default function CharacterStudio() {
       </div>
       {variantsOpen && variantModel && (
         <VariantsModal model={variantModel} onClose={() => setVariantsOpen(false)} />
+      )}
+
+      {result && (
+        <button
+          onClick={() => setMobileControlsVisible((v) => !v)}
+          aria-label={showControlsOnMobile ? 'Đóng tuỳ chỉnh' : 'Mở tuỳ chỉnh'}
+          title={showControlsOnMobile ? 'Đóng tuỳ chỉnh' : 'Mở tuỳ chỉnh'}
+          className="lg:hidden fixed bottom-4 right-4 z-40 flex items-center gap-1.5 rounded-full bg-violet-600 px-4 py-3 text-[12px] font-bold text-white shadow-lg shadow-violet-900/30 hover:bg-violet-700 active:scale-95 transition-transform"
+        >
+          {showControlsOnMobile
+            ? <><X className="h-4 w-4" /> Đóng</>
+            : <><Sliders className="h-4 w-4" /> Tuỳ chỉnh</>}
+        </button>
       )}
     </div>
   )

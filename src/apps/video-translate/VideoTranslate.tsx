@@ -2,7 +2,7 @@ import { useState, useRef, useCallback, useEffect } from 'react'
 import {
   Languages, Upload, Link2, Play, Pause, Download, Trash2,
   Loader2, AlertTriangle, CheckCircle2, ChevronDown, X,
-  Globe, ArrowRight, FileVideo, Info,
+  Globe, ArrowRight, FileVideo, Info, Sliders,
 } from 'lucide-react'
 import {
   createDubbing, getDubbedMedia, pollDubbingUntilDone, deleteDubbing,
@@ -444,6 +444,18 @@ export default function VideoTranslate() {
     !!elevenLabsApiKey &&
     !isTranslating
 
+  // Mobile output-first (M5): once a translation lands in history, collapse
+  // the input form so the user actually sees the result. FAB re-opens form.
+  const [mobileFormVisible, setMobileFormVisible] = useState(true)
+  const prevHistoryLenRef = useRef(history.length)
+  useEffect(() => {
+    if (prevHistoryLenRef.current === 0 && history.length > 0) {
+      setMobileFormVisible(false)
+    }
+    prevHistoryLenRef.current = history.length
+  }, [history.length])
+  const showInputOnMobile = history.length === 0 || mobileFormVisible
+
   // ── Render ────────────────────────────────────────────────────────────
 
   return (
@@ -457,7 +469,7 @@ export default function VideoTranslate() {
       />
 
       {/* ── Left panel ── */}
-      <div className="flex w-full shrink-0 flex-col border-b border-black/8 lg:w-[340px] lg:border-b-0 lg:border-r">
+      <div className={`${showInputOnMobile ? 'flex' : 'hidden'} lg:flex w-full shrink-0 flex-col border-b border-black/8 lg:w-[340px] lg:border-b-0 lg:border-r`}>
         {/* Header */}
         <div className="shrink-0 border-b border-black/8 bg-gradient-to-r from-teal-600 to-emerald-500 px-5 py-4">
           <div className="flex items-center gap-3">
@@ -847,6 +859,19 @@ export default function VideoTranslate() {
           </div>
         )}
       </div>
+
+      {history.length > 0 && (
+        <button
+          onClick={() => setMobileFormVisible((v) => !v)}
+          aria-label={showInputOnMobile ? 'Đóng cấu hình' : 'Sửa cấu hình'}
+          title={showInputOnMobile ? 'Đóng cấu hình' : 'Sửa cấu hình'}
+          className="lg:hidden fixed bottom-4 right-4 z-40 flex items-center gap-1.5 rounded-full bg-violet-600 px-4 py-3 text-[12px] font-bold text-white shadow-lg shadow-violet-900/30 hover:bg-violet-700 active:scale-95 transition-transform"
+        >
+          {showInputOnMobile
+            ? <><X className="h-4 w-4" /> Đóng</>
+            : <><Sliders className="h-4 w-4" /> Sửa</>}
+        </button>
+      )}
     </div>
   )
 }

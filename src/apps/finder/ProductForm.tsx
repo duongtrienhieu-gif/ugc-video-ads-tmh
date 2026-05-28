@@ -26,111 +26,344 @@ const FIELDS: { key: keyof Product; label: string; type: 'text' | 'textarea'; re
 
 const JSON_SCHEMA = `{"productName":"","productDescription":"","targetMarket":"","painPoints":"","usps":"","benefits":"","offer":"","ingredients":""}`
 
-const EXTRACT_SYSTEM = 'You are a product info extraction assistant. Return ONLY a raw minified JSON object on a single line — no markdown, no code fences, no explanation, no newlines inside values. Always respond in English.'
+const EXTRACT_SYSTEM = 'You are a product info extraction assistant. Return ONLY a raw minified JSON object on a single line — no markdown, no code fences, no explanation, no newlines inside values. Always respond in VIETNAMESE.'
 
-const EXTRACT_PROMPT = (pageText: string) =>
-  `Extract product information from the webpage text below and fill in this JSON. ALL VALUES MUST BE IN ENGLISH (translate from source language if needed). Return ONLY the JSON, nothing else, all on one line:
-${JSON_SCHEMA}
-
-Fields:
-- productName: main product name
-- productDescription: short description of what it is and does
-- targetMarket: target customers (who should use this)
-- painPoints: customer problems/pain points this product solves
-- usps: unique selling points / competitive advantages
-- benefits: SPECIFIC benefits of using the product. CRITICAL for dual-category
-  products (functional foods, health snacks, beauty supplements, fortified
-  beverages, functional cosmetics) — EXTRACT BOTH layers:
-    (a) Surface benefits: "delicious", "convenient", "easy to eat", "no mess"
-    (b) FUNCTIONAL/HEALTH benefits with ingredient linkage if mentioned:
-        e.g. "Black sesame supports heart health", "Walnut + cranberry lower
-        cholesterol", "Fig provides natural fiber for blood sugar control",
-        "Collagen-infused for skin elasticity", "B vitamins for energy metabolism"
-  If the page mentions health claims, regulatory approvals (HALAL/KKM/FDA),
-  ingredient functional purposes, or scientific backing → EXTRACT ALL of them.
-  These are often the KEY SELLING POINTS hidden behind the surface description.
-  Do NOT just paraphrase surface description — dig for functional value-prop
-- offer: Product pricing — base price + ALL combo/bundle tiers visible on page. Extract EVERY pricing tier the page offers, no matter how many. Format CONCISE, comma-separated, no "for"/"FREE" filler words.
-  ⚠️ EXTRACT 100% OF TIERS — if page shows 4 tiers ("BELI 1 PERCUMA 1", "BELI 2 PERCUMA 2", "BELI 3 PERCUMA 3", "BELI 5 PERCUMA 5"), output ALL 4. Do NOT stop at 2.
-  ⚠️ INCLUDE originalPrice (gạch) when page shows "was RMxxx" or strikethrough price near the sale price — this is critical for the savings calculation.
-  CONCISE FORMAT examples:
-    • single tier: "RM59" or "RM55 (was RM109)"
+const FIELDS_SPEC = `Fields (ALL values must be written in NATURAL VIETNAMESE — translate from any source language; keep brand/product proper nouns as-is, keep original currency tokens like RM, ₫, $, ฿):
+- productName: tên chính của sản phẩm (giữ nguyên tên thương hiệu nếu là proper noun, vd "LANZF", "Manuka")
+- productDescription: mô tả ngắn về sản phẩm và công dụng
+- targetMarket: khách hàng mục tiêu (ai nên dùng sản phẩm này)
+- painPoints: vấn đề / nỗi đau khách hàng mà sản phẩm giải quyết
+- usps: điểm bán hàng độc đáo / lợi thế cạnh tranh
+- benefits: lợi ích cụ thể khi sử dụng sản phẩm. QUAN TRỌNG với sản phẩm dual-category (TPCN, snack sức khoẻ, supplement làm đẹp, đồ uống bổ sung, mỹ phẩm functional) — TRÍCH XUẤT CẢ 2 LỚP:
+    (a) Lợi ích bề mặt: "ngon miệng", "tiện lợi", "dễ ăn", "không lem"
+    (b) Lợi ích FUNCTIONAL/SỨC KHOẺ kèm liên kết thành phần: vd "Mè đen hỗ trợ tim mạch", "Óc chó + cranberry giảm cholesterol", "Bổ sung collagen cho đàn hồi da", "Vitamin B chuyển hoá năng lượng"
+  Nếu trang đề cập health claim, chứng nhận (HALAL/KKM/FDA), tác dụng functional thành phần, bằng chứng khoa học → TRÍCH XUẤT HẾT. Đây thường là điểm bán quan trọng ẩn dưới mô tả bề mặt. KHÔNG chỉ paraphrase mô tả bề mặt — đào sâu functional value-prop.
+- offer: giá sản phẩm — giá gốc + TẤT CẢ tier combo/bundle hiện trên trang. Trích MỌI tier (4-5 tier cũng OK). Format CONCISE, comma-separated, KHÔNG dùng "for"/"FREE" thừa.
+  ⚠️ TRÍCH 100% TIERS — nếu có 4 tier ("BELI 1 PERCUMA 1", "BELI 2 PERCUMA 2", "BELI 3 PERCUMA 3", "BELI 5 PERCUMA 5"), output ĐỦ 4. KHÔNG dừng ở 2.
+  ⚠️ GIỮ originalPrice (giá gạch) khi trang hiện "was RMxxx" — quan trọng để tính savings.
+  Format ví dụ:
+    • single: "RM59" hoặc "RM55 (was RM109)"
     • multi-tier: "RM55 (was RM109), BUY 2 RM95, BUY 3 RM145"
-    • bundle (NO "FREE for" filler — use "GET" only):
-        "BUY 1 GET 1 RM59 (was RM129), BUY 2 GET 2 RM99, BUY 3 GET 3 RM129, BUY 5 GET 5 RM149"
-    • with discount: "RM59, 50% off for first 50 customers"
-  Do NOT include: shipping fees, COD info, delivery times, regional surcharges (e.g. "Sabah +RM5"), address fields, "FREESHIP" word (shipping is implied for bundle, not part of price text).
+    • bundle (chỉ "GET", không "FREE for"): "BUY 1 GET 1 RM59 (was RM129), BUY 2 GET 2 RM99, BUY 3 GET 3 RM129, BUY 5 GET 5 RM149"
+    • có giảm giá: "RM59, giảm 50% cho 50 khách đầu"
+  KHÔNG bao gồm: phí ship, COD, thời gian giao, phụ phí vùng (vd "Sabah +RM5"), địa chỉ, từ "FREESHIP".
+- ingredients: thành phần vật lý / hoạt chất CÓ THẬT trong sản phẩm. Ví dụ: "Vitamin B12, A, E, biotin, sắt, magie" hoặc "Inulin prebiotic, chủng probiotic FloraFit, Lactobacillus acidophilus" hoặc "Đương quy, Ích mẫu thảo, rễ Dong Quai". GIỮ NGUYÊN tên khoa học chuẩn quốc tế (Latin/English).
+  ❌ TUYỆT ĐỐI KHÔNG đưa slogan marketing, CTA, lời kêu gọi hành động vào ingredients ("DAFTAR", "REGISTER", "BUY NOW", "ORDER TODAY", "MUA NGAY", "ĐẶT HÀNG", "ĐĂNG KÝ"... đều KHÔNG phải ingredients). Ingredients = THÀNH PHẦN VẬT LÝ trong chai/hộp. CTA = hành động marketing cho khách. Khác nhau hoàn toàn. Nếu trang không liệt kê thành phần thật và không suy luận được từ loại sản phẩm, trả "" (chuỗi rỗng).
 
 E-COMMERCE PLATFORM HANDLING:
-Supported platforms include:
-  - SEA: Shopee, Lazada, TikTok Shop, Tiki, Sendo
-  - Chinese: 1688, Alibaba, AliExpress, Taobao, Tmall, Pinduoduo, JD.com
-  - Western: Amazon, eBay, Walmart, Target, Best Buy, Etsy
-The webpage may contain MULTIPLE products mixed together. Common noise sections to IGNORE (any language):
+Hỗ trợ: SEA (Shopee, Lazada, TikTok Shop, Tiki, Sendo), Chinese (1688, Alibaba, AliExpress, Taobao, Tmall, Pinduoduo, JD.com), Western (Amazon, eBay, Walmart, Target, Best Buy, Etsy).
+Trang có thể chứa NHIỀU sản phẩm trộn. Section nhiễu cần BỎ QUA (mọi ngôn ngữ):
   - "Sản phẩm khác của shop" / "Other products from this shop" / "More from this seller"
   - "Có thể bạn cũng thích" / "You may also like" / "Customers also bought" / "Frequently bought together"
   - "Sản phẩm liên quan" / "Related products" / "Similar items" / "Recommended for you"
   - "Đã xem gần đây" / "Recently viewed" / "Browsing history"
-  - "Sponsored" / "Quảng cáo" / "广告" / "推荐商品"
-  - "你可能还喜欢" / "店铺其他商品" / "猜你喜欢"
-⚠️ EXTRACT ONLY THE MAIN PRODUCT. Ignore ALL related/recommended/other-shop/sponsored sections completely.
-Identify the main product by: appears FIRST in page text + has price + has detailed description + has main image gallery + has add-to-cart button. If multiple products with similar prominence exist → still pick the first (top of page).
-For 1688/Alibaba B2B pages: focus on the main listing's price range / MOQ / specifications. Ignore "Recommended suppliers" / "Same category products".
-- ingredients: PHYSICAL substances / compounds / active components actually INSIDE the product. Examples of CORRECT values: "Vitamin B12, A, E, biotin, iron, magnesium" or "Inulin prebiotic, FloraFit probiotic strains, Lactobacillus acidophilus, Bifidobacterium" or "Angelica sinensis, Motherwort herb, Dong Quai root" or "Hyaluronic acid, niacinamide, vitamin C, peptides".
-  ❌ ABSOLUTE PROHIBITION: NEVER put marketing slogans, CTAs, call-to-action phrases, or promotional text here. The following are NOT ingredients and MUST NEVER appear in this field: "DAFTAR UNTUK DAPATKAN HARGA TAWARAN SEKARANG", "REGISTER TO GET THE OFFER PRICE NOW", "BUY NOW", "ORDER TODAY", "CLICK HERE", "SUBSCRIBE", "JOM BELI", "MUA NGAY", "ĐẶT HÀNG NGAY", "ĐĂNG KÝ", "Get yours now", "Shop now", etc.
-  Ingredients = PHYSICAL THINGS inside the bottle/box (vitamins, herbs, probiotic strains, compounds, active molecules). CTAs = marketing actions for the customer to take. These are DIFFERENT.
-  If the page does NOT list any actual ingredients/compounds and you cannot reasonably infer them from product type, return an EMPTY STRING "" — do NOT fill this field with marketing text, offer text, or CTAs.
+  - "Sponsored" / "Quảng cáo" / "广告" / "推荐商品" / "你可能还喜欢" / "店铺其他商品" / "猜你喜欢"
+⚠️ CHỈ TRÍCH XUẤT SẢN PHẨM CHÍNH. Bỏ HOÀN TOÀN mọi section related/recommended/other-shop/sponsored.
+Xác định sản phẩm chính: xuất hiện ĐẦU TIÊN + có giá + mô tả chi tiết + gallery ảnh chính + nút add-to-cart. Nhiều SP cùng prominence → lấy cái đầu (top of page).
+Với 1688/Alibaba B2B: tập trung main listing's price range / MOQ / specifications. Bỏ qua "Recommended suppliers" / "Same category products".`
 
-WEBPAGE TEXT:
-${pageText.slice(0, 16000)}`
-
-const IMAGE_EXTRACT_PROMPT = `Extract product information from this product page screenshot and fill in this JSON. ALL VALUES MUST BE IN ENGLISH (translate from source language if needed). Return ONLY the JSON, nothing else, all on one line:
+const EXTRACT_PROMPT = (pageText: string) =>
+  `Trích xuất thông tin sản phẩm từ nội dung trang web bên dưới và điền vào JSON. TẤT CẢ giá trị PHẢI viết bằng TIẾNG VIỆT TỰ NHIÊN (dịch từ ngôn ngữ gốc nếu cần). Chỉ trả về JSON, không gì khác, tất cả trên 1 dòng:
 ${JSON_SCHEMA}
 
-Fields:
-- productName: main product name
-- productDescription: short description of what it is and does
-- targetMarket: target customers (who should use this)
-- painPoints: customer problems/pain points this product solves
-- usps: unique selling points / competitive advantages
-- benefits: SPECIFIC benefits of using the product. CRITICAL for dual-category
-  products (functional foods, health snacks, beauty supplements, fortified
-  beverages, functional cosmetics) — EXTRACT BOTH layers:
-    (a) Surface benefits: "delicious", "convenient", "easy to eat", "no mess"
-    (b) FUNCTIONAL/HEALTH benefits with ingredient linkage if mentioned:
-        e.g. "Black sesame supports heart health", "Walnut + cranberry lower
-        cholesterol", "Fig provides natural fiber for blood sugar control",
-        "Collagen-infused for skin elasticity", "B vitamins for energy metabolism"
-  If the page mentions health claims, regulatory approvals (HALAL/KKM/FDA),
-  ingredient functional purposes, or scientific backing → EXTRACT ALL of them.
-  These are often the KEY SELLING POINTS hidden behind the surface description.
-  Do NOT just paraphrase surface description — dig for functional value-prop
-- offer: Product pricing — base price + ALL combo/bundle tiers visible in screenshot. Extract EVERY tier shown, no matter how many (4-5 tiers OK). Format CONCISE, comma-separated.
-  ⚠️ EXTRACT 100% OF TIERS — do NOT stop at 2. Include originalPrice (gạch) when shown.
-  Format examples:
-    • single: "RM59" or "RM55 (was RM109)"
-    • multi: "RM55 (was RM109), BUY 2 RM95, BUY 3 RM145"
-    • bundle (NO "FREE for" filler): "BUY 1 GET 1 RM59 (was RM129), BUY 2 GET 2 RM99, BUY 3 GET 3 RM129"
-  Do NOT include: shipping fees, COD info, delivery times, regional surcharges, "FREESHIP" word.
-- ingredients: SPECIFIC ingredients / active components / key compounds in this product (e.g. "Vitamin B12, A, E, biotin, iron", "Inulin prebiotic, FloraFit probiotic strains, Lactobacillus acidophilus", "Angelica sinensis, Motherwort herb"). List the actual ingredient names — do not write generic descriptions. If the screenshot doesn't list ingredients explicitly, infer the most likely active components from product type.`
+${FIELDS_SPEC}
 
-// Jina Reader — renders JS pages and returns clean markdown. Handles LadiPage, Shopee, etc.
-// 2026-05-20: limit 8000 → 16000 chars. Lý do: Ladipage thường có hero + marketing
-// content dài, form order với multi-tier combo nằm cuối page. 8000 chars cắt mất phần
-// form → chỉ extract được 1-2 tier đầu. 16000 chars (~4K tokens) đủ cover toàn page,
-// vẫn an toàn cho Gemini 2.5 Flash context window.
-async function fetchViaJina(url: string): Promise<string> {
+NỘI DUNG TRANG WEB:
+${pageText.slice(0, 16000)}`
+
+/** Used when images are also sent — tells Gemini to read both sources and synthesize. */
+const EXTRACT_PROMPT_HYBRID = (pageText: string, imageCount: number) =>
+  `Bạn đang phân tích một trang sản phẩm. Bạn nhận được CẢ nội dung text trang web (bên dưới) VÀ ${imageCount} ảnh/screenshot từ trang (bên trên).
+
+HOẠT ĐỘNG VỚI: LadiPage landings, Amazon listings, Shopee/Lazada/TikTok Shop, Shopify stores, mọi trang sản phẩm e-commerce.
+
+NHIỆM VỤ — HYBRID SYNTHESIS:
+1. SCAN CẢ HAI NGUỒN song song: đọc text VÀ nhìn kỹ TỪNG ảnh.
+2. TRÍCH XUẤT thông tin sản phẩm từ mỗi nguồn độc lập — text thường có mô tả/review/spec; ảnh thường có giá trên banner, danh sách thành phần trên bao bì, claim lợi ích trên infographic, testimonial khách hàng.
+3. MERGE & LOẠI BỎ TRÙNG: nếu cả text và ảnh nói cùng 1 thông tin, ghi 1 LẦN duy nhất. Nếu mâu thuẫn, ưu tiên giá trị cụ thể/chi tiết hơn.
+4. ĐIỀN MỌI FIELD có thể — KHÔNG để field trống nếu thông tin có ở 1 trong 2 nguồn. Lưu ý sai lầm phổ biến:
+   • targetMarket thường SUY LUẬN từ loại sản phẩm + hình ảnh (vd gel ho cho trẻ em = "Phụ huynh có con nhỏ bị ho"; kem chống lão hoá = "Phụ nữ 35+ quan tâm nếp nhăn").
+   • usps đến từ ảnh bảng so sánh, badge ("100% tự nhiên", "Được bác sĩ khuyên dùng"), hoặc claim lặp lại.
+   • offer/giá hầu như luôn ở banner ảnh, KHÔNG ở text. NHÌN ảnh để tìm giá kiểu "RM59", "₫299.000", "$29.99", sticker giảm giá ("50% OFF").
+   • ingredients đến từ ảnh bao bì hiển thị nhãn sau, hoặc infographic "Thành phần" — đọc ảnh kỹ.
+5. TẤT CẢ GIÁ TRỊ PHẢI VIẾT BẰNG TIẾNG VIỆT TỰ NHIÊN (dịch từ ngôn ngữ gốc nếu cần). Giữ nguyên tên thương hiệu, đơn vị tiền tệ, tên khoa học chuẩn quốc tế.
+6. Chỉ trả về JSON, không gì khác, tất cả trên 1 dòng:
+${JSON_SCHEMA}
+
+${FIELDS_SPEC}
+
+NỘI DUNG TRANG WEB (kết hợp với ${imageCount} ảnh ở trên):
+${pageText.slice(0, 16000)}`
+
+const IMAGE_EXTRACT_PROMPT = `Trích xuất thông tin sản phẩm từ screenshot trang sản phẩm này và điền vào JSON. TẤT CẢ giá trị PHẢI viết bằng TIẾNG VIỆT TỰ NHIÊN (dịch từ ngôn ngữ gốc nếu cần). Chỉ trả về JSON, không gì khác, tất cả trên 1 dòng:
+${JSON_SCHEMA}
+
+${FIELDS_SPEC}
+
+Nếu screenshot không liệt kê thành phần rõ ràng, suy luận hoạt chất khả thi nhất từ loại sản phẩm.`
+
+// ── Shopee marketplace fetch ────────────────────────────────────────────
+// Jina/Cloudflare can't read Shopee SPA pages (anti-bot wall). Instead we
+// parse the shop_id + item_id out of the URL, then hit Shopee's internal
+// public API (`api/v4/item/get`) via a CORS proxy. Returns structured JSON
+// with name/description/price/attributes — much cleaner than scraping.
+//
+// Reliability ~30-60%: Shopee rotates auth headers + blocks proxy IPs.
+// On failure we throw a Shopee-specific error pointing the user to the
+// screenshot upload fallback.
+
+interface ShopeeItem {
+  name?: string
+  description?: string
+  price?: number              // micro units (×100,000)
+  price_min?: number
+  price_max?: number
+  price_before_discount?: number
+  raw_discount?: number       // 0-100 percent
+  historical_sold?: number
+  item_rating?: { rating_star?: number; rating_count?: number[] }
+  categories?: Array<{ display_name?: string }>
+  attributes?: Array<{ name?: string; value?: string }>
+  brand?: string
+}
+
+interface ShopeeApiResponse {
+  data?: { item?: ShopeeItem }
+  error?: number
+}
+
+/** Parse `shopee.vn/<slug>-i.<shop_id>.<item_id>(?...)` → { shopId, itemId }. */
+function parseShopeeUrl(url: string): { shopId: string; itemId: string } | null {
+  try {
+    const u = new URL(url)
+    const hostnameOk = /(^|\.)shopee\./i.test(u.hostname)
+    const m = u.pathname.match(/-i\.(\d+)\.(\d+)/)
+    console.log('[SHOPEE-PARSE]', { hostname: u.hostname, pathname: u.pathname.slice(0, 100), hostnameOk, match: m })
+    if (!hostnameOk) return null
+    if (!m) return null
+    return { shopId: m[1], itemId: m[2] }
+  } catch (err) {
+    console.warn('[SHOPEE-PARSE] threw', err)
+    return null
+  }
+}
+
+/** Format Shopee API price (micro units) → display string like "430.000đ". */
+function formatShopeePrice(micro?: number): string {
+  if (typeof micro !== 'number' || micro <= 0) return ''
+  const vnd = Math.round(micro / 100000)
+  return `${vnd.toLocaleString('vi-VN')}đ`
+}
+
+/**
+ * Fetch Shopee item via CORS proxy chain. Tries 2 proxies in order; returns
+ * the first successful response or null. Shopee API is brittle — sometimes
+ * a proxy IP gets blacklisted, so we fall back to a second.
+ */
+async function fetchShopeeItem(shopId: string, itemId: string): Promise<ShopeeItem | null> {
+  const apiUrl = `https://shopee.vn/api/v4/item/get?itemid=${itemId}&shopid=${shopId}`
+  const proxies = [
+    { name: 'corsproxy.io', wrap: (u: string) => `https://corsproxy.io/?url=${encodeURIComponent(u)}` },
+    { name: 'allorigins',   wrap: (u: string) => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}` },
+  ]
+  for (const p of proxies) {
+    try {
+      const proxiedUrl = p.wrap(apiUrl)
+      console.log(`[SHOPEE-FETCH] trying ${p.name}:`, proxiedUrl.slice(0, 120))
+      const r = await fetch(proxiedUrl, { signal: AbortSignal.timeout(15000) })
+      console.log(`[SHOPEE-FETCH] ${p.name} status:`, r.status, r.statusText)
+      if (!r.ok) continue
+      const json = await r.json() as ShopeeApiResponse
+      console.log(`[SHOPEE-FETCH] ${p.name} json keys:`, Object.keys(json), '· error:', json.error, '· hasItem:', !!json.data?.item)
+      if (json.error === 0 && json.data?.item) return json.data.item
+    } catch (err) {
+      console.warn(`[SHOPEE-FETCH] ${p.name} threw`, err)
+    }
+  }
+  return null
+}
+
+/**
+ * Convert Shopee item JSON → compact text block we feed to Gemini for
+ * the same VN extraction prompt used elsewhere. Lets Gemini infer
+ * targetMarket / painPoints / usps / benefits from name + description,
+ * while we pre-format the price field.
+ */
+function shopeeItemToText(item: ShopeeItem): string {
+  const lines: string[] = []
+  if (item.name) lines.push(`Tên sản phẩm: ${item.name}`)
+  if (item.brand) lines.push(`Thương hiệu: ${item.brand}`)
+  if (item.description) lines.push(`Mô tả:\n${item.description}`)
+
+  // Price + discount → one neat line
+  const cur = formatShopeePrice(item.price ?? item.price_min)
+  const before = formatShopeePrice(item.price_before_discount)
+  const disc = item.raw_discount
+  if (cur) {
+    let priceLine = `Giá: ${cur}`
+    if (before && disc) priceLine += ` (giảm ${disc}% từ ${before})`
+    else if (before) priceLine += ` (giá gốc ${before})`
+    lines.push(priceLine)
+  }
+
+  if (item.historical_sold) lines.push(`Đã bán: ${item.historical_sold.toLocaleString('vi-VN')}`)
+  if (item.item_rating?.rating_star) lines.push(`Đánh giá: ${item.item_rating.rating_star.toFixed(1)}/5`)
+
+  if (item.categories && item.categories.length > 0) {
+    const cats = item.categories.map((c) => c.display_name).filter(Boolean).join(' › ')
+    if (cats) lines.push(`Danh mục: ${cats}`)
+  }
+
+  if (item.attributes && item.attributes.length > 0) {
+    lines.push('Thuộc tính:')
+    for (const a of item.attributes) {
+      if (a.name && a.value) lines.push(`  • ${a.name}: ${a.value}`)
+    }
+  }
+
+  return lines.join('\n')
+}
+
+interface JinaJsonData {
+  data?: { content?: string; images?: Record<string, string> }
+}
+
+/**
+ * Fetch page via Jina Reader — returns page text AND image URLs found on the page.
+ * Tries JSON format first (gives structured images map); falls back to plain text.
+ * X-With-Images-Summary tells Jina to AI-caption every image server-side so text
+ * output includes descriptions of banner/infographic content even without direct OCR.
+ */
+async function fetchPageContent(url: string): Promise<{ text: string; imageUrls: string[] }> {
+  // Tier 1: JSON format + image summaries → structured text + image URL list
+  try {
+    const r = await fetch(`https://r.jina.ai/${url}`, {
+      headers: {
+        Accept: 'application/json',
+        'X-With-Images-Summary': 'true',
+      },
+      signal: AbortSignal.timeout(35000),
+    })
+    if (r.ok) {
+      const json = await r.json() as JinaJsonData
+      const content = json.data?.content ?? ''
+      const imageUrls = extractUrlsFromJinaImages(json.data?.images)
+      if (content.trim()) {
+        return { text: content.slice(0, 14000), imageUrls }
+      }
+    }
+  } catch { /* fall through */ }
+
+  // Tier 2: plain text + image summaries → extract image URLs from markdown
+  try {
+    const r = await fetch(`https://r.jina.ai/${url}`, {
+      headers: { Accept: 'text/plain', 'X-With-Images-Summary': 'true' },
+      signal: AbortSignal.timeout(30000),
+    })
+    if (r.ok) {
+      const text = await r.text()
+      if (text.trim()) {
+        const imageUrls = extractImageUrlsFromMarkdown(text)
+        return { text: text.slice(0, 12000), imageUrls }
+      }
+    }
+  } catch { /* fall through */ }
+
+  // Tier 3: plain text, no image processing
   try {
     const r = await fetch(`https://r.jina.ai/${url}`, {
       headers: { Accept: 'text/plain' },
       signal: AbortSignal.timeout(20000),
     })
-    if (!r.ok) return ''
+    if (!r.ok) return { text: '', imageUrls: [] }
     const text = await r.text()
-    return text.slice(0, 16000)
+    return { text: text.slice(0, 8000), imageUrls: extractImageUrlsFromMarkdown(text) }
   } catch {
-    return ''
+    return { text: '', imageUrls: [] }
   }
+}
+
+/**
+ * Jina returns `images` as { [label]: url } e.g. { "Image 1": "https://...jpg" }.
+ * But some pages return { [url]: description }. Extract URLs from BOTH possible
+ * shapes — check keys + values, keep anything that looks like a URL.
+ */
+function extractUrlsFromJinaImages(images: Record<string, string> | undefined): string[] {
+  if (!images) return []
+  const seen = new Set<string>()
+  const urls: string[] = []
+  for (const [k, v] of Object.entries(images)) {
+    if (typeof k === 'string' && /^https?:\/\//.test(k) && !seen.has(k)) { seen.add(k); urls.push(k) }
+    if (typeof v === 'string' && /^https?:\/\//.test(v) && !seen.has(v)) { seen.add(v); urls.push(v) }
+  }
+  return urls
+}
+
+/** Extract image URLs from Jina markdown (![alt](url) syntax + bare image extension URLs). */
+function extractImageUrlsFromMarkdown(markdown: string): string[] {
+  const seen = new Set<string>()
+  const urls: string[] = []
+  const mdImg = /!\[[^\]]*\]\((https?:\/\/[^)\s"]+)\)/g
+  let m: RegExpExecArray | null
+  while ((m = mdImg.exec(markdown)) !== null) {
+    if (!seen.has(m[1])) { seen.add(m[1]); urls.push(m[1]) }
+  }
+  const bareImg = /https?:\/\/[^\s")\]]+\.(?:jpg|jpeg|png|webp|gif)(?:[?#][^\s")\]]*)?/gi
+  while ((m = bareImg.exec(markdown)) !== null) {
+    if (!seen.has(m[0])) { seen.add(m[0]); urls.push(m[0]) }
+  }
+  return urls
+}
+
+/**
+ * Fetch an image URL and return { mimeType, data } for Gemini inlineData.
+ *
+ * Two-tier fetch:
+ *   1. Direct fetch — fast path for CORS-friendly CDNs (Cloudinary etc.)
+ *   2. images.weserv.nl CORS proxy — bypasses CORS for any 3rd-party image
+ *      host (Amazon, Shopee, LadiPage CDN, raw shop CDNs). Free public
+ *      service that re-encodes to JPG with proper CORS headers, and resizes
+ *      to max 1024px so we stay under Gemini's inline image budget.
+ *
+ * Returns null only when BOTH tiers fail (truly unreachable image).
+ */
+async function fetchImageAsBase64(url: string): Promise<{ mimeType: string; data: string } | null> {
+  // Tier 1: direct fetch (no CORS issues on friendly CDNs, faster)
+  try {
+    const r = await fetch(url, { signal: AbortSignal.timeout(8000) })
+    if (r.ok) {
+      const result = await responseToBase64(r)
+      if (result) return result
+    }
+  } catch { /* CORS block or net error — try proxy */ }
+
+  // Tier 2: CORS proxy (works for any public image URL)
+  try {
+    // weserv expects URL without scheme prefix; resize to 1024px max + JPG
+    const cleanUrl = url.replace(/^https?:\/\//, '')
+    const proxyUrl = `https://images.weserv.nl/?url=${encodeURIComponent(cleanUrl)}&w=1024&output=jpg`
+    const r = await fetch(proxyUrl, { signal: AbortSignal.timeout(12000) })
+    if (!r.ok) return null
+    return await responseToBase64(r)
+  } catch {
+    return null
+  }
+}
+
+/** Convert a fetched image Response → Gemini inlineData payload (base64-encoded). */
+async function responseToBase64(r: Response): Promise<{ mimeType: string; data: string } | null> {
+  const contentType = r.headers.get('content-type') ?? 'image/jpeg'
+  const mime = contentType.split(';')[0].trim()
+  if (!mime.startsWith('image/')) return null
+  const buf = await r.arrayBuffer()
+  if (buf.byteLength > 2_500_000) return null
+  const bytes = new Uint8Array(buf)
+  let binary = ''
+  const chunk = 8192
+  for (let i = 0; i < bytes.length; i += chunk) {
+    binary += String.fromCharCode(...bytes.subarray(i, Math.min(i + chunk, bytes.length)))
+  }
+  return { mimeType: mime, data: btoa(binary) }
 }
 
 /** Escape raw control chars inside JSON string values so JSON.parse doesn't choke */
@@ -215,14 +448,10 @@ export function looksLikeCTA(text: string): boolean {
   return ctaKeywords.some((kw) => upper.includes(kw))
 }
 
-/** Strip shipping/delivery text from offer field. Keeps only price + discount.
- *
- *  SAFETY: nếu strip làm string empty hoặc chỉ còn whitespace → ABORT,
- *  return original. Tránh edge case offer có combo tier kèm "FREESHIP"
- *  bị wipe toàn bộ (vd "BUY 1 RM55 + RM10 SHIP, BUY 2 RM95 FREESHIP"
- *  bị regex match toàn bộ vì không có dấu chấm câu chia). */
+/** Strip shipping/delivery text from offer field. Keeps only price + discount. */
 export function stripShippingFromOffer(text: string): string {
   if (!text) return ''
+  // Common shipping phrases across languages — remove the entire sentence containing them
   const shippingPatterns = [
     // English
     /[^.!?\n]*(?:shipping|delivery|deliver to|cod\b|cash on delivery|free ship|additional[^.!?\n]*RM|extra cost|surcharge)[^.!?\n]*[.!?\n]?/gi,
@@ -233,17 +462,8 @@ export function stripShippingFromOffer(text: string): string {
   ]
   let cleaned = text
   for (const pat of shippingPatterns) cleaned = cleaned.replace(pat, ' ')
+  // Collapse whitespace + remove dangling punctuation
   cleaned = cleaned.replace(/\s+/g, ' ').replace(/^[\s,.;:-]+|[\s,.;:-]+$/g, '').trim()
-
-  // SAFETY NET: nếu strip xóa hết → giữ original (có thể combo deal có
-  // "FREESHIP" kèm price, không muốn wipe). Re-check: nếu original có
-  // dấu hiệu price (RM/Rp/$/đ + số) mà cleaned không có → abort.
-  const hasPrice = (s: string) => /(?:RM|Rp|\$|đ|VND|IDR)\s*\d/i.test(s)
-  if (!cleaned || (hasPrice(text) && !hasPrice(cleaned))) {
-    console.warn('[stripShippingFromOffer] strip would wipe price info — keeping original:', text.slice(0, 100))
-    return text
-  }
-
   return cleaned
 }
 
@@ -358,14 +578,62 @@ export default function ProductForm({ item, onSave, onCancel }: ProductFormProps
     try {
       const geminiKey = getGeminiKey()
 
-      // Jina Reader handles JS-rendered pages (LadiPage, Shopee, etc.)
+      // Shopee URLs bypass Jina (Cloudflare wall) — go straight to the
+      // Shopee internal API via CORS proxy. Returns structured JSON we
+      // then pass to Gemini for VN normalization + field inference.
+      const shopeeIds = parseShopeeUrl(url)
+      if (shopeeIds) {
+        addToast('Đang đọc Shopee qua API...')
+        const item = await fetchShopeeItem(shopeeIds.shopId, shopeeIds.itemId)
+        if (!item) {
+          throw new Error('Shopee API không phản hồi (anti-bot chặn ngẫu nhiên). Vui lòng dùng "Tải ảnh chụp màn hình" bên dưới.')
+        }
+        const pageText = shopeeItemToText(item)
+        const response = await directGeminiVision({
+          apiKey: geminiKey,
+          parts: [{ text: EXTRACT_PROMPT(pageText) }],
+          systemInstruction: EXTRACT_SYSTEM,
+          maxOutputTokens: 2048,
+        })
+        const extracted = parseExtracted(response)
+        if (!extracted) throw new Error('AI không trích xuất được thông tin từ dữ liệu Shopee.')
+        const { next, count } = applyExtracted(extracted, form)
+        if (count === 0) throw new Error('Không trích xuất được thông tin.')
+        setForm(next)
+        addToast(`Đã tự động điền ${count} trường từ Shopee`)
+        return
+      }
+
+      // Step 1: fetch page text + image URL list in parallel with image downloads
       addToast('Đang đọc trang sản phẩm...')
-      const pageText = await fetchViaJina(url)
+      const { text: pageText, imageUrls } = await fetchPageContent(url)
       if (!pageText) throw new Error('Không đọc được nội dung trang. Thử tải ảnh chụp màn hình thay thế.')
+
+      // Step 2: fetch page images in parallel (best-effort — CORS-friendly CDNs succeed)
+      type GeminiPart = { text: string } | { inlineData: { mimeType: string; data: string } }
+      let imageParts: GeminiPart[] = []
+      if (imageUrls.length > 0) {
+        addToast(`Đang tải ${Math.min(imageUrls.length, 6)} ảnh để phân tích...`)
+        const results = await Promise.allSettled(
+          imageUrls.slice(0, 6).map(fetchImageAsBase64)
+        )
+        imageParts = results
+          .filter((r): r is PromiseFulfilledResult<{ mimeType: string; data: string }> =>
+            r.status === 'fulfilled' && r.value !== null)
+          .map((r) => ({ inlineData: r.value }))
+      }
+
+      // Step 3: single Gemini call — images first so Gemini has visual context,
+      // then text. Use the hybrid prompt when we actually have images.
+      const hasImages = imageParts.length > 0
+      const parts: GeminiPart[] = [
+        ...imageParts,
+        { text: hasImages ? EXTRACT_PROMPT_HYBRID(pageText, imageParts.length) : EXTRACT_PROMPT(pageText) },
+      ]
 
       const response = await directGeminiVision({
         apiKey: geminiKey,
-        parts: [{ text: EXTRACT_PROMPT(pageText) }],
+        parts,
         systemInstruction: EXTRACT_SYSTEM,
         maxOutputTokens: 2048,
       })
@@ -376,7 +644,8 @@ export default function ProductForm({ item, onSave, onCancel }: ProductFormProps
       const { next, count } = applyExtracted(extracted, form)
       if (count === 0) throw new Error('Không trích xuất được thông tin. Thử tải ảnh chụp màn hình.')
       setForm(next)
-      addToast(`Đã tự động điền ${count} trường thông tin`)
+      const imgNote = imageParts.length > 0 ? ` (text + ${imageParts.length} ảnh)` : ''
+      addToast(`Đã tự động điền ${count} trường thông tin${imgNote}`)
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
       addToast(`Không thể lấy thông tin: ${msg}`, 'error')

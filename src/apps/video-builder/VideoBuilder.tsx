@@ -4,7 +4,7 @@ import {
   AlertTriangle, ChevronRight, ChevronLeft, Trash2,
   Mic, Sparkles, FileText, User, Package,
   Check, ChevronDown, ChevronUp, Upload, X,
-  RotateCcw, SkipForward, Coins,
+  RotateCcw, SkipForward, Coins, Sliders,
 } from 'lucide-react'
 import { useSettingsStore } from '../../stores/settingsStore'
 import { useAppStore } from '../../stores/appStore'
@@ -1109,6 +1109,8 @@ function VideoBuilderV1({ onSwitchToV2 }: { onSwitchToV2: () => void }) {
 ═══════════════════════════════════════════════════════════════
 PRODUCT MARKETING CONTEXT (use this to inform every shot's emotional beat)
 ═══════════════════════════════════════════════════════════════
+NOTE: Product fields below may be written in VIETNAMESE — the operator's working language. Read and understand them as native VN text, then write your image generation prompts in ENGLISH (the standard language for image gen models). Any TEXT OVERLAY visible in the output images should be in the target market's language (Malay / Vietnamese / etc. per the script). Keep brand names, currencies, and scientific ingredient names as-is.
+
 Product name: ${bankProduct.productName}
 ${bankProduct.productDescription ? `Description: ${bankProduct.productDescription}` : ''}
 ${bankProduct.targetMarket       ? `Target market: ${bankProduct.targetMarket}` : ''}
@@ -2124,13 +2126,26 @@ MOTION: Gentle cinematic camera motion only — slow push-in on key detail, or s
     !kieApiKey && 'KIE.ai', !falApiKey && 'fal.ai', !shotstackApiKey && 'Shotstack',
   ].filter(Boolean) as string[]
 
+  // Mobile output-first (M5): once a build lands in history, collapse the
+  // long left config panel so the user actually sees the pipeline / final
+  // video. FAB re-opens config for re-tweaks between builds.
+  const [mobileFormVisible, setMobileFormVisible] = useState(true)
+  const prevHistoryLenRef = useRef(history.length)
+  useEffect(() => {
+    if (prevHistoryLenRef.current === 0 && history.length > 0) {
+      setMobileFormVisible(false)
+    }
+    prevHistoryLenRef.current = history.length
+  }, [history.length])
+  const showInputOnMobile = history.length === 0 || mobileFormVisible
+
   // ── Render ────────────────────────────────────────────────────────────────
 
   return (
     <div className="flex h-full flex-col lg:flex-row bg-gradient-to-br from-violet-50/30 via-white to-purple-50/20">
 
       {/* ══ Left panel ══ */}
-      <div className="flex w-full shrink-0 flex-col border-b border-black/8 lg:w-[440px] lg:border-b-0 lg:border-r">
+      <div className={`${showInputOnMobile ? 'flex' : 'hidden'} lg:flex w-full shrink-0 flex-col border-b border-black/8 lg:w-[440px] lg:border-b-0 lg:border-r`}>
 
         {/* Header */}
         <div className="flex shrink-0 items-center justify-between gap-2 border-b border-black/8 bg-gradient-to-r from-violet-600 to-purple-500 px-5 py-4">
@@ -2980,6 +2995,19 @@ MOTION: Gentle cinematic camera motion only — slow push-in on key detail, or s
           </div>
         </div>
       </div>
+
+      {history.length > 0 && (
+        <button
+          onClick={() => setMobileFormVisible((v) => !v)}
+          aria-label={showInputOnMobile ? 'Đóng cấu hình' : 'Mở cấu hình'}
+          title={showInputOnMobile ? 'Đóng cấu hình' : 'Mở cấu hình'}
+          className="lg:hidden fixed bottom-4 right-4 z-40 flex items-center gap-1.5 rounded-full bg-violet-600 px-4 py-3 text-[12px] font-bold text-white shadow-lg shadow-violet-900/30 hover:bg-violet-700 active:scale-95 transition-transform"
+        >
+          {showInputOnMobile
+            ? <><X className="h-4 w-4" /> Đóng</>
+            : <><Sliders className="h-4 w-4" /> Cấu hình</>}
+        </button>
+      )}
     </div>
   )
 }

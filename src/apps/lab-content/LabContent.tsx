@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { Sliders, X as XIcon } from 'lucide-react'
 import { useAppStore } from '../../stores/appStore'
 import { useBankStore } from '../../stores/bankStore'
 import type { Product } from '../../stores/types'
@@ -356,9 +357,19 @@ export default function LabContent() {
     return modalMode === 'caption' ? slot.caption ?? null : slot.script ?? null
   })()
 
+  // Mobile output-first (M5): auto-collapse the input form when a brief
+  // result lands. FAB toggles back to edit mode.
+  const [mobileFormVisible, setMobileFormVisible] = useState(true)
+  const prevResultRef = useRef<LabBriefResult | null>(null)
+  useEffect(() => {
+    if (!prevResultRef.current && result) setMobileFormVisible(false)
+    prevResultRef.current = result
+  }, [result])
+  const showInputOnMobile = !result || mobileFormVisible
+
   return (
     <div className="flex h-full flex-col lg:flex-row">
-      <div className="flex w-full lg:w-[380px] shrink-0 flex-col border-b lg:border-b-0 lg:border-r border-black/8">
+      <div className={`${showInputOnMobile ? 'flex' : 'hidden'} lg:flex w-full lg:w-[380px] shrink-0 flex-col border-b lg:border-b-0 lg:border-r border-black/8`}>
         <InputPanel
           selectedProduct={selectedProduct}
           onProductSelect={(p) => { setSelectedProduct(p); setSavedBriefId(null) }}
@@ -390,6 +401,19 @@ export default function LabContent() {
           onOpenCoc={handleOpenCoc}
           onOpenSalesLetter={handleOpenSalesLetter}
         />
+
+        {result && (
+          <button
+            onClick={() => setMobileFormVisible((v) => !v)}
+            aria-label={showInputOnMobile ? 'Đóng cấu hình' : 'Sửa cấu hình'}
+            title={showInputOnMobile ? 'Đóng cấu hình' : 'Sửa cấu hình'}
+            className="lg:hidden fixed bottom-4 right-4 z-40 flex items-center gap-1.5 rounded-full bg-violet-600 px-4 py-3 text-[12px] font-bold text-white shadow-lg shadow-violet-900/30 hover:bg-violet-700 active:scale-95 transition-transform"
+          >
+            {showInputOnMobile
+              ? <><XIcon className="h-4 w-4" /> Đóng</>
+              : <><Sliders className="h-4 w-4" /> Sửa</>}
+          </button>
+        )}
       </div>
 
       <AngleOutputModal
