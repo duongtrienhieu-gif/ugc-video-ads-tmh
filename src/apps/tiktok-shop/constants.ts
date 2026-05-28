@@ -10,6 +10,7 @@ import type {
   ListingDescription,
   OverlayConfig,
 } from './types'
+import type { Market } from '../../types/brandKit'
 
 // ─────────────────────────────────────────────────────────────────────────
 // SLOT MAP — the 9-slot conversion arc, hard-mapped for TPCN health.
@@ -224,4 +225,36 @@ export const DESCRIPTION_BLOCK_LABELS: Record<DescriptionBlock['kind'], { icon: 
   faq:      { icon: '❓', label: 'FAQ' },
   promise:  { icon: '🛡️', label: 'Cam kết' },
   cta:      { icon: '📲', label: 'CTA' },
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// COMBO COUNT LABELS — top-center pill on each combo thumbnail.
+// Conversion psychology: 1 = trial (low commit) → 4 = max household saving →
+// 5+ = wholesale/bulk territory (reseller, stockpile).
+// Universal — niche-agnostic, works for any product (TPCN, beauty, etc.).
+// ─────────────────────────────────────────────────────────────────────────
+
+const COMBO_LABELS_MS: Record<number, string> = {
+  1: 'PERCUBAAN',
+  2: 'JIMAT BERDUA',
+  3: 'PAKEJ KELUARGA',
+  4: 'JIMAT MAKSIMA',
+  5: 'PAKEJ BORONG',
+}
+const COMBO_LABEL_MS_FALLBACK = 'MEGA BORONG'  // 6+
+
+const COMBO_LABELS_VI: Record<number, string> = {
+  1: 'DÙNG THỬ',
+  2: 'COMBO TIẾT KIỆM',
+  3: 'COMBO GIA ĐÌNH',
+  4: 'TIẾT KIỆM TỐI ĐA',
+  5: 'GIÁ SỈ',
+}
+const COMBO_LABEL_VI_FALLBACK = 'SIÊU SỈ TIẾT KIỆM'  // 6+
+
+export function getComboLabel(count: number, market: Market): string {
+  const safeCount = Math.max(1, Math.floor(count))
+  const table = market === 'ms' ? COMBO_LABELS_MS : COMBO_LABELS_VI
+  const fallback = market === 'ms' ? COMBO_LABEL_MS_FALLBACK : COMBO_LABEL_VI_FALLBACK
+  return table[safeCount] ?? fallback
 }

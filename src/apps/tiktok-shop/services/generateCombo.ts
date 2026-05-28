@@ -13,7 +13,7 @@ import {
 import { getUrl, saveAsset } from '../../../utils/assetStore'
 import type { ResolvedBrandKit, Market } from '../../../types/brandKit'
 import type { ComboOption, PaletteFamily } from '../types'
-import { TPCN_PALETTES } from '../constants'
+import { TPCN_PALETTES, getComboLabel } from '../constants'
 
 export interface GenerateComboParams {
   apiKey: string
@@ -82,63 +82,59 @@ function buildComboPrompt(params: GenerateComboParams, hasLogoRef: boolean): str
   const langName = params.language === 'ms' ? 'Bahasa Malaysia' : 'Vietnamese'
   const marketBadge = params.language === 'ms' ? '🇲🇾 MY' : '🇻🇳 VN'
   const productRefHint = hasLogoRef
-    ? 'Reference 1 = brand logo (preserve EXACTLY inside the BRAND FRAME). References 2+ = product photos.'
-    : 'All references are product photos. (No logo ref — render store name as text only in the frame.)'
-  const logoSlot = hasLogoRef
-    ? 'LEFT (16px padding): brand logo from Reference 1, ~64px tall, vertically centered'
-    : 'LEFT (16px padding): small brand mark icon ~48px (no logo ref provided)'
+    ? 'Reference 1 = brand logo (render EXACTLY as shown — preserve shape, colors, no redraw). References 2+ = product photos.'
+    : 'All references are product photos.'
 
   // Count enforcement. productCount is the authoritative source (user input);
   // fall back to parsing the description ("2 jars" → 2), then to 1.
   const count = c.productCount ?? extractCountFromDescription(c.description) ?? 1
   const countInstruction = count > 1
-    ? `Show EXACTLY ${count} instances of the product clearly visible, arranged side-by-side or in a small cluster (NOT just 1). Each instance must match the reference photos.`
-    : `Show exactly 1 instance of the product centered, matching the reference photos.`
+    ? `Show EXACTLY ${count} bottle(s)/jar(s) of the product clearly visible, arranged side-by-side in a clean row. Each bottle must match the reference photos exactly (same color, shape, label).`
+    : `Show exactly 1 bottle/jar of the product centered, matching the reference photos.`
 
-  const effectiveDescription = c.description.trim()
-    || (count > 1 ? `${count} units of the product` : '1 unit of the product')
+  // Count label — top-center pill, universal label table by count + market.
+  // HOT merges INTO the pill (red bg + 🔥 prefix) per user spec — no separate HOT badge.
+  const countLabel = getComboLabel(count, params.language)
+  const labelPillSpec = c.isHot
+    ? `LABEL PILL (HOT variant): rounded pill ~420px wide × 60px tall, rounded corners 30px, background SOLID RED (#DC2626), centered at top y≈260-320 (just below brand seal). Text "🔥 ${countLabel}" in WHITE Plus Jakarta Sans ExtraBold ~44px. Subtle drop shadow.`
+    : `LABEL PILL: rounded pill ~420px wide × 60px tall, rounded corners 30px, background accent color ${p.cta}, centered at top y≈260-320 (just below brand seal). Text "${countLabel}" in WHITE Plus Jakarta Sans ExtraBold ~44px. Subtle drop shadow.`
 
-  // Price block sits BELOW the brand frame on the RIGHT side (NOT top-right —
-  // that area is now occupied by the centered brand frame).
+  // Price block sits on the RIGHT half, BELOW the count label pill.
   const priceBlock = c.originalPrice
-    ? `- BELOW BRAND FRAME, RIGHT half (y≈160), struck-through original price "${c.originalPrice}" (~32px light tint)\n- DIRECTLY BELOW the strike-through (y≈210, still RIGHT half), GIANT current price "${c.price}" (~140px ExtraBold white with strong shadow)${c.discount ? `\n- AMBER PILL BADGE next to/below current price (~36px dark bold): "${c.discount}"` : ''}`
-    : `- BELOW BRAND FRAME, RIGHT half (y≈180), GIANT price "${c.price}" (~140px ExtraBold white with strong shadow).`
-
-  const hotBadge = c.isHot
-    ? '\nHOT BADGE: small red rounded-corner badge floating in upper-left content area (y≈140, NOT inside the brand frame) with text "🔥 HOT" (~24px white bold).'
-    : ''
+    ? `- RIGHT half (y≈360), struck-through original price "${c.originalPrice}" (~32px light tint)\n- DIRECTLY BELOW (y≈410, still RIGHT half), GIANT current price "${c.price}" (~140px ExtraBold white with strong shadow)${c.discount ? `\n- AMBER PILL BADGE next to/below current price (~36px dark bold): "${c.discount}"` : ''}`
+    : `- RIGHT half (y≈380), GIANT price "${c.price}" (~140px ExtraBold white with strong shadow).`
 
   return `1:1 square TikTok Shop VARIANT THUMBNAIL (1024×1024). ${productRefHint}
 
-PRODUCT FIDELITY: Replicate EXACTLY from product refs — same color, shape, label, brand name. Do NOT redesign.
+PRODUCT FIDELITY (CRITICAL):
+- Render ONLY the inner product container (bottle, jar, tube, or primary container — the actual product item).
+- DO NOT include the outer cardboard packaging box/carton, even if the reference photos show it.
+- Each bottle must replicate refs EXACTLY: same color, shape, label, brand name. Do NOT redesign.
+- ${countInstruction}
 
-VARIANT CONTENT: ${effectiveDescription}
-PRODUCT COUNT: ${countInstruction}
+═══ BRAND SEAL — IDENTICAL spec to the main 9 listing slots (no white banner, integrated) ═══
+- LAYER 1 — LOGO: Render Reference 1 (brand logo) LARGE and CENTERED at the top. Logo size ~280px wide × 120px tall, at y≈40-160. NO white box, NO banner — logo sits directly on the brand-color gradient. Preserve logo EXACTLY from Reference 1.
+- LAYER 2 — SUBTITLE: Below logo at y≈170-205, render "Official store | ${marketBadge}" in WHITE Plus Jakarta Sans Medium Italic ~28px. Center-aligned.
+- LAYER 3 — UNDERLINE: Thin horizontal white line ~140px wide at 50% opacity centered at y≈215.
+- DO NOT render the brand kit's store name as separate text — the logo carries it.
 
-═══ BRAND FRAME — IDENTICAL spec to the main 9 listing slots (master seal) ═══
-- Position: TOP CENTER, horizontally centered on canvas
-- Dimensions: ~720px wide × 90px tall, rounded corners 20px
-- Background INSIDE: clean WHITE (#FFFFFF) with subtle drop shadow
-- Three elements left → center → right INSIDE the frame:
-  • ${logoSlot}
-  • CENTER: store name "${params.brandKit.storeName}" in dark navy (#0E2A47) Plus Jakarta Sans ExtraBold ~32px
-  • RIGHT (16px padding): rounded pill "${marketBadge}" in accent color with white bold text (~28px height)
-- Same exact size/shape/colors as the main 9 slots — unified brand identity.
+═══ COUNT LABEL PILL — top-center, just below brand seal ═══
+${labelPillSpec}
 
-LAYOUT (all combo content sits BELOW the brand frame, y≥140):
-- Product configuration centered horizontally on canvas, occupying ~55% of total area (y≈380-820)
-- Saturated brand-color gradient background (${p.primary} → ${p.secondary}) with subtle decorative particles${hotBadge}
+LAYOUT (all combo content sits BELOW the brand seal + label pill, y≥360):
+- Saturated brand-color gradient background (${p.primary} → ${p.secondary}) with subtle decorative particles
+- Product zone: LEFT half + center (y≈400-870), ${count} bottle(s) side-by-side standing upright on a subtle podium/surface
 
-PRICE OVERLAY (must appear, dominant):
+PRICE OVERLAY (must appear, dominant — on the RIGHT half, parallel to product zone):
 ${priceBlock}
 
-VARIANT LABEL: At bottom-center (y≈900), white rounded rect with name "${c.name}" inside (~28px medium dark navy bold).
+VARIANT LABEL: At bottom-center (y≈920), white rounded rect with name "${c.name}" inside (~28px medium dark navy bold).
 
 STYLE: Same premium e-commerce aesthetic as the main 9 listing slots. Plus Jakarta Sans ExtraBold for prices. Saturated brand palette. Clean focus on product + price.
 
-LANGUAGE: ${langName} ONLY in any rendered text. NO other languages.
+LANGUAGE: ${langName} ONLY in any rendered text (except "Official store" subtitle and count label which use their universal forms). NO other languages.
 
-NO trust bar, NO cert badges, NO clutter.`
+NO trust bar, NO cert badges, NO clutter, NO outer packaging box.`
 }
 
 // Try to extract a leading number from a description string like
