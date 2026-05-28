@@ -8,8 +8,9 @@
 //   • Không hardcode pattern Pentavite — mỗi brand AI sinh phải khác.
 //   • Trust badges + cultural rules MY-centric (Halal/JAKIM/KKM…).
 
-import { directGeminiText, geminiImageGenerate } from '../../utils/gemini'
-import { saveBase64Asset } from '../../utils/assetStore'
+import { directGeminiText } from '../../utils/gemini'
+import { generateGpt4oImage } from '../../utils/kieai'
+import { saveAsset } from '../../utils/assetStore'
 import {
   FONT_WHITELIST,
   type BrandCategory,
@@ -351,15 +352,21 @@ export interface LogoConcept {
 /**
  * Generate logo concepts via image-gen model.
  *
- * IMPORTANT: image generation routes through kie.ai (`geminiImageGenerate`
- * → `kieGenerateImage`), so this needs the KIE API key (Bearer token),
- * NOT the Gemini API key used by `inferBrandIdentity`.
+ * Uses kie.ai's GPT-4o image endpoint (same one Character Studio uses) at
+ * 1:1 aspect ratio — perfect for square logos.
  *
- * Returns 3 concepts mặc định — UI cho user pick 1.
- * Mỗi concept dùng 1 prompt khác nhau (đã infer ở step 1).
+ * Previously this routed through `geminiImageGenerate` which hard-coded
+ * the deprecated `nano-banana-2` model and returned 9:16 portrait, both
+ * wrong for a logo workflow. The new path:
+ *   1. generateGpt4oImage → returns a remote image URL
+ *   2. Fetch the URL → blob
+ *   3. saveAsset → upload to Supabase Storage → return assetId
+ *
+ * Throws on the first failure so the UI can surface a clear "Vẽ logo
+ * thất bại: …" toast with the actual error.
  */
 export async function generateLogoConcepts(params: {
-  kieApiKey: string                  // ← kie.ai Bearer token, NOT Gemini key
+  kieApiKey: string                  // ← kie.ai Bearer token
   brandName: string
   category: BrandCategory
   palette: InferredBrandFields['palette']
@@ -371,12 +378,17 @@ export async function generateLogoConcepts(params: {
 
   const tasks = conceptPrompts.slice(0, count).map(async (basePrompt) => {
     const fullPrompt = composeLogoPrompt({ brandName, category, palette, basePrompt })
-    // kie/nano-banana only accepts 9:16 or 16:9 — pick portrait so the
-    // brand wordmark + supporting elements have vertical room.
-    const result = await geminiImageGenerate(kieApiKey, fullPrompt, '9:16')
-    const assetId = await saveBase64Asset(result.base64, result.mimeType)
+    const remoteUrl = await generateGpt4oImage({
+      apiKey: kieApiKey,
+      prompt: fullPrompt,
+      size: '1:1',
+    })
+    const res = await fetch(remoteUrl)
+    if (!res.ok) throw new Error(`Tải logo về thất bại (HTTP ${res.status})`)
+    const blob = await res.blob()
+    const assetId = await saveAsset(blob, blob.type || 'image/png')
     const { getUrl } = await import('../../utils/assetStore')
-    const blobUrl = (await getUrl(assetId)) ?? ''
+    const blobUrl = (await getUrl(assetId)) ?? remoteUrl
     return { prompt: basePrompt, assetId, blobUrl }
   })
 
