@@ -695,6 +695,28 @@ export async function generateStorytellingPack(
   // Gemini deep accurate product understanding with explicit forbidden-
   // DriftSymptoms guardrail. Solves multi-sub-niche pool pollution
   // (e.g., nasal spray drift to knee/joint).
+
+  // 2026-05-29 — Fix #2: when synthesis returns 0 reader symptoms (free-tier
+  // overload / 429 truncation), derive them from the brainstorm pain ladder.
+  // Brainstorm reads RAW product input directly (not just synthesis) so it
+  // remains product-specific even when synthesis fails — its painLadder is
+  // a reliable backup source. Without this fallback, an empty synthesis
+  // dumps storytelling onto the generic niche pool → cross-symptom pollution
+  // (nasal spray pack mentions chest tightness; cough patch mentions
+  // skincare/fatigue). With this fallback, the pack stays product-anchored
+  // even when the synthesis JSON truncated.
+  let effectiveReaderSymptoms = synthesizedBrief.readerSpecificSymptoms
+  if (effectiveReaderSymptoms.length === 0 && packBrainstorm && packBrainstorm.painLadder.length > 0) {
+    effectiveReaderSymptoms = packBrainstorm.painLadder
+      .slice(0, 6)
+      .map((p) => p.pain.trim())
+      .filter((s) => s.length > 0)
+    console.info(
+      `[storytelling] synthesis returned 0 reader symptoms — derived ${effectiveReaderSymptoms.length} from brainstorm pain ladder ` +
+      `(angle=${packBrainstorm.chosenAngle}). Pack stays product-specific instead of falling to generic niche pool.`,
+    )
+  }
+
   const result = await generatePackWithRetry({
     input,
     plan,
@@ -703,8 +725,8 @@ export async function generateStorytellingPack(
     synthesizedBrief: synthesizedBriefText,
     // SPEC-FIX (2026-05-27): pass reader-specific symptoms structurally
     // so nicheDomainLockBrief can REPLACE its generic pool with these.
-    // Resolves the two-competing-pools conflict that caused niche drift.
-    synthesizedReaderSymptoms: synthesizedBrief.readerSpecificSymptoms,
+    // Fix #2 (2026-05-29): symptoms may come from brainstorm if synthesis empty.
+    synthesizedReaderSymptoms: effectiveReaderSymptoms,
     // PARADIGM-FIX (2026-05-27): pass full synthesis brief so fallback
     // content adapts to product paradigm (no more supplement hardcode).
     synthesisBriefObj: synthesizedBrief,

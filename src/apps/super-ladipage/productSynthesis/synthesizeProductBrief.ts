@@ -15,6 +15,7 @@ import type {
   SynthesizeProductBriefInput,
   SynthesizeProductBriefKeys,
 } from './types'
+import { recoverPartialJson, stripJsonFences } from './recoverPartialJson'
 
 const SYNTHESIS_SYSTEM = `You are a product reality synthesizer for a marketing copy pipeline.
 
@@ -118,17 +119,39 @@ export async function synthesizeProductBrief(
       prompt: buildSynthesisPrompt(input),
       systemInstruction: SYNTHESIS_SYSTEM,
       jsonMode: true,
-      maxOutputTokens: 1800,
+      // 2026-05-29 — bumped 1800 → 2400 after diagnostic log showed Gemini
+      // truncating at 234 chars on free-tier overload. The recovery layer
+      // below handles truncation if it still happens; bigger ceiling reduces
+      // the chance.
+      maxOutputTokens: 2400,
       timeoutMs: 30_000,
       label: 'product-synthesis',
     })
 
-    let cleaned = raw.trim()
-    if (cleaned.startsWith('```')) {
-      cleaned = cleaned.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '').trim()
-    }
+    const cleaned = stripJsonFences(raw)
 
-    const parsed = JSON.parse(cleaned) as Record<string, unknown>
+    // 2026-05-29 — Partial JSON recovery (mirrors Sprint 7 / OPT.6 pattern).
+    // Gemini free-tier overload + 429 retries frequently truncates synthesis
+    // mid-string. The previous behavior threw on the whole document and the
+    // pack shipped with empty essence + 0 reader symptoms — catastrophic
+    // for product-specific anchoring. Now: try strict first, walk partial
+    // on failure, ship whatever fields are complete.
+    let parsed: Record<string, unknown>
+    try {
+      parsed = JSON.parse(cleaned) as Record<string, unknown>
+    } catch (parseErr) {
+      const recovered = recoverPartialJson(cleaned)
+      if (!recovered) {
+        // Truly unrecoverable — propagate to outer catch for full fallback.
+        throw parseErr
+      }
+      const recoveredKeys = Object.keys(recovered).length
+      console.warn(
+        `[productSynthesis] strict parse failed (${(parseErr as Error).message.slice(0, 80)}); ` +
+        `recovered ${recoveredKeys} partial fields: ${Object.keys(recovered).join(', ')}`,
+      )
+      parsed = recovered
+    }
 
     return {
       productEssence: typeof parsed.productEssence === 'string' ? parsed.productEssence : '',

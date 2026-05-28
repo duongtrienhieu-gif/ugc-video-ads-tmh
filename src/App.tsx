@@ -37,6 +37,7 @@ import VideoTranslate from './apps/video-translate/VideoTranslate'
 import VideoBuilder from './apps/video-builder/VideoBuilder'
 import TimSourceVideo from './apps/tim-source-video/TimSourceVideo'
 import StudioBrandKit from './apps/studio-brand-kit/StudioBrandKit'
+import TikTokShop from './apps/tiktok-shop/TikTokShop'
 
 const APP_COMPONENTS: Record<string, React.ComponentType> = {
   'finder': Finder,
@@ -59,6 +60,7 @@ const APP_COMPONENTS: Record<string, React.ComponentType> = {
   'video-builder': VideoBuilder,
   'tim-source-video': TimSourceVideo,
   'studio-brand-kit': StudioBrandKit,
+  'tiktok-shop': TikTokShop,
 }
 
 /** VN label + cache keys used by the per-app ErrorBoundary fallback so the
@@ -82,6 +84,7 @@ const APP_BOUNDARY_META: Record<string, { name: string; resetKeys: string[] }> =
   'video-builder':     { name: 'UGC Builder',    resetKeys: [] },
   'tim-source-video':  { name: 'Tìm Source Video', resetKeys: [] },
   'studio-brand-kit':  { name: 'Studio Brand Kit', resetKeys: ['ugc-lab:brand-kits'] },
+  'tiktok-shop':       { name: 'TikTok Shop',      resetKeys: [] },
 }
 
 export default function App() {

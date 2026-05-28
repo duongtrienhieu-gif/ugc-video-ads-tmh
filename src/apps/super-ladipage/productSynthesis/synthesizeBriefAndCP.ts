@@ -25,6 +25,7 @@ import type {
 } from './types'
 import { synthesizeProductBrief } from './synthesizeProductBrief'
 import { synthesizeCommercialPsychology } from './synthesizeCommercialPsychology'
+import { recoverPartialJson, stripJsonFences } from './recoverPartialJson'
 
 const COMBINED_SYSTEM = `You are a product synthesizer + commercial-psychology synthesizer combined.
 
@@ -150,14 +151,35 @@ async function tryCombinedSynthesis(
       label: 'synth-combined',
     })
 
-    let cleaned = raw.trim()
-    if (cleaned.startsWith('```')) {
-      cleaned = cleaned.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '').trim()
+    const cleaned = stripJsonFences(raw)
+
+    // 2026-05-29 — Partial JSON recovery for nested combined output.
+    // The combined call produces { brief: {...}, commercialPsychology: {...} }.
+    // When Gemini truncates mid-output (free-tier 429 storms — saw 3034 chars
+    // cut yielding empty essence), we walk the top-level keys ("brief",
+    // "commercialPsychology") and recover each sub-object. Even if one is
+    // truncated and the other complete, the complete one ships.
+    let parsed: CombinedJSON
+    try {
+      parsed = JSON.parse(cleaned) as CombinedJSON
+    } catch (parseErr) {
+      const recovered = recoverPartialJson(cleaned) as unknown as CombinedJSON | null
+      if (!recovered) {
+        console.warn(`[synth-combined] strict parse failed and unrecoverable: ${(parseErr as Error).message.slice(0, 80)}`)
+        return null
+      }
+      console.warn(
+        `[synth-combined] strict parse failed (${(parseErr as Error).message.slice(0, 80)}); ` +
+        `recovered partial — brief=${recovered.brief ? 'yes' : 'no'}, CP=${recovered.commercialPsychology ? 'yes' : 'no'}`,
+      )
+      parsed = recovered
     }
 
-    const parsed = JSON.parse(cleaned) as CombinedJSON
-
-    // Validate both sub-objects present + critical fields populated
+    // Validate critical fields. If brief is incomplete, return null so the
+    // sequential fallback path runs (which has its own recovery layer in
+    // synthesizeProductBrief). If only CP is incomplete, we could still
+    // accept the brief, but downstream wires expect both — let sequential
+    // handle the split. Conservative.
     if (!parsed?.brief?.productEssence || parsed.brief.productEssence.length < 30) return null
     if (!Array.isArray(parsed.brief.readerSpecificSymptoms) || parsed.brief.readerSpecificSymptoms.length === 0) return null
     if (!parsed?.commercialPsychology?.primaryDesire || parsed.commercialPsychology.primaryDesire.length < 8) return null
