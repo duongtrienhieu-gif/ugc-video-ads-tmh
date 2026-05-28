@@ -3,6 +3,54 @@ import { supabase } from '../lib/supabase'
 
 const STORAGE_KEY = 'ai-ugc-lab-settings'
 
+// ── IndexedDB primary storage (Phase 10.3 migration) ──────────────────
+// localStorage cap of ~5-10MB per origin caused QuotaExceededError when
+// other apps' Zustand persists filled it. IDB has effectively unlimited
+// quota (~50% of disk free). Strategy:
+//   - IDB = PRIMARY: every save writes here, never fails on quota
+//   - localStorage = OPPORTUNISTIC CACHE for sync boot (may fail silently)
+//   - Cloud Supabase = REMOTE backup (unchanged)
+// On boot: read localStorage SYNCHRONOUSLY for instant initial state, then
+// async IDB hydrate kicks in to reconcile (IDB wins if newer).
+
+const IDB_NAME  = 'ugc-lab-settings'
+const IDB_STORE = 'kv'
+
+function openSettingsIDB(): Promise<IDBDatabase> {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(IDB_NAME, 1)
+    req.onupgradeneeded = () => req.result.createObjectStore(IDB_STORE)
+    req.onsuccess = () => resolve(req.result)
+    req.onerror = () => reject(req.error)
+  })
+}
+
+async function idbGet(key: string): Promise<string | null> {
+  try {
+    const db = await openSettingsIDB()
+    return new Promise((resolve) => {
+      const tx = db.transaction(IDB_STORE, 'readonly')
+      const req = tx.objectStore(IDB_STORE).get(key)
+      req.onsuccess = () => resolve((req.result as string | undefined) ?? null)
+      req.onerror = () => resolve(null)
+    })
+  } catch { return null }
+}
+
+async function idbSet(key: string, value: string): Promise<void> {
+  try {
+    const db = await openSettingsIDB()
+    await new Promise<void>((resolve, reject) => {
+      const tx = db.transaction(IDB_STORE, 'readwrite')
+      tx.objectStore(IDB_STORE).put(value, key)
+      tx.oncomplete = () => resolve()
+      tx.onerror = () => reject(tx.error)
+    })
+  } catch (err) {
+    console.warn('[settingsStore] IDB set failed', err)
+  }
+}
+
 // ── Z38 — Supabase cloud sync ────────────────────────────────────────────
 // Settings now sync to a per-user row in Supabase `user_settings`. The
 // existing localStorage cache is kept as an OFFLINE FALLBACK + initial
@@ -122,34 +170,14 @@ function loadFromStorage(): StoredSettings {
 
 function saveToStorage(s: StoredSettings) {
   const payload = JSON.stringify(s)
+  // PRIMARY: IndexedDB (~50GB quota, never fails in practice)
+  void idbSet(STORAGE_KEY, payload)
+  // CACHE: localStorage as opportunistic boot cache (may fail silently
+  // when other apps fill the 5-10MB cap — settings still safe in IDB).
   try {
     localStorage.setItem(STORAGE_KEY, payload)
   } catch (err) {
-    // QuotaExceededError — localStorage is full from accumulated app state.
-    // Auto-cleanup known legacy keys that we've already migrated to IndexedDB
-    // and retry once. Throws clear error if still fails so caller can warn user.
-    console.warn('[settingsStore] localStorage write failed, attempting auto-cleanup', err)
-    const legacyKeysToClear = [
-      'ugc-lab:tiktok-shop',     // migrated to IDB in commit 69ed7d9
-      'ugc-lab:gemini-usage',    // migrated to IDB in commit 4031d85
-      'ugc-lab-brand-kits',      // brand kit legacy localStorage entry
-    ]
-    let freed = 0
-    for (const key of legacyKeysToClear) {
-      try {
-        if (localStorage.getItem(key)) {
-          localStorage.removeItem(key)
-          freed++
-        }
-      } catch { /* silent */ }
-    }
-    if (freed > 0) console.info(`[settingsStore] freed ${freed} legacy keys, retrying save`)
-    try {
-      localStorage.setItem(STORAGE_KEY, payload)
-    } catch (err2) {
-      console.error('[settingsStore] localStorage save still failed after cleanup', err2)
-      throw new Error('Không lưu được cài đặt — bộ nhớ trình duyệt đầy. Mở F12 → Application → Storage → "Clear site data", rồi reload và thử lại.')
-    }
+    console.warn('[settingsStore] localStorage cache write skipped (IDB still saved)', err)
   }
   // Z38 — also push to cloud (debounced)
   schedulePushToCloud(s)
@@ -289,14 +317,14 @@ async function hydrateFromCloud(setStore: (patch: Partial<StoredSettings>) => vo
       ),
       theme: (cloud.theme === 'dark' ? 'dark' : 'light'),
     }
-    // Push merged into local state + mirror to localStorage
+    // Push merged into local state + mirror to IDB + localStorage cache
     // Suppress the cloud-push that follows so we don't echo back
     suppressNextCloudPush = true
+    const payload = JSON.stringify(merged)
+    void idbSet(STORAGE_KEY, payload)  // primary
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(merged))
-    } catch (err) {
-      console.warn('[SETTINGS_SYNC] mirror to localStorage failed (in-memory still updated)', err)
-    }
+      localStorage.setItem(STORAGE_KEY, payload)  // opportunistic cache
+    } catch { /* silent — IDB still has it */ }
     setStore(merged)
     console.log('[SETTINGS_SYNC] hydrated from cloud · pipelineVersion=' + merged.pipelineVersion)
   } catch (err) {
@@ -419,7 +447,42 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
 // state alone (anonymous mode still works via localStorage).
 
 if (typeof window !== 'undefined') {
-  // Initial hydrate — fires once on import if a session already exists
+  // Phase 10.3 — IDB hydrate + one-shot localStorage migration.
+  // Runs once at module load. Async, but kicks off before React renders
+  // any settings UI, so the modal sees correct values when opened.
+  ;(async () => {
+    const stored = await idbGet(STORAGE_KEY)
+    if (stored) {
+      try {
+        const parsed = JSON.parse(stored) as Partial<StoredSettings>
+        // Only merge non-empty values so we don't clobber any in-memory
+        // edits the user might have made during the ~50ms hydrate window.
+        useSettingsStore.setState((curr) => ({
+          kieApiKey:        parsed.kieApiKey        ?? curr.kieApiKey,
+          geminiApiKey:     parsed.geminiApiKey     ?? curr.geminiApiKey,
+          elevenLabsApiKey: parsed.elevenLabsApiKey ?? curr.elevenLabsApiKey,
+          falApiKey:        parsed.falApiKey        ?? curr.falApiKey,
+          shotstackApiKey:  parsed.shotstackApiKey  ?? curr.shotstackApiKey,
+          youtubeApiKey:    parsed.youtubeApiKey    ?? curr.youtubeApiKey,
+          pipelineVersion:  parsed.pipelineVersion  ?? curr.pipelineVersion,
+          theme:            parsed.theme            ?? curr.theme,
+        }))
+      } catch { /* silent */ }
+    } else {
+      // No IDB data yet — migrate from localStorage if any. Then clear
+      // localStorage to free up quota for other apps.
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY)
+        if (raw) {
+          await idbSet(STORAGE_KEY, raw)
+          try { localStorage.removeItem(STORAGE_KEY) } catch { /* silent */ }
+          console.info('[settingsStore] migrated localStorage → IDB, freed legacy quota')
+        }
+      } catch { /* silent */ }
+    }
+  })()
+
+  // Initial cloud hydrate — fires once on import if a session already exists
   void hydrateFromCloud((patch) => {
     useSettingsStore.setState(patch)
   })
