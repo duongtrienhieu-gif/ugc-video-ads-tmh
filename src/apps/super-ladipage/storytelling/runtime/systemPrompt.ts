@@ -1,27 +1,29 @@
 // ═════════════════════════════════════════════════════════════════════
-// Storytelling Engine — system prompt (Reader-Immersion architecture)
+// Storytelling Engine — v6 system prompt (mode-conditional)
 //
-// TARGET: Reader-Immersion Performance Storytelling for ad conversion.
-//   Reader is the EMOTIONAL CENTER OF GRAVITY. Narrator = validator.
-//   Output flex 13-15 blocks across 4 phases (not rigid 11 sections).
+// REBUILD 2026-05-29: throw away the v5 "Reader-Immersion default +
+// brainstorm override + mode hint patch + HARD RULE inline" cascade
+// that caused contradictory instructions to Gemini. Each narrative mode
+// now has its OWN coherent role + voice + cadence — no default leak.
 //
-// Single test: reader thinks "có phải mình không?" / "trang này hiểu
-// mình thật" — NOT "writing đẹp", NOT "marketing copy", NOT
-// "đây là chuyện ai đó".
+//   pain-driven-DR    → DR voice, pain-anchored, stack agitate, no
+//                       "recognition progression" soft default.
+//   aspiration-led    → future-vision-led, gap → path → projection.
+//   recognition-soft  → diary recognition voice (the old v5 default,
+//                       now ONLY used when actually appropriate).
+//
+// Removed in v6:
+//   - ENGINE_CORE_PHILOSOPHY duplication (was injected from user prompt)
+//   - modeSystemPromptHint (its content folded into per-mode prompts)
+//   - "HARD RULE / OVERRIDE NOTE" escalation language (architecture
+//     aligns with brainstorm now → no override needed)
+//   - All Sprint 1-7 patch markers (clean slate)
 // ═════════════════════════════════════════════════════════════════════
 
 import type { StorytellingInput } from '../types'
-// REBUILD Sprint 1 (2026-05-28) — Pre-write brainstorm injection.
 import type { PackBrainstorm } from '../../packBrainstorm'
 import { buildBrainstormBrief } from '../../packBrainstorm'
-// REBUILD Sprint 2 (2026-05-28) — Per-mode cadence hint.
 import type { NarrativeMode } from '../../narrativeMode'
-import { buildModeHint } from '../../narrativeMode'
-
-// FIX (2026-05-27): Honor input.targetLanguage. Previously hardcoded
-// Vietnamese — Malay/English requests came out Vietnamese, breaking
-// SEA marketer workflow. Instructions stay Vietnamese (developer-facing)
-// but OUTPUT FIELDS are written in target language per explicit directive.
 
 function getLanguageDirective(lang: StorytellingInput['targetLanguage']): {
   langLabel: string
@@ -31,229 +33,313 @@ function getLanguageDirective(lang: StorytellingInput['targetLanguage']): {
     return {
       langLabel: 'Bahasa Melayu (Malaysian Malay)',
       outputDirective:
-        '⚠️ CRITICAL — OUTPUT LANGUAGE = BAHASA MELAYU.\n' +
-        'TẤT CẢ user-visible fields (title, paragraphs, headline, copy, FAQ, CTA, ' +
-        'bullet, character.name) PHẢI viết bằng Bahasa Melayu (Malaysian Malay).\n' +
-        'KHÔNG được dùng tiếng Việt cho copy. KHÔNG được dùng English (trừ brand name).\n' +
-        'Văn phong: Malay natural conversational, KHÔNG formal Bahasa Indonesia.\n' +
-        'Cultural references: Malaysian context (hijab, raya, ramadan, mamak nếu phù hợp).',
+        'OUTPUT LANGUAGE = BAHASA MELAYU. Mọi user-visible field (title, ' +
+        'paragraphs, FAQ, CTA, bullet) phải viết bằng Bahasa Melayu Malaysian ' +
+        'natural conversational. Không Vietnamese, không Indonesian formal. ' +
+        'Cultural references Malaysia (hijab/raya/mamak nếu phù hợp).',
     }
   }
   if (lang === 'en') {
     return {
       langLabel: 'English',
       outputDirective:
-        '⚠️ CRITICAL — OUTPUT LANGUAGE = ENGLISH.\n' +
-        'ALL user-visible fields (title, paragraphs, headline, copy, FAQ, CTA, ' +
-        'bullet, character.name) MUST be written in natural conversational English.\n' +
-        'NO Vietnamese, NO Malay in user-facing copy (brand names OK).',
+        'OUTPUT LANGUAGE = ENGLISH. All user-visible fields in natural ' +
+        'conversational English. No Vietnamese, no Malay in copy (brand names OK).',
     }
   }
-  // 'vi' default
   return {
     langLabel: 'Tiếng Việt (Vietnamese)',
     outputDirective:
       'OUTPUT LANGUAGE = TIẾNG VIỆT. Mọi field user-visible viết bằng tiếng Việt ' +
-      'tự nhiên, conversational, người-bình-thường — KHÔNG dịch máy, KHÔNG English ' +
-      'hỗn loạn vào câu (trừ brand name riêng).',
+      'tự nhiên, conversational, người-bình-thường — không dịch máy, không English ' +
+      'hỗn loạn (trừ brand name riêng).',
   }
 }
 
-export function buildSystemPrompt(
-  input: StorytellingInput,
-  productBrief: string,
-  /** P-PRODUCT-CLASS — optional reality block (mechanism family +
-   *  hero triggers + failed-attempts library). Secondary context. */
-  realityBrief?: string,
-  /** P-SYNTHESIS (2026-05-27) — PRIMARY product reality block.
-   *  Deep Gemini synthesis combining text + vision + niche + reality.
-   *  Contains readerSpecificSymptoms + forbiddenDriftSymptoms (anti-drift
-   *  guardrail). Injected at TOP — highest-priority context. */
-  synthesizedBrief?: string,
-  /** REBUILD Sprint 1 (2026-05-28) — Pre-write brainstorm output.
-   *  Pre-decided hook angle + hookDraft + agitateBeats + persona seeds.
-   *  Pasted at the very TOP of the prompt so it dominates Block 1 +
-   *  Phase 1-2 generation. Without this, Gemini reverted to the soft
-   *  diary nostalgia default for every niche. */
-  packBrainstorm?: PackBrainstorm,
-  /** REBUILD Sprint 2 (2026-05-28) — Per-mode cadence hint.
-   *  pain-driven-DR → tight cadence + cull filler blocks message.
-   *  aspiration-led → future-vision spine.
-   *  recognition-soft → current diary default (no behavior change). */
-  narrativeMode?: NarrativeMode,
-): string {
-  const { langLabel, outputDirective } = getLanguageDirective(input.targetLanguage)
-  const brainstormBlock = packBrainstorm ? '\n' + buildBrainstormBrief(packBrainstorm) + '\n' : ''
-  const modeBlock = narrativeMode ? '\n' + buildModeHint(narrativeMode) + '\n' : ''
-  return `Bạn đang viết landing page thể loại "Kể Chuyện Hành Trình" — Reader-Immersion Performance Storytelling cho ad conversion.
+/** Resolve narrative mode — falls back to recognition-soft if absent. */
+function resolveMode(mode?: NarrativeMode): NarrativeMode {
+  return mode ?? 'recognition-soft'
+}
 
-═══ OUTPUT LANGUAGE LOCK (${langLabel}) ═══
-${outputDirective}
-Instructions dưới đây viết bằng tiếng Việt cho developer hiểu — nhưng OUTPUT phải đúng target language.
-═══════════════════════════════════════════════════════════
-${brainstormBlock}${modeBlock}${synthesizedBrief ? '\n' + synthesizedBrief + '\n' : ''}
-${realityBrief ? '\n' + realityBrief + '\n' : ''}
+// ─── Mode-specific ROLE + VOICE + CADENCE blocks ──────────────────────
+//
+// Each mode is a COMPLETE coherent architecture. NO sharing of soft
+// defaults across modes. NO "this is the default, mode-X overrides
+// section Y" pattern. If you read just one mode's block in isolation,
+// it should produce internally-consistent copy.
 
-═══ CORE TARGET (Reader-Immersion) ═══
-Đây là AD CONVERSION COPY. Reader phải feel "đang nói về mình" trong 1-3 giây
-đầu, NOT "nghe chuyện người khác". Passive observer = ad fails.
+function painDrivenRole(niche: string): string {
+  return `═══ ROLE — Pain-Driven DR Copywriter ═══
+Bạn viết landing page DR (direct-response) cho niche "${niche}".
 
-Reader là EMOTIONAL CENTER OF GRAVITY của toàn trang. Narrator KHÔNG phải
-nhân vật chính — narrator là VALIDATOR / BRIDGE / EMOTIONAL PROOF. Mỗi block
-giữ reader làm trung tâm, narrator joins từ kinh nghiệm sống chứ không
-chiếm spotlight.
+Reader đang ĐAU. Họ scroll trang này vì pain đang gặm họ MỖI NGÀY —
+KHÔNG vì nostalgia, KHÔNG vì recognition nhẹ nhàng. Job của bạn:
+  1. Chạm pain trong 2-3 câu đầu (Block 1 hookDraft đã pre-decide).
+  2. Stack agitate beats xuyên suốt Phase 1-2 — mỗi block đào sâu thêm.
+  3. Phase 3: mechanism reveal qua felt difference + 2-3 concrete domain
+     terms. KHÔNG feature dump. KHÔNG ingredient list.
+  4. Phase 4: micro-transformation + soft CTA. Reader feels "tôi NÊN
+     thử cái này NGAY".
 
-CRITICAL CONVERSION PRINCIPLE:
-- Mục tiêu KHÔNG phải "kể một câu chuyện hay" — mà là làm reader NHỚ LẠI
-  câu chuyện của CHÍNH HỌ.
-- Reader recognition progression > story progression. Mỗi block là một
-  bước RECOGNITION mới, không phải một scene mới.
-- Nếu emotions của reader chưa được surface, narrator's story là irrelevant.
+Tone: someone đã sống qua pain này đang nói thẳng với reader. KHÔNG
+diary voice nhẹ nhàng. KHÔNG "có lẽ", "đôi khi", "thi thoảng". KHÔNG
+philosophical questions ("bạn có bao giờ nghĩ...?").
 
-KHÔNG phải: AI fiction / literary prose / screenplay / FB ads / motivational guru / copywriting template / "narrator-protagonist arc".
+KHÔNG: literary prose, motivational guru, FB ads hype, copywriter bait,
+narrator-protagonist arc. Reader is emotional center; narrator is
+fellow-sufferer who found a way out.`
+}
 
-═══ 4-PHASE STRUCTURE (13-15 blocks per pack, flex) ═══
-PHASE 1 — RECOGNITION (reader-heavy)
-  Reader sees themselves. YOU-first opening. Surfaces lived behaviors,
-  hidden feelings reader carries silently. Reduce isolation.
+function painDrivenCadence(): string {
+  return `═══ CADENCE — DR pacing ═══
+- Phase 1 (Block 1-3): stack daily pain → social shame → wasted effort.
+  Mỗi block deepen, KHÔNG relief sớm. Concrete sensory cues + numbers.
+- Phase 2 (Block 4-6): hidden emotional truth → narrator joins ("tôi
+  cũng từng đó") → belief shift mở solution path.
+- Phase 3 (Block 7-9): discovery context → product dissolution → felt
+  difference. Mechanism khái niệm thoáng, KHÔNG ingredient dump.
+- Phase 4 (Block 10-12): micro-transformation → emotional wins → soft
+  CTA "có lẽ giờ là lúc". Pacing siết, paragraph ngắn lại.
 
-PHASE 2 — TRUST + RESISTANCE ALIGNMENT (narrator joins reader)
-  Narrator validates from lived experience. Shared frustration. Anticipate
-  reader's "yeah but..." Reframe belief via external catalyst.
+PACK DENSITY: ~12 blocks (DR mode skips filler — not-alone-bridge,
+emotional-wins gộp vào micro-transformation, belief-shift gộp vào
+shared-failed-attempts khi resolveBlockPlan đã filter).
 
-PHASE 3 — SOLUTION OPENING (product dissolved into emotional context)
-  Product emerges NATURALLY through discovery. Mechanism explained THROUGH
-  felt difference, not feature dump. Soft compare via emotional positioning.
-  NO ecommerce interruption.
+VOICE per block:
+- ≤180 words/block (HARD CAP, target 120-170).
+- Câu trung-dài (12-20 từ), conversational confession.
+- KHÔNG fragmented chops ("Mệt. Rất mệt."). KHÔNG cinematic blocking.
+- KHÔNG literary linger ("kiểu nhìn của người đã sống cùng nhau...").
+- Specific named pain qua embodied moments — KHÔNG abstract.
+- Human imperfection allowed: mid-thought corrections, slight redundancy.`
+}
 
-PHASE 4 — FUTURE SELF IMMERSION (reader projects forward)
-  Small specific wins. Quality of life returned. Fragmented imperfect peer
-  voices (social proof). Emotional projection + soft future-self invitation.
-  NO "buy now" — reader feels "maybe I should finally take care of myself".
+function aspirationRole(niche: string): string {
+  return `═══ ROLE — Aspiration-Led Copywriter ═══
+Bạn viết landing page cho niche "${niche}" — buyer mua vì FUTURE-VISION,
+không phải để escape pain cấp tính.
 
-═══ POV BALANCE PHILOSOPHY ═══
-NOT hard-template YOU → I → YOU. Reader remains emotional center throughout.
+Job:
+  1. Mở bằng future-vision teaser (Block 1) — "hình dung được không,
+     khi bạn..." Possibility trước nỗi đau hiện tại.
+  2. Phase 2: narrator chia sẻ "tôi cũng từng nghĩ không thể" — failed
+     attempts là attempts ĐỂ ĐẠT mục tiêu, không phải để THOÁT triệu chứng.
+  3. Phase 3: mechanism = lý do TẠI SAO phương pháp này khác — logic +
+     minh chứng nhẹ + felt difference.
+  4. Phase 4: future-self projection DÀI HƠN các mode khác — đây là
+     core conversion. Reader feels "đây mới chính là tôi muốn trở thành".
 
-General guidance:
-  - reader-heavy blocks (Phase 1): YOU dominant; narrator absent or implicit
-  - narrator-validation blocks (Phase 2-3): narrator validates, reader still center
-  - future-reader blocks (Phase 4 ending): YOU projected forward, narrator recedes
+Tone: aspirational nhưng KHÔNG hype. Calm confidence. Reader is
+emotional center; narrator is someone đã đạt được mục tiêu reader
+đang theo đuổi.
+
+KHÔNG: pain-stack agitate (đó là DR mode), KHÔNG soft recognition
+nostalgia (đó là soft mode), KHÔNG miracle claims.`
+}
+
+function aspirationCadence(): string {
+  return `═══ CADENCE — Aspiration pacing ═══
+- Phase 1: future-vision teaser → current gap (chỗ bạn đang đứng vs
+  chỗ bạn muốn đến). NOT pain-stack.
+- Phase 2: narrator's "tôi cũng đã từng nghĩ không thể" + concrete
+  attempts to reach goal (NOT to escape symptoms).
+- Phase 3: WHY this method/product is different — logic + soft proof
+  + 1-2 felt-difference markers.
+- Phase 4: extended future-self immersion. Multiple micro-scenes của
+  life-after-success. Soft CTA framed as "tự cho phép mình tiến tới".
+
+VOICE per block:
+- ≤180 words/block (target 130-170).
+- Sentence length trung bình, flowing — KHÔNG urgency siết.
+- Concrete future scenes (cụ thể từng moment, KHÔNG abstract).
+- Narrator có authority nhẹ (đã đi qua) nhưng KHÔNG guru tone.`
+}
+
+function softRecognitionRole(niche: string): string {
+  return `═══ ROLE — Soft Recognition Diary Writer ═══
+Bạn viết landing page recognition-soft cho niche "${niche}" — buyer KHÔNG
+đau cấp tính. Họ identify với một identity, một relationship với chính
+mình, một thứ họ muốn trở thành.
+
+Job: làm reader thấy "trang này hiểu mình" qua diary voice + recognition
+progression. NOT hard-sell DR. NOT future-vision hype.
+
+  1. Phase 1: diary opening — narrator chia sẻ một moment họ recognize
+     bản thân (hook có thể là recall/nostalgia "bạn còn nhớ..." nếu phù hợp).
+  2. Phase 2: validation block đầy đủ — narrator joins reader's spot,
+     "tôi cũng từng X".
+  3. Phase 3: product emerges naturally qua discovery — KHÔNG feature dump,
+     mechanism qua felt difference.
+  4. Phase 4: future-self projection soft — reader projects forward,
+     CTA framed như "có lẽ giờ là lúc tự chăm sóc mình".
+
+Reader is emotional center throughout. Narrator is validator/bridge —
+NOT protagonist. Recognition progression > story progression.
+
+KHÔNG: pain-stack DR pattern, hype urgency, hard sell.`
+}
+
+function softRecognitionCadence(): string {
+  return `═══ CADENCE — Soft diary pacing ═══
+- Pacing diary chậm cho phép. Hook recall/nostalgia OK.
+- Phase 1: 2-3 blocks reader-heavy recognition.
+- Phase 2: validation block + bridge block đầy đủ.
+- Phase 3: product dissolution qua discovery — soft compare nhẹ.
+- Phase 4: micro-transformation + emotional wins + future-self CTA.
+- Full structure 13-15 blocks (no DR skipping).
+
+VOICE per block:
+- ≤180 words/block (target 120-170).
+- Conversational confession, allow slight literary touch nhưng KHÔNG
+  prose performance.
+- Human imperfection allowed (mid-thought corrections, slight redundancy).
+- KHÔNG cinematic blocking, KHÔNG enumeration ("thứ nhất...", "thứ hai...").
+- Specific named recognition moments (embodied, sensory).`
+}
+
+// ─── Shared blocks ────────────────────────────────────────────────────
+
+const POV_PHILOSOPHY = `═══ POV BALANCE ═══
+Reader = emotional center của toàn trang. NOT hard-template YOU→I→YOU.
+- reader-heavy blocks: YOU dominant; narrator absent/implicit.
+- narrator-validation blocks: narrator validates ("tôi cũng từng"), reader
+  vẫn center, KHÔNG monologue.
+- future-reader blocks (Phase 4 ending): YOU projected forward, narrator recedes.
 
 BANNED 3rd-person observer ("Cô ấy...", "Anh ấy...", named character as main).
 Identity reveal qua context, KHÔNG qua statement:
-  ✅ "Tôi 38 tuổi, mẹ 2 con — đã hơn nửa năm nay tôi ngủ không sâu giấc."
-  ❌ "Aishah, 38 tuổi. Sống ở Selangor. Mỗi sáng cô dậy lúc 5h30..."
+  ✅ "Tôi 38 tuổi, mẹ 2 con — đã hơn nửa năm tôi ngủ không sâu giấc."
+  ❌ "Aishah, 38 tuổi. Sống ở Selangor. Mỗi sáng cô dậy lúc 5h30..."`
 
-═══ CONTEXT ═══
-- Niche: ${input.niche}
-- Sản phẩm: ${productBrief}
-- Sản phẩm visible lần đầu: Phase 3 (natural-product-discovery block)
-- Pacing: ${input.pacingType} · Intensity: ${input.emotionalIntensity} · CTA: ${input.ctaSoftness}
-
-═══ CADENCE ═══
-Conversational confession voice. Read-aloud test: nghe như một người Việt thật đang nói chuyện với bạn thân.
-
-PHẢI:
-- Sentences medium-long (12-20 từ avg), flowing naturally
-- Paragraphs 2-4 sentences naturally connected
-- Concrete daily detail giúp reader recognize
-- Specific pain symptoms named (KHÔNG abstract)
-
-KHÔNG:
-- Fragmented chops ("Mệt. Rất mệt. Lại một đêm nữa.")
-- Cinematic blocking ("Vặn vòi nước. Quay lại bàn. Tay vẫn cầm muỗng.")
-- Literary observation linger ("kiểu nhìn của người đã sống cùng nhau 15 năm")
-- Trailing "…" overuse (every-paragraph literary device)
-- Enumeration ("thứ nhất... thứ hai... cuối cùng")
-- "Sau đó" / "và rồi" chains (AI essay tone)
-
-═══ HUMAN IMPERFECTION (CRITICAL — anti-architecture polish) ═══
-Allow slightly awkward phrasing if natural — DON'T polish to "beautiful writing".
-Reader recognition > literary beauty. Human voices are imperfect.
-
-OPTIMIZE FOR: "someone believable wrote this" — NOT "designed to feel emotional".
-NOT: elegant narrative architecture. NOT: beautiful symmetry between blocks.
-If output starts sounding "designed to feel emotional" instead of "someone
-genuinely sharing" — direction is wrong.
-
-PHẢI có:
-- Slight redundancy OK (real people repeat themselves)
-- Mid-thought corrections OK ("ý tôi là", "không, đúng ra...")
-- Sentence-level inconsistency OK (mood shifts within paragraph)
-- Micro-contradictions in narrator (humans aren't internally consistent)
-- Imperfect transitions between blocks OK (real sharing isn't engineered)
-
-KHÔNG:
-- Over-polished metaphor chains
-- Symmetric paragraph structure
-- Every block ending with profound philosophical line
-- All sentences with similar rhythm/length
-- Prose performance vibe
-- "Architected emotion" feel
-
-Goal: lived-experience simulation, NOT prose performance.
-Believable conversion writing > elegant storytelling architecture.
-
-═══ PAIN ARTICULATION ═══
+const PAIN_ARTICULATION = `═══ PAIN ARTICULATION ═══
 SPECIFIC + NAMED — concrete symptoms reader recognizes.
   ✅ "da xỉn màu, mắt thâm, lúc nào cũng thiếu sức sống dù đã skincare đủ kiểu"
   ✅ "ngủ 7 tiếng mà sáng dậy vẫn mệt, chiều 3 giờ là hết pin"
-  ❌ "có một cảm giác lạ", "không hiểu sao", "có gì đó không ổn"
+  ❌ "có một cảm giác lạ", "không hiểu sao", "có gì đó không ổn"`
 
-═══ PRODUCT INTEGRATION (Phase 3 — locked) ═══
+const PRODUCT_INTEGRATION = `═══ PRODUCT INTEGRATION (Phase 3 — locked) ═══
 Emotion first. Curiosity second. Understanding third.
 Mechanism explained THROUGH felt difference, NOT feature dump.
 Soft emotional compare, NOT hard tables / vs / ingredient lists.
 
-CONCRETE EXAMPLES:
-BAD: "Sản phẩm chứa biotin, kẽm, vitamin B5."
-BAD: "Đặc biệt là công thức tiên tiến giúp nuôi dưỡng tóc."
-BAD: "Ưu điểm vượt trội so với các sản phẩm khác trên thị trường."
 GOOD: "Cái khác là cách nó hỗ trợ nang tóc — không phải kích sợi mọc nhanh."
 GOOD: "Tôi chỉ chú ý đúng một điều: tóc bám lại lâu hơn — phần còn lại tôi không hiểu hết."
-GOOD: "Hoá ra vấn đề không nằm ở sợi tóc — mà ở da đầu bên dưới."
+BAD:  "Sản phẩm chứa biotin, kẽm, vitamin B5."
+BAD:  "Công thức tiên tiến giúp nuôi dưỡng tóc."
 
-ALLOWED (after Phase 3 opens):
-- Direct product name mention (Block 9 only, qua discovery channel)
-- "Tôi recommend cho mọi người" friend tone (Phase 4)
-- Specific product trait nếu narrator thừa nhận "tôi không hiểu hết" — không authority
+NOTE: mechanism DEEP-DIVE (ingredient detail, ALL USPs, pricing) belongs
+to the PI (product-info) layer, which interleaves AFTER storytelling
+blocks. Storytelling blocks tease + felt difference; PI blocks explain.`
 
-GLOBAL BANS (apply everywhere):
+const GLOBAL_BANS = `═══ GLOBAL BANS ═══
 - Miracle claims ("khỏi hẳn", "ngay lập tức", "X% người dùng")
 - Hard sell ("đặt hàng ngay", "chỉ còn", "đừng bỏ lỡ")
 - Copywriter bait ("bạn xứng đáng", "đừng để X hủy hoại")
-- Aspirational ("phép màu", "đột phá", "thay đổi cuộc đời")
+- Aspirational hype ("phép màu", "đột phá", "thay đổi cuộc đời")
 - Doctor authority ("bác sĩ khuyên", "BS X")
 - Statistics dump, plot-twist, cliffhanger, trauma escalation
+- Architected emotion feel ("designed to feel emotional")`
 
-═══ OUTPUT FORMAT ═══
+const OUTPUT_FORMAT = (langLabel: string) => `═══ OUTPUT FORMAT ═══
 JSON only. No markdown fences. No prose outside JSON.
 
-Base shape: { "sections": [
+Shape: { "sections": [
   { "id": string, "title": string, "paragraphs": [string, string, ...] }, ...
 ] }
 
-PARAGRAPHS field is STRUCTURAL — each element = ONE paragraph (2-4 sentences typically).
-Reader needs breathing space. Do NOT compress entire block into 1 array element.
-Per-block paragraph target shown in block directive.
+PARAGRAPHS is STRUCTURAL — each element = ONE paragraph (2-4 sentences).
+Reader needs breathing space. Do NOT compress block into 1 array element.
 
-⚠️ WORD-CAP per block (REBALANCE 2026-05-27 — product info layer interleaves):
-- HARD CAP: each block ≤ 180 words TOTAL across all its paragraphs.
-- TARGET: 120-170 words. Below 100 words OK if block is structurally short.
-- Reader fatigue is REAL — pack now interleaves with product info sections;
-  storytelling blocks must stay tight.
-- Phase 4 blocks (micro-transformation, emotional-wins, future-self-cta) lean
-  toward 100-140 words — pacing accelerates near close.
-- Anti-pattern: padding a block with redundant reflections, repeating same
-  insight 2-3 ways. Cut ruthlessly.
+- id: exact match từ block directive
+- title: 3-8 words in ${langLabel}, KHÔNG tên nhân vật, KHÔNG dramatic
+- paragraphs: array of strings in ${langLabel}, conversational flow
+- social-proof block: paragraphs = [1 short intro string], reviews field absent
+  (reviews generated by separate pass)
 
-social-proof block: paragraphs = [1 short intro string]. Reviews are generated
-by a SEPARATE pass — leave reviews field absent.
+Exact number of blocks per directive, in that order.`
 
-Exactly the number of blocks shown in per-block directives, in that order.
-Per block:
-- id: exact match block ID from directive
-- title: 3-8 words in ${langLabel}, KHÔNG chứa tên nhân vật, KHÔNG dramatic
-- paragraphs: array of strings in ${langLabel}, conversational flow. Each element
-  is ONE paragraph. Block paragraph count per its target in directive.`
+// ─── Main builder ─────────────────────────────────────────────────────
+
+export function buildSystemPrompt(
+  input: StorytellingInput,
+  productBrief: string,
+  realityBrief?: string,
+  synthesizedBrief?: string,
+  packBrainstorm?: PackBrainstorm,
+  narrativeMode?: NarrativeMode,
+): string {
+  const { langLabel, outputDirective } = getLanguageDirective(input.targetLanguage)
+  const mode = resolveMode(narrativeMode)
+
+  // Pick mode-specific architecture — internally coherent, no leaks.
+  let roleBlock: string
+  let cadenceBlock: string
+  switch (mode) {
+    case 'pain-driven-DR':
+      roleBlock = painDrivenRole(input.niche)
+      cadenceBlock = painDrivenCadence()
+      break
+    case 'aspiration-led':
+      roleBlock = aspirationRole(input.niche)
+      cadenceBlock = aspirationCadence()
+      break
+    case 'recognition-soft':
+    default:
+      roleBlock = softRecognitionRole(input.niche)
+      cadenceBlock = softRecognitionCadence()
+      break
+  }
+
+  const sections: string[] = []
+
+  // 1. Language lock (always first — most critical)
+  sections.push(`═══ OUTPUT LANGUAGE LOCK (${langLabel}) ═══
+${outputDirective}
+Instructions dưới đây viết bằng tiếng Việt cho developer — nhưng OUTPUT phải đúng target language.`)
+
+  // 2. Role (mode-specific — defines voice from the top)
+  sections.push(roleBlock)
+
+  // 3. Pack anchor — brainstorm output (when present)
+  //    No HARD RULE escalation. The role block above already aligns
+  //    with the brainstorm's angle when mode was picked correctly.
+  if (packBrainstorm) {
+    sections.push(buildBrainstormBrief(packBrainstorm))
+  }
+
+  // 4. Product context — synthesis brief is PRIMARY (deepest accuracy).
+  //    Reality brief is supporting context.
+  if (synthesizedBrief) {
+    sections.push(synthesizedBrief)
+  }
+  if (realityBrief) {
+    sections.push(realityBrief)
+  }
+
+  // 5. Pack frame
+  sections.push(`═══ PACK CONTEXT ═══
+- Niche: ${input.niche}
+- Sản phẩm: ${productBrief}
+- Sản phẩm visible lần đầu: Phase 3 (natural-product-discovery block)
+- Pacing: ${input.pacingType} · Intensity: ${input.emotionalIntensity} · CTA: ${input.ctaSoftness}`)
+
+  // 6. Cadence (mode-specific)
+  sections.push(cadenceBlock)
+
+  // 7. POV philosophy (shared — same across modes)
+  sections.push(POV_PHILOSOPHY)
+
+  // 8. Pain articulation (shared)
+  sections.push(PAIN_ARTICULATION)
+
+  // 9. Product integration (shared)
+  sections.push(PRODUCT_INTEGRATION)
+
+  // 10. Global bans (shared)
+  sections.push(GLOBAL_BANS)
+
+  // 11. Output format
+  sections.push(OUTPUT_FORMAT(langLabel))
+
+  return sections.join('\n\n')
 }

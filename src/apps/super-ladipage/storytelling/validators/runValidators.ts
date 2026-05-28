@@ -1,14 +1,22 @@
 // ─────────────────────────────────────────────────────────────────────
-// runValidators — orchestrate all detectors
+// runValidators — v6 (2026-05-29)
 //
-// 12 validators total. 5 hard (trigger retry on violation). 7 soft
-// (informational, don't trigger retry).
+// REBUILD: trimmed hard-validator set to 5 (was 7). The 2 that moved to
+// soft (phaseOneSpecificity, duplicateContent) were retry-storm drivers
+// — they fired because the v5 prompt didn't prevent the patterns upfront.
+// In v6 the mode-conditional system prompt + brainstorm beat assignment
+// enforce these constraints at generation time, so the detectors are
+// safety net (warn) not enforcement (retry).
 //
-// Soft warning philosophy: stylistic finesse comes from prompt + Gemini
-// judgment. Validators are SAFETY NET catching obvious failures, NOT
-// drivers shaping every output. C2 added 4 philosophy-enforcement
-// detectors (all soft): nicheContamination, genericWellnessDensity,
-// memoryAnchor, emotionalFlattening.
+// Removed: selfInsertionDetector (low signal, audit confirmed).
+//
+// Hard validators (5) — trigger retry + fallback if violated:
+//   bioIntro, adjacentRhythm, aiCadence, bannedPhrase, commercialTone
+//
+// Soft validators (8) — log only, no retry:
+//   paragraphCount, narratorCentric, nicheContamination, crossNicheVocab,
+//   genericWellnessDensity, memoryAnchor, emotionalFlattening, aggressiveSales,
+//   phaseOneSpecificity (v6 demoted), duplicateContent (v6 demoted)
 // ─────────────────────────────────────────────────────────────────────
 
 import type { BlockId, NicheKey } from '../types'
@@ -18,11 +26,9 @@ import { adjacentRhythmDetector } from './adjacentRhythmDetector'
 import { aiCadenceDetector } from './aiCadenceDetector'
 import { bannedPhraseDetector } from './bannedPhraseDetector'
 import { commercialToneDetector } from './commercialToneDetector'
-import { selfInsertionDetector } from './selfInsertionDetector'
 import { paragraphCountDetector } from './paragraphCountDetector'
 import { narratorCentricDetector } from './narratorCentricDetector'
 import { nicheContaminationDetector } from './nicheContaminationDetector'
-// REBUILD Sprint 3 (2026-05-28) — Cross-niche mechanism vocab leak detector.
 import { crossNicheVocabDetector } from './crossNicheVocabDetector'
 import { genericWellnessDensityDetector } from './genericWellnessDensityDetector'
 import { memoryAnchorDetector } from './memoryAnchorDetector'
@@ -38,24 +44,25 @@ export type ValidatorName =
   | 'aiCadence'
   | 'bannedPhrase'
   | 'commercialTone'
-  | 'phaseOneSpecificity'        // hard — SPEC-FIX 2026-05-27
-  | 'duplicateContent'           // hard — SPEC-FIX 2026-05-27
-  | 'selfInsertion'              // soft
+  | 'phaseOneSpecificity'        // soft (v6 — was hard in v5)
+  | 'duplicateContent'           // soft (v6 — was hard in v5)
   | 'paragraphCount'             // soft
-  | 'narratorCentric'            // soft — Chunk C
-  | 'nicheContamination'         // soft — Chunk C2
-  | 'crossNicheVocab'            // soft — REBUILD Sprint 3
-  | 'genericWellnessDensity'     // soft — Chunk C2
-  | 'memoryAnchor'               // soft — Chunk C2
-  | 'emotionalFlattening'        // soft — Chunk C2
-  | 'aggressiveSales'            // soft — Chunk P3
+  | 'narratorCentric'            // soft
+  | 'nicheContamination'         // soft
+  | 'crossNicheVocab'            // soft
+  | 'genericWellnessDensity'     // soft
+  | 'memoryAnchor'               // soft
+  | 'emotionalFlattening'        // soft
+  | 'aggressiveSales'            // soft
 
-/** Soft validators — flagged for visibility, not enforcement. */
+/** Soft validators — log warnings, do NOT trigger retry. */
 const SOFT_VALIDATORS: ReadonlySet<ValidatorName> = new Set([
-  'selfInsertion', 'paragraphCount', 'narratorCentric',
+  'paragraphCount', 'narratorCentric',
   'nicheContamination', 'crossNicheVocab',
   'genericWellnessDensity', 'memoryAnchor', 'emotionalFlattening',
   'aggressiveSales',
+  'phaseOneSpecificity',   // v6 demoted
+  'duplicateContent',      // v6 demoted
 ])
 
 export interface AggregatedValidation {
@@ -87,7 +94,6 @@ export function runValidators(
       ? phaseOneSpecificityDetector(parsed.sections, readerSpecificSymptoms)
       : { pass: true, violations: [] },
     duplicateContent:        duplicateContentDetector(parsed.sections),
-    selfInsertion:           selfInsertionDetector(parsed.sections[0]),
     paragraphCount:          paragraphCountDetector(parsed.sections),
     narratorCentric:         narratorCentricDetector(parsed.sections),
     nicheContamination:      niche
@@ -134,14 +140,13 @@ export function runValidators(
 
 /** Log validator results to console — for debug. */
 export function logValidationResult(result: AggregatedValidation) {
-  const softLabel = '(paragraphCount + selfInsertion + narratorCentric + nicheContamination + genericWellnessDensity + memoryAnchor + emotionalFlattening = soft)'
   if (result.pass && result.softWarnings.length === 0) {
-    console.info(`[storytelling/validators] ✓ all 5 hard validators passed ${softLabel}, 0 soft warnings`)
+    console.info(`[storytelling/validators] ✓ all 5 hard validators passed, 0 soft warnings`)
     return
   }
   if (result.pass) {
     console.info(
-      `[storytelling/validators] ✓ all 5 hard validators passed ${softLabel}, ${result.softWarnings.length} soft warnings`,
+      `[storytelling/validators] ✓ all 5 hard validators passed, ${result.softWarnings.length} soft warnings`,
     )
     for (const w of result.softWarnings) {
       console.info(`  [soft:${w.validator}] ${w.sectionId}: ${w.violation}`)
@@ -149,7 +154,7 @@ export function logValidationResult(result: AggregatedValidation) {
     return
   }
   console.warn(
-    `[storytelling/validators] ✗ ${result.violations.length} violations across ${result.failingSections.length} sections (+ ${result.softWarnings.length} soft warnings)`,
+    `[storytelling/validators] ✗ ${result.violations.length} hard violations across ${result.failingSections.length} sections (+ ${result.softWarnings.length} soft warnings)`,
   )
   for (const v of result.violations) {
     console.warn(`  [${v.validator}] ${v.sectionId}: ${v.violation}`)

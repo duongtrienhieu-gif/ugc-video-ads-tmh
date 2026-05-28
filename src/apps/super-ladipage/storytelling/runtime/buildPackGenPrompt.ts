@@ -1,17 +1,17 @@
 // ═════════════════════════════════════════════════════════════════════
-// Storytelling Engine — pack-gen user prompt builder (Reader-Immersion)
+// Storytelling Engine — v6 user prompt builder
 //
-// Iterates BlockPlan, builds per-block directives driven by:
-//   - phase                  → which conversion phase
-//   - psychologicalFunction  → what this block does to reader's mind
-//   - youIBalance            → reader-heavy / narrator-validation / future-reader
-//   - intent                 → 1-line psychological purpose
-//   - paragraphTarget        → soft pacing target
-//   - samplingHooks          → which sampling objects to inject
-//
-// Each block is a PSYCHOLOGICAL TRANSITION carried by the reader, NOT a
-// story scene carried by the narrator. Per-block directive injects ONLY
-// what that block's samplingHooks call for — keeps prompt mass small.
+// REBUILD 2026-05-29:
+//   - Removed ENGINE_CORE_PHILOSOPHY duplication (lived in system prompt;
+//     repeated here was creating contradictions vs mode-conditional role).
+//   - Removed Sprint 5/6/7 "HARD RULE" inline escalation in block directives.
+//   - Removed dual mirrorBeat / brainstorm-beat competing logic.
+//   - Per-block directives are now lean — name the function + assigned
+//     beat (when present) + paragraph target. No "FORBIDDEN" inline walls.
+//   - Block 10 2-beat structure preserved (still needed) but trimmed.
+//   - Concrete-cost rule for failed-attempts kept but condensed.
+//   - buildRetryFeedback: simplified to "vary scene of these blocks";
+//     elaborate diff parsing removed (was compensating for weak prompt).
 // ═════════════════════════════════════════════════════════════════════
 
 import type {
@@ -28,14 +28,9 @@ import { emotionalDnaBrief } from '../config/personaEmotionalDNA'
 import { energyCurveBrief } from '../config/energyCurvePresets'
 import { snapshotsBrief } from '../config/memorySnapshots'
 import { discoveryChannelBrief } from '../config/discoveryChannels'
-import { ENGINE_CORE_PHILOSOPHY } from '../config/enginePhilosophy'
 import {
   payoffArchetypeBrief, payoffSectionFlavor,
 } from '../config/payoffArchetypes'
-import {
-  performanceHookSection1Directive,
-  HOOK_PATTERNS,
-} from '../config/performanceHookLayer'
 import { sampleMirrorBeat, readerMirrorBeatDirective } from '../config/readerMirrorMoments'
 import { nicheDomainLockBrief } from '../config/nicheDomainLock'
 import { nicheMechanismBrief } from '../config/nicheMechanismVocab'
@@ -45,9 +40,6 @@ import { dissolutionBrief } from '../config/productDissolutionPatterns'
 import { softCompareBrief } from '../config/softComparePatterns'
 import { buildCtaMomentsBrief } from '../../cta'
 import type { NarratorDnaSelection } from './selectNarratorDna'
-// Sprint 5 — E2 + E3 (2026-05-28): pull brainstorm into block directives
-// so Phase 1-2 blocks can pin specific agitate beats + failed-attempts
-// block gets explicit "concrete cost per attempt" rule.
 import type { PackBrainstorm } from '../../packBrainstorm'
 
 /** Compose protagonist brief — 1-2 lines, used in system prompt context. */
@@ -63,152 +55,104 @@ export function buildProductBrief(productName: string, niche: string, painPoint?
   return `${productName} — ${niche}${pain}`
 }
 
-/** 1-line directive cụ thể hóa YOU/I balance cho block. */
+/** YOU/I balance directive — 1 line per balance. */
 function balanceFramingDirective(balance: YouIBalance): string {
   switch (balance) {
     case 'reader-heavy':
-      return 'PHẢI: YOU dominant. Narrator absent or implicit. Reader\'s emotions = block\'s center. Mở/đóng KHÔNG bằng "Tôi/Mình".'
+      return 'YOU dominant. Narrator absent / implicit. Reader emotions = center.'
     case 'narrator-validation':
-      return 'PHẢI: narrator validates (joins reader\'s spot, NOT spotlights self). Reader still emotional center. "Tôi cũng từng X" tone, không monologue.'
+      return 'Narrator validates ("tôi cũng từng X"). Reader still center, không monologue.'
     case 'future-reader':
-      return 'PHẢI: YOU projected forward. Narrator recedes. Reader imagines own self-care, own future-self moment.'
+      return 'YOU projected forward. Narrator recedes.'
   }
 }
 
-/** Sprint 5 — E3 (2026-05-28). Map Phase 1-2 block id → which agitate beat
- *  it should execute. Order matches the natural flow:
- *    daily-micro-friction  → beat 1 (stack daily symptoms)
- *    hidden-emotional-truth → beat 2 (name the hidden feeling)
- *    not-alone-bridge       → beat 3 (reduce isolation via shared)
- *  Falls through to "first available beat" if a block doesn't have a
- *  specific assignment. */
+/** Phase 1-2 block → which agitate beat from brainstorm to execute.
+ *  Each block centers on ONE assigned beat (no blur). */
 const PHASE12_BEAT_ASSIGNMENT: Record<string, number> = {
   'daily-micro-friction':   0,
   'hidden-emotional-truth': 1,
   'not-alone-bridge':       2,
 }
 
-/** Per-block directive block. Lean — only what this block's
- *  psychologicalFunction + samplingHooks call for. */
+/** Per-block directive. Lean by design — only what this block needs. */
 function buildBlockDirective(
   plan: BlockPlan,
   input: StorytellingInput,
   selection: NarratorDnaSelection,
-  /** Sprint 5 — E2/E3 (2026-05-28). Optional brainstorm for per-block
-   *  beat assignment + concrete-cost rule on failed-attempts. */
   brainstorm?: PackBrainstorm,
 ): string {
   const block = plan.blueprint
-
   const lines: string[] = []
-  lines.push(`BLOCK ${plan.order} — id="${block.id}" (phase=${block.phase})`)
-  lines.push(`  PSYCHOLOGICAL FUNCTION: ${block.psychologicalFunction}`)
-  lines.push(`  INTENT: ${block.intent}`)
-  lines.push(`  YOU/I BALANCE: ${block.youIBalance}`)
-  lines.push(`  ${balanceFramingDirective(block.youIBalance)}`)
-  lines.push(`  PARAGRAPHS: ${block.paragraphTarget.min}-${block.paragraphTarget.max}`)
 
-  // ─── Sprint 5 — E3: pin specific agitate beat to Phase 1-2 blocks ──
-  // The brainstorm produces 3-5 agitate beats. Previously these were
-  // listed in the brief but no individual block was told WHICH beat
-  // belongs to it — Gemini sampled all beats per block → blurred
-  // content + duplicateContent across Phase 1-2 blocks. Now each block
-  // gets ONE assigned beat to execute.
-  if (brainstorm && block.id in PHASE12_BEAT_ASSIGNMENT) {
+  lines.push(`BLOCK ${plan.order} — id="${block.id}" (phase=${block.phase})`)
+  lines.push(`  Function: ${block.psychologicalFunction}`)
+  lines.push(`  Intent: ${block.intent}`)
+  lines.push(`  POV: ${block.youIBalance} — ${balanceFramingDirective(block.youIBalance)}`)
+  lines.push(`  Paragraphs: ${block.paragraphTarget.min}-${block.paragraphTarget.max}`)
+
+  // ─── Phase 1-2 agitate beat assignment (from brainstorm) ────────────
+  // Each Phase 1-2 block gets ONE beat to execute (no blur across blocks).
+  const hasAssignedBeat = brainstorm && block.id in PHASE12_BEAT_ASSIGNMENT
+  if (hasAssignedBeat) {
     const beatIndex = PHASE12_BEAT_ASSIGNMENT[block.id]
     const beat = brainstorm.agitateBeats[beatIndex] ?? brainstorm.agitateBeats[0]
     if (beat) {
-      lines.push(`  🎯 ASSIGNED AGITATE BEAT — execute THIS beat in THIS block:`)
-      lines.push(`     "${beat}"`)
-      lines.push(`  HARD RULE: this block must CENTER on the beat above. Do not blur to other Phase 1-2 beats — each beat belongs to its own block.`)
-      lines.push(`  Each detail in this block should serve THIS beat. Use concrete sensory cue / number / micro-moment, not vague abstraction.`)
+      lines.push(`  Agitate beat (center on THIS): "${beat}"`)
+      lines.push(`  Use concrete sensory cue / number / micro-moment — not vague abstraction.`)
     }
   }
 
-  // ─── Phase 1 Block 1 — Performance Hook Layer ────────────────────
-  // Sprint 6 Fix #A (2026-05-28): when brainstorm.hookDraft is present,
-  // it is the SOLE source of truth for Block 1's opening (Sprint 5 E1
-  // locked it verbatim). Stop emitting competing anchors here — the
-  // legacy performanceHookSection1Directive + HOOK_PATTERNS sampled
-  // line were 2 ADDITIONAL anchors that confused Gemini and triggered
-  // a "compromise blend" (= soft recall question). Now we either
-  // defer entirely to brainstorm (preferred) OR run the old sampled
-  // path when brainstorm absent (fallback).
+  // ─── Block 1 opening (brainstorm hookDraft is sole source) ──────────
   if (block.samplingHooks.performanceHookLayer) {
     if (brainstorm?.hookDraft) {
-      // SOLE SOURCE = brainstorm. Just remind Gemini.
-      lines.push(`  🎯 BLOCK 1 OPENING: USE brainstorm hookDraft VERBATIM (see PACK BRAINSTORM at top of system prompt). Anchor LOCKED.`)
-      lines.push(`  Connective tissue (sentences AFTER the locked opening): may naturally use opener "${selection.youFirstOpener}" or bridge "${selection.bridgePhrase}" if it fits the pain anchor — NOT to replace the opening.`)
+      lines.push(`  Block 1 opening: use brainstorm hookDraft (see PACK BRAINSTORM in system prompt).`)
+      lines.push(`  After the opening, may use opener "${selection.youFirstOpener}" or bridge "${selection.bridgePhrase}" for connective tissue.`)
     } else {
-      // No brainstorm (rare — soft niche / fallback path). Use sampled anchors.
-      for (const line of performanceHookSection1Directive(
-        selection.youFirstOpener, selection.bridgePhrase,
-      ).split('\n')) {
-        lines.push(`  ${line}`)
-      }
-      const hp = HOOK_PATTERNS[selection.hookPattern]
-      lines.push(`  EMOTIONAL FLAVOR: hookPattern=${selection.hookPattern} (${hp.description.slice(0, 60)}) | hookAxis=${selection.hookAxis}`)
+      lines.push(`  Block 1 opening: YOU-first, anchor reader's pain in first 2 sentences. Opener hint: "${selection.youFirstOpener}".`)
     }
   }
 
-  // ─── Reader mirror beat (any block where samplingHooks.readerMirrorBeat) ──
-  // Sprint 6 Fix #B (2026-05-28): for Phase 1-2 blocks that ALREADY get
-  // an assigned brainstorm beat (Sprint 5 E3), the sampled mirrorBeat
-  // becomes a SECOND competing anchor → Gemini blurs both. Skip the
-  // sampled mirrorBeat when brainstorm has already assigned a specific
-  // beat to this block. Other blocks (Phase 2-4 non-assigned) keep
-  // the original mirrorBeat behavior.
-  if (block.samplingHooks.readerMirrorBeat) {
-    const hasAssignedBrainstormBeat = Boolean(
-      brainstorm && block.id in PHASE12_BEAT_ASSIGNMENT && brainstorm.agitateBeats.length > 0,
-    )
-    if (!hasAssignedBrainstormBeat) {
-      const beat = sampleMirrorBeat(selection.seed, block.id)
-      if (beat) {
-        for (const line of readerMirrorBeatDirective(beat).split('\n')) {
-          lines.push(`  ${line}`)
-        }
-      }
+  // ─── Reader mirror beat (only when no brainstorm beat already assigned) ──
+  if (block.samplingHooks.readerMirrorBeat && !hasAssignedBeat) {
+    const beat = sampleMirrorBeat(selection.seed, block.id)
+    if (beat) {
+      lines.push(`  Mirror beat: ${readerMirrorBeatDirective(beat).replace(/\n/g, ' ').slice(0, 220)}`)
     }
-    // else: brainstorm assigned beat (Sprint 5 E3) lives in the block
-    // already — that's the single source.
   }
 
-  // ─── Discovery channel (natural-product-discovery block) ─────────
+  // ─── Discovery channel (Phase 3 natural-product-discovery) ──────────
   if (block.samplingHooks.discoveryChannel) {
     for (const line of discoveryChannelBrief(selection.discoveryChannel).split('\n')) {
       lines.push(`  ${line}`)
     }
   }
 
-  // ─── D: Product dissolution (Block 9 ONLY) ──────────────────────
+  // ─── Product dissolution (Block 9) ──────────────────────────────────
   if (block.samplingHooks.productDissolution) {
     for (const line of dissolutionBrief(selection.dissolutionPattern).split('\n')) {
       lines.push(`  ${line}`)
     }
   }
 
-  // ─── D: Soft compare (Block 11 ONLY, when included) ─────────────
+  // ─── Soft compare (Block 11) ─────────────────────────────────────────
   if (block.samplingHooks.softCompare) {
     for (const line of softCompareBrief(selection.comparePattern).split('\n')) {
       lines.push(`  ${line}`)
     }
   }
 
-  // ─── Belief shift (belief-shift block) ────────────────────────────
+  // ─── Belief shift block ─────────────────────────────────────────────
   if (block.samplingHooks.beliefCatalyst) {
     const reframe = getReframeForNiche(input.niche)
     const catalystSpec = BELIEF_SHIFT_CATALYSTS[selection.beliefCatalystType]
-    lines.push(`  🔥 BELIEF SHIFT — CONVERSION CORE`)
-    lines.push(`  [1] CATALYST: ${selection.beliefCatalystType} — ${catalystSpec.description}`)
-    lines.push(`  [2] REFRAME structure: "Có thể vấn đề không phải [old assumption about niche '${input.niche}'], `
-      + `mà là [new actionable frame — body-system-level cause that supplement/care can support]"`)
-    lines.push(`      Topic hint (DO NOT QUOTE): reframe around "${reframe.oldBelief.slice(0, 40)}..."`)
-    lines.push(`  [3] PERMISSION: internal acceptance to seek solution.`)
-    lines.push(`  KHÔNG mention product name. Reveal lives in Phase-3 natural-product-discovery block.`)
+    lines.push(`  Belief shift — catalyst: ${selection.beliefCatalystType} (${catalystSpec.description})`)
+    lines.push(`  Reframe shape: "Có thể vấn đề không phải [old], mà là [new — body-system-level cause]"`)
+    lines.push(`  Topic hint (do NOT quote): "${reframe.oldBelief.slice(0, 50)}"`)
+    lines.push(`  KHÔNG mention product name (reveal lives in Phase-3 discovery block).`)
   }
 
-  // ─── Payoff archetype flavor (Phase-4 blocks with payoffArchetype hook) ─
+  // ─── Payoff archetype (Phase 4 blocks) ──────────────────────────────
   if (block.samplingHooks.payoffArchetype) {
     if (block.id === 'micro-transformation' || block.id === 'emotional-wins' || block.id === 'future-self-cta') {
       for (const line of payoffSectionFlavor(selection.payoffArchetype, block.id).split('\n')) {
@@ -217,84 +161,39 @@ function buildBlockDirective(
     }
   }
 
-  // ─── Sprint 5 — E2 (2026-05-28): concrete cost rule for failed-attempts ──
-  // Without this, Gemini wrote vague lists like "thử nhiều loại siro ho.. dùng
-  // viên ngậm.." — zero specificity, reader doesn't feel the pain of wasted
-  // money/time. Real DR voice anchors failed attempts with concrete cost
-  // signals. This rule forces Gemini to add a cost dimension to each item.
+  // ─── Failed-attempts block: concrete cost rule (condensed from Sprint 5 E2) ──
   if (block.id === 'shared-failed-attempts') {
-    lines.push(`  💸 CONCRETE COST RULE (Sprint 5 — E2):`)
-    lines.push(`  HARD RULE: Each failed attempt MUST include a CONCRETE COST signal in at least ONE of these dimensions:`)
-    lines.push(`    1. MONEY — specific amount, real or plausibly invented`)
-    lines.push(`         e.g. "4 thang nước thuốc Bắc × 80 RM = 320 RM"`)
-    lines.push(`         e.g. "máy xịt 180 RM, dùng 2 tháng đã hỏng"`)
-    lines.push(`         e.g. "3 hộp viên uống × 65 RM"`)
-    lines.push(`    2. TIME WASTED — specific duration the attempt was tried`)
-    lines.push(`         e.g. "uống đều 3 tháng, không kết quả"`)
-    lines.push(`         e.g. "kiên trì xông hơi 6 tuần"`)
-    lines.push(`    3. BRAND / METHOD NAME — concrete reference (real local product or method)`)
-    lines.push(`         e.g. "siro Bisolvon — vị ngọt, không hiệu quả"`)
-    lines.push(`         e.g. "miếng dán Trung Quốc trên Shopee 35 RM"`)
-    lines.push(`  ✅ Total inventory: 3-5 attempts. Each one MUST have at least 1 cost dimension above.`)
-    lines.push(`  ⛔ FORBIDDEN openers / phrasings for this block:`)
-    lines.push(`     - "Tôi đã thử đủ mọi cách" (no specifics following)`)
-    lines.push(`     - "Thử nhiều loại / Dùng viên ngậm hoặc..." (no brand, no number)`)
-    lines.push(`     - Bullet-only lists without one micro-detail per item`)
-    lines.push(`  ✅ Optional close: a 1-line total cost summary, e.g. "Cộng lại, hơn 900 RM ném vào những thứ không giải quyết gốc rễ."`)
+    lines.push(`  Concrete-cost rule: each failed attempt MUST include at least ONE cost dimension —`)
+    lines.push(`    • money (specific amount, eg "4 thang × 80 RM = 320 RM"),`)
+    lines.push(`    • time wasted (specific duration), or`)
+    lines.push(`    • brand/method name (concrete reference).`)
+    lines.push(`  3-5 attempts total. Avoid "thử đủ mọi cách" without specifics.`)
+    lines.push(`  Optional 1-line total: "cộng lại, hơn 900 RM ném vào những thứ không giải quyết gốc rễ".`)
   }
 
-  // (P2: proof blocks reviewSlot handled separately — not generated by main pass,
-  //  content interleaved post-generation from proof Gemini call.)
-
-  // ─── D: Block 10 — 3-BEAT STRUCTURE (emotion → curiosity → understanding) ──
-  // Sprint 6 Fix #F (2026-05-28): mechanism explanation HANDED OFF to PI
-  // block pi-mechanism-personal (which the composer interleaves after this
-  // block). Previously Block 10 explained mechanism in Beat 3 AND
-  // pi-mechanism-personal explained it again → 2 mechanism explanations
-  // in the same pack with different voice tones (storytelling soft vs PI
-  // ingredient-specific). Reader fatigue + potential contradiction.
-  //
-  // Now Block 10 keeps Beat 1 (emotion) + Beat 2 (curiosity) at full
-  // weight, and Beat 3 is a 1-line tease that hands off to PI. Memory
-  // anchor stays here so the curiosity hook leads to memory locking
-  // BEFORE the PI deep-dive arrives.
+  // ─── Block 10 (why-this-felt-different): 2-beat + tease handoff to PI ──
   if (block.id === 'why-this-felt-different') {
-    lines.push(`  📐 BLOCK 10 — 2-BEAT + TEASE (locked, ordered):`)
-    lines.push(``)
-    lines.push(`  [BEAT 1] EMOTION FIRST — start with FELT difference`)
-    lines.push(`    "Cảm giác/cái khác là [felt change reader can recognize]"`)
-    lines.push(`    KHÔNG mở bằng mechanism. KHÔNG ingredient. KHÔNG "Sản phẩm...".`)
-    lines.push(``)
-    lines.push(`  [BEAT 2] CURIOSITY SECOND — surface "vì sao khác"`)
-    lines.push(`    "Tôi bắt đầu tò mò vì sao lần này khác / tại sao không quay lại"`)
-    lines.push(`    📌 STATE MEMORY ANCHOR HERE (in Beat 2's reflection, NOT Beat 3):`)
-    lines.push(`        Frame: ${selection.memoryAnchor.frame}`)
-    lines.push(`        Posture: ${selection.memoryAnchor.posture}`)
-    lines.push(`        Generate niche-fit version (NEVER verbatim copy example).`)
-    lines.push(``)
-    lines.push(`  [BEAT 3 — TEASE ONLY, 1-2 sentences] HAND-OFF to next block`)
-    lines.push(`    "Tôi sẽ kể cụ thể cơ chế ở phần sau" / "Sau khi tôi hỏi anh em rể dược sĩ, anh ấy giải thích rõ hơn — tôi viết lại ở chương tiếp"`)
-    lines.push(`    ⚠️ DO NOT explain mechanism details / ingredients / science HERE.`)
-    lines.push(`    The pi-mechanism-personal block (interleaved AFTER) carries the deep-dive.`)
-    lines.push(``)
-    lines.push(`  ⛔ Block 10 forbids: ingredient lists, pseudo-science authority,`)
-    lines.push(`     ad-copy mechanism tone, "Sản phẩm chứa X, Y, Z", "công thức tiên tiến",`)
-    lines.push(`     full mechanism explanation (PI block handles it).`)
-    lines.push(`  ✅ Block 10 allows: felt experience → curiosity + memory anchor → 1-line tease to PI.`)
+    lines.push(`  Block 10 structure (2 beats + 1-line tease):`)
+    lines.push(`    Beat 1 — EMOTION FIRST: start with felt difference ("Cảm giác/cái khác là...").`)
+    lines.push(`    Beat 2 — CURIOSITY: surface "vì sao khác". State memory anchor here.`)
+    lines.push(`      Anchor frame: ${selection.memoryAnchor.frame}`)
+    lines.push(`      Anchor posture: ${selection.memoryAnchor.posture}`)
+    lines.push(`    Beat 3 — TEASE ONLY (1-2 sentences): hand off to next block.`)
+    lines.push(`      Example: "Sau khi tôi hỏi anh em rể dược sĩ, anh ấy giải thích rõ hơn — tôi viết lại ở chương tiếp."`)
+    lines.push(`  Block 10 forbids: ingredient lists, pseudo-science, "công thức tiên tiến",`)
+    lines.push(`    full mechanism explanation. Mechanism deep-dive happens in PI block (next).`)
   }
 
-  // ─── C2: Commercial memory anchor — ECHO in sampled echo block ──────
+  // ─── Echo memory anchor (sampled echo block) ────────────────────────
   if (block.id === selection.memoryAnchor.echoBlock) {
-    lines.push(`  🔁 ECHO MEMORY ANCHOR lightly here — callback to Block 10\'s differentiator.`)
-    lines.push(`  Brief mention or reframe — reader recognizes it returning, memory locks.`)
-    lines.push(`  KHÔNG repeat verbatim. KHÔNG re-explain. Just trigger recognition.`)
+    lines.push(`  Echo memory anchor lightly — callback to Block 10 differentiator.`)
+    lines.push(`  Brief mention / reframe — reader recognizes it returning. KHÔNG verbatim repeat.`)
   }
 
-  // ─── Soft CTA (future-self-cta block) ─────────────────────────────
+  // ─── Soft CTA block ─────────────────────────────────────────────────
   if (block.samplingHooks.softCta) {
-    lines.push(`  💌 ${buildSoftCtaDirective()}`)
-    lines.push(`  Length: 60-100 từ. KHÔNG benefit push. KHÔNG urgency. KHÔNG "buy now".`)
-    lines.push(`  Reader feels "maybe I should finally take care of myself" — NOT "buy now".`)
+    lines.push(`  ${buildSoftCtaDirective()}`)
+    lines.push(`  Length 60-100 từ. KHÔNG benefit push, KHÔNG urgency, KHÔNG "buy now".`)
     lines.push(`  Self-test: thay product bằng "cuốn sách tôi đọc" — vẫn make sense → PASS.`)
   }
 
@@ -302,40 +201,23 @@ function buildBlockDirective(
 }
 
 /** Top-level user prompt builder.
- *
- *  POST-FIX (2026-05-27): accepts optional `synthesizedReaderSymptoms` —
- *  when provided, the nicheDomainLockBrief switches to synthesis-aware
- *  mode (product-specific symptoms replace generic niche-pool symptoms).
- *  This resolves the two-competing-pools conflict that caused niche drift
- *  in kitchen-sink niches like 'health-functional'. */
+ *  Composes: niche briefs → narrator DNA → per-block directives. */
 export function buildPackGenUserPrompt(
   input: StorytellingInput,
   plan: BlockPlan[],
   selection: NarratorDnaSelection,
   retryFeedback?: string,
   synthesizedReaderSymptoms?: string[],
-  /** CP-SYNTHESIS (2026-05-28) — Commercial psychology overrides niche
-   *  defaults in desire / cta / objections / proof texture briefs.
-   *  When provided, the niche-table values become fallback baseline. */
   commercialPsychology?: import('../../productSynthesis').SynthesizedCommercialPsychology,
-  /** Sprint 5 — E2/E3 (2026-05-28): pass brainstorm into block directives
-   *  so Phase 1-2 blocks can pin specific agitate beats. */
   brainstorm?: PackBrainstorm,
 ): string {
   const lines: string[] = []
 
-  lines.push(ENGINE_CORE_PHILOSOPHY)
-  lines.push('')
-
-  // ─── C2: Niche-domain lock (synthesis-aware, anti-contamination) ────
-  // When synthesis brief provides product-specific symptoms, the brief
-  // uses THOSE as the authoritative pain symptom list and downgrades the
-  // niche-generic pools to "supporting cues, filter to current product".
+  // ─── Niche domain lock (single-source resolution: synthesis OR niche) ──
   lines.push(nicheDomainLockBrief(selection.domainLock, synthesizedReaderSymptoms))
   lines.push('')
 
-  // ─── C2: Niche desire architecture (anti-flattening, synthesis-aware) ────
-  // CP-SYNTHESIS: commercial psychology overrides niche-baseline desire.
+  // ─── Niche desire (commercial-psych override when present) ──────────
   lines.push(nicheDesireBrief(
     selection.desireArchitecture,
     commercialPsychology ? {
@@ -346,16 +228,15 @@ export function buildPackGenUserPrompt(
   ))
   lines.push('')
 
-  // ─── C2: Niche mechanism vocab (anti-generic-wellness) ──────────────
+  // ─── Niche mechanism vocab (anti-generic-wellness) ──────────────────
   lines.push(nicheMechanismBrief(selection.domainLock.niche, selection.mechanismFrame))
   lines.push('')
 
-  // ─── C2: Commercial memory anchor (anti-product-forgetting) ─────────
+  // ─── Memory anchor (anti-product-forgetting) ────────────────────────
   lines.push(memoryAnchorBrief(selection.memoryAnchor))
   lines.push('')
 
-  // ─── P3: CTA orchestration (lightweight, sampling-driven, synthesis-aware) ─
-  // CP-SYNTHESIS: commercial psychology overrides niche-baseline CTA vibe.
+  // ─── CTA orchestration (commercial-psych override when present) ─────
   lines.push(buildCtaMomentsBrief(
     selection.ctaFlow,
     commercialPsychology ? {
@@ -365,10 +246,9 @@ export function buildPackGenUserPrompt(
   ))
   lines.push('')
 
-  // ─── Per-pack archetype + DNA briefs ─────────────────────────────
+  // ─── Per-pack archetype + narrator DNA ──────────────────────────────
   lines.push(payoffArchetypeBrief(selection.payoffArchetype))
   lines.push('')
-
   lines.push('═══ NARRATOR DNA (per-pack — sampled deterministically) ═══')
   lines.push(narratorBrief(selection.narrator))
   if (selection.emotionalDna) {
@@ -389,148 +269,70 @@ export function buildPackGenUserPrompt(
     lines.push(buildBlockDirective(bp, input, selection, brainstorm))
   }
 
-  // ─── Optional retry feedback ─────────────────────────────────────
+  // ─── Optional retry feedback ────────────────────────────────────────
   if (retryFeedback && retryFeedback.trim().length > 0) {
     lines.push('')
-    lines.push('═══ RETRY FEEDBACK ═══')
+    lines.push('═══ RETRY NOTE ═══')
     lines.push(retryFeedback)
   }
 
-  // ─── Closing reminders (minimal — output schema only) ──────────────
-  // OPT-DIAG Fix 1 (2026-05-28): trimmed redundant repeats. The
-  // "reader is emotional center" + global bans are already in the
-  // system prompt's CORE TARGET + GLOBAL BANS sections — repeating
-  // them here adds ~80 tokens of noise per call. Kept only the
-  // OUTPUT SCHEMA reminder (Gemini sometimes drops it).
+  // ─── Output schema reminder (minimal) ───────────────────────────────
   lines.push('')
   lines.push(`═══ OUTPUT ═══
-JSON only. ${storyBlocks.length} blocks in order. Schema: { id, title, paragraphs: [string, ...] }.`)
+JSON only. ${storyBlocks.length} blocks in order. Schema per block: { id, title, paragraphs: [string, ...] }.`)
 
   return lines.join('\n')
 }
 
-/** OPT-DIAG Fix 2 (2026-05-28) — Sharpen retry feedback.
+/** Simplified retry feedback. v5 elaborate per-violation parser was
+ *  compensating for a weak prompt — it generated dense per-block diffs
+ *  that often confused Gemini (saw 13→21 violation escalation in
+ *  testing). v6 keeps it short and focused on the blocks that failed.
  *
- *  Old behavior: pasted raw violation strings + generic "fix the violations"
- *  instruction. Gemini saw a wall of issues without knowing WHICH block was
- *  the worst offender or HOW to vary it — retry attempt frequently produced
- *  the SAME content with even more violations (observed 13 → 21).
- *
- *  New behavior:
- *    1. Parse violation strings to extract (failing block, validator,
- *       similarity %, ref block).
- *    2. Group by failing block — collapse multiple duplicate complaints
- *       about one block into ONE focused instruction.
- *    3. Per-validator actionable instructions:
- *       - duplicateContent → name BOTH blocks + similarity %, tell Gemini
- *         to use a DIFFERENT scene/object/sensory channel for the failing
- *         block (psychological function is unchanged — the SCENE around
- *         it must change).
- *       - adjacentRhythm → name the PREV block + tell Gemini to vary
- *         sentence-length distribution + opening word patterns.
- *       - selfInsertion / memoryAnchor / phaseOneSpecificity → quote the
- *         exact rule with the block id.
- *    4. Block ids NOT mentioned in any violation are explicitly listed
- *       as "keep these as they are" — Gemini doesn't accidentally rewrite
- *       passing blocks during retry.
- *
- *  Zero logic change to validators or the main generator — this is purely
- *  retry-prompt phrasing.
- */
+ *  The mode-conditional system prompt + flat block directives should now
+ *  produce passing output on attempt 1 more often, so retry feedback is
+ *  the exception, not the rule. */
 export function buildRetryFeedback(items: string[]): string {
   if (items.length === 0) return ''
 
-  // ── Parse violations into structured form ──
-  interface ParsedViolation {
-    blockId: string
-    validator: string
-    refBlock?: string
-    similarity?: number
-    raw: string
-  }
-  const parsed: ParsedViolation[] = []
+  // Group violations by block id.
+  const byBlock = new Map<string, string[]>()
+  const globals: string[] = []
   for (const raw of items) {
-    // Pattern: `Block "X" failed VALIDATOR: ...`
-    const blockMatch = raw.match(/Block\s+"([^"]+)"\s+failed\s+(\w+):\s*(.*)/i)
-    if (!blockMatch) {
-      // Non-block-tagged violation (e.g. JSON error) — keep as-is
-      parsed.push({ blockId: '_global', validator: 'misc', raw })
+    const m = raw.match(/Block\s+"([^"]+)"\s+failed\s+(\w+):\s*(.*)/i)
+    if (!m) {
+      globals.push(raw)
       continue
     }
-    const blockId = blockMatch[1]
-    const validator = blockMatch[2]
-    const rest = blockMatch[3] ?? ''
-    // For duplicateContent: extract ref block + similarity
-    let refBlock: string | undefined
-    let similarity: number | undefined
-    if (validator === 'duplicateContent') {
-      const dupMatch = rest.match(/section\s+"([^"]+)"\s*\((\d+)%/)
-      if (dupMatch) {
-        refBlock = dupMatch[1]
-        similarity = parseInt(dupMatch[2], 10)
-      }
-    } else if (validator === 'adjacentRhythm') {
-      const adjMatch = rest.match(/\(([^)]+)\)/)
-      if (adjMatch) refBlock = adjMatch[1]
-    }
-    parsed.push({ blockId, validator, refBlock, similarity, raw })
+    const blockId = m[1]
+    const summary = `${m[2]}: ${m[3].slice(0, 140)}`
+    const arr = byBlock.get(blockId) ?? []
+    arr.push(summary)
+    byBlock.set(blockId, arr)
   }
 
-  // ── Group by failing block ──
-  const byBlock = new Map<string, ParsedViolation[]>()
-  for (const v of parsed) {
-    const arr = byBlock.get(v.blockId) ?? []
-    arr.push(v)
-    byBlock.set(v.blockId, arr)
-  }
-
-  // ── Emit focused per-block instructions ──
   const lines: string[] = []
-  lines.push('Previous attempt had validator violations. Fix ONLY the blocks listed below — keep every other block exactly as in attempt 1.')
+  lines.push('Attempt 1 had issues in the blocks below. Rewrite ONLY these blocks; keep all other blocks identical to attempt 1.')
   lines.push('')
 
-  for (const [blockId, violations] of byBlock) {
-    if (blockId === '_global') {
-      lines.push('GLOBAL ISSUES:')
-      for (const v of violations) lines.push(`  - ${v.raw}`)
-      lines.push('')
-      continue
-    }
-    lines.push(`▸ BLOCK "${blockId}" — REWRITE this block. Specific instructions:`)
-
-    // Group by validator within this block
-    const dupViolations = violations.filter((v) => v.validator === 'duplicateContent')
-    const adjViolations = violations.filter((v) => v.validator === 'adjacentRhythm')
-    const others = violations.filter((v) => v.validator !== 'duplicateContent' && v.validator !== 'adjacentRhythm')
-
-    if (dupViolations.length > 0) {
-      const refs = dupViolations
-        .filter((v) => v.refBlock)
-        .map((v) => `"${v.refBlock}"${v.similarity ? ` (${v.similarity}%)` : ''}`)
-        .join(', ')
-      lines.push(`  • DUPLICATE CONTENT — your draft is too similar to: ${refs}. `)
-      lines.push(`    Keep this block's psychological function the same, but CHANGE:`)
-      lines.push(`    1. The SCENE / setting (different time of day, place, posture).`)
-      lines.push(`    2. The OBJECT in focus (different daily item, different sensory channel).`)
-      lines.push(`    3. The OPENING phrasing (different first 4-5 words).`)
-      lines.push(`    Cut any phrase that appeared in the referenced block(s).`)
-    }
-    if (adjViolations.length > 0) {
-      const refs = adjViolations.map((v) => v.refBlock ?? 'previous block').join(', ')
-      lines.push(`  • ADJACENT RHYTHM — your draft echoes the rhythm of: ${refs}.`)
-      lines.push(`    Vary sentence lengths (mix short + medium + longer). Vary opening words.`)
-    }
-    for (const v of others) {
-      lines.push(`  • [${v.validator}] ${v.raw.replace(/^Block\s+"[^"]+"\s+failed\s+\w+:\s*/, '')}`)
-    }
+  for (const [blockId, summaries] of byBlock) {
+    lines.push(`▸ Block "${blockId}":`)
+    for (const s of summaries) lines.push(`    - ${s}`)
+    lines.push(`    Fix: vary scene/object/sensory channel + opening phrasing. Keep psychological function intact.`)
     lines.push('')
   }
 
-  lines.push('Output the SAME JSON structure (same block ids in the same order). Do NOT touch blocks that pass — they are already good.')
+  if (globals.length > 0) {
+    lines.push('Global issues:')
+    for (const g of globals) lines.push(`  - ${g}`)
+    lines.push('')
+  }
+
+  lines.push('Output the SAME JSON schema (same block ids in same order).')
   return lines.join('\n')
 }
 
-/** Log prompt stats for telemetry/debugging. */
+/** Log prompt stats — telemetry only. */
 export function logPromptStats(systemPrompt: string, userPrompt: string, plan: BlockPlan[]): void {
   const sysTokens = Math.round(systemPrompt.length / 4)
   const userTokens = Math.round(userPrompt.length / 4)

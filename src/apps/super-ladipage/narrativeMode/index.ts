@@ -15,4 +15,3 @@ export type {
 } from './detectNarrativeMode'
 
 export { isBlockSkippedForMode, getSkippedBlocksForMode } from './modeBlockFilter'
-export { buildModeHint } from './modeSystemPromptHint'
