@@ -306,16 +306,42 @@ NO markdown fences. NO prose outside JSON. JSON only.`
   }
 
   try {
-    const raw = await textGenWithFallback({
+    // 2026-05-29 — Defensive retry on suspiciously short output.
+    // Pack 3 (dental Teeth Restoration) showed Gemini returning 404 chars
+    // for a 5-block JSON request — clearly truncated mid-stream by free-tier
+    // server overload (not by maxOutputTokens which was 3000). A 5-block
+    // PI batch typically produces 2500-4000 chars; <800 chars means
+    // server cut early. In that case the recovery walker gets nothing
+    // useful (can't even close the first entry's brace). Retry once
+    // with the same prompt — usually a different server worker that's
+    // less throttled. Bumped tokens 3000→4000 for headroom.
+    const SHORT_OUTPUT_THRESHOLD = 800   // chars
+    let raw = await textGenWithFallback({
       geminiApiKey: keys.geminiApiKey,
       kieApiKey: keys.kieApiKey,
       prompt: userPrompt,
       systemInstruction,
       jsonMode: true,
-      maxOutputTokens: 3000,
+      maxOutputTokens: 4000,
       timeoutMs: 60_000,
       label: 'pi-batch',
     })
+
+    if (raw.trim().length < SHORT_OUTPUT_THRESHOLD) {
+      console.warn(
+        `[PI/batch] attempt 1 returned only ${raw.trim().length} chars (< ${SHORT_OUTPUT_THRESHOLD} threshold) — likely server-side truncation. Retrying once.`,
+      )
+      raw = await textGenWithFallback({
+        geminiApiKey: keys.geminiApiKey,
+        kieApiKey: keys.kieApiKey,
+        prompt: userPrompt,
+        systemInstruction,
+        jsonMode: true,
+        maxOutputTokens: 4000,
+        timeoutMs: 60_000,
+        label: 'pi-batch-retry',
+      })
+    }
 
     let cleaned = raw.trim()
     if (cleaned.startsWith('```')) {

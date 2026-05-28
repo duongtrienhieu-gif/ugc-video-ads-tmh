@@ -1,16 +1,21 @@
 // ImageSlot — single card in the 9-slot grid.
-// Phase 2: renders via ListingCanvas (real Konva). Slot 1 gets full content;
-// slots 2-9 show a placeholder until Phase 4 wires their renderers.
+// Phase 2: renders via ListingCanvas (real Konva).
+// Phase 3: Re-roll visual button now calls real kie.ai for slot 1.
 
 import { useEffect, useRef, useState } from 'react'
 import { RefreshCw, Pencil, Download, Loader2 } from 'lucide-react'
 import type Konva from 'konva'
 import { useAppStore } from '../../../stores/appStore'
+import { useBankStore } from '../../../stores/bankStore'
+import { useSettingsStore } from '../../../stores/settingsStore'
 import type { ListingImage, PaletteFamily } from '../types'
 import type { ResolvedBrandKit } from '../../../types/brandKit'
 import { COMPOSITION_FAMILY_LABELS, ATMOSPHERE_VARIANTS } from '../constants'
 import ListingCanvas from '../canvas/ListingCanvas'
 import { downloadStage } from '../services/exportImage'
+import { generateSlotImage, friendlyErrorMessage } from '../services/generateSlot'
+import { getKieCredits } from '../../../utils/kieai'
+import { useTikTokShopStore } from '../store'
 
 interface Props {
   image: ListingImage
@@ -24,15 +29,63 @@ export default function ImageSlot({ image, paletteFamily, brandKit, fallbackScen
   const stageRef = useRef<Konva.Stage | null>(null)
   const [wrapRef, displayWidth] = useElementWidth<HTMLDivElement>()
 
-  const atmosphere = ATMOSPHERE_VARIANTS[image.config.atmosphere]
+  const draft           = useTikTokShopStore((s) => s.draft)
+  const setSlotStatus   = useTikTokShopStore((s) => s.setSlotStatus)
+  const setSlotImage    = useTikTokShopStore((s) => s.setSlotImage)
+  const getProductById  = useBankStore((s) => s.getProductById)
+  const kieApiKey       = useSettingsStore((s) => s.kieApiKey)
+  const setKieCredits   = useSettingsStore((s) => s.setKieCredits)
 
-  const phaseStubAction = (kind: 'visual' | 'text') => {
-    addToast(
-      kind === 'visual'
-        ? 'Re-roll visual — wire ở Phase 3'
-        : 'Re-roll text — wire ở Phase 4',
-      'info',
-    )
+  const atmosphere = ATMOSPHERE_VARIANTS[image.config.atmosphere]
+  const isGenerating = image.status === 'generating'
+
+  async function handleRerollVisual() {
+    if (!draft.brandKitId || !draft.productId) {
+      addToast('Cần chọn Brand Kit + Sản phẩm trước khi re-roll', 'error')
+      return
+    }
+    if (!draft.output) {
+      addToast('Bấm "Tạo Slot 1" ở panel trái trước', 'error')
+      return
+    }
+    const product = getProductById(draft.productId)
+    if (!product) {
+      addToast('Không tìm thấy sản phẩm', 'error')
+      return
+    }
+    if (draft.referenceImageAssetIds.length < 2) {
+      addToast('Cần ít nhất 2 ảnh tham chiếu', 'error')
+      return
+    }
+
+    setSlotStatus(image.slot, 'generating')
+    try {
+      const { assetId, prompt } = await generateSlotImage({
+        apiKey: kieApiKey,
+        brandKit,
+        product,
+        slotConfig: image.config,
+        paletteFamily,
+        language: draft.market,
+        referenceImageAssetIds: draft.referenceImageAssetIds,
+      })
+      setSlotImage(image.slot, assetId, prompt)
+      addToast(`Đã tạo lại Slot ${image.slot}`, 'success')
+
+      // Refresh credits
+      try {
+        const newCredits = await getKieCredits(kieApiKey)
+        setKieCredits(newCredits)
+      } catch { /* silent */ }
+    } catch (err) {
+      const msg = friendlyErrorMessage(err)
+      setSlotStatus(image.slot, 'failed', msg)
+      addToast(`Slot ${image.slot} lỗi: ${msg}`, 'error')
+    }
+  }
+
+  function handleRerollText() {
+    addToast('Re-roll text — wire ở Phase 4 (khi text gen có)', 'info')
   }
 
   const handleDownload = async () => {
@@ -95,14 +148,15 @@ export default function ImageSlot({ image, paletteFamily, brandKit, fallbackScen
         </span>
         <div className="flex shrink-0 items-center gap-0.5">
           <IconBtn
-            icon={<RefreshCw className="h-3 w-3" />}
+            icon={isGenerating ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
             title="Tạo lại ảnh"
-            onClick={() => phaseStubAction('visual')}
+            onClick={handleRerollVisual}
+            disabled={isGenerating}
           />
           <IconBtn
             icon={<Pencil className="h-3 w-3" />}
             title="Sửa text"
-            onClick={() => phaseStubAction('text')}
+            onClick={handleRerollText}
           />
           <IconBtn
             icon={<Download className="h-3 w-3" />}

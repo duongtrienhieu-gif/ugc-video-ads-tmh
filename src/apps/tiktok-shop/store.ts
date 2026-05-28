@@ -1,5 +1,7 @@
-// TikTok Shop — Zustand store (Phase 1: skeleton).
-// Phase 3+ adds: generate action, retry, re-roll visual/text, save to Supabase.
+// TikTok Shop — Zustand store.
+// Phase 1: skeleton selectors + mock builder.
+// Phase 3: + generation lifecycle (initialize output, per-slot status/asset).
+// Phase 4 will: persist listings to Supabase, snapshot brandKitVersion, etc.
 
 import { create } from 'zustand'
 import type { Market } from '../../types/brandKit'
@@ -7,7 +9,10 @@ import type {
   ListingDraft,
   ListingOutput,
   ListingImage,
+  ImageGenStatus,
+  SlotNumber,
   DraftReadiness,
+  PaletteFamily,
 } from './types'
 import {
   SLOT_MAP,
@@ -21,6 +26,7 @@ interface TikTokShopState {
   // even before Phase 3 wires real generation. Toggle off later phases.
   showMockPreview: boolean
 
+  // ── Input selection ──
   selectBrandKit: (id: string | null) => void
   selectProduct: (id: string | null) => void
   setLanguage: (m: Market) => void
@@ -28,6 +34,18 @@ interface TikTokShopState {
   removeReferenceImage: (assetId: string) => void
   toggleMockPreview: () => void
   resetDraft: () => void
+
+  // ── Generation lifecycle (Phase 3+) ──
+  initializeListingOutput: (params: {
+    productId: string
+    brandKitId: string
+    brandKitVersion: number
+    market: Market
+    paletteFamily: PaletteFamily
+  }) => void
+  setIsGenerating: (val: boolean) => void
+  setSlotStatus: (slot: SlotNumber, status: ImageGenStatus, error?: string) => void
+  setSlotImage: (slot: SlotNumber, assetId: string, prompt?: string) => void
 }
 
 function createEmptyDraft(): ListingDraft {
@@ -39,6 +57,16 @@ function createEmptyDraft(): ListingDraft {
     output: null,
     isGenerating: false,
   }
+}
+
+function createPendingImages(): ListingImage[] {
+  return SLOT_MAP.map((cfg) => ({
+    slot: cfg.slot,
+    config: cfg,
+    imageAssetId: null,
+    overlay: MOCK_OVERLAY_BY_SLOT[cfg.slot] ?? {},
+    status: 'pending',
+  }))
 }
 
 export const useTikTokShopStore = create<TikTokShopState>((set) => ({
@@ -62,6 +90,73 @@ export const useTikTokShopStore = create<TikTokShopState>((set) => ({
   toggleMockPreview: () => set((s) => ({ showMockPreview: !s.showMockPreview })),
 
   resetDraft: () => set({ draft: createEmptyDraft() }),
+
+  // ── Phase 3: Generation lifecycle ──────────────────────────────────────
+
+  initializeListingOutput: ({ productId, brandKitId, brandKitVersion, market, paletteFamily }) => set((s) => {
+    const nowIso = new Date().toISOString()
+    const output: ListingOutput = {
+      id: crypto.randomUUID(),
+      productId,
+      brandKitId,
+      brandKitVersion,
+      market,
+      category: 'tpcn-health',
+      paletteFamily,
+      createdAt: nowIso,
+      updatedAt: nowIso,
+      images: createPendingImages(),
+      description: MOCK_DESCRIPTION,  // Phase 4 replaces with real gen
+    }
+    return {
+      draft: { ...s.draft, output },
+      showMockPreview: false,  // turn off mock — show the real (pending) output
+    }
+  }),
+
+  setIsGenerating: (val) => set((s) => ({ draft: { ...s.draft, isGenerating: val } })),
+
+  setSlotStatus: (slot, status, error) => set((s) => {
+    if (!s.draft.output) return s
+    return {
+      draft: {
+        ...s.draft,
+        output: {
+          ...s.draft.output,
+          updatedAt: new Date().toISOString(),
+          images: s.draft.output.images.map((img) =>
+            img.slot === slot ? { ...img, status, error: error ?? undefined } : img,
+          ),
+        },
+      },
+    }
+  }),
+
+  setSlotImage: (slot, assetId, prompt) => set((s) => {
+    if (!s.draft.output) return s
+    const nowIso = new Date().toISOString()
+    return {
+      draft: {
+        ...s.draft,
+        output: {
+          ...s.draft.output,
+          updatedAt: nowIso,
+          images: s.draft.output.images.map((img) =>
+            img.slot === slot
+              ? {
+                  ...img,
+                  imageAssetId: assetId,
+                  status: 'completed',
+                  error: undefined,
+                  aiGenPrompt: prompt ?? img.aiGenPrompt,
+                  generatedAt: nowIso,
+                }
+              : img,
+          ),
+        },
+      },
+    }
+  }),
 }))
 
 // ── Validation helper ────────────────────────────────────────────────────
@@ -89,9 +184,8 @@ export function checkDraftReadiness(
   return { ready: missing.length === 0, missing, warnings }
 }
 
-// ── Mock listing builder — Phase 1 only ─────────────────────────────────
-// Produces a fake ListingOutput that ImageGrid/DescriptionEditor can render
-// so the UI shell isn't empty before Phase 3 wires real generation.
+// ── Mock listing builder ─────────────────────────────────────────────────
+// Renders 9 mock slots so the UI shell isn't empty before user generates.
 
 export function buildMockListing(): ListingOutput {
   const images: ListingImage[] = SLOT_MAP.map((cfg) => ({

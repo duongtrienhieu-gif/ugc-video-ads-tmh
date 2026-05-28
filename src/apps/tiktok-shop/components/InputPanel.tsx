@@ -1,7 +1,7 @@
 // InputPanel — left column of TikTok Shop app.
 // Brand Kit picker + Product picker + reference image upload + language toggle
 // + cost estimate + generate button.
-// Phase 1: UI wired; Generate button shows "coming Phase 3" toast.
+// Phase 3: Generate runs real kie.ai pipeline for Slot 1 (others land Phase 4).
 
 import { useEffect, useRef, useState } from 'react'
 import {
@@ -13,8 +13,17 @@ import { useSettingsStore } from '../../../stores/settingsStore'
 import { useAppStore } from '../../../stores/appStore'
 import { MARKET_LABELS, type Market } from '../../../types/brandKit'
 import { saveAsset, getUrl } from '../../../utils/assetStore'
+import { getKieCredits } from '../../../utils/kieai'
 import { useTikTokShopStore, checkDraftReadiness } from '../store'
-import { estimateListingCredits } from '../constants'
+import {
+  CREDIT_COST_PER_IMAGE_1K,
+  CREDIT_COST_PER_IMAGE_2K,
+  SLOT_MAP,
+  snapToPaletteFamily,
+} from '../constants'
+import { useResolvedBrandKit } from '../canvas/useResolvedBrandKit'
+import { generateSlotImage, friendlyErrorMessage } from '../services/generateSlot'
+import CostEstimator from './CostEstimator'
 
 export default function InputPanel() {
   const draft         = useTikTokShopStore((s) => s.draft)
@@ -23,15 +32,24 @@ export default function InputPanel() {
   const setLanguage    = useTikTokShopStore((s) => s.setLanguage)
   const addRef         = useTikTokShopStore((s) => s.addReferenceImage)
   const removeRef      = useTikTokShopStore((s) => s.removeReferenceImage)
+  const initializeOutput = useTikTokShopStore((s) => s.initializeListingOutput)
+  const setSlotStatus    = useTikTokShopStore((s) => s.setSlotStatus)
+  const setSlotImage     = useTikTokShopStore((s) => s.setSlotImage)
+  const setIsGenerating  = useTikTokShopStore((s) => s.setIsGenerating)
+  const isGenerating     = useTikTokShopStore((s) => s.draft.isGenerating)
 
   const brandKits   = useBrandKitStore((s) => s.brandKits)
   const products    = useBankStore((s) => s.products)
+  const getProductById = useBankStore((s) => s.getProductById)
   const hasApiKey   = useSettingsStore((s) => s.hasApiKey())
+  const kieApiKey   = useSettingsStore((s) => s.kieApiKey)
   const kieCredits  = useSettingsStore((s) => s.kieCredits)
+  const setKieCredits = useSettingsStore((s) => s.setKieCredits)
   const openApp     = useAppStore((s) => s.openApp)
   const addToast    = useAppStore((s) => s.addToast)
 
   const [uploading, setUploading] = useState(false)
+  const [costModalOpen, setCostModalOpen] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   // Filter brand kits by selected market — only show kits that target the
@@ -40,8 +58,17 @@ export default function InputPanel() {
   const selectedKit = brandKits.find((k) => k.id === draft.brandKitId)
   const kitReady    = selectedKit ? isBrandKitReady(selectedKit).ready : false
 
+  // Resolve brand kit + palette for generation (falls back to mock when no
+  // brand kit selected, but Generate is blocked until one is)
+  const resolvedBrandKit = useResolvedBrandKit(draft.brandKitId, draft.market)
+  const paletteFamily = snapToPaletteFamily(resolvedBrandKit.palette.primary)
+
   const readiness = checkDraftReadiness(draft, kitReady, hasApiKey)
-  const estimatedCost = estimateListingCredits()
+
+  // Phase 3: only Slot 1 generates → cost is just that one image.
+  // Phase 4 will switch to full-9-slot cost via estimateListingCredits().
+  const slot1Config = SLOT_MAP[0]
+  const estimatedCost = slot1Config.highRes ? CREDIT_COST_PER_IMAGE_2K : CREDIT_COST_PER_IMAGE_1K
 
   async function handleUpload(files: FileList | null) {
     if (!files || files.length === 0) return
@@ -68,7 +95,56 @@ export default function InputPanel() {
   }
 
   function handleGenerate() {
-    addToast('Phase 3 sẽ wire tính năng tạo listing — Phase 1 hiện chỉ là UI skeleton', 'info')
+    if (!readiness.ready) return
+    setCostModalOpen(true)
+  }
+
+  async function handleConfirmGenerate() {
+    setCostModalOpen(false)
+    if (!draft.brandKitId || !draft.productId) return
+    const product = getProductById(draft.productId)
+    if (!product) {
+      addToast('Không tìm thấy sản phẩm', 'error')
+      return
+    }
+
+    // 1. Initialize 9-slot output (Phase 3 only fills slot 1; others stay pending)
+    initializeOutput({
+      productId: draft.productId,
+      brandKitId: draft.brandKitId,
+      brandKitVersion: selectedKit?.version ?? 1,
+      market: draft.market,
+      paletteFamily,
+    })
+    setIsGenerating(true)
+    setSlotStatus(1, 'generating')
+
+    try {
+      const { assetId, prompt } = await generateSlotImage({
+        apiKey: kieApiKey,
+        brandKit: resolvedBrandKit,
+        product,
+        slotConfig: slot1Config,
+        paletteFamily,
+        language: draft.market,
+        referenceImageAssetIds: draft.referenceImageAssetIds,
+        onStatus: (s) => console.log('[tiktok-shop] slot 1 status:', s),
+      })
+      setSlotImage(1, assetId, prompt)
+      addToast('Đã tạo Slot 1 — kiểm tra grid giữa', 'success')
+
+      // Refresh credit balance so the sidebar number updates
+      try {
+        const newCredits = await getKieCredits(kieApiKey)
+        setKieCredits(newCredits)
+      } catch { /* silent — UI just shows stale number */ }
+    } catch (err) {
+      const msg = friendlyErrorMessage(err)
+      setSlotStatus(1, 'failed', msg)
+      addToast(`Slot 1 lỗi: ${msg}`, 'error')
+    } finally {
+      setIsGenerating(false)
+    }
   }
 
   return (
@@ -199,7 +275,7 @@ export default function InputPanel() {
             </span>
           </div>
           <p className="mt-1 text-[10px] leading-snug text-indigo-500">
-            7 ảnh AI + 1 text gen. Re-roll tốn thêm credit.
+            Phase 3: chỉ Slot 1 (Hero Hook, 2K). Re-roll tốn thêm credit.
           </p>
         </div>
       </Section>
@@ -224,16 +300,27 @@ export default function InputPanel() {
 
         <button
           onClick={handleGenerate}
-          disabled={!readiness.ready}
+          disabled={!readiness.ready || isGenerating}
           className="flex w-full items-center justify-center gap-2 rounded-lg bg-violet-600 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-violet-700 disabled:bg-gray-300 disabled:text-gray-500"
         >
-          <Sparkles className="h-4 w-4" />
-          Tạo Listing
+          {isGenerating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+          {isGenerating ? 'Đang tạo Slot 1...' : 'Tạo Slot 1'}
         </button>
         <p className="text-center text-[10px] text-gray-400">
-          Phase 1 skeleton — chưa wire tạo thật
+          Phase 3: chỉ Slot 1 — Phase 4 sẽ scale 9 slot
         </p>
       </div>
+
+      {/* ── Cost confirmation modal ─────────────────────────────────── */}
+      <CostEstimator
+        open={costModalOpen}
+        onClose={() => setCostModalOpen(false)}
+        onConfirm={handleConfirmGenerate}
+        estimatedCredits={estimatedCost}
+        currentBalance={kieCredits}
+        scope="slot-1"
+        busy={isGenerating}
+      />
     </div>
   )
 }

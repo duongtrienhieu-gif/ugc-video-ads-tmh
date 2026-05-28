@@ -2,13 +2,11 @@
 // Phase 2: each card renders via real Konva canvas (ListingCanvas).
 // Brand kit + fallback scene URL resolved here once, passed to all 9 cards.
 
-import { useEffect, useState } from 'react'
 import { LayoutGrid, Eye, EyeOff } from 'lucide-react'
 import ImageSlot from './ImageSlot'
 import { useTikTokShopStore, buildMockListing } from '../store'
 import { useResolvedBrandKit } from '../canvas/useResolvedBrandKit'
 import { snapToPaletteFamily } from '../constants'
-import { getUrl } from '../../../utils/assetStore'
 
 export default function ImageGrid() {
   const draft = useTikTokShopStore((s) => s.draft)
@@ -19,18 +17,13 @@ export default function ImageGrid() {
   const brandKit = useResolvedBrandKit(draft.brandKitId, draft.market)
   const paletteFamily = snapToPaletteFamily(brandKit.palette.primary)
 
-  // Load first reference image as the fallback "product scene" — Phase 2 uses
-  // this in Slot 1 instead of an AI-generated background. Phase 3 swaps in AI.
-  const firstRefId = draft.referenceImageAssetIds[0]
-  const [fallbackSceneUrl, setFallbackSceneUrl] = useState<string | null>(null)
-  useEffect(() => {
-    if (!firstRefId) { setFallbackSceneUrl(null); return }
-    let alive = true
-    getUrl(firstRefId)
-      .then((u) => { if (alive) setFallbackSceneUrl(u) })
-      .catch(() => { if (alive) setFallbackSceneUrl(null) })
-    return () => { alive = false }
-  }, [firstRefId])
+  // NOTE: Earlier Phase 2 used the first reference image as a fallback
+  // "product scene" in Slot 1 preview — but the raw ref photo (which
+  // includes its own background, often a full ad mockup) looked like an
+  // "ad inside an ad" and confused users. Now we only show the clean
+  // dashed placeholder until AI actually generates the scene in Phase 3+.
+  // If we later add background-removal, we can re-introduce ref previews.
+  const fallbackSceneUrl: string | null = null
 
   const output = draft.output ?? (showMock ? buildMockListing() : null)
 

@@ -24,11 +24,15 @@ interface Props {
   overlay: OverlayConfig
   textColor: string
   accentColor: string
-  /** Either AI-generated scene (Phase 3+) OR product reference photo (Phase 2 fallback) */
+  /** Product reference photo (Phase 2 fallback). When AI scene is present,
+   *  parent passes null + hidePlaceholder=true so this layer only draws text. */
   sceneImageUrl: string | null
+  /** Skip the product placeholder rectangle when the AI scene already fills bg.
+   *  Text overlays still render on top. */
+  hidePlaceholder?: boolean
 }
 
-export default function Slot1Hero({ overlay, textColor, accentColor, sceneImageUrl }: Props) {
+export default function Slot1Hero({ overlay, textColor, accentColor, sceneImageUrl, hidePlaceholder }: Props) {
   const sceneImg = useLoadedImage(sceneImageUrl)
 
   // Vertical layout within content area:
@@ -65,7 +69,9 @@ export default function Slot1Hero({ overlay, textColor, accentColor, sceneImageU
       )}
 
       {/* ── Product image (centered, with subtle shadow & slight angle) ── */}
-      {sceneImg ? (
+      {/* Only rendered when no AI scene exists. With AI scene, the product is
+       *  already in the bg image — adding another product here would double up. */}
+      {!hidePlaceholder && sceneImg && (
         <KonvaImage
           image={sceneImg}
           x={productX}
@@ -80,8 +86,8 @@ export default function Slot1Hero({ overlay, textColor, accentColor, sceneImageU
           shadowOffsetY={12}
           shadowOpacity={0.5}
         />
-      ) : (
-        // Placeholder when no reference uploaded — shown only during Phase 2/3 dev.
+      )}
+      {!hidePlaceholder && !sceneImg && (
         <Group>
           <Rect
             x={productX}

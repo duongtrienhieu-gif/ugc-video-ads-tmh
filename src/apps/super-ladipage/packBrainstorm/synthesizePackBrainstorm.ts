@@ -173,10 +173,35 @@ ${buildSubVariantMenu()}
 
   "agitateBeats": [
     "...", "...", "..."
-    // 3-5 short beats (each ≤ 12 words in ${lang}) the agitation phase (Phase 1-2 of pack) MUST hit.
-    // Examples: "stack 5 symptoms reader counts", "negative future 5 years if untreated",
-    // "money already spent on failed solutions", "social moment of shame".
-    // These become the SCAFFOLD for blocks daily-micro-friction + hidden-emotional-truth.
+    // EXACTLY 5 short beats (each ≤ 14 words in ${lang}) the agitation phase (Phase 1-2) MUST hit.
+    //
+    // ⚠️ CRITICAL DIVERSITY RULE — each beat MUST hit a PSYCHOLOGICALLY DISTINCT axis.
+    // 5 beats all describing the same symptom with different wording = REJECTED.
+    // Each beat must come from a DIFFERENT category below. Cover at least 4 of these 5:
+    //
+    //   AXIS 1 — DAILY PHYSICAL: the symptom moment itself (concrete sensory)
+    //     e.g. "thức giấc 3am vì nghẹt mũi, không thở được"
+    //     e.g. "răng ê buốt khi uống nước đá, phải nhắm mắt"
+    //
+    //   AXIS 2 — HIDDEN EMOTION: shame / fear / anxiety reader keeps private
+    //     e.g. "không dám cười lớn trước đồng nghiệp vì sợ lộ răng vàng"
+    //     e.g. "cảm giác xấu hổ thầm kín mỗi sáng soi gương"
+    //
+    //   AXIS 3 — SOCIAL FRICTION: moment when OTHER people notice / react
+    //     e.g. "đồng nghiệp tránh ngồi gần khi họp"
+    //     e.g. "con gái 8 tuổi hỏi 'mẹ ơi, mẹ có mệt không?'"
+    //
+    //   AXIS 4 — WASTED RESOURCE: money / time / effort already burned
+    //     e.g. "đã chi 800 RM cho kem đánh răng, súc miệng, vẫn không đỡ"
+    //     e.g. "3 tháng kiên trì xông hơi không kết quả"
+    //
+    //   AXIS 5 — FUTURE FEAR: what happens if untreated (compounding)
+    //     e.g. "5 năm nữa có thể phải phẫu thuật xoang"
+    //     e.g. "sợ răng lung lay hoặc hư hỏng nặng về sau"
+    //
+    // Each beat becomes the SCAFFOLD for one Phase 1-2 block. Phase 1-2 has ~5 blocks —
+    // if your beats overlap, the resulting blocks will repeat themselves (reader fatigue).
+    // Beats must be DIFFERENT lenses on the same product, not paraphrases of one lens.
   ],
 
   "socialProofPersonas": [
@@ -211,6 +236,112 @@ function asValidLossType(
   return VALID_LOSS_TYPES.includes(normalized) ? normalized : fallback
 }
 
+/** 2026-05-29 — Angle-matched fallback hookDraft templates per language.
+ *  Returns 1 of 3 indexed candidates per angle. Each angle uses the
+ *  opening pattern specific to that psychological frame — wasted-effort
+ *  opens with money inventory, social-shame with the hidden moment, etc.
+ *  Only soft-recognition uses the "Bạn còn nhớ..." nostalgia recall. */
+function buildFallbackDraftForAngle(
+  angle: HookAngle,
+  idx: number,
+  ctx: { lang: 'vi' | 'ms' | 'en'; topSymptom: string; topAttempt: string; usageScene: string },
+): string {
+  const { lang, topSymptom, topAttempt, usageScene } = ctx
+  const i = Math.max(0, Math.min(2, idx))
+
+  if (lang === 'ms') {
+    const TABLE: Record<HookAngle, string[]> = {
+      'pain-immediate-scene': [
+        `Jam 3 pagi. Awak terjaga lagi sebab ${topSymptom}. Lampu suam-suam, badan letih, tapi mata terbuka.`,
+        `Pagi tadi, sebaik bangun, awak sedar ${topSymptom} datang balik. Macam semalam. Macam minggu lepas.`,
+        `Setiap ${usageScene || 'pagi'}, perkara pertama yang awak rasa bukan kesegaran — tapi ${topSymptom}.`,
+      ],
+      'social-shame': [
+        `Bila orang berdiri dekat, awak tanpa sedar undur seinci. Bukan sebab sombong — sebab ${topSymptom}.`,
+        `Dalam mesyuarat semalam, awak ketawa kecil sahaja, tutup mulut. Awak tahu kenapa.`,
+        `Setiap kali ambil gambar bersama keluarga, awak pilih posisi belakang. Sebab ${topSymptom}.`,
+      ],
+      'future-fear': [
+        `5 tahun lagi, jika dibiarkan, ${topSymptom} bukan lagi gangguan kecil — ia jadi masalah kekal.`,
+        `Setiap minggu yang lalu tanpa tindakan ialah satu minggu lagi keadaan jadi lebih sukar dipulihkan.`,
+        `Awak tahu kalau biar macam ni, suatu hari nanti awak akan menyesal — tapi waktu itu mungkin dah terlewat.`,
+      ],
+      'wasted-effort': [
+        `Awak dah cuba ${topAttempt}, lepas tu cuba lagi sesuatu, lepas tu lagi. Tapi ${topSymptom} masih balik.`,
+        `Kira balik wang yang dah dibelanjakan untuk masalah ni — angka itu sendiri sakit hati.`,
+        `Awak ingat berapa kali awak fikir "kali ni mungkin berkesan" — dan setiap kali kecewa?`,
+      ],
+      'soft-recognition': [
+        `Awak masih ingat tak — bila kali terakhir awak tidur lena tanpa ${topSymptom}?`,
+        `Kadang-kadang awak terkenangkan masa dulu, sebelum ${topSymptom} jadi sebahagian hidup harian.`,
+        `Mungkin awak dah lupa rasa bangun pagi tanpa memikirkan ${topSymptom} dulu.`,
+      ],
+    }
+    return TABLE[angle][i]
+  }
+
+  if (lang === 'en') {
+    const TABLE: Record<HookAngle, string[]> = {
+      'pain-immediate-scene': [
+        `3am. You're awake again because of ${topSymptom}. The lights are off, the body is tired, but your eyes are wide open.`,
+        `This morning, the first thing you noticed was ${topSymptom} coming back. Like yesterday. Like last week.`,
+        `Every ${usageScene || 'morning'}, the first thing you feel isn't refreshment — it's ${topSymptom}.`,
+      ],
+      'social-shame': [
+        `When people stand close, you unconsciously step back an inch. Not because you're cold — because of ${topSymptom}.`,
+        `In yesterday's meeting, you laughed quietly behind your hand. You know why.`,
+        `Every family photo, you pick the spot in the back row. Because of ${topSymptom}.`,
+      ],
+      'future-fear': [
+        `5 years from now, left untreated, ${topSymptom} won't be a minor annoyance anymore — it becomes permanent.`,
+        `Every week that goes by without action is another week the condition gets harder to reverse.`,
+        `You know if you keep ignoring this, one day you'll regret it — and by then it may be too late.`,
+      ],
+      'wasted-effort': [
+        `You tried ${topAttempt}, then something else, then another thing. ${topSymptom} still comes back.`,
+        `Add up the money already spent on this problem — the number itself stings.`,
+        `Count how many times you thought "maybe this one will work" — and were disappointed every time.`,
+      ],
+      'soft-recognition': [
+        `When was the last time you went a whole night without ${topSymptom}? Do you even remember?`,
+        `Sometimes you think back to the years before ${topSymptom} became part of every day.`,
+        `Maybe you've forgotten what it felt like to wake up not thinking about ${topSymptom} first.`,
+      ],
+    }
+    return TABLE[angle][i]
+  }
+
+  // Vietnamese (default)
+  const TABLE: Record<HookAngle, string[]> = {
+    'pain-immediate-scene': [
+      `3 giờ sáng. Bạn lại thức giấc vì ${topSymptom}. Đèn vẫn tắt, người vẫn mệt, nhưng mắt mở to thao thức.`,
+      `Sáng nay, vừa mở mắt là bạn nhận ra ${topSymptom} lại quay về. Giống hôm qua. Giống tuần trước.`,
+      `Mỗi ${usageScene || 'sáng'}, thứ đầu tiên bạn cảm nhận không phải sự tươi mới — mà là ${topSymptom}.`,
+    ],
+    'social-shame': [
+      `Khi ai đứng gần, bạn vô thức lùi nửa bước. Không phải vì ngại — vì ${topSymptom}.`,
+      `Cuộc họp hôm qua, bạn chỉ cười khẽ, đưa tay che miệng. Bạn biết lý do.`,
+      `Mỗi lần chụp ảnh gia đình, bạn chọn vị trí phía sau. Vì ${topSymptom}.`,
+    ],
+    'future-fear': [
+      `5 năm nữa, nếu cứ thế này, ${topSymptom} không còn là chuyện vặt nữa — nó thành vĩnh viễn.`,
+      `Mỗi tuần trôi qua không xử lý là một tuần tình trạng khó đảo ngược thêm.`,
+      `Bạn biết nếu cứ phớt lờ, một ngày sẽ hối hận — nhưng lúc đó có thể đã muộn.`,
+    ],
+    'wasted-effort': [
+      `Bạn đã thử ${topAttempt}, rồi cái khác, rồi cái nữa. ${topSymptom} vẫn quay lại.`,
+      `Cộng lại số tiền đã chi cho vấn đề này — chính con số đó đã đau.`,
+      `Đếm lại bao nhiêu lần bạn nghĩ "lần này có khi được" — và mỗi lần đều thất vọng.`,
+    ],
+    'soft-recognition': [
+      `Bạn còn nhớ lần cuối cùng một ngày trôi qua mà không có ${topSymptom} không?`,
+      `Có khi bạn nhớ lại những năm trước, khi ${topSymptom} chưa thành một phần của mỗi ngày.`,
+      `Có lẽ bạn đã quên cảm giác thức dậy mà không nghĩ đến ${topSymptom} đầu tiên.`,
+    ],
+  }
+  return TABLE[angle][i]
+}
+
 /** Build a deterministic fallback when Gemini is unavailable or returns garbage.
  *  Uses the upstream synthesis data verbatim — no static templates.
  *  Sprint 4: returns 3 candidates so the picker still has a pool. */
@@ -231,29 +362,22 @@ function buildFallbackBrainstorm(input: SynthesizePackBrainstormInput): PackBrai
     lossType: 'health',
   }))
 
-  // Compose 3 basic candidates using the first 3 sub-variants of the
-  // chosen angle so the picker still has a pool. Deliberately terse —
-  // the storytelling generator expands later.
+  // 2026-05-29 — Angle-aware fallback hookDrafts.
+  // Previously all fallbacks used soft "Bạn còn nhớ..." nostalgia pattern
+  // regardless of the picked angle → wasted-effort angle would still open
+  // with a recall question (mismatch). Now each angle has its own template
+  // set that MATCHES the angle's opening pattern. Critical when Gemini
+  // brainstorm fails and fallback is the ONLY hook source.
   const variants = listSubVariants(angle).slice(0, 3)
   const topSymptom = symptoms[0] ?? input.productEssence.slice(0, 80)
+  const topAttempt = failedAttempts[0] ?? 'những thứ trước đây'
   const hookCandidates: HookCandidate[] = variants.map((v, i) => {
-    const draftSeed = input.targetLanguage === 'ms'
-      ? [
-          `Awak masih ingat tak — bila kali terakhir awak tidur lena tanpa ${topSymptom}?`,
-          `Pernah tak terasa ${topSymptom}, lepas tu tak boleh tidur balik?`,
-          `Setiap kali ${input.usageScene || 'pagi'}, awak terasa ${topSymptom} lagi sekali.`,
-        ][i]
-      : input.targetLanguage === 'en'
-      ? [
-          `When was the last time a full day went by without ${topSymptom}?`,
-          `Three nights a week now you wake up at 3am because of ${topSymptom}.`,
-          `Every ${input.usageScene || 'morning'}, you check whether ${topSymptom} is back. It always is.`,
-        ][i]
-      : [
-          `Bạn còn nhớ lần cuối cùng một ngày trôi qua mà không có ${topSymptom} không?`,
-          `Ba đêm trong tuần bạn lại thức dậy vì ${topSymptom}. Bạn đã đếm.`,
-          `Sáng nay, lại là ${topSymptom}. Như mọi sáng tuần này. Như mọi sáng tháng trước.`,
-        ][i]
+    const draftSeed = buildFallbackDraftForAngle(angle, i, {
+      lang: input.targetLanguage,
+      topSymptom,
+      topAttempt,
+      usageScene: input.usageScene,
+    })
     return {
       subVariant: v.id,
       hookDraft: draftSeed,
@@ -276,10 +400,16 @@ function buildFallbackBrainstorm(input: SynthesizePackBrainstormInput): PackBrai
     avoidedFingerprints: input.avoidedHookFingerprints,
   })
 
+  // 2026-05-29 — Diversified fallback beats covering 4 of 5 psychological axes.
+  // (Previously only 3 generic beats — caused Phase 1-2 block content to repeat.)
   const agitateBeats: string[] = []
-  if (symptoms.length >= 3) agitateBeats.push('stack symptoms 3-5 thật cụ thể')
-  if (failedAttempts.length >= 2) agitateBeats.push('thừa nhận đã thử nhưng không thành')
-  agitateBeats.push('vẽ tương lai nếu không xử lý sớm')
+  agitateBeats.push('AXIS 1 — daily physical: ' + (symptoms[0] ?? 'triệu chứng quay lại mỗi ngày'))
+  agitateBeats.push('AXIS 2 — hidden emotion: nỗi xấu hổ thầm kín reader không nói với ai')
+  agitateBeats.push('AXIS 3 — social friction: khoảnh khắc người khác để ý / phản ứng')
+  if (failedAttempts.length >= 2) {
+    agitateBeats.push('AXIS 4 — wasted resource: tiền + thời gian đã chi cho ' + failedAttempts.slice(0, 2).join(', '))
+  }
+  agitateBeats.push('AXIS 5 — future fear: tình trạng nặng hơn nếu không xử lý sớm')
 
   const socialProofPersonas: SocialProofPersonaSeed[] = [
     { label: 'Persona 1', angle: 'người mới dùng — kể trải nghiệm 2-3 tuần' },
