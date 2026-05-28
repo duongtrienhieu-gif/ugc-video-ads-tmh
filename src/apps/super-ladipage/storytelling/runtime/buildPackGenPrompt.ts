@@ -290,26 +290,138 @@ export function buildPackGenUserPrompt(
     lines.push(retryFeedback)
   }
 
-  // ─── Closing reminders (brief) ───────────────────────────────────
+  // ─── Closing reminders (minimal — output schema only) ──────────────
+  // OPT-DIAG Fix 1 (2026-05-28): trimmed redundant repeats. The
+  // "reader is emotional center" + global bans are already in the
+  // system prompt's CORE TARGET + GLOBAL BANS sections — repeating
+  // them here adds ~80 tokens of noise per call. Kept only the
+  // OUTPUT SCHEMA reminder (Gemini sometimes drops it).
   lines.push('')
-  lines.push(`═══ CLOSING REMINDERS ═══
-- Output JSON ONLY (no markdown fences, no prose outside JSON).
-- Exactly ${storyBlocks.length} blocks in this exact order.
-- Each block: { id, title, paragraphs: [string, ...] }
-- Reader is emotional center — narrator validates, doesn't dominate.
-- KHÔNG "buy now" / KHÔNG aspirational copywriter bait / KHÔNG fake empathy.`)
+  lines.push(`═══ OUTPUT ═══
+JSON only. ${storyBlocks.length} blocks in order. Schema: { id, title, paragraphs: [string, ...] }.`)
 
   return lines.join('\n')
 }
 
-/** Build retry feedback string for second-attempt prompt injection. */
+/** OPT-DIAG Fix 2 (2026-05-28) — Sharpen retry feedback.
+ *
+ *  Old behavior: pasted raw violation strings + generic "fix the violations"
+ *  instruction. Gemini saw a wall of issues without knowing WHICH block was
+ *  the worst offender or HOW to vary it — retry attempt frequently produced
+ *  the SAME content with even more violations (observed 13 → 21).
+ *
+ *  New behavior:
+ *    1. Parse violation strings to extract (failing block, validator,
+ *       similarity %, ref block).
+ *    2. Group by failing block — collapse multiple duplicate complaints
+ *       about one block into ONE focused instruction.
+ *    3. Per-validator actionable instructions:
+ *       - duplicateContent → name BOTH blocks + similarity %, tell Gemini
+ *         to use a DIFFERENT scene/object/sensory channel for the failing
+ *         block (psychological function is unchanged — the SCENE around
+ *         it must change).
+ *       - adjacentRhythm → name the PREV block + tell Gemini to vary
+ *         sentence-length distribution + opening word patterns.
+ *       - selfInsertion / memoryAnchor / phaseOneSpecificity → quote the
+ *         exact rule with the block id.
+ *    4. Block ids NOT mentioned in any violation are explicitly listed
+ *       as "keep these as they are" — Gemini doesn't accidentally rewrite
+ *       passing blocks during retry.
+ *
+ *  Zero logic change to validators or the main generator — this is purely
+ *  retry-prompt phrasing.
+ */
 export function buildRetryFeedback(items: string[]): string {
   if (items.length === 0) return ''
-  return [
-    'Previous attempt had violations. Fix the following and regenerate:',
-    ...items.map((it) => `  - ${it}`),
-    'Output the SAME structure (same block ids in same order). Only fix the violations.',
-  ].join('\n')
+
+  // ── Parse violations into structured form ──
+  interface ParsedViolation {
+    blockId: string
+    validator: string
+    refBlock?: string
+    similarity?: number
+    raw: string
+  }
+  const parsed: ParsedViolation[] = []
+  for (const raw of items) {
+    // Pattern: `Block "X" failed VALIDATOR: ...`
+    const blockMatch = raw.match(/Block\s+"([^"]+)"\s+failed\s+(\w+):\s*(.*)/i)
+    if (!blockMatch) {
+      // Non-block-tagged violation (e.g. JSON error) — keep as-is
+      parsed.push({ blockId: '_global', validator: 'misc', raw })
+      continue
+    }
+    const blockId = blockMatch[1]
+    const validator = blockMatch[2]
+    const rest = blockMatch[3] ?? ''
+    // For duplicateContent: extract ref block + similarity
+    let refBlock: string | undefined
+    let similarity: number | undefined
+    if (validator === 'duplicateContent') {
+      const dupMatch = rest.match(/section\s+"([^"]+)"\s*\((\d+)%/)
+      if (dupMatch) {
+        refBlock = dupMatch[1]
+        similarity = parseInt(dupMatch[2], 10)
+      }
+    } else if (validator === 'adjacentRhythm') {
+      const adjMatch = rest.match(/\(([^)]+)\)/)
+      if (adjMatch) refBlock = adjMatch[1]
+    }
+    parsed.push({ blockId, validator, refBlock, similarity, raw })
+  }
+
+  // ── Group by failing block ──
+  const byBlock = new Map<string, ParsedViolation[]>()
+  for (const v of parsed) {
+    const arr = byBlock.get(v.blockId) ?? []
+    arr.push(v)
+    byBlock.set(v.blockId, arr)
+  }
+
+  // ── Emit focused per-block instructions ──
+  const lines: string[] = []
+  lines.push('Previous attempt had validator violations. Fix ONLY the blocks listed below — keep every other block exactly as in attempt 1.')
+  lines.push('')
+
+  for (const [blockId, violations] of byBlock) {
+    if (blockId === '_global') {
+      lines.push('GLOBAL ISSUES:')
+      for (const v of violations) lines.push(`  - ${v.raw}`)
+      lines.push('')
+      continue
+    }
+    lines.push(`▸ BLOCK "${blockId}" — REWRITE this block. Specific instructions:`)
+
+    // Group by validator within this block
+    const dupViolations = violations.filter((v) => v.validator === 'duplicateContent')
+    const adjViolations = violations.filter((v) => v.validator === 'adjacentRhythm')
+    const others = violations.filter((v) => v.validator !== 'duplicateContent' && v.validator !== 'adjacentRhythm')
+
+    if (dupViolations.length > 0) {
+      const refs = dupViolations
+        .filter((v) => v.refBlock)
+        .map((v) => `"${v.refBlock}"${v.similarity ? ` (${v.similarity}%)` : ''}`)
+        .join(', ')
+      lines.push(`  • DUPLICATE CONTENT — your draft is too similar to: ${refs}. `)
+      lines.push(`    Keep this block's psychological function the same, but CHANGE:`)
+      lines.push(`    1. The SCENE / setting (different time of day, place, posture).`)
+      lines.push(`    2. The OBJECT in focus (different daily item, different sensory channel).`)
+      lines.push(`    3. The OPENING phrasing (different first 4-5 words).`)
+      lines.push(`    Cut any phrase that appeared in the referenced block(s).`)
+    }
+    if (adjViolations.length > 0) {
+      const refs = adjViolations.map((v) => v.refBlock ?? 'previous block').join(', ')
+      lines.push(`  • ADJACENT RHYTHM — your draft echoes the rhythm of: ${refs}.`)
+      lines.push(`    Vary sentence lengths (mix short + medium + longer). Vary opening words.`)
+    }
+    for (const v of others) {
+      lines.push(`  • [${v.validator}] ${v.raw.replace(/^Block\s+"[^"]+"\s+failed\s+\w+:\s*/, '')}`)
+    }
+    lines.push('')
+  }
+
+  lines.push('Output the SAME JSON structure (same block ids in the same order). Do NOT touch blocks that pass — they are already good.')
+  return lines.join('\n')
 }
 
 /** Log prompt stats for telemetry/debugging. */
