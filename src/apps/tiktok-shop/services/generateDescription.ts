@@ -94,7 +94,7 @@ function buildDescriptionPrompt(params: GenerateDescriptionParams): string {
     ? `SLOT 4 GUARD: Use ONLY the ingredients listed in PRODUCT DATA above. Do not add extras.`
     : `SLOT 4 GUARD: No ingredients were provided — slot4.ingredients MUST be [] in your output. Do NOT invent any ingredient names.`
 
-  return `Generate a TikTok Shop listing description + per-slot image text. Return a single JSON object only.
+  return `Generate a TikTok Shop listing description + per-slot image text. Output format: <REASONING> block first, then the JSON object (as instructed in system prompt).
 
 PRODUCT DATA (read carefully — ALL copy must derive ONLY from this):
 - Name: ${product.productName}
