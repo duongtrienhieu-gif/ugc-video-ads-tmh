@@ -63,12 +63,80 @@ import type { SceneDescription } from '../../imageSceneSynthesis'
 // "soft diary nostalgia" for every niche.
 import { synthesizePackBrainstorm } from '../../packBrainstorm'
 import type { PackBrainstorm } from '../../packBrainstorm'
+// OPT-DIAG2 Fix B (2026-05-28) — localStorage quota guard.
+// localStorage has a 5-10MB per-origin limit. After many packs the niche
+// cache + reality cache + hook memory entries can fill it, causing
+// QuotaExceededError on every subsequent write (silent cache misses
+// → wasted Gemini calls). safeSetItem catches the quota error, prunes
+// oldest entries across our cache prefixes, and retries once.
+const CACHE_PREFIXES = [
+  'super-ladipage:hookMemory:',
+  'super-ladipage:nicheCache:',
+  'super-ladipage:realityCache:',
+] as const
+/** List our cache entries with their savedAt timestamp (or 0 if untimestamped). */
+function listOurCacheEntries(): Array<{ key: string; ts: number }> {
+  if (typeof window === 'undefined') return []
+  const out: Array<{ key: string; ts: number }> = []
+  for (let i = 0; i < window.localStorage.length; i++) {
+    const key = window.localStorage.key(i)
+    if (!key) continue
+    if (!CACHE_PREFIXES.some((p) => key.startsWith(p))) continue
+    let ts = 0
+    try {
+      const raw = window.localStorage.getItem(key)
+      if (raw) {
+        const parsed = JSON.parse(raw) as { savedAt?: number } | string[]
+        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed) && typeof parsed.savedAt === 'number') {
+          ts = parsed.savedAt
+        }
+        // hookMemory is a string[] — no savedAt; treat as 0 = oldest
+      }
+    } catch { /* ignore parse error, ts stays 0 */ }
+    out.push({ key, ts })
+  }
+  return out
+}
+/** Safe setItem with quota recovery — on QuotaExceededError prune oldest
+ *  N entries from our caches and retry once. Returns true on success. */
+function safeSetItem(key: string, value: string): boolean {
+  if (typeof window === 'undefined') return false
+  try {
+    window.localStorage.setItem(key, value)
+    return true
+  } catch (err) {
+    const isQuota = err instanceof DOMException && (
+      err.name === 'QuotaExceededError' ||
+      err.name === 'NS_ERROR_DOM_QUOTA_REACHED'
+    )
+    if (!isQuota) return false
+    // Quota exceeded — prune the 5 oldest entries from our caches.
+    const entries = listOurCacheEntries()
+      .sort((a, b) => a.ts - b.ts)
+      .slice(0, 5)
+    for (const e of entries) {
+      try { window.localStorage.removeItem(e.key) } catch { /* ignore */ }
+    }
+    console.warn(`[storytelling/cache] localStorage quota hit — pruned ${entries.length} oldest entries, retrying write`)
+    try {
+      window.localStorage.setItem(key, value)
+      return true
+    } catch {
+      console.warn(`[storytelling/cache] retry after prune still failed — skipping write for ${key.slice(0, 40)}`)
+      return false
+    }
+  }
+}
+
 // REBUILD Sprint 4 (2026-05-28) — Anti-repeat memory helpers (Layer E).
 // Persists the last N hook fingerprints per productId in localStorage so
 // subsequent regenerations of the SAME product pick a different hook
 // candidate from the brainstorm pool.
+// OPT-DIAG2 Fix B: HOOK_MEMORY_MAX reduced 5 → 3 to lighten storage
+// footprint without sacrificing variety (3 past fingerprints is still
+// enough to force rotation through different sub-variants).
 const HOOK_MEMORY_PREFIX = 'super-ladipage:hookMemory:'
-const HOOK_MEMORY_MAX = 5
+const HOOK_MEMORY_MAX = 3
 function readHookMemory(productId: string): string[] {
   try {
     if (typeof window === 'undefined') return []
@@ -82,13 +150,11 @@ function readHookMemory(productId: string): string[] {
   }
 }
 function pushHookMemory(productId: string, fingerprint: string): void {
-  try {
-    if (typeof window === 'undefined' || !fingerprint) return
-    const existing = readHookMemory(productId)
-    // Move to front + de-dupe + cap
-    const next = [fingerprint, ...existing.filter((f) => f !== fingerprint)].slice(0, HOOK_MEMORY_MAX)
-    window.localStorage.setItem(HOOK_MEMORY_PREFIX + productId, JSON.stringify(next))
-  } catch { /* localStorage may be blocked — ignore */ }
+  if (typeof window === 'undefined' || !fingerprint) return
+  const existing = readHookMemory(productId)
+  // Move to front + de-dupe + cap
+  const next = [fingerprint, ...existing.filter((f) => f !== fingerprint)].slice(0, HOOK_MEMORY_MAX)
+  safeSetItem(HOOK_MEMORY_PREFIX + productId, JSON.stringify(next))
 }
 
 // OPT-F1 (2026-05-28) — Niche detection cache.
@@ -139,15 +205,13 @@ function writeNicheCache(
   input: { productName: string; painPoints?: string; benefits?: string },
   result: { niche: string; source: string; matchedKeywords: string[]; confidence: string },
 ): void {
-  try {
-    if (typeof window === 'undefined') return
-    const entry: NicheCacheEntry = {
-      ...result,
-      inputHash: hashProductInput(input),
-      savedAt: Date.now(),
-    }
-    window.localStorage.setItem(NICHE_CACHE_PREFIX + productId, JSON.stringify(entry))
-  } catch { /* ignore */ }
+  if (typeof window === 'undefined') return
+  const entry: NicheCacheEntry = {
+    ...result,
+    inputHash: hashProductInput(input),
+    savedAt: Date.now(),
+  }
+  safeSetItem(NICHE_CACHE_PREFIX + productId, JSON.stringify(entry))
 }
 
 // OPT-F3 (2026-05-28) — Product reality cache.
@@ -197,15 +261,13 @@ function writeRealityCache(
   input: RealityCacheInputShape,
   reality: unknown,
 ): void {
-  try {
-    if (typeof window === 'undefined') return
-    const entry: RealityCacheEntry = {
-      reality,
-      inputHash: hashRealityInput(input),
-      savedAt: Date.now(),
-    }
-    window.localStorage.setItem(REALITY_CACHE_PREFIX + productId, JSON.stringify(entry))
-  } catch { /* ignore */ }
+  if (typeof window === 'undefined') return
+  const entry: RealityCacheEntry = {
+    reality,
+    inputHash: hashRealityInput(input),
+    savedAt: Date.now(),
+  }
+  safeSetItem(REALITY_CACHE_PREFIX + productId, JSON.stringify(entry))
 }
 // REBUILD Sprint 2 (2026-05-28) — Narrative mode detector + filter.
 import { detectNarrativeMode, getSkippedBlocksForMode } from '../../narrativeMode'
