@@ -31,14 +31,14 @@ export async function generateDescription(
 
 function buildSystemInstruction(params: GenerateDescriptionParams): string {
   const lang = params.language === 'ms' ? 'Bahasa Malaysia' : 'Vietnamese'
-  return `You are a TikTok Shop listing copywriter for TPCN (health supplement) products in the Malaysia/Vietnam market.
+  return `You are a TikTok Shop listing copywriter for the Malaysia/Vietnam market. The product can be ANY niche (supplement, beauty, skincare, oral care, cough patch, mom-baby, household, etc.) — read the PRODUCT DATA below carefully and write copy that matches THAT specific product. Never assume the niche.
 
 OUTPUT LANGUAGE: ${lang} ONLY. NO English mixed in. NO Chinese, Japanese, Arabic, Thai characters.
 OUTPUT FORMAT: strict JSON only — no markdown fences, no preamble, no commentary, no trailing text.
 
 LEGAL CONSTRAINTS (per [[feedback-no-fake-certs]]):
 - DO NOT mention any cert claims (Halal JAKIM, KKM, GMP, FDA, BYT, ISO) — user has not uploaded proof
-- DO NOT use clinical claims like "rawat", "sembuh", "cure", "treat" — use softer "membantu", "menyokong", "hỗ trợ"
+- DO NOT use strong clinical claims like "rawat", "sembuh", "cure", "treat" — use softer "membantu", "menyokong", "hỗ trợ"
 - DO NOT invent specific medical claims not supported by product data provided`
 }
 
@@ -107,16 +107,17 @@ WRITING RULES:
 - Promise: only SAFE service claims (shipping speed, return window, discreet packaging) — NO cert claims
 
 BOLD FORMATTING (use **markdown bold** strategically — TikTok Shop renders it):
-- Wrap KEY TERMS, not full sentences. Examples:
-  - benefits bullet: "Putihkan hingga **8 shade dalam 14 hari**" (bold the result claim)
-  - benefits bullet: "**Selamat untuk enamel** — pH neutral, formula lembut" (bold the headline phrase)
-  - usage step: "**Berus 2 minit**, 2x sehari (pagi & malam)" (bold the action)
-  - faq question: keep plain (UI will style it bold separately)
-  - hook: 1 key claim bolded e.g. "Senyum percaya diri **dalam 14 hari** — tanpa whitening klinik mahal!"
-  - solution: bold product name + main mechanism — "**WHITEPRO Whitening Powder** — Serbuk pemutih gigi formula aktif dengan **Activated Charcoal + Hydroxyapatite**"
-  - cta: bold the verb — "**Beli sekarang** — stok terhad hari ini!"
-- DO NOT bold every word — that defeats the purpose. Pick 1-2 emphasis points per block.
-- DO NOT bold inside specs rows (the row labels render bold automatically in UI).
+- Wrap KEY TERMS, not full sentences. Generic pattern (DO NOT copy these example strings — they are illustrative only, your content must match the ACTUAL product):
+  - benefits bullet: bold the result claim (e.g., "<verb> hingga **<concrete outcome with number>**")
+  - benefits bullet: bold the headline phrase (e.g., "**<short feature label>** — <expansion>")
+  - usage step: bold the action verb + duration (e.g., "**<verb> <duration>**, <frequency>")
+  - faq question: keep plain (UI styles it bold separately)
+  - hook: bold the strongest claim (e.g., "<context> **<key time/result claim>** <rest>")
+  - solution: bold product name + main mechanism (e.g., "**<actual product name>** — <category> với **<main mechanism/ingredients>**")
+  - cta: bold the verb (e.g., "**<Buy verb>** — <urgency>")
+- DO NOT bold every word — pick 1-2 emphasis points per block.
+- DO NOT bold inside specs rows (UI styles them).
+- CRITICAL: derive all wording from the actual PRODUCT DATA at the bottom of this prompt. Do NOT copy any words from these examples ("verb", "outcome", "duration", etc. are placeholders, not real copy).
 
 Return the JSON object only.`
 }

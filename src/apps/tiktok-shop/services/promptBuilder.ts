@@ -39,7 +39,7 @@ PRODUCT: Replicate EXACTLY from refs — same color, shape, label, brand name. D
 
 BRAND IDENTITY: Small top-left zone (~8% canvas height) with brand logo + store name "${ctx.brandKit.storeName}"${ctx.brandKit.flagOrigin ? ` + ${ctx.brandKit.flagOrigin.toUpperCase()} flag chip` : ''}. Same position EVERY slot.
 
-STYLE: Premium e-commerce listing in the style of top sellers (Pentavite, EXOLABO V-SHINE, SMILEE) — saturated brand palette (NOT pastel), polished commercial photography, integrated decorative elements. Plus Jakarta Sans ExtraBold (weight 800-900) for headlines, Medium Italic for sub-text.
+STYLE: Premium e-commerce listing — match the aesthetic typical of top sellers IN THIS PRODUCT'S category (do not assume teeth/supplement). Saturated brand palette (NOT pastel), polished commercial photography, integrated decorative elements. Plus Jakarta Sans ExtraBold (weight 800-900) for headlines, Medium Italic for sub-text.
 
 PALETTE (use ONLY these): ${p.primary} primary, ${p.secondary} secondary, ${p.cta} accent. High saturation.
 

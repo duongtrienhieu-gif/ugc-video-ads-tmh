@@ -32,7 +32,7 @@ PRESERVE STRUCTURE EXACTLY:
 - Keep **markdown bold** markers around the same emphasized terms
 - Keep line breaks and section spacing
 - Keep section headers (e.g. "ANDA SEDANG", "KENAPA PILIH...") translated
-- Keep brand names + product names unchanged (e.g. "WHITEPRO", "TEETH RESTORATION")
+- Keep brand names + product names unchanged (do NOT translate them)
 - Keep prices unchanged (RM 89, 500K, etc.)
 - Keep "Q:" / "A:" prefixes in FAQ blocks
 
