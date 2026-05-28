@@ -57,18 +57,21 @@ PRODUCT FIDELITY: Replicate the product EXACTLY from product refs — same color
 === BACKGROUND — full canvas brand gradient ===
 - The ENTIRE canvas (y=0 to y=1024) is filled with a saturated brand-color gradient (${p.primary} → ${p.secondary}) with subtle decorative elements (particles, soft glow, geometric accents). This is the unified backdrop.
 
-=== BRAND SEAL CARD — IDENTICAL across all 9 slots (white rounded CARD centered at top, NOT a full-width zone) ===
-- Render a WHITE (#FFFFFF) rounded rectangle CARD floating on the brand gradient.
-- Card dimensions: ~720px wide × 180px tall, rounded corners 24px, subtle drop shadow below.
-- Card position: centered horizontally on canvas, y=20 to y=200 (the brand gradient continues to the LEFT and RIGHT of the card on the same row).
-- Card contents (stacked vertically, centered):
-  - LAYER 1 — LOGO: Reference 1 rendered at the TOP-CENTER of the card (~170px wide × 72px tall, y=40-110 inside the card). Preserve the logo's ORIGINAL colors EXACTLY from Reference 1 (do NOT redraw / recolor / invert; the white card background lets the original colors show naturally).
-  - LAYER 2 — SUBTITLE: Below the logo at y=120-150 inside the card, render "Official store | ${marketBadge}" in DARK NAVY (#0E2A47) Plus Jakarta Sans Medium Italic ~26px. The "|" separator is dark navy at 50% opacity.
-  - LAYER 3 — UNDERLINE: Thin DARK NAVY line ~130px wide at 35% opacity centered at y=165 inside the card.
-- DO NOT add the brand kit's store name as separate text — logo carries it.
-- DO NOT widen the card to full canvas width — brand gradient MUST be visible on the left and right sides of the card.
+=== BRAND SEAL — WIDE HORIZONTAL PILL CARD, IDENTICAL across all 9 slots (match Pentavite-style ref) ===
+- Render a WHITE (#FFFFFF) rounded PILL card floating on the brand gradient.
+- Card shape: WIDE and FLAT (NOT square, NOT tall stack). Dimensions ~720px wide × 120px tall, rounded corners 30px (pill-like), subtle drop shadow.
+- Card position: centered horizontally on canvas, y=30 to y=150 (brand gradient continues to LEFT and RIGHT of the card).
+- CONTENTS — single HORIZONTAL ROW, ALL elements vertically centered inside the card at y≈90 (NO vertical stacking):
+  - LEFT SECTION (x≈172-332): brand logo from Reference 1, ~160px wide × 60px tall, vertically centered. Preserve logo's ORIGINAL colors EXACTLY (do NOT recolor / invert; white card means original colors render naturally).
+  - DIVIDER (x≈360): thin vertical bar "|" in DARK NAVY (#0E2A47) at 40% opacity, ~50px tall, vertically centered.
+  - MIDDLE SECTION (x≈390-560): text "Official store" in DARK NAVY (#0E2A47) Plus Jakarta Sans Medium ~30px, vertically centered.
+  - RIGHT SECTION (x≈580-700): small rounded pill badge "${marketBadge}" — accent color (${p.cta}) background with WHITE bold text ~24px, ~36px tall, vertically centered.
+- DO NOT stack elements vertically — logo + separator + "Official store" + market badge sit on ONE HORIZONTAL ROW like a single navigation bar.
+- DO NOT render the brand kit's store name as additional text — logo carries it.
+- DO NOT add tagline / subtitle / underline below the main row — keep the pill minimal (one row only).
+- DO NOT widen the card to full canvas width — brand gradient MUST be visible on the LEFT and RIGHT sides of the card.
 
-LAYOUT: ALL slot content (headlines, product hero, price overlays, decorations) sits BELOW the brand seal card — content area starts y≈230 down to y≈980. Content text uses WHITE / light colors (it's on the brand gradient).
+LAYOUT: ALL slot content (headlines, product hero, price overlays, decorations) sits BELOW the brand seal pill — content area starts y≈180 down to y≈980. Content text uses WHITE / light colors (it's on the brand gradient).
 
 STYLE: Premium e-commerce listing — top-seller aesthetic for this product's category. Saturated brand palette (NOT pastel), polished commercial photography, integrated decorative elements. Plus Jakarta Sans ExtraBold (weight 800-900) for headlines, Medium Italic for sub-text.
 

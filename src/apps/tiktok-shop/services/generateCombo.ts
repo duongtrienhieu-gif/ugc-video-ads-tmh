@@ -126,16 +126,19 @@ PRODUCT FIDELITY (CRITICAL):
 === BACKGROUND — full canvas brand gradient ===
 - The ENTIRE canvas is filled with saturated brand-color gradient (${p.primary} → ${p.secondary}) with subtle decorative particles. Unified backdrop.
 
-=== BRAND SEAL CARD — IDENTICAL to the main 9 listing slots (white rounded CARD centered at top, NOT a full-width zone) ===
-- Render a WHITE (#FFFFFF) rounded rectangle CARD floating on the brand gradient.
-- Card dimensions: ~720px wide × 180px tall, rounded corners 24px, subtle drop shadow.
-- Card position: centered horizontally on canvas, y=20 to y=200 (brand gradient continues to the LEFT and RIGHT of the card).
-- Card contents (stacked vertically, centered):
-  - LAYER 1 — LOGO: Reference 1 at TOP-CENTER of card (~170×72px, y=40-110 inside card). Preserve ORIGINAL logo colors EXACTLY (no recolor).
-  - LAYER 2 — SUBTITLE: Below logo at y=120-150 inside card, render "Official store | ${marketBadge}" in DARK NAVY (#0E2A47) Plus Jakarta Sans Medium Italic ~26px.
-  - LAYER 3 — UNDERLINE: Thin DARK NAVY line ~130px wide at 35% opacity centered at y=165 inside card.
-- DO NOT render the brand kit's store name as separate text.
-- DO NOT widen the card to full canvas width — gradient MUST show on left/right sides of card.
+=== BRAND SEAL — WIDE HORIZONTAL PILL CARD, IDENTICAL to the main 9 listing slots (match Pentavite-style ref) ===
+- Render a WHITE (#FFFFFF) rounded PILL card floating on the brand gradient.
+- Card shape: WIDE and FLAT (NOT square, NOT tall stack). Dimensions ~720px wide × 120px tall, rounded corners 30px, subtle drop shadow.
+- Card position: centered horizontally, y=30 to y=150 (brand gradient continues LEFT and RIGHT of card).
+- CONTENTS — single HORIZONTAL ROW, all elements vertically centered at y≈90 (NO vertical stacking):
+  - LEFT (x≈172-332): brand logo from Reference 1, ~160×60px, vertically centered. Preserve ORIGINAL logo colors EXACTLY.
+  - DIVIDER (x≈360): thin "|" vertical bar in DARK NAVY (#0E2A47) at 40% opacity, ~50px tall.
+  - MIDDLE (x≈390-560): "Official store" in DARK NAVY Plus Jakarta Sans Medium ~30px, vertically centered.
+  - RIGHT (x≈580-700): rounded pill "${marketBadge}" — accent color (${p.cta}) bg with WHITE bold text ~24px, ~36px tall.
+- DO NOT stack vertically — all on ONE horizontal row like a nav bar.
+- DO NOT add tagline / subtitle / underline below the row.
+- DO NOT render store name as additional text.
+- DO NOT widen to full canvas width — gradient must show on left/right.
 
 === COUNT LABEL PILL — top-center, inside the brand gradient bottom zone ===
 ${labelPillSpec}
