@@ -135,15 +135,17 @@ export const COMPOSITION_FAMILY_LABELS: Record<CompositionFamily, string> = {
 }
 
 // ─────────────────────────────────────────────────────────────────────────
-// COST ESTIMATION — Phase 6 pivot uses Nano Banana 2 (strong ref preservation).
-// Per kie.ai pricing:
-//   nano-banana-2: 8 credits @ 1K, 12 @ 2K, 20 @ 4K
+// COST ESTIMATION — Phase 6 final uses GPT-4o image edit (TRUE i2i).
+// Per kie.ai pricing (battle-tested in Super Ladipage):
+//   gpt-4o-image (i2i with filesUrl): 6 credits @ 1K
 //   Text gen via Gemini Flash ≈ 1 credit per listing
-// 9 AI slots × 8 + 1 text = ~73 credits/listing (~$0.37 / RM 1.70)
+// 9 AI slots × 6 + 1 text = ~55 credits/listing (~$0.28 / RM 1.30)
+// Same cost as the failed gpt-image-2 test, but gpt-image-2 ignores refs
+// while gpt-4o-image honors them properly.
 // ─────────────────────────────────────────────────────────────────────────
 
-export const CREDIT_COST_PER_IMAGE_1K = 8
-export const CREDIT_COST_PER_IMAGE_2K = 12
+export const CREDIT_COST_PER_IMAGE_1K = 6
+export const CREDIT_COST_PER_IMAGE_2K = 10
 export const ESTIMATED_TEXT_CREDITS = 1
 
 export function estimateListingCredits(slots: SlotConfig[] = SLOT_MAP): number {

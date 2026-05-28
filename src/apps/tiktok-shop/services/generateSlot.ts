@@ -1,18 +1,23 @@
 // generateSlot — end-to-end image generation for ONE listing slot.
-// Phase 6 pivot: uses Nano Banana 2 (Gemini 3.1 Flash Image) for stronger
-// product reference preservation per [[feedback-product-fidelity-mandate]].
+// Phase 6 final: uses GPT-4o image edit (/gpt4o-image/generate with filesUrl)
+// for TRUE image-to-image preservation per [[feedback-product-fidelity-mandate]].
+//
+// Same cost as gpt-image-2 (6 credits @ 1K) but actually honors the reference
+// images — gpt-image-2 silently ignores image_urls (text-to-image only).
+// Battle-tested in Super Ladipage's kieGptImage1.ts provider.
 //
 // Flow:
-//   1. Resolve reference image assetIds → public signed URLs (kie.ai needs URLs)
+//   1. Resolve reference image assetIds → public signed URLs
 //   2. Build slot-specific prompt with EMBEDDED text + brand identity
-//   3. POST to kie.ai nano-banana-2 with image_input refs
-//   4. Poll until done (reuses gpt-image-2 polling — same /jobs/recordInfo shape)
-//   5. Download from kie URL → save to our Supabase Storage as asset
+//   3. POST to kie.ai /gpt4o-image/generate with filesUrl
+//   4. Poll until done (pollGpt4oUntilDone — same retry/timeout pattern)
+//   5. Download from kie CDN → save to our Supabase Storage as asset
 //   6. Return the new assetId for ListingImage.imageAssetId
 
 import {
-  generateNanoBanana2,
+  generateGpt4oImage,
   type ImageStatus,
+  type Gpt4oSize,
 } from '../../../utils/kieai'
 import { getUrl, saveFromBlobUrl } from '../../../utils/assetStore'
 import type { ResolvedBrandKit, Market } from '../../../types/brandKit'
@@ -40,11 +45,20 @@ export interface GenerateSlotResult {
 const TIMEOUT_MS = 5 * 60 * 1000
 
 export async function generateSlotImage(params: GenerateSlotParams): Promise<GenerateSlotResult> {
-  // 1. Resolve ref assetIds → signed URLs
-  const refUrls = await resolveReferenceUrls(params.referenceImageAssetIds)
-  if (refUrls.length === 0) {
-    throw new Error('Cần ít nhất 1 ảnh tham chiếu hợp lệ để generate')
+  // 1. Resolve ref assetIds → signed URLs.
+  //    Prepend the brand kit logo URL as the FIRST ref so AI can place it
+  //    consistently across all 9 slots (true brand presence, not just text).
+  //    Cap product refs at 4 to leave room for logo (gpt-4o-image max 5 refs).
+  const logoUrl = params.brandKit.logo?.blobUrl?.trim() || null
+  const hasLogoRef = !!logoUrl
+  const productRefUrls = await resolveReferenceUrls(
+    params.referenceImageAssetIds,
+    hasLogoRef ? 4 : 5,
+  )
+  if (productRefUrls.length === 0) {
+    throw new Error('Cần ít nhất 1 ảnh tham chiếu sản phẩm hợp lệ để generate')
   }
+  const refUrls = hasLogoRef ? [logoUrl, ...productRefUrls] : productRefUrls
 
   // 2. Build prompt with embedded text + brand
   const prompt = buildPromptForSlot({
@@ -53,21 +67,21 @@ export async function generateSlotImage(params: GenerateSlotParams): Promise<Gen
     slotConfig: params.slotConfig,
     paletteFamily: params.paletteFamily,
     language: params.language,
+    hasLogoRef,
   })
 
   if (typeof console !== 'undefined') {
-    console.log(`[tiktok-shop] slot=${params.slotConfig.slot} lang=${params.language} model=nano-banana-2 promptLen=${prompt.length} refs=${refUrls.length}`)
+    console.log(`[tiktok-shop] slot=${params.slotConfig.slot} lang=${params.language} model=gpt-4o-image promptLen=${prompt.length} refs=${refUrls.length} (logo=${hasLogoRef})`)
   }
 
-  // 3. Submit + poll Nano Banana 2 (Gemini 3.1 Flash Image)
-  const resolution = params.slotConfig.highRes ? '2K' : '1K'
-  const kieImageUrl = await generateNanoBanana2({
+  // 3. Submit + poll GPT-4o image edit (TRUE i2i — refs are HONORED via filesUrl)
+  // size accepts '1:1' | '3:2' | '2:3' — TikTok Shop always 1:1
+  const size: Gpt4oSize = '1:1'
+  const kieImageUrl = await generateGpt4oImage({
     apiKey: params.apiKey,
     prompt,
-    imageInput: refUrls,
-    aspectRatio: '1:1',
-    resolution,
-    outputFormat: 'jpeg',
+    filesUrl: refUrls,
+    size,
     onStatusChange: params.onStatus,
     timeoutMs: TIMEOUT_MS,
     signal: params.signal,
@@ -82,10 +96,10 @@ export async function generateSlotImage(params: GenerateSlotParams): Promise<Gen
 
 // ── Helpers ──────────────────────────────────────────────────────────────
 
-async function resolveReferenceUrls(assetIds: string[]): Promise<string[]> {
+async function resolveReferenceUrls(assetIds: string[], maxRefs = 5): Promise<string[]> {
   const urls: string[] = []
-  // gpt-image-2 accepts up to 5 reference images
-  for (const id of assetIds.slice(0, 5)) {
+  // gpt-4o-image accepts up to 5 total refs (filesUrl)
+  for (const id of assetIds.slice(0, maxRefs)) {
     try {
       const url = await getUrl(id)
       if (url) urls.push(url)

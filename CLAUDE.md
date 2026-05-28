@@ -157,21 +157,40 @@ Reason for pivot:
   the final canvas preview; show clean placeholder until AI generates. See
   `[[feedback-no-raw-ref-in-preview]]`.
 
-### Generation pipeline (Phase 6 — full AI)
+### Generation pipeline (Phase 6 — full AI with GPT-4o image edit)
 
 ```
-User → "Tạo Listing (9 ảnh + mô tả)" → CostEstimator confirms (~73 credits)
+User → "Tạo Listing (9 ảnh + mô tả)" → CostEstimator confirms (~55 credits)
   ↓
 initializeListingOutput → 9 ListingImage stubs
   ↓ parallel:
   ├─ generateDescription (Gemini Flash JSON, ~5s, ~1 credit)
-  └─ generateAllSlots (max 3 concurrent, ~3-5min, 9 × ~8 credits)
-       └─ slots 1-9 ALL go through Nano Banana 2 with full-text prompts
+  └─ generateAllSlots (max 3 concurrent, ~3-5min, 9 × 6 credits)
+       └─ slots 1-9 ALL go through gpt-4o-image (i2i) with full-text prompts
   ↓
-Each slot: kie.ai nano-banana-2 with image_input refs + detailed prompt
+Each slot: kie.ai /gpt4o-image/generate with filesUrl refs + detailed prompt
   (embedded text + brand + trust bar) → poll → save to Supabase Storage
   ↓ assetId set → ImageSlot renders plain <img src={signedUrl} />
 ```
+
+### Model choice rationale (lesson learned the hard way)
+
+We initially built with `gpt-image-2-text-to-image` (6 credits, looks like the
+right model) — but it SILENTLY IGNORES `image_urls`. Product fidelity failed
+completely (purple jar → white pharmacy bottle). The kie.ai docstring in
+`utils/kieai.ts` warns about this explicitly.
+
+We then tried `nano-banana-2` (8 credits) thinking it was an upgrade. But
+the actual right answer was `gpt-4o-image` (the `/gpt4o-image/generate`
+endpoint), which is **also 6 credits** on kie.ai but does TRUE image-to-image
+editing with strong reference preservation. Super Ladipage has been using it
+in production since Phase 1 (see `apps/super-ladipage/providers/kieGptImage1.ts`).
+
+Rule going forward: **for any feature that needs to "preserve this product,
+just change the scene", default to `gpt-4o-image` (filesUrl)**, NOT
+`gpt-image-2` (text-only) or `nano-banana-2`. Same 6 credit cost, dramatically
+better ref preservation. Only switch to nano-banana models if testing shows
+gpt-4o-image fails on specific edge cases.
 
 ### Persistence (Phase 5)
 

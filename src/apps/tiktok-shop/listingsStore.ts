@@ -103,9 +103,9 @@ export const useTikTokShopListingsStore = create<ListingsStore>((set, get) => ({
 
   save: async (listing) => {
     // Optimistic upsert in-memory
+    const wasExisting = !!get().listings.find((l) => l.id === listing.id)
     set((s) => {
-      const exists = s.listings.find((l) => l.id === listing.id)
-      const next = exists
+      const next = wasExisting
         ? s.listings.map((l) => (l.id === listing.id ? listing : l))
         : [listing, ...s.listings]
       return { listings: next }
@@ -115,17 +115,34 @@ export const useTikTokShopListingsStore = create<ListingsStore>((set, get) => ({
       const user_id = await requireUserId()
       const title = listing.images.find((i) => i.slot === 1)?.overlay?.headline?.slice(0, 80)
         ?? `Listing ${listing.market.toUpperCase()}`
-      const { error } = await supabase
-        .from('user_outputs')
-        .upsert({
-          id: listing.id,
-          user_id,
-          kind: KIND,
-          title,
-          payload_json: listing,
-          updated_at: new Date().toISOString(),
-        }, { onConflict: 'id' })
-      if (error) reportError('Lưu listing', error)
+
+      // P6-fix: mirror brandKitStore pattern — UPSERT via Supabase was hitting
+      // "Could not find the table in the schema cache" when PostgREST couldn't
+      // resolve the onConflict target. Switch to explicit insert-OR-update.
+      if (wasExisting) {
+        const { error } = await supabase
+          .from('user_outputs')
+          .update({
+            title,
+            payload_json: listing,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', listing.id)
+          .eq('user_id', user_id)
+          .eq('kind', KIND)
+        if (error) reportError('Cập nhật listing', error)
+      } else {
+        const { error } = await supabase
+          .from('user_outputs')
+          .insert({
+            id: listing.id,
+            user_id,
+            kind: KIND,
+            title,
+            payload_json: listing,
+          })
+        if (error) reportError('Lưu listing', error)
+      }
     } catch (e) {
       reportError('Lưu listing', { message: e instanceof Error ? e.message : String(e) })
     }
