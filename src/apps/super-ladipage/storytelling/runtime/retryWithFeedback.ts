@@ -83,6 +83,11 @@ interface RunArgs {
    *  objections / proof texture). Same pattern as synthesisBriefObj for
    *  symptoms. */
   commercialPsychology?: import('../../productSynthesis').SynthesizedCommercialPsychology
+  /** REBUILD Sprint 1 (2026-05-28) — Pre-write brainstorm. Pre-decided
+   *  hook angle + hookDraft + agitateBeats + persona seeds. Threaded into
+   *  the storytelling systemPrompt as a HARD ANCHOR so Block 1 + Phase
+   *  1-2 stop defaulting to soft diary nostalgia for every niche. */
+  packBrainstorm?: import('../../packBrainstorm').PackBrainstorm
   geminiApiKey: string
   kieApiKey: string
   /** v5.1 — Narrator/DNA/curve selection. OPTIONAL — if undefined,
@@ -111,6 +116,7 @@ async function runOnce(
     args.productBrief,
     args.realityBrief,
     args.synthesizedBrief,
+    args.packBrainstorm,
   )
   const userPrompt = buildPackGenUserPrompt(
     args.input,

@@ -1,0 +1,75 @@
+// ─────────────────────────────────────────────────────────────────────
+// Pack Brainstorm — buildBrainstormBrief (REBUILD Sprint 1, 2026-05-28)
+//
+// Convert PackBrainstorm output into a short paragraph that gets pasted
+// at the TOP of the storytelling system prompt. The downstream writer
+// is told to anchor Block 1 to the hookDraft + scaffold Phase 1-2 from
+// the agitateBeats.
+//
+// Kept tight (~250-400 words) so it doesn't bloat the prompt.
+// ─────────────────────────────────────────────────────────────────────
+
+import type { PackBrainstorm, HookAngle } from './types'
+
+const ANGLE_GUIDANCE: Record<HookAngle, string> = {
+  'pain-immediate-scene':
+    'Mở Block 1 bằng SCENE CỤ THỂ tại 1 thời điểm xác định (giờ / khoảnh khắc). KHÔNG dùng pattern "bạn còn nhớ..." (nostalgia). KHÔNG dùng câu hỏi triết lý chung chung.',
+  'social-shame':
+    'Mở Block 1 bằng MOMENT XÃ HỘI mà reader giấu nỗi đau (cuộc họp / gặp khách / chụp ảnh). Đánh vào identity, KHÔNG vào triệu chứng đơn thuần.',
+  'future-fear':
+    'Mở Block 1 bằng PROJECTION 5-10 năm nếu để vậy. Kèm 1 chi tiết cụ thể (vd "không leo nổi cầu thang nhà mình"). KHÔNG nhẹ nhàng "có lẽ".',
+  'wasted-effort':
+    'Mở Block 1 bằng INVENTORY các thứ reader đã thử + tiền đã ném vào. Số cụ thể nếu có. Frustration tone, KHÔNG resignation tone.',
+  'soft-recognition':
+    'Mở Block 1 bằng RECOGNITION nhẹ — vẫn YOU-first nhưng warmer cadence. Pattern "bạn còn nhớ..." chấp nhận ở mode này.',
+}
+
+export function buildBrainstormBrief(brainstorm: PackBrainstorm): string {
+  const lines: string[] = []
+  lines.push('═══ PACK BRAINSTORM (REQUIRED ANCHOR — DO NOT IGNORE) ═══')
+  lines.push('')
+  lines.push(`Chosen hook angle: ${brainstorm.chosenAngle}`)
+  lines.push(`Angle guidance: ${ANGLE_GUIDANCE[brainstorm.chosenAngle]}`)
+  lines.push('')
+
+  if (brainstorm.painLadder.length > 0) {
+    lines.push('Pain ladder (rank 1 = sharpest — open the pack from this):')
+    for (const p of brainstorm.painLadder) {
+      lines.push(`  ${p.rank}. [${p.lossType}] ${p.pain}`)
+    }
+    lines.push('')
+  }
+
+  lines.push('HOOK DRAFT — seed for Block 1 (self-recognition-hook):')
+  lines.push(`"""`)
+  lines.push(brainstorm.hookDraft)
+  lines.push(`"""`)
+  lines.push('Use this draft as the STARTING POINT for Block 1.')
+  lines.push('You may polish wording, add 1-2 connecting sentences, but DO NOT defang it back into nostalgia / "bạn còn nhớ" / philosophical pattern unless chosenAngle = soft-recognition.')
+  lines.push('Block 1 must hit the rank-1 pain WITHIN THE FIRST 2 SENTENCES.')
+  lines.push('')
+
+  if (brainstorm.agitateBeats.length > 0) {
+    lines.push('Agitate beats for Phase 1-2 blocks (daily-micro-friction + hidden-emotional-truth):')
+    brainstorm.agitateBeats.forEach((b, i) => {
+      lines.push(`  • Beat ${i + 1}: ${b}`)
+    })
+    lines.push('Each Phase 1-2 block must touch AT LEAST ONE of these beats. Stack them, don\'t skip to relief.')
+    lines.push('')
+  }
+
+  if (brainstorm.socialProofPersonas.length > 0) {
+    lines.push('Social-proof persona seeds (for proof-future-self / lifestyle blocks):')
+    brainstorm.socialProofPersonas.forEach((p, i) => {
+      lines.push(`  Persona ${i + 1}: ${p.label} — ${p.angle}`)
+    })
+    lines.push('')
+  }
+
+  if (brainstorm.rationale) {
+    lines.push(`(Rationale — debug only, not for output: ${brainstorm.rationale})`)
+  }
+
+  lines.push('═══════════════════════════════════════════════════════════')
+  return lines.join('\n')
+}

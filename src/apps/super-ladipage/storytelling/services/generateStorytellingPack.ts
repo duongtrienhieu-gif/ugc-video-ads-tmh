@@ -56,6 +56,13 @@ import { translatePackToVi } from '../../services/translate'
 import { composePIBlocks, interleaveIntoPack } from '../../productInfoLayer'
 import { synthesizePageScenes } from '../../imageSceneSynthesis'
 import type { SceneDescription } from '../../imageSceneSynthesis'
+// REBUILD Sprint 1 (2026-05-28) — Pre-write brainstorm stage.
+// Reads productSynthesis + commercialPsychology + raw input, picks hook
+// angle, drafts the opening, lists agitate beats. Output is threaded
+// into the storytelling system prompt so Gemini stops defaulting to
+// "soft diary nostalgia" for every niche.
+import { synthesizePackBrainstorm } from '../../packBrainstorm'
+import type { PackBrainstorm } from '../../packBrainstorm'
 
 // ── Map storytelling BlockId → existing UGC SectionType for
 //    LandingSection.type compat. Storytelling block ID stored
@@ -340,6 +347,45 @@ export async function generateStorytellingPack(
     console.warn(`[storytelling] Commercial psychology synthesis failed — pack uses niche-baseline only:`, err)
   }
 
+  // ─── 3.45 REBUILD Sprint 1 (2026-05-28) — Pre-write brainstorm ───
+  // Runs AFTER productSynthesis + commercialPsychology because it needs
+  // both as inputs. Runs BEFORE generatePackWithRetry because its output
+  // is threaded into the storytelling system prompt as a HARD ANCHOR for
+  // Block 1 hook + Phase 1-2 agitate beats. Without this stage Gemini
+  // kept defaulting to "soft diary nostalgia recall" for every niche
+  // regardless of input — the universal lan-man bug across all packs.
+  let packBrainstorm: PackBrainstorm | undefined = undefined
+  try {
+    const brainstormStart = Date.now()
+    packBrainstorm = await synthesizePackBrainstorm(
+      {
+        productName: product.productName,
+        niche: input.niche,
+        productEssence: synthesizedBrief.productEssence,
+        readerSpecificSymptoms: synthesizedBrief.readerSpecificSymptoms,
+        realisticFailedAttempts: synthesizedBrief.realisticFailedAttempts,
+        usageScene: synthesizedBrief.usageScene,
+        primaryDesire: commercialPsychology?.primaryDesire,
+        desireTensions: commercialPsychology?.desireTensions,
+        topObjections: commercialPsychology?.topObjections,
+        rawPainPoints: product.painPoints ?? '',
+        rawBenefits: product.benefits ?? '',
+        rawUsp: product.usps ?? '',
+        rawPricing: product.offer ?? '',
+        targetLanguage: params.language,
+      },
+      { geminiApiKey, kieApiKey },
+    )
+    console.info(
+      `[storytelling/brainstorm] ${packBrainstorm.source} · angle=${packBrainstorm.chosenAngle} · ` +
+      `pains=${packBrainstorm.painLadder.length} · beats=${packBrainstorm.agitateBeats.length} · ` +
+      `personas=${packBrainstorm.socialProofPersonas.length} in ${((Date.now() - brainstormStart) / 1000).toFixed(1)}s` +
+      (packBrainstorm.rationale ? ` // ${packBrainstorm.rationale.slice(0, 80)}` : ''),
+    )
+  } catch (err) {
+    console.warn('[storytelling/brainstorm] Brainstorm synthesis failed — pack uses niche-baseline only:', err)
+  }
+
   // ─── 3.5 v5.1 — Select narrator/DNA/curve (human variation engine) ──
   const selection = selectNarratorDna({
     niche: input.niche,
@@ -370,6 +416,9 @@ export async function generateStorytellingPack(
     // overrides niche-table defaults in desireBrief / ctaBrief /
     // objectionSampling / textureBrief.
     commercialPsychology,
+    // REBUILD Sprint 1 (2026-05-28): pre-write brainstorm — threaded into
+    // systemPrompt as a hard anchor for Block 1 + Phase 1-2.
+    packBrainstorm,
     geminiApiKey,
     kieApiKey,
     selection,
