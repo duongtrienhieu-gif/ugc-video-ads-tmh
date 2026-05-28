@@ -22,6 +22,8 @@ import { selfInsertionDetector } from './selfInsertionDetector'
 import { paragraphCountDetector } from './paragraphCountDetector'
 import { narratorCentricDetector } from './narratorCentricDetector'
 import { nicheContaminationDetector } from './nicheContaminationDetector'
+// REBUILD Sprint 3 (2026-05-28) — Cross-niche mechanism vocab leak detector.
+import { crossNicheVocabDetector } from './crossNicheVocabDetector'
 import { genericWellnessDensityDetector } from './genericWellnessDensityDetector'
 import { memoryAnchorDetector } from './memoryAnchorDetector'
 import { emotionalFlatteningDetector } from './emotionalFlatteningDetector'
@@ -42,6 +44,7 @@ export type ValidatorName =
   | 'paragraphCount'             // soft
   | 'narratorCentric'            // soft — Chunk C
   | 'nicheContamination'         // soft — Chunk C2
+  | 'crossNicheVocab'            // soft — REBUILD Sprint 3
   | 'genericWellnessDensity'     // soft — Chunk C2
   | 'memoryAnchor'               // soft — Chunk C2
   | 'emotionalFlattening'        // soft — Chunk C2
@@ -50,7 +53,8 @@ export type ValidatorName =
 /** Soft validators — flagged for visibility, not enforcement. */
 const SOFT_VALIDATORS: ReadonlySet<ValidatorName> = new Set([
   'selfInsertion', 'paragraphCount', 'narratorCentric',
-  'nicheContamination', 'genericWellnessDensity', 'memoryAnchor', 'emotionalFlattening',
+  'nicheContamination', 'crossNicheVocab',
+  'genericWellnessDensity', 'memoryAnchor', 'emotionalFlattening',
   'aggressiveSales',
 ])
 
@@ -88,6 +92,9 @@ export function runValidators(
     narratorCentric:         narratorCentricDetector(parsed.sections),
     nicheContamination:      niche
       ? nicheContaminationDetector(parsed.sections, niche)
+      : { pass: true, violations: [] },
+    crossNicheVocab:         niche
+      ? crossNicheVocabDetector(parsed.sections, niche)
       : { pass: true, violations: [] },
     genericWellnessDensity:  genericWellnessDensityDetector(parsed.sections),
     memoryAnchor:            memoryAnchorDetector(parsed.sections),
