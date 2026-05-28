@@ -7,11 +7,14 @@
 import type { ResolvedBrandKit, Market } from '../../../types/brandKit'
 import type { Product } from '../../../stores/types'
 import type { DescriptionBlock, ListingDescription, SlotTexts, TiktokShopProductBrief } from '../types'
-import { kieTextGenerate } from '../../../utils/kieai'
+import { directGeminiText } from '../../../utils/gemini'
 import { MOCK_DESCRIPTION_BLOCKS } from '../constants'
 
 export interface GenerateDescriptionParams {
-  apiKey: string
+  /** Google AI Studio API key (NOT kie.ai — text gen routes via Gemini direct
+   *  because kie.ai's /chat/completions returns "Operation not found" for our
+   *  text models). */
+  geminiApiKey: string
   brandKit: ResolvedBrandKit
   product: Product
   language: Market
@@ -24,10 +27,22 @@ export interface GenerateDescriptionParams {
 export async function generateDescription(
   params: GenerateDescriptionParams,
 ): Promise<ListingDescription> {
+  if (!params.geminiApiKey?.trim()) {
+    throw new Error('Cần Gemini API key trong Cài đặt để generate mô tả')
+  }
   const prompt = buildDescriptionPrompt(params)
   const systemInstruction = buildSystemInstruction(params)
 
-  const raw = await kieTextGenerate(params.apiKey, prompt, systemInstruction)
+  // Gemini direct with responseMimeType: 'application/json' → guaranteed JSON.
+  // Bypasses kie.ai which currently returns empty for chat/completions.
+  const raw = await directGeminiText({
+    apiKey: params.geminiApiKey,
+    prompt,
+    systemInstruction,
+    responseMimeType: 'application/json',
+    maxOutputTokens: 4096,
+    temperature: 0.7,
+  })
   const { blocks, slotTexts } = parseOrFallback(raw)
   const fullText = assembleFullText(blocks)
   return { blocks, fullText, slotTexts }

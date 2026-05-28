@@ -46,6 +46,7 @@ export default function InputPanel() {
   const getProductById = useBankStore((s) => s.getProductById)
   const hasApiKey   = useSettingsStore((s) => s.hasApiKey())
   const kieApiKey   = useSettingsStore((s) => s.kieApiKey)
+  const geminiApiKey = useSettingsStore((s) => s.geminiApiKey)
   const kieCredits  = useSettingsStore((s) => s.kieCredits)
   const setKieCredits = useSettingsStore((s) => s.setKieCredits)
   const openApp     = useAppStore((s) => s.openApp)
@@ -132,9 +133,12 @@ export default function InputPanel() {
       console.log(`[tiktok-shop] ✓ reusing cached product brief (key=${newCacheKey.slice(0, 40)}...)`)
     } else {
       try {
-        addToast('Đang phân tích sản phẩm (Vision)...', 'info')
+        if (!geminiApiKey?.trim()) {
+          throw new Error('Cần Gemini API key trong Cài đặt (lấy free tại aistudio.google.com/apikey)')
+        }
+        addToast('Đang phân tích sản phẩm (Gemini Vision)...', 'info')
         brief = await extractProductBrief({
-          apiKey: kieApiKey,
+          geminiApiKey,
           product,
           referenceImageAssetIds: draft.referenceImageAssetIds,
           language: draft.market,
@@ -149,12 +153,12 @@ export default function InputPanel() {
       }
     }
 
-    // 3. PHASE 2 — Generate description, passing brief as ground truth.
-    //    Produces slotTexts that the image prompts use for in-image text.
+    // 3. PHASE 2 — Generate description via Gemini direct (bypasses kie.ai
+    //    chat/completions which returns "Operation not found" for our models).
     let slotTexts: import('../types').SlotTexts | undefined = undefined
     try {
       const desc = await generateDescription({
-        apiKey: kieApiKey,
+        geminiApiKey,
         brandKit: resolvedBrandKit,
         product,
         language: draft.market,

@@ -27,6 +27,7 @@ export default function DescriptionEditor() {
   const addToast = useAppStore((s) => s.addToast)
   const getProductById = useBankStore((s) => s.getProductById)
   const kieApiKey = useSettingsStore((s) => s.kieApiKey)
+  const geminiApiKey = useSettingsStore((s) => s.geminiApiKey)
   const resolvedBrandKit = useResolvedBrandKit(draft.brandKitId, draft.market)
 
   const [regenerating, setRegenerating] = useState(false)
@@ -91,10 +92,11 @@ export default function DescriptionEditor() {
     setRegenerating(true)
     try {
       const desc = await generateDescription({
-        apiKey: kieApiKey,
+        geminiApiKey,
         brandKit: resolvedBrandKit,
         product,
         language: draft.market,
+        brief: draft.productBrief ?? undefined,
       })
       setDescription(desc)
       addToast('Đã tạo lại mô tả', 'success')

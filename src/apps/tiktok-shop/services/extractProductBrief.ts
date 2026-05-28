@@ -1,24 +1,28 @@
-// extractProductBrief — Phase 10: Vision-based product analysis.
+// extractProductBrief — Phase 10 (Phase 10.1 refactor): Vision via Google direct.
 //
-// ONE upfront kie.ai Vision call (~3-5 credits, ~5s) before description +
-// image gen. Returns a structured TiktokShopProductBrief that:
+// ONE upfront Gemini Vision call before description + image gen. Returns a
+// structured TiktokShopProductBrief that:
 //   - reads ACTUAL product label/packaging from reference photos
 //   - infers target customer + core pain feelings
 //   - commits to transformation promise + key differentiator
 //   - lists ONLY ingredients visible on label (no fabrication)
 //
-// Result flows as READ-ONLY context into generateDescription + all 9
-// generateSlot calls + combo gen → unifies product understanding across
-// every output. Mirrors Super Ladipage's extractProductIdentity pattern.
+// Routing: calls Google Gemini API DIRECTLY (directGeminiVision), bypassing
+// kie.ai's /chat/completions endpoint which returns "Operation not found"
+// for all our text/vision models. Image generation still uses kie.ai because
+// the /gpt4o-image/generate endpoint works fine.
+//
+// Mirrors Super Ladipage's readProductImages + extractProductIdentity pattern.
 
 import type { Market } from '../../../types/brandKit'
 import type { Product } from '../../../stores/types'
 import type { TiktokShopProductBrief } from '../types'
-import { kieAnalyzeImage } from '../../../utils/kieai'
-import { getUrl } from '../../../utils/assetStore'
+import { directGeminiVision } from '../../../utils/gemini'
+import { getAsBase64 } from '../../../utils/assetStore'
 
 export interface ExtractProductBriefParams {
-  apiKey: string
+  /** Google AI Studio API key (NOT kie.ai key — Gemini direct). */
+  geminiApiKey: string
   product: Product
   referenceImageAssetIds: string[]
   language: Market
@@ -33,28 +37,45 @@ export function buildBriefCacheKey(productId: string, refIds: string[]): string 
 export async function extractProductBrief(
   params: ExtractProductBriefParams,
 ): Promise<TiktokShopProductBrief> {
-  const refUrls = await resolveReferenceUrls(params.referenceImageAssetIds)
-  if (refUrls.length === 0) {
-    throw new Error('Cần ít nhất 1 ảnh tham chiếu sản phẩm để phân tích')
+  if (!params.geminiApiKey?.trim()) {
+    throw new Error('Cần Gemini API key trong Cài đặt để phân tích sản phẩm bằng Vision')
+  }
+
+  // Load ref images as inline base64 (Gemini Vision expects inlineData parts).
+  const imageParts: Array<{ inlineData: { mimeType: string; data: string } }> = []
+  for (const id of params.referenceImageAssetIds.slice(0, 5)) {
+    try {
+      const asset = await getAsBase64(id)
+      if (asset) {
+        imageParts.push({ inlineData: { mimeType: asset.mimeType, data: asset.base64 } })
+      }
+    } catch (err) {
+      console.warn(`[extractProductBrief] Could not load asset ${id}:`, err)
+    }
+  }
+
+  if (imageParts.length === 0) {
+    throw new Error('Không đọc được ảnh tham chiếu nào để Vision phân tích')
   }
 
   const langName = params.language === 'ms' ? 'Bahasa Malaysia' : 'Vietnamese'
   const systemPrompt = buildSystemPrompt(langName)
   const userPrompt = buildUserPrompt(params.product, langName)
 
-  console.log(`[extractProductBrief] analyzing ${refUrls.length} refs · product="${params.product.productName}"`)
+  console.log(`[extractProductBrief] analyzing ${imageParts.length} refs via Gemini direct · product="${params.product.productName}"`)
 
-  // kieAnalyzeImage signature: (apiKey, imageBase64, mimeType, prompt, systemInstruction?, imageUrls?)
-  // When imageUrls is provided, imageBase64+mimeType are unused (the function builds
-  // vision content from urls instead of inline base64).
-  const raw = await kieAnalyzeImage(
-    params.apiKey,
-    '',
-    'image/jpeg',
-    userPrompt,
-    systemPrompt,
-    refUrls,
-  )
+  // directGeminiVision tries gemini-2.5-flash → flash-lite → 2.0-flash etc.
+  // responseMimeType: 'application/json' forces valid JSON output.
+  const raw = await directGeminiVision({
+    apiKey: params.geminiApiKey,
+    parts: [
+      ...imageParts,
+      { text: userPrompt },
+    ],
+    systemInstruction: systemPrompt,
+    responseMimeType: 'application/json',
+    maxOutputTokens: 4096,
+  })
 
   const brief = parseAndValidate(raw, params.product, params.language)
   console.log(`[extractProductBrief] ✓ brief extracted · name="${brief.productNameExact}" · category="${brief.productCategory}" · ingredients=${brief.visibleIngredients.length}`)
@@ -64,23 +85,23 @@ export async function extractProductBrief(
 // ── System prompt ─────────────────────────────────────────────────────────
 
 function buildSystemPrompt(langName: string): string {
-  return `You are a product analyst for the TikTok Shop Malaysia/Vietnam market. Your job: examine the provided product reference photos AND the product metadata, then output ONE strict JSON brief that downstream copywriters + image generators will use.
+  return `You are a product analyst for the TikTok Shop Malaysia/Vietnam market. Examine the provided product reference photos AND the product metadata, then output ONE strict JSON brief that downstream copywriters + image generators will use.
 
 LANGUAGE for inferred text fields (corePains, transformationPromise, specificMetric, keyDifferentiator, usageContext, commonObjections, nicheSafeClaims, forbiddenClaims, targetCustomer.dailyContext): ${langName} ONLY.
 LANGUAGE for factual fields (productNameExact, productCategory, productSubtype, packagingDescription, primaryColors, visibleIngredients): match what's printed on the label (usually English) — do NOT translate.
 
-OUTPUT: strict JSON object only. No markdown fences, no preamble, no text after the closing brace.
+OUTPUT: strict JSON object only.
 
 CRITICAL DATA INTEGRITY RULES:
 1. productNameExact: read it EXACTLY from the product label as printed (preserve capitalization, brand mark like ®).
 2. visibleIngredients: list ONLY ingredient names you can READ on the product label / packaging in the photos. If the label doesn't list ingredients, return [] (empty array). NEVER invent ingredient names from category assumption.
 3. primaryColors: list visible packaging colors from the photos (hex codes preferred, color words OK).
-4. specificMetric: a CONCRETE measurable outcome derived from product context (e.g. "DALAM 15 MINIT", "3× LEBIH LANCAR", "−2KG SEBULAN"). NOT vague superlatives like "HASIL TERBAIK".
-5. corePains: write as customer self-questions ending '?', each max 12 words, customer-voice feelings (not clinical descriptions).
-6. forbiddenClaims: list claims that would be legally risky for this niche (cert claims like Halal/KKM/GMP/FDA without proof, strong clinical claims like "rawat/sembuh/cure/treat", unverified efficacy statements).
-7. nicheSafeClaims: list 3-5 claims that are SAFE for this niche (soft "membantu/menyokong/hỗ trợ" framing, observable benefits, comfort/feel improvements).
+4. specificMetric: a CONCRETE measurable outcome derived from product context (e.g. "DALAM 15 MINIT", "3× LEBIH LANCAR", "−2KG SEBULAN"). NOT vague superlatives.
+5. corePains: customer self-questions ending '?', each max 12 words, customer-voice feelings.
+6. forbiddenClaims: list claims that would be legally risky for this niche (Halal/KKM/GMP/FDA without proof, "rawat/sembuh/cure/treat", unverified efficacy statements).
+7. nicheSafeClaims: 3-5 claims that are SAFE for this niche (soft "membantu/menyokong/hỗ trợ" framing, observable benefits).
 
-IF a field cannot be determined from photos + metadata, write the most reasonable inference based on category — but flag uncertainty by using safer/softer language. NEVER fabricate specific ingredient names, certifications, lab numbers, or clinical claims.`
+IF a field cannot be determined from photos + metadata, write the most reasonable inference based on category — but flag uncertainty by using softer language. NEVER fabricate specific ingredient names, certifications, lab numbers, or clinical claims.`
 }
 
 // ── User prompt ──────────────────────────────────────────────────────────
@@ -113,25 +134,15 @@ function buildUserPrompt(product: Product, langName: string): string {
   lines.push(`    "primaryGender": "<female|male|mixed>",`)
   lines.push(`    "dailyContext": "<who they are + daily life context in ${langName}, 1-2 sentences>"`)
   lines.push(`  },`)
-  lines.push(`  "corePains": [`)
-  lines.push(`    "<customer self-question ending '?', max 12 words, in ${langName}>",`)
-  lines.push(`    "<another pain question>",`)
-  lines.push(`    "<another pain question>"`)
-  lines.push(`  ],`)
+  lines.push(`  "corePains": ["<customer self-question in ${langName} max 12 words>", "<...>", "<...>"],`)
   lines.push(`  "transformationPromise": "<what specifically changes after using, in ${langName}>",`)
   lines.push(`  "specificMetric": "<ALL CAPS measurable outcome, max 4 words, in ${langName}>",`)
   lines.push(`  "keyDifferentiator": "<specific edge vs generic alternative, in ${langName}>",`)
   lines.push(`  "usageContext": "<when/where used, in ${langName}>",`)
-  lines.push(`  "commonObjections": [`)
-  lines.push(`    "<top buyer concern in ${langName}>",`)
-  lines.push(`    "<another concern>",`)
-  lines.push(`    "<another concern>"`)
-  lines.push(`  ],`)
-  lines.push(`  "nicheSafeClaims": ["<safe claim in ${langName}>", "...3-5 items"],`)
-  lines.push(`  "forbiddenClaims": ["<claim to avoid for this niche>", "..."]`)
+  lines.push(`  "commonObjections": ["<top buyer concern>", "<...>", "<...>"],`)
+  lines.push(`  "nicheSafeClaims": ["<safe claim>", "...3-5 items"],`)
+  lines.push(`  "forbiddenClaims": ["<claim to avoid>", "..."]`)
   lines.push(`}`)
-  lines.push(``)
-  lines.push(`Return ONLY the JSON object.`)
   return lines.join('\n')
 }
 
@@ -142,17 +153,18 @@ function parseAndValidate(
   product: Product,
   language: Market,
 ): TiktokShopProductBrief {
-  const json = extractJsonObject(raw)
-  if (!json) {
-    console.warn('[extractProductBrief] could not extract JSON — using fallback brief. Raw first 500 chars:', raw.slice(0, 500))
-    return buildFallbackBrief(product, language)
+  // Gemini with responseMimeType: 'application/json' usually returns clean JSON.
+  // Still strip fences defensively in case the model wraps it.
+  let cleaned = raw.trim()
+  if (cleaned.startsWith('```')) {
+    cleaned = cleaned.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '').trim()
   }
 
   try {
-    const parsed = JSON.parse(json) as Partial<TiktokShopProductBrief>
+    const parsed = JSON.parse(cleaned) as Partial<TiktokShopProductBrief>
     return normalizeBrief(parsed, product, language)
   } catch (err) {
-    console.warn('[extractProductBrief] JSON parse failed — using fallback', err)
+    console.warn('[extractProductBrief] JSON parse failed — using fallback', err, 'raw first 300:', raw.slice(0, 300))
     return buildFallbackBrief(product, language)
   }
 }
@@ -175,7 +187,7 @@ function normalizeBrief(
     productSubtype:        typeof r.productSubtype === 'string'        ? r.productSubtype        : fallback.productSubtype,
     packagingDescription:  typeof r.packagingDescription === 'string'  ? r.packagingDescription  : fallback.packagingDescription,
     primaryColors:         strArr(r.primaryColors).length > 0          ? strArr(r.primaryColors) : fallback.primaryColors,
-    visibleIngredients:    strArr(r.visibleIngredients),  // [] is valid — don't fall back (would invite fabrication)
+    visibleIngredients:    strArr(r.visibleIngredients),  // [] is valid — don't fall back
     targetCustomer: {
       ageRange:      typeof tc.ageRange === 'string'      ? (tc.ageRange as string)      : fallback.targetCustomer.ageRange,
       primaryGender: (tc.primaryGender === 'female' || tc.primaryGender === 'male' || tc.primaryGender === 'mixed')
@@ -205,10 +217,10 @@ function buildFallbackBrief(product: Product, language: Market): TiktokShopProdu
   return {
     productNameExact:      product.productName || 'Product',
     productCategory:       product.productName || 'Health Product',
-    productSubtype:        'bottle',  // safe default for most TPCN/personal care
+    productSubtype:        'bottle',
     packagingDescription:  'product container as shown in reference photos',
     primaryColors:         ['#1E4D8C', '#FFFFFF'],
-    visibleIngredients:    ings,  // from seller field (may be empty)
+    visibleIngredients:    ings,
     targetCustomer: {
       ageRange:      '25-45',
       primaryGender: 'mixed',
@@ -231,43 +243,4 @@ function buildFallbackBrief(product: Product, language: Market): TiktokShopProdu
       ? ['rawat', 'sembuh', 'cure', 'treat', 'Halal JAKIM (tanpa sijil)', 'KKM lulus (tanpa bukti)']
       : ['chữa khỏi', 'điều trị', 'BYT cấp phép (chưa có)', 'lâm sàng (chưa kiểm chứng)'],
   }
-}
-
-// Models occasionally wrap JSON in ```json fences or add commentary.
-// Extract the first balanced JSON object from the response.
-function extractJsonObject(raw: string): string | null {
-  const cleaned = raw.replace(/```(?:json)?\s*/gi, '').replace(/```/g, '').trim()
-  const start = cleaned.indexOf('{')
-  if (start === -1) return null
-
-  let depth = 0
-  let inString = false
-  let escapeNext = false
-
-  for (let i = start; i < cleaned.length; i++) {
-    const ch = cleaned[i]
-    if (escapeNext) { escapeNext = false; continue }
-    if (ch === '\\') { escapeNext = true; continue }
-    if (ch === '"') { inString = !inString; continue }
-    if (inString) continue
-    if (ch === '{') depth++
-    else if (ch === '}') {
-      depth--
-      if (depth === 0) return cleaned.slice(start, i + 1)
-    }
-  }
-  return null
-}
-
-// ── Helpers ──────────────────────────────────────────────────────────────
-
-async function resolveReferenceUrls(assetIds: string[]): Promise<string[]> {
-  const urls: string[] = []
-  for (const id of assetIds.slice(0, 5)) {
-    try {
-      const url = await getUrl(id)
-      if (url) urls.push(url)
-    } catch { /* silent skip */ }
-  }
-  return urls
 }
