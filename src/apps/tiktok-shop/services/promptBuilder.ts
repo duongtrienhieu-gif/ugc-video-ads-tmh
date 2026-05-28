@@ -146,18 +146,19 @@ function deriveSlot3(ctx: PromptContext): { beforeLabel: string; afterLabel: str
 function deriveSlot4(ctx: PromptContext): { title: string; ingredients: Array<{ name: string; pct?: string }>; tagline: string } {
   const title = ctx.language === 'ms' ? 'BAHAN AKTIF' : 'THÀNH PHẦN CHÍNH'
   const tagline = ctx.language === 'ms' ? 'Bahan berkualiti, selamat digunakan' : 'Thành phần chất lượng, an toàn'
-  if (ctx.brief) {
-    // Vision-read ingredients ONLY. Empty array = label has none → show empty (no fabrication).
-    const ings = ctx.brief.visibleIngredients.slice(0, 5).map((name) => ({ name }))
-    return { title, ingredients: ings, tagline }
+  // Layered priority: Vision-read > seller-typed > placeholder
+  // Brief can be present but visibleIngredients empty (label didn't show them clearly) —
+  // in that case the seller-typed product.ingredients is the source of truth.
+  const visionIngs = ctx.brief?.visibleIngredients ?? []
+  if (visionIngs.length > 0) {
+    return { title, ingredients: visionIngs.slice(0, 5).map((name) => ({ name })), tagline }
   }
-  // No brief — try product.ingredients (seller-typed)
-  const ings = (ctx.product.ingredients || '').split(/[\n,]/).map((s) => s.trim()).filter(Boolean).slice(0, 5)
-  return {
-    title,
-    ingredients: ings.length > 0 ? ings.map((name) => ({ name })) : [{ name: '(Bổ sung từ Bank Sản phẩm)' }],
-    tagline,
+  const sellerIngs = (ctx.product.ingredients || '').split(/[\n,]/).map((s) => s.trim()).filter(Boolean).slice(0, 5)
+  if (sellerIngs.length > 0) {
+    return { title, ingredients: sellerIngs.map((name) => ({ name })), tagline }
   }
+  // Neither Vision nor seller has ingredients — return empty so prompt shows USP panel
+  return { title, ingredients: [], tagline }
 }
 
 function deriveSlot5(ctx: PromptContext): { quote: string; author: string; verifiedNote: string } {

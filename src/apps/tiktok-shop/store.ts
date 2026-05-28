@@ -4,6 +4,7 @@
 // Phase 4 will: persist listings to Supabase, snapshot brandKitVersion, etc.
 
 import { create } from 'zustand'
+import { persist, createJSONStorage } from 'zustand/middleware'
 import type { Market } from '../../types/brandKit'
 import type {
   ListingDraft,
@@ -93,7 +94,9 @@ function createPendingImages(): ListingImage[] {
   }))
 }
 
-export const useTikTokShopStore = create<TikTokShopState>((set) => ({
+export const useTikTokShopStore = create<TikTokShopState>()(
+  persist(
+    (set) => ({
   draft: createEmptyDraft(),
   showMockPreview: true,
 
@@ -330,7 +333,28 @@ export const useTikTokShopStore = create<TikTokShopState>((set) => ({
       },
     }
   }),
-}))
+    }),
+    {
+      name: 'ugc-lab:tiktok-shop',
+      storage: createJSONStorage(() => localStorage),
+      // Persist working draft (output + brief cache + selections + market)
+      // so a hard refresh doesn't wipe the generated listing. isGenerating
+      // and showMockPreview are transient/UI state — don't persist them.
+      partialize: (s) => ({
+        draft: {
+          brandKitId: s.draft.brandKitId,
+          productId: s.draft.productId,
+          referenceImageAssetIds: s.draft.referenceImageAssetIds,
+          market: s.draft.market,
+          output: s.draft.output,
+          isGenerating: false,                  // reset on refresh (never persist mid-gen state)
+          productBrief: s.draft.productBrief,
+          productBriefKey: s.draft.productBriefKey,
+        },
+      }),
+    },
+  ),
+)
 
 // ── Validation helper ────────────────────────────────────────────────────
 // Returns whether the draft has enough to start generation.

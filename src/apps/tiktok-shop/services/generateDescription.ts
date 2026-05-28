@@ -108,7 +108,7 @@ function buildDescriptionPrompt(params: GenerateDescriptionParams): string {
   const sellerIngs = (product.ingredients?.trim() ?? '').length > 0
   const hasIngredients = visibleIngs.length > 0 || sellerIngs
   const slot4IngShape = hasIngredients
-    ? `[{"name": "<ingredient name — must come from brief.visibleIngredients or seller-provided list>", "pct": "<% if known, else omit pct>"}]`
+    ? `[{"name": "<ingredient name — from brief.visibleIngredients if any, else from seller-provided Ingredients field>", "pct": "<% if known, else omit pct>"}]`
     : `[]`
   const reviewerNameHint = language === 'ms'
     ? 'MY-market names: Aisyah, Siti, Faridah, Hanim, Nurliyana + city KL / JB / Penang / Shah Alam'
@@ -117,24 +117,24 @@ function buildDescriptionPrompt(params: GenerateDescriptionParams): string {
   const faqTitle = language === 'ms' ? 'SOALAN LAZIM' : 'CÂU HỎI THƯỜNG GẶP'
   const beforeLabel = language === 'ms' ? 'SEBELUM' : 'TRƯỚC'
   const afterLabel = language === 'ms' ? 'SELEPAS' : 'SAU'
-  const ingredientsGuard = brief
-    ? (visibleIngs.length > 0
-        ? `SLOT 4 GUARD: Use ONLY ingredients from brief.visibleIngredients (Vision-read from label). Do not add extras.`
-        : `SLOT 4 GUARD: brief.visibleIngredients is empty (no ingredients visible on label) — slot4.ingredients MUST be [] in your output. Do NOT invent any ingredient names.`)
-    : (sellerIngs
-        ? `SLOT 4 GUARD: Use ONLY the ingredients listed in PRODUCT DATA above. Do not add extras.`
-        : `SLOT 4 GUARD: No ingredients were provided — slot4.ingredients MUST be [] in your output. Do NOT invent any ingredient names.`)
+  // Ingredient priority: Vision-read (most reliable for label visibility) > seller-typed (user's knowledge) > [] (don't invent)
+  const ingredientsGuard = visibleIngs.length > 0
+    ? `INGREDIENTS RULE: Use ONLY the items in brief.visibleIngredients (Vision-read from product label). These are ground truth. Do not add extras.`
+    : sellerIngs
+      ? `INGREDIENTS RULE: brief.visibleIngredients is empty (label didn't show them clearly) — fall back to the seller-provided Ingredients field in PRODUCT DATA below. Use ONLY those names. Do not add extras.`
+      : `INGREDIENTS RULE: No ingredient data from Vision or seller. slot4.ingredients MUST be [] in your output. Do NOT invent any ingredient names.`
 
-  const productDataBlock = brief
-    ? `(See PRODUCT BRIEF in system prompt for the authoritative analysis. Below is seller-provided supplemental data — use it but the brief is ground truth.)
-- Name: ${product.productName}${product.offer ? `\n- Pricing / Offer: ${product.offer}` : ''}`
-    : `PRODUCT DATA (derive ALL copy ONLY from this):
+  // ALWAYS include all product fields, even when brief exists. Brief is the
+  // authoritative analysis layer; product fields are the raw seller-provided
+  // data that MUST remain visible (especially Ingredients — when Vision can't
+  // read them off the label, the seller-typed list is the source of truth).
+  const productDataBlock = `PRODUCT DATA (raw seller-provided fields${brief ? ' — Brief above is the analyzed layer; use both' : ''}):
 - Name: ${product.productName}
 ${product.productDescription ? `- Description: ${product.productDescription}` : ''}
 ${product.painPoints ? `- Customer pain points: ${product.painPoints}` : ''}
 ${product.usps ? `- USPs / key differentiators: ${product.usps}` : ''}
 ${product.benefits ? `- Benefits: ${product.benefits}` : ''}
-- Ingredients: ${product.ingredients || '[NOT PROVIDED]'}
+- Ingredients (seller-typed): ${product.ingredients || '[NOT PROVIDED]'}
 ${product.offer ? `- Pricing / Offer: ${product.offer}` : ''}`
 
   return `Generate the JSON object below for this product.
