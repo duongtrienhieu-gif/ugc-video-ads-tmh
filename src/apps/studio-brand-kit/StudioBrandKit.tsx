@@ -66,12 +66,23 @@ export default function StudioBrandKit() {
     )
   }
 
+  const openCreate = () => {
+    if (!hasGeminiKey) {
+      addToast('Vui lòng nhập Gemini API key trong Cài đặt trước khi tạo Brand Kit.', 'error')
+      return
+    }
+    setStage({ kind: 'create' })
+  }
+
   // List view
   return (
     <div className="flex h-full flex-col bg-[#FAFAFA]">
-      {/* Header */}
-      <div className="flex shrink-0 items-center justify-between border-b border-black/8 bg-white px-6 py-4">
-        <div>
+      {/* Header — pr-* reserves space for the absolute-positioned
+          Gemini/KIE credit badges at top-right of the main panel
+          (mounted by App.tsx with z-50). Without this, header buttons
+          get hidden under those pills on every screen size. */}
+      <div className="flex shrink-0 items-center justify-between gap-4 border-b border-black/8 bg-white px-6 py-4 pr-[180px] md:pr-[260px]">
+        <div className="min-w-0">
           <h1 className="text-base font-semibold text-gray-900">
             Studio Brand Kit
           </h1>
@@ -80,14 +91,8 @@ export default function StudioBrandKit() {
           </p>
         </div>
         <button
-          onClick={() => {
-            if (!hasGeminiKey) {
-              addToast('Vui lòng nhập Gemini API key trong Cài đặt trước khi tạo Brand Kit.', 'error')
-              return
-            }
-            setStage({ kind: 'create' })
-          }}
-          className="flex items-center gap-2 rounded-lg bg-gray-900 px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition-colors hover:bg-black"
+          onClick={openCreate}
+          className="flex shrink-0 items-center gap-2 rounded-lg bg-gray-900 px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition-colors hover:bg-black"
         >
           <Plus className="h-3.5 w-3.5" />
           Tạo Brand Kit mới
@@ -102,9 +107,16 @@ export default function StudioBrandKit() {
               <h3 className="text-sm font-semibold text-gray-800">
                 Chưa có Brand Kit nào
               </h3>
-              <p className="mt-1.5 max-w-sm text-xs leading-relaxed text-gray-500">
-                Nhấn "Tạo Brand Kit mới" để AI dựng nhận diện trong vài giây — bạn chỉ cần nhập tên brand và chọn ngách.
+              <p className="mx-auto mt-1.5 max-w-sm text-xs leading-relaxed text-gray-500">
+                AI dựng nhận diện trong vài giây — bạn chỉ cần nhập tên brand và chọn ngách.
               </p>
+              <button
+                onClick={openCreate}
+                className="mx-auto mt-5 flex items-center gap-2 rounded-lg bg-gray-900 px-4 py-2 text-xs font-semibold text-white shadow-sm transition-colors hover:bg-black"
+              >
+                <Plus className="h-3.5 w-3.5" />
+                Tạo Brand Kit mới
+              </button>
             </div>
           </div>
         ) : (

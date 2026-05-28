@@ -185,8 +185,9 @@ export default function ResultEditor({ onCancel, onSaved }: Props) {
 
   return (
     <div className="flex h-full flex-col bg-[#FAFAFA]">
-      {/* Header */}
-      <div className="flex shrink-0 items-center justify-between border-b border-black/8 bg-white px-6 py-4">
+      {/* Header — pr-* reserves space for the Gemini/KIE credit badges
+          mounted by App.tsx at top-right (z-50). */}
+      <div className="flex shrink-0 items-center justify-between gap-4 border-b border-black/8 bg-white px-6 py-4 pr-[180px] md:pr-[260px]">
         <div className="flex items-center gap-3">
           <button
             onClick={onCancel}
@@ -207,7 +208,7 @@ export default function ResultEditor({ onCancel, onSaved }: Props) {
         <button
           onClick={handleSave}
           disabled={!canSave}
-          className="flex items-center gap-2 rounded-lg bg-gray-900 px-4 py-2 text-xs font-semibold text-white shadow-sm transition-colors hover:bg-black disabled:cursor-not-allowed disabled:opacity-50"
+          className="flex shrink-0 items-center gap-2 rounded-lg bg-gray-900 px-4 py-2 text-xs font-semibold text-white shadow-sm transition-colors hover:bg-black disabled:cursor-not-allowed disabled:opacity-50"
         >
           {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
           Lưu vào ngân hàng

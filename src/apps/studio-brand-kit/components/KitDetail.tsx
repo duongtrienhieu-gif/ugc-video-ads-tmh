@@ -37,7 +37,7 @@ export default function KitDetail({ kit, onBack }: Props) {
 
   return (
     <div className="flex h-full flex-col bg-[#FAFAFA]">
-      <div className="flex shrink-0 items-center gap-3 border-b border-black/8 bg-white px-6 py-4">
+      <div className="flex shrink-0 items-center gap-3 border-b border-black/8 bg-white px-6 py-4 pr-[180px] md:pr-[260px]">
         <button
           onClick={onBack}
           className="rounded-md p-1.5 text-gray-500 transition-colors hover:bg-black/5"

@@ -105,7 +105,7 @@ export default function CreateForm({ onCancel, onReady }: Props) {
 
   return (
     <div className="flex h-full flex-col bg-[#FAFAFA]">
-      <div className="flex shrink-0 items-center gap-3 border-b border-black/8 bg-white px-6 py-4">
+      <div className="flex shrink-0 items-center gap-3 border-b border-black/8 bg-white px-6 py-4 pr-[180px] md:pr-[260px]">
         <button
           onClick={onCancel}
           disabled={loading}
@@ -113,7 +113,7 @@ export default function CreateForm({ onCancel, onReady }: Props) {
         >
           <ArrowLeft className="h-4 w-4" />
         </button>
-        <div>
+        <div className="min-w-0">
           <h1 className="text-base font-semibold text-gray-900">Tạo Brand Kit mới</h1>
           <p className="mt-0.5 text-xs text-gray-500">
             AI suy luận trọn bộ nhận diện — bạn chỉ cần nhập 2 trường.
