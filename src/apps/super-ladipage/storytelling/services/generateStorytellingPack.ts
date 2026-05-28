@@ -63,6 +63,9 @@ import type { SceneDescription } from '../../imageSceneSynthesis'
 // "soft diary nostalgia" for every niche.
 import { synthesizePackBrainstorm } from '../../packBrainstorm'
 import type { PackBrainstorm } from '../../packBrainstorm'
+// REBUILD Sprint 2 (2026-05-28) — Narrative mode detector + filter.
+import { detectNarrativeMode, getSkippedBlocksForMode } from '../../narrativeMode'
+import type { NarrativeMode } from '../../narrativeMode'
 
 // ── Map storytelling BlockId → existing UGC SectionType for
 //    LandingSection.type compat. Storytelling block ID stored
@@ -240,11 +243,14 @@ export async function generateStorytellingPack(
   // ─── Resolve input WITH pacing override from product reality ──────
   const pacingOverride = PACING_OVERRIDES[productReality.pacingProfile]
   const input = resolveStorytellingInput(params, nicheDetection.niche, pacingOverride)
-  const plan = resolveBlockPlan(input)
+  // NOTE: plan is RE-resolved AFTER brainstorm so the chosen narrative mode
+  // can cull filler blocks. This first call captures the niche-default
+  // outline for logging only.
+  let plan = resolveBlockPlan(input)
   console.info(
     `[storytelling] resolved input: niche=${input.niche}, pacing=${input.pacingType}, ` +
     `intensity=${input.emotionalIntensity}, productReveal=section ${input.productRevealSection}, ` +
-    `blocks planned=${plan.length} (pacing override: ${pacingOverride.rationale})`,
+    `blocks planned (niche-default)=${plan.length} (pacing override: ${pacingOverride.rationale})`,
   )
 
   // ─── 2.7 P-VISION (2026-05-27) — Read product images via Gemini Vision ──
@@ -386,6 +392,33 @@ export async function generateStorytellingPack(
     console.warn('[storytelling/brainstorm] Brainstorm synthesis failed — pack uses niche-baseline only:', err)
   }
 
+  // ─── 3.47 REBUILD Sprint 2 (2026-05-28) — Detect narrative mode ──
+  // Uses niche + (optional) brainstorm angle to decide pacing register:
+  //   - pain-driven-DR  → dense outline, cut filler chapters
+  //   - aspiration-led  → future-vision led, full structure
+  //   - recognition-soft → soft diary default, full structure
+  // Then re-resolve the block plan honoring the chosen mode's filter list.
+  const narrativeModeDecision = detectNarrativeMode({
+    niche: input.niche,
+    brainstormAngle: packBrainstorm?.chosenAngle,
+  })
+  const narrativeMode: NarrativeMode = narrativeModeDecision.mode
+  const skippedForMode = getSkippedBlocksForMode(narrativeMode)
+  const planAfterMode = resolveBlockPlan(input, narrativeMode)
+  if (planAfterMode.length !== plan.length) {
+    console.info(
+      `[storytelling/narrativeMode] mode=${narrativeMode} (${narrativeModeDecision.source}) — ` +
+      `re-resolved plan: ${plan.length} → ${planAfterMode.length} blocks ` +
+      `(skipped: ${skippedForMode.join(', ') || 'none'})`,
+    )
+  } else {
+    console.info(
+      `[storytelling/narrativeMode] mode=${narrativeMode} (${narrativeModeDecision.source}) — ` +
+      `plan unchanged at ${plan.length} blocks`,
+    )
+  }
+  plan = planAfterMode
+
   // ─── 3.5 v5.1 — Select narrator/DNA/curve (human variation engine) ──
   const selection = selectNarratorDna({
     niche: input.niche,
@@ -419,6 +452,9 @@ export async function generateStorytellingPack(
     // REBUILD Sprint 1 (2026-05-28): pre-write brainstorm — threaded into
     // systemPrompt as a hard anchor for Block 1 + Phase 1-2.
     packBrainstorm,
+    // REBUILD Sprint 2 (2026-05-28): narrative mode for per-mode cadence
+    // guidance pasted into systemPrompt under the brainstorm anchor.
+    narrativeMode,
     geminiApiKey,
     kieApiKey,
     selection,

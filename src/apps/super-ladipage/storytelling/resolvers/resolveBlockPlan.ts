@@ -16,6 +16,9 @@
 
 import type { BlockId, BlockPlan, NicheKey, StorytellingInput } from '../types'
 import { ALL_BLOCK_IDS, BLOCK_POOL } from '../config/blockPool'
+// REBUILD Sprint 2 (2026-05-28) — Narrative mode block filter.
+import type { NarrativeMode } from '../../narrativeMode'
+import { isBlockSkippedForMode } from '../../narrativeMode'
 
 /** Niches where reader skepticism is a primary trust blocker. */
 const SKEPTICISM_PRONE_NICHES: NicheKey[] = [
@@ -41,9 +44,16 @@ function includeMechanismCompare(input: StorytellingInput): boolean {
   return MECHANISM_COMPLEX_NICHES.includes(input.niche)
 }
 
-/** Top-level resolver: returns 13-15 BlockPlans in canonical phase order.
- *  Optional blocks toggled by intensity + niche fit. Order preserved. */
-export function resolveBlockPlan(input: StorytellingInput): BlockPlan[] {
+/** Top-level resolver: returns 10-15 BlockPlans in canonical phase order.
+ *  - Optional blocks toggled by intensity + niche fit.
+ *  - REBUILD Sprint 2 (2026-05-28): when `narrativeMode` is provided, cull
+ *    filler blocks the mode does not need (e.g. pain-driven-DR drops
+ *    not-alone-bridge / belief-shift / emotional-wins).
+ *  - Order preserved in all cases. */
+export function resolveBlockPlan(
+  input: StorytellingInput,
+  narrativeMode?: NarrativeMode,
+): BlockPlan[] {
   const optionalIncluded: Partial<Record<BlockId, boolean>> = {
     'skepticism-alignment': includeSkepticism(input),
     'soft-mechanism-compare': includeMechanismCompare(input),
@@ -53,6 +63,7 @@ export function resolveBlockPlan(input: StorytellingInput): BlockPlan[] {
   for (const id of ALL_BLOCK_IDS) {
     const blueprint = BLOCK_POOL[id]
     if (!blueprint.required && !optionalIncluded[id]) continue
+    if (narrativeMode && isBlockSkippedForMode(id, narrativeMode)) continue
     selected.push({
       blueprint,
       order: selected.length + 1,

@@ -14,6 +14,9 @@ import type { StorytellingInput } from '../types'
 // REBUILD Sprint 1 (2026-05-28) — Pre-write brainstorm injection.
 import type { PackBrainstorm } from '../../packBrainstorm'
 import { buildBrainstormBrief } from '../../packBrainstorm'
+// REBUILD Sprint 2 (2026-05-28) — Per-mode cadence hint.
+import type { NarrativeMode } from '../../narrativeMode'
+import { buildModeHint } from '../../narrativeMode'
 
 // FIX (2026-05-27): Honor input.targetLanguage. Previously hardcoded
 // Vietnamese — Malay/English requests came out Vietnamese, breaking
@@ -73,16 +76,22 @@ export function buildSystemPrompt(
    *  Phase 1-2 generation. Without this, Gemini reverted to the soft
    *  diary nostalgia default for every niche. */
   packBrainstorm?: PackBrainstorm,
+  /** REBUILD Sprint 2 (2026-05-28) — Per-mode cadence hint.
+   *  pain-driven-DR → tight cadence + cull filler blocks message.
+   *  aspiration-led → future-vision spine.
+   *  recognition-soft → current diary default (no behavior change). */
+  narrativeMode?: NarrativeMode,
 ): string {
   const { langLabel, outputDirective } = getLanguageDirective(input.targetLanguage)
   const brainstormBlock = packBrainstorm ? '\n' + buildBrainstormBrief(packBrainstorm) + '\n' : ''
+  const modeBlock = narrativeMode ? '\n' + buildModeHint(narrativeMode) + '\n' : ''
   return `Bạn đang viết landing page thể loại "Kể Chuyện Hành Trình" — Reader-Immersion Performance Storytelling cho ad conversion.
 
 ═══ OUTPUT LANGUAGE LOCK (${langLabel}) ═══
 ${outputDirective}
 Instructions dưới đây viết bằng tiếng Việt cho developer hiểu — nhưng OUTPUT phải đúng target language.
 ═══════════════════════════════════════════════════════════
-${brainstormBlock}${synthesizedBrief ? '\n' + synthesizedBrief + '\n' : ''}
+${brainstormBlock}${modeBlock}${synthesizedBrief ? '\n' + synthesizedBrief + '\n' : ''}
 ${realityBrief ? '\n' + realityBrief + '\n' : ''}
 
 ═══ CORE TARGET (Reader-Immersion) ═══

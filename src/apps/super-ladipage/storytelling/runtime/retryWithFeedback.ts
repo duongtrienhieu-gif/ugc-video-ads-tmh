@@ -88,6 +88,10 @@ interface RunArgs {
    *  the storytelling systemPrompt as a HARD ANCHOR so Block 1 + Phase
    *  1-2 stop defaulting to soft diary nostalgia for every niche. */
   packBrainstorm?: import('../../packBrainstorm').PackBrainstorm
+  /** REBUILD Sprint 2 (2026-05-28) — Narrative mode decision. Adds a
+   *  per-mode cadence hint block to systemPrompt right under the brainstorm
+   *  anchor. Mode also determined the plan's culled filler blocks upstream. */
+  narrativeMode?: import('../../narrativeMode').NarrativeMode
   geminiApiKey: string
   kieApiKey: string
   /** v5.1 — Narrator/DNA/curve selection. OPTIONAL — if undefined,
@@ -117,6 +121,7 @@ async function runOnce(
     args.realityBrief,
     args.synthesizedBrief,
     args.packBrainstorm,
+    args.narrativeMode,
   )
   const userPrompt = buildPackGenUserPrompt(
     args.input,
