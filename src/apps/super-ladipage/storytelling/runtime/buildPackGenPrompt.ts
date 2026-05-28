@@ -126,25 +126,52 @@ function buildBlockDirective(
   }
 
   // ─── Phase 1 Block 1 — Performance Hook Layer ────────────────────
+  // Sprint 6 Fix #A (2026-05-28): when brainstorm.hookDraft is present,
+  // it is the SOLE source of truth for Block 1's opening (Sprint 5 E1
+  // locked it verbatim). Stop emitting competing anchors here — the
+  // legacy performanceHookSection1Directive + HOOK_PATTERNS sampled
+  // line were 2 ADDITIONAL anchors that confused Gemini and triggered
+  // a "compromise blend" (= soft recall question). Now we either
+  // defer entirely to brainstorm (preferred) OR run the old sampled
+  // path when brainstorm absent (fallback).
   if (block.samplingHooks.performanceHookLayer) {
-    for (const line of performanceHookSection1Directive(
-      selection.youFirstOpener, selection.bridgePhrase,
-    ).split('\n')) {
-      lines.push(`  ${line}`)
+    if (brainstorm?.hookDraft) {
+      // SOLE SOURCE = brainstorm. Just remind Gemini.
+      lines.push(`  🎯 BLOCK 1 OPENING: USE brainstorm hookDraft VERBATIM (see PACK BRAINSTORM at top of system prompt). Anchor LOCKED.`)
+      lines.push(`  Connective tissue (sentences AFTER the locked opening): may naturally use opener "${selection.youFirstOpener}" or bridge "${selection.bridgePhrase}" if it fits the pain anchor — NOT to replace the opening.`)
+    } else {
+      // No brainstorm (rare — soft niche / fallback path). Use sampled anchors.
+      for (const line of performanceHookSection1Directive(
+        selection.youFirstOpener, selection.bridgePhrase,
+      ).split('\n')) {
+        lines.push(`  ${line}`)
+      }
+      const hp = HOOK_PATTERNS[selection.hookPattern]
+      lines.push(`  EMOTIONAL FLAVOR: hookPattern=${selection.hookPattern} (${hp.description.slice(0, 60)}) | hookAxis=${selection.hookAxis}`)
     }
-    // hookPattern + hookAxis as additional emotional flavor (sampled per pack)
-    const hp = HOOK_PATTERNS[selection.hookPattern]
-    lines.push(`  EMOTIONAL FLAVOR: hookPattern=${selection.hookPattern} (${hp.description.slice(0, 60)}) | hookAxis=${selection.hookAxis}`)
   }
 
   // ─── Reader mirror beat (any block where samplingHooks.readerMirrorBeat) ──
+  // Sprint 6 Fix #B (2026-05-28): for Phase 1-2 blocks that ALREADY get
+  // an assigned brainstorm beat (Sprint 5 E3), the sampled mirrorBeat
+  // becomes a SECOND competing anchor → Gemini blurs both. Skip the
+  // sampled mirrorBeat when brainstorm has already assigned a specific
+  // beat to this block. Other blocks (Phase 2-4 non-assigned) keep
+  // the original mirrorBeat behavior.
   if (block.samplingHooks.readerMirrorBeat) {
-    const beat = sampleMirrorBeat(selection.seed, block.id)
-    if (beat) {
-      for (const line of readerMirrorBeatDirective(beat).split('\n')) {
-        lines.push(`  ${line}`)
+    const hasAssignedBrainstormBeat = Boolean(
+      brainstorm && block.id in PHASE12_BEAT_ASSIGNMENT && brainstorm.agitateBeats.length > 0,
+    )
+    if (!hasAssignedBrainstormBeat) {
+      const beat = sampleMirrorBeat(selection.seed, block.id)
+      if (beat) {
+        for (const line of readerMirrorBeatDirective(beat).split('\n')) {
+          lines.push(`  ${line}`)
+        }
       }
     }
+    // else: brainstorm assigned beat (Sprint 5 E3) lives in the block
+    // already — that's the single source.
   }
 
   // ─── Discovery channel (natural-product-discovery block) ─────────
@@ -220,8 +247,19 @@ function buildBlockDirective(
   //  content interleaved post-generation from proof Gemini call.)
 
   // ─── D: Block 10 — 3-BEAT STRUCTURE (emotion → curiosity → understanding) ──
+  // Sprint 6 Fix #F (2026-05-28): mechanism explanation HANDED OFF to PI
+  // block pi-mechanism-personal (which the composer interleaves after this
+  // block). Previously Block 10 explained mechanism in Beat 3 AND
+  // pi-mechanism-personal explained it again → 2 mechanism explanations
+  // in the same pack with different voice tones (storytelling soft vs PI
+  // ingredient-specific). Reader fatigue + potential contradiction.
+  //
+  // Now Block 10 keeps Beat 1 (emotion) + Beat 2 (curiosity) at full
+  // weight, and Beat 3 is a 1-line tease that hands off to PI. Memory
+  // anchor stays here so the curiosity hook leads to memory locking
+  // BEFORE the PI deep-dive arrives.
   if (block.id === 'why-this-felt-different') {
-    lines.push(`  📐 BLOCK 10 — 3-BEAT SEQUENCE (locked, ordered):`)
+    lines.push(`  📐 BLOCK 10 — 2-BEAT + TEASE (locked, ordered):`)
     lines.push(``)
     lines.push(`  [BEAT 1] EMOTION FIRST — start with FELT difference`)
     lines.push(`    "Cảm giác/cái khác là [felt change reader can recognize]"`)
@@ -229,18 +267,20 @@ function buildBlockDirective(
     lines.push(``)
     lines.push(`  [BEAT 2] CURIOSITY SECOND — surface "vì sao khác"`)
     lines.push(`    "Tôi bắt đầu tò mò vì sao lần này khác / tại sao không quay lại"`)
-    lines.push(`    KHÔNG feature dump. KHÔNG pseudo-science.`)
-    lines.push(``)
-    lines.push(`  [BEAT 3] UNDERSTANDING THIRD — mechanism THROUGH emotional context`)
-    lines.push(`    "Hoá ra [single-axis mechanism in plain felt terms]"`)
-    lines.push(`    📌 STATE MEMORY ANCHOR HERE — anchor lives in BEAT 3:`)
+    lines.push(`    📌 STATE MEMORY ANCHOR HERE (in Beat 2's reflection, NOT Beat 3):`)
     lines.push(`        Frame: ${selection.memoryAnchor.frame}`)
     lines.push(`        Posture: ${selection.memoryAnchor.posture}`)
     lines.push(`        Generate niche-fit version (NEVER verbatim copy example).`)
     lines.push(``)
+    lines.push(`  [BEAT 3 — TEASE ONLY, 1-2 sentences] HAND-OFF to next block`)
+    lines.push(`    "Tôi sẽ kể cụ thể cơ chế ở phần sau" / "Sau khi tôi hỏi anh em rể dược sĩ, anh ấy giải thích rõ hơn — tôi viết lại ở chương tiếp"`)
+    lines.push(`    ⚠️ DO NOT explain mechanism details / ingredients / science HERE.`)
+    lines.push(`    The pi-mechanism-personal block (interleaved AFTER) carries the deep-dive.`)
+    lines.push(``)
     lines.push(`  ⛔ Block 10 forbids: ingredient lists, pseudo-science authority,`)
-    lines.push(`     ad-copy mechanism tone, "Sản phẩm chứa X, Y, Z", "công thức tiên tiến".`)
-    lines.push(`  ✅ Block 10 allows: felt experience → curiosity → realization sequence only.`)
+    lines.push(`     ad-copy mechanism tone, "Sản phẩm chứa X, Y, Z", "công thức tiên tiến",`)
+    lines.push(`     full mechanism explanation (PI block handles it).`)
+    lines.push(`  ✅ Block 10 allows: felt experience → curiosity + memory anchor → 1-line tease to PI.`)
   }
 
   // ─── C2: Commercial memory anchor — ECHO in sampled echo block ──────
