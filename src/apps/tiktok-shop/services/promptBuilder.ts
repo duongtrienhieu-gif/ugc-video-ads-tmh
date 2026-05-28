@@ -1,14 +1,16 @@
 // Prompt builder for gpt-4o-image (TRUE i2i editing via filesUrl).
 //
-// DESIGN PRINCIPLES:
-//   1. LEAN — ~150 words/slot total. Long prompts cause AI to ignore later
-//      instructions + crowd out creative space. Use keywords, not paragraphs.
-//   2. PRODUCT FIDELITY first — refs are passed via filesUrl and identified
-//      by role (logo + product photos). One short replication directive.
-//   3. PROFESSIONAL aesthetic — reference specific brands AI knows
-//      (Pentavite Australia, BBOJI Korean) rather than vague "premium feel".
-//   4. CONCRETE decor — name 3 specific elements per slot, not exhaustive list.
-//   5. EMBEDDED text — exact strings the AI must render, in {lang}.
+// DESIGN PRINCIPLES (calibrated against top-seller refs: EXOLABO V-SHINE,
+// SMILEE EXTRA PRO, EUCRYL ROYAL LONDON):
+//   1. LEAN — ~180 words/slot. Long prompts crowd out creative space.
+//   2. PRODUCT FIDELITY first — refs honored via filesUrl + replication directive.
+//   3. PROFESSIONAL aesthetic — reference real top-seller styles by name.
+//   4. CONCRETE decor — saturated bg + subtle pattern (sparkles/dots/shapes).
+//   5. COMPOSITION VARIETY — each slot has a distinct visual treatment (podium,
+//      floating, triptych, VS, hero+overlay) instead of generic "centered product".
+//   6. NO TRUST BAR — top sellers don't use them; removed entirely per user
+//      feedback. Bottom area is free for visual breathing / decor.
+//   7. Brand identity STAYS small top-left (logo from ref1 + store name).
 
 import type { ResolvedBrandKit, Market } from '../../../types/brandKit'
 import type { Product } from '../../../stores/types'
@@ -21,12 +23,11 @@ export interface PromptContext {
   slotConfig: SlotConfig
   paletteFamily: PaletteFamily
   language: Market
-  /** True when brand kit logo URL was prepended to filesUrl (first ref).
-   *  Lets the prompt tell AI which ref is logo vs product. */
+  /** True when brand kit logo URL was prepended to filesUrl (first ref). */
   hasLogoRef: boolean
 }
 
-// ── Shared header (~80 words) — appears in every slot prompt ────────────
+// ── Shared header (~100 words) — appears in every slot prompt ───────────
 
 function header(ctx: PromptContext): string {
   const p = TPCN_PALETTES[ctx.paletteFamily]
@@ -39,22 +40,20 @@ function header(ctx: PromptContext): string {
 
 PRODUCT: Replicate EXACTLY from refs — same color, shape, label, brand name. Do NOT redesign or substitute.
 
-BRAND: Logo top-left in 8% zone with store name "${ctx.brandKit.storeName}"${ctx.brandKit.flagOrigin ? ` + ${ctx.brandKit.flagOrigin.toUpperCase()} flag chip` : ''}. Same position EVERY slot.
+BRAND IDENTITY: Small top-left zone (~8% canvas height) with brand logo + store name "${ctx.brandKit.storeName}"${ctx.brandKit.flagOrigin ? ` + ${ctx.brandKit.flagOrigin.toUpperCase()} flag chip` : ''}. Same position EVERY slot. Subtle, doesn't compete with main message.
 
-STYLE: Premium TPCN catalog like Pentavite Australia / BBOJI Korean — info-heavy yet clean, bold typography, integrated decor. Plus Jakarta Sans ExtraBold for headlines (weight 800-900), Medium Italic for sub-text. Palette ONLY: ${p.primary} primary, ${p.secondary} secondary, ${p.cta} accent. Saturated, not washed out.
+STYLE: Premium TPCN listing in the style of top sellers EXOLABO V-SHINE / SMILEE EXTRA PRO / EUCRYL Royal London — saturated brand palette (NOT pastel washed out), polished commercial photography, integrated decorative elements. Use Plus Jakarta Sans ExtraBold (weight 800-900) for headlines, Medium Italic for sub-text. SAME font family across all text in image.
 
-DECOR (subtle, intentional): geometric corner accent in accent color + thin accent-color divider line under headline + soft accent-color glow halo (low opacity) behind hero text. NO molecular bg, NO leaves, NO sparkles.
+PALETTE (use ONLY these): ${p.primary} primary, ${p.secondary} secondary, ${p.cta} accent. High saturation, colors pop.
 
-HIERARCHY: Strict — text zones NEVER overlap product. Mobile-readable at 300px thumbnail.
+BACKGROUND: Saturated brand-color gradient + subtle decorative elements (sparingly placed floating particles, soft glow halos, small geometric accents in accent color). NO molecular bg, NO leaves scatter, NO sparkles overload — keep balanced.
 
-TRUST BAR (bottom 6%): "${ctx.language === 'ms'
-    ? '📦 Stok Malaysia · 🚚 1-3 hari · ↩️ Pulangan 7 hari · 🤫 Diskret'
-    : '📦 Sẵn hàng VN · 🚚 1-3 ngày · ↩️ Đổi trả 7 ngày · 🤫 Đóng gói kín'}"
+LANGUAGE: ${langName} ONLY in image. NO other language characters.
 
-LANGUAGE: ${langName} ONLY in image. No mixing with other languages.`
+NO TRUST BAR at bottom — leave bottom area clean for visual breathing or relevant content.`
 }
 
-// ── Per-slot blocks (~70 words each) ─────────────────────────────────────
+// ── Per-slot blocks (~80 words each) — varied compositions per refs ─────
 
 export function buildPromptSlot1(ctx: PromptContext): string {
   const t = ctx.language === 'ms'
@@ -63,10 +62,10 @@ export function buildPromptSlot1(ctx: PromptContext): string {
   return `${header(ctx)}
 
 SLOT 1 — HERO HOOK
-Product centered, slight 15° rotation, ~55% canvas height, lower-center sweet spot. Diagonal gradient bg (primary→secondary).
-Text in image:
-- TOP CENTER, giant bold (~130px) white with shadow: "${t.hero}"
-- BELOW PRODUCT, italic (~44px) light tint with accent underline: "${t.tag}"`
+COMPOSITION: Product on transparent glass PODIUM, centered, slight 12° rotation. Soft brand-color SPOTLIGHT HALO from above grounding the product. Subtle floating decorative particles (3-5 max) around — sparkles or geometric shapes in accent color.
+TEXT in image:
+- TOP CENTER, giant bold (~140px) white with subtle shadow: "${t.hero}"
+- BELOW PRODUCT, italic medium (~46px) light tint with accent underline (~80px wide, 5px tall): "${t.tag}"`
 }
 
 export function buildPromptSlot2(ctx: PromptContext): string {
@@ -76,10 +75,10 @@ export function buildPromptSlot2(ctx: PromptContext): string {
   return `${header(ctx)}
 
 SLOT 2 — PAIN POINT
-Documentary close-up of the painful "before" state (e.g., yellowed teeth macro). Slight desaturation (-15%). Product small ~18% in bottom-right corner. Soft bg.
-Text in image:
-- TOP, bold (~85px): "${t.q}"
-- LEFT-SIDE STACK, 3 bullets with red ✗ + bold (~40px each):
+COMPOSITION: Documentary close-up of the painful "before" state (e.g., yellowed teeth macro), slight desaturation (-15%) to convey discomfort. The product (matching refs) floats in BOTTOM-RIGHT corner, small (~18%), tilted, glowing softly as if "the answer".
+TEXT in image:
+- TOP CENTER, bold (~90px) white with shadow: "${t.q}"
+- LEFT-SIDE STACK, 3 bullets with red ✗ + bold (~42px each):
   ✗ ${t.b[0]}
   ✗ ${t.b[1]}
   ✗ ${t.b[2]}`
@@ -92,12 +91,12 @@ export function buildPromptSlot3(ctx: PromptContext): string {
   return `${header(ctx)}
 
 SLOT 3 — TRANSFORMATION
-50/50 SYMMETRIC vertical split — left "before" (yellowed), right "after" (white). SAME camera angle + SAME lighting on both halves (credibility-critical). Product small floats lower-center over split.
-Text in image:
-- TOP labels (~36px bold tracking-wide): left="${t.before}", right="${t.after}"
-- CENTER GIANT (~170px ExtraBold accent color with shadow): "${t.metric}"
-- Below metric (~44px bold uppercase): "${t.sub}"
-- Tiny italic bottom (~24px): "${t.disc}"`
+COMPOSITION: 50/50 SYMMETRIC vertical split — LEFT "before" (yellowed teeth), RIGHT "after" (whitened). SAME camera angle + SAME lighting (credibility critical). Thin vertical accent-color divider with subtle glow. Product floats lower-center over the divide, small.
+TEXT in image:
+- TOP labels (~38px bold tracking-wide white with shadow): left="${t.before}", right="${t.after}"
+- CENTER GIANT (~180px ExtraBold accent color with strong shadow): "${t.metric}"
+- Below metric (~46px bold uppercase white): "${t.sub}"
+- Bottom small italic (~24px tinted): "${t.disc}"`
 }
 
 export function buildPromptSlot4(ctx: PromptContext): string {
@@ -108,12 +107,13 @@ export function buildPromptSlot4(ctx: PromptContext): string {
   const ingLine = ings.length > 0 ? ings.join(', ') : '(read from product label in refs)'
   return `${header(ctx)}
 
-SLOT 4 — USP / MECHANISM
-Product centered slightly LEFT. 4-5 REAL-LOOKING ingredient elements float around with realistic shadows — macro photography style, NOT cartoon icons.
-Text in image:
+SLOT 4 — USP / MECHANISM (ref style: EXOLABO V-SHINE ingredient panel)
+COMPOSITION: Product centered slightly LEFT on subtle podium. Around it: 4-5 REAL-LOOKING ingredient elements (charcoal pieces, mint leaves, vitamin powder, crystals) floating with realistic shadows — macro photography style, NOT cartoon icons.
+TEXT in image:
 - TOP CENTER giant bold (~120px) white: "${t.title}"
-- RIGHT-SIDE STACK 4-5 pill chips (white rounded rect + shadow), each with numbered accent badge + ingredient + %: ${ingLine}
-- BOTTOM italic (~24px): "${t.sub}"`
+- RIGHT-SIDE STACK of 4-5 pill-shaped chips (white rounded rect + soft shadow), each containing: small CUSTOM-DESIGNED icon (leaf for plant, drop for liquid, crystal/diamond for mineral, shield for protection — NOT emoji), numbered accent badge (1-5), ingredient name + percentage in bold dark navy:
+  ${ingLine}
+- BOTTOM italic (~26px) tinted: "${t.sub}"`
 }
 
 export function buildPromptSlot5(ctx: PromptContext): string {
@@ -123,12 +123,12 @@ export function buildPromptSlot5(ctx: PromptContext): string {
   return `${header(ctx)}
 
 SLOT 5 — SOCIAL PROOF
-Light bg (secondary→neutral). Product small ~18% bottom-left corner. Big white rounded card center-right (~70% area) with soft shadow. Giant decorative "❝" behind card in accent color at 15% opacity.
-Text in card:
+COMPOSITION: Soft brand-tint bg (lighter shade of primary). Product small ~18% bottom-left corner. Big white rounded testimonial card center-right (~70% area), generous shadow. Giant decorative "❝" behind card in accent color at 15% opacity.
+TEXT in card:
 - TOP large amber stars: ⭐⭐⭐⭐⭐
-- CENTER italic (~44px) dark: "${t.q}"
-- BOTTOM bold (~30px): "— ${t.a}"
-- Below card, small italic (~22px) gray: "${t.v}"`
+- CENTER italic (~46px) dark navy: "${t.q}"
+- BOTTOM bold (~32px) gray: "— ${t.a}"
+- Below card, small italic (~22px) soft gray: "${t.v}"`
 }
 
 export function buildPromptSlot6(ctx: PromptContext): string {
@@ -138,31 +138,40 @@ export function buildPromptSlot6(ctx: PromptContext): string {
   return `${header(ctx)}
 
 SLOT 6 — USAGE DEMO
-3 instances of product in horizontal triptych — one per step, slightly different angle each. Soft bathroom/vanity bg, NOT cluttered. Subtle vertical dividers between panels.
-Text in image:
-- TOP CENTER bold (~100px) dark primary: "${t.title}"
-- BELOW EACH PRODUCT (3 columns): big accent circle with white number 1/2/3 (~90px diameter), then bold (~36px) step text:
+COMPOSITION: TRIPTYCH — 3 instances of product in horizontal sequence, each in slightly different angle/state representing the step (closed jar → finger dipping → applied to brush). Soft bathroom/vanity context bg, NOT cluttered. Subtle vertical accent-color dividers between panels.
+TEXT in image:
+- TOP CENTER bold (~110px) dark primary or white (depending on bg): "${t.title}"
+- BELOW EACH PRODUCT (3 columns): big accent-color circle (~90px) with white number 1/2/3, then bold step text (~38px) below:
   Col 1: "${t.s[0]}"
   Col 2: "${t.s[1]}"
   Col 3: "${t.s[2]}"
-- BOTTOM center (~30px): "${t.time}"`
+- BOTTOM center (~32px) tinted: "${t.time}"`
 }
 
 export function buildPromptSlot7(ctx: PromptContext): string {
   const t = ctx.language === 'ms'
-    ? { title: 'PILIH YANG BAIK', us: 'Pilihan natural', them: 'Bahan kimia', rows: [['RM 89', 'RM 250+'], ['14 hari', '30+ hari'], ['Tiada sakit', 'Sensitif'], ['Semula jadi', 'Kimia']] }
-    : { title: 'LỰA CHỌN ĐÚNG',   us: 'Tự nhiên',       them: 'Hóa chất',    rows: [['500K', '2.5tr+'], ['14 ngày', '30+ ngày'], ['Không đau', 'Ê buốt'], ['Tự nhiên', 'Hóa chất']] }
-  const rowsStr = t.rows.map(([a, b]) => `${a} | ${b}`).join(' / ')
+    ? { title: 'PILIH YANG BAIK', us: 'Pilihan natural', them: 'Bahan kimia', points: [
+        ['RM 89', 'RM 250+'],
+        ['14 hari', '30+ hari'],
+        ['Tiada sakit', 'Sensitif'],
+        ['Semula jadi', 'Kimia'],
+      ] }
+    : { title: 'LỰA CHỌN ĐÚNG', us: 'Tự nhiên', them: 'Hóa chất', points: [
+        ['500K', '2.5tr+'],
+        ['14 ngày', '30+ ngày'],
+        ['Không đau', 'Ê buốt'],
+        ['Tự nhiên', 'Hóa chất'],
+      ] }
+  const pointsStr = t.points.map(([a, b]) => `${a} vs ${b}`).join(' / ')
   return `${header(ctx)}
 
-SLOT 7 — COMPARISON
-Product top-center ~25% scale, slight angle. Bottom 70% reserved for table. Energetic bg.
-Text in image:
-- TOP large bold (~110px) white: "${t.title}"
-- COMPARISON TABLE (white rounded card + shadow, 2 cols):
-  - Headers (~30px bold): LEFT (accent-tinted bg) = "${t.us}", RIGHT = "${t.them}"
-  - 4 rows (~36px), left = dark navy bold (winning), right = medium gray:
-    ${rowsStr}`
+SLOT 7 — COMPARISON (VS visual, NOT table)
+COMPOSITION: SIDE-BY-SIDE split — LEFT half shows our product (matching refs) on accent-tinted pedestal with confident lighting + "${t.us}" label badge top. RIGHT half shows a GENERIC competitor product (unbranded blurred bottle/tube) on neutral pedestal with dimmer lighting + "${t.them}" label. Large bold "VS" in accent color sits at center between them.
+TEXT in image:
+- TOP CENTER bold (~110px) white with shadow: "${t.title}"
+- BELOW PEDESTALS, 4 quick comparison rows with checkmark (left side) vs cross (right side), bold (~32px):
+  ${pointsStr}
+NO traditional table — use visual VS layout instead.`
 }
 
 export function buildPromptSlot8(ctx: PromptContext): string {
@@ -171,15 +180,15 @@ export function buildPromptSlot8(ctx: PromptContext): string {
     : { old: '999K',   cur: '500K',  disc: '-50%', combo: '+ TẶNG Bàn chải mềm (250K)',        cta: 'MUA NGAY',      urg: 'Số lượng có hạn hôm nay' }
   return `${header(ctx)}
 
-SLOT 8 — OFFER
-Product hero in bottom-right third. Energetic bg (primary → warm accent). Top-left clean for price block.
-Text in image:
-- UPPER-LEFT struck-through (~40px) light tint: "${t.old}"
-- BELOW GIANT ExtraBold (~190px) white: "${t.cur}"
-- AMBER PILL BADGE (~48px) dark: "${t.disc}"
-- MIDDLE bold (~40px) white: "${t.combo}"
-- BOTTOM wide rounded BUTTON accent color, big bold white inside (~56px) with shadow: "${t.cta}"
-- Below button italic (~26px): "⏰ ${t.urg}"`
+SLOT 8 — OFFER (hero composition + price overlay)
+COMPOSITION: Product hero shot in BOTTOM-RIGHT third, optionally with combo product (smaller, secondary) next to it. Energetic saturated bg (primary → warm accent). Top-left area clean for price block.
+TEXT in image:
+- UPPER-LEFT struck-through (~42px) light tint: "${t.old}"
+- BELOW it, GIANT ExtraBold (~200px) white with shadow: "${t.cur}"
+- AMBER PILL BADGE next to or below price (~50px dark bold): "${t.disc}"
+- MIDDLE band bold (~42px) white: "${t.combo}"
+- BOTTOM wide rounded BUTTON in accent color, big bold white inside (~58px) with shadow: "${t.cta}"
+- Below button italic (~28px) light tint: "⏰ ${t.urg}"`
 }
 
 export function buildPromptSlot9(ctx: PromptContext): string {
@@ -198,10 +207,10 @@ export function buildPromptSlot9(ctx: PromptContext): string {
   return `${header(ctx)}
 
 SLOT 9 — FAQ & ASSURANCE
-Light bg. Product small ~18% bottom-right corner. 3 white rounded cards stacked vertically center (each ~26% canvas height, soft shadow).
-Text in image:
+COMPOSITION: Soft light bg (secondary washing to neutral). Product small ~18% bottom-right corner. 3 white rounded cards stacked vertically center (~26% canvas height each, soft shadow).
+TEXT in image:
 - TOP CENTER bold (~110px) dark primary: "${t.title}"
-- 3 cards content, each with accent-color "Q" badge square (~40px) on left, bold question (~36px) + answer prefixed with "→" (~30px gray):
+- 3 cards content, each with accent-color "Q" badge square (~40px) on left, bold question (~38px) + answer prefixed with "→" (~30px gray):
   ${itemsStr}`
 }
 
