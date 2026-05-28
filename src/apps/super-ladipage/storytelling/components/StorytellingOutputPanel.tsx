@@ -578,6 +578,16 @@ export default function StorytellingOutputPanel({
                 ? meta.imageScenes?.[exportSection.id]?.prompt
                 : undefined
               const promptForUI = generatedAsset?.promptUsed?.prompt || preComputedScenePrompt
+              // UI-FIX9 (2026-05-29) — canGenerate also requires the
+              // section to have a generatedAsset (image plan from composer).
+              // Previously a section with imageRole but no plan would
+              // show an active "Tạo ảnh" button that silently no-op'd
+              // because the orchestrator filter dropped it. Now button
+              // hides when there's no plan, eliminating false-positive
+              // click target.
+              const canGen = Boolean(
+                kieApiKey && exportSection && exportSection.generatedAsset,
+              )
               return (
                 <StorytellingSectionView
                   key={idx}
@@ -595,9 +605,9 @@ export default function StorytellingOutputPanel({
                     sectionRegenState?.regenStatus === 'generating' ||
                     sectionRegenState?.regenStatus === 'queued'
                   }
-                  canGenerateImage={Boolean(kieApiKey && exportSection)}
+                  canGenerateImage={canGen}
                   onGenerateImage={
-                    exportSection ? () => handleRegenerateImage(exportSection.id) : undefined
+                    canGen && exportSection ? () => handleRegenerateImage(exportSection.id) : undefined
                   }
                   isPIBlock={isPIBlock}
                   hasNoOwnImage={!isPIBlock && !exportSection}
@@ -1037,7 +1047,7 @@ function StorytellingSectionView({
               image figure (no more mx-auto so it sits under the image
               instead of drifting to the article centerline). Width
               matches the image figure (max-w-sm) for visual unity. */}
-          {imagePrompt && (
+          {imagePrompt ? (
             <details className="mt-2 w-full max-w-sm rounded-md border border-stone-200 bg-stone-50 px-3 py-2 text-[10px]">
               <summary className="cursor-pointer text-stone-500 italic select-none">
                 {imageUrl ? '👁 Xem prompt đã dùng để tạo ảnh' : '👁 Xem prompt sẽ dùng để tạo ảnh'}
@@ -1046,6 +1056,16 @@ function StorytellingSectionView({
                 {imagePrompt}
               </div>
             </details>
+          ) : (
+            // UI-FIX9 (2026-05-29) — Surface missing-prompt state instead
+            // of rendering nothing. Previously the section showed an active
+            // "Tạo ảnh" button with NO visible explanation of why "Xem
+            // prompt" didn't appear → user thought button was broken.
+            canGenerateImage && (
+              <div className="mt-2 w-full max-w-sm rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-[10px] italic text-amber-700">
+                ⚠ Prompt chưa được sinh trước (pre-compute miss). Click "Tạo ảnh" — pipeline sẽ sinh prompt lúc đó.
+              </div>
+            )
           )}
           {/* OPT.4 (2026-05-28) — Inline error box when last gen failed.
               Surfaces the failure reason + retry button so user knows WHY

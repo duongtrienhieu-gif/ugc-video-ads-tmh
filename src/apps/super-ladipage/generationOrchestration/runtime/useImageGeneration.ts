@@ -90,15 +90,31 @@ export function useImageGeneration(opts: UseImageGenerationOptions): UseImageGen
 
   const runGeneration = useCallback(
     async (sectionFilter?: (id: string) => boolean) => {
+      // UI-FIX9 (2026-05-29) — SURFACE silent failures via toast.
+      // Previous code did silent `return` on 3 paths (no page/session, no
+      // context, isGenerating). User reported "click Tạo ảnh nhiều lần
+      // không ra gì" because all 3 paths failed without any feedback.
+      // Now each rejected click triggers a toast with the reason — user
+      // sees WHY click was ignored and what to do.
+      const toastReject = (reason: string) => {
+        opts.onFailureToast?.('click-rejected', reason)
+        console.warn(`[image-gen] click rejected: ${reason}`)
+      }
+
       if (!opts.page || !opts.session) {
         setState((s) => ({ ...s, error: 'No page or session available' }))
+        toastReject('Pack chưa sẵn sàng — refresh trang rồi thử lại')
         return
       }
       if (!opts.context) {
         setState((s) => ({ ...s, error: 'Missing generation context — refresh the pack' }))
+        toastReject('Thiếu context (KIE key?) — kiểm tra Cài đặt')
         return
       }
-      if (state.isGenerating) return
+      if (state.isGenerating) {
+        toastReject('Đang chạy generation khác — đợi thanh tiến độ xong rồi click lại')
+        return
+      }
 
       const controller = new AbortController()
       abortRef.current = controller
@@ -108,13 +124,30 @@ export function useImageGeneration(opts: UseImageGenerationOptions): UseImageGen
       // current status. "Generate All" path (no filter) keeps the
       // status-based eligibility check.
       const isSingleSection = Boolean(sectionFilter)
-      const total = opts.page.sections.filter((s) => {
+      const eligibleSections = opts.page.sections.filter((s) => {
         if (!s.generatedAsset) return false
         if (sectionFilter && !sectionFilter(s.id)) return false
         if (isSingleSection) return true
         const st = s.generatedAsset.generationStatus
         return st === 'planned' || st === 'failed'
-      }).length
+      })
+      const total = eligibleSections.length
+
+      // UI-FIX9 (2026-05-29) — Empty-queue guard. If filter matched 0
+      // sections (e.g. user clicked "Tạo ảnh" on a section whose
+      // `generatedAsset` is missing because composer didn't plan it),
+      // executePageGeneration would no-op silently. Toast instead.
+      if (total === 0) {
+        const targetId = sectionFilter
+          ? opts.page.sections.find((s) => sectionFilter(s.id))?.id ?? 'unknown'
+          : 'all'
+        toastReject(
+          isSingleSection
+            ? `Section "${targetId.slice(0, 24)}" không có image plan — composer chưa assign imageRole. Thử Tạo lại pack.`
+            : 'Không có ảnh nào cần tạo. Có thể tất cả đã hoàn thành.',
+        )
+        return
+      }
 
       setState({
         isGenerating: true,

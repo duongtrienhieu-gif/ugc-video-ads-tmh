@@ -13,11 +13,34 @@
 //      → routing logic suspect (one renderer dominating)
 //
 // SOFT — never modifies the plan. Surfaces for QA.
+//
+// Fix C (2026-05-29) — Two checks demoted to no-op for the post-rebuild
+// world (the fragment-stacking + 3-renderer pipeline was deleted in
+// IS.6, which made these checks fire on every single pack as false
+// positives):
+//
+//   - Check 2 "adapter coverage gap": adaptRenderContractedPage now
+//     intentionally returns empty rendererOutputs={} because real
+//     prompts are produced at exec time by scene synthesis. The check
+//     was written against the pre-rebuild assumption that the adapter
+//     populates outputs for all 3 renderers. → Skip when outputs map
+//     is the empty post-rebuild sentinel.
+//
+//   - Check 4 "routing skew > 80%": post-rebuild we only have 2
+//     renderers (gpt4o + gptImage). storytelling packs are 100%
+//     gpt4o by design (every section needs character/product
+//     reference lock; gptImage is reserved for ref-less object-trace).
+//     80% threshold is impossible to honor with this routing table.
+//     → Raise threshold to 100% so it only warns on a degenerate
+//     all-gptImage page (which would mean no character continuity).
 // ─────────────────────────────────────────────────────────────────────
 
 import type { OrchestratedSection, ReferenceAsset } from '../types'
 
-const SKEW_THRESHOLD = 0.8
+// Post-rebuild: 2 renderers (gpt4o for character/product, gptImage for
+// ref-less). storytelling packs naturally route 100% gpt4o; only flag a
+// page that is 100% gptImage (no character continuity at all).
+const SKEW_THRESHOLD = 1.0
 
 export function orchestrationValidator(
   sections: OrchestratedSection[],
@@ -39,7 +62,13 @@ export function orchestrationValidator(
     }
 
     // ── Check 2: renderer in rendererOutputs map ────────────────────
-    if (!(asset.renderer in s.rendererOutputs)) {
+    // Fix C (2026-05-29) — Skip when rendererOutputs is the post-rebuild
+    // empty-object sentinel ({}). adaptRenderContractedPage intentionally
+    // produces empty maps post-IS.6; real prompts come from scene synthesis
+    // at exec time. The original check fired on every storytelling pack
+    // as a false positive.
+    const outputsAreEmptySentinel = Object.keys(s.rendererOutputs).length === 0
+    if (!outputsAreEmptySentinel && !(asset.renderer in s.rendererOutputs)) {
       warnings.push(
         `Section "${s.id}" routed to renderer '${asset.renderer}' but ` +
         `rendererOutputs is missing this key. Adapter coverage gap.`,

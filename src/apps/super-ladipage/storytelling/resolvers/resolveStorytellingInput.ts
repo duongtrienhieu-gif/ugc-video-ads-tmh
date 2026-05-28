@@ -46,7 +46,14 @@ export function resolveStorytellingInput(
     targetCountry: params.language === 'ms' ? 'MY' : params.language === 'vi' ? 'VN' : 'SG',
     targetLanguage: params.language,
 
-    protagonistProfile: resolveProtagonistProfile({ niche }),
+    // Fix A (2026-05-29) — pass language + productId so protagonist varies
+    // per niche × language × product (was hardcoded stub returning the same
+    // MY-Muslim woman for every input → root cause of identical image prompts).
+    protagonistProfile: resolveProtagonistProfile({
+      niche,
+      targetLanguage: params.language,
+      productSeed: params.productId,
+    }),
 
     // PACING OVERRIDE precedence: productClass > niche preset > defaults
     emotionalIntensity:

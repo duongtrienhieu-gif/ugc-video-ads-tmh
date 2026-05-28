@@ -105,121 +105,167 @@ function sanitizeBracketPlaceholders(text: string, blockType: string): string {
  *  enough info, I want to try this NOW", not "interesting story, let me
  *  think more". */
 function buildMicroDirective(type: PISectionType, input: PlannerInput): string {
+  // 2026-05-29 — Removed VN-specific narrator example phrases ("em rể dược
+  // sĩ", "Lúc đặt tôi thấy", "khi ho / khi đau ngực", etc) that previously
+  // leaked into MS/EN outputs as untranslated VN text. Now uses neutral
+  // English structural language that Gemini renders in the target language
+  // (per the LOCKED voice instructions in the system prompt).
+  const lang = input.targetLanguage
+  const langLabel = lang === 'ms' ? 'Bahasa Melayu' : lang === 'en' ? 'English' : 'Tiếng Việt'
+
   switch (type) {
     case 'mechanism-personal': {
       // Sprint 6 P3 — receive Block 10 handoff + name specific ingredients
       const vocab = NICHE_MECHANISM_VOCAB[input.niche]
       const concreteVocab = vocab.mechanismVocab.slice(0, 5).join(', ')
       return `mechanism-personal: Narrator's RESEARCH MOMENT — mechanism deep-dive.
+Output language: ${langLabel}.
 
 ⚠️ HANDOFF NOTE: storytelling Block 10 (why-this-felt-different) only teases
 mechanism (Beat 3 hand-off). THIS block carries the FULL deep-dive — reader
 is already curious, deliver the explanation here.
 
 HARD RULES:
-1. Name 2-3 SPECIFIC ingredient / mechanism terms (NOT generic "thảo dược").
+1. Name 2-3 SPECIFIC ingredient / mechanism terms (NOT generic vague "herbs").
    For niche ${input.niche}, pick 2 from: ${concreteVocab}
-2. Frame: narrator learned from a credible source — em rể dược sĩ /
-   chị bác sĩ / nhà thuốc nói. 1 attribution line anchors authority.
+2. Frame: narrator learned from a credible source (pharmacist relative /
+   doctor friend / pharmacy staff). 1 attribution line anchors authority,
+   written naturally in ${langLabel}.
 3. Explain HOW each ingredient works in plain felt terms (NOT pseudo-science).
 4. Close with 1 sentence linking mechanism → felt experience.
 
 ⛔ FORBIDDEN generic phrases (anti-AI fingerprint): ${vocab.bannedGenericPhrases.join(', ')}
-⛔ FORBIDDEN: "tôi không hiểu rõ lắm về khoa học" only (you DO have an
-   authority source — actually explain).
+⛔ FORBIDDEN: dodging with "I don't really understand the science" ONLY
+   (you DO have an authority source — actually explain).
 
-100-160 words across 2-3 paragraphs.`
+100-160 words across 2-3 paragraphs, all in ${langLabel}.`
     }
 
     case 'ingredients-usp-woven':
       // Sprint 6 P1 — enforce ALL USPs woven into prose
       return `ingredients-usp-woven: Narrator examines product (reads label, checks with family).
+Output language: ${langLabel}.
 
 ⚠️ HARD RULE — must touch ALL USPs from input, woven into diary prose (NOT bullet list).
 USPs from input: ${input.productUsp || '(not provided)'}
 Ingredients from input: ${input.productIngredients || '(not provided)'}
 
-EACH USP signal that appears in input MUST be acknowledged in this block:
-- "no sticky residue" / "không dính" → narrator notes peeling experience
-- "soothing herbal scent" / "mùi thảo dược" → narrator describes scent
-- "top-selling in [country]" / "bán chạy ở [nước]" → narrator references trust signal
-- "fast effects" / "tác dụng nhanh" → narrator notes onset moment
+EACH USP signal that appears in input MUST be acknowledged in this block,
+narrated in ${langLabel}:
+- "no sticky residue" → narrator notes peeling/removal experience
+- "soothing herbal scent" → narrator describes the scent
+- "top-selling in [country]" → narrator references trust signal
+- "fast effects" → narrator notes onset moment
 - COD / free shipping / fast returns → save for the pricing-narrator block
 
-Style: diary voice, narrator uncertainty allowed ("tôi check kỹ vì lần đầu...").
-⛔ FORBIDDEN: bullet list, "Đặc điểm:", marketing-claim voice.
-100-170 words across 2-3 paragraphs.`
+If input USP / ingredient text is in a different language than ${langLabel},
+TRANSLATE it into ${langLabel} naturally before weaving it in. DO NOT keep
+raw foreign-language USP phrases untranslated inside the ${langLabel} prose.
+
+Style: diary voice, narrator uncertainty allowed.
+⛔ FORBIDDEN: bullet list, spec-sheet headings, marketing-claim voice.
+100-170 words across 2-3 paragraphs, all in ${langLabel}.`
 
     case 'usage-faq-personal':
       // Sprint 6 P4 — enforce specifics: WHEN/HOW LONG/FREQUENCY/WHERE/PRECAUTION
       return `usage-faq-personal: Narrator describes WHEN + HOW they use product.
+Output language: ${langLabel}.
 
-⚠️ HARD RULES — must answer ALL 5 usage dimensions explicitly:
-1. WHEN: time of day (sáng / tối / trước ngủ) + trigger moment (khi ho / khi đau ngực).
-2. HOW LONG: duration to wear (4-8 tiếng / qua đêm / 30 phút).
-3. FREQUENCY: how often (1 lần/ngày / liên tục / khi cần thiết).
-4. WHERE: location on body (dán lên ngực / sau lưng / điểm cụ thể).
-5. PRECAUTION: 1 brief "không dùng khi..." (1 short sentence).
+⚠️ HARD RULES — must answer ALL 5 usage dimensions explicitly, written in ${langLabel}:
+1. WHEN: time of day (morning / evening / before bed) + trigger moment
+   (when symptom flares).
+2. HOW LONG: duration of single use (e.g., 4-8 hours / overnight / 30 mins).
+3. FREQUENCY: how often (1x daily / continuous / as needed).
+4. WHERE: location on body if topical (chest / back / specific spot) —
+   skip if product is oral/internal.
+5. PRECAUTION: 1 brief "do not use when..." (1 short sentence).
 
 Format: 1 paragraph for narrator's routine + 1 paragraph weaving 1-2 questions
 INLINE (asked by family / friend / colleague) — NOT Q&A list format.
 
 Synthesis usage scene (use if relevant): ${input.synthesizedBrief.usageScene || '(none)'}
 
-⛔ FORBIDDEN: bullet list, formal Q&A format, generic "dễ sử dụng" without specifics.
-110-170 words across 2-3 paragraphs.`
+⛔ FORBIDDEN: bullet list, formal Q&A format, generic "easy to use" without specifics.
+110-170 words across 2-3 paragraphs, all in ${langLabel}.`
 
     case 'social-proof-collective': {
       // (unchanged — already works; persona seeds come from brainstorm separately)
       const texture = PROOF_TEXTURE_PROFILES[input.niche]
       const cues = texture.textureCues.slice(0, 3).join('; ')
-      return `social-proof-collective: 1 short narrator intro + 2-3 mini-voices (DIFFERENT personas, ~25-40 words each). Texture: ${texture.typicalVoice}. Platform: ${texture.platformFeel}. Cues: ${cues}. NO 5-star ratings. NO "TUYỆT VỜI!". 130-180 words.`
+      return `social-proof-collective: 1 short narrator intro + 2-3 mini-voices (DIFFERENT personas, ~25-40 words each).
+Output language: ${langLabel}. ALL mini-voices in ${langLabel}, even if proof
+texture references foreign-language platforms.
+Texture: ${texture.typicalVoice}. Platform: ${texture.platformFeel}. Cues: ${cues}.
+NO 5-star ratings. NO exclamation-mark hype. 130-180 words.`
     }
 
     case 'pricing-narrator':
       // Sprint 6 P2 + P5 — enforce ALL pricing dimensions + scarcity + COD + return
       return `pricing-narrator: Narrator's PURCHASE MOMENT.
+Output language: ${langLabel}.
 
 ⚠️ HARD RULE — must mention ALL pricing dimensions present in input.
 Pricing info from input: ${input.productPricing || '(not provided)'}
 
-REQUIRED COVERAGE — each dimension below MUST appear if input has it:
-1. ORIGINAL PRICE / discount magnitude — "giá gốc RM119" (sets value anchor).
+REQUIRED COVERAGE — each dimension below MUST appear if input has it,
+narrated naturally in ${langLabel}:
+1. ORIGINAL PRICE / discount magnitude (sets value anchor).
 2. EACH PROMOTIONAL TIER — list all that apply (1+1 / 2+2 / 3+3),
    then state which one the narrator picked + 1-line reason.
 3. TIME-BOUND SCARCITY HOOK — if input mentions "first N customers" /
    "50% off first 200" / "limited time" — narrator MUST cite this
-   verbatim or near-verbatim. Example: "thấy có 50% cho 200 khách đầu
-   tiên, tôi quyết định luôn để không lỡ".
+   naturally (translated to ${langLabel}).
 4. SHIPPING perk — if input has free-shipping threshold, narrator notes
-   it as a small relief ("miễn ship nếu mua 2+ — đỡ tiếc").
-5. PAYMENT mode — if input has COD, narrator chooses COD ("đặt COD an
-   tâm hơn, lần đầu thử mà").
+   it as a small relief.
+5. PAYMENT mode — if input has COD, narrator chooses COD with a 1-line
+   reasoning ("first time trying, COD feels safer").
 6. RETURN / EXCHANGE perk — if input has "fast returns" or guarantee,
-   narrator closes with 1 sentence risk-reversal ("Mua thử 1 cái trước,
-   không hợp thì còn đổi được — không sợ mất tiền").
+   narrator closes with 1 sentence risk-reversal.
 
-Narrator template: "Lúc đặt tôi thấy [scarcity hook]. Giá gốc [X] nhưng
-giờ chỉ [Y] cho gói [tier picked] vì [reason]. Có [shipping/COD perk]
-nên tôi thấy [feeling]. Nếu [return perk available], thì cũng yên tâm
-hơn."
+If input pricing text contains foreign-language phrases ("limited time",
+"COD", "first 200 buyers"), TRANSLATE / naturalize them into ${langLabel}.
+Keep numerical values + currency codes (RM, VND, USD) as-is.
 
-⛔ FORBIDDEN: "MUA NGAY!" / "ưu đãi cực sốc!" / exclamation marks /
-   urgency caps / hard-sell voice.
+⛔ FORBIDDEN: hard-sell exclamations / urgency caps / "BUY NOW!"-style voice.
 ✅ ALLOWED: factual narrator observation of the deal + small relief feeling.
-Optional subtleCallout: 1 short whispered line.
+Optional subtleCallout: 1 short whispered line in ${langLabel}.
 
-90-140 words across 1-2 paragraphs (allowing slight expansion vs old 70-110
-cap because we now require multiple pricing dimensions).`
+90-140 words across 1-2 paragraphs, all in ${langLabel}.`
   }
 }
 
-const FALLBACK_HEADINGS: Record<PISectionType, string> = {
+// 2026-05-29 — Language-aware fallback headings. Previous version was
+// VN-only → MS/EN packs got "Cái cơ chế tôi mới hiểu" + "Cái tôi check kỹ"
+// VN headings even though pack target was MS, producing the visible
+// language-mix bug ("Cái cơ chế tôi mới hiểu" with MS body).
+const FALLBACK_HEADINGS_VI: Record<PISectionType, string> = {
   'mechanism-personal': 'Cái cơ chế tôi mới hiểu',
   'ingredients-usp-woven': 'Cái tôi check kỹ',
   'usage-faq-personal': 'Cách tôi dùng + câu hỏi gặp',
   'social-proof-collective': 'Người quen tôi cũng đang dùng',
   'pricing-narrator': 'Lúc tôi đặt',
+}
+const FALLBACK_HEADINGS_MS: Record<PISectionType, string> = {
+  'mechanism-personal': 'Cara ia berfungsi yang baru saya faham',
+  'ingredients-usp-woven': 'Yang saya check betul-betul',
+  'usage-faq-personal': 'Cara saya pakai + soalan biasa',
+  'social-proof-collective': 'Kenalan saya pun sedang guna',
+  'pricing-narrator': 'Masa saya order',
+}
+const FALLBACK_HEADINGS_EN: Record<PISectionType, string> = {
+  'mechanism-personal': 'How it actually works (now I get it)',
+  'ingredients-usp-woven': 'What I checked carefully',
+  'usage-faq-personal': 'How I use it + common questions',
+  'social-proof-collective': 'People I know also using it',
+  'pricing-narrator': 'When I placed the order',
+}
+
+function getFallbackHeading(type: PISectionType, language: 'vi' | 'ms' | 'en'): string {
+  const table =
+    language === 'ms' ? FALLBACK_HEADINGS_MS :
+    language === 'en' ? FALLBACK_HEADINGS_EN :
+    FALLBACK_HEADINGS_VI
+  return table[type]
 }
 
 /** OPT.6 (2026-05-28) — Partial JSON recovery for batch Gemini outputs.
@@ -356,8 +402,20 @@ Strict JSON with one key per type (use exact type strings from the directives ab
 ${plannedTypes.map((p) => `  "${p.type}": { "heading": "...", "paragraphs": ["...", "..."], "subtleCallout": "(optional)" }`).join(',\n')}
 }
 
-ALL fields in ${langName}. Diary voice. Each block obeys its micro-directive.
-NO markdown fences. NO prose outside JSON. JSON only.`
+═══ LANGUAGE LOCK (CRITICAL) ═══
+
+ALL fields (heading, paragraphs, subtleCallout) in ${langName}. Diary voice.
+NO language mixing inside any field. NO ${langName} narrator phrasing followed
+by an untranslated foreign-language product-spec phrase — translate / naturalize
+foreign content into ${langName} so the reading voice stays coherent.
+
+If the PRODUCT CONTEXT above contains raw fields in a different language
+(pain points, benefits, essence, ingredients, USP), the narrator FIRST mentally
+translates them, THEN weaves the meaning into ${langName} diary prose. Keep
+brand name, product name, numerical values, and currency codes verbatim.
+
+Each block obeys its micro-directive. NO markdown fences. NO prose outside JSON.
+JSON only.`
 
   if (!keys.geminiApiKey && !keys.kieApiKey) {
     console.warn('[PI/batch] No API key — using fallback')
@@ -482,7 +540,119 @@ NO markdown fences. NO prose outside JSON. JSON only.`
   }
 }
 
-// ─── Per-type fallback (paradigm-aware, reads synthesis brief) ────────
+// ─── Per-type fallback (paradigm-aware + language-aware) ──────────────
+//
+// 2026-05-29 — Made language-aware. Previous version hard-coded VN narrator
+// phrases ("Tôi tò mò nên đọc thêm về...", "Tôi đọc kỹ hộp trước khi đặt.
+// Thành phần:", "Cái khác tôi nhận ra:") regardless of pack target language.
+// When PI batch Gemini call failed on a MY pack → all 5 blocks fell back
+// to these VN templates, mixed with MS raw product fields → visible
+// language leak (the "Cái cơ chế tôi mới hiểu" + MS body bug).
+//
+// Each fallback now has 3 language variants (VI/MS/EN), selected by
+// input.targetLanguage. Raw product fields (productEssence,
+// productIngredients, productUsp, productPricing) are still injected
+// as-is — they're already in the input language whatever user typed.
+// Worst-case mix is now "MY narrator + EN input fields" instead of
+// "VN narrator + MS input fields" which is far less jarring (EN is the
+// common ad/spec language in SEA so it co-exists naturally with MS/VN).
+
+interface FallbackTemplate {
+  /** When essence is available: "I got curious, read more about X. Turns out it works differently." */
+  mechanismIntroWithEssence: (productName: string) => string
+  /** When essence missing: "I got curious, read more about X." */
+  mechanismIntroPlain: (productName: string) => string
+  /** Prefix for essence body: "Specifically: ..." */
+  mechanismEssencePrefix: string
+  /** Fallback when essence missing entirely. */
+  mechanismNoEssence: string
+
+  /** Prefix when ingredients available: "I read the box carefully. Ingredients: ..." */
+  ingredientsWithList: string
+  /** Fallback when ingredients missing. */
+  ingredientsNoList: string
+  /** Prefix when USP available: "Something else I noticed: ..." */
+  uspPrefix: string
+  /** Fallback when USP missing. */
+  uspMissing: string
+
+  /** Fallback when usageScene missing. */
+  usageNoScene: string
+  /** Generic question + reassurance line. */
+  usageReassurance: string
+
+  /** Intro when failed attempts known. */
+  socialProofWithFailed: (failedAttempts: string) => string
+  /** Intro when no failed attempts. */
+  socialProofPlain: string
+  /** Generic spread-of-results line. */
+  socialProofVariation: string
+
+  /** Pricing line, takes pricing string. */
+  pricingMain: (pricing: string) => string
+  /** "Current price: X" callout prefix. */
+  pricingCalloutPrefix: string
+}
+
+const FALLBACK_TEMPLATES_VI: FallbackTemplate = {
+  mechanismIntroWithEssence: (n) => `Tôi tò mò nên đọc thêm về ${n}. Hóa ra cách nó hoạt động khác với cách tôi nghĩ trước đây.`,
+  mechanismIntroPlain: (n) => `Tôi tò mò nên đọc thêm về ${n}.`,
+  mechanismEssencePrefix: 'Cụ thể: ',
+  mechanismNoEssence: 'Tôi không hiểu hết khoa học. Tôi chỉ biết cách tiếp cận này khác — và đó là điều khiến tôi quyết định thử.',
+  ingredientsWithList: 'Tôi đọc kỹ hộp trước khi đặt. Thành phần: ',
+  ingredientsNoList: 'Tôi đọc kỹ hộp trước khi đặt. Thành phần liệt kê rõ ràng — không có cái gì làm tôi gợn nghi.',
+  uspPrefix: 'Cái khác tôi nhận ra: ',
+  uspMissing: 'Tôi cẩn thận vì đã thử nhiều thứ — lần này thấy yên tâm hơn.',
+  usageNoScene: 'Tôi dùng đều theo hướng dẫn — nguyên tắc đơn giản, không cần ép.',
+  usageReassurance: 'Người nhà tôi có hỏi "Có an toàn không?". Tôi check kỹ trước rồi — đọc nhãn, hỏi người dùng — không thấy cảnh báo gì bất thường.',
+  socialProofWithFailed: (f) => `Sau khi tôi thấy đỡ hơn, mấy người trong nhóm chat cũng nhắn hỏi. Mọi người trước đây đã thử ${f} nhưng vẫn không đỡ.`,
+  socialProofPlain: 'Sau khi tôi thấy đỡ hơn, mấy người trong nhóm chat cũng nhắn hỏi.',
+  socialProofVariation: 'Có chị bảo 2-3 tuần đầu đã khác. Có anh thì chậm hơn, tới tháng thứ 2 mới chịu công nhận. Mỗi người mỗi nhịp — không ai giống ai.',
+  pricingMain: (p) => `Tôi đặt qua đợt đang giảm: ${p}. Tôi không phải kiểu shopping bốc đồng, nhưng đợt này đáng — tôi mua liền 2 sản phẩm để dùng kiên trì.`,
+  pricingCalloutPrefix: 'Giá hiện tại: ',
+}
+
+const FALLBACK_TEMPLATES_MS: FallbackTemplate = {
+  mechanismIntroWithEssence: (n) => `Saya curious, jadi saya baca lebih lanjut tentang ${n}. Rupanya cara ia berfungsi berbeza dengan apa yang saya fikirkan dulu.`,
+  mechanismIntroPlain: (n) => `Saya curious, jadi saya baca lebih lanjut tentang ${n}.`,
+  mechanismEssencePrefix: 'Secara khususnya: ',
+  mechanismNoEssence: 'Saya tak faham semua sains di sebaliknya. Saya cuma tahu pendekatan ini berbeza — dan itulah yang buat saya nak cuba.',
+  ingredientsWithList: 'Saya baca label dengan teliti sebelum order. Bahan-bahannya: ',
+  ingredientsNoList: 'Saya baca label dengan teliti sebelum order. Bahan-bahannya disenaraikan dengan jelas — takde apa-apa yang buat saya rasa pelik.',
+  uspPrefix: 'Yang lain saya perasan: ',
+  uspMissing: 'Saya berhati-hati sebab dah cuba banyak benda — kali ini rasa lebih tenang.',
+  usageNoScene: 'Saya guna ikut arahan — prinsipnya senang, tak perlu paksa.',
+  usageReassurance: 'Keluarga saya pernah tanya "Selamat ke?". Saya dah check dulu — baca label, tanya pengguna lain — takde amaran apa-apa yang luar biasa.',
+  socialProofWithFailed: (f) => `Selepas saya rasa lebih baik, beberapa orang dalam group chat pun mesej tanya. Mereka dulu pernah cuba ${f} tapi masih tak lega.`,
+  socialProofPlain: 'Selepas saya rasa lebih baik, beberapa orang dalam group chat pun mesej tanya.',
+  socialProofVariation: 'Ada kakak kata 2-3 minggu pertama dah berbeza. Ada abang pula lambat, sampai bulan kedua baru mengaku. Setiap orang ada rentaknya — tak sama.',
+  pricingMain: (p) => `Saya order masa ada promo: ${p}. Saya bukan jenis shopping melulu, tapi promo ni berbaloi — saya beli 2 terus untuk guna konsisten.`,
+  pricingCalloutPrefix: 'Harga sekarang: ',
+}
+
+const FALLBACK_TEMPLATES_EN: FallbackTemplate = {
+  mechanismIntroWithEssence: (n) => `I got curious so I read more about ${n}. Turns out it works differently than what I assumed before.`,
+  mechanismIntroPlain: (n) => `I got curious so I read more about ${n}.`,
+  mechanismEssencePrefix: 'Specifically: ',
+  mechanismNoEssence: 'I don\'t understand all the science. I just know this approach is different — and that\'s what made me decide to try it.',
+  ingredientsWithList: 'I read the label carefully before ordering. The ingredients: ',
+  ingredientsNoList: 'I read the label carefully before ordering. The ingredients are listed clearly — nothing that triggered any concern for me.',
+  uspPrefix: 'Something else I noticed: ',
+  uspMissing: 'I was cautious because I\'ve tried many things — this time felt different, more reassuring.',
+  usageNoScene: 'I use it consistently per the instructions — simple routine, no forcing.',
+  usageReassurance: 'My family asked "Is it safe?". I had checked beforehand — read the label, asked other users — no unusual warnings.',
+  socialProofWithFailed: (f) => `After I started feeling better, a few people in the group chat messaged me too. They had previously tried ${f} but still didn\'t get relief.`,
+  socialProofPlain: 'After I started feeling better, a few people in the group chat messaged me too.',
+  socialProofVariation: 'One woman said the first 2-3 weeks already felt different. One guy was slower — only by month 2 did he admit it. Everyone\'s pace is different.',
+  pricingMain: (p) => `I ordered during the promo: ${p}. I\'m not an impulse shopper, but this deal was worth it — I bought 2 right away to use consistently.`,
+  pricingCalloutPrefix: 'Current price: ',
+}
+
+function getFallbackTemplate(language: 'vi' | 'ms' | 'en'): FallbackTemplate {
+  return language === 'ms' ? FALLBACK_TEMPLATES_MS
+       : language === 'en' ? FALLBACK_TEMPLATES_EN
+       : FALLBACK_TEMPLATES_VI
+}
 
 function fallbackBlock(plan: PISectionPlan, input: PlannerInput): PIBlock {
   const brief = input.synthesizedBrief
@@ -490,7 +660,11 @@ function fallbackBlock(plan: PISectionPlan, input: PlannerInput): PIBlock {
   const hasUsageScene = brief.usageScene && brief.usageScene.length > 10
   const hasFailedAtt = Array.isArray(brief.realisticFailedAttempts) && brief.realisticFailedAttempts.length > 0
 
-  let heading = FALLBACK_HEADINGS[plan.type]
+  // 2026-05-29 — Language-aware template selection. Was hardcoded VN
+  // which is THE root cause of the visible language-mix bug on MY/EN packs.
+  const lang = input.targetLanguage
+  const tpl = getFallbackTemplate(lang)
+  const heading = getFallbackHeading(plan.type, lang)
   let paragraphs: string[] = []
   let subtleCallout: string | undefined
 
@@ -498,43 +672,43 @@ function fallbackBlock(plan: PISectionPlan, input: PlannerInput): PIBlock {
     case 'mechanism-personal':
       paragraphs = [
         hasEssence
-          ? `Tôi tò mò nên đọc thêm về ${input.productName}. Hóa ra cách nó hoạt động khác với cách tôi nghĩ trước đây.`
-          : `Tôi tò mò nên đọc thêm về ${input.productName}.`,
+          ? tpl.mechanismIntroWithEssence(input.productName)
+          : tpl.mechanismIntroPlain(input.productName),
         hasEssence
-          ? `Cụ thể: ${brief.productEssence.slice(0, 220)}.`
-          : `Tôi không hiểu hết khoa học. Tôi chỉ biết cách tiếp cận này khác — và đó là điều khiến tôi quyết định thử.`,
+          ? `${tpl.mechanismEssencePrefix}${brief.productEssence.slice(0, 220)}.`
+          : tpl.mechanismNoEssence,
       ]
       break
     case 'ingredients-usp-woven':
       paragraphs = [
         input.productIngredients && input.productIngredients.length > 5
-          ? `Tôi đọc kỹ hộp trước khi đặt. Thành phần: ${input.productIngredients.slice(0, 180)}.`
-          : `Tôi đọc kỹ hộp trước khi đặt. Thành phần liệt kê rõ ràng — không có cái gì làm tôi gợn nghi.`,
+          ? `${tpl.ingredientsWithList}${input.productIngredients.slice(0, 180)}.`
+          : tpl.ingredientsNoList,
         input.productUsp && input.productUsp.length > 5
-          ? `Cái khác tôi nhận ra: ${input.productUsp.slice(0, 160)}.`
-          : `Tôi cẩn thận vì đã thử nhiều thứ — lần này thấy yên tâm hơn.`,
+          ? `${tpl.uspPrefix}${input.productUsp.slice(0, 160)}.`
+          : tpl.uspMissing,
       ]
       break
     case 'usage-faq-personal':
       paragraphs = [
-        hasUsageScene ? brief.usageScene : `Tôi dùng đều theo hướng dẫn — nguyên tắc đơn giản, không cần ép.`,
-        `Người nhà tôi có hỏi "Có an toàn không?". Tôi check kỹ trước rồi — đọc nhãn, hỏi người dùng — không thấy cảnh báo gì bất thường.`,
+        hasUsageScene ? brief.usageScene : tpl.usageNoScene,
+        tpl.usageReassurance,
       ]
       break
     case 'social-proof-collective':
       paragraphs = [
         hasFailedAtt
-          ? `Sau khi tôi thấy đỡ hơn, mấy người trong nhóm chat cũng nhắn hỏi. Mọi người trước đây đã thử ${brief.realisticFailedAttempts.slice(0, 2).join(', ').slice(0, 120)} nhưng vẫn không đỡ.`
-          : `Sau khi tôi thấy đỡ hơn, mấy người trong nhóm chat cũng nhắn hỏi.`,
-        `Có chị bảo 2-3 tuần đầu đã khác. Có anh thì chậm hơn, tới tháng thứ 2 mới chịu công nhận. Mỗi người mỗi nhịp — không ai giống ai.`,
+          ? tpl.socialProofWithFailed(brief.realisticFailedAttempts.slice(0, 2).join(', ').slice(0, 120))
+          : tpl.socialProofPlain,
+        tpl.socialProofVariation,
       ]
       break
     case 'pricing-narrator': {
-      const pricing = input.productPricing && input.productPricing.length > 0 ? input.productPricing : '(giá khuyến mại)'
-      paragraphs = [
-        `Tôi đặt qua đợt đang giảm: ${pricing}. Tôi không phải kiểu shopping bốc đồng, nhưng đợt này đáng — tôi mua liền 2 sản phẩm để dùng kiên trì.`,
-      ]
-      subtleCallout = `Giá hiện tại: ${pricing.split(/[(\n]/)[0].trim()}`
+      const pricing = input.productPricing && input.productPricing.length > 0
+        ? input.productPricing
+        : (lang === 'ms' ? '(harga promosi)' : lang === 'en' ? '(promo price)' : '(giá khuyến mại)')
+      paragraphs = [tpl.pricingMain(pricing)]
+      subtleCallout = `${tpl.pricingCalloutPrefix}${pricing.split(/[(\n]/)[0].trim()}`
       break
     }
   }
