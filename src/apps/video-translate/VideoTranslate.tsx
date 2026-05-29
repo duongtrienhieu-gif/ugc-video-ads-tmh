@@ -109,6 +109,36 @@ function LangSelect<T extends { code: string; label: string; flag: string }>({
 
 type InputMode = 'file' | 'url'
 
+/**
+ * Phase C — Timing expansion profile per target language.
+ *
+ * `expansion` = approximate audio length change vs typical source. Negative
+ * = target is shorter, positive = longer. Rough averages from real-world
+ * ElevenLabs dubbing across thousands of videos; actual results vary with
+ * source language pair and speech density.
+ *
+ * `risk` drives the banner color + recommendation:
+ *  - 'low':    +/- ≤ 12%, ElevenLabs auto-adjust handles cleanly
+ *  - 'medium': ±13-22%, lip-sync may speed up audibly; voice-only OK
+ *  - 'high':   > 22%, risk of CUT content tail; recommend voice-only mode
+ */
+const LANG_TIMING_PROFILE: Record<string, { expansion: number; risk: 'low' | 'medium' | 'high'; note?: string }> = {
+  en: { expansion: 0,    risk: 'low' },
+  ms: { expansion: 0.08, risk: 'low' },
+  id: { expansion: 0.08, risk: 'low' },
+  hi: { expansion: 0.08, risk: 'low' },
+  ar: { expansion: 0.10, risk: 'low' },
+  es: { expansion: 0.12, risk: 'low' },
+  de: { expansion: 0.12, risk: 'low' },
+  pt: { expansion: 0.08, risk: 'low' },
+  vi: { expansion: 0.12, risk: 'medium' },
+  ru: { expansion: 0.15, risk: 'medium' },
+  fr: { expansion: 0.18, risk: 'medium' },
+  ko: { expansion: 0.20, risk: 'medium' },
+  ja: { expansion: 0.30, risk: 'high',  note: 'Tiếng Nhật giãn nhiều — video nói nhanh dễ bị cut cuối' },
+  zh: { expansion: -0.10, risk: 'low',   note: 'Tiếng Trung ngắn hơn — có thể có khoảng lặng cuối' },
+}
+
 export default function VideoTranslate() {
   // ── Input state ──────────────────────────────────────────────────────
   const [inputMode, setInputMode]       = useState<InputMode>('file')
@@ -116,6 +146,9 @@ export default function VideoTranslate() {
   // 'voice-only' skips fal.ai (faster, cheaper, only needs ElevenLabs key).
   const [mode, setMode]                 = useState<TranslationMode>('lip-sync')
   const [file, setFile]                 = useState<File | null>(null)
+  // Phase C — measured duration of uploaded video/audio (seconds). null = unknown
+  // (URL mode, or metadata not yet loaded). Drives the timing expansion estimate banner.
+  const [fileDuration, setFileDuration] = useState<number | null>(null)
   const [sourceUrl, setSourceUrl]       = useState('')
   // Phase 1: default source = 'vi' (most common for VN-MY workflows). User
   // must explicitly pick. No more auto-detect.
@@ -252,7 +285,34 @@ export default function VideoTranslate() {
       return
     }
     setFile(f)
+    setFileDuration(null)  // reset; effect below will re-measure
   }
+
+  // Phase C — read duration metadata from uploaded file via off-DOM <video>.
+  // Works for both video and audio files (audio file in <video> tag still
+  // reports duration). Skips for URL mode (no File object). Cleans up the
+  // blob URL on unmount or file change to prevent memory leaks.
+  useEffect(() => {
+    if (!file) { setFileDuration(null); return }
+    const blobUrl = URL.createObjectURL(file)
+    const probe = document.createElement('video')
+    probe.preload = 'metadata'
+    let cleanedUp = false
+    const cleanup = () => {
+      if (cleanedUp) return
+      cleanedUp = true
+      URL.revokeObjectURL(blobUrl)
+    }
+    probe.onloadedmetadata = () => {
+      if (Number.isFinite(probe.duration) && probe.duration > 0) {
+        setFileDuration(Math.round(probe.duration))
+      }
+      cleanup()
+    }
+    probe.onerror = cleanup
+    probe.src = blobUrl
+    return cleanup
+  }, [file])
 
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault()
@@ -707,6 +767,51 @@ export default function VideoTranslate() {
                 ))}
               </div>
             </div>
+
+            {/* Phase C — timing expansion estimate banner.
+                Shows when target lang is known + different from source. Risk-aware
+                color: orange for high-risk pairs (audio likely exceeds video),
+                blue for informational notes. Recommends voice-only for high-risk
+                when user is in lip-sync mode. */}
+            {(() => {
+              if (!targetLang || targetLang === sourceLang) return null
+              const profile = LANG_TIMING_PROFILE[targetLang]
+              if (!profile) return null
+              const isExpansion = profile.expansion > 0
+              const pct = Math.round(Math.abs(profile.expansion) * 100)
+              const highRisk = profile.risk === 'high'
+              const mediumLipSync = profile.risk === 'medium' && mode === 'lip-sync'
+              const showWarning = highRisk || mediumLipSync
+              const targetLabel = getLangLabel(targetLang)
+              const sourceLabel = getLangLabel(sourceLang)
+              const estimatedSec = fileDuration ? Math.round(fileDuration * (1 + profile.expansion)) : null
+              return (
+                <div className={`flex items-start gap-2 rounded-xl border px-3 py-2.5 ${
+                  showWarning
+                    ? 'border-orange-200 bg-orange-50/60'
+                    : 'border-blue-100 bg-blue-50/40'
+                }`}>
+                  {showWarning
+                    ? <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-orange-500" />
+                    : <Info className="mt-0.5 h-3.5 w-3.5 shrink-0 text-blue-400" />}
+                  <p className="text-[10px] leading-relaxed text-gray-700">
+                    <strong>Timing:</strong> Bản dịch {targetLabel} thường{' '}
+                    {pct === 0
+                      ? 'có thời lượng tương đương'
+                      : (isExpansion ? `dài hơn ~${pct}%` : `ngắn hơn ~${pct}%`)}{' '}
+                    so với {sourceLabel}.
+                    {profile.note && <> {profile.note}.</>}
+                    {fileDuration && estimatedSec && (
+                      <> Video gốc <strong>{fileDuration}s</strong> → ước tính bản dịch <strong>~{estimatedSec}s</strong>.</>
+                    )}
+                    {showWarning && mode === 'lip-sync' && (
+                      <> Nếu video nói nhanh, ElevenLabs có thể cut cuối hoặc sound rushed —{' '}
+                        cân nhắc <strong>chuyển sang "Chỉ giọng"</strong> để có flexibility timing.</>
+                    )}
+                  </p>
+                </div>
+              )
+            })()}
 
             {/* Info note */}
             <div className="flex items-start gap-2 rounded-xl border border-teal-100 bg-teal-50/60 px-3 py-2.5">
