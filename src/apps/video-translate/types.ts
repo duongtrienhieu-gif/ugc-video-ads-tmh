@@ -24,6 +24,11 @@ export interface TranslationItem {
   /** Pipeline mode chosen at job creation. Optional for backward compat with
    *  history items created before this field existed — fallback to 'lip-sync'. */
   mode?: TranslationMode
+  /** Phase B — voice mode chosen at job creation. true = used ElevenLabs Voice
+   *  Library (native accent for target lang). false/undefined = voice cloning
+   *  of original speaker (foreigner accent). Persisted so history can show
+   *  which choice was made + future resume logic could re-trigger. */
+  disableVoiceCloning?: boolean
   videoUrl: string | null      // transient signed URL (regenerated on load)
   assetId: string | null       // final video Supabase ref (permanent) — lip-synced (mode=lip-sync) or ElevenLabs-dubbed (mode=voice-only)
   audioAssetId?: string | null // dubbed audio Supabase ref (permanent) — only set for lip-sync mode (fed to fal.ai)
