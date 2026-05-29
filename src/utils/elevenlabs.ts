@@ -611,16 +611,31 @@ export async function getDubbingStatus(apiKey: string, dubbingId: string): Promi
   }
 }
 
-/** Download the dubbed media (video or audio) */
+/** Download the dubbed audio file from ElevenLabs.
+ *
+ *  Retry-on-404: ElevenLabs occasionally flips dubbing status to 'dubbed'
+ *  before the rendered audio file is fully written to their CDN. Retry up
+ *  to 3 times with backoff (10s, 20s, 40s) to bridge the race window. */
 export async function getDubbedMedia(apiKey: string, dubbingId: string, languageCode: string): Promise<Blob> {
-  const res = await fetch(`${EL_BASE}/dubbing/${dubbingId}/audio/${languageCode}`, {
-    headers: { 'xi-api-key': apiKey },
-  })
-  if (!res.ok) {
-    const err = await res.text().catch(() => res.statusText)
-    throw new Error(`Tải video đã dịch thất bại (${res.status}): ${err.slice(0, 100)}`)
+  const url = `${EL_BASE}/dubbing/${dubbingId}/audio/${languageCode}`
+  const delays = [10_000, 20_000, 40_000]
+  let lastStatus = 0
+  let lastErr = ''
+
+  for (let attempt = 0; attempt <= delays.length; attempt++) {
+    const res = await fetch(url, { headers: { 'xi-api-key': apiKey } })
+    if (res.ok) return res.blob()
+
+    lastStatus = res.status
+    lastErr = await res.text().catch(() => res.statusText)
+
+    if (res.status !== 404 || attempt === delays.length) break
+
+    console.warn(`[elevenlabs.getDubbedMedia] 404 — retry in ${delays[attempt] / 1000}s (attempt ${attempt + 1}/${delays.length})`)
+    await new Promise<void>((r) => setTimeout(r, delays[attempt]))
   }
-  return res.blob()
+
+  throw new Error(`Tải audio đã dịch thất bại (${lastStatus}): ${lastErr.slice(0, 100)}`)
 }
 
 /** Delete a dubbing project */
