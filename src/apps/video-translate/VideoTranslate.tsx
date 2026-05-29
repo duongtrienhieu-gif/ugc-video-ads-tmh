@@ -463,22 +463,28 @@ export default function VideoTranslate() {
         patch({ audioAssetId })
 
         patch({ status: 'muxing' })
-        // Use 'extend' mode if audio is meaningfully longer than video (>0.5s)
-        // — pads video tail by freezing last frame so audio plays to completion.
-        const needsExtend = audioDurationSec > targetSec + 0.5
+        // Pick mux mode so we never lose content from either stream:
+        //   audio longer  → extend video (hold last frame)
+        //   audio shorter → pad audio with trailing silence (keep video full)
+        //   roughly equal → simple copy
+        const delta = audioDurationSec - targetSec
+        const muxMode: 'simple' | 'extend' | 'pad-audio' =
+          delta > 0.5 ? 'extend' :
+          delta < -0.5 ? 'pad-audio' :
+          'simple'
         const finalVideoBlob = await muxAudioIntoVideo({
           videoBlob: srcVideoBlob,
           audioBlob,
-          mode: needsExtend ? 'extend' : 'simple',
+          mode: muxMode,
         })
         const assetId = await saveAsset(finalVideoBlob, 'video/mp4')
         const videoUrl = await getUrl(assetId)
         patch({ status: 'dubbed', assetId, videoUrl })
-        addToast(
-          needsExtend
-            ? `Dịch hoàn tất — video giữ frame cuối thêm ${(audioDurationSec - targetSec).toFixed(1)}s`
-            : `Dịch hoàn tất: ${displayName}`
-        )
+        const toastMsg =
+          muxMode === 'extend'   ? `Dịch hoàn tất — video giữ frame cuối thêm ${delta.toFixed(1)}s`
+        : muxMode === 'pad-audio' ? `Dịch hoàn tất — bản dịch ngắn hơn ${(-delta).toFixed(1)}s, video chạy đủ với khoảng lặng cuối`
+                                  : `Dịch hoàn tất: ${displayName}`
+        addToast(toastMsg)
       } else {
         // ── Legacy lip-sync path: ElevenLabs Dubbing + fal.ai LatentSync ──
         patch({ status: 'dubbing' })

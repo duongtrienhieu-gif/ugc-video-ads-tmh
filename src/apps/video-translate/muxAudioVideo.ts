@@ -1,19 +1,24 @@
-// Client-side audio+video muxing via ffmpeg.wasm. Two modes:
+// Client-side audio+video muxing via ffmpeg.wasm. Three modes — caller picks
+// based on the audio-vs-video duration delta so no source content is lost:
 //
-//   1. `'simple'` — old behaviour. Copy video stream as-is, replace audio,
-//      trim to shorter (-shortest). Use when both tracks are roughly the
-//      same length (legacy ElevenLabs Dubbing audio, which is auto-fitted).
+//   1. `'simple'`     audio ≈ video. Copy video stream as-is, replace audio,
+//                     trim to shorter (-shortest). Safe only when both tracks
+//                     are within ±0.5s of each other.
 //
-//   2. `'extend'` — smart-condense path. Audio is at natural speed and may
-//      be slightly longer than the source video. Pad the video tail by
-//      freeze-cloning the last frame (`tpad=stop_mode=clone`) so it lasts
-//      as long as the audio. Requires re-encoding the video stream.
-//      Output is still MP4 H.264/AAC.
+//   2. `'extend'`     audio LONGER than video (e.g. EN→VI/JA, verbatim mode).
+//                     Pad the video tail by freeze-cloning the last frame
+//                     (`tpad=stop_mode=clone`) so it lasts as long as the
+//                     audio. Re-encodes video.
+//
+//   3. `'pad-audio'`  audio SHORTER than video (e.g. MS→VI, or aggressive
+//                     condense). Pad the audio tail with silence so the
+//                     video plays in full to its original end. Re-encodes
+//                     audio only; video stream is copied.
 
 import { getFFmpeg } from '../video-builder/v3/services/ffmpegLoader'
 import { fetchFile } from '@ffmpeg/util'
 
-export type MuxMode = 'simple' | 'extend'
+export type MuxMode = 'simple' | 'extend' | 'pad-audio'
 
 export async function muxAudioIntoVideo(params: {
   videoBlob: Blob
@@ -33,35 +38,57 @@ export async function muxAudioIntoVideo(params: {
   await ffmpeg.writeFile(inputVideo, await fetchFile(params.videoBlob))
   await ffmpeg.writeFile(inputAudio, await fetchFile(params.audioBlob))
 
-  const args = mode === 'extend'
-    ? [
-        '-i', inputVideo,
-        '-i', inputAudio,
-        // Hold last video frame indefinitely; -shortest cuts when audio ends.
-        '-filter_complex', '[0:v]tpad=stop_mode=clone:stop_duration=3600[v]',
-        '-map', '[v]',
-        '-map', '1:a:0',
-        '-c:v', 'libx264',
-        '-preset', 'ultrafast',
-        '-pix_fmt', 'yuv420p',
-        '-c:a', 'aac',
-        '-b:a', '192k',
-        '-shortest',
-        '-y',
-        output,
-      ]
-    : [
-        '-i', inputVideo,
-        '-i', inputAudio,
-        '-map', '0:v:0',
-        '-map', '1:a:0',
-        '-c:v', 'copy',
-        '-c:a', 'aac',
-        '-b:a', '192k',
-        '-shortest',
-        '-y',
-        output,
-      ]
+  let args: string[]
+  if (mode === 'extend') {
+    // Hold last video frame indefinitely; -shortest cuts when audio ends.
+    args = [
+      '-i', inputVideo,
+      '-i', inputAudio,
+      '-filter_complex', '[0:v]tpad=stop_mode=clone:stop_duration=3600[v]',
+      '-map', '[v]',
+      '-map', '1:a:0',
+      '-c:v', 'libx264',
+      '-preset', 'ultrafast',
+      '-pix_fmt', 'yuv420p',
+      '-c:a', 'aac',
+      '-b:a', '192k',
+      '-shortest',
+      '-y',
+      output,
+    ]
+  } else if (mode === 'pad-audio') {
+    // Append trailing silence to the audio so it lasts the full video duration.
+    // `apad` extends the audio stream; without it, audio would end early and
+    // -shortest would truncate the video. We DROP -shortest here — output
+    // length is governed by the (padded) audio, which we cap at video length
+    // by re-mapping after apad. Simpler: use video as the duration anchor.
+    args = [
+      '-i', inputVideo,
+      '-i', inputAudio,
+      '-filter_complex', '[1:a]apad[a]',
+      '-map', '0:v:0',
+      '-map', '[a]',
+      '-c:v', 'copy',
+      '-c:a', 'aac',
+      '-b:a', '192k',
+      '-shortest',  // now safe: video is the shorter ⇒ output = video length
+      '-y',
+      output,
+    ]
+  } else {
+    args = [
+      '-i', inputVideo,
+      '-i', inputAudio,
+      '-map', '0:v:0',
+      '-map', '1:a:0',
+      '-c:v', 'copy',
+      '-c:a', 'aac',
+      '-b:a', '192k',
+      '-shortest',
+      '-y',
+      output,
+    ]
+  }
 
   await ffmpeg.exec(args)
 
