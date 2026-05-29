@@ -6,6 +6,14 @@ export type TranslationStatus =
   | 'dubbed'       // final video ready
   | 'failed'
 
+/** Translation pipeline mode chosen by user per job.
+ *  - 'lip-sync'   = ElevenLabs Dubbing + fal.ai LatentSync (matches mouth to new audio)
+ *  - 'voice-only' = ElevenLabs Dubbing only — uses ElevenLabs' /video endpoint
+ *    which already mixes dubbed audio into the original video. Faster + cheaper
+ *    (no fal.ai credit) but lips won't match — suitable for voiceover, product
+ *    demos, screen recordings where no face is on camera. */
+export type TranslationMode = 'lip-sync' | 'voice-only'
+
 export interface TranslationItem {
   id: string                   // local id (UUID)
   dubbingId: string            // ElevenLabs dubbing_id
@@ -13,9 +21,12 @@ export interface TranslationItem {
   sourceLang: string           // ISO-639-1 code (vi/en/ms/...). Phase 1: no more 'auto'
   targetLang: string           // ISO-639-1 code
   status: TranslationStatus
+  /** Pipeline mode chosen at job creation. Optional for backward compat with
+   *  history items created before this field existed — fallback to 'lip-sync'. */
+  mode?: TranslationMode
   videoUrl: string | null      // transient signed URL (regenerated on load)
-  assetId: string | null       // final lip-synced video Supabase ref (permanent)
-  audioAssetId?: string | null // dubbed audio Supabase ref (permanent)
+  assetId: string | null       // final video Supabase ref (permanent) — lip-synced (mode=lip-sync) or ElevenLabs-dubbed (mode=voice-only)
+  audioAssetId?: string | null // dubbed audio Supabase ref (permanent) — only set for lip-sync mode (fed to fal.ai)
   imageAssetId?: string | null // extracted frame Supabase ref (permanent)
   /** Phase 5: persist fal.ai LatentSync request id so we can resume after F5 */
   lipSyncRequestId?: string

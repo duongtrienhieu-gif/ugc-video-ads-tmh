@@ -611,14 +611,23 @@ export async function getDubbingStatus(apiKey: string, dubbingId: string): Promi
   }
 }
 
-/** Download the dubbed media (video or audio) */
-export async function getDubbedMedia(apiKey: string, dubbingId: string, languageCode: string): Promise<Blob> {
-  const res = await fetch(`${EL_BASE}/dubbing/${dubbingId}/audio/${languageCode}`, {
+/** Download the dubbed media from ElevenLabs. Two flavors:
+ *  - 'audio' (default) → just the dubbed audio track, used when feeding
+ *    into fal.ai LatentSync for full lip-sync pipeline.
+ *  - 'video' → the original video with dubbed audio mixed in (no lip-sync).
+ *    Used for voice-only mode (faster, no fal.ai needed). */
+export async function getDubbedMedia(
+  apiKey: string,
+  dubbingId: string,
+  languageCode: string,
+  mediaType: 'audio' | 'video' = 'audio',
+): Promise<Blob> {
+  const res = await fetch(`${EL_BASE}/dubbing/${dubbingId}/${mediaType}/${languageCode}`, {
     headers: { 'xi-api-key': apiKey },
   })
   if (!res.ok) {
     const err = await res.text().catch(() => res.statusText)
-    throw new Error(`Tải video đã dịch thất bại (${res.status}): ${err.slice(0, 100)}`)
+    throw new Error(`Tải ${mediaType} đã dịch thất bại (${res.status}): ${err.slice(0, 100)}`)
   }
   return res.blob()
 }
