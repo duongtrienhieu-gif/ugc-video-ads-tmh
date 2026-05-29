@@ -285,8 +285,9 @@ async function fetchPageContent(url: string): Promise<PageContent> {
           headers: { Accept: 'text/plain' },
           signal: AbortSignal.any([ctrl.signal, AbortSignal.timeout(12000)]),
         })
-        if (!r.ok) { console.log('[FETCH] jina-lean status:', r.status); return null }
+        if (!r.ok) { console.log('[FETCH] jina-lean status:', r.status, r.statusText); return null }
         const text = await r.text()
+        console.log(`[FETCH] jina-lean received ${text.length}c text`)
         if (!text.trim()) return null
         return { text: text.slice(0, 16000), imageUrls: extractImageUrlsFromMarkdown(text), source: 'jina-lean' }
       },
@@ -298,10 +299,11 @@ async function fetchPageContent(url: string): Promise<PageContent> {
           headers: { Accept: 'application/json', 'X-With-Images-Summary': 'true' },
           signal: AbortSignal.any([ctrl.signal, AbortSignal.timeout(20000)]),
         })
-        if (!r.ok) { console.log('[FETCH] jina-rich status:', r.status); return null }
+        if (!r.ok) { console.log('[FETCH] jina-rich status:', r.status, r.statusText); return null }
         const json = await r.json() as JinaJsonData
         const content = json.data?.content ?? ''
         const imageUrls = extractUrlsFromJinaImages(json.data?.images)
+        console.log(`[FETCH] jina-rich extracted: text=${content.length}c · images=${imageUrls.length}`)
         if (!content.trim() && imageUrls.length === 0) return null
         return { text: content.slice(0, 16000), imageUrls, source: 'jina-rich' }
       },
@@ -314,11 +316,47 @@ async function fetchPageContent(url: string): Promise<PageContent> {
         })
         if (!r.ok) { console.log('[FETCH] allorigins status:', r.status); return null }
         const html = await r.text()
+        console.log(`[FETCH] allorigins received ${html.length}c HTML`)
         if (!html.trim()) return null
         const text = extractTextFromHtml(html)
         const imageUrls = extractImageUrlsFromHtml(html, url)
+        console.log(`[FETCH] allorigins extracted: text=${text.length}c · images=${imageUrls.length}`)
         if (!text.trim() && imageUrls.length === 0) return null
         return { text: text.slice(0, 16000), imageUrls, source: 'allorigins' }
+      },
+    },
+    {
+      name: 'corsproxy',
+      run: async () => {
+        const r = await fetch(`https://corsproxy.io/?url=${encodeURIComponent(url)}`, {
+          signal: AbortSignal.any([ctrl.signal, AbortSignal.timeout(15000)]),
+        })
+        if (!r.ok) { console.log('[FETCH] corsproxy status:', r.status); return null }
+        const html = await r.text()
+        console.log(`[FETCH] corsproxy received ${html.length}c HTML`)
+        if (!html.trim()) return null
+        const text = extractTextFromHtml(html)
+        const imageUrls = extractImageUrlsFromHtml(html, url)
+        console.log(`[FETCH] corsproxy extracted: text=${text.length}c · images=${imageUrls.length}`)
+        if (!text.trim() && imageUrls.length === 0) return null
+        return { text: text.slice(0, 16000), imageUrls, source: 'corsproxy' }
+      },
+    },
+    {
+      name: 'codetabs',
+      run: async () => {
+        const r = await fetch(`https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`, {
+          signal: AbortSignal.any([ctrl.signal, AbortSignal.timeout(15000)]),
+        })
+        if (!r.ok) { console.log('[FETCH] codetabs status:', r.status); return null }
+        const html = await r.text()
+        console.log(`[FETCH] codetabs received ${html.length}c HTML`)
+        if (!html.trim()) return null
+        const text = extractTextFromHtml(html)
+        const imageUrls = extractImageUrlsFromHtml(html, url)
+        console.log(`[FETCH] codetabs extracted: text=${text.length}c · images=${imageUrls.length}`)
+        if (!text.trim() && imageUrls.length === 0) return null
+        return { text: text.slice(0, 16000), imageUrls, source: 'codetabs' }
       },
     },
   ]
@@ -722,7 +760,7 @@ export default function ProductForm({ item, onSave, onCancel }: ProductFormProps
       // Hard-fail only when BOTH text AND images are empty. If we have just
       // images (image-heavy LadiPage / banner-only pages), proceed image-only.
       if (!pageText && imageUrls.length === 0) {
-        throw new Error('Tất cả nguồn đọc trang đều fail (Jina + AllOrigins). Có thể trang chặn bot hoặc các provider đang rate-limit. Dùng "Tải ảnh chụp màn hình" bên dưới.')
+        throw new Error('Cả 5 provider (jina-lean, jina-rich, allorigins, corsproxy, codetabs) đều không đọc được trang. Mở F12 → Console xem chi tiết từng provider. Có thể trang chặn bot hoặc các provider đang rate-limit Vercel IP. Dùng "Tải ảnh chụp màn hình" bên dưới.')
       }
 
       // Step 2: fetch page images in parallel (best-effort — CORS-friendly via weserv proxy)
