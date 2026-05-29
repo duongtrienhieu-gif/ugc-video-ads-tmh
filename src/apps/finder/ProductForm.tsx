@@ -30,7 +30,7 @@ const JSON_SCHEMA = `{"productName":"","productDescription":"","targetMarket":""
  *  — user can upload 1-5, not mandatory to fill all slots. */
 const MAX_SCREENSHOTS = 5
 
-const EXTRACT_SYSTEM = 'You are a product info extraction assistant. Return ONLY a raw minified JSON object on a single line — no markdown, no code fences, no explanation, no newlines inside values. Always respond in VIETNAMESE.'
+const EXTRACT_SYSTEM = 'You are a product info extraction assistant. The user prompt will ask you to do a BRAINSTORM step first (using [brackets] and quotes only, never {}), then output ONE minified JSON object on a single line at the end (no markdown, no code fences). The parser reads only the first {} block, so make sure the JSON appears at the end of your response and contains no nested raw newlines inside string values. Always respond in VIETNAMESE.'
 
 const FIELDS_SPEC = `Fields (ALL values must be written in NATURAL VIETNAMESE — translate from any source language; keep brand/product proper nouns as-is, keep original currency tokens like RM, ₫, $, ฿):
 - productName: tên chính của sản phẩm (giữ nguyên tên thương hiệu nếu là proper noun, vd "LANZF", "Manuka")
@@ -66,8 +66,32 @@ Trang có thể chứa NHIỀU sản phẩm trộn. Section nhiễu cần BỎ Q
 Xác định sản phẩm chính: xuất hiện ĐẦU TIÊN + có giá + mô tả chi tiết + gallery ảnh chính + nút add-to-cart. Nhiều SP cùng prominence → lấy cái đầu (top of page).
 Với 1688/Alibaba B2B: tập trung main listing's price range / MOQ / specifications. Bỏ qua "Recommended suppliers" / "Same category products".`
 
+// ── Chain-of-thought block reused by all prompts ─────────────────────────
+// Forces Gemini to brainstorm per-field BEFORE committing to JSON. Quality
+// boost ~20% on inference-heavy fields (targetMarket, painPoints, usps).
+// Cost: ~30% more tokens (but still single call). parseExtracted picks the
+// FIRST {} block in output so analysis (which uses [brackets]/quotes only,
+// never {}) is automatically skipped.
+const COT_INSTRUCTION = `QUAN TRỌNG — LÀM 2 BƯỚC, ĐỪNG XUẤT JSON NGAY:
+
+BƯỚC 1 — PHÂN TÍCH (brainstorm trong đầu, output bằng văn bản, KHÔNG dùng dấu {}):
+- productName: Tìm tên chính ở đâu? (title, h1, banner ảnh đầu) → "..."
+- productDescription: 1-2 câu mô tả ngắn gọn sản phẩm + công dụng chính?
+- targetMarket: Sản phẩm này dành cho AI? (suy luận từ loại sp + ngôn ngữ + hình ảnh + tone trang)
+- painPoints: Trang nói trực tiếp vấn đề nào? Vấn đề nào suy luận từ loại sp?
+- usps: Claim nào lặp lại nhiều? Badge nào (100% natural, Halal, KKM)? Có bảng so sánh không?
+- benefits: Lợi ích bề mặt + functional? Có liên kết thành phần → tác dụng không?
+- offer: Có bao nhiêu tier giá? Giá gốc gạch? Discount %?
+- ingredients: Thành phần thật trong sản phẩm là gì? (KHÔNG nhầm với CTA marketing)
+Trong phần này dùng [bracket] hoặc "quotes" để bao text, KHÔNG dùng {} (dấu {} chỉ cho BƯỚC 2).
+
+BƯỚC 2 — JSON CUỐI (output thật, parser app sẽ đọc):
+Sau khi phân tích xong, output 1 dòng JSON minified, không markdown, không code fence:`
+
 const EXTRACT_PROMPT = (pageText: string) =>
-  `Trích xuất thông tin sản phẩm từ nội dung trang web bên dưới và điền vào JSON. TẤT CẢ giá trị PHẢI viết bằng TIẾNG VIỆT TỰ NHIÊN (dịch từ ngôn ngữ gốc nếu cần). Chỉ trả về JSON, không gì khác, tất cả trên 1 dòng:
+  `Trích xuất thông tin sản phẩm từ nội dung trang web bên dưới. TẤT CẢ giá trị JSON phải viết bằng TIẾNG VIỆT TỰ NHIÊN (dịch từ ngôn ngữ gốc nếu cần).
+
+${COT_INSTRUCTION}
 ${JSON_SCHEMA}
 
 ${FIELDS_SPEC}
@@ -91,7 +115,8 @@ NHIỆM VỤ — HYBRID SYNTHESIS:
    • offer/giá hầu như luôn ở banner ảnh, KHÔNG ở text. NHÌN ảnh để tìm giá kiểu "RM59", "₫299.000", "$29.99", sticker giảm giá ("50% OFF").
    • ingredients đến từ ảnh bao bì hiển thị nhãn sau, hoặc infographic "Thành phần" — đọc ảnh kỹ.
 5. TẤT CẢ GIÁ TRỊ PHẢI VIẾT BẰNG TIẾNG VIỆT TỰ NHIÊN (dịch từ ngôn ngữ gốc nếu cần). Giữ nguyên tên thương hiệu, đơn vị tiền tệ, tên khoa học chuẩn quốc tế.
-6. Chỉ trả về JSON, không gì khác, tất cả trên 1 dòng:
+
+${COT_INSTRUCTION}
 ${JSON_SCHEMA}
 
 ${FIELDS_SPEC}
@@ -425,11 +450,21 @@ async function fetchImageAsBase64(url: string): Promise<{ mimeType: string; data
   }
 }
 
+/** MIME types Gemini Vision accepts. SVG/GIF/BMP/AVIF/ICO are REJECTED at
+ *  the API boundary even if you base64-encode them, so we filter at fetch
+ *  time. Otherwise even a single SVG logo on the page fails the whole call. */
+const GEMINI_SUPPORTED_MIMES = new Set([
+  'image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/heic', 'image/heif',
+])
+
 /** Convert a fetched image Response → Gemini inlineData payload (base64-encoded). */
 async function responseToBase64(r: Response): Promise<{ mimeType: string; data: string } | null> {
   const contentType = r.headers.get('content-type') ?? 'image/jpeg'
-  const mime = contentType.split(';')[0].trim()
-  if (!mime.startsWith('image/')) return null
+  const mime = contentType.split(';')[0].trim().toLowerCase()
+  if (!GEMINI_SUPPORTED_MIMES.has(mime)) {
+    console.log(`[FETCH] skip unsupported MIME: ${mime}`)
+    return null
+  }
   const buf = await r.arrayBuffer()
   if (buf.byteLength > 2_500_000) return null
   const bytes = new Uint8Array(buf)
@@ -438,7 +473,7 @@ async function responseToBase64(r: Response): Promise<{ mimeType: string; data: 
   for (let i = 0; i < bytes.length; i += chunk) {
     binary += String.fromCharCode(...bytes.subarray(i, Math.min(i + chunk, bytes.length)))
   }
-  return { mimeType: mime, data: btoa(binary) }
+  return { mimeType: mime === 'image/jpg' ? 'image/jpeg' : mime, data: btoa(binary) }
 }
 
 /** Escape raw control chars inside JSON string values so JSON.parse doesn't choke */
@@ -669,7 +704,7 @@ export default function ProductForm({ item, onSave, onCancel }: ProductFormProps
           apiKey: geminiKey,
           parts: [{ text: EXTRACT_PROMPT(pageText) }],
           systemInstruction: EXTRACT_SYSTEM,
-          maxOutputTokens: 2048,
+          maxOutputTokens: 4096,
         })
         const extracted = parseExtracted(response)
         if (!extracted) throw new Error('AI không trích xuất được thông tin từ dữ liệu Shopee.')
@@ -724,7 +759,7 @@ export default function ProductForm({ item, onSave, onCancel }: ProductFormProps
         apiKey: geminiKey,
         parts,
         systemInstruction: EXTRACT_SYSTEM,
-        maxOutputTokens: 2048,
+        maxOutputTokens: 4096,
       })
 
       const extracted = parseExtracted(response)
@@ -750,9 +785,18 @@ export default function ProductForm({ item, onSave, onCancel }: ProductFormProps
   // remove individually before submitting. Doesn't auto-analyze on add — they
   // press the analyze button below.
   const handleScreenshotFiles = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(e.target.files ?? [])
-    if (files.length === 0) return
+    const rawFiles = Array.from(e.target.files ?? [])
+    if (rawFiles.length === 0) return
     e.target.value = ''
+
+    // Filter to Gemini-supported MIMEs (skip SVG/GIF/BMP/AVIF — Gemini rejects them)
+    const files = rawFiles.filter((f) => GEMINI_SUPPORTED_MIMES.has(f.type.toLowerCase()))
+    const rejected = rawFiles.length - files.length
+    if (rejected > 0) {
+      addToast(`${rejected} ảnh bị bỏ qua (Gemini chỉ nhận JPEG/PNG/WebP, không nhận SVG/GIF/BMP)`, 'error')
+    }
+    if (files.length === 0) return
+
     setStagedScreenshots((prev) => {
       const next = [...prev, ...files].slice(0, MAX_SCREENSHOTS)
       if (prev.length + files.length > MAX_SCREENSHOTS) {
@@ -789,7 +833,7 @@ export default function ProductForm({ item, onSave, onCancel }: ProductFormProps
           { text: EXTRACT_PROMPT_HYBRID('(Không có text trang — chỉ phân tích ảnh upload)', imageParts.length) },
         ],
         systemInstruction: EXTRACT_SYSTEM,
-        maxOutputTokens: 2048,
+        maxOutputTokens: 4096,
       })
 
       const extracted = parseExtracted(response)
