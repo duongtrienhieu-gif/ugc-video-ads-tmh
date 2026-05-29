@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Sliders, X as XIcon } from 'lucide-react'
 import { useAppStore } from '../../stores/appStore'
 import { useBankStore } from '../../stores/bankStore'
@@ -26,6 +26,62 @@ interface LandingPageSnapshot {
   loadedFromId?: string | null
 }
 
+// ─────────────────────────────────────────────────────────────────────
+// Phase 1 stability — friendly error helper.
+// Maps technical KIE / Gemini error messages to short Vietnamese strings
+// that the marketer can act on. Raw error stays in console.error for
+// debug (see runWithCreditSafeRetry logs).
+// ─────────────────────────────────────────────────────────────────────
+export function friendlyError(raw: string): string {
+  if (!raw) return 'Lỗi không xác định — bấm Thử lại'
+  const m = raw.toLowerCase()
+  if (m.includes('timeout') || m.includes('quá') && m.includes('90s')) {
+    return '⏱️ Ảnh tạo lâu hơn dự kiến — bấm Thử lại'
+  }
+  if (m.includes('insufficient_credits') || m.includes('thiếu credit') || m.includes('hết credit')) {
+    return '💳 Hết credit KIE — nạp thêm rồi Thử lại'
+  }
+  if (m.includes('content_policy')) {
+    return '🚫 KIE từ chối prompt — sửa nội dung section rồi Thử lại'
+  }
+  if (m.includes('generate_failed') || m.includes('failed')) {
+    return '⚠️ KIE từ chối render — bấm Thử lại'
+  }
+  if (m.includes('huỷ') || m.includes('cancel')) {
+    return '⏹️ Đã huỷ'
+  }
+  if (m.includes('fetch') || m.includes('network')) {
+    return '📡 Mất kết nối tạm thời — bấm Thử lại'
+  }
+  // Fallback — truncate raw to avoid scary blob
+  return raw.length > 80 ? raw.slice(0, 77) + '…' : raw
+}
+
+/**
+ * Phase 1 stability — normalize ghost in-flight states on app mount.
+ * When the user refreshes mid-generation, persisted imagePrompts may carry
+ * status='generating' / 'queued' / 'retrying' that no longer reflects
+ * reality. This converts them to 'failed' so the UI shows a clear Thử lại
+ * button instead of an infinite spinner.
+ */
+function clearGhostInFlightStates(pack: LandingPagePack): LandingPagePack {
+  let mutated = false
+  const sections = pack.sections.map((s) => {
+    const imagePrompts = s.imagePrompts.map((p) => {
+      if (
+        (p.status === 'generating' || p.status === 'queued' || p.status === 'retrying') &&
+        !p.generatedAssetRef
+      ) {
+        mutated = true
+        return { ...p, status: 'failed' as const, error: 'Bị gián đoạn — bấm Thử lại' }
+      }
+      return p
+    })
+    return mutated ? { ...s, imagePrompts } : s
+  })
+  return mutated ? { ...pack, sections } : pack
+}
+
 /** Z8: extended progress shape — drives the ETA / images-per-minute UI. */
 export interface ImageProgress {
   done: number
@@ -49,6 +105,20 @@ export default function LandingPageAI() {
   // Remember last params so "Tạo lại" reuses language / niche / visualMemory.
   const lastParamsRef = useRef<Omit<LandingGenParams, 'productId'> | null>(null)
 
+  // Phase 1 stability — AbortController for the active KIE batch. Replaces
+  // silent in-flight tasks on "Tạo lại" / unmount / new project so cancelled
+  // requests don't keep burning credits + don't race against the next batch.
+  const abortRef = useRef<AbortController | null>(null)
+  const cancelInFlight = useCallback((reason: string) => {
+    if (abortRef.current) {
+      console.info(`[LandingPageAI] aborting in-flight image batch — ${reason}`)
+      abortRef.current.abort()
+      abortRef.current = null
+    }
+  }, [])
+  // Unmount: cancel anything running so KIE polls stop + memory frees.
+  useEffect(() => () => { cancelInFlight('component unmount') }, [cancelInFlight])
+
   const interAppPayload = useAppStore((s) => s.interAppPayload)
   const consumePayload  = useAppStore((s) => s.consumePayload)
   const activeApp       = useAppStore((s) => s.activeApp)
@@ -68,14 +138,17 @@ export default function LandingPageAI() {
       return
     }
     setLoadedFromId(saved.id)
-    setPack({
+    // Phase 1 — clear any persisted ghost 'generating' / 'queued' status so
+    // the UI doesn't show infinite spinners on assets that never actually
+    // finished (e.g. user closed the tab mid-batch).
+    setPack(clearGhostInFlightStates({
       productId:    saved.productId,
       productName:  saved.productName,
       language:     saved.language,
       sections:     saved.sections,
       visualMemory: saved.visualMemory,
       generatedAt:  saved.generatedAt,
-    })
+    }))
     if (saved.productId) {
       const p = getProductById(saved.productId)
       if (p) setSelectedProduct(p)
@@ -88,7 +161,9 @@ export default function LandingPageAI() {
 
   // ── Session persistence (Phase R3 pilot) ──────────────────────────────
   // Counts how many sections + images are complete — drives the modal preview.
-  const computeProgress = () => {
+  // Task 8 — useMemo so the reducer doesn't re-walk every section on every
+  // render. Pack changes infrequently relative to status flicker.
+  const computedProgress = useMemo(() => {
     if (!pack) return undefined
     const totalSections = pack.sections.length
     const totalImages = pack.sections.reduce((sum, s) => sum + s.imagePrompts.length, 0)
@@ -100,7 +175,8 @@ export default function LandingPageAI() {
       return `${totalSections} section · chưa render ảnh`
     }
     return `${totalSections} section · ${doneImages}/${totalImages} ảnh đã render`
-  }
+  }, [pack])
+  const computeProgress = () => computedProgress
 
   const sessionApi = useSessionPersist<LandingPageSnapshot>({
     moduleId: 'landing-page',
@@ -118,8 +194,14 @@ export default function LandingPageAI() {
         const p = getProductById(data.selectedProductId)
         if (p) setSelectedProduct(p)
       }
-      if (data.pack) setPack(data.pack)
-      if (data.imageProgress) setImageProgress(data.imageProgress)
+      // Phase 1 — clear ghost in-flight states from the persisted snapshot
+      // so a refresh during generation surfaces clear "Thử lại" buttons
+      // instead of infinite spinners.
+      if (data.pack) setPack(clearGhostInFlightStates(data.pack))
+      // Drop stale progress counter — it referenced the cancelled batch.
+      if (data.imageProgress && !(isGenerating || isGeneratingImages)) {
+        setImageProgress(null)
+      }
       if (data.lastParams) lastParamsRef.current = data.lastParams
       if (data.loadedFromId) setLoadedFromId(data.loadedFromId)
       addToast('✓ Đã khôi phục LandingPage AI từ phiên trước', 'success')
@@ -179,6 +261,7 @@ export default function LandingPageAI() {
 
   // ── Start a fresh session (drop loaded project link) ──────────────────
   const handleNewProject = () => {
+    cancelInFlight('user clicked "Tạo mới"')
     setLoadedFromId(null)
     setPack(null)
     setImageProgress(null)
@@ -200,6 +283,8 @@ export default function LandingPageAI() {
   // ── Pack generation (Phase A — text only) ───────────────────────────
   const runGeneration = async (params: Omit<LandingGenParams, 'productId'>) => {
     if (!selectedProduct) return
+    // Phase 1 — cancel any prior in-flight batch BEFORE starting a new one.
+    cancelInFlight('user requested fresh generation')
     lastParamsRef.current = params
     // Fresh generation breaks the "loaded project" link — user starts over.
     if (loadedFromId) setLoadedFromId(null)
@@ -226,7 +311,8 @@ export default function LandingPageAI() {
       sessionApi.forceSave()
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
-      addToast(`Tạo landing pack thất bại: ${msg}`, 'error')
+      console.error('[LandingPageAI] pack generation failed:', err)
+      addToast(`Tạo landing pack thất bại: ${friendlyError(msg)}`, 'error')
     } finally {
       setIsGenerating(false)
     }
@@ -239,7 +325,10 @@ export default function LandingPageAI() {
 
   // ── Per-image patch — used by queue workers + single regen ──────────
   // Each successful image patch triggers the debounced auto-save (via deps).
-  const patchImagePrompt = (sectionIdx: number, imageIdx: number, patch: Partial<ImagePrompt>) => {
+  // Task 8 — useCallback so the memoized SectionCard children don't
+  // re-render on every parent state change. Stable reference between
+  // renders since setPack is stable.
+  const patchImagePrompt = useCallback((sectionIdx: number, imageIdx: number, patch: Partial<ImagePrompt>) => {
     setPack((prev) => {
       if (!prev) return prev
       return {
@@ -252,27 +341,36 @@ export default function LandingPageAI() {
         ),
       }
     })
-  }
+  }, [])
 
   // ── Phase B — batch image generation (Z8 perf upgrade) ──────────────
   const handleGenerateAllImages = async () => {
     if (!pack) return
+    // Phase 1 — cancel any stale batch and create a fresh AbortController.
+    cancelInFlight('user clicked "Sinh ảnh" — restart batch')
+    const controller = new AbortController()
+    abortRef.current = controller
     setIsGeneratingImages(true)
     const startedAt = Date.now()
     setImageProgress({ done: 0, failed: 0, total: 0, retries: 0, startedAt })
     try {
       await generatePackImages(pack, {
-        concurrency: 6, // Z8: 3 → 6 (3x throughput, priority queue gates hero first)
-        onTaskUpdate: patchImagePrompt,
+        concurrency: 8, // Z8 → P4 hotfix: 6 → 8 — KIE backend tolerates 8 parallel /gpt4o-image submissions; bumps throughput ~33% vs the previous 6-slot cap
+        signal: controller.signal,
+        onTaskUpdate: (sIdx, iIdx, patch) =>
+          patchImagePrompt(sIdx, iIdx, patch.error ? { ...patch, error: friendlyError(patch.error) } : patch),
         onProgress: (done, failed, total, retries) =>
           setImageProgress({ done, failed, total, retries, startedAt }),
       })
       addToast('✓ Đã sinh xong toàn bộ ảnh landing pack')
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
-      addToast(`Sinh ảnh lỗi: ${msg}`, 'error')
+      if (!msg.toLowerCase().includes('cancel') && !msg.toLowerCase().includes('huỷ')) {
+        addToast(`Sinh ảnh lỗi: ${friendlyError(msg)}`, 'error')
+      }
     } finally {
       setIsGeneratingImages(false)
+      if (abortRef.current === controller) abortRef.current = null
       // Final save once batch completes
       sessionApi.forceSave()
     }
@@ -282,10 +380,14 @@ export default function LandingPageAI() {
   const handleRegenerateOneImage = async (sectionIdx: number, imageIdx: number) => {
     if (!pack) return
     try {
-      await regenerateSingleImage(pack, sectionIdx, imageIdx, patchImagePrompt)
+      await regenerateSingleImage(
+        pack, sectionIdx, imageIdx,
+        (sIdx, iIdx, patch) =>
+          patchImagePrompt(sIdx, iIdx, patch.error ? { ...patch, error: friendlyError(patch.error) } : patch),
+      )
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
-      addToast(`Sinh ảnh lỗi: ${msg}`, 'error')
+      addToast(`Sinh ảnh lỗi: ${friendlyError(msg)}`, 'error')
     }
   }
 

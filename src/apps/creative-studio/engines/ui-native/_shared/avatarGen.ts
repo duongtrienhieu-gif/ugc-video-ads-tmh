@@ -68,3 +68,29 @@ export async function generateAvatar(
   if (!url) throw new Error('[ui-native avatar] saveAsset returned no URL')
   return url
 }
+
+// ── Batch generator (P12) ──────────────────────────────────────────────
+//
+// Generate N unique avatars concurrently. Used by facebook-comment /
+// tiktok-comment platforms to break the bot-farm "every commenter has
+// the same face" tell.
+//
+// COST WARNING: each call burns 1 KIE image credit (~6 platform credit).
+// Callers must respect UNIQUE_AVATAR_CEILING (8 in participants.ts) to
+// protect users from runaway bills.
+//
+// Failures are tolerated: if any individual avatar gen throws, that
+// participant gets null and the renderer falls back to a colored disc
+// for that one row. The thread still ships rather than failing
+// whole-batch.
+
+export async function generateAvatarBatch(
+  apiKey: string,
+  specs: AvatarGenSpec[],
+  signal?: AbortSignal,
+): Promise<(string | null)[]> {
+  const results = await Promise.allSettled(
+    specs.map((s) => generateAvatar(apiKey, s, signal)),
+  )
+  return results.map((r) => r.status === 'fulfilled' ? r.value : null)
+}

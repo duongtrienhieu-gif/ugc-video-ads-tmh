@@ -505,6 +505,13 @@ export async function createDubbing(params: {
   name?: string
   numSpeakers?: number  // 0 = auto-detect
   highestResolution?: boolean
+  /**
+   * If true, skip voice cloning and use a SIMILAR voice from the ElevenLabs
+   * Voice Library — native accent for target language. Default false (clone
+   * original speaker, foreigner accent). Note: counts toward workspace's
+   * custom voices limit; requires 'add_voice_from_voice_library' permission.
+   */
+  disableVoiceCloning?: boolean
 }): Promise<{ dubbingId: string; expectedDurationSec: number }> {
   if (!params.apiKey) throw new Error('Vui lòng nhập ElevenLabs API key trong Cài đặt')
   if (!params.file && !params.sourceUrl) throw new Error('Cần file video hoặc URL video')
@@ -518,6 +525,7 @@ export async function createDubbing(params: {
   form.append('num_speakers', String(params.numSpeakers ?? 0))
   form.append('watermark', 'false')
   if (params.highestResolution) form.append('highest_resolution', 'true')
+  if (params.disableVoiceCloning) form.append('disable_voice_cloning', 'true')
 
   const res = await fetch(`${EL_BASE}/dubbing`, {
     method: 'POST',
@@ -611,13 +619,26 @@ export async function getDubbingStatus(apiKey: string, dubbingId: string): Promi
   }
 }
 
-/** Download the dubbed audio file from ElevenLabs.
+/** Download the dubbed media from ElevenLabs. Two flavors:
+ *  - 'audio' (default) → just the dubbed audio track, used when feeding
+ *    into fal.ai LatentSync for full lip-sync pipeline.
+ *  - 'video' → the original video with dubbed audio mixed in (no lip-sync).
+ *    Used for voice-only mode (faster, no fal.ai needed).
  *
- *  Retry-on-404: ElevenLabs occasionally flips dubbing status to 'dubbed'
- *  before the rendered audio file is fully written to their CDN. Retry up
- *  to 3 times with backoff (10s, 20s, 40s) to bridge the race window. */
-export async function getDubbedMedia(apiKey: string, dubbingId: string, languageCode: string): Promise<Blob> {
-  const url = `${EL_BASE}/dubbing/${dubbingId}/audio/${languageCode}`
+ *  Retry-on-404: ElevenLabs reports status='dubbed' before the rendered
+ *  media file is fully written to their CDN — especially the /video/
+ *  variant which renders after /audio/. Also: when disable_voice_cloning
+ *  is used (native voice mode), video render may be skipped entirely.
+ *  Retry up to 3 times with backoff (10s, 20s, 40s) before failing.
+ *
+ *  Callers can catch the 404 final-error and fall back to audio+mux. */
+export async function getDubbedMedia(
+  apiKey: string,
+  dubbingId: string,
+  languageCode: string,
+  mediaType: 'audio' | 'video' = 'audio',
+): Promise<Blob> {
+  const url = `${EL_BASE}/dubbing/${dubbingId}/${mediaType}/${languageCode}`
   const delays = [10_000, 20_000, 40_000]
   let lastStatus = 0
   let lastErr = ''
@@ -631,11 +652,11 @@ export async function getDubbedMedia(apiKey: string, dubbingId: string, language
 
     if (res.status !== 404 || attempt === delays.length) break
 
-    console.warn(`[elevenlabs.getDubbedMedia] 404 — retry in ${delays[attempt] / 1000}s (attempt ${attempt + 1}/${delays.length})`)
+    console.warn(`[elevenlabs.getDubbedMedia] ${mediaType} 404 — retry in ${delays[attempt] / 1000}s (attempt ${attempt + 1}/${delays.length})`)
     await new Promise<void>((r) => setTimeout(r, delays[attempt]))
   }
 
-  throw new Error(`Tải audio đã dịch thất bại (${lastStatus}): ${lastErr.slice(0, 100)}`)
+  throw new Error(`Tải ${mediaType} đã dịch thất bại (${lastStatus}): ${lastErr.slice(0, 100)}`)
 }
 
 /** Delete a dubbing project */

@@ -1,22 +1,39 @@
-// ── Facebook Comment Thread Canvas Template (P6) ────────────────────────────
+// ── Facebook Comment Thread Canvas Template (P12 refresh, P48 post header) ─
 //
-// Renders a Facebook post + comment thread screenshot. Top portion shows
-// a minimal post header (author + time + body excerpt) so the comments
-// have context; bulk of the canvas is the comment list.
+// P48 changes — the template now renders THREE stacked zones to match a
+// real Facebook page post layout:
 //
-// Output: 9:16 portrait, 1080×1920.
+//   1. POST HEADER — page/creator avatar + display name + timestamp +
+//      post caption + attached product image. Authored by the LLM and
+//      surfaced via inputs.text.context.postCaption / ownerName.
+//   2. ENGAGEMENT STRIP — like reactions ball + like count + comments
+//      count + shares count (matches real FB v420 like/share row, not
+//      just a "Comments" sort-bar like pre-P48).
+//   3. COMMENTS THREAD — existing comment list, now with optional
+//      "Tác giả" / "Author" badge on bubbles where readIsOwnerReply is
+//      true. Owner replies are visually indented + author-coloured so
+//      the page-owner-replying-to-a-customer pattern reads instantly.
+//
+// Pre-P48 the template only showed the comments + composer with a tiny
+// "Comments / Most relevant" sort bar at the very top. That made every
+// generated screenshot read as "a sorted comments list" instead of "a
+// real Facebook post with replies" — losing the FB authenticity signal
+// the user is after.
+//
+// P12 baseline preserved:
+//   • per-platform metrics (FACEBOOK_COMMENT_METRICS)
+//   • per-platform typography (FACEBOOK_TYPO) — Meta-stack 600/400
+//   • iPhone 15 Pro device chrome
+//   • locale-aware metadata strings + per-comment avatar pool
 
-import type { UINativeTextContent, UINativeTemplate } from '../../../types/uiNative'
-import {
-  createCanvas,
-  loadImage,
-  drawCircularAvatar,
-  roundedRectPath,
-  wrapText,
-} from '../../../shared/canvas'
+import type { UINativeTextContent, UINativeTemplate, UINativeLocale } from '../../../types/uiNative'
+import { createCanvas, loadImage, drawCircularAvatar, roundedRectPath, wrapText } from '../../../shared/canvas'
 import { FACEBOOK_LIGHT_2024 } from '../_shared/colors'
-import { renderStatusBar } from '../_shared/statusBar'
-import { readLikes, readIsReply } from '../_shared/textPayload'
+import { FACEBOOK_COMMENT_METRICS } from '../_shared/platformMetrics'
+import { FACEBOOK_TYPO, font } from '../_shared/platformTypography'
+import { IPHONE_15_PRO, renderDeviceChrome } from '../_shared/deviceChrome'
+import { readLikes, readIsReply, readIsOwnerReply } from '../_shared/textPayload'
+import { findStrings, fakeMetric } from '../_shared/conversationMetadata'
 import type { MessageTimeline } from '../_shared/timestamps'
 
 export const FACEBOOK_COMMENT_TEMPLATE: UINativeTemplate = {
@@ -25,163 +42,144 @@ export const FACEBOOK_COMMENT_TEMPLATE: UINativeTemplate = {
   variant: 'post-with-comments',
   canvasSize: { width: 1080, height: 1920 },
   theme: 'light',
-  statusBarStyle: 'android',
+  statusBarStyle: 'ios',
   uiVintage: '2024',
 }
 
 export interface RenderInputs {
   text: UINativeTextContent
   timeline: MessageTimeline
-  /** Avatar of the POST author (NOT a commenter). */
-  postAuthorAvatarUrl: string
-  /** Optional generic commenter avatar (reused for all commenters). */
-  commenterAvatarUrl?: string
+  customerAvatarUrl: string
+  avatarPool?: Map<number, string>
+  locale: UINativeLocale
+  productImageUrl?: string
 }
 
-export async function renderFacebookComments(
-  inputs: RenderInputs,
-): Promise<HTMLCanvasElement> {
+export async function renderFacebookComments(inputs: RenderInputs): Promise<HTMLCanvasElement> {
   const palette = FACEBOOK_LIGHT_2024
+  const M = FACEBOOK_COMMENT_METRICS
+  const T = FACEBOOK_TYPO
+  const S = findStrings(inputs.locale)
   const size = FACEBOOK_COMMENT_TEMPLATE.canvasSize
   const { canvas, ctx } = createCanvas(size)
 
   ctx.fillStyle = palette.pageBg
   ctx.fillRect(0, 0, size.width, size.height)
 
-  renderStatusBar(ctx, {
-    style: 'android',
-    fg: palette.headerFg,
-    bg: palette.headerBg,
+  // iPhone chrome — Facebook uses white header so status bar fg is dark
+  renderDeviceChrome(ctx, IPHONE_15_PRO, size.width, size.height, {
+    statusBarBg: palette.headerBg,
+    statusBarFg: palette.headerFg,
     timeLabel: inputs.timeline.statusBarTime,
-    width: size.width,
   })
 
-  // ── Page header — "Comments" label + back chevron ─────────────────
-  const headerY = 44
-  const headerH = 100
+  // ── Header — back chevron + page name (no longer a "Comments" sort bar)
+  const headerY = IPHONE_15_PRO.statusBarHeight + IPHONE_15_PRO.safeAreaTop
   ctx.fillStyle = palette.headerBg
-  ctx.fillRect(0, headerY, size.width, headerH)
+  ctx.fillRect(0, headerY, size.width, M.headerHeight)
   ctx.fillStyle = palette.divider
-  ctx.fillRect(0, headerY + headerH, size.width, 1)
+  ctx.fillRect(0, headerY + M.headerHeight, size.width, 1)
 
+  // Back chevron
   ctx.strokeStyle = palette.headerFg
-  ctx.lineWidth = 4
+  ctx.lineWidth = 3.5
   ctx.lineCap = 'round'
   ctx.beginPath()
-  ctx.moveTo(60, headerY + headerH / 2)
-  ctx.lineTo(34, headerY + headerH / 2)
-  ctx.moveTo(46, headerY + headerH / 2 - 14)
-  ctx.lineTo(34, headerY + headerH / 2)
-  ctx.lineTo(46, headerY + headerH / 2 + 14)
+  const chevY = headerY + M.headerHeight / 2
+  ctx.moveTo(58, chevY); ctx.lineTo(34, chevY)
+  ctx.moveTo(46, chevY - 12); ctx.lineTo(34, chevY); ctx.lineTo(46, chevY + 12)
   ctx.stroke()
 
+  const ownerName = inputs.text.context.ownerName ?? inputs.text.context.productName ?? 'Page'
   ctx.fillStyle = palette.headerFg
-  ctx.font = '600 30px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
+  ctx.font = font(T, 'header')
   ctx.textAlign = 'left'
   ctx.textBaseline = 'middle'
-  ctx.fillText('Comments', 90, headerY + headerH / 2)
+  ctx.fillText(truncate(ownerName, 30), 86, chevY)
 
-  // Sort pill (right)
-  ctx.fillStyle = palette.mutedFg
-  ctx.font = '500 22px -apple-system, sans-serif'
-  ctx.textAlign = 'right'
-  ctx.textBaseline = 'middle'
-  ctx.fillText('Most relevant ▾', size.width - 30, headerY + headerH / 2)
+  // Pre-load avatars before drawing the post header (the page owner
+  // avatar reuses authorIdx 0 from the avatar pool if available).
+  const avatarCache = new Map<number, HTMLImageElement | null>()
+  const uniqueAuthors = new Set(inputs.text.items.map((c) => c.authorIdx))
+  const poolSize = inputs.avatarPool?.size ?? 0
+  for (const idx of uniqueAuthors) {
+    const url = (poolSize > 0
+      ? inputs.avatarPool!.get(idx % poolSize)
+      : inputs.customerAvatarUrl) ?? inputs.customerAvatarUrl
+    avatarCache.set(idx, await loadImageSafe(url))
+  }
+  const ownerAvatar = avatarCache.get(0)
+    ?? await loadImageSafe(inputs.customerAvatarUrl)
 
-  // ── Compact post stub (engagement bar) ────────────────────────────
-  const stubY = headerY + headerH
-  const stubH = 80
-  ctx.fillStyle = palette.pageBg
-  ctx.fillRect(0, stubY, size.width, stubH)
-  ctx.fillStyle = palette.divider
-  ctx.fillRect(0, stubY + stubH, size.width, 1)
+  // ── POST HEADER — page avatar + name + timestamp + caption + styled post photo
+  //
+  // P49 — the post photo is no longer a raw full-width 4:3 packshot. It's a
+  // styled "social-media post card" with a creative gradient background, a
+  // large person avatar on the left, and the product photo on the right.
+  // The avatar reuses the second avatar from the pool (a customer face,
+  // distinct from the page owner) so the post looks like "a happy customer
+  // showing the product they bought", not a sterile ecommerce packshot.
+  // Layout collapses to ~1/3 of canvas height (post zone) + 2/3 (comments).
+  const postPhotoAvatar = (poolSize > 1 ? await loadImageSafe((inputs.avatarPool!.get(1 % poolSize) ?? inputs.customerAvatarUrl)) : ownerAvatar) ?? ownerAvatar
+  let cursor = headerY + M.headerHeight + 14
+  cursor = await drawPostHeader(ctx, {
+    palette, metrics: M, typo: T,
+    width: size.width,
+    startY: cursor,
+    ownerName,
+    timestamp: inputs.timeline.dateLabel,
+    caption: inputs.text.context.postCaption ?? defaultCaption(inputs.locale, inputs.text.context.productName),
+    productImageUrl: inputs.productImageUrl,
+    ownerAvatar,
+    postPhotoAvatar,
+  })
 
-  // Like + comment + share counters
-  ctx.fillStyle = palette.likeAccent
-  ctx.beginPath()
-  ctx.arc(60, stubY + stubH / 2, 16, 0, Math.PI * 2)
-  ctx.fill()
-  ctx.fillStyle = '#FFFFFF'
-  ctx.font = '600 18px -apple-system, sans-serif'
-  ctx.textAlign = 'center'
-  ctx.textBaseline = 'middle'
-  ctx.fillText('👍', 60, stubY + stubH / 2)
+  // ── ENGAGEMENT STRIP — reactions stack + counts row
+  cursor = drawEngagementStrip(ctx, {
+    palette, metrics: M, typo: T, strings: S,
+    width: size.width,
+    startY: cursor,
+    likes:     inputs.text.context.postLikes  ?? (200 + fakeMetric(`${inputs.timeline.dateLabel}_post_likes`, 'medium')),
+    comments:  inputs.text.items.length + fakeMetric(`${inputs.timeline.dateLabel}_cmt`, 'small'),
+    shares:    inputs.text.context.postShares ?? fakeMetric(`${inputs.timeline.dateLabel}_share`, 'small'),
+    locale:    inputs.locale,
+  })
 
-  ctx.fillStyle = palette.pageFg
-  ctx.font = '500 26px -apple-system, sans-serif'
-  ctx.textAlign = 'left'
-  ctx.textBaseline = 'middle'
-  ctx.fillText(`${countTotalLikes(inputs.text) + 218}`, 96, stubY + stubH / 2)
-
-  ctx.fillStyle = palette.mutedFg
-  ctx.font = '400 24px -apple-system, sans-serif'
-  ctx.textAlign = 'right'
-  ctx.fillText(`${inputs.text.items.length} comments  ·  12 shares`, size.width - 30, stubY + stubH / 2)
-
-  // ── Comment list ──────────────────────────────────────────────────
-  let cursor = stubY + stubH + 24
-  const commenterImg = inputs.commenterAvatarUrl
-    ? await loadImageSafe(inputs.commenterAvatarUrl)
-    : null
+  // ── COMMENT LIST
+  const cutoffY = size.height - M.footerHeight - 30
 
   for (let i = 0; i < inputs.text.items.length; i++) {
     const c = inputs.text.items[i]
-    const isReply = readIsReply(c)
+    const isOwnerReply = readIsOwnerReply(c)
+    const displayName = isOwnerReply
+      ? ownerName
+      : inputs.text.participants[c.authorIdx]?.displayName ?? 'user'
+    const avatarImg = isOwnerReply
+      ? ownerAvatar
+      : avatarCache.get(c.authorIdx) ?? null
     cursor = await drawComment(ctx, {
-      palette,
+      palette, metrics: M, typo: T, strings: S,
       width: size.width,
       startY: cursor,
-      displayName: inputs.text.participants[c.authorIdx]?.displayName ?? 'user',
+      displayName,
       body: c.text,
       timestamp: c.timestamp,
       likes: readLikes(c),
-      isReply,
-      avatarImg: commenterImg,
+      isReply: readIsReply(c) || isOwnerReply,
+      isOwnerReply,
+      avatarImg,
     })
-
-    if (cursor > size.height - 200) break
+    if (cursor > cutoffY) break
   }
 
-  // ── Composer at bottom ────────────────────────────────────────────
-  const composerH = 130
-  const composerY = size.height - composerH
-  ctx.fillStyle = palette.composerBg
-  ctx.fillRect(0, composerY, size.width, composerH)
-  ctx.fillStyle = palette.divider
-  ctx.fillRect(0, composerY, size.width, 1)
-
-  // Reactions row (above input)
-  const reactionsY = composerY + 30
-  const reactions = ['👍', '❤️', '😆', '😮', '😢', '😡']
-  ctx.font = '400 26px -apple-system, sans-serif'
-  ctx.textAlign = 'left'
-  ctx.textBaseline = 'middle'
-  for (let i = 0; i < reactions.length; i++) {
-    ctx.fillText(reactions[i], 40 + i * 80, reactionsY)
-  }
-
-  // Input pill
-  const pillX = 40
-  const pillY = composerY + 70
-  const pillW = size.width - pillX - 100
-  const pillH = composerH - 78
-  roundedRectPath(ctx, pillX, pillY, pillW, pillH, pillH / 2)
-  ctx.fillStyle = palette.pageBg
-  ctx.fill()
-  ctx.strokeStyle = palette.divider
-  ctx.lineWidth = 1
-  ctx.stroke()
-
-  ctx.fillStyle = palette.composerPlaceholder
-  ctx.font = '400 24px -apple-system, sans-serif'
-  ctx.textBaseline = 'middle'
-  ctx.fillText('Write a comment...', pillX + 30, pillY + pillH / 2)
-
-  // Smiley icon (right of input)
-  ctx.fillStyle = palette.composerPlaceholder
-  ctx.beginPath()
-  ctx.arc(size.width - 60, pillY + pillH / 2, 22, 0, Math.PI * 2)
-  ctx.fill()
+  // Composer
+  drawFbComposer(ctx, {
+    palette, typo: T, strings: S,
+    width: size.width,
+    yOffset: size.height - M.footerHeight - IPHONE_15_PRO.safeAreaBottom,
+    height: M.footerHeight,
+    primaryAvatar: avatarCache.get(0) ?? null,
+  })
 
   return canvas
 }
@@ -190,6 +188,9 @@ export async function renderFacebookComments(
 
 interface CommentInputs {
   palette: typeof FACEBOOK_LIGHT_2024
+  metrics: typeof FACEBOOK_COMMENT_METRICS
+  typo: typeof FACEBOOK_TYPO
+  strings: ReturnType<typeof findStrings>
   width: number
   startY: number
   displayName: string
@@ -197,19 +198,258 @@ interface CommentInputs {
   timestamp: string
   likes: number
   isReply: boolean
+  /** P48 — when true, render a small "Tác giả" / "Author" badge next
+   *  to the display name and tint the bubble slightly to differentiate
+   *  page-owner replies from regular commenters. */
+  isOwnerReply?: boolean
   avatarImg: HTMLImageElement | null
 }
 
-async function drawComment(
-  ctx: CanvasRenderingContext2D,
-  inputs: CommentInputs,
-): Promise<number> {
-  const { palette, width, startY, displayName, body, timestamp, likes, isReply, avatarImg } = inputs
+// ── P48 — Post header / engagement strip / utility helpers ─────────────
 
-  const padX = 36
-  const indentX = isReply ? 90 : 0
-  const avatarRadius = isReply ? 22 : 28
-  const avatarCx = padX + indentX + avatarRadius
+interface PostHeaderInputs {
+  palette: typeof FACEBOOK_LIGHT_2024
+  metrics: typeof FACEBOOK_COMMENT_METRICS
+  typo: typeof FACEBOOK_TYPO
+  width: number
+  startY: number
+  ownerName: string
+  timestamp: string
+  caption: string
+  productImageUrl?: string
+  ownerAvatar: HTMLImageElement | null
+  /** P49 — a customer-face avatar (NOT the page owner) composited into
+   *  the styled post-photo card so the post reads as "a real customer
+   *  posing with the product" rather than a sterile ecommerce packshot. */
+  postPhotoAvatar: HTMLImageElement | null
+}
+
+async function drawPostHeader(ctx: CanvasRenderingContext2D, i: PostHeaderInputs): Promise<number> {
+  const { palette, metrics: M, typo: T, width, startY, ownerName, timestamp, caption, productImageUrl, ownerAvatar, postPhotoAvatar } = i
+  const sideX = M.sideMargin
+
+  // ── Page author row: avatar + name + timestamp · 🌐 ──────────────────
+  const avatarR = 36
+  const avatarCx = sideX + avatarR
+  const avatarCy = startY + avatarR
+  if (ownerAvatar) {
+    drawCircularAvatar(ctx, ownerAvatar, avatarCx, avatarCy, avatarR)
+  } else {
+    ctx.fillStyle = '#1877F2'
+    ctx.beginPath()
+    ctx.arc(avatarCx, avatarCy, avatarR, 0, Math.PI * 2)
+    ctx.fill()
+    ctx.fillStyle = '#FFFFFF'
+    ctx.font = `700 ${Math.round(avatarR * 0.9)}px ${T.nameFont}`
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'middle'
+    ctx.fillText(ownerName.charAt(0).toUpperCase(), avatarCx, avatarCy + 2)
+  }
+
+  const nameX = avatarCx + avatarR + 16
+  ctx.fillStyle = palette.authorFg
+  ctx.font = `700 ${T.nameSize}px ${T.nameFont}`
+  ctx.textAlign = 'left'
+  ctx.textBaseline = 'top'
+  ctx.fillText(truncate(ownerName, 40), nameX, startY + 2)
+
+  ctx.fillStyle = palette.mutedFg
+  ctx.font = font(T, 'meta')
+  ctx.fillText(`${timestamp}  ·  🌐`, nameX, startY + 2 + T.nameSize + 6)
+
+  // ── Caption (tight — keep visible above the post photo card) ─────────
+  let cy = startY + 2 * avatarR + 14
+  if (caption) {
+    ctx.fillStyle = palette.pageFg
+    ctx.font = font(T, 'body')
+    ctx.textAlign = 'left'
+    ctx.textBaseline = 'top'
+    const captionMaxW = width - sideX * 2
+    const captionLines = wrapText(ctx, caption, captionMaxW).slice(0, 3) // hard-cap at 3 lines so caption never eats into the comments zone
+    const lh = T.bodySize * T.bodyLineHeight
+    for (let li = 0; li < captionLines.length; li++) {
+      ctx.fillText(captionLines[li], sideX, cy + li * lh)
+    }
+    cy += captionLines.length * lh + 10
+  }
+
+  // ── P49 — styled post photo card (compact, ~440px tall instead of
+  //   the prior full-width 4:3 packshot which ate ~810px of the canvas).
+  //   Layout: brand-color gradient backdrop + large customer avatar on
+  //   the left half + product image on the right half. The two halves
+  //   share a soft white overlap so it reads as one composed shot, not
+  //   two disjoint inserts.
+  const cardH = 440
+  if (productImageUrl || postPhotoAvatar) {
+    // Backdrop gradient
+    const gradLeft  = '#E7DBFF'
+    const gradRight = '#F7F1FF'
+    const g = ctx.createLinearGradient(0, cy, width, cy + cardH)
+    g.addColorStop(0, gradLeft)
+    g.addColorStop(1, gradRight)
+    ctx.fillStyle = g
+    ctx.fillRect(0, cy, width, cardH)
+
+    // Subtle brand-accent diagonal strip behind the card
+    ctx.save()
+    ctx.globalAlpha = 0.08
+    ctx.fillStyle = '#7E22CE'
+    ctx.beginPath()
+    ctx.moveTo(0, cy + cardH * 0.55)
+    ctx.lineTo(width, cy + cardH * 0.35)
+    ctx.lineTo(width, cy + cardH * 0.45)
+    ctx.lineTo(0, cy + cardH * 0.65)
+    ctx.closePath()
+    ctx.fill()
+    ctx.restore()
+
+    // Left half: large customer avatar with soft white halo
+    if (postPhotoAvatar) {
+      const avX = Math.round(width * 0.28)
+      const avY = cy + Math.round(cardH / 2)
+      const avR = 170
+      ctx.save()
+      ctx.shadowColor = 'rgba(0,0,0,0.14)'
+      ctx.shadowBlur = 22
+      ctx.fillStyle = '#FFFFFF'
+      ctx.beginPath()
+      ctx.arc(avX, avY, avR + 10, 0, Math.PI * 2)
+      ctx.fill()
+      ctx.restore()
+      drawCircularAvatar(ctx, postPhotoAvatar, avX, avY, avR)
+    }
+
+    // Right half: product image in rounded white tile, light shadow
+    if (productImageUrl) {
+      try {
+        const img = await loadImage(productImageUrl)
+        const pW = 360
+        const pH = 360
+        const pX = Math.round(width * 0.72 - pW / 2)
+        const pY = cy + Math.round((cardH - pH) / 2)
+        ctx.save()
+        ctx.shadowColor = 'rgba(0,0,0,0.22)'
+        ctx.shadowBlur = 28
+        ctx.shadowOffsetY = 14
+        roundedRectPath(ctx, pX, pY, pW, pH, 28)
+        ctx.fillStyle = '#FFFFFF'
+        ctx.fill()
+        ctx.restore()
+        ctx.save()
+        roundedRectPath(ctx, pX, pY, pW, pH, 28)
+        ctx.clip()
+        const scale = Math.max(pW / img.naturalWidth, pH / img.naturalHeight)
+        const dw = img.naturalWidth * scale
+        const dh = img.naturalHeight * scale
+        ctx.drawImage(img, pX + (pW - dw) / 2, pY + (pH - dh) / 2, dw, dh)
+        ctx.restore()
+      } catch {
+        // silent — card backdrop still renders so the layout doesn't collapse
+      }
+    }
+
+    cy += cardH
+  }
+
+  return cy
+}
+
+interface EngagementStripInputs {
+  palette: typeof FACEBOOK_LIGHT_2024
+  metrics: typeof FACEBOOK_COMMENT_METRICS
+  typo: typeof FACEBOOK_TYPO
+  strings: ReturnType<typeof findStrings>
+  width: number
+  startY: number
+  likes: number
+  comments: number
+  shares: number
+  locale: UINativeLocale
+}
+
+function drawEngagementStrip(ctx: CanvasRenderingContext2D, i: EngagementStripInputs): number {
+  const { palette, metrics: M, typo: T, width, startY, likes, comments, shares, locale } = i
+  const sideX = M.sideMargin
+
+  // Counts row: 👍 likes ... N bình luận · M lượt chia sẻ
+  ctx.fillStyle = palette.likeAccent
+  const ballCx = sideX + 14
+  const ballCy = startY + 22
+  ctx.beginPath()
+  ctx.arc(ballCx, ballCy, 14, 0, Math.PI * 2)
+  ctx.fill()
+  ctx.fillStyle = '#FFFFFF'
+  ctx.font = `600 18px ${T.bodyFont}`
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  ctx.fillText('👍', ballCx, ballCy + 1)
+
+  ctx.fillStyle = palette.mutedFg
+  ctx.font = font(T, 'name')
+  ctx.textAlign = 'left'
+  ctx.textBaseline = 'middle'
+  ctx.fillText(formatCount(likes), ballCx + 22, ballCy)
+
+  ctx.font = font(T, 'meta')
+  ctx.textAlign = 'right'
+  const commentsLabel = locale === 'vi-VN' ? `${formatCount(comments)} bình luận` : locale === 'my-MY' ? `${formatCount(comments)} komen` : locale === 'id-ID' ? `${formatCount(comments)} komentar` : `${formatCount(comments)} comments`
+  const sharesLabel   = locale === 'vi-VN' ? `${formatCount(shares)} lượt chia sẻ` : locale === 'my-MY' ? `${formatCount(shares)} kongsi` : locale === 'id-ID' ? `${formatCount(shares)} dibagikan` : `${formatCount(shares)} shares`
+  ctx.fillText(`${commentsLabel}  ·  ${sharesLabel}`, width - sideX, ballCy)
+
+  // Divider
+  ctx.fillStyle = palette.divider
+  ctx.fillRect(sideX, startY + 52, width - sideX * 2, 1)
+
+  // Action row: Thích · Bình luận · Chia sẻ
+  const actY = startY + 52 + 36
+  const actW = (width - sideX * 2) / 3
+  const actLabels = locale === 'vi-VN'
+    ? ['👍  Thích', '💬  Bình luận', '↪️  Chia sẻ']
+    : locale === 'my-MY'
+    ? ['👍  Suka', '💬  Komen', '↪️  Kongsi']
+    : locale === 'id-ID'
+    ? ['👍  Suka', '💬  Komentar', '↪️  Bagikan']
+    : ['👍  Like', '💬  Comment', '↪️  Share']
+  ctx.fillStyle = palette.mutedFg
+  ctx.font = font(T, 'name')
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  for (let k = 0; k < actLabels.length; k++) {
+    ctx.fillText(actLabels[k], sideX + actW * (k + 0.5), actY)
+  }
+
+  // Divider below action row
+  ctx.fillStyle = palette.divider
+  ctx.fillRect(0, startY + 52 + 72, width, 1)
+
+  return startY + 52 + 72 + 18
+}
+
+function defaultCaption(locale: UINativeLocale, productName?: string): string {
+  const p = productName ?? 'sản phẩm mới'
+  if (locale === 'vi-VN') return `Đã dùng ${p} được 2 tuần rồi mn ơi, hiệu quả thật sự bất ngờ luôn 🥰 ai cần thì hỏi mình nha`
+  if (locale === 'my-MY') return `Dah guna ${p} dalam 2 minggu, memang power betul. Tanya mana nak dapat — boleh DM 🙌`
+  if (locale === 'id-ID') return `Udah pakai ${p} 2 minggu, hasilnya beneran kelihatan banget. Mau nanya boleh DM ya 🙌`
+  return `Been using ${p} for 2 weeks now and the results are real. DM me if you want to try ✨`
+}
+
+function formatCount(n: number): string {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1).replace(/\.0$/, '')}M`
+  if (n >= 1_000)     return `${(n / 1_000).toFixed(1).replace(/\.0$/, '')}K`
+  return `${Math.max(0, Math.round(n))}`
+}
+
+function truncate(s: string, max: number): string {
+  return s.length > max ? `${s.slice(0, max - 1)}…` : s
+}
+
+async function drawComment(ctx: CanvasRenderingContext2D, i: CommentInputs): Promise<number> {
+  const { palette, metrics: M, typo: T, strings: S, width, startY,
+          displayName, body, timestamp, likes, isReply, isOwnerReply, avatarImg } = i
+
+  const indentX = isReply ? 78 : 0
+  const avatarRadius = isReply ? M.inlineAvatarRadius * 0.78 : M.inlineAvatarRadius
+  const avatarCx = M.sideMargin + indentX + avatarRadius
   const avatarCy = startY + avatarRadius
 
   if (avatarImg) {
@@ -221,82 +461,139 @@ async function drawComment(
     ctx.fill()
   }
 
-  // Bubble background
-  const bubbleX = avatarCx + avatarRadius + 14
-  const bubblePadX = 22
-  const bubblePadY = 14
-  const bubbleMaxW = width - bubbleX - padX
-  const nameFont = '600 24px -apple-system, sans-serif'
-  const bodyFont = '400 26px -apple-system, sans-serif'
+  const bubbleX = avatarCx + avatarRadius + 12
+  const bubbleMaxW = (width - bubbleX - M.sideMargin) * 0.95
 
-  ctx.font = bodyFont
-  const lines = wrapText(ctx, body, bubbleMaxW - bubblePadX * 2)
-  const lineH = 34
-  const textBlockH = lines.length * lineH
+  // Pre-measure body
+  ctx.font = font(T, 'body')
+  const lines = wrapText(ctx, body, bubbleMaxW - M.bubblePaddingX * 2)
+  const lh = T.bodySize * T.bodyLineHeight
+  const textBlockH = lines.length * lh
 
-  ctx.font = nameFont
+  // P48 — owner badge measurement (rendered next to the display name).
+  // Pre-compute so the bubble width accommodates the name + badge.
+  const authorBadgeText = '· Tác giả'
+  ctx.font = font(T, 'name')
   const nameW = ctx.measureText(displayName).width
-  const longestBodyW = Math.max(...lines.map((l) => ctx.measureText(l).width))
+  ctx.font = font(T, 'meta')
+  const ownerBadgeW = isOwnerReply ? ctx.measureText(authorBadgeText).width + 8 : 0
+  const longestLineW = lines.length === 0 ? 0 : Math.max(...lines.map((l) => {
+    ctx.font = font(T, 'body')
+    return ctx.measureText(l).width
+  }))
+
   const bubbleW = Math.min(
     bubbleMaxW,
-    Math.max(nameW, longestBodyW) + bubblePadX * 2,
+    Math.max(nameW + ownerBadgeW, longestLineW) + M.bubblePaddingX * 2,
   )
-  const bubbleH = 38 + textBlockH + bubblePadY  // header height + body
-  roundedRectPath(ctx, bubbleX, startY, bubbleW, bubbleH, 18)
-  ctx.fillStyle = '#F0F2F5'
+  const bubbleH = 34 + textBlockH + M.bubblePaddingY
+
+  roundedRectPath(ctx, bubbleX, startY, bubbleW, bubbleH, M.bubbleRadius)
+  // P48 — page-owner replies get a subtle blue-tint bubble so the
+  // page-owner-answering-customer pattern reads at a glance, mirroring
+  // real FB pages where the owner's reply often shows differently.
+  ctx.fillStyle = isOwnerReply ? '#E7F3FF' : '#F0F2F5'
   ctx.fill()
 
-  // Display name (bold)
+  // Display name
   ctx.fillStyle = palette.authorFg
-  ctx.font = nameFont
+  ctx.font = font(T, 'name')
   ctx.textAlign = 'left'
   ctx.textBaseline = 'top'
-  ctx.fillText(displayName, bubbleX + bubblePadX, startY + bubblePadY)
+  ctx.fillText(displayName, bubbleX + M.bubblePaddingX, startY + M.bubblePaddingY)
+
+  // P48 — owner badge ("· Tác giả") to the right of the display name
+  if (isOwnerReply) {
+    ctx.fillStyle = '#1877F2'
+    ctx.font = font(T, 'meta')
+    ctx.fillText(authorBadgeText, bubbleX + M.bubblePaddingX + nameW + 8, startY + M.bubblePaddingY + 4)
+  }
 
   // Body
   ctx.fillStyle = palette.pageFg
-  ctx.font = bodyFont
+  ctx.font = font(T, 'body')
   for (let li = 0; li < lines.length; li++) {
-    ctx.fillText(lines[li], bubbleX + bubblePadX, startY + 38 + bubblePadY + li * lineH)
+    ctx.fillText(lines[li], bubbleX + M.bubblePaddingX, startY + 34 + M.bubblePaddingY + li * lh - 6)
   }
 
-  // Action row below bubble
-  const actionsY = startY + bubbleH + 8
-  ctx.font = '500 22px -apple-system, sans-serif'
+  // Action row
+  const actionsY = startY + bubbleH + 6
+  ctx.font = font(T, 'meta')
   ctx.fillStyle = palette.mutedFg
   ctx.textAlign = 'left'
   ctx.textBaseline = 'top'
-  ctx.fillText(timestamp, bubbleX + 6, actionsY)
+  ctx.fillText(timestamp, bubbleX + 4, actionsY)
   ctx.fillStyle = palette.likeAccent
-  ctx.fillText('Like', bubbleX + 110, actionsY)
+  ctx.fillText(S.like, bubbleX + 96, actionsY)
   ctx.fillStyle = palette.mutedFg
-  ctx.fillText('Reply', bubbleX + 200, actionsY)
+  ctx.fillText(S.reply, bubbleX + 168, actionsY)
 
   if (likes > 0) {
-    // Right-aligned like count badge
     ctx.fillStyle = palette.likeAccent
     ctx.beginPath()
-    ctx.arc(bubbleX + bubbleW - 60, actionsY + 12, 14, 0, Math.PI * 2)
+    ctx.arc(bubbleX + bubbleW - 52, actionsY + 11, 13, 0, Math.PI * 2)
     ctx.fill()
     ctx.fillStyle = '#FFFFFF'
-    ctx.font = '600 18px -apple-system, sans-serif'
+    ctx.font = '600 16px -apple-system, sans-serif'
     ctx.textAlign = 'center'
     ctx.textBaseline = 'middle'
-    ctx.fillText('👍', bubbleX + bubbleW - 60, actionsY + 12)
+    ctx.fillText('👍', bubbleX + bubbleW - 52, actionsY + 11)
     ctx.fillStyle = palette.mutedFg
-    ctx.font = '500 22px -apple-system, sans-serif'
+    ctx.font = font(T, 'meta')
     ctx.textAlign = 'left'
     ctx.textBaseline = 'top'
-    ctx.fillText(`${likes}`, bubbleX + bubbleW - 36, actionsY)
+    ctx.fillText(`${likes}`, bubbleX + bubbleW - 30, actionsY)
   }
 
-  return actionsY + 40
+  return actionsY + 32 + M.bubbleGap
+}
+
+function drawFbComposer(ctx: CanvasRenderingContext2D, i: {
+  palette: typeof FACEBOOK_LIGHT_2024
+  typo: typeof FACEBOOK_TYPO
+  strings: ReturnType<typeof findStrings>
+  width: number
+  yOffset: number
+  height: number
+  primaryAvatar: HTMLImageElement | null
+}) {
+  const { palette, typo: T, strings: S, width, yOffset, height, primaryAvatar } = i
+  ctx.fillStyle = palette.composerBg
+  ctx.fillRect(0, yOffset, width, height)
+  ctx.fillStyle = palette.divider
+  ctx.fillRect(0, yOffset, width, 1)
+
+  // Reactions row
+  const reactionsY = yOffset + 28
+  const reactions = ['👍', '❤️', '😆', '😮', '😢', '😡']
+  ctx.font = font(T, 'name')
+  ctx.textAlign = 'left'
+  ctx.textBaseline = 'middle'
+  for (let r = 0; r < reactions.length; r++) {
+    ctx.fillText(reactions[r], 36 + r * 72, reactionsY)
+  }
+
+  // Avatar + input pill row
+  const pillRowY = yOffset + 66
+  const pillH = height - 76
+  const ax = 36 + 24
+  if (primaryAvatar) drawCircularAvatar(ctx, primaryAvatar, ax, pillRowY + pillH / 2, 22)
+
+  const pillX = ax + 32
+  const pillW = width - pillX - 36
+  roundedRectPath(ctx, pillX, pillRowY, pillW, pillH, pillH / 2)
+  ctx.fillStyle = palette.pageBg
+  ctx.fill()
+  ctx.strokeStyle = palette.divider
+  ctx.lineWidth = 1
+  ctx.stroke()
+
+  ctx.fillStyle = palette.composerPlaceholder
+  ctx.font = font(T, 'body')
+  ctx.textBaseline = 'middle'
+  ctx.fillText(S.composerPlaceholder('facebook'), pillX + 26, pillRowY + pillH / 2)
 }
 
 async function loadImageSafe(url: string): Promise<HTMLImageElement | null> {
   try { return await loadImage(url) } catch { return null }
-}
-
-function countTotalLikes(text: UINativeTextContent): number {
-  return text.items.reduce((sum, c) => sum + readLikes(c), 0)
 }

@@ -32,11 +32,11 @@ import type {
 } from '../../types'
 import type { FormBlueprintModule } from './_types'
 import {
-  getGeminiKey, extractJson, normalizeSection, injectPriceIntoPrompts,
-  extractPriceTag, type RawPack,
+  getGeminiKey, normalizeSection, injectPriceIntoPrompts,
+  extractPriceTag, callGeminiWithMsRetry, validatePackSections,
 } from '../generateLandingPack'
+import { buildProductIntelligence, buildIntelligencePromptBlock } from '../productIntelligence'
 import { useBankStore } from '../../../../stores/bankStore'
-import { directGeminiVision } from '../../../../utils/gemini'
 
 // ── Storytelling section blueprint — 12 emotional beats ──────────────────
 //
@@ -359,35 +359,31 @@ async function buildPack(params: LandingGenParams): Promise<LandingPagePack> {
   console.info('[FORM advertorial] character locked:', character.name, '·', character.archetype)
 
   // 2. Build user prompt with character + product context baked in
+  // Phase 2 — niche detection + intelligence overlay.
+  const intelligence = buildProductIntelligence({
+    product, language: params.language, nicheHint: params.nicheHint,
+  })
+  console.info(`[FORM advertorial] product intelligence niche=${intelligence.niche}`)
+
   const userPrompt = buildStorytellingUserPrompt(params, product, character)
+    + '\n\n' + buildIntelligencePromptBlock(intelligence)
   const priceTag = extractPriceTag(product.offer ?? '')
 
-  // 3. Single Gemini call with storytelling system prompt
-  const raw = await directGeminiVision({
+  // 3. Gemini call w/ MS-leak validate + retry (centralized helper)
+  const parsed = await callGeminiWithMsRetry({
     apiKey,
-    parts: [{ text: userPrompt }],
-    systemInstruction: STORYTELLING_SYSTEM_PROMPT,
-    maxOutputTokens: 24576,    // less than form 1 — shorter expected output
-    responseMimeType: 'application/json',
+    userPrompt,
+    systemPrompt: STORYTELLING_SYSTEM_PROMPT,
+    language: params.language,
+    maxOutputTokens: 24576,
+    formLabel: 'FORM advertorial',
   })
-
-  // 4. Parse + normalize
-  let parsed: RawPack
-  try {
-    parsed = JSON.parse(extractJson(raw)) as RawPack
-  } catch {
-    console.error('[FORM advertorial] JSON parse failed. Raw head:', raw.slice(0, 500))
-    throw new Error('Gemini trả về JSON không hợp lệ — thử lại')
-  }
-
-  if (!Array.isArray(parsed.sections) || parsed.sections.length === 0) {
-    throw new Error('Gemini không trả về section nào — thử lại')
-  }
 
   // 5. Iterate storytelling section order — drop anything off-blueprint
   const sections: LandingSection[] = []
+  const parsedSections = parsed.sections ?? []
   for (const ord of STORYTELLING_SECTIONS) {
-    const found = parsed.sections.find((s) => s.type === ord)
+    const found = parsedSections.find((s) => s.type === ord)
     if (found) {
       const norm = normalizeSection(found)
       if (norm) sections.push(norm)
@@ -401,6 +397,7 @@ async function buildPack(params: LandingGenParams): Promise<LandingPagePack> {
 
   // 6. Post-process — price injection (same as form 1)
   injectPriceIntoPrompts(sections, priceTag)
+  validatePackSections(sections)
 
   return {
     productId: params.productId,

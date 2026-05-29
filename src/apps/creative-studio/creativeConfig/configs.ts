@@ -1,0 +1,2002 @@
+// ── Creative Configs (P15) ──────────────────────────────────────────────────
+//
+// Single declarative registry — 17 entries. Each CreativeConfig binds:
+//   • engine + model routing
+//   • Creative DNA (the marketing brain)
+//   • Composable PromptBlock sequence
+//   • Per-creative negative additions
+//   • Output rules
+//
+// SCALING RULE: adding a new creative type = adding ONE entry below.
+// NO code changes in dispatcher / assembler / engine.
+
+import type { CreativeConfig } from '../types/creativeDNA'
+import type { AssetTypeId } from '../types/asset'
+import { BLOCKS } from '../shared/prompt/blockLibrary'
+
+const CONFIGS: CreativeConfig[] = [
+  // ═══════════════ PHOTOGRAPHIC (9) — prompt-driven ═══════════════
+
+  {
+    id: 'product-shot',
+    engine: 'photographic',
+    model: 'gpt-image-2',
+    dna: {
+      category: 'pro-photo',
+      marketingGoal: 'Hero packshot khách thấy ĐẦU TIÊN — phải sharp, sạch, label readable. Drives trust at first impression.',
+      emotion: 'authority',
+      realism: 'highly-real',
+      composition: 'product-hero',
+      productVisibility: 'hero-dominant',
+      textImportance: 'critical',
+      platformStyle: 'ecommerce-thumbnail',
+      cameraStyle: 'tripod-studio',
+      renderStyle: 'studio-clean',
+      emotionalGoal: 'Premium ecommerce confidence — label đáng tin, packaging chỉn chu',
+      platformBehavior: 'Ecommerce thumbnail — sharp at small size, label readable when zoomed out',
+      layoutRules: [
+        'product centered hero',
+        'negative space all around for cropping flexibility',
+        'no props, no people, no environmental context',
+      ],
+      visualRules: [
+        'dramatic key + fill studio lighting',
+        'premium shadow with clear feet placement on the surface',
+        'subtle reflection plane acceptable',
+        'seamless near-white background',
+      ],
+      qualityRules: [
+        'label fully readable at thumbnail size',
+        'sharp focus end-to-end on the packaging',
+        'packaging proportions accurate to reference image',
+      ],
+      failureModes: [
+        'lifestyle clutter or environmental props',
+        'colored gradient or photographic backgrounds',
+        'visible hands or people in frame',
+        'distorted packaging proportions',
+      ],
+    },
+    promptBlocks: [
+      BLOCKS.productLock(),
+      BLOCKS.productContext(),
+      BLOCKS.continuity(),
+      // P36 — Ladipage-style: single packed scene paragraph instead of fragmented triples
+      BLOCKS.composition('Single-product hero, centered. Negative space all around for cropping flexibility. No props, no people, no environmental clutter.'),
+      BLOCKS.setting('studio-clean'),
+      BLOCKS.capture('tripod'),
+      BLOCKS.lighting('Even softbox key + fill. Subtle reflection plane below the product. No bokeh, no environmental light leaks.'),
+      BLOCKS.priceLock(),   // P41 — extract price when product.offer has one; ecommerce thumbnails benefit from "(show only RM59)" anti-invention
+      BLOCKS.platform('ecommerce-thumbnail'),
+      BLOCKS.variation(),
+      BLOCKS.localeHardLock(),
+      BLOCKS.negative(['lifestyle clutter', 'environmental props', 'hands or people in frame', 'colored backgrounds']),
+    ],
+    negativeBlocks: ['lifestyle clutter', 'environmental props', 'hands or people in frame', 'colored backgrounds'],
+    outputRules: {
+      aspectRatio: '1:1',
+      enforce: ['label fully readable', 'sharp focus end-to-end', 'product hero centered'],
+      forbid: ['lifestyle background', 'props', 'colored gradient bg'],
+    },
+  },
+
+  {
+    id: 'holding-product',
+    engine: 'photographic',
+    model: 'gpt-image-2',
+    dna: {
+      category: 'ugc-real',
+      marketingGoal: 'Standard UGC packshot-with-hands — trust hơn studio thuần vì có "người thật" cầm.',
+      emotion: 'trust',
+      realism: 'highly-real',
+      composition: 'single-subject-centered',
+      productVisibility: 'high',
+      textImportance: 'supporting',
+      platformStyle: 'landing-page',
+      cameraStyle: 'handheld-smartphone',
+      renderStyle: 'ugc-realism',
+      emotionalGoal: 'Authentic human trust — "khách hàng thật cầm sản phẩm", non-influencer feel',
+      platformBehavior: 'Landing page + social — works as hero or scrollable testimonial slot',
+      layoutRules: [
+        'person at chest level, both hands grip product',
+        'label faces camera at eye level',
+        'eye-level framing, slight asymmetric off-center',
+      ],
+      visualRules: [
+        'natural skin texture with visible pores',
+        'soft indoor daylight (no studio key light)',
+        'authentic non-influencer feel',
+      ],
+      qualityRules: [
+        'both hands visible holding the product',
+        'product label readable',
+        'genuine human skin (not plastic AI smoothness)',
+      ],
+      failureModes: [
+        'studio softbox glow',
+        'magazine retouching / plastic skin',
+        'over-symmetric model pose',
+        'influencer-perfect aesthetic',
+      ],
+    },
+    promptBlocks: [
+      BLOCKS.productLock(),
+      BLOCKS.productContext(),
+      BLOCKS.continuity(),
+      // P36 — Ladipage style: demographic anchor + setting + capture mode in one prompt pack
+      BLOCKS.demographic({ role: 'customer', gender: 'woman', age: 'mid-30s' }),
+      BLOCKS.setting('casual-home'),
+      BLOCKS.capture('handheld'),
+      BLOCKS.scene('The person holds the product at chest level with both hands, label fully facing camera at eye level. Gentle confident smile, looking directly at lens.'),
+      BLOCKS.lighting('Soft natural indoor daylight, no studio key light, lived-in not staged.'),
+      BLOCKS.ugc('Natural skin texture with visible pores. Authentic non-influencer feel. NOT plastic AI skin.'),
+      BLOCKS.culturalCue(),
+      BLOCKS.platform('landing-page'),
+      BLOCKS.variation(),
+      BLOCKS.localeHardLock(),
+      BLOCKS.negative(['studio softbox', 'magazine retouching', 'plastic glossy skin']),
+    ],
+    negativeBlocks: ['studio softbox', 'magazine retouching', 'plastic glossy skin'],
+    outputRules: { aspectRatio: '1:1', enforce: ['both hands visible', 'label faces camera'], forbid: ['fake studio look', 'over-retouched skin'] },
+  },
+
+  {
+    id: 'ugc-selfie',
+    engine: 'photographic',
+    model: 'gpt-image-2',
+    dna: {
+      category: 'ugc-real',
+      marketingGoal: 'Pass authentic-check — trông như khách hàng thật post lên TikTok.',
+      emotion: 'intimacy',
+      realism: 'highly-real',
+      composition: 'single-subject-centered',
+      productVisibility: 'high',
+      textImportance: 'none',
+      platformStyle: 'tiktok',
+      cameraStyle: 'selfie-ring-light',
+      renderStyle: 'ugc-realism',
+      emotionalGoal: 'Private creator-customer authenticity — looks like a real selfie',
+      platformBehavior: 'TikTok / Reels — handheld smartphone aesthetic, off-center framing OK',
+      layoutRules: [
+        'phone-camera angle slightly elevated',
+        'product near face / cheek',
+        'asymmetric framing, not centered',
+      ],
+      visualRules: [
+        'ring-light reflection in eyes acceptable',
+        'raw smartphone aesthetic with slight digital grain',
+        'phone-screen glare or natural shadows acceptable',
+      ],
+      qualityRules: [
+        'product visible alongside face with label readable',
+        'genuine relaxed expression, not posed model smile',
+      ],
+      failureModes: [
+        'professional studio key-light setup',
+        'symmetric posed magazine shot',
+        'editorial portrait lighting',
+        'plastic-smooth skin',
+      ],
+    },
+    promptBlocks: [
+      BLOCKS.productLock(),
+      BLOCKS.productContext(),
+      BLOCKS.continuity(),
+      // P36 — Ladipage-style packed selfie prompt
+      BLOCKS.demographic({ role: 'customer', gender: 'woman', age: 'mid-30s' }),
+      BLOCKS.setting('casual-home'),
+      BLOCKS.capture('selfie'),
+      BLOCKS.scene('Selfie composition from slightly above. The person holds the product right next to her cheek with one hand. Faint genuine smile, looking into the lens. Asymmetric framing, NOT posed.'),
+      BLOCKS.lighting('Soft natural window light. Ring-light reflection in eyes acceptable. Phone-screen glare or natural shadows acceptable.'),
+      BLOCKS.ugc('Looks like a real selfie a customer posted to TikTok. Natural skin imperfection. No studio polish.'),
+      BLOCKS.culturalCue(),
+      BLOCKS.platform('tiktok'),
+      BLOCKS.variation(),
+      BLOCKS.localeHardLock(),
+      BLOCKS.negative(['professional headshot', 'studio glamour', 'editorial portrait', 'symmetric perfection']),
+    ],
+    negativeBlocks: ['professional headshot', 'studio glamour', 'editorial portrait', 'symmetric perfection'],
+    outputRules: { aspectRatio: '1:1', enforce: ['product label readable', 'selfie angle'], forbid: ['professional camera look'] },
+  },
+
+  {
+    id: 'review-table',
+    engine: 'photographic',
+    model: 'gpt-image-2',
+    dna: {
+      category: 'pro-photo',
+      marketingGoal: 'Macro detail shot — chứng minh chất lượng cao qua texture cận cảnh.',
+      emotion: 'aspiration',
+      realism: 'natural',
+      composition: 'flat-lay',
+      productVisibility: 'hero-dominant',
+      textImportance: 'minimal',
+      platformStyle: 'instagram-feed',
+      cameraStyle: 'macro-detail',
+      renderStyle: 'editorial-beauty',
+      emotionalGoal: 'Tactile premium quality — khách thấy texture là tin "có hàng thật"',
+      platformBehavior: 'Detail page + carousel — works for ingredient close-ups and texture proof',
+      layoutRules: [
+        'macro close-up, very tight framing',
+        'product texture in foreground focus plane',
+        'optional ingredient swatch alongside packaging',
+      ],
+      visualRules: [
+        'shallow depth of field with sharp focal point',
+        'soft daylight, no harsh studio key',
+        'natural surface (wood / marble / linen)',
+      ],
+      qualityRules: [
+        'label readable when label is in frame',
+        'texture / material clearly visible',
+        'one sharp focal point — no everything-in-focus look',
+      ],
+      failureModes: [
+        'wide-angle environmental shot',
+        'busy background props',
+        'overprocessed digital glow',
+      ],
+    },
+    promptBlocks: [
+      BLOCKS.productLock(),
+      BLOCKS.productContext(),
+      BLOCKS.continuity(),
+      // P36 + P41 — packed prompt with optional UGC hand for review-style
+      BLOCKS.composition('Macro close-up with very tight framing on the product texture / packaging detail. Shallow depth of field with one sharp focal point. Optional ingredient swatch (gel / cream / powder) alongside packaging.'),
+      BLOCKS.demographic({ role: 'customer', gender: 'woman', age: 'mid-30s' }),   // P41 — hand-edge presence anchor (woman's hand grip when shown)
+      BLOCKS.scene('Product on a clean natural surface (light wood / linen / marble). The customer\'s hand may appear at the edge of the frame holding or arranging it — pure UGC review-still style. Otherwise pure flat-lay macro.'),
+      BLOCKS.capture('macro'),
+      BLOCKS.lighting('Soft daylight from a side window. No harsh studio key. Subtle shadow shows surface contact realistic.'),
+      BLOCKS.culturalCue(),   // P41 — surface texture / decor differs per market (wood grain vs marble vs linen weave)
+      BLOCKS.platform('instagram-feed'),
+      BLOCKS.variation(),
+      BLOCKS.localeHardLock(),
+      BLOCKS.negative(['wide-angle environmental shot', 'busy props', 'overprocessed digital glow', 'studio-perfect cold lighting']),
+    ],
+    negativeBlocks: ['busy background props', 'overly stylized lifestyle clutter'],
+    outputRules: { aspectRatio: '1:1', enforce: ['label unobstructed', 'three-quarter overhead'], forbid: ['busy props'] },
+  },
+
+  {
+    id: 'before-after',
+    engine: 'photographic',
+    model: 'gpt-image-2',
+    dna: {
+      category: 'pro-photo',
+      marketingGoal: 'Strongest visual conversion driver — show kết quả cụ thể, tăng tỉ lệ click + CR.',
+      emotion: 'aspiration',
+      realism: 'highly-real',
+      composition: 'split-frame',
+      productVisibility: 'contextual',
+      textImportance: 'supporting',
+      platformStyle: 'facebook-ads',
+      cameraStyle: 'tripod-studio',
+      renderStyle: 'ugc-realism',
+      emotionalGoal: 'Concrete transformation evidence — set realistic before/after expectation',
+      platformBehavior: 'Performance ads — thumb-stop hook with clear visual delta',
+      layoutRules: [
+        'strict 50/50 vertical split frame',
+        'SAME person both halves',
+        'identical lighting, backdrop, and camera angle both halves',
+      ],
+      contentRules: [
+        'optional small SEBELUM/SELEPAS or TRƯỚC/SAU label at the bottom edge',
+        'no overlay text covering the subject',
+      ],
+      visualRules: [
+        'left half: dull / tired / withdrawn',
+        'right half: refreshed / confident / open',
+        'neutral backdrop — change comes from the SUBJECT not the lighting',
+      ],
+      qualityRules: [
+        'left+right halves pixel-aligned',
+        'same camera angle both halves',
+        'continuity of clothing and hairstyle',
+      ],
+      failureModes: [
+        'two different people on each side',
+        'Photoshop blur / glow filter divide',
+        'beauty filter smoothing only on the "after" side',
+        'different lighting between halves',
+      ],
+    },
+    promptBlocks: [
+      BLOCKS.productLock(),
+      BLOCKS.productContext(),
+      BLOCKS.continuity(),
+      // P36 — Ladipage before-after with explicit casual ecommerce quality
+      BLOCKS.demographic({ role: 'customer', gender: 'woman', age: 'mid-30s' }),
+      BLOCKS.composition('Strict 50/50 vertical split. SAME person both halves, SAME crop, SAME backdrop, SAME camera angle. The change is in the SUBJECT, not the framing.'),
+      BLOCKS.scene('Left half: BEFORE — person looking tired / dull, plain casual attire. Right half: AFTER — same person now confident / refreshed, holding the product, brighter expression.'),
+      BLOCKS.capture('split-frame'),
+      BLOCKS.lighting('Neutral backdrop. EQUAL lighting both halves — no spotlight cheat. Authentic amateur quality, not pro-studio gloss.'),
+      BLOCKS.designedOverlay('before-after-labels'),
+      BLOCKS.platform('facebook-ads'),
+      BLOCKS.variation(),
+      BLOCKS.localeHardLock(),
+      BLOCKS.negative(['Photoshop blur/glow overlay', 'fake skin smoothing', 'beauty filter look', 'different person in two halves', 'pro-studio gloss']),
+    ],
+    negativeBlocks: ['Photoshop blur/glow overlay', 'fake skin smoothing', 'beauty filter look', 'different person in two halves'],
+    outputRules: { aspectRatio: '1:1', enforce: ['split-frame 50/50', 'identical framing'], forbid: ['Photoshop smoothing', 'two different people'] },
+  },
+
+  {
+    id: 'lifestyle-kitchen',
+    engine: 'photographic',
+    model: 'gpt-image-2',
+    dna: {
+      category: 'pro-photo',
+      marketingGoal: 'Benefit scene — gắn sản phẩm vào morning routine, khách tưởng tượng dùng SP mỗi sáng.',
+      emotion: 'comfort',
+      realism: 'highly-real',
+      composition: 'lifestyle-environmental',
+      productVisibility: 'high',
+      textImportance: 'none',
+      platformStyle: 'instagram-feed',
+      cameraStyle: 'wide-environmental',
+      renderStyle: 'editorial-beauty',
+      emotionalGoal: 'Warm domestic comfort — sản phẩm thuộc về bếp nhà mình',
+      platformBehavior: 'Instagram + lifestyle ads — narrative scene, scroll-stop emotion',
+      layoutRules: [
+        'product on counter foreground',
+        'person blurred in background, candid action',
+        'natural depth of field — label sharp, scene soft',
+      ],
+      visualRules: [
+        'warm morning sunlight through a window',
+        'authentic lived-in kitchen (slight clutter acceptable)',
+        'soft warm color grade',
+      ],
+      qualityRules: [
+        'product label readable in foreground',
+        'kitchen context clearly recognizable',
+      ],
+      failureModes: [
+        'staged perfect magazine kitchen',
+        'over-produced photo-studio look',
+        'dark moody mood lighting',
+      ],
+    },
+    promptBlocks: [
+      BLOCKS.productLock(),
+      BLOCKS.productContext(),
+      BLOCKS.continuity(),
+      BLOCKS.demographic({ role: 'family-member', gender: 'woman', age: 'mid-30s' }),
+      BLOCKS.setting('kitchen-morning'),
+      BLOCKS.capture('handheld'),
+      BLOCKS.scene('Product hero sharp in the foreground on the counter. Person blurred in the background pouring coffee or preparing breakfast — candid moment, not posed.'),
+      BLOCKS.lighting('Warm morning sunlight through the window, soft golden tone. Authentic lived-in kitchen — slight clutter acceptable.'),
+      BLOCKS.culturalCue(),
+      BLOCKS.platform('instagram-feed'),
+      BLOCKS.variation(),
+      BLOCKS.localeHardLock(),
+      BLOCKS.negative(['dark moody kitchen', 'industrial gritty look', 'magazine-perfect staged kitchen']),
+    ],
+    negativeBlocks: ['dark moody kitchen', 'industrial gritty look'],
+    outputRules: { aspectRatio: '1:1', enforce: ['morning warm light', 'label sharp foreground'], forbid: ['moody dark kitchen'] },
+  },
+
+  {
+    id: 'bathroom-routine',
+    engine: 'photographic',
+    model: 'gpt-image-2',
+    dna: {
+      category: 'pro-photo',
+      marketingGoal: 'Benefit scene — gợi cảm giác self-care premium, sản phẩm trong morning routine.',
+      emotion: 'comfort',
+      realism: 'natural',
+      composition: 'lifestyle-environmental',
+      productVisibility: 'hero-dominant',
+      textImportance: 'none',
+      platformStyle: 'instagram-feed',
+      cameraStyle: 'tripod-studio',
+      renderStyle: 'editorial-beauty',
+      emotionalGoal: 'Premium self-care ritual — beauty editorial vibe, slow morning',
+      platformBehavior: 'Instagram + skincare ads — clean editorial composition',
+      layoutRules: [
+        'product hero on marble counter foreground',
+        'optional person blurred in mirror reflection or background',
+        'neatly folded towels as supporting prop',
+      ],
+      visualRules: [
+        'white marble or clean tile surface',
+        'soft warm natural light, morning skincare vibe',
+        'minimal counter clutter — premium not cluttered',
+      ],
+      qualityRules: [
+        'product label sharp and readable',
+        'bathroom context clearly recognizable as upscale',
+      ],
+      failureModes: [
+        'cluttered or dirty bathroom',
+        'industrial / institutional bathroom feel',
+        'dim or moody lighting',
+      ],
+    },
+    promptBlocks: [
+      BLOCKS.productLock(),
+      BLOCKS.productContext(),
+      BLOCKS.continuity(),
+      BLOCKS.demographic({ role: 'customer', gender: 'woman', age: 'mid-30s' }),
+      BLOCKS.setting('bathroom-routine'),
+      BLOCKS.capture('tripod'),
+      BLOCKS.scene('Product hero on the marble counter foreground. Person softly out of focus in background, looking into the mirror — morning skincare routine moment. Neatly folded towels as supporting prop.'),
+      BLOCKS.lighting('Soft warm morning light, beauty-editorial vibe. Premium not cluttered.'),
+      BLOCKS.culturalCue(),
+      BLOCKS.platform('instagram-feed'),
+      BLOCKS.variation(),
+      BLOCKS.localeHardLock(),
+      BLOCKS.negative(['dirty bathroom', 'cluttered counter', 'institutional bathroom feel', 'dim moody lighting']),
+    ],
+    negativeBlocks: ['dirty bathroom', 'cluttered counter'],
+    outputRules: { aspectRatio: '1:1', enforce: ['marble + towels', 'soft warm light'], forbid: ['clutter', 'dim lighting'] },
+  },
+
+  {
+    id: 'cafe-lifestyle',
+    engine: 'photographic',
+    model: 'gpt-image-2',
+    dna: {
+      category: 'pro-photo',
+      marketingGoal: 'Benefit scene — gắn sản phẩm vào lối sống urban / freelancer / millennial.',
+      emotion: 'aspiration',
+      realism: 'natural',
+      composition: 'lifestyle-environmental',
+      productVisibility: 'high',
+      textImportance: 'none',
+      platformStyle: 'instagram-feed',
+      cameraStyle: 'handheld-smartphone',
+      renderStyle: 'ugc-realism',
+      emotionalGoal: 'Candid urban moment — sản phẩm thuộc về freelancer/digital nomad lifestyle',
+      platformBehavior: 'Instagram lifestyle + brand-vibe ads',
+      layoutRules: [
+        'cafe table in foreground',
+        'product + cappuccino + laptop / notebook as supporting props',
+        'candid handheld eye-level framing',
+      ],
+      visualRules: [
+        'ambient cafe light + warm window backlight',
+        'natural bokeh-free background',
+        'product label angled toward camera',
+      ],
+      qualityRules: [
+        'product clearly visible with label readable',
+        'cafe context unambiguously recognizable',
+      ],
+      failureModes: [
+        'hotel-restaurant or fine-dining look',
+        'overstaged influencer-shoot composition',
+        'tripod-studio precision (this is candid)',
+      ],
+    },
+    promptBlocks: [
+      BLOCKS.productLock(),
+      BLOCKS.productContext(),
+      BLOCKS.continuity(),
+      BLOCKS.demographic({ role: 'office-worker', gender: 'woman', age: 'mid-20s' }),
+      BLOCKS.setting('cafe-urban'),
+      BLOCKS.capture('handheld'),
+      BLOCKS.scene('Person at the cafe table holding the product, cappuccino and laptop / notebook on the table. Product label rotated toward the camera. Candid urban moment, NOT posed influencer shoot.'),
+      BLOCKS.lighting('Cafe ambient light plus warm window backlight. Natural bokeh-free background.'),
+      BLOCKS.culturalCue(),
+      BLOCKS.platform('instagram-feed'),
+      BLOCKS.variation(),
+      BLOCKS.localeHardLock(),
+      BLOCKS.negative(['posed influencer shoot', 'overly styled lifestyle', 'hotel-restaurant look', 'tripod-studio precision']),
+    ],
+    negativeBlocks: ['posed influencer shoot', 'overly styled lifestyle'],
+    outputRules: { aspectRatio: '1:1', enforce: ['cafe context', 'product label visible'], forbid: ['posed influencer look'] },
+  },
+
+  {
+    id: 'ugc-tiktok',
+    engine: 'photographic',
+    model: 'gpt-image-2',
+    dna: {
+      category: 'ugc-real',
+      marketingGoal: 'Capitalize trên trend creator review — visual quen với audience TikTok.',
+      emotion: 'hype',
+      realism: 'highly-real',
+      composition: 'single-subject-centered',
+      productVisibility: 'high',
+      textImportance: 'none',
+      platformStyle: 'tiktok',
+      cameraStyle: 'selfie-ring-light',
+      renderStyle: 'ugc-realism',
+      emotionalGoal: 'TikTok creator review still — feels like a frame plucked from a viral video',
+      platformBehavior: 'TikTok / Reels — vertical-thinking framing, raw smartphone aesthetic',
+      layoutRules: [
+        'vertical-thinking framing (works cropped to 9:16)',
+        'bedroom / vanity / desk setup as context',
+        'product near face at handheld arm distance',
+      ],
+      visualRules: [
+        'ring-light reflection in eyes',
+        'phone smartphone camera aesthetic',
+        'mild digital grain and slight handheld jitter',
+      ],
+      qualityRules: [
+        'authentic creator-review feel',
+        'product label visible at frame center',
+      ],
+      failureModes: [
+        'cinematic studio mood lighting',
+        'professional camera DSLR aesthetic',
+        'editorial model pose',
+      ],
+    },
+    promptBlocks: [
+      BLOCKS.productLock(),
+      BLOCKS.productContext(),
+      BLOCKS.continuity(),
+      // P36 — Ladipage TikTok creator review still
+      BLOCKS.demographic({ role: 'creator', gender: 'woman', age: 'mid-20s' }),
+      BLOCKS.setting('bedroom-vanity'),
+      BLOCKS.capture('selfie'),
+      BLOCKS.scene('TikTok review still — person holds product up to the camera at arm distance. Mid-talking expression like a frame plucked from a viral creator video.'),
+      BLOCKS.lighting('Ring-light reflection visible in the eyes. Mild digital grain. Slight handheld jitter.'),
+      BLOCKS.ugc('Raw smartphone aesthetic — looks like an actual TikTok video still, not a studio shoot.'),
+      BLOCKS.culturalCue(),
+      BLOCKS.platform('tiktok'),
+      BLOCKS.variation(),
+      BLOCKS.localeHardLock(),
+      BLOCKS.negative(['cinematic mood lighting', 'professional studio backdrop', 'editorial model pose']),
+    ],
+    negativeBlocks: ['cinematic mood lighting', 'professional studio backdrop'],
+    outputRules: { aspectRatio: '1:1', enforce: ['ring-light reflection', 'bedroom/vanity context'], forbid: ['cinematic mood'] },
+  },
+
+  // ═══════════════ P33 — Pro-photo + UGC rebuild ═════════════════════
+
+  {
+    id: 'floating-product',
+    engine: 'photographic',
+    model: 'gpt-image-2',
+    dna: {
+      category: 'pro-photo',
+      marketingGoal: 'Premium ad packshot — dynamic splash + glow + particles. Thumb-stop creative cho paid social.',
+      emotion: 'aspiration',
+      realism: 'stylized',
+      composition: 'product-hero',
+      productVisibility: 'hero-dominant',
+      textImportance: 'none',
+      platformStyle: 'facebook-ads',
+      cameraStyle: 'tripod-studio',
+      renderStyle: 'editorial-beauty',
+      emotionalGoal: 'Premium ad energy — luxury hero shot vibe',
+      platformBehavior: 'Facebook + Instagram paid ads — thumb-stop hook hero',
+      layoutRules: [
+        'product floats centered, mid-frame',
+        'negative space all around for ad copy overlay',
+        'splash / powder burst / particles radiating outward',
+      ],
+      visualRules: [
+        'dramatic rim lighting',
+        'subtle particles / splash emanating from product',
+        'premium glow halo behind product',
+        'high-contrast brand-accent background gradient',
+      ],
+      qualityRules: [
+        'label fully readable',
+        'product proportions accurate',
+        'splash composition aesthetic not chaotic',
+      ],
+      failureModes: [
+        'cluttered splash hiding the product',
+        'realistic environmental scene (this is pure ad creative)',
+        'flat studio lighting with no rim',
+      ],
+    },
+    promptBlocks: [
+      BLOCKS.productLock(),
+      BLOCKS.productContext(),
+      BLOCKS.continuity(),
+      BLOCKS.composition('Product packaging floats centered mid-frame with negative space all around for paid-ad copy overlay. Splash + glow + particles radiate outward, tasteful not cluttered.'),
+      BLOCKS.scene('Premium ad hero shot — luxury packshot vibe like the cover image of a paid Facebook / TikTok ad. NO environmental scene.'),
+      BLOCKS.capture('tripod'),
+      BLOCKS.lighting('Dramatic rim light + soft fill. Brand-accent gradient background (warm amber to cream, or saturated brand colors). Subtle particles catching the rim light. Premium glow halo behind product.'),
+      BLOCKS.priceLock(),
+      BLOCKS.platform('facebook-ads'),
+      BLOCKS.variation(),
+      BLOCKS.localeHardLock(),
+      BLOCKS.negative(['realistic environmental scene', 'flat lighting', 'cluttered splash hiding the product']),
+    ],
+    negativeBlocks: ['realistic environmental scene', 'flat lighting', 'cluttered splash'],
+    outputRules: { aspectRatio: '1:1', enforce: ['product centered floating', 'splash/glow visible'], forbid: ['environmental scene', 'flat composition'] },
+  },
+
+  {
+    id: 'ingredient-composition',
+    engine: 'photographic',
+    model: 'gpt-image-2',
+    dna: {
+      category: 'pro-photo',
+      marketingGoal: 'Justify purchase qua ingredient provenance — show sản phẩm + nguyên liệu thật, vibe wellness premium.',
+      emotion: 'trust',
+      realism: 'natural',
+      composition: 'flat-lay',
+      productVisibility: 'hero-dominant',
+      textImportance: 'none',
+      platformStyle: 'instagram-feed',
+      cameraStyle: 'tripod-studio',
+      renderStyle: 'editorial-beauty',
+      emotionalGoal: 'Editorial wellness — premium, scientific, natural',
+      platformBehavior: 'Instagram + landing-page detail — works for skincare / supplement / herbal',
+      layoutRules: [
+        'product as centered hero',
+        'tasteful ingredient arrangement around (herbs, leaves, raw extracts)',
+        'natural surface foreground (wood / linen / stone)',
+      ],
+      visualRules: [
+        'soft directional daylight',
+        'shallow depth of field — product sharp, ingredients soft',
+        'natural color palette — earthy + clean',
+      ],
+      qualityRules: [
+        'product label fully readable',
+        'ingredients clearly visible and match product brief',
+        'composition feels editorial not cluttered',
+      ],
+      failureModes: [
+        'random plants unrelated to product',
+        'studio-cold lighting',
+        'sterile commercial vibe',
+      ],
+    },
+    promptBlocks: [
+      BLOCKS.productLock(),
+      BLOCKS.productContext(),
+      BLOCKS.continuity(),
+      BLOCKS.composition('Editorial flat-lay or slight 3/4 elevation. Product as centered hero. Tasteful arrangement of key ingredients — herbs, leaves, dried botanicals, raw extracts — radiating around the product as supporting players, never overwhelming.'),
+      BLOCKS.scene('Natural surface foreground (light wood / linen / stone). Ingredients MUST match the product brief — pull from product knowledge, do not invent botanicals.'),
+      BLOCKS.capture('macro'),
+      BLOCKS.lighting('Soft directional daylight. Shallow depth of field with product sharp and botanicals soft. Editorial wellness magazine vibe.'),
+      BLOCKS.platform('instagram-feed'),
+      BLOCKS.variation(),
+      BLOCKS.localeHardLock(),
+      BLOCKS.negative(['random unrelated plants', 'studio-cold lighting', 'sterile commercial backdrop']),
+    ],
+    negativeBlocks: ['random unrelated plants', 'studio-cold lighting', 'sterile commercial backdrop'],
+    outputRules: { aspectRatio: '1:1', enforce: ['ingredients match product brief', 'product label readable'], forbid: ['random plants', 'sterile look'] },
+  },
+
+  {
+    id: 'group-holding',
+    engine: 'photographic',
+    model: 'gpt-image-2',
+    dna: {
+      category: 'ugc-real',
+      marketingGoal: 'Mass trust — "nhiều người cùng dùng = sản phẩm hot". Trigger herd behavior.',
+      emotion: 'trust',
+      realism: 'highly-real',
+      composition: 'crowd-centered',
+      productVisibility: 'high',
+      textImportance: 'none',
+      platformStyle: 'landing-page',
+      cameraStyle: 'handheld-smartphone',
+      renderStyle: 'ugc-realism',
+      emotionalGoal: 'Communal warmth — friends / family discovering together',
+      platformBehavior: 'Brand awareness ads + landing-page community section',
+      layoutRules: [
+        '3-5 people grouped naturally',
+        'all holding or showing the SAME product',
+        'casual setting (living room / kitchen / cafe / community space)',
+      ],
+      visualRules: [
+        'soft natural daylight',
+        'authentic group dynamics — not posed lineup',
+        'culturally believable for SEA market',
+      ],
+      qualityRules: [
+        'all faces visible and natural',
+        'product clearly readable in the frame',
+        'group composition feels candid not staged',
+      ],
+      failureModes: [
+        'stock-photo posed lineup',
+        'model-portfolio uniformity',
+        'studio backdrop (this is candid)',
+      ],
+    },
+    promptBlocks: [
+      BLOCKS.productLock(),
+      BLOCKS.productContext(),
+      BLOCKS.continuity(),
+      // P36 — Ladipage crowd-style: 3-4 different demographics holding product
+      BLOCKS.demographic({ gender: 'mixed', age: 'mixed' }),
+      BLOCKS.composition('Candid group photo of 3-4 people of different ages and looks, all holding the SAME product. Slight overlap, natural group dynamics, NOT lineup arrangement.'),
+      BLOCKS.scene('Casual indoor or outdoor setting (living room, kitchen, café, community space). Each person has a real authentic smile, not model-portfolio uniform pose.'),
+      BLOCKS.capture('handheld'),
+      BLOCKS.lighting('Soft natural daylight, casual setting. Indoor or shaded outdoor.'),
+      BLOCKS.ugc('Real group dynamics. Culturally believable. Some members may wear locally-appropriate attire (eg hijab acceptable in my-MY context).'),
+      BLOCKS.culturalCue(),
+      BLOCKS.platform('landing-page'),
+      BLOCKS.variation(),
+      BLOCKS.localeHardLock(),
+      BLOCKS.negative(['stock-photo lineup', 'model-portfolio uniformity', 'studio backdrop', 'identical poses']),
+    ],
+    negativeBlocks: ['stock-photo lineup', 'model-portfolio uniformity', 'studio backdrop'],
+    outputRules: { aspectRatio: '1:1', enforce: ['3-5 people visible', 'all holding the product'], forbid: ['posed lineup', 'studio look'] },
+  },
+
+  {
+    id: 'expert-kol',
+    // P48 — testimonial-card layout: portrait 9:16, headshot + info bar
+    // (name + role + years + follower count) + quote box. KIE will render
+    // at 2:3 (closest supported) and the UI displays at 9:16.
+    engine: 'photographic',
+    model: 'gpt-image-2',
+    dna: {
+      category: 'ugc-real',
+      marketingGoal: 'Authority signal — chuyên gia fictional khuyên dùng, kèm danh tính + số năm kinh nghiệm + lượt theo dõi + câu trích dẫn để chốt trust. Strongest for health / skincare / supplement.',
+      emotion: 'authority',
+      realism: 'highly-real',
+      composition: 'single-subject-centered',
+      productVisibility: 'high',
+      textImportance: 'critical',
+      platformStyle: 'landing-page',
+      cameraStyle: 'tripod-studio',
+      renderStyle: 'clinical-pharma',
+      emotionalGoal: 'Professional credibility — expert vouching with calm confidence + verifiable-looking credentials',
+      platformBehavior: 'Landing-page authority section + health ads — portrait 9:16 testimonial-card framing for mobile feed',
+      layoutRules: [
+        'portrait 9:16 testimonial card with 3 stacked zones',
+        'upper 55% = chest-up expert headshot + product visible',
+        'middle strip = name + role title + years-of-experience pill + follower-count pill',
+        'lower 30% = italic-quote testimonial card',
+      ],
+      visualRules: [
+        'role-appropriate attire (white coat / scrubs / smart professional)',
+        'clean professional lighting',
+        'direct calm eye contact with camera',
+        'rounded white info bar with brand-color accent on the quote card',
+      ],
+      qualityRules: [
+        'expert appears credible for the niche',
+        'product clearly visible and label readable',
+        'name + role + years + followers + quote text all readable',
+      ],
+      failureModes: [
+        'impersonating real doctors / real celebrities / named KOLs',
+        'unrealistic fake credentials in frame',
+        'cluttered overlapping badges hiding the expert face',
+        'missing any of the 3 layout zones',
+      ],
+    },
+    promptBlocks: [
+      BLOCKS.productLock(),
+      BLOCKS.productContext(),
+      BLOCKS.continuity(),
+      BLOCKS.demographic({ role: 'professional', gender: 'woman', age: 'mid-40s' }),
+      BLOCKS.setting('clinic-clean'),
+      BLOCKS.capture('tripod'),
+      BLOCKS.composition('Portrait 9:16 expert-testimonial-card layout with 3 stacked zones. UPPER 55%: chest-up shot of the fictional professional in a clean professional setting, product packaging visible in hand or on the surface beside them with label facing camera. MIDDLE STRIP: clean white rounded info bar with the expert\'s plausible locale-native FULL NAME in bold large type, role title below ("Bác sĩ răng hàm mặt" / "Doktor Pergigian" / "Dokter Gigi" — match the product niche), and TWO pill badges side-by-side: "X năm kinh nghiệm" / "X tahun pengalaman" (8-20 years plausible) and "Y followers" with a small verified tick (50K-500K plausible). LOWER 30%: a soft rounded-rectangle quote card with large italic opening + closing quotation marks framing a SHORT 1-2 sentence locale-native testimonial about the product, brand-color accent.'),
+      BLOCKS.scene('Fictional professional spokesperson — doctor / pharmacist / nutritionist / wellness expert matching the product niche. NEVER impersonate a real named doctor / KOL / celebrity. Composite fictional face only. Role-appropriate attire (white coat / scrubs / smart professional) — culturally-appropriate variant in the target locale.'),
+      BLOCKS.emotion('Direct calm eye contact. Authoritative but warm. Genuine professional expression.'),
+      BLOCKS.lighting('Clean professional lighting, soft balanced fill. No sterile clinical fluorescence.'),
+      BLOCKS.culturalCue(),
+      BLOCKS.platform('landing-page'),
+      BLOCKS.variation(),
+      BLOCKS.localeHardLock(),
+      BLOCKS.negative(['impersonating real doctors / celebrities / KOLs', 'fake credentials or certificate plaques in frame', 'cluttered overlapping badges hiding the face', 'missing the name / years / followers / quote zones', 'quote text in the wrong locale']),
+    ],
+    negativeBlocks: ['impersonating real doctors / celebrities / KOLs', 'fake credentials in frame', 'missing testimonial-card zones', 'wrong locale quote'],
+    outputRules: { aspectRatio: '9:16', enforce: ['fictional expert credible for niche', 'name + years + followers + quote visible', 'product readable'], forbid: ['real-person impersonation', 'fake credentials', 'missing zones'] },
+  },
+
+  // ═══════════════ UI-NATIVE (6) — template-driven, DNA only ═════════
+
+  ...uiNativeConfig('whatsapp-proof', {
+    category: 'social-proof',
+    marketingGoal: 'Bằng chứng xã hội tức thì — khách tưởng tin nhắn thật từ người dùng cũ.',
+    emotion: 'trust',
+    composition: 'mobile-screenshot',
+    platformStyle: 'whatsapp',
+    emotionalGoal: 'Casual authenticity — private recommendation between two people',
+    typographyStyle: 'native WhatsApp system font sizes, no custom typography',
+    platformBehavior: 'WhatsApp 1-on-1 chat — customer + shop, casual conversational',
+    layoutRules: [
+      'portrait mobile screenshot',
+      'WhatsApp-safe margins (16px side gutters)',
+      'realistic chat bubble spacing',
+      'proper bubble padding, never centered',
+    ],
+    contentRules: [
+      'believable conversational tone',
+      'imperfect grammar acceptable',
+      'non-salesy — NEVER marketing copy',
+      'casual emoji 0-2 per chat, never spammy',
+      'mix message lengths — 4-25 words each',
+    ],
+    visualRules: [
+      'native WhatsApp green for outgoing bubbles',
+      'realistic avatar crops',
+      'correct timestamp spacing under bubble groups',
+      'double blue tick for read messages',
+    ],
+    qualityRules: [
+      'all text fully readable',
+      'UI pixel-correct to WhatsApp 2024',
+      'no icon distortion',
+    ],
+    failureModes: [
+      'AI gibberish text or broken Unicode',
+      'overly clean Figma-perfect UI',
+      'fake typography that does not match WhatsApp',
+      'centered chat bubble layout',
+      'landscape screenshot orientation',
+      'language leakage (e.g. Vietnamese in a my-MY locale)',
+    ],
+  }),
+  ...uiNativeConfig('messenger-chat', {
+    category: 'social-proof',
+    marketingGoal: 'Show shop có tương tác thật — chứng minh uy tín đang hoạt động.',
+    emotion: 'trust',
+    composition: 'mobile-screenshot',
+    platformStyle: 'messenger',
+    emotionalGoal: 'Customer-to-page trust — show shop active and replying',
+    typographyStyle: 'native Messenger system font, blue gradient outgoing bubbles',
+    platformBehavior: 'Messenger buyer ↔ page — customer inquiry then shop response',
+    layoutRules: [
+      'portrait mobile screenshot',
+      'Messenger header with page name + avatar at top',
+      'Messenger-blue outgoing bubble gradient',
+      'realistic bubble spacing',
+    ],
+    contentRules: [
+      'casual buyer asking + page replying',
+      'short conversational messages',
+      'Seen indicator after page replies',
+      'mix of question + helpful response',
+    ],
+    visualRules: [
+      'Messenger blue gradient for outgoing',
+      'realistic Seen indicator with page profile thumb',
+      'system timestamp formatting',
+    ],
+    qualityRules: [
+      'text readable, no broken glyphs',
+      'realistic timestamps and Seen states',
+    ],
+    failureModes: [
+      'WhatsApp green color leakage (this is Messenger blue)',
+      'landscape orientation',
+      'centered bubble layout',
+      'corporate marketing copy in customer voice',
+    ],
+  }),
+  ...uiNativeConfig('shopee-feedback', {
+    category: 'social-proof',
+    marketingGoal: 'Trust signal từ Shopee — kênh Việt mặc định check trước khi mua.',
+    emotion: 'trust',
+    composition: 'mobile-screenshot',
+    platformStyle: 'shopee',
+    emotionalGoal: 'Buyer testimonial confidence — "đã mua, đã dùng, đã thấy kết quả"',
+    typographyStyle: 'Shopee marketplace native — rating stars + variant tag + helpful count',
+    platformBehavior: 'Shopee review — short review density, rating-first emphasis',
+    layoutRules: [
+      'Shopee orange brand header',
+      'star rating block at top of card',
+      'review body 60-160 words',
+      'variant string and helpful count visible',
+    ],
+    contentRules: [
+      'specific buyer details — when used, what changed, sensory detail',
+      'casual reviewer tone',
+      '0-2 emojis max — no emoji spam',
+      'rating usually 5, sometimes 4 (never 1-3 in testimonial use)',
+    ],
+    visualRules: [
+      'Shopee brand orange consistent',
+      'realistic helpful count (3-80)',
+      'product variant text feels like a real SKU choice',
+    ],
+    qualityRules: [
+      'rating stars clearly visible',
+      'variant string realistic',
+      'review text fully readable',
+    ],
+    failureModes: [
+      'corporate shop-generated marketing copy in buyer voice',
+      'rating below 4 (testimonial use case is 4-5)',
+      'links, phone numbers, prices',
+    ],
+  }),
+  ...uiNativeConfig('tiktok-feedback', {
+    category: 'social-proof',
+    marketingGoal: 'Trust signal cho audience Gen Z mua qua TikTok Shop.',
+    emotion: 'aspiration',
+    composition: 'mobile-screenshot',
+    platformStyle: 'tiktok-shop',
+    emotionalGoal: 'Gen Z buyer confidence — TikTok Shop is the new ecommerce default',
+    typographyStyle: 'TikTok Shop UI 2024 — pink-red accents, sans-serif',
+    platformBehavior: 'TikTok Shop — younger voice, mobile-vertical buy-now context',
+    layoutRules: [
+      'TikTok pink-red chrome header',
+      'star rating block prominent',
+      'buy-now button visible',
+      'mobile-vertical 9:16 framing',
+    ],
+    contentRules: [
+      'Gen Z casual tone, light slang',
+      'short body with one specific result detail',
+      '0-1 emojis',
+    ],
+    visualRules: [
+      'TikTok Shop 2024 UI chrome',
+      'pink-red brand accents (NOT Shopee orange)',
+    ],
+    qualityRules: [
+      'UI realistic to current TikTok Shop',
+      'review text readable',
+    ],
+    failureModes: [
+      'Shopee orange color leakage',
+      'corporate older-demographic voice',
+      'long-essay review (this is short)',
+    ],
+  }),
+  ...uiNativeConfig('facebook-comment', {
+    category: 'social-proof',
+    marketingGoal: 'Engagement social proof — show bài post nhận phản hồi tích cực.',
+    emotion: 'trust',
+    composition: 'mobile-screenshot',
+    platformStyle: 'facebook-ads',
+    emotionalGoal: 'Community endorsement — strangers vouching publicly',
+    typographyStyle: 'Facebook native sans-serif, like + reply buttons',
+    platformBehavior: 'Facebook comments — older demographic tone, longer conversational comments',
+    layoutRules: [
+      'portrait screenshot',
+      'thread of 4-6 comments stacked',
+      'each comment: avatar + name + body + like count + reply count',
+    ],
+    contentRules: [
+      'older demographic tone acceptable (vs TikTok Gen Z)',
+      'longer conversational comments OK',
+      'mix question + testimonial + reaction across the thread',
+      'one or two viral comments with high like counts',
+      'each commenter has a DIFFERENT username',
+    ],
+    visualRules: [
+      'Facebook blue accents',
+      'realistic timestamps ("2h", "1d", "5d")',
+      'like + reply controls under each comment',
+    ],
+    qualityRules: [
+      'every commenter username unique',
+      'realistic like distribution — most 0..15, one or two 60..400',
+    ],
+    failureModes: [
+      '8 near-identical variations of the same comment',
+      'shop self-commenting under own post',
+      'sponsored / ad / promo language',
+    ],
+  }),
+  ...uiNativeConfig('tiktok-comment', {
+    category: 'social-proof',
+    marketingGoal: 'Trigger FOMO — show video đang viral, engagement cao.',
+    emotion: 'hype',
+    composition: 'mobile-screenshot',
+    platformStyle: 'tiktok',
+    emotionalGoal: 'Viral FOMO — "ai cũng comment, mình cũng phải xem"',
+    typographyStyle: 'TikTok dark UI — white text on dark overlay, pink heart icons',
+    platformBehavior: 'TikTok comment overlay — chaotic engagement, casual tone, emoji-heavy, Gen Z phrasing',
+    layoutRules: [
+      'dark TikTok overlay theme',
+      '"9.4k bình luận" header at top',
+      'heart count visible per comment',
+      'overlay layered on bottom of a video frame',
+    ],
+    contentRules: [
+      'chaotic engagement — short fragments, drop punctuation',
+      'casual lowercase tone, emoji-heavy 1-3 per comment',
+      'younger Gen Z phrasing, light slang',
+      'mix reaction + question + tag-a-friend',
+      'one or two reply chains where a username quotes another',
+    ],
+    visualRules: [
+      'dark theme TikTok 2024 chrome',
+      'pink/red heart icons',
+      'realistic like spread — some 0, some viral 200+',
+    ],
+    qualityRules: [
+      'authentic Gen Z voice across the thread',
+      'high engagement signaling — not boring',
+    ],
+    failureModes: [
+      'older formal tone or full sentences',
+      'long-essay comments',
+      'corporate marketing voice',
+      'Shopee/Facebook UI leakage',
+    ],
+  }),
+
+  // ═══════════════ DESIGNED-GRAPHIC (2) — template + Gemini text ═════
+
+  {
+    id: 'infographic',
+    // P43 — migrated to photographic (KIE gpt-image-2) for Ladipage-grade
+    // illustrated stat infographics. Old Canvas-template module retained
+    // on disk but unrouted.
+    engine: 'photographic',
+    model: 'gpt-image-2',
+    dna: {
+      category: 'product-explain',
+      marketingGoal: 'Tăng độ tin tưởng + giải thích công dụng nhanh trong 5 giây.',
+      emotion: 'authority',
+      realism: 'stylized',
+      composition: 'infographic-hierarchy',
+      productVisibility: 'high',
+      textImportance: 'critical',
+      platformStyle: 'landing-page',
+      cameraStyle: 'tripod-studio',
+      renderStyle: 'infographic-vector',
+      emotionalGoal: 'Educational confidence — justify purchase with cứng numbers',
+      typographyStyle: 'Ecommerce readability, bold benefit emphasis, mobile-safe 14px+ minimum',
+      platformBehavior: 'Landing page section + ad carousel — 5-second scan readability',
+      layoutRules: [
+        'one BIG hero stat number anchored top-left',
+        'product packaging on the right side as anchor',
+        '3-5 supporting bullets with small flat icons stacked below the hero stat',
+      ],
+      contentRules: [
+        'specific numbers, never vague claims',
+        '3-5 supporting bullet points, each 4-9 words',
+        'footnote: source / timeframe / methodology hint',
+      ],
+      visualRules: [
+        'icon-driven sections',
+        'clean limited color palette',
+        'high-contrast typography',
+        'hybrid photographic product + illustrated infographic feel',
+      ],
+      qualityRules: [
+        'hero stat readable at thumbnail size',
+        'bullets parseable in a 5-second scan',
+        'mobile-safe minimum font sizes',
+      ],
+      failureModes: [
+        'cluttered layout',
+        'tiny unreadable text',
+        'random photo as background',
+        'stock-photo collage feel',
+      ],
+    },
+    promptBlocks: [
+      BLOCKS.productLock(),
+      BLOCKS.continuity(),
+      BLOCKS.composition(
+        'Premium ecommerce stat-driven infographic. One BIG bold hero stat number anchored at the top-left (e.g. "96%" or "30 hari") with a 2-4 word locale-native label beside it. Product packaging on the right side, label fully facing camera. 3-5 supporting bullets with small flat icons stacked below the hero stat. Hybrid photographic-product + illustrated-infographic feel.',
+      ),
+      BLOCKS.scene(
+        'Soft brand-color gradient background (cream / pearl / pastel teal / brand accent). Clean ecommerce-readable typography. Small subtle product brand badge or certification mark at the top if the product has one.',
+      ),
+      BLOCKS.factsList({ kind: 'benefits', max: 5, label: 'benefit phrases' }),
+      BLOCKS.capture('tripod'),
+      BLOCKS.lighting(
+        'Even soft studio lighting, subtle premium glow halo behind the product. No cinematic mood, no harsh shadows.',
+      ),
+      BLOCKS.platform('landing-page'),
+      BLOCKS.variation(),
+      BLOCKS.localeHardLock(),
+      BLOCKS.negative(['random photo as bg', 'multiple competing hero numbers', 'inventing statistics not in the brief']),
+    ],
+    negativeBlocks: ['cluttered layout', 'gradient noise overlays', 'invented statistics'],
+    outputRules: {
+      aspectRatio: '1:1',
+      enforce: ['hero stat readable', '3-5 supporting bullets', 'product label visible'],
+      forbid: ['random photo as bg', 'unreadable typography', 'invented statistics'],
+    },
+  },
+
+  {
+    id: 'cta-banner',
+    engine: 'designed-graphic',
+    model: 'gemini-text+canvas',
+    dna: {
+      category: 'product-explain',
+      marketingGoal: 'Click-thru optimization — banner cho Facebook / Shopee / TikTok ads paid traffic.',
+      emotion: 'urgency',
+      realism: 'stylized',
+      composition: 'product-hero',
+      productVisibility: 'hero-dominant',
+      textImportance: 'critical',
+      platformStyle: 'facebook-ads',
+      cameraStyle: 'tripod-studio',
+      renderStyle: 'editorial-beauty',
+      emotionalGoal: 'Action-trigger urgency — pull the click without feeling spammy',
+      typographyStyle: 'Bold headline readable at thumbnail size, CTA button contrasts background',
+      platformBehavior: 'Paid ads — Facebook + Shopee + TikTok thumb-stop hook',
+      layoutRules: [
+        'product hero on one side (left or right)',
+        'headline + offer + CTA stacked on the opposite side',
+        'CTA button visually anchored at the bottom',
+      ],
+      contentRules: [
+        'headline: 4-9 words',
+        'subheadline: 6-12 words',
+        'offer line: single benefit ("Giảm 30%", "Giao 24h")',
+        'CTA: 2-3 word action verb ("Đặt ngay", "Xem chi tiết")',
+      ],
+      visualRules: [
+        'brand palette consistent',
+        'clean composition without bg noise',
+        'CTA button contrasts background',
+      ],
+      qualityRules: [
+        'headline readable at thumbnail size',
+        'CTA button strongly contrasts background',
+        'offer pill visible at a glance',
+      ],
+      failureModes: [
+        'busy gradient background',
+        'low-contrast CTA button',
+        'crowded multi-element layout',
+        'corporate stock-template feel',
+      ],
+    },
+    promptBlocks: [],
+    negativeBlocks: ['busy gradient', 'low-contrast CTA'],
+    outputRules: {
+      aspectRatio: '4:5',
+      enforce: ['headline readable at thumbnail size', 'offer pill visible', 'CTA button contrasts bg'],
+      forbid: ['low contrast', 'busy gradient bg'],
+    },
+  },
+
+  // ═══════════════ P35 — remaining roadmap shipped ════════════════════
+
+  {
+    id: 'ingredients-explain',
+    // P43 — migrated to photographic for Ladipage "6 Strain Probiotik"
+    // grade illustrated ingredient infographics.
+    engine: 'photographic',
+    model: 'gpt-image-2',
+    dna: {
+      category: 'product-explain',
+      marketingGoal: 'Justify purchase qua ingredient provenance — show "có khoa học, có thành phần thật" thay vì marketing copy.',
+      emotion: 'authority',
+      realism: 'stylized',
+      composition: 'infographic-hierarchy',
+      productVisibility: 'high',
+      textImportance: 'critical',
+      platformStyle: 'landing-page',
+      cameraStyle: 'tripod-studio',
+      renderStyle: 'infographic-vector',
+      emotionalGoal: 'Scientific trust — khách thấy ingredient list là tin "có công thức thật"',
+      typographyStyle: 'Ecommerce readability, ingredient name bold + benefit subtler',
+      platformBehavior: 'Detail page Shopee + landing-page ingredients section + ad carousel',
+      layoutRules: [
+        'product packaging CENTERED with subtle glow halo',
+        '4-6 illustrated ingredient badges arranged symmetrically AROUND the product',
+        'each badge = a small illustrated icon + ingredient name + 2-3 word benefit',
+      ],
+      contentRules: [
+        'use the EXACT ingredient names from the product brief — do not invent latin names or strains',
+        'each badge label has the ingredient name in bold + a 2-3 word locale-native benefit',
+        '4-6 badges total',
+      ],
+      visualRules: [
+        'clinical medical-grade illustrated icon style — NOT cartoony',
+        'consistent badge shape across all ingredients',
+        'soft brand-color gradient background',
+      ],
+      qualityRules: [
+        'product label readable in the center',
+        'each ingredient badge readable at thumbnail size',
+        'reads in a 5-second scan',
+      ],
+      failureModes: [
+        'invented ingredients not in product brief',
+        'badges overlapping the product',
+        'cartoony childish icon style',
+        'cluttered layout',
+      ],
+    },
+    promptBlocks: [
+      BLOCKS.productLock(),
+      BLOCKS.continuity(),
+      BLOCKS.composition(
+        'Scientific ingredient infographic. Product packaging CENTERED with a subtle premium glow halo, label fully facing camera. 4-6 illustrated ingredient badges arranged symmetrically AROUND the product — top-left, top-right, mid-left, mid-right, bottom-left, bottom-right. Badges NEVER overlap the product or each other. Consistent badge shape across all ingredients.',
+      ),
+      BLOCKS.scene(
+        'Each badge pairs a flat illustrated icon matching the ingredient nature (microorganism cluster for probiotic strains, leaf for botanical, capsule for extract, molecule for active compound, drop for liquid) with the ingredient name in bold + a 2-3 word locale-native benefit phrase. Subtle product brand badge or certification mark at the top of the frame.',
+      ),
+      BLOCKS.factsList({ kind: 'ingredients', max: 6, label: 'ingredient names' }),
+      BLOCKS.capture('tripod'),
+      BLOCKS.lighting(
+        'Brand-color soft gradient background (white / pearl / soft teal / pastel). Premium clinical medical-grade aesthetic. Subtle inner shadow / rim light per badge for dimension. NOT cartoony, NOT cinematic.',
+      ),
+      BLOCKS.platform('landing-page'),
+      BLOCKS.variation(),
+      BLOCKS.localeHardLock(),
+      BLOCKS.negative([
+        'fewer than 4 ingredient badges visible',
+        'badges overlapping product',
+        'inventing ingredient names not in the brief',
+        'cartoony childish icon style',
+        'cluttered busy gradient',
+      ]),
+    ],
+    negativeBlocks: ['invented ingredients', 'cartoony icons', 'badges overlapping product', 'cluttered layout'],
+    outputRules: {
+      aspectRatio: '1:1',
+      enforce: ['4-6 ingredient badges visible', 'product centered', 'ingredient names from brief'],
+      forbid: ['invented ingredients', 'badges overlapping product', 'cartoony icons'],
+    },
+  },
+
+  {
+    id: 'mechanism-explain',
+    // P43 — migrated to photographic for Ladipage "Bagaimana Probiotik
+    // Bekerja" grade biological mechanism diagrams.
+    engine: 'photographic',
+    model: 'gpt-image-2',
+    dna: {
+      category: 'product-explain',
+      marketingGoal: 'Conversion mạnh nhất cho pain relief / supplement / skincare — khách hiểu RÕ cơ chế là tin và mua.',
+      emotion: 'authority',
+      realism: 'stylized',
+      composition: 'infographic-hierarchy',
+      productVisibility: 'high',
+      textImportance: 'critical',
+      platformStyle: 'landing-page',
+      cameraStyle: 'tripod-studio',
+      renderStyle: 'infographic-vector',
+      emotionalGoal: 'Mechanism clarity — "I get how it works, so I trust it"',
+      typographyStyle: 'Step numbers bold, step description regular weight',
+      platformBehavior: 'Landing-page detail section + health/wellness ads',
+      layoutRules: [
+        'before / after biological illustration showing the mechanism',
+        'product packaging anchored on the right side',
+        '3-5 numbered stage labels along the flow path',
+      ],
+      contentRules: [
+        'every stage label starts with "Bước N:" / "Step N:" / locale equivalent',
+        'steps describe HOW the product acts on the body, not what the user feels',
+        '3-5 ordered mechanism steps',
+        'monotonically ordered',
+      ],
+      visualRules: [
+        'clinical medical-grade illustration style',
+        'soft anatomical illustration, biology-grade detail, NOT cartoony',
+        'thin elegant flow line / arrow connecting product to body system',
+      ],
+      qualityRules: [
+        'steps read in correct order',
+        'mechanism feels scientific not magical',
+        'before / after halves visually contrast',
+      ],
+      failureModes: [
+        'cartoony childish illustration',
+        'horror / overly graphic anatomical detail',
+        'magical glow effects on the body illustration',
+        'steps out of order',
+        'identical before / after halves',
+      ],
+    },
+    promptBlocks: [
+      BLOCKS.productLock(),
+      BLOCKS.continuity(),
+      BLOCKS.composition(
+        'Scientific mechanism diagram. Top half shows the "before" state (problem) — a small flat illustration of the affected body system in trouble (e.g. inflamed gut wall with bad bacteria, clogged pore, dull skin layer). Bottom half shows the "after" state — same body system restored / balanced. Product packaging anchored on the right side, label fully facing camera, with a thin elegant arrow / flow line pointing from the product into the body-system illustration.',
+      ),
+      BLOCKS.scene(
+        '3-5 small numbered stage labels placed along the flow path, each stage in locale-native phrasing starting with the locale equivalent of "Bước N:" / "Step N:". Clinical premium medical-infographic aesthetic — soft anatomical illustration style with biology-grade detail, NOT cartoony, NOT horror.',
+      ),
+      BLOCKS.factsList({ kind: 'usps', max: 5, label: 'mechanism phrases' }),
+      BLOCKS.capture('tripod'),
+      BLOCKS.lighting(
+        'Brand-color light gradient background. Mobile-readable typography. Subtle premium glow behind the product. No cinematic mood, no harsh shadows.',
+      ),
+      BLOCKS.platform('landing-page'),
+      BLOCKS.variation(),
+      BLOCKS.localeHardLock(),
+      BLOCKS.negative([
+        'cartoony childish illustration',
+        'horror / overly graphic anatomical detail',
+        'magical glow effects on the body illustration',
+        'identical before / after halves',
+        'unordered or missing step numbers',
+      ]),
+    ],
+    negativeBlocks: ['cartoony icons', 'horror anatomy', 'magical claims', 'unordered steps'],
+    outputRules: {
+      aspectRatio: '1:1',
+      enforce: ['ordered mechanism steps', 'before / after halves contrast', 'product visible on right'],
+      forbid: ['cartoony illustration', 'horror anatomy', 'unordered steps'],
+    },
+  },
+
+  {
+    id: 'benefit-timeline',
+    // P43 — migrated to photographic for Ladipage "PERJALANAN KESIHATAN"
+    // grade illustrated progress timelines.
+    engine: 'photographic',
+    model: 'gpt-image-2',
+    dna: {
+      category: 'product-explain',
+      marketingGoal: 'Set expectation đúng + tạo cảm giác kết quả nhanh — khách nhìn timeline biết khi nào thấy đổi.',
+      emotion: 'aspiration',
+      realism: 'stylized',
+      composition: 'infographic-hierarchy',
+      productVisibility: 'high',
+      textImportance: 'critical',
+      platformStyle: 'landing-page',
+      cameraStyle: 'tripod-studio',
+      renderStyle: 'infographic-vector',
+      emotionalGoal: 'Realistic progress — không "instant cure" overpromise',
+      typographyStyle: 'Time markers bold prominent, milestone description regular',
+      platformBehavior: 'Detail page + skincare/supplement/hair-care landing sections',
+      layoutRules: [
+        'product packaging anchored on the left side as origin',
+        'horizontal timeline flowing to the right',
+        '3-5 ascending time markers with small icons above + descriptions below',
+      ],
+      contentRules: [
+        'every marker uses locale-native time phrasing (e.g. "5 phút" / "3 hari" / "1 minggu" / "30 hari")',
+        'first marker = small early effect',
+        'last marker = mature result',
+        '3-5 milestones, monotonically ascending',
+        'realistic expectations — never promise instant cure',
+      ],
+      visualRules: [
+        'each milestone icon visually distinct + matches the visible change',
+        'soft brand-color arrow line connecting all markers',
+        'hybrid photographic product + illustrated infographic feel',
+      ],
+      qualityRules: [
+        'time markers ascending',
+        'milestones describe SPECIFIC visible / felt change',
+      ],
+      failureModes: [
+        'instant-cure promises in early markers',
+        'identical changes across markers (no progression)',
+        'time markers out of order',
+        'cluttered overlapping milestone icons',
+      ],
+    },
+    promptBlocks: [
+      BLOCKS.productLock(),
+      BLOCKS.continuity(),
+      BLOCKS.composition(
+        'Premium ecommerce progress-timeline infographic. Product packaging anchored on the LEFT side as the visual origin, label fully facing camera. A clean horizontal timeline flows to the right, with 3-5 ASCENDING time markers (locale-native — e.g. "5 phút" / "3 hari" / "1 minggu" / "30 hari"). Each time marker has a small flat illustrated icon ABOVE it showing the visible change at that stage and a SHORT 4-9 word locale-native description BELOW it.',
+      ),
+      BLOCKS.scene(
+        'Earliest marker shows a SMALL early effect (gentle calming / soothing). Latest marker shows the mature result. Connected by a soft brand-color arrow line. Mobile-readable bold typography on the time markers, regular weight on the descriptions. Premium landing-page aesthetic, hybrid photographic product + illustrated infographic.',
+      ),
+      BLOCKS.factsList({ kind: 'benefits', max: 5, label: 'milestone descriptions' }),
+      BLOCKS.capture('tripod'),
+      BLOCKS.lighting(
+        'Soft brand-color gradient background. Subtle premium glow behind the product on the left. No cinematic mood, no harsh shadows.',
+      ),
+      BLOCKS.platform('landing-page'),
+      BLOCKS.variation(),
+      BLOCKS.localeHardLock(),
+      BLOCKS.negative([
+        'time markers out of order',
+        'identical icons across all milestones',
+        'instant-cure overpromise in the early marker',
+        'cluttered overlapping milestone icons',
+      ]),
+    ],
+    negativeBlocks: ['instant-cure overpromise', 'identical milestones', 'unordered time markers'],
+    outputRules: {
+      aspectRatio: '1:1',
+      enforce: ['time markers ascending', 'each milestone specific', 'product visible on left'],
+      forbid: ['instant cure', 'unordered timeline', 'identical milestone icons'],
+    },
+  },
+
+  // ═══════════════ P35 — collage 4 frames (photographic) ══════════════
+
+  {
+    id: 'collage-4-frames',
+    engine: 'photographic',
+    model: 'gpt-image-2',
+    dna: {
+      category: 'ugc-real',
+      marketingGoal: 'Diverse testimonial grid — show "nhiều demographic khác nhau đều dùng" trong 1 visual.',
+      emotion: 'trust',
+      realism: 'highly-real',
+      composition: 'crowd-centered',
+      productVisibility: 'high',
+      textImportance: 'none',
+      platformStyle: 'landing-page',
+      cameraStyle: 'handheld-smartphone',
+      renderStyle: 'ugc-realism',
+      emotionalGoal: 'Diverse community trust — "ai cũng dùng, ai cũng hiệu quả"',
+      platformBehavior: 'Landing-page social proof grid + carousel ads',
+      layoutRules: [
+        '2×2 grid composition — 4 equal cells',
+        'each cell contains a DIFFERENT person',
+        'thin clean gutter lines between cells',
+      ],
+      visualRules: [
+        'identical lighting style across all 4 cells',
+        'identical background tone across all 4 cells',
+        'product label clearly visible in EVERY cell',
+        'each face culturally believable for SEA market',
+      ],
+      qualityRules: [
+        '4 visually distinct people (different age / gender / look)',
+        'product appears in all 4 cells',
+        'grid reads as cohesive testimonial set',
+      ],
+      failureModes: [
+        'same face repeated across cells',
+        'different product variations across cells',
+        'inconsistent lighting between cells',
+        'studio-perfect uniform poses',
+        'fewer than 4 cells visible',
+      ],
+    },
+    promptBlocks: [
+      BLOCKS.productLock(),
+      BLOCKS.productContext(),
+      BLOCKS.continuity(),
+      BLOCKS.demographic({ gender: 'mixed', age: 'mixed' }),
+      BLOCKS.composition('2×2 grid composition — 4 equal cells separated by thin clean white gutter lines. Each cell shows a DIFFERENT person holding the SAME product. Layout reads as a cohesive testimonial collage.'),
+      BLOCKS.scene('Four different people in 4 cells — varied age / gender / look, all locally believable. Each holding the product, label visible. Identical background tone + lighting style cell-to-cell so the grid feels unified. Authentic UGC expressions, not model-portfolio uniformity.'),
+      BLOCKS.capture('handheld'),
+      BLOCKS.lighting('Soft natural daylight, EVENLY matched across all 4 cells.'),
+      BLOCKS.ugc('Real diverse humans, never repeated. Some cells may show locally-appropriate attire (eg hijab acceptable in my-MY context).'),
+      BLOCKS.culturalCue(),
+      BLOCKS.platform('landing-page'),
+      BLOCKS.variation(),
+      BLOCKS.localeHardLock(),
+      BLOCKS.negative([
+        'same face repeated across cells',
+        'cells with different products',
+        'inconsistent lighting between cells',
+        'fewer than 4 cells',
+        'studio uniform poses',
+      ]),
+    ],
+    negativeBlocks: [
+      'same face repeated across cells',
+      'cells with different products',
+      'inconsistent lighting between cells',
+      'fewer than 4 cells',
+      'studio uniform poses',
+    ],
+    outputRules: {
+      aspectRatio: '1:1',
+      enforce: ['4 distinct cells', '4 different people', 'product in every cell'],
+      forbid: ['repeated faces', 'different products per cell', 'fewer than 4 cells'],
+    },
+  },
+
+  // ═══════════════ P37 — Ladipage-inspired creatives ═════════════════
+
+  {
+    id: 'pain-overlay',
+    engine: 'photographic',
+    model: 'gpt-image-2',
+    dna: {
+      category: 'ugc-real',
+      marketingGoal: 'Pain-point empathy — khách nhận ra "đây là vấn đề của mình" → trigger emotional response trước khi product reveal.',
+      emotion: 'urgency',
+      realism: 'highly-real',
+      composition: 'single-subject-centered',
+      productVisibility: 'absent',
+      textImportance: 'critical',
+      platformStyle: 'facebook-ads',
+      cameraStyle: 'handheld-smartphone',
+      renderStyle: 'ugc-realism',
+      emotionalGoal: 'Pain recognition — "ai cũng vậy đấy" relatability moment',
+      platformBehavior: 'Top-funnel pain hook for Facebook / TikTok scroll',
+      layoutRules: [
+        'face is the subject (no product visible)',
+        'italic Malay/Vietnamese/Indonesian overlay on dark glassmorphism panel',
+        'emoji prefix on overlay text (😩 / ⚠️ / 💤 / 😣 / 🤯)',
+        'subtle warning-color glow near affected area',
+      ],
+      contentRules: [
+        'overlay text is ONE pain point only — never multiple',
+        'use the locale\'s native pain-phrasing (eg my-MY: "Penat walaupun dah rehat?")',
+        'never name the target product in this frame',
+      ],
+      visualRules: [
+        'genuine fatigue / discomfort expression — NOT acted',
+        'casual indoor setting, natural light',
+        'soft red / orange / blue glow color matching the pain severity',
+      ],
+      qualityRules: [
+        'overlay text fully readable',
+        'expression matches the pain claimed',
+      ],
+      failureModes: [
+        'happy or relaxed expression',
+        'target product visible in frame',
+        'studio glamour lighting',
+        'overlay text in wrong language',
+      ],
+    },
+    promptBlocks: [
+      BLOCKS.productLock(),
+      BLOCKS.productContext(),
+      BLOCKS.continuity(),
+      BLOCKS.demographic({ role: 'customer', gender: 'woman', age: 'mid-30s' }),
+      BLOCKS.setting('casual-home'),
+      BLOCKS.capture('handheld'),
+      // P48 — depict the pain at the BODY LOCATION matching the product's
+      // actual pain-points (loaded from productKnowledge). Pre-P48 the
+      // prompt hardcoded "bloated belly / sleepless / disheartened on a
+      // scale" examples which biased the model toward abdomen-clutching
+      // poses even for dental / skincare / joint products. The factsList
+      // block below injects the EXACT painPoints from the brief.
+      BLOCKS.scene('Person mid-symptom at home expressing the EXACT pain point recorded for this product (provided inline below as "painPoints"). The body location MUST match the pain: dental / oral product → hand to cheek or jaw with wincing mouth; digestive / gut product → hand on stomach; headache / sleep product → hand to forehead or temples; joint / back product → hand to the affected joint; skin product → looking at affected skin in a mirror; hair / scalp product → hand through thinning hair. Genuine frustrated exhausted expression — NEVER acted, NEVER smiling. NO target product visible in frame (pre-discovery state).'),
+      BLOCKS.factsList({ kind: 'painPoints', max: 1, label: 'painPoints' }),
+      BLOCKS.lighting('Soft natural light. Subtle warning-color glow (red / orange / blue) near the affected body area to anchor the eye.'),
+      BLOCKS.designedOverlay('pain-italic'),
+      BLOCKS.culturalCue(),
+      BLOCKS.platform('facebook-ads'),
+      BLOCKS.variation(),
+      BLOCKS.localeHardLock(),
+      BLOCKS.negative(['happy expression', 'target product visible', 'studio glamour', 'overlay in wrong language', 'pain location mismatched with product niche']),
+    ],
+    negativeBlocks: ['happy expression', 'target product visible', 'studio glamour', 'overlay in wrong language'],
+    outputRules: {
+      aspectRatio: '4:5',
+      enforce: ['pain expression visible', 'italic overlay readable', 'one pain only'],
+      forbid: ['target product in frame', 'multiple pains in one frame'],
+    },
+  },
+
+  {
+    id: 'news-mock',
+    engine: 'photographic',
+    model: 'gpt-image-2',
+    dna: {
+      category: 'social-proof',
+      marketingGoal: 'Authority via media — fake news / health authority screenshot ("kesihatan đã đăng báo") để build credibility.',
+      emotion: 'authority',
+      realism: 'highly-real',
+      composition: 'mobile-screenshot',
+      productVisibility: 'contextual',
+      textImportance: 'critical',
+      platformStyle: 'landing-page',
+      cameraStyle: 'tripod-studio',
+      renderStyle: 'mobile-ui-screenshot',
+      emotionalGoal: 'Institutional trust — "có báo đăng / cơ quan y tế nói"',
+      typographyStyle: 'Newspaper sans-serif, bold headline, body text greyscale',
+      platformBehavior: 'Landing-page authority section + Facebook ad screenshot share',
+      layoutRules: [
+        'mobile screenshot framing of a news article',
+        'prominent target-locale headline at top',
+        'partial article body visible below',
+        'neutralized publication chrome (NOT pixel-copying a real outlet)',
+      ],
+      contentRules: [
+        'headline must reference the product\'s niche / pain point',
+        'body text greyscale Lorem-ipsum-like fragments OK — readability matters more than meaning',
+        'no SPECIFIC named real outlet in the header',
+        'no real doctor / KOL names in body',
+      ],
+      visualRules: [
+        'mobile screenshot aesthetic — slight JPEG compression, system status bar acceptable',
+        'newspaper sans-serif typography',
+        'small article hero photo when fits naturally',
+      ],
+      qualityRules: [
+        'headline fully readable',
+        'looks like a real screenshot, NOT a designed banner',
+      ],
+      failureModes: [
+        'pixel-copying a specific real outlet brand (Berita Harian / VnExpress / Kompas etc)',
+        'fake doctor headshot with named credentials',
+        'invented quotes attributed to real people',
+        'overly-designed banner look (this is a SCREENSHOT)',
+      ],
+    },
+    promptBlocks: [
+      BLOCKS.productLock(),
+      BLOCKS.productContext(),
+      BLOCKS.continuity(),
+      BLOCKS.composition('Mobile screenshot of a regional health news article. Prominent headline at top + partial article body below + small article hero photo when natural. NOT a designed banner — looks like a real article screenshot.'),
+      // P41 — Ladipage references real regional outlets by NAME in the
+      // style hint but the chrome itself stays GENERIC. This gives the
+      // model a visual target ("looks like a Malaysian health portal")
+      // without pixel-copying any specific outlet's exact brand mark.
+      BLOCKS.scene('Aesthetic reminiscent of a regional health portal article for the target locale (eg mStar / Berita Harian / Sinar Harian / Hello Sehat / VnExpress Sức Khoẻ / Tuổi Trẻ Sức Khoẻ — STYLE INSPIRATION ONLY, NOT pixel-copying a specific outlet). Generic newspaper chrome with locally-appropriate typography. Headline references the product\'s niche / pain point — eg "Kesihatan Usus Kunci Imuniti" for a gut-health product, "Bí mật mất ngủ kéo dài" for a sleep aid.'),
+      BLOCKS.capture('handheld'),
+      BLOCKS.lighting('Mobile screenshot quality — slight JPEG compression, natural phone screen capture feel.'),
+      BLOCKS.culturalCue(),   // P41 — regional outlet typography / chrome cue
+      BLOCKS.platform('landing-page'),
+      BLOCKS.variation(),
+      BLOCKS.localeHardLock(),
+      BLOCKS.negative([
+        'pixel-copying a specific named real outlet brand mark',
+        'fake real-person credentials',
+        'overly-designed banner aesthetic',
+      ]),
+    ],
+    negativeBlocks: ['pixel-copying real outlets', 'fake credentials', 'designed-banner look'],
+    outputRules: {
+      aspectRatio: '4:5',
+      enforce: ['mobile screenshot framing', 'newspaper aesthetic', 'headline relevant to product'],
+      forbid: ['named real outlet branding', 'fake named credentials'],
+    },
+  },
+
+  {
+    id: 'metric-cta',
+    engine: 'photographic',
+    model: 'gpt-image-2',
+    dna: {
+      category: 'product-explain',
+      marketingGoal: 'Last-scroll-stopper conversion banner — product + halo metric chips + price-lock + CTA. Phù hợp final-stage ads.',
+      emotion: 'urgency',
+      realism: 'stylized',
+      composition: 'product-hero',
+      productVisibility: 'hero-dominant',
+      textImportance: 'critical',
+      platformStyle: 'facebook-ads',
+      cameraStyle: 'tripod-studio',
+      renderStyle: 'editorial-beauty',
+      emotionalGoal: 'Trust through metrics — "★ 4.8/5", "20,000+ pengguna", "TOP RATED"',
+      typographyStyle: 'Bold mobile-readable headline + chip badges + CTA button',
+      platformBehavior: 'Final-stage paid ads + landing-page last-scroll CTA',
+      layoutRules: [
+        'product packaging centered with subtle glow halo',
+        '4-6 floating metric chips around the product',
+        'large target-locale headline overlay',
+        'CTA button shape included',
+        'optional mini before/after thumbnail row at bottom',
+      ],
+      contentRules: [
+        'metric chips: rating ("★ 4.8/5"), customer count ("20,000+ pengguna"), trust badge ("✓ Verified KKM" / "✓ Halal"), top-rated chip',
+        'price token from product offer ONLY — never invent',
+        'headline in native ecommerce hard-sell voice',
+      ],
+      visualRules: [
+        'premium clean gradient background (cream → pearl → soft teal OR navy → red for urgency variant)',
+        'subtle glow halo behind product',
+        'metric chips visually distinct (pill / rounded card shapes)',
+      ],
+      qualityRules: [
+        'price matches offer exactly',
+        'headline readable at thumbnail size',
+        'CTA button visually contrasted',
+      ],
+      failureModes: [
+        'inventing prices not in offer field',
+        'inventing certification badges that aren\'t real',
+        'busy gradient hiding the product',
+        'metric chip text in wrong language',
+      ],
+    },
+    promptBlocks: [
+      BLOCKS.productLock(),
+      BLOCKS.productContext(),
+      BLOCKS.continuity(),
+      // P51 — banner zones explicit so the model stops emitting "ecommerce
+      // thumbnail with floating elements". Real Ladipage final-CTA banners
+      // have a clear LEFT (product + halo + metric chips) + RIGHT
+      // (headline + price + CTA + freeship) split on the 16:9 frame.
+      // CTA + freeship text is locale-native — the locale is locked by the
+      // single-line locale rule emitted at the end of the compressed prompt
+      // (no need to enumerate locales here and risk the model picking 4
+      // languages at once).
+      BLOCKS.composition('Last-scroll-stopper conversion BANNER at 16:9 landscape. Two zones split roughly 45/55: LEFT 45% = product packaging centered with a subtle white halo + 4-6 floating metric chips (rating ★ 4.8/5, customer-count, trust-badge "✓ Halal" or "✓ Verified", top-rated chip) orbiting around the product like sticker overlays — each chip on its own rounded pill with a faint drop shadow. RIGHT 55% = stacked text block in this top-to-bottom order: (1) BIG bold locale-native HEADLINE (3-6 words, ecommerce hard-sell voice), (2) a price PILL with the EXACT price token from the product offer field — never invented, (3) a 1-line locale-native subhead, (4) a bright contrasting full-width CTA BUTTON with a locale-native action verb (Beli sekarang / Mua ngay / Order now — single phrase, NOT a list) + forward-arrow icon, (5) a small locale-native free-shipping tag underneath the CTA. The banner is HORIZONTAL 16:9 — never a square or vertical thumbnail.'),
+      BLOCKS.scene('Premium ecommerce conversion banner — Malaysia / Vietnam / Indonesia hard-sell style, NOT luxury cinematic. Mobile-readable typography. The product must remain the EXACT product from the reference image (do not redesign packaging).'),
+      BLOCKS.capture('tripod'),
+      BLOCKS.lighting('Clean premium brand-color gradient background (cream → soft accent OR navy → urgency red for sale variants). Subtle rim glow behind product. Each metric chip catches a light highlight + tiny drop shadow. CTA button uses the brand accent at full saturation so it pops against the gradient.'),
+      BLOCKS.designedOverlay('final-cta-metrics'),
+      BLOCKS.priceLock(),
+      BLOCKS.platform('facebook-ads'),
+      BLOCKS.variation(),
+      BLOCKS.localeHardLock(),
+      BLOCKS.negative(['invented prices', 'invented certifications', 'busy gradient', 'cinematic luxury vibe', 'square thumbnail layout instead of 16:9 banner split', 'CTA button missing or hidden']),
+    ],
+    negativeBlocks: ['invented prices', 'invented certifications', 'cinematic luxury vibe'],
+    outputRules: {
+      aspectRatio: '16:9',
+      enforce: ['product centered with halo', '4+ metric chips visible', 'price matches offer'],
+      forbid: ['invented prices', 'invented certifications', 'cinematic mood'],
+    },
+  },
+
+  {
+    id: 'failed-solutions',
+    engine: 'photographic',
+    model: 'gpt-image-2',
+    dna: {
+      category: 'ugc-real',
+      marketingGoal: 'Empathy bridge — show "you\'ve tried everything" moment để khách relate trước khi reveal product. Pre-discovery funnel beat.',
+      emotion: 'comfort',
+      realism: 'highly-real',
+      composition: 'lifestyle-environmental',
+      productVisibility: 'absent',
+      textImportance: 'none',
+      platformStyle: 'facebook-ads',
+      cameraStyle: 'handheld-smartphone',
+      renderStyle: 'ugc-realism',
+      emotionalGoal: '"I get you — I\'ve been there too" moment',
+      platformBehavior: 'Mid-funnel advertorial — sets up product-discovery section',
+      layoutRules: [
+        'subject sitting on bed / dining table / sofa',
+        'surrounded by 4-8 different empty / half-used bottles + OTC medications + traditional remedies',
+        'disheartened expression — NOT acted',
+      ],
+      contentRules: [
+        'NEVER show the target product in this frame (this is BEFORE)',
+        'NEVER show real medication brand names',
+      ],
+      visualRules: [
+        'soft natural daylight, NOT studio',
+        'lived-in mess acceptable — authentic UGC',
+        'shallow depth of field on the subject',
+      ],
+      qualityRules: [
+        'expression reads as frustrated / disheartened',
+        'failed-attempt clutter clearly visible',
+      ],
+      failureModes: [
+        'target product appears in frame',
+        'happy resolved expression',
+        'studio polish / pro-model look',
+        'real medication brand names visible',
+      ],
+    },
+    promptBlocks: [
+      BLOCKS.productLock(),
+      BLOCKS.productContext(),
+      BLOCKS.continuity(),
+      BLOCKS.demographic({ role: 'customer', gender: 'woman', age: 'mid-40s' }),
+      BLOCKS.setting('casual-home'),
+      BLOCKS.capture('handheld'),
+      BLOCKS.scene('Person sitting on her bed or at a dining table, surrounded by 4-8 various empty or half-used bottles, supplement containers, traditional remedies, and OTC medications. Disheartened frustrated expression — NOT acted. Looking down or off to the side. NO target product in the frame.'),
+      BLOCKS.lighting('Soft natural daylight from a window. Lived-in not staged.'),
+      BLOCKS.ugc('Authentic UGC moment — like a real photo a customer would take after months of trying things.'),
+      BLOCKS.culturalCue(),
+      BLOCKS.platform('facebook-ads'),
+      BLOCKS.variation(),
+      BLOCKS.localeHardLock(),
+      BLOCKS.negative(['target product in frame', 'happy expression', 'studio polish', 'real medication brand names']),
+    ],
+    negativeBlocks: ['target product in frame', 'happy expression', 'studio polish', 'real medication brand names'],
+    outputRules: {
+      aspectRatio: '4:5',
+      enforce: ['failed-attempt clutter visible', 'disheartened expression'],
+      forbid: ['target product visible', 'happy resolved face', 'studio look'],
+    },
+  },
+
+  {
+    id: 'comparison-table',
+    engine: 'photographic',
+    model: 'gpt-image-2',
+    dna: {
+      category: 'product-explain',
+      marketingGoal: 'Justify purchase via head-to-head — show side-by-side superiority. Phù hợp niche supplement / skincare / health.',
+      emotion: 'authority',
+      realism: 'stylized',
+      composition: 'infographic-hierarchy',
+      productVisibility: 'high',
+      textImportance: 'critical',
+      platformStyle: 'landing-page',
+      cameraStyle: 'tripod-studio',
+      renderStyle: 'infographic-vector',
+      emotionalGoal: 'Clear-cut superiority — "có thể không cần đắn đo nữa"',
+      typographyStyle: 'Bold mobile-readable column headers + checkmark/X icon rows',
+      platformBehavior: 'Detail page Shopee + landing-page section + Facebook carousel',
+      layoutRules: [
+        '2-column comparison table',
+        'left column: target product (highlighted emerald + green checkmarks)',
+        'right column: "other supplements" / "competitor" (gray + red X)',
+        '5-6 rows of comparison attributes',
+      ],
+      contentRules: [
+        'row labels in target locale, bold',
+        'left column shows competitive advantages',
+        'NEVER name a specific real competitor brand on the right column',
+      ],
+      visualRules: [
+        'mobile-readable typography — minimum 14px equivalent',
+        'high contrast between the two columns',
+        'subtle background gradient OK, never busy',
+      ],
+      qualityRules: [
+        'row labels fully readable on mobile thumbnail',
+        'all 5-6 rows have matching ✓ vs ✗',
+        'column headers visually distinct',
+      ],
+      failureModes: [
+        'naming a specific real competitor brand',
+        'unreadable mobile typography',
+        'more than 6 rows (clutter)',
+        'mixed checkmarks across rows confusingly',
+      ],
+    },
+    promptBlocks: [
+      BLOCKS.productLock(),
+      BLOCKS.productContext(),
+      BLOCKS.continuity(),
+      BLOCKS.composition('Clean mobile-readable comparison table infographic. 2-column layout. Left column = target product with highlighted emerald background and green checkmarks. Right column = "other supplements" with gray background and red X marks. 5-6 rows of comparison attributes.'),
+      BLOCKS.scene('Malaysia / Vietnam / Indonesia ecommerce comparison style — bold mobile-readable. Row labels in target locale. NEVER name a specific real competitor.'),
+      BLOCKS.capture('tripod'),
+      BLOCKS.lighting('Clean studio with subtle background gradient. High contrast text-to-background.'),
+      BLOCKS.designedOverlay('comparison-table'),
+      BLOCKS.platform('shopee'),
+      BLOCKS.variation(),
+      BLOCKS.localeHardLock(),
+      BLOCKS.negative(['naming specific competitor brand', 'unreadable typography', 'cluttered with more than 6 rows']),
+    ],
+    negativeBlocks: ['naming specific competitor brand', 'unreadable typography', 'cluttered table'],
+    outputRules: {
+      aspectRatio: '1:1',
+      enforce: ['2 columns clearly differentiated', '5-6 rows with matching checkmarks', 'mobile-readable text'],
+      forbid: ['real competitor name', 'more than 6 rows'],
+    },
+  },
+
+  // ═══════════════ P40 — Benefits Icon Grid (photographic) ═══════════
+  //
+  // Photographic version of "benefit infographic" — product centered +
+  // 6 circular/hexagonal badges around it, each with an icon paired to
+  // a locale-native benefit label. Matches Ladipage benefits_01.jpg
+  // aesthetic. Replaces the Canvas-rendered designed-graphic look with
+  // a richer image-gen composition.
+
+  {
+    id: 'benefits-grid',
+    engine: 'photographic',
+    model: 'gpt-image-2',
+    dna: {
+      category: 'product-explain',
+      marketingGoal: 'Visual benefit at-a-glance — product center + 6 badges show ALL công dụng cùng lúc. Scroll-stop hook cho detail page + ads.',
+      emotion: 'trust',
+      realism: 'stylized',
+      composition: 'product-hero',
+      productVisibility: 'hero-dominant',
+      textImportance: 'critical',
+      platformStyle: 'landing-page',
+      cameraStyle: 'tripod-studio',
+      renderStyle: 'editorial-beauty',
+      emotionalGoal: 'Clear comprehensive benefit map — "tất cả công dụng trong 1 visual"',
+      typographyStyle: 'Short benefit labels mobile-readable, icon + text pair per badge',
+      platformBehavior: 'Detail page Shopee + landing-page benefits section + Facebook carousel slide',
+      layoutRules: [
+        'product packaging CENTERED with subtle glow halo',
+        '6 distinct badges arranged symmetrically AROUND the product (top-left / top-right / mid-left / mid-right / bottom-left / bottom-right)',
+        'each badge = a small icon + 2-4 word benefit label below or beside it',
+        'badges never overlap the product or each other',
+        'background = brand-color soft gradient (cream / pearl / soft teal / brand accent)',
+      ],
+      contentRules: [
+        'badge labels MUST come from product benefits / usps fields — never invent unrelated benefits',
+        'each label 2-4 words, locale-native',
+        'icon picks must MATCH the benefit (happy stomach for digestion, shield for immunity, lightning for energy, leaf for natural, bed for sleep, toilet for bowel)',
+      ],
+      visualRules: [
+        'product centered with subtle premium glow halo',
+        'badges visually distinct (circular OR hexagonal, consistent shape across all 6)',
+        'icons hand-illustrated lifestyle / health flat style, NOT generic stock icons',
+        'soft brand-color gradient background',
+      ],
+      qualityRules: [
+        'product label fully readable in center',
+        'all 6 badges visible at thumbnail size',
+        'each benefit label parseable in 5-second scan',
+      ],
+      failureModes: [
+        'fewer than 5 badges visible',
+        'badges overlapping product or each other',
+        'inventing benefit labels not in product brief',
+        'random unrelated icons (eg a fish for an immunity benefit)',
+        'unreadable mobile typography',
+        'cluttered busy gradient hiding product',
+      ],
+    },
+    promptBlocks: [
+      BLOCKS.productLock(),
+      BLOCKS.productContext(),
+      BLOCKS.continuity(),
+      BLOCKS.composition(
+        'Centered product hero with 6 circular OR hexagonal benefit badges arranged symmetrically AROUND it — top-left, top-right, mid-left, mid-right, bottom-left, bottom-right. Badges NEVER overlap the product or each other. Consistent shape across all 6 badges.'
+      ),
+      BLOCKS.scene(
+        'Clean modern benefits icon grid composition like a premium ecommerce ad. Each badge pairs ONE small lifestyle/health icon (happy stomach, strong shield, lightning bolt, leafy green, comfortable bed, toilet with checkmark, brain, water drop — match the benefit) with a SHORT 2-4 word benefit label in the target locale. Badge labels pulled from the product\'s benefits / USPs — NEVER invent unrelated claims. Subtle product brand badge at the top (eg "FloraFit DARI DENMARK" if the product has a formula brand).'
+      ),
+      BLOCKS.capture('tripod'),
+      BLOCKS.lighting(
+        'Brand-color soft gradient background (cream / pearl / soft teal / product-brand accent). Subtle premium glow halo behind the centered product. Each badge gets a soft inner shadow / rim light for dimension. Clean studio softbox feel, NOT cinematic mood.'
+      ),
+      BLOCKS.platform('landing-page'),
+      BLOCKS.variation(),
+      BLOCKS.localeHardLock(),
+      BLOCKS.negative([
+        'fewer than 5 badges visible',
+        'badges overlapping product',
+        'random unrelated icons',
+        'inventing benefit labels not in product brief',
+        'cluttered gradient hiding product',
+        'cinematic moody lighting',
+      ]),
+    ],
+    negativeBlocks: [
+      'fewer than 5 badges',
+      'badges overlapping product',
+      'invented benefits',
+      'random unrelated icons',
+      'cinematic moody lighting',
+    ],
+    outputRules: {
+      aspectRatio: '1:1',
+      enforce: ['6 badges visible', 'product centered', 'icons match benefit semantics', 'labels from product brief'],
+      forbid: ['fewer than 5 badges', 'badges overlapping product', 'invented benefits'],
+    },
+  },
+]
+
+/** UI-native configs share most DNA shape — generate via helper.
+ *  Returns a 1-element array so the spread above stays flat.
+ *
+ *  P28: helper now accepts Phase 4 rule arrays so each UI-native creative
+ *  declares its layout / content / visual / quality / failure rules
+ *  inline alongside the shared screenshot DNA. */
+function uiNativeConfig(
+  id: AssetTypeId,
+  partial: {
+    category: import('../uiCatalog/assetCatalog').CategoryId
+    marketingGoal: string
+    emotion: import('../types/creativeDNA').EmotionTone
+    composition: import('../types/creativeDNA').CompositionKind
+    platformStyle: import('../types/creativeDNA').PlatformStyle
+    emotionalGoal?: string
+    typographyStyle?: string
+    platformBehavior?: string
+    layoutRules?: string[]
+    contentRules?: string[]
+    visualRules?: string[]
+    qualityRules?: string[]
+    failureModes?: string[]
+  },
+): CreativeConfig[] {
+  return [{
+    id,
+    engine: 'ui-native',
+    model: 'gemini-text+canvas',
+    dna: {
+      category: partial.category,
+      marketingGoal: partial.marketingGoal,
+      emotion: partial.emotion,
+      realism: 'highly-real',
+      composition: partial.composition,
+      productVisibility: 'contextual',
+      textImportance: 'critical',
+      platformStyle: partial.platformStyle,
+      cameraStyle: 'handheld-smartphone',
+      renderStyle: 'mobile-ui-screenshot',
+      emotionalGoal:    partial.emotionalGoal,
+      typographyStyle:  partial.typographyStyle,
+      platformBehavior: partial.platformBehavior,
+      layoutRules:      partial.layoutRules,
+      contentRules:     partial.contentRules,
+      visualRules:      partial.visualRules,
+      qualityRules:     partial.qualityRules,
+      failureModes:     partial.failureModes,
+    },
+    promptBlocks: [],   // template-rendered, not prompt-driven
+    negativeBlocks: ['figma-perfect-edges', 'studio-clean-screenshot', 'png-export'],
+    outputRules: {
+      aspectRatio: '9:16',
+      enforce: ['status bar realistic', 'realistic timestamps', 'JPEG compression artifacts'],
+      forbid: ['perfect Figma edges', 'PNG export', 'desktop screenshot'],
+    },
+  }]
+}
+
+// ── Public registry ──────────────────────────────────────────────────
+
+const BY_ID = new Map<AssetTypeId, CreativeConfig>(CONFIGS.map((c) => [c.id, c]))
+
+export function findCreativeConfig(id: AssetTypeId): CreativeConfig | null {
+  return BY_ID.get(id) ?? null
+}
+
+export function listCreativeConfigs(): CreativeConfig[] {
+  return CONFIGS
+}

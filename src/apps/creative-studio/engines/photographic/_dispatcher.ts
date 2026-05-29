@@ -21,6 +21,12 @@ import { useBankStore } from '../../../../stores/bankStore'
 import { useSettingsStore } from '../../../../stores/settingsStore'
 import { toPublicUrl } from '../../shared/utils/refResolver'
 import { runBaselineQC } from '../../shared/qc/baselineQC'
+import { findCreativeConfig } from '../../creativeConfig/configs'
+import { assemblePrompt } from '../../shared/prompt/promptAssembler'
+import { assembleCompressedPrompt } from '../../shared/prompt/compressedPrompt'
+import { dnaSummary } from '../../shared/prompt/dnaDirective'
+import { fromProduct } from '../../services/productKnowledge'
+import type { UINativeLocale } from '../../types/uiNative'
 
 export async function dispatchPhotographic(
   module: PhotographicModule,
@@ -54,21 +60,77 @@ export async function dispatchPhotographic(
   if (avatarUrl) referenceUrls.push(avatarUrl)
   if (baseUrl) referenceUrls.push(baseUrl)
 
-  // Build the full prompt via the module's builder
-  const composition = module.buildComposition(params)
-  const finalPrompt = composition.prompt
+  // P15: prefer Creative Config + PromptAssembler when a config exists
+  // for this asset type. Falls back to legacy module.buildComposition()
+  // when no config registered yet (back-compat).
+  const config = findCreativeConfig(module.id)
+  let finalPrompt: string
+  let promptSource: 'compressed' | 'structured' | 'legacy'
+  let blocksUsed: string[] = []
+  if (config) {
+    // P25 — load FULL product knowledge from bankStore (USPs / benefits
+    // / pain points / audience / offer / tone) so the prompt assembler
+    // can bake context into the scene composition. Locale defaults to
+    // 'vi-VN' but can be overridden via params.options.locale.
+    const locale = (params.options?.locale as UINativeLocale | undefined) ?? 'vi-VN'
+    const productKnowledge = fromProduct(product, locale)
+
+    const promptCtx = {
+      productName: product.productName,
+      productDescription: product.productDescription,
+      hasAvatar: !!avatarUrl,
+      hasBaseRef: !!baseUrl,
+      variationHint: (params.options?.variationHint as string | undefined) ?? null,
+      personaId: params.options?.personaId as string | undefined,
+      beatId:    params.options?.beatId    as string | undefined,
+      locale,
+      productKnowledge,
+    }
+
+    const { prompt: structuredPrompt, blocksUsed: structuredBlocks } = assemblePrompt(config, promptCtx)
+    const compressedPrompt = assembleCompressedPrompt(config, promptCtx)
+
+    // P42 — default to the compressed flat-paragraph prompt (Ladipage
+    // density profile, ~100-200 words). The structured multi-section
+    // prompt remains available behind params.options.useStructuredPrompt
+    // for A/B comparison + emergency rollback. blocksUsed is still
+    // reported (from the structured assembly) for diagnostics — the
+    // creative DNA snapshot persisted on the asset is independent of
+    // which prompt path the model saw.
+    const useCompressed = params.options?.useStructuredPrompt !== true
+    finalPrompt = useCompressed ? compressedPrompt : structuredPrompt
+    promptSource = useCompressed ? 'compressed' : 'structured'
+    blocksUsed = structuredBlocks
+  } else {
+    const composition = module.buildComposition(params)
+    finalPrompt = composition.prompt
+    promptSource = 'legacy'
+  }
+
+  // P48 — derive KIE size from the module's declared aspectRatio. KIE
+  // gpt-image-2 only supports '1:1' | '3:2' | '2:3', so map every UI
+  // aspect to the closest supported size. Portrait UI ratios (9:16, 4:5)
+  // collapse to '2:3'; landscape UI ratios (16:9, 3:2) collapse to '3:2'.
+  const kieSize: '1:1' | '3:2' | '2:3' =
+      module.aspectRatio === '3:2' || module.aspectRatio === '16:9' ? '3:2'
+    : module.aspectRatio === '9:16' || module.aspectRatio === '4:5' ? '2:3'
+    : '1:1'
 
   console.info('[photographic dispatcher]', {
     assetType: module.id,
     refs: referenceUrls.length,
     promptLen: finalPrompt.length,
+    promptSource,
+    blocksUsed,
+    moduleAspect: module.aspectRatio,
+    kieSize,
   })
 
   const remoteUrl = await generateGpt4oImage({
     apiKey,
     prompt: finalPrompt,
     filesUrl: referenceUrls,
-    size: '1:1',
+    size: kieSize,
   })
 
   // Persist the generated image
@@ -96,6 +158,13 @@ export async function dispatchPhotographic(
     overall:    qc.overall,
     issues:     qc.issues,
     visionPass: qc.visionPass,
+  }
+  // P28 — surface DNA rule snapshot on the asset.
+  if (config?.dna) {
+    asset.metadata.engineExtras = {
+      ...(asset.metadata.engineExtras ?? {}),
+      creativeDna: dnaSummary(config.dna),
+    }
   }
   return asset
 }

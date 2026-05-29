@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Terms of Service — UGC Lab</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      max-width: 760px;
+      margin: 0 auto;
+      padding: 40px 24px 80px;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+      color: #1f2937;
+      line-height: 1.7;
+      font-size: 15px;
+    }
+    h1 { font-size: 28px; margin: 0 0 8px; }
+    h2 { font-size: 18px; margin-top: 32px; color: #111827; }
+    .meta { color: #6b7280; font-size: 13px; margin-bottom: 32px; }
+    ul { padding-left: 24px; }
+    li { margin: 6px 0; }
+    a { color: #7c3aed; text-decoration: underline; }
+    .lang-toggle { float: right; font-size: 13px; }
+    .section { margin-top: 28px; }
+    .highlight { background: #fef3c7; padding: 12px 16px; border-left: 3px solid #f59e0b; border-radius: 4px; }
+  </style>
+</head>
+<body>
+
+<a class="lang-toggle" href="#en">English ↓</a>
+<h1>Terms of Service</h1>
+<p class="meta">UGC Lab — AI Video Ads Studio · Cập nhật: 27 tháng 5, 2026</p>
+
+<div class="section">
+  <h2>1. Mô tả dịch vụ</h2>
+  <p>UGC Lab là tool AI hỗ trợ content creator + marketing team tạo video quảng cáo theo phong cách User-Generated Content (UGC) bằng tiếng Việt, Anh, và Malay. App tích hợp nhiều tính năng:</p>
+  <ul>
+    <li>Script Architect — sinh kịch bản UGC bằng Gemini</li>
+    <li>Character Studio — tạo avatar AI</li>
+    <li>Voice Studio — text-to-speech qua ElevenLabs</li>
+    <li>UGC Builder — generate video UGC qua KIE</li>
+    <li><strong>Tìm Source Video</strong> — discovery video YouTube/TikTok làm reference</li>
+    <li>Và các tool khác</li>
+  </ul>
+</div>
+
+<div class="section">
+  <h2>2. Bring Your Own Key (BYOK)</h2>
+  <p>App theo mô hình BYOK — bạn tự cung cấp API keys cho các dịch vụ bên thứ ba:</p>
+  <ul>
+    <li>Google Gemini API key</li>
+    <li>YouTube Data API v3 key</li>
+    <li>KIE.AI API key</li>
+    <li>ElevenLabs API key (optional)</li>
+    <li>fal.ai API key (optional)</li>
+  </ul>
+  <p>Bạn chịu trách nhiệm về:</p>
+  <ul>
+    <li>Cost API mà bạn tiêu thụ</li>
+    <li>Tuân thủ ToS của từng dịch vụ</li>
+    <li>Bảo mật API keys</li>
+  </ul>
+</div>
+
+<div class="section">
+  <h2>3. Acceptable Use</h2>
+  <p>Bạn ĐỒNG Ý KHÔNG:</p>
+  <ul>
+    <li>Tạo content vi phạm luật pháp Việt Nam hoặc nước sở tại</li>
+    <li>Sinh content giả mạo người thật / deepfake không có consent</li>
+    <li>Spam, harassment, hoặc malicious content</li>
+    <li>Reverse engineer hoặc bypass rate limit của app</li>
+    <li>Resell access app cho bên thứ ba</li>
+    <li>Vi phạm <a href="https://developers.google.com/youtube/terms/api-services-terms-of-service">YouTube API ToS</a></li>
+  </ul>
+</div>
+
+<div class="section">
+  <h2>4. Tìm Source Video — quy tắc</h2>
+  <div class="highlight">
+    Tính năng Tìm Source Video chỉ DISCOVERY content công khai trên YouTube và TikTok. Bạn KHÔNG được:
+  </div>
+  <ul>
+    <li>Download video YouTube/TikTok trực tiếp qua app (app không cung cấp tính năng này)</li>
+    <li>Sử dụng video tìm được mà không có quyền (copyright) — phải tự verify license</li>
+    <li>Redistribute thumbnail YouTube ngoài context tham khảo</li>
+  </ul>
+  <p>App chỉ phục vụ mục đích <strong>tham khảo cho creative work</strong> — bạn tự chịu trách nhiệm về việc sử dụng cuối cùng.</p>
+</div>
+
+<div class="section">
+  <h2>5. IP và Ownership</h2>
+  <ul>
+    <li><strong>Content bạn tạo</strong> (script, avatar, voice, video render) → thuộc sở hữu của bạn</li>
+    <li><strong>UGC Lab platform</strong> (code, design) → thuộc sở hữu của chúng tôi</li>
+    <li><strong>Content bên thứ ba</strong> (YouTube videos, TikTok, etc.) → thuộc sở hữu của các bên đó. App chỉ provide discovery link, không transfer quyền.</li>
+  </ul>
+</div>
+
+<div class="section">
+  <h2>6. Disclaimer</h2>
+  <p>App được cung cấp <strong>"AS IS"</strong> không có warranty. Chúng tôi KHÔNG đảm bảo:</p>
+  <ul>
+    <li>Output AI luôn chính xác / phù hợp</li>
+    <li>Uptime 100% (depends on Vercel, Supabase, Google, KIE, etc.)</li>
+    <li>Quality video render đạt mong muốn</li>
+    <li>Result Tìm Source Video luôn relevant với scene của bạn</li>
+  </ul>
+  <p>Chúng tôi không chịu trách nhiệm cho thiệt hại gián tiếp từ việc sử dụng app.</p>
+</div>
+
+<div class="section">
+  <h2>7. Termination</h2>
+  <p>Bạn có thể ngừng dùng app anytime — clear API keys + xóa account.</p>
+  <p>Chúng tôi có quyền terminate account nếu bạn vi phạm Terms này.</p>
+</div>
+
+<div class="section">
+  <h2>8. Thay đổi Terms</h2>
+  <p>Chúng tôi có thể update Terms này. Thay đổi quan trọng sẽ được notify qua email. Tiếp tục sử dụng app sau update = bạn đồng ý với phiên bản mới.</p>
+</div>
+
+<div class="section">
+  <h2>9. Liên hệ</h2>
+  <p>Câu hỏi về Terms → <a href="mailto:duongtrienhieu@gmail.com">duongtrienhieu@gmail.com</a></p>
+</div>
+
+<hr style="margin: 60px 0 32px; border: none; border-top: 1px solid #e5e7eb;">
+
+<h1 id="en">Terms of Service (English)</h1>
+<p class="meta">UGC Lab — AI Video Ads Studio · Last updated: May 27, 2026</p>
+
+<h2>1. Service Description</h2>
+<p>UGC Lab is an AI-powered tool helping content creators produce User-Generated Content (UGC) style video ads in Vietnamese, English, and Malay. Includes Script Architect, Character Studio, Voice Studio, UGC Builder, "Tìm Source Video" (YouTube/TikTok discovery), and other tools.</p>
+
+<h2>2. Bring Your Own Key (BYOK)</h2>
+<p>You provide your own API keys (Gemini, YouTube Data API, KIE, ElevenLabs, etc.). You are responsible for: API costs, compliance with each service's ToS, key security.</p>
+
+<h2>3. Acceptable Use</h2>
+<p>You agree NOT to: violate local laws, create deepfakes without consent, spam/harass, reverse-engineer rate limits, resell app access, or violate <a href="https://developers.google.com/youtube/terms/api-services-terms-of-service">YouTube API ToS</a>.</p>
+
+<h2>4. Tìm Source Video Rules</h2>
+<p>The discovery feature provides links to publicly available YouTube + TikTok content for creative reference only. You may NOT download videos through the app, use found content without proper license, or redistribute thumbnails outside reference context.</p>
+
+<h2>5. IP and Ownership</h2>
+<p>Content YOU create (scripts, avatars, renders) belongs to you. The UGC Lab platform belongs to us. Third-party content (YouTube/TikTok) belongs to original owners.</p>
+
+<h2>6. Disclaimer</h2>
+<p>App provided "AS IS" without warranty. We don't guarantee AI accuracy, 100% uptime, render quality, or relevance of Tìm Source Video results. Not liable for indirect damages.</p>
+
+<h2>7. Termination</h2>
+<p>You can stop using anytime. We may terminate accounts violating these Terms.</p>
+
+<h2>8. Changes to Terms</h2>
+<p>We may update these Terms; significant changes notified by email. Continued use implies acceptance.</p>
+
+<h2>9. Contact</h2>
+<p>Questions: <a href="mailto:duongtrienhieu@gmail.com">duongtrienhieu@gmail.com</a></p>
+
+</body>
+</html>

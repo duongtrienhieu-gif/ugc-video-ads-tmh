@@ -701,17 +701,33 @@ function ReviewCard({
 
 // ── Main component ────────────────────────────────────────────────────────────
 
-// ── Outer dispatcher: routes to v1 (stable) or v2 (AI Director beta) ────────
+// ── Outer dispatcher: routes to v1 (stable) / v2 (AI Director) / v3 (Ads Video Engine).
+// Z30 PHASE 1 — v3 is the new default. v2 stays available as legacy
+// escape hatch. v1 stays available as the original stable pipeline.
 import VideoBuilderV2 from './v2/VideoBuilderV2'
+import AdsVideoEngine from './v3/AdsVideoEngine'
 
 export default function VideoBuilder() {
   const pipelineVersion = useSettingsStore((s) => s.pipelineVersion)
   const setPipelineVersion = useSettingsStore((s) => s.setPipelineVersion)
 
-  if (pipelineVersion === 'v2') {
-    return <VideoBuilderV2 onSwitchToV1={() => setPipelineVersion('v1')} />
+  if (pipelineVersion === 'v3') {
+    return (
+      <AdsVideoEngine
+        onSwitchToV2={() => setPipelineVersion('v2')}
+        onSwitchToV1={() => setPipelineVersion('v1')}
+      />
+    )
   }
-  return <VideoBuilderV1 onSwitchToV2={() => setPipelineVersion('v2')} />
+  if (pipelineVersion === 'v2') {
+    return (
+      <VideoBuilderV2
+        onSwitchToV1={() => setPipelineVersion('v1')}
+        onSwitchToV3={() => setPipelineVersion('v3')}
+      />
+    )
+  }
+  return <VideoBuilderV1 onSwitchToV2={() => setPipelineVersion('v3')} />
 }
 
 function VideoBuilderV1({ onSwitchToV2 }: { onSwitchToV2: () => void }) {
@@ -1093,6 +1109,8 @@ function VideoBuilderV1({ onSwitchToV2 }: { onSwitchToV2: () => void }) {
 ═══════════════════════════════════════════════════════════════
 PRODUCT MARKETING CONTEXT (use this to inform every shot's emotional beat)
 ═══════════════════════════════════════════════════════════════
+NOTE: Product fields below may be written in VIETNAMESE — the operator's working language. Read and understand them as native VN text, then write your image generation prompts in ENGLISH (the standard language for image gen models). Any TEXT OVERLAY visible in the output images should be in the target market's language (Malay / Vietnamese / etc. per the script). Keep brand names, currencies, and scientific ingredient names as-is.
+
 Product name: ${bankProduct.productName}
 ${bankProduct.productDescription ? `Description: ${bankProduct.productDescription}` : ''}
 ${bankProduct.targetMarket       ? `Target market: ${bankProduct.targetMarket}` : ''}

@@ -97,13 +97,69 @@ export function readEnvelope<T>(persistKey: string): SnapshotEnvelope<T> | null 
   }
 }
 
-/** Write an envelope. Silently swallows errors (storage may be full). */
+/** OPT-DIAG2 Fix B (2026-05-28) — prune low-priority caches on quota error.
+ *  Super Ladipage's per-product niche / reality / hookMemory caches can
+ *  accumulate over many packs and squeeze out the session-persistence
+ *  envelopes (auto-save state). When that happens we silently lose the
+ *  inflight save. Instead, when QuotaExceededError fires, prune oldest
+ *  super-ladipage caches first and retry the envelope write. */
+const SUPER_LADIPAGE_CACHE_PREFIXES = [
+  'super-ladipage:hookMemory:',
+  'super-ladipage:nicheCache:',
+  'super-ladipage:realityCache:',
+] as const
+
+function pruneSuperLadipageCaches(limit: number): number {
+  if (typeof window === 'undefined') return 0
+  const entries: Array<{ key: string; ts: number }> = []
+  for (let i = 0; i < window.localStorage.length; i++) {
+    const key = window.localStorage.key(i)
+    if (!key) continue
+    if (!SUPER_LADIPAGE_CACHE_PREFIXES.some((p) => key.startsWith(p))) continue
+    let ts = 0
+    try {
+      const raw = window.localStorage.getItem(key)
+      if (raw) {
+        const parsed = JSON.parse(raw) as { savedAt?: number } | string[]
+        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed) && typeof parsed.savedAt === 'number') {
+          ts = parsed.savedAt
+        }
+      }
+    } catch { /* parse error → ts=0 (oldest) */ }
+    entries.push({ key, ts })
+  }
+  entries.sort((a, b) => a.ts - b.ts)
+  const toDelete = entries.slice(0, limit)
+  for (const e of toDelete) {
+    try { window.localStorage.removeItem(e.key) } catch { /* ignore */ }
+  }
+  return toDelete.length
+}
+
+/** Write an envelope. Silently swallows errors (storage may be full).
+ *  On QuotaExceededError, prune oldest super-ladipage cache entries first
+ *  and retry once. */
 export function writeEnvelope<T>(persistKey: string, envelope: SnapshotEnvelope<T>): void {
+  const serialized = JSON.stringify(envelope)
   try {
-    localStorage.setItem(persistKey, JSON.stringify(envelope))
+    localStorage.setItem(persistKey, serialized)
+    return
   } catch (err) {
-    // Storage quota exceeded, private mode, etc. — log but don't crash
-    console.warn(`[sessionPersistence] failed to write ${persistKey}:`, err)
+    const isQuota = err instanceof DOMException && (
+      err.name === 'QuotaExceededError' ||
+      err.name === 'NS_ERROR_DOM_QUOTA_REACHED'
+    )
+    if (!isQuota) {
+      console.warn(`[sessionPersistence] failed to write ${persistKey}:`, err)
+      return
+    }
+    const pruned = pruneSuperLadipageCaches(8)
+    console.warn(`[sessionPersistence] quota hit — pruned ${pruned} oldest super-ladipage cache entries, retrying`)
+    try {
+      localStorage.setItem(persistKey, serialized)
+    } catch (err2) {
+      console.warn(`[sessionPersistence] retry after prune still failed for ${persistKey}:`, err2)
+    }
   }
 }
 

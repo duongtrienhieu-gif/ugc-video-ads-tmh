@@ -3,9 +3,11 @@ import type {
 } from '../types'
 import { useSettingsStore } from '../../../stores/settingsStore'
 import {
-  submitGpt4oImage, pollGpt4oUntilDone, type Gpt4oSize,
+  submitGptImage2, pollGptImage2UntilDone, type Gpt4oSize,
+  submitGpt4oImage, pollGpt4oUntilDone,
 } from '../../../utils/kieai'
 import { saveAsset, getUrl, isAssetRef } from '../../../utils/assetStore'
+import { recordAttempt, finalizeAttempt } from '../debugStore'
 import { renderForLandingSlot } from './chat-proof'
 import { renderForLandingSlot as renderIngredientCardForSlot } from './ingredient-card'
 import { renderForLandingSlot as renderComparisonCardForSlot } from './comparison-card'
@@ -43,6 +45,9 @@ const PRODUCT_FOCUS_SECTIONS: ReadonlySet<SectionType> = new Set<SectionType>([
   'whatsapp-testimonials',
   'offer',
   'final-cta',
+  'magazine-feature',     // premium magazine cover features the product hero
+  'stat-proof',           // stat infographic includes product packaging bottom-right
+  'web-authority-proof',  // Knowledge Panel renders product packaging
 ])
 
 // People / lifestyle / editorial — do NOT pass product refs.
@@ -52,6 +57,97 @@ const PEOPLE_FOCUS_SECTIONS: ReadonlySet<SectionType> = new Set<SectionType>([
   'lifestyle',
   'news-proof',
   'before-after',
+  'expert-feedback',  // expert IS the focus; product visibility banned by spec
+])
+
+// ─────────────────────────────────────────────────────────────────────────
+// FIX 1A — sections where the product is the FOCUS or a featured subject.
+// When pack.productPackagingDescription is available (extracted via Gemini
+// Vision at pack-creation time), inject it verbatim into every prompt so
+// KIE gpt-image-2 renders the EXACT user packaging instead of inventing
+// a similar-looking but wrong brand (Dr White / GoPure / biotopics).
+// Sections NOT in this set rely on FIX 1B (negative ban) or the existing
+// PAIN_NO_PRODUCT_DIRECTIVE.
+// ─────────────────────────────────────────────────────────────────────────
+const WITH_PRODUCT_SECTIONS: ReadonlySet<SectionType> = new Set<SectionType>([
+  'hero',
+  'product-discovery',
+  'ingredients',
+  'mechanism',
+  'comparison',
+  'social-proof',
+  'whatsapp-testimonials',
+  'offer',
+  'final-cta',
+  'magazine-feature',
+  'stat-proof',
+  'web-authority-proof',
+])
+
+// ─────────────────────────────────────────────────────────────────────────
+// HYBRID ROUTING — match Super Ladipage's productPolicy-driven pattern.
+//
+// Super Ladipage (the sibling app that battle-tested this issue) routes:
+//   • Sections WITH product (hero / product-discovery / ingredients /
+//     mechanism / benefits / comparison / social-proof / whatsapp /
+//     offer / final-cta) → gpt-4o-image via /gpt4o-image/generate.
+//     Endpoint actually CONSUMES filesUrl → identity locked.
+//   • Sections WITHOUT product (pain / why-happens / failed-solutions /
+//     expert-feedback / news-proof / before-after / lifestyle) →
+//     gpt-image-2 via /jobs/createTask. Cheaper + sharper photo realism
+//     for emotional candid / portrait / infographic shots.
+//   • FAQ → no images.
+//
+// Rationale: gpt-image-2 is TEXT-ONLY (silently ignores filesUrl) — using
+// it for product-bearing sections produces drift to real brands KIE knows
+// (PHARMANEX, Shaklee, Dr. White, GoPure, biotopics, Nutriplus). For
+// non-product sections, gpt-image-2 is actually PREFERRED because it's
+// newer + sharper for pure photo realism.
+//
+// Routing is CODE-DRIVEN per section type — AI never decides the model
+// → eliminates risk of misrouting a product section to text-only.
+//
+// Falls back to gpt-image-2 if pack has no uploaded refs (filesUrl empty
+// → image-to-image is useless, cheaper path is fine).
+// ─────────────────────────────────────────────────────────────────────────
+const ROUTE_TO_GPT4O_SECTIONS: ReadonlySet<SectionType> = new Set<SectionType>([
+  // 10 sections that always feature the product (per Super Ladipage map)
+  'hero',
+  'product-discovery',
+  'ingredients',
+  'mechanism',
+  'benefits',
+  'comparison',
+  'social-proof',
+  'whatsapp-testimonials',
+  'offer',
+  'final-cta',
+  // Premium form sections (not in form 1 but defined in type) — also
+  // product-bearing per spec, included for cross-form consistency.
+  'magazine-feature',
+  'stat-proof',
+  'web-authority-proof',
+])
+
+// ─────────────────────────────────────────────────────────────────────────
+// FIX 1B — sections where KIE has been observed to ADD a random supplement
+// bottle as a prop, even when the prompt didn't ask for one. User observed:
+//   • benefits_01 prompt asked for 7-icon grid → KIE added "Nutriplus
+//     Gastro Feed" bottle
+//   • news-proof / before-after may render a stray random product
+// These sections get the soft "no random product" ban appended. If the
+// pack has a packaging description, the ban also tells KIE: "if a product
+// is truly unavoidable, use THIS exact packaging — never a random brand."
+//
+// NOT included: pain / failed-solutions / why-happens / expert-feedback —
+// those already have the stronger PAIN_NO_PRODUCT_DIRECTIVE (hard ban).
+// Stacking would be redundant noise in the prompt.
+// ─────────────────────────────────────────────────────────────────────────
+const SOFT_NO_RANDOM_PRODUCT_SECTIONS: ReadonlySet<SectionType> = new Set<SectionType>([
+  'benefits',
+  'news-proof',
+  'before-after',
+  'lifestyle',
 ])
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -75,6 +171,10 @@ const SECTION_PRIORITY: Record<SectionType, number> = {
   'product-discovery':     2,
   'lifestyle':             2,
   'news-proof':            2,
+  'expert-feedback':       2,
+  'magazine-feature':      2,
+  'stat-proof':            2,
+  'web-authority-proof':   2,
   'ingredients':           3,
   'mechanism':             3,
   'benefits':              3,
@@ -608,7 +708,42 @@ const NO_PRODUCT_SECTIONS: ReadonlySet<SectionType> = new Set<SectionType>([
   'pain',
   'failed-solutions',
   'why-happens',
+  'expert-feedback',  // expert IS the focus — product visibility banned by section spec
 ])
+
+/** FIX 1A — build the per-prompt packaging description block.
+ *  Inserted near the top of every prompt for WITH_PRODUCT_SECTIONS so KIE
+ *  has a concrete, specific identity to render. Works around the gpt-image-2
+ *  "TEXT-ONLY ignores filesUrl" limitation that lets ref images be silently
+ *  dropped. */
+function buildPackagingDescriptionBlock(description: string): string {
+  return [
+    'PRODUCT PACKAGING — RENDER EXACTLY AS DESCRIBED (this is the user\'s ACTUAL uploaded product):',
+    description,
+    'USE THIS EXACT PACKAGING. Do NOT invent a different jar / bottle / brand / label / cap. Do NOT substitute with a similar-looking generic supplement. The packaging above is the ONLY valid product visual.',
+  ].join('\n')
+}
+
+/** FIX 1B — soft "no random product" ban for sections that should NOT
+ *  feature a product but where KIE has been observed to add a random
+ *  supplement bottle anyway (benefits icon grid, news article, before-after
+ *  transformation, lifestyle). When packaging description is available,
+ *  the ban routes any unavoidable product render through THAT description
+ *  rather than letting KIE invent. */
+function buildSoftNoRandomProductBlock(description?: string): string {
+  const lines: string[] = [
+    'NO RANDOM PRODUCT — STRICT:',
+    '  • Do NOT include any random supplement bottle, jar, capsule, sachet, tube, box, or generic health product as a prop in this image.',
+    '  • Specifically banned fake brands (KIE has invented these before): Shaklee, Nutriplus, Gastrofeed, Detox Juice, Triple Detox, Dr. White, GoPure, biotopics, biomatrix, "Wellness Pro", or any other made-up health brand.',
+  ]
+  if (description) {
+    lines.push('  • If the composition genuinely requires the product, render it as the EXACT user packaging below — NEVER a different brand:')
+    lines.push(`    ${description}`)
+  } else {
+    lines.push('  • The user has not uploaded a clear product reference — if KIE feels a product is needed for context, OMIT the product entirely rather than invent one.')
+  }
+  return lines.join('\n')
+}
 
 /** Hard directive injected into pain / failed-solutions / why-happens
  *  prompts. Forces KIE to render the PROBLEM scene, not a product shot
@@ -626,6 +761,7 @@ function selectRefsForSection(
   type: SectionType,
   pack: LandingPagePack,
   promptBody?: string,
+  imageIdx?: number,
 ): string[] {
   const memory = pack.visualMemory ?? []
   const refs: string[] = []
@@ -635,6 +771,18 @@ function selectRefsForSection(
     const heroSection = pack.sections.find((s) => s.type === 'hero')
     const heroRef = heroSection?.imagePrompts?.[0]?.generatedAssetRef
     if (heroRef) refs.push(heroRef)
+  }
+
+  // ── Before-after pair-ref injection. When generating the "after" image
+  // (imageIdx=1 ba_02 ↔ ba_01, imageIdx=3 ba_04 ↔ ba_03), prepend the
+  // already-generated "before" image so KIE has a visual identity anchor.
+  // Falls back to text-only identity lock when the pair-mate hasn't
+  // rendered yet (concurrent queue race). ─────────────────────────────────
+  if (type === 'before-after' && (imageIdx === 1 || imageIdx === 3)) {
+    const baSection = pack.sections.find((s) => s.type === 'before-after')
+    const pairMateIdx = imageIdx - 1   // 1→0, 3→2
+    const pairRef = baSection?.imagePrompts?.[pairMateIdx]?.generatedAssetRef
+    if (pairRef) refs.push(pairRef)
   }
 
   // ── PAIN-SECTION GUARD (Phase 7 stabilization) ────────────────────────
@@ -759,6 +907,33 @@ function buildFinalPrompt(job: ImageJob, hasProductRefs: boolean): string {
   }
   if (hasProductRefs) parts.push(PRODUCT_IDENTITY_PREFIX)
 
+  // ── FIX 1A — POSITIVE: inject concrete packaging description so KIE
+  // has a stable identity to render (works around gpt-image-2 TEXT-ONLY
+  // limitation that silently drops filesUrl). Applies to sections that
+  // ALWAYS feature the product, OR any section whose Gemini-emitted prompt
+  // body explicitly mentions a product token (e.g. lifestyle person holding
+  // the product). Skipped when pack has no description (Vision call failed
+  // or no refs uploaded → graceful fallback to PRODUCT_IDENTITY_PREFIX above).
+  const packaging = job.pack.productPackagingDescription
+  if (packaging) {
+    const sectionAlwaysShowsProduct = WITH_PRODUCT_SECTIONS.has(job.section.type)
+    const promptLower = (job.prompt.prompt ?? '').toLowerCase()
+    const productNameLower = (job.pack.productName ?? '').toLowerCase()
+    const PRODUCT_MENTION_TOKENS = [
+      'bottle', 'capsule', 'tablet', 'sachet', 'packet', 'tube', 'jar',
+      'powder', 'cream', 'serum', 'gel', 'spray', 'product', 'packaging', 'label',
+    ]
+    const promptMentionsProduct = PRODUCT_MENTION_TOKENS.some((t) => promptLower.includes(t))
+      || (productNameLower.length > 3 && promptLower.includes(productNameLower))
+
+    // Do NOT inject into NO_PRODUCT_SECTIONS even if prompt leaked product
+    // tokens — PAIN_NO_PRODUCT_DIRECTIVE below is the source of truth there.
+    const allowedInThisSection = !NO_PRODUCT_SECTIONS.has(job.section.type)
+    if (allowedInThisSection && (sectionAlwaysShowsProduct || promptMentionsProduct)) {
+      parts.push(buildPackagingDescriptionBlock(packaging))
+    }
+  }
+
   // Phase 7 stabilization — pain / problem / symptom sections must NEVER
   // depict the product. User reported pain-section shots with person
   // holding product like a testimonial, which kills the emotional
@@ -768,12 +943,88 @@ function buildFinalPrompt(job: ImageJob, hasProductRefs: boolean): string {
     parts.push(PAIN_NO_PRODUCT_DIRECTIVE)
   }
 
-  parts.push(job.prompt.prompt)
+  // ── FIX 1B — NEGATIVE: ban random supplement bottles in sections where
+  // KIE has been observed to add stray product props (benefits icon grid,
+  // news article mock, before-after transformation, lifestyle scene). When
+  // the pack has a packaging description, the ban routes any unavoidable
+  // product render through THAT description rather than letting KIE
+  // invent. Skipped for NO_PRODUCT_SECTIONS — those already have the
+  // stronger PAIN_NO_PRODUCT_DIRECTIVE above.
+  if (SOFT_NO_RANDOM_PRODUCT_SECTIONS.has(job.section.type)
+      && !NO_PRODUCT_SECTIONS.has(job.section.type)) {
+    parts.push(buildSoftNoRandomProductBlock(packaging))
+  }
+
+  // ── Mobile-screenshot sections (whatsapp / shopee / tiktok / facebook):
+  // prepend a TRUE-9:16 mobile-screenshot directive that locks composition
+  // to authentic phone screenshots — status bar, safe area, native UI
+  // proportions. Eliminates the "poster layout / floating product card /
+  // landscape composition" failure modes. ─────────────────────────────────
+  // Phase 3 — platform-specific screenshot directive (was 1 generic
+  // directive for all 4 platforms; now each platform gets its own UI rules,
+  // banned VN vocab list, and diversity directive).
+  if (isMobileScreenshotJob(job)) {
+    parts.push(buildPlatformScreenshotDirective(job, job.pack.language))
+  }
+
+  // ── Expert-feedback section: premium editorial composition with badge +
+  // quote-box overlay. Re-asserts the spec at runtime to avoid Gemini
+  // under-specification. ──────────────────────────────────────────────────
+  if (job.section.type === 'expert-feedback') {
+    parts.push(EXPERT_FEEDBACK_DIRECTIVE)
+  }
+
+  // ── Premium-form upgrades (3 new visual styles + annotated hero) ────────
+  if (job.pack.form === 'premium' && job.section.type === 'hero') {
+    parts.push(PREMIUM_ANNOTATED_HERO_DIRECTIVE)
+  }
+  if (job.section.type === 'magazine-feature') {
+    parts.push(MAGAZINE_FEATURE_DIRECTIVE)
+  }
+  if (job.section.type === 'stat-proof') {
+    parts.push(STAT_PROOF_DIRECTIVE)
+  }
+  if (job.section.type === 'web-authority-proof') {
+    parts.push(WEB_AUTHORITY_PROOF_DIRECTIVE)
+  }
+
+  // ── Before-after section: identity-lock directive. Combined with pair-
+  // ref injection in selectRefsForSection, this gives KIE both a textual
+  // identity description AND (when available) a visual reference image
+  // from the pair-mate so the same individual threads through BEFORE ↔
+  // AFTER. Fixes the "random unrelated people" failure mode. ──────────────
+  if (job.section.type === 'before-after') {
+    // Detect whether pair-mate's ref is already in filesUrl (selectRefsForSection
+    // injects it when generatedAssetRef is ready). Use this to switch the
+    // directive between strict image-to-image lock vs text-only fallback.
+    parts.push(buildBeforeAfterIdentityLock(job, hasProductRefs))
+  }
+
+  // ── Comparison section: inject structured comparisonData when available so
+  // the image generator gets explicit US vs THEM bullet pairs rather than
+  // trying to parse them out of the free-form imagePrompt body. Eliminates
+  // the "Không tìm được cặp bullet THEM/US" failure mode.
+  // Phase 1 stability — defensive try/catch so a future schema mismatch
+  // never crashes the whole pack build. Falls back to free-form prompt. ────
+  if (job.section.type === 'comparison' && job.section.comparisonData) {
+    try {
+      parts.push(buildComparisonStructuredPrompt(job.section.comparisonData, job.prompt.prompt))
+    } catch (err) {
+      console.warn('[generateImages] comparison structured prompt builder threw — falling back to free-form prompt:', err)
+      parts.push(job.prompt.prompt)
+    }
+  } else {
+    parts.push(job.prompt.prompt)
+  }
 
   // Z22 — per-image diversity directive (replaced by continuity directive
   // for advertorial form via buildDiversityDirective branch logic).
-  const diversity = buildDiversityDirective(job)
-  if (diversity) parts.push(diversity)
+  try {
+    const diversity = buildDiversityDirective(job)
+    if (diversity) parts.push(diversity)
+  } catch (err) {
+    console.warn('[generateImages] diversity directive builder threw — skipping:', err)
+  }
 
   // Z22 — hard negatives. Form-specific overrides:
   //   • chuyen-gia: allows editorial / clinical look
@@ -793,6 +1044,291 @@ function buildFinalPrompt(job: ImageJob, hasProductRefs: boolean): string {
   }
 
   return parts.join('\n\n')
+}
+
+/** Premium-form hero variant directive — "Annotated UGC Poster" style
+ *  (Daily Greens / Huel reference). Applied ONLY when pack.form === 'premium'
+ *  AND section.type === 'hero'. Overrides the default UGC-selfie hero with
+ *  a brand-first annotated product poster: product center-frame, multi
+ *  callout labels around it in handwritten / sketchy script with curved
+ *  arrows, decorative stars, domain url at corner. */
+const PREMIUM_ANNOTATED_HERO_DIRECTIVE =
+  'PREMIUM ANNOTATED POSTER (Huel / Daily Greens reference) — non-negotiable composition:\n'
+  + '  • This is a BRAND-FIRST poster, not a UGC selfie. The EXACT uploaded product packaging is CENTER-FRAME, held by a hand entering from the bottom OR resting on a clean stone / linen / kitchen surface with subtle natural garnish (lemon slice, blueberries, herbs).\n'
+  + '  • Background: soft natural daylight, slightly out-of-focus styled wellness scene (kitchen counter / morning window light / clean stone surface).\n'
+  + '  • Around the product: 4-5 HANDWRITTEN CALLOUT LABELS in a casual marker / script font. Each label connects to a point on the product / scene with a thin curved hand-drawn arrow. Example callout content: ingredient highlight ("Lion\'s mane"), benefit ("Supports energy, immunity & recovery"), spec ("41 vitamins & SuperFoods!"), low-calorie claim ("Only 25 calories!").\n'
+  + '  • Decorative elements: small hand-drawn stars / sparkles / dots scattered. A tiny brand domain URL at one corner (eg "huel.com" or invented brand domain).\n'
+  + '  • Top-left or top-right corner: thin script "Product Name" wordmark in casual marker style with a small ⭐ doodle.\n'
+  + '  • Palette: cream / sage / soft green accents that complement the product packaging. Not high-contrast, not loud.\n'
+  + '  • Aesthetic reference: Huel Daily Greens / Spacegoods / premium wellness brand Instagram creative. Editorial premium feel — NOT TikTok, NOT marketplace promo.\n'
+  + '  • ABSOLUTELY FORBIDDEN: poster glossy commercial ad styling; cinematic luxury studio; UGC selfie with face dominating frame; floating product PNG with no scene; harsh marketing typography; HARI INI / DISKAUN / urgency text; multi-bottle promotional layout.'
+
+/** Magazine-feature section directive. Premium magazine cover mockup. */
+const MAGAZINE_FEATURE_DIRECTIVE =
+  'PREMIUM MAGAZINE COVER MOCKUP (VITAL / Wellness Magazine reference) — non-negotiable composition:\n'
+  + '  • Render as a fake premium wellness magazine COVER (4:5 portrait magazine proportions). The EXACT uploaded product packaging is the centerpiece of the cover image.\n'
+  + '  • TOP of cover: a bold short editorial masthead (invent a name like "VITAL" / "WELLNESS" / "GREEN BRIEF") in clean condensed serif or bold sans-serif. Below the masthead: tiny "POWERING MODERN WELLNESS" tagline + small "ISSUE 47 · MAY 2026" line + a tiny barcode hint at one corner.\n'
+  + '  • CENTER: the EXACT uploaded product packaging on a premium editorial set — linen / stone surface / blueberries / lemon / soft botanical garnish, magazine-quality product photography. Soft natural daylight. Generous whitespace.\n'
+  + '  • BIG EDITORIAL HEADLINE OVERLAY across the lower half of the cover: render the section\'s headline + subheadline as visible image text in clean magazine-style typography. Example: "DAILY GREENS. MAXIMUM YOU." stacked, with subhead "41 vitamins. Zero nonsense. All benefit." underneath in lighter weight.\n'
+  + '  • RIGHT EDGE or LEFT EDGE: 2-3 small slanted ribbon callout cards in green / cream accent, each containing a short sub-article tease (eg "BIOHACK YOUR ROUTINE", "GUT HEALTH UPGRADED", "EXCLUSIVE INTERVIEW WITH X").\n'
+  + '  • BOTTOM corner: small "REAL NUTRITION. REAL RESULTS." or similar tagline in elegant small caps.\n'
+  + '  • Palette: cream / soft sage / green / off-white — match the product packaging color family.\n'
+  + '  • Aesthetic: Huel-magazine / Spacegoods-magazine / Apple-brochure / premium wellness editorial. Generous negative space. Clean typography hierarchy.\n'
+  + '  • ABSOLUTELY FORBIDDEN: TikTok visual style; UGC selfie; discount banner overlay; HARI INI / DISKAUN urgency text; emoji; oversized red CTA buttons; cluttered marketplace layout. This is an EDITORIAL MAGAZINE COVER, not an ad.'
+
+/** Stat-proof section directive. Big-number infographic + growth chart. */
+const STAT_PROOF_DIRECTIVE =
+  'STAT-HERO INFOGRAPHIC (Spacegoods / Hims-Hers / Huel-data reference) — non-negotiable composition:\n'
+  + '  • 1:1 square infographic poster. BACKGROUND: deep charcoal / near-black with a very subtle purple-pink gradient hint at one corner (NOT loud, NOT pure black).\n'
+  + '  • HERO ELEMENT: extract the BIG NUMBER from the section headline (eg "87%" / "92%" / "3x") and render it MASSIVE in the top-left or top-center — bold modern sans-serif typography, gradient fill running from purple to pink on the number itself. Big enough to occupy ~40% of the canvas height.\n'
+  + '  • Directly below the big number: render the rest of the headline phrase as visible text in clean white sans-serif (eg "of users reported laser focus without the crash"). Smaller subtitle line below in light gray small-caps reading the study methodology (eg "SELF-REPORTED FOCUS & PRODUCTIVITY AFTER 14 DAYS OF USE").\n'
+  + '  • RIGHT-BOTTOM or BOTTOM HALF: a clean line CHART on a soft grid. X-axis labels "DAY 1 · DAY 4 · DAY 7 · DAY 10 · DAY 14". Y-axis labels "0% · 50% · 100%". The line itself: glowing purple-pink gradient stroke, trending smoothly upward to approximately the headline percentage at the right edge.\n'
+  + '  • EXACT uploaded product packaging in the bottom-right corner, small-to-medium sized, with subtle product glow / soft halo. Render the actual brand label faithfully.\n'
+  + '  • BOTTOM-LEFT or BOTTOM-CENTER: tiny disclaimer text in light-gray small caps — use the bullets field verbatim (eg "*Based on a 14-day consumer study with 120 participants", "Not intended to diagnose, treat, cure, or prevent any disease").\n'
+  + '  • Optional small cursor / click icon hint as a subtle decorative element.\n'
+  + '  • Aesthetic: modern dark-mode wellness science infographic. Premium clean typography. The big number dominates; everything else supports it.\n'
+  + '  • ABSOLUTELY FORBIDDEN: TikTok / Shopee badges; HARI INI / DISKAUN urgency; emoji; UGC selfie; floating product PNG dominating the frame (product is supportive, the stat is the hero); loud red / yellow marketing colors; chaotic chart with multiple lines.'
+
+/** Web-authority-proof section directive. Google SERP screenshot mockup. */
+const WEB_AUTHORITY_PROOF_DIRECTIVE =
+  'GOOGLE SERP SCREENSHOT MOCKUP (Google 2026 desktop reference) — non-negotiable composition:\n'
+  + '  • Render as a 4:5 portrait crop of a desktop Google Search results page screenshot. Pixel-perfect Google SERP mimicry.\n'
+  + '  • TOP: realistic Google search bar with the EXACT product / brand name typed in (use the actual product name from brief). Small navigation tab row beneath ("All · Images · Shopping · News · Videos · Forums").\n'
+  + '  • LEFT 60% (organic results column): 4-5 organic result entries. Each entry has: small site favicon + breadcrumb URL (mix authoritative-looking domains: brand official site, healthline / berita-harian / vogue / health.com.my / mens-health) + bold blue clickable title relevant to the product niche (eg "Daily Greens — 41 Vitamins, Minerals & Superfoods", "Are X Greens Worth The Hype?") + 2-line gray snippet excerpt beneath. Include one "People Also Ask" expandable widget showing 3 collapsed questions about the product / niche.\n'
+  + '  • RIGHT 40% (Knowledge Panel sidebar): a clean white panel card containing — the EXACT uploaded product packaging as the panel\'s hero image at the top; bold product name below it; "★ 4.7  1,248 Google reviews" rating line; a compact key-value info table ("Ingredients: ...", "Category: Health drink"); a primary blue "Visit official site" CTA button.\n'
+  + '  • BOTTOM-LEFT corner: tiny "About this result" / share / feedback icons matching real Google UI.\n'
+  + '  • Light Google theme. Authentic Google Sans typography. Real spacing. Subtle browser chrome / scrollbar hint at edges. Subtle JPEG compression hint so it feels like a real screenshot.\n'
+  + '  • ABSOLUTELY FORBIDDEN: TikTok aesthetic; mobile UI (this is DESKTOP); oversized marketing text; floating product PNG outside the Knowledge Panel; fake Google logo deformations; HARI INI / DISKAUN urgency; emoji rendered as Google emoji; cartoonish Google styling.'
+
+/** Expert-feedback section directive. Forces premium editorial composition
+ *  with badge overlay + quote box, NOT lifestyle / UGC. The section spec
+ *  in SYSTEM_PROMPT already describes the layout — this runtime block
+ *  re-asserts the rules at the KIE prompt level so they survive any
+ *  Gemini under-specification. */
+const EXPERT_FEEDBACK_DIRECTIVE =
+  'EXPERT AUTHORITY FEEDBACK COMPOSITION — non-negotiable layout rules:\n'
+  + '  • This is a PREMIUM EDITORIAL portrait poster, NOT a lifestyle UGC shot.\n'
+  + '  • 9:16 tall canvas. TOP 60% = professional medical / clinic / pharmacy / nutrition-lab environment with the expert in clean professional attire (white coat / pharmacist tunic / smart blouse). Calm authoritative expression. Soft natural daylight.\n'
+  + '  • TOP-RIGHT corner: small rounded "expert badge" card overlay. Inside: circular avatar headshot + bold expert name + thin small-cap specialty line + "X Years Experience" line. Clean editorial sans-serif typography. Subtle drop-shadow on the badge.\n'
+  + '  • BOTTOM 40%: light cream / off-white quote box overlay with a thin top divider line. Inside: italic blockquote of the expert\'s opinion text (rendered as visible image text), credited beneath with the expert\'s name in small caps. Bold opening quotation mark (").\n'
+  + '  • Aesthetic: premium magazine editorial, clinical-professional, magazine-clean typography hierarchy, realistic spacing.\n'
+  + '  • Realistic Malaysian / Southeast-Asian expert face. NO Western / Korean / Chinese-influencer aesthetic.\n'
+  + '  • ABSOLUTELY FORBIDDEN: product packaging visible (focus is expert, not product); TikTok visual style; UGC selfie aesthetic; phone-camera feel; fashion-editorial glamour; oversized stamped marketing text; CTA buttons / "ORDER" / "DISKAUN" rendered into image; cinematic gym-influencer transformation aesthetic.'
+
+/** Before-after identity-lock directive. Strengthens the per-pair identity
+ *  requirements in the imagePrompt body — explicit hard bans + explicit
+ *  "if reference image #1 is attached, IT IS the same person you must
+ *  render" line. Combined with pair-ref injection (see selectRefsForSection
+ *  before-after branch) this gives KIE a visual identity anchor instead of
+ *  relying purely on text description. */
+/** Before/after identity lock — softened per ROLLBACK_HANDOFF mục 1+8.
+ *  Restored to the pre-Phase-4 lighter style: keep pair-identity guidance
+ *  + retain the ref-attached vs text-only branch, but drop the strict
+ *  "image is REJECTED if drifts" language and the explicit 7-item face-
+ *  feature checklist that was over-constraining KIE and producing rigid
+ *  unnatural pair outputs. */
+function buildBeforeAfterIdentityLock(_job: ImageJob, hasPairMateRef: boolean): string {
+  const lines: string[] = []
+  lines.push('BEFORE/AFTER IDENTITY LOCK — non-negotiable per-pair rules:')
+  lines.push('  • The BEFORE and AFTER images of EACH PAIR (ba_01↔ba_02, ba_03↔ba_04) MUST depict the SAME individual.')
+  lines.push('  • Same face shape, same skin tone, same age, same ethnicity, same hairstyle / hijab style as their pair-mate.')
+  lines.push('  • Same room background, same camera framing, same outfit family (slight color shift OK) as their pair-mate.')
+  if (hasPairMateRef) {
+    lines.push('  • A reference image is attached (filesUrl) — THAT REFERENCE IS THE BEFORE-STATE PERSON; the AFTER render must be visually recognizable as the same individual (same bone structure, same demographic identity).')
+  } else {
+    lines.push('  • No pair-mate reference attached — fall back to text-only identity lock per the imagePrompt body (same face / age / ethnicity described there).')
+  }
+  lines.push('  • DIFFERENT clothing pieces between BEFORE and AFTER (no same exact shirt) — natural outfit evolution, no Photoshop split-clone.')
+  lines.push('  • DIFFERENT expression: BEFORE = tired / slumped / low-energy; AFTER = relaxed / confident / brighter.')
+  lines.push('  • DIFFERENT lighting: BEFORE = cooler dim; AFTER = warmer brighter (same window, different time of day).')
+  lines.push('  • Render the Malay label "SEBELUM" (before) OR "SELEPAS" (after) in clean white sans-serif top-left.')
+  lines.push('  • ABSOLUTELY FORBIDDEN: different face between BEFORE and AFTER of the same pair; race / body-type swap; gym-influencer transformation aesthetic; sports-bra / activewear / lingerie reveal; English "BEFORE" / "AFTER" labels; collage / split-frame / side-by-side in ONE image.')
+  return lines.join('\n')
+}
+
+/** Detect WhatsApp / Shopee / TikTok-Shop / Facebook screenshot jobs.
+ *  Matches by section type + imagePrompt.style heuristic so we don't
+ *  accidentally trigger on lifestyle / hero / before-after photos. */
+function isMobileScreenshotJob(job: ImageJob): boolean {
+  const t = job.section.type
+  if (t === 'whatsapp-testimonials') return true
+  if (t === 'social-proof') {
+    const style = (job.prompt.style ?? '').toLowerCase()
+    return (
+      style.includes('whatsapp') ||
+      style.includes('shopee') ||
+      style.includes('tiktok') ||
+      style.includes('facebook comment') ||
+      style.includes('fb comment')
+    )
+  }
+  return false
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Phase 3 — Platform-locked screenshot directives.
+//
+// Each platform gets its own UI rules instead of sharing one generic block:
+//   • WhatsApp 2025
+//   • Shopee MY (orange)
+//   • TikTok Shop MY (dark)
+//   • Facebook comments
+//
+// All directives share a common screenshot-realism preamble + a Malay UI
+// vocabulary lock (when language='ms') that explicitly bans Vietnamese
+// phrases ("Mua ngay", "Đánh giá", etc.) and lists required Malay
+// equivalents ("Beli sekarang", "Penilaian", etc.).
+//
+// Aspect ratio note: KIE GPT-4o's tallest portrait is 2:3 (≈ 1024×1536) —
+// we can't literally output 1080×1920 9:16 but we force the COMPOSITION
+// to look like a 9:16 phone screenshot inside the 2:3 canvas.
+// ─────────────────────────────────────────────────────────────────────────
+
+const SCREENSHOT_REALISM_PREAMBLE =
+  'MOBILE SCREENSHOT MODE — non-negotiable composition rules:\n'
+  + '  • This is a REAL phone screenshot captured on a 2025 Android / iOS handset. Full-bleed mobile UI from edge to edge.\n'
+  + '  • COMPOSITION: full-screen mobile screenshot occupying the ENTIRE canvas. NO centered card. NO floating poster. NO black/empty bands above or below. NO landscape composition.\n'
+  + '  • TOP STATUS BAR: realistic Android / iOS bar — time ("11:47"), battery % numeric, signal icon (4G/5G), wifi icon, notification badges. Native OS typography scale.\n'
+  + '  • SAFE AREA: ~4-6% top padding for status bar, ~3-5% bottom padding for home indicator. Content respects these margins.\n'
+  + '  • TYPOGRAPHY: native platform fonts, organic uneven spacing (real apps NEVER have Figma-perfect equal margins).\n'
+  + '  • QUALITY: subtle JPEG compression, slight blur in non-text regions, slight imperfect crop — looks like a real captured screenshot, NOT a designed graphic, NOT a Figma mockup.\n'
+  + '  • REVIEWER / AVATAR DIVERSITY: every visible reviewer / comment author MUST be a DIFFERENT person — different Malaysian ethnicity (Malay / Chinese-Malaysian / Indian-Malaysian / hijab variants), different age (20s/30s/40s/50s), different avatar colour. NO clone faces. NO repeated names.\n'
+  + '  • COMMENT LENGTH VARIATION: short emoji-only replies (5 words), medium reactions (15 words), longer paragraph reviews (3-4 lines) — mixed organically.\n'
+  + '  • ABSOLUTELY FORBIDDEN: poster layout, floating product PNG card, centered product packshot, black empty backgrounds, landscape composition, designed marketing graphic, advertisement-style overlay, fake / futuristic UI, clone avatars, repeated reviewer names.\n'
+
+/**
+ * Malay UI vocabulary lock — appended to platform directive when
+ * landing language = 'ms'. Explicit banned VN phrases + required MY
+ * equivalents so KIE doesn't render Vietnamese UI text into the
+ * screenshot canvas (a leak the user reported in the latest gel xương
+ * landing pack).
+ */
+const MALAY_UI_VOCAB_LOCK =
+  '\n  • LANGUAGE LOCK — Bahasa Melayu UI ONLY. Every label / button / timestamp / username / comment text rendered into the image MUST be in Malaysian Bahasa Melayu (or English loanwords commonly used in MY apps). Vietnamese is STRICTLY BANNED.\n'
+  + '  • BANNED Vietnamese phrases (these have leaked before — DO NOT render any of them into the screenshot):\n'
+  + '      ✗ "Mua ngay" / "Mua lẹ"           → use "Beli sekarang" / "Beli sekarang"\n'
+  + '      ✗ "Đánh giá" / "Bình luận"        → use "Penilaian" / "Komen" / "Ulasan"\n'
+  + '      ✗ "Thêm vào giỏ" / "Thêm giỏ"     → use "Tambah ke troli" / "Tambah ke keranjang"\n'
+  + '      ✗ "Chất lượng tốt"                → use "Kualiti baik" / "Kualiti tinggi"\n'
+  + '      ✗ "Khách mua tiếp"                → use "Pelanggan beli semula"\n'
+  + '      ✗ "Phân loại"                     → use "Variasi" / "Pilihan"\n'
+  + '      ✗ "Đặt hàng"                      → use "Tempah" / "Tempah sekarang"\n'
+  + '      ✗ "Giao hàng"                     → use "Penghantaran"\n'
+  + '      ✗ "Có hình"                       → use "Dengan media" / "Ada gambar"\n'
+  + '  • Use AUTHENTIC Malaysian timestamp formats: "2 hari lalu", "1 minggu lalu", "5 minit yang lalu", "Semalam".\n'
+  + '  • Use AUTHENTIC Malaysian reviewer names: "T**n H**u", "L**g T**m", "duc.l***ous" are FORBIDDEN (those are VN-style obfuscation). Use MY-style: "Aini bt M****", "Ahmad Z**", "Siti N****", "Wong M**", "Raj K****".\n'
+  + '  • All emoji + reaction text stay universal (👍 ❤️ 😍) — no language anchor needed.\n'
+
+function platformPostlude(language: 'ms' | 'vi' | 'en'): string {
+  return language === 'ms' ? MALAY_UI_VOCAB_LOCK : ''
+}
+
+const WHATSAPP_PLATFORM_BLOCK =
+  '\n— PLATFORM: WhatsApp 2025 (Malaysia) —\n'
+  + '  • TOP NAVBAR: dark green-teal bar, back arrow + circular contact avatar + contact name + "last seen X minit yang lalu" subtitle. Right side: video-call + voice-call + 3-dot menu icons.\n'
+  + '  • CHAT AREA: WhatsApp light cream / pale-yellow background (CSS-equivalent #ECE5DD or current 2025 theme). Soft pattern visible faintly.\n'
+  + '  • BUBBLES: outgoing messages on the right (light-green #DCF8C6 in light mode), incoming on the left (white). Rounded corners with little tail pointer on the first bubble of a series. Each bubble: 1-2 lines of text + tiny timestamp + double-check delivery ticks (blue ✓✓ for read).\n'
+  + '  • INPUT BAR: bottom — text-field with emoji/attach icons, microphone icon on the right.\n'
+  + '  • TYPOGRAPHY: WhatsApp font sizing — message ~14sp, timestamp ~10sp, contact name ~17sp.\n'
+  + '  • Status bar typography matches Android (numeric battery, 4G/5G).\n'
+  + '  • NO desktop WhatsApp Web UI. NO fake "WhatsApp Lite" / "GBWhatsApp" mods.\n'
+
+const SHOPEE_PLATFORM_BLOCK =
+  '\n— PLATFORM: Shopee Malaysia (orange theme) —\n'
+  + '  • TOP NAVBAR: white bar with back arrow, "Penilaian" title, share + cart icons on the right.\n'
+  + '  • RATING HEADER: large "★ 4.8" + "Penilaian (2.6K)" + tag row "5★ 4★ 3★ 2★ 1★" + "Dengan media" sub-filter.\n'
+  + '  • REVIEW CARDS: white background, each card has — circular avatar + masked Malay name + 5-star row + "Variasi: <colour/size>" line + timestamp ("2 hari lalu") + 2-4 line review text + 2-4 small thumbnail review photos.\n'
+  + '  • FLOATING BOTTOM CTA: chat icon + cart icon + bright pink "Beli Sekarang" button + price "RM<price>" — Shopee uses BRIGHT PINK CTA, not orange (orange is the brand header). Pink #EE4D2D / FF424F.\n'
+  + '  • TYPOGRAPHY: Shopee Sans / Helvetica Neue — review text ~13sp, headlines ~15sp.\n'
+  + '  • REVIEW THUMBNAIL ASPECT: preserve original aspect (object-fit: cover style) — never stretch horizontally / squash vertically.\n'
+  + '  • NO fake clean symmetry, NO Figma-perfect equal margins.\n'
+
+const TIKTOK_SHOP_PLATFORM_BLOCK =
+  '\n— PLATFORM: TikTok Shop Malaysia (dark theme) —\n'
+  + '  • TOP NAVBAR: BLACK bar, back arrow + product star rating "★ 4.8 Penilaian 2.6K" + share + cart icons.\n'
+  + '  • REVIEW FILTER ROW: pill tabs "Semua / Ada gambar / 5★ / 4★ / 3★" — selected tab has white outline on dark bg.\n'
+  + '  • REVIEW CARDS: dark / near-black background, white text. Each card: circular avatar + masked username + 5-star row + 2-4 line review in casual Bahasa Melayu mixing English loanwords + tiny timestamp + 2-4 small thumbnail review photos.\n'
+  + '  • FLOATING BOTTOM CTA: black bar with cart icon + bright red-orange "Beli Sekarang" button + price "RM<price>" + small "Tambah ke troli" secondary text.\n'
+  + '  • TYPOGRAPHY: TikTok Display / SF Pro — comment text ~13sp on dark bg.\n'
+  + '  • Uneven organic spacing — real TikTok feeds have inconsistent gaps.\n'
+  + '  • NO Shopee orange. NO WhatsApp green.\n'
+
+const FACEBOOK_COMMENT_PLATFORM_BLOCK =
+  '\n— PLATFORM: Facebook Mobile (Malaysia) —\n'
+  + '  • TOP NAVBAR: Facebook blue (#1877F2) — back arrow + page title (eg "INFINITY PROBIOTICS Malaysia") + 3-dot menu.\n'
+  + '  • POST HEADER: page avatar + page name + verified blue tick (if brand) + post timestamp + small globe "Public" badge.\n'
+  + '  • POST BODY: post text mentioning product + optional product image (preserve EXACT uploaded packaging). Reaction count row beneath ("👍 ❤️ 😍  1.2K   234 komen   58 kongsi").\n'
+  + '  • COMMENT THREAD: 4-6 comment cards stacked. Each: circular avatar + name + comment in casual Malay with emojis + reaction count + "Suka · Balas · Xs/menit/jam yang lalu". Some comments have nested 1-2 replies.\n'
+  + '  • COMMENT INPUT BAR: bottom — emoji + camera + gif icons on the right.\n'
+  + '  • TYPOGRAPHY: SF Pro / Roboto — comment text ~14sp, reaction count ~12sp.\n'
+  + '  • NO desktop Facebook UI. NO Facebook Lite / FB-Messenger UI.\n'
+
+const MESSENGER_PLATFORM_BLOCK =
+  '\n— PLATFORM: Messenger 2025 (Malaysia) —\n'
+  + '  • TOP NAVBAR: white bar + back arrow + circular contact avatar + contact name + tiny "Aktif sekarang" subtitle. Right: phone + video-call + info icons.\n'
+  + '  • CHAT AREA: white background — Messenger 2025 light theme.\n'
+  + '  • BUBBLES: outgoing messages on the right in Messenger BLUE GRADIENT (#0084FF), incoming on the left in light grey #E4E6EB. Rounded fully-pill shape. Tail pointer on first bubble of series.\n'
+  + '  • READ RECEIPT: tiny circular avatar at the bottom-right of the last outgoing message indicates "seen".\n'
+  + '  • TYPING INDICATOR: 3-dot animated bubble visible on some chats.\n'
+  + '  • INPUT BAR: bottom — camera + gif + emoji + microphone icons.\n'
+  + '  • NO WhatsApp green bubbles, NO Instagram DM gradient.\n'
+
+const TIKTOK_COMMENT_PLATFORM_BLOCK =
+  '\n— PLATFORM: TikTok Comments (Malaysia) —\n'
+  + '  • COMPOSITION: vertical full-bleed phone screenshot with a darkened video frame in the top 40% + comment section overlay rising from the bottom.\n'
+  + '  • COMMENT SECTION: white background sliding up from bottom edge. Title row "1.2K komen" + filter pill row.\n'
+  + '  • COMMENT CARDS: circular avatar + masked Malay username + casual Malay comment (1-3 lines, emoji-rich) + tiny "Suka X" + "Balas" + timestamp.\n'
+  + '  • SOME COMMENTS have 1-2 nested replies indented under them.\n'
+  + '  • RIGHT EDGE of video frame: TikTok action stack — heart + comment + share + bookmark icons + creator avatar.\n'
+  + '  • INPUT BAR: bottom — "Tambah komen..." placeholder + emoji shortcuts.\n'
+
+/** Pick the platform-specific block by job style + section type. */
+function pickPlatformBlock(job: ImageJob): string {
+  const t = job.section.type
+  const style = (job.prompt.style ?? '').toLowerCase()
+  if (t === 'whatsapp-testimonials') return WHATSAPP_PLATFORM_BLOCK
+  if (style.includes('messenger')) return MESSENGER_PLATFORM_BLOCK
+  if (style.includes('shopee')) return SHOPEE_PLATFORM_BLOCK
+  if (style.includes('tiktok shop')) return TIKTOK_SHOP_PLATFORM_BLOCK
+  if (style.includes('tiktok comment')) return TIKTOK_COMMENT_PLATFORM_BLOCK
+  if (style.includes('facebook')) return FACEBOOK_COMMENT_PLATFORM_BLOCK
+  // Fallback — generic mobile screenshot (no platform-specific UI rules).
+  return ''
+}
+
+/** Build the final screenshot directive: preamble + platform block +
+ *  language vocab lock (when ms). */
+function buildPlatformScreenshotDirective(job: ImageJob, language: 'ms' | 'vi' | 'en'): string {
+  return SCREENSHOT_REALISM_PREAMBLE + pickPlatformBlock(job) + platformPostlude(language)
+}
+
+/** Build a STRUCTURED comparison prompt that embeds the explicit
+ *  US-vs-THEM bullet pairs inline. KIE renders the infographic directly
+ *  from this data — no parser, no regex, no "find THEM/US" instruction.
+ *  Caller falls back to the free-form prompt when comparisonData is absent. */
+function buildComparisonStructuredPrompt(
+  data: import('../types').ComparisonSchema,
+  freeFormBody: string,
+): string {
+  const rows = data.us.bullets.map((u, i) => {
+    const t = data.them.bullets[i] ?? ''
+    return `   • Row ${i + 1}:  US="${u.replace(/"/g, '\\"')}"  |  THEM="${t.replace(/"/g, '\\"')}"`
+  }).join('\n')
+  return (
+    `STRUCTURED COMPARISON DATA — render this verbatim, do NOT paraphrase, do NOT add rows, do NOT skip rows:\n`
+    + `LEFT COLUMN (us):  title="${data.us.title}"\n`
+    + `RIGHT COLUMN (them):  title="${data.them.title}"\n`
+    + `ROW PAIRS (render each row at the SAME y-position across both columns):\n${rows}\n`
+    + `RENDER RULES:\n`
+    + `   • 2-column split-screen comparison infographic, 1:1 aspect.\n`
+    + `   • Left column: emerald/green highlighted background, green checkmark icon next to each US bullet.\n`
+    + `   • Right column: muted gray background, red X icon next to each THEM bullet.\n`
+    + `   • Top row: column titles ("${data.us.title}" left, "${data.them.title}" right) in bold sans-serif heading typography.\n`
+    + `   • One row per bullet pair, vertically aligned. Same row-height across both columns.\n`
+    + `   • Clean mobile-readable typography (16-22px equivalent). Bold labels.\n`
+    + `   • NO text outside the listed rows. NO error messages. NO placeholders. NO "find bullet" / "parse" instructions.\n`
+    + `Original image-prompt body (for additional aesthetic context only — the row data above OVERRIDES any conflicting instruction): ${freeFormBody}`
+  )
 }
 
 // Phase 4 (stabilization update) — expert-form-specific negative prompt.
@@ -858,9 +1394,19 @@ const HARDSELL_NEGATIVE_BLOCK =
 // another 30s; otherwise re-submit. MAX_ATTEMPTS dropped 4→2 so we fail
 // fast on broken tasks and free the slot for the next image. Same credit
 // safety semantics (recovery-poll before re-submit).
-const MAX_ATTEMPTS     = 2
-const RECOVERY_POLL_MS = 30_000   // was 60s
-const FRESH_POLL_MS    = 100_000  // was 5min
+// Group-1 watchdog tightening (2026-05-18):
+//   • FRESH_POLL_MS 100s → 90s — spec target was "if >90s auto retry".
+//   • RECOVERY_POLL_MS 30s → 25s — same task rarely unsticks past 25s.
+//   • MAX_ATTEMPTS 2 → 3 — extra attempt with simplified prompt fallback.
+// Worst-case wall time: 90 + 25 + 90 + 25 + 90 ≈ 5 min before final fail.
+const MAX_ATTEMPTS     = 3
+const RECOVERY_POLL_MS = 25_000
+// FIX 2 (2026-05-19) — bumped 90_000 → 150_000. User report 27% timeout rate
+// on Teeth Restoration pack (10/37 images). KIE backend often legitimately
+// needs 90-130s per gpt-image-2 render when busy; the previous 90s ceiling
+// false-failed those tasks and burned a retry attempt. 150s gives KIE one
+// extra breathing window without doubling retry storms.
+const FRESH_POLL_MS    = 150_000
 
 // ─────────────────────────────────────────────────────────────────────────
 // UI-NATIVE CHAT PROOF — handler invoked for every imagePrompt in the
@@ -869,7 +1415,9 @@ const FRESH_POLL_MS    = 100_000  // was 5min
 // thumbnail pipeline. Output looks like a real phone screenshot instead
 // of an AI-warped fake UI.
 // ─────────────────────────────────────────────────────────────────────────
-async function runChatProofRender(
+// @ts-expect-error — preserved for future re-enable (currently bypassed; see
+// 2026-05-19 routing comment in runWithCreditSafeRetry)
+async function runChatProofRender( // eslint-disable-line @typescript-eslint/no-unused-vars
   job: ImageJob,
   kieApiKey: string,
   onTaskUpdate: (patch: Partial<ImagePrompt>) => void,
@@ -1053,14 +1601,29 @@ async function runWithCreditSafeRetry(
   signal?: AbortSignal,
 ): Promise<{ assetRef: string; retries: number }> {
   // ── UI-NATIVE CHAT PROOF ROUTING ─────────────────────────────────────
-  // whatsapp-testimonials no longer goes through KIE for the full
-  // screenshot. We render the chat UI on canvas (deterministic typography
-  // / icons / spacing) and only ask KIE for the SMALL product thumb that
-  // sits inside the chat product card. This eliminates the fake-UI /
-  // warped-text failure mode that plagued the previous KIE-only path.
-  if (job.section.type === 'whatsapp-testimonials') {
-    return runChatProofRender(job, kieApiKey, onTaskUpdate, signal)
-  }
+  // 2026-05-19 — whatsapp-testimonials BYPASSES canvas hybrid again.
+  //   User compared canvas output (designed link-preview-style product
+  //   card on a dark/streaked background) vs the desired INFINITY ref
+  //   output (authentic light-cream WhatsApp UI with a real photo of a
+  //   person holding the product inside an image-attachment bubble). The
+  //   canvas template produces the wrong style — even though the rollback
+  //   handoff claimed canvas was active when the INFINITY ref was created,
+  //   the actual output suggests INFINITY was rendered by pure KIE.
+  //
+  //   Falls through to pure KIE path. Identity is now stable because
+  //   buildPackagingDescriptionBlock (FIX 1A) injects the exact packaging
+  //   description into the prompt — KIE no longer invents a different
+  //   brand. Combined with the strengthened WhatsApp section 12 spec
+  //   (UI RULES + ABSOLUTE BANS in generateLandingPack.ts), KIE has both
+  //   the visual identity AND the layout rules to render the correct
+  //   authentic screenshot style.
+  //
+  //   runChatProofRender preserved in source under @ts-expect-error so
+  //   it can be re-enabled later if the canvas template is overhauled
+  //   to produce native-photo style WhatsApp output.
+  // if (job.section.type === 'whatsapp-testimonials') {
+  //   return runChatProofRender(job, kieApiKey, onTaskUpdate, signal)
+  // }
 
   // ── UI-NATIVE INGREDIENT CARD ROUTING ────────────────────────────────
   // ingredients no longer asks KIE to render label text — that produced
@@ -1088,7 +1651,7 @@ async function runWithCreditSafeRetry(
   // Phase 7 — pass prompt body so selectRefsForSection can auto-attach
   // product refs when the imagePrompt mentions bottle / capsule / brand
   // name (prevents KIE from inventing fake brands on people-focus shots).
-  const refs = selectRefsForSection(job.section.type, job.pack, job.prompt.prompt)
+  const refs = selectRefsForSection(job.section.type, job.pack, job.prompt.prompt, job.imageIdx)
   const filesUrl = await resolveRefs(refs)
   const hasProductRefs = filesUrl.length > 0
 
@@ -1097,9 +1660,21 @@ async function runWithCreditSafeRetry(
 
   const finalPrompt = buildFinalPrompt(job, hasProductRefs)
 
+  // ── HYBRID ROUTING per Super Ladipage pattern.
+  //   Product-bearing sections (ROUTE_TO_GPT4O_SECTIONS) → gpt-4o-image
+  //   /gpt4o-image/generate (TRUE i2i, identity locked via filesUrl).
+  //   Non-product sections → gpt-image-2 /jobs/createTask (cheaper +
+  //   sharper photo realism for emotional / portrait / infographic shots).
+  //   Falls back to gpt-image-2 if pack has no refs (i2i pointless).
+  const useGpt4oForIdentity = ROUTE_TO_GPT4O_SECTIONS.has(job.section.type) && hasProductRefs
+  const providerTag = useGpt4oForIdentity ? 'KIE gpt-4o-image' : 'KIE gpt-image-2'
+
   let lastTaskId: string | null = null
   let lastError: Error | null = null
   let retries = 0
+
+  // ── Task 5 debug capture: per-asset attempt log ─────────────────────────
+  const assetKey = `${job.sectionIdx}:${job.imageIdx}`
 
   for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
     if (signal?.aborted) throw new Error('Đã huỷ')
@@ -1108,12 +1683,19 @@ async function runWithCreditSafeRetry(
     if (lastTaskId) {
       try {
         onTaskUpdate({ status: 'retrying', error: undefined })
-        const recoveredUrl = await pollGpt4oUntilDone({
-          apiKey: kieApiKey,
-          taskId: lastTaskId,
-          timeoutMs: RECOVERY_POLL_MS,
-          signal,
-        })
+        const recoveredUrl = useGpt4oForIdentity
+          ? await pollGpt4oUntilDone({
+              apiKey: kieApiKey,
+              taskId: lastTaskId,
+              timeoutMs: RECOVERY_POLL_MS,
+              signal,
+            })
+          : await pollGptImage2UntilDone({
+              apiKey: kieApiKey,
+              taskId: lastTaskId,
+              timeoutMs: RECOVERY_POLL_MS,
+              signal,
+            })
         const assetRef = await downloadAndStore(recoveredUrl)
         return { assetRef, retries }
       } catch (err) {
@@ -1125,30 +1707,84 @@ async function runWithCreditSafeRetry(
     }
 
     // ── Submit a brand-new task ────────────────────────────────────────
+    const startedAt = Date.now()
+    const attemptNum = attempt + 1
+    recordAttempt({
+      assetKey, sectionType: job.section.type, filename: job.prompt.filename,
+      attempt: attemptNum, maxAttempts: MAX_ATTEMPTS,
+      provider: providerTag,
+      prompt: finalPrompt,
+      filesUrlCount: filesUrl.length,
+      kieSize: size,
+      status: 'started',
+      startedAt,
+    })
+
     try {
       onTaskUpdate({ status: attempt === 0 ? 'generating' : 'retrying', error: undefined })
 
-      const { taskId } = await submitGpt4oImage({
-        apiKey: kieApiKey,
-        prompt: finalPrompt,
-        filesUrl: filesUrl.length > 0 ? filesUrl : undefined,
-        size,
-      })
-      lastTaskId = taskId
+      let taskId: string
+      let remoteUrl: string
 
-      const remoteUrl = await pollGpt4oUntilDone({
-        apiKey: kieApiKey,
-        taskId,
-        timeoutMs: FRESH_POLL_MS,
-        signal,
-      })
+      if (useGpt4oForIdentity) {
+        // gpt-4o-image/generate — actually consumes filesUrl (image-to-image).
+        // Identity-critical sections route here so KIE renders the user's
+        // EXACT uploaded product packaging instead of inventing a similar
+        // brand from training data.
+        const submitted = await submitGpt4oImage({
+          apiKey: kieApiKey,
+          prompt: finalPrompt,
+          filesUrl,
+          size,
+          enableFallback: true,
+        })
+        taskId = submitted.taskId
+        lastTaskId = taskId
+        remoteUrl = await pollGpt4oUntilDone({
+          apiKey: kieApiKey,
+          taskId,
+          timeoutMs: FRESH_POLL_MS,
+          signal,
+        })
+      } else {
+        // gpt-image-2 text-to-image — default path for non-identity-critical
+        // sections (pain / lifestyle / news / before-after / FAQ / mechanism
+        // / benefits / etc.). Cheaper, no image-to-image overhead.
+        const submitted = await submitGptImage2({
+          apiKey: kieApiKey,
+          prompt: finalPrompt,
+          filesUrl: filesUrl.length > 0 ? filesUrl : undefined,
+          size,
+        })
+        taskId = submitted.taskId
+        lastTaskId = taskId
+        remoteUrl = await pollGptImage2UntilDone({
+          apiKey: kieApiKey,
+          taskId,
+          timeoutMs: FRESH_POLL_MS,
+          signal,
+        })
+      }
 
       const assetRef = await downloadAndStore(remoteUrl)
+      finalizeAttempt({ assetKey, attempt: attemptNum, startedAt }, {
+        status: 'success', taskId, assetRef,
+        durationMs: Date.now() - startedAt,
+      })
       // Success → clear the in-flight tracker
       lastTaskId = null
       return { assetRef, retries }
 
     } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      const outcome =
+        msg.includes('Đã huỷ') || msg.includes('CANCELLED') ? 'cancelled' as const :
+        msg.toLowerCase().includes('timeout') || msg.includes('90s') ? 'timeout' as const :
+        'failed' as const
+      finalizeAttempt({ assetKey, attempt: attemptNum, startedAt }, {
+        status: outcome, taskId: lastTaskId ?? undefined,
+        errorReason: msg, durationMs: Date.now() - startedAt,
+      })
       lastError = err instanceof Error ? err : new Error(String(err))
 
       // Hard failures — never retry (don't burn credit on something that
@@ -1306,6 +1942,58 @@ export async function generatePackImages(
     }
   }
 
+  // ── Before/after PAIR-SEED stage (Group 3 identity-lock, hotfix v2) ─────
+  //
+  // Goal: ba_02 (imageIdx=1) and ba_04 (imageIdx=3) should attach their
+  // pair-mate's generatedAssetRef so KIE locks identity across BEFORE ↔
+  // AFTER via image-to-image.
+  //
+  // v1 BUG: ran ba_01 + ba_03 SEQUENTIALLY before the parallel pool
+  // started → entire queue stalled 1-3 min before ANY image dispatched
+  // (user-visible "0/37 ảnh, 141s đã chạy"). Fixed in v2 by:
+  //   • Running pair-seed jobs (ba_01, ba_03) INSIDE the parallel pool —
+  //     they get dispatched immediately alongside hero / pain / etc.
+  //   • Pulling pair jobs (ba_02, ba_04) out of the initial pool and
+  //     queueing them AFTER their pair-mate's promise resolves (deferred
+  //     dispatch). When a seed completes, its pair-mate gets pushed onto
+  //     the queue and picked up by the next pump() tick.
+  //   • If a seed FAILS, the pair-mate is still released (falls back to
+  //     text-only identity lock per BEFORE_AFTER_IDENTITY_LOCK_DIRECTIVE).
+  //
+  // Net effect: parallel concurrency=8 from t=0; identity-lock preserved.
+  const baSectionIdx = pack.sections.findIndex((s) => s.type === 'before-after')
+  let deferredJobs: ImageJob[] = []
+  const pairMatePromises = new Map<string, Promise<void>>()
+  if (baSectionIdx >= 0) {
+    deferredJobs = jobs.filter((j) =>
+      j.sectionIdx === baSectionIdx && (j.imageIdx === 1 || j.imageIdx === 3),
+    )
+    if (deferredJobs.length > 0) {
+      const deferredKeys = new Set(deferredJobs.map((j) => `${j.sectionIdx}:${j.imageIdx}`))
+      jobs = jobs.filter((j) => !deferredKeys.has(`${j.sectionIdx}:${j.imageIdx}`))
+      // Pre-create resolver promises keyed by SEED imageIdx (0 or 2). The
+      // parallel pool's .finally() handler for seeds will resolve these,
+      // unblocking the matching pair-mate dispatch.
+      for (const def of deferredJobs) {
+        const seedIdx = def.imageIdx - 1   // 1 -> 0, 3 -> 2
+        const key = `${baSectionIdx}:${seedIdx}`
+        if (!pairMatePromises.has(key)) {
+          let resolveFn: () => void = () => {}
+          pairMatePromises.set(key, new Promise<void>((r) => { resolveFn = r }))
+          // Stash resolver on the map value for the pool to retrieve.
+          // (We attach it via a side-channel: rebind .then on the promise.)
+          ;(pairMatePromises.get(key) as Promise<void> & { _resolve?: () => void })._resolve = resolveFn
+        }
+      }
+      console.info(`[before-after] pair-seed stage (parallel) — deferred ${deferredJobs.length} pair-mate jobs (ba_02/ba_04) until their seeds resolve`)
+      // Append deferred jobs at the END so they get dispatched LAST by the
+      // pool. Their `gate` Promise blocks the actual KIE submit until the
+      // pair-mate seed resolves — but the slot opens up immediately so
+      // OTHER jobs aren't starved.
+      jobs = [...jobs, ...deferredJobs]
+    }
+  }
+
   // ── Z8: concurrency 2 → 6 (3x throughput) ────────────────────────────
   // Z23 — concurrency 6 → 8. KIE backend tolerates 8 parallel /gpt4o-image
   // submissions; bottleneck is per-image latency, not API rate limit.
@@ -1341,15 +2029,47 @@ export async function generatePackImages(
         active++
         options.onTaskUpdate(job.sectionIdx, job.imageIdx, { status: 'generating' })
 
-        runWithCreditSafeRetry(
-          job,
-          pack.visualMemory,
-          kieApiKey,
-          (patch) => options.onTaskUpdate(job.sectionIdx, job.imageIdx, patch),
-          options.signal,
-        )
+        // Capture job locally for the .then/.catch closure binding.
+        const jobRef = job
+        const isBeforeAfterSeed =
+          jobRef.section.type === 'before-after' &&
+          (jobRef.imageIdx === 0 || jobRef.imageIdx === 2)
+
+        // If this is a deferred pair-mate (ba_02 / ba_04), wait for the
+        // seed promise to resolve before actually dispatching the retry.
+        // This is a no-op when the pair-mate isn't deferred (the promise
+        // is undefined and we proceed immediately).
+        const pairKey = jobRef.section.type === 'before-after' && (jobRef.imageIdx === 1 || jobRef.imageIdx === 3)
+          ? `${jobRef.sectionIdx}:${jobRef.imageIdx - 1}`
+          : null
+        const gate = pairKey ? pairMatePromises.get(pairKey) : null
+
+        const dispatch = gate
+          ? gate.then(() => runWithCreditSafeRetry(
+              jobRef,
+              pack.visualMemory,
+              kieApiKey,
+              (patch) => options.onTaskUpdate(jobRef.sectionIdx, jobRef.imageIdx, patch),
+              options.signal,
+            ))
+          : runWithCreditSafeRetry(
+              jobRef,
+              pack.visualMemory,
+              kieApiKey,
+              (patch) => options.onTaskUpdate(jobRef.sectionIdx, jobRef.imageIdx, patch),
+              options.signal,
+            )
+
+        dispatch
           .then(({ assetRef, retries }) => {
-            options.onTaskUpdate(job.sectionIdx, job.imageIdx, {
+            // CRITICAL — mutate pack so selectRefsForSection sees ba_01/03
+            // generatedAssetRef when ba_02/04 dispatch later.
+            const sec = pack.sections[jobRef.sectionIdx]
+            if (sec && sec.imagePrompts?.[jobRef.imageIdx]) {
+              sec.imagePrompts[jobRef.imageIdx].generatedAssetRef = assetRef
+              sec.imagePrompts[jobRef.imageIdx].status = 'done'
+            }
+            options.onTaskUpdate(jobRef.sectionIdx, jobRef.imageIdx, {
               status: 'done', generatedAssetRef: assetRef, error: undefined,
             })
             done++
@@ -1357,12 +2077,23 @@ export async function generatePackImages(
           })
           .catch((err) => {
             const msg = err instanceof Error ? err.message : String(err)
-            options.onTaskUpdate(job.sectionIdx, job.imageIdx, {
+            options.onTaskUpdate(jobRef.sectionIdx, jobRef.imageIdx, {
               status: 'failed', error: msg,
             })
             failed++
           })
           .finally(() => {
+            // Release the gate for the pair-mate (ba_02 / ba_04) when a
+            // seed (ba_01 / ba_03) finishes — success OR failure. On
+            // failure the pair-mate falls back to text-only identity lock.
+            if (isBeforeAfterSeed) {
+              const seedKey = `${jobRef.sectionIdx}:${jobRef.imageIdx}`
+              const seedPromise = pairMatePromises.get(seedKey) as Promise<void> & { _resolve?: () => void }
+              if (seedPromise?._resolve) {
+                seedPromise._resolve()
+                pairMatePromises.delete(seedKey)
+              }
+            }
             active--
             options.onProgress?.(done, failed, total, totalRetries)
             pump()

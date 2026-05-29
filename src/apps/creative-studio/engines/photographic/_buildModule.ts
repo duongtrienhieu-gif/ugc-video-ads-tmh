@@ -35,6 +35,10 @@ export interface PhotographicModuleSpec {
   requiresAvatar?: boolean
   /** Whether the scene allows multi-product (eg "Bàn nhiều SP"). */
   allowsMultiProduct?: boolean
+  /** P48 — UI aspect ratio for this asset. The dispatcher maps it to the
+   *  closest KIE-supported size (1:1, 3:2, 2:3) before calling the model.
+   *  Default '1:1'. */
+  aspectRatio?: '1:1' | '4:5' | '9:16' | '3:2' | '16:9'
 }
 
 const DEFAULT_COMPOSITION: PhotographicComposition = {
@@ -66,12 +70,14 @@ export function buildPhotographicModule(spec: PhotographicModuleSpec): Photograp
     ...spec.qcOverrides,
   }
 
+  const aspectRatio = spec.aspectRatio ?? '1:1'
+
   return {
     id: spec.id,
     engineGroup: 'photographic',
     label: spec.label,
     category: spec.category,
-    aspectRatio: '1:1',
+    aspectRatio,
     composition,
     negative,
     qc,
@@ -92,7 +98,7 @@ export function buildPhotographicModule(spec: PhotographicModuleSpec): Photograp
         ? `\n\n[VARIATION]\n${variationHint}\nThe product must remain pixel-faithful to the FIRST reference. The person must remain the same individual as in the previous shot.`
         : ''
       const formatBlock = `\n\n[FORMAT]
-1:1 square composition. The product label must be fully readable and unobstructed. ${spec.allowsMultiProduct ? '' : 'Exactly one product instance unless the scene explicitly calls for multiple.'} ${hasAvatar ? 'Exactly one person.' : ''}`
+${aspectRatio} composition (${aspectRatio === '1:1' ? 'square' : aspectRatio === '9:16' || aspectRatio === '4:5' ? 'portrait' : aspectRatio === '16:9' || aspectRatio === '3:2' ? 'landscape' : 'as-declared'}). The product label must be fully readable and unobstructed. ${spec.allowsMultiProduct ? '' : 'Exactly one product instance unless the scene explicitly calls for multiple.'} ${hasAvatar ? 'Exactly one person.' : ''}`
 
       return `IMAGE-EDITING TASK: ${refMap}
 
@@ -114,15 +120,19 @@ ${PRODUCT_LOCK_BLOCK}${avatarBlock}${sceneBlock}${styleBlock}${variationBlock}${
       // referenceUrls resolution happens at dispatch time (orchestrator
       // resolves asset:xxx refs to public URLs). At module level we just
       // declare the spec.
+      const compositionAspect: '1:1' | '2:3' | '3:2' =
+          aspectRatio === '3:2' || aspectRatio === '16:9' ? '3:2'
+        : aspectRatio === '9:16' || aspectRatio === '4:5' ? '2:3'
+        : '1:1'
       return {
         prompt: fullPrompt + '\n\n' + negativePrompt,
         negativePrompt,
         referenceUrls: [],  // populated by dispatcher
-        aspect: '1:1' as const,
+        aspect: compositionAspect,
       }
     },
 
-    buildQC(_params: GenerateAssetParams): PhotographicQCConfig {
+    buildQC(): PhotographicQCConfig {
       return qc
     },
 
@@ -138,7 +148,7 @@ ${PRODUCT_LOCK_BLOCK}${avatarBlock}${sceneBlock}${styleBlock}${variationBlock}${
           category: spec.category,
           productId: raw.productId ?? params.productId,
           modelId: raw.modelId ?? params.modelId,
-          aspectRatio: '1:1',
+          aspectRatio,
           tags: [spec.id, spec.category],
         },
       }

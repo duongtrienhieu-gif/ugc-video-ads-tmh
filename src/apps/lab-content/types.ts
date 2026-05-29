@@ -264,6 +264,157 @@ export interface CocOutput {
   generatedAt: number
 }
 
+// ── Long-Form Sales Letter ────────────────────────────────────────────────
+// 1500-2500 word advertorial / sales letter using AIDA + PPPP + Storytelling
+// chain. 14-section blueprint. Output is full-length copy ready for landing
+// page / paid native traffic.
+
+export type SalesLetterLength = 1000 | 1500 | 2000 | 2500
+
+export interface SalesLetterSection {
+  id: string
+  /** Section type identifier — e.g. "hero", "pain", "story", "proof", "offer". */
+  sectionType: string
+  /** VN section label shown in UI. */
+  labelVi: string
+  /** Vietnamese section text. */
+  vietnamese: string
+  /** Malay section text. */
+  malay: string
+}
+
+export interface SalesLetterOutput {
+  /** Target length the user picked. */
+  targetLength: SalesLetterLength
+  /** 14 sections of the letter, in narrative order. */
+  sections: SalesLetterSection[]
+  /** Auto-calculated total word count (VI). */
+  wordCountVi: number
+  /** Auto-calculated total word count (MY). */
+  wordCountMy: number
+  generatedAt: number
+}
+
+// ── Multi-Angle Ad Pack ───────────────────────────────────────────────────
+// 5 ready-to-run paid ads, each engineered around a DIFFERENT psychological
+// door: Logical, Emotional, Social Proof, Fear/Loss, Aspirational.
+// This is the "test pack" that real media buyers run — 5 angles at once,
+// let the algo pick the winner.
+
+export type AdAngleType =
+  | 'logical'      // data, mechanism, ingredient stats
+  | 'emotional'    // storytelling, vulnerability, struggle
+  | 'social-proof' // testimonials, "X people use this"
+  | 'fear-loss'    // loss aversion, cost of inaction
+  | 'aspirational' // future pacing, lifestyle, who you'll become
+
+export interface MultiAngleAd {
+  id: string
+  angleType: AdAngleType
+  /** VN label for the angle (shown on the card). */
+  angleLabelVi: string
+  /** Vietnamese hook (1-2 lines, opens the ad). */
+  hookVi: string
+  /** Malay hook. */
+  hookMy: string
+  /** Vietnamese body (60-100 words). */
+  bodyVi: string
+  /** Malay body. */
+  bodyMy: string
+  /** Vietnamese CTA line. */
+  ctaVi: string
+  /** Malay CTA line. */
+  ctaMy: string
+  /** Visual direction (Vietnamese) — 1-2 lines describing creative. */
+  visualDirectionVi: string
+}
+
+export interface MultiAngleOutput {
+  ads: MultiAngleAd[]    // 5 ads, one per angle type
+  generatedAt: number
+}
+
+// ── Carousel Ad Generator ─────────────────────────────────────────────────
+// Multi-slide IG / FB carousel ad. User picks structure → AI generates the
+// 6-10 slide sequence with per-slide text + visual direction + background.
+// Output format mirrors how Canva carousel templates expect content.
+
+export type CarouselStructure =
+  | 'problem-solution'  // 6 slides: Hook → Pain 1 → Pain 2 → Reveal → Benefit → CTA
+  | 'before-after'      // 8 slides: Scene → Struggle 1 → Struggle 2 → Turning → Result → Proof → Offer → CTA
+  | 'mechanism'         // 8 slides: Hook → Why problem → How → Ingredient 1 → Ingredient 2 → Result → Proof → CTA
+  | 'listicle-five'     // 7 slides: Hook → 5 numbered ways → Summary CTA
+
+export interface CarouselStructureOption {
+  id: CarouselStructure
+  label: string
+  glyph: string
+  slideCount: number
+  hint: string
+  /** English instruction sent into Gemini to shape the slide sequence. */
+  briefEn: string
+}
+
+export interface CarouselSlide {
+  id: string
+  /** 1-based slide number in the carousel sequence. */
+  position: number
+  /** Vietnamese caption text on this slide (5-15 words). */
+  captionVi: string
+  /** Malay caption text. */
+  captionMy: string
+  /** Visual direction (Vietnamese) — 1 line describing image. */
+  visualDirectionVi: string
+  /** Suggested background color label (vd: "Cream + accent đỏ", "Đen + neon"). */
+  backgroundSuggest: string
+}
+
+export interface CarouselOutput {
+  structure: CarouselStructure
+  slides: CarouselSlide[]
+  generatedAt: number
+}
+
+// ── Comment Bait / Engagement Post ────────────────────────────────────────
+// Posts engineered to EARN COMMENTS (algo signal) — boost organic reach,
+// warm up the audience for paid ads, lower CPM. Each post uses a specific
+// bait mechanic: poll, controversial opinion, fill-in-the-blank, etc.
+
+export type BaitType =
+  | 'controversial'     // "Đại đa số mọi người sai về X"
+  | 'this-or-that'      // "Bạn chọn A hay B?"
+  | 'rate-scale'        // "Cho mình xin rating tình trạng của bạn từ 1-10"
+  | 'open-question'     // "Vấn đề lớn nhất của bạn về X là gì?"
+  | 'tag-friend'        // "Tag đứa bạn cần biết điều này"
+  | 'fill-blank'        // "Hồi 18 tuổi mình từng ___"
+  | 'unpopular-opinion' // "Unpopular opinion: X..."
+  | 'spot-the'          // "Spot ai từng/sẽ..."
+
+export interface BaitTypeOption {
+  id: BaitType
+  label: string
+  glyph: string
+  hint: string
+  briefEn: string
+}
+
+export interface EngagementPost {
+  id: string
+  baitType: BaitType
+  baitLabelVi: string
+  /** Vietnamese post text (50-150 words). */
+  vietnamese: string
+  /** Malay post text. */
+  malay: string
+  /** Expected engagement signal — what algo behavior this post triggers. */
+  expectedSignalVi: string
+}
+
+export interface EngagementOutput {
+  posts: EngagementPost[]   // ~12 posts mixed across bait types
+  generatedAt: number
+}
+
 // ── Output ────────────────────────────────────────────────────────────────
 export interface LabBriefResult {
   /** Product link */
@@ -304,6 +455,18 @@ export interface LabBriefResult {
 
   /** Cached COC Multiplier output (1 pillar → 7 micros). Optional. */
   cocOutput?: CocOutput
+
+  /** Cached Long-Form Sales Letter output. Optional. */
+  salesLetterOutput?: SalesLetterOutput
+
+  /** Cached Multi-Angle Ad Pack output (5 ads, 5 angles). Optional. */
+  multiAngleOutput?: MultiAngleOutput
+
+  /** Cached Carousel Ad output. Optional. */
+  carouselOutput?: CarouselOutput
+
+  /** Cached Engagement Post output. Optional. */
+  engagementOutput?: EngagementOutput
 
   generatedAt: number
 }

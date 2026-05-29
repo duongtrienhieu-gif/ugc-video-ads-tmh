@@ -36,6 +36,30 @@ export type AssetTypeId =
   | 'infographic'
   | 'cta-banner'
 
+  // ── P27 (Phase 3 taxonomy) — declared in catalog ───────────────────
+  // group-holding + expert-kol moved to shipped in P33. The remaining
+  // 4 stay "coming soon" pending engine implementation.
+  | 'ingredients-explain'   // designed-graphic — composition / molecule map (comingSoon)
+  | 'mechanism-explain'     // designed-graphic — body heatmap + arrows (comingSoon)
+  | 'benefit-timeline'      // designed-graphic — 5 min / 7d / 30d (comingSoon)
+  | 'collage-4-frames'      // composite — 4 portraits assembled (comingSoon)
+  | 'group-holding'         // photographic — đám đông cầm sản phẩm (P33 shipped)
+  | 'expert-kol'            // photographic — fictional expert + quote (P33 shipped)
+
+  // ── P33 (Phase 33) — Phase 3 pro-photo rebuild ────────────────────
+  | 'floating-product'       // photographic — dynamic ad packshot
+  | 'ingredient-composition' // photographic — product + herbs / botanicals
+
+  // ── P37 (Phase 37) — Ladipage-inspired creatives ─────────────────
+  | 'pain-overlay'           // photographic — face + italic warning overlay
+  | 'news-mock'              // photographic — fake news article screenshot
+  | 'metric-cta'             // photographic — product + floating metric chips + price
+  | 'failed-solutions'       // photographic — empathy UGC, NO target product
+  | 'comparison-table'       // photographic — 2-col VS competitor table
+
+  // ── P40 (Phase 40) — photographic benefits icon grid ─────────────
+  | 'benefits-grid'          // photographic — product + 6 surrounding badge+icon
+
 /**
  * High-level asset category — used for UI grouping in tabs, filtering,
  * analytics. Orthogonal to engineGroup (multiple categories can route to

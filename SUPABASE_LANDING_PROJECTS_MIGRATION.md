@@ -1,24 +1,33 @@
-# Supabase Migration — Landing Page Projects (H2)
+# Supabase Migration — Landing Page Projects
 
-The Landing Page module now persists saved projects to Supabase in addition
-to localStorage. Run the SQL below ONCE in your Supabase project's SQL
-editor before the H2 features become useful.
+Landing Page AI **and Super Ladipage** persist saved projects to Supabase
+so they're available cross-device when the user logs in from a different
+machine. Run the SQL below ONCE in your Supabase project's SQL editor
+before cross-device sync becomes useful.
 
 The app handles graceful degradation: if the table doesn't exist, all
 saved projects keep working via localStorage (the same way they did
-pre-H2). No code path crashes on a missing table.
+pre-Supabase). No code path crashes on a missing table.
+
+> **If you already ran an earlier version of this migration** (without
+> the `kind` column), re-run the SQL below — it's idempotent. The
+> `ALTER TABLE ... ADD COLUMN IF NOT EXISTS kind` will be a no-op on
+> fresh tables and back-fill an existing one without touching data.
 
 ---
 
 ## What this enables
 
-| Before H2 | After H2 |
+| Before | After |
 |---|---|
 | Projects stored in localStorage only | Projects in localStorage + Supabase |
 | Lost if user clears browser data | Survives any browser clear / device swap |
-| Single-device | Cross-device — log in on any browser, projects appear |
+| Single-device | **Cross-device** — log in on any browser, projects appear |
 | No backup | Supabase auto-backups handle disaster recovery |
 | F5 = stays (per-browser) | F5 = stays (per-account, any device) |
+
+Both **Landing Page AI** and **Super Ladipage** use the same table; the
+`kind` column keeps their projects separated.
 
 ---
 
@@ -27,17 +36,18 @@ pre-H2). No code path crashes on a missing table.
 1. Open https://supabase.com/dashboard/project/_/sql/new
 2. Paste the SQL block below into the editor
 3. Click "Run"
-4. Verify the table exists in Database → Tables → landing_projects
+4. Verify in Database → Tables → landing_projects (should have a `kind` column)
 
-That's it. Frontend code is already deployed; it'll start writing to the
-table as soon as it exists.
+After the SQL runs, log out + log back in on the device with existing
+projects. The app uploads them once on first sync. From then on every
+device gets the same project list automatically.
 
 ---
 
 ## SQL — copy this into Supabase SQL editor
 
 ```sql
--- ── landing_projects: saved Landing Page packs ────────────────────────────
+-- ── landing_projects: saved Landing Page + Super Ladipage packs ──────────
 -- Stores the FULL LandingPagePack as JSONB. Image refs inside the pack
 -- still point to Supabase Storage assets via the existing asset_paths table.
 -- This is the source of truth for cross-device project sync.
@@ -45,6 +55,7 @@ table as soon as it exists.
 CREATE TABLE IF NOT EXISTS public.landing_projects (
   id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id       UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  kind          TEXT NOT NULL DEFAULT 'landing-page',
   title         TEXT NOT NULL,
   product_id    TEXT,
   product_name  TEXT,
@@ -55,9 +66,16 @@ CREATE TABLE IF NOT EXISTS public.landing_projects (
   updated_at    TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+-- Idempotent migration for users who ran the earlier version (no kind column)
+ALTER TABLE public.landing_projects
+  ADD COLUMN IF NOT EXISTS kind TEXT NOT NULL DEFAULT 'landing-page';
+
 -- Indexes for the queries the app actually runs
 CREATE INDEX IF NOT EXISTS idx_landing_projects_user_updated
   ON public.landing_projects(user_id, updated_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_landing_projects_user_kind
+  ON public.landing_projects(user_id, kind, is_archived);
 
 CREATE INDEX IF NOT EXISTS idx_landing_projects_user_archived
   ON public.landing_projects(user_id, is_archived);

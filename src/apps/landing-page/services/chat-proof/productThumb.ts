@@ -8,7 +8,7 @@
 // area without competing with the chat UI.
 // ─────────────────────────────────────────────────────────────────────
 
-import { submitGpt4oImage, pollGpt4oUntilDone } from '../../../../utils/kieai'
+import { submitGptImage2, pollGptImage2UntilDone } from '../../../../utils/kieai'
 import { saveAsset, isAssetRef } from '../../../../utils/assetStore'
 
 interface GenerateThumbArgs {
@@ -39,14 +39,14 @@ export async function generateProductThumb(args: GenerateThumbArgs): Promise<str
   const seed = args.variationSeed ?? Math.random().toString(36).slice(2, 8)
   const prompt = PROMPT_TEMPLATE(args.productName, seed)
 
-  const { taskId } = await submitGpt4oImage({
+  const { taskId } = await submitGptImage2({
     apiKey: args.kieApiKey,
     prompt,
     filesUrl: filesUrl.length > 0 ? filesUrl : undefined,
     size: '1:1',
   })
 
-  const remoteUrl = await pollGpt4oUntilDone({
+  const remoteUrl = await pollGptImage2UntilDone({
     apiKey: args.kieApiKey,
     taskId,
     timeoutMs: 90_000,

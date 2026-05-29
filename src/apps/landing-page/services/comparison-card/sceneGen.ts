@@ -9,6 +9,12 @@
 //
 // NO text in this image — bullet copy, headers, VS badge, and chrome
 // are drawn by the canvas overlay step.
+//
+// 2026-05-20 — switched from submitGptImage2 → submitGpt4oImage so the
+// RIGHT half (the EXACT uploaded product) actually renders with locked
+// identity. gpt-image-2 silently dropped the filesUrl product refs and
+// rendered the right side with a random brand, defeating the whole
+// "vs competitor" comparison. /gpt4o-image/generate is TRUE i2i.
 // ─────────────────────────────────────────────────────────────────────
 
 import { submitGpt4oImage, pollGpt4oUntilDone } from '../../../../utils/kieai'
@@ -96,6 +102,7 @@ export async function generateComparisonScene(args: GenerateSceneArgs): Promise<
     prompt,
     filesUrl: args.productRefUrls.slice(0, 3),
     size: '2:3',
+    enableFallback: true,
   })
 
   const remoteUrl = await pollGpt4oUntilDone({

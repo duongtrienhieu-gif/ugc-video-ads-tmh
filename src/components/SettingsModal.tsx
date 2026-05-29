@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
-import { X, Eye, EyeOff, Key, Check, HardDrive, RefreshCw, ChevronDown, ExternalLink } from 'lucide-react'
-import { useSettingsStore } from '../stores/settingsStore'
+import { X, Eye, EyeOff, Key, Check, HardDrive, RefreshCw, ChevronDown, ExternalLink, Sun, Moon } from 'lucide-react'
+import { useSettingsStore, flushPendingCloudPush } from '../stores/settingsStore'
 import { useAppStore } from '../stores/appStore'
 import { useBankStore } from '../stores/bankStore'
 import { getAllAssetIds, deleteAsset, isAssetRef } from '../utils/assetStore'
@@ -15,7 +15,7 @@ interface SettingsModalProps {
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-type SectionId = 'kie' | 'gemini' | 'eleven' | 'fal' | 'shotstack'
+type SectionId = 'kie' | 'gemini' | 'eleven' | 'fal' | 'shotstack' | 'youtube'
 
 interface ServiceConfig {
   id: SectionId
@@ -91,6 +91,18 @@ const SERVICES: ServiceConfig[] = [
     getKeyUrl: 'https://dashboard.shotstack.io/register',
     getKeyLabel: 'Đăng ký →',
   },
+  {
+    id: 'youtube',
+    label: 'YouTube Data API',
+    sublabel: 'Tìm Source Video · YT Search',
+    color: 'sky',
+    borderColor: 'border-sky-200',
+    bgColor: 'bg-sky-50',
+    keyHint: 'Miễn phí · 10,000 units/ngày (~100 search) · Cần bật YouTube Data API v3 trong Google Cloud Console',
+    placeholder: 'AIza...',
+    getKeyUrl: 'https://console.cloud.google.com/apis/library/youtube.googleapis.com',
+    getKeyLabel: 'Lấy key →',
+  },
 ]
 
 // ── Color maps ─────────────────────────────────────────────────────────────────
@@ -132,10 +144,10 @@ const BTN_CLASS: Record<string, string> = {
 
 export default function SettingsModal({ open, onClose }: SettingsModalProps) {
   const {
-    kieApiKey, geminiApiKey, elevenLabsApiKey, falApiKey, shotstackApiKey,
-    kieCredits,
-    setKieApiKey, setGeminiApiKey, setElevenLabsApiKey, setFalApiKey, setShotstackApiKey,
-    setKieCredits,
+    kieApiKey, geminiApiKey, elevenLabsApiKey, falApiKey, shotstackApiKey, youtubeApiKey,
+    kieCredits, theme,
+    setKieApiKey, setGeminiApiKey, setElevenLabsApiKey, setFalApiKey, setShotstackApiKey, setYoutubeApiKey,
+    setKieCredits, setTheme,
   } = useSettingsStore()
   const addToast = useAppStore((s) => s.addToast)
 
@@ -146,9 +158,10 @@ export default function SettingsModal({ open, onClose }: SettingsModalProps) {
     eleven: elevenLabsApiKey,
     fal: falApiKey,
     shotstack: shotstackApiKey,
+    youtube: youtubeApiKey,
   })
   const [shows, setShows] = useState<Record<SectionId, boolean>>({
-    kie: false, gemini: false, eleven: false, fal: false, shotstack: false,
+    kie: false, gemini: false, eleven: false, fal: false, shotstack: false, youtube: false,
   })
   const [openSection, setOpenSection] = useState<SectionId | null>(null)
   const [saved, setSaved] = useState(false)
@@ -160,12 +173,12 @@ export default function SettingsModal({ open, onClose }: SettingsModalProps) {
 
   useEffect(() => {
     if (open) {
-      setDrafts({ kie: kieApiKey, gemini: geminiApiKey, eleven: elevenLabsApiKey, fal: falApiKey, shotstack: shotstackApiKey })
+      setDrafts({ kie: kieApiKey, gemini: geminiApiKey, eleven: elevenLabsApiKey, fal: falApiKey, shotstack: shotstackApiKey, youtube: youtubeApiKey })
       setSaved(false)
       setTestResults({})
       setOpenSection(null)
     }
-  }, [open, kieApiKey, geminiApiKey, elevenLabsApiKey, falApiKey, shotstackApiKey])
+  }, [open, kieApiKey, geminiApiKey, elevenLabsApiKey, falApiKey, shotstackApiKey, youtubeApiKey])
 
   if (!open) return null
 
@@ -179,7 +192,7 @@ export default function SettingsModal({ open, onClose }: SettingsModalProps) {
   const isSaved = (id: SectionId): boolean => {
     const map: Record<SectionId, string> = {
       kie: kieApiKey, gemini: geminiApiKey, eleven: elevenLabsApiKey,
-      fal: falApiKey, shotstack: shotstackApiKey,
+      fal: falApiKey, shotstack: shotstackApiKey, youtube: youtubeApiKey,
     }
     return map[id].length > 0
   }
@@ -214,6 +227,14 @@ export default function SettingsModal({ open, onClose }: SettingsModalProps) {
         } else {
           setTestResults((r) => ({ ...r, fal: { ok: true, message: 'Kết nối thành công — API key hợp lệ' } }))
         }
+      } else if (id === 'youtube') {
+        const res = await fetch(`https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&maxResults=1&q=test&key=${encodeURIComponent(key)}`)
+        if (res.ok) {
+          setTestResults((r) => ({ ...r, youtube: { ok: true, message: 'Kết nối thành công — YouTube Data API v3 sẵn sàng' } }))
+        } else {
+          const body = await res.json().catch(() => null) as { error?: { message?: string } } | null
+          setTestResults((r) => ({ ...r, youtube: { ok: false, message: body?.error?.message || `Lỗi ${res.status}` } }))
+        }
       } else if (id === 'shotstack') {
         const res = await fetch('https://api.shotstack.io/edit/v1/render?limit=1', {
           headers: { 'x-api-key': key },
@@ -233,11 +254,35 @@ export default function SettingsModal({ open, onClose }: SettingsModalProps) {
   }
 
   async function handleSave() {
-    setKieApiKey(drafts.kie.trim())
-    setGeminiApiKey(drafts.gemini.trim())
-    setElevenLabsApiKey(drafts.eleven.trim())
-    setFalApiKey(drafts.fal.trim())
-    setShotstackApiKey(drafts.shotstack.trim())
+    // Phase 10.3 fix: wrap setters in try/catch — when localStorage is full
+    // (QuotaExceededError), the setters throw and the function crashes silently
+    // before reaching the success toast. User then thought save succeeded but
+    // F5 reverted to old key (still hitting rate limit). Now we catch and
+    // surface a clear error.
+    try {
+      setKieApiKey(drafts.kie.trim())
+      setGeminiApiKey(drafts.gemini.trim())
+      setElevenLabsApiKey(drafts.eleven.trim())
+      setFalApiKey(drafts.fal.trim())
+      setShotstackApiKey(drafts.shotstack.trim())
+      setYoutubeApiKey(drafts.youtube.trim())
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      console.error('[SettingsModal] save failed', err)
+      addToast(`Lưu thất bại: ${msg.slice(0, 200)}`, 'error')
+      return  // don't show success — save did NOT happen
+    }
+
+    // RACE FIX (2026-05-20): setters schedule a 1.5s debounced cloud
+    // push. If the user clicked Lưu then F5'd within 1.5s, the new keys
+    // never reached Supabase + the next hydrateFromCloud would
+    // OVERWRITE localStorage with the stale cloud value, silently
+    // reverting the save. Bypass the debounce by flushing immediately
+    // BEFORE we tell the user "Đã lưu" so the toast is honest.
+    try {
+      await flushPendingCloudPush()
+    } catch { /* logged in flush fn */ }
+
     setSaved(true)
     addToast('Đã lưu cài đặt thành công')
     if (drafts.kie.trim()) {
@@ -289,7 +334,7 @@ export default function SettingsModal({ open, onClose }: SettingsModalProps) {
           <div>
             <h2 className="text-base font-bold text-gray-900">Cài đặt</h2>
             <p className="mt-0.5 text-[11px] text-gray-400">
-              {[kieApiKey, geminiApiKey, elevenLabsApiKey, falApiKey, shotstackApiKey].filter(Boolean).length}/5 dịch vụ đã kết nối
+              {[kieApiKey, geminiApiKey, elevenLabsApiKey, falApiKey, shotstackApiKey, youtubeApiKey].filter(Boolean).length}/6 dịch vụ đã kết nối
             </p>
           </div>
           <button
@@ -404,6 +449,49 @@ export default function SettingsModal({ open, onClose }: SettingsModalProps) {
                 </div>
               )
             })}
+          </div>
+
+          {/* Giao diện (Theme) — Sáng / Tối */}
+          <div className="border-t border-black/6 px-5 py-4">
+            <div className="flex items-center justify-between gap-3 flex-wrap">
+              <div>
+                <p className="flex items-center gap-1.5 text-xs font-semibold text-gray-600">
+                  <Sun className="h-3.5 w-3.5 text-gray-400" />
+                  Giao diện
+                </p>
+                <p className="mt-0.5 text-[11px] text-gray-400">
+                  {theme === 'dark'
+                    ? 'Đang dùng giao diện tối — đỡ mỏi mắt khi làm khuya'
+                    : 'Đang dùng giao diện sáng'}
+                </p>
+              </div>
+              <div className="flex shrink-0 items-center gap-1 rounded-lg border border-black/10 bg-black/[0.02] p-1">
+                <button
+                  onClick={() => setTheme('light')}
+                  title="Giao diện sáng"
+                  aria-pressed={theme === 'light'}
+                  className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-[11px] font-semibold transition-colors ${
+                    theme === 'light'
+                      ? 'bg-white text-gray-900 shadow-sm'
+                      : 'text-gray-500 hover:text-gray-700'
+                  }`}
+                >
+                  <Sun className="h-3.5 w-3.5" /> Sáng
+                </button>
+                <button
+                  onClick={() => setTheme('dark')}
+                  title="Giao diện tối"
+                  aria-pressed={theme === 'dark'}
+                  className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-[11px] font-semibold transition-colors ${
+                    theme === 'dark'
+                      ? 'bg-white text-gray-900 shadow-sm'
+                      : 'text-gray-500 hover:text-gray-700'
+                  }`}
+                >
+                  <Moon className="h-3.5 w-3.5" /> Tối
+                </button>
+              </div>
+            </div>
           </div>
 
           {/* Storage section */}
