@@ -55,11 +55,16 @@ export const DENSITY_PROFILES: Record<SectionRole, DensityProfile> = {
 
   'reframe-moment': {
     pacingRole: 'breathing',
-    imageRole: 'none',                 // pure text — belief shift moment
+    // 2026-05-29 — Was 'none' (anti-distraction at conversion core). User
+    // feedback: 1500-word packs with 5 images is too text-heavy — reader
+    // fatigues before reaching the reframe. A QUIET mood-supporting image
+    // (no product, narrator alone with quiet thought) reinforces the
+    // reframe instead of distracting from it.
+    imageRole: 'mood-supporting',
     scrollWeight: 'light',
     spacingBefore: 'wide',             // pause before reframe
     spacingAfter: 'wide',              // pause after reframe lands
-    flowNote: 'conversion core — quiet reframe, no visual distraction',
+    flowNote: 'conversion core — quiet reframe + supporting mood image (post-2026-05-29 fix)',
   },
 
   'solution-opening': {
@@ -82,11 +87,15 @@ export const DENSITY_PROFILES: Record<SectionRole, DensityProfile> = {
 
   'close-invitation': {
     pacingRole: 'close',
-    imageRole: 'none',                 // pure text closing — anti-distraction
+    // 2026-05-29 — Was 'none'. User wants ~8 images per pack for visual
+    // rhythm. A lifestyle-context image at close (future-self imagery —
+    // narrator doing an ordinary thing with renewed ease) reinforces the
+    // "you can be here too" message instead of distracting from it.
+    imageRole: 'lifestyle-context',
     scrollWeight: 'light',
     spacingBefore: 'wide',
     spacingAfter: 'tight',             // end of page
-    flowNote: 'soft action invitation — earned, not pushed',
+    flowNote: 'soft action invitation + future-self lifestyle anchor image',
   },
 }
 

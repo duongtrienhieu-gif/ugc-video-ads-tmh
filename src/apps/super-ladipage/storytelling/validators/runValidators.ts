@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────
-// runValidators — v6 (2026-05-29)
+// runValidators — v6.1 (2026-05-29)
 //
 // REBUILD: trimmed hard-validator set to 5 (was 7). The 2 that moved to
 // soft (phaseOneSpecificity, duplicateContent) were retry-storm drivers
@@ -8,15 +8,29 @@
 // enforce these constraints at generation time, so the detectors are
 // safety net (warn) not enforcement (retry).
 //
+// 2026-05-29 (v6.1) — phaseOneSpecificity RE-PROMOTED to HARD. User
+// reported a knee-brace pack (clear health-joint niche) that drifted into
+// abstract emotional / mental-health language with zero knee-specific
+// vocabulary in Phase 1-2. Root cause: niche detector mis-routed to
+// health-functional (fixed separately) → wrong narrative mode → soft
+// recognition output. Even after the niche fix, Gemini can still produce
+// abstract drift if synthesis under-extracts specifics. Phase 1-2
+// specificity is now a HARD validator again — but only triggers retry
+// when readerSpecificSymptoms ARE provided AND >50% of Phase 1-2 blocks
+// fail. This was the original SPEC.2 design; we should not have demoted
+// it without first confirming the upstream mode-conditional prompt was
+// sufficient on its own. It wasn't.
+//
 // Removed: selfInsertionDetector (low signal, audit confirmed).
 //
-// Hard validators (5) — trigger retry + fallback if violated:
-//   bioIntro, adjacentRhythm, aiCadence, bannedPhrase, commercialTone
+// Hard validators (6) — trigger retry + fallback if violated:
+//   bioIntro, adjacentRhythm, aiCadence, bannedPhrase, commercialTone,
+//   phaseOneSpecificity (v6.1 re-promoted)
 //
 // Soft validators (8) — log only, no retry:
 //   paragraphCount, narratorCentric, nicheContamination, crossNicheVocab,
 //   genericWellnessDensity, memoryAnchor, emotionalFlattening, aggressiveSales,
-//   phaseOneSpecificity (v6 demoted), duplicateContent (v6 demoted)
+//   duplicateContent (v6 demoted)
 // ─────────────────────────────────────────────────────────────────────
 
 import type { BlockId, NicheKey } from '../types'
@@ -61,8 +75,9 @@ const SOFT_VALIDATORS: ReadonlySet<ValidatorName> = new Set([
   'nicheContamination', 'crossNicheVocab',
   'genericWellnessDensity', 'memoryAnchor', 'emotionalFlattening',
   'aggressiveSales',
-  'phaseOneSpecificity',   // v6 demoted
-  'duplicateContent',      // v6 demoted
+  // v6.1 (2026-05-29) — phaseOneSpecificity RE-PROMOTED to HARD. See file
+  // header for rationale. duplicateContent stays soft.
+  'duplicateContent',
 ])
 
 export interface AggregatedValidation {
@@ -141,12 +156,12 @@ export function runValidators(
 /** Log validator results to console — for debug. */
 export function logValidationResult(result: AggregatedValidation) {
   if (result.pass && result.softWarnings.length === 0) {
-    console.info(`[storytelling/validators] ✓ all 5 hard validators passed, 0 soft warnings`)
+    console.info(`[storytelling/validators] ✓ all 6 hard validators passed, 0 soft warnings`)
     return
   }
   if (result.pass) {
     console.info(
-      `[storytelling/validators] ✓ all 5 hard validators passed, ${result.softWarnings.length} soft warnings`,
+      `[storytelling/validators] ✓ all 6 hard validators passed, ${result.softWarnings.length} soft warnings`,
     )
     for (const w of result.softWarnings) {
       console.info(`  [soft:${w.validator}] ${w.sectionId}: ${w.violation}`)

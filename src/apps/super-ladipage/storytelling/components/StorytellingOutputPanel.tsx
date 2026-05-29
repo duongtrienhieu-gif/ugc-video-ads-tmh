@@ -588,6 +588,14 @@ export default function StorytellingOutputPanel({
               const canGen = Boolean(
                 kieApiKey && exportSection && exportSection.generatedAsset,
               )
+              // UI-FIX10 (2026-05-29) — If composer didn't plan an image
+              // for this section (imageRole='none' → no generatedAsset),
+              // hide the placeholder card entirely. User feedback: seeing
+              // 4 "[Section này chưa có plan tạo ảnh]" cards on a 6-image
+              // pack is confusing — those sections are TEXT-ONLY BY DESIGN
+              // (reframe-moment + close-invitation per density profile),
+              // not broken. Pass-through to hasNoOwnImage to suppress.
+              const exportHasPlan = Boolean(exportSection?.generatedAsset)
               return (
                 <StorytellingSectionView
                   key={idx}
@@ -610,7 +618,7 @@ export default function StorytellingOutputPanel({
                     canGen && exportSection ? () => handleRegenerateImage(exportSection.id) : undefined
                   }
                   isPIBlock={isPIBlock}
-                  hasNoOwnImage={!isPIBlock && !exportSection}
+                  hasNoOwnImage={!isPIBlock && (!exportSection || !exportHasPlan)}
                   imageFailureReason={
                     sectionRegenState?.regenStatus === 'failed'
                       ? sectionRegenState.lastFailureReason
@@ -1354,7 +1362,7 @@ function PipelineStatusBadge({ meta }: PipelineStatusBadgeProps) {
   return (
     <span
       className="flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-medium text-emerald-700 shrink-0"
-      title="All 5 validators passed on first attempt"
+      title="All 6 validators passed on first attempt"
     >
       <ShieldCheck className="h-3 w-3" />
       CLEAN
