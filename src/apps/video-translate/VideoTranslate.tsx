@@ -559,6 +559,10 @@ export default function VideoTranslate() {
       let toast: string
       if (msg === 'TIMEOUT') {
         toast = 'Quá thời gian xử lý — thử video ngắn hơn'
+      } else if (lower.includes('gemini') && (lower.includes('rate limit') || lower.includes('hết quota') || lower.includes('quá tải'))) {
+        // Smart-condense path exhausted all Gemini fallback models. Common on
+        // free tier (250 requests/day for 2.5-flash, 1500/day for 2.0-flash).
+        toast = 'Gemini hết quota free tier (tất cả 4 model fallback đều đầy). Cách xử lý: (1) đợi 1-2 phút rồi thử lại nếu là rate limit per-minute, (2) đợi đến nửa đêm UTC nếu hết quota ngày, hoặc (3) upgrade Gemini API lên paid tier tại aistudio.google.com → Get API key → Set up Billing.'
       } else if (currentUseNative && (lower.includes('voice') && (lower.includes('limit') || lower.includes('quota') || lower.includes('slot')))) {
         toast = 'Voice native: hết quota custom voices của workspace. Xoá bớt voice cũ trên ElevenLabs hoặc dùng "Giữ giọng gốc (clone)" thay thế.'
       } else if (currentUseNative && lower.includes('permission')) {
