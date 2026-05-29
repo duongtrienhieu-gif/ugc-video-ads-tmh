@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { X, ImagePlus, Sparkles, Loader2, ScanSearch } from 'lucide-react'
+import { X, ImagePlus, Sparkles, Loader2, ScanSearch, Plus } from 'lucide-react'
 import type { Product } from '../../stores/types'
 import { useAssetUrl } from '../../hooks/useAssetUrl'
 import { useSettingsStore } from '../../stores/settingsStore'
@@ -25,6 +25,10 @@ const FIELDS: { key: keyof Product; label: string; type: 'text' | 'textarea'; re
 ]
 
 const JSON_SCHEMA = `{"productName":"","productDescription":"","targetMarket":"","painPoints":"","usps":"","benefits":"","offer":"","ingredients":""}`
+
+/** Max screenshots user can upload at once for AI extraction. 5 is the limit
+ *  — user can upload 1-5, not mandatory to fill all slots. */
+const MAX_SCREENSHOTS = 5
 
 const EXTRACT_SYSTEM = 'You are a product info extraction assistant. Return ONLY a raw minified JSON object on a single line — no markdown, no code fences, no explanation, no newlines inside values. Always respond in VIETNAMESE.'
 
@@ -95,12 +99,9 @@ ${FIELDS_SPEC}
 NỘI DUNG TRANG WEB (kết hợp với ${imageCount} ảnh ở trên):
 ${pageText.slice(0, 16000)}`
 
-const IMAGE_EXTRACT_PROMPT = `Trích xuất thông tin sản phẩm từ screenshot trang sản phẩm này và điền vào JSON. TẤT CẢ giá trị PHẢI viết bằng TIẾNG VIỆT TỰ NHIÊN (dịch từ ngôn ngữ gốc nếu cần). Chỉ trả về JSON, không gì khác, tất cả trên 1 dòng:
-${JSON_SCHEMA}
-
-${FIELDS_SPEC}
-
-Nếu screenshot không liệt kê thành phần rõ ràng, suy luận hoạt chất khả thi nhất từ loại sản phẩm.`
+// Note: screenshot upload flow reuses EXTRACT_PROMPT_HYBRID with a placeholder
+// text so that single-prompt-for-all-image-modes stays consistent (Lấy từ link
+// hybrid mode + screenshot upload mode share the same instructions).
 
 // ── Shopee marketplace fetch ────────────────────────────────────────────
 // Jina/Cloudflare can't read Shopee SPA pages (anti-bot wall). Instead we
@@ -228,59 +229,133 @@ interface JinaJsonData {
   data?: { content?: string; images?: Record<string, string> }
 }
 
+interface PageContent {
+  text: string
+  imageUrls: string[]
+  source: string  // for diagnostics: which provider succeeded
+}
+
 /**
- * Fetch page via Jina Reader — returns page text AND image URLs found on the page.
- * Tries JSON format first (gives structured images map); falls back to plain text.
- * X-With-Images-Summary tells Jina to AI-caption every image server-side so text
- * output includes descriptions of banner/infographic content even without direct OCR.
+ * Fetch page content + image URLs. RACE multiple providers in parallel
+ * instead of cascading — fastest successful response wins, others get
+ * cancelled. Worst-case latency = slowest configured provider (~20s),
+ * not the SUM of all timeouts.
+ *
+ * Providers:
+ * - jinaLean: r.jina.ai without image summaries — fastest, text only
+ * - jinaRich: r.jina.ai with X-With-Images-Summary — slower but captions images
+ * - allOrigins: api.allorigins.win raw HTML — backup when Jina rate-limits
+ *
+ * Returns whichever wins; falls back to "" if ALL fail. The caller decides
+ * what to do with empty text (e.g. proceed image-only if imageUrls exist).
  */
-async function fetchPageContent(url: string): Promise<{ text: string; imageUrls: string[] }> {
-  // Tier 1: JSON format + image summaries → structured text + image URL list
-  try {
-    const r = await fetch(`https://r.jina.ai/${url}`, {
-      headers: {
-        Accept: 'application/json',
-        'X-With-Images-Summary': 'true',
+async function fetchPageContent(url: string): Promise<PageContent> {
+  const ctrl = new AbortController()
+
+  const attempts: Array<{ name: string; run: () => Promise<PageContent | null> }> = [
+    {
+      name: 'jina-lean',
+      run: async () => {
+        const r = await fetch(`https://r.jina.ai/${url}`, {
+          headers: { Accept: 'text/plain' },
+          signal: AbortSignal.any([ctrl.signal, AbortSignal.timeout(12000)]),
+        })
+        if (!r.ok) { console.log('[FETCH] jina-lean status:', r.status); return null }
+        const text = await r.text()
+        if (!text.trim()) return null
+        return { text: text.slice(0, 16000), imageUrls: extractImageUrlsFromMarkdown(text), source: 'jina-lean' }
       },
-      signal: AbortSignal.timeout(35000),
-    })
-    if (r.ok) {
-      const json = await r.json() as JinaJsonData
-      const content = json.data?.content ?? ''
-      const imageUrls = extractUrlsFromJinaImages(json.data?.images)
-      if (content.trim()) {
-        return { text: content.slice(0, 14000), imageUrls }
-      }
-    }
-  } catch { /* fall through */ }
+    },
+    {
+      name: 'jina-rich',
+      run: async () => {
+        const r = await fetch(`https://r.jina.ai/${url}`, {
+          headers: { Accept: 'application/json', 'X-With-Images-Summary': 'true' },
+          signal: AbortSignal.any([ctrl.signal, AbortSignal.timeout(20000)]),
+        })
+        if (!r.ok) { console.log('[FETCH] jina-rich status:', r.status); return null }
+        const json = await r.json() as JinaJsonData
+        const content = json.data?.content ?? ''
+        const imageUrls = extractUrlsFromJinaImages(json.data?.images)
+        if (!content.trim() && imageUrls.length === 0) return null
+        return { text: content.slice(0, 16000), imageUrls, source: 'jina-rich' }
+      },
+    },
+    {
+      name: 'allorigins',
+      run: async () => {
+        const r = await fetch(`https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`, {
+          signal: AbortSignal.any([ctrl.signal, AbortSignal.timeout(15000)]),
+        })
+        if (!r.ok) { console.log('[FETCH] allorigins status:', r.status); return null }
+        const html = await r.text()
+        if (!html.trim()) return null
+        const text = extractTextFromHtml(html)
+        const imageUrls = extractImageUrlsFromHtml(html, url)
+        if (!text.trim() && imageUrls.length === 0) return null
+        return { text: text.slice(0, 16000), imageUrls, source: 'allorigins' }
+      },
+    },
+  ]
 
-  // Tier 2: plain text + image summaries → extract image URLs from markdown
-  try {
-    const r = await fetch(`https://r.jina.ai/${url}`, {
-      headers: { Accept: 'text/plain', 'X-With-Images-Summary': 'true' },
-      signal: AbortSignal.timeout(30000),
-    })
-    if (r.ok) {
-      const text = await r.text()
-      if (text.trim()) {
-        const imageUrls = extractImageUrlsFromMarkdown(text)
-        return { text: text.slice(0, 12000), imageUrls }
-      }
-    }
-  } catch { /* fall through */ }
+  const wrapped = attempts.map(({ name, run }) =>
+    run().catch((err) => { console.log(`[FETCH] ${name} threw:`, err?.message ?? err); return null })
+  )
 
-  // Tier 3: plain text, no image processing
-  try {
-    const r = await fetch(`https://r.jina.ai/${url}`, {
-      headers: { Accept: 'text/plain' },
-      signal: AbortSignal.timeout(20000),
+  // Race: first non-null result wins, cancel the rest
+  return new Promise<PageContent>((resolve) => {
+    let settled = false
+    let pending = wrapped.length
+    wrapped.forEach((p) => {
+      p.then((result) => {
+        if (settled) return
+        if (result) {
+          settled = true
+          console.log(`[FETCH] winner: ${result.source} · text=${result.text.length}c · images=${result.imageUrls.length}`)
+          ctrl.abort()
+          resolve(result)
+        } else if (--pending === 0) {
+          console.warn('[FETCH] all providers failed')
+          resolve({ text: '', imageUrls: [], source: 'none' })
+        }
+      })
     })
-    if (!r.ok) return { text: '', imageUrls: [] }
-    const text = await r.text()
-    return { text: text.slice(0, 8000), imageUrls: extractImageUrlsFromMarkdown(text) }
-  } catch {
-    return { text: '', imageUrls: [] }
+  })
+}
+
+/** Strip HTML tags + decode entities → plain text. Lean fallback when
+ *  Jina is down and we only have raw HTML from a CORS proxy. */
+function extractTextFromHtml(html: string): string {
+  return html
+    .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, ' ')
+    .replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, ' ')
+    .replace(/<noscript\b[^<]*(?:(?!<\/noscript>)<[^<]*)*<\/noscript>/gi, ' ')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'")
+    .replace(/&#(\d+);/g, (_, n) => String.fromCharCode(parseInt(n, 10)))
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+/** Extract image src URLs from raw HTML, resolving relative paths against the page URL. */
+function extractImageUrlsFromHtml(html: string, pageUrl: string): string[] {
+  const base = (() => { try { return new URL(pageUrl) } catch { return null } })()
+  const seen = new Set<string>()
+  const urls: string[] = []
+  const re = /<img\b[^>]*\bsrc=["']([^"']+)["']/gi
+  let m: RegExpExecArray | null
+  while ((m = re.exec(html)) !== null) {
+    let src = m[1].trim()
+    if (!src || src.startsWith('data:')) continue
+    if (src.startsWith('//')) src = 'https:' + src
+    else if (src.startsWith('/') && base) src = base.origin + src
+    else if (!/^https?:\/\//i.test(src) && base) {
+      try { src = new URL(src, base.href).toString() } catch { continue }
+    }
+    if (!seen.has(src)) { seen.add(src); urls.push(src) }
   }
+  return urls
 }
 
 /**
@@ -510,6 +585,7 @@ export default function ProductForm({ item, onSave, onCancel }: ProductFormProps
   const [productUrl, setProductUrl] = useState('')
   const [isFetching, setIsFetching] = useState(false)
   const [isAnalyzing, setIsAnalyzing] = useState(false)
+  const [stagedScreenshots, setStagedScreenshots] = useState<File[]>([])
 
   const fileRef = useRef<HTMLInputElement>(null)
   const screenshotRef = useRef<HTMLInputElement>(null)
@@ -604,16 +680,22 @@ export default function ProductForm({ item, onSave, onCancel }: ProductFormProps
         return
       }
 
-      // Step 1: fetch page text + image URL list in parallel with image downloads
+      // Step 1: fetch page text + image URL list (race multiple providers)
       addToast('Đang đọc trang sản phẩm...')
-      const { text: pageText, imageUrls } = await fetchPageContent(url)
-      if (!pageText) throw new Error('Không đọc được nội dung trang. Thử tải ảnh chụp màn hình thay thế.')
+      const { text: pageText, imageUrls, source } = await fetchPageContent(url)
 
-      // Step 2: fetch page images in parallel (best-effort — CORS-friendly CDNs succeed)
+      // Hard-fail only when BOTH text AND images are empty. If we have just
+      // images (image-heavy LadiPage / banner-only pages), proceed image-only.
+      if (!pageText && imageUrls.length === 0) {
+        throw new Error('Tất cả nguồn đọc trang đều fail (Jina + AllOrigins). Có thể trang chặn bot hoặc các provider đang rate-limit. Dùng "Tải ảnh chụp màn hình" bên dưới.')
+      }
+
+      // Step 2: fetch page images in parallel (best-effort — CORS-friendly via weserv proxy)
       type GeminiPart = { text: string } | { inlineData: { mimeType: string; data: string } }
       let imageParts: GeminiPart[] = []
       if (imageUrls.length > 0) {
-        addToast(`Đang tải ${Math.min(imageUrls.length, 6)} ảnh để phân tích...`)
+        const fetchCount = Math.min(imageUrls.length, 6)
+        addToast(`Đang tải ${fetchCount} ảnh để phân tích...`)
         const results = await Promise.allSettled(
           imageUrls.slice(0, 6).map(fetchImageAsBase64)
         )
@@ -621,15 +703,22 @@ export default function ProductForm({ item, onSave, onCancel }: ProductFormProps
           .filter((r): r is PromiseFulfilledResult<{ mimeType: string; data: string }> =>
             r.status === 'fulfilled' && r.value !== null)
           .map((r) => ({ inlineData: r.value }))
+        console.log(`[FETCH] images: ${imageParts.length}/${fetchCount} successfully fetched`)
       }
 
-      // Step 3: single Gemini call — images first so Gemini has visual context,
-      // then text. Use the hybrid prompt when we actually have images.
+      // Step 3: single Gemini call. Prompt picks itself based on what we have:
+      //   • text + images → HYBRID (best)
+      //   • text only     → text prompt
+      //   • images only   → HYBRID with empty text placeholder (Gemini reads images)
       const hasImages = imageParts.length > 0
-      const parts: GeminiPart[] = [
-        ...imageParts,
-        { text: hasImages ? EXTRACT_PROMPT_HYBRID(pageText, imageParts.length) : EXTRACT_PROMPT(pageText) },
-      ]
+      const hasText = pageText.length > 0
+      if (!hasText && !hasImages) {
+        throw new Error('Trang có URL ảnh nhưng tất cả ảnh đều không tải được (CORS). Dùng "Tải ảnh chụp màn hình".')
+      }
+      const promptText = hasImages
+        ? EXTRACT_PROMPT_HYBRID(pageText || '(Trang không có text - phân tích từ ảnh)', imageParts.length)
+        : EXTRACT_PROMPT(pageText)
+      const parts: GeminiPart[] = [...imageParts, { text: promptText }]
 
       const response = await directGeminiVision({
         apiKey: geminiKey,
@@ -644,8 +733,11 @@ export default function ProductForm({ item, onSave, onCancel }: ProductFormProps
       const { next, count } = applyExtracted(extracted, form)
       if (count === 0) throw new Error('Không trích xuất được thông tin. Thử tải ảnh chụp màn hình.')
       setForm(next)
-      const imgNote = imageParts.length > 0 ? ` (text + ${imageParts.length} ảnh)` : ''
-      addToast(`Đã tự động điền ${count} trường thông tin${imgNote}`)
+      const srcNote = ` (${source}`
+        + (hasText ? ` · text=${pageText.length}c` : '')
+        + (hasImages ? ` · ${imageParts.length} ảnh` : '')
+        + ')'
+      addToast(`Đã tự động điền ${count} trường${srcNote}`)
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
       addToast(`Không thể lấy thông tin: ${msg}`, 'error')
@@ -654,22 +746,49 @@ export default function ProductForm({ item, onSave, onCancel }: ProductFormProps
     }
   }
 
-  const handleScreenshotAnalyze = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (!file) return
+  // Multi-screenshot upload (max 5). Add files to the staging list; user can
+  // remove individually before submitting. Doesn't auto-analyze on add — they
+  // press the analyze button below.
+  const handleScreenshotFiles = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files ?? [])
+    if (files.length === 0) return
     e.target.value = ''
+    setStagedScreenshots((prev) => {
+      const next = [...prev, ...files].slice(0, MAX_SCREENSHOTS)
+      if (prev.length + files.length > MAX_SCREENSHOTS) {
+        addToast(`Tối đa ${MAX_SCREENSHOTS} ảnh — chỉ giữ ${MAX_SCREENSHOTS} ảnh đầu`, 'error')
+      }
+      return next
+    })
+  }
+
+  const removeStagedScreenshot = (idx: number) => {
+    setStagedScreenshots((prev) => prev.filter((_, i) => i !== idx))
+  }
+
+  const handleAnalyzeScreenshots = async () => {
+    if (stagedScreenshots.length === 0) return
 
     setIsAnalyzing(true)
     try {
       const geminiKey = getGeminiKey()
-      const base64 = await blobToSmallBase64(file, 1024)
+      addToast(`Đang phân tích ${stagedScreenshots.length} ảnh...`)
+
+      // Convert all files to base64 in parallel
+      const imageParts = await Promise.all(
+        stagedScreenshots.map(async (f) => {
+          const data = await blobToSmallBase64(f, 1024)
+          return { inlineData: { mimeType: 'image/jpeg', data } }
+        })
+      )
 
       const response = await directGeminiVision({
         apiKey: geminiKey,
         parts: [
-          { inlineData: { mimeType: 'image/jpeg', data: base64 } },
-          { text: IMAGE_EXTRACT_PROMPT },
+          ...imageParts,
+          { text: EXTRACT_PROMPT_HYBRID('(Không có text trang — chỉ phân tích ảnh upload)', imageParts.length) },
         ],
+        systemInstruction: EXTRACT_SYSTEM,
         maxOutputTokens: 2048,
       })
 
@@ -679,7 +798,8 @@ export default function ProductForm({ item, onSave, onCancel }: ProductFormProps
       const { next, count } = applyExtracted(extracted, form)
       if (count === 0) throw new Error('Không trích xuất được thông tin, thử ảnh khác')
       setForm(next)
-      addToast(`Đã tự động điền ${count} trường từ ảnh`)
+      addToast(`Đã tự động điền ${count} trường từ ${stagedScreenshots.length} ảnh`)
+      setStagedScreenshots([])  // clear staging after success
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
       addToast(`Phân tích ảnh thất bại: ${msg}`, 'error')
@@ -735,22 +855,73 @@ export default function ProductForm({ item, onSave, onCancel }: ProductFormProps
         {/* Divider */}
         <div className="flex items-center gap-2">
           <div className="h-px flex-1 bg-sky-500/15" />
-          <span className="text-[10px] text-sky-400/60">hoặc</span>
+          <span className="text-[10px] text-sky-400/60">hoặc tải ảnh ({stagedScreenshots.length}/{MAX_SCREENSHOTS})</span>
           <div className="h-px flex-1 bg-sky-500/15" />
         </div>
-        {/* Screenshot upload */}
-        <button
-          type="button"
-          onClick={() => screenshotRef.current?.click()}
-          disabled={isFetching || isAnalyzing}
-          className="flex items-center justify-center gap-2 rounded-lg border border-dashed border-sky-400/30 bg-white/50 py-2.5 text-xs font-medium text-sky-500 transition-colors hover:bg-sky-500/5 disabled:cursor-not-allowed disabled:opacity-40"
-        >
-          {isAnalyzing
-            ? <><Loader2 className="h-3.5 w-3.5 animate-spin" />Đang phân tích ảnh...</>
-            : <><ScanSearch className="h-3.5 w-3.5" />Tải ảnh chụp màn hình trang sản phẩm</>
-          }
-        </button>
-        <input ref={screenshotRef} type="file" accept="image/*" className="hidden" onChange={handleScreenshotAnalyze} />
+
+        {/* Multi-screenshot upload — grid of MAX_SCREENSHOTS slots. User can
+            upload 1-5 ảnh; không bắt buộc đủ 5 mới analyze được. */}
+        <div className="grid grid-cols-5 gap-1.5">
+          {Array.from({ length: MAX_SCREENSHOTS }).map((_, i) => {
+            const file = stagedScreenshots[i]
+            if (file) {
+              const url = URL.createObjectURL(file)
+              return (
+                <div key={i} className="relative aspect-square rounded-lg overflow-hidden border border-sky-400/30 bg-white">
+                  <img src={url} alt="" className="h-full w-full object-cover" onLoad={() => URL.revokeObjectURL(url)} />
+                  <button
+                    type="button"
+                    onClick={() => removeStagedScreenshot(i)}
+                    aria-label="Xoá ảnh này"
+                    className="absolute top-0.5 right-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-black/60 text-white hover:bg-black/80"
+                  >
+                    <X className="h-2.5 w-2.5" />
+                  </button>
+                </div>
+              )
+            }
+            // Only the first empty slot is clickable (the next upload slot)
+            const isNextSlot = i === stagedScreenshots.length
+            return (
+              <button
+                key={i}
+                type="button"
+                onClick={isNextSlot ? () => screenshotRef.current?.click() : undefined}
+                disabled={!isNextSlot || isFetching || isAnalyzing}
+                className={`aspect-square rounded-lg border border-dashed flex items-center justify-center transition-colors ${
+                  isNextSlot
+                    ? 'border-sky-400/40 bg-white/50 text-sky-500 hover:bg-sky-500/5 cursor-pointer'
+                    : 'border-black/8 bg-black/[0.02] text-gray-300 cursor-not-allowed'
+                }`}
+              >
+                <Plus className="h-4 w-4" />
+              </button>
+            )
+          })}
+        </div>
+
+        {stagedScreenshots.length > 0 && (
+          <button
+            type="button"
+            onClick={handleAnalyzeScreenshots}
+            disabled={isFetching || isAnalyzing}
+            className="flex items-center justify-center gap-2 rounded-lg bg-sky-500 py-2.5 text-xs font-semibold text-white transition-colors hover:bg-sky-600 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            {isAnalyzing
+              ? <><Loader2 className="h-3.5 w-3.5 animate-spin" />Đang phân tích {stagedScreenshots.length} ảnh...</>
+              : <><ScanSearch className="h-3.5 w-3.5" />Phân tích {stagedScreenshots.length} ảnh để điền thông tin</>
+            }
+          </button>
+        )}
+
+        <input
+          ref={screenshotRef}
+          type="file"
+          accept="image/*"
+          multiple
+          className="hidden"
+          onChange={handleScreenshotFiles}
+        />
       </div>
 
       {/* Product image upload */}
