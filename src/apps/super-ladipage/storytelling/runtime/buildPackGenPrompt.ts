@@ -42,7 +42,7 @@ import { buildCtaMomentsBrief } from '../../cta'
 import type { NarratorDnaSelection } from './selectNarratorDna'
 import type { PackBrainstorm } from '../../packBrainstorm'
 import type { LengthMode } from '../../narrativeMode'
-import { LENGTH_MODE_SPEC } from '../../narrativeMode'
+import { getLengthModeSpec } from '../../narrativeMode'
 
 /** Compose protagonist brief — 1-2 lines, used in system prompt context. */
 export function buildProtagonistBrief(p: ProtagonistProfile): string {
@@ -92,7 +92,9 @@ function buildBlockDirective(
 
   // 2026-05-29 — Per-block paragraph + word cap from length mode (if set).
   // SHORT mode tightens both for mobile-friendly output.
-  const lengthSpec = lengthMode ? LENGTH_MODE_SPEC[lengthMode] : null
+  // Fix A (2026-05-29) — Use language-aware spec so MS packs get tighter
+  // sentence caps (each word reads longer on mobile than VN).
+  const lengthSpec = lengthMode ? getLengthModeSpec(lengthMode, input.targetLanguage) : null
   const paragraphMin = lengthSpec ? lengthSpec.paragraphMin : block.paragraphTarget.min
   const paragraphMax = lengthSpec ? lengthSpec.paragraphMax : block.paragraphTarget.max
 

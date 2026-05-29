@@ -31,7 +31,7 @@
 //   - All validators
 // ─────────────────────────────────────────────────────────────────────
 
-import type { BlockId } from '../storytelling/types'
+import type { BlockId, LandingLanguage } from '../storytelling/types'
 import type { PacingProfile } from '../productClass/types'
 
 export type LengthMode = 'short' | 'medium' | 'long'
@@ -142,39 +142,152 @@ export const LENGTH_MODE_SPEC: Record<LengthMode, LengthModeSpec> = {
   },
 }
 
+// ─── Fix A (2026-05-29) — Language-aware spec ─────────────────────────
+//
+// VN is a CC-VC tonal language with 1 syllable = ~1 character grouping;
+// 16 VN words reads as a short sentence. MS / EN use multi-syllable words
+// (MS especially has long compound terms like "menghalang pergerakan
+// anda" = 3 words but reads as 30 characters), so the same 16-word cap
+// becomes a wall of text on mobile.
+//
+// MS pack feedback (knee brace pack, 2026-05-29): paragraphs had 3
+// sentences of 18-25 words each → wall-of-text feel. Multiplier:
+//   - VN: 1.00 baseline (tested + working in earlier packs)
+//   - MS: 0.65 — tighter caps because each word reads longer
+//   - EN: 0.80 — middle ground
+//
+// Apply ONLY to sentence-length + sentences-per-paragraph (the cadence
+// dimensions reader perceives as "wall of text"). Word-cap per block
+// stays language-neutral because total pack length is a content budget,
+// not a cadence concern.
+
+const LANGUAGE_CADENCE_MULTIPLIER: Record<LandingLanguage, number> = {
+  vi: 1.0,
+  ms: 0.65,
+  en: 0.80,
+}
+
+/** Per-language sentence-length and sentences-per-paragraph caps,
+ *  derived from base spec × multiplier. Floors prevent the cap from
+ *  becoming so tight that Gemini can't produce coherent prose. */
+function adjustSpecForLanguage(spec: LengthModeSpec, language: LandingLanguage): LengthModeSpec {
+  const mult = LANGUAGE_CADENCE_MULTIPLIER[language]
+  if (mult === 1.0) return spec
+  return {
+    ...spec,
+    wordsPerSentenceMax: Math.max(8, Math.round(spec.wordsPerSentenceMax * mult)),
+    // sentencesPerParagraphMax: keep at 2 even for VN (was 2). For MS/EN we
+    // cap at 2 explicitly. Single-sentence paragraphs are heavily
+    // encouraged for impact moments regardless of language.
+    sentencesPerParagraphMax: Math.min(spec.sentencesPerParagraphMax, 2),
+  }
+}
+
+/** Public accessor: return the spec adjusted for output language. When
+ *  language is omitted, returns the base spec (VN-equivalent). */
+export function getLengthModeSpec(mode: LengthMode, language?: LandingLanguage): LengthModeSpec {
+  const base = LENGTH_MODE_SPEC[mode]
+  return language ? adjustSpecForLanguage(base, language) : base
+}
+
+// ─── Per-language example fragments for the hint (Fix B) ──────────────
+//
+// Concrete examples in the target language teach Gemini the rhythm to
+// imitate. Without them, the hint is abstract structural language that
+// Gemini can interpret away.
+
+interface LangExamples {
+  /** 1-sentence impact paragraph (5-8 words). */
+  oneSentImpact: string
+  /** 2-sentence breathing paragraph. */
+  twoSentBreathing: string
+  /** A "wall of text" anti-pattern that gets rejected. */
+  wallExample: string
+  /** Same idea broken into 3 short paragraphs (the GOOD pattern). */
+  brokenExample: string
+}
+
+const LANGUAGE_EXAMPLES: Record<LandingLanguage, LangExamples> = {
+  vi: {
+    oneSentImpact: `"3 giờ sáng. Lại tỉnh."`,
+    twoSentBreathing: `"Tôi ngồi dậy. Lưng đau như có ai đè."`,
+    wallExample: `"Tôi ngồi dậy sau một đêm dài, lưng đau như có ai đè lên, và tôi biết mình lại phải bắt đầu một ngày nữa với cảm giác mệt mỏi không thể tả được."`,
+    brokenExample: `"Tôi ngồi dậy.\n\nLưng đau như có ai đè lên.\n\nLại một ngày nữa bắt đầu mệt."`,
+  },
+  ms: {
+    oneSentImpact: `"3 pagi. Terjaga lagi."`,
+    twoSentBreathing: `"Saya bangun perlahan. Lutut keras macam papan."`,
+    wallExample: `"Saya bangun perlahan dari katil setelah satu malam yang panjang, lutut saya rasa keras seperti papan dan saya tahu hari ini akan sama seperti semalam, penuh dengan kesakitan yang tak boleh saya elakkan."`,
+    brokenExample: `"Saya bangun perlahan.\n\nLutut keras macam papan.\n\nHari ini akan sama seperti semalam."`,
+  },
+  en: {
+    oneSentImpact: `"3am. Awake again."`,
+    twoSentBreathing: `"I sit up slowly. My knee feels locked."`,
+    wallExample: `"I sit up slowly after a long night, my knee feels locked and stiff and I already know this day is going to be just like yesterday, full of the kind of pain that I cannot avoid no matter how hard I try."`,
+    brokenExample: `"I sit up slowly.\n\nMy knee feels locked.\n\nAnother day, same as yesterday."`,
+  },
+}
+
 /** Build the cadence hint block injected into the system prompt.
  *  Tells Gemini explicit per-block word cap + paragraph rules + sentence
  *  rules for this length mode. Critical for mobile-friendly output.
  *
  *  2026-05-29 (re-cal) — Strengthened MIN-floor language. Previous version
  *  said "words per block: 60-100" → Gemini wrote 30-word blocks. New
- *  version: "MINIMUM N words. Writing below this is REJECTED." */
-export function buildLengthModeHint(mode: LengthMode): string {
-  const spec = LENGTH_MODE_SPEC[mode]
+ *  version: "MINIMUM N words. Writing below this is REJECTED."
+ *
+ *  Fix A + B (2026-05-29) — Language parameter + concrete in-language
+ *  examples + wall-of-text anti-pattern. MS pack came back with 3-
+ *  sentence-20-word paragraphs because the abstract rule didn't survive
+ *  language translation. Showing Gemini "this is a wall (reject) vs.
+ *  this is good (3 short paras)" in the target language makes the
+ *  rule actually stick.
+ */
+export function buildLengthModeHint(mode: LengthMode, language?: LandingLanguage): string {
+  const spec = getLengthModeSpec(mode, language)
+  const examples = language ? LANGUAGE_EXAMPLES[language] : LANGUAGE_EXAMPLES.vi
+  const langLabel = language === 'ms' ? 'Bahasa Melayu' : language === 'en' ? 'English' : 'Tiếng Việt'
+
   return [
-    `═══ LENGTH MODE: ${mode.toUpperCase()} (${spec.label}) ═══`,
+    `═══ LENGTH MODE: ${mode.toUpperCase()} (${spec.label}) — LANGUAGE: ${langLabel} ═══`,
     ``,
     `⚠️ PER-BLOCK WORD BUDGET — STRICT FLOOR + CEILING:`,
     `   MINIMUM ${spec.wordCapMin} words per block. This is a HARD FLOOR — do NOT go below.`,
     `   MAXIMUM ${spec.wordCapMax} words per block. Aim for the upper half (${Math.round((spec.wordCapMin + spec.wordCapMax) / 2)}-${spec.wordCapMax}).`,
     `   Writing a block under ${spec.wordCapMin} words is REJECTED — block has not delivered its psychological function.`,
     ``,
-    `STRUCTURE per block:`,
+    `⚠️ SENTENCE + PARAGRAPH CADENCE — MOBILE READER ENFORCEMENT:`,
     `- Paragraphs per block: ${spec.paragraphMin}-${spec.paragraphMax}.`,
-    `- Sentences per paragraph: 1-${spec.sentencesPerParagraphMax} MAX. 1-sentence paragraphs ENCOURAGED for impact moments.`,
-    `- Words per sentence: ≤ ${spec.wordsPerSentenceMax} avg. Mobile reader scrolls fast — short sentences breathe.`,
+    `- Sentences per paragraph: ${spec.sentencesPerParagraphMax} MAXIMUM. NEVER 3.`,
+    `   → If you write a 3-sentence paragraph, BREAK IT into 2 paragraphs.`,
+    `   → 1-sentence paragraphs are ENCOURAGED for impact moments (≥30% of paras).`,
+    `- Words per sentence: ${spec.wordsPerSentenceMax} MAXIMUM avg. NEVER 25.`,
+    `   → If a sentence exceeds ${spec.wordsPerSentenceMax} words, split it at the comma or "and"/"dan"/"và".`,
+    `   → Short sentences (3-6 words) are GOOD — they breathe on mobile.`,
     ``,
-    `MOBILE RHYTHM — reader is on phone, ~50 chars/line:`,
-    `- Break paragraphs AGGRESSIVELY. White space between paragraphs is OXYGEN, not waste.`,
-    `- 1 idea = 1 paragraph. Do not stack 3 ideas into one wall of text.`,
-    `- Mix sentence lengths: short impact + medium flow + occasional very short ("3 giờ sáng.").`,
-    `- Avoid 3+ consecutive long sentences — reader eyes fatigue, scrolls past.`,
+    `🚫 WALL-OF-TEXT ANTI-PATTERN (REJECT THIS — example in ${langLabel}):`,
+    examples.wallExample,
+    `   ↑ This is ONE paragraph, 3+ sentences, ${language === 'ms' ? '~30 words/sentence' : '~25 words/sentence'}. Reader's eyes glaze. SCROLL PAST.`,
+    ``,
+    `✅ MOBILE-RHYTHM PATTERN (DO THIS INSTEAD — example in ${langLabel}):`,
+    examples.brokenExample,
+    `   ↑ Same idea. 3 short paragraphs. White space between each. Eye rests. Reader keeps scrolling.`,
+    ``,
+    `IMPACT MOMENT examples (1-sentence paragraph) in ${langLabel}:`,
+    `   ${examples.oneSentImpact}`,
+    `   ${examples.twoSentBreathing}  ← 2 sentences max if you need slightly more weight.`,
+    ``,
+    `MOBILE RHYTHM rules (apply EVERY paragraph):`,
+    `- Break paragraphs AGGRESSIVELY. White space = OXYGEN, not waste.`,
+    `- 1 idea = 1 paragraph. NEVER stack 3 ideas into one block.`,
+    `- After every long sentence, follow with a short one (≤6 words). Pattern: long → short → short → medium.`,
+    `- NEVER 3 consecutive long sentences. Reader eyes fatigue, scrolls past.`,
     ``,
     `TOTAL PACK TARGET: ${spec.expectedPackWords} words across all storytelling blocks (PI layer adds on top).`,
     mode === 'short'
       ? `Sweet spot ~1,200-1,500 words readable in 3-4 min mobile scroll.
-Each block must EARN its place — but each block must also REACH its word floor.
-A 30-word block does not deliver its psychological function. Write the full ${spec.wordCapMin}-${spec.wordCapMax}.`
+Each block EARNS its place + REACHES its word floor + RESPECTS the cadence caps.
+A 30-word block = rejected. A 200-word block in 1 paragraph = also rejected.`
       : mode === 'medium'
       ? `Sweet spot ~1,700-2,000 words for considered purchase decisions.
 More space for narrator validation + failed-attempts than SHORT.

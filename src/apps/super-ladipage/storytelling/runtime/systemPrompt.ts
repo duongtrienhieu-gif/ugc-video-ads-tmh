@@ -336,8 +336,14 @@ Instructions dưới đây viết bằng tiếng Việt cho developer — nhưng
   // This block enforces per-block word cap, paragraph count, sentence
   // length — critical for mobile-readable output. Without it, Gemini
   // defaults to wall-of-text paragraphs that fatigue mobile readers.
+  //
+  // Fix A (2026-05-29) — Pass targetLanguage so the hint:
+  // (1) tightens sentence cap for MS (each word reads longer than VN),
+  // (2) shows wall-of-text + good-rhythm examples IN THE TARGET LANGUAGE
+  // so Gemini imitates the right cadence instead of translating an
+  // abstract rule.
   if (lengthMode) {
-    sections.push(buildLengthModeHint(lengthMode))
+    sections.push(buildLengthModeHint(lengthMode, input.targetLanguage))
   }
 
   // 7. POV philosophy (shared — same across modes)
