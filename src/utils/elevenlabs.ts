@@ -505,6 +505,13 @@ export async function createDubbing(params: {
   name?: string
   numSpeakers?: number  // 0 = auto-detect
   highestResolution?: boolean
+  /**
+   * If true, skip voice cloning and use a SIMILAR voice from the ElevenLabs
+   * Voice Library — native accent for target language. Default false (clone
+   * original speaker, foreigner accent). Note: counts toward workspace's
+   * custom voices limit; requires 'add_voice_from_voice_library' permission.
+   */
+  disableVoiceCloning?: boolean
 }): Promise<{ dubbingId: string; expectedDurationSec: number }> {
   if (!params.apiKey) throw new Error('Vui lòng nhập ElevenLabs API key trong Cài đặt')
   if (!params.file && !params.sourceUrl) throw new Error('Cần file video hoặc URL video')
@@ -518,6 +525,7 @@ export async function createDubbing(params: {
   form.append('num_speakers', String(params.numSpeakers ?? 0))
   form.append('watermark', 'false')
   if (params.highestResolution) form.append('highest_resolution', 'true')
+  if (params.disableVoiceCloning) form.append('disable_voice_cloning', 'true')
 
   const res = await fetch(`${EL_BASE}/dubbing`, {
     method: 'POST',

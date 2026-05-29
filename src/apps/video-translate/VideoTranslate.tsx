@@ -145,6 +145,10 @@ export default function VideoTranslate() {
   // Pipeline mode — default 'lip-sync' to preserve existing UX for current users.
   // 'voice-only' skips fal.ai (faster, cheaper, only needs ElevenLabs key).
   const [mode, setMode]                 = useState<TranslationMode>('lip-sync')
+  // Phase B — voice mode. false = clone original speaker's voice (current default,
+  // foreigner accent). true = use ElevenLabs Voice Library native voice for
+  // target language (authentic accent, slot quota applies).
+  const [useNativeVoice, setUseNativeVoice] = useState(false)
   const [file, setFile]                 = useState<File | null>(null)
   // Phase C — measured duration of uploaded video/audio (seconds). null = unknown
   // (URL mode, or metadata not yet loaded). Drives the timing expansion estimate banner.
@@ -346,26 +350,29 @@ export default function VideoTranslate() {
 
     setIsTranslating(true)
 
-    // Capture current mode value — protects against user toggling during the
-    // async run (mode state would mutate, but currentMode stays consistent).
+    // Capture current mode + voice settings — protects against user toggling
+    // during async run (state would mutate, but currentMode/currentUseNative
+    // stay consistent for this job).
     const currentMode: TranslationMode = mode
+    const currentUseNative: boolean = useNativeVoice
 
     const localId = crypto.randomUUID()
     const displayName = inputMode === 'file' ? (file?.name ?? 'video') : sourceUrl.split('/').pop() ?? 'video'
 
     const newItem: TranslationItem = {
-      id:           localId,
-      dubbingId:    '',
-      name:         displayName,
+      id:                  localId,
+      dubbingId:           '',
+      name:                displayName,
       sourceLang,
       targetLang,
-      mode:         currentMode,
-      status:       'pending',
-      videoUrl:     null,
-      assetId:      null,
-      audioAssetId: null,
-      imageAssetId: null,
-      createdAt:    Date.now(),
+      mode:                currentMode,
+      disableVoiceCloning: currentUseNative,
+      status:              'pending',
+      videoUrl:            null,
+      assetId:             null,
+      audioAssetId:        null,
+      imageAssetId:        null,
+      createdAt:           Date.now(),
     }
     addItem(newItem)
 
@@ -393,14 +400,15 @@ export default function VideoTranslate() {
         inputMode, fileName: file?.name, fileSize: file?.size,
       })
       const { dubbingId, expectedDurationSec } = await createDubbing({
-        apiKey:            elevenLabsApiKey,
-        file:              inputMode === 'file' ? (file ?? undefined) : undefined,
-        sourceUrl:         inputMode === 'url' ? sourceUrl.trim() : undefined,
+        apiKey:              elevenLabsApiKey,
+        file:                inputMode === 'file' ? (file ?? undefined) : undefined,
+        sourceUrl:           inputMode === 'url' ? sourceUrl.trim() : undefined,
         targetLang,
         sourceLang,
-        name:              displayName,
+        name:                displayName,
         numSpeakers,
-        highestResolution: true,
+        highestResolution:   true,
+        disableVoiceCloning: currentUseNative,
       })
       console.info('[video-translate] dubbing created:', { dubbingId, expectedDurationSec })
       patch({ dubbingId, expectedDurationSec })
@@ -464,11 +472,22 @@ export default function VideoTranslate() {
       // Phase 3: log full error context for diagnostics
       console.error('[video-translate] FAIL', {
         sourceLang, targetLang, error: msg,
+        useNativeVoice: currentUseNative,
         stack: err instanceof Error ? err.stack : undefined,
       })
-      const toast = msg === 'TIMEOUT'
-        ? 'Quá thời gian xử lý — thử video ngắn hơn'
-        : `Thất bại: ${msg}`
+      // Phase B: specialize error messages around voice library failures so
+      // user knows what to do (toggle back to clone mode, or upgrade plan).
+      const lower = msg.toLowerCase()
+      let toast: string
+      if (msg === 'TIMEOUT') {
+        toast = 'Quá thời gian xử lý — thử video ngắn hơn'
+      } else if (currentUseNative && (lower.includes('voice') && (lower.includes('limit') || lower.includes('quota') || lower.includes('slot')))) {
+        toast = 'Voice native: hết quota custom voices của workspace. Xoá bớt voice cũ trên ElevenLabs hoặc dùng "Giữ giọng gốc (clone)" thay thế.'
+      } else if (currentUseNative && lower.includes('permission')) {
+        toast = 'Voice native: workspace của bạn chưa có quyền "add_voice_from_voice_library". Upgrade ElevenLabs plan hoặc dùng "Giữ giọng gốc (clone)".'
+      } else {
+        toast = `Thất bại: ${msg}`
+      }
       addToast(toast, 'error')
       // Phase 4: persist FULL raw error so user can see it on the card
       patch({ status: 'failed', errorMessage: msg, rawErrorBody: msg })
@@ -768,6 +787,42 @@ export default function VideoTranslate() {
               </div>
             </div>
 
+            {/* Phase B — Voice selection: clone original speaker vs use native voice.
+                Default false (clone). Important: native voice mode uses ElevenLabs Voice
+                Library which counts toward workspace's custom voice quota. */}
+            <div>
+              <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-widest text-gray-400">
+                Giọng output
+              </p>
+              <div className="flex gap-1 rounded-xl border border-black/8 bg-black/[0.02] p-1">
+                <button
+                  onClick={() => setUseNativeVoice(false)}
+                  className={`flex flex-1 items-center justify-center gap-1.5 rounded-lg py-2 text-[11px] font-medium transition-all ${
+                    !useNativeVoice
+                      ? 'bg-white shadow-sm text-teal-700 border border-teal-200'
+                      : 'text-gray-500 hover:text-gray-700'
+                  }`}
+                >
+                  Giữ giọng gốc (clone)
+                </button>
+                <button
+                  onClick={() => setUseNativeVoice(true)}
+                  className={`flex flex-1 items-center justify-center gap-1.5 rounded-lg py-2 text-[11px] font-medium transition-all ${
+                    useNativeVoice
+                      ? 'bg-white shadow-sm text-teal-700 border border-teal-200'
+                      : 'text-gray-500 hover:text-gray-700'
+                  }`}
+                >
+                  Voice native ngôn ngữ đích
+                </button>
+              </div>
+              <p className="mt-1.5 text-[10px] leading-relaxed text-gray-400">
+                {useNativeVoice
+                  ? 'ElevenLabs auto-pick voice native cho ngôn ngữ đích — accent chuẩn người bản địa, GIỌNG NGƯỜI khác giọng gốc. ⚠️ Voice từ library tính vào quota custom voices của workspace.'
+                  : 'Clone giọng nhân vật gốc, chuyển sang ngôn ngữ đích — giữ voice gốc nhưng accent nghe như foreigner nói tiếng đích.'}
+              </p>
+            </div>
+
             {/* Phase C — timing expansion estimate banner.
                 Shows when target lang is known + different from source. Risk-aware
                 color: orange for high-risk pairs (audio likely exceeds video),
@@ -1016,6 +1071,12 @@ export default function VideoTranslate() {
                             ? <><Mic className="h-2.5 w-2.5" /> Chỉ giọng</>
                             : <><Film className="h-2.5 w-2.5" /> Khớp môi</>}
                         </span>
+                        {/* Voice badge — only show if explicitly using native voice */}
+                        {item.disableVoiceCloning && (
+                          <span className="rounded-full bg-emerald-50 px-1.5 py-0.5 text-[9px] font-semibold text-emerald-600 border border-emerald-200">
+                            Native
+                          </span>
+                        )}
                         <span className="ml-auto text-[10px] tabular-nums text-gray-400">
                           {new Date(item.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                         </span>
