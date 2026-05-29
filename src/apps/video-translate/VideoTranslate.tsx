@@ -8,7 +8,8 @@ import {
   createDubbing, getDubbedMedia, pollDubbingUntilDone, deleteDubbing,
 } from '../../utils/elevenlabs'
 import { submitLatentSync, pollLatentSyncUntilDone } from '../../utils/falai'
-import { saveAsset, getUrl } from '../../utils/assetStore'
+import { muxAudioIntoVideo } from './muxAudioVideo'
+import { saveAsset, getUrl, getBlob } from '../../utils/assetStore'
 import { useSettingsStore } from '../../stores/settingsStore'
 import { useAppStore } from '../../stores/appStore'
 import { useVideoTranslateStore } from '../../stores/videoTranslateStore'
@@ -226,11 +227,21 @@ export default function VideoTranslate() {
           }
 
           if (itemMode === 'voice-only') {
-            // Voice-only resume: dubbing done → just fetch video + save as final.
-            // This DOES work after F5 (unlike lip-sync) because we don't need
-            // the transient sourceVideoUrl — ElevenLabs serves the video itself.
-            const videoBlob = await getDubbedMedia(elevenLabsApiKey, item.dubbingId, item.targetLang, 'video')
-            const assetId = await saveAsset(videoBlob, videoBlob.type || 'video/mp4')
+            // Voice-only resume: try /video; on 404 fall back to /audio + mux
+            // with the source video (cached in imageAssetId).
+            let finalVideoBlob: Blob
+            try {
+              finalVideoBlob = await getDubbedMedia(elevenLabsApiKey, item.dubbingId, item.targetLang, 'video')
+            } catch (err) {
+              const msg = err instanceof Error ? err.message : String(err)
+              if (!msg.includes('(404)')) throw err
+              console.warn('[video-translate] /video 404 on resume — fallback to audio + mux')
+              const dubAudioBlob = await getDubbedMedia(elevenLabsApiKey, item.dubbingId, item.targetLang, 'audio')
+              const srcVideoBlob = item.imageAssetId ? await getBlob(item.imageAssetId) : null
+              if (!srcVideoBlob) throw new Error('Không tìm thấy video gốc đã cache để mux — chạy lại job')
+              finalVideoBlob = await muxAudioIntoVideo({ videoBlob: srcVideoBlob, audioBlob: dubAudioBlob })
+            }
+            const assetId = await saveAsset(finalVideoBlob, finalVideoBlob.type || 'video/mp4')
             const videoUrl = await getUrl(assetId)
             patch({ status: 'dubbed', assetId, videoUrl })
             addToast(`✓ Đã hoàn tất "${item.name}" sau khi resume (voice-only)`, 'success')
@@ -424,10 +435,27 @@ export default function VideoTranslate() {
 
       // ── Branch by mode ──────────────────────────────────────────────────
       if (currentMode === 'voice-only') {
-        // Voice-only: fetch ElevenLabs' /video endpoint which already has the
-        // dubbed audio mixed into the original video (no lip-sync). Skip fal.ai.
-        const videoBlob = await getDubbedMedia(elevenLabsApiKey, dubbingId, targetLang, 'video')
-        const assetId   = await saveAsset(videoBlob, videoBlob.type || 'video/mp4')
+        // Voice-only: try ElevenLabs' /video endpoint first (has dubbed audio
+        // pre-mixed into the original video). If it 404s — happens reliably
+        // with disable_voice_cloning=true / Native voice mode where EL skips
+        // the video render — fall back to fetching /audio and muxing client-
+        // side with ffmpeg.wasm. Skip fal.ai either way.
+        let finalVideoBlob: Blob
+        try {
+          finalVideoBlob = await getDubbedMedia(elevenLabsApiKey, dubbingId, targetLang, 'video')
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err)
+          if (!msg.includes('(404)')) throw err
+          console.warn('[video-translate] /video 404 — falling back to audio + ffmpeg mux')
+          addToast('ElevenLabs không render video — đang mux audio vào video gốc...', 'info')
+          const dubAudioBlob = await getDubbedMedia(elevenLabsApiKey, dubbingId, targetLang, 'audio')
+          const srcVideoBlob = file ?? (inputMode === 'url'
+            ? await fetch(sourceVideoUrl).then((r) => r.blob())
+            : null)
+          if (!srcVideoBlob) throw new Error('Không lấy được video gốc để mux audio đã dịch')
+          finalVideoBlob = await muxAudioIntoVideo({ videoBlob: srcVideoBlob, audioBlob: dubAudioBlob })
+        }
+        const assetId   = await saveAsset(finalVideoBlob, finalVideoBlob.type || 'video/mp4')
         const videoUrl  = await getUrl(assetId)
         patch({ status: 'dubbed', assetId, videoUrl })
         addToast(`Dịch voice hoàn tất: ${displayName}`)
