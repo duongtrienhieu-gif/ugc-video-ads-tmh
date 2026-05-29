@@ -3,12 +3,15 @@ import {
   Languages, Upload, Link2, Play, Pause, Download, Trash2,
   Loader2, AlertTriangle, CheckCircle2, ChevronDown, X,
   Globe, ArrowRight, FileVideo, Info, Sliders, Mic, Film,
+  Volume2,
 } from 'lucide-react'
 import {
   createDubbing, getDubbedMedia, pollDubbingUntilDone, deleteDubbing,
 } from '../../utils/elevenlabs'
 import { submitLatentSync, pollLatentSyncUntilDone } from '../../utils/falai'
 import { muxAudioIntoVideo } from './muxAudioVideo'
+import { generateCondensedAudio } from './services/condensedPipeline'
+import VoicePickerModal, { type PickedVoice } from './components/VoicePickerModal'
 import { saveAsset, getUrl, getBlob } from '../../utils/assetStore'
 import { useSettingsStore } from '../../stores/settingsStore'
 import { useAppStore } from '../../stores/appStore'
@@ -16,6 +19,7 @@ import { useVideoTranslateStore } from '../../stores/videoTranslateStore'
 import {
   SOURCE_LANGUAGES, TARGET_LANGUAGES, VALID_SOURCE_CODES, VALID_TARGET_CODES,
   type TranslationItem, type TranslationStatus, type TranslationMode,
+  type CondenseLevel,
 } from './types'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -40,12 +44,16 @@ function getLangFlag(code: string): string {
 function StatusBadge({ status }: { status: TranslationStatus }) {
   const spinner = <Loader2 className="h-2.5 w-2.5 animate-spin" />
   const map: Record<TranslationStatus, { label: string; className: string; icon?: React.ReactNode }> = {
-    pending:    { label: 'Đang chờ',       className: 'bg-slate-100 text-slate-500' },
-    extracting: { label: 'Upload nguồn',   className: 'bg-slate-100 text-slate-600', icon: spinner },
-    dubbing:    { label: 'Đang dịch',      className: 'bg-teal-500/15 text-teal-600', icon: spinner },
-    lipsyncing: { label: 'Đang lip-sync',  className: 'bg-indigo-500/15 text-indigo-600', icon: spinner },
-    dubbed:     { label: 'Hoàn thành',     className: 'bg-emerald-500/15 text-emerald-600', icon: <CheckCircle2 className="h-2.5 w-2.5" /> },
-    failed:     { label: 'Thất bại',       className: 'bg-red-500/15 text-red-500' },
+    pending:      { label: 'Đang chờ',       className: 'bg-slate-100 text-slate-500' },
+    extracting:   { label: 'Upload nguồn',   className: 'bg-slate-100 text-slate-600', icon: spinner },
+    transcribing: { label: 'Phiên âm',       className: 'bg-sky-500/15 text-sky-600',   icon: spinner },
+    translating:  { label: 'Đang dịch',      className: 'bg-violet-500/15 text-violet-600', icon: spinner },
+    synthesizing: { label: 'Tạo giọng',      className: 'bg-teal-500/15 text-teal-600',  icon: spinner },
+    dubbing:      { label: 'Đang dịch',      className: 'bg-teal-500/15 text-teal-600',  icon: spinner },
+    lipsyncing:   { label: 'Đang lip-sync',  className: 'bg-indigo-500/15 text-indigo-600', icon: spinner },
+    muxing:       { label: 'Ghép video',     className: 'bg-amber-500/15 text-amber-600',  icon: spinner },
+    dubbed:       { label: 'Hoàn thành',     className: 'bg-emerald-500/15 text-emerald-600', icon: <CheckCircle2 className="h-2.5 w-2.5" /> },
+    failed:       { label: 'Thất bại',       className: 'bg-red-500/15 text-red-500' },
   }
   const { label, className, icon } = map[status]
   return (
@@ -146,10 +154,18 @@ export default function VideoTranslate() {
   // Pipeline mode — default 'lip-sync' to preserve existing UX for current users.
   // 'voice-only' skips fal.ai (faster, cheaper, only needs ElevenLabs key).
   const [mode, setMode]                 = useState<TranslationMode>('lip-sync')
-  // Phase B — voice mode. false = clone original speaker's voice (current default,
-  // foreigner accent). true = use ElevenLabs Voice Library native voice for
-  // target language (authentic accent, slot quota applies).
-  const [useNativeVoice, setUseNativeVoice] = useState(false)
+  // Voice-only (smart-condense) — voice picked by user for TTS. Persisted in
+  // localStorage so the choice survives page reloads within the session.
+  const [pickedVoice, setPickedVoice] = useState<PickedVoice | null>(() => {
+    try {
+      const raw = localStorage.getItem('video-translate-picked-voice-v1')
+      return raw ? (JSON.parse(raw) as PickedVoice) : null
+    } catch { return null }
+  })
+  const [voicePickerOpen, setVoicePickerOpen] = useState(false)
+  const [condenseLevel, setCondenseLevel]     = useState<CondenseLevel>('light')
+  // Legacy lip-sync flag — only relevant for ElevenLabs Dubbing path.
+  const useNativeVoice = false  // smart-condense replaces this knob
   const [file, setFile]                 = useState<File | null>(null)
   // Phase C — measured duration of uploaded video/audio (seconds). null = unknown
   // (URL mode, or metadata not yet loaded). Drives the timing expansion estimate banner.
@@ -177,6 +193,7 @@ export default function VideoTranslate() {
   const addToast         = useAppStore((s) => s.addToast)
   const elevenLabsApiKey = useSettingsStore((s) => s.elevenLabsApiKey)
   const falApiKey        = useSettingsStore((s) => s.falApiKey)
+  const geminiApiKey     = useSettingsStore((s) => s.geminiApiKey)
 
   // ── Restore videoUrl from assetId after reload ───────────────────────
   useEffect(() => {
@@ -350,10 +367,14 @@ export default function VideoTranslate() {
       addToast('Chọn ngôn ngữ đích hợp lệ', 'error'); return
     }
     if (!elevenLabsApiKey) { addToast('Cài ElevenLabs API key trong Cài đặt', 'error'); return }
-    // fal.ai only required for lip-sync mode. Voice-only mode uses ElevenLabs' /video
-    // endpoint directly (already has dubbed audio mixed into original video).
     if (mode === 'lip-sync' && !falApiKey) {
       addToast('Mode Khớp môi cần fal.ai API key trong Cài đặt — hoặc chuyển sang Chỉ giọng', 'error'); return
+    }
+    if (mode === 'voice-only' && !geminiApiKey) {
+      addToast('Mode Chỉ giọng cần Gemini API key trong Cài đặt (dùng để phiên âm + dịch tối ưu)', 'error'); return
+    }
+    if (mode === 'voice-only' && !pickedVoice?.voiceId) {
+      addToast('Chọn giọng đọc trước khi dịch (nút "Chọn giọng" trong Giọng output)', 'error'); return
     }
     if (sourceLang === targetLang) {
       addToast('Ngôn ngữ gốc và đích không được trùng nhau', 'error'); return
@@ -361,11 +382,12 @@ export default function VideoTranslate() {
 
     setIsTranslating(true)
 
-    // Capture current mode + voice settings — protects against user toggling
-    // during async run (state would mutate, but currentMode/currentUseNative
-    // stay consistent for this job).
+    // Capture state at job-start so async run is unaffected by later toggles.
     const currentMode: TranslationMode = mode
     const currentUseNative: boolean = useNativeVoice
+    const currentVoice: PickedVoice | null = pickedVoice
+    const currentCondense: CondenseLevel = condenseLevel
+    const currentDuration: number | null = fileDuration
 
     const localId = crypto.randomUUID()
     const displayName = inputMode === 'file' ? (file?.name ?? 'video') : sourceUrl.split('/').pop() ?? 'video'
@@ -377,6 +399,9 @@ export default function VideoTranslate() {
       sourceLang,
       targetLang,
       mode:                currentMode,
+      voiceId:             currentMode === 'voice-only' ? currentVoice?.voiceId : undefined,
+      voiceName:           currentMode === 'voice-only' ? currentVoice?.voiceName : undefined,
+      condenseLevel:       currentMode === 'voice-only' ? currentCondense : undefined,
       disableVoiceCloning: currentUseNative,
       status:              'pending',
       videoUrl:            null,
@@ -403,65 +428,87 @@ export default function VideoTranslate() {
         sourceVideoUrl = sourceUrl.trim()
       }
 
-      // ── Stage 2: ElevenLabs Dubbing — dịch audio giữ giọng gốc ────────
-      patch({ status: 'dubbing' })
-      // Phase 3: log full payload before API call so we can debug failed runs
-      console.info('[video-translate] createDubbing →', {
-        sourceLang, targetLang, numSpeakers,
-        inputMode, fileName: file?.name, fileSize: file?.size,
-      })
-      const { dubbingId, expectedDurationSec } = await createDubbing({
-        apiKey:              elevenLabsApiKey,
-        file:                inputMode === 'file' ? (file ?? undefined) : undefined,
-        sourceUrl:           inputMode === 'url' ? sourceUrl.trim() : undefined,
-        targetLang,
-        sourceLang,
-        name:                displayName,
-        numSpeakers,
-        highestResolution:   true,
-        disableVoiceCloning: currentUseNative,
-      })
-      console.info('[video-translate] dubbing created:', { dubbingId, expectedDurationSec })
-      patch({ dubbingId, expectedDurationSec })
-
-      const result = await pollDubbingUntilDone({
-        apiKey:    elevenLabsApiKey,
-        dubbingId,
-        timeoutMs: 20 * 60 * 1000,
-      })
-      if (result.status === 'failed') {
-        throw new Error(result.error ?? 'Dịch thất bại — thử lại hoặc kiểm tra video')
-      }
-
-      // ── Branch by mode ──────────────────────────────────────────────────
       if (currentMode === 'voice-only') {
-        // Voice-only: try ElevenLabs' /video endpoint first (has dubbed audio
-        // pre-mixed into the original video). If it 404s — happens reliably
-        // with disable_voice_cloning=true / Native voice mode where EL skips
-        // the video render — fall back to fetching /audio and muxing client-
-        // side with ffmpeg.wasm. Skip fal.ai either way.
-        let finalVideoBlob: Blob
-        try {
-          finalVideoBlob = await getDubbedMedia(elevenLabsApiKey, dubbingId, targetLang, 'video')
-        } catch (err) {
-          const msg = err instanceof Error ? err.message : String(err)
-          if (!msg.includes('(404)')) throw err
-          console.warn('[video-translate] /video 404 — falling back to audio + ffmpeg mux')
-          addToast('ElevenLabs không render video — đang mux audio vào video gốc...', 'info')
-          const dubAudioBlob = await getDubbedMedia(elevenLabsApiKey, dubbingId, targetLang, 'audio')
-          const srcVideoBlob = file ?? (inputMode === 'url'
-            ? await fetch(sourceVideoUrl).then((r) => r.blob())
-            : null)
-          if (!srcVideoBlob) throw new Error('Không lấy được video gốc để mux audio đã dịch')
-          finalVideoBlob = await muxAudioIntoVideo({ videoBlob: srcVideoBlob, audioBlob: dubAudioBlob })
-        }
-        const assetId   = await saveAsset(finalVideoBlob, finalVideoBlob.type || 'video/mp4')
-        const videoUrl  = await getUrl(assetId)
+        // ── Smart-condense voice-only path ───────────────────────────────
+        // No ElevenLabs Dubbing. We transcribe + condense + TTS + mux ourselves
+        // so the audio plays at natural speed and content isn't cut off.
+        const srcVideoBlob: Blob | null = file ?? (inputMode === 'url'
+          ? await fetch(sourceVideoUrl).then((r) => r.blob()).catch(() => null)
+          : null)
+        if (!srcVideoBlob) throw new Error('Không lấy được video gốc để xử lý')
+        const targetSec = currentDuration && currentDuration > 0 ? currentDuration : 30
+        patch({ expectedDurationSec: Math.round(targetSec) })
+
+        console.info('[video-translate] smart-condense →', {
+          sourceLang, targetLang, voiceId: currentVoice!.voiceId,
+          level: currentCondense, targetSec,
+        })
+
+        const { translatedText, audioBlob, audioDurationSec, retried } =
+          await generateCondensedAudio({
+            geminiApiKey,
+            elevenLabsApiKey,
+            videoBlob:         srcVideoBlob,
+            sourceLang,
+            targetLang,
+            targetDurationSec: targetSec,
+            voiceId:           currentVoice!.voiceId,
+            level:             currentCondense,
+            onStatus:          (s) => patch({ status: s as TranslationStatus }),
+          })
+        patch({ translatedText })
+        if (retried) addToast('Text dịch dài quá — đã condense thêm để fit video', 'info')
+
+        const audioAssetId = await saveAsset(audioBlob, audioBlob.type || 'audio/mpeg')
+        patch({ audioAssetId })
+
+        patch({ status: 'muxing' })
+        // Use 'extend' mode if audio is meaningfully longer than video (>0.5s)
+        // — pads video tail by freezing last frame so audio plays to completion.
+        const needsExtend = audioDurationSec > targetSec + 0.5
+        const finalVideoBlob = await muxAudioIntoVideo({
+          videoBlob: srcVideoBlob,
+          audioBlob,
+          mode: needsExtend ? 'extend' : 'simple',
+        })
+        const assetId = await saveAsset(finalVideoBlob, 'video/mp4')
+        const videoUrl = await getUrl(assetId)
         patch({ status: 'dubbed', assetId, videoUrl })
-        addToast(`Dịch voice hoàn tất: ${displayName}`)
+        addToast(
+          needsExtend
+            ? `Dịch hoàn tất — video giữ frame cuối thêm ${(audioDurationSec - targetSec).toFixed(1)}s`
+            : `Dịch hoàn tất: ${displayName}`
+        )
       } else {
-        // Lip-sync: fetch dubbed AUDIO + send through fal.ai LatentSync
-        // to re-sync mouth movement with the new language audio.
+        // ── Legacy lip-sync path: ElevenLabs Dubbing + fal.ai LatentSync ──
+        patch({ status: 'dubbing' })
+        console.info('[video-translate] createDubbing →', {
+          sourceLang, targetLang, numSpeakers,
+          inputMode, fileName: file?.name, fileSize: file?.size,
+        })
+        const { dubbingId, expectedDurationSec } = await createDubbing({
+          apiKey:              elevenLabsApiKey,
+          file:                inputMode === 'file' ? (file ?? undefined) : undefined,
+          sourceUrl:           inputMode === 'url' ? sourceUrl.trim() : undefined,
+          targetLang,
+          sourceLang,
+          name:                displayName,
+          numSpeakers,
+          highestResolution:   true,
+          disableVoiceCloning: currentUseNative,
+        })
+        console.info('[video-translate] dubbing created:', { dubbingId, expectedDurationSec })
+        patch({ dubbingId, expectedDurationSec })
+
+        const result = await pollDubbingUntilDone({
+          apiKey:    elevenLabsApiKey,
+          dubbingId,
+          timeoutMs: 20 * 60 * 1000,
+        })
+        if (result.status === 'failed') {
+          throw new Error(result.error ?? 'Dịch thất bại — thử lại hoặc kiểm tra video')
+        }
+
         const dubBlob       = await getDubbedMedia(elevenLabsApiKey, dubbingId, targetLang, 'audio')
         const audioMime     = dubBlob.type || 'audio/mpeg'
         const audioAssetId  = await saveAsset(dubBlob, audioMime)
@@ -469,7 +516,6 @@ export default function VideoTranslate() {
         if (!dubbedAudioUrl) throw new Error('Không lấy được URL audio đã dịch')
         patch({ audioAssetId })
 
-        // ── Stage 3: fal.ai LatentSync — video-to-video lip-sync ──────────
         patch({ status: 'lipsyncing' })
         const { requestId } = await submitLatentSync({
           apiKey:    falApiKey,
@@ -477,7 +523,6 @@ export default function VideoTranslate() {
           audioUrl:  dubbedAudioUrl,
         })
         console.info('[video-translate] lip-sync requestId:', requestId)
-        // Phase 5: persist requestId so refresh-resume can pick it up
         patch({ lipSyncRequestId: requestId })
 
         const lipSyncResult = await pollLatentSyncUntilDone({
@@ -486,7 +531,6 @@ export default function VideoTranslate() {
           timeoutMs: 25 * 60 * 1000,
         })
 
-        // Download lip-synced video + save permanently
         const finalRes  = await fetch(lipSyncResult.videoUrl)
         const finalBlob = await finalRes.blob()
         const assetId   = await saveAsset(finalBlob, finalBlob.type || 'video/mp4')
@@ -815,41 +859,60 @@ export default function VideoTranslate() {
               </div>
             </div>
 
-            {/* Phase B — Voice selection: clone original speaker vs use native voice.
-                Default false (clone). Important: native voice mode uses ElevenLabs Voice
-                Library which counts toward workspace's custom voice quota. */}
-            <div>
-              <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-widest text-gray-400">
-                Giọng output
-              </p>
-              <div className="flex gap-1 rounded-xl border border-black/8 bg-black/[0.02] p-1">
+            {/* Voice picker (smart-condense voice-only mode only) — replaces the
+                old Clone/Native toggle. User picks any voice from their own account
+                (Voice Studio) or from the ElevenLabs Voice Library for the target
+                language. Lip-sync mode hides this — it has its own voice flow. */}
+            {mode === 'voice-only' && (
+              <div>
+                <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-widest text-gray-400">
+                  Giọng đọc đầu ra
+                </p>
                 <button
-                  onClick={() => setUseNativeVoice(false)}
-                  className={`flex flex-1 items-center justify-center gap-1.5 rounded-lg py-2 text-[11px] font-medium transition-all ${
-                    !useNativeVoice
-                      ? 'bg-white shadow-sm text-teal-700 border border-teal-200'
-                      : 'text-gray-500 hover:text-gray-700'
+                  onClick={() => setVoicePickerOpen(true)}
+                  className={`flex w-full items-center gap-2.5 rounded-xl border bg-white px-3 py-2.5 text-left transition-colors hover:bg-teal-50/40 ${
+                    pickedVoice ? 'border-teal-300' : 'border-amber-300 bg-amber-50/40'
                   }`}
                 >
-                  Giữ giọng gốc (clone)
+                  <Volume2 className={`h-4 w-4 shrink-0 ${pickedVoice ? 'text-teal-600' : 'text-amber-600'}`} />
+                  <span className="min-w-0 flex-1 truncate text-sm font-semibold text-gray-800">
+                    {pickedVoice?.voiceName ?? 'Chọn giọng đọc...'}
+                  </span>
+                  <span className="text-[10px] font-semibold uppercase text-teal-600">Đổi</span>
                 </button>
-                <button
-                  onClick={() => setUseNativeVoice(true)}
-                  className={`flex flex-1 items-center justify-center gap-1.5 rounded-lg py-2 text-[11px] font-medium transition-all ${
-                    useNativeVoice
-                      ? 'bg-white shadow-sm text-teal-700 border border-teal-200'
-                      : 'text-gray-500 hover:text-gray-700'
-                  }`}
-                >
-                  Voice native ngôn ngữ đích
-                </button>
+                {!pickedVoice && (
+                  <p className="mt-1.5 text-[10px] leading-relaxed text-amber-600">
+                    Bắt buộc — pick giọng custom (voice clone của bạn) hoặc giọng Library native cho {getLangLabel(targetLang)}.
+                  </p>
+                )}
+
+                <p className="mb-1.5 mt-3 text-[10px] font-semibold uppercase tracking-widest text-gray-400">
+                  Mức tối ưu nội dung
+                </p>
+                <div className="flex gap-1 rounded-xl border border-black/8 bg-black/[0.02] p-1">
+                  {(['verbatim', 'light', 'aggressive'] as CondenseLevel[]).map((lv) => (
+                    <button
+                      key={lv}
+                      onClick={() => setCondenseLevel(lv)}
+                      className={`flex flex-1 items-center justify-center gap-1 rounded-lg py-1.5 text-[10px] font-medium transition-all ${
+                        condenseLevel === lv
+                          ? 'bg-white shadow-sm text-teal-700 border border-teal-200'
+                          : 'text-gray-500 hover:text-gray-700'
+                      }`}
+                    >
+                      {lv === 'verbatim' ? 'Nguyên văn' : lv === 'light' ? 'Nhẹ' : 'Mạnh'}
+                    </button>
+                  ))}
+                </div>
+                <p className="mt-1.5 text-[10px] leading-relaxed text-gray-400">
+                  {condenseLevel === 'verbatim'
+                    ? 'Dịch đầy đủ từng chữ — audio có thể dài hơn video, frame cuối giữ thêm.'
+                    : condenseLevel === 'light'
+                    ? 'Bỏ filler ("uh", "you know") + gộp câu ngắn — giữ tone UGC, fit video gần đúng.'
+                    : 'Cắt aggressive: giữ số liệu/brand/CTA, bỏ nhiều nuance để fit chính xác.'}
+                </p>
               </div>
-              <p className="mt-1.5 text-[10px] leading-relaxed text-gray-400">
-                {useNativeVoice
-                  ? 'ElevenLabs auto-pick voice native cho ngôn ngữ đích — accent chuẩn người bản địa, GIỌNG NGƯỜI khác giọng gốc. ⚠️ Voice từ library tính vào quota custom voices của workspace.'
-                  : 'Clone giọng nhân vật gốc, chuyển sang ngôn ngữ đích — giữ voice gốc nhưng accent nghe như foreigner nói tiếng đích.'}
-              </p>
-            </div>
+            )}
 
             {/* Phase C — timing expansion estimate banner.
                 Shows when target lang is known + different from source. Risk-aware
@@ -1160,6 +1223,18 @@ export default function VideoTranslate() {
             : <><Sliders className="h-4 w-4" /> Sửa</>}
         </button>
       )}
+
+      <VoicePickerModal
+        open={voicePickerOpen}
+        targetLang={targetLang}
+        currentVoiceId={pickedVoice?.voiceId}
+        onClose={() => setVoicePickerOpen(false)}
+        onPick={(picked) => {
+          setPickedVoice(picked)
+          try { localStorage.setItem('video-translate-picked-voice-v1', JSON.stringify(picked)) } catch { /* ignore */ }
+          setVoicePickerOpen(false)
+        }}
+      />
     </div>
   )
 }
