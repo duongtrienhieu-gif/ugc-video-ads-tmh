@@ -8,3 +8,6 @@ dist/
 
 # Test harness output (real Gemini packs for audit — never commit)
 test-output/
+
+# ffmpeg.wasm UMD core — auto-copied from node_modules/@ffmpeg/core at pre(dev|build)
+public/ffmpeg/

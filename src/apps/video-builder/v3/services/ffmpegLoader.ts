@@ -1,7 +1,11 @@
 // ── FFmpeg.wasm Loader ───────────────────────────────────────────────────────
-// Z36 — Singleton loader for @ffmpeg/ffmpeg. First call fetches the ~30MB
-// wasm + worker bundle from unpkg CDN; subsequent calls reuse the cached
-// instance.
+// Z36 — Singleton loader for @ffmpeg/ffmpeg. The core wasm + js are
+// served same-origin via Vite `?url` imports from @ffmpeg/core in
+// node_modules (added as a dep). Avoids:
+//   • flaky unpkg/jsdelivr CDN reachability under high traffic
+//   • COEP credentialless cross-origin restrictions on Vercel that
+//     surfaced as `failed to import ffmpeg-core.js` in the worker
+//   • CSP issues with blob: URLs created from cross-origin fetches
 //
 // Browser requirements:
 //   • SharedArrayBuffer support — set via vite headers config or
@@ -16,11 +20,12 @@
 
 import type { FFmpeg } from '@ffmpeg/ffmpeg'
 
-// Public CDN URLs for the wasm + worker assets. @ffmpeg/core is fetched
-// separately so we can pin a known-good version.
-const FFMPEG_CORE_VERSION = '0.12.6'
-const CORE_BASE_URL =
-  `https://unpkg.com/@ffmpeg/core@${FFMPEG_CORE_VERSION}/dist/umd`
+// Same-origin static paths under /public/ffmpeg/. Files are auto-copied
+// from node_modules/@ffmpeg/core/dist/umd/ at pre(dev|build) — see
+// scripts/copy-ffmpeg-core.mjs. UMD (not ESM) is required because the
+// worker uses importScripts() which can't parse ESM syntax.
+const coreURL = '/ffmpeg/ffmpeg-core.js'
+const wasmURL = '/ffmpeg/ffmpeg-core.wasm'
 
 interface FfmpegSingleton {
   instance: FFmpeg
@@ -42,8 +47,8 @@ export interface LoadFfmpegOptions {
 /**
  * Get (or lazy-load) the singleton ffmpeg instance.
  *
- * On first call, fetches the wasm core (~30MB) from unpkg CDN and
- * boots the worker. Cached for the rest of the session.
+ * Same-origin core URLs come from Vite asset imports (no CDN fetch).
+ * Cached after first load for the rest of the session.
  *
  * Throws a friendly error if @ffmpeg/ffmpeg is not installed or if
  * the browser doesn't support WebAssembly.
@@ -58,16 +63,13 @@ export async function getFFmpeg(opts: LoadFfmpegOptions = {}): Promise<FFmpeg> {
 
   loadingPromise = (async () => {
     let FFmpegClass: typeof FFmpeg
-    let toBlobURL: (url: string, mimeType: string) => Promise<string>
     try {
       // Dynamic import so a missing dep doesn't break the entire build.
       const ffmpegModule = await import('@ffmpeg/ffmpeg')
-      const utilModule = await import('@ffmpeg/util')
       FFmpegClass = ffmpegModule.FFmpeg
-      toBlobURL = utilModule.toBlobURL
     } catch (err) {
       throw new Error(
-        '@ffmpeg/ffmpeg chưa cài. Chạy: npm install @ffmpeg/ffmpeg @ffmpeg/util. ' +
+        '@ffmpeg/ffmpeg chưa cài. Chạy: npm install @ffmpeg/ffmpeg @ffmpeg/core @ffmpeg/util. ' +
         `Chi tiết: ${err instanceof Error ? err.message : 'unknown error'}`
       )
     }
@@ -75,15 +77,7 @@ export async function getFFmpeg(opts: LoadFfmpegOptions = {}): Promise<FFmpeg> {
     const ffmpeg = new FFmpegClass()
     rewireCallbacks(ffmpeg, opts)
 
-    // toBlobURL converts the cross-origin script into a same-origin blob
-    // URL, sidestepping CSP / cross-origin worker restrictions. Without
-    // this trick, browsers refuse to spawn the wasm worker from unpkg.
-    const [coreURL, wasmURL] = await Promise.all([
-      toBlobURL(`${CORE_BASE_URL}/ffmpeg-core.js`, 'text/javascript'),
-      toBlobURL(`${CORE_BASE_URL}/ffmpeg-core.wasm`, 'application/wasm'),
-    ])
-
-    console.log(`[FFMPEG] loading core ${FFMPEG_CORE_VERSION} from unpkg...`)
+    console.log('[FFMPEG] loading same-origin core…')
     opts.onLoadProgress?.(0.5)
 
     await ffmpeg.load({ coreURL, wasmURL })

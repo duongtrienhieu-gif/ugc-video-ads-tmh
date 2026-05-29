@@ -4,13 +4,16 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
+    "predev": "node scripts/copy-ffmpeg-core.mjs",
     "dev": "vite",
+    "prebuild": "node scripts/copy-ffmpeg-core.mjs",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview",
     "test-storytelling": "tsx scripts/test-storytelling.ts"
   },
   "dependencies": {
+    "@ffmpeg/core": "0.12.6",
     "@ffmpeg/ffmpeg": "^0.12.15",
     "@ffmpeg/util": "^0.12.2",
     "@supabase/supabase-js": "^2.105.4",
