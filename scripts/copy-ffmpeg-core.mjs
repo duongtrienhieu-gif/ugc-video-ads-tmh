@@ -1,7 +1,9 @@
-// Copy @ffmpeg/core UMD files to public/ffmpeg/ so Vite serves them
-// same-origin. UMD (not ESM) is required because ffmpeg.wasm's worker
-// loads core via `importScripts()`, which is classic-script-only —
-// ESM's `import.meta.url` syntax would throw inside the worker.
+// Copy @ffmpeg/core ESM files to public/ffmpeg/ so Vite serves them
+// same-origin. ESM (not UMD) is required: @ffmpeg/ffmpeg 0.12.x spawns
+// a module-type worker that loads core via `(await import(coreURL)).default`
+// after the initial `importScripts()` attempt throws. UMD has no ESM
+// default export — using it produces the exact production error
+// "failed to import ffmpeg-core.js".
 //
 // Runs from prebuild + predev (see package.json). Files are gitignored.
 
@@ -10,7 +12,7 @@ import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..')
-const src  = join(root, 'node_modules/@ffmpeg/core/dist/umd')
+const src  = join(root, 'node_modules/@ffmpeg/core/dist/esm')
 const dst  = join(root, 'public/ffmpeg')
 
 if (!existsSync(src)) {

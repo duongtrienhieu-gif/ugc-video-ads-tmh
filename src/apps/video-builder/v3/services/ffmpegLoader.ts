@@ -21,9 +21,10 @@
 import type { FFmpeg } from '@ffmpeg/ffmpeg'
 
 // Same-origin static paths under /public/ffmpeg/. Files are auto-copied
-// from node_modules/@ffmpeg/core/dist/umd/ at pre(dev|build) — see
-// scripts/copy-ffmpeg-core.mjs. UMD (not ESM) is required because the
-// worker uses importScripts() which can't parse ESM syntax.
+// from node_modules/@ffmpeg/core/dist/esm/ at pre(dev|build) — see
+// scripts/copy-ffmpeg-core.mjs. ESM (not UMD) is required: @ffmpeg/ffmpeg
+// 0.12.x's worker is module-type and loads core via dynamic `import().default`
+// after `importScripts` throws. UMD has no default export → would fail.
 const coreURL = '/ffmpeg/ffmpeg-core.js'
 const wasmURL = '/ffmpeg/ffmpeg-core.wasm'
 
