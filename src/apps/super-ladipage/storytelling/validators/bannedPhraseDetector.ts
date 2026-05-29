@@ -59,7 +59,7 @@ const BANNED_PHRASES: BannedPattern[] = [
   { pattern: 'không ai biết tôi đã', reason: 'manufactured confession' },
   // 'tôi đã từng nghĩ đến' REMOVED — natural confession context OK
 
-  // ── Generic-wellness AI fingerprints (SPEC-FIX 2026-05-27) ──
+  // ── Generic-wellness AI fingerprints (SPEC-FIX 2026-05-27 + 2026-05-29) ──
   // These phrases are explicitly in nicheMechanismVocab.bannedGenericPhrases
   // for EVERY niche but Gemini still drifts to them. Hard ban now.
   { pattern: 'phục hồi từ bên trong', reason: 'generic wellness fingerprint — banned across all niches' },
@@ -68,6 +68,18 @@ const BANNED_PHRASES: BannedPattern[] = [
   { pattern: 'nuôi dưỡng toàn diện', reason: 'generic wellness fingerprint — banned across all niches' },
   { pattern: 'phục hồi tự nhiên', reason: 'generic wellness fingerprint — banned across all niches' },
   { pattern: 'gốc rễ vấn đề', reason: 'generic wellness fingerprint — banned across all niches' },
+  // 2026-05-29 — User-reported drift (knee brace pack). The "root cause vs
+  // mask symptoms" framing is wrong for mechanical-support products and is
+  // the #1 sign of soft-recognition mode leaking when pain-driven-DR was
+  // intended. Hard ban + variants.
+  { pattern: 'nguyên nhân gốc rễ', reason: 'generic wellness fingerprint — root-cause framing leaks into wrong niches' },
+  { pattern: 'tập trung vào nguyên nhân gốc rễ', reason: 'generic wellness fingerprint' },
+  { pattern: 'che đậy triệu chứng', reason: 'generic wellness fingerprint — root-cause inverse' },
+  { pattern: 'che đậy các triệu chứng', reason: 'generic wellness fingerprint — root-cause inverse' },
+  { pattern: 'che đi triệu chứng', reason: 'generic wellness fingerprint — root-cause inverse' },
+  { pattern: 'triệu chứng bên ngoài', reason: 'generic wellness fingerprint — root-cause framing' },
+  { pattern: 'giải quyết tận gốc', reason: 'generic wellness fingerprint — root-cause framing' },
+  { pattern: 'không phải là phép màu', reason: 'AI hedge cliche — overused dismissal that signals AI output' },
 ]
 
 export function bannedPhraseDetector(sections: ParsedSection[]): ValidatorResult {

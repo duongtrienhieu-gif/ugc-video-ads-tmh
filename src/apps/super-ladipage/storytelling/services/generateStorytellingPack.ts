@@ -162,7 +162,13 @@ function pushHookMemory(productId: string, fingerprint: string): void {
 // productName + painPoints + benefits which don't change between packs
 // of the same product). Caching saves ~1 Gemini call per regeneration.
 // TTL 7 days so a user editing product input gets a fresh classification.
-const NICHE_CACHE_PREFIX = 'super-ladipage:nicheCache:'
+// 2026-05-29 — Cache prefix bumped to v2 to invalidate stale entries that
+// resolved knee braces / nasal sprays to 'health-functional' (the old
+// detectNiche CRITICAL RULES had a contradiction that misrouted these
+// products). New cache key forces re-classification with the fixed
+// Gemini prompt. Old localStorage entries become unreachable and are
+// garbage-collected on next pack-gen.
+const NICHE_CACHE_PREFIX = 'super-ladipage:nicheCache-v2:'
 const NICHE_CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000   // 7 days
 interface NicheCacheEntry {
   niche: string
@@ -362,7 +368,7 @@ function allocateOverlay(blockIds: BlockId[]): (AllowedOverlayType | null)[] {
 function buildValidationSummary(result: GeneratedPackResult): string {
   const { finalValidation, initialValidation, attempts } = result
   if (finalValidation.pass && attempts === 1) {
-    return '✓ all 5 validators passed (clean first try)'
+    return '✓ all 6 validators passed (clean first try)'
   }
   if (finalValidation.pass && attempts === 2) {
     return `✓ passed after retry (${initialValidation.violations.length} initial violations resolved)`

@@ -1362,7 +1362,7 @@ function PipelineStatusBadge({ meta }: PipelineStatusBadgeProps) {
   return (
     <span
       className="flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-medium text-emerald-700 shrink-0"
-      title="All 5 validators passed on first attempt"
+      title="All 6 validators passed on first attempt"
     >
       <ShieldCheck className="h-3 w-3" />
       CLEAN

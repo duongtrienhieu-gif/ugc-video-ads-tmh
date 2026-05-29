@@ -113,8 +113,8 @@ PRODUCT TO CLASSIFY:
 ${input.category ? `- Category: ${input.category}` : ''}
 
 CRITICAL RULES:
-1. Knee/back/joint/spine braces or supports → health-functional (NOT beauty-confidence)
-2. Nasal/sinus/respiratory products → health-functional (NOT skincare)
+1. Knee/back/joint/spine braces or supports → health-joint (NOT health-functional generic, NOT beauty-confidence). Examples: knee brace, back belt, posture corrector, đai đầu gối, đai lưng, nẹp gối, glucosamine, chondroitin.
+2. Nasal/sinus/respiratory products → health-respiratory (NOT health-functional generic, NOT skincare). Examples: nasal spray, sinus rinse, decongestant, semburan hidung, xịt mũi, anti-allergy spray.
 3. Generic "boost confidence" language does NOT make it beauty-confidence — look at WHAT the product does
 4. Vitamins/collagen taken orally for general health → supplement-wellness, BUT see exceptions 6-15 below
 5. If multiple match, pick the MOST SPECIFIC niche to the product function (what the product physically does), NOT the marketing emotion
@@ -355,18 +355,25 @@ const NICHE_KEYWORDS: Array<{ niche: NicheKey; keywords: RegExp[] }> = [
     ],
   },
   {
+    // 2026-05-29 — Pruned keywords that belonged to specific sub-niches
+    // (post SPEC.4 split). Previously this generic fallback grabbed knee
+    // brace / joint / nasal / spine / diabetes / huyết áp before the
+    // specific niches above had a chance, mis-routing every joint product
+    // to "health-functional" (generic) and triggering soft-recognition
+    // narrative mode instead of pain-driven-DR.
+    //
+    // Now health-functional is a TRUE fallback: only fires for products
+    // that have no specific niche match (generic immunity / antioxidant /
+    // vitamin C with no other signal). All physical-pain niches now
+    // route through health-joint / health-respiratory / health-digestive
+    // / health-cardiovascular / diabetes / liver / prostate as defined
+    // earlier in this priority list.
     niche: 'health-functional',
     keywords: [
-      /\bknee\b/i, /\bgối\b/i, /\bđầu gối\b/i,
-      /\bback pain\b/i, /\blưng\b/i, /\bspine\b/i, /\bcột sống\b/i,
-      /\bankle\b/i, /\belbow\b/i,
-      /\bbrace\b/i, /\borthopedic\b/i, /\bđai\b/i, /\bnẹp\b/i,
-      /\bpain\b/i, /\bđau\b/i, /\bsakit\b/i, /\bnhức\b/i,
-      /\bxương khớp\b/i, /\bkhớp\b/i, /\bsendi\b/i, /\bjoint\b/i,
-      /\barthritis\b/i, /\bthấp khớp\b/i, /\bgout\b/i,
-      /\bnasal\b/i, /\bsinus\b/i, /\bmũi\b/i, /\bnghẹt\b/i, /\bxoang\b/i,
-      /\bresdung\b/i, /\bsemburan\b/i,
-      /\bdiabetes\b/i, /\bhuyết áp\b/i, /\btiểu đường\b/i,
+      /\bmiễn dịch\b/i, /\bimmune\b/i,
+      /\bantioxidant\b/i, /\bchống oxy hóa\b/i,
+      /\benergy booster\b/i, /\btăng cường năng lượng\b/i,
+      /\bgeneral health\b/i, /\bsức khỏe tổng quát\b/i,
     ],
   },
   {
