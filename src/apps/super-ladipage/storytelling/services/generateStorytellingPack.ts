@@ -34,6 +34,7 @@ import { resolveBlockPlan } from '../resolvers/resolveBlockPlan'
 import {
   classifyProductReality,
   buildRealityBrief,
+  crossValidateProductReality,
   PACING_OVERRIDES,
 } from '../../productClass'
 import { readProductImages } from '../../productVision'
@@ -517,6 +518,35 @@ export async function generateStorytellingPack(
       `discovery=${productReality.discoveryContext}, ` +
       `source=${productReality.source}` +
       (productReality.rationale ? ` // ${productReality.rationale.slice(0, 80)}` : ''),
+    )
+  }
+
+  // ── 2.6 Niche × reality cross-validation (2026-05-30) ─────────────
+  // Catches the systemic "10/10 packs internal framing" bug: when reality
+  // classifier picks oral-bioactive / biochemical-repair for a niche that
+  // is ALWAYS topical (dental, skincare, haircare, beauty), the mechanism
+  // description block leaks "từ bên trong / hấp thu hệ thống" framing
+  // across the whole pack. Cross-validation runs AFTER both niche + reality
+  // resolve and overrides obvious mismatches.
+  //
+  // Mutates productReality in place when an override fires (productReality
+  // is `let` above). Does NOT touch the reality cache — the override is
+  // niche-conditional and the cache key only sees product input, so we
+  // want the next run of the same product (potentially in a different
+  // niche if user edits) to re-classify cleanly. Cache holds the original
+  // classifier output; we apply the override every time.
+  const crossCheck = crossValidateProductReality({
+    reality: productReality,
+    niche: nicheDetection.niche,
+    productName: product.productName,
+  })
+  if (crossCheck.overridden) {
+    productReality = crossCheck.reality
+    console.info(
+      `[storytelling] product reality (cross-validated): form=${productReality.productForm}, ` +
+      `mechanism=${productReality.mechanismFamily}, ` +
+      `usageMode=${productReality.usageMode}, ` +
+      `reason=${crossCheck.reason ?? '(none)'}`,
     )
   }
 

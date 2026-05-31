@@ -36,14 +36,26 @@ const VALID = {
 }
 
 // ─── Safe fallback (when classifier fails) ────────────────────────
+//
+// 2026-05-30 — Changed default from `oral-bioactive` to `topical-soothe`.
+// Previous default was causing systemic "từ bên trong / hấp thu / tác động
+// hệ thống" framing to leak into packs whose products were topical / device
+// / cosmetic — Gemini followed the mechanism description literally. User
+// reported 10/10 packs across niches all showed this pattern. New default
+// `topical-soothe` is the MOST NEUTRAL mechanism (TẠI CHỖ, not systemic)
+// — wrongly-classified products at worst lean topical, not internal.
+//
+// For products that ARE truly oral (supplements / collagen / vitamin),
+// Gemini classifier should still pick `oral-bioactive` / `biochemical-repair`
+// explicitly via the strengthened rules below.
 
 const SAFE_FALLBACK: ProductRealityModel = {
-  productForm: 'oral-pill',
-  usageMode: 'swallow',
+  productForm: 'topical-cream',
+  usageMode: 'apply',
   sensationTiming: 'gradual',
   discoveryContext: 'social-ads',
   impulseType: 'impulse-cod',
-  mechanismFamily: 'oral-bioactive',
+  mechanismFamily: 'topical-soothe',
   pacingProfile: 'medium-narrative',
   source: 'fallback',
 }
@@ -116,11 +128,31 @@ AXES + ALLOWED VALUES:
    - slow-burn: 14-17 sections, productReveal trễ (premium / narrative-heavy)
 
 CRITICAL RULES:
-- KNEE BRACE / BACK BRACE / SUPPORT DEVICE: productForm=wearable-device, mechanism=physical-stabilization, timing=immediate, NOT oral-bioactive
-- ORAL SUPPLEMENT (glucosamine, collagen, vitamin): productForm=oral-pill, mechanism=biochemical-repair OR oral-bioactive, timing=gradual/cumulative
-- NASAL SPRAY: productForm=topical-spray, usageMode=inhale, mechanism=spray-relief, timing=fast
-- TOPICAL CREAM (kem dưỡng da, dầu nóng): productForm=topical-cream, mechanism=topical-soothe, timing=gradual
-- Pacing rule: COD products (<RM100) almost always fast-cod. Premium narrative products = slow-burn.
+- KNEE BRACE / BACK BRACE / SUPPORT DEVICE / đai đầu gối / đai lưng: productForm=wearable-device, usageMode=wear, mechanism=physical-stabilization, timing=immediate. NOT oral-bioactive, NOT biochemical-repair.
+- ORAL SUPPLEMENT (glucosamine, collagen, vitamin, omega, NMN, viên uống): productForm=oral-pill, usageMode=swallow, mechanism=biochemical-repair OR oral-bioactive, timing=gradual/cumulative.
+- ORAL DRINK / SIRO: productForm=oral-liquid, usageMode=swallow.
+- NASAL SPRAY / xịt mũi / semburan hidung: productForm=topical-spray, usageMode=inhale, mechanism=spray-relief, timing=fast.
+- TOPICAL CREAM (kem dưỡng da, dầu nóng, dầu xoa bóp, balm): productForm=topical-cream, usageMode=apply, mechanism=topical-soothe, timing=gradual.
+- PATCH (miếng dán giảm đau, dán làm dịu): productForm=patch, usageMode=apply, mechanism=patch-delivery, timing=fast.
+
+⚠️ DENTAL PRODUCTS — ALL TOPICAL (apply on teeth via brushing/rinsing, NOT swallow):
+- KEM ĐÁNH RĂNG / TOOTHPASTE: productForm=cosmetic, usageMode=apply, mechanism=cosmetic-aesthetic.
+- BỘT TẨY TRẮNG RĂNG / BỘT KHOÁNG CHẤT RĂNG / WHITENING POWDER / MINERAL POWDER FOR TEETH / TEETH POWDER / TEETH RESTORATION POWDER: productForm=cosmetic, usageMode=apply, mechanism=cosmetic-aesthetic. KHÔNG phải oral-pill, KHÔNG phải swallow — đây là bột để CHẢI lên răng cùng bàn chải, KHÔNG uống.
+- NƯỚC SÚC MIỆNG / MOUTHWASH: productForm=oral-liquid, usageMode=apply (súc rồi nhổ, KHÔNG nuốt), mechanism=cosmetic-aesthetic.
+- CHỈ NHA KHOA / DENTAL FLOSS: productForm=tool, usageMode=use.
+- DENTAL APPLIANCE (whitening tray, dental brush): productForm=tool, usageMode=use.
+
+⚠️ TOPICAL COSMETIC — all apply-to-surface products:
+- KEM TRỊ MỤN / KEM CHỐNG NẮNG / SERUM / SỮA RỬA MẶT / MẶT NẠ: productForm=topical-cream or cosmetic, usageMode=apply, mechanism=topical-soothe OR cosmetic-aesthetic.
+- DẦU GỘI / DẦU XẢ / SHAMPOO / HAIR SERUM / HAIR OIL: productForm=cosmetic, usageMode=apply, mechanism=cosmetic-aesthetic.
+- TẨY LÔNG / HAIR REMOVAL CREAM: productForm=topical-cream, usageMode=apply, mechanism=cosmetic-aesthetic.
+
+⚠️ ANTI-MISCLASSIFICATION CHECK:
+- If product name contains "powder" + ("teeth" / "răng" / "gigi" / "dental" / "whitening") → ALWAYS cosmetic-aesthetic + apply. NEVER swallow.
+- If product is a CREAM / SPRAY / WIPE / PATCH / BRACE / DEVICE → NEVER mechanism=oral-bioactive or biochemical-repair.
+- If product clearly says "topical use only" / "external use only" / "bôi ngoài" / "không được uống" → NEVER swallow / oral.
+
+PACING RULE: COD products (<RM100) → fast-cod. Premium narrative products → slow-burn.
 
 OUTPUT (strict JSON, no other text):
 {
