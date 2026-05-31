@@ -190,7 +190,16 @@ export default function ScriptVoicePhase({ onContinue }: Props) {
         </div>
 
         {/* ── Pickers row: Structure + Angle + Duration ─────────────────── */}
-        <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
+        {/* Phase 1 — structure / angle / duration only matter when Gemini
+            WRITES the script. With your own script the segmenter keeps it
+            verbatim and ignores all three, so dim them to kill the
+            "must configure" confusion. */}
+        {brain.useOwnScript && (
+          <p className="mb-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] font-semibold text-amber-700">
+            Đang dùng kịch bản của bạn — cấu trúc / angle / thời lượng bên dưới KHÔNG áp dụng (giữ nguyên 100% câu chữ của bạn).
+          </p>
+        )}
+        <div className={`grid grid-cols-1 gap-3 lg:grid-cols-3 ${brain.useOwnScript ? 'pointer-events-none opacity-40' : ''}`}>
           <PickerCard title="Cấu trúc ad" icon={Lightbulb}>
             <div className="grid grid-cols-2 gap-1.5">
               {AD_STRUCTURE_ORDER.map((s) => {
@@ -322,10 +331,18 @@ export default function ScriptVoicePhase({ onContinue }: Props) {
         <div className="mt-4 flex items-center justify-between gap-3 rounded-xl border border-violet-200 bg-gradient-to-r from-violet-50 to-pink-50 p-3">
           <div className="min-w-0">
             <p className="text-sm font-bold text-gray-900">
-              {brain.script ? 'Đã có script — bạn có thể tạo lại để thử variant khác' : 'Chưa có script — bấm "Tạo script" để Gemini sinh'}
+              {brain.script
+                ? (brain.useOwnScript
+                    ? 'Đã tách kịch bản của bạn thành 5 phần — sửa nội dung thì tách lại'
+                    : 'Đã có script — bạn có thể tạo lại để thử variant khác')
+                : (brain.useOwnScript
+                    ? 'Kịch bản của bạn đã sẵn sàng — bấm "Tách kịch bản của tôi" để chia 5 phần'
+                    : 'Chưa có script — bấm "Tạo script" để Gemini sinh')}
             </p>
             <p className="text-[11px] text-gray-500">
-              {AD_STRUCTURES[brain.structure].labelVi} · {AD_ANGLES[brain.angle].labelVi} · {brain.targetDurationSec}s
+              {brain.useOwnScript
+                ? `Kịch bản của bạn · giữ nguyên câu chữ · ${SCRIPT_LANG_LABEL_VI[brain.outputLang]}`
+                : `${AD_STRUCTURES[brain.structure].labelVi} · ${AD_ANGLES[brain.angle].labelVi} · ${brain.targetDurationSec}s`}
             </p>
           </div>
           <button
