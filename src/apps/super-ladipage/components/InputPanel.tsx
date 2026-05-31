@@ -135,6 +135,28 @@ export default function InputPanel({
 
   const canGenerate = !!selectedProduct && hasGeminiKey && !isGenerating
 
+  // 2026-05-30 — Auto-fallback to the product's saved project image when
+  // user didn't upload any reference here. User feedback: "sản phẩm đã có
+  // ảnh đính kèm trong project, không cần phải upload lại — ảnh upload
+  // chỉ là tham khảo bổ sung". Behavior:
+  //   - User uploaded N≥1 refs → use uploaded refs only.
+  //   - User uploaded 0 refs BUT product has productImage → use that
+  //     1 image as the implicit reference (transparent fallback).
+  //   - Neither → empty visualMemory (vision step uses text-only path).
+  // The downstream vision pipeline + scene synth don't distinguish source —
+  // they just consume the visualMemory array.
+  const effectiveVisualMemory = (): VisualMemoryItem[] => {
+    if (visualMemory.length > 0) return visualMemory
+    const fallbackRef = selectedProduct?.productImage
+    if (fallbackRef) {
+      return [{
+        ref: fallbackRef,
+        label: selectedProduct?.productName?.slice(0, 40) || 'product',
+      }]
+    }
+    return []
+  }
+
   const handleClickGenerate = () => {
     if (!canGenerate) return
     onGenerate({
@@ -143,7 +165,7 @@ export default function InputPanel({
       nicheHint: nicheHint.trim() || undefined,
       competitorUrl: competitorUrl.trim() || undefined,
       competitorInfluence: competitorUrl.trim() ? competitorInfluence : undefined,
-      visualMemory,
+      visualMemory: effectiveVisualMemory(),
     })
   }
 
@@ -236,14 +258,28 @@ export default function InputPanel({
         <Section
           step={2}
           title="Ảnh tham chiếu sản phẩm (tuỳ chọn)"
-          summary={visualMemory.length > 0 ? `${visualMemory.length} ảnh` : 'Bỏ qua'}
-          completed={visualMemory.length > 0}
+          summary={
+            visualMemory.length > 0
+              ? `${visualMemory.length} ảnh upload`
+              : selectedProduct?.productImage
+                ? 'Dùng ảnh trong Project'
+                : 'Bỏ qua'
+          }
+          completed={visualMemory.length > 0 || Boolean(selectedProduct?.productImage)}
           expandedStep={expandedStep}
           onToggle={setExpandedStep}
         >
           <p className="text-[10px] text-gray-500">
             Upload ảnh sản phẩm (packaging, label, logo…) để AI giữ identity nhất quán khi sinh ảnh. Tối đa 3 ảnh đầu được pass vào image generator.
           </p>
+          {/* 2026-05-30 — Hint that the project's product image is auto-used
+              as the implicit reference when user uploads nothing. */}
+          {visualMemory.length === 0 && selectedProduct?.productImage && (
+            <p className="text-[10px] italic text-violet-600">
+              ✓ Tự dùng ảnh sản phẩm từ Project ({selectedProduct.productName?.slice(0, 40) || 'product'}).
+              Upload thêm ở đây nếu muốn AI tham chiếu nhiều ảnh hơn.
+            </p>
+          )}
           <div className="flex items-center gap-2">
             <button
               onClick={() => fileInputRef.current?.click()}
