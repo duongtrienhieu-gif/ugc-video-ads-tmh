@@ -8,6 +8,7 @@
 
 import { useCallback, useRef, useState } from 'react'
 import type { GeneratedAsset, OrchestratedPage } from '../types'
+import type { SceneDescription } from '../../imageSceneSynthesis'
 import type { LandingSession } from '../../sessionRuntime'
 import {
   setRegenStatus,
@@ -22,6 +23,8 @@ import type {
   ExecutePageGenerationResult,
   PageGenerationContext,
 } from './executePageGeneration'
+import { executePIImages } from './executePIImages'
+import type { PIImageWorkItem } from './executePIImages'
 
 export interface UseImageGenerationOptions {
   page: OrchestratedPage | null
@@ -43,6 +46,17 @@ export interface UseImageGenerationOptions {
    *  meta.exportablePage.sections[i].generatedAsset.outputImages) never
    *  saw a URL → "Tạo ảnh" silently appeared to do nothing forever. */
   onAssetUpdated?: (sectionId: string, asset: GeneratedAsset) => void
+
+  // ── 2026-05-30 — PI image plans (parallel pipeline) ─────────────────
+  // When the pack carries piImageAssets (currently only
+  // 'pi-mechanism-personal' per PI_IMAGE_ROLE), this hook ALSO runs
+  // executePIImages alongside executePageGeneration:
+  //   - generateAll: runs storytelling first, then PI with the
+  //     character anchor URL captured from the hero-anchor section.
+  //   - generateSection('pi-…'): routes to executePIImages only.
+  // Both maps are optional — PI flow no-ops cleanly when absent.
+  piImageAssets?: Record<string, GeneratedAsset>
+  piImageScenes?: Record<string, SceneDescription>
 }
 
 export interface UseImageGenerationState {
@@ -131,7 +145,25 @@ export function useImageGeneration(opts: UseImageGenerationOptions): UseImageGen
         const st = s.generatedAsset.generationStatus
         return st === 'planned' || st === 'failed'
       })
-      const total = eligibleSections.length
+
+      // 2026-05-30 — Parallel PI eligibility check. PI assets live in
+      // opts.piImageAssets (NOT opts.page.sections) and have their own
+      // execution path. We do the same status / filter checks so the
+      // overall counter reflects both flows.
+      const eligiblePIIds: string[] = []
+      if (opts.piImageAssets) {
+        for (const [piId, asset] of Object.entries(opts.piImageAssets)) {
+          if (sectionFilter && !sectionFilter(piId)) continue
+          if (isSingleSection) {
+            eligiblePIIds.push(piId)
+            continue
+          }
+          const st = asset.generationStatus
+          if (st === 'planned' || st === 'failed') eligiblePIIds.push(piId)
+        }
+      }
+
+      const total = eligibleSections.length + eligiblePIIds.length
 
       // UI-FIX9 (2026-05-29) — Empty-queue guard. If filter matched 0
       // sections (e.g. user clicked "Tạo ảnh" on a section whose
@@ -139,7 +171,9 @@ export function useImageGeneration(opts: UseImageGenerationOptions): UseImageGen
       // executePageGeneration would no-op silently. Toast instead.
       if (total === 0) {
         const targetId = sectionFilter
-          ? opts.page.sections.find((s) => sectionFilter(s.id))?.id ?? 'unknown'
+          ? (opts.page.sections.find((s) => sectionFilter(s.id))?.id
+             ?? Object.keys(opts.piImageAssets ?? {}).find((id) => sectionFilter(id))
+             ?? 'unknown')
           : 'all'
         toastReject(
           isSingleSection
@@ -164,69 +198,130 @@ export function useImageGeneration(opts: UseImageGenerationOptions): UseImageGen
       // every subsequent click hit the `if (state.isGenerating) return`
       // guard, so the button became dead until full page reload.
       let result: ExecutePageGenerationResult | null = null
-      try {
-        result = await executePageGeneration(opts.page, {
-          executors: opts.executors,
-          context: opts.context,
-          concurrency: opts.concurrency,
-          signal: controller.signal,
-          filter: sectionFilter,
-          // UI-FIX4 — single-section click should always regen, even if
-          // the section currently sits in 'completed' or 'generating'.
-          forceRegenerate: isSingleSection,
-          onSceneSynthesized: () => {
-            // First time we see a synthesized scene, flip out of "synthesizing" UI state
-            setState((s) =>
-              s.progress.isSynthesizing
-                ? { ...s, progress: { ...s.progress, isSynthesizing: false } }
-                : s,
-            )
-          },
-          onSectionStart: (sectionId, renderer) => {
-            console.info(`[image-gen] section=${sectionId} renderer=${renderer} START`)
-            workingSession = setRegenStatus(workingSession, sectionId, 'generating', 'image')
-            opts.setSession(workingSession)
-            void saveSession(workingSession)
-            setState((s) => ({
-              ...s,
-              progress: { ...s.progress, currentSectionId: sectionId, isSynthesizing: false },
-            }))
-          },
-          onSectionComplete: (sectionId, asset) => {
-            // UI-FIX5 (2026-05-28) — propagate the updated asset (with
-            // outputImages[].url) to the parent BEFORE touching session
-            // state. Without this the URL was thrown away on every gen.
-            opts.onAssetUpdated?.(sectionId, asset)
 
-            if (asset.generationStatus === 'completed') {
-              console.info(`[image-gen] section=${sectionId} renderer=${asset.renderer} COMPLETED url=${asset.outputImages[0]?.url.slice(0, 80)}`)
-              workingSession = setRegenStatus(workingSession, sectionId, 'completed', 'image')
-            } else {
-              const reason = asset.failureReason ?? 'unknown failure'
-              console.warn(`[image-gen] section=${sectionId} renderer=${asset.renderer} FAILED reason=${reason}`)
-              workingSession = recordFailure(
-                workingSession,
-                sectionId,
-                reason,
-              )
-              workingSession = incrementRetry(workingSession, sectionId)
-              opts.onFailureToast?.(sectionId, reason)
-            }
-            workingSession = recordGenerationEvent(workingSession, {
-              durationMs:
-                asset.executedAt && asset.plannedAt
-                  ? Math.max(0, asset.executedAt - asset.plannedAt)
-                  : 0,
-              renderer: asset.renderer,
-            })
-            opts.setSession(workingSession)
-            void saveSession(workingSession)
-            setState((s) => ({
-              ...s,
-              progress: { ...s.progress, done: s.progress.done + 1 },
-            }))
-          },
+      // 2026-05-30 — Shared session-mutation logic for both storytelling
+      // and PI completion handlers. Extracted so the PI parallel pipeline
+      // can reuse the same session-update path without duplicating the
+      // UI-FIX5 callback wiring.
+      const handleAssetComplete = (sectionId: string, asset: GeneratedAsset) => {
+        opts.onAssetUpdated?.(sectionId, asset)
+        if (asset.generationStatus === 'completed') {
+          console.info(`[image-gen] section=${sectionId} renderer=${asset.renderer} COMPLETED url=${asset.outputImages[0]?.url.slice(0, 80)}`)
+          workingSession = setRegenStatus(workingSession, sectionId, 'completed', 'image')
+        } else {
+          const reason = asset.failureReason ?? 'unknown failure'
+          console.warn(`[image-gen] section=${sectionId} renderer=${asset.renderer} FAILED reason=${reason}`)
+          workingSession = recordFailure(workingSession, sectionId, reason)
+          workingSession = incrementRetry(workingSession, sectionId)
+          opts.onFailureToast?.(sectionId, reason)
+        }
+        workingSession = recordGenerationEvent(workingSession, {
+          durationMs:
+            asset.executedAt && asset.plannedAt
+              ? Math.max(0, asset.executedAt - asset.plannedAt)
+              : 0,
+          renderer: asset.renderer,
         })
+        opts.setSession(workingSession)
+        void saveSession(workingSession)
+        setState((s) => ({
+          ...s,
+          progress: { ...s.progress, done: s.progress.done + 1 },
+        }))
+      }
+
+      const handleAssetStart = (sectionId: string, renderer: string) => {
+        console.info(`[image-gen] section=${sectionId} renderer=${renderer} START`)
+        workingSession = setRegenStatus(workingSession, sectionId, 'generating', 'image')
+        opts.setSession(workingSession)
+        void saveSession(workingSession)
+        setState((s) => ({
+          ...s,
+          progress: { ...s.progress, currentSectionId: sectionId, isSynthesizing: false },
+        }))
+      }
+
+      // 2026-05-30 — Capture character anchor URL from hero section as it
+      // completes, so the PI image (which runs after storytelling) can
+      // receive it as a reference for face / identity continuity.
+      let capturedAnchorUrl: string | null = null
+      const heroSectionId = opts.page?.sections.find(
+        (s) => s.imageIntent?.imageRole === 'hero-anchor',
+      )?.id
+
+      try {
+        // ── STORYTELLING flow (skip when only PI is eligible) ─────────
+        if (eligibleSections.length > 0) {
+          result = await executePageGeneration(opts.page, {
+            executors: opts.executors,
+            context: opts.context,
+            concurrency: opts.concurrency,
+            signal: controller.signal,
+            filter: sectionFilter,
+            // UI-FIX4 — single-section click should always regen, even if
+            // the section currently sits in 'completed' or 'generating'.
+            forceRegenerate: isSingleSection,
+            onSceneSynthesized: () => {
+              setState((s) =>
+                s.progress.isSynthesizing
+                  ? { ...s, progress: { ...s.progress, isSynthesizing: false } }
+                  : s,
+              )
+            },
+            onSectionStart: handleAssetStart,
+            onSectionComplete: (sectionId, asset) => {
+              if (
+                heroSectionId
+                && sectionId === heroSectionId
+                && asset.generationStatus === 'completed'
+                && asset.outputImages[0]?.url
+              ) {
+                capturedAnchorUrl = asset.outputImages[0].url
+              }
+              handleAssetComplete(sectionId, asset)
+            },
+          })
+        }
+
+        // ── PI flow (parallel pipeline, runs after storytelling) ──────
+        // Only fires when:
+        //   - opts.piImageAssets + opts.piImageScenes are present, AND
+        //   - at least one PI id passed eligibility above.
+        // Reuses storytelling's character anchor URL when available so
+        // the narrator in the PI mechanism close-up matches the rest of
+        // the pack. When storytelling didn't run (PI-only click), PI
+        // gets no anchor — acceptable trade-off for the simpler flow.
+        if (
+          eligiblePIIds.length > 0
+          && opts.piImageAssets
+          && opts.piImageScenes
+        ) {
+          const piWorkItems: PIImageWorkItem[] = []
+          for (const piId of eligiblePIIds) {
+            const asset = opts.piImageAssets[piId]
+            const scene = opts.piImageScenes[piId]
+            if (!asset || !scene) continue
+            piWorkItems.push({
+              piBlockId: piId,
+              scene,
+              asset,
+              imageRole: scene.imageRole,
+              aspectRatio: '9:16',
+            })
+          }
+
+          if (piWorkItems.length > 0) {
+            await executePIImages(piWorkItems, {
+              executors: opts.executors,
+              characterAnchorUrl: capturedAnchorUrl,
+              signal: controller.signal,
+              filter: sectionFilter,
+              forceRegenerate: isSingleSection,
+              onItemStart: (piBlockId) => handleAssetStart(piBlockId, 'gpt4o'),
+              onItemComplete: (piBlockId, asset) => handleAssetComplete(piBlockId, asset),
+            })
+          }
+        }
       } catch (err) {
         const msg = err instanceof Error ? err.message : 'Unknown image gen error'
         console.error(`[image-gen] FATAL during runGeneration: ${msg}`)

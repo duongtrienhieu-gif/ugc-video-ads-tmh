@@ -53,7 +53,9 @@ import { planImageGenerationPage } from '../../generationOrchestration'
 import { validateOrchestratedPage } from '../../validationCalibration'
 import { deriveExportPipelinePage } from '../../exportPipeline'
 import { translatePackToVi } from '../../services/translate'
-import { composePIBlocks, interleaveIntoPack } from '../../productInfoLayer'
+import { composePIBlocks, interleaveIntoPack, PI_IMAGE_ROLE, piBlockIdForType } from '../../productInfoLayer'
+import type { PIBlock } from '../../productInfoLayer'
+import type { GeneratedAsset } from '../../generationOrchestration'
 import { synthesizePageScenes } from '../../imageSceneSynthesis'
 import type { SceneDescription } from '../../imageSceneSynthesis'
 // REBUILD Sprint 1 (2026-05-28) — Pre-write brainstorm stage.
@@ -949,6 +951,11 @@ export async function generateStorytellingPack(
   let finalSections: LandingSection[] = sections
   let finalSectionIds: string[] = storytellingBlockIds
   let finalOverlay: (AllowedOverlayType | null)[] = overlayPerSection
+  // 2026-05-30 — Hoist PI block list so the scene-synth block below can
+  // also synthesize prompts for PI blocks that need images (currently just
+  // pi-mechanism-personal per PI_IMAGE_ROLE). Stays undefined when PI gen
+  // fails entirely — image-enriched PI flow then no-ops cleanly.
+  let piBlocksGenerated: PIBlock[] = []
   try {
     const piBatchStart = Date.now()
     const piResult = await composePIBlocks(
@@ -974,6 +981,7 @@ export async function generateStorytellingPack(
     )
 
     if (piResult.blocks.length > 0) {
+      piBlocksGenerated = piResult.blocks   // hoist for scene-synth step below
       const merged = interleaveIntoPack({
         sections,
         sectionIds: storytellingBlockIds,
@@ -998,30 +1006,75 @@ export async function generateStorytellingPack(
   // Cost: +1 Gemini call/image (~9 calls, parallel, ~$0.001/pack).
   // executePageGeneration will reuse these instead of re-synthesizing.
   let imageScenes: Record<string, SceneDescription> | undefined = undefined
+  // 2026-05-30 — Parallel store for PI block image scenes + plans. Stays
+  // undefined when PI gen failed or no PI block has PI_IMAGE_ROLE !== null.
+  let piImageScenes: Record<string, SceneDescription> | undefined = undefined
+  let piImageAssets: Record<string, GeneratedAsset> | undefined = undefined
   try {
-    if (exportablePage.sections.length > 0) {
+    // ── Build storytelling synth inputs (existing path) ─────────────
+    const composedSectionsForSynth = exportablePage.sections
+      .filter((s) => s.imageRole !== 'none')
+      .map((s) => ({
+        id: s.id,
+        role: s.role,
+        sourceBlockIds: s.sourceBlockIds,
+        paragraphs: s.paragraphs,
+        inlineProof: s.inlineProof,
+        density: s.density,
+        pacingRole: s.pacingRole,
+        imageRole: s.imageRole,
+        scrollWeight: s.scrollWeight,
+        ctaInline: s.ctaInline,
+        spacingBefore: s.spacingBefore,
+        spacingAfter: s.spacingAfter,
+        transitionHint: s.transitionHint,
+        wordCount: s.wordCount,
+        paragraphCount: s.paragraphCount,
+      }))
+
+    // ── 2026-05-30 — Build PI synth inputs for blocks with image role ─
+    // PI blocks adapt to the same ComposedSection shape that
+    // synthesizePageScenes consumes (the synthesizer only reads .id,
+    // .imageRole, .paragraphs, and a couple of pacing flags). We map
+    // PI properties to safe defaults for fields not relevant to PI
+    // (sourceBlockIds, density, etc.) without polluting the actual
+    // composer output — these synthetic sections live ONLY in this
+    // batch call.
+    const piIdsForSynth = new Set<string>()
+    const piSectionsForSynth = piBlocksGenerated
+      .map((piBlock) => {
+        const role = PI_IMAGE_ROLE[piBlock.type]
+        if (!role) return null
+        const id = piBlockIdForType(piBlock.type)
+        piIdsForSynth.add(id)
+        return {
+          id,
+          // 'solution-opening' is the closest semantic SectionRole for PI
+          // mechanism — narrator is in product-discovery / mechanism-reveal
+          // mode. Used by synth for phase mood inference.
+          role: 'solution-opening' as const,
+          sourceBlockIds: [],   // PI blocks aren't composed; empty is fine
+          paragraphs: piBlock.paragraphs,
+          inlineProof: undefined,
+          density: 'medium' as const,
+          pacingRole: 'mixed' as const,
+          imageRole: role,
+          scrollWeight: 'moderate' as const,
+          ctaInline: false,
+          spacingBefore: 'normal' as const,
+          spacingAfter: 'normal' as const,
+          transitionHint: 'product-detail-callout',
+          wordCount: piBlock.paragraphs.join(' ').split(/\s+/).length,
+          paragraphCount: piBlock.paragraphs.length,
+        }
+      })
+      .filter((s): s is NonNullable<typeof s> => s !== null)
+
+    const totalSynthSections = composedSectionsForSynth.length + piSectionsForSynth.length
+    if (totalSynthSections > 0) {
       const sceneSynthStart = Date.now()
-      const composedSectionsForSynth = exportablePage.sections
-        .filter((s) => s.imageRole !== 'none')
-        .map((s) => ({
-          id: s.id,
-          role: s.role,
-          sourceBlockIds: s.sourceBlockIds,
-          paragraphs: s.paragraphs,
-          inlineProof: s.inlineProof,
-          density: s.density,
-          pacingRole: s.pacingRole,
-          imageRole: s.imageRole,
-          scrollWeight: s.scrollWeight,
-          ctaInline: s.ctaInline,
-          spacingBefore: s.spacingBefore,
-          spacingAfter: s.spacingAfter,
-          transitionHint: s.transitionHint,
-          wordCount: s.wordCount,
-          paragraphCount: s.paragraphCount,
-        }))
       const sceneBatch = await synthesizePageScenes(
-        composedSectionsForSynth,
+        [...composedSectionsForSynth, ...piSectionsForSynth],
         {
           niche: input.niche,
           protagonist: {
@@ -1037,10 +1090,43 @@ export async function generateStorytellingPack(
         { geminiApiKey, kieApiKey },
         { concurrency: 4 },
       )
-      imageScenes = sceneBatch.scenes
+
+      // Split scenes back into storytelling vs PI per the id sets.
+      const storytellingScenes: Record<string, SceneDescription> = {}
+      const piScenes: Record<string, SceneDescription> = {}
+      for (const [id, scene] of Object.entries(sceneBatch.scenes)) {
+        if (piIdsForSynth.has(id)) piScenes[id] = scene
+        else storytellingScenes[id] = scene
+      }
+      imageScenes = storytellingScenes
+      if (Object.keys(piScenes).length > 0) {
+        piImageScenes = piScenes
+      }
+
+      // Build PI image asset plans for each PI block that got a scene.
+      // Stub renderer (gpt4o) — matches scene.routing.renderer; UI swaps
+      // these in for the actual prompt at exec time via the same path
+      // the storytelling pipeline already uses.
+      if (piImageScenes) {
+        const plans: Record<string, GeneratedAsset> = {}
+        for (const [piId, scene] of Object.entries(piImageScenes)) {
+          plans[piId] = {
+            renderer: scene.routing.renderer,
+            promptUsed: { prompt: scene.prompt },
+            referenceAssets: [],
+            generationStatus: 'planned',
+            retryCount: 0,
+            outputImages: [],
+            plannedAt: Date.now(),
+          }
+        }
+        piImageAssets = plans
+      }
+
       console.info(
         `[storytelling/sceneSynth] pre-computed ${Object.keys(sceneBatch.scenes).length} scene prompts ` +
-        `(${sceneBatch.succeeded} gemini, ${sceneBatch.fallbackCount} fallback) in ${((Date.now() - sceneSynthStart) / 1000).toFixed(1)}s`,
+        `(${sceneBatch.succeeded} gemini, ${sceneBatch.fallbackCount} fallback, ` +
+        `${Object.keys(piScenes).length} are PI) in ${((Date.now() - sceneSynthStart) / 1000).toFixed(1)}s`,
       )
     }
   } catch (err) {
@@ -1086,6 +1172,10 @@ export async function generateStorytellingPack(
       // UI-FIX (2026-05-28) — pre-computed scene prompts per composed
       // section so UI shows "Xem prompt" preview before user clicks gen.
       imageScenes,
+      // 2026-05-30 — PI image scenes + asset plans (parallel store).
+      // Currently only pi-mechanism-personal — see PI_IMAGE_ROLE table.
+      piImageScenes,
+      piImageAssets,
       // P14 — Exportable page (composer + renderContract + visualSemantics +
       // imageIntent + prompt fragments + renderer adapters + orchestration +
       // validation/calibration + ExportGuide per section). Full subtype chain:

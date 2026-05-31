@@ -17,6 +17,8 @@ export type {
 export {
   PI_ANCHOR_BY_TYPE,
   PI_SECTION_TYPE_MAP,
+  PI_IMAGE_ROLE,
+  piBlockIdForType,
 } from './types'
 
 export { planPISections, getPlannedTypes, getAnchorForType } from './runtime/planPISections'

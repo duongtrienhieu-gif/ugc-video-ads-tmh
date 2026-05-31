@@ -28,6 +28,14 @@ export type {
   PageGenerationContext,
 } from './runtime/executePageGeneration'
 
+// LIVE: PI block image execution (parallel to executePageGeneration)
+export { executePIImages } from './runtime/executePIImages'
+export type {
+  ExecutePIImagesOptions,
+  ExecutePIImagesResult,
+  PIImageWorkItem,
+} from './runtime/executePIImages'
+
 // LIVE: React hook for UI integration
 export { useImageGeneration } from './runtime/useImageGeneration'
 export type {

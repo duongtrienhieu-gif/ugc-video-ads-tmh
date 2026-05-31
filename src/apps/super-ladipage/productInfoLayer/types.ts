@@ -145,3 +145,37 @@ export const PI_SECTION_TYPE_MAP: Record<PISectionType, SectionType> = {
   'social-proof-collective': 'social-proof',
   'pricing-narrator':        'offer',
 }
+
+// ─── Image role per PI type (2026-05-30) ─────────────────────────────
+//
+// Universal mapping. PI blocks that benefit from a visual anchor (so the
+// reader can SEE the product as the narrator describes it) get a role.
+// Others stay text-only by design.
+//
+// - mechanism-personal:  narrator describes the product's physical
+//                        structure ("3 springs / exoskeleton / patella
+//                        protection") — needs a CLOSE-UP image so the
+//                        reader can verify the described structure.
+//                        → 'proof-callout' = hand holding product,
+//                          product ~25% of frame, soft window light.
+// - All others:          stay text-only (usage routine works without
+//                        image; testimonial chat screenshots feel fake;
+//                        pricing receipt feels too commercial).
+//
+// Adding image to a PI type here also requires the orchestration pipeline
+// to pre-compute a scene prompt and create a generated-asset plan; see
+// generateStorytellingPack.ts § PI image plans.
+
+export const PI_IMAGE_ROLE: Record<PISectionType, 'proof-callout' | null> = {
+  'mechanism-personal':      'proof-callout',
+  'ingredients-usp-woven':   null,
+  'usage-faq-personal':      null,
+  'social-proof-collective': null,
+  'pricing-narrator':        null,
+}
+
+/** Stable id used as map key for PI image scenes / assets — mirrors the
+ *  pattern used by PIBlock.id (`pi-<type>`). Single source of truth. */
+export function piBlockIdForType(type: PISectionType): string {
+  return `pi-${type}`
+}

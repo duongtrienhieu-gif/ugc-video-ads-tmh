@@ -181,6 +181,13 @@ export default function StorytellingOutputPanel({
     onAssetUpdated: (sectionId, asset) => {
       setAssetOverlay((prev) => ({ ...prev, [sectionId]: asset }))
     },
+    // 2026-05-30 — PI image plans (parallel store). When the pack
+    // includes a pi-mechanism-personal block, this hands the hook an
+    // extra work item per gen-all click; PI images run after the
+    // storytelling page completes so they can reuse the character
+    // anchor URL for face continuity.
+    piImageAssets: meta.piImageAssets,
+    piImageScenes: meta.piImageScenes,
   })
 
   // ── Session callback handlers ────────────────────────────────────
@@ -266,7 +273,7 @@ export default function StorytellingOutputPanel({
   const imageCounters = useMemo(() => {
     if (!meta.exportablePage) return { total: 0, done: 0, failed: 0 }
     const sections = meta.exportablePage.sections.filter((s) => s.generatedAsset)
-    const total = sections.length
+    let total = sections.length
     let done = 0
     let failed = 0
     for (const s of sections) {
@@ -276,8 +283,22 @@ export default function StorytellingOutputPanel({
       if (url) done++
       else if (regen === 'failed') failed++
     }
+    // 2026-05-30 — Include PI image plans in the counter so the header
+    // reflects the real total a user sees (storytelling + PI mechanism).
+    // Currently only pi-mechanism-personal has a plan per PI_IMAGE_ROLE,
+    // so total typically goes from 7 to 8.
+    if (meta.piImageAssets) {
+      for (const [piId, piAsset] of Object.entries(meta.piImageAssets)) {
+        total += 1
+        const overlay = assetOverlay[piId]
+        const url = overlay?.outputImages?.[0]?.url ?? piAsset.outputImages?.[0]?.url
+        const regen = session?.sections[piId]?.regenStatus
+        if (url) done += 1
+        else if (regen === 'failed') failed += 1
+      }
+    }
     return { total, done, failed }
-  }, [meta.exportablePage, assetOverlay, session])
+  }, [meta.exportablePage, meta.piImageAssets, assetOverlay, session])
 
   const handleSave = () => {
     if (saving || saved || !onSaveAsProject) return
@@ -577,7 +598,28 @@ export default function StorytellingOutputPanel({
               const preComputedScenePrompt = exportSection
                 ? meta.imageScenes?.[exportSection.id]?.prompt
                 : undefined
-              const promptForUI = generatedAsset?.promptUsed?.prompt || preComputedScenePrompt
+              // 2026-05-30 — PI block image lookup (parallel store).
+              // When this is a PI block whose type has an image plan
+              // (currently only pi-mechanism-personal per PI_IMAGE_ROLE),
+              // fetch its asset/scene from the parallel meta maps so the
+              // section view can render the image the same way as a
+              // storytelling composed section.
+              const piAsset = isPIBlock && typeof currentSectionId === 'string'
+                ? (assetOverlay[currentSectionId]
+                    ?? meta.piImageAssets?.[currentSectionId])
+                : undefined
+              const piPrompt = isPIBlock && typeof currentSectionId === 'string'
+                ? (piAsset?.promptUsed?.prompt
+                    || meta.piImageScenes?.[currentSectionId]?.prompt)
+                : undefined
+              // Effective imageUrl / prompt: PI value wins when this is a
+              // PI block with an image plan; otherwise fall back to the
+              // storytelling composed-section asset chain.
+              const effectiveImageUrl = piAsset?.outputImages?.[0]?.url
+                ?? generatedAsset?.outputImages?.[0]?.url
+              const promptForUI = piPrompt
+                || generatedAsset?.promptUsed?.prompt
+                || preComputedScenePrompt
               // UI-FIX9 (2026-05-29) — canGenerate also requires the
               // section to have a generatedAsset (image plan from composer).
               // Previously a section with imageRole but no plan would
@@ -585,8 +627,13 @@ export default function StorytellingOutputPanel({
               // because the orchestrator filter dropped it. Now button
               // hides when there's no plan, eliminating false-positive
               // click target.
+              // 2026-05-30 — Extended for PI: PI blocks with piAsset are
+              // also generatable.
               const canGen = Boolean(
-                kieApiKey && exportSection && exportSection.generatedAsset,
+                kieApiKey && (
+                  (exportSection && exportSection.generatedAsset)
+                  || piAsset
+                ),
               )
               // UI-FIX10 (2026-05-29) — If composer didn't plan an image
               // for this section (imageRole='none' → no generatedAsset),
@@ -596,6 +643,23 @@ export default function StorytellingOutputPanel({
               // (reframe-moment + close-invitation per density profile),
               // not broken. Pass-through to hasNoOwnImage to suppress.
               const exportHasPlan = Boolean(exportSection?.generatedAsset)
+              // 2026-05-30 — hasNoOwnImage now considers PI blocks:
+              //   - PI block WITHOUT piAsset → hide (text-only by design)
+              //   - PI block WITH piAsset → show image area
+              //   - Non-PI block → existing storytelling logic
+              const hasNoOwn = isPIBlock
+                ? !piAsset
+                : (!exportSection || !exportHasPlan)
+              // For PI blocks with image, track session state by piId
+              const sectionTrackingId = isPIBlock && piAsset
+                ? (typeof currentSectionId === 'string' ? currentSectionId : undefined)
+                : exportSection?.id
+              const trackingRegenState = sectionTrackingId
+                ? session?.sections[sectionTrackingId]
+                : undefined
+              const isTrackingGenerating =
+                imageGen.isGenerating
+                && imageGen.progress.currentSectionId === sectionTrackingId
               return (
                 <StorytellingSectionView
                   key={idx}
@@ -606,19 +670,30 @@ export default function StorytellingOutputPanel({
                   isLast={idx === pack.sections.length - 1}
                   characterName={character?.name}
                   status={meta.sectionStatus?.[idx]}
-                  imageUrl={generatedAsset?.outputImages?.[0]?.url}
+                  imageUrl={effectiveImageUrl}
                   imagePrompt={promptForUI}
                   isImageGenerating={
+                    isTrackingGenerating ||
                     isThisSectionGenerating ||
+                    trackingRegenState?.regenStatus === 'generating' ||
+                    trackingRegenState?.regenStatus === 'queued' ||
                     sectionRegenState?.regenStatus === 'generating' ||
                     sectionRegenState?.regenStatus === 'queued'
                   }
                   canGenerateImage={canGen}
                   onGenerateImage={
-                    canGen && exportSection ? () => handleRegenerateImage(exportSection.id) : undefined
+                    canGen
+                      ? () => {
+                          if (isPIBlock && typeof currentSectionId === 'string') {
+                            handleRegenerateImage(currentSectionId)
+                          } else if (exportSection) {
+                            handleRegenerateImage(exportSection.id)
+                          }
+                        }
+                      : undefined
                   }
                   isPIBlock={isPIBlock}
-                  hasNoOwnImage={!isPIBlock && (!exportSection || !exportHasPlan)}
+                  hasNoOwnImage={hasNoOwn}
                   imageFailureReason={
                     sectionRegenState?.regenStatus === 'failed'
                       ? sectionRegenState.lastFailureReason
@@ -979,12 +1054,19 @@ function StorytellingSectionView({
         .map((p) => p.trim())
         .filter((p) => p.length > 0)
     : []
-  // Image presence:
-  //  - PI blocks: hidden (text-only by design)
-  //  - Non-primary storytelling blocks (already represented by an earlier
-  //    block's image in the same composed group): hidden too
-  //  - Otherwise: show placeholder/image
-  const hasImage = !isPIBlock && !hasNoOwnImage
+  // Image presence (2026-05-30):
+  // Parent now drives this through hasNoOwnImage so PI blocks with image
+  // plans (currently just pi-mechanism-personal) show the placeholder /
+  // image area the same way as a storytelling composed section. PI blocks
+  // WITHOUT a plan continue to be text-only.
+  //
+  // Logic split by parent (StorytellingOutputPanel rendering loop):
+  //   - PI block + has piAsset → hasNoOwnImage=false → image area visible
+  //   - PI block + no piAsset → hasNoOwnImage=true → image area hidden
+  //   - Non-PI primary composed section → hasNoOwnImage=false → visible
+  //   - Non-PI non-primary section → hasNoOwnImage=true → hidden
+  //     (image already attached to the primary section above)
+  const hasImage = !hasNoOwnImage
 
   return (
     // UI-FIX4 (2026-05-28): trimmed section spacing mb-20/mb-28 → mb-10/mb-14
