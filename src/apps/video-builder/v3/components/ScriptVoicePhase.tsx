@@ -445,7 +445,9 @@ export default function ScriptVoicePhase({ onContinue }: Props) {
             <div className="mt-2 space-y-2">
               {brain.script.blocks.map((block, i) => {
                 const target = blockTargetDuration(block.id, brain.structure, brain.targetDurationSec)
-                const overTarget = block.estDurationSec > target * 1.2
+                // Own-script giữ nguyên câu chữ → KHÔNG có "mục tiêu/block" để so;
+                // chỉ hiện ước tính trung tính, không gắn cảnh báo "lố target".
+                const overTarget = !brain.useOwnScript && block.estDurationSec > target * 1.2
                 return (
                   <div key={block.id} className="rounded-xl border border-black/10 bg-white p-3">
                     <div className="flex items-center justify-between gap-2">
@@ -454,9 +456,11 @@ export default function ScriptVoicePhase({ onContinue }: Props) {
                         <span className="text-[10px] font-bold uppercase tracking-widest text-gray-500">
                           {SCRIPT_BLOCK_LABEL_VI[block.id]}
                         </span>
-                        <span className="text-[10px] text-gray-400">
-                          mục tiêu ~{target.toFixed(1)}s
-                        </span>
+                        {!brain.useOwnScript && (
+                          <span className="text-[10px] text-gray-400">
+                            mục tiêu ~{target.toFixed(1)}s
+                          </span>
+                        )}
                       </div>
                       <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
                         overTarget ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-700'
@@ -528,19 +532,32 @@ export default function ScriptVoicePhase({ onContinue }: Props) {
         {brain.script && variance && (
           <div className="mt-5 flex items-center justify-between gap-3 rounded-xl border border-violet-200 bg-gradient-to-r from-violet-50 to-pink-50 p-4">
             <div className="min-w-0">
-              <p className="text-sm font-bold text-gray-900">
-                Tổng: {brain.script.totalDurationSec.toFixed(1)}s
-                <span className="ml-2 text-[12px] text-gray-500">/ target {brain.script.targetDurationSec}s</span>
-                <span className={`ml-2 rounded-full px-2 py-0.5 text-[10px] font-bold ${
-                  variance.status === 'on-target' ? 'bg-emerald-100 text-emerald-700' :
-                  variance.status === 'over'      ? 'bg-amber-100 text-amber-800' :
-                                                    'bg-sky-100 text-sky-800'
-                }`}>
-                  {variance.status === 'on-target' ? 'Vừa khớp' :
-                   variance.status === 'over'      ? `Dài ${variance.deltaSec > 0 ? '+' : ''}${variance.deltaSec.toFixed(1)}s` :
-                                                     `Ngắn ${variance.deltaSec.toFixed(1)}s`}
-                </span>
-              </p>
+              {brain.useOwnScript ? (
+                // Own-script: độ dài là thông tin, KHÔNG so target (segmenter
+                // bỏ qua target — đây là kịch bản của bạn, dài bao nhiêu là do bạn).
+                <p className="text-sm font-bold text-gray-900">
+                  Kịch bản của bạn: ~{brain.script.totalDurationSec.toFixed(1)}s
+                  {brain.script.totalDurationSec > 60 && (
+                    <span className="ml-2 rounded-full bg-sky-100 px-2 py-0.5 text-[10px] font-bold text-sky-800">
+                      Ad dài — TikTok thường &lt;60s, rút gọn nếu cần
+                    </span>
+                  )}
+                </p>
+              ) : (
+                <p className="text-sm font-bold text-gray-900">
+                  Tổng: {brain.script.totalDurationSec.toFixed(1)}s
+                  <span className="ml-2 text-[12px] text-gray-500">/ target {brain.script.targetDurationSec}s</span>
+                  <span className={`ml-2 rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                    variance.status === 'on-target' ? 'bg-emerald-100 text-emerald-700' :
+                    variance.status === 'over'      ? 'bg-amber-100 text-amber-800' :
+                                                      'bg-sky-100 text-sky-800'
+                  }`}>
+                    {variance.status === 'on-target' ? 'Vừa khớp' :
+                     variance.status === 'over'      ? `Dài ${variance.deltaSec > 0 ? '+' : ''}${variance.deltaSec.toFixed(1)}s` :
+                                                       `Ngắn ${variance.deltaSec.toFixed(1)}s`}
+                  </span>
+                </p>
+              )}
               <p className="text-[11px] text-gray-500">
                 Voice timeline locked ở giá trị này — Phase 3 sẽ render TTS đúng độ dài.
               </p>
