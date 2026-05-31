@@ -25,6 +25,9 @@ import type { RouterDecision, SceneRendererKey } from '../types'
 const PRODUCT_VISIBLE_ROLES = new Set<ImageRole>([
   'proof-callout',
   'lifestyle-context',
+  // 2026-05-30 — hero-product is the most product-prominent role
+  // (product 60-80% of frame). Always requires the product reference.
+  'hero-product',
   // object-trace MAY include product if reference is available
 ])
 
@@ -34,6 +37,9 @@ const CHARACTER_BEARING_ROLES = new Set<ImageRole>([
   'mood-supporting',
   'lifestyle-context',
   'proof-callout',
+  // hero-product does NOT bear a character — pure product shot. Hand
+  // optional in some compositions, but no face / no identity continuity
+  // needed. See the micro-rule for framing details.
 ])
 
 export function decideRouting(

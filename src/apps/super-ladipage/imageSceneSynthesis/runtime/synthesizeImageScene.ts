@@ -152,6 +152,13 @@ function fallbackPrompt(input: SceneSynthesisInput): string {
     case 'proof-callout':
       return `A candid close moment for ${buyerContext} — a hand holding a product over a kitchen counter, with soft window light behind. The product occupies about 25% of the frame, real surface texture below. Could include partial face of ${personDesc} on the edge of frame (use reference for identity continuity). ${phaseTone}.${productMention}${sectionLine} Documentary style, photojournalism-light. NO before/after split, NO testimonial card, NO star rating overlay. Just a quiet real moment. Identity reference: ${idLock}. Not posed, not centered, no studio gloss.`
 
+    case 'hero-product':
+      // 2026-05-30 — Dedicated product showcase. Used by PI mechanism-personal
+      // so the reader actually SEES the product the narrator is describing.
+      // Product fills 60-80% of frame, label readable. NO character continuity
+      // needed (this is a product hero, not a person scene).
+      return `Dedicated product showcase shot for ${buyerContext}. Composition: product fills 60-80% of the frame, label clearly readable. Surface: single clean tabletop / wooden counter / soft fabric. Light: soft natural diffused (window or overhead daylight) — NO studio strobe, NO commercial gloss, NO advertising glamour. Shallow depth of field (background slightly out of focus).${productMention} Optional supporting element: a hand at the edge holding it, OR a single small accessory beside for scale — do NOT crowd the frame. Documentary catalog feel — like a Humans-of-New-York object portrait, NOT an Instagram product flat-lay. Real surface texture preserved. No overlay text. No badges. No watermark. Not centered exact, comfortable with slight asymmetry.${sectionLine}`
+
     case 'none':
       return ''
   }

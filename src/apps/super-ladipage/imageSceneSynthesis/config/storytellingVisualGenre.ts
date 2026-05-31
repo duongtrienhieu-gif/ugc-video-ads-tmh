@@ -84,6 +84,8 @@ export const ROLE_MICRO_RULES: Record<ImageRole, string> = {
 
   'proof-callout': `THIS IMAGE = visual proof / testimonial anchor. Either: (a) a candid moment of the protagonist using the product naturally (use both reference images if available — face + product), or (b) a close detail of the product in a real-life context (hand holding bottle, opening cap, on a desk near a notebook). NO before/after split. NO testimonial card overlay. NO star ratings. Just a documentary moment that quietly says "this is real". Soft natural light.`,
 
+  'hero-product': `THIS IMAGE = DEDICATED product showcase. The product is the SUBJECT, not background context. Composition: product fills 60-80% of the frame, label clearly readable, single clean surface (wooden tabletop / kitchen counter / soft fabric), soft natural diffused light. Optional: ONE supporting element (a hand at the edge holding it, a small accessory beside it for scale) — but DO NOT crowd the frame. If a product reference image is provided, MATCH IT EXACTLY (same color / shape / label / packaging text — no reinterpretation). Background slightly out of focus (shallow depth of field). Documentary catalog feel, NOT commercial gloss, NOT studio strobe, NOT advertising glamour. Real surface texture preserved. No overlay text. No badges. No watermark.`,
+
   'none': `(no image for this section)`,
 }
 

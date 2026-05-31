@@ -41,7 +41,14 @@ export type ImageRole =
   | 'mood-supporting'     // mid-page — emotional atmosphere
   | 'object-trace'        // frustration / failed attempts visualization
   | 'lifestyle-context'   // wide context, daily life
-  | 'proof-callout'       // proof callout visual
+  | 'proof-callout'       // proof callout visual (subtle product, ~25% frame)
+  | 'hero-product'        // 2026-05-30 — DEDICATED product showcase (60-80%
+                          //   of frame, label readable, clean surface).
+                          //   Currently used by PI mechanism-personal so the
+                          //   reader actually SEES the product the narrator
+                          //   is describing. NEVER used by storytelling
+                          //   roles — those keep proof-callout's subtle
+                          //   integration.
   | 'none'                // pure text section
 
 export type ScrollWeight = 'light' | 'moderate' | 'heavy'

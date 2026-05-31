@@ -154,10 +154,13 @@ export const PI_SECTION_TYPE_MAP: Record<PISectionType, SectionType> = {
 //
 // - mechanism-personal:  narrator describes the product's physical
 //                        structure ("3 springs / exoskeleton / patella
-//                        protection") — needs a CLOSE-UP image so the
-//                        reader can verify the described structure.
-//                        → 'proof-callout' = hand holding product,
-//                          product ~25% of frame, soft window light.
+//                        protection") — needs a PROMINENT product shot
+//                        so the reader can verify the described structure.
+//                        → 'hero-product' = product fills 60-80% of frame,
+//                          label readable, clean background (vs the old
+//                          'proof-callout' which only showed product at
+//                          ~25% of frame — user feedback that "no image
+//                          actually shows the product clearly").
 // - All others:          stay text-only (usage routine works without
 //                        image; testimonial chat screenshots feel fake;
 //                        pricing receipt feels too commercial).
@@ -166,8 +169,8 @@ export const PI_SECTION_TYPE_MAP: Record<PISectionType, SectionType> = {
 // to pre-compute a scene prompt and create a generated-asset plan; see
 // generateStorytellingPack.ts § PI image plans.
 
-export const PI_IMAGE_ROLE: Record<PISectionType, 'proof-callout' | null> = {
-  'mechanism-personal':      'proof-callout',
+export const PI_IMAGE_ROLE: Record<PISectionType, 'proof-callout' | 'hero-product' | null> = {
+  'mechanism-personal':      'hero-product',
   'ingredients-usp-woven':   null,
   'usage-faq-personal':      null,
   'social-proof-collective': null,

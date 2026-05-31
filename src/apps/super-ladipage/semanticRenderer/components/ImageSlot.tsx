@@ -30,12 +30,14 @@ function imageRoleLabel(role: ImageRole): string {
     case 'object-trace':      return 'Object — failed attempts flat-lay'
     case 'lifestyle-context': return 'Lifestyle — wide context, daily life'
     case 'proof-callout':     return 'Proof — inline callout (no image)'
+    case 'hero-product':      return 'Product — dedicated 60-80% showcase'
     case 'none':              return 'No image — text-only section'
   }
 }
 
 export function ImageSlot({ imageRole, aspectRatio, characterName }: ImageSlotProps) {
-  // No image for proof-callout or 'none' roles
+  // No image for proof-callout or 'none' roles. hero-product DOES render
+  // (product showcase frame) — only inline-quote proof-callout skips.
   if (imageRole === 'none' || imageRole === 'proof-callout') return null
 
   const paddingBottom = aspectRatioToPaddingBottom(aspectRatio)

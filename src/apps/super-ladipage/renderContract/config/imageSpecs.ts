@@ -34,6 +34,14 @@ export const IMAGE_SPECS: Record<ImageRole, ImageSpec> = {
     recommendedCount: 0,         // proof-callout = inline quote, no image
     // aspectRatio omitted
   },
+  // 2026-05-30 — Dedicated product hero shot (60-80% of frame, label
+  // readable). Square reads best for product hero on mobile vertical
+  // scroll — matches Shopee / TikTok Shop listing image convention so
+  // marketers can repurpose the asset.
+  'hero-product': {
+    recommendedCount: 1,
+    aspectRatio:      '1:1',
+  },
   'none': {
     recommendedCount: 0,
   },
