@@ -150,7 +150,13 @@ export async function synthesizePageScenes(
         systemInstruction: VISUAL_GENRE_SYSTEM_INSTRUCTION,
         jsonMode: true,
         maxOutputTokens: 4000,
-        timeoutMs: 60_000,
+        // 2026-05-30 — Lowered from 60s to 30s. Successful Gemini batch
+        // gens return in ~10-15s; the extra 30s of timeout headroom only
+        // matters during overload, and during overload the per-section
+        // fallback path produces better results faster than waiting for
+        // a slow batch to complete. Scene synth user-perceived latency
+        // drops from 60s+ to 30s on peak-hour overload.
+        timeoutMs: 30_000,
         label: 'scene-synth-batch',
       })
 

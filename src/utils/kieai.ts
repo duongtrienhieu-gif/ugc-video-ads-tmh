@@ -1027,8 +1027,17 @@ export async function kieTextGenerate(
   if (systemInstruction) messages.push({ role: 'system', content: systemInstruction })
   messages.push({ role: 'user', content: prompt })
 
-  // gemini-2.5-flash first: usually 3-5x faster than gpt-4o for text
-  const textModels = ['gemini-2.5-flash', 'gpt-4o-mini', 'gpt-4o']
+  // gemini-2.5-flash first: usually 3-5x faster than gpt-4o for text.
+  //
+  // 2026-05-30 — Dropped 'gpt-4o' from the fallback chain. KIE's chat
+  // completions endpoint now returns `{"code":500,"msg":"Operation not
+  // found: gpt-4o"}` for this model — it was deprecated upstream. Keeping
+  // it in the list cost ~0.3-1s per fallback chain (per section, per
+  // retry) during Gemini peak-hour overload, which compounded badly:
+  // scene synthesis would burn 5-10 wasted round-trips before falling
+  // back to static templates. gpt-4o-mini covers the same fallback role
+  // and is still active.
+  const textModels = ['gemini-2.5-flash', 'gpt-4o-mini']
   let lastError = ''
 
   for (const model of textModels) {
