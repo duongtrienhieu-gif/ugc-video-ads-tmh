@@ -62,8 +62,12 @@ export interface RenderCreatorVideoParams {
   config: CreatorVideoConfig
   /** Z31 — the locked script from Phase 2. We TTS the concatenation of all blocks. */
   script: GeneratedScript
-  /** Z31 voice category — chooses ElevenLabs voiceId */
+  /** Z31 voice category — drives WPM/timing + the fallback ElevenLabs voiceId */
   voiceCategory: VoiceCategoryId
+  /** User-chosen ElevenLabs voiceId (custom/clone or library voice picked in
+   *  Bước 2). When set it OVERRIDES the category's default voiceId for TTS.
+   *  Category is still used for timing estimation. null/undefined = use default. */
+  voiceId?: string | null
   /** Avatar Model — drives keyframe identity lock */
   avatar: Model
   /** Product (optional — shown in frame only if config.setting is product_demo) */
@@ -97,10 +101,12 @@ export async function renderCreatorVideo(
   // ── STAGE 1: TTS via ElevenLabs ────────────────────────────────────────
   params.onStageUpdate({ stage: 'tts' })
   const voiceCategory = VOICE_CATEGORIES[params.voiceCategory]
-  const voiceId = voiceCategory.defaultVoiceId
+  // User-picked voice (custom/clone or library) overrides the category default.
+  const voiceId = params.voiceId?.trim() || voiceCategory.defaultVoiceId
   const fullScriptText = params.script.blocks.map((b) => b.text).join(' ')
 
-  console.log(`[CREATOR_VIDEO Stage 1] TTS voice=${voiceCategory.labelVi} (${voiceId}) chars=${fullScriptText.length}`)
+  const voiceSource = params.voiceId?.trim() ? 'user-picked' : `category:${voiceCategory.labelVi}`
+  console.log(`[CREATOR_VIDEO Stage 1] TTS voice=${voiceSource} (${voiceId}) chars=${fullScriptText.length}`)
   const audioBuffer = await textToSpeech({
     apiKey: params.elevenLabsApiKey,
     voiceId,

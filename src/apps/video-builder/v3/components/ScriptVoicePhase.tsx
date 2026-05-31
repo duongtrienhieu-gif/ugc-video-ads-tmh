@@ -14,10 +14,11 @@
 // VOICE step in this phase is currently SUGGESTED CATEGORY only.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { useMemo, useEffect } from 'react'
+import { useMemo, useEffect, useState } from 'react'
 import {
   Loader2, Sparkles, Wand2, RefreshCw, ChevronRight, AlertCircle,
   Clock, Mic2, FileText, Lightbulb, Edit3, Globe, PenLine,
+  Library, UserCircle2, Search, Check, Play, Plus, X,
 } from 'lucide-react'
 import { useAppStore } from '../../../../stores/appStore'
 import { useSettingsStore } from '../../../../stores/settingsStore'
@@ -37,6 +38,10 @@ import {
   computeDurationVariance, blockTargetDuration,
 } from '../services/voiceTimingEstimator'
 import { generateScript, detectCertClaims } from '../services/scriptGenerator'
+import {
+  listVoices, listSharedVoices, addSharedVoice,
+  type ElevenLabsVoice, type SharedVoice,
+} from '../../../../utils/elevenlabs'
 
 const TONE_BG: Record<string, string> = {
   emerald: 'bg-emerald-100 text-emerald-800 border-emerald-300',
@@ -65,10 +70,12 @@ export default function ScriptVoicePhase({ onContinue }: Props) {
   const patchScriptBlock     = useAdsVideoStore((s) => s.patchScriptBlock)
   const setScriptTotalDuration = useAdsVideoStore((s) => s.setScriptTotalDuration)
   const setVoiceCategory     = useAdsVideoStore((s) => s.setVoiceCategory)
+  const setVoiceId           = useAdsVideoStore((s) => s.setVoiceId)
   const setIsGeneratingScript = useAdsVideoStore((s) => s.setIsGeneratingScript)
   const setScriptBrainError  = useAdsVideoStore((s) => s.setScriptBrainError)
 
-  const geminiKey = useSettingsStore((s) => s.geminiApiKey)
+  const geminiKey      = useSettingsStore((s) => s.geminiApiKey)
+  const elevenLabsKey  = useSettingsStore((s) => s.elevenLabsApiKey)
   const addToast  = useAppStore((s) => s.addToast)
 
   const brain = state.scriptBrain
@@ -173,6 +180,85 @@ export default function ScriptVoicePhase({ onContinue }: Props) {
       const refined = recomputeBlockDurations(brain.script, cat)
       setGeneratedScript(refined)
     }
+  }
+
+  // ── Voice picker (Hướng 1 — chọn giọng ElevenLabs cụ thể) ─────────────────
+  // Category vẫn quyết WPM/timing; voiceId này CHỈ override giọng TTS thực ở
+  // Bước 3. Để trống = dùng giọng mặc định của category.
+  const [voicePanelOpen, setVoicePanelOpen] = useState(false)
+  const [voiceTab, setVoiceTab]   = useState<'mine' | 'library'>('mine')
+  const [myVoices, setMyVoices]   = useState<ElevenLabsVoice[]>([])
+  const [loadingMine, setLoadingMine] = useState(false)
+  const [sharedVoices, setSharedVoices] = useState<SharedVoice[]>([])
+  const [loadingShared, setLoadingShared] = useState(false)
+  const [addingId, setAddingId]   = useState<string | null>(null)
+  const [libLang, setLibLang]     = useState('ms')
+  const [libGender, setLibGender] = useState<'' | 'male' | 'female'>('')
+  const [libSearch, setLibSearch] = useState('')
+  const [previewEl, setPreviewEl] = useState<HTMLAudioElement | null>(null)
+
+  const selectedVoiceId = state.inputs.voiceId
+  const selectedVoiceName = useMemo(() => {
+    if (!selectedVoiceId) return null
+    return myVoices.find((v) => v.voice_id === selectedVoiceId)?.name
+      ?? sharedVoices.find((v) => v.voice_id === selectedVoiceId)?.name
+      ?? null
+  }, [selectedVoiceId, myVoices, sharedVoices])
+
+  const playPreview = (url?: string) => {
+    if (!url) return
+    previewEl?.pause()
+    const a = new Audio(url)
+    setPreviewEl(a)
+    a.play().catch(() => {})
+  }
+
+  const handleLoadMyVoices = async () => {
+    if (!elevenLabsKey) { addToast('Thiếu ElevenLabs API key trong Settings', 'error'); return }
+    setLoadingMine(true)
+    try {
+      const voices = await listVoices(elevenLabsKey)
+      setMyVoices(voices)
+      if (voices.length === 0) addToast('Tài khoản chưa có giọng nào — thử Thư viện ElevenLabs', 'info')
+    } catch (err) {
+      addToast(err instanceof Error ? err.message : 'Tải giọng thất bại', 'error')
+    } finally { setLoadingMine(false) }
+  }
+
+  const handleSearchLibrary = async () => {
+    if (!elevenLabsKey) { addToast('Thiếu ElevenLabs API key trong Settings', 'error'); return }
+    setLoadingShared(true)
+    try {
+      const voices = await listSharedVoices({
+        apiKey: elevenLabsKey,
+        language: libLang || undefined,
+        gender: libGender || undefined,
+        search: libSearch.trim() || undefined,
+        pageSize: 30,
+      })
+      setSharedVoices(voices)
+      if (voices.length === 0) addToast('Không tìm thấy giọng phù hợp — đổi bộ lọc', 'info')
+    } catch (err) {
+      addToast(err instanceof Error ? err.message : 'Tìm giọng thất bại', 'error')
+    } finally { setLoadingShared(false) }
+  }
+
+  const handleAddSharedVoice = async (v: SharedVoice) => {
+    if (!elevenLabsKey) { addToast('Thiếu ElevenLabs API key trong Settings', 'error'); return }
+    setAddingId(v.voice_id)
+    try {
+      const newId = await addSharedVoice({
+        apiKey: elevenLabsKey,
+        publicOwnerId: v.public_owner_id,
+        voiceId: v.voice_id,
+        newName: v.name,
+      })
+      setVoiceId(newId)
+      addToast(`✓ Đã thêm & chọn giọng "${v.name}"`, 'success')
+      handleLoadMyVoices()  // refresh "Giọng của tôi" so it appears there
+    } catch (err) {
+      addToast(err instanceof Error ? err.message : 'Thêm giọng thất bại', 'error')
+    } finally { setAddingId(null) }
   }
 
   const canContinue = !!brain.script && brain.script.blocks.every((b) => b.text.trim().length > 0)
@@ -522,8 +608,207 @@ export default function ScriptVoicePhase({ onContinue }: Props) {
                 })}
               </div>
               <p className="mt-2 text-[10px] text-gray-400">
-                ElevenLabs TTS thực sẽ chạy ở Phase 3 khi render creator video. Lúc này chỉ pick category để estimator dùng WPM phù hợp.
+                Category quyết WPM/timing. Muốn dùng đúng 1 giọng cụ thể (giọng clone của bạn hoặc giọng Malay trong thư viện)? Chọn ở phần bên dưới.
               </p>
+            </div>
+          </div>
+        )}
+
+        {/* ── Voice picker (Hướng 1 — chọn giọng ElevenLabs cụ thể) ────────── */}
+        {brain.script && (
+          <div className="mt-5">
+            <h3 className="text-[12px] font-bold uppercase tracking-widest text-gray-500">
+              Giọng đọc cụ thể (ElevenLabs) <span className="font-normal normal-case text-gray-400">— tuỳ chọn</span>
+            </h3>
+            <div className="mt-2 rounded-xl border border-black/10 bg-white p-3">
+              {/* Current selection summary */}
+              <div className="flex flex-wrap items-center gap-2">
+                <Mic2 className="h-4 w-4 text-violet-500" />
+                {selectedVoiceId ? (
+                  <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-100 px-2.5 py-1 text-[11px] font-bold text-emerald-800">
+                    <Check className="h-3 w-3" />
+                    Đang dùng: {selectedVoiceName ?? 'giọng đã chọn'}
+                    <button
+                      onClick={() => { setVoiceId(null); addToast('Đã trở về giọng mặc định của category', 'info') }}
+                      title="Bỏ chọn — dùng giọng mặc định của category"
+                      className="ml-1 rounded-full p-0.5 hover:bg-emerald-200"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </span>
+                ) : (
+                  <span className="text-[11px] text-gray-500">
+                    Đang dùng giọng mặc định của category <b>{VOICE_CATEGORIES[effectiveCategory].labelVi}</b>.
+                  </span>
+                )}
+                <button
+                  onClick={() => setVoicePanelOpen((o) => !o)}
+                  className="ml-auto rounded-full border border-violet-200 bg-violet-50 px-3 py-1 text-[11px] font-bold text-violet-700 transition-all hover:bg-violet-100"
+                >
+                  {voicePanelOpen ? 'Đóng' : 'Chọn giọng…'}
+                </button>
+              </div>
+
+              {voicePanelOpen && (
+                <div className="mt-3 border-t border-black/5 pt-3">
+                  {/* Tabs */}
+                  <div className="flex gap-1.5">
+                    <button
+                      onClick={() => setVoiceTab('mine')}
+                      className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-[11px] font-bold transition-all ${
+                        voiceTab === 'mine' ? 'bg-violet-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                      }`}
+                    >
+                      <UserCircle2 className="h-3.5 w-3.5" /> Giọng của tôi
+                    </button>
+                    <button
+                      onClick={() => setVoiceTab('library')}
+                      className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-[11px] font-bold transition-all ${
+                        voiceTab === 'library' ? 'bg-violet-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                      }`}
+                    >
+                      <Library className="h-3.5 w-3.5" /> Thư viện ElevenLabs
+                    </button>
+                  </div>
+
+                  {!elevenLabsKey && (
+                    <p className="mt-2 flex items-center gap-1.5 text-[11px] text-amber-700">
+                      <AlertCircle className="h-3.5 w-3.5" /> Thiếu ElevenLabs API key — thêm trong Cài đặt để dùng tính năng này.
+                    </p>
+                  )}
+
+                  {/* ── Tab: Giọng của tôi ───────────────────────────────── */}
+                  {voiceTab === 'mine' && (
+                    <div className="mt-3">
+                      <button
+                        onClick={handleLoadMyVoices}
+                        disabled={loadingMine || !elevenLabsKey}
+                        className="inline-flex items-center gap-1.5 rounded-full bg-gray-900 px-3 py-1.5 text-[11px] font-bold text-white transition-all hover:bg-gray-700 disabled:opacity-50"
+                      >
+                        {loadingMine ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+                        Tải giọng trong tài khoản
+                      </button>
+                      <div className="mt-2 grid grid-cols-1 gap-1.5 sm:grid-cols-2">
+                        {myVoices.map((v) => {
+                          const isSel = v.voice_id === selectedVoiceId
+                          return (
+                            <div
+                              key={v.voice_id}
+                              className={`flex items-center gap-2 rounded-lg border p-2 ${
+                                isSel ? 'border-emerald-300 bg-emerald-50' : 'border-black/10 bg-white'
+                              }`}
+                            >
+                              <div className="min-w-0 flex-1">
+                                <p className="truncate text-[12px] font-bold text-gray-900">{v.name}</p>
+                                <p className="text-[10px] text-gray-500">
+                                  {v.category}{v.labels?.gender ? ` · ${v.labels.gender}` : ''}{v.labels?.accent ? ` · ${v.labels.accent}` : ''}
+                                </p>
+                              </div>
+                              {v.preview_url && (
+                                <button onClick={() => playPreview(v.preview_url)} title="Nghe thử" className="rounded-full p-1 text-violet-600 hover:bg-violet-100">
+                                  <Play className="h-3.5 w-3.5" />
+                                </button>
+                              )}
+                              <button
+                                onClick={() => { setVoiceId(v.voice_id); addToast(`✓ Đã chọn giọng "${v.name}"`, 'success') }}
+                                className={`rounded-full px-2.5 py-1 text-[10px] font-bold transition-all ${
+                                  isSel ? 'bg-emerald-600 text-white' : 'bg-violet-100 text-violet-700 hover:bg-violet-200'
+                                }`}
+                              >
+                                {isSel ? 'Đang chọn' : 'Chọn'}
+                              </button>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* ── Tab: Thư viện ElevenLabs ─────────────────────────── */}
+                  {voiceTab === 'library' && (
+                    <div className="mt-3">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <select
+                          value={libLang}
+                          onChange={(e) => setLibLang(e.target.value)}
+                          className="rounded-lg border border-black/10 bg-white px-2 py-1 text-[11px] focus:border-violet-400 focus:outline-none"
+                        >
+                          <option value="ms">Malay (ms)</option>
+                          <option value="id">Indonesia (id)</option>
+                          <option value="en">English (en)</option>
+                          <option value="vi">Vietnamese (vi)</option>
+                          <option value="">Mọi ngôn ngữ</option>
+                        </select>
+                        <select
+                          value={libGender}
+                          onChange={(e) => setLibGender(e.target.value as '' | 'male' | 'female')}
+                          className="rounded-lg border border-black/10 bg-white px-2 py-1 text-[11px] focus:border-violet-400 focus:outline-none"
+                        >
+                          <option value="">Mọi giới tính</option>
+                          <option value="female">Nữ</option>
+                          <option value="male">Nam</option>
+                        </select>
+                        <div className="relative flex-1 min-w-[140px]">
+                          <Search className="pointer-events-none absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-gray-400" />
+                          <input
+                            value={libSearch}
+                            onChange={(e) => setLibSearch(e.target.value)}
+                            onKeyDown={(e) => { if (e.key === 'Enter') handleSearchLibrary() }}
+                            placeholder="Tìm tên giọng…"
+                            className="w-full rounded-lg border border-black/10 bg-white py-1 pl-7 pr-2 text-[11px] focus:border-violet-400 focus:outline-none"
+                          />
+                        </div>
+                        <button
+                          onClick={handleSearchLibrary}
+                          disabled={loadingShared || !elevenLabsKey}
+                          className="inline-flex items-center gap-1.5 rounded-full bg-gray-900 px-3 py-1.5 text-[11px] font-bold text-white transition-all hover:bg-gray-700 disabled:opacity-50"
+                        >
+                          {loadingShared ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Search className="h-3.5 w-3.5" />}
+                          Tìm
+                        </button>
+                      </div>
+                      <div className="mt-2 grid grid-cols-1 gap-1.5 sm:grid-cols-2">
+                        {sharedVoices.map((v) => {
+                          const isSel = v.voice_id === selectedVoiceId
+                          return (
+                            <div
+                              key={`${v.public_owner_id}-${v.voice_id}`}
+                              className={`flex items-center gap-2 rounded-lg border p-2 ${
+                                isSel ? 'border-emerald-300 bg-emerald-50' : 'border-black/10 bg-white'
+                              }`}
+                            >
+                              <div className="min-w-0 flex-1">
+                                <p className="truncate text-[12px] font-bold text-gray-900">{v.name}</p>
+                                <p className="truncate text-[10px] text-gray-500">
+                                  {v.language}{v.accent ? ` · ${v.accent}` : ''}{v.gender ? ` · ${v.gender}` : ''}{v.use_case ? ` · ${v.use_case}` : ''}
+                                </p>
+                              </div>
+                              {v.preview_url && (
+                                <button onClick={() => playPreview(v.preview_url)} title="Nghe thử" className="rounded-full p-1 text-violet-600 hover:bg-violet-100">
+                                  <Play className="h-3.5 w-3.5" />
+                                </button>
+                              )}
+                              <button
+                                onClick={() => handleAddSharedVoice(v)}
+                                disabled={addingId === v.voice_id || isSel}
+                                className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[10px] font-bold transition-all disabled:opacity-60 ${
+                                  isSel ? 'bg-emerald-600 text-white' : 'bg-violet-100 text-violet-700 hover:bg-violet-200'
+                                }`}
+                              >
+                                {addingId === v.voice_id ? <Loader2 className="h-3 w-3 animate-spin" /> : isSel ? <Check className="h-3 w-3" /> : <Plus className="h-3 w-3" />}
+                                {isSel ? 'Đã chọn' : 'Thêm & chọn'}
+                              </button>
+                            </div>
+                          )
+                        })}
+                      </div>
+                      <p className="mt-2 text-[10px] text-gray-400">
+                        "Thêm & chọn" sẽ thêm giọng từ thư viện vào tài khoản ElevenLabs của bạn rồi chọn luôn cho video này.
+                      </p>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           </div>
         )}

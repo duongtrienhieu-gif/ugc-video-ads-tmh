@@ -273,6 +273,7 @@ export default function CreatorVideoPhase({ onContinue }: Props) {
         config,
         script: brain.script,
         voiceCategory: brain.voiceCategory ?? 'energetic_creator',
+        voiceId: state.inputs.voiceId,
         avatar: state.inputs.avatar,
         product: state.inputs.product,
         skipPreview,
@@ -319,6 +320,9 @@ export default function CreatorVideoPhase({ onContinue }: Props) {
           <h2 className="text-lg font-bold text-gray-900">Bước 3 — Video creator chính (talking head)</h2>
           <p className="text-[12px] text-gray-500">
             70-80% của video cuối — 1 video creator lipsync liên tục. Voice timeline đã chốt {brain.script?.totalDurationSec.toFixed(1) ?? '—'}s.
+          </p>
+          <p className="mt-1.5 rounded-lg bg-sky-50 px-3 py-2 text-[11px] leading-relaxed text-sky-800 ring-1 ring-sky-100">
+            Khuôn mặt nhân vật được giữ nguyên từ avatar bạn chọn ở Bước 1. Ở bước này bạn chỉ chọn <b>bối cảnh</b>, <b>trang phục</b> và <b>thần thái</b> — app sẽ dựng video người đó đang nói đúng kịch bản (lipsync).
           </p>
         </div>
 
