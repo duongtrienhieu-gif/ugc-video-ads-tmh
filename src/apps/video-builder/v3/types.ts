@@ -697,11 +697,11 @@ export interface ScriptBrain {
   targetDurationSec: ScriptTargetDurationSec
   /** Output language — locks script + voice + insert keywords to ONE language. */
   outputLang: ScriptLang
-  /** TRUE = use the user's own pasted script verbatim (Gemini only segments it
-   *  into the 5 roles, never rewrites). FALSE = Gemini writes from scratch. */
+  /** TRUE = use the user's own script verbatim (Gemini only segments it into
+   *  the 5 roles, never rewrites). FALSE = Gemini writes from scratch.
+   *  The script TEXT itself is the SINGLE source of truth in state.inputs.script
+   *  (picked or typed at Bước 1) — there is no separate copy here. */
   useOwnScript: boolean
-  /** Raw pasted script text (only meaningful when useOwnScript is TRUE). */
-  ownScriptText: string
   /** The last generated script (null until first generation) */
   script: GeneratedScript | null
   /** 3 hook variants Gemini produced */
@@ -727,7 +727,6 @@ export function createEmptyScriptBrain(): ScriptBrain {
     targetDurationSec: DEFAULT_SCRIPT_DURATION_SEC,
     outputLang: DEFAULT_SCRIPT_LANG,
     useOwnScript: false,
-    ownScriptText: '',
     script: null,
     hookVariants: [],
     pickedHookIdx: -1,

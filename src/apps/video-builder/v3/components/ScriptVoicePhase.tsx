@@ -14,7 +14,7 @@
 // VOICE step in this phase is currently SUGGESTED CATEGORY only.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { useMemo } from 'react'
+import { useMemo, useEffect } from 'react'
 import {
   Loader2, Sparkles, Wand2, RefreshCw, ChevronRight, AlertCircle,
   Clock, Mic2, FileText, Lightbulb, Edit3, Globe, PenLine,
@@ -58,7 +58,7 @@ export default function ScriptVoicePhase({ onContinue }: Props) {
   const setTargetDurationSec = useAdsVideoStore((s) => s.setTargetDurationSec)
   const setOutputLang        = useAdsVideoStore((s) => s.setOutputLang)
   const setUseOwnScript      = useAdsVideoStore((s) => s.setUseOwnScript)
-  const setOwnScriptText     = useAdsVideoStore((s) => s.setOwnScriptText)
+  const setScript            = useAdsVideoStore((s) => s.setScript)
   const setGeneratedScript   = useAdsVideoStore((s) => s.setGeneratedScript)
   const setHookVariants      = useAdsVideoStore((s) => s.setHookVariants)
   const pickHookVariant      = useAdsVideoStore((s) => s.pickHookVariant)
@@ -72,6 +72,17 @@ export default function ScriptVoicePhase({ onContinue }: Props) {
   const addToast  = useAppStore((s) => s.addToast)
 
   const brain = state.scriptBrain
+
+  // Phase 1 — kịch bản là MỘT nguồn duy nhất: state.inputs.script (chọn/dán ở
+  // Bước 1). Nếu người dùng mang sẵn kịch bản sang đây thì mặc định BẬT chế độ
+  // "Dùng kịch bản của tôi" để khỏi phải gõ lại. Chỉ chạy 1 lần khi vào bước —
+  // người dùng vẫn có thể tắt để cho AI tự viết.
+  useEffect(() => {
+    if (state.inputs.script.trim().length > 0 && !brain.useOwnScript) {
+      setUseOwnScript(true)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   // Auto-suggest voice category whenever avatar or angle changes — but only
   // overwrite if user hasn't explicitly picked one yet.
@@ -97,8 +108,8 @@ export default function ScriptVoicePhase({ onContinue }: Props) {
       addToast('Chưa pick product — quay lại bước 1', 'error')
       return
     }
-    if (brain.useOwnScript && brain.ownScriptText.trim().length === 0) {
-      addToast('Bạn đã bật "Dùng kịch bản của tôi" nhưng chưa dán nội dung', 'error')
+    if (brain.useOwnScript && state.inputs.script.trim().length === 0) {
+      addToast('Bạn đã bật "Dùng kịch bản của tôi" nhưng chưa có nội dung — dán/chọn kịch bản ở Bước 1 hoặc ngay bên dưới', 'error')
       return
     }
 
@@ -122,7 +133,7 @@ export default function ScriptVoicePhase({ onContinue }: Props) {
         creatorDescription,
         lang: brain.outputLang,
         useOwnScript: brain.useOwnScript,
-        ownScriptText: brain.ownScriptText,
+        ownScriptText: state.inputs.script,
       })
 
       // Recompute block durations against the effective voice category
@@ -289,14 +300,14 @@ export default function ScriptVoicePhase({ onContinue }: Props) {
             {brain.useOwnScript ? (
               <>
                 <textarea
-                  value={brain.ownScriptText}
-                  onChange={(e) => setOwnScriptText(e.target.value)}
+                  value={state.inputs.script}
+                  onChange={(e) => setScript(e.target.value)}
                   rows={5}
-                  placeholder="Dán nguyên văn kịch bản của bạn vào đây. Gemini chỉ chia thành 5 phần (hook / pain / discovery / benefit / cta) — KHÔNG viết lại, KHÔNG dịch, giữ nguyên từng chữ."
+                  placeholder="Kịch bản từ Bước 1 sẽ hiện ở đây. Hoặc dán nguyên văn vào — Gemini chỉ chia thành 5 phần (hook / pain / discovery / benefit / cta), KHÔNG viết lại, KHÔNG dịch, giữ nguyên từng chữ."
                   className="mt-2 w-full resize-y rounded-lg border border-black/10 bg-black/[0.02] p-2 text-[12px] leading-relaxed focus:border-violet-400 focus:outline-none"
                 />
                 <p className="mt-1 text-[10px] text-gray-400">
-                  Giữ nguyên 100% câu chữ của bạn. Nhớ chọn đúng ngôn ngữ output bên trái cho khớp.
+                  Đây là cùng một kịch bản với Bước 1 — sửa ở đây cũng cập nhật ở đó. Giữ nguyên 100% câu chữ; nhớ chọn đúng ngôn ngữ output bên trái cho khớp.
                 </p>
               </>
             ) : (
@@ -321,7 +332,7 @@ export default function ScriptVoicePhase({ onContinue }: Props) {
             onClick={handleGenerate}
             disabled={
               brain.isGeneratingScript || !geminiKey || !state.inputs.product ||
-              (brain.useOwnScript && brain.ownScriptText.trim().length === 0)
+              (brain.useOwnScript && state.inputs.script.trim().length === 0)
             }
             className="flex items-center gap-2 rounded-full bg-gradient-to-r from-violet-600 to-pink-600 px-5 py-2 text-sm font-bold text-white shadow-md transition-colors hover:from-violet-700 hover:to-pink-700 disabled:cursor-not-allowed disabled:opacity-50"
           >

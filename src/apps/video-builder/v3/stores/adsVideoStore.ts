@@ -133,10 +133,8 @@ interface AdsVideoStoreState {
   setTargetDurationSec:  (sec: ScriptTargetDurationSec) => void
   /** Set the output language — locks script + voice + insert keywords to one language. */
   setOutputLang:         (lang: ScriptLang) => void
-  /** Toggle "use my own pasted script" mode. */
+  /** Toggle "use my own script" mode (script text lives in inputs.script). */
   setUseOwnScript:       (v: boolean) => void
-  /** Update the raw pasted own-script text. */
-  setOwnScriptText:      (text: string) => void
   /** Set or replace the generated script (called after Gemini returns). */
   setGeneratedScript:    (script: GeneratedScript | null) => void
   /** Update one block's text + recompute its estDurationSec via the
@@ -619,12 +617,6 @@ export const useAdsVideoStore = create<AdsVideoStoreState>((set, get) => ({
     commit(set, get, (s) => ({
       ...s,
       scriptBrain: { ...s.scriptBrain, useOwnScript },
-    })),
-
-  setOwnScriptText: (ownScriptText) =>
-    commit(set, get, (s) => ({
-      ...s,
-      scriptBrain: { ...s.scriptBrain, ownScriptText },
     })),
 
   setGeneratedScript: (script) =>
