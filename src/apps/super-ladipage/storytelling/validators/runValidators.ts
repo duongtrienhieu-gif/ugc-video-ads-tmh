@@ -50,6 +50,11 @@ import { emotionalFlatteningDetector } from './emotionalFlatteningDetector'
 import { aggressiveSalesDetector } from '../../cta/validators/aggressiveSalesDetector'
 import { phaseOneSpecificityDetector } from './phaseOneSpecificityDetector'
 import { duplicateContentDetector } from './duplicateContentDetector'
+// 2026-05-30 — new compliance + DR-cadence validators
+import { fakeCertDetector } from './fakeCertDetector'
+import { fabricationStatsDetector } from './fabricationStatsDetector'
+import { drCloseDetector } from './drCloseDetector'
+import type { NarrativeMode } from '../../narrativeMode'
 import type { ValidatorResult, ValidatorViolation } from './bioIntroDetector'
 
 export type ValidatorName =
@@ -68,6 +73,10 @@ export type ValidatorName =
   | 'memoryAnchor'               // soft
   | 'emotionalFlattening'        // soft
   | 'aggressiveSales'            // soft
+  // 2026-05-30 — compliance + DR-cadence
+  | 'fakeCert'                   // hard — legal-risk cert fabrication
+  | 'fabricationStats'           // hard — fake stats (4.9/5, 96%, etc.)
+  | 'drClose'                    // hard for DR mode — missing action verb + scarcity
 
 /** Soft validators — log warnings, do NOT trigger retry. */
 const SOFT_VALIDATORS: ReadonlySet<ValidatorName> = new Set([
@@ -91,14 +100,41 @@ export interface AggregatedValidation {
   retryFeedback: string[]
 }
 
+export interface RunValidatorsOptions {
+  niche?: NicheKey
+  /** SPEC-FIX (2026-05-27) — synthesis-derived product-specific symptoms. */
+  readerSpecificSymptoms?: string[]
+  /** 2026-05-30 — Concatenated user input fields (painPoints + benefits
+   *  + USP + pricing). Used by fabricationStatsDetector to cross-check
+   *  stats appearing in output against stats actually present in input. */
+  inputHaystack?: string
+  /** 2026-05-30 — True if user uploaded a cert proof asset (image / doc).
+   *  When true, fakeCertDetector bypasses (cert mentions are legitimate). */
+  userProvidedCertProof?: boolean
+  /** 2026-05-30 — Narrative mode (pain-driven-DR triggers drCloseDetector). */
+  narrativeMode?: NarrativeMode
+  /** 2026-05-30 — Target language for action-verb whitelist in DR close. */
+  targetLanguage?: 'vi' | 'ms' | 'en'
+}
+
 export function runValidators(
   parsed: ParsedPack,
-  niche?: NicheKey,
-  /** SPEC-FIX (2026-05-27) — synthesis-derived product-specific symptoms.
-   *  When provided, phaseOneSpecificityDetector hard-checks that Phase 1-2
-   *  sections anchor to these terms (no abstract emotional drift). */
-  readerSpecificSymptoms?: string[],
+  optionsOrLegacyNiche?: RunValidatorsOptions | NicheKey,
+  /** Legacy 3rd arg — old callers passed readerSpecificSymptoms directly. */
+  legacyReaderSymptoms?: string[],
 ): AggregatedValidation {
+  // Backwards compatibility: previous signature was
+  // `runValidators(parsed, niche?, readerSpecificSymptoms?)`. Detect that
+  // calling pattern and fold it into the new options bag.
+  const options: RunValidatorsOptions =
+    optionsOrLegacyNiche === undefined
+      ? {}
+      : typeof optionsOrLegacyNiche === 'object'
+        ? optionsOrLegacyNiche
+        : { niche: optionsOrLegacyNiche, readerSpecificSymptoms: legacyReaderSymptoms }
+
+  const niche = options.niche
+  const readerSpecificSymptoms = options.readerSpecificSymptoms
   const byValidator: Record<ValidatorName, ValidatorResult> = {
     bioIntro:                bioIntroDetector(parsed.sections[0]),
     adjacentRhythm:          adjacentRhythmDetector(parsed.sections),
@@ -123,6 +159,17 @@ export function runValidators(
       ? emotionalFlatteningDetector(parsed.sections, niche)
       : { pass: true, violations: [] },
     aggressiveSales:         aggressiveSalesDetector(parsed.sections),
+    // 2026-05-30 — new hard validators
+    fakeCert: fakeCertDetector(parsed.sections, {
+      userProvidedCertProof: options.userProvidedCertProof,
+    }),
+    fabricationStats: fabricationStatsDetector(parsed.sections, {
+      inputHaystack: options.inputHaystack,
+    }),
+    drClose: drCloseDetector(parsed.sections, {
+      narrativeMode: options.narrativeMode,
+      targetLanguage: options.targetLanguage,
+    }),
   }
 
   const violations: AggregatedValidation['violations'] = []

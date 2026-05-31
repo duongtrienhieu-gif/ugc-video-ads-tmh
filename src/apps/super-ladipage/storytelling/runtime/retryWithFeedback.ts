@@ -368,7 +368,31 @@ async function generateMainPackOnly(args: RunArgs): Promise<GeneratedPackResult>
     recoveredMissingIds = result.recoveredMissingIds
   }
 
-  const initialValidation = runValidators(pack, args.input.niche, args.synthesizedReaderSymptoms)
+  // 2026-05-30 — Build the validator options bag with the new fields
+  // (inputHaystack for fabricationStats cross-check, narrativeMode for
+  // drClose enforcement, targetLanguage for action-verb whitelist).
+  // The args don't carry productInfo directly; synthesizedReaderSymptoms +
+  // synthesisBriefObj are not full product fields, so we approximate the
+  // input haystack from the brief essence + USP. False negatives (stat in
+  // product input but not in brief) just mean fabricationStats may flag
+  // a legitimate stat — surface-area is small and a retry will produce
+  // similar text without the stat (acceptable trade-off).
+  const validatorOpts = {
+    niche: args.input.niche,
+    readerSpecificSymptoms: args.synthesizedReaderSymptoms,
+    inputHaystack: [
+      args.productBrief,
+      args.synthesizedBrief ?? '',
+      args.synthesisBriefObj?.productEssence ?? '',
+      (args.synthesisBriefObj?.realisticFailedAttempts ?? []).join(' '),
+    ].filter(Boolean).join(' ').toLowerCase(),
+    narrativeMode: args.narrativeMode,
+    targetLanguage: args.input.targetLanguage,
+    // No cert-proof concept in pack-gen pipeline yet; default false (strict).
+    userProvidedCertProof: false,
+  } as const
+
+  const initialValidation = runValidators(pack, validatorOpts)
   logValidationResult(initialValidation)
 
   // Sprint 7 — if recovery filled empty placeholders, treat them as failing
@@ -418,7 +442,10 @@ async function generateMainPackOnly(args: RunArgs): Promise<GeneratedPackResult>
     )
   }
 
-  const secondValidation = runValidators(pack2, args.input.niche, args.synthesizedReaderSymptoms)
+  // Reuse the same validator options bag from initial validation —
+  // niche + brainstorm + narrativeMode + targetLanguage haven't changed
+  // between attempts. inputHaystack is identical (same product input).
+  const secondValidation = runValidators(pack2, validatorOpts)
   logValidationResult(secondValidation)
 
   if (secondValidation.pass && recoveredMissingIds2.length === 0) {

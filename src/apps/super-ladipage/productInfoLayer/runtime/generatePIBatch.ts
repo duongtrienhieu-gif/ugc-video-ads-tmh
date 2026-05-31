@@ -18,6 +18,7 @@ import { getDiaryVoiceSystemInstruction } from '../config/diaryVoiceLock'
 import { NICHE_MECHANISM_VOCAB } from '../../storytelling/config/nicheMechanismVocab'
 import { NICHE_OBJECTIONS } from '../../proof/config/objectionPatterns'
 import { PROOF_TEXTURE_PROFILES } from '../../proof/config/proofTextureProfiles'
+import { findBannedPhrasesInTexts } from '../../storytelling/validators/bannedPhraseDetector'
 import type {
   PISectionType,
   PIBlock,
@@ -510,6 +511,38 @@ JSON only.`
         const sanitizedCallout = typeof entry.subtleCallout === 'string' && entry.subtleCallout.length > 0
           ? sanitizeBracketPlaceholders(entry.subtleCallout.slice(0, 140), plan.type)
           : undefined
+
+        // 2026-05-30 — Banned phrase scan on PI block heading + paragraphs
+        // + subtleCallout. Storytelling main blocks already go through
+        // bannedPhraseDetector via runValidators; PI blocks were silent
+        // and were the source of "Hiểu Rõ Nguyên Nhân Gây Ra Vấn Đề Răng
+        // Miệng" + "chăm sóc từ gốc rễ vấn đề" leaks the user reported
+        // across 10/10 test packs. When ANY banned phrase is found in
+        // this PI block's output, fall back to the language-aware
+        // template instead of shipping the polluted Gemini output.
+        // Trade-off: lose Gemini quality for this one block, gain
+        // compliance with the GLOBAL_BANS guard the rest of the pipeline
+        // already enforces.
+        const bannedHits = findBannedPhrasesInTexts([
+          sanitizedHeading,
+          ...validParas,
+          sanitizedCallout,
+        ])
+        if (bannedHits.length > 0) {
+          const hitSummary = bannedHits
+            .slice(0, 3)
+            .map((h) => `"${h.phrase}"`)
+            .join(', ')
+          console.warn(
+            `[PI/batch] ${plan.type}: banned phrase detected (${bannedHits.length} hit${
+              bannedHits.length === 1 ? '' : 's'
+            }: ${hitSummary}); falling back to template instead of shipping polluted Gemini output.`,
+          )
+          blocks.push(fallbackBlock(plan, input))
+          fallbackUsedCount++
+          continue
+        }
+
         blocks.push({
           id: `pi-${plan.type}`,
           type: plan.type,
