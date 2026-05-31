@@ -30,7 +30,7 @@ export type V3Phase =
   | 'export'          // download MP4
 
 export const V3_PHASE_LABEL_VI: Record<V3Phase, string> = {
-  'input':          'Chọn input',
+  'input':          'Input + Script',
   'script-voice':   'Script + Voice',
   'creator-video':  'Video creator chính',
   'action-inserts': 'Action inserts',
