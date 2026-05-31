@@ -23,8 +23,8 @@ import { useSettingsStore } from '../../../../stores/settingsStore'
 import { useAssetUrl } from '../../../../hooks/useAssetUrl'
 import { useAdsVideoStore } from '../stores/adsVideoStore'
 import {
-  CREATOR_VIDEO_STAGE_LABEL_VI, COST_MODE_CONFIG,
-  V3_CREDIT_COST, formatCredits,
+  CREATOR_VIDEO_STAGE_LABEL_VI,
+  V3_CREDIT_COST, formatCredits, estimateLipsyncCredits,
   type CreatorSettingId, type CreatorEnergyLevel, type CreatorPresetId,
   type CreatorVideoStage,
 } from '../types'
@@ -37,7 +37,7 @@ import {
 import {
   CREATOR_PRESETS, CREATOR_PRESET_ORDER,
 } from '../services/creatorPresets'
-import { renderCreatorVideo } from '../services/creatorVideoEngine'
+import { renderCreatorVideo, resumeCreatorVideoLipsync } from '../services/creatorVideoEngine'
 
 const TONE_BG: Record<string, string> = {
   emerald: 'bg-emerald-100 text-emerald-800 border-emerald-300',
@@ -50,8 +50,10 @@ const TONE_BG: Record<string, string> = {
 
 // ── Stage progress strip ───────────────────────────────────────────────────
 
+// Z38 — 'preview_motion' removed from the visible pipeline (it was a
+// duplicate full-length render that double-charged). One Kling pass now.
 const STAGE_ORDER: CreatorVideoStage[] = [
-  'tts', 'keyframe', 'preview_motion', 'lipsync_full', 'completed',
+  'tts', 'keyframe', 'lipsync_full', 'completed',
 ]
 
 const STAGE_ICON: Record<CreatorVideoStage, React.ElementType> = {
@@ -213,7 +215,6 @@ export default function CreatorVideoPhase({ onContinue }: Props) {
   const applyCreatorPreset      = useAdsVideoStore((s) => s.applyCreatorPreset)
   const setCreatorVideo         = useAdsVideoStore((s) => s.setCreatorVideo)
   const patchCreatorVideo       = useAdsVideoStore((s) => s.patchCreatorVideo)
-  const setSkipPreviewOverride  = useAdsVideoStore((s) => s.setSkipPreviewOverride)
 
   const kieApiKey       = useSettingsStore((s) => s.kieApiKey)
   const elevenLabsKey   = useSettingsStore((s) => s.elevenLabsApiKey)
@@ -223,15 +224,14 @@ export default function CreatorVideoPhase({ onContinue }: Props) {
   const clip   = state.creatorVideo
   const brain  = state.scriptBrain
 
-  const costModeCfg = COST_MODE_CONFIG[state.costMode]
-  const skipPreview = state.skipPreviewOverride ?? costModeCfg.skipPreviewDefault
-
-  // Cost of THIS render = TTS + keyframe + full lipsync (+ optional 1s preview).
+  // Z38 — cost of THIS render = TTS + keyframe + ONE Kling lipsync (no more
+  // duplicate preview render). Lipsync scales with the real script duration
+  // (Kling avatar is billed ~per second), so the chip reflects actual KIE cost.
+  const lipsyncCredits = estimateLipsyncCredits(brain.script?.totalDurationSec ?? 30)
   const stepCredits =
     V3_CREDIT_COST.tts +
     V3_CREDIT_COST.keyframe +
-    V3_CREDIT_COST.lipsync +
-    (skipPreview ? 0 : V3_CREDIT_COST.previewMotion)
+    lipsyncCredits
 
   // Auto-suggest energy based on selected ad angle (but only if user hasn't
   // already changed energy from the default).
@@ -276,7 +276,6 @@ export default function CreatorVideoPhase({ onContinue }: Props) {
         voiceId: state.inputs.voiceId,
         avatar: state.inputs.avatar,
         product: state.inputs.product,
-        skipPreview,
         onStageUpdate: (update) => {
           patchCreatorVideo({
             stage: update.stage,
@@ -285,7 +284,6 @@ export default function CreatorVideoPhase({ onContinue }: Props) {
             ...(update.voiceId !== undefined           && { voiceId: update.voiceId }),
             ...(update.keyframeRef !== undefined       && { keyframeRef: update.keyframeRef }),
             ...(update.keyframePromptUsed !== undefined && { keyframePromptUsed: update.keyframePromptUsed }),
-            ...(update.previewVideoRef !== undefined   && { previewVideoRef: update.previewVideoRef }),
             ...(update.fullLipsyncTaskId !== undefined && { fullLipsyncTaskId: update.fullLipsyncTaskId }),
             ...(update.videoRef !== undefined          && { videoRef: update.videoRef }),
             ...(update.error !== undefined             && { error: update.error }),
@@ -308,6 +306,45 @@ export default function CreatorVideoPhase({ onContinue }: Props) {
         finishedAt: Date.now(),
       })
       addToast(`Render creator video lỗi: ${msg}`, 'error')
+    }
+  }
+
+  // Z38 — RESUME a render that timed out. The Kling job was already submitted
+  // and PAID FOR; its taskId is saved. This re-polls that same job — it does
+  // NOT submit a new one, so it costs ZERO extra credit. Shown when a render
+  // failed/timed-out but we still hold the taskId and have no final video.
+  const canResume = !!clip?.fullLipsyncTaskId && !clip?.videoRef &&
+    (clip?.stage === 'failed' || clip?.stage === 'lipsync_full')
+
+  const handleResume = async () => {
+    if (!kieApiKey) { addToast('Thiếu KIE API key trong Settings', 'error'); return }
+    const taskId = clip?.fullLipsyncTaskId
+    if (!taskId) { addToast('Không tìm thấy job để khôi phục', 'error'); return }
+
+    patchCreatorVideo({ stage: 'lipsync_full', status: 'rendering', error: undefined })
+    try {
+      const { videoRef } = await resumeCreatorVideoLipsync({
+        kieApiKey,
+        taskId,
+        onStageUpdate: (update) => {
+          patchCreatorVideo({
+            stage: update.stage,
+            ...(update.fullLipsyncTaskId !== undefined && { fullLipsyncTaskId: update.fullLipsyncTaskId }),
+            ...(update.videoRef !== undefined          && { videoRef: update.videoRef }),
+          })
+        },
+      })
+      patchCreatorVideo({
+        stage: 'completed',
+        status: 'completed',
+        videoRef,
+        finishedAt: Date.now(),
+      })
+      addToast('✓ Đã khôi phục video từ job đã trả tiền — không tốn thêm credit!', 'success')
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      patchCreatorVideo({ stage: 'failed', status: 'failed', error: msg.slice(0, 240) })
+      addToast(`Khôi phục lỗi: ${msg}. Job có thể đã hết hạn trên KIE.`, 'error')
     }
   }
 
@@ -427,31 +464,36 @@ export default function CreatorVideoPhase({ onContinue }: Props) {
               {clip?.stage === 'completed' ? 'Đã có creator video — render lại nếu cần' : 'Render creator video'}
             </p>
             <p className="text-[11px] text-gray-500">
-              {config.resolution} · ~{brain.script?.totalDurationSec.toFixed(0) ?? '—'}s · TTS → keyframe → {skipPreview ? '' : 'preview → '}lipsync · bước này {formatCredits(stepCredits)}
+              {config.resolution} · ~{brain.script?.totalDurationSec.toFixed(0) ?? '—'}s · TTS → keyframe → lipsync · bước này {formatCredits(stepCredits)}
             </p>
-            <label className="mt-1 flex cursor-pointer items-center gap-1.5 text-[11px] text-gray-600">
-              <input
-                type="checkbox"
-                checked={skipPreview}
-                onChange={(e) => setSkipPreviewOverride(e.target.checked)}
-                className="h-3 w-3 accent-violet-600"
-              />
-              Bỏ qua preview 1s (nhanh + rẻ hơn, bỏ bước kiểm tra motion)
-            </label>
+            <p className="mt-1 text-[10px] text-gray-400">
+              Ước tính theo độ dài kịch bản (Kling tính tiền theo giây). Chỉ render 1 lần — nếu timeout, bấm “Khôi phục” để lấy lại video đã trả tiền, không tốn thêm credit.
+            </p>
           </div>
-          <button
-            onClick={handleRender}
-            disabled={isRendering || !brain.script}
-            className="flex items-center gap-2 rounded-full bg-gradient-to-r from-violet-600 to-pink-600 px-5 py-2 text-sm font-bold text-white shadow-md transition-all hover:from-violet-700 hover:to-pink-700 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {isRendering ? (
-              <><Loader2 className="h-4 w-4 animate-spin" /> Đang render...</>
-            ) : clip?.stage === 'completed' ? (
-              <><RotateCcw className="h-4 w-4" /> Render lại · {formatCredits(stepCredits)}</>
-            ) : (
-              <><Sparkles className="h-4 w-4" /> Tạo creator video · {formatCredits(stepCredits)}</>
+          <div className="flex shrink-0 flex-col items-end gap-1.5">
+            <button
+              onClick={handleRender}
+              disabled={isRendering || !brain.script}
+              className="flex items-center gap-2 rounded-full bg-gradient-to-r from-violet-600 to-pink-600 px-5 py-2 text-sm font-bold text-white shadow-md transition-all hover:from-violet-700 hover:to-pink-700 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {isRendering ? (
+                <><Loader2 className="h-4 w-4 animate-spin" /> Đang render...</>
+              ) : clip?.stage === 'completed' ? (
+                <><RotateCcw className="h-4 w-4" /> Render lại · {formatCredits(stepCredits)}</>
+              ) : (
+                <><Sparkles className="h-4 w-4" /> Tạo creator video · {formatCredits(stepCredits)}</>
+              )}
+            </button>
+            {canResume && !isRendering && (
+              <button
+                onClick={handleResume}
+                className="flex items-center gap-1.5 rounded-full border border-emerald-300 bg-emerald-50 px-4 py-1.5 text-[12px] font-bold text-emerald-700 transition-colors hover:bg-emerald-100"
+                title="Job đã được tính tiền — lấy lại video mà không tốn thêm credit"
+              >
+                <RotateCcw className="h-3.5 w-3.5" /> Khôi phục video (0 credit)
+              </button>
             )}
-          </button>
+          </div>
         </div>
 
         {/* ── Stage progress strip ────────────────────────────────────────── */}
@@ -462,15 +504,12 @@ export default function CreatorVideoPhase({ onContinue }: Props) {
         )}
 
         {/* ── Output tiles ────────────────────────────────────────────────── */}
-        {clip && (clip.keyframeRef || clip.previewVideoRef || clip.videoRef) && (
+        {clip && (clip.keyframeRef || clip.videoRef) && (
           <div className="mt-4">
             <h3 className="mb-2 text-[10px] font-bold uppercase tracking-widest text-gray-500">Output</h3>
             <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
               {clip.keyframeRef && (
                 <ImageTile assetRef={clip.keyframeRef} label="Keyframe (still)" />
-              )}
-              {clip.previewVideoRef && (
-                <VideoTile assetRef={clip.previewVideoRef} label="Preview motion" badge="PREVIEW" />
               )}
               {clip.videoRef && (
                 <VideoTile assetRef={clip.videoRef} label="Full lipsync video" badge="✓ FINAL" />

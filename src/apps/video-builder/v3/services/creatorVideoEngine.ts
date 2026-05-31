@@ -72,7 +72,9 @@ export interface RenderCreatorVideoParams {
   avatar: Model
   /** Product (optional — shown in frame only if config.setting is product_demo) */
   product: Product | null
-  /** Skip the cheap preview-motion test (Stage 3). Default false. */
+  /** @deprecated Z38 — the preview stage was removed (it was a duplicate
+   *  full-length render that double-charged). Kept for call-site back-compat;
+   *  the engine ignores it. */
   skipPreview?: boolean
   /** Per-stage status callback. Engine calls this BEFORE each stage starts. */
   onStageUpdate: (update: StageUpdate) => void
@@ -86,7 +88,6 @@ export interface RenderCreatorVideoResult {
   voiceId: string
   keyframeRef: string
   keyframePromptUsed: string
-  previewVideoRef?: string
   videoRef: string
   fullLipsyncTaskId: string
 }
@@ -192,69 +193,19 @@ export async function renderCreatorVideo(
 
   if (params.signal?.aborted) throw new Error('CANCELLED — user huỷ')
 
-  // ── STAGE 3: Preview motion (optional, default ON) ─────────────────────
-  let previewVideoRef: string | undefined
-  if (!params.skipPreview) {
-    params.onStageUpdate({
-      stage: 'preview_motion',
-      voiceRef, voiceDurationSec, voiceId,
-      keyframeRef, keyframePromptUsed,
-    })
-
-    try {
-      const keyframePublicUrl = await getUrl(keyframeRef)
-      const audioPublicUrl    = await getUrl(voiceRef)
-      if (!keyframePublicUrl || !audioPublicUrl) {
-        throw new Error('Không lấy được URL công khai cho keyframe hoặc audio (asset store fail)')
-      }
-
-      // Use first ~2s of audio as the preview source. We pass the FULL
-      // audio URL — Kling Avatar will sync the visible motion length to
-      // however long the lipsync runs. For the preview, we want minimal
-      // duration; in v1 of this engine we don't trim audio (Kling Avatar
-      // doesn't expose a duration cap on its preview submission), so we
-      // accept that the "preview" is technically the full lipsync but
-      // shorter resolution. Real trim happens in v2.
-      const previewLipsync = await generateLipSync({
-        apiKey: params.kieApiKey,
-        modelId: 'kling/ai-avatar-standard',
-        imageUrl: keyframePublicUrl,
-        audioUrl: audioPublicUrl,
-        prompt: buildLipsyncPrompt({ config: params.config }),
-      })
-      const previewRemoteUrl = await pollLipSyncUntilDone({
-        apiKey: params.kieApiKey,
-        taskId: previewLipsync.taskId,
-        timeoutMs: 6 * 60 * 1000,
-      })
-      const previewBlob = await fetch(previewRemoteUrl).then((r) => r.blob())
-      previewVideoRef = await saveAsset(previewBlob, previewBlob.type || 'video/mp4')
-      params.onStageUpdate({
-        stage: 'preview_motion',
-        voiceRef, voiceDurationSec, voiceId,
-        keyframeRef, keyframePromptUsed,
-        previewVideoRef,
-      })
-    } catch (err) {
-      // Preview is OPTIONAL — log + continue to full render. We do NOT
-      // fail the whole job just because the cheap preview hit a snag.
-      const msg = err instanceof Error ? err.message : String(err)
-      console.warn(`[CREATOR_VIDEO Stage 3] preview skipped: ${msg.slice(0, 200)}`)
-    }
-  }
-
-  if (params.signal?.aborted) throw new Error('CANCELLED — user huỷ')
-
-  // ── STAGE 4: Full lipsync render ───────────────────────────────────────
-  // If we already rendered the preview AT THE SAME RESOLUTION as the full
-  // render, we technically already have the full video — re-use it.
-  // But for clarity we always do a fresh full-render submission; future
-  // optimisation can short-circuit when preview output is identical.
+  // ── STAGE: Lipsync render — SINGLE Kling pass ──────────────────────────
+  // Z38 — there used to be a separate "preview" Kling render before this one
+  // that submitted the SAME model + SAME full audio (kling/ai-avatar-standard
+  // with the whole TTS track). It was NOT a cheap 1-2s test — it was a second,
+  // identical, full-length lipsync. So every render quietly paid Kling TWICE.
+  // A real ~81s render is ~730 KIE credits, so "preview + full" burned ~1.4k
+  // for one video. The preview stage is DELETED. We submit ONE job, persist
+  // its taskId BEFORE polling so a timeout/refresh can RESUME the already-paid
+  // job (resumeCreatorVideoLipsync) instead of re-submitting and charging again.
   params.onStageUpdate({
     stage: 'lipsync_full',
     voiceRef, voiceDurationSec, voiceId,
     keyframeRef, keyframePromptUsed,
-    previewVideoRef,
   })
 
   const keyframePublicUrl = await getUrl(keyframeRef)
@@ -270,27 +221,25 @@ export async function renderCreatorVideo(
     audioUrl: audioPublicUrl,
     prompt: buildLipsyncPrompt({ config: params.config }),
   })
+  // Persist taskId IMMEDIATELY — the job is now paid for. If polling below
+  // times out, this handle lets the user re-poll without paying again.
   params.onStageUpdate({
     stage: 'lipsync_full',
     voiceRef, voiceDurationSec, voiceId,
     keyframeRef, keyframePromptUsed,
-    previewVideoRef,
     fullLipsyncTaskId: fullLipsync.taskId,
   })
 
-  const fullRemoteUrl = await pollLipSyncUntilDone({
+  const videoRef = await pollAndSaveLipsync({
     apiKey: params.kieApiKey,
     taskId: fullLipsync.taskId,
-    timeoutMs: 10 * 60 * 1000,  // 10min ceiling for full lipsync
+    timeoutMs: 15 * 60 * 1000,  // 15min ceiling — 60-90s avatar renders are slow
   })
-  const fullBlob = await fetch(fullRemoteUrl).then((r) => r.blob())
-  const videoRef = await saveAsset(fullBlob, fullBlob.type || 'video/mp4')
 
   params.onStageUpdate({
     stage: 'completed',
     voiceRef, voiceDurationSec, voiceId,
     keyframeRef, keyframePromptUsed,
-    previewVideoRef,
     fullLipsyncTaskId: fullLipsync.taskId,
     videoRef,
   })
@@ -301,10 +250,57 @@ export async function renderCreatorVideo(
     voiceId,
     keyframeRef,
     keyframePromptUsed,
-    previewVideoRef,
     videoRef,
     fullLipsyncTaskId: fullLipsync.taskId,
   }
+}
+
+// ── Resume a paid-but-unfinished lipsync job ────────────────────────────────
+// Z38 — when the poll above times out (or the user refreshed mid-render), the
+// Kling job is STILL running on KIE's side and was already charged. We persist
+// its taskId, so this re-polls the SAME job and saves the result. It NEVER
+// submits a new job → it does NOT spend any more credit.
+
+export interface ResumeLipsyncParams {
+  kieApiKey: string
+  /** The fullLipsyncTaskId persisted from a prior (timed-out) render. */
+  taskId: string
+  onStageUpdate: (update: StageUpdate) => void
+  /** Max wait before giving up again. Default 15min. */
+  timeoutMs?: number
+  signal?: AbortSignal
+}
+
+export async function resumeCreatorVideoLipsync(
+  params: ResumeLipsyncParams,
+): Promise<{ videoRef: string }> {
+  if (params.signal?.aborted) throw new Error('CANCELLED — user huỷ')
+  console.log(`[CREATOR_VIDEO resume] re-polling paid task ${params.taskId} (no new charge)`)
+  params.onStageUpdate({ stage: 'lipsync_full', fullLipsyncTaskId: params.taskId })
+
+  const videoRef = await pollAndSaveLipsync({
+    apiKey: params.kieApiKey,
+    taskId: params.taskId,
+    timeoutMs: params.timeoutMs ?? 15 * 60 * 1000,
+  })
+
+  params.onStageUpdate({ stage: 'completed', fullLipsyncTaskId: params.taskId, videoRef })
+  return { videoRef }
+}
+
+/** Poll a Kling lipsync task to completion, then download + persist the MP4. */
+async function pollAndSaveLipsync(args: {
+  apiKey: string
+  taskId: string
+  timeoutMs: number
+}): Promise<string> {
+  const remoteUrl = await pollLipSyncUntilDone({
+    apiKey: args.apiKey,
+    taskId: args.taskId,
+    timeoutMs: args.timeoutMs,
+  })
+  const blob = await fetch(remoteUrl).then((r) => r.blob())
+  return saveAsset(blob, blob.type || 'video/mp4')
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────
