@@ -354,13 +354,31 @@ function buildCharacterProfile(p: ProtagonistProfile, blockIds: BlockId[]): Char
   }
 }
 
-/** Allocate overlay per block. Chapter-marker on Phase-1 first block only.
- *  Chunk E (visual rebuild) will expand to phase-aware overlay budget. */
+/** Allocate overlay per block.
+ *
+ *  2026-05-30 — Universal caption rollout. User feedback: pack reads as
+ *  wall-of-text without visual chapter markers; readers want a short
+ *  scan-friendly label on every image. Previous design hard-capped
+ *  overlays at 2/pack as an anti-ads guard, but the "photobook-caption"
+ *  overlay style is documentary not advertising (Humans of New York /
+ *  family album), so it reinforces the diary aesthetic rather than
+ *  cheapening it.
+ *
+ *  New rule:
+ *  - First block keeps `chapter-marker` ("Chương 1") — anchors the page
+ *    opening as Phase-1 of a story arc, not just a random first image.
+ *  - `micro-transformation` keeps `diary-timestamp` ("Vài tuần sau") —
+ *    time-shift signal for the recognition payoff.
+ *  - Every OTHER block gets `photobook-caption` — section title rendered
+ *    as a soft caption beneath/over the image. UI suppresses it when the
+ *    composed section has no image (PI blocks / no-image roles), so the
+ *    actual overlay count matches the image count, ~7/pack.
+ *  - Universal across all 22 niches + 3 languages — no hardcoding. */
 function allocateOverlay(blockIds: BlockId[]): (AllowedOverlayType | null)[] {
   return blockIds.map((id, idx) => {
     if (idx === 0 && id === 'self-recognition-hook') return 'chapter-marker'
     if (id === 'micro-transformation') return 'diary-timestamp'
-    return null
+    return 'photobook-caption'
   })
 }
 

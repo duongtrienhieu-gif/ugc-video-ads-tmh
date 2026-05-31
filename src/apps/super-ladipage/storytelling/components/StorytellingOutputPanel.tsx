@@ -1226,9 +1226,13 @@ function ImagePlaceholder({
                 {isGenerating ? 'Đang tạo...' : 'Tạo lại'}
               </button>
             )}
-            {/* Overlay caption — bottom-left */}
+            {/* Overlay caption — bottom-left documentary photo-essay style.
+                2026-05-30: enlarged 11px → 13.5px + bumped padding so the
+                title is readable while scanning the page; bg opacity raised
+                from 0.85 to 0.92 for stronger contrast against varied photo
+                backgrounds; max-w 70%→80% so most titles fit one line. */}
             {overlayText && (
-              <span className="absolute bottom-3 left-3 max-w-[70%] rounded-sm bg-stone-50/85 backdrop-blur-sm px-2 py-0.5 font-serif italic text-[11px] text-stone-700">
+              <span className="absolute bottom-3 left-3 max-w-[80%] rounded-sm bg-stone-50/92 backdrop-blur-sm px-2.5 py-1 font-serif italic text-[13.5px] leading-snug text-stone-800 shadow-sm line-clamp-2">
                 {overlayText}
               </span>
             )}
@@ -1272,7 +1276,7 @@ function ImagePlaceholder({
               </p>
             )}
             {overlayText && (
-              <span className="absolute bottom-3 left-3 max-w-[70%] rounded-sm bg-stone-50/85 backdrop-blur-sm px-2 py-0.5 font-serif italic text-[11px] text-stone-700">
+              <span className="absolute bottom-3 left-3 max-w-[80%] rounded-sm bg-stone-50/92 backdrop-blur-sm px-2.5 py-1 font-serif italic text-[13.5px] leading-snug text-stone-800 shadow-sm line-clamp-2">
                 {overlayText}
               </span>
             )}
@@ -1303,9 +1307,13 @@ function renderOverlayText(
       // Time-marker dùng section title (mock đã chứa "Ba tuần sau" / "Bây giờ"...)
       return sectionTitle
     case 'photobook-caption':
-      return characterName
-        ? `${characterName}, ${sectionTitle.toLowerCase()}.`
-        : sectionTitle
+      // 2026-05-30 — Use the section title verbatim. The previous
+      // "characterName, title.toLowerCase()." compose pattern produced
+      // awkward results like "Nhân vật chính, sakit lutut menghalang." —
+      // wrong-case for MS/EN packs and added redundant author info that
+      // belongs in the chapter byline, not the image caption. Title
+      // alone reads as a documentary photo-essay label.
+      return sectionTitle
     case 'film-subtitle':
       return `"${sectionTitle}"`
     default:
