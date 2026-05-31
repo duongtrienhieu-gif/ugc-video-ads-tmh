@@ -14,8 +14,9 @@
 
 import { directGeminiText } from '../../../../utils/gemini'
 import type {
-  GeneratedScript, CtaVariation, CtaVariantStyle,
+  GeneratedScript, CtaVariation, CtaVariantStyle, ScriptLang,
 } from '../types'
+import { SCRIPT_LANG_GEMINI_NAME, DEFAULT_SCRIPT_LANG } from '../types'
 import { estimateReadDurationSec } from './voiceTimingEstimator'
 
 const CTA_STYLES: CtaVariantStyle[] = [
@@ -36,18 +37,15 @@ export interface GenerateCtaVariationsParams {
   productName: string
   /** Optional creator vibe — keeps voice consistent with the rest of the ad */
   creatorDescription?: string
-  /** Auto-detect language from script. Override if needed. */
-  vietnamese?: boolean
+  /** Output language of the locked script — CTAs MUST be written 100% in this
+   *  language (no cross-language leakage). Defaults to the app default lang. */
+  outputLang?: ScriptLang
 }
 
 export async function generateCtaVariations(
   params: GenerateCtaVariationsParams,
 ): Promise<CtaVariation[]> {
-  const sample = params.script.blocks.map((b) => b.text).join(' ')
-  const isVietnamese =
-    params.vietnamese ??
-    /[ăâđêôơưĂÂĐÊÔƠƯáàảãạắằẳẵặ]/.test(sample + params.productName)
-  const lang = isVietnamese ? 'Vietnamese' : 'English'
+  const lang = SCRIPT_LANG_GEMINI_NAME[params.outputLang ?? DEFAULT_SCRIPT_LANG]
 
   const systemInstruction =
     `You are a TikTok-native ad copywriter generating CTA ALTERNATIVES in ${lang}.\n\n` +
@@ -58,7 +56,10 @@ export async function generateCtaVariations(
     `\n\nRules:\n` +
     `- Write spoken language, NOT marketing copy.\n` +
     `- NO corporate phrases ("learn more", "find out", "click below").\n` +
-    `- ${lang === 'Vietnamese' ? 'Vietnamese casual register — "mình", "thử đi", "link dưới"' : 'Casual TikTok register — "trust me", "link below", "this changed mine"'}.\n` +
+    `- Write in the casual, everyday spoken register of ${lang}, using the natural ` +
+    `filler words and closing phrases (the equivalent of "trust me", "link below", ` +
+    `"this changed mine") native to ${lang}. Write 100% in ${lang} only — do NOT ` +
+    `borrow words or phrasing from any other language.\n` +
     `- Each variant should FEEL different — don't produce 5 close paraphrases.\n` +
     `- Reference the product naturally (or just imply it).\n\n` +
     `OUTPUT FORMAT — strict JSON, no markdown:\n` +

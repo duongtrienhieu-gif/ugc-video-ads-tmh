@@ -26,10 +26,7 @@ export type V3Phase =
   | 'script-voice'    // Z31 — Ad Brain: structure + angle + script + voice timing
   | 'creator-video'   // generate the main lip-synced avatar shot
   | 'action-inserts'  // pick + render 3-8 action preset clips
-  | 'preview'         // play through all clips in sequence
-  | 'approve'         // per-clip approve / reject / lock
-  | 'final-render'    // upgrade approved clips to FINAL_1080
-  | 'auto-edit'       // ffmpeg concat + transitions + subtitles + audio
+  | 'auto-edit'       // ffmpeg concat + transitions + subtitles + audio (clip approval gate lives here)
   | 'export'          // download MP4
 
 export const V3_PHASE_LABEL_VI: Record<V3Phase, string> = {
@@ -37,9 +34,6 @@ export const V3_PHASE_LABEL_VI: Record<V3Phase, string> = {
   'script-voice':   'Script + Voice',
   'creator-video':  'Video creator chính',
   'action-inserts': 'Action inserts',
-  'preview':        'Preview',
-  'approve':        'Duyệt / Loại',
-  'final-render':   'Render bản cuối',
   'auto-edit':      'Auto edit',
   'export':         'Export MP4',
 }
@@ -111,6 +105,10 @@ export interface CostModeConfig {
   resolution: '480p' | '720p' | '1080p'
   /** Estimated total cost for the WHOLE project at this mode (USD) */
   estimatedUsd: { min: number; max: number }
+  /** Default for the cheap 1s motion pre-flight. TEST skips it (the full
+   *  render is already 480p cheap, so the preview is redundant overhead);
+   *  STANDARD/FULL keep it (cheap insurance before an expensive HD render). */
+  skipPreviewDefault: boolean
   /** Tone for UI tint */
   tone: 'amber' | 'violet' | 'pink'
   /** Short tag rendered onto the chip */
@@ -126,6 +124,7 @@ export const COST_MODE_CONFIG: Record<CostMode, CostModeConfig> = {
     insertCount: { min: 2, max: 3 },
     resolution: '480p',
     estimatedUsd: { min: 1, max: 3 },
+    skipPreviewDefault: true,
     tone: 'amber',
     badge: '⚡ CHEAP · MẶC ĐỊNH',
   },
@@ -137,6 +136,7 @@ export const COST_MODE_CONFIG: Record<CostMode, CostModeConfig> = {
     insertCount: { min: 4, max: 5 },
     resolution: '720p',
     estimatedUsd: { min: 3, max: 5 },
+    skipPreviewDefault: false,
     tone: 'violet',
     badge: 'STANDARD',
   },
@@ -148,12 +148,45 @@ export const COST_MODE_CONFIG: Record<CostMode, CostModeConfig> = {
     insertCount: { min: 6, max: 8 },
     resolution: '1080p',
     estimatedUsd: { min: 6, max: 10 },
+    skipPreviewDefault: false,
     tone: 'pink',
     badge: 'PREMIUM',
   },
 }
 
-export const DEFAULT_COST_MODE: CostMode = 'TEST'
+// Z36 — the cost-mode picker was removed from the UI. The whole engine now
+// runs ONE fixed, balanced profile: 720p / 30s / up-to-5 inserts. STANDARD is
+// that profile. (TEST/FULL configs are kept so any old persisted state still
+// resolves, but nothing in the UI selects them anymore.)
+export const DEFAULT_COST_MODE: CostMode = 'STANDARD'
+
+// ── Per-step credit cost estimates (Z36) ─────────────────────────────────────
+// Single source of truth for the cost labels shown on every render / continue
+// button — the user must see what each step burns BEFORE committing credit.
+// These are ESTIMATES, anchored to the real provider prices we already know:
+//   • KIE gpt-4o-image still  ≈ 6 credits   (tiktok-shop listing: 73cr ≈ $0.37)
+//   • KIE Kling video 5s clip ≈ 70 credits  (v2 KLING_CREDIT_PER_CLIP)
+//   • credit → USD            ≈ $0.005      (73 credits ≈ $0.37)
+// Display-only: no billing or render logic reads these.
+export const CREDIT_USD = 0.005
+
+export const V3_CREDIT_COST = {
+  /** ElevenLabs TTS for a ~30s script */
+  tts: 5,
+  /** KIE gpt-4o-image keyframe still */
+  keyframe: 6,
+  /** Optional 1-2s Kling motion pre-flight */
+  previewMotion: 10,
+  /** KIE Kling Avatar Std full talking-head lipsync */
+  lipsync: 70,
+  /** One action insert = 1 keyframe (6) + 1 Kling 5s clip (70) */
+  insert: 76,
+} as const
+
+/** "~N credit (~$X.XX)" — the standard cost chip on action buttons. */
+export function formatCredits(credits: number): string {
+  return `~${credits} credit (~$${(credits * CREDIT_USD).toFixed(2)})`
+}
 
 // ── Action preset enum ──────────────────────────────────────────────────────
 // Z30/Z33 — the ONLY motion primitives the v3 engine emits. Every action
@@ -426,6 +459,9 @@ export interface V3PipelineState {
   mode: WorkflowMode
   /** Quality / cost preset */
   costMode: CostMode
+  /** Manual override for the 1s motion pre-flight. null = follow the cost
+   *  mode's skipPreviewDefault; true/false = explicit user choice. */
+  skipPreviewOverride: boolean | null
 
   /** Inputs picked by the user */
   inputs: {
@@ -465,6 +501,7 @@ export function createEmptyV3State(): V3PipelineState {
     phase: 'input',
     mode: DEFAULT_WORKFLOW_MODE,
     costMode: DEFAULT_COST_MODE,
+    skipPreviewOverride: null,
     inputs: {
       avatar: null,
       product: null,
@@ -527,6 +564,29 @@ export const DEFAULT_AD_ANGLE: AdAngle = 'native_tiktok'
 export type ScriptTargetDurationSec = 15 | 30 | 45 | 60
 
 export const DEFAULT_SCRIPT_DURATION_SEC: ScriptTargetDurationSec = 30
+
+// ── Output language (single language per generate) ─────────────────────────
+// The script + voice + insert keywords all lock to ONE language per
+// generation. Default = Bahasa Malaysia (primary market). Never let the
+// generator mix languages in a single output.
+
+export type ScriptLang = 'ms' | 'vi' | 'en'
+
+export const DEFAULT_SCRIPT_LANG: ScriptLang = 'ms'
+
+/** Full language name fed to Gemini ("write in ___"). */
+export const SCRIPT_LANG_GEMINI_NAME: Record<ScriptLang, string> = {
+  ms: 'Bahasa Malaysia',
+  vi: 'Vietnamese',
+  en: 'English',
+}
+
+/** Human label shown in the UI picker. */
+export const SCRIPT_LANG_LABEL_VI: Record<ScriptLang, string> = {
+  ms: 'Bahasa Malaysia',
+  vi: 'Tiếng Việt',
+  en: 'English',
+}
 
 // ── Voice categories (Z31 §7) ──────────────────────────────────────────────
 
@@ -635,6 +695,13 @@ export interface ScriptBrain {
   angle: AdAngle
   /** Target duration */
   targetDurationSec: ScriptTargetDurationSec
+  /** Output language — locks script + voice + insert keywords to ONE language. */
+  outputLang: ScriptLang
+  /** TRUE = use the user's own pasted script verbatim (Gemini only segments it
+   *  into the 5 roles, never rewrites). FALSE = Gemini writes from scratch. */
+  useOwnScript: boolean
+  /** Raw pasted script text (only meaningful when useOwnScript is TRUE). */
+  ownScriptText: string
   /** The last generated script (null until first generation) */
   script: GeneratedScript | null
   /** 3 hook variants Gemini produced */
@@ -658,6 +725,9 @@ export function createEmptyScriptBrain(): ScriptBrain {
     structure: DEFAULT_AD_STRUCTURE,
     angle: DEFAULT_AD_ANGLE,
     targetDurationSec: DEFAULT_SCRIPT_DURATION_SEC,
+    outputLang: DEFAULT_SCRIPT_LANG,
+    useOwnScript: false,
+    ownScriptText: '',
     script: null,
     hookVariants: [],
     pickedHookIdx: -1,

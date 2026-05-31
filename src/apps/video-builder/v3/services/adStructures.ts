@@ -84,17 +84,20 @@ export const AD_STRUCTURES: Record<AdStructure, AdStructureConfig> = {
 
   AUTHORITY_EXPERT: {
     id: 'AUTHORITY_EXPERT',
-    labelVi: 'Chuyên gia / Khoa học',
-    descriptionVi: 'Tone tự tin của người trong nghề — bác sĩ, dược sĩ, huấn luyện viên.',
-    emoji: '🩺',
+    labelVi: 'Chuyên gia / Người am hiểu',
+    descriptionVi: 'Tone tự tin của người am hiểu — chuyên gia, người dùng lâu năm, hoặc người trong ngành.',
+    emoji: '🎓',
     tone: 'sky',
     blockWeights: { hook: 0.10, pain: 0.20, discovery: 0.30, benefit: 0.25, cta: 0.15 },
     systemPrompt:
-      'Write a TikTok-native ad in AUTHORITY tone — first-person of someone with credible ' +
-      'expertise (doctor, pharmacist, trainer, dietitian). Use a small piece of specific ' +
-      'knowledge in the DISCOVERY block (a mechanism, a study finding, a clinical insight) ' +
-      'but keep language accessible. No jargon walls. Confidence without arrogance.',
-    bestFor: ['supplement', 'medical', 'fitness'],
+      "Write a TikTok-native ad in AUTHORITY tone — first-person of someone with credible, " +
+      "hands-on expertise in THIS product's field (e.g. a long-time user, a professional who " +
+      "works with it daily, an insider or maker). Use a small piece of specific insider " +
+      "knowledge in the DISCOVERY block (how it actually works, a little-known detail, a " +
+      "practical mechanism) but keep language accessible. No jargon walls. Confidence without " +
+      "arrogance. Do NOT claim medical, clinical or regulatory authority unless the product is " +
+      "genuinely medical and the user can back it up.",
+    bestFor: ['any niche', 'tech', 'services'],
   },
 
   PRODUCT_DEMO: {
@@ -135,11 +138,11 @@ export const AD_STRUCTURES: Record<AdStructure, AdStructureConfig> = {
     tone: 'rose',
     blockWeights: { hook: 0.25, pain: 0.30, discovery: 0.15, benefit: 0.15, cta: 0.15 },
     systemPrompt:
-      'Write a TikTok-native ad with a PAIN-POINT HOOK. The first line must call out a ' +
-      'very specific niche pain ("If you wake up at 3am with your heart racing...") that ' +
-      'feels like the algorithm read your mind. The PAIN block stays in that same niche. ' +
-      'Product enters late, almost reluctantly. CTA is short and direct.',
-    bestFor: ['niche health', 'anxiety', 'sleep'],
+      "Write a TikTok-native ad with a PAIN-POINT HOOK. The first line must call out a very " +
+      "specific pain in THIS product's niche — so precise it feels like the algorithm read the " +
+      "viewer's mind. The PAIN block stays in that same niche. Product enters late, almost " +
+      "reluctantly. CTA is short and direct.",
+    bestFor: ['any niche', 'problem-aware', 'COD'],
   },
 
   LISTICLE_TIPS: {

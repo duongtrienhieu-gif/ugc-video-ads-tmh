@@ -53,8 +53,10 @@ export interface ActionPresetConfig {
   /** Z33 §6 — explicit object-interaction rule. Reinforces the
    *  product-consistency lock (label / shape / scale preservation). */
   objectInteraction: string
-  /** Z33 §11 — script keywords (lowercased, English + Vietnamese)
-   *  that auto-suggest this preset when found in the script. */
+  /** Z33 §11 — script keywords (lowercased, English + Vietnamese + Bahasa
+   *  Malaysia) that auto-suggest this preset when found in the script. BM is
+   *  the default output language, so the offline (no-Gemini) keyword path must
+   *  carry BM terms or it returns empty suggestions for default scripts. */
   triggerKeywords: string[]
 }
 
@@ -92,6 +94,7 @@ export const ACTION_PRESETS: Record<ActionPresetId, ActionPresetConfig> = {
     objectInteraction: PRODUCT_LOCK,
     triggerKeywords: [
       'hold', 'holding', 'show', 'cầm', 'giữ', 'lấy ra', 'this is', 'this product', 'sản phẩm này',
+      'pegang', 'tunjuk', 'produk ini', 'produk ni',
     ],
   },
 
@@ -114,6 +117,7 @@ export const ACTION_PRESETS: Record<ActionPresetId, ActionPresetConfig> = {
     objectInteraction: PRODUCT_LOCK + ' Cap unscrews cleanly — no deformation of bottle neck.',
     triggerKeywords: [
       'open', 'opened', 'easy to open', 'unscrew', 'mở', 'mở ra', 'mở nắp', 'pop the cap', 'twist',
+      'buka', 'buka penutup', 'putar', 'pusing',
     ],
   },
 
@@ -136,6 +140,7 @@ export const ACTION_PRESETS: Record<ActionPresetId, ActionPresetConfig> = {
     objectInteraction: PRODUCT_LOCK + ' Finger does NOT cover the brand name. Label text fully readable.',
     triggerKeywords: [
       'look at', 'check', 'see this', 'label', 'ingredient', 'tag', 'nhìn', 'thành phần', 'nhãn', 'xem',
+      'tengok', 'lihat', 'bahan', 'kandungan',
     ],
   },
 
@@ -157,6 +162,7 @@ export const ACTION_PRESETS: Record<ActionPresetId, ActionPresetConfig> = {
     objectInteraction: PRODUCT_LOCK + ' Bottle / cup tilted only slightly — no extreme angles.',
     triggerKeywords: [
       'drink', 'sip', 'taste', 'tasty', 'uống', 'nếm', 'thử', 'ngon', 'thơm',
+      'minum', 'rasa', 'sedap',
     ],
   },
 
@@ -179,6 +185,7 @@ export const ACTION_PRESETS: Record<ActionPresetId, ActionPresetConfig> = {
     objectInteraction: PRODUCT_LOCK + ' Pill is a single visible tablet — same size + colour throughout.',
     triggerKeywords: [
       'pill', 'tablet', 'capsule', 'supplement', 'vitamin', 'viên', 'thuốc', 'uống thuốc',
+      'pil', 'kapsul', 'suplemen', 'ubat',
     ],
   },
 
@@ -201,6 +208,7 @@ export const ACTION_PRESETS: Record<ActionPresetId, ActionPresetConfig> = {
     objectInteraction: PRODUCT_LOCK + ' Outer box + inner product both intact, no crumpling.',
     triggerKeywords: [
       'unbox', 'unboxing', 'new', 'just arrived', 'received', 'opening', 'mở hộp', 'vừa nhận', 'mới',
+      'buka kotak', 'baru', 'baru sampai', 'baru terima',
     ],
   },
 
@@ -223,6 +231,7 @@ export const ACTION_PRESETS: Record<ActionPresetId, ActionPresetConfig> = {
     objectInteraction: 'Phone screen shows blurred social feed. No specific brand logos visible.',
     triggerKeywords: [
       'scroll', 'scrolling', 'tiktok', 'instagram', 'feed', 'phone', 'điện thoại', 'lướt', 'mạng xã hội',
+      'skrol', 'telefon', 'media sosial',
     ],
   },
 
@@ -245,6 +254,7 @@ export const ACTION_PRESETS: Record<ActionPresetId, ActionPresetConfig> = {
     objectInteraction: 'No product in frame — pure facial reaction shot.',
     triggerKeywords: [
       'before', 'after', 'changed', 'difference', 'now i feel', 'trước', 'sau', 'khác', 'khoẻ hơn', 'tỉnh hơn',
+      'sebelum', 'selepas', 'berubah', 'beza',
     ],
   },
 
@@ -269,6 +279,7 @@ export const ACTION_PRESETS: Record<ActionPresetId, ActionPresetConfig> = {
     objectInteraction: PRODUCT_LOCK + ' Macro detail — every label letter sharply readable.',
     triggerKeywords: [
       'this product', 'check it out', 'closer look', 'detail', 'gần hơn', 'chi tiết', 'cận cảnh', 'macro',
+      'lebih dekat', 'perincian', 'dekat sini',
     ],
   },
 
@@ -291,6 +302,7 @@ export const ACTION_PRESETS: Record<ActionPresetId, ActionPresetConfig> = {
     objectInteraction: PRODUCT_LOCK + ' All sides of packaging visible during rotation — no deformation.',
     triggerKeywords: [
       'package', 'packaging', 'box', 'design', 'bao bì', 'hộp', 'thiết kế', 'mặt sau',
+      'pakej', 'kotak', 'reka bentuk', 'pembungkusan',
     ],
   },
 
@@ -313,6 +325,7 @@ export const ACTION_PRESETS: Record<ActionPresetId, ActionPresetConfig> = {
     objectInteraction: PRODUCT_LOCK + ' Product upright on desk surface — not floating, not tilted.',
     triggerKeywords: [
       'desk', 'morning', 'routine', 'every day', 'bàn', 'sáng', 'thói quen', 'hằng ngày',
+      'meja', 'pagi', 'rutin', 'setiap hari',
     ],
   },
 
@@ -335,6 +348,7 @@ export const ACTION_PRESETS: Record<ActionPresetId, ActionPresetConfig> = {
     objectInteraction: PRODUCT_LOCK + ' Product emerges from bag without deformation or scale shift.',
     triggerKeywords: [
       'bring', 'carry', 'in my bag', 'always with me', 'trong túi', 'mang theo', 'mang đi',
+      'beg', 'bawa', 'dalam beg', 'bawa ke mana',
     ],
   },
 }

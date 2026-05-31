@@ -76,7 +76,9 @@ export async function buildExportPackage(
     try {
       // Use the picked hook text as the thumbnail headline — strongest
       // attention-grabber for ad context.
-      const headline = (hookText || params.script.blocks[0]?.text || 'NEW')
+      // Fall back through hook → first block (both in the script's output
+      // language); never inject an English literal as a last resort.
+      const headline = (hookText || params.script.blocks[0]?.text || '')
         .split(/[.!?\n]/)[0]
         .trim()
         .slice(0, 60)

@@ -332,7 +332,10 @@ interface BuildCtaParams {
 function buildCtaOverlay(params: BuildCtaParams): CtaOverlay {
   // Extract CTA text from script — pick the script's CTA block first line.
   const ctaBlock = params.script.blocks.find((b) => b.id === 'cta')
-  const fallbackText = ctaBlock?.text.split(/[.!?]/)[0].trim() || 'Try it now'
+  // Fall back to empty (not an English string) so we never leak a language
+  // that doesn't match the script's output language. The CTA block is one of
+  // the 5 canonical blocks, so this is effectively always populated.
+  const fallbackText = ctaBlock?.text.split(/[.!?]/)[0].trim() || ''
   const text = (params.textOverride || fallbackText).slice(0, 80)
 
   // Style decides animation

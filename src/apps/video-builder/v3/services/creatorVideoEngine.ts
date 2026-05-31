@@ -131,28 +131,38 @@ export async function renderCreatorVideo(
     voiceRef, voiceDurationSec, voiceId,
   })
 
-  const keyframePromptUsed = buildKeyframePrompt({
-    config: params.config,
-    avatar: params.avatar,
-    product: params.product,
-    showProductInFrame: params.config.setting === 'product_demo' && !!params.product,
-  })
-  console.log(`[CREATOR_VIDEO Stage 2] keyframe prompt len=${keyframePromptUsed.length}`)
-
-  // filesUrl: [avatar, product?] — keep order matching the prompt's references
+  // Resolve reference images FIRST so the prompt can reference each by its
+  // ACTUAL position in filesUrl. Order: avatar (identity, primary) then the
+  // product (optional). Only send the product image when we actually show it
+  // in frame, so the prompt never references an image we didn't send.
   const refUrls: string[] = []
-  if (params.product?.productImage) {
-    const url = isAssetRef(params.product.productImage)
-      ? await getUrl(params.product.productImage)
-      : params.product.productImage
-    if (url) refUrls.push(url)
-  }
+  let avatarRefIndex = 0
+  let productRefIndex = 0
+
   if (params.avatar.characterImage) {
     const url = isAssetRef(params.avatar.characterImage)
       ? await getUrl(params.avatar.characterImage)
       : params.avatar.characterImage
-    if (url) refUrls.push(url)
+    if (url) { refUrls.push(url); avatarRefIndex = refUrls.length }
   }
+
+  const showProductInFrame = params.config.setting === 'product_demo' && !!params.product
+  if (showProductInFrame && params.product?.productImage) {
+    const url = isAssetRef(params.product.productImage)
+      ? await getUrl(params.product.productImage)
+      : params.product.productImage
+    if (url) { refUrls.push(url); productRefIndex = refUrls.length }
+  }
+
+  const keyframePromptUsed = buildKeyframePrompt({
+    config: params.config,
+    avatar: params.avatar,
+    product: params.product,
+    showProductInFrame,
+    avatarRefIndex,
+    productRefIndex,
+  })
+  console.log(`[CREATOR_VIDEO Stage 2] keyframe prompt len=${keyframePromptUsed.length}`)
 
   const keyframeRemoteUrl = await generateGpt4oImageFast({
     apiKey: params.kieApiKey,

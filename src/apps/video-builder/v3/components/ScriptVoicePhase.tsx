@@ -17,15 +17,16 @@
 import { useMemo } from 'react'
 import {
   Loader2, Sparkles, Wand2, RefreshCw, ChevronRight, AlertCircle,
-  Clock, Mic2, FileText, Lightbulb, Edit3,
+  Clock, Mic2, FileText, Lightbulb, Edit3, Globe, PenLine,
 } from 'lucide-react'
 import { useAppStore } from '../../../../stores/appStore'
 import { useSettingsStore } from '../../../../stores/settingsStore'
 import { useAdsVideoStore } from '../stores/adsVideoStore'
 import {
   SCRIPT_BLOCK_ORDER, SCRIPT_BLOCK_LABEL_VI, HOOK_STYLE_LABEL_VI,
+  SCRIPT_LANG_LABEL_VI,
   type AdStructure, type AdAngle, type ScriptTargetDurationSec,
-  type VoiceCategoryId,
+  type VoiceCategoryId, type ScriptLang,
 } from '../types'
 import { AD_STRUCTURES, AD_STRUCTURE_ORDER } from '../services/adStructures'
 import { AD_ANGLES, AD_ANGLE_ORDER } from '../services/adAngles'
@@ -35,7 +36,7 @@ import {
   recomputeBlockDurations, estimateReadDurationForVoice,
   computeDurationVariance, blockTargetDuration,
 } from '../services/voiceTimingEstimator'
-import { generateScript } from '../services/scriptGenerator'
+import { generateScript, detectCertClaims } from '../services/scriptGenerator'
 
 const TONE_BG: Record<string, string> = {
   emerald: 'bg-emerald-100 text-emerald-800 border-emerald-300',
@@ -55,6 +56,9 @@ export default function ScriptVoicePhase({ onContinue }: Props) {
   const setAdStructure = useAdsVideoStore((s) => s.setAdStructure)
   const setAdAngle     = useAdsVideoStore((s) => s.setAdAngle)
   const setTargetDurationSec = useAdsVideoStore((s) => s.setTargetDurationSec)
+  const setOutputLang        = useAdsVideoStore((s) => s.setOutputLang)
+  const setUseOwnScript      = useAdsVideoStore((s) => s.setUseOwnScript)
+  const setOwnScriptText     = useAdsVideoStore((s) => s.setOwnScriptText)
   const setGeneratedScript   = useAdsVideoStore((s) => s.setGeneratedScript)
   const setHookVariants      = useAdsVideoStore((s) => s.setHookVariants)
   const pickHookVariant      = useAdsVideoStore((s) => s.pickHookVariant)
@@ -80,6 +84,7 @@ export default function ScriptVoicePhase({ onContinue }: Props) {
   // Recompute block durations whenever voice category changes (different
   // WPM → different read durations).
   const variance = brain.script ? computeDurationVariance(brain.script) : null
+  const certClaims = brain.script ? detectCertClaims(brain.script) : []
 
   // ── Handlers ─────────────────────────────────────────────────────────────
 
@@ -90,6 +95,10 @@ export default function ScriptVoicePhase({ onContinue }: Props) {
     }
     if (!state.inputs.product) {
       addToast('Chưa pick product — quay lại bước 1', 'error')
+      return
+    }
+    if (brain.useOwnScript && brain.ownScriptText.trim().length === 0) {
+      addToast('Bạn đã bật "Dùng kịch bản của tôi" nhưng chưa dán nội dung', 'error')
       return
     }
 
@@ -111,6 +120,9 @@ export default function ScriptVoicePhase({ onContinue }: Props) {
         productName: state.inputs.product.productName ?? 'Product',
         productPitch,
         creatorDescription,
+        lang: brain.outputLang,
+        useOwnScript: brain.useOwnScript,
+        ownScriptText: brain.ownScriptText,
       })
 
       // Recompute block durations against the effective voice category
@@ -160,7 +172,8 @@ export default function ScriptVoicePhase({ onContinue }: Props) {
         <div className="mb-4">
           <h2 className="text-lg font-bold text-gray-900">Bước 2 — Script + Voice (Ad Brain)</h2>
           <p className="text-[12px] text-gray-500">
-            Pick structure + angle + thời lượng → Gemini sinh script TikTok-native + 3 hook variants.
+            Chọn structure + angle + thời lượng + ngôn ngữ → Gemini sinh script TikTok-native + 3 hook variants.
+            Hoặc bật "Dùng kịch bản của tôi" để giữ nguyên 100% câu chữ của bạn.
             Voice (TTS thực) sẽ render ở Phase 3 — phase này chỉ chốt timing.
           </p>
         </div>
@@ -233,6 +246,67 @@ export default function ScriptVoicePhase({ onContinue }: Props) {
           </PickerCard>
         </div>
 
+        {/* ── Output language + own-script source ─────────────────────────── */}
+        <div className="mt-3 grid grid-cols-1 gap-3 lg:grid-cols-2">
+          <div className="rounded-xl border border-black/10 bg-white p-3">
+            <div className="flex items-center gap-1.5">
+              <Globe className="h-3.5 w-3.5 text-gray-400" />
+              <p className="text-[10px] font-bold uppercase tracking-widest text-gray-500">Ngôn ngữ output</p>
+            </div>
+            <div className="mt-2 grid grid-cols-3 gap-1.5">
+              {(['ms', 'vi', 'en'] as ScriptLang[]).map((lng) => (
+                <button
+                  key={lng}
+                  onClick={() => setOutputLang(lng)}
+                  className={`rounded-lg border px-2 py-2 text-center text-[12px] font-bold transition-all ${
+                    brain.outputLang === lng
+                      ? 'border-violet-400 bg-violet-100 text-violet-800'
+                      : 'border-gray-200 bg-white text-gray-500 hover:bg-gray-50'
+                  }`}
+                >
+                  {SCRIPT_LANG_LABEL_VI[lng]}
+                </button>
+              ))}
+            </div>
+            <p className="mt-2 text-[10px] text-gray-400">
+              Mỗi lần tạo chỉ dùng 1 ngôn ngữ — script, voice và keyword B-Roll đều khóa theo ngôn ngữ này. Không trộn ngôn ngữ.
+            </p>
+          </div>
+
+          <div className="rounded-xl border border-black/10 bg-white p-3">
+            <button
+              onClick={() => setUseOwnScript(!brain.useOwnScript)}
+              className="flex w-full items-center gap-2 text-left"
+            >
+              <PenLine className="h-3.5 w-3.5 text-gray-400" />
+              <span className="text-[10px] font-bold uppercase tracking-widest text-gray-500">Dùng kịch bản của tôi</span>
+              <span className={`ml-auto rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                brain.useOwnScript ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-500'
+              }`}>
+                {brain.useOwnScript ? 'BẬT' : 'TẮT'}
+              </span>
+            </button>
+            {brain.useOwnScript ? (
+              <>
+                <textarea
+                  value={brain.ownScriptText}
+                  onChange={(e) => setOwnScriptText(e.target.value)}
+                  rows={5}
+                  placeholder="Dán nguyên văn kịch bản của bạn vào đây. Gemini chỉ chia thành 5 phần (hook / pain / discovery / benefit / cta) — KHÔNG viết lại, KHÔNG dịch, giữ nguyên từng chữ."
+                  className="mt-2 w-full resize-y rounded-lg border border-black/10 bg-black/[0.02] p-2 text-[12px] leading-relaxed focus:border-violet-400 focus:outline-none"
+                />
+                <p className="mt-1 text-[10px] text-gray-400">
+                  Giữ nguyên 100% câu chữ của bạn. Nhớ chọn đúng ngôn ngữ output bên trái cho khớp.
+                </p>
+              </>
+            ) : (
+              <p className="mt-2 text-[10px] text-gray-400">
+                Đang tắt — Gemini tự viết script mới theo cấu trúc + angle + thời lượng bạn chọn ở trên.
+              </p>
+            )}
+          </div>
+        </div>
+
         {/* ── Generate button + error ────────────────────────────────────── */}
         <div className="mt-4 flex items-center justify-between gap-3 rounded-xl border border-violet-200 bg-gradient-to-r from-violet-50 to-pink-50 p-3">
           <div className="min-w-0">
@@ -245,11 +319,16 @@ export default function ScriptVoicePhase({ onContinue }: Props) {
           </div>
           <button
             onClick={handleGenerate}
-            disabled={brain.isGeneratingScript || !geminiKey || !state.inputs.product}
+            disabled={
+              brain.isGeneratingScript || !geminiKey || !state.inputs.product ||
+              (brain.useOwnScript && brain.ownScriptText.trim().length === 0)
+            }
             className="flex items-center gap-2 rounded-full bg-gradient-to-r from-violet-600 to-pink-600 px-5 py-2 text-sm font-bold text-white shadow-md transition-colors hover:from-violet-700 hover:to-pink-700 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {brain.isGeneratingScript ? (
-              <><Loader2 className="h-4 w-4 animate-spin" /> Đang sinh...</>
+              <><Loader2 className="h-4 w-4 animate-spin" /> Đang xử lý...</>
+            ) : brain.useOwnScript ? (
+              <><PenLine className="h-4 w-4" /> Tách kịch bản của tôi</>
             ) : brain.script ? (
               <><RefreshCw className="h-4 w-4" /> Tạo lại</>
             ) : (
@@ -308,6 +387,23 @@ export default function ScriptVoicePhase({ onContinue }: Props) {
                 <span className="font-bold">↺ Quay lại hook gốc</span>
                 <p className="mt-1 text-gray-500">Bỏ override, dùng HOOK block Gemini sinh ban đầu.</p>
               </button>
+            </div>
+          </div>
+        )}
+
+        {/* ── Compliance warning: cert / authority claims ─────────────────── */}
+        {certClaims.length > 0 && (
+          <div className="mt-4 flex items-start gap-2 rounded-xl border border-amber-300 bg-amber-50 p-3 text-[12px] text-amber-900">
+            <AlertCircle className="h-4 w-4 shrink-0 mt-0.5 text-amber-600" />
+            <div>
+              <p className="font-bold">
+                Cảnh báo tuân thủ — script đang nhắc đến: {certClaims.join(', ')}
+              </p>
+              <p className="mt-0.5 text-amber-800">
+                Theo Trade Descriptions Act (Malaysia), chỉ giữ các tuyên bố chứng nhận / phê duyệt
+                này nếu bạn có bằng chứng hợp lệ. App không gắn badge chứng nhận. Nên sửa thành trải
+                nghiệm cá nhân thay vì tuyên bố được cơ quan công nhận.
+              </p>
             </div>
           </div>
         )}

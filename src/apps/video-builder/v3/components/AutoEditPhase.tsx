@@ -14,10 +14,11 @@
 //   7. Export button (stub — Phase 6 wires ffmpeg.wasm)
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import {
   Loader2, Sparkles, AlertCircle, ChevronRight, RotateCcw, Wand2,
   Type, Music2, Zap, Play, Volume2, Megaphone, Download,
+  CheckCircle2, XCircle, Eye,
 } from 'lucide-react'
 import { useAppStore } from '../../../../stores/appStore'
 import { useAdsVideoStore } from '../stores/adsVideoStore'
@@ -55,17 +56,38 @@ export default function AutoEditPhase({ onContinue }: Props) {
 
   const autoEdit = state.autoEdit
   const styleConfig = EDITING_STYLES[autoEdit.styleId]
+  const patchInsert = useAdsVideoStore((s) => s.patchInsert)
+
+  // Review acknowledgment — the user must confirm they watched the rendered
+  // clips before a plan can be built. This is the gate that used to be the
+  // (removed) standalone "Duyệt / Loại" phase.
+  const [reviewedAck, setReviewedAck] = useState(false)
 
   // Effective BGM = override OR style default
   const effectiveBgmId: BgmStyleId = autoEdit.bgmStyleId ?? styleConfig.defaultBgmStyle
 
   // ── Pre-flight: do we have what we need? ──────────────────────────────
   const hasCreatorVideo = !!state.creatorVideo?.videoRef
-  const approvedInserts = state.inserts.filter(
-    (it) => it.status === 'approved' || it.status === 'locked' || (it.status === 'completed' && !!it.videoRef),
-  )
   const hasScript = !!state.scriptBrain.script
-  const canGenerate = hasCreatorVideo && hasScript
+
+  // Every insert that finished rendering (has a videoRef) must be explicitly
+  // triaged — approved/locked (included) or rejected (dropped). A freshly
+  // rendered insert sits in 'completed' limbo until the user decides; we do
+  // NOT silently feed 'completed' clips into the final MP4.
+  const renderedInserts = state.inserts.filter((it) => !!it.videoRef)
+  const approvedInserts = state.inserts.filter(
+    (it) => it.status === 'approved' || it.status === 'locked',
+  )
+  const untriagedInserts = renderedInserts.filter(
+    (it) => it.status !== 'approved' && it.status !== 'locked' && it.status !== 'rejected',
+  )
+  const allInsertsTriaged = untriagedInserts.length === 0
+
+  // Hard inputs required just to enter the phase.
+  const hasInputs = hasCreatorVideo && hasScript
+  // Plan can be built only after: inputs present + every rendered insert
+  // triaged + the user acknowledged the review.
+  const canGenerate = hasInputs && allInsertsTriaged && reviewedAck
 
   const warnings = useMemo(() => {
     return autoEdit.plan ? validatePlan(autoEdit.plan) : []
@@ -82,7 +104,7 @@ export default function AutoEditPhase({ onContinue }: Props) {
       try {
         const plan = buildAutoEditPlan({
           creatorVideo: state.creatorVideo!,
-          inserts: state.inserts,
+          inserts: approvedInserts,
           script: state.scriptBrain.script!,
           styleId: autoEdit.styleId,
           subtitleStyleId: autoEdit.subtitleStyleId,
@@ -105,7 +127,7 @@ export default function AutoEditPhase({ onContinue }: Props) {
 
   // ── Render ──────────────────────────────────────────────────────────────
 
-  if (!canGenerate) {
+  if (!hasInputs) {
     return (
       <div className="flex h-full flex-col items-center justify-center gap-3 p-8 text-center">
         <Wand2 className="h-10 w-10 text-gray-300" />
@@ -125,11 +147,91 @@ export default function AutoEditPhase({ onContinue }: Props) {
     <div className="h-full overflow-y-auto p-6">
       <div className="mx-auto max-w-5xl">
         <div className="mb-4">
-          <h2 className="text-lg font-bold text-gray-900">Bước 7 — Auto Edit (conversion layer)</h2>
+          <h2 className="text-lg font-bold text-gray-900">Bước 5 — Auto Edit (conversion layer)</h2>
           <p className="text-[12px] text-gray-500">
             Tạo edit plan TikTok-native: cuts, captions, punch zooms, SFX, BGM, CTA overlay.
             Plan deterministic — không gọi AI ở phase này, free re-roll.
           </p>
+        </div>
+
+        {/* ── Clip approval gate (replaces the old Duyệt / Loại phase) ────── */}
+        <div className="mb-4 rounded-xl border border-black/10 bg-white p-3">
+          <h3 className="mb-2 flex items-center gap-1 text-[10px] font-bold uppercase tracking-widest text-gray-500">
+            <Eye className="h-3.5 w-3.5" /> Duyệt clip trước khi dựng
+          </h3>
+
+          {/* Creator video — always included, shown for confirmation */}
+          <div className="mb-1.5 flex items-center justify-between gap-2 rounded-lg border border-violet-200 bg-violet-50 px-3 py-2">
+            <span className="text-[12px] font-semibold text-violet-900">
+              🎬 Video creator chính {state.creatorVideo?.videoRef ? '· đã render' : ''}
+            </span>
+            <span className="rounded-full bg-violet-200 px-2 py-0.5 text-[10px] font-bold text-violet-800">
+              Bắt buộc
+            </span>
+          </div>
+
+          {/* Rendered inserts — each must be approved or excluded */}
+          {renderedInserts.length === 0 ? (
+            <p className="px-1 py-1 text-[11px] text-gray-400">
+              Chưa có action insert nào được render — plan sẽ chỉ dùng video creator (vẫn OK).
+            </p>
+          ) : (
+            <ul className="space-y-1.5">
+              {renderedInserts.map((it) => {
+                const included = it.status === 'approved' || it.status === 'locked'
+                const excluded = it.status === 'rejected'
+                return (
+                  <li
+                    key={it.insertId}
+                    className="flex items-center justify-between gap-2 rounded-lg border border-gray-200 px-3 py-2"
+                  >
+                    <span className="min-w-0 truncate text-[12px] text-gray-700">
+                      🎞️ Insert #{it.insertId}
+                      {excluded && <span className="ml-1 text-[10px] text-gray-400">(đã loại)</span>}
+                    </span>
+                    <div className="flex shrink-0 items-center gap-1">
+                      <button
+                        onClick={() => patchInsert(it.insertId, { status: 'approved' })}
+                        className={`flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold transition-all ${
+                          included
+                            ? 'border-emerald-400 bg-emerald-100 text-emerald-800'
+                            : 'border-gray-200 bg-white text-gray-500 hover:bg-emerald-50'
+                        }`}
+                      >
+                        <CheckCircle2 className="h-3 w-3" /> Duyệt
+                      </button>
+                      <button
+                        onClick={() => patchInsert(it.insertId, { status: 'rejected' })}
+                        className={`flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold transition-all ${
+                          excluded
+                            ? 'border-rose-400 bg-rose-100 text-rose-800'
+                            : 'border-gray-200 bg-white text-gray-500 hover:bg-rose-50'
+                        }`}
+                      >
+                        <XCircle className="h-3 w-3" /> Loại
+                      </button>
+                    </div>
+                  </li>
+                )
+              })}
+            </ul>
+          )}
+
+          {!allInsertsTriaged && (
+            <p className="mt-2 rounded-md border border-amber-200 bg-amber-50 px-2 py-1 text-[11px] text-amber-800">
+              Còn {untriagedInserts.length} insert chưa duyệt/loại — xử lý hết trước khi dựng.
+            </p>
+          )}
+
+          <label className="mt-2 flex cursor-pointer items-center gap-2 rounded-md bg-black/[0.03] px-2 py-1.5 text-[12px] text-gray-700">
+            <input
+              type="checkbox"
+              checked={reviewedAck}
+              onChange={(e) => setReviewedAck(e.target.checked)}
+              className="h-3.5 w-3.5 accent-violet-600"
+            />
+            Tôi đã xem và xác nhận các clip ở trên trước khi dựng video cuối.
+          </label>
         </div>
 
         {/* ── 7 Editing styles ───────────────────────────────────────────── */}
@@ -247,7 +349,8 @@ export default function AutoEditPhase({ onContinue }: Props) {
           </div>
           <button
             onClick={handleGenerate}
-            disabled={autoEdit.isGenerating}
+            disabled={autoEdit.isGenerating || !canGenerate}
+            title={!canGenerate ? 'Duyệt clip + tick xác nhận trước khi dựng' : undefined}
             className="flex items-center gap-2 rounded-full bg-gradient-to-r from-violet-600 to-pink-600 px-5 py-2 text-sm font-bold text-white shadow-md transition-all hover:from-violet-700 hover:to-pink-700 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {autoEdit.isGenerating ? (

@@ -49,6 +49,12 @@ export interface RenderInsertParams {
    *  TAKE_PILL, BEFORE_AFTER_REACTION). For product-only inserts (e.g.
    *  PRODUCT_CLOSEUP, DESK_PRODUCT) the avatar ref is optional. */
   avatar: Model | null
+  /** Chain anchor — the Phase 3 creator video's generated keyframe (the
+   *  person already placed in the real scene + wardrobe + lighting). When
+   *  present, inserts that feature the person anchor their identity to THIS
+   *  frame instead of the raw avatar bank portrait, so the insert person
+   *  matches the talking-head creator (no outfit / lighting / look jump). */
+  creatorKeyframeRef?: string
   /** Resolution to render at — driven by cost mode */
   resolution: '480p' | '720p' | '1080p'
   /** Skip the cheap preview-motion test (Stage 2). Default false. */
@@ -71,21 +77,22 @@ export interface RenderInsertResult {
 function buildInsertKeyframePrompt(
   presetId: ActionPresetId,
   product: Product | null,
-  hasAvatar: boolean,
+  productRefIndex: number,
+  personRefIndex: number,
 ): string {
   const preset = ACTION_PRESETS[presetId]
   const paragraphs: string[] = []
 
-  // 1. Subject locks
-  if (preset.needsProduct && product) {
+  // 1. Subject locks — reference each image by its ACTUAL position in filesUrl
+  if (productRefIndex > 0 && product) {
     paragraphs.push(
-      `PRODUCT LOCK: ${product.productName ?? 'the product'} from reference image #1. ` +
+      `PRODUCT LOCK: ${product.productName ?? 'the product'} from reference image #${productRefIndex}. ` +
       preset.objectInteraction,
     )
   }
-  if (hasAvatar && presetUsesAvatar(presetId)) {
+  if (personRefIndex > 0) {
     paragraphs.push(
-      `IDENTITY LOCK: Person from reference image #${preset.needsProduct ? '2' : '1'}. ` +
+      `IDENTITY LOCK: Person from reference image #${personRefIndex}. ` +
       `Preserve EXACTLY face, hair, skin tone, body proportions. Do NOT redesign.`,
     )
   }
@@ -120,26 +127,34 @@ function presetUsesAvatar(presetId: ActionPresetId): boolean {
   return ['HOLD_PRODUCT', 'DRINK', 'TAKE_PILL', 'BEFORE_AFTER_REACTION'].includes(presetId)
 }
 
-/** Pick which assets to send to KIE as filesUrl — product first, then avatar */
+/** Pick which assets to send to KIE as filesUrl — product first, then the
+ *  person reference. The person reference chains to the creator video's
+ *  keyframe when available (visual continuity), falling back to the raw
+ *  avatar bank portrait only when there is no creator keyframe yet. */
 async function resolveRefs(
   preset: typeof ACTION_PRESETS[ActionPresetId],
   product: Product | null,
   avatar: Model | null,
-): Promise<string[]> {
+  creatorKeyframeRef?: string,
+): Promise<{ refs: string[]; productRefIndex: number; personRefIndex: number }> {
   const refs: string[] = []
+  let productRefIndex = 0
+  let personRefIndex = 0
   if (preset.needsProduct && product?.productImage) {
     const url = isAssetRef(product.productImage)
       ? await getUrl(product.productImage)
       : product.productImage
-    if (url) refs.push(url)
+    if (url) { refs.push(url); productRefIndex = refs.length }
   }
-  if (avatar?.characterImage && presetUsesAvatar(preset.id)) {
-    const url = isAssetRef(avatar.characterImage)
-      ? await getUrl(avatar.characterImage)
-      : avatar.characterImage
-    if (url) refs.push(url)
+  if (presetUsesAvatar(preset.id)) {
+    // Chain anchor first, raw avatar portrait second.
+    const personRef = creatorKeyframeRef ?? avatar?.characterImage
+    if (personRef) {
+      const url = isAssetRef(personRef) ? await getUrl(personRef) : personRef
+      if (url) { refs.push(url); personRefIndex = refs.length }
+    }
   }
-  return refs
+  return { refs, productRefIndex, personRefIndex }
 }
 
 // ── Public: render a single insert end-to-end ──────────────────────────────
@@ -150,13 +165,15 @@ export async function renderInsert(
   if (params.signal?.aborted) throw new Error('CANCELLED — user huỷ')
 
   const preset = ACTION_PRESETS[params.presetId]
-  const filesUrl = await resolveRefs(preset, params.product, params.avatar)
+  const { refs: filesUrl, productRefIndex, personRefIndex } = await resolveRefs(
+    preset, params.product, params.avatar, params.creatorKeyframeRef,
+  )
 
   // ── STAGE 1: KEYFRAME ─────────────────────────────────────────────────
   params.onStageUpdate({ stage: 'keyframe' })
 
   const keyframePromptUsed = buildInsertKeyframePrompt(
-    params.presetId, params.product, !!params.avatar,
+    params.presetId, params.product, productRefIndex, personRefIndex,
   )
   console.log(`[INSERT ${params.presetId}] Stage 1 keyframe prompt len=${keyframePromptUsed.length}, refs=${filesUrl.length}`)
 

@@ -19,6 +19,10 @@ export interface BuildKeyframeParams {
   product: Product | null
   /** Whether to include the product physically in the keyframe (for product_demo setting) */
   showProductInFrame: boolean
+  /** 1-based position of the avatar image inside filesUrl (identity reference). */
+  avatarRefIndex: number
+  /** 1-based position of the product image inside filesUrl, or 0 if not sent. */
+  productRefIndex: number
 }
 
 export interface BuildLipsyncPromptParams {
@@ -52,7 +56,7 @@ export function buildKeyframePrompt(params: BuildKeyframeParams): string {
 
   // 1. Identity lock — most important
   paragraphs.push(
-    `IDENTITY LOCK: This is ${avatarName} from reference image #2. Preserve EXACTLY their ` +
+    `IDENTITY LOCK: This is ${avatarName} from reference image #${params.avatarRefIndex}. Preserve EXACTLY their ` +
     `face shape, eye colour, eyebrow shape, nose, lip shape, jaw line, skin tone, hair ` +
     `colour + length + texture, and body proportions. Do NOT redesign the face. The person ` +
     `in the output MUST be unambiguously the same individual as the reference.`,
@@ -74,13 +78,13 @@ export function buildKeyframePrompt(params: BuildKeyframeParams): string {
   // 5. Expression
   paragraphs.push(`EXPRESSION: ${energy.expressionPrompt}`)
 
-  // 6. Optional product
-  if (params.showProductInFrame && params.product) {
+  // 6. Optional product — only reference it when we actually sent its image
+  if (params.showProductInFrame && params.product && params.productRefIndex > 0) {
     const productName = params.product.productName ?? 'the product'
     paragraphs.push(
-      `PRODUCT IN FRAME: ${productName} from reference image #1 is held naturally in the ` +
+      `PRODUCT IN FRAME: ${productName} from reference image #${params.productRefIndex} is held naturally in the ` +
       `speaker's hand or visible on the surface near them. Preserve EXACT packaging design, ` +
-      `label typography, and bottle/box shape from reference image #1. Do NOT redesign the ` +
+      `label typography, and overall shape from reference image #${params.productRefIndex}. Do NOT redesign the ` +
       `product. Hands holding the product look natural — no malformed fingers.`,
     )
   }

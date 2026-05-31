@@ -23,7 +23,8 @@ import { useSettingsStore } from '../../../../stores/settingsStore'
 import { useAssetUrl } from '../../../../hooks/useAssetUrl'
 import { useAdsVideoStore } from '../stores/adsVideoStore'
 import {
-  CREATOR_VIDEO_STAGE_LABEL_VI,
+  CREATOR_VIDEO_STAGE_LABEL_VI, COST_MODE_CONFIG,
+  V3_CREDIT_COST, formatCredits,
   type CreatorSettingId, type CreatorEnergyLevel, type CreatorPresetId,
   type CreatorVideoStage,
 } from '../types'
@@ -212,6 +213,7 @@ export default function CreatorVideoPhase({ onContinue }: Props) {
   const applyCreatorPreset      = useAdsVideoStore((s) => s.applyCreatorPreset)
   const setCreatorVideo         = useAdsVideoStore((s) => s.setCreatorVideo)
   const patchCreatorVideo       = useAdsVideoStore((s) => s.patchCreatorVideo)
+  const setSkipPreviewOverride  = useAdsVideoStore((s) => s.setSkipPreviewOverride)
 
   const kieApiKey       = useSettingsStore((s) => s.kieApiKey)
   const elevenLabsKey   = useSettingsStore((s) => s.elevenLabsApiKey)
@@ -220,6 +222,16 @@ export default function CreatorVideoPhase({ onContinue }: Props) {
   const config = state.creatorVideoConfig
   const clip   = state.creatorVideo
   const brain  = state.scriptBrain
+
+  const costModeCfg = COST_MODE_CONFIG[state.costMode]
+  const skipPreview = state.skipPreviewOverride ?? costModeCfg.skipPreviewDefault
+
+  // Cost of THIS render = TTS + keyframe + full lipsync (+ optional 1s preview).
+  const stepCredits =
+    V3_CREDIT_COST.tts +
+    V3_CREDIT_COST.keyframe +
+    V3_CREDIT_COST.lipsync +
+    (skipPreview ? 0 : V3_CREDIT_COST.previewMotion)
 
   // Auto-suggest energy based on selected ad angle (but only if user hasn't
   // already changed energy from the default).
@@ -263,6 +275,7 @@ export default function CreatorVideoPhase({ onContinue }: Props) {
         voiceCategory: brain.voiceCategory ?? 'energetic_creator',
         avatar: state.inputs.avatar,
         product: state.inputs.product,
+        skipPreview,
         onStageUpdate: (update) => {
           patchCreatorVideo({
             stage: update.stage,
@@ -410,8 +423,17 @@ export default function CreatorVideoPhase({ onContinue }: Props) {
               {clip?.stage === 'completed' ? 'Đã có creator video — render lại nếu cần' : 'Render creator video'}
             </p>
             <p className="text-[11px] text-gray-500">
-              {config.resolution} · ~{brain.script?.totalDurationSec.toFixed(0) ?? '—'}s · TTS → keyframe → preview → lipsync · ước ~$0.5-1
+              {config.resolution} · ~{brain.script?.totalDurationSec.toFixed(0) ?? '—'}s · TTS → keyframe → {skipPreview ? '' : 'preview → '}lipsync · bước này {formatCredits(stepCredits)}
             </p>
+            <label className="mt-1 flex cursor-pointer items-center gap-1.5 text-[11px] text-gray-600">
+              <input
+                type="checkbox"
+                checked={skipPreview}
+                onChange={(e) => setSkipPreviewOverride(e.target.checked)}
+                className="h-3 w-3 accent-violet-600"
+              />
+              Bỏ qua preview 1s (nhanh + rẻ hơn, bỏ bước kiểm tra motion)
+            </label>
           </div>
           <button
             onClick={handleRender}
@@ -421,9 +443,9 @@ export default function CreatorVideoPhase({ onContinue }: Props) {
             {isRendering ? (
               <><Loader2 className="h-4 w-4 animate-spin" /> Đang render...</>
             ) : clip?.stage === 'completed' ? (
-              <><RotateCcw className="h-4 w-4" /> Render lại</>
+              <><RotateCcw className="h-4 w-4" /> Render lại · {formatCredits(stepCredits)}</>
             ) : (
-              <><Sparkles className="h-4 w-4" /> Tạo creator video</>
+              <><Sparkles className="h-4 w-4" /> Tạo creator video · {formatCredits(stepCredits)}</>
             )}
           </button>
         </div>

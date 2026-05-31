@@ -39,7 +39,7 @@ export const AD_ANGLES: Record<AdAngle, AdAngleConfig> = {
   authority: {
     id: 'authority',
     labelVi: 'Chuyên gia',
-    descriptionVi: 'Tự tin, có kiến thức. Phù hợp khi sản phẩm có cơ chế khoa học.',
+    descriptionVi: 'Tự tin, am hiểu. Phù hợp khi muốn thể hiện chuyên môn đáng tin.',
     emoji: '🎓',
     tonePrompt:
       'Voice: confident, knowledgeable, slightly measured. Use one or two specific facts ' +
@@ -55,9 +55,9 @@ export const AD_ANGLES: Record<AdAngle, AdAngleConfig> = {
     descriptionVi: 'Người thật kể trải nghiệm — không phải bán, chỉ chia sẻ.',
     emoji: '🗣️',
     tonePrompt:
-      'Voice: first-person testimonial. Use natural disfluencies ("uhm" / "kiểu như" / ' +
-      '"thật ra"). Specific timeframes and outcomes ("3 tuần rồi", "2 lần / ngày"). Avoid ' +
-      'any sentence that sounds like marketing copy.',
+      'Voice: first-person testimonial. Use natural disfluencies and filler native to the ' +
+      'output language. Give specific timeframes and outcomes (e.g. "3 weeks in", "twice a ' +
+      'day") expressed in the output language. Avoid any sentence that sounds like marketing copy.',
     voiceHints: ['emotional_mom', 'skincare_influencer', 'energetic_creator'],
     tone: 'emerald',
   },
@@ -81,8 +81,8 @@ export const AD_ANGLES: Record<AdAngle, AdAngleConfig> = {
     emoji: '👀',
     tonePrompt:
       'Voice: build curiosity. Tease information without revealing it in the hook. The ' +
-      'PAIN block deepens the mystery ("Nobody told me this..."). DISCOVERY reveals the ' +
-      'surprise. Use rhetorical questions sparingly.',
+      'PAIN block deepens the mystery (hint there is something the viewer was never told). ' +
+      'DISCOVERY reveals the surprise. Use rhetorical questions sparingly.',
     voiceHints: ['energetic_creator', 'skincare_influencer'],
     tone: 'amber',
   },
@@ -93,9 +93,9 @@ export const AD_ANGLES: Record<AdAngle, AdAngleConfig> = {
     descriptionVi: 'Bán hàng thẳng — không vòng vo, CTA mạnh. Cho COD / promo nóng.',
     emoji: '⚡',
     tonePrompt:
-      'Voice: direct sales. State the offer early. Use urgency markers ("HÔM NAY", "chỉ 50 ' +
-      'suất"). CTA appears multiple times. Skip the long emotional setup — get to the offer. ' +
-      'TikTok-native, NOT corporate. Energetic, not pushy.',
+      'Voice: direct sales. State the offer early. Use urgency markers (e.g. "today only", ' +
+      '"limited slots") rendered in the output language. CTA appears multiple times. Skip the ' +
+      'long emotional setup — get to the offer. TikTok-native, NOT corporate. Energetic, not pushy.',
     voiceHints: ['energetic_creator', 'authority_male', 'gym_creator'],
     tone: 'pink',
   },
@@ -106,9 +106,10 @@ export const AD_ANGLES: Record<AdAngle, AdAngleConfig> = {
     descriptionVi: 'Không có cảm giác là ad — kiểu video creator chia sẻ tự nhiên.',
     emoji: '📱',
     tonePrompt:
-      'Voice: pure TikTok creator. Casual, slightly chaotic energy. Use phrases like "ok ' +
-      'so listen", "wait this is actually wild", "lemme show you". The product appears as ' +
-      'a discovery the creator stumbled on, not a sponsored mention. No "in this video..."',
+      'Voice: pure TikTok creator. Casual, slightly chaotic energy. Use casual conversational ' +
+      'openers and reactions native to the output language (the equivalent of "ok so listen", ' +
+      '"wait this is actually wild", "lemme show you"). The product appears as a discovery the ' +
+      'creator stumbled on, not a sponsored mention. No "in this video..."',
     voiceHints: ['energetic_creator', 'skincare_influencer', 'gym_creator'],
     tone: 'violet',
   },

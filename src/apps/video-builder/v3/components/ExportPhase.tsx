@@ -140,6 +140,7 @@ export default function ExportPhase() {
         creatorDescription: state.inputs.avatar
           ? `${state.inputs.avatar.name} — ${state.inputs.avatar.notes ?? ''}`
           : undefined,
+        outputLang: state.scriptBrain.outputLang,
       })
       setCtaVariations(variations)
       addToast(`✓ ${variations.length} CTA variants`, 'success')
@@ -258,7 +259,7 @@ export default function ExportPhase() {
       <div className="mx-auto max-w-5xl">
         <div className="mb-4 flex items-start justify-between">
           <div>
-            <h2 className="text-lg font-bold text-gray-900">Bước 8 — Export + Variations</h2>
+            <h2 className="text-lg font-bold text-gray-900">Bước 6 — Export + Variations</h2>
             <p className="text-[12px] text-gray-500">
               Build export bundle (SRT + script + thumbnail + MP4 fallback). Generate hook/CTA variations
               cho ad testing. Save winning projects vào library.
@@ -823,7 +824,7 @@ function RealMp4AssemblyPanel({
                 <Download className="h-3.5 w-3.5" /> Download MP4
               </button>
               <p className="text-[10px] text-emerald-700">
-                Subtitle đã burn-in trực tiếp vào video. Audio = voice track. SFX/BGM mix sẽ wire ở Phase 7.5.
+                Subtitle đã burn-in trực tiếp vào video. Audio = voice + SFX + BGM (mix tự động; SFX/BGM nào chưa có file sẽ tự bỏ qua).
               </p>
             </div>
           </div>

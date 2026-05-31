@@ -22,7 +22,9 @@ import { directGeminiText } from '../../../../utils/gemini'
 import type {
   AdStructure, AdAngle, ScriptTargetDurationSec,
   GeneratedScript, ScriptBlock, HookVariant, ScriptBlockId, HookStyle,
+  ScriptLang,
 } from '../types'
+import { SCRIPT_LANG_GEMINI_NAME } from '../types'
 import { AD_STRUCTURES } from './adStructures'
 import { AD_ANGLES } from './adAngles'
 import {
@@ -43,9 +45,14 @@ export interface GenerateScriptParams {
   /** Optional creator description (name / vibe) — helps Gemini write
    *  in-character. E.g. "Malaysian Muslim mom, late-30s, calm voice" */
   creatorDescription?: string
-  /** Optional Vietnamese — TRUE keeps output in Vietnamese, FALSE → English.
-   *  Auto-detected from productName if omitted. */
-  vietnamese?: boolean
+  /** Output language — locks the WHOLE generation to ONE language.
+   *  No auto-detect, no mixing. Default decided by the caller (Bahasa Malaysia). */
+  lang: ScriptLang
+  /** TRUE = segment the user's own pasted script VERBATIM into the 5 roles
+   *  (Gemini never rewrites). FALSE = Gemini writes a fresh script. */
+  useOwnScript?: boolean
+  /** Raw pasted script — required when useOwnScript is TRUE. */
+  ownScriptText?: string
 }
 
 export interface GenerateScriptResult {
@@ -60,42 +67,51 @@ export interface GenerateScriptResult {
 export async function generateScript(
   params: GenerateScriptParams,
 ): Promise<GenerateScriptResult> {
-  const isVietnamese =
-    params.vietnamese ??
-    /[ăâđêôơưĂÂĐÊÔƠƯáàảãạắằẳẵặ]/.test(params.productName + params.productPitch)
-
-  const lang = isVietnamese ? 'Vietnamese' : 'English'
+  // Single output language per generate — no auto-detect, no mixing.
+  const lang = SCRIPT_LANG_GEMINI_NAME[params.lang]
   const structure = AD_STRUCTURES[params.structure]
   const angle = AD_ANGLES[params.angle]
   const budgets = allocateBlockBudgets(params.structure, params.targetDurationSec)
 
-  const systemInstruction = buildSystemPrompt({
-    structureSystem: structure.systemPrompt,
-    angleTone: angle.tonePrompt,
-    lang,
-  })
+  // Branch: own-script (verbatim segmentation) vs fresh generation.
+  // The own-script path NEVER rewrites the user's words — Gemini only
+  // assigns each existing sentence to one of the 5 roles.
+  let parsed: GeminiOutput
+  if (params.useOwnScript && (params.ownScriptText ?? '').trim().length > 0) {
+    parsed = await segmentOwnScript({
+      apiKey: params.geminiKey,
+      ownScriptText: params.ownScriptText!.trim(),
+      langName: lang,
+    })
+  } else {
+    const systemInstruction = buildSystemPrompt({
+      structureSystem: structure.systemPrompt,
+      angleTone: angle.tonePrompt,
+      lang,
+    })
 
-  const userPrompt = buildUserPrompt({
-    productName: params.productName,
-    productPitch: params.productPitch,
-    creatorDescription: params.creatorDescription,
-    targetDurationSec: params.targetDurationSec,
-    budgets,
-    structureLabel: structure.labelVi,
-    angleLabel: angle.labelVi,
-    lang,
-  })
+    const userPrompt = buildUserPrompt({
+      productName: params.productName,
+      productPitch: params.productPitch,
+      creatorDescription: params.creatorDescription,
+      targetDurationSec: params.targetDurationSec,
+      budgets,
+      structureLabel: structure.labelVi,
+      angleLabel: angle.labelVi,
+      lang,
+    })
 
-  // Z31-fix: schema-constrained decoding + auto-retry on parse failure.
-  // Gemini's `responseMimeType: 'application/json'` alone leaves ~5% of
-  // outputs malformed (unescaped newlines / quotes inside Vietnamese
-  // string values). `responseSchema` forces shape conformance at decode
-  // time; the repair + retry path handles the edge cases that slip through.
-  const parsed = await callGeminiWithRetry({
-    apiKey: params.geminiKey,
-    systemInstruction,
-    userPrompt,
-  })
+    // Z31-fix: schema-constrained decoding + auto-retry on parse failure.
+    // Gemini's `responseMimeType: 'application/json'` alone leaves ~5% of
+    // outputs malformed (unescaped newlines / quotes inside Vietnamese
+    // string values). `responseSchema` forces shape conformance at decode
+    // time; the repair + retry path handles the edge cases that slip through.
+    parsed = await callGeminiWithRetry({
+      apiKey: params.geminiKey,
+      systemInstruction,
+      userPrompt,
+    })
+  }
   const blocks: ScriptBlock[] = SCRIPT_BLOCK_IDS.map((id) => ({
     id,
     text: parsed.blocks[id] ?? '',
@@ -150,11 +166,19 @@ UNIVERSAL TIKTOK-NATIVE RULES:
 - NO corporate language. NO "in this video". NO "let me introduce you to".
 - NO long paragraphs. Each block should feel like 1-2 spoken breaths.
 - It is OK (encouraged) to have imperfect, conversational phrasing.
-- If language is Vietnamese: write in casual Vietnamese ("mình" / "tôi" both ok,
-  pick one and stick). Use natural Vietnamese spoken rhythm — short clauses,
-  occasional "thật ra", "thực sự", "ờ", "kiểu như". NO formal salutation.
+- Write in the casual, everyday spoken register of ${args.lang} — the way a real
+  person talks to friends, NOT formal or written language. Pick ONE consistent
+  first-person voice and stick with it. Use the natural filler words, rhythm and
+  short clauses native to ${args.lang}. Do NOT borrow filler or phrasing from any
+  other language, and write 100% in ${args.lang} only. NO formal salutation.
 - The product should appear as a discovery the speaker stumbled onto, NOT
   as a sponsored mention. Avoid "today I'll tell you about X".
+- COMPLIANCE (Malaysia Trade Descriptions Act): NEVER claim regulatory
+  certifications or official approvals — no "Halal certified", "KKM approved",
+  "GMP", "FDA approved", "clinically proven", "doctor approved", or similar
+  authority/approval claims. We cannot verify proof here, so these are illegal
+  if unbacked. Speak only to personal experience and felt benefits, not
+  official endorsements.
 
 OUTPUT FORMAT:
 Return strict JSON with this exact shape (no markdown fences, no commentary):
@@ -246,6 +270,104 @@ const SCRIPT_RESPONSE_SCHEMA = {
     },
   },
   required: ['blocks', 'hookVariants'],
+}
+
+// ── Own-script verbatim segmentation ──────────────────────────────────────
+// When the user pastes their OWN finished script, we must not rewrite a
+// single word. Gemini acts purely as a segmenter: it assigns each existing
+// sentence to one of the 5 canonical roles, preserving wording, punctuation
+// and language exactly. This keeps the user's voice while still feeding the
+// downstream 5-block contract (insertTimingEngine et al.).
+
+const SEGMENT_RESPONSE_SCHEMA = {
+  type: 'object',
+  properties: {
+    blocks: {
+      type: 'object',
+      properties: {
+        hook:      { type: 'string' },
+        pain:      { type: 'string' },
+        discovery: { type: 'string' },
+        benefit:   { type: 'string' },
+        cta:       { type: 'string' },
+      },
+      required: ['hook', 'pain', 'discovery', 'benefit', 'cta'],
+    },
+  },
+  required: ['blocks'],
+}
+
+async function segmentOwnScript(args: {
+  apiKey: string
+  ownScriptText: string
+  langName: string
+}): Promise<GeminiOutput> {
+  const systemInstruction = `You are a script SEGMENTER, not a writer.
+You receive a finished ad script written in ${args.langName}. Your ONLY job is
+to split it VERBATIM into 5 roles: hook, pain, discovery, benefit, cta.
+
+ABSOLUTE RULES (violating any is a failure):
+- DO NOT translate, paraphrase, rewrite, shorten, expand, fix, or "improve" any word.
+- Preserve the EXACT original wording, punctuation, casing and ${args.langName} spelling.
+- Every sentence of the original must be assigned to exactly ONE role.
+- Keep the original order — each role is a consecutive span of the script.
+- Do NOT invent new sentences. If a role has no matching span, give it the single
+  closest existing sentence (it is fine for a role to be short).
+- Do NOT add labels (HOOK:, PAIN:, etc.) inside the text values.
+
+ROLE MEANING (for assignment only — never rewrite):
+- hook: opening attention grab
+- pain: the problem / pain context
+- discovery: the moment the product / solution appears
+- benefit: what it does / the results / proof
+- cta: the closing call to action (offer / buy / link)
+
+OUTPUT: strict JSON only, no markdown fences:
+{ "blocks": { "hook":"", "pain":"", "discovery":"", "benefit":"", "cta":"" } }`
+
+  const userPrompt = `Segment this script verbatim into the 5 roles. Reproduce the original words exactly:\n\n${args.ownScriptText}`
+
+  const call = (schema = true) =>
+    directGeminiText({
+      apiKey: args.apiKey,
+      systemInstruction,
+      prompt: userPrompt,
+      maxOutputTokens: 2048,
+      responseMimeType: 'application/json',
+      ...(schema ? { responseSchema: SEGMENT_RESPONSE_SCHEMA } : {}),
+    })
+
+  let raw = await call()
+  let blocks = tryParseSegments(raw)
+  if (!blocks) blocks = tryParseSegments(repairJsonString(raw))
+  if (!blocks) {
+    raw = await call(false)
+    blocks = tryParseSegments(raw) ?? tryParseSegments(repairJsonString(raw))
+  }
+  if (!blocks) {
+    throw new Error('Không tách được kịch bản của bạn thành 5 phần. Hãy thử lại.')
+  }
+
+  // Own-script mode: never invent alternative hooks. The user's hook stands.
+  return { blocks, hookVariants: [] }
+}
+
+function tryParseSegments(raw: string): Record<ScriptBlockId, string> | null {
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(raw)
+  } catch {
+    return null
+  }
+  const obj = parsed as { blocks?: Partial<Record<ScriptBlockId, string>> }
+  if (!obj || typeof obj !== 'object' || !obj.blocks) return null
+  const out = {} as Record<ScriptBlockId, string>
+  for (const id of SCRIPT_BLOCK_IDS) {
+    const v = obj.blocks[id]
+    if (typeof v !== 'string') return null
+    out[id] = v
+  }
+  return out
 }
 
 async function callGeminiWithRetry(args: {
@@ -394,4 +516,36 @@ function parseAndValidate(raw: string): GeminiOutput {
     blocks: blocks as Record<ScriptBlockId, string>,
     hookVariants: validVariants as Array<{ style: HookStyle; text: string }>,
   }
+}
+
+// ── Compliance: cert / authority claim detector ──────────────────────────────
+// Z-compliance — scans a finished script (AI-generated OR the user's own
+// pasted text) for regulatory certification / authority-approval language.
+// We have no proof-upload mechanism in the video builder, so any such claim
+// is unbacked and illegal under the Malaysia Trade Descriptions Act. The UI
+// surfaces a non-blocking warning so the user removes it or confirms they
+// hold valid proof. We never render a cert badge graphic (there is none).
+
+const CERT_CLAIM_PATTERNS: { label: string; re: RegExp }[] = [
+  { label: 'Halal',             re: /\bhalal\b/i },
+  { label: 'KKM',               re: /\bkkm\b|kementerian kesihatan/i },
+  { label: 'GMP',               re: /\bgmp\b/i },
+  { label: 'FDA',               re: /\bfda\b/i },
+  { label: 'MeSTI',             re: /\bmesti\b/i },
+  { label: 'Clinically proven', re: /clinical(ly)? proven|terbukti (secara )?klinikal|chứng minh lâm sàng/i },
+  { label: 'Doctor approved',   re: /doctor[- ]approved|disahkan doktor|bác sĩ khuyên dùng/i },
+  { label: 'Certified/Approved',re: /\bcertified\b|\bapproved\b|disahkan|diluluskan|được chứng nhận|được phê duyệt/i },
+]
+
+/**
+ * Returns the distinct cert/authority claim labels found anywhere in the
+ * script blocks. Empty array = clean. Language-agnostic (BM / VN / EN terms).
+ */
+export function detectCertClaims(script: GeneratedScript): string[] {
+  const haystack = script.blocks.map((b) => b.text).join('\n')
+  const found = new Set<string>()
+  for (const { label, re } of CERT_CLAIM_PATTERNS) {
+    if (re.test(haystack)) found.add(label)
+  }
+  return Array.from(found)
 }

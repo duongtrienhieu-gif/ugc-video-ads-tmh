@@ -21,6 +21,7 @@ import {
   type ActionInsertClip, type CreatorVideoClip,
   // Z31 — Ad Brain
   type AdStructure, type AdAngle, type ScriptTargetDurationSec,
+  type ScriptLang,
   type GeneratedScript, type HookVariant, type VoiceCategoryId,
   type VoiceRecord,
   // Z32 — Creator Video Engine
@@ -36,6 +37,7 @@ import {
   // Z36 — Final MP4 Assembly
   type ExportRenderStage,
 } from '../types'
+import { COST_MODE_CONFIG, DEFAULT_COST_MODE } from '../types'
 import { CREATOR_PRESETS } from '../services/creatorPresets'
 import type { Model, Product } from '../../../../stores/types'
 
@@ -50,6 +52,8 @@ interface AdsVideoStoreState {
   setPhase:    (phase: V3Phase) => void
   setMode:     (mode: WorkflowMode) => void
   setCostMode: (mode: CostMode) => void
+  /** Manual override for the 1s motion pre-flight (null = follow cost mode). */
+  setSkipPreviewOverride: (value: boolean | null) => void
 
   // ── Input setters ───────────────────────────────────────────────────────
 
@@ -79,7 +83,7 @@ interface AdsVideoStoreState {
    *  + sensible defaults (stage='idle', status='idle', resolution from
    *  current cost mode). Used by "Apply suggestions" button. */
   bulkAddInsertsFromPresets: (
-    items: Array<{ presetId: ActionPresetId; durationSec: number; scriptKeyword?: string }>,
+    items: Array<{ presetId: ActionPresetId; durationSec: number; scriptKeyword?: string; voiceTimestampSec?: number | null }>,
   ) => void
   /** Patch one insert by insertId. */
   patchInsert:  (insertId: number, patch: Partial<ActionInsertClip>) => void
@@ -127,6 +131,12 @@ interface AdsVideoStoreState {
   setAdStructure:        (structure: AdStructure) => void
   setAdAngle:            (angle: AdAngle) => void
   setTargetDurationSec:  (sec: ScriptTargetDurationSec) => void
+  /** Set the output language — locks script + voice + insert keywords to one language. */
+  setOutputLang:         (lang: ScriptLang) => void
+  /** Toggle "use my own pasted script" mode. */
+  setUseOwnScript:       (v: boolean) => void
+  /** Update the raw pasted own-script text. */
+  setOwnScriptText:      (text: string) => void
   /** Set or replace the generated script (called after Gemini returns). */
   setGeneratedScript:    (script: GeneratedScript | null) => void
   /** Update one block's text + recompute its estDurationSec via the
@@ -160,6 +170,21 @@ function loadFromStorage(): V3PipelineState | null {
       console.warn(`[V3_STATE] discarding stale payload (schema ${parsed.schemaVersion} ≠ ${CURRENT_SCHEMA})`)
       return null
     }
+    // Flow-model migration — the 'preview' / 'approve' / 'final-render' phases
+    // were removed (collapsed into the auto-edit step). Remap any persisted
+    // session landing on one of them so the body switch always has a view.
+    const legacyPhase = parsed.phase as string
+    if (
+      legacyPhase === 'preview' ||
+      legacyPhase === 'approve' ||
+      legacyPhase === 'final-render'
+    ) {
+      parsed.phase = 'auto-edit'
+    }
+    // Z36 — the cost-mode picker was removed; the engine runs one fixed 720p
+    // profile. Snap any old persisted TEST/FULL session onto it so resumed
+    // sessions can't keep rendering at a resolution the UI no longer exposes.
+    parsed.costMode = DEFAULT_COST_MODE
     // Defensive: reset transient rendering flags so resume never deadlocks
     if (parsed.creatorVideo?.status === 'rendering') {
       parsed.creatorVideo = { ...parsed.creatorVideo, status: 'idle', startedAt: undefined }
@@ -175,6 +200,9 @@ function loadFromStorage(): V3PipelineState | null {
       const empty = createEmptyV3State()
       parsed.creatorVideoConfig = empty.creatorVideoConfig
     }
+    // Defensive: a corrupted / pre-inserts payload may not carry an array.
+    // Guard before .map so a bad localStorage blob can't crash hydration.
+    if (!Array.isArray(parsed.inserts)) parsed.inserts = []
     parsed.inserts = parsed.inserts.map((it) => {
       let next = it
       // Reset legacy V3ClipStatus
@@ -257,6 +285,17 @@ function saveToStorage(state: V3PipelineState | null): void {
   }
 }
 
+/** A previously-built auto-edit plan snapshots refs to the creator video +
+ *  every insert. Any STRUCTURAL change to those clips (add/remove/replace)
+ *  leaves the plan pointing at refs that no longer match — at export the
+ *  assembler would fetch a removed/stale ref. Drop the plan so the user is
+ *  forced to rebuild it from the current clip set. */
+function invalidatePlan(
+  autoEdit: V3PipelineState['autoEdit'],
+): V3PipelineState['autoEdit'] {
+  return autoEdit.plan ? { ...autoEdit, plan: null } : autoEdit
+}
+
 /** Helper: update state immutably, save, set. */
 function commit(
   set: (partial: { state: V3PipelineState }) => void,
@@ -284,6 +323,9 @@ export const useAdsVideoStore = create<AdsVideoStoreState>((set, get) => ({
   setCostMode: (costMode) =>
     commit(set, get, (s) => ({ ...s, costMode })),
 
+  setSkipPreviewOverride: (skipPreviewOverride) =>
+    commit(set, get, (s) => ({ ...s, skipPreviewOverride })),
+
   setAvatar: (avatar) =>
     commit(set, get, (s) => ({ ...s, inputs: { ...s.inputs, avatar } })),
 
@@ -297,12 +339,15 @@ export const useAdsVideoStore = create<AdsVideoStoreState>((set, get) => ({
     commit(set, get, (s) => ({ ...s, inputs: { ...s.inputs, voiceId } })),
 
   setCreatorVideo: (clip) =>
-    commit(set, get, (s) => ({ ...s, creatorVideo: clip })),
+    commit(set, get, (s) => ({ ...s, creatorVideo: clip, autoEdit: invalidatePlan(s.autoEdit) })),
 
   patchCreatorVideo: (patch) =>
     commit(set, get, (s) => ({
       ...s,
       creatorVideo: s.creatorVideo ? { ...s.creatorVideo, ...patch } : s.creatorVideo,
+      // A re-render hands back a new videoRef — the prior plan still points
+      // at the old creator clip, so drop it. Status-only patches don't.
+      autoEdit: patch.videoRef !== undefined ? invalidatePlan(s.autoEdit) : s.autoEdit,
     })),
 
   // ── Z32 creator video config ───────────────────────────────────────────
@@ -333,13 +378,13 @@ export const useAdsVideoStore = create<AdsVideoStoreState>((set, get) => ({
     }),
 
   setInserts: (inserts) =>
-    commit(set, get, (s) => ({ ...s, inserts })),
+    commit(set, get, (s) => ({ ...s, inserts, autoEdit: invalidatePlan(s.autoEdit) })),
 
   addInsert: (insert) =>
     commit(set, get, (s) => {
       const nextId = s.inserts.reduce((m, it) => Math.max(m, it.insertId), 0) + 1
       const full: ActionInsertClip = { ...insert, insertId: nextId }
-      return { ...s, inserts: [...s.inserts, full] }
+      return { ...s, inserts: [...s.inserts, full], autoEdit: invalidatePlan(s.autoEdit) }
     }),
 
   patchInsert: (insertId, patch) =>
@@ -348,12 +393,16 @@ export const useAdsVideoStore = create<AdsVideoStoreState>((set, get) => ({
       inserts: s.inserts.map((it) =>
         it.insertId === insertId ? { ...it, ...patch } : it
       ),
+      // Re-rendering an insert swaps its videoRef — invalidate the plan that
+      // referenced the old one. Status/stage patches leave the plan intact.
+      autoEdit: patch.videoRef !== undefined ? invalidatePlan(s.autoEdit) : s.autoEdit,
     })),
 
   removeInsert: (insertId) =>
     commit(set, get, (s) => ({
       ...s,
       inserts: s.inserts.filter((it) => it.insertId !== insertId),
+      autoEdit: invalidatePlan(s.autoEdit),
     })),
 
   // Z33 — bulk add from preset suggestions
@@ -364,8 +413,13 @@ export const useAdsVideoStore = create<AdsVideoStoreState>((set, get) => ({
         s.costMode === 'FULL' ? '1080p' :
         s.costMode === 'STANDARD' ? '720p' :
         '480p'
+      // Enforce the cost-mode insert ceiling — never let a bulk apply push the
+      // total past what the chosen mode budgeted for (drives render cost).
+      const maxInserts = COST_MODE_CONFIG[s.costMode].insertCount.max
+      const room = Math.max(0, maxInserts - s.inserts.length)
+      const accepted = items.slice(0, room)
       let nextId = s.inserts.reduce((m, it) => Math.max(m, it.insertId), 0)
-      const newInserts: ActionInsertClip[] = items.map((item, i) => {
+      const newInserts: ActionInsertClip[] = accepted.map((item, i) => {
         nextId += 1
         return {
           insertId: nextId,
@@ -376,14 +430,14 @@ export const useAdsVideoStore = create<AdsVideoStoreState>((set, get) => ({
           durationSec: item.durationSec,
           resolution,
           scriptKeyword: item.scriptKeyword,
-          voiceTimestampSec: null,
+          voiceTimestampSec: item.voiceTimestampSec ?? null,
         }
       })
-      return { ...s, inserts: [...s.inserts, ...newInserts] }
+      return { ...s, inserts: [...s.inserts, ...newInserts], autoEdit: invalidatePlan(s.autoEdit) }
     }),
 
   clearAllInserts: () =>
-    commit(set, get, (s) => ({ ...s, inserts: [] })),
+    commit(set, get, (s) => ({ ...s, inserts: [], autoEdit: invalidatePlan(s.autoEdit) })),
 
   // ── Z34 Auto Edit ──────────────────────────────────────────────────────
 
@@ -553,6 +607,24 @@ export const useAdsVideoStore = create<AdsVideoStoreState>((set, get) => ({
     commit(set, get, (s) => ({
       ...s,
       scriptBrain: { ...s.scriptBrain, targetDurationSec },
+    })),
+
+  setOutputLang: (outputLang) =>
+    commit(set, get, (s) => ({
+      ...s,
+      scriptBrain: { ...s.scriptBrain, outputLang },
+    })),
+
+  setUseOwnScript: (useOwnScript) =>
+    commit(set, get, (s) => ({
+      ...s,
+      scriptBrain: { ...s.scriptBrain, useOwnScript },
+    })),
+
+  setOwnScriptText: (ownScriptText) =>
+    commit(set, get, (s) => ({
+      ...s,
+      scriptBrain: { ...s.scriptBrain, ownScriptText },
     })),
 
   setGeneratedScript: (script) =>

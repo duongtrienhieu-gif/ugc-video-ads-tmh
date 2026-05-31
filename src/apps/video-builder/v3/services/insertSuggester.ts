@@ -12,14 +12,16 @@
 // in QUICK mode workflow (Z30 §5).
 // ─────────────────────────────────────────────────────────────────────────────
 
+import { directGeminiText } from '../../../../utils/gemini'
 import type {
-  ActionPresetId, GeneratedScript, ScriptBlockId,
+  ActionPresetId, GeneratedScript, ScriptBlockId, ScriptLang,
 } from '../types'
+import { SCRIPT_LANG_GEMINI_NAME } from '../types'
 import { ACTION_PRESETS, ACTION_PRESET_ORDER } from './actionPresets'
 
 export interface InsertSuggestion {
   presetId: ActionPresetId
-  /** Number of keyword matches across the whole script */
+  /** Number of keyword matches across the whole script (keyword path only) */
   matchCount: number
   /** Specific block ids where matches occurred (for timing engine) */
   matchedBlocks: ScriptBlockId[]
@@ -27,8 +29,10 @@ export interface InsertSuggestion {
   matchedKeywords: string[]
   /** First-match block id — used by timing engine as anchor */
   anchorBlock: ScriptBlockId | null
-  /** Confidence score 0-1 (matchCount / triggerKeywords.length, capped) */
+  /** Confidence score 0-1. Keyword path = matchCount/keywords; Gemini path = fit. */
   confidence: number
+  /** Gemini path — one short phrase (in the script language) explaining the fit. */
+  reason?: string
 }
 
 /**
@@ -92,41 +96,142 @@ export function suggestInsertsForScript(script: GeneratedScript): InsertSuggesti
 }
 
 /**
- * Z33 — Pick the TOP N suggestions for a given cost mode insert budget.
- * If too few keyword-matched suggestions, pad with safe defaults
- * (HOLD_PRODUCT, POINT_LABEL — universally useful).
+ * Z33 — Keyword fallback: pick the TOP N keyword-matched suggestions.
+ * Used only when no Gemini key is available. NO confidence=0 padding —
+ * a weak/empty suggestion list is more honest than fake "safe default"
+ * inserts that don't actually match the script.
  */
 export function pickTopInsertsForBudget(
   script: GeneratedScript,
   insertBudget: number,
 ): InsertSuggestion[] {
-  const allSuggestions = suggestInsertsForScript(script)
-  if (allSuggestions.length >= insertBudget) {
-    return allSuggestions.slice(0, insertBudget)
-  }
-  // Pad with safe defaults if not enough keyword hits
-  const filledIds = new Set(allSuggestions.map((s) => s.presetId))
-  const safeDefaults: ActionPresetId[] = [
-    'HOLD_PRODUCT', 'POINT_LABEL', 'PRODUCT_CLOSEUP',
-    'OPEN_CAP', 'DESK_PRODUCT',
-  ]
-  const padded = [...allSuggestions]
-  for (const id of safeDefaults) {
-    if (padded.length >= insertBudget) break
-    if (filledIds.has(id)) continue
-    padded.push({
-      presetId: id,
-      matchCount: 0,
-      matchedBlocks: [],
-      matchedKeywords: [],
-      anchorBlock: null,
-      confidence: 0,
-    })
-    filledIds.add(id)
-  }
-  return padded.slice(0, insertBudget)
+  return suggestInsertsForScript(script).slice(0, insertBudget)
 }
 
 function escapeRegex(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
+// ── Gemini semantic suggester (primary path) ───────────────────────────────
+// Keyword matching breaks the moment the script is in a language whose
+// trigger words aren't in the bag (e.g. Bahasa Malaysia). This path reads the
+// MEANING of each block in the script's own language and maps it to the
+// inserts that visually support it — no keyword dependency, no language lock.
+
+export interface GeminiSuggestParams {
+  geminiKey: string
+  script: GeneratedScript
+  lang: ScriptLang
+  budget: number
+}
+
+const SUGGEST_RESPONSE_SCHEMA = {
+  type: 'object',
+  properties: {
+    inserts: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          presetId:    { type: 'string', enum: ACTION_PRESET_ORDER },
+          anchorBlock: { type: 'string', enum: ['hook', 'pain', 'discovery', 'benefit', 'cta'] },
+          fit:         { type: 'number' },
+          reason:      { type: 'string' },
+        },
+        required: ['presetId', 'anchorBlock', 'fit'],
+      },
+    },
+  },
+  required: ['inserts'],
+}
+
+export async function suggestInsertsWithGemini(
+  params: GeminiSuggestParams,
+): Promise<InsertSuggestion[]> {
+  const langName = SCRIPT_LANG_GEMINI_NAME[params.lang]
+  const catalogue = ACTION_PRESET_ORDER
+    .map((id) => `- ${id}: ${ACTION_PRESETS[id].descriptionVi} (needsProduct=${ACTION_PRESETS[id].needsProduct})`)
+    .join('\n')
+  const scriptDump = params.script.blocks
+    .map((b) => `[${b.id}] ${b.text}`)
+    .join('\n')
+
+  const systemInstruction = `You are a UGC ad video editor. The script is written in ${langName}.
+You choose which B-roll "action insert" clips visually support the script.
+Read the MEANING of each block (do NOT keyword-match) and pick inserts that
+illustrate what is being said at that moment.
+
+AVAILABLE INSERT PRESETS (id: what it shows):
+${catalogue}
+
+RULES:
+- Pick AT MOST ${params.budget} inserts, ranked best-first.
+- Anchor each insert to the ONE block (hook/pain/discovery/benefit/cta) it best supports.
+- Only suggest an insert if it genuinely fits. Fewer strong inserts > padding with weak ones.
+- Never suggest the same presetId twice.
+- "fit" = 0..1 strength of the match. "reason" = one short phrase in ${langName}.
+
+OUTPUT strict JSON, no fences:
+{ "inserts": [ { "presetId": "...", "anchorBlock": "...", "fit": 0.0, "reason": "..." } ] }`
+
+  const userPrompt = `SCRIPT (block id in brackets):\n${scriptDump}\n\nPick the inserts now.`
+
+  const raw = await directGeminiText({
+    apiKey: params.geminiKey,
+    systemInstruction,
+    prompt: userPrompt,
+    maxOutputTokens: 1024,
+    responseMimeType: 'application/json',
+    responseSchema: SUGGEST_RESPONSE_SCHEMA,
+  })
+
+  const parsed = parseSuggestOutput(raw)
+  const seen = new Set<ActionPresetId>()
+  const validPresets = new Set<string>(ACTION_PRESET_ORDER)
+  const validBlocks = new Set<string>(['hook', 'pain', 'discovery', 'benefit', 'cta'])
+
+  const out: InsertSuggestion[] = []
+  for (const item of parsed) {
+    if (!validPresets.has(item.presetId)) continue
+    if (seen.has(item.presetId as ActionPresetId)) continue
+    const anchor = validBlocks.has(item.anchorBlock) ? (item.anchorBlock as ScriptBlockId) : null
+    const fit = Math.max(0, Math.min(1, Number(item.fit) || 0))
+    if (fit <= 0) continue  // drop non-matches — no padding
+    seen.add(item.presetId as ActionPresetId)
+    out.push({
+      presetId: item.presetId as ActionPresetId,
+      matchCount: 0,
+      matchedBlocks: anchor ? [anchor] : [],
+      matchedKeywords: [],
+      anchorBlock: anchor,
+      confidence: fit,
+      reason: typeof item.reason === 'string' ? item.reason : undefined,
+    })
+  }
+  out.sort((a, b) => b.confidence - a.confidence)
+  return out.slice(0, params.budget)
+}
+
+interface RawSuggestItem {
+  presetId: string
+  anchorBlock: string
+  fit: number
+  reason?: string
+}
+
+function parseSuggestOutput(raw: string): RawSuggestItem[] {
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(raw)
+  } catch {
+    const cleaned = raw.replace(/^```(?:json)?\s*/m, '').replace(/```\s*$/m, '').trim()
+    try {
+      parsed = JSON.parse(cleaned)
+    } catch {
+      return []
+    }
+  }
+  const obj = parsed as { inserts?: unknown }
+  if (!obj || typeof obj !== 'object' || !Array.isArray(obj.inserts)) return []
+  return obj.inserts as RawSuggestItem[]
 }

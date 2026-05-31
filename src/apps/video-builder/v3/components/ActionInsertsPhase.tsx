@@ -13,10 +13,10 @@
 //      been locked or approved.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { useMemo, useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import {
   Loader2, Sparkles, AlertCircle, ChevronRight, Play, Pause, RotateCcw,
-  Check, ThumbsDown, Lock, Unlock, X, Plus, Trash2, Lightbulb, Zap,
+  Check, ThumbsDown, Lock, Unlock, X, Plus, Trash2, Lightbulb, Zap, Wand2,
 } from 'lucide-react'
 import { useAppStore } from '../../../../stores/appStore'
 import { useSettingsStore } from '../../../../stores/settingsStore'
@@ -24,12 +24,17 @@ import { useAssetUrl } from '../../../../hooks/useAssetUrl'
 import { useAdsVideoStore } from '../stores/adsVideoStore'
 import {
   COST_MODE_CONFIG, INSERT_STAGE_LABEL_VI,
+  V3_CREDIT_COST, formatCredits,
   type ActionPresetId, type ActionInsertClip, type InsertRenderStage,
   type V3ClipStatus,
 } from '../types'
 import { ACTION_PRESETS, ACTION_PRESET_ORDER } from '../services/actionPresets'
-import { pickTopInsertsForBudget } from '../services/insertSuggester'
+import {
+  pickTopInsertsForBudget, suggestInsertsWithGemini,
+  type InsertSuggestion,
+} from '../services/insertSuggester'
 import { renderInsert, listEligibleInsertsForBulk } from '../services/insertRenderer'
+import { computeBlockStartTimestamps } from '../services/insertTimingEngine'
 
 // Wrap Date.now in a non-render-pure call site so react-hooks/purity lint
 // doesn't false-positive on usage inside async event handlers below.
@@ -74,8 +79,10 @@ export default function ActionInsertsPhase({ onContinue }: Props) {
   const patchInsert      = useAdsVideoStore((s) => s.patchInsert)
   const removeInsert     = useAdsVideoStore((s) => s.removeInsert)
   const clearAllInserts  = useAdsVideoStore((s) => s.clearAllInserts)
+  const setSkipPreviewOverride = useAdsVideoStore((s) => s.setSkipPreviewOverride)
 
   const kieApiKey   = useSettingsStore((s) => s.kieApiKey)
+  const geminiKey   = useSettingsStore((s) => s.geminiApiKey)
   const addToast    = useAppStore((s) => s.addToast)
 
   const inserts = state.inserts
@@ -86,21 +93,70 @@ export default function ActionInsertsPhase({ onContinue }: Props) {
     state.costMode === 'FULL' ? '1080p' :
     state.costMode === 'STANDARD' ? '720p' :
     '480p'
+  const skipPreview = state.skipPreviewOverride ?? costModeCfg.skipPreviewDefault
+  // How many inserts a "Bulk render" would actually pay for (skips
+  // locked/approved/rejected per the Z26 lesson) — drives the cost chip.
+  const bulkPendingCount = listEligibleInsertsForBulk(inserts).length
 
   const overBudget = inserts.length > maxInserts
 
-  // ── Smart suggestions ────────────────────────────────────────────────────
-  const suggestions = useMemo(() => {
-    if (!state.scriptBrain.script) return []
-    return pickTopInsertsForBudget(state.scriptBrain.script, maxInserts)
-  }, [state.scriptBrain.script, maxInserts])
+  // ── Smart suggestions (Gemini semantic, script-language aware) ────────────
+  const [suggestions, setSuggestions] = useState<InsertSuggestion[]>([])
+  const [isSuggesting, setIsSuggesting] = useState(false)
+
+  const handleSuggest = async () => {
+    const script = state.scriptBrain.script
+    if (!script) {
+      addToast('Chưa có script — quay lại bước 2', 'error')
+      return
+    }
+    setIsSuggesting(true)
+    try {
+      if (geminiKey) {
+        const result = await suggestInsertsWithGemini({
+          geminiKey,
+          script,
+          lang: state.scriptBrain.outputLang,
+          budget: maxInserts,
+        })
+        setSuggestions(result)
+        addToast(
+          result.length > 0
+            ? `✓ Gemini gợi ý ${result.length} insert theo nội dung script`
+            : 'Gemini không tìm thấy insert nào thật sự khớp — bạn tự chọn từ thư viện nhé',
+          result.length > 0 ? 'success' : 'info',
+        )
+      } else {
+        // Offline fallback — keyword match, no padding.
+        const result = pickTopInsertsForBudget(script, maxInserts)
+        setSuggestions(result)
+        addToast(
+          result.length > 0
+            ? `Gợi ý theo keyword (${result.length}) — thêm Gemini key để gợi ý theo nghĩa`
+            : 'Không match keyword nào — thêm Gemini key hoặc tự chọn từ thư viện',
+          'info',
+        )
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      addToast(`Gợi ý lỗi: ${msg.slice(0, 160)}`, 'error')
+    } finally {
+      setIsSuggesting(false)
+    }
+  }
 
   const handleApplySuggestions = () => {
     if (suggestions.length === 0) return
+    const script = state.scriptBrain.script
+    // Anchor each suggestion to its block's start second so the auto-edit
+    // planner places it at the right moment (semantic match → timeline).
+    const blockStarts = script ? computeBlockStartTimestamps(script) : null
     const items = suggestions.map((s) => ({
       presetId: s.presetId,
       durationSec: ACTION_PRESETS[s.presetId].durationPreset,
       scriptKeyword: s.matchedKeywords[0],
+      voiceTimestampSec:
+        blockStarts && s.anchorBlock ? blockStarts[s.anchorBlock] : null,
     }))
     clearAllInserts()
     bulkAddInsertsFromPresets(items)
@@ -145,7 +201,9 @@ export default function ActionInsertsPhase({ onContinue }: Props) {
         presetId: insert.presetId,
         product: preset.needsProduct ? state.inputs.product : null,
         avatar: state.inputs.avatar,
+        creatorKeyframeRef: state.creatorVideo?.keyframeRef,
         resolution: insert.resolution,
+        skipPreview,
         onStageUpdate: (update) => {
           patchInsert(insertId, {
             stage: update.stage,
@@ -205,51 +263,69 @@ export default function ActionInsertsPhase({ onContinue }: Props) {
           <h2 className="text-lg font-bold text-gray-900">Bước 4 — Action Inserts</h2>
           <p className="text-[12px] text-gray-500">
             3-8 clip ngắn hỗ trợ (cầm sản phẩm, mở nắp, point label, etc) — không phải B-roll cinematic.
-            Cost mode <strong>{costModeCfg.labelVi}</strong> · giới hạn {minInserts}-{maxInserts} insert · resolution {insertResolution}.
+            Giới hạn {minInserts}-{maxInserts} insert · {insertResolution} · mỗi insert {formatCredits(V3_CREDIT_COST.insert)}.
           </p>
+          <label className="mt-1 flex w-fit cursor-pointer items-center gap-1.5 text-[11px] text-gray-600">
+            <input
+              type="checkbox"
+              checked={skipPreview}
+              onChange={(e) => setSkipPreviewOverride(e.target.checked)}
+              className="h-3 w-3 accent-violet-600"
+            />
+            Bỏ qua preview 1s mỗi insert (nhanh + rẻ hơn, bỏ bước kiểm tra motion)
+          </label>
         </div>
 
-        {/* ── Smart suggestions banner ────────────────────────────────────── */}
-        {suggestions.length > 0 && (
+        {/* ── Smart suggestions (Gemini semantic) ─────────────────────────── */}
+        {state.scriptBrain.script && (
           <div className="mb-4 rounded-xl border border-amber-200 bg-gradient-to-r from-amber-50 to-orange-50 p-4">
             <div className="flex items-start gap-3">
               <Lightbulb className="h-5 w-5 shrink-0 text-amber-600" />
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-bold text-gray-900">
-                  Gợi ý từ script ({suggestions.length} insert tốt nhất)
+                  Gợi ý insert theo nội dung script
                 </p>
                 <p className="mt-0.5 text-[11px] text-gray-600">
-                  Quét keyword trong script Phase 2 → chọn preset phù hợp nhất.
+                  Gemini đọc <strong>nghĩa</strong> từng đoạn (đúng ngôn ngữ output) và chọn insert phù hợp — không dò keyword.
                 </p>
-                <div className="mt-2 flex flex-wrap gap-1.5">
-                  {suggestions.map((sug) => {
-                    const preset = ACTION_PRESETS[sug.presetId]
-                    return (
-                      <span
-                        key={sug.presetId}
-                        title={sug.matchedKeywords.length > 0
-                          ? `Match từ: ${sug.matchedKeywords.join(', ')}`
-                          : 'Default fill (không có keyword match)'}
-                        className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[10px] font-bold ${
-                          sug.matchCount > 0 ? TONE_BG[preset.tone] : 'border-gray-200 bg-white text-gray-500'
-                        }`}
-                      >
-                        <span>{preset.emoji}</span>
-                        <span>{preset.labelVi}</span>
-                        {sug.matchCount > 0 && (
-                          <span className="text-[8px] opacity-70">×{sug.matchCount}</span>
-                        )}
-                      </span>
-                    )
-                  })}
-                </div>
+                {suggestions.length > 0 && (
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    {suggestions.map((sug) => {
+                      const preset = ACTION_PRESETS[sug.presetId]
+                      return (
+                        <span
+                          key={sug.presetId}
+                          title={sug.reason ?? `Khớp ~${Math.round(sug.confidence * 100)}%`}
+                          className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[10px] font-bold ${TONE_BG[preset.tone]}`}
+                        >
+                          <span>{preset.emoji}</span>
+                          <span>{preset.labelVi}</span>
+                          <span className="text-[8px] opacity-70">{Math.round(sug.confidence * 100)}%</span>
+                        </span>
+                      )
+                    })}
+                  </div>
+                )}
               </div>
-              <button
-                onClick={handleApplySuggestions}
-                className="shrink-0 rounded-lg bg-gradient-to-r from-amber-500 to-orange-500 px-3 py-2 text-[12px] font-bold text-white shadow-sm hover:from-amber-600 hover:to-orange-600"
-              >
-                <Zap className="mr-1 inline h-3.5 w-3.5" /> Apply
-              </button>
+              <div className="flex shrink-0 flex-col gap-1.5">
+                <button
+                  onClick={handleSuggest}
+                  disabled={isSuggesting}
+                  className="rounded-lg border border-amber-300 bg-white px-3 py-2 text-[12px] font-bold text-amber-700 shadow-sm hover:bg-amber-50 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {isSuggesting
+                    ? <><Loader2 className="mr-1 inline h-3.5 w-3.5 animate-spin" /> Đang đọc...</>
+                    : <><Wand2 className="mr-1 inline h-3.5 w-3.5" /> Gợi ý AI</>}
+                </button>
+                {suggestions.length > 0 && (
+                  <button
+                    onClick={handleApplySuggestions}
+                    className="rounded-lg bg-gradient-to-r from-amber-500 to-orange-500 px-3 py-2 text-[12px] font-bold text-white shadow-sm hover:from-amber-600 hover:to-orange-600"
+                  >
+                    <Zap className="mr-1 inline h-3.5 w-3.5" /> Apply {suggestions.length}
+                  </button>
+                )}
+              </div>
             </div>
           </div>
         )}
@@ -342,14 +418,14 @@ export default function ActionInsertsPhase({ onContinue }: Props) {
                   onClick={handleBulkRender}
                   className="flex items-center gap-1.5 rounded-full bg-gradient-to-r from-violet-600 to-pink-600 px-4 py-2 text-[12px] font-bold text-white shadow-sm hover:from-violet-700 hover:to-pink-700"
                 >
-                  <Sparkles className="h-3.5 w-3.5" /> Bulk render
+                  <Sparkles className="h-3.5 w-3.5" /> Bulk render{bulkPendingCount > 0 ? ` · ${formatCredits(bulkPendingCount * V3_CREDIT_COST.insert)}` : ''}
                 </button>
                 {approvedCount >= minInserts && (
                   <button
                     onClick={onContinue}
                     className="flex items-center gap-1.5 rounded-full bg-gradient-to-r from-emerald-600 to-teal-600 px-4 py-2 text-[12px] font-bold text-white shadow-sm hover:from-emerald-700 hover:to-teal-700"
                   >
-                    Tiếp tục → Preview <ChevronRight className="h-3.5 w-3.5" />
+                    Tiếp tục → Auto-Edit <ChevronRight className="h-3.5 w-3.5" />
                   </button>
                 )}
               </div>

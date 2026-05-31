@@ -31,6 +31,7 @@ import { buildAssSubtitles } from './subtitleAssBurner'
 import { EXPORT_FORMATS } from './exportFormats'
 import { EXPORT_QUALITIES } from './exportQuality'
 import { BGM_CATALOG } from './bgmCatalog'
+import { SFX_CATALOG } from './sfxCatalog'
 import type {
   AutoEditPlan, ExportFormatId, ExportQualityId,
   ExportRenderStage,
@@ -102,7 +103,7 @@ export async function assembleFinalVideo(
   // ── STAGE 1: PREP — resolve assets + write to ffmpeg FS ───────────────
   params.onStage?.('preparing', 'Fetching clips + audio...')
   const failedClipIds: number[] = []
-  const segmentInputs: { idx: number; fileName: string; durationSec: number }[] = []
+  const segmentInputs: { idx: number; fileName: string; durationSec: number; sourceInSec: number }[] = []
 
   for (let i = 0; i < params.plan.segments.length; i++) {
     const seg = params.plan.segments[i]
@@ -120,7 +121,7 @@ export async function assembleFinalVideo(
       const fileName = `seg_${i}.mp4`
       const data = await fetchFile(url)
       await ffmpeg.writeFile(fileName, data)
-      segmentInputs.push({ idx: i, fileName, durationSec: seg.durationSec })
+      segmentInputs.push({ idx: i, fileName, durationSec: seg.durationSec, sourceInSec: seg.sourceInSec ?? 0 })
     } catch (err) {
       const clipId = seg.source.kind === 'action_insert' ? seg.source.insertId : -1
       console.warn(`[ASSEMBLE] segment ${seg.segmentId} fetch failed — skipping`, err)
@@ -145,6 +146,38 @@ export async function assembleFinalVideo(
     } catch (err) {
       console.warn('[ASSEMBLE] voice fetch failed — continuing without override', err)
       voiceFile = null
+    }
+  }
+
+  // Write SFX cue audio (fail-soft — skip any that 404 / are placeholders).
+  // Each resolvable cue carries its timeline position + per-cue volume.
+  const sfxFiles: { fileName: string; startSec: number; volume: number }[] = []
+  for (let i = 0; i < params.plan.sfxCues.length; i++) {
+    const cue = params.plan.sfxCues[i]
+    const url = SFX_CATALOG[cue.sfxId]?.url
+    if (!url) continue
+    const data = await tryFetchAudio(url)
+    if (!data) continue
+    const fileName = `sfx_${i}.mp3`
+    await ffmpeg.writeFile(fileName, data)
+    sfxFiles.push({ fileName, startSec: cue.startSec, volume: cue.volume })
+  }
+
+  // Write BGM track (fail-soft). Looped + faded to cover the whole video.
+  let bgmFile: { fileName: string; volume: number; fadeInSec: number; fadeOutSec: number } | null = null
+  if (params.plan.bgm) {
+    const url = BGM_CATALOG[params.plan.bgm.styleId]?.url
+    if (url) {
+      const data = await tryFetchAudio(url)
+      if (data) {
+        await ffmpeg.writeFile('bgm.mp3', data)
+        bgmFile = {
+          fileName: 'bgm.mp3',
+          volume: params.plan.bgm.volume,
+          fadeInSec: params.plan.bgm.fadeInSec,
+          fadeOutSec: params.plan.bgm.fadeOutSec,
+        }
+      }
     }
   }
 
@@ -183,7 +216,7 @@ export async function assembleFinalVideo(
     const s = segmentInputs[i]
     filterParts.push(
       `[${i}:v]scale=${evenW}:${evenH}:force_original_aspect_ratio=increase,` +
-      `crop=${evenW}:${evenH},setpts=PTS-STARTPTS,trim=duration=${s.durationSec}[v${i}]`,
+      `crop=${evenW}:${evenH},trim=start=${s.sourceInSec}:duration=${s.durationSec},setpts=PTS-STARTPTS[v${i}]`,
     )
   }
   const concatInputs = Array.from({ length: N }, (_, i) => `[v${i}]`).join('')
@@ -210,43 +243,107 @@ export async function assembleFinalVideo(
   // ── STAGE 3: MUX — burn subtitles + add audio ─────────────────────────
   params.onStage?.('muxing', 'Burning subtitles + mixing audio...')
 
-  const muxInputs: string[] = ['-i', intermediateFile]
-  if (voiceFile) muxInputs.push('-i', voiceFile)
-
-  const vfFilters: string[] = []
-  if (assFile) vfFilters.push(`ass=${assFile}`)
-
-  const muxArgs: string[] = [...muxInputs]
-  if (vfFilters.length > 0) {
-    muxArgs.push('-vf', vfFilters.join(','))
-  }
-
-  // Audio: if voice file present, use it; otherwise keep silent
-  if (voiceFile) {
-    muxArgs.push(
-      '-map', '0:v:0',
-      '-map', '1:a:0',
-      '-c:v', 'libx264',
-      '-preset', preset_x264,
-      '-crf', crf,
-      '-c:a', 'aac',
-      '-b:a', `${qualityCfg.audioBitrateKbps}k`,
-      '-shortest',
-    )
-  } else {
-    muxArgs.push(
-      '-map', '0:v:0',
-      '-c:v', 'libx264',
-      '-preset', preset_x264,
-      '-crf', crf,
-      '-an',  // no audio
-    )
-  }
-
   const outFile = 'out.mp4'
-  muxArgs.push('-pix_fmt', 'yuv420p', '-movflags', '+faststart', '-y', outFile)
+  const hasExtraAudio = sfxFiles.length > 0 || bgmFile !== null
 
-  await ffmpeg.exec(muxArgs)
+  if (!hasExtraAudio) {
+    // ── Simple path: voice-only (or silent) — burn subs via -vf ─────────
+    const muxInputs: string[] = ['-i', intermediateFile]
+    if (voiceFile) muxInputs.push('-i', voiceFile)
+
+    const muxArgs: string[] = [...muxInputs]
+    if (assFile) muxArgs.push('-vf', `ass=${assFile}`)
+
+    if (voiceFile) {
+      muxArgs.push(
+        '-map', '0:v:0',
+        '-map', '1:a:0',
+        '-c:v', 'libx264',
+        '-preset', preset_x264,
+        '-crf', crf,
+        '-c:a', 'aac',
+        '-b:a', `${qualityCfg.audioBitrateKbps}k`,
+        '-shortest',
+      )
+    } else {
+      muxArgs.push(
+        '-map', '0:v:0',
+        '-c:v', 'libx264',
+        '-preset', preset_x264,
+        '-crf', crf,
+        '-an',  // no audio
+      )
+    }
+    muxArgs.push('-pix_fmt', 'yuv420p', '-movflags', '+faststart', '-y', outFile)
+    await ffmpeg.exec(muxArgs)
+  } else {
+    // ── Mix path: voice + SFX cues + BGM via amix ───────────────────────
+    // -vf cannot coexist with -filter_complex, so burn subtitles inside the
+    // graph too. Voice stays at full volume (normalize=0); SFX are delayed
+    // to their cue time; BGM is looped + faded under the voice.
+    const muxInputs: string[] = ['-i', intermediateFile]
+    let inIdx = 1
+    const audioParts: string[] = []
+    const amixLabels: string[] = []
+
+    if (voiceFile) {
+      muxInputs.push('-i', voiceFile)
+      audioParts.push(`[${inIdx}:a]volume=1.0[a_voice]`)
+      amixLabels.push('[a_voice]')
+      inIdx++
+    }
+    for (let i = 0; i < sfxFiles.length; i++) {
+      const s = sfxFiles[i]
+      muxInputs.push('-i', s.fileName)
+      const delayMs = Math.max(0, Math.round(s.startSec * 1000))
+      audioParts.push(`[${inIdx}:a]adelay=${delayMs}:all=1,volume=${s.volume.toFixed(2)}[a_sfx${i}]`)
+      amixLabels.push(`[a_sfx${i}]`)
+      inIdx++
+    }
+    if (bgmFile) {
+      // -stream_loop -1 must precede its -i so the track repeats; atrim caps it.
+      muxInputs.push('-stream_loop', '-1', '-i', bgmFile.fileName)
+      const total = params.plan.totalDurationSec
+      const fadeOutStart = Math.max(0, total - bgmFile.fadeOutSec)
+      audioParts.push(
+        `[${inIdx}:a]volume=${bgmFile.volume.toFixed(2)},` +
+        `afade=t=in:st=0:d=${bgmFile.fadeInSec},` +
+        `afade=t=out:st=${fadeOutStart.toFixed(2)}:d=${bgmFile.fadeOutSec},` +
+        `atrim=0:${total.toFixed(2)}[a_bgm]`,
+      )
+      amixLabels.push('[a_bgm]')
+      inIdx++
+    }
+
+    const fcParts: string[] = []
+    fcParts.push(assFile ? `[0:v]ass=${assFile}[outv]` : `[0:v]null[outv]`)
+    fcParts.push(...audioParts)
+    let audioMapLabel: string | null = null
+    if (amixLabels.length > 1) {
+      fcParts.push(`${amixLabels.join('')}amix=inputs=${amixLabels.length}:normalize=0:duration=longest[aout]`)
+      audioMapLabel = '[aout]'
+    } else if (amixLabels.length === 1) {
+      audioMapLabel = amixLabels[0]
+    }
+
+    const muxArgs: string[] = [
+      ...muxInputs,
+      '-filter_complex', fcParts.join(';'),
+      '-map', '[outv]',
+    ]
+    if (audioMapLabel) {
+      muxArgs.push(
+        '-map', audioMapLabel,
+        '-c:v', 'libx264', '-preset', preset_x264, '-crf', crf,
+        '-c:a', 'aac', '-b:a', `${qualityCfg.audioBitrateKbps}k`,
+        '-shortest',
+      )
+    } else {
+      muxArgs.push('-c:v', 'libx264', '-preset', preset_x264, '-crf', crf, '-an')
+    }
+    muxArgs.push('-pix_fmt', 'yuv420p', '-movflags', '+faststart', '-y', outFile)
+    await ffmpeg.exec(muxArgs)
+  }
 
   // ── STAGE 4: SAVE ────────────────────────────────────────────────────
   const data = await ffmpeg.readFile(outFile)
@@ -260,6 +357,8 @@ export async function assembleFinalVideo(
   try {
     for (const s of segmentInputs) await ffmpeg.deleteFile(s.fileName).catch(() => {})
     if (voiceFile) await ffmpeg.deleteFile(voiceFile).catch(() => {})
+    for (const s of sfxFiles) await ffmpeg.deleteFile(s.fileName).catch(() => {})
+    if (bgmFile) await ffmpeg.deleteFile(bgmFile.fileName).catch(() => {})
     if (assFile) await ffmpeg.deleteFile(assFile).catch(() => {})
     await ffmpeg.deleteFile(intermediateFile).catch(() => {})
     await ffmpeg.deleteFile(outFile).catch(() => {})
@@ -322,11 +421,22 @@ export async function preflightCheckAssets(plan: AutoEditPlan): Promise<{
   }
 }
 
-// Helper used by the BGM mixer in future — kept for forward-compat
-export function bgmStyleVolume(styleId: AutoEditPlan['bgm'] extends infer T ? T : null): number {
-  void styleId
-  return 0.15
+/**
+ * Fetch a (possibly placeholder) audio URL fail-soft. Returns the bytes only
+ * if the response is a real audio file. Guards against the dev-server SPA
+ * fallback that returns index.html (200 + text/html) for missing /sfx/*.mp3
+ * and /bgm/*.mp3 — feeding that HTML to ffmpeg would corrupt the whole mux.
+ */
+async function tryFetchAudio(url: string): Promise<Uint8Array | null> {
+  try {
+    const res = await fetch(url)
+    if (!res.ok) return null
+    const contentType = res.headers.get('content-type') ?? ''
+    if (contentType.includes('text/html')) return null
+    const buf = await res.arrayBuffer()
+    if (buf.byteLength === 0) return null
+    return new Uint8Array(buf)
+  } catch {
+    return null
+  }
 }
-
-// Suppress unused-warning for BGM_CATALOG (referenced in future audio mixer pass)
-void BGM_CATALOG
