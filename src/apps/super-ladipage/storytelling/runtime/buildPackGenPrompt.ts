@@ -22,7 +22,7 @@ import {
   BELIEF_SHIFT_CATALYSTS,
   getReframeForNiche,
 } from '../config/beliefShiftEngine'
-import { buildSoftCtaDirective } from '../config/softCtaPatterns'
+import { buildSoftCtaDirective, buildDrCtaDirective } from '../config/softCtaPatterns'
 import { narratorBrief } from '../config/narratorArchetypes'
 import { emotionalDnaBrief } from '../config/personaEmotionalDNA'
 import { energyCurveBrief } from '../config/energyCurvePresets'
@@ -41,7 +41,7 @@ import { softCompareBrief } from '../config/softComparePatterns'
 import { buildCtaMomentsBrief } from '../../cta'
 import type { NarratorDnaSelection } from './selectNarratorDna'
 import type { PackBrainstorm } from '../../packBrainstorm'
-import type { LengthMode } from '../../narrativeMode'
+import type { LengthMode, NarrativeMode } from '../../narrativeMode'
 import { getLengthModeSpec } from '../../narrativeMode'
 
 /** Compose protagonist brief — 1-2 lines, used in system prompt context. */
@@ -86,6 +86,10 @@ function buildBlockDirective(
   /** 2026-05-29 — When provided, overrides default paragraphTarget with
    *  length-mode-aware bounds + injects explicit per-block word cap. */
   lengthMode?: LengthMode,
+  /** 2026-05-30 — Pain-driven-DR mode swaps the soft close directive
+   *  for a DR close (action verb + scarcity recall + transformation
+   *  echo + objection knockout). Other modes keep the soft close. */
+  narrativeMode?: NarrativeMode,
 ): string {
   const block = plan.blueprint
   const lines: string[] = []
@@ -243,11 +247,29 @@ function buildBlockDirective(
     lines.push(`  Brief mention / reframe — reader recognizes it returning. KHÔNG verbatim repeat.`)
   }
 
-  // ─── Soft CTA block ─────────────────────────────────────────────────
+  // ─── Soft CTA block — mode-conditional (2026-05-30) ─────────────────
+  // Pain-driven-DR packs ship a CLOSING DIRECTIVE that includes action
+  // verb + scarcity recall + transformation recall + objection knockout.
+  // Soft + aspiration modes keep the original peer-acknowledgment /
+  // gentle-permission / quiet-invitation tones — those are appropriate
+  // for skincare / beauty / lifestyle packs where hard close would feel
+  // off-brand and reader would scroll past instead of acting.
+  //
+  // User feedback (dental whitening pack): DR mode with soft close =
+  // "đầu voi đuôi chuột" — all Phase 1-4 agitation wasted because the
+  // closing chapter cut to "Có lẽ đã đến lúc thử một cách khác" with
+  // no action verb, no scarcity, no transformation recall.
   if (block.samplingHooks.softCta) {
-    lines.push(`  ${buildSoftCtaDirective()}`)
-    lines.push(`  Length 60-100 từ. KHÔNG benefit push, KHÔNG urgency, KHÔNG "buy now".`)
-    lines.push(`  Self-test: thay product bằng "cuốn sách tôi đọc" — vẫn make sense → PASS.`)
+    if (narrativeMode === 'pain-driven-DR') {
+      lines.push(`  ${buildDrCtaDirective()}`)
+      lines.push(`  Length 100-160 từ (DR close needs 5 elements — KHÔNG cắt ngắn).`)
+      lines.push(`  Self-test: count (1) pain pivot recall, (2) action verb, (3) numeric scarcity,`)
+      lines.push(`    (4) transformation recall, (5) objection knockout — ALL 5 present? PASS.`)
+    } else {
+      lines.push(`  ${buildSoftCtaDirective()}`)
+      lines.push(`  Length 60-100 từ. KHÔNG benefit push, KHÔNG urgency, KHÔNG "buy now".`)
+      lines.push(`  Self-test: thay product bằng "cuốn sách tôi đọc" — vẫn make sense → PASS.`)
+    }
   }
 
   return lines.join('\n')
@@ -265,6 +287,8 @@ export function buildPackGenUserPrompt(
   brainstorm?: PackBrainstorm,
   /** 2026-05-29 — Length mode for per-block word cap + mobile rhythm. */
   lengthMode?: LengthMode,
+  /** 2026-05-30 — Pain-driven-DR mode override for close-invitation. */
+  narrativeMode?: NarrativeMode,
 ): string {
   const lines: string[] = []
 
@@ -321,7 +345,7 @@ export function buildPackGenUserPrompt(
   lines.push(`═══ ${storyBlocks.length} BLOCKS — generate ALL in order ═══`)
   for (const bp of storyBlocks) {
     lines.push('')
-    lines.push(buildBlockDirective(bp, input, selection, brainstorm, lengthMode))
+    lines.push(buildBlockDirective(bp, input, selection, brainstorm, lengthMode, narrativeMode))
   }
 
   // ─── Optional retry feedback ────────────────────────────────────────

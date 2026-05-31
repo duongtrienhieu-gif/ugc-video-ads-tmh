@@ -236,10 +236,32 @@ const GLOBAL_BANS = `═══ GLOBAL BANS ═══
 - Miracle claims ("khỏi hẳn", "ngay lập tức", "X% người dùng")
 - Hard sell ("đặt hàng ngay", "chỉ còn", "đừng bỏ lỡ")
 - Copywriter bait ("bạn xứng đáng", "đừng để X hủy hoại")
-- Aspirational hype ("phép màu", "đột phá", "thay đổi cuộc đời")
+- Aspirational hype ("phép màu", "đột phá", "thay đổi cuộc đời", "không phải là phép màu")
 - Doctor authority ("bác sĩ khuyên", "BS X")
 - Statistics dump, plot-twist, cliffhanger, trauma escalation
-- Architected emotion feel ("designed to feel emotional")`
+- Architected emotion feel ("designed to feel emotional")
+
+⚠️ AI WELLNESS FINGERPRINT — TUYỆT ĐỐI cấm các cụm sau (đã trigger cross-niche
+contamination trong test thực tế):
+- "từ bên trong" / "từ bên trong cơ thể" / "tác động từ trong ra ngoài"
+- "nguyên nhân gốc rễ" / "gốc rễ vấn đề" / "căn nguyên" / "giải quyết tận gốc"
+- "không phải chỉ che đậy triệu chứng" / "che đậy bề ngoài"
+- "thẩm thấu sâu" / "ngấm sâu vào tận"
+- "cân bằng cơ thể" / "phục hồi từ bên trong" / "nuôi dưỡng toàn diện"
+- MS equivalents: "akar masalah", "punca utama", "atasi punca", "dari dalam"
+- EN equivalents: "root cause", "address the source", "from within", "not just symptoms"
+
+⚠️ FABRICATION BAN — tuyệt đối KHÔNG tự bịa:
+- Số liệu cụ thể (X%, X.X/5.0, hàng nghìn người dùng) nếu input KHÔNG có.
+  Nếu input có "4.9/5.0" → OK. Nếu không có → KHÔNG viết.
+- Cert badges (KKM, JAKIM, HALAL, GMP, EU-GMP, FDA, BPOM) nếu user KHÔNG
+  cung cấp proof. Nếu input không nêu cert → KHÔNG nhắc.
+- Tên thành phần / công nghệ độc quyền (Công nghệ Nano, công nghệ Z-Fiber)
+  nếu input KHÔNG có. Chỉ liệt kê thành phần / công nghệ user đã input.
+- So sánh hiệu quả "gấp X lần" / "5x faster" nếu input không nêu.
+
+Nếu thiếu data: narrator dùng uncertainty hedge ("tôi không rõ chi tiết
+khoa học", "tôi chỉ biết...") thay vì bịa số.`
 
 const OUTPUT_FORMAT = (langLabel: string) => `═══ OUTPUT FORMAT ═══
 JSON only. No markdown fences. No prose outside JSON.

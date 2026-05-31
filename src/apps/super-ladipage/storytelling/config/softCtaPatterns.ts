@@ -124,3 +124,85 @@ export function buildSoftCtaDirective(): string {
   const toneKeys = Object.keys(SOFT_CTA_TONES) as Array<keyof typeof SOFT_CTA_TONES>
   return `SOFT CTA TONES (CHOOSE 1, vary across packs): ${toneKeys.join(' / ')}`
 }
+
+// ═════════════════════════════════════════════════════════════════════
+// 2026-05-30 — Pain-driven-DR close directive
+//
+// User feedback (dental whitening pack): pain-driven-DR mode pack
+// produced shock pain in Phase 1-2, full failed-attempts RM500 detail
+// in Phase 2, transformation specifics in Phase 4 — then cut to a SOFT
+// close ("Có lẽ đã đến lúc bạn cho phép bản thân thử một cách khác")
+// that wasted all the agitation. Conversion = "đầu voi đuôi chuột".
+//
+// DR mode close needs:
+//   1. Pivot back to the SPECIFIC pain reader felt (sensory recall).
+//   2. Explicit ACTION VERB ("đặt", "mua", "thử", "lấy" + lang variants).
+//   3. SCARCITY echo (recall pricing tier or limited offer from PI block).
+//   4. SPECIFIC transformation recall (echo Phase 4 sensory moment).
+//   5. 1 OBJECTION KNOCKOUT (risk reversal: COD, refund, free shipping).
+//
+// Still NOT hard-sell screaming. Still narrator voice. But the close
+// closes — it doesn't drift into a soft "permission to try" with no
+// next step.
+//
+// The directive is INJECTED at the close-invitation block when
+// narrativeMode === 'pain-driven-DR'. Soft + aspiration modes keep
+// the existing buildSoftCtaDirective behavior.
+// ═════════════════════════════════════════════════════════════════════
+
+export const DR_CTA_PROMPT =
+  `Section 11 (close-invitation) — PAIN-DRIVEN-DR CLOSE:
+
+Bạn vừa stack ${ '6-9' } chương về pain + failed attempts + product reveal +
+transformation. Reader đang ở peak emotional readiness — NGAY BÂY GIỜ là
+moment họ quyết định mua hay không. KHÔNG được soft-out với "có lẽ bạn
+cũng có quyền dừng lại" — đó là wasted agitation.
+
+DR CLOSE phải có ĐỦ 5 ELEMENTS (per priority):
+
+1. PAIN PIVOT (1 paragraph) — recall ONE specific symptom reader đã
+   nhận ra ở Phase 1-2 (cụ thể, KHÔNG generic "khó chịu").
+   ✅ "Sáng mai bạn vẫn che miệng khi cười, hay đặt 1 hộp về thử?"
+   ❌ "Có lẽ đã đến lúc thử một cách khác"
+
+2. ACTION VERB EXPLICIT (1 paragraph) — câu mệnh lệnh cụ thể:
+   ✅ "Đặt 1 hộp về dùng 30 ngày — không hợp trả lại."
+   ✅ "Lấy gói MUA 2 TẶNG 2 — đủ cho bạn + mẹ."
+   ✅ "Thử 1 chai trước — RM59 thôi, đỡ rủi ro."
+   MS: "Order satu kotak", "Cuba", "Beli".
+   EN: "Order 1 box", "Try", "Get".
+
+3. SCARCITY ECHO (1 sentence) — recall offer cụ thể từ PI pricing block:
+   "Giá RM59 (giảm từ RM119) — promo đến hết tháng."
+   "Pack 2+2 RM89 — khi hết stock sẽ tăng giá."
+
+4. TRANSFORMATION RECALL (1 sentence) — echo sensory peak từ Phase 4:
+   ✅ "Để sáng mai mở mắt cười không phải sờ răng xem có sạch không."
+   ✅ "Để đứng dậy không cần vịn bàn nữa."
+
+5. OBJECTION KNOCKOUT (1 sentence) — risk reversal:
+   "COD, không hợp trả lại — bạn không mất đồng nào nếu không hợp."
+   "Free ship + đổi trả 7 ngày — thử là biết."
+
+LENGTH: 100-160 từ. Dài hơn soft close vì có 5 elements. KHÔNG cắt.
+
+⛔ DR CLOSE VẪN KHÔNG ĐƯỢC:
+- Caps lock + exclamation marks ("MUA NGAY!!!", "ƯU ĐÃI SỐC")
+- Fake urgency ("chỉ còn 3 hộp cuối", "đếm ngược 24h")
+- Fake stats ("99% người dùng yêu thích")
+- Aspirational fluff ("bạn xứng đáng", "cuộc sống tốt hơn")
+- Banned root-cause phrases ("nguyên nhân gốc rễ", "từ bên trong cơ thể")
+
+✅ DR CLOSE ALLOWED:
+- Action verb có thật (đặt / mua / thử / lấy / nhận)
+- Numeric scarcity từ input (RM59 / RM89 / MUA 2 TẶNG 2)
+- Cụ thể transformation recall từ Phase 4
+- Risk reversal (COD / 7-day return / free ship) NẾU input có
+
+Self-test: nếu close section thiếu action verb HOẶC thiếu numeric reference
+HOẶC thiếu transformation recall → REJECT + retry.`
+
+/** Get section 11 directive for pain-driven-DR mode. */
+export function buildDrCtaDirective(): string {
+  return DR_CTA_PROMPT
+}

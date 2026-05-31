@@ -145,6 +145,10 @@ async function runOnce(
     args.packBrainstorm,
     // 2026-05-29 — Length mode: per-block word cap override.
     args.lengthMode,
+    // 2026-05-30 — Narrative mode: pain-driven-DR swaps close-invitation
+    // directive to the DR variant (action verb + scarcity + transformation
+    // recall + objection knockout). Soft + aspiration modes pass-through.
+    args.narrativeMode,
   )
   logPromptStats(systemPrompt, userPrompt, args.plan)
 
