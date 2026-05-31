@@ -12,6 +12,19 @@
 //
 // LOCKED: prompt is the SCENE DESCRIPTION from imageSceneSynthesis,
 // verbatim. NO prepend / append / hint stacking.
+//
+// CIRCUIT BREAKER (Option A — 2026-05-31)
+// Module-level state shared across all executor instances within a tab.
+// When KIE's gpt-4o-image queue is stuck (server-side), the poll loop
+// times out per task. Without a breaker, an 8-section batch wastes
+// 8 × 240s = ~32 min before failing.
+// After TRIP_THRESHOLD=2 consecutive timeouts, the breaker trips and
+// subsequent calls fail-fast in ~1ms with status='failed' +
+// failureReason='KIE_DEGRADED: ...'. The breaker auto-resets after
+// AUTO_RESET_MS=60s of no calls so the user can retry once KIE recovers,
+// AND resetKieHealth() can be called explicitly at full-batch entry.
+// Failures other than TIMEOUT (credit/policy/cancel) do NOT count
+// because they are not server-stuck symptoms.
 // ─────────────────────────────────────────────────────────────────────
 
 import { submitGpt4oImage, pollGpt4oUntilDone } from '../../../../utils/kieai'
@@ -21,6 +34,63 @@ import type {
   ExecutorOutput,
 } from '../types'
 import type { ImageAspectRatio } from '../../renderContract'
+
+// ─── Circuit breaker state (module-level, shared across executors) ─
+
+const TRIP_THRESHOLD = 2
+const AUTO_RESET_MS = 60_000
+
+let consecutiveTimeouts = 0
+let circuitTripped = false
+let lastCallTs = 0
+let trippedAt = 0
+
+/** Reset breaker — called at the start of a full batch run. */
+export function resetKieHealth(): void {
+  consecutiveTimeouts = 0
+  circuitTripped = false
+  trippedAt = 0
+}
+
+/** Read breaker state with stale auto-reset. */
+export function isKieUnhealthy(): boolean {
+  if (circuitTripped && Date.now() - lastCallTs > AUTO_RESET_MS) {
+    // No calls for AUTO_RESET_MS → KIE may have recovered, give next call a chance
+    resetKieHealth()
+    return false
+  }
+  return circuitTripped
+}
+
+/** Telemetry snapshot — used by UI to render the degraded banner. */
+export function getKieHealthSnapshot() {
+  return {
+    consecutiveTimeouts,
+    tripped: circuitTripped,
+    trippedAt,
+    secondsSinceLastCall: lastCallTs ? Math.round((Date.now() - lastCallTs) / 1000) : null,
+  }
+}
+
+function recordKieResult(result: 'success' | 'timeout' | 'other'): void {
+  lastCallTs = Date.now()
+  if (result === 'success') {
+    consecutiveTimeouts = 0
+    circuitTripped = false
+    trippedAt = 0
+    return
+  }
+  if (result === 'timeout') {
+    consecutiveTimeouts++
+    if (consecutiveTimeouts >= TRIP_THRESHOLD && !circuitTripped) {
+      circuitTripped = true
+      trippedAt = Date.now()
+      console.warn(`[kie-gpt4o] CIRCUIT TRIPPED — ${consecutiveTimeouts} consecutive timeouts, fast-failing subsequent calls for ${AUTO_RESET_MS / 1000}s of inactivity or until resetKieHealth()`)
+    }
+    return
+  }
+  // 'other' — non-timeout failures (credit / policy / cancel) don't count
+}
 
 // ─── Aspect ratio map (ImageAspectRatio → KIE Gpt4oSize) ───────────
 
@@ -67,6 +137,18 @@ export function createKieGpt4oImageExecutor(
         }
       }
 
+      // CIRCUIT BREAKER (2026-05-31) — fast-fail if KIE queue has shown
+      // sustained timeouts in this session. Caller (UI banner) can detect
+      // the 'KIE_DEGRADED:' prefix and surface a recovery hint.
+      if (isKieUnhealthy()) {
+        console.warn(`[kie-gpt4o] section=${input.sectionId} fast-failed — circuit breaker tripped (KIE queue degraded)`)
+        return {
+          status: 'failed',
+          images: [],
+          failureReason: 'KIE_DEGRADED: bỏ qua vì queue KIE đang nghẽn (đã có ≥2 timeout liên tiếp). Thử lại sau ~1-2 phút khi KIE hồi.',
+        }
+      }
+
       const size: '1:1' | '3:2' | '2:3' = input.aspectRatio
         ? ASPECT_MAP[input.aspectRatio]
         : '2:3'
@@ -92,15 +174,18 @@ export function createKieGpt4oImageExecutor(
         taskId = submission.taskId
       } catch (err) {
         const msg = err instanceof Error ? err.message : 'KIE gpt-4o submit threw'
-        // HARD failures — no retry
+        // HARD failures — no retry, no circuit-counter (not server-stuck)
         if (msg.includes('INSUFFICIENT_CREDITS')) {
+          recordKieResult('other')
           return {
             status: 'failed',
             images: [],
             failureReason: 'KIE: insufficient credits — top up before retrying',
           }
         }
-        // SOFT — track and retry
+        // SOFT — submit-level network/timeout counts as transient, not the
+        // queue-stuck symptom we care about, so record as 'other' (no trip).
+        recordKieResult('other')
         lastError = {
           status: 'failed',
           images: [],
@@ -118,6 +203,7 @@ export function createKieGpt4oImageExecutor(
           timeoutMs,
           signal: options.signal,
         })
+        recordKieResult('success')
         return {
           status: 'ok',
           images: [{ url: imageUrl }],
@@ -125,6 +211,7 @@ export function createKieGpt4oImageExecutor(
       } catch (err) {
         const msg = err instanceof Error ? err.message : 'KIE gpt-4o poll threw'
         if (msg.includes('CANCELLED')) {
+          recordKieResult('other')
           return {
             status: 'failed',
             images: [],
@@ -132,18 +219,23 @@ export function createKieGpt4oImageExecutor(
           }
         }
         if (msg.includes('TIMEOUT')) {
-          // SOFT — track and retry
+          // SOFT — track for circuit breaker + retry within attempt budget
+          recordKieResult('timeout')
           lastError = {
             status: 'failed',
             images: [],
             failureReason: `KIE gpt-4o timeout (${Math.round(timeoutMs / 1000)}s) — task may be stuck`,
           }
           console.warn(`[kie-gpt4o] attempt ${attempt} timeout after ${Math.round(timeoutMs / 1000)}s`)
+          // If breaker just tripped, abort remaining in-attempt retries —
+          // subsequent calls in this batch will fast-fail at the entry guard.
+          if (isKieUnhealthy()) return lastError
           if (attempt < MAX_ATTEMPTS) continue
           return lastError
         }
         // Hard failures: GENERATE_FAILED, content_policy, malformed output
         if (msg.includes('GENERATE_FAILED') || msg.includes('content_policy')) {
+          recordKieResult('other')
           return {
             status: 'failed',
             images: [],
@@ -151,6 +243,7 @@ export function createKieGpt4oImageExecutor(
           }
         }
         // Other transient — retry once
+        recordKieResult('other')
         lastError = {
           status: 'malformed',
           images: [],

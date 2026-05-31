@@ -28,6 +28,7 @@ import type {
 } from '../../imageSceneSynthesis'
 import { synthesizePageScenes } from '../../imageSceneSynthesis'
 import { executeSectionGeneration } from './executeSectionGeneration'
+import { resetKieHealth } from '../executors/kieGpt4oImageExecutor'
 
 export interface PageGenerationContext {
   /** Niche for cultural anchoring + scene synthesis. */
@@ -111,6 +112,17 @@ export async function executePageGeneration(
       durationMs: 0,
       synthesisSucceeded: 0, synthesisFallback: 0,
     }
+  }
+
+  // KIE circuit-breaker reset (Option A — 2026-05-31).
+  // Only reset when this is a FULL batch run (no filter, no forceRegenerate)
+  // — i.e. user clicked "Tạo tất cả ảnh" fresh. For partial/forced runs
+  // (single-section regen, retry-all-failed loop), keep the breaker state
+  // so a sustained KIE outage fast-fails the remaining items.
+  const isFullBatch = !options.filter && !options.forceRegenerate
+  if (isFullBatch) {
+    resetKieHealth()
+    console.info(`[exec/kie-health] full batch start — reset circuit breaker (${queue.length} sections queued)`)
   }
 
   // ── STEP 1 — Scene synthesis (OPT.1: reuse pre-computed when available) ──

@@ -300,6 +300,30 @@ export default function StorytellingOutputPanel({
     return { total, done, failed }
   }, [meta.exportablePage, meta.piImageAssets, assetOverlay, session])
 
+  // FIX-12 (2026-05-31) — KIE circuit-breaker UI signal.
+  // Scans all assets (storytelling sections + PI image assets + the live
+  // overlay) for a failureReason starting with 'KIE_DEGRADED:'. When ≥1
+  // such failure exists, the banner below tells the user the breaker
+  // tripped and the remaining images were skipped on purpose — so the
+  // pack is usable now and they can retry in 1-2 minutes once KIE recovers
+  // instead of staring at a spinner for 20+ minutes.
+  const kieDegraded = useMemo(() => {
+    for (const asset of Object.values(assetOverlay)) {
+      if (asset?.failureReason?.startsWith('KIE_DEGRADED')) return true
+    }
+    if (meta.exportablePage) {
+      for (const s of meta.exportablePage.sections) {
+        if (s.generatedAsset?.failureReason?.startsWith('KIE_DEGRADED')) return true
+      }
+    }
+    if (meta.piImageAssets) {
+      for (const piAsset of Object.values(meta.piImageAssets)) {
+        if (piAsset.failureReason?.startsWith('KIE_DEGRADED')) return true
+      }
+    }
+    return false
+  }, [assetOverlay, meta.exportablePage, meta.piImageAssets])
+
   const handleSave = () => {
     if (saving || saved || !onSaveAsProject) return
     setSaving(true)
@@ -515,6 +539,25 @@ export default function StorytellingOutputPanel({
                   (các chương khác chia sẻ ảnh với chương đầu cùng nhóm)
                 </>
               )}
+            </span>
+          </div>
+        )}
+
+        {/* FIX-12 (2026-05-31) — KIE circuit-breaker recovery banner.
+            Shown when at least one section/PI asset has failureReason
+            'KIE_DEGRADED:...'. Explains why the rest were skipped fast
+            and what the user should do next (wait + retry). Amber tone
+            because this is "wait, then retry", not a hard error. */}
+        {kieDegraded && (
+          <div className="mt-1 flex items-start gap-2 rounded-md border border-amber-300 bg-amber-50 px-2.5 py-1.5 text-[11px] text-amber-900">
+            <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+            <span className="leading-relaxed">
+              <strong>Queue ảnh KIE đang nghẽn</strong> — sau 2 ảnh timeout liên tiếp,
+              hệ thống đã <strong>dừng tạo các ảnh còn lại</strong> để bạn không phải
+              chờ vô ích (thay vì xoay 20+ phút). Text pack đã sẵn sàng dùng.
+              {' '}Đợi <strong>1-2 phút</strong> rồi bấm
+              {' '}<em>"Thử lại các ảnh thất bại"</em> hoặc
+              {' '}<em>"Tạo tất cả ảnh"</em> lại khi KIE hồi.
             </span>
           </div>
         )}
