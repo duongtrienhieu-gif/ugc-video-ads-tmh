@@ -289,7 +289,7 @@ export default function ActionInsertsPhase({ onContinue }: Props) {
                   AI đạo diễn — tự tách cảnh theo kịch bản
                 </p>
                 <p className="mt-0.5 text-[11px] text-gray-600">
-                  AI đọc <strong>nghĩa</strong> cả kịch bản, tự <strong>tách cảnh</strong> (3-7s/cảnh) và chọn:
+                  AI đọc <strong>nghĩa</strong> cả kịch bản, tự <strong>tách cảnh</strong> (3-5s/cảnh) và chọn:
                   cảnh có sản phẩm hoặc <strong>cảnh minh hoạ concept</strong> (không có sản phẩm) — không dò keyword.
                 </p>
                 {suggestions.length > 0 && (

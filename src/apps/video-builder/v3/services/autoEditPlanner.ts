@@ -181,17 +181,29 @@ function buildSegments(
   const insertSlots: { insert: ActionInsertClip; tsSec: number; durSec: number }[] = []
 
   for (const insert of inserts) {
+    // Z37 — honor the per-scene length the Scene Director (or the preset)
+    // decided, so a grouped concept scene can hold the screen for its full
+    // 3-5s instead of being capped to one fixed style value. The style's
+    // insertOverlayDurationSec is the fallback when an insert has no length.
+    // Clamp to a sane overlay window so one insert never swallows the video.
+    // 5s ceiling = the actual rendered Kling clip length (insertRenderer uses
+    // duration:5); a longer overlay would have no footage to fill it.
+    const overlayCap = Math.min(5, Math.max(1.5, usableEnd - usableStart))
+    const durSec = Math.max(
+      1.5,
+      Math.min(overlayCap, insert.durationSec || insertOverlayDurationSec),
+    )
     let ts = insert.voiceTimestampSec ?? null
     if (ts === null || ts === undefined) {
       // Evenly distribute manually-added inserts that lack a timestamp
       const fraction = insertSlots.length / Math.max(1, inserts.length)
       ts = usableStart + fraction * (usableEnd - usableStart)
     }
-    ts = Math.max(usableStart, Math.min(usableEnd - insertOverlayDurationSec, ts))
+    ts = Math.max(usableStart, Math.min(usableEnd - durSec, ts))
     insertSlots.push({
       insert,
       tsSec: round2(ts),
-      durSec: insertOverlayDurationSec,
+      durSec: round2(durSec),
     })
   }
 

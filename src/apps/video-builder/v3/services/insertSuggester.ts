@@ -291,8 +291,8 @@ ${catalogue}
 DIRECTING RULES:
 - Read the MEANING of the script, not keywords. Group sentences that describe
   the SAME idea into ONE scene (do not cut every sentence).
-- Each scene is 3-7 seconds ("durationSec"). Match length to how much dialogue
-  it covers — one short line ≈ 3s, a few sentences on one idea ≈ 5-7s.
+- Each scene is 3-5 seconds ("durationSec"). Match length to how much dialogue
+  it covers — one short line ≈ 3s, a few sentences on one idea ≈ 5s.
 - Anchor each scene to the ONE block (hook/pain/discovery/benefit/cta) whose
   dialogue it illustrates.
 - Cut away only when a visual genuinely helps. Leave plain talking-head moments
@@ -350,9 +350,12 @@ OUTPUT strict JSON, no fences:
 }
 
 function clampDuration(v: unknown): number {
+  // 5s ceiling = the rendered Kling clip length (insertRenderer duration:5).
+  // The director may group several same-idea sentences into one clip, but the
+  // single rendered clip can't exceed 5s, so we cap here to stay honest.
   const n = Number(v)
   if (!Number.isFinite(n)) return 4
-  return Math.max(3, Math.min(7, Math.round(n * 10) / 10))
+  return Math.max(3, Math.min(5, Math.round(n * 10) / 10))
 }
 
 interface RawDirectorScene {
