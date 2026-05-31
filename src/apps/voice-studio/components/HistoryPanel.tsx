@@ -25,10 +25,13 @@ async function resolveAudioUrl(ref: string): Promise<string> {
 }
 
 /**
- * Decode an audio URL into normalized waveform peaks (0–1).
- * Uses Web Audio API to get the actual audio data.
+ * Decode an audio URL into normalized waveform peaks (0–1) AND its real
+ * duration in seconds, in one pass. Uses Web Audio API to read the actual
+ * decoded samples — pulling the real duration this way is more reliable
+ * than HTMLAudioElement.duration on some MP3s, and we'd be doing the fetch
+ * anyway for the waveform.
  */
-async function decodeWaveform(audioRef: string, barCount: number): Promise<number[]> {
+async function decodeWaveform(audioRef: string, barCount: number): Promise<{ peaks: number[]; duration: number }> {
   const audioUrl = await resolveAudioUrl(audioRef)
   const ctx = new AudioContext()
   try {
@@ -58,7 +61,7 @@ async function decodeWaveform(audioRef: string, barCount: number): Promise<numbe
     }
 
     const max = Math.max(...peaks, 0.001)
-    return peaks.map((p) => p / max)
+    return { peaks: peaks.map((p) => p / max), duration: audioBuffer.duration }
   } finally {
     ctx.close()
   }
@@ -73,25 +76,29 @@ function AudioWaveform({
   progress,
   isPlaying,
   onSeek,
+  onDuration,
 }: {
   audioUrl: string
   itemId: string
   progress: number
   isPlaying: boolean
   onSeek: (fraction: number) => void
+  onDuration?: (seconds: number) => void
 }) {
   const [peaks, setPeaks] = useState<number[] | null>(null)
   const containerRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     let cancelled = false
-    decodeWaveform(audioUrl, BAR_COUNT).then((p) => {
-      if (!cancelled) setPeaks(p)
+    decodeWaveform(audioUrl, BAR_COUNT).then(({ peaks: p, duration }) => {
+      if (cancelled) return
+      setPeaks(p)
+      if (duration > 0) onDuration?.(duration)
     }).catch(() => {
       if (!cancelled) setPeaks(Array.from({ length: BAR_COUNT }, () => 0.3))
     })
     return () => { cancelled = true }
-  }, [audioUrl, itemId])
+  }, [audioUrl, itemId, onDuration])
 
   const handleClick = (e: React.MouseEvent) => {
     if (!containerRef.current) return
@@ -155,6 +162,11 @@ export default function HistoryPanel({ items, onDelete }: HistoryPanelProps) {
   const [playingId, setPlayingId] = useState<string | null>(null)
   const [progress, setProgress] = useState<Record<string, number>>({})
   const [currentTime, setCurrentTime] = useState<Record<string, number>>({})
+  // Real durations decoded from the audio blob — overrides item.duration when
+  // available. Old history items have a stored duration that's ~1.5x too high
+  // (the legacy estimate divided byteLength by 128 kbps instead of 192 kbps);
+  // this map lets us correct the display without rewriting the store.
+  const [realDuration, setRealDuration] = useState<Record<string, number>>({})
   const [savingId, setSavingId] = useState<string | null>(null)
   const [savedIds, setSavedIds] = useState<Set<string>>(new Set())
   const [namingItemId, setNamingItemId] = useState<string | null>(null)
@@ -357,12 +369,15 @@ export default function HistoryPanel({ items, onDelete }: HistoryPanelProps) {
                   progress={prog}
                   isPlaying={isPlaying}
                   onSeek={(fraction) => handleSeek(item, fraction)}
+                  onDuration={(d) => setRealDuration((prev) => prev[item.id] === d ? prev : { ...prev, [item.id]: d })}
                 />
 
-                {/* Duration */}
+                {/* Duration — prefer the live-decoded real duration over the
+                    stored `item.duration`, which is wrong for legacy items
+                    generated before the 192 kbps fix. */}
                 <div className="mt-1 flex items-center justify-between">
                   <span className="text-[10px] font-medium tabular-nums text-slate-400">
-                    {formatTime(time)} / {formatTime(item.duration)}
+                    {formatTime(time)} / {formatTime(realDuration[item.id] ?? item.duration)}
                   </span>
                 </div>
 
