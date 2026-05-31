@@ -351,6 +351,33 @@ export const ACTION_PRESETS: Record<ActionPresetId, ActionPresetConfig> = {
       'beg', 'bawa', 'dalam beg', 'bawa ke mana',
     ],
   },
+
+  // ── Z37 — script-driven concept scene ──────────────────────────────────
+  // A free B-roll scene with NO product on screen (ingredient / mechanism /
+  // lifestyle illustration). Its prompt is written per-scene by the AI scene
+  // director and carried on ActionInsertClip.conceptPrompt — the fields here
+  // are only neutral fallbacks. Because the product is not shown, there is no
+  // fidelity lock to break, which is why free generation is safe here.
+  // NOT added to ACTION_PRESET_ORDER (never shown in the product preset picker
+  // or keyword suggester).
+  CONCEPT_SCENE: {
+    id: 'CONCEPT_SCENE',
+    labelVi: 'Cảnh minh hoạ (concept)',
+    descriptionVi: 'Cảnh không có sản phẩm — minh hoạ cơ chế / cảm xúc / lifestyle khớp lời thoại.',
+    emoji: '🎞️',
+    motionPreset: 'static',
+    framingPreset: 'medium',
+    promptPreset:
+      'Authentic lifestyle B-roll scene that illustrates the narration. ' +
+      'No product packaging visible in frame.',
+    durationPreset: 3.0,
+    cameraPreset: 'subtle_drift',
+    needsProduct: false,
+    tone: 'sky',
+    handBehavior: 'Hands only if naturally part of the scene; otherwise out of frame.',
+    objectInteraction: 'No specific product on screen — concept / mood illustration only.',
+    triggerKeywords: [],
+  },
 }
 
 /** Ordered list of presets — cheap/safe first, narrative-heavy last.

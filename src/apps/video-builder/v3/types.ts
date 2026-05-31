@@ -214,6 +214,13 @@ export type ActionPresetId =
   | 'SHOW_PACKAGE'
   | 'DESK_PRODUCT'
   | 'BAG_PRODUCT_PULL'
+  // Z37 — script-driven scene redesign. NOT a product-interaction preset: a
+  // free "concept" B-roll scene (ingredient / mechanism / lifestyle) whose
+  // visual prompt is written per-scene by the AI scene director (the product
+  // is NOT on screen, so there is no fidelity lock to break). Deliberately
+  // excluded from ACTION_PRESET_ORDER so it never shows in the manual product
+  // preset picker or the keyword suggester.
+  | 'CONCEPT_SCENE'
 
 // ── Per-clip render status (v3) ─────────────────────────────────────────────
 // Simplified vs v2's TimelineRenderStatus — no queued/locked-vs-completed
@@ -436,6 +443,11 @@ export interface ActionInsertClip {
    *  Empty for manually-added inserts. Used by timing engine to anchor
    *  the insert at the right voice timestamp. */
   scriptKeyword?: string
+  /** Z37 — free per-scene visual prompt for CONCEPT_SCENE inserts (written by
+   *  the AI scene director, matched to the dialogue span). Ignored for the 12
+   *  product presets (they build their prompt from the catalogue). Only read
+   *  when presetId === 'CONCEPT_SCENE'. */
+  conceptPrompt?: string
   /** Z33 — target timestamp within the voice timeline (seconds from 0).
    *  null = no anchor, insert plays at natural position in `order`. */
   voiceTimestampSec?: number | null

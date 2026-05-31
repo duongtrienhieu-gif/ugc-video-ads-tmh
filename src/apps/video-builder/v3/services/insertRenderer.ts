@@ -59,6 +59,9 @@ export interface RenderInsertParams {
   resolution: '480p' | '720p' | '1080p'
   /** Skip the cheap preview-motion test (Stage 2). Default false. */
   skipPreview?: boolean
+  /** Z37 — free visual prompt for a CONCEPT_SCENE insert (no product on
+   *  screen). Required when presetId === 'CONCEPT_SCENE'; ignored otherwise. */
+  conceptPrompt?: string
   /** Per-stage status callback */
   onStageUpdate: (update: InsertStageUpdate) => void
   signal?: AbortSignal
@@ -79,9 +82,33 @@ function buildInsertKeyframePrompt(
   product: Product | null,
   productRefIndex: number,
   personRefIndex: number,
+  conceptPrompt?: string,
 ): string {
   const preset = ACTION_PRESETS[presetId]
   const paragraphs: string[] = []
+
+  // Z37 — CONCEPT_SCENE: a free concept B-roll written by the AI scene director.
+  // No product on screen → no product lock, no identity lock, no preset action.
+  // Pure text-to-image illustration of the dialogue span.
+  if (presetId === 'CONCEPT_SCENE') {
+    const scene = conceptPrompt?.trim()
+    paragraphs.push(
+      `SCENE: ${scene && scene.length > 0
+        ? scene
+        : preset.promptPreset}`,
+    )
+    paragraphs.push('COMPOSITION: vertical 9:16 aspect ratio, natural framing.')
+    paragraphs.push('NO PRODUCT PACKAGING visible in frame — concept / mood illustration only.')
+    paragraphs.push(
+      'STYLE: Authentic UGC iPhone footage — real lived-in moment, natural daylight, ' +
+      'subtle grain, real texture. NOT cinematic, NOT studio, NOT magazine, NOT stock-photo.',
+    )
+    paragraphs.push(
+      'Avoid: text overlays, watermarks, logos, product packaging, 3D-render look, ' +
+      'cartoon, beauty filter, cinematic color grade.',
+    )
+    return paragraphs.join('\n\n')
+  }
 
   // 1. Subject locks — reference each image by its ACTUAL position in filesUrl
   if (productRefIndex > 0 && product) {
@@ -169,11 +196,23 @@ export async function renderInsert(
     preset, params.product, params.avatar, params.creatorKeyframeRef,
   )
 
+  // Z37 — the scene verb that drives the Kling motion prompts (Stage 2/3).
+  // For CONCEPT_SCENE it comes from the AI scene director's free prompt; for
+  // the 12 product presets it stays the hard-won stable preset prompt.
+  const isConcept = params.presetId === 'CONCEPT_SCENE'
+  const motionScene = isConcept
+    ? (params.conceptPrompt?.trim() || preset.promptPreset)
+    : preset.promptPreset
+  const cameraMotion = preset.cameraPreset === 'static'
+    ? 'Locked-off camera.'
+    : 'Subtle handheld micro-motion.'
+
   // ── STAGE 1: KEYFRAME ─────────────────────────────────────────────────
   params.onStageUpdate({ stage: 'keyframe' })
 
   const keyframePromptUsed = buildInsertKeyframePrompt(
     params.presetId, params.product, productRefIndex, personRefIndex,
+    params.conceptPrompt,
   )
   console.log(`[INSERT ${params.presetId}] Stage 1 keyframe prompt len=${keyframePromptUsed.length}, refs=${filesUrl.length}`)
 
@@ -207,7 +246,7 @@ export async function renderInsert(
       const previewSubmission = await generateVideoJob({
         apiKey: params.kieApiKey,
         jobModelId: 'kling-3.0/video',
-        prompt: `${preset.promptPreset} ${preset.cameraPreset === 'static' ? 'Locked-off camera.' : 'Subtle handheld micro-motion.'}`,
+        prompt: `${motionScene} ${cameraMotion}`,
         aspectRatio: '9:16',
         resolution: '480p',
         duration: 5,
@@ -243,7 +282,9 @@ export async function renderInsert(
   const fullSubmission = await generateVideoJob({
     apiKey: params.kieApiKey,
     jobModelId: 'kling-3.0/video',
-    prompt: `${preset.promptPreset} ${preset.cameraPreset === 'static' ? 'Locked-off camera.' : 'Subtle handheld micro-motion.'} ${preset.handBehavior}`,
+    prompt: isConcept
+      ? `${motionScene} ${cameraMotion} No product packaging in frame.`
+      : `${motionScene} ${cameraMotion} ${preset.handBehavior}`,
     aspectRatio: '9:16',
     resolution: params.resolution,
     duration: 5,
