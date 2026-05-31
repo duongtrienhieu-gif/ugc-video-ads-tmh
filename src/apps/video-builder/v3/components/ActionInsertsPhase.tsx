@@ -24,9 +24,9 @@ import { useAssetUrl } from '../../../../hooks/useAssetUrl'
 import { useAdsVideoStore } from '../stores/adsVideoStore'
 import {
   COST_MODE_CONFIG, INSERT_STAGE_LABEL_VI,
-  estimateInsertCredits, formatCredits,
+  estimateInsertCredits, formatCredits, defaultInsertRenderMode,
   type ActionPresetId, type ActionInsertClip, type InsertRenderStage,
-  type V3ClipStatus,
+  type InsertRenderMode, type V3ClipStatus,
 } from '../types'
 import { ACTION_PRESETS, ACTION_PRESET_ORDER } from '../services/actionPresets'
 import {
@@ -92,12 +92,18 @@ export default function ActionInsertsPhase({ onContinue }: Props) {
     state.costMode === 'FULL' ? '1080p' :
     state.costMode === 'STANDARD' ? '720p' :
     '480p'
-  // Z38 — realistic per-insert credit (keyframe + 5s Kling, ~9 cr/s). Replaces
-  // the fictional flat V3_CREDIT_COST.insert (76) that overstated by ~50%.
-  const insertCredits = estimateInsertCredits()
-  // How many inserts a "Bulk render" would actually pay for (skips
-  // locked/approved/rejected per the Z26 lesson) — drives the cost chip.
-  const bulkPendingCount = listEligibleInsertsForBulk(inserts).length
+  // Z39 — per-insert credit is mode-aware: 'video' = keyframe + 5s Kling
+  // (~51cr); 'ken_burns' = keyframe-only (~6cr, the motion is a free local
+  // ffmpeg zoom). Default chip shows the Kling price as the headline number.
+  const insertCredits = estimateInsertCredits('video')
+  // Eligible inserts a "Bulk render" would actually pay for (skips
+  // locked/approved/rejected per the Z26 lesson) — and their real summed cost,
+  // honouring each card's render mode.
+  const bulkEligible = listEligibleInsertsForBulk(inserts)
+  const bulkPendingCount = bulkEligible.length
+  const bulkCredits = bulkEligible.reduce(
+    (sum, it) => sum + estimateInsertCredits(it.renderMode ?? 'video'), 0,
+  )
 
   const overBudget = inserts.length > maxInserts
 
@@ -180,6 +186,7 @@ export default function ActionInsertsPhase({ onContinue }: Props) {
       durationSec: preset.durationPreset,
       resolution: insertResolution,
       voiceTimestampSec: null,
+      renderMode: defaultInsertRenderMode(presetId),
     })
   }
 
@@ -207,6 +214,8 @@ export default function ActionInsertsPhase({ onContinue }: Props) {
         creatorKeyframeRef: state.creatorVideo?.keyframeRef,
         resolution: insert.resolution,
         conceptPrompt: insert.conceptPrompt,
+        renderMode: insert.renderMode ?? 'video',
+        durationSec: insert.durationSec,
         onStageUpdate: (update) => {
           patchInsert(insertId, {
             stage: update.stage,
@@ -428,6 +437,7 @@ export default function ActionInsertsPhase({ onContinue }: Props) {
                 <InsertCard
                   key={insert.insertId}
                   insert={insert}
+                  onSetMode={(mode) => patchInsert(insert.insertId, { renderMode: mode })}
                   onRender={() => handleRenderInsert(insert.insertId)}
                   onResume={() => handleResumeInsert(insert.insertId)}
                   onApprove={() => handleApprove(insert.insertId)}
@@ -458,16 +468,14 @@ export default function ActionInsertsPhase({ onContinue }: Props) {
                   onClick={handleBulkRender}
                   className="flex items-center gap-1.5 rounded-full bg-gradient-to-r from-violet-600 to-pink-600 px-4 py-2 text-[12px] font-bold text-white shadow-sm hover:from-violet-700 hover:to-pink-700"
                 >
-                  <Sparkles className="h-3.5 w-3.5" /> Bulk render{bulkPendingCount > 0 ? ` · ${formatCredits(bulkPendingCount * insertCredits)}` : ''}
+                  <Sparkles className="h-3.5 w-3.5" /> Bulk render{bulkPendingCount > 0 ? ` · ${formatCredits(bulkCredits)}` : ''}
                 </button>
-                {approvedCount >= minInserts && (
-                  <button
-                    onClick={onContinue}
-                    className="flex items-center gap-1.5 rounded-full bg-gradient-to-r from-emerald-600 to-teal-600 px-4 py-2 text-[12px] font-bold text-white shadow-sm hover:from-emerald-700 hover:to-teal-700"
-                  >
-                    Tiếp tục → Auto-Edit <ChevronRight className="h-3.5 w-3.5" />
-                  </button>
-                )}
+                <button
+                  onClick={onContinue}
+                  className="flex items-center gap-1.5 rounded-full bg-gradient-to-r from-emerald-600 to-teal-600 px-4 py-2 text-[12px] font-bold text-white shadow-sm hover:from-emerald-700 hover:to-teal-700"
+                >
+                  Tiếp tục → Video Creator <ChevronRight className="h-3.5 w-3.5" />
+                </button>
               </div>
             </div>
           </div>
@@ -491,9 +499,10 @@ export default function ActionInsertsPhase({ onContinue }: Props) {
 
 function InsertCard({
   insert,
-  onRender, onResume, onApprove, onReject, onLock, onUnlock, onRemove,
+  onSetMode, onRender, onResume, onApprove, onReject, onLock, onUnlock, onRemove,
 }: {
   insert: ActionInsertClip
+  onSetMode: (mode: InsertRenderMode) => void
   onRender: () => void
   onResume: () => void
   onApprove: () => void
@@ -518,6 +527,8 @@ function InsertCard({
 
   const isLoading = insert.stage === 'keyframe' || insert.stage === 'preview_motion' || insert.stage === 'video_full'
   const hasVideo = !!insert.videoRef
+  const mode: InsertRenderMode = insert.renderMode ?? 'video'
+  const canEditMode = !isLoading && !hasVideo && insert.status !== 'locked'
   const isLocked = insert.status === 'locked'
   const isApproved = insert.status === 'approved'
   const isRejected = insert.status === 'rejected'
@@ -619,6 +630,42 @@ function InsertCard({
           {insert.voiceTimestampSec != null && (
             <span className="text-violet-600">@{insert.voiceTimestampSec.toFixed(1)}s</span>
           )}
+        </div>
+
+        {/* Z39 — render-mode toggle: Ken Burns still (cheap, ~6cr, free local
+            zoom) vs Kling video (~51cr). Editable only before render. */}
+        <div className="mt-1 flex items-center gap-1">
+          {canEditMode ? (
+            <div className="inline-flex overflow-hidden rounded-md border border-gray-200">
+              <button
+                onClick={() => onSetMode('ken_burns')}
+                title="Ảnh tĩnh + zoom nhẹ (ffmpeg local, ~6 credit). Hợp cảnh concept/thành phần."
+                className={`px-1.5 py-0.5 text-[9px] font-bold ${
+                  mode === 'ken_burns' ? 'bg-sky-600 text-white' : 'bg-white text-gray-500 hover:bg-gray-50'
+                }`}
+              >
+                🖼 Ảnh
+              </button>
+              <button
+                onClick={() => onSetMode('video')}
+                title="Video Kling 5s (~51 credit). Hợp cảnh có chuyển động/người thật."
+                className={`px-1.5 py-0.5 text-[9px] font-bold ${
+                  mode === 'video' ? 'bg-pink-600 text-white' : 'bg-white text-gray-500 hover:bg-gray-50'
+                }`}
+              >
+                🎬 Video
+              </button>
+            </div>
+          ) : (
+            <span className={`rounded px-1.5 py-0.5 text-[9px] font-bold ${
+              mode === 'ken_burns' ? 'bg-sky-100 text-sky-700' : 'bg-pink-100 text-pink-700'
+            }`}>
+              {mode === 'ken_burns' ? '🖼 Ảnh (Ken Burns)' : '🎬 Video (Kling)'}
+            </span>
+          )}
+          <span className="ml-auto text-[9px] font-semibold text-gray-400">
+            {formatCredits(estimateInsertCredits(mode)).replace(/ \(.*\)$/, '')}
+          </span>
         </div>
       </div>
 

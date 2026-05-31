@@ -206,8 +206,25 @@ export function estimateLipsyncCredits(durationSec: number): number {
 // this for a 4-5 insert budget.
 export const INSERT_CLIP_SECONDS = 5
 
-export function estimateInsertCredits(): number {
+// Z39 — two ways to realise an insert:
+//   'video'     → Kling i2v 5s clip (keyframe + ~9cr/s motion ≈ ~51cr). For
+//                 scenes with REAL motion/people (drink, hold, react).
+//   'ken_burns' → keyframe still ONLY (~6cr); the motion is a slow zoom/pan
+//                 rendered LOCALLY with ffmpeg.wasm (free). For static concept
+//                 / ingredient / product-label scenes — avoids the ~45cr Kling
+//                 charge AND the i2v morph risk on abstract subjects.
+export type InsertRenderMode = 'video' | 'ken_burns'
+
+export function estimateInsertCredits(mode: InsertRenderMode = 'video'): number {
+  if (mode === 'ken_burns') return V3_CREDIT_COST.keyframe
   return V3_CREDIT_COST.keyframe + Math.ceil(INSERT_CLIP_SECONDS * KIE_LIPSYNC_CREDITS_PER_SEC)
+}
+
+// Concept scenes default to Ken Burns (they're abstract/static — the exact
+// case where Kling i2v morphs and overcharges). Everything else defaults to a
+// real Kling video; the user can flip any insert per-card.
+export function defaultInsertRenderMode(presetId: ActionPresetId): InsertRenderMode {
+  return presetId === 'CONCEPT_SCENE' ? 'ken_burns' : 'video'
 }
 
 /** "~N credit (~$X.XX)" — the standard cost chip on action buttons. */
@@ -448,6 +465,13 @@ export interface ActionInsertClip {
 
   /** Z33 — render pipeline stage (orthogonal to verdict status) */
   stage: InsertRenderStage
+
+  /** Z39 — how this insert is realised: a Kling video clip ('video') or a
+   *  Ken Burns still ('ken_burns', keyframe-only + local ffmpeg zoom). When
+   *  ken_burns, the renderer skips Kling entirely and produces an mp4 LOCALLY
+   *  from the keyframe, so `videoRef` is still set and the planner/assembler
+   *  treat it identically. Defaults to 'video' when absent (back-compat). */
+  renderMode?: InsertRenderMode
 
   /** asset:xxx of the source still (product or scene shot) */
   keyframeRef?: string

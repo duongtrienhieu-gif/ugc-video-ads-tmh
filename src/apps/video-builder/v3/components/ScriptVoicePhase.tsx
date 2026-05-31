@@ -682,7 +682,7 @@ export default function ScriptVoicePhase({ onContinue }: Props) {
               disabled={!acknowledgedCerts}
               className="flex items-center gap-2 rounded-full bg-gradient-to-r from-violet-600 to-pink-600 px-5 py-2 text-sm font-bold text-white shadow-md transition-all hover:from-violet-700 hover:to-pink-700 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              Vẫn tiếp tục → Video creator <ChevronRight className="h-4 w-4" />
+              Vẫn tiếp tục → Action Inserts <ChevronRight className="h-4 w-4" />
             </button>
           ) : (
             <button

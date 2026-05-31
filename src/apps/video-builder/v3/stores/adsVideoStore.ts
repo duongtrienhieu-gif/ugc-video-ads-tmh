@@ -37,7 +37,7 @@ import {
   // Z36 — Final MP4 Assembly
   type ExportRenderStage,
 } from '../types'
-import { COST_MODE_CONFIG, DEFAULT_COST_MODE } from '../types'
+import { COST_MODE_CONFIG, DEFAULT_COST_MODE, defaultInsertRenderMode } from '../types'
 import { CREATOR_PRESETS } from '../services/creatorPresets'
 import type { Model, Product } from '../../../../stores/types'
 
@@ -429,6 +429,7 @@ export const useAdsVideoStore = create<AdsVideoStoreState>((set, get) => ({
           resolution,
           scriptKeyword: item.scriptKeyword,
           voiceTimestampSec: item.voiceTimestampSec ?? null,
+          renderMode: defaultInsertRenderMode(item.presetId),
           ...(item.conceptPrompt ? { conceptPrompt: item.conceptPrompt } : {}),
         }
       })

@@ -23,9 +23,10 @@ import {
 import { saveAsset, getUrl, isAssetRef } from '../../../../utils/assetStore'
 import type { Model, Product } from '../../../../stores/types'
 import type {
-  ActionInsertClip, InsertRenderStage, ActionPresetId,
+  ActionInsertClip, InsertRenderStage, ActionPresetId, InsertRenderMode,
 } from '../types'
 import { ACTION_PRESETS } from './actionPresets'
+import { getFFmpeg } from './ffmpegLoader'
 
 // ── Stage update callback ─────────────────────────────────────────────────
 
@@ -57,6 +58,13 @@ export interface RenderInsertParams {
   creatorKeyframeRef?: string
   /** Resolution to render at — driven by cost mode */
   resolution: '480p' | '720p' | '1080p'
+  /** Z39 — 'video' (Kling clip) or 'ken_burns' (still + local zoom). Default
+   *  'video'. When 'ken_burns' the renderer skips Kling and produces the mp4
+   *  locally from the keyframe (no KIE credit beyond the keyframe). */
+  renderMode?: InsertRenderMode
+  /** Overlay duration (seconds) — used to size the Ken Burns clip. Ignored for
+   *  Kling video (fixed 5s). Default 3.5s. */
+  durationSec?: number
   /** Skip the cheap preview-motion test (Stage 2). Default false. */
   skipPreview?: boolean
   /** Z37 — free visual prompt for a CONCEPT_SCENE insert (no product on
@@ -72,7 +80,8 @@ export interface RenderInsertResult {
   keyframePromptUsed: string
   previewVideoRef?: string
   videoRef: string
-  fullTaskId: string
+  /** Present only for Kling ('video') renders — Ken Burns has no KIE task. */
+  fullTaskId?: string
 }
 
 // ── Build keyframe prompt for the insert ──────────────────────────────────
@@ -233,6 +242,22 @@ export async function renderInsert(
 
   if (params.signal?.aborted) throw new Error('CANCELLED — user huỷ')
 
+  // ── STAGE 2 (Ken Burns mode): NO Kling — animate the still locally ─────
+  // Z39 — for static concept / ingredient / product-label scenes we don't pay
+  // Kling (~45cr) just to add a slow drift. Render a zoom/pan over the keyframe
+  // with ffmpeg.wasm IN THE BROWSER (free), and save it as a normal mp4 so the
+  // planner + final assembler treat it exactly like a Kling insert.
+  if ((params.renderMode ?? 'video') === 'ken_burns') {
+    params.onStageUpdate({ stage: 'video_full', keyframeRef, keyframePromptUsed })
+    const videoRef = await renderKenBurnsClip({
+      imageBlob: keyframeBlob,
+      durationSec: params.durationSec ?? 3.5,
+      resolution: params.resolution,
+    })
+    params.onStageUpdate({ stage: 'completed', keyframeRef, keyframePromptUsed, videoRef })
+    return { keyframeRef, keyframePromptUsed, videoRef }
+  }
+
   // ── STAGE 2: VIDEO — SINGLE Kling i2v pass ─────────────────────────────
   // Z38 — there used to be a separate 480p "preview" Kling render here BEFORE
   // the full render — and the two ran back-to-back with NO approval gate in
@@ -314,6 +339,59 @@ export async function resumeInsertVideo(
 
   params.onStageUpdate({ stage: 'completed', fullTaskId: params.taskId, videoRef })
   return { videoRef }
+}
+
+// ── Ken Burns: still → mp4 (local, free) ────────────────────────────────────
+// Z39 — slow centered zoom over a single keyframe via ffmpeg.wasm zoompan.
+// Output is a normal 9:16 mp4 (no audio) saved to the asset store, so the rest
+// of the pipeline (planner / assembler) is UNCHANGED — it just sees a videoRef.
+// The zoom increment is scaled to the duration so the total push is ~12%
+// regardless of clip length. We pre-upscale 2x before zoompan (the standard
+// anti-jitter trick). Runs in the browser → costs ZERO KIE credit.
+async function renderKenBurnsClip(args: {
+  imageBlob: Blob
+  durationSec: number
+  resolution: '480p' | '720p' | '1080p'
+}): Promise<string> {
+  const ffmpeg = await getFFmpeg()
+  const dur = Math.max(1.5, Math.min(6, args.durationSec || 3.5))
+  const shortSide = args.resolution === '1080p' ? 1080 : args.resolution === '720p' ? 720 : 480
+  const W = shortSide % 2 === 0 ? shortSide : shortSide + 1
+  const h0 = Math.round((shortSide * 16) / 9)
+  const H = h0 % 2 === 0 ? h0 : h0 + 1
+  const fps = 30
+  const frames = Math.max(1, Math.round(dur * fps))
+  const inc = (0.12 / frames).toFixed(6)
+  const id = Math.random().toString(36).slice(2, 8)
+  const ext = (args.imageBlob.type || '').includes('png') ? 'png' : 'jpg'
+  const inName = `kb_${id}.${ext}`
+  const outName = `kb_${id}.mp4`
+
+  await ffmpeg.writeFile(inName, new Uint8Array(await args.imageBlob.arrayBuffer()))
+
+  // Cover-crop to 9:16, upscale 2x, then zoompan down to WxH (centered slow zoom-in).
+  const vf =
+    `scale=${W}:${H}:force_original_aspect_ratio=increase,crop=${W}:${H},` +
+    `scale=${W * 2}:${H * 2},` +
+    `zoompan=z='zoom+${inc}':d=${frames}:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s=${W}x${H}:fps=${fps},` +
+    `trim=duration=${dur},setpts=PTS-STARTPTS`
+
+  await ffmpeg.exec([
+    '-i', inName,
+    '-vf', vf,
+    '-c:v', 'libx264', '-preset', 'fast', '-crf', '23',
+    '-pix_fmt', 'yuv420p', '-r', String(fps), '-t', String(dur),
+    '-an', '-y', outName,
+  ])
+
+  const data = await ffmpeg.readFile(outName)
+  const blob = new Blob(
+    [data instanceof Uint8Array ? (data as unknown as BlobPart) : new Uint8Array()],
+    { type: 'video/mp4' },
+  )
+  await ffmpeg.deleteFile(inName).catch(() => {})
+  await ffmpeg.deleteFile(outName).catch(() => {})
+  return saveAsset(blob, 'video/mp4')
 }
 
 /** Poll a Kling i2v task to completion, then download + persist the MP4. */

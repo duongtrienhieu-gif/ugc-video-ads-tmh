@@ -54,10 +54,14 @@ interface Props {
 // Z37 — Bước 1 (Input) + Bước 2 (Script + Voice) merged into ONE screen.
 // The script segmentation (5-block split) still runs, but BEHIND THE
 // SCENES — the user only sees a single input step.
+// Z39 — B-roll (action-inserts) moved AHEAD of creator-video so the user can
+// test cheap inserts (Ken Burns ~6cr / Kling ~51cr) BEFORE committing ~700cr to
+// avatar lipsync. Rationale: don't risk paying for lipsync only to find the
+// B-roll concept was wrong.
 const PHASE_ORDER: V3Phase[] = [
   'input',
-  'creator-video',
   'action-inserts',
+  'creator-video',
   'auto-edit',        // clip approval gate + edit plan live here
   'export',
 ]
@@ -134,12 +138,11 @@ export default function AdsVideoEngine({ onSwitchToV2, onSwitchToV1 }: Props) {
   // creator-video reachable once inputs valid; rest reachable in narrative
   // order once their predecessor has output. Phase 2+ will tighten these.
   const reachable = new Set<V3Phase>(['input'])
-  // creator-video unlocks once we have a generated script (Ad Brain done)
-  if (state.scriptBrain.script) reachable.add('creator-video')
-  // Z32 — action-inserts unlocks once the creator video has a videoRef
-  // (completed lipsync, regardless of approval state)
-  if (state.creatorVideo?.videoRef) {
+  // Z39 — once a script exists, BOTH B-roll and creator-video unlock. B-roll now
+  // comes first in the flow so the user can test cheap inserts before lipsync.
+  if (state.scriptBrain.script) {
     reachable.add('action-inserts')
+    reachable.add('creator-video')
   }
   // auto-edit only needs creator video + script. Inserts are optional.
   // The clip approval gate now lives inside this phase.
@@ -219,13 +222,13 @@ export default function AdsVideoEngine({ onSwitchToV2, onSwitchToV1 }: Props) {
       {/* ── Body — switches by phase ────────────────────────────────────── */}
       <div className="flex-1 overflow-hidden">
         {(state.phase === 'input' || state.phase === 'script-voice') && (
-          <ScriptVoicePhase onContinue={() => setPhase('creator-video')} />
-        )}
-        {state.phase === 'creator-video' && (
-          <CreatorVideoPhase onContinue={() => setPhase('action-inserts')} />
+          <ScriptVoicePhase onContinue={() => setPhase('action-inserts')} />
         )}
         {state.phase === 'action-inserts' && (
-          <ActionInsertsPhase onContinue={() => setPhase('auto-edit')} />
+          <ActionInsertsPhase onContinue={() => setPhase('creator-video')} />
+        )}
+        {state.phase === 'creator-video' && (
+          <CreatorVideoPhase onContinue={() => setPhase('auto-edit')} />
         )}
         {state.phase === 'auto-edit' && (
           <AutoEditPhase onContinue={() => setPhase('export')} />

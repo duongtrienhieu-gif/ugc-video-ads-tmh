@@ -526,14 +526,14 @@ export default function CreatorVideoPhase({ onContinue }: Props) {
                 ✓ Creator video sẵn sàng — {clip.voiceDurationSec?.toFixed(1) ?? '—'}s
               </p>
               <p className="text-[11px] text-emerald-700">
-                Sang Action Inserts để add B-roll moments (3-8 clips ngắn).
+                Sang Auto-Edit để ghép talking-head với B-roll thành video hoàn chỉnh.
               </p>
             </div>
             <button
               onClick={onContinue}
               className="flex items-center gap-2 rounded-full bg-gradient-to-r from-emerald-600 to-teal-600 px-5 py-2 text-sm font-bold text-white shadow-md hover:from-emerald-700 hover:to-teal-700"
             >
-              Tiếp tục → Action inserts <ChevronRight className="h-4 w-4" />
+              Tiếp tục → Auto-Edit <ChevronRight className="h-4 w-4" />
             </button>
           </div>
         )}
