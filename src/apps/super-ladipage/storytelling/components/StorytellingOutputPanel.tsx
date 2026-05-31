@@ -1377,7 +1377,11 @@ function ImagePlaceholder({
 function renderOverlayText(
   overlayType: AllowedOverlayType | null,
   chapterNumber: number,
-  characterName: string | undefined,
+  // 2026-05-30 — Param kept for caller compatibility (callsite passes
+  // `character?.name`) but the photobook-caption case no longer uses it;
+  // prefix with underscore so TypeScript's noUnusedParameters strict mode
+  // (which Vercel's `tsc -b` build runs) doesn't reject the file.
+  _characterName: string | undefined,
   sectionTitle: string,
 ): string | null {
   if (!overlayType) return null
