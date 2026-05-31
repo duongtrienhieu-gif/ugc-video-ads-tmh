@@ -24,7 +24,7 @@ import { useAssetUrl } from '../../../../hooks/useAssetUrl'
 import { useAdsVideoStore } from '../stores/adsVideoStore'
 import {
   COST_MODE_CONFIG, INSERT_STAGE_LABEL_VI,
-  V3_CREDIT_COST, formatCredits,
+  estimateInsertCredits, formatCredits,
   type ActionPresetId, type ActionInsertClip, type InsertRenderStage,
   type V3ClipStatus,
 } from '../types'
@@ -33,7 +33,7 @@ import {
   pickTopInsertsForBudget, directScenesWithGemini,
   type InsertSuggestion,
 } from '../services/insertSuggester'
-import { renderInsert, listEligibleInsertsForBulk } from '../services/insertRenderer'
+import { renderInsert, resumeInsertVideo, listEligibleInsertsForBulk } from '../services/insertRenderer'
 import { computeBlockStartTimestamps } from '../services/insertTimingEngine'
 
 // Wrap Date.now in a non-render-pure call site so react-hooks/purity lint
@@ -79,7 +79,6 @@ export default function ActionInsertsPhase({ onContinue }: Props) {
   const patchInsert      = useAdsVideoStore((s) => s.patchInsert)
   const removeInsert     = useAdsVideoStore((s) => s.removeInsert)
   const clearAllInserts  = useAdsVideoStore((s) => s.clearAllInserts)
-  const setSkipPreviewOverride = useAdsVideoStore((s) => s.setSkipPreviewOverride)
 
   const kieApiKey   = useSettingsStore((s) => s.kieApiKey)
   const geminiKey   = useSettingsStore((s) => s.geminiApiKey)
@@ -93,7 +92,9 @@ export default function ActionInsertsPhase({ onContinue }: Props) {
     state.costMode === 'FULL' ? '1080p' :
     state.costMode === 'STANDARD' ? '720p' :
     '480p'
-  const skipPreview = state.skipPreviewOverride ?? costModeCfg.skipPreviewDefault
+  // Z38 — realistic per-insert credit (keyframe + 5s Kling, ~9 cr/s). Replaces
+  // the fictional flat V3_CREDIT_COST.insert (76) that overstated by ~50%.
+  const insertCredits = estimateInsertCredits()
   // How many inserts a "Bulk render" would actually pay for (skips
   // locked/approved/rejected per the Z26 lesson) — drives the cost chip.
   const bulkPendingCount = listEligibleInsertsForBulk(inserts).length
@@ -205,14 +206,12 @@ export default function ActionInsertsPhase({ onContinue }: Props) {
         avatar: state.inputs.avatar,
         creatorKeyframeRef: state.creatorVideo?.keyframeRef,
         resolution: insert.resolution,
-        skipPreview,
         conceptPrompt: insert.conceptPrompt,
         onStageUpdate: (update) => {
           patchInsert(insertId, {
             stage: update.stage,
             ...(update.keyframeRef !== undefined        && { keyframeRef: update.keyframeRef }),
             ...(update.keyframePromptUsed !== undefined && { keyframePromptUsed: update.keyframePromptUsed }),
-            ...(update.previewVideoRef !== undefined    && { previewVideoRef: update.previewVideoRef }),
             ...(update.fullTaskId !== undefined         && { fullTaskId: update.fullTaskId }),
             ...(update.videoRef !== undefined           && { videoRef: update.videoRef }),
           })
@@ -233,6 +232,39 @@ export default function ActionInsertsPhase({ onContinue }: Props) {
         finishedAt: now(),
       })
       addToast(`Insert lỗi: ${msg}`, 'error')
+    }
+  }
+
+  // Z38 — RESUME a paid-but-unfinished insert. When a render timed out (or the
+  // tab was refreshed) the Kling job kept running on KIE and was already
+  // charged. Re-poll the SAME taskId instead of re-submitting → 0 extra credit.
+  const handleResumeInsert = async (insertId: number) => {
+    if (!kieApiKey) { addToast('Thiếu KIE API key', 'error'); return }
+    const insert = inserts.find((it) => it.insertId === insertId)
+    if (!insert?.fullTaskId) return
+    patchInsert(insertId, { stage: 'video_full', status: 'rendering', error: undefined })
+    try {
+      const { videoRef } = await resumeInsertVideo({
+        kieApiKey,
+        taskId: insert.fullTaskId,
+        onStageUpdate: (update) => {
+          patchInsert(insertId, {
+            stage: update.stage,
+            ...(update.videoRef !== undefined && { videoRef: update.videoRef }),
+          })
+        },
+      })
+      patchInsert(insertId, {
+        stage: 'completed',
+        status: 'completed',
+        videoRef,
+        finishedAt: now(),
+      })
+      addToast('✓ Khôi phục insert thành công (0 credit)', 'success')
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      patchInsert(insertId, { stage: 'failed', status: 'failed', error: msg.slice(0, 240), finishedAt: now() })
+      addToast(`Khôi phục lỗi: ${msg}`, 'error')
     }
   }
 
@@ -266,17 +298,12 @@ export default function ActionInsertsPhase({ onContinue }: Props) {
           <h2 className="text-lg font-bold text-gray-900">Bước 4 — Action Inserts</h2>
           <p className="text-[12px] text-gray-500">
             3-8 clip ngắn hỗ trợ (cầm sản phẩm, mở nắp, point label, etc) — không phải B-roll cinematic.
-            Giới hạn {minInserts}-{maxInserts} insert · {insertResolution} · mỗi insert {formatCredits(V3_CREDIT_COST.insert)}.
+            Giới hạn {minInserts}-{maxInserts} insert · {insertResolution} · mỗi insert {formatCredits(insertCredits)}.
           </p>
-          <label className="mt-1 flex w-fit cursor-pointer items-center gap-1.5 text-[11px] text-gray-600">
-            <input
-              type="checkbox"
-              checked={skipPreview}
-              onChange={(e) => setSkipPreviewOverride(e.target.checked)}
-              className="h-3 w-3 accent-violet-600"
-            />
-            Bỏ qua preview 1s mỗi insert (nhanh + rẻ hơn, bỏ bước kiểm tra motion)
-          </label>
+          <p className="mt-1 text-[11px] text-amber-700">
+            Mỗi insert chỉ render 1 lần (đã bỏ bước preview tốn credit thừa). Nếu render timeout, bấm
+            <strong> Khôi phục</strong> trên thẻ để lấy lại video đã trả tiền — không tốn thêm credit.
+          </p>
         </div>
 
         {/* ── Smart suggestions (Gemini semantic) ─────────────────────────── */}
@@ -402,6 +429,7 @@ export default function ActionInsertsPhase({ onContinue }: Props) {
                   key={insert.insertId}
                   insert={insert}
                   onRender={() => handleRenderInsert(insert.insertId)}
+                  onResume={() => handleResumeInsert(insert.insertId)}
                   onApprove={() => handleApprove(insert.insertId)}
                   onReject={() => handleReject(insert.insertId)}
                   onLock={() => handleLock(insert.insertId)}
@@ -430,7 +458,7 @@ export default function ActionInsertsPhase({ onContinue }: Props) {
                   onClick={handleBulkRender}
                   className="flex items-center gap-1.5 rounded-full bg-gradient-to-r from-violet-600 to-pink-600 px-4 py-2 text-[12px] font-bold text-white shadow-sm hover:from-violet-700 hover:to-pink-700"
                 >
-                  <Sparkles className="h-3.5 w-3.5" /> Bulk render{bulkPendingCount > 0 ? ` · ${formatCredits(bulkPendingCount * V3_CREDIT_COST.insert)}` : ''}
+                  <Sparkles className="h-3.5 w-3.5" /> Bulk render{bulkPendingCount > 0 ? ` · ${formatCredits(bulkPendingCount * insertCredits)}` : ''}
                 </button>
                 {approvedCount >= minInserts && (
                   <button
@@ -463,10 +491,11 @@ export default function ActionInsertsPhase({ onContinue }: Props) {
 
 function InsertCard({
   insert,
-  onRender, onApprove, onReject, onLock, onUnlock, onRemove,
+  onRender, onResume, onApprove, onReject, onLock, onUnlock, onRemove,
 }: {
   insert: ActionInsertClip
   onRender: () => void
+  onResume: () => void
   onApprove: () => void
   onReject: () => void
   onLock: () => void
@@ -614,6 +643,15 @@ function InsertCard({
               {hasVideo ? <RotateCcw className="h-3 w-3" /> : <Play className="h-3 w-3 fill-white" />}
               {hasVideo ? 'Lại' : 'Render'}
             </button>
+            {!hasVideo && insert.fullTaskId && (
+              <button
+                onClick={onResume}
+                title="Khôi phục video đã trả tiền (re-poll taskId, 0 credit)"
+                className="flex items-center justify-center gap-1 rounded-md border border-amber-300 bg-white px-2 py-1 text-[10px] font-bold text-amber-700 hover:bg-amber-50"
+              >
+                <RotateCcw className="h-3 w-3" /> Khôi phục
+              </button>
+            )}
             {hasVideo && !isApproved && !isRejected && (
               <>
                 <button

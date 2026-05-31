@@ -197,6 +197,19 @@ export function estimateLipsyncCredits(durationSec: number): number {
   return Math.ceil(Math.max(5, sec) * KIE_LIPSYNC_CREDITS_PER_SEC)
 }
 
+// Z38 — realistic estimate for ONE action insert: a gpt-4o keyframe (~6 cr,
+// stable) + a 5s Kling i2v clip. The old flat `insert: 76` bundled the same
+// fictional "70-cr 5s clip" that overstated everything. A Kling video is billed
+// per second of output (~9 cr/s like the avatar render ⇒ ~45 cr for 5s), so a
+// single insert lands ~51 cr, not 76. STILL AN ESTIMATE — render ONE real
+// insert to confirm the per-second rate for kling-3.0/video before trusting
+// this for a 4-5 insert budget.
+export const INSERT_CLIP_SECONDS = 5
+
+export function estimateInsertCredits(): number {
+  return V3_CREDIT_COST.keyframe + Math.ceil(INSERT_CLIP_SECONDS * KIE_LIPSYNC_CREDITS_PER_SEC)
+}
+
 /** "~N credit (~$X.XX)" — the standard cost chip on action buttons. */
 export function formatCredits(credits: number): string {
   return `~${credits} credit (~$${(credits * CREDIT_USD).toFixed(2)})`

@@ -233,48 +233,15 @@ export async function renderInsert(
 
   if (params.signal?.aborted) throw new Error('CANCELLED — user huỷ')
 
-  // ── STAGE 2: PREVIEW MOTION (optional) ─────────────────────────────────
-  let previewVideoRef: string | undefined
-  if (!params.skipPreview) {
-    params.onStageUpdate({ stage: 'preview_motion', keyframeRef, keyframePromptUsed })
-
-    try {
-      const keyframePublicUrl = await getUrl(keyframeRef)
-      if (!keyframePublicUrl) throw new Error('Không lấy được URL keyframe (asset store)')
-
-      // Submit a Kling i2v preview at 480p with the preset's motion verb
-      const previewSubmission = await generateVideoJob({
-        apiKey: params.kieApiKey,
-        jobModelId: 'kling-3.0/video',
-        prompt: `${motionScene} ${cameraMotion}`,
-        aspectRatio: '9:16',
-        resolution: '480p',
-        duration: 5,
-        referenceImageUrls: [keyframePublicUrl],
-      })
-      const previewRemoteUrl = await pollVideoJobUntilDone({
-        apiKey: params.kieApiKey,
-        taskId: previewSubmission.taskId,
-        timeoutMs: 6 * 60 * 1000,
-      })
-      const previewBlob = await fetch(previewRemoteUrl).then((r) => r.blob())
-      previewVideoRef = await saveAsset(previewBlob, previewBlob.type || 'video/mp4')
-      params.onStageUpdate({
-        stage: 'preview_motion', keyframeRef, keyframePromptUsed, previewVideoRef,
-      })
-    } catch (err) {
-      // Preview is OPTIONAL — log + continue
-      const msg = err instanceof Error ? err.message : String(err)
-      console.warn(`[INSERT ${params.presetId}] preview skipped: ${msg.slice(0, 200)}`)
-    }
-  }
-
-  if (params.signal?.aborted) throw new Error('CANCELLED — user huỷ')
-
-  // ── STAGE 3: FULL VIDEO ────────────────────────────────────────────────
-  params.onStageUpdate({
-    stage: 'video_full', keyframeRef, keyframePromptUsed, previewVideoRef,
-  })
+  // ── STAGE 2: VIDEO — SINGLE Kling i2v pass ─────────────────────────────
+  // Z38 — there used to be a separate 480p "preview" Kling render here BEFORE
+  // the full render — and the two ran back-to-back with NO approval gate in
+  // between, so the cheap preview was never actually used to decide anything;
+  // it just doubled the Kling submissions (2 paid jobs per insert → 10 for a
+  // 5-insert ad). Deleted. One Kling job per insert now. Its taskId is
+  // persisted BEFORE polling so a timeout can RESUME the already-paid job
+  // (resumeInsertVideo) instead of re-submitting and charging again.
+  params.onStageUpdate({ stage: 'video_full', keyframeRef, keyframePromptUsed })
 
   const keyframePublicUrl = await getUrl(keyframeRef)
   if (!keyframePublicUrl) throw new Error('Không lấy được URL keyframe (asset store)')
@@ -290,32 +257,78 @@ export async function renderInsert(
     duration: 5,
     referenceImageUrls: [keyframePublicUrl],
   })
+  // Persist taskId IMMEDIATELY — the job is paid for. A timeout below leaves
+  // a recoverable handle so the user re-polls instead of paying twice.
   params.onStageUpdate({
-    stage: 'video_full', keyframeRef, keyframePromptUsed, previewVideoRef,
+    stage: 'video_full', keyframeRef, keyframePromptUsed,
     fullTaskId: fullSubmission.taskId,
   })
 
-  const fullRemoteUrl = await pollVideoJobUntilDone({
+  const videoRef = await pollAndSaveInsertVideo({
     apiKey: params.kieApiKey,
     taskId: fullSubmission.taskId,
-    timeoutMs: 6 * 60 * 1000,
+    timeoutMs: 10 * 60 * 1000,  // 10min ceiling for a 5s i2v clip
   })
-  const fullBlob = await fetch(fullRemoteUrl).then((r) => r.blob())
-  const videoRef = await saveAsset(fullBlob, fullBlob.type || 'video/mp4')
 
   params.onStageUpdate({
     stage: 'completed',
-    keyframeRef, keyframePromptUsed, previewVideoRef,
+    keyframeRef, keyframePromptUsed,
     fullTaskId: fullSubmission.taskId, videoRef,
   })
 
   return {
     keyframeRef,
     keyframePromptUsed,
-    previewVideoRef,
     videoRef,
     fullTaskId: fullSubmission.taskId,
   }
+}
+
+// ── Resume a paid-but-unfinished insert video job ───────────────────────────
+// Z38 — same recovery path as the creator video: when the poll above times out
+// (or the user refreshed), the Kling job is still running on KIE and was
+// already charged. Re-poll the SAME taskId — never submit a new job, so it
+// does NOT spend more credit.
+
+export interface ResumeInsertParams {
+  kieApiKey: string
+  /** The fullTaskId persisted from a prior (timed-out) insert render. */
+  taskId: string
+  onStageUpdate: (update: InsertStageUpdate) => void
+  timeoutMs?: number
+  signal?: AbortSignal
+}
+
+export async function resumeInsertVideo(
+  params: ResumeInsertParams,
+): Promise<{ videoRef: string }> {
+  if (params.signal?.aborted) throw new Error('CANCELLED — user huỷ')
+  console.log(`[INSERT resume] re-polling paid task ${params.taskId} (no new charge)`)
+  params.onStageUpdate({ stage: 'video_full', fullTaskId: params.taskId })
+
+  const videoRef = await pollAndSaveInsertVideo({
+    apiKey: params.kieApiKey,
+    taskId: params.taskId,
+    timeoutMs: params.timeoutMs ?? 10 * 60 * 1000,
+  })
+
+  params.onStageUpdate({ stage: 'completed', fullTaskId: params.taskId, videoRef })
+  return { videoRef }
+}
+
+/** Poll a Kling i2v task to completion, then download + persist the MP4. */
+async function pollAndSaveInsertVideo(args: {
+  apiKey: string
+  taskId: string
+  timeoutMs: number
+}): Promise<string> {
+  const remoteUrl = await pollVideoJobUntilDone({
+    apiKey: args.apiKey,
+    taskId: args.taskId,
+    timeoutMs: args.timeoutMs,
+  })
+  const blob = await fetch(remoteUrl).then((r) => r.blob())
+  return saveAsset(blob, blob.type || 'video/mp4')
 }
 
 /** Helper: list cuts that are eligible for a bulk render call. Excludes
