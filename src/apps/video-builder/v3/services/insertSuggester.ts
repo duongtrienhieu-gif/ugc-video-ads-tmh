@@ -33,6 +33,15 @@ export interface InsertSuggestion {
   confidence: number
   /** Gemini path — one short phrase (in the script language) explaining the fit. */
   reason?: string
+  /** Z37 — Scene Director path only. When presetId === 'CONCEPT_SCENE', this is
+   *  the free visual prompt (English, for the image/video model) describing the
+   *  concept B-roll that illustrates this dialogue span. Undefined for the 12
+   *  product presets. */
+  conceptPrompt?: string
+  /** Z37 — Scene Director path only. The director's chosen scene length (3-7s),
+   *  grouping same-content sentences into one clip. Falls back to the preset's
+   *  durationPreset when absent. */
+  durationSec?: number
 }
 
 /**
@@ -210,6 +219,166 @@ OUTPUT strict JSON, no fences:
   }
   out.sort((a, b) => b.confidence - a.confidence)
   return out.slice(0, params.budget)
+}
+
+// ── Z37 Scene Director (primary path when own-script / brainstorm wanted) ──
+// The suggester above only maps the script to the 12 PRODUCT presets. The
+// Scene Director goes further: it READS the whole script, brainstorms a
+// variable scene breakdown (grouping same-content sentences into one 3-7s
+// clip), and for each visual moment decides between:
+//   • a PRODUCT preset (one of the 12 — product is on screen, fidelity-locked)
+//   • a CONCEPT_SCENE  (no product on screen — a free B-roll prompt the model
+//                       can render however it likes to illustrate the meaning;
+//                       no fidelity risk because the product never appears).
+// Talking-head moments produce NO insert (the creator video already covers
+// them — inserts only LAYER over it). So the director's job is: where to cut
+// away, and to what.
+
+const DIRECTOR_PRESET_ENUM = [...ACTION_PRESET_ORDER, 'CONCEPT_SCENE']
+
+const DIRECTOR_RESPONSE_SCHEMA = {
+  type: 'object',
+  properties: {
+    scenes: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          presetId:      { type: 'string', enum: DIRECTOR_PRESET_ENUM },
+          anchorBlock:   { type: 'string', enum: ['hook', 'pain', 'discovery', 'benefit', 'cta'] },
+          durationSec:   { type: 'number' },
+          fit:           { type: 'number' },
+          reason:        { type: 'string' },
+          conceptPrompt: { type: 'string' },
+        },
+        required: ['presetId', 'anchorBlock', 'durationSec', 'fit'],
+      },
+    },
+  },
+  required: ['scenes'],
+}
+
+export async function directScenesWithGemini(
+  params: GeminiSuggestParams,
+): Promise<InsertSuggestion[]> {
+  const langName = SCRIPT_LANG_GEMINI_NAME[params.lang]
+  const catalogue = ACTION_PRESET_ORDER
+    .map((id) => `- ${id}: ${ACTION_PRESETS[id].descriptionVi} (needsProduct=${ACTION_PRESETS[id].needsProduct})`)
+    .join('\n')
+  const scriptDump = params.script.blocks
+    .map((b) => `[${b.id}] ${b.text}`)
+    .join('\n')
+
+  const systemInstruction = `You are a UGC ad video DIRECTOR. The script is written in ${langName}.
+A single talking-head "creator video" of the person speaking already covers the
+whole script. Your job is to decide WHERE to cut away to a supporting visual
+(a B-roll insert that LAYERS over the talking head) and WHAT to show there.
+
+You have TWO kinds of insert:
+
+1. PRODUCT presets — the real product is ON SCREEN (fidelity-locked to the
+   reference image). Use these when the dialogue is about handling / using /
+   showing the product itself. Pick from this catalogue:
+${catalogue}
+
+2. CONCEPT_SCENE — a free concept B-roll with NO product on screen. Use this
+   when the dialogue describes a FEELING, a PROBLEM, a MECHANISM / how-it-works,
+   a lifestyle moment, or an ingredient/cause — anything that is better shown by
+   an illustrative scene than by the product. For CONCEPT_SCENE you MUST write a
+   "conceptPrompt": one vivid English sentence describing the shot (subject,
+   setting, mood, action). NEVER put product packaging in a conceptPrompt.
+
+DIRECTING RULES:
+- Read the MEANING of the script, not keywords. Group sentences that describe
+  the SAME idea into ONE scene (do not cut every sentence).
+- Each scene is 3-7 seconds ("durationSec"). Match length to how much dialogue
+  it covers — one short line ≈ 3s, a few sentences on one idea ≈ 5-7s.
+- Anchor each scene to the ONE block (hook/pain/discovery/benefit/cta) whose
+  dialogue it illustrates.
+- Cut away only when a visual genuinely helps. Leave plain talking-head moments
+  alone (just omit them). Quality of cuts > quantity. Max ${params.budget} scenes.
+- Prefer CONCEPT_SCENE for emotion / problem / mechanism / lifestyle; prefer a
+  PRODUCT preset only when the product itself is the subject of that line.
+- "fit" = 0..1 how strongly the visual supports the line. "reason" = one short
+  phrase in ${langName} explaining the choice (shown to the user).
+
+OUTPUT strict JSON, no fences:
+{ "scenes": [ { "presetId": "...", "anchorBlock": "...", "durationSec": 4,
+  "fit": 0.0, "reason": "...", "conceptPrompt": "(only for CONCEPT_SCENE)" } ] }`
+
+  const userPrompt = `SCRIPT (block id in brackets):\n${scriptDump}\n\nDirect the scenes now.`
+
+  const raw = await directGeminiText({
+    apiKey: params.geminiKey,
+    systemInstruction,
+    prompt: userPrompt,
+    maxOutputTokens: 2048,
+    responseMimeType: 'application/json',
+    responseSchema: DIRECTOR_RESPONSE_SCHEMA,
+  })
+
+  const parsed = parseDirectorOutput(raw)
+  const validPresets = new Set<string>(DIRECTOR_PRESET_ENUM)
+  const validBlocks = new Set<string>(['hook', 'pain', 'discovery', 'benefit', 'cta'])
+
+  const out: InsertSuggestion[] = []
+  for (const item of parsed) {
+    if (!validPresets.has(item.presetId)) continue
+    const isConcept = item.presetId === 'CONCEPT_SCENE'
+    // A concept scene with no prompt is useless — drop it.
+    const conceptPrompt = typeof item.conceptPrompt === 'string' ? item.conceptPrompt.trim() : ''
+    if (isConcept && conceptPrompt.length === 0) continue
+    const anchor = validBlocks.has(item.anchorBlock) ? (item.anchorBlock as ScriptBlockId) : null
+    const fit = Math.max(0, Math.min(1, Number(item.fit) || 0))
+    if (fit <= 0) continue  // drop non-matches — no padding
+    const durationSec = clampDuration(item.durationSec)
+    out.push({
+      presetId: item.presetId as ActionPresetId,
+      matchCount: 0,
+      matchedBlocks: anchor ? [anchor] : [],
+      matchedKeywords: [],
+      anchorBlock: anchor,
+      confidence: fit,
+      reason: typeof item.reason === 'string' ? item.reason : undefined,
+      conceptPrompt: isConcept ? conceptPrompt : undefined,
+      durationSec,
+    })
+  }
+  // Keep the director's ORDER (narrative sequence), not a fit sort — scenes
+  // should play in script order. Cap to budget.
+  return out.slice(0, params.budget)
+}
+
+function clampDuration(v: unknown): number {
+  const n = Number(v)
+  if (!Number.isFinite(n)) return 4
+  return Math.max(3, Math.min(7, Math.round(n * 10) / 10))
+}
+
+interface RawDirectorScene {
+  presetId: string
+  anchorBlock: string
+  durationSec: number
+  fit: number
+  reason?: string
+  conceptPrompt?: string
+}
+
+function parseDirectorOutput(raw: string): RawDirectorScene[] {
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(raw)
+  } catch {
+    const cleaned = raw.replace(/^```(?:json)?\s*/m, '').replace(/```\s*$/m, '').trim()
+    try {
+      parsed = JSON.parse(cleaned)
+    } catch {
+      return []
+    }
+  }
+  const obj = parsed as { scenes?: unknown }
+  if (!obj || typeof obj !== 'object' || !Array.isArray(obj.scenes)) return []
+  return obj.scenes as RawDirectorScene[]
 }
 
 interface RawSuggestItem {

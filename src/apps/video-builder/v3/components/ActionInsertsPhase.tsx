@@ -30,7 +30,7 @@ import {
 } from '../types'
 import { ACTION_PRESETS, ACTION_PRESET_ORDER } from '../services/actionPresets'
 import {
-  pickTopInsertsForBudget, suggestInsertsWithGemini,
+  pickTopInsertsForBudget, directScenesWithGemini,
   type InsertSuggestion,
 } from '../services/insertSuggester'
 import { renderInsert, listEligibleInsertsForBulk } from '../services/insertRenderer'
@@ -113,17 +113,18 @@ export default function ActionInsertsPhase({ onContinue }: Props) {
     setIsSuggesting(true)
     try {
       if (geminiKey) {
-        const result = await suggestInsertsWithGemini({
+        const result = await directScenesWithGemini({
           geminiKey,
           script,
           lang: state.scriptBrain.outputLang,
           budget: maxInserts,
         })
         setSuggestions(result)
+        const conceptCount = result.filter((r) => r.presetId === 'CONCEPT_SCENE').length
         addToast(
           result.length > 0
-            ? `✓ Gemini gợi ý ${result.length} insert theo nội dung script`
-            : 'Gemini không tìm thấy insert nào thật sự khớp — bạn tự chọn từ thư viện nhé',
+            ? `✓ AI tách ${result.length} cảnh theo nội dung script${conceptCount > 0 ? ` (${conceptCount} cảnh concept)` : ''}`
+            : 'AI không tìm thấy cảnh nào thật sự cần cắt — bạn tự chọn từ thư viện nhé',
           result.length > 0 ? 'success' : 'info',
         )
       } else {
@@ -153,10 +154,11 @@ export default function ActionInsertsPhase({ onContinue }: Props) {
     const blockStarts = script ? computeBlockStartTimestamps(script) : null
     const items = suggestions.map((s) => ({
       presetId: s.presetId,
-      durationSec: ACTION_PRESETS[s.presetId].durationPreset,
+      durationSec: s.durationSec ?? ACTION_PRESETS[s.presetId].durationPreset,
       scriptKeyword: s.matchedKeywords[0],
       voiceTimestampSec:
         blockStarts && s.anchorBlock ? blockStarts[s.anchorBlock] : null,
+      conceptPrompt: s.conceptPrompt,
     }))
     clearAllInserts()
     bulkAddInsertsFromPresets(items)
@@ -204,6 +206,7 @@ export default function ActionInsertsPhase({ onContinue }: Props) {
         creatorKeyframeRef: state.creatorVideo?.keyframeRef,
         resolution: insert.resolution,
         skipPreview,
+        conceptPrompt: insert.conceptPrompt,
         onStageUpdate: (update) => {
           patchInsert(insertId, {
             stage: update.stage,
@@ -283,25 +286,34 @@ export default function ActionInsertsPhase({ onContinue }: Props) {
               <Lightbulb className="h-5 w-5 shrink-0 text-amber-600" />
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-bold text-gray-900">
-                  Gợi ý insert theo nội dung script
+                  AI đạo diễn — tự tách cảnh theo kịch bản
                 </p>
                 <p className="mt-0.5 text-[11px] text-gray-600">
-                  Gemini đọc <strong>nghĩa</strong> từng đoạn (đúng ngôn ngữ output) và chọn insert phù hợp — không dò keyword.
+                  AI đọc <strong>nghĩa</strong> cả kịch bản, tự <strong>tách cảnh</strong> (3-7s/cảnh) và chọn:
+                  cảnh có sản phẩm hoặc <strong>cảnh minh hoạ concept</strong> (không có sản phẩm) — không dò keyword.
                 </p>
                 {suggestions.length > 0 && (
-                  <div className="mt-2 flex flex-wrap gap-1.5">
-                    {suggestions.map((sug) => {
+                  <div className="mt-2 flex flex-col gap-1.5">
+                    {suggestions.map((sug, i) => {
                       const preset = ACTION_PRESETS[sug.presetId]
+                      const isConcept = sug.presetId === 'CONCEPT_SCENE'
                       return (
-                        <span
-                          key={sug.presetId}
-                          title={sug.reason ?? `Khớp ~${Math.round(sug.confidence * 100)}%`}
-                          className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[10px] font-bold ${TONE_BG[preset.tone]}`}
+                        <div
+                          key={`${sug.presetId}-${i}`}
+                          title={isConcept ? sug.conceptPrompt : sug.reason}
+                          className={`flex items-center gap-2 rounded-lg border px-2.5 py-1.5 text-[10px] font-bold ${TONE_BG[preset.tone]}`}
                         >
-                          <span>{preset.emoji}</span>
-                          <span>{preset.labelVi}</span>
-                          <span className="text-[8px] opacity-70">{Math.round(sug.confidence * 100)}%</span>
-                        </span>
+                          <span className="shrink-0 opacity-50">#{i + 1}</span>
+                          <span className="shrink-0">{preset.emoji}</span>
+                          <span className="shrink-0">{preset.labelVi}</span>
+                          <span className="shrink-0 rounded bg-black/10 px-1 text-[8px]">~{sug.durationSec ?? preset.durationPreset}s</span>
+                          {(isConcept ? sug.conceptPrompt : sug.reason) && (
+                            <span className="min-w-0 flex-1 truncate font-normal opacity-80">
+                              {isConcept ? sug.conceptPrompt : sug.reason}
+                            </span>
+                          )}
+                          <span className="ml-auto shrink-0 text-[8px] opacity-70">{Math.round(sug.confidence * 100)}%</span>
+                        </div>
                       )
                     })}
                   </div>
@@ -562,6 +574,14 @@ function InsertCard({
       {/* Meta */}
       <div className="border-t border-black/5 px-2 py-1.5 text-[10px]">
         <p className="font-bold leading-tight text-gray-700">{preset.labelVi}</p>
+        {insert.presetId === 'CONCEPT_SCENE' && insert.conceptPrompt && (
+          <p
+            title={insert.conceptPrompt}
+            className="mt-0.5 line-clamp-2 font-normal italic leading-tight text-sky-700"
+          >
+            {insert.conceptPrompt}
+          </p>
+        )}
         <div className="mt-0.5 flex items-center justify-between text-gray-500">
           <span className="flex items-center gap-1">
             <span className={`h-1.5 w-1.5 rounded-full ${STATUS_DOT[insert.status]}`} />
