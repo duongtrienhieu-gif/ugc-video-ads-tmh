@@ -348,11 +348,16 @@ OUTPUT strict JSON, no fences:
 
   const userPrompt = `SCRIPT (block id in brackets):\n${scriptDump}\n\nDirect the scenes now.`
 
+  // Z43 — room for up to 8 scenes, each with a VN quote + VN reason + an
+  // English conceptPrompt. 2048 tokens truncated the JSON on longer scripts
+  // (especially now that the budget is up to 8) → JSON.parse failed → the
+  // director silently fell back to the weak keyword path. 8192 gives headroom
+  // so the full scene list comes back intact.
   const raw = await directGeminiText({
     apiKey: params.geminiKey,
     systemInstruction,
     prompt: userPrompt,
-    maxOutputTokens: 2048,
+    maxOutputTokens: 8192,
     responseMimeType: 'application/json',
     responseSchema: DIRECTOR_RESPONSE_SCHEMA,
   })
