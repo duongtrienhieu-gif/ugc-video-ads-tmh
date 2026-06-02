@@ -237,9 +237,14 @@ export async function renderInsert(
     prompt: keyframePromptUsed,
     filesUrl,
     size: '2:3',  // closest GPT-4o supports to vertical 9:16
-    softTimeoutMs: 60_000,
-    attemptTimeoutMs: 90_000,
-    maxAttempts: 2,
+    // Z43 — KIE GPT-4o image-edit with 2 reference images routinely takes
+    // 90-140s when the KIE queue is busy. The old 90s hard cap abandoned
+    // tasks that would have finished at ~100s, turning a slow-but-fine run
+    // into a "TIMEOUT" failure. Give it a realistic window (150s) and one
+    // extra fresh attempt so a transient KIE "Internal Error" gets a 3rd shot.
+    softTimeoutMs: 100_000,
+    attemptTimeoutMs: 150_000,
+    maxAttempts: 3,
     signal: params.signal,
   })
 
