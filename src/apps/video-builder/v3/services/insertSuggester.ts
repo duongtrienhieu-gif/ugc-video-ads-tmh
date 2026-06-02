@@ -132,6 +132,11 @@ export interface GeminiSuggestParams {
   script: GeneratedScript
   lang: ScriptLang
   budget: number
+  /** Z40 — soft lower bound for full-auto mode: the director should aim for at
+   *  least this many scenes (a finished ad almost always needs several
+   *  cutaways). Default 3. Does NOT force padding — it just stops the model
+   *  from being over-shy and returning zero. */
+  floor?: number
 }
 
 const SUGGEST_RESPONSE_SCHEMA = {
@@ -262,6 +267,9 @@ export async function directScenesWithGemini(
   params: GeminiSuggestParams,
 ): Promise<InsertSuggestion[]> {
   const langName = SCRIPT_LANG_GEMINI_NAME[params.lang]
+  // Full-auto baseline: aim for at least `floor` scenes (default 3) but never
+  // more than the budget. Keeps the director from returning an empty list.
+  const floor = Math.max(1, Math.min(params.floor ?? 3, params.budget))
   const catalogue = ACTION_PRESET_ORDER
     .map((id) => `- ${id}: ${ACTION_PRESETS[id].descriptionVi} (needsProduct=${ACTION_PRESETS[id].needsProduct})`)
     .join('\n')
@@ -295,8 +303,14 @@ DIRECTING RULES:
   it covers — one short line ≈ 3s, a few sentences on one idea ≈ 5s.
 - Anchor each scene to the ONE block (hook/pain/discovery/benefit/cta) whose
   dialogue it illustrates.
-- Cut away only when a visual genuinely helps. Leave plain talking-head moments
-  alone (just omit them). Quality of cuts > quantity. Max ${params.budget} scenes.
+- A finished UGC ad is NOT a static talking head — it cuts to a supporting
+  visual on most key beats. Propose between ${floor} and ${params.budget} scenes
+  that together cover the arc: the hook, the core problem, the product/benefit
+  moment, and the CTA. Returning zero or one scene is only correct for an
+  unusually short script — otherwise give the editor a solid baseline.
+- Still favour quality: group same-idea sentences into one scene and don't
+  invent a cut where truly nothing visual would help. Quality first, but DO
+  cover the arc.
 - Prefer CONCEPT_SCENE for emotion / problem / mechanism / lifestyle; prefer a
   PRODUCT preset only when the product itself is the subject of that line.
 - "fit" = 0..1 how strongly the visual supports the line. "reason" = one short
@@ -346,7 +360,14 @@ OUTPUT strict JSON, no fences:
   }
   // Keep the director's ORDER (narrative sequence), not a fit sort — scenes
   // should play in script order. Cap to budget.
-  return out.slice(0, params.budget)
+  const directed = out.slice(0, params.budget)
+  if (directed.length > 0) return directed
+  // Z40 full-auto safety net — Gemini returned nothing usable (over-shy, parse
+  // miss, or a thin script). Fall back to the keyword suggester so the engine
+  // still proposes a baseline instead of dumping the work back on the user.
+  // (If the keyword path is ALSO empty, the script genuinely has no matchable
+  // moment — that's an honest empty, not a shy one.)
+  return suggestInsertsForScript(params.script).slice(0, params.budget)
 }
 
 function clampDuration(v: unknown): number {

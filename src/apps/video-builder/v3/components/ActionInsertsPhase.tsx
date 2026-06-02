@@ -111,55 +111,32 @@ export default function ActionInsertsPhase({ onContinue }: Props) {
   const [suggestions, setSuggestions] = useState<InsertSuggestion[]>([])
   const [isSuggesting, setIsSuggesting] = useState(false)
 
-  const handleSuggest = async () => {
+  // Fetch the director's scene breakdown for the current script. Gemini path
+  // when a key exists (reads meaning), keyword fallback otherwise.
+  const fetchSuggestions = async (): Promise<InsertSuggestion[]> => {
     const script = state.scriptBrain.script
-    if (!script) {
-      addToast('Chưa có script — quay lại bước 2', 'error')
-      return
+    if (!script) return []
+    if (geminiKey) {
+      return directScenesWithGemini({
+        geminiKey,
+        script,
+        lang: state.scriptBrain.outputLang,
+        budget: maxInserts,
+        floor: minInserts,
+      })
     }
-    setIsSuggesting(true)
-    try {
-      if (geminiKey) {
-        const result = await directScenesWithGemini({
-          geminiKey,
-          script,
-          lang: state.scriptBrain.outputLang,
-          budget: maxInserts,
-        })
-        setSuggestions(result)
-        const conceptCount = result.filter((r) => r.presetId === 'CONCEPT_SCENE').length
-        addToast(
-          result.length > 0
-            ? `✓ AI tách ${result.length} cảnh theo nội dung script${conceptCount > 0 ? ` (${conceptCount} cảnh concept)` : ''}`
-            : 'AI không tìm thấy cảnh nào thật sự cần cắt — bạn tự chọn từ thư viện nhé',
-          result.length > 0 ? 'success' : 'info',
-        )
-      } else {
-        // Offline fallback — keyword match, no padding.
-        const result = pickTopInsertsForBudget(script, maxInserts)
-        setSuggestions(result)
-        addToast(
-          result.length > 0
-            ? `Gợi ý theo keyword (${result.length}) — thêm Gemini key để gợi ý theo nghĩa`
-            : 'Không match keyword nào — thêm Gemini key hoặc tự chọn từ thư viện',
-          'info',
-        )
-      }
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err)
-      addToast(`Gợi ý lỗi: ${msg.slice(0, 160)}`, 'error')
-    } finally {
-      setIsSuggesting(false)
-    }
+    // Offline fallback — keyword match, no padding.
+    return pickTopInsertsForBudget(script, maxInserts)
   }
 
-  const handleApplySuggestions = () => {
-    if (suggestions.length === 0) return
+  // Apply a suggestion list straight into the store (replaces current inserts).
+  // Anchors each scene to its block's start second so the auto-edit planner
+  // places it at the right moment (semantic match → timeline).
+  const applySuggestions = (result: InsertSuggestion[]) => {
+    if (result.length === 0) return
     const script = state.scriptBrain.script
-    // Anchor each suggestion to its block's start second so the auto-edit
-    // planner places it at the right moment (semantic match → timeline).
     const blockStarts = script ? computeBlockStartTimestamps(script) : null
-    const items = suggestions.map((s) => ({
+    const items = result.map((s) => ({
       presetId: s.presetId,
       durationSec: s.durationSec ?? ACTION_PRESETS[s.presetId].durationPreset,
       scriptKeyword: s.matchedKeywords[0],
@@ -169,8 +146,83 @@ export default function ActionInsertsPhase({ onContinue }: Props) {
     }))
     clearAllInserts()
     bulkAddInsertsFromPresets(items)
-    addToast(`✓ Đã thêm ${items.length} insert từ gợi ý`, 'success')
   }
+
+  // Manual re-run ("Đạo diễn lại"). Fetches + applies + shows the result chips.
+  const handleSuggest = async () => {
+    const script = state.scriptBrain.script
+    if (!script) {
+      addToast('Chưa có script — quay lại Bước 1', 'error')
+      return
+    }
+    setIsSuggesting(true)
+    try {
+      const result = await fetchSuggestions()
+      setSuggestions(result)
+      if (result.length > 0) {
+        applySuggestions(result)
+        const conceptCount = result.filter((r) => r.presetId === 'CONCEPT_SCENE').length
+        addToast(
+          `✓ AI đạo diễn ${result.length} cảnh theo kịch bản${conceptCount > 0 ? ` (${conceptCount} cảnh concept)` : ''}`,
+          'success',
+        )
+      } else {
+        addToast(
+          geminiKey
+            ? 'Kịch bản hơi ngắn — AI chưa tách được cảnh, bạn thêm từ thư viện bên dưới nhé'
+            : 'Chưa match được cảnh nào — thêm Gemini key hoặc thêm từ thư viện bên dưới',
+          'info',
+        )
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      addToast(`Đạo diễn lỗi: ${msg.slice(0, 160)}`, 'error')
+    } finally {
+      setIsSuggesting(false)
+    }
+  }
+
+  const handleApplySuggestions = () => {
+    if (suggestions.length === 0) return
+    applySuggestions(suggestions)
+    addToast(`✓ Đã thêm ${suggestions.length} insert từ gợi ý`, 'success')
+  }
+
+  // ── Full-auto: direct the scenes ONCE on entry ───────────────────────────
+  // The engine is AI-first — landing on this step with a script and no inserts
+  // yet auto-runs the director and fills the list. The user only reviews/edits;
+  // the preset library below is for manual tweaks, not the starting point.
+  // This is a single cheap Gemini text call — NO KIE credits are spent (nothing
+  // is rendered until the user explicitly triggers a render).
+  const autoRanRef = useRef(false)
+  useEffect(() => {
+    if (autoRanRef.current) return
+    const script = state.scriptBrain.script
+    if (!script) return
+    // Respect existing work (restored from store / added manually) — don't wipe.
+    if (inserts.length > 0) { autoRanRef.current = true; return }
+    autoRanRef.current = true
+    void (async () => {
+      setIsSuggesting(true)
+      try {
+        const result = await fetchSuggestions()
+        if (result.length > 0) {
+          setSuggestions(result)
+          applySuggestions(result)
+          const conceptCount = result.filter((r) => r.presetId === 'CONCEPT_SCENE').length
+          addToast(
+            `✓ AI tự đạo diễn ${result.length} cảnh theo kịch bản${conceptCount > 0 ? ` (${conceptCount} cảnh concept)` : ''} — soát lại / sửa bên dưới`,
+            'success',
+          )
+        }
+      } catch {
+        // Silent on auto-run — the user can hit "Đạo diễn lại" to see the error.
+      } finally {
+        setIsSuggesting(false)
+      }
+    })()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state.scriptBrain.script])
 
   const handleAddPreset = (presetId: ActionPresetId) => {
     if (inserts.length >= maxInserts) {
@@ -306,7 +358,8 @@ export default function ActionInsertsPhase({ onContinue }: Props) {
         <div className="mb-4">
           <h2 className="text-lg font-bold text-gray-900">Bước 2 — Action Inserts</h2>
           <p className="text-[12px] text-gray-500">
-            3-8 clip ngắn hỗ trợ (cầm sản phẩm, mở nắp, point label, etc) — không phải B-roll cinematic.
+            AI tự đạo diễn cảnh từ kịch bản và đổ danh sách sẵn — bạn chỉ soát lại. Đây là clip ngắn hỗ trợ
+            (cầm sản phẩm, mở nắp, point label, cảnh minh hoạ) — không phải B-roll cinematic.
             Giới hạn {minInserts}-{maxInserts} insert · {insertResolution} · mỗi insert {formatCredits(insertCredits)}.
           </p>
           <p className="mt-1 text-[11px] text-amber-700">
@@ -325,8 +378,9 @@ export default function ActionInsertsPhase({ onContinue }: Props) {
                   AI đạo diễn — tự tách cảnh theo kịch bản
                 </p>
                 <p className="mt-0.5 text-[11px] text-gray-600">
-                  AI đọc <strong>nghĩa</strong> cả kịch bản, tự <strong>tách cảnh</strong> (3-5s/cảnh) và chọn:
-                  cảnh có sản phẩm hoặc <strong>cảnh minh hoạ concept</strong> (không có sản phẩm) — không dò keyword.
+                  AI <strong>tự chạy</strong> ngay khi bạn vào bước này: đọc <strong>nghĩa</strong> cả kịch bản,
+                  tách cảnh (3-5s/cảnh) và <strong>đổ sẵn danh sách insert bên dưới</strong>. Bạn chỉ soát lại / sửa / xoá.
+                  Bấm <strong>Đạo diễn lại</strong> nếu muốn AI thử lại. (Chưa render gì — không tốn KIE credit.)
                 </p>
                 {suggestions.length > 0 && (
                   <div className="mt-2 flex flex-col gap-1.5">
@@ -362,8 +416,8 @@ export default function ActionInsertsPhase({ onContinue }: Props) {
                   className="rounded-lg border border-amber-300 bg-white px-3 py-2 text-[12px] font-bold text-amber-700 shadow-sm hover:bg-amber-50 disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   {isSuggesting
-                    ? <><Loader2 className="mr-1 inline h-3.5 w-3.5 animate-spin" /> Đang đọc...</>
-                    : <><Wand2 className="mr-1 inline h-3.5 w-3.5" /> Gợi ý AI</>}
+                    ? <><Loader2 className="mr-1 inline h-3.5 w-3.5 animate-spin" /> Đang đạo diễn...</>
+                    : <><Wand2 className="mr-1 inline h-3.5 w-3.5" /> {suggestions.length > 0 ? 'Đạo diễn lại' : 'Gợi ý AI'}</>}
                 </button>
                 {suggestions.length > 0 && (
                   <button
@@ -382,7 +436,7 @@ export default function ActionInsertsPhase({ onContinue }: Props) {
         <div className="mb-4 rounded-xl border border-black/10 bg-white p-4">
           <div className="flex items-center justify-between">
             <p className="text-[10px] font-bold uppercase tracking-widest text-gray-500">
-              Thư viện preset ({ACTION_PRESET_ORDER.length})
+              Thêm thủ công — thư viện preset ({ACTION_PRESET_ORDER.length})
             </p>
             <p className="text-[10px] text-gray-400">
               Hiện có {inserts.length}/{maxInserts} insert
