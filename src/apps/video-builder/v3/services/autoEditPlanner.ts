@@ -186,9 +186,12 @@ function buildSegments(
     // 3-5s instead of being capped to one fixed style value. The style's
     // insertOverlayDurationSec is the fallback when an insert has no length.
     // Clamp to a sane overlay window so one insert never swallows the video.
-    // 5s ceiling = the actual rendered Kling clip length (insertRenderer uses
-    // duration:5); a longer overlay would have no footage to fill it.
-    const overlayCap = Math.min(5, Math.max(1.5, usableEnd - usableStart))
+    // Z42 — the footage ceiling depends on render mode: a Kling clip is a fixed
+    // 5s of real footage, while a Ken Burns clip is a synthetic local zoom that
+    // can run up to 8s. Cap each insert to what its own footage can actually
+    // fill so we never hold past the available frames.
+    const footageCap = (insert.renderMode ?? 'video') === 'ken_burns' ? 8 : 5
+    const overlayCap = Math.min(footageCap, Math.max(1.5, usableEnd - usableStart))
     const durSec = Math.max(
       1.5,
       Math.min(overlayCap, insert.durationSec || insertOverlayDurationSec),

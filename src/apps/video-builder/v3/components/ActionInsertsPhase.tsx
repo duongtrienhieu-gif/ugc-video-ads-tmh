@@ -34,7 +34,7 @@ import {
   type InsertSuggestion,
 } from '../services/insertSuggester'
 import { renderInsert, resumeInsertVideo, listEligibleInsertsForBulk } from '../services/insertRenderer'
-import { computeBlockStartTimestamps } from '../services/insertTimingEngine'
+import { computeBlockStartTimestamps, computeQuoteTimestamp } from '../services/insertTimingEngine'
 
 // Wrap Date.now in a non-render-pure call site so react-hooks/purity lint
 // doesn't false-positive on usage inside async event handlers below.
@@ -136,14 +136,19 @@ export default function ActionInsertsPhase({ onContinue }: Props) {
     if (result.length === 0) return
     const script = state.scriptBrain.script
     const blockStarts = script ? computeBlockStartTimestamps(script) : null
-    const items = result.map((s) => ({
-      presetId: s.presetId,
-      durationSec: s.durationSec ?? ACTION_PRESETS[s.presetId].durationPreset,
-      scriptKeyword: s.matchedKeywords[0],
-      voiceTimestampSec:
-        blockStarts && s.anchorBlock ? blockStarts[s.anchorBlock] : null,
-      conceptPrompt: s.conceptPrompt,
-    }))
+    const items = result.map((s) => {
+      // Z42 — anchor to the EXACT second the quoted line is spoken; fall back to
+      // the coarse block-start only when the quote can't be located.
+      const quoteTs = script ? computeQuoteTimestamp(script, s.quote) : null
+      const blockTs = blockStarts && s.anchorBlock ? blockStarts[s.anchorBlock] : null
+      return {
+        presetId: s.presetId,
+        durationSec: s.durationSec ?? ACTION_PRESETS[s.presetId].durationPreset,
+        scriptKeyword: s.matchedKeywords[0],
+        voiceTimestampSec: quoteTs ?? blockTs,
+        conceptPrompt: s.conceptPrompt,
+      }
+    })
     clearAllInserts()
     bulkAddInsertsFromPresets(items)
   }
@@ -386,7 +391,7 @@ export default function ActionInsertsPhase({ onContinue }: Props) {
                   <div className="mt-2 flex flex-col gap-1.5">
                     {suggestions.map((sug, i) => {
                       const preset = ACTION_PRESETS[sug.presetId]
-                      const isConcept = sug.presetId === 'CONCEPT_SCENE'
+                      const isConcept = sug.presetId === 'CONCEPT_SCENE' || sug.presetId === 'PRODUCT_IN_ACTION'
                       return (
                         <div
                           key={`${sug.presetId}-${i}`}
@@ -668,7 +673,7 @@ function InsertCard({
       {/* Meta */}
       <div className="border-t border-black/5 px-2 py-1.5 text-[10px]">
         <p className="font-bold leading-tight text-gray-700">{preset.labelVi}</p>
-        {insert.presetId === 'CONCEPT_SCENE' && insert.conceptPrompt && (
+        {(insert.presetId === 'CONCEPT_SCENE' || insert.presetId === 'PRODUCT_IN_ACTION') && insert.conceptPrompt && (
           <p
             title={insert.conceptPrompt}
             className="mt-0.5 line-clamp-2 font-normal italic leading-tight text-sky-700"

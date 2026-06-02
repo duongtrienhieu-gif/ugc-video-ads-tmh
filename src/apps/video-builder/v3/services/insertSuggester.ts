@@ -33,15 +33,22 @@ export interface InsertSuggestion {
   confidence: number
   /** Gemini path — one short phrase (in the script language) explaining the fit. */
   reason?: string
-  /** Z37 — Scene Director path only. When presetId === 'CONCEPT_SCENE', this is
-   *  the free visual prompt (English, for the image/video model) describing the
-   *  concept B-roll that illustrates this dialogue span. Undefined for the 12
-   *  product presets. */
+  /** Z37/Z42 — Scene Director path only. The free visual prompt (English, for
+   *  the image/video model) describing the scene that illustrates this dialogue
+   *  span. Used by BOTH free scene kinds:
+   *    • CONCEPT_SCENE     — no product on screen (mechanism / emotion / lifestyle)
+   *    • PRODUCT_IN_ACTION — product on screen, free real-world action/demo
+   *  Undefined for the 12 fixed product presets (they use their own promptPreset). */
   conceptPrompt?: string
-  /** Z37 — Scene Director path only. The director's chosen scene length (3-7s),
-   *  grouping same-content sentences into one clip. Falls back to the preset's
-   *  durationPreset when absent. */
+  /** Z37 — Scene Director path only. The director's chosen scene length. Free
+   *  per scene (~2s to ~6s+) — the director matches it to how much dialogue the
+   *  scene covers. Falls back to the preset's durationPreset when absent. */
   durationSec?: number
+  /** Z42 — Scene Director path only. The VERBATIM line of dialogue (in the
+   *  script's own language) this scene illustrates. Used to anchor the scene to
+   *  the exact second the words are spoken (computeQuoteTimestamp), instead of
+   *  the coarse block-start. Undefined for the keyword path. */
+  quote?: string
 }
 
 /**
@@ -239,7 +246,7 @@ OUTPUT strict JSON, no fences:
 // them — inserts only LAYER over it). So the director's job is: where to cut
 // away, and to what.
 
-const DIRECTOR_PRESET_ENUM = [...ACTION_PRESET_ORDER, 'CONCEPT_SCENE']
+const DIRECTOR_PRESET_ENUM = [...ACTION_PRESET_ORDER, 'CONCEPT_SCENE', 'PRODUCT_IN_ACTION']
 
 const DIRECTOR_RESPONSE_SCHEMA = {
   type: 'object',
@@ -251,12 +258,13 @@ const DIRECTOR_RESPONSE_SCHEMA = {
         properties: {
           presetId:      { type: 'string', enum: DIRECTOR_PRESET_ENUM },
           anchorBlock:   { type: 'string', enum: ['hook', 'pain', 'discovery', 'benefit', 'cta'] },
+          quote:         { type: 'string' },
           durationSec:   { type: 'number' },
           fit:           { type: 'number' },
           reason:        { type: 'string' },
           conceptPrompt: { type: 'string' },
         },
-        required: ['presetId', 'anchorBlock', 'durationSec', 'fit'],
+        required: ['presetId', 'anchorBlock', 'quote', 'durationSec', 'fit'],
       },
     },
   },
@@ -277,48 +285,66 @@ export async function directScenesWithGemini(
     .map((b) => `[${b.id}] ${b.text}`)
     .join('\n')
 
-  const systemInstruction = `You are a UGC ad video DIRECTOR. The script is written in ${langName}.
+  const systemInstruction = `You are a senior UGC ad video DIRECTOR with full creative freedom. The
+script is written in ${langName}. This is NOT a fixed storytelling template —
+read the actual script, understand the product and the niche, and decide the
+B-roll like a real director would. The product can be ANYTHING (health
+supplement, cosmetics, kitchen appliance, power tool, machine, gadget, apparel…)
+— never assume it is a supplement.
+
 A single talking-head "creator video" of the person speaking already covers the
-whole script. Your job is to decide WHERE to cut away to a supporting visual
-(a B-roll insert that LAYERS over the talking head) and WHAT to show there.
+whole script. Your job: decide WHERE to cut away to a supporting visual (a
+B-roll insert that LAYERS over the talking head) and WHAT to show there.
 
-You have TWO kinds of insert:
+You have THREE kinds of scene:
 
-1. PRODUCT presets — the real product is ON SCREEN (fidelity-locked to the
-   reference image). Use these when the dialogue is about handling / using /
-   showing the product itself. Pick from this catalogue:
+1. FIXED PRODUCT presets — product ON SCREEN, fidelity-locked, with a fixed safe
+   action. Use when the line is about a simple product handling moment that one
+   of these already describes:
 ${catalogue}
 
-2. CONCEPT_SCENE — a free concept B-roll with NO product on screen. Use this
-   when the dialogue describes a FEELING, a PROBLEM, a MECHANISM / how-it-works,
-   a lifestyle moment, or an ingredient/cause — anything that is better shown by
-   an illustrative scene than by the product. For CONCEPT_SCENE you MUST write a
-   "conceptPrompt": one vivid English sentence describing the shot (subject,
-   setting, mood, action). NEVER put product packaging in a conceptPrompt.
+2. PRODUCT_IN_ACTION — product ON SCREEN, fidelity-locked, but YOU write the
+   action. Use this for any real-world use / demo / test the fixed presets can't
+   express — e.g. a blender crushing ice, a drill driving a screw, cream rubbed
+   into skin, a bottle dunked in water to prove it's waterproof, a machine
+   running on a workbench, the product used outdoors. For PRODUCT_IN_ACTION you
+   MUST write a "conceptPrompt": one vivid English sentence describing the action
+   + setting. The product itself stays on screen (a reference image locks its
+   look) — so describe the ACTION around it, do NOT redescribe the packaging.
+
+3. CONCEPT_SCENE — NO product on screen. Use when the line describes a FEELING,
+   a PROBLEM, a MECHANISM / how-it-works, an INGREDIENT or cause, or a lifestyle
+   moment that is better shown WITHOUT the product. For CONCEPT_SCENE you MUST
+   write a "conceptPrompt": one vivid English sentence (subject, setting, mood,
+   action). NEVER put product packaging in a CONCEPT_SCENE conceptPrompt.
 
 DIRECTING RULES:
-- Read the MEANING of the script, not keywords. Group sentences that describe
-  the SAME idea into ONE scene (do not cut every sentence).
-- Each scene is 3-5 seconds ("durationSec"). Match length to how much dialogue
-  it covers — one short line ≈ 3s, a few sentences on one idea ≈ 5s.
+- Read the MEANING. Ground EVERY scene in a real line of the script — never
+  invent a visual for something the script doesn't say. If a beat has no
+  worthwhile visual, skip it.
+- For EVERY scene, copy the exact line of dialogue it illustrates into "quote"
+  (verbatim, in ${langName}, one sentence or clause — this is how the scene is
+  timed to the voice). The quote MUST be text that actually appears in the script.
+- COVER THE WHOLE SCRIPT, not just the obvious beats. If the script explains
+  INGREDIENTS or a MECHANISM / how-it-works, you MUST give those lines their own
+  scene (usually CONCEPT_SCENE or PRODUCT_IN_ACTION) — do not leave them with no
+  visual. This is the most common miss.
+- Group sentences describing the SAME idea into ONE scene; don't cut every line.
+- Duration is FREE per scene — YOU decide based on how much dialogue it covers.
+  A quick punch ≈ 2s, a normal beat ≈ 3-4s, a dense idea ≈ 5-6s. Use whatever
+  fits; do NOT force everything to one length.
 - Anchor each scene to the ONE block (hook/pain/discovery/benefit/cta) whose
-  dialogue it illustrates.
-- A finished UGC ad is NOT a static talking head — it cuts to a supporting
-  visual on most key beats. Propose between ${floor} and ${params.budget} scenes
-  that together cover the arc: the hook, the core problem, the product/benefit
-  moment, and the CTA. Returning zero or one scene is only correct for an
-  unusually short script — otherwise give the editor a solid baseline.
-- Still favour quality: group same-idea sentences into one scene and don't
-  invent a cut where truly nothing visual would help. Quality first, but DO
-  cover the arc.
-- Prefer CONCEPT_SCENE for emotion / problem / mechanism / lifestyle; prefer a
-  PRODUCT preset only when the product itself is the subject of that line.
+  dialogue it illustrates (used only as a coarse fallback).
+- A finished UGC ad cuts to a supporting visual on most key beats. Propose
+  between ${floor} and ${params.budget} scenes covering the arc. Returning zero
+  or one scene is only right for an unusually short script.
 - "fit" = 0..1 how strongly the visual supports the line. "reason" = one short
   phrase in ${langName} explaining the choice (shown to the user).
 
 OUTPUT strict JSON, no fences:
-{ "scenes": [ { "presetId": "...", "anchorBlock": "...", "durationSec": 4,
-  "fit": 0.0, "reason": "...", "conceptPrompt": "(only for CONCEPT_SCENE)" } ] }`
+{ "scenes": [ { "presetId": "...", "anchorBlock": "...", "quote": "(verbatim line)",
+  "durationSec": 4, "fit": 0.0, "reason": "...",
+  "conceptPrompt": "(required for CONCEPT_SCENE and PRODUCT_IN_ACTION)" } ] }`
 
   const userPrompt = `SCRIPT (block id in brackets):\n${scriptDump}\n\nDirect the scenes now.`
 
@@ -338,14 +364,18 @@ OUTPUT strict JSON, no fences:
   const out: InsertSuggestion[] = []
   for (const item of parsed) {
     if (!validPresets.has(item.presetId)) continue
-    const isConcept = item.presetId === 'CONCEPT_SCENE'
-    // A concept scene with no prompt is useless — drop it.
+    // Both free-scene kinds carry a director-written prompt and are useless
+    // without one — drop them if the prompt is missing.
+    const isFreeScene = item.presetId === 'CONCEPT_SCENE' || item.presetId === 'PRODUCT_IN_ACTION'
     const conceptPrompt = typeof item.conceptPrompt === 'string' ? item.conceptPrompt.trim() : ''
-    if (isConcept && conceptPrompt.length === 0) continue
+    if (isFreeScene && conceptPrompt.length === 0) continue
     const anchor = validBlocks.has(item.anchorBlock) ? (item.anchorBlock as ScriptBlockId) : null
     const fit = Math.max(0, Math.min(1, Number(item.fit) || 0))
     if (fit <= 0) continue  // drop non-matches — no padding
-    const durationSec = clampDuration(item.durationSec)
+    const durationSec = clampDuration(item.durationSec, item.presetId as ActionPresetId)
+    const quote = typeof item.quote === 'string' && item.quote.trim().length > 0
+      ? item.quote.trim()
+      : undefined
     out.push({
       presetId: item.presetId as ActionPresetId,
       matchCount: 0,
@@ -354,8 +384,9 @@ OUTPUT strict JSON, no fences:
       anchorBlock: anchor,
       confidence: fit,
       reason: typeof item.reason === 'string' ? item.reason : undefined,
-      conceptPrompt: isConcept ? conceptPrompt : undefined,
+      conceptPrompt: isFreeScene ? conceptPrompt : undefined,
       durationSec,
+      quote,
     })
   }
   // Keep the director's ORDER (narrative sequence), not a fit sort — scenes
@@ -370,18 +401,25 @@ OUTPUT strict JSON, no fences:
   return suggestInsertsForScript(params.script).slice(0, params.budget)
 }
 
-function clampDuration(v: unknown): number {
-  // 5s ceiling = the rendered Kling clip length (insertRenderer duration:5).
-  // The director may group several same-idea sentences into one clip, but the
-  // single rendered clip can't exceed 5s, so we cap here to stay honest.
+function clampDuration(v: unknown, presetId: ActionPresetId): number {
+  // Z42 — free duration, but bounded by what each render mode can actually
+  // produce:
+  //   • CONCEPT_SCENE renders as Ken Burns (local zoom over a still) — the clip
+  //     length is synthetic, so it can hold up to ~8s.
+  //   • Everything else renders as a Kling i2v clip whose footage is a fixed 5s
+  //     (insertRenderer duration:5) — a longer overlay would have no footage to
+  //     fill it, so cap at 5s.
+  // Floor is 2s for all (the director may want a quick punch cut).
+  const ceiling = presetId === 'CONCEPT_SCENE' ? 8 : 5
   const n = Number(v)
   if (!Number.isFinite(n)) return 4
-  return Math.max(3, Math.min(5, Math.round(n * 10) / 10))
+  return Math.max(2, Math.min(ceiling, Math.round(n * 10) / 10))
 }
 
 interface RawDirectorScene {
   presetId: string
   anchorBlock: string
+  quote?: string
   durationSec: number
   fit: number
   reason?: string

@@ -378,6 +378,35 @@ export const ACTION_PRESETS: Record<ActionPresetId, ActionPresetConfig> = {
     objectInteraction: 'No specific product on screen — concept / mood illustration only.',
     triggerKeywords: [],
   },
+
+  // ── Z42 — niche-agnostic product-in-action scene ────────────────────────
+  // The product IS on screen and fidelity-locked, but the ACTION is free —
+  // written per-scene by the AI scene director on ActionInsertClip.conceptPrompt
+  // (e.g. "blender crushing ice on a kitchen counter", "drill driving a screw
+  // into hardwood", "cream rubbed onto the back of a hand", "bottle dunked in
+  // water to show it's waterproof"). The 12 fixed presets above only cover
+  // hold/open/point/drink/pill/unbox/etc — they can't describe a durability
+  // test, an outdoor demo, or a machine running. This preset fills that gap for
+  // ANY niche. Fields here are neutral fallbacks; the real action comes from the
+  // director's conceptPrompt. NOT added to ACTION_PRESET_ORDER.
+  PRODUCT_IN_ACTION: {
+    id: 'PRODUCT_IN_ACTION',
+    labelVi: 'Sản phẩm hoạt động thực tế',
+    descriptionVi: 'Sản phẩm đang được dùng / test thật — đạo diễn tự mô tả cảnh (demo, độ bền, ngoài trời, máy chạy…).',
+    emoji: '🎬',
+    motionPreset: 'static',
+    framingPreset: 'medium',
+    promptPreset:
+      'The product is shown being used in a real, believable way that matches ' +
+      'the narration — a genuine demonstration, not a studio pose.',
+    durationPreset: 4.0,
+    cameraPreset: 'subtle_drift',
+    needsProduct: true,
+    tone: 'emerald',
+    handBehavior: HAND_BASELINE + ' Hands interact with the product only as the scene naturally requires.',
+    objectInteraction: PRODUCT_LOCK,
+    triggerKeywords: [],
+  },
 }
 
 /** Ordered list of presets — cheap/safe first, narrative-heavy last.

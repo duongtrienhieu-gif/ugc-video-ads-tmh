@@ -40,3 +40,72 @@ export function computeBlockStartTimestamps(
     cta:       startTimes.cta       ?? null,
   }
 }
+
+// ── Z42 — sentence-level timeline anchoring ─────────────────────────────────
+// The block-start map above only gives 5 coarse anchor points (one per block),
+// so multiple scenes in the same block pile up at the same second. The Scene
+// Director now returns the VERBATIM line of dialogue ("quote") each scene
+// illustrates. This function locates that quote inside the running voice
+// timeline and returns the precise second it is spoken — so scenes land where
+// the words actually are, not at the block boundary.
+//
+// Timing model is the same word-count/WPM basis as computeBlockStartTimestamps:
+// each block occupies [blockStart, blockStart + estDurationSec], and we
+// linearly interpolate the quote's character offset within its block to a time.
+// Returns null when the quote can't be located — the caller then falls back to
+// the block-start anchor (and finally to even spacing).
+
+function normalizeForMatch(s: string): string {
+  return s.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim()
+}
+
+export function computeQuoteTimestamp(
+  script: GeneratedScript,
+  quote: string | undefined | null,
+): number | null {
+  const normQuote = quote ? normalizeForMatch(quote) : ''
+  if (normQuote.length < 4) return null  // too short to locate reliably
+
+  // Build the running timeline of present blocks, recording each block's
+  // char-offset inside the concatenated normalized transcript.
+  interface Seg { start: number; dur: number; charStart: number; charLen: number }
+  const segs: Seg[] = []
+  const parts: string[] = []
+  let cursorTime = 0
+  let cursorChar = 0
+  for (const blockId of SCRIPT_BLOCK_ORDER) {
+    const block = script.blocks.find((b) => b.id === blockId)
+    if (!block) continue
+    const norm = normalizeForMatch(block.text)
+    segs.push({
+      start: cursorTime,
+      dur: block.estDurationSec,
+      charStart: cursorChar,
+      charLen: norm.length,
+    })
+    parts.push(norm)
+    cursorTime += block.estDurationSec
+    cursorChar += norm.length + 1  // +1 for the join separator space
+  }
+  if (segs.length === 0) return null
+
+  const full = parts.join(' ')
+
+  // Exact substring first; loose probe on the first ~40 chars as a fallback
+  // (handles the director quoting a line with minor punctuation differences).
+  let idx = full.indexOf(normQuote)
+  if (idx < 0) {
+    const probe = normQuote.slice(0, 40).trim()
+    if (probe.length >= 6) idx = full.indexOf(probe)
+  }
+  if (idx < 0) return null
+
+  // Find the block segment that contains this char offset.
+  const seg = segs.find((s) => idx >= s.charStart && idx < s.charStart + s.charLen + 1)
+    ?? segs[segs.length - 1]
+  const fraction = seg.charLen > 0
+    ? Math.max(0, Math.min(1, (idx - seg.charStart) / seg.charLen))
+    : 0
+  const time = seg.start + fraction * seg.dur
+  return Number(time.toFixed(2))
+}

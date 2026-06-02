@@ -136,8 +136,11 @@ function buildInsertKeyframePrompt(
   // 2. Composition
   paragraphs.push(`COMPOSITION: ${preset.framingPreset} shot, vertical 9:16 aspect ratio.`)
 
-  // 3. Action prompt
-  paragraphs.push(`ACTION: ${preset.promptPreset}`)
+  // 3. Action prompt — Z42: PRODUCT_IN_ACTION uses the director's free action
+  // (conceptPrompt) instead of the fixed preset verb, while still keeping the
+  // product lock above. The 12 fixed presets keep their hard-won stable prompt.
+  const freeAction = presetId === 'PRODUCT_IN_ACTION' ? conceptPrompt?.trim() : ''
+  paragraphs.push(`ACTION: ${freeAction && freeAction.length > 0 ? freeAction : preset.promptPreset}`)
 
   // 4. Hand behaviour
   paragraphs.push(`HANDS: ${preset.handBehavior}`)
@@ -208,8 +211,12 @@ export async function renderInsert(
   // Z37 — the scene verb that drives the Kling motion prompts (Stage 2/3).
   // For CONCEPT_SCENE it comes from the AI scene director's free prompt; for
   // the 12 product presets it stays the hard-won stable preset prompt.
+  // Z42 — CONCEPT_SCENE has NO product on screen (special keyframe branch +
+  // Ken Burns default). PRODUCT_IN_ACTION keeps the product but uses the
+  // director's free action. Both pull their scene verb from conceptPrompt.
   const isConcept = params.presetId === 'CONCEPT_SCENE'
-  const motionScene = isConcept
+  const usesFreeAction = isConcept || params.presetId === 'PRODUCT_IN_ACTION'
+  const motionScene = usesFreeAction
     ? (params.conceptPrompt?.trim() || preset.promptPreset)
     : preset.promptPreset
   const cameraMotion = preset.cameraPreset === 'static'
@@ -354,7 +361,7 @@ async function renderKenBurnsClip(args: {
   resolution: '480p' | '720p' | '1080p'
 }): Promise<string> {
   const ffmpeg = await getFFmpeg()
-  const dur = Math.max(1.5, Math.min(6, args.durationSec || 3.5))
+  const dur = Math.max(1.5, Math.min(8, args.durationSec || 3.5))
   const shortSide = args.resolution === '1080p' ? 1080 : args.resolution === '720p' ? 720 : 480
   const W = shortSide % 2 === 0 ? shortSide : shortSide + 1
   const h0 = Math.round((shortSide * 16) / 9)

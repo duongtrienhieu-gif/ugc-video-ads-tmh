@@ -265,6 +265,15 @@ export type ActionPresetId =
   // excluded from ACTION_PRESET_ORDER so it never shows in the manual product
   // preset picker or the keyword suggester.
   | 'CONCEPT_SCENE'
+  // Z42 — niche-agnostic "product in real action" scene. The product IS on
+  // screen (fidelity-locked to the reference) but the ACTION is free-written
+  // per-scene by the AI scene director via conceptPrompt — e.g. durability
+  // test, outdoor use, machine running, real-world demo. Covers any niche
+  // (home appliance / tool / gadget / cosmetics) that the 12 fixed product
+  // presets can't describe. Like CONCEPT_SCENE it carries a director-written
+  // prompt; UNLIKE it, the product reference is kept and locked. Excluded from
+  // ACTION_PRESET_ORDER (never in the manual picker or keyword suggester).
+  | 'PRODUCT_IN_ACTION'
 
 // ── Per-clip render status (v3) ─────────────────────────────────────────────
 // Simplified vs v2's TimelineRenderStatus — no queued/locked-vs-completed
