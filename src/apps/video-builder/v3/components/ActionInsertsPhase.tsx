@@ -111,6 +111,13 @@ export default function ActionInsertsPhase({ onContinue }: Props) {
   const [suggestions, setSuggestions] = useState<InsertSuggestion[]>([])
   const [isSuggesting, setIsSuggesting] = useState(false)
 
+  // ── Free-scene composer (Z42) — the 2 AI presets (CONCEPT_SCENE +
+  // PRODUCT_IN_ACTION) need a written scene description, so the manual library
+  // opens an inline textarea instead of adding instantly like the 12 fixed
+  // presets. `composerPreset` = which free preset's box is open (null = closed).
+  const [composerPreset, setComposerPreset] = useState<ActionPresetId | null>(null)
+  const [composerText, setComposerText] = useState('')
+
   // Fetch the director's scene breakdown for the current script. Gemini path
   // when a key exists (reads meaning), keyword fallback otherwise.
   const fetchSuggestions = async (): Promise<InsertSuggestion[]> => {
@@ -276,6 +283,36 @@ export default function ActionInsertsPhase({ onContinue }: Props) {
       voiceTimestampSec: null,
       renderMode: defaultInsertRenderMode(presetId),
     })
+  }
+
+  // Z42 — add one of the 2 free presets (CONCEPT_SCENE / PRODUCT_IN_ACTION)
+  // with the user's typed scene description. These need a conceptPrompt, so
+  // they come from the composer textarea instead of an instant click.
+  const handleAddFreeScene = () => {
+    if (!composerPreset) return
+    if (inserts.length >= maxInserts) {
+      addToast(`Đã đạt giới hạn ${maxInserts} insert cho ${costModeCfg.labelVi} mode`, 'error')
+      return
+    }
+    const text = composerText.trim()
+    if (text.length < 4) {
+      addToast('Hãy mô tả cảnh bạn muốn (tối thiểu vài từ)', 'error')
+      return
+    }
+    const preset = ACTION_PRESETS[composerPreset]
+    addInsert({
+      presetId: composerPreset,
+      order: inserts.length,
+      stage: 'idle',
+      status: 'idle',
+      durationSec: preset.durationPreset,
+      resolution: insertResolution,
+      voiceTimestampSec: null,
+      renderMode: defaultInsertRenderMode(composerPreset),
+      conceptPrompt: text,
+    })
+    setComposerPreset(null)
+    setComposerText('')
   }
 
   // ── Per-insert render ────────────────────────────────────────────────────
@@ -505,6 +542,72 @@ export default function ActionInsertsPhase({ onContinue }: Props) {
                 </button>
               )
             })}
+          </div>
+
+          {/* ── 2 AI free presets — need a written scene description (Z42) ──── */}
+          <div className="mt-4 border-t border-dashed border-black/10 pt-3">
+            <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-gray-500">
+              Cảnh tự do (bạn tự mô tả)
+            </p>
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+              {(['CONCEPT_SCENE', 'PRODUCT_IN_ACTION'] as ActionPresetId[]).map((p) => {
+                const preset = ACTION_PRESETS[p]
+                const isOpen = composerPreset === p
+                return (
+                  <button
+                    key={p}
+                    onClick={() => {
+                      setComposerPreset(isOpen ? null : p)
+                      setComposerText('')
+                    }}
+                    disabled={inserts.length >= maxInserts}
+                    title={preset.descriptionVi}
+                    className={`flex items-start gap-2 rounded-lg border p-2 text-left transition-all ${
+                      isOpen
+                        ? TONE_BG[preset.tone]
+                        : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50'
+                    } disabled:cursor-not-allowed disabled:opacity-50`}
+                  >
+                    <span className="text-xl leading-none">{preset.emoji}</span>
+                    <span className="min-w-0">
+                      <span className="block text-[11px] font-bold leading-tight">{preset.labelVi}</span>
+                      <span className="block text-[10px] leading-tight text-gray-500">{preset.descriptionVi}</span>
+                    </span>
+                  </button>
+                )
+              })}
+            </div>
+
+            {composerPreset && (
+              <div className="mt-2 rounded-lg border border-black/10 bg-gray-50 p-2">
+                <textarea
+                  value={composerText}
+                  onChange={(e) => setComposerText(e.target.value)}
+                  rows={2}
+                  placeholder={
+                    composerPreset === 'PRODUCT_IN_ACTION'
+                      ? 'Mô tả cảnh sản phẩm hoạt động thật — ví dụ: máy xay đang xay đá, kem được thoa lên da, máy khoan bắt vít…'
+                      : 'Mô tả cảnh minh hoạ (không có sản phẩm) — ví dụ: ruột khoẻ mạnh nhìn từ bên trong, người mệt mỏi buổi sáng, cánh đồng nguyên liệu…'
+                  }
+                  className="w-full resize-none rounded-md border border-gray-200 bg-white p-2 text-[12px] text-gray-800 outline-none focus:border-violet-400"
+                />
+                <div className="mt-2 flex items-center justify-end gap-2">
+                  <button
+                    onClick={() => { setComposerPreset(null); setComposerText('') }}
+                    className="rounded-md border border-gray-200 bg-white px-2 py-1 text-[11px] font-semibold text-gray-500 hover:bg-gray-100"
+                  >
+                    Huỷ
+                  </button>
+                  <button
+                    onClick={handleAddFreeScene}
+                    disabled={composerText.trim().length < 4 || inserts.length >= maxInserts}
+                    className="rounded-md bg-violet-600 px-3 py-1 text-[11px] font-bold text-white hover:bg-violet-700 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    <Plus className="mr-0.5 inline h-3 w-3" /> Thêm cảnh
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
 

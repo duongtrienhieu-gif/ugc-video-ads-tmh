@@ -131,9 +131,9 @@ export const COST_MODE_CONFIG: Record<CostMode, CostModeConfig> = {
   STANDARD: {
     id: 'STANDARD',
     labelVi: 'STANDARD',
-    descriptionVi: '30s · 720p · 5 inserts · chất lượng cân bằng · ~$3-5',
+    descriptionVi: '30s · 720p · 3-8 inserts (đạo diễn tự quyết) · chất lượng cân bằng · ~$3-8',
     targetDurationSec: 30,
-    insertCount: { min: 4, max: 5 },
+    insertCount: { min: 3, max: 8 },
     resolution: '720p',
     estimatedUsd: { min: 3, max: 5 },
     skipPreviewDefault: false,
@@ -155,9 +155,10 @@ export const COST_MODE_CONFIG: Record<CostMode, CostModeConfig> = {
 }
 
 // Z36 — the cost-mode picker was removed from the UI. The whole engine now
-// runs ONE fixed, balanced profile: 720p / 30s / up-to-5 inserts. STANDARD is
-// that profile. (TEST/FULL configs are kept so any old persisted state still
-// resolves, but nothing in the UI selects them anymore.)
+// runs ONE fixed, balanced profile: 720p / 30s / 3-8 inserts (the Scene
+// Director decides how many within that range). STANDARD is that profile.
+// (TEST/FULL configs are kept so any old persisted state still resolves, but
+// nothing in the UI selects them anymore.)
 export const DEFAULT_COST_MODE: CostMode = 'STANDARD'
 
 // ── Per-step credit cost estimates (Z36) ─────────────────────────────────────
