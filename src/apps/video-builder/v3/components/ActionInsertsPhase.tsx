@@ -166,11 +166,27 @@ export default function ActionInsertsPhase({ onContinue }: Props) {
       setSuggestions(result)
       if (result.length > 0) {
         applySuggestions(result)
-        const conceptCount = result.filter((r) => r.presetId === 'CONCEPT_SCENE').length
-        addToast(
-          `✓ AI đạo diễn ${result.length} cảnh theo kịch bản${conceptCount > 0 ? ` (${conceptCount} cảnh concept)` : ''}`,
-          'success',
-        )
+        // Z42 — honest path signal. The Gemini DIRECTOR always sets matchCount=0;
+        // the offline KEYWORD path sets matchCount>0. If every result came from
+        // keyword matching, the AI director did NOT run (no key, or it failed) —
+        // say so instead of falsely claiming "AI đạo diễn".
+        const usedKeyword = result.every((r) => r.matchCount > 0)
+        if (usedKeyword) {
+          addToast(
+            geminiKey
+              ? '⚠ AI đạo diễn chưa trả được kết quả — đang tạm dò từ khoá (không có cảnh concept/cơ chế). Bấm Đạo diễn lại để thử lại.'
+              : '⚠ Chưa có Gemini key trong Cài đặt — chỉ dò từ khoá (không tách được cảnh cơ chế/cảm xúc). Thêm key để AI đạo diễn thật.',
+            'info',
+          )
+        } else {
+          const freeCount = result.filter(
+            (r) => r.presetId === 'CONCEPT_SCENE' || r.presetId === 'PRODUCT_IN_ACTION',
+          ).length
+          addToast(
+            `✓ AI đạo diễn ${result.length} cảnh theo kịch bản${freeCount > 0 ? ` (${freeCount} cảnh tự do)` : ''}`,
+            'success',
+          )
+        }
       } else {
         addToast(
           geminiKey
@@ -214,14 +230,29 @@ export default function ActionInsertsPhase({ onContinue }: Props) {
         if (result.length > 0) {
           setSuggestions(result)
           applySuggestions(result)
-          const conceptCount = result.filter((r) => r.presetId === 'CONCEPT_SCENE').length
-          addToast(
-            `✓ AI tự đạo diễn ${result.length} cảnh theo kịch bản${conceptCount > 0 ? ` (${conceptCount} cảnh concept)` : ''} — soát lại / sửa bên dưới`,
-            'success',
-          )
+          const usedKeyword = result.every((r) => r.matchCount > 0)
+          if (usedKeyword) {
+            addToast(
+              geminiKey
+                ? '⚠ AI đạo diễn chưa trả được kết quả — đang tạm dò từ khoá. Bấm Đạo diễn lại để thử lại.'
+                : '⚠ Chưa có Gemini key trong Cài đặt — chỉ dò từ khoá. Thêm key để AI đạo diễn thật theo kịch bản.',
+              'info',
+            )
+          } else {
+            const freeCount = result.filter(
+              (r) => r.presetId === 'CONCEPT_SCENE' || r.presetId === 'PRODUCT_IN_ACTION',
+            ).length
+            addToast(
+              `✓ AI tự đạo diễn ${result.length} cảnh theo kịch bản${freeCount > 0 ? ` (${freeCount} cảnh tự do)` : ''} — soát lại / sửa bên dưới`,
+              'success',
+            )
+          }
         }
-      } catch {
-        // Silent on auto-run — the user can hit "Đạo diễn lại" to see the error.
+      } catch (err) {
+        // Z42 — surface the failure (was silent) so a bad Gemini key / network
+        // error is visible instead of looking like "AI did nothing".
+        const msg = err instanceof Error ? err.message : String(err)
+        addToast(`AI đạo diễn lỗi: ${msg.slice(0, 140)} — bấm Đạo diễn lại để thử`, 'error')
       } finally {
         setIsSuggesting(false)
       }
