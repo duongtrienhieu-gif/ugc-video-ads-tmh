@@ -225,6 +225,13 @@ export async function directGeminiText(params: {
    *  JSON (unescaped newlines/quotes inside string values). */
   responseSchema?: Record<string, unknown>
   temperature?: number
+  /** Z43 — opt-in thinking budget for the 2.5 models. Pass 0 to DISABLE
+   *  thinking on a structured-JSON task: gemini-2.5-flash otherwise spends its
+   *  output-token budget on internal "thinking" and can return an empty /
+   *  truncated body when a responseSchema is attached, which the caller then
+   *  reads as "phản hồi rỗng". Undefined = leave Gemini's default (unchanged
+   *  for every existing caller). Ignored by the 2.0 models. */
+  thinkingBudget?: number
 }): Promise<string> {
   const modelsToTry = ['gemini-2.5-flash', 'gemini-2.5-flash-lite', 'gemini-2.0-flash', 'gemini-2.0-flash-lite']
   const errors: string[] = []
@@ -237,6 +244,9 @@ export async function directGeminiText(params: {
     }
     if (params.responseMimeType) generationConfig.responseMimeType = params.responseMimeType
     if (params.responseSchema)   generationConfig.responseSchema   = params.responseSchema
+    if (params.thinkingBudget !== undefined) {
+      generationConfig.thinkingConfig = { thinkingBudget: params.thinkingBudget }
+    }
     const body: Record<string, unknown> = {
       contents: [{ role: 'user', parts: [{ text: params.prompt }] }],
       generationConfig,

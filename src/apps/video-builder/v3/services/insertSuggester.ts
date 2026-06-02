@@ -360,23 +360,30 @@ OUTPUT strict JSON, no fences:
     maxOutputTokens: 8192,
     responseMimeType: 'application/json',
     responseSchema: DIRECTOR_RESPONSE_SCHEMA,
+    // Z43 — disable 2.5-flash "thinking" so the whole token budget goes to the
+    // JSON answer, not internal reasoning (which was returning empty bodies).
+    thinkingBudget: 0,
   })
 
   const parsed = parseDirectorOutput(raw)
   const validPresets = new Set<string>(DIRECTOR_PRESET_ENUM)
   const validBlocks = new Set<string>(['hook', 'pain', 'discovery', 'benefit', 'cta'])
 
+  // Z43 — diagnostic counters so a silent keyword fallback can be traced from
+  // the browser console instead of guessed at.
+  const drop = { preset: 0, noPrompt: 0, zeroFit: 0 }
+
   const out: InsertSuggestion[] = []
   for (const item of parsed) {
-    if (!validPresets.has(item.presetId)) continue
+    if (!validPresets.has(item.presetId)) { drop.preset++; continue }
     // Both free-scene kinds carry a director-written prompt and are useless
     // without one — drop them if the prompt is missing.
     const isFreeScene = item.presetId === 'CONCEPT_SCENE' || item.presetId === 'PRODUCT_IN_ACTION'
     const conceptPrompt = typeof item.conceptPrompt === 'string' ? item.conceptPrompt.trim() : ''
-    if (isFreeScene && conceptPrompt.length === 0) continue
+    if (isFreeScene && conceptPrompt.length === 0) { drop.noPrompt++; continue }
     const anchor = validBlocks.has(item.anchorBlock) ? (item.anchorBlock as ScriptBlockId) : null
     const fit = Math.max(0, Math.min(1, Number(item.fit) || 0))
-    if (fit <= 0) continue  // drop non-matches — no padding
+    if (fit <= 0) { drop.zeroFit++; continue }  // drop non-matches — no padding
     const durationSec = clampDuration(item.durationSec, item.presetId as ActionPresetId)
     const quote = typeof item.quote === 'string' && item.quote.trim().length > 0
       ? item.quote.trim()
@@ -397,6 +404,14 @@ OUTPUT strict JSON, no fences:
   // Keep the director's ORDER (narrative sequence), not a fit sort — scenes
   // should play in script order. Cap to budget.
   const directed = out.slice(0, params.budget)
+  console.log(
+    `[DIRECTOR] raw=${raw.length}ch parsed=${parsed.length} usable=${out.length} ` +
+    `dropped{preset:${drop.preset},noPrompt:${drop.noPrompt},zeroFit:${drop.zeroFit}} ` +
+    `→ ${directed.length > 0 ? `${directed.length} scenes` : 'EMPTY → keyword fallback'}`,
+  )
+  if (directed.length === 0) {
+    console.warn(`[DIRECTOR] raw head: ${raw.slice(0, 400)}`)
+  }
   if (directed.length > 0) return directed
   // Z40 full-auto safety net — Gemini returned nothing usable (over-shy, parse
   // miss, or a thin script). Fall back to the keyword suggester so the engine
