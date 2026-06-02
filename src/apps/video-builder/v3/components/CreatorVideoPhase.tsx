@@ -35,7 +35,7 @@ import {
   CREATOR_ENERGIES, CREATOR_ENERGY_ORDER, recommendEnergyForAngle,
 } from '../services/creatorEnergy'
 import {
-  CREATOR_PRESETS, CREATOR_PRESET_ORDER,
+  CREATOR_PRESETS, CREATOR_PRESET_ORDER, styleCreatorWithGemini,
 } from '../services/creatorPresets'
 import { renderCreatorVideo, resumeCreatorVideoLipsync } from '../services/creatorVideoEngine'
 
@@ -218,11 +218,17 @@ export default function CreatorVideoPhase({ onContinue }: Props) {
 
   const kieApiKey       = useSettingsStore((s) => s.kieApiKey)
   const elevenLabsKey   = useSettingsStore((s) => s.elevenLabsApiKey)
+  const geminiKey       = useSettingsStore((s) => s.geminiApiKey)
   const addToast        = useAppStore((s) => s.addToast)
 
   const config = state.creatorVideoConfig
   const clip   = state.creatorVideo
   const brain  = state.scriptBrain
+
+  // Z41 AI Stylist — auto-composes persona (setting/energy/wardrobe).
+  const [isStyling, setIsStyling] = useState(false)
+  const [aiReason, setAiReason]   = useState<string | null>(null)
+  const autoStyledRef = useRef(false)
 
   // Z38 — cost of THIS render = TTS + keyframe + ONE Kling lipsync (no more
   // duplicate preview render). Lipsync scales with the real script duration
@@ -348,6 +354,71 @@ export default function CreatorVideoPhase({ onContinue }: Props) {
     }
   }
 
+  // ── Z41 AI Stylist ─────────────────────────────────────────────────────────
+  // Reads product + market + angle + avatar + hook and auto-composes the
+  // persona (setting / energy / wardrobe). manual=true surfaces errors; the
+  // auto-run stays silent on failure so it never nags. One Gemini text call —
+  // NO KIE credit (nothing is rendered here).
+  const runStylist = async (manual: boolean) => {
+    if (!geminiKey) {
+      if (manual) addToast('Cần Gemini key trong Settings để AI stylist chạy', 'error')
+      return
+    }
+    if (!brain.script && !state.inputs.product) {
+      if (manual) addToast('Chưa có sản phẩm / kịch bản để AI tham chiếu', 'error')
+      return
+    }
+    setIsStyling(true)
+    try {
+      const hook =
+        brain.script?.blocks.find((b) => b.id === 'hook')?.text ??
+        brain.script?.blocks[0]?.text
+      const result = await styleCreatorWithGemini({
+        geminiKey,
+        product: state.inputs.product,
+        avatarName: state.inputs.avatar?.name,
+        avatarNotes: state.inputs.avatar?.notes,
+        angle: brain.angle,
+        scriptHook: hook,
+        lang: brain.outputLang,
+      })
+      patchCreatorVideoConfig({
+        setting: result.setting,
+        energy: result.energy,
+        wardrobeNote: result.wardrobeNote,
+        preset: null,
+      })
+      setAiReason(result.reason || null)
+      addToast(
+        `✓ AI stylist: ${CREATOR_SETTINGS[result.setting].labelVi} · ${CREATOR_ENERGIES[result.energy].labelVi}`,
+        'success',
+      )
+    } catch (err) {
+      if (manual) {
+        const msg = err instanceof Error ? err.message : String(err)
+        addToast(`AI stylist lỗi: ${msg.slice(0, 160)}`, 'error')
+      }
+    } finally {
+      setIsStyling(false)
+    }
+  }
+
+  // Auto-run the stylist ONCE on entry — only on a fresh, untouched config so
+  // we never overwrite the user's manual choices or a finished render.
+  useEffect(() => {
+    if (autoStyledRef.current) return
+    if (!brain.script) return
+    if (!geminiKey) return
+    if (config.wardrobeNote.trim() !== '' || config.preset !== null) {
+      autoStyledRef.current = true
+      return
+    }
+    if (clip?.videoRef) { autoStyledRef.current = true; return }
+    autoStyledRef.current = true
+    void runStylist(false)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [brain.script])
+
   // ── Render ───────────────────────────────────────────────────────────────
 
   return (
@@ -359,9 +430,47 @@ export default function CreatorVideoPhase({ onContinue }: Props) {
             70-80% của video cuối — 1 video creator lipsync liên tục. Voice timeline đã chốt {brain.script?.totalDurationSec.toFixed(1) ?? '—'}s.
           </p>
           <p className="mt-1.5 rounded-lg bg-sky-50 px-3 py-2 text-[11px] leading-relaxed text-sky-800 ring-1 ring-sky-100">
-            Khuôn mặt nhân vật được giữ nguyên từ avatar bạn chọn ở Bước 1. Ở bước này bạn chỉ chọn <b>bối cảnh</b>, <b>trang phục</b> và <b>thần thái</b> — app sẽ dựng video người đó đang nói đúng kịch bản (lipsync).
+            Khuôn mặt nhân vật được giữ nguyên từ avatar bạn chọn ở Bước 1. AI tự chọn sẵn <b>bối cảnh</b>, <b>trang phục</b> và <b>thần thái</b> — bạn chỉ chỉnh lại nếu muốn, rồi app dựng video người đó đang nói đúng kịch bản (lipsync).
           </p>
         </div>
+
+        {/* ── AI Stylist banner ───────────────────────────────────────────── */}
+        {(brain.script || state.inputs.product) && (
+          <div className="mb-4 rounded-xl border border-violet-200 bg-gradient-to-r from-violet-50 to-fuchsia-50 p-4">
+            <div className="flex items-start gap-3">
+              <Wand2 className="h-5 w-5 shrink-0 text-violet-600" />
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-bold text-gray-900">
+                  AI stylist — tự chọn persona theo sản phẩm
+                </p>
+                <p className="mt-0.5 text-[11px] text-gray-600">
+                  AI <strong>tự chạy</strong> khi bạn vào bước này: đọc sản phẩm + thị trường + góc quảng cáo + avatar
+                  → chọn sẵn <strong>bối cảnh</strong>, <strong>thần thái</strong>, <strong>trang phục</strong> bên dưới.
+                  Bạn chỉ chỉnh lại nếu muốn. (Chưa render — không tốn KIE credit.)
+                </p>
+                {aiReason && (
+                  <p className="mt-1.5 rounded-lg bg-white/70 px-2.5 py-1.5 text-[11px] text-violet-800 ring-1 ring-violet-100">
+                    💡 {aiReason}
+                  </p>
+                )}
+                {!geminiKey && (
+                  <p className="mt-1.5 text-[11px] font-semibold text-amber-700">
+                    Cần Gemini key trong Settings để AI stylist chạy — hiện bạn chọn tay bên dưới.
+                  </p>
+                )}
+              </div>
+              <button
+                onClick={() => runStylist(true)}
+                disabled={isStyling || isRendering}
+                className="shrink-0 rounded-lg border border-violet-300 bg-white px-3 py-2 text-[12px] font-bold text-violet-700 shadow-sm hover:bg-violet-50 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {isStyling
+                  ? <><Loader2 className="mr-1 inline h-3.5 w-3.5 animate-spin" /> Đang chọn...</>
+                  : <><Wand2 className="mr-1 inline h-3.5 w-3.5" /> {aiReason ? 'AI chọn lại' : 'AI chọn'}</>}
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* ── 6 Preset cards ──────────────────────────────────────────────── */}
         <div>
