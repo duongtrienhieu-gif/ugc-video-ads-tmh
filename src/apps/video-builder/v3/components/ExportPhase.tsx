@@ -259,7 +259,7 @@ export default function ExportPhase() {
       <div className="mx-auto max-w-5xl">
         <div className="mb-4 flex items-start justify-between">
           <div>
-            <h2 className="text-lg font-bold text-gray-900">Bước 6 — Export + Variations</h2>
+            <h2 className="text-lg font-bold text-gray-900">Bước 5 — Export + Variations</h2>
             <p className="text-[12px] text-gray-500">
               Build export bundle (SRT + script + thumbnail + MP4 fallback). Generate hook/CTA variations
               cho ad testing. Save winning projects vào library.

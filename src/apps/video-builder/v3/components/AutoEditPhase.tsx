@@ -147,7 +147,7 @@ export default function AutoEditPhase({ onContinue }: Props) {
     <div className="h-full overflow-y-auto p-6">
       <div className="mx-auto max-w-5xl">
         <div className="mb-4">
-          <h2 className="text-lg font-bold text-gray-900">Bước 5 — Auto Edit (conversion layer)</h2>
+          <h2 className="text-lg font-bold text-gray-900">Bước 4 — Auto Edit (conversion layer)</h2>
           <p className="text-[12px] text-gray-500">
             Tạo edit plan TikTok-native: cuts, captions, punch zooms, SFX, BGM, CTA overlay.
             Plan deterministic — không gọi AI ở phase này, free re-roll.

@@ -304,7 +304,7 @@ export default function ActionInsertsPhase({ onContinue }: Props) {
     <div className="h-full overflow-y-auto p-6">
       <div className="mx-auto max-w-5xl">
         <div className="mb-4">
-          <h2 className="text-lg font-bold text-gray-900">Bước 4 — Action Inserts</h2>
+          <h2 className="text-lg font-bold text-gray-900">Bước 2 — Action Inserts</h2>
           <p className="text-[12px] text-gray-500">
             3-8 clip ngắn hỗ trợ (cầm sản phẩm, mở nắp, point label, etc) — không phải B-roll cinematic.
             Giới hạn {minInserts}-{maxInserts} insert · {insertResolution} · mỗi insert {formatCredits(insertCredits)}.
