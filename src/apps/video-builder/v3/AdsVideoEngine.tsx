@@ -163,7 +163,10 @@ export default function AdsVideoEngine({ onSwitchToV2, onSwitchToV1 }: Props) {
   return (
     <div className="flex h-full flex-col overflow-hidden">
       {/* ── Top banner — NEW BRANDING (Z30) ──────────────────────────────── */}
-      <div className="shrink-0 border-b border-black/8 bg-gradient-to-r from-violet-600 via-fuchsia-600 to-pink-600 px-6 py-3 text-white">
+      {/* pr reserves room for the global Gemini/KIE-Credit badges (App.tsx —
+          absolute right-4 top-3 z-50) so the banner's own buttons aren't
+          covered by them. */}
+      <div className="shrink-0 border-b border-black/8 bg-gradient-to-r from-violet-600 via-fuchsia-600 to-pink-600 py-3 pl-6 pr-3 text-white md:pr-[260px]">
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-2">
             <Zap className="h-5 w-5" />
