@@ -351,10 +351,29 @@ DIRECTING RULES:
   a generic phone shot. Pick one of:
     • HOLD_PRODUCT — the speaker confidently holding the product up to camera
     • POINT_LABEL  — the speaker pointing at the product label / key claim
-    • BEFORE_AFTER_REACTION — confident smiling reaction with the product
   These show the model OWNING the product. NEVER use PHONE_SCROLL for a CTA
   scene — it shows generic doom-scrolling on a social feed and has no purchase
   intent, completely unrelated to "click the link / buy now" lines.
+- BEFORE/AFTER RULE — there are TWO kinds of "before/after" beat, and they
+  need DIFFERENT scenes:
+    (a) INTERNAL / FELT result (energy ↑, sleep ↑, mood ↑, gut comfort,
+        focus, fatigue ↓) → OK to use BEFORE_AFTER_REACTION (the preset
+        shows the model's FACE going from tired to relieved — perfect for
+        felt-state changes, no product needed on screen).
+    (b) VISIBLE / EXTERNAL result (teeth whiter, skin clearer, hair thicker,
+        nails stronger, weight ↓, wrinkles ↓, scalp regrowth, stain removed,
+        any change a CAMERA can SEE on the body or object) → DO NOT use
+        BEFORE_AFTER_REACTION. Its prompt only animates the FACE, never the
+        actual visible result. Instead use a CONCEPT_SCENE with a split or
+        side-by-side conceptPrompt showing the actual change. Example for
+        teeth whitening: "Extreme close-up split-screen of teeth: left half
+        stained yellow with visible plaque, right half clean glossy white
+        — dramatic dental before/after, soft natural light." Example for
+        skin: "Macro split-screen of cheek skin: left side dull with visible
+        blemishes, right side smooth even-toned, side-by-side comparison."
+  Read the product and the script. If the script promises a CAMERA-VISIBLE
+  change (claims like "whiter", "clearer", "stronger hair", "less wrinkles",
+  "scars fade"), it is type (b) — use CONCEPT_SCENE, not BEFORE_AFTER_REACTION.
 - A finished UGC ad cuts to a supporting visual on most key beats. Propose
   between ${floor} and ${params.budget} scenes covering the arc. Returning zero
   or one scene is only right for an unusually short script.
