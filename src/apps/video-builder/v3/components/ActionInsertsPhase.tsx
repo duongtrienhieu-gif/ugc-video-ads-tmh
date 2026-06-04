@@ -803,7 +803,25 @@ function InsertCard({
             )}
           </>
         ) : keyframeUrl ? (
-          <img src={keyframeUrl} alt={preset.labelVi} className="h-full w-full object-cover opacity-90" />
+          <>
+            <img src={keyframeUrl} alt={preset.labelVi} className="h-full w-full object-cover opacity-90" />
+            {/* Z45 — when keyframe is done but video FAILED, the card otherwise
+                looks identical to "not yet rendered" (just an image + Render
+                button), which made users think the still image WAS the final
+                result. Overlay a clear failure banner so the retry intent is
+                obvious. */}
+            {insert.stage === 'failed' && (
+              <div className="absolute inset-x-0 bottom-0 flex items-center justify-center gap-1 bg-red-600/85 px-2 py-1 text-[10px] font-bold text-white backdrop-blur-sm">
+                <AlertCircle className="h-3 w-3" />
+                <span className="line-clamp-1">Video lỗi — bấm Render để thử lại</span>
+              </div>
+            )}
+            {insert.stage !== 'failed' && !hasVideo && (
+              <div className="absolute inset-x-0 bottom-0 flex items-center justify-center gap-1 bg-amber-500/85 px-2 py-1 text-[10px] font-bold text-white backdrop-blur-sm">
+                <span>Mới có ảnh keyframe · bấm Render để tạo video</span>
+              </div>
+            )}
+          </>
         ) : insert.stage === 'failed' ? (
           <div className="flex h-full flex-col items-center justify-center gap-1 px-2 text-center text-red-400">
             <AlertCircle className="h-5 w-5" />
