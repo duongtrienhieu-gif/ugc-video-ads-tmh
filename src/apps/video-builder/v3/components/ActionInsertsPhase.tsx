@@ -154,6 +154,7 @@ export default function ActionInsertsPhase({ onContinue }: Props) {
         scriptKeyword: s.matchedKeywords[0],
         voiceTimestampSec: quoteTs ?? blockTs,
         conceptPrompt: s.conceptPrompt,
+        renderMode: s.renderMode,
       }
     })
     clearAllInserts()

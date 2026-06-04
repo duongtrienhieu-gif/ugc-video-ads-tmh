@@ -14,7 +14,7 @@
 
 import { directGeminiText } from '../../../../utils/gemini'
 import type {
-  ActionPresetId, GeneratedScript, ScriptBlockId, ScriptLang,
+  ActionPresetId, GeneratedScript, ScriptBlockId, ScriptLang, InsertRenderMode,
 } from '../types'
 import { SCRIPT_LANG_GEMINI_NAME } from '../types'
 import { ACTION_PRESETS, ACTION_PRESET_ORDER } from './actionPresets'
@@ -49,6 +49,12 @@ export interface InsertSuggestion {
    *  the exact second the words are spoken (computeQuoteTimestamp), instead of
    *  the coarse block-start. Undefined for the keyword path. */
   quote?: string
+  /** Z45 — Scene Director path only. The director-decided render mode for THIS
+   *  scene. For CONCEPT_SCENE, the director picks 'video' (Kling motion, used
+   *  for EMOTION/LIFESTYLE/PERSON beats — costs ~51cr) vs 'ken_burns' (still
+   *  + local zoom, for GRAPHIC/INFOGRAPHIC/MECHANISM beats — costs ~6cr). For
+   *  the 12 fixed presets and PRODUCT_IN_ACTION this is always 'video'. */
+  renderMode?: InsertRenderMode
 }
 
 /**
@@ -263,6 +269,7 @@ const DIRECTOR_RESPONSE_SCHEMA = {
           fit:           { type: 'number' },
           reason:        { type: 'string' },
           conceptPrompt: { type: 'string' },
+          motionKind:    { type: 'string', enum: ['graphic', 'emotion'] },
         },
         required: ['presetId', 'anchorBlock', 'quote', 'durationSec', 'fit'],
       },
@@ -317,6 +324,23 @@ ${catalogue}
    moment that is better shown WITHOUT the product. For CONCEPT_SCENE you MUST
    write a "conceptPrompt": one vivid English sentence (subject, setting, mood,
    action). NEVER put product packaging in a CONCEPT_SCENE conceptPrompt.
+   For CONCEPT_SCENE you MUST also set "motionKind":
+     • "emotion" — for any scene featuring a PERSON expressing a feeling,
+       performing a lifestyle action, or any scene that needs REAL HUMAN
+       MOTION to feel believable. Examples: "person covering their mouth
+       self-consciously", "woman smiling shyly", "tired man rubbing his eyes",
+       "hand running through thinning hair, worried". These render as REAL
+       motion video (Kling, ~51cr). A still image cannot carry human emotion.
+     • "graphic" — for visualizations, infographics, microscope shots,
+       split-screen comparisons, ingredient close-ups, sci-fi-style animations,
+       chemistry diagrams, any scene with NO PERSON or where motion is not
+       needed. Examples: "microscopic bacteria multiplying", "split-screen of
+       teeth before/after", "ingredient capsule cross-section". These render
+       cheaply as a still + slow zoom (~6cr) — perfect when subject is static.
+   PICK CORRECTLY. Choosing "graphic" for a scene that needs human emotion
+   makes the final video feel like a slideshow. Choosing "emotion" for a
+   pure infographic wastes 8× the credit. Default to "graphic" only when the
+   scene truly has no person and no felt-emotion.
 
 DIRECTING RULES:
 - Read the MEANING. Ground EVERY scene in a real line of the script — never
@@ -423,7 +447,18 @@ OUTPUT strict JSON, no fences:
     const anchor = validBlocks.has(item.anchorBlock) ? (item.anchorBlock as ScriptBlockId) : null
     const fit = Math.max(0, Math.min(1, Number(item.fit) || 0))
     if (fit <= 0) { drop.zeroFit++; continue }  // drop non-matches — no padding
-    const durationSec = clampDuration(item.durationSec, item.presetId as ActionPresetId)
+    // Z45 — pick renderMode per scene:
+    //   • 12 fixed presets + PRODUCT_IN_ACTION → always 'video' (Kling, product
+    //     fidelity required)
+    //   • CONCEPT_SCENE → 'video' (Kling) when director marked motionKind='emotion'
+    //     (real human/lifestyle motion needed); 'ken_burns' otherwise (cheap
+    //     graphic/infographic)
+    const isEmotionConcept = item.presetId === 'CONCEPT_SCENE' && item.motionKind === 'emotion'
+    const renderMode: InsertRenderMode =
+      item.presetId === 'CONCEPT_SCENE'
+        ? (isEmotionConcept ? 'video' : 'ken_burns')
+        : 'video'
+    const durationSec = clampDuration(item.durationSec, item.presetId as ActionPresetId, renderMode)
     const quote = typeof item.quote === 'string' && item.quote.trim().length > 0
       ? item.quote.trim()
       : undefined
@@ -438,6 +473,7 @@ OUTPUT strict JSON, no fences:
       conceptPrompt: isFreeScene ? conceptPrompt : undefined,
       durationSec,
       quote,
+      renderMode,
     })
   }
   // Keep the director's ORDER (narrative sequence), not a fit sort — scenes
@@ -460,19 +496,17 @@ OUTPUT strict JSON, no fences:
   return suggestInsertsForScript(params.script).slice(0, params.budget)
 }
 
-function clampDuration(v: unknown, presetId: ActionPresetId): number {
-  // Z42/Z44 — free duration, but bounded by what each render mode can actually
-  // produce + what feels watchable:
-  //   • CONCEPT_SCENE renders as Ken Burns (local zoom over a still). The
-  //     codec can hold up to ~8s, but in practice a single still zoomed for
-  //     7-8s is BORING — the viewer's eye stops moving. Cap at 4s and force
-  //     the director to SPLIT dense ideas into 2-3 short concept cuts (see
-  //     system instruction below).
-  //   • Everything else renders as a Kling i2v clip whose footage is a fixed
-  //     5s (insertRenderer duration:5) — a longer overlay would have no
-  //     footage to fill it, so cap at 5s.
+function clampDuration(v: unknown, presetId: ActionPresetId, renderMode?: InsertRenderMode): number {
+  // Z42/Z44/Z45 — free duration, but bounded by what each render mode can
+  // actually produce + what feels watchable:
+  //   • CONCEPT_SCENE + ken_burns → 4s cap (a still zoomed for 7-8s is
+  //     boring; force the director to split dense ideas)
+  //   • CONCEPT_SCENE + video (Kling, for emotion scenes) → 5s cap, same as
+  //     any Kling clip (fixed 5s footage)
+  //   • Everything else → 5s (Kling fixed)
   // Floor is 2s for all (the director may want a quick punch cut).
-  const ceiling = presetId === 'CONCEPT_SCENE' ? 4 : 5
+  const isKenBurns = presetId === 'CONCEPT_SCENE' && renderMode !== 'video'
+  const ceiling = isKenBurns ? 4 : 5
   const n = Number(v)
   if (!Number.isFinite(n)) return 4
   return Math.max(2, Math.min(ceiling, Math.round(n * 10) / 10))
@@ -486,6 +520,7 @@ interface RawDirectorScene {
   fit: number
   reason?: string
   conceptPrompt?: string
+  motionKind?: 'graphic' | 'emotion'
 }
 
 function parseDirectorOutput(raw: string): RawDirectorScene[] {

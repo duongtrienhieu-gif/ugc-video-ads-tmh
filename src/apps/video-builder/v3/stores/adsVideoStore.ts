@@ -83,7 +83,7 @@ interface AdsVideoStoreState {
    *  + sensible defaults (stage='idle', status='idle', resolution from
    *  current cost mode). Used by "Apply suggestions" button. */
   bulkAddInsertsFromPresets: (
-    items: Array<{ presetId: ActionPresetId; durationSec: number; scriptKeyword?: string; voiceTimestampSec?: number | null; conceptPrompt?: string }>,
+    items: Array<{ presetId: ActionPresetId; durationSec: number; scriptKeyword?: string; voiceTimestampSec?: number | null; conceptPrompt?: string; renderMode?: ActionInsertClip['renderMode'] }>,
   ) => void
   /** Patch one insert by insertId. */
   patchInsert:  (insertId: number, patch: Partial<ActionInsertClip>) => void
@@ -429,7 +429,7 @@ export const useAdsVideoStore = create<AdsVideoStoreState>((set, get) => ({
           resolution,
           scriptKeyword: item.scriptKeyword,
           voiceTimestampSec: item.voiceTimestampSec ?? null,
-          renderMode: defaultInsertRenderMode(item.presetId),
+          renderMode: item.renderMode ?? defaultInsertRenderMode(item.presetId),
           ...(item.conceptPrompt ? { conceptPrompt: item.conceptPrompt } : {}),
         }
       })
