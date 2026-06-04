@@ -346,6 +346,15 @@ DIRECTING RULES:
   use more, shorter cuts instead of fewer long ones.
 - Anchor each scene to the ONE block (hook/pain/discovery/benefit/cta) whose
   dialogue it illustrates (used only as a coarse fallback).
+- CTA SCENE RULE — for the FINAL beat (anchorBlock = "cta", typically the line
+  asking the viewer to buy/click/order), the visual job is a TRUST CLOSE, not
+  a generic phone shot. Pick one of:
+    • HOLD_PRODUCT — the speaker confidently holding the product up to camera
+    • POINT_LABEL  — the speaker pointing at the product label / key claim
+    • BEFORE_AFTER_REACTION — confident smiling reaction with the product
+  These show the model OWNING the product. NEVER use PHONE_SCROLL for a CTA
+  scene — it shows generic doom-scrolling on a social feed and has no purchase
+  intent, completely unrelated to "click the link / buy now" lines.
 - A finished UGC ad cuts to a supporting visual on most key beats. Propose
   between ${floor} and ${params.budget} scenes covering the arc. Returning zero
   or one scene is only right for an unusually short script.
