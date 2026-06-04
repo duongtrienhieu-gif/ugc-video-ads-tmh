@@ -354,11 +354,13 @@ export async function resumeInsertVideo(
 }
 
 // ── Ken Burns: still → mp4 (local, free) ────────────────────────────────────
-// Z39 — slow centered zoom over a single keyframe via ffmpeg.wasm zoompan.
+// Z39/Z44 — slow centered zoom over a single keyframe via ffmpeg.wasm zoompan.
 // Output is a normal 9:16 mp4 (no audio) saved to the asset store, so the rest
 // of the pipeline (planner / assembler) is UNCHANGED — it just sees a videoRef.
-// The zoom increment is scaled to the duration so the total push is ~12%
-// regardless of clip length. We pre-upscale 2x before zoompan (the standard
+// The zoom increment is scaled to the duration so the total push is ~28%
+// regardless of clip length. 12% (the original) was too subtle — viewers
+// perceived the clip as a static image. 28% is still gentle UGC-style motion
+// but unmistakably moving. We pre-upscale 2x before zoompan (the standard
 // anti-jitter trick). Runs in the browser → costs ZERO KIE credit.
 async function renderKenBurnsClip(args: {
   imageBlob: Blob
@@ -373,7 +375,7 @@ async function renderKenBurnsClip(args: {
   const H = h0 % 2 === 0 ? h0 : h0 + 1
   const fps = 30
   const frames = Math.max(1, Math.round(dur * fps))
-  const inc = (0.12 / frames).toFixed(6)
+  const inc = (0.28 / frames).toFixed(6)
   const id = Math.random().toString(36).slice(2, 8)
   const ext = (args.imageBlob.type || '').includes('png') ? 'png' : 'jpg'
   const inName = `kb_${id}.${ext}`

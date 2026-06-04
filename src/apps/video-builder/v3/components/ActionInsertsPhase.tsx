@@ -317,18 +317,39 @@ export default function ActionInsertsPhase({ onContinue }: Props) {
 
   // ── Per-insert render ────────────────────────────────────────────────────
 
+  // Z44 — Render concurrency gate. Manual clicks fire in parallel by default;
+  // bursting 5+ Kling submissions at once gets KIE rate-limited (422 / 429 /
+  // queue-stuck timeouts). Hard cap at 2 in-flight; additional clicks queue up
+  // and start as the earlier ones finish. The user can spam every "Render"
+  // button — the gate keeps KIE happy.
+  const RENDER_CONCURRENCY = 2
+  const renderSlotRef = useRef<{ active: number; queue: Array<() => void> }>({ active: 0, queue: [] })
+  const acquireRenderSlot = (insertId: number): Promise<void> => new Promise((resolve) => {
+    const ref = renderSlotRef.current
+    if (ref.active < RENDER_CONCURRENCY) {
+      ref.active++
+      resolve()
+    } else {
+      addToast(`Đã có ${RENDER_CONCURRENCY} render đang chạy — insert #${insertId} xếp hàng đợi`, 'info')
+      ref.queue.push(() => { ref.active++; resolve() })
+    }
+  })
+  const releaseRenderSlot = () => {
+    const ref = renderSlotRef.current
+    ref.active = Math.max(0, ref.active - 1)
+    const next = ref.queue.shift()
+    if (next) next()
+  }
+
   const handleRenderInsert = async (insertId: number) => {
     if (!kieApiKey) { addToast('Thiếu KIE API key', 'error'); return }
     const insert = inserts.find((it) => it.insertId === insertId)
     if (!insert) return
     const preset = ACTION_PRESETS[insert.presetId]
 
-    patchInsert(insertId, {
-      stage: 'keyframe',
-      status: 'rendering',
-      startedAt: now(),
-      error: undefined,
-    })
+    // Mark queued state if we have to wait
+    patchInsert(insertId, { stage: 'keyframe', status: 'rendering', startedAt: now(), error: undefined })
+    await acquireRenderSlot(insertId)
 
     try {
       const result = await renderInsert({
@@ -366,6 +387,8 @@ export default function ActionInsertsPhase({ onContinue }: Props) {
         finishedAt: now(),
       })
       addToast(`Insert lỗi: ${msg}`, 'error')
+    } finally {
+      releaseRenderSlot()
     }
   }
 
@@ -764,6 +787,9 @@ function InsertCard({
               playsInline
               loop
               muted
+              autoPlay
+              onPlay={() => setPlaying(true)}
+              onPause={() => setPlaying(false)}
               onClick={toggle}
               onEnded={() => setPlaying(false)}
             />
