@@ -331,8 +331,19 @@ DIRECTING RULES:
   visual. This is the most common miss.
 - Group sentences describing the SAME idea into ONE scene; don't cut every line.
 - Duration is FREE per scene — YOU decide based on how much dialogue it covers.
-  A quick punch ≈ 2s, a normal beat ≈ 3-4s, a dense idea ≈ 5-6s. Use whatever
-  fits; do NOT force everything to one length.
+  A quick punch ≈ 2s, a normal beat ≈ 3-4s. Use whatever fits; do NOT force
+  everything to one length.
+- HARD LIMIT for CONCEPT_SCENE: never exceed 4s. A still image zoomed for 7-8s
+  is BORING and breaks UGC pacing — the viewer's eye stops moving.
+- For a DENSE / MULTI-SENTENCE concept beat (e.g. mechanism with several steps,
+  ingredients with several names, a feeling described from multiple angles),
+  DO NOT make one long 6-8s concept scene. Instead, SPLIT it into 2-3 short
+  CONCEPT_SCENE cuts back-to-back (each 3-4s), each showing a DIFFERENT angle
+  of the idea (different subject, framing, or environment). Example for a gut
+  mechanism explanation: cut1 "microscopic bacteria multiplying" 3s → cut2
+  "glowing Inulin molecules feeding bacteria" 3s → cut3 "calm relaxed stomach
+  silhouette" 3s. Variety keeps the eye moving. The total budget covers this —
+  use more, shorter cuts instead of fewer long ones.
 - Anchor each scene to the ONE block (hook/pain/discovery/benefit/cta) whose
   dialogue it illustrates (used only as a coarse fallback).
 - A finished UGC ad cuts to a supporting visual on most key beats. Propose
@@ -422,15 +433,18 @@ OUTPUT strict JSON, no fences:
 }
 
 function clampDuration(v: unknown, presetId: ActionPresetId): number {
-  // Z42 — free duration, but bounded by what each render mode can actually
-  // produce:
-  //   • CONCEPT_SCENE renders as Ken Burns (local zoom over a still) — the clip
-  //     length is synthetic, so it can hold up to ~8s.
-  //   • Everything else renders as a Kling i2v clip whose footage is a fixed 5s
-  //     (insertRenderer duration:5) — a longer overlay would have no footage to
-  //     fill it, so cap at 5s.
+  // Z42/Z44 — free duration, but bounded by what each render mode can actually
+  // produce + what feels watchable:
+  //   • CONCEPT_SCENE renders as Ken Burns (local zoom over a still). The
+  //     codec can hold up to ~8s, but in practice a single still zoomed for
+  //     7-8s is BORING — the viewer's eye stops moving. Cap at 4s and force
+  //     the director to SPLIT dense ideas into 2-3 short concept cuts (see
+  //     system instruction below).
+  //   • Everything else renders as a Kling i2v clip whose footage is a fixed
+  //     5s (insertRenderer duration:5) — a longer overlay would have no
+  //     footage to fill it, so cap at 5s.
   // Floor is 2s for all (the director may want a quick punch cut).
-  const ceiling = presetId === 'CONCEPT_SCENE' ? 8 : 5
+  const ceiling = presetId === 'CONCEPT_SCENE' ? 4 : 5
   const n = Number(v)
   if (!Number.isFinite(n)) return 4
   return Math.max(2, Math.min(ceiling, Math.round(n * 10) / 10))
