@@ -261,6 +261,7 @@ export async function renderInsert(
   // planner + final assembler treat it exactly like a Kling insert.
   if ((params.renderMode ?? 'video') === 'ken_burns') {
     params.onStageUpdate({ stage: 'video_full', keyframeRef, keyframePromptUsed })
+    console.log(`[INSERT ${params.presetId}] Stage 2 ken_burns start (local ffmpeg, no Kling)`)
     const videoRef = await renderKenBurnsClip({
       imageBlob: keyframeBlob,
       durationSec: params.durationSec ?? 3.5,
@@ -279,6 +280,7 @@ export async function renderInsert(
   // persisted BEFORE polling so a timeout can RESUME the already-paid job
   // (resumeInsertVideo) instead of re-submitting and charging again.
   params.onStageUpdate({ stage: 'video_full', keyframeRef, keyframePromptUsed })
+  console.log(`[INSERT ${params.presetId}] Stage 2 video_full start (${params.resolution}, kling-3.0)`)
 
   const keyframePublicUrl = await getUrl(keyframeRef)
   if (!keyframePublicUrl) throw new Error('Không lấy được URL keyframe (asset store)')
@@ -296,6 +298,7 @@ export async function renderInsert(
   })
   // Persist taskId IMMEDIATELY — the job is paid for. A timeout below leaves
   // a recoverable handle so the user re-polls instead of paying twice.
+  console.log(`[INSERT ${params.presetId}] Kling submitted taskId=${fullSubmission.taskId.slice(0, 12)}`)
   params.onStageUpdate({
     stage: 'video_full', keyframeRef, keyframePromptUsed,
     fullTaskId: fullSubmission.taskId,
@@ -305,6 +308,7 @@ export async function renderInsert(
     apiKey: params.kieApiKey,
     taskId: fullSubmission.taskId,
     timeoutMs: 10 * 60 * 1000,  // 10min ceiling for a 5s i2v clip
+    logTag: `${params.presetId}/full`,
   })
 
   params.onStageUpdate({
@@ -347,6 +351,7 @@ export async function resumeInsertVideo(
     apiKey: params.kieApiKey,
     taskId: params.taskId,
     timeoutMs: params.timeoutMs ?? 10 * 60 * 1000,
+    logTag: 'resume',
   })
 
   params.onStageUpdate({ stage: 'completed', fullTaskId: params.taskId, videoRef })
@@ -413,11 +418,13 @@ async function pollAndSaveInsertVideo(args: {
   apiKey: string
   taskId: string
   timeoutMs: number
+  logTag?: string
 }): Promise<string> {
   const remoteUrl = await pollVideoJobUntilDone({
     apiKey: args.apiKey,
     taskId: args.taskId,
     timeoutMs: args.timeoutMs,
+    logTag: args.logTag,
   })
   const blob = await fetch(remoteUrl).then((r) => r.blob())
   return saveAsset(blob, blob.type || 'video/mp4')

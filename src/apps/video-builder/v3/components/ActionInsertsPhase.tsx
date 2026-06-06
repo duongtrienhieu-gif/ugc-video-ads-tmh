@@ -381,6 +381,9 @@ export default function ActionInsertsPhase({ onContinue }: Props) {
       })
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
+      const stack = err instanceof Error ? err.stack : undefined
+      console.error(`[INSERT_FAIL insertId=${insertId} presetId=${insert.presetId}] full message:`, msg)
+      if (stack) console.error(`[INSERT_FAIL insertId=${insertId}] stack:`, stack)
       patchInsert(insertId, {
         stage: 'failed',
         status: 'failed',
