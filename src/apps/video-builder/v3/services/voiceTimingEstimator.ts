@@ -4,9 +4,11 @@
 // BEFORE the TTS call so the UI can show "your 30s script lands at 28.4s"
 // and the user can tweak before paying for TTS.
 //
-// Baseline: 150 wpm for Vietnamese / English UGC voiceover at a natural
-// TikTok pace. Voice category WPM hints (160-170 for energetic creator
-// types, 140-145 for emotional / calm voices) are applied as a multiplier.
+// Baseline: 175 wpm — matches ElevenLabs Vietnamese voice output at the
+// engine-default speed of 1.15× (real TikTok creator pace). Single global
+// value, no per-tone variation: the tone picker was removed because real
+// TikTok pace ≈ 230 wpm and the 140-170 wpm spread across "tones" was
+// broadcaster-style, not creator-style.
 //
 // The estimator is purely arithmetic — no network, no Gemini, runs on
 // every script edit.
@@ -14,12 +16,11 @@
 
 import type {
   GeneratedScript, ScriptBlock, ScriptBlockId, ScriptTargetDurationSec,
-  VoiceCategoryId, AdStructure,
+  AdStructure,
 } from '../types'
-import { VOICE_CATEGORIES } from './voiceCategories'
 import { AD_STRUCTURES } from './adStructures'
 
-const DEFAULT_WPM = 150
+const DEFAULT_WPM = 175
 
 /** Count words — supports Vietnamese (space-tokenized) + English. */
 export function countWords(text: string): number {
@@ -34,13 +35,9 @@ export function estimateReadDurationSec(text: string, wpm: number = DEFAULT_WPM)
   return Number(((words / wpm) * 60).toFixed(2))
 }
 
-/** Estimate duration with a specific voice category's WPM hint. */
-export function estimateReadDurationForVoice(
-  text: string,
-  voiceCategory: VoiceCategoryId | null,
-): number {
-  const wpm = voiceCategory ? VOICE_CATEGORIES[voiceCategory].wpmHint : DEFAULT_WPM
-  return estimateReadDurationSec(text, wpm)
+/** Estimate duration at the engine-default pace. */
+export function estimateReadDurationForVoice(text: string): number {
+  return estimateReadDurationSec(text, DEFAULT_WPM)
 }
 
 /**
@@ -72,11 +69,8 @@ export function allocateBlockBudgets(
  * Mutates the input blocks (in-place) and returns a fresh GeneratedScript
  * with the updated totalDurationSec.
  */
-export function recomputeBlockDurations(
-  script: GeneratedScript,
-  voiceCategory: VoiceCategoryId | null,
-): GeneratedScript {
-  const wpm = voiceCategory ? VOICE_CATEGORIES[voiceCategory].wpmHint : DEFAULT_WPM
+export function recomputeBlockDurations(script: GeneratedScript): GeneratedScript {
+  const wpm = DEFAULT_WPM
   const updatedBlocks: ScriptBlock[] = script.blocks.map((b) => ({
     ...b,
     estDurationSec: estimateReadDurationSec(b.text, wpm),

@@ -22,6 +22,7 @@ import { useAppStore } from '../../../../stores/appStore'
 import { useSettingsStore } from '../../../../stores/settingsStore'
 import { useAssetUrl } from '../../../../hooks/useAssetUrl'
 import { useAdsVideoStore } from '../stores/adsVideoStore'
+import { matchVoiceForAvatar } from '../services/voiceCreatorMatcher'
 import {
   CREATOR_VIDEO_STAGE_LABEL_VI,
   V3_CREDIT_COST, formatCredits, estimateLipsyncCredits,
@@ -278,7 +279,10 @@ export default function CreatorVideoPhase({ onContinue }: Props) {
         elevenLabsApiKey: elevenLabsKey,
         config,
         script: brain.script,
-        voiceCategory: brain.voiceCategory ?? 'energetic_creator',
+        // Tone picker removed — auto-pick a sensible voice category from
+        // avatar gender + ad angle (gives female voice for female avatar, etc).
+        // User can still override via the specific voice picker.
+        voiceCategory: brain.voiceCategory ?? matchVoiceForAvatar(state.inputs.avatar, brain.angle),
         voiceId: state.inputs.voiceId,
         avatar: state.inputs.avatar,
         product: state.inputs.product,

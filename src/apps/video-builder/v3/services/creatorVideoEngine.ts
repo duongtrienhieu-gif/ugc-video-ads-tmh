@@ -116,7 +116,10 @@ export async function renderCreatorVideo(
     stability: 0.78,
     similarity: 0.75,
     style: 0,
-    speed: 1.0,
+    // 1.15× — natural TikTok creator pace; saves ~13% Kling lipsync credit vs 1.0
+    // while staying inside ElevenLabs' safe range (1.0-1.2 sounds natural,
+    // >1.2 starts to feel rushed/robotic on some voices).
+    speed: 1.15,
     outputFormat: 'mp3_44100_128',  // matches Starter $5/mo plan
   })
 

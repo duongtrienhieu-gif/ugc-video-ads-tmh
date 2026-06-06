@@ -31,12 +31,10 @@ import { useAdsVideoStore } from '../stores/adsVideoStore'
 import {
   SCRIPT_LANG_LABEL_VI,
   type AdStructure, type AdAngle, type ScriptTargetDurationSec,
-  type VoiceCategoryId, type ScriptLang,
+  type ScriptLang,
 } from '../types'
 import { AD_STRUCTURES, AD_STRUCTURE_ORDER } from '../services/adStructures'
 import { AD_ANGLES, AD_ANGLE_ORDER } from '../services/adAngles'
-import { VOICE_CATEGORIES, VOICE_CATEGORY_ORDER } from '../services/voiceCategories'
-import { matchVoiceForAvatar } from '../services/voiceCreatorMatcher'
 import { recomputeBlockDurations, estimateReadDurationForVoice } from '../services/voiceTimingEstimator'
 import { generateScript, detectCertClaims } from '../services/scriptGenerator'
 import {
@@ -80,7 +78,6 @@ export default function ScriptVoicePhase({ onContinue }: Props) {
   const setGeneratedScript   = useAdsVideoStore((s) => s.setGeneratedScript)
   const setHookVariants      = useAdsVideoStore((s) => s.setHookVariants)
   const pickHookVariant      = useAdsVideoStore((s) => s.pickHookVariant)
-  const setVoiceCategory     = useAdsVideoStore((s) => s.setVoiceCategory)
   const setVoiceId           = useAdsVideoStore((s) => s.setVoiceId)
   const setIsGeneratingScript = useAdsVideoStore((s) => s.setIsGeneratingScript)
   const setScriptBrainError  = useAdsVideoStore((s) => s.setScriptBrainError)
@@ -111,19 +108,12 @@ export default function ScriptVoicePhase({ onContinue }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.inputs.script, langTouched])
 
-  // Auto-suggest voice category from avatar + angle (used for WPM + fallback voice).
-  const suggestedCategory = useMemo(
-    () => matchVoiceForAvatar(state.inputs.avatar, brain.angle),
-    [state.inputs.avatar, brain.angle],
-  )
-  const effectiveCategory: VoiceCategoryId = brain.voiceCategory ?? suggestedCategory
-
   // Live duration estimate from the raw script (own-script path) so the user
   // sees "ad dài ~Xs" before generating — no 5-block view needed.
   const liveDurationSec = useMemo(() => {
     if (!hasScriptText) return null
-    return estimateReadDurationForVoice(state.inputs.script, effectiveCategory)
-  }, [state.inputs.script, hasScriptText, effectiveCategory])
+    return estimateReadDurationForVoice(state.inputs.script)
+  }, [state.inputs.script, hasScriptText])
 
   const certClaims = brain.script ? detectCertClaims(brain.script) : []
 
@@ -165,7 +155,7 @@ export default function ScriptVoicePhase({ onContinue }: Props) {
         ownScriptText: state.inputs.script,
       })
 
-      const refined = recomputeBlockDurations(result.script, effectiveCategory)
+      const refined = recomputeBlockDurations(result.script)
       setGeneratedScript(refined)
       setHookVariants(result.hookVariants)
       pickHookVariant(-1)
@@ -185,11 +175,6 @@ export default function ScriptVoicePhase({ onContinue }: Props) {
     } finally {
       setIsGeneratingScript(false)
     }
-  }
-
-  const handleSwapVoiceCategory = (cat: VoiceCategoryId) => {
-    setVoiceCategory(cat)
-    if (brain.script) setGeneratedScript(recomputeBlockDurations(brain.script, cat))
   }
 
   // ── Voice picker (chọn giọng ElevenLabs cụ thể) ───────────────────────────
@@ -425,38 +410,18 @@ export default function ScriptVoicePhase({ onContinue }: Props) {
           </div>
         )}
 
-        {/* ── Voice category (auto) + specific voice picker ─────────────────── */}
+        {/* ── Specific voice picker ─────────────────────────────────────────
+            Tone preset row removed — engine reads at one realistic TikTok
+            pace (1.15× speed) for everyone. User only picks the voice itself. */}
         <div className="mt-3 rounded-xl border border-black/10 bg-white p-3">
           <div className="flex items-center gap-3">
             <Mic2 className="h-5 w-5 text-violet-500" />
             <div className="min-w-0 flex-1">
-              <p className="text-[13px] font-bold text-gray-900">
-                {VOICE_CATEGORIES[effectiveCategory].emoji} {VOICE_CATEGORIES[effectiveCategory].labelVi}
-                {brain.voiceCategory == null && (
-                  <span className="ml-2 rounded-full bg-violet-100 px-2 py-0.5 text-[9px] font-bold text-violet-700">AUTO</span>
-                )}
+              <p className="text-[13px] font-bold text-gray-900">Giọng đọc</p>
+              <p className="text-[11px] text-gray-500">
+                Tốc độ chuẩn TikTok creator (1.15×) — nhanh, tự nhiên, tiết kiệm ~13% credit lipsync.
               </p>
-              <p className="text-[11px] text-gray-500">{VOICE_CATEGORIES[effectiveCategory].descriptionVi}</p>
             </div>
-          </div>
-          <div className="mt-3 flex flex-wrap gap-1.5">
-            <span className="self-center text-[10px] font-bold uppercase tracking-widest text-gray-400">Đổi tông:</span>
-            {VOICE_CATEGORY_ORDER.map((c) => {
-              const cfg = VOICE_CATEGORIES[c]
-              const isActive = effectiveCategory === c
-              return (
-                <button
-                  key={c}
-                  onClick={() => handleSwapVoiceCategory(c)}
-                  title={cfg.descriptionVi}
-                  className={`rounded-full border px-2.5 py-0.5 text-[10px] font-semibold transition-all ${
-                    isActive ? TONE_BG[cfg.tone] : 'border-gray-200 bg-white text-gray-500 hover:bg-gray-50'
-                  }`}
-                >
-                  {cfg.emoji} {cfg.labelVi}
-                </button>
-              )
-            })}
           </div>
 
           {/* Specific voice */}
@@ -468,15 +433,15 @@ export default function ScriptVoicePhase({ onContinue }: Props) {
                   <Check className="h-3 w-3" />
                   {selectedVoiceName ?? 'giọng đã chọn'}
                   <button
-                    onClick={() => { setVoiceId(null); addToast('Đã trở về giọng mặc định của tông', 'info') }}
-                    title="Bỏ chọn — dùng giọng mặc định của tông"
+                    onClick={() => { setVoiceId(null); addToast('Đã trở về giọng mặc định', 'info') }}
+                    title="Bỏ chọn — dùng giọng mặc định"
                     className="ml-1 rounded-full p-0.5 hover:bg-emerald-200"
                   >
                     <X className="h-3 w-3" />
                   </button>
                 </span>
               ) : (
-                <span className="text-[11px] text-gray-500">Đang dùng giọng mặc định của tông.</span>
+                <span className="text-[11px] text-gray-500">Đang dùng giọng mặc định.</span>
               )}
               <button
                 onClick={() => setVoicePanelOpen((o) => !o)}
