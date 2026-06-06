@@ -378,26 +378,48 @@ DIRECTING RULES:
   These show the model OWNING the product. NEVER use PHONE_SCROLL for a CTA
   scene — it shows generic doom-scrolling on a social feed and has no purchase
   intent, completely unrelated to "click the link / buy now" lines.
-- BEFORE/AFTER RULE — there are TWO kinds of "before/after" beat, and they
-  need DIFFERENT scenes:
+- BEFORE/AFTER RULE — **HARD BAN, NO EXCEPTIONS**. Read this twice:
+
+    BEFORE_AFTER_REACTION animates ONLY the model's FACE (tired → relieved).
+    The body part / object being claimed (teeth, skin, hair, scalp, nails)
+    NEVER appears in this preset. So it CANNOT show camera-visible results.
+
     (a) INTERNAL / FELT result (energy ↑, sleep ↑, mood ↑, gut comfort,
-        focus, fatigue ↓) → OK to use BEFORE_AFTER_REACTION (the preset
-        shows the model's FACE going from tired to relieved — perfect for
-        felt-state changes, no product needed on screen).
-    (b) VISIBLE / EXTERNAL result (teeth whiter, skin clearer, hair thicker,
-        nails stronger, weight ↓, wrinkles ↓, scalp regrowth, stain removed,
-        any change a CAMERA can SEE on the body or object) → DO NOT use
-        BEFORE_AFTER_REACTION. Its prompt only animates the FACE, never the
-        actual visible result. Instead use a CONCEPT_SCENE with a split or
-        side-by-side conceptPrompt showing the actual change. Example for
-        teeth whitening: "Extreme close-up split-screen of teeth: left half
-        stained yellow with visible plaque, right half clean glossy white
-        — dramatic dental before/after, soft natural light." Example for
-        skin: "Macro split-screen of cheek skin: left side dull with visible
-        blemishes, right side smooth even-toned, side-by-side comparison."
-  Read the product and the script. If the script promises a CAMERA-VISIBLE
-  change (claims like "whiter", "clearer", "stronger hair", "less wrinkles",
-  "scars fade"), it is type (b) — use CONCEPT_SCENE, not BEFORE_AFTER_REACTION.
+        focus, fatigue ↓, less anxiety, calmer stomach) → OK to use
+        BEFORE_AFTER_REACTION. The face going relieved IS the proof here.
+
+    (b) VISIBLE / EXTERNAL result — **BEFORE_AFTER_REACTION IS BANNED for
+        these. PICKING IT IS A BUG.** This covers ANY claim a camera can SEE:
+          • teeth: whiter / brighter / less yellow / less plaque
+          • skin: clearer / smoother / less acne / fewer wrinkles / brighter
+          • hair: thicker / fuller / longer / less falling / shinier / scalp regrowth
+          • body: slimmer / firmer / toned / lifted / less bloated
+          • marks/stains: faded / gone / lightened
+        For ANY of these, use CONCEPT_SCENE with a split-screen / side-by-side
+        conceptPrompt showing the actual body part change. Examples:
+          • teeth: "Extreme close-up split-screen of teeth: left half stained
+            yellow with visible plaque, right half clean glossy white — dramatic
+            dental before/after, soft natural light."
+          • skin: "Macro split-screen of cheek skin: left side dull with visible
+            blemishes, right side smooth even-toned, side-by-side comparison."
+          • hair: "Top-down split scalp shot: left half thinning patches visible,
+            right half fuller denser hair growth, clinical comparison lighting."
+        If the script mentions BOTH (a) and (b) in one beat — e.g. "răng trắng
+        hơn và mình tự tin hơn" — pick (b) CONCEPT_SCENE. The visible proof is
+        the load-bearing claim for conversion; the felt-state is secondary.
+
+  DECISION TREE: before picking BEFORE_AFTER_REACTION, ask "is the result a
+  camera-visible body-part change?" If yes → switch to CONCEPT_SCENE. The
+  post-parse layer will OVERRIDE BEFORE_AFTER_REACTION → CONCEPT_SCENE
+  automatically when it detects a visible-result keyword in the script —
+  picking BEFORE_AFTER for a visible-result product just wastes your slot.
+
+- NO DUPLICATE PRESETS — never pick the same presetId twice. Even if the
+  script has two great moments for HOLD_PRODUCT (e.g. hook + CTA), the
+  second one MUST use a different preset (POINT_LABEL, SHOW_PACKAGE,
+  PRODUCT_CLOSEUP). A video that opens with the speaker holding the jar
+  and closes with the speaker holding the jar at the same angle looks
+  amateur. Vary the composition.
 - A finished UGC ad cuts to a supporting visual on most key beats. Propose
   between ${floor} and ${params.budget} scenes covering the arc. Returning zero
   or one scene is only right for an unusually short script.
@@ -432,38 +454,82 @@ OUTPUT strict JSON, no fences:
   const validPresets = new Set<string>(DIRECTOR_PRESET_ENUM)
   const validBlocks = new Set<string>(['hook', 'pain', 'discovery', 'benefit', 'cta'])
 
+  // Z46 — pre-scan script for visible-result claims (teeth whiter, skin clearer,
+  // etc). When detected, the post-parse layer auto-rewrites any
+  // BEFORE_AFTER_REACTION scene to CONCEPT_SCENE — the preset can't actually
+  // show the camera-visible change the script promises.
+  const visibleResultProduct = detectsVisibleResultClaim(params.script)
+
   // Z43 — diagnostic counters so a silent keyword fallback can be traced from
   // the browser console instead of guessed at.
-  const drop = { preset: 0, noPrompt: 0, zeroFit: 0 }
+  // Z46 — added beforeAfterRewrite + dupeSkip + dupeSwap counters.
+  const drop = { preset: 0, noPrompt: 0, zeroFit: 0, dupeSkip: 0 }
+  const rewrite = { beforeAfter: 0, dupeSwap: 0 }
 
+  const seen = new Set<ActionPresetId>()
   const out: InsertSuggestion[] = []
   for (const item of parsed) {
     if (!validPresets.has(item.presetId)) { drop.preset++; continue }
+    let presetId = item.presetId as ActionPresetId
+    let motionKind = item.motionKind
+    let conceptPrompt = typeof item.conceptPrompt === 'string' ? item.conceptPrompt.trim() : ''
+
+    // Z46 — BEFORE_AFTER_REACTION rewrite for visible-result products.
+    // The preset only animates the face, never the actual body-part change
+    // the script promises. Auto-convert to a CONCEPT_SCENE split-screen.
+    if (presetId === 'BEFORE_AFTER_REACTION' && visibleResultProduct) {
+      const quote = (item.quote ?? '').trim()
+      presetId = 'CONCEPT_SCENE' as ActionPresetId
+      motionKind = 'graphic'
+      conceptPrompt = conceptPrompt.length > 0 ? conceptPrompt :
+        `Extreme close-up split-screen showing the body-part transformation the line ` +
+        `"${quote}" promises: LEFT half = the "before" state with the visible problem ` +
+        `clearly shown, RIGHT half = the "after" state with the problem resolved. ` +
+        `Side-by-side dramatic comparison, soft natural light, clinical credibility.`
+      rewrite.beforeAfter++
+    }
+
     // Both free-scene kinds carry a director-written prompt and are useless
     // without one — drop them if the prompt is missing.
-    const isFreeScene = item.presetId === 'CONCEPT_SCENE' || item.presetId === 'PRODUCT_IN_ACTION'
-    const conceptPrompt = typeof item.conceptPrompt === 'string' ? item.conceptPrompt.trim() : ''
+    const isFreeScene = presetId === 'CONCEPT_SCENE' || presetId === 'PRODUCT_IN_ACTION'
     if (isFreeScene && conceptPrompt.length === 0) { drop.noPrompt++; continue }
     const anchor = validBlocks.has(item.anchorBlock) ? (item.anchorBlock as ScriptBlockId) : null
     const fit = Math.max(0, Math.min(1, Number(item.fit) || 0))
     if (fit <= 0) { drop.zeroFit++; continue }  // drop non-matches — no padding
+
+    // Z46 — diversity: if this fixed preset is already used in this video,
+    // try to swap to a related alternative (HOLD_PRODUCT → POINT_LABEL etc.).
+    // Free scenes (CONCEPT_SCENE / PRODUCT_IN_ACTION) are exempt — their
+    // identity is the conceptPrompt, not the preset key, so duplicates are
+    // not actually visually duplicate.
+    if (!isFreeScene && seen.has(presetId)) {
+      const swap = pickSwap(presetId, seen)
+      if (swap) {
+        presetId = swap
+        rewrite.dupeSwap++
+      } else {
+        drop.dupeSkip++
+        continue
+      }
+    }
+    if (!isFreeScene) seen.add(presetId)
+
     // Z45 — pick renderMode per scene:
-    //   • 12 fixed presets + PRODUCT_IN_ACTION → always 'video' (Kling, product
+    //   • 12 fixed presets + PRODUCT_IN_ACTION → always 'video' (product
     //     fidelity required)
-    //   • CONCEPT_SCENE → 'video' (Kling) when director marked motionKind='emotion'
-    //     (real human/lifestyle motion needed); 'ken_burns' otherwise (cheap
-    //     graphic/infographic)
-    const isEmotionConcept = item.presetId === 'CONCEPT_SCENE' && item.motionKind === 'emotion'
+    //   • CONCEPT_SCENE → 'video' when motionKind='emotion' (real human/lifestyle
+    //     motion needed); 'ken_burns' otherwise (cheap graphic/infographic)
+    const isEmotionConcept = presetId === 'CONCEPT_SCENE' && motionKind === 'emotion'
     const renderMode: InsertRenderMode =
-      item.presetId === 'CONCEPT_SCENE'
+      presetId === 'CONCEPT_SCENE'
         ? (isEmotionConcept ? 'video' : 'ken_burns')
         : 'video'
-    const durationSec = clampDuration(item.durationSec, item.presetId as ActionPresetId, renderMode)
+    const durationSec = clampDuration(item.durationSec, presetId, renderMode)
     const quote = typeof item.quote === 'string' && item.quote.trim().length > 0
       ? item.quote.trim()
       : undefined
     out.push({
-      presetId: item.presetId as ActionPresetId,
+      presetId,
       matchCount: 0,
       matchedBlocks: anchor ? [anchor] : [],
       matchedKeywords: [],
@@ -481,7 +547,9 @@ OUTPUT strict JSON, no fences:
   const directed = out.slice(0, params.budget)
   console.log(
     `[DIRECTOR] raw=${raw.length}ch parsed=${parsed.length} usable=${out.length} ` +
-    `dropped{preset:${drop.preset},noPrompt:${drop.noPrompt},zeroFit:${drop.zeroFit}} ` +
+    `dropped{preset:${drop.preset},noPrompt:${drop.noPrompt},zeroFit:${drop.zeroFit},dupeSkip:${drop.dupeSkip}} ` +
+    `rewrote{beforeAfter:${rewrite.beforeAfter},dupeSwap:${rewrite.dupeSwap}} ` +
+    `visibleResult=${visibleResultProduct} ` +
     `→ ${directed.length > 0 ? `${directed.length} scenes` : 'EMPTY → keyword fallback'}`,
   )
   if (directed.length === 0) {
@@ -494,6 +562,55 @@ OUTPUT strict JSON, no fences:
   // (If the keyword path is ALSO empty, the script genuinely has no matchable
   // moment — that's an honest empty, not a shy one.)
   return suggestInsertsForScript(params.script).slice(0, params.budget)
+}
+
+// Z46 — visible-result claim detector. If the script promises a camera-visible
+// body-part change (teeth whiter, skin clearer, hair thicker, etc.), the
+// post-parse layer rejects BEFORE_AFTER_REACTION picks for that script — the
+// preset only animates the face and can't show the actual change. The Director
+// prompt already tells Gemini this; this is the safety net for when it disobeys.
+const VISIBLE_RESULT_KEYWORDS = [
+  // English
+  'whiter', 'whiten', 'whitening', 'brighter', 'brighten', 'clearer', 'clear up',
+  'smoother', 'thicker', 'fuller', 'stronger', 'longer', 'firmer', 'tighter',
+  'glowing', 'shinier', 'less wrinkle', 'fewer wrinkle', 'less acne', 'less bloat',
+  'fade', 'faded', 'lightened', 'slimmer', 'toned', 'lifted', 'plumper',
+  // Vietnamese
+  'trắng', 'sáng', 'sạch', 'mượt', 'mềm', 'dày', 'đầy', 'mạnh', 'dài',
+  'thon', 'gọn', 'săn', 'mịn', 'bóng', 'mỏng đi', 'mờ đi', 'hết mụn',
+  'hết nám', 'hết thâm', 'rụng tóc', 'dài tóc',
+  // Bahasa Malaysia
+  'putih', 'terang', 'bersih', 'halus', 'lembut', 'tebal', 'kuat',
+  'panjang', 'langsing', 'padu', 'kilat', 'bersinar', 'kurang jerawat',
+  'kurang kedut', 'hilang parut',
+]
+
+function detectsVisibleResultClaim(script: GeneratedScript): boolean {
+  const haystack = script.blocks.map((b) => b.text.toLowerCase()).join(' ')
+  return VISIBLE_RESULT_KEYWORDS.some((kw) => haystack.includes(kw))
+}
+
+// Z46 — diversity swap: if a presetId is already used, pick the next-best
+// substitute. Mainly fixes the hook+CTA both-HOLD_PRODUCT case the user hit.
+// Returns null if no swap is available — caller should skip the scene.
+const PRESET_SWAP_CHAIN: Record<string, ActionPresetId[]> = {
+  HOLD_PRODUCT:    ['POINT_LABEL', 'SHOW_PACKAGE', 'PRODUCT_CLOSEUP'],
+  POINT_LABEL:     ['SHOW_PACKAGE', 'PRODUCT_CLOSEUP', 'HOLD_PRODUCT'],
+  SHOW_PACKAGE:    ['PRODUCT_CLOSEUP', 'POINT_LABEL', 'HOLD_PRODUCT'],
+  PRODUCT_CLOSEUP: ['SHOW_PACKAGE', 'POINT_LABEL', 'DESK_PRODUCT'],
+  DESK_PRODUCT:    ['PRODUCT_CLOSEUP', 'SHOW_PACKAGE'],
+  OPEN_CAP:        ['UNBOX', 'SHOW_PACKAGE'],
+  UNBOX:           ['OPEN_CAP', 'SHOW_PACKAGE'],
+  DRINK:           ['TAKE_PILL', 'HOLD_PRODUCT'],
+  TAKE_PILL:       ['DRINK', 'HOLD_PRODUCT'],
+}
+
+function pickSwap(presetId: ActionPresetId, seen: Set<ActionPresetId>): ActionPresetId | null {
+  const chain = PRESET_SWAP_CHAIN[presetId] ?? []
+  for (const candidate of chain) {
+    if (!seen.has(candidate)) return candidate
+  }
+  return null
 }
 
 function clampDuration(v: unknown, presetId: ActionPresetId, renderMode?: InsertRenderMode): number {

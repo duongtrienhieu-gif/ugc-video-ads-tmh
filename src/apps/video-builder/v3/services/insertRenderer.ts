@@ -18,7 +18,7 @@
 
 import {
   generateGpt4oImageFast,
-  generateVideoJob, pollVideoJobUntilDone,
+  generateVideo, pollVideoUntilDone,
 } from '../../../../utils/kieai'
 import { saveAsset, getUrl, isAssetRef } from '../../../../utils/assetStore'
 import type { Model, Product } from '../../../../stores/types'
@@ -92,6 +92,7 @@ function buildInsertKeyframePrompt(
   productRefIndex: number,
   personRefIndex: number,
   conceptPrompt?: string,
+  renderMode?: InsertRenderMode,
 ): string {
   const preset = ACTION_PRESETS[presetId]
   const paragraphs: string[] = []
@@ -108,14 +109,41 @@ function buildInsertKeyframePrompt(
     )
     paragraphs.push('COMPOSITION: vertical 9:16 aspect ratio, natural framing.')
     paragraphs.push('NO PRODUCT PACKAGING visible in frame — concept / mood illustration only.')
-    paragraphs.push(
-      'STYLE: Authentic UGC iPhone footage — real lived-in moment, natural daylight, ' +
-      'subtle grain, real texture. NOT cinematic, NOT studio, NOT magazine, NOT stock-photo.',
-    )
-    paragraphs.push(
-      'Avoid: text overlays, watermarks, logos, product packaging, 3D-render look, ' +
-      'cartoon, beauty filter, cinematic color grade.',
-    )
+
+    // Z46 — branch STYLE + negatives by motion kind. Director marks
+    // emotion/lifestyle scenes for video (Kling); graphic/infographic/microscope
+    // scenes for ken_burns. They need OPPOSITE aesthetic guidance:
+    //   • EMOTION (video) — real UGC iPhone feel, real-world color (current).
+    //   • GRAPHIC (ken_burns) — scientific/clinical/microscope/document look.
+    //     The old generic negatives let GPT-4o invent "fake science" visuals
+    //     (rainbow gradients on nano cross-sections, neon glow on microscope
+    //     shots) that broke credibility for health/cosmetic niches.
+    const isGraphic = renderMode === 'ken_burns'
+    if (isGraphic) {
+      paragraphs.push(
+        'STYLE: Scientific / medical / documentary visualization — microscopy, ' +
+        'cross-section diagram, lab close-up, or clinical infographic. ' +
+        'Monochrome to muted palette (deep blues, teals, whites, neutral greys). ' +
+        'Realistic and credible — looks like a real National Geographic or ' +
+        'medical journal photo, NOT a stylized illustration.',
+      )
+      paragraphs.push(
+        'Avoid: rainbow gradient, neon glow, fantasy color, sci-fi color wash, ' +
+        'pastel dreamy bloom, soft fairy-light, anime sparkle, magical aura, ' +
+        'text overlays, watermarks, logos, product packaging, 3D-render plastic ' +
+        'look, cartoon, cinematic color grade. NO rainbow strips, NO purple-pink ' +
+        'gradients, NO blue-to-pink fade — clinical palette ONLY.',
+      )
+    } else {
+      paragraphs.push(
+        'STYLE: Authentic UGC iPhone footage — real lived-in moment, natural daylight, ' +
+        'subtle grain, real texture. NOT cinematic, NOT studio, NOT magazine, NOT stock-photo.',
+      )
+      paragraphs.push(
+        'Avoid: text overlays, watermarks, logos, product packaging, 3D-render look, ' +
+        'cartoon, beauty filter, cinematic color grade.',
+      )
+    }
     return paragraphs.join('\n\n')
   }
 
@@ -228,7 +256,7 @@ export async function renderInsert(
 
   const keyframePromptUsed = buildInsertKeyframePrompt(
     params.presetId, params.product, productRefIndex, personRefIndex,
-    params.conceptPrompt,
+    params.conceptPrompt, params.renderMode,
   )
   console.log(`[INSERT ${params.presetId}] Stage 1 keyframe prompt len=${keyframePromptUsed.length}, refs=${filesUrl.length}`)
 
@@ -280,14 +308,19 @@ export async function renderInsert(
   // persisted BEFORE polling so a timeout can RESUME the already-paid job
   // (resumeInsertVideo) instead of re-submitting and charging again.
   params.onStageUpdate({ stage: 'video_full', keyframeRef, keyframePromptUsed })
-  console.log(`[INSERT ${params.presetId}] Stage 2 video_full start (${params.resolution}, kling-3.0)`)
+  console.log(`[INSERT ${params.presetId}] Stage 2 video_full start (${params.resolution}, veo3_fast)`)
 
   const keyframePublicUrl = await getUrl(keyframeRef)
   if (!keyframePublicUrl) throw new Error('Không lấy được URL keyframe (asset store)')
 
-  const fullSubmission = await generateVideoJob({
+  // Z46 — Kling 3.0 returned 422 (Unprocessable Entity) on every i2v submit,
+  // making the engine output zero videos. Swapped to Veo 3.1 Fast: same price
+  // tier (60c vs 70c), different KIE endpoint (/veo/generate vs /jobs/createTask),
+  // different schema → bypasses whatever Kling regression hit us. Google Veo
+  // also handles Asian faces + product preservation reliably.
+  const fullSubmission = await generateVideo({
     apiKey: params.kieApiKey,
-    jobModelId: 'kling-3.0/video',
+    model: 'veo3_fast',
     prompt: isConcept
       ? `${motionScene} ${cameraMotion} No product packaging in frame.`
       : `${motionScene} ${cameraMotion} ${preset.handBehavior}`,
@@ -298,7 +331,7 @@ export async function renderInsert(
   })
   // Persist taskId IMMEDIATELY — the job is paid for. A timeout below leaves
   // a recoverable handle so the user re-polls instead of paying twice.
-  console.log(`[INSERT ${params.presetId}] Kling submitted taskId=${fullSubmission.taskId.slice(0, 12)}`)
+  console.log(`[INSERT ${params.presetId}] Veo submitted taskId=${fullSubmission.taskId.slice(0, 12)}`)
   params.onStageUpdate({
     stage: 'video_full', keyframeRef, keyframePromptUsed,
     fullTaskId: fullSubmission.taskId,
@@ -413,14 +446,15 @@ async function renderKenBurnsClip(args: {
   return saveAsset(blob, 'video/mp4')
 }
 
-/** Poll a Kling i2v task to completion, then download + persist the MP4. */
+/** Poll a Veo i2v task to completion, then download + persist the MP4.
+ *  Z46 — was Kling /jobs/recordInfo poll, now Veo /veo/record-info poll. */
 async function pollAndSaveInsertVideo(args: {
   apiKey: string
   taskId: string
   timeoutMs: number
   logTag?: string
 }): Promise<string> {
-  const remoteUrl = await pollVideoJobUntilDone({
+  const remoteUrl = await pollVideoUntilDone({
     apiKey: args.apiKey,
     taskId: args.taskId,
     timeoutMs: args.timeoutMs,

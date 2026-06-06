@@ -765,12 +765,14 @@ export async function generateVideo(params: {
   if (res.status === 402) throw new Error('INSUFFICIENT_CREDITS')
   if (!res.ok) {
     const text = await res.text().catch(() => res.statusText)
-    throw new Error(text)
+    console.error(`[VEO_SUBMIT_FAIL] HTTP ${res.status} body=${text.slice(0, 500)}`)
+    throw new Error(`Veo submit ${res.status}: ${text.slice(0, 300)}`)
   }
 
   const data = await res.json() as { code?: number; message?: string; data: { taskId: string } | null }
   if (!data.data?.taskId) {
-    throw new Error(data.message ?? `API trả về lỗi (code: ${data.code ?? 'unknown'})`)
+    console.error(`[VEO_SUBMIT_NO_TASKID] code=${data.code} message=${data.message} body=${JSON.stringify(data).slice(0, 500)}`)
+    throw new Error(data.message ?? `Veo không trả về taskId (code: ${data.code ?? 'unknown'})`)
   }
   return { taskId: data.data.taskId }
 }
@@ -822,21 +824,62 @@ export async function pollVideoUntilDone(params: {
   taskId: string
   onStatusChange?: (status: VideoStatus) => void
   timeoutMs?: number
+  logTag?: string
 }): Promise<string> {
   const timeout = params.timeoutMs ?? 5 * 60 * 1000
   const start = Date.now()
+  let lastStatus = ''
+  let sameStatusCount = 0
+  let pollCount = 0
+
+  const tagPrefix = params.logTag ? `${params.logTag} ` : ''
+  const taskTag = params.taskId.slice(0, 12)
+  console.log(`[VEO_POLL_START ${tagPrefix}task=${taskTag}] timeout=${Math.round(timeout / 1000)}s`)
 
   while (Date.now() - start < timeout) {
     await new Promise<void>((resolve) => setTimeout(resolve, 5000))
+    pollCount++
 
-    const result = await getVideoStatus({ apiKey: params.apiKey, taskId: params.taskId })
+    let result: { status: VideoStatus; videoUrl?: string; error?: string }
+    try {
+      result = await getVideoStatus({ apiKey: params.apiKey, taskId: params.taskId })
+    } catch (e) {
+      const elapsedSec = Math.round((Date.now() - start) / 1000)
+      const msg = e instanceof Error ? e.message : String(e)
+      console.warn(`[VEO_POLL_NET_ERR ${tagPrefix}task=${taskTag}] +${elapsedSec}s poll #${pollCount} ${msg} — retry`)
+      continue
+    }
+
     params.onStatusChange?.(result.status)
+    const elapsedSec = Math.round((Date.now() - start) / 1000)
 
-    if (result.status === 'completed' && result.videoUrl) return result.videoUrl
-    if (result.status === 'failed') throw new Error(result.error ?? 'Tạo video thất bại')
+    if (result.status !== lastStatus) {
+      console.log(`[VEO_POLL_STATUS ${tagPrefix}task=${taskTag}] +${elapsedSec}s status=${result.status} (poll #${pollCount})`)
+      lastStatus = result.status
+      sameStatusCount = 0
+    } else {
+      sameStatusCount++
+      if (sameStatusCount === 12) {
+        console.warn(`[VEO_POLL_STUCK_WARN ${tagPrefix}task=${taskTag}] +${elapsedSec}s status=${result.status} unchanged ~60s — Veo may be queued/frozen`)
+      }
+      if (pollCount % 6 === 0) {
+        console.log(`[VEO_POLL_ELAPSED ${tagPrefix}task=${taskTag}] +${elapsedSec}s still ${result.status} (poll #${pollCount}, same#${sameStatusCount})`)
+      }
+    }
+
+    if (result.status === 'completed' && result.videoUrl) {
+      console.log(`[VEO_POLL_COMPLETE ${tagPrefix}task=${taskTag}] +${elapsedSec}s url=${result.videoUrl.slice(0, 80)}`)
+      return result.videoUrl
+    }
+    if (result.status === 'failed') {
+      console.error(`[VEO_POLL_FAIL ${tagPrefix}task=${taskTag}] +${elapsedSec}s reason=${result.error}`)
+      throw new Error(result.error ?? 'Tạo video thất bại')
+    }
   }
 
-  throw new Error('TIMEOUT')
+  const totalSec = Math.round((Date.now() - start) / 1000)
+  console.error(`[VEO_POLL_FAIL ${tagPrefix}task=${taskTag}] +${totalSec}s reason=TIMEOUT (final status=${lastStatus || 'unknown'} sameCount=${sameStatusCount} polls=${pollCount})`)
+  throw new Error(`TIMEOUT — Veo video quá ${totalSec}s chưa xong (final=${lastStatus || 'unknown'}, polls=${pollCount}) — task có thể stuck trong queue KIE`)
 }
 
 // ── Video generation via Jobs API (non-Veo models) ───────────────────
@@ -893,11 +936,13 @@ export async function generateVideoJob(params: {
   if (res.status === 402) throw new Error('INSUFFICIENT_CREDITS')
   if (!res.ok) {
     const text = await res.text().catch(() => res.statusText)
-    throw new Error(text)
+    console.error(`[JOB_SUBMIT_FAIL model=${params.jobModelId}] HTTP ${res.status} body=${text.slice(0, 500)}`)
+    throw new Error(`KIE ${params.jobModelId} submit ${res.status}: ${text.slice(0, 300)}`)
   }
   const data = await res.json() as { code?: number; message?: string; data: { taskId: string } | null }
   if (!data.data?.taskId) {
-    throw new Error(data.message ?? `API trả về lỗi (code: ${data.code ?? 'unknown'})`)
+    console.error(`[JOB_SUBMIT_NO_TASKID model=${params.jobModelId}] code=${data.code} message=${data.message} body=${JSON.stringify(data).slice(0, 500)}`)
+    throw new Error(data.message ?? `KIE ${params.jobModelId} không trả về taskId (code: ${data.code ?? 'unknown'})`)
   }
   return { taskId: data.data.taskId }
 }
