@@ -102,6 +102,18 @@ function buildInsertKeyframePrompt(
   // Pure text-to-image illustration of the dialogue span.
   if (presetId === 'CONCEPT_SCENE') {
     const scene = conceptPrompt?.trim()
+    // Z61 — emotion concept (video) features a PERSON; lock it to the creator
+    // avatar so the same face appears across the whole ad (not a random
+    // stranger). Graphic concept (ken_burns infographic) has no person.
+    const isEmotionPerson = renderMode === 'video' && personRefIndex > 0
+    if (isEmotionPerson) {
+      paragraphs.push(
+        `IDENTITY LOCK: The person in this scene is the SAME person from reference ` +
+        `image #${personRefIndex} — preserve EXACTLY their face, hair, skin tone, ` +
+        `age and build. This must read as the same creator who appears elsewhere ` +
+        `in the video, NOT a different model.`,
+      )
+    }
     paragraphs.push(
       `SCENE: ${scene && scene.length > 0
         ? scene
@@ -113,7 +125,11 @@ function buildInsertKeyframePrompt(
       'slowly zoomed, so keep the subject + its labels well inside the centre — ' +
       'anything near the left/right/top/bottom edges WILL be cut off.',
     )
-    paragraphs.push('NO PRODUCT PACKAGING visible in frame — concept / mood illustration only.')
+    if (!isEmotionPerson) {
+      paragraphs.push('NO PRODUCT PACKAGING visible in frame — concept / mood illustration only.')
+    } else {
+      paragraphs.push('No product packaging in frame — this is a reaction / emotion shot of the person only.')
+    }
 
     // Z48 — the ART STYLE now lives INSIDE the conceptPrompt (the Director
     // writes either a hand-drawn UGC infographic — with ${lang} text labels +
@@ -199,10 +215,21 @@ function buildInsertKeyframePrompt(
   return paragraphs.join('\n\n')
 }
 
-/** Which presets benefit from including the avatar reference */
-function presetUsesAvatar(presetId: ActionPresetId): boolean {
-  // Presets that feature the person's face / body
-  return ['HOLD_PRODUCT', 'DRINK', 'TAKE_PILL', 'BEFORE_AFTER_REACTION'].includes(presetId)
+/** Z61 — which scenes feature the CREATOR and must lock to the avatar so the
+ *  same person appears across the whole ad. Without this, emotion concept
+ *  scenes + product-in-action scenes generated RANDOM strangers, so a single
+ *  review showed 2-3 different faces (authenticity killer).
+ *    • HOLD_PRODUCT / DRINK / TAKE_PILL / BEFORE_AFTER_REACTION — person + product
+ *    • PRODUCT_IN_ACTION — the person uses/applies the product (brush, rub…)
+ *    • CONCEPT_SCENE + video (emotion) — a person expressing a feeling
+ *  Graphic CONCEPT_SCENE (ken_burns infographic) has NO person → no avatar. */
+function usesAvatarRef(presetId: ActionPresetId, renderMode?: InsertRenderMode): boolean {
+  if (['HOLD_PRODUCT', 'DRINK', 'TAKE_PILL', 'BEFORE_AFTER_REACTION', 'PRODUCT_IN_ACTION'].includes(presetId)) {
+    return true
+  }
+  // Emotion concept scenes feature the creator; graphic infographics do not.
+  if (presetId === 'CONCEPT_SCENE') return renderMode === 'video'
+  return false
 }
 
 /** Pick which assets to send to KIE as filesUrl — product first, then the
@@ -214,6 +241,7 @@ async function resolveRefs(
   product: Product | null,
   avatar: Model | null,
   creatorKeyframeRef?: string,
+  renderMode?: InsertRenderMode,
 ): Promise<{ refs: string[]; productRefIndex: number; personRefIndex: number }> {
   const refs: string[] = []
   let productRefIndex = 0
@@ -224,7 +252,7 @@ async function resolveRefs(
       : product.productImage
     if (url) { refs.push(url); productRefIndex = refs.length }
   }
-  if (presetUsesAvatar(preset.id)) {
+  if (usesAvatarRef(preset.id, renderMode)) {
     // Chain anchor first, raw avatar portrait second.
     const personRef = creatorKeyframeRef ?? avatar?.characterImage
     if (personRef) {
@@ -244,7 +272,7 @@ export async function renderInsert(
 
   const preset = ACTION_PRESETS[params.presetId]
   const { refs: filesUrl, productRefIndex, personRefIndex } = await resolveRefs(
-    preset, params.product, params.avatar, params.creatorKeyframeRef,
+    preset, params.product, params.avatar, params.creatorKeyframeRef, params.renderMode,
   )
 
   // Z37 — the scene verb that drives the Kling motion prompts (Stage 2/3).

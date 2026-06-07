@@ -454,6 +454,19 @@ DIRECTING RULES:
   Leave "labels" EMPTY ONLY for: pure pain/emotion visuals that need no words,
   and style (2) realistic microscopy. Brand-name ingredients may stay in their
   original form if the script writes them that way.
+- VISUAL VARIETY — do NOT make every graphic scene the same "cartoon tooth in
+  the centre with a label". A run of 5 near-identical illustrations feels like a
+  boring slideshow. Vary EACH scene so the eye keeps moving:
+    • Change the SUBJECT focus: sometimes the ingredient itself (charcoal chunk,
+      volcanic rock, grape) as the hero, sometimes a tooth, sometimes a hand /
+      mouth / gum close-up, sometimes an abstract motion (particles, sparkles).
+    • Change the FRAMING / ANGLE: extreme macro, side angle, top-down, wide,
+      split — not always a flat centred front view.
+    • BALANCE illustration with reality: an all-cartoon B-roll set looks fake.
+      Across the whole ad, mix the hand-drawn teaching scenes with REAL-footage
+      scenes (emotion reactions, the product in use, before/after) so it does
+      not become a cartoon slideshow. Aim for roughly half illustration, half
+      real footage when the script allows.
 - Group sentences describing the SAME idea into ONE scene; don't cut every line.
 - Duration is FREE per scene — YOU decide based on how much dialogue it covers.
   But mind the render mode:
