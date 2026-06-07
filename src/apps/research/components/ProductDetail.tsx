@@ -4,6 +4,7 @@ import type { Market, ScoredProduct, SignalResult } from '../types'
 import { VERDICT_META, NICHES, MARKETS } from '../constants'
 import { formatMyr } from '../services/pricing'
 import { getVideosFor, getCreatorsFor, getCrossMarketFor, analyzeVideo, formatCount, formatKMyr } from '../services/evidence'
+import { useResearchStore, type DbVideo, type DbCreator } from '../store'
 import PricingCalculator from './PricingCalculator'
 
 type Tab = 'overview' | 'video' | 'creator' | 'market' | 'pricing'
@@ -46,9 +47,37 @@ export default function ProductDetail({ product, onClose }: { product: ScoredPro
   const niche = NICHES.find((n) => n.key === product.nicheKey)
   const passCount = product.signals.filter((s) => s.status === 'pass').length
 
-  const videos = useMemo(() => getVideosFor(product), [product.productId])
-  const creators = useMemo(() => getCreatorsFor(product), [product.productId])
-  const crossMarket = useMemo(() => getCrossMarketFor(product), [product.productId])
+  const realVideos = useResearchStore((s) => s.realVideos)
+  const realCreators = useResearchStore((s) => s.realCreators)
+  const getVideosForProduct = useResearchStore((s) => s.getVideosForProduct)
+  const getCreatorsForProduct = useResearchStore((s) => s.getCreatorsForProduct)
+
+  // Video: ưu tiên DB; fallback sample.
+  const videos = useMemo(() => {
+    const real = (realVideos && realVideos.length) ? getVideosForProduct(product.productId, product.nicheKey) : []
+    if (real.length) {
+      return real.map((v: DbVideo) => ({
+        id: v.videoId, caption: v.description.slice(0, 80) || '(video)', handle: v.handle ? '@' + v.handle : '@unknown',
+        views: v.views, gmv: v.gmv, adRoas: v.adRoas || 1, durationSec: v.duration,
+      }))
+    }
+    return getVideosFor(product)
+  }, [product, realVideos, getVideosForProduct])
+
+  // Creator: ưu tiên DB; fallback sample.
+  const creators = useMemo(() => {
+    const real = (realCreators && realCreators.length) ? getCreatorsForProduct(product.productId, product.nicheKey) : []
+    if (real.length) {
+      return real.map((c: DbCreator) => ({
+        id: c.creatorId, handle: '@' + c.handle, nickname: c.nickname || c.handle,
+        followers: c.followers, gmv: c.gmv,
+        engagementPct: Math.round((c.engagementPct || 0) * 10) / 10,
+      }))
+    }
+    return getCreatorsFor(product)
+  }, [product, realCreators, getCreatorsForProduct])
+
+  const crossMarket = useMemo(() => getCrossMarketFor(product), [product])
 
   const metrics: { label: string; value: string }[] = [
     { label: 'Doanh thu', value: formatKMyr(product.revenue) },

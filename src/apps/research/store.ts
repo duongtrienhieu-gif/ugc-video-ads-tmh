@@ -9,12 +9,70 @@ import { SAMPLE_PRODUCTS } from './sampleData'
 import { scoreMany } from './services/scoring'
 import { classifyNiche, classifySkuRisk } from './services/niche'
 
+export interface DbVideo {
+  videoId: string; market: Market; description: string; handle: string
+  duration: number; views: number; gmv: number
+  adRoas: number; adCpa: number; adCost: number; isAd: boolean
+  productId?: string; nicheKey: NicheKey
+}
+export interface DbCreator {
+  creatorId: string; market: Market; handle: string; nickname: string
+  signature: string; mainCategory: string
+  followers: number; gmv: number; engagementPct: number; views: number
+  nicheKey: NicheKey
+}
+export interface DbShop {
+  shopId: string; market: Market; name: string; sellerType: string
+  mainCategory: string; revenue: number; growthRate: number
+  productIds: string[]; nicheKey: NicheKey
+}
+
 type SortKey = 'score' | 'revenue' | 'growth' | 'commission'
 
 /* DB row (research_products) → ResearchProduct.
    LƯU Ý: nicheKey + competitionShops là PLACEHOLDER cho data thật (chờ map danh mục
    + tính bão hòa ở bước sau). Các số revenue/growth/giá/hoa hồng/rating/creator map
    TRỰC TIẾP từ Kalodata để đối chiếu đúng. */
+function rowToVideo(r: Record<string, unknown>): DbVideo {
+  const num = (v: unknown) => (v == null ? 0 : Number(v) || 0)
+  const desc = (r.description as string) ?? ''
+  return {
+    videoId: String(r.video_id), market: (r.market as Market) || 'MY',
+    description: desc, handle: (r.handle as string) ?? '',
+    duration: num(r.duration), views: num(r.views), gmv: num(r.revenue),
+    adRoas: num(r.ad2_roas), adCpa: num(r.ad_cpa), adCost: num(r.ad2_cost),
+    isAd: !!r.ad,
+    productId: (r.product_id as string) ?? undefined,
+    nicheKey: classifyNiche(desc),
+  }
+}
+function rowToCreator(r: Record<string, unknown>): DbCreator {
+  const num = (v: unknown) => (v == null ? 0 : Number(v) || 0)
+  const sig = (r.signature as string) ?? ''
+  const cat = (r.main_category as string) ?? ''
+  return {
+    creatorId: String(r.creator_id), market: (r.market as Market) || 'MY',
+    handle: (r.handle as string) ?? '', nickname: (r.nickname as string) ?? '',
+    signature: sig, mainCategory: cat,
+    followers: num(r.followers), gmv: num(r.revenue),
+    engagementPct: num(r.video_engagement_rate), views: num(r.views),
+    nicheKey: classifyNiche(cat + ' ' + sig + ' ' + (r.nickname || '')),
+  }
+}
+function rowToShop(r: Record<string, unknown>): DbShop {
+  const num = (v: unknown) => (v == null ? 0 : Number(v) || 0)
+  const name = (r.name as string) ?? ''
+  const cat = (r.main_category as string) ?? ''
+  return {
+    shopId: String(r.shop_id), market: (r.market as Market) || 'MY',
+    name, sellerType: (r.seller_type as string) ?? '',
+    mainCategory: cat, revenue: num(r.revenue),
+    growthRate: num(r.revenue_grouping_rate),
+    productIds: Array.isArray(r.product_ids) ? (r.product_ids as string[]) : [],
+    nicheKey: classifyNiche(name + ' ' + cat),
+  }
+}
+
 function rowToProduct(r: Record<string, unknown>): ResearchProduct {
   const num = (v: unknown) => (v == null ? 0 : Number(v) || 0)
   const title = (r.product_title as string) ?? '(không tên)'
@@ -53,6 +111,9 @@ interface ResearchStore {
   selectedId: string | null
 
   realProducts: ResearchProduct[] | null
+  realVideos: DbVideo[] | null
+  realCreators: DbCreator[] | null
+  realShops: DbShop[] | null
   hydrated: boolean
   syncedAt: string | null
 
@@ -68,6 +129,9 @@ interface ResearchStore {
   source: () => ResearchProduct[]
   getScored: () => ScoredProduct[]
   getSelected: () => ScoredProduct | null
+  getVideosForProduct: (productId: string, nicheKey: NicheKey) => DbVideo[]
+  getCreatorsForProduct: (productId: string, nicheKey: NicheKey) => DbCreator[]
+  getShopsForNiches: (market: Market, niches: NicheKey[]) => DbShop[]
 }
 
 export const useResearchStore = create<ResearchStore>((set, get) => ({
@@ -78,6 +142,9 @@ export const useResearchStore = create<ResearchStore>((set, get) => ({
   sortBy: 'score',
   selectedId: null,
   realProducts: null,
+  realVideos: null,
+  realCreators: null,
+  realShops: null,
   hydrated: false,
   syncedAt: null,
 
@@ -96,25 +163,56 @@ export const useResearchStore = create<ResearchStore>((set, get) => ({
   hydrate: async () => {
     if (get().hydrated) return
     try {
-      const { data, error } = await supabase.from('research_products').select('*').limit(2000)
-      if (error) { set({ hydrated: true }); return } // bảng chưa tạo / RLS → giữ data mẫu
-      if (data && data.length) {
-        const products = data.map((r) => rowToProduct(r as Record<string, unknown>))
+      const [pRes, vRes, cRes, sRes] = await Promise.all([
+        supabase.from('research_products').select('*').limit(3000),
+        supabase.from('research_videos').select('*').limit(3000),
+        supabase.from('research_creators').select('*').limit(3000),
+        supabase.from('research_shops').select('*').limit(3000),
+      ])
+      const patch: Partial<ResearchStore> = { hydrated: true }
+      if (!pRes.error && pRes.data && pRes.data.length) {
+        const products = pRes.data.map((r) => rowToProduct(r as Record<string, unknown>))
         let synced = ''
-        for (const r of data as Record<string, unknown>[]) {
+        for (const r of pRes.data as Record<string, unknown>[]) {
           const c = r.captured_at as string
           if (c && c > synced) synced = c
         }
-        set({ realProducts: products, syncedAt: synced || null, hydrated: true })
-      } else {
-        set({ hydrated: true })
+        patch.realProducts = products
+        patch.syncedAt = synced || null
       }
+      if (!vRes.error && vRes.data) patch.realVideos = vRes.data.map(rowToVideo)
+      if (!cRes.error && cRes.data) patch.realCreators = cRes.data.map(rowToCreator)
+      if (!sRes.error && sRes.data) patch.realShops = sRes.data.map(rowToShop)
+      set(patch as ResearchStore)
     } catch {
       set({ hydrated: true })
     }
   },
 
   source: () => get().realProducts ?? SAMPLE_PRODUCTS,
+
+  getVideosForProduct: (productId: string, nicheKey: NicheKey): DbVideo[] => {
+    const all = get().realVideos
+    if (!all || !all.length) return []
+    // Ưu tiên video gắn trực tiếp sản phẩm; nếu không có thì lấy top video cùng ngách.
+    const linked = all.filter((v) => v.productId && v.productId === productId)
+    if (linked.length) return linked.sort((a, b) => b.gmv - a.gmv).slice(0, 6)
+    return all.filter((v) => v.nicheKey === nicheKey)
+      .sort((a, b) => b.gmv - a.gmv).slice(0, 6)
+  },
+  getCreatorsForProduct: (_productId: string, nicheKey: NicheKey): DbCreator[] => {
+    const all = get().realCreators
+    if (!all || !all.length) return []
+    return all.filter((c) => c.nicheKey === nicheKey)
+      .sort((a, b) => b.gmv - a.gmv).slice(0, 6)
+  },
+  getShopsForNiches: (market: Market, niches: NicheKey[]): DbShop[] => {
+    const all = get().realShops
+    if (!all || !all.length) return []
+    const set = new Set(niches)
+    return all.filter((sh) => sh.market === market && set.has(sh.nicheKey))
+      .sort((a, b) => b.revenue - a.revenue).slice(0, 30)
+  },
 
   getScored: () => {
     const { market, nicheFilter, filters, sortBy } = get()

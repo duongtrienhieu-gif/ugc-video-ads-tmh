@@ -67,7 +67,7 @@ async function render() {
 
     <div class="status">
       <div>Lần cuối đẩy: <b>${fmtTime(s.lastSync)}</b></div>
-      <div>Thị trường: <b>${esc(s.lastMarket || '—')}</b> · +<b>${s.lastCount || 0}</b></div>
+      <div>Thị trường: <b>${esc(s.lastMarket || '—')}</b> · +<b>${s.lastCount || 0}</b>${s.lastEntity ? ' ' + esc(s.lastEntity) : ''}</div>
       <div>Tổng đã đẩy: <b>${st.total}</b></div>
       ${s.error ? `<div class="err">⚠ ${esc(s.error)}</div>` : `<div class="ok">✓ Sẵn sàng</div>`}
     </div>

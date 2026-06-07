@@ -1,27 +1,16 @@
-// Service worker — nhận data Kalodata đã bắt, map sang research_products, upsert lên Supabase.
+// Service worker — nhận data Kalodata đã bắt, route theo entity, upsert lên Supabase.
 importScripts('./config.js')
 
-// ── helpers map kiểu dữ liệu ──
-// Kalodata trả số dạng STRING đã format ("RM37.5k", "11.6k", "1.36tr", "2,278")
-// → tự parse về number raw. Cũng nhận number thuần.
+// ── helpers map kiểu ──
 function n(v) {
   if (v == null) return null
   if (typeof v === 'number') return isFinite(v) ? v : null
   if (typeof v !== 'string') return null
-  // Kalodata dùng định dạng số kiểu CHÂU ÂU: dấu PHẨY là dấu thập phân.
-  //   "RM436,88k"  → 436.88 × 1000 = 436880
-  //   "11,66k"     → 11.66 × 1000  = 11660
-  //   "RM37,45"    → 37.45
-  //   "RM179,00 - RM205,00" → lấy số đầu tiên
   let str = v.trim()
-  // Cắt prefix tiền tệ (RM, $, VND, IDR, THB, MYR, ...)
   str = str.replace(/^(RM|MYR|VND|IDR|THB|USD|\$)\s*/i, '')
-  // Nếu có dấu "-" (range giá), chỉ lấy phần trước
   const dashIdx = str.indexOf('-')
   if (dashIdx > 0) str = str.slice(0, dashIdx).trim()
-  // Bỏ khoảng trắng giữa
   str = str.replace(/\s+/g, '')
-  // Cắt suffix nhân
   let mult = 1
   const lower = str.toLowerCase()
   if (lower.endsWith('tr')) { mult = 1_000_000; str = str.slice(0, -2) }
@@ -29,20 +18,12 @@ function n(v) {
   else if (str.endsWith('M')) { mult = 1_000_000; str = str.slice(0, -1) }
   else if (lower.endsWith('b')) { mult = 1_000_000_000; str = str.slice(0, -1) }
   if (str.endsWith('%')) str = str.slice(0, -1)
-  // Chuẩn hoá dấu thập phân:
-  //   • Có cả "," và "." → kiểu Mỹ "1,234.56" (phẩy=ngàn, chấm=thập phân): bỏ ","
-  //     (Kalodata không dùng kiểu này nhưng để an toàn)
-  //   • Chỉ có ","       → phẩy LÀ dấu thập phân (Kalodata)
-  //   • Chỉ có "."       → chấm là thập phân
   const hasComma = str.indexOf(',') >= 0
   const hasDot = str.indexOf('.') >= 0
   if (hasComma && hasDot) {
-    // Đoán: cái nào ở phía PHẢI hơn là dấu thập phân
     if (str.lastIndexOf(',') > str.lastIndexOf('.')) str = str.replace(/\./g, '').replace(',', '.')
     else str = str.replace(/,/g, '')
-  } else if (hasComma) {
-    str = str.replace(',', '.')
-  }
+  } else if (hasComma) str = str.replace(',', '.')
   const num = Number(str)
   return isFinite(num) ? num * mult : null
 }
@@ -52,13 +33,11 @@ function dateOnly(v) {
   if (typeof v === 'string' && /^\d{4}-\d{2}-\d{2}/.test(v)) return v.slice(0, 10)
   return null
 }
-// Tìm ảnh sản phẩm: nhiều ứng viên + đào sâu raw nếu cần.
 function findImage(item) {
   const direct = ['cover','image','image_url','main_image','product_image',
     'product_image_url','img','img_url','pic','pic_url','thumbnail',
-    'cover_url','product_pic','product_cover']
+    'cover_url','product_pic','product_cover','avatar','avatar_url','head','headPic']
   for (const k of direct) if (item[k]) return String(item[k])
-  // Đào sâu: bất kỳ URL trông như CDN ảnh sản phẩm.
   const seen = new Set()
   function dig(o, depth) {
     if (!o || depth > 3 || seen.has(o)) return null
@@ -79,43 +58,86 @@ function findImage(item) {
   return dig(item, 0)
 }
 
-function mapRow(item, country, userId, nowIso) {
+// ── mappers per entity ──
+function mapProduct(item, country, userId, nowIso) {
   return {
-    product_id: String(item.id),
-    market: country,
-    product_title: item.product_title ?? null,
-    image_url: findImage(item),
-    revenue: n(item.revenue),
-    revenue_grouping_rate: n(item.revenue_grouping_rate),
-    sale: n(item.sale),
-    unit_price: n(item.unit_price),
-    min_real_price: n(item.min_real_price),
-    max_real_price: n(item.max_real_price),
-    commission_rate: n(item.commission_rate),
-    product_rating: n(item.product_rating),
-    creator_num: n(item.creator_num),
-    creator_conversion_ratio: n(item.creator_conversion_ratio),
-    video_revenue: n(item.video_revenue),
-    live_revenue: n(item.live_revenue),
+    product_id: String(item.id), market: country,
+    product_title: item.product_title ?? null, image_url: findImage(item),
+    revenue: n(item.revenue), revenue_grouping_rate: n(item.revenue_grouping_rate),
+    sale: n(item.sale), unit_price: n(item.unit_price),
+    min_real_price: n(item.min_real_price), max_real_price: n(item.max_real_price),
+    commission_rate: n(item.commission_rate), product_rating: n(item.product_rating),
+    creator_num: n(item.creator_num), creator_conversion_ratio: n(item.creator_conversion_ratio),
+    video_revenue: n(item.video_revenue), live_revenue: n(item.live_revenue),
     showcase_revenue: n(item.showcase_revenue),
-    gmv_a: n(item.gmv_A),
-    gmv_b: n(item.gmv_B),
-    pri_cate_id: s(item.pri_cate_id),
-    sec_cate_id: s(item.sec_cate_id),
-    ter_cate_id: s(item.ter_cate_id),
+    gmv_a: n(item.gmv_A), gmv_b: n(item.gmv_B),
+    pri_cate_id: s(item.pri_cate_id), sec_cate_id: s(item.sec_cate_id), ter_cate_id: s(item.ter_cate_id),
     delivery_type: s(item.delivery_type),
-    is_overseas: b(item.is_overseas),
-    is_full_service: b(item.is_full_service),
-    is_tokopedia: b(item.is_tokopedia),
-    launch_date: dateOnly(item.launch_date),
-    revenue_trend: item.revenue_trend ?? null,
-    raw: item,
-    ingested_by: userId,
-    captured_at: nowIso,
+    is_overseas: b(item.is_overseas), is_full_service: b(item.is_full_service), is_tokopedia: b(item.is_tokopedia),
+    launch_date: dateOnly(item.launch_date), revenue_trend: item.revenue_trend ?? null,
+    raw: item, ingested_by: userId, captured_at: nowIso,
+  }
+}
+function mapCreator(item, country, userId, nowIso) {
+  return {
+    creator_id: String(item.id), market: country,
+    handle: s(item.handle), nickname: s(item.nickname), signature: s(item.signature),
+    main_category: s(item.main_category),
+    followers: n(item.followers), new_followers: n(item.new_followers),
+    video_engagement_rate: n(item.video_engagement_rate),
+    revenue: n(item.revenue), sale: n(item.sale), unit_price: n(item.unit_price),
+    views: n(item.views), revenue_grouping_rate: n(item.revenue_grouping_rate),
+    creator_debut: dateOnly(item.creatorDebut || item.creator_debut),
+    contact: item.contact ?? null, raw: item,
+    ingested_by: userId, captured_at: nowIso,
+  }
+}
+function mapVideo(item, country, userId, nowIso) {
+  return {
+    video_id: String(item.id), market: country,
+    description: s(item.description), handle: s(item.handle),
+    duration: n(item.duration), publish_date: dateOnly(item.publish_date),
+    views: n(item.views), gpm: n(item.gpm),
+    revenue: n(item.revenue), sale: n(item.sale),
+    ad: b(item.ad), ad_cpa: n(item.ad_cpa),
+    ad2_roas: n(item.ad2Roas), ad2_cost: n(item.ad2Cost),
+    ad_view_ratio: n(item.ad_view_ratio), ad_revenue_ratio: n(item.ad_revenue_ratio),
+    revenue_grouping_rate: n(item.revenue_grouping_rate),
+    product_id: s(item.product_id || item.productId || (item.product && item.product.id)),
+    raw: item, ingested_by: userId, captured_at: nowIso,
+  }
+}
+function mapShop(item, country, userId, nowIso) {
+  return {
+    shop_id: String(item.id), market: country,
+    name: s(item.name), region: s(item.region),
+    seller_type: s(item.seller_type), main_category: s(item.main_category),
+    revenue: n(item.revenue), sale: n(item.sale), unit_price: n(item.unit_price),
+    revenue_grouping_rate: n(item.revenue_grouping_rate),
+    self_promotion_revenue: n(item.self_promotion_revenue),
+    affiliate_revenue: n(item.affiliate_revenue),
+    video_revenue: n(item.video_revenue), live_revenue: n(item.live_revenue),
+    showcase_revenue: n(item.showcase_revenue), shopping_mall_revenue: n(item.shopping_mall_revenue),
+    is_full_service: b(item.is_full_service), is_overseas: b(item.is_overseas), is_tokopedia: b(item.is_tokopedia),
+    product_ids: item.product_ids ?? null, raw: item,
+    ingested_by: userId, captured_at: nowIso,
   }
 }
 
-// ── session (đăng nhập UGC Lab) — tự refresh khi token hết hạn ──
+// Route theo URL: target → {table, mapper, entity_type, conflict_keys}
+const ROUTES = [
+  { match: '/product/queryList', table: 'research_products',  conflict: 'product_id,market',  mapper: mapProduct, entity: 'product' },
+  { match: '/creator/queryList', table: 'research_creators',  conflict: 'creator_id,market',  mapper: mapCreator, entity: 'creator' },
+  { match: '/video/queryList',   table: 'research_videos',    conflict: 'video_id,market',    mapper: mapVideo,   entity: 'video' },
+  { match: '/shop/queryList',    table: 'research_shops',     conflict: 'shop_id,market',     mapper: mapShop,    entity: 'shop' },
+]
+function pickRoute(target) {
+  if (!target) return null
+  for (const r of ROUTES) if (target.indexOf(r.match) > -1) return r
+  return null
+}
+
+// ── session ──
 async function getValidSession() {
   const { kaloSession } = await chrome.storage.local.get('kaloSession')
   if (!kaloSession || !kaloSession.refresh_token) return null
@@ -130,8 +152,7 @@ async function getValidSession() {
     if (!r.ok) return null
     const j = await r.json()
     const sess = {
-      access_token: j.access_token,
-      refresh_token: j.refresh_token,
+      access_token: j.access_token, refresh_token: j.refresh_token,
       user_id: (j.user && j.user.id) || kaloSession.user_id,
       email: (j.user && j.user.email) || kaloSession.email,
       expires_at: j.expires_at || (now + (j.expires_in || 3600)),
@@ -146,18 +167,18 @@ async function patchStatus(patch) {
   await chrome.storage.local.set({ status: { ...cur, ...patch } })
 }
 
-// ── xử lý mỗi lần bắt được /product/queryList ──
 async function handleCapture(msg) {
   const { enabled } = await chrome.storage.local.get('enabled')
   if (enabled === false) return
+  const route = pickRoute(msg.target)
+  if (!route) return
 
   let req = {}, resp = {}
   try { req = JSON.parse(msg.reqBody || '{}') } catch (e) { /* */ }
   try { resp = JSON.parse(msg.respText || '{}') } catch (e) { return }
 
   const country = req.country || 'MY'
-  const list = Array.isArray(resp.data)
-    ? resp.data
+  const list = Array.isArray(resp.data) ? resp.data
     : (resp.data && Array.isArray(resp.data.list) ? resp.data.list : [])
   if (!list.length) return
 
@@ -165,11 +186,12 @@ async function handleCapture(msg) {
   if (!session) { await patchStatus({ error: 'Chưa đăng nhập UGC Lab trong extension' }); return }
 
   const nowIso = new Date().toISOString()
-  const rows = list.filter((it) => it && it.id != null).map((it) => mapRow(it, country, session.user_id, nowIso))
+  const rows = list.filter((it) => it && it.id != null)
+    .map((it) => route.mapper(it, country, session.user_id, nowIso))
   if (!rows.length) return
 
   try {
-    const r = await fetch(`${SUPA_URL}/rest/v1/research_products?on_conflict=product_id,market`, {
+    const r = await fetch(`${SUPA_URL}/rest/v1/${route.table}?on_conflict=${route.conflict}`, {
       method: 'POST',
       headers: {
         apikey: SUPA_ANON,
@@ -181,7 +203,7 @@ async function handleCapture(msg) {
     })
     if (!r.ok) {
       const t = await r.text()
-      await patchStatus({ error: `Lỗi đẩy ${r.status}: ${t.slice(0, 140)}` })
+      await patchStatus({ error: `Lỗi đẩy ${route.entity} ${r.status}: ${t.slice(0, 140)}` })
       return
     }
   } catch (e) {
@@ -189,7 +211,6 @@ async function handleCapture(msg) {
     return
   }
 
-  // ghi log (best-effort)
   fetch(`${SUPA_URL}/rest/v1/research_ingest_log`, {
     method: 'POST',
     headers: {
@@ -198,12 +219,18 @@ async function handleCapture(msg) {
       'Content-Type': 'application/json',
       Prefer: 'return=minimal',
     },
-    body: JSON.stringify([{ ingested_by: session.user_id, market: country, entity_type: 'product', row_count: rows.length, source_url: msg.target }]),
+    body: JSON.stringify([{
+      ingested_by: session.user_id, market: country,
+      entity_type: route.entity, row_count: rows.length, source_url: msg.target,
+    }]),
   }).catch(() => {})
 
-  const total = ((await chrome.storage.local.get('totalIngested')).totalIngested || 0) + rows.length
-  await chrome.storage.local.set({ totalIngested: total })
-  await patchStatus({ lastSync: nowIso, lastMarket: country, lastCount: rows.length, error: null })
+  const counterKey = `total_${route.entity}`
+  const cur = await chrome.storage.local.get(['totalIngested', counterKey])
+  const total = (cur.totalIngested || 0) + rows.length
+  const totalEntity = (cur[counterKey] || 0) + rows.length
+  await chrome.storage.local.set({ totalIngested: total, [counterKey]: totalEntity })
+  await patchStatus({ lastSync: nowIso, lastMarket: country, lastCount: rows.length, lastEntity: route.entity, error: null })
 }
 
 chrome.runtime.onMessage.addListener((msg) => {

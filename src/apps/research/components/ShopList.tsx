@@ -7,8 +7,19 @@ import type { NicheKey } from '../types'
 export default function ShopList() {
   const market = useResearchStore((s) => s.market)
   const nicheFilter = useResearchStore((s) => s.nicheFilter)
+  const realShops = useResearchStore((s) => s.realShops)
+  const getShopsForNiches = useResearchStore((s) => s.getShopsForNiches)
   const niches: NicheKey[] = nicheFilter === 'all' ? NICHES.map((n) => n.key) : [nicheFilter]
-  const shops = getShops(market, niches)
+
+  // Ưu tiên DB shop thật (nếu đã ingest), fallback sample.
+  const shops = (realShops && realShops.length)
+    ? getShopsForNiches(market, niches).map((sh) => ({
+        id: sh.shopId, name: sh.name || '(shop)', nicheKey: sh.nicheKey,
+        market: sh.market, revenue: sh.revenue, growthRate: sh.growthRate,
+        productCount: Array.isArray(sh.productIds) ? sh.productIds.length : 0,
+        sellerType: sh.sellerType || '—',
+      }))
+    : getShops(market, niches)
 
   return (
     <div className="flex flex-col gap-3">

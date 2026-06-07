@@ -1,13 +1,20 @@
-// Chạy trong MAIN world (cùng ngữ cảnh trang Kalodata) — monkey-patch fetch + XHR
-// để bắt response /product/queryList. Đồng thời hỗ trợ "tự động thu thập" (replay
-// query nhiều trang bằng fetch gốc + cookie của trang).
+// MAIN world — monkey-patch fetch + XHR để bắt response của 4 queryList endpoint
+// của Kalodata, đồng thời hỗ trợ auto-crawl replay nhiều trang.
 (function () {
-  const TARGETS = ['/product/queryList']
-  let lastReq = null // { url, body } — query mẫu gần nhất để auto-crawl dựa vào
+  const TARGETS = [
+    '/product/queryList',
+    '/creator/queryList',
+    '/video/queryList',
+    '/shop/queryList',
+  ]
+  // lastReq lưu PER endpoint — anh đứng ở /creator thì auto-crawl creator, /shop thì shop...
+  const lastReq = {} // { '/product/queryList': {url,body}, ... }
   console.log('[UGC-Lab Sync] inject.js loaded (MAIN world)')
 
-  function isTarget(url) {
-    return typeof url === 'string' && TARGETS.some((t) => url.indexOf(t) > -1)
+  function matchTarget(url) {
+    if (typeof url !== 'string') return null
+    for (const t of TARGETS) if (url.indexOf(t) > -1) return t
+    return null
   }
   function emit(target, reqBody, respText) {
     try { window.postMessage({ __kaloSync: true, target, reqBody, respText }, '*') } catch (e) { /* */ }
@@ -16,11 +23,11 @@
   const origFetch = window.fetch
   window.fetch = function (input, init) {
     const url = input && input.url ? input.url : input
-    const hit = isTarget(url)
-    const reqBody = hit && init && init.body ? String(init.body) : null
-    if (hit && reqBody) lastReq = { url: String(url), body: reqBody }
+    const tgt = matchTarget(url)
+    const reqBody = tgt && init && init.body ? String(init.body) : null
+    if (tgt && reqBody) lastReq[tgt] = { url: String(url), body: reqBody }
     const p = origFetch.apply(this, arguments)
-    if (hit) {
+    if (tgt) {
       p.then((res) => { try { res.clone().text().then((t) => emit(String(url), reqBody, t)) } catch (e) { /* */ } }).catch(() => {})
     }
     return p
@@ -34,8 +41,9 @@
   }
   XMLHttpRequest.prototype.send = function (body) {
     const self = this
-    if (isTarget(self.__kaloUrl)) {
-      if (body) lastReq = { url: String(self.__kaloUrl), body: String(body) }
+    const tgt = matchTarget(self.__kaloUrl)
+    if (tgt) {
+      if (body) lastReq[tgt] = { url: String(self.__kaloUrl), body: String(body) }
       self.addEventListener('load', function () {
         try { emit(String(self.__kaloUrl), body ? String(body) : null, self.responseText) } catch (e) { /* */ }
       })
@@ -43,35 +51,51 @@
     return origSend.apply(this, arguments)
   }
 
-  // ── Auto-crawl: replay query mẫu với pageNo tăng dần ──
   function crawlStatus(payload) {
     try { window.postMessage(Object.assign({ __kaloCrawlStatus: true }, payload), '*') } catch (e) { /* */ }
   }
-  // Tìm key chứa số trang (Kalodata có thể dùng pageNo / page / pageNum / current ...).
   function findPageKey(obj) {
     if (!obj || typeof obj !== 'object') return null
     const cands = ['pageNo', 'pageNum', 'page', 'current', 'pageIndex', 'page_no', 'page_num']
     for (const k of cands) if (k in obj) return k
     return null
   }
+  // Tự chọn endpoint theo URL anh đang đứng ở Kalodata.
+  function pickTargetFromPath() {
+    const p = location.pathname
+    if (p.indexOf('/creator') === 0) return '/creator/queryList'
+    if (p.indexOf('/video') === 0) return '/video/queryList'
+    if (p.indexOf('/shop') === 0) return '/shop/queryList'
+    return '/product/queryList'
+  }
+  const ENTITY_LABEL = {
+    '/product/queryList': 'sản phẩm',
+    '/creator/queryList': 'creator',
+    '/video/queryList': 'video',
+    '/shop/queryList': 'shop',
+  }
+
   async function runCrawl(maxPages, delayMs) {
-    console.log('[UGC-Lab Sync] runCrawl start, lastReq:', lastReq)
-    if (!lastReq || !lastReq.body) {
+    const tgt = pickTargetFromPath()
+    const req = lastReq[tgt]
+    const label = ENTITY_LABEL[tgt] || 'mục'
+    console.log('[UGC-Lab Sync] runCrawl', { target: tgt, hasReq: !!req })
+    if (!req || !req.body) {
       crawlStatus({ done: true, error: true,
-        text: 'Chưa bắt được query Kalodata. Thử:\n1) Cuộn xuống bảng sản phẩm\n2) Bấm sang trang 2 hoặc đổi sort cột\nRồi bấm lại nút này.' })
+        text: `Chưa bắt được query ${label}. Hãy:\n1) Cuộn xuống bảng ${label}\n2) Bấm sort 1 cột hoặc sang trang 2\nRồi bấm lại nút này.` })
       return
     }
     let base, url
-    try { base = JSON.parse(lastReq.body); url = lastReq.url } catch (e) {
+    try { base = JSON.parse(req.body); url = req.url } catch (e) {
       crawlStatus({ done: true, error: true, text: 'Không đọc được query mẫu.' }); return
     }
     const pageKey = findPageKey(base) || 'pageNo'
-    console.log('[UGC-Lab Sync] page key:', pageKey, 'base:', base)
     const market = base.country || ''
     let captured = 0
-    let seenIds = new Set()
+    const seenIds = new Set()
     let duplicateStreak = 0
-    crawlStatus({ done: false, page: 0, maxPages, market, captured, text: 'Bắt đầu kéo' + (market ? ' ' + market : '') + '...' })
+    crawlStatus({ done: false, page: 0, maxPages, market, captured,
+      text: `Bắt đầu kéo ${label}` + (market ? ' ' + market : '') + '...' })
     for (let page = 1; page <= maxPages; page++) {
       const body = Object.assign({}, base, { [pageKey]: page })
       let pageCount = 0, newCount = 0, stop = false
@@ -99,27 +123,24 @@
         crawlStatus({ done: true, error: true, text: 'Lỗi kéo trang ' + page + ': ' + (e && e.message) })
         return
       }
-      // Trang trùng lặp 100% → pagination không hoạt động. Dừng sớm + báo.
       if (page > 1 && pageCount > 0 && newCount === 0) duplicateStreak++
       else duplicateStreak = 0
-      crawlStatus({
-        done: false, page, maxPages, market, captured,
-        text: 'Trang ' + page + '/' + maxPages + ' · +' + pageCount + ' SP (mới: ' + newCount + ')',
-      })
+      crawlStatus({ done: false, page, maxPages, market, captured: seenIds.size,
+        text: `[${label}] Trang ${page}/${maxPages} · +${pageCount} (mới: ${newCount})` })
       if (duplicateStreak >= 2) {
         crawlStatus({ done: true, page, maxPages, market, captured: seenIds.size,
-          text: 'Pagination không hoạt động (trùng lặp).\nThử trên Kalodata: bấm sort cột "Doanh thu" (tăng dần / giảm dần) rồi crawl lại.' })
+          text: `Pagination không hoạt động (trùng lặp).\nThử trên Kalodata: bấm sort cột "Doanh thu" rồi crawl lại.` })
         return
       }
       if (stop) {
         crawlStatus({ done: true, page, maxPages, market, captured: seenIds.size,
-          text: 'Đã kéo hết (' + seenIds.size + ' SP duy nhất, từ ' + captured + ' lượt) ✓' })
+          text: `Đã kéo hết ${seenIds.size} ${label} ✓` })
         return
       }
       await new Promise((r) => setTimeout(r, delayMs))
     }
     crawlStatus({ done: true, page: maxPages, maxPages, market, captured: seenIds.size,
-      text: 'Xong ✓ — ' + seenIds.size + ' SP duy nhất' + (market ? ' · ' + market : '') })
+      text: `Xong ✓ — ${seenIds.size} ${label}` + (market ? ' · ' + market : '') })
   }
 
   window.addEventListener('message', function (ev) {
