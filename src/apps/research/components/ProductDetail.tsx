@@ -1,12 +1,20 @@
 import { useMemo, useState } from 'react'
-import { X, Check, AlertTriangle, XCircle, Plus, Play, TrendingUp, TrendingDown } from 'lucide-react'
-import type { ScoredProduct, SignalResult } from '../types'
+import { X, Check, AlertTriangle, XCircle, Plus, Play, TrendingUp, TrendingDown, ExternalLink } from 'lucide-react'
+import type { Market, ScoredProduct, SignalResult } from '../types'
 import { VERDICT_META, NICHES, MARKETS } from '../constants'
 import { formatMyr } from '../services/pricing'
 import { getVideosFor, getCreatorsFor, getCrossMarketFor, formatCount, formatKMyr } from '../services/evidence'
 import PricingCalculator from './PricingCalculator'
 
 type Tab = 'overview' | 'video' | 'creator' | 'market' | 'pricing'
+
+const KALODATA_CURRENCY: Record<Market, string> = { MY: 'MYR', TH: 'THB', ID: 'IDR', VN: 'VND' }
+function kalodataUrl(productId: string, market: Market): string {
+  // demo: bỏ hậu tố thị trường (-th/-id/-vn) đã thêm cho data mẫu;
+  // data thật: product_id chính là id Kalodata nên link trỏ đúng sản phẩm.
+  const id = productId.replace(/-(th|id|vn)$/i, '')
+  return `https://www.kalodata.com/product/detail?id=${encodeURIComponent(id)}&language=vi-VN&currency=${KALODATA_CURRENCY[market]}&region=${market}`
+}
 
 const STATUS_ICON: Record<SignalResult['status'], React.ReactNode> = {
   pass: <Check className="h-4 w-4 text-emerald-500" />,
@@ -64,6 +72,14 @@ export default function ProductDetail({ product, onClose }: { product: ScoredPro
               <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-bold text-slate-600">⭐ {product.score}/100</span>
               <span className={`rounded-full border px-2 py-0.5 text-xs font-bold ${v.bg} ${v.color}`}>{v.emoji} {v.label}</span>
             </div>
+            <a
+              href={kalodataUrl(product.productId, product.market)}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="mt-1.5 inline-flex items-center gap-1 text-xs font-medium text-violet-600 hover:underline"
+            >
+              <ExternalLink className="h-3 w-3" /> Xem trên Kalodata
+            </a>
           </div>
           <button onClick={onClose} className="rounded-lg p-1 text-slate-400 hover:bg-black/5"><X className="h-5 w-5" /></button>
         </div>
