@@ -1,6 +1,7 @@
 import { TrendingUp, TrendingDown, Users, Tag } from 'lucide-react'
 import type { ScoredProduct } from '../types'
 import { VERDICT_META, NICHES } from '../constants'
+import { formatKMyr } from '../services/evidence'
 
 interface Props {
   product: ScoredProduct
@@ -31,6 +32,11 @@ export default function OpportunityCard({ product: p, onOpen }: Props) {
       {/* Nội dung */}
       <div className="flex flex-1 flex-col gap-2 p-3">
         <h3 className="line-clamp-2 text-sm font-semibold text-slate-800">{p.title}</h3>
+
+        <div className="flex items-center gap-1.5 text-xs">
+          <span className="font-bold text-slate-800">{formatKMyr(p.revenue)}</span>
+          <span className="text-slate-400">· {p.sale} đơn</span>
+        </div>
 
         <ul className="flex flex-col gap-0.5 text-xs text-slate-500">
           {p.reasons.map((r, i) => (
