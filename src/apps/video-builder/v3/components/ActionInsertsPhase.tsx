@@ -130,6 +130,9 @@ export default function ActionInsertsPhase({ onContinue }: Props) {
         lang: state.scriptBrain.outputLang,
         budget: maxInserts,
         floor: minInserts,
+        // Z48 — give the Director the product so it understands usage/form
+        // and picks usage-correct presets for any niche (not just teeth).
+        product: state.inputs.product,
       })
     }
     // Offline fallback — keyword match, no padding.

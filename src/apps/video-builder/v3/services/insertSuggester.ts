@@ -17,6 +17,7 @@ import type {
   ActionPresetId, GeneratedScript, ScriptBlockId, ScriptLang, InsertRenderMode,
 } from '../types'
 import { SCRIPT_LANG_GEMINI_NAME } from '../types'
+import type { Product } from '../../../../stores/types'
 import { ACTION_PRESETS, ACTION_PRESET_ORDER } from './actionPresets'
 
 export interface InsertSuggestion {
@@ -150,6 +151,38 @@ export interface GeminiSuggestParams {
    *  cutaways). Default 3. Does NOT force padding — it just stops the model
    *  from being over-shy and returning zero. */
   floor?: number
+  /** Z48 — the actual product. Passing name + description lets the Director
+   *  understand WHAT the product is and HOW it is used, so it picks usage-
+   *  correct presets for ANY niche (tooth powder → brush, cream → rub, pill →
+   *  swallow, device → demo) instead of guessing from the script alone. */
+  product?: Product | null
+}
+
+// Z48 — build the product-context block injected into the Director prompt.
+// The Director was previously blind to the product (script-only), so it
+// guessed usage — picking TAKE_PILL for a tooth powder, BEFORE_AFTER for a
+// visible result, etc. Giving it the name + description fixes the whole class
+// of niche-misread bugs at the source.
+function buildProductContextBlock(product: Product | null | undefined): string {
+  if (!product) return ''
+  const lines: string[] = []
+  if (product.productName) lines.push(`- Name: ${product.productName}`)
+  if (product.productDescription) lines.push(`- Description: ${product.productDescription.slice(0, 600)}`)
+  if (product.usps) lines.push(`- Key selling points: ${product.usps.slice(0, 300)}`)
+  if (product.ingredients) lines.push(`- Ingredients / contents: ${product.ingredients.slice(0, 200)}`)
+  if (lines.length === 0) return ''
+  return `\n\nPRODUCT CONTEXT — read this FIRST to understand what the product IS and
+HOW it is physically used. Do NOT guess usage from the script word "powder/gel/
+liquid" alone:
+${lines.join('\n')}
+
+USE THIS to choose usage-correct scenes. Worked examples:
+- A "powder" can be a drink mix (swallowed), a tooth powder (brushed on teeth),
+  or a face mask (applied to skin) — the name + description tell you which.
+- A "tooth/teeth/whitening/enamel" product is BRUSHED on teeth, never eaten.
+- A cream / serum / lotion is rubbed on skin; a shampoo is washed into hair.
+- A supplement / vitamin / capsule is swallowed.
+- A device / appliance / tool is operated, not consumed.\n`
 }
 
 const SUGGEST_RESPONSE_SCHEMA = {
@@ -292,12 +325,14 @@ export async function directScenesWithGemini(
     .map((b) => `[${b.id}] ${b.text}`)
     .join('\n')
 
+  const productContext = buildProductContextBlock(params.product)
+
   const systemInstruction = `You are a senior UGC ad video DIRECTOR with full creative freedom. The
 script is written in ${langName}. This is NOT a fixed storytelling template —
 read the actual script, understand the product and the niche, and decide the
 B-roll like a real director would. The product can be ANYTHING (health
 supplement, cosmetics, kitchen appliance, power tool, machine, gadget, apparel…)
-— never assume it is a supplement.
+— never assume it is a supplement.${productContext}
 
 A single talking-head "creator video" of the person speaking already covers the
 whole script. Your job: decide WHERE to cut away to a supporting visual (a
@@ -384,6 +419,22 @@ DIRECTING RULES:
     • spray / deodorant / perfume → sprayed on.
   Read what the product IS. A "powder" is not automatically a supplement —
   a teeth-whitening powder is brushed on, not swallowed.
+- PRODUCT-FORM RULE — several fixed presets hardcode a physical form. Pick them
+  ONLY when the product actually matches; otherwise use PRODUCT_IN_ACTION and
+  describe the real action (it has no form assumption):
+    • OPEN_CAP assumes a BOTTLE with a screw cap. Don't use it for a jar (twist
+      lid), tube (flip cap), sachet (tear), pump, box, or device.
+    • TAKE_PILL assumes a single solid PILL/TABLET/CAPSULE. Don't use it for a
+      powder (scooped/mixed), gummy (chewed), or liquid.
+    • DRINK assumes the product is sipped straight from its container. A powder
+      that must be mixed into water first is PRODUCT_IN_ACTION (scoop → stir →
+      drink), not DRINK.
+    • UNBOX assumes the product ships inside an outer BOX. Don't use it for a
+      bare jar/bottle with no box.
+    • BAG_PRODUCT_PULL assumes the product fits in a handbag. Don't use it for an
+      appliance, machine, or large device.
+  When in doubt about form, prefer PRODUCT_IN_ACTION — it is form-agnostic and
+  you control the action.
 - CTA SCENE RULE — for the FINAL beat (anchorBlock = "cta", typically the line
   asking the viewer to buy/click/order), the visual job is a TRUST CLOSE, not
   a generic phone shot. Pick one of:
