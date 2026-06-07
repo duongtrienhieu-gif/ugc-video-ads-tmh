@@ -953,8 +953,18 @@ export async function generateVideoJob(params: {
     if (params.duration) input.duration = params.duration
     input.mode = 'std'
     if (params.referenceImageUrls?.length) input.image_urls = params.referenceImageUrls
+  } else if (params.jobModelId.includes('image-to-video') && params.jobModelId.startsWith('wan/')) {
+    // Z67 — Wan 2.7 image-to-video: animate the keyframe via first_frame_url.
+    // VIDEO-ONLY (omit driving_audio_url → no audio-gen failures). Wan only
+    // supports 720p/1080p (map 480p → 720p). duration is an integer (2-15s).
+    // prompt_extend off so Wan keeps the keyframe + our prompt faithfully.
+    if (params.referenceImageUrls?.length) input.first_frame_url = params.referenceImageUrls[0]
+    input.resolution = params.resolution === '1080p' ? '1080p' : '720p'
+    if (params.duration) input.duration = Math.max(2, Math.min(15, Math.round(params.duration)))
+    input.prompt_extend = false
+    input.watermark = false
   } else if (params.jobModelId.startsWith('wan/')) {
-    // Wan uses `ratio` instead of `aspect_ratio`
+    // Wan text-to-video (legacy): uses `ratio` instead of `aspect_ratio`
     input.ratio = params.aspectRatio
     input.resolution = params.resolution
     if (params.duration) input.duration = params.duration

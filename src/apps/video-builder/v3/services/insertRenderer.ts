@@ -18,7 +18,7 @@
 
 import {
   generateGpt4oImageFast,
-  generateVideo, pollVideoUntilDone,
+  generateVideoJob, pollVideoJobUntilDone,
 } from '../../../../utils/kieai'
 import { saveAsset, getUrl, isAssetRef } from '../../../../utils/assetStore'
 import type { Model, Product } from '../../../../stores/types'
@@ -347,46 +347,34 @@ export async function renderInsert(
   // persisted BEFORE polling so a timeout can RESUME the already-paid job
   // (resumeInsertVideo) instead of re-submitting and charging again.
   params.onStageUpdate({ stage: 'video_full', keyframeRef, keyframePromptUsed })
-  console.log(`[INSERT ${params.presetId}] Stage 2 video_full start (${params.resolution}, veo3_fast)`)
+  console.log(`[INSERT ${params.presetId}] Stage 2 video_full start (${params.resolution}, wan/2-7-image-to-video)`)
 
   const keyframePublicUrl = await getUrl(keyframeRef)
   if (!keyframePublicUrl) throw new Error('Không lấy được URL keyframe (asset store)')
 
-  // Z46 — Kling 3.0 returned 422 on every i2v submit → swapped to Veo
-  // (/veo/generate, different schema, bypasses the Kling regression).
-  // Z49 — tried Veo 3.1 Lite (30c) to halve cost, but Lite returned 100%
-  // failures on i2v (it does not appear to support reference-image input).
-  // Z50 — reverted to Veo 3.1 Fast (60c) which renders i2v reliably. The
-  // real cost lever is using ken_burns (~6c) for non-motion scenes, not the
-  // video tier. Pricing is flat per submission.
-  // Z62 — append a SILENT directive. Veo 3.1 is audio-native and was failing
-  // the whole job ("unable to generate audio") when it tried to synthesize
-  // speech for a person scene. Inserts are silent B-roll (audio stripped at
-  // assembly), so tell Veo not to generate dialogue/voice — only ambient.
-  const SILENT_SUFFIX = ' Silent footage — no spoken dialogue, no voiceover, the person does not talk; ambient sound only.'
-  // Z63 — Veo can still fail per-clip (audio-gen, content, timeout). Instead of
-  // dead-ending the card with "Video lỗi" (the user clicked retry 100×), catch
-  // ANY Veo failure and fall back to a Ken Burns clip from the keyframe we
-  // ALREADY rendered. Result: every card always produces a usable clip — real
-  // motion when Veo works, a still + slow zoom when it doesn't. The user can
-  // re-render that one card later if they specifically want motion on it.
+  // Z67 — i2v model history: Kling 3.0 (422) → Veo 3.1 Fast (worked but
+  // audio-native → "unable to generate audio" failures + expensive ~60c) →
+  // NOW Wan 2.7 image-to-video. Wan is VIDEO-ONLY (no audio generation → the
+  // whole audio-fail class disappears), ~4-5× cheaper than Veo, and animates
+  // the keyframe via first_frame_url so the GPT-4o face+product lock is kept.
+  // Flexible duration (2-15s) → we generate exactly what the insert needs, no
+  // wasted footage like Veo's fixed 8s. Wan only supports 720p/1080p.
+  const wanDuration = Math.max(4, Math.min(8, Math.ceil(params.durationSec ?? 5)))
+  // Z63 — catch ANY video failure and fall back to a Ken Burns clip from the
+  // keyframe we ALREADY rendered, so a card never dead-ends with "Video lỗi".
   try {
-    const fullSubmission = await generateVideo({
+    const fullSubmission = await generateVideoJob({
       apiKey: params.kieApiKey,
-      model: 'veo3_fast',
-      prompt: (isConcept
+      jobModelId: 'wan/2-7-image-to-video',
+      prompt: isConcept
         ? `${motionScene} ${cameraMotion} No product packaging in frame.`
-        : `${motionScene} ${cameraMotion} ${preset.handBehavior}`) + SILENT_SUFFIX,
+        : `${motionScene} ${cameraMotion} ${preset.handBehavior}`,
       aspectRatio: '9:16',
       resolution: params.resolution,
-      // Z46 — Veo 3.1 HARD constraint: duration must be 4, 6, or 8.
-      // We pick 6 (middle option) — generous motion buffer that the
-      // compositor trims down to the per-insert durationSec (usually 2-4s).
-      // Sending 5 returns HTTP 422 "Duration must be 4, 6 or 8 seconds".
-      duration: 6,
+      duration: wanDuration,
       referenceImageUrls: [keyframePublicUrl],
     })
-    console.log(`[INSERT ${params.presetId}] Veo submitted taskId=${fullSubmission.taskId.slice(0, 12)}`)
+    console.log(`[INSERT ${params.presetId}] Wan submitted taskId=${fullSubmission.taskId.slice(0, 12)} dur=${wanDuration}s`)
     params.onStageUpdate({
       stage: 'video_full', keyframeRef, keyframePromptUsed,
       fullTaskId: fullSubmission.taskId,
@@ -411,10 +399,10 @@ export async function renderInsert(
       videoRef,
       fullTaskId: fullSubmission.taskId,
     }
-  } catch (veoErr) {
-    if (params.signal?.aborted) throw veoErr  // user cancelled — don't fall back
-    const msg = veoErr instanceof Error ? veoErr.message : String(veoErr)
-    console.warn(`[INSERT ${params.presetId}] Veo failed (${msg.slice(0, 140)}) → auto fallback to Ken Burns from the existing keyframe`)
+  } catch (videoErr) {
+    if (params.signal?.aborted) throw videoErr  // user cancelled — don't fall back
+    const msg = videoErr instanceof Error ? videoErr.message : String(videoErr)
+    console.warn(`[INSERT ${params.presetId}] Wan i2v failed (${msg.slice(0, 140)}) → auto fallback to Ken Burns from the existing keyframe`)
     params.onStageUpdate({ stage: 'video_full', keyframeRef, keyframePromptUsed })
     const videoRef = await renderKenBurnsClip({
       imageBlob: keyframeBlob,
@@ -517,15 +505,16 @@ async function renderKenBurnsClip(args: {
   return saveAsset(blob, 'video/mp4')
 }
 
-/** Poll a Veo i2v task to completion, then download + persist the MP4.
- *  Z46 — was Kling /jobs/recordInfo poll, now Veo /veo/record-info poll. */
+/** Poll an i2v task to completion, then download + persist the MP4.
+ *  Z67 — Wan i2v uses the /jobs API (createTask + recordInfo), so poll with
+ *  pollVideoJobUntilDone (was Veo /veo/record-info in Z46). */
 async function pollAndSaveInsertVideo(args: {
   apiKey: string
   taskId: string
   timeoutMs: number
   logTag?: string
 }): Promise<string> {
-  const remoteUrl = await pollVideoUntilDone({
+  const remoteUrl = await pollVideoJobUntilDone({
     apiKey: args.apiKey,
     taskId: args.taskId,
     timeoutMs: args.timeoutMs,

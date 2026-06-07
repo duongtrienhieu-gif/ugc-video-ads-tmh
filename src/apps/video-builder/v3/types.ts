@@ -199,29 +199,27 @@ export function estimateLipsyncCredits(durationSec: number): number {
   return Math.ceil(Math.max(5, sec) * KIE_LIPSYNC_CREDITS_PER_SEC)
 }
 
-// Z38/Z46/Z50 — realistic estimate for ONE action insert: a gpt-4o keyframe
-// (~6 cr, stable) + a Veo 3.1 FAST i2v clip (~60 cr flat per submission, see
-// VIDEO_MODELS in kieai.ts). Total ~66 cr. Z49 tried Lite (30cr) to halve
-// cost but Lite failed 100% on i2v (no reference-image support) → Z50
-// reverted to Fast. The real cost lever is ken_burns (~6c), not the video tier.
-// Note: Veo 3.1 only accepts duration ∈ {4, 6, 8}s. We submit 6s and the
-// compositor trims to per-insert durationSec. Pricing is FLAT per submission,
-// so clip length does not change cost — only the model tier does.
+// Z38/Z67 — estimate for ONE action insert: a gpt-4o keyframe (~6 cr) + a
+// video clip. Z67 switched the video model Veo 3.1 Fast (~60cr, audio-native
+// → audio-gen failures) → Wan 2.7 image-to-video, which is VIDEO-ONLY (no
+// audio failures) and ~4-5× cheaper. ~30 cr ESTIMATE for a ~5-6s Wan i2v
+// clip — VERIFY against the real KIE deduction on the first render and tune.
+// The real cost lever is still ken_burns (~6c) for non-motion scenes.
 export const INSERT_CLIP_SECONDS = 6
-export const VEO_INSERT_CREDITS = 60
+export const INSERT_VIDEO_CREDITS = 30
 
-// Z39/Z46/Z50 — two ways to realise an insert:
-//   'video'     → Veo 3.1 Fast i2v clip (keyframe + ~60cr flat ≈ ~66cr). For
-//                 scenes with REAL motion/people (drink, hold, react).
+// Z39/Z67 — two ways to realise an insert:
+//   'video'     → Wan 2.7 i2v clip (keyframe + ~30cr ≈ ~36cr). For scenes with
+//                 REAL motion/people (drink, hold, react). Video-only.
 //   'ken_burns' → keyframe still ONLY (~6cr); the motion is a slow zoom/pan
 //                 rendered LOCALLY with ffmpeg.wasm (free). For static concept
-//                 / ingredient / product-label scenes — avoids the ~60cr Veo
+//                 / ingredient / product-label scenes — avoids the video
 //                 charge AND the i2v morph risk on abstract subjects.
 export type InsertRenderMode = 'video' | 'ken_burns'
 
 export function estimateInsertCredits(mode: InsertRenderMode = 'video'): number {
   if (mode === 'ken_burns') return V3_CREDIT_COST.keyframe
-  return V3_CREDIT_COST.keyframe + VEO_INSERT_CREDITS
+  return V3_CREDIT_COST.keyframe + INSERT_VIDEO_CREDITS
 }
 
 // Concept scenes default to Ken Burns (they're abstract/static — the exact
