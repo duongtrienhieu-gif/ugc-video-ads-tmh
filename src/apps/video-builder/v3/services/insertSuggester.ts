@@ -303,6 +303,7 @@ const DIRECTOR_RESPONSE_SCHEMA = {
           reason:        { type: 'string' },
           conceptPrompt: { type: 'string' },
           motionKind:    { type: 'string', enum: ['graphic', 'emotion'] },
+          labels:        { type: 'array', items: { type: 'string' } },
         },
         required: ['presetId', 'anchorBlock', 'quote', 'durationSec', 'fit'],
       },
@@ -442,6 +443,17 @@ DIRECTING RULES:
   Most ingredient/mechanism beats in an ad should be (1) the friendly
   infographic — it reads clearly and matches UGC tone. Reserve (2) for genuine
   microscope/anatomy shots.
+- LABELS FIELD (REQUIRED for teaching graphic scenes) — for a "graphic"
+  CONCEPT_SCENE of style (1) that teaches (ingredient / mechanism / "Nx" claim /
+  benefit), you MUST ALSO fill the separate "labels" array with the short text
+  to PRINT on the image, each in ${langName}, each 1-3 words. This is NOT
+  optional and must not be left empty for these scenes — a teaching graphic
+  with no labels is useless. Examples:
+    • line "Activated Charcoal và Volcanic Ash..." → labels: ["Than hoạt tính", "Tro núi lửa"]  (in ${langName})
+    • line "...gấp 5 lần..." → labels: ["Công nghệ Nano", "5x"]
+  Leave "labels" EMPTY ONLY for: pure pain/emotion visuals that need no words,
+  and style (2) realistic microscopy. Brand-name ingredients may stay in their
+  original form if the script writes them that way.
 - Group sentences describing the SAME idea into ONE scene; don't cut every line.
 - Duration is FREE per scene — YOU decide based on how much dialogue it covers.
   A quick punch ≈ 2s, a normal beat ≈ 3-4s. Use whatever fits; do NOT force
@@ -548,7 +560,8 @@ DIRECTING RULES:
 OUTPUT strict JSON, no fences:
 { "scenes": [ { "presetId": "...", "anchorBlock": "...", "quote": "(verbatim line)",
   "durationSec": 4, "fit": 0.0, "reason": "...",
-  "conceptPrompt": "(required for CONCEPT_SCENE and PRODUCT_IN_ACTION)" } ] }`
+  "conceptPrompt": "(required for CONCEPT_SCENE and PRODUCT_IN_ACTION)",
+  "labels": ["(required for teaching graphic CONCEPT_SCENE — short ${langName} terms to print on the image; empty for pain/emotion/microscopy)"] } ] }`
 
   const userPrompt = `SCRIPT (block id in brackets):\n${scriptDump}\n\nDirect the scenes now.`
 
@@ -589,7 +602,7 @@ OUTPUT strict JSON, no fences:
   // the browser console instead of guessed at.
   // Z46/Z47 — added beforeAfter + topical + dupeSkip + dupeSwap counters.
   const drop = { preset: 0, noPrompt: 0, zeroFit: 0, dupeSkip: 0 }
-  const rewrite = { beforeAfter: 0, topical: 0, dupeSwap: 0 }
+  const rewrite = { beforeAfter: 0, topical: 0, dupeSwap: 0, labeled: 0 }
 
   const seen = new Set<ActionPresetId>()
   const out: InsertSuggestion[] = []
@@ -660,6 +673,25 @@ OUTPUT strict JSON, no fences:
       presetId === 'CONCEPT_SCENE'
         ? (isEmotionConcept ? 'video' : 'ken_burns')
         : 'video'
+
+    // Z56 — hard-inject the structured labels into the conceptPrompt as an
+    // explicit "render this text" instruction. The Director kept dropping
+    // labels when they were only an instruction buried in prose; making them
+    // a separate field + appending them here as a final, unmissable directive
+    // forces the labels to actually appear in the image. Only for graphic
+    // (ken_burns) concept scenes — emotion video + realistic microscopy get none.
+    const labels = Array.isArray(item.labels)
+      ? item.labels.map((l) => String(l).trim()).filter((l) => l.length > 0 && l.length <= 24).slice(0, 4)
+      : []
+    if (presetId === 'CONCEPT_SCENE' && renderMode === 'ken_burns' && labels.length > 0) {
+      const list = labels.map((l) => `"${l}"`).join(', ')
+      conceptPrompt +=
+        `\n\nTEXT TO RENDER IN THE IMAGE — print these exact words as BIG, clear, ` +
+        `correctly-spelled hand-written labels placed next to what they describe: ${list}. ` +
+        `Do NOT translate or alter them. These labels MUST be visible and legible in the image.`
+      rewrite.labeled++
+    }
+
     const durationSec = clampDuration(item.durationSec, presetId, renderMode)
     const quote = typeof item.quote === 'string' && item.quote.trim().length > 0
       ? item.quote.trim()
@@ -684,7 +716,7 @@ OUTPUT strict JSON, no fences:
   console.log(
     `[DIRECTOR] raw=${raw.length}ch parsed=${parsed.length} usable=${out.length} ` +
     `dropped{preset:${drop.preset},noPrompt:${drop.noPrompt},zeroFit:${drop.zeroFit},dupeSkip:${drop.dupeSkip}} ` +
-    `rewrote{beforeAfter:${rewrite.beforeAfter},topical:${rewrite.topical},dupeSwap:${rewrite.dupeSwap}} ` +
+    `rewrote{beforeAfter:${rewrite.beforeAfter},topical:${rewrite.topical},dupeSwap:${rewrite.dupeSwap},labeled:${rewrite.labeled}} ` +
     `visibleResult=${visibleResultProduct} topical=${topicalCategory ?? 'no'} ` +
     `→ ${directed.length > 0 ? `${directed.length} scenes` : 'EMPTY → keyword fallback'}`,
   )
@@ -827,6 +859,11 @@ interface RawDirectorScene {
   reason?: string
   conceptPrompt?: string
   motionKind?: 'graphic' | 'emotion'
+  /** Z56 — explicit short text labels to print on a graphic concept scene
+   *  (ingredient names, "5x", core term). Structured field so the Director
+   *  can't bury/drop them in prose; appended to conceptPrompt as a hard
+   *  "render this text" instruction at parse time. */
+  labels?: string[]
 }
 
 function parseDirectorOutput(raw: string): RawDirectorScene[] {
