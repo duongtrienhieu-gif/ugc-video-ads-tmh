@@ -364,47 +364,65 @@ export async function renderInsert(
   // speech for a person scene. Inserts are silent B-roll (audio stripped at
   // assembly), so tell Veo not to generate dialogue/voice — only ambient.
   const SILENT_SUFFIX = ' Silent footage — no spoken dialogue, no voiceover, the person does not talk; ambient sound only.'
-  const fullSubmission = await generateVideo({
-    apiKey: params.kieApiKey,
-    model: 'veo3_fast',
-    prompt: (isConcept
-      ? `${motionScene} ${cameraMotion} No product packaging in frame.`
-      : `${motionScene} ${cameraMotion} ${preset.handBehavior}`) + SILENT_SUFFIX,
-    aspectRatio: '9:16',
-    resolution: params.resolution,
-    // Z46 — Veo 3.1 HARD constraint: duration must be 4, 6, or 8.
-    // We pick 6 (middle option) — generous motion buffer that the
-    // compositor trims down to the per-insert durationSec (usually 2-4s).
-    // Sending 5 returns HTTP 422 "Duration must be 4, 6 or 8 seconds".
-    duration: 6,
-    referenceImageUrls: [keyframePublicUrl],
-  })
-  // Persist taskId IMMEDIATELY — the job is paid for. A timeout below leaves
-  // a recoverable handle so the user re-polls instead of paying twice.
-  console.log(`[INSERT ${params.presetId}] Veo submitted taskId=${fullSubmission.taskId.slice(0, 12)}`)
-  params.onStageUpdate({
-    stage: 'video_full', keyframeRef, keyframePromptUsed,
-    fullTaskId: fullSubmission.taskId,
-  })
+  // Z63 — Veo can still fail per-clip (audio-gen, content, timeout). Instead of
+  // dead-ending the card with "Video lỗi" (the user clicked retry 100×), catch
+  // ANY Veo failure and fall back to a Ken Burns clip from the keyframe we
+  // ALREADY rendered. Result: every card always produces a usable clip — real
+  // motion when Veo works, a still + slow zoom when it doesn't. The user can
+  // re-render that one card later if they specifically want motion on it.
+  try {
+    const fullSubmission = await generateVideo({
+      apiKey: params.kieApiKey,
+      model: 'veo3_fast',
+      prompt: (isConcept
+        ? `${motionScene} ${cameraMotion} No product packaging in frame.`
+        : `${motionScene} ${cameraMotion} ${preset.handBehavior}`) + SILENT_SUFFIX,
+      aspectRatio: '9:16',
+      resolution: params.resolution,
+      // Z46 — Veo 3.1 HARD constraint: duration must be 4, 6, or 8.
+      // We pick 6 (middle option) — generous motion buffer that the
+      // compositor trims down to the per-insert durationSec (usually 2-4s).
+      // Sending 5 returns HTTP 422 "Duration must be 4, 6 or 8 seconds".
+      duration: 6,
+      referenceImageUrls: [keyframePublicUrl],
+    })
+    console.log(`[INSERT ${params.presetId}] Veo submitted taskId=${fullSubmission.taskId.slice(0, 12)}`)
+    params.onStageUpdate({
+      stage: 'video_full', keyframeRef, keyframePromptUsed,
+      fullTaskId: fullSubmission.taskId,
+    })
 
-  const videoRef = await pollAndSaveInsertVideo({
-    apiKey: params.kieApiKey,
-    taskId: fullSubmission.taskId,
-    timeoutMs: 10 * 60 * 1000,  // 10min ceiling for a 5s i2v clip
-    logTag: `${params.presetId}/full`,
-  })
+    const videoRef = await pollAndSaveInsertVideo({
+      apiKey: params.kieApiKey,
+      taskId: fullSubmission.taskId,
+      timeoutMs: 10 * 60 * 1000,  // 10min ceiling for a 5s i2v clip
+      logTag: `${params.presetId}/full`,
+    })
 
-  params.onStageUpdate({
-    stage: 'completed',
-    keyframeRef, keyframePromptUsed,
-    fullTaskId: fullSubmission.taskId, videoRef,
-  })
+    params.onStageUpdate({
+      stage: 'completed',
+      keyframeRef, keyframePromptUsed,
+      fullTaskId: fullSubmission.taskId, videoRef,
+    })
 
-  return {
-    keyframeRef,
-    keyframePromptUsed,
-    videoRef,
-    fullTaskId: fullSubmission.taskId,
+    return {
+      keyframeRef,
+      keyframePromptUsed,
+      videoRef,
+      fullTaskId: fullSubmission.taskId,
+    }
+  } catch (veoErr) {
+    if (params.signal?.aborted) throw veoErr  // user cancelled — don't fall back
+    const msg = veoErr instanceof Error ? veoErr.message : String(veoErr)
+    console.warn(`[INSERT ${params.presetId}] Veo failed (${msg.slice(0, 140)}) → auto fallback to Ken Burns from the existing keyframe`)
+    params.onStageUpdate({ stage: 'video_full', keyframeRef, keyframePromptUsed })
+    const videoRef = await renderKenBurnsClip({
+      imageBlob: keyframeBlob,
+      durationSec: params.durationSec ?? 4,
+      resolution: params.resolution,
+    })
+    params.onStageUpdate({ stage: 'completed', keyframeRef, keyframePromptUsed, videoRef })
+    return { keyframeRef, keyframePromptUsed, videoRef }
   }
 }
 
