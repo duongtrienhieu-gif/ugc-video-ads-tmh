@@ -390,31 +390,30 @@ DIRECTING RULES:
   visual. This is the most common miss.
 - CONCEPT ART-STYLE RULE (for "graphic" CONCEPT_SCENE only) — bake the art
   direction INTO the conceptPrompt. There are TWO looks; pick per scene:
-  (1) CLEAN PROFESSIONAL INFOGRAPHIC — use this for INGREDIENT explanations,
+  (1) SIMPLE HAND-DRAWN VISUAL — use this for INGREDIENT explanations,
       MECHANISM / how-it-works, "X times more effective" claims, benefit
-      breakdowns, anything that teaches. Write the conceptPrompt as: a CLEAN,
-      MODERN, PROFESSIONAL infographic — flat vector / 3D-clean medical-brand
-      style (like a premium skincare or pharma brand explainer), crisp clean
-      icons, clear organised layout, trustworthy and polished. NOT hand-drawn,
-      NOT doodle, NOT sketchy, NOT childish, NOT abstract art. With CLEAR
-      LABELED elements, simple modern icons, and clean arrows. Put the key
-      terms as SHORT ${langName} text labels right in the scene (e.g. for an
-      ingredient scene name each ingredient in ${langName}). Keep labels SHORT
-      (1-3 words each) — long sentences render badly. Clean modern colour
-      palette aligned to a health/beauty brand (soft whites, teals, one accent).
-      Example for a teeth mechanism: "Clean modern professional infographic,
-      flat medical-brand style: a crisp tooth diagram with a ${langName} label,
-      a clean arrow to powder particles lifting plaque, ${langName} labels on
-      the two active ingredients, simple modern icons, white/teal palette,
-      polished and trustworthy."
-      LAYOUT IS CRITICAL — the frame is cropped to TALL VERTICAL 9:16 and slowly
-      zoomed in. Compose for a tall portrait canvas and keep EVERY label + icon
-      INSIDE a generous central safe margin. Put NOTHING important near the
-      left/right/top/bottom edges — edge content gets cropped off and becomes
-      unreadable. STACK labels vertically (top→bottom) instead of spreading them
-      to the side edges. State this in the conceptPrompt, e.g. "...vertical 9:16
-      layout, all labels stacked in the centre with wide safe margins, nothing
-      touching the edges."
+      breakdowns, anything that teaches. Write the conceptPrompt as: ONE
+      friendly HAND-DRAWN sketch (clean simple line-art doodle, warm marker /
+      crayon feel) illustrating a SINGLE idea — big, bold, instantly readable.
+      *** MINIMALISM IS THE #1 RULE *** — the viewer sees this for only 2-4
+      seconds WHILE the voice is talking; it is a quick visual accent, NOT a
+      poster to read. So:
+        • ONE focal drawing + AT MOST one short ${langName} label (1-3 words).
+        • NO paragraphs, NO sentences, NO body text, NO description blocks.
+        • NO multiple panels / sections, NO title bar + subtitle, NO row of
+          icons along the bottom, NO dense medical-poster layout.
+        • Lots of empty space. If a child could "get it" in one glance, good.
+      If a script beat has SEVERAL ideas (e.g. 3 ingredients, a 3-step
+      mechanism), DO NOT cram them into one busy image — SPLIT into separate
+      simple scenes, ONE idea per scene (the split-into-short-cuts rule above).
+      Example for an ingredient: "Simple friendly hand-drawn sketch, one bold
+      doodle of charcoal powder lifting dark plaque off a happy tooth, a single
+      ${langName} label 'Than hoạt tính', warm marker style, lots of white
+      space, minimal." Example for a benefit: "Hand-drawn doodle of a sparkling
+      white tooth smiling, one ${langName} word 'Trắng sáng', simple, airy."
+      LAYOUT — the frame is cropped to TALL VERTICAL 9:16 and slowly zoomed, so
+      keep the single drawing + its one label CENTRED with wide margins; nothing
+      near the edges (it gets cropped).
   (2) REALISTIC SCIENTIFIC — use this ONLY for true microscopy / anatomy / real
       micro-phenomena (bacteria, enamel cross-section under a microscope). Write
       it as a realistic documentary/medical close-up, NO text labels.

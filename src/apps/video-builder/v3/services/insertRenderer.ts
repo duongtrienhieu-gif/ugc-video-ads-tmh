@@ -108,11 +108,10 @@ function buildInsertKeyframePrompt(
         : preset.promptPreset}`,
     )
     paragraphs.push(
-      'COMPOSITION: vertical 9:16 aspect ratio. Keep ALL text labels, icons and ' +
-      'key elements INSIDE a generous central safe margin — the frame is cropped ' +
-      'to tall vertical and slowly zoomed, so anything near the left/right/top/' +
-      'bottom edges WILL be cut off. Stack labels vertically in the centre; do ' +
-      'NOT place labels at the side edges. Every label fully inside the frame.',
+      'COMPOSITION: vertical 9:16 aspect ratio, ONE clear focal subject centred ' +
+      'with generous empty margins. The frame is cropped to tall vertical and ' +
+      'slowly zoomed, so keep the subject + its single label well inside the ' +
+      'centre — anything near the left/right/top/bottom edges WILL be cut off.',
     )
     paragraphs.push('NO PRODUCT PACKAGING visible in frame — concept / mood illustration only.')
 
@@ -129,17 +128,18 @@ function buildInsertKeyframePrompt(
       // Graphic concept (ken_burns): infographic OR realistic — conceptPrompt
       // decides. Text labels are ALLOWED here (infographics need them).
       paragraphs.push(
-        'STYLE: Follow the art direction described in the SCENE above exactly. ' +
-        'If it asks for an infographic, make it a CLEAN, MODERN, PROFESSIONAL ' +
-        'infographic — flat vector / clean medical-brand explainer look, crisp ' +
-        'icons, organised layout, polished and trustworthy. NOT hand-drawn, NOT ' +
-        'doodle, NOT sketchy, NOT childish. Labels clear and correctly spelled. ' +
-        'If it asks for a realistic microscopy / medical look, make it photoreal.',
+        'STYLE: Follow the art direction in the SCENE above. If it is a sketch / ' +
+        'infographic, make it a SIMPLE friendly HAND-DRAWN visual — clean line-art ' +
+        'doodle, warm marker feel, ONE bold idea, lots of empty space, absorbable ' +
+        'at a glance in 2-3 seconds. AT MOST one short text label (1-3 words), ' +
+        'correctly spelled. If the SCENE asks for a realistic microscopy / medical ' +
+        'look instead, make it photoreal.',
       )
       paragraphs.push(
-        'Avoid: hand-drawn doodle look, childish cartoon, watermarks, brand ' +
-        'logos, product packaging, glossy plastic 3D-render, neon sci-fi glow, ' +
-        'rainbow gradient, fantasy color wash. Keep text labels SHORT + correct.',
+        'Avoid: dense infographic / medical-poster layout, paragraphs or sentences ' +
+        'of text, multiple labeled sections, title bars, rows of bottom icons, ' +
+        'busy cluttered compositions, watermarks, brand logos, product packaging, ' +
+        'glossy plastic 3D-render, neon glow, rainbow gradient. Less text is better.',
       )
     } else {
       // Emotion concept (video): real human/lifestyle footage, no text.
