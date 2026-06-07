@@ -1,10 +1,11 @@
 // Research module — DATA MẪU (giả lập) để test UX trên app khi chưa nối Kalodata thật.
 // Sau này thay bằng data từ Supabase (research_products). Giữ shape giống hệt.
-import type { ResearchProduct } from './types'
+// MY là base; TH/ID/VN sinh tự động (deterministic) để test luồng đổi thị trường.
+import type { Market, ResearchProduct } from './types'
 
 const trend = (a: number[]) => a
 
-export const SAMPLE_PRODUCTS: ResearchProduct[] = [
+const BASE_MY: ResearchProduct[] = [
   // ── Chăm sóc da/tóc (Hà) ──
   {
     productId: 'sk-1', market: 'MY', title: 'Máy massage da đầu chống rụng tóc',
@@ -117,3 +118,41 @@ export const SAMPLE_PRODUCTS: ResearchProduct[] = [
     skuVarianceRisk: 'high', revenueTrend: trend([12, 13, 14, 15, 16, 18, 19]),
   },
 ]
+
+// ── Sinh biến thể cho 3 thị trường spy (deterministic) ──
+function rngFor(seed: string): () => number {
+  let h = 2166136261
+  for (let i = 0; i < seed.length; i++) { h ^= seed.charCodeAt(i); h = Math.imul(h, 16777619) }
+  let s = h >>> 0
+  return () => {
+    s = (s + 0x6D2B79F5) >>> 0
+    let t = s
+    t = Math.imul(t ^ (t >>> 15), t | 1)
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61)
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296
+  }
+}
+
+const SPY_MARKETS: Market[] = ['TH', 'ID', 'VN']
+const spyVariants: ResearchProduct[] = []
+for (const base of BASE_MY) {
+  for (const market of SPY_MARKETS) {
+    const r = rngFor(base.productId + market)
+    if (r() > 0.72) continue // ~mỗi market lấy phần lớn base → có data để xem
+    spyVariants.push({
+      ...base,
+      productId: `${base.productId}-${market.toLowerCase()}`,
+      market,
+      revenue: Math.round(base.revenue * (0.5 + r() * 1.3)),
+      sale: Math.round(base.sale * (0.5 + r() * 1.3)),
+      growthRate: Math.round(base.growthRate * (0.6 + r() * 1.1)),
+      competitionShops: Math.max(2, Math.round(base.competitionShops * (0.6 + r() * 1.6))),
+      creatorNum: Math.max(0, Math.round(base.creatorNum * (0.5 + r()))),
+      videoRevenue: base.videoRevenue ? Math.round(base.videoRevenue * (0.5 + r() * 1.2)) : 0,
+      hotIn: undefined,
+      revenueTrend: base.revenueTrend?.map((x) => Math.max(1, Math.round(x * (0.6 + r() * 0.9)))),
+    })
+  }
+}
+
+export const SAMPLE_PRODUCTS: ResearchProduct[] = [...BASE_MY, ...spyVariants]
