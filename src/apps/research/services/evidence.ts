@@ -107,6 +107,61 @@ export function getCrossMarketFor(p: ResearchProduct): CrossMarketRow[] {
   return rows
 }
 
+// ── AI phân tích "video win" (demo: bản mẫu theo loại hook;
+//    data thật: cho Gemini xem video thật để mổ xẻ) ──
+export interface VideoAnalysis {
+  hookType: string
+  sections: { label: string; text: string }[]
+}
+
+const ANALYSIS_TEMPLATES: { match: RegExp; hookType: string; structure: string; why: string; replicate: string }[] = [
+  { match: /before|after|7 ngày/i, hookType: 'Before / After',
+    structure: 'Cảnh "trước" (vấn đề) → dùng sản phẩm → cảnh "sau" (kết quả) trong 1 mạch liền.',
+    why: 'Bằng chứng trực quan — khách tin vì THẤY kết quả, không cần lời quảng cáo.',
+    replicate: 'Quay "before" thật (xấu/đau), "after" rõ ràng, gắn mốc thời gian. Hook = cảnh before ngay giây 1.' },
+  { match: /review thật|không quảng cáo/i, hookType: 'Review chân thật',
+    structure: 'Tự nhận "không được trả tiền" → dùng thật → nhận xét cả ưu lẫn nhược → chốt vẫn đáng mua.',
+    why: 'Xây niềm tin bằng sự "thật" — chê 1 chút khiến lời khen đáng tin hơn.',
+    replicate: 'Cho creator nói giọng thật, quay tay cầm, nêu 1 nhược điểm nhỏ rồi vẫn recommend.' },
+  { match: /mở hộp|unbox/i, hookType: 'Mở hộp',
+    structure: 'Bóc hộp → phản ứng bất ngờ → demo nhanh tính năng nổi bật.',
+    why: 'Tò mò "bên trong có gì" giữ người xem; phản ứng thật tạo cảm xúc.',
+    replicate: 'Quay cận cảnh lúc bóc, biểu cảm thật, lộ ngay điểm "wow" trong 5s đầu.' },
+  { match: /tại sao|nên có/i, hookType: 'Giáo dục / Vì sao',
+    structure: 'Đặt câu hỏi/nỗi đau → giải thích vì sao cần → sản phẩm là lời giải.',
+    why: 'Cho người xem "lý do" trước khi bán → giảm phản kháng, tăng tin.',
+    replicate: 'Mở bằng câu hỏi giật ("Tại sao nhà bạn vẫn...?"), 1 lý do rõ ràng, rồi mới ra sản phẩm.' },
+  { match: /mẹo|cực hay/i, hookType: 'Mẹo hay',
+    structure: 'Tip hữu ích → sản phẩm xuất hiện như công cụ làm tip đó dễ hơn.',
+    why: 'Giá trị trước, bán sau — người xem lưu/chia sẻ vì hữu ích.',
+    replicate: 'Dạy 1 mẹo nhanh gọn, sản phẩm chỉ là "trợ thủ", không hard-sell.' },
+  { match: /so sánh|hàng ngoài chợ/i, hookType: 'So sánh',
+    structure: 'Đặt sản phẩm cạnh hàng thường → demo khác biệt rõ → kết luận đáng tiền hơn.',
+    why: 'Khác biệt nhìn thấy được → biện minh cho việc chi tiền.',
+    replicate: 'Quay side-by-side cùng điều kiện, để khác biệt tự nói, đừng nói quá.' },
+  { match: /khách phản hồi|sau 1 tuần/i, hookType: 'Lời chứng thực',
+    structure: 'Trích phản hồi khách thật → minh hoạ kết quả → kêu gọi thử.',
+    why: 'Social proof — người khác dùng tốt thì mình cũng muốn thử.',
+    replicate: 'Dùng tin nhắn/đánh giá thật (che tên), kèm cảnh dùng, giọng tự nhiên.' },
+]
+
+export function analyzeVideo(caption: string): VideoAnalysis {
+  const t = ANALYSIS_TEMPLATES.find((x) => x.match.test(caption)) ?? {
+    hookType: 'Demo dùng thử', structure: 'Bắt tay dùng ngay → cho thấy hiệu quả tức thì.',
+    why: 'Thấy là tin — demo trực tiếp thuyết phục hơn lời nói.',
+    replicate: 'Vào thẳng cảnh dùng trong 3s đầu, làm bật hiệu quả rõ nhất.',
+  }
+  return {
+    hookType: t.hookType,
+    sections: [
+      { label: 'Loại hook', text: t.hookType },
+      { label: 'Cấu trúc video', text: t.structure },
+      { label: 'Vì sao thắng', text: t.why },
+      { label: 'Cách bắt chước (brief creator)', text: t.replicate },
+    ],
+  }
+}
+
 // ── format helpers ──
 export function formatCount(n: number): string {
   if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + 'tr'

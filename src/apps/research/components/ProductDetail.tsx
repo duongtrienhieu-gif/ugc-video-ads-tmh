@@ -1,9 +1,9 @@
 import { useMemo, useState } from 'react'
-import { X, Check, AlertTriangle, XCircle, Plus, Play, TrendingUp, TrendingDown, ExternalLink } from 'lucide-react'
+import { X, Check, AlertTriangle, XCircle, Plus, Play, TrendingUp, TrendingDown, ExternalLink, Sparkles } from 'lucide-react'
 import type { Market, ScoredProduct, SignalResult } from '../types'
 import { VERDICT_META, NICHES, MARKETS } from '../constants'
 import { formatMyr } from '../services/pricing'
-import { getVideosFor, getCreatorsFor, getCrossMarketFor, formatCount, formatKMyr } from '../services/evidence'
+import { getVideosFor, getCreatorsFor, getCrossMarketFor, analyzeVideo, formatCount, formatKMyr } from '../services/evidence'
 import PricingCalculator from './PricingCalculator'
 
 type Tab = 'overview' | 'video' | 'creator' | 'market' | 'pricing'
@@ -36,6 +36,7 @@ function Sparkline({ data }: { data?: number[] }) {
 
 export default function ProductDetail({ product, onClose }: { product: ScoredProduct; onClose: () => void }) {
   const [tab, setTab] = useState<Tab>('overview')
+  const [analyzeId, setAnalyzeId] = useState<string | null>(null)
   const v = VERDICT_META[product.verdict]
   const niche = NICHES.find((n) => n.key === product.nicheKey)
   const passCount = product.signals.filter((s) => s.status === 'pass').length
@@ -56,7 +57,7 @@ export default function ProductDetail({ product, onClose }: { product: ScoredPro
   ]
 
   const TABS: [Tab, string][] = [
-    ['overview', 'Tổng quan'], ['video', 'Video thắng'], ['creator', 'Creator'], ['market', 'Thị trường'], ['pricing', 'Giá'],
+    ['overview', 'Tổng quan'], ['video', 'Video win'], ['creator', 'Creator'], ['market', 'Thị trường'], ['pricing', 'Giá'],
   ]
 
   return (
@@ -147,27 +148,55 @@ export default function ProductDetail({ product, onClose }: { product: ScoredPro
             </div>
           )}
 
-          {/* ── VIDEO THẮNG ── */}
+          {/* ── VIDEO WIN ── */}
           {tab === 'video' && (
             <div className="flex flex-col gap-3">
-              <p className="text-xs text-slate-500">🎥 Video đang bán tốt sản phẩm này — học góc content thắng để brief creator.</p>
-              {videos.map((vid) => (
-                <div key={vid.id} className="flex gap-3 rounded-xl border border-black/10 p-2.5">
-                  <div className="relative flex h-16 w-12 shrink-0 items-center justify-center rounded-lg bg-slate-200">
-                    <Play className="h-5 w-5 text-slate-500" />
-                    <span className="absolute bottom-0.5 right-0.5 rounded bg-black/60 px-1 text-[9px] font-bold text-white">{vid.durationSec}s</span>
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="line-clamp-1 text-xs font-semibold text-slate-700">{vid.caption}</p>
-                    <p className="text-[11px] text-slate-400">{vid.handle}</p>
-                    <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-[11px] font-medium text-slate-600">
-                      <span>👁 {formatCount(vid.views)} view</span>
-                      <span className="text-emerald-600">{formatMyr(vid.gmv)} GMV</span>
-                      <span className="text-violet-600">ROAS {vid.adRoas}x</span>
+              <p className="text-xs text-slate-500">🎥 Video đang bán tốt sản phẩm này — bấm "Phân tích AI" để mổ xẻ góc content thắng.</p>
+              {videos.map((vid) => {
+                const open = analyzeId === vid.id
+                const analysis = open ? analyzeVideo(vid.caption) : null
+                return (
+                  <div key={vid.id} className="rounded-xl border border-black/10 p-2.5">
+                    <div className="flex gap-3">
+                      <div className="relative flex h-16 w-12 shrink-0 items-center justify-center rounded-lg bg-slate-200">
+                        <Play className="h-5 w-5 text-slate-500" />
+                        <span className="absolute bottom-0.5 right-0.5 rounded bg-black/60 px-1 text-[9px] font-bold text-white">{vid.durationSec}s</span>
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="line-clamp-1 text-xs font-semibold text-slate-700">{vid.caption}</p>
+                        <p className="text-[11px] text-slate-400">{vid.handle}</p>
+                        <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-[11px] font-medium text-slate-600">
+                          <span>👁 {formatCount(vid.views)} view</span>
+                          <span className="text-emerald-600">{formatMyr(vid.gmv)} GMV</span>
+                          <span className="text-violet-600">ROAS {vid.adRoas}x</span>
+                        </div>
+                      </div>
                     </div>
+
+                    <button
+                      onClick={() => setAnalyzeId(open ? null : vid.id)}
+                      className="mt-2 flex w-full items-center justify-center gap-1.5 rounded-lg border border-violet-200 bg-violet-50 py-1.5 text-xs font-semibold text-violet-700 transition-colors hover:bg-violet-100"
+                    >
+                      <Sparkles className="h-3.5 w-3.5" /> {open ? 'Ẩn phân tích' : 'Phân tích AI'}
+                    </button>
+
+                    {analysis && (
+                      <div className="mt-2 flex flex-col gap-2 rounded-lg bg-slate-50 p-3">
+                        <div className="flex items-center gap-1.5 text-[11px] font-semibold text-violet-600">
+                          <Sparkles className="h-3 w-3" /> AI mổ xẻ video win
+                          <span className="ml-auto rounded-full bg-amber-50 px-1.5 text-[10px] font-normal text-amber-600">demo</span>
+                        </div>
+                        {analysis.sections.map((s) => (
+                          <div key={s.label}>
+                            <div className="text-[11px] font-bold text-slate-700">{s.label}</div>
+                            <div className="text-[11px] text-slate-500">{s.text}</div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
-                </div>
-              ))}
+                )
+              })}
             </div>
           )}
 
