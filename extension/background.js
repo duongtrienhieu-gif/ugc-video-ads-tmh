@@ -8,14 +8,41 @@ function n(v) {
   if (v == null) return null
   if (typeof v === 'number') return isFinite(v) ? v : null
   if (typeof v !== 'string') return null
-  let str = v.trim().replace(/^RM\s*/i, '').replace(/,/g, '').replace(/\s+/g, '')
-  if (!str) return null
+  // Kalodata dùng định dạng số kiểu CHÂU ÂU: dấu PHẨY là dấu thập phân.
+  //   "RM436,88k"  → 436.88 × 1000 = 436880
+  //   "11,66k"     → 11.66 × 1000  = 11660
+  //   "RM37,45"    → 37.45
+  //   "RM179,00 - RM205,00" → lấy số đầu tiên
+  let str = v.trim()
+  // Cắt prefix tiền tệ (RM, $, VND, IDR, THB, MYR, ...)
+  str = str.replace(/^(RM|MYR|VND|IDR|THB|USD|\$)\s*/i, '')
+  // Nếu có dấu "-" (range giá), chỉ lấy phần trước
+  const dashIdx = str.indexOf('-')
+  if (dashIdx > 0) str = str.slice(0, dashIdx).trim()
+  // Bỏ khoảng trắng giữa
+  str = str.replace(/\s+/g, '')
+  // Cắt suffix nhân
   let mult = 1
-  if (/tr$/i.test(str)) { mult = 1_000_000; str = str.slice(0, -2) }
-  else if (/k$/i.test(str)) { mult = 1_000; str = str.slice(0, -1) }
-  else if (/M$/.test(str)) { mult = 1_000_000; str = str.slice(0, -1) }
-  else if (/B$/i.test(str)) { mult = 1_000_000_000; str = str.slice(0, -1) }
-  if (/%$/.test(str)) str = str.slice(0, -1)
+  const lower = str.toLowerCase()
+  if (lower.endsWith('tr')) { mult = 1_000_000; str = str.slice(0, -2) }
+  else if (lower.endsWith('k')) { mult = 1_000; str = str.slice(0, -1) }
+  else if (str.endsWith('M')) { mult = 1_000_000; str = str.slice(0, -1) }
+  else if (lower.endsWith('b')) { mult = 1_000_000_000; str = str.slice(0, -1) }
+  if (str.endsWith('%')) str = str.slice(0, -1)
+  // Chuẩn hoá dấu thập phân:
+  //   • Có cả "," và "." → kiểu Mỹ "1,234.56" (phẩy=ngàn, chấm=thập phân): bỏ ","
+  //     (Kalodata không dùng kiểu này nhưng để an toàn)
+  //   • Chỉ có ","       → phẩy LÀ dấu thập phân (Kalodata)
+  //   • Chỉ có "."       → chấm là thập phân
+  const hasComma = str.indexOf(',') >= 0
+  const hasDot = str.indexOf('.') >= 0
+  if (hasComma && hasDot) {
+    // Đoán: cái nào ở phía PHẢI hơn là dấu thập phân
+    if (str.lastIndexOf(',') > str.lastIndexOf('.')) str = str.replace(/\./g, '').replace(',', '.')
+    else str = str.replace(/,/g, '')
+  } else if (hasComma) {
+    str = str.replace(',', '.')
+  }
   const num = Number(str)
   return isFinite(num) ? num * mult : null
 }
