@@ -326,7 +326,11 @@ export async function renderInsert(
       : `${motionScene} ${cameraMotion} ${preset.handBehavior}`,
     aspectRatio: '9:16',
     resolution: params.resolution,
-    duration: 5,
+    // Z46 — Veo 3.1 Fast HARD constraint: duration must be 4, 6, or 8.
+    // We pick 6 (middle option) — generous motion buffer that the
+    // compositor trims down to the per-insert durationSec (usually 2-4s).
+    // Sending 5 returns HTTP 422 "Duration must be 4, 6 or 8 seconds".
+    duration: 6,
     referenceImageUrls: [keyframePublicUrl],
   })
   // Persist taskId IMMEDIATELY — the job is paid for. A timeout below leaves

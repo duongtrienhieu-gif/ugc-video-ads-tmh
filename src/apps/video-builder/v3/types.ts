@@ -199,10 +199,12 @@ export function estimateLipsyncCredits(durationSec: number): number {
 }
 
 // Z38/Z46 — realistic estimate for ONE action insert: a gpt-4o keyframe (~6 cr,
-// stable) + a 5s Veo 3.1 Fast i2v clip (~60 cr flat per submission, see
+// stable) + a 6s Veo 3.1 Fast i2v clip (~60 cr flat per submission, see
 // VIDEO_MODELS in kieai.ts). Total ~66 cr. Switched from Kling 3.0 → Veo
 // after Kling started returning HTTP 422 on every submit in Z46.
-export const INSERT_CLIP_SECONDS = 5
+// Note: Veo 3.1 Fast only accepts duration ∈ {4, 6, 8}s. We submit 6s
+// (middle option) and the compositor trims to per-insert durationSec.
+export const INSERT_CLIP_SECONDS = 6
 export const VEO_FAST_INSERT_CREDITS = 60
 
 // Z39/Z46 — two ways to realise an insert:
