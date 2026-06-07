@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    * { box-sizing: border-box; font-family: -apple-system, "Segoe UI", Roboto, sans-serif; }
+    body { width: 300px; margin: 0; padding: 14px; background: #fff; color: #1f2024; }
+    h1 { font-size: 14px; margin: 0 0 2px; display: flex; align-items: center; gap: 6px; }
+    .sub { font-size: 11px; color: #888; margin: 0 0 12px; }
+    label { font-size: 11px; color: #555; display: block; margin-bottom: 3px; }
+    input { width: 100%; padding: 7px 9px; border: 1px solid #ddd; border-radius: 8px; font-size: 13px; margin-bottom: 9px; }
+    button { width: 100%; padding: 8px; border: 0; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; }
+    .primary { background: #7c3aed; color: #fff; }
+    .primary:hover { background: #6d28d9; }
+    .ghost { background: #f3f3f5; color: #444; }
+    .row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+    .status { font-size: 12px; background: #f7f7f9; border-radius: 8px; padding: 9px; margin: 10px 0; line-height: 1.5; }
+    .ok { color: #16a34a; } .err { color: #dc2626; } .muted { color: #888; }
+    .switch { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; }
+    .pill { font-size: 11px; padding: 2px 7px; border-radius: 99px; background: #eef; color: #4338ca; }
+  </style>
+</head>
+<body>
+  <h1>🔬 UGC Lab — Kalodata Sync</h1>
+  <p class="sub">Browse Kalodata → data tự đẩy về app.</p>
+  <div id="app"></div>
+  <script src="config.js"></script>
+  <script src="popup.js"></script>
+</body>
+</html>

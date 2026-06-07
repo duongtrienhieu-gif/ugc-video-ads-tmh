@@ -1,6 +1,6 @@
 // Research — entry component (P1, data mẫu).
 // Header (market + thời gian + preset) | FilterPanel | lưới thẻ cơ hội | drawer chi tiết.
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Search, FlaskConical } from 'lucide-react'
 import { useResearchStore } from './store'
 import { MARKETS, PRESETS } from './constants'
@@ -16,8 +16,9 @@ const segCls = (active: boolean) =>
   }`
 
 export default function Research() {
-  const { market, setMarket, activePreset, applyPreset, getScored, selectedId, select, getSelected } = useResearchStore()
+  const { market, setMarket, activePreset, applyPreset, getScored, selectedId, select, getSelected, hydrate, realProducts, syncedAt } = useResearchStore()
   const [view, setView] = useState<'products' | 'shops'>('products')
+  useEffect(() => { void hydrate() }, [hydrate])
   const scored = getScored()
   const selected = getSelected()
 
@@ -31,9 +32,15 @@ export default function Research() {
               <Search className="h-4 w-4 text-violet-600" />
             </div>
             <h1 className="text-base font-bold text-slate-800">Research</h1>
-            <span className="flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-600">
-              <FlaskConical className="h-3 w-3" /> Bản thử — data mẫu
-            </span>
+            {realProducts ? (
+              <span className="flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-600">
+                ✓ Data thật{syncedAt ? ` · ${new Date(syncedAt).toLocaleDateString('vi-VN')}` : ''}
+              </span>
+            ) : (
+              <span className="flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-600">
+                <FlaskConical className="h-3 w-3" /> Bản thử — data mẫu
+              </span>
+            )}
           </div>
 
           {/* Ô chọn đưa ra GIỮA để không bị badge Gemini/Credit (góc phải) che */}
