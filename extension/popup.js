@@ -16,6 +16,22 @@ async function getState() {
 function esc(s) { return String(s == null ? '' : s).replace(/[<>&]/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' }[c])) }
 function fmtTime(iso) { if (!iso) return '—'; try { return new Date(iso).toLocaleString('vi-VN') } catch (e) { return iso } }
 
+function renderCrawl(c) {
+  if (!c) return ''
+  const pct = c.maxPages ? Math.min(100, Math.round(((c.page || 0) / c.maxPages) * 100)) : (c.done ? 100 : 0)
+  const headLine = c.error ? `<div class="err">⚠ ${esc(c.text)}</div>` :
+    c.done ? `<div class="progDone">${esc(c.text)}</div>` :
+    `<div><b>${esc(c.text)}</b></div>`
+  return `
+    ${headLine}
+    <div class="bar"><div style="width:${pct}%"></div></div>
+    <div class="progRow">
+      <span>${pct}%${c.market ? ' · ' + esc(c.market) : ''}</span>
+      <span>📦 ${c.captured || 0} sản phẩm đã đẩy</span>
+    </div>
+  `
+}
+
 async function render() {
   const st = await getState()
   if (!st.session) {
@@ -47,9 +63,7 @@ async function render() {
     <button id="crawl" class="primary" style="margin-top:10px" ${crawling ? 'disabled' : ''}>
       ${crawling ? '⏳ Đang thu thập...' : '🔄 Tự động thu thập'}
     </button>
-    <div id="crawlBox" class="status" style="${st.crawl ? '' : 'display:none'}">
-      ${st.crawl ? esc(st.crawl.text) : ''}
-    </div>
+    <div id="crawlBox" class="status" style="${st.crawl ? '' : 'display:none'}">${renderCrawl(st.crawl)}</div>
 
     <div class="status">
       <div>Lần cuối đẩy: <b>${fmtTime(s.lastSync)}</b></div>
@@ -70,13 +84,13 @@ function startPoll() {
   pollTimer = setInterval(async () => {
     const { crawlStatus } = await chrome.storage.local.get('crawlStatus')
     const box = $('crawlBox'); const btn = $('crawl')
-    if (box && crawlStatus) { box.style.display = ''; box.textContent = crawlStatus.text }
+    if (box && crawlStatus) { box.style.display = ''; box.innerHTML = renderCrawl(crawlStatus) }
     if (crawlStatus && crawlStatus.done) {
       clearInterval(pollTimer); pollTimer = null
       if (btn) { btn.disabled = false; btn.textContent = '🔄 Tự động thu thập' }
-      render()
+      setTimeout(render, 200)
     }
-  }, 1000)
+  }, 700)
 }
 
 async function startCrawl() {

@@ -43,21 +43,25 @@
   }
 
   // ── Auto-crawl: replay query mẫu với pageNo tăng dần ──
-  function crawlStatus(text, done) {
-    try { window.postMessage({ __kaloCrawlStatus: true, text, done: !!done }, '*') } catch (e) { /* */ }
+  function crawlStatus(payload) {
+    try { window.postMessage(Object.assign({ __kaloCrawlStatus: true }, payload), '*') } catch (e) { /* */ }
   }
   async function runCrawl(maxPages, delayMs) {
     if (!lastReq || !lastReq.body) {
-      crawlStatus('Mở mục "Sản phẩm" trên Kalodata 1 lần (cuộn/đổi filter) rồi bấm lại.', true)
+      crawlStatus({ done: true, error: true, text: 'Mở mục "Sản phẩm" trên Kalodata 1 lần (cuộn/đổi filter) rồi bấm lại.' })
       return
     }
     let base
-    try { base = JSON.parse(lastReq.body) } catch (e) { crawlStatus('Không đọc được query mẫu.', true); return }
+    try { base = JSON.parse(lastReq.body) } catch (e) {
+      crawlStatus({ done: true, error: true, text: 'Không đọc được query mẫu.' }); return
+    }
     const url = lastReq.url
     const market = base.country || ''
+    let captured = 0
+    crawlStatus({ done: false, page: 0, maxPages, market, captured, text: 'Bắt đầu kéo' + (market ? ' ' + market : '') + '...' })
     for (let page = 1; page <= maxPages; page++) {
       const body = Object.assign({}, base, { pageNo: page })
-      let stop = false
+      let pageCount = 0, stop = false
       try {
         const res = await origFetch(url, {
           method: 'POST',
@@ -66,21 +70,29 @@
           credentials: 'include',
         })
         const t = await res.text()
-        emit(url, JSON.stringify(body), t) // đẩy thủ công (gọi origFetch nên patch không tự bắt)
+        emit(url, JSON.stringify(body), t)
         try {
           const j = JSON.parse(t)
           const list = Array.isArray(j.data) ? j.data : (j.data && j.data.list) || []
-          if (!list.length) stop = true
+          pageCount = list.length
+          if (!pageCount) stop = true
         } catch (e) { /* */ }
+        captured += pageCount
       } catch (e) {
-        crawlStatus('Lỗi kéo trang ' + page + ': ' + (e && e.message), true)
+        crawlStatus({ done: true, error: true, text: 'Lỗi kéo trang ' + page + ': ' + (e && e.message) })
         return
       }
-      crawlStatus('Đã kéo trang ' + page + '/' + maxPages + (market ? ' · ' + market : ''))
-      if (stop) { crawlStatus('Hết sản phẩm (trang ' + page + '). Xong ✓', true); return }
+      crawlStatus({
+        done: false, page, maxPages, market, captured,
+        text: 'Trang ' + page + '/' + maxPages + ' · +' + pageCount + ' sản phẩm',
+      })
+      if (stop) {
+        crawlStatus({ done: true, page, maxPages, market, captured, text: 'Đã kéo hết (' + captured + ' sản phẩm) ✓' })
+        return
+      }
       await new Promise((r) => setTimeout(r, delayMs))
     }
-    crawlStatus('Xong ✓ — đã kéo ' + maxPages + ' trang' + (market ? ' · ' + market : ''), true)
+    crawlStatus({ done: true, page: maxPages, maxPages, market, captured, text: 'Xong ✓ — tổng ' + captured + ' sản phẩm' + (market ? ' · ' + market : '') })
   }
 
   window.addEventListener('message', function (ev) {

@@ -141,6 +141,10 @@ chrome.runtime.onMessage.addListener((msg) => {
   if (msg && msg.type === 'kalo-capture') {
     handleCapture(msg).catch((e) => console.error('[kalo-sync]', e))
   } else if (msg && msg.type === 'kalo-crawl-status') {
-    chrome.storage.local.set({ crawlStatus: { text: msg.text, done: !!msg.done, at: Date.now() } })
+    chrome.storage.local.set({ crawlStatus: {
+      text: msg.text, done: !!msg.done, error: !!msg.error,
+      page: msg.page || 0, maxPages: msg.maxPages || 0,
+      market: msg.market || '', captured: msg.captured || 0, at: Date.now(),
+    } })
   }
 })
