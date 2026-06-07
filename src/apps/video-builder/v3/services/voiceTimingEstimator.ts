@@ -4,11 +4,13 @@
 // BEFORE the TTS call so the UI can show "your 30s script lands at 28.4s"
 // and the user can tweak before paying for TTS.
 //
-// Baseline: 175 wpm — matches ElevenLabs Vietnamese voice output at the
-// engine-default speed of 1.15× (real TikTok creator pace). Single global
-// value, no per-tone variation: the tone picker was removed because real
-// TikTok pace ≈ 230 wpm and the 140-170 wpm spread across "tones" was
-// broadcaster-style, not creator-style.
+// Baseline: 200 wpm — calibrated against REAL ElevenLabs output. Z53 measured
+// a 193-word VN script rendering at ~56s with eleven_v3 + 1.15× speed (≈207
+// effective wpm); the old 175 over-estimated it at ~66s, which both misled the
+// UI and (before Z57) misplaced the inserts. 200 lands the estimate within ~2s
+// of the real audio for the common (v3 + 1.15×) case. The estimate is still
+// approximate — the auto-edit planner (Z57) re-scales insert timestamps to the
+// ACTUAL measured voice duration, so final timing is correct regardless.
 //
 // The estimator is purely arithmetic — no network, no Gemini, runs on
 // every script edit.
@@ -20,7 +22,7 @@ import type {
 } from '../types'
 import { AD_STRUCTURES } from './adStructures'
 
-const DEFAULT_WPM = 175
+const DEFAULT_WPM = 200
 
 /** Count words — supports Vietnamese (space-tokenized) + English. */
 export function countWords(text: string): number {
