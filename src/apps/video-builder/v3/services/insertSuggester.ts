@@ -390,19 +390,23 @@ DIRECTING RULES:
   visual. This is the most common miss.
 - CONCEPT ART-STYLE RULE (for "graphic" CONCEPT_SCENE only) — bake the art
   direction INTO the conceptPrompt. There are TWO looks; pick per scene:
-  (1) HAND-DRAWN UGC INFOGRAPHIC — use this for INGREDIENT explanations,
+  (1) CLEAN PROFESSIONAL INFOGRAPHIC — use this for INGREDIENT explanations,
       MECHANISM / how-it-works, "X times more effective" claims, benefit
-      breakdowns, anything that teaches. Write the conceptPrompt as: a warm,
-      friendly HAND-DRAWN / doodle-style infographic (like a creator's
-      notebook sketch, NOT corporate flat-design, NOT abstract art), with
-      CLEAR LABELED elements, small simple icons, and arrows. Put the key
+      breakdowns, anything that teaches. Write the conceptPrompt as: a CLEAN,
+      MODERN, PROFESSIONAL infographic — flat vector / 3D-clean medical-brand
+      style (like a premium skincare or pharma brand explainer), crisp clean
+      icons, clear organised layout, trustworthy and polished. NOT hand-drawn,
+      NOT doodle, NOT sketchy, NOT childish, NOT abstract art. With CLEAR
+      LABELED elements, simple modern icons, and clean arrows. Put the key
       terms as SHORT ${langName} text labels right in the scene (e.g. for an
       ingredient scene name each ingredient in ${langName}). Keep labels SHORT
-      (1-3 words each) — long sentences render badly. Soft approachable colors.
-      Example for a teeth mechanism: "Hand-drawn UGC-style infographic, friendly
-      sketch look: a tooth on the left with a ${langName} label, an arrow to
-      dark powder particles pulling away plaque, ${langName} labels on the two
-      active ingredients, small charcoal + ash icons, warm paper background."
+      (1-3 words each) — long sentences render badly. Clean modern colour
+      palette aligned to a health/beauty brand (soft whites, teals, one accent).
+      Example for a teeth mechanism: "Clean modern professional infographic,
+      flat medical-brand style: a crisp tooth diagram with a ${langName} label,
+      a clean arrow to powder particles lifting plaque, ${langName} labels on
+      the two active ingredients, simple modern icons, white/teal palette,
+      polished and trustworthy."
       LAYOUT IS CRITICAL — the frame is cropped to TALL VERTICAL 9:16 and slowly
       zoomed in. Compose for a tall portrait canvas and keep EVERY label + icon
       INSIDE a generous central safe margin. Put NOTHING important near the

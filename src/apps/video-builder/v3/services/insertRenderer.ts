@@ -130,15 +130,16 @@ function buildInsertKeyframePrompt(
       // decides. Text labels are ALLOWED here (infographics need them).
       paragraphs.push(
         'STYLE: Follow the art direction described in the SCENE above exactly. ' +
-        'If it asks for a hand-drawn / sketch infographic, make it look genuinely ' +
-        'hand-drawn and friendly (a creator\'s notebook doodle), with the labels ' +
-        'written clearly. If it asks for a realistic microscopy / medical look, ' +
-        'make it photoreal and credible.',
+        'If it asks for an infographic, make it a CLEAN, MODERN, PROFESSIONAL ' +
+        'infographic — flat vector / clean medical-brand explainer look, crisp ' +
+        'icons, organised layout, polished and trustworthy. NOT hand-drawn, NOT ' +
+        'doodle, NOT sketchy, NOT childish. Labels clear and correctly spelled. ' +
+        'If it asks for a realistic microscopy / medical look, make it photoreal.',
       )
       paragraphs.push(
-        'Avoid: watermarks, brand logos, product packaging, glossy 3D-render ' +
-        'plastic look, neon sci-fi glow, rainbow gradient, fantasy color wash. ' +
-        'Keep any text labels SHORT and spelled correctly.',
+        'Avoid: hand-drawn doodle look, childish cartoon, watermarks, brand ' +
+        'logos, product packaging, glossy plastic 3D-render, neon sci-fi glow, ' +
+        'rainbow gradient, fantasy color wash. Keep text labels SHORT + correct.',
       )
     } else {
       // Emotion concept (video): real human/lifestyle footage, no text.
