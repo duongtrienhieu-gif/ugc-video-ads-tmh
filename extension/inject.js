@@ -4,6 +4,7 @@
 (function () {
   const TARGETS = ['/product/queryList']
   let lastReq = null // { url, body } — query mẫu gần nhất để auto-crawl dựa vào
+  console.log('[UGC-Lab Sync] inject.js loaded (MAIN world)')
 
   function isTarget(url) {
     return typeof url === 'string' && TARGETS.some((t) => url.indexOf(t) > -1)
@@ -46,16 +47,26 @@
   function crawlStatus(payload) {
     try { window.postMessage(Object.assign({ __kaloCrawlStatus: true }, payload), '*') } catch (e) { /* */ }
   }
+  function buildDefaultBody() {
+    // Fallback khi chưa bắt được query mẫu (Kalodata dùng cache, chưa gọi /product/queryList).
+    // Body khớp recon: country/startDate/endDate/cateIds/showCateIds/pageNo/pageSize/sort.
+    const today = new Date(); const end = today.toISOString().slice(0, 10)
+    const start = new Date(today.getTime() - 30 * 86400000).toISOString().slice(0, 10)
+    return { country: 'MY', startDate: start, endDate: end, cateIds: [], showCateIds: [], pageNo: 1, pageSize: 10, sort: 'revenue,desc' }
+  }
   async function runCrawl(maxPages, delayMs) {
-    if (!lastReq || !lastReq.body) {
-      crawlStatus({ done: true, error: true, text: 'Mở mục "Sản phẩm" trên Kalodata 1 lần (cuộn/đổi filter) rồi bấm lại.' })
-      return
+    console.log('[UGC-Lab Sync] runCrawl start, lastReq:', lastReq)
+    let base, url
+    if (lastReq && lastReq.body) {
+      try { base = JSON.parse(lastReq.body); url = lastReq.url } catch (e) {
+        crawlStatus({ done: true, error: true, text: 'Không đọc được query mẫu.' }); return
+      }
+    } else {
+      // Fallback: gửi 1 query default cho MY để khởi động (Kalodata dùng cache → chưa có query mẫu).
+      url = 'https://www.kalodata.com/product/queryList'
+      base = buildDefaultBody()
+      console.log('[UGC-Lab Sync] dùng query mặc định:', base)
     }
-    let base
-    try { base = JSON.parse(lastReq.body) } catch (e) {
-      crawlStatus({ done: true, error: true, text: 'Không đọc được query mẫu.' }); return
-    }
-    const url = lastReq.url
     const market = base.country || ''
     let captured = 0
     crawlStatus({ done: false, page: 0, maxPages, market, captured, text: 'Bắt đầu kéo' + (market ? ' ' + market : '') + '...' })
@@ -98,6 +109,9 @@
   window.addEventListener('message', function (ev) {
     if (ev.source !== window) return
     const d = ev.data
-    if (d && d.__kaloCrawl === 'start') runCrawl(d.maxPages || 25, d.delayMs || 1800)
+    if (d && d.__kaloCrawl === 'start') {
+      console.log('[UGC-Lab Sync] nhận lệnh crawl')
+      runCrawl(d.maxPages || 25, d.delayMs || 1500)
+    }
   })
 })();

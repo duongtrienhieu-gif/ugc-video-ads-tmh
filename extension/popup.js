@@ -87,8 +87,8 @@ function startPoll(startedAt) {
     const box = $('crawlBox'); const btn = $('crawl')
     if (box && crawlStatus) { box.style.display = ''; box.innerHTML = renderCrawl(crawlStatus) }
     // Phát hiện script trên Kalodata không phản hồi: sau 5s mà page vẫn = 0 → cảnh báo F5.
-    if (!crawlStatus || (!crawlStatus.done && (crawlStatus.page || 0) === 0 && Date.now() - start > 5000)) {
-      const stale = '⚠ Trang Kalodata chưa phản hồi.\nHãy F5 lại tab Kalodata, mở mục "Sản phẩm" rồi bấm lại nút này.'
+    if (!crawlStatus || (!crawlStatus.done && (crawlStatus.page || 0) === 0 && Date.now() - start > 12000)) {
+      const stale = '⚠ Trang Kalodata không phản hồi.\nMở DevTools (F12) tab Kalodata → Console, xem có lỗi đỏ không, chụp cho mình.'
       await chrome.storage.local.set({ crawlStatus: { text: stale, done: true, error: true, at: Date.now() } })
       clearInterval(pollTimer); pollTimer = null
       if (btn) { btn.disabled = false; btn.textContent = '🔄 Tự động thu thập' }
@@ -103,6 +103,19 @@ function startPoll(startedAt) {
   }, 600)
 }
 
+function sendMessageWithTimeout(tabId, msg, timeoutMs) {
+  return new Promise((resolve, reject) => {
+    const t = setTimeout(() => reject(new Error('timeout')), timeoutMs)
+    try {
+      chrome.tabs.sendMessage(tabId, msg, (resp) => {
+        clearTimeout(t)
+        if (chrome.runtime.lastError) return reject(new Error(chrome.runtime.lastError.message))
+        resolve(resp)
+      })
+    } catch (e) { clearTimeout(t); reject(e) }
+  })
+}
+
 async function startCrawl() {
   const tabs = await chrome.tabs.query({ active: true, currentWindow: true })
   const tab = tabs[0]
@@ -111,13 +124,22 @@ async function startCrawl() {
     if (box) { box.style.display = ''; box.innerHTML = '<div class="err">⚠ Mở tab Kalodata (mục Sản phẩm) rồi bấm lại.</div>' }
     return
   }
+  // PING trước: xác định content script (bridge.js) đã load chưa.
+  try {
+    await sendMessageWithTimeout(tab.id, { type: 'kalo-ping' }, 2000)
+  } catch (e) {
+    const msg = '⚠ Script trong trang Kalodata chưa hoạt động.\n\nLàm theo thứ tự:\n1) chrome://extensions → bấm ⟳ trên card extension\n2) Sang tab Kalodata → F5\n3) Đợi trang load xong → bấm lại nút này'
+    await chrome.storage.local.set({ crawlStatus: { text: msg, done: true, error: true, at: Date.now() } })
+    render()
+    return
+  }
   const startedAt = Date.now()
   await chrome.storage.local.set({ crawlStatus: { text: 'Đang gửi lệnh tới Kalodata...', done: false, at: startedAt, page: 0, maxPages: 25, captured: 0 } })
   if (btn) { btn.disabled = true; btn.textContent = '⏳ Đang thu thập...' }
   try {
-    await chrome.tabs.sendMessage(tab.id, { type: 'kalo-crawl-start', maxPages: 25, delayMs: 1200 })
+    await sendMessageWithTimeout(tab.id, { type: 'kalo-crawl-start', maxPages: 25, delayMs: 1500 }, 3000)
   } catch (e) {
-    const msg = '⚠ Hãy F5 lại trang Kalodata rồi bấm lại nút này.\n(Lý do: extension vừa được nâng cấp, trang Kalodata cần tải lại tệp mới.)'
+    const msg = '⚠ Không gửi được lệnh tới Kalodata.\nF5 lại tab Kalodata rồi thử lại.'
     await chrome.storage.local.set({ crawlStatus: { text: msg, done: true, error: true, at: Date.now() } })
     if (btn) { btn.disabled = false; btn.textContent = '🔄 Tự động thu thập' }
     render()

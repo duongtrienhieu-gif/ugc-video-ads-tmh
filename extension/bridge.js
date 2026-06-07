@@ -1,4 +1,5 @@
 // ISOLATED world — cầu nối inject.js (MAIN) ↔ background (service worker).
+console.log('[UGC-Lab Sync] bridge.js loaded (ISOLATED world)')
 window.addEventListener('message', function (ev) {
   if (ev.source !== window) return
   const d = ev.data
@@ -17,8 +18,13 @@ window.addEventListener('message', function (ev) {
 })
 
 // Nhận lệnh "bắt đầu thu thập" từ popup → chuyển vào MAIN world cho inject.js chạy.
-chrome.runtime.onMessage.addListener(function (msg) {
+chrome.runtime.onMessage.addListener(function (msg, _sender, sendResponse) {
   if (msg && msg.type === 'kalo-crawl-start') {
+    console.log('[UGC-Lab Sync] bridge nhận crawl-start, chuyển sang MAIN world')
     window.postMessage({ __kaloCrawl: 'start', maxPages: msg.maxPages, delayMs: msg.delayMs }, '*')
+    sendResponse({ ok: true })
+  } else if (msg && msg.type === 'kalo-ping') {
+    sendResponse({ ok: true })
   }
+  return true
 })
