@@ -236,6 +236,14 @@ export default function CreatorVideoPhase({ onContinue }: Props) {
   const [voicePreviewing, setVoicePreviewing] = useState(false)
   const [voicePreviewUrl, setVoicePreviewUrl] = useState<string | null>(null)
   const [voicePreviewModel, setVoicePreviewModel] = useState<string | null>(null)
+  // Z64 — the MEASURED real voice duration from the preview. The header/banner
+  // show this once known (vs the WPM estimate, which varies by voice/run and
+  // kept confusing the user). null = not previewed yet → fall back to estimate.
+  const [voicePreviewDuration, setVoicePreviewDuration] = useState<number | null>(null)
+
+  // Best duration to DISPLAY: measured (real) once previewed, else the estimate.
+  const displayDurationSec = voicePreviewDuration ?? brain.script?.totalDurationSec ?? null
+  const durationIsReal = voicePreviewDuration != null
 
   // Z38 — cost of THIS render = TTS + keyframe + ONE Kling lipsync (no more
   // duplicate preview render). Lipsync scales with the real script duration
@@ -283,6 +291,7 @@ export default function CreatorVideoPhase({ onContinue }: Props) {
       const url = URL.createObjectURL(result.audioBlob)
       setVoicePreviewUrl(url)
       setVoicePreviewModel(result.modelUsed)
+      setVoicePreviewDuration(result.durationSec)
       const v3 = result.modelUsed === 'eleven_v3'
       addToast(
         v3
@@ -472,7 +481,7 @@ export default function CreatorVideoPhase({ onContinue }: Props) {
         <div className="mb-4">
           <h2 className="text-lg font-bold text-gray-900">Bước 3 — Video creator chính (talking head)</h2>
           <p className="text-[12px] text-gray-500">
-            70-80% của video cuối — 1 video creator lipsync liên tục. Voice timeline đã chốt {brain.script?.totalDurationSec.toFixed(1) ?? '—'}s.
+            70-80% của video cuối — 1 video creator lipsync liên tục. Voice timeline {durationIsReal ? 'thật' : 'ước tính'} ~{displayDurationSec?.toFixed(1) ?? '—'}s{durationIsReal ? ' (đã nghe thử)' : ' — nghe thử để biết số chính xác'}.
           </p>
           <p className="mt-1.5 rounded-lg bg-sky-50 px-3 py-2 text-[11px] leading-relaxed text-sky-800 ring-1 ring-sky-100">
             Khuôn mặt nhân vật được giữ nguyên từ avatar bạn chọn ở Bước 1. AI tự chọn sẵn <b>bối cảnh</b>, <b>trang phục</b> và <b>thần thái</b> — bạn chỉ chỉnh lại nếu muốn, rồi app dựng video người đó đang nói đúng kịch bản (lipsync).
@@ -618,7 +627,7 @@ export default function CreatorVideoPhase({ onContinue }: Props) {
               {clip?.stage === 'completed' ? 'Đã có creator video — render lại nếu cần' : 'Render creator video'}
             </p>
             <p className="text-[11px] text-gray-500">
-              {config.resolution} · ~{brain.script?.totalDurationSec.toFixed(0) ?? '—'}s · TTS → keyframe → lipsync · bước này {formatCredits(stepCredits)}
+              {config.resolution} · ~{displayDurationSec?.toFixed(0) ?? '—'}s{durationIsReal ? ' (thật)' : ' (ước tính)'} · TTS → keyframe → lipsync · bước này {formatCredits(stepCredits)}
             </p>
             <p className="mt-1 text-[10px] text-gray-400">
               Ước tính theo độ dài kịch bản (Kling tính tiền theo giây). Chỉ render 1 lần — nếu timeout, bấm “Khôi phục” để lấy lại video đã trả tiền, không tốn thêm credit.
@@ -676,10 +685,15 @@ export default function CreatorVideoPhase({ onContinue }: Props) {
                   {voicePreviewModel === 'eleven_v3' ? 'v3 · biểu cảm cao' : 'v2 · biểu cảm vừa (key không có v3)'}
                 </span>
               )}
+              {voicePreviewDuration != null && (
+                <span className="rounded-full bg-violet-100 px-2 py-0.5 text-[10px] font-bold text-violet-700">
+                  Thời lượng thật: {voicePreviewDuration.toFixed(1)}s
+                </span>
+              )}
             </div>
             <audio controls src={voicePreviewUrl} className="w-full" />
             <p className="mt-1.5 text-[11px] text-gray-500">
-              Đây là giọng + tốc độ thật sẽ dùng cho video. Nghe ưng thì bấm “Tạo creator video”. Đổi giọng ở bước Script + Voice rồi nghe lại nếu chưa hợp.
+              Đây là giọng + tốc độ + ĐỘ DÀI thật sẽ dùng cho video (số ở trên cùng giờ là số thật, không phải ước tính). Nghe ưng thì bấm “Tạo creator video”. Đổi giọng ở bước Script + Voice rồi nghe lại nếu chưa hợp.
             </p>
           </div>
         )}
