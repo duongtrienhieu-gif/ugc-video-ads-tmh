@@ -76,12 +76,36 @@ export function buildAutoEditPlan(params: BuildPlanParams): AutoEditPlan {
     params.script.totalDurationSec ??
     params.creatorVideo.durationSec
 
+  // Z57 — re-scale insert timestamps from the ESTIMATE basis to the ACTUAL
+  // voice. insert.voiceTimestampSec was computed against script.totalDurationSec
+  // (a word-count/WPM estimate, e.g. 66s), but the real TTS often lands shorter
+  // (e.g. 56s with eleven_v3 + 1.15× speed). Without scaling, an insert anchored
+  // at 40s of a 66s estimate plays at 40s of a 56s clip = 14s too late, over the
+  // wrong spoken line. Scale = actualVoiceDur / estimatedScriptDur makes every
+  // insert land on the line it was anchored to, regardless of which TTS model
+  // (v2/v3) or voice rendered. Falls back to 1 (no change) when the actual voice
+  // duration isn't known yet.
+  const estimatedScriptDur = params.script.totalDurationSec ?? 0
+  const actualVoiceDur = params.creatorVideo.voiceDurationSec ?? 0
+  const timelineScale =
+    actualVoiceDur > 0 && estimatedScriptDur > 0
+      ? actualVoiceDur / estimatedScriptDur
+      : 1
+  if (Math.abs(timelineScale - 1) > 0.02) {
+    console.log(
+      `[AUTO_EDIT] timeline rescale ${estimatedScriptDur.toFixed(1)}s (est) → ` +
+      `${actualVoiceDur.toFixed(1)}s (real) · scale=${timelineScale.toFixed(3)} ` +
+      `— insert timestamps adjusted to match the actual voice`,
+    )
+  }
+
   // ── 1. Build segments (creator + inserts) ────────────────────────────
   const segments = buildSegments(
     params.creatorVideo,
     eligibleInserts,
     style.insertOverlayDurationSec,
     totalDurationSec,
+    timelineScale,
   )
 
   // ── 2. Build captions ────────────────────────────────────────────────
@@ -170,6 +194,9 @@ function buildSegments(
   inserts: ActionInsertClip[],
   insertOverlayDurationSec: number,
   totalDurationSec: number,
+  /** Z57 — multiply estimate-based voiceTimestampSec to map onto the real
+   *  voice duration. 1 = no change (actual duration unknown). */
+  timelineScale: number,
 ): EditSegment[] {
   if (!creatorVideo.videoRef) return []
 
@@ -201,6 +228,9 @@ function buildSegments(
       // Evenly distribute manually-added inserts that lack a timestamp
       const fraction = insertSlots.length / Math.max(1, inserts.length)
       ts = usableStart + fraction * (usableEnd - usableStart)
+    } else {
+      // Z57 — map the estimate-based timestamp onto the real voice timeline.
+      ts = ts * timelineScale
     }
     ts = Math.max(usableStart, Math.min(usableEnd - durSec, ts))
     insertSlots.push({
