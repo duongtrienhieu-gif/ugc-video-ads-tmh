@@ -370,6 +370,20 @@ DIRECTING RULES:
   use more, shorter cuts instead of fewer long ones.
 - Anchor each scene to the ONE block (hook/pain/discovery/benefit/cta) whose
   dialogue it illustrates (used only as a coarse fallback).
+- INGESTION RULE — DRINK and TAKE_PILL animate the person SWALLOWING the
+  product. Use them ONLY for products that are genuinely ingested: drinks,
+  shakes, supplements, vitamins, gummies, pills, capsules taken by mouth.
+  For products APPLIED EXTERNALLY, these presets are WRONG and look absurd —
+  NEVER use them. Instead use PRODUCT_IN_ACTION with a conceptPrompt showing
+  the REAL application:
+    • tooth powder / toothpaste / whitening powder → person BRUSHING it on
+      their teeth with a toothbrush (it is NOT eaten — note clues like
+      "whiten teeth", "enamel", "vs toothpaste", "plaque").
+    • cream / serum / lotion / mask → rubbed / massaged onto skin.
+    • shampoo / hair tonic / scalp serum → washed / applied into hair.
+    • spray / deodorant / perfume → sprayed on.
+  Read what the product IS. A "powder" is not automatically a supplement —
+  a teeth-whitening powder is brushed on, not swallowed.
 - CTA SCENE RULE — for the FINAL beat (anchorBlock = "cta", typically the line
   asking the viewer to buy/click/order), the visual job is a TRUST CLOSE, not
   a generic phone shot. Pick one of:
@@ -460,11 +474,17 @@ OUTPUT strict JSON, no fences:
   // show the camera-visible change the script promises.
   const visibleResultProduct = detectsVisibleResultClaim(params.script)
 
+  // Z47 — pre-scan for topical products (tooth powder, cream, shampoo). When
+  // detected, the post-parse layer rewrites any DRINK / TAKE_PILL scene to a
+  // PRODUCT_IN_ACTION showing the real application — those presets animate
+  // SWALLOWING, which is wrong (e.g. a tooth powder is brushed, not eaten).
+  const topicalCategory = detectTopicalCategory(params.script)
+
   // Z43 — diagnostic counters so a silent keyword fallback can be traced from
   // the browser console instead of guessed at.
-  // Z46 — added beforeAfterRewrite + dupeSkip + dupeSwap counters.
+  // Z46/Z47 — added beforeAfter + topical + dupeSkip + dupeSwap counters.
   const drop = { preset: 0, noPrompt: 0, zeroFit: 0, dupeSkip: 0 }
-  const rewrite = { beforeAfter: 0, dupeSwap: 0 }
+  const rewrite = { beforeAfter: 0, topical: 0, dupeSwap: 0 }
 
   const seen = new Set<ActionPresetId>()
   const out: InsertSuggestion[] = []
@@ -487,6 +507,17 @@ OUTPUT strict JSON, no fences:
         `clearly shown, RIGHT half = the "after" state with the problem resolved. ` +
         `Side-by-side dramatic comparison, soft natural light, clinical credibility.`
       rewrite.beforeAfter++
+    }
+
+    // Z47 — DRINK / TAKE_PILL rewrite for topical products. These presets
+    // animate SWALLOWING; a tooth powder is brushed on teeth, a cream is
+    // rubbed on skin — never eaten. Convert to PRODUCT_IN_ACTION showing the
+    // real application (product stays on screen, fidelity-locked).
+    if ((presetId === 'DRINK' || presetId === 'TAKE_PILL') && topicalCategory) {
+      const quote = (item.quote ?? '').trim()
+      presetId = 'PRODUCT_IN_ACTION' as ActionPresetId
+      conceptPrompt = topicalApplicationPrompt(topicalCategory, quote)
+      rewrite.topical++
     }
 
     // Both free-scene kinds carry a director-written prompt and are useless
@@ -548,8 +579,8 @@ OUTPUT strict JSON, no fences:
   console.log(
     `[DIRECTOR] raw=${raw.length}ch parsed=${parsed.length} usable=${out.length} ` +
     `dropped{preset:${drop.preset},noPrompt:${drop.noPrompt},zeroFit:${drop.zeroFit},dupeSkip:${drop.dupeSkip}} ` +
-    `rewrote{beforeAfter:${rewrite.beforeAfter},dupeSwap:${rewrite.dupeSwap}} ` +
-    `visibleResult=${visibleResultProduct} ` +
+    `rewrote{beforeAfter:${rewrite.beforeAfter},topical:${rewrite.topical},dupeSwap:${rewrite.dupeSwap}} ` +
+    `visibleResult=${visibleResultProduct} topical=${topicalCategory ?? 'no'} ` +
     `→ ${directed.length > 0 ? `${directed.length} scenes` : 'EMPTY → keyword fallback'}`,
   )
   if (directed.length === 0) {
@@ -588,6 +619,59 @@ const VISIBLE_RESULT_KEYWORDS = [
 function detectsVisibleResultClaim(script: GeneratedScript): boolean {
   const haystack = script.blocks.map((b) => b.text.toLowerCase()).join(' ')
   return VISIBLE_RESULT_KEYWORDS.some((kw) => haystack.includes(kw))
+}
+
+// Z47 — usage-mode detection. DRINK / TAKE_PILL animate someone SWALLOWING the
+// product. That is WRONG for topical products that are applied externally:
+//   • tooth powder / paste → brushed on teeth (NEVER swallowed)
+//   • cream / serum → rubbed on skin
+//   • shampoo → washed into hair
+// The Director sometimes picks TAKE_PILL for any "powder" because supplements
+// are the most common UGC niche. This catches it + rewrites to a real-usage
+// PRODUCT_IN_ACTION. Returns the topical category, or null if the product is
+// genuinely ingested / unknown.
+const DENTAL_SIGNALS = [
+  'kem đánh răng', 'đánh răng', 'chà răng', 'men răng', 'làm trắng răng', 'mảng bám',
+  'nướu', 'răng', 'teeth', 'tooth', 'toothpaste', 'dental', 'enamel', 'gum', 'gigi',
+]
+const SKIN_SIGNALS = [
+  'thoa', 'bôi', 'lên da', 'kem dưỡng', 'serum', 'mặt nạ', 'dưỡng da', 'làn da',
+  'skin', 'cream', 'serum', 'lotion', 'kulit', 'wajah',
+]
+const HAIR_SIGNALS = [
+  'gội', 'dầu gội', 'ủ tóc', 'lên tóc', 'da đầu', 'chân tóc', 'hair', 'shampoo',
+  'scalp', 'rambut',
+]
+const INGEST_VERBS = ['uống', 'nuốt', ' ăn ', 'swallow', 'sip', 'ingest', 'drink it']
+
+function detectTopicalCategory(
+  script: GeneratedScript,
+): 'dental' | 'skin' | 'hair' | null {
+  const hay = ' ' + script.blocks.map((b) => b.text.toLowerCase()).join(' ') + ' '
+  const ingestVerb = INGEST_VERBS.some((k) => hay.includes(k))
+  // Dental = always brushed, never swallowed → confident even with an ingest
+  // verb elsewhere (e.g. "ăn uống thoải mái"). Need 2+ dental signals.
+  const dentalHits = DENTAL_SIGNALS.filter((k) => hay.includes(k)).length
+  if (dentalHits >= 2) return 'dental'
+  // Skin / hair are ambiguous (could be ingested hair-vitamins etc), so only
+  // treat as topical when there is NO ingestion verb in the script.
+  if (!ingestVerb) {
+    if (SKIN_SIGNALS.filter((k) => hay.includes(k)).length >= 2) return 'skin'
+    if (HAIR_SIGNALS.filter((k) => hay.includes(k)).length >= 2) return 'hair'
+  }
+  return null
+}
+
+function topicalApplicationPrompt(category: 'dental' | 'skin' | 'hair', quote: string): string {
+  const tail = ` This illustrates the line "${quote}". The product stays on screen (its packaging is locked by the reference image). Authentic UGC iPhone footage, natural daylight, real texture. The person does NOT swallow or eat the product.`
+  switch (category) {
+    case 'dental':
+      return `Person dipping a damp toothbrush into the mineral tooth powder, then brushing their teeth with it — close-up of the loaded toothbrush gently foaming, bathroom-mirror setting.${tail}`
+    case 'skin':
+      return `Person scooping a small amount of the product and gently applying / massaging it onto their skin — close-up of the application motion.${tail}`
+    case 'hair':
+      return `Person applying the product to their hair / scalp and working it in — close-up of the application motion.${tail}`
+  }
 }
 
 // Z46 — diversity swap: if a presetId is already used, pick the next-best
