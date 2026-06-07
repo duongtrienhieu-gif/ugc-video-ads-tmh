@@ -7,6 +7,7 @@ import type { Market, NicheKey, ResearchProduct, ScoredProduct, SkuRisk } from '
 import { DEFAULT_FILTERS, type ResearchFilters, type PresetKey, PRESETS } from './constants'
 import { SAMPLE_PRODUCTS } from './sampleData'
 import { scoreMany } from './services/scoring'
+import { classifyNiche, classifySkuRisk } from './services/niche'
 
 type SortKey = 'score' | 'revenue' | 'growth' | 'commission'
 
@@ -16,10 +17,14 @@ type SortKey = 'score' | 'revenue' | 'growth' | 'commission'
    TRỰC TIẾP từ Kalodata để đối chiếu đúng. */
 function rowToProduct(r: Record<string, unknown>): ResearchProduct {
   const num = (v: unknown) => (v == null ? 0 : Number(v) || 0)
+  const title = (r.product_title as string) ?? '(không tên)'
+  // Phân ngách + rủi ro SKU dựa vào tên (DB có thể đã pre-classify; nếu không, làm runtime).
+  const nicheKey: NicheKey = ((r.niche_key as NicheKey) || classifyNiche(title))
+  const skuVarianceRisk: SkuRisk = ((r.sku_variance_risk as SkuRisk) || classifySkuRisk(title))
   return {
     productId: String(r.product_id),
     market: (r.market as Market) || 'MY',
-    title: (r.product_title as string) ?? '(không tên)',
+    title,
     imageUrl: (r.image_url as string) ?? undefined,
     revenue: num(r.revenue),
     growthRate: num(r.revenue_grouping_rate),
@@ -32,8 +37,8 @@ function rowToProduct(r: Record<string, unknown>): ResearchProduct {
     creatorNum: num(r.creator_num),
     competitionShops: 10,
     videoRevenue: num(r.video_revenue),
-    nicheKey: ((r.niche_key as NicheKey) || 'skincare'),
-    skuVarianceRisk: ((r.sku_variance_risk as SkuRisk) || 'low'),
+    nicheKey,
+    skuVarianceRisk,
     revenueTrend: Array.isArray(r.revenue_trend) ? (r.revenue_trend as number[]) : undefined,
     launchDate: (r.launch_date as string) ?? undefined,
   }

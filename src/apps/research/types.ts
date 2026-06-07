@@ -14,6 +14,7 @@ export type NicheKey =
   | 'kitchen'
   | 'home-problem'
   | 'personal-care'
+  | 'other'
 
 export interface ResearchProduct {
   productId: string
