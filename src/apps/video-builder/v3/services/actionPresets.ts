@@ -64,8 +64,10 @@ export interface ActionPresetConfig {
 // (Z33 §9 — label/color/shape/scale lock).
 const PRODUCT_LOCK =
   'Preserve EXACT label typography, color, shape, and scale of the product ' +
-  'from reference image #1. The product must read as the same physical object ' +
-  'across all inserts — no redesigned packaging, no resized bottle, no colour drift.'
+  'from reference image #1. Reproduce the label text EXACTLY as in the reference ' +
+  '— do NOT invent, translate, garble, or alter any letters or words on the label. ' +
+  'The product must read as the same physical object across all inserts — no ' +
+  'redesigned packaging, no resized bottle, no colour drift.'
 
 // Shared hand-behavior baseline — applied to all hand-driven inserts to
 // avoid the AI-typical malformed-finger / extra-thumb / wrong-grip failure modes.
@@ -268,15 +270,22 @@ export const ACTION_PRESETS: Record<ActionPresetId, ActionPresetConfig> = {
     motionPreset: 'zoom_in',
     framingPreset: 'macro',
     promptPreset:
-      'Extreme macro closeup of the product on a clean surface, slow camera push toward label, ' +
-      'sharp focus on brand name, soft natural daylight, identical packaging as input image. ' +
-      'No hands in frame — product alone.',
+      'Product on a clean surface, gentle slow camera push, soft natural daylight, ' +
+      'identical packaging as input image. Keep the WHOLE product in frame at a ' +
+      'comfortable distance (medium-close, NOT an extreme macro that fills the ' +
+      'frame with tiny label text). No hands in frame — product alone.',
     durationPreset: 2.5,
     cameraPreset: 'subtle_drift',
     needsProduct: true,
     tone: 'violet',
-    handBehavior: 'No hands in frame. Product alone is the subject.',
-    objectInteraction: PRODUCT_LOCK + ' Macro detail — every label letter sharply readable.',
+    // Z54 — do NOT demand "every letter sharply readable" in macro: GPT-4o
+    // re-renders fine print and garbles it (fake-looking misspelled labels).
+    // Show the product whole; copy the label EXACTLY as the reference, and do
+    // not invent or alter any letters. Keep the label small enough that minor
+    // text imperfections are not the focus.
+    objectInteraction: PRODUCT_LOCK + ' Reproduce the label text EXACTLY as it ' +
+      'appears in the reference image — do NOT invent, translate, or alter any ' +
+      'letters. Frame the whole product (not an extreme macro of the text).',
     triggerKeywords: [
       'this product', 'check it out', 'closer look', 'detail', 'gần hơn', 'chi tiết', 'cận cảnh', 'macro',
       'lebih dekat', 'perincian', 'dekat sini',

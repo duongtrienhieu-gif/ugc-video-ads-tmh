@@ -110,8 +110,8 @@ function buildInsertKeyframePrompt(
     paragraphs.push(
       'COMPOSITION: vertical 9:16 aspect ratio, ONE clear focal subject centred ' +
       'with generous empty margins. The frame is cropped to tall vertical and ' +
-      'slowly zoomed, so keep the subject + its single label well inside the ' +
-      'centre — anything near the left/right/top/bottom edges WILL be cut off.',
+      'slowly zoomed, so keep the subject + its labels well inside the centre — ' +
+      'anything near the left/right/top/bottom edges WILL be cut off.',
     )
     paragraphs.push('NO PRODUCT PACKAGING visible in frame — concept / mood illustration only.')
 
@@ -130,16 +130,18 @@ function buildInsertKeyframePrompt(
       paragraphs.push(
         'STYLE: Follow the art direction in the SCENE above. If it is a sketch / ' +
         'infographic, make it a SIMPLE friendly HAND-DRAWN visual — clean line-art ' +
-        'doodle, warm marker feel, ONE bold idea, lots of empty space, absorbable ' +
-        'at a glance in 2-3 seconds. AT MOST one short text label (1-3 words), ' +
-        'correctly spelled. If the SCENE asks for a realistic microscopy / medical ' +
-        'look instead, make it photoreal.',
+        'doodle, warm marker feel, one clear idea, lots of empty space, absorbable ' +
+        'at a glance. Render the SHORT text labels the SCENE specifies (ingredient ' +
+        'names, a number, the key term) — a few short labels (1-3 words each), ' +
+        'BIG and correctly spelled. NO sentences or paragraphs. If the SCENE asks ' +
+        'for a realistic microscopy / medical look instead, make it photoreal.',
       )
       paragraphs.push(
-        'Avoid: dense infographic / medical-poster layout, paragraphs or sentences ' +
-        'of text, multiple labeled sections, title bars, rows of bottom icons, ' +
-        'busy cluttered compositions, watermarks, brand logos, product packaging, ' +
-        'glossy plastic 3D-render, neon glow, rainbow gradient. Less text is better.',
+        'Avoid: paragraphs or sentences of text, dense medical-poster layout, ' +
+        'multiple stacked sections, title bars, rows of bottom icons, busy ' +
+        'cluttered compositions, watermarks, brand logos, product packaging, ' +
+        'glossy plastic 3D-render, neon glow, rainbow gradient. Keep ONLY the few ' +
+        'key-term labels — no explanatory prose.',
       )
     } else {
       // Emotion concept (video): real human/lifestyle footage, no text.

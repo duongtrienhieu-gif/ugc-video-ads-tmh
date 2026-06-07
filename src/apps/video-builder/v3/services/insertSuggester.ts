@@ -386,8 +386,16 @@ DIRECTING RULES:
   timed to the voice). The quote MUST be text that actually appears in the script.
 - COVER THE WHOLE SCRIPT, not just the obvious beats. If the script explains
   INGREDIENTS or a MECHANISM / how-it-works, you MUST give those lines their own
-  scene (usually CONCEPT_SCENE or PRODUCT_IN_ACTION) — do not leave them with no
-  visual. This is the most common miss.
+  scene (usually a labeled CONCEPT_SCENE) — do not leave them with no visual.
+  This is the most common miss.
+- INGREDIENT BEATS — when a line NAMES specific ingredients (e.g. "Activated
+  Charcoal và Volcanic Ash...", "Grape Seed Extract..."), give that line a
+  CONCEPT_SCENE whose conceptPrompt SHOWS and LABELS each named ingredient (the
+  label IS the ingredient name). Two ingredients named → both labeled. Do NOT
+  cover an ingredient line with a bare product close-up — a macro of the jar
+  garbles the small label text and does NOT tell the viewer the ingredient
+  names. The labeled sketch does. (Product close-ups are for "show the product"
+  beats, not for teaching ingredients.)
 - CONCEPT ART-STYLE RULE (for "graphic" CONCEPT_SCENE only) — bake the art
   direction INTO the conceptPrompt. There are TWO looks; pick per scene:
   (1) SIMPLE HAND-DRAWN VISUAL — use this for INGREDIENT explanations,
@@ -395,25 +403,32 @@ DIRECTING RULES:
       breakdowns, anything that teaches. Write the conceptPrompt as: ONE
       friendly HAND-DRAWN sketch (clean simple line-art doodle, warm marker /
       crayon feel) illustrating a SINGLE idea — big, bold, instantly readable.
-      *** MINIMALISM IS THE #1 RULE *** — the viewer sees this for only 2-4
-      seconds WHILE the voice is talking; it is a quick visual accent, NOT a
-      poster to read. So:
-        • ONE focal drawing + AT MOST one short ${langName} label (1-3 words).
-        • NO paragraphs, NO sentences, NO body text, NO description blocks.
-        • NO multiple panels / sections, NO title bar + subtitle, NO row of
-          icons along the bottom, NO dense medical-poster layout.
-        • Lots of empty space. If a child could "get it" in one glance, good.
-      If a script beat has SEVERAL ideas (e.g. 3 ingredients, a 3-step
-      mechanism), DO NOT cram them into one busy image — SPLIT into separate
-      simple scenes, ONE idea per scene (the split-into-short-cuts rule above).
-      Example for an ingredient: "Simple friendly hand-drawn sketch, one bold
-      doodle of charcoal powder lifting dark plaque off a happy tooth, a single
-      ${langName} label 'Than hoạt tính', warm marker style, lots of white
-      space, minimal." Example for a benefit: "Hand-drawn doodle of a sparkling
-      white tooth smiling, one ${langName} word 'Trắng sáng', simple, airy."
+      *** SIMPLE BUT LABELED — this is the balance ***
+      The viewer sees this for only 2-4 seconds WHILE the voice talks, so it
+      must be absorbed at a glance AND it MUST carry the KEY TERMS the spoken
+      line names, as short ${langName} labels, so image and voice match:
+        • LABEL THE ACTUAL TERMS FROM THE QUOTE: ingredient names, a number
+          ("5x", "gấp 5 lần"), the one core mechanism/benefit word. Typically
+          1-4 short labels, each 1-3 words. The labels ARE the terms the voice
+          is saying at that second.
+        • If the line names MULTIPLE ingredients (e.g. "Activated Charcoal và
+          Volcanic Ash"), SHOW and LABEL EACH ONE (e.g. labels "Than hoạt tính"
+          + "Tro núi lửa"). Do not drop ingredient names — they are the point.
+        • BUT still SIMPLE: a few short labels on a clean airy sketch. NO
+          sentences, NO paragraphs, NO description blocks, NO body text, NO
+          title bar + subtitle, NO row of icons along the bottom, NO dense
+          medical-poster layout. Key terms only — never explanatory prose.
+      If a beat is too dense for a few labels (a long multi-step mechanism),
+      SPLIT into 2-3 simple labeled scenes instead of one crammed image.
+      Example (multi-ingredient): "Simple friendly hand-drawn sketch: black
+      charcoal powder + grey volcanic ash lifting dark plaque off a happy white
+      tooth, two short ${langName} labels 'Than hoạt tính' and 'Tro núi lửa',
+      warm marker style, lots of white space." Example (claim): "Hand-drawn
+      tooth with nano dots sinking in, a big '5x' badge and one ${langName}
+      label 'Công nghệ Nano', airy, minimal."
       LAYOUT — the frame is cropped to TALL VERTICAL 9:16 and slowly zoomed, so
-      keep the single drawing + its one label CENTRED with wide margins; nothing
-      near the edges (it gets cropped).
+      keep the drawing + its labels CENTRED with wide margins; nothing near the
+      edges (it gets cropped).
   (2) REALISTIC SCIENTIFIC — use this ONLY for true microscopy / anatomy / real
       micro-phenomena (bacteria, enamel cross-section under a microscope). Write
       it as a realistic documentary/medical close-up, NO text labels.
