@@ -22,7 +22,7 @@ export default function FilterPanel() {
   const { filters, setFilter, nicheFilter, setNiche, sortBy, setSort, clearPreset } = useResearchStore()
 
   return (
-    <aside className="flex w-56 shrink-0 flex-col gap-3 overflow-y-auto border-r border-black/[0.06] bg-[#FAFAFB] p-3">
+    <aside className="flex w-56 shrink-0 flex-col gap-3 overflow-y-auto border-r border-black/10 bg-[#FAFAFA] p-3">
       <div className="flex items-center justify-between">
         <span className="text-[11px] font-bold uppercase tracking-wide text-slate-400">Bộ lọc</span>
         <button onClick={clearPreset} title="Đặt lại" className="flex items-center gap-1 text-[11px] text-slate-400 hover:text-slate-600">

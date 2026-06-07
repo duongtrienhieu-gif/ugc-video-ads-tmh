@@ -33,8 +33,8 @@ export default function ProductDetail({ product, onClose }: { product: ScoredPro
       <div className="fixed inset-0 z-40 bg-black/20" onClick={onClose} />
       <aside className="fixed right-0 top-0 z-50 flex h-full w-full max-w-md flex-col bg-white shadow-2xl">
         {/* Header */}
-        <div className="flex items-start gap-3 border-b border-black/[0.06] p-4">
-          <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-slate-100 to-slate-200 text-2xl">
+        <div className="flex items-start gap-3 border-b border-black/10 p-4">
+          <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl bg-slate-100 text-2xl">
             {niche?.emoji ?? '📦'}
           </div>
           <div className="min-w-0 flex-1">
@@ -48,7 +48,7 @@ export default function ProductDetail({ product, onClose }: { product: ScoredPro
         </div>
 
         {/* Tabs */}
-        <div className="flex gap-1 border-b border-black/[0.06] px-3">
+        <div className="flex gap-1 border-b border-black/10 px-3">
           {([['overview', 'Tổng quan'], ['pricing', 'Setup giá']] as const).map(([k, label]) => (
             <button
               key={k} onClick={() => setTab(k)}
@@ -65,7 +65,7 @@ export default function ProductDetail({ product, onClose }: { product: ScoredPro
         <div className="flex-1 overflow-y-auto p-4">
           {tab === 'overview' ? (
             <div className="flex flex-col gap-4">
-              <div className="rounded-xl border border-black/[0.06] bg-slate-50 p-3">
+              <div className="rounded-xl border border-black/10 bg-slate-50 p-3">
                 <div className="mb-1 flex items-center justify-between text-xs text-slate-500">
                   <span>Xu hướng doanh thu</span>
                   <span className="font-semibold text-slate-700">RM{(product.revenue / 1000).toFixed(1)}k · {product.sale} đơn</span>
@@ -80,7 +80,7 @@ export default function ProductDetail({ product, onClose }: { product: ScoredPro
                 </div>
                 <ul className="flex flex-col gap-1.5">
                   {product.signals.map((s) => (
-                    <li key={s.key} className="flex items-start gap-2 rounded-lg border border-black/[0.05] px-3 py-2">
+                    <li key={s.key} className="flex items-start gap-2 rounded-lg border border-black/10 px-3 py-2">
                       <span className="mt-0.5">{STATUS_ICON[s.status]}</span>
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center justify-between">

@@ -14,9 +14,9 @@ export default function Research() {
   const selected = getSelected()
 
   return (
-    <div className="flex h-full w-full flex-col overflow-hidden bg-[#F6F7F9]">
+    <div className="flex h-full w-full flex-col overflow-hidden bg-[#EEEEF2]">
       {/* Header */}
-      <header className="flex shrink-0 flex-col gap-3 border-b border-black/[0.06] bg-white px-5 py-3">
+      <header className="flex shrink-0 flex-col gap-3 border-b border-black/10 bg-white px-5 py-3">
         <div className="flex items-center gap-3">
           <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-violet-100">
             <Search className="h-4 w-4 text-violet-600" />
