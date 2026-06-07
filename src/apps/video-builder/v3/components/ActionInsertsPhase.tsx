@@ -92,8 +92,8 @@ export default function ActionInsertsPhase({ onContinue }: Props) {
     state.costMode === 'FULL' ? '1080p' :
     state.costMode === 'STANDARD' ? '720p' :
     '480p'
-  // Z39/Z67 — per-insert credit is mode-aware: 'video' = keyframe + Wan 2.7
-  // i2v (~36cr); 'ken_burns' = keyframe-only (~6cr, the motion is a free local
+  // Z39/Z68 — per-insert credit is mode-aware: 'video' = keyframe + Grok 1.5
+  // i2v (~21cr); 'ken_burns' = keyframe-only (~6cr, the motion is a free local
   // ffmpeg zoom). Default chip shows the video price as the headline.
   const insertCredits = estimateInsertCredits('video')
   // Eligible inserts a "Bulk render" would actually pay for (skips
@@ -877,7 +877,7 @@ function InsertCard({
         </div>
 
         {/* Z39/Z46 — render-mode toggle: Ken Burns still (cheap, ~6cr, free
-            local zoom) vs Wan i2v (~36cr). Editable only before render. */}
+            local zoom) vs Grok i2v (~21cr). Editable only before render. */}
         <div className="mt-1 flex items-center gap-1">
           {canEditMode ? (
             <div className="inline-flex overflow-hidden rounded-md border border-gray-200">
@@ -892,7 +892,7 @@ function InsertCard({
               </button>
               <button
                 onClick={() => onSetMode('video')}
-                title="Video Wan 2.7 i2v (~36 credit). Hợp cảnh có chuyển động/người thật."
+                title="Video Grok 1.5 i2v (~21 credit). Hợp cảnh có chuyển động/người thật."
                 className={`px-1.5 py-0.5 text-[9px] font-bold ${
                   mode === 'video' ? 'bg-pink-600 text-white' : 'bg-white text-gray-500 hover:bg-gray-50'
                 }`}
@@ -904,7 +904,7 @@ function InsertCard({
             <span className={`rounded px-1.5 py-0.5 text-[9px] font-bold ${
               mode === 'ken_burns' ? 'bg-sky-100 text-sky-700' : 'bg-pink-100 text-pink-700'
             }`}>
-              {mode === 'ken_burns' ? '🖼 Ảnh (Ken Burns)' : '🎬 Video (Wan)'}
+              {mode === 'ken_burns' ? '🖼 Ảnh (Ken Burns)' : '🎬 Video (Grok)'}
             </span>
           )}
           <span className="ml-auto text-[9px] font-semibold text-gray-400">

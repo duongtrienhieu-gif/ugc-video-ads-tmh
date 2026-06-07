@@ -199,14 +199,13 @@ export function estimateLipsyncCredits(durationSec: number): number {
   return Math.ceil(Math.max(5, sec) * KIE_LIPSYNC_CREDITS_PER_SEC)
 }
 
-// Z38/Z67 — estimate for ONE action insert: a gpt-4o keyframe (~6 cr) + a
-// video clip. Z67 switched the video model Veo 3.1 Fast (~60cr, audio-native
-// → audio-gen failures) → Wan 2.7 image-to-video, which is VIDEO-ONLY (no
-// audio failures) and ~4-5× cheaper. ~30 cr ESTIMATE for a ~5-6s Wan i2v
-// clip — VERIFY against the real KIE deduction on the first render and tune.
-// The real cost lever is still ken_burns (~6c) for non-motion scenes.
+// Z38/Z68 — estimate for ONE action insert: a gpt-4o keyframe (~6 cr) + a
+// video clip. Z68 switched the i2v model to Grok Imagine 1.5 — the CHEAPEST
+// (~3 cr/s @480p), VIDEO-ONLY (no audio-gen failures). A ~5s 480p clip ≈ 15 cr
+// → ~21 cr total. ESTIMATE — VERIFY against the real KIE deduction on the
+// first render and tune. ken_burns (~6cr) is still the cheapest for non-motion.
 export const INSERT_CLIP_SECONDS = 6
-export const INSERT_VIDEO_CREDITS = 30
+export const INSERT_VIDEO_CREDITS = 15
 
 // Z39/Z67 — two ways to realise an insert:
 //   'video'     → Wan 2.7 i2v clip (keyframe + ~30cr ≈ ~36cr). For scenes with

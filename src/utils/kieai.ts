@@ -972,6 +972,15 @@ export async function generateVideoJob(params: {
     // Sora uses portrait/landscape and n_frames instead of resolution/duration
     input.aspect_ratio = params.aspectRatio === '9:16' ? 'portrait' : 'landscape'
     input.n_frames = '15'
+  } else if (params.jobModelId.startsWith('grok')) {
+    // Z68 — Grok Imagine i2v: cheapest video model (~3 cr/s @480p), VIDEO-ONLY
+    // (no audio param → no audio-gen failures). Animates the keyframe via
+    // image_urls so the GPT-4o face+product lock is kept. Grok only supports
+    // 480p/720p (map 1080p → 720p; default 480p = cheapest). duration 1-15s.
+    if (params.referenceImageUrls?.length) input.image_urls = [params.referenceImageUrls[0]]
+    input.aspect_ratio = params.aspectRatio
+    input.resolution = params.resolution === '480p' ? '480p' : '720p'
+    if (params.duration) input.duration = Math.max(1, Math.min(15, Math.round(params.duration)))
   }
 
   const res = await fetch(`${KIE_BASE}/jobs/createTask`, {

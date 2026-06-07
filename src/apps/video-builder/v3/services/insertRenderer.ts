@@ -347,34 +347,31 @@ export async function renderInsert(
   // persisted BEFORE polling so a timeout can RESUME the already-paid job
   // (resumeInsertVideo) instead of re-submitting and charging again.
   params.onStageUpdate({ stage: 'video_full', keyframeRef, keyframePromptUsed })
-  console.log(`[INSERT ${params.presetId}] Stage 2 video_full start (${params.resolution}, wan/2-7-image-to-video)`)
+  console.log(`[INSERT ${params.presetId}] Stage 2 video_full start (${params.resolution}, grok-imagine-video-1.5)`)
 
   const keyframePublicUrl = await getUrl(keyframeRef)
   if (!keyframePublicUrl) throw new Error('Không lấy được URL keyframe (asset store)')
 
-  // Z67 — i2v model history: Kling 3.0 (422) → Veo 3.1 Fast (worked but
-  // audio-native → "unable to generate audio" failures + expensive ~60c) →
-  // NOW Wan 2.7 image-to-video. Wan is VIDEO-ONLY (no audio generation → the
-  // whole audio-fail class disappears), ~4-5× cheaper than Veo, and animates
-  // the keyframe via first_frame_url so the GPT-4o face+product lock is kept.
-  // Flexible duration (2-15s) → we generate exactly what the insert needs, no
-  // wasted footage like Veo's fixed 8s. Wan only supports 720p/1080p.
-  const wanDuration = Math.max(4, Math.min(8, Math.ceil(params.durationSec ?? 5)))
-  // Z63 — catch ANY video failure and fall back to a Ken Burns clip from the
-  // keyframe we ALREADY rendered, so a card never dead-ends with "Video lỗi".
+  // Z68 — i2v model history: Kling 3.0 (422) → Veo 3.1 Fast (audio-gen fails,
+  // ~60c) → Wan 2.7 (premium 16cr/s) → NOW Grok Imagine 1.5 — the CHEAPEST i2v
+  // (~3 cr/s @480p), VIDEO-ONLY (no audio-gen failures), animates the keyframe
+  // via image_urls so the GPT-4o face+product lock is kept. Flexible duration
+  // (1-15s) → generate just what the insert needs. Per-second billing so we
+  // keep it short (4-6s). Ken Burns auto-fallback (Z63) still covers failures.
+  const videoDuration = Math.max(4, Math.min(6, Math.ceil(params.durationSec ?? 5)))
   try {
     const fullSubmission = await generateVideoJob({
       apiKey: params.kieApiKey,
-      jobModelId: 'wan/2-7-image-to-video',
+      jobModelId: 'grok-imagine-video-1-5-preview',
       prompt: isConcept
         ? `${motionScene} ${cameraMotion} No product packaging in frame.`
         : `${motionScene} ${cameraMotion} ${preset.handBehavior}`,
       aspectRatio: '9:16',
       resolution: params.resolution,
-      duration: wanDuration,
+      duration: videoDuration,
       referenceImageUrls: [keyframePublicUrl],
     })
-    console.log(`[INSERT ${params.presetId}] Wan submitted taskId=${fullSubmission.taskId.slice(0, 12)} dur=${wanDuration}s`)
+    console.log(`[INSERT ${params.presetId}] Grok submitted taskId=${fullSubmission.taskId.slice(0, 12)} dur=${videoDuration}s`)
     params.onStageUpdate({
       stage: 'video_full', keyframeRef, keyframePromptUsed,
       fullTaskId: fullSubmission.taskId,
@@ -402,7 +399,7 @@ export async function renderInsert(
   } catch (videoErr) {
     if (params.signal?.aborted) throw videoErr  // user cancelled — don't fall back
     const msg = videoErr instanceof Error ? videoErr.message : String(videoErr)
-    console.warn(`[INSERT ${params.presetId}] Wan i2v failed (${msg.slice(0, 140)}) → auto fallback to Ken Burns from the existing keyframe`)
+    console.warn(`[INSERT ${params.presetId}] Grok i2v failed (${msg.slice(0, 140)}) → auto fallback to Ken Burns from the existing keyframe`)
     params.onStageUpdate({ stage: 'video_full', keyframeRef, keyframePromptUsed })
     const videoRef = await renderKenBurnsClip({
       imageBlob: keyframeBlob,
