@@ -184,14 +184,15 @@ export const V3_CREDIT_COST = {
   insert: 76,
 } as const
 
-// Z38 — realistic KIE-credit estimate for a Kling AI-Avatar lipsync render.
-// HARD-WON lesson: Kling avatar is billed roughly PER SECOND of output, NOT
-// as a flat 5s clip. A real ~81s talking-head render burned ~730 KIE credits
-// (≈ 9 cr/s). The old flat `lipsync: 70` understated a full-length creator
-// video by ~10x — which is how a "~91 credit" button silently cost ~1.4k.
+// Z38/Z66 — KIE-credit estimate for the creator-video lipsync, billed PER
+// SECOND of output (not a flat clip). Z66 switched from Kling AI Avatar
+// Standard (~9 cr/s) to InfiniteTalk 480p, which is the CHEAPEST option
+// (~$0.015/s ≈ ~3 cr/s) while giving better lip-sync + more natural
+// expression. This is an ESTIMATE — render one real video and check the
+// actual KIE credit deduction, then tune this number if it differs.
 // Use THIS (not V3_CREDIT_COST.lipsync) anywhere a real talking-head render
 // cost is shown to the user.
-export const KIE_LIPSYNC_CREDITS_PER_SEC = 9
+export const KIE_LIPSYNC_CREDITS_PER_SEC = 3
 
 export function estimateLipsyncCredits(durationSec: number): number {
   const sec = Number.isFinite(durationSec) && durationSec > 0 ? durationSec : 30
