@@ -787,36 +787,68 @@ export async function getVideoStatus(params: {
   )
   if (!res.ok) throw new Error(`Status check failed: ${res.status}`)
 
-  const data = await res.json() as {
-    data: {
-      successFlag?: number
-      resultUrls?: string[] | string
-      fullResultUrls?: string[]
-    }
-  }
-  const record = data.data
-  const flag = record.successFlag
+  // Z46 — Veo record-info response shape varies; parse defensively. The KIE
+  // Veo endpoint nests the result urls under `response` (same as gpt4o-image),
+  // NOT at the top level like the old code assumed. We probe every plausible
+  // location so a minor KIE shape change can't silently break URL extraction
+  // again (the bug that made tasks "complete" then time out at 604s).
+  const json = await res.json() as Record<string, unknown>
+  const record = (json.data ?? json) as Record<string, unknown>
+  const response = (record.response ?? {}) as Record<string, unknown>
 
+  const flag = record.successFlag
   let status: VideoStatus = 'pending'
   if (flag === 1) status = 'completed'
   else if (flag === 2 || flag === 3) status = 'failed'
   else if (flag === 0) status = 'processing'
 
-  let videoUrl: string | undefined
-  if (status === 'completed') {
-    const urls = record.fullResultUrls ?? (
-      typeof record.resultUrls === 'string'
-        ? (JSON.parse(record.resultUrls) as string[])
-        : record.resultUrls
-    )
-    videoUrl = Array.isArray(urls) ? urls[0] : undefined
+  // ── Robust video URL extraction — checks every known KIE field shape ──
+  const parseUrls = (v: unknown): string[] => {
+    if (Array.isArray(v)) return v.filter((x): x is string => typeof x === 'string')
+    if (typeof v === 'string') {
+      const s = v.trim()
+      if (s.startsWith('http')) return [s]
+      try {
+        const parsed = JSON.parse(s)
+        if (Array.isArray(parsed)) return parsed.filter((x): x is string => typeof x === 'string')
+        if (parsed && typeof parsed === 'object') {
+          const inner = (parsed as Record<string, unknown>).resultUrls
+          if (Array.isArray(inner)) return inner.filter((x): x is string => typeof x === 'string')
+        }
+      } catch { /* not JSON */ }
+    }
+    return []
   }
 
-  return {
-    status,
-    videoUrl,
-    error: status === 'failed' ? 'Tạo video thất bại' : undefined,
+  let videoUrl: string | undefined
+  if (status === 'completed') {
+    const candidates = [
+      response.resultUrls, response.fullResultUrls, response.resultUrl, response.videoUrl,
+      record.fullResultUrls, record.resultUrls, record.resultUrl, record.videoUrl,
+      (record as Record<string, unknown>).video_url, record.resultJson,
+    ]
+    for (const c of candidates) {
+      const urls = parseUrls(c)
+      if (urls.length > 0) { videoUrl = urls[0]; break }
+    }
+    if (!videoUrl) {
+      // Could not find the URL despite completed → dump the full body so we
+      // can see the actual field name instead of timing out blind.
+      console.error(`[VEO_STATUS_NO_URL] completed but no url found — raw=${JSON.stringify(json).slice(0, 800)}`)
+    }
   }
+
+  // ── Real error message for failed tasks (was hardcoded generic before) ──
+  let error: string | undefined
+  if (status === 'failed') {
+    error = (
+      record.errorMessage ?? record.failMsg ?? record.errorCode ??
+      json.msg ?? json.message ?? 'Tạo video thất bại'
+    ) as string
+    console.error(`[VEO_STATUS_FAILED] task=${params.taskId.slice(0, 12)} flag=${flag} error="${error}" raw=${JSON.stringify(json).slice(0, 800)}`)
+  }
+
+  return { status, videoUrl, error: error ? String(error) : undefined }
 }
 
 export async function pollVideoUntilDone(params: {
