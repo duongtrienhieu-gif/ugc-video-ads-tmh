@@ -1,13 +1,15 @@
 const $ = (id) => document.getElementById(id)
 const app = $('app')
+let pollTimer = null
 
 async function getState() {
-  const o = await chrome.storage.local.get(['kaloSession', 'enabled', 'status', 'totalIngested'])
+  const o = await chrome.storage.local.get(['kaloSession', 'enabled', 'status', 'totalIngested', 'crawlStatus'])
   return {
     session: o.kaloSession || null,
     enabled: o.enabled !== false,
     status: o.status || {},
     total: o.totalIngested || 0,
+    crawl: o.crawlStatus || null,
   }
 }
 
@@ -17,6 +19,7 @@ function fmtTime(iso) { if (!iso) return '—'; try { return new Date(iso).toLoc
 async function render() {
   const st = await getState()
   if (!st.session) {
+    if (pollTimer) { clearInterval(pollTimer); pollTimer = null }
     app.innerHTML = `
       <label>Email UGC Lab</label>
       <input id="email" type="email" placeholder="email@..." autocomplete="username" />
@@ -31,24 +34,69 @@ async function render() {
   }
 
   const s = st.status
+  const crawling = st.crawl && !st.crawl.done
   app.innerHTML = `
     <div class="row">
       <span class="muted">Đã đăng nhập</span>
       <span class="pill">${esc(st.session.email || 'UGC Lab')}</span>
     </div>
-    <div class="row" style="margin-top:10px">
+    <div class="row" style="margin-top:8px">
       <span class="switch"><input type="checkbox" id="enabled" ${st.enabled ? 'checked' : ''}/> Bật đồng bộ</span>
     </div>
+
+    <button id="crawl" class="primary" style="margin-top:10px" ${crawling ? 'disabled' : ''}>
+      ${crawling ? '⏳ Đang thu thập...' : '🔄 Tự động thu thập'}
+    </button>
+    <div id="crawlBox" class="status" style="${st.crawl ? '' : 'display:none'}">
+      ${st.crawl ? esc(st.crawl.text) : ''}
+    </div>
+
     <div class="status">
-      <div>Lần cuối: <b>${fmtTime(s.lastSync)}</b></div>
-      <div>Thị trường: <b>${esc(s.lastMarket || '—')}</b> · +<b>${s.lastCount || 0}</b> sản phẩm</div>
+      <div>Lần cuối đẩy: <b>${fmtTime(s.lastSync)}</b></div>
+      <div>Thị trường: <b>${esc(s.lastMarket || '—')}</b> · +<b>${s.lastCount || 0}</b></div>
       <div>Tổng đã đẩy: <b>${st.total}</b></div>
-      ${s.error ? `<div class="err">⚠ ${esc(s.error)}</div>` : `<div class="ok">✓ Sẵn sàng — vào Kalodata browse là tự đẩy</div>`}
+      ${s.error ? `<div class="err">⚠ ${esc(s.error)}</div>` : `<div class="ok">✓ Sẵn sàng</div>`}
     </div>
     <button id="logout" class="ghost">Đăng xuất</button>
   `
   $('enabled').onchange = (e) => chrome.storage.local.set({ enabled: e.target.checked })
   $('logout').onclick = async () => { await chrome.storage.local.remove('kaloSession'); render() }
+  $('crawl').onclick = startCrawl
+  if (crawling && !pollTimer) startPoll()
+}
+
+function startPoll() {
+  if (pollTimer) clearInterval(pollTimer)
+  pollTimer = setInterval(async () => {
+    const { crawlStatus } = await chrome.storage.local.get('crawlStatus')
+    const box = $('crawlBox'); const btn = $('crawl')
+    if (box && crawlStatus) { box.style.display = ''; box.textContent = crawlStatus.text }
+    if (crawlStatus && crawlStatus.done) {
+      clearInterval(pollTimer); pollTimer = null
+      if (btn) { btn.disabled = false; btn.textContent = '🔄 Tự động thu thập' }
+      render()
+    }
+  }, 1000)
+}
+
+async function startCrawl() {
+  const tabs = await chrome.tabs.query({ active: true, currentWindow: true })
+  const tab = tabs[0]
+  const box = $('crawlBox'); const btn = $('crawl')
+  if (!tab || !/kalodata\.com/.test(tab.url || '')) {
+    if (box) { box.style.display = ''; box.textContent = '⚠ Mở tab Kalodata (mục Sản phẩm) rồi bấm lại.' }
+    return
+  }
+  await chrome.storage.local.set({ crawlStatus: { text: 'Bắt đầu...', done: false, at: Date.now() } })
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Đang thu thập...' }
+  try {
+    await chrome.tabs.sendMessage(tab.id, { type: 'kalo-crawl-start', maxPages: 25, delayMs: 1800 })
+  } catch (e) {
+    if (box) { box.style.display = ''; box.textContent = '⚠ Refresh trang Kalodata rồi thử lại.' }
+    if (btn) { btn.disabled = false; btn.textContent = '🔄 Tự động thu thập' }
+    return
+  }
+  startPoll()
 }
 
 async function doLogin() {

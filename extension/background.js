@@ -140,5 +140,7 @@ async function handleCapture(msg) {
 chrome.runtime.onMessage.addListener((msg) => {
   if (msg && msg.type === 'kalo-capture') {
     handleCapture(msg).catch((e) => console.error('[kalo-sync]', e))
+  } else if (msg && msg.type === 'kalo-crawl-status') {
+    chrome.storage.local.set({ crawlStatus: { text: msg.text, done: !!msg.done, at: Date.now() } })
   }
 })

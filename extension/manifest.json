@@ -3,7 +3,7 @@
   "name": "UGC Lab — Kalodata Sync",
   "version": "0.1.0",
   "description": "Bắt dữ liệu Kalodata khi bạn browse và đẩy về UGC Lab Research.",
-  "permissions": ["storage"],
+  "permissions": ["storage", "tabs"],
   "host_permissions": [
     "https://www.kalodata.com/*",
     "https://cashuqewfyypyldkutfx.supabase.co/*"
