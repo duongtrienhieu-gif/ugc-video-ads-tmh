@@ -278,6 +278,7 @@ export const ACTION_PRESETS: Record<ActionPresetId, ActionPresetConfig> = {
     cameraPreset: 'subtle_drift',
     needsProduct: true,
     tone: 'violet',
+    handBehavior: 'No hands in frame. Product alone is the subject.',
     // Z54 — do NOT demand "every letter sharply readable" in macro: GPT-4o
     // re-renders fine print and garbles it (fake-looking misspelled labels).
     // Show the product whole; copy the label EXACTLY as the reference, and do
