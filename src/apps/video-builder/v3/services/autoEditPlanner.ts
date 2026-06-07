@@ -217,7 +217,9 @@ function buildSegments(
     // 5s of real footage, while a Ken Burns clip is a synthetic local zoom that
     // can run up to 8s. Cap each insert to what its own footage can actually
     // fill so we never hold past the available frames.
-    const footageCap = (insert.renderMode ?? 'video') === 'ken_burns' ? 8 : 5
+    // Z60 — Veo renders a fixed 8s clip (was Kling 5s), so video footage can
+    // fill up to ~7s; ken_burns local zoom up to 8s.
+    const footageCap = (insert.renderMode ?? 'video') === 'ken_burns' ? 8 : 7
     const overlayCap = Math.min(footageCap, Math.max(1.5, usableEnd - usableStart))
     const durSec = Math.max(
       1.5,

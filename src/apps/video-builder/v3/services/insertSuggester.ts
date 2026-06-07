@@ -456,8 +456,12 @@ DIRECTING RULES:
   original form if the script writes them that way.
 - Group sentences describing the SAME idea into ONE scene; don't cut every line.
 - Duration is FREE per scene — YOU decide based on how much dialogue it covers.
-  A quick punch ≈ 2s, a normal beat ≈ 3-4s. Use whatever fits; do NOT force
-  everything to one length.
+  But mind the render mode:
+    • ken_burns concept stills → 2-4s (short; split dense ideas into more cuts).
+    • VIDEO inserts (any product preset, PRODUCT_IN_ACTION, or emotion
+      CONCEPT_SCENE) → AT LEAST 4s, up to ~6s. These render as a fixed 8s Veo
+      clip, so a 2s cut wastes most of the paid footage and feels jarringly
+      short. Give motion inserts room to breathe (4-6s).
 - HARD LIMIT for CONCEPT_SCENE: never exceed 4s. A still image zoomed for 7-8s
   is BORING and breaks UGC pacing — the viewer's eye stops moving.
 - For a DENSE / MULTI-SENTENCE concept beat (e.g. mechanism with several steps,
@@ -835,19 +839,22 @@ function pickSwap(presetId: ActionPresetId, seen: Set<ActionPresetId>): ActionPr
 }
 
 function clampDuration(v: unknown, presetId: ActionPresetId, renderMode?: InsertRenderMode): number {
-  // Z42/Z44/Z45 — free duration, but bounded by what each render mode can
-  // actually produce + what feels watchable:
-  //   • CONCEPT_SCENE + ken_burns → 4s cap (a still zoomed for 7-8s is
-  //     boring; force the director to split dense ideas)
-  //   • CONCEPT_SCENE + video (Kling, for emotion scenes) → 5s cap, same as
-  //     any Kling clip (fixed 5s footage)
-  //   • Everything else → 5s (Kling fixed)
-  // Floor is 2s for all (the director may want a quick punch cut).
+  // Z42/Z44/Z45/Z60 — free duration, bounded by render mode:
+  //   • ken_burns (still + local zoom) → 2-4s. A still zoomed for 7-8s is
+  //     boring; keep it short and split dense ideas into more cuts.
+  //   • video (Veo i2v) → 4-6s. Veo renders a FIXED 8s clip (flat cost), so a
+  //     2s cut wastes 6s of paid footage AND a 2s motion clip feels jarringly
+  //     short. Floor 4s uses the footage and reads as a real beat; cap 6s keeps
+  //     pacing snappy (well inside the 8s footage).
   const isKenBurns = presetId === 'CONCEPT_SCENE' && renderMode !== 'video'
-  const ceiling = isKenBurns ? 4 : 5
   const n = Number(v)
+  if (isKenBurns) {
+    if (!Number.isFinite(n)) return 3.5
+    return Math.max(2, Math.min(4, Math.round(n * 10) / 10))
+  }
+  // video mode
   if (!Number.isFinite(n)) return 4
-  return Math.max(2, Math.min(ceiling, Math.round(n * 10) / 10))
+  return Math.max(4, Math.min(6, Math.round(n * 10) / 10))
 }
 
 interface RawDirectorScene {
