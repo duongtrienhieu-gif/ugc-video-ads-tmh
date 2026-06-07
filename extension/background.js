@@ -2,12 +2,54 @@
 importScripts('./config.js')
 
 // ── helpers map kiểu dữ liệu ──
-function n(v) { const x = Number(v); return isFinite(x) ? x : null }
+// Kalodata trả số dạng STRING đã format ("RM37.5k", "11.6k", "1.36tr", "2,278")
+// → tự parse về number raw. Cũng nhận number thuần.
+function n(v) {
+  if (v == null) return null
+  if (typeof v === 'number') return isFinite(v) ? v : null
+  if (typeof v !== 'string') return null
+  let str = v.trim().replace(/^RM\s*/i, '').replace(/,/g, '').replace(/\s+/g, '')
+  if (!str) return null
+  let mult = 1
+  if (/tr$/i.test(str)) { mult = 1_000_000; str = str.slice(0, -2) }
+  else if (/k$/i.test(str)) { mult = 1_000; str = str.slice(0, -1) }
+  else if (/M$/.test(str)) { mult = 1_000_000; str = str.slice(0, -1) }
+  else if (/B$/i.test(str)) { mult = 1_000_000_000; str = str.slice(0, -1) }
+  if (/%$/.test(str)) str = str.slice(0, -1)
+  const num = Number(str)
+  return isFinite(num) ? num * mult : null
+}
 function s(v) { return v == null ? null : String(v) }
 function b(v) { return v == null ? null : !!v }
 function dateOnly(v) {
   if (typeof v === 'string' && /^\d{4}-\d{2}-\d{2}/.test(v)) return v.slice(0, 10)
   return null
+}
+// Tìm ảnh sản phẩm: nhiều ứng viên + đào sâu raw nếu cần.
+function findImage(item) {
+  const direct = ['cover','image','image_url','main_image','product_image',
+    'product_image_url','img','img_url','pic','pic_url','thumbnail',
+    'cover_url','product_pic','product_cover']
+  for (const k of direct) if (item[k]) return String(item[k])
+  // Đào sâu: bất kỳ URL trông như CDN ảnh sản phẩm.
+  const seen = new Set()
+  function dig(o, depth) {
+    if (!o || depth > 3 || seen.has(o)) return null
+    if (typeof o === 'string') {
+      if (/\.(jpg|jpeg|png|webp|gif)(\?|$)/i.test(o) &&
+          /(kalocdn|tiktokcdn|alisg|tos-|byteimg)/i.test(o)) return o
+      return null
+    }
+    if (typeof o !== 'object') return null
+    seen.add(o)
+    if (Array.isArray(o)) {
+      for (const v of o) { const r = dig(v, depth + 1); if (r) return r }
+    } else {
+      for (const v of Object.values(o)) { const r = dig(v, depth + 1); if (r) return r }
+    }
+    return null
+  }
+  return dig(item, 0)
 }
 
 function mapRow(item, country, userId, nowIso) {
@@ -15,7 +57,7 @@ function mapRow(item, country, userId, nowIso) {
     product_id: String(item.id),
     market: country,
     product_title: item.product_title ?? null,
-    image_url: item.cover ?? item.image ?? item.product_image ?? item.main_image ?? item.image_url ?? null,
+    image_url: findImage(item),
     revenue: n(item.revenue),
     revenue_grouping_rate: n(item.revenue_grouping_rate),
     sale: n(item.sale),

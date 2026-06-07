@@ -66,7 +66,14 @@ export default function ProductDetail({ product, onClose }: { product: ScoredPro
       <aside className="fixed right-0 top-0 z-50 flex h-full w-full max-w-xl flex-col bg-white shadow-2xl">
         {/* Header */}
         <div className="flex items-start gap-3 border-b border-black/10 p-4">
-          <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl bg-slate-100 text-2xl">{niche?.emoji ?? '📦'}</div>
+          <div className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-slate-100 text-2xl">
+            {product.imageUrl ? (
+              <img src={product.imageUrl} alt={product.title} className="h-full w-full object-cover"
+                onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none' }} />
+            ) : (
+              <span>{niche?.emoji ?? '📦'}</span>
+            )}
+          </div>
           <div className="min-w-0 flex-1">
             <h2 className="text-sm font-semibold leading-snug text-slate-800">{product.title}</h2>
             <div className="mt-1 flex items-center gap-2">
@@ -203,22 +210,37 @@ export default function ProductDetail({ product, onClose }: { product: ScoredPro
           {/* ── CREATOR ── */}
           {tab === 'creator' && (
             <div className="flex flex-col gap-3">
-              <p className="text-xs text-slate-500">👤 Creator đang đẩy sản phẩm — đã có cầu nên dễ tuyển hơn làm từ đầu.</p>
-              {creators.map((c) => (
-                <div key={c.id} className="flex items-center gap-3 rounded-xl border border-black/10 p-2.5">
-                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-violet-400 to-pink-400 text-sm font-bold text-white">
-                    {c.nickname.charAt(0)}
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="text-xs font-semibold text-slate-700">{c.nickname} <span className="font-normal text-slate-400">{c.handle}</span></p>
-                    <div className="mt-0.5 flex flex-wrap gap-x-3 text-[11px] font-medium text-slate-600">
-                      <span>{formatCount(c.followers)} follow</span>
-                      <span className="text-emerald-600">{formatMyr(c.gmv)} GMV</span>
-                      <span>tương tác {c.engagementPct}%</span>
+              <p className="text-xs text-slate-500">👤 Creator đang đẩy sản phẩm — bấm <b>"TikTok"</b> để xem kênh, đánh giá rồi tuyển.</p>
+              {creators.map((c) => {
+                const tiktokHandle = c.handle.replace(/^@/, '')
+                const tiktokUrl = `https://www.tiktok.com/@${tiktokHandle}`
+                return (
+                  <div key={c.id} className="rounded-xl border border-black/10 p-2.5">
+                    <div className="flex items-center gap-3">
+                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-violet-400 to-pink-400 text-sm font-bold text-white">
+                        {c.nickname.charAt(0)}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-xs font-semibold text-slate-700">{c.nickname} <span className="font-normal text-slate-400">{c.handle}</span></p>
+                        <div className="mt-0.5 flex flex-wrap gap-x-3 text-[11px] font-medium text-slate-600">
+                          <span>{formatCount(c.followers)} follow</span>
+                          <span className="text-emerald-600">{formatMyr(c.gmv)} GMV</span>
+                          <span>tương tác {c.engagementPct}%</span>
+                        </div>
+                      </div>
+                      <a
+                        href={tiktokUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex shrink-0 items-center gap-1 rounded-lg border border-black/10 bg-slate-50 px-2.5 py-1.5 text-[11px] font-semibold text-slate-700 transition-colors hover:bg-slate-100"
+                        title={`Xem kênh TikTok của ${c.nickname}`}
+                      >
+                        <ExternalLink className="h-3 w-3" /> TikTok
+                      </a>
                     </div>
                   </div>
-                </div>
-              ))}
+                )
+              })}
             </div>
           )}
 

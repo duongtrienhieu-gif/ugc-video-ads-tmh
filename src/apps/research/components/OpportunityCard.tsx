@@ -18,9 +18,18 @@ export default function OpportunityCard({ product: p, onOpen }: Props) {
       onClick={() => onOpen(p.productId)}
       className="group flex flex-col overflow-hidden rounded-2xl border border-black/10 bg-white text-left shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md"
     >
-      {/* Ảnh (mẫu: khối gradient + emoji ngách) */}
-      <div className="relative flex h-28 items-center justify-center bg-slate-100">
-        <span className="text-4xl">{niche?.emoji ?? '📦'}</span>
+      {/* Ảnh: nếu có image_url thật thì hiện ảnh, không thì emoji */}
+      <div className="relative flex h-28 items-center justify-center overflow-hidden bg-slate-100">
+        {p.imageUrl ? (
+          <img
+            src={p.imageUrl}
+            alt={p.title}
+            className="h-full w-full object-cover"
+            onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none' }}
+          />
+        ) : (
+          <span className="text-4xl">{niche?.emoji ?? '📦'}</span>
+        )}
         <span className="absolute right-2 top-2 rounded-full bg-white/90 px-2 py-0.5 text-xs font-bold text-slate-700 shadow-sm">
           ⭐ {p.score}
         </span>
