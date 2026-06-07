@@ -1,7 +1,7 @@
 // Research module — sinh "bằng chứng" (video/creator/cross-market) cho 1 sản phẩm.
 // P1: deterministic generator từ data mẫu (ổn định, không nhảy số mỗi lần mở).
 // Khi nối Kalodata thật → thay bằng query research_videos / research_creators / cross-market.
-import type { Market, ResearchProduct } from '../types'
+import type { Market, NicheKey, ResearchProduct } from '../types'
 
 export interface SampleVideo {
   id: string; caption: string; handle: string
@@ -29,6 +29,7 @@ function mkRng(seed: number) {
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296
   }
 }
+function rngFor(s: string) { return mkRng(seedFrom(s)) }
 
 const HOOK_POOL = [
   'Before/after sau 7 ngày', 'Demo dùng thử tại nhà', 'Review thật không quảng cáo',
@@ -171,4 +172,42 @@ export function formatCount(n: number): string {
 export function formatKMyr(n: number): string {
   if (n >= 1000) return 'RM' + (n / 1000).toFixed(1) + 'k'
   return 'RM' + Math.round(n)
+}
+
+// ── Shop đối thủ trong ngách (spy) ──
+export interface CompetitorShop {
+  id: string; name: string; nicheKey: NicheKey; market: Market
+  revenue: number; growthRate: number; productCount: number; sellerType: string
+}
+
+const SHOP_PREFIX = ['MY', 'Top', 'Royal', 'Prime', 'Daily', 'Smart', 'Pro', 'Mega', 'Lumi', 'Nova', 'Glow', 'Urban']
+const SHOP_SUFFIX = ['Store', 'Mart', 'Official', 'Shop', 'House', 'Hub', 'Care', 'Lab', 'Mall', 'Co']
+const SELLER_TYPES = ['Thương hiệu', 'Nhà bán lẻ', 'Tự vận hành']
+
+export function getShops(market: Market, niches: NicheKey[]): CompetitorShop[] {
+  const out: CompetitorShop[] = []
+  for (const nk of niches) {
+    const r = rngFor(market + nk + 'shops')
+    const count = 4 + Math.floor(r() * 4)
+    for (let i = 0; i < count; i++) {
+      const pre = SHOP_PREFIX[Math.floor(r() * SHOP_PREFIX.length)]
+      const suf = SHOP_SUFFIX[Math.floor(r() * SHOP_SUFFIX.length)]
+      out.push({
+        id: `${market}-${nk}-shop${i}`,
+        name: `${pre} ${suf}`,
+        nicheKey: nk,
+        market,
+        revenue: Math.round((8 + r() * 90) * 1000),
+        growthRate: Math.round(-20 + r() * 220),
+        productCount: 5 + Math.floor(r() * 60),
+        sellerType: SELLER_TYPES[Math.floor(r() * SELLER_TYPES.length)],
+      })
+    }
+  }
+  return out.sort((a, b) => b.revenue - a.revenue)
+}
+
+export function kalodataShopUrl(shopId: string, market: Market): string {
+  const cur: Record<Market, string> = { MY: 'MYR', TH: 'THB', ID: 'IDR', VN: 'VND' }
+  return `https://www.kalodata.com/shop/detail?id=${encodeURIComponent(shopId)}&language=vi-VN&currency=${cur[market]}&region=${market}`
 }

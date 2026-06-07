@@ -1,15 +1,23 @@
 // Research — entry component (P1, data mẫu).
 // Header (market + thời gian + preset) | FilterPanel | lưới thẻ cơ hội | drawer chi tiết.
+import { useState } from 'react'
 import { Search, FlaskConical } from 'lucide-react'
 import { useResearchStore } from './store'
 import { MARKETS, PRESETS } from './constants'
 import OpportunityCard from './components/OpportunityCard'
 import FilterPanel from './components/FilterPanel'
 import ProductDetail from './components/ProductDetail'
+import ShopList from './components/ShopList'
 import type { Market } from './types'
+
+const segCls = (active: boolean) =>
+  `rounded-md px-3 py-1.5 text-xs font-semibold transition-colors ${
+    active ? 'bg-violet-100 text-violet-700' : 'text-slate-500 hover:text-slate-700'
+  }`
 
 export default function Research() {
   const { market, setMarket, activePreset, applyPreset, getScored, selectedId, select, getSelected } = useResearchStore()
+  const [view, setView] = useState<'products' | 'shops'>('products')
   const scored = getScored()
   const selected = getSelected()
 
@@ -73,13 +81,20 @@ export default function Research() {
         <FilterPanel />
 
         <main className="flex-1 overflow-y-auto p-5">
-          <div className="mb-3 flex items-center justify-between">
-            <h2 className="text-sm font-semibold text-slate-700">
-              {scored.length > 0 ? `${scored.length} cơ hội` : 'Không có kết quả'}
-            </h2>
+          {/* Toggle: Sản phẩm / Shop đối thủ */}
+          <div className="mb-3 flex items-center gap-3">
+            <div className="inline-flex items-center gap-1 rounded-lg border border-black/10 bg-white p-0.5">
+              <button onClick={() => setView('products')} className={segCls(view === 'products')}>🛍 Sản phẩm</button>
+              <button onClick={() => setView('shops')} className={segCls(view === 'shops')}>🏪 Shop đối thủ</button>
+            </div>
+            {view === 'products' && (
+              <span className="text-sm font-semibold text-slate-500">{scored.length} cơ hội</span>
+            )}
           </div>
 
-          {scored.length === 0 ? (
+          {view === 'shops' ? (
+            <ShopList />
+          ) : scored.length === 0 ? (
             <div className="flex h-64 flex-col items-center justify-center gap-2 rounded-2xl border border-dashed border-black/10 text-center text-slate-400">
               <Search className="h-8 w-8" />
               <p className="text-sm">Không có sản phẩm khớp bộ lọc.</p>
