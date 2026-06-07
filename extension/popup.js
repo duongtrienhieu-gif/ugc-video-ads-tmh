@@ -79,18 +79,28 @@ async function render() {
   if (crawling && !pollTimer) startPoll()
 }
 
-function startPoll() {
+function startPoll(startedAt) {
   if (pollTimer) clearInterval(pollTimer)
+  const start = startedAt || Date.now()
   pollTimer = setInterval(async () => {
     const { crawlStatus } = await chrome.storage.local.get('crawlStatus')
     const box = $('crawlBox'); const btn = $('crawl')
     if (box && crawlStatus) { box.style.display = ''; box.innerHTML = renderCrawl(crawlStatus) }
+    // Phát hiện script trên Kalodata không phản hồi: sau 5s mà page vẫn = 0 → cảnh báo F5.
+    if (!crawlStatus || (!crawlStatus.done && (crawlStatus.page || 0) === 0 && Date.now() - start > 5000)) {
+      const stale = '⚠ Trang Kalodata chưa phản hồi.\nHãy F5 lại tab Kalodata, mở mục "Sản phẩm" rồi bấm lại nút này.'
+      await chrome.storage.local.set({ crawlStatus: { text: stale, done: true, error: true, at: Date.now() } })
+      clearInterval(pollTimer); pollTimer = null
+      if (btn) { btn.disabled = false; btn.textContent = '🔄 Tự động thu thập' }
+      setTimeout(render, 200)
+      return
+    }
     if (crawlStatus && crawlStatus.done) {
       clearInterval(pollTimer); pollTimer = null
       if (btn) { btn.disabled = false; btn.textContent = '🔄 Tự động thu thập' }
       setTimeout(render, 200)
     }
-  }, 700)
+  }, 600)
 }
 
 async function startCrawl() {
@@ -98,19 +108,22 @@ async function startCrawl() {
   const tab = tabs[0]
   const box = $('crawlBox'); const btn = $('crawl')
   if (!tab || !/kalodata\.com/.test(tab.url || '')) {
-    if (box) { box.style.display = ''; box.textContent = '⚠ Mở tab Kalodata (mục Sản phẩm) rồi bấm lại.' }
+    if (box) { box.style.display = ''; box.innerHTML = '<div class="err">⚠ Mở tab Kalodata (mục Sản phẩm) rồi bấm lại.</div>' }
     return
   }
-  await chrome.storage.local.set({ crawlStatus: { text: 'Bắt đầu...', done: false, at: Date.now() } })
+  const startedAt = Date.now()
+  await chrome.storage.local.set({ crawlStatus: { text: 'Đang gửi lệnh tới Kalodata...', done: false, at: startedAt, page: 0, maxPages: 25, captured: 0 } })
   if (btn) { btn.disabled = true; btn.textContent = '⏳ Đang thu thập...' }
   try {
-    await chrome.tabs.sendMessage(tab.id, { type: 'kalo-crawl-start', maxPages: 25, delayMs: 1800 })
+    await chrome.tabs.sendMessage(tab.id, { type: 'kalo-crawl-start', maxPages: 25, delayMs: 1200 })
   } catch (e) {
-    if (box) { box.style.display = ''; box.textContent = '⚠ Refresh trang Kalodata rồi thử lại.' }
+    const msg = '⚠ Hãy F5 lại trang Kalodata rồi bấm lại nút này.\n(Lý do: extension vừa được nâng cấp, trang Kalodata cần tải lại tệp mới.)'
+    await chrome.storage.local.set({ crawlStatus: { text: msg, done: true, error: true, at: Date.now() } })
     if (btn) { btn.disabled = false; btn.textContent = '🔄 Tự động thu thập' }
+    render()
     return
   }
-  startPoll()
+  startPoll(startedAt)
 }
 
 async function doLogin() {
