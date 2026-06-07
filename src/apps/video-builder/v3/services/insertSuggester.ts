@@ -388,6 +388,27 @@ DIRECTING RULES:
   INGREDIENTS or a MECHANISM / how-it-works, you MUST give those lines their own
   scene (usually CONCEPT_SCENE or PRODUCT_IN_ACTION) — do not leave them with no
   visual. This is the most common miss.
+- CONCEPT ART-STYLE RULE (for "graphic" CONCEPT_SCENE only) — bake the art
+  direction INTO the conceptPrompt. There are TWO looks; pick per scene:
+  (1) HAND-DRAWN UGC INFOGRAPHIC — use this for INGREDIENT explanations,
+      MECHANISM / how-it-works, "X times more effective" claims, benefit
+      breakdowns, anything that teaches. Write the conceptPrompt as: a warm,
+      friendly HAND-DRAWN / doodle-style infographic (like a creator's
+      notebook sketch, NOT corporate flat-design, NOT abstract art), with
+      CLEAR LABELED elements, small simple icons, and arrows. Put the key
+      terms as SHORT ${langName} text labels right in the scene (e.g. for an
+      ingredient scene name each ingredient in ${langName}). Keep labels SHORT
+      (1-3 words each) — long sentences render badly. Soft approachable colors.
+      Example for a teeth mechanism: "Hand-drawn UGC-style infographic, friendly
+      sketch look: a tooth on the left with a ${langName} label, an arrow to
+      dark powder particles pulling away plaque, ${langName} labels on the two
+      active ingredients, small charcoal + ash icons, warm paper background."
+  (2) REALISTIC SCIENTIFIC — use this ONLY for true microscopy / anatomy / real
+      micro-phenomena (bacteria, enamel cross-section under a microscope). Write
+      it as a realistic documentary/medical close-up, NO text labels.
+  Most ingredient/mechanism beats in an ad should be (1) the friendly
+  infographic — it reads clearly and matches UGC tone. Reserve (2) for genuine
+  microscope/anatomy shots.
 - Group sentences describing the SAME idea into ONE scene; don't cut every line.
 - Duration is FREE per scene — YOU decide based on how much dialogue it covers.
   A quick punch ≈ 2s, a normal beat ≈ 3-4s. Use whatever fits; do NOT force

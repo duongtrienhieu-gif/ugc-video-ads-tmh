@@ -110,31 +110,32 @@ function buildInsertKeyframePrompt(
     paragraphs.push('COMPOSITION: vertical 9:16 aspect ratio, natural framing.')
     paragraphs.push('NO PRODUCT PACKAGING visible in frame — concept / mood illustration only.')
 
-    // Z46 — branch STYLE + negatives by motion kind. Director marks
-    // emotion/lifestyle scenes for video (Kling); graphic/infographic/microscope
-    // scenes for ken_burns. They need OPPOSITE aesthetic guidance:
-    //   • EMOTION (video) — real UGC iPhone feel, real-world color (current).
-    //   • GRAPHIC (ken_burns) — scientific/clinical/microscope/document look.
-    //     The old generic negatives let GPT-4o invent "fake science" visuals
-    //     (rainbow gradients on nano cross-sections, neon glow on microscope
-    //     shots) that broke credibility for health/cosmetic niches.
+    // Z48 — the ART STYLE now lives INSIDE the conceptPrompt (the Director
+    // writes either a hand-drawn UGC infographic — with ${lang} text labels +
+    // icons — or a realistic microscopy look, per scene). So the keyframe
+    // builder must NOT impose its own conflicting style anymore. The old Z46
+    // block forced "scientific microscopy, monochrome, NO text" onto EVERY
+    // graphic scene, which fought an infographic conceptPrompt and produced
+    // abstract art with no labels. We now DEFER to the conceptPrompt and only
+    // add non-conflicting guards (these apply to both looks):
     const isGraphic = renderMode === 'ken_burns'
     if (isGraphic) {
+      // Graphic concept (ken_burns): infographic OR realistic — conceptPrompt
+      // decides. Text labels are ALLOWED here (infographics need them).
       paragraphs.push(
-        'STYLE: Scientific / medical / documentary visualization — microscopy, ' +
-        'cross-section diagram, lab close-up, or clinical infographic. ' +
-        'Monochrome to muted palette (deep blues, teals, whites, neutral greys). ' +
-        'Realistic and credible — looks like a real National Geographic or ' +
-        'medical journal photo, NOT a stylized illustration.',
+        'STYLE: Follow the art direction described in the SCENE above exactly. ' +
+        'If it asks for a hand-drawn / sketch infographic, make it look genuinely ' +
+        'hand-drawn and friendly (a creator\'s notebook doodle), with the labels ' +
+        'written clearly. If it asks for a realistic microscopy / medical look, ' +
+        'make it photoreal and credible.',
       )
       paragraphs.push(
-        'Avoid: rainbow gradient, neon glow, fantasy color, sci-fi color wash, ' +
-        'pastel dreamy bloom, soft fairy-light, anime sparkle, magical aura, ' +
-        'text overlays, watermarks, logos, product packaging, 3D-render plastic ' +
-        'look, cartoon, cinematic color grade. NO rainbow strips, NO purple-pink ' +
-        'gradients, NO blue-to-pink fade — clinical palette ONLY.',
+        'Avoid: watermarks, brand logos, product packaging, glossy 3D-render ' +
+        'plastic look, neon sci-fi glow, rainbow gradient, fantasy color wash. ' +
+        'Keep any text labels SHORT and spelled correctly.',
       )
     } else {
+      // Emotion concept (video): real human/lifestyle footage, no text.
       paragraphs.push(
         'STYLE: Authentic UGC iPhone footage — real lived-in moment, natural daylight, ' +
         'subtle grain, real texture. NOT cinematic, NOT studio, NOT magazine, NOT stock-photo.',
