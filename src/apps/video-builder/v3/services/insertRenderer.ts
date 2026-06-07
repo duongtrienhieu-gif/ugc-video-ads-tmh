@@ -309,25 +309,25 @@ export async function renderInsert(
   // persisted BEFORE polling so a timeout can RESUME the already-paid job
   // (resumeInsertVideo) instead of re-submitting and charging again.
   params.onStageUpdate({ stage: 'video_full', keyframeRef, keyframePromptUsed })
-  console.log(`[INSERT ${params.presetId}] Stage 2 video_full start (${params.resolution}, veo3_fast)`)
+  console.log(`[INSERT ${params.presetId}] Stage 2 video_full start (${params.resolution}, veo3_lite)`)
 
   const keyframePublicUrl = await getUrl(keyframeRef)
   if (!keyframePublicUrl) throw new Error('Không lấy được URL keyframe (asset store)')
 
-  // Z46 — Kling 3.0 returned 422 (Unprocessable Entity) on every i2v submit,
-  // making the engine output zero videos. Swapped to Veo 3.1 Fast: same price
-  // tier (60c vs 70c), different KIE endpoint (/veo/generate vs /jobs/createTask),
-  // different schema → bypasses whatever Kling regression hit us. Google Veo
-  // also handles Asian faces + product preservation reliably.
+  // Z46 — Kling 3.0 returned 422 on every i2v submit → swapped to Veo
+  // (/veo/generate, different schema, bypasses the Kling regression).
+  // Z49 — Veo 3.1 Fast (60c) → Veo 3.1 LITE (30c): same endpoint + i2v,
+  // half the price. Lite quality is plenty for a 3-4s B-roll cutaway that
+  // plays trimmed + under the voiceover. Pricing is flat per submission.
   const fullSubmission = await generateVideo({
     apiKey: params.kieApiKey,
-    model: 'veo3_fast',
+    model: 'veo3_lite',
     prompt: isConcept
       ? `${motionScene} ${cameraMotion} No product packaging in frame.`
       : `${motionScene} ${cameraMotion} ${preset.handBehavior}`,
     aspectRatio: '9:16',
     resolution: params.resolution,
-    // Z46 — Veo 3.1 Fast HARD constraint: duration must be 4, 6, or 8.
+    // Z46 — Veo 3.1 HARD constraint: duration must be 4, 6, or 8.
     // We pick 6 (middle option) — generous motion buffer that the
     // compositor trims down to the per-insert durationSec (usually 2-4s).
     // Sending 5 returns HTTP 422 "Duration must be 4, 6 or 8 seconds".
