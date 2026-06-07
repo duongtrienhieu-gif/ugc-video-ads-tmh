@@ -406,14 +406,21 @@ DIRECTING RULES:
       *** SIMPLE BUT LABELED — this is the balance ***
       The viewer sees this for only 2-4 seconds WHILE the voice talks, so it
       must be absorbed at a glance AND it MUST carry the KEY TERMS the spoken
-      line names, as short ${langName} labels, so image and voice match:
+      line names, as short labels, so image and voice match:
+        • LANGUAGE LOCK — EVERY text label in the image MUST be written in
+          ${langName} (the script's language). For a Bahasa Malaysia script the
+          labels are Malay, for a Vietnamese script Vietnamese, etc. NEVER mix
+          languages and NEVER default to another language. Take the term
+          straight from the ${langName} quote. (Ingredient brand names like
+          "Activated Charcoal" may stay in their original form if the script
+          itself uses them that way.)
         • LABEL THE ACTUAL TERMS FROM THE QUOTE: ingredient names, a number
-          ("5x", "gấp 5 lần"), the one core mechanism/benefit word. Typically
-          1-4 short labels, each 1-3 words. The labels ARE the terms the voice
-          is saying at that second.
-        • If the line names MULTIPLE ingredients (e.g. "Activated Charcoal và
-          Volcanic Ash"), SHOW and LABEL EACH ONE (e.g. labels "Than hoạt tính"
-          + "Tro núi lửa"). Do not drop ingredient names — they are the point.
+          ("5x"), the one core mechanism/benefit word. Typically 1-4 short
+          labels, each 1-3 words. The labels ARE the terms the voice is saying
+          at that second.
+        • If the line names MULTIPLE ingredients, SHOW and LABEL EACH ONE (e.g.
+          a two-ingredient line → two labels, each the ingredient's name in
+          ${langName}). Do not drop ingredient names — they are the point.
         • BUT still SIMPLE: a few short labels on a clean airy sketch. NO
           sentences, NO paragraphs, NO description blocks, NO body text, NO
           title bar + subtitle, NO row of icons along the bottom, NO dense
@@ -422,10 +429,10 @@ DIRECTING RULES:
       SPLIT into 2-3 simple labeled scenes instead of one crammed image.
       Example (multi-ingredient): "Simple friendly hand-drawn sketch: black
       charcoal powder + grey volcanic ash lifting dark plaque off a happy white
-      tooth, two short ${langName} labels 'Than hoạt tính' and 'Tro núi lửa',
+      tooth, two short labels (each ingredient's name written in ${langName}),
       warm marker style, lots of white space." Example (claim): "Hand-drawn
-      tooth with nano dots sinking in, a big '5x' badge and one ${langName}
-      label 'Công nghệ Nano', airy, minimal."
+      tooth with nano dots sinking in, a big '5x' badge and one short
+      ${langName} label for the core tech, airy, minimal."
       LAYOUT — the frame is cropped to TALL VERTICAL 9:16 and slowly zoomed, so
       keep the drawing + its labels CENTRED with wide margins; nothing near the
       edges (it gets cropped).

@@ -132,9 +132,10 @@ function buildInsertKeyframePrompt(
         'infographic, make it a SIMPLE friendly HAND-DRAWN visual — clean line-art ' +
         'doodle, warm marker feel, one clear idea, lots of empty space, absorbable ' +
         'at a glance. Render the SHORT text labels the SCENE specifies (ingredient ' +
-        'names, a number, the key term) — a few short labels (1-3 words each), ' +
-        'BIG and correctly spelled. NO sentences or paragraphs. If the SCENE asks ' +
-        'for a realistic microscopy / medical look instead, make it photoreal.',
+        'names, a number, the key term) EXACTLY as written in the SCENE — same ' +
+        'language, do NOT translate or change them — a few short labels (1-3 words ' +
+        'each), BIG and correctly spelled. NO sentences or paragraphs. If the SCENE ' +
+        'asks for a realistic microscopy / medical look instead, make it photoreal.',
       )
       paragraphs.push(
         'Avoid: paragraphs or sentences of text, dense medical-poster layout, ' +
