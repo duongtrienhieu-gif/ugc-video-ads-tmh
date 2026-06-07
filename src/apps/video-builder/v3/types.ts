@@ -198,27 +198,25 @@ export function estimateLipsyncCredits(durationSec: number): number {
   return Math.ceil(Math.max(5, sec) * KIE_LIPSYNC_CREDITS_PER_SEC)
 }
 
-// Z38 — realistic estimate for ONE action insert: a gpt-4o keyframe (~6 cr,
-// stable) + a 5s Kling i2v clip. The old flat `insert: 76` bundled the same
-// fictional "70-cr 5s clip" that overstated everything. A Kling video is billed
-// per second of output (~9 cr/s like the avatar render ⇒ ~45 cr for 5s), so a
-// single insert lands ~51 cr, not 76. STILL AN ESTIMATE — render ONE real
-// insert to confirm the per-second rate for kling-3.0/video before trusting
-// this for a 4-5 insert budget.
+// Z38/Z46 — realistic estimate for ONE action insert: a gpt-4o keyframe (~6 cr,
+// stable) + a 5s Veo 3.1 Fast i2v clip (~60 cr flat per submission, see
+// VIDEO_MODELS in kieai.ts). Total ~66 cr. Switched from Kling 3.0 → Veo
+// after Kling started returning HTTP 422 on every submit in Z46.
 export const INSERT_CLIP_SECONDS = 5
+export const VEO_FAST_INSERT_CREDITS = 60
 
-// Z39 — two ways to realise an insert:
-//   'video'     → Kling i2v 5s clip (keyframe + ~9cr/s motion ≈ ~51cr). For
+// Z39/Z46 — two ways to realise an insert:
+//   'video'     → Veo 3.1 Fast i2v 5s clip (keyframe + ~60cr flat ≈ ~66cr). For
 //                 scenes with REAL motion/people (drink, hold, react).
 //   'ken_burns' → keyframe still ONLY (~6cr); the motion is a slow zoom/pan
 //                 rendered LOCALLY with ffmpeg.wasm (free). For static concept
-//                 / ingredient / product-label scenes — avoids the ~45cr Kling
+//                 / ingredient / product-label scenes — avoids the ~60cr Veo
 //                 charge AND the i2v morph risk on abstract subjects.
 export type InsertRenderMode = 'video' | 'ken_burns'
 
 export function estimateInsertCredits(mode: InsertRenderMode = 'video'): number {
   if (mode === 'ken_burns') return V3_CREDIT_COST.keyframe
-  return V3_CREDIT_COST.keyframe + Math.ceil(INSERT_CLIP_SECONDS * KIE_LIPSYNC_CREDITS_PER_SEC)
+  return V3_CREDIT_COST.keyframe + VEO_FAST_INSERT_CREDITS
 }
 
 // Concept scenes default to Ken Burns (they're abstract/static — the exact

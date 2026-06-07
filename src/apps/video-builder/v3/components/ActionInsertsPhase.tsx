@@ -92,9 +92,9 @@ export default function ActionInsertsPhase({ onContinue }: Props) {
     state.costMode === 'FULL' ? '1080p' :
     state.costMode === 'STANDARD' ? '720p' :
     '480p'
-  // Z39 — per-insert credit is mode-aware: 'video' = keyframe + 5s Kling
-  // (~51cr); 'ken_burns' = keyframe-only (~6cr, the motion is a free local
-  // ffmpeg zoom). Default chip shows the Kling price as the headline number.
+  // Z39/Z46 — per-insert credit is mode-aware: 'video' = keyframe + 5s Veo i2v
+  // (~66cr); 'ken_burns' = keyframe-only (~6cr, the motion is a free local
+  // ffmpeg zoom). Default chip shows the Veo price as the headline number.
   const insertCredits = estimateInsertCredits('video')
   // Eligible inserts a "Bulk render" would actually pay for (skips
   // locked/approved/rejected per the Z26 lesson) — and their real summed cost,
@@ -873,8 +873,8 @@ function InsertCard({
           )}
         </div>
 
-        {/* Z39 — render-mode toggle: Ken Burns still (cheap, ~6cr, free local
-            zoom) vs Kling video (~51cr). Editable only before render. */}
+        {/* Z39/Z46 — render-mode toggle: Ken Burns still (cheap, ~6cr, free
+            local zoom) vs Veo i2v (~66cr). Editable only before render. */}
         <div className="mt-1 flex items-center gap-1">
           {canEditMode ? (
             <div className="inline-flex overflow-hidden rounded-md border border-gray-200">
@@ -889,7 +889,7 @@ function InsertCard({
               </button>
               <button
                 onClick={() => onSetMode('video')}
-                title="Video Kling 5s (~51 credit). Hợp cảnh có chuyển động/người thật."
+                title="Video Veo 3.1 Fast 5s (~66 credit). Hợp cảnh có chuyển động/người thật."
                 className={`px-1.5 py-0.5 text-[9px] font-bold ${
                   mode === 'video' ? 'bg-pink-600 text-white' : 'bg-white text-gray-500 hover:bg-gray-50'
                 }`}
@@ -901,7 +901,7 @@ function InsertCard({
             <span className={`rounded px-1.5 py-0.5 text-[9px] font-bold ${
               mode === 'ken_burns' ? 'bg-sky-100 text-sky-700' : 'bg-pink-100 text-pink-700'
             }`}>
-              {mode === 'ken_burns' ? '🖼 Ảnh (Ken Burns)' : '🎬 Video (Kling)'}
+              {mode === 'ken_burns' ? '🖼 Ảnh (Ken Burns)' : '🎬 Video (Veo)'}
             </span>
           )}
           <span className="ml-auto text-[9px] font-semibold text-gray-400">
