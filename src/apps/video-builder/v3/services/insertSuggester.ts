@@ -403,6 +403,14 @@ DIRECTING RULES:
       sketch look: a tooth on the left with a ${langName} label, an arrow to
       dark powder particles pulling away plaque, ${langName} labels on the two
       active ingredients, small charcoal + ash icons, warm paper background."
+      LAYOUT IS CRITICAL — the frame is cropped to TALL VERTICAL 9:16 and slowly
+      zoomed in. Compose for a tall portrait canvas and keep EVERY label + icon
+      INSIDE a generous central safe margin. Put NOTHING important near the
+      left/right/top/bottom edges — edge content gets cropped off and becomes
+      unreadable. STACK labels vertically (top→bottom) instead of spreading them
+      to the side edges. State this in the conceptPrompt, e.g. "...vertical 9:16
+      layout, all labels stacked in the centre with wide safe margins, nothing
+      touching the edges."
   (2) REALISTIC SCIENTIFIC — use this ONLY for true microscopy / anatomy / real
       micro-phenomena (bacteria, enamel cross-section under a microscope). Write
       it as a realistic documentary/medical close-up, NO text labels.

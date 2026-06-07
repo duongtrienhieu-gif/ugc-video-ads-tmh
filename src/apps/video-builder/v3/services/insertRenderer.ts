@@ -107,7 +107,13 @@ function buildInsertKeyframePrompt(
         ? scene
         : preset.promptPreset}`,
     )
-    paragraphs.push('COMPOSITION: vertical 9:16 aspect ratio, natural framing.')
+    paragraphs.push(
+      'COMPOSITION: vertical 9:16 aspect ratio. Keep ALL text labels, icons and ' +
+      'key elements INSIDE a generous central safe margin — the frame is cropped ' +
+      'to tall vertical and slowly zoomed, so anything near the left/right/top/' +
+      'bottom edges WILL be cut off. Stack labels vertically in the centre; do ' +
+      'NOT place labels at the side edges. Every label fully inside the frame.',
+    )
     paragraphs.push('NO PRODUCT PACKAGING visible in frame — concept / mood illustration only.')
 
     // Z48 — the ART STYLE now lives INSIDE the conceptPrompt (the Director
@@ -309,19 +315,21 @@ export async function renderInsert(
   // persisted BEFORE polling so a timeout can RESUME the already-paid job
   // (resumeInsertVideo) instead of re-submitting and charging again.
   params.onStageUpdate({ stage: 'video_full', keyframeRef, keyframePromptUsed })
-  console.log(`[INSERT ${params.presetId}] Stage 2 video_full start (${params.resolution}, veo3_lite)`)
+  console.log(`[INSERT ${params.presetId}] Stage 2 video_full start (${params.resolution}, veo3_fast)`)
 
   const keyframePublicUrl = await getUrl(keyframeRef)
   if (!keyframePublicUrl) throw new Error('Không lấy được URL keyframe (asset store)')
 
   // Z46 — Kling 3.0 returned 422 on every i2v submit → swapped to Veo
   // (/veo/generate, different schema, bypasses the Kling regression).
-  // Z49 — Veo 3.1 Fast (60c) → Veo 3.1 LITE (30c): same endpoint + i2v,
-  // half the price. Lite quality is plenty for a 3-4s B-roll cutaway that
-  // plays trimmed + under the voiceover. Pricing is flat per submission.
+  // Z49 — tried Veo 3.1 Lite (30c) to halve cost, but Lite returned 100%
+  // failures on i2v (it does not appear to support reference-image input).
+  // Z50 — reverted to Veo 3.1 Fast (60c) which renders i2v reliably. The
+  // real cost lever is using ken_burns (~6c) for non-motion scenes, not the
+  // video tier. Pricing is flat per submission.
   const fullSubmission = await generateVideo({
     apiKey: params.kieApiKey,
-    model: 'veo3_lite',
+    model: 'veo3_fast',
     prompt: isConcept
       ? `${motionScene} ${cameraMotion} No product packaging in frame.`
       : `${motionScene} ${cameraMotion} ${preset.handBehavior}`,
@@ -418,7 +426,10 @@ async function renderKenBurnsClip(args: {
   const H = h0 % 2 === 0 ? h0 : h0 + 1
   const fps = 30
   const frames = Math.max(1, Math.round(dur * fps))
-  const inc = (0.28 / frames).toFixed(6)
+  // Z50 — gentler zoom (was 0.28). A 28% push cropped the edges of infographic
+  // concept scenes, cutting off the side text labels mid-clip. 14% still reads
+  // as motion but keeps labeled elements in frame long enough to read.
+  const inc = (0.14 / frames).toFixed(6)
   const id = Math.random().toString(36).slice(2, 8)
   const ext = (args.imageBlob.type || '').includes('png') ? 'png' : 'jpg'
   const inName = `kb_${id}.${ext}`
