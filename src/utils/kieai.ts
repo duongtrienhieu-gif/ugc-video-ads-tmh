@@ -746,6 +746,14 @@ export async function generateVideo(params: {
     prompt: params.prompt,
     model: params.model,
     aspect_ratio: params.aspectRatio,
+    // Z62 — Veo 3.1 is audio-native and FAILS the whole job with flag=3
+    // ("The Google model was unable to generate audio for this request") on
+    // some prompts/images (e.g. a person holding a product). We strip insert
+    // audio at assembly anyway, so the audio is pure downside. enableFallback
+    // lets KIE switch to a backup channel instead of hard-failing when the
+    // primary Veo path errors — turning the 100%-fail HOLD_PRODUCT into a
+    // successful (silent) clip.
+    enableFallback: true,
   }
   // Only send generationType when images are involved; omit for pure text-to-video
   if (generationType) body.generationType = generationType

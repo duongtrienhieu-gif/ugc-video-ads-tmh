@@ -359,12 +359,17 @@ export async function renderInsert(
   // Z50 — reverted to Veo 3.1 Fast (60c) which renders i2v reliably. The
   // real cost lever is using ken_burns (~6c) for non-motion scenes, not the
   // video tier. Pricing is flat per submission.
+  // Z62 — append a SILENT directive. Veo 3.1 is audio-native and was failing
+  // the whole job ("unable to generate audio") when it tried to synthesize
+  // speech for a person scene. Inserts are silent B-roll (audio stripped at
+  // assembly), so tell Veo not to generate dialogue/voice — only ambient.
+  const SILENT_SUFFIX = ' Silent footage — no spoken dialogue, no voiceover, the person does not talk; ambient sound only.'
   const fullSubmission = await generateVideo({
     apiKey: params.kieApiKey,
     model: 'veo3_fast',
-    prompt: isConcept
+    prompt: (isConcept
       ? `${motionScene} ${cameraMotion} No product packaging in frame.`
-      : `${motionScene} ${cameraMotion} ${preset.handBehavior}`,
+      : `${motionScene} ${cameraMotion} ${preset.handBehavior}`) + SILENT_SUFFIX,
     aspectRatio: '9:16',
     resolution: params.resolution,
     // Z46 — Veo 3.1 HARD constraint: duration must be 4, 6, or 8.
