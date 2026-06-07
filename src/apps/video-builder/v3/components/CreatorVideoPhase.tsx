@@ -38,7 +38,7 @@ import {
 import {
   CREATOR_PRESETS, CREATOR_PRESET_ORDER, styleCreatorWithGemini,
 } from '../services/creatorPresets'
-import { renderCreatorVideo, resumeCreatorVideoLipsync } from '../services/creatorVideoEngine'
+import { renderCreatorVideo, resumeCreatorVideoLipsync, previewCreatorVoice } from '../services/creatorVideoEngine'
 
 const TONE_BG: Record<string, string> = {
   emerald: 'bg-emerald-100 text-emerald-800 border-emerald-300',
@@ -231,6 +231,12 @@ export default function CreatorVideoPhase({ onContinue }: Props) {
   const [aiReason, setAiReason]   = useState<string | null>(null)
   const autoStyledRef = useRef(false)
 
+  // Z53 — voice-only preview (TTS, no lipsync) so the user hears the real
+  // script + voice + expressive setting + which model (v3/v2) before paying.
+  const [voicePreviewing, setVoicePreviewing] = useState(false)
+  const [voicePreviewUrl, setVoicePreviewUrl] = useState<string | null>(null)
+  const [voicePreviewModel, setVoicePreviewModel] = useState<string | null>(null)
+
   // Z38 — cost of THIS render = TTS + keyframe + ONE Kling lipsync (no more
   // duplicate preview render). Lipsync scales with the real script duration
   // (Kling avatar is billed ~per second), so the chip reflects actual KIE cost.
@@ -256,6 +262,41 @@ export default function CreatorVideoPhase({ onContinue }: Props) {
   const isRendering = stage !== 'idle' && stage !== 'completed' && stage !== 'failed'
 
   // ── Handlers ─────────────────────────────────────────────────────────────
+
+  // Z53 — hear the voice on the REAL script before paying for lipsync.
+  // Runs ONLY the TTS step (cheap) and plays it back; reports v3 vs v2.
+  const handlePreviewVoice = async () => {
+    if (!elevenLabsKey) { addToast('Thiếu ElevenLabs API key trong Settings', 'error'); return }
+    if (!brain.script) { addToast('Chưa có script — quay lại bước Script + Voice', 'error'); return }
+    if (!state.inputs.avatar) { addToast('Chưa pick avatar — quay lại bước 1', 'error'); return }
+    setVoicePreviewing(true)
+    setVoicePreviewModel(null)
+    try {
+      const result = await previewCreatorVoice({
+        elevenLabsApiKey: elevenLabsKey,
+        script: brain.script,
+        voiceCategory: brain.voiceCategory ?? matchVoiceForAvatar(state.inputs.avatar, brain.angle),
+        voiceId: state.inputs.voiceId,
+      })
+      // Revoke any previous object URL before replacing it.
+      if (voicePreviewUrl) URL.revokeObjectURL(voicePreviewUrl)
+      const url = URL.createObjectURL(result.audioBlob)
+      setVoicePreviewUrl(url)
+      setVoicePreviewModel(result.modelUsed)
+      const v3 = result.modelUsed === 'eleven_v3'
+      addToast(
+        v3
+          ? '🔊 Giọng v3 (biểu cảm cao) — nghe thử bên dưới'
+          : '🔊 Nghe thử bên dưới · Key không có v3 → dùng v2 (biểu cảm vừa)',
+        'success',
+      )
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      addToast(`Nghe thử giọng lỗi: ${msg}`, 'error')
+    } finally {
+      setVoicePreviewing(false)
+    }
+  }
 
   const handleRender = async () => {
     if (!kieApiKey) { addToast('Thiếu KIE API key trong Settings', 'error'); return }
@@ -597,6 +638,17 @@ export default function CreatorVideoPhase({ onContinue }: Props) {
                 <><Sparkles className="h-4 w-4" /> Tạo creator video · {formatCredits(stepCredits)}</>
               )}
             </button>
+            {/* Z53 — nghe thử giọng trước khi tốn credit lipsync */}
+            <button
+              onClick={handlePreviewVoice}
+              disabled={voicePreviewing || isRendering || !brain.script}
+              className="flex items-center gap-1.5 rounded-full border border-violet-300 bg-violet-50 px-4 py-1.5 text-[12px] font-bold text-violet-700 transition-colors hover:bg-violet-100 disabled:cursor-not-allowed disabled:opacity-50"
+              title="Chỉ tạo giọng (TTS) để nghe thử — KHÔNG tốn credit lipsync. Nghe ưng mới tạo video."
+            >
+              {voicePreviewing
+                ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Đang tạo giọng...</>
+                : <><Mic2 className="h-3.5 w-3.5" /> Nghe thử giọng (không tốn lipsync)</>}
+            </button>
             {canResume && !isRendering && (
               <button
                 onClick={handleResume}
@@ -608,6 +660,29 @@ export default function CreatorVideoPhase({ onContinue }: Props) {
             )}
           </div>
         </div>
+
+        {/* Z53 — voice preview player */}
+        {voicePreviewUrl && (
+          <div className="mt-3 rounded-xl border border-violet-200 bg-violet-50/60 p-3">
+            <div className="mb-1.5 flex items-center gap-2">
+              <Mic2 className="h-4 w-4 text-violet-600" />
+              <span className="text-[12px] font-bold text-gray-800">Nghe thử giọng</span>
+              {voicePreviewModel && (
+                <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                  voicePreviewModel === 'eleven_v3'
+                    ? 'bg-emerald-100 text-emerald-700'
+                    : 'bg-amber-100 text-amber-700'
+                }`}>
+                  {voicePreviewModel === 'eleven_v3' ? 'v3 · biểu cảm cao' : 'v2 · biểu cảm vừa (key không có v3)'}
+                </span>
+              )}
+            </div>
+            <audio controls src={voicePreviewUrl} className="w-full" />
+            <p className="mt-1.5 text-[11px] text-gray-500">
+              Đây là giọng + tốc độ thật sẽ dùng cho video. Nghe ưng thì bấm “Tạo creator video”. Đổi giọng ở bước Script + Voice rồi nghe lại nếu chưa hợp.
+            </p>
+          </div>
+        )}
 
         {/* ── Stage progress strip ────────────────────────────────────────── */}
         {clip && clip.stage !== 'idle' && (

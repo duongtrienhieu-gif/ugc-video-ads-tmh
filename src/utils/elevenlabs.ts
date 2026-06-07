@@ -224,6 +224,10 @@ export async function textToSpeech(params: {
   nextText?: string
   /** MP3 quality. Default mp3_44100_192 (Creator+ plans); falls back to 128 on free/Starter. */
   outputFormat?: 'mp3_44100_128' | 'mp3_44100_192' | 'mp3_44100_64' | 'pcm_44100'
+  /** Z53 — fires with the model that ACTUALLY produced the audio (after any
+   *  eleven_v3 → v2 fallback). Lets callers report "v3 worked" vs "fell back
+   *  to v2" to the user. */
+  onModelUsed?: (model: string) => void
 }): Promise<ArrayBuffer> {
   const body: Record<string, unknown> = {
     text: params.text,
@@ -285,6 +289,8 @@ export async function textToSpeech(params: {
     throw new Error(`ElevenLabs TTS lỗi (${res.status}): ${detail.slice(0, 200)}`)
   }
 
+  // Z53 — report the model that actually rendered (after any v3→v2 fallback).
+  params.onModelUsed?.(String(body.model_id))
   return res.arrayBuffer()
 }
 

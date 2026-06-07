@@ -39,6 +39,42 @@ import {
   buildKeyframePrompt, buildLipsyncPrompt,
 } from './creatorPromptBuilder'
 
+// ── Z53 — expressive voice settings ─────────────────────────────────────────
+// The old TTS was tuned for "stability over expressiveness" (stability 0.78,
+// style 0) → flat, even, reading-tone delivery. These settings trade some
+// consistency for life: lower stability lets the voice rise/fall with the
+// sentence, style adds emotional emphasis. Shared by BOTH the preview button
+// and the real render so what you hear == what you get.
+export const EXPRESSIVE_TTS = {
+  stability: 0.45,   // ↓ from 0.78 — dynamic, less monotone
+  similarity: 0.75,
+  style: 0.40,       // ↑ from 0 — emotional emphasis
+  speed: 1.15,
+} as const
+
+// Synthesize the script with eleven_v3 attempted FIRST (auto-falls back to
+// multilingual_v2 if the key/plan lacks v3) + the expressive settings. Reports
+// the model that actually rendered via onModelUsed.
+async function synthVoice(args: {
+  apiKey: string
+  voiceId: string
+  text: string
+  onModelUsed?: (model: string) => void
+}): Promise<ArrayBuffer> {
+  return textToSpeech({
+    apiKey: args.apiKey,
+    voiceId: args.voiceId,
+    text: args.text,
+    modelId: 'eleven_v3',   // try v3 (expressive); falls back to v2 internally
+    stability: EXPRESSIVE_TTS.stability,
+    similarity: EXPRESSIVE_TTS.similarity,
+    style: EXPRESSIVE_TTS.style,
+    speed: EXPRESSIVE_TTS.speed,
+    outputFormat: 'mp3_44100_128',
+    onModelUsed: args.onModelUsed,
+  })
+}
+
 // ── Stage update callbacks ─────────────────────────────────────────────────
 
 export interface StageUpdate {
@@ -108,19 +144,13 @@ export async function renderCreatorVideo(
 
   const voiceSource = params.voiceId?.trim() ? 'user-picked' : `category:${voiceCategory.labelVi}`
   console.log(`[CREATOR_VIDEO Stage 1] TTS voice=${voiceSource} (${voiceId}) chars=${fullScriptText.length}`)
-  const audioBuffer = await textToSpeech({
+  // Z53 — expressive synth (eleven_v3 first → v2 fallback) so the render matches
+  // the "Nghe thử giọng" preview the user approved before paying for lipsync.
+  const audioBuffer = await synthVoice({
     apiKey: params.elevenLabsApiKey,
     voiceId,
     text: fullScriptText,
-    // Slight downward adjustment for long scripts — stability over expressiveness
-    stability: 0.78,
-    similarity: 0.75,
-    style: 0,
-    // 1.15× — natural TikTok creator pace; saves ~13% Kling lipsync credit vs 1.0
-    // while staying inside ElevenLabs' safe range (1.0-1.2 sounds natural,
-    // >1.2 starts to feel rushed/robotic on some voices).
-    speed: 1.15,
-    outputFormat: 'mp3_44100_128',  // matches Starter $5/mo plan
+    onModelUsed: (m) => console.log(`[CREATOR_VIDEO Stage 1] TTS model=${m}`),
   })
 
   if (params.signal?.aborted) throw new Error('CANCELLED — user huỷ')
@@ -335,4 +365,41 @@ async function measureAudioDurationSec(audioBlob: Blob): Promise<number> {
 function estimateFromSize(bytes: number): number {
   // 128 kbps = 16 KB/s → bytes / 16384
   return Math.max(1, bytes / 16384)
+}
+
+// ── Z53 — voice-only preview ────────────────────────────────────────────────
+// Runs ONLY the TTS step (no keyframe, no Kling lipsync) so the user can hear
+// the actual script in the chosen voice — with the expressive settings + the
+// eleven_v3 attempt — BEFORE paying for the expensive lipsync. Returns the
+// audio blob (caller plays it via an <audio> element) plus which model
+// actually rendered (so the UI can show "v3 expressive" vs "v2 fallback").
+export interface VoicePreviewResult {
+  audioBlob: Blob
+  modelUsed: string
+  durationSec: number
+}
+
+export async function previewCreatorVoice(args: {
+  elevenLabsApiKey: string
+  script: GeneratedScript
+  voiceCategory: VoiceCategoryId
+  voiceId?: string | null
+}): Promise<VoicePreviewResult> {
+  const voiceCategory = VOICE_CATEGORIES[args.voiceCategory]
+  const voiceId = args.voiceId?.trim() || voiceCategory.defaultVoiceId
+  const fullScriptText = args.script.blocks.map((b) => b.text).join(' ')
+  if (!fullScriptText.trim()) throw new Error('Chưa có kịch bản để nghe thử')
+
+  let modelUsed = 'eleven_multilingual_v2'
+  console.log(`[VOICE_PREVIEW] voiceId=${voiceId} chars=${fullScriptText.length} — TTS only, no lipsync`)
+  const buffer = await synthVoice({
+    apiKey: args.elevenLabsApiKey,
+    voiceId,
+    text: fullScriptText,
+    onModelUsed: (m) => { modelUsed = m },
+  })
+  const audioBlob = new Blob([buffer], { type: 'audio/mpeg' })
+  const durationSec = await measureAudioDurationSec(audioBlob)
+  console.log(`[VOICE_PREVIEW] done model=${modelUsed} dur=${durationSec}s`)
+  return { audioBlob, modelUsed, durationSec }
 }
