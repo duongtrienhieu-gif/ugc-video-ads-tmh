@@ -39,17 +39,18 @@ import {
   buildKeyframePrompt, buildLipsyncPrompt,
 } from './creatorPromptBuilder'
 
-// ── Z53 — expressive voice settings ─────────────────────────────────────────
-// The old TTS was tuned for "stability over expressiveness" (stability 0.78,
-// style 0) → flat, even, reading-tone delivery. These settings trade some
-// consistency for life: lower stability lets the voice rise/fall with the
-// sentence, style adds emotional emphasis. Shared by BOTH the preview button
-// and the real render so what you hear == what you get.
+// ── Z53/Z65 — expressive voice settings ─────────────────────────────────────
+// Z53 made the voice expressive (vs the old flat reading tone). Z65 tightens
+// the PACE: the user found it "từ tốn" (too leisurely) — that came from v3's
+// dramatic expressive pauses + the 1.15× speed. Now: speed maxed to 1.2 (the
+// ElevenLabs ceiling) and style trimmed 0.40 → 0.28 so it keeps emotion but
+// stops the long pauses, giving a snappier TikTok-creator pace. Faster read →
+// shorter video → cheaper per-second lipsync. Shared by preview + render.
 export const EXPRESSIVE_TTS = {
-  stability: 0.45,   // ↓ from 0.78 — dynamic, less monotone
+  stability: 0.45,   // dynamic, not monotone
   similarity: 0.75,
-  style: 0.40,       // ↑ from 0 — emotional emphasis
-  speed: 1.15,
+  style: 0.28,       // some emotion, but fewer leisurely pauses (was 0.40)
+  speed: 1.2,        // ElevenLabs max — snappiest natural pace (was 1.15)
 } as const
 
 // Synthesize the script with eleven_v3 attempted FIRST (auto-falls back to

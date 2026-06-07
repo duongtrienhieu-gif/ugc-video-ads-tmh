@@ -4,13 +4,12 @@
 // BEFORE the TTS call so the UI can show "your 30s script lands at 28.4s"
 // and the user can tweak before paying for TTS.
 //
-// Baseline: 200 wpm — calibrated against REAL ElevenLabs output. Z53 measured
-// a 193-word VN script rendering at ~56s with eleven_v3 + 1.15× speed (≈207
-// effective wpm); the old 175 over-estimated it at ~66s, which both misled the
-// UI and (before Z57) misplaced the inserts. 200 lands the estimate within ~2s
-// of the real audio for the common (v3 + 1.15×) case. The estimate is still
-// approximate — the auto-edit planner (Z57) re-scales insert timestamps to the
-// ACTUAL measured voice duration, so final timing is correct regardless.
+// Baseline: 215 wpm — Z65 raised the TTS to speed 1.2 + lower style (fewer
+// pauses) for a snappier pace, so the effective read rate rose (~200→~215 wpm).
+// The estimate is still approximate (it varies by voice/run) — the auto-edit
+// planner (Z57) re-scales insert timestamps to the ACTUAL measured voice
+// duration, and the UI shows the REAL measured duration after "Nghe thử giọng"
+// (Z64), so final timing + the displayed number are correct regardless.
 //
 // The estimator is purely arithmetic — no network, no Gemini, runs on
 // every script edit.
@@ -22,7 +21,7 @@ import type {
 } from '../types'
 import { AD_STRUCTURES } from './adStructures'
 
-const DEFAULT_WPM = 200
+const DEFAULT_WPM = 215
 
 /** Count words — supports Vietnamese (space-tokenized) + English. */
 export function countWords(text: string): number {
