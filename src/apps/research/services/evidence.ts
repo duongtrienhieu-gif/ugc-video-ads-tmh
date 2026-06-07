@@ -209,5 +209,9 @@ export function getShops(market: Market, niches: NicheKey[]): CompetitorShop[] {
 
 export function kalodataShopUrl(shopId: string, market: Market): string {
   const cur: Record<Market, string> = { MY: 'MYR', TH: 'THB', ID: 'IDR', VN: 'VND' }
-  return `https://www.kalodata.com/shop/detail?id=${encodeURIComponent(shopId)}&language=vi-VN&currency=${cur[market]}&region=${market}`
+  const end = new Date(); const start = new Date(end.getTime() - 30 * 86400000)
+  const fmt = (d: Date) => d.toISOString().slice(0, 10)
+  const dateRange = encodeURIComponent(JSON.stringify([fmt(start), fmt(end)]))
+  const cateValue = encodeURIComponent('[]')
+  return `https://www.kalodata.com/shop/detail?id=${encodeURIComponent(shopId)}&language=vi-VN&currency=${cur[market]}&region=${market}&dateRange=${dateRange}&cateValue=${cateValue}`
 }

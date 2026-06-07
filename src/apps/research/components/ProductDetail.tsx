@@ -13,7 +13,12 @@ function kalodataUrl(productId: string, market: Market): string {
   // demo: bỏ hậu tố thị trường (-th/-id/-vn) đã thêm cho data mẫu;
   // data thật: product_id chính là id Kalodata nên link trỏ đúng sản phẩm.
   const id = productId.replace(/-(th|id|vn)$/i, '')
-  return `https://www.kalodata.com/product/detail?id=${encodeURIComponent(id)}&language=vi-VN&currency=${KALODATA_CURRENCY[market]}&region=${market}`
+  // URL Kalodata cập nhật 2026-06: PHẢI có dateRange + cateValue, không trang trống.
+  const end = new Date(); const start = new Date(end.getTime() - 30 * 86400000)
+  const fmt = (d: Date) => d.toISOString().slice(0, 10)
+  const dateRange = encodeURIComponent(JSON.stringify([fmt(start), fmt(end)]))
+  const cateValue = encodeURIComponent('[]')
+  return `https://www.kalodata.com/product/detail?id=${encodeURIComponent(id)}&language=vi-VN&currency=${KALODATA_CURRENCY[market]}&region=${market}&dateRange=${dateRange}&cateValue=${cateValue}`
 }
 
 const STATUS_ICON: Record<SignalResult['status'], React.ReactNode> = {
