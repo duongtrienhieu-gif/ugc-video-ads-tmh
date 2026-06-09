@@ -359,6 +359,9 @@ const DIRECTOR_RESPONSE_SCHEMA = {
         required: ['presetId', 'anchorBlock', 'quote', 'durationSec', 'fit'],
       },
     },
+    // Z79 (A) — the ingredient phrases the SCRIPT actually names, copied
+    // VERBATIM in the script's own language. Empty if the script names none.
+    ingredientsInScript: { type: 'array', items: { type: 'string' } },
   },
   required: ['scenes'],
 }
@@ -367,9 +370,16 @@ export async function directScenesWithGemini(
   params: GeminiSuggestParams,
 ): Promise<InsertSuggestion[]> {
   const langName = SCRIPT_LANG_GEMINI_NAME[params.lang]
-  // Full-auto baseline: aim for at least `floor` scenes (default 3) but never
-  // more than the budget. Keeps the director from returning an empty list.
-  const floor = Math.max(1, Math.min(params.floor ?? 3, params.budget))
+  // Z79 (B) — scale the scene count to the SCRIPT LENGTH, not a flat cap.
+  // ~1 insert per ~6.5s of voice → 55s ≈ 8, 30s ≈ 5, 18s ≈ 3 — clamped to the
+  // cost-mode [floor, budget]. A flat budget made Gemini over-pack a short
+  // script or under-fill a long one; this targets a count that fits the runtime
+  // and nudges Gemini to actually reach it (effFloor = target − 1).
+  const baseFloor = Math.max(1, Math.min(params.floor ?? 3, params.budget))
+  const durTarget = Math.round((params.script.totalDurationSec || 30) / 6.5)
+  const effBudget = Math.max(baseFloor, Math.min(params.budget, durTarget))
+  const effFloor = Math.max(baseFloor, effBudget - 1)
+  const floor = effFloor  // template references `${floor}` → the duration-aware target
   const catalogue = ACTION_PRESET_ORDER
     .map((id) => `- ${id}: ${ACTION_PRESETS[id].descriptionVi} (needsProduct=${ACTION_PRESETS[id].needsProduct})`)
     .join('\n')
@@ -695,18 +705,38 @@ DIRECTING RULES:
   PRODUCT_CLOSEUP). A video that opens with the speaker holding the jar
   and closes with the speaker holding the jar at the same angle looks
   amateur. Vary the composition.
-- A finished UGC ad cuts to a supporting visual on most key beats. Propose
-  between ${floor} and ${params.budget} scenes covering the arc. Returning zero
-  or one scene is only right for an unusually short script.
+- SCENE COUNT — propose ${effBudget} scenes (this number is matched to the
+  script length). Do NOT under-fill: a finished UGC ad cuts to a supporting
+  visual on MOST beats. Returning only 1-2 scenes makes a flat, un-dynamic ad.
+  Aim for the full ${effBudget}; never fewer than ${floor}.
+- SCENE MIX — split those ${effBudget} scenes roughly HALF and HALF:
+    • ~half = real-footage VIDEO scenes that REPLACE the creator full-screen
+      (cut): the person/product in action — HOLD_PRODUCT, PRODUCT_IN_ACTION
+      (brushing / applying / using), the BEFORE/AFTER, the CTA hold. These carry
+      the realism + product trust.
+    • ~half = illustration IMAGE scenes that OVERLAY on the talking creator
+      (overlay_corner): infographic / ingredient photo / mechanism / "Nx" claim
+      graphic CONCEPT_SCENEs. These add the teaching + the lively pop-ups while
+      the creator keeps talking.
+  A pure-cut ad is a slideshow; a pure-overlay ad has no product realism. Mix.
 - "fit" = 0..1 how strongly the visual supports the line. "reason" = one short
   phrase in ${langName} explaining the choice (shown to the user).
+
+INGREDIENT EXTRACTION — separately from the scenes, scan the WHOLE script for any
+PRODUCT INGREDIENT it names (e.g. an extract, a powder, an oil, a herb, an active
+compound). Copy each one into "ingredientsInScript" EXACTLY as it is written in
+the script, in ${langName} (the script's language) — do NOT translate it to
+English, do NOT add ingredients the script does not mention. If the script names
+no ingredients, return an empty array. This list guarantees an ingredient scene
+gets made even if you did not pick one above.
 
 OUTPUT strict JSON, no fences:
 { "scenes": [ { "presetId": "...", "anchorBlock": "...", "quote": "(verbatim line)",
   "durationSec": 4, "fit": 0.0, "reason": "...",
   "conceptPrompt": "(required for CONCEPT_SCENE and PRODUCT_IN_ACTION)",
   "labels": ["(required for teaching graphic CONCEPT_SCENE — short ${langName} terms to print on the image; empty for pain/emotion/microscopy)"],
-  "layout": "cut | overlay_corner (per LAYOUT RULE — pick per scene)" } ] }`
+  "layout": "cut | overlay_corner (per LAYOUT RULE — pick per scene)" } ],
+  "ingredientsInScript": ["(each ingredient the script names, verbatim, in ${langName}; [] if none)"] }`
 
   const userPrompt = `SCRIPT (block id in brackets):\n${scriptDump}\n\nDirect the scenes now.`
 
@@ -727,7 +757,7 @@ OUTPUT strict JSON, no fences:
     thinkingBudget: 0,
   })
 
-  const parsed = parseDirectorOutput(raw)
+  const { scenes: parsed, ingredientsInScript } = parseDirectorOutput(raw)
   const validPresets = new Set<string>(DIRECTOR_PRESET_ENUM)
   const validBlocks = new Set<string>(['hook', 'pain', 'discovery', 'benefit', 'cta'])
 
@@ -917,13 +947,15 @@ OUTPUT strict JSON, no fences:
       layout,
     })
   }
-  // Z69 — Trust & pacing safety net (post-parse):
+  // Z69/Z79 — Trust & pacing safety net (post-parse):
   // 1. CREATOR-FIRST: drop any scene anchored before t<3s so the viewer sees
   //    the speaker's face during the trust-building window. Director was told
   //    not to do this, but Gemini sometimes still front-loads infographics.
-  // 2. COVERAGE CAP: total insert duration ≤ 60% of the (estimated) voice
-  //    duration. If Director over-packed, drop lowest-confidence scenes until
-  //    we're under budget. Stops "8 cuts = 2/3 of the ad = slideshow".
+  // 2. CUT COVERAGE CAP (Z79 (C)): only CUT inserts hide the creator, so only
+  //    CUTS count toward the cap (≤ 50% of voice). OVERLAYS are uncapped — the
+  //    creator stays full-screen + talking behind them, so they can't "lose"
+  //    the creator no matter how many there are. (Pre-Z79 this counted overlays
+  //    too, which throttled the lively pop-up illustrations for no reason.)
   // 3. NO-RUN-OF-3: split runs of 3+ back-to-back inserts by removing the
   //    middle one, so the creator's face surfaces between illustrations.
   const sortedByTime = [...out].sort((a, b) => {
@@ -945,20 +977,21 @@ OUTPUT strict JSON, no fences:
       trustDrops.earlyHook++
     }
   }
-  // (2) Coverage cap 60% of estimated voice duration.
+  // (2) CUT coverage cap — only CUTS hide the creator, so only CUTS count.
   const voiceDur = params.script.totalDurationSec
   if (voiceDur && voiceDur > 0) {
-    const cap = voiceDur * 0.6
-    let totalSec = out.reduce((s, x) => s + (x.durationSec ?? 4), 0)
-    if (totalSec > cap) {
-      // Drop the lowest-confidence scenes until we're under the cap.
-      const ranked = [...out].sort((a, b) => a.confidence - b.confidence)
-      while (totalSec > cap && ranked.length > 1) {
-        const victim = ranked.shift()
+    const isCut = (x: InsertSuggestion) => x.layout !== 'overlay_corner'
+    const cap = voiceDur * 0.5  // ≤50% of the ad may hide the creator
+    let cutSec = out.filter(isCut).reduce((s, x) => s + (x.durationSec ?? 4), 0)
+    if (cutSec > cap) {
+      // Drop the lowest-confidence CUTS (never overlays) until under the cap.
+      const rankedCuts = out.filter(isCut).sort((a, b) => a.confidence - b.confidence)
+      while (cutSec > cap && rankedCuts.length > 1) {
+        const victim = rankedCuts.shift()
         if (!victim) break
         const idx = out.indexOf(victim)
         if (idx >= 0) {
-          totalSec -= victim.durationSec ?? 4
+          cutSec -= victim.durationSec ?? 4
           out.splice(idx, 1)
           trustDrops.coverage++
         }
@@ -982,12 +1015,14 @@ OUTPUT strict JSON, no fences:
     }
   }
 
-  // Z78 — INGREDIENT COVERAGE GUARANTEE (only when the SCRIPT names ingredients).
-  const ingredientInjected = enforceIngredientScene(out, params.script, params.product, params.budget)
+  // Z78/Z79 — INGREDIENT COVERAGE GUARANTEE. Z79 (A): drive it off the
+  // ingredient phrases GEMINI extracted FROM THE SCRIPT (language-correct,
+  // cross-language safe) — falls back to product.ingredients literal match.
+  const ingredientInjected = enforceIngredientScene(out, params.script, params.product, effBudget, ingredientsInScript)
 
   // Keep the director's ORDER (narrative sequence), not a fit sort — scenes
-  // should play in script order. Cap to budget.
-  const directed = out.slice(0, params.budget)
+  // should play in script order. Cap to the duration-aware budget.
+  const directed = out.slice(0, effBudget)
   console.log(
     `[DIRECTOR] raw=${raw.length}ch parsed=${parsed.length} usable=${out.length} ` +
     `dropped{preset:${drop.preset},noPrompt:${drop.noPrompt},zeroFit:${drop.zeroFit},dupeSkip:${drop.dupeSkip}} ` +
@@ -1053,19 +1088,28 @@ function enforceIngredientScene(
   script: GeneratedScript,
   product: Product | null | undefined,
   budget: number,
+  ingredientsFromScript: string[] = [],
 ): number {
-  if (!product?.ingredients) return 0
-  // (a) ingredient vocab from the product's OWN list.
-  const vocab = product.ingredients
-    .split(/[,;\n•·/|]+/)
+  // Z79 (A) — PRIMARY source: the phrases Gemini extracted FROM THE SCRIPT (in
+  // the script's own language). This is what the user wanted — "read the
+  // script". It is cross-language safe (product list can be English while the
+  // script is Vietnamese) AND gives correctly-localised on-image labels.
+  // FALLBACK: literal match of product.ingredients against the script (only
+  // works when they share a language) for the rare case Gemini returns nothing.
+  let mentioned = ingredientsFromScript
     .map((s) => s.trim())
-    .filter((s) => s.length >= 3 && s.length <= 40)
-  if (vocab.length === 0) return 0
+    .filter((s) => s.length >= 2 && s.length <= 50)
 
-  // (b) which of those names actually appear in the SCRIPT (diacritic + case
-  //     insensitive)? None → the writer chose not to talk ingredients → skip.
-  const scriptNorm = normalizeForMatch(script.blocks.map((b) => b.text).join('  '))
-  const mentioned = vocab.filter((ing) => scriptNorm.includes(normalizeForMatch(ing)))
+  if (mentioned.length === 0) {
+    if (!product?.ingredients) return 0
+    const vocab = product.ingredients
+      .split(/[,;\n•·/|]+/)
+      .map((s) => s.trim())
+      .filter((s) => s.length >= 3 && s.length <= 40)
+    if (vocab.length === 0) return 0
+    const scriptNorm = normalizeForMatch(script.blocks.map((b) => b.text).join('  '))
+    mentioned = vocab.filter((ing) => scriptNorm.includes(normalizeForMatch(ing)))
+  }
   if (mentioned.length === 0) return 0
 
   // (c) already covered? Any scene whose conceptPrompt/quote names a mentioned
@@ -1244,7 +1288,7 @@ interface RawDirectorScene {
   layout?: 'cut' | 'overlay_corner'
 }
 
-function parseDirectorOutput(raw: string): RawDirectorScene[] {
+function parseDirectorOutput(raw: string): { scenes: RawDirectorScene[]; ingredientsInScript: string[] } {
   let parsed: unknown
   try {
     parsed = JSON.parse(raw)
@@ -1253,12 +1297,17 @@ function parseDirectorOutput(raw: string): RawDirectorScene[] {
     try {
       parsed = JSON.parse(cleaned)
     } catch {
-      return []
+      return { scenes: [], ingredientsInScript: [] }
     }
   }
-  const obj = parsed as { scenes?: unknown }
-  if (!obj || typeof obj !== 'object' || !Array.isArray(obj.scenes)) return []
-  return obj.scenes as RawDirectorScene[]
+  const obj = parsed as { scenes?: unknown; ingredientsInScript?: unknown }
+  if (!obj || typeof obj !== 'object' || !Array.isArray(obj.scenes)) {
+    return { scenes: [], ingredientsInScript: [] }
+  }
+  const ingredientsInScript = Array.isArray(obj.ingredientsInScript)
+    ? (obj.ingredientsInScript as unknown[]).map((x) => String(x).trim()).filter((x) => x.length >= 2 && x.length <= 50)
+    : []
+  return { scenes: obj.scenes as RawDirectorScene[], ingredientsInScript }
 }
 
 interface RawSuggestItem {
