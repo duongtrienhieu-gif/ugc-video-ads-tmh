@@ -122,8 +122,11 @@ function buildInsertKeyframePrompt(
     paragraphs.push(
       'COMPOSITION: vertical 9:16 aspect ratio, ONE clear focal subject centred ' +
       'with generous empty margins. The frame is cropped to tall vertical and ' +
-      'slowly zoomed, so keep the subject + its labels well inside the centre — ' +
-      'anything near the left/right/top/bottom edges WILL be cut off.',
+      'slowly zoomed, so EVERY visible element — subject, icons, and especially ' +
+      'TEXT LABELS — MUST sit within the CENTRAL 60% of the frame (≥20% padding ' +
+      'from EVERY edge: top, bottom, left, right). NO text touching or running ' +
+      'off any edge. If a label is long, break it into two stacked short lines ' +
+      'rather than letting it stretch toward the edges.',
     )
     if (!isEmotionPerson) {
       // Z70 — strengthen no-product rule. Even "generic" devices that look like

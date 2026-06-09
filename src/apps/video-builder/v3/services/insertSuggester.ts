@@ -456,8 +456,17 @@ DIRECTING RULES:
   label IS the ingredient name). Two ingredients named → both labeled. Do NOT
   cover an ingredient line with a bare product close-up — a macro of the jar
   garbles the small label text and does NOT tell the viewer the ingredient
-  names. The labeled sketch does. (Product close-ups are for "show the product"
-  beats, not for teaching ingredients.)
+  names. The labeled photo / illustration does.
+  *** INGREDIENT STYLE = REAL PHOTOGRAPHY, NOT HAND-DRAWN ***
+  For ingredient beats, write the conceptPrompt as REAL-WORLD photography of
+  the ingredient: e.g. "Professional macro photo of a small pile of activated
+  charcoal powder next to a pile of grey volcanic ash, on a clean white marble
+  surface, soft natural daylight, sharp focus, shallow depth of field." Use
+  the ACTUAL appearance of each ingredient — black charcoal, dark volcanic
+  ash, red/purple grape seeds, etc. — not a drawing of them. Labels still go
+  in the script language, written cleanly next to each pile (not floating).
+  Reserve the hand-drawn doodle style for MECHANISM / claim ("Nx more
+  effective") / benefit-breakdown beats, where photo doesn't apply.
 - CONCEPT ART-STYLE RULE (for "graphic" CONCEPT_SCENE only) — bake the art
   direction INTO the conceptPrompt. There are TWO looks; pick per scene:
   (1) SIMPLE HAND-DRAWN VISUAL — use this for INGREDIENT explanations,
@@ -730,12 +739,24 @@ OUTPUT strict JSON, no fences:
     if (presetId === 'BEFORE_AFTER_REACTION' && visibleResultProduct) {
       const quote = (item.quote ?? '').trim()
       presetId = 'CONCEPT_SCENE' as ActionPresetId
-      motionKind = 'graphic'
+      // Z74 — was 'graphic' (generic anatomy split, no person). Now 'emotion'
+      // so the keyframe builder anchors the scene to the AVATAR ref → the
+      // BEFORE and AFTER halves both show the SAME creator (not random
+      // anatomy), with the BEFORE state visibly impaired and the AFTER state
+      // visibly recovered. Authentic before/after = same person across both.
+      motionKind = 'emotion'
       conceptPrompt = conceptPrompt.length > 0 ? conceptPrompt :
-        `Extreme close-up split-screen showing the body-part transformation the line ` +
-        `"${quote}" promises: LEFT half = the "before" state with the visible problem ` +
-        `clearly shown, RIGHT half = the "after" state with the problem resolved. ` +
-        `Side-by-side dramatic comparison, soft natural light, clinical credibility.`
+        `Split-screen of THE SAME PERSON (from the avatar reference) shown in two ` +
+        `clearly contrasting states, illustrating the line "${quote}": LEFT half = ` +
+        `the BEFORE state showing the visible problem the script names (yellow ` +
+        `stained teeth / acne-prone skin / thinning hair / stiff painful joint — ` +
+        `whatever the script promises will improve), with matching subdued ` +
+        `posture and dim cool light. RIGHT half = the SAME person in the AFTER ` +
+        `state with the problem clearly resolved (white teeth / clear glowing ` +
+        `skin / fuller hair / relaxed easy posture), confident smile, warm ` +
+        `bright light. Identical face, hair, outfit — only the named body-part ` +
+        `change + the emotion + the light differ. The two halves MUST look ` +
+        `unmistakably different in the named area at a glance.`
       rewrite.beforeAfter++
     }
 

@@ -352,6 +352,17 @@ export default function ActionInsertsPhase({ onContinue }: Props) {
     if (!insert) return
     const preset = ACTION_PRESETS[insert.presetId]
 
+    // Z74 — DOUBLE-SUBMIT GUARD. CRITICAL credit-burn fix.
+    // Before: if the user clicked Bulk render and then clicked the per-card
+    // Render on an insert that was queued (status='rendering'), this handler
+    // re-submitted the SAME insert to KIE, costing the credit again. User
+    // burned ~487 credits on one session this way. Now: any insert already
+    // in an active state (rendering OR mid-stage keyframe/video_full) is
+    // refused with a clear toast; nothing is submitted.
+    if (insert.status === 'rendering' || insert.stage === 'keyframe' || insert.stage === 'video_full') {
+      addToast(`Insert #${insertId} đang render (${insert.stage}) — đợi xong, không bấm lại để tránh tốn credit 2 lần.`, 'info')
+      return
+    }
     // Mark queued state if we have to wait
     patchInsert(insertId, { stage: 'keyframe', status: 'rendering', startedAt: now(), error: undefined })
     await acquireRenderSlot(insertId)
