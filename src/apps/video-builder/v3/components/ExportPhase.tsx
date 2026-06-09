@@ -26,12 +26,8 @@ import type {
   CtaVariantStyle, HookStyle,
 } from '../types'
 import { HOOK_STYLE_LABEL_VI } from '../types'
-import {
-  EXPORT_FORMATS, EXPORT_FORMAT_ORDER,
-} from '../services/exportFormats'
-import {
-  EXPORT_QUALITIES, EXPORT_QUALITY_ORDER,
-} from '../services/exportQuality'
+import { EXPORT_FORMATS } from '../services/exportFormats'
+import { EXPORT_QUALITIES } from '../services/exportQuality'
 import { THUMBNAIL_STYLES, THUMBNAIL_STYLE_ORDER } from '../services/thumbnailEngine'
 import { generateCtaVariations } from '../services/ctaVariationEngine'
 import {
@@ -48,15 +44,6 @@ import {
 import { warmUpFFmpeg, isFFmpegLoaded } from '../services/ffmpegLoader'
 import { EXPORT_RENDER_STAGE_LABEL_VI } from '../types'
 
-const TONE_BG: Record<string, string> = {
-  emerald: 'bg-emerald-100 text-emerald-800 border-emerald-300',
-  violet:  'bg-violet-100 text-violet-800 border-violet-300',
-  amber:   'bg-amber-100 text-amber-800 border-amber-300',
-  pink:    'bg-pink-100 text-pink-800 border-pink-300',
-  sky:     'bg-sky-100 text-sky-800 border-sky-300',
-  rose:    'bg-rose-100 text-rose-800 border-rose-300',
-}
-
 const CTA_STYLE_LABEL_VI: Record<CtaVariantStyle, string> = {
   soft:        'Mềm',
   urgency:     'Khẩn cấp',
@@ -67,8 +54,6 @@ const CTA_STYLE_LABEL_VI: Record<CtaVariantStyle, string> = {
 
 export default function ExportPhase() {
   const state = useAdsVideoStore((s) => s.state)
-  const setExportFormat   = useAdsVideoStore((s) => s.setExportFormat)
-  const setExportQuality  = useAdsVideoStore((s) => s.setExportQuality)
   const setCtaVariations  = useAdsVideoStore((s) => s.setCtaVariations)
   const pickCtaVariation  = useAdsVideoStore((s) => s.pickCtaVariation)
   const pickHookForExport = useAdsVideoStore((s) => s.pickHookForExport)
@@ -281,57 +266,13 @@ export default function ExportPhase() {
           </div>
         </div>
 
-        {/* ── Format + Quality ───────────────────────────────────────────── */}
-        <div className="mb-4 grid grid-cols-1 gap-3 md:grid-cols-2">
-          <div className="rounded-xl border border-black/10 bg-white p-3">
-            <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-gray-500">
-              <Video className="mr-1 inline h-3.5 w-3.5" /> Format
-            </p>
-            <div className="grid grid-cols-3 gap-1.5">
-              {EXPORT_FORMAT_ORDER.map((f) => {
-                const cfg = EXPORT_FORMATS[f]
-                const isActive = ev.formatId === f
-                return (
-                  <button
-                    key={f}
-                    onClick={() => setExportFormat(f as ExportFormatId)}
-                    className={`flex flex-col items-center gap-0.5 rounded-lg border p-1.5 transition-all ${
-                      isActive ? TONE_BG[cfg.tone] : 'border-gray-200 bg-white text-gray-500 hover:bg-gray-50'
-                    }`}
-                    title={cfg.platformVi}
-                  >
-                    <span className="text-lg">{cfg.emoji}</span>
-                    <span className="text-[10px] font-bold">{cfg.labelVi}</span>
-                  </button>
-                )
-              })}
-            </div>
-          </div>
-
-          <div className="rounded-xl border border-black/10 bg-white p-3">
-            <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-gray-500">
-              <Sparkles className="mr-1 inline h-3.5 w-3.5" /> Quality
-            </p>
-            <div className="grid grid-cols-3 gap-1.5">
-              {EXPORT_QUALITY_ORDER.map((q) => {
-                const cfg = EXPORT_QUALITIES[q]
-                const isActive = ev.qualityId === q
-                return (
-                  <button
-                    key={q}
-                    onClick={() => setExportQuality(q as ExportQualityId)}
-                    className={`flex flex-col items-start gap-0.5 rounded-lg border p-2 text-left transition-all ${
-                      isActive ? TONE_BG[cfg.tone] : 'border-gray-200 bg-white text-gray-500 hover:bg-gray-50'
-                    }`}
-                    title={cfg.descriptionVi}
-                  >
-                    <span className="text-[11px] font-bold">{cfg.emoji} {cfg.labelVi}</span>
-                    <span className="text-[9px] opacity-70">~{cfg.estFileSizeMb}MB</span>
-                  </button>
-                )
-              })}
-            </div>
-          </div>
+        {/* ── Z85 — format + quality auto-decided (TikTok 9:16 · FINAL 1080).
+            The Director ships the standard ad spec; user no longer picks. ── */}
+        <div className="mb-4 flex items-center gap-2 rounded-xl border border-violet-200 bg-violet-50 px-3 py-2 text-[12px] text-violet-900">
+          <Video className="h-4 w-4 shrink-0 text-violet-600" />
+          <span>
+            Xuất chuẩn: <b>{EXPORT_FORMATS[ev.formatId].labelVi} · {EXPORT_QUALITIES[ev.qualityId].labelVi}</b> (đạo diễn tự chọn — định dạng phổ biến nhất cho quảng cáo).
+          </span>
         </div>
 
         {/* ── Hook variation panel ──────────────────────────────────────── */}

@@ -1078,7 +1078,9 @@ export type ExportQualityId =
   | 'standard_720'
   | 'final_1080'
 
-export const DEFAULT_EXPORT_QUALITY: ExportQualityId = 'test_480'
+// Z85 — default to FINAL 1080 (the user doesn't want to pick quality; the
+// Director ships the best output by default — upscaled from the 480p sources).
+export const DEFAULT_EXPORT_QUALITY: ExportQualityId = 'final_1080'
 
 export type HookVariantStyle = 'curiosity' | 'emotional' | 'shocking' | 'confession' | 'authority'
 
