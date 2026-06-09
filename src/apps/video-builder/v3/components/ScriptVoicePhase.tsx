@@ -419,7 +419,7 @@ export default function ScriptVoicePhase({ onContinue }: Props) {
             <div className="min-w-0 flex-1">
               <p className="text-[13px] font-bold text-gray-900">Giọng đọc</p>
               <p className="text-[11px] text-gray-500">
-                Tốc độ chuẩn TikTok creator (1.2×) — nhanh, tự nhiên, tiết kiệm ~13% credit lipsync.
+                Tốc độ chuẩn TikTok creator (1.35×) — nhanh, tự nhiên, tiết kiệm credit lipsync.
               </p>
             </div>
           </div>

@@ -54,7 +54,9 @@ export const EXPRESSIVE_TTS = {
   stability: 0.45,   // dynamic, not monotone
   similarity: 0.75,
   style: 0.28,       // some emotion, but fewer leisurely pauses (was 0.40)
-  speed: 1.2,        // atempo TARGET — real snappy pace, applied post-TTS
+  speed: 1.35,       // Z97 — atempo TARGET (was 1.2). Snappier TikTok pace; the
+                     // v3 base is slow so 1.2 still read leisurely (~71s). 1.35
+                     // ≈ −26% runtime. Applied post-TTS via ffmpeg atempo.
 } as const
 
 // Z81 — time-stretch the TTS audio to a target pace (pitch-preserving) via
