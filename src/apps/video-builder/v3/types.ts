@@ -1113,6 +1113,28 @@ export interface ThumbnailPlan {
   generatedAt: number
 }
 
+// ── Z89 — AI thumbnail archetypes (đợt 3) ───────────────────────────────────
+// 4 fully-AI-rendered thumbnail styles (GPT-4o i2i with avatar + product refs).
+// Each pairs a distinct scroll-stopping composition with a curiosity hook the
+// Director writes. The user picks 1 of 4.
+export type ThumbnailArchetypeId =
+  | 'reaction_face'   // big creator face (shocked/curious) + hook + small product
+  | 'before_after'    // split problem→result + hook
+  | 'product_hero'    // product front-and-centre held by avatar + hook + offer
+  | 'curiosity_text'  // giant curiosity-question hook + avatar + product small
+
+export interface AiThumbnail {
+  archetypeId: ThumbnailArchetypeId
+  /** The curiosity hook text baked into the image. */
+  hook: string
+  /** asset:xxx of the generated thumbnail (null while still rendering / failed). */
+  imageRef: string | null
+  /** Per-card render state so the grid can show spinners + errors. */
+  status: 'rendering' | 'completed' | 'failed'
+  error?: string
+  generatedAt: number
+}
+
 export interface ExportPackage {
   formatId: ExportFormatId
   qualityId: ExportQualityId
@@ -1187,6 +1209,10 @@ export interface ExportVariationState {
   /** Last built export package (null until user clicks Build) */
   lastPackage: ExportPackage | null
   thumbnailStyleId: ThumbnailStyleId
+  /** Z89 — the 4 AI thumbnail candidates + which one the user picked. */
+  aiThumbnails: AiThumbnail[]
+  pickedThumbnailRef: string | null
+  isGeneratingThumbnails: boolean
   isGeneratingCtaVariations: boolean
   isBuildingPackage: boolean
   error: string | null
@@ -1213,6 +1239,9 @@ export function createEmptyExportVariationState(): ExportVariationState {
     pickedHookIdxForExport: -1,
     lastPackage: null,
     thumbnailStyleId: 'tiktok_native',
+    aiThumbnails: [],
+    pickedThumbnailRef: null,
+    isGeneratingThumbnails: false,
     isGeneratingCtaVariations: false,
     isBuildingPackage: false,
     error: null,

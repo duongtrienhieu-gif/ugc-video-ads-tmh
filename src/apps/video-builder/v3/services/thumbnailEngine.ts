@@ -12,7 +12,14 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { saveAsset, getUrl, isAssetRef } from '../../../../utils/assetStore'
-import type { ThumbnailStyleId, ThumbnailPlan } from '../types'
+import { directGeminiText } from '../../../../utils/gemini'
+import { generateGpt4oImageFast } from '../../../../utils/kieai'
+import type {
+  ThumbnailStyleId, ThumbnailPlan, ThumbnailArchetypeId,
+  GeneratedScript, ScriptLang,
+} from '../types'
+import { SCRIPT_LANG_GEMINI_NAME } from '../types'
+import type { Product, Model } from '../../../../stores/types'
 
 export interface ThumbnailStyleConfig {
   id: ThumbnailStyleId
@@ -260,4 +267,166 @@ function drawCenteredText(
     ctx.strokeText(lines[i], opts.x, y)
     ctx.fillText(lines[i], opts.x, y)
   }
+}
+
+// ── Z89 — AI thumbnail archetypes (đợt 3) ─────────────────────────────────
+// 4 fully-AI-rendered thumbnails (GPT-4o i2i with avatar + product refs). Each
+// pairs a distinct scroll-stopping composition with a curiosity hook. User picks 1.
+
+export interface ThumbnailArchetypeConfig {
+  id: ThumbnailArchetypeId
+  labelVi: string
+  /** Popup text so the user knows WHEN to pick this style. */
+  popupVi: string
+  emoji: string
+}
+
+export const THUMBNAIL_ARCHETYPES: Record<ThumbnailArchetypeId, ThumbnailArchetypeConfig> = {
+  reaction_face: {
+    id: 'reaction_face',
+    labelVi: 'Mặt phản ứng',
+    popupVi: 'Mặt creator biểu cảm mạnh (sốc/tò mò) cận cảnh + hook to phía trên, sản phẩm nhỏ góc. Dừng lướt bằng CẢM XÚC — hợp hook cảm xúc/bất ngờ.',
+    emoji: '😲',
+  },
+  before_after: {
+    id: 'before_after',
+    labelVi: 'Before / After',
+    popupVi: 'Chia đôi: trái = vấn đề (xấu), phải = kết quả (đẹp) + hook. Dừng lướt bằng TƯƠNG PHẢN — hợp sản phẩm có kết quả nhìn thấy (răng/da/tóc).',
+    emoji: '🔀',
+  },
+  product_hero: {
+    id: 'product_hero',
+    labelVi: 'Sản phẩm + Ưu đãi',
+    popupVi: 'Sản phẩm to giữa khung (creator cầm) + hook + badge ưu đãi. Direct-response — hợp khách đã có nhu cầu, đẩy mua/COD.',
+    emoji: '🎁',
+  },
+  curiosity_text: {
+    id: 'curiosity_text',
+    labelVi: 'Câu hỏi tò mò',
+    popupVi: 'Chữ hook dạng câu hỏi/bí mật choán phần lớn khung + creator + sản phẩm nhỏ. Dừng lướt bằng TÒ MÒ — hợp hook "tại sao / bí mật / đừng mua trước khi...".',
+    emoji: '❓',
+  },
+}
+
+export const THUMBNAIL_ARCHETYPE_ORDER: ThumbnailArchetypeId[] = [
+  'reaction_face', 'before_after', 'product_hero', 'curiosity_text',
+]
+
+// Per-archetype composition prompt; the hook text is baked into the image so it
+// reads as a designed thumbnail. The avatar (person) + product are passed as
+// i2i references via filesUrl.
+function buildArchetypePrompt(archetype: ThumbnailArchetypeId, hook: string, langName: string): string {
+  const base =
+    `Design a scroll-stopping VERTICAL 9:16 TikTok ad THUMBNAIL. ` +
+    `Use the SAME PERSON from the avatar reference (identical face) as the creator, and the EXACT product ` +
+    `from the product reference (same packaging, colour, label — do NOT redesign it). ` +
+    `Render the hook text "${hook}" as BIG, BOLD, perfectly-spelled ${langName} text with a heavy contrasting ` +
+    `outline so it is readable on a small phone. Authentic UGC look (real iPhone photo, natural light), NOT stock. `
+  switch (archetype) {
+    case 'reaction_face':
+      return base +
+        `COMPOSITION: extreme close-up of the creator's face with a strong shocked / curious / amazed expression ` +
+        `filling most of the frame. Hook text across the TOP third. Product small in a bottom corner. High-contrast, emotional.`
+    case 'before_after':
+      return base +
+        `COMPOSITION: a clear vertical SPLIT-SCREEN. LEFT half = the BEFORE problem state (dull / before using). ` +
+        `RIGHT half = the AFTER result (bright / improved) — same creator or the relevant body-part change. ` +
+        `Bold "BEFORE" / "AFTER" labels on each half; hook text across the centre. Product small in a corner.`
+    case 'product_hero':
+      return base +
+        `COMPOSITION: the product is the HERO — large, centred, held up by the creator's hands, sharp + well-lit. ` +
+        `The creator's smiling face partly visible beside it. Hook text bold at the top; a small bright OFFER/discount badge in a corner.`
+    case 'curiosity_text':
+      return base +
+        `COMPOSITION: the hook QUESTION text DOMINATES the frame (very large, ~half the image, bold with a bright highlight). ` +
+        `The creator's face smaller to one side with a curious expression; the product small in a corner. Maximum curiosity-gap.`
+  }
+}
+
+/** Generate 4 short curiosity hooks in the script language. Robust: simple
+ *  schema + fallback so the thumbnail flow never blocks on Gemini. */
+export async function generateThumbnailHooks(params: {
+  geminiKey: string
+  script: GeneratedScript
+  product: Product | null
+  lang: ScriptLang
+}): Promise<string[]> {
+  const langName = SCRIPT_LANG_GEMINI_NAME[params.lang]
+  const productName = params.product?.productName ?? ''
+  const scriptText = params.script.blocks.map((b) => b.text).join(' ').slice(0, 1200)
+  const fallback = buildFallbackHooks(params.script, productName)
+  if (!params.geminiKey) return fallback
+  try {
+    const raw = await directGeminiText({
+      apiKey: params.geminiKey,
+      systemInstruction:
+        `You write THUMBNAIL hooks for a TikTok ad. Output 4 DIFFERENT hooks in ${langName}, each 3-7 words, ` +
+        `SHORT + punchy, designed to STOP the scroll via a curiosity gap (a question, bold claim, "secret", ` +
+        `"don't buy before…"). No hashtags, no emojis, no quotes. Base them on the product + script. ` +
+        `Return strict JSON: {"hooks":["...","...","...","..."]}`,
+      prompt: `PRODUCT: ${productName}\nSCRIPT: ${scriptText}\n\nWrite the 4 thumbnail hooks now.`,
+      maxOutputTokens: 512,
+      responseMimeType: 'application/json',
+      responseSchema: {
+        type: 'object',
+        properties: { hooks: { type: 'array', items: { type: 'string' } } },
+        required: ['hooks'],
+      },
+      thinkingBudget: 0,
+    })
+    const parsed = JSON.parse(raw) as { hooks?: unknown }
+    const hooks = Array.isArray(parsed.hooks)
+      ? parsed.hooks.map((h) => String(h).trim()).filter((h) => h.length >= 2 && h.length <= 60)
+      : []
+    while (hooks.length < 4) hooks.push(fallback[hooks.length % fallback.length])
+    return hooks.slice(0, 4)
+  } catch (err) {
+    console.warn('[THUMBNAIL] hook generation failed — using fallback hooks', err)
+    return fallback
+  }
+}
+
+function buildFallbackHooks(script: GeneratedScript, productName: string): string[] {
+  const hookBlock = script.blocks.find((b) => b.id === 'hook')?.text ?? ''
+  const firstClause = hookBlock.split(/[.!?…\n]/)[0]?.trim().slice(0, 50) ?? ''
+  const name = productName.slice(0, 28) || 'Sản phẩm này'
+  return [
+    firstClause.length >= 6 ? firstClause : 'Mình suýt bỏ cuộc...',
+    'Trước vs Sau khi dùng',
+    `${name} — thử là mê`,
+    'Tại sao ai cũng giấu cái này?',
+  ]
+}
+
+/** Render ONE AI thumbnail for an archetype (GPT-4o i2i with avatar + product
+ *  refs). Returns the asset:xxx ref. Throws on failure (caller marks the card). */
+export async function generateAiThumbnail(params: {
+  kieApiKey: string
+  archetypeId: ThumbnailArchetypeId
+  hook: string
+  langName: string
+  avatar: Model | null
+  product: Product | null
+}): Promise<string> {
+  const filesUrl: string[] = []
+  if (params.avatar?.characterImage) {
+    const u = isAssetRef(params.avatar.characterImage) ? await getUrl(params.avatar.characterImage) : params.avatar.characterImage
+    if (u) filesUrl.push(u)
+  }
+  if (params.product?.productImage) {
+    const u = isAssetRef(params.product.productImage) ? await getUrl(params.product.productImage) : params.product.productImage
+    if (u) filesUrl.push(u)
+  }
+  const prompt = buildArchetypePrompt(params.archetypeId, params.hook, params.langName)
+  const remoteUrl = await generateGpt4oImageFast({
+    apiKey: params.kieApiKey,
+    prompt,
+    filesUrl,
+    size: '2:3',
+    softTimeoutMs: 100_000,
+    attemptTimeoutMs: 150_000,
+    maxAttempts: 2,
+  })
+  const blob = await fetch(remoteUrl).then((r) => r.blob())
+  return saveAsset(blob, blob.type || 'image/png')
 }
