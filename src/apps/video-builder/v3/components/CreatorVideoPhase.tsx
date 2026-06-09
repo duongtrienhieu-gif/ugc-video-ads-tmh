@@ -15,7 +15,7 @@
 
 import { useState, useRef, useEffect } from 'react'
 import {
-  Loader2, Sparkles, AlertCircle, ChevronRight, Play, Pause, Check,
+  Loader2, Sparkles, AlertCircle, ChevronRight, Check,
   Wand2, Mic2, ImageIcon, Film, RotateCcw,
 } from 'lucide-react'
 import { useAppStore } from '../../../../stores/appStore'
@@ -120,53 +120,56 @@ function VideoTile({
   label: string
   badge?: string
 }) {
-  const ref = useRef<HTMLVideoElement>(null)
-  const [playing, setPlaying] = useState(false)
   const resolved = useAssetUrl(assetRef ?? undefined)
   const src = assetRef?.startsWith('http') ? assetRef : resolved
 
-  const toggle = () => {
-    if (!ref.current) return
-    if (ref.current.paused) { ref.current.play(); setPlaying(true) }
-    else { ref.current.pause(); setPlaying(false) }
-  }
-
   return (
     <div className="overflow-hidden rounded-xl border border-black/10 bg-white">
-      <div className="relative aspect-[9/16] bg-gray-100">
+      <div className="relative aspect-[9/16] bg-black">
         {src ? (
-          <>
-            <video
-              ref={ref}
-              src={src}
-              className="h-full w-full object-cover"
-              playsInline
-              loop
-              muted={false}
-              onClick={toggle}
-              onEnded={() => setPlaying(false)}
-            />
-            <button
-              onClick={toggle}
-              className={`absolute inset-0 flex items-center justify-center bg-black/30 text-white transition-opacity ${
-                playing ? 'opacity-0 hover:opacity-100' : 'opacity-100'
-              }`}
-            >
-              {playing ? <Pause className="h-10 w-10" /> : <Play className="h-10 w-10 fill-white" />}
-            </button>
-          </>
+          // Z94 — native <video controls> gives a timeline/scrub bar, seek,
+          // fullscreen + (via the browser) save. object-contain shows the full
+          // 9:16 frame uncropped for review.
+          <video
+            src={src}
+            controls
+            playsInline
+            className="h-full w-full object-contain"
+          />
         ) : (
           <div className="flex h-full items-center justify-center text-gray-300">
             <Film className="h-10 w-10 opacity-40" />
           </div>
         )}
         {badge && (
-          <span className="absolute left-2 top-2 rounded bg-black/65 px-2 py-0.5 text-[10px] font-bold text-white backdrop-blur-sm">
+          <span className="absolute left-2 top-2 z-10 rounded bg-black/65 px-2 py-0.5 text-[10px] font-bold text-white backdrop-blur-sm">
             {badge}
           </span>
         )}
       </div>
-      <div className="p-2 text-center text-[11px] font-semibold text-gray-600">{label}</div>
+      <div className="flex items-center justify-between gap-1 p-2">
+        <span className="truncate text-[11px] font-semibold text-gray-600">{label}</span>
+        {src && (
+          <span className="flex shrink-0 gap-1">
+            {/* Z94 — it cost ~600cr to render; always let the user keep it. */}
+            <a
+              href={src}
+              download="creator-video.mp4"
+              className="rounded-md border border-gray-200 px-2 py-0.5 text-[10px] font-bold text-gray-600 hover:bg-gray-50"
+            >
+              ⬇ Tải MP4
+            </a>
+            <a
+              href={src}
+              target="_blank"
+              rel="noreferrer"
+              className="rounded-md border border-gray-200 px-2 py-0.5 text-[10px] font-bold text-gray-600 hover:bg-gray-50"
+            >
+              ↗ Tab mới
+            </a>
+          </span>
+        )}
+      </div>
     </div>
   )
 }
