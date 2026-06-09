@@ -14,7 +14,7 @@
 //   7. Export button (stub — Phase 6 wires ffmpeg.wasm)
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { useMemo } from 'react'
+import { useMemo, type CSSProperties } from 'react'
 import {
   Loader2, Sparkles, AlertCircle, ChevronRight, RotateCcw, Wand2,
   Type, Music2, Zap, Play, Volume2, Megaphone, Download,
@@ -42,6 +42,16 @@ const TONE_BG: Record<string, string> = {
 
 interface Props {
   onContinue: () => void
+}
+
+// Z96 — CSS mirror of the burned-in .ass subtitle styles (subtitleAssBurner) so
+// the user can PREVIEW each style instead of picking blind. Approximates
+// font-weight / colour / outline of the real render.
+const SUBTITLE_PREVIEW_CSS: Record<string, CSSProperties> = {
+  bold_creator:      { color: '#ffffff', fontWeight: 900, WebkitTextStroke: '1.5px #000', textShadow: '0 2px 5px rgba(0,0,0,.7)', fontSize: 21 },
+  minimal:           { color: '#ffffff', fontWeight: 400, textShadow: '0 1px 3px rgba(0,0,0,.85)', fontSize: 15 },
+  aggressive_tiktok: { color: '#FBBF24', fontWeight: 900, WebkitTextStroke: '2px #000', textShadow: '0 2px 5px #000', textTransform: 'uppercase', fontSize: 23 },
+  clean_ugc:         { color: '#FAFCF8', fontWeight: 700, WebkitTextStroke: '0.6px #1B233E', textShadow: '0 1px 4px rgba(27,35,62,.85)', fontSize: 17 },
 }
 
 export default function AutoEditPhase({ onContinue }: Props) {
@@ -167,6 +177,25 @@ export default function AutoEditPhase({ onContinue }: Props) {
                 )
               })}
             </div>
+            {/* Z96 — live preview of the selected subtitle style (no render). */}
+            <div
+              className="mt-2 flex items-end justify-center rounded-lg bg-gradient-to-b from-gray-600 to-gray-900 px-3 py-4"
+              style={{ minHeight: 72 }}
+            >
+              {autoEdit.subtitleStyleId === 'none' ? (
+                <span className="text-[11px] italic text-gray-400">Không có phụ đề trên video</span>
+              ) : (
+                <span
+                  className="text-center"
+                  style={{ ...SUBTITLE_PREVIEW_CSS[autoEdit.subtitleStyleId], lineHeight: 1.15 }}
+                >
+                  Đây là phụ đề mẫu
+                </span>
+              )}
+            </div>
+            <p className="mt-1 text-center text-[9px] text-gray-400">
+              Xem trước kiểu chữ phụ đề sẽ burn dưới video — bấm kiểu khác để đổi.
+            </p>
           </div>
         </div>
 
