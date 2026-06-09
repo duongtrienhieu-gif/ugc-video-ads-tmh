@@ -207,6 +207,10 @@ export interface SlotTexts {
     contactName: string
     conversation: Array<{ from: 'customer' | 'shop'; text: string }>
     verifiedNote: string
+    /** Legacy alt parse format — older generateDescription path returns bubbles
+     *  (flat string[]) instead of a structured conversation. promptBuilder
+     *  accepts either; both are kept to stay backwards-compatible. */
+    bubbles?: string[]
   }
   slot6?: { title: string; steps: string[]; timing: string }
   slot7?: { title: string; usLabel: string; themLabel: string; points: Array<[string, string]> }

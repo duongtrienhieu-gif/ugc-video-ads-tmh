@@ -457,23 +457,42 @@ DIRECTING RULES:
   cover an ingredient line with a bare product close-up — a macro of the jar
   garbles the small label text and does NOT tell the viewer the ingredient
   names. The labeled photo / illustration does.
-  *** INGREDIENT STYLE = REAL PHOTOGRAPHY, NOT HAND-DRAWN ***
-  For ingredient beats, write the conceptPrompt as REAL-WORLD photography of
-  the ingredient: e.g. "Professional macro photo of a small pile of activated
-  charcoal powder next to a pile of grey volcanic ash, on a clean white marble
-  surface, soft natural daylight, sharp focus, shallow depth of field." Use
-  the ACTUAL appearance of each ingredient — black charcoal, dark volcanic
-  ash, red/purple grape seeds, etc. — not a drawing of them. Labels still go
-  in the script language, written cleanly next to each pile (not floating).
-  Reserve the hand-drawn doodle style for MECHANISM / claim ("Nx more
-  effective") / benefit-breakdown beats, where photo doesn't apply.
+  *** INGREDIENT STYLE = REAL PHOTOGRAPHY, NOT HAND-DRAWN (UNIVERSAL) ***
+  For ANY ingredient beat in ANY niche, write the conceptPrompt as REAL-WORLD
+  macro/product photography of THAT specific ingredient's actual real-world
+  appearance, on a clean neutral surface, soft natural daylight, sharp focus,
+  shallow depth of field. Pick the right form per ingredient — match what the
+  ingredient ACTUALLY looks like in real life:
+    • POWDERS / solids: a small pile or scoop (charcoal = black powder,
+      volcanic ash = grey powder, matcha = green powder, turmeric = orange,
+      collagen = white powder, cocoa = brown, salt = white crystals).
+    • LIQUIDS / oils / extracts: a few drops or a small clear glass jar (rose
+      water = clear pink, vitamin C serum = golden drops, fish oil = amber,
+      argan oil = yellow, milk = white).
+    • PLANT / fruit / seed / herb: the raw ingredient itself (grape seeds,
+      green tea leaves, ginseng root, aloe leaf, lavender sprigs, hyaluronic
+      acid molecule on a glass slide).
+    • CAPSULE / pearl ingredients: a few capsules / softgels cut open showing
+      the contents next to whole ones.
+    • MINERAL / chemical actives (niacinamide, retinol, hyaluronic, salicylic):
+      a clean lab-style drop on glass / a small clear vial labeled in the
+      script language.
+  Use whatever the script names. Labels in the script language, placed cleanly
+  next to the ingredient (not floating). Two ingredients in the line → both
+  shown side-by-side with their respective real forms + labels.
+  Reserve hand-drawn doodle style for non-ingredient teaching: MECHANISM /
+  how-it-works diagrams / "Nx more effective" claims / benefit-breakdowns,
+  where a real photo can't represent the idea.
 - CONCEPT ART-STYLE RULE (for "graphic" CONCEPT_SCENE only) — bake the art
-  direction INTO the conceptPrompt. There are TWO looks; pick per scene:
-  (1) SIMPLE HAND-DRAWN VISUAL — use this for INGREDIENT explanations,
-      MECHANISM / how-it-works, "X times more effective" claims, benefit
-      breakdowns, anything that teaches. Write the conceptPrompt as: ONE
-      friendly HAND-DRAWN sketch (clean simple line-art doodle, warm marker /
-      crayon feel) illustrating a SINGLE idea — big, bold, instantly readable.
+  direction INTO the conceptPrompt. There are THREE looks; pick per scene:
+  (0) REAL-WORLD PHOTO — for INGREDIENT scenes (see "INGREDIENT STYLE" rule
+      above). NOT hand-drawn — real macro photography of the actual ingredient.
+  (1) SIMPLE HAND-DRAWN VISUAL — use this for MECHANISM / how-it-works
+      diagrams, "X times more effective" claims, benefit breakdowns, abstract
+      teaching where a real photo doesn't apply. Write the conceptPrompt as:
+      ONE friendly HAND-DRAWN sketch (clean simple line-art doodle, warm
+      marker / crayon feel) illustrating a SINGLE idea — big, bold, instantly
+      readable.
       *** SIMPLE BUT LABELED — this is the balance ***
       The viewer sees this for only 2-4 seconds WHILE the voice talks, so it
       must be absorbed at a glance AND it MUST carry the KEY TERMS the spoken
