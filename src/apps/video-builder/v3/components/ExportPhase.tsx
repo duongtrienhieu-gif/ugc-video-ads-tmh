@@ -15,7 +15,7 @@
 import { useMemo, useState, useEffect } from 'react'
 import {
   Loader2, Sparkles, AlertCircle, Download, FileText, Image as ImageIcon,
-  Save, Library, Copy, Trash2, Star, StarOff, RotateCcw, Video, Subtitles,
+  Save, Library, Copy, Trash2, Star, StarOff, Video, Subtitles,
 } from 'lucide-react'
 import { useAppStore } from '../../../../stores/appStore'
 import { useSettingsStore } from '../../../../stores/settingsStore'
@@ -23,7 +23,7 @@ import { useAssetUrl } from '../../../../hooks/useAssetUrl'
 import { useAdsVideoStore } from '../stores/adsVideoStore'
 import type {
   ExportFormatId, ExportQualityId, SavedProject,
-  CtaVariantStyle, HookStyle, AiThumbnail,
+  HookStyle, AiThumbnail,
 } from '../types'
 import { HOOK_STYLE_LABEL_VI, SCRIPT_LANG_GEMINI_NAME } from '../types'
 import { EXPORT_FORMATS } from '../services/exportFormats'
@@ -32,7 +32,6 @@ import {
   THUMBNAIL_ARCHETYPES, THUMBNAIL_ARCHETYPE_ORDER,
   generateThumbnailHooks, generateAiThumbnail,
 } from '../services/thumbnailEngine'
-import { generateCtaVariations } from '../services/ctaVariationEngine'
 import {
   buildExportPackage, downloadSrt, downloadPlainTextScript, downloadAssetAs,
 } from '../services/exportPackageBuilder'
@@ -47,18 +46,8 @@ import {
 import { warmUpFFmpeg, isFFmpegLoaded } from '../services/ffmpegLoader'
 import { EXPORT_RENDER_STAGE_LABEL_VI } from '../types'
 
-const CTA_STYLE_LABEL_VI: Record<CtaVariantStyle, string> = {
-  soft:        'Mềm',
-  urgency:     'Khẩn cấp',
-  promo:       'Promo',
-  emotional:   'Cảm xúc',
-  testimonial: 'Lời chứng',
-}
-
 export default function ExportPhase() {
   const state = useAdsVideoStore((s) => s.state)
-  const setCtaVariations  = useAdsVideoStore((s) => s.setCtaVariations)
-  const pickCtaVariation  = useAdsVideoStore((s) => s.pickCtaVariation)
   const pickHookForExport = useAdsVideoStore((s) => s.pickHookForExport)
   const setExportPackage  = useAdsVideoStore((s) => s.setExportPackage)
   // Z89 — AI thumbnail actions
@@ -66,7 +55,6 @@ export default function ExportPhase() {
   const patchAiThumbnail  = useAdsVideoStore((s) => s.patchAiThumbnail)
   const pickThumbnail     = useAdsVideoStore((s) => s.pickThumbnail)
   const setIsGeneratingThumbnails = useAdsVideoStore((s) => s.setIsGeneratingThumbnails)
-  const setIsGeneratingCtaVars = useAdsVideoStore((s) => s.setIsGeneratingCtaVars)
   const setIsBuildingPackage = useAdsVideoStore((s) => s.setIsBuildingPackage)
   const setExportError    = useAdsVideoStore((s) => s.setExportError)
   const hydrateFromSnapshot = useAdsVideoStore((s) => s.hydrateFromSnapshot)
@@ -100,7 +88,6 @@ export default function ExportPhase() {
   // ── Pre-flight ──────────────────────────────────────────────────────────
   const canBuildPackage = !!plan && !!state.scriptBrain.script
   const hasHooks = state.scriptBrain.hookVariants.length > 0
-  const hasCtaVars = ev.ctaVariations.length > 0
 
   // Effective hook + CTA text (preview the active picks)
   const effectiveHookText = useMemo(() => {
@@ -118,33 +105,6 @@ export default function ExportPhase() {
   }, [ev.pickedCtaIdx, ev.ctaVariations, state.scriptBrain.script])
 
   // ── Handlers ────────────────────────────────────────────────────────────
-
-  const handleGenerateCtaVars = async () => {
-    if (!geminiKey) { addToast('Thiếu Gemini API key', 'error'); return }
-    if (!state.scriptBrain.script) { addToast('Chưa có script', 'error'); return }
-    if (!state.inputs.product) { addToast('Chưa có product', 'error'); return }
-    setIsGeneratingCtaVars(true)
-    setExportError(null)
-    try {
-      const variations = await generateCtaVariations({
-        geminiKey,
-        script: state.scriptBrain.script,
-        productName: state.inputs.product.productName,
-        creatorDescription: state.inputs.avatar
-          ? `${state.inputs.avatar.name} — ${state.inputs.avatar.notes ?? ''}`
-          : undefined,
-        outputLang: state.scriptBrain.outputLang,
-      })
-      setCtaVariations(variations)
-      addToast(`✓ ${variations.length} CTA variants`, 'success')
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err)
-      setExportError(msg.slice(0, 240))
-      addToast(`Tạo CTA variants lỗi: ${msg}`, 'error')
-    } finally {
-      setIsGeneratingCtaVars(false)
-    }
-  }
 
   // Z89 — generate 4 AI thumbnail archetypes (Director writes 4 curiosity hooks,
   // GPT-4o renders each archetype with avatar + product). Each card updates as
@@ -363,60 +323,9 @@ export default function ExportPhase() {
           </div>
         )}
 
-        {/* ── CTA variation panel ───────────────────────────────────────── */}
-        <div className="mb-4 rounded-xl border border-black/10 bg-white p-3">
-          <div className="flex items-center justify-between">
-            <p className="text-[10px] font-bold uppercase tracking-widest text-gray-500">
-              CTA variations (5 styles) — Phase 6 generate
-            </p>
-            <button
-              onClick={handleGenerateCtaVars}
-              disabled={ev.isGeneratingCtaVariations}
-              className="flex items-center gap-1 rounded-md bg-gradient-to-r from-violet-500 to-pink-500 px-2.5 py-1 text-[10px] font-bold text-white shadow-sm hover:from-violet-600 hover:to-pink-600 disabled:opacity-50"
-            >
-              {ev.isGeneratingCtaVariations
-                ? <><Loader2 className="h-3 w-3 animate-spin" /> Đang sinh...</>
-                : hasCtaVars
-                  ? <><RotateCcw className="h-3 w-3" /> Re-roll</>
-                  : <><Sparkles className="h-3 w-3" /> Generate</>}
-            </button>
-          </div>
-          {hasCtaVars ? (
-            <div className="mt-2 grid grid-cols-1 gap-2 md:grid-cols-3">
-              {ev.ctaVariations.map((cv, i) => {
-                const isActive = ev.pickedCtaIdx === i
-                return (
-                  <button
-                    key={i}
-                    onClick={() => pickCtaVariation(i)}
-                    className={`rounded-xl border p-2.5 text-left text-[11px] transition-all ${
-                      isActive ? 'border-pink-400 bg-pink-50 ring-2 ring-pink-200' : 'border-gray-200 bg-white hover:bg-pink-50/40'
-                    }`}
-                  >
-                    <span className="rounded-full bg-pink-100 px-1.5 py-0.5 text-[9px] font-bold uppercase text-pink-700">
-                      {CTA_STYLE_LABEL_VI[cv.style]}
-                    </span>
-                    <p className="mt-1 leading-snug text-gray-800">{cv.text}</p>
-                    <p className="mt-1 text-[9px] text-gray-400">~{cv.estDurationSec.toFixed(1)}s</p>
-                  </button>
-                )
-              })}
-              <button
-                onClick={() => pickCtaVariation(-1)}
-                className={`rounded-xl border p-2.5 text-left text-[11px] transition-all ${
-                  ev.pickedCtaIdx === -1 ? 'border-gray-400 bg-gray-100 ring-2 ring-gray-300' : 'border-dashed border-gray-200 bg-white text-gray-500'
-                }`}
-              >
-                <span className="font-bold">↺ Dùng CTA gốc</span>
-                <p className="mt-1 text-gray-500">Không override — dùng CTA block trong script.</p>
-              </button>
-            </div>
-          ) : (
-            <p className="mt-2 text-[11px] italic text-gray-400">
-              Click "Generate" để tạo 5 CTA variations (soft/urgency/promo/emotional/testimonial).
-            </p>
-          )}
-        </div>
+        {/* Z89 — CTA variations panel removed (Gemini JSON kept erroring + the
+            ad uses the script's own CTA). The package still passes ctaVariations
+            (empty) → falls back to the script CTA block. */}
 
         {/* ── Z89 — AI thumbnail (4 archetypes) ──────────────────────────── */}
         <div className="mb-4 rounded-xl border border-black/10 bg-white p-3">
