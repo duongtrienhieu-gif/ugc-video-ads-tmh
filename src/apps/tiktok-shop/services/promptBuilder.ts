@@ -402,17 +402,37 @@ export function buildPromptSlot2(ctx: PromptContext): string {
   const st = ctx.slotTexts?.slot2
   const { question, painBullets } = st ?? deriveSlot2(ctx)
   const bullets = painBullets.slice(0, 3)
-  const bodyZoneHint = ctx.brief
-    ? `Documentary close-up of the customer's "before" pain — show DISCOMFORT in the EXACT body zone the product targets: "${ctx.brief.applicationDetails.bodyZone}". E.g., if product = knee brace, show person grabbing/touching the KNEE; if product = nasal spray, show person rubbing the NOSE; if product = face cream, show person frowning at facial skin. NEVER show pain on the wrong body part.`
-    : `Documentary close-up of the painful "before" state related to this product's category.`
+  const zoneRef = ctx.brief
+    ? `"${ctx.brief.applicationDetails.bodyZone}"`
+    : `the body zone this product targets`
   return `${header(ctx)}
 
 SLOT 2 — PAIN POINT
-COMPOSITION: ${bodyZoneHint} The "before" scene sits in middle-right (y≈380-760). Slight desaturation (-15%) to convey discomfort. The product (matching refs) floats in BOTTOM-RIGHT corner, small (~18%), tilted, glowing softly.
+COMPOSITION (CRITICAL — FULL PERSON + FACE + EXPRESSION, NOT just the body part):
+- Shot type: MEDIUM-WIDE or FULL-BODY shot. NEVER a cropped close-up that shows only the affected body part. The camera MUST capture BOTH (a) the customer's FACE clearly AND (b) ${zoneRef} in the SAME frame.
+- Framing rule by body zone location:
+   * If the affected zone is on the LOWER body (knee, ankle, foot, calf, lower back, hip): use a FULL-BODY or THREE-QUARTER shot so the face is visible at top AND the zone is visible at bottom. Person sitting or standing, with one hand naturally touching/holding the zone in discomfort.
+   * If the affected zone is on the TORSO (back, shoulder, chest, abdomen): use a MEDIUM shot (chest up) — face naturally in frame, zone touched by hand.
+   * If the affected zone is on the HEAD / FACE / NOSE / MOUTH / EYES / SCALP: use a MEDIUM CLOSE-UP — face fills more of the frame, expression is dominant.
+   * If the product is ORAL / INGESTIBLE: medium shot showing person looking tired/uncomfortable, may hold stomach or rub temples.
+- Facial expression (REQUIRED, must be visible and believable — NOT theatrical):
+   * Furrowed brow, slightly pursed or tense lips, tired/strained eyes.
+   * Subtle wince, slight head tilt, looking down or away from camera.
+   * Hand may be on the affected zone, OR holding the head, OR rubbing temples — pose that BELIEVABLY conveys the specific pain.
+   * NEVER smile, NEVER look confident — this is the "before" state.
+- Slight overall desaturation (-15%) + cool/dim lighting on the person side to convey discomfort.
+- The "before" scene sits in middle-right (y≈380-820). Person is the FOCAL POINT, not the body part alone.
+- The product (matching refs) floats in BOTTOM-RIGHT corner, small (~16%), tilted, glowing softly — quiet presence, not hero yet.
+
 TEXT in image:
 - BELOW BRAND SEAL, centered (y≈250-340), bold (~90px) white with shadow: "${question}"
 - LEFT-SIDE STACK 3 bullets (y≈400-760) with red ✗ + bold (~42px each):
-${bullets.map((b) => `  ✗ ${b}`).join('\n')}`
+${bullets.map((b) => `  ✗ ${b}`).join('\n')}
+
+EXTRA RULES (universal — apply to ALL product niches):
+- Picture must read as "real person experiencing this pain in real life" — not a body-part stock photo.
+- One person only, not multiple. Same ethnicity / age band as the target customer described in PRODUCT BRIEF.
+- NO surgical/medical clinical context (white sterile rooms, doctor's office) unless the product is explicitly medical-grade. Default scene: home / outdoor / office, depending on usage context.`
 }
 
 export function buildPromptSlot3(ctx: PromptContext): string {
@@ -423,13 +443,41 @@ export function buildPromptSlot3(ctx: PromptContext): string {
   const metric       = st?.metric         ?? derived.metric
   const metricSub    = st?.metricSubtitle ?? derived.metricSubtitle
   const disclaimer   = st?.disclaimer     ?? derived.disclaimer
-  const transformBodyHint = ctx.brief
-    ? `BOTH halves must show the EXACT body zone the product targets ("${ctx.brief.applicationDetails.bodyZone}"). LEFT shows the BEFORE state (discomfort / problem visible at that zone). RIGHT shows the AFTER state (relief / improvement visible at that zone, often with the product worn/applied if appropriate). The body zone MUST match the product type — e.g., knee brace → both halves show the KNEE.`
-    : `LEFT "before" state, RIGHT "after" state (both directly relevant to this product's effect).`
+  const zoneRef = ctx.brief
+    ? `"${ctx.brief.applicationDetails.bodyZone}"`
+    : `the body zone this product targets`
   return `${header(ctx)}
 
 SLOT 3 — TRANSFORMATION
-COMPOSITION: 50/50 SYMMETRIC vertical split (occupying y≈240-900) — ${transformBodyHint} SAME camera angle + SAME lighting both halves (credibility critical). Thin accent-color vertical divider. Product floats lower-center over the divide, small.
+COMPOSITION: 50/50 SYMMETRIC vertical split (occupying y≈240-900). The SAME person appears in BOTH halves (consistency = critical for credibility — same face, same skin tone, same age). SAME camera framing + SAME lighting both halves so only the EMOTIONAL + POSTURAL STATE changes.
+
+FRAMING (CRITICAL — FULL PERSON + FACE + EXPRESSION, NOT just the body part):
+- BOTH halves: MEDIUM-WIDE or FULL-BODY shot showing FACE clearly + ${zoneRef} in the SAME frame.
+- Framing rule by body zone location:
+   * Lower body (knee, ankle, foot, calf, back): FULL-BODY or THREE-QUARTER shot.
+   * Torso (back, shoulder, chest): MEDIUM shot (chest up).
+   * Head / face / nose / mouth / scalp: MEDIUM CLOSE-UP.
+   * Oral / ingestible product: medium shot showing whole person's mood.
+- NEVER crop to just the body part. Face must read clearly in BOTH halves.
+
+LEFT HALF (BEFORE — discomfort):
+- Same person, facial expression: furrowed brow, tense lips, tired/strained eyes, slight wince.
+- Posture: slumped, leaning, struggling to perform an action (e.g., climbing stairs, walking, sitting down).
+- One hand naturally on / near ${zoneRef} conveying the pain.
+- Cool / dimmer lighting, slight desaturation (-10%).
+- Outfit: casual everyday, comfortable.
+
+RIGHT HALF (AFTER — relief & confidence):
+- SAME person (same face, same age, same skin tone, ideally same outfit). Different POSTURE + EXPRESSION only.
+- Facial expression: relaxed brow, gentle confident SMILE, bright eyes, looking forward (not down).
+- Posture: standing tall, walking confidently, performing the same action effortlessly.
+- The PRODUCT is visibly worn / applied at ${zoneRef} when physically appropriate (e.g., knee brace on knee, nasal spray held confidently, face cream visible on glowing skin). For ingestible products, person looks energized, glass of water nearby is OK.
+- Warmer / brighter natural lighting, fully saturated colors.
+
+GLUE:
+- Thin accent-color vertical divider between halves.
+- Product (matching refs) floats lower-center across the divide, small (~12%), tilted, soft glow.
+
 TEXT in image:
 - JUST BELOW BRAND SEAL (y≈250), two labels (~38px bold tracking-wide white with shadow): left half="${beforeLabel}", right half="${afterLabel}"
 - CENTER MIDDLE GIANT (y≈500, ~180px ExtraBold accent color with strong shadow): "${metric}"
