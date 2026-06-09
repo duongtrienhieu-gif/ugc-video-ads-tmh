@@ -370,13 +370,14 @@ export async function directScenesWithGemini(
   params: GeminiSuggestParams,
 ): Promise<InsertSuggestion[]> {
   const langName = SCRIPT_LANG_GEMINI_NAME[params.lang]
-  // Z79 (B) — scale the scene count to the SCRIPT LENGTH, not a flat cap.
-  // ~1 insert per ~6.5s of voice → 55s ≈ 8, 30s ≈ 5, 18s ≈ 3 — clamped to the
-  // cost-mode [floor, budget]. A flat budget made Gemini over-pack a short
-  // script or under-fill a long one; this targets a count that fits the runtime
-  // and nudges Gemini to actually reach it (effFloor = target − 1).
+  // Z79/Z80 (B) — scale the scene count to the SCRIPT LENGTH, not a flat cap.
+  // Z80: DENSER (~1 insert per ~4.5s, was 6.5) now that overlays are free +
+  // additive (don't hide the creator) and the budget ceiling is 12 — gives the
+  // Director room for a rich mix of cuts + overlays. → 55s ≈ 12, 45s ≈ 10,
+  // 30s ≈ 7, 18s ≈ 4 — clamped to the cost-mode [floor, budget]. effFloor =
+  // target − 1 nudges Gemini to actually reach the target.
   const baseFloor = Math.max(1, Math.min(params.floor ?? 3, params.budget))
-  const durTarget = Math.round((params.script.totalDurationSec || 30) / 6.5)
+  const durTarget = Math.round((params.script.totalDurationSec || 30) / 4.5)
   const effBudget = Math.max(baseFloor, Math.min(params.budget, durTarget))
   const effFloor = Math.max(baseFloor, effBudget - 1)
   const floor = effFloor  // template references `${floor}` → the duration-aware target

@@ -212,6 +212,13 @@ function buildSegments(
   // (CTA intact).
   const usableStart = 1.0
   const usableEnd = Math.max(usableStart + 1, totalDurationSec - 1)
+  // Z80 — CREATOR-FIRST hard floor: a CUT replaces the creator, so the first
+  // few seconds must NOT be a cut — the viewer has to see the avatar lipsync
+  // talking before anything covers it (trust). Cuts start no earlier than 4s;
+  // the creator owns 0-4s. (Overlays keep usableStart=1.0 — the creator stays
+  // visible behind them, so they don't need the lead-in.)
+  const cutLeadInSec = 4.0
+  const cutUsableStart = Math.min(cutLeadInSec, usableEnd - 1.5)
   const insertSlots: { insert: ActionInsertClip; tsSec: number; durSec: number }[] = []
 
   for (const insert of cutInserts) {
@@ -236,12 +243,13 @@ function buildSegments(
     if (ts === null || ts === undefined) {
       // Evenly distribute manually-added inserts that lack a timestamp
       const fraction = insertSlots.length / Math.max(1, inserts.length)
-      ts = usableStart + fraction * (usableEnd - usableStart)
+      ts = cutUsableStart + fraction * (usableEnd - cutUsableStart)
     } else {
       // Z57 — map the estimate-based timestamp onto the real voice timeline.
       ts = ts * timelineScale
     }
-    ts = Math.max(usableStart, Math.min(usableEnd - durSec, ts))
+    // Z80 — cuts can't start before the creator lead-in (4s).
+    ts = Math.max(cutUsableStart, Math.min(usableEnd - durSec, ts))
     insertSlots.push({
       insert,
       tsSec: round2(ts),
@@ -251,6 +259,11 @@ function buildSegments(
 
   // Sort by timestamp + dedupe overlaps (push later inserts forward)
   insertSlots.sort((a, b) => a.tsSec - b.tsSec)
+  // Z80 — the OPENING cut stays short so the ad doesn't sit on one B-roll right
+  // after the hook (user: "mở đầu 6s quá dài"). Cap the earliest cut to ≤4s.
+  if (insertSlots.length > 0) {
+    insertSlots[0].durSec = round2(Math.min(insertSlots[0].durSec, 4))
+  }
   for (let i = 1; i < insertSlots.length; i++) {
     const prev = insertSlots[i - 1]
     const cur = insertSlots[i]
