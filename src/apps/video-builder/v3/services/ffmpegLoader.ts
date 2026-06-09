@@ -36,6 +36,17 @@ interface FfmpegSingleton {
 let singleton: FfmpegSingleton | null = null
 let loadingPromise: Promise<FFmpeg> | null = null
 
+// Z91 — serialize every ffmpeg.exec() across the WHOLE app. The FFmpeg.wasm
+// instance is a SINGLETON and is NOT re-entrant: two exec() calls in flight at
+// once collide on the single worker's resolver (one hangs / returns the wrong
+// result / corrupts output). This happens when steps run in parallel — e.g.
+// Bước 2 static-image clips while Bước 3's atempo runs, or two concurrent
+// inserts both rendering a static clip. We chain every exec() onto one promise
+// so they run strictly one-at-a-time, FIFO. writeFile/readFile already serialize
+// at the worker-message level and use unique filenames, so locking exec() (the
+// actual command run) is sufficient.
+let execLock: Promise<unknown> = Promise.resolve()
+
 export interface LoadFfmpegOptions {
   /** Progress callback for the wasm fetch (0-1) — fired once during load */
   onLoadProgress?: (ratio: number) => void
@@ -77,6 +88,15 @@ export async function getFFmpeg(opts: LoadFfmpegOptions = {}): Promise<FFmpeg> {
 
     const ffmpeg = new FFmpegClass()
     rewireCallbacks(ffmpeg, opts)
+
+    // Z91 — wrap exec() ONCE so every call (from any phase / parallel render)
+    // serializes through execLock. No call-site changes needed.
+    const rawExec = ffmpeg.exec.bind(ffmpeg)
+    ffmpeg.exec = ((...args: Parameters<typeof rawExec>) => {
+      const run = execLock.then(() => rawExec(...args))
+      execLock = run.then(() => {}, () => {})  // release on settle (swallow errors)
+      return run
+    }) as typeof ffmpeg.exec
 
     console.log('[FFMPEG] loading same-origin core…')
     opts.onLoadProgress?.(0.5)
