@@ -126,7 +126,19 @@ function buildInsertKeyframePrompt(
       'anything near the left/right/top/bottom edges WILL be cut off.',
     )
     if (!isEmotionPerson) {
-      paragraphs.push('NO PRODUCT PACKAGING visible in frame — concept / mood illustration only.')
+      // Z70 — strengthen no-product rule. Even "generic" devices that look like
+      // a competitor / fake version of the product (a generic knee brace, a
+      // generic jar of powder, an unbranded toothbrush head) are NOT allowed
+      // here. The viewer should see anatomy, ingredients, mechanism, or feeling
+      // — never any object that competes visually with the real product.
+      paragraphs.push(
+        'NO PRODUCT — concept / mood illustration only. ZERO product-like objects in ' +
+        'frame: no brace, no jar, no bottle, no tube, no sachet, no pill, no device, ' +
+        'no toothbrush head, no medical appliance — branded OR unbranded, real OR ' +
+        'generic, full OR partial. Show ONLY anatomy, ingredients in their raw form, ' +
+        'mechanism diagrams, body parts, or feelings/emotions. The product belongs ' +
+        'in CUT scenes (HOLD_PRODUCT, PRODUCT_IN_ACTION, etc.), never here.',
+      )
     } else {
       paragraphs.push('No product packaging in frame — this is a reaction / emotion shot of the person only.')
     }

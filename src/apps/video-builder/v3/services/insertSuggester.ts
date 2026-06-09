@@ -161,11 +161,51 @@ export interface GeminiSuggestParams {
   product?: Product | null
 }
 
-// Z48 — build the product-context block injected into the Director prompt.
+// Z70 — auto-detect product niche from name + description, used as an extra
+// hint for the Director so it doesn't have to infer usage purely from text.
+// Conservative: only return a label when there are STRONG signals; otherwise
+// leave it 'unknown' and let Director read the description directly.
+const NICHE_RULES: { niche: string; usage: string; cues: RegExp }[] = [
+  { niche: 'dental',     usage: 'brushed on teeth with a toothbrush (topical, not swallowed)',
+    cues: /\b(tooth|teeth|toothpaste|whiten|enamel|gum|plaque|dental|răng|men răng|kem đánh răng|mảng bám|nướu|gigi|pergigian)\b/i },
+  { niche: 'skincare',   usage: 'applied topically to skin (rubbed/patted/massaged)',
+    cues: /\b(skin|skincare|serum|cream|lotion|moisturiz|moisturis|cleanser|toner|mask|sunscreen|spf|acne|wrinkle|da|dưỡng da|kem dưỡng|tinh chất|mặt nạ|kulit|wajah)\b/i },
+  { niche: 'haircare',   usage: 'washed/applied into hair or scalp',
+    cues: /\b(hair|shampoo|conditioner|scalp|tóc|gội|dầu gội|chân tóc|da đầu|rambut|kepala)\b/i },
+  { niche: 'joint',      usage: 'worn on / supports a body joint (knee, back, wrist…), not consumed',
+    cues: /\b(knee|joint|brace|back support|wrist|elbow|ankle|lưng|khớp|gối|đai|đeo|sendi|lutut|pinggang)\b/i },
+  { niche: 'supplement', usage: 'swallowed orally (pill / capsule / drink)',
+    cues: /\b(supplement|vitamin|capsule|tablet|pill|gummies|thực phẩm chức năng|tpcn|viên uống|uống bổ|suplemen|vitamin)\b/i },
+  { niche: 'beverage',   usage: 'sipped / drunk directly',
+    cues: /\b(drink|beverage|tea|coffee|juice|protein shake|nước uống|trà|cà phê|minuman)\b/i },
+  { niche: 'food',       usage: 'eaten as food',
+    cues: /\b(snack|cookie|biscuit|cereal|noodle|bánh|kẹo|đồ ăn|makanan)\b/i },
+  { niche: 'cleaning',   usage: 'used to clean a surface / kitchen / bathroom',
+    cues: /\b(detergent|cleaner|disinfect|stain|wipe|chất tẩy|lau chùi|tẩy|vệ sinh|pembersih)\b/i },
+  { niche: 'pest',       usage: 'placed/sprayed to kill or repel pests; never consumed by humans',
+    cues: /\b(pest|roach|cockroach|ant|mosquito|insect|repellent|bait|gián|kiến|muỗi|côn trùng|bả|serangga)\b/i },
+  { niche: 'appliance',  usage: 'a tool/device that is operated, not consumed',
+    cues: /\b(blender|fryer|cooker|vacuum|drill|machine|appliance|máy|thiết bị|dụng cụ|mesin|alat)\b/i },
+  { niche: 'apparel',    usage: 'worn on the body (clothing/footwear)',
+    cues: /\b(shirt|pants|dress|shoes|sneaker|jacket|áo|quần|giày|baju|seluar|kasut)\b/i },
+]
+
+function detectProductNiche(product: Product | null | undefined): { niche: string; usage: string } | null {
+  if (!product) return null
+  const hay = [product.productName, product.productDescription, product.usps, product.ingredients]
+    .filter(Boolean).join(' ').toLowerCase()
+  if (hay.length < 8) return null
+  for (const r of NICHE_RULES) {
+    if (r.cues.test(hay)) return { niche: r.niche, usage: r.usage }
+  }
+  return null
+}
+
+// Z48/Z70 — build the product-context block injected into the Director prompt.
 // The Director was previously blind to the product (script-only), so it
 // guessed usage — picking TAKE_PILL for a tooth powder, BEFORE_AFTER for a
-// visible result, etc. Giving it the name + description fixes the whole class
-// of niche-misread bugs at the source.
+// visible result, etc. Giving it the name + description + detected niche
+// fixes the whole class of niche-misread bugs at the source.
 function buildProductContextBlock(product: Product | null | undefined): string {
   if (!product) return ''
   const lines: string[] = []
@@ -173,10 +213,15 @@ function buildProductContextBlock(product: Product | null | undefined): string {
   if (product.productDescription) lines.push(`- Description: ${product.productDescription.slice(0, 600)}`)
   if (product.usps) lines.push(`- Key selling points: ${product.usps.slice(0, 300)}`)
   if (product.ingredients) lines.push(`- Ingredients / contents: ${product.ingredients.slice(0, 200)}`)
+  const detected = detectProductNiche(product)
+  if (detected) {
+    lines.push(`- Detected niche: ${detected.niche}`)
+    lines.push(`- Detected physical usage: ${detected.usage}`)
+  }
   if (lines.length === 0) return ''
   return `\n\nPRODUCT CONTEXT — read this FIRST to understand what the product IS and
-HOW it is physically used. Do NOT guess usage from the script word "powder/gel/
-liquid" alone:
+HOW it is physically used. The "Detected niche / physical usage" lines (when
+present) are a strong hint — trust them over a guess from "powder/gel/liquid":
 ${lines.join('\n')}
 
 USE THIS to choose usage-correct scenes. Worked examples:
@@ -185,7 +230,9 @@ USE THIS to choose usage-correct scenes. Worked examples:
 - A "tooth/teeth/whitening/enamel" product is BRUSHED on teeth, never eaten.
 - A cream / serum / lotion is rubbed on skin; a shampoo is washed into hair.
 - A supplement / vitamin / capsule is swallowed.
-- A device / appliance / tool is operated, not consumed.\n`
+- A device / appliance / tool is operated, not consumed.
+- A joint brace / support is WORN on the body, not swallowed.
+- A pest bait / repellent is PLACED or sprayed; the human never consumes it.\n`
 }
 
 const SUGGEST_RESPONSE_SCHEMA = {
@@ -425,10 +472,20 @@ DIRECTING RULES:
         • LANGUAGE LOCK — EVERY text label in the image MUST be written in
           ${langName} (the script's language). For a Bahasa Malaysia script the
           labels are Malay, for a Vietnamese script Vietnamese, etc. NEVER mix
-          languages and NEVER default to another language. Take the term
-          straight from the ${langName} quote. (Ingredient brand names like
-          "Activated Charcoal" may stay in their original form if the script
-          itself uses them that way.)
+          languages and NEVER default to another language.
+          *** CRITICAL: even when the PRODUCT NAME contains English words ***
+          (e.g. "Knee Support Booster", "Brightening Serum"), THE LABELS STILL
+          MUST BE IN ${langName}. The product NAME stays English (it's a brand);
+          the LABELS on a teaching graphic are concepts and must be translated:
+            • English product "Knee Support Booster" → labels in VN: "Khớp gối",
+              "Áp lực", "Lò xo nâng đỡ" — NOT "knee joint", "pressure", "springs".
+            • English product "Brightening Serum" → labels in VN: "Da xỉn",
+              "Tinh chất", "Sáng mịn" — NOT "dull skin", "serum", "brightening".
+          Take the term straight from the ${langName} quote that the scene
+          illustrates — that quote IS in the script language; mirror it.
+          (Ingredient names that ARE the brand of the active substance — e.g.
+          "Activated Charcoal", "Niacinamide" — may stay in their original
+          chemical form if the ${langName} script writes them that way.)
         • LABEL THE ACTUAL TERMS FROM THE QUOTE: ingredient names, a number
           ("5x"), the one core mechanism/benefit word. Typically 1-4 short
           labels, each 1-3 words. The labels ARE the terms the voice is saying
@@ -468,6 +525,15 @@ DIRECTING RULES:
   Leave "labels" EMPTY ONLY for: pure pain/emotion visuals that need no words,
   and style (2) realistic microscopy. Brand-name ingredients may stay in their
   original form if the script writes them that way.
+- NO-PRODUCT-IN-CONCEPT — when writing a CONCEPT_SCENE conceptPrompt, NEVER
+  describe ANY product-like object: no brace, jar, bottle, tube, sachet, pill,
+  device, toothbrush head, medical appliance — branded OR unbranded, real OR
+  generic. Even a "generic version" of the product visually competes with the
+  real product (the viewer thinks "is that the product?"). Concept scenes show
+  ONLY: anatomy, raw ingredients (charcoal chunks, grape seeds, herb leaves),
+  mechanism diagrams (particles, arrows, cross-sections), body parts, or pure
+  emotion. If the scene NEEDS a product on screen, switch presetId to
+  PRODUCT_IN_ACTION or one of the 12 fixed product presets — not CONCEPT_SCENE.
 - VISUAL VARIETY — do NOT make every graphic scene the same "cartoon tooth in
   the centre with a label". A run of 5 near-identical illustrations feels like a
   boring slideshow. Vary EACH scene so the eye keeps moving:
@@ -648,7 +714,7 @@ OUTPUT strict JSON, no fences:
   // the browser console instead of guessed at.
   // Z46/Z47 — added beforeAfter + topical + dupeSkip + dupeSwap counters.
   const drop = { preset: 0, noPrompt: 0, zeroFit: 0, dupeSkip: 0 }
-  const rewrite = { beforeAfter: 0, topical: 0, dupeSwap: 0, labeled: 0 }
+  const rewrite = { beforeAfter: 0, topical: 0, dupeSwap: 0, labeled: 0, labelLangDrop: 0 }
 
   const seen = new Set<ActionPresetId>()
   const out: InsertSuggestion[] = []
@@ -726,9 +792,39 @@ OUTPUT strict JSON, no fences:
     // a separate field + appending them here as a final, unmissable directive
     // forces the labels to actually appear in the image. Only for graphic
     // (ken_burns) concept scenes — emotion video + realistic microscopy get none.
-    const labels = Array.isArray(item.labels)
+    let labels = Array.isArray(item.labels)
       ? item.labels.map((l) => String(l).trim()).filter((l) => l.length > 0 && l.length <= 24).slice(0, 4)
       : []
+    // Z70 — Language filter. For non-English scripts the labels MUST be in the
+    // script language. The Director sometimes drifts to English when the
+    // product description contains English terms ("Knee Support Booster"). We
+    // detect: a label that is ALL-Latin without ANY diacritics on a VN script,
+    // OR all-Latin on a BM script that doesn't match the script's own words —
+    // and drop it (better no label than wrong-language label). The structured-
+    // labels rule + ${langName} mention in the prompt are still the primary
+    // defense; this is the safety net.
+    if (params.lang === 'vi' && labels.length > 0) {
+      // Vietnamese has diacritics on most non-trivial words. A 4+ char label
+      // with zero diacritics is almost certainly English. Allow short words
+      // (1-3 chars like "5x") and known global terms.
+      const KEEP_AS_IS = /^(5x|10x|nano|gmp|fda|iso|vit|c|b1|b3|b5|b12)$/i
+      const droppedLabels: string[] = []
+      labels = labels.filter((l) => {
+        if (KEEP_AS_IS.test(l)) return true
+        if (l.length <= 3) return true  // short codes pass
+        const hasDiacritic = /[À-ỹĂăÂâÊêÔôƠơƯưĐđ]/.test(l)
+        // All-Latin no-diacritic label on a VN script → drop (likely English).
+        if (!hasDiacritic && /^[A-Za-z0-9\s\-./()]+$/.test(l)) {
+          droppedLabels.push(l)
+          return false
+        }
+        return true
+      })
+      if (droppedLabels.length > 0) {
+        rewrite.labelLangDrop += droppedLabels.length
+        console.warn(`[DIRECTOR] dropped non-VN labels: ${droppedLabels.join(', ')} (scene anchor=${anchor})`)
+      }
+    }
     if (presetId === 'CONCEPT_SCENE' && renderMode === 'ken_burns' && labels.length > 0) {
       const list = labels.map((l) => `"${l}"`).join(', ')
       conceptPrompt +=
@@ -840,7 +936,7 @@ OUTPUT strict JSON, no fences:
   console.log(
     `[DIRECTOR] raw=${raw.length}ch parsed=${parsed.length} usable=${out.length} ` +
     `dropped{preset:${drop.preset},noPrompt:${drop.noPrompt},zeroFit:${drop.zeroFit},dupeSkip:${drop.dupeSkip}} ` +
-    `rewrote{beforeAfter:${rewrite.beforeAfter},topical:${rewrite.topical},dupeSwap:${rewrite.dupeSwap},labeled:${rewrite.labeled}} ` +
+    `rewrote{beforeAfter:${rewrite.beforeAfter},topical:${rewrite.topical},dupeSwap:${rewrite.dupeSwap},labeled:${rewrite.labeled},labelLangDrop:${rewrite.labelLangDrop}} ` +
     `trust{earlyHook:${trustDrops.earlyHook},coverage:${trustDrops.coverage},run3:${trustDrops.run3}} ` +
     `visibleResult=${visibleResultProduct} topical=${topicalCategory ?? 'no'} ` +
     `→ ${directed.length > 0 ? `${directed.length} scenes` : 'EMPTY → keyword fallback'}`,
