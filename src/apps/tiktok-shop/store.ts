@@ -480,7 +480,10 @@ export const useTikTokShopStore = create<TikTokShopState>()(
         if (brief && typeof brief === 'object') {
           let needsRefresh = false
           const ad = brief.applicationDetails as Record<string, unknown> | undefined
-          const ORIENTATION_STUB = 'OUTER (visible when worn): mặt ngoài theo ảnh tham chiếu. INNER (touching body, hidden behind body in view): mặt trong tiếp xúc cơ thể.'
+          // Neutral stub for completely-missing data. Vision will overwrite with
+          // proper Format A (OUTER/INNER for worn products) or Format B (plain
+          // natural description for ingestible/cream/tool) on next "Tạo Listing".
+          const ORIENTATION_STUB = 'mặt sản phẩm theo ảnh tham chiếu khi dùng đúng cách'
           if (!ad || typeof ad !== 'object') {
             brief.applicationDetails = {
               bodyZone: '(chưa xác định)',
@@ -491,12 +494,14 @@ export const useTikTokShopStore = create<TikTokShopState>()(
             }
             needsRefresh = true
           } else {
-            // Add fields added in later schema bumps without nuking existing data.
-            if (typeof ad.orientationDetail !== 'string' || !/OUTER/i.test(ad.orientationDetail as string)) {
+            // Only backfill when fields are completely missing — never overwrite
+            // existing data (Vision-extracted Format B has no OUTER tag, and
+            // that's correct; do not regex-force OUTER into it).
+            if (typeof ad.orientationDetail !== 'string' || (ad.orientationDetail as string).trim().length === 0) {
               ad.orientationDetail = ORIENTATION_STUB
               needsRefresh = true
             }
-            if (typeof ad.painManifest !== 'string') {
+            if (typeof ad.painManifest !== 'string' || (ad.painManifest as string).trim().length === 0) {
               ad.painManifest = 'biểu hiện khó chịu rõ ràng ở vùng cần chăm sóc'
               needsRefresh = true
             }

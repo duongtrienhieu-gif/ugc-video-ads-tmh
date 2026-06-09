@@ -114,13 +114,28 @@ CRITICAL DATA INTEGRITY RULES:
    - Oral supplement / tablet → bodyZone="(oral — swallowed, no body application)", howApplied="take 1-2 tablets with a glass of water after meal", usageScene="Person holding a tablet between fingers, a glass of water in the other hand, about to take it after a meal"
    - Toothpaste → bodyZone="teeth + gums", howApplied="brush teeth twice daily with a pea-sized amount", usageScene="Person standing in front of bathroom mirror, brushing teeth with a clean white toothbrush, foam visible"
    The usageScene line will be embedded VERBATIM into the image-gen prompt for slot 6 — make it concrete, single sentence, photo-direction quality.
-   ALSO infer applicationDetails.orientationDetail — format STRICTLY as TWO labeled halves so image-gen can hide the inner side:
-     "OUTER (visible when worn): <what you see from outside, e.g. padded fabric + brand logo + Velcro straps>. INNER (touching body, must be HIDDEN behind body in view): <what contacts skin, e.g. metal springs + back-of-knee contact surface>."
-   Examples:
+   ALSO infer applicationDetails.orientationDetail — TWO formats depending on product type:
+
+   FORMAT A — for WORN / TWO-SIDED products (brace, patch, mask, watch, earbuds, sock, contact lens, headphones, body strap): use the OUTER/INNER labeled structure so image-gen can hide the contact side:
+     "OUTER (visible when worn): <what camera sees, e.g. padded fabric + brand logo + Velcro straps>. INNER (touching body, must be HIDDEN behind body in view): <what contacts skin, e.g. metal springs + back-of-knee contact surface>."
+     Examples:
      - Knee brace: "OUTER (visible when worn): smooth padded fabric front with brand label + Velcro straps wrapping around. INNER (touching body, hidden behind leg): metal coil springs and rigid frame pressed against the back of the knee (popliteal area)."
-     - Nasal spray: "OUTER (visible): bottle body held in hand, brand label facing camera. INNER (hidden inside nostril): spray nozzle tip inserted into nostril."
      - Sleep mask: "OUTER (visible): printed/colored fabric side with strap. INNER (hidden against face): soft gel/silicone cup pressed against the eye area."
      - Hot patch: "OUTER (visible): printed paper backing with brand. INNER (hidden against skin): adhesive gel side stuck to the body."
+     - Smartwatch: "OUTER (visible): display face up on the wrist. INNER (hidden against wrist): sensor/charger pins pressed against the skin."
+
+   FORMAT B — for NON-WORN products (ingestible, topical cream/serum/oil, liquid, hand-held tool, fashion accessory): describe orientation in plain natural language WITHOUT OUTER/INNER labels — this signals to image-gen that the OUTER/INNER hiding rule doesn't apply.
+     Examples:
+     - Tablet/capsule: "swallowed with water, held between fingers before swallowing — no body-contact face."
+     - Powder/sachet: "poured into water and stirred — no two-sided contact orientation."
+     - Face cream: "applied as a thin even layer on facial skin, fingertip spreads it in circular motion — no two-sided contact orientation."
+     - Serum/oil: "dropper applies drops onto skin, then patted in with fingertips — no two-sided contact orientation."
+     - Nasal spray: "bottle held upright in hand, nozzle tip inserted into nostril (tip is inside the nose, not against an outer body surface) — describe natural use, no OUTER/INNER hiding needed."
+     - Toothpaste: "squeezed onto toothbrush, then brushed onto teeth — no two-sided contact orientation."
+     - Hand-held massager / device: "held by handle in hand, working head pressed against the body part being treated — describe grip orientation only."
+     - Fashion accessory: "worn in usual position (e.g., glasses on bridge of nose, watch on wrist) — natural orientation, no OUTER/INNER hiding needed."
+
+   PICK FORMAT A only if the product genuinely has TWO distinct sides where ONE clearly contacts the body and the OTHER faces outward. If unsure, default to FORMAT B.
    ALSO infer applicationDetails.painManifest (visible BEFORE cues for slot 2 — concrete observable signs only — e.g. "swollen red knee + slight limp" / "rough cheek skin with visible pores + dark spots" / "red irritated nose + tissue in hand" / "yellowed teeth + dark gum line" / "thinning hair on crown showing scalp"). In ${langName}.
 
 IF a field cannot be determined from photos + metadata, write the most reasonable inference based on category — but flag uncertainty by using softer language. NEVER fabricate specific ingredient names, certifications, lab numbers, or clinical claims.`
@@ -307,8 +322,8 @@ function buildFallbackBrief(product: Product, language: Market): TiktokShopProdu
         ? 'Pengguna mengambil produk di rumah, demonstrasi cara guna yang ditunjukkan jelas, sudut kamera medium close-up'
         : 'Người dùng cầm sản phẩm tại nhà, thao tác sử dụng được thể hiện rõ ràng, góc máy medium close-up',
       orientationDetail: isMS
-        ? 'OUTER (visible when worn): bahagian luar produk seperti dalam gambar rujukan. INNER (touching body, hidden behind body in view): bahagian dalam yang menyentuh badan.'
-        : 'OUTER (visible when worn): mặt ngoài sản phẩm theo ảnh tham chiếu. INNER (touching body, hidden behind body in view): mặt trong tiếp xúc cơ thể.',
+        ? 'orientasi produk seperti dalam gambar rujukan apabila digunakan dengan betul'
+        : 'mặt sản phẩm theo ảnh tham chiếu khi dùng đúng cách',
       painManifest: isMS
         ? 'tanda ketidakselesaan yang jelas pada kawasan sasaran'
         : 'biểu hiện khó chịu rõ ràng ở vùng cần chăm sóc',

@@ -96,6 +96,22 @@ LANGUAGE: ${langName} ONLY in any rendered text (except "Official store" subtitl
 NO trust bar at bottom — leave clean for visual breathing.`
 }
 
+// ── Shared helper: conditional orientation rule ──
+// Brief.applicationDetails.orientationDetail uses 2 formats (decided by Vision):
+//   - FORMAT A (worn / two-sided products): "OUTER (...): X. INNER (...): Y."
+//   - FORMAT B (ingestible / topical / tool / fashion): plain natural description, no OUTER tag.
+// For Format A we inject the strict "hide INNER" rule. For Format B we inject a
+// soft "match refs" rule. Detection via /OUTER/i keyword on the orientationDetail.
+function orientationRule(ctx: PromptContext): string {
+  if (!ctx.brief) return ''
+  const detail = ctx.brief.applicationDetails.orientationDetail
+  const isWornTwoSided = /OUTER/i.test(detail)
+  if (isWornTwoSided) {
+    return `\n- ORIENTATION (CRITICAL — prevents backwards rendering): "${detail}". Render ONLY the OUTER side visible to the camera. The INNER side (touching skin/body) MUST be HIDDEN behind the body — do NOT show inner parts (springs / gel / adhesive / nozzle tips) on the camera-facing side. Do not flip the product.`
+  }
+  return `\n- ORIENTATION: "${detail}". Render the product with this natural orientation, matching how it appears in the product reference photos when used correctly.`
+}
+
 // ── Fallback helpers — brief-aware when ctx.brief present, else product fields ──
 // Phase 10.2 fix: when Gemini's slotTexts output is missing/incomplete, fall
 // back to BRIEF data (BM/VN, customer-voice) instead of raw product fields
@@ -472,7 +488,7 @@ RIGHT HALF (AFTER — relief & confidence):
 - SAME person (same face, same age, same skin tone, ideally same outfit). Different POSTURE + EXPRESSION only.
 - Facial expression: relaxed brow, gentle confident SMILE, bright eyes, looking forward (not down).
 - Posture: standing tall, walking confidently, performing the same action effortlessly.
-- The PRODUCT is visibly worn / applied at ${zoneRef} when physically appropriate (e.g., knee brace on knee, nasal spray held confidently, face cream visible on glowing skin). For ingestible products, person looks energized, glass of water nearby is OK.${ctx.brief ? `\n- ORIENTATION (CRITICAL — prevents backwards rendering): "${ctx.brief.applicationDetails.orientationDetail}". Render ONLY the OUTER side visible to the camera. The INNER side (touching skin/body) MUST be HIDDEN behind the body — do NOT show inner parts (springs / gel / adhesive / nozzle tips) on the camera-facing side. Do not flip the product.` : ''}
+- The PRODUCT is visibly worn / applied at ${zoneRef} when physically appropriate (e.g., knee brace on knee, nasal spray held confidently, face cream visible on glowing skin). For ingestible products, person looks energized, glass of water nearby is OK.${orientationRule(ctx)}
 - Warmer / brighter natural lighting, fully saturated colors.
 
 GLUE:
@@ -603,7 +619,7 @@ export function buildPromptSlot6(ctx: PromptContext): string {
   // correct body zone — NOT 3 product-only shots. usageScene from brief gives
   // the AI a concrete photo direction. Without brief, fall back to generic.
   const usageDirection = ctx.brief
-    ? `Each of the 3 panels shows a PERSON actually using the product on the correct body zone "${ctx.brief.applicationDetails.bodyZone}". Use this scene direction as the base for all 3 panels: "${ctx.brief.applicationDetails.usageScene}". Product orientation: "${ctx.brief.applicationDetails.orientationDetail}". In every panel render ONLY the OUTER side visible to the camera; the INNER side (touching skin/body) must be HIDDEN behind the body — do NOT show inner parts (springs / gel / adhesive / nozzle tips) on the camera-facing side. Vary the panels by step progression (e.g., Panel 1 = preparing/positioning, Panel 2 = active application motion, Panel 3 = result/finished). Every panel must show body-product interaction at the target zone with correct orientation. NEVER place the product on the wrong body part.`
+    ? `Each of the 3 panels shows a PERSON actually using the product on the correct body zone "${ctx.brief.applicationDetails.bodyZone}". Use this scene direction as the base for all 3 panels: "${ctx.brief.applicationDetails.usageScene}".${orientationRule(ctx)}\nVary the panels by step progression (e.g., Panel 1 = preparing/positioning, Panel 2 = active application motion, Panel 3 = result/finished). Every panel must show body-product interaction at the target zone with correct orientation. NEVER place the product on the wrong body part.`
     : `TRIPTYCH — 3 instances of the product being USED (with a person interacting), in horizontal sequence. Each panel = one usage step.`
   return `${header(ctx)}
 
