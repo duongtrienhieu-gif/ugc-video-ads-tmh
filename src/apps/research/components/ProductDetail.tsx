@@ -192,10 +192,16 @@ export default function ProductDetail({ product, onClose }: { product: ScoredPro
           {/* ── VIDEO WIN ── */}
           {tab === 'video' && (
             <div className="flex flex-col gap-3">
-              <p className="text-xs text-slate-500">🎥 Video đang bán tốt sản phẩm này — bấm "Phân tích AI" để mổ xẻ góc content thắng.</p>
+              <p className="text-xs text-slate-500">🎥 Video đang bán tốt — bấm <b>"Xem TikTok"</b> để xem video thật, bấm <b>"Phân tích AI"</b> để mổ xẻ góc content.</p>
               {videos.map((vid) => {
                 const open = analyzeId === vid.id
                 const analysis = open ? analyzeVideo(vid.caption) : null
+                // TikTok video URL: thử /video/{id} trước, không có id thì link tới kênh.
+                const cleanHandle = vid.handle.replace(/^@/, '').trim()
+                const looksLikeId = /^\d{15,}$/.test(vid.id)
+                const tiktokUrl = cleanHandle
+                  ? (looksLikeId ? `https://www.tiktok.com/@${cleanHandle}/video/${vid.id}` : `https://www.tiktok.com/@${cleanHandle}`)
+                  : null
                 return (
                   <div key={vid.id} className="rounded-xl border border-black/10 p-2.5">
                     <div className="flex gap-3">
@@ -214,12 +220,25 @@ export default function ProductDetail({ product, onClose }: { product: ScoredPro
                       </div>
                     </div>
 
-                    <button
-                      onClick={() => setAnalyzeId(open ? null : vid.id)}
-                      className="mt-2 flex w-full items-center justify-center gap-1.5 rounded-lg border border-violet-200 bg-violet-50 py-1.5 text-xs font-semibold text-violet-700 transition-colors hover:bg-violet-100"
-                    >
-                      <Sparkles className="h-3.5 w-3.5" /> {open ? 'Ẩn phân tích' : 'Phân tích AI'}
-                    </button>
+                    <div className="mt-2 flex gap-2">
+                      {tiktokUrl && (
+                        <a
+                          href={tiktokUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-black/10 bg-slate-50 py-1.5 text-xs font-semibold text-slate-700 transition-colors hover:bg-slate-100"
+                          title={looksLikeId ? 'Mở video TikTok' : 'Mở kênh TikTok (chưa khớp video id)'}
+                        >
+                          <Play className="h-3.5 w-3.5" /> {looksLikeId ? 'Xem TikTok' : 'Kênh TikTok'}
+                        </a>
+                      )}
+                      <button
+                        onClick={() => setAnalyzeId(open ? null : vid.id)}
+                        className={`flex ${tiktokUrl ? 'flex-1' : 'w-full'} items-center justify-center gap-1.5 rounded-lg border border-violet-200 bg-violet-50 py-1.5 text-xs font-semibold text-violet-700 transition-colors hover:bg-violet-100`}
+                      >
+                        <Sparkles className="h-3.5 w-3.5" /> {open ? 'Ẩn AI' : 'Phân tích AI'}
+                      </button>
+                    </div>
 
                     {analysis && (
                       <div className="mt-2 flex flex-col gap-2 rounded-lg bg-slate-50 p-3">
@@ -246,31 +265,39 @@ export default function ProductDetail({ product, onClose }: { product: ScoredPro
             <div className="flex flex-col gap-3">
               <p className="text-xs text-slate-500">👤 Creator đang đẩy sản phẩm — bấm <b>"TikTok"</b> để xem kênh, đánh giá rồi tuyển.</p>
               {creators.map((c) => {
-                const tiktokHandle = c.handle.replace(/^@/, '')
-                const tiktokUrl = `https://www.tiktok.com/@${tiktokHandle}`
+                const cleanHandle = c.handle.replace(/^@/, '').trim()
+                // Handle phải đúng định dạng TikTok (chữ/số/dấu chấm/gạch dưới, ≥2 ký tự).
+                const handleOk = /^[A-Za-z0-9._-]{2,}$/.test(cleanHandle)
+                const tiktokUrl = handleOk ? `https://www.tiktok.com/@${cleanHandle}` : null
                 return (
                   <div key={c.id} className="rounded-xl border border-black/10 p-2.5">
                     <div className="flex items-center gap-3">
                       <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-violet-400 to-pink-400 text-sm font-bold text-white">
-                        {c.nickname.charAt(0)}
+                        {(c.nickname || cleanHandle || '?').charAt(0).toUpperCase()}
                       </div>
                       <div className="min-w-0 flex-1">
-                        <p className="text-xs font-semibold text-slate-700">{c.nickname} <span className="font-normal text-slate-400">{c.handle}</span></p>
+                        <p className="text-xs font-semibold text-slate-700">{c.nickname || cleanHandle} <span className="font-normal text-slate-400">{c.handle}</span></p>
                         <div className="mt-0.5 flex flex-wrap gap-x-3 text-[11px] font-medium text-slate-600">
                           <span>{formatCount(c.followers)} follow</span>
                           <span className="text-emerald-600">{formatMyr(c.gmv)} GMV</span>
                           <span>tương tác {c.engagementPct}%</span>
                         </div>
                       </div>
-                      <a
-                        href={tiktokUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="flex shrink-0 items-center gap-1 rounded-lg border border-black/10 bg-slate-50 px-2.5 py-1.5 text-[11px] font-semibold text-slate-700 transition-colors hover:bg-slate-100"
-                        title={`Xem kênh TikTok của ${c.nickname}`}
-                      >
-                        <ExternalLink className="h-3 w-3" /> TikTok
-                      </a>
+                      {tiktokUrl ? (
+                        <a
+                          href={tiktokUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex shrink-0 items-center gap-1 rounded-lg border border-black/10 bg-slate-50 px-2.5 py-1.5 text-[11px] font-semibold text-slate-700 transition-colors hover:bg-slate-100"
+                          title={`Xem kênh TikTok của ${c.nickname || cleanHandle}`}
+                        >
+                          <ExternalLink className="h-3 w-3" /> TikTok
+                        </a>
+                      ) : (
+                        <span className="shrink-0 rounded-lg border border-amber-200 bg-amber-50 px-2 py-1 text-[10px] text-amber-700" title="Chưa có handle TikTok hợp lệ">
+                          Chưa có handle
+                        </span>
+                      )}
                     </div>
                   </div>
                 )

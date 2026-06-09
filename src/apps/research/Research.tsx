@@ -33,8 +33,11 @@ export default function Research() {
             </div>
             <h1 className="text-base font-bold text-slate-800">Research</h1>
             {realProducts ? (
-              <span className="flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-600">
-                ✓ Data thật{syncedAt ? ` · ${new Date(syncedAt).toLocaleDateString('vi-VN')}` : ''}
+              <span
+                className="flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-600"
+                title="Số liệu (doanh thu, growth, giá, hoa hồng) là DATA THẬT từ Kalodata. Tên sản phẩm hiển thị tiếng Việt do Kalodata tự dịch (account của bạn đang chọn ngôn ngữ vi-VN) — tên gốc trên TikTok Shop là tiếng Mã."
+              >
+                ✓ Data thật{syncedAt ? ` · ${new Date(syncedAt).toLocaleDateString('vi-VN')}` : ''} ⓘ
               </span>
             ) : (
               <span className="flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-600">
