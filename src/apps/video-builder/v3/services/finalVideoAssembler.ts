@@ -103,7 +103,15 @@ export async function assembleFinalVideo(
   // ── STAGE 1: PREP — resolve assets + write to ffmpeg FS ───────────────
   params.onStage?.('preparing', 'Fetching clips + audio...')
   const failedClipIds: number[] = []
-  const segmentInputs: { idx: number; fileName: string; durationSec: number; sourceInSec: number }[] = []
+  const segmentInputs: {
+    idx: number
+    fileName: string
+    durationSec: number
+    sourceInSec: number
+    /** Z73 — overlay PIPs that ride on this segment, with their fetched filenames.
+     *  Only populated for creator_video segments that have overlays. */
+    overlays?: { fileName: string; startSec: number; durationSec: number; corner: 'tl' | 'tr' | 'bl' | 'br'; widthFraction: number }[]
+  }[] = []
 
   for (let i = 0; i < params.plan.segments.length; i++) {
     const seg = params.plan.segments[i]
@@ -121,7 +129,37 @@ export async function assembleFinalVideo(
       const fileName = `seg_${i}.mp4`
       const data = await fetchFile(url)
       await ffmpeg.writeFile(fileName, data)
-      segmentInputs.push({ idx: i, fileName, durationSec: seg.durationSec, sourceInSec: seg.sourceInSec ?? 0 })
+
+      // Z73 — fetch overlay PIPs for this creator segment (if any).
+      const overlayFiles: NonNullable<typeof segmentInputs[number]['overlays']> = []
+      const ovs = seg.overlays ?? []
+      for (let j = 0; j < ovs.length; j++) {
+        const ov = ovs[j]
+        const ovUrl = isAssetRef(ov.videoRef) ? await getUrl(ov.videoRef) : ov.videoRef
+        if (!ovUrl) continue
+        try {
+          const ovFile = `seg_${i}_ov_${j}.mp4`
+          const ovData = await fetchFile(ovUrl)
+          await ffmpeg.writeFile(ovFile, ovData)
+          overlayFiles.push({
+            fileName: ovFile,
+            startSec: ov.startSec,
+            durationSec: ov.durationSec,
+            corner: ov.corner ?? 'tr',
+            widthFraction: Math.max(0.2, Math.min(0.45, ov.widthFraction ?? 0.32)),
+          })
+        } catch (err) {
+          console.warn(`[ASSEMBLE] overlay ${seg.segmentId}.${j} fetch failed — dropping`, err)
+        }
+      }
+
+      segmentInputs.push({
+        idx: i,
+        fileName,
+        durationSec: seg.durationSec,
+        sourceInSec: seg.sourceInSec ?? 0,
+        overlays: overlayFiles.length > 0 ? overlayFiles : undefined,
+      })
     } catch (err) {
       const clipId = seg.source.kind === 'action_insert' ? seg.source.insertId : -1
       console.warn(`[ASSEMBLE] segment ${seg.segmentId} fetch failed — skipping`, err)
@@ -206,18 +244,71 @@ export async function assembleFinalVideo(
   // but more reliable across codec mismatches):
   //   -i seg_0.mp4 -i seg_1.mp4 ... -filter_complex "[0:v]scale=...[v0];[1:v]scale=...[v1];[v0][v1]concat=n=N:v=1[outv]"
 
+  // Z73 — input list now also includes overlay PIPs (one ffmpeg input per
+  // overlay file). We keep track of the input INDEX for each overlay so the
+  // filter graph can reference it.
   const inputArgs: string[] = []
-  for (const s of segmentInputs) inputArgs.push('-i', s.fileName)
+  const segInputIdx: number[] = []           // global ffmpeg-input index of each segment's main video
+  const overlayInputIdx: number[][] = []     // per-segment list of overlay input indices
+  let nextInputIdx = 0
+  for (const s of segmentInputs) {
+    inputArgs.push('-i', s.fileName)
+    segInputIdx.push(nextInputIdx)
+    nextInputIdx++
+    const ovIdx: number[] = []
+    for (const ov of s.overlays ?? []) {
+      inputArgs.push('-i', ov.fileName)
+      ovIdx.push(nextInputIdx)
+      nextInputIdx++
+    }
+    overlayInputIdx.push(ovIdx)
+  }
 
-  // Filter graph: scale each segment to output dims, trim to durationSec, concat
+  // Filter graph: scale each segment to output dims, trim to durationSec; for
+  // segments with overlays, scale + position each PIP and overlay it on the
+  // base segment with `enable=between(t,...)` for its window; then concat all.
   const N = segmentInputs.length
   const filterParts: string[] = []
   for (let i = 0; i < N; i++) {
     const s = segmentInputs[i]
+    const baseIdx = segInputIdx[i]
+    // Base segment: scale + crop + trim
     filterParts.push(
-      `[${i}:v]scale=${evenW}:${evenH}:force_original_aspect_ratio=increase,` +
-      `crop=${evenW}:${evenH},trim=start=${s.sourceInSec}:duration=${s.durationSec},setpts=PTS-STARTPTS[v${i}]`,
+      `[${baseIdx}:v]scale=${evenW}:${evenH}:force_original_aspect_ratio=increase,` +
+      `crop=${evenW}:${evenH},trim=start=${s.sourceInSec}:duration=${s.durationSec},` +
+      `setpts=PTS-STARTPTS[base${i}]`,
     )
+
+    const ovs = s.overlays ?? []
+    if (ovs.length === 0) {
+      // No overlays — base IS the segment output
+      filterParts.push(`[base${i}]null[v${i}]`)
+    } else {
+      // Build a chain: base → overlay 0 → overlay 1 → ... → v{i}
+      const MARGIN = 24  // px from the frame edges
+      ovs.forEach((ov, j) => {
+        const ovGlobalIdx = overlayInputIdx[i][j]
+        const pipW = Math.round(evenW * ov.widthFraction / 2) * 2  // even
+        // Pre-process the overlay video: scale to PIP size, trim to its
+        // duration, and offset its presentation timestamp so it starts at
+        // `ov.startSec` inside the segment.
+        filterParts.push(
+          `[${ovGlobalIdx}:v]scale=${pipW}:-2,setsar=1,` +
+          `trim=duration=${ov.durationSec},setpts=PTS-STARTPTS+${ov.startSec}/TB[pip${i}_${j}]`,
+        )
+        // Position by corner. `W` and `H` are the BASE width/height inside
+        // the overlay filter; `w` and `h` are the OVERLAY's.
+        const x = (ov.corner === 'tl' || ov.corner === 'bl') ? `${MARGIN}` : `W-w-${MARGIN}`
+        const y = (ov.corner === 'tl' || ov.corner === 'tr') ? `${MARGIN}` : `H-h-${MARGIN}`
+        const prevLabel = j === 0 ? `base${i}` : `mix${i}_${j - 1}`
+        const nextLabel = j === ovs.length - 1 ? `v${i}` : `mix${i}_${j}`
+        const endT = ov.startSec + ov.durationSec
+        filterParts.push(
+          `[${prevLabel}][pip${i}_${j}]overlay=x=${x}:y=${y}:` +
+          `enable='between(t,${ov.startSec},${endT})':eof_action=pass[${nextLabel}]`,
+        )
+      })
+    }
   }
   const concatInputs = Array.from({ length: N }, (_, i) => `[v${i}]`).join('')
   filterParts.push(`${concatInputs}concat=n=${N}:v=1:a=0[outv]`)
