@@ -33,7 +33,7 @@ import {
   type AutoEditPlan,
   // Z35 — Export + Variation Engine
   type ExportFormatId, type ExportQualityId,
-  type CtaVariation, type ExportPackage, type ThumbnailStyleId,
+  type CtaVariation, type ExportPackage, type ThumbnailStyleId, type AiThumbnail,
   // Z36 — Final MP4 Assembly
   type ExportRenderStage,
 } from '../types'
@@ -112,6 +112,11 @@ interface AdsVideoStoreState {
   pickHookForExport:      (idx: number) => void
   setExportPackage:       (pkg: ExportPackage | null) => void
   setThumbnailStyle:      (styleId: ThumbnailStyleId) => void
+  // Z89 — AI thumbnail set (đợt 3)
+  setAiThumbnails:        (thumbs: AiThumbnail[]) => void
+  patchAiThumbnail:       (index: number, patch: Partial<AiThumbnail>) => void
+  pickThumbnail:          (ref: string | null) => void
+  setIsGeneratingThumbnails: (v: boolean) => void
   setIsGeneratingCtaVars: (v: boolean) => void
   setIsBuildingPackage:   (v: boolean) => void
   setExportError:         (err: string | null) => void
@@ -250,6 +255,11 @@ function loadFromStorage(): V3PipelineState | null {
       parsed.exportVariation.isGeneratingCtaVariations = false
       parsed.exportVariation.isBuildingPackage = false
       parsed.exportVariation.error = null
+      // Z89 — backfill AI-thumbnail fields for pre-Z89 saves + reset the
+      // transient generating flag (a refresh mid-generate shouldn't deadlock).
+      if (!Array.isArray(parsed.exportVariation.aiThumbnails)) parsed.exportVariation.aiThumbnails = []
+      if (parsed.exportVariation.pickedThumbnailRef === undefined) parsed.exportVariation.pickedThumbnailRef = null
+      parsed.exportVariation.isGeneratingThumbnails = false
       // Z88 — the Format + Quality pickers were removed (Director auto-decides:
       // TikTok 9:16 · FINAL 1080). Snap any persisted draft onto those defaults
       // so an old session can't stay stuck at TEST 480 / a hidden format with
@@ -538,6 +548,31 @@ export const useAdsVideoStore = create<AdsVideoStoreState>((set, get) => ({
     commit(set, get, (s) => ({
       ...s,
       exportVariation: { ...s.exportVariation, thumbnailStyleId: styleId },
+    })),
+
+  // Z89 — AI thumbnail set (đợt 3)
+  setAiThumbnails: (thumbs) =>
+    commit(set, get, (s) => ({
+      ...s,
+      exportVariation: { ...s.exportVariation, aiThumbnails: thumbs },
+    })),
+  patchAiThumbnail: (index, patch) =>
+    commit(set, get, (s) => ({
+      ...s,
+      exportVariation: {
+        ...s.exportVariation,
+        aiThumbnails: s.exportVariation.aiThumbnails.map((t, i) => (i === index ? { ...t, ...patch } : t)),
+      },
+    })),
+  pickThumbnail: (ref) =>
+    commit(set, get, (s) => ({
+      ...s,
+      exportVariation: { ...s.exportVariation, pickedThumbnailRef: ref },
+    })),
+  setIsGeneratingThumbnails: (v) =>
+    commit(set, get, (s) => ({
+      ...s,
+      exportVariation: { ...s.exportVariation, isGeneratingThumbnails: v },
     })),
 
   setIsGeneratingCtaVars: (v) =>
