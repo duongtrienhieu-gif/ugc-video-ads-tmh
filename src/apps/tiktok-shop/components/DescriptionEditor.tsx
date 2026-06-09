@@ -336,7 +336,10 @@ function BlockCard({
   onSave: (next: DescriptionBlock) => void
 }) {
   const [editing, setEditing] = useState(false)
-  const meta = DESCRIPTION_BLOCK_LABELS[block.kind]
+  // Guard for unknown block kinds that may slip through from legacy saved
+  // listings (e.g., 'offer' removed from the union). Show a neutral label
+  // rather than crashing on undefined.icon.
+  const meta = DESCRIPTION_BLOCK_LABELS[block.kind] ?? { icon: '📝', label: String(block.kind).toUpperCase() }
 
   return (
     <div className={`group rounded-lg border bg-white p-3 transition-colors ${

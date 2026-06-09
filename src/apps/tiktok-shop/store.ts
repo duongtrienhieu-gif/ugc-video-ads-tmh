@@ -332,17 +332,33 @@ export const useTikTokShopStore = create<TikTokShopState>()(
     }
   }),
 
-  loadSavedOutput: (listing) => set((s) => ({
-    draft: {
-      ...s.draft,
-      brandKitId: listing.brandKitId,
-      productId: listing.productId,
-      market: listing.market,
-      output: listing,
-      isGenerating: false,
-    },
-    showMockPreview: false,
-  })),
+  loadSavedOutput: (listing) => set((s) => {
+    // Migration: legacy listings may carry block.kind values that have since
+    // been removed from the union (e.g., 'offer'). Strip them so the UI
+    // doesn't crash on a missing label lookup.
+    const VALID_KINDS = new Set<DescriptionBlock['kind']>([
+      'hook', 'pain', 'solution', 'benefits', 'specs',
+      'reviews', 'usage', 'faq', 'promise', 'cta',
+    ])
+    const sanitizedListing: ListingOutput = {
+      ...listing,
+      description: {
+        ...listing.description,
+        blocks: listing.description.blocks.filter((b) => VALID_KINDS.has(b.kind)),
+      },
+    }
+    return {
+      draft: {
+        ...s.draft,
+        brandKitId: sanitizedListing.brandKitId,
+        productId: sanitizedListing.productId,
+        market: sanitizedListing.market,
+        output: sanitizedListing,
+        isGenerating: false,
+      },
+      showMockPreview: false,
+    }
+  }),
 
   // ── Combos ─────────────────────────────────────────────────────────────
 
@@ -441,6 +457,16 @@ export const useTikTokShopStore = create<TikTokShopState>()(
           productBriefKey: s.draft.productBriefKey,
         },
       }),
+      // On rehydrate, strip block kinds that have been removed from the union
+      // since the listing was saved (e.g., 'offer' as of 2026-06-09). Without
+      // this, DescriptionEditor crashes on a missing label lookup.
+      onRehydrateStorage: () => (state) => {
+        if (!state) return
+        const blocks = state.draft?.output?.description?.blocks
+        if (!Array.isArray(blocks)) return
+        const VALID = new Set(['hook', 'pain', 'solution', 'benefits', 'specs', 'reviews', 'usage', 'faq', 'promise', 'cta'])
+        state.draft.output!.description.blocks = blocks.filter((b) => VALID.has(b.kind))
+      },
     },
   ),
 )
