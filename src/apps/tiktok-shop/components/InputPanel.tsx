@@ -5,7 +5,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import {
-  Palette, Package, Upload, X, Globe, Sparkles, Loader2, AlertCircle, Info,
+  Palette, Package, Upload, X, Globe, Sparkles, Loader2, AlertCircle, Info, FilePlus2,
 } from 'lucide-react'
 import { useBrandKitStore, isBrandKitReady } from '../../../stores/brandKitStore'
 import { useBankStore } from '../../../stores/bankStore'
@@ -34,6 +34,7 @@ export default function InputPanel() {
   const setLanguage    = useTikTokShopStore((s) => s.setLanguage)
   const addRef         = useTikTokShopStore((s) => s.addReferenceImage)
   const removeRef      = useTikTokShopStore((s) => s.removeReferenceImage)
+  const startNewListing = useTikTokShopStore((s) => s.startNewListing)
   const initializeOutput = useTikTokShopStore((s) => s.initializeListingOutput)
   const setSlotStatus    = useTikTokShopStore((s) => s.setSlotStatus)
   const setSlotImage     = useTikTokShopStore((s) => s.setSlotImage)
@@ -103,6 +104,20 @@ export default function InputPanel() {
   function handleGenerate() {
     if (!readiness.ready) return
     setCostModalOpen(true)
+  }
+
+  function handleNewListing() {
+    if (isGenerating) {
+      addToast('Đang tạo — dừng trước khi bắt đầu listing mới', 'error')
+      return
+    }
+    const hasWork = !!draft.output || draft.referenceImageAssetIds.length > 0 || !!draft.productId
+    if (hasWork) {
+      const ok = confirm('Bắt đầu listing mới?\n\nListing hiện tại đã tự lưu vào "Bản nháp" — bạn có thể mở lại bất cứ lúc nào.')
+      if (!ok) return
+    }
+    startNewListing()
+    addToast('Đã bắt đầu listing mới', 'success')
   }
 
   async function handleConfirmGenerate() {
@@ -221,6 +236,17 @@ export default function InputPanel() {
 
   return (
     <div className="flex h-full w-[320px] shrink-0 flex-col gap-4 overflow-y-auto border-r border-gray-200 bg-[#FAFAFA] p-4">
+      {/* ── New listing button ──────────────────────────────────────── */}
+      <button
+        onClick={handleNewListing}
+        disabled={isGenerating}
+        className="flex w-full items-center justify-center gap-2 rounded-lg border border-violet-300 bg-white px-3 py-2 text-xs font-semibold text-violet-700 transition-colors hover:border-violet-400 hover:bg-violet-50 disabled:opacity-50"
+        title="Xóa listing hiện tại khỏi vùng làm việc và bắt đầu listing mới (listing cũ vẫn được lưu trong Bản nháp)"
+      >
+        <FilePlus2 className="h-3.5 w-3.5" />
+        Tạo listing mới
+      </button>
+
       {/* ── Language toggle ─────────────────────────────────────────── */}
       <Section icon={<Globe className="h-4 w-4" />} title="Ngôn ngữ output">
         <div className="flex gap-2">

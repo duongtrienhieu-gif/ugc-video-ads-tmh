@@ -117,6 +117,9 @@ interface TikTokShopState {
   removeReferenceImage: (assetId: string) => void
   toggleMockPreview: () => void
   resetDraft: () => void
+  /** Start a fresh listing — clears output, product, refs, brief.
+   *  KEEPS brandKit + market (user is likely staying in the same shop/market). */
+  startNewListing: () => void
 
   // ── Generation lifecycle (Phase 3+) ──
   initializeListingOutput: (params: {
@@ -218,6 +221,14 @@ export const useTikTokShopStore = create<TikTokShopState>()(
   toggleMockPreview: () => set((s) => ({ showMockPreview: !s.showMockPreview })),
 
   resetDraft: () => set({ draft: createEmptyDraft() }),
+
+  startNewListing: () => set((s) => ({
+    draft: {
+      ...createEmptyDraft(),
+      brandKitId: s.draft.brandKitId,
+      market: s.draft.market,
+    },
+  })),
 
   // ── Phase 3: Generation lifecycle ──────────────────────────────────────
 
