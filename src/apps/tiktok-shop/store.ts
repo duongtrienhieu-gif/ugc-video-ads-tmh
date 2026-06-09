@@ -457,15 +457,45 @@ export const useTikTokShopStore = create<TikTokShopState>()(
           productBriefKey: s.draft.productBriefKey,
         },
       }),
-      // On rehydrate, strip block kinds that have been removed from the union
-      // since the listing was saved (e.g., 'offer' as of 2026-06-09). Without
-      // this, DescriptionEditor crashes on a missing label lookup.
+      // On rehydrate, run light migrations so older persisted state doesn't
+      // crash the new code paths. Bumping version on schema change would be
+      // cleaner but we keep these heals so users don't lose work mid-flight.
       onRehydrateStorage: () => (state) => {
         if (!state) return
+
+        // 1) Strip block kinds removed from the union (e.g., 'offer' as of
+        //    2026-06-09). DescriptionEditor crashes without this.
         const blocks = state.draft?.output?.description?.blocks
-        if (!Array.isArray(blocks)) return
-        const VALID = new Set(['hook', 'pain', 'solution', 'benefits', 'specs', 'reviews', 'usage', 'faq', 'promise', 'cta'])
-        state.draft.output!.description.blocks = blocks.filter((b) => VALID.has(b.kind))
+        if (Array.isArray(blocks)) {
+          const VALID = new Set(['hook', 'pain', 'solution', 'benefits', 'specs', 'reviews', 'usage', 'faq', 'promise', 'cta'])
+          state.draft.output!.description.blocks = blocks.filter((b) => VALID.has(b.kind))
+        }
+
+        // 2) Heal old productBrief missing Phase 11 fields (applicationDetails,
+        //    keyFeatures). Without this, slot prompts crash on
+        //    `brief.applicationDetails.bodyZone` / `brief.keyFeatures.length`.
+        //    Bust productBriefKey so the next "Tạo Listing" re-extracts a
+        //    proper Vision brief instead of reusing the stub.
+        const brief = state.draft?.productBrief as Record<string, unknown> | null | undefined
+        if (brief && typeof brief === 'object') {
+          let needsRefresh = false
+          if (!brief.applicationDetails || typeof brief.applicationDetails !== 'object') {
+            brief.applicationDetails = {
+              bodyZone: '(chưa xác định)',
+              howApplied: '(theo hướng dẫn nhãn)',
+              usageScene: 'Người dùng cầm sản phẩm tại nhà, thao tác sử dụng được thể hiện rõ ràng, góc máy medium close-up',
+            }
+            needsRefresh = true
+          }
+          if (!Array.isArray(brief.keyFeatures)) {
+            brief.keyFeatures = []
+            needsRefresh = true
+          }
+          if (needsRefresh) {
+            state.draft.productBriefKey = null
+            console.info('[tiktok-shop store] healed legacy productBrief — next generate will re-run Vision')
+          }
+        }
       },
     },
   ),
