@@ -982,6 +982,9 @@ OUTPUT strict JSON, no fences:
     }
   }
 
+  // Z78 — INGREDIENT COVERAGE GUARANTEE (only when the SCRIPT names ingredients).
+  const ingredientInjected = enforceIngredientScene(out, params.script, params.product, params.budget)
+
   // Keep the director's ORDER (narrative sequence), not a fit sort — scenes
   // should play in script order. Cap to budget.
   const directed = out.slice(0, params.budget)
@@ -990,6 +993,7 @@ OUTPUT strict JSON, no fences:
     `dropped{preset:${drop.preset},noPrompt:${drop.noPrompt},zeroFit:${drop.zeroFit},dupeSkip:${drop.dupeSkip}} ` +
     `rewrote{beforeAfter:${rewrite.beforeAfter},topical:${rewrite.topical},dupeSwap:${rewrite.dupeSwap},labeled:${rewrite.labeled},labelLangDrop:${rewrite.labelLangDrop}} ` +
     `trust{earlyHook:${trustDrops.earlyHook},coverage:${trustDrops.coverage},run3:${trustDrops.run3}} ` +
+    `ingredientInject=${ingredientInjected} ` +
     `visibleResult=${visibleResultProduct} topical=${topicalCategory ?? 'no'} ` +
     `→ ${directed.length > 0 ? `${directed.length} scenes` : 'EMPTY → keyword fallback'}`,
   )
@@ -1029,6 +1033,102 @@ const VISIBLE_RESULT_KEYWORDS = [
 function detectsVisibleResultClaim(script: GeneratedScript): boolean {
   const haystack = script.blocks.map((b) => b.text.toLowerCase()).join(' ')
   return VISIBLE_RESULT_KEYWORDS.some((kw) => haystack.includes(kw))
+}
+
+// Z78 — INGREDIENT COVERAGE GUARANTEE. The "INGREDIENT BEATS" prompt rule is
+// SOFT — Gemini sometimes skips the ingredient line entirely (covers it with a
+// bare product close-up, or merges it away), so a script that NAMES ingredients
+// could ship with NO ingredient scene at all (the user hit this). This injects
+// ONE photoreal ingredient CONCEPT_SCENE — but ONLY when:
+//   (a) the product has an ingredient list, AND
+//   (b) the SCRIPT actually mentions ≥1 of those ingredients, AND
+//   (c) no existing scene already covers them.
+// If the script never mentions ingredients → does NOTHING (no forced/hardcoded
+// scene, per the user's instruction). Returns 1 if injected, else 0.
+function normalizeForMatch(s: string): string {
+  return s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/đ/g, 'd').replace(/\s+/g, ' ').trim()
+}
+function enforceIngredientScene(
+  out: InsertSuggestion[],
+  script: GeneratedScript,
+  product: Product | null | undefined,
+  budget: number,
+): number {
+  if (!product?.ingredients) return 0
+  // (a) ingredient vocab from the product's OWN list.
+  const vocab = product.ingredients
+    .split(/[,;\n•·/|]+/)
+    .map((s) => s.trim())
+    .filter((s) => s.length >= 3 && s.length <= 40)
+  if (vocab.length === 0) return 0
+
+  // (b) which of those names actually appear in the SCRIPT (diacritic + case
+  //     insensitive)? None → the writer chose not to talk ingredients → skip.
+  const scriptNorm = normalizeForMatch(script.blocks.map((b) => b.text).join('  '))
+  const mentioned = vocab.filter((ing) => scriptNorm.includes(normalizeForMatch(ing)))
+  if (mentioned.length === 0) return 0
+
+  // (c) already covered? Any scene whose conceptPrompt/quote names a mentioned
+  //     ingredient counts → don't duplicate.
+  const covered = out.some((s) => {
+    const hay = normalizeForMatch(`${s.conceptPrompt ?? ''} ${s.quote ?? ''}`)
+    return mentioned.some((ing) => hay.includes(normalizeForMatch(ing)))
+  })
+  if (covered) return 0
+
+  // Find the script sentence naming the MOST ingredients → use it as the quote
+  // so the planner times the overlay to that exact line.
+  let bestQuote = ''
+  let bestHits = 0
+  let bestBlock: ScriptBlockId | undefined
+  for (const b of script.blocks) {
+    const sents = b.text.split(/(?<=[.!?…])\s+|\n+/).map((x) => x.trim()).filter(Boolean)
+    for (const sent of sents) {
+      const sn = normalizeForMatch(sent)
+      const hits = mentioned.filter((ing) => sn.includes(normalizeForMatch(ing))).length
+      if (hits > bestHits) { bestHits = hits; bestQuote = sent; bestBlock = b.id }
+    }
+  }
+  if (!bestQuote) { bestQuote = mentioned.join(', '); bestBlock = 'benefit' }
+
+  // Build the photoreal ingredient scene (static image → overlays per Z77).
+  const list = mentioned.slice(0, 4)
+  const labelList = list.map((l) => `"${l}"`).join(', ')
+  const conceptPrompt =
+    `Professional real-world macro product photography of the actual ingredients named in the script: ${list.join(', ')}. ` +
+    `Show EACH ingredient in its REAL physical form (powder pile / liquid drops / raw plant / seeds / capsule contents — whatever it truly is) ` +
+    `arranged side by side on a clean neutral surface, soft natural daylight, sharp focus, shallow depth of field. ` +
+    `Real photographs of the real materials — NOT hand-drawn, NOT cartoon, NOT icons.` +
+    `\n\nTEXT TO RENDER IN THE IMAGE — print these exact words as big, clear, correctly-spelled labels next to each ingredient: ${labelList}. ` +
+    `Do NOT translate or alter them. These labels MUST be visible and legible.`
+
+  const scene: InsertSuggestion = {
+    presetId: 'CONCEPT_SCENE' as ActionPresetId,
+    matchCount: 0,
+    matchedBlocks: bestBlock ? [bestBlock] : [],
+    matchedKeywords: [],
+    anchorBlock: bestBlock ?? 'benefit',
+    confidence: 0.9,  // high → survives the coverage cap if one runs
+    reason: 'Thành phần sản phẩm (tự thêm — script có nhắc, đảm bảo cảnh thành phần)',
+    conceptPrompt,
+    durationSec: 4,
+    quote: bestQuote,
+    renderMode: 'ken_burns',     // static image (Z76) → overlay (Z77)
+    layout: 'overlay_corner',
+  }
+
+  // Insert within budget. If at/over budget, replace the lowest-confidence
+  // existing scene so the guarantee holds without exceeding the budget.
+  if (out.length >= budget) {
+    let lowIdx = -1
+    let lowConf = Infinity
+    out.forEach((s, i) => { if (s.confidence < lowConf) { lowConf = s.confidence; lowIdx = i } })
+    if (lowIdx >= 0) out.splice(lowIdx, 1, scene)
+    else out.push(scene)
+  } else {
+    out.push(scene)
+  }
+  return 1
 }
 
 // Z47 — usage-mode detection. DRINK / TAKE_PILL animate someone SWALLOWING the
