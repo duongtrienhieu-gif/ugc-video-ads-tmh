@@ -304,6 +304,7 @@ export default function CreatorVideoPhase({ onContinue }: Props) {
       ...(update.voiceRef !== undefined          && { voiceRef: update.voiceRef }),
       ...(update.voiceDurationSec !== undefined  && { voiceDurationSec: update.voiceDurationSec }),
       ...(update.voiceId !== undefined           && { voiceId: update.voiceId }),
+      ...(update.voiceAlignment !== undefined    && { voiceAlignment: update.voiceAlignment }),
       ...(update.keyframeRef !== undefined       && { keyframeRef: update.keyframeRef }),
       ...(update.keyframePromptUsed !== undefined && { keyframePromptUsed: update.keyframePromptUsed }),
       ...(update.fullLipsyncTaskId !== undefined && { fullLipsyncTaskId: update.fullLipsyncTaskId }),
@@ -345,6 +346,7 @@ export default function CreatorVideoPhase({ onContinue }: Props) {
           reuseVoiceRef: clip!.voiceRef,
           reuseVoiceDurationSec: clip!.voiceDurationSec,
           reuseVoiceId: clip!.voiceId,
+          reuseVoiceAlignment: clip!.voiceAlignment,
         } : {}),
         onStageUpdate: applyStageUpdate,
       })

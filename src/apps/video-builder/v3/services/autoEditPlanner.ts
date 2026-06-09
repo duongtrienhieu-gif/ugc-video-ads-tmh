@@ -27,11 +27,30 @@
 import type {
   AutoEditPlan, EditSegment, SegmentOverlay, CtaOverlay,
   EditingStyleId, SubtitleStyleId, BgmStyleId,
-  CreatorVideoClip, ActionInsertClip, GeneratedScript,
+  CreatorVideoClip, ActionInsertClip, GeneratedScript, VoiceAlignment,
 } from '../types'
 import { EDITING_STYLES } from './editingStyles'
 import { BGM_CATALOG } from './bgmCatalog'
 import { buildPunchZoomCues } from './punchZoomPlanner'
+import { computeQuoteTimestampFromAlignment } from './insertTimingEngine'
+
+// Z98 (#6) — the anchor second of an insert on the FINAL voice timeline. Prefers
+// the REAL voice alignment (exact spoken second of the insert's quoted line) and
+// only falls back to the WPM estimate × global rescale when there's no alignment
+// or the quote can't be located. Returns null when the insert has no anchor at
+// all (caller then spaces it evenly).
+function resolveAnchorSec(
+  insert: ActionInsertClip,
+  voiceAlignment: VoiceAlignment | undefined,
+  timelineScale: number,
+): number | null {
+  if (voiceAlignment && insert.quote) {
+    const real = computeQuoteTimestampFromAlignment(voiceAlignment, insert.quote)
+    if (real != null) return real   // exact — already in final-audio seconds, no scale
+  }
+  if (insert.voiceTimestampSec == null) return null
+  return insert.voiceTimestampSec * timelineScale   // estimate fallback (Z57)
+}
 
 // ── Public entry ───────────────────────────────────────────────────────────
 
@@ -194,9 +213,6 @@ function buildSegments(
   // they just attach to different places in the segment tree at the end.
   const cutInserts = inserts.filter((it) => (it.layout ?? 'cut') === 'cut')
   const overlayInserts = inserts.filter((it) => it.layout === 'overlay_corner')
-  // Z83 — cuts that get DEMOTED to overlays (because they'd stack too close to
-  // another cut and bury the creator) collect here, then ride alongside the
-  // real overlays below. Keeps their content while letting the creator surface.
   // Compute insert timestamps — clamp to [1, totalDuration - 1] window
   // so we don't insert in the first second (hook intact) or last second
   // (CTA intact).
@@ -229,14 +245,12 @@ function buildSegments(
       1.5,
       Math.min(overlayCap, insert.durationSec || insertOverlayDurationSec),
     )
-    let ts = insert.voiceTimestampSec ?? null
-    if (ts === null || ts === undefined) {
-      // Evenly distribute manually-added inserts that lack a timestamp
+    // Z98 (#6) — real voice second when available, else estimate × rescale.
+    let ts = resolveAnchorSec(insert, creatorVideo.voiceAlignment, timelineScale)
+    if (ts === null) {
+      // Evenly distribute manually-added inserts that lack any anchor
       const fraction = insertSlots.length / Math.max(1, inserts.length)
       ts = cutUsableStart + fraction * (usableEnd - cutUsableStart)
-    } else {
-      // Z57 — map the estimate-based timestamp onto the real voice timeline.
-      ts = ts * timelineScale
     }
     // Z80 — cuts can't start before the creator lead-in (4s).
     ts = Math.max(cutUsableStart, Math.min(usableEnd - durSec, ts))
@@ -338,12 +352,11 @@ function buildSegments(
     if (!ins.videoRef) continue
     const footageCap = (ins.renderMode ?? 'video') === 'ken_burns' ? 8 : 7
     const durSec = Math.max(1.5, Math.min(footageCap, ins.durationSec || insertOverlayDurationSec))
-    let ts = ins.voiceTimestampSec ?? null
+    // Z98 (#6) — real voice second when available, else estimate × rescale.
+    let ts = resolveAnchorSec(ins, creatorVideo.voiceAlignment, timelineScale)
     if (ts == null) {
-      // Manually-added overlay without timestamp → put at the midpoint
+      // Manually-added overlay without any anchor → put at the midpoint
       ts = totalDurationSec / 2
-    } else {
-      ts = ts * timelineScale
     }
     ts = Math.max(usableStart, Math.min(usableEnd - durSec, ts))
 

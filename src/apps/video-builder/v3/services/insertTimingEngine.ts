@@ -9,7 +9,7 @@
 // timestamp are spaced evenly there.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import type { GeneratedScript, ScriptBlockId } from '../types'
+import type { GeneratedScript, ScriptBlockId, VoiceAlignment } from '../types'
 import { SCRIPT_BLOCK_ORDER } from '../types'
 
 /**
@@ -108,4 +108,61 @@ export function computeQuoteTimestamp(
     : 0
   const time = seg.start + fraction * seg.dur
   return Number(time.toFixed(2))
+}
+
+// ── Z98 (#6) — REAL voice-timeline anchoring ────────────────────────────────
+// The functions above estimate timing from word-count/WPM. This one reads the
+// ACTUAL per-character spoken time captured from ElevenLabs /with-timestamps
+// (already mapped onto the final atempo'd audio). It locates the director's
+// quote inside the real spoken transcript and returns the EXACT second it is
+// read — no WPM estimate, no global rescale. Same loose matching as
+// computeQuoteTimestamp. Returns null when the quote can't be located, so the
+// caller falls back to the estimate path.
+
+/** Normalize like normalizeForMatch but keep a map from each normalized-char
+ *  index back to its index in the RAW text, so we can read the real timing of
+ *  the character the match lands on. */
+function normalizeWithMap(s: string): { norm: string; rawIdx: number[] } {
+  const out: string[] = []
+  const rawIdx: number[] = []
+  let prevSpace = true  // start true so leading separators emit no space
+  for (let i = 0; i < s.length; i++) {
+    const ch = s[i]
+    if (/[\p{L}\p{N}]/u.test(ch)) {
+      out.push(ch.toLowerCase())
+      rawIdx.push(i)
+      prevSpace = false
+    } else if (!prevSpace) {
+      out.push(' ')
+      rawIdx.push(i)
+      prevSpace = true
+    }
+  }
+  if (out.length > 0 && out[out.length - 1] === ' ') { out.pop(); rawIdx.pop() }
+  return { norm: out.join(''), rawIdx }
+}
+
+export function computeQuoteTimestampFromAlignment(
+  alignment: VoiceAlignment,
+  quote: string | undefined | null,
+): number | null {
+  const normQuote = quote ? normalizeForMatch(quote) : ''
+  if (normQuote.length < 4) return null
+  const { text, charStartSecs } = alignment
+  if (!text || charStartSecs.length === 0) return null
+
+  const { norm, rawIdx } = normalizeWithMap(text)
+
+  // Exact substring first; loose probe on the first ~40 chars as a fallback
+  // (handles minor punctuation differences between the quote and the transcript).
+  let pos = norm.indexOf(normQuote)
+  if (pos < 0) {
+    const probe = normQuote.slice(0, 40).trim()
+    if (probe.length >= 6) pos = norm.indexOf(probe)
+  }
+  if (pos < 0) return null
+
+  const raw = rawIdx[pos] ?? 0
+  const t = charStartSecs[Math.min(raw, charStartSecs.length - 1)]
+  return Number.isFinite(t) ? Number(t.toFixed(2)) : null
 }

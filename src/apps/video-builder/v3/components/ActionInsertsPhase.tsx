@@ -156,6 +156,9 @@ export default function ActionInsertsPhase({ onContinue }: Props) {
         durationSec: s.durationSec ?? ACTION_PRESETS[s.presetId].durationPreset,
         scriptKeyword: s.matchedKeywords[0],
         voiceTimestampSec: quoteTs ?? blockTs,
+        // Z98 (#6) — persist the quote so the planner can re-anchor against the
+        // REAL voice alignment (exact spoken second), not just the WPM estimate.
+        quote: s.quote,
         conceptPrompt: s.conceptPrompt,
         renderMode: s.renderMode,
         layout: s.layout,

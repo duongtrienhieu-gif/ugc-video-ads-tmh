@@ -415,6 +415,23 @@ export function createDefaultCreatorVideoConfig(): CreatorVideoConfig {
 // ── Main Creator Video clip ─────────────────────────────────────────────────
 // The "talking head" — one per project. 15-45s lip-synced shot.
 
+// ── Z98 (#6) — REAL voice timing from ElevenLabs /with-timestamps ───────────
+// The per-character spoken time of the TTS audio, already mapped onto the FINAL
+// (atempo-stretched) audio the user hears — i.e. raw ElevenLabs times divided by
+// EXPRESSIVE_TTS.speed. `text` is the exact transcript the timings index into
+// (alignment.characters joined). charStartSecs[i] = second char text[i] is
+// spoken. Used by the planner to land each cut/insert on the EXACT second its
+// quoted line is read, instead of the WPM estimate. Absent on old projects or
+// when the timestamped TTS call failed (→ planner falls back to the estimate).
+export interface VoiceAlignment {
+  /** The spoken transcript the timings index into (alignment.characters joined). */
+  text: string
+  /** Final-audio start second of each character in `text` (post-atempo). */
+  charStartSecs: number[]
+  /** Which ElevenLabs model produced these timings (eleven_v3 / multilingual_v2). */
+  model?: string
+}
+
 export interface CreatorVideoClip {
   /** Multi-stage status. Renderer flips through these on its way to 'completed'. */
   stage: CreatorVideoStage
@@ -427,6 +444,9 @@ export interface CreatorVideoClip {
   voiceDurationSec?: number
   /** ElevenLabs voice id used. */
   voiceId?: string
+  /** Z98 (#6) — real per-character voice timing (when the timestamped TTS path
+   *  succeeded). Lets the planner anchor cuts/inserts to the exact spoken second. */
+  voiceAlignment?: VoiceAlignment
 
   /** Asset:xxx of the still keyframe (avatar in setting + energy + wardrobe). */
   keyframeRef?: string
@@ -533,6 +553,11 @@ export interface ActionInsertClip {
   /** Z33 — target timestamp within the voice timeline (seconds from 0).
    *  null = no anchor, insert plays at natural position in `order`. */
   voiceTimestampSec?: number | null
+  /** Z98 (#6) — the VERBATIM spoken line this scene illustrates (from the Scene
+   *  Director). Persisted so the planner can re-anchor the insert against the
+   *  REAL voice alignment (computeQuoteTimestampFromAlignment) instead of the
+   *  WPM estimate. Empty for manually-added inserts. */
+  quote?: string
 
   /** Verdict status (Z26-style approve / reject / lock) */
   status: V3ClipStatus

@@ -23,7 +23,7 @@
 // Cost: TEST_480 profile → roughly $0.40-0.80 total for a 30s creator video.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { textToSpeech } from '../../../../utils/elevenlabs'
+import { textToSpeech, textToSpeechWithTimestamps, type TtsTimestamps } from '../../../../utils/elevenlabs'
 import {
   generateGpt4oImageFast,
   generateLipSync, pollLipSyncUntilDone,
@@ -32,7 +32,7 @@ import { saveAsset, getUrl, isAssetRef } from '../../../../utils/assetStore'
 import { getFFmpeg } from './ffmpegLoader'
 import type { Model, Product } from '../../../../stores/types'
 import type {
-  CreatorVideoConfig, CreatorVideoStage, GeneratedScript,
+  CreatorVideoConfig, CreatorVideoStage, GeneratedScript, VoiceAlignment,
 } from '../types'
 import { VOICE_CATEGORIES } from './voiceCategories'
 import type { VoiceCategoryId } from '../types'
@@ -110,6 +110,74 @@ async function synthVoice(args: {
   return applyTempo(raw, EXPRESSIVE_TTS.speed)
 }
 
+// Z98 (#6) — map raw ElevenLabs char timings onto the FINAL atempo'd audio.
+// atempo is a linear time-scale, so every spoken second compresses by 1/speed.
+// We expand to ONE entry per code unit so `text.length === charStartSecs.length`
+// always holds — ElevenLabs usually returns single chars, but a multi-char token
+// would otherwise desync the index lookup the planner relies on.
+function toVoiceAlignment(raw: TtsTimestamps, tempo: number, model: string): VoiceAlignment {
+  const speed = Number.isFinite(tempo) && tempo > 0 ? tempo : 1
+  const text: string[] = []
+  const charStartSecs: number[] = []
+  for (let i = 0; i < raw.characters.length; i++) {
+    const tok = raw.characters[i] ?? ''
+    const t = Number(((raw.characterStartTimesSeconds[i] ?? 0) / speed).toFixed(3))
+    for (let k = 0; k < tok.length; k++) { text.push(tok[k]); charStartSecs.push(t) }
+  }
+  return { text: text.join(''), charStartSecs, model }
+}
+
+// Z98 (#6) — HYBRID timestamped TTS. Try eleven_v3 (expressive) WITH timestamps
+// first; if v3 returns no alignment OR errors, try multilingual_v2 (guaranteed
+// timing). Audio + alignment ALWAYS come from the SAME call — different models
+// render different durations, so pairing v3 audio with v2 timing would mis-place
+// every scene. If NO model yields alignment we keep the best audio we got (or
+// fall back to plain synthVoice) and return alignment=null → the planner falls
+// back to the WPM estimate. The TTS itself never breaks.
+async function synthVoiceTimed(args: {
+  apiKey: string
+  voiceId: string
+  text: string
+  onModelUsed?: (model: string) => void
+}): Promise<{ audio: ArrayBuffer; alignment: VoiceAlignment | null }> {
+  let fallbackAudio: ArrayBuffer | null = null
+  let fallbackModel = ''
+  for (const model of ['eleven_v3', 'eleven_multilingual_v2'] as const) {
+    try {
+      const res = await textToSpeechWithTimestamps({
+        apiKey: args.apiKey,
+        voiceId: args.voiceId,
+        text: args.text,
+        modelId: model,
+        stability: EXPRESSIVE_TTS.stability,
+        similarity: EXPRESSIVE_TTS.similarity,
+        style: EXPRESSIVE_TTS.style,
+        speed: 1.0,                       // pace applied via atempo below, not the API
+        outputFormat: 'mp3_44100_128',
+      })
+      if (res.alignment) {
+        args.onModelUsed?.(model)
+        const audio = await applyTempo(res.buffer, EXPRESSIVE_TTS.speed)
+        return { audio, alignment: toVoiceAlignment(res.alignment, EXPRESSIVE_TTS.speed, model) }
+      }
+      // Audio came back but with no timing — remember it only if nothing better
+      // turns up, then try the next (more timing-reliable) model.
+      if (!fallbackAudio) { fallbackAudio = res.buffer; fallbackModel = model }
+      console.warn(`[TTS timed] ${model} returned audio without alignment — trying next model`)
+    } catch (err) {
+      console.warn(`[TTS timed] ${model} failed`, err)
+    }
+  }
+  // No alignment from any model — use the best timing-less audio we captured…
+  if (fallbackAudio) {
+    args.onModelUsed?.(fallbackModel)
+    return { audio: await applyTempo(fallbackAudio, EXPRESSIVE_TTS.speed), alignment: null }
+  }
+  // …or, if every timestamped call failed outright, the original plain path.
+  console.warn('[TTS timed] all timestamped calls failed — plain TTS (no timing)')
+  return { audio: await synthVoice(args), alignment: null }
+}
+
 // ── Stage update callbacks ─────────────────────────────────────────────────
 
 export interface StageUpdate {
@@ -118,6 +186,8 @@ export interface StageUpdate {
   voiceRef?: string
   voiceDurationSec?: number
   voiceId?: string
+  /** Z98 (#6) — real per-character voice timing (when timestamped TTS succeeded). */
+  voiceAlignment?: VoiceAlignment
   keyframeRef?: string
   keyframePromptUsed?: string
   previewVideoRef?: string
@@ -171,6 +241,8 @@ export interface RenderKeyframeResult {
   voiceId: string
   keyframeRef: string
   keyframePromptUsed: string
+  /** Z98 (#6) — real per-character voice timing (absent if timestamped TTS failed). */
+  voiceAlignment?: VoiceAlignment
 }
 
 // Z95 — STAGE 1+2 ONLY (TTS + keyframe). STOPS at 'keyframe_ready' so the user
@@ -182,6 +254,7 @@ export async function renderCreatorKeyframe(
     reuseVoiceRef?: string
     reuseVoiceDurationSec?: number
     reuseVoiceId?: string
+    reuseVoiceAlignment?: VoiceAlignment
   },
 ): Promise<RenderKeyframeResult> {
   if (params.signal?.aborted) throw new Error('CANCELLED — user huỷ')
@@ -189,12 +262,14 @@ export async function renderCreatorKeyframe(
   let voiceRef: string
   let voiceDurationSec: number
   let voiceId: string
+  let voiceAlignment: VoiceAlignment | undefined
 
   if (params.reuseVoiceRef && params.reuseVoiceId) {
     // Regenerate keyframe ONLY — reuse the already-paid voice (no new TTS cost).
     voiceRef = params.reuseVoiceRef
     voiceDurationSec = params.reuseVoiceDurationSec ?? 0
     voiceId = params.reuseVoiceId
+    voiceAlignment = params.reuseVoiceAlignment
   } else {
     // ── STAGE 1: TTS via ElevenLabs ──────────────────────────────────────
     params.onStageUpdate({ stage: 'tts' })
@@ -203,21 +278,29 @@ export async function renderCreatorKeyframe(
     const fullScriptText = params.script.blocks.map((b) => b.text).join(' ')
     const voiceSource = params.voiceId?.trim() ? 'user-picked' : `category:${voiceCategory.labelVi}`
     console.log(`[CREATOR_VIDEO Stage 1] TTS voice=${voiceSource} (${voiceId}) chars=${fullScriptText.length}`)
-    const audioBuffer = await synthVoice({
+    // Z98 (#6) — timestamped TTS (hybrid v3→v2). On any failure this still
+    // returns audio with alignment=null, so the voice never breaks.
+    const { audio: audioBuffer, alignment } = await synthVoiceTimed({
       apiKey: params.elevenLabsApiKey,
       voiceId,
       text: fullScriptText,
       onModelUsed: (m) => console.log(`[CREATOR_VIDEO Stage 1] TTS model=${m}`),
     })
+    voiceAlignment = alignment ?? undefined
     if (params.signal?.aborted) throw new Error('CANCELLED — user huỷ')
     const audioBlob = new Blob([audioBuffer], { type: 'audio/mpeg' })
     voiceRef = await saveAsset(audioBlob, 'audio/mpeg')
     voiceDurationSec = await measureAudioDurationSec(audioBlob)
-    params.onStageUpdate({ stage: 'tts', voiceRef, voiceDurationSec, voiceId })
+    console.log(
+      `[CREATOR_VIDEO Stage 1] voice timing=${voiceAlignment
+        ? `REAL (${voiceAlignment.model}, ${voiceAlignment.charStartSecs.length} chars)`
+        : 'estimate (no alignment — fell back)'}`,
+    )
+    params.onStageUpdate({ stage: 'tts', voiceRef, voiceDurationSec, voiceId, voiceAlignment })
   }
 
   // ── STAGE 2: Keyframe via KIE GPT-4o ───────────────────────────────────
-  params.onStageUpdate({ stage: 'keyframe', voiceRef, voiceDurationSec, voiceId })
+  params.onStageUpdate({ stage: 'keyframe', voiceRef, voiceDurationSec, voiceId, voiceAlignment })
 
   const refUrls: string[] = []
   let avatarRefIndex = 0
@@ -260,9 +343,9 @@ export async function renderCreatorKeyframe(
   // Z95 — STOP at keyframe_ready (awaiting approval). NO lipsync yet.
   params.onStageUpdate({
     stage: 'keyframe_ready',
-    voiceRef, voiceDurationSec, voiceId, keyframeRef, keyframePromptUsed,
+    voiceRef, voiceDurationSec, voiceId, keyframeRef, keyframePromptUsed, voiceAlignment,
   })
-  return { voiceRef, voiceDurationSec, voiceId, keyframeRef, keyframePromptUsed }
+  return { voiceRef, voiceDurationSec, voiceId, keyframeRef, keyframePromptUsed, voiceAlignment }
 }
 
 export interface RenderLipsyncResult { videoRef: string; fullLipsyncTaskId: string }

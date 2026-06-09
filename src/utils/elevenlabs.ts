@@ -294,6 +294,103 @@ export async function textToSpeech(params: {
   return res.arrayBuffer()
 }
 
+// ── Z98 (#6) — TTS WITH per-character timestamps ───────────────────────────
+// Same synthesis as textToSpeech but hits the `/with-timestamps` endpoint, which
+// returns the audio (base64) PLUS character-level spoken timing. Used by the ads
+// creator engine to anchor cuts/inserts to the EXACT second a line is read,
+// instead of a WPM estimate. The endpoint guarantees timing on
+// eleven_multilingual_v2; on newer models (eleven_v3) it MAY return audio with no
+// alignment — in that case `alignment` is null and the caller can retry on v2.
+
+/** Raw ElevenLabs alignment payload (character-level). */
+export interface TtsTimestamps {
+  characters: string[]
+  characterStartTimesSeconds: number[]
+  characterEndTimesSeconds: number[]
+}
+
+function base64ToArrayBuffer(b64: string): ArrayBuffer {
+  const binary = atob(b64)
+  const bytes = new Uint8Array(binary.length)
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i)
+  return bytes.buffer
+}
+
+export async function textToSpeechWithTimestamps(params: {
+  apiKey: string
+  voiceId: string
+  text: string
+  stability?: number
+  similarity?: number
+  style?: number
+  speed?: number
+  useSpeakerBoost?: boolean
+  modelId?: string         // default eleven_multilingual_v2 (guaranteed timing)
+  outputFormat?: 'mp3_44100_128' | 'mp3_44100_192'
+  onModelUsed?: (model: string) => void
+}): Promise<{ buffer: ArrayBuffer; alignment: TtsTimestamps | null }> {
+  const body: Record<string, unknown> = {
+    text: params.text,
+    model_id: params.modelId ?? 'eleven_multilingual_v2',
+    voice_settings: {
+      stability: params.stability ?? 0.75,
+      similarity_boost: params.similarity ?? 0.75,
+      style: params.style ?? 0,
+      use_speaker_boost: params.useSpeakerBoost ?? true,
+      speed: params.speed ?? 1.0,
+    },
+  }
+
+  const format = params.outputFormat ?? 'mp3_44100_128'
+  const res = await fetch(`${EL_BASE}/text-to-speech/${params.voiceId}/with-timestamps?output_format=${format}`, {
+    method: 'POST',
+    headers: {
+      'xi-api-key': params.apiKey,
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+    },
+    body: JSON.stringify(body),
+  })
+
+  if (!res.ok) {
+    const err = await res.text().catch(() => res.statusText)
+    // 192kbps requires Creator+ — auto-retry at 128kbps (mirrors textToSpeech).
+    if (res.status === 403 && format === 'mp3_44100_192') {
+      return textToSpeechWithTimestamps({ ...params, outputFormat: 'mp3_44100_128' })
+    }
+    // Throw with the raw status so the caller's hybrid loop can decide whether
+    // to try another model or fall back to plain (timing-less) TTS. We do NOT
+    // translate to a user-facing message here — this path is always wrapped in a
+    // try/catch that degrades gracefully, never surfacing directly to the user.
+    throw new Error(`tts-with-timestamps ${res.status}: ${err.slice(0, 160)}`)
+  }
+
+  params.onModelUsed?.(String(body.model_id))
+  const data = (await res.json()) as {
+    audio_base64?: string
+    alignment?: {
+      characters?: string[]
+      character_start_times_seconds?: number[]
+      character_end_times_seconds?: number[]
+    } | null
+  }
+  if (!data.audio_base64) throw new Error('tts-with-timestamps: missing audio_base64')
+
+  const buffer = base64ToArrayBuffer(data.audio_base64)
+  const a = data.alignment
+  const alignment: TtsTimestamps | null =
+    a && Array.isArray(a.characters) && a.characters.length > 0 &&
+    Array.isArray(a.character_start_times_seconds) && a.character_start_times_seconds.length > 0
+      ? {
+          characters: a.characters,
+          characterStartTimesSeconds: a.character_start_times_seconds,
+          characterEndTimesSeconds: a.character_end_times_seconds ?? [],
+        }
+      : null
+
+  return { buffer, alignment }
+}
+
 // ── Audio concatenation via Web Audio API ─────────────────────────────────
 // Concatenating MP3s at the binary level produces audible pops/static at the
 // chunk boundaries (frame headers misalign, ID3 tags interrupt sample flow).
