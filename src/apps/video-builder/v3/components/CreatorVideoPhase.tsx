@@ -26,28 +26,14 @@ import { matchVoiceForAvatar } from '../services/voiceCreatorMatcher'
 import {
   CREATOR_VIDEO_STAGE_LABEL_VI,
   V3_CREDIT_COST, formatCredits, estimateLipsyncCredits,
-  type CreatorSettingId, type CreatorEnergyLevel, type CreatorPresetId,
   type CreatorVideoStage,
 } from '../types'
+import { CREATOR_SETTINGS } from '../services/creatorSettings'
 import {
-  CREATOR_SETTINGS, CREATOR_SETTING_ORDER,
-} from '../services/creatorSettings'
-import {
-  CREATOR_ENERGIES, CREATOR_ENERGY_ORDER, recommendEnergyForAngle,
+  CREATOR_ENERGIES, recommendEnergyForAngle,
 } from '../services/creatorEnergy'
-import {
-  CREATOR_PRESETS, CREATOR_PRESET_ORDER, styleCreatorWithGemini,
-} from '../services/creatorPresets'
+import { styleCreatorWithGemini } from '../services/creatorPresets'
 import { renderCreatorVideo, resumeCreatorVideoLipsync, previewCreatorVoice } from '../services/creatorVideoEngine'
-
-const TONE_BG: Record<string, string> = {
-  emerald: 'bg-emerald-100 text-emerald-800 border-emerald-300',
-  violet:  'bg-violet-100 text-violet-800 border-violet-300',
-  amber:   'bg-amber-100 text-amber-800 border-amber-300',
-  pink:    'bg-pink-100 text-pink-800 border-pink-300',
-  sky:     'bg-sky-100 text-sky-800 border-sky-300',
-  rose:    'bg-rose-100 text-rose-800 border-rose-300',
-}
 
 // ── Stage progress strip ───────────────────────────────────────────────────
 
@@ -213,7 +199,6 @@ interface Props { onContinue: () => void }
 export default function CreatorVideoPhase({ onContinue }: Props) {
   const state = useAdsVideoStore((s) => s.state)
   const patchCreatorVideoConfig = useAdsVideoStore((s) => s.patchCreatorVideoConfig)
-  const applyCreatorPreset      = useAdsVideoStore((s) => s.applyCreatorPreset)
   const setCreatorVideo         = useAdsVideoStore((s) => s.setCreatorVideo)
   const patchCreatorVideo       = useAdsVideoStore((s) => s.patchCreatorVideo)
 
@@ -526,98 +511,23 @@ export default function CreatorVideoPhase({ onContinue }: Props) {
           </div>
         )}
 
-        {/* ── 6 Preset cards ──────────────────────────────────────────────── */}
-        <div>
-          <h3 className="mb-2 text-[10px] font-bold uppercase tracking-widest text-gray-500">
-            <Wand2 className="mr-1 inline h-3.5 w-3.5" /> Preset 1-click
-          </h3>
-          <div className="grid grid-cols-2 gap-2 md:grid-cols-3">
-            {CREATOR_PRESET_ORDER.map((p) => {
-              const cfg = CREATOR_PRESETS[p]
-              const isActive = config.preset === p
-              return (
-                <button
-                  key={p}
-                  onClick={() => applyCreatorPreset(p as CreatorPresetId)}
-                  className={`flex items-start gap-2 rounded-xl border p-3 text-left transition-all ${
-                    isActive
-                      ? `${TONE_BG[cfg.tone]} ring-2 ring-offset-1`
-                      : 'border-gray-200 bg-white hover:bg-gray-50'
-                  }`}
-                  disabled={isRendering}
-                >
-                  <span className="text-2xl">{cfg.emoji}</span>
-                  <div className="min-w-0">
-                    <p className="truncate text-[12px] font-bold">{cfg.labelVi}</p>
-                    <p className="text-[10px] leading-snug text-gray-500">{cfg.descriptionVi}</p>
-                  </div>
-                </button>
-              )
-            })}
-          </div>
-        </div>
-
-        {/* ── Setting + Energy + Wardrobe customise ─────────────────────── */}
-        <div className="mt-4 grid grid-cols-1 gap-3 lg:grid-cols-3">
-          <div className="rounded-xl border border-black/10 bg-white p-3">
-            <p className="text-[10px] font-bold uppercase tracking-widest text-gray-500">Setting</p>
-            <div className="mt-2 grid grid-cols-2 gap-1.5">
-              {CREATOR_SETTING_ORDER.map((s) => {
-                const cfg = CREATOR_SETTINGS[s]
-                const isActive = config.setting === s
-                return (
-                  <button
-                    key={s}
-                    onClick={() => patchCreatorVideoConfig({ setting: s as CreatorSettingId, preset: null })}
-                    disabled={isRendering}
-                    title={cfg.descriptionVi}
-                    className={`flex items-center gap-1 rounded-lg border px-2 py-1.5 text-left text-[10px] font-semibold transition-all ${
-                      isActive ? TONE_BG[cfg.tone] : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50'
-                    }`}
-                  >
-                    <span>{cfg.emoji}</span>
-                    <span className="truncate">{cfg.labelVi}</span>
-                  </button>
-                )
-              })}
-            </div>
-          </div>
-
-          <div className="rounded-xl border border-black/10 bg-white p-3">
-            <p className="text-[10px] font-bold uppercase tracking-widest text-gray-500">Energy</p>
-            <div className="mt-2 grid grid-cols-2 gap-1.5">
-              {CREATOR_ENERGY_ORDER.map((e) => {
-                const cfg = CREATOR_ENERGIES[e]
-                const isActive = config.energy === e
-                return (
-                  <button
-                    key={e}
-                    onClick={() => patchCreatorVideoConfig({ energy: e as CreatorEnergyLevel, preset: null })}
-                    disabled={isRendering}
-                    title={cfg.descriptionVi}
-                    className={`flex items-center gap-1 rounded-lg border px-2 py-1.5 text-left text-[10px] font-semibold transition-all ${
-                      isActive ? TONE_BG[cfg.tone] : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50'
-                    }`}
-                  >
-                    <span>{cfg.emoji}</span>
-                    <span className="truncate">{cfg.labelVi}</span>
-                  </button>
-                )
-              })}
-            </div>
-          </div>
-
-          <div className="rounded-xl border border-black/10 bg-white p-3">
-            <p className="text-[10px] font-bold uppercase tracking-widest text-gray-500">Wardrobe (free text)</p>
-            <textarea
-              value={config.wardrobeNote}
-              onChange={(e) => patchCreatorVideoConfig({ wardrobeNote: e.target.value, preset: null })}
-              disabled={isRendering}
-              placeholder="VD: hijab pastel + áo cotton trắng nhẹ..."
-              rows={4}
-              className="mt-2 w-full resize-none rounded-lg border border-black/10 bg-black/[0.02] p-2 text-[12px] focus:border-violet-400 focus:outline-none"
-            />
-          </div>
+        {/* ── Z85 — persona is AI-decided. The stylist above auto-runs + picks
+            setting / energy / wardrobe; we just SHOW the result (read-only).
+            No manual preset / setting / energy pickers — "AI chọn lại" re-rolls. */}
+        <div className="mt-1 rounded-xl border border-black/10 bg-white p-3 text-[12px] text-gray-700">
+          <p className="mb-1 text-[10px] font-bold uppercase tracking-widest text-gray-500">
+            Persona đạo diễn AI đã chọn
+          </p>
+          <p>
+            🎬 Bối cảnh: <b>{CREATOR_SETTINGS[config.setting].labelVi}</b>
+            {'  ·  '}⚡ Thần thái: <b>{CREATOR_ENERGIES[config.energy].labelVi}</b>
+          </p>
+          {config.wardrobeNote.trim() !== '' && (
+            <p className="mt-0.5">👕 Trang phục: {config.wardrobeNote}</p>
+          )}
+          <p className="mt-1 text-[10px] text-gray-400">
+            Muốn đổi? Bấm “AI chọn lại” ở khung tím phía trên.
+          </p>
         </div>
 
         {/* ── Render banner ──────────────────────────────────────────────── */}
