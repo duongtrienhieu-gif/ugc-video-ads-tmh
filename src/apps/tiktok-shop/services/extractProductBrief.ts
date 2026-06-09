@@ -114,7 +114,13 @@ CRITICAL DATA INTEGRITY RULES:
    - Oral supplement / tablet → bodyZone="(oral — swallowed, no body application)", howApplied="take 1-2 tablets with a glass of water after meal", usageScene="Person holding a tablet between fingers, a glass of water in the other hand, about to take it after a meal"
    - Toothpaste → bodyZone="teeth + gums", howApplied="brush teeth twice daily with a pea-sized amount", usageScene="Person standing in front of bathroom mirror, brushing teeth with a clean white toothbrush, foam visible"
    The usageScene line will be embedded VERBATIM into the image-gen prompt for slot 6 — make it concrete, single sentence, photo-direction quality.
-   ALSO infer applicationDetails.orientationDetail (which side/face touches which body side, prevents backwards rendering — e.g. "metal springs on BACK of knee, padded fabric on FRONT" / "nozzle into nostril, bottle upright" / "gel side on skin, plastic facing out" / "adhesive side to skin").
+   ALSO infer applicationDetails.orientationDetail — format STRICTLY as TWO labeled halves so image-gen can hide the inner side:
+     "OUTER (visible when worn): <what you see from outside, e.g. padded fabric + brand logo + Velcro straps>. INNER (touching body, must be HIDDEN behind body in view): <what contacts skin, e.g. metal springs + back-of-knee contact surface>."
+   Examples:
+     - Knee brace: "OUTER (visible when worn): smooth padded fabric front with brand label + Velcro straps wrapping around. INNER (touching body, hidden behind leg): metal coil springs and rigid frame pressed against the back of the knee (popliteal area)."
+     - Nasal spray: "OUTER (visible): bottle body held in hand, brand label facing camera. INNER (hidden inside nostril): spray nozzle tip inserted into nostril."
+     - Sleep mask: "OUTER (visible): printed/colored fabric side with strap. INNER (hidden against face): soft gel/silicone cup pressed against the eye area."
+     - Hot patch: "OUTER (visible): printed paper backing with brand. INNER (hidden against skin): adhesive gel side stuck to the body."
    ALSO infer applicationDetails.painManifest (visible BEFORE cues for slot 2 — concrete observable signs only — e.g. "swollen red knee + slight limp" / "rough cheek skin with visible pores + dark spots" / "red irritated nose + tissue in hand" / "yellowed teeth + dark gum line" / "thinning hair on crown showing scalp"). In ${langName}.
 
 IF a field cannot be determined from photos + metadata, write the most reasonable inference based on category — but flag uncertainty by using softer language. NEVER fabricate specific ingredient names, certifications, lab numbers, or clinical claims.`
@@ -301,8 +307,8 @@ function buildFallbackBrief(product: Product, language: Market): TiktokShopProdu
         ? 'Pengguna mengambil produk di rumah, demonstrasi cara guna yang ditunjukkan jelas, sudut kamera medium close-up'
         : 'Người dùng cầm sản phẩm tại nhà, thao tác sử dụng được thể hiện rõ ràng, góc máy medium close-up',
       orientationDetail: isMS
-        ? 'sisi produk seperti pada label produk'
-        : 'mặt sản phẩm theo hướng dẫn trên nhãn',
+        ? 'OUTER (visible when worn): bahagian luar produk seperti dalam gambar rujukan. INNER (touching body, hidden behind body in view): bahagian dalam yang menyentuh badan.'
+        : 'OUTER (visible when worn): mặt ngoài sản phẩm theo ảnh tham chiếu. INNER (touching body, hidden behind body in view): mặt trong tiếp xúc cơ thể.',
       painManifest: isMS
         ? 'tanda ketidakselesaan yang jelas pada kawasan sasaran'
         : 'biểu hiện khó chịu rõ ràng ở vùng cần chăm sóc',

@@ -480,19 +480,20 @@ export const useTikTokShopStore = create<TikTokShopState>()(
         if (brief && typeof brief === 'object') {
           let needsRefresh = false
           const ad = brief.applicationDetails as Record<string, unknown> | undefined
+          const ORIENTATION_STUB = 'OUTER (visible when worn): mặt ngoài theo ảnh tham chiếu. INNER (touching body, hidden behind body in view): mặt trong tiếp xúc cơ thể.'
           if (!ad || typeof ad !== 'object') {
             brief.applicationDetails = {
               bodyZone: '(chưa xác định)',
               howApplied: '(theo hướng dẫn nhãn)',
               usageScene: 'Người dùng cầm sản phẩm tại nhà, thao tác sử dụng được thể hiện rõ ràng, góc máy medium close-up',
-              orientationDetail: 'mặt sản phẩm theo hướng dẫn trên nhãn',
+              orientationDetail: ORIENTATION_STUB,
               painManifest: 'biểu hiện khó chịu rõ ràng ở vùng cần chăm sóc',
             }
             needsRefresh = true
           } else {
             // Add fields added in later schema bumps without nuking existing data.
-            if (typeof ad.orientationDetail !== 'string') {
-              ad.orientationDetail = 'mặt sản phẩm theo hướng dẫn trên nhãn'
+            if (typeof ad.orientationDetail !== 'string' || !/OUTER/i.test(ad.orientationDetail as string)) {
+              ad.orientationDetail = ORIENTATION_STUB
               needsRefresh = true
             }
             if (typeof ad.painManifest !== 'string') {
