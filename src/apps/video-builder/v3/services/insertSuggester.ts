@@ -14,7 +14,7 @@
 
 import { directGeminiText } from '../../../../utils/gemini'
 import type {
-  ActionPresetId, GeneratedScript, ScriptBlockId, ScriptLang, InsertRenderMode,
+  ActionPresetId, GeneratedScript, ScriptBlockId, ScriptLang, InsertRenderMode, InsertLayout,
 } from '../types'
 import { SCRIPT_LANG_GEMINI_NAME } from '../types'
 import type { Product } from '../../../../stores/types'
@@ -56,6 +56,9 @@ export interface InsertSuggestion {
    *  + local zoom, for GRAPHIC/INFOGRAPHIC/MECHANISM beats — costs ~6cr). For
    *  the 12 fixed presets and PRODUCT_IN_ACTION this is always 'video'. */
   renderMode?: InsertRenderMode
+  /** Z69 — Director-picked layout: full-screen 'cut' or corner 'overlay_corner'.
+   *  See InsertLayout in types.ts. */
+  layout?: InsertLayout
 }
 
 /**
@@ -304,6 +307,7 @@ const DIRECTOR_RESPONSE_SCHEMA = {
           conceptPrompt: { type: 'string' },
           motionKind:    { type: 'string', enum: ['graphic', 'emotion'] },
           labels:        { type: 'array', items: { type: 'string' } },
+          layout:        { type: 'string', enum: ['cut', 'overlay_corner'] },
         },
         required: ['presetId', 'anchorBlock', 'quote', 'durationSec', 'fit'],
       },
@@ -389,6 +393,16 @@ DIRECTING RULES:
   INGREDIENTS or a MECHANISM / how-it-works, you MUST give those lines their own
   scene (usually a labeled CONCEPT_SCENE) — do not leave them with no visual.
   This is the most common miss.
+- CREATOR-FIRST RULE — the viewer needs to SEE the speaker's face early to
+  trust the ad. The FIRST insert MUST NOT start before t≈3s of voice — let the
+  viewer see the talking creator first. Practical translation: when you anchor
+  scenes, the earliest scene (whichever quote starts the earliest) should be
+  illustrating a line that arrives roughly 3+ seconds in, NOT the very first
+  words of the hook. Reserve the opening seconds for the creator's face.
+  Also: NEVER stack 3+ consecutive inserts that all replace the creator —
+  the viewer will lose track of who is speaking. Break long stretches of
+  illustration with at least one beat where ONLY the creator is on screen
+  (i.e. skip an insert there).
 - INGREDIENT BEATS — when a line NAMES specific ingredients (e.g. "Activated
   Charcoal và Volcanic Ash...", "Grape Seed Extract..."), give that line a
   CONCEPT_SCENE whose conceptPrompt SHOWS and LABELS each named ingredient (the
@@ -518,6 +532,20 @@ DIRECTING RULES:
       appliance, machine, or large device.
   When in doubt about form, prefer PRODUCT_IN_ACTION — it is form-agnostic and
   you control the action.
+- LAYOUT RULE — for EVERY scene, pick a "layout":
+    • "cut" → the insert REPLACES the creator video full-screen for its window.
+      Use for high-impact beats: HOOK reveal, PAIN raw shot, CTA trust close,
+      product DEMO (PRODUCT_IN_ACTION), visible BEFORE/AFTER, emotion
+      CONCEPT_SCENE that needs full focus.
+    • "overlay_corner" → the insert sits as a corner PIP (~30% of the frame)
+      while the CREATOR keeps talking full-screen behind it. Use for SUPPORTING
+      illustrations the viewer should glance at without losing the speaker:
+      teaching graphic CONCEPT_SCENE (ingredient sketches, mechanism diagrams,
+      "Nx more effective" labels), small product close-ups during explanation.
+  Rule of thumb: if the scene is the MAIN thing on screen at that moment, "cut";
+  if the scene is a SUPPORTING aside while the creator is the focus, "overlay_corner".
+  A finished ad SHOULD MIX both — not all cuts (loses creator face) and not all
+  overlays (loses impact). Aim roughly half-half across the ad.
 - CTA SCENE RULE — for the FINAL beat (anchorBlock = "cta", typically the line
   asking the viewer to buy/click/order), the visual job is a TRUST CLOSE, not
   a generic phone shot. Pick one of:
@@ -578,7 +606,8 @@ OUTPUT strict JSON, no fences:
 { "scenes": [ { "presetId": "...", "anchorBlock": "...", "quote": "(verbatim line)",
   "durationSec": 4, "fit": 0.0, "reason": "...",
   "conceptPrompt": "(required for CONCEPT_SCENE and PRODUCT_IN_ACTION)",
-  "labels": ["(required for teaching graphic CONCEPT_SCENE — short ${langName} terms to print on the image; empty for pain/emotion/microscopy)"] } ] }`
+  "labels": ["(required for teaching graphic CONCEPT_SCENE — short ${langName} terms to print on the image; empty for pain/emotion/microscopy)"],
+  "layout": "cut | overlay_corner (per LAYOUT RULE — pick per scene)" } ] }`
 
   const userPrompt = `SCRIPT (block id in brackets):\n${scriptDump}\n\nDirect the scenes now.`
 
@@ -713,6 +742,18 @@ OUTPUT strict JSON, no fences:
     const quote = typeof item.quote === 'string' && item.quote.trim().length > 0
       ? item.quote.trim()
       : undefined
+    // Z69 — pick layout. Honour the Director's choice when valid. When absent
+    // or invalid, choose a SAFE default per scene kind:
+    //   • CTA / hook product reveal / demo / visible-result → 'cut' (focus).
+    //   • Teaching graphic CONCEPT_SCENE (ken_burns w/ labels) → 'overlay_corner'.
+    //   • Everything else → 'cut'.
+    const directorLayout = item.layout === 'overlay_corner' || item.layout === 'cut'
+      ? item.layout
+      : undefined
+    const isTeachingGraphic =
+      presetId === 'CONCEPT_SCENE' && renderMode === 'ken_burns' && labels.length > 0
+    const layout: InsertLayout =
+      directorLayout ?? (isTeachingGraphic ? 'overlay_corner' : 'cut')
     out.push({
       presetId,
       matchCount: 0,
@@ -725,8 +766,74 @@ OUTPUT strict JSON, no fences:
       durationSec,
       quote,
       renderMode,
+      layout,
     })
   }
+  // Z69 — Trust & pacing safety net (post-parse):
+  // 1. CREATOR-FIRST: drop any scene anchored before t<3s so the viewer sees
+  //    the speaker's face during the trust-building window. Director was told
+  //    not to do this, but Gemini sometimes still front-loads infographics.
+  // 2. COVERAGE CAP: total insert duration ≤ 60% of the (estimated) voice
+  //    duration. If Director over-packed, drop lowest-confidence scenes until
+  //    we're under budget. Stops "8 cuts = 2/3 of the ad = slideshow".
+  // 3. NO-RUN-OF-3: split runs of 3+ back-to-back inserts by removing the
+  //    middle one, so the creator's face surfaces between illustrations.
+  const sortedByTime = [...out].sort((a, b) => {
+    const ta = a.matchedBlocks[0] ? 0 : 0  // tie-break placeholder
+    return ta - (b.matchedBlocks[0] ? 0 : 0)
+  })
+  void sortedByTime  // (placeholder so the import stays — reordering not needed; we use computeQuoteTimestamp at apply time)
+
+  const trustDrops = { earlyHook: 0, coverage: 0, run3: 0 }
+  // (1) Creator-first — best-effort: we don't have block timestamps here, but
+  //     the FIRST anchored block we see is the hook. We drop the FIRST scene
+  //     iff its quote sits in the hook block AND there are at least 2 hook
+  //     scenes (so the second can carry the hook beat with a small delay).
+  const hookScenes = out.filter((s) => s.anchorBlock === 'hook')
+  if (hookScenes.length >= 2) {
+    const idx = out.indexOf(hookScenes[0])
+    if (idx >= 0) {
+      out.splice(idx, 1)
+      trustDrops.earlyHook++
+    }
+  }
+  // (2) Coverage cap 60% of estimated voice duration.
+  const voiceDur = params.script.totalDurationSec
+  if (voiceDur && voiceDur > 0) {
+    const cap = voiceDur * 0.6
+    let totalSec = out.reduce((s, x) => s + (x.durationSec ?? 4), 0)
+    if (totalSec > cap) {
+      // Drop the lowest-confidence scenes until we're under the cap.
+      const ranked = [...out].sort((a, b) => a.confidence - b.confidence)
+      while (totalSec > cap && ranked.length > 1) {
+        const victim = ranked.shift()
+        if (!victim) break
+        const idx = out.indexOf(victim)
+        if (idx >= 0) {
+          totalSec -= victim.durationSec ?? 4
+          out.splice(idx, 1)
+          trustDrops.coverage++
+        }
+      }
+    }
+  }
+  // (3) Break runs of 3+ consecutive inserts. Since every scene IS an insert
+  //     (and the creator-video fills the gaps in the planner), a "run" here
+  //     means 3 inserts with no anchor-gap. Without timestamps we approximate
+  //     by anchor block: 3+ scenes anchored to the SAME block in a row =
+  //     slideshow risk. Drop the middle one.
+  for (let i = 0; i < out.length - 2; i++) {
+    if (
+      out[i].anchorBlock != null &&
+      out[i].anchorBlock === out[i + 1].anchorBlock &&
+      out[i].anchorBlock === out[i + 2].anchorBlock
+    ) {
+      out.splice(i + 1, 1)
+      trustDrops.run3++
+      i--  // re-check the new triplet
+    }
+  }
+
   // Keep the director's ORDER (narrative sequence), not a fit sort — scenes
   // should play in script order. Cap to budget.
   const directed = out.slice(0, params.budget)
@@ -734,6 +841,7 @@ OUTPUT strict JSON, no fences:
     `[DIRECTOR] raw=${raw.length}ch parsed=${parsed.length} usable=${out.length} ` +
     `dropped{preset:${drop.preset},noPrompt:${drop.noPrompt},zeroFit:${drop.zeroFit},dupeSkip:${drop.dupeSkip}} ` +
     `rewrote{beforeAfter:${rewrite.beforeAfter},topical:${rewrite.topical},dupeSwap:${rewrite.dupeSwap},labeled:${rewrite.labeled}} ` +
+    `trust{earlyHook:${trustDrops.earlyHook},coverage:${trustDrops.coverage},run3:${trustDrops.run3}} ` +
     `visibleResult=${visibleResultProduct} topical=${topicalCategory ?? 'no'} ` +
     `→ ${directed.length > 0 ? `${directed.length} scenes` : 'EMPTY → keyword fallback'}`,
   )
@@ -884,6 +992,8 @@ interface RawDirectorScene {
    *  can't bury/drop them in prose; appended to conceptPrompt as a hard
    *  "render this text" instruction at parse time. */
   labels?: string[]
+  /** Z69 — full-screen cut vs corner overlay. */
+  layout?: 'cut' | 'overlay_corner'
 }
 
 function parseDirectorOutput(raw: string): RawDirectorScene[] {

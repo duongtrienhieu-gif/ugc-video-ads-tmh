@@ -158,6 +158,7 @@ export default function ActionInsertsPhase({ onContinue }: Props) {
         voiceTimestampSec: quoteTs ?? blockTs,
         conceptPrompt: s.conceptPrompt,
         renderMode: s.renderMode,
+        layout: s.layout,
       }
     })
     clearAllInserts()

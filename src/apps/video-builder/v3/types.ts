@@ -216,6 +216,16 @@ export const INSERT_VIDEO_CREDITS = 15
 //                 charge AND the i2v morph risk on abstract subjects.
 export type InsertRenderMode = 'video' | 'ken_burns'
 
+// Z69 — how the insert sits in the timeline against the creator video:
+//   'cut'            → replaces the creator video for the insert's window
+//                      (full-screen). Use for high-impact reveal / CTA / demo /
+//                      visible-result beats where focus belongs on the insert.
+//   'overlay_corner' → insert sits as a corner PIP (~30% of the frame) while
+//                      the creator KEEPS talking full-screen behind it. Use
+//                      for teaching beats (ingredients, mechanism, "5x" claim)
+//                      so the viewer never loses the creator's face.
+export type InsertLayout = 'cut' | 'overlay_corner'
+
 export function estimateInsertCredits(mode: InsertRenderMode = 'video'): number {
   if (mode === 'ken_burns') return V3_CREDIT_COST.keyframe
   return V3_CREDIT_COST.keyframe + INSERT_VIDEO_CREDITS
@@ -482,6 +492,11 @@ export interface ActionInsertClip {
    *  from the keyframe, so `videoRef` is still set and the planner/assembler
    *  treat it identically. Defaults to 'video' when absent (back-compat). */
   renderMode?: InsertRenderMode
+
+  /** Z69 — how the insert is composited against the creator video.
+   *  Defaults to 'cut' when absent (back-compat). The Director chooses this
+   *  per scene based on intent (teaching → overlay; reveal/demo → cut). */
+  layout?: InsertLayout
 
   /** asset:xxx of the source still (product or scene shot) */
   keyframeRef?: string
@@ -910,6 +925,29 @@ export interface EditSegment {
   reason: 'narration_block' | 'insert_overlay' | 'transition_hide'
   /** Optional transition INTO this segment */
   transitionIn?: 'cut' | 'whoosh' | 'swipe' | 'crossfade'
+  /** Z69 — corner-PIP overlays played ON TOP of this creator segment. Only
+   *  populated on creator_video segments; ignored on action_insert segments.
+   *  Each overlay shows an insert clip in a corner (~30% width) for its
+   *  window, while the creator keeps speaking full-screen behind it. */
+  overlays?: SegmentOverlay[]
+}
+
+/** Z69 — a corner-PIP overlay riding on top of a creator segment. The compositor
+ *  draws this insert clip at the chosen corner for `startSec..startSec+durationSec`
+ *  RELATIVE to the segment start. */
+export interface SegmentOverlay {
+  /** Insert id this overlay sources from (for debug). */
+  insertId: number
+  /** Insert mp4 source */
+  videoRef: string
+  /** Start time INSIDE this creator segment (seconds from segment start). */
+  startSec: number
+  /** Overlay duration (seconds). */
+  durationSec: number
+  /** Where to place the PIP. Default 'tr' (top-right). */
+  corner?: 'tl' | 'tr' | 'bl' | 'br'
+  /** PIP width as a fraction of the output frame width (0.25-0.4). Default 0.32. */
+  widthFraction?: number
 }
 
 // ── Caption segments (Z34 §5) ────────────────────────────────────────────

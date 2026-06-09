@@ -25,7 +25,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import type {
-  AutoEditPlan, EditSegment, SfxCue, CtaOverlay,
+  AutoEditPlan, EditSegment, SegmentOverlay, SfxCue, CtaOverlay,
   EditingStyleId, SubtitleStyleId, BgmStyleId,
   CreatorVideoClip, ActionInsertClip, GeneratedScript,
 } from '../types'
@@ -200,6 +200,13 @@ function buildSegments(
 ): EditSegment[] {
   if (!creatorVideo.videoRef) return []
 
+  // Z69 — split inserts by layout. 'overlay_corner' → ride on the creator
+  // segment as a PIP (creator stays full-screen + visible). 'cut' (default) →
+  // replace the creator for its window. Same scheduling/scaling logic for both,
+  // they just attach to different places in the segment tree at the end.
+  const cutInserts = inserts.filter((it) => (it.layout ?? 'cut') === 'cut')
+  const overlayInserts = inserts.filter((it) => it.layout === 'overlay_corner')
+
   // Compute insert timestamps — clamp to [1, totalDuration - 1] window
   // so we don't insert in the first second (hook intact) or last second
   // (CTA intact).
@@ -207,7 +214,7 @@ function buildSegments(
   const usableEnd = Math.max(usableStart + 1, totalDurationSec - 1)
   const insertSlots: { insert: ActionInsertClip; tsSec: number; durSec: number }[] = []
 
-  for (const insert of inserts) {
+  for (const insert of cutInserts) {
     // Z37 — honor the per-scene length the Scene Director (or the preset)
     // decided, so a grouped concept scene can hold the screen for its full
     // 3-5s instead of being capped to one fixed style value. The style's
@@ -303,6 +310,50 @@ function buildSegments(
       reason: 'narration_block',
       transitionIn: 'cut',
     })
+  }
+
+  // Z69 — attach overlay_corner inserts to the creator segments they sit
+  // inside. Each overlay rides ON TOP of the creator segment for its window —
+  // the creator stays full-screen behind it. If an overlay straddles segment
+  // boundaries we clamp it to the segment it MOSTLY overlaps (simpler than
+  // splitting). Overlays falling on an action_insert (cut) segment are dropped
+  // — can't PIP-over an insert that already replaced the creator.
+  for (const ins of overlayInserts) {
+    if (!ins.videoRef) continue
+    const footageCap = (ins.renderMode ?? 'video') === 'ken_burns' ? 8 : 7
+    const durSec = Math.max(1.5, Math.min(footageCap, ins.durationSec || insertOverlayDurationSec))
+    let ts = ins.voiceTimestampSec ?? null
+    if (ts == null) {
+      // Manually-added overlay without timestamp → put at the midpoint
+      ts = totalDurationSec / 2
+    } else {
+      ts = ts * timelineScale
+    }
+    ts = Math.max(usableStart, Math.min(usableEnd - durSec, ts))
+
+    // Find the creator segment that contains the overlay START.
+    const host = segments.find(
+      (s) => s.source.kind === 'creator_video'
+        && s.startSec <= ts!
+        && ts! < s.startSec + s.durationSec,
+    )
+    if (!host) continue  // overlay falls on a cut insert → drop (can't PIP a PIP)
+
+    // Clamp the overlay window to within the host segment.
+    const overlayStart = Math.max(0, ts - host.startSec)
+    const overlayEnd = Math.min(host.durationSec, overlayStart + durSec)
+    const overlayDur = round2(overlayEnd - overlayStart)
+    if (overlayDur < 1.0) continue  // too short after clamp
+
+    const overlay: SegmentOverlay = {
+      insertId: ins.insertId,
+      videoRef: ins.videoRef,
+      startSec: round2(overlayStart),
+      durationSec: overlayDur,
+      corner: 'tr',
+      widthFraction: 0.32,
+    }
+    host.overlays = [...(host.overlays ?? []), overlay]
   }
 
   return segments
