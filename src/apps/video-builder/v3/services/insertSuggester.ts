@@ -591,9 +591,9 @@ DIRECTING RULES:
   But mind the render mode:
     • ken_burns concept stills → 2-4s (short; split dense ideas into more cuts).
     • VIDEO inserts (any product preset, PRODUCT_IN_ACTION, or emotion
-      CONCEPT_SCENE) → AT LEAST 4s, up to ~6s. These render as a fixed 8s Veo
-      clip, so a 2s cut wastes most of the paid footage and feels jarringly
-      short. Give motion inserts room to breathe (4-6s).
+      CONCEPT_SCENE) → 3-4s, MAX 4s. A 6s cut drags ("dài lê thê") and breaks
+      TikTok pacing — keep every video beat punchy at 3-4s. Use MORE short cuts
+      rather than fewer long ones.
 - HARD LIMIT for CONCEPT_SCENE: never exceed 4s. A still image zoomed for 7-8s
   is BORING and breaks UGC pacing — the viewer's eye stops moving.
 - For a DENSE / MULTI-SENTENCE concept beat (e.g. mechanism with several steps,
@@ -741,16 +741,17 @@ OUTPUT strict JSON, no fences:
 
   const userPrompt = `SCRIPT (block id in brackets):\n${scriptDump}\n\nDirect the scenes now.`
 
-  // Z43 — room for up to 8 scenes, each with a VN quote + VN reason + an
-  // English conceptPrompt. 2048 tokens truncated the JSON on longer scripts
-  // (especially now that the budget is up to 8) → JSON.parse failed → the
-  // director silently fell back to the weak keyword path. 8192 gives headroom
-  // so the full scene list comes back intact.
+  // Z43/Z80 — room for the full scene list. Z80 raised the budget to 12 scenes
+  // (each with a VN quote + VN reason + an English conceptPrompt + the ingredient
+  // list). At 8192 the JSON truncated mid-array on a 12-scene 55s script
+  // (raw≈33k chars > 8192-token ceiling) → JSON.parse failed → parsed=0 →
+  // silent fallback to the weak 2-insert keyword path (the "không ra 12" bug).
+  // 16384 fits 12 verbose scenes so the full list parses.
   const raw = await directGeminiText({
     apiKey: params.geminiKey,
     systemInstruction,
     prompt: userPrompt,
-    maxOutputTokens: 8192,
+    maxOutputTokens: 16384,
     responseMimeType: 'application/json',
     responseSchema: DIRECTOR_RESPONSE_SCHEMA,
     // Z43 — disable 2.5-flash "thinking" so the whole token budget goes to the
@@ -1253,22 +1254,21 @@ function pickSwap(presetId: ActionPresetId, seen: Set<ActionPresetId>): ActionPr
 }
 
 function clampDuration(v: unknown, presetId: ActionPresetId, renderMode?: InsertRenderMode): number {
-  // Z42/Z44/Z45/Z60 — free duration, bounded by render mode:
-  //   • ken_burns (still + local zoom) → 2-4s. A still zoomed for 7-8s is
-  //     boring; keep it short and split dense ideas into more cuts.
-  //   • video (Veo i2v) → 4-6s. Veo renders a FIXED 8s clip (flat cost), so a
-  //     2s cut wastes 6s of paid footage AND a 2s motion clip feels jarringly
-  //     short. Floor 4s uses the footage and reads as a real beat; cap 6s keeps
-  //     pacing snappy (well inside the 8s footage).
+  // Z42/Z44/Z45/Z60/Z81 — free duration, bounded by render mode:
+  //   • ken_burns (static image) → 2-4s. A still held for 7-8s is boring; keep
+  //     it short and split dense ideas into more cuts.
+  //   • video (Grok i2v) → 3-4s. Z81: capped at 4s (was 6s) — the user found
+  //     6s cuts "dài lê thê" (draggy). 3-4s reads as a snappy beat; the Grok
+  //     clip is 6s but the assembler trims it to this window.
   const isKenBurns = presetId === 'CONCEPT_SCENE' && renderMode !== 'video'
   const n = Number(v)
   if (isKenBurns) {
     if (!Number.isFinite(n)) return 3.5
     return Math.max(2, Math.min(4, Math.round(n * 10) / 10))
   }
-  // video mode
+  // video mode — max 4s (was 6s)
   if (!Number.isFinite(n)) return 4
-  return Math.max(4, Math.min(6, Math.round(n * 10) / 10))
+  return Math.max(3, Math.min(4, Math.round(n * 10) / 10))
 }
 
 interface RawDirectorScene {

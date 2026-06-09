@@ -29,6 +29,7 @@ import {
   generateLipSync, pollLipSyncUntilDone,
 } from '../../../../utils/kieai'
 import { saveAsset, getUrl, isAssetRef } from '../../../../utils/assetStore'
+import { getFFmpeg } from './ffmpegLoader'
 import type { Model, Product } from '../../../../stores/types'
 import type {
   CreatorVideoConfig, CreatorVideoStage, GeneratedScript,
@@ -39,19 +40,48 @@ import {
   buildKeyframePrompt, buildLipsyncPrompt,
 } from './creatorPromptBuilder'
 
-// ── Z53/Z65 — expressive voice settings ─────────────────────────────────────
-// Z53 made the voice expressive (vs the old flat reading tone). Z65 tightens
-// the PACE: the user found it "từ tốn" (too leisurely) — that came from v3's
-// dramatic expressive pauses + the 1.15× speed. Now: speed maxed to 1.2 (the
-// ElevenLabs ceiling) and style trimmed 0.40 → 0.28 so it keeps emotion but
-// stops the long pauses, giving a snappier TikTok-creator pace. Faster read →
-// shorter video → cheaper per-second lipsync. Shared by preview + render.
+// ── Z53/Z65/Z81 — expressive voice settings ─────────────────────────────────
+// Z53 made the voice expressive. Z65 tried to fix the "từ tốn" (too leisurely)
+// pace by raising the `speed` voice-setting to 1.2 — but that DID NOTHING,
+// because eleven_v3 (the expressive model we use) SILENTLY IGNORES the `speed`
+// param (it's only honoured by eleven_multilingual_v2). So the render kept
+// coming out at ~1.0× while the UI claimed 1.2×.
+// Z81 fix: we no longer rely on the API `speed`. We synth at neutral 1.0 and
+// then time-stretch the audio with ffmpeg `atempo` (pitch-preserving) to TARGET
+// pace below — works for BOTH models, and preview === render. `speed` here is
+// the atempo TARGET, not the API value.
 export const EXPRESSIVE_TTS = {
   stability: 0.45,   // dynamic, not monotone
   similarity: 0.75,
   style: 0.28,       // some emotion, but fewer leisurely pauses (was 0.40)
-  speed: 1.2,        // ElevenLabs max — snappiest natural pace (was 1.15)
+  speed: 1.2,        // atempo TARGET — real snappy pace, applied post-TTS
 } as const
+
+// Z81 — time-stretch the TTS audio to a target pace (pitch-preserving) via
+// ffmpeg atempo. This is the ONLY reliable way to control pace because v3
+// ignores the API speed param. Fallback: on ANY ffmpeg error, return the
+// original audio unchanged so the voice never breaks.
+async function applyTempo(audio: ArrayBuffer, tempo: number): Promise<ArrayBuffer> {
+  if (!Number.isFinite(tempo) || Math.abs(tempo - 1) < 0.01) return audio
+  try {
+    const ffmpeg = await getFFmpeg()
+    const id = Math.random().toString(36).slice(2, 8)
+    const inName = `tts_${id}.mp3`
+    const outName = `tts_${id}_fast.mp3`
+    await ffmpeg.writeFile(inName, new Uint8Array(audio))
+    // atempo valid range is 0.5–2.0 per pass; our 1.2 is well within it.
+    await ffmpeg.exec(['-i', inName, '-filter:a', `atempo=${tempo.toFixed(3)}`, '-y', outName])
+    const data = await ffmpeg.readFile(outName)
+    await ffmpeg.deleteFile(inName).catch(() => {})
+    await ffmpeg.deleteFile(outName).catch(() => {})
+    const arr = data instanceof Uint8Array ? data : new Uint8Array()
+    if (arr.byteLength === 0) return audio  // safety — empty output → keep original
+    return arr.slice().buffer
+  } catch (err) {
+    console.warn('[TTS atempo] failed — using original (1.0×) speed', err)
+    return audio
+  }
+}
 
 // Synthesize the script with eleven_v3 attempted FIRST (auto-falls back to
 // multilingual_v2 if the key/plan lacks v3) + the expressive settings. Reports
@@ -62,7 +92,7 @@ async function synthVoice(args: {
   text: string
   onModelUsed?: (model: string) => void
 }): Promise<ArrayBuffer> {
-  return textToSpeech({
+  const raw = await textToSpeech({
     apiKey: args.apiKey,
     voiceId: args.voiceId,
     text: args.text,
@@ -70,10 +100,12 @@ async function synthVoice(args: {
     stability: EXPRESSIVE_TTS.stability,
     similarity: EXPRESSIVE_TTS.similarity,
     style: EXPRESSIVE_TTS.style,
-    speed: EXPRESSIVE_TTS.speed,
+    speed: 1.0,             // Z81 — neutral; real pace applied via atempo below
     outputFormat: 'mp3_44100_128',
     onModelUsed: args.onModelUsed,
   })
+  // Z81 — apply the snappy pace ourselves (v3 ignores the API speed param).
+  return applyTempo(raw, EXPRESSIVE_TTS.speed)
 }
 
 // ── Stage update callbacks ─────────────────────────────────────────────────
