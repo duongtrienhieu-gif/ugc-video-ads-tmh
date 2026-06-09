@@ -37,7 +37,7 @@ import {
   // Z36 — Final MP4 Assembly
   type ExportRenderStage,
 } from '../types'
-import { COST_MODE_CONFIG, DEFAULT_COST_MODE, defaultInsertRenderMode } from '../types'
+import { COST_MODE_CONFIG, DEFAULT_COST_MODE, defaultInsertRenderMode, DEFAULT_EXPORT_FORMAT, DEFAULT_EXPORT_QUALITY } from '../types'
 import { CREATOR_PRESETS } from '../services/creatorPresets'
 import type { Model, Product } from '../../../../stores/types'
 
@@ -250,6 +250,12 @@ function loadFromStorage(): V3PipelineState | null {
       parsed.exportVariation.isGeneratingCtaVariations = false
       parsed.exportVariation.isBuildingPackage = false
       parsed.exportVariation.error = null
+      // Z88 — the Format + Quality pickers were removed (Director auto-decides:
+      // TikTok 9:16 · FINAL 1080). Snap any persisted draft onto those defaults
+      // so an old session can't stay stuck at TEST 480 / a hidden format with
+      // NO UI left to change it (mirrors the costMode reset above).
+      parsed.exportVariation.qualityId = DEFAULT_EXPORT_QUALITY
+      parsed.exportVariation.formatId = DEFAULT_EXPORT_FORMAT
       // Z36 — reset in-flight export stage (assembledVideoRef survives)
       if (parsed.exportVariation.exportStage &&
           parsed.exportVariation.exportStage !== 'done' &&

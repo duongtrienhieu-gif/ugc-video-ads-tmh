@@ -261,7 +261,8 @@ function buildSegments(
     })
   }
 
-  // Sort by timestamp + dedupe overlaps (push later inserts forward)
+  // Sort by timestamp. Overlap handling is done by the Z83 gap loop below
+  // (overlapping later cuts are demoted to overlays, not pushed forward).
   insertSlots.sort((a, b) => a.tsSec - b.tsSec)
   // Z80 — the OPENING cut stays short so the ad doesn't sit on one B-roll right
   // after the hook (user: "mở đầu 6s quá dài"). Cap the earliest cut to ≤4s.
@@ -376,10 +377,20 @@ function buildSegments(
     }
 
     // Clamp the overlay window to within the host segment.
-    const overlayStart = Math.max(0, ts - host.startSec)
+    let overlayStart = Math.max(0, ts - host.startSec)
+    // Z88 — DE-COLLIDE. Multiple demoted cuts (Z83) can slide onto the SAME
+    // creator segment; without this they'd all sit at the same corner+time and
+    // render as overlapping PIPs. Push each new overlay to start AFTER the
+    // latest existing overlay on this host so they play sequentially, never
+    // stacked. If there's no room left in the segment, it's dropped below.
+    const existing = host.overlays ?? []
+    if (existing.length > 0) {
+      const latestEnd = Math.max(...existing.map((o) => o.startSec + o.durationSec))
+      if (overlayStart < latestEnd) overlayStart = round2(latestEnd + 0.2)
+    }
     const overlayEnd = Math.min(host.durationSec, overlayStart + durSec)
     const overlayDur = round2(overlayEnd - overlayStart)
-    if (overlayDur < 1.0) continue  // too short after clamp
+    if (overlayDur < 1.0) continue  // too short after clamp / no room left → drop
 
     const overlay: SegmentOverlay = {
       insertId: ins.insertId,
