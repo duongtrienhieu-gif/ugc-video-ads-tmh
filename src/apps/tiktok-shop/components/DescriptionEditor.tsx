@@ -389,7 +389,6 @@ function BlockBody({ block }: { block: DescriptionBlock }) {
   switch (block.kind) {
     case 'hook':
     case 'solution':
-    case 'offer':
     case 'cta':
       return <p className="text-xs leading-relaxed text-gray-700">{renderInlineBold(block.text)}</p>
 
@@ -516,7 +515,6 @@ function serializeBlock(block: DescriptionBlock): string {
   switch (block.kind) {
     case 'hook':
     case 'solution':
-    case 'offer':
     case 'cta':
       return block.text
     case 'pain':
@@ -539,7 +537,6 @@ function parseBlock(kind: DescriptionBlock['kind'], text: string): DescriptionBl
   switch (kind) {
     case 'hook':
     case 'solution':
-    case 'offer':
     case 'cta':
       if (!trimmed) throw new Error('empty')
       return { kind, text: trimmed }

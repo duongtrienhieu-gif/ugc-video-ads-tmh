@@ -101,7 +101,6 @@ export type DescriptionBlock =
   | { kind: 'specs';     rows: Array<[string, string]> }
   | { kind: 'reviews';   quotes: Array<{ text: string; author: string }> }
   | { kind: 'usage';     steps: string[] }
-  | { kind: 'offer';     text: string }
   | { kind: 'faq';       items: Array<{ q: string; a: string }> }
   | { kind: 'promise';   bullets: string[] }
   | { kind: 'cta';       text: string }
@@ -164,6 +163,24 @@ export interface TiktokShopProductBrief {
      *  medium close-up camera angle focused on the knee". */
     usageScene: string
   }
+
+  /** Universal slot 4 source — 3-5 key features/highlights of the product.
+   *  TYPE-ADAPTIVE: Vision picks what's appropriate.
+   *    - TPCN / supplement → list ingredients ("Grape Seed Extract", detail="25%")
+   *    - Accessory / brace → list materials/components ("3X spring", detail="Reinforced steel")
+   *    - Device → list features ("Waterproof IP68", detail="2m / 30min")
+   *    - Cosmetic → list active ingredients OR formula highlights
+   *  Each item is something you'd render with a MACRO PHOTO of the actual
+   *  material/component/ingredient. NEVER abstract benefit claims. */
+  keyFeatures: Array<{
+    /** Short label rendered in the chip (3-5 words max). Match label language to ${langName}. */
+    name: string
+    /** Optional small detail — % for ingredients, "3X" or material name for components. */
+    detail?: string
+    /** Optional photo direction for the macro shot of this feature. Helps
+     *  image-gen render the right material when the name alone is ambiguous. */
+    photoHint?: string
+  }>
 
   // ── Pain & promise (commercial copywriting anchor) ──
   /** 3 customer-voice pain feelings ranked by emotional intensity, max 12 words each. */

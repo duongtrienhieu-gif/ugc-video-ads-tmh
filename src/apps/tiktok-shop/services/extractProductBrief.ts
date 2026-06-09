@@ -100,7 +100,13 @@ CRITICAL DATA INTEGRITY RULES:
 5. corePains: customer self-questions ending '?', each max 12 words, customer-voice feelings.
 6. forbiddenClaims: list claims that would be legally risky for this niche (Halal/KKM/GMP/FDA without proof, "rawat/sembuh/cure/treat", unverified efficacy statements).
 7. nicheSafeClaims: 3-5 claims that are SAFE for this niche (soft "membantu/menyokong/hỗ trợ" framing, observable benefits).
-8. applicationDetails (CRITICAL for image gen — see below): infer the SPECIFIC body zone, physical interaction, and usage scene from product type. This is what tells the image generator WHERE on the body the product goes. Examples:
+8. keyFeatures (CRITICAL for slot 4 image — universal 3-5 product highlights): TYPE-ADAPTIVE: for TPCN / supplement list INGREDIENTS with %; for accessory / brace / massager list MATERIALS / COMPONENTS / TECHNOLOGIES; for device list FEATURES (waterproof rating, battery, sensor); for cosmetic list ACTIVE INGREDIENTS. Each item must be SOMETHING THAT EXISTS PHYSICALLY in / on the product and can be photographed as a real macro shot. NEVER abstract benefit claims like "natural", "premium quality", "effective". Examples:
+   - Knee support brace → [{"name":"Lò xo thép cứng cáp","detail":"3X trợ lực","photoHint":"close-up of metal coil spring"},{"name":"Vải lưới thoáng khí","detail":"100% nylon","photoHint":"macro of breathable mesh fabric"},{"name":"Khoá Velcro Hàn Quốc","detail":"giữ chặt","photoHint":"close-up of velcro hook-loop"},{"name":"Đệm silicone êm","detail":"360°","photoHint":"silicone gel pad"},{"name":"Khung định hình 2 bên","detail":"chống xô","photoHint":"plastic lateral stabilizer rod"}]
+   - Nasal spray → [{"name":"Muối biển sâu","detail":"0.9%","photoHint":"macro of sea salt crystals"},{"name":"Tinh dầu khuynh diệp","detail":"2%","photoHint":"eucalyptus leaf close-up"}, ...]
+   - Smartwatch → [{"name":"Chống nước IP68","detail":"2m / 30 phút","photoHint":"watch submerged"},{"name":"Cảm biến nhịp tim","detail":"24/7","photoHint":"heart-rate sensor LED close-up"}, ...]
+   Each name should be 2-5 words. detail is optional but adds credibility (% / measurement / origin). photoHint guides the image-gen toward the right macro shot.
+
+9. applicationDetails (CRITICAL for image gen — see below): infer the SPECIFIC body zone, physical interaction, and usage scene from product type. This is what tells the image generator WHERE on the body the product goes. Examples:
    - Knee support brace → bodyZone="knee joint", howApplied="wrap around bent knee, secure velcro straps", usageScene="Person sitting on a couch with knee bent at 90°, both hands wrapping the brace around the knee joint, medium close-up on the knee"
    - Nasal spray → bodyZone="nostrils (inside nasal cavity)", howApplied="spray 1-2 puffs into each nostril, head tilted slightly back, breathe in gently", usageScene="Person standing in front of bathroom mirror, head tilted back slightly, spray nozzle inserted into one nostril, gentle pressing motion"
    - Face cream → bodyZone="facial skin (cheeks + forehead + chin)", howApplied="dot a pea-sized amount on cheeks/forehead/chin, massage in circular motion", usageScene="Person looking into mirror, fingertip dabbing cream on cheek, upward circular massage motion"
@@ -154,8 +160,14 @@ function buildUserPrompt(product: Product, langName: string): string {
   lines.push(`    "bodyZone": "<SPECIFIC body part / surface the product touches — see system prompt examples. Always concrete (e.g., 'knee joint', 'nostrils', 'scalp', 'lips'), NOT vague ('body', 'skin')>",`)
   lines.push(`    "howApplied": "<concrete physical action — verb + amount + body zone + technique. In ${langName}.>",`)
   lines.push(`    "usageScene": "<ONE concrete photo-direction sentence: person + pose + action + camera angle. Used VERBATIM in image-gen prompt for slot 6. In ${langName}.>"`)
-  lines.push(`  }`)
+  lines.push(`  },`)
+  lines.push(`  "keyFeatures": [`)
+  lines.push(`    {"name": "<2-5 word physical feature/material/ingredient in ${langName}>", "detail": "<optional % or measurement>", "photoHint": "<short english macro-photo direction for image gen>"},`)
+  lines.push(`    {"name": "...", "detail": "...", "photoHint": "..."}`)
+  lines.push(`  ]`)
   lines.push(`}`)
+  lines.push(``)
+  lines.push(`IMPORTANT: keyFeatures must be PHYSICAL THINGS that exist on / in the product (materials, ingredients, components, technologies). NEVER abstract claims. Provide 3-5 items.`)
   return lines.join('\n')
 }
 
@@ -222,7 +234,22 @@ function normalizeBrief(
       howApplied:  typeof ad.howApplied === 'string'  && (ad.howApplied as string).trim().length > 0  ? (ad.howApplied as string).trim()  : fallback.applicationDetails.howApplied,
       usageScene:  typeof ad.usageScene === 'string'  && (ad.usageScene as string).trim().length > 0  ? (ad.usageScene as string).trim()  : fallback.applicationDetails.usageScene,
     },
+    keyFeatures: extractKeyFeatures(r.keyFeatures, fallback),
   }
+}
+
+function extractKeyFeatures(raw: unknown, fallback: TiktokShopProductBrief): TiktokShopProductBrief['keyFeatures'] {
+  if (!Array.isArray(raw)) return fallback.keyFeatures
+  const out = (raw as unknown[])
+    .map((x) => x as Record<string, unknown>)
+    .filter((x) => typeof x.name === 'string' && (x.name as string).trim().length > 0)
+    .map((x) => ({
+      name:      (x.name as string).trim(),
+      detail:    typeof x.detail === 'string' && (x.detail as string).trim().length > 0 ? (x.detail as string).trim() : undefined,
+      photoHint: typeof x.photoHint === 'string' && (x.photoHint as string).trim().length > 0 ? (x.photoHint as string).trim() : undefined,
+    }))
+    .slice(0, 5)
+  return out.length > 0 ? out : fallback.keyFeatures
 }
 
 /** Conservative fallback when Vision fails. Derives from raw product fields. */
@@ -268,5 +295,8 @@ function buildFallbackBrief(product: Product, language: Market): TiktokShopProdu
         ? 'Pengguna mengambil produk di rumah, demonstrasi cara guna yang ditunjukkan jelas, sudut kamera medium close-up'
         : 'Người dùng cầm sản phẩm tại nhà, thao tác sử dụng được thể hiện rõ ràng, góc máy medium close-up',
     },
+    keyFeatures: ings.length > 0
+      ? ings.slice(0, 5).map((name) => ({ name, photoHint: `macro photo of ${name}` }))
+      : usps.slice(0, 5).map((name) => ({ name, photoHint: `commercial product detail shot of ${name}` })),
   }
 }

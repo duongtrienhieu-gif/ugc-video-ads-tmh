@@ -160,12 +160,30 @@ function deriveSlot3(ctx: PromptContext): { beforeLabel: string; afterLabel: str
   }
 }
 
-function deriveSlot4(ctx: PromptContext): { title: string; ingredients: Array<{ name: string; pct?: string }>; tagline: string } {
-  const title = ctx.language === 'ms' ? 'BAHAN AKTIF' : 'THÀNH PHẦN CHÍNH'
-  const tagline = ctx.language === 'ms' ? 'Bahan berkualiti, selamat digunakan' : 'Thành phần chất lượng, an toàn'
-  // Layered priority: Vision-read > seller-typed > placeholder
-  // Brief can be present but visibleIngredients empty (label didn't show them clearly) —
-  // in that case the seller-typed product.ingredients is the source of truth.
+function deriveSlot4(ctx: PromptContext): { title: string; ingredients: Array<{ name: string; pct?: string; photoHint?: string }>; tagline: string } {
+  const isMS = ctx.language === 'ms'
+  // Title adapts to product type — supplements/cosmetics → "Thành phần"; everything else → "Cấu tạo / Vật liệu / Đặc điểm".
+  const subtype = (ctx.brief?.productSubtype || '').toLowerCase()
+  const isConsumable = /tablet|capsule|powder|sachet|drink|spray|cream|gel|serum|oil|liquid/i.test(subtype)
+  const title = isConsumable
+    ? (isMS ? 'BAHAN AKTIF' : 'THÀNH PHẦN CHÍNH')
+    : (isMS ? 'CIRI UTAMA' : 'CẤU TẠO NỔI BẬT')
+  const tagline = isConsumable
+    ? (isMS ? 'Bahan berkualiti, selamat digunakan' : 'Thành phần chất lượng, an toàn')
+    : (isMS ? 'Reka bentuk teliti, tahan lama' : 'Thiết kế tỉ mỉ, bền bỉ')
+
+  // Priority: brief.keyFeatures (universal, type-adapted) > visible ingredients > seller ingredients > seller usps > [].
+  if (ctx.brief && ctx.brief.keyFeatures.length > 0) {
+    return {
+      title,
+      ingredients: ctx.brief.keyFeatures.slice(0, 5).map((f) => ({
+        name: f.name,
+        pct: f.detail,
+        photoHint: f.photoHint,
+      })),
+      tagline,
+    }
+  }
   const visionIngs = ctx.brief?.visibleIngredients ?? []
   if (visionIngs.length > 0) {
     return { title, ingredients: visionIngs.slice(0, 5).map((name) => ({ name })), tagline }
@@ -174,7 +192,10 @@ function deriveSlot4(ctx: PromptContext): { title: string; ingredients: Array<{ 
   if (sellerIngs.length > 0) {
     return { title, ingredients: sellerIngs.map((name) => ({ name })), tagline }
   }
-  // Neither Vision nor seller has ingredients — return empty so prompt shows USP panel
+  const sellerUsps = (ctx.product.usps || '').split(/[\n,;.]/).map((s) => s.trim()).filter(Boolean).slice(0, 5)
+  if (sellerUsps.length > 0) {
+    return { title, ingredients: sellerUsps.map((name) => ({ name })), tagline }
+  }
   return { title, ingredients: [], tagline }
 }
 
@@ -420,22 +441,59 @@ export function buildPromptSlot4(ctx: PromptContext): string {
   const st = ctx.slotTexts?.slot4
   const derived = deriveSlot4(ctx)
   const title = st?.title ?? derived.title
-  // Use AI ingredients if non-empty; fall back to derived when AI returned [] (no ingredients in product data)
-  const ingredients = (st?.ingredients && st.ingredients.length > 0) ? st.ingredients : derived.ingredients
+  // Prefer AI's slotTexts but enrich with photoHint from derived (slotTexts schema doesn't carry photoHint).
+  const aiIngs = st?.ingredients ?? []
+  const ingredients = (aiIngs.length > 0
+    ? aiIngs.map((ai, i) => ({
+        name:      ai.name,
+        pct:       ai.pct,
+        photoHint: derived.ingredients[i]?.photoHint,
+      }))
+    : derived.ingredients
+  ).slice(0, 5)
   const tagline = st?.tagline ?? derived.tagline
+
+  // If there are no chips at all, render a clean USP version of slot 4 with a
+  // generic decorative panel instead of an empty chip stack (which causes
+  // earlier "Grape Seed Extract" hallucination from leftover example wording).
+  if (ingredients.length === 0) {
+    return `${header(ctx)}
+
+SLOT 4 — PRODUCT HIGHLIGHTS (clean panel — no specific feature breakdown available)
+COMPOSITION: Product centered on subtle podium (y≈420-880). Soft decorative elements (light particles, brand-color glow) around the product. NO chips, NO numbered badges, NO ingredient photos.
+TEXT in image:
+- Headline JUST BELOW BRAND SEAL (y≈250-360), giant bold (~120px) white: "${title}"
+- BOTTOM italic (~26px) tinted: "${tagline}"
+EXTRA RULES: Do NOT invent ingredient names, materials, or feature breakdowns. This slot is intentionally minimal because the product brief did not provide structured features.`
+  }
+
   const ingLine = ingredients
-    .map((i, n) => `  ${n + 1}. ${i.name}${i.pct ? ` ${i.pct}` : ''}`)
+    .map((i, n) => {
+      const detail = i.pct ? ` — ${i.pct}` : ''
+      const hint = i.photoHint ? `  ↳ MACRO PHOTO: ${i.photoHint}` : ''
+      return `  Chip ${n + 1}: "${i.name}${detail}"${hint ? '\n' + hint : ''}`
+    })
     .join('\n')
 
   return `${header(ctx)}
 
-SLOT 4 — INGREDIENTS / MECHANISM (ref style: BBOJI / EXOLABO ingredient panel with REAL photos)
-COMPOSITION: Product centered slightly LEFT on subtle podium (y≈420-880). Around the product: natural decorative elements relevant to the ingredients (leaves, herbs, fruit pieces) grounding the scene.
+SLOT 4 — KEY FEATURES PANEL (ingredient / material / component breakdown)
+COMPOSITION: Product centered slightly LEFT on subtle podium (y≈420-880). Around the product: decorative elements that visually echo the listed features (e.g., for fabric features → soft fabric folds in bg; for ingredients → leaves/herbs in bg; for tech components → subtle circuit-pattern glow). Pick decor that MATCHES the feature list, NOT a default herbal/leaf set.
 TEXT in image:
 - Headline JUST BELOW BRAND SEAL (y≈250-360), giant bold (~120px) white: "${title}"
-- RIGHT-SIDE STACK of pill-shaped chips (white rounded rect + soft shadow), each chip contains FOUR elements in order from left to right: (1) numbered accent badge 1-5, (2) ingredient name in bold dark navy ~30px, (3) percentage in accent color ~28px, (4) REAL MACRO PHOTOGRAPH of the actual ingredient material on the right side of the chip — e.g., real grape cluster + seeds for "Grape Seed Extract", real bamboo charcoal pieces for "Bamboo Charcoal", real mint leaves for "Mint Extract", real coconut shell for "Coconut Powder", real vitamin capsules for "Vitamin E". Commercial product catalog photography style. STRICTLY NOT abstract icons, NOT cartoon symbols, NOT generic geometric shapes.
-Chips list:
+- RIGHT-SIDE STACK of pill-shaped chips (white rounded rect + soft shadow), each chip has FOUR elements LEFT-TO-RIGHT:
+  (1) numbered accent badge 1-${ingredients.length}
+  (2) feature/ingredient/material name in bold dark navy ~30px
+  (3) detail (% / measurement / spec) in accent color ~28px
+  (4) REAL MACRO PHOTOGRAPH on the right side of the chip showing the actual feature/material/ingredient described by the "MACRO PHOTO" hint for that chip.
+Chips (RENDER EXACTLY THESE ${ingredients.length} CHIPS — NO MORE, NO LESS, NO EXAMPLES FROM OTHER PRODUCTS):
 ${ingLine}
+
+EXTRA RULES (critical — anti-contamination):
+- The macro photos on the chips MUST match the product type. If the chips are about fabric / springs / velcro (accessory product), the macro shots must show FABRIC / METAL SPRINGS / VELCRO — NEVER grape seeds, bamboo charcoal, mint leaves, coconut, or vitamin capsules.
+- If the chips are about ingredients (supplement / cream), show the actual ingredient material.
+- NEVER invent a 6th chip. NEVER substitute one chip with a different feature.
+- Commercial product catalog photography style. STRICTLY NOT abstract icons, NOT cartoon symbols, NOT generic geometric shapes.
 - BOTTOM italic (~26px) tinted: "${tagline}"`
 }
 

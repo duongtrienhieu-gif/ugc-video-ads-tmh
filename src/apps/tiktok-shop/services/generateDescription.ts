@@ -54,6 +54,9 @@ function buildCompactBriefBlock(brief: TiktokShopProductBrief): string {
   const ings = brief.visibleIngredients.length > 0 ? brief.visibleIngredients.join(', ') : '(none visible on label)'
   const safe = brief.nicheSafeClaims.slice(0, 5).join(', ')
   const forbidden = brief.forbiddenClaims.slice(0, 5).join(', ')
+  const keyFeats = brief.keyFeatures.length > 0
+    ? brief.keyFeatures.map((f) => `${f.name}${f.detail ? ` (${f.detail})` : ''}`).join(' | ')
+    : '(none extracted)'
   return `
 --- PRODUCT BRIEF (already analyzed; READ-ONLY ground truth) ---
 - Name: ${brief.productNameExact}
@@ -68,6 +71,7 @@ function buildCompactBriefBlock(brief: TiktokShopProductBrief): string {
 - Application — how used: ${brief.applicationDetails.howApplied}
 - Common objections: ${brief.commonObjections.join(' | ')}
 - Visible ingredients: ${ings}
+- Key features (UNIVERSAL — use for slot 4 + specs block): ${keyFeats}
 - Safe claims toolkit: ${safe}
 - Forbidden claims (avoid): ${forbidden}
 --- END BRIEF ---
@@ -120,12 +124,15 @@ function buildDescriptionPrompt(params: GenerateDescriptionParams): string {
     ? brandKit.voice.samplePhrases.join(' / ')
     : 'N/A'
   const langName = language === 'ms' ? 'Bahasa Malaysia' : 'Vietnamese'
-  // Ingredients source: brief (Vision-read from label) > product.ingredients (seller-typed) > none
+  // Slot 4 source priority: brief.keyFeatures (universal, Vision-typed) > brief.visibleIngredients > seller ingredients > [].
+  // keyFeatures is the universal fallback that works for any product type — Vision
+  // populates it with materials/components for accessories, ingredients for TPCN, etc.
+  const briefHasFeatures = (brief?.keyFeatures?.length ?? 0) > 0
   const visibleIngs = brief?.visibleIngredients ?? []
   const sellerIngs = (product.ingredients?.trim() ?? '').length > 0
-  const hasIngredients = visibleIngs.length > 0 || sellerIngs
-  const slot4IngShape = hasIngredients
-    ? `[{"name": "<ingredient name — from brief.visibleIngredients if any, else from seller-provided Ingredients field>", "pct": "<% if known, else omit pct>"}]`
+  const hasSlot4Source = briefHasFeatures || visibleIngs.length > 0 || sellerIngs
+  const slot4IngShape = hasSlot4Source
+    ? `[{"name": "<feature/material/ingredient name — PRIORITY: brief.keyFeatures[*].name first; else brief.visibleIngredients; else seller ingredients>", "pct": "<% / measurement / spec if known (from brief.keyFeatures[*].detail), else omit>"}]`
     : `[]`
   const reviewerNameHint = language === 'ms'
     ? 'MY-market names: Aisyah, Siti, Faridah, Hanim, Nurliyana + city KL / JB / Penang / Shah Alam'
@@ -135,12 +142,14 @@ function buildDescriptionPrompt(params: GenerateDescriptionParams): string {
   const qualifierExample = language === 'ms' ? 'Ada 2/5 tanda? Produk ni untuk anda' : 'Có 2/5 dấu hiệu? Đây là sản phẩm cho bạn'
   const beforeLabel = language === 'ms' ? 'SEBELUM' : 'TRƯỚC'
   const afterLabel = language === 'ms' ? 'SELEPAS' : 'SAU'
-  // Ingredient priority: Vision-read (most reliable for label visibility) > seller-typed (user's knowledge) > [] (don't invent)
-  const ingredientsGuard = visibleIngs.length > 0
-    ? `INGREDIENTS RULE: Use ONLY the items in brief.visibleIngredients (Vision-read from product label). These are ground truth. Do not add extras.`
-    : sellerIngs
-      ? `INGREDIENTS RULE: brief.visibleIngredients is empty (label didn't show them clearly) — fall back to the seller-provided Ingredients field in PRODUCT DATA below. Use ONLY those names. Do not add extras.`
-      : `INGREDIENTS RULE: No ingredient data from Vision or seller. slot4.ingredients MUST be [] in your output. Do NOT invent any ingredient names.`
+  // Slot 4 source priority: keyFeatures (Vision, universal) > visibleIngredients (TPCN) > seller > []
+  const ingredientsGuard = briefHasFeatures
+    ? `SLOT 4 RULE: Use ONLY items from brief.keyFeatures (Vision-extracted, type-appropriate — could be materials/components for accessories OR ingredients for supplements). Render names + details (% or measurement) EXACTLY as provided. DO NOT invent extras, DO NOT mix with ingredient names from other product categories. specs block also uses these.`
+    : visibleIngs.length > 0
+      ? `SLOT 4 RULE: brief.keyFeatures was empty but brief.visibleIngredients has data — use those for slot4.ingredients. These are real label readings. Do not add extras.`
+      : sellerIngs
+        ? `SLOT 4 RULE: brief has no Vision-extracted features/ingredients — fall back to seller-provided Ingredients field in PRODUCT DATA below. Use ONLY those names.`
+        : `SLOT 4 RULE: No feature/ingredient data from Vision or seller. slot4.ingredients MUST be [] in your output. Do NOT invent any names (NO generic "natural extracts", NO ingredients from other product categories like "Grape Seed Extract", "Bamboo Charcoal"). Slot 4 will render a clean USP panel without chips.`
 
   // ALWAYS include all product fields, even when brief exists. Brief is the
   // authoritative analysis layer; product fields are the raw seller-provided
@@ -164,7 +173,7 @@ BRAND:
 - Sample phrases: ${voiceSamples}
 - Store: ${brandKit.storeName}
 
-INGREDIENTS RULE: ${ingredientsGuard}
+${ingredientsGuard}
 REVIEWER NAMES: ${reviewerNameHint}
 
 JSON SHAPE (return EXACTLY this structure — single JSON object, all string values in ${langName}):
@@ -174,10 +183,9 @@ JSON SHAPE (return EXACTLY this structure — single JSON object, all string val
     {"kind": "pain", "bullets": ["<${brief ? 'use brief.corePains' : 'customer self-question'}, max 10 words>", "<related pain question>", "<related pain question>"]},
     {"kind": "solution", "text": "<introduce product as answer to pain; **bold** product name + ${brief ? 'brief.keyDifferentiator' : 'main mechanism'}; max 160 chars>"},
     {"kind": "benefits", "bullets": ["<concrete outcome tied to ${brief ? 'brief.transformationPromise' : 'promise'} — number or timeframe, max 15 words>", "<benefit>", "<benefit>", "<benefit>", "<benefit>"]},
-    {"kind": "specs", "rows": [["<ingredient/spec from ${brief ? 'brief.visibleIngredients' : 'PRODUCT DATA'} only>", "<brief function>"]]},
+    {"kind": "specs", "rows": [["<feature/ingredient/material from ${brief ? 'brief.keyFeatures or brief.visibleIngredients' : 'PRODUCT DATA'} only>", "<brief function — what does this feature/ingredient do for the customer>"]]},
     {"kind": "reviews", "quotes": [{"text": "<before→after story with time marker, max 100 chars>", "author": "<Name, City>"}, {"text": "<second review with time marker>", "author": "<Name, City>"}]},
     {"kind": "usage", "steps": ["<SPECIFIC verb + object + amount/duration, max 12 words>", "<step>", "<step>"]},
-    {"kind": "offer", "text": "<offer; **bold** price or discount; max 100 chars>"},
     {"kind": "faq", "items": [{"q": "<${brief ? 'from brief.commonObjections' : 'safety/ingredients question'}>", "a": "<answer>"}, {"q": "<results timing>", "a": "<specific timeframe>"}, {"q": "<return or refund>", "a": "<answer>"}]},
     {"kind": "promise", "bullets": ["<service promise — shipping/return/packaging ONLY, max 10 words>", "<promise>", "<promise>"]},
     {"kind": "cta", "text": "<**bold** action verb; mild urgency; max 80 chars>"}
@@ -398,7 +406,6 @@ function validateBlock(raw: unknown): DescriptionBlock | null {
   switch (b.kind) {
     case 'hook':
     case 'solution':
-    case 'offer':
     case 'cta':
       if (typeof b.text === 'string' && b.text.trim()) return { kind: b.kind, text: b.text.trim() }
       return null
@@ -450,7 +457,7 @@ function validateBlock(raw: unknown): DescriptionBlock | null {
 
 const BLOCK_ICON: Record<DescriptionBlock['kind'], string> = {
   hook: '🎯', pain: '😣', solution: '✨', benefits: '🔥', specs: '📦',
-  reviews: '👥', usage: '🎬', offer: '🎁', faq: '❓', promise: '🛡️', cta: '📲',
+  reviews: '👥', usage: '🎬', faq: '❓', promise: '🛡️', cta: '📲',
 }
 
 // Phase 10.3 — language-aware block headings. Previously hardcoded BM which
@@ -460,13 +467,13 @@ const BLOCK_ICON: Record<DescriptionBlock['kind'], string> = {
 const BLOCK_HEADING_MS: Record<DescriptionBlock['kind'], string> = {
   hook: '', pain: 'ANDA SEDANG', solution: '', benefits: 'KENAPA PILIH KAMI',
   specs: 'BAHAN AKTIF', reviews: 'KATA PENGGUNA', usage: 'CARA GUNA',
-  offer: '', faq: 'SOALAN LAZIM', promise: 'JANJI KAMI', cta: '',
+  faq: 'SOALAN LAZIM', promise: 'JANJI KAMI', cta: '',
 }
 
 const BLOCK_HEADING_VI: Record<DescriptionBlock['kind'], string> = {
   hook: '', pain: 'BẠN ĐANG GẶP', solution: '', benefits: 'VÌ SAO CHỌN CHÚNG TÔI',
   specs: 'THÀNH PHẦN CHÍNH', reviews: 'KHÁCH HÀNG NÓI', usage: 'CÁCH DÙNG',
-  offer: '', faq: 'CÂU HỎI THƯỜNG GẶP', promise: 'CAM KẾT CỦA CHÚNG TÔI', cta: '',
+  faq: 'CÂU HỎI THƯỜNG GẶP', promise: 'CAM KẾT CỦA CHÚNG TÔI', cta: '',
 }
 
 function getBlockHeading(kind: DescriptionBlock['kind'], market?: Market): string {
@@ -482,7 +489,6 @@ export function assembleFullText(blocks: DescriptionBlock[], market?: Market): s
     switch (b.kind) {
       case 'hook':
       case 'solution':
-      case 'offer':
       case 'cta':
         parts.push(`${icon} ${b.text}`)
         break

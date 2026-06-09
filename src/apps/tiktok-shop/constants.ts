@@ -195,7 +195,6 @@ export const MOCK_DESCRIPTION_BLOCKS: DescriptionBlock[] = [
   { kind: 'specs',    rows: [['(Thành phần)', '(%)']] },
   { kind: 'reviews',  quotes: [{ text: '(Quote khách hàng)', author: '(Tên, địa chỉ)' }] },
   { kind: 'usage',    steps: ['(Bước 1)', '(Bước 2)', '(Bước 3)'] },
-  { kind: 'offer',    text: '(Ưu đãi giá + combo)' },
   { kind: 'faq',      items: [
     { q: '(Câu hỏi 1)', a: '(Trả lời 1)' },
     { q: '(Câu hỏi 2)', a: '(Trả lời 2)' },
@@ -221,7 +220,6 @@ export const DESCRIPTION_BLOCK_LABELS: Record<DescriptionBlock['kind'], { icon: 
   specs:    { icon: '📦', label: 'Thông số' },
   reviews:  { icon: '👥', label: 'Đánh giá' },
   usage:    { icon: '🎬', label: 'Cách dùng' },
-  offer:    { icon: '🎁', label: 'Ưu đãi' },
   faq:      { icon: '❓', label: 'FAQ' },
   promise:  { icon: '🛡️', label: 'Cam kết' },
   cta:      { icon: '📲', label: 'CTA' },
