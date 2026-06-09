@@ -124,7 +124,6 @@ function buildDescriptionPrompt(params: GenerateDescriptionParams): string {
   const reviewerNameHint = language === 'ms'
     ? 'MY-market names: Aisyah, Siti, Faridah, Hanim, Nurliyana + city KL / JB / Penang / Shah Alam'
     : 'VN-market names: Linh, Mai, Thu, Hương, Ngọc + thành phố Việt Nam'
-  const ctaDefault = language === 'ms' ? 'BELI SEKARANG' : 'MUA NGAY'
   const checklistTitle = language === 'ms' ? 'SIAPA PERLU GUNA?' : 'AI NÊN DÙNG?'
   const brandStoryTitle = language === 'ms' ? 'KENAPA PILIH KAMI' : 'VÌ SAO CHỌN CHÚNG TÔI'
   const qualifierExample = language === 'ms' ? 'Ada 2/5 tanda? Produk ni untuk anda' : 'Có 2/5 dấu hiệu? Đây là sản phẩm cho bạn'
