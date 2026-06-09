@@ -240,20 +240,32 @@ export const ACTION_PRESETS: Record<ActionPresetId, ActionPresetConfig> = {
   BEFORE_AFTER_REACTION: {
     id: 'BEFORE_AFTER_REACTION',
     labelVi: 'Phản ứng before/after',
-    descriptionVi: 'Khuôn mặt thay đổi từ mệt mỏi sang tươi tỉnh',
+    descriptionVi: 'Khuôn mặt thay đổi từ mệt mỏi/đau sang thoải mái/cười',
     emoji: '🎭',
     motionPreset: 'zoom_in',
     framingPreset: 'closeup',
+    // Z71 — force STRONG emotional contrast. Old prompt gave Gemini wiggle
+    // room to render two near-identical neutral faces (the knee test produced
+    // exactly that: 2 mirrored same-faces, no actual change). Now: the BEFORE
+    // half must show clearly negative state (grimace, holding the affected
+    // body part, slumped posture, dim/cool light); the AFTER half must show
+    // clearly positive state (relaxed smile, upright, warm/bright light).
+    // Same person, same outfit — only the affect + light + posture differ.
     promptPreset:
-      'Person face starts with tired weary expression, then transitions to relieved energetic ' +
-      'expression, subtle camera push toward face, natural lighting throughout, ' +
-      'identical face as input image — same person, two emotional states.',
+      'A split-screen of THE SAME PERSON in TWO clearly contrasting emotional states. ' +
+      'LEFT half (BEFORE): visibly uncomfortable — grimacing or wincing, brows drawn, ' +
+      'shoulders slumped, dim cool light, perhaps a hand touching the affected area ' +
+      '(forehead, lower back, stomach, knee — wherever the script\'s pain is). ' +
+      'RIGHT half (AFTER): visibly relieved and content — soft genuine smile, ' +
+      'relaxed posture, upright, warm bright light, hands free and easy. ' +
+      'Identical face / hair / clothing on both sides — only the emotion, posture, ' +
+      'and light change. The two halves must look UNMISTAKABLY different at a glance.',
     durationPreset: 3.5,
     cameraPreset: 'subtle_drift',
     needsProduct: false,
     tone: 'rose',
-    handBehavior: 'Hands largely out of frame — face is the subject.',
-    objectInteraction: 'No product in frame — pure facial reaction shot.',
+    handBehavior: 'BEFORE half: hand may touch the affected body part (forehead, back, knee). AFTER half: hands relaxed, out of frame or open.',
+    objectInteraction: 'No product in frame — pure facial + posture contrast.',
     triggerKeywords: [
       'before', 'after', 'changed', 'difference', 'now i feel', 'trước', 'sau', 'khác', 'khoẻ hơn', 'tỉnh hơn',
       'sebelum', 'selepas', 'berubah', 'beza',

@@ -248,16 +248,17 @@ export async function renderCreatorVideo(
     throw new Error('Không lấy được URL công khai cho keyframe hoặc audio (asset store fail)')
   }
 
-  // Z66 — InfiniteTalk (480p) instead of Kling AI Avatar Standard. The Standard
-  // tier looked fake/stiff; InfiniteTalk has stronger lip-sync accuracy AND
-  // more natural facial expression (eyebrow raises, smiles, head tilts,
-  // micro-expressions matched to tone) — and 480p is the CHEAPEST option
-  // (~3 cr/s vs Standard ~9, Pro ~21). Same input shape (image_url, audio_url,
-  // prompt) + a resolution field that generateLipSync only sends for this model.
+  // Z71 — Lipsync model swapped InfiniteTalk 480p → Kling AI Avatar Pro.
+  // Why: InfiniteTalk on KIE has a HARD 15-second audio cap ("The uploaded
+  // audio file cannot exceed 15 seconds"), which fails 100% of real UGC ads
+  // (script lands at 30-60s+). Kling Avatar Pro supports up to 5 MINUTES of
+  // continuous audio, with stronger realism + expressive motion than the old
+  // Kling Standard tier. Same input shape (image_url, audio_url, prompt) so
+  // the swap is one-line. 1080p output. ~21 cr/s — verify against KIE
+  // deduction and tune KIE_LIPSYNC_CREDITS_PER_SEC if it differs.
   const fullLipsync = await generateLipSync({
     apiKey: params.kieApiKey,
-    modelId: 'infinitalk/from-audio',
-    resolution: '480p',
+    modelId: 'kling/ai-avatar-pro',
     imageUrl: keyframePublicUrl,
     audioUrl: audioPublicUrl,
     prompt: buildLipsyncPrompt({ config: params.config }),
