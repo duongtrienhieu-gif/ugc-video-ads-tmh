@@ -184,15 +184,14 @@ export const V3_CREDIT_COST = {
   insert: 76,
 } as const
 
-// Z38/Z66/Z71 — KIE-credit estimate for the creator-video lipsync, billed PER
+// Z38/Z72 — KIE-credit estimate for the creator-video lipsync, billed PER
 // SECOND of output. Model history:
-//   Standard (~9 cr/s, looked fake) → InfiniteTalk 480p (~3 cr/s, BUT 15-sec
-//   audio cap → fails real UGC scripts) → Kling AI Avatar Pro (~21 cr/s, up
-//   to 5-minute audio, stronger realism + expressive motion).
-// Pro is more expensive, but it's the only Kling tier that handles the
-// 30-60s+ audio a real UGC ad needs. ESTIMATE — verify against the real KIE
-// credit deduction on the first render and tune if it differs.
-export const KIE_LIPSYNC_CREDITS_PER_SEC = 21
+//   Standard (~10 cr/s) → InfiniteTalk 480p (~3 cr/s, BUT 15-sec audio cap →
+//   fails real UGC scripts) → Pro (~21 cr/s, 1080p, but ~$4/40s too pricey)
+//   → BACK to Standard (~10 cr/s, 720p, 5-min audio).
+// Standard handles the 30-60s+ audio a real UGC ad needs at ~half the Pro
+// cost. ESTIMATE — verify against the real KIE deduction on the first render.
+export const KIE_LIPSYNC_CREDITS_PER_SEC = 10
 
 export function estimateLipsyncCredits(durationSec: number): number {
   const sec = Number.isFinite(durationSec) && durationSec > 0 ? durationSec : 30
