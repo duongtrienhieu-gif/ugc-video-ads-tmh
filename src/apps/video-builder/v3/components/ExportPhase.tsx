@@ -22,13 +22,16 @@ import { useSettingsStore } from '../../../../stores/settingsStore'
 import { useAssetUrl } from '../../../../hooks/useAssetUrl'
 import { useAdsVideoStore } from '../stores/adsVideoStore'
 import type {
-  ExportFormatId, ExportQualityId, ThumbnailStyleId, SavedProject,
-  CtaVariantStyle, HookStyle,
+  ExportFormatId, ExportQualityId, SavedProject,
+  CtaVariantStyle, HookStyle, AiThumbnail,
 } from '../types'
-import { HOOK_STYLE_LABEL_VI } from '../types'
+import { HOOK_STYLE_LABEL_VI, SCRIPT_LANG_GEMINI_NAME } from '../types'
 import { EXPORT_FORMATS } from '../services/exportFormats'
 import { EXPORT_QUALITIES } from '../services/exportQuality'
-import { THUMBNAIL_STYLES, THUMBNAIL_STYLE_ORDER } from '../services/thumbnailEngine'
+import {
+  THUMBNAIL_ARCHETYPES, THUMBNAIL_ARCHETYPE_ORDER,
+  generateThumbnailHooks, generateAiThumbnail,
+} from '../services/thumbnailEngine'
 import { generateCtaVariations } from '../services/ctaVariationEngine'
 import {
   buildExportPackage, downloadSrt, downloadPlainTextScript, downloadAssetAs,
@@ -58,7 +61,11 @@ export default function ExportPhase() {
   const pickCtaVariation  = useAdsVideoStore((s) => s.pickCtaVariation)
   const pickHookForExport = useAdsVideoStore((s) => s.pickHookForExport)
   const setExportPackage  = useAdsVideoStore((s) => s.setExportPackage)
-  const setThumbnailStyle = useAdsVideoStore((s) => s.setThumbnailStyle)
+  // Z89 — AI thumbnail actions
+  const setAiThumbnails   = useAdsVideoStore((s) => s.setAiThumbnails)
+  const patchAiThumbnail  = useAdsVideoStore((s) => s.patchAiThumbnail)
+  const pickThumbnail     = useAdsVideoStore((s) => s.pickThumbnail)
+  const setIsGeneratingThumbnails = useAdsVideoStore((s) => s.setIsGeneratingThumbnails)
   const setIsGeneratingCtaVars = useAdsVideoStore((s) => s.setIsGeneratingCtaVars)
   const setIsBuildingPackage = useAdsVideoStore((s) => s.setIsBuildingPackage)
   const setExportError    = useAdsVideoStore((s) => s.setExportError)
@@ -71,6 +78,7 @@ export default function ExportPhase() {
   const setFailedClipIds     = useAdsVideoStore((s) => s.setFailedClipIds)
 
   const geminiKey = useSettingsStore((s) => s.geminiApiKey)
+  const kieApiKey = useSettingsStore((s) => s.kieApiKey)
   const addToast = useAppStore((s) => s.addToast)
 
   const ev = state.exportVariation
@@ -138,6 +146,47 @@ export default function ExportPhase() {
     }
   }
 
+  // Z89 — generate 4 AI thumbnail archetypes (Director writes 4 curiosity hooks,
+  // GPT-4o renders each archetype with avatar + product). Each card updates as
+  // it finishes; failures are marked per-card and don't block the others.
+  const handleGenerateThumbnails = async () => {
+    if (!kieApiKey) { addToast('Thiếu KIE API key trong Settings', 'error'); return }
+    if (!state.scriptBrain.script) { addToast('Chưa có script (bước 2)', 'error'); return }
+    setIsGeneratingThumbnails(true)
+    setExportError(null)
+    try {
+      const lang = state.scriptBrain.outputLang
+      const langName = SCRIPT_LANG_GEMINI_NAME[lang]
+      const hooks = await generateThumbnailHooks({
+        geminiKey, script: state.scriptBrain.script, product: state.inputs.product, lang,
+      })
+      const seeds: AiThumbnail[] = THUMBNAIL_ARCHETYPE_ORDER.map((id, i) => ({
+        archetypeId: id, hook: hooks[i] ?? '', imageRef: null,
+        status: 'rendering', generatedAt: Date.now(),
+      }))
+      setAiThumbnails(seeds)
+      await Promise.all(THUMBNAIL_ARCHETYPE_ORDER.map(async (id, i) => {
+        try {
+          const imageRef = await generateAiThumbnail({
+            kieApiKey, archetypeId: id, hook: hooks[i] ?? '', langName,
+            avatar: state.inputs.avatar, product: state.inputs.product,
+          })
+          patchAiThumbnail(i, { imageRef, status: 'completed' })
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err)
+          patchAiThumbnail(i, { status: 'failed', error: msg.slice(0, 160) })
+        }
+      }))
+      addToast('✓ Đã tạo thumbnail — chọn 1 cái', 'success')
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      setExportError(msg.slice(0, 240))
+      addToast(`Tạo thumbnail lỗi: ${msg}`, 'error')
+    } finally {
+      setIsGeneratingThumbnails(false)
+    }
+  }
+
   const handleBuildPackage = async () => {
     if (!canBuildPackage || !plan || !state.scriptBrain.script) return
     setIsBuildingPackage(true)
@@ -154,6 +203,7 @@ export default function ExportPhase() {
         pickedCtaIdx: ev.pickedCtaIdx,
         thumbnailSourceRef: state.creatorVideo?.keyframeRef ?? null,
         thumbnailStyleId: ev.thumbnailStyleId,
+        pickedThumbnailRef: ev.pickedThumbnailRef,  // Z89 — AI thumbnail if picked
         creatorVideoRef: state.creatorVideo?.videoRef ?? null,
       })
       setExportPackage(pkg)
@@ -368,29 +418,38 @@ export default function ExportPhase() {
           )}
         </div>
 
-        {/* ── Thumbnail style ────────────────────────────────────────────── */}
+        {/* ── Z89 — AI thumbnail (4 archetypes) ──────────────────────────── */}
         <div className="mb-4 rounded-xl border border-black/10 bg-white p-3">
-          <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-gray-500">
-            <ImageIcon className="mr-1 inline h-3.5 w-3.5" /> Thumbnail style
-          </p>
-          <div className="grid grid-cols-3 gap-1.5">
-            {THUMBNAIL_STYLE_ORDER.map((t) => {
-              const cfg = THUMBNAIL_STYLES[t]
-              const isActive = ev.thumbnailStyleId === t
-              return (
-                <button
-                  key={t}
-                  onClick={() => setThumbnailStyle(t as ThumbnailStyleId)}
-                  className={`flex flex-col items-start gap-0.5 rounded-lg border p-2 text-left transition-all ${
-                    isActive ? 'border-violet-400 bg-violet-50' : 'border-gray-200 bg-white text-gray-500 hover:bg-gray-50'
-                  }`}
-                  title={cfg.descriptionVi}
-                >
-                  <span className="text-[11px] font-bold">{cfg.emoji} {cfg.labelVi}</span>
-                </button>
-              )
-            })}
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <p className="text-[10px] font-bold uppercase tracking-widest text-gray-500">
+              <ImageIcon className="mr-1 inline h-3.5 w-3.5" /> Thumbnail (AI · 4 kiểu)
+            </p>
+            <button
+              onClick={handleGenerateThumbnails}
+              disabled={ev.isGeneratingThumbnails}
+              className="flex items-center gap-1 rounded-lg bg-gradient-to-r from-violet-600 to-pink-600 px-3 py-1.5 text-[11px] font-bold text-white shadow-sm transition-all hover:from-violet-700 hover:to-pink-700 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {ev.isGeneratingThumbnails
+                ? <><Loader2 className="h-3 w-3 animate-spin" /> Đang tạo 4 thumbnail...</>
+                : <><Sparkles className="h-3 w-3" /> {ev.aiThumbnails.length ? 'Tạo lại 4 thumbnail' : 'Tạo 4 thumbnail'} (~24cr)</>}
+            </button>
           </div>
+          {ev.aiThumbnails.length === 0 ? (
+            <p className="text-[11px] text-gray-400">
+              AI viết 4 hook tò mò + dựng 4 kiểu thumbnail (mặt phản ứng / before-after / sản phẩm + ưu đãi / câu hỏi) kèm avatar + sản phẩm. Chọn 1 cái cho ad.
+            </p>
+          ) : (
+            <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
+              {ev.aiThumbnails.map((t, i) => (
+                <AiThumbCard
+                  key={i}
+                  thumb={t}
+                  picked={!!t.imageRef && ev.pickedThumbnailRef === t.imageRef}
+                  onPick={() => t.imageRef && pickThumbnail(t.imageRef)}
+                />
+              ))}
+            </div>
+          )}
         </div>
 
         {/* ── Build button + error ──────────────────────────────────────── */}
@@ -771,6 +830,44 @@ function RealMp4AssemblyPanel({
           </div>
         </div>
       )}
+    </div>
+  )
+}
+
+// ── Z89 — AI thumbnail card (one archetype). Uses useAssetUrl for its image. ──
+function AiThumbCard({ thumb, picked, onPick }: {
+  thumb: AiThumbnail
+  picked: boolean
+  onPick: () => void
+}) {
+  const cfg = THUMBNAIL_ARCHETYPES[thumb.archetypeId]
+  const url = useAssetUrl(thumb.imageRef ?? undefined)
+  return (
+    <div className={`overflow-hidden rounded-lg border transition-all ${picked ? 'border-violet-500 ring-2 ring-violet-300' : 'border-gray-200'}`}>
+      <button
+        onClick={onPick}
+        disabled={thumb.status !== 'completed'}
+        className="block aspect-[9/16] w-full bg-gray-100"
+      >
+        {thumb.status === 'rendering' && (
+          <span className="flex h-full items-center justify-center text-[10px] text-gray-400">
+            <Loader2 className="mr-1 h-3 w-3 animate-spin" /> Đang tạo...
+          </span>
+        )}
+        {thumb.status === 'failed' && (
+          <span className="flex h-full items-center justify-center px-1 text-center text-[9px] text-rose-500">
+            Lỗi: {thumb.error?.slice(0, 40)}
+          </span>
+        )}
+        {thumb.status === 'completed' && url && (
+          <img src={url} alt={cfg.labelVi} className="h-full w-full object-cover" />
+        )}
+      </button>
+      <div className="p-1.5">
+        <p className="text-[10px] font-bold text-gray-800">{cfg.emoji} {cfg.labelVi}{picked && ' ✓'}</p>
+        <p className="mt-0.5 line-clamp-3 text-[8px] leading-tight text-gray-500">{cfg.popupVi}</p>
+        {thumb.hook && <p className="mt-0.5 truncate text-[9px] font-semibold text-violet-700">"{thumb.hook}"</p>}
+      </div>
     </div>
   )
 }

@@ -39,6 +39,8 @@ export interface BuildExportPackageParams {
   /** Source ref for the thumbnail — creator video keyframe is ideal */
   thumbnailSourceRef: string | null
   thumbnailStyleId: ThumbnailStyleId
+  /** Z89 — if the user picked an AI thumbnail, use it directly (skip canvas). */
+  pickedThumbnailRef?: string | null
   /** Optional override for the existing creator-video MP4 (used as a
    *  fallback videoRef until Phase 7 ffmpeg.wasm encodes the full plan). */
   creatorVideoRef?: string | null
@@ -72,7 +74,16 @@ export async function buildExportPackage(
 
   // ── 4. Thumbnail ─────────────────────────────────────────────────────
   let thumbnail = null
-  if (params.thumbnailSourceRef) {
+  if (params.pickedThumbnailRef) {
+    // Z89 — user picked an AI-generated thumbnail; use it directly.
+    thumbnail = {
+      styleId: params.thumbnailStyleId,
+      sourceRef: params.pickedThumbnailRef,
+      headlineText: (hookText || '').slice(0, 60),
+      imageRef: params.pickedThumbnailRef,
+      generatedAt: Date.now(),
+    }
+  } else if (params.thumbnailSourceRef) {
     try {
       // Use the picked hook text as the thumbnail headline — strongest
       // attention-grabber for ad context.
