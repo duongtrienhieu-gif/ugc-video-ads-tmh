@@ -479,13 +479,26 @@ export const useTikTokShopStore = create<TikTokShopState>()(
         const brief = state.draft?.productBrief as Record<string, unknown> | null | undefined
         if (brief && typeof brief === 'object') {
           let needsRefresh = false
-          if (!brief.applicationDetails || typeof brief.applicationDetails !== 'object') {
+          const ad = brief.applicationDetails as Record<string, unknown> | undefined
+          if (!ad || typeof ad !== 'object') {
             brief.applicationDetails = {
               bodyZone: '(chưa xác định)',
               howApplied: '(theo hướng dẫn nhãn)',
               usageScene: 'Người dùng cầm sản phẩm tại nhà, thao tác sử dụng được thể hiện rõ ràng, góc máy medium close-up',
+              orientationDetail: 'mặt sản phẩm theo hướng dẫn trên nhãn',
+              painManifest: 'biểu hiện khó chịu rõ ràng ở vùng cần chăm sóc',
             }
             needsRefresh = true
+          } else {
+            // Add fields added in later schema bumps without nuking existing data.
+            if (typeof ad.orientationDetail !== 'string') {
+              ad.orientationDetail = 'mặt sản phẩm theo hướng dẫn trên nhãn'
+              needsRefresh = true
+            }
+            if (typeof ad.painManifest !== 'string') {
+              ad.painManifest = 'biểu hiện khó chịu rõ ràng ở vùng cần chăm sóc'
+              needsRefresh = true
+            }
           }
           if (!Array.isArray(brief.keyFeatures)) {
             brief.keyFeatures = []

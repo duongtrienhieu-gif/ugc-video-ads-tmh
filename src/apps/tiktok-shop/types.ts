@@ -162,6 +162,18 @@ export interface TiktokShopProductBrief {
      *  wrapping the brace around the knee joint, securing the velcro strap,
      *  medium close-up camera angle focused on the knee". */
     usageScene: string
+    /** Which face/side of the product touches which side of the body —
+     *  prevents AI from rendering the product backwards / inside-out.
+     *  E.g., "metal springs + frame on the BACK of knee (popliteal area),
+     *  padded fabric on the front (kneecap)" / "nozzle inserted into nostril,
+     *  bottle upright" / "gel side on skin, plastic side facing out".
+     *  Used in slot 3 (after), slot 6 (usage), slot 4 (product hero). */
+    orientationDetail: string
+    /** Visible "BEFORE" cues for the customer's pain — used in slot 2 only.
+     *  Concrete observable signs the camera can capture.
+     *  E.g., "swollen red knee + slight limp" / "rough cheek skin with visible
+     *  pores + dark spots" / "red irritated nose + tissue in hand". */
+    painManifest: string
   }
 
   /** Universal slot 4 source — 3-5 key features/highlights of the product.

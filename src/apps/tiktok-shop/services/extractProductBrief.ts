@@ -114,6 +114,8 @@ CRITICAL DATA INTEGRITY RULES:
    - Oral supplement / tablet → bodyZone="(oral — swallowed, no body application)", howApplied="take 1-2 tablets with a glass of water after meal", usageScene="Person holding a tablet between fingers, a glass of water in the other hand, about to take it after a meal"
    - Toothpaste → bodyZone="teeth + gums", howApplied="brush teeth twice daily with a pea-sized amount", usageScene="Person standing in front of bathroom mirror, brushing teeth with a clean white toothbrush, foam visible"
    The usageScene line will be embedded VERBATIM into the image-gen prompt for slot 6 — make it concrete, single sentence, photo-direction quality.
+   ALSO infer applicationDetails.orientationDetail (which side/face touches which body side, prevents backwards rendering — e.g. "metal springs on BACK of knee, padded fabric on FRONT" / "nozzle into nostril, bottle upright" / "gel side on skin, plastic facing out" / "adhesive side to skin").
+   ALSO infer applicationDetails.painManifest (visible BEFORE cues for slot 2 — concrete observable signs only — e.g. "swollen red knee + slight limp" / "rough cheek skin with visible pores + dark spots" / "red irritated nose + tissue in hand" / "yellowed teeth + dark gum line" / "thinning hair on crown showing scalp"). In ${langName}.
 
 IF a field cannot be determined from photos + metadata, write the most reasonable inference based on category — but flag uncertainty by using softer language. NEVER fabricate specific ingredient names, certifications, lab numbers, or clinical claims.`
 }
@@ -159,7 +161,9 @@ function buildUserPrompt(product: Product, langName: string): string {
   lines.push(`  "applicationDetails": {`)
   lines.push(`    "bodyZone": "<SPECIFIC body part / surface the product touches — see system prompt examples. Always concrete (e.g., 'knee joint', 'nostrils', 'scalp', 'lips'), NOT vague ('body', 'skin')>",`)
   lines.push(`    "howApplied": "<concrete physical action — verb + amount + body zone + technique. In ${langName}.>",`)
-  lines.push(`    "usageScene": "<ONE concrete photo-direction sentence: person + pose + action + camera angle. Used VERBATIM in image-gen prompt for slot 6. In ${langName}.>"`)
+  lines.push(`    "usageScene": "<ONE concrete photo-direction sentence: person + pose + action + camera angle. Used VERBATIM in image-gen prompt for slot 6. In ${langName}.>",`)
+  lines.push(`    "orientationDetail": "<which side/face of product touches which side of body. Prevents backwards rendering. In ${langName}.>",`)
+  lines.push(`    "painManifest": "<visible BEFORE cues — concrete observable signs only, no abstract feelings. In ${langName}.>"`)
   lines.push(`  },`)
   lines.push(`  "keyFeatures": [`)
   lines.push(`    {"name": "<2-5 word physical feature/material/ingredient in ${langName}>", "detail": "<optional % or measurement>", "photoHint": "<short english macro-photo direction for image gen>"},`)
@@ -230,9 +234,11 @@ function normalizeBrief(
     nicheSafeClaims:       strArr(r.nicheSafeClaims).length >= 1       ? strArr(r.nicheSafeClaims).slice(0, 8)  : fallback.nicheSafeClaims,
     forbiddenClaims:       strArr(r.forbiddenClaims).length >= 1       ? strArr(r.forbiddenClaims).slice(0, 8)  : fallback.forbiddenClaims,
     applicationDetails: {
-      bodyZone:    typeof ad.bodyZone === 'string'    && (ad.bodyZone as string).trim().length > 0    ? (ad.bodyZone as string).trim()    : fallback.applicationDetails.bodyZone,
-      howApplied:  typeof ad.howApplied === 'string'  && (ad.howApplied as string).trim().length > 0  ? (ad.howApplied as string).trim()  : fallback.applicationDetails.howApplied,
-      usageScene:  typeof ad.usageScene === 'string'  && (ad.usageScene as string).trim().length > 0  ? (ad.usageScene as string).trim()  : fallback.applicationDetails.usageScene,
+      bodyZone:          typeof ad.bodyZone === 'string'          && (ad.bodyZone as string).trim().length > 0          ? (ad.bodyZone as string).trim()          : fallback.applicationDetails.bodyZone,
+      howApplied:        typeof ad.howApplied === 'string'        && (ad.howApplied as string).trim().length > 0        ? (ad.howApplied as string).trim()        : fallback.applicationDetails.howApplied,
+      usageScene:        typeof ad.usageScene === 'string'        && (ad.usageScene as string).trim().length > 0        ? (ad.usageScene as string).trim()        : fallback.applicationDetails.usageScene,
+      orientationDetail: typeof ad.orientationDetail === 'string' && (ad.orientationDetail as string).trim().length > 0 ? (ad.orientationDetail as string).trim() : fallback.applicationDetails.orientationDetail,
+      painManifest:      typeof ad.painManifest === 'string'      && (ad.painManifest as string).trim().length > 0      ? (ad.painManifest as string).trim()      : fallback.applicationDetails.painManifest,
     },
     keyFeatures: extractKeyFeatures(r.keyFeatures, fallback),
   }
@@ -294,6 +300,12 @@ function buildFallbackBrief(product: Product, language: Market): TiktokShopProdu
       usageScene: isMS
         ? 'Pengguna mengambil produk di rumah, demonstrasi cara guna yang ditunjukkan jelas, sudut kamera medium close-up'
         : 'Người dùng cầm sản phẩm tại nhà, thao tác sử dụng được thể hiện rõ ràng, góc máy medium close-up',
+      orientationDetail: isMS
+        ? 'sisi produk seperti pada label produk'
+        : 'mặt sản phẩm theo hướng dẫn trên nhãn',
+      painManifest: isMS
+        ? 'tanda ketidakselesaan yang jelas pada kawasan sasaran'
+        : 'biểu hiện khó chịu rõ ràng ở vùng cần chăm sóc',
     },
     keyFeatures: ings.length > 0
       ? ings.slice(0, 5).map((name) => ({ name, photoHint: `macro photo of ${name}` }))

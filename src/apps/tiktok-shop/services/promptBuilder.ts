@@ -432,7 +432,8 @@ ${bullets.map((b) => `  ✗ ${b}`).join('\n')}
 EXTRA RULES (universal — apply to ALL product niches):
 - Picture must read as "real person experiencing this pain in real life" — not a body-part stock photo.
 - One person only, not multiple. Same ethnicity / age band as the target customer described in PRODUCT BRIEF.
-- NO surgical/medical clinical context (white sterile rooms, doctor's office) unless the product is explicitly medical-grade. Default scene: home / outdoor / office, depending on usage context.`
+- NO surgical/medical clinical context (white sterile rooms, doctor's office) unless the product is explicitly medical-grade. Default scene: home / outdoor / office, depending on usage context.
+- BEFORE STATE (CRITICAL): the person MUST NOT be wearing / holding / applying / using the product on their body. This is the pre-purchase state. The product appears ONLY as the small floating element in the BOTTOM-RIGHT corner — never on the person.${ctx.brief ? `\n- Render the visible pain cues described here on/around the body zone: "${ctx.brief.applicationDetails.painManifest}". Subtle and believable (mild swelling / redness / dull skin / fatigue cues), NOT grotesque.` : ''}`
 }
 
 export function buildPromptSlot3(ctx: PromptContext): string {
@@ -471,7 +472,7 @@ RIGHT HALF (AFTER — relief & confidence):
 - SAME person (same face, same age, same skin tone, ideally same outfit). Different POSTURE + EXPRESSION only.
 - Facial expression: relaxed brow, gentle confident SMILE, bright eyes, looking forward (not down).
 - Posture: standing tall, walking confidently, performing the same action effortlessly.
-- The PRODUCT is visibly worn / applied at ${zoneRef} when physically appropriate (e.g., knee brace on knee, nasal spray held confidently, face cream visible on glowing skin). For ingestible products, person looks energized, glass of water nearby is OK.
+- The PRODUCT is visibly worn / applied at ${zoneRef} when physically appropriate (e.g., knee brace on knee, nasal spray held confidently, face cream visible on glowing skin). For ingestible products, person looks energized, glass of water nearby is OK.${ctx.brief ? `\n- ORIENTATION (critical — prevents backwards rendering): "${ctx.brief.applicationDetails.orientationDetail}". Render the product on the body with this exact orientation, NEVER reversed.` : ''}
 - Warmer / brighter natural lighting, fully saturated colors.
 
 GLUE:
@@ -597,7 +598,7 @@ export function buildPromptSlot6(ctx: PromptContext): string {
   // correct body zone — NOT 3 product-only shots. usageScene from brief gives
   // the AI a concrete photo direction. Without brief, fall back to generic.
   const usageDirection = ctx.brief
-    ? `Each of the 3 panels shows a PERSON actually using the product on the correct body zone "${ctx.brief.applicationDetails.bodyZone}". Use this scene direction as the base for all 3 panels: "${ctx.brief.applicationDetails.usageScene}". Vary the panels by step progression (e.g., Panel 1 = preparing/positioning, Panel 2 = active application motion, Panel 3 = result/finished). DO NOT show only the product — every panel must show body-product interaction at the target zone. NEVER place the product on the wrong body part.`
+    ? `Each of the 3 panels shows a PERSON actually using the product on the correct body zone "${ctx.brief.applicationDetails.bodyZone}". Use this scene direction as the base for all 3 panels: "${ctx.brief.applicationDetails.usageScene}". Product orientation MUST match: "${ctx.brief.applicationDetails.orientationDetail}" — NEVER reversed. Vary the panels by step progression (e.g., Panel 1 = preparing/positioning, Panel 2 = active application motion, Panel 3 = result/finished). DO NOT show only the product — every panel must show body-product interaction at the target zone. NEVER place the product on the wrong body part.`
     : `TRIPTYCH — 3 instances of the product being USED (with a person interacting), in horizontal sequence. Each panel = one usage step.`
   return `${header(ctx)}
 
