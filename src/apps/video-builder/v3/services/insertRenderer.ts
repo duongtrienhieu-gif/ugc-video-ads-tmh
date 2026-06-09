@@ -379,13 +379,25 @@ export async function renderInsert(
   // assembler trims it down to the timeline segment. ~10cr/clip at 480p.
   // Static-image auto-fallback (Z63/Z76) still covers any failure.
   const videoDuration = Math.max(6, Math.min(8, Math.ceil(params.durationSec ?? 6)))
+
+  // Z77 — keep b-roll people SILENT. Grok i2v otherwise animates the person
+  // mouthing ENGLISH words (it's English-trained), which clashes with the
+  // creator lipsync that actually owns the voiceover → the viewer saw two
+  // people "talking" at once (#4 brushing, #6 holding the jar). We forbid
+  // SPEECH ONLY, never mouth movement: scenes like brushing teeth / applying
+  // the product MUST be able to open the mouth for the action — we only stop
+  // it from forming words. Applies to any scene that features a person.
+  const personPresent = usesAvatarRef(params.presetId, params.renderMode)
+  const noSpeech = personPresent
+    ? ' IMPORTANT: the person does NOT speak, talk, or mouth any words — no dialogue, no lip-syncing of speech, no conversation. The mouth may still open naturally as the physical action requires (e.g. brushing teeth, applying the product, an open relaxed smile); it simply never forms words. The creator voiceover owns all speech.'
+    : ''
   try {
     const fullSubmission = await generateVideoJob({
       apiKey: params.kieApiKey,
       jobModelId: 'grok-imagine/image-to-video',
-      prompt: isConcept
+      prompt: (isConcept
         ? `${motionScene} ${cameraMotion} No product packaging in frame.`
-        : `${motionScene} ${cameraMotion} ${preset.handBehavior}`,
+        : `${motionScene} ${cameraMotion} ${preset.handBehavior}`) + noSpeech,
       aspectRatio: '9:16',
       resolution: params.resolution,
       duration: videoDuration,

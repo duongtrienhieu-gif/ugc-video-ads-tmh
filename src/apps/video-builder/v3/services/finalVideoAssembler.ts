@@ -145,8 +145,8 @@ export async function assembleFinalVideo(
             fileName: ovFile,
             startSec: ov.startSec,
             durationSec: ov.durationSec,
-            corner: ov.corner ?? 'tr',
-            widthFraction: Math.max(0.2, Math.min(0.45, ov.widthFraction ?? 0.32)),
+            corner: ov.corner ?? 'br',
+            widthFraction: Math.max(0.2, Math.min(0.55, ov.widthFraction ?? 0.46)),
           })
         } catch (err) {
           console.warn(`[ASSEMBLE] overlay ${seg.segmentId}.${j} fetch failed — dropping`, err)

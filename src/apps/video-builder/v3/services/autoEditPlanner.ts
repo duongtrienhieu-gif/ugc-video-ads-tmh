@@ -350,8 +350,12 @@ function buildSegments(
       videoRef: ins.videoRef,
       startSec: round2(overlayStart),
       durationSec: overlayDur,
-      corner: 'tr',
-      widthFraction: 0.32,
+      // Z77 — bottom-right + bigger. The creator talking-head's face sits
+      // upper-centre, so a bottom corner keeps the face clear while filling the
+      // dead chest/shirt space. 0.46 (was 0.32) makes infographic text + labels
+      // actually readable as a PIP. The assembler clamps to [0.2, 0.55].
+      corner: 'br',
+      widthFraction: 0.46,
     }
     host.overlays = [...(host.overlays ?? []), overlay]
   }

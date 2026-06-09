@@ -638,8 +638,13 @@ DIRECTING RULES:
       "Nx more effective" labels), small product close-ups during explanation.
   Rule of thumb: if the scene is the MAIN thing on screen at that moment, "cut";
   if the scene is a SUPPORTING aside while the creator is the focus, "overlay_corner".
-  A finished ad SHOULD MIX both — not all cuts (loses creator face) and not all
-  overlays (loses impact). Aim roughly half-half across the ad.
+  DEFAULT POLICY (the engine enforces this): every illustration / infographic /
+  ingredient / mechanism graphic CONCEPT_SCENE → "overlay_corner" (it rides over
+  the talking creator so the ad stays continuous and lively). Reserve "cut" for
+  the few high-impact beats that deserve the full screen: HOOK reveal, PAIN raw
+  shot, product DEMO (PRODUCT_IN_ACTION), visible BEFORE/AFTER, and the CTA trust
+  close. So a finished ad is mostly creator-with-overlays, punctuated by a few
+  full-screen cuts — NOT a slideshow of back-to-back cuts.
 - CTA SCENE RULE — for the FINAL beat (anchorBlock = "cta", typically the line
   asking the viewer to buy/click/order), the visual job is a TRUST CLOSE, not
   a generic phone shot. Pick one of:
@@ -886,10 +891,17 @@ OUTPUT strict JSON, no fences:
     const directorLayout = item.layout === 'overlay_corner' || item.layout === 'cut'
       ? item.layout
       : undefined
-    const isTeachingGraphic =
-      presetId === 'CONCEPT_SCENE' && renderMode === 'ken_burns' && labels.length > 0
+    // Z77 — static illustration concept scenes (infographic / ingredient /
+    // mechanism — no person, renderMode ken_burns) ALWAYS overlay on the
+    // talking creator, so the ad stays a continuous creator-led piece with
+    // illustrations popping over it ("sinh động" target) instead of a slideshow
+    // of full-screen cuts. We OVERRIDE the Director's layout for these — its
+    // habit of marking them 'cut' is exactly what flattened the ad into a
+    // slideshow. Person / product / demo / before-after / CTA keep the
+    // Director's choice (defaulting to 'cut' for full focus).
+    const isStaticIllustration = presetId === 'CONCEPT_SCENE' && renderMode === 'ken_burns'
     const layout: InsertLayout =
-      directorLayout ?? (isTeachingGraphic ? 'overlay_corner' : 'cut')
+      isStaticIllustration ? 'overlay_corner' : (directorLayout ?? 'cut')
     out.push({
       presetId,
       matchCount: 0,
