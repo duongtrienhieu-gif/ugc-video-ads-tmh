@@ -54,9 +54,12 @@ export const EXPRESSIVE_TTS = {
   stability: 0.45,   // dynamic, not monotone
   similarity: 0.75,
   style: 0.28,       // some emotion, but fewer leisurely pauses (was 0.40)
-  speed: 1.35,       // Z97 — atempo TARGET (was 1.2). Snappier TikTok pace; the
-                     // v3 base is slow so 1.2 still read leisurely (~71s). 1.35
-                     // ≈ −26% runtime. Applied post-TTS via ffmpeg atempo.
+  speed: 1.2,        // Z98 — reverted 1.35 → 1.2. 1.35 read "như gió" (too fast)
+                     // and risked Kling lipsync drift, which would knock the
+                     // whole director timeline off. 1.2 is the natural-but-snappy
+                     // pace. atempo TARGET, applied post-TTS via ffmpeg (v3 ignores
+                     // the API speed param). Also matches the 215-wpm estimate,
+                     // which was calibrated for ~1.2×.
 } as const
 
 // Z81 — time-stretch the TTS audio to a target pace (pitch-preserving) via
