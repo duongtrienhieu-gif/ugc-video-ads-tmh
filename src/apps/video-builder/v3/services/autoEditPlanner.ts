@@ -25,14 +25,12 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import type {
-  AutoEditPlan, EditSegment, SegmentOverlay, SfxCue, CtaOverlay,
+  AutoEditPlan, EditSegment, SegmentOverlay, CtaOverlay,
   EditingStyleId, SubtitleStyleId, BgmStyleId,
   CreatorVideoClip, ActionInsertClip, GeneratedScript,
 } from '../types'
 import { EDITING_STYLES } from './editingStyles'
 import { BGM_CATALOG } from './bgmCatalog'
-import { pickSfxFor } from './sfxCatalog'
-import { buildCaptionSegments } from './subtitleEngine'
 import { buildPunchZoomCues } from './punchZoomPlanner'
 
 // ── Public entry ───────────────────────────────────────────────────────────
@@ -108,15 +106,10 @@ export function buildAutoEditPlan(params: BuildPlanParams): AutoEditPlan {
     timelineScale,
   )
 
-  // ── 2. Build captions ────────────────────────────────────────────────
-  const captions = subtitleStyleId === 'none'
-    ? []
-    : buildCaptionSegments({
-        script: params.script,
-        scriptStartSec: 0,
-        wordsPerChunk: 3,
-        emphasisRate: style.captionEmphasisRate,
-      })
+  // ── 2. Captions — REMOVED (Z98) ──────────────────────────────────────
+  // Subtitle feature dropped: the WPM-estimated caption timing drifted badly
+  // and the .ass burn errored ("Parsed_ass Read failed"). No captions generated.
+  const captions: AutoEditPlan['captions'] = []
 
   // ── 3. Build punch zoom cues ─────────────────────────────────────────
   const punchZooms = buildPunchZoomCues({
@@ -126,14 +119,9 @@ export function buildAutoEditPlan(params: BuildPlanParams): AutoEditPlan {
     totalDurationSec,
   })
 
-  // ── 4. Build SFX cues (transitions + zoom accents) ───────────────────
-  const sfxCues = buildSfxCues({
-    segments,
-    punchZooms,
-    totalDurationSec,
-    sfxDensity: style.sfxDensity,
-    styleAppliesCta: style.applyCtaOverlay,
-  })
+  // ── 4. SFX — REMOVED (Z98) ───────────────────────────────────────────
+  // No /sfx/*.mp3 files ever shipped (404 spam) + BGM was already removed.
+  const sfxCues: AutoEditPlan['sfxCues'] = []
 
   // ── 5. CTA overlay ───────────────────────────────────────────────────
   const cta: CtaOverlay | null = style.applyCtaOverlay
@@ -410,64 +398,7 @@ function buildSegments(
   return segments
 }
 
-// ── SFX cue builder ────────────────────────────────────────────────────
-
-interface BuildSfxCuesParams {
-  segments: EditSegment[]
-  punchZooms: { startSec: number }[]
-  totalDurationSec: number
-  sfxDensity: number
-  styleAppliesCta: boolean
-}
-
-function buildSfxCues(params: BuildSfxCuesParams): SfxCue[] {
-  if (params.sfxDensity <= 0) return []
-  const cues: SfxCue[] = []
-
-  // 1. Transitions — fire SFX on every action_insert IN/OUT
-  for (const seg of params.segments) {
-    if (seg.source.kind === 'action_insert') {
-      cues.push({
-        startSec: round2(seg.startSec),
-        sfxId: pickSfxFor('transition'),
-        volume: 0.35 * params.sfxDensity,
-        reason: 'transition',
-      })
-    }
-  }
-
-  // 2. Punch-zoom accents — light click on each zoom (if density high enough)
-  if (params.sfxDensity > 0.4) {
-    for (const zoom of params.punchZooms) {
-      cues.push({
-        startSec: round2(zoom.startSec),
-        sfxId: pickSfxFor('punch_zoom'),
-        volume: 0.25 * params.sfxDensity,
-        reason: 'punch_zoom',
-      })
-    }
-  }
-
-  // 3. CTA hit — strong impact 0.5s before CTA shows (if style does CTA)
-  if (params.styleAppliesCta && params.totalDurationSec > 2) {
-    cues.push({
-      startSec: round2(params.totalDurationSec - 2.0),
-      sfxId: pickSfxFor('cta'),
-      volume: 0.45 * Math.max(0.5, params.sfxDensity),
-      reason: 'cta_emphasis',
-    })
-  }
-
-  // Sort + dedupe overlapping
-  cues.sort((a, b) => a.startSec - b.startSec)
-  const out: SfxCue[] = []
-  for (const c of cues) {
-    const last = out[out.length - 1]
-    // Don't fire two SFX within 0.2s of each other (too cluttered)
-    if (!last || c.startSec - last.startSec > 0.2) out.push(c)
-  }
-  return out
-}
+// Z98 — buildSfxCues() removed (SFX feature dropped; no /sfx files shipped).
 
 // ── CTA overlay builder ────────────────────────────────────────────────
 
