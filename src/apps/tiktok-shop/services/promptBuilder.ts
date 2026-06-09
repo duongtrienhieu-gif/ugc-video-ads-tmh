@@ -552,30 +552,35 @@ export function buildPromptSlot5(ctx: PromptContext): string {
   const contactName = st?.contactName ?? derived.contactName
   const conversation = (st?.conversation && st.conversation.length > 0 ? st.conversation : derived.conversation).slice(0, 5)
   const verified    = st?.verifiedNote ?? derived.verifiedNote
+  // PHONE OWNER = SHOP (shop screenshots their own chat to share customer feedback).
+  // Per WhatsApp convention on phone-owner's view:
+  //   - Outgoing (shop, phone owner) → RIGHT side, LIGHT GREEN bubble + ✓✓ blue read-tick
+  //   - Incoming (customer, the contact) → LEFT side, WHITE bubble, no check marks
   const bubblesList = conversation
     .map((b, i) => {
       const minute = String(21 + i).padStart(2, '0')
-      if (b.from === 'customer') {
-        return `  Bubble ${i + 1} — CUSTOMER (RIGHT-aligned, LIGHT GREEN #DCF8C6 with tail on right, dark text), timestamp "14:${minute}" + ✓✓ BLUE read-tick: "${b.text}"`
+      if (b.from === 'shop') {
+        return `  Bubble ${i + 1} — SHOP / phone owner (RIGHT-aligned, LIGHT GREEN #DCF8C6 with tail on right, dark text), timestamp "14:${minute}" + ✓✓ BLUE read-tick (customer has read it): "${b.text}"`
       }
-      return `  Bubble ${i + 1} — SHOP (LEFT-aligned, WHITE #FFFFFF with tail on left, dark text, slight drop shadow), timestamp "14:${minute}" (no read-tick on shop bubbles): "${b.text}"`
+      return `  Bubble ${i + 1} — CUSTOMER / incoming contact "${contactName}" (LEFT-aligned, WHITE #FFFFFF with tail on left, dark text, slight drop shadow), timestamp "14:${minute}" (NO check marks — incoming messages don't show read receipts on receiver's view): "${b.text}"`
     })
     .join('\n')
 
   return `${header(ctx)}
 
-SLOT 5 — SOCIAL PROOF (WhatsApp 2-way chat screenshot inside iPhone mockup)
+SLOT 5 — SOCIAL PROOF (WhatsApp 2-way chat screenshot from the SHOP's phone)
 COMPOSITION:
 - Soft brand-color background fills the canvas.
 - CENTER OF CANVAS (y≈150-940), a realistic BLACK iPhone 14 / 15 mockup, tilted ~3° for natural perspective. The phone occupies ~58% of canvas width, sharp 3D-rendered look with subtle screen reflection. Notch + dynamic island visible at the top of the screen.
+- The phone belongs to the SHOP — this is the shop screenshotting their own conversation with the customer to share. Convention follows WhatsApp on the phone owner's view.
 - Phone screen content = WhatsApp chat thread (authentic WhatsApp UI, 2-way conversation):
   - iOS status bar at very top (small): time "14:25", signal/wifi/battery icons.
-  - WHATSAPP HEADER BAR (height ~80px on the screen, background = WhatsApp green #075E54): back arrow on the left, circular avatar (generic person silhouette in muted color — NO real face), then contact name "${contactName}" in WHITE Plus Jakarta Sans Semibold ~32px, with sub-text "online" in lighter green ~22px below the name. Camera + phone call icons on the right.
+  - WHATSAPP HEADER BAR (height ~80px on the screen, background = WhatsApp green #075E54): back arrow on the left, circular avatar (generic person silhouette in muted color — NO real face), then contact name "${contactName}" (the CUSTOMER's name — shop is chatting with this person) in WHITE Plus Jakarta Sans Semibold ~32px, with sub-text "online" in lighter green ~22px below the name. Camera + phone call icons on the right.
   - CHAT AREA below header: classic WhatsApp light beige #ECE5DD background with subtle faint geometric WhatsApp pattern texture.
-  - BUBBLES (ALTERNATING customer right-green / shop left-white — render in this EXACT order, top to bottom):
+  - BUBBLES (render in this EXACT order, top to bottom):
 ${bubblesList}
-  - Each customer bubble: WhatsApp light-green #DCF8C6, tail on RIGHT side, dark gray text ~28px, timestamp + BLUE ✓✓ read-receipt in bottom-right.
-  - Each shop bubble: pure WHITE #FFFFFF, tail on LEFT side, dark gray text ~28px, timestamp in bottom-right (NO read-tick — shop is the receiver).
+  - Each SHOP bubble (outgoing on shop's phone): WhatsApp light-green #DCF8C6, tail on RIGHT side, dark gray text ~28px, timestamp + BLUE ✓✓ read-receipt in bottom-right.
+  - Each CUSTOMER bubble (incoming from contact): pure WHITE #FFFFFF, tail on LEFT side, dark gray text ~28px, timestamp in bottom-right (NO check marks on incoming).
   - Vertical spacing between bubbles ~12-16px. Bubbles stacked naturally as in a real chat.
 - Around the phone: subtle accent-color soft glow halo, gentle shadow under the phone.
 - Product (matching refs) appears small ~14% in the BOTTOM-LEFT corner of the canvas (NOT inside the chat screen), slightly out-of-focus for depth.
@@ -583,7 +588,7 @@ TEXT in image (OUTSIDE the phone screen):
 - BOTTOM CENTER (y≈980), small italic ~22px dark navy on the bg: "${verified}"
 EXTRA RULES:
 - Render the chat as an authentic forwarded screenshot — NOT a designed marketing card. NO "5 star" overlay, NO testimonial frame.
-- WhatsApp bubble layout must follow real conventions: customer = right-green, shop = left-white. NEVER mix or swap.
+- WhatsApp bubble layout MUST follow phone-owner convention: SHOP (phone owner / outgoing) = RIGHT green with ✓✓ blue; CUSTOMER (incoming contact) = LEFT white, no check marks. NEVER mix or swap.
 - Render every bubble's text EXACTLY as written (no paraphrasing, no truncation). If a bubble has emoji, render the emoji.
 - The conversation MUST feel like a real back-and-forth: customer shares result, shop thanks + gives instruction, customer acknowledges.`
 }
