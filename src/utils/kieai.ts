@@ -973,14 +973,20 @@ export async function generateVideoJob(params: {
     input.aspect_ratio = params.aspectRatio === '9:16' ? 'portrait' : 'landscape'
     input.n_frames = '15'
   } else if (params.jobModelId.startsWith('grok')) {
-    // Z68 — Grok Imagine i2v: cheapest video model (~3 cr/s @480p), VIDEO-ONLY
-    // (no audio param → no audio-gen failures). Animates the keyframe via
-    // image_urls so the GPT-4o face+product lock is kept. Grok only supports
-    // 480p/720p (map 1080p → 720p; default 480p = cheapest). duration 1-15s.
+    // Z76 — `grok-imagine/image-to-video` (the SEPARATE cheap model, NOT the
+    // premium `grok-imagine-video-1-5-preview` Z68 used by mistake — that one
+    // is 14.5 cr/s, this one is 1.6 cr/s @480p). VIDEO-ONLY. Exact schema from
+    // the KIE OpenAPI spec:
+    //   • image_urls: array (single ref → output matches the image's own
+    //     dimensions; aspect_ratio is IGNORED in single-image mode, so omit it)
+    //   • duration: STRING, min 6, max 30, step 1 (NOT a number — passing a
+    //     number 422'd). The model floor is 6s, so clamp ≥6.
+    //   • mode: 'normal' (balanced motion; 'spicy' is blocked for external imgs)
+    //   • resolution: '480p' (cheapest) / '720p'
     if (params.referenceImageUrls?.length) input.image_urls = [params.referenceImageUrls[0]]
-    input.aspect_ratio = params.aspectRatio
     input.resolution = params.resolution === '480p' ? '480p' : '720p'
-    if (params.duration) input.duration = Math.max(1, Math.min(15, Math.round(params.duration)))
+    input.mode = 'normal'
+    input.duration = String(Math.max(6, Math.min(30, Math.round(params.duration ?? 6))))
   }
 
   const res = await fetch(`${KIE_BASE}/jobs/createTask`, {

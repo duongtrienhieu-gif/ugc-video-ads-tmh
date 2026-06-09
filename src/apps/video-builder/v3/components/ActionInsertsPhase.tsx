@@ -892,14 +892,15 @@ function InsertCard({
           )}
         </div>
 
-        {/* Z39/Z46 — render-mode toggle: Ken Burns still (cheap, ~6cr, free
-            local zoom) vs Grok i2v (~21cr). Editable only before render. */}
+        {/* Z39/Z76 — render-mode toggle: static image (cheap, ~6cr, free local
+            ffmpeg, content never cropped) vs Grok i2v (~16cr). Editable only
+            before render. */}
         <div className="mt-1 flex items-center gap-1">
           {canEditMode ? (
             <div className="inline-flex overflow-hidden rounded-md border border-gray-200">
               <button
                 onClick={() => onSetMode('ken_burns')}
-                title="Ảnh tĩnh + zoom nhẹ (ffmpeg local, ~6 credit). Hợp cảnh concept/thành phần."
+                title="Ảnh tĩnh — giữ trọn 100% nội dung, không cắt chữ (ffmpeg local, ~6 credit). Hợp cảnh concept/thành phần/infographic."
                 className={`px-1.5 py-0.5 text-[9px] font-bold ${
                   mode === 'ken_burns' ? 'bg-sky-600 text-white' : 'bg-white text-gray-500 hover:bg-gray-50'
                 }`}
@@ -908,7 +909,7 @@ function InsertCard({
               </button>
               <button
                 onClick={() => onSetMode('video')}
-                title="Video Grok 1.5 i2v (~21 credit). Hợp cảnh có chuyển động/người thật."
+                title="Video Grok image-to-video (~16 credit). Hợp cảnh có chuyển động/người thật."
                 className={`px-1.5 py-0.5 text-[9px] font-bold ${
                   mode === 'video' ? 'bg-pink-600 text-white' : 'bg-white text-gray-500 hover:bg-gray-50'
                 }`}
@@ -920,7 +921,7 @@ function InsertCard({
             <span className={`rounded px-1.5 py-0.5 text-[9px] font-bold ${
               mode === 'ken_burns' ? 'bg-sky-100 text-sky-700' : 'bg-pink-100 text-pink-700'
             }`}>
-              {mode === 'ken_burns' ? '🖼 Ảnh (Ken Burns)' : '🎬 Video (Grok)'}
+              {mode === 'ken_burns' ? '🖼 Ảnh tĩnh' : '🎬 Video (Grok)'}
             </span>
           )}
           <span className="ml-auto text-[9px] font-semibold text-gray-400">

@@ -336,15 +336,18 @@ export async function renderInsert(
 
   if (params.signal?.aborted) throw new Error('CANCELLED — user huỷ')
 
-  // ── STAGE 2 (Ken Burns mode): NO Kling — animate the still locally ─────
-  // Z39 — for static concept / ingredient / product-label scenes we don't pay
-  // Kling (~45cr) just to add a slow drift. Render a zoom/pan over the keyframe
-  // with ffmpeg.wasm IN THE BROWSER (free), and save it as a normal mp4 so the
-  // planner + final assembler treat it exactly like a Kling insert.
+  // ── STAGE 2 (still mode): NO video API — hold the keyframe locally ─────
+  // Z39/Z76 — for concept / ingredient / mechanism scenes we don't pay the i2v
+  // model just to add motion. Render a STATIC image clip over the keyframe with
+  // ffmpeg.wasm IN THE BROWSER (free) and save it as a normal mp4 so the planner
+  // + final assembler treat it exactly like a video insert.
+  // Z76 — was a Ken Burns zoom; the zoom+crop kept cutting off the infographic
+  // text labels ("ảng bám" / "Vi khu" sheared at the edges). User wants 100%
+  // of the content visible, so it's now a non-moving fit (see renderStaticImageClip).
   if ((params.renderMode ?? 'video') === 'ken_burns') {
     params.onStageUpdate({ stage: 'video_full', keyframeRef, keyframePromptUsed })
-    console.log(`[INSERT ${params.presetId}] Stage 2 ken_burns start (local ffmpeg, no Kling)`)
-    const videoRef = await renderKenBurnsClip({
+    console.log(`[INSERT ${params.presetId}] Stage 2 static-image start (local ffmpeg, no video API)`)
+    const videoRef = await renderStaticImageClip({
       imageBlob: keyframeBlob,
       durationSec: params.durationSec ?? 3.5,
       resolution: params.resolution,
@@ -362,22 +365,24 @@ export async function renderInsert(
   // persisted BEFORE polling so a timeout can RESUME the already-paid job
   // (resumeInsertVideo) instead of re-submitting and charging again.
   params.onStageUpdate({ stage: 'video_full', keyframeRef, keyframePromptUsed })
-  console.log(`[INSERT ${params.presetId}] Stage 2 video_full start (${params.resolution}, grok-imagine-video-1.5)`)
+  console.log(`[INSERT ${params.presetId}] Stage 2 video_full start (${params.resolution}, grok-imagine/image-to-video)`)
 
   const keyframePublicUrl = await getUrl(keyframeRef)
   if (!keyframePublicUrl) throw new Error('Không lấy được URL keyframe (asset store)')
 
-  // Z68 — i2v model history: Kling 3.0 (422) → Veo 3.1 Fast (audio-gen fails,
-  // ~60c) → Wan 2.7 (premium 16cr/s) → NOW Grok Imagine 1.5 — the CHEAPEST i2v
-  // (~3 cr/s @480p), VIDEO-ONLY (no audio-gen failures), animates the keyframe
-  // via image_urls so the GPT-4o face+product lock is kept. Flexible duration
-  // (1-15s) → generate just what the insert needs. Per-second billing so we
-  // keep it short (4-6s). Ken Burns auto-fallback (Z63) still covers failures.
-  const videoDuration = Math.max(4, Math.min(6, Math.ceil(params.durationSec ?? 5)))
+  // Z76 — i2v model history: Kling 3.0 (422) → Veo 3.1 Fast (audio fails, ~60c)
+  // → Wan 2.7 (16cr/s) → grok-imagine-video-1-5-preview (PREMIUM 14.5cr/s — the
+  // big credit burn) → NOW `grok-imagine/image-to-video`, the cheap Grok tier at
+  // 1.6 cr/s @480p (~9× cheaper). VIDEO-ONLY (no audio-gen failures). Animates
+  // the keyframe via image_urls so the GPT-4o face+product lock is kept.
+  // The model has a 6s FLOOR (its duration min), so a clip is always 6s and the
+  // assembler trims it down to the timeline segment. ~10cr/clip at 480p.
+  // Static-image auto-fallback (Z63/Z76) still covers any failure.
+  const videoDuration = Math.max(6, Math.min(8, Math.ceil(params.durationSec ?? 6)))
   try {
     const fullSubmission = await generateVideoJob({
       apiKey: params.kieApiKey,
-      jobModelId: 'grok-imagine-video-1-5-preview',
+      jobModelId: 'grok-imagine/image-to-video',
       prompt: isConcept
         ? `${motionScene} ${cameraMotion} No product packaging in frame.`
         : `${motionScene} ${cameraMotion} ${preset.handBehavior}`,
@@ -414,9 +419,9 @@ export async function renderInsert(
   } catch (videoErr) {
     if (params.signal?.aborted) throw videoErr  // user cancelled — don't fall back
     const msg = videoErr instanceof Error ? videoErr.message : String(videoErr)
-    console.warn(`[INSERT ${params.presetId}] Grok i2v failed (${msg.slice(0, 140)}) → auto fallback to Ken Burns from the existing keyframe`)
+    console.warn(`[INSERT ${params.presetId}] Grok i2v failed (${msg.slice(0, 140)}) → auto fallback to a static image clip from the existing keyframe`)
     params.onStageUpdate({ stage: 'video_full', keyframeRef, keyframePromptUsed })
-    const videoRef = await renderKenBurnsClip({
+    const videoRef = await renderStaticImageClip({
       imageBlob: keyframeBlob,
       durationSec: params.durationSec ?? 4,
       resolution: params.resolution,
@@ -459,16 +464,21 @@ export async function resumeInsertVideo(
   return { videoRef }
 }
 
-// ── Ken Burns: still → mp4 (local, free) ────────────────────────────────────
-// Z39/Z44 — slow centered zoom over a single keyframe via ffmpeg.wasm zoompan.
+// ── Static image clip: still → mp4 (local, free) ───────────────────────────
+// Z76 — replaces the old Ken Burns zoom. User feedback: the zoom+crop kept
+// shearing the infographic text labels off the edges, and no amount of prompt
+// tuning fully fixed it. The ONLY way to guarantee 100% of the content stays
+// visible is to NOT crop and NOT move. So this renders a fully static clip:
+//   • foreground = the whole keyframe scaled to FIT (force_original_aspect_
+//     ratio=decrease) → never cropped, every label intact.
+//   • background = the same keyframe scaled to COVER + heavily blurred, filling
+//     the letterbox gap so there are no hard black bars (the standard vertical-
+//     content fill look). The keyframe bg is light cream, so the blur reads as
+//     a soft extension, not a bar.
 // Output is a normal 9:16 mp4 (no audio) saved to the asset store, so the rest
 // of the pipeline (planner / assembler) is UNCHANGED — it just sees a videoRef.
-// The zoom increment is scaled to the duration so the total push is ~28%
-// regardless of clip length. 12% (the original) was too subtle — viewers
-// perceived the clip as a static image. 28% is still gentle UGC-style motion
-// but unmistakably moving. We pre-upscale 2x before zoompan (the standard
-// anti-jitter trick). Runs in the browser → costs ZERO KIE credit.
-async function renderKenBurnsClip(args: {
+// Runs in the browser → costs ZERO KIE credit.
+async function renderStaticImageClip(args: {
   imageBlob: Blob
   durationSec: number
   resolution: '480p' | '720p' | '1080p'
@@ -480,28 +490,24 @@ async function renderKenBurnsClip(args: {
   const h0 = Math.round((shortSide * 16) / 9)
   const H = h0 % 2 === 0 ? h0 : h0 + 1
   const fps = 30
-  const frames = Math.max(1, Math.round(dur * fps))
-  // Z50 — gentler zoom (was 0.28). A 28% push cropped the edges of infographic
-  // concept scenes, cutting off the side text labels mid-clip. 14% still reads
-  // as motion but keeps labeled elements in frame long enough to read.
-  const inc = (0.14 / frames).toFixed(6)
   const id = Math.random().toString(36).slice(2, 8)
   const ext = (args.imageBlob.type || '').includes('png') ? 'png' : 'jpg'
-  const inName = `kb_${id}.${ext}`
-  const outName = `kb_${id}.mp4`
+  const inName = `st_${id}.${ext}`
+  const outName = `st_${id}.mp4`
 
   await ffmpeg.writeFile(inName, new Uint8Array(await args.imageBlob.arrayBuffer()))
 
-  // Cover-crop to 9:16, upscale 2x, then zoompan down to WxH (centered slow zoom-in).
-  const vf =
-    `scale=${W}:${H}:force_original_aspect_ratio=increase,crop=${W}:${H},` +
-    `scale=${W * 2}:${H * 2},` +
-    `zoompan=z='zoom+${inc}':d=${frames}:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s=${W}x${H}:fps=${fps},` +
-    `trim=duration=${dur},setpts=PTS-STARTPTS`
+  // split: [bg] cover+blur fills the frame, [fg] full image fit on top centred.
+  // NO crop on fg → text can never be cut. NO zoompan → fully static.
+  const filter =
+    `[0:v]split=2[bg][fg];` +
+    `[bg]scale=${W}:${H}:force_original_aspect_ratio=increase,crop=${W}:${H},boxblur=20:2,setsar=1[bgb];` +
+    `[fg]scale=${W}:${H}:force_original_aspect_ratio=decrease,setsar=1[fgs];` +
+    `[bgb][fgs]overlay=(W-w)/2:(H-h)/2:format=auto,format=yuv420p[v]`
 
   await ffmpeg.exec([
-    '-i', inName,
-    '-vf', vf,
+    '-loop', '1', '-t', String(dur), '-i', inName,
+    '-filter_complex', filter, '-map', '[v]',
     '-c:v', 'libx264', '-preset', 'fast', '-crf', '23',
     '-pix_fmt', 'yuv420p', '-r', String(fps), '-t', String(dur),
     '-an', '-y', outName,

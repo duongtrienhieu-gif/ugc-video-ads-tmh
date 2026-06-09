@@ -198,21 +198,26 @@ export function estimateLipsyncCredits(durationSec: number): number {
   return Math.ceil(Math.max(5, sec) * KIE_LIPSYNC_CREDITS_PER_SEC)
 }
 
-// Z38/Z68 — estimate for ONE action insert: a gpt-4o keyframe (~6 cr) + a
-// video clip. Z68 switched the i2v model to Grok Imagine 1.5 — the CHEAPEST
-// (~3 cr/s @480p), VIDEO-ONLY (no audio-gen failures). A ~5s 480p clip ≈ 15 cr
-// → ~21 cr total. ESTIMATE — VERIFY against the real KIE deduction on the
-// first render and tune. ken_burns (~6cr) is still the cheapest for non-motion.
+// Z76 — estimate for ONE action insert: a gpt-4o keyframe (~6 cr) + a video clip.
+// CREDIT-BURN FIX: Z68 used `grok-imagine-video-1-5-preview` — which on KIE is
+// the PREMIUM Grok tier at 14.5 cr/s @480p (25 cr/s @720p). A 6s clip = ~87 cr,
+// and a single 7-insert render burned ~500 cr. Z76 swaps to the SEPARATE cheap
+// model `grok-imagine/image-to-video` = 1.6 cr/s @480p (3 cr/s @720p). The model
+// floor is 6s, so 6 × 1.6 ≈ 10 cr per video insert at 480p — ~9× cheaper.
+// VERIFIED against the kie.ai Pricing page (2026-06-09 screenshots).
 export const INSERT_CLIP_SECONDS = 6
-export const INSERT_VIDEO_CREDITS = 15
+export const INSERT_VIDEO_CREDITS = 10
 
-// Z39/Z67 — two ways to realise an insert:
-//   'video'     → Wan 2.7 i2v clip (keyframe + ~30cr ≈ ~36cr). For scenes with
-//                 REAL motion/people (drink, hold, react). Video-only.
-//   'ken_burns' → keyframe still ONLY (~6cr); the motion is a slow zoom/pan
-//                 rendered LOCALLY with ffmpeg.wasm (free). For static concept
-//                 / ingredient / product-label scenes — avoids the video
-//                 charge AND the i2v morph risk on abstract subjects.
+// Z39/Z76 — two ways to realise an insert:
+//   'video'     → grok-imagine/image-to-video clip (keyframe ~6cr + ~10cr i2v
+//                 ≈ ~16cr). For scenes with REAL motion/people (drink, hold,
+//                 react, before/after). Video-only (no audio-gen failures).
+//   'ken_burns' → keyframe still ONLY (~6cr). NOTE: the literal is kept for
+//                 backwards-compat with saved drafts, but as of Z76 it no
+//                 longer zooms — it renders a STATIC image clip (full content
+//                 fit inside the frame, never cropped) because the Ken Burns
+//                 zoom kept cutting off infographic text labels. Used for
+//                 concept / ingredient / mechanism scenes.
 export type InsertRenderMode = 'video' | 'ken_burns'
 
 // Z69 — how the insert sits in the timeline against the creator video:
