@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { X, Check, AlertTriangle, XCircle, Plus, Play, TrendingUp, TrendingDown, ExternalLink, Sparkles, Info } from 'lucide-react'
 import type { Market, ScoredProduct, SignalResult } from '../types'
 import { VERDICT_META, NICHES, MARKETS } from '../constants'
@@ -23,28 +23,51 @@ function kalodataUrl(productId: string, market: Market): string {
   return `https://www.kalodata.com/product/detail?id=${encodeURIComponent(id)}&language=vi-VN&currency=${KALODATA_CURRENCY[market]}&region=${market}&dateRange=${dateRange}&cateValue=${cateValue}`
 }
 
-// TikTok blockquote-embed approach (CHÍNH THỨC) — iframe v2 bị block X-Frame-Options.
-// embed.js của TikTok tự thay blockquote bằng player nội bộ.
+// TikTok blockquote-embed (CHÍNH THỨC). Re-inject embed.js mỗi lần videoId đổi
+// để force script rescan DOM. Sau 5s nếu chưa có iframe → fallback "Mở TikTok".
 function TikTokEmbedPlayer({ videoId, handle }: { videoId: string; handle?: string }) {
-  const ref = useRef<HTMLDivElement>(null)
+  const [failed, setFailed] = useState(false)
+  const cite = handle
+    ? `https://www.tiktok.com/@${handle}/video/${videoId}`
+    : `https://www.tiktok.com/embed/v2/${videoId}`
   useEffect(() => {
-    const existing = document.querySelector('script[src*="tiktok.com/embed.js"]') as HTMLScriptElement | null
-    if (existing) {
-      // ép embed.js re-scan blockquote mới
-      const w = window as unknown as { tiktokWidget?: { load?: () => void } }
-      if (w.tiktokWidget && w.tiktokWidget.load) w.tiktokWidget.load()
-      return
-    }
+    setFailed(false)
+    // 1) Xóa script cũ để force fresh load
+    document.querySelectorAll('script[src*="tiktok.com/embed.js"]').forEach((s) => s.remove())
+    // 2) Inject lại
     const script = document.createElement('script')
     script.src = 'https://www.tiktok.com/embed.js'
     script.async = true
     document.body.appendChild(script)
+    // 3) Timeout: sau 5s nếu blockquote chưa được thay bằng iframe → coi là fail
+    const timer = window.setTimeout(() => {
+      const bq = document.querySelector(`blockquote.tiktok-embed[data-video-id="${videoId}"]`) as HTMLElement | null
+      if (bq && !bq.querySelector('iframe')) setFailed(true)
+    }, 5000)
+    return () => window.clearTimeout(timer)
   }, [videoId])
-  const cite = handle
-    ? `https://www.tiktok.com/@${handle}/video/${videoId}`
-    : `https://www.tiktok.com/embed/v2/${videoId}`
+
+  if (failed) {
+    return (
+      <div className="flex h-full w-full flex-col items-center justify-center gap-4 p-8 text-center">
+        <Play className="h-12 w-12 text-slate-300" />
+        <p className="text-sm text-slate-500">
+          TikTok không cho phép xem video này trong app.<br/>
+          Bấm nút bên dưới để xem trong tab mới.
+        </p>
+        <a
+          href={cite}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex items-center gap-2 rounded-lg bg-violet-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-violet-700"
+        >
+          <ExternalLink className="h-4 w-4" /> Mở trên TikTok
+        </a>
+      </div>
+    )
+  }
   return (
-    <div ref={ref} className="flex h-full w-full items-center justify-center overflow-auto">
+    <div className="flex h-full w-full items-center justify-center overflow-auto p-2">
       <blockquote
         className="tiktok-embed"
         cite={cite}
