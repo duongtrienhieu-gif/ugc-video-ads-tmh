@@ -663,14 +663,14 @@ DIRECTING RULES:
   shot, product DEMO (PRODUCT_IN_ACTION), visible BEFORE/AFTER, and the CTA trust
   close. So a finished ad is mostly creator-with-overlays, punctuated by a few
   full-screen cuts — NOT a slideshow of back-to-back cuts.
-- CTA SCENE RULE — for the FINAL beat (anchorBlock = "cta", typically the line
-  asking the viewer to buy/click/order), the visual job is a TRUST CLOSE, not
-  a generic phone shot. Pick one of:
-    • HOLD_PRODUCT — the speaker confidently holding the product up to camera
-    • POINT_LABEL  — the speaker pointing at the product label / key claim
-  These show the model OWNING the product. NEVER use PHONE_SCROLL for a CTA
-  scene — it shows generic doom-scrolling on a social feed and has no purchase
-  intent, completely unrelated to "click the link / buy now" lines.
+- CTA SCENE RULE — for the FINAL beat (anchorBlock = "cta", the line asking the
+  viewer to buy/click/order), the visual job is a personal TRUST CLOSE. The IDEAL
+  is the CREATOR holding the product up beside their face + a THUMBS-UP + an
+  approving smile/nod — a "trust me, try this" endorsement (use PRODUCT_IN_ACTION
+  with that as the conceptPrompt). NEVER use POINT_LABEL for the CTA (it renders
+  the product ALONE with no creator face — no endorsement) and NEVER use
+  PHONE_SCROLL (generic doom-scrolling, zero purchase intent). The viewer must
+  see the creator personally vouching for the product at the close.
 - BEFORE/AFTER RULE — **HARD BAN, NO EXCEPTIONS**. Read this twice:
 
     BEFORE_AFTER_REACTION animates ONLY the model's FACE (tired → relieved).
@@ -791,7 +791,7 @@ OUTPUT strict JSON, no fences:
   // the browser console instead of guessed at.
   // Z46/Z47 — added beforeAfter + topical + dupeSkip + dupeSwap counters.
   const drop = { preset: 0, noPrompt: 0, zeroFit: 0, dupeSkip: 0 }
-  const rewrite = { beforeAfter: 0, topical: 0, dupeSwap: 0, labeled: 0, labelLangDrop: 0 }
+  const rewrite = { beforeAfter: 0, topical: 0, dupeSwap: 0, labeled: 0, labelLangDrop: 0, ctaClose: 0 }
 
   const seen = new Set<ActionPresetId>()
   const out: InsertSuggestion[] = []
@@ -837,6 +837,26 @@ OUTPUT strict JSON, no fences:
       presetId = 'PRODUCT_IN_ACTION' as ActionPresetId
       conceptPrompt = topicalApplicationPrompt(topicalCategory, quote)
       rewrite.topical++
+    }
+
+    // Z93 — CTA TRUST-CLOSE rewrite. The final CTA beat should be the creator
+    // personally ENDORSING the product: holding it up + a THUMBS-UP + an
+    // approving smile/nod ("trust me, buy it"). The Director kept picking
+    // POINT_LABEL — which renders the PRODUCT ALONE (no creator face, no
+    // endorsement) — or a plain hold. Force every cta-anchored scene to
+    // PRODUCT_IN_ACTION with the thumbs-up endorsement so the close is always
+    // creator + product + 👍. Runs LAST so it wins over before/after/topical.
+    if (item.anchorBlock === 'cta') {
+      const quote = (item.quote ?? '').trim()
+      presetId = 'PRODUCT_IN_ACTION' as ActionPresetId
+      motionKind = 'emotion'
+      conceptPrompt =
+        `The SAME creator (from the avatar reference) holds the product up beside their face in one hand ` +
+        `and gives an enthusiastic THUMBS-UP with the other hand, with a big approving smile and a confident ` +
+        `nod — a warm personal endorsement / "trust me, you should try this" close for the CTA line ` +
+        `"${quote}". Authentic UGC selfie, natural friendly light. Keep the EXACT product packaging ` +
+        `(same colour/label), and the creator's face identical to the avatar.`
+      rewrite.ctaClose++
     }
 
     // Both free-scene kinds carry a director-written prompt and are useless
@@ -1057,7 +1077,7 @@ OUTPUT strict JSON, no fences:
   console.log(
     `[DIRECTOR] raw=${raw.length}ch parsed=${parsed.length} usable=${out.length} ` +
     `dropped{preset:${drop.preset},noPrompt:${drop.noPrompt},zeroFit:${drop.zeroFit},dupeSkip:${drop.dupeSkip}} ` +
-    `rewrote{beforeAfter:${rewrite.beforeAfter},topical:${rewrite.topical},dupeSwap:${rewrite.dupeSwap},labeled:${rewrite.labeled},labelLangDrop:${rewrite.labelLangDrop}} ` +
+    `rewrote{beforeAfter:${rewrite.beforeAfter},topical:${rewrite.topical},dupeSwap:${rewrite.dupeSwap},labeled:${rewrite.labeled},labelLangDrop:${rewrite.labelLangDrop},ctaClose:${rewrite.ctaClose}} ` +
     `trust{earlyHook:${trustDrops.earlyHook},coverage:${trustDrops.coverage},run3:${trustDrops.run3}} ` +
     `ingredientInject=${ingredientInjected} ` +
     `visibleResult=${visibleResultProduct} topical=${topicalCategory ?? 'no'} ` +
