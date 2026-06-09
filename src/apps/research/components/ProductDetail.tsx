@@ -1,5 +1,5 @@
-import { useMemo, useState } from 'react'
-import { X, Check, AlertTriangle, XCircle, Plus, Play, TrendingUp, TrendingDown, ExternalLink, Sparkles } from 'lucide-react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { X, Check, AlertTriangle, XCircle, Plus, Play, TrendingUp, TrendingDown, ExternalLink, Sparkles, Info } from 'lucide-react'
 import type { Market, ScoredProduct, SignalResult } from '../types'
 import { VERDICT_META, NICHES, MARKETS } from '../constants'
 import { formatMyr } from '../services/pricing'
@@ -23,8 +23,38 @@ function kalodataUrl(productId: string, market: Market): string {
   return `https://www.kalodata.com/product/detail?id=${encodeURIComponent(id)}&language=vi-VN&currency=${KALODATA_CURRENCY[market]}&region=${market}&dateRange=${dateRange}&cateValue=${cateValue}`
 }
 
-function tiktokEmbedUrl(videoId: string): string {
-  return `https://www.tiktok.com/embed/v2/${encodeURIComponent(videoId)}?lang=vi-VN`
+// TikTok blockquote-embed approach (CHÍNH THỨC) — iframe v2 bị block X-Frame-Options.
+// embed.js của TikTok tự thay blockquote bằng player nội bộ.
+function TikTokEmbedPlayer({ videoId, handle }: { videoId: string; handle?: string }) {
+  const ref = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    const existing = document.querySelector('script[src*="tiktok.com/embed.js"]') as HTMLScriptElement | null
+    if (existing) {
+      // ép embed.js re-scan blockquote mới
+      const w = window as unknown as { tiktokWidget?: { load?: () => void } }
+      if (w.tiktokWidget && w.tiktokWidget.load) w.tiktokWidget.load()
+      return
+    }
+    const script = document.createElement('script')
+    script.src = 'https://www.tiktok.com/embed.js'
+    script.async = true
+    document.body.appendChild(script)
+  }, [videoId])
+  const cite = handle
+    ? `https://www.tiktok.com/@${handle}/video/${videoId}`
+    : `https://www.tiktok.com/embed/v2/${videoId}`
+  return (
+    <div ref={ref} className="flex h-full w-full items-center justify-center overflow-auto">
+      <blockquote
+        className="tiktok-embed"
+        cite={cite}
+        data-video-id={videoId}
+        style={{ maxWidth: 605, minWidth: 325 }}
+      >
+        <section />
+      </blockquote>
+    </div>
+  )
 }
 
 const STATUS_ICON: Record<SignalResult['status'], React.ReactNode> = {
@@ -48,7 +78,7 @@ function Sparkline({ data }: { data?: number[] }) {
 export default function ProductDetail({ product, onClose }: { product: ScoredProduct; onClose: () => void }) {
   const [tab, setTab] = useState<Tab>('overview')
   const [analyzeId, setAnalyzeId] = useState<string | null>(null)
-  const [embedVideoId, setEmbedVideoId] = useState<string | null>(null)
+  const [embedVideo, setEmbedVideo] = useState<{ id: string; handle?: string } | null>(null)
   const v = VERDICT_META[product.verdict]
   const niche = NICHES.find((n) => n.key === product.nicheKey)
   const passCount = product.signals.filter((s) => s.status === 'pass').length
@@ -120,14 +150,26 @@ export default function ProductDetail({ product, onClose }: { product: ScoredPro
               <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-bold text-slate-600">⭐ {product.score}/100</span>
               <span className={`rounded-full border px-2 py-0.5 text-xs font-bold ${v.bg} ${v.color}`}>{v.emoji} {v.label}</span>
             </div>
-            <a
-              href={kalodataUrl(product.productId, product.market)}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="mt-1.5 inline-flex items-center gap-1 text-xs font-medium text-violet-600 hover:underline"
-            >
-              <ExternalLink className="h-3 w-3" /> Xem trên Kalodata
-            </a>
+            <div className="mt-1.5 flex items-center gap-3">
+              <a
+                href={kalodataUrl(product.productId, product.market)}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 text-xs font-medium text-violet-600 hover:underline"
+                title="Nếu trang Kalodata trống → sản phẩm này hết data trong 90 ngày gần nhất (vấn đề từ Kalodata, không phải bug app)"
+              >
+                <ExternalLink className="h-3 w-3" /> Xem trên Kalodata
+              </a>
+              <a
+                href={`https://www.kalodata.com/product?searchKey=${encodeURIComponent(product.title.slice(0, 40))}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 text-xs font-medium text-slate-500 hover:underline"
+                title="Tìm sản phẩm theo tên (fallback)"
+              >
+                Tìm theo tên
+              </a>
+            </div>
           </div>
           <button onClick={onClose} className="rounded-lg p-1 text-slate-400 hover:bg-black/5"><X className="h-5 w-5" /></button>
         </div>
@@ -198,7 +240,13 @@ export default function ProductDetail({ product, onClose }: { product: ScoredPro
           {/* ── VIDEO WIN ── */}
           {tab === 'video' && (
             <div className="flex flex-col gap-3">
-              <p className="text-xs text-slate-500">🎥 Video đang bán tốt — bấm <b>▶ Phát</b> để xem TikTok ngay trong app, bấm <b>"Phân tích AI"</b> để mổ xẻ góc content.</p>
+              <p className="text-xs text-slate-500">🎥 Video đang bán tốt sản phẩm này (thị trường <b>{product.market}</b>). Bấm <b>▶ Phát video</b> để xem ngay trong app.</p>
+              {videos.some((v) => /\.(vn|id|th)\b/i.test(v.handle) || /[ăâđêôơưĐ]/.test(v.caption)) && (
+                <div className="flex items-start gap-1.5 rounded-lg border border-blue-100 bg-blue-50 px-3 py-2 text-[11px] text-blue-700">
+                  <Info className="mt-0.5 h-3 w-3 shrink-0" />
+                  <span>Một số video tiếng Việt là creator gốc VN làm content cho TikTok Shop {product.market} — đây là DATA THẬT từ Kalodata thị trường {product.market}, KHÔNG phải lẫn data.</span>
+                </div>
+              )}
               {videos.length === 0 && (
                 <div className="rounded-xl border border-dashed border-black/10 p-4 text-center text-xs text-slate-400">
                   Chưa có data video cho thị trường <b>{product.market}</b>.<br/>
@@ -232,7 +280,7 @@ export default function ProductDetail({ product, onClose }: { product: ScoredPro
                     <div className="mt-2 flex gap-2">
                       {canEmbed ? (
                         <button
-                          onClick={() => setEmbedVideoId(vid.id)}
+                          onClick={() => setEmbedVideo({ id: vid.id, handle: cleanHandle || undefined })}
                           className="flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 py-1.5 text-xs font-semibold text-emerald-700 transition-colors hover:bg-emerald-100"
                         >
                           <Play className="h-3.5 w-3.5" /> Phát video
@@ -278,7 +326,13 @@ export default function ProductDetail({ product, onClose }: { product: ScoredPro
           {/* ── CREATOR ── */}
           {tab === 'creator' && (
             <div className="flex flex-col gap-3">
-              <p className="text-xs text-slate-500">👤 Creator đang đẩy sản phẩm — bấm <b>"TikTok"</b> để xem kênh, đánh giá rồi tuyển.</p>
+              <p className="text-xs text-slate-500">👤 Creator đang đẩy sản phẩm (thị trường <b>{product.market}</b>) — bấm <b>"TikTok"</b> để xem kênh, đánh giá rồi tuyển.</p>
+              {creators.some((c) => /[ăâđêôơưĐ]/.test(c.nickname)) && (
+                <div className="flex items-start gap-1.5 rounded-lg border border-blue-100 bg-blue-50 px-3 py-2 text-[11px] text-blue-700">
+                  <Info className="mt-0.5 h-3 w-3 shrink-0" />
+                  <span>Một số creator tên tiếng Việt là người Việt làm content cho TikTok Shop {product.market} — họ có handle Việt nhưng bán hàng MY. Cơ hội tuyển dễ vì cùng ngôn ngữ.</span>
+                </div>
+              )}
               {creators.length === 0 && (
                 <div className="rounded-xl border border-dashed border-black/10 p-4 text-center text-xs text-slate-400">
                   Chưa có data creator cho thị trường <b>{product.market}</b>.<br/>
@@ -374,24 +428,36 @@ export default function ProductDetail({ product, onClose }: { product: ScoredPro
         </div>
       </aside>
 
-      {/* ── TikTok video embed modal ── */}
-      {embedVideoId && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 p-4" onClick={() => setEmbedVideoId(null)}>
-          <div className="relative flex h-[80vh] max-h-[720px] w-full max-w-md flex-col overflow-hidden rounded-2xl bg-black" onClick={(e) => e.stopPropagation()}>
-            <button
-              onClick={() => setEmbedVideoId(null)}
-              className="absolute right-3 top-3 z-10 rounded-full bg-black/60 p-1.5 text-white hover:bg-black/80"
-              title="Đóng"
-            >
-              <X className="h-4 w-4" />
-            </button>
-            <iframe
-              src={tiktokEmbedUrl(embedVideoId)}
-              className="h-full w-full"
-              allow="autoplay; encrypted-media; picture-in-picture"
-              allowFullScreen
-              title="TikTok video"
-            />
+      {/* ── TikTok video embed modal (CHÍNH THỨC qua blockquote + embed.js) ── */}
+      {embedVideo && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 p-4" onClick={() => setEmbedVideo(null)}>
+          <div className="relative flex h-[85vh] max-h-[820px] w-full max-w-2xl flex-col overflow-hidden rounded-2xl bg-white" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between border-b border-black/10 px-4 py-2">
+              <span className="text-xs font-semibold text-slate-600">▶ TikTok video</span>
+              <div className="flex items-center gap-2">
+                {embedVideo.handle && (
+                  <a
+                    href={`https://www.tiktok.com/@${embedVideo.handle}/video/${embedVideo.id}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-1 rounded-md bg-slate-100 px-2 py-1 text-[11px] font-semibold text-slate-700 hover:bg-slate-200"
+                    title="Mở thẳng trên TikTok (nếu embed lỗi)"
+                  >
+                    <ExternalLink className="h-3 w-3" /> Mở TikTok
+                  </a>
+                )}
+                <button
+                  onClick={() => setEmbedVideo(null)}
+                  className="rounded-full p-1 text-slate-500 hover:bg-slate-100"
+                  title="Đóng"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+            </div>
+            <div className="flex-1 overflow-auto bg-slate-50">
+              <TikTokEmbedPlayer videoId={embedVideo.id} handle={embedVideo.handle} />
+            </div>
           </div>
         </div>
       )}
