@@ -15,11 +15,16 @@ function kalodataUrl(productId: string, market: Market): string {
   // data thật: product_id chính là id Kalodata nên link trỏ đúng sản phẩm.
   const id = productId.replace(/-(th|id|vn)$/i, '')
   // URL Kalodata cập nhật 2026-06: PHẢI có dateRange + cateValue, không trang trống.
-  const end = new Date(); const start = new Date(end.getTime() - 30 * 86400000)
+  // dateRange 90 ngày để bắt được cả sản phẩm peak sớm hơn (30 ngày quá hẹp gây "Không có kết quả").
+  const end = new Date(); const start = new Date(end.getTime() - 90 * 86400000)
   const fmt = (d: Date) => d.toISOString().slice(0, 10)
   const dateRange = encodeURIComponent(JSON.stringify([fmt(start), fmt(end)]))
   const cateValue = encodeURIComponent('[]')
   return `https://www.kalodata.com/product/detail?id=${encodeURIComponent(id)}&language=vi-VN&currency=${KALODATA_CURRENCY[market]}&region=${market}&dateRange=${dateRange}&cateValue=${cateValue}`
+}
+
+function tiktokEmbedUrl(videoId: string): string {
+  return `https://www.tiktok.com/embed/v2/${encodeURIComponent(videoId)}?lang=vi-VN`
 }
 
 const STATUS_ICON: Record<SignalResult['status'], React.ReactNode> = {
@@ -43,6 +48,7 @@ function Sparkline({ data }: { data?: number[] }) {
 export default function ProductDetail({ product, onClose }: { product: ScoredProduct; onClose: () => void }) {
   const [tab, setTab] = useState<Tab>('overview')
   const [analyzeId, setAnalyzeId] = useState<string | null>(null)
+  const [embedVideoId, setEmbedVideoId] = useState<string | null>(null)
   const v = VERDICT_META[product.verdict]
   const niche = NICHES.find((n) => n.key === product.nicheKey)
   const passCount = product.signals.filter((s) => s.status === 'pass').length
@@ -52,22 +58,22 @@ export default function ProductDetail({ product, onClose }: { product: ScoredPro
   const getVideosForProduct = useResearchStore((s) => s.getVideosForProduct)
   const getCreatorsForProduct = useResearchStore((s) => s.getCreatorsForProduct)
 
-  // Video: ưu tiên DB; fallback sample.
+  // Video: nếu DB ĐÃ hydrate (kể cả empty), CHỈ dùng real — không lừa anh bằng sample.
   const videos = useMemo(() => {
-    const real = (realVideos && realVideos.length) ? getVideosForProduct(product.productId, product.nicheKey) : []
-    if (real.length) {
+    if (realVideos !== null) {
+      const real = getVideosForProduct(product.productId, product.nicheKey, product.market)
       return real.map((v: DbVideo) => ({
         id: v.videoId, caption: v.description.slice(0, 80) || '(video)', handle: v.handle ? '@' + v.handle : '@unknown',
         views: v.views, gmv: v.gmv, adRoas: v.adRoas || 1, durationSec: v.duration,
       }))
     }
-    return getVideosFor(product)
+    return getVideosFor(product) // chỉ khi DB chưa hydrate (offline / chưa tạo bảng)
   }, [product, realVideos, getVideosForProduct])
 
-  // Creator: ưu tiên DB; fallback sample.
+  // Creator: tương tự — DB hydrate → chỉ dùng real, kể cả trống.
   const creators = useMemo(() => {
-    const real = (realCreators && realCreators.length) ? getCreatorsForProduct(product.productId, product.nicheKey) : []
-    if (real.length) {
+    if (realCreators !== null) {
+      const real = getCreatorsForProduct(product.productId, product.nicheKey, product.market)
       return real.map((c: DbCreator) => ({
         id: c.creatorId, handle: '@' + c.handle, nickname: c.nickname || c.handle,
         followers: c.followers, gmv: c.gmv,
@@ -192,16 +198,19 @@ export default function ProductDetail({ product, onClose }: { product: ScoredPro
           {/* ── VIDEO WIN ── */}
           {tab === 'video' && (
             <div className="flex flex-col gap-3">
-              <p className="text-xs text-slate-500">🎥 Video đang bán tốt — bấm <b>"Xem TikTok"</b> để xem video thật, bấm <b>"Phân tích AI"</b> để mổ xẻ góc content.</p>
+              <p className="text-xs text-slate-500">🎥 Video đang bán tốt — bấm <b>▶ Phát</b> để xem TikTok ngay trong app, bấm <b>"Phân tích AI"</b> để mổ xẻ góc content.</p>
+              {videos.length === 0 && (
+                <div className="rounded-xl border border-dashed border-black/10 p-4 text-center text-xs text-slate-400">
+                  Chưa có data video cho thị trường <b>{product.market}</b>.<br/>
+                  Vào Kalodata → mục <b>Video & Quảng cáo</b> → bấm <b>"Crawl Full"</b> trên extension.
+                </div>
+              )}
               {videos.map((vid) => {
                 const open = analyzeId === vid.id
                 const analysis = open ? analyzeVideo(vid.caption) : null
-                // TikTok video URL: thử /video/{id} trước, không có id thì link tới kênh.
                 const cleanHandle = vid.handle.replace(/^@/, '').trim()
                 const looksLikeId = /^\d{15,}$/.test(vid.id)
-                const tiktokUrl = cleanHandle
-                  ? (looksLikeId ? `https://www.tiktok.com/@${cleanHandle}/video/${vid.id}` : `https://www.tiktok.com/@${cleanHandle}`)
-                  : null
+                const canEmbed = looksLikeId
                 return (
                   <div key={vid.id} className="rounded-xl border border-black/10 p-2.5">
                     <div className="flex gap-3">
@@ -221,20 +230,26 @@ export default function ProductDetail({ product, onClose }: { product: ScoredPro
                     </div>
 
                     <div className="mt-2 flex gap-2">
-                      {tiktokUrl && (
+                      {canEmbed ? (
+                        <button
+                          onClick={() => setEmbedVideoId(vid.id)}
+                          className="flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 py-1.5 text-xs font-semibold text-emerald-700 transition-colors hover:bg-emerald-100"
+                        >
+                          <Play className="h-3.5 w-3.5" /> Phát video
+                        </button>
+                      ) : cleanHandle ? (
                         <a
-                          href={tiktokUrl}
+                          href={`https://www.tiktok.com/@${cleanHandle}`}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-black/10 bg-slate-50 py-1.5 text-xs font-semibold text-slate-700 transition-colors hover:bg-slate-100"
-                          title={looksLikeId ? 'Mở video TikTok' : 'Mở kênh TikTok (chưa khớp video id)'}
                         >
-                          <Play className="h-3.5 w-3.5" /> {looksLikeId ? 'Xem TikTok' : 'Kênh TikTok'}
+                          <ExternalLink className="h-3.5 w-3.5" /> Kênh TikTok
                         </a>
-                      )}
+                      ) : null}
                       <button
                         onClick={() => setAnalyzeId(open ? null : vid.id)}
-                        className={`flex ${tiktokUrl ? 'flex-1' : 'w-full'} items-center justify-center gap-1.5 rounded-lg border border-violet-200 bg-violet-50 py-1.5 text-xs font-semibold text-violet-700 transition-colors hover:bg-violet-100`}
+                        className="flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-violet-200 bg-violet-50 py-1.5 text-xs font-semibold text-violet-700 transition-colors hover:bg-violet-100"
                       >
                         <Sparkles className="h-3.5 w-3.5" /> {open ? 'Ẩn AI' : 'Phân tích AI'}
                       </button>
@@ -264,6 +279,12 @@ export default function ProductDetail({ product, onClose }: { product: ScoredPro
           {tab === 'creator' && (
             <div className="flex flex-col gap-3">
               <p className="text-xs text-slate-500">👤 Creator đang đẩy sản phẩm — bấm <b>"TikTok"</b> để xem kênh, đánh giá rồi tuyển.</p>
+              {creators.length === 0 && (
+                <div className="rounded-xl border border-dashed border-black/10 p-4 text-center text-xs text-slate-400">
+                  Chưa có data creator cho thị trường <b>{product.market}</b>.<br/>
+                  Vào Kalodata → mục <b>Nhà sáng tạo</b> → bấm <b>"Crawl Full"</b> trên extension.
+                </div>
+              )}
               {creators.map((c) => {
                 const cleanHandle = c.handle.replace(/^@/, '').trim()
                 // Handle phải đúng định dạng TikTok (chữ/số/dấu chấm/gạch dưới, ≥2 ký tự).
@@ -352,6 +373,28 @@ export default function ProductDetail({ product, onClose }: { product: ScoredPro
           {tab === 'pricing' && <PricingCalculator defaultPriceMyr={product.unitPrice} />}
         </div>
       </aside>
+
+      {/* ── TikTok video embed modal ── */}
+      {embedVideoId && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 p-4" onClick={() => setEmbedVideoId(null)}>
+          <div className="relative flex h-[80vh] max-h-[720px] w-full max-w-md flex-col overflow-hidden rounded-2xl bg-black" onClick={(e) => e.stopPropagation()}>
+            <button
+              onClick={() => setEmbedVideoId(null)}
+              className="absolute right-3 top-3 z-10 rounded-full bg-black/60 p-1.5 text-white hover:bg-black/80"
+              title="Đóng"
+            >
+              <X className="h-4 w-4" />
+            </button>
+            <iframe
+              src={tiktokEmbedUrl(embedVideoId)}
+              className="h-full w-full"
+              allow="autoplay; encrypted-media; picture-in-picture"
+              allowFullScreen
+              title="TikTok video"
+            />
+          </div>
+        </div>
+      )}
     </>
   )
 }

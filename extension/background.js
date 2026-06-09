@@ -289,11 +289,18 @@ async function applySchedule() {
   const { schedule } = await chrome.storage.local.get('schedule')
   try { await chrome.alarms.clear(ALARM_NAME) } catch (e) { /* */ }
   if (!schedule || !schedule.enabled) return
-  const [hh, mm] = String(schedule.time || '07:00').split(':').map(Number)
-  const now = new Date()
-  const next = new Date(now.getFullYear(), now.getMonth(), now.getDate(), hh || 7, mm || 0, 0, 0)
-  if (next.getTime() <= now.getTime()) next.setDate(next.getDate() + 1)
-  chrome.alarms.create(ALARM_NAME, { when: next.getTime(), periodInMinutes: 24 * 60 })
+  const interval = Number(schedule.intervalMin) || 1440 // mặc định 1 ngày
+  if (interval >= 1440) {
+    // Hằng ngày tại giờ cố định
+    const [hh, mm] = String(schedule.time || '07:00').split(':').map(Number)
+    const now = new Date()
+    const next = new Date(now.getFullYear(), now.getMonth(), now.getDate(), hh || 7, mm || 0, 0, 0)
+    if (next.getTime() <= now.getTime()) next.setDate(next.getDate() + 1)
+    chrome.alarms.create(ALARM_NAME, { when: next.getTime(), periodInMinutes: 24 * 60 })
+  } else {
+    // Mỗi N phút (30, 60, 360)
+    chrome.alarms.create(ALARM_NAME, { delayInMinutes: interval, periodInMinutes: interval })
+  }
 }
 
 chrome.alarms.onAlarm.addListener((alarm) => {

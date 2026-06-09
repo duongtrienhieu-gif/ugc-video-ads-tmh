@@ -129,8 +129,8 @@ interface ResearchStore {
   source: () => ResearchProduct[]
   getScored: () => ScoredProduct[]
   getSelected: () => ScoredProduct | null
-  getVideosForProduct: (productId: string, nicheKey: NicheKey) => DbVideo[]
-  getCreatorsForProduct: (productId: string, nicheKey: NicheKey) => DbCreator[]
+  getVideosForProduct: (productId: string, nicheKey: NicheKey, market: Market) => DbVideo[]
+  getCreatorsForProduct: (productId: string, nicheKey: NicheKey, market: Market) => DbCreator[]
   getShopsForNiches: (market: Market, niches: NicheKey[]) => DbShop[]
 }
 
@@ -191,20 +191,26 @@ export const useResearchStore = create<ResearchStore>((set, get) => ({
 
   source: () => get().realProducts ?? SAMPLE_PRODUCTS,
 
-  getVideosForProduct: (productId: string, nicheKey: NicheKey): DbVideo[] => {
+  getVideosForProduct: (productId: string, nicheKey: NicheKey, market: Market): DbVideo[] => {
     const all = get().realVideos
     if (!all || !all.length) return []
-    // Ưu tiên video gắn trực tiếp sản phẩm; nếu không có thì lấy top video cùng ngách.
-    const linked = all.filter((v) => v.productId && v.productId === productId)
+    // 1) Video gắn trực tiếp sản phẩm cùng market
+    const linked = all.filter((v) => v.market === market && v.productId === productId)
     if (linked.length) return linked.sort((a, b) => b.gmv - a.gmv).slice(0, 6)
-    return all.filter((v) => v.nicheKey === nicheKey)
-      .sort((a, b) => b.gmv - a.gmv).slice(0, 6)
+    // 2) Cùng market + cùng ngách
+    const sameMarketNiche = all.filter((v) => v.market === market && v.nicheKey === nicheKey)
+    if (sameMarketNiche.length) return sameMarketNiche.sort((a, b) => b.gmv - a.gmv).slice(0, 6)
+    // 3) Cùng market, bất kỳ ngách (đảm bảo không lẫn data thị trường khác)
+    return all.filter((v) => v.market === market).sort((a, b) => b.gmv - a.gmv).slice(0, 6)
   },
-  getCreatorsForProduct: (_productId: string, nicheKey: NicheKey): DbCreator[] => {
+  getCreatorsForProduct: (_productId: string, nicheKey: NicheKey, market: Market): DbCreator[] => {
     const all = get().realCreators
     if (!all || !all.length) return []
-    return all.filter((c) => c.nicheKey === nicheKey)
-      .sort((a, b) => b.gmv - a.gmv).slice(0, 6)
+    // 1) Cùng market + cùng ngách
+    const sameMarketNiche = all.filter((c) => c.market === market && c.nicheKey === nicheKey)
+    if (sameMarketNiche.length) return sameMarketNiche.sort((a, b) => b.gmv - a.gmv).slice(0, 6)
+    // 2) Cùng market, bất kỳ ngách (better than empty)
+    return all.filter((c) => c.market === market).sort((a, b) => b.gmv - a.gmv).slice(0, 6)
   },
   getShopsForNiches: (market: Market, niches: NicheKey[]): DbShop[] => {
     const all = get().realShops

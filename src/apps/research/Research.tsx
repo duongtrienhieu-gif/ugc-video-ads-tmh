@@ -16,7 +16,10 @@ const segCls = (active: boolean) =>
   }`
 
 export default function Research() {
-  const { market, setMarket, activePreset, applyPreset, getScored, selectedId, select, getSelected, hydrate, realProducts, syncedAt } = useResearchStore()
+  const { market, setMarket, activePreset, applyPreset, getScored, selectedId, select, getSelected, hydrate, realProducts } = useResearchStore()
+  const realVideos = useResearchStore((s) => s.realVideos)
+  const realCreators = useResearchStore((s) => s.realCreators)
+  const realShops = useResearchStore((s) => s.realShops)
   const [view, setView] = useState<'products' | 'shops'>('products')
   useEffect(() => { void hydrate() }, [hydrate])
   const scored = getScored()
@@ -35,9 +38,9 @@ export default function Research() {
             {realProducts ? (
               <span
                 className="flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-600"
-                title="Số liệu (doanh thu, growth, giá, hoa hồng) là DATA THẬT từ Kalodata. Tên sản phẩm hiển thị tiếng Việt do Kalodata tự dịch (account của bạn đang chọn ngôn ngữ vi-VN) — tên gốc trên TikTok Shop là tiếng Mã."
+                title={`DB hiện có:\n• ${realProducts.length} sản phẩm\n• ${realCreators?.length || 0} creator\n• ${realVideos?.length || 0} video\n• ${realShops?.length || 0} shop\n\nSố liệu là DATA THẬT từ Kalodata. Tên hiển thị tiếng Việt do Kalodata tự dịch.`}
               >
-                ✓ Data thật{syncedAt ? ` · ${new Date(syncedAt).toLocaleDateString('vi-VN')}` : ''} ⓘ
+                ✓ {realProducts.length} SP · {realCreators?.length || 0} creator · {realVideos?.length || 0} video · {realShops?.length || 0} shop ⓘ
               </span>
             ) : (
               <span className="flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-600">

@@ -11,7 +11,7 @@ async function getState() {
     total: o.totalIngested || 0,
     crawl: o.crawlStatus || null,
     fullCrawl: o.fullCrawl || null,
-    schedule: o.schedule || { enabled: false, time: '07:00' },
+    schedule: o.schedule || { enabled: false, time: '07:00', intervalMin: 1440 },
   }
 }
 
@@ -96,12 +96,17 @@ async function render() {
 
     <div class="schedSection">
       <div class="row">
-        <span class="switch"><input type="checkbox" id="schEnabled" ${sch.enabled ? 'checked' : ''}/> ⏰ Hẹn giờ tự kéo mỗi ngày</span>
+        <span class="switch"><input type="checkbox" id="schEnabled" ${sch.enabled ? 'checked' : ''}/> ⏰ Hẹn giờ tự kéo</span>
       </div>
-      <div class="row" style="display:${sch.enabled ? 'flex' : 'none'}; align-items:center; gap:6px">
-        <span>Lúc</span>
-        <input id="schTime" type="time" class="timeInput" value="${esc(sch.time)}" />
-        <span class="muted">(giờ máy)</span>
+      <div class="row" style="display:${sch.enabled ? 'flex' : 'none'}; align-items:center; gap:6px; flex-wrap:wrap">
+        <span>Mỗi</span>
+        <select id="schInterval" class="timeInput">
+          <option value="30" ${sch.intervalMin == 30 ? 'selected' : ''}>30 phút</option>
+          <option value="60" ${sch.intervalMin == 60 ? 'selected' : ''}>1 giờ</option>
+          <option value="360" ${sch.intervalMin == 360 ? 'selected' : ''}>6 giờ</option>
+          <option value="1440" ${(!sch.intervalMin || sch.intervalMin == 1440) ? 'selected' : ''}>1 ngày</option>
+        </select>
+        ${sch.intervalMin >= 1440 || !sch.intervalMin ? `<span>lúc</span><input id="schTime" type="time" class="timeInput" value="${esc(sch.time)}" /><span class="muted">(giờ máy)</span>` : ''}
       </div>
     </div>
 
@@ -118,7 +123,8 @@ async function render() {
   $('crawl').onclick = startCrawl
   $('full').onclick = startFullCrawl
   $('schEnabled').onchange = saveSchedule
-  $('schTime').onchange = saveSchedule
+  if ($('schTime')) $('schTime').onchange = saveSchedule
+  if ($('schInterval')) $('schInterval').onchange = saveSchedule
   if (crawling && !pollTimer) startPoll()
   if (fullRunning && !pollTimer) startFullPoll()
 }
@@ -148,8 +154,9 @@ function startFullPoll() {
 
 async function saveSchedule() {
   const enabled = $('schEnabled').checked
+  const intervalMin = $('schInterval') ? Number($('schInterval').value) || 1440 : 1440
   const time = $('schTime') ? $('schTime').value : '07:00'
-  await chrome.storage.local.set({ schedule: { enabled, time } })
+  await chrome.storage.local.set({ schedule: { enabled, time, intervalMin } })
   chrome.runtime.sendMessage({ type: 'kalo-apply-schedule' }, () => { /* */ })
   render()
 }
