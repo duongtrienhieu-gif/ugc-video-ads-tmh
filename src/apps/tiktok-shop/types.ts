@@ -141,6 +141,30 @@ export interface TiktokShopProductBrief {
     dailyContext: string                // e.g. "office workers in AC environments with nasal dryness"
   }
 
+  // ── Physical application context (Phase 11 — context intelligence) ──
+  // Tells image-gen WHERE on body / surface the product is used and HOW.
+  // Critical for slots that show usage (slot 2 pain, slot 3 transformation,
+  // slot 6 usage demo, slot 5 customer chat). Without this, AI may render
+  // a knee brace on the arm or a face cream on the elbow.
+  applicationDetails: {
+    /** Where on the body / surface the product is applied.
+     *  E.g., "knee joint", "lower back", "nostrils", "facial skin (cheeks + forehead)",
+     *  "scalp", "lips", "tongue", "(oral — swallowed, no body application)". */
+    bodyZone: string
+    /** Concrete physical interaction. E.g.,
+     *  - "wrap around the knee joint and secure velcro straps tightly"
+     *  - "spray 1-2 puffs into each nostril while head tilted slightly back"
+     *  - "apply a pea-sized amount with fingertip in circular motion"
+     *  - "place 1 tablet under tongue, let dissolve" */
+    howApplied: string
+    /** Full image-gen scene direction — ONE concrete sentence describing the
+     *  pose / camera / action so AI renders the right body interaction.
+     *  E.g., "Person sitting on a couch with knee bent at 90°, both hands
+     *  wrapping the brace around the knee joint, securing the velcro strap,
+     *  medium close-up camera angle focused on the knee". */
+    usageScene: string
+  }
+
   // ── Pain & promise (commercial copywriting anchor) ──
   /** 3 customer-voice pain feelings ranked by emotional intensity, max 12 words each. */
   corePains: string[]
@@ -172,10 +196,18 @@ export interface SlotTexts {
   slot2?: { question: string; painBullets: string[] }
   slot3?: { beforeLabel: string; afterLabel: string; metric: string; metricSubtitle: string; disclaimer: string }
   slot4?: { title: string; ingredients: Array<{ name: string; pct?: string }>; tagline: string }
-  /** Slot 5 — WhatsApp-screenshot social proof.
-   *  contactName = customer's display name in the chat.
-   *  bubbles = 2-3 customer message lines split into separate WhatsApp bubbles. */
-  slot5?: { contactName: string; bubbles: string[]; verifiedNote: string }
+  /** Slot 5 — WhatsApp-screenshot social proof (2-way conversation).
+   *  conversation: alternating customer + shop bubbles. Customer = right-aligned
+   *  green; shop = left-aligned white. Typical flow:
+   *  1) customer: pain context
+   *  2) customer: result after using (mentions body zone naturally)
+   *  3) shop: thank-you + dặn dò (instruction to keep using)
+   *  4) optional customer: thank-you / will-order-again. */
+  slot5?: {
+    contactName: string
+    conversation: Array<{ from: 'customer' | 'shop'; text: string }>
+    verifiedNote: string
+  }
   slot6?: { title: string; steps: string[]; timing: string }
   slot7?: { title: string; usLabel: string; themLabel: string; points: Array<[string, string]> }
   /** Slot 8 — qualifying checklist ("Ai nên dùng?").

@@ -48,7 +48,21 @@ function header(ctx: PromptContext): string {
 - Target customer: ${ctx.brief.targetCustomer.ageRange} ${ctx.brief.targetCustomer.primaryGender} · ${ctx.brief.targetCustomer.dailyContext}
 - Transformation: ${ctx.brief.transformationPromise}
 - Key edge: ${ctx.brief.keyDifferentiator}
+- APPLICATION (where/how on body): ${ctx.brief.applicationDetails.bodyZone} · ${ctx.brief.applicationDetails.howApplied}
+- USAGE SCENE direction: ${ctx.brief.applicationDetails.usageScene}
 ` : ''
+
+  // Vietnamese diacritics rule — gpt-4o-image tends to strip dấu (ă/â/ê/ô/ơ/ư/đ
+  // + sắc/huyền/hỏi/ngã/nặng) when rendering stylized headlines. Make the rule
+  // explicit and provide a few good/bad examples so the model knows what to do.
+  const diacriticsRule = ctx.language === 'vi'
+    ? `\nVIETNAMESE DIACRITICS (CRITICAL — render text faithfully):
+- Render ALL Vietnamese diacritics EXACTLY: ă â ê ô ơ ư đ AND all tonal marks (sắc/huyền/hỏi/ngã/nặng).
+- Render text strings VERBATIM as provided in this prompt. Do NOT transliterate to ASCII.
+- ✓ "Đầu Gối", "Hỗ Trợ", "Công Nghệ", "Vật Liệu Thoáng Khí", "Thoải Mái", "Chính Hãng"
+- ✗ NEVER render "Dau Goi", "Ho Tro", "Cong Nghe", "Vat Lieu Thoang Khi", "Thoai Mai", "Chinh Hang"
+- Every Vietnamese word with a vowel mark or tone MUST keep the mark in the rendered image — even at large display sizes, even in ExtraBold weight.`
+    : ''
 
   return `1:1 square TikTok Shop image (1024×1024). ${productRefHint}
 
@@ -77,7 +91,7 @@ STYLE: Premium e-commerce listing — top-seller aesthetic for this product's ca
 
 PALETTE (use ONLY these): ${p.primary} primary, ${p.secondary} secondary, ${p.cta} accent. High saturation.
 
-LANGUAGE: ${langName} ONLY in any rendered text (except "Official store" subtitle which stays English as universal e-commerce terminology). NO other language characters.
+LANGUAGE: ${langName} ONLY in any rendered text (except "Official store" subtitle which stays English as universal e-commerce terminology). NO other language characters.${diacriticsRule}
 
 NO trust bar at bottom — leave clean for visual breathing.`
 }
@@ -164,31 +178,45 @@ function deriveSlot4(ctx: PromptContext): { title: string; ingredients: Array<{ 
   return { title, ingredients: [], tagline }
 }
 
-function deriveSlot5(ctx: PromptContext): { contactName: string; bubbles: string[]; verifiedNote: string } {
+function deriveSlot5(ctx: PromptContext): { contactName: string; conversation: Array<{ from: 'customer' | 'shop'; text: string }>; verifiedNote: string } {
   const isMS = ctx.language === 'ms'
   const verifiedNote = isMS ? 'Ulasan pelanggan sebenar' : 'Phản hồi khách hàng thật'
   const contactName = isMS ? 'Aisyah' : 'Mai Anh'
   if (ctx.brief) {
     const pain = ctx.brief.corePains[0]?.replace(/\?$/, '').trim() || (isMS ? 'masalah saya' : 'vấn đề của tôi')
     const promise = ctx.brief.transformationPromise.slice(0, 80).trim()
-    const bubbles = isMS
+    const zone = ctx.brief.applicationDetails.bodyZone
+    const usageHint = ctx.brief.applicationDetails.howApplied.slice(0, 60)
+    const conversation: Array<{ from: 'customer' | 'shop'; text: string }> = isMS
       ? [
-          `Hi kak, sebelum ni saya ${pain.toLowerCase()}`,
-          `Dah guna ${ctx.brief.productNameExact} seminggu, ${promise.toLowerCase()} 🥰`,
-          `Terima kasih banyak yer!`,
+          { from: 'customer', text: `Hi kak, sebelum ni saya ${pain.toLowerCase()} (${zone}) 😩` },
+          { from: 'customer', text: `Dah guna ${ctx.brief.productNameExact} seminggu, ${promise.toLowerCase()} 🥰` },
+          { from: 'shop',     text: `Terima kasih kak! Teruskan ${usageHint.toLowerCase()} setiap hari untuk hasil yang lebih lama tau 💚` },
+          { from: 'customer', text: `Okay! Akan order lagi nanti 🙏` },
         ]
       : [
-          `Chị ơi, trước em bị ${pain.toLowerCase()} 😩`,
-          `Em dùng ${ctx.brief.productNameExact} được 1 tuần, ${promise.toLowerCase()} ạ ❤️`,
-          `Cảm ơn chị nhiều lắm!`,
+          { from: 'customer', text: `Chị ơi, trước em bị ${pain.toLowerCase()} ở ${zone} 😩` },
+          { from: 'customer', text: `Em dùng ${ctx.brief.productNameExact} được 1 tuần, ${promise.toLowerCase()} ạ ❤️` },
+          { from: 'shop',     text: `Cảm ơn em! Nhớ ${usageHint.toLowerCase()} đều mỗi ngày để duy trì hiệu quả nha 💚` },
+          { from: 'customer', text: `Dạ em nhớ rồi! Em sẽ đặt thêm ạ 🙏` },
         ]
-    return { contactName, bubbles, verifiedNote }
+    return { contactName, conversation, verifiedNote }
   }
   return {
     contactName,
-    bubbles: isMS
-      ? [`Hi kak`, `Saya sangat berpuas hati dengan ${ctx.product.productName}!`, `Akan order lagi 🥰`]
-      : [`Chị ơi`, `Em hài lòng lắm với ${ctx.product.productName}!`, `Em sẽ đặt thêm ạ ❤️`],
+    conversation: isMS
+      ? [
+          { from: 'customer', text: `Hi kak, saya nak share` },
+          { from: 'customer', text: `Saya sangat berpuas hati dengan ${ctx.product.productName}! 🥰` },
+          { from: 'shop',     text: `Terima kasih kak! Teruskan penggunaan harian untuk hasil terbaik 💚` },
+          { from: 'customer', text: `Akan order lagi nanti 🙏` },
+        ]
+      : [
+          { from: 'customer', text: `Chị ơi, em muốn chia sẻ` },
+          { from: 'customer', text: `Em hài lòng lắm với ${ctx.product.productName}! ❤️` },
+          { from: 'shop',     text: `Cảm ơn em! Nhớ dùng đều hằng ngày để duy trì hiệu quả nha 💚` },
+          { from: 'customer', text: `Dạ em sẽ đặt thêm ạ 🙏` },
+        ],
     verifiedNote,
   }
 }
@@ -353,10 +381,13 @@ export function buildPromptSlot2(ctx: PromptContext): string {
   const st = ctx.slotTexts?.slot2
   const { question, painBullets } = st ?? deriveSlot2(ctx)
   const bullets = painBullets.slice(0, 3)
+  const bodyZoneHint = ctx.brief
+    ? `Documentary close-up of the customer's "before" pain — show DISCOMFORT in the EXACT body zone the product targets: "${ctx.brief.applicationDetails.bodyZone}". E.g., if product = knee brace, show person grabbing/touching the KNEE; if product = nasal spray, show person rubbing the NOSE; if product = face cream, show person frowning at facial skin. NEVER show pain on the wrong body part.`
+    : `Documentary close-up of the painful "before" state related to this product's category.`
   return `${header(ctx)}
 
 SLOT 2 — PAIN POINT
-COMPOSITION: Documentary close-up of the painful "before" state related to this product's category, sits in middle-right (y≈380-760). Slight desaturation (-15%) to convey discomfort. The product (matching refs) floats in BOTTOM-RIGHT corner, small (~18%), tilted, glowing softly.
+COMPOSITION: ${bodyZoneHint} The "before" scene sits in middle-right (y≈380-760). Slight desaturation (-15%) to convey discomfort. The product (matching refs) floats in BOTTOM-RIGHT corner, small (~18%), tilted, glowing softly.
 TEXT in image:
 - BELOW BRAND SEAL, centered (y≈250-340), bold (~90px) white with shadow: "${question}"
 - LEFT-SIDE STACK 3 bullets (y≈400-760) with red ✗ + bold (~42px each):
@@ -371,10 +402,13 @@ export function buildPromptSlot3(ctx: PromptContext): string {
   const metric       = st?.metric         ?? derived.metric
   const metricSub    = st?.metricSubtitle ?? derived.metricSubtitle
   const disclaimer   = st?.disclaimer     ?? derived.disclaimer
+  const transformBodyHint = ctx.brief
+    ? `BOTH halves must show the EXACT body zone the product targets ("${ctx.brief.applicationDetails.bodyZone}"). LEFT shows the BEFORE state (discomfort / problem visible at that zone). RIGHT shows the AFTER state (relief / improvement visible at that zone, often with the product worn/applied if appropriate). The body zone MUST match the product type — e.g., knee brace → both halves show the KNEE.`
+    : `LEFT "before" state, RIGHT "after" state (both directly relevant to this product's effect).`
   return `${header(ctx)}
 
 SLOT 3 — TRANSFORMATION
-COMPOSITION: 50/50 SYMMETRIC vertical split (occupying y≈240-900) — LEFT "before" state, RIGHT "after" state (both directly relevant to this product's effect). SAME camera angle + SAME lighting both halves (credibility critical). Thin accent-color vertical divider. Product floats lower-center over the divide, small.
+COMPOSITION: 50/50 SYMMETRIC vertical split (occupying y≈240-900) — ${transformBodyHint} SAME camera angle + SAME lighting both halves (credibility critical). Thin accent-color vertical divider. Product floats lower-center over the divide, small.
 TEXT in image:
 - JUST BELOW BRAND SEAL (y≈250), two labels (~38px bold tracking-wide white with shadow): left half="${beforeLabel}", right half="${afterLabel}"
 - CENTER MIDDLE GIANT (y≈500, ~180px ExtraBold accent color with strong shadow): "${metric}"
@@ -409,33 +443,42 @@ export function buildPromptSlot5(ctx: PromptContext): string {
   const st = ctx.slotTexts?.slot5
   const derived = deriveSlot5(ctx)
   const contactName = st?.contactName ?? derived.contactName
-  const bubbles     = (st?.bubbles && st.bubbles.length > 0 ? st.bubbles : derived.bubbles).slice(0, 3)
+  const conversation = (st?.conversation && st.conversation.length > 0 ? st.conversation : derived.conversation).slice(0, 5)
   const verified    = st?.verifiedNote ?? derived.verifiedNote
-  const bubblesList = bubbles
-    .map((b, i) => `  Bubble ${i + 1} (sent at "14:2${i + 1}", ✓✓ blue read-receipt): "${b}"`)
+  const bubblesList = conversation
+    .map((b, i) => {
+      const minute = String(21 + i).padStart(2, '0')
+      if (b.from === 'customer') {
+        return `  Bubble ${i + 1} — CUSTOMER (RIGHT-aligned, LIGHT GREEN #DCF8C6 with tail on right, dark text), timestamp "14:${minute}" + ✓✓ BLUE read-tick: "${b.text}"`
+      }
+      return `  Bubble ${i + 1} — SHOP (LEFT-aligned, WHITE #FFFFFF with tail on left, dark text, slight drop shadow), timestamp "14:${minute}" (no read-tick on shop bubbles): "${b.text}"`
+    })
     .join('\n')
 
   return `${header(ctx)}
 
-SLOT 5 — SOCIAL PROOF (WhatsApp screenshot inside iPhone mockup)
+SLOT 5 — SOCIAL PROOF (WhatsApp 2-way chat screenshot inside iPhone mockup)
 COMPOSITION:
 - Soft brand-color background fills the canvas.
-- CENTER OF CANVAS (y≈170-940), a realistic BLACK iPhone 14 / 15 mockup, tilted ~3° for natural perspective. The phone occupies ~58% of canvas width, sharp 3D-rendered look with subtle screen reflection. Notch + dynamic island visible at the top of the screen.
-- Phone screen content = WhatsApp chat thread (authentic WhatsApp UI):
-  - iOS status bar at very top (small): time "14:23", signal/wifi/battery icons.
+- CENTER OF CANVAS (y≈150-940), a realistic BLACK iPhone 14 / 15 mockup, tilted ~3° for natural perspective. The phone occupies ~58% of canvas width, sharp 3D-rendered look with subtle screen reflection. Notch + dynamic island visible at the top of the screen.
+- Phone screen content = WhatsApp chat thread (authentic WhatsApp UI, 2-way conversation):
+  - iOS status bar at very top (small): time "14:25", signal/wifi/battery icons.
   - WHATSAPP HEADER BAR (height ~80px on the screen, background = WhatsApp green #075E54): back arrow on the left, circular avatar (generic person silhouette in muted color — NO real face), then contact name "${contactName}" in WHITE Plus Jakarta Sans Semibold ~32px, with sub-text "online" in lighter green ~22px below the name. Camera + phone call icons on the right.
   - CHAT AREA below header: classic WhatsApp light beige #ECE5DD background with subtle faint geometric WhatsApp pattern texture.
-  - RIGHT-ALIGNED outgoing message bubbles (customer = sender), each bubble = WhatsApp light-green #DCF8C6 rounded rectangle with tail on the right, dark gray text ~30px:
+  - BUBBLES (ALTERNATING customer right-green / shop left-white — render in this EXACT order, top to bottom):
 ${bubblesList}
-  - Each bubble bottom-right has timestamp + double-tick BLUE ✓✓ (read).
+  - Each customer bubble: WhatsApp light-green #DCF8C6, tail on RIGHT side, dark gray text ~28px, timestamp + BLUE ✓✓ read-receipt in bottom-right.
+  - Each shop bubble: pure WHITE #FFFFFF, tail on LEFT side, dark gray text ~28px, timestamp in bottom-right (NO read-tick — shop is the receiver).
+  - Vertical spacing between bubbles ~12-16px. Bubbles stacked naturally as in a real chat.
 - Around the phone: subtle accent-color soft glow halo, gentle shadow under the phone.
 - Product (matching refs) appears small ~14% in the BOTTOM-LEFT corner of the canvas (NOT inside the chat screen), slightly out-of-focus for depth.
 TEXT in image (OUTSIDE the phone screen):
 - BOTTOM CENTER (y≈980), small italic ~22px dark navy on the bg: "${verified}"
 EXTRA RULES:
-- Make it look like an actual screenshot a customer would forward — not a designed marketing card. NO "5 star" rating overlay, NO testimonial frame outside the phone.
-- WhatsApp bubble colors and layout must follow real WhatsApp conventions exactly.
-- Customer messages are right-aligned green. If a shop reply bubble appears, it would be left-aligned white — but for this slot show ONLY customer outgoing bubbles to keep focus.`
+- Render the chat as an authentic forwarded screenshot — NOT a designed marketing card. NO "5 star" overlay, NO testimonial frame.
+- WhatsApp bubble layout must follow real conventions: customer = right-green, shop = left-white. NEVER mix or swap.
+- Render every bubble's text EXACTLY as written (no paraphrasing, no truncation). If a bubble has emoji, render the emoji.
+- The conversation MUST feel like a real back-and-forth: customer shares result, shop thanks + gives instruction, customer acknowledges.`
 }
 
 export function buildPromptSlot6(ctx: PromptContext): string {
@@ -444,13 +487,19 @@ export function buildPromptSlot6(ctx: PromptContext): string {
   const title  = st?.title  ?? derived.title
   const steps  = (st?.steps && st.steps.length > 0 ? st.steps : derived.steps).slice(0, 3)
   const timing = st?.timing ?? derived.timing
+  // The TRIPTYCH must show a PERSON physically applying the product on the
+  // correct body zone — NOT 3 product-only shots. usageScene from brief gives
+  // the AI a concrete photo direction. Without brief, fall back to generic.
+  const usageDirection = ctx.brief
+    ? `Each of the 3 panels shows a PERSON actually using the product on the correct body zone "${ctx.brief.applicationDetails.bodyZone}". Use this scene direction as the base for all 3 panels: "${ctx.brief.applicationDetails.usageScene}". Vary the panels by step progression (e.g., Panel 1 = preparing/positioning, Panel 2 = active application motion, Panel 3 = result/finished). DO NOT show only the product — every panel must show body-product interaction at the target zone. NEVER place the product on the wrong body part.`
+    : `TRIPTYCH — 3 instances of the product being USED (with a person interacting), in horizontal sequence. Each panel = one usage step.`
   return `${header(ctx)}
 
 SLOT 6 — USAGE DEMO
-COMPOSITION: TRIPTYCH — 3 instances of product in horizontal sequence (y≈400-820), each in slightly different angle/state representing the step. Soft context bg (relevant to where product is used), NOT cluttered. Subtle accent-color vertical dividers between panels.
+COMPOSITION: ${usageDirection} Panels occupy y≈400-820 in horizontal sequence. Soft context bg (home/bathroom/clinic depending on usage scene), NOT cluttered. Subtle accent-color vertical dividers between panels.
 TEXT in image:
 - BELOW BRAND SEAL, centered (y≈250-340), bold (~110px) dark primary or white: "${title}"
-- BELOW EACH PRODUCT (3 columns, y≈840): big accent-color circle (~90px) with white number, then bold step text (~36px):
+- BELOW EACH PANEL (3 columns, y≈840): big accent-color circle (~90px) with white number, then bold step text (~36px):
 ${steps.map((s, i) => `  Col ${i + 1}: "${s}"`).join('\n')}
 - BOTTOM center (y≈970, ~32px) tinted: "${timing}"`
 }

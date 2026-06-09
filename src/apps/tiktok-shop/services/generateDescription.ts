@@ -64,6 +64,8 @@ function buildCompactBriefBlock(brief: TiktokShopProductBrief): string {
 - Specific metric: ${brief.specificMetric}
 - Key differentiator: ${brief.keyDifferentiator}
 - Usage context: ${brief.usageContext}
+- Application — body zone: ${brief.applicationDetails.bodyZone}
+- Application — how used: ${brief.applicationDetails.howApplied}
 - Common objections: ${brief.commonObjections.join(' | ')}
 - Visible ingredients: ${ings}
 - Safe claims toolkit: ${safe}
@@ -90,7 +92,11 @@ COPYWRITING RULES:
 • Slot 1 headline: 4-6 words ALL CAPS, derived from brief.transformationPromise.
 • Slot 3 metric: must equal brief.specificMetric (already specific & measurable).
 • Slot 4 ingredients: must equal brief.visibleIngredients exactly. If brief.visibleIngredients is [], slot4.ingredients MUST be [] (do NOT invent).
-• Slot 5 bubbles (WhatsApp screenshot): 2-3 short customer chat lines, conversational, 1st-person, casual punctuation + occasional emoji like real WhatsApp. NOT a polished testimonial. Each bubble ≤ 14 words. First bubble = the pain context; second bubble = the result after using the product (mention product name); optional third = thank-you or order-again line.
+• Slot 5 conversation (WhatsApp 2-way chat): EXACTLY 4 alternating bubbles in this order — customer, customer, shop, customer. Each bubble ≤ 16 words, casual chat tone, may include 1 emoji.
+   - Bubble 1 (customer): pain context, mention the specific body zone from brief.applicationDetails.bodyZone naturally (e.g., "trước em bị đau ở đầu gối" for a knee product, "mũi em hay nghẹt suốt" for a nasal spray).
+   - Bubble 2 (customer): result after using the product, mention product name (brief.productNameExact). Cite the transformation specifically.
+   - Bubble 3 (SHOP — reply): warm thank-you + ONE concrete instruction/dặn dò derived from brief.applicationDetails.howApplied (e.g., "Nhớ đeo đều mỗi ngày khi đi bộ để duy trì hiệu quả nha"). MUST sound like a real shop owner, NOT generic "thank you for purchasing".
+   - Bubble 4 (customer): short acknowledgement / will-order-again. ≤ 10 words.
 • Slot 8 signs (qualifying checklist): 5 short concrete symptoms/situations from brief.corePains + brief.targetCustomer.dailyContext. Each ≤ 9 words, statement form (NOT a question, NO '?'). NO sales language, NO product mention, NO benefit talk — JUST the pain/situation the customer would recognize.
 • Slot 9 reasons (brand story bar): EXACTLY 3 reasons. ANTI-GENERIC HARD RULE:
    - reason 1 headline MUST contain at least one specific noun extracted from brief.keyDifferentiator (mechanism, technology, ingredient, country, timeframe).
@@ -181,7 +187,7 @@ JSON SHAPE (return EXACTLY this structure — single JSON object, all string val
     "slot2": {"question": "<${brief ? 'use brief.corePains[0]' : 'core pain as self-question'}, max 10 words ends '?'>", "painBullets": ["<self-question max 8 words ends '?'>", "<question>", "<question>"]},
     "slot3": {"beforeLabel": "${beforeLabel}", "afterLabel": "${afterLabel}", "metric": "<${brief ? 'must equal brief.specificMetric' : 'SPECIFIC number+unit ALL CAPS max 4 words'}>", "metricSubtitle": "<context max 5 words>", "disclaimer": "<results-may-vary, max 8 words>"},
     "slot4": {"title": "<formula panel title ALL CAPS>", "ingredients": ${slot4IngShape}, "tagline": "<safety/natural claim, max 8 words>"},
-    "slot5": {"contactName": "<short reviewer first name only — ${reviewerNameHint}>", "bubbles": ["<1st-person pain bubble, casual chat tone, mention pain context, ${brief ? 'anchor to brief.corePains[0]' : 'use product.painPoints[0]'}, max 14 words, may include 1 emoji>", "<2nd bubble: result after using product, mention product name, ${brief ? 'anchor to brief.transformationPromise' : 'use product benefit'}, max 14 words, may include 1 emoji>", "<optional 3rd bubble: short thank-you / will-order-again line, max 10 words>"], "verifiedNote": "<verified-review label>"},
+    "slot5": {"contactName": "<short reviewer first name only — ${reviewerNameHint}>", "conversation": [{"from": "customer", "text": "<1st bubble — pain context, mention specific body zone from ${brief ? 'brief.applicationDetails.bodyZone' : 'product.painPoints'}, casual chat tone, max 16 words, may include 1 emoji>"}, {"from": "customer", "text": "<2nd bubble — result after using, mention product name, ${brief ? 'anchor to brief.transformationPromise' : 'use product benefit'}, max 16 words, may include 1 emoji>"}, {"from": "shop", "text": "<3rd bubble — SHOP reply: warm thank-you + ONE concrete instruction derived from ${brief ? 'brief.applicationDetails.howApplied' : 'product usage'}. Must sound like real shop owner, NOT generic. Max 18 words, may include 1 emoji>"}, {"from": "customer", "text": "<4th bubble — short acknowledgement / will-order-again, max 10 words>"}], "verifiedNote": "<verified-review label>"},
     "slot6": {"title": "<how-to-use title with step count>", "steps": ["<SPECIFIC action verb + object + amount/duration, max 10 words>", "<step>", "<step>"], "timing": "<usage timing e.g. '🌅 Pagi • 🌙 Malam'>"},
     "slot7": {"title": "<comparison title>", "usLabel": "<our product label>", "themLabel": "<generic alternative label>", "points": [["<${brief ? 'must reflect brief.keyDifferentiator' : 'specific measurable differentiator'}>", "<generic equivalent>"], ["<specific>", "<generic>"], ["<specific>", "<generic>"], ["<specific>", "<generic>"]]},
     "slot8": {"title": "${checklistTitle}", "signs": ["<concrete symptom/situation statement (NOT a question, NO '?'), max 9 words, ${brief ? 'derived from brief.corePains and brief.targetCustomer.dailyContext' : 'derived from product.painPoints'}>", "<sign>", "<sign>", "<sign>", "<sign>"], "qualifier": "<bottom callout matching pattern '${qualifierExample}'>"},
@@ -286,13 +292,16 @@ function validateSlotTexts(raw: unknown): SlotTexts | undefined {
     }
   }
 
-  const s5 = r.slot5 as { contactName?: unknown; bubbles?: unknown; verifiedNote?: unknown } | undefined
-  if (s5 && typeof s5.contactName === 'string' && Array.isArray(s5.bubbles)) {
-    const bubbles = (s5.bubbles as unknown[]).filter((b): b is string => typeof b === 'string' && b.trim().length > 0)
-    if (bubbles.length > 0) {
+  const s5 = r.slot5 as { contactName?: unknown; conversation?: unknown; verifiedNote?: unknown } | undefined
+  if (s5 && typeof s5.contactName === 'string' && Array.isArray(s5.conversation)) {
+    const conversation = (s5.conversation as unknown[])
+      .map((x) => x as Record<string, unknown>)
+      .filter((x) => (x.from === 'customer' || x.from === 'shop') && typeof x.text === 'string' && (x.text as string).trim().length > 0)
+      .map((x) => ({ from: x.from as 'customer' | 'shop', text: (x.text as string).trim() }))
+    if (conversation.length >= 2) {
       out.slot5 = {
         contactName:  s5.contactName,
-        bubbles:      bubbles.slice(0, 3),
+        conversation: conversation.slice(0, 5),
         verifiedNote: typeof s5.verifiedNote === 'string' ? s5.verifiedNote : '',
       }
     }

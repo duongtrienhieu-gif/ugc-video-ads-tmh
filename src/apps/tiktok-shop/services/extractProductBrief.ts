@@ -100,6 +100,14 @@ CRITICAL DATA INTEGRITY RULES:
 5. corePains: customer self-questions ending '?', each max 12 words, customer-voice feelings.
 6. forbiddenClaims: list claims that would be legally risky for this niche (Halal/KKM/GMP/FDA without proof, "rawat/sembuh/cure/treat", unverified efficacy statements).
 7. nicheSafeClaims: 3-5 claims that are SAFE for this niche (soft "membantu/menyokong/hỗ trợ" framing, observable benefits).
+8. applicationDetails (CRITICAL for image gen — see below): infer the SPECIFIC body zone, physical interaction, and usage scene from product type. This is what tells the image generator WHERE on the body the product goes. Examples:
+   - Knee support brace → bodyZone="knee joint", howApplied="wrap around bent knee, secure velcro straps", usageScene="Person sitting on a couch with knee bent at 90°, both hands wrapping the brace around the knee joint, medium close-up on the knee"
+   - Nasal spray → bodyZone="nostrils (inside nasal cavity)", howApplied="spray 1-2 puffs into each nostril, head tilted slightly back, breathe in gently", usageScene="Person standing in front of bathroom mirror, head tilted back slightly, spray nozzle inserted into one nostril, gentle pressing motion"
+   - Face cream → bodyZone="facial skin (cheeks + forehead + chin)", howApplied="dot a pea-sized amount on cheeks/forehead/chin, massage in circular motion", usageScene="Person looking into mirror, fingertip dabbing cream on cheek, upward circular massage motion"
+   - Hair growth oil → bodyZone="scalp (along hair partings)", howApplied="apply a few drops directly on the scalp, massage with fingertips for 1-2 minutes", usageScene="Person sitting in front of mirror, dropper applying oil to the scalp partings, fingertips massaging the scalp"
+   - Oral supplement / tablet → bodyZone="(oral — swallowed, no body application)", howApplied="take 1-2 tablets with a glass of water after meal", usageScene="Person holding a tablet between fingers, a glass of water in the other hand, about to take it after a meal"
+   - Toothpaste → bodyZone="teeth + gums", howApplied="brush teeth twice daily with a pea-sized amount", usageScene="Person standing in front of bathroom mirror, brushing teeth with a clean white toothbrush, foam visible"
+   The usageScene line will be embedded VERBATIM into the image-gen prompt for slot 6 — make it concrete, single sentence, photo-direction quality.
 
 IF a field cannot be determined from photos + metadata, write the most reasonable inference based on category — but flag uncertainty by using softer language. NEVER fabricate specific ingredient names, certifications, lab numbers, or clinical claims.`
 }
@@ -141,7 +149,12 @@ function buildUserPrompt(product: Product, langName: string): string {
   lines.push(`  "usageContext": "<when/where used, in ${langName}>",`)
   lines.push(`  "commonObjections": ["<top buyer concern>", "<...>", "<...>"],`)
   lines.push(`  "nicheSafeClaims": ["<safe claim>", "...3-5 items"],`)
-  lines.push(`  "forbiddenClaims": ["<claim to avoid>", "..."]`)
+  lines.push(`  "forbiddenClaims": ["<claim to avoid>", "..."],`)
+  lines.push(`  "applicationDetails": {`)
+  lines.push(`    "bodyZone": "<SPECIFIC body part / surface the product touches — see system prompt examples. Always concrete (e.g., 'knee joint', 'nostrils', 'scalp', 'lips'), NOT vague ('body', 'skin')>",`)
+  lines.push(`    "howApplied": "<concrete physical action — verb + amount + body zone + technique. In ${langName}.>",`)
+  lines.push(`    "usageScene": "<ONE concrete photo-direction sentence: person + pose + action + camera angle. Used VERBATIM in image-gen prompt for slot 6. In ${langName}.>"`)
+  lines.push(`  }`)
   lines.push(`}`)
   return lines.join('\n')
 }
@@ -177,6 +190,7 @@ function normalizeBrief(
   const fallback = buildFallbackBrief(product, language)
   const r = raw as Record<string, unknown>
   const tc = (r.targetCustomer ?? {}) as Record<string, unknown>
+  const ad = (r.applicationDetails ?? {}) as Record<string, unknown>
 
   const strArr = (v: unknown): string[] =>
     Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string' && x.trim().length > 0) : []
@@ -203,6 +217,11 @@ function normalizeBrief(
     commonObjections:      strArr(r.commonObjections).length >= 1      ? strArr(r.commonObjections).slice(0, 5) : fallback.commonObjections,
     nicheSafeClaims:       strArr(r.nicheSafeClaims).length >= 1       ? strArr(r.nicheSafeClaims).slice(0, 8)  : fallback.nicheSafeClaims,
     forbiddenClaims:       strArr(r.forbiddenClaims).length >= 1       ? strArr(r.forbiddenClaims).slice(0, 8)  : fallback.forbiddenClaims,
+    applicationDetails: {
+      bodyZone:    typeof ad.bodyZone === 'string'    && (ad.bodyZone as string).trim().length > 0    ? (ad.bodyZone as string).trim()    : fallback.applicationDetails.bodyZone,
+      howApplied:  typeof ad.howApplied === 'string'  && (ad.howApplied as string).trim().length > 0  ? (ad.howApplied as string).trim()  : fallback.applicationDetails.howApplied,
+      usageScene:  typeof ad.usageScene === 'string'  && (ad.usageScene as string).trim().length > 0  ? (ad.usageScene as string).trim()  : fallback.applicationDetails.usageScene,
+    },
   }
 }
 
@@ -242,5 +261,12 @@ function buildFallbackBrief(product: Product, language: Market): TiktokShopProdu
     forbiddenClaims:       isMS
       ? ['rawat', 'sembuh', 'cure', 'treat', 'Halal JAKIM (tanpa sijil)', 'KKM lulus (tanpa bukti)']
       : ['chữa khỏi', 'điều trị', 'BYT cấp phép (chưa có)', 'lâm sàng (chưa kiểm chứng)'],
+    applicationDetails: {
+      bodyZone:   isMS ? 'kawasan sasaran pada badan' : 'vùng cơ thể cần chăm sóc',
+      howApplied: isMS ? 'gunakan mengikut arahan pada label' : 'sử dụng theo hướng dẫn trên nhãn',
+      usageScene: isMS
+        ? 'Pengguna mengambil produk di rumah, demonstrasi cara guna yang ditunjukkan jelas, sudut kamera medium close-up'
+        : 'Người dùng cầm sản phẩm tại nhà, thao tác sử dụng được thể hiện rõ ràng, góc máy medium close-up',
+    },
   }
 }
