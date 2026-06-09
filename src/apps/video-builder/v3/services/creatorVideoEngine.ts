@@ -163,62 +163,69 @@ export interface RenderCreatorVideoResult {
 
 // ── Public entry ───────────────────────────────────────────────────────────
 
-export async function renderCreatorVideo(
-  params: RenderCreatorVideoParams,
-): Promise<RenderCreatorVideoResult> {
+export interface RenderKeyframeResult {
+  voiceRef: string
+  voiceDurationSec: number
+  voiceId: string
+  keyframeRef: string
+  keyframePromptUsed: string
+}
+
+// Z95 — STAGE 1+2 ONLY (TTS + keyframe). STOPS at 'keyframe_ready' so the user
+// reviews/regenerates the CHEAP keyframe (~6cr) BEFORE paying for the EXPENSIVE
+// lipsync (~600cr). Pass reuseVoice* to regenerate ONLY the keyframe without
+// re-synthesizing (and re-paying for) the voice.
+export async function renderCreatorKeyframe(
+  params: RenderCreatorVideoParams & {
+    reuseVoiceRef?: string
+    reuseVoiceDurationSec?: number
+    reuseVoiceId?: string
+  },
+): Promise<RenderKeyframeResult> {
   if (params.signal?.aborted) throw new Error('CANCELLED — user huỷ')
 
-  // ── STAGE 1: TTS via ElevenLabs ────────────────────────────────────────
-  params.onStageUpdate({ stage: 'tts' })
-  const voiceCategory = VOICE_CATEGORIES[params.voiceCategory]
-  // User-picked voice (custom/clone or library) overrides the category default.
-  const voiceId = params.voiceId?.trim() || voiceCategory.defaultVoiceId
-  const fullScriptText = params.script.blocks.map((b) => b.text).join(' ')
+  let voiceRef: string
+  let voiceDurationSec: number
+  let voiceId: string
 
-  const voiceSource = params.voiceId?.trim() ? 'user-picked' : `category:${voiceCategory.labelVi}`
-  console.log(`[CREATOR_VIDEO Stage 1] TTS voice=${voiceSource} (${voiceId}) chars=${fullScriptText.length}`)
-  // Z53 — expressive synth (eleven_v3 first → v2 fallback) so the render matches
-  // the "Nghe thử giọng" preview the user approved before paying for lipsync.
-  const audioBuffer = await synthVoice({
-    apiKey: params.elevenLabsApiKey,
-    voiceId,
-    text: fullScriptText,
-    onModelUsed: (m) => console.log(`[CREATOR_VIDEO Stage 1] TTS model=${m}`),
-  })
-
-  if (params.signal?.aborted) throw new Error('CANCELLED — user huỷ')
-
-  const audioBlob = new Blob([audioBuffer], { type: 'audio/mpeg' })
-  const voiceRef = await saveAsset(audioBlob, 'audio/mpeg')
-  const voiceDurationSec = await measureAudioDurationSec(audioBlob)
-  params.onStageUpdate({
-    stage: 'tts',
-    voiceRef,
-    voiceDurationSec,
-    voiceId,
-  })
+  if (params.reuseVoiceRef && params.reuseVoiceId) {
+    // Regenerate keyframe ONLY — reuse the already-paid voice (no new TTS cost).
+    voiceRef = params.reuseVoiceRef
+    voiceDurationSec = params.reuseVoiceDurationSec ?? 0
+    voiceId = params.reuseVoiceId
+  } else {
+    // ── STAGE 1: TTS via ElevenLabs ──────────────────────────────────────
+    params.onStageUpdate({ stage: 'tts' })
+    const voiceCategory = VOICE_CATEGORIES[params.voiceCategory]
+    voiceId = params.voiceId?.trim() || voiceCategory.defaultVoiceId
+    const fullScriptText = params.script.blocks.map((b) => b.text).join(' ')
+    const voiceSource = params.voiceId?.trim() ? 'user-picked' : `category:${voiceCategory.labelVi}`
+    console.log(`[CREATOR_VIDEO Stage 1] TTS voice=${voiceSource} (${voiceId}) chars=${fullScriptText.length}`)
+    const audioBuffer = await synthVoice({
+      apiKey: params.elevenLabsApiKey,
+      voiceId,
+      text: fullScriptText,
+      onModelUsed: (m) => console.log(`[CREATOR_VIDEO Stage 1] TTS model=${m}`),
+    })
+    if (params.signal?.aborted) throw new Error('CANCELLED — user huỷ')
+    const audioBlob = new Blob([audioBuffer], { type: 'audio/mpeg' })
+    voiceRef = await saveAsset(audioBlob, 'audio/mpeg')
+    voiceDurationSec = await measureAudioDurationSec(audioBlob)
+    params.onStageUpdate({ stage: 'tts', voiceRef, voiceDurationSec, voiceId })
+  }
 
   // ── STAGE 2: Keyframe via KIE GPT-4o ───────────────────────────────────
-  params.onStageUpdate({
-    stage: 'keyframe',
-    voiceRef, voiceDurationSec, voiceId,
-  })
+  params.onStageUpdate({ stage: 'keyframe', voiceRef, voiceDurationSec, voiceId })
 
-  // Resolve reference images FIRST so the prompt can reference each by its
-  // ACTUAL position in filesUrl. Order: avatar (identity, primary) then the
-  // product (optional). Only send the product image when we actually show it
-  // in frame, so the prompt never references an image we didn't send.
   const refUrls: string[] = []
   let avatarRefIndex = 0
   let productRefIndex = 0
-
   if (params.avatar.characterImage) {
     const url = isAssetRef(params.avatar.characterImage)
       ? await getUrl(params.avatar.characterImage)
       : params.avatar.characterImage
     if (url) { refUrls.push(url); avatarRefIndex = refUrls.length }
   }
-
   const showProductInFrame = params.config.setting === 'product_demo' && !!params.product
   if (showProductInFrame && params.product?.productImage) {
     const url = isAssetRef(params.product.productImage)
@@ -226,7 +233,6 @@ export async function renderCreatorVideo(
       : params.product.productImage
     if (url) { refUrls.push(url); productRefIndex = refUrls.length }
   }
-
   const keyframePromptUsed = buildKeyframePrompt({
     config: params.config,
     avatar: params.avatar,
@@ -236,56 +242,48 @@ export async function renderCreatorVideo(
     productRefIndex,
   })
   console.log(`[CREATOR_VIDEO Stage 2] keyframe prompt len=${keyframePromptUsed.length}`)
-
   const keyframeRemoteUrl = await generateGpt4oImageFast({
     apiKey: params.kieApiKey,
     prompt: keyframePromptUsed,
     filesUrl: refUrls,
-    size: '2:3',  // closest GPT-4o supports to vertical 9:16
+    size: '2:3',
     softTimeoutMs: 60_000,
     attemptTimeoutMs: 90_000,
     maxAttempts: 2,
     signal: params.signal,
   })
-
-  // Persist keyframe
   const keyframeBlob = await fetch(keyframeRemoteUrl).then((r) => r.blob())
   const keyframeRef = await saveAsset(keyframeBlob, keyframeBlob.type || 'image/png')
-  params.onStageUpdate({
-    stage: 'keyframe',
-    voiceRef, voiceDurationSec, voiceId,
-    keyframeRef, keyframePromptUsed,
-  })
 
+  // Z95 — STOP at keyframe_ready (awaiting approval). NO lipsync yet.
+  params.onStageUpdate({
+    stage: 'keyframe_ready',
+    voiceRef, voiceDurationSec, voiceId, keyframeRef, keyframePromptUsed,
+  })
+  return { voiceRef, voiceDurationSec, voiceId, keyframeRef, keyframePromptUsed }
+}
+
+export interface RenderLipsyncResult { videoRef: string; fullLipsyncTaskId: string }
+
+// Z95 — STAGE 3 ONLY. Lipsync the APPROVED keyframe with the already-paid voice.
+// Persists the taskId BEFORE polling so a timeout/refresh can RESUME the paid
+// job (resumeCreatorVideoLipsync) instead of re-submitting + re-charging.
+export async function renderCreatorLipsync(params: {
+  kieApiKey: string
+  config: CreatorVideoConfig
+  voiceRef: string
+  keyframeRef: string
+  onStageUpdate: (u: StageUpdate) => void
+  signal?: AbortSignal
+}): Promise<RenderLipsyncResult> {
   if (params.signal?.aborted) throw new Error('CANCELLED — user huỷ')
+  params.onStageUpdate({ stage: 'lipsync_full' })
 
-  // ── STAGE: Lipsync render — SINGLE Kling pass ──────────────────────────
-  // Z38 — there used to be a separate "preview" Kling render before this one
-  // that submitted the SAME model + SAME full audio (kling/ai-avatar-standard
-  // with the whole TTS track). It was NOT a cheap 1-2s test — it was a second,
-  // identical, full-length lipsync. So every render quietly paid Kling TWICE.
-  // A real ~81s render is ~730 KIE credits, so "preview + full" burned ~1.4k
-  // for one video. The preview stage is DELETED. We submit ONE job, persist
-  // its taskId BEFORE polling so a timeout/refresh can RESUME the already-paid
-  // job (resumeCreatorVideoLipsync) instead of re-submitting and charging again.
-  params.onStageUpdate({
-    stage: 'lipsync_full',
-    voiceRef, voiceDurationSec, voiceId,
-    keyframeRef, keyframePromptUsed,
-  })
-
-  const keyframePublicUrl = await getUrl(keyframeRef)
-  const audioPublicUrl    = await getUrl(voiceRef)
+  const keyframePublicUrl = await getUrl(params.keyframeRef)
+  const audioPublicUrl    = await getUrl(params.voiceRef)
   if (!keyframePublicUrl || !audioPublicUrl) {
     throw new Error('Không lấy được URL công khai cho keyframe hoặc audio (asset store fail)')
   }
-
-  // Z72 — Lipsync history: Kling Standard (Z53, baseline) → InfiniteTalk 480p
-  // (15s audio cap → 100% fail on real ads) → Kling Pro (works, ~21 cr/s, $4/40s
-  // — too expensive for the user) → BACK to Kling AI Avatar Standard. Standard
-  // supports the same 5-minute audio as Pro and costs ~half the credit (~10
-  // cr/s @720p vs Pro 21 cr/s @1080p). User accepts the lower realism tier as
-  // the cost trade-off; cheap + reliable beats expensive + idle.
   const fullLipsync = await generateLipSync({
     apiKey: params.kieApiKey,
     modelId: 'kling/ai-avatar-standard',
@@ -293,38 +291,16 @@ export async function renderCreatorVideo(
     audioUrl: audioPublicUrl,
     prompt: buildLipsyncPrompt({ config: params.config }),
   })
-  // Persist taskId IMMEDIATELY — the job is now paid for. If polling below
-  // times out, this handle lets the user re-poll without paying again.
-  params.onStageUpdate({
-    stage: 'lipsync_full',
-    voiceRef, voiceDurationSec, voiceId,
-    keyframeRef, keyframePromptUsed,
-    fullLipsyncTaskId: fullLipsync.taskId,
-  })
+  // Paid now — persist taskId so a timeout can resume without paying again.
+  params.onStageUpdate({ stage: 'lipsync_full', fullLipsyncTaskId: fullLipsync.taskId })
 
   const videoRef = await pollAndSaveLipsync({
     apiKey: params.kieApiKey,
     taskId: fullLipsync.taskId,
-    timeoutMs: 15 * 60 * 1000,  // 15min ceiling — 60-90s avatar renders are slow
+    timeoutMs: 15 * 60 * 1000,
   })
-
-  params.onStageUpdate({
-    stage: 'completed',
-    voiceRef, voiceDurationSec, voiceId,
-    keyframeRef, keyframePromptUsed,
-    fullLipsyncTaskId: fullLipsync.taskId,
-    videoRef,
-  })
-
-  return {
-    voiceRef,
-    voiceDurationSec,
-    voiceId,
-    keyframeRef,
-    keyframePromptUsed,
-    videoRef,
-    fullLipsyncTaskId: fullLipsync.taskId,
-  }
+  params.onStageUpdate({ stage: 'completed', fullLipsyncTaskId: fullLipsync.taskId, videoRef })
+  return { videoRef, fullLipsyncTaskId: fullLipsync.taskId }
 }
 
 // ── Resume a paid-but-unfinished lipsync job ────────────────────────────────

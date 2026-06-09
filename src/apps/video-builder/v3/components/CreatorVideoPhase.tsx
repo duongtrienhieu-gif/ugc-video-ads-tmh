@@ -33,7 +33,7 @@ import {
   CREATOR_ENERGIES, recommendEnergyForAngle,
 } from '../services/creatorEnergy'
 import { styleCreatorWithGemini } from '../services/creatorPresets'
-import { renderCreatorVideo, resumeCreatorVideoLipsync, previewCreatorVoice } from '../services/creatorVideoEngine'
+import { renderCreatorKeyframe, renderCreatorLipsync, resumeCreatorVideoLipsync, previewCreatorVoice, type StageUpdate } from '../services/creatorVideoEngine'
 
 // ── Stage progress strip ───────────────────────────────────────────────────
 
@@ -47,6 +47,7 @@ const STAGE_ICON: Record<CreatorVideoStage, React.ElementType> = {
   idle:           Loader2,
   tts:            Mic2,
   keyframe:       ImageIcon,
+  keyframe_ready: ImageIcon,
   preview_motion: Film,
   lipsync_full:   Film,
   completed:      Check,
@@ -255,7 +256,8 @@ export default function CreatorVideoPhase({ onContinue }: Props) {
   }, [brain.angle])
 
   const stage = clip?.stage ?? 'idle'
-  const isRendering = stage !== 'idle' && stage !== 'completed' && stage !== 'failed'
+  // Z95 — 'keyframe_ready' is a PAUSE (awaiting approval), not an active render.
+  const isRendering = stage !== 'idle' && stage !== 'completed' && stage !== 'failed' && stage !== 'keyframe_ready'
 
   // ── Handlers ─────────────────────────────────────────────────────────────
 
@@ -295,65 +297,82 @@ export default function CreatorVideoPhase({ onContinue }: Props) {
     }
   }
 
-  const handleRender = async () => {
+  // Shared store-patch from an engine stage update.
+  const applyStageUpdate = (update: StageUpdate) => {
+    patchCreatorVideo({
+      stage: update.stage,
+      ...(update.voiceRef !== undefined          && { voiceRef: update.voiceRef }),
+      ...(update.voiceDurationSec !== undefined  && { voiceDurationSec: update.voiceDurationSec }),
+      ...(update.voiceId !== undefined           && { voiceId: update.voiceId }),
+      ...(update.keyframeRef !== undefined       && { keyframeRef: update.keyframeRef }),
+      ...(update.keyframePromptUsed !== undefined && { keyframePromptUsed: update.keyframePromptUsed }),
+      ...(update.fullLipsyncTaskId !== undefined && { fullLipsyncTaskId: update.fullLipsyncTaskId }),
+      ...(update.videoRef !== undefined          && { videoRef: update.videoRef }),
+      ...(update.error !== undefined             && { error: update.error }),
+    })
+  }
+
+  // Z95 — STEP 1: TTS + keyframe ONLY (cheap ~6cr), then STOP at keyframe_ready
+  // so the user reviews the face before paying for the expensive lipsync.
+  // regenerate=true re-rolls ONLY the keyframe, reusing the already-paid voice.
+  const handleRenderKeyframe = async (regenerate = false) => {
     if (!kieApiKey) { addToast('Thiếu KIE API key trong Settings', 'error'); return }
     if (!elevenLabsKey) { addToast('Thiếu ElevenLabs API key trong Settings', 'error'); return }
     if (!brain.script) { addToast('Chưa có script — quay lại bước Script + Voice', 'error'); return }
     if (!state.inputs.avatar) { addToast('Chưa pick avatar — quay lại bước 1', 'error'); return }
 
-    // Seed the creator video clip with config + idle stage
-    setCreatorVideo({
-      stage: 'tts',
-      status: 'rendering',
-      config,
-      durationSec: brain.script.totalDurationSec,
-      resolution: config.resolution,
-      startedAt: Date.now(),
-    })
-
+    const reuse = regenerate && !!clip?.voiceRef && !!clip?.voiceId
+    if (reuse) {
+      patchCreatorVideo({ stage: 'keyframe', status: 'rendering', error: undefined })
+    } else {
+      setCreatorVideo({
+        stage: 'tts', status: 'rendering', config,
+        durationSec: brain.script.totalDurationSec, resolution: config.resolution,
+        startedAt: Date.now(),
+      })
+    }
     try {
-      const result = await renderCreatorVideo({
+      await renderCreatorKeyframe({
         kieApiKey,
         elevenLabsApiKey: elevenLabsKey,
         config,
         script: brain.script,
-        // Tone picker removed — auto-pick a sensible voice category from
-        // avatar gender + ad angle (gives female voice for female avatar, etc).
-        // User can still override via the specific voice picker.
         voiceCategory: brain.voiceCategory ?? matchVoiceForAvatar(state.inputs.avatar, brain.angle),
         voiceId: state.inputs.voiceId,
         avatar: state.inputs.avatar,
         product: state.inputs.product,
-        onStageUpdate: (update) => {
-          patchCreatorVideo({
-            stage: update.stage,
-            ...(update.voiceRef !== undefined          && { voiceRef: update.voiceRef }),
-            ...(update.voiceDurationSec !== undefined  && { voiceDurationSec: update.voiceDurationSec }),
-            ...(update.voiceId !== undefined           && { voiceId: update.voiceId }),
-            ...(update.keyframeRef !== undefined       && { keyframeRef: update.keyframeRef }),
-            ...(update.keyframePromptUsed !== undefined && { keyframePromptUsed: update.keyframePromptUsed }),
-            ...(update.fullLipsyncTaskId !== undefined && { fullLipsyncTaskId: update.fullLipsyncTaskId }),
-            ...(update.videoRef !== undefined          && { videoRef: update.videoRef }),
-            ...(update.error !== undefined             && { error: update.error }),
-          })
-        },
+        ...(reuse ? {
+          reuseVoiceRef: clip!.voiceRef,
+          reuseVoiceDurationSec: clip!.voiceDurationSec,
+          reuseVoiceId: clip!.voiceId,
+        } : {}),
+        onStageUpdate: applyStageUpdate,
       })
-      patchCreatorVideo({
-        stage: 'completed',
-        status: 'completed',
-        videoRef: result.videoRef,
-        finishedAt: Date.now(),
+      patchCreatorVideo({ stage: 'keyframe_ready', status: 'idle' })
+      addToast('✓ Ảnh keyframe sẵn sàng — duyệt rồi mới dựng video', 'success')
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      patchCreatorVideo({ stage: 'failed', status: 'failed', error: msg.slice(0, 240), finishedAt: Date.now() })
+      addToast(`Tạo keyframe lỗi: ${msg}`, 'error')
+    }
+  }
+
+  // Z95 — STEP 2: lipsync the APPROVED keyframe (expensive ~600cr). User-gated.
+  const handleRenderLipsync = async () => {
+    if (!kieApiKey) { addToast('Thiếu KIE API key trong Settings', 'error'); return }
+    if (!clip?.voiceRef || !clip?.keyframeRef) { addToast('Chưa có keyframe — tạo keyframe trước', 'error'); return }
+    patchCreatorVideo({ stage: 'lipsync_full', status: 'rendering', error: undefined })
+    try {
+      const { videoRef } = await renderCreatorLipsync({
+        kieApiKey, config, voiceRef: clip.voiceRef, keyframeRef: clip.keyframeRef,
+        onStageUpdate: applyStageUpdate,
       })
+      patchCreatorVideo({ stage: 'completed', status: 'completed', videoRef, finishedAt: Date.now() })
       addToast('✓ Creator video rendered!', 'success')
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
-      patchCreatorVideo({
-        stage: 'failed',
-        status: 'failed',
-        error: msg.slice(0, 240),
-        finishedAt: Date.now(),
-      })
-      addToast(`Render creator video lỗi: ${msg}`, 'error')
+      patchCreatorVideo({ stage: 'failed', status: 'failed', error: msg.slice(0, 240), finishedAt: Date.now() })
+      addToast(`Dựng video lỗi: ${msg}`, 'error')
     }
   }
 
@@ -537,29 +556,55 @@ export default function CreatorVideoPhase({ onContinue }: Props) {
         <div className="mt-4 flex items-center justify-between gap-3 rounded-xl border border-violet-200 bg-gradient-to-r from-violet-50 to-pink-50 p-3">
           <div className="min-w-0">
             <p className="text-sm font-bold text-gray-900">
-              {clip?.stage === 'completed' ? 'Đã có creator video — render lại nếu cần' : 'Render creator video'}
+              {clip?.stage === 'completed' ? 'Đã có creator video — làm lại nếu cần'
+                : stage === 'keyframe_ready' ? 'Ảnh sẵn sàng — duyệt rồi dựng video'
+                : 'Render creator video (2 bước)'}
             </p>
             <p className="text-[11px] text-gray-500">
-              {config.resolution} · ~{displayDurationSec?.toFixed(0) ?? '—'}s{durationIsReal ? ' (thật)' : ' (ước tính)'} · TTS → keyframe → lipsync · bước này {formatCredits(stepCredits)}
+              {config.resolution} · ~{displayDurationSec?.toFixed(0) ?? '—'}s{durationIsReal ? ' (thật)' : ' (ước tính)'} · <b>Bước 1:</b> tạo ảnh keyframe (~{formatCredits(V3_CREDIT_COST.keyframe)}) → duyệt → <b>Bước 2:</b> lipsync ({formatCredits(stepCredits)})
             </p>
             <p className="mt-1 text-[10px] text-gray-400">
-              Ước tính theo độ dài kịch bản (Kling tính tiền theo giây). Chỉ render 1 lần — nếu timeout, bấm “Khôi phục” để lấy lại video đã trả tiền, không tốn thêm credit.
+              Tạo ẢNH trước (rẻ) — xem OK mới dựng video lipsync (đắt). Ảnh sai thì “Tạo lại ảnh” thoải mái, không đốt credit lipsync. Nếu lipsync timeout, bấm “Khôi phục” để lấy lại video đã trả tiền.
             </p>
           </div>
           <div className="flex shrink-0 flex-col items-end gap-1.5">
-            <button
-              onClick={handleRender}
-              disabled={isRendering || !brain.script}
-              className="flex items-center gap-2 rounded-full bg-gradient-to-r from-violet-600 to-pink-600 px-5 py-2 text-sm font-bold text-white shadow-md transition-all hover:from-violet-700 hover:to-pink-700 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {isRendering ? (
-                <><Loader2 className="h-4 w-4 animate-spin" /> Đang render...</>
-              ) : clip?.stage === 'completed' ? (
-                <><RotateCcw className="h-4 w-4" /> Render lại · {formatCredits(stepCredits)}</>
-              ) : (
-                <><Sparkles className="h-4 w-4" /> Tạo creator video · {formatCredits(stepCredits)}</>
-              )}
-            </button>
+            {/* Z95 — keyframe-approval gate: when the cheap keyframe is ready,
+                the user reviews it, then chooses to render lipsync (expensive)
+                OR re-roll just the image (~6cr) — instead of auto-burning ~600cr. */}
+            {stage === 'keyframe_ready' ? (
+              <>
+                <button
+                  onClick={handleRenderLipsync}
+                  disabled={isRendering}
+                  className="flex items-center gap-2 rounded-full bg-gradient-to-r from-violet-600 to-pink-600 px-5 py-2 text-sm font-bold text-white shadow-md transition-all hover:from-violet-700 hover:to-pink-700 disabled:cursor-not-allowed disabled:opacity-50"
+                  title="Ảnh OK → dựng video lipsync (bước NÀY mới tốn nhiều credit)"
+                >
+                  <Sparkles className="h-4 w-4" /> Dựng video lipsync · {formatCredits(stepCredits)}
+                </button>
+                <button
+                  onClick={() => handleRenderKeyframe(true)}
+                  disabled={isRendering}
+                  className="flex items-center gap-1.5 rounded-full border border-violet-300 bg-white px-4 py-1.5 text-[12px] font-bold text-violet-700 transition-colors hover:bg-violet-50 disabled:cursor-not-allowed disabled:opacity-50"
+                  title="Tạo lại ảnh keyframe (giữ giọng đã có — chỉ tốn tiền ảnh)"
+                >
+                  <RotateCcw className="h-3.5 w-3.5" /> Tạo lại ảnh · {formatCredits(V3_CREDIT_COST.keyframe)}
+                </button>
+              </>
+            ) : (
+              <button
+                onClick={() => handleRenderKeyframe(false)}
+                disabled={isRendering || !brain.script}
+                className="flex items-center gap-2 rounded-full bg-gradient-to-r from-violet-600 to-pink-600 px-5 py-2 text-sm font-bold text-white shadow-md transition-all hover:from-violet-700 hover:to-pink-700 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {isRendering ? (
+                  <><Loader2 className="h-4 w-4 animate-spin" /> Đang render...</>
+                ) : clip?.stage === 'completed' ? (
+                  <><RotateCcw className="h-4 w-4" /> Làm lại từ đầu · {formatCredits(V3_CREDIT_COST.keyframe)}</>
+                ) : (
+                  <><Sparkles className="h-4 w-4" /> Tạo keyframe · {formatCredits(V3_CREDIT_COST.keyframe)}</>
+                )}
+              </button>
+            )}
             {/* Z53 — nghe thử giọng trước khi tốn credit lipsync */}
             <button
               onClick={handlePreviewVoice}

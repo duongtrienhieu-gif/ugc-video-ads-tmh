@@ -369,6 +369,7 @@ export type CreatorVideoStage =
   | 'idle'             // nothing started
   | 'tts'              // ElevenLabs running
   | 'keyframe'         // KIE GPT-4o generating the still
+  | 'keyframe_ready'   // Z95 — keyframe done, AWAITING user approval before lipsync
   | 'preview_motion'   // 1-2s preview test
   | 'lipsync_full'     // KIE Kling Avatar full talking video
   | 'completed'        // we have a full lipsync video
@@ -378,6 +379,7 @@ export const CREATOR_VIDEO_STAGE_LABEL_VI: Record<CreatorVideoStage, string> = {
   idle:           'Chưa bắt đầu',
   tts:            'Đang tạo voice (ElevenLabs)...',
   keyframe:       'Đang tạo keyframe (GPT-4o)...',
+  keyframe_ready: 'Ảnh sẵn sàng — duyệt trước khi dựng video',
   preview_motion: 'Đang tạo preview motion 1-2s...',
   lipsync_full:   'Đang lipsync video đầy đủ...',
   completed:      'Đã xong ✓',
