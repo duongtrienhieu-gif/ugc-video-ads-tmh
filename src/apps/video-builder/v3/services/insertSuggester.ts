@@ -714,13 +714,22 @@ DIRECTING RULES:
   PRODUCT_CLOSEUP). A video that opens with the speaker holding the jar
   and closes with the speaker holding the jar at the same angle looks
   amateur. Vary the composition.
-- SCENE COUNT — you MUST return ${effBudget} scenes (this number is matched to
-  the script length; a ${Math.round((params.script.totalDurationSec || 30))}s
-  script easily supports ${effBudget} distinct supporting visuals). Returning
-  fewer than ${floor} is WRONG — the ad will feel flat. To reach ${effBudget},
-  give EACH of these its own scene instead of grouping: every named ingredient,
-  every distinct benefit, every claim/number, every pain point, every emotional
-  turn, the hook, the demo, and the CTA. More short scenes > fewer long ones.
+- SCENE COUNT — aim for ${effBudget} scenes (matched to the script length; a
+  ${Math.round((params.script.totalDurationSec || 30))}s script can support
+  ${effBudget} distinct supporting visuals). Reach it by giving EACH of these
+  its own scene instead of grouping: every named ingredient, every distinct
+  benefit, every claim/number, every pain point, every emotional turn, the
+  hook, the demo, and the CTA. More short scenes > fewer long ones — when the
+  script genuinely earns them.
+- EVERY SCENE MUST EARN ITS PLACE — ${effBudget} is a CEILING, never a quota to
+  fill with padding. Each scene MUST illustrate a SPECIFIC spoken line (its
+  "quote") with something LITERALLY in that line: a real object, body part,
+  action, ingredient, number, or face. NEVER invent an abstract, decorative or
+  vague "vibe" scene (drifting particles, generic lifestyle b-roll, a mood with
+  no spoken anchor) just to reach ${effBudget}. If the script honestly supports
+  only N < ${effBudget} concrete scenes, return N — a tight ad of real scenes
+  beats a padded one. But returning fewer than ${floor} concrete scenes is still
+  too flat, so don't be lazy either: find the real visual hiding in each line.
 - SCENE MIX — split those ${effBudget} scenes roughly HALF and HALF:
     • ~half = real-footage VIDEO scenes that REPLACE the creator full-screen
       (cut): the person/product in action — HOLD_PRODUCT, PRODUCT_IN_ACTION
