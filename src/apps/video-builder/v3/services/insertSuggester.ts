@@ -725,6 +725,8 @@ DIRECTING RULES:
   A pure-cut ad is a slideshow; a pure-overlay ad has no product realism. Mix.
 - "fit" = 0..1 how strongly the visual supports the line. "reason" = one short
   phrase in ${langName} explaining the choice (shown to the user).
+- BE CONCISE — keep "conceptPrompt" ≤ 2 sentences and "reason" ≤ 12 words. Do
+  NOT repeat or pad. A bloated response gets cut off and wastes the whole result.
 
 INGREDIENT EXTRACTION — separately from the scenes, scan the WHOLE script for any
 PRODUCT INGREDIENT it names (e.g. an extract, a powder, an oil, a herb, an active
@@ -1306,6 +1308,17 @@ function parseDirectorOutput(raw: string): { scenes: RawDirectorScene[]; ingredi
     try {
       parsed = JSON.parse(cleaned)
     } catch {
+      // Z90 — SALVAGE. Gemini 2.5-flash sometimes rambles/repeats until it hits
+      // the output-token cap, so the JSON is TRUNCATED mid-array (the whole
+      // response then fails JSON.parse → parsed=0 → weak keyword fallback). This
+      // happened on the nasal-spray product (raw=67068ch). Instead of throwing
+      // the whole thing away, walk the "scenes" array and recover every COMPLETE
+      // {...} object from the start — works for ANY product/niche.
+      const scenes = salvageScenes(raw)
+      if (scenes.length > 0) {
+        console.warn(`[DIRECTOR] JSON truncated (${raw.length}ch) — salvaged ${scenes.length} complete scenes`)
+        return { scenes, ingredientsInScript: [] }
+      }
       return { scenes: [], ingredientsInScript: [] }
     }
   }
@@ -1317,6 +1330,43 @@ function parseDirectorOutput(raw: string): { scenes: RawDirectorScene[]; ingredi
     ? (obj.ingredientsInScript as unknown[]).map((x) => String(x).trim()).filter((x) => x.length >= 2 && x.length <= 50)
     : []
   return { scenes: obj.scenes as RawDirectorScene[], ingredientsInScript }
+}
+
+// Z90 — recover complete scene objects from a TRUNCATED Director JSON. Finds the
+// "scenes" array, then walks it extracting balanced {...} objects (string-aware
+// so braces inside quoted text don't confuse it) and JSON.parse-ing each. Stops
+// at the first incomplete object (the truncation point). Universal — no
+// product-specific assumptions.
+function salvageScenes(raw: string): RawDirectorScene[] {
+  const key = raw.indexOf('"scenes"')
+  if (key < 0) return []
+  const arrStart = raw.indexOf('[', key)
+  if (arrStart < 0) return []
+  const out: RawDirectorScene[] = []
+  let i = arrStart + 1
+  while (i < raw.length) {
+    while (i < raw.length && raw[i] !== '{' && raw[i] !== ']') i++
+    if (i >= raw.length || raw[i] === ']') break
+    const objStart = i
+    let depth = 0
+    let inStr = false
+    let esc = false
+    let closed = false
+    for (; i < raw.length; i++) {
+      const c = raw[i]
+      if (esc) { esc = false; continue }
+      if (c === '\\') { esc = true; continue }
+      if (c === '"') { inStr = !inStr; continue }
+      if (inStr) continue
+      if (c === '{') depth++
+      else if (c === '}') { depth--; if (depth === 0) { i++; closed = true; break } }
+    }
+    if (!closed) break  // truncated mid-object → stop
+    try {
+      out.push(JSON.parse(raw.slice(objStart, i)) as RawDirectorScene)
+    } catch { /* skip a malformed object, keep going */ }
+  }
+  return out
 }
 
 interface RawSuggestItem {
