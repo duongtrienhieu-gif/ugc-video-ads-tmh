@@ -14,21 +14,21 @@
 //   7. Export button (stub — Phase 6 wires ffmpeg.wasm)
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { useMemo, useState } from 'react'
+import { useMemo } from 'react'
 import {
   Loader2, Sparkles, AlertCircle, ChevronRight, RotateCcw, Wand2,
   Type, Music2, Zap, Play, Volume2, Megaphone, Download,
-  CheckCircle2, XCircle, Eye,
+  CheckCircle2,
 } from 'lucide-react'
 import { useAppStore } from '../../../../stores/appStore'
 import { useAdsVideoStore } from '../stores/adsVideoStore'
 import type {
-  AutoEditPlan, EditingStyleId, SubtitleStyleId, BgmStyleId,
+  AutoEditPlan, SubtitleStyleId,
 } from '../types'
 import {
-  EDITING_STYLES, EDITING_STYLE_ORDER, SUBTITLE_STYLES,
+  EDITING_STYLES, SUBTITLE_STYLES,
 } from '../services/editingStyles'
-import { BGM_CATALOG, BGM_ORDER } from '../services/bgmCatalog'
+import { BGM_CATALOG } from '../services/bgmCatalog'
 import { buildAutoEditPlan, validatePlan } from '../services/autoEditPlanner'
 
 const TONE_BG: Record<string, string> = {
@@ -46,9 +46,7 @@ interface Props {
 
 export default function AutoEditPhase({ onContinue }: Props) {
   const state = useAdsVideoStore((s) => s.state)
-  const setEditingStyle    = useAdsVideoStore((s) => s.setEditingStyle)
   const setSubtitleStyle   = useAdsVideoStore((s) => s.setSubtitleStyle)
-  const setBgmStyle        = useAdsVideoStore((s) => s.setBgmStyle)
   const setAutoEditPlan    = useAdsVideoStore((s) => s.setAutoEditPlan)
   const setIsGeneratingPlan = useAdsVideoStore((s) => s.setIsGeneratingPlan)
   const setAutoEditError   = useAdsVideoStore((s) => s.setAutoEditError)
@@ -56,38 +54,20 @@ export default function AutoEditPhase({ onContinue }: Props) {
 
   const autoEdit = state.autoEdit
   const styleConfig = EDITING_STYLES[autoEdit.styleId]
-  const patchInsert = useAdsVideoStore((s) => s.patchInsert)
-
-  // Review acknowledgment — the user must confirm they watched the rendered
-  // clips before a plan can be built. This is the gate that used to be the
-  // (removed) standalone "Duyệt / Loại" phase.
-  const [reviewedAck, setReviewedAck] = useState(false)
-
-  // Effective BGM = override OR style default
-  const effectiveBgmId: BgmStyleId = autoEdit.bgmStyleId ?? styleConfig.defaultBgmStyle
 
   // ── Pre-flight: do we have what we need? ──────────────────────────────
   const hasCreatorVideo = !!state.creatorVideo?.videoRef
   const hasScript = !!state.scriptBrain.script
 
-  // Every insert that finished rendering (has a videoRef) must be explicitly
-  // triaged — approved/locked (included) or rejected (dropped). A freshly
-  // rendered insert sits in 'completed' limbo until the user decides; we do
-  // NOT silently feed 'completed' clips into the final MP4.
+  // Z85 — auto-use ALL rendered inserts. The old manual "Duyệt / Loại" gate was
+  // redundant: the user already paid for every insert in Bước 2, so there's no
+  // reason to make them re-approve here. Every clip with a videoRef is fed
+  // straight into the plan (the planner itself drops anything still failing).
   const renderedInserts = state.inserts.filter((it) => !!it.videoRef)
-  const approvedInserts = state.inserts.filter(
-    (it) => it.status === 'approved' || it.status === 'locked',
-  )
-  const untriagedInserts = renderedInserts.filter(
-    (it) => it.status !== 'approved' && it.status !== 'locked' && it.status !== 'rejected',
-  )
-  const allInsertsTriaged = untriagedInserts.length === 0
 
-  // Hard inputs required just to enter the phase.
+  // Hard inputs required just to enter (+build) the phase.
   const hasInputs = hasCreatorVideo && hasScript
-  // Plan can be built only after: inputs present + every rendered insert
-  // triaged + the user acknowledged the review.
-  const canGenerate = hasInputs && allInsertsTriaged && reviewedAck
+  const canGenerate = hasInputs
 
   const warnings = useMemo(() => {
     return autoEdit.plan ? validatePlan(autoEdit.plan) : []
@@ -104,11 +84,11 @@ export default function AutoEditPhase({ onContinue }: Props) {
       try {
         const plan = buildAutoEditPlan({
           creatorVideo: state.creatorVideo!,
-          inserts: approvedInserts,
+          inserts: renderedInserts,
           script: state.scriptBrain.script!,
           styleId: autoEdit.styleId,
           subtitleStyleId: autoEdit.subtitleStyleId,
-          bgmStyleId: autoEdit.bgmStyleId,
+          bgmStyleId: 'none',  // Z85 — BGM feature removed (no music files)
         })
         setAutoEditPlan(plan)
         addToast(
@@ -154,124 +134,17 @@ export default function AutoEditPhase({ onContinue }: Props) {
           </p>
         </div>
 
-        {/* ── Clip approval gate (replaces the old Duyệt / Loại phase) ────── */}
-        <div className="mb-4 rounded-xl border border-black/10 bg-white p-3">
-          <h3 className="mb-2 flex items-center gap-1 text-[10px] font-bold uppercase tracking-widest text-gray-500">
-            <Eye className="h-3.5 w-3.5" /> Duyệt clip trước khi dựng
-          </h3>
-
-          {/* Creator video — always included, shown for confirmation */}
-          <div className="mb-1.5 flex items-center justify-between gap-2 rounded-lg border border-violet-200 bg-violet-50 px-3 py-2">
-            <span className="text-[12px] font-semibold text-violet-900">
-              🎬 Video creator chính {state.creatorVideo?.videoRef ? '· đã render' : ''}
-            </span>
-            <span className="rounded-full bg-violet-200 px-2 py-0.5 text-[10px] font-bold text-violet-800">
-              Bắt buộc
-            </span>
-          </div>
-
-          {/* Rendered inserts — each must be approved or excluded */}
-          {renderedInserts.length === 0 ? (
-            <p className="px-1 py-1 text-[11px] text-gray-400">
-              Chưa có action insert nào được render — plan sẽ chỉ dùng video creator (vẫn OK).
-            </p>
-          ) : (
-            <ul className="space-y-1.5">
-              {renderedInserts.map((it) => {
-                const included = it.status === 'approved' || it.status === 'locked'
-                const excluded = it.status === 'rejected'
-                return (
-                  <li
-                    key={it.insertId}
-                    className="flex items-center justify-between gap-2 rounded-lg border border-gray-200 px-3 py-2"
-                  >
-                    <span className="min-w-0 truncate text-[12px] text-gray-700">
-                      🎞️ Insert #{it.insertId}
-                      {excluded && <span className="ml-1 text-[10px] text-gray-400">(đã loại)</span>}
-                    </span>
-                    <div className="flex shrink-0 items-center gap-1">
-                      <button
-                        onClick={() => patchInsert(it.insertId, { status: 'approved' })}
-                        className={`flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold transition-all ${
-                          included
-                            ? 'border-emerald-400 bg-emerald-100 text-emerald-800'
-                            : 'border-gray-200 bg-white text-gray-500 hover:bg-emerald-50'
-                        }`}
-                      >
-                        <CheckCircle2 className="h-3 w-3" /> Duyệt
-                      </button>
-                      <button
-                        onClick={() => patchInsert(it.insertId, { status: 'rejected' })}
-                        className={`flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold transition-all ${
-                          excluded
-                            ? 'border-rose-400 bg-rose-100 text-rose-800'
-                            : 'border-gray-200 bg-white text-gray-500 hover:bg-rose-50'
-                        }`}
-                      >
-                        <XCircle className="h-3 w-3" /> Loại
-                      </button>
-                    </div>
-                  </li>
-                )
-              })}
-            </ul>
-          )}
-
-          {!allInsertsTriaged && (
-            <p className="mt-2 rounded-md border border-amber-200 bg-amber-50 px-2 py-1 text-[11px] text-amber-800">
-              Còn {untriagedInserts.length} insert chưa duyệt/loại — xử lý hết trước khi dựng.
-            </p>
-          )}
-
-          <label className="mt-2 flex cursor-pointer items-center gap-2 rounded-md bg-black/[0.03] px-2 py-1.5 text-[12px] text-gray-700">
-            <input
-              type="checkbox"
-              checked={reviewedAck}
-              onChange={(e) => setReviewedAck(e.target.checked)}
-              className="h-3.5 w-3.5 accent-violet-600"
-            />
-            Tôi đã xem và xác nhận các clip ở trên trước khi dựng video cuối.
-          </label>
+        {/* ── Z85 — auto-use all rendered clips (no manual approval) ──────── */}
+        <div className="mb-4 flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-[12px] text-emerald-900">
+          <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600" />
+          <span>
+            Tự dùng <b>video creator + {renderedInserts.length} insert</b> đã render (đã trả phí ở bước 2 — không cần duyệt lại).
+            Đạo diễn AI tự chọn nhịp dựng phù hợp.
+          </span>
         </div>
 
-        {/* ── 7 Editing styles ───────────────────────────────────────────── */}
+        {/* ── Subtitle picker (the one creative choice the user still makes) ── */}
         <div className="mb-4">
-          <h3 className="mb-2 text-[10px] font-bold uppercase tracking-widest text-gray-500">
-            <Wand2 className="mr-1 inline h-3.5 w-3.5" /> Editing style ({EDITING_STYLE_ORDER.length})
-          </h3>
-          <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
-            {EDITING_STYLE_ORDER.map((sid) => {
-              const cfg = EDITING_STYLES[sid]
-              const isActive = autoEdit.styleId === sid
-              return (
-                <button
-                  key={sid}
-                  onClick={() => setEditingStyle(sid as EditingStyleId)}
-                  disabled={autoEdit.isGenerating}
-                  title={cfg.descriptionVi}
-                  className={`flex flex-col items-start gap-1 rounded-xl border p-2 text-left transition-all ${
-                    isActive ? `${TONE_BG[cfg.tone]} ring-2 ring-offset-1` : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50'
-                  } disabled:cursor-not-allowed disabled:opacity-50`}
-                >
-                  <span className="flex items-center gap-1 text-sm font-bold">
-                    <span className="text-lg">{cfg.emoji}</span> {cfg.labelVi}
-                  </span>
-                  <span className="line-clamp-2 text-[10px] leading-snug text-gray-500">
-                    {cfg.descriptionVi}
-                  </span>
-                  <span className="flex flex-wrap gap-1 text-[9px] font-bold uppercase tracking-wide opacity-70">
-                    <span>cuts {cfg.cutEverySec}s</span>
-                    <span>· zoom {Math.round(cfg.zoomIntensity * 100)}%</span>
-                    <span>· SFX {Math.round(cfg.sfxDensity * 100)}%</span>
-                  </span>
-                </button>
-              )
-            })}
-          </div>
-        </div>
-
-        {/* ── Subtitle + BGM secondary pickers ───────────────────────────── */}
-        <div className="mb-4 grid grid-cols-1 gap-3 md:grid-cols-2">
           <div className="rounded-xl border border-black/10 bg-white p-3">
             <p className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-widest text-gray-500">
               <Type className="h-3.5 w-3.5" /> Subtitle style
@@ -295,46 +168,6 @@ export default function AutoEditPhase({ onContinue }: Props) {
               })}
             </div>
           </div>
-
-          <div className="rounded-xl border border-black/10 bg-white p-3">
-            <p className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-widest text-gray-500">
-              <Music2 className="h-3.5 w-3.5" /> BGM
-              <span className="ml-auto text-[9px] normal-case tracking-normal text-gray-400">
-                hiện: {BGM_CATALOG[effectiveBgmId].emoji} {BGM_CATALOG[effectiveBgmId].labelVi}
-                {autoEdit.bgmStyleId == null && (
-                  <span className="ml-1 rounded-full bg-violet-100 px-1.5 py-0.5 text-[8px] font-bold text-violet-700">AUTO</span>
-                )}
-              </span>
-            </p>
-            <div className="mt-2 flex flex-wrap gap-1.5">
-              {BGM_ORDER.map((b) => {
-                const cfg = BGM_CATALOG[b]
-                const isActive = autoEdit.bgmStyleId === b
-                return (
-                  <button
-                    key={b}
-                    onClick={() => setBgmStyle(b)}
-                    disabled={autoEdit.isGenerating}
-                    title={cfg.descriptionVi}
-                    className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold transition-all ${
-                      isActive ? TONE_BG[cfg.tone] : 'border-gray-200 bg-white text-gray-500 hover:bg-gray-50'
-                    }`}
-                  >
-                    {cfg.emoji} {cfg.labelVi}
-                  </button>
-                )
-              })}
-              <button
-                onClick={() => setBgmStyle(null)}
-                disabled={autoEdit.isGenerating}
-                className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold transition-all ${
-                  autoEdit.bgmStyleId == null ? 'border-violet-400 bg-violet-50 text-violet-700' : 'border-dashed border-gray-200 bg-white text-gray-400'
-                }`}
-              >
-                ↺ Auto (theo style)
-              </button>
-            </div>
-          </div>
         </div>
 
         {/* ── Generate banner ────────────────────────────────────────────── */}
@@ -344,13 +177,13 @@ export default function AutoEditPhase({ onContinue }: Props) {
               {autoEdit.plan ? 'Đã có plan — regenerate để thử style khác' : 'Build edit plan'}
             </p>
             <p className="text-[11px] text-gray-500">
-              {approvedInserts.length} insert đã duyệt · {state.scriptBrain.script?.totalDurationSec.toFixed(1)}s voice · {styleConfig.labelVi}
+              {renderedInserts.length} insert · {state.scriptBrain.script?.totalDurationSec.toFixed(1)}s voice · {styleConfig.labelVi}
             </p>
           </div>
           <button
             onClick={handleGenerate}
             disabled={autoEdit.isGenerating || !canGenerate}
-            title={!canGenerate ? 'Duyệt clip + tick xác nhận trước khi dựng' : undefined}
+            title={!canGenerate ? 'Cần creator video + script trước khi dựng' : undefined}
             className="flex items-center gap-2 rounded-full bg-gradient-to-r from-violet-600 to-pink-600 px-5 py-2 text-sm font-bold text-white shadow-md transition-all hover:from-violet-700 hover:to-pink-700 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {autoEdit.isGenerating ? (
