@@ -347,11 +347,14 @@ const DIRECTOR_RESPONSE_SCHEMA = {
         properties: {
           presetId:      { type: 'string', enum: DIRECTOR_PRESET_ENUM },
           anchorBlock:   { type: 'string', enum: ['hook', 'pain', 'discovery', 'benefit', 'cta'] },
-          quote:         { type: 'string' },
+          // Z98 — hard maxLength caps stop Gemini 2.5-flash from rambling inside a
+          // single field until it hits the token ceiling (→ truncated JSON → 0
+          // scenes → weak keyword fallback). conceptPrompt is the usual culprit.
+          quote:         { type: 'string', maxLength: 200 },
           durationSec:   { type: 'number' },
           fit:           { type: 'number' },
-          reason:        { type: 'string' },
-          conceptPrompt: { type: 'string' },
+          reason:        { type: 'string', maxLength: 80 },
+          conceptPrompt: { type: 'string', maxLength: 240 },
           motionKind:    { type: 'string', enum: ['graphic', 'emotion'] },
           labels:        { type: 'array', items: { type: 'string' } },
           layout:        { type: 'string', enum: ['cut', 'overlay_corner'] },
@@ -742,8 +745,11 @@ DIRECTING RULES:
   A pure-cut ad is a slideshow; a pure-overlay ad has no product realism. Mix.
 - "fit" = 0..1 how strongly the visual supports the line. "reason" = one short
   phrase in ${langName} explaining the choice (shown to the user).
-- BE CONCISE — keep "conceptPrompt" ≤ 2 sentences and "reason" ≤ 12 words. Do
-  NOT repeat or pad. A bloated response gets cut off and wastes the whole result.
+- BE CONCISE — HARD LIMITS: "conceptPrompt" ≤ 240 characters (one tight visual
+  sentence, no extra adjectives), "reason" ≤ 12 words, "quote" = ONE line copied
+  verbatim (never a paragraph). Do NOT repeat, pad, or keep elaborating a single
+  scene. A long-winded response gets cut off mid-JSON and the WHOLE result is
+  lost — short scenes that all fit beats one verbose scene that truncates.
 
 INGREDIENT EXTRACTION — separately from the scenes, scan the WHOLE script for any
 PRODUCT INGREDIENT it names (e.g. an extract, a powder, an oil, a herb, an active
@@ -768,12 +774,15 @@ OUTPUT strict JSON, no fences:
   // list). At 8192 the JSON truncated mid-array on a 12-scene 55s script
   // (raw≈33k chars > 8192-token ceiling) → JSON.parse failed → parsed=0 →
   // silent fallback to the weak 2-insert keyword path (the "không ra 12" bug).
-  // 16384 fits 12 verbose scenes so the full list parses.
+  // Z98 — raised 16384 → 32768. With the cap now 14 (and verbose conceptPrompts),
+  // a long 60s+ script could ramble past 16384 (seen: raw=60335ch parsed=0). The
+  // schema maxLength caps + the CONCISE rule keep each scene small; this ceiling
+  // is the safety net so even a full 14-scene list always closes its JSON.
   const raw = await directGeminiText({
     apiKey: params.geminiKey,
     systemInstruction,
     prompt: userPrompt,
-    maxOutputTokens: 16384,
+    maxOutputTokens: 32768,
     responseMimeType: 'application/json',
     responseSchema: DIRECTOR_RESPONSE_SCHEMA,
     // Z43 — disable 2.5-flash "thinking" so the whole token budget goes to the
