@@ -110,11 +110,6 @@ function buildComboPrompt(params: GenerateComboParams, hasLogoRef: boolean): str
     ? `LABEL PILL (HOT variant): rounded pill ~420px wide × 60px tall, rounded corners 30px, background SOLID RED (#DC2626), centered at y≈220-280 (just inside the brand gradient bottom zone). Text "🔥 ${countLabel}" in WHITE Plus Jakarta Sans ExtraBold ~44px. Subtle drop shadow.`
     : `LABEL PILL: rounded pill ~420px wide × 60px tall, rounded corners 30px, background accent color ${p.cta}, centered at y≈220-280. Text "${countLabel}" in WHITE Plus Jakarta Sans ExtraBold ~44px. Subtle drop shadow.`
 
-  // Price block sits on the RIGHT half, BELOW the count label pill.
-  const priceBlock = c.originalPrice
-    ? `- RIGHT half (y≈320), struck-through original price "${c.originalPrice}" (~32px light tint)\n- DIRECTLY BELOW (y≈370, still RIGHT half), GIANT current price "${c.price}" (~140px ExtraBold white with strong shadow)${c.discount ? `\n- AMBER PILL BADGE next to/below current price (~36px dark bold): "${c.discount}"` : ''}`
-    : `- RIGHT half (y≈340), GIANT price "${c.price}" (~140px ExtraBold white with strong shadow).`
-
   return `1:1 square TikTok Shop VARIANT THUMBNAIL (1024×1024). ${productRefHint}
 
 PRODUCT FIDELITY (CRITICAL):
@@ -142,15 +137,12 @@ PRODUCT FIDELITY (CRITICAL):
 === COUNT LABEL PILL — top-center, inside the brand gradient bottom zone ===
 ${labelPillSpec}
 
-LAYOUT (combo product + price live in the brand gradient bottom zone, y≥300):
-- Product zone: LEFT half + center (y≈360-870), ${count} bottle(s) side-by-side standing upright on a subtle podium/surface
-
-PRICE OVERLAY (must appear, dominant — on the RIGHT half, parallel to product zone):
-${priceBlock}
+LAYOUT (combo product fills the brand gradient bottom zone, y≥300):
+- Product zone: FULL WIDTH centered (y≈360-870), ${count} bottle(s) side-by-side standing upright on a subtle podium/surface. Hero focus on the product — no price overlays, no number callouts.
 
 VARIANT LABEL: At bottom-center (y≈920), white rounded rect with name "${c.name}" inside (~28px medium dark navy bold).
 
-STYLE: Same premium e-commerce aesthetic as the main 9 listing slots. Plus Jakarta Sans ExtraBold for prices. Saturated brand palette. Clean focus on product + price.
+STYLE: Same premium e-commerce aesthetic as the main 9 listing slots. Plus Jakarta Sans ExtraBold for the variant label. Saturated brand palette. Clean focus on the product itself.
 
 LANGUAGE: ${langName} ONLY in any rendered text (except "Official store" subtitle and count label which use their universal forms). NO other languages.
 

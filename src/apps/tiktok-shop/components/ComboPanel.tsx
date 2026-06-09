@@ -1,6 +1,6 @@
 // ComboPanel — Phase 7B. Manage variant/combo thumbnails for the TikTok Shop
-// option picker. Each combo is an independent 1024×1024 image with product
-// configuration + price overlay. Same brand style as the main 9 slots.
+// option picker. Each combo is an independent 1024×1024 image showing the
+// product configuration only. Same brand style as the main 9 slots.
 
 import { useEffect, useState } from 'react'
 import {
@@ -37,9 +37,6 @@ export default function ComboPanel() {
     addCombo({
       name: `Combo ${n}`,
       description: '',
-      price: '',
-      originalPrice: undefined,
-      discount: undefined,
       isHot: false,
       productCount: 1,
     })
@@ -129,11 +126,11 @@ function ComboCard({ combo }: { combo: ComboOption }) {
   // Description is now OPTIONAL — productCount alone tells AI how many to
   // render. User can add description for finer control (e.g. "1 jar + 1
   // spray") but isn't forced to.
-  const canGenerate = combo.name.trim() !== '' && combo.price.trim() !== ''
+  const canGenerate = combo.name.trim() !== ''
 
   async function handleGenerate() {
     if (!canGenerate) {
-      addToast('Cần điền Tên + Giá trước khi tạo', 'error')
+      addToast('Cần điền Tên combo trước khi tạo', 'error')
       return
     }
     if (draft.referenceImageAssetIds.length < 1) {
@@ -226,29 +223,6 @@ function ComboCard({ combo }: { combo: ComboOption }) {
           </div>
         </div>
 
-        <div className="grid grid-cols-3 gap-2">
-          <input
-            type="text"
-            value={combo.price}
-            onChange={(e) => updateCombo(combo.id, { price: e.target.value })}
-            placeholder="Giá (508K)"
-            className="rounded border border-gray-200 px-2 py-1 text-[11px] font-semibold text-violet-700 focus:border-violet-400 focus:outline-none"
-          />
-          <input
-            type="text"
-            value={combo.originalPrice ?? ''}
-            onChange={(e) => updateCombo(combo.id, { originalPrice: e.target.value || undefined })}
-            placeholder="Giá gốc (718K)"
-            className="rounded border border-gray-200 px-2 py-1 text-[11px] text-gray-500 focus:border-violet-400 focus:outline-none"
-          />
-          <input
-            type="text"
-            value={combo.discount ?? ''}
-            onChange={(e) => updateCombo(combo.id, { discount: e.target.value || undefined })}
-            placeholder="-29%"
-            className="rounded border border-gray-200 px-2 py-1 text-[11px] font-semibold text-amber-600 focus:border-violet-400 focus:outline-none"
-          />
-        </div>
       </div>
 
       {/* Image preview */}

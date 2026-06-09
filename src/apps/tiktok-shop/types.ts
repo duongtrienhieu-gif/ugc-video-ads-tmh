@@ -198,14 +198,6 @@ export interface ComboOption {
    *  to compose the thumbnail. E.g., "1 jar of mineral powder",
    *  "1 jar mineral powder + 1 spray bottle". */
   description: string
-  /** Current sale price, free-form string. E.g., "359K", "RM 89", "508K". */
-  price: string
-  /** Optional original / struck-through price for discount badge. */
-  originalPrice?: string
-  /** Optional display label for discount badge. E.g., "-44%", "JIMAT 70K".
-   *  If user provides both price + originalPrice, UI can auto-suggest a value
-   *  but final string is what the user types. */
-  discount?: string
   /** Highlight as "Hot" / featured variant. */
   isHot?: boolean
   /** Explicit count of product instances to show in the thumbnail. When set,
