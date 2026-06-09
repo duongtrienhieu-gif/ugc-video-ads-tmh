@@ -662,6 +662,7 @@ export default function ActionInsertsPhase({ onContinue }: Props) {
                   key={insert.insertId}
                   insert={insert}
                   onSetMode={(mode) => patchInsert(insert.insertId, { renderMode: mode })}
+                  onSetLayout={(layout) => patchInsert(insert.insertId, { layout })}
                   onRender={() => handleRenderInsert(insert.insertId)}
                   onResume={() => handleResumeInsert(insert.insertId)}
                   onApprove={() => handleApprove(insert.insertId)}
@@ -723,10 +724,11 @@ export default function ActionInsertsPhase({ onContinue }: Props) {
 
 function InsertCard({
   insert,
-  onSetMode, onRender, onResume, onApprove, onReject, onLock, onUnlock, onRemove,
+  onSetMode, onSetLayout, onRender, onResume, onApprove, onReject, onLock, onUnlock, onRemove,
 }: {
   insert: ActionInsertClip
   onSetMode: (mode: InsertRenderMode) => void
+  onSetLayout: (layout: 'cut' | 'overlay_corner') => void
   onRender: () => void
   onResume: () => void
   onApprove: () => void
@@ -752,10 +754,12 @@ function InsertCard({
   const isLoading = insert.stage === 'keyframe' || insert.stage === 'preview_motion' || insert.stage === 'video_full'
   const hasVideo = !!insert.videoRef
   const mode: InsertRenderMode = insert.renderMode ?? 'video'
+  const layout = insert.layout ?? 'cut'
   const canEditMode = !isLoading && !hasVideo && insert.status !== 'locked'
   const isLocked = insert.status === 'locked'
   const isApproved = insert.status === 'approved'
   const isRejected = insert.status === 'rejected'
+  const canEditLayout = !isLocked && !isApproved
 
   // Auto-rebind src when ref changes
   useEffect(() => {
@@ -910,6 +914,42 @@ function InsertCard({
           )}
           <span className="ml-auto text-[9px] font-semibold text-gray-400">
             {formatCredits(estimateInsertCredits(mode)).replace(/ \(.*\)$/, '')}
+          </span>
+        </div>
+
+        {/* Z69 — layout toggle: full-screen 'cut' vs corner PIP 'overlay_corner'.
+            Editable until the clip is locked or approved. */}
+        <div className="mt-1 flex items-center gap-1">
+          {canEditLayout ? (
+            <div className="inline-flex overflow-hidden rounded-md border border-gray-200">
+              <button
+                onClick={() => onSetLayout('cut')}
+                title="Cut — insert chiếm full màn hình, thay thế creator. Hợp hook, demo, CTA, kết quả."
+                className={`px-1.5 py-0.5 text-[9px] font-bold ${
+                  layout === 'cut' ? 'bg-violet-600 text-white' : 'bg-white text-gray-500 hover:bg-gray-50'
+                }`}
+              >
+                ⬛ Cut
+              </button>
+              <button
+                onClick={() => onSetLayout('overlay_corner')}
+                title="Overlay góc — insert hiện góc ~30% màn hình, creator vẫn nói full. Hợp cảnh minh hoạ, thành phần, cơ chế."
+                className={`px-1.5 py-0.5 text-[9px] font-bold ${
+                  layout === 'overlay_corner' ? 'bg-amber-500 text-white' : 'bg-white text-gray-500 hover:bg-gray-50'
+                }`}
+              >
+                ◰ Overlay
+              </button>
+            </div>
+          ) : (
+            <span className={`rounded px-1.5 py-0.5 text-[9px] font-bold ${
+              layout === 'overlay_corner' ? 'bg-amber-100 text-amber-800' : 'bg-violet-100 text-violet-700'
+            }`}>
+              {layout === 'overlay_corner' ? '◰ Overlay góc' : '⬛ Cut full'}
+            </span>
+          )}
+          <span className="ml-auto text-[9px] text-gray-400">
+            {layout === 'overlay_corner' ? 'creator vẫn nói full' : 'thay thế creator'}
           </span>
         </div>
       </div>
