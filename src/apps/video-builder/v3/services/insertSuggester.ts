@@ -587,6 +587,13 @@ DIRECTING RULES:
       not become a cartoon slideshow. Aim for roughly half illustration, half
       real footage when the script allows.
 - Group sentences describing the SAME idea into ONE scene; don't cut every line.
+- NO ABSTRACT TEXT-METAPHORS — a scene that only makes sense by READING words in
+  it (a calendar labelled "Doubt → Relief", a signpost, a gauge marked
+  "before/after", a clock) is weak UGC: abstract, text-dependent, slow to read.
+  Prefer a CONCRETE visual — the person's face/reaction, the body part, the
+  ingredient, the product in use. Also do NOT illustrate the SAME felt-transition
+  twice: if one scene already shows "skeptical → relieved" (e.g. a person
+  before/after), do NOT add a second metaphor scene for the same idea.
 - Duration is FREE per scene — YOU decide based on how much dialogue it covers.
   But mind the render mode:
     • ken_burns concept stills → 2-4s (short; split dense ideas into more cuts).
@@ -914,6 +921,18 @@ OUTPUT strict JSON, no fences:
         `correctly-spelled hand-written labels placed next to what they describe: ${list}. ` +
         `Do NOT translate or alter them. These labels MUST be visible and legible in the image.`
       rewrite.labeled++
+    }
+    // Z92 — LANGUAGE LOCK on ANY text in the image (not just the labels above).
+    // GPT-4o reads the English conceptPrompt and otherwise renders incidental
+    // ENGLISH text — calendar day names, "Doubt → Relief" arrows, captions (the
+    // #8 nasal-spray calendar bug). Force every visible word into the script's
+    // language for ALL graphic concept scenes.
+    if (presetId === 'CONCEPT_SCENE' && renderMode === 'ken_burns') {
+      conceptPrompt +=
+        `\n\nLANGUAGE: EVERY word/caption/label/heading that appears anywhere in ` +
+        `the image MUST be written in ${langName} — NEVER English. This includes ` +
+        `calendar day names, arrow labels, headings and any incidental caption. ` +
+        `Only a brand/product name may stay as printed on the real product.`
     }
 
     const durationSec = clampDuration(item.durationSec, presetId, renderMode)
