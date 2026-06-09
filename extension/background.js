@@ -233,7 +233,80 @@ async function handleCapture(msg) {
   await patchStatus({ lastSync: nowIso, lastMarket: country, lastCount: rows.length, lastEntity: route.entity, error: null })
 }
 
-chrome.runtime.onMessage.addListener((msg) => {
+// ── Full Crawl: tự mở 4 tab Kalodata ngầm, đợi mỗi cái crawl xong, đóng, sang cái tiếp ──
+const FULL_CRAWL_ENTITIES = [
+  { path: '/product', label: 'sản phẩm' },
+  { path: '/creator', label: 'creator' },
+  { path: '/video',   label: 'video' },
+  { path: '/shop',    label: 'shop' },
+]
+const doneWaiters = new Map() // tabId → resolve()
+let fullCrawlRunning = false
+
+function waitForDoneFromTab(tabId, timeoutMs) {
+  return new Promise((resolve) => {
+    doneWaiters.set(tabId, resolve)
+    setTimeout(() => {
+      if (doneWaiters.has(tabId)) { doneWaiters.delete(tabId); resolve('timeout') }
+    }, timeoutMs)
+  })
+}
+
+async function startFullCrawl(reason) {
+  if (fullCrawlRunning) return { skipped: true }
+  fullCrawlRunning = true
+  try {
+    const startAt = Date.now()
+    for (let i = 0; i < FULL_CRAWL_ENTITIES.length; i++) {
+      const ent = FULL_CRAWL_ENTITIES[i]
+      await chrome.storage.local.set({ fullCrawl: {
+        running: true, idx: i, total: FULL_CRAWL_ENTITIES.length,
+        label: ent.label, startAt, reason: reason || 'manual', at: Date.now(),
+      } })
+      const tab = await chrome.tabs.create({
+        url: `https://www.kalodata.com${ent.path}?ugcAutoCrawl=1`,
+        active: false,
+      })
+      await waitForDoneFromTab(tab.id, 4 * 60 * 1000) // 4 phút/entity tối đa
+      try { await chrome.tabs.remove(tab.id) } catch (e) { /* */ }
+    }
+    await chrome.storage.local.set({ fullCrawl: {
+      running: false, idx: FULL_CRAWL_ENTITIES.length, total: FULL_CRAWL_ENTITIES.length,
+      done: true, at: Date.now(), reason: reason || 'manual', durationMs: Date.now() - startAt,
+    } })
+  } catch (e) {
+    await chrome.storage.local.set({ fullCrawl: { running: false, error: String(e && e.message), at: Date.now() } })
+  } finally {
+    fullCrawlRunning = false
+  }
+  return { ok: true }
+}
+
+// ── Hẹn giờ tự kéo (chrome.alarms) ──
+const ALARM_NAME = 'ugc-lab-daily-crawl'
+
+async function applySchedule() {
+  const { schedule } = await chrome.storage.local.get('schedule')
+  try { await chrome.alarms.clear(ALARM_NAME) } catch (e) { /* */ }
+  if (!schedule || !schedule.enabled) return
+  const [hh, mm] = String(schedule.time || '07:00').split(':').map(Number)
+  const now = new Date()
+  const next = new Date(now.getFullYear(), now.getMonth(), now.getDate(), hh || 7, mm || 0, 0, 0)
+  if (next.getTime() <= now.getTime()) next.setDate(next.getDate() + 1)
+  chrome.alarms.create(ALARM_NAME, { when: next.getTime(), periodInMinutes: 24 * 60 })
+}
+
+chrome.alarms.onAlarm.addListener((alarm) => {
+  if (alarm.name === ALARM_NAME) {
+    startFullCrawl('schedule').catch((e) => console.error('[kalo-sync] schedule', e))
+  }
+})
+
+// Setup khi extension khởi động lại (browser restart, extension update).
+chrome.runtime.onStartup.addListener(() => { applySchedule() })
+chrome.runtime.onInstalled.addListener(() => { applySchedule() })
+
+chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg && msg.type === 'kalo-capture') {
     handleCapture(msg).catch((e) => console.error('[kalo-sync]', e))
   } else if (msg && msg.type === 'kalo-crawl-status') {
@@ -242,5 +315,16 @@ chrome.runtime.onMessage.addListener((msg) => {
       page: msg.page || 0, maxPages: msg.maxPages || 0,
       market: msg.market || '', captured: msg.captured || 0, at: Date.now(),
     } })
+    // Full Crawl: resolve khi tab này báo done
+    if (msg.done && sender && sender.tab) {
+      const w = doneWaiters.get(sender.tab.id)
+      if (w) { doneWaiters.delete(sender.tab.id); w('done') }
+    }
+  } else if (msg && msg.type === 'kalo-full-crawl-start') {
+    startFullCrawl('manual').then((r) => sendResponse(r)).catch((e) => sendResponse({ error: String(e) }))
+    return true // async
+  } else if (msg && msg.type === 'kalo-apply-schedule') {
+    applySchedule().then(() => sendResponse({ ok: true })).catch((e) => sendResponse({ error: String(e) }))
+    return true
   }
 })

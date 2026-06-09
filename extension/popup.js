@@ -3,14 +3,36 @@ const app = $('app')
 let pollTimer = null
 
 async function getState() {
-  const o = await chrome.storage.local.get(['kaloSession', 'enabled', 'status', 'totalIngested', 'crawlStatus'])
+  const o = await chrome.storage.local.get(['kaloSession', 'enabled', 'status', 'totalIngested', 'crawlStatus', 'fullCrawl', 'schedule'])
   return {
     session: o.kaloSession || null,
     enabled: o.enabled !== false,
     status: o.status || {},
     total: o.totalIngested || 0,
     crawl: o.crawlStatus || null,
+    fullCrawl: o.fullCrawl || null,
+    schedule: o.schedule || { enabled: false, time: '07:00' },
   }
+}
+
+const FULL_ENTITIES = ['sản phẩm', 'creator', 'video', 'shop']
+function renderFullCrawl(fc) {
+  if (!fc) return ''
+  const idx = fc.idx || 0
+  const total = fc.total || FULL_ENTITIES.length
+  const pct = Math.round((idx / total) * 100)
+  const steps = FULL_ENTITIES.map((label, i) => {
+    let cls = 'pending', mark = '○'
+    if (fc.done || i < idx) { cls = 'done'; mark = '✓' }
+    else if (i === idx && fc.running) { cls = 'active'; mark = '●' }
+    return `<div class="step ${cls}">${mark} ${label}</div>`
+  }).join('')
+  const head = fc.error ? `<div class="err">⚠ ${esc(fc.error)}</div>` :
+    fc.done ? `<div class="progDone">Xong cả 4 entity ✓ (${Math.round((fc.durationMs||0)/1000)}s)</div>` :
+    `<div><b>Đang kéo: ${esc(fc.label || '')} (${idx + 1}/${total})</b></div>`
+  return `${head}
+    <div class="bar"><div style="width:${pct}%"></div></div>
+    ${steps}`
 }
 
 function esc(s) { return String(s == null ? '' : s).replace(/[<>&]/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' }[c])) }
@@ -51,6 +73,8 @@ async function render() {
 
   const s = st.status
   const crawling = st.crawl && !st.crawl.done
+  const fullRunning = st.fullCrawl && st.fullCrawl.running
+  const sch = st.schedule || { enabled: false, time: '07:00' }
   app.innerHTML = `
     <div class="row">
       <span class="muted">Đã đăng nhập</span>
@@ -60,10 +84,26 @@ async function render() {
       <span class="switch"><input type="checkbox" id="enabled" ${st.enabled ? 'checked' : ''}/> Bật đồng bộ</span>
     </div>
 
-    <button id="crawl" class="primary" style="margin-top:10px" ${crawling ? 'disabled' : ''}>
-      ${crawling ? '⏳ Đang thu thập...' : '🔄 Tự động thu thập'}
+    <button id="full" class="magenta primary" style="margin-top:10px" ${fullRunning || crawling ? 'disabled' : ''}>
+      ${fullRunning ? '⏳ Đang kéo 4 entity...' : '⚡ Crawl Full (4 entity ~3 phút)'}
+    </button>
+    <div id="fullBox" class="status" style="${st.fullCrawl ? '' : 'display:none'}">${renderFullCrawl(st.fullCrawl)}</div>
+
+    <button id="crawl" class="ghost" style="margin-top:8px" ${crawling || fullRunning ? 'disabled' : ''}>
+      ${crawling ? '⏳ Đang thu thập...' : '🔄 Crawl entity hiện tại'}
     </button>
     <div id="crawlBox" class="status" style="${st.crawl ? '' : 'display:none'}">${renderCrawl(st.crawl)}</div>
+
+    <div class="schedSection">
+      <div class="row">
+        <span class="switch"><input type="checkbox" id="schEnabled" ${sch.enabled ? 'checked' : ''}/> ⏰ Hẹn giờ tự kéo mỗi ngày</span>
+      </div>
+      <div class="row" style="display:${sch.enabled ? 'flex' : 'none'}; align-items:center; gap:6px">
+        <span>Lúc</span>
+        <input id="schTime" type="time" class="timeInput" value="${esc(sch.time)}" />
+        <span class="muted">(giờ máy)</span>
+      </div>
+    </div>
 
     <div class="status">
       <div>Lần cuối đẩy: <b>${fmtTime(s.lastSync)}</b></div>
@@ -76,7 +116,42 @@ async function render() {
   $('enabled').onchange = (e) => chrome.storage.local.set({ enabled: e.target.checked })
   $('logout').onclick = async () => { await chrome.storage.local.remove('kaloSession'); render() }
   $('crawl').onclick = startCrawl
+  $('full').onclick = startFullCrawl
+  $('schEnabled').onchange = saveSchedule
+  $('schTime').onchange = saveSchedule
   if (crawling && !pollTimer) startPoll()
+  if (fullRunning && !pollTimer) startFullPoll()
+}
+
+async function startFullCrawl() {
+  const btn = $('full')
+  const box = $('fullBox')
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Đang kéo 4 entity...' }
+  await chrome.storage.local.set({ fullCrawl: { running: true, idx: 0, total: 4, label: 'sản phẩm', at: Date.now() } })
+  if (box) { box.style.display = ''; box.innerHTML = renderFullCrawl({ running: true, idx: 0, total: 4, label: 'sản phẩm' }) }
+  chrome.runtime.sendMessage({ type: 'kalo-full-crawl-start' }, () => { /* fire and forget */ })
+  startFullPoll()
+}
+
+function startFullPoll() {
+  if (pollTimer) clearInterval(pollTimer)
+  pollTimer = setInterval(async () => {
+    const { fullCrawl } = await chrome.storage.local.get('fullCrawl')
+    const box = $('fullBox')
+    if (box && fullCrawl) { box.style.display = ''; box.innerHTML = renderFullCrawl(fullCrawl) }
+    if (fullCrawl && !fullCrawl.running) {
+      clearInterval(pollTimer); pollTimer = null
+      setTimeout(render, 500)
+    }
+  }, 800)
+}
+
+async function saveSchedule() {
+  const enabled = $('schEnabled').checked
+  const time = $('schTime') ? $('schTime').value : '07:00'
+  await chrome.storage.local.set({ schedule: { enabled, time } })
+  chrome.runtime.sendMessage({ type: 'kalo-apply-schedule' }, () => { /* */ })
+  render()
 }
 
 function startPoll(startedAt) {

@@ -16,8 +16,30 @@
     for (const t of TARGETS) if (url.indexOf(t) > -1) return t
     return null
   }
+  // Tự chọn endpoint theo URL anh đang đứng ở Kalodata.
+  function pickTargetFromPath() {
+    const p = location.pathname
+    if (p.indexOf('/creator') === 0) return '/creator/queryList'
+    if (p.indexOf('/video') === 0) return '/video/queryList'
+    if (p.indexOf('/shop') === 0) return '/shop/queryList'
+    return '/product/queryList'
+  }
   function emit(target, reqBody, respText) {
     try { window.postMessage({ __kaloSync: true, target, reqBody, respText }, '*') } catch (e) { /* */ }
+    maybeAutoStart()
+  }
+
+  // ── AUTO-CRAWL mode: nếu URL có ?ugcAutoCrawl=1 → tự kéo khi page load xong ──
+  const AUTO_CRAWL_MODE = /[?&]ugcAutoCrawl=1/.test(location.search)
+  let autoCrawlFired = false
+  function maybeAutoStart() {
+    if (!AUTO_CRAWL_MODE || autoCrawlFired) return
+    const tgt = pickTargetFromPath()
+    if (lastReq[tgt]) {
+      autoCrawlFired = true
+      console.log('[UGC-Lab Sync] auto-crawl mode → kéo', tgt)
+      setTimeout(() => runCrawl(25, 1500), 1200)
+    }
   }
 
   const origFetch = window.fetch
@@ -59,14 +81,6 @@
     const cands = ['pageNo', 'pageNum', 'page', 'current', 'pageIndex', 'page_no', 'page_num']
     for (const k of cands) if (k in obj) return k
     return null
-  }
-  // Tự chọn endpoint theo URL anh đang đứng ở Kalodata.
-  function pickTargetFromPath() {
-    const p = location.pathname
-    if (p.indexOf('/creator') === 0) return '/creator/queryList'
-    if (p.indexOf('/video') === 0) return '/video/queryList'
-    if (p.indexOf('/shop') === 0) return '/shop/queryList'
-    return '/product/queryList'
   }
   const ENTITY_LABEL = {
     '/product/queryList': 'sản phẩm',
