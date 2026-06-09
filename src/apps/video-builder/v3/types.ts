@@ -131,9 +131,9 @@ export const COST_MODE_CONFIG: Record<CostMode, CostModeConfig> = {
   STANDARD: {
     id: 'STANDARD',
     labelVi: 'STANDARD',
-    descriptionVi: '30s · 720p · 3-12 inserts (đạo diễn tự quyết theo độ dài) · chất lượng cân bằng · ~$3-8',
+    descriptionVi: '30s · 720p · 3-14 inserts (đạo diễn tự quyết theo độ dài) · chất lượng cân bằng · ~$3-8',
     targetDurationSec: 30,
-    insertCount: { min: 3, max: 12 },
+    insertCount: { min: 3, max: 14 },
     resolution: '720p',
     estimatedUsd: { min: 3, max: 5 },
     skipPreviewDefault: false,
@@ -143,9 +143,9 @@ export const COST_MODE_CONFIG: Record<CostMode, CostModeConfig> = {
   FULL: {
     id: 'FULL',
     labelVi: 'FULL',
-    descriptionVi: '45-60s · 1080p · tới 12 inserts · HD export · ~$6-10',
+    descriptionVi: '45-60s · 1080p · tới 14 inserts · HD export · ~$6-10',
     targetDurationSec: 50,
-    insertCount: { min: 6, max: 12 },
+    insertCount: { min: 6, max: 14 },
     resolution: '1080p',
     estimatedUsd: { min: 6, max: 10 },
     skipPreviewDefault: false,

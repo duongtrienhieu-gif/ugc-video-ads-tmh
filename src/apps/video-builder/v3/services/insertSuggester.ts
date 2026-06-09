@@ -372,8 +372,9 @@ export async function directScenesWithGemini(
   const langName = SCRIPT_LANG_GEMINI_NAME[params.lang]
   // Z79/Z80 (B) — scale the scene count to the SCRIPT LENGTH, not a flat cap.
   // Z80: DENSER (~1 insert per ~4.5s, was 6.5) now that overlays are free +
-  // additive (don't hide the creator) and the budget ceiling is 12 — gives the
-  // Director room for a rich mix of cuts + overlays. → 55s ≈ 12, 45s ≈ 10,
+  // additive (don't hide the creator). Z98: budget ceiling raised 12 → 14 so a
+  // long script can use the full density when it earns it — gives the Director
+  // room for a rich mix of cuts + overlays. → 63s ≈ 14, 55s ≈ 12, 45s ≈ 10,
   // 30s ≈ 7, 18s ≈ 4 — clamped to the cost-mode [floor, budget]. effFloor =
   // target − 1 nudges Gemini to actually reach the target.
   const baseFloor = Math.max(1, Math.min(params.floor ?? 3, params.budget))
