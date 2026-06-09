@@ -18,8 +18,8 @@ export type SlotIntent =
   | 'social-proof'
   | 'usage-demo'
   | 'comparison'
-  | 'offer-combo'
-  | 'faq-assurance'
+  | 'qualifying-checklist'
+  | 'brand-story-bar'
 
 // ── 6 composition families ───────────────────────────────────────────────
 // Locked per slot (code chooses, not user). Tier 3 in the consistency system.
@@ -172,11 +172,21 @@ export interface SlotTexts {
   slot2?: { question: string; painBullets: string[] }
   slot3?: { beforeLabel: string; afterLabel: string; metric: string; metricSubtitle: string; disclaimer: string }
   slot4?: { title: string; ingredients: Array<{ name: string; pct?: string }>; tagline: string }
-  slot5?: { quote: string; author: string; verifiedNote: string }
+  /** Slot 5 — WhatsApp-screenshot social proof.
+   *  contactName = customer's display name in the chat.
+   *  bubbles = 2-3 customer message lines split into separate WhatsApp bubbles. */
+  slot5?: { contactName: string; bubbles: string[]; verifiedNote: string }
   slot6?: { title: string; steps: string[]; timing: string }
   slot7?: { title: string; usLabel: string; themLabel: string; points: Array<[string, string]> }
-  slot8?: { originalPrice?: string; currentPrice: string; discount?: string; combo?: string; cta: string; urgency?: string }
-  slot9?: { title: string; items: Array<{ q: string; a: string }> }
+  /** Slot 8 — qualifying checklist ("Ai nên dùng?").
+   *  5 concrete signs anchored to brief.corePains + targetCustomer.dailyContext.
+   *  qualifier = bottom callout like "Có 2/5 dấu hiệu? Đây là sản phẩm cho bạn". */
+  slot8?: { title: string; signs: string[]; qualifier: string }
+  /** Slot 9 — brand story bar (3 product-specific reasons).
+   *  Each reason: short specific headline + concrete one-line detail.
+   *  MUST be grounded in brief (keyDifferentiator, visibleIngredients,
+   *  packagingDescription, nicheSafeClaims) — never generic adjectives. */
+  slot9?: { title: string; reasons: Array<{ headline: string; detail: string }> }
 }
 
 export interface ListingDescription {

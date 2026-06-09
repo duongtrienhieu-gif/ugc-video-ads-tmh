@@ -164,24 +164,31 @@ function deriveSlot4(ctx: PromptContext): { title: string; ingredients: Array<{ 
   return { title, ingredients: [], tagline }
 }
 
-function deriveSlot5(ctx: PromptContext): { quote: string; author: string; verifiedNote: string } {
+function deriveSlot5(ctx: PromptContext): { contactName: string; bubbles: string[]; verifiedNote: string } {
   const isMS = ctx.language === 'ms'
-  const verifiedNote = isMS ? 'Ulasan pelanggan sebenar' : 'Đánh giá khách hàng thật'
+  const verifiedNote = isMS ? 'Ulasan pelanggan sebenar' : 'Phản hồi khách hàng thật'
+  const contactName = isMS ? 'Aisyah' : 'Mai Anh'
   if (ctx.brief) {
-    // Build a concrete before→after quote from brief data
-    const pain = ctx.brief.corePains[0]?.replace(/\?$/, '') || (isMS ? 'masalah saya' : 'vấn đề của tôi')
-    const promise = ctx.brief.transformationPromise.slice(0, 60)
-    const quote = isMS
-      ? `Dulu ${pain.toLowerCase()}. Lepas guna ${ctx.brief.productNameExact}, ${promise.toLowerCase()}!`
-      : `Trước đây ${pain.toLowerCase()}. Sau khi dùng ${ctx.brief.productNameExact}, ${promise.toLowerCase()}!`
-    const author = isMS ? 'Aisyah, KL' : 'Mai, TP.HCM'
-    return { quote: quote.slice(0, 100), author, verifiedNote }
+    const pain = ctx.brief.corePains[0]?.replace(/\?$/, '').trim() || (isMS ? 'masalah saya' : 'vấn đề của tôi')
+    const promise = ctx.brief.transformationPromise.slice(0, 80).trim()
+    const bubbles = isMS
+      ? [
+          `Hi kak, sebelum ni saya ${pain.toLowerCase()}`,
+          `Dah guna ${ctx.brief.productNameExact} seminggu, ${promise.toLowerCase()} 🥰`,
+          `Terima kasih banyak yer!`,
+        ]
+      : [
+          `Chị ơi, trước em bị ${pain.toLowerCase()} 😩`,
+          `Em dùng ${ctx.brief.productNameExact} được 1 tuần, ${promise.toLowerCase()} ạ ❤️`,
+          `Cảm ơn chị nhiều lắm!`,
+        ]
+    return { contactName, bubbles, verifiedNote }
   }
   return {
-    quote: isMS
-      ? `Saya sangat berpuas hati dengan ${ctx.product.productName}!`
-      : `Tôi rất hài lòng với ${ctx.product.productName}!`,
-    author: isMS ? 'Pelanggan Sebenar' : 'Khách Hàng Thật',
+    contactName,
+    bubbles: isMS
+      ? [`Hi kak`, `Saya sangat berpuas hati dengan ${ctx.product.productName}!`, `Akan order lagi 🥰`]
+      : [`Chị ơi`, `Em hài lòng lắm với ${ctx.product.productName}!`, `Em sẽ đặt thêm ạ ❤️`],
     verifiedNote,
   }
 }
@@ -244,49 +251,86 @@ function deriveSlot7(ctx: PromptContext): { title: string; usLabel: string; them
   }
 }
 
-function deriveSlot8(ctx: PromptContext): { originalPrice?: string; currentPrice: string; discount?: string; combo?: string; cta: string; urgency?: string } {
-  const offer = ctx.product.offer || ''
-  const ctaText = ctx.language === 'ms' ? 'BELI SEKARANG' : 'MUA NGAY'
-  return { currentPrice: offer || '(Giá)', cta: ctaText, urgency: ctx.language === 'ms' ? 'Stok terhad hari ini' : 'Số lượng có hạn' }
-}
-
-function deriveSlot9(ctx: PromptContext): { title: string; items: Array<{ q: string; a: string }> } {
+function deriveSlot8(ctx: PromptContext): { title: string; signs: string[]; qualifier: string } {
   const isMS = ctx.language === 'ms'
-  const title = isMS ? 'SOALAN LAZIM' : 'CÂU HỎI THƯỜNG GẶP'
+  const title = isMS ? 'SIAPA PERLU GUNA?' : 'AI NÊN DÙNG?'
+  const qualifier = isMS
+    ? 'Ada 2/5 tanda? Produk ni untuk anda'
+    : 'Có 2/5 dấu hiệu? Đây là sản phẩm cho bạn'
   if (ctx.brief) {
-    // Use brief.commonObjections as FAQ questions; build short answers from safe claims
-    const objections = ctx.brief.commonObjections.slice(0, 3)
-    const safeClaim = ctx.brief.nicheSafeClaims[0] || (isMS ? 'lembut digunakan' : 'an toàn')
-    const items = objections.length >= 3
-      ? objections.map((q): { q: string; a: string } => ({
-          q: q.slice(0, 50),
-          a: isMS ? `Ya, ${safeClaim}` : `Vâng, ${safeClaim}`,
-        }))
-      : (isMS
-          ? [
-              { q: 'Selamat digunakan?', a: 'Ya, formula lembut' },
-              { q: 'Bila nampak hasil?', a: 'Bergantung penggunaan' },
-              { q: 'Boleh pulangkan?',   a: 'Ya, dalam 7 hari' },
-            ]
-          : [
-              { q: 'Có an toàn không?',  a: 'Có, công thức lành tính' },
-              { q: 'Khi nào thấy kết quả?', a: 'Tùy cách dùng' },
-              { q: 'Có đổi trả không?',  a: 'Có, trong 7 ngày' },
-            ])
-    return { title, items }
+    // Build 5 concrete signs from brief.corePains + targetCustomer.dailyContext
+    const pains = ctx.brief.corePains.map((p) => p.replace(/\?$/, '').trim()).filter(Boolean)
+    const context = ctx.brief.targetCustomer.dailyContext
+    const fromContext = context.split(/[,;]/).map((s) => s.trim()).filter(Boolean)
+    const merged = [...pains, ...fromContext].slice(0, 5)
+    if (merged.length >= 3) {
+      const padded = merged.concat(isMS
+        ? ['Mahu hasil tahan lama', 'Cari penyelesaian semula jadi']
+        : ['Muốn kết quả lâu dài', 'Tìm giải pháp tự nhiên']).slice(0, 5)
+      return { title, signs: padded, qualifier }
+    }
   }
   return {
     title,
-    items: isMS
+    signs: isMS
+      ? ['Masalah berulang setiap hari', 'Cuba banyak cara tapi tak berkesan', 'Mahu penyelesaian semula jadi', 'Hidup terganggu kerana masalah ni', 'Mencari produk yang dipercayai'].slice(0, 5)
+      : ['Vấn đề lặp lại mỗi ngày', 'Thử nhiều cách nhưng không hiệu quả', 'Muốn giải pháp tự nhiên', 'Cuộc sống bị ảnh hưởng vì vấn đề này', 'Tìm sản phẩm tin được'].slice(0, 5),
+    qualifier,
+  }
+}
+
+function deriveSlot9(ctx: PromptContext): { title: string; reasons: Array<{ headline: string; detail: string }> } {
+  const isMS = ctx.language === 'ms'
+  const title = isMS ? 'KENAPA PILIH KAMI' : 'VÌ SAO CHỌN CHÚNG TÔI'
+  if (ctx.brief) {
+    // Build 3 product-specific reasons from brief data — NEVER generic.
+    // Reason 1 → keyDifferentiator (the unique edge)
+    // Reason 2 → visibleIngredients OR packagingDescription (proof of mechanism)
+    // Reason 3 → nicheSafeClaims OR targetCustomer.dailyContext (who/where it fits)
+    const edge = ctx.brief.keyDifferentiator.trim()
+    const ings = ctx.brief.visibleIngredients.slice(0, 3).join(', ')
+    const safe = ctx.brief.nicheSafeClaims[0]?.trim() || ''
+    const context = ctx.brief.targetCustomer.dailyContext.trim()
+    const reasons: Array<{ headline: string; detail: string }> = []
+
+    reasons.push({
+      headline: edge.split(/[,.;]/)[0]?.trim().slice(0, 50) || edge.slice(0, 50),
+      detail: edge.slice(0, 90),
+    })
+
+    if (ings) {
+      reasons.push({
+        headline: ings.slice(0, 50),
+        detail: isMS
+          ? `Bahan utama dari ${ctx.brief.packagingDescription.split(/[,.;]/)[0]?.trim().slice(0, 60) || 'sumber yang dipercayai'}`
+          : `Thành phần chính từ ${ctx.brief.packagingDescription.split(/[,.;]/)[0]?.trim().slice(0, 60) || 'nguồn tin cậy'}`,
+      })
+    } else {
+      reasons.push({
+        headline: ctx.brief.transformationPromise.split(/[,.;]/)[0]?.trim().slice(0, 50) || ctx.brief.transformationPromise.slice(0, 50),
+        detail: ctx.brief.specificMetric.slice(0, 80),
+      })
+    }
+
+    reasons.push({
+      headline: safe ? safe.slice(0, 50) : context.split(/[,.;]/)[0]?.trim().slice(0, 50) || (isMS ? 'Sesuai untuk semua' : 'Phù hợp mọi người'),
+      detail: (context || ctx.brief.usageContext).slice(0, 90),
+    })
+
+    return { title, reasons: reasons.slice(0, 3) }
+  }
+  return {
+    title,
+    reasons: isMS
       ? [
-          { q: 'Selamat digunakan?', a: 'Ya, formula lembut' },
-          { q: 'Bila nampak hasil?', a: 'Bergantung penggunaan' },
-          { q: 'Boleh pulangkan?',   a: 'Ya, dalam 7 hari' },
+          { headline: 'Formula khusus', detail: 'Direka untuk masalah khusus anda' },
+          { headline: 'Bahan terpilih',  detail: 'Setiap bahan ada fungsi yang jelas' },
+          { headline: 'Sesuai harian',   detail: 'Boleh diguna setiap hari tanpa kesan sampingan' },
         ]
       : [
-          { q: 'Có an toàn không?',  a: 'Có, công thức an toàn' },
-          { q: 'Khi nào thấy kết quả?', a: 'Tùy cách dùng' },
-          { q: 'Có đổi trả không?',  a: 'Có, trong 7 ngày' },
+          { headline: 'Công thức chuyên biệt', detail: 'Thiết kế riêng cho vấn đề của bạn' },
+          { headline: 'Thành phần chọn lọc',   detail: 'Mỗi thành phần có vai trò rõ ràng' },
+          { headline: 'Phù hợp dùng hằng ngày', detail: 'An tâm sử dụng mỗi ngày' },
         ],
   }
 }
@@ -364,18 +408,34 @@ ${ingLine}
 export function buildPromptSlot5(ctx: PromptContext): string {
   const st = ctx.slotTexts?.slot5
   const derived = deriveSlot5(ctx)
-  const quote    = st?.quote        ?? derived.quote
-  const author   = st?.author       ?? derived.author
-  const verified = st?.verifiedNote ?? derived.verifiedNote
+  const contactName = st?.contactName ?? derived.contactName
+  const bubbles     = (st?.bubbles && st.bubbles.length > 0 ? st.bubbles : derived.bubbles).slice(0, 3)
+  const verified    = st?.verifiedNote ?? derived.verifiedNote
+  const bubblesList = bubbles
+    .map((b, i) => `  Bubble ${i + 1} (sent at "14:2${i + 1}", ✓✓ blue read-receipt): "${b}"`)
+    .join('\n')
+
   return `${header(ctx)}
 
-SLOT 5 — SOCIAL PROOF
-COMPOSITION: Soft brand-tint bg. Product small ~18% bottom-left corner. Big white rounded testimonial card center-right (~70% area), generous shadow. Giant "❝" behind card in accent color at 15% opacity.
-TEXT in card:
-- TOP large amber stars: ⭐⭐⭐⭐⭐
-- CENTER italic (~44px) dark navy: "${quote}"
-- BOTTOM bold (~30px) gray: "— ${author}"
-- Below card, small italic (~22px) gray: "${verified}"`
+SLOT 5 — SOCIAL PROOF (WhatsApp screenshot inside iPhone mockup)
+COMPOSITION:
+- Soft brand-color background fills the canvas.
+- CENTER OF CANVAS (y≈170-940), a realistic BLACK iPhone 14 / 15 mockup, tilted ~3° for natural perspective. The phone occupies ~58% of canvas width, sharp 3D-rendered look with subtle screen reflection. Notch + dynamic island visible at the top of the screen.
+- Phone screen content = WhatsApp chat thread (authentic WhatsApp UI):
+  - iOS status bar at very top (small): time "14:23", signal/wifi/battery icons.
+  - WHATSAPP HEADER BAR (height ~80px on the screen, background = WhatsApp green #075E54): back arrow on the left, circular avatar (generic person silhouette in muted color — NO real face), then contact name "${contactName}" in WHITE Plus Jakarta Sans Semibold ~32px, with sub-text "online" in lighter green ~22px below the name. Camera + phone call icons on the right.
+  - CHAT AREA below header: classic WhatsApp light beige #ECE5DD background with subtle faint geometric WhatsApp pattern texture.
+  - RIGHT-ALIGNED outgoing message bubbles (customer = sender), each bubble = WhatsApp light-green #DCF8C6 rounded rectangle with tail on the right, dark gray text ~30px:
+${bubblesList}
+  - Each bubble bottom-right has timestamp + double-tick BLUE ✓✓ (read).
+- Around the phone: subtle accent-color soft glow halo, gentle shadow under the phone.
+- Product (matching refs) appears small ~14% in the BOTTOM-LEFT corner of the canvas (NOT inside the chat screen), slightly out-of-focus for depth.
+TEXT in image (OUTSIDE the phone screen):
+- BOTTOM CENTER (y≈980), small italic ~22px dark navy on the bg: "${verified}"
+EXTRA RULES:
+- Make it look like an actual screenshot a customer would forward — not a designed marketing card. NO "5 star" rating overlay, NO testimonial frame outside the phone.
+- WhatsApp bubble colors and layout must follow real WhatsApp conventions exactly.
+- Customer messages are right-aligned green. If a shop reply bubble appears, it would be left-aligned white — but for this slot show ONLY customer outgoing bubbles to keep focus.`
 }
 
 export function buildPromptSlot6(ctx: PromptContext): string {
@@ -417,44 +477,59 @@ TEXT in image:
 export function buildPromptSlot8(ctx: PromptContext): string {
   const st = ctx.slotTexts?.slot8
   const derived = deriveSlot8(ctx)
-  const cur = st?.currentPrice ?? derived.currentPrice
-  const orig = st?.originalPrice
-  const disc = st?.discount
-  const combo = st?.combo
-  const cta = st?.cta ?? derived.cta
-  const urgency = st?.urgency ?? derived.urgency
-
-  const priceBlock = orig
-    ? `- BELOW BRAND SEAL, LEFT half (y≈260), struck-through (~42px) light tint: "${orig}"\n- DIRECTLY BELOW the strike-through (y≈320, still LEFT half), GIANT ExtraBold (~200px) white with shadow: "${cur}"`
-    : `- BELOW BRAND SEAL, LEFT half (y≈280), GIANT ExtraBold (~200px) white with shadow: "${cur}"`
-  const discBlock = disc ? `\n- AMBER PILL BADGE next to or below current price (~50px dark bold): "${disc}"` : ''
-  const comboBlock = combo ? `\n- MIDDLE band (y≈640) bold (~40px) white: "${combo}"` : ''
-  const urgBlock = urgency ? `\n- Below CTA button italic (~28px) light tint: "⏰ ${urgency}"` : ''
+  const title     = st?.title     ?? derived.title
+  const signs     = (st?.signs && st.signs.length > 0 ? st.signs : derived.signs).slice(0, 5)
+  const qualifier = st?.qualifier ?? derived.qualifier
+  const signsList = signs
+    .map((s, i) => `  Row ${i + 1} (y≈${410 + i * 90}): white rounded pill ~760px wide × 76px tall, with accent-color circle checkbox ~46px on the LEFT (white ✓ inside) and DARK NAVY bold ~34px text on the right: "${s}"`)
+    .join('\n')
 
   return `${header(ctx)}
 
-SLOT 8 — OFFER (hero composition + price overlay)
-COMPOSITION: Product hero shot in BOTTOM-RIGHT third (y≈520-880). Energetic saturated bg (primary → warm accent). Price block sits in the LEFT half BELOW the brand seal.
-TEXT in image:
-${priceBlock}${discBlock}${comboBlock}
-- BOTTOM (y≈930) wide rounded BUTTON in accent color, big bold white inside (~58px) with shadow: "${cta}"${urgBlock}`
+SLOT 8 — QUALIFYING CHECKLIST ("Ai nên dùng?")
+COMPOSITION:
+- Brand gradient fills the canvas (energetic but readable — not too dark).
+- Product (matching refs) small ~14% in the BOTTOM-RIGHT corner (y≈800-960), slightly tilted, soft glow — acts as a quiet visual anchor, NOT the hero.
+- The hero of this slot is the CHECKLIST, not the product.
+TEXT / LAYOUT in image:
+- BELOW BRAND SEAL (y≈230-340), centered, bold ExtraBold (~110px) WHITE with strong drop shadow: "${title}"
+- VERTICAL STACK of ${signs.length} checklist pills, evenly spaced, centered horizontally (x≈130-890):
+${signsList}
+- BOTTOM CALLOUT BAR (y≈900-970), wide rounded rectangle in ACCENT color, big bold WHITE text (~44px) centered with subtle shadow: "${qualifier}"
+
+EXTRA RULES:
+- NO prices, NO percentage discounts, NO "BELI SEKARANG" / "MUA NGAY" buttons, NO countdown timers, NO stock counters.
+- Pills must look CLEAN and uniform — same width, same height, same checkbox style. Like a wellness self-diagnosis quiz card, not a sale slide.
+- The 5 signs are short, concrete symptoms / situations the customer recognizes — render them faithfully without paraphrasing.`
 }
 
 export function buildPromptSlot9(ctx: PromptContext): string {
   const st = ctx.slotTexts?.slot9
   const derived = deriveSlot9(ctx)
-  const title = st?.title ?? derived.title
-  const items = (st?.items && st.items.length > 0 ? st.items : derived.items).slice(0, 3)
-  const itemsStr = items.map((it, i) => `Card ${i + 1}: Q: "${it.q}" → A: "${it.a}"`).join(' / ')
+  const title   = st?.title ?? derived.title
+  const reasons = (st?.reasons && st.reasons.length > 0 ? st.reasons : derived.reasons).slice(0, 3)
+  const reasonsList = reasons
+    .map((r, i) => `  Card ${i + 1} (y≈${400 + i * 165}): WHITE rounded card ~840px × 150px with soft shadow.\n    - LEFT: large accent-color circle ~96px with WHITE ExtraBold number "${i + 1}" inside (~64px).\n    - CENTER-RIGHT: TOP line bold DARK NAVY ~38px headline: "${r.headline}"\n    - CENTER-RIGHT: BOTTOM line medium gray ~26px detail: "${r.detail}"`)
+    .join('\n')
 
   return `${header(ctx)}
 
-SLOT 9 — FAQ & ASSURANCE
-COMPOSITION: Soft light bg. Product small ~18% bottom-right corner (y≈790-960). 3 white rounded cards stacked vertically centered (y≈380-880, each ~160px tall, soft shadow).
-TEXT in image:
-- BELOW BRAND SEAL, centered (y≈250-340), bold (~110px) dark primary: "${title}"
-- 3 cards content (stacked), each with accent-color "Q" badge square (~40px) on left, bold question (~38px) + answer prefixed with "→" (~30px gray):
-  ${itemsStr}`
+SLOT 9 — BRAND STORY BAR (3 product-specific reasons)
+COMPOSITION:
+- Soft brand-tint background (calm, trustworthy — not energetic).
+- Product (matching refs) small ~14% in the BOTTOM-RIGHT corner (y≈810-960), gently lit — acts as anchor only.
+- Hero is the 3-reason stack.
+TEXT / LAYOUT in image:
+- BELOW BRAND SEAL (y≈230-340), centered, bold ExtraBold (~110px) DARK PRIMARY color (NOT white — this section feels editorial): "${title}"
+- 3 stacked reason cards centered horizontally:
+${reasonsList}
+
+EXTRA RULES (critical — anti-generic):
+- The 3 reasons are the EXACT strings provided. Do NOT generalize or rewrite them.
+- NO generic adjective-only badges ("chất lượng cao", "uy tín", "an toàn", "hiệu quả nhanh", "kualiti tinggi", "dipercayai", "selamat", "berkesan cepat").
+- Each headline must contain at least one concrete noun (ingredient name, country/region, technology, mechanism, certification type, timeframe, target customer) — NOT just adjectives.
+- This slot is brand differentiation, not generic FAQ. NO "Q:" / "A:" formatting, NO question marks, NO refund/shipping/return talk.
+- Numbers 1-2-3 are large circles, visually anchoring each reason. Reasons read as 3 short proof points, not 3 questions.`
 }
 
 // ── Dispatcher ───────────────────────────────────────────────────────────

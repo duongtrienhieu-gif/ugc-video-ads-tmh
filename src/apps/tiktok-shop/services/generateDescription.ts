@@ -90,6 +90,17 @@ COPYWRITING RULES:
 • Slot 1 headline: 4-6 words ALL CAPS, derived from brief.transformationPromise.
 • Slot 3 metric: must equal brief.specificMetric (already specific & measurable).
 • Slot 4 ingredients: must equal brief.visibleIngredients exactly. If brief.visibleIngredients is [], slot4.ingredients MUST be [] (do NOT invent).
+• Slot 5 bubbles (WhatsApp screenshot): 2-3 short customer chat lines, conversational, 1st-person, casual punctuation + occasional emoji like real WhatsApp. NOT a polished testimonial. Each bubble ≤ 14 words. First bubble = the pain context; second bubble = the result after using the product (mention product name); optional third = thank-you or order-again line.
+• Slot 8 signs (qualifying checklist): 5 short concrete symptoms/situations from brief.corePains + brief.targetCustomer.dailyContext. Each ≤ 9 words, statement form (NOT a question, NO '?'). NO sales language, NO product mention, NO benefit talk — JUST the pain/situation the customer would recognize.
+• Slot 9 reasons (brand story bar): EXACTLY 3 reasons. ANTI-GENERIC HARD RULE:
+   - reason 1 headline MUST contain at least one specific noun extracted from brief.keyDifferentiator (mechanism, technology, ingredient, country, timeframe).
+   - reason 2 headline MUST reference brief.visibleIngredients (if non-empty) or brief.packagingDescription specifics.
+   - reason 3 headline MUST reference brief.targetCustomer.dailyContext or brief.usageContext or brief.nicheSafeClaims — who/where the product is for.
+   - Each headline ≤ 7 words. Each detail ≤ 14 words.
+   - BANNED phrases (do NOT use ANY of these as a headline or core wording — they are too generic to differentiate):
+     Vietnamese: "chất lượng cao", "uy tín", "an toàn", "hiệu quả nhanh", "tin cậy", "đáng tin", "tốt nhất", "số 1", "hàng đầu", "chuyên nghiệp"
+     Malay: "kualiti tinggi", "dipercayai", "selamat", "berkesan cepat", "berkualiti", "nombor 1", "terbaik", "profesional"
+   - If you cannot make a reason specific from the brief, leave the slot9.reasons array shorter (2 or even 1 specific reason) — NEVER pad with generic content.
 
 DATA INTEGRITY: anchor everything to the brief. If a field isn't covered by the brief, derive from PRODUCT DATA. NEVER fabricate ingredient names, cert claims, lab numbers, or clinical specifics.
 
@@ -114,7 +125,9 @@ function buildDescriptionPrompt(params: GenerateDescriptionParams): string {
     ? 'MY-market names: Aisyah, Siti, Faridah, Hanim, Nurliyana + city KL / JB / Penang / Shah Alam'
     : 'VN-market names: Linh, Mai, Thu, Hương, Ngọc + thành phố Việt Nam'
   const ctaDefault = language === 'ms' ? 'BELI SEKARANG' : 'MUA NGAY'
-  const faqTitle = language === 'ms' ? 'SOALAN LAZIM' : 'CÂU HỎI THƯỜNG GẶP'
+  const checklistTitle = language === 'ms' ? 'SIAPA PERLU GUNA?' : 'AI NÊN DÙNG?'
+  const brandStoryTitle = language === 'ms' ? 'KENAPA PILIH KAMI' : 'VÌ SAO CHỌN CHÚNG TÔI'
+  const qualifierExample = language === 'ms' ? 'Ada 2/5 tanda? Produk ni untuk anda' : 'Có 2/5 dấu hiệu? Đây là sản phẩm cho bạn'
   const beforeLabel = language === 'ms' ? 'SEBELUM' : 'TRƯỚC'
   const afterLabel = language === 'ms' ? 'SELEPAS' : 'SAU'
   // Ingredient priority: Vision-read (most reliable for label visibility) > seller-typed (user's knowledge) > [] (don't invent)
@@ -169,13 +182,22 @@ JSON SHAPE (return EXACTLY this structure — single JSON object, all string val
     "slot2": {"question": "<${brief ? 'use brief.corePains[0]' : 'core pain as self-question'}, max 10 words ends '?'>", "painBullets": ["<self-question max 8 words ends '?'>", "<question>", "<question>"]},
     "slot3": {"beforeLabel": "${beforeLabel}", "afterLabel": "${afterLabel}", "metric": "<${brief ? 'must equal brief.specificMetric' : 'SPECIFIC number+unit ALL CAPS max 4 words'}>", "metricSubtitle": "<context max 5 words>", "disclaimer": "<results-may-vary, max 8 words>"},
     "slot4": {"title": "<formula panel title ALL CAPS>", "ingredients": ${slot4IngShape}, "tagline": "<safety/natural claim, max 8 words>"},
-    "slot5": {"quote": "<before→after with time, anchor to ${brief ? 'brief.targetCustomer + brief.transformationPromise' : "customer transformation"}, max 100 chars>", "author": "<${reviewerNameHint}>", "verifiedNote": "<verified-review label>"},
+    "slot5": {"contactName": "<short reviewer first name only — ${reviewerNameHint}>", "bubbles": ["<1st-person pain bubble, casual chat tone, mention pain context, ${brief ? 'anchor to brief.corePains[0]' : 'use product.painPoints[0]'}, max 14 words, may include 1 emoji>", "<2nd bubble: result after using product, mention product name, ${brief ? 'anchor to brief.transformationPromise' : 'use product benefit'}, max 14 words, may include 1 emoji>", "<optional 3rd bubble: short thank-you / will-order-again line, max 10 words>"], "verifiedNote": "<verified-review label>"},
     "slot6": {"title": "<how-to-use title with step count>", "steps": ["<SPECIFIC action verb + object + amount/duration, max 10 words>", "<step>", "<step>"], "timing": "<usage timing e.g. '🌅 Pagi • 🌙 Malam'>"},
     "slot7": {"title": "<comparison title>", "usLabel": "<our product label>", "themLabel": "<generic alternative label>", "points": [["<${brief ? 'must reflect brief.keyDifferentiator' : 'specific measurable differentiator'}>", "<generic equivalent>"], ["<specific>", "<generic>"], ["<specific>", "<generic>"], ["<specific>", "<generic>"]]},
-    "slot8": {"originalPrice": "<original price if mentioned, else omit key>", "currentPrice": "<from product.offer or '(Harga)'>", "discount": "<if available, else omit>", "combo": "<combo line if applicable, else omit>", "cta": "${ctaDefault}", "urgency": "<urgency max 6 words>"},
-    "slot9": {"title": "${faqTitle}", "items": [{"q": "<${brief ? 'from brief.commonObjections[0]' : 'main safety concern'}>", "a": "<answer>"}, {"q": "<results timing>", "a": "<specific timeframe>"}, {"q": "<return/refund>", "a": "<answer>"}]}
+    "slot8": {"title": "${checklistTitle}", "signs": ["<concrete symptom/situation statement (NOT a question, NO '?'), max 9 words, ${brief ? 'derived from brief.corePains and brief.targetCustomer.dailyContext' : 'derived from product.painPoints'}>", "<sign>", "<sign>", "<sign>", "<sign>"], "qualifier": "<bottom callout matching pattern '${qualifierExample}'>"},
+    "slot9": {"title": "${brandStoryTitle}", "reasons": [{"headline": "<reason 1 — MUST cite concrete noun from ${brief ? 'brief.keyDifferentiator' : 'product.usps'} (mechanism / ingredient / country / timeframe). NO generic adjectives. Max 7 words.>", "detail": "<one specific line expanding the headline, max 14 words>"}, {"headline": "<reason 2 — MUST reference ${brief ? 'brief.visibleIngredients or brief.packagingDescription' : 'product.ingredients'} specifics. Max 7 words.>", "detail": "<one specific line, max 14 words>"}, {"headline": "<reason 3 — MUST reference ${brief ? 'brief.targetCustomer.dailyContext or brief.usageContext or brief.nicheSafeClaims' : 'product.benefits'} — who/where it fits. Max 7 words.>", "detail": "<one specific line, max 14 words>"}]}
   }
 }
+
+EXAMPLES of BAD generic slot9 reasons (do NOT produce these or anything like them):
+  ❌ {"headline": "Chất lượng cao", "detail": "Sản phẩm uy tín được khách hàng tin dùng"}
+  ❌ {"headline": "An toàn hiệu quả", "detail": "Phù hợp cho mọi đối tượng khách hàng"}
+  ❌ {"headline": "Thương hiệu uy tín", "detail": "Được nhiều người tin tưởng lựa chọn"}
+EXAMPLES of GOOD specific slot9 reasons (concrete nouns, no generic praise):
+  ✓ {"headline": "Công nghệ phun sương Nano", "detail": "Hạt sương 10 micron thẩm thấu sâu khoang mũi"}
+  ✓ {"headline": "Muối Himalaya nguyên chất", "detail": "Khai thác trực tiếp từ vùng núi 250 triệu năm tuổi"}
+  ✓ {"headline": "Hợp dân văn phòng máy lạnh", "detail": "Cấp ẩm tức thì khi niêm mạc khô do điều hòa"}
 
 BOLD: use **markdown bold** for 1-2 emphasis points per block (result claim, product name, action verb, price). Never bold filler.
 
@@ -265,12 +287,15 @@ function validateSlotTexts(raw: unknown): SlotTexts | undefined {
     }
   }
 
-  const s5 = r.slot5 as { quote?: unknown; author?: unknown; verifiedNote?: unknown } | undefined
-  if (s5 && typeof s5.quote === 'string' && typeof s5.author === 'string') {
-    out.slot5 = {
-      quote:        s5.quote,
-      author:       s5.author,
-      verifiedNote: typeof s5.verifiedNote === 'string' ? s5.verifiedNote : '',
+  const s5 = r.slot5 as { contactName?: unknown; bubbles?: unknown; verifiedNote?: unknown } | undefined
+  if (s5 && typeof s5.contactName === 'string' && Array.isArray(s5.bubbles)) {
+    const bubbles = (s5.bubbles as unknown[]).filter((b): b is string => typeof b === 'string' && b.trim().length > 0)
+    if (bubbles.length > 0) {
+      out.slot5 = {
+        contactName:  s5.contactName,
+        bubbles:      bubbles.slice(0, 3),
+        verifiedNote: typeof s5.verifiedNote === 'string' ? s5.verifiedNote : '',
+      }
     }
   }
 
@@ -300,26 +325,27 @@ function validateSlotTexts(raw: unknown): SlotTexts | undefined {
     }
   }
 
-  const s8 = r.slot8 as { originalPrice?: unknown; currentPrice?: unknown; discount?: unknown; combo?: unknown; cta?: unknown; urgency?: unknown } | undefined
-  if (s8 && typeof s8.currentPrice === 'string') {
-    out.slot8 = {
-      originalPrice: typeof s8.originalPrice === 'string' ? s8.originalPrice : undefined,
-      currentPrice:  s8.currentPrice,
-      discount:      typeof s8.discount === 'string' ? s8.discount : undefined,
-      combo:         typeof s8.combo === 'string' ? s8.combo : undefined,
-      cta:           typeof s8.cta === 'string' ? s8.cta : 'BELI SEKARANG',
-      urgency:       typeof s8.urgency === 'string' ? s8.urgency : undefined,
+  const s8 = r.slot8 as { title?: unknown; signs?: unknown; qualifier?: unknown } | undefined
+  if (s8 && typeof s8.title === 'string' && Array.isArray(s8.signs)) {
+    const signs = (s8.signs as unknown[]).filter((x): x is string => typeof x === 'string' && x.trim().length > 0)
+    if (signs.length >= 3) {
+      out.slot8 = {
+        title:     s8.title,
+        signs:     signs.slice(0, 5),
+        qualifier: typeof s8.qualifier === 'string' ? s8.qualifier : '',
+      }
     }
   }
 
-  const s9 = r.slot9 as { title?: unknown; items?: unknown } | undefined
-  if (s9 && typeof s9.title === 'string' && Array.isArray(s9.items)) {
-    const items = (s9.items as unknown[])
+  const s9 = r.slot9 as { title?: unknown; reasons?: unknown } | undefined
+  if (s9 && typeof s9.title === 'string' && Array.isArray(s9.reasons)) {
+    const reasons = (s9.reasons as unknown[])
       .map((x) => x as Record<string, unknown>)
-      .filter((x) => typeof x.q === 'string' && typeof x.a === 'string')
-      .map((x) => ({ q: x.q as string, a: x.a as string }))
-    if (items.length > 0) {
-      out.slot9 = { title: s9.title, items }
+      .filter((x) => typeof x.headline === 'string' && typeof x.detail === 'string')
+      .map((x) => ({ headline: (x.headline as string).trim(), detail: (x.detail as string).trim() }))
+      .filter((r) => r.headline.length > 0 && r.detail.length > 0)
+    if (reasons.length > 0) {
+      out.slot9 = { title: s9.title, reasons: reasons.slice(0, 3) }
     }
   }
 

@@ -26,11 +26,11 @@ export const SLOT_MAP: SlotConfig[] = [
   { slot: 2, intent: 'pain-point',     intentLabel: 'Pain Point',         composition: 'split-screen-before-after',  atmosphere: 'soft',      visualMode: 'ai-gen', highRes: false },
   { slot: 3, intent: 'transformation', intentLabel: 'Kết quả',            composition: 'split-screen-before-after',  atmosphere: 'energetic', visualMode: 'ai-gen', highRes: false },
   { slot: 4, intent: 'usp-mechanism',  intentLabel: 'USP / Cơ chế',       composition: 'floating-ingredients-bottle', atmosphere: 'classic',   visualMode: 'ai-gen', highRes: false },
-  { slot: 5, intent: 'social-proof',   intentLabel: 'Đánh giá khách',     composition: 'testimonial-card-overlay',   atmosphere: 'soft',      visualMode: 'ai-gen', highRes: false },
-  { slot: 6, intent: 'usage-demo',     intentLabel: 'Hướng dẫn dùng',     composition: 'step-infographic',           atmosphere: 'soft',      visualMode: 'ai-gen', highRes: false },
-  { slot: 7, intent: 'comparison',     intentLabel: 'So sánh',            composition: 'cert-lab-report-stack',      atmosphere: 'energetic', visualMode: 'ai-gen', highRes: false },
-  { slot: 8, intent: 'offer-combo',    intentLabel: 'Ưu đãi',             composition: 'pill-bottle-hero-centered',  atmosphere: 'energetic', visualMode: 'ai-gen', highRes: false },
-  { slot: 9, intent: 'faq-assurance',  intentLabel: 'FAQ & Cam kết',      composition: 'cert-lab-report-stack',      atmosphere: 'soft',      visualMode: 'ai-gen', highRes: false },
+  { slot: 5, intent: 'social-proof',         intentLabel: 'Phản hồi WhatsApp',  composition: 'testimonial-card-overlay',   atmosphere: 'soft',      visualMode: 'ai-gen', highRes: false },
+  { slot: 6, intent: 'usage-demo',           intentLabel: 'Hướng dẫn dùng',     composition: 'step-infographic',           atmosphere: 'soft',      visualMode: 'ai-gen', highRes: false },
+  { slot: 7, intent: 'comparison',           intentLabel: 'So sánh',            composition: 'cert-lab-report-stack',      atmosphere: 'energetic', visualMode: 'ai-gen', highRes: false },
+  { slot: 8, intent: 'qualifying-checklist', intentLabel: 'Ai nên dùng',        composition: 'step-infographic',           atmosphere: 'classic',   visualMode: 'ai-gen', highRes: false },
+  { slot: 9, intent: 'brand-story-bar',      intentLabel: 'Lý do chọn',         composition: 'cert-lab-report-stack',      atmosphere: 'soft',      visualMode: 'ai-gen', highRes: false },
 ]
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -179,8 +179,8 @@ export const MOCK_OVERLAY_BY_SLOT: Record<number, OverlayConfig> = {
   5: { testimonial: { quote: '(Quote)',       author: '(Author)', rating: 5 } },
   6: { headline: '(Usage title)',             steps: [{ number: 1, text: '(Step 1)' }, { number: 2, text: '(Step 2)' }, { number: 3, text: '(Step 3)' }] },
   7: { comparison: { headers: ['(Ours)', '(Theirs)'], rows: [['', ''], ['', '']] } },
-  8: { price: { current: '(price)',           original: '(orig)', discount: '(-X%)' }, headline: '(Combo)', cta: '(CTA)' },
-  9: { faq: [{ q: '(Q1)', a: '(A1)' }, { q: '(Q2)', a: '(A2)' }, { q: '(Q3)', a: '(A3)' }] },
+  8: { headline: '(AI NÊN DÙNG)', bullets: ['(Dấu hiệu 1)', '(Dấu hiệu 2)', '(Dấu hiệu 3)', '(Dấu hiệu 4)', '(Dấu hiệu 5)'], cta: '(Qualifier)' },
+  9: { headline: '(LÝ DO CHỌN)', bullets: ['(Lý do 1 — cụ thể)', '(Lý do 2 — cụ thể)', '(Lý do 3 — cụ thể)'] },
 }
 
 // MOCK description blocks shown ONLY in the empty-state mock preview (before
