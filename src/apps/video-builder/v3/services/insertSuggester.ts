@@ -706,10 +706,13 @@ DIRECTING RULES:
   PRODUCT_CLOSEUP). A video that opens with the speaker holding the jar
   and closes with the speaker holding the jar at the same angle looks
   amateur. Vary the composition.
-- SCENE COUNT — propose ${effBudget} scenes (this number is matched to the
-  script length). Do NOT under-fill: a finished UGC ad cuts to a supporting
-  visual on MOST beats. Returning only 1-2 scenes makes a flat, un-dynamic ad.
-  Aim for the full ${effBudget}; never fewer than ${floor}.
+- SCENE COUNT — you MUST return ${effBudget} scenes (this number is matched to
+  the script length; a ${Math.round((params.script.totalDurationSec || 30))}s
+  script easily supports ${effBudget} distinct supporting visuals). Returning
+  fewer than ${floor} is WRONG — the ad will feel flat. To reach ${effBudget},
+  give EACH of these its own scene instead of grouping: every named ingredient,
+  every distinct benefit, every claim/number, every pain point, every emotional
+  turn, the hook, the demo, and the CTA. More short scenes > fewer long ones.
 - SCENE MIX — split those ${effBudget} scenes roughly HALF and HALF:
     • ~half = real-footage VIDEO scenes that REPLACE the creator full-screen
       (cut): the person/product in action — HOLD_PRODUCT, PRODUCT_IN_ACTION
@@ -1000,13 +1003,18 @@ OUTPUT strict JSON, no fences:
       }
     }
   }
-  // (3) Break runs of 3+ consecutive inserts. Since every scene IS an insert
-  //     (and the creator-video fills the gaps in the planner), a "run" here
-  //     means 3 inserts with no anchor-gap. Without timestamps we approximate
-  //     by anchor block: 3+ scenes anchored to the SAME block in a row =
-  //     slideshow risk. Drop the middle one.
+  // (3) Break runs of 3+ consecutive CUTS only (Z80). A run of CUTS hides the
+  //     creator for a long stretch = slideshow risk. OVERLAYS are EXEMPT — the
+  //     creator stays full-screen + talking behind them, so any number of
+  //     consecutive overlays is fine (that's the lively pop-up look the user
+  //     wants). Pre-Z80 this counted ALL inserts by anchorBlock, which — now
+  //     that we run 10-12 dense scenes across only 5 blocks — fired constantly
+  //     and silently deleted ~3 scenes ("chưa ra 12 chip" bug). Cuts are
+  //     already bounded by the 50% coverage cap, so this rarely triggers now.
   for (let i = 0; i < out.length - 2; i++) {
+    const isCut = (s: InsertSuggestion) => s.layout !== 'overlay_corner'
     if (
+      isCut(out[i]) && isCut(out[i + 1]) && isCut(out[i + 2]) &&
       out[i].anchorBlock != null &&
       out[i].anchorBlock === out[i + 1].anchorBlock &&
       out[i].anchorBlock === out[i + 2].anchorBlock
