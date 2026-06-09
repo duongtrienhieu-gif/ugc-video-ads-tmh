@@ -206,6 +206,10 @@ function buildSegments(
   // they just attach to different places in the segment tree at the end.
   const cutInserts = inserts.filter((it) => (it.layout ?? 'cut') === 'cut')
   const overlayInserts = inserts.filter((it) => it.layout === 'overlay_corner')
+  // Z83 — cuts that get DEMOTED to overlays (because they'd stack too close to
+  // another cut and bury the creator) collect here, then ride alongside the
+  // real overlays below. Keeps their content while letting the creator surface.
+  const demotedCuts: ActionInsertClip[] = []
 
   // Compute insert timestamps — clamp to [1, totalDuration - 1] window
   // so we don't insert in the first second (hook intact) or last second
@@ -264,16 +268,25 @@ function buildSegments(
   if (insertSlots.length > 0) {
     insertSlots[0].durSec = round2(Math.min(insertSlots[0].durSec, 4))
   }
-  for (let i = 1; i < insertSlots.length; i++) {
-    const prev = insertSlots[i - 1]
-    const cur = insertSlots[i]
-    const prevEnd = prev.tsSec + prev.durSec
-    if (cur.tsSec < prevEnd) {
-      cur.tsSec = round2(prevEnd + 0.1)
+  // Z83 — MIN CREATOR GAP. A CUT hides the creator; two cuts back-to-back bury
+  // the talking head for their COMBINED length (the user saw the creator vanish
+  // ~7s when two cuts stacked). Enforce ≥3s of creator BETWEEN cuts: a cut that
+  // would land within 3s of the previous KEPT cut's end is DEMOTED to an overlay
+  // (content preserved, creator stays visible behind it) instead of stacking.
+  // Cuts therefore always alternate with a visible creator stretch.
+  const MIN_CREATOR_GAP = 3.0
+  const keptSlots: typeof insertSlots = []
+  let lastCutEnd = -Infinity
+  for (const slot of insertSlots) {
+    if (slot.tsSec >= lastCutEnd + MIN_CREATOR_GAP) {
+      keptSlots.push(slot)
+      lastCutEnd = slot.tsSec + slot.durSec
+    } else {
+      demotedCuts.push(slot.insert)  // too close → render as an overlay instead
     }
   }
-  // Trim any that pushed past the end
-  const validSlots = insertSlots.filter((s) => s.tsSec + s.durSec <= totalDurationSec)
+  // Trim any that ran past the end
+  const validSlots = keptSlots.filter((s) => s.tsSec + s.durSec <= totalDurationSec)
 
   // Now build the actual segment list
   const segments: EditSegment[] = []
@@ -331,7 +344,8 @@ function buildSegments(
   // boundaries we clamp it to the segment it MOSTLY overlaps (simpler than
   // splitting). Overlays falling on an action_insert (cut) segment are dropped
   // — can't PIP-over an insert that already replaced the creator.
-  for (const ins of overlayInserts) {
+  // Z83 — real overlays + the cuts we demoted above, processed together.
+  for (const ins of [...overlayInserts, ...demotedCuts]) {
     if (!ins.videoRef) continue
     const footageCap = (ins.renderMode ?? 'video') === 'ken_burns' ? 8 : 7
     const durSec = Math.max(1.5, Math.min(footageCap, ins.durationSec || insertOverlayDurationSec))
@@ -345,12 +359,21 @@ function buildSegments(
     ts = Math.max(usableStart, Math.min(usableEnd - durSec, ts))
 
     // Find the creator segment that contains the overlay START.
-    const host = segments.find(
+    let host = segments.find(
       (s) => s.source.kind === 'creator_video'
         && s.startSec <= ts!
         && ts! < s.startSec + s.durationSec,
     )
-    if (!host) continue  // overlay falls on a cut insert → drop (can't PIP a PIP)
+    if (!host) {
+      // Z83 — the ideal time lands ON a CUT (common for a demoted cut, whose
+      // anchor sat inside the cut it collided with). Slide the overlay to the
+      // START of the next creator segment so the content still renders (slightly
+      // off its line, but the creator is visible) instead of being dropped.
+      const next = segments.find((s) => s.source.kind === 'creator_video' && s.startSec >= ts!)
+      if (!next) continue  // no creator window left → drop
+      host = next
+      ts = next.startSec
+    }
 
     // Clamp the overlay window to within the host segment.
     const overlayStart = Math.max(0, ts - host.startSec)
