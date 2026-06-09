@@ -41,11 +41,16 @@ interface AssStyle {
   marginV: number
 }
 
+// Z84 — ALL styles use 'Be Vietnam Pro' (the one .ttf we bundle + load into the
+// ffmpeg FS). The old per-style names (Arial Black / Roboto / Impact / Inter)
+// don't exist in the wasm FS, so libass rendered NOTHING — that was the
+// "subtitles never show" bug. Be Vietnam Pro has full VN diacritics. The styles
+// still differ by size / colour / outline / margin, so they remain distinct.
 const STYLE_PRESETS: Record<SubtitleStyleId, AssStyle | null> = {
   none: null,
   bold_creator: {
     name: 'BoldCreator',
-    fontName: 'Arial Black',
+    fontName: 'Be Vietnam Pro',
     fontSize: 56,
     primaryColor: '&H00FFFFFF',  // white BGR + 00 alpha (ASS quirk)
     outlineColor: '&H00000000',  // black
@@ -56,7 +61,7 @@ const STYLE_PRESETS: Record<SubtitleStyleId, AssStyle | null> = {
   },
   minimal: {
     name: 'Minimal',
-    fontName: 'Roboto',
+    fontName: 'Be Vietnam Pro',
     fontSize: 36,
     primaryColor: '&H00FFFFFF',
     outlineColor: '&H00000000',
@@ -67,7 +72,7 @@ const STYLE_PRESETS: Record<SubtitleStyleId, AssStyle | null> = {
   },
   aggressive_tiktok: {
     name: 'AggressiveTiktok',
-    fontName: 'Impact',
+    fontName: 'Be Vietnam Pro',
     fontSize: 64,
     primaryColor: '&H0024B5FB',   // tailwind amber-400 (BGR = FB B5 24)
     outlineColor: '&H00000000',
@@ -78,7 +83,7 @@ const STYLE_PRESETS: Record<SubtitleStyleId, AssStyle | null> = {
   },
   clean_ugc: {
     name: 'CleanUGC',
-    fontName: 'Inter',
+    fontName: 'Be Vietnam Pro',
     fontSize: 46,
     primaryColor: '&H00FAFCF8',   // slate-50ish in BGR
     outlineColor: '&H001B233E',   // slate-900 outline

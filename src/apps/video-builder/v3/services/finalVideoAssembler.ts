@@ -230,6 +230,19 @@ export async function assembleFinalVideo(
   if (assContent) {
     assFile = 'subs.ass'
     await ffmpeg.writeFile(assFile, new TextEncoder().encode(assContent))
+    // Z84 — CRITICAL subtitle fix. libass (the `ass` filter) needs the font in
+    // the ffmpeg FS or it renders NOTHING — which is exactly why captions never
+    // showed in the export. The .ass styles name "Be Vietnam Pro"; load that
+    // .ttf (bundled in /public/fonts, full Vietnamese diacritic support) into
+    // the cwd and the `ass` filter finds it via fontsdir=/ (set in the MUX
+    // stage). Fail-soft: if the font fetch fails we still write subs.ass and
+    // libass falls back to its built-in default.
+    try {
+      const fontData = await fetchFile('/fonts/BeVietnamPro-Bold.ttf')
+      await ffmpeg.writeFile('BeVietnamPro-Bold.ttf', fontData)
+    } catch (err) {
+      console.warn('[ASSEMBLE] subtitle font fetch failed — captions may not render', err)
+    }
   }
 
   // ── STAGE 2: ENCODE — concat segments with normalized resolution ──────
@@ -343,7 +356,7 @@ export async function assembleFinalVideo(
     if (voiceFile) muxInputs.push('-i', voiceFile)
 
     const muxArgs: string[] = [...muxInputs]
-    if (assFile) muxArgs.push('-vf', `ass=${assFile}`)
+    if (assFile) muxArgs.push('-vf', `ass=${assFile}:fontsdir=/`)
 
     if (voiceFile) {
       muxArgs.push(
@@ -407,7 +420,7 @@ export async function assembleFinalVideo(
     }
 
     const fcParts: string[] = []
-    fcParts.push(assFile ? `[0:v]ass=${assFile}[outv]` : `[0:v]null[outv]`)
+    fcParts.push(assFile ? `[0:v]ass=${assFile}:fontsdir=/[outv]` : `[0:v]null[outv]`)
     fcParts.push(...audioParts)
     let audioMapLabel: string | null = null
     if (amixLabels.length > 1) {
