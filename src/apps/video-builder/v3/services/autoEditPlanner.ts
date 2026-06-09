@@ -197,8 +197,6 @@ function buildSegments(
   // Z83 — cuts that get DEMOTED to overlays (because they'd stack too close to
   // another cut and bury the creator) collect here, then ride alongside the
   // real overlays below. Keeps their content while letting the creator surface.
-  const demotedCuts: ActionInsertClip[] = []
-
   // Compute insert timestamps — clamp to [1, totalDuration - 1] window
   // so we don't insert in the first second (hook intact) or last second
   // (CTA intact).
@@ -257,25 +255,27 @@ function buildSegments(
   if (insertSlots.length > 0) {
     insertSlots[0].durSec = round2(Math.min(insertSlots[0].durSec, 4))
   }
-  // Z83 — MIN CREATOR GAP. A CUT hides the creator; two cuts back-to-back bury
-  // the talking head for their COMBINED length (the user saw the creator vanish
-  // ~7s when two cuts stacked). Enforce ≥3s of creator BETWEEN cuts: a cut that
-  // would land within 3s of the previous KEPT cut's end is DEMOTED to an overlay
-  // (content preserved, creator stays visible behind it) instead of stacking.
-  // Cuts therefore always alternate with a visible creator stretch.
-  const MIN_CREATOR_GAP = 3.0
+  // Z98 — NO MORE DEMOTION. A cut the director chose STAYS a cut; it is never
+  // pushed up to an overlay (user: "mọi cảnh đạo diễn xác định là cut thì edit
+  // video phải dùng cut, ko đẩy lên overlay hết"). The old Z83 MIN_CREATOR_GAP
+  // rule demoted any cut landing <3s after the previous one — that quietly
+  // overrode director intent. Instead, when two cuts would overlap we slide the
+  // later one forward so they sit back-to-back (high cut density is allowed —
+  // 5/5 is fine). Real per-word voice timing (the ElevenLabs timestamp package)
+  // is the proper fix for placement drift; this just guarantees no overlap.
   const keptSlots: typeof insertSlots = []
   let lastCutEnd = -Infinity
   for (const slot of insertSlots) {
-    if (slot.tsSec >= lastCutEnd + MIN_CREATOR_GAP) {
-      keptSlots.push(slot)
-      lastCutEnd = slot.tsSec + slot.durSec
-    } else {
-      demotedCuts.push(slot.insert)  // too close → render as an overlay instead
-    }
+    let start = slot.tsSec
+    if (start < lastCutEnd) start = round2(lastCutEnd)  // slide forward, stay a cut
+    const room = round2(totalDurationSec - start)
+    if (room < 1.0) continue  // no room left before the end → drop (can't show <1s)
+    slot.tsSec = start
+    slot.durSec = round2(Math.min(slot.durSec, room))
+    keptSlots.push(slot)
+    lastCutEnd = round2(start + slot.durSec)
   }
-  // Trim any that ran past the end
-  const validSlots = keptSlots.filter((s) => s.tsSec + s.durSec <= totalDurationSec)
+  const validSlots = keptSlots
 
   // Now build the actual segment list
   const segments: EditSegment[] = []
@@ -333,8 +333,8 @@ function buildSegments(
   // boundaries we clamp it to the segment it MOSTLY overlaps (simpler than
   // splitting). Overlays falling on an action_insert (cut) segment are dropped
   // — can't PIP-over an insert that already replaced the creator.
-  // Z83 — real overlays + the cuts we demoted above, processed together.
-  for (const ins of [...overlayInserts, ...demotedCuts]) {
+  // Z98 — only real director-chosen overlays here (cuts are no longer demoted).
+  for (const ins of overlayInserts) {
     if (!ins.videoRef) continue
     const footageCap = (ins.renderMode ?? 'video') === 'ken_burns' ? 8 : 7
     const durSec = Math.max(1.5, Math.min(footageCap, ins.durationSec || insertOverlayDurationSec))
