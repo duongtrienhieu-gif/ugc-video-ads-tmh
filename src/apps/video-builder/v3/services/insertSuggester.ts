@@ -450,8 +450,8 @@ ${catalogue}
        motion video (Kling, ~51cr). A still image cannot carry human emotion.
      • "graphic" — for ingredient photos, infographics, claim graphics ("5x"),
        problem-cause diagrams, microscope shots — any scene with NO PERSON.
-       Examples: "microscopic bacteria multiplying", "labeled tooth cross-section
-       showing enamel + plaque". NOTE: a PRODUCT MECHANISM (an ingredient acting
+       Examples: "microscopic bacteria multiplying", "a labeled cross-section of
+       the affected body part". NOTE: a PRODUCT MECHANISM (an ingredient acting
        inside the body) is NOT a flat graphic — the engine renders it as 3D; and a
        real before/after of a PERSON is real footage ("emotion"), not a graphic.
        These render cheaply as a still + slow zoom (~6cr) — perfect when static.
@@ -536,17 +536,17 @@ DIRECTING RULES:
           medical-poster layout. Key terms only — never explanatory prose.
       If a beat is too dense for a few labels (a long multi-step mechanism),
       SPLIT into 2-3 simple labeled scenes instead of one crammed image.
-      Example (multi-ingredient): "Simple friendly hand-drawn sketch: black
-      charcoal powder + grey volcanic ash lifting dark plaque off a happy white
-      tooth, two short labels (each ingredient's name written in ${langName}),
-      warm marker style, lots of white space." Example (claim): "Hand-drawn
-      tooth with nano dots sinking in, a big '5x' badge and one short
-      ${langName} label for the core tech, airy, minimal."
+      Example (multi-ingredient — works for ANY niche; here skincare): "Simple
+      friendly hand-drawn sketch: a drop of vitamin C serum + a green tea leaf
+      soothing red irritated skin, two short labels (each ingredient's name in
+      ${langName}), warm marker style, lots of white space." Example (claim):
+      "Hand-drawn '5x' badge over the improved area with one short ${langName}
+      label for the core tech, airy, minimal."
       LAYOUT — the frame is cropped to TALL VERTICAL 9:16 and slowly zoomed, so
       keep the drawing + its labels CENTRED with wide margins; nothing near the
       edges (it gets cropped).
   (2) REALISTIC SCIENTIFIC — use this ONLY for true microscopy / anatomy / real
-      micro-phenomena (bacteria, enamel cross-section under a microscope). Write
+      micro-phenomena (bacteria, a tissue/anatomy cross-section under a microscope). Write
       it as a realistic documentary/medical close-up, NO text labels.
   Most ingredient/mechanism beats in an ad should be (1) the friendly
   infographic — it reads clearly and matches UGC tone. Reserve (2) for genuine
@@ -571,12 +571,12 @@ DIRECTING RULES:
   mechanism diagrams (particles, arrows, cross-sections), body parts, or pure
   emotion. If the scene NEEDS a product on screen, switch presetId to
   PRODUCT_IN_ACTION or one of the 12 fixed product presets — not CONCEPT_SCENE.
-- VISUAL VARIETY — do NOT make every graphic scene the same "cartoon tooth in
-  the centre with a label". A run of 5 near-identical illustrations feels like a
+- VISUAL VARIETY — do NOT make every graphic scene the same "subject in the
+  centre with a label". A run of 5 near-identical illustrations feels like a
   boring slideshow. Vary EACH scene so the eye keeps moving:
-    • Change the SUBJECT focus: sometimes the ingredient itself (charcoal chunk,
-      volcanic rock, grape) as the hero, sometimes a tooth, sometimes a hand /
-      mouth / gum close-up, sometimes an abstract motion (particles, sparkles).
+    • Change the SUBJECT focus: sometimes the ingredient itself (a powder, a seed,
+      a drop, a leaf) as the hero, sometimes the target body part, sometimes a
+      hand / face close-up, sometimes an abstract motion (particles, sparkles).
     • Change the FRAMING / ANGLE: extreme macro, side angle, top-down, wide,
       split — not always a flat centred front view.
     • BALANCE illustration with reality: an all-cartoon B-roll set looks fake.
@@ -628,8 +628,9 @@ DIRECTING RULES:
   the budget makes a flat, talking-head-heavy ad. A normal product script has
   plenty to show, so REACH ${effBudget} by DECOMPOSING dense lines instead of
   covering each with one scene:
-    • a pain line that names 4 symptoms (yellow teeth / bad breath / bleeding
-      gums / sensitivity) = up to 4 separate scenes, ONE per symptom.
+    • a pain line that names several symptoms (e.g. tired / aching / bloated, OR
+      dull / dry / flaky skin, OR yellow teeth / bad breath / sensitivity) = one
+      scene per symptom.
     • a line naming 2 ingredients = 2 scenes (one each).
     • a benefit/result list = ONE scene per benefit.
   Then give EACH of these its own scene too: every named ingredient, every
@@ -827,7 +828,10 @@ OUTPUT strict JSON, no fences:
     // filmable as real footage. Instead of a hand-drawn overlay OR a surreal
     // avatar+magic cut, render it as a clean 3D scientific animation (no person),
     // full-screen cut. Marked via a conceptPrompt prefix the renderer detects.
-    const is3D = presetId === 'CONCEPT_SCENE' &&
+    // Only a NON-person concept scene can become a 3D animation — a person /
+    // emotion / before-after scene (motionKind 'emotion') stays real footage even
+    // if it mentions a mechanism word ("she nourishes her skin").
+    const is3D = presetId === 'CONCEPT_SCENE' && motionKind !== 'emotion' &&
       MECHANISM_RE.test(`${typeof item.quote === 'string' ? item.quote : ''} ${conceptPrompt}`)
     const isEmotionConcept = presetId === 'CONCEPT_SCENE' && motionKind === 'emotion'
     const renderMode: InsertRenderMode =
@@ -1102,7 +1106,7 @@ const ABSTRACT_RE = /\b(nano|molecul\w*|cross[- ]section|schematic|diagram|count
 // not real footage and not a hand-drawn overlay. Narrow on purpose: problem-cause
 // scenes (enamel ERODING, bacteria forming) and demos / before-after are NOT
 // mechanism and are left alone.
-const MECHANISM_RE = /\b((restor|repair|rebuild|remineral|strengthen|heal)\w* (the )?(enamel|tooth|teeth|gum|skin|hair|scalp|nail)|absorb\w* (the )?(plaque|plak|toxin|bacteria|dirt|kotoran|impurit|stain)|penetrat\w*|deliver\w*[^.]{0,25}(mineral|nutrient|ingredient)|nano[- ]?(tech|particle|mineral)|particles? (that )?(sink|enter|penetrat|go deep|absorb)|deep into the (tooth|enamel|skin|hair|root)|inside the (tooth|enamel|body|skin|hair))\b/i
+const MECHANISM_RE = /\b((restor|repair|rebuild|remineral|strengthen|heal|regenerat|replenish|lubricat|calm|soothe|regulat|balanc|neutralis|neutraliz|detox|cleans|stimulat|coat|feed|flush|boost|nourish)\w*( the| your)? (enamel|tooth|teeth|gum|skin|hair|scalp|nail|follicle|collagen|gut|stomach|intestin\w*|digest\w*|joint|cartilage|bone|ligament|liver|kidney|blood\w*|cell|nerve|nervous|immun\w*|muscle|gland|hormone|metabolism|lung|artery|vein|eye|root)|absorb\w* (the )?(plaque|plak|toxin|bacteria|dirt|kotoran|impurit|stain|oil|grease)|penetrat\w*|deliver\w*[^.]{0,25}(mineral|nutrient|ingredient|vitamin|collagen|active)\w*|nano[- ]?(tech|particle|mineral)\w*|particles? (that )?(sink|enter|penetrat|go deep|absorb)|deep in(to)? the (tooth|enamel|skin|hair|root|gut|joint|cell|body)|inside the (tooth|enamel|body|skin|hair|gut|joint|cell))\b/i
 
 // Z98 — a scene that was rebuilt into a 3D mechanism animation (marked in prompt).
 // These are full-screen cuts but DON'T count toward the 40% real-footage quota.
