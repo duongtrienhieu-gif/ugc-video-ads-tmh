@@ -335,7 +335,16 @@ OUTPUT strict JSON, no fences:
 // them — inserts only LAYER over it). So the director's job is: where to cut
 // away, and to what.
 
-const DIRECTOR_PRESET_ENUM = [...ACTION_PRESET_ORDER, 'CONCEPT_SCENE', 'PRODUCT_IN_ACTION']
+// Z98 — presets the AI director may NOT auto-pick. They read as generic stock
+// B-roll with no real claim, so the director rationalises them onto unrelated
+// lines (e.g. PHONE_SCROLL "lướt điện thoại" landing on a teeth-whitening
+// social-proof beat — nothing in the script is about a phone). Still available in
+// the MANUAL preset library if the user deliberately adds one.
+const DIRECTOR_BANNED_PRESETS: ActionPresetId[] = ['PHONE_SCROLL']
+const DIRECTOR_ALLOWED_PRESETS = ACTION_PRESET_ORDER.filter(
+  (p) => !DIRECTOR_BANNED_PRESETS.includes(p),
+)
+const DIRECTOR_PRESET_ENUM = [...DIRECTOR_ALLOWED_PRESETS, 'CONCEPT_SCENE', 'PRODUCT_IN_ACTION']
 
 const DIRECTOR_RESPONSE_SCHEMA = {
   type: 'object',
@@ -385,7 +394,7 @@ export async function directScenesWithGemini(
   const effBudget = Math.max(baseFloor, Math.min(params.budget, durTarget))
   const effFloor = Math.max(baseFloor, effBudget - 1)
   const floor = effFloor  // template references `${floor}` → the duration-aware target
-  const catalogue = ACTION_PRESET_ORDER
+  const catalogue = DIRECTOR_ALLOWED_PRESETS
     .map((id) => `- ${id}: ${ACTION_PRESETS[id].descriptionVi} (needsProduct=${ACTION_PRESETS[id].needsProduct})`)
     .join('\n')
   const scriptDump = params.script.blocks
