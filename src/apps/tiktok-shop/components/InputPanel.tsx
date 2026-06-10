@@ -5,7 +5,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import {
-  Palette, Package, Upload, X, Globe, Sparkles, Loader2, AlertCircle, Info, FilePlus2,
+  Palette, Package, Upload, X, Globe, Sparkles, Loader2, AlertCircle, Info, FilePlus2, History,
 } from 'lucide-react'
 import { useBrandKitStore, isBrandKitReady } from '../../../stores/brandKitStore'
 import { useBankStore } from '../../../stores/bankStore'
@@ -26,6 +26,7 @@ import { friendlyErrorMessage } from '../services/generateSlot'
 import { extractProductBrief, buildBriefCacheKey } from '../services/extractProductBrief'
 import { useGeminiUsageStore, GEMINI_DAILY_LIMIT } from '../geminiUsageStore'
 import CostEstimator from './CostEstimator'
+import ListingHistoryModal from './ListingHistoryModal'
 
 export default function InputPanel() {
   const draft         = useTikTokShopStore((s) => s.draft)
@@ -59,6 +60,7 @@ export default function InputPanel() {
 
   const [uploading, setUploading] = useState(false)
   const [costModalOpen, setCostModalOpen] = useState(false)
+  const [historyOpen, setHistoryOpen] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   // Filter brand kits by selected market — only show kits that target the
@@ -236,16 +238,26 @@ export default function InputPanel() {
 
   return (
     <div className="flex h-full w-[320px] shrink-0 flex-col gap-4 overflow-y-auto border-r border-gray-200 bg-[#FAFAFA] p-4">
-      {/* ── New listing button ──────────────────────────────────────── */}
-      <button
-        onClick={handleNewListing}
-        disabled={isGenerating}
-        className="flex w-full items-center justify-center gap-2 rounded-lg border border-violet-300 bg-white px-3 py-2 text-xs font-semibold text-violet-700 transition-colors hover:border-violet-400 hover:bg-violet-50 disabled:opacity-50"
-        title="Xóa listing hiện tại khỏi vùng làm việc và bắt đầu listing mới (listing cũ vẫn được lưu trong Bản nháp)"
-      >
-        <FilePlus2 className="h-3.5 w-3.5" />
-        Tạo listing mới
-      </button>
+      {/* ── New listing + History buttons ───────────────────────────── */}
+      <div className="flex gap-2">
+        <button
+          onClick={handleNewListing}
+          disabled={isGenerating}
+          className="flex flex-1 items-center justify-center gap-2 rounded-lg border border-violet-300 bg-white px-3 py-2 text-xs font-semibold text-violet-700 transition-colors hover:border-violet-400 hover:bg-violet-50 disabled:opacity-50"
+          title="Xóa listing hiện tại khỏi vùng làm việc và bắt đầu listing mới (listing cũ vẫn được lưu trong cloud)"
+        >
+          <FilePlus2 className="h-3.5 w-3.5" />
+          Tạo listing mới
+        </button>
+        <button
+          onClick={() => setHistoryOpen(true)}
+          className="flex items-center justify-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-semibold text-gray-700 transition-colors hover:border-violet-300 hover:bg-violet-50 hover:text-violet-700"
+          title="Mở listing đã lưu trước đây"
+        >
+          <History className="h-3.5 w-3.5" />
+          Lịch sử
+        </button>
+      </div>
 
       {/* ── Language toggle ─────────────────────────────────────────── */}
       <Section icon={<Globe className="h-4 w-4" />} title="Ngôn ngữ output">
@@ -439,6 +451,12 @@ export default function InputPanel() {
         currentBalance={kieCredits}
         scope="all-slots"
         busy={isGenerating}
+      />
+
+      {/* ── Saved listings history modal ────────────────────────────── */}
+      <ListingHistoryModal
+        open={historyOpen}
+        onClose={() => setHistoryOpen(false)}
       />
     </div>
   )
