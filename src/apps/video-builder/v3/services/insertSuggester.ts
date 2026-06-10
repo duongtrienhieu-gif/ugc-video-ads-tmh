@@ -235,93 +235,6 @@ USE THIS to choose usage-correct scenes. Worked examples:
 - A pest bait / repellent is PLACED or sprayed; the human never consumes it.\n`
 }
 
-const SUGGEST_RESPONSE_SCHEMA = {
-  type: 'object',
-  properties: {
-    inserts: {
-      type: 'array',
-      items: {
-        type: 'object',
-        properties: {
-          presetId:    { type: 'string', enum: ACTION_PRESET_ORDER },
-          anchorBlock: { type: 'string', enum: ['hook', 'pain', 'discovery', 'benefit', 'cta'] },
-          fit:         { type: 'number' },
-          reason:      { type: 'string' },
-        },
-        required: ['presetId', 'anchorBlock', 'fit'],
-      },
-    },
-  },
-  required: ['inserts'],
-}
-
-export async function suggestInsertsWithGemini(
-  params: GeminiSuggestParams,
-): Promise<InsertSuggestion[]> {
-  const langName = SCRIPT_LANG_GEMINI_NAME[params.lang]
-  const catalogue = ACTION_PRESET_ORDER
-    .map((id) => `- ${id}: ${ACTION_PRESETS[id].descriptionVi} (needsProduct=${ACTION_PRESETS[id].needsProduct})`)
-    .join('\n')
-  const scriptDump = params.script.blocks
-    .map((b) => `[${b.id}] ${b.text}`)
-    .join('\n')
-
-  const systemInstruction = `You are a UGC ad video editor. The script is written in ${langName}.
-You choose which B-roll "action insert" clips visually support the script.
-Read the MEANING of each block (do NOT keyword-match) and pick inserts that
-illustrate what is being said at that moment.
-
-AVAILABLE INSERT PRESETS (id: what it shows):
-${catalogue}
-
-RULES:
-- Pick AT MOST ${params.budget} inserts, ranked best-first.
-- Anchor each insert to the ONE block (hook/pain/discovery/benefit/cta) it best supports.
-- Only suggest an insert if it genuinely fits. Fewer strong inserts > padding with weak ones.
-- Never suggest the same presetId twice.
-- "fit" = 0..1 strength of the match. "reason" = one short phrase in ${langName}.
-
-OUTPUT strict JSON, no fences:
-{ "inserts": [ { "presetId": "...", "anchorBlock": "...", "fit": 0.0, "reason": "..." } ] }`
-
-  const userPrompt = `SCRIPT (block id in brackets):\n${scriptDump}\n\nPick the inserts now.`
-
-  const raw = await directGeminiText({
-    apiKey: params.geminiKey,
-    systemInstruction,
-    prompt: userPrompt,
-    maxOutputTokens: 1024,
-    responseMimeType: 'application/json',
-    responseSchema: SUGGEST_RESPONSE_SCHEMA,
-  })
-
-  const parsed = parseSuggestOutput(raw)
-  const seen = new Set<ActionPresetId>()
-  const validPresets = new Set<string>(ACTION_PRESET_ORDER)
-  const validBlocks = new Set<string>(['hook', 'pain', 'discovery', 'benefit', 'cta'])
-
-  const out: InsertSuggestion[] = []
-  for (const item of parsed) {
-    if (!validPresets.has(item.presetId)) continue
-    if (seen.has(item.presetId as ActionPresetId)) continue
-    const anchor = validBlocks.has(item.anchorBlock) ? (item.anchorBlock as ScriptBlockId) : null
-    const fit = Math.max(0, Math.min(1, Number(item.fit) || 0))
-    if (fit <= 0) continue  // drop non-matches — no padding
-    seen.add(item.presetId as ActionPresetId)
-    out.push({
-      presetId: item.presetId as ActionPresetId,
-      matchCount: 0,
-      matchedBlocks: anchor ? [anchor] : [],
-      matchedKeywords: [],
-      anchorBlock: anchor,
-      confidence: fit,
-      reason: typeof item.reason === 'string' ? item.reason : undefined,
-    })
-  }
-  out.sort((a, b) => b.confidence - a.confidence)
-  return out.slice(0, params.budget)
-}
-
 // ── Z37 Scene Director (primary path when own-script / brainstorm wanted) ──
 // The suggester above only maps the script to the 12 PRODUCT presets. The
 // Scene Director goes further: it READS the whole script, brainstorms a
@@ -994,11 +907,14 @@ OUTPUT strict JSON, no fences:
       trustDrops.earlyHook++
     }
   }
-  // (2) CUT coverage cap — only CUTS hide the creator, so only CUTS count.
+  // (2) CUT coverage cap — only REAL cuts hide the creator + count toward it.
+  // Z98 — EXCLUDE 3D mechanism scenes: they're intentional full-screen premium
+  // moments, not "the creator being buried", so they must never be dropped here
+  // (and shouldn't squeeze the real-footage cuts out of the 50% budget).
   const voiceDur = params.script.totalDurationSec
   if (voiceDur && voiceDur > 0) {
-    const isCut = (x: InsertSuggestion) => x.layout !== 'overlay_corner'
-    const cap = voiceDur * 0.5  // ≤50% of the ad may hide the creator
+    const isCut = (x: InsertSuggestion) => x.layout !== 'overlay_corner' && !is3DScene(x)
+    const cap = voiceDur * 0.5  // ≤50% of the ad may be hidden by REAL cuts
     let cutSec = out.filter(isCut).reduce((s, x) => s + (x.durationSec ?? 4), 0)
     if (cutSec > cap) {
       // Drop the lowest-confidence CUTS (never overlays) until under the cap.
@@ -1055,12 +971,14 @@ OUTPUT strict JSON, no fences:
   // creator (layout !== overlay_corner); overlays don't count toward the 40%.
   const cutScenes = directed.filter((s) => s.layout !== 'overlay_corner' && !is3DScene(s))
   const cutSec = Math.round(cutScenes.reduce((sum, s) => sum + (s.durationSec ?? 4), 0))
+  const scenes3D = directed.filter(is3DScene).length
+  const overlays = directed.filter((s) => s.layout === 'overlay_corner').length
   console.log(
     `[DIRECTOR] raw=${raw.length}ch parsed=${parsed.length} usable=${out.length} ` +
     `dropped{preset:${drop.preset},noPrompt:${drop.noPrompt},zeroFit:${drop.zeroFit},dupeSkip:${drop.dupeSkip}} ` +
     `rewrote{beforeAfter:${rewrite.beforeAfter},topical:${rewrite.topical},dupeSwap:${rewrite.dupeSwap},labeled:${rewrite.labeled},labelLangDrop:${rewrite.labelLangDrop},ctaClose:${rewrite.ctaClose}} ` +
     `trust{earlyHook:${trustDrops.earlyHook},coverage:${trustDrops.coverage},run3:${trustDrops.run3}} ` +
-    `cuts=${cutScenes.length}/${minCutScenes} cutSec=${cutSec}/${cutSecNeeded}s(≥40%of${dur}s) promoted=${promotedCuts} ` +
+    `realCuts=${cutScenes.length}/${minCutScenes} cutSec=${cutSec}/${cutSecNeeded}s(≥40%of${dur}s) promoted=${promotedCuts} 3d=${scenes3D} overlays=${overlays} ` +
     `ingredientInject=${ingredientInjected} ` +
     `visibleResult=${visibleResultProduct} topical=${topicalCategory ?? 'no'} ` +
     `→ ${directed.length > 0 ? `${directed.length} scenes` : 'EMPTY → keyword fallback'}`,
@@ -1092,13 +1010,10 @@ OUTPUT strict JSON, no fences:
 // deliberately NOT in ABSTRACT — "split-screen of teeth with plaque vs white" is a
 // perfectly filmable before/after, not a diagram. Mutates scenes in place; returns
 // how many were promoted. Promotion order = script order (keeps narrative flow).
-// Also EXCLUDE internal-mechanism scenes (an ingredient acting INSIDE a body part
-// — "amethyst repairing enamel", "charcoal absorbing plaque", "particles sinking
-// into the tooth"). Those can't be filmed for real; forcing them into a cut makes
-// the image gen hallucinate floating glowing magic teeth. They stay as overlay
-// diagrams. (Patterns require a body-part object so the product name "Teeth
-// Restoration" alone is NOT caught.)
-const ABSTRACT_RE = /\b(nano|molecul\w*|cross[- ]section|schematic|diagram|counter|graph|chart|infographic|icon|flag|badge|stamp|how it works|mechanism|statistic\w*|percentage|arrow|timeline|calendar|(restor|repair|rebuild|heal)\w* (the )?(enamel|tooth|teeth|gum|skin|hair|scalp|nail)|absorb\w* (the )?(plaque|plak|toxin|bacteria|dirt|kotoran|impurit)|penetrat\w*|sinking (deep )?into|deep into the|inside the (tooth|enamel|body|skin|hair)|glowing particle)\b/i
+// (Internal-mechanism scenes are already converted to 3D cuts upstream by
+// MECHANISM_RE, so they never reach this overlay pool — ABSTRACT only needs the
+// pure data / diagram graphics here.)
+const ABSTRACT_RE = /\b(nano|molecul\w*|cross[- ]section|schematic|diagram|counter|graph|chart|infographic|icon|flag|badge|stamp|how it works|mechanism|statistic\w*|percentage|arrow|timeline|calendar|glowing particle)\b/i
 
 // Z98 — PRODUCT MECHANISM = an ingredient/technology acting ON/INSIDE the body
 // (restoring enamel, absorbing plaque, nano delivering minerals into the tooth).
@@ -1467,26 +1382,3 @@ function salvageScenes(raw: string): RawDirectorScene[] {
   return out
 }
 
-interface RawSuggestItem {
-  presetId: string
-  anchorBlock: string
-  fit: number
-  reason?: string
-}
-
-function parseSuggestOutput(raw: string): RawSuggestItem[] {
-  let parsed: unknown
-  try {
-    parsed = JSON.parse(raw)
-  } catch {
-    const cleaned = raw.replace(/^```(?:json)?\s*/m, '').replace(/```\s*$/m, '').trim()
-    try {
-      parsed = JSON.parse(cleaned)
-    } catch {
-      return []
-    }
-  }
-  const obj = parsed as { inserts?: unknown }
-  if (!obj || typeof obj !== 'object' || !Array.isArray(obj.inserts)) return []
-  return obj.inserts as RawSuggestItem[]
-}
