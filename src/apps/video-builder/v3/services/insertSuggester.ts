@@ -732,22 +732,26 @@ DIRECTING RULES:
   PRODUCT_CLOSEUP). A video that opens with the speaker holding the jar
   and closes with the speaker holding the jar at the same angle looks
   amateur. Vary the composition.
-- SCENE COUNT — aim for ${effBudget} scenes (matched to the script length; a
-  ${Math.round((params.script.totalDurationSec || 30))}s script can support
-  ${effBudget} distinct supporting visuals). Reach it by giving EACH of these
-  its own scene instead of grouping: every named ingredient, every distinct
-  benefit, every claim/number, every pain point, every emotional turn, the
-  hook, the demo, and the CTA. More short scenes > fewer long ones — when the
-  script genuinely earns them.
-- EVERY SCENE MUST EARN ITS PLACE — ${effBudget} is a CEILING, never a quota to
-  fill with padding. Each scene MUST illustrate a SPECIFIC spoken line (its
-  "quote") with something LITERALLY in that line: a real object, body part,
-  action, ingredient, number, or face. NEVER invent an abstract, decorative or
-  vague "vibe" scene (drifting particles, generic lifestyle b-roll, a mood with
-  no spoken anchor) just to reach ${effBudget}. If the script honestly supports
-  only N < ${effBudget} concrete scenes, return N — a tight ad of real scenes
-  beats a padded one. But returning fewer than ${floor} concrete scenes is still
-  too flat, so don't be lazy either: find the real visual hiding in each line.
+- SCENE COUNT — TARGET the FULL ${effBudget} scenes (matched to the ${dur}s
+  length — the ad should feel RICH and fast, not sparse). Returning only ~half
+  the budget makes a flat, talking-head-heavy ad. A normal product script has
+  plenty to show, so REACH ${effBudget} by DECOMPOSING dense lines instead of
+  covering each with one scene:
+    • a pain line that names 4 symptoms (yellow teeth / bad breath / bleeding
+      gums / sensitivity) = up to 4 separate scenes, ONE per symptom.
+    • a line naming 2 ingredients = 2 scenes (one each).
+    • a benefit/result list = ONE scene per benefit.
+  Then give EACH of these its own scene too: every named ingredient, every
+  symptom, every distinct benefit, every claim/number, the mechanism, the hook,
+  the demo, the proof, and the CTA. More short scenes > fewer long ones.
+- EVERY SCENE MUST EARN ITS PLACE — each scene MUST illustrate a SPECIFIC spoken
+  detail (its "quote") with something LITERALLY in that line: a real object, body
+  part, action, ingredient, number, or face. Decomposing real spoken details
+  (above) is NOT padding — it's coverage. What IS forbidden: inventing an
+  abstract, decorative or vague "vibe" scene (drifting particles, generic
+  lifestyle b-roll, a mood with no spoken anchor), or REPEATING the same idea.
+  Returning fewer than ${floor} scenes on a normal product script is too flat /
+  lazy — only drop below that if the script is genuinely thin.
 - CUT-TIME QUOTA (MANDATORY, think about this) — at least 40% of the ${dur}s
   video MUST be CUT footage: real-footage scenes that REPLACE the creator
   full-screen (layout:"cut"). That is ≥ ${cutSecNeeded}s of cuts ≈ AT LEAST
