@@ -1132,6 +1132,12 @@ OUTPUT strict JSON, no fences:
   // Keep the director's ORDER (narrative sequence), not a fit sort — scenes
   // should play in script order. Cap to the duration-aware budget.
   const directed = out.slice(0, effBudget)
+  // Z98 — HARD cut-quota guarantee. The prompt rule biases the director, but it's
+  // an LLM and keeps going overlay-heavy on teaching scripts. If cut footage is
+  // short, promote the most FILMABLE overlay illustrations (person / body-part /
+  // product / result / before-after — NOT abstract data/mechanism graphics) into
+  // real-footage cuts.
+  const promotedCuts = promoteCutsToQuota(directed, cutSecNeeded)
   // Z98 — cut-quota telemetry. Cuts = real-footage scenes that replace the
   // creator (layout !== overlay_corner); overlays don't count toward the 40%.
   const cutScenes = directed.filter((s) => s.layout !== 'overlay_corner')
@@ -1141,7 +1147,7 @@ OUTPUT strict JSON, no fences:
     `dropped{preset:${drop.preset},noPrompt:${drop.noPrompt},zeroFit:${drop.zeroFit},dupeSkip:${drop.dupeSkip}} ` +
     `rewrote{beforeAfter:${rewrite.beforeAfter},topical:${rewrite.topical},dupeSwap:${rewrite.dupeSwap},labeled:${rewrite.labeled},labelLangDrop:${rewrite.labelLangDrop},ctaClose:${rewrite.ctaClose}} ` +
     `trust{earlyHook:${trustDrops.earlyHook},coverage:${trustDrops.coverage},run3:${trustDrops.run3}} ` +
-    `cuts=${cutScenes.length}/${minCutScenes} cutSec=${cutSec}/${cutSecNeeded}s(≥40%of${dur}s) ` +
+    `cuts=${cutScenes.length}/${minCutScenes} cutSec=${cutSec}/${cutSecNeeded}s(≥40%of${dur}s) promoted=${promotedCuts} ` +
     `ingredientInject=${ingredientInjected} ` +
     `visibleResult=${visibleResultProduct} topical=${topicalCategory ?? 'no'} ` +
     `→ ${directed.length > 0 ? `${directed.length} scenes` : 'EMPTY → keyword fallback'}`,
@@ -1162,6 +1168,48 @@ OUTPUT strict JSON, no fences:
   // (If the keyword path is ALSO empty, the script genuinely has no matchable
   // moment — that's an honest empty, not a shy one.)
   return suggestInsertsForScript(params.script).slice(0, params.budget)
+}
+
+// Z98 — HARD cut-quota enforcement. Promote overlay illustrations into real-
+// footage CUTS until cut footage ≥ the 40% quota. Only FILMABLE subjects are
+// promotable (a person / body-part / product / result / before-after — things a
+// camera can really shoot). Abstract data + mechanism graphics (molecular
+// diagrams, counters, badges, "how it works") stay as overlays — they only work
+// as illustrations. Mutates the scenes in place; returns how many were promoted.
+const FILMABLE_RE = /\b(creator|person|face|smil\w*|before\s*(and|&|\/|→|-)?\s*after|the same (person|creator)|holding|hold|applying|apply|brush\w*|spray\w*|scoop\w*|rubbing|product|packaging|package|powder|cream|serum|bottle|jar|macro|close[- ]?up|split[- ]screen|reaction|white teeth|whiter teeth)\b/i
+const ABSTRACT_RE = /\b(nano|molecul\w*|cross[- ]section|diagram|counter|graph|chart|infographic|icon|flag|badge|stamp|bacteria|plaque|erod\w*|erosion|penetrat\w*|absorb\w*|rebuild\w*|comparison|comparing|how it works|mechanism|statistic\w*|percentage|arrow|timeline|calendar)\b/i
+
+function promoteCutsToQuota(scenes: InsertSuggestion[], cutSecNeeded: number): number {
+  const cutSec = () => scenes
+    .filter((s) => s.layout !== 'overlay_corner')
+    .reduce((sum, s) => sum + (s.durationSec ?? 4), 0)
+  if (cutSec() >= cutSecNeeded) return 0
+
+  const promotable = scenes.filter((s) =>
+    s.layout === 'overlay_corner' &&
+    typeof s.conceptPrompt === 'string' &&
+    s.conceptPrompt.length > 0 &&
+    FILMABLE_RE.test(s.conceptPrompt) &&
+    !ABSTRACT_RE.test(s.conceptPrompt),
+  )
+
+  let promoted = 0
+  for (const s of promotable) {
+    if (cutSec() >= cutSecNeeded) break
+    s.layout = 'cut'
+    s.renderMode = 'video'  // real footage (i2v), not a ken_burns illustration
+    const cleaned = (s.conceptPrompt ?? '')
+      .replace(/\b(hand[- ]drawn sketch|hand[- ]drawn|illustration|illustrated|animated graphic|graphic|drawing|infographic|ilustrasi|lakaran|sketch)\b/gi, 'real footage')
+      .replace(/\s+/g, ' ')
+      .trim()
+    s.conceptPrompt =
+      `Real, photographic, realistic UGC footage — NOT a drawing/sketch/graphic: ${cleaned}`
+    promoted++
+  }
+  if (promoted > 0) {
+    console.log(`[DIRECTOR] cut-quota: promoted ${promoted} overlay illustration(s) → real-footage cuts`)
+  }
+  return promoted
 }
 
 // Z46 — visible-result claim detector. If the script promises a camera-visible
