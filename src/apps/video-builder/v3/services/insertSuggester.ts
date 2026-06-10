@@ -383,17 +383,23 @@ export async function directScenesWithGemini(
 ): Promise<InsertSuggestion[]> {
   const langName = SCRIPT_LANG_GEMINI_NAME[params.lang]
   // Z79/Z80 (B) — scale the scene count to the SCRIPT LENGTH, not a flat cap.
-  // Z80: DENSER (~1 insert per ~4.5s, was 6.5) now that overlays are free +
-  // additive (don't hide the creator). Z98: budget ceiling raised 12 → 14 so a
-  // long script can use the full density when it earns it — gives the Director
-  // room for a rich mix of cuts + overlays. → 63s ≈ 14, 55s ≈ 12, 45s ≈ 10,
-  // 30s ≈ 7, 18s ≈ 4 — clamped to the cost-mode [floor, budget]. effFloor =
-  // target − 1 nudges Gemini to actually reach the target.
+  // Z80: DENSER now that overlays are free + additive (don't hide the creator).
+  // Z98: divisor 4.5 → 4.0 + ceiling 14 → 16 so a long script has room for a
+  // BIG cut quota + many overlays on top. → 64s ≈ 16, 48s ≈ 12, 32s ≈ 8,
+  // 18s ≈ 5 — clamped to the cost-mode [floor, budget]. effFloor = target − 1
+  // nudges Gemini to actually reach the target.
   const baseFloor = Math.max(1, Math.min(params.floor ?? 3, params.budget))
-  const durTarget = Math.round((params.script.totalDurationSec || 30) / 4.5)
+  const durTarget = Math.round((params.script.totalDurationSec || 30) / 4.0)
   const effBudget = Math.max(baseFloor, Math.min(params.budget, durTarget))
   const effFloor = Math.max(baseFloor, effBudget - 1)
   const floor = effFloor  // template references `${floor}` → the duration-aware target
+  // Z98 — CUT-TIME QUOTA. At least 40% of the REAL voice length must be CUT
+  // footage (real-footage scenes that REPLACE the creator full-screen). Overlay
+  // illustrations ride on top and don't count toward it. ≈4s per cut → the
+  // minimum number of cut scenes the director must return.
+  const dur = Math.round(params.script.totalDurationSec || 30)
+  const cutSecNeeded = Math.round(dur * 0.4)
+  const minCutScenes = Math.max(2, Math.min(effBudget, Math.ceil(cutSecNeeded / 4)))
   const catalogue = DIRECTOR_ALLOWED_PRESETS
     .map((id) => `- ${id}: ${ACTION_PRESETS[id].descriptionVi} (needsProduct=${ACTION_PRESETS[id].needsProduct})`)
     .join('\n')
@@ -742,16 +748,26 @@ DIRECTING RULES:
   only N < ${effBudget} concrete scenes, return N — a tight ad of real scenes
   beats a padded one. But returning fewer than ${floor} concrete scenes is still
   too flat, so don't be lazy either: find the real visual hiding in each line.
-- SCENE MIX — split those ${effBudget} scenes roughly HALF and HALF:
-    • ~half = real-footage VIDEO scenes that REPLACE the creator full-screen
-      (cut): the person/product in action — HOLD_PRODUCT, PRODUCT_IN_ACTION
-      (brushing / applying / using), the BEFORE/AFTER, the CTA hold. These carry
-      the realism + product trust.
-    • ~half = illustration IMAGE scenes that OVERLAY on the talking creator
-      (overlay_corner): infographic / ingredient photo / mechanism / "Nx" claim
-      graphic CONCEPT_SCENEs. These add the teaching + the lively pop-ups while
-      the creator keeps talking.
-  A pure-cut ad is a slideshow; a pure-overlay ad has no product realism. Mix.
+- CUT-TIME QUOTA (MANDATORY, think about this) — at least 40% of the ${dur}s
+  video MUST be CUT footage: real-footage scenes that REPLACE the creator
+  full-screen (layout:"cut"). That is ≥ ${cutSecNeeded}s of cuts ≈ AT LEAST
+  ${minCutScenes} cut scenes. CUT scenes show the REAL thing the line is about —
+  the product in hand / being used (brushing, rubbing, spraying, scooping the
+  powder), the BEFORE→AFTER on the actual body part, the visible result (white
+  teeth, clear skin), the package / badge, the creator demoing or holding +
+  endorsing it. Returning only 2-3 cuts is WRONG and lazy — count your cuts and
+  hit ${minCutScenes}.
+    • DON'T turn every teaching beat into an abstract hand-drawn sketch. For a
+      mechanism / ingredient / claim line, PREFER showing the REAL product (the
+      actual powder, the actual application, the actual result) as a CUT over a
+      generic illustration. Reach for PRODUCT_IN_ACTION / the fixed product
+      presets / BEFORE_AFTER for these — those render as real-footage cuts.
+    • ILLUSTRATION overlays (graphic CONCEPT_SCENE sketches / infographics,
+      layout:"overlay_corner") ride ON TOP of the talking creator and do NOT
+      count toward the 40%. Use as MANY as the script earns — NO limit. They add
+      teaching pop-ups while the creator keeps talking.
+  Hit the cut quota FIRST, then layer overlays freely on top. A pure-overlay ad
+  has no product realism.
 - "fit" = 0..1 how strongly the visual supports the line. "reason" = one short
   phrase in ${langName} explaining the choice (shown to the user).
 - BE CONCISE — HARD LIMITS: "conceptPrompt" ≤ 240 characters (one tight visual
@@ -1116,15 +1132,26 @@ OUTPUT strict JSON, no fences:
   // Keep the director's ORDER (narrative sequence), not a fit sort — scenes
   // should play in script order. Cap to the duration-aware budget.
   const directed = out.slice(0, effBudget)
+  // Z98 — cut-quota telemetry. Cuts = real-footage scenes that replace the
+  // creator (layout !== overlay_corner); overlays don't count toward the 40%.
+  const cutScenes = directed.filter((s) => s.layout !== 'overlay_corner')
+  const cutSec = Math.round(cutScenes.reduce((sum, s) => sum + (s.durationSec ?? 4), 0))
   console.log(
     `[DIRECTOR] raw=${raw.length}ch parsed=${parsed.length} usable=${out.length} ` +
     `dropped{preset:${drop.preset},noPrompt:${drop.noPrompt},zeroFit:${drop.zeroFit},dupeSkip:${drop.dupeSkip}} ` +
     `rewrote{beforeAfter:${rewrite.beforeAfter},topical:${rewrite.topical},dupeSwap:${rewrite.dupeSwap},labeled:${rewrite.labeled},labelLangDrop:${rewrite.labelLangDrop},ctaClose:${rewrite.ctaClose}} ` +
     `trust{earlyHook:${trustDrops.earlyHook},coverage:${trustDrops.coverage},run3:${trustDrops.run3}} ` +
+    `cuts=${cutScenes.length}/${minCutScenes} cutSec=${cutSec}/${cutSecNeeded}s(≥40%of${dur}s) ` +
     `ingredientInject=${ingredientInjected} ` +
     `visibleResult=${visibleResultProduct} topical=${topicalCategory ?? 'no'} ` +
     `→ ${directed.length > 0 ? `${directed.length} scenes` : 'EMPTY → keyword fallback'}`,
   )
+  if (directed.length > 0 && cutSec < cutSecNeeded) {
+    console.warn(
+      `[DIRECTOR] CUT QUOTA MISS — only ${cutSec}s cut footage (<${cutSecNeeded}s = 40% of ${dur}s). ` +
+      `Director went overlay-heavy; bấm "Đạo diễn lại" để thử lại.`,
+    )
+  }
   if (directed.length === 0) {
     console.warn(`[DIRECTOR] raw head: ${raw.slice(0, 400)}`)
   }
