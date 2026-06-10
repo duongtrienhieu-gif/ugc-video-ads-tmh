@@ -17,7 +17,7 @@
 
 import type {
   GeneratedScript, ScriptBlock, ScriptBlockId, ScriptTargetDurationSec,
-  AdStructure,
+  AdStructure, VoiceAlignment,
 } from '../types'
 import { AD_STRUCTURES } from './adStructures'
 
@@ -116,4 +116,72 @@ export function blockTargetDuration(
 ): number {
   const budgets = allocateBlockBudgets(structure, targetDurationSec)
   return budgets[blockId]
+}
+
+/**
+ * Z98 B2 — cheap deterministic hash of (full script text + voiceId). Shared by the
+ * Step-2 trigger (which stamps a generated voice) and the Step-3 render (which only
+ * reuses that voice when the sig still matches — i.e. the script/voice are unchanged).
+ */
+export function scriptVoiceSig(scriptText: string, voiceId: string | null | undefined): string {
+  const s = `${scriptText}|${voiceId ?? ''}`
+  let h = 5381
+  for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0
+  return `${h}:${s.length}`
+}
+
+/**
+ * Z98 B2 — VOICE-FIRST recalibration. Once the REAL voice is synthesized, replace
+ * the 215-wpm estimate with the measured truth so the director splits B-roll over
+ * the actual length (the estimate could be ~40% off, which squeezed all the
+ * B-roll into the front of a longer real video).
+ *
+ * With a per-character alignment (#6) we set each block's estDurationSec to the
+ * REAL spoken span of its text. Without one we scale every block proportionally
+ * so at least the TOTAL matches the measured audio. Either way
+ * script.totalDurationSec becomes the real number the director reads.
+ */
+export function recalibrateScriptToRealVoice(
+  script: GeneratedScript,
+  measuredDurationSec: number,
+  voiceAlignment?: VoiceAlignment,
+): GeneratedScript {
+  const measured = measuredDurationSec > 0 ? measuredDurationSec : script.totalDurationSec
+
+  // No alignment → proportional scale (real total, blocks keep their ratio).
+  if (!voiceAlignment || !voiceAlignment.text || voiceAlignment.charStartSecs.length === 0) {
+    const estTotal = script.blocks.reduce((sum, b) => sum + b.estDurationSec, 0)
+    const factor = estTotal > 0 ? measured / estTotal : 1
+    const blocks = script.blocks.map((b) => ({
+      ...b,
+      estDurationSec: Number((b.estDurationSec * factor).toFixed(2)),
+    }))
+    return { ...script, blocks, totalDurationSec: Number(measured.toFixed(2)) }
+  }
+
+  // Alignment present → real per-block durations. Each block's text appears in the
+  // transcript (alignment.text === blocks joined by ' '); locate it sequentially
+  // and read the spoken second of its first character.
+  const { text, charStartSecs } = voiceAlignment
+  const realStartAt = (charIdx: number): number | null => {
+    if (charIdx < 0) return null
+    const s = charStartSecs[Math.min(charIdx, charStartSecs.length - 1)]
+    return Number.isFinite(s) ? s : null
+  }
+  const startIdx: number[] = []
+  let cursor = 0
+  for (const b of script.blocks) {
+    const at = text.indexOf(b.text, cursor)
+    if (at >= 0) { startIdx.push(at); cursor = at + b.text.length }
+    else startIdx.push(-1)
+  }
+  const blocks = script.blocks.map((b, i) => {
+    const start = realStartAt(startIdx[i])
+    if (start == null) return { ...b }  // couldn't locate → keep its estimate
+    const nextStart = i + 1 < script.blocks.length ? realStartAt(startIdx[i + 1]) : measured
+    const end = nextStart ?? measured
+    const dur = Math.max(0.1, Number((end - start).toFixed(2)))
+    return { ...b, estDurationSec: dur }
+  })
+  return { ...script, blocks, totalDurationSec: Number(measured.toFixed(2)) }
 }

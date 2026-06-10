@@ -567,6 +567,21 @@ export interface ActionInsertClip {
   hero?: boolean
 }
 
+// ── Z98 B2 — voice-first slot ───────────────────────────────────────────────
+// The REAL voice is synthesized BEFORE the director (Step 2) so scene count +
+// placement use the actual measured duration, not a 215-wpm estimate that can be
+// ~40% off. The same voice is then REUSED at Step 3 for lipsync (no second TTS
+// charge). `scriptSig` = a cheap hash of (full script text + voiceId); when the
+// current sig no longer matches, this voice is stale (script/voice changed) and
+// must be regenerated.
+export interface VoiceFirstSlot {
+  voiceRef: string
+  voiceDurationSec: number
+  voiceId: string
+  voiceAlignment?: VoiceAlignment
+  scriptSig: string
+}
+
 // ── Top-level pipeline state ────────────────────────────────────────────────
 
 export interface V3PipelineState {
@@ -600,6 +615,10 @@ export interface V3PipelineState {
   /** Main creator video (the talking head — single instance per project) */
   creatorVideo: CreatorVideoClip | null
 
+  /** Z98 B2 — pre-generated REAL voice (synthesized at Step 2 before the
+   *  director, reused at Step 3). null until synthesized. See VoiceFirstSlot. */
+  voiceFirst: VoiceFirstSlot | null
+
   /** Action inserts — 3-8 short product moments */
   inserts: ActionInsertClip[]
 
@@ -630,6 +649,7 @@ export function createEmptyV3State(): V3PipelineState {
     scriptBrain: createEmptyScriptBrain(),
     creatorVideoConfig: createDefaultCreatorVideoConfig(),
     creatorVideo: null,
+    voiceFirst: null,
     inserts: [],
     autoEdit: createEmptyAutoEditState(),
     exportVariation: createEmptyExportVariationState(),

@@ -18,7 +18,7 @@ import { create } from 'zustand'
 import {
   createEmptyV3State,
   type V3PipelineState, type V3Phase, type WorkflowMode, type CostMode,
-  type ActionInsertClip, type CreatorVideoClip,
+  type ActionInsertClip, type CreatorVideoClip, type VoiceFirstSlot,
   // Z31 — Ad Brain
   type AdStructure, type AdAngle, type ScriptTargetDurationSec,
   type ScriptLang,
@@ -66,6 +66,9 @@ interface AdsVideoStoreState {
 
   setCreatorVideo:       (clip: CreatorVideoClip | null) => void
   patchCreatorVideo:     (patch: Partial<CreatorVideoClip>) => void
+  /** Z98 B2 — store / clear the pre-generated real voice (voice-first). */
+  setVoiceFirst:         (voice: VoiceFirstSlot | null) => void
+  clearVoiceFirst:       () => void
   /** Z32 — set/replace creator video config (setting + energy + preset + wardrobe + resolution) */
   setCreatorVideoConfig: (config: CreatorVideoConfig) => void
   /** Z32 — apply a preset (writes setting + energy + wardrobeNote in one go) */
@@ -354,6 +357,12 @@ export const useAdsVideoStore = create<AdsVideoStoreState>((set, get) => ({
 
   setCreatorVideo: (clip) =>
     commit(set, get, (s) => ({ ...s, creatorVideo: clip, autoEdit: invalidatePlan(s.autoEdit) })),
+
+  setVoiceFirst: (voice) =>
+    commit(set, get, (s) => ({ ...s, voiceFirst: voice })),
+
+  clearVoiceFirst: () =>
+    commit(set, get, (s) => ({ ...s, voiceFirst: null })),
 
   patchCreatorVideo: (patch) =>
     commit(set, get, (s) => ({

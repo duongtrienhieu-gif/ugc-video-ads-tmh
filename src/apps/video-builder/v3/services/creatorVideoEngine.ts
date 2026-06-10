@@ -181,6 +181,41 @@ async function synthVoiceTimed(args: {
   return { audio: await synthVoice(args), alignment: null }
 }
 
+// Z98 B2 — VOICE-FIRST. Synthesize the REAL voice (TTS only, NO keyframe) so the
+// director at Step 2 can read the actual measured duration + per-word timing
+// before deciding how many B-roll scenes to cut and where. The exact same audio
+// is reused at Step 3 for lipsync (no second TTS charge). Mirrors Stage 1 of
+// renderCreatorKeyframe, which now calls this too.
+export async function generateCreatorVoice(params: {
+  elevenLabsApiKey: string
+  script: GeneratedScript
+  voiceCategory: VoiceCategoryId
+  voiceId?: string | null
+  signal?: AbortSignal
+}): Promise<{ voiceRef: string; voiceDurationSec: number; voiceId: string; voiceAlignment?: VoiceAlignment }> {
+  if (params.signal?.aborted) throw new Error('CANCELLED — user huỷ')
+  const voiceCategory = VOICE_CATEGORIES[params.voiceCategory]
+  const voiceId = params.voiceId?.trim() || voiceCategory.defaultVoiceId
+  const fullScriptText = params.script.blocks.map((b) => b.text).join(' ')
+  console.log(`[VOICE-FIRST] TTS voice=${voiceId} chars=${fullScriptText.length}`)
+  const { audio, alignment } = await synthVoiceTimed({
+    apiKey: params.elevenLabsApiKey,
+    voiceId,
+    text: fullScriptText,
+    onModelUsed: (m) => console.log(`[VOICE-FIRST] TTS model=${m}`),
+  })
+  if (params.signal?.aborted) throw new Error('CANCELLED — user huỷ')
+  const audioBlob = new Blob([audio], { type: 'audio/mpeg' })
+  const voiceRef = await saveAsset(audioBlob, 'audio/mpeg')
+  const voiceDurationSec = await measureAudioDurationSec(audioBlob)
+  console.log(
+    `[VOICE-FIRST] done dur=${voiceDurationSec.toFixed(1)}s timing=${alignment
+      ? `REAL (${alignment.model}, ${alignment.charStartSecs.length} chars)`
+      : 'estimate (no alignment)'}`,
+  )
+  return { voiceRef, voiceDurationSec, voiceId, voiceAlignment: alignment ?? undefined }
+}
+
 // ── Stage update callbacks ─────────────────────────────────────────────────
 
 export interface StageUpdate {
@@ -274,31 +309,19 @@ export async function renderCreatorKeyframe(
     voiceId = params.reuseVoiceId
     voiceAlignment = params.reuseVoiceAlignment
   } else {
-    // ── STAGE 1: TTS via ElevenLabs ──────────────────────────────────────
+    // ── STAGE 1: TTS via ElevenLabs (same routine voice-first uses at Step 2) ──
     params.onStageUpdate({ stage: 'tts' })
-    const voiceCategory = VOICE_CATEGORIES[params.voiceCategory]
-    voiceId = params.voiceId?.trim() || voiceCategory.defaultVoiceId
-    const fullScriptText = params.script.blocks.map((b) => b.text).join(' ')
-    const voiceSource = params.voiceId?.trim() ? 'user-picked' : `category:${voiceCategory.labelVi}`
-    console.log(`[CREATOR_VIDEO Stage 1] TTS voice=${voiceSource} (${voiceId}) chars=${fullScriptText.length}`)
-    // Z98 (#6) — timestamped TTS (hybrid v3→v2). On any failure this still
-    // returns audio with alignment=null, so the voice never breaks.
-    const { audio: audioBuffer, alignment } = await synthVoiceTimed({
-      apiKey: params.elevenLabsApiKey,
-      voiceId,
-      text: fullScriptText,
-      onModelUsed: (m) => console.log(`[CREATOR_VIDEO Stage 1] TTS model=${m}`),
+    const voice = await generateCreatorVoice({
+      elevenLabsApiKey: params.elevenLabsApiKey,
+      script: params.script,
+      voiceCategory: params.voiceCategory,
+      voiceId: params.voiceId,
+      signal: params.signal,
     })
-    voiceAlignment = alignment ?? undefined
-    if (params.signal?.aborted) throw new Error('CANCELLED — user huỷ')
-    const audioBlob = new Blob([audioBuffer], { type: 'audio/mpeg' })
-    voiceRef = await saveAsset(audioBlob, 'audio/mpeg')
-    voiceDurationSec = await measureAudioDurationSec(audioBlob)
-    console.log(
-      `[CREATOR_VIDEO Stage 1] voice timing=${voiceAlignment
-        ? `REAL (${voiceAlignment.model}, ${voiceAlignment.charStartSecs.length} chars)`
-        : 'estimate (no alignment — fell back)'}`,
-    )
+    voiceRef = voice.voiceRef
+    voiceDurationSec = voice.voiceDurationSec
+    voiceId = voice.voiceId
+    voiceAlignment = voice.voiceAlignment
     params.onStageUpdate({ stage: 'tts', voiceRef, voiceDurationSec, voiceId, voiceAlignment })
   }
 

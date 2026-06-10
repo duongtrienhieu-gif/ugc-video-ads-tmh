@@ -23,6 +23,7 @@ import { useSettingsStore } from '../../../../stores/settingsStore'
 import { useAssetUrl } from '../../../../hooks/useAssetUrl'
 import { useAdsVideoStore } from '../stores/adsVideoStore'
 import { matchVoiceForAvatar } from '../services/voiceCreatorMatcher'
+import { scriptVoiceSig } from '../services/voiceTimingEstimator'
 import {
   CREATOR_VIDEO_STAGE_LABEL_VI,
   V3_CREDIT_COST, formatCredits, estimateLipsyncCredits,
@@ -322,9 +323,35 @@ export default function CreatorVideoPhase({ onContinue }: Props) {
     if (!brain.script) { addToast('Chưa có script — quay lại bước Script + Voice', 'error'); return }
     if (!state.inputs.avatar) { addToast('Chưa pick avatar — quay lại bước 1', 'error'); return }
 
-    const reuse = regenerate && !!clip?.voiceRef && !!clip?.voiceId
-    if (reuse) {
+    // Z98 B2 — reuse an already-paid voice to skip a second TTS charge:
+    //   • regenerate → the live clip's voice (re-roll keyframe only — unchanged).
+    //   • first render → the Step-2 VOICE-FIRST voice, but ONLY when its sig still
+    //     matches the current script + voice (a voice/script change → sig miss →
+    //     fresh TTS, so we never lipsync a stale voice).
+    const reuseFromClip = regenerate && !!clip?.voiceRef && !!clip?.voiceId
+    const sig = scriptVoiceSig(brain.script.blocks.map((b) => b.text).join(' '), state.inputs.voiceId)
+    const pregen = !reuseFromClip && state.voiceFirst && state.voiceFirst.scriptSig === sig
+      ? state.voiceFirst : null
+    const reuseSrc = reuseFromClip
+      ? { voiceRef: clip!.voiceRef!, voiceDurationSec: clip!.voiceDurationSec ?? 0, voiceId: clip!.voiceId!, voiceAlignment: clip!.voiceAlignment }
+      : pregen
+      ? { voiceRef: pregen.voiceRef, voiceDurationSec: pregen.voiceDurationSec, voiceId: pregen.voiceId, voiceAlignment: pregen.voiceAlignment }
+      : null
+    const reuse = !!reuseSrc
+
+    if (reuseFromClip) {
       patchCreatorVideo({ stage: 'keyframe', status: 'rendering', error: undefined })
+    } else if (reuse && reuseSrc) {
+      // Seed the clip with the pre-generated voice so the render skips straight to
+      // the keyframe (no TTS) and the timeline reflects the real measured duration.
+      setCreatorVideo({
+        stage: 'keyframe', status: 'rendering', config,
+        durationSec: reuseSrc.voiceDurationSec || brain.script.totalDurationSec,
+        resolution: config.resolution,
+        voiceRef: reuseSrc.voiceRef, voiceDurationSec: reuseSrc.voiceDurationSec,
+        voiceId: reuseSrc.voiceId, voiceAlignment: reuseSrc.voiceAlignment,
+        startedAt: Date.now(),
+      })
     } else {
       setCreatorVideo({
         stage: 'tts', status: 'rendering', config,
@@ -342,11 +369,11 @@ export default function CreatorVideoPhase({ onContinue }: Props) {
         voiceId: state.inputs.voiceId,
         avatar: state.inputs.avatar,
         product: state.inputs.product,
-        ...(reuse ? {
-          reuseVoiceRef: clip!.voiceRef,
-          reuseVoiceDurationSec: clip!.voiceDurationSec,
-          reuseVoiceId: clip!.voiceId,
-          reuseVoiceAlignment: clip!.voiceAlignment,
+        ...(reuse && reuseSrc ? {
+          reuseVoiceRef: reuseSrc.voiceRef,
+          reuseVoiceDurationSec: reuseSrc.voiceDurationSec,
+          reuseVoiceId: reuseSrc.voiceId,
+          reuseVoiceAlignment: reuseSrc.voiceAlignment,
         } : {}),
         onStageUpdate: applyStageUpdate,
       })

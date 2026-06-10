@@ -26,7 +26,7 @@ import {
   COST_MODE_CONFIG, INSERT_STAGE_LABEL_VI,
   estimateInsertCredits, formatCredits, defaultInsertRenderMode,
   type ActionPresetId, type ActionInsertClip, type InsertRenderStage,
-  type InsertRenderMode, type V3ClipStatus,
+  type InsertRenderMode, type V3ClipStatus, type GeneratedScript,
 } from '../types'
 import { ACTION_PRESETS, ACTION_PRESET_ORDER } from '../services/actionPresets'
 import {
@@ -35,6 +35,11 @@ import {
 } from '../services/insertSuggester'
 import { renderInsert, resumeInsertVideo, listEligibleInsertsForBulk } from '../services/insertRenderer'
 import { computeBlockStartTimestamps, computeQuoteTimestamp } from '../services/insertTimingEngine'
+// Z98 B2 — voice-first: synth the real voice + recalibrate the script BEFORE the
+// director runs, so scene count/placement use the real duration not a WPM guess.
+import { generateCreatorVoice } from '../services/creatorVideoEngine'
+import { recalibrateScriptToRealVoice, scriptVoiceSig } from '../services/voiceTimingEstimator'
+import { matchVoiceForAvatar } from '../services/voiceCreatorMatcher'
 
 // Wrap Date.now in a non-render-pure call site so react-hooks/purity lint
 // doesn't false-positive on usage inside async event handlers below.
@@ -79,10 +84,13 @@ export default function ActionInsertsPhase({ onContinue }: Props) {
   const patchInsert      = useAdsVideoStore((s) => s.patchInsert)
   const removeInsert     = useAdsVideoStore((s) => s.removeInsert)
   const clearAllInserts  = useAdsVideoStore((s) => s.clearAllInserts)
+  const setVoiceFirst    = useAdsVideoStore((s) => s.setVoiceFirst)
+  const setGeneratedScript = useAdsVideoStore((s) => s.setGeneratedScript)
 
-  const kieApiKey   = useSettingsStore((s) => s.kieApiKey)
-  const geminiKey   = useSettingsStore((s) => s.geminiApiKey)
-  const addToast    = useAppStore((s) => s.addToast)
+  const kieApiKey     = useSettingsStore((s) => s.kieApiKey)
+  const geminiKey     = useSettingsStore((s) => s.geminiApiKey)
+  const elevenLabsKey = useSettingsStore((s) => s.elevenLabsApiKey)
+  const addToast      = useAppStore((s) => s.addToast)
 
   const inserts = state.inserts
   const costModeCfg = COST_MODE_CONFIG[state.costMode]
@@ -110,6 +118,8 @@ export default function ActionInsertsPhase({ onContinue }: Props) {
   // ── Smart suggestions (Gemini semantic, script-language aware) ────────────
   const [suggestions, setSuggestions] = useState<InsertSuggestion[]>([])
   const [isSuggesting, setIsSuggesting] = useState(false)
+  // Z98 B2 — true while the real voice is being synthesized before the director.
+  const [isPreparingVoice, setIsPreparingVoice] = useState(false)
 
   // ── Free-scene composer (Z42) — the 2 AI presets (CONCEPT_SCENE +
   // PRODUCT_IN_ACTION) need a written scene description, so the manual library
@@ -118,10 +128,66 @@ export default function ActionInsertsPhase({ onContinue }: Props) {
   const [composerPreset, setComposerPreset] = useState<ActionPresetId | null>(null)
   const [composerText, setComposerText] = useState('')
 
+  // Z98 B2 — VOICE-FIRST. Ensure the REAL voice exists BEFORE the director runs,
+  // recalibrate the script to its measured duration, and return the recalibrated
+  // script for the director to read. Reuses an existing voice when script+voice
+  // are unchanged (sig match). Falls back to the current estimate-script when
+  // there's no ElevenLabs key or TTS fails — never blocks the director.
+  const ensureVoiceFirst = async (): Promise<GeneratedScript | null> => {
+    const script = state.scriptBrain.script
+    if (!script) return null
+    const fullText = script.blocks.map((b) => b.text).join(' ')
+    const pickedVoiceId = state.inputs.voiceId
+    const sig = scriptVoiceSig(fullText, pickedVoiceId)
+
+    // Already have a matching real voice → reuse, just recalibrate (idempotent).
+    const existing = state.voiceFirst
+    if (existing && existing.scriptSig === sig) {
+      const recal = recalibrateScriptToRealVoice(script, existing.voiceDurationSec, existing.voiceAlignment)
+      setGeneratedScript(recal)
+      return recal
+    }
+
+    // No ElevenLabs key → can't synth the real voice; director uses the estimate.
+    if (!elevenLabsKey) return script
+
+    setIsPreparingVoice(true)
+    try {
+      const voiceCategory = state.scriptBrain.voiceCategory
+        ?? matchVoiceForAvatar(state.inputs.avatar, state.scriptBrain.angle)
+      const voice = await generateCreatorVoice({
+        elevenLabsApiKey: elevenLabsKey,
+        script,
+        voiceCategory,
+        voiceId: pickedVoiceId,
+      })
+      setVoiceFirst({
+        voiceRef: voice.voiceRef,
+        voiceDurationSec: voice.voiceDurationSec,
+        voiceId: voice.voiceId,
+        voiceAlignment: voice.voiceAlignment,
+        scriptSig: sig,
+      })
+      const recal = recalibrateScriptToRealVoice(script, voice.voiceDurationSec, voice.voiceAlignment)
+      setGeneratedScript(recal)
+      addToast(
+        `✓ Đã tạo giọng thật ${recal.totalDurationSec.toFixed(1)}s — đạo diễn chia cảnh theo độ dài này`,
+        'success',
+      )
+      return recal
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      addToast(`Tạo giọng lỗi: ${msg.slice(0, 140)} — đạo diễn tạm dùng ước tính`, 'info')
+      return script
+    } finally {
+      setIsPreparingVoice(false)
+    }
+  }
+
   // Fetch the director's scene breakdown for the current script. Gemini path
   // when a key exists (reads meaning), keyword fallback otherwise.
-  const fetchSuggestions = async (): Promise<InsertSuggestion[]> => {
-    const script = state.scriptBrain.script
+  const fetchSuggestions = async (scriptOverride?: GeneratedScript): Promise<InsertSuggestion[]> => {
+    const script = scriptOverride ?? state.scriptBrain.script
     if (!script) return []
     if (geminiKey) {
       return directScenesWithGemini({
@@ -142,9 +208,9 @@ export default function ActionInsertsPhase({ onContinue }: Props) {
   // Apply a suggestion list straight into the store (replaces current inserts).
   // Anchors each scene to its block's start second so the auto-edit planner
   // places it at the right moment (semantic match → timeline).
-  const applySuggestions = (result: InsertSuggestion[]) => {
+  const applySuggestions = (result: InsertSuggestion[], scriptOverride?: GeneratedScript) => {
     if (result.length === 0) return
-    const script = state.scriptBrain.script
+    const script = scriptOverride ?? state.scriptBrain.script
     const blockStarts = script ? computeBlockStartTimestamps(script) : null
     const items = result.map((s) => {
       // Z42 — anchor to the EXACT second the quoted line is spoken; fall back to
@@ -177,10 +243,12 @@ export default function ActionInsertsPhase({ onContinue }: Props) {
     }
     setIsSuggesting(true)
     try {
-      const result = await fetchSuggestions()
+      // Z98 B2 — real voice first → director reads the true duration.
+      const calibrated = await ensureVoiceFirst()
+      const result = await fetchSuggestions(calibrated ?? undefined)
       setSuggestions(result)
       if (result.length > 0) {
-        applySuggestions(result)
+        applySuggestions(result, calibrated ?? undefined)
         // Z42 — honest path signal. The Gemini DIRECTOR always sets matchCount=0;
         // the offline KEYWORD path sets matchCount>0. If every result came from
         // keyword matching, the AI director did NOT run (no key, or it failed) —
@@ -241,10 +309,12 @@ export default function ActionInsertsPhase({ onContinue }: Props) {
     void (async () => {
       setIsSuggesting(true)
       try {
-        const result = await fetchSuggestions()
+        // Z98 B2 — synth the real voice + recalibrate BEFORE directing.
+        const calibrated = await ensureVoiceFirst()
+        const result = await fetchSuggestions(calibrated ?? undefined)
         if (result.length > 0) {
           setSuggestions(result)
-          applySuggestions(result)
+          applySuggestions(result, calibrated ?? undefined)
           const usedKeyword = result.every((r) => r.matchCount > 0)
           if (usedKeyword) {
             addToast(
@@ -530,10 +600,12 @@ export default function ActionInsertsPhase({ onContinue }: Props) {
               <div className="flex shrink-0 flex-col gap-1.5">
                 <button
                   onClick={handleSuggest}
-                  disabled={isSuggesting}
+                  disabled={isSuggesting || isPreparingVoice}
                   className="rounded-lg border border-amber-300 bg-white px-3 py-2 text-[12px] font-bold text-amber-700 shadow-sm hover:bg-amber-50 disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                  {isSuggesting
+                  {isPreparingVoice
+                    ? <><Loader2 className="mr-1 inline h-3.5 w-3.5 animate-spin" /> Đang tạo giọng...</>
+                    : isSuggesting
                     ? <><Loader2 className="mr-1 inline h-3.5 w-3.5 animate-spin" /> Đang đạo diễn...</>
                     : <><Wand2 className="mr-1 inline h-3.5 w-3.5" /> {suggestions.length > 0 ? 'Đạo diễn lại' : 'Gợi ý AI'}</>}
                 </button>
