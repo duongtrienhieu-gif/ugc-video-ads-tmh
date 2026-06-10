@@ -269,10 +269,6 @@ export interface ComboOption {
   /** Variant display name shown on the thumbnail + variant picker.
    *  E.g., "1 Kem trắng răng", "Combo 1: 1 kem + 1 xịt" */
   name: string
-  /** Short visual description of what the combo contains — AI uses this
-   *  to compose the thumbnail. E.g., "1 jar of mineral powder",
-   *  "1 jar mineral powder + 1 spray bottle". */
-  description: string
   /** Highlight as "Hot" / featured variant. */
   isHot?: boolean
   /** Explicit count of product instances to show in the thumbnail. When set,

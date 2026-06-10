@@ -95,9 +95,8 @@ function buildComboPrompt(params: GenerateComboParams, hasLogoRef: boolean): str
 - Primary colors: ${params.brief.primaryColors.join(', ')}
 ` : ''
 
-  // Count enforcement. productCount is the authoritative source (user input);
-  // fall back to parsing the description ("2 jars" → 2), then to 1.
-  const count = c.productCount ?? extractCountFromDescription(c.description) ?? 1
+  // Count enforcement. productCount is the authoritative source (user input).
+  const count = c.productCount ?? 1
   // Use brief.productSubtype as the unit word (box / bottle / tube / sachet /
   // patch box / pouch / blister pack / etc.) so we don't force a TPCN-bottle
   // shape on non-bottle products like patches, sachets, devices, etc.
@@ -150,16 +149,6 @@ STYLE: Same premium e-commerce aesthetic as the main 9 listing slots. Plus Jakar
 LANGUAGE: ${langName} ONLY in any rendered text (except "Official store" subtitle and count label which use their universal forms). NO other languages.
 
 NO trust bar, NO cert badges, NO clutter, NO outer packaging box.`
-}
-
-// Try to extract a leading number from a description string like
-// "2 product unit", "3 jars", "5 items" → 2, 3, 5. Returns null otherwise.
-function extractCountFromDescription(desc: string): number | null {
-  const match = desc.trim().match(/^(\d+)/)
-  if (!match) return null
-  const n = parseInt(match[1], 10)
-  if (Number.isNaN(n) || n < 1 || n > 20) return null
-  return n
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────
