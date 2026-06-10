@@ -448,12 +448,13 @@ ${catalogue}
        self-consciously", "woman smiling shyly", "tired man rubbing his eyes",
        "hand running through thinning hair, worried". These render as REAL
        motion video (Kling, ~51cr). A still image cannot carry human emotion.
-     • "graphic" — for visualizations, infographics, microscope shots,
-       split-screen comparisons, ingredient close-ups, sci-fi-style animations,
-       chemistry diagrams, any scene with NO PERSON or where motion is not
-       needed. Examples: "microscopic bacteria multiplying", "split-screen of
-       teeth before/after", "ingredient capsule cross-section". These render
-       cheaply as a still + slow zoom (~6cr) — perfect when subject is static.
+     • "graphic" — for visualizations, infographics, microscope shots, mechanism
+       diagrams, ingredient close-ups, "how it works" animations, chemistry
+       diagrams, any scene with NO PERSON or where motion is not needed. Examples:
+       "microscopic bacteria multiplying", "labeled tooth cross-section showing
+       enamel + plaque", "ingredient capsule cross-section". NOTE: a real
+       before/after of a PERSON is NOT a graphic — that's real footage ("emotion").
+       These render cheaply as a still + slow zoom (~6cr) — perfect when static.
    PICK CORRECTLY. Choosing "graphic" for a scene that needs human emotion
    makes the final video feel like a slideshow. Choosing "emotion" for a
    pure infographic wastes 8× the credit. Default to "graphic" only when the
@@ -707,15 +708,20 @@ DIRECTING RULES:
           • hair: thicker / fuller / longer / less falling / shinier / scalp regrowth
           • body: slimmer / firmer / toned / lifted / less bloated
           • marks/stains: faded / gone / lightened
-        For ANY of these, use CONCEPT_SCENE with a split-screen / side-by-side
-        conceptPrompt showing the actual body part change. Examples:
-          • teeth: "Extreme close-up split-screen of teeth: left half stained
-            yellow with visible plaque, right half clean glossy white — dramatic
-            dental before/after, soft natural light."
-          • skin: "Macro split-screen of cheek skin: left side dull with visible
-            blemishes, right side smooth even-toned, side-by-side comparison."
-          • hair: "Top-down split scalp shot: left half thinning patches visible,
-            right half fuller denser hair growth, clinical comparison lighting."
+        For ANY of these, use a REAL before/after of the SAME person — NEVER a
+        single face/mouth/image split down the middle into two halves (that looks
+        fake/AI). Show TWO real testimonial photos of the SAME person: a BEFORE
+        shot (whole face/area, problem visible) and an AFTER shot (whole face/area,
+        improved). Realistic phone photo, natural light, NO cinematic / glow / CGI.
+        Examples:
+          • teeth: "Two real testimonial photos of the same woman side by side:
+            LEFT she smiles showing yellow stained teeth (before), RIGHT the SAME
+            woman smiles with clean white teeth (after). Real phone photo, natural
+            light. NOT one face split in half."
+          • skin: "Same woman, two real photos: before — cheek with visible acne;
+            after — same cheek clear and smooth. Authentic phone photo."
+          • hair: "Same person, two real photos: before — thinning hair; after —
+            fuller hair. Real phone shot, natural light."
         If the script mentions BOTH (a) and (b) in one beat — e.g. "răng trắng
         hơn và mình tự tin hơn" — pick (b) CONCEPT_SCENE. The visible proof is
         the load-bearing claim for conversion; the felt-state is secondary.
@@ -766,10 +772,21 @@ DIRECTING RULES:
       actual powder, the actual application, the actual result) as a CUT over a
       generic illustration. Reach for PRODUCT_IN_ACTION / the fixed product
       presets / BEFORE_AFTER for these — those render as real-footage cuts.
+    • EVERY CUT MUST BE REALISTIC REAL FOOTAGE — a real person / real product /
+      real body part / real before-after, shot on a PHONE in natural light. NO
+      cinematic film-look, NO magical / fantasy / glowing / floating / CGI / sci-fi
+      effects. A "how it works" MECHANISM (an ingredient acting INSIDE the body —
+      "amethyst repairing enamel", "charcoal absorbing plaque", "particles sinking
+      into the tooth") is NOT filmable for real → make it an OVERLAY diagram,
+      NEVER a cut. A cut is only something a phone camera could actually record.
+    • BEFORE/AFTER as a cut = the SAME real person shown BEFORE (problem) and
+      AFTER (improved), like a real testimonial — NEVER one face/image split down
+      the middle into two halves (that looks fake).
     • ILLUSTRATION overlays (graphic CONCEPT_SCENE sketches / infographics,
       layout:"overlay_corner") ride ON TOP of the talking creator and do NOT
       count toward the 40%. Use as MANY as the script earns — NO limit. They add
-      teaching pop-ups while the creator keeps talking.
+      teaching pop-ups while the creator keeps talking. Mechanism / "how it works"
+      / data scenes BELONG here as overlays, not as cuts.
   Hit the cut quota FIRST, then layer overlays freely on top. A pure-overlay ad
   has no product realism.
 - "fit" = 0..1 how strongly the visual supports the line. "reason" = one short
@@ -868,17 +885,14 @@ OUTPUT strict JSON, no fences:
       // visibly recovered. Authentic before/after = same person across both.
       motionKind = 'emotion'
       conceptPrompt = conceptPrompt.length > 0 ? conceptPrompt :
-        `Split-screen of THE SAME PERSON (from the avatar reference) shown in two ` +
-        `clearly contrasting states, illustrating the line "${quote}": LEFT half = ` +
-        `the BEFORE state showing the visible problem the script names (yellow ` +
-        `stained teeth / acne-prone skin / thinning hair / stiff painful joint — ` +
-        `whatever the script promises will improve), with matching subdued ` +
-        `posture and dim cool light. RIGHT half = the SAME person in the AFTER ` +
-        `state with the problem clearly resolved (white teeth / clear glowing ` +
-        `skin / fuller hair / relaxed easy posture), confident smile, warm ` +
-        `bright light. Identical face, hair, outfit — only the named body-part ` +
-        `change + the emotion + the light differ. The two halves MUST look ` +
-        `unmistakably different in the named area at a glance.`
+        `A REAL before/after of THE SAME PERSON (from the avatar reference) for the ` +
+        `line "${quote}": TWO real testimonial photos side by side — the BEFORE photo ` +
+        `(whole face/area, the visible problem the script names: yellow stained ` +
+        `teeth / acne skin / thinning hair, subdued mood) and the AFTER photo (the ` +
+        `SAME person, problem clearly resolved: white teeth / clear skin / fuller ` +
+        `hair, confident smile). Identical face + outfit, only the named body-part ` +
+        `+ mood differ. Realistic phone photo, natural light. NOT one single face/` +
+        `image split down the middle into two halves, NOT cinematic, NO glow/CGI.`
       rewrite.beforeAfter++
     }
 
@@ -1183,7 +1197,13 @@ OUTPUT strict JSON, no fences:
 // deliberately NOT in ABSTRACT — "split-screen of teeth with plaque vs white" is a
 // perfectly filmable before/after, not a diagram. Mutates scenes in place; returns
 // how many were promoted. Promotion order = script order (keeps narrative flow).
-const ABSTRACT_RE = /\b(nano|molecul\w*|cross[- ]section|schematic|diagram|counter|graph|chart|infographic|icon|flag|badge|stamp|how it works|mechanism|statistic\w*|percentage|arrow|timeline|calendar)\b/i
+// Also EXCLUDE internal-mechanism scenes (an ingredient acting INSIDE a body part
+// — "amethyst repairing enamel", "charcoal absorbing plaque", "particles sinking
+// into the tooth"). Those can't be filmed for real; forcing them into a cut makes
+// the image gen hallucinate floating glowing magic teeth. They stay as overlay
+// diagrams. (Patterns require a body-part object so the product name "Teeth
+// Restoration" alone is NOT caught.)
+const ABSTRACT_RE = /\b(nano|molecul\w*|cross[- ]section|schematic|diagram|counter|graph|chart|infographic|icon|flag|badge|stamp|how it works|mechanism|statistic\w*|percentage|arrow|timeline|calendar|(restor|repair|rebuild|heal)\w* (the )?(enamel|tooth|teeth|gum|skin|hair|scalp|nail)|absorb\w* (the )?(plaque|plak|toxin|bacteria|dirt|kotoran|impurit)|penetrat\w*|sinking (deep )?into|deep into the|inside the (tooth|enamel|body|skin|hair)|glowing particle)\b/i
 
 // Only the FIRST paragraph is the real scene description. The engine appends
 // "\n\nTEXT TO RENDER…" + "\n\nLANGUAGE: EVERY … calendar day names … arrow labels …"
@@ -1211,11 +1231,14 @@ function promoteCutsToQuota(scenes: InsertSuggestion[], cutSecNeeded: number): n
     s.layout = 'cut'
     s.renderMode = 'video'  // real footage (i2v), not a ken_burns illustration
     const cleaned = baseDesc(s)
-      .replace(/\b(simple )?(hand[- ]drawn sketch|hand[- ]drawn|illustration|illustrated|animated graphic|graphic|drawing|infographic|ilustrasi|lakaran|sketch)\b/gi, 'real footage')
+      .replace(/\b(simple |friendly )?(hand[- ]drawn sketch|hand[- ]drawn|illustration|illustrated|animated graphic|animation|graphic|drawing|infographic|ilustrasi|lakaran|sketch)\b/gi, 'real footage')
+      .replace(/\b(glowing|magical|magic|floating|sci-?fi|cinematic|fantasy|surreal|CGI|particles)\b/gi, '')
       .replace(/\s+/g, ' ')
       .trim()
     s.conceptPrompt =
-      `Real, photographic, realistic UGC footage — NOT a drawing/sketch/graphic: ${cleaned}`
+      `Real, photographic, realistic phone-shot UGC footage — NOT a drawing/sketch/` +
+      `graphic, NOT cinematic, NO magical/fantasy/glowing/floating/CGI effects, only ` +
+      `real physical objects + real people in natural light: ${cleaned}`
     promoted++
   }
   if (promoted > 0) {
