@@ -448,12 +448,12 @@ ${catalogue}
        self-consciously", "woman smiling shyly", "tired man rubbing his eyes",
        "hand running through thinning hair, worried". These render as REAL
        motion video (Kling, ~51cr). A still image cannot carry human emotion.
-     • "graphic" — for visualizations, infographics, microscope shots, mechanism
-       diagrams, ingredient close-ups, "how it works" animations, chemistry
-       diagrams, any scene with NO PERSON or where motion is not needed. Examples:
-       "microscopic bacteria multiplying", "labeled tooth cross-section showing
-       enamel + plaque", "ingredient capsule cross-section". NOTE: a real
-       before/after of a PERSON is NOT a graphic — that's real footage ("emotion").
+     • "graphic" — for ingredient photos, infographics, claim graphics ("5x"),
+       problem-cause diagrams, microscope shots — any scene with NO PERSON.
+       Examples: "microscopic bacteria multiplying", "labeled tooth cross-section
+       showing enamel + plaque". NOTE: a PRODUCT MECHANISM (an ingredient acting
+       inside the body) is NOT a flat graphic — the engine renders it as 3D; and a
+       real before/after of a PERSON is real footage ("emotion"), not a graphic.
        These render cheaply as a still + slow zoom (~6cr) — perfect when static.
    PICK CORRECTLY. Choosing "graphic" for a scene that needs human emotion
    makes the final video feel like a slideshow. Choosing "emotion" for a
@@ -471,16 +471,9 @@ DIRECTING RULES:
   INGREDIENTS or a MECHANISM / how-it-works, you MUST give those lines their own
   scene (usually a labeled CONCEPT_SCENE) — do not leave them with no visual.
   This is the most common miss.
-- CREATOR-FIRST RULE — the viewer needs to SEE the speaker's face early to
-  trust the ad. The FIRST insert MUST NOT start before t≈3s of voice — let the
-  viewer see the talking creator first. Practical translation: when you anchor
-  scenes, the earliest scene (whichever quote starts the earliest) should be
-  illustrating a line that arrives roughly 3+ seconds in, NOT the very first
-  words of the hook. Reserve the opening seconds for the creator's face.
-  Also: NEVER stack 3+ consecutive inserts that all replace the creator —
-  the viewer will lose track of who is speaking. Break long stretches of
-  illustration with at least one beat where ONLY the creator is on screen
-  (i.e. skip an insert there).
+- CREATOR-FIRST — don't anchor the FIRST insert in the opening ~3s (let the
+  viewer see the talking creator first), and don't stack 3+ back-to-back cuts.
+  (The engine enforces both, but plan for it.)
 - INGREDIENT BEATS — when a line NAMES specific ingredients (e.g. "Activated
   Charcoal và Volcanic Ash...", "Grape Seed Extract..."), give that line a
   CONCEPT_SCENE whose conceptPrompt SHOWS and LABELS each named ingredient (the
@@ -494,33 +487,26 @@ DIRECTING RULES:
   appearance, on a clean neutral surface, soft natural daylight, sharp focus,
   shallow depth of field. Pick the right form per ingredient — match what the
   ingredient ACTUALLY looks like in real life:
-    • POWDERS / solids: a small pile or scoop (charcoal = black powder,
-      volcanic ash = grey powder, matcha = green powder, turmeric = orange,
-      collagen = white powder, cocoa = brown, salt = white crystals).
-    • LIQUIDS / oils / extracts: a few drops or a small clear glass jar (rose
-      water = clear pink, vitamin C serum = golden drops, fish oil = amber,
-      argan oil = yellow, milk = white).
-    • PLANT / fruit / seed / herb: the raw ingredient itself (grape seeds,
-      green tea leaves, ginseng root, aloe leaf, lavender sprigs, hyaluronic
-      acid molecule on a glass slide).
-    • CAPSULE / pearl ingredients: a few capsules / softgels cut open showing
-      the contents next to whole ones.
-    • MINERAL / chemical actives (niacinamide, retinol, hyaluronic, salicylic):
-      a clean lab-style drop on glass / a small clear vial labeled in the
-      script language.
+    • Powders → a small pile/scoop in its REAL colour (charcoal black, turmeric
+      orange, collagen white); oils/liquids/extracts → a few drops or a small
+      glass jar (amber/golden/clear); plant/seed/herb → the raw ingredient itself;
+      capsules → a few cut open showing the contents; chemical actives → a clean
+      lab drop on glass. Match the ingredient's REAL look.
   Use whatever the script names. Labels in the script language, placed cleanly
   next to the ingredient (not floating). Two ingredients in the line → both
   shown side-by-side with their respective real forms + labels.
-  Reserve hand-drawn doodle style for non-ingredient teaching: MECHANISM /
-  how-it-works diagrams / "Nx more effective" claims / benefit-breakdowns,
-  where a real photo can't represent the idea.
+  Reserve hand-drawn doodle style for TEACHING / CLAIM graphics ("Nx more
+  effective" claims, benefit-breakdowns, an abstract idea a photo can't show) and
+  problem-cause visuals — NOT for product mechanism (the engine renders mechanism
+  beats as a 3D animation; see the CUT-TIME QUOTA note).
 - CONCEPT ART-STYLE RULE (for "graphic" CONCEPT_SCENE only) — bake the art
   direction INTO the conceptPrompt. There are THREE looks; pick per scene:
   (0) REAL-WORLD PHOTO — for INGREDIENT scenes (see "INGREDIENT STYLE" rule
       above). NOT hand-drawn — real macro photography of the actual ingredient.
-  (1) SIMPLE HAND-DRAWN VISUAL — use this for MECHANISM / how-it-works
-      diagrams, "X times more effective" claims, benefit breakdowns, abstract
-      teaching where a real photo doesn't apply. Write the conceptPrompt as:
+  (1) SIMPLE HAND-DRAWN VISUAL — use this for TEACHING / CLAIM graphics ("X times
+      more effective" claims, benefit breakdowns, abstract teaching where a real
+      photo doesn't apply). NOT for product mechanism (→ 3D, the engine handles
+      it). Write the conceptPrompt as:
       ONE friendly HAND-DRAWN sketch (clean simple line-art doodle, warm
       marker / crayon feel) illustrating a SINGLE idea — big, bold, instantly
       readable.
@@ -532,19 +518,11 @@ DIRECTING RULES:
           ${langName} (the script's language). For a Bahasa Malaysia script the
           labels are Malay, for a Vietnamese script Vietnamese, etc. NEVER mix
           languages and NEVER default to another language.
-          *** CRITICAL: even when the PRODUCT NAME contains English words ***
-          (e.g. "Knee Support Booster", "Brightening Serum"), THE LABELS STILL
-          MUST BE IN ${langName}. The product NAME stays English (it's a brand);
-          the LABELS on a teaching graphic are concepts and must be translated:
-            • English product "Knee Support Booster" → labels in VN: "Khớp gối",
-              "Áp lực", "Lò xo nâng đỡ" — NOT "knee joint", "pressure", "springs".
-            • English product "Brightening Serum" → labels in VN: "Da xỉn",
-              "Tinh chất", "Sáng mịn" — NOT "dull skin", "serum", "brightening".
-          Take the term straight from the ${langName} quote that the scene
-          illustrates — that quote IS in the script language; mirror it.
-          (Ingredient names that ARE the brand of the active substance — e.g.
-          "Activated Charcoal", "Niacinamide" — may stay in their original
-          chemical form if the ${langName} script writes them that way.)
+          *** Even when the PRODUCT NAME is English (e.g. "Brightening Serum"),
+          the concept LABELS stay in ${langName} — mirror the term from the
+          ${langName} quote (e.g. "Da xỉn", "Sáng mịn", NOT "dull skin",
+          "brightening"). Brand-name actives ("Activated Charcoal", "Niacinamide")
+          may keep their original form if the script writes them that way. ***
         • LABEL THE ACTUAL TERMS FROM THE QUOTE: ingredient names, a number
           ("5x"), the one core mechanism/benefit word. Typically 1-4 short
           labels, each 1-3 words. The labels ARE the terms the voice is saying
@@ -614,130 +592,37 @@ DIRECTING RULES:
   ingredient, the product in use. Also do NOT illustrate the SAME felt-transition
   twice: if one scene already shows "skeptical → relieved" (e.g. a person
   before/after), do NOT add a second metaphor scene for the same idea.
-- Duration is FREE per scene — YOU decide based on how much dialogue it covers.
-  But mind the render mode:
-    • ken_burns concept stills → 2-4s (short; split dense ideas into more cuts).
-    • VIDEO inserts (any product preset, PRODUCT_IN_ACTION, or emotion
-      CONCEPT_SCENE) → 3-4s, MAX 4s. A 6s cut drags ("dài lê thê") and breaks
-      TikTok pacing — keep every video beat punchy at 3-4s. Use MORE short cuts
-      rather than fewer long ones.
-- HARD LIMIT for CONCEPT_SCENE: never exceed 4s. A still image zoomed for 7-8s
-  is BORING and breaks UGC pacing — the viewer's eye stops moving.
-- For a DENSE / MULTI-SENTENCE concept beat (e.g. mechanism with several steps,
-  ingredients with several names, a feeling described from multiple angles),
-  DO NOT make one long 6-8s concept scene. Instead, SPLIT it into 2-3 short
-  CONCEPT_SCENE cuts back-to-back (each 3-4s), each showing a DIFFERENT angle
-  of the idea (different subject, framing, or environment). Example for a gut
-  mechanism explanation: cut1 "microscopic bacteria multiplying" 3s → cut2
-  "glowing Inulin molecules feeding bacteria" 3s → cut3 "calm relaxed stomach
-  silhouette" 3s. Variety keeps the eye moving. The total budget covers this —
-  use more, shorter cuts instead of fewer long ones.
+- DURATION — keep every scene 3-4s (MAX 4s; the engine clamps it). A dense beat
+  (a multi-step mechanism, several ingredients) → SPLIT into 2-3 short cuts, each
+  a different angle (subject / framing / environment), not one long scene.
 - Anchor each scene to the ONE block (hook/pain/discovery/benefit/cta) whose
   dialogue it illustrates (used only as a coarse fallback).
-- INGESTION RULE — DRINK and TAKE_PILL animate the person SWALLOWING the
-  product. Use them ONLY for products that are genuinely ingested: drinks,
-  shakes, supplements, vitamins, gummies, pills, capsules taken by mouth.
-  For products APPLIED EXTERNALLY, these presets are WRONG and look absurd —
-  NEVER use them. Instead use PRODUCT_IN_ACTION with a conceptPrompt showing
-  the REAL application:
-    • tooth powder / toothpaste / whitening powder → person BRUSHING it on
-      their teeth with a toothbrush (it is NOT eaten — note clues like
-      "whiten teeth", "enamel", "vs toothpaste", "plaque").
-    • cream / serum / lotion / mask → rubbed / massaged onto skin.
-    • shampoo / hair tonic / scalp serum → washed / applied into hair.
-    • spray / deodorant / perfume → sprayed on.
-  Read what the product IS. A "powder" is not automatically a supplement —
-  a teeth-whitening powder is brushed on, not swallowed.
-- PRODUCT-FORM RULE — several fixed presets hardcode a physical form. Pick them
-  ONLY when the product actually matches; otherwise use PRODUCT_IN_ACTION and
-  describe the real action (it has no form assumption):
-    • OPEN_CAP assumes a BOTTLE with a screw cap. Don't use it for a jar (twist
-      lid), tube (flip cap), sachet (tear), pump, box, or device.
-    • TAKE_PILL assumes a single solid PILL/TABLET/CAPSULE. Don't use it for a
-      powder (scooped/mixed), gummy (chewed), or liquid.
-    • DRINK assumes the product is sipped straight from its container. A powder
-      that must be mixed into water first is PRODUCT_IN_ACTION (scoop → stir →
-      drink), not DRINK.
-    • UNBOX assumes the product ships inside an outer BOX. Don't use it for a
-      bare jar/bottle with no box.
-    • BAG_PRODUCT_PULL assumes the product fits in a handbag. Don't use it for an
-      appliance, machine, or large device.
-  When in doubt about form, prefer PRODUCT_IN_ACTION — it is form-agnostic and
-  you control the action.
-- LAYOUT RULE — for EVERY scene, pick a "layout":
-    • "cut" → the insert REPLACES the creator video full-screen for its window.
-      Use for high-impact beats: HOOK reveal, PAIN raw shot, CTA trust close,
-      product DEMO (PRODUCT_IN_ACTION), visible BEFORE/AFTER, emotion
-      CONCEPT_SCENE that needs full focus.
-    • "overlay_corner" → the insert sits as a corner PIP (~30% of the frame)
-      while the CREATOR keeps talking full-screen behind it. Use for SUPPORTING
-      illustrations the viewer should glance at without losing the speaker:
-      teaching graphic CONCEPT_SCENE (ingredient sketches, mechanism diagrams,
-      "Nx more effective" labels), small product close-ups during explanation.
-  Rule of thumb: if the scene is the MAIN thing on screen at that moment, "cut";
-  if the scene is a SUPPORTING aside while the creator is the focus, "overlay_corner".
-  DEFAULT POLICY (the engine enforces this): every illustration / infographic /
-  ingredient / mechanism graphic CONCEPT_SCENE → "overlay_corner" (it rides over
-  the talking creator so the ad stays continuous and lively). Reserve "cut" for
-  the few high-impact beats that deserve the full screen: HOOK reveal, PAIN raw
-  shot, product DEMO (PRODUCT_IN_ACTION), visible BEFORE/AFTER, and the CTA trust
-  close. So a finished ad is mostly creator-with-overlays, punctuated by a few
-  full-screen cuts — NOT a slideshow of back-to-back cuts.
-- CTA SCENE RULE — for the FINAL beat (anchorBlock = "cta", the line asking the
-  viewer to buy/click/order), the visual job is a personal TRUST CLOSE. The IDEAL
-  is the CREATOR holding the product up beside their face + a THUMBS-UP + an
-  approving smile/nod — a "trust me, try this" endorsement (use PRODUCT_IN_ACTION
-  with that as the conceptPrompt). NEVER use POINT_LABEL for the CTA (it renders
-  the product ALONE with no creator face — no endorsement) and NEVER use
-  PHONE_SCROLL (generic doom-scrolling, zero purchase intent). The viewer must
-  see the creator personally vouching for the product at the close.
-- BEFORE/AFTER RULE — **HARD BAN, NO EXCEPTIONS**. Read this twice:
-
-    BEFORE_AFTER_REACTION animates ONLY the model's FACE (tired → relieved).
-    The body part / object being claimed (teeth, skin, hair, scalp, nails)
-    NEVER appears in this preset. So it CANNOT show camera-visible results.
-
-    (a) INTERNAL / FELT result (energy ↑, sleep ↑, mood ↑, gut comfort,
-        focus, fatigue ↓, less anxiety, calmer stomach) → OK to use
-        BEFORE_AFTER_REACTION. The face going relieved IS the proof here.
-
-    (b) VISIBLE / EXTERNAL result — **BEFORE_AFTER_REACTION IS BANNED for
-        these. PICKING IT IS A BUG.** This covers ANY claim a camera can SEE:
-          • teeth: whiter / brighter / less yellow / less plaque
-          • skin: clearer / smoother / less acne / fewer wrinkles / brighter
-          • hair: thicker / fuller / longer / less falling / shinier / scalp regrowth
-          • body: slimmer / firmer / toned / lifted / less bloated
-          • marks/stains: faded / gone / lightened
-        For ANY of these, use a REAL before/after of the SAME person — NEVER a
-        single face/mouth/image split down the middle into two halves (that looks
-        fake/AI). Show TWO real testimonial photos of the SAME person: a BEFORE
-        shot (whole face/area, problem visible) and an AFTER shot (whole face/area,
-        improved). Realistic phone photo, natural light, NO cinematic / glow / CGI.
-        Examples:
-          • teeth: "Two real testimonial photos of the same woman side by side:
-            LEFT she smiles showing yellow stained teeth (before), RIGHT the SAME
-            woman smiles with clean white teeth (after). Real phone photo, natural
-            light. NOT one face split in half."
-          • skin: "Same woman, two real photos: before — cheek with visible acne;
-            after — same cheek clear and smooth. Authentic phone photo."
-          • hair: "Same person, two real photos: before — thinning hair; after —
-            fuller hair. Real phone shot, natural light."
-        If the script mentions BOTH (a) and (b) in one beat — e.g. "răng trắng
-        hơn và mình tự tin hơn" — pick (b) CONCEPT_SCENE. The visible proof is
-        the load-bearing claim for conversion; the felt-state is secondary.
-
-  DECISION TREE: before picking BEFORE_AFTER_REACTION, ask "is the result a
-  camera-visible body-part change?" If yes → switch to CONCEPT_SCENE. The
-  post-parse layer will OVERRIDE BEFORE_AFTER_REACTION → CONCEPT_SCENE
-  automatically when it detects a visible-result keyword in the script —
-  picking BEFORE_AFTER for a visible-result product just wastes your slot.
-
-- NO DUPLICATE PRESETS — never pick the same presetId twice. Even if the
-  script has two great moments for HOLD_PRODUCT (e.g. hook + CTA), the
-  second one MUST use a different preset (POINT_LABEL, SHOW_PACKAGE,
-  PRODUCT_CLOSEUP). A video that opens with the speaker holding the jar
-  and closes with the speaker holding the jar at the same angle looks
-  amateur. Vary the composition.
+- PRODUCT FORM — pick a fixed preset only if the product matches its assumed form
+  (OPEN_CAP = screw-cap bottle, TAKE_PILL = a solid pill, DRINK = sipped straight,
+  UNBOX = ships in a box, BAG_PRODUCT_PULL = fits a handbag). When unsure, use
+  PRODUCT_IN_ACTION and describe the real action — it's form-agnostic. DRINK/
+  TAKE_PILL are for genuinely SWALLOWED products only; a TOPICAL (tooth powder
+  brushed on, cream rubbed in, spray sprayed on) must be PRODUCT_IN_ACTION showing
+  the real application, never swallowed. (The engine auto-fixes a swallow preset
+  picked for a topical, but get it right.)
+- LAYOUT — set "cut" (replaces the creator full-screen) for high-impact REAL
+  beats: hook reveal, pain shot, product demo, visible before/after, CTA close,
+  and the 3D mechanism. Set "overlay_corner" (corner PIP while the creator keeps
+  talking) for SUPPORTING teaching illustrations (ingredient photos, claim
+  graphics, infographics). The engine auto-forces hand-drawn teaching graphics to
+  overlay, so the ad stays creator-led with pop-ups, punctuated by real cuts.
+- CTA close — the final "cta" beat is the creator holding the product up beside
+  their face + a thumbs-up endorsement ("trust me, try this"). The engine forces
+  this, so just anchor a scene to the "cta" block.
+- BEFORE/AFTER — for a VISIBLE result (whiter teeth, clearer skin, fuller hair,
+  faded marks) show a REAL before/after of the SAME person: TWO real testimonial
+  photos — a BEFORE shot (whole face/area, problem visible) and an AFTER shot
+  (improved) — realistic phone photo, natural light. NEVER one face/image split
+  down the middle (looks fake), NO cinematic/glow/CGI. For an INTERNAL/felt result
+  (energy, sleep, mood, focus) a face going tired → relieved is fine. (The engine
+  auto-switches BEFORE_AFTER_REACTION → a real before/after for visible results.)
+- Don't pick the same fixed preset twice — vary the composition (the engine
+  swaps duplicates automatically, but variety is better from the start).
 - SCENE COUNT — TARGET the FULL ${effBudget} scenes (matched to the ${dur}s
   length — the ad should feel RICH and fast, not sparse). Returning only ~half
   the budget makes a flat, talking-head-heavy ad. A normal product script has
@@ -758,42 +643,16 @@ DIRECTING RULES:
   lifestyle b-roll, a mood with no spoken anchor), or REPEATING the same idea.
   Returning fewer than ${floor} scenes on a normal product script is too flat /
   lazy — only drop below that if the script is genuinely thin.
-- CUT-TIME QUOTA (MANDATORY, think about this) — at least 40% of the ${dur}s
-  video MUST be CUT footage: real-footage scenes that REPLACE the creator
-  full-screen (layout:"cut"). That is ≥ ${cutSecNeeded}s of cuts ≈ AT LEAST
-  ${minCutScenes} cut scenes. CUT scenes show the REAL thing the line is about —
-  the product in hand / being used (brushing, rubbing, spraying, scooping the
-  powder), the BEFORE→AFTER on the actual body part, the visible result (white
-  teeth, clear skin), the package / badge, the creator demoing or holding +
-  endorsing it. Returning only 2-3 cuts is WRONG and lazy — count your cuts and
-  hit ${minCutScenes}.
-    • DON'T turn every teaching beat into an abstract hand-drawn sketch. For a
-      mechanism / ingredient / claim line, PREFER showing the REAL product (the
-      actual powder, the actual application, the actual result) as a CUT over a
-      generic illustration. Reach for PRODUCT_IN_ACTION / the fixed product
-      presets / BEFORE_AFTER for these — those render as real-footage cuts.
-    • EVERY REAL CUT MUST BE REALISTIC REAL FOOTAGE — a real person / real product
-      / real body part / real before-after, shot on a PHONE in natural light. NO
-      cinematic film-look, NO magical / fantasy / glowing / floating effects on a
-      real person or product. A cut is only what a phone camera could record.
-    • PRODUCT-MECHANISM is its OWN scene type (NOT a real cut, NOT a sketch). When
-      the line explains HOW THE PRODUCT WORKS — an ingredient/technology acting
-      on/inside the body ("amethyst rebuilds enamel", "charcoal absorbs plaque",
-      "nano delivers minerals deep into the tooth") — make a CONCEPT_SCENE for it.
-      The engine renders it as a clean 3D scientific animation (no people, no
-      text), full-screen. This is the ONLY place 3D/CGI is allowed. Do NOT mix it
-      with the creator's face. (Problem-cause scenes — "enamel eroding / bacteria
-      forming plaque" — are NOT product mechanism; keep those as hand-drawn
-      teaching overlays.)
-    • BEFORE/AFTER as a cut = the SAME real person shown BEFORE (problem) and
-      AFTER (improved), like a real testimonial — NEVER one face/image split down
-      the middle into two halves (that looks fake).
-    • ILLUSTRATION overlays (graphic CONCEPT_SCENE sketches / infographics,
-      layout:"overlay_corner") ride ON TOP of the talking creator and do NOT
-      count toward the 40%. Use as MANY as the script earns — NO limit. They add
-      teaching pop-ups while the creator keeps talking.
-  Hit the cut quota FIRST, then layer overlays freely on top. A pure-overlay ad
-  has no product realism.
+- CUT-TIME QUOTA — at least 40% of the ${dur}s video should be CUT footage
+  (real-footage scenes that REPLACE the creator, layout:"cut") ≈ ${minCutScenes}
+  cuts; don't go overlay-heavy with only 2-3. A CUT shows the REAL thing — the
+  product in hand / being used, the visible result, a real before/after, the
+  package, the creator demoing or endorsing. EVERY REAL CUT must look like real
+  phone footage: NO cinematic / fantasy / glowing / floating / CGI on a real
+  person or product. ILLUSTRATION overlays (teaching sketches / ingredient photos
+  / infographics, layout:"overlay_corner") ride on top of the creator, do NOT
+  count toward the 40%, and are unlimited. (The engine tops cuts up to 40% and
+  renders product-mechanism beats as 3D, so just aim true and it holds.)
 - "fit" = 0..1 how strongly the visual supports the line. "reason" = one short
   phrase in ${langName} explaining the choice (shown to the user).
 - BE CONCISE — HARD LIMITS: "conceptPrompt" ≤ 240 characters (one tight visual
