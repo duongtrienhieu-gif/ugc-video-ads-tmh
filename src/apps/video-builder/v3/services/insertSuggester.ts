@@ -822,6 +822,12 @@ OUTPUT strict JSON, no fences:
   const rewrite = { beforeAfter: 0, topical: 0, dupeSwap: 0, labeled: 0, labelLangDrop: 0, ctaClose: 0 }
 
   const seen = new Set<ActionPresetId>()
+  // Z98 — de-dupe free scenes by their conceptPrompt prefix. Free scenes are
+  // exempt from the preset-key dedup (their identity is the prompt), but the CTA
+  // close-rewrite OVERWRITES the prompt with a FIXED endorsement template, so two
+  // cta-anchored scenes end up byte-identical (the #10≡#11 duplicate). This also
+  // catches any other accidental repeat of the same concept.
+  const seenPrompts = new Set<string>()
   const out: InsertSuggestion[] = []
   for (const item of parsed) {
     if (!validPresets.has(item.presetId)) { drop.preset++; continue }
@@ -981,6 +987,14 @@ OUTPUT strict JSON, no fences:
         `the image MUST be written in ${langName} — NEVER English. This includes ` +
         `calendar day names, arrow labels, headings and any incidental caption. ` +
         `Only a brand/product name may stay as printed on the real product.`
+    }
+
+    // Z98 — drop a free scene whose conceptPrompt repeats one already emitted
+    // (the CTA endorsement template is identical across cta scenes → #10≡#11).
+    if (isFreeScene) {
+      const promptKey = conceptPrompt.toLowerCase().replace(/\s+/g, ' ').trim().slice(0, 160)
+      if (seenPrompts.has(promptKey)) { drop.dupeSkip++; continue }
+      seenPrompts.add(promptKey)
     }
 
     const durationSec = clampDuration(item.durationSec, presetId, renderMode)
