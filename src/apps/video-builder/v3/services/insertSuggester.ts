@@ -1181,6 +1181,13 @@ OUTPUT strict JSON, no fences:
 // how many were promoted. Promotion order = script order (keeps narrative flow).
 const ABSTRACT_RE = /\b(nano|molecul\w*|cross[- ]section|schematic|diagram|counter|graph|chart|infographic|icon|flag|badge|stamp|how it works|mechanism|statistic\w*|percentage|arrow|timeline|calendar)\b/i
 
+// Only the FIRST paragraph is the real scene description. The engine appends
+// "\n\nTEXT TO RENDER…" + "\n\nLANGUAGE: EVERY … calendar day names … arrow labels …"
+// boilerplate to labeled illustration scenes — those words would otherwise poison
+// the abstract check (calendar/arrow are in ABSTRACT_RE) and wrongly skip every
+// labeled overlay. So test + rebuild from the base description only.
+const baseDesc = (s: InsertSuggestion) => (s.conceptPrompt ?? '').split('\n\n')[0].trim()
+
 function promoteCutsToQuota(scenes: InsertSuggestion[], cutSecNeeded: number): number {
   const cutSec = () => scenes
     .filter((s) => s.layout !== 'overlay_corner')
@@ -1191,7 +1198,7 @@ function promoteCutsToQuota(scenes: InsertSuggestion[], cutSecNeeded: number): n
     s.layout === 'overlay_corner' &&
     typeof s.conceptPrompt === 'string' &&
     s.conceptPrompt.length > 0 &&
-    !ABSTRACT_RE.test(s.conceptPrompt),
+    !ABSTRACT_RE.test(baseDesc(s)),
   )
 
   let promoted = 0
@@ -1199,7 +1206,7 @@ function promoteCutsToQuota(scenes: InsertSuggestion[], cutSecNeeded: number): n
     if (cutSec() >= cutSecNeeded) break
     s.layout = 'cut'
     s.renderMode = 'video'  // real footage (i2v), not a ken_burns illustration
-    const cleaned = (s.conceptPrompt ?? '')
+    const cleaned = baseDesc(s)
       .replace(/\b(simple )?(hand[- ]drawn sketch|hand[- ]drawn|illustration|illustrated|animated graphic|graphic|drawing|infographic|ilustrasi|lakaran|sketch)\b/gi, 'real footage')
       .replace(/\s+/g, ' ')
       .trim()
