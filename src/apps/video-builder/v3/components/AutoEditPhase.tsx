@@ -3,32 +3,27 @@
 // see the edit plan visualised as a timeline, then Export (Phase 6).
 //
 // Layout (top-to-bottom):
-//   1. Style picker — 7 editing styles in a card grid
-//   2. Subtitle + BGM secondary pickers
-//   3. Generate plan button + status
-//   4. Plan summary KPI strip — segment count / caption count / zoom
-//      count / SFX count / total duration
-//   5. Timeline visualiser — colored bars per segment with caption /
-//      zoom / SFX markers
-//   6. Warnings panel — if planner detected anything off
-//   7. Export button (stub — Phase 6 wires ffmpeg.wasm)
+//   1. Generate plan button + status (style is auto-picked, no picker)
+//   2. Plan summary KPI strip — segment / zoom count / duration / CTA
+//   3. Timeline visualiser — colored bars per segment + zoom markers + CTA
+//   4. Warnings panel — if planner detected anything off
+//   5. Export button (Phase 6 — ffmpeg.wasm)
+//
+// Z98 — subtitles, SFX and BGM were all dropped from the engine, so this UI no
+// longer has subtitle/BGM/SFX pickers or rows. The planner always returns empty
+// captions/sfxCues + null bgm.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { useMemo, type CSSProperties } from 'react'
+import { useMemo } from 'react'
 import {
   Loader2, Sparkles, AlertCircle, ChevronRight, RotateCcw, Wand2,
-  Type, Music2, Zap, Play, Volume2, Megaphone, Download,
+  Zap, Play, Megaphone, Download,
   CheckCircle2,
 } from 'lucide-react'
 import { useAppStore } from '../../../../stores/appStore'
 import { useAdsVideoStore } from '../stores/adsVideoStore'
-import type {
-  AutoEditPlan, SubtitleStyleId,
-} from '../types'
-import {
-  EDITING_STYLES, SUBTITLE_STYLES,
-} from '../services/editingStyles'
-import { BGM_CATALOG } from '../services/bgmCatalog'
+import type { AutoEditPlan } from '../types'
+import { EDITING_STYLES } from '../services/editingStyles'
 import { buildAutoEditPlan, validatePlan } from '../services/autoEditPlanner'
 
 const TONE_BG: Record<string, string> = {
@@ -44,19 +39,8 @@ interface Props {
   onContinue: () => void
 }
 
-// Z96 — CSS mirror of the burned-in .ass subtitle styles (subtitleAssBurner) so
-// the user can PREVIEW each style instead of picking blind. Approximates
-// font-weight / colour / outline of the real render.
-const SUBTITLE_PREVIEW_CSS: Record<string, CSSProperties> = {
-  bold_creator:      { color: '#ffffff', fontWeight: 900, WebkitTextStroke: '1.5px #000', textShadow: '0 2px 5px rgba(0,0,0,.7)', fontSize: 21 },
-  minimal:           { color: '#ffffff', fontWeight: 400, textShadow: '0 1px 3px rgba(0,0,0,.85)', fontSize: 15 },
-  aggressive_tiktok: { color: '#FBBF24', fontWeight: 900, WebkitTextStroke: '2px #000', textShadow: '0 2px 5px #000', textTransform: 'uppercase', fontSize: 23 },
-  clean_ugc:         { color: '#FAFCF8', fontWeight: 700, WebkitTextStroke: '0.6px #1B233E', textShadow: '0 1px 4px rgba(27,35,62,.85)', fontSize: 17 },
-}
-
 export default function AutoEditPhase({ onContinue }: Props) {
   const state = useAdsVideoStore((s) => s.state)
-  const setSubtitleStyle   = useAdsVideoStore((s) => s.setSubtitleStyle)
   const setAutoEditPlan    = useAdsVideoStore((s) => s.setAutoEditPlan)
   const setIsGeneratingPlan = useAdsVideoStore((s) => s.setIsGeneratingPlan)
   const setAutoEditError   = useAdsVideoStore((s) => s.setAutoEditError)
@@ -102,7 +86,7 @@ export default function AutoEditPhase({ onContinue }: Props) {
         })
         setAutoEditPlan(plan)
         addToast(
-          `✓ Edit plan: ${plan.segments.length} segments · ${plan.captions.length} captions · ${plan.punchZooms.length} zooms · ${plan.totalDurationSec.toFixed(1)}s`,
+          `✓ Edit plan: ${plan.segments.length} segments · ${plan.punchZooms.length} zooms · ${plan.totalDurationSec.toFixed(1)}s`,
           'success',
         )
       } catch (err) {
@@ -139,7 +123,7 @@ export default function AutoEditPhase({ onContinue }: Props) {
         <div className="mb-4">
           <h2 className="text-lg font-bold text-gray-900">Bước 4 — Auto Edit (conversion layer)</h2>
           <p className="text-[12px] text-gray-500">
-            Tạo edit plan TikTok-native: cuts, captions, punch zooms, SFX, BGM, CTA overlay.
+            Tạo edit plan TikTok-native: cuts, punch zooms, CTA overlay.
             Plan deterministic — không gọi AI ở phase này, free re-roll.
           </p>
         </div>
@@ -151,52 +135,6 @@ export default function AutoEditPhase({ onContinue }: Props) {
             Tự dùng <b>video creator + {renderedInserts.length} insert</b> đã render (đã trả phí ở bước 2 — không cần duyệt lại).
             Đạo diễn AI tự chọn nhịp dựng phù hợp.
           </span>
-        </div>
-
-        {/* ── Subtitle picker (the one creative choice the user still makes) ── */}
-        <div className="mb-4">
-          <div className="rounded-xl border border-black/10 bg-white p-3">
-            <p className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-widest text-gray-500">
-              <Type className="h-3.5 w-3.5" /> Subtitle style
-            </p>
-            <div className="mt-2 flex flex-wrap gap-1.5">
-              {(['bold_creator', 'minimal', 'aggressive_tiktok', 'clean_ugc', 'none'] as SubtitleStyleId[]).map((s) => {
-                const cfg = SUBTITLE_STYLES[s]
-                const isActive = autoEdit.subtitleStyleId === s
-                return (
-                  <button
-                    key={s}
-                    onClick={() => setSubtitleStyle(s)}
-                    disabled={autoEdit.isGenerating}
-                    className={`rounded-full border px-2.5 py-1 text-[10px] font-semibold transition-all ${
-                      isActive ? 'border-violet-400 bg-violet-100 text-violet-800' : 'border-gray-200 bg-white text-gray-500 hover:bg-gray-50'
-                    }`}
-                  >
-                    {cfg.labelVi}
-                  </button>
-                )
-              })}
-            </div>
-            {/* Z96 — live preview of the selected subtitle style (no render). */}
-            <div
-              className="mt-2 flex items-end justify-center rounded-lg bg-gradient-to-b from-gray-600 to-gray-900 px-3 py-4"
-              style={{ minHeight: 72 }}
-            >
-              {autoEdit.subtitleStyleId === 'none' ? (
-                <span className="text-[11px] italic text-gray-400">Không có phụ đề trên video</span>
-              ) : (
-                <span
-                  className="text-center"
-                  style={{ ...SUBTITLE_PREVIEW_CSS[autoEdit.subtitleStyleId], lineHeight: 1.15 }}
-                >
-                  Đây là phụ đề mẫu
-                </span>
-              )}
-            </div>
-            <p className="mt-1 text-center text-[9px] text-gray-400">
-              Xem trước kiểu chữ phụ đề sẽ burn dưới video — bấm kiểu khác để đổi.
-            </p>
-          </div>
         </div>
 
         {/* ── Generate banner ────────────────────────────────────────────── */}
@@ -236,12 +174,10 @@ export default function AutoEditPhase({ onContinue }: Props) {
         {/* ── Plan summary + visualiser ───────────────────────────────────── */}
         {autoEdit.plan && (
           <>
-            <div className="mb-3 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
+            <div className="mb-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
               <Kpi label="Duration"  value={`${autoEdit.plan.totalDurationSec.toFixed(1)}s`} icon={Play} tone="violet" />
               <Kpi label="Segments"  value={autoEdit.plan.segments.length} icon={Zap} tone="emerald" />
-              <Kpi label="Captions"  value={autoEdit.plan.captions.length} icon={Type} tone="amber" />
               <Kpi label="Zooms"     value={autoEdit.plan.punchZooms.length} icon={Zap} tone="pink" />
-              <Kpi label="SFX cues"  value={autoEdit.plan.sfxCues.length} icon={Volume2} tone="sky" />
               <Kpi label="CTA"       value={autoEdit.plan.cta ? 'YES' : 'NO'} icon={Megaphone} tone={autoEdit.plan.cta ? 'rose' : 'sky'} />
             </div>
 
@@ -352,45 +288,6 @@ function EditTimelineViewer({ plan }: { plan: AutoEditPlan }) {
         </div>
       )}
 
-      {/* SFX cues row */}
-      {plan.sfxCues.length > 0 && (
-        <div className="mt-3">
-          <p className="mb-0.5 text-[9px] font-bold uppercase tracking-widest text-gray-500">SFX</p>
-          <div className="relative h-3 w-full">
-            {plan.sfxCues.map((s, i) => (
-              <div
-                key={i}
-                className="absolute top-0 h-3 w-1 rounded bg-sky-500"
-                style={{ left: pctOf(s.startSec) }}
-                title={`${s.sfxId} @ ${s.startSec.toFixed(1)}s · vol ${s.volume.toFixed(2)}`}
-              />
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Captions row */}
-      {plan.captions.length > 0 && (
-        <div className="mt-3">
-          <p className="mb-0.5 text-[9px] font-bold uppercase tracking-widest text-gray-500">
-            Captions ({plan.captions.length})
-          </p>
-          <div className="relative h-2 w-full overflow-hidden rounded-md bg-gray-50">
-            {plan.captions.map((c, i) => (
-              <div
-                key={i}
-                className={`absolute top-0 h-full ${c.emphasised ? 'bg-amber-400' : 'bg-emerald-300'}`}
-                style={{
-                  left: pctOf(c.startSec),
-                  width: `${Math.max(0.2, ((c.endSec - c.startSec) / total) * 100)}%`,
-                }}
-                title={`"${c.text}" @ ${c.startSec.toFixed(1)}-${c.endSec.toFixed(1)}s${c.emphasised ? ' ★' : ''}`}
-              />
-            ))}
-          </div>
-        </div>
-      )}
-
       {/* CTA marker */}
       {plan.cta && (
         <div className="mt-3 rounded-md border border-rose-200 bg-rose-50 p-2">
@@ -404,18 +301,6 @@ function EditTimelineViewer({ plan }: { plan: AutoEditPlan }) {
         </div>
       )}
 
-      {/* BGM row */}
-      {plan.bgm && (
-        <div className="mt-3 flex items-center gap-2 rounded-md border border-violet-200 bg-violet-50 p-2 text-[10px]">
-          <Music2 className="h-3 w-3 text-violet-700" />
-          <span className="font-bold text-violet-900">
-            {BGM_CATALOG[plan.bgm.styleId].emoji} {BGM_CATALOG[plan.bgm.styleId].labelVi}
-          </span>
-          <span className="text-violet-700">
-            vol {Math.round(plan.bgm.volume * 100)}% · fade-in {plan.bgm.fadeInSec}s · fade-out {plan.bgm.fadeOutSec}s
-          </span>
-        </div>
-      )}
     </div>
   )
 }
