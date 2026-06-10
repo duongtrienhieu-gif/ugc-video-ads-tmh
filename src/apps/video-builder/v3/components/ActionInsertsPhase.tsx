@@ -16,7 +16,7 @@
 import { useState, useRef, useEffect } from 'react'
 import {
   Loader2, Sparkles, AlertCircle, ChevronRight, Play, Pause, RotateCcw,
-  Check, ThumbsDown, Lock, Unlock, X, Plus, Trash2, Lightbulb, Zap, Wand2,
+  Check, ThumbsDown, Lock, Unlock, X, Plus, Trash2, Lightbulb, Zap, Wand2, Mic,
 } from 'lucide-react'
 import { useAppStore } from '../../../../stores/appStore'
 import { useSettingsStore } from '../../../../stores/settingsStore'
@@ -27,6 +27,7 @@ import {
   estimateInsertCredits, formatCredits, defaultInsertRenderMode,
   type ActionPresetId, type ActionInsertClip, type InsertRenderStage,
   type InsertRenderMode, type V3ClipStatus, type GeneratedScript,
+  type VoiceFirstSlot,
 } from '../types'
 import { ACTION_PRESETS, ACTION_PRESET_ORDER } from '../services/actionPresets'
 import {
@@ -75,6 +76,31 @@ const STAGE_BAR_COLOR: Record<InsertRenderStage, string> = {
 
 interface Props {
   onContinue: () => void
+}
+
+// Z98 — voice-first player. The REAL voice is synthesized at Step 2 BEFORE the
+// director runs; surface it here so the user can LISTEN to it (it's the exact
+// voice the director timed the B-roll to, and the one reused for lipsync).
+function VoiceFirstBar({ voice }: { voice: VoiceFirstSlot }) {
+  const url = useAssetUrl(voice.voiceRef)
+  return (
+    <div className="mb-4 flex flex-wrap items-center gap-3 rounded-xl border border-violet-200 bg-gradient-to-r from-violet-50 to-pink-50 px-3 py-2.5">
+      <div className="flex shrink-0 items-center gap-1.5 text-[12px] font-bold text-violet-900">
+        <Mic className="h-4 w-4 text-violet-600" />
+        Giọng đọc thật · {voice.voiceDurationSec.toFixed(1)}s
+      </div>
+      {url ? (
+        <audio controls src={url} preload="metadata" className="h-8 min-w-[220px] flex-1" />
+      ) : (
+        <span className="flex items-center gap-1 text-[11px] text-violet-500">
+          <Loader2 className="h-3 w-3 animate-spin" /> Đang tải giọng…
+        </span>
+      )}
+      <span className="shrink-0 text-[10px] text-violet-500">
+        Đạo diễn chia cảnh B-roll theo đúng độ dài này (1.2×) — cũng là giọng dùng cho lipsync
+      </span>
+    </div>
+  )
 }
 
 export default function ActionInsertsPhase({ onContinue }: Props) {
@@ -555,6 +581,9 @@ export default function ActionInsertsPhase({ onContinue }: Props) {
             <strong> Khôi phục</strong> trên thẻ để lấy lại video đã trả tiền — không tốn thêm credit.
           </p>
         </div>
+
+        {/* ── Z98 — voice-first player (listen to the real voice the director used) ── */}
+        {state.voiceFirst && <VoiceFirstBar voice={state.voiceFirst} />}
 
         {/* ── Smart suggestions (Gemini semantic) ─────────────────────────── */}
         {state.scriptBrain.script && (
