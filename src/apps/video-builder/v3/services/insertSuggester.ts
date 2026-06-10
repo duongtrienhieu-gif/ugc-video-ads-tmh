@@ -1171,13 +1171,15 @@ OUTPUT strict JSON, no fences:
 }
 
 // Z98 — HARD cut-quota enforcement. Promote overlay illustrations into real-
-// footage CUTS until cut footage ≥ the 40% quota. Only FILMABLE subjects are
-// promotable (a person / body-part / product / result / before-after — things a
-// camera can really shoot). Abstract data + mechanism graphics (molecular
-// diagrams, counters, badges, "how it works") stay as overlays — they only work
-// as illustrations. Mutates the scenes in place; returns how many were promoted.
-const FILMABLE_RE = /\b(creator|person|face|smil\w*|before\s*(and|&|\/|→|-)?\s*after|the same (person|creator)|holding|hold|applying|apply|brush\w*|spray\w*|scoop\w*|rubbing|product|packaging|package|powder|cream|serum|bottle|jar|macro|close[- ]?up|split[- ]screen|reaction|white teeth|whiter teeth)\b/i
-const ABSTRACT_RE = /\b(nano|molecul\w*|cross[- ]section|diagram|counter|graph|chart|infographic|icon|flag|badge|stamp|bacteria|plaque|erod\w*|erosion|penetrat\w*|absorb\w*|rebuild\w*|comparison|comparing|how it works|mechanism|statistic\w*|percentage|arrow|timeline|calendar)\b/i
+// footage CUTS until cut footage ≥ the 40% quota. ONLY pure diagram / data
+// graphics can't be filmed (molecular/cross-section diagrams, counters, badges,
+// "how it works") — skip just those. EVERYTHING else in a product ad (a product,
+// a body part, a result, a person, a before/after) can be shown as real footage,
+// so default to promotable. NOTE: body-state words (plaque, bacteria, eroded) are
+// deliberately NOT in ABSTRACT — "split-screen of teeth with plaque vs white" is a
+// perfectly filmable before/after, not a diagram. Mutates scenes in place; returns
+// how many were promoted. Promotion order = script order (keeps narrative flow).
+const ABSTRACT_RE = /\b(nano|molecul\w*|cross[- ]section|schematic|diagram|counter|graph|chart|infographic|icon|flag|badge|stamp|how it works|mechanism|statistic\w*|percentage|arrow|timeline|calendar)\b/i
 
 function promoteCutsToQuota(scenes: InsertSuggestion[], cutSecNeeded: number): number {
   const cutSec = () => scenes
@@ -1189,7 +1191,6 @@ function promoteCutsToQuota(scenes: InsertSuggestion[], cutSecNeeded: number): n
     s.layout === 'overlay_corner' &&
     typeof s.conceptPrompt === 'string' &&
     s.conceptPrompt.length > 0 &&
-    FILMABLE_RE.test(s.conceptPrompt) &&
     !ABSTRACT_RE.test(s.conceptPrompt),
   )
 
@@ -1199,7 +1200,7 @@ function promoteCutsToQuota(scenes: InsertSuggestion[], cutSecNeeded: number): n
     s.layout = 'cut'
     s.renderMode = 'video'  // real footage (i2v), not a ken_burns illustration
     const cleaned = (s.conceptPrompt ?? '')
-      .replace(/\b(hand[- ]drawn sketch|hand[- ]drawn|illustration|illustrated|animated graphic|graphic|drawing|infographic|ilustrasi|lakaran|sketch)\b/gi, 'real footage')
+      .replace(/\b(simple )?(hand[- ]drawn sketch|hand[- ]drawn|illustration|illustrated|animated graphic|graphic|drawing|infographic|ilustrasi|lakaran|sketch)\b/gi, 'real footage')
       .replace(/\s+/g, ' ')
       .trim()
     s.conceptPrompt =
