@@ -98,9 +98,13 @@ function buildComboPrompt(params: GenerateComboParams, hasLogoRef: boolean): str
   // Count enforcement. productCount is the authoritative source (user input);
   // fall back to parsing the description ("2 jars" → 2), then to 1.
   const count = c.productCount ?? extractCountFromDescription(c.description) ?? 1
+  // Use brief.productSubtype as the unit word (box / bottle / tube / sachet /
+  // patch box / pouch / blister pack / etc.) so we don't force a TPCN-bottle
+  // shape on non-bottle products like patches, sachets, devices, etc.
+  const unitWord = (params.brief?.productSubtype || 'unit').trim().toLowerCase()
   const countInstruction = count > 1
-    ? `Show EXACTLY ${count} bottle(s)/jar(s) of the product clearly visible, arranged side-by-side in a clean row. Each bottle must match the reference photos exactly (same color, shape, label).`
-    : `Show exactly 1 bottle/jar of the product centered, matching the reference photos.`
+    ? `Show EXACTLY ${count} ${unitWord}(s) of the product clearly visible, arranged side-by-side in a clean row. Each ${unitWord} must replicate the reference photos exactly (same color, shape, label, layout, packaging form).`
+    : `Show exactly 1 ${unitWord} of the product centered, matching the reference photos exactly.`
 
   // Count label — top-center pill, universal label table by count + market.
   // Sits on the BRAND GRADIENT (bottom zone), just below the white brand-seal zone.
@@ -113,9 +117,8 @@ function buildComboPrompt(params: GenerateComboParams, hasLogoRef: boolean): str
   return `1:1 square TikTok Shop VARIANT THUMBNAIL (1024×1024). ${productRefHint}
 
 PRODUCT FIDELITY (CRITICAL):
-- Render ONLY the inner product container (bottle, jar, tube, or primary container — the actual product item).
-- DO NOT include the outer cardboard packaging box/carton, even if the reference photos show it.
-- Each bottle must replicate refs EXACTLY: same color, shape, label, brand name. Do NOT redesign.
+- Render the product's PRIMARY SALES UNIT exactly as it appears in the reference photos — the customer-facing packaging that's actually purchased and shipped. This can be ANY form: bottle, jar, tube, box, carton, sachet, blister pack, patch pouch, tin, pouch, capsule pack, etc. DO NOT substitute one form for another (e.g., do not render bottles of pills when the actual product is a patch in a box, or a tube when the actual product is a sachet).
+- Replicate refs EXACTLY: same color, shape, label layout, brand name, packaging material. Do NOT redesign or stylize.
 - ${countInstruction}${briefBlock}
 
 === BACKGROUND — full canvas brand gradient ===
@@ -138,7 +141,7 @@ PRODUCT FIDELITY (CRITICAL):
 ${labelPillSpec}
 
 LAYOUT (combo product fills the brand gradient bottom zone, y≥300):
-- Product zone: FULL WIDTH centered (y≈360-870), ${count} bottle(s) side-by-side standing upright on a subtle podium/surface. Hero focus on the product — no price overlays, no number callouts.
+- Product zone: FULL WIDTH centered (y≈360-870), ${count} ${unitWord}(s) side-by-side resting on a subtle podium/surface (standing upright if the unit is a bottle/tube; lying flat if the unit is a flat box/sachet/blister — match the natural display pose for this packaging type). Hero focus on the product — no price overlays, no number callouts.
 
 VARIANT LABEL: At bottom-center (y≈920), white rounded rect with name "${c.name}" inside (~28px medium dark navy bold).
 
