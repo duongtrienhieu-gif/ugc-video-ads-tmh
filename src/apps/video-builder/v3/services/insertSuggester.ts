@@ -772,21 +772,26 @@ DIRECTING RULES:
       actual powder, the actual application, the actual result) as a CUT over a
       generic illustration. Reach for PRODUCT_IN_ACTION / the fixed product
       presets / BEFORE_AFTER for these — those render as real-footage cuts.
-    • EVERY CUT MUST BE REALISTIC REAL FOOTAGE — a real person / real product /
-      real body part / real before-after, shot on a PHONE in natural light. NO
-      cinematic film-look, NO magical / fantasy / glowing / floating / CGI / sci-fi
-      effects. A "how it works" MECHANISM (an ingredient acting INSIDE the body —
-      "amethyst repairing enamel", "charcoal absorbing plaque", "particles sinking
-      into the tooth") is NOT filmable for real → make it an OVERLAY diagram,
-      NEVER a cut. A cut is only something a phone camera could actually record.
+    • EVERY REAL CUT MUST BE REALISTIC REAL FOOTAGE — a real person / real product
+      / real body part / real before-after, shot on a PHONE in natural light. NO
+      cinematic film-look, NO magical / fantasy / glowing / floating effects on a
+      real person or product. A cut is only what a phone camera could record.
+    • PRODUCT-MECHANISM is its OWN scene type (NOT a real cut, NOT a sketch). When
+      the line explains HOW THE PRODUCT WORKS — an ingredient/technology acting
+      on/inside the body ("amethyst rebuilds enamel", "charcoal absorbs plaque",
+      "nano delivers minerals deep into the tooth") — make a CONCEPT_SCENE for it.
+      The engine renders it as a clean 3D scientific animation (no people, no
+      text), full-screen. This is the ONLY place 3D/CGI is allowed. Do NOT mix it
+      with the creator's face. (Problem-cause scenes — "enamel eroding / bacteria
+      forming plaque" — are NOT product mechanism; keep those as hand-drawn
+      teaching overlays.)
     • BEFORE/AFTER as a cut = the SAME real person shown BEFORE (problem) and
       AFTER (improved), like a real testimonial — NEVER one face/image split down
       the middle into two halves (that looks fake).
     • ILLUSTRATION overlays (graphic CONCEPT_SCENE sketches / infographics,
       layout:"overlay_corner") ride ON TOP of the talking creator and do NOT
       count toward the 40%. Use as MANY as the script earns — NO limit. They add
-      teaching pop-ups while the creator keeps talking. Mechanism / "how it works"
-      / data scenes BELONG here as overlays, not as cuts.
+      teaching pop-ups while the creator keeps talking.
   Hit the cut quota FIRST, then layer overlays freely on top. A pure-overlay ad
   has no product realism.
 - "fit" = 0..1 how strongly the visual supports the line. "reason" = one short
@@ -957,11 +962,36 @@ OUTPUT strict JSON, no fences:
     //     fidelity required)
     //   • CONCEPT_SCENE → 'video' when motionKind='emotion' (real human/lifestyle
     //     motion needed); 'ken_burns' otherwise (cheap graphic/infographic)
+    // Z98 — MECHANISM → 3D. When the line explains HOW THE PRODUCT works (an
+    // ingredient/technology acting on/inside the body — restoring enamel,
+    // absorbing plaque, nano delivering minerals into the tooth) it is NOT
+    // filmable as real footage. Instead of a hand-drawn overlay OR a surreal
+    // avatar+magic cut, render it as a clean 3D scientific animation (no person),
+    // full-screen cut. Marked via a conceptPrompt prefix the renderer detects.
+    const is3D = presetId === 'CONCEPT_SCENE' &&
+      MECHANISM_RE.test(`${typeof item.quote === 'string' ? item.quote : ''} ${conceptPrompt}`)
     const isEmotionConcept = presetId === 'CONCEPT_SCENE' && motionKind === 'emotion'
     const renderMode: InsertRenderMode =
-      presetId === 'CONCEPT_SCENE'
-        ? (isEmotionConcept ? 'video' : 'ken_burns')
-        : 'video'
+      is3D ? 'video'
+        : presetId === 'CONCEPT_SCENE'
+          ? (isEmotionConcept ? 'video' : 'ken_burns')
+          : 'video'
+
+    // Z98 — rebuild a mechanism scene as a 3D scientific-animation prompt (no
+    // person, no text, no product). The renderer detects this "3D MECHANISM
+    // ANIMATION" prefix → switches to a 3D render style + drops the avatar.
+    // layout is forced to 'cut' below.
+    if (is3D) {
+      const core = conceptPrompt
+        .split('\n\n')[0]
+        .replace(/\b(simple |friendly )?(hand[- ]drawn sketch|hand[- ]drawn|illustration|illustrated|animated graphic|animation|graphic|drawing|infographic|ilustrasi|lakaran|sketch|labeled|split[- ]screen)\b/gi, '')
+        .replace(/\s+/g, ' ').trim()
+      conceptPrompt =
+        `3D MECHANISM ANIMATION (no people, no text): clean photorealistic 3D ` +
+        `scientific / medical animation showing ${core}. Studio 3D render, ` +
+        `cross-section / macro view of the body part, smooth depth of field, soft ` +
+        `clinical light. NO human, NO avatar, NO text labels, NO product packaging.`
+    }
 
     // Z56 — hard-inject the structured labels into the conceptPrompt as an
     // explicit "render this text" instruction. The Director kept dropping
@@ -1053,7 +1083,9 @@ OUTPUT strict JSON, no fences:
     // Director's choice (defaulting to 'cut' for full focus).
     const isStaticIllustration = presetId === 'CONCEPT_SCENE' && renderMode === 'ken_burns'
     const layout: InsertLayout =
-      isStaticIllustration ? 'overlay_corner' : (directorLayout ?? 'cut')
+      is3D ? 'cut'                                  // Z98 — 3D mechanism = full-screen cut
+        : isStaticIllustration ? 'overlay_corner'
+        : (directorLayout ?? 'cut')
     out.push({
       presetId,
       matchCount: 0,
@@ -1158,7 +1190,7 @@ OUTPUT strict JSON, no fences:
   const promotedCuts = promoteCutsToQuota(directed, cutSecNeeded)
   // Z98 — cut-quota telemetry. Cuts = real-footage scenes that replace the
   // creator (layout !== overlay_corner); overlays don't count toward the 40%.
-  const cutScenes = directed.filter((s) => s.layout !== 'overlay_corner')
+  const cutScenes = directed.filter((s) => s.layout !== 'overlay_corner' && !is3DScene(s))
   const cutSec = Math.round(cutScenes.reduce((sum, s) => sum + (s.durationSec ?? 4), 0))
   console.log(
     `[DIRECTOR] raw=${raw.length}ch parsed=${parsed.length} usable=${out.length} ` +
@@ -1205,6 +1237,18 @@ OUTPUT strict JSON, no fences:
 // Restoration" alone is NOT caught.)
 const ABSTRACT_RE = /\b(nano|molecul\w*|cross[- ]section|schematic|diagram|counter|graph|chart|infographic|icon|flag|badge|stamp|how it works|mechanism|statistic\w*|percentage|arrow|timeline|calendar|(restor|repair|rebuild|heal)\w* (the )?(enamel|tooth|teeth|gum|skin|hair|scalp|nail)|absorb\w* (the )?(plaque|plak|toxin|bacteria|dirt|kotoran|impurit)|penetrat\w*|sinking (deep )?into|deep into the|inside the (tooth|enamel|body|skin|hair)|glowing particle)\b/i
 
+// Z98 — PRODUCT MECHANISM = an ingredient/technology acting ON/INSIDE the body
+// (restoring enamel, absorbing plaque, nano delivering minerals into the tooth).
+// Can't be filmed for real → rendered as a 3D scientific animation (no person),
+// not real footage and not a hand-drawn overlay. Narrow on purpose: problem-cause
+// scenes (enamel ERODING, bacteria forming) and demos / before-after are NOT
+// mechanism and are left alone.
+const MECHANISM_RE = /\b((restor|repair|rebuild|remineral|strengthen|heal)\w* (the )?(enamel|tooth|teeth|gum|skin|hair|scalp|nail)|absorb\w* (the )?(plaque|plak|toxin|bacteria|dirt|kotoran|impurit|stain)|penetrat\w*|deliver\w*[^.]{0,25}(mineral|nutrient|ingredient)|nano[- ]?(tech|particle|mineral)|particles? (that )?(sink|enter|penetrat|go deep|absorb)|deep into the (tooth|enamel|skin|hair|root)|inside the (tooth|enamel|body|skin|hair))\b/i
+
+// Z98 — a scene that was rebuilt into a 3D mechanism animation (marked in prompt).
+// These are full-screen cuts but DON'T count toward the 40% real-footage quota.
+const is3DScene = (s: InsertSuggestion) => (s.conceptPrompt ?? '').startsWith('3D MECHANISM ANIMATION')
+
 // Only the FIRST paragraph is the real scene description. The engine appends
 // "\n\nTEXT TO RENDER…" + "\n\nLANGUAGE: EVERY … calendar day names … arrow labels …"
 // boilerplate to labeled illustration scenes — those words would otherwise poison
@@ -1214,7 +1258,7 @@ const baseDesc = (s: InsertSuggestion) => (s.conceptPrompt ?? '').split('\n\n')[
 
 function promoteCutsToQuota(scenes: InsertSuggestion[], cutSecNeeded: number): number {
   const cutSec = () => scenes
-    .filter((s) => s.layout !== 'overlay_corner')
+    .filter((s) => s.layout !== 'overlay_corner' && !is3DScene(s))
     .reduce((sum, s) => sum + (s.durationSec ?? 4), 0)
   if (cutSec() >= cutSecNeeded) return 0
 

@@ -93,6 +93,7 @@ function buildInsertKeyframePrompt(
   personRefIndex: number,
   conceptPrompt?: string,
   renderMode?: InsertRenderMode,
+  is3D = false,
 ): string {
   const preset = ACTION_PRESETS[presetId]
   const paragraphs: string[] = []
@@ -155,7 +156,17 @@ function buildInsertKeyframePrompt(
     // abstract art with no labels. We now DEFER to the conceptPrompt and only
     // add non-conflicting guards (these apply to both looks):
     const isGraphic = renderMode === 'ken_burns'
-    if (isGraphic) {
+    if (is3D) {
+      // Z98 — clean 3D scientific animation for a product-mechanism beat. No
+      // person, no product, no text — a premium commercial mechanism shot.
+      paragraphs.push(
+        'STYLE: Clean photorealistic 3D scientific / medical ANIMATION render — like a ' +
+        'premium toothpaste / skincare commercial mechanism shot. Smooth studio 3D, ' +
+        'cross-section or macro of the body part, soft depth of field, soft clinical ' +
+        'light. NO people, NO avatar, NO hands, NO text / labels, NO product packaging, ' +
+        'NO hand-drawn / sketch / cartoon / flat-illustration look. Photoreal 3D only.',
+      )
+    } else if (isGraphic) {
       // Graphic concept (ken_burns): infographic OR realistic — conceptPrompt
       // decides. Text labels are ALLOWED here (infographics need them).
       paragraphs.push(
@@ -238,7 +249,9 @@ function buildInsertKeyframePrompt(
  *    • PRODUCT_IN_ACTION — the person uses/applies the product (brush, rub…)
  *    • CONCEPT_SCENE + video (emotion) — a person expressing a feeling
  *  Graphic CONCEPT_SCENE (ken_burns infographic) has NO person → no avatar. */
-function usesAvatarRef(presetId: ActionPresetId, renderMode?: InsertRenderMode): boolean {
+function usesAvatarRef(presetId: ActionPresetId, renderMode?: InsertRenderMode, is3D = false): boolean {
+  // Z98 — a 3D mechanism animation has NO person, even though it's a video concept.
+  if (is3D) return false
   if (['HOLD_PRODUCT', 'DRINK', 'TAKE_PILL', 'BEFORE_AFTER_REACTION', 'PRODUCT_IN_ACTION'].includes(presetId)) {
     return true
   }
@@ -257,17 +270,19 @@ async function resolveRefs(
   avatar: Model | null,
   creatorKeyframeRef?: string,
   renderMode?: InsertRenderMode,
+  is3D = false,
 ): Promise<{ refs: string[]; productRefIndex: number; personRefIndex: number }> {
   const refs: string[] = []
   let productRefIndex = 0
   let personRefIndex = 0
-  if (preset.needsProduct && product?.productImage) {
+  // Z98 — a 3D mechanism animation shows no product + no person.
+  if (preset.needsProduct && product?.productImage && !is3D) {
     const url = isAssetRef(product.productImage)
       ? await getUrl(product.productImage)
       : product.productImage
     if (url) { refs.push(url); productRefIndex = refs.length }
   }
-  if (usesAvatarRef(preset.id, renderMode)) {
+  if (usesAvatarRef(preset.id, renderMode, is3D)) {
     // Chain anchor first, raw avatar portrait second.
     const personRef = creatorKeyframeRef ?? avatar?.characterImage
     if (personRef) {
@@ -286,8 +301,11 @@ export async function renderInsert(
   if (params.signal?.aborted) throw new Error('CANCELLED — user huỷ')
 
   const preset = ACTION_PRESETS[params.presetId]
+  // Z98 — a mechanism scene rebuilt into a clean 3D scientific animation (no
+  // person, no product). Marked by the director layer via this conceptPrompt prefix.
+  const is3D = (params.conceptPrompt ?? '').startsWith('3D MECHANISM ANIMATION')
   const { refs: filesUrl, productRefIndex, personRefIndex } = await resolveRefs(
-    preset, params.product, params.avatar, params.creatorKeyframeRef, params.renderMode,
+    preset, params.product, params.avatar, params.creatorKeyframeRef, params.renderMode, is3D,
   )
 
   // Z37 — the scene verb that drives the Kling motion prompts (Stage 2/3).
@@ -310,7 +328,7 @@ export async function renderInsert(
 
   const keyframePromptUsed = buildInsertKeyframePrompt(
     params.presetId, params.product, productRefIndex, personRefIndex,
-    params.conceptPrompt, params.renderMode,
+    params.conceptPrompt, params.renderMode, is3D,
   )
   console.log(`[INSERT ${params.presetId}] Stage 1 keyframe prompt len=${keyframePromptUsed.length}, refs=${filesUrl.length}`)
 
@@ -387,7 +405,7 @@ export async function renderInsert(
   // SPEECH ONLY, never mouth movement: scenes like brushing teeth / applying
   // the product MUST be able to open the mouth for the action — we only stop
   // it from forming words. Applies to any scene that features a person.
-  const personPresent = usesAvatarRef(params.presetId, params.renderMode)
+  const personPresent = usesAvatarRef(params.presetId, params.renderMode, is3D)
   const noSpeech = personPresent
     ? ' IMPORTANT: the person does NOT speak, talk, or mouth any words — no dialogue, no lip-syncing of speech, no conversation. The mouth may still open naturally as the physical action requires (e.g. brushing teeth, applying the product, an open relaxed smile); it simply never forms words. The creator voiceover owns all speech.'
     : ''
