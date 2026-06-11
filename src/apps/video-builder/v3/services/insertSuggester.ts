@@ -801,15 +801,29 @@ OUTPUT strict JSON, no fences:
     // ANIMATION" prefix → switches to a 3D render style + drops the avatar.
     // layout is forced to 'cut' below.
     if (is3D) {
+      // Z98 V1a — also strip SURFACE-ACTION phrases from the director's core.
+      // The director still sometimes writes "a drop applied to the back of a hand,
+      // then massaged into the skin" inside a 3D MECHANISM beat — the image model
+      // honors that surface description and renders a close-up of a real hand
+      // instead of an inside-the-body cross-section. Strip the surface verb/body
+      // surface ("hand / face / finger / applied to / massaged into / patted onto /
+      // tay / mặt / ngón / xoa lên / vỗ vào / tangan / muka / sapu pada") + the
+      // illustration vocab so what reaches the image model is "what is happening
+      // INSIDE the body", not "a hand doing something on top of the skin".
       const core = conceptPrompt
         .split('\n\n')[0]
         .replace(/\b(simple |friendly )?(hand[- ]drawn sketch|hand[- ]drawn|illustration|illustrated|animated graphic|animation|graphic|drawing|infographic|ilustrasi|lakaran|sketch|labeled|split[- ]screen)\b/gi, '')
+        .replace(/\b(the |a |an )?(back of (a |the )?hand|back of hand|hand|hands|finger\w*|face|cheek\w*|forehead|mouth|lips|tay|bàn tay|ngón\w*|mặt|má|trán|miệng|tangan|jari|muka|wajah|pipi)\b/gi, '')
+        .replace(/\b(being |gently |slowly |then )?(applied (to|onto|on)|massaged (into|onto)|rubbed (into|onto)|patted (onto|into)|poured (onto|on)|dropped (onto|on)|wiped (on|onto)|xoa (lên|vào)|vỗ (lên|vào)|bôi (lên|vào)|sapu (pada|ke)|gosok (pada|ke)|titis(kan)? ke)\b/gi, '')
         .replace(/\s+/g, ' ').trim()
       conceptPrompt =
         `3D MECHANISM ANIMATION (no people, no text): clean photorealistic 3D ` +
-        `scientific / medical animation showing ${core}. Studio 3D render, ` +
-        `cross-section / macro view of the body part, smooth depth of field, soft ` +
-        `clinical light. NO human, NO avatar, NO text labels, NO product packaging.`
+        `scientific / medical animation showing what happens INSIDE the body ` +
+        `at the molecular / cellular level — ${core}. Cross-section / macro view ` +
+        `of the internal microstructure (cells, fibers, layers). Studio 3D render, ` +
+        `smooth depth of field, soft clinical light. NO human, NO avatar, NO hand, ` +
+        `NO face, NO finger, NO surface skin, NO text labels, NO product packaging — ` +
+        `the camera is INSIDE the body, not looking at it from outside.`
     }
 
     // Z56 — hard-inject the structured labels into the conceptPrompt as an

@@ -8,7 +8,7 @@ import { useAppStore } from '../../../stores/appStore'
 import { useBankStore } from '../../../stores/bankStore'
 import { useAssetUrl } from '../../../hooks/useAssetUrl'
 
-const EMPTY: CloneFields = { expression: '', outfit: '', background: '' }
+const EMPTY: CloneFields = { expression: '', outfit: '', background: '', headscarf: '' }
 
 /**
  * "Tạo Avatar Clone" — upload a face, keep it (no drift), restyle only
@@ -154,6 +154,7 @@ export default function CloneStudio() {
             <ChipField fieldKey="clone_expression" label="Biểu cảm" value={fields.expression} chips={CLONE_FIELD_CHIPS.expression} onChange={(v) => setField('expression', v)} placeholder="Chọn hoặc nhập biểu cảm..." />
             <ChipField fieldKey="clone_outfit" label="Trang phục" value={fields.outfit} chips={CLONE_FIELD_CHIPS.outfit} onChange={(v) => setField('outfit', v)} placeholder="Chọn hoặc nhập trang phục..." />
             <ChipField fieldKey="clone_background" label="Background / Bối cảnh" value={fields.background} chips={CLONE_FIELD_CHIPS.background} onChange={(v) => setField('background', v)} placeholder="Chọn hoặc nhập bối cảnh..." />
+            <ChipField fieldKey="clone_headscarf" label="Khăn đội đầu — màu (chỉ đổi nếu có khăn)" value={fields.headscarf} chips={CLONE_FIELD_CHIPS.headscarf} onChange={(v) => setField('headscarf', v)} placeholder="Để trống = giữ màu khăn gốc" />
           </div>
         </div>
       </div>

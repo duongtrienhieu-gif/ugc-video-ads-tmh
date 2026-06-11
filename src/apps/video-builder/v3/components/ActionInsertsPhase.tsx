@@ -151,14 +151,16 @@ export default function ActionInsertsPhase({ onContinue }: Props) {
   // Z39/Z68 — per-insert credit is mode-aware: 'video' = keyframe + Grok 1.5
   // i2v (~21cr); 'ken_burns' = keyframe-only (~6cr, the motion is a free local
   // ffmpeg zoom). Default chip shows the video price as the headline.
-  const insertCredits = estimateInsertCredits('video')
+  // Z98 — credit estimate now scales with the active resolution + the insert's
+  // duration so the UI chip matches what Grok will actually bill.
+  const insertCredits = estimateInsertCredits('video', insertResolution, 6)
   // Eligible inserts a "Bulk render" would actually pay for (skips
   // locked/approved/rejected per the Z26 lesson) — and their real summed cost,
   // honouring each card's render mode.
   const bulkEligible = listEligibleInsertsForBulk(inserts)
   const bulkPendingCount = bulkEligible.length
   const bulkCredits = bulkEligible.reduce(
-    (sum, it) => sum + estimateInsertCredits(it.renderMode ?? 'video'), 0,
+    (sum, it) => sum + estimateInsertCredits(it.renderMode ?? 'video', insertResolution, it.durationSec ?? 4), 0,
   )
 
   const overBudget = inserts.length > maxInserts
@@ -1076,7 +1078,7 @@ function InsertCard({
             </span>
           )}
           <span className="ml-auto text-[9px] font-semibold text-gray-400">
-            {formatCredits(estimateInsertCredits(mode)).replace(/ \(.*\)$/, '')}
+            {formatCredits(estimateInsertCredits(mode, insert.resolution, insert.durationSec)).replace(/ \(.*\)$/, '')}
           </span>
         </div>
 

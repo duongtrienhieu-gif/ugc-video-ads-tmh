@@ -159,7 +159,12 @@ export const COST_MODE_CONFIG: Record<CostMode, CostModeConfig> = {
 // Director decides how many within that range). STANDARD is that profile.
 // (TEST/FULL configs are kept so any old persisted state still resolves, but
 // nothing in the UI selects them anymore.)
-export const DEFAULT_COST_MODE: CostMode = 'STANDARD'
+// Z98 — default flipped STANDARD → TEST. User pivots on cost — 480p × 6s
+// (~16cr per insert) is the right starting point. STANDARD (720p × 8s, ~36cr)
+// was triple the cost without user opting in, and the UI cost chip was hard-
+// coded to the 480p estimate so the difference wasn't visible until the bill
+// arrived. STANDARD/FULL stay available as opt-ins via the cost-mode picker.
+export const DEFAULT_COST_MODE: CostMode = 'TEST'
 
 // ── Per-step credit cost estimates (Z36) ─────────────────────────────────────
 // Single source of truth for the cost labels shown on every render / continue
@@ -230,9 +235,28 @@ export type InsertRenderMode = 'video' | 'ken_burns'
 //                      so the viewer never loses the creator's face.
 export type InsertLayout = 'cut' | 'overlay_corner'
 
-export function estimateInsertCredits(mode: InsertRenderMode = 'video'): number {
+// Z98 — Grok i2v actual cost per second by resolution. The old constant
+// (INSERT_VIDEO_CREDITS = 10) was hard-coded to "480p × 6s ≈ 9.6 → 10cr" and
+// silently lied at 720p (~24cr for an 8s clip) and 1080p. UI cost chip now
+// scales correctly so the user sees what they will actually be billed.
+const GROK_I2V_CR_PER_SEC: Record<'480p' | '720p' | '1080p', number> = {
+  '480p': 1.6,
+  '720p': 3,
+  '1080p': 5,
+}
+
+export function estimateInsertCredits(
+  mode: InsertRenderMode = 'video',
+  resolution: '480p' | '720p' | '1080p' = '480p',
+  durationSec: number = 6,
+): number {
   if (mode === 'ken_burns') return V3_CREDIT_COST.keyframe
-  return V3_CREDIT_COST.keyframe + INSERT_VIDEO_CREDITS
+  // Mirror the renderer's clamp: Grok always renders 6-8s regardless of the
+  // director's durationSec, so we bill the user for what Grok will actually
+  // charge — never less than the clamp floor.
+  const billedSec = Math.max(6, Math.min(8, Math.ceil(durationSec)))
+  const videoCr = Math.round(GROK_I2V_CR_PER_SEC[resolution] * billedSec)
+  return V3_CREDIT_COST.keyframe + videoCr
 }
 
 // Concept scenes default to Ken Burns (they're abstract/static — the exact

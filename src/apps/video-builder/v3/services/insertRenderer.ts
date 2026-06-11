@@ -245,15 +245,25 @@ function buildInsertKeyframePrompt(
     )
     paragraphs.push(
       isAfterTime
-        ? `WARDROBE: DIFFERENT outfit from the reference photo AND from the ` +
-          `earlier problem/demo scenes — a casual change of clothes (a different ` +
-          `simple top), implying DAYS HAVE PASSED since the earlier scenes. The ` +
-          `background may shift slightly too (different time of day / light). ` +
-          `Same person, later moment in time — like a real KOC filming a "result" ` +
-          `update a few weeks after the original review.`
-        : `WARDROBE: A casual outfit DIFFERENT from the reference photo — a ` +
-          `simple change of clothes, same person filmed on a separate, earlier ` +
-          `day. This is NOT the same filming session as the talking-head video.`,
+        ? `WARDROBE: COMPLETELY DIFFERENT outfit from the reference photo AND ` +
+          `from the earlier problem/demo scenes — DO NOT copy or reuse ANY ` +
+          `clothing item from the reference (different top, different color, ` +
+          `different style). If the person wears any HEADWEAR in the reference ` +
+          `(hijab, scarf, hat, headband, turban, beanie, cap) — also CHANGE its ` +
+          `color or style; the headwear is part of the outfit, not part of the ` +
+          `identity. The background may shift too (different time of day, ` +
+          `different room corner). USE the reference ONLY for face / skin tone / ` +
+          `the person's identity — ignore the clothes and headwear. Implies DAYS ` +
+          `HAVE PASSED since the earlier scenes, like a real KOC filming a ` +
+          `"result" update a few weeks later.`
+        : `WARDROBE: COMPLETELY DIFFERENT outfit from the reference photo — DO ` +
+          `NOT copy or reuse ANY clothing item from the reference (different ` +
+          `top, different color, different style). If the person wears any ` +
+          `HEADWEAR in the reference (hijab, scarf, hat, headband, turban, ` +
+          `beanie, cap) — also CHANGE its color or style; the headwear is part ` +
+          `of the outfit, not part of the identity. USE the reference ONLY for ` +
+          `face / skin tone / the person's identity — ignore the clothes and ` +
+          `headwear. This is a different filming day from the talking-head video.`,
     )
   }
   // Z98 — REAL-WORLD SCALE lock. Universal anti-drift for any scene where the

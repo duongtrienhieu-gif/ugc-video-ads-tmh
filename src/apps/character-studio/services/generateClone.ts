@@ -17,13 +17,15 @@ export interface CloneFields {
   expression: string
   outfit: string
   background: string
+  headscarf: string   // optional — recolor an EXISTING hijab only
 }
 
-/** Curated chip suggestions for the 3 Clone fields. */
+/** Curated chip suggestions for the Clone fields. */
 export const CLONE_FIELD_CHIPS: Record<keyof CloneFields, string[]> = {
   expression: ['Natural smile', 'Genuine warm smile', 'Excited', 'Surprised', 'Confident', 'Mid-sentence talking', 'Soft laughing', 'Thoughtful', 'Serious/focused'],
   outfit: ['Casual athleisure', 'White tee + denim', 'Cozy knit sweater', 'Smart casual blazer', 'Minimalist beige set', 'Modest casual hijab outfit', 'Summer dress', 'Hoodie streetwear', 'Office business casual'],
   background: ['Soft blurred bedroom', 'Bright kitchen counter', 'Neutral studio wall', 'Cozy living room with plants', 'Coffee shop window light', 'Outdoor park, golden hour', 'Minimalist office', 'Car interior', 'Beach, soft daylight'],
+  headscarf: ['Coral pink', 'Dusty rose', 'Beige / cream', 'Ivory white', 'Smoky grey', 'Sage green', 'Terracotta', 'Black', 'Lavender', 'Navy blue', 'Soft brown'],
 }
 
 function pickRandom<T>(arr: T[]): T {
@@ -36,6 +38,7 @@ export function randomCloneFields(): CloneFields {
     expression: pickRandom(CLONE_FIELD_CHIPS.expression),
     outfit: pickRandom(CLONE_FIELD_CHIPS.outfit),
     background: pickRandom(CLONE_FIELD_CHIPS.background),
+    headscarf: '',  // keep original scarf colour unless the user picks one
   }
 }
 
@@ -43,7 +46,7 @@ export function randomCloneFields(): CloneFields {
 // "everything else stays identical", which made gpt-4o-image (an EDIT endpoint,
 // already very faithful to the input) just reproduce the reference unchanged.
 const CLONE_LOCK =
-  'KEEP the identity exactly: same face, bone structure, skin tone, eyes, nose, lips, eyebrows and ethnicity — it must clearly be the same individual, and keep the same headscarf/hijab if she wears one. Re-pose naturally to fit the new scene. Photorealistic, natural casual phone-selfie look.'
+  'KEEP the identity exactly: same face, bone structure, skin tone, eyes, nose, lips, eyebrows and ethnicity — it must clearly be the same individual. Keep her headscarf/hijab STYLE if she wears one (only recolor it when a headscarf color is requested above; never add a headscarf if she has none). Re-pose naturally to fit the new scene. Photorealistic, natural casual phone-selfie look.'
 
 /**
  * Generate ONE identity-locked clone. Uploads the face (if a raw File is given)
@@ -71,6 +74,7 @@ export async function generateClone(params: {
   if (params.fields.expression.trim()) changes.push(`Expression: ${params.fields.expression.trim()}`)
   if (params.fields.outfit.trim()) changes.push(`New outfit / clothing: ${params.fields.outfit.trim()}`)
   if (params.fields.background.trim()) changes.push(`New background / setting: ${params.fields.background.trim()}`)
+  if (params.fields.headscarf.trim()) changes.push(`Headscarf / hijab color: ${params.fields.headscarf.trim()} (recolor the EXISTING headscarf only — do NOT add one if she has none)`)
   const changeBlock = changes.length
     ? changes.map((c) => `- ${c}`).join('\n')
     : '- A fresh, natural everyday look'
