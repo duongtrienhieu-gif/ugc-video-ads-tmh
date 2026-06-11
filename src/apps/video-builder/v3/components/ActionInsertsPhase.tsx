@@ -37,7 +37,7 @@ import {
 import { renderInsert, resumeInsertVideo, listEligibleInsertsForBulk } from '../services/insertRenderer'
 import { computeBlockStartTimestamps, computeQuoteTimestamp } from '../services/insertTimingEngine'
 // Z98 #5 — local sticker renderer (canvas → transparent PNG, 0 credit).
-import { renderStickerBlob } from '../services/stickerRenderer'
+import { renderStickerBlob, STICKER_STYLE_META } from '../services/stickerRenderer'
 import { saveAsset } from '../../../../utils/assetStore'
 // Z98 B2 — voice-first: synth the real voice + recalibrate the script BEFORE the
 // director runs, so scene count/placement use the real duration not a WPM guess.
@@ -159,8 +159,9 @@ export default function ActionInsertsPhase({ onContinue }: Props) {
   const insertCredits = estimateInsertCredits('video', insertResolution, 6)
   // Eligible inserts a "Bulk render" would actually pay for (skips
   // locked/approved/rejected per the Z26 lesson) — and their real summed cost,
-  // honouring each card's render mode.
-  const bulkEligible = listEligibleInsertsForBulk(inserts)
+  // honouring each card's render mode. Z98 #5 — stickers are excluded: they're
+  // already drawn locally (0 credit), so sending them to Grok just errors.
+  const bulkEligible = listEligibleInsertsForBulk(inserts).filter((it) => it.renderMode !== 'sticker')
   const bulkPendingCount = bulkEligible.length
   const bulkCredits = bulkEligible.reduce(
     (sum, it) => sum + estimateInsertCredits(it.renderMode ?? 'video', insertResolution, it.durationSec ?? 4), 0,
@@ -639,7 +640,8 @@ export default function ActionInsertsPhase({ onContinue }: Props) {
   const handleUnlock  = (insertId: number) => patchInsert(insertId, { status: 'completed' })
 
   const handleBulkRender = async () => {
-    const eligible = listEligibleInsertsForBulk(inserts)
+    // Z98 #5 — never bulk-render stickers (local, 0 credit; Grok render errors).
+    const eligible = listEligibleInsertsForBulk(inserts).filter((it) => it.renderMode !== 'sticker')
     if (eligible.length === 0) {
       addToast('Không có insert nào pending — tất cả đã render / locked / approved', 'info')
       return
@@ -998,6 +1000,71 @@ function InsertCard({
     isRejected ? 'border-rose-300 opacity-70' :
     insert.stage === 'failed' ? 'border-red-300' :
     'border-black/10'
+
+  // Z98 #5.4 — sticker cards are a DIFFERENT thing from Grok/3D inserts: a free
+  // local PNG that pops mid-right over the talking-head. Render a dedicated,
+  // simpler card (no Render button, no mode toggle, no "Video lỗi" banner) that
+  // previews the sticker at its REAL size + position, with a click-to-hear so
+  // the user can verify it lands on the right voice moment.
+  if (insert.renderMode === 'sticker') {
+    const styleMeta = insert.stickerStyle ? STICKER_STYLE_META[insert.stickerStyle] : null
+    const ts = insert.voiceTimestampSec
+    return (
+      <div className="group flex flex-col overflow-hidden rounded-xl border border-violet-200 bg-white shadow-sm">
+        {/* Mock composition: the talking-head stand-in + the sticker at its real
+            mid-right ~28% position, so the user sees where it will actually sit. */}
+        <div className="relative aspect-[9/16] bg-gradient-to-b from-slate-200 to-slate-300">
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 text-slate-400">
+            <Mic className="h-8 w-8 opacity-40" />
+            <span className="text-[9px] font-medium opacity-70">creator đang nói</span>
+          </div>
+          {keyframeUrl ? (
+            <img
+              src={keyframeUrl}
+              alt={insert.stickerText ?? 'sticker'}
+              className="absolute right-[4%] top-1/2 w-[28%] -translate-y-1/2 drop-shadow-lg"
+            />
+          ) : (
+            <div className="absolute inset-0 flex items-center justify-center text-[10px] text-violet-500">
+              <Loader2 className="mr-1 h-3 w-3 animate-spin" /> Đang vẽ sticker…
+            </div>
+          )}
+          <span className="absolute left-1.5 top-1.5 rounded bg-violet-600 px-1.5 py-0.5 text-[9px] font-bold text-white">
+            🏷 STICKER · {styleMeta?.labelVi ?? insert.stickerStyle}
+          </span>
+        </div>
+        <div className="border-t border-black/5 px-2 py-1.5 text-[10px]">
+          <div className="flex items-center justify-between gap-1">
+            <span className="truncate font-bold text-violet-800">"{insert.stickerText}"</span>
+            {ts != null && <span className="shrink-0 text-violet-600">@{ts.toFixed(1)}s</span>}
+          </div>
+          {insert.quote && (
+            <button
+              type="button"
+              onClick={() => ts != null && seekVoiceTo(ts)}
+              disabled={ts == null}
+              title={ts != null ? `Nghe đoạn voice quanh giây ${ts.toFixed(1)}s` : 'Không có dấu thời gian'}
+              className="mt-1 flex w-full items-start gap-1 rounded-md border border-violet-200 bg-violet-50 px-1.5 py-1 text-left leading-tight text-violet-900 transition-colors enabled:hover:border-violet-400 enabled:hover:bg-violet-100 disabled:cursor-default disabled:opacity-70"
+            >
+              <Play className="mt-[1px] h-2.5 w-2.5 shrink-0 text-violet-600" />
+              <span className="line-clamp-2">
+                "{insert.quote}"
+                {insert.stickerWordAnchor && (
+                  <span className="font-semibold"> → bật ở "{insert.stickerWordAnchor}"</span>
+                )}
+              </span>
+            </button>
+          )}
+          <div className="mt-1 flex items-center justify-between text-gray-400">
+            <span>1.8s · 0 credit · local</span>
+            <button onClick={onRemove} className="flex items-center gap-0.5 rounded px-1.5 py-0.5 text-rose-500 hover:bg-rose-50">
+              <Trash2 className="h-3 w-3" /> Xoá
+            </button>
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className={`group flex flex-col overflow-hidden rounded-xl border bg-white shadow-sm transition-all ${borderCls}`}>
