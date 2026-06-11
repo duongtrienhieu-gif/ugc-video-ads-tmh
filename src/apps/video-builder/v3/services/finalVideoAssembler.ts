@@ -328,6 +328,13 @@ export async function assembleFinalVideo(
       '-y', normFile,
     ])
     normFiles.push(normFile)
+    // Z98 — free THIS segment's source inputs immediately. Each seg_${i}.mp4 /
+    // overlay is a UNIQUE file (a creator clip is re-fetched + re-written per
+    // segment), so without this MEMFS holds many full-length copies of the
+    // creator video at once → wasm "memory access out of bounds" on later
+    // segments. The norm .ts clips are tiny and kept for the concat below.
+    await ffmpeg.deleteFile(s.fileName).catch(() => {})
+    for (const ov of ovs) await ffmpeg.deleteFile(ov.fileName).catch(() => {})
   }
 
   // Join the normalized clips with the concat DEMUXER + stream-copy (no decode).
@@ -360,34 +367,34 @@ export async function assembleFinalVideo(
   const hasExtraAudio = sfxFiles.length > 0 || bgmFile !== null
 
   if (!hasExtraAudio) {
-    // ── Simple path: voice-only (or silent) — burn subs via -vf ─────────
+    // ── Simple path: voice-only (or silent) ─────────────────────────────
+    // Z98 — with NO subtitle filter the already-encoded concat video is COPIED
+    // (`-c:v copy`), not re-encoded. The old unconditional libx264 pass here was
+    // a wasted SECOND full encode of the whole video (the segments were already
+    // encoded in STAGE 2) → it doubled wall-clock + memory. Subtitles, when
+    // present, still force a re-encode (a filter must touch every frame).
     const muxInputs: string[] = ['-i', intermediateFile]
     if (voiceFile) muxInputs.push('-i', voiceFile)
-
     const muxArgs: string[] = [...muxInputs]
-    if (assFile) muxArgs.push('-vf', `ass=${assFile}:fontsdir=/`)
+
+    // `-c:v copy` forbids `-pix_fmt`; only the re-encode branch sets it.
+    const videoCodec = assFile
+      ? ['-vf', `ass=${assFile}:fontsdir=/`, '-c:v', 'libx264', '-preset', preset_x264, '-crf', crf, '-pix_fmt', 'yuv420p']
+      : ['-c:v', 'copy']
 
     if (voiceFile) {
       muxArgs.push(
         '-map', '0:v:0',
         '-map', '1:a:0',
-        '-c:v', 'libx264',
-        '-preset', preset_x264,
-        '-crf', crf,
+        ...videoCodec,
         '-c:a', 'aac',
         '-b:a', `${qualityCfg.audioBitrateKbps}k`,
         '-shortest',
       )
     } else {
-      muxArgs.push(
-        '-map', '0:v:0',
-        '-c:v', 'libx264',
-        '-preset', preset_x264,
-        '-crf', crf,
-        '-an',  // no audio
-      )
+      muxArgs.push('-map', '0:v:0', ...videoCodec, '-an')
     }
-    muxArgs.push('-pix_fmt', 'yuv420p', '-movflags', '+faststart', '-y', outFile)
+    muxArgs.push('-movflags', '+faststart', '-y', outFile)
     await ffmpeg.exec(muxArgs)
   } else {
     // ── Mix path: voice + SFX cues + BGM via amix ───────────────────────
