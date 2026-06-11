@@ -307,13 +307,12 @@ export async function directScenesWithGemini(
   const effBudget = Math.max(baseFloor, Math.min(params.budget, durTarget))
   const effFloor = Math.max(baseFloor, effBudget - 1)
   const floor = effFloor  // template references `${floor}` → the duration-aware target
-  // Z98 — CUT-TIME QUOTA. At least 40% of the REAL voice length must be CUT
-  // footage (real-footage scenes that REPLACE the creator full-screen). Overlay
-  // illustrations ride on top and don't count toward it. ≈4s per cut → the
-  // minimum number of cut scenes the director must return.
+  // Z98 — Quota cut % bỏ. Số cut do KỊCH BẢN dictate (đoạn nào có hành động vật
+  // lý quay được = cut; đoạn nào explain cơ chế = 3D MECHANISM auto; đoạn nào
+  // claim trừu tượng/diagram = overlay). Trước đây ép 40% timeline làm director
+  // dồn sang cut, đẩy mọi cảnh giải thích thành close-up người ngáo. `dur` vẫn
+  // giữ cho telemetry.
   const dur = Math.round(params.script.totalDurationSec || 30)
-  const cutSecNeeded = Math.round(dur * 0.4)
-  const minCutScenes = Math.max(2, Math.min(effBudget, Math.ceil(cutSecNeeded / 4)))
   const catalogue = DIRECTOR_ALLOWED_PRESETS
     .map((id) => `- ${id}: ${ACTION_PRESETS[id].descriptionVi} (needsProduct=${ACTION_PRESETS[id].needsProduct})`)
     .join('\n')
@@ -558,16 +557,25 @@ DIRECTING RULES:
   lifestyle b-roll, a mood with no spoken anchor), or REPEATING the same idea.
   Returning fewer than ${floor} scenes on a normal product script is too flat /
   lazy — only drop below that if the script is genuinely thin.
-- CUT-TIME QUOTA — at least 40% of the ${dur}s video should be CUT footage
-  (real-footage scenes that REPLACE the creator, layout:"cut") ≈ ${minCutScenes}
-  cuts; don't go overlay-heavy with only 2-3. A CUT shows the REAL thing — the
-  product in hand / being used, the visible result, a real before/after, the
-  package, the creator demoing or endorsing. EVERY REAL CUT must look like real
-  phone footage: NO cinematic / fantasy / glowing / floating / CGI on a real
-  person or product. ILLUSTRATION overlays (teaching sketches / ingredient photos
-  / infographics, layout:"overlay_corner") ride on top of the creator, do NOT
-  count toward the 40%, and are unlimited. (The engine tops cuts up to 40% and
-  renders product-mechanism beats as 3D, so just aim true and it holds.)
+- SCENE-TYPE BY MEANING — pick the type from what the spoken line DESCRIBES, not
+  a fixed quota. The script dictates the mix.
+  • CUT (layout:"cut", real-footage replacing the creator) — for lines describing
+    a PHYSICAL ACTION that a phone CAN actually film: holding / opening / applying /
+    drinking / wearing the product, looking in a mirror, a real before-after,
+    a real demo, a visible reaction, a hand-to-camera CTA. Looks like real phone
+    footage — NO cinematic / fantasy / glowing / floating / CGI on real people.
+  • 3D MECHANISM (layout:"cut", no person, full-screen) — for lines describing a
+    PROCESS INSIDE THE BODY or a MICRO-LEVEL effect a phone CAN'T film: an
+    ingredient acting on / penetrating / restoring / repairing / absorbing /
+    delivering into a body part. The engine detects this automatically from
+    your quote + conceptPrompt — just describe the mechanism literally; don't
+    force it into a person close-up.
+  • OVERLAY illustration (layout:"overlay_corner") — for ABSTRACT teaching beats
+    riding on top of the creator: statistics ("70% of women over 25…"), pure
+    diagrams, educational infographics with no in-body action.
+  Order matters more than count: every scene must illustrate ONE specific
+  spoken line. If the script has 5 physical-action lines → ≈5 cuts. If 2 →
+  ≈2 cuts. Don't pad and don't underfill.
 - "fit" = 0..1 how strongly the visual supports the line. "reason" = one short
   phrase in ${langName} explaining the choice (shown to the user).
 - BE CONCISE — HARD LIMITS: "conceptPrompt" ≤ 240 characters (one tight visual
@@ -745,7 +753,14 @@ OUTPUT strict JSON, no fences:
     // Only a NON-person concept scene can become a 3D animation — a person /
     // emotion / before-after scene (motionKind 'emotion') stays real footage even
     // if it mentions a mechanism word ("she nourishes her skin").
-    const is3D = presetId === 'CONCEPT_SCENE' && motionKind !== 'emotion' &&
+    // Z98 — 3D MECHANISM gate. Bất kể director chọn preset gì (CONCEPT_SCENE OR
+    // PRODUCT_IN_ACTION OR a person-action preset), nếu quote + conceptPrompt
+    // mô tả cơ chế ingredient lên/trong cơ thể → ép sang 3D animation no-person.
+    // Trước đây chỉ áp cho CONCEPT_SCENE → cảnh PRODUCT_IN_ACTION mô tả "nano
+    // thấm vào da" bị lọt qua, ra close-up tay người + particles fake. Loại trừ
+    // 'emotion' motion (cảnh người buồn/vui) — câu có thể nhắc verb cơ chế
+    // ("nourishes her skin") nhưng vẫn là cảnh người thật.
+    const is3D = motionKind !== 'emotion' &&
       MECHANISM_RE.test(`${typeof item.quote === 'string' ? item.quote : ''} ${conceptPrompt}`)
     const isEmotionConcept = presetId === 'CONCEPT_SCENE' && motionKind === 'emotion'
     const renderMode: InsertRenderMode =
@@ -962,14 +977,8 @@ OUTPUT strict JSON, no fences:
   // Keep the director's ORDER (narrative sequence), not a fit sort — scenes
   // should play in script order. Cap to the duration-aware budget.
   const directed = out.slice(0, effBudget)
-  // Z98 — HARD cut-quota guarantee. The prompt rule biases the director, but it's
-  // an LLM and keeps going overlay-heavy on teaching scripts. If cut footage is
-  // short, promote the most FILMABLE overlay illustrations (person / body-part /
-  // product / result / before-after — NOT abstract data/mechanism graphics) into
-  // real-footage cuts.
-  const promotedCuts = promoteCutsToQuota(directed, cutSecNeeded)
-  // Z98 — cut-quota telemetry. Cuts = real-footage scenes that replace the
-  // creator (layout !== overlay_corner); overlays don't count toward the 40%.
+  // Z98 — telemetry only. Quota promotion bỏ; script dictates the mix via the
+  // semantic SCENE-TYPE BY MEANING rule + MECHANISM_RE auto-routing.
   const cutScenes = directed.filter((s) => s.layout !== 'overlay_corner' && !is3DScene(s))
   const cutSec = Math.round(cutScenes.reduce((sum, s) => sum + (s.durationSec ?? 4), 0))
   const scenes3D = directed.filter(is3DScene).length
@@ -979,17 +988,11 @@ OUTPUT strict JSON, no fences:
     `dropped{preset:${drop.preset},noPrompt:${drop.noPrompt},zeroFit:${drop.zeroFit},dupeSkip:${drop.dupeSkip}} ` +
     `rewrote{beforeAfter:${rewrite.beforeAfter},topical:${rewrite.topical},dupeSwap:${rewrite.dupeSwap},labeled:${rewrite.labeled},labelLangDrop:${rewrite.labelLangDrop},ctaClose:${rewrite.ctaClose}} ` +
     `trust{earlyHook:${trustDrops.earlyHook},coverage:${trustDrops.coverage},run3:${trustDrops.run3}} ` +
-    `realCuts=${cutScenes.length}/${minCutScenes} cutSec=${cutSec}/${cutSecNeeded}s(≥40%of${dur}s) promoted=${promotedCuts} 3d=${scenes3D} overlays=${overlays} ` +
+    `cuts=${cutScenes.length}(${cutSec}s) 3d=${scenes3D} overlays=${overlays} dur=${dur}s ` +
     `ingredientInject=${ingredientInjected} ` +
     `visibleResult=${visibleResultProduct} topical=${topicalCategory ?? 'no'} ` +
     `→ ${directed.length > 0 ? `${directed.length} scenes` : 'EMPTY → keyword fallback'}`,
   )
-  if (directed.length > 0 && cutSec < cutSecNeeded) {
-    console.warn(
-      `[DIRECTOR] CUT QUOTA MISS — only ${cutSec}s cut footage (<${cutSecNeeded}s = 40% of ${dur}s). ` +
-      `Director went overlay-heavy; bấm "Đạo diễn lại" để thử lại.`,
-    )
-  }
   if (directed.length === 0) {
     console.warn(`[DIRECTOR] raw head: ${raw.slice(0, 400)}`)
   }
@@ -1002,73 +1005,17 @@ OUTPUT strict JSON, no fences:
   return suggestInsertsForScript(params.script).slice(0, params.budget)
 }
 
-// Z98 — HARD cut-quota enforcement. Promote overlay illustrations into real-
-// footage CUTS until cut footage ≥ the 40% quota. ONLY pure diagram / data
-// graphics can't be filmed (molecular/cross-section diagrams, counters, badges,
-// "how it works") — skip just those. EVERYTHING else in a product ad (a product,
-// a body part, a result, a person, a before/after) can be shown as real footage,
-// so default to promotable. NOTE: body-state words (plaque, bacteria, eroded) are
-// deliberately NOT in ABSTRACT — "split-screen of teeth with plaque vs white" is a
-// perfectly filmable before/after, not a diagram. Mutates scenes in place; returns
-// how many were promoted. Promotion order = script order (keeps narrative flow).
-// (Internal-mechanism scenes are already converted to 3D cuts upstream by
-// MECHANISM_RE, so they never reach this overlay pool — ABSTRACT only needs the
-// pure data / diagram graphics here.)
-const ABSTRACT_RE = /\b(nano|molecul\w*|cross[- ]section|schematic|diagram|counter|graph|chart|infographic|icon|flag|badge|stamp|how it works|mechanism|statistic\w*|percentage|arrow|timeline|calendar|glowing particle)\b/i
-
 // Z98 — PRODUCT MECHANISM = an ingredient/technology acting ON/INSIDE the body
-// (restoring enamel, absorbing plaque, nano delivering minerals into the tooth).
-// Can't be filmed for real → rendered as a 3D scientific animation (no person),
-// not real footage and not a hand-drawn overlay. Narrow on purpose: problem-cause
-// scenes (enamel ERODING, bacteria forming) and demos / before-after are NOT
-// mechanism and are left alone.
+// (restoring enamel, absorbing plaque, nano delivering minerals into the tooth,
+// peptide stimulating collagen, etc.). Can't be filmed for real → rendered as a
+// 3D scientific animation (no person), not real footage and not a hand-drawn
+// overlay. Universal across niches (dental/skin/hair/gut/joint/liver/cell/...).
+// Narrow on purpose: problem-cause scenes (enamel ERODING, bacteria forming)
+// and demos / before-after are NOT mechanism and are left alone.
 const MECHANISM_RE = /\b((restor|repair|rebuild|remineral|strengthen|heal|regenerat|replenish|lubricat|calm|soothe|regulat|balanc|neutralis|neutraliz|detox|cleans|stimulat|coat|feed|flush|boost|nourish)\w*( the| your)? (enamel|tooth|teeth|gum|skin|hair|scalp|nail|follicle|collagen|gut|stomach|intestin\w*|digest\w*|joint|cartilage|bone|ligament|liver|kidney|blood\w*|cell|nerve|nervous|immun\w*|muscle|gland|hormone|metabolism|lung|artery|vein|eye|root)|absorb\w* (the )?(plaque|plak|toxin|bacteria|dirt|kotoran|impurit|stain|oil|grease)|penetrat\w*|deliver\w*[^.]{0,25}(mineral|nutrient|ingredient|vitamin|collagen|active)\w*|nano[- ]?(tech|particle|mineral)\w*|particles? (that )?(sink|enter|penetrat|go deep|absorb)|deep in(to)? the (tooth|enamel|skin|hair|root|gut|joint|cell|body)|inside the (tooth|enamel|body|skin|hair|gut|joint|cell))\b/i
 
 // Z98 — a scene that was rebuilt into a 3D mechanism animation (marked in prompt).
-// These are full-screen cuts but DON'T count toward the 40% real-footage quota.
 const is3DScene = (s: InsertSuggestion) => (s.conceptPrompt ?? '').startsWith('3D MECHANISM ANIMATION')
-
-// Only the FIRST paragraph is the real scene description. The engine appends
-// "\n\nTEXT TO RENDER…" + "\n\nLANGUAGE: EVERY … calendar day names … arrow labels …"
-// boilerplate to labeled illustration scenes — those words would otherwise poison
-// the abstract check (calendar/arrow are in ABSTRACT_RE) and wrongly skip every
-// labeled overlay. So test + rebuild from the base description only.
-const baseDesc = (s: InsertSuggestion) => (s.conceptPrompt ?? '').split('\n\n')[0].trim()
-
-function promoteCutsToQuota(scenes: InsertSuggestion[], cutSecNeeded: number): number {
-  const cutSec = () => scenes
-    .filter((s) => s.layout !== 'overlay_corner' && !is3DScene(s))
-    .reduce((sum, s) => sum + (s.durationSec ?? 4), 0)
-  if (cutSec() >= cutSecNeeded) return 0
-
-  const promotable = scenes.filter((s) =>
-    s.layout === 'overlay_corner' &&
-    typeof s.conceptPrompt === 'string' &&
-    s.conceptPrompt.length > 0 &&
-    !ABSTRACT_RE.test(baseDesc(s)),
-  )
-
-  let promoted = 0
-  for (const s of promotable) {
-    if (cutSec() >= cutSecNeeded) break
-    s.layout = 'cut'
-    s.renderMode = 'video'  // real footage (i2v), not a ken_burns illustration
-    const cleaned = baseDesc(s)
-      .replace(/\b(simple |friendly )?(hand[- ]drawn sketch|hand[- ]drawn|illustration|illustrated|animated graphic|animation|graphic|drawing|infographic|ilustrasi|lakaran|sketch)\b/gi, 'real footage')
-      .replace(/\b(glowing|magical|magic|floating|sci-?fi|cinematic|fantasy|surreal|CGI|particles)\b/gi, '')
-      .replace(/\s+/g, ' ')
-      .trim()
-    s.conceptPrompt =
-      `Real, photographic, realistic phone-shot UGC footage — NOT a drawing/sketch/` +
-      `graphic, NOT cinematic, NO magical/fantasy/glowing/floating/CGI effects, only ` +
-      `real physical objects + real people in natural light: ${cleaned}`
-    promoted++
-  }
-  if (promoted > 0) {
-    console.log(`[DIRECTOR] cut-quota: promoted ${promoted} overlay illustration(s) → real-footage cuts`)
-  }
-  return promoted
-}
 
 // Z46 — visible-result claim detector. If the script promises a camera-visible
 // body-part change (teeth whiter, skin clearer, hair thicker, etc.), the
