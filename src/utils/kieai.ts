@@ -1275,6 +1275,58 @@ export async function blobToSmallBase64(blob: Blob, maxWidth = 768): Promise<str
   })
 }
 
+/**
+ * Resize a Blob to maxWidth, then slice a tall result into horizontal bands
+ * (each ≤ maxSliceHeight px) and return one base64 JPEG per band.
+ *
+ * Why slice instead of uniform-downscale: a full-page screenshot (e.g.
+ * 1080×15000 Ladipage capture) scaled to fit a height cap would shrink its
+ * width to ~150px, making every line of text unreadable — Gemini then extracts
+ * nothing. Keeping width at maxWidth and cutting the height into legible bands
+ * preserves OCR quality. Returns base64 strings WITHOUT the data: prefix.
+ */
+export async function blobToReadableSlices(
+  blob: Blob,
+  maxWidth = 1024,
+  maxSliceHeight = 1400,
+  maxSlices = 8,
+): Promise<string[]> {
+  return new Promise((resolve, reject) => {
+    const img = new Image()
+    const url = URL.createObjectURL(blob)
+    img.onload = () => {
+      try {
+        const scale = Math.min(1, maxWidth / img.width)
+        const w = Math.max(1, Math.round(img.width * scale))
+        const fullH = Math.max(1, Math.round(img.height * scale))
+        const sliceCount = Math.min(maxSlices, Math.max(1, Math.ceil(fullH / maxSliceHeight)))
+        const sliceH = Math.ceil(fullH / sliceCount)
+        const out: string[] = []
+        for (let i = 0; i < sliceCount; i++) {
+          const sy = i * sliceH
+          const h = Math.min(sliceH, fullH - sy)
+          if (h <= 0) break
+          const canvas = document.createElement('canvas')
+          canvas.width = w
+          canvas.height = h
+          const ctx = canvas.getContext('2d')
+          if (!ctx) { URL.revokeObjectURL(url); reject(new Error('canvas')); return }
+          // Map this destination band back to the matching source band.
+          ctx.drawImage(img, 0, sy / scale, img.width, h / scale, 0, 0, w, h)
+          out.push(canvas.toDataURL('image/jpeg', 0.8).split(',')[1])
+        }
+        URL.revokeObjectURL(url)
+        resolve(out)
+      } catch (e) {
+        URL.revokeObjectURL(url)
+        reject(e instanceof Error ? e : new Error('slice'))
+      }
+    }
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('img load')) }
+    img.src = url
+  })
+}
+
 export async function kieAnalyzeImage(
   apiKey: string,
   imageBase64: string,

@@ -5,7 +5,7 @@ import { useAssetUrl } from '../../hooks/useAssetUrl'
 import { useSettingsStore } from '../../stores/settingsStore'
 import { useAppStore } from '../../stores/appStore'
 import { directGeminiVision } from '../../utils/gemini'
-import { blobToSmallBase64 } from '../../utils/kieai'
+import { blobToReadableSlices } from '../../utils/kieai'
 
 interface ProductFormProps {
   item?: Product | null
@@ -856,13 +856,17 @@ export default function ProductForm({ item, onSave, onCancel }: ProductFormProps
       const geminiKey = getGeminiKey()
       addToast(`Đang phân tích ${stagedScreenshots.length} ảnh...`)
 
-      // Convert all files to base64 in parallel
-      const imageParts = await Promise.all(
-        stagedScreenshots.map(async (f) => {
-          const data = await blobToSmallBase64(f, 1024)
-          return { inlineData: { mimeType: 'image/jpeg', data } }
-        })
+      // Convert all files to base64. Tall full-page screenshots get sliced into
+      // legible horizontal bands so text stays readable for Gemini (a 7MB+
+      // long-page capture would otherwise be unreadable once shrunk to fit).
+      const sliceGroups = await Promise.all(
+        stagedScreenshots.map((f) => blobToReadableSlices(f, 1024))
       )
+      let imageParts = sliceGroups
+        .flat()
+        .map((data) => ({ inlineData: { mimeType: 'image/jpeg', data } }))
+      // Cap total bands so a very long page can't blow up the request.
+      if (imageParts.length > 12) imageParts = imageParts.slice(0, 12)
 
       const response = await directGeminiVision({
         apiKey: geminiKey,
