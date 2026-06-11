@@ -1009,10 +1009,30 @@ OUTPUT strict JSON, no fences:
 // (restoring enamel, absorbing plaque, nano delivering minerals into the tooth,
 // peptide stimulating collagen, etc.). Can't be filmed for real → rendered as a
 // 3D scientific animation (no person), not real footage and not a hand-drawn
-// overlay. Universal across niches (dental/skin/hair/gut/joint/liver/cell/...).
-// Narrow on purpose: problem-cause scenes (enamel ERODING, bacteria forming)
-// and demos / before-after are NOT mechanism and are left alone.
-const MECHANISM_RE = /\b((restor|repair|rebuild|remineral|strengthen|heal|regenerat|replenish|lubricat|calm|soothe|regulat|balanc|neutralis|neutraliz|detox|cleans|stimulat|coat|feed|flush|boost|nourish)\w*( the| your)? (enamel|tooth|teeth|gum|skin|hair|scalp|nail|follicle|collagen|gut|stomach|intestin\w*|digest\w*|joint|cartilage|bone|ligament|liver|kidney|blood\w*|cell|nerve|nervous|immun\w*|muscle|gland|hormone|metabolism|lung|artery|vein|eye|root)|absorb\w* (the )?(plaque|plak|toxin|bacteria|dirt|kotoran|impurit|stain|oil|grease)|penetrat\w*|deliver\w*[^.]{0,25}(mineral|nutrient|ingredient|vitamin|collagen|active)\w*|nano[- ]?(tech|particle|mineral)\w*|particles? (that )?(sink|enter|penetrat|go deep|absorb)|deep in(to)? the (tooth|enamel|skin|hair|root|gut|joint|cell|body)|inside the (tooth|enamel|body|skin|hair|gut|joint|cell))\b/i
+// overlay. Universal across niches (dental/skin/hair/gut/joint/liver/cell/...)
+// AND across the 3 script languages the app supports (vi / ms / en). Narrow on
+// purpose: problem-cause scenes (enamel ERODING, bacteria forming) and
+// demos / before-after are NOT mechanism and are left alone.
+//
+// Top-level alternation by language: EN keeps its anchored `\b…\b` form; VN+MS
+// branches are unanchored because JS `\b` only respects ASCII word chars (the VN
+// diacritics ẩ/ấ/ẳ break the boundary check). Each non-EN branch requires a
+// VERB + BODY-PART pairing within 0-40 chars — that pairing alone is specific
+// enough to avoid false positives without `\b`.
+const MECHANISM_RE = new RegExp(
+  // ── EN (unchanged, kept anchored) ────────────────────────────────────────
+  '\\b((restor|repair|rebuild|remineral|strengthen|heal|regenerat|replenish|lubricat|calm|soothe|regulat|balanc|neutralis|neutraliz|detox|cleans|stimulat|coat|feed|flush|boost|nourish)\\w*( the| your)? (enamel|tooth|teeth|gum|skin|hair|scalp|nail|follicle|collagen|gut|stomach|intestin\\w*|digest\\w*|joint|cartilage|bone|ligament|liver|kidney|blood\\w*|cell|nerve|nervous|immun\\w*|muscle|gland|hormone|metabolism|lung|artery|vein|eye|root)|absorb\\w* (the )?(plaque|plak|toxin|bacteria|dirt|kotoran|impurit|stain|oil|grease)|penetrat\\w*|deliver\\w*[^.]{0,25}(mineral|nutrient|ingredient|vitamin|collagen|active)\\w*|nano[- ]?(tech|particle|mineral)\\w*|particles? (that )?(sink|enter|penetrat|go deep|absorb)|deep in(to)? the (tooth|enamel|skin|hair|root|gut|joint|cell|body)|inside the (tooth|enamel|body|skin|hair|gut|joint|cell))\\b'
+  // ── VN: verb cơ chế + body-part trong 0-40 ký tự ─────────────────────────
+  // Note: "thấm" standalone is EXCLUDED — "thấm nhanh 3 giây" describes a real
+  // demo cut (a hand patting in the serum), not the molecular mechanism. Only
+  // the compound forms "thẩm thấu / thấm sâu / thấm vào" mean penetration into
+  // tissue. Same idea: "hấp thụ" is kept (always implies absorption into the
+  // body) while bare "hấp" is not (could be "hấp dẫn" etc).
+  + '|(thẩm thấu|thấm sâu|thấm vào|hấp thụ|hấp thu|nuôi dưỡng|tái tạo|phục hồi|hồi phục|kích thích|kích hoạt|thanh lọc|thải độc|đào thải|cân bằng|điều hoà|điều hòa|củng cố|tăng cường|bồi bổ|bảo vệ|xâm nhập|xuyên qua|hoà tan|hòa tan|sản xuất|tổng hợp)[^.!?]{0,40}(da|biểu bì|hạ bì|tóc|nang tóc|chân tóc|da đầu|móng|răng|men răng|nướu|lợi|chân răng|tế bào|mô|sợi|sụn|dây chằng|xương|khớp|gan|thận|ruột|dạ dày|hệ tiêu hoá|hệ tiêu hóa|máu|mạch máu|thần kinh|hệ thần kinh|hormone|nội tiết|collagen|elastin|keratin|mắt|phổi|tim|hệ miễn dịch)'
+  // ── MS: kata kerja mekanisme + body-part dalam 0-40 aksara ───────────────
+  + '|(meresap|menyerap|penyerapan|merawat|membaiki|memulihkan|memperbaharui|merangsang|merangsangkan|membersihkan|detoks|menyahtoksik|menyeimbangkan|mengawal|melindungi|mencegah|menguatkan|memperkuat|mengurangkan|menembusi|meresapi)[^.!?]{0,40}(kulit|rambut|kuku|gigi|gusi|akar gigi|sel|tisu|serat|darah|hati|buah pinggang|usus|perut|sistem penghadaman|tulang|sendi|otot|saraf|sistem saraf|hormon|kolagen|elastin)',
+  'i',
+)
 
 // Z98 — a scene that was rebuilt into a 3D mechanism animation (marked in prompt).
 const is3DScene = (s: InsertSuggestion) => (s.conceptPrompt ?? '').startsWith('3D MECHANISM ANIMATION')
