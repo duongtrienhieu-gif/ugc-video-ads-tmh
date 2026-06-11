@@ -36,10 +36,9 @@ import {
 } from '../services/insertSuggester'
 import { renderInsert, resumeInsertVideo, listEligibleInsertsForBulk } from '../services/insertRenderer'
 import { computeBlockStartTimestamps, computeQuoteTimestamp } from '../services/insertTimingEngine'
-// Z98 #5.1 — side-effect import keeps the sticker module (incl. the
-// window.__testSticker dev helper) in the bundle. The real named imports +
-// card wiring land in sub-commit 5.4.
-import '../services/stickerRenderer'
+// Z98 #5 — local sticker renderer (canvas → transparent PNG, 0 credit).
+import { renderStickerBlob } from '../services/stickerRenderer'
+import { saveAsset } from '../../../../utils/assetStore'
 // Z98 B2 — voice-first: synth the real voice + recalibrate the script BEFORE the
 // director runs, so scene count/placement use the real duration not a WPM guess.
 import { generateCreatorVoice } from '../services/creatorVideoEngine'
@@ -282,6 +281,10 @@ export default function ActionInsertsPhase({ onContinue }: Props) {
         conceptPrompt: s.conceptPrompt,
         renderMode: s.renderMode,
         layout: s.layout,
+        // Z98 #5 — sticker scenes carry their style + text + word anchor.
+        stickerStyle: s.stickerStyle,
+        stickerText: s.stickerText,
+        stickerWordAnchor: s.stickerWordAnchor,
       }
     })
     // Z98 #1 — telemetry-only gap detector. The director's "no gap >5s" rule
@@ -322,6 +325,28 @@ export default function ActionInsertsPhase({ onContinue }: Props) {
     }
     clearAllInserts()
     bulkAddInsertsFromPresets(items)
+    // Z98 #5 — auto-render sticker PNGs locally (0 credit, instant). Stickers
+    // never touch the Grok pipeline; we draw the transparent PNG on a canvas,
+    // save it as the insert's keyframeRef, and mark it completed so the card
+    // shows it immediately. Runs after bulkAdd so the insertIds exist.
+    void renderPendingStickers()
+  }
+
+  // Z98 #5 — render any sticker insert that doesn't have its PNG yet.
+  const renderPendingStickers = async () => {
+    const pending = useAdsVideoStore.getState().state.inserts.filter(
+      (it) => it.renderMode === 'sticker' && it.stickerStyle && it.stickerText && !it.keyframeRef,
+    )
+    for (const it of pending) {
+      try {
+        const blob = await renderStickerBlob({ style: it.stickerStyle!, text: it.stickerText! })
+        const ref = await saveAsset(blob, 'image/png')
+        patchInsert(it.insertId, { keyframeRef: ref, stage: 'completed', status: 'idle' })
+      } catch (err) {
+        console.warn(`[STICKER] render failed for insert #${it.insertId}`, err)
+        patchInsert(it.insertId, { stage: 'failed', error: 'Lỗi vẽ sticker' })
+      }
+    }
   }
 
   // Manual re-run ("Đạo diễn lại"). Fetches + applies + shows the result chips.

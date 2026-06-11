@@ -17,6 +17,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import type { Model, Product } from '../../../stores/types'
+import type { StickerStyle } from './services/stickerRenderer'
 
 // ── Top-level phase enum ────────────────────────────────────────────────────
 // Sequential workflow; each phase has its own view + persisted state.
@@ -230,7 +231,10 @@ export const INSERT_VIDEO_CREDITS = 10
 //                 fit inside the frame, never cropped) because the Ken Burns
 //                 zoom kept cutting off infographic text labels. Used for
 //                 concept / ingredient / mechanism scenes.
-export type InsertRenderMode = 'video' | 'ken_burns'
+// Z98 #5 — 'sticker' = a local canvas-drawn transparent PNG overlay (TikTok-style
+// keyword pop). Rendered in the browser (0 credit), composited in the corner over
+// the talking-head. See services/stickerRenderer.ts for the 9 styles.
+export type InsertRenderMode = 'video' | 'ken_burns' | 'sticker'
 
 // Z69 — how the insert sits in the timeline against the creator video:
 //   'cut'            → replaces the creator video for the insert's window
@@ -257,6 +261,7 @@ export function estimateInsertCredits(
   resolution: '480p' | '720p' | '1080p' = '480p',
   durationSec: number = 6,
 ): number {
+  if (mode === 'sticker') return 0           // Z98 #5 — local canvas PNG, no AI call
   if (mode === 'ken_burns') return V3_CREDIT_COST.keyframe
   // Mirror the renderer's clamp: Grok always renders 6-8s regardless of the
   // director's durationSec, so we bill the user for what Grok will actually
@@ -589,6 +594,16 @@ export interface ActionInsertClip {
    *  REAL voice alignment (computeQuoteTimestampFromAlignment) instead of the
    *  WPM estimate. Empty for manually-added inserts. */
   quote?: string
+  /** Z98 #5 — sticker scenes only (renderMode 'sticker'). The visual style
+   *  (number / countdown / pill / flag / badge / warning / price / highlight /
+   *  arrow) the local canvas renderer draws. */
+  stickerStyle?: StickerStyle
+  /** Z98 #5 — the sticker's display text (e.g. "3 giây", "Nano", "RM59"). */
+  stickerText?: string
+  /** Z98 #5.3 — the exact keyword inside `quote` the sticker should pop ON
+   *  (word-level anchor). When set, the timing engine seeks the second that
+   *  word is spoken; when absent it falls back to the quote's start second. */
+  stickerWordAnchor?: string
 
   /** Verdict status (Z26-style approve / reject / lock) */
   status: V3ClipStatus

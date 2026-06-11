@@ -17,6 +17,7 @@ import type {
   ActionPresetId, GeneratedScript, ScriptBlockId, ScriptLang, InsertRenderMode, InsertLayout,
 } from '../types'
 import { SCRIPT_LANG_GEMINI_NAME } from '../types'
+import type { StickerStyle } from './stickerRenderer'
 import type { Product } from '../../../../stores/types'
 import { ACTION_PRESETS, ACTION_PRESET_ORDER } from './actionPresets'
 
@@ -59,6 +60,10 @@ export interface InsertSuggestion {
   /** Z69 — Director-picked layout: full-screen 'cut' or corner 'overlay_corner'.
    *  See InsertLayout in types.ts. */
   layout?: InsertLayout
+  /** Z98 #5 — sticker scene style + text + word anchor (local canvas text pop). */
+  stickerStyle?: StickerStyle
+  stickerText?: string
+  stickerWordAnchor?: string
 }
 
 /**
@@ -289,6 +294,13 @@ const DIRECTOR_RESPONSE_SCHEMA = {
           // because the MECHANISM_RE regex still fires as a safety net for
           // body-niche scripts.
           isMechanism:   { type: 'boolean' },
+          // Z98 #5 — sticker scenes. When set, this scene is NOT a Grok/3D
+          // render — it's a short (1.5-2s) TikTok-style text sticker drawn
+          // locally + popped in the corner of the talking-head on the keyword.
+          // `labels` carries the sticker text; `stickerWordAnchor` is the word
+          // inside `quote` it pops on.
+          stickerStyle:      { type: 'string', enum: ['number', 'countdown', 'pill', 'flag', 'badge', 'warning', 'price', 'highlight', 'arrow'] },
+          stickerWordAnchor: { type: 'string', maxLength: 40 },
         },
         required: ['presetId', 'anchorBlock', 'quote', 'durationSec', 'fit'],
       },
@@ -589,6 +601,24 @@ DIRECTING RULES:
     stamp in the corner beside the creator's face. Use GENEROUSLY: abstract
     claims, USP numbers, ingredient names, time refs, proof points. Cheap and
     additive — rides on top of the talking-head, doesn't compete with cuts.
+  • STICKER (set "stickerStyle") — a tiny 0-credit TikTok-style text pop that
+    appears in the corner ON the exact word, over the talking-head. Use it to
+    punch a SHORT concrete keyword the voice says — NOT a whole scene. Pick the
+    style by what the keyword IS (universal across every niche):
+      number (a measured spec: "20kPa","98%","1400rpm","16MP"),
+      countdown (time: "3 giây","2 tuần","180 phút"),
+      pill (ingredient/part/material name: "Nano","HEPA","Inox 304","Cotton"),
+      flag (origin/brand: "Korea","Made in VN"),
+      badge (short benefit: "Chống gỉ","Kháng khuẩn"),
+      warning (caution/note: "Không cho trẻ em","BH 2 năm"),
+      price (price/offer: "RM59","-50%","Combo"),
+      highlight (emphasise any key word the voice stresses),
+      arrow (point: "Nút này").
+    Put the 1-3 word text in "labels" (in ${langName}) and the exact word it
+    pops on in "stickerWordAnchor". Stickers DON'T replace cuts/overlays — add
+    them ON TOP for sparse talking-head stretches. Only for a real concrete
+    keyword (number/term/origin/claim) — skip vague phrases; don't spam (≤1 per
+    ~5s).
   TARGET MIX — roughly half cuts, half overlays; count flows from the gap-≤5s
   rule (30s ≈ 3+3, 60s ≈ 6+6). Graphic/teaching content (split-screen,
   infographic, diagram, animated-graphic, chart) MUST be overlay, NEVER cut —
@@ -927,11 +957,27 @@ OUTPUT strict JSON, no fences:
     // director's motionKind (was: marked emotion → video → cut = 16cr waste).
     const GRAPHIC_TEACHING_RE = /\b(animated graphic|hand[- ]drawn|split[- ]screen|split screen|infographic|chart|diagram|counter|statistic\w*|sketch|illustration|graph|schematic|cross[- ]section view|labeled|annotated)\b/i
     const isGraphicTeaching = !is3D && presetId === 'CONCEPT_SCENE' && GRAPHIC_TEACHING_RE.test(conceptPrompt)
-    const effectiveRenderMode: InsertRenderMode = isGraphicTeaching ? 'ken_burns' : renderMode
+    // Z98 #5 — sticker scene. The director tags a short keyword-pop with a
+    // stickerStyle; it renders as a 0-credit local canvas PNG, always a 1.5-2s
+    // corner overlay. labels[] supplies the text. A sticker OVERRIDES the normal
+    // cut/overlay/3D routing (it never goes to Grok), but only when it actually
+    // has both a valid style AND text — else it degrades to a normal scene.
+    const stickerStyle = typeof item.stickerStyle === 'string' && STICKER_STYLE_SET.has(item.stickerStyle)
+      ? item.stickerStyle as StickerStyle : undefined
+    const stickerText = stickerStyle && Array.isArray(item.labels)
+      ? item.labels.map((l) => String(l).trim()).filter(Boolean).join(' ').slice(0, 28).trim()
+      : undefined
+    const isSticker = !!stickerStyle && !!stickerText
+    const effectiveRenderMode: InsertRenderMode =
+      isSticker ? 'sticker' : isGraphicTeaching ? 'ken_burns' : renderMode
     const layout: InsertLayout =
-      is3D ? 'cut'                                  // Z98 — 3D mechanism = full-screen cut
+      isSticker ? 'overlay_corner'                  // Z98 #5 — sticker = corner pop
+        : is3D ? 'cut'                              // Z98 — 3D mechanism = full-screen cut
         : (isStaticIllustration || isGraphicTeaching) ? 'overlay_corner'
         : (directorLayout ?? 'cut')
+    const effectiveDuration = isSticker
+      ? Math.max(1.5, Math.min(2, item.durationSec || 1.8))
+      : durationSec
     out.push({
       presetId,
       matchCount: 0,
@@ -940,11 +986,16 @@ OUTPUT strict JSON, no fences:
       anchorBlock: anchor,
       confidence: fit,
       reason: typeof item.reason === 'string' ? item.reason : undefined,
-      conceptPrompt: isFreeScene ? conceptPrompt : undefined,
-      durationSec,
+      conceptPrompt: isFreeScene && !isSticker ? conceptPrompt : undefined,
+      durationSec: effectiveDuration,
       quote,
       renderMode: effectiveRenderMode,
       layout,
+      ...(isSticker && {
+        stickerStyle,
+        stickerText,
+        stickerWordAnchor: typeof item.stickerWordAnchor === 'string' ? item.stickerWordAnchor.trim() : undefined,
+      }),
     })
   }
   // Z69/Z79 — Trust & pacing safety net (post-parse):
@@ -1085,6 +1136,13 @@ const MECHANISM_RE = new RegExp(
 
 // Z98 — a scene that was rebuilt into a 3D mechanism animation (marked in prompt).
 const is3DScene = (s: InsertSuggestion) => (s.conceptPrompt ?? '').startsWith('3D MECHANISM ANIMATION')
+
+// Z98 #5 — valid sticker styles (mirrors the responseSchema enum + the
+// stickerRenderer styles). Local set so the parser doesn't pull the canvas
+// renderer's runtime (incl. its window dev helper) into this service.
+const STICKER_STYLE_SET = new Set<string>([
+  'number', 'countdown', 'pill', 'flag', 'badge', 'warning', 'price', 'highlight', 'arrow',
+])
 
 // Z46 — visible-result claim detector. If the script promises a camera-visible
 // body-part change (teeth whiter, skin clearer, hair thicker, etc.), the
@@ -1332,6 +1390,10 @@ interface RawDirectorScene {
    *  as a 3D scientific animation. Optional — the MECHANISM_RE regex still
    *  fires as a body-niche safety net when the director forgets the flag. */
   isMechanism?: boolean
+  /** Z98 #5 — sticker scene style (local canvas text pop). */
+  stickerStyle?: StickerStyle
+  /** Z98 #5 — the word inside `quote` the sticker pops on (word-level anchor). */
+  stickerWordAnchor?: string
 }
 
 function parseDirectorOutput(raw: string): { scenes: RawDirectorScene[]; ingredientsInScript: string[] } {

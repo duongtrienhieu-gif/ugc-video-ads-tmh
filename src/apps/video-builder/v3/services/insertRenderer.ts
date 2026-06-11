@@ -389,6 +389,13 @@ export async function renderInsert(
 ): Promise<RenderInsertResult> {
   if (params.signal?.aborted) throw new Error('CANCELLED — user huỷ')
 
+  // Z98 #5 — stickers never go through this Grok pipeline. They're drawn
+  // locally (stickerRenderer) + auto-applied in ActionInsertsPhase, so reaching
+  // here means a stale call; fail loud rather than burn a Grok render.
+  if (params.renderMode === 'sticker') {
+    throw new Error('Sticker được tạo sẵn (local, 0 credit) — không cần render qua AI.')
+  }
+
   const preset = ACTION_PRESETS[params.presetId]
   // Z98 — a mechanism scene rebuilt into a clean 3D scientific animation (no
   // person, no product). Marked by the director layer via this conceptPrompt prefix.
