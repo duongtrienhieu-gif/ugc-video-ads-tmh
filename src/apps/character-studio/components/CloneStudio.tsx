@@ -22,7 +22,11 @@ export default function CloneStudio() {
   const [resultRef, setResultRef] = useState<string | null>(null)
   const [dragOver, setDragOver] = useState(false)
   const [saved, setSaved] = useState(false)
+  const [elapsed, setElapsed] = useState(0)
+  const [status, setStatus] = useState('')
   const inputRef = useRef<HTMLInputElement>(null)
+
+  const elapsedLabel = elapsed >= 60 ? `${Math.floor(elapsed / 60)}m${String(elapsed % 60).padStart(2, '0')}s` : `${elapsed}s`
 
   const kieApiKey = useSettingsStore((s) => s.kieApiKey)
   const addToast = useAppStore((s) => s.addToast)
@@ -43,15 +47,29 @@ export default function CloneStudio() {
     if (!face) { addToast('Hãy tải ảnh khuôn mặt lên trước', 'error'); return }
     setIsGenerating(true)
     setResultRef(null)
+    setElapsed(0)
+    setStatus('Đang gửi yêu cầu...')
+    const timer = setInterval(() => setElapsed((e) => e + 1), 1000)
     try {
-      const ref = await generateClone({ apiKey: kieApiKey, faceFile: face.file, fields })
+      const ref = await generateClone({
+        apiKey: kieApiKey,
+        faceFile: face.file,
+        fields,
+        onStatus: (s) => setStatus(
+          s === 'processing' ? 'Đang dựng ảnh...'
+          : s === 'pending' ? 'Đang chờ hàng đợi...'
+          : s === 'completed' ? 'Hoàn tất'
+          : 'Đang xử lý...',
+        ),
+      })
       setResultRef(ref)
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
       if (msg === 'INSUFFICIENT_CREDITS') addToast('Không đủ Credit kie.ai', 'error')
-      else if (msg === 'TIMEOUT') addToast('Tạo ảnh quá thời gian. Vui lòng thử lại.', 'error')
+      else if (msg.startsWith('TIMEOUT')) addToast('Tạo ảnh quá thời gian (gpt-4o-image bị nghẽn). Thử lại.', 'error')
       else addToast(`Tạo Clone thất bại: ${msg}`, 'error')
     } finally {
+      clearInterval(timer)
       setIsGenerating(false)
     }
   }
@@ -147,14 +165,15 @@ export default function CloneStudio() {
           disabled={isGenerating || !face || !kieApiKey.trim()}
           className="mb-3 flex w-full items-center justify-center gap-2 rounded-xl bg-violet-600 px-4 py-3 text-sm font-bold text-white shadow-md transition-all hover:bg-violet-700 disabled:cursor-not-allowed disabled:opacity-40"
         >
-          {isGenerating ? (<><Loader2 className="h-4 w-4 animate-spin" /> Đang tạo Clone...</>) : (<><Sparkles className="h-4 w-4" /> Tạo Avatar Clone</>)}
+          {isGenerating ? (<><Loader2 className="h-4 w-4 animate-spin" /> Đang tạo Clone... {elapsedLabel}</>) : (<><Sparkles className="h-4 w-4" /> Tạo Avatar Clone</>)}
         </button>
 
         <div className="flex flex-1 items-center justify-center overflow-hidden rounded-xl border border-black/8 bg-black/[0.02]">
           {isGenerating ? (
-            <div className="flex flex-col items-center gap-2 text-gray-400">
+            <div className="flex flex-col items-center gap-2 px-6 text-center text-gray-400">
               <Loader2 className="h-6 w-6 animate-spin" />
-              <span className="text-xs">Giữ mặt, đổi biểu cảm / trang phục / nền...</span>
+              <span className="text-xs">{status || 'Giữ mặt, đổi biểu cảm / trang phục / nền...'}</span>
+              <span className="text-[11px] tabular-nums text-gray-400">{elapsedLabel} · gpt-4o-image thường mất 1–4 phút</span>
             </div>
           ) : resultUrl ? (
             <img src={resultUrl} alt="Avatar Clone" className="max-h-full max-w-full object-contain" />

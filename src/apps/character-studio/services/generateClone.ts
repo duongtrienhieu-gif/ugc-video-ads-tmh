@@ -39,11 +39,11 @@ export function randomCloneFields(): CloneFields {
   }
 }
 
-// Kept SHORT on purpose — a long identity-lock paragraph dilutes the image
-// reference's conditioning weight and pushes the model toward inventing a
-// similar-looking different person. The reference image IS the identity source.
+// Locks ONLY the identity (face) — NOT the whole image. v1 also said
+// "everything else stays identical", which made gpt-4o-image (an EDIT endpoint,
+// already very faithful to the input) just reproduce the reference unchanged.
 const CLONE_LOCK =
-  'Keep the EXACT same person from the reference image: identical face, bone structure, skin tone, hair and ethnicity. Do not change their identity, age or facial proportions. Photorealistic, same individual, natural UGC look.'
+  'KEEP the identity exactly: same face, bone structure, skin tone, eyes, nose, lips, eyebrows and ethnicity — it must clearly be the same individual, and keep the same headscarf/hijab if she wears one. Re-pose naturally to fit the new scene. Photorealistic, natural casual phone-selfie look.'
 
 /**
  * Generate ONE identity-locked clone. Uploads the face (if a raw File is given)
@@ -56,6 +56,7 @@ export async function generateClone(params: {
   faceImageRef?: string    // existing asset ref or public URL (alternative to faceFile)
   fields: CloneFields
   portrait?: boolean       // 9:16 portrait (default) vs landscape
+  onStatus?: (status: string, progress?: number) => void
 }): Promise<string> {
   // Resolve a PUBLIC url the KIE backend can fetch (signed Supabase URL).
   let ref = params.faceImageRef
@@ -67,20 +68,29 @@ export async function generateClone(params: {
   if (!faceUrl) throw new Error('Không lấy được URL ảnh khuôn mặt (upload chưa xong)')
 
   const changes: string[] = []
-  if (params.fields.expression.trim()) changes.push(`facial expression → ${params.fields.expression.trim()}`)
-  if (params.fields.outfit.trim()) changes.push(`outfit / clothing → ${params.fields.outfit.trim()}`)
-  if (params.fields.background.trim()) changes.push(`background / scene → ${params.fields.background.trim()}`)
-  const changeLine = changes.length
-    ? `Restyle ONLY: ${changes.join('; ')}. Everything else about the person stays identical.`
-    : 'Natural neutral restyle, identity unchanged.'
+  if (params.fields.expression.trim()) changes.push(`Expression: ${params.fields.expression.trim()}`)
+  if (params.fields.outfit.trim()) changes.push(`New outfit / clothing: ${params.fields.outfit.trim()}`)
+  if (params.fields.background.trim()) changes.push(`New background / setting: ${params.fields.background.trim()}`)
+  const changeBlock = changes.length
+    ? changes.map((c) => `- ${c}`).join('\n')
+    : '- A fresh, natural everyday look'
 
-  const prompt = `Same person as the reference image. ${changeLine}\n\n${CLONE_LOCK}`
+  // Frame it as generating a NEW photo (not a faithful edit) so the model
+  // actually changes outfit/background/expression — identity is locked to the
+  // FACE only (see CLONE_LOCK).
+  const prompt = `Create a NEW photorealistic UGC selfie of the SAME person shown in the reference image.
+
+CHANGE the following — these MUST visibly differ from the reference image:
+${changeBlock}
+
+${CLONE_LOCK}`
 
   const imageUrl = await generateGpt4oImage({
     apiKey: params.apiKey,
     prompt,
     filesUrl: [faceUrl],
     size: params.portrait === false ? '3:2' : '2:3',  // KIE gpt4o: 1:1 | 3:2 | 2:3
+    onStatusChange: params.onStatus,
     timeoutMs: 4 * 60 * 1000,
   })
 
