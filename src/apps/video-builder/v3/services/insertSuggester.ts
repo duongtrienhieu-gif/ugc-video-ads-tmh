@@ -281,6 +281,14 @@ const DIRECTOR_RESPONSE_SCHEMA = {
           motionKind:    { type: 'string', enum: ['graphic', 'emotion'] },
           labels:        { type: 'array', items: { type: 'string' } },
           layout:        { type: 'string', enum: ['cut', 'overlay_corner'] },
+          // Z98 — director's own call: is this line describing a mechanism that
+          // can't be filmed (a process inside the body OR inside a device) and
+          // therefore needs a 3D animation? Universal across niches (skincare /
+          // supplement / appliance / tool / accessory / electronics / ...) and
+          // languages — director decides from meaning, not vocabulary. Optional
+          // because the MECHANISM_RE regex still fires as a safety net for
+          // body-niche scripts.
+          isMechanism:   { type: 'boolean' },
         },
         required: ['presetId', 'anchorBlock', 'quote', 'durationSec', 'fit'],
       },
@@ -565,11 +573,14 @@ DIRECTING RULES:
     a real demo, a visible reaction, a hand-to-camera CTA. Looks like real phone
     footage — NO cinematic / fantasy / glowing / floating / CGI on real people.
   • 3D MECHANISM (layout:"cut", no person, full-screen) — for lines describing a
-    PROCESS INSIDE THE BODY or a MICRO-LEVEL effect a phone CAN'T film: an
-    ingredient acting on / penetrating / restoring / repairing / absorbing /
-    delivering into a body part. The engine detects this automatically from
-    your quote + conceptPrompt — just describe the mechanism literally; don't
-    force it into a person close-up.
+    PROCESS A PHONE CAN'T FILM: an ingredient acting inside the body (nano
+    penetrating skin, peptide stimulating collagen, ingredient restoring
+    cartilage, …) OR a process inside a device or material (suction airflow
+    inside a vacuum, a non-stick coating at molecular level, a watch movement,
+    a speaker driver vibrating, a tool's tempered-steel grain structure, …).
+    SET "isMechanism": true on such scenes — the renderer will then drop the
+    avatar/product reference and produce a clean 3D scientific animation. Don't
+    force these into a person close-up or a product packshot.
   • OVERLAY illustration (layout:"overlay_corner") — for ABSTRACT teaching beats
     riding on top of the creator: statistics ("70% of women over 25…"), pure
     diagrams, educational infographics with no in-body action.
@@ -753,15 +764,18 @@ OUTPUT strict JSON, no fences:
     // Only a NON-person concept scene can become a 3D animation — a person /
     // emotion / before-after scene (motionKind 'emotion') stays real footage even
     // if it mentions a mechanism word ("she nourishes her skin").
-    // Z98 — 3D MECHANISM gate. Bất kể director chọn preset gì (CONCEPT_SCENE OR
-    // PRODUCT_IN_ACTION OR a person-action preset), nếu quote + conceptPrompt
-    // mô tả cơ chế ingredient lên/trong cơ thể → ép sang 3D animation no-person.
-    // Trước đây chỉ áp cho CONCEPT_SCENE → cảnh PRODUCT_IN_ACTION mô tả "nano
-    // thấm vào da" bị lọt qua, ra close-up tay người + particles fake. Loại trừ
-    // 'emotion' motion (cảnh người buồn/vui) — câu có thể nhắc verb cơ chế
-    // ("nourishes her skin") nhưng vẫn là cảnh người thật.
-    const is3D = motionKind !== 'emotion' &&
-      MECHANISM_RE.test(`${typeof item.quote === 'string' ? item.quote : ''} ${conceptPrompt}`)
+    // Z98 — 3D MECHANISM gate. Universal across niches + languages via two
+    // independent triggers, EITHER of which fires 3D:
+    //   • director's own `isMechanism` flag — catches non-body niches (appliance
+    //     suction, motor, lens, coating, gear assembly…) AND any language the
+    //     regex doesn't cover. Director decides from meaning, not vocabulary.
+    //   • MECHANISM_RE 3-lang safety net — catches body-niche scripts (skincare /
+    //     dental / supplement / hair / joint / ...) when director forgets the flag.
+    // 'emotion' motion (face beats) bypasses both — a person scene that mentions
+    // "nourishes her skin" stays real footage, not 3D.
+    const flaggedMechanism = item.isMechanism === true
+    const regexMechanism = MECHANISM_RE.test(`${typeof item.quote === 'string' ? item.quote : ''} ${conceptPrompt}`)
+    const is3D = motionKind !== 'emotion' && (flaggedMechanism || regexMechanism)
     const isEmotionConcept = presetId === 'CONCEPT_SCENE' && motionKind === 'emotion'
     const renderMode: InsertRenderMode =
       is3D ? 'video'
@@ -1278,6 +1292,11 @@ interface RawDirectorScene {
   labels?: string[]
   /** Z69 — full-screen cut vs corner overlay. */
   layout?: 'cut' | 'overlay_corner'
+  /** Z98 — director's own call: this scene's spoken line describes a process
+   *  inside the body or inside a device that a phone can't film, so render it
+   *  as a 3D scientific animation. Optional — the MECHANISM_RE regex still
+   *  fires as a body-niche safety net when the director forgets the flag. */
+  isMechanism?: boolean
 }
 
 function parseDirectorOutput(raw: string): { scenes: RawDirectorScene[]; ingredientsInScript: string[] } {
