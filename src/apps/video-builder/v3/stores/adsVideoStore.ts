@@ -441,9 +441,13 @@ export const useAdsVideoStore = create<AdsVideoStoreState>((set, get) => ({
         '480p'
       // Enforce the cost-mode insert ceiling — never let a bulk apply push the
       // total past what the chosen mode budgeted for (drives render cost).
+      // Z98 #5 — stickers are EXEMPT: they're 0-credit local overlays, additive
+      // on top of the talking-head, so they don't eat the paid-render budget.
       const maxInserts = COST_MODE_CONFIG[s.costMode].insertCount.max
+      const stickerItems = items.filter((it) => it.renderMode === 'sticker')
+      const sceneItems = items.filter((it) => it.renderMode !== 'sticker')
       const room = Math.max(0, maxInserts - s.inserts.length)
-      const accepted = items.slice(0, room)
+      const accepted = [...sceneItems.slice(0, room), ...stickerItems]
       let nextId = s.inserts.reduce((m, it) => Math.max(m, it.insertId), 0)
       const newInserts: ActionInsertClip[] = accepted.map((item, i) => {
         nextId += 1

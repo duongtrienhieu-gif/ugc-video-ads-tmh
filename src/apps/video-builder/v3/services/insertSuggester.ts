@@ -294,13 +294,6 @@ const DIRECTOR_RESPONSE_SCHEMA = {
           // because the MECHANISM_RE regex still fires as a safety net for
           // body-niche scripts.
           isMechanism:   { type: 'boolean' },
-          // Z98 #5 — sticker scenes. When set, this scene is NOT a Grok/3D
-          // render — it's a short (1.5-2s) TikTok-style text sticker drawn
-          // locally + popped in the corner of the talking-head on the keyword.
-          // `labels` carries the sticker text; `stickerWordAnchor` is the word
-          // inside `quote` it pops on.
-          stickerStyle:      { type: 'string', enum: ['number', 'countdown', 'pill', 'flag', 'badge', 'warning', 'price', 'highlight', 'arrow'] },
-          stickerWordAnchor: { type: 'string', maxLength: 40 },
         },
         required: ['presetId', 'anchorBlock', 'quote', 'durationSec', 'fit'],
       },
@@ -308,6 +301,25 @@ const DIRECTOR_RESPONSE_SCHEMA = {
     // Z79 (A) — the ingredient phrases the SCRIPT actually names, copied
     // VERBATIM in the script's own language. Empty if the script names none.
     ingredientsInScript: { type: 'array', items: { type: 'string' } },
+    // Z98 #5 — sticker pops. A SEPARATE layer from `scenes`: tiny 0-credit
+    // TikTok-style text stickers that ride ON TOP of the talking-head on a
+    // concrete keyword. Kept out of `scenes` so they don't compete with the
+    // main visual budget and the director actually fills them (a dedicated
+    // output slot, like ingredientsInScript, gets answered; a soft prompt rule
+    // buried in the scene-type list got ignored).
+    stickers: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          style:      { type: 'string', enum: ['number', 'countdown', 'pill', 'flag', 'badge', 'warning', 'price', 'highlight', 'arrow'] },
+          text:       { type: 'string', maxLength: 28 },
+          quote:      { type: 'string', maxLength: 200 },
+          wordAnchor: { type: 'string', maxLength: 40 },
+        },
+        required: ['style', 'text', 'quote'],
+      },
+    },
   },
   required: ['scenes'],
 }
@@ -601,24 +613,6 @@ DIRECTING RULES:
     stamp in the corner beside the creator's face. Use GENEROUSLY: abstract
     claims, USP numbers, ingredient names, time refs, proof points. Cheap and
     additive — rides on top of the talking-head, doesn't compete with cuts.
-  • STICKER (set "stickerStyle") — a tiny 0-credit TikTok-style text pop that
-    appears in the corner ON the exact word, over the talking-head. Use it to
-    punch a SHORT concrete keyword the voice says — NOT a whole scene. Pick the
-    style by what the keyword IS (universal across every niche):
-      number (a measured spec: "20kPa","98%","1400rpm","16MP"),
-      countdown (time: "3 giây","2 tuần","180 phút"),
-      pill (ingredient/part/material name: "Nano","HEPA","Inox 304","Cotton"),
-      flag (origin/brand: "Korea","Made in VN"),
-      badge (short benefit: "Chống gỉ","Kháng khuẩn"),
-      warning (caution/note: "Không cho trẻ em","BH 2 năm"),
-      price (price/offer: "RM59","-50%","Combo"),
-      highlight (emphasise any key word the voice stresses),
-      arrow (point: "Nút này").
-    Put the 1-3 word text in "labels" (in ${langName}) and the exact word it
-    pops on in "stickerWordAnchor". Stickers DON'T replace cuts/overlays — add
-    them ON TOP for sparse talking-head stretches. Only for a real concrete
-    keyword (number/term/origin/claim) — skip vague phrases; don't spam (≤1 per
-    ~5s).
   TARGET MIX — roughly half cuts, half overlays; count flows from the gap-≤5s
   rule (30s ≈ 3+3, 60s ≈ 6+6). Graphic/teaching content (split-screen,
   infographic, diagram, animated-graphic, chart) MUST be overlay, NEVER cut —
@@ -649,13 +643,33 @@ English, do NOT add ingredients the script does not mention. If the script names
 no ingredients, return an empty array. This list guarantees an ingredient scene
 gets made even if you did not pick one above.
 
+STICKERS — also separate from the scenes. Scan the WHOLE script and fill the
+"stickers" array with EVERY short concrete keyword worth a 0-credit TikTok-style
+text pop in the corner (these ride ON TOP of the talking-head and do NOT count as
+scenes — fill them GENEROUSLY, aim ~1 every 5-8s). Pick "style" by what the
+keyword IS (universal across all niches):
+  number (a measured spec: "20kPa","98%","1400rpm","16MP"),
+  countdown (a time/duration: "3 giây","2 tuần","180 phút"),
+  pill (an ingredient/part/material name: "Nano","HEPA","Inox 304","Cotton"),
+  flag (an origin/brand: "Korea","Made in VN"),
+  badge (a short benefit claim: "Chống gỉ","Kháng khuẩn"),
+  warning (a caution/note: "Không cho trẻ em","BH 2 năm"),
+  price (a price/offer: "RM59","-50%","Combo"),
+  highlight (any key word the voice clearly stresses),
+  arrow (point at something: "Nút này").
+"text" = the 1-3 word sticker copy in ${langName}; "quote" = the verbatim line it
+sits on; "wordAnchor" = the exact word inside that line it should pop on. ONLY
+real concrete keywords — skip vague phrases ("tươi tắn", "thoải mái"). [] if the
+script has none.
+
 OUTPUT strict JSON, no fences:
 { "scenes": [ { "presetId": "...", "anchorBlock": "...", "quote": "(verbatim line)",
   "durationSec": 4, "fit": 0.0, "reason": "...",
   "conceptPrompt": "(required for CONCEPT_SCENE and PRODUCT_IN_ACTION)",
   "labels": ["(required for teaching graphic CONCEPT_SCENE — short ${langName} terms to print on the image; empty for pain/emotion/microscopy)"],
   "layout": "cut | overlay_corner (per LAYOUT RULE — pick per scene)" } ],
-  "ingredientsInScript": ["(each ingredient the script names, verbatim, in ${langName}; [] if none)"] }`
+  "ingredientsInScript": ["(each ingredient the script names, verbatim, in ${langName}; [] if none)"],
+  "stickers": [ { "style": "number|countdown|pill|flag|badge|warning|price|highlight|arrow", "text": "(1-3 words in ${langName})", "quote": "(verbatim line it sits on)", "wordAnchor": "(the exact word to pop on)" } ] }`
 
   const userPrompt = `SCRIPT (block id in brackets):\n${scriptDump}\n\nDirect the scenes now.`
 
@@ -680,7 +694,7 @@ OUTPUT strict JSON, no fences:
     thinkingBudget: 0,
   })
 
-  const { scenes: parsed, ingredientsInScript } = parseDirectorOutput(raw)
+  const { scenes: parsed, ingredientsInScript, stickers: rawStickers } = parseDirectorOutput(raw)
   const validPresets = new Set<string>(DIRECTOR_PRESET_ENUM)
   const validBlocks = new Set<string>(['hook', 'pain', 'discovery', 'benefit', 'cta'])
 
@@ -957,27 +971,11 @@ OUTPUT strict JSON, no fences:
     // director's motionKind (was: marked emotion → video → cut = 16cr waste).
     const GRAPHIC_TEACHING_RE = /\b(animated graphic|hand[- ]drawn|split[- ]screen|split screen|infographic|chart|diagram|counter|statistic\w*|sketch|illustration|graph|schematic|cross[- ]section view|labeled|annotated)\b/i
     const isGraphicTeaching = !is3D && presetId === 'CONCEPT_SCENE' && GRAPHIC_TEACHING_RE.test(conceptPrompt)
-    // Z98 #5 — sticker scene. The director tags a short keyword-pop with a
-    // stickerStyle; it renders as a 0-credit local canvas PNG, always a 1.5-2s
-    // corner overlay. labels[] supplies the text. A sticker OVERRIDES the normal
-    // cut/overlay/3D routing (it never goes to Grok), but only when it actually
-    // has both a valid style AND text — else it degrades to a normal scene.
-    const stickerStyle = typeof item.stickerStyle === 'string' && STICKER_STYLE_SET.has(item.stickerStyle)
-      ? item.stickerStyle as StickerStyle : undefined
-    const stickerText = stickerStyle && Array.isArray(item.labels)
-      ? item.labels.map((l) => String(l).trim()).filter(Boolean).join(' ').slice(0, 28).trim()
-      : undefined
-    const isSticker = !!stickerStyle && !!stickerText
-    const effectiveRenderMode: InsertRenderMode =
-      isSticker ? 'sticker' : isGraphicTeaching ? 'ken_burns' : renderMode
+    const effectiveRenderMode: InsertRenderMode = isGraphicTeaching ? 'ken_burns' : renderMode
     const layout: InsertLayout =
-      isSticker ? 'overlay_corner'                  // Z98 #5 — sticker = corner pop
-        : is3D ? 'cut'                              // Z98 — 3D mechanism = full-screen cut
+      is3D ? 'cut'                                  // Z98 — 3D mechanism = full-screen cut
         : (isStaticIllustration || isGraphicTeaching) ? 'overlay_corner'
         : (directorLayout ?? 'cut')
-    const effectiveDuration = isSticker
-      ? Math.max(1.5, Math.min(2, item.durationSec || 1.8))
-      : durationSec
     out.push({
       presetId,
       matchCount: 0,
@@ -986,16 +984,11 @@ OUTPUT strict JSON, no fences:
       anchorBlock: anchor,
       confidence: fit,
       reason: typeof item.reason === 'string' ? item.reason : undefined,
-      conceptPrompt: isFreeScene && !isSticker ? conceptPrompt : undefined,
-      durationSec: effectiveDuration,
+      conceptPrompt: isFreeScene ? conceptPrompt : undefined,
+      durationSec,
       quote,
       renderMode: effectiveRenderMode,
       layout,
-      ...(isSticker && {
-        stickerStyle,
-        stickerText,
-        stickerWordAnchor: typeof item.stickerWordAnchor === 'string' ? item.stickerWordAnchor.trim() : undefined,
-      }),
     })
   }
   // Z69/Z79 — Trust & pacing safety net (post-parse):
@@ -1077,6 +1070,31 @@ OUTPUT strict JSON, no fences:
   // Keep the director's ORDER (narrative sequence), not a fit sort — scenes
   // should play in script order. Cap to the duration-aware budget.
   const directed = out.slice(0, effBudget)
+  // Z98 #5 — convert the director's SEPARATE `stickers` array into 0-credit
+  // sticker inserts. Appended AFTER the scene budget cap so they never push a
+  // real B-roll scene out; capped at 10 so a runaway model can't spam. Each
+  // needs a known style + non-empty text + a quote to anchor its timing on.
+  const stickerSuggestions: InsertSuggestion[] = rawStickers
+    .filter((s) => !!s && typeof s.style === 'string' && STICKER_STYLE_SET.has(s.style)
+      && typeof s.text === 'string' && s.text.trim().length > 0
+      && typeof s.quote === 'string' && s.quote.trim().length > 0)
+    .slice(0, 10)
+    .map((s) => ({
+      presetId: 'CONCEPT_SCENE' as ActionPresetId,   // placeholder; renderMode 'sticker' drives everything
+      matchCount: 0,
+      matchedBlocks: [],
+      matchedKeywords: [],
+      anchorBlock: null,
+      confidence: 0.9,
+      durationSec: 1.8,
+      quote: s.quote!.trim(),
+      renderMode: 'sticker' as InsertRenderMode,
+      layout: 'overlay_corner' as InsertLayout,
+      stickerStyle: s.style as StickerStyle,
+      stickerText: s.text!.trim().slice(0, 28),
+      stickerWordAnchor: typeof s.wordAnchor === 'string' ? s.wordAnchor.trim() : undefined,
+    }))
+  const final = [...directed, ...stickerSuggestions]
   // Z98 — telemetry only. Quota promotion bỏ; script dictates the mix via the
   // semantic SCENE-TYPE BY MEANING rule + MECHANISM_RE auto-routing.
   const cutScenes = directed.filter((s) => s.layout !== 'overlay_corner' && !is3DScene(s))
@@ -1088,15 +1106,15 @@ OUTPUT strict JSON, no fences:
     `dropped{preset:${drop.preset},noPrompt:${drop.noPrompt},zeroFit:${drop.zeroFit},dupeSkip:${drop.dupeSkip}} ` +
     `rewrote{beforeAfter:${rewrite.beforeAfter},topical:${rewrite.topical},dupeSwap:${rewrite.dupeSwap},labeled:${rewrite.labeled},labelLangDrop:${rewrite.labelLangDrop},ctaClose:${rewrite.ctaClose}} ` +
     `trust{earlyHook:${trustDrops.earlyHook},coverage:${trustDrops.coverage},run3:${trustDrops.run3}} ` +
-    `cuts=${cutScenes.length}(${cutSec}s) 3d=${scenes3D} overlays=${overlays} dur=${dur}s ` +
+    `cuts=${cutScenes.length}(${cutSec}s) 3d=${scenes3D} overlays=${overlays} stickers=${stickerSuggestions.length}/${rawStickers.length} dur=${dur}s ` +
     `ingredientInject=${ingredientInjected} ` +
     `visibleResult=${visibleResultProduct} topical=${topicalCategory ?? 'no'} ` +
-    `→ ${directed.length > 0 ? `${directed.length} scenes` : 'EMPTY → keyword fallback'}`,
+    `→ ${directed.length > 0 ? `${final.length} items` : 'EMPTY → keyword fallback'}`,
   )
   if (directed.length === 0) {
     console.warn(`[DIRECTOR] raw head: ${raw.slice(0, 400)}`)
   }
-  if (directed.length > 0) return directed
+  if (directed.length > 0) return final
   // Z40 full-auto safety net — Gemini returned nothing usable (over-shy, parse
   // miss, or a thin script). Fall back to the keyword suggester so the engine
   // still proposes a baseline instead of dumping the work back on the user.
@@ -1390,13 +1408,17 @@ interface RawDirectorScene {
    *  as a 3D scientific animation. Optional — the MECHANISM_RE regex still
    *  fires as a body-niche safety net when the director forgets the flag. */
   isMechanism?: boolean
-  /** Z98 #5 — sticker scene style (local canvas text pop). */
-  stickerStyle?: StickerStyle
-  /** Z98 #5 — the word inside `quote` the sticker pops on (word-level anchor). */
-  stickerWordAnchor?: string
 }
 
-function parseDirectorOutput(raw: string): { scenes: RawDirectorScene[]; ingredientsInScript: string[] } {
+// Z98 #5 — a sticker pop from the director's separate `stickers` array.
+interface RawSticker {
+  style?: string
+  text?: string
+  quote?: string
+  wordAnchor?: string
+}
+
+function parseDirectorOutput(raw: string): { scenes: RawDirectorScene[]; ingredientsInScript: string[]; stickers: RawSticker[] } {
   let parsed: unknown
   try {
     parsed = JSON.parse(raw)
@@ -1414,19 +1436,20 @@ function parseDirectorOutput(raw: string): { scenes: RawDirectorScene[]; ingredi
       const scenes = salvageScenes(raw)
       if (scenes.length > 0) {
         console.warn(`[DIRECTOR] JSON truncated (${raw.length}ch) — salvaged ${scenes.length} complete scenes`)
-        return { scenes, ingredientsInScript: [] }
+        return { scenes, ingredientsInScript: [], stickers: [] }
       }
-      return { scenes: [], ingredientsInScript: [] }
+      return { scenes: [], ingredientsInScript: [], stickers: [] }
     }
   }
-  const obj = parsed as { scenes?: unknown; ingredientsInScript?: unknown }
+  const obj = parsed as { scenes?: unknown; ingredientsInScript?: unknown; stickers?: unknown }
   if (!obj || typeof obj !== 'object' || !Array.isArray(obj.scenes)) {
-    return { scenes: [], ingredientsInScript: [] }
+    return { scenes: [], ingredientsInScript: [], stickers: [] }
   }
   const ingredientsInScript = Array.isArray(obj.ingredientsInScript)
     ? (obj.ingredientsInScript as unknown[]).map((x) => String(x).trim()).filter((x) => x.length >= 2 && x.length <= 50)
     : []
-  return { scenes: obj.scenes as RawDirectorScene[], ingredientsInScript }
+  const stickers = Array.isArray(obj.stickers) ? (obj.stickers as RawSticker[]) : []
+  return { scenes: obj.scenes as RawDirectorScene[], ingredientsInScript, stickers }
 }
 
 // Z90 — recover complete scene objects from a TRUNCATED Director JSON. Finds the
