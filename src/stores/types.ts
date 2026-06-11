@@ -9,6 +9,7 @@ export interface Product {
   benefits: string
   offer: string
   ingredients: string
+  usageGuide: string
   createdAt: number
 }
 

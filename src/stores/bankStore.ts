@@ -49,6 +49,7 @@ function toProduct(row: Record<string, unknown>): Product {
     benefits: (row.benefits as string) ?? '',
     offer: (row.offer as string) ?? '',
     ingredients: cleanIngredients,
+    usageGuide: (row.usage_guide as string) ?? '',
     productImage: (row.product_image as string) ?? '',
   }
 }
@@ -256,7 +257,7 @@ export const useBankStore = create<BankState>((set, get) => ({
     try {
       const user_id = await requireUserId()
       console.log('[addProduct] inserting with user_id:', user_id)
-      const { data: row, error } = await supabase.from('products').insert({
+      const fullRow: Record<string, unknown> = {
         user_id,
         product_name: product.productName,
         product_description: product.productDescription,
@@ -266,8 +267,18 @@ export const useBankStore = create<BankState>((set, get) => ({
         benefits: product.benefits,
         offer: product.offer,
         cta: product.ingredients,  // legacy column name — stores ingredients
+        usage_guide: product.usageGuide,
         product_image: product.productImage,
-      }).select().single()
+      }
+      let { data: row, error } = await supabase.from('products').insert(fullRow).select().single()
+      // Graceful fallback: if the `usage_guide` column hasn't been added to the
+      // Supabase table yet, retry without it so saving never breaks. The field
+      // simply won't persist until the column exists (run the ALTER TABLE).
+      if (error && /usage_guide/i.test(error.message)) {
+        const legacyRow = { ...fullRow }
+        delete legacyRow.usage_guide
+        ;({ data: row, error } = await supabase.from('products').insert(legacyRow).select().single())
+      }
       if (error) {
         reportError('Lưu sản phẩm', error)
         set((s) => ({ products: s.products.filter((p) => p.id !== tempId) }))
@@ -290,8 +301,15 @@ export const useBankStore = create<BankState>((set, get) => ({
     if (updates.benefits !== undefined) patch.benefits = updates.benefits
     if (updates.offer !== undefined) patch.offer = updates.offer
     if (updates.ingredients !== undefined) patch.cta = updates.ingredients  // legacy column name
+    if (updates.usageGuide !== undefined) patch.usage_guide = updates.usageGuide
     if (updates.productImage !== undefined) patch.product_image = updates.productImage
-    const { error } = await supabase.from('products').update(patch).eq('id', id)
+    let { error } = await supabase.from('products').update(patch).eq('id', id)
+    // Same graceful fallback as addProduct — survive a missing usage_guide column.
+    if (error && /usage_guide/i.test(error.message)) {
+      const legacyPatch = { ...patch }
+      delete legacyPatch.usage_guide
+      ;({ error } = await supabase.from('products').update(legacyPatch).eq('id', id))
+    }
     if (error) reportError('Cập nhật sản phẩm', error)
     else set((s) => ({ products: s.products.map((p) => p.id === id ? { ...p, ...updates } : p) }))
   },
