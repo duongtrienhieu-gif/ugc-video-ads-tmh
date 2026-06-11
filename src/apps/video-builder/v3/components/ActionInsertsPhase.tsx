@@ -1059,7 +1059,10 @@ function InsertCard({
             <img
               src={keyframeUrl}
               alt={insert.stickerText ?? 'sticker'}
-              className={`absolute right-[4%] top-1/2 w-[28%] -translate-y-1/2 drop-shadow-lg transition-all duration-200 ${
+              /* Z98 #5 — size by HEIGHT (consistent text size for every sticker),
+                 width auto, capped so a long label can't overflow. Fixing WIDTH
+                 made short labels huge + long labels unreadably tiny. */
+              className={`absolute right-[4%] top-1/2 h-[11%] w-auto max-w-[60%] -translate-y-1/2 object-contain drop-shadow-lg transition-all duration-200 ${
                 stickerShown ? 'scale-100 opacity-100' : 'scale-50 opacity-0'
               }`}
             />

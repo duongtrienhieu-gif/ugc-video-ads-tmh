@@ -313,7 +313,7 @@ const DIRECTOR_RESPONSE_SCHEMA = {
         type: 'object',
         properties: {
           style:      { type: 'string', enum: ['number', 'countdown', 'pill', 'flag', 'badge', 'warning', 'price', 'highlight', 'arrow'] },
-          text:       { type: 'string', maxLength: 28 },
+          text:       { type: 'string', maxLength: 20 },
           quote:      { type: 'string', maxLength: 200 },
           wordAnchor: { type: 'string', maxLength: 40 },
         },
@@ -659,7 +659,9 @@ adds energy. Pick "style" by what the keyword IS (universal across all niches):
   price (a price/offer: "RM59","-50%","Combo"),
   highlight (any key word the voice clearly stresses),
   arrow (point at something: "Nút này").
-"text" = the 1-3 word sticker copy in ${langName}; "quote" = the verbatim line it
+"text" = the sticker copy in ${langName} — keep it SHORT (1-2 words, ≤20 chars):
+trim a long phrase to its core ("Nano siêu nhỏ"→"Nano", "Công thức Hàn Quốc"→
+"Hàn Quốc", "Hydrolyzed Collagen"→"Collagen"). "quote" = the verbatim line it
 sits on; "wordAnchor" = the exact word inside that line it should pop on. ONLY
 real concrete keywords — skip vague phrases ("tươi tắn", "thoải mái"). [] if the
 script has none.
@@ -1093,7 +1095,7 @@ OUTPUT strict JSON, no fences:
       renderMode: 'sticker' as InsertRenderMode,
       layout: 'overlay_corner' as InsertLayout,
       stickerStyle: s.style as StickerStyle,
-      stickerText: s.text!.trim().slice(0, 28),
+      stickerText: s.text!.trim().slice(0, 20),
       stickerWordAnchor: typeof s.wordAnchor === 'string' ? s.wordAnchor.trim() : undefined,
     }))
   const final = [...directed, ...stickerSuggestions]
