@@ -36,6 +36,10 @@ import {
 } from '../services/insertSuggester'
 import { renderInsert, resumeInsertVideo, listEligibleInsertsForBulk } from '../services/insertRenderer'
 import { computeBlockStartTimestamps, computeQuoteTimestamp } from '../services/insertTimingEngine'
+// Z98 #5.1 — side-effect import keeps the sticker module (incl. the
+// window.__testSticker dev helper) in the bundle. The real named imports +
+// card wiring land in sub-commit 5.4.
+import '../services/stickerRenderer'
 // Z98 B2 — voice-first: synth the real voice + recalibrate the script BEFORE the
 // director runs, so scene count/placement use the real duration not a WPM guess.
 import { generateCreatorVoice } from '../services/creatorVideoEngine'
