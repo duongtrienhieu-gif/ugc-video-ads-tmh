@@ -103,6 +103,12 @@ const GLOW_STRIP_RE = /\b(soft |gentle |warm |bright )?(glowing|glow|radiant|shi
 // across VN / MS / EN.
 const AFTER_TIME_RE = /\b(sau\s+(vài|\d+)\s+(tuần|ngày|tháng)|vài tuần|tuần dùng|kết quả|trẻ ra|rạng rỡ|tươi tắn|thử ngay|combo|ưu đãi|selepas\s+\d+\s+(minggu|hari|bulan)|hasil|kemerlangan|after\s+\d+\s+(weeks?|days?|months?)|results?|try (it )?now|order now)/i
 
+// Z98 #2 — detect a BEFORE/AFTER comparison scene (split-screen / side-by-side).
+// In these the SAME person appears twice in one frame and the two halves must
+// wear DIFFERENT outfits, else "time has passed" reads fake (looks like one
+// sitting with two expressions). Matched off the conceptPrompt, universal.
+const BEFORE_AFTER_RE = /\b(before[- ]?(and[- ]?)?after|before\s*\/\s*after|split[- ]?screen|side[- ]?by[- ]?side|trước\s*(và|\/|-)?\s*sau|sebelum\s*(dan|\/|-)?\s*selepas)\b/i
+
 function buildInsertKeyframePrompt(
   presetId: ActionPresetId,
   product: Product | null,
@@ -265,6 +271,21 @@ function buildInsertKeyframePrompt(
           `face / skin tone / the person's identity — ignore the clothes and ` +
           `headwear. This is a different filming day from the talking-head video.`,
     )
+    // Z98 #2 — inside a BEFORE/AFTER comparison the two halves are the SAME
+    // person at two points in time; they MUST wear different outfits or "time
+    // has passed" reads fake. Adds to (doesn't replace) the WARDROBE rule above.
+    const isBeforeAfter = presetId === 'BEFORE_AFTER_REACTION' ||
+      (!!conceptPrompt && BEFORE_AFTER_RE.test(conceptPrompt))
+    if (isBeforeAfter) {
+      paragraphs.push(
+        `BEFORE/AFTER WARDROBE: the BEFORE side and the AFTER side are the SAME ` +
+        `person at two different times — they MUST wear CLEARLY DIFFERENT outfits ` +
+        `(different colors, different tops, and different headwear if any). The ` +
+        `"after" look is fresher / brighter. Two distinct outfits in one frame so ` +
+        `it is visually obvious that days or weeks have passed — never the same ` +
+        `outfit on both sides.`,
+      )
+    }
   }
   // Z98 — REAL-WORLD SCALE lock. Universal anti-drift for any scene where the
   // product shares the frame with the person. Image models often emphasise the
