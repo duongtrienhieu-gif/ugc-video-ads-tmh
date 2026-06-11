@@ -118,12 +118,19 @@ export interface CostModeConfig {
 export const COST_MODE_CONFIG: Record<CostMode, CostModeConfig> = {
   TEST: {
     id: 'TEST',
+    // Z98 — TEST mode is now the engine's default. The old TEST (a 15-20s
+    // thumbnail-test with a 3-scene cap) was wrong for the default — a 60s
+    // script flowing through it got its director output sliced to 3 cuts
+    // covering 12s, leaving 48s of pure talking-head. TEST now keeps its
+    // CHEAP 480p render path (the reason it was promoted to default) but
+    // accepts the same 3-16 director scenes as STANDARD/FULL, so script
+    // length — not mode — drives how dense the ad is.
     labelVi: 'TEST',
-    descriptionVi: '15-20s · 480p · 3 inserts · motion thấp · ~$1-3 cho toàn project',
-    targetDurationSec: 18,
-    insertCount: { min: 2, max: 3 },
+    descriptionVi: 'Mọi độ dài · 480p · 3-16 inserts (đạo diễn tự quyết theo độ dài) · CHEAP · ~$1-5',
+    targetDurationSec: 30,
+    insertCount: { min: 3, max: 16 },
     resolution: '480p',
-    estimatedUsd: { min: 1, max: 3 },
+    estimatedUsd: { min: 1, max: 5 },
     skipPreviewDefault: true,
     tone: 'amber',
     badge: '⚡ CHEAP · MẶC ĐỊNH',
