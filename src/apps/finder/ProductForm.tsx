@@ -24,13 +24,31 @@ const FIELDS: { key: keyof Product; label: string; type: 'text' | 'textarea'; re
   { key: 'ingredients', label: 'Ingredients', type: 'textarea', placeholder: 'e.g. Vitamin B12, Inulin (prebiotic), FloraFit probiotic strains, Angelica sinensis, Motherwort...' },
 ]
 
-const JSON_SCHEMA = `{"productName":"","productDescription":"","targetMarket":"","painPoints":"","usps":"","benefits":"","offer":"","ingredients":""}`
+// Gemini JSON-mode schema. Forcing responseMimeType=application/json +
+// responseSchema makes Gemini return ONE clean JSON object every time — no
+// code fences, no [bracket] brainstorm, no truncated prose. This is what
+// killed the old "[parseExtracted] failed" errors: the model used to emit its
+// reasoning first and the parser choked. Empty string = field not found.
+const EXTRACT_SCHEMA = {
+  type: 'object',
+  properties: {
+    productName: { type: 'string' },
+    productDescription: { type: 'string' },
+    targetMarket: { type: 'string' },
+    painPoints: { type: 'string' },
+    usps: { type: 'string' },
+    benefits: { type: 'string' },
+    offer: { type: 'string' },
+    ingredients: { type: 'string' },
+  },
+  required: ['productName', 'productDescription', 'targetMarket', 'painPoints', 'usps', 'benefits', 'offer', 'ingredients'],
+} as const
 
 /** Max screenshots user can upload at once for AI extraction. 5 is the limit
  *  — user can upload 1-5, not mandatory to fill all slots. */
 const MAX_SCREENSHOTS = 5
 
-const EXTRACT_SYSTEM = 'You are a product info extraction assistant. The user prompt will ask you to do a BRAINSTORM step first (using [brackets] and quotes only, never {}), then output ONE minified JSON object on a single line at the end (no markdown, no code fences). The parser reads only the first {} block, so make sure the JSON appears at the end of your response and contains no nested raw newlines inside string values. Always respond in VIETNAMESE.'
+const EXTRACT_SYSTEM = 'You are a product info extraction assistant. Output ONLY the JSON object defined by the response schema — fill every field directly. All string values MUST be written in natural Vietnamese (translate from any source language; keep brand names, currency tokens and scientific ingredient names as-is). If a field has no information on the page, return an empty string for it. Do not invent data.'
 
 const FIELDS_SPEC = `Fields (ALL values must be written in NATURAL VIETNAMESE — translate from any source language; keep brand/product proper nouns as-is, keep original currency tokens like RM, ₫, $, ฿):
 - productName: tên chính của sản phẩm (giữ nguyên tên thương hiệu nếu là proper noun, vd "LANZF", "Manuka")
@@ -66,33 +84,8 @@ Trang có thể chứa NHIỀU sản phẩm trộn. Section nhiễu cần BỎ Q
 Xác định sản phẩm chính: xuất hiện ĐẦU TIÊN + có giá + mô tả chi tiết + gallery ảnh chính + nút add-to-cart. Nhiều SP cùng prominence → lấy cái đầu (top of page).
 Với 1688/Alibaba B2B: tập trung main listing's price range / MOQ / specifications. Bỏ qua "Recommended suppliers" / "Same category products".`
 
-// ── Chain-of-thought block reused by all prompts ─────────────────────────
-// Forces Gemini to brainstorm per-field BEFORE committing to JSON. Quality
-// boost ~20% on inference-heavy fields (targetMarket, painPoints, usps).
-// Cost: ~30% more tokens (but still single call). parseExtracted picks the
-// FIRST {} block in output so analysis (which uses [brackets]/quotes only,
-// never {}) is automatically skipped.
-const COT_INSTRUCTION = `QUAN TRỌNG — LÀM 2 BƯỚC, ĐỪNG XUẤT JSON NGAY:
-
-BƯỚC 1 — PHÂN TÍCH (brainstorm trong đầu, output bằng văn bản, KHÔNG dùng dấu {}):
-- productName: Tìm tên chính ở đâu? (title, h1, banner ảnh đầu) → "..."
-- productDescription: 1-2 câu mô tả ngắn gọn sản phẩm + công dụng chính?
-- targetMarket: Sản phẩm này dành cho AI? (suy luận từ loại sp + ngôn ngữ + hình ảnh + tone trang)
-- painPoints: Trang nói trực tiếp vấn đề nào? Vấn đề nào suy luận từ loại sp?
-- usps: Claim nào lặp lại nhiều? Badge nào (100% natural, Halal, KKM)? Có bảng so sánh không?
-- benefits: Lợi ích bề mặt + functional? Có liên kết thành phần → tác dụng không?
-- offer: Có bao nhiêu tier giá? Giá gốc gạch? Discount %?
-- ingredients: Thành phần thật trong sản phẩm là gì? (KHÔNG nhầm với CTA marketing)
-Trong phần này dùng [bracket] hoặc "quotes" để bao text, KHÔNG dùng {} (dấu {} chỉ cho BƯỚC 2).
-
-BƯỚC 2 — JSON CUỐI (output thật, parser app sẽ đọc):
-Sau khi phân tích xong, output 1 dòng JSON minified, không markdown, không code fence:`
-
 const EXTRACT_PROMPT = (pageText: string) =>
-  `Trích xuất thông tin sản phẩm từ nội dung trang web bên dưới. TẤT CẢ giá trị JSON phải viết bằng TIẾNG VIỆT TỰ NHIÊN (dịch từ ngôn ngữ gốc nếu cần).
-
-${COT_INSTRUCTION}
-${JSON_SCHEMA}
+  `Trích xuất thông tin sản phẩm từ nội dung trang web bên dưới và điền vào JSON theo schema. Điền MỌI field có thể; field nào trang không có thông tin thì để chuỗi rỗng "". TẤT CẢ giá trị phải viết bằng TIẾNG VIỆT TỰ NHIÊN (dịch từ ngôn ngữ gốc nếu cần).
 
 ${FIELDS_SPEC}
 
@@ -115,9 +108,7 @@ NHIỆM VỤ — HYBRID SYNTHESIS:
    • offer/giá hầu như luôn ở banner ảnh, KHÔNG ở text. NHÌN ảnh để tìm giá kiểu "RM59", "₫299.000", "$29.99", sticker giảm giá ("50% OFF").
    • ingredients đến từ ảnh bao bì hiển thị nhãn sau, hoặc infographic "Thành phần" — đọc ảnh kỹ.
 5. TẤT CẢ GIÁ TRỊ PHẢI VIẾT BẰNG TIẾNG VIỆT TỰ NHIÊN (dịch từ ngôn ngữ gốc nếu cần). Giữ nguyên tên thương hiệu, đơn vị tiền tệ, tên khoa học chuẩn quốc tế.
-
-${COT_INSTRUCTION}
-${JSON_SCHEMA}
+6. Điền vào JSON theo schema. Field nào không có thông tin ở cả 2 nguồn thì để chuỗi rỗng "".
 
 ${FIELDS_SPEC}
 
@@ -798,6 +789,8 @@ export default function ProductForm({ item, onSave, onCancel }: ProductFormProps
         parts,
         systemInstruction: EXTRACT_SYSTEM,
         maxOutputTokens: 4096,
+        responseMimeType: 'application/json',
+        responseSchema: EXTRACT_SCHEMA as unknown as Record<string, unknown>,
       })
 
       const extracted = parseExtracted(response)
@@ -860,13 +853,14 @@ export default function ProductForm({ item, onSave, onCancel }: ProductFormProps
       // legible horizontal bands so text stays readable for Gemini (a 7MB+
       // long-page capture would otherwise be unreadable once shrunk to fit).
       const sliceGroups = await Promise.all(
-        stagedScreenshots.map((f) => blobToReadableSlices(f, 1024))
+        stagedScreenshots.map((f) => blobToReadableSlices(f, 1024, 1400, 6))
       )
       let imageParts = sliceGroups
         .flat()
         .map((data) => ({ inlineData: { mimeType: 'image/jpeg', data } }))
-      // Cap total bands so a very long page can't blow up the request.
-      if (imageParts.length > 12) imageParts = imageParts.slice(0, 12)
+      // Cap total bands so a very long page can't blow up the request (keeps
+      // the payload light enough to avoid Gemini free-tier 429s).
+      if (imageParts.length > 6) imageParts = imageParts.slice(0, 6)
 
       const response = await directGeminiVision({
         apiKey: geminiKey,
@@ -876,6 +870,8 @@ export default function ProductForm({ item, onSave, onCancel }: ProductFormProps
         ],
         systemInstruction: EXTRACT_SYSTEM,
         maxOutputTokens: 4096,
+        responseMimeType: 'application/json',
+        responseSchema: EXTRACT_SCHEMA as unknown as Record<string, unknown>,
       })
 
       const extracted = parseExtracted(response)
