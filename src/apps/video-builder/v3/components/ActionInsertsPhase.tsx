@@ -886,6 +886,7 @@ export default function ActionInsertsPhase({ onContinue }: Props) {
                 <InsertCard
                   key={insert.insertId}
                   insert={insert}
+                  voiceRef={state.voiceFirst?.voiceRef}
                   onSetMode={(mode) => patchInsert(insert.insertId, { renderMode: mode })}
                   onSetLayout={(layout) => patchInsert(insert.insertId, { layout })}
                   onRender={() => handleRenderInsert(insert.insertId)}
@@ -948,10 +949,12 @@ export default function ActionInsertsPhase({ onContinue }: Props) {
 // ── Per-insert card ──────────────────────────────────────────────────────
 
 function InsertCard({
-  insert,
+  insert, voiceRef,
   onSetMode, onSetLayout, onRender, onResume, onApprove, onReject, onLock, onUnlock, onRemove,
 }: {
   insert: ActionInsertClip
+  /** Z98 #5 — the voice-first voice asset, for the sticker mini-preview. */
+  voiceRef?: string
   onSetMode: (mode: InsertRenderMode) => void
   onSetLayout: (layout: 'cut' | 'overlay_corner') => void
   onRender: () => void
@@ -968,6 +971,31 @@ function InsertCard({
   const resolvedKeyframe = useAssetUrl(insert.keyframeRef ?? undefined)
   const resolvedVideo    = useAssetUrl(insert.videoRef ?? undefined)
   const resolvedPreview  = useAssetUrl(insert.previewVideoRef ?? undefined)
+  // Z98 #5 — sticker mini-preview: plays the voice window + pops the sticker in
+  // at the exact spoken second so the user can SEE+HEAR whether it lines up.
+  const stickerVoiceUrl = useAssetUrl(voiceRef ?? undefined)
+  const stickerAudioRef = useRef<HTMLAudioElement>(null)
+  const [stickerPreviewing, setStickerPreviewing] = useState(false)
+  const [stickerShown, setStickerShown] = useState(true)
+  const playStickerPreview = () => {
+    const audio = stickerAudioRef.current
+    const ts = insert.voiceTimestampSec
+    if (!audio || ts == null) return
+    setStickerPreviewing(true)
+    setStickerShown(false)                  // hidden during the 2s lead-in
+    audio.currentTime = Math.max(0, ts - 2)
+    audio.play().catch(() => {})
+    const onTime = () => {
+      if (audio.currentTime >= ts) setStickerShown(true)        // pop on the word
+      if (audio.currentTime >= ts + 2) {                        // end the window
+        audio.pause()
+        audio.removeEventListener('timeupdate', onTime)
+        setStickerPreviewing(false)
+        setStickerShown(true)               // back to the static display
+      }
+    }
+    audio.addEventListener('timeupdate', onTime)
+  }
 
   const keyframeUrl = insert.keyframeRef?.startsWith('http') ? insert.keyframeRef : resolvedKeyframe
   const videoUrl    = insert.videoRef?.startsWith('http')    ? insert.videoRef    : resolvedVideo
@@ -1031,7 +1059,9 @@ function InsertCard({
             <img
               src={keyframeUrl}
               alt={insert.stickerText ?? 'sticker'}
-              className="absolute right-[4%] top-1/2 w-[28%] -translate-y-1/2 drop-shadow-lg"
+              className={`absolute right-[4%] top-1/2 w-[28%] -translate-y-1/2 drop-shadow-lg transition-all duration-200 ${
+                stickerShown ? 'scale-100 opacity-100' : 'scale-50 opacity-0'
+              }`}
             />
           ) : (
             <div className="absolute inset-0 flex items-center justify-center text-[10px] text-violet-500">
@@ -1041,6 +1071,12 @@ function InsertCard({
           <span className="absolute left-1.5 top-1.5 rounded bg-violet-600 px-1.5 py-0.5 text-[9px] font-bold text-white">
             🏷 STICKER · {styleMeta?.labelVi ?? insert.stickerStyle}
           </span>
+          {stickerPreviewing && (
+            <span className="absolute bottom-1.5 left-1/2 -translate-x-1/2 rounded-full bg-black/70 px-2 py-0.5 text-[9px] font-bold text-white">
+              ▶ đang xem thử…
+            </span>
+          )}
+          {stickerVoiceUrl && <audio ref={stickerAudioRef} src={stickerVoiceUrl} preload="auto" className="hidden" />}
         </div>
         <div className="border-t border-black/5 px-2 py-1.5 text-[10px]">
           <div className="flex items-center justify-between gap-1">
@@ -1050,13 +1086,14 @@ function InsertCard({
           {insert.quote && (
             <button
               type="button"
-              onClick={() => ts != null && seekVoiceTo(ts)}
-              disabled={ts == null}
-              title={ts != null ? `Nghe đoạn voice quanh giây ${ts.toFixed(1)}s` : 'Không có dấu thời gian'}
+              onClick={playStickerPreview}
+              disabled={ts == null || !stickerVoiceUrl || stickerPreviewing}
+              title={ts != null ? `Xem thử: nghe voice + sticker bật ở giây ${ts.toFixed(1)}s` : 'Không có dấu thời gian'}
               className="mt-1 flex w-full items-start gap-1 rounded-md border border-violet-200 bg-violet-50 px-1.5 py-1 text-left leading-tight text-violet-900 transition-colors enabled:hover:border-violet-400 enabled:hover:bg-violet-100 disabled:cursor-default disabled:opacity-70"
             >
               <Play className="mt-[1px] h-2.5 w-2.5 shrink-0 text-violet-600" />
               <span className="line-clamp-2">
+                <span className="font-semibold text-violet-700">▶ Xem thử · </span>
                 "{insert.quote}"
                 {insert.stickerWordAnchor && (
                   <span className="font-semibold"> → bật ở "{insert.stickerWordAnchor}"</span>
