@@ -10,6 +10,17 @@ import type { Product } from '../../../stores/types'
 import type { SlotConfig, PaletteFamily, SlotTexts, TiktokShopProductBrief } from '../types'
 import { TPCN_PALETTES } from '../constants'
 
+/** Split a seller free-text field into short, name-like tokens, DROPPING long
+ *  prose fragments (e.g. mechanism sentences) so they never leak into the
+ *  slot-4 ingredient panel as a fake "ingredient". Returns [] for prose. */
+function shortNameTokens(text: string | undefined, max = 5): string[] {
+  return (text || '')
+    .split(/[\n,;•]/)
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0 && s.length <= 40 && s.split(/\s+/).length <= 4)
+    .slice(0, max)
+}
+
 export interface PromptContext {
   brandKit: ResolvedBrandKit
   product: Product
@@ -204,11 +215,14 @@ function deriveSlot4(ctx: PromptContext): { title: string; ingredients: Array<{ 
   if (visionIngs.length > 0) {
     return { title, ingredients: visionIngs.slice(0, 5).map((name) => ({ name })), tagline }
   }
-  const sellerIngs = (ctx.product.ingredients || '').split(/[\n,]/).map((s) => s.trim()).filter(Boolean).slice(0, 5)
+  // ingredients/usps are free text (ingredients now carries mechanism prose).
+  // Only accept short, name-like tokens for the slot-4 panel — never fragment a
+  // full sentence into a fake ingredient name + macro-photo hint.
+  const sellerIngs = shortNameTokens(ctx.product.ingredients)
   if (sellerIngs.length > 0) {
     return { title, ingredients: sellerIngs.map((name) => ({ name })), tagline }
   }
-  const sellerUsps = (ctx.product.usps || '').split(/[\n,;.]/).map((s) => s.trim()).filter(Boolean).slice(0, 5)
+  const sellerUsps = shortNameTokens(ctx.product.usps)
   if (sellerUsps.length > 0) {
     return { title, ingredients: sellerUsps.map((name) => ({ name })), tagline }
   }

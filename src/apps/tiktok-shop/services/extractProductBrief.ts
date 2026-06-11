@@ -17,7 +17,7 @@
 import type { Market } from '../../../types/brandKit'
 import type { Product } from '../../../stores/types'
 import type { TiktokShopProductBrief } from '../types'
-import { directGeminiVision } from '../../../utils/gemini'
+import { directGeminiVision, directGeminiText } from '../../../utils/gemini'
 import { getAsBase64 } from '../../../utils/assetStore'
 
 export interface ExtractProductBriefParams {
@@ -77,8 +77,20 @@ export async function extractProductBrief(
     maxOutputTokens: 4096,
   })
 
-  const brief = parseAndValidate(raw, params.product, params.language)
-  console.log(`[extractProductBrief] ✓ brief extracted · name="${brief.productNameExact}" · category="${brief.productCategory}" · ingredients=${brief.visibleIngredients.length}`)
+  let brief = tryParseBrief(raw, params.product, params.language)
+  if (!brief) {
+    // Vision returned unusable JSON. Instead of naively splitting the seller's
+    // ingredients/usps PROSE into fragmented pseudo-ingredients (which corrupts
+    // the slot-4 macro-photo prompts), let a text model READ + UNDERSTAND the
+    // metadata and author a proper brief.
+    console.warn('[extractProductBrief] Vision JSON unusable — AI text-comprehension fallback')
+    brief = await inferBriefFromMetadataAI(params.geminiApiKey, params.product, params.language)
+  }
+  if (!brief) {
+    console.warn('[extractProductBrief] text fallback failed — conservative brief')
+    brief = buildFallbackBrief(params.product, params.language)
+  }
+  console.log(`[extractProductBrief] ✓ brief · name="${brief.productNameExact}" · category="${brief.productCategory}" · ingredients=${brief.visibleIngredients.length}`)
   return brief
 }
 
@@ -154,7 +166,7 @@ function buildUserPrompt(product: Product, langName: string): string {
   if (product.painPoints)         lines.push(`- Pain points seller mentioned: ${product.painPoints}`)
   if (product.usps)               lines.push(`- USPs / differentiators: ${product.usps}`)
   if (product.benefits)           lines.push(`- Benefits: ${product.benefits}`)
-  if (product.ingredients)        lines.push(`- Ingredients (seller-provided): ${product.ingredients}`)
+  if (product.ingredients)        lines.push(`- Ingredients & how-it-works (seller-provided — may be full sentences describing the mechanism; READ to understand the product + extract ingredient NAMES from it, do NOT copy whole sentences into name fields): ${product.ingredients}`)
   if (product.offer)              lines.push(`- Pricing context: ${product.offer}`)
 
   lines.push(``)
@@ -198,11 +210,11 @@ function buildUserPrompt(product: Product, langName: string): string {
 
 // ── Parse & validate ─────────────────────────────────────────────────────
 
-function parseAndValidate(
+function tryParseBrief(
   raw: string,
   product: Product,
   language: Market,
-): TiktokShopProductBrief {
+): TiktokShopProductBrief | null {
   // Gemini with responseMimeType: 'application/json' usually returns clean JSON.
   // Still strip fences defensively in case the model wraps it.
   let cleaned = raw.trim()
@@ -214,9 +226,56 @@ function parseAndValidate(
     const parsed = JSON.parse(cleaned) as Partial<TiktokShopProductBrief>
     return normalizeBrief(parsed, product, language)
   } catch (err) {
-    console.warn('[extractProductBrief] JSON parse failed — using fallback', err, 'raw first 300:', raw.slice(0, 300))
-    return buildFallbackBrief(product, language)
+    console.warn('[extractProductBrief] JSON parse failed', err, 'raw first 300:', raw.slice(0, 300))
+    return null
   }
+}
+
+/** AI text-comprehension fallback. When Vision JSON is unusable we still want
+ *  the brief AUTHORED by a model that READS + UNDERSTANDS the seller's prose
+ *  (especially the "Ingredients & mechanism" text) — not by naive string
+ *  splitting. No reference photos here, so visual fields are inferred softly. */
+async function inferBriefFromMetadataAI(
+  apiKey: string,
+  product: Product,
+  language: Market,
+): Promise<TiktokShopProductBrief | null> {
+  if (!apiKey?.trim()) return null
+  const langName = language === 'ms' ? 'Bahasa Malaysia' : 'Vietnamese'
+  const userPrompt =
+    buildUserPrompt(product, langName) +
+    `\n\nNOTE: No reference photos are available on this call. Infer the factual visual fields ` +
+    `(packagingDescription, primaryColors, productSubtype) CONSERVATIVELY from the metadata. ` +
+    `The seller "Ingredients" text may be full sentences describing HOW the product works — READ ` +
+    `it to understand the product, but for visibleIngredients list ONLY the ingredient NAMES that ` +
+    `actually appear in it (e.g. "Collagen", "Hyaluronic Acid"), never whole sentences; if none are ` +
+    `clearly named, return []. For keyFeatures, propose concise 2-5 word physical names with ` +
+    `photoHints — do NOT copy prose verbatim.`
+  try {
+    const raw = await directGeminiText({
+      apiKey,
+      prompt: userPrompt,
+      systemInstruction: buildSystemPrompt(langName),
+      responseMimeType: 'application/json',
+      maxOutputTokens: 4096,
+      thinkingBudget: 0,
+    })
+    return tryParseBrief(raw, product, language)
+  } catch (err) {
+    console.warn('[extractProductBrief] text-AI fallback threw', err)
+    return null
+  }
+}
+
+/** Split a seller free-text field into short, name-like tokens, DROPPING long
+ *  prose fragments (e.g. mechanism sentences) so they never leak into an
+ *  ingredient-name or macro-photo slot. Returns [] when the text is prose. */
+function shortNameTokens(text: string | undefined, max = 5): string[] {
+  return (text || '')
+    .split(/[\n,;•]/)
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0 && s.length <= 40 && s.split(/\s+/).length <= 4)
+    .slice(0, max)
 }
 
 function normalizeBrief(
@@ -285,7 +344,9 @@ function buildFallbackBrief(product: Product, language: Market): TiktokShopProdu
   const usps = (product.usps || '').split(/[\n,;.]/).map((s) => s.trim()).filter(Boolean)
   const pains = (product.painPoints || '').split(/[\n;.]|•/).map((s) => s.trim()).filter(Boolean)
   const benefits = (product.benefits || '').split(/[\n,;.]/).map((s) => s.trim()).filter(Boolean)
-  const ings = (product.ingredients || '').split(/[\n,;]/).map((s) => s.trim()).filter(Boolean)
+  // ingredients is now prose (ingredient + mechanism) — extract clean NAMES only,
+  // never fragment full sentences into fake ingredients / macro-photo hints.
+  const ings = shortNameTokens(product.ingredients)
 
   return {
     productNameExact:      product.productName || 'Product',
@@ -330,6 +391,6 @@ function buildFallbackBrief(product: Product, language: Market): TiktokShopProdu
     },
     keyFeatures: ings.length > 0
       ? ings.slice(0, 5).map((name) => ({ name, photoHint: `macro photo of ${name}` }))
-      : usps.slice(0, 5).map((name) => ({ name, photoHint: `commercial product detail shot of ${name}` })),
+      : shortNameTokens(product.usps).map((name) => ({ name, photoHint: `commercial product detail shot of ${name}` })),
   }
 }
