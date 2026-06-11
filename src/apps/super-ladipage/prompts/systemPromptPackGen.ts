@@ -43,6 +43,7 @@ Sales flow: Hook → INSTANT TRUST → Pain → Education → Failed → FEAR
 Tone: ${preset.toneBrief}
 
 Output language for all native fields: ${langName}.
+SOURCE-LANGUAGE LOCK: the PRODUCT IDENTITY above is the operator's working notes and may be written in a DIFFERENT language (usually Vietnamese). Treat it as SOURCE ONLY — every user-visible value you output MUST be in ${langName}. If the source is not ${langName}, translate/localize it; never leave source-language words, and never leave a foreign currency token (e.g. "đ") — use the target market's currency (MY → RM, VN → đ). Keep AS-IS ONLY genuine brand proper nouns + international scientific / certification names.
 ${competitorUrl ? `Competitor STYLE reference (learn tone only, NEVER copy product info): ${competitorUrl}` : ''}
 
 Sections:

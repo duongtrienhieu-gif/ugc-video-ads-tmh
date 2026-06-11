@@ -221,7 +221,7 @@ function buildUserPrompt(args: {
   return `Write a ${args.targetDurationSec}-second TikTok ad in ${args.lang} for the product below.
 
 PRODUCT: ${args.productName}
-PRODUCT BRIEF (read + understand — ground the script in these real facts, weave them in naturally, do NOT recite verbatim):
+PRODUCT BRIEF (read + understand — ground the script in these real facts, weave them in naturally, do NOT recite verbatim. The brief may be written in Vietnamese; understand it, but write the script 100% in ${args.lang} — never echo Vietnamese words):
 ${args.productPitch}
 ${creatorLine}
 SELECTED STRUCTURE: ${args.structureLabel}

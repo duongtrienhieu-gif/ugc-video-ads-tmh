@@ -46,6 +46,8 @@ Offer / Price hint: ${product.offer || '(none — infer from market+category)'}
 Ingredients:        ${product.ingredients || '(none)'}
 Usage / how to use: ${product.usageGuide || '(none)'}
 
+SOURCE-LANGUAGE NOTE: the product fields above are the operator's working notes, usually written in VIETNAMESE. Read + understand them, but EVERY text value in the ProductIdentity JSON (pains, transformation, offer/combo labels, taglines, descriptive name parts) MUST be in the target display language (${langHint}). Translate/localize — never leave Vietnamese words. Use the target market's currency (MY → RM, VN → đ); if the seller's price is in a different currency than the market, infer a market-appropriate price for the category instead of copying the foreign-currency number. Keep AS-IS ONLY genuine brand proper nouns + international scientific ingredient names.
+
 Now output the ProductIdentity JSON exactly per the schema in the system prompt.
 Output JSON ONLY.
 `.trim()
