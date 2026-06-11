@@ -166,3 +166,40 @@ export function computeQuoteTimestampFromAlignment(
   const t = charStartSecs[Math.min(raw, charStartSecs.length - 1)]
   return Number.isFinite(t) ? Number(t.toFixed(2)) : null
 }
+
+// ── Z98 #5.3 — WORD-level anchoring for stickers ────────────────────────────
+// A sticker should pop at the exact second its keyword is spoken, not at the
+// start of the sentence it sits in. Given the verbatim quote + the wordAnchor
+// (the keyword inside it), locate that word in the REAL char-level alignment
+// and return its start second. The search is scoped to AT/AFTER the quote's
+// position so a word that recurs earlier in the script can't grab the wrong
+// occurrence. Falls back to the quote's start second when the word can't be
+// located (or there's no anchor) — never worse than the sentence-level anchor.
+export function computeWordTimestampFromAlignment(
+  alignment: VoiceAlignment,
+  quote: string | undefined | null,
+  wordAnchor: string | undefined | null,
+): number | null {
+  const quoteStart = computeQuoteTimestampFromAlignment(alignment, quote)
+  const anchorNorm = wordAnchor ? normalizeForMatch(wordAnchor) : ''
+  if (anchorNorm.length < 1) return quoteStart
+
+  const { text, charStartSecs } = alignment
+  if (!text || charStartSecs.length === 0) return quoteStart
+  const { norm, rawIdx } = normalizeWithMap(text)
+
+  // Scope to where the quote begins so we hit THIS occurrence of the keyword.
+  let from = 0
+  const normQuote = quote ? normalizeForMatch(quote) : ''
+  if (normQuote.length >= 4) {
+    const qpos = norm.indexOf(normQuote)
+    if (qpos >= 0) from = qpos
+  }
+  let pos = norm.indexOf(anchorNorm, from)
+  if (pos < 0) pos = norm.indexOf(anchorNorm)  // anywhere, last resort
+  if (pos < 0) return quoteStart
+
+  const raw = rawIdx[pos] ?? 0
+  const t = charStartSecs[Math.min(raw, charStartSecs.length - 1)]
+  return Number.isFinite(t) ? Number(t.toFixed(2)) : quoteStart
+}

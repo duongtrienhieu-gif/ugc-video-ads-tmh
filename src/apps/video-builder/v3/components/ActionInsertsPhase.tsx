@@ -35,7 +35,7 @@ import {
   type InsertSuggestion,
 } from '../services/insertSuggester'
 import { renderInsert, resumeInsertVideo, listEligibleInsertsForBulk } from '../services/insertRenderer'
-import { computeBlockStartTimestamps, computeQuoteTimestamp } from '../services/insertTimingEngine'
+import { computeBlockStartTimestamps, computeQuoteTimestamp, computeWordTimestampFromAlignment } from '../services/insertTimingEngine'
 // Z98 #5 — local sticker renderer (canvas → transparent PNG, 0 credit).
 import { renderStickerBlob, STICKER_STYLE_META } from '../services/stickerRenderer'
 import { saveAsset } from '../../../../utils/assetStore'
@@ -266,16 +266,25 @@ export default function ActionInsertsPhase({ onContinue }: Props) {
     if (result.length === 0) return
     const script = scriptOverride ?? state.scriptBrain.script
     const blockStarts = script ? computeBlockStartTimestamps(script) : null
+    // Z98 #5.3 — real char-level alignment from the voice-first synth; lets
+    // stickers anchor on the exact WORD, not the sentence start.
+    const align = state.voiceFirst?.voiceAlignment
     const items = result.map((s) => {
       // Z42 — anchor to the EXACT second the quoted line is spoken; fall back to
       // the coarse block-start only when the quote can't be located.
       const quoteTs = script ? computeQuoteTimestamp(script, s.quote) : null
       const blockTs = blockStarts && s.anchorBlock ? blockStarts[s.anchorBlock] : null
+      // Z98 #5.3 — a sticker pops on its keyword, not the sentence start. Use
+      // the real alignment's word-level second when available; else fall back
+      // to the sentence-level estimate like any other insert.
+      const wordTs = (s.renderMode === 'sticker' && align)
+        ? computeWordTimestampFromAlignment(align, s.quote, s.stickerWordAnchor)
+        : null
       return {
         presetId: s.presetId,
         durationSec: s.durationSec ?? ACTION_PRESETS[s.presetId].durationPreset,
         scriptKeyword: s.matchedKeywords[0],
-        voiceTimestampSec: quoteTs ?? blockTs,
+        voiceTimestampSec: wordTs ?? quoteTs ?? blockTs,
         // Z98 (#6) — persist the quote so the planner can re-anchor against the
         // REAL voice alignment (exact spoken second), not just the WPM estimate.
         quote: s.quote,
