@@ -34,25 +34,22 @@ interface StyleSpec {
   /** Emoji prepended when the director didn't supply one. '' = no emoji. */
   defaultEmoji: string
   /** Pill background (CSS color). 'transparent' = highlight (marker) style. */
-  bg: string
-  /** Text color. */
-  fg: string
-  /** Optional left accent bar color (number style). */
-  accent?: string
-  /** Draw a thin outer border (stamp look). */
-  border?: boolean
+  /** Ink (text) color — drawn on the shared paper background. The per-style
+   *  colour now lives in the INK, not a solid pill, so every sticker reads as
+   *  a friendly hand-drawn paper note while keeping a subtle colour code. */
+  ink: string
 }
 
 export const STICKER_STYLE_META: Record<StickerStyle, StyleSpec> = {
-  number:    { labelVi: 'Thông số',  defaultEmoji: '',   bg: '#FFFFFF', fg: '#0F172A', accent: '#2563EB' },
-  countdown: { labelVi: 'Thời gian', defaultEmoji: '⏱', bg: '#111827', fg: '#FFFFFF' },
-  pill:      { labelVi: 'Thành phần',defaultEmoji: '💧', bg: '#FFFFFF', fg: '#0F172A' },
-  flag:      { labelVi: 'Xuất xứ',   defaultEmoji: '🌏', bg: '#FFFFFF', fg: '#0F172A', border: true },
-  badge:     { labelVi: 'Lợi ích',   defaultEmoji: '✓',  bg: '#16A34A', fg: '#FFFFFF' },
-  warning:   { labelVi: 'Lưu ý',     defaultEmoji: '⚠', bg: '#F59E0B', fg: '#1F2937' },
-  price:     { labelVi: 'Giá / Ưu đãi', defaultEmoji: '💰', bg: '#EF4444', fg: '#FFFFFF' },
-  highlight: { labelVi: 'Nhấn chữ',  defaultEmoji: '',   bg: 'transparent', fg: '#0F172A' },
-  arrow:     { labelVi: 'Chỉ vào',   defaultEmoji: '👉', bg: '#FFFFFF', fg: '#0F172A' },
+  number:    { labelVi: 'Thông số',  defaultEmoji: '🔢', ink: '#3A3226' },
+  countdown: { labelVi: 'Thời gian', defaultEmoji: '⏱', ink: '#3A3226' },
+  pill:      { labelVi: 'Thành phần',defaultEmoji: '💧', ink: '#1D6FA3' },
+  flag:      { labelVi: 'Xuất xứ',   defaultEmoji: '🌏', ink: '#1E4FA8' },
+  badge:     { labelVi: 'Lợi ích',   defaultEmoji: '✅', ink: '#15803D' },
+  warning:   { labelVi: 'Lưu ý',     defaultEmoji: '⚠', ink: '#B45309' },
+  price:     { labelVi: 'Giá / Ưu đãi', defaultEmoji: '🔥', ink: '#C2410C' },
+  highlight: { labelVi: 'Nhấn chữ',  defaultEmoji: '✏️', ink: '#A16207' },
+  arrow:     { labelVi: 'Chỉ vào',   defaultEmoji: '👉', ink: '#3A3226' },
 }
 
 export interface StickerRenderOpts {
@@ -71,7 +68,10 @@ const PAD_Y = 26
 const RADIUS = 30
 const EMOJI = Math.round(FONT * 1.5)  // emoji 1.5× the text size (user request)
 const GAP = 16            // gap between emoji and text
-const FONT_STACK = `800 ${FONT}px 'Be Vietnam Pro', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif`
+// Hand-drawn look (Patrick Hand, loaded in index.html — has a Vietnamese subset).
+// Be Vietnam Pro is the per-glyph fallback so any diacritic Patrick Hand lacks
+// still renders. Patrick Hand is a single casual weight, so no bold prefix.
+const FONT_STACK = `${FONT}px 'Patrick Hand', 'Be Vietnam Pro', system-ui, sans-serif`
 
 function roundRectPath(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
   const rr = Math.min(r, w / 2, h / 2)
@@ -86,8 +86,16 @@ function roundRectPath(ctx: CanvasRenderingContext2D, x: number, y: number, w: n
 
 /** Draw the sticker onto a fresh canvas (transparent background) + return it. */
 export async function renderStickerCanvas(opts: StickerRenderOpts): Promise<HTMLCanvasElement> {
-  // Ensure the app font is available so VN diacritics render correctly.
-  try { await (document as Document & { fonts?: FontFaceSet }).fonts?.ready } catch { /* best-effort */ }
+  // Ensure the hand-drawn font (+ its VN glyphs) is loaded BEFORE measuring/
+  // drawing — otherwise the first sticker silently falls back to a sans font
+  // and gets mis-measured. Load with the actual text so the right subset loads.
+  try {
+    const fonts = (document as Document & { fonts?: FontFaceSet }).fonts
+    if (fonts) {
+      await fonts.load(`${FONT}px 'Patrick Hand'`, (opts.text ?? '') || 'x').catch(() => {})
+      await fonts.ready
+    }
+  } catch { /* best-effort */ }
 
   const spec = STICKER_STYLE_META[opts.style]
   const emoji = (opts.emoji ?? spec.defaultEmoji).trim()
@@ -98,9 +106,8 @@ export async function renderStickerCanvas(opts: StickerRenderOpts): Promise<HTML
   scratch.font = FONT_STACK
   const textW = Math.ceil(scratch.measureText(text).width)
   const emojiW = emoji ? EMOJI + GAP : 0
-  const accentW = opts.style === 'number' && spec.accent ? 14 + GAP : 0
 
-  const innerW = emojiW + accentW + textW
+  const innerW = emojiW + textW
   const boxW = innerW + PAD_X * 2
   // Height tracks the TALLER of text vs emoji so the bigger emoji isn't clipped.
   const boxH = Math.max(FONT, emoji ? EMOJI : 0) + PAD_Y * 2
@@ -120,49 +127,45 @@ export async function renderStickerCanvas(opts: StickerRenderOpts): Promise<HTML
   const by = SHADOW
   const cy = by + boxH / 2
 
-  if (opts.style === 'highlight') {
-    // Marker swipe behind the text — no solid box, mostly-transparent sticker.
-    ctx.font = FONT_STACK
-    const markH = FONT * 0.92
-    ctx.fillStyle = 'rgba(250, 204, 21, 0.85)'  // marker yellow
-    roundRectPath(ctx, bx, cy - markH / 2, textW + PAD_X, markH, 10)
-    ctx.fill()
-    ctx.fillStyle = spec.fg
-    ctx.fillText(text, bx + PAD_X / 2, cy + 2)
-    return canvas
-  }
-
-  // Drop shadow for separation on busy video.
+  // ── PAPER NOTE background ──────────────────────────────────────────────────
+  // Warm cream fill + soft lifted shadow → reads as a hand-stuck paper label.
   ctx.save()
-  ctx.shadowColor = 'rgba(0,0,0,0.32)'
+  ctx.shadowColor = 'rgba(60,40,15,0.30)'
   ctx.shadowBlur = SHADOW
-  ctx.shadowOffsetY = 6
-  ctx.fillStyle = spec.bg
+  ctx.shadowOffsetY = 7
+  ctx.fillStyle = '#FCF4E1'  // cream paper
   roundRectPath(ctx, bx, by, boxW, boxH, RADIUS)
   ctx.fill()
   ctx.restore()
 
-  if (spec.border) {
-    ctx.lineWidth = 4
-    ctx.strokeStyle = 'rgba(15,23,42,0.55)'
-    roundRectPath(ctx, bx + 2, by + 2, boxW - 4, boxH - 4, RADIUS - 2)
-    ctx.stroke()
+  // Subtle paper grain — a sprinkle of faint warm specks, clipped to the note.
+  ctx.save()
+  roundRectPath(ctx, bx, by, boxW, boxH, RADIUS)
+  ctx.clip()
+  const specks = Math.min(120, Math.round((boxW * boxH) / 1400))
+  for (let i = 0; i < specks; i++) {
+    const gx = bx + Math.random() * boxW
+    const gy = by + Math.random() * boxH
+    ctx.fillStyle = `rgba(120,90,40,${0.025 + Math.random() * 0.04})`
+    ctx.fillRect(gx, gy, 2, 2)
   }
+  ctx.restore()
 
+  // Thin hand-drawn-ish ink border just inside the edge.
+  ctx.lineWidth = 3
+  ctx.strokeStyle = 'rgba(120,90,40,0.45)'
+  roundRectPath(ctx, bx + 3, by + 3, boxW - 6, boxH - 6, RADIUS - 3)
+  ctx.stroke()
+
+  // ── Content: emoji (1.5× text) + handwritten ink text ─────────────────────
   let cx = bx + PAD_X
-  if (accentW) {
-    ctx.fillStyle = spec.accent!
-    roundRectPath(ctx, cx, by + PAD_Y, 14, boxH - PAD_Y * 2, 7)
-    ctx.fill()
-    cx += accentW
-  }
   if (emoji) {
     ctx.font = `${EMOJI}px 'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji', sans-serif`
     ctx.fillText(emoji, cx, cy + 2)
     cx += emojiW
   }
   ctx.font = FONT_STACK
-  ctx.fillStyle = spec.fg
+  ctx.fillStyle = spec.ink
   ctx.fillText(text, cx, cy + 2)
 
   return canvas
