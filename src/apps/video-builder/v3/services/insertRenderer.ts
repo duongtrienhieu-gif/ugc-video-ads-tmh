@@ -70,6 +70,11 @@ export interface RenderInsertParams {
   /** Z37 — free visual prompt for a CONCEPT_SCENE insert (no product on
    *  screen). Required when presetId === 'CONCEPT_SCENE'; ignored otherwise. */
   conceptPrompt?: string
+  /** Z98 — the verbatim spoken line this scene illustrates. Used by the
+   *  builder to detect "time has passed" beats (after N weeks / result / CTA)
+   *  and switch the avatar wardrobe to outfit B/C so the ad reads as filmed
+   *  across multiple days, not 60s in one outfit. */
+  quote?: string
   /** Per-stage status callback */
   onStageUpdate: (update: InsertStageUpdate) => void
   signal?: AbortSignal
@@ -86,6 +91,18 @@ export interface RenderInsertResult {
 
 // ── Build keyframe prompt for the insert ──────────────────────────────────
 
+// Z98 — V4 strip list. The director sometimes writes "glowing light on her face",
+// "radiant skin", "soft shimmer" inside conceptPrompt. The image model honours
+// those literal words and the cảnh ends up with a halo / beauty-filter look,
+// breaking the "real iPhone footage" rule. Strip them BEFORE the prompt reaches
+// the image model — keeps director prompt unchanged + zero new rules layered on.
+const GLOW_STRIP_RE = /\b(soft |gentle |warm |bright )?(glowing|glow|radiant|shimmer(ing)?|sparkle|sparkling|halo|sun[- ]?kissed|dewy glow|luminous|luminescent|ethereal|cinematic light|soft glow|divine light|heavenly( light)?)\b,?\s*/gi
+
+// Z98 — V1 outfit. Detect a quote that implies time has passed between scenes
+// ("sau N tuần / vài tuần / kết quả / before-after / CTA cuối"). Universal
+// across VN / MS / EN.
+const AFTER_TIME_RE = /\b(sau\s+(vài|\d+)\s+(tuần|ngày|tháng)|vài tuần|tuần dùng|kết quả|trẻ ra|rạng rỡ|tươi tắn|thử ngay|combo|ưu đãi|selepas\s+\d+\s+(minggu|hari|bulan)|hasil|kemerlangan|after\s+\d+\s+(weeks?|days?|months?)|results?|try (it )?now|order now)/i
+
 function buildInsertKeyframePrompt(
   presetId: ActionPresetId,
   product: Product | null,
@@ -94,15 +111,21 @@ function buildInsertKeyframePrompt(
   conceptPrompt?: string,
   renderMode?: InsertRenderMode,
   is3D = false,
+  quote?: string,
 ): string {
   const preset = ACTION_PRESETS[presetId]
   const paragraphs: string[] = []
+  // V4 — strip glow words from conceptPrompt for person scenes (3D mechanism
+  // animations keep the glow because they're scientific renders, not people).
+  const safeConcept = conceptPrompt && personRefIndex > 0 && !is3D
+    ? conceptPrompt.replace(GLOW_STRIP_RE, '').replace(/\s+/g, ' ').trim()
+    : conceptPrompt
 
   // Z37 — CONCEPT_SCENE: a free concept B-roll written by the AI scene director.
   // No product on screen → no product lock, no identity lock, no preset action.
   // Pure text-to-image illustration of the dialogue span.
   if (presetId === 'CONCEPT_SCENE') {
-    const scene = conceptPrompt?.trim()
+    const scene = safeConcept?.trim()
     // Z61 — emotion concept (video) features a PERSON; lock it to the creator
     // avatar so the same face appears across the whole ad (not a random
     // stranger). Graphic concept (ken_burns infographic) has no person.
@@ -208,9 +231,29 @@ function buildInsertKeyframePrompt(
     )
   }
   if (personRefIndex > 0) {
+    // Z98 V1 — identity vs wardrobe split. Bước 3 talking-head video keeps the
+    // EXACT outfit from the user's avatar; the Bước 2 insert scenes deliberately
+    // change outfit so the ad reads as filmed across multiple days, not 60s
+    // in a single sitting. "After-time" scenes (sau N tuần / kết quả / CTA cuối)
+    // get a 2nd distinct outfit so before/after looks plausible — three outfits
+    // total across the whole ad (Bước 1 + 2 in Bước 2).
+    const isAfterTime = !!quote && AFTER_TIME_RE.test(quote)
     paragraphs.push(
       `IDENTITY LOCK: Person from reference image #${personRefIndex}. ` +
-      `Preserve EXACTLY face, hair, skin tone, body proportions. Do NOT redesign.`,
+      `Preserve EXACTLY the face and skin tone — the SAME human being. Do NOT ` +
+      `redesign the person. Hair and clothing may differ as noted below.`,
+    )
+    paragraphs.push(
+      isAfterTime
+        ? `WARDROBE: DIFFERENT outfit from the reference photo AND from the ` +
+          `earlier problem/demo scenes — a casual change of clothes (a different ` +
+          `simple top), implying DAYS HAVE PASSED since the earlier scenes. The ` +
+          `background may shift slightly too (different time of day / light). ` +
+          `Same person, later moment in time — like a real KOC filming a "result" ` +
+          `update a few weeks after the original review.`
+        : `WARDROBE: A casual outfit DIFFERENT from the reference photo — a ` +
+          `simple change of clothes, same person filmed on a separate, earlier ` +
+          `day. This is NOT the same filming session as the talking-head video.`,
     )
   }
   // Z98 — REAL-WORLD SCALE lock. Universal anti-drift for any scene where the
@@ -235,7 +278,7 @@ function buildInsertKeyframePrompt(
   // 3. Action prompt — Z42: PRODUCT_IN_ACTION uses the director's free action
   // (conceptPrompt) instead of the fixed preset verb, while still keeping the
   // product lock above. The 12 fixed presets keep their hard-won stable prompt.
-  const freeAction = presetId === 'PRODUCT_IN_ACTION' ? conceptPrompt?.trim() : ''
+  const freeAction = presetId === 'PRODUCT_IN_ACTION' ? safeConcept?.trim() : ''
   paragraphs.push(`ACTION: ${freeAction && freeAction.length > 0 ? freeAction : preset.promptPreset}`)
 
   // 4. Hand behaviour
@@ -343,7 +386,7 @@ export async function renderInsert(
 
   const keyframePromptUsed = buildInsertKeyframePrompt(
     params.presetId, params.product, productRefIndex, personRefIndex,
-    params.conceptPrompt, params.renderMode, is3D,
+    params.conceptPrompt, params.renderMode, is3D, params.quote,
   )
   console.log(`[INSERT ${params.presetId}] Stage 1 keyframe prompt len=${keyframePromptUsed.length}, refs=${filesUrl.length}`)
 
@@ -462,17 +505,20 @@ export async function renderInsert(
       fullTaskId: fullSubmission.taskId,
     }
   } catch (videoErr) {
-    if (params.signal?.aborted) throw videoErr  // user cancelled — don't fall back
+    if (params.signal?.aborted) throw videoErr  // user cancelled — surface as-is
+    // Z98 V5 — NO MORE silent fallback to a static-image clip. The old fallback
+    // marked the clip "DONE" with a frozen keyframe, so the user thought they
+    // had a video and the 16cr credit was burnt without recourse. Now we
+    // surface the failure honestly: stage='failed' fires the red "Lỗi" badge
+    // in the UI + the user clicks "Lại" to retry. (Grok itself doesn't charge
+    // for a failed render, so retry is free.)
     const msg = videoErr instanceof Error ? videoErr.message : String(videoErr)
-    console.warn(`[INSERT ${params.presetId}] Grok i2v failed (${msg.slice(0, 140)}) → auto fallback to a static image clip from the existing keyframe`)
-    params.onStageUpdate({ stage: 'video_full', keyframeRef, keyframePromptUsed })
-    const videoRef = await renderStaticImageClip({
-      imageBlob: keyframeBlob,
-      durationSec: params.durationSec ?? 4,
-      resolution: params.resolution,
+    console.warn(`[INSERT ${params.presetId}] Grok i2v failed (${msg.slice(0, 140)})`)
+    params.onStageUpdate({
+      stage: 'failed', keyframeRef, keyframePromptUsed,
+      error: msg.slice(0, 240),
     })
-    params.onStageUpdate({ stage: 'completed', keyframeRef, keyframePromptUsed, videoRef })
-    return { keyframeRef, keyframePromptUsed, videoRef }
+    throw new Error(`Video render lỗi: ${msg.slice(0, 160)} — bấm "Lại" để thử lại (không tốn thêm credit).`)
   }
 }
 

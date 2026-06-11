@@ -116,6 +116,12 @@ export async function assembleFinalVideo(
     fileName: string
     durationSec: number
     sourceInSec: number
+    /** Z98 V3 — Grok i2v renders ~0.77× of natural motion speed (a 4s
+     *  director-requested clip lands as a ~6s file that LOOKS like slow-mo),
+     *  so speed insert segments up by 1.3× in the filter graph to compensate.
+     *  Creator (talking-head) segments stay at 1.0× — they're already correct
+     *  speed from ElevenLabs + KIE lipsync. */
+    isInsert: boolean
     /** Z73 — overlay PIPs that ride on this segment, with their fetched filenames.
      *  Only populated for creator_video segments that have overlays. */
     overlays?: { fileName: string; startSec: number; durationSec: number; corner: 'tl' | 'tr' | 'bl' | 'br'; widthFraction: number }[]
@@ -166,6 +172,7 @@ export async function assembleFinalVideo(
         fileName,
         durationSec: seg.durationSec,
         sourceInSec: seg.sourceInSec ?? 0,
+        isInsert: seg.source.kind === 'action_insert',
         overlays: overlayFiles.length > 0 ? overlayFiles : undefined,
       })
     } catch (err) {
@@ -290,10 +297,19 @@ export async function assembleFinalVideo(
     const ovs = s.overlays ?? []
     for (const ov of ovs) segArgs.push('-i', ov.fileName)
 
+    // Z98 V3 — speed Grok i2v inserts up 1.3× so the segment fills the
+    // director's requested duration (Grok renders motion ~0.77× of natural
+    // speed; without this every cut clip looks slow-mo). Source trim is
+    // durationSec × 1.3 so the sped-up output still fills durationSec exactly.
+    const INSERT_SPEED = 1.3
+    const trimDur = s.isInsert ? s.durationSec * INSERT_SPEED : s.durationSec
+    const ptsExpr = s.isInsert
+      ? `setpts=(PTS-STARTPTS)/${INSERT_SPEED}`
+      : `setpts=PTS-STARTPTS`
     const parts: string[] = [
       `[0:v]scale=${evenW}:${evenH}:force_original_aspect_ratio=increase,` +
-      `crop=${evenW}:${evenH},trim=start=${s.sourceInSec}:duration=${s.durationSec},` +
-      `setpts=PTS-STARTPTS[base]`,
+      `crop=${evenW}:${evenH},trim=start=${s.sourceInSec}:duration=${trimDur},` +
+      `${ptsExpr}[base]`,
     ]
     let lastLabel = 'base'
     ovs.forEach((ov, j) => {

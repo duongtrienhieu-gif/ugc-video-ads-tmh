@@ -499,6 +499,7 @@ export default function ActionInsertsPhase({ onContinue }: Props) {
         conceptPrompt: insert.conceptPrompt,
         renderMode: insert.renderMode ?? 'video',
         durationSec: insert.durationSec,
+        quote: insert.quote,  // Z98 V1 — drives the wardrobe-shift decision in the renderer
         onStageUpdate: (update) => {
           patchInsert(insertId, {
             stage: update.stage,
@@ -898,10 +899,14 @@ function InsertCard({
   const isRejected = insert.status === 'rejected'
   const canEditLayout = !isLocked && !isApproved
 
-  // Auto-rebind src when ref changes
+  // Auto-rebind src when ref changes. Z98 V3 — also pin the playback rate to
+  // 1.3× so the preview matches the final export (Grok i2v intrinsic motion
+  // runs ~0.7× of natural speed; without this the preview feels slow-mo even
+  // though the final export will already be sped up by the assembler).
   useEffect(() => {
     if (videoRef.current && displayVideoUrl) {
       videoRef.current.load()
+      videoRef.current.playbackRate = 1.3
     }
   }, [displayVideoUrl])
 

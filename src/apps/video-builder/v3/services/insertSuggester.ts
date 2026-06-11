@@ -581,9 +581,13 @@ DIRECTING RULES:
     SET "isMechanism": true on such scenes — the renderer will then drop the
     avatar/product reference and produce a clean 3D scientific animation. Don't
     force these into a person close-up or a product packshot.
-  • OVERLAY illustration (layout:"overlay_corner") — for ABSTRACT teaching beats
-    riding on top of the creator: statistics ("70% of women over 25…"), pure
-    diagrams, educational infographics with no in-body action.
+  • OVERLAY illustration (layout:"overlay_corner") — a small label / icon /
+    sketch / number floating beside the creator's face. Use these GENEROUSLY:
+    abstract claims, USP numbers, ingredient names, time references ("3 seconds",
+    "After 2 weeks"), short proof points, mini-diagrams, korean-formula stamps,
+    etc. Overlays are CHEAP and ADDITIVE — they ride on top of the talking-head
+    timeline, they do NOT replace cuts or compete with them. Don't be stingy:
+    when in doubt between a cut and an overlay, an overlay is the safer bet.
   Order matters more than count: every scene must illustrate ONE specific
   spoken line. If the script has 5 physical-action lines → ≈5 cuts. If 2 →
   ≈2 cuts. Don't pad.
@@ -978,17 +982,22 @@ OUTPUT strict JSON, no fences:
   //     that we run 10-12 dense scenes across only 5 blocks — fired constantly
   //     and silently deleted ~3 scenes ("chưa ra 12 chip" bug). Cuts are
   //     already bounded by the 50% coverage cap, so this rarely triggers now.
-  for (let i = 0; i < out.length - 2; i++) {
+  // Z98 — run-of-N detector relaxed 3 → 4. The coverage rule (no gap >5s)
+  // legitimately packs more cuts into each script block, so 3 consecutive
+  // same-block cuts is now NORMAL. Only collapse when 4 cuts in a row share
+  // a block — that's still a real run-on and worth thinning.
+  for (let i = 0; i < out.length - 3; i++) {
     const isCut = (s: InsertSuggestion) => s.layout !== 'overlay_corner'
     if (
-      isCut(out[i]) && isCut(out[i + 1]) && isCut(out[i + 2]) &&
+      isCut(out[i]) && isCut(out[i + 1]) && isCut(out[i + 2]) && isCut(out[i + 3]) &&
       out[i].anchorBlock != null &&
       out[i].anchorBlock === out[i + 1].anchorBlock &&
-      out[i].anchorBlock === out[i + 2].anchorBlock
+      out[i].anchorBlock === out[i + 2].anchorBlock &&
+      out[i].anchorBlock === out[i + 3].anchorBlock
     ) {
       out.splice(i + 1, 1)
       trustDrops.run3++
-      i--  // re-check the new triplet
+      i--  // re-check the new quadruplet
     }
   }
 
