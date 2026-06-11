@@ -124,7 +124,8 @@ function buildUserPrompt(params: ScriptGenerationParams, product: Product): stri
   if (product.usps)               lines.push(`USPs: ${product.usps}`)
   if (product.benefits)           lines.push(`Benefits: ${product.benefits}`)
   if (product.offer)              lines.push(`Offer: ${product.offer}`)
-  if (product.ingredients)        lines.push(`★ Ingredients (name these specifically in the script — never generic): ${product.ingredients}`)
+  if (product.ingredients)        lines.push(`★ Ingredients & mechanism (name ingredients specifically + weave in HOW they work — never generic): ${product.ingredients}`)
+  if (product.usageGuide)         lines.push(`★ How to use (real usage — ground any "how to use" / demonstration beat in THIS; understand it, don't recite verbatim): ${product.usageGuide}`)
 
   lines.push('')
   lines.push('═══════════════════════════════════════════════════════════════')

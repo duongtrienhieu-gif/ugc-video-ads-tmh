@@ -1118,9 +1118,12 @@ ${bankProduct.painPoints         ? `Pain points the product solves: ${bankProduc
 ${bankProduct.usps               ? `Unique selling points: ${bankProduct.usps}` : ''}
 ${bankProduct.benefits           ? `Benefits to user: ${bankProduct.benefits}` : ''}
 ${bankProduct.offer              ? `Offer / pricing: ${bankProduct.offer}` : ''}
-${bankProduct.ingredients        ? `Key ingredients / active components: ${bankProduct.ingredients}` : ''}
+${bankProduct.ingredients        ? `Key ingredients / active components (+ how they work): ${bankProduct.ingredients}` : ''}
+${bankProduct.usageGuide         ? `How the user actually uses it: ${bankProduct.usageGuide}` : ''}
 
 USE THIS CONTEXT TO:
+- For "how to use / demonstration" segments: stage the SPECIFIC real usage above
+  (match the documented application — don't invent a generic usage motion)
 - For "pain point" segments: visualize the SPECIFIC pain points listed above
   (don't invent generic pain — match the documented ones)
 - For "transformation" segments: visualize the SPECIFIC benefits listed above

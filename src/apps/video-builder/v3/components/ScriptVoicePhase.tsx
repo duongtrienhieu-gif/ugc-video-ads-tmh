@@ -135,9 +135,25 @@ export default function ScriptVoicePhase({ onContinue }: Props) {
     setIsGeneratingScript(true)
     setScriptBrainError(null)
     try {
-      const productPitch =
-        (state.inputs.product as { jsonProfile?: { pitch?: string } }).jsonProfile?.pitch ??
-        'Premium UGC product for Malaysian/Vietnamese market.'
+      // Build a RICH product brief from the real bank fields so the script AI
+      // actually understands the product. Previously this only read an absent
+      // jsonProfile.pitch and ALWAYS fell back to a generic English line — the
+      // v3 script ignored painPoints/benefits/ingredients/usageGuide entirely.
+      // The AI reads + understands this brief; it is not recited verbatim.
+      const p = state.inputs.product
+      const pitchParts: string[] = []
+      if (p?.productDescription) pitchParts.push(p.productDescription)
+      if (p?.targetMarket)       pitchParts.push(`Target market: ${p.targetMarket}`)
+      if (p?.painPoints)         pitchParts.push(`Pain points: ${p.painPoints}`)
+      if (p?.benefits)           pitchParts.push(`Benefits: ${p.benefits}`)
+      if (p?.usps)               pitchParts.push(`USPs: ${p.usps}`)
+      if (p?.ingredients)        pitchParts.push(`Ingredients & how they work: ${p.ingredients}`)
+      if (p?.usageGuide)         pitchParts.push(`How to use: ${p.usageGuide}`)
+      if (p?.offer)              pitchParts.push(`Offer: ${p.offer}`)
+      const legacyPitch = (p as { jsonProfile?: { pitch?: string } } | null)?.jsonProfile?.pitch
+      const productPitch = pitchParts.length > 0
+        ? pitchParts.join('\n')
+        : (legacyPitch ?? 'Premium UGC product for Malaysian/Vietnamese market.')
       const creatorDescription = state.inputs.avatar
         ? `${state.inputs.avatar.name ?? 'Creator'} — ${state.inputs.avatar.notes ?? 'natural casual UGC vibe'}`
         : undefined

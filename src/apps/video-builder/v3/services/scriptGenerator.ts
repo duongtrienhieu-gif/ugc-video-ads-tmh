@@ -221,7 +221,8 @@ function buildUserPrompt(args: {
   return `Write a ${args.targetDurationSec}-second TikTok ad in ${args.lang} for the product below.
 
 PRODUCT: ${args.productName}
-PITCH: ${args.productPitch}
+PRODUCT BRIEF (read + understand — ground the script in these real facts, weave them in naturally, do NOT recite verbatim):
+${args.productPitch}
 ${creatorLine}
 SELECTED STRUCTURE: ${args.structureLabel}
 SELECTED ANGLE: ${args.angleLabel}

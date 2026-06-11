@@ -192,7 +192,7 @@ const NICHE_RULES: { niche: string; usage: string; cues: RegExp }[] = [
 
 function detectProductNiche(product: Product | null | undefined): { niche: string; usage: string } | null {
   if (!product) return null
-  const hay = [product.productName, product.productDescription, product.usps, product.ingredients]
+  const hay = [product.productName, product.productDescription, product.usps, product.ingredients, product.usageGuide]
     .filter(Boolean).join(' ').toLowerCase()
   if (hay.length < 8) return null
   for (const r of NICHE_RULES) {
@@ -212,7 +212,8 @@ function buildProductContextBlock(product: Product | null | undefined): string {
   if (product.productName) lines.push(`- Name: ${product.productName}`)
   if (product.productDescription) lines.push(`- Description: ${product.productDescription.slice(0, 600)}`)
   if (product.usps) lines.push(`- Key selling points: ${product.usps.slice(0, 300)}`)
-  if (product.ingredients) lines.push(`- Ingredients / contents: ${product.ingredients.slice(0, 200)}`)
+  if (product.ingredients) lines.push(`- Ingredients & how they work: ${product.ingredients.slice(0, 500)}`)
+  if (product.usageGuide) lines.push(`- How the user physically uses it (real usage — ground demonstration shots in this, not a guess): ${product.usageGuide.slice(0, 300)}`)
   const detected = detectProductNiche(product)
   if (detected) {
     lines.push(`- Detected niche: ${detected.niche}`)
