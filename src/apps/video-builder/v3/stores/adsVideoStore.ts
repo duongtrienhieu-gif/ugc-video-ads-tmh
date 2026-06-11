@@ -195,10 +195,13 @@ function loadFromStorage(): V3PipelineState | null {
     if (parsed.creatorVideo?.status === 'rendering') {
       parsed.creatorVideo = { ...parsed.creatorVideo, status: 'idle', startedAt: undefined }
     }
-    // Z32 — also reset any in-flight stage. tts/keyframe/preview/lipsync
-    // get bumped back to 'idle' so the user can retry rather than seeing
-    // a stuck stage indicator.
-    if (parsed.creatorVideo && parsed.creatorVideo.stage !== 'completed' && parsed.creatorVideo.stage !== 'failed') {
+    // Z32/Z98 — a FINISHED render (videoRef present) MUST survive a refresh:
+    // force it back to 'completed' instead of resetting its stage, so F5 NEVER
+    // loses a paid lipsync video. Only an output-less render (truly mid-flight,
+    // no videoRef) gets reset to 'idle' so the user can retry.
+    if (parsed.creatorVideo?.videoRef) {
+      parsed.creatorVideo = { ...parsed.creatorVideo, stage: 'completed', status: 'completed' }
+    } else if (parsed.creatorVideo && parsed.creatorVideo.stage !== 'completed' && parsed.creatorVideo.stage !== 'failed') {
       parsed.creatorVideo = { ...parsed.creatorVideo, stage: 'idle' }
     }
     // Z32 — pre-Z32 saves won't have creatorVideoConfig; backfill it.

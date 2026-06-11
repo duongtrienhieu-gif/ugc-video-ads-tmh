@@ -252,6 +252,28 @@ export function saveCurrentAsProject(
   return project
 }
 
+// ── Z98 — Auto-backup safety net ───────────────────────────────────────────
+// After each EXPENSIVE step (lipsync render / auto-edit plan) the pipeline
+// auto-saves into ONE dedicated Library slot. This guarantees a paid render is
+// always recoverable even if the active state is lost (F5, corruption) — the
+// user no longer has to remember to click "Save current". Keyed by a stored id
+// so it upserts a single slot instead of spamming the library.
+const AUTOBACKUP_ID_KEY = 'ugc-lab-v3-autobackup-id'
+
+export function autoBackupProject(state: V3PipelineState): void {
+  // Only worth backing up once there's an expensive artifact to protect.
+  if (!state.creatorVideo?.videoRef) return
+  try {
+    const existingId = localStorage.getItem(AUTOBACKUP_ID_KEY)
+    if (existingId && updateProject(existingId, state)) return
+    const productName = state.inputs.product?.productName ?? 'Sản phẩm'
+    const saved = saveCurrentAsProject(state, { name: `🔄 Auto-backup — ${productName}` })
+    localStorage.setItem(AUTOBACKUP_ID_KEY, saved.id)
+  } catch (err) {
+    console.warn('[PROJECT_LIBRARY] auto-backup failed', err)
+  }
+}
+
 /** Update an existing project (overwrites snapshot). */
 export function updateProject(id: string, state: V3PipelineState): SavedProject | null {
   const projects = loadLibrary()

@@ -35,6 +35,7 @@ import {
 } from '../services/creatorEnergy'
 import { styleCreatorWithGemini } from '../services/creatorPresets'
 import { renderCreatorKeyframe, renderCreatorLipsync, resumeCreatorVideoLipsync, previewCreatorVoice, type StageUpdate } from '../services/creatorVideoEngine'
+import { autoBackupProject } from '../services/projectLibrary'
 
 // ── Stage progress strip ───────────────────────────────────────────────────
 
@@ -312,6 +313,9 @@ export default function CreatorVideoPhase({ onContinue }: Props) {
       ...(update.videoRef !== undefined          && { videoRef: update.videoRef }),
       ...(update.error !== undefined             && { error: update.error }),
     })
+    // Z98 — the instant a paid lipsync video lands, auto-backup to the Library so
+    // F5 / a crash can never lose it (the user no longer must click "Save current").
+    if (update.videoRef) autoBackupProject(useAdsVideoStore.getState().state)
   }
 
   // Z95 — STEP 1: TTS + keyframe ONLY (cheap ~6cr), then STOP at keyframe_ready
@@ -436,6 +440,7 @@ export default function CreatorVideoPhase({ onContinue }: Props) {
         videoRef,
         finishedAt: Date.now(),
       })
+      autoBackupProject(useAdsVideoStore.getState().state)  // Z98 — backup recovered video
       addToast('✓ Đã khôi phục video từ job đã trả tiền — không tốn thêm credit!', 'success')
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)

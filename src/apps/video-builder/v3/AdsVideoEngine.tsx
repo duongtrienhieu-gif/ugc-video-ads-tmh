@@ -25,7 +25,7 @@ import { useState, useEffect } from 'react'
 import {
   Sparkles, FlaskConical, UserRound, FileText,
   ChevronRight, ArrowLeft, RotateCcw, Lock, Zap, Star,
-  Film, Wand2, Download, Info, Settings,
+  Film, Wand2, Download, Info, Settings, FolderOpen,
 } from 'lucide-react'
 import { useAppStore } from '../../../stores/appStore'
 import { useAdsVideoStore } from './stores/adsVideoStore'
@@ -37,7 +37,9 @@ import ExportPhase from './components/ExportPhase'
 import {
   V3_PHASE_LABEL_VI,
   type V3Phase,
+  type SavedProject,
 } from './types'
+import { getAllProjects, hydrateProjectAsState } from './services/projectLibrary'
 
 interface Props {
   /** Switch to legacy v2 (cinematic coverage pipeline). */
@@ -123,10 +125,31 @@ export default function AdsVideoEngine({ onSwitchToV2, onSwitchToV1 }: Props) {
   const state    = useAdsVideoStore((s) => s.state)
   const setPhase = useAdsVideoStore((s) => s.setPhase)
   const clearState  = useAdsVideoStore((s) => s.clearState)
+  const hydrateFromSnapshot = useAdsVideoStore((s) => s.hydrateFromSnapshot)
   const addToast    = useAppStore((s) => s.addToast)
 
   const [resetConfirmOpen, setResetConfirmOpen] = useState(false)
   const [showLegacy, setShowLegacy] = useState(false)
+  const [restoreOpen, setRestoreOpen] = useState(false)
+
+  // Z98 — restore picker. The Library lives on the Export step, which locks if a
+  // render is lost — so this top-bar entry makes saved projects ALWAYS
+  // restorable, even when the wizard tabs are gated.
+  const savedProjects = restoreOpen ? getAllProjects() : []
+  const handleRestore = (proj: SavedProject) => {
+    hydrateFromSnapshot(hydrateProjectAsState(proj))
+    const snap = proj.snapshot
+    const target: V3Phase = snap.autoEdit?.plan
+      ? 'export'
+      : snap.creatorVideo?.videoRef
+      ? 'auto-edit'
+      : snap.creatorVideo
+      ? 'creator-video'
+      : 'input'
+    setPhase(target)
+    setRestoreOpen(false)
+    addToast(`Đã khôi phục "${proj.name}"`, 'success')
+  }
 
   // Z37 — migration: persisted state may still sit on the now-merged
   // 'script-voice' phase. Map it back onto 'input' (the merged screen).
@@ -148,6 +171,10 @@ export default function AdsVideoEngine({ onSwitchToV2, onSwitchToV1 }: Props) {
   // The clip approval gate now lives inside this phase.
   if (state.creatorVideo?.videoRef && state.scriptBrain.script) {
     reachable.add('auto-edit')
+    // Z98 — the Library/restore + export bundle live on the Export step. Once a
+    // (paid) creator video exists, keep Export reachable so a lost auto-edit plan
+    // can never trap the user away from their saved work.
+    reachable.add('export')
   }
   // export reachable once an auto-edit plan exists.
   if (state.autoEdit.plan) {
@@ -203,6 +230,13 @@ export default function AdsVideoEngine({ onSwitchToV2, onSwitchToV1 }: Props) {
               </>
             )}
             <button
+              onClick={() => setRestoreOpen(true)}
+              title="Khôi phục một dự án đã lưu (dùng được kể cả khi các bước đang khoá)"
+              className="flex items-center gap-1.5 rounded-lg bg-white/15 px-3 py-1.5 text-xs font-semibold backdrop-blur-sm hover:bg-white/25"
+            >
+              <FolderOpen className="h-3.5 w-3.5" /> Khôi phục
+            </button>
+            <button
               onClick={() => setResetConfirmOpen(true)}
               title="Xoá toàn bộ tiến trình + bắt đầu lại từ bước 1"
               className="flex items-center gap-1.5 rounded-lg border border-white/30 bg-red-500/30 px-3 py-1.5 text-xs font-semibold backdrop-blur-sm transition-colors hover:bg-red-500/50"
@@ -240,6 +274,62 @@ export default function AdsVideoEngine({ onSwitchToV2, onSwitchToV1 }: Props) {
           <ExportPhase />
         )}
       </div>
+
+      {/* Z98 — Restore picker — always-accessible Library load (works even when
+          the wizard tabs are gated after a lost render). */}
+      {restoreOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm" onClick={() => setRestoreOpen(false)}>
+          <div className="flex max-h-[80vh] w-full max-w-lg flex-col rounded-2xl bg-white p-6 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            <div className="mb-4 flex items-start gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-violet-100">
+                <FolderOpen className="h-5 w-5 text-violet-600" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-gray-900">Khôi phục dự án đã lưu</h3>
+                <p className="text-xs text-gray-500">
+                  Gồm cả bản tự-lưu sau mỗi lần render video. Khôi phục sẽ thay thế tiến trình hiện tại.
+                </p>
+              </div>
+            </div>
+            {savedProjects.length === 0 ? (
+              <p className="py-8 text-center text-sm text-gray-400">
+                Chưa có dự án nào được lưu trong máy này.
+              </p>
+            ) : (
+              <div className="-mx-1 flex-1 overflow-y-auto px-1">
+                {savedProjects.map((p) => {
+                  const hasVideo = !!p.snapshot.creatorVideo?.videoRef
+                  const hasPlan = !!p.snapshot.autoEdit?.plan
+                  return (
+                    <button
+                      key={p.id}
+                      onClick={() => handleRestore(p)}
+                      className="mb-2 flex w-full items-center justify-between gap-3 rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-left transition-colors hover:border-violet-300 hover:bg-violet-50"
+                    >
+                      <div className="min-w-0">
+                        <div className="truncate text-sm font-semibold text-gray-900">{p.name}</div>
+                        <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[11px] text-gray-500">
+                          <span>{new Date(p.lastEditedAt).toLocaleString('vi-VN')}</span>
+                          {hasVideo && <span className="rounded bg-green-100 px-1.5 py-0.5 font-semibold text-green-700">có video</span>}
+                          {hasPlan && <span className="rounded bg-blue-100 px-1.5 py-0.5 font-semibold text-blue-700">có plan</span>}
+                          <span>· {p.snapshot.inserts?.length ?? 0} insert</span>
+                        </div>
+                      </div>
+                      <ChevronRight className="h-4 w-4 shrink-0 text-gray-400" />
+                    </button>
+                  )
+                })}
+              </div>
+            )}
+            <button
+              onClick={() => setRestoreOpen(false)}
+              className="mt-4 self-end rounded-lg px-4 py-2 text-sm font-semibold text-gray-500 hover:bg-gray-100"
+            >
+              Đóng
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Reset confirm modal — same pattern as Z27 */}
       {resetConfirmOpen && (
