@@ -44,6 +44,7 @@ USPs:               ${product.usps || '(none)'}
 Benefits:           ${product.benefits || '(none)'}
 Offer / Price hint: ${product.offer || '(none — infer from market+category)'}
 Ingredients:        ${product.ingredients || '(none)'}
+Usage / how to use: ${product.usageGuide || '(none)'}
 
 Now output the ProductIdentity JSON exactly per the schema in the system prompt.
 Output JSON ONLY.

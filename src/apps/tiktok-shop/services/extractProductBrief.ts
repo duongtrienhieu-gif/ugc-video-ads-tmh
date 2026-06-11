@@ -168,6 +168,7 @@ function buildUserPrompt(product: Product, langName: string): string {
   if (product.benefits)           lines.push(`- Benefits: ${product.benefits}`)
   if (product.ingredients)        lines.push(`- Ingredients & how-it-works (seller-provided — may be full sentences describing the mechanism; READ to understand the product + extract ingredient NAMES from it, do NOT copy whole sentences into name fields): ${product.ingredients}`)
   if (product.offer)              lines.push(`- Pricing context: ${product.offer}`)
+  if (product.usageGuide)         lines.push(`- How to use (seller-provided — use to ground applicationDetails.usageScene + howApplied, don't copy verbatim): ${product.usageGuide}`)
 
   lines.push(``)
   lines.push(`JSON SHAPE (return EXACTLY this, all inferred text fields in ${langName}):`)

@@ -183,7 +183,8 @@ function buildUserPrompt(brief: LabBriefResult): string {
   if (product.usps)               lines.push(`USPs: ${product.usps}`)
   if (product.benefits)           lines.push(`Benefits: ${product.benefits}`)
   if (product.offer)              lines.push(`Offer: ${product.offer}`)
-  if (product.ingredients)        lines.push(`★ Ingredients (name specifically): ${product.ingredients}`)
+  if (product.ingredients)        lines.push(`★ Ingredients & mechanism (name specifically + how they work): ${product.ingredients}`)
+  if (product.usageGuide)         lines.push(`How to use: ${product.usageGuide}`)
 
   lines.push('')
   lines.push('═══════════════════════════════════════════════════════════════')

@@ -41,6 +41,9 @@ export interface ProductKnowledge {
   ingredients: string[]
   /** Offer / pricing terms. */
   offer: string
+  /** How the user uses the product (steps + dosage). Empty for non-vi locales
+   *  unless a native-rewrite override provides it — prevents VN leakage. */
+  usageGuide: string
   /** Tone hint — inferred from niche if not explicit. */
   tone: string
   /** Market the locale implies (vi-VN → "Vietnam", my-MY → "Malaysia", ...). */
@@ -130,6 +133,9 @@ export function fromProduct(product: Product, locale: UINativeLocale = 'vi-VN'):
     painPoints,
     ingredients,
     offer:        offerStr || '',
+    // VN source gets the raw field; other locales only via a native-rewrite
+    // override, else empty — never inject raw Vietnamese into a MY/ID prompt.
+    usageGuide:   override?.usageGuide ?? (locale === 'vi-VN' ? (product.usageGuide || '') : ''),
     tone:         override?.tone ?? inferTone(niche, painPoints),
     market:       MARKET_BY_LOCALE[locale],
     productImage: product.productImage || null,
@@ -153,6 +159,7 @@ export function formatProductKnowledgeForPrompt(k: ProductKnowledge): string {
   if (k.painPoints.length)  lines.push(`Pain points solved: ${k.painPoints.slice(0, 3).join(' · ')}`)
   if (k.ingredients.length) lines.push(`Key ingredients: ${k.ingredients.slice(0, 4).join(' · ')}`)
   if (k.offer)              lines.push(`Offer: ${k.offer.slice(0, 120)}`)
+  if (k.usageGuide)         lines.push(`How to use: ${k.usageGuide.slice(0, 160)}`)
   lines.push(`Tone: ${k.tone}`)
   return lines.join('\n')
 }

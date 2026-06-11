@@ -33,6 +33,7 @@ export interface LocalizedProductFields {
   painPoints?: string
   ingredients?: string
   offer?: string
+  usageGuide?: string
   tone?: string
   /** When this localization was created / last updated. */
   updatedAt: number

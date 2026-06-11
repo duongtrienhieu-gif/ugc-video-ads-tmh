@@ -122,7 +122,8 @@ function buildUserPrompt(brief: LabBriefResult, pillarText: string): string {
   if (product.targetMarket)       lines.push(`Target market: ${product.targetMarket}`)
   if (product.usps)               lines.push(`USPs: ${product.usps}`)
   if (product.benefits)           lines.push(`Benefits: ${product.benefits}`)
-  if (product.ingredients)        lines.push(`★ Ingredients: ${product.ingredients}`)
+  if (product.ingredients)        lines.push(`★ Ingredients & mechanism: ${product.ingredients}`)
+  if (product.usageGuide)         lines.push(`How to use: ${product.usageGuide}`)
   if (product.offer)              lines.push(`Offer: ${product.offer}`)
 
   lines.push('')

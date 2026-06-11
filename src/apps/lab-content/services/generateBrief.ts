@@ -217,7 +217,8 @@ function buildUserPrompt(params: LabBriefParams): string {
   if (product.usps)               lines.push(`USPs: ${product.usps}`)
   if (product.benefits)           lines.push(`Benefits: ${product.benefits}`)
   if (product.offer)              lines.push(`Offer: ${product.offer}`)
-  if (product.ingredients)        lines.push(`Ingredients (name specifically — never generic): ${product.ingredients}`)
+  if (product.ingredients)        lines.push(`Ingredients & mechanism (name specifically + how they work — never generic): ${product.ingredients}`)
+  if (product.usageGuide)         lines.push(`How to use: ${product.usageGuide}`)
 
   lines.push('')
   lines.push('═══════════════════════════════════════════════════════════════')
