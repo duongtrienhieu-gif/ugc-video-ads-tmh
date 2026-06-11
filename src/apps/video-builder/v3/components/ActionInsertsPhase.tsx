@@ -280,6 +280,42 @@ export default function ActionInsertsPhase({ onContinue }: Props) {
         layout: s.layout,
       }
     })
+    // Z98 #1 — telemetry-only gap detector. The director's "no gap >5s" rule
+    // sits in the prompt and Gemini sometimes ignores it (anchors 2 distinct
+    // voice claims into a single scene → 9-12s of talking-head with nothing
+    // illustrating it). Code never auto-generates a scene to fill the gap —
+    // that would be patching AI behaviour, which the user has banned. Instead
+    // we sort the scenes by their real spoken second + log any consecutive
+    // pair more than 5s apart so the user sees WHERE the gap is and can
+    // either "Đạo diễn lại" or accept it (a sparse script naturally yields
+    // sparse coverage).
+    const voiceDur = script?.totalDurationSec ?? 0
+    if (voiceDur > 0) {
+      const timed = items
+        .map((it, i) => ({ i, ts: it.voiceTimestampSec, dur: it.durationSec ?? 4 }))
+        .filter((x): x is { i: number; ts: number; dur: number } => typeof x.ts === 'number')
+        .sort((a, b) => a.ts - b.ts)
+      const GAP_THRESHOLD = 5
+      const gaps: { fromIdx: number; toIdx: number; gapSec: number; fromEnd: number; toStart: number }[] = []
+      for (let k = 0; k < timed.length - 1; k++) {
+        const fromEnd = timed[k].ts + timed[k].dur
+        const toStart = timed[k + 1].ts
+        const gap = toStart - fromEnd
+        if (gap > GAP_THRESHOLD) {
+          gaps.push({ fromIdx: timed[k].i + 1, toIdx: timed[k + 1].i + 1, gapSec: Math.round(gap * 10) / 10, fromEnd: Math.round(fromEnd * 10) / 10, toStart: Math.round(toStart * 10) / 10 })
+        }
+      }
+      if (gaps.length > 0) {
+        console.warn(
+          `[DIRECTOR] ${gaps.length} GAP >${GAP_THRESHOLD}s detected — script vùng đó không có cảnh nào minh hoạ:`,
+          gaps,
+        )
+        addToast(
+          `⚠ ${gaps.length} đoạn voice trống >${GAP_THRESHOLD}s (xem Console) — bấm "Đạo diễn lại" hoặc kiểm tra kịch bản`,
+          'info',
+        )
+      }
+    }
     clearAllInserts()
     bulkAddInsertsFromPresets(items)
   }
