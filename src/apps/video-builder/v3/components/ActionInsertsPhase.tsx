@@ -81,8 +81,26 @@ interface Props {
 // Z98 — voice-first player. The REAL voice is synthesized at Step 2 BEFORE the
 // director runs; surface it here so the user can LISTEN to it (it's the exact
 // voice the director timed the B-roll to, and the one reused for lipsync).
+//
+// Insert cards dispatch `ads-video:seek-voice` (detail.sec) to ask this player
+// to jump to the second a given quoted line is spoken. Event-bus over prop
+// drilling: there's only ever ONE voice player on the page.
+const SEEK_VOICE_EVENT = 'ads-video:seek-voice'
 function VoiceFirstBar({ voice }: { voice: VoiceFirstSlot }) {
   const url = useAssetUrl(voice.voiceRef)
+  const audioRef = useRef<HTMLAudioElement>(null)
+  useEffect(() => {
+    const onSeek = (e: Event) => {
+      const el = audioRef.current
+      if (!el) return
+      const sec = (e as CustomEvent<{ sec: number }>).detail?.sec
+      if (!Number.isFinite(sec)) return
+      el.currentTime = Math.max(0, sec - 0.1)  // tiny pre-roll for context
+      el.play().catch(() => { /* user-gesture race — ignore */ })
+    }
+    window.addEventListener(SEEK_VOICE_EVENT, onSeek)
+    return () => window.removeEventListener(SEEK_VOICE_EVENT, onSeek)
+  }, [])
   return (
     <div className="mb-4 flex flex-wrap items-center gap-3 rounded-xl border border-violet-200 bg-gradient-to-r from-violet-50 to-pink-50 px-3 py-2.5">
       <div className="flex shrink-0 items-center gap-1.5 text-[12px] font-bold text-violet-900">
@@ -90,17 +108,21 @@ function VoiceFirstBar({ voice }: { voice: VoiceFirstSlot }) {
         Giọng đọc thật · {voice.voiceDurationSec.toFixed(1)}s
       </div>
       {url ? (
-        <audio controls src={url} preload="metadata" className="h-8 min-w-[220px] flex-1" />
+        <audio ref={audioRef} controls src={url} preload="metadata" className="h-8 min-w-[220px] flex-1" />
       ) : (
         <span className="flex items-center gap-1 text-[11px] text-violet-500">
           <Loader2 className="h-3 w-3 animate-spin" /> Đang tải giọng…
         </span>
       )}
       <span className="shrink-0 text-[10px] text-violet-500">
-        Đạo diễn chia cảnh B-roll theo đúng độ dài này (1.2×) — cũng là giọng dùng cho lipsync
+        Bấm câu thoại dưới mỗi cảnh để nghe phần voice tương ứng — nếu không khớp ý, "Lại" trước khi render
       </span>
     </div>
   )
+}
+
+function seekVoiceTo(sec: number) {
+  window.dispatchEvent(new CustomEvent(SEEK_VOICE_EVENT, { detail: { sec } }))
 }
 
 export default function ActionInsertsPhase({ onContinue }: Props) {
@@ -985,6 +1007,26 @@ function InsertCard({
           >
             {insert.conceptPrompt}
           </p>
+        )}
+        {/* Z98 — verbatim voice line this scene illustrates. Click to seek the
+            voice player up top so the user can verify the director matched the
+            cảnh to the RIGHT moment of the script BEFORE paying for the render.
+            Empty for manually-added inserts (no director quote bound). */}
+        {insert.quote && (
+          <button
+            type="button"
+            onClick={() => insert.voiceTimestampSec != null && seekVoiceTo(insert.voiceTimestampSec)}
+            disabled={insert.voiceTimestampSec == null}
+            title={insert.voiceTimestampSec != null
+              ? `Bấm để nghe đoạn voice tương ứng (@${insert.voiceTimestampSec.toFixed(1)}s)`
+              : 'Không có dấu thời gian — kéo voice thủ công'}
+            className="mt-1 flex w-full items-start gap-1 rounded-md border border-violet-200 bg-violet-50 px-1.5 py-1 text-left text-[10px] leading-tight text-violet-900 transition-colors enabled:hover:border-violet-400 enabled:hover:bg-violet-100 disabled:cursor-default disabled:opacity-70"
+          >
+            <Play className="mt-[1px] h-2.5 w-2.5 shrink-0 text-violet-600" />
+            <span className="line-clamp-2">
+              <span className="font-semibold">"{insert.quote}"</span>
+            </span>
+          </button>
         )}
         <div className="mt-0.5 flex items-center justify-between text-gray-500">
           <span className="flex items-center gap-1">
