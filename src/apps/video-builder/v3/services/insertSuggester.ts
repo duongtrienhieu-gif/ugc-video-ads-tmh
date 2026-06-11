@@ -982,24 +982,14 @@ OUTPUT strict JSON, no fences:
   //     that we run 10-12 dense scenes across only 5 blocks — fired constantly
   //     and silently deleted ~3 scenes ("chưa ra 12 chip" bug). Cuts are
   //     already bounded by the 50% coverage cap, so this rarely triggers now.
-  // Z98 — run-of-N detector relaxed 3 → 4. The coverage rule (no gap >5s)
-  // legitimately packs more cuts into each script block, so 3 consecutive
-  // same-block cuts is now NORMAL. Only collapse when 4 cuts in a row share
-  // a block — that's still a real run-on and worth thinning.
-  for (let i = 0; i < out.length - 3; i++) {
-    const isCut = (s: InsertSuggestion) => s.layout !== 'overlay_corner'
-    if (
-      isCut(out[i]) && isCut(out[i + 1]) && isCut(out[i + 2]) && isCut(out[i + 3]) &&
-      out[i].anchorBlock != null &&
-      out[i].anchorBlock === out[i + 1].anchorBlock &&
-      out[i].anchorBlock === out[i + 2].anchorBlock &&
-      out[i].anchorBlock === out[i + 3].anchorBlock
-    ) {
-      out.splice(i + 1, 1)
-      trustDrops.run3++
-      i--  // re-check the new quadruplet
-    }
-  }
+  // Z98 — run-of-N detector REMOVED. The Z80-era rule (drop the middle of any
+  // 3+ same-block cut run) was built when a script averaged 4-6 inserts; with
+  // the Z98 coverage rule (no gap >5s, 60s ≈ 10-12 scenes) a long block legit
+  // carries 5-7 cuts in a row. Even after relaxing 3 → 4, real test runs
+  // showed it still nuked 4 scenes per script — kept stomping the director's
+  // dense output back down to 7. Per-scene dedupe (dupeSkip via seenPrompts)
+  // already catches actual repeats; this anchorBlock-only collapse was just
+  // collateral damage.
 
   // Z78/Z79 — INGREDIENT COVERAGE GUARANTEE. Z79 (A): drive it off the
   // ingredient phrases GEMINI extracted FROM THE SCRIPT (language-correct,
