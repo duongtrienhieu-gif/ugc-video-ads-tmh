@@ -588,13 +588,14 @@ DIRECTING RULES:
   spoken line. If the script has 5 physical-action lines → ≈5 cuts. If 2 →
   ≈2 cuts. Don't pad.
 - COVERAGE — every spoken line deserves a visual, and the scenes MUST cover
-  the whole script with NO gap longer than ~7 seconds between consecutive
-  anchors. If you can't find an obvious CUT or 3D-MECHANISM for a span, use
-  an OVERLAY (sketch / labeled diagram / a tight emotional close-up of the
-  creator's face) rather than skipping the span — leaving 10–20 seconds of
-  pure talking-head between B-roll scenes kills momentum and wastes the
-  punchiest moments of the script (USP claims, demos, results often live in
-  the middle and they MUST land on a visual, not on a blank face).
+  the whole script with NO gap longer than ~5 seconds between consecutive
+  anchors. A 60s ad should land 10–12 scenes; a 30s ad ≈ 6 scenes. If you
+  can't find an obvious CUT or 3D-MECHANISM for a span, use an OVERLAY
+  (sketch / labeled diagram / a tight emotional close-up of the creator's
+  face) rather than skipping the span — leaving 10–20 seconds of pure
+  talking-head between B-roll scenes kills momentum and wastes the punchiest
+  moments of the script (USP claims, demos, results often live in the middle
+  and they MUST land on a visual, not on a blank face).
 - "fit" = 0..1 how strongly the visual supports the line. "reason" = one short
   phrase in ${langName} explaining the choice (shown to the user).
 - BE CONCISE — HARD LIMITS: "conceptPrompt" ≤ 240 characters (one tight visual
