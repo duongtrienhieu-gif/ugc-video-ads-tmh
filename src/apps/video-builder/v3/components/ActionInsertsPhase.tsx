@@ -579,11 +579,20 @@ export default function ActionInsertsPhase({ onContinue }: Props) {
       addToast('Không có insert nào pending — tất cả đã render / locked / approved', 'info')
       return
     }
-    addToast(`🎬 Bulk render ${eligible.length} insert...`)
-    for (const it of eligible) {
-      // Sequential — keeps cost predictable and avoids KIE rate limits
-      await handleRenderInsert(it.insertId)
-    }
+    // Z98 P1 — parallel with concurrency=2. Sequential was ~5min/scene worst
+    // case when KIE freezes (150s × 3 fast-attempt retries) → 12 scenes = 60min.
+    // 2-at-a-time roughly halves wall-clock without hitting KIE rate limits.
+    const CONCURRENCY = 2
+    addToast(`🎬 Bulk render ${eligible.length} insert (×${CONCURRENCY} song song)...`)
+    const queue = [...eligible]
+    const workers = Array.from({ length: Math.min(CONCURRENCY, queue.length) }, async () => {
+      while (queue.length > 0) {
+        const it = queue.shift()
+        if (!it) break
+        await handleRenderInsert(it.insertId)
+      }
+    })
+    await Promise.all(workers)
     addToast(`✓ Bulk render xong ${eligible.length} insert`, 'success')
   }
 

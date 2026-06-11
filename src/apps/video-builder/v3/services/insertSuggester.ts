@@ -579,27 +579,21 @@ DIRECTING RULES:
     inside a vacuum, a non-stick coating at molecular level, a watch movement,
     a speaker driver vibrating, a tool's tempered-steel grain structure, …).
     SET "isMechanism": true on such scenes — the renderer will then drop the
-    avatar/product reference and produce a clean 3D scientific animation. Don't
-    force these into a person close-up or a product packshot.
+    avatar/product reference and produce a clean 3D scientific animation. You
+    MAY add 1-2 short text labels (ingredient name / body-part / mechanism
+    term, in ${langName}, max 24 chars each) in the "labels" array — the
+    renderer will print them next to the structure. Don't force a 3D beat into
+    a person close-up or a product packshot.
   • OVERLAY illustration (layout:"overlay_corner") — a small label / icon /
-    sketch / number / animated graphic / split-screen / diagram / infographic /
-    chart / counter / stamp floating in the corner beside the creator's face.
-    Use these GENEROUSLY: abstract claims, USP numbers, ingredient names, time
-    references ("3 seconds", "After 2 weeks"), short proof points, mini-
-    diagrams, korean-formula stamps, etc. Overlays are CHEAP and ADDITIVE —
-    they ride in the corner of the talking-head, they do NOT replace cuts or
-    compete with them. Don't be stingy.
-  TARGET MIX — aim for ROUGHLY HALF cuts and HALF overlays. The total scene
-  count flows from the gap-≤5s coverage rule, so the proportion stays balanced
-  at any script length (30s ≈ 3+3, 60s ≈ 6+6, 90s ≈ 9+9). Physical-action
-  lines (holding / applying / demoing / mirror / before-after / CTA) → CUT.
-  Abstract teaching / graphic / split-screen / animated-graphic / infographic /
-  diagram / chart / counter lines → OVERLAY, NEVER cut — they ride next to the
-  talking-head, they do not replace it. Using a cut for a graphic/teaching
-  beat wastes a Grok render on something that wanted to be a corner sticker.
-  Order matters more than count: every scene must illustrate ONE specific
-  spoken line. If the script has 5 physical-action lines → ≈5 cuts. If 2 →
-  ≈2 cuts. Don't pad.
+    sketch / number / split-screen / diagram / infographic / chart / counter /
+    stamp in the corner beside the creator's face. Use GENEROUSLY: abstract
+    claims, USP numbers, ingredient names, time refs, proof points. Cheap and
+    additive — rides on top of the talking-head, doesn't compete with cuts.
+  TARGET MIX — roughly half cuts, half overlays; count flows from the gap-≤5s
+  rule (30s ≈ 3+3, 60s ≈ 6+6). Graphic/teaching content (split-screen,
+  infographic, diagram, animated-graphic, chart) MUST be overlay, NEVER cut —
+  a cut wastes 16cr on something that wanted to be a 6cr corner sticker.
+  Every scene illustrates ONE specific spoken line; don't pad.
 - COVERAGE — every spoken line deserves a visual, and the scenes MUST cover
   the whole script with NO gap longer than ~5 seconds between consecutive
   anchors. A 60s ad should land 10–12 scenes; a 30s ad ≈ 6 scenes. If you
@@ -810,43 +804,34 @@ OUTPUT strict JSON, no fences:
     // ANIMATION" prefix → switches to a 3D render style + drops the avatar.
     // layout is forced to 'cut' below.
     if (is3D) {
-      // Z98 V2 (S1+S2) — universal 3D rebuild. Must work for ANY niche the
-      // engine ships against: skincare ingredient inside a skin layer, dental
-      // ingredient inside tooth enamel, supplement inside gut/joint/liver,
-      // vacuum airflow inside a chamber, motor inside a watch movement, non-
-      // stick coating at molecular level on a pan, leather grain inside a bag.
-      // The earlier rebuild hard-coded "body / cells / fibers / molecular /
-      // cellular" which only fits body niches — a pan or vacuum has no cells.
-      // Template now says "INSIDE the subject" generically; the director's
-      // core description supplies the actual subject.
-      //
-      // Strip three groups before the template wraps them:
-      // 1. Illustration vocab (sketch / hand-drawn / etc.) so a 3D beat doesn't
-      //    smuggle in a flat drawing.
-      // 2. People surface (hand / face / finger / cheek — VN+MS too) — 3D
-      //    always has no person.
-      // 3. Surface-action verbs (applied to / poured onto / placed on /
-      //    mounted on / drilled into / clipped onto / Đặt lên / lắp vào /
-      //    dipasang) covering skincare + appliance + tooling so the prompt
-      //    describes the INTERNAL effect, not the outside contact.
+      // Z98 — universal 3D rebuild. Template says "INSIDE the subject" (not
+      // hard-coded to body/cells), so the same prompt fits skincare, dental,
+      // appliance, tool, leather, etc. Strip illustration vocab + people
+      // surface + surface-action verbs (vi/ms/en) so the model describes the
+      // INTERNAL effect, not the outside contact.
       const core = conceptPrompt
         .split('\n\n')[0]
         .replace(/\b(simple |friendly )?(hand[- ]drawn sketch|hand[- ]drawn|illustration|illustrated|animated graphic|animation|graphic|drawing|infographic|ilustrasi|lakaran|sketch|labeled|split[- ]screen)\b/gi, '')
         .replace(/\b(the |a |an )?(back of (a |the )?hand|back of hand|hand|hands|finger\w*|face|cheek\w*|forehead|mouth|lips|tay|bàn tay|ngón\w*|mặt|má|trán|miệng|tangan|jari|muka|wajah|pipi)\b/gi, '')
         .replace(/\b(being |gently |slowly |then )?(applied (to|onto|on)|massaged (into|onto)|rubbed (into|onto)|patted (onto|into)|poured (onto|on)|dropped (onto|on)|wiped (on|onto)|sprayed (on|onto)|placed (on|onto)|pressed (into|onto)|mounted (on|onto)|clipped (onto|to)|inserted into|fitted (to|onto)|drilled into|hammered (onto|into)|attached (to|onto)|xoa (lên|vào)|vỗ (lên|vào)|bôi (lên|vào)|đặt lên|lắp vào|vít vào|sapu (pada|ke)|gosok (pada|ke)|dipasang (pada|ke)|dilekapkan (pada|ke)|titis(kan)? ke)\b/gi, '')
         .replace(/\s+/g, ' ').trim()
+      // Z98 P2 — 3D scenes can now carry 1-2 short labels (ingredient name /
+      // body-part / mechanism term) so the viewer reads what they're seeing.
+      // Director fills `labels`; renderer drops them when the array is empty.
+      const threeDLabels = Array.isArray(item.labels)
+        ? item.labels.map((l) => String(l).trim()).filter((l) => l.length > 0 && l.length <= 24).slice(0, 2)
+        : []
+      const labelClause = threeDLabels.length > 0
+        ? `Include short floating text label(s) in ${langName} beside the structure: ${threeDLabels.map((l) => `"${l}"`).join(', ')} — 1-2 words each, big and legible, no sentences.`
+        : `NO text labels.`
       conceptPrompt =
-        `3D MECHANISM ANIMATION (no people, no text): clean photorealistic 3D ` +
-        `scientific / technical animation showing what happens INSIDE the ` +
-        `subject described above — ${core}. Cross-section / macro view of ` +
-        `the internal workings appropriate to this subject (cellular / ` +
-        `molecular for body / ingredient subjects; mechanical / component / ` +
-        `material for device / appliance / tool subjects — whichever the ` +
-        `subject's nature implies). Studio 3D render, smooth depth of field, ` +
-        `soft studio / clinical light. NO human, NO avatar, NO hand, NO ` +
-        `finger, NO surface contact, NO outside view, NO text labels, NO ` +
-        `product packaging — the camera is INSIDE the subject looking at ` +
-        `its internal workings, not at it from outside.`
+        `3D MECHANISM ANIMATION (no people): clean photorealistic 3D scientific ` +
+        `/ technical animation INSIDE the subject — ${core}. Cross-section / ` +
+        `macro view of the internal workings (cellular/molecular for body or ` +
+        `ingredient subjects; mechanical/component for device/tool subjects). ` +
+        `Studio 3D render, smooth depth of field, soft clinical light. ${labelClause} ` +
+        `NO human, NO hand, NO surface contact, NO outside view, NO product ` +
+        `packaging — the camera is INSIDE the subject.`
     }
 
     // Z56 — hard-inject the structured labels into the conceptPrompt as an
@@ -938,14 +923,8 @@ OUTPUT strict JSON, no fences:
     // slideshow. Person / product / demo / before-after / CTA keep the
     // Director's choice (defaulting to 'cut' for full focus).
     const isStaticIllustration = presetId === 'CONCEPT_SCENE' && renderMode === 'ken_burns'
-    // Z98 V1 P2 — graphic-content safety net. The director sometimes marks an
-    // "animated graphic" / "split-screen" / "infographic" beat as
-    // motionKind='emotion' → renderMode='video' → cut, which spends 16cr of
-    // Grok rendering a full-screen cut for what should have been a 6cr corner
-    // overlay. Detect graphic-content keywords in the conceptPrompt (universal
-    // across niches: appliance-airflow diagram, watch-movement schematic,
-    // skincare cross-section sketch all match the same words) and reroute the
-    // scene to a static overlay regardless of the director's motionKind.
+    // Z98 — force overlay for graphic/teaching content regardless of the
+    // director's motionKind (was: marked emotion → video → cut = 16cr waste).
     const GRAPHIC_TEACHING_RE = /\b(animated graphic|hand[- ]drawn|split[- ]screen|split screen|infographic|chart|diagram|counter|statistic\w*|sketch|illustration|graph|schematic|cross[- ]section view|labeled|annotated)\b/i
     const isGraphicTeaching = !is3D && presetId === 'CONCEPT_SCENE' && GRAPHIC_TEACHING_RE.test(conceptPrompt)
     const effectiveRenderMode: InsertRenderMode = isGraphicTeaching ? 'ken_burns' : renderMode
