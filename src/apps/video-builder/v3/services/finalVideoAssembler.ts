@@ -87,6 +87,14 @@ export async function assembleFinalVideo(
   const evenW = outW % 2 === 0 ? outW : outW + 1
   const evenH = outH % 2 === 0 ? outH : outH + 1
 
+  // Z98 — overall-progress window for the multi-pass (per-segment) encode. Each
+  // segment is a SEPARATE ffmpeg.exec, so the raw per-exec ratio resets 0→1 once
+  // per segment (the "loạn xạ" jumping bar). The STAGE-2 loop slides this window
+  // [progBase, progBase+progSpan] forward per segment so the UI bar advances
+  // monotonically 0→100% across all segments + the final concat pass.
+  let progBase = 0
+  let progSpan = 1
+
   params.onStage?.('loading_ffmpeg', 'Loading ffmpeg.wasm...')
   const ffmpeg = await getFFmpeg({
     onLog: (msg) => {
@@ -95,7 +103,7 @@ export async function assembleFinalVideo(
     },
     onExecProgress: (ratio) => {
       if (Number.isFinite(ratio) && ratio >= 0 && ratio <= 1) {
-        params.onProgress?.(ratio)
+        params.onProgress?.(progBase + ratio * progSpan)
       }
     },
   })
@@ -273,6 +281,10 @@ export async function assembleFinalVideo(
   for (let i = 0; i < segmentInputs.length; i++) {
     const s = segmentInputs[i]
     params.onStage?.('encoding', `Encoding segment ${i + 1}/${segmentInputs.length}…`)
+    // Slide the overall-progress window onto this segment (reserve the last 8%
+    // for the concat pass) so the bar climbs monotonically instead of resetting.
+    progBase = (i / segmentInputs.length) * 0.92
+    progSpan = (1 / segmentInputs.length) * 0.92
     // Local inputs for THIS segment only: input 0 = base, inputs 1.. = overlays.
     const segArgs: string[] = ['-i', s.fileName]
     const ovs = s.overlays ?? []
@@ -327,11 +339,15 @@ export async function assembleFinalVideo(
 
   // Intermediate file — video only, no audio yet (audio comes from voiceFile)
   const intermediateFile = '_video_only.mp4'
+  params.onStage?.('encoding', 'Ghép các cảnh lại…')
+  progBase = 0.92
+  progSpan = 0.08
   await ffmpeg.exec([
     '-f', 'concat', '-safe', '0', '-i', concatListFile,
     '-c', 'copy',
     '-y', intermediateFile,
   ])
+  // The last 8% window stays open for STAGE 3 (mux audio) to climb to 100%.
 
   // Tidy the per-segment clips + list (free the FS before the mux pass).
   for (const f of normFiles) await ffmpeg.deleteFile(f).catch(() => {})

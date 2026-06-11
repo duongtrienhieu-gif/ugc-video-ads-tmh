@@ -194,7 +194,7 @@ export default function AdsVideoEngine({ onSwitchToV2, onSwitchToV1 }: Props) {
           absolute right-4 top-3 z-50) so the banner's own buttons aren't
           covered by them. */}
       <div className="shrink-0 border-b border-black/8 bg-gradient-to-r from-violet-600 via-fuchsia-600 to-pink-600 py-3 pl-6 pr-3 text-white md:pr-[260px]">
-        <div className="flex items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
           <div className="flex items-center gap-2">
             <Zap className="h-5 w-5" />
             <div>
@@ -204,7 +204,9 @@ export default function AdsVideoEngine({ onSwitchToV2, onSwitchToV1 }: Props) {
               </p>
             </div>
           </div>
-          <div className="flex items-center gap-2">
+          {/* Z98 — action buttons sit right after the title (center-left) so the
+              global Gemini/KIE-Credit badges (absolute top-right) can't cover them. */}
+          <div className="flex flex-wrap items-center gap-2">
             {/* Legacy escape hatch */}
             <button
               onClick={() => setShowLegacy((v) => !v)}
