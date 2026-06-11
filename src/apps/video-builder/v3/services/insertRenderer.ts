@@ -213,6 +213,21 @@ function buildInsertKeyframePrompt(
       `Preserve EXACTLY face, hair, skin tone, body proportions. Do NOT redesign.`,
     )
   }
+  // Z98 — REAL-WORLD SCALE lock. Universal anti-drift for any scene where the
+  // product shares the frame with the person. Image models often emphasise the
+  // product by enlarging it (a 30 ml serum bottle the size of a fist, a 15 cm
+  // toothpaste tube the size of a water bottle) or shrinking it the other way —
+  // both kill the "real UGC" feel instantly. The reference photo already pins
+  // the appearance; this line pins the SIZE relationship to the hand/face.
+  if (productRefIndex > 0 && product && personRefIndex > 0) {
+    paragraphs.push(
+      `REAL-WORLD SCALE: Render the product at its TRUE physical size relative ` +
+      `to the person's hand and face — exactly the proportions visible in ` +
+      `reference image #${productRefIndex}. Do NOT scale it up to "hero" it ` +
+      `and do NOT shrink it; the size must look natural and physically ` +
+      `plausible for a viewer who has handled this kind of product in real life.`,
+    )
+  }
 
   // 2. Composition
   paragraphs.push(`COMPOSITION: ${preset.framingPreset} shot, vertical 9:16 aspect ratio.`)
