@@ -586,7 +586,15 @@ DIRECTING RULES:
     diagrams, educational infographics with no in-body action.
   Order matters more than count: every scene must illustrate ONE specific
   spoken line. If the script has 5 physical-action lines → ≈5 cuts. If 2 →
-  ≈2 cuts. Don't pad and don't underfill.
+  ≈2 cuts. Don't pad.
+- COVERAGE — every spoken line deserves a visual, and the scenes MUST cover
+  the whole script with NO gap longer than ~7 seconds between consecutive
+  anchors. If you can't find an obvious CUT or 3D-MECHANISM for a span, use
+  an OVERLAY (sketch / labeled diagram / a tight emotional close-up of the
+  creator's face) rather than skipping the span — leaving 10–20 seconds of
+  pure talking-head between B-roll scenes kills momentum and wastes the
+  punchiest moments of the script (USP claims, demos, results often live in
+  the middle and they MUST land on a visual, not on a blank face).
 - "fit" = 0..1 how strongly the visual supports the line. "reason" = one short
   phrase in ${langName} explaining the choice (shown to the user).
 - BE CONCISE — HARD LIMITS: "conceptPrompt" ≤ 240 characters (one tight visual
