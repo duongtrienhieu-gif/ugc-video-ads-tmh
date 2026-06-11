@@ -646,8 +646,10 @@ gets made even if you did not pick one above.
 STICKERS — also separate from the scenes. Scan the WHOLE script and fill the
 "stickers" array with EVERY short concrete keyword worth a 0-credit TikTok-style
 text pop in the corner (these ride ON TOP of the talking-head and do NOT count as
-scenes — fill them GENEROUSLY, aim ~1 every 5-8s). Pick "style" by what the
-keyword IS (universal across all niches):
+scenes — fill them GENEROUSLY, aim ~1 every 4-6s, so a 60s ad gets ~8-10). Do
+NOT skip an origin, an ingredient / part / material name, a number or a time
+word just because a nearby scene already covers that line — the sticker still
+adds energy. Pick "style" by what the keyword IS (universal across all niches):
   number (a measured spec: "20kPa","98%","1400rpm","16MP"),
   countdown (a time/duration: "3 giây","2 tuần","180 phút"),
   pill (an ingredient/part/material name: "Nano","HEPA","Inox 304","Cotton"),

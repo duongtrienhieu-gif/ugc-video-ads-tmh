@@ -69,7 +69,7 @@ const FONT = 64           // main text px
 const PAD_X = 40
 const PAD_Y = 26
 const RADIUS = 30
-const EMOJI = 58
+const EMOJI = Math.round(FONT * 1.5)  // emoji 1.5× the text size (user request)
 const GAP = 16            // gap between emoji and text
 const FONT_STACK = `800 ${FONT}px 'Be Vietnam Pro', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif`
 
@@ -102,7 +102,8 @@ export async function renderStickerCanvas(opts: StickerRenderOpts): Promise<HTML
 
   const innerW = emojiW + accentW + textW
   const boxW = innerW + PAD_X * 2
-  const boxH = FONT + PAD_Y * 2
+  // Height tracks the TALLER of text vs emoji so the bigger emoji isn't clipped.
+  const boxH = Math.max(FONT, emoji ? EMOJI : 0) + PAD_Y * 2
   const SHADOW = 18
   const W = Math.ceil(boxW + SHADOW * 2)
   const H = Math.ceil(boxH + SHADOW * 2)
