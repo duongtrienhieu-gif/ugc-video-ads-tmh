@@ -268,10 +268,14 @@ export default function CharacterStudio() {
         </div>
       </div>
 
-      {mode === 'clone' ? (
+      {/* Clone mode — kept MOUNTED (CSS-hidden when inactive) so an in-flight
+          generation survives switching to Random mode and back. */}
+      <div className={`min-h-0 flex-1 flex-col ${mode === 'clone' ? 'flex' : 'hidden'}`}>
         <CloneStudio />
-      ) : (
-      <>
+      </div>
+
+      {/* Random mode — also kept mounted; only one is visible at a time. */}
+      <div className={`min-h-0 flex-1 flex-col ${mode === 'random' ? 'flex' : 'hidden'}`}>
       {/* ── Auto-fill banner ── */}
       <div className="shrink-0 border-b border-black/8 px-4 py-3">
         <p className="mb-2 text-[9px] font-semibold uppercase tracking-widest text-gray-400">
@@ -407,8 +411,7 @@ export default function CharacterStudio() {
             : <><Sliders className="h-4 w-4" /> Tuỳ chỉnh</>}
         </button>
       )}
-      </>
-      )}
+      </div>
     </div>
   )
 }
