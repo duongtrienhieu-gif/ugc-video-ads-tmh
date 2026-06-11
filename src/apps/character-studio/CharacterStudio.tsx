@@ -5,6 +5,7 @@ import type { CharacterProfile, TabId } from './types'
 import { createEmptyProfile, TABS } from './types'
 import ControlsPanel from './components/ControlsPanel'
 import OutputPanel from './components/OutputPanel'
+import CloneStudio from './components/CloneStudio'
 import AutoSaveIndicator from '../../components/AutoSaveIndicator'
 import { useSessionPersist } from '../../services/sessionPersistence'
 import { generateCharacter } from './services/generateCharacter'
@@ -47,6 +48,7 @@ export default function CharacterStudio() {
   const [result, setResult] = useState<GenerationResult | null>(null)
   const [isGenerating, setIsGenerating] = useState(false)
   const [activeTab, setActiveTab] = useState<TabId>('physical')
+  const [mode, setMode] = useState<'random' | 'clone'>('random')
   const cancelledRef = useRef(false)
 
   const [refImage, setRefImage] = useState<{ file: File; preview: string } | null>(null)
@@ -247,6 +249,29 @@ export default function CharacterStudio() {
       <div className="absolute right-4 top-3 z-30">
         <AutoSaveIndicator lastSavedAt={sessionApi.lastSavedAt} lastSaveOk={sessionApi.lastSaveOk} />
       </div>
+
+      {/* ── Mode toggle: Random (attribute-driven) vs Clone (keep uploaded face) ── */}
+      <div className="shrink-0 border-b border-black/8 px-4 pt-3">
+        <div className="inline-flex rounded-xl border border-black/10 bg-black/[0.02] p-0.5">
+          <button
+            onClick={() => setMode('random')}
+            className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors ${mode === 'random' ? 'bg-violet-600 text-white shadow' : 'text-gray-500 hover:text-gray-700'}`}
+          >
+            Tạo Avatar Random
+          </button>
+          <button
+            onClick={() => setMode('clone')}
+            className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors ${mode === 'clone' ? 'bg-violet-600 text-white shadow' : 'text-gray-500 hover:text-gray-700'}`}
+          >
+            Tạo Avatar Clone
+          </button>
+        </div>
+      </div>
+
+      {mode === 'clone' ? (
+        <CloneStudio />
+      ) : (
+      <>
       {/* ── Auto-fill banner ── */}
       <div className="shrink-0 border-b border-black/8 px-4 py-3">
         <p className="mb-2 text-[9px] font-semibold uppercase tracking-widest text-gray-400">
@@ -381,6 +406,8 @@ export default function CharacterStudio() {
             ? <><X className="h-4 w-4" /> Đóng</>
             : <><Sliders className="h-4 w-4" /> Tuỳ chỉnh</>}
         </button>
+      )}
+      </>
       )}
     </div>
   )
