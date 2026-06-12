@@ -30,7 +30,7 @@ import {
 import { AD_STRUCTURES } from './adStructures'
 import { AD_ANGLES } from './adAngles'
 import {
-  allocateBlockBudgets, estimateReadDurationSec,
+  allocateBlockBudgets, estimateReadDurationSec, estimateReadDurationForVoice,
 } from './voiceTimingEstimator'
 
 // ── Public API ─────────────────────────────────────────────────────────────
@@ -139,6 +139,36 @@ export async function generateScript(
       userPrompt,
     })
   }
+
+  // ── Fit-to-length (deterministic) ───────────────────────────────────────────
+  // The model can't reliably self-measure spoken duration and word↔second density
+  // varies by language (vi ≈ 3.5-3.9 w/s, ms differs), so prompt-only length control
+  // swings short↔long. Instead MEASURE the estimate and run up to 2 corrective
+  // passes that explicitly cut (or expand) to the target while keeping the core
+  // facts. Skipped for own-script (the user's words are never reshaped).
+  if (!params.useOwnScript) {
+    let blockMap: Record<ScriptBlockId, string> = { ...parsed.blocks }
+    const target = params.targetDurationSec
+    for (let pass = 0; pass < 2; pass++) {
+      const joined = SCRIPT_BLOCK_IDS.map((id) => blockMap[id] ?? '').join(' ')
+      const durNow = estimateReadDurationForVoice(joined)
+      if (durNow <= target * 1.15 && durNow >= target * 0.72) break  // in band
+      const refit = await refitScriptToLength({
+        apiKey: params.geminiKey,
+        blocks: blockMap,
+        langName: lang,
+        targetSec: target,
+        currentSec: durNow,
+        tooLong: durNow > target * 1.15,
+      })
+      if (!refit) break
+      blockMap = refit
+    }
+    // Keep the user's picked hook verbatim through any refit.
+    if ((params.chosenHook ?? '').trim()) blockMap.hook = params.chosenHook!.trim()
+    parsed = { ...parsed, blocks: blockMap }
+  }
+
   const blocks: ScriptBlock[] = SCRIPT_BLOCK_IDS.map((id) => ({
     id,
     text: parsed.blocks[id] ?? '',
@@ -191,9 +221,8 @@ UNIVERSAL TIKTOK-NATIVE RULES:
 - Write spoken language, not written copy. Short sentences. Natural rhythm.
 - Use first person. Sound like a real person on TikTok sharing what worked.
 - NO corporate language. NO "in this video". NO "let me introduce you to".
-- Keep each SENTENCE short and punchy (spoken, not written). But COVER THE FULL
-  target length — a longer ad means MORE of these short beats and more specific
-  detail, NOT longer sentences and NOT a short script. Never undershoot the time.
+- Keep each SENTENCE short and punchy (spoken, not written). Be CONCISE — cover the
+  key beats without rambling, repeating, or over-explaining; do NOT pad to fill time.
 - It is OK (encouraged) to have imperfect, conversational phrasing.
 - Write in the casual, everyday spoken register of ${args.lang} — the way a real
   person talks to friends, NOT formal or written language. Pick ONE consistent
@@ -283,24 +312,18 @@ ${creatorLine}
 SELECTED STRUCTURE: ${args.structureLabel}
 SELECTED ANGLE: ${args.angleLabel}
 
-LENGTH — HARD TARGET (the most common mistake is writing TOO SHORT): the COMPLETE
-script, read aloud at a natural pace, MUST run close to ${args.targetDurationSec}s
-— about ${Math.round(args.targetDurationSec * 2.5)} words total across the 5 blocks.
-Do NOT hand back a script noticeably shorter than ${args.targetDurationSec}s. If
-your draft is short, EXPAND it before answering: go deeper on the mechanism, add
-another concrete benefit or a proof point, make the pain more specific — always
-using REAL facts from the brief, never filler. A longer ad is simply MORE short,
-punchy beats with more specific detail — not padding and not longer sentences.
+LENGTH — aim for about ${args.targetDurationSec}s spoken: tight, punchy, to the
+point. Do NOT ramble, repeat, or over-explain — a concise ad holds attention far
+better than a long one. The length is auto-checked and trimmed afterward, so err
+on the side of SHORTER rather than padding. Cover the key beats (the pain, the
+named ingredient + how it works, the usage moment, the offer) without filler.
 
-PER-BLOCK TARGET DURATION (they sum to ~${args.targetDurationSec}s — FILL each):
+PER-BLOCK rough split (sum ~${args.targetDurationSec}s, just a guide):
 - HOOK:      ~${args.budgets.hook}s
 - PAIN:      ~${args.budgets.pain}s
 - DISCOVERY: ~${args.budgets.discovery}s
 - BENEFIT:   ~${args.budgets.benefit}s
 - CTA:       ~${args.budgets.cta}s
-
-Reading pace baseline: 150 words per minute (a 3s block ≈ 7-8 words). Each block
-should land within ~20% of its budget — and the TOTAL must reach the target.
 
 MUST INCLUDE (pull from the brief — this is what makes it persuasive, not basic):
 - the SPECIFIC pain + who it's for, so the right viewer feels seen (early);
@@ -475,6 +498,52 @@ THE FIXED HOOK (continue the script from here; reproduce it verbatim as the hook
   // Force the hook verbatim — never trust the model to reproduce it exactly.
   blocks.hook = args.chosenHook
   return { blocks, hookVariants: [] }
+}
+
+// ── Fit-to-length corrective pass ───────────────────────────────────────────
+// Rewrites the 5 blocks to hit a target spoken length. Used by the deterministic
+// fit-to-length loop in generateScript. CUTS (or expands) while preserving the
+// hook + product name + ingredients + mechanism + usage + offer. Language-agnostic.
+async function refitScriptToLength(args: {
+  apiKey: string
+  blocks: Record<ScriptBlockId, string>
+  langName: string
+  targetSec: number
+  currentSec: number
+  tooLong: boolean
+}): Promise<Record<ScriptBlockId, string> | null> {
+  const current = SCRIPT_BLOCK_IDS.map((id) => `[${id}] ${args.blocks[id] ?? ''}`).join('\n')
+  const systemInstruction = `You are editing a finished TikTok ad script written in ${args.langName} to FIT A TARGET SPOKEN LENGTH. Keep the SAME language, the SAME casual spoken voice, and the 5-block structure (hook, pain, discovery, benefit, cta). Do not switch language or tone.`
+  const userPrompt = `This script currently reads about ${Math.round(args.currentSec)} seconds spoken, but it MUST read about ${args.targetSec} seconds. ${
+    args.tooLong
+      ? `It is TOO LONG — CUT it down to about ${args.targetSec}s. Remove the least essential sentences, trim repetition and filler, and tighten the wording. You MUST KEEP: the opening hook (verbatim), the product name + its key ingredients + how it works (the mechanism), the one concrete usage moment, and the offer / CTA. Cut fluff, never the core facts.`
+      : `It is TOO SHORT — expand to about ${args.targetSec}s by going a little deeper on the mechanism or adding one more concrete benefit, using ONLY facts already present. Do not invent new product claims and do not pad with filler.`
+  }
+
+CURRENT SCRIPT:
+${current}
+
+Return strict JSON only, no markdown fences:
+{ "blocks": { "hook":"", "pain":"", "discovery":"", "benefit":"", "cta":"" } }`
+
+  const call = (schema = true) =>
+    directGeminiText({
+      apiKey: args.apiKey,
+      systemInstruction,
+      prompt: userPrompt,
+      maxOutputTokens: 2048,
+      temperature: 0.4,
+      responseMimeType: 'application/json',
+      ...(schema ? { responseSchema: SEGMENT_RESPONSE_SCHEMA } : {}),
+    })
+
+  let raw = await call()
+  let blocks = tryParseSegments(raw) ?? tryParseSegments(repairJsonString(raw))
+  if (!blocks) {
+    raw = await call(false)
+    blocks = tryParseSegments(raw) ?? tryParseSegments(repairJsonString(raw))
+  }
+  return blocks
 }
 
 // ── #6 hook layer ──────────────────────────────────────────────────────────
