@@ -221,14 +221,27 @@ export default function ScriptVoicePhase({ onContinue }: Props) {
         chosenHook,
       })
 
+      // Quick mode: DON'T jump to the next step. Drop the generated script into the
+      // editable box (switch to the Dán/Edit tab) so the user can READ + tweak it
+      // first, then press "Tiếp tục" themselves. The blocks join into plain text
+      // (no labels) — the hook is the first line. Re-segmentation happens on continue.
+      if (isQuick) {
+        const draft = result.script.blocks
+          .map((b) => b.text.trim())
+          .filter(Boolean)
+          .join('\n\n')
+        setScript(draft)
+        setLangTouched(true)   // keep the chosen language; don't auto-detect over it
+        setGenTab('own')
+        addToast('✓ Đã tạo kịch bản — xem lại & chỉnh sửa, rồi bấm Tiếp tục', 'success')
+        return
+      }
+
+      // Own-script path: segment verbatim, then advance (cert guard first).
       const refined = recomputeBlockDurations(result.script)
       setGeneratedScript(refined)
-      // Quick mode keeps the user's 6 hooks (the picked one is already baked into
-      // the script); only the legacy fresh/own paths replace the hook list.
-      if (!isQuick) {
-        setHookVariants(result.hookVariants)
-        pickHookVariant(-1)
-      }
+      setHookVariants(result.hookVariants)
+      pickHookVariant(-1)
 
       const claims = detectCertClaims(refined)
       if (claims.length === 0) {
@@ -795,7 +808,9 @@ export default function ScriptVoicePhase({ onContinue }: Props) {
             >
               {brain.isGeneratingScript
                 ? <><Loader2 className="h-4 w-4 animate-spin" /> Đang xử lý...</>
-                : <><Sparkles className="h-4 w-4" /> Tạo & tiếp tục</>}
+                : genTab === 'quick'
+                  ? <><Sparkles className="h-4 w-4" /> Tạo kịch bản</>
+                  : <>Tiếp tục → Action Inserts <ChevronRight className="h-4 w-4" /></>}
             </button>
           )}
         </div>
