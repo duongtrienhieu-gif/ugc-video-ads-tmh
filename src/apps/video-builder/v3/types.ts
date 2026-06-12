@@ -746,9 +746,9 @@ export const DEFAULT_AD_ANGLE: AdAngle = 'native_tiktok'
 
 // ── Target script duration (Z31 §5) ────────────────────────────────────────
 
-export type ScriptTargetDurationSec = 15 | 30 | 45 | 60
+export type ScriptTargetDurationSec = 40 | 50 | 60
 
-export const DEFAULT_SCRIPT_DURATION_SEC: ScriptTargetDurationSec = 30
+export const DEFAULT_SCRIPT_DURATION_SEC: ScriptTargetDurationSec = 50
 
 // ── Output language (single language per generate) ─────────────────────────
 // The script + voice + insert keywords all lock to ONE language per
@@ -828,9 +828,104 @@ export const HOOK_STYLE_LABEL_VI: Record<HookStyle, string> = {
   curiosity: 'Tò mò',
 }
 
+// ── Hook archetypes (#6 quick-gen) ─────────────────────────────────────────
+// The hook is the single biggest lever on whether an ad survives the scroll,
+// so the quick-gen treats it as a FIRST-CLASS layer (generate many, pick one,
+// then write the body around it) — independent of the body FRAMEWORK. These 6
+// archetypes are PROVEN, UNIVERSAL TikTok-ad opening patterns; the AI fills the
+// niche from the product brief, so they work for ANY product (skincare,
+// supplement, appliance, power tool, apparel…). NO hardcoded niche.
+
+export type HookArchetype =
+  | 'callout_pain'   // "Nếu bạn [đau rất cụ thể], dừng lại xem cái này"
+  | 'contrarian'     // "Ngừng [việc ai cũng làm] đi, nó đang [hậu quả]"
+  | 'curiosity_gap'  // "Không ai nói cho bạn [bí mật này]..."
+  | 'confession'     // "3 năm nay mình [khổ vì X], tới khi..."
+  | 'shock_result'   // "[Chuyển biến bất ngờ] chỉ sau [thời gian ngắn]"
+  | 'question_pov'   // "Tại sao [hiện tượng]?" / "POV: bạn vừa biết..."
+
+export interface HookArchetypeConfig {
+  id: HookArchetype
+  labelVi: string
+  /** One-line user-facing description for the picker chip */
+  descriptionVi: string
+  emoji: string
+  /** Gemini prompt fragment — UNIVERSAL, niche filled from the product brief. */
+  promptHint: string
+}
+
+export const HOOK_ARCHETYPES: Record<HookArchetype, HookArchetypeConfig> = {
+  callout_pain: {
+    id: 'callout_pain',
+    labelVi: 'Gọi đích nỗi đau',
+    descriptionVi: 'Nhắm thẳng người đang gặp đúng nỗi đau cụ thể của ngách.',
+    emoji: '🎯',
+    promptHint:
+      'CALLOUT a very specific pain of THIS product\'s exact audience in the first ' +
+      'line, so the right viewer feels personally named and stops scrolling. So ' +
+      'precise it feels like the algorithm read their mind. Niche comes from the brief.',
+  },
+  contrarian: {
+    id: 'contrarian',
+    labelVi: 'Phản biện / Bẻ niềm tin',
+    descriptionVi: 'Bẻ một niềm tin/thói quen sai phổ biến trong ngách.',
+    emoji: '🔄',
+    promptHint:
+      'Open by CONTRADICTING a common belief or habit in this niche ("Stop doing ' +
+      'X — it is quietly causing Y"). Bold, a little provocative, but honest. Creates ' +
+      'tension that makes the viewer stay to find out if they are wrong.',
+  },
+  curiosity_gap: {
+    id: 'curiosity_gap',
+    labelVi: 'Khoảng trống tò mò',
+    descriptionVi: 'Hé lộ có một bí mật/điều ít ai biết — chưa nói ra ngay.',
+    emoji: '🕳️',
+    promptHint:
+      'Open a CURIOSITY GAP — hint at a little-known secret / reason / method this ' +
+      'product reveals, WITHOUT giving it away in the first line. The viewer must ' +
+      'keep watching to close the gap. Avoid clickbait that the script cannot pay off.',
+  },
+  confession: {
+    id: 'confession',
+    labelVi: 'Tự thú trạng thái trước',
+    descriptionVi: 'Thú nhận cá nhân kiểu "mình từng khổ vì... tới khi".',
+    emoji: '🤫',
+    promptHint:
+      'Open as a first-person CONFESSION of a past struggle / mistake ("For months ' +
+      'I ... until ..."). Vulnerable, intimate, like a voice memo to a friend — not ' +
+      'an ad. The product appears later as the turning point, never in the hook.',
+  },
+  shock_result: {
+    id: 'shock_result',
+    labelVi: 'Kết quả gây sốc',
+    descriptionVi: 'Đập ngay vào một kết quả/chuyển biến bất ngờ.',
+    emoji: '⚡',
+    promptHint:
+      'Open with a SURPRISING, concrete RESULT or transformation up front ("In days ' +
+      'this completely changed ..."). Specific and believable — a real felt or ' +
+      'visible change, never an unbacked medical/clinical claim. Numbers only if real.',
+  },
+  question_pov: {
+    id: 'question_pov',
+    labelVi: 'Câu hỏi / POV',
+    descriptionVi: 'Mở bằng câu hỏi cắm chốt hoặc khung "POV: bạn vừa biết...".',
+    emoji: '❓',
+    promptHint:
+      'Open with a sharp QUESTION the target viewer silently answers "yes" to, OR a ' +
+      '"POV: ..." framing that drops them into a relatable moment. Short, punchy, ' +
+      'scroll-stopping. The question must be about a real tension the script resolves.',
+  },
+}
+
+export const HOOK_ARCHETYPE_ORDER: HookArchetype[] = [
+  'callout_pain', 'contrarian', 'curiosity_gap', 'confession', 'shock_result', 'question_pov',
+]
+
 export interface HookVariant {
-  /** Tone of this hook */
+  /** Tone of this hook (legacy 3-style; kept for back-compat) */
   style: HookStyle
+  /** #6 — which archetype produced this hook (absent on legacy 3-variant hooks) */
+  archetype?: HookArchetype
   /** The hook text — short, 1-2 lines */
   text: string
   /** Estimated read duration */
@@ -844,7 +939,7 @@ export interface GeneratedScript {
   structure: AdStructure
   /** Which angle was used */
   angle: AdAngle
-  /** Target duration the user picked (15/30/45/60) */
+  /** Target duration the user picked (40/50/60) */
   targetDurationSec: ScriptTargetDurationSec
   /** 5 script blocks in order */
   blocks: ScriptBlock[]

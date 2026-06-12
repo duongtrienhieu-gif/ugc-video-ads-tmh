@@ -171,3 +171,18 @@ export const AD_STRUCTURE_ORDER: AdStructure[] = [
   'AUTHORITY_EXPERT',
   'LISTICLE_TIPS',
 ]
+
+// #6 quick-gen — the 6 SHARP, distinct frameworks surfaced in the "Tạo nhanh"
+// picker. Fewer-but-sharper beats 8 overlapping ones for a universal app run by
+// non-experts (PAIN_POINT_HOOK folds into the HOOK layer; LISTICLE_TIPS is a
+// niche variant). All 8 enum values stay valid for back-compat with saved state;
+// only the picker is curated to these 6. The body FRAMEWORK is orthogonal to the
+// HOOK archetype (see HOOK_ARCHETYPES) — the user picks both independently.
+export const QUICK_GEN_FRAMEWORKS: AdStructure[] = [
+  'PROBLEM_SOLUTION',
+  'BEFORE_AFTER',
+  'STORY_CONFESSION',
+  'PRODUCT_DEMO',
+  'SOCIAL_PROOF',
+  'AUTHORITY_EXPERT',
+]

@@ -407,8 +407,8 @@ export default function ScriptVoicePhase({ onContinue }: Props) {
             </PickerCard>
 
             <PickerCard title="Thời lượng target" icon={Clock}>
-              <div className="grid grid-cols-4 gap-1.5">
-                {([15, 30, 45, 60] as ScriptTargetDurationSec[]).map((d) => (
+              <div className="grid grid-cols-3 gap-1.5">
+                {([40, 50, 60] as ScriptTargetDurationSec[]).map((d) => (
                   <button
                     key={d}
                     onClick={() => setTargetDurationSec(d)}
