@@ -23,7 +23,7 @@ import {
 import { saveAsset, getUrl, isAssetRef } from '../../../../utils/assetStore'
 import type { Model, Product } from '../../../../stores/types'
 import type {
-  ActionInsertClip, InsertRenderStage, ActionPresetId, InsertRenderMode,
+  ActionInsertClip, InsertRenderStage, ActionPresetId, InsertRenderMode, CameraFraming,
 } from '../types'
 import { ACTION_PRESETS } from './actionPresets'
 import { getFFmpeg } from './ffmpegLoader'
@@ -72,6 +72,9 @@ export interface RenderInsertParams {
   /** Z37 — free visual prompt for a CONCEPT_SCENE insert (no product on
    *  screen). Required when presetId === 'CONCEPT_SCENE'; ignored otherwise. */
   conceptPrompt?: string
+  /** Director upgrade — 'hands_noface' drops the avatar/face and renders a
+   *  hands-only product-in-use shot in its real setting. Default 'creator'. */
+  cameraFraming?: CameraFraming
   /** Z98 — the verbatim spoken line this scene illustrates. Used by the
    *  builder to detect "time has passed" beats (after N weeks / result / CTA)
    *  and switch the avatar wardrobe to outfit B/C so the ad reads as filmed
@@ -124,6 +127,7 @@ function buildInsertKeyframePrompt(
   renderMode?: InsertRenderMode,
   is3D = false,
   quote?: string,
+  noFace = false,
 ): string {
   const preset = ACTION_PRESETS[presetId]
   const paragraphs: string[] = []
@@ -318,6 +322,20 @@ function buildInsertKeyframePrompt(
   const freeAction = presetId === 'PRODUCT_IN_ACTION' ? safeConcept?.trim() : ''
   paragraphs.push(`ACTION: ${freeAction && freeAction.length > 0 ? freeAction : preset.promptPreset}`)
 
+  // Director upgrade — no-face hands-in-action shot. No avatar ref was sent, so
+  // there is no IDENTITY LOCK; enforce hands-only + the real setting so the model
+  // renders genuine product-in-use B-roll instead of a posed person.
+  if (noFace) {
+    paragraphs.push(
+      'HANDS-ONLY FRAMING — NO face, NO head, NO full person in the frame. Show ' +
+      'ONLY the hands (and forearms) performing the ACTION above, together with the ' +
+      'real-world SETTING / background it describes. First-person / over-the-hands ' +
+      'phone angle. The product stays EXACTLY as its reference image (same colour, ' +
+      'shape, label). Authentic UGC iPhone footage of a real moment — natural light, ' +
+      'real textures, slight handheld feel. NOT studio, NOT staged, NOT cinematic.',
+    )
+  }
+
   // 4. Hand behaviour
   paragraphs.push(`HANDS: ${preset.handBehavior}`)
 
@@ -369,6 +387,7 @@ async function resolveRefs(
   visualBrief?: ProductVisualBrief,
   quote?: string,
   conceptPrompt?: string,
+  noFace = false,
 ): Promise<{ refs: string[]; productRefIndex: number; personRefIndex: number }> {
   const refs: string[] = []
   let productRefIndex = 0
@@ -400,7 +419,9 @@ async function resolveRefs(
       }
     }
   }
-  if (usesAvatarRef(preset.id, renderMode, is3D)) {
+  if (!noFace && usesAvatarRef(preset.id, renderMode, is3D)) {
+    // Director upgrade — a 'hands_noface' shot deliberately omits the avatar so
+    // no face appears; personRefIndex stays 0 → no IDENTITY LOCK in the prompt.
     // Chain anchor first, raw avatar portrait second.
     const personRef = creatorKeyframeRef ?? avatar?.characterImage
     if (personRef) {
@@ -429,9 +450,13 @@ export async function renderInsert(
   // Z98 — a mechanism scene rebuilt into a clean 3D scientific animation (no
   // person, no product). Marked by the director layer via this conceptPrompt prefix.
   const is3D = (params.conceptPrompt ?? '').startsWith('3D MECHANISM ANIMATION')
+  // Director upgrade — a no-face hands-in-action shot: drop the avatar ref so no
+  // face appears, keep the product + setting. Only ever a real PRODUCT_IN_ACTION
+  // scene (never CTA/3D — guarded both in the director parse and here).
+  const noFace = params.cameraFraming === 'hands_noface' && !is3D && params.presetId === 'PRODUCT_IN_ACTION'
   const { refs: filesUrl, productRefIndex, personRefIndex } = await resolveRefs(
     preset, params.product, params.avatar, params.creatorKeyframeRef, params.renderMode, is3D,
-    params.visualBrief, params.quote, params.conceptPrompt,
+    params.visualBrief, params.quote, params.conceptPrompt, noFace,
   )
 
   // Z37 — the scene verb that drives the Kling motion prompts (Stage 2/3).
@@ -454,7 +479,7 @@ export async function renderInsert(
 
   const keyframePromptUsed = buildInsertKeyframePrompt(
     params.presetId, params.product, productRefIndex, personRefIndex,
-    params.conceptPrompt, params.renderMode, is3D, params.quote,
+    params.conceptPrompt, params.renderMode, is3D, params.quote, noFace,
   )
   console.log(`[INSERT ${params.presetId}] Stage 1 keyframe prompt len=${keyframePromptUsed.length}, refs=${filesUrl.length}`)
 

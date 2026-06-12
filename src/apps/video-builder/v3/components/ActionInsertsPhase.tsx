@@ -616,6 +616,7 @@ export default function ActionInsertsPhase({ onContinue }: Props) {
         conceptPrompt: insert.conceptPrompt,
         renderMode: insert.renderMode ?? 'video',
         durationSec: insert.durationSec,
+        cameraFraming: insert.cameraFraming,  // director upgrade — no-face hands-in-action shot
         quote: insert.quote,  // Z98 V1 — drives the wardrobe-shift decision in the renderer
         onStageUpdate: (update) => {
           patchInsert(insertId, {
