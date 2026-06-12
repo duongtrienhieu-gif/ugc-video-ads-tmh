@@ -35,6 +35,8 @@ import {
   type InsertSuggestion,
 } from '../services/insertSuggester'
 import { renderInsert, resumeInsertVideo, listEligibleInsertsForBulk } from '../services/insertRenderer'
+import { getProductVisualBrief, type ProductVisualBrief } from '../../../../services/productVisualBrief'
+import { hasFourProductImages } from '../../../../stores/types'
 import { computeBlockStartTimestamps, computeQuoteTimestamp, computeWordTimestampFromAlignment } from '../services/insertTimingEngine'
 // Z98 #5 — local sticker renderer (canvas → transparent PNG, 0 credit).
 import { renderStickerBlob, STICKER_STYLE_META } from '../services/stickerRenderer'
@@ -571,6 +573,13 @@ export default function ActionInsertsPhase({ onContinue }: Props) {
     if (!insert) return
     const preset = ACTION_PRESETS[insert.presetId]
 
+    // P4b GATE — product inserts need the product's 4 images. Old 1-image
+    // products are blocked until the user re-uploads 4 in the Product app.
+    if (preset.needsProduct && state.inputs.product && !hasFourProductImages(state.inputs.product)) {
+      addToast('Sản phẩm cần đủ 4 ảnh — vào app Sản phẩm bổ sung đủ 4 ảnh rồi lưu mới tạo được cảnh', 'error')
+      return
+    }
+
     // Z74 — DOUBLE-SUBMIT GUARD. CRITICAL credit-burn fix.
     // Before: if the user clicked Bulk render and then clicked the per-card
     // Render on an insert that was queued (status='rendering'), this handler
@@ -587,10 +596,19 @@ export default function ActionInsertsPhase({ onContinue }: Props) {
     await acquireRenderSlot(insertId)
 
     try {
+      const product = preset.needsProduct ? state.inputs.product : null
+      // P4b — compute the product's visual brief ONCE (cached + in-flight
+      // deduped), so the renderer can pick the best image(s) per insert.
+      let visualBrief: ProductVisualBrief | undefined
+      if (product && geminiKey) {
+        try { visualBrief = await getProductVisualBrief(product, geminiKey) }
+        catch (e) { console.warn('[insert] product visual brief failed — using single image', e) }
+      }
       const result = await renderInsert({
         kieApiKey,
         presetId: insert.presetId,
-        product: preset.needsProduct ? state.inputs.product : null,
+        product,
+        visualBrief,
         avatar: state.inputs.avatar,
         creatorKeyframeRef: state.creatorVideo?.keyframeRef,
         resolution: insert.resolution,

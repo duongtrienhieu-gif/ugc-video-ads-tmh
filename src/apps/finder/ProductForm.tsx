@@ -1090,7 +1090,7 @@ export default function ProductForm({ item, onSave, onCancel }: ProductFormProps
       <div className="flex flex-col gap-1.5">
         <span className="text-[11px] font-medium uppercase tracking-widest text-gray-500">
           Ảnh sản phẩm *
-          <span className="ml-1 normal-case tracking-normal text-gray-400">(bắt buộc đủ 4 — nhiều góc: bao bì, mở/đóng nắp, hộp...)</span>
+          <span className="ml-1 normal-case tracking-normal text-gray-400">(bắt buộc đủ 4 — nên ĐA DẠNG góc/trạng thái: mặt trước · mở/đóng nắp · nhãn/mặt sau · trong bối cảnh → video/ảnh sinh động & chính xác hơn)</span>
         </span>
         <div className="flex flex-wrap gap-2">
           {[0, 1, 2, 3].map((i) => (

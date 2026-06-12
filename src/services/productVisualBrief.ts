@@ -73,6 +73,9 @@ function buildUserPrompt(n: number): string {
 
 // ── In-memory cache ─────────────────────────────────────────────────────────
 const cache = new Map<string, ProductVisualBrief>()
+// Dedup concurrent callers (e.g. a bulk insert-render fires N renders that each
+// ask for the brief before the first finishes) so we pay the Vision call ONCE.
+const inflight = new Map<string, Promise<ProductVisualBrief>>()
 
 function cacheKey(product: Product): string {
   return `${product.id}::${product.productImages.filter(Boolean).join('|')}`
@@ -137,8 +140,24 @@ export async function getProductVisualBrief(
   if (!opts?.force) {
     const cached = cache.get(key)
     if (cached) return cached
+    const pending = inflight.get(key)
+    if (pending) return pending
   }
 
+  const promise = computeBrief(product, geminiApiKey, key)
+  inflight.set(key, promise)
+  try {
+    return await promise
+  } finally {
+    inflight.delete(key)
+  }
+}
+
+async function computeBrief(
+  product: Product,
+  geminiApiKey: string,
+  key: string,
+): Promise<ProductVisualBrief> {
   const refs = product.productImages.filter((r) => !!r && r.trim() !== '').slice(0, 4)
   const imageParts: Array<{ inlineData: { mimeType: string; data: string } }> = []
   for (const ref of refs) {

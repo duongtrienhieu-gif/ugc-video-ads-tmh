@@ -27,6 +27,8 @@ import type {
 } from '../types'
 import { ACTION_PRESETS } from './actionPresets'
 import { getFFmpeg } from './ffmpegLoader'
+import { pickProductRefIndexes } from './insertRefPicker'
+import type { ProductVisualBrief } from '../../../../services/productVisualBrief'
 
 // ── Stage update callback ─────────────────────────────────────────────────
 
@@ -75,6 +77,10 @@ export interface RenderInsertParams {
    *  and switch the avatar wardrobe to outfit B/C so the ad reads as filmed
    *  across multiple days, not 60s in one outfit. */
   quote?: string
+  /** P4b — the product's visual brief (from all 4 images). Lets the renderer
+   *  pick the BEST product image(s) for THIS insert's action instead of always
+   *  reusing image #1. Optional: falls back to the single image when absent. */
+  visualBrief?: ProductVisualBrief
   /** Per-stage status callback */
   onStageUpdate: (update: InsertStageUpdate) => void
   signal?: AbortSignal
@@ -360,16 +366,39 @@ async function resolveRefs(
   creatorKeyframeRef?: string,
   renderMode?: InsertRenderMode,
   is3D = false,
+  visualBrief?: ProductVisualBrief,
+  quote?: string,
+  conceptPrompt?: string,
 ): Promise<{ refs: string[]; productRefIndex: number; personRefIndex: number }> {
   const refs: string[] = []
   let productRefIndex = 0
   let personRefIndex = 0
   // Z98 — a 3D mechanism animation shows no product + no person.
-  if (preset.needsProduct && product?.productImage && !is3D) {
-    const url = isAssetRef(product.productImage)
-      ? await getUrl(product.productImage)
-      : product.productImage
-    if (url) { refs.push(url); productRefIndex = refs.length }
+  if (preset.needsProduct && product && !is3D) {
+    // P4b — pick which of the product's 4 images fit THIS insert (hero + a
+    // scene-match + clean diversity, ≥2, capped). The FIRST pushed image is the
+    // hero, so productRefIndex stays = the "#N" the prompt names; the extra
+    // product refs reinforce identity / supply the right state to GPT-4o.
+    const imgs = (product.productImages?.length ? product.productImages : (product.productImage ? [product.productImage] : []))
+      .filter((r) => !!r && r.trim() !== '')
+    if (imgs.length > 0) {
+      const picked = pickProductRefIndexes(visualBrief, preset.id, quote, conceptPrompt)
+        .filter((i) => i >= 0 && i < imgs.length)
+      const chosen = picked.length ? [...picked] : [0]
+      // Guarantee ≥2 product refs when ≥2 images exist (anti-lazy), even if the
+      // brief was missing and the picker returned a single index.
+      for (let i = 0; chosen.length < Math.min(2, imgs.length) && i < imgs.length; i++) {
+        if (!chosen.includes(i)) chosen.push(i)
+      }
+      for (const i of chosen) {
+        const ref = imgs[i]
+        const url = isAssetRef(ref) ? await getUrl(ref) : ref
+        if (url) {
+          refs.push(url)
+          if (productRefIndex === 0) productRefIndex = refs.length  // first = hero = the prompt's "#N"
+        }
+      }
+    }
   }
   if (usesAvatarRef(preset.id, renderMode, is3D)) {
     // Chain anchor first, raw avatar portrait second.
@@ -402,6 +431,7 @@ export async function renderInsert(
   const is3D = (params.conceptPrompt ?? '').startsWith('3D MECHANISM ANIMATION')
   const { refs: filesUrl, productRefIndex, personRefIndex } = await resolveRefs(
     preset, params.product, params.avatar, params.creatorKeyframeRef, params.renderMode, is3D,
+    params.visualBrief, params.quote, params.conceptPrompt,
   )
 
   // Z37 — the scene verb that drives the Kling motion prompts (Stage 2/3).
