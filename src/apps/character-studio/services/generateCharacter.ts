@@ -4,6 +4,7 @@ import { generateImage, pollImageUntilDone } from '../../../utils/kieai'
 import type { ImageResolution } from '../../../utils/kieai'
 import { saveAsset } from '../../../utils/assetStore'
 import { directGeminiVision } from '../../../utils/gemini'
+import { translateProfileToEnglish } from './translateProfile'
 
 export interface GenerationResult {
   imageUrl: string
@@ -224,7 +225,12 @@ export async function generateCharacter(
     }
   }
 
-  const prompt = buildImagePrompt(profile, productDescription)
+  // Translate the (Vietnamese) profile to English so the image model gets a
+  // clean English prompt. ethnicity/nationality is preserved exactly (no drift);
+  // no-op when already English. aspectRatio is read from the ORIGINAL profile
+  // (it's a structural value, not part of the visual prompt).
+  const enProfile = await translateProfileToEnglish(profile, settings.geminiApiKey)
+  const prompt = buildImagePrompt(enProfile, productDescription)
   const aspectRatio = profile.aspectRatio?.includes('1:1')
     ? '1:1'
     : profile.aspectRatio === 'Landscape (16:9)'

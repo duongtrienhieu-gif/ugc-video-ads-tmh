@@ -1,7 +1,7 @@
 ﻿import { useState } from 'react'
 import { FolderOpen, Trash2, Sparkles, Save } from 'lucide-react'
 import type { TabId, CharacterProfile } from '../types'
-import { TABS, generateRandomUGCProfile, createEmptyProfile } from '../types'
+import { TABS, generateRandomUGCProfile, createEmptyProfile, COUNTRY_OPTIONS } from '../types'
 import type { Model } from '../../../stores/types'
 import { useBankStore } from '../../../stores/bankStore'
 import { buildJsonPrompt } from '../services/generateCharacter'
@@ -19,6 +19,15 @@ export default function ControlsPanel({ profile, onProfileChange, activeTab }: C
   const [showSaveForm, setShowSaveForm] = useState(false)
   const [saveName, setSaveName] = useState('')
   const [saved, setSaved] = useState(false)
+  // Selected nationality drives the cultural random fill (Việt Nam → người Việt).
+  const [country, setCountry] = useState('vn')
+
+  // Pick a country → fill all fields (Vietnamese) for that culture. UGC Creator
+  // re-rolls another instance within the same country.
+  const selectCountry = (key: string) => {
+    setCountry(key)
+    onProfileChange(generateRandomUGCProfile(key))
+  }
 
   const addModel = useBankStore((s) => s.addModel)
 
@@ -48,10 +57,22 @@ export default function ControlsPanel({ profile, onProfileChange, activeTab }: C
     <div className="flex h-full flex-col">
       {/* Presets, load, clear */}
       <div className="border-b border-black/8 px-3 py-2">
+        <span className="mb-1.5 block text-[9px] font-semibold uppercase tracking-widest text-gray-400">Người nước nào (văn hoá)</span>
+        <div className="mb-2 flex flex-wrap gap-1.5">
+          {COUNTRY_OPTIONS.map((opt) => (
+            <button
+              key={opt.key}
+              onClick={() => selectCountry(opt.key)}
+              className={`rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors ${country === opt.key ? 'bg-violet-600 text-white' : 'bg-black/[0.04] text-gray-600 hover:bg-black/[0.06] hover:text-gray-800'}`}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
         <span className="mb-1.5 block text-[9px] font-semibold uppercase tracking-widest text-gray-400">Preset & PROJECT</span>
         <div className="flex items-center gap-1.5 flex-wrap">
           <button
-            onClick={() => onProfileChange(generateRandomUGCProfile())}
+            onClick={() => onProfileChange(generateRandomUGCProfile(country))}
             className="flex items-center gap-1 rounded-full bg-black/[0.04] px-2.5 py-1 text-[11px] font-medium text-gray-600 transition-colors hover:bg-black/[0.06] hover:text-gray-800"
           >
             <Sparkles className="h-3 w-3" />

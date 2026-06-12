@@ -30,11 +30,9 @@ export const TABS: TabConfig[] = [
         label: 'Độ tuổi',
         chips: ['18-24', '20s', '25-30', '30-40', '40-50', '50+'],
       },
-      {
-        key: 'ethnicity',
-        label: 'Dân tộc',
-        chips: ['Japanese', 'Norwegian', 'American', 'French mixed with Moroccan', 'South African', 'Caucasian', 'Black', 'Asian', 'Hispanic/Latino', 'Middle Eastern', 'South Asian', 'Mixed'],
-      },
+      // 'ethnicity' is intentionally NOT a visible field — it is set behind the
+      // scenes by the Country selector (COUNTRY_OPTIONS) so "chọn Việt Nam" can
+      // never drift to another nationality. The key still exists in the profile.
       {
         key: 'bodyType',
         label: 'Vóc dáng',
@@ -316,130 +314,219 @@ function pickRandom<T>(arr: T[]): T {
   return arr[Math.floor(Math.random() * arr.length)]
 }
 
-// UGC scenario: guarantees subject always faces camera directly
-interface UGCScenario {
-  location: string
-  background: string
-  lighting: string
-  weather: string
-  timeOfDay: string
-  pose: string
-  action: string
-  shotType: string
-  cameraDevice: string
+// ── Country / nationality presets ───────────────────────────────────────────
+// UGC Creator builds a culturally-coherent random avatar for the SELECTED
+// country (ethnicity + typical hair / skin / clothing). All field VALUES are
+// Vietnamese (operator's language); generateCharacter translates the profile to
+// English for the image model at generation time — so prompt quality is
+// unchanged AND the chosen nationality is preserved (no "Việt Nam → Malaysia"
+// drift). Scene fields stay generic; buildImagePrompt re-asserts the prop-free
+// "empty hands" rule in English, so it survives translation.
+export interface CountryOption { key: string; label: string }
+export const COUNTRY_OPTIONS: CountryOption[] = [
+  { key: 'vn', label: 'Việt Nam' },
+  { key: 'ph', label: 'Philippines' },
+  { key: 'id', label: 'Indonesia' },
+  { key: 'th', label: 'Thái Lan' },
+  { key: 'my', label: 'Malaysia' },
+  { key: 'us', label: 'Mỹ' },
+  { key: 'cn', label: 'Trung Quốc' },
+  { key: 'eu', label: 'Châu Âu (chung)' },
+]
+
+interface CulturePool {
+  ethnicityFemale: string
+  ethnicityMale: string
+  femaleHasHijab: boolean   // true → women wear a headscarf, hair colour hidden
+  femaleHair: string[]
+  maleHair: string[]
+  hairColor: string[]
+  skinTone: string[]
+  eyeShape: string[]
+  clothingFemale: string[]
+  clothingMale: string[]
+  makeup: string[]
+  facialFeatures: string[]
 }
 
-// All scenarios are explicitly PROP-FREE — the avatar must never be holding a
-// phone, cup, glass, product, or any other object. UGC Creator generates a
-// CLEAN avatar that downstream tools (Product AI, B-Roll) compose with the
-// actual product later. Props in the avatar would conflict with that pipeline.
+const HIJAB_COLORS = ['Khăn trùm đầu Hồi giáo màu hồng san hô', 'Khăn trùm đầu Hồi giáo màu hồng phấn', 'Khăn trùm đầu Hồi giáo màu xanh sage', 'Khăn trùm đầu Hồi giáo màu xanh da trời', 'Khăn trùm đầu Hồi giáo màu trắng ngà', 'Khăn trùm đầu Hồi giáo màu tím lavender', 'Khăn trùm đầu Hồi giáo màu nâu đất', 'Khăn trùm đầu Hồi giáo màu be']
+
+const COUNTRY_CULTURE: Record<string, CulturePool> = {
+  vn: {
+    ethnicityFemale: 'Phụ nữ Việt Nam', ethnicityMale: 'Nam giới Việt Nam', femaleHasHijab: false,
+    femaleHair: ['Tóc đen dài thẳng', 'Tóc đen dài gợn sóng nhẹ', 'Tóc ngang vai', 'Tóc bob', 'Tóc buộc đuôi ngựa', 'Tóc layer mái thưa'],
+    maleHair: ['Tóc ngắn gọn gàng', 'Tóc ngắn vuốt nhẹ', 'Undercut', 'Tóc ngắn tự nhiên'],
+    hairColor: ['Đen', 'Nâu đen', 'Nâu hạt dẻ'],
+    skinTone: ['Trắng', 'Trắng hồng', 'Da trung bình', 'Ngăm nhẹ'],
+    eyeShape: ['Mắt hạnh nhân', 'Mắt một mí', 'Mắt to tròn', 'Mắt hơi xếch'],
+    clothingFemale: ['Áo thun trắng phối quần jean', 'Sơ mi công sở nhẹ nhàng', 'Áo len dệt kim ấm', 'Set đồ tối giản', 'Váy mùa hè nhẹ nhàng'],
+    clothingMale: ['Áo thun basic', 'Sơ mi smart casual', 'Áo polo lịch sự', 'Hoodie streetwear'],
+    makeup: ['Trang điểm tự nhiên', 'Makeup nhẹ trong veo', 'Không trang điểm', 'Makeup hằng ngày nhẹ'],
+    facialFeatures: ['Nét mặt dịu dàng', 'Gò má cao', 'Môi đầy đặn', 'Khuôn mặt thanh tú'],
+  },
+  ph: {
+    ethnicityFemale: 'Phụ nữ Philippines (Filipina)', ethnicityMale: 'Nam giới Philippines', femaleHasHijab: false,
+    femaleHair: ['Tóc nâu sẫm dài gợn sóng', 'Tóc đen dài thẳng', 'Tóc layer dài', 'Tóc búi rối tự nhiên'],
+    maleHair: ['Tóc ngắn gọn', 'Tóc ngắn vuốt', 'Fade haircut', 'Tóc xoăn ngắn'],
+    hairColor: ['Đen', 'Nâu sẫm', 'Nâu'],
+    skinTone: ['Nâu vàng (morena)', 'Ngăm khỏe khoắn', 'Da trung bình', 'Nâu'],
+    eyeShape: ['Mắt to tròn', 'Mắt hạnh nhân', 'Mắt hơi xếch'],
+    clothingFemale: ['Áo phông casual nhiệt đới', 'Đầm hoa nhẹ nhàng', 'Áo croptop + quần jean', 'Set đồ tươi mát'],
+    clothingMale: ['Áo thun nhiệt đới', 'Sơ mi vải mỏng', 'Áo polo', 'Hoodie casual'],
+    makeup: ['Trang điểm tự nhiên', 'Makeup nâu khỏe khoắn', 'Không trang điểm', 'Makeup nhẹ'],
+    facialFeatures: ['Nét mặt rạng rỡ', 'Gò má cao', 'Môi đầy đặn', 'Khuôn mặt tươi tắn'],
+  },
+  id: {
+    ethnicityFemale: 'Phụ nữ Indonesia', ethnicityMale: 'Nam giới Indonesia', femaleHasHijab: true,
+    femaleHair: [...HIJAB_COLORS, 'Tóc đen dài thẳng (không khăn)', 'Tóc nâu sẫm gợn sóng (không khăn)'],
+    maleHair: ['Tóc ngắn gọn', 'Tóc ngắn xoăn nhẹ', 'Fade haircut', 'Tóc đen ngắn tự nhiên'],
+    hairColor: ['Đen', 'Nâu sẫm'],
+    skinTone: ['Nâu vàng', 'Ngăm', 'Da trung bình', 'Nâu'],
+    eyeShape: ['Mắt hạnh nhân', 'Mắt to tròn', 'Mắt hơi xếch'],
+    clothingFemale: ['Trang phục kín đáo lịch sự', 'Áo dài tay phối váy maxi', 'Đồ Hồi giáo modest hằng ngày', 'Set đồ kín đáo trẻ trung'],
+    clothingMale: ['Áo thun casual', 'Sơ mi batik nhẹ', 'Áo polo', 'Hoodie casual'],
+    makeup: ['Trang điểm tự nhiên', 'Makeup nhẹ', 'Không trang điểm', 'Makeup hằng ngày'],
+    facialFeatures: ['Nét mặt hiền hòa', 'Gò má cao', 'Khuôn mặt phúc hậu', 'Nét mặt dịu dàng'],
+  },
+  th: {
+    ethnicityFemale: 'Phụ nữ Thái Lan', ethnicityMale: 'Nam giới Thái Lan', femaleHasHijab: false,
+    femaleHair: ['Tóc đen dài thẳng', 'Tóc nâu dài gợn sóng', 'Tóc ngang vai', 'Tóc layer dài'],
+    maleHair: ['Tóc ngắn gọn', 'Undercut', 'Tóc ngắn vuốt nhẹ', 'Fade haircut'],
+    hairColor: ['Đen', 'Nâu đen', 'Nâu'],
+    skinTone: ['Da sáng', 'Ngăm vàng', 'Da trung bình', 'Nâu nhẹ'],
+    eyeShape: ['Mắt hạnh nhân', 'Mắt to tròn', 'Mắt hơi xếch'],
+    clothingFemale: ['Áo thun casual', 'Đầm nhẹ nhàng', 'Sơ mi mỏng + chân váy', 'Set đồ tươi mát'],
+    clothingMale: ['Áo thun basic', 'Sơ mi vải mỏng', 'Áo polo', 'Hoodie casual'],
+    makeup: ['Trang điểm tự nhiên', 'Makeup nhẹ trong trẻo', 'Không trang điểm', 'Makeup hằng ngày'],
+    facialFeatures: ['Nét mặt tươi tắn', 'Gò má cao', 'Môi đầy đặn', 'Khuôn mặt thanh tú'],
+  },
+  my: {
+    ethnicityFemale: 'Phụ nữ Malaysia theo đạo Hồi', ethnicityMale: 'Nam giới Malaysia (người Mã Lai)', femaleHasHijab: true,
+    femaleHair: [...HIJAB_COLORS],
+    maleHair: ['Tóc ngắn gọn', 'Tóc ngắn xoăn nhẹ', 'Fade haircut', 'Tóc đen ngắn tự nhiên', 'Cạo gọn'],
+    hairColor: ['Đen', 'Nâu sẫm'],
+    skinTone: ['Nâu vàng', 'Ngăm', 'Da trung bình', 'Nâu'],
+    eyeShape: ['Mắt hạnh nhân', 'Mắt to tròn', 'Mắt một mí'],
+    clothingFemale: ['Trang phục kín đáo lịch sự', 'Đồ Hồi giáo modest hằng ngày', 'Áo dài tay phối váy', 'Modest athleisure'],
+    clothingMale: ['Áo thun casual', 'Sơ mi batik nhẹ', 'Áo polo', 'Trang phục Mã Lai truyền thống nhẹ nhàng'],
+    makeup: ['Trang điểm tự nhiên', 'Makeup nhẹ', 'Không trang điểm', 'Makeup hằng ngày'],
+    facialFeatures: ['Nét mặt hiền hòa', 'Gò má cao', 'Khuôn mặt phúc hậu', 'Nét mặt dịu dàng'],
+  },
+  us: {
+    ethnicityFemale: 'Phụ nữ Mỹ', ethnicityMale: 'Nam giới Mỹ', femaleHasHijab: false,
+    femaleHair: ['Tóc vàng dài gợn sóng', 'Tóc nâu dài thẳng', 'Tóc bob', 'Tóc xoăn tự nhiên', 'Tóc búi rối', 'Tóc layer mái rèm'],
+    maleHair: ['Tóc ngắn gọn', 'Undercut', 'Tóc xoăn ngắn', 'Buzz cut', 'Fade haircut'],
+    hairColor: ['Vàng', 'Nâu', 'Đen', 'Nâu đỏ (auburn)', 'Bạch kim'],
+    skinTone: ['Trắng', 'Da sáng', 'Ngăm rám nắng', 'Nâu', 'Da đen'],
+    eyeShape: ['Mắt hạnh nhân', 'Mắt to tròn', 'Mắt hơi cụp', 'Mắt sâu'],
+    clothingFemale: ['Áo thun + quần jean', 'Set đồ tối giản', 'Áo len dệt kim', 'Đầm casual', 'Áo blazer smart casual'],
+    clothingMale: ['Áo thun basic', 'Sơ mi flannel', 'Áo hoodie', 'Áo polo'],
+    makeup: ['Trang điểm tự nhiên', 'Makeup nhẹ', 'Không trang điểm', 'Makeup hằng ngày'],
+    facialFeatures: ['Tàn nhang nhẹ', 'Gò má cao', 'Quai hàm thanh', 'Nét mặt tự nhiên'],
+  },
+  cn: {
+    ethnicityFemale: 'Phụ nữ Trung Quốc', ethnicityMale: 'Nam giới Trung Quốc', femaleHasHijab: false,
+    femaleHair: ['Tóc đen dài thẳng', 'Tóc đen ngang vai', 'Tóc bob', 'Tóc buộc nửa đầu', 'Tóc layer mái thưa'],
+    maleHair: ['Tóc ngắn gọn', 'Undercut', 'Tóc ngắn vuốt nhẹ', 'Tóc đen ngắn tự nhiên'],
+    hairColor: ['Đen', 'Nâu đen'],
+    skinTone: ['Trắng', 'Trắng sáng', 'Da trung bình'],
+    eyeShape: ['Mắt một mí', 'Mắt hạnh nhân', 'Mắt hơi xếch', 'Mắt to tròn'],
+    clothingFemale: ['Áo thun tối giản', 'Sơ mi thanh lịch', 'Áo len dệt kim', 'Set đồ trẻ trung', 'Váy nhẹ nhàng'],
+    clothingMale: ['Áo thun basic', 'Sơ mi smart casual', 'Áo polo', 'Hoodie tối giản'],
+    makeup: ['Trang điểm tự nhiên', 'Makeup trong veo kiểu Đông Á', 'Không trang điểm', 'Makeup nhẹ'],
+    facialFeatures: ['Nét mặt thanh tú', 'Gò má cao', 'Da trắng mịn', 'Nét mặt dịu dàng'],
+  },
+  eu: {
+    ethnicityFemale: 'Phụ nữ châu Âu', ethnicityMale: 'Nam giới châu Âu', femaleHasHijab: false,
+    femaleHair: ['Tóc vàng dài thẳng', 'Tóc nâu dài gợn sóng', 'Tóc bob', 'Tóc layer mái rèm', 'Tóc búi rối tự nhiên'],
+    maleHair: ['Tóc ngắn gọn', 'Undercut', 'Tóc nâu ngắn vuốt', 'Tóc xoăn nhẹ'],
+    hairColor: ['Vàng', 'Nâu', 'Nâu sẫm', 'Nâu đỏ (auburn)'],
+    skinTone: ['Trắng', 'Da sáng', 'Trắng hồng', 'Ngăm nhẹ'],
+    eyeShape: ['Mắt to tròn', 'Mắt hạnh nhân', 'Mắt sâu', 'Mắt hơi cụp'],
+    clothingFemale: ['Áo thun + quần jean', 'Set đồ tối giản kiểu Âu', 'Áo len dệt kim', 'Đầm casual thanh lịch', 'Blazer smart casual'],
+    clothingMale: ['Áo thun basic', 'Sơ mi linen', 'Áo hoodie', 'Áo polo'],
+    makeup: ['Trang điểm tự nhiên', 'Makeup nhẹ', 'Không trang điểm', 'Makeup hằng ngày'],
+    facialFeatures: ['Tàn nhang nhẹ', 'Gò má cao', 'Quai hàm thanh', 'Nét mặt tự nhiên'],
+  },
+}
+
+// Prop-free UGC scenes (Vietnamese). buildImagePrompt re-adds the hard English
+// "EMPTY HANDS / no props" rule, so the avatar stays clean for downstream tools.
+interface UGCScenario {
+  location: string; background: string; lighting: string; weather: string
+  timeOfDay: string; pose: string; action: string; shotType: string; cameraDevice: string
+}
 const UGC_SCENARIOS: UGCScenario[] = [
-  // 1. Classic talking-head — face-to-camera, hands out of frame
   {
-    location: pickRandom(['Bedroom', 'Living room', 'Kitchen']),
-    background: pickRandom(['Neutral wall', 'Blurred background', 'Minimalist']),
-    lighting: 'Soft, diffused natural window light, creating gentle highlights on the cheekbones and realistic subsurface scattering on the skin',
-    weather: 'Indoor (N/A)',
-    timeOfDay: pickRandom(['Morning', 'Afternoon']),
-    pose: 'Front-on, sitting upright, face directed straight at camera lens, hands relaxed below frame',
-    action: 'Speaking directly to camera, genuine direct eye contact with viewer. EMPTY HANDS — no phone, no cup, no objects in hands',
-    shotType: 'Medium close-up (chest up)',
-    cameraDevice: pickRandom(['iPhone selfie cam on tripod', 'iPhone Front Cam']),
+    location: 'Phòng ngủ', background: 'Tường trơn / nền mờ tối giản',
+    lighting: 'Ánh sáng cửa sổ tự nhiên, dịu, đổ nhẹ lên gò má, da chân thật',
+    weather: 'Trong nhà', timeOfDay: 'Buổi sáng',
+    pose: 'Ngồi thẳng, chính diện, mặt hướng thẳng vào ống kính',
+    action: 'Nói chuyện trực tiếp với camera, giao tiếp mắt chân thật',
+    shotType: 'Cận trung (từ ngực lên)', cameraDevice: 'iPhone Front Cam đặt trên tripod',
   },
-  // 2. Window-side soft-light portrait — replaces the old "mirror selfie" so
-  //    the model has no excuse to render a phone in hand
   {
-    location: pickRandom(['Bedroom', 'Living room']),
-    background: 'Soft blurred home interior, window visible to one side',
-    lighting: pickRandom(['Soft natural light', 'Natural Window Light']),
-    weather: 'Indoor (N/A)',
-    timeOfDay: pickRandom(['Morning', 'Afternoon']),
-    pose: 'Standing or sitting near a window, body slightly angled toward the light, face front-on to camera, hands relaxed at sides',
-    action: 'Looking directly at the camera with a natural friendly expression. EMPTY HANDS — no phone, no cup, no objects in hands',
-    shotType: 'Medium close-up (chest up)',
-    cameraDevice: 'iPhone Front Cam on tripod',
+    location: 'Phòng khách', background: 'Nội thất nhà mờ ảo, có cửa sổ một bên',
+    lighting: 'Ánh sáng cửa sổ tự nhiên dịu nhẹ',
+    weather: 'Trong nhà', timeOfDay: 'Buổi chiều',
+    pose: 'Đứng hoặc ngồi cạnh cửa sổ, người hơi nghiêng về phía ánh sáng, mặt chính diện camera',
+    action: 'Nhìn thẳng vào camera với biểu cảm thân thiện tự nhiên',
+    shotType: 'Cận trung (từ ngực lên)', cameraDevice: 'iPhone Front Cam đặt trên tripod',
   },
-  // 3. Ring-light creator setup — phone on tripod (not in hand)
   {
-    location: pickRandom(['Bedroom', 'Living room']),
-    background: pickRandom(['Neutral wall', 'Minimalist', 'Blurred background']),
-    lighting: 'Ring Light (Influencer)',
-    weather: 'Indoor (N/A)',
-    timeOfDay: 'Evening',
-    pose: 'Front-on, sitting at desk, face directed straight at camera, hands relaxed below frame',
-    action: 'Speaking to camera with confident direct eye contact, ring light reflected in eyes. EMPTY HANDS — no phone, no cup, no objects in hands',
-    shotType: 'Close-up face',
-    cameraDevice: 'Ring light with phone on tripod',
+    location: 'Bàn làm việc', background: 'Tường trơn / nền tối giản',
+    lighting: 'Đèn ring light (kiểu influencer), phản chiếu nhẹ trong mắt',
+    weather: 'Trong nhà', timeOfDay: 'Buổi tối',
+    pose: 'Ngồi ở bàn, chính diện, mặt hướng thẳng vào ống kính',
+    action: 'Nói chuyện với camera, giao tiếp mắt tự tin',
+    shotType: 'Cận mặt', cameraDevice: 'Đèn ring light kèm điện thoại trên tripod',
   },
-  // 4. Outdoor casual portrait — replaces the old "holding phone for selfie"
   {
-    location: pickRandom(['Outdoors park', 'Coffee shop']),
-    background: pickRandom(['Blurred background', 'Plants', 'Window with natural light']),
-    lighting: pickRandom(['Soft natural light', 'Golden Hour']),
-    weather: pickRandom(['Sunny', 'Overcast']),
-    timeOfDay: pickRandom(['Morning', 'Midday', 'Afternoon']),
-    pose: 'Standing or seated, body and face front-on, looking directly at camera, hands relaxed at sides',
-    action: 'Speaking to camera with a natural confident smile. EMPTY HANDS — no phone, no cup, no glass, no products or objects in hands',
-    shotType: 'Medium close-up (chest up)',
-    cameraDevice: 'iPhone Front Cam on tripod',
+    location: 'Công viên ngoài trời / quán cà phê', background: 'Nền mờ, cây xanh / ánh sáng cửa sổ',
+    lighting: 'Ánh sáng tự nhiên dịu / giờ vàng',
+    weather: 'Nắng nhẹ', timeOfDay: 'Buổi sáng',
+    pose: 'Đứng hoặc ngồi, người và mặt chính diện, nhìn thẳng camera',
+    action: 'Nói chuyện với camera, nụ cười tự tin tự nhiên',
+    shotType: 'Cận trung (từ ngực lên)', cameraDevice: 'iPhone Front Cam đặt trên tripod',
   },
 ]
 
-export function generateRandomUGCProfile(): CharacterProfile {
-  const gender = pickRandom(['Female', 'Male'])
-  const isFemale = gender === 'Female'
-  const ethnicity = isFemale ? 'Malaysian female Islam' : 'Malaysian male Islam'
+/** Build a random, culturally-coherent UGC avatar profile for the given country.
+ *  Values are Vietnamese; generateCharacter translates to English at gen time. */
+export function generateRandomUGCProfile(countryKey = 'vn'): CharacterProfile {
+  const c = COUNTRY_CULTURE[countryKey] ?? COUNTRY_CULTURE.vn
+  const gender = pickRandom(['Nữ', 'Nam'])
+  const isFemale = gender === 'Nữ'
 
-  const hairColor = isFemale ? '' : pickRandom(['Black', 'Dark brown', 'Brown', 'Auburn'])
-  const hairStyle = isFemale
-    ? pickRandom([
-        'Islamic headscarf in coral pink',
-        'Islamic headscarf in dusty rose',
-        'Islamic headscarf in sage green',
-        'Islamic headscarf in sky blue',
-        'Islamic headscarf in ivory white',
-        'Islamic headscarf in lavender',
-        'Islamic headscarf in terracotta',
-        'Islamic headscarf in soft beige',
-      ])
-    : pickRandom(['Short textured', 'Short curly', 'Buzz cut', 'Short wavy', 'Fade haircut'])
-  const hairTexture = isFemale ? '' : pickRandom(['Straight', 'Wavy', 'Curly'])
-  const facialHair = isFemale ? '' : pickRandom(['None', 'Clean-shaven', 'Stubble', 'Short beard', 'Light beard'])
+  const hairStyle = pickRandom(isFemale ? c.femaleHair : c.maleHair)
+  const wearsHijab = isFemale && c.femaleHasHijab && hairStyle.includes('Khăn')
+  const hairColor = wearsHijab ? '' : pickRandom(c.hairColor)
+  const hairTexture = wearsHijab ? '' : pickRandom(['Thẳng', 'Gợn sóng', 'Xoăn'])
+  const facialHair = isFemale ? '' : pickRandom(['Không', 'Cạo nhẵn', 'Râu lún phún', 'Râu ngắn'])
 
-  // Pick one scenario — all guarantee face-to-camera
   const scene = pickRandom(UGC_SCENARIOS)
 
   return {
     gender,
     age: pickRandom(['18-24', '20s', '25-30', '30-40']),
-    ethnicity,
-    bodyType: pickRandom(['Slim', 'Athletic', 'Average', 'Curvy']),
-    skinTone: pickRandom(['Medium', 'Olive', 'Tan', 'Brown']),
-    skinTexture: pickRandom([
-      'Glass skin finish with ultra-detailed texture, including visible skin pores, fine peach fuzz, and a scattering of light freckles across the bridge of her nose',
-      'Glass skin',
-      'Natural pores',
-      'Natural pores with slight imperfections',
-      'Textured',
-    ]),
-    eyeColor: pickRandom(['Brown', 'Dark brown', 'Hazel', 'Amber']),
-    eyeShape: pickRandom(['Almond', 'Round', 'Hooded', 'Monolid', 'Upturned']),
+    ethnicity: isFemale ? c.ethnicityFemale : c.ethnicityMale,
+    bodyType: pickRandom(['Mảnh mai', 'Cân đối', 'Trung bình', 'Đầy đặn']),
+    skinTone: pickRandom(c.skinTone),
+    skinTexture: pickRandom(['Da căng mịn, lỗ chân lông nhỏ tự nhiên', 'Da tự nhiên có lỗ chân lông', 'Da mịn tự nhiên', 'Da có kết cấu thật, hơi không hoàn hảo']),
+    eyeColor: pickRandom(['Nâu', 'Nâu đen', 'Nâu hạt dẻ', 'Đen']),
+    eyeShape: pickRandom(c.eyeShape),
     hairColor,
     hairStyle,
     hairTexture,
-    facialFeatures: pickRandom(['Soft features', 'High cheekbones', 'Full lips', 'Sharp jawline', 'Soft features, gentle eyes']),
+    facialFeatures: pickRandom(c.facialFeatures),
     facialHair,
-    distinguishingMarks: pickRandom(['None', 'Beauty mark', 'Dimples', 'None', 'None']),
-    clothingStyle: isFemale
-      ? pickRandom(['Modest casual', 'Traditional Islamic modest wear', 'Modest athleisure', 'Casual modest style'])
-      : pickRandom(['Casual', 'Smart casual', 'Athleisure', 'Traditional Malay casual']),
-    accessories: pickRandom(['None', 'Simple earrings', 'Watch', 'Glasses', 'None']),
-    makeup: isFemale
-      ? pickRandom(['Natural/minimal', 'Light natural makeup', 'No makeup', 'Soft everyday makeup'])
-      : 'None',
+    distinguishingMarks: pickRandom(['Không', 'Nốt ruồi duyên', 'Má lúm', 'Không', 'Không']),
+    clothingStyle: pickRandom(isFemale ? c.clothingFemale : c.clothingMale),
+    accessories: pickRandom(['Không', 'Bông tai nhỏ', 'Đồng hồ', 'Kính', 'Không']),
+    makeup: isFemale ? pickRandom(c.makeup) : 'Không',
     ...scene,
-    expression: pickRandom(['Natural smile', 'Genuine smile', 'Excited', 'Mid-sentence', 'Natural smile']),
-    cameraAngle: 'Eye Level',
-    aspectRatio: 'Portrait (9:16)',
+    expression: pickRandom(['Cười tự nhiên', 'Cười tươi chân thật', 'Hào hứng', 'Đang nói dở câu', 'Cười tự nhiên']),
+    cameraAngle: 'Ngang tầm mắt',
+    aspectRatio: 'Portrait (9:16)',  // structural value — kept English for the size logic
   }
 }
