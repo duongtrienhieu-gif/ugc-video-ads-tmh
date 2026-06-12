@@ -560,20 +560,37 @@ Generate the JSON now — exactly 6 hooks, one per archetype.`
       apiKey: params.geminiKey,
       systemInstruction,
       prompt: userPrompt,
-      maxOutputTokens: 1536,
+      maxOutputTokens: 2048,
       responseMimeType: 'application/json',
       ...(schema ? { responseSchema: HOOKS_RESPONSE_SCHEMA } : {}),
     })
 
-  let raw = await call()
-  let hooks = parseHooks(raw)
-  if (!hooks) hooks = parseHooks(repairJsonString(raw))
+  // Surface the REAL cause: if the Gemini call itself fails (429 rate-limit, 503,
+  // bad key…) propagate that message; only fall back to a generic message when the
+  // call SUCCEEDS but the payload can't be parsed (and log the raw for diagnosis).
+  let raw = ''
+  try {
+    raw = await call()
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    throw new Error(`Gemini lỗi khi tạo hook: ${msg}`)
+  }
+  let hooks = parseHooks(raw) ?? parseHooks(repairJsonString(raw))
   if (!hooks) {
-    raw = await call(false)
+    // eslint-disable-next-line no-console
+    console.warn('[generateHooks] parse fail, retrying without schema. raw:', raw.slice(0, 500))
+    try {
+      raw = await call(false)
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      throw new Error(`Gemini lỗi khi tạo hook: ${msg}`)
+    }
     hooks = parseHooks(raw) ?? parseHooks(repairJsonString(raw))
   }
   if (!hooks || hooks.length === 0) {
-    throw new Error('Không tạo được hook. Hãy thử lại.')
+    // eslint-disable-next-line no-console
+    console.warn('[generateHooks] still no hooks. final raw:', raw.slice(0, 500))
+    throw new Error(`Gemini trả về không đọc được${raw.trim() ? ` (${raw.trim().slice(0, 80)}…)` : ' (rỗng)'}. Thử lại.`)
   }
   return hooks
 }
