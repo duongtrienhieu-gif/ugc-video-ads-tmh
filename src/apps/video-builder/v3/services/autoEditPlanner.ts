@@ -380,19 +380,21 @@ function buildSegments(
     }
     ts = Math.max(usableStart, Math.min(usableEnd - durSec, ts))
 
-    // Find the creator segment that contains the overlay START.
+    // Find the segment that contains the overlay START. Z98 #5 v2 — a sticker
+    // is a tiny mid-right PNG, so it MAY ride on top of a CUT segment too, which
+    // keeps it pinned to its exact spoken word even while a cut is playing. A
+    // video overlay (a big PIP) stays creator-only — PIP-ing a video on top of
+    // another full-screen cut looks wrong.
+    const canHost = (s: typeof segments[number]) => isSticker || s.source.kind === 'creator_video'
     let host = segments.find(
-      (s) => s.source.kind === 'creator_video'
-        && s.startSec <= ts!
-        && ts! < s.startSec + s.durationSec,
+      (s) => canHost(s) && s.startSec <= ts! && ts! < s.startSec + s.durationSec,
     )
     if (!host) {
-      // Z83 — the ideal time lands ON a CUT (common for a demoted cut, whose
-      // anchor sat inside the cut it collided with). Slide the overlay to the
-      // START of the next creator segment so the content still renders (slightly
-      // off its line, but the creator is visible) instead of being dropped.
-      const next = segments.find((s) => s.source.kind === 'creator_video' && s.startSec >= ts!)
-      if (!next) continue  // no creator window left → drop
+      // The ideal time lands on a segment this overlay can't host on (a video
+      // overlay over a cut). Slide to the START of the next eligible segment so
+      // it still renders (slightly off its line) instead of being dropped.
+      const next = segments.find((s) => canHost(s) && s.startSec >= ts!)
+      if (!next) continue  // no eligible window left → drop
       host = next
       ts = next.startSec
     }
