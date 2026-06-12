@@ -35,6 +35,7 @@ import {
   type InsertSuggestion,
 } from '../services/insertSuggester'
 import { renderInsert, resumeInsertVideo, listEligibleInsertsForBulk } from '../services/insertRenderer'
+import { directBrollScenes } from '../services/brollDirector'
 import { getProductVisualBrief, type ProductVisualBrief } from '../../../../services/productVisualBrief'
 import { hasFourProductImages } from '../../../../stores/types'
 import { computeBlockStartTimestamps, computeQuoteTimestamp, computeWordTimestampFromAlignment } from '../services/insertTimingEngine'
@@ -144,6 +145,30 @@ export default function ActionInsertsPhase({ onContinue }: Props) {
   const geminiKey     = useSettingsStore((s) => s.geminiApiKey)
   const elevenLabsKey = useSettingsStore((s) => s.elevenLabsApiKey)
   const addToast      = useAppStore((s) => s.addToast)
+
+  // P1 dev helper — test the new HYBRID director (plan only, no render, no credit).
+  // From the console: __testBrollDirector() → logs the full-coverage shot list.
+  useEffect(() => {
+    const w = window as unknown as { __testBrollDirector?: () => Promise<unknown> }
+    w.__testBrollDirector = async () => {
+      const st = useAdsVideoStore.getState().state
+      const script = st.scriptBrain.script
+      if (!geminiKey) { console.warn('[BROLL_DIRECTOR] thiếu Gemini key'); return }
+      if (!script) { console.warn('[BROLL_DIRECTOR] chưa có kịch bản (Bước 1)'); return }
+      const voiceDurationSec =
+        st.voiceFirst?.voiceDurationSec ?? st.creatorVideo?.voiceDurationSec ?? script.totalDurationSec ?? 50
+      console.log(`[BROLL_DIRECTOR] đang plan (dur=${voiceDurationSec.toFixed(0)}s)...`)
+      try {
+        const res = await directBrollScenes({
+          geminiKey, script, lang: st.scriptBrain.outputLang, product: st.inputs.product, voiceDurationSec,
+        })
+        console.log('[BROLL_DIRECTOR] SCENES:', res.scenes)
+        console.log('[BROLL_DIRECTOR] STICKERS:', res.stickers)
+        return res
+      } catch (e) { console.error('[BROLL_DIRECTOR] lỗi:', e) }
+    }
+    return () => { delete (window as unknown as { __testBrollDirector?: unknown }).__testBrollDirector }
+  }, [geminiKey])
 
   const inserts = state.inserts
   const costModeCfg = COST_MODE_CONFIG[state.costMode]

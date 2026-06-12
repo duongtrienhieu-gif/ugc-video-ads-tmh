@@ -199,7 +199,7 @@ const NICHE_RULES: { niche: string; usage: string; cues: RegExp }[] = [
     cues: /\b(shirt|pants|dress|shoes|sneaker|jacket|áo|quần|giày|baju|seluar|kasut)\b/i },
 ]
 
-function detectProductNiche(product: Product | null | undefined): { niche: string; usage: string } | null {
+export function detectProductNiche(product: Product | null | undefined): { niche: string; usage: string } | null {
   if (!product) return null
   const hay = [product.productName, product.productDescription, product.usps, product.ingredients, product.usageGuide]
     .filter(Boolean).join(' ').toLowerCase()
@@ -215,7 +215,7 @@ function detectProductNiche(product: Product | null | undefined): { niche: strin
 // guessed usage — picking TAKE_PILL for a tooth powder, BEFORE_AFTER for a
 // visible result, etc. Giving it the name + description + detected niche
 // fixes the whole class of niche-misread bugs at the source.
-function buildProductContextBlock(product: Product | null | undefined): string {
+export function buildProductContextBlock(product: Product | null | undefined): string {
   if (!product) return ''
   const lines: string[] = []
   if (product.productName) lines.push(`- Name: ${product.productName}`)
