@@ -267,8 +267,12 @@ export default function ActionInsertsPhase({ onContinue }: Props) {
     const script = scriptOverride ?? state.scriptBrain.script
     const blockStarts = script ? computeBlockStartTimestamps(script) : null
     // Z98 #5.3 — real char-level alignment from the voice-first synth; lets
-    // stickers anchor on the exact WORD, not the sentence start.
-    const align = state.voiceFirst?.voiceAlignment
+    // stickers anchor on the exact WORD, not the sentence start. Read FRESH from
+    // the store (not the closure `state`, which can be stale when applySuggestions
+    // runs in the async flow right after the voice was synthesized — a stale
+    // undefined alignment made every sticker fall back to its sentence start, so
+    // two stickers on one line collided at the same second).
+    const align = useAdsVideoStore.getState().state.voiceFirst?.voiceAlignment
     const items = result.map((s) => {
       // Z42 — anchor to the EXACT second the quoted line is spoken; fall back to
       // the coarse block-start only when the quote can't be located.
@@ -297,6 +301,23 @@ export default function ActionInsertsPhase({ onContinue }: Props) {
         stickerWordAnchor: s.stickerWordAnchor,
       }
     })
+    // Z98 #5 — sticker spacing. Stickers all sit at the same mid-right spot and
+    // last 1.8s, so two within ~2.5s overlap (the director sometimes pops a
+    // keyword + its neighbour in one line). Keep the FIRST of any cluster, drop
+    // the rest. Scenes are left untouched.
+    const sceneItems = items.filter((it) => it.renderMode !== 'sticker')
+    const MIN_STICKER_GAP = 2.5
+    let lastStickerTs = -Infinity
+    const keptStickers = items
+      .filter((it) => it.renderMode === 'sticker')
+      .sort((a, b) => (a.voiceTimestampSec ?? 0) - (b.voiceTimestampSec ?? 0))
+      .filter((it) => {
+        const t = it.voiceTimestampSec ?? 0
+        if (t - lastStickerTs >= MIN_STICKER_GAP) { lastStickerTs = t; return true }
+        return false
+      })
+    const dedupedItems = [...sceneItems, ...keptStickers]
+
     // Z98 #1 — telemetry-only gap detector. The director's "no gap >5s" rule
     // sits in the prompt and Gemini sometimes ignores it (anchors 2 distinct
     // voice claims into a single scene → 9-12s of talking-head with nothing
@@ -308,7 +329,7 @@ export default function ActionInsertsPhase({ onContinue }: Props) {
     // sparse coverage).
     const voiceDur = script?.totalDurationSec ?? 0
     if (voiceDur > 0) {
-      const timed = items
+      const timed = sceneItems
         .map((it, i) => ({ i, ts: it.voiceTimestampSec, dur: it.durationSec ?? 4 }))
         .filter((x): x is { i: number; ts: number; dur: number } => typeof x.ts === 'number')
         .sort((a, b) => a.ts - b.ts)
@@ -334,7 +355,7 @@ export default function ActionInsertsPhase({ onContinue }: Props) {
       }
     }
     clearAllInserts()
-    bulkAddInsertsFromPresets(items)
+    bulkAddInsertsFromPresets(dedupedItems)
     // Z98 #5 — auto-render sticker PNGs locally (0 credit, instant). Stickers
     // never touch the Grok pipeline; we draw the transparent PNG on a canvas,
     // save it as the insert's keyframeRef, and mark it completed so the card
