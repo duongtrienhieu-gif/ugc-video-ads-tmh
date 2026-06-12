@@ -1070,7 +1070,8 @@ function InsertCard({
     return (
       <div className="group flex flex-col overflow-hidden rounded-xl border border-violet-200 bg-white shadow-sm">
         {/* Mock composition: the talking-head stand-in + the sticker at its real
-            mid-right ~28% position, so the user sees where it will actually sit. */}
+            right-column LOWER-THIRD position (y≈70%, over the chest — clears the
+            face), so the user sees where it will actually sit. */}
         <div className="relative aspect-[9/16] bg-gradient-to-b from-slate-200 to-slate-300">
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 text-slate-400">
             <Mic className="h-8 w-8 opacity-40" />
@@ -1083,7 +1084,7 @@ function InsertCard({
               /* Z98 #5 — size by HEIGHT (consistent text size for every sticker),
                  width auto, capped so a long label can't overflow. Fixing WIDTH
                  made short labels huge + long labels unreadably tiny. */
-              className={`absolute right-[4%] top-1/2 h-[11%] w-auto max-w-[60%] -translate-y-1/2 object-contain drop-shadow-lg transition-all duration-200 ${
+              className={`absolute right-[4%] top-[70%] h-[11%] w-auto max-w-[60%] -translate-y-1/2 object-contain drop-shadow-lg transition-all duration-200 ${
                 stickerShown ? 'scale-100 opacity-100' : 'scale-50 opacity-0'
               }`}
             />

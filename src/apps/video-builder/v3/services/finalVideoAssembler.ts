@@ -340,13 +340,15 @@ export async function assembleFinalVideo(
           `trim=duration=${ov.durationSec},setpts=PTS-STARTPTS+${ov.startSec}/TB[pip${j}]`,
         )
       }
-      // Position. 'mr' = mid-right edge (vertically centred). Others map as
-      // before (left/right by corner column, top/bottom by corner row).
+      // Position. 'mr' = right column, lowered into the LOWER THIRD (y≈70% of the
+      // frame) so the sticker rides over the chest/neckline and never covers the
+      // talking-head's face. Others map as before (left/right by corner column,
+      // top/bottom by corner row).
       const x = ov.corner === 'mr'
         ? `W-w-${MARGIN}`
         : (ov.corner === 'tl' || ov.corner === 'bl') ? `${MARGIN}` : `W-w-${MARGIN}`
       const y = ov.corner === 'mr'
-        ? `(H-h)/2`
+        ? `(H-h)*0.72`
         : (ov.corner === 'tl' || ov.corner === 'tr') ? `${MARGIN}` : `H-h-${MARGIN}`
       const endT = ov.startSec + ov.durationSec
       const next = `m${j}`
