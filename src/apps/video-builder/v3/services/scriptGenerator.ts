@@ -446,6 +446,7 @@ THE FIXED HOOK (continue the script from here; reproduce it verbatim as the hook
       systemInstruction,
       prompt: userPrompt,
       maxOutputTokens: 2048,
+      temperature: 0.85,   // creative but still grounded in the brief
       responseMimeType: 'application/json',
       ...(schema ? { responseSchema: SEGMENT_RESPONSE_SCHEMA } : {}),
     })
@@ -565,6 +566,9 @@ OUTPUT strict JSON, no markdown fences:
 
   const creatorLine = params.creatorDescription
     ? `\nCREATOR PROFILE (write in this voice): ${params.creatorDescription}\n` : ''
+  // A fresh token per call so "Đổi hook" actually re-rolls instead of converging
+  // on the same safe answer (combined with a high temperature below).
+  const freshness = Math.random().toString(36).slice(2, 8)
   const userPrompt = `Write the 6 hooks in ${lang} for this product.
 
 PRODUCT: ${params.productName}
@@ -572,6 +576,10 @@ PRODUCT BRIEF (understand + ground the hooks in these real facts; may be in
 Vietnamese — never echo Vietnamese words, write only in ${lang}):
 ${params.productPitch}
 ${creatorLine}
+Give a FRESH, BOLD set — explore genuinely DIFFERENT angles, concrete details and
+phrasings than the safest obvious version; do NOT repeat the typical wording. Each
+press should feel like a new brainstorm. (variation ${freshness})
+
 Generate the JSON now — exactly 6 hooks, one per archetype.`
 
   const call = (schema = true) =>
@@ -580,6 +588,7 @@ Generate the JSON now — exactly 6 hooks, one per archetype.`
       systemInstruction,
       prompt: userPrompt,
       maxOutputTokens: 2048,
+      temperature: 1.1,   // hooks are a creative task — high temp for real variety
       responseMimeType: 'application/json',
       ...(schema ? { responseSchema: HOOKS_RESPONSE_SCHEMA } : {}),
     })
@@ -690,6 +699,7 @@ async function callGeminiWithRetry(args: {
       systemInstruction: args.systemInstruction,
       prompt: args.userPrompt + extraSuffix,
       maxOutputTokens: 2048,
+      temperature: 0.85,   // creative but still grounded in the brief
       responseMimeType: 'application/json',
       ...(schema ? { responseSchema: SCRIPT_RESPONSE_SCHEMA } : {}),
     })
