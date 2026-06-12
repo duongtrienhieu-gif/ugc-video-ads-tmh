@@ -34,8 +34,9 @@ import {
   CREATOR_ENERGIES, recommendEnergyForAngle,
 } from '../services/creatorEnergy'
 import { styleCreatorWithGemini } from '../services/creatorPresets'
-import { renderCreatorKeyframe, renderCreatorLipsync, resumeCreatorVideoLipsync, previewCreatorVoice, type StageUpdate } from '../services/creatorVideoEngine'
+import { renderCreatorKeyframe, renderCreatorLipsync, resumeCreatorVideoLipsync, previewCreatorVoice, renderLipsyncSegment, type StageUpdate } from '../services/creatorVideoEngine'
 import { autoBackupProject } from '../services/projectLibrary'
+import { getUrl } from '../../../../utils/assetStore'
 
 // ── Stage progress strip ───────────────────────────────────────────────────
 
@@ -216,6 +217,32 @@ export default function CreatorVideoPhase({ onContinue }: Props) {
   const config = state.creatorVideoConfig
   const clip   = state.creatorVideo
   const brain  = state.scriptBrain
+
+  // POC (Phase 0) — segmented-lipsync dev helper. From the console, after the
+  // keyframe is rendered (voiceRef + keyframeRef exist), run:
+  //   __testLipsyncSegment(0, 4)   → lip-syncs ONLY the 0-4s slice of the voice
+  // and opens the resulting short clip so we can verify the mouth matches.
+  // Proves the hybrid direction before building the full pipeline. Dev-only.
+  useEffect(() => {
+    const w = window as unknown as { __testLipsyncSegment?: (s?: number, e?: number) => Promise<unknown> }
+    w.__testLipsyncSegment = async (startSec = 0, endSec = 4) => {
+      if (!kieApiKey) { console.warn('[LIPSYNC-SEG] thiếu KIE API key'); return }
+      if (!clip?.voiceRef || !clip?.keyframeRef) {
+        console.warn('[LIPSYNC-SEG] chưa có voiceRef/keyframeRef — tạo keyframe ở Bước 3 trước'); return
+      }
+      console.log(`[LIPSYNC-SEG] test [${startSec}s..${endSec}s] — đang render (~${Math.round((endSec - startSec) * 8)}cr)...`)
+      try {
+        const { videoRef, durSec } = await renderLipsyncSegment({
+          kieApiKey, config, voiceRef: clip.voiceRef, keyframeRef: clip.keyframeRef, startSec, endSec,
+        })
+        const url = await getUrl(videoRef)
+        console.log(`[LIPSYNC-SEG] ✅ XONG (≈${durSec.toFixed(1)}s). Video: ${url}`)
+        if (url) window.open(url, '_blank')
+        return url
+      } catch (e) { console.error('[LIPSYNC-SEG] lỗi:', e) }
+    }
+    return () => { delete (window as unknown as { __testLipsyncSegment?: unknown }).__testLipsyncSegment }
+  }, [kieApiKey, config, clip?.voiceRef, clip?.keyframeRef])
 
   // Z41 AI Stylist — auto-composes persona (setting/energy/wardrobe).
   const [isStyling, setIsStyling] = useState(false)

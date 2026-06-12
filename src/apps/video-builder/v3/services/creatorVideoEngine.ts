@@ -414,6 +414,73 @@ export async function renderCreatorLipsync(params: {
   return { videoRef, fullLipsyncTaskId: fullLipsync.taskId }
 }
 
+// ── POC (Phase 0) — SEGMENTED lipsync ───────────────────────────────────────
+// Proves the hybrid direction: lip-sync only a SHORT span of the voice instead of
+// the full ~60s (~500cr). Kling Avatar generates the mouth FROM the audio, so a
+// sliced 4s clip's mouth matches exactly those 4s of speech — placed back at the
+// same span on the master TTS track, it stays in sync inherently. A few ~32cr
+// short cuts then replace the one ~500cr full lipsync.
+//
+// ADDITIVE — does NOT touch renderCreatorLipsync (the existing full path stays
+// 100% intact). This is a standalone capability for the POC + the future hybrid
+// director; nothing else calls it yet.
+export async function renderLipsyncSegment(params: {
+  kieApiKey: string
+  config: CreatorVideoConfig
+  /** The FULL TTS audio (asset ref) — we slice it, never re-synthesize. */
+  voiceRef: string
+  /** The creator keyframe (asset ref) — the talking face. */
+  keyframeRef: string
+  startSec: number
+  endSec: number
+}): Promise<{ videoRef: string; segVoiceRef: string; durSec: number }> {
+  const startSec = Math.max(0, params.startSec)
+  const durSec = Math.max(0.5, params.endSec - startSec)
+
+  // 1. Slice the voice [startSec, startSec+durSec] with ffmpeg (re-encode for an
+  //    accurate cut — mp3 stream-copy cuts land on the nearest frame, not exact).
+  const fullUrl = await getUrl(params.voiceRef)
+  if (!fullUrl) throw new Error('Không lấy được audio gốc (voiceRef)')
+  const audioBytes = new Uint8Array(await (await fetch(fullUrl)).arrayBuffer())
+  const ffmpeg = await getFFmpeg()
+  const id = Math.random().toString(36).slice(2, 8)
+  const inName = `seg_${id}_in.mp3`
+  const outName = `seg_${id}_out.mp3`
+  await ffmpeg.writeFile(inName, audioBytes)
+  await ffmpeg.exec([
+    '-ss', startSec.toFixed(3), '-i', inName, '-t', durSec.toFixed(3),
+    '-c:a', 'libmp3lame', '-q:a', '4', '-y', outName,
+  ])
+  const outData = await ffmpeg.readFile(outName)
+  await ffmpeg.deleteFile(inName).catch(() => {})
+  await ffmpeg.deleteFile(outName).catch(() => {})
+  const outArr = outData instanceof Uint8Array ? outData : new Uint8Array()
+  if (outArr.byteLength === 0) throw new Error('Cắt audio thất bại (output rỗng)')
+  const segVoiceRef = await saveAsset(new Blob([outArr.slice()], { type: 'audio/mpeg' }), 'audio/mpeg')
+  console.log(`[LIPSYNC-SEG] sliced voice [${startSec.toFixed(2)}s..${(startSec + durSec).toFixed(2)}s] → ${outArr.byteLength} bytes`)
+
+  // 2. Lip-sync the SLICED audio + the creator keyframe → a short talking clip.
+  const keyframePublicUrl = await getUrl(params.keyframeRef)
+  const segAudioPublicUrl = await getUrl(segVoiceRef)
+  if (!keyframePublicUrl || !segAudioPublicUrl) {
+    throw new Error('Không lấy được URL công khai (keyframe / segment audio)')
+  }
+  const job = await generateLipSync({
+    apiKey: params.kieApiKey,
+    modelId: 'kling/ai-avatar-standard',
+    imageUrl: keyframePublicUrl,
+    audioUrl: segAudioPublicUrl,
+    prompt: buildLipsyncPrompt({ config: params.config }),
+  })
+  console.log(`[LIPSYNC-SEG] lipsync job ${job.taskId} submitted (dur≈${durSec.toFixed(1)}s)`)
+  const videoRef = await pollAndSaveLipsync({
+    apiKey: params.kieApiKey,
+    taskId: job.taskId,
+    timeoutMs: 15 * 60 * 1000,
+  })
+  return { videoRef, segVoiceRef, durSec }
+}
+
 // ── Resume a paid-but-unfinished lipsync job ────────────────────────────────
 // Z38 — when the poll above times out (or the user refreshed mid-render), the
 // Kling job is STILL running on KIE's side and was already charged. We persist
