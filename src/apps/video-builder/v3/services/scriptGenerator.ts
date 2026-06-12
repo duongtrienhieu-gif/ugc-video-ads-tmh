@@ -575,7 +575,7 @@ Generate the JSON now — exactly 6 hooks, one per archetype.`
     const msg = err instanceof Error ? err.message : String(err)
     throw new Error(`Gemini lỗi khi tạo hook: ${msg}`)
   }
-  let hooks = parseHooks(raw) ?? parseHooks(repairJsonString(raw))
+  let hooks = parseHooks(raw) ?? parseHooks(repairJsonString(raw)) ?? salvageHooks(raw)
   if (!hooks) {
     // eslint-disable-next-line no-console
     console.warn('[generateHooks] parse fail, retrying without schema. raw:', raw.slice(0, 500))
@@ -585,7 +585,7 @@ Generate the JSON now — exactly 6 hooks, one per archetype.`
       const msg = err instanceof Error ? err.message : String(err)
       throw new Error(`Gemini lỗi khi tạo hook: ${msg}`)
     }
-    hooks = parseHooks(raw) ?? parseHooks(repairJsonString(raw))
+    hooks = parseHooks(raw) ?? parseHooks(repairJsonString(raw)) ?? salvageHooks(raw)
   }
   if (!hooks || hooks.length === 0) {
     // eslint-disable-next-line no-console
@@ -593,6 +593,32 @@ Generate the JSON now — exactly 6 hooks, one per archetype.`
     throw new Error(`Gemini trả về không đọc được${raw.trim() ? ` (${raw.trim().slice(0, 80)}…)` : ' (rỗng)'}. Thử lại.`)
   }
   return hooks
+}
+
+// Salvage hooks from a TRUNCATED / slightly-malformed JSON payload (Gemini cut
+// off mid-object, or an unescaped quote broke JSON.parse). Pulls every
+// "archetype"/"text" value in document order and zips them by index — every
+// COMPLETE hook before the cut survives, even if the closing braces are missing.
+function salvageHooks(raw: string): HookVariant[] | null {
+  const archetypes = [...raw.matchAll(/"archetype"\s*:\s*"([a-z_]+)"/g)].map((m) => m[1])
+  const texts = [...raw.matchAll(/"text"\s*:\s*"((?:[^"\\]|\\.)*)"/g)].map((m) => m[1])
+  const n = Math.min(archetypes.length, texts.length)
+  const out: HookVariant[] = []
+  for (let i = 0; i < n; i++) {
+    const archetype = HOOK_ARCHETYPE_ORDER.includes(archetypes[i] as HookArchetype)
+      ? (archetypes[i] as HookArchetype)
+      : undefined
+    const text = texts[i].replace(/\\"/g, '"').replace(/\\n/g, ' ').replace(/\s+/g, ' ').trim()
+    if (text) {
+      out.push({
+        style: ARCHETYPE_TO_STYLE[archetype ?? 'curiosity_gap'],
+        archetype,
+        text,
+        estDurationSec: estimateReadDurationSec(text),
+      })
+    }
+  }
+  return out.length > 0 ? out : null
 }
 
 function parseHooks(raw: string): HookVariant[] | null {
