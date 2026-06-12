@@ -191,7 +191,9 @@ UNIVERSAL TIKTOK-NATIVE RULES:
 - Write spoken language, not written copy. Short sentences. Natural rhythm.
 - Use first person. Sound like a real person on TikTok sharing what worked.
 - NO corporate language. NO "in this video". NO "let me introduce you to".
-- NO long paragraphs. Each block should feel like 1-2 spoken breaths.
+- Keep each SENTENCE short and punchy (spoken, not written). But COVER THE FULL
+  target length — a longer ad means MORE of these short beats and more specific
+  detail, NOT longer sentences and NOT a short script. Never undershoot the time.
 - It is OK (encouraged) to have imperfect, conversational phrasing.
 - Write in the casual, everyday spoken register of ${args.lang} — the way a real
   person talks to friends, NOT formal or written language. Pick ONE consistent
@@ -281,15 +283,24 @@ ${creatorLine}
 SELECTED STRUCTURE: ${args.structureLabel}
 SELECTED ANGLE: ${args.angleLabel}
 
-PER-BLOCK TARGET DURATION (sum to ~${args.targetDurationSec}s):
+LENGTH — HARD TARGET (the most common mistake is writing TOO SHORT): the COMPLETE
+script, read aloud at a natural pace, MUST run close to ${args.targetDurationSec}s
+— about ${Math.round(args.targetDurationSec * 2.5)} words total across the 5 blocks.
+Do NOT hand back a script noticeably shorter than ${args.targetDurationSec}s. If
+your draft is short, EXPAND it before answering: go deeper on the mechanism, add
+another concrete benefit or a proof point, make the pain more specific — always
+using REAL facts from the brief, never filler. A longer ad is simply MORE short,
+punchy beats with more specific detail — not padding and not longer sentences.
+
+PER-BLOCK TARGET DURATION (they sum to ~${args.targetDurationSec}s — FILL each):
 - HOOK:      ~${args.budgets.hook}s
 - PAIN:      ~${args.budgets.pain}s
 - DISCOVERY: ~${args.budgets.discovery}s
 - BENEFIT:   ~${args.budgets.benefit}s
 - CTA:       ~${args.budgets.cta}s
 
-Reading pace baseline: 150 words per minute. So a 3s block ≈ ~7-8 words.
-Hit the per-block budget within ±20%.
+Reading pace baseline: 150 words per minute (a 3s block ≈ 7-8 words). Each block
+should land within ~20% of its budget — and the TOTAL must reach the target.
 
 MUST INCLUDE (pull from the brief — this is what makes it persuasive, not basic):
 - the SPECIFIC pain + who it's for, so the right viewer feels seen (early);
