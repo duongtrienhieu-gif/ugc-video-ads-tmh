@@ -200,23 +200,33 @@ UNIVERSAL TIKTOK-NATIVE RULES:
   other language, and write 100% in ${args.lang} only. NO formal salutation.
 - The product should appear as a discovery the speaker stumbled onto, NOT
   as a sponsored mention. Avoid "today I'll tell you about X".
-- CONCRETE & FILMABLE (IMPORTANT) — in the DISCOVERY, demo and BENEFIT moments,
-  prefer lines that describe a SPECIFIC, physical, SENSORY action a phone camera
-  could actually film, instead of abstract claims. A downstream AI director turns
-  each spoken line into a visual and can only show what the words concretely name,
-  so vague claims become flat talking-head footage. Write the moment, not the
-  adjective. This is UNIVERSAL across every niche — for example:
-    • instead of "it's so easy to clean" → "I just hold it under the tap and the
-      gunk rinses straight off, done in seconds" (an appliance / tool)
-    • instead of "it absorbs fast" → "I dab it on and it just sinks in and
-      disappears, my hands aren't even greasy" (a topical / skincare)
-    • instead of "it's really powerful" → "I dropped a whole carrot in and it
-      turned to juice before I finished the sentence" (a blender / gadget)
-    • instead of "it's comfortable" → "I wore it all day and forgot it was even
-      on" (apparel / wearable)
-  Name the real action, object, texture, time or place. Do NOT force every line
-  to be an action — the HOOK, PAIN and emotional beats can stay abstract/felt;
-  this applies where the script is showing the product working or its result.
+- GROUND IT IN THE REAL PRODUCT — do NOT stay vague ("some Korean technology",
+  "this serum", "công nghệ gì đó", "thứ này"). Vague copy persuades nobody AND
+  gives the downstream visual director nothing to show. A real person who actually
+  uses a product can name what is in it and why it works — so must this script,
+  using ONLY the real facts in the PRODUCT BRIEF (never invent ingredients/claims):
+    • NAME the key ingredient(s) / active(s) / material the brief lists — say them
+      out loud (e.g. "peptide với collagen", "than hoạt tính", "thép Nhật"), NOT
+      "công nghệ gì đó". If the brief names two actives, name both.
+    • Give the MECHANISM in ONE simple spoken sentence — HOW it actually works, the
+      way a friend explains it ("peptide nó kích cho da tự sinh collagen lại"),
+      not a corporate spec. This is the line the director turns into a mechanism shot.
+    • Show ONE concrete USAGE moment — the ACT of using it (how much, where, the
+      texture / feel), something a phone can FILM: "tối thoa 2-3 giọt, vỗ nhẹ là
+      thấm". Write the moment, not the adjective — this becomes the product-in-use
+      B-roll. (Universal: "xả thẳng dưới vòi, rửa cái sạch trơn" for an appliance;
+      "thả nguyên củ cà rốt vô, xay cái thành nước" for a blender.)
+    • Speak to the SPECIFIC person it is for, EARLY, so they feel seen — pull their
+      exact situation from the brief's pain points + target audience ("ai da vừa
+      khô vừa nhăn sớm như mình không").
+  Keep ALL of this in casual spoken register — a real person who genuinely knows
+  the product, weaving the facts in naturally, NEVER a brochure or a spec list.
+- KEEP IT BELIEVABLE — a believable specific beats a spectacular lie. NO miracle
+  instant results ("3 giây", "vài ngày là hết nhăn"), NO claiming it equals a
+  medical procedure ("như đi tiêm filler / botox"), realistic timeframes, spoken
+  as personal felt experience. Overclaiming reads as a scam, kills trust, and
+  breaks compliance. Let the named ingredient + mechanism do the convincing, not
+  an unbelievable result.
 - COMPLIANCE (Malaysia Trade Descriptions Act): NEVER claim regulatory
   certifications or official approvals — no "Halal certified", "KKM approved",
   "GMP", "FDA approved", "clinically proven", "doctor approved", or similar
@@ -280,6 +290,15 @@ PER-BLOCK TARGET DURATION (sum to ~${args.targetDurationSec}s):
 
 Reading pace baseline: 150 words per minute. So a 3s block ≈ ~7-8 words.
 Hit the per-block budget within ±20%.
+
+MUST INCLUDE (pull from the brief — this is what makes it persuasive, not basic):
+- the SPECIFIC pain + who it's for, so the right viewer feels seen (early);
+- the NAMED key ingredient(s) / active(s) the brief lists (not "công nghệ gì đó");
+- a ONE-LINE simple mechanism — how it actually works;
+- a concrete USAGE moment — the act of using it (filmable);
+- a believable result (NO "3 giây" / miracle / filler-botox claims).
+If the brief has no ingredient/mechanism info, do not invent — lean on the pain,
+the usage moment and the honest result instead.
 
 Generate the JSON now.`
 }
