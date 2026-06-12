@@ -606,7 +606,14 @@ A hook is the first 1-3 seconds of a short video ad — the single biggest facto
 in whether a viewer keeps watching or scrolls past. Write hooks so good the
 target viewer cannot scroll past.
 
-Generate EXACTLY 6 hooks — ONE for each archetype below — all for the SAME product:
+*** LANGUAGE LOCK — THE #1 RULE ***
+ALL 6 hooks MUST be written 100% in ${lang}. The product brief is in Vietnamese —
+you READ and translate its meaning, but you NEVER write a hook in Vietnamese and
+NEVER mix languages. Every single one of the 6 hooks must be entirely in ${lang}.
+If ${lang} is not Vietnamese, a Vietnamese (or mixed) hook is a HARD FAILURE.
+
+Generate EXACTLY 6 hooks — ONE for each archetype below — all for the SAME product,
+all in ${lang}:
 ${archetypeList}
 
 WHAT MAKES A HOOK STOP THE SCROLL (follow ALL — this is the whole job):
@@ -668,7 +675,7 @@ Generate the JSON now — exactly 6 hooks, one per archetype.`
       systemInstruction,
       prompt: userPrompt,
       maxOutputTokens: 2048,
-      temperature: 1.1,   // hooks are a creative task — high temp for real variety
+      temperature: 0.9,   // varied but disciplined — 1.1 drifted off the target language
       responseMimeType: 'application/json',
       ...(schema ? { responseSchema: HOOKS_RESPONSE_SCHEMA } : {}),
     })
