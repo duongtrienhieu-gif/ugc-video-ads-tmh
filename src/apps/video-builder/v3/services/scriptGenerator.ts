@@ -22,9 +22,11 @@ import { directGeminiText } from '../../../../utils/gemini'
 import type {
   AdStructure, AdAngle, ScriptTargetDurationSec,
   GeneratedScript, ScriptBlock, HookVariant, ScriptBlockId, HookStyle,
-  ScriptLang,
+  ScriptLang, HookArchetype,
 } from '../types'
-import { SCRIPT_LANG_GEMINI_NAME } from '../types'
+import {
+  SCRIPT_LANG_GEMINI_NAME, HOOK_ARCHETYPES, HOOK_ARCHETYPE_ORDER,
+} from '../types'
 import { AD_STRUCTURES } from './adStructures'
 import { AD_ANGLES } from './adAngles'
 import {
@@ -53,6 +55,10 @@ export interface GenerateScriptParams {
   useOwnScript?: boolean
   /** Raw pasted script — required when useOwnScript is TRUE. */
   ownScriptText?: string
+  /** #6 hook-first — a hook the user already picked (from generateHooks).
+   *  When set, Gemini writes the other 4 blocks to flow from THIS exact hook
+   *  and the hook block is forced to this text verbatim (never rewritten). */
+  chosenHook?: string
 }
 
 export interface GenerateScriptResult {
@@ -82,6 +88,27 @@ export async function generateScript(
       apiKey: params.geminiKey,
       ownScriptText: params.ownScriptText!.trim(),
       langName: lang,
+    })
+  } else if ((params.chosenHook ?? '').trim().length > 0) {
+    // #6 hook-first — the user already picked the hook; write the body around it.
+    parsed = await generateBodyAroundHook({
+      apiKey: params.geminiKey,
+      systemInstruction: buildSystemPrompt({
+        structureSystem: structure.systemPrompt,
+        angleTone: angle.tonePrompt,
+        lang,
+      }),
+      chosenHook: params.chosenHook!.trim(),
+      userPrompt: buildUserPrompt({
+        productName: params.productName,
+        productPitch: params.productPitch,
+        creatorDescription: params.creatorDescription,
+        targetDurationSec: params.targetDurationSec,
+        budgets,
+        structureLabel: structure.labelVi,
+        angleLabel: angle.labelVi,
+        lang,
+      }),
     })
   } else {
     const systemInstruction = buildSystemPrompt({
@@ -173,6 +200,23 @@ UNIVERSAL TIKTOK-NATIVE RULES:
   other language, and write 100% in ${args.lang} only. NO formal salutation.
 - The product should appear as a discovery the speaker stumbled onto, NOT
   as a sponsored mention. Avoid "today I'll tell you about X".
+- CONCRETE & FILMABLE (IMPORTANT) — in the DISCOVERY, demo and BENEFIT moments,
+  prefer lines that describe a SPECIFIC, physical, SENSORY action a phone camera
+  could actually film, instead of abstract claims. A downstream AI director turns
+  each spoken line into a visual and can only show what the words concretely name,
+  so vague claims become flat talking-head footage. Write the moment, not the
+  adjective. This is UNIVERSAL across every niche — for example:
+    • instead of "it's so easy to clean" → "I just hold it under the tap and the
+      gunk rinses straight off, done in seconds" (an appliance / tool)
+    • instead of "it absorbs fast" → "I dab it on and it just sinks in and
+      disappears, my hands aren't even greasy" (a topical / skincare)
+    • instead of "it's really powerful" → "I dropped a whole carrot in and it
+      turned to juice before I finished the sentence" (a blender / gadget)
+    • instead of "it's comfortable" → "I wore it all day and forgot it was even
+      on" (apparel / wearable)
+  Name the real action, object, texture, time or place. Do NOT force every line
+  to be an action — the HOOK, PAIN and emotional beats can stay abstract/felt;
+  this applies where the script is showing the product working or its result.
 - COMPLIANCE (Malaysia Trade Descriptions Act): NEVER claim regulatory
   certifications or official approvals — no "Halal certified", "KKM approved",
   "GMP", "FDA approved", "clinically proven", "doctor approved", or similar
@@ -351,6 +395,189 @@ OUTPUT: strict JSON only, no markdown fences:
 
   // Own-script mode: never invent alternative hooks. The user's hook stands.
   return { blocks, hookVariants: [] }
+}
+
+// ── #6 hook-first body generation ──────────────────────────────────────────
+// The user has already picked the hook (from generateHooks). Gemini writes only
+// the remaining 4 blocks so they flow from that exact hook; the hook block is
+// forced verbatim afterwards so the model can never drift from the chosen line.
+
+async function generateBodyAroundHook(args: {
+  apiKey: string
+  systemInstruction: string
+  userPrompt: string
+  chosenHook: string
+}): Promise<GeminiOutput> {
+  const systemInstruction = `${args.systemInstruction}
+
+HOOK IS ALREADY CHOSEN — do NOT write or change the hook. The opening hook line
+is FIXED (given below). Write ONLY the remaining 4 blocks (pain, discovery,
+benefit, cta) so they flow naturally and seamlessly from this exact hook — same
+person, same voice, same language. For the "hook" field, reproduce the GIVEN
+hook VERBATIM, unchanged.`
+
+  const userPrompt = `${args.userPrompt}
+
+THE FIXED HOOK (continue the script from here; reproduce it verbatim as the hook block):
+"""${args.chosenHook}"""`
+
+  const call = (schema = true) =>
+    directGeminiText({
+      apiKey: args.apiKey,
+      systemInstruction,
+      prompt: userPrompt,
+      maxOutputTokens: 2048,
+      responseMimeType: 'application/json',
+      ...(schema ? { responseSchema: SEGMENT_RESPONSE_SCHEMA } : {}),
+    })
+
+  let raw = await call()
+  let blocks = tryParseSegments(raw)
+  if (!blocks) blocks = tryParseSegments(repairJsonString(raw))
+  if (!blocks) {
+    raw = await call(false)
+    blocks = tryParseSegments(raw) ?? tryParseSegments(repairJsonString(raw))
+  }
+  if (!blocks) {
+    throw new Error('Không viết được kịch bản từ hook đã chọn. Hãy thử lại.')
+  }
+  // Force the hook verbatim — never trust the model to reproduce it exactly.
+  blocks.hook = args.chosenHook
+  return { blocks, hookVariants: [] }
+}
+
+// ── #6 hook layer ──────────────────────────────────────────────────────────
+// Hook is the #1 lever on whether an ad survives the scroll, so it is generated
+// as its own cheap, fast step: 6 hooks (one per archetype), the user picks one,
+// THEN the body is written around it (generateScript with chosenHook). Universal
+// — the AI fills the niche from the product brief.
+
+export interface GenerateHooksParams {
+  geminiKey: string
+  lang: ScriptLang
+  /** Body framework the hooks must stay compatible with */
+  framework: AdStructure
+  productName: string
+  productPitch: string
+  creatorDescription?: string
+}
+
+const ARCHETYPE_TO_STYLE: Record<HookArchetype, HookStyle> = {
+  callout_pain:  'emotional',
+  contrarian:    'shock',
+  curiosity_gap: 'curiosity',
+  confession:    'emotional',
+  shock_result:  'shock',
+  question_pov:  'curiosity',
+}
+
+const HOOKS_RESPONSE_SCHEMA = {
+  type: 'object',
+  properties: {
+    hooks: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          archetype: { type: 'string', enum: HOOK_ARCHETYPE_ORDER },
+          text:      { type: 'string' },
+        },
+        required: ['archetype', 'text'],
+      },
+    },
+  },
+  required: ['hooks'],
+}
+
+/**
+ * #6 — Generate 6 scroll-stopping hooks (one per archetype) for the product.
+ * Cheap text-only Gemini call; the user picks one, then generateScript writes
+ * the body around it. Strict JSON + repair/retry.
+ */
+export async function generateHooks(params: GenerateHooksParams): Promise<HookVariant[]> {
+  const lang = SCRIPT_LANG_GEMINI_NAME[params.lang]
+  const structure = AD_STRUCTURES[params.framework]
+  const archetypeList = HOOK_ARCHETYPE_ORDER
+    .map((id) => `- ${id}: ${HOOK_ARCHETYPES[id].promptHint}`)
+    .join('\n')
+
+  const systemInstruction = `You are a TikTok-native ad HOOK specialist writing in ${lang}.
+A hook is the first 1-3 seconds of a short video ad — the single biggest factor
+in whether a viewer keeps watching or scrolls past. Write hooks so good the
+target viewer cannot scroll past.
+
+Generate EXACTLY 6 hooks — ONE for each archetype below — all for the SAME product:
+${archetypeList}
+
+RULES:
+- Each hook: 1-2 short SPOKEN lines (max 2 sentences), first person, in the casual
+  everyday register of ${lang}. Sound like a real person on TikTok, never an ad.
+- Write 100% in ${lang}. The brief may be in Vietnamese — understand it but NEVER
+  echo Vietnamese words; write only in ${lang}.
+- Ground every hook in the REAL product / niche from the brief — specific, not generic.
+- The hook sets up tension the rest of the ad pays off; do NOT pitch the product as
+  a sponsored mention in the hook itself.
+- COMPLIANCE: never claim certifications/approvals (Halal, KKM, GMP, FDA, clinically
+  proven, doctor approved) or any authority endorsement — personal experience only.
+- The body will use the "${structure.labelVi}" framework — keep hooks compatible,
+  but each hook leads with its OWN archetype angle.
+
+OUTPUT strict JSON, no markdown fences:
+{ "hooks": [ { "archetype": "callout_pain", "text": "..." }, ... exactly 6 ] }`
+
+  const creatorLine = params.creatorDescription
+    ? `\nCREATOR PROFILE (write in this voice): ${params.creatorDescription}\n` : ''
+  const userPrompt = `Write the 6 hooks in ${lang} for this product.
+
+PRODUCT: ${params.productName}
+PRODUCT BRIEF (understand + ground the hooks in these real facts; may be in
+Vietnamese — never echo Vietnamese words, write only in ${lang}):
+${params.productPitch}
+${creatorLine}
+Generate the JSON now — exactly 6 hooks, one per archetype.`
+
+  const call = (schema = true) =>
+    directGeminiText({
+      apiKey: params.geminiKey,
+      systemInstruction,
+      prompt: userPrompt,
+      maxOutputTokens: 1536,
+      responseMimeType: 'application/json',
+      ...(schema ? { responseSchema: HOOKS_RESPONSE_SCHEMA } : {}),
+    })
+
+  let raw = await call()
+  let hooks = parseHooks(raw)
+  if (!hooks) hooks = parseHooks(repairJsonString(raw))
+  if (!hooks) {
+    raw = await call(false)
+    hooks = parseHooks(raw) ?? parseHooks(repairJsonString(raw))
+  }
+  if (!hooks || hooks.length === 0) {
+    throw new Error('Không tạo được hook. Hãy thử lại.')
+  }
+  return hooks
+}
+
+function parseHooks(raw: string): HookVariant[] | null {
+  let parsed: unknown
+  try { parsed = JSON.parse(raw) } catch { return null }
+  const obj = parsed as { hooks?: Array<{ archetype?: string; text?: string }> }
+  if (!obj || typeof obj !== 'object' || !Array.isArray(obj.hooks)) return null
+  const out: HookVariant[] = []
+  for (const h of obj.hooks) {
+    if (!h || typeof h.text !== 'string' || !h.text.trim()) continue
+    const archetype = HOOK_ARCHETYPE_ORDER.includes(h.archetype as HookArchetype)
+      ? (h.archetype as HookArchetype)
+      : undefined
+    out.push({
+      style: ARCHETYPE_TO_STYLE[archetype ?? 'curiosity_gap'],
+      archetype,
+      text: h.text.trim(),
+      estDurationSec: estimateReadDurationSec(h.text.trim()),
+    })
+  }
+  return out.length > 0 ? out : null
 }
 
 function tryParseSegments(raw: string): Record<ScriptBlockId, string> | null {
