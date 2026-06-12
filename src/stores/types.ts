@@ -1,6 +1,7 @@
 export interface Product {
   id: string
-  productImage: string
+  productImage: string          // legacy primary image = productImages[0]; kept for back-compat
+  productImages: string[]       // the 4 required product images (asset refs / data URLs)
   productName: string
   productDescription: string
   targetMarket: string
@@ -11,6 +12,14 @@ export interface Product {
   ingredients: string
   usageGuide: string
   createdAt: number
+}
+
+/** A product is "image-complete" only when it has 4 real product images. Image-
+ *  generating apps (TikTok Shop / Ladipage / UGC Builder / Avatar / Creative
+ *  Studio) gate on this — legacy 1-image products fail it until the user
+ *  re-uploads 4 and saves. Text-only apps do NOT gate on this. */
+export function hasFourProductImages(p: Pick<Product, 'productImages'>): boolean {
+  return Array.isArray(p.productImages) && p.productImages.filter((s) => !!s && s.trim() !== '').length >= 4
 }
 
 /** A variant is a different angle/expression of the SAME avatar.

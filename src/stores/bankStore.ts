@@ -38,6 +38,15 @@ function toProduct(row: Record<string, unknown>): Product {
   const rawIngredients = ((row.ingredients ?? row.cta) as string) ?? ''
   const cleanIngredients = looksLikeCTA(rawIngredients) ? '' : rawIngredients
 
+  // Multi-image: read product_images (jsonb array). Fall back to the legacy
+  // single product_image for old rows so they still LOAD (they then fail the
+  // 4-image gate until the user re-uploads 4 and saves).
+  const legacyImg = (row.product_image as string) ?? ''
+  const imgsRaw = row.product_images
+  const productImages = Array.isArray(imgsRaw)
+    ? (imgsRaw as unknown[]).filter((s): s is string => typeof s === 'string' && s.trim() !== '')
+    : (legacyImg ? [legacyImg] : [])
+
   return {
     id: row.id as string,
     createdAt: row.created_at as number,
@@ -50,7 +59,8 @@ function toProduct(row: Record<string, unknown>): Product {
     offer: (row.offer as string) ?? '',
     ingredients: cleanIngredients,
     usageGuide: (row.usage_guide as string) ?? '',
-    productImage: (row.product_image as string) ?? '',
+    productImage: legacyImg || productImages[0] || '',
+    productImages,
   }
 }
 
@@ -269,14 +279,17 @@ export const useBankStore = create<BankState>((set, get) => ({
         cta: product.ingredients,  // legacy column name — stores ingredients
         usage_guide: product.usageGuide,
         product_image: product.productImage,
+        product_images: product.productImages ?? [],
       }
       let { data: row, error } = await supabase.from('products').insert(fullRow).select().single()
-      // Graceful fallback: if the `usage_guide` column hasn't been added to the
-      // Supabase table yet, retry without it so saving never breaks. The field
-      // simply won't persist until the column exists (run the ALTER TABLE).
-      if (error && /usage_guide/i.test(error.message)) {
+      // Graceful fallback: if a newer column (usage_guide / product_images) hasn't
+      // been added to the Supabase table yet, retry without it so saving never
+      // breaks. The field simply won't persist until the column exists (run the
+      // ALTER TABLE migrations).
+      if (error && /usage_guide|product_images/i.test(error.message)) {
         const legacyRow = { ...fullRow }
         delete legacyRow.usage_guide
+        delete legacyRow.product_images
         ;({ data: row, error } = await supabase.from('products').insert(legacyRow).select().single())
       }
       if (error) {
@@ -303,11 +316,13 @@ export const useBankStore = create<BankState>((set, get) => ({
     if (updates.ingredients !== undefined) patch.cta = updates.ingredients  // legacy column name
     if (updates.usageGuide !== undefined) patch.usage_guide = updates.usageGuide
     if (updates.productImage !== undefined) patch.product_image = updates.productImage
+    if (updates.productImages !== undefined) patch.product_images = updates.productImages
     let { error } = await supabase.from('products').update(patch).eq('id', id)
-    // Same graceful fallback as addProduct — survive a missing usage_guide column.
-    if (error && /usage_guide/i.test(error.message)) {
+    // Same graceful fallback as addProduct — survive a missing newer column.
+    if (error && /usage_guide|product_images/i.test(error.message)) {
       const legacyPatch = { ...patch }
       delete legacyPatch.usage_guide
+      delete legacyPatch.product_images
       ;({ error } = await supabase.from('products').update(legacyPatch).eq('id', id))
     }
     if (error) reportError('Cập nhật sản phẩm', error)

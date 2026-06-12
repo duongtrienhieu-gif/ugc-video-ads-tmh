@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { X, ImagePlus, Sparkles, Loader2, ScanSearch, Plus } from 'lucide-react'
 import type { Product } from '../../stores/types'
 import { useAssetUrl } from '../../hooks/useAssetUrl'
+import { saveAsset } from '../../utils/assetStore'
 import { useSettingsStore } from '../../stores/settingsStore'
 import { useAppStore } from '../../stores/appStore'
 import { directGeminiVision } from '../../utils/gemini'
@@ -569,7 +570,7 @@ function parseExtracted(raw: string): Record<string, string> | null {
   return null
 }
 
-type FormState = { productImage: string; productName: string; productDescription: string; targetMarket: string; painPoints: string; usps: string; benefits: string; offer: string; ingredients: string; usageGuide: string }
+type FormState = { productImage: string; productImages: string[]; productName: string; productDescription: string; targetMarket: string; painPoints: string; usps: string; benefits: string; offer: string; ingredients: string; usageGuide: string }
 
 /** Detect CTA/marketing text that should NEVER appear in the ingredients field. */
 export function looksLikeCTA(text: string): boolean {
@@ -633,16 +634,67 @@ function applyExtracted(extracted: Record<string, string>, prev: FormState): { n
         v = stripped
         if (!v) continue
       }
-      ;(next as Record<string, string>)[key] = v
+      ;(next as unknown as Record<string, string>)[key] = v
       count++
     }
   }
   return { next, count }
 }
 
+/** One of the 4 required product-image slots. Self-contained: resolves its own
+ *  signed URL, has its own file input, shows upload spinner + remove button. */
+function ProductImageSlot({ index, refStr, uploading, onFile, onRemove }: {
+  index: number
+  refStr: string
+  uploading: boolean
+  onFile: (i: number, f: File) => void
+  onRemove: (i: number) => void
+}) {
+  const url = useAssetUrl(refStr || undefined)
+  const inputRef = useRef<HTMLInputElement>(null)
+  return (
+    <div className="relative h-20 w-20 shrink-0">
+      <button
+        type="button"
+        onClick={() => inputRef.current?.click()}
+        disabled={uploading}
+        className="group flex h-full w-full items-center justify-center overflow-hidden rounded-xl border border-dashed border-black/10 bg-black/[0.02] transition-colors hover:border-black/15 disabled:opacity-60"
+      >
+        {uploading ? (
+          <Loader2 className="h-4 w-4 animate-spin text-gray-400" />
+        ) : url ? (
+          <img src={url} alt="" className="h-full w-full object-cover" />
+        ) : (
+          <span className="flex flex-col items-center text-gray-400 transition-colors group-hover:text-gray-600">
+            <ImagePlus className="h-4 w-4" />
+            <span className="mt-0.5 text-[9px]">Ảnh {index + 1}</span>
+          </span>
+        )}
+      </button>
+      {url && !uploading && (
+        <button
+          type="button"
+          onClick={() => onRemove(index)}
+          className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-gray-500 text-white transition-colors hover:bg-red-500"
+        >
+          <X className="h-2.5 w-2.5" />
+        </button>
+      )}
+      <input
+        ref={inputRef}
+        type="file"
+        accept=".png,.jpg,.jpeg,.webp,image/png,image/jpeg,image/webp"
+        className="hidden"
+        onChange={(e) => { const f = e.target.files?.[0]; if (f) onFile(index, f); e.target.value = '' }}
+      />
+    </div>
+  )
+}
+
 export default function ProductForm({ item, onSave, onCancel }: ProductFormProps) {
-  const [form, setForm] = useState({
+  const [form, setForm] = useState<FormState>({
     productImage: item?.productImage ?? '',
+    productImages: item?.productImages ?? (item?.productImage ? [item.productImage] : []),
     productName: item?.productName ?? '',
     productDescription: item?.productDescription ?? '',
     targetMarket: item?.targetMarket ?? '',
@@ -658,11 +710,8 @@ export default function ProductForm({ item, onSave, onCancel }: ProductFormProps
   const [isAnalyzing, setIsAnalyzing] = useState(false)
   const [stagedScreenshots, setStagedScreenshots] = useState<File[]>([])
 
-  const fileRef = useRef<HTMLInputElement>(null)
   const screenshotRef = useRef<HTMLInputElement>(null)
-  const [localPreview, setLocalPreview] = useState<string | null>(null)
-  const resolvedAssetUrl = useAssetUrl(form.productImage)
-  const displayImage = localPreview ?? resolvedAssetUrl
+  const [uploadingSlot, setUploadingSlot] = useState<number | null>(null)
 
   const addToast = useAppStore((s) => s.addToast)
 
@@ -670,6 +719,7 @@ export default function ProductForm({ item, onSave, onCancel }: ProductFormProps
     if (item) {
       setForm({
         productImage: item.productImage,
+        productImages: item.productImages ?? (item.productImage ? [item.productImage] : []),
         productName: item.productName,
         productDescription: item.productDescription,
         targetMarket: item.targetMarket,
@@ -703,16 +753,31 @@ export default function ProductForm({ item, onSave, onCancel }: ProductFormProps
     return store.getGeminiApiKey()
   }
 
-  const handleImage = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (!file) return
-    const reader = new FileReader()
-    reader.onload = () => {
-      const dataUrl = reader.result as string
-      set('productImage', dataUrl)
-      setLocalPreview(dataUrl)
+  const handleSlotImage = async (index: number, file: File) => {
+    if (!file.type.startsWith('image/')) { addToast('File phải là ảnh', 'error'); return }
+    if (file.size > 10 * 1024 * 1024) { addToast('Ảnh tối đa 10MB', 'error'); return }
+    setUploadingSlot(index)
+    try {
+      const ref = await saveAsset(file, file.type || 'image/jpeg')
+      setForm((f) => {
+        const imgs = [...f.productImages]
+        imgs[index] = ref
+        // Keep legacy productImage = first non-empty slot for back-compat.
+        return { ...f, productImages: imgs, productImage: imgs.find((s) => !!s && s.trim() !== '') ?? ref }
+      })
+    } catch (err) {
+      addToast(`Tải ảnh thất bại: ${err instanceof Error ? err.message.slice(0, 60) : 'lỗi'}`, 'error')
+    } finally {
+      setUploadingSlot(null)
     }
-    reader.readAsDataURL(file)
+  }
+
+  const removeSlot = (index: number) => {
+    setForm((f) => {
+      const imgs = [...f.productImages]
+      imgs[index] = ''
+      return { ...f, productImages: imgs, productImage: imgs.find((s) => !!s && s.trim() !== '') ?? '' }
+    })
   }
 
   const handleFetchInfo = async () => {
@@ -904,6 +969,10 @@ export default function ProductForm({ item, onSave, onCancel }: ProductFormProps
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     if (!form.productName.trim() || !form.productDescription.trim() || !form.targetMarket.trim()) return
+    if (form.productImages.filter((s) => s && s.trim() !== '').length < 4) {
+      addToast('Vui lòng tải đủ 4 ảnh sản phẩm trước khi lưu', 'error')
+      return
+    }
     onSave(form)
   }
 
@@ -1017,19 +1086,28 @@ export default function ProductForm({ item, onSave, onCancel }: ProductFormProps
         />
       </div>
 
-      {/* Product image upload */}
-      <button
-        type="button"
-        onClick={() => fileRef.current?.click()}
-        className="group flex h-24 w-24 items-center justify-center rounded-xl border border-dashed border-black/10 bg-black/[0.02] transition-colors hover:border-black/15 overflow-hidden"
-      >
-        {displayImage ? (
-          <img src={displayImage} alt="" className="h-full w-full object-cover" />
-        ) : (
-          <ImagePlus className="h-5 w-5 text-gray-400 transition-colors group-hover:text-gray-600" />
-        )}
-      </button>
-      <input ref={fileRef} type="file" accept=".png,.jpg,.jpeg,.webp,image/png,image/jpeg,image/webp" className="hidden" onChange={handleImage} />
+      {/* Product images — 4 required (diverse angles: packaging, open/closed lid, box...) */}
+      <div className="flex flex-col gap-1.5">
+        <span className="text-[11px] font-medium uppercase tracking-widest text-gray-500">
+          Ảnh sản phẩm *
+          <span className="ml-1 normal-case tracking-normal text-gray-400">(bắt buộc đủ 4 — nhiều góc: bao bì, mở/đóng nắp, hộp...)</span>
+        </span>
+        <div className="flex flex-wrap gap-2">
+          {[0, 1, 2, 3].map((i) => (
+            <ProductImageSlot
+              key={i}
+              index={i}
+              refStr={form.productImages[i] ?? ''}
+              uploading={uploadingSlot === i}
+              onFile={handleSlotImage}
+              onRemove={removeSlot}
+            />
+          ))}
+        </div>
+        <span className="text-[10px] text-gray-400">
+          {form.productImages.filter((s) => s && s.trim() !== '').length}/4 ảnh
+        </span>
+      </div>
 
       {FIELDS.map(({ key, label, type, required, placeholder }) => (
         <label key={key} className="flex flex-col gap-1">
