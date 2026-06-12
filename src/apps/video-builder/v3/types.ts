@@ -537,6 +537,17 @@ export const INSERT_STAGE_LABEL_VI: Record<InsertRenderStage, string> = {
 // One of N inserts. Each tied to a preset. Z33: extended with multi-stage
 // + scriptKeyword (for timing engine traceability) + suggestedAt timestamp.
 
+// Director upgrade — how a scene is FRAMED with respect to the creator's face.
+//   'creator'      → the creator is on screen, face visible (holding / using /
+//                    reacting) — the current default, identity-locked to the avatar.
+//   'hands_noface' → no face: only hands + the product, in its real-world use
+//                    context (sprinkling salt over a pan, pumping a tyre roadside,
+//                    applying serum). The renderer drops the avatar reference for
+//                    these so the shot is a genuine product-in-use B-roll.
+// Universal: the director infers WHICH framing fits each scene from the product's
+// usageGuide + the spoken line — never hardcoded per niche.
+export type CameraFraming = 'creator' | 'hands_noface'
+
 export interface ActionInsertClip {
   /** Unique id within the project */
   insertId: number
@@ -559,6 +570,11 @@ export interface ActionInsertClip {
    *  Defaults to 'cut' when absent (back-compat). The Director chooses this
    *  per scene based on intent (teaching → overlay; reveal/demo → cut). */
   layout?: InsertLayout
+
+  /** Director upgrade — face-vs-no-face framing (see CameraFraming). Defaults to
+   *  'creator' when absent (back-compat). Only acted on by the renderer for
+   *  free action scenes; CTA / before-after / emotion always stay 'creator'. */
+  cameraFraming?: CameraFraming
 
   /** asset:xxx of the source still (product or scene shot) */
   keyframeRef?: string

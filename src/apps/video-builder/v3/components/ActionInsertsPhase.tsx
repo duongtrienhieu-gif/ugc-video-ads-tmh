@@ -297,6 +297,7 @@ export default function ActionInsertsPhase({ onContinue }: Props) {
         conceptPrompt: s.conceptPrompt,
         renderMode: s.renderMode,
         layout: s.layout,
+        cameraFraming: s.cameraFraming,
         // Z98 #5 — sticker scenes carry their style + text + word anchor.
         stickerStyle: s.stickerStyle,
         stickerText: s.stickerText,

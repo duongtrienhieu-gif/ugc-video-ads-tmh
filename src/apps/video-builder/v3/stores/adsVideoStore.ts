@@ -86,7 +86,7 @@ interface AdsVideoStoreState {
    *  + sensible defaults (stage='idle', status='idle', resolution from
    *  current cost mode). Used by "Apply suggestions" button. */
   bulkAddInsertsFromPresets: (
-    items: Array<{ presetId: ActionPresetId; durationSec: number; scriptKeyword?: string; voiceTimestampSec?: number | null; quote?: string; conceptPrompt?: string; renderMode?: ActionInsertClip['renderMode']; layout?: ActionInsertClip['layout']; stickerStyle?: ActionInsertClip['stickerStyle']; stickerText?: string; stickerWordAnchor?: string }>,
+    items: Array<{ presetId: ActionPresetId; durationSec: number; scriptKeyword?: string; voiceTimestampSec?: number | null; quote?: string; conceptPrompt?: string; renderMode?: ActionInsertClip['renderMode']; layout?: ActionInsertClip['layout']; cameraFraming?: ActionInsertClip['cameraFraming']; stickerStyle?: ActionInsertClip['stickerStyle']; stickerText?: string; stickerWordAnchor?: string }>,
   ) => void
   /** Patch one insert by insertId. */
   patchInsert:  (insertId: number, patch: Partial<ActionInsertClip>) => void
@@ -463,6 +463,7 @@ export const useAdsVideoStore = create<AdsVideoStoreState>((set, get) => ({
           voiceTimestampSec: item.voiceTimestampSec ?? null,
           renderMode: item.renderMode ?? defaultInsertRenderMode(item.presetId),
           layout: item.layout ?? 'cut',
+          ...(item.cameraFraming ? { cameraFraming: item.cameraFraming } : {}),
           ...(item.quote ? { quote: item.quote } : {}),
           ...(item.conceptPrompt ? { conceptPrompt: item.conceptPrompt } : {}),
           // Z98 #5 — sticker fields (only present on sticker scenes).

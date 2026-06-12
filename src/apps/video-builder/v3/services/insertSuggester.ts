@@ -15,6 +15,7 @@
 import { directGeminiText } from '../../../../utils/gemini'
 import type {
   ActionPresetId, GeneratedScript, ScriptBlockId, ScriptLang, InsertRenderMode, InsertLayout,
+  CameraFraming,
 } from '../types'
 import { SCRIPT_LANG_GEMINI_NAME } from '../types'
 import type { StickerStyle } from './stickerRenderer'
@@ -60,6 +61,9 @@ export interface InsertSuggestion {
   /** Z69 — Director-picked layout: full-screen 'cut' or corner 'overlay_corner'.
    *  See InsertLayout in types.ts. */
   layout?: InsertLayout
+  /** Director upgrade — face-vs-no-face framing the director picked for this
+   *  scene (see CameraFraming). Undefined → 'creator'. */
+  cameraFraming?: CameraFraming
   /** Z98 #5 — sticker scene style + text + word anchor (local canvas text pop). */
   stickerStyle?: StickerStyle
   stickerText?: string
@@ -286,6 +290,9 @@ const DIRECTOR_RESPONSE_SCHEMA = {
           motionKind:    { type: 'string', enum: ['graphic', 'emotion'] },
           labels:        { type: 'array', items: { type: 'string' } },
           layout:        { type: 'string', enum: ['cut', 'overlay_corner'] },
+          // Director upgrade — face-vs-no-face framing (D1: parsed + plumbed; the
+          // renderer acts on it in D3). Optional — defaults to 'creator'.
+          cameraFraming: { type: 'string', enum: ['creator', 'hands_noface'] },
           // Z98 — director's own call: is this line describing a mechanism that
           // can't be filmed (a process inside the body OR inside a device) and
           // therefore needs a 3D animation? Universal across niches (skincare /
@@ -980,6 +987,13 @@ OUTPUT strict JSON, no fences:
       is3D ? 'cut'                                  // Z98 — 3D mechanism = full-screen cut
         : (isStaticIllustration || isGraphicTeaching) ? 'overlay_corner'
         : (directorLayout ?? 'cut')
+    // Director upgrade (D1) — pass the director's face/no-face framing through.
+    // Parsed + plumbed here; the renderer only acts on it in D3. Until D2 teaches
+    // the director to emit it, this is always undefined → 'creator' (no change).
+    const cameraFraming: CameraFraming | undefined =
+      item.cameraFraming === 'hands_noface' || item.cameraFraming === 'creator'
+        ? item.cameraFraming
+        : undefined
     out.push({
       presetId,
       matchCount: 0,
@@ -993,6 +1007,7 @@ OUTPUT strict JSON, no fences:
       quote,
       renderMode: effectiveRenderMode,
       layout,
+      cameraFraming,
     })
   }
   // Z69/Z79 — Trust & pacing safety net (post-parse):
@@ -1412,6 +1427,8 @@ interface RawDirectorScene {
    *  as a 3D scientific animation. Optional — the MECHANISM_RE regex still
    *  fires as a body-niche safety net when the director forgets the flag. */
   isMechanism?: boolean
+  /** Director upgrade — face-vs-no-face framing (D1: parsed; D3: rendered). */
+  cameraFraming?: 'creator' | 'hands_noface'
 }
 
 // Z98 #5 — a sticker pop from the director's separate `stickers` array.
