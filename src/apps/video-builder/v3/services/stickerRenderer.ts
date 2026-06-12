@@ -66,7 +66,7 @@ const FONT = 64           // main text px
 const PAD_X = 40
 const PAD_Y = 26
 const RADIUS = 30
-const EMOJI = Math.round(FONT * 1.5)  // emoji 1.5× the text size (user request)
+const EMOJI = FONT  // emoji 1:1 with the text size (user request)
 const GAP = 16            // gap between emoji and text
 // Hand-drawn look (Patrick Hand, loaded in index.html — has a Vietnamese subset).
 // Be Vietnam Pro is the per-glyph fallback so any diacritic Patrick Hand lacks
