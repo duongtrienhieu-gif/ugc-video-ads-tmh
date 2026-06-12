@@ -18,7 +18,7 @@
 
 import { useMemo, useEffect, useState } from 'react'
 import {
-  Loader2, Sparkles, Wand2, RefreshCw, ChevronRight, AlertCircle,
+  Loader2, Sparkles, RefreshCw, ChevronRight, AlertCircle,
   Clock, Mic2, Lightbulb, Globe, Package, UserRound,
   Library, UserCircle2, Search, Check, Play, Plus, X,
 } from 'lucide-react'
@@ -29,14 +29,12 @@ import BankPicker from '../../../../components/BankPicker'
 import type { Model, Product } from '../../../../stores/types'
 import { useAdsVideoStore } from '../stores/adsVideoStore'
 import {
-  SCRIPT_LANG_LABEL_VI,
-  type AdStructure, type AdAngle, type ScriptTargetDurationSec,
-  type ScriptLang,
+  SCRIPT_LANG_LABEL_VI, HOOK_ARCHETYPES,
+  type AdStructure, type ScriptTargetDurationSec, type ScriptLang,
 } from '../types'
-import { AD_STRUCTURES, AD_STRUCTURE_ORDER } from '../services/adStructures'
-import { AD_ANGLES, AD_ANGLE_ORDER } from '../services/adAngles'
+import { AD_STRUCTURES, QUICK_GEN_FRAMEWORKS } from '../services/adStructures'
 import { recomputeBlockDurations, estimateReadDurationForVoice } from '../services/voiceTimingEstimator'
-import { generateScript, detectCertClaims } from '../services/scriptGenerator'
+import { generateScript, generateHooks, detectCertClaims } from '../services/scriptGenerator'
 import {
   listVoices, listSharedVoices, addSharedVoice,
   type ElevenLabsVoice, type SharedVoice,
@@ -70,7 +68,6 @@ export default function ScriptVoicePhase({ onContinue }: Props) {
   const setAvatar  = useAdsVideoStore((s) => s.setAvatar)
   const setProduct = useAdsVideoStore((s) => s.setProduct)
   const setAdStructure = useAdsVideoStore((s) => s.setAdStructure)
-  const setAdAngle     = useAdsVideoStore((s) => s.setAdAngle)
   const setTargetDurationSec = useAdsVideoStore((s) => s.setTargetDurationSec)
   const setOutputLang        = useAdsVideoStore((s) => s.setOutputLang)
   const setUseOwnScript      = useAdsVideoStore((s) => s.setUseOwnScript)
@@ -92,6 +89,21 @@ export default function ScriptVoicePhase({ onContinue }: Props) {
   const [pickerMode, setPickerMode] = useState<'avatar' | 'product' | 'script' | null>(null)
   const [langTouched, setLangTouched] = useState(false)
   const [acknowledgedCerts, setAcknowledgedCerts] = useState(false)
+  // #6 — Tab A "⚡ Tạo nhanh" (AI viết, default) vs Tab B "📝 Dán" (own script).
+  const [genTab, setGenTab] = useState<'quick' | 'own'>('quick')
+  const [isGeneratingHooks, setIsGeneratingHooks] = useState(false)
+
+  // #6 — app-suggested framework from the product fields (universal keyword
+  // heuristic across vi/ms/en; just a highlight, the user can pick any).
+  const suggestedFramework = useMemo<AdStructure>(() => {
+    const p = state.inputs.product
+    if (!p) return 'PROBLEM_SOLUTION'
+    const txt = `${p.benefits ?? ''} ${p.usps ?? ''} ${p.painPoints ?? ''} ${p.productDescription ?? ''} ${p.ingredients ?? ''}`.toLowerCase()
+    if (/before|after|trước|sau|sebelum|selepas|kết quả|hasil|transform/.test(txt)) return 'BEFORE_AFTER'
+    if (/review|đánh giá|ngàn người|nghìn người|khách|ulasan|testimoni|best.?sell|bán chạy|laris/.test(txt)) return 'SOCIAL_PROOF'
+    if (/ingredient|thành phần|cơ chế|công nghệ|bahan|teknologi|mechanism|chiết xuất|extract/.test(txt)) return 'AUTHORITY_EXPERT'
+    return 'PROBLEM_SOLUTION'
+  }, [state.inputs.product])
 
   // useOwnScript follows the script box: text present → segment it verbatim;
   // empty → let the AI write. Keeps the two paths from needing a manual toggle.
@@ -126,55 +138,97 @@ export default function ScriptVoicePhase({ onContinue }: Props) {
     setLangTouched(false)  // re-detect language for the new script
   }
 
-  // ── Generate (segment own-script OR AI-write) then advance ─────────────────
+  // Build a RICH product brief from the real bank fields so the AI actually
+  // understands the product (painPoints/benefits/ingredients/usageGuide/offer).
+  // The AI reads + understands this brief; it is not recited verbatim. Shared by
+  // the hook generator and the script generator.
+  const buildProductBrief = () => {
+    const p = state.inputs.product
+    const pitchParts: string[] = []
+    if (p?.productDescription) pitchParts.push(p.productDescription)
+    if (p?.targetMarket)       pitchParts.push(`Target market: ${p.targetMarket}`)
+    if (p?.painPoints)         pitchParts.push(`Pain points: ${p.painPoints}`)
+    if (p?.benefits)           pitchParts.push(`Benefits: ${p.benefits}`)
+    if (p?.usps)               pitchParts.push(`USPs: ${p.usps}`)
+    if (p?.ingredients)        pitchParts.push(`Ingredients & how they work: ${p.ingredients}`)
+    if (p?.usageGuide)         pitchParts.push(`How to use: ${p.usageGuide}`)
+    if (p?.offer)              pitchParts.push(`Offer: ${p.offer}`)
+    const legacyPitch = (p as { jsonProfile?: { pitch?: string } } | null)?.jsonProfile?.pitch
+    const productPitch = pitchParts.length > 0
+      ? pitchParts.join('\n')
+      : (legacyPitch ?? 'Premium UGC product for Malaysian/Vietnamese market.')
+    const creatorDescription = state.inputs.avatar
+      ? `${state.inputs.avatar.name ?? 'Creator'} — ${state.inputs.avatar.notes ?? 'natural casual UGC vibe'}`
+      : undefined
+    return { productName: p?.productName ?? 'Product', productPitch, creatorDescription }
+  }
+
+  // ── #6 hook layer — generate 6 hooks (one per archetype) for the user to pick ─
+  const handleGenerateHooks = async () => {
+    if (!geminiKey) { addToast('Chưa có Gemini API key trong Settings', 'error'); return }
+    if (!state.inputs.product) { addToast('Chưa chọn sản phẩm', 'error'); return }
+    setIsGeneratingHooks(true)
+    setScriptBrainError(null)
+    try {
+      const brief = buildProductBrief()
+      const hooks = await generateHooks({
+        geminiKey,
+        lang: brain.outputLang,
+        framework: brain.structure,
+        productName: brief.productName,
+        productPitch: brief.productPitch,
+        creatorDescription: brief.creatorDescription,
+      })
+      setHookVariants(hooks)
+      pickHookVariant(-1)
+      addToast(`✓ ${hooks.length} hook — chọn 1 cái rồi tạo kịch bản`, 'success')
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      setScriptBrainError(msg.slice(0, 240))
+      addToast(`Tạo hook lỗi: ${msg}`, 'error')
+    } finally {
+      setIsGeneratingHooks(false)
+    }
+  }
+
+  // ── Generate (quick AI-write around the picked hook, OR segment own-script) ──
   const handleGenerateAndContinue = async () => {
     if (!geminiKey) { addToast('Chưa có Gemini API key trong Settings', 'error'); return }
     if (!state.inputs.product) { addToast('Chưa chọn sản phẩm', 'error'); return }
     if (!state.inputs.avatar)  { addToast('Chưa chọn avatar', 'error'); return }
 
+    const isQuick = genTab === 'quick'
+    const chosenHook = isQuick && brain.pickedHookIdx >= 0
+      ? brain.hookVariants[brain.pickedHookIdx]?.text
+      : undefined
+    if (isQuick && !chosenHook) { addToast('Tạo hook và chọn 1 cái trước', 'error'); return }
+
     setIsGeneratingScript(true)
     setScriptBrainError(null)
     try {
-      // Build a RICH product brief from the real bank fields so the script AI
-      // actually understands the product. Previously this only read an absent
-      // jsonProfile.pitch and ALWAYS fell back to a generic English line — the
-      // v3 script ignored painPoints/benefits/ingredients/usageGuide entirely.
-      // The AI reads + understands this brief; it is not recited verbatim.
-      const p = state.inputs.product
-      const pitchParts: string[] = []
-      if (p?.productDescription) pitchParts.push(p.productDescription)
-      if (p?.targetMarket)       pitchParts.push(`Target market: ${p.targetMarket}`)
-      if (p?.painPoints)         pitchParts.push(`Pain points: ${p.painPoints}`)
-      if (p?.benefits)           pitchParts.push(`Benefits: ${p.benefits}`)
-      if (p?.usps)               pitchParts.push(`USPs: ${p.usps}`)
-      if (p?.ingredients)        pitchParts.push(`Ingredients & how they work: ${p.ingredients}`)
-      if (p?.usageGuide)         pitchParts.push(`How to use: ${p.usageGuide}`)
-      if (p?.offer)              pitchParts.push(`Offer: ${p.offer}`)
-      const legacyPitch = (p as { jsonProfile?: { pitch?: string } } | null)?.jsonProfile?.pitch
-      const productPitch = pitchParts.length > 0
-        ? pitchParts.join('\n')
-        : (legacyPitch ?? 'Premium UGC product for Malaysian/Vietnamese market.')
-      const creatorDescription = state.inputs.avatar
-        ? `${state.inputs.avatar.name ?? 'Creator'} — ${state.inputs.avatar.notes ?? 'natural casual UGC vibe'}`
-        : undefined
-
+      const brief = buildProductBrief()
       const result = await generateScript({
         geminiKey,
         structure: brain.structure,
         angle: brain.angle,
         targetDurationSec: brain.targetDurationSec,
-        productName: state.inputs.product.productName ?? 'Product',
-        productPitch,
-        creatorDescription,
+        productName: brief.productName,
+        productPitch: brief.productPitch,
+        creatorDescription: brief.creatorDescription,
         lang: brain.outputLang,
-        useOwnScript: hasScriptText,
+        useOwnScript: !isQuick && hasScriptText,
         ownScriptText: state.inputs.script,
+        chosenHook,
       })
 
       const refined = recomputeBlockDurations(result.script)
       setGeneratedScript(refined)
-      setHookVariants(result.hookVariants)
-      pickHookVariant(-1)
+      // Quick mode keeps the user's 6 hooks (the picked one is already baked into
+      // the script); only the legacy fresh/own paths replace the hook list.
+      if (!isQuick) {
+        setHookVariants(result.hookVariants)
+        pickHookVariant(-1)
+      }
 
       const claims = detectCertClaims(refined)
       if (claims.length === 0) {
@@ -272,6 +326,10 @@ export default function ScriptVoicePhase({ onContinue }: Props) {
 
   const inputsOk = !!state.inputs.product && !!state.inputs.avatar
   const canGenerate = inputsOk && !!geminiKey && !brain.isGeneratingScript
+  // Quick tab needs a picked hook; own tab needs pasted text.
+  const canGenerateScript = canGenerate && (
+    genTab === 'own' ? hasScriptText : brain.pickedHookIdx >= 0
+  )
 
   // ── Render ─────────────────────────────────────────────────────────────────
   return (
@@ -305,123 +363,186 @@ export default function ScriptVoicePhase({ onContinue }: Props) {
           />
         </div>
 
-        {/* ── Script (MAIN) + language ──────────────────────────────────────── */}
-        <div className="mt-3 rounded-xl border border-black/10 bg-white p-3">
-          <div className="flex flex-wrap items-center gap-2">
-            <p className="text-[11px] font-bold uppercase tracking-widest text-gray-500">Kịch bản</p>
-            <button
-              onClick={() => setPickerMode('script')}
-              className="text-[10px] font-semibold text-violet-600 hover:text-violet-700"
-            >
-              Chọn kịch bản có sẵn →
-            </button>
-            {hasScriptText && (
-              <button onClick={() => { setScript(''); setLangTouched(false) }} className="text-[10px] text-gray-400 hover:text-red-500">
-                Xoá
-              </button>
-            )}
-            {/* Language — auto-detected, editable */}
-            <div className="ml-auto flex items-center gap-1.5">
-              <Globe className="h-3.5 w-3.5 text-gray-400" />
-              <select
-                value={brain.outputLang}
-                onChange={(e) => { setLangTouched(true); setOutputLang(e.target.value as ScriptLang) }}
-                className="rounded-lg border border-black/10 bg-white px-2 py-1 text-[11px] font-semibold focus:border-violet-400 focus:outline-none"
-                title="Ngôn ngữ output — khoá script, voice và keyword B-Roll. App tự đoán từ kịch bản, sửa nếu sai."
-              >
-                {(['ms', 'vi', 'en'] as ScriptLang[]).map((lng) => (
-                  <option key={lng} value={lng}>{SCRIPT_LANG_LABEL_VI[lng]}</option>
-                ))}
-              </select>
-            </div>
-          </div>
-          <textarea
-            value={state.inputs.script}
-            onChange={(e) => setScript(e.target.value)}
-            rows={6}
-            placeholder="Dán kịch bản của bạn vào đây — app giữ nguyên 100% câu chữ, chỉ chia phân đoạn ngầm để dựng video. Để TRỐNG nếu muốn AI tự viết."
-            className="mt-2 w-full resize-y rounded-lg border border-black/10 bg-black/[0.02] p-2 text-[13px] leading-relaxed focus:border-violet-400 focus:outline-none"
-          />
-          {hasScriptText ? (
-            <p className="mt-1.5 text-[10px] text-gray-500">
-              Dùng kịch bản của bạn (giữ nguyên câu chữ) · ngôn ngữ đã đoán: <b>{SCRIPT_LANG_LABEL_VI[brain.outputLang]}</b>
-              {liveDurationSec != null && <> · ~{liveDurationSec.toFixed(1)}s</>}
-              {liveDurationSec != null && liveDurationSec > 60 && (
-                <span className="ml-1.5 rounded-full bg-sky-100 px-2 py-0.5 text-[10px] font-bold text-sky-800">
-                  Ad dài — TikTok thường &lt;60s
-                </span>
-              )}
-            </p>
-          ) : (
-            <p className="mt-1.5 text-[10px] text-gray-400">
-              Ô trống → AI sẽ tự viết theo cấu trúc + angle + thời lượng bên dưới.
-            </p>
-          )}
+        {/* ── Kịch bản — Tab ⚡ Tạo nhanh (AI viết) / 📝 Dán ────────────────── */}
+        <div className="mt-3 flex items-center gap-1.5">
+          <button
+            onClick={() => setGenTab('quick')}
+            className={`flex items-center gap-1 rounded-lg px-3 py-1.5 text-[12px] font-bold transition-all ${
+              genTab === 'quick' ? 'bg-violet-600 text-white shadow' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+            }`}
+          >
+            ⚡ Tạo nhanh
+          </button>
+          <button
+            onClick={() => setGenTab('own')}
+            className={`flex items-center gap-1 rounded-lg px-3 py-1.5 text-[12px] font-bold transition-all ${
+              genTab === 'own' ? 'bg-violet-600 text-white shadow' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+            }`}
+          >
+            📝 Dán kịch bản
+          </button>
+          <button
+            onClick={() => setPickerMode('script')}
+            className="ml-auto text-[10px] font-semibold text-violet-600 hover:text-violet-700"
+          >
+            Chọn kịch bản có sẵn →
+          </button>
         </div>
 
-        {/* ── AI-write controls (only when no script pasted) ────────────────── */}
-        {!hasScriptText && (
-          <div className="mt-3 grid grid-cols-1 gap-3 lg:grid-cols-3">
-            <PickerCard title="Cấu trúc ad" icon={Lightbulb}>
-              <div className="grid grid-cols-2 gap-1.5">
-                {AD_STRUCTURE_ORDER.map((s) => {
-                  const cfg = AD_STRUCTURES[s]
-                  const isActive = brain.structure === s
-                  return (
-                    <button
-                      key={s}
-                      onClick={() => setAdStructure(s as AdStructure)}
-                      title={cfg.descriptionVi}
-                      className={`flex items-center gap-1.5 rounded-lg border px-2 py-1.5 text-left text-[11px] font-semibold transition-all ${
-                        isActive ? TONE_BG[cfg.tone] : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50'
-                      }`}
-                    >
-                      <span className="text-sm">{cfg.emoji}</span>
-                      <span className="truncate">{cfg.labelVi}</span>
-                    </button>
-                  )
-                })}
+        {genTab === 'own' ? (
+          /* ── Tab B: dán kịch bản của bạn (giữ nguyên câu chữ) ── */
+          <div className="mt-2 rounded-xl border border-black/10 bg-white p-3">
+            <div className="flex items-center gap-2">
+              {hasScriptText && (
+                <button onClick={() => { setScript(''); setLangTouched(false) }} className="text-[10px] text-gray-400 hover:text-red-500">
+                  Xoá
+                </button>
+              )}
+              <div className="ml-auto flex items-center gap-1.5">
+                <Globe className="h-3.5 w-3.5 text-gray-400" />
+                <select
+                  value={brain.outputLang}
+                  onChange={(e) => { setLangTouched(true); setOutputLang(e.target.value as ScriptLang) }}
+                  className="rounded-lg border border-black/10 bg-white px-2 py-1 text-[11px] font-semibold focus:border-violet-400 focus:outline-none"
+                  title="Ngôn ngữ output — khoá script, voice và keyword B-Roll. App tự đoán từ kịch bản, sửa nếu sai."
+                >
+                  {(['ms', 'vi', 'en'] as ScriptLang[]).map((lng) => (
+                    <option key={lng} value={lng}>{SCRIPT_LANG_LABEL_VI[lng]}</option>
+                  ))}
+                </select>
               </div>
-            </PickerCard>
-
-            <PickerCard title="Ad Angle (tone)" icon={Wand2}>
-              <div className="grid grid-cols-2 gap-1.5">
-                {AD_ANGLE_ORDER.map((a) => {
-                  const cfg = AD_ANGLES[a]
-                  const isActive = brain.angle === a
-                  return (
-                    <button
-                      key={a}
-                      onClick={() => setAdAngle(a as AdAngle)}
-                      title={cfg.descriptionVi}
-                      className={`flex items-center gap-1.5 rounded-lg border px-2 py-1.5 text-left text-[11px] font-semibold transition-all ${
-                        isActive ? TONE_BG[cfg.tone] : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50'
-                      }`}
-                    >
-                      <span className="text-sm">{cfg.emoji}</span>
-                      <span className="truncate">{cfg.labelVi}</span>
-                    </button>
-                  )
-                })}
-              </div>
-            </PickerCard>
-
-            <PickerCard title="Thời lượng target" icon={Clock}>
+            </div>
+            <textarea
+              value={state.inputs.script}
+              onChange={(e) => setScript(e.target.value)}
+              rows={6}
+              placeholder="Dán kịch bản của bạn vào đây — app giữ nguyên 100% câu chữ, chỉ chia phân đoạn ngầm để dựng video."
+              className="mt-2 w-full resize-y rounded-lg border border-black/10 bg-black/[0.02] p-2 text-[13px] leading-relaxed focus:border-violet-400 focus:outline-none"
+            />
+            <p className="mt-1.5 text-[10px] text-gray-500">
+              {hasScriptText ? (
+                <>Giữ nguyên câu chữ · ngôn ngữ đã đoán: <b>{SCRIPT_LANG_LABEL_VI[brain.outputLang]}</b>
+                  {liveDurationSec != null && <> · ~{liveDurationSec.toFixed(1)}s</>}
+                  {liveDurationSec != null && liveDurationSec > 60 && (
+                    <span className="ml-1.5 rounded-full bg-sky-100 px-2 py-0.5 text-[10px] font-bold text-sky-800">
+                      Ad dài — TikTok thường &lt;60s
+                    </span>
+                  )}
+                </>
+              ) : 'Dán kịch bản hoàn chỉnh của bạn, hoặc chuyển sang ⚡ Tạo nhanh để AI viết.'}
+            </p>
+          </div>
+        ) : (
+          /* ── Tab A: ⚡ Tạo nhanh — AI viết quanh hook bạn chọn ── */
+          <div className="mt-2 flex flex-col gap-3">
+            <PickerCard title="Ngôn ngữ đích" icon={Globe}>
               <div className="grid grid-cols-3 gap-1.5">
-                {([40, 50, 60] as ScriptTargetDurationSec[]).map((d) => (
+                {(['vi', 'ms', 'en'] as ScriptLang[]).map((lng) => (
                   <button
-                    key={d}
-                    onClick={() => setTargetDurationSec(d)}
+                    key={lng}
+                    onClick={() => { setLangTouched(true); setOutputLang(lng) }}
                     className={`rounded-lg border px-2 py-2 text-center text-[12px] font-bold transition-all ${
-                      brain.targetDurationSec === d
+                      brain.outputLang === lng
                         ? 'border-violet-400 bg-violet-100 text-violet-800'
                         : 'border-gray-200 bg-white text-gray-500 hover:bg-gray-50'
                     }`}
                   >
-                    {d}s
+                    {SCRIPT_LANG_LABEL_VI[lng]}
                   </button>
                 ))}
               </div>
+            </PickerCard>
+
+            <div className="grid gap-3 lg:grid-cols-2">
+              <PickerCard title="Kiểu kịch bản (framework)" icon={Lightbulb}>
+                <div className="grid grid-cols-2 gap-1.5">
+                  {QUICK_GEN_FRAMEWORKS.map((s) => {
+                    const cfg = AD_STRUCTURES[s]
+                    const isActive = brain.structure === s
+                    const isSuggested = suggestedFramework === s
+                    return (
+                      <button
+                        key={s}
+                        onClick={() => setAdStructure(s)}
+                        title={cfg.descriptionVi}
+                        className={`relative flex items-center gap-1.5 rounded-lg border px-2 py-1.5 text-left text-[11px] font-semibold transition-all ${
+                          isActive ? TONE_BG[cfg.tone] : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50'
+                        }`}
+                      >
+                        <span className="text-sm">{cfg.emoji}</span>
+                        <span className="truncate">{cfg.labelVi}</span>
+                        {isSuggested && !isActive && (
+                          <span className="absolute -right-1 -top-1.5 rounded-full bg-emerald-500 px-1.5 py-0.5 text-[8px] font-bold text-white">Gợi ý</span>
+                        )}
+                      </button>
+                    )
+                  })}
+                </div>
+              </PickerCard>
+
+              <PickerCard title="Thời lượng" icon={Clock}>
+                <div className="grid grid-cols-3 gap-1.5">
+                  {([40, 50, 60] as ScriptTargetDurationSec[]).map((d) => (
+                    <button
+                      key={d}
+                      onClick={() => setTargetDurationSec(d)}
+                      className={`rounded-lg border px-2 py-2 text-center text-[12px] font-bold transition-all ${
+                        brain.targetDurationSec === d
+                          ? 'border-violet-400 bg-violet-100 text-violet-800'
+                          : 'border-gray-200 bg-white text-gray-500 hover:bg-gray-50'
+                      }`}
+                    >
+                      {d}s
+                    </button>
+                  ))}
+                </div>
+              </PickerCard>
+            </div>
+
+            <PickerCard title="Hook · 3 giây đầu (quyết định giữ chân)" icon={Sparkles}>
+              <div className="mb-2 flex items-center justify-between gap-2">
+                <p className="text-[10px] text-gray-500">
+                  {brain.hookVariants.length === 0
+                    ? 'Bấm tạo → chọn 1 hook mạnh nhất, AI viết kịch bản bám hook đó.'
+                    : 'Chọn 1 hook — kịch bản sẽ được viết bám theo nó.'}
+                </p>
+                <button
+                  onClick={handleGenerateHooks}
+                  disabled={!inputsOk || !geminiKey || isGeneratingHooks}
+                  className="flex shrink-0 items-center gap-1 rounded-full bg-violet-600 px-3 py-1.5 text-[11px] font-bold text-white transition-all hover:bg-violet-700 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {isGeneratingHooks
+                    ? <><Loader2 className="h-3 w-3 animate-spin" /> Đang tạo...</>
+                    : <><RefreshCw className="h-3 w-3" /> {brain.hookVariants.length ? 'Đổi 6 hook' : 'Tạo 6 hook'}</>}
+                </button>
+              </div>
+              {brain.hookVariants.length > 0 && (
+                <div className="flex flex-col gap-1.5">
+                  {brain.hookVariants.map((h, i) => {
+                    const picked = brain.pickedHookIdx === i
+                    const arche = h.archetype ? HOOK_ARCHETYPES[h.archetype] : null
+                    return (
+                      <button
+                        key={i}
+                        onClick={() => pickHookVariant(i)}
+                        className={`rounded-lg border p-2 text-left transition-all ${
+                          picked ? 'border-violet-500 bg-violet-50 ring-1 ring-violet-300' : 'border-gray-200 bg-white hover:bg-gray-50'
+                        }`}
+                      >
+                        <div className="mb-1 flex items-center justify-between gap-2">
+                          {arche && (
+                            <span className="rounded-full bg-gray-100 px-1.5 py-0.5 text-[9px] font-bold text-gray-600">
+                              {arche.emoji} {arche.labelVi}
+                            </span>
+                          )}
+                          {picked && <Check className="h-3.5 w-3.5 text-violet-600" />}
+                        </div>
+                        <p className="text-[12px] leading-snug text-gray-800">{h.text}</p>
+                      </button>
+                    )
+                  })}
+                </div>
+              )}
             </PickerCard>
           </div>
         )}
@@ -649,12 +770,12 @@ export default function ScriptVoicePhase({ onContinue }: Props) {
         <div className="mt-4 flex items-center justify-between gap-3 rounded-xl border border-violet-200 bg-gradient-to-r from-violet-50 to-pink-50 p-4">
           <div className="min-w-0">
             <p className="text-sm font-bold text-gray-900">
-              {hasScriptText ? 'Dùng kịch bản của bạn' : 'AI tự viết kịch bản'}
+              {genTab === 'own' ? 'Dùng kịch bản của bạn' : 'AI viết kịch bản nhanh'}
             </p>
             <p className="text-[11px] text-gray-500">
-              {hasScriptText
+              {genTab === 'own'
                 ? `Giữ nguyên câu chữ · ${SCRIPT_LANG_LABEL_VI[brain.outputLang]}${liveDurationSec != null ? ` · ~${liveDurationSec.toFixed(1)}s` : ''}`
-                : `${AD_STRUCTURES[brain.structure].labelVi} · ${AD_ANGLES[brain.angle].labelVi} · ${brain.targetDurationSec}s`}
+                : `${SCRIPT_LANG_LABEL_VI[brain.outputLang]} · ${AD_STRUCTURES[brain.structure].labelVi} · ${brain.targetDurationSec}s · ${brain.pickedHookIdx >= 0 ? 'đã chọn hook ✓' : 'chưa chọn hook'}`}
             </p>
           </div>
           {brain.script && certClaims.length > 0 ? (
@@ -668,7 +789,8 @@ export default function ScriptVoicePhase({ onContinue }: Props) {
           ) : (
             <button
               onClick={handleGenerateAndContinue}
-              disabled={!canGenerate}
+              disabled={!canGenerateScript}
+              title={genTab === 'quick' && brain.pickedHookIdx < 0 ? 'Tạo hook và chọn 1 cái trước' : undefined}
               className="flex items-center gap-2 rounded-full bg-gradient-to-r from-violet-600 to-pink-600 px-5 py-2 text-sm font-bold text-white shadow-md transition-all hover:from-violet-700 hover:to-pink-700 disabled:cursor-not-allowed disabled:opacity-50"
             >
               {brain.isGeneratingScript
