@@ -742,6 +742,7 @@ export default function ProductForm({ item, onSave, onCancel }: ProductFormProps
           parts: [{ text: EXTRACT_PROMPT(pageText) }],
           systemInstruction: EXTRACT_SYSTEM,
           maxOutputTokens: 4096,
+          thinkingBudget: 0,  // no "thinking" → full, non-truncated JSON
         })
         const extracted = parseExtracted(response)
         if (!extracted) throw new Error('AI không trích xuất được thông tin từ dữ liệu Shopee.')
@@ -799,6 +800,7 @@ export default function ProductForm({ item, onSave, onCancel }: ProductFormProps
         maxOutputTokens: 4096,
         responseMimeType: 'application/json',
         responseSchema: EXTRACT_SCHEMA as unknown as Record<string, unknown>,
+        thinkingBudget: 0,  // no "thinking" → full, non-truncated JSON (was 3/10)
       })
 
       const extracted = parseExtracted(response)
@@ -880,6 +882,7 @@ export default function ProductForm({ item, onSave, onCancel }: ProductFormProps
         maxOutputTokens: 4096,
         responseMimeType: 'application/json',
         responseSchema: EXTRACT_SCHEMA as unknown as Record<string, unknown>,
+        thinkingBudget: 0,  // no "thinking" → full, non-truncated JSON (was 3/10)
       })
 
       const extracted = parseExtracted(response)

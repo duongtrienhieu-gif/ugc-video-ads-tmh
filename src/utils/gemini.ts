@@ -131,6 +131,11 @@ export async function directGeminiVision(params: {
   maxOutputTokens?: number
   responseMimeType?: 'application/json' | 'text/plain'
   responseSchema?: Record<string, unknown>
+  /** Pass 0 to DISABLE gemini-2.5-flash internal "thinking" on a structured-JSON
+   *  task. Without it, the model can spend its whole output-token budget on
+   *  thinking and return a TRUNCATED JSON body (callers then hit "JSON parse
+   *  failed"). Mirrors directGeminiText.thinkingBudget. Ignored by 2.0 models. */
+  thinkingBudget?: number
 }): Promise<string> {
   const modelsToTry = params.model ? [params.model] : GEMINI_MODELS
   const errors: string[] = []
@@ -145,6 +150,7 @@ export async function directGeminiVision(params: {
         maxOutputTokens: params.maxOutputTokens ?? 4096,
         ...(params.responseMimeType && { responseMimeType: params.responseMimeType }),
         ...(params.responseSchema  && { responseSchema:  params.responseSchema  }),
+        ...(params.thinkingBudget !== undefined && { thinkingConfig: { thinkingBudget: params.thinkingBudget } }),
       },
     }
     if (params.systemInstruction) {
