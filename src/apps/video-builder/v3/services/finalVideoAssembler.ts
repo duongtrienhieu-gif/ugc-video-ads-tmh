@@ -149,14 +149,15 @@ export async function assembleFinalVideo(
       const ovs = seg.overlays ?? []
       for (let j = 0; j < ovs.length; j++) {
         const ov = ovs[j]
-        // Z98 #5.5a — sticker overlays (imageRef, no videoRef) are planned but
-        // NOT yet composited; the image-overlay filter path lands in 5.5b. Skip
-        // them for now so the existing video-overlay path is untouched.
-        if (!ov.videoRef) continue
-        const ovUrl = isAssetRef(ov.videoRef) ? await getUrl(ov.videoRef) : ov.videoRef
+        // Z98 #5.5b — a sticker overlay is a transparent PNG (imageRef); a
+        // video/ken_burns overlay is an mp4 (videoRef). Fetch whichever it is.
+        const isImg = !!ov.imageRef && !ov.videoRef
+        const ref = isImg ? ov.imageRef! : ov.videoRef
+        if (!ref) continue
+        const ovUrl = isAssetRef(ref) ? await getUrl(ref) : ref
         if (!ovUrl) continue
         try {
-          const ovFile = `seg_${i}_ov_${j}.mp4`
+          const ovFile = isImg ? `seg_${i}_ov_${j}.png` : `seg_${i}_ov_${j}.mp4`
           const ovData = await fetchFile(ovUrl)
           await ffmpeg.writeFile(ovFile, ovData)
           overlayFiles.push({
@@ -165,6 +166,8 @@ export async function assembleFinalVideo(
             durationSec: ov.durationSec,
             corner: ov.corner ?? 'br',
             widthFraction: Math.max(0.2, Math.min(0.55, ov.widthFraction ?? 0.46)),
+            isImage: isImg,
+            heightFraction: ov.heightFraction,
           })
         } catch (err) {
           console.warn(`[ASSEMBLE] overlay ${seg.segmentId}.${j} fetch failed — dropping`, err)
@@ -299,7 +302,13 @@ export async function assembleFinalVideo(
     // Local inputs for THIS segment only: input 0 = base, inputs 1.. = overlays.
     const segArgs: string[] = ['-i', s.fileName]
     const ovs = s.overlays ?? []
-    for (const ov of ovs) segArgs.push('-i', ov.fileName)
+    for (const ov of ovs) {
+      // Z98 #5.5b — a sticker is a still PNG: loop it for the segment length so
+      // it's available throughout (the overlay `enable` window controls WHEN it
+      // actually shows). A video overlay is a normal mp4 input.
+      if (ov.isImage) segArgs.push('-loop', '1', '-t', String(s.durationSec), '-i', ov.fileName)
+      else segArgs.push('-i', ov.fileName)
+    }
 
     // Z98 V3 — speed Grok i2v inserts up 1.3× so the segment fills the
     // director's requested duration (Grok renders motion ~0.77× of natural
@@ -318,13 +327,27 @@ export async function assembleFinalVideo(
     let lastLabel = 'base'
     ovs.forEach((ov, j) => {
       const inIdx = j + 1  // overlays start at input index 1
-      const pipW = Math.round(evenW * ov.widthFraction / 2) * 2  // even
-      parts.push(
-        `[${inIdx}:v]scale=${pipW}:-2,setsar=1,` +
-        `trim=duration=${ov.durationSec},setpts=PTS-STARTPTS+${ov.startSec}/TB[pip${j}]`,
-      )
-      const x = (ov.corner === 'tl' || ov.corner === 'bl') ? `${MARGIN}` : `W-w-${MARGIN}`
-      const y = (ov.corner === 'tl' || ov.corner === 'tr') ? `${MARGIN}` : `H-h-${MARGIN}`
+      if (ov.isImage) {
+        // Z98 #5.5b — sticker PNG: size by HEIGHT (consistent text size), keep
+        // the transparent alpha (format=rgba), no trim/setpts — the still spans
+        // the whole segment and the overlay `enable` window shows it on its word.
+        const pipH = Math.round(evenH * (ov.heightFraction ?? 0.09) / 2) * 2
+        parts.push(`[${inIdx}:v]format=rgba,scale=-2:${pipH},setsar=1[pip${j}]`)
+      } else {
+        const pipW = Math.round(evenW * ov.widthFraction / 2) * 2  // even
+        parts.push(
+          `[${inIdx}:v]scale=${pipW}:-2,setsar=1,` +
+          `trim=duration=${ov.durationSec},setpts=PTS-STARTPTS+${ov.startSec}/TB[pip${j}]`,
+        )
+      }
+      // Position. 'mr' = mid-right edge (vertically centred). Others map as
+      // before (left/right by corner column, top/bottom by corner row).
+      const x = ov.corner === 'mr'
+        ? `W-w-${MARGIN}`
+        : (ov.corner === 'tl' || ov.corner === 'bl') ? `${MARGIN}` : `W-w-${MARGIN}`
+      const y = ov.corner === 'mr'
+        ? `(H-h)/2`
+        : (ov.corner === 'tl' || ov.corner === 'tr') ? `${MARGIN}` : `H-h-${MARGIN}`
       const endT = ov.startSec + ov.durationSec
       const next = `m${j}`
       parts.push(
