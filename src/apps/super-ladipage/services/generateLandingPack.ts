@@ -7,6 +7,7 @@ import { useSettingsStore } from '../../../stores/settingsStore'
 import { getPresetSpec } from '../prompts/presetSpecs'
 import { buildSystemPromptPackGen } from '../prompts/systemPromptPackGen'
 import { extractProductIdentity } from './extractProductIdentity'
+import { localizeProduct } from '../../../services/localizeProduct'
 import { translatePackToVi } from './translate'
 import { assembleImagePrompt } from '../assembler/assembleImagePrompt'
 import { semanticGateScan } from '../assembler/semanticGate'
@@ -176,7 +177,7 @@ function buildSpecsMap(preset: ReturnType<typeof getPresetSpec>): Map<string, Se
 
 export async function generateLandingPack(params: LandingGenParams): Promise<LandingPagePack> {
   // ─── 1. Resolve product + API key ───
-  const product = useBankStore.getState().getProductById(params.productId)
+  let product = useBankStore.getState().getProductById(params.productId)
   if (!product) {
     throw new Error(`Không tìm thấy sản phẩm với id="${params.productId}". Vui lòng chọn lại sản phẩm.`)
   }
@@ -191,6 +192,13 @@ export async function generateLandingPack(params: LandingGenParams): Promise<Lan
   const geminiKey = settings.getGeminiApiKey()
   const kieApiKey = settings.getApiKey()  // for KIE text fallback when Gemini overloaded
   const language  = params.language
+
+  // P5 — translate the product's text fields (incl. the NAME) Vietnamese →
+  // target language BEFORE extraction, so no Vietnamese / "đ" currency leaks
+  // into an MS/EN landing page. No-op for vi; graceful (keeps source) on failure.
+  if (language !== 'vi') {
+    product = await localizeProduct(product, language, geminiKey)
+  }
 
   const form = params.form ?? 'ugc-malaysia'
   const preset = getPresetSpec(form)
