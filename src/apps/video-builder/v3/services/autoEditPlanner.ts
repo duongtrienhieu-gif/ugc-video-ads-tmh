@@ -76,12 +76,17 @@ export function buildAutoEditPlan(params: BuildPlanParams): AutoEditPlan {
   const subtitleStyleId = params.subtitleStyleId
 
   // Filter inserts to only those eligible (approved / locked / completed).
-  // Z98 #5 — a sticker's footage is its local PNG (keyframeRef), not a videoRef,
-  // so accept EITHER so stickers aren't filtered out before the overlay pass.
-  const eligibleInserts = params.inserts.filter((it) =>
-    (it.status === 'approved' || it.status === 'locked' || it.status === 'completed') &&
-    (!!it.videoRef || (it.renderMode === 'sticker' && !!it.keyframeRef))
-  ).sort((a, b) => a.order - b.order)
+  // Z98 #5 — a sticker is eligible the moment its PNG (keyframeRef) is drawn. Its
+  // `status` stays 'idle' on purpose (the approve/lock/paid-render gate is only for
+  // Grok/3D video inserts the user paid for), so stickers must NOT go through the
+  // status check or they'd be dropped (eligible=0 even though the PNG exists).
+  const eligibleInserts = params.inserts.filter((it) => {
+    if (it.renderMode === 'sticker') return !!it.keyframeRef
+    return (
+      (it.status === 'approved' || it.status === 'locked' || it.status === 'completed') &&
+      !!it.videoRef
+    )
+  }).sort((a, b) => a.order - b.order)
 
   console.log(
     `[AUTO_EDIT] style=${params.styleId} bgm=${bgmStyleId} ` +

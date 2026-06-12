@@ -57,7 +57,11 @@ export default function AutoEditPhase({ onContinue }: Props) {
   // redundant: the user already paid for every insert in Bước 2, so there's no
   // reason to make them re-approve here. Every clip with a videoRef is fed
   // straight into the plan (the planner itself drops anything still failing).
-  const renderedInserts = state.inserts.filter((it) => !!it.videoRef)
+  // Z98 #5 — a sticker carries its footage as a local PNG (keyframeRef), never a
+  // videoRef, so include it here too or the planner never sees it (eligible=0/0).
+  const renderedInserts = state.inserts.filter(
+    (it) => !!it.videoRef || (it.renderMode === 'sticker' && !!it.keyframeRef),
+  )
 
   // Hard inputs required just to enter (+build) the phase.
   const hasInputs = hasCreatorVideo && hasScript
