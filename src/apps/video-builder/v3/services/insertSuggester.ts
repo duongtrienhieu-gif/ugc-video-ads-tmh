@@ -387,6 +387,8 @@ ${catalogue}
    MUST write a "conceptPrompt": one vivid English sentence describing the action
    + setting. The product itself stays on screen (a reference image locks its
    look) — so describe the ACTION around it, do NOT redescribe the packaging.
+   For PRODUCT_IN_ACTION you ALSO set the "cameraFraming" field and a real-world
+   SETTING — see the CAMERA FRAMING & REAL SETTING rule below.
 
 3. CONCEPT_SCENE — NO product on screen. Use when the line describes a FEELING,
    a PROBLEM, a MECHANISM / how-it-works, an INGREDIENT or cause, or a lifestyle
@@ -536,6 +538,29 @@ DIRECTING RULES:
       scenes (emotion reactions, the product in use, before/after) so it does
       not become a cartoon slideshow. Aim for roughly half illustration, half
       real footage when the script allows.
+- CAMERA FRAMING & REAL SETTING (makes the ad feel like a REAL hand-held review,
+  not a studio talking-head) — do NOT make every cut "the creator holding the
+  product". MIX the shots across the ad: creator-face beats + product close-ups
+  (use PRODUCT_CLOSEUP / SHOW_PACKAGE for "look at this feature" lines, describing
+  the product's REAL look so it renders faithfully) + NO-FACE hands-in-action
+  beats. For a PRODUCT_IN_ACTION usage/demo scene, INFER from the PRODUCT CONTEXT
+  (the "How the user physically uses it" / description lines) WHERE and HOW this
+  specific product is really used, put the action in that real-world SETTING, and
+  set "cameraFraming":
+    • "hands_noface" — only the hands + the product doing the action in its
+      setting, NO face. Use GENEROUSLY for usage / demo / benefit-in-action lines;
+      it is the most dynamic, "real footage" shot. The product still appears
+      (locked to its reference) — describe its real look briefly.
+    • "creator" (default) — the creator, face visible, does the action / reacts.
+  KEEP "creator" for: the CTA close, ANY before/after, ANY emotion / reaction
+  beat, and the first product reveal — those need the face.
+  The setting is ALWAYS INFERRED from the product, NEVER hardcoded. It works for
+  ANY product — examples of the inference: a seasoning → hands sprinkling it over
+  food in a kitchen; a tyre inflator → hands pumping a car tyre at the roadside; a
+  serum → hands dabbing it on at a bathroom mirror; a watch → on a wrist, a finger
+  swiping the screen; garden seeds → a hand scattering them onto soil in a garden
+  bed; a perfume → sprayed onto the wrist/neck; a lawn mower → pushed across a
+  lawn. Read THIS product's usage and pick its true setting + action.
 - Group sentences describing the SAME idea into ONE scene; don't cut every line.
 - NO ABSTRACT TEXT-METAPHORS — a scene that only makes sense by READING words in
   it (a calendar labelled "Doubt → Relief", a signpost, a gauge marked
@@ -987,13 +1012,15 @@ OUTPUT strict JSON, no fences:
       is3D ? 'cut'                                  // Z98 — 3D mechanism = full-screen cut
         : (isStaticIllustration || isGraphicTeaching) ? 'overlay_corner'
         : (directorLayout ?? 'cut')
-    // Director upgrade (D1) — pass the director's face/no-face framing through.
-    // Parsed + plumbed here; the renderer only acts on it in D3. Until D2 teaches
-    // the director to emit it, this is always undefined → 'creator' (no change).
+    // Director upgrade — face/no-face framing, with a HARD scope guard so a
+    // mis-flagged scene can never drop the face where identity matters. No-face is
+    // allowed ONLY for a real PRODUCT_IN_ACTION usage/demo shot — NEVER for the CTA
+    // close (anchorBlock 'cta'), a 3D mechanism, an emotion/person CONCEPT_SCENE,
+    // a before/after, or any fixed product preset. Anything else → 'creator'.
+    // (undefined ⇒ 'creator' downstream.)
+    const noFaceAllowed = presetId === 'PRODUCT_IN_ACTION' && item.anchorBlock !== 'cta' && !is3D
     const cameraFraming: CameraFraming | undefined =
-      item.cameraFraming === 'hands_noface' || item.cameraFraming === 'creator'
-        ? item.cameraFraming
-        : undefined
+      noFaceAllowed && item.cameraFraming === 'hands_noface' ? 'hands_noface' : undefined
     out.push({
       presetId,
       matchCount: 0,
@@ -1125,7 +1152,7 @@ OUTPUT strict JSON, no fences:
     `dropped{preset:${drop.preset},noPrompt:${drop.noPrompt},zeroFit:${drop.zeroFit},dupeSkip:${drop.dupeSkip}} ` +
     `rewrote{beforeAfter:${rewrite.beforeAfter},topical:${rewrite.topical},dupeSwap:${rewrite.dupeSwap},labeled:${rewrite.labeled},labelLangDrop:${rewrite.labelLangDrop},ctaClose:${rewrite.ctaClose}} ` +
     `trust{earlyHook:${trustDrops.earlyHook},coverage:${trustDrops.coverage},run3:${trustDrops.run3}} ` +
-    `cuts=${cutScenes.length}(${cutSec}s) 3d=${scenes3D} overlays=${overlays} stickers=${stickerSuggestions.length}/${rawStickers.length} dur=${dur}s ` +
+    `cuts=${cutScenes.length}(${cutSec}s) 3d=${scenes3D} overlays=${overlays} noface=${directed.filter((s) => s.cameraFraming === 'hands_noface').length} stickers=${stickerSuggestions.length}/${rawStickers.length} dur=${dur}s ` +
     `ingredientInject=${ingredientInjected} ` +
     `visibleResult=${visibleResultProduct} topical=${topicalCategory ?? 'no'} ` +
     `→ ${directed.length > 0 ? `${final.length} items` : 'EMPTY → keyword fallback'}`,
