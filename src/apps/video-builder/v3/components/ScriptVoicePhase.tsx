@@ -34,7 +34,7 @@ import {
 } from '../types'
 import { AD_STRUCTURES, QUICK_GEN_FRAMEWORKS } from '../services/adStructures'
 import { recomputeBlockDurations, estimateReadDurationForVoice } from '../services/voiceTimingEstimator'
-import { generateScript, generateHooks, detectCertClaims } from '../services/scriptGenerator'
+import { generateScript, generateHooks, translateScriptToVietnamese, detectCertClaims } from '../services/scriptGenerator'
 import {
   listVoices, listSharedVoices, addSharedVoice,
   type ElevenLabsVoice, type SharedVoice,
@@ -92,6 +92,20 @@ export default function ScriptVoicePhase({ onContinue }: Props) {
   // #6 — Tab A "⚡ Tạo nhanh" (AI viết, default) vs Tab B "📝 Dán" (own script).
   const [genTab, setGenTab] = useState<'quick' | 'own'>('quick')
   const [isGeneratingHooks, setIsGeneratingHooks] = useState(false)
+  // #6 — Vietnamese translation for DISPLAY only (target lang ≠ vi). Never written
+  // into state.inputs.script — the real script stays in the target language.
+  const [viTranslation, setViTranslation] = useState<string | null>(null)
+  const [isTranslating, setIsTranslating] = useState(false)
+
+  const runViTranslation = (text: string) => {
+    if (!geminiKey || brain.outputLang === 'vi' || !text.trim()) { setViTranslation(null); return }
+    setIsTranslating(true)
+    setViTranslation(null)
+    translateScriptToVietnamese(geminiKey, text, brain.outputLang)
+      .then((vi) => setViTranslation(vi))
+      .catch(() => {})
+      .finally(() => setIsTranslating(false))
+  }
 
   // #6 — app-suggested framework from the product fields (universal keyword
   // heuristic across vi/ms/en; just a highlight, the user can pick any).
@@ -233,6 +247,7 @@ export default function ScriptVoicePhase({ onContinue }: Props) {
         setScript(draft)
         setLangTouched(true)   // keep the chosen language; don't auto-detect over it
         setGenTab('own')
+        runViTranslation(draft)   // VN translation for display (no-op when lang = vi)
         addToast('✓ Đã tạo kịch bản — xem lại & chỉnh sửa, rồi bấm Tiếp tục', 'success')
         return
       }
@@ -404,6 +419,7 @@ export default function ScriptVoicePhase({ onContinue }: Props) {
 
         {genTab === 'own' ? (
           /* ── Tab B: dán kịch bản của bạn (giữ nguyên câu chữ) ── */
+          <>
           <div className="mt-2 rounded-xl border border-black/10 bg-white p-3">
             <div className="flex items-center gap-2">
               {hasScriptText && (
@@ -445,6 +461,32 @@ export default function ScriptVoicePhase({ onContinue }: Props) {
               ) : 'Dán kịch bản hoàn chỉnh của bạn, hoặc chuyển sang ⚡ Tạo nhanh để AI viết.'}
             </p>
           </div>
+          {/* #6 — VN translation for understanding only (target lang ≠ vi). The
+              script above STAYS in the target language; this is never used as input. */}
+          {brain.outputLang !== 'vi' && (viTranslation || isTranslating) && (
+            <div className="mt-2 rounded-xl border border-sky-200 bg-sky-50/60 p-3">
+              <div className="mb-1 flex items-center justify-between gap-2">
+                <p className="text-[10px] font-bold uppercase tracking-widest text-sky-700">
+                  🇻🇳 Bản dịch để hiểu — KHÔNG dùng cho video
+                </p>
+                <button
+                  onClick={() => runViTranslation(state.inputs.script)}
+                  disabled={isTranslating || !hasScriptText}
+                  className="shrink-0 text-[10px] font-semibold text-sky-600 hover:text-sky-700 disabled:opacity-50"
+                >
+                  Dịch lại
+                </button>
+              </div>
+              {isTranslating ? (
+                <p className="flex items-center gap-1.5 text-[12px] text-sky-600">
+                  <Loader2 className="h-3 w-3 animate-spin" /> Đang dịch...
+                </p>
+              ) : (
+                <p className="whitespace-pre-wrap text-[12px] leading-relaxed text-gray-700">{viTranslation}</p>
+              )}
+            </div>
+          )}
+          </>
         ) : (
           /* ── Tab A: ⚡ Tạo nhanh — AI viết quanh hook bạn chọn ── */
           <div className="mt-2 flex flex-col gap-3">
@@ -551,6 +593,9 @@ export default function ScriptVoicePhase({ onContinue }: Props) {
                           {picked && <Check className="h-3.5 w-3.5 text-violet-600" />}
                         </div>
                         <p className="text-[12px] leading-snug text-gray-800">{h.text}</p>
+                        {brain.outputLang !== 'vi' && h.viGloss && (
+                          <p className="mt-1 text-[10px] italic leading-snug text-gray-400">🇻🇳 {h.viGloss}</p>
+                        )}
                       </button>
                     )
                   })}

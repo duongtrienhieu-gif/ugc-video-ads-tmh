@@ -927,8 +927,11 @@ export interface HookVariant {
   style: HookStyle
   /** #6 — which archetype produced this hook (absent on legacy 3-variant hooks) */
   archetype?: HookArchetype
-  /** The hook text — short, 1-2 lines */
+  /** The hook text — short, 1-2 lines, in the TARGET language */
   text: string
+  /** #6 — Vietnamese gloss for DISPLAY ONLY (when target lang ≠ vi). Never used
+   *  as the actual hook/script — purely so the VN user understands the meaning. */
+  viGloss?: string
   /** Estimated read duration */
   estDurationSec: number
 }

@@ -581,6 +581,7 @@ const HOOKS_RESPONSE_SCHEMA = {
         properties: {
           archetype: { type: 'string', enum: HOOK_ARCHETYPE_ORDER },
           text:      { type: 'string' },
+          vi:        { type: 'string' },  // #6 — VN gloss for display (when lang ≠ vi)
         },
         required: ['archetype', 'text'],
       },
@@ -646,10 +647,16 @@ RULES:
   KKM, GMP, FDA, clinically proven, doctor approved) or authority endorsement — a
   felt, plausible, personal angle beats an unbelievable claim (and stays compliant).
 - The body will use the "${structure.labelVi}" framework — keep hooks compatible,
-  but each hook leads with its OWN archetype angle.
+  but each hook leads with its OWN archetype angle.${params.lang !== 'vi' ? `
+- TRANSLATION: for EACH hook also give a faithful Vietnamese translation in a "vi"
+  field — keep the casual spoken tone, NOT formal/literal. This is only so the user
+  understands the meaning; it is NEVER shown in the video. "text" stays 100% in
+  ${lang}; only "vi" is Vietnamese.` : ''}
 
 OUTPUT strict JSON, no markdown fences:
-{ "hooks": [ { "archetype": "callout_pain", "text": "..." }, ... exactly 6 ] }`
+${params.lang !== 'vi'
+  ? `{ "hooks": [ { "archetype": "callout_pain", "text": "<in ${lang}>", "vi": "<Vietnamese translation>" }, ... exactly 6 ] }`
+  : `{ "hooks": [ { "archetype": "callout_pain", "text": "..." }, ... exactly 6 ] }`}`
 
   const creatorLine = params.creatorDescription
     ? `\nCREATOR PROFILE (write in this voice): ${params.creatorDescription}\n` : ''
@@ -717,6 +724,7 @@ Generate the JSON now — exactly 6 hooks, one per archetype.`
 function salvageHooks(raw: string): HookVariant[] | null {
   const archetypes = [...raw.matchAll(/"archetype"\s*:\s*"([a-z_]+)"/g)].map((m) => m[1])
   const texts = [...raw.matchAll(/"text"\s*:\s*"((?:[^"\\]|\\.)*)"/g)].map((m) => m[1])
+  const vis = [...raw.matchAll(/"vi"\s*:\s*"((?:[^"\\]|\\.)*)"/g)].map((m) => m[1])
   const n = Math.min(archetypes.length, texts.length)
   const out: HookVariant[] = []
   for (let i = 0; i < n; i++) {
@@ -724,11 +732,13 @@ function salvageHooks(raw: string): HookVariant[] | null {
       ? (archetypes[i] as HookArchetype)
       : undefined
     const text = texts[i].replace(/\\"/g, '"').replace(/\\n/g, ' ').replace(/\s+/g, ' ').trim()
+    const viGloss = vis[i]?.replace(/\\"/g, '"').replace(/\\n/g, ' ').replace(/\s+/g, ' ').trim() || undefined
     if (text) {
       out.push({
         style: ARCHETYPE_TO_STYLE[archetype ?? 'curiosity_gap'],
         archetype,
         text,
+        viGloss,
         estDurationSec: estimateReadDurationSec(text),
       })
     }
@@ -739,7 +749,7 @@ function salvageHooks(raw: string): HookVariant[] | null {
 function parseHooks(raw: string): HookVariant[] | null {
   let parsed: unknown
   try { parsed = JSON.parse(raw) } catch { return null }
-  const obj = parsed as { hooks?: Array<{ archetype?: string; text?: string }> }
+  const obj = parsed as { hooks?: Array<{ archetype?: string; text?: string; vi?: string }> }
   if (!obj || typeof obj !== 'object' || !Array.isArray(obj.hooks)) return null
   const out: HookVariant[] = []
   for (const h of obj.hooks) {
@@ -751,10 +761,33 @@ function parseHooks(raw: string): HookVariant[] | null {
       style: ARCHETYPE_TO_STYLE[archetype ?? 'curiosity_gap'],
       archetype,
       text: h.text.trim(),
+      viGloss: typeof h.vi === 'string' && h.vi.trim() ? h.vi.trim() : undefined,
       estDurationSec: estimateReadDurationSec(h.text.trim()),
     })
   }
   return out.length > 0 ? out : null
+}
+
+// ── #6 — Vietnamese translation for display (never used as the script input) ──
+// Lets the Vietnamese user understand a non-Vietnamese script/hook without copying
+// to Google Translate. Keeps the casual TikTok tone, not a stiff literal gloss.
+export async function translateScriptToVietnamese(
+  apiKey: string, text: string, fromLang: ScriptLang,
+): Promise<string> {
+  if (fromLang === 'vi' || !text.trim()) return text
+  const fromName = SCRIPT_LANG_GEMINI_NAME[fromLang]
+  const systemInstruction =
+    `You translate short ad scripts into natural, CASUAL, SPOKEN Vietnamese — the way ` +
+    `a real person talks on TikTok (first person, friendly, a bit playful), NOT formal ` +
+    `or stiff. The translation is only so a Vietnamese reader understands the meaning ` +
+    `and tone; keep the energy, do not soften it into textbook Vietnamese.`
+  const prompt =
+    `Translate this ${fromName} TikTok ad script into casual spoken Vietnamese. ` +
+    `Output ONLY the Vietnamese translation — no notes, no labels, no quotes:\n\n${text}`
+  const out = await directGeminiText({
+    apiKey, systemInstruction, prompt, maxOutputTokens: 2048, temperature: 0.3,
+  })
+  return out.trim()
 }
 
 function tryParseSegments(raw: string): Record<ScriptBlockId, string> | null {
