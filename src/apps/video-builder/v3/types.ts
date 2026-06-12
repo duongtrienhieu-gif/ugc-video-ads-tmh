@@ -907,13 +907,14 @@ export const HOOK_ARCHETYPES: Record<HookArchetype, HookArchetypeConfig> = {
   },
   question_pov: {
     id: 'question_pov',
-    labelVi: 'Câu hỏi / POV',
-    descriptionVi: 'Mở bằng câu hỏi cắm chốt hoặc khung "POV: bạn vừa biết...".',
+    labelVi: 'Câu hỏi cắm chốt',
+    descriptionVi: 'Mở bằng câu hỏi người xem thầm gật đầu, hoặc thả thẳng vào 1 khoảnh khắc thật.',
     emoji: '❓',
     promptHint:
-      'Open with a sharp QUESTION the target viewer silently answers "yes" to, OR a ' +
-      '"POV: ..." framing that drops them into a relatable moment. Short, punchy, ' +
-      'scroll-stopping. The question must be about a real tension the script resolves.',
+      'Open with a sharp QUESTION the viewer silently answers "yes" to, OR drop them ' +
+      'straight into a vivid, specific everyday moment. Write it as the natural spoken ' +
+      'words the person says — NEVER as a label or stage direction like "POV:". Short, ' +
+      'punchy, about a real tension the script resolves.',
   },
 }
 

@@ -509,16 +509,35 @@ target viewer cannot scroll past.
 Generate EXACTLY 6 hooks — ONE for each archetype below — all for the SAME product:
 ${archetypeList}
 
+WHAT MAKES A HOOK STOP THE SCROLL (follow ALL — this is the whole job):
+- BRUTALLY SHORT. Aim for ~6-12 words, one breath, readable in under 3 seconds.
+  Front-load the punch into the FIRST 3 WORDS. Cut every word that isn't pulling
+  weight. A long, complete, polite sentence is a SCROLLED-PAST sentence.
+- ONE sharp, concrete, slightly UNEXPECTED detail per hook — a specific moment,
+  object, number, time of day, or micro-behaviour. NOT a generic list of symptoms.
+  Make the viewer see a picture, not read a claim.
+- KILL the softeners and filler that bleed urgency: no trailing "...nhé / ...đó /
+  ...cơ / ...vậy", no "Bạn có thấy... không?" wind-ups. Say it straight.
+- BAN clichés / ad-speak the audience is blind to: "bí mật ít ai biết", "điều bất
+  ngờ là", "không ngờ...", "cứ như trẻ lại chục tuổi", "thay đổi cuộc đời" and the
+  like (and their ${lang} equivalents). If it sounds like an ad, rewrite it.
+- NO meta-labels or stage directions IN THE TEXT — the hook is spoken aloud by a
+  voiceover, so every character is read out. NEVER write "POV:", "Hook:", archetype
+  names, brackets, or scene directions. Just the words the person actually says.
+- The 6 hooks must each take a CLEARLY DIFFERENT angle and use a DIFFERENT concrete
+  detail — they must NOT read as 6 paraphrases of the same line.
+
 RULES:
-- Each hook: 1-2 short SPOKEN lines (max 2 sentences), first person, in the casual
-  everyday register of ${lang}. Sound like a real person on TikTok, never an ad.
+- Each hook: 1 short SPOKEN line, first person, the casual everyday register of
+  ${lang}. Sound like a real person mid-scroll, never an ad.
 - Write 100% in ${lang}. The brief may be in Vietnamese — understand it but NEVER
   echo Vietnamese words; write only in ${lang}.
 - Ground every hook in the REAL product / niche from the brief — specific, not generic.
 - The hook sets up tension the rest of the ad pays off; do NOT pitch the product as
   a sponsored mention in the hook itself.
-- COMPLIANCE: never claim certifications/approvals (Halal, KKM, GMP, FDA, clinically
-  proven, doctor approved) or any authority endorsement — personal experience only.
+- BELIEVABLE: no miracle "in X days" results, no certifications/approvals (Halal,
+  KKM, GMP, FDA, clinically proven, doctor approved) or authority endorsement — a
+  felt, plausible, personal angle beats an unbelievable claim (and stays compliant).
 - The body will use the "${structure.labelVi}" framework — keep hooks compatible,
   but each hook leads with its OWN archetype angle.
 
