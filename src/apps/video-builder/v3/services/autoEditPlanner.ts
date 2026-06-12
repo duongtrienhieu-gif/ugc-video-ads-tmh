@@ -75,10 +75,12 @@ export function buildAutoEditPlan(params: BuildPlanParams): AutoEditPlan {
   const bgmStyleId = params.bgmStyleId ?? style.defaultBgmStyle
   const subtitleStyleId = params.subtitleStyleId
 
-  // Filter inserts to only those eligible (approved / locked / completed)
+  // Filter inserts to only those eligible (approved / locked / completed).
+  // Z98 #5 — a sticker's footage is its local PNG (keyframeRef), not a videoRef,
+  // so accept EITHER so stickers aren't filtered out before the overlay pass.
   const eligibleInserts = params.inserts.filter((it) =>
     (it.status === 'approved' || it.status === 'locked' || it.status === 'completed') &&
-    !!it.videoRef
+    (!!it.videoRef || (it.renderMode === 'sticker' && !!it.keyframeRef))
   ).sort((a, b) => a.order - b.order)
 
   console.log(
@@ -123,6 +125,13 @@ export function buildAutoEditPlan(params: BuildPlanParams): AutoEditPlan {
     style.insertOverlayDurationSec,
     totalDurationSec,
     timelineScale,
+  )
+  // Z98 #5 — telemetry: how many sticker / video overlays made it into the plan.
+  const allOverlays = segments.flatMap((s) => s.overlays ?? [])
+  const stickerOverlays = allOverlays.filter((o) => !!o.imageRef)
+  console.log(
+    `[AUTO_EDIT] overlays=${allOverlays.length} (stickers=${stickerOverlays.length}, video=${allOverlays.length - stickerOverlays.length}) ` +
+    `at ${stickerOverlays.map((o) => `${o.startSec}s`).join(',') || '—'}`,
   )
 
   // ── 2. Captions — REMOVED (Z98) ──────────────────────────────────────
@@ -349,11 +358,22 @@ function buildSegments(
   // — can't PIP-over an insert that already replaced the creator.
   // Z98 — only real director-chosen overlays here (cuts are no longer demoted).
   for (const ins of overlayInserts) {
-    if (!ins.videoRef) continue
+    // Z98 #5 — a sticker's footage is its PNG (keyframeRef); a video/ken_burns
+    // overlay is its mp4 (videoRef). Accept either.
+    const isSticker = ins.renderMode === 'sticker'
+    const srcRef = isSticker ? ins.keyframeRef : ins.videoRef
+    if (!srcRef) continue
     const footageCap = (ins.renderMode ?? 'video') === 'ken_burns' ? 8 : 7
-    const durSec = Math.max(1.5, Math.min(footageCap, ins.durationSec || insertOverlayDurationSec))
-    // Z98 (#6) — real voice second when available, else estimate × rescale.
-    let ts = resolveAnchorSec(ins, creatorVideo.voiceAlignment, timelineScale)
+    const durSec = isSticker
+      ? Math.max(1.2, Math.min(2.5, ins.durationSec || 1.8))
+      : Math.max(1.5, Math.min(footageCap, ins.durationSec || insertOverlayDurationSec))
+    // Z98 (#6) — real voice second. A sticker's voiceTimestampSec is ALREADY the
+    // word-level second (5.3, final-audio seconds), so use it directly — DON'T
+    // re-anchor through resolveAnchorSec, which re-locates the whole sentence
+    // quote and would drag the sticker back to the sentence start.
+    let ts = isSticker
+      ? (ins.voiceTimestampSec ?? null)
+      : resolveAnchorSec(ins, creatorVideo.voiceAlignment, timelineScale)
     if (ts == null) {
       // Manually-added overlay without any anchor → put at the midpoint
       ts = totalDurationSec / 2
@@ -379,12 +399,14 @@ function buildSegments(
 
     // Clamp the overlay window to within the host segment.
     let overlayStart = Math.max(0, ts - host.startSec)
-    // Z88 — DE-COLLIDE. Multiple demoted cuts (Z83) can slide onto the SAME
-    // creator segment; without this they'd all sit at the same corner+time and
-    // render as overlapping PIPs. Push each new overlay to start AFTER the
-    // latest existing overlay on this host so they play sequentially, never
-    // stacked. If there's no room left in the segment, it's dropped below.
-    const existing = host.overlays ?? []
+    // Z88 — DE-COLLIDE. Multiple overlays can land on the SAME creator segment;
+    // without this they'd sit at the same corner+time and render stacked. Push
+    // each new overlay to start AFTER the latest existing one. Z98 #5 — only
+    // de-collide against the SAME corner: a sticker (mid-right) and a video
+    // overlay (bottom-right) never visually clash, so they shouldn't shove
+    // each other off their voice moment.
+    const targetCorner: SegmentOverlay['corner'] = isSticker ? 'mr' : 'br'
+    const existing = (host.overlays ?? []).filter((o) => (o.corner ?? 'br') === targetCorner)
     if (existing.length > 0) {
       const latestEnd = Math.max(...existing.map((o) => o.startSec + o.durationSec))
       if (overlayStart < latestEnd) overlayStart = round2(latestEnd + 0.2)
@@ -393,18 +415,28 @@ function buildSegments(
     const overlayDur = round2(overlayEnd - overlayStart)
     if (overlayDur < 1.0) continue  // too short after clamp / no room left → drop
 
-    const overlay: SegmentOverlay = {
-      insertId: ins.insertId,
-      videoRef: ins.videoRef,
-      startSec: round2(overlayStart),
-      durationSec: overlayDur,
-      // Z77 — bottom-right + bigger. The creator talking-head's face sits
-      // upper-centre, so a bottom corner keeps the face clear while filling the
-      // dead chest/shirt space. 0.46 (was 0.32) makes infographic text + labels
-      // actually readable as a PIP. The assembler clamps to [0.2, 0.55].
-      corner: 'br',
-      widthFraction: 0.46,
-    }
+    const overlay: SegmentOverlay = isSticker
+      ? {
+          // Z98 #5 — sticker: transparent PNG, mid-right edge, sized by HEIGHT
+          // (~9% of frame) so every label reads at the same size.
+          insertId: ins.insertId,
+          imageRef: ins.keyframeRef,
+          startSec: round2(overlayStart),
+          durationSec: overlayDur,
+          corner: 'mr',
+          heightFraction: 0.09,
+        }
+      : {
+          insertId: ins.insertId,
+          videoRef: ins.videoRef,
+          startSec: round2(overlayStart),
+          durationSec: overlayDur,
+          // Z77 — bottom-right + bigger. The creator talking-head's face sits
+          // upper-centre, so a bottom corner keeps the face clear while filling
+          // the dead chest/shirt space. The assembler clamps to [0.2, 0.55].
+          corner: 'br',
+          widthFraction: 0.46,
+        }
     host.overlays = [...(host.overlays ?? []), overlay]
   }
 

@@ -124,7 +124,7 @@ export async function assembleFinalVideo(
     isInsert: boolean
     /** Z73 — overlay PIPs that ride on this segment, with their fetched filenames.
      *  Only populated for creator_video segments that have overlays. */
-    overlays?: { fileName: string; startSec: number; durationSec: number; corner: 'tl' | 'tr' | 'bl' | 'br'; widthFraction: number }[]
+    overlays?: { fileName: string; startSec: number; durationSec: number; corner: 'tl' | 'tr' | 'bl' | 'br' | 'mr'; widthFraction: number; isImage?: boolean; heightFraction?: number }[]
   }[] = []
 
   for (let i = 0; i < params.plan.segments.length; i++) {
@@ -149,6 +149,10 @@ export async function assembleFinalVideo(
       const ovs = seg.overlays ?? []
       for (let j = 0; j < ovs.length; j++) {
         const ov = ovs[j]
+        // Z98 #5.5a — sticker overlays (imageRef, no videoRef) are planned but
+        // NOT yet composited; the image-overlay filter path lands in 5.5b. Skip
+        // them for now so the existing video-overlay path is untouched.
+        if (!ov.videoRef) continue
         const ovUrl = isAssetRef(ov.videoRef) ? await getUrl(ov.videoRef) : ov.videoRef
         if (!ovUrl) continue
         try {

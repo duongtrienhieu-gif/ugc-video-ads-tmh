@@ -1035,16 +1035,23 @@ export interface EditSegment {
 export interface SegmentOverlay {
   /** Insert id this overlay sources from (for debug). */
   insertId: number
-  /** Insert mp4 source */
-  videoRef: string
+  /** Insert mp4 source (video / ken_burns overlays). Optional — a sticker overlay
+   *  uses `imageRef` instead. */
+  videoRef?: string
+  /** Z98 #5 — sticker overlay: a transparent PNG (looped) instead of an mp4. */
+  imageRef?: string
   /** Start time INSIDE this creator segment (seconds from segment start). */
   startSec: number
   /** Overlay duration (seconds). */
   durationSec: number
-  /** Where to place the PIP. Default 'tr' (top-right). */
-  corner?: 'tl' | 'tr' | 'bl' | 'br'
+  /** Where to place the PIP. Default 'tr' (top-right). 'mr' = mid-right edge,
+   *  vertically centred (used by stickers so they stay clear of the face/chest). */
+  corner?: 'tl' | 'tr' | 'bl' | 'br' | 'mr'
   /** PIP width as a fraction of the output frame width (0.25-0.4). Default 0.32. */
   widthFraction?: number
+  /** Z98 #5 — sticker overlays size by HEIGHT (consistent text size regardless
+   *  of label length) instead of width. Fraction of the output frame height. */
+  heightFraction?: number
 }
 
 // ── Caption segments (Z34 §5) ────────────────────────────────────────────
