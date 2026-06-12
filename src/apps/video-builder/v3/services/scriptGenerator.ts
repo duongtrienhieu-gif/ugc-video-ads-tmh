@@ -430,7 +430,8 @@ OUTPUT: strict JSON only, no markdown fences:
       apiKey: args.apiKey,
       systemInstruction,
       prompt: userPrompt,
-      maxOutputTokens: 2048,
+      maxOutputTokens: 3072,
+      thinkingBudget: 0,   // structured JSON — don't let thinking eat the output budget
       responseMimeType: 'application/json',
       ...(schema ? { responseSchema: SEGMENT_RESPONSE_SCHEMA } : {}),
     })
@@ -481,6 +482,7 @@ THE FIXED HOOK (continue the script from here; reproduce it verbatim as the hook
       prompt: userPrompt,
       maxOutputTokens: 2048,
       temperature: 0.85,   // creative but still grounded in the brief
+      thinkingBudget: 0,   // structured JSON — don't let thinking eat the output budget
       responseMimeType: 'application/json',
       ...(schema ? { responseSchema: SEGMENT_RESPONSE_SCHEMA } : {}),
     })
@@ -531,8 +533,9 @@ Return strict JSON only, no markdown fences:
       apiKey: args.apiKey,
       systemInstruction,
       prompt: userPrompt,
-      maxOutputTokens: 2048,
+      maxOutputTokens: 3072,
       temperature: 0.4,
+      thinkingBudget: 0,   // structured JSON — don't let thinking eat the output budget
       responseMimeType: 'application/json',
       ...(schema ? { responseSchema: SEGMENT_RESPONSE_SCHEMA } : {}),
     })
@@ -681,8 +684,9 @@ Generate the JSON now — exactly 6 hooks, one per archetype.`
       apiKey: params.geminiKey,
       systemInstruction,
       prompt: userPrompt,
-      maxOutputTokens: 2048,
+      maxOutputTokens: 3072,
       temperature: 0.9,   // varied but disciplined — 1.1 drifted off the target language
+      thinkingBudget: 0,  // 2.5 models otherwise burn the token budget thinking → truncated JSON → 1 hook
       responseMimeType: 'application/json',
       ...(schema ? { responseSchema: HOOKS_RESPONSE_SCHEMA } : {}),
     })
@@ -698,16 +702,21 @@ Generate the JSON now — exactly 6 hooks, one per archetype.`
     throw new Error(`Gemini lỗi khi tạo hook: ${msg}`)
   }
   let hooks = parseHooks(raw) ?? parseHooks(repairJsonString(raw)) ?? salvageHooks(raw)
-  if (!hooks) {
+  // Retry once if we got nothing OR a truncated partial (< 4 of the 6 hooks) — keep
+  // whichever attempt yielded more hooks. Never lose a good batch to a bad retry.
+  if (!hooks || hooks.length < 4) {
     // eslint-disable-next-line no-console
-    console.warn('[generateHooks] parse fail, retrying without schema. raw:', raw.slice(0, 500))
+    console.warn(`[generateHooks] only ${hooks?.length ?? 0} hooks, retrying. raw:`, raw.slice(0, 400))
     try {
-      raw = await call(false)
+      const raw2 = await call(false)
+      const hooks2 = parseHooks(raw2) ?? parseHooks(repairJsonString(raw2)) ?? salvageHooks(raw2)
+      if (hooks2 && (!hooks || hooks2.length > hooks.length)) hooks = hooks2
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err)
-      throw new Error(`Gemini lỗi khi tạo hook: ${msg}`)
+      if (!hooks) {
+        const msg = err instanceof Error ? err.message : String(err)
+        throw new Error(`Gemini lỗi khi tạo hook: ${msg}`)
+      }
     }
-    hooks = parseHooks(raw) ?? parseHooks(repairJsonString(raw)) ?? salvageHooks(raw)
   }
   if (!hooks || hooks.length === 0) {
     // eslint-disable-next-line no-console
@@ -818,8 +827,9 @@ async function callGeminiWithRetry(args: {
       apiKey: args.apiKey,
       systemInstruction: args.systemInstruction,
       prompt: args.userPrompt + extraSuffix,
-      maxOutputTokens: 2048,
+      maxOutputTokens: 3072,
       temperature: 0.85,   // creative but still grounded in the brief
+      thinkingBudget: 0,   // structured JSON — don't let thinking eat the output budget
       responseMimeType: 'application/json',
       ...(schema ? { responseSchema: SCRIPT_RESPONSE_SCHEMA } : {}),
     })
