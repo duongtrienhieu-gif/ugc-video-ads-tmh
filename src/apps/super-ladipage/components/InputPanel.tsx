@@ -1,12 +1,11 @@
-import { useState, useRef } from 'react'
-import { Package, Loader2, Rocket, Globe2, Upload, X, Image as ImageIcon, Link2, ChevronDown, Check } from 'lucide-react'
-import type { Product } from '../../../stores/types'
+import { useState } from 'react'
+import { Package, Loader2, Rocket, Globe2, X, Image as ImageIcon, Link2, ChevronDown, Check } from 'lucide-react'
+import { hasFourProductImages, type Product } from '../../../stores/types'
 import type { LandingGenParams, LandingLanguage, LandingForm, CompetitorInfluence, VisualMemoryItem } from '../types'
 import { useBankStore } from '../../../stores/bankStore'
 import { useSettingsStore } from '../../../stores/settingsStore'
 import { useAppStore } from '../../../stores/appStore'
 import { useAssetUrl } from '../../../hooks/useAssetUrl'
-import { saveAsset } from '../../../utils/assetStore'
 import BankPicker from '../../../components/BankPicker'
 
 interface InputPanelProps {
@@ -113,10 +112,6 @@ export default function InputPanel({
   const nicheHint = ''
   const [competitorUrl, setCompetitorUrl]     = useState('')
   const [competitorInfluence, setCompetitorInfluence] = useState<CompetitorInfluence>('low')
-  const [visualMemory, setVisualMemory]       = useState<VisualMemoryItem[]>([])
-  const [uploading, setUploading]             = useState(false)
-  const fileInputRef = useRef<HTMLInputElement>(null)
-
   const [expandedStep, setExpandedStep] = useState<number | null>(1)
 
   const selectedFormOption = FORM_OPTIONS.find((f) => f.id === form)
@@ -133,28 +128,17 @@ export default function InputPanel({
     openApp('finder')
   }
 
-  const canGenerate = !!selectedProduct && hasGeminiKey && !isGenerating
+  // Gate: require the product's 4 images (legacy 1-image products are blocked
+  // until the user re-uploads 4 in the Product app).
+  const canGenerate = !!selectedProduct && hasFourProductImages(selectedProduct) && hasGeminiKey && !isGenerating
 
-  // 2026-05-30 — Auto-fallback to the product's saved project image when
-  // user didn't upload any reference here. User feedback: "sản phẩm đã có
-  // ảnh đính kèm trong project, không cần phải upload lại — ảnh upload
-  // chỉ là tham khảo bổ sung". Behavior:
-  //   - User uploaded N≥1 refs → use uploaded refs only.
-  //   - User uploaded 0 refs BUT product has productImage → use that
-  //     1 image as the implicit reference (transparent fallback).
-  //   - Neither → empty visualMemory (vision step uses text-only path).
-  // The downstream vision pipeline + scene synth don't distinguish source —
-  // they just consume the visualMemory array.
+  // Visual memory now comes straight from the product's 4 bank images — the
+  // user no longer uploads per-listing references (avoids overloading the
+  // vision brain with extra/conflicting images).
   const effectiveVisualMemory = (): VisualMemoryItem[] => {
-    if (visualMemory.length > 0) return visualMemory
-    const fallbackRef = selectedProduct?.productImage
-    if (fallbackRef) {
-      return [{
-        ref: fallbackRef,
-        label: selectedProduct?.productName?.slice(0, 40) || 'product',
-      }]
-    }
-    return []
+    const imgs = (selectedProduct?.productImages ?? []).filter((r) => !!r && r.trim() !== '').slice(0, 4)
+    const name = selectedProduct?.productName?.slice(0, 30) || 'product'
+    return imgs.map((ref, i) => ({ ref, label: `${name} ${i + 1}` }))
   }
 
   const handleClickGenerate = () => {
@@ -167,32 +151,6 @@ export default function InputPanel({
       competitorInfluence: competitorUrl.trim() ? competitorInfluence : undefined,
       visualMemory: effectiveVisualMemory(),
     })
-  }
-
-  const handleFilesPicked = async (files: FileList | null) => {
-    if (!files || files.length === 0) return
-    setUploading(true)
-    try {
-      const newItems: VisualMemoryItem[] = []
-      for (const file of Array.from(files)) {
-        if (!file.type.startsWith('image/')) continue
-        const ref = await saveAsset(file, file.type)
-        const label = file.name.replace(/\.[^.]+$/, '').slice(0, 40) || 'image'
-        newItems.push({ ref, label })
-      }
-      setVisualMemory((prev) => [...prev, ...newItems])
-    } finally {
-      setUploading(false)
-      if (fileInputRef.current) fileInputRef.current.value = ''
-    }
-  }
-
-  const removeMemoryItem = (ref: string) => {
-    setVisualMemory((prev) => prev.filter((m) => m.ref !== ref))
-  }
-
-  const updateMemoryLabel = (ref: string, label: string) => {
-    setVisualMemory((prev) => prev.map((m) => m.ref === ref ? { ...m, label } : m))
   }
 
   return (
@@ -257,59 +215,33 @@ export default function InputPanel({
 
         <Section
           step={2}
-          title="Ảnh tham chiếu sản phẩm (tuỳ chọn)"
+          title="Ảnh sản phẩm (từ Project)"
           summary={
-            visualMemory.length > 0
-              ? `${visualMemory.length} ảnh upload`
-              : selectedProduct?.productImage
-                ? 'Dùng ảnh trong Project'
-                : 'Bỏ qua'
+            !selectedProduct ? 'Chưa chọn'
+              : hasFourProductImages(selectedProduct) ? `${selectedProduct.productImages.filter(Boolean).length} ảnh`
+                : 'Thiếu ảnh'
           }
-          completed={visualMemory.length > 0 || Boolean(selectedProduct?.productImage)}
+          completed={!!selectedProduct && hasFourProductImages(selectedProduct)}
           expandedStep={expandedStep}
           onToggle={setExpandedStep}
         >
-          <p className="text-[10px] text-gray-500">
-            Upload ảnh sản phẩm (packaging, label, logo…) để AI giữ identity nhất quán khi sinh ảnh. Tối đa 3 ảnh đầu được pass vào image generator.
-          </p>
-          {/* 2026-05-30 — Hint that the project's product image is auto-used
-              as the implicit reference when user uploads nothing. */}
-          {visualMemory.length === 0 && selectedProduct?.productImage && (
-            <p className="text-[10px] italic text-violet-600">
-              ✓ Tự dùng ảnh sản phẩm từ Project ({selectedProduct.productName?.slice(0, 40) || 'product'}).
-              Upload thêm ở đây nếu muốn AI tham chiếu nhiều ảnh hơn.
+          {!selectedProduct ? (
+            <p className="text-[10px] text-gray-400">Chọn sản phẩm để dùng 4 ảnh của nó.</p>
+          ) : !hasFourProductImages(selectedProduct) ? (
+            <p className="text-[10px] leading-snug text-amber-600">
+              Sản phẩm thiếu ảnh — cần đủ <strong>4 ảnh</strong>. Vào app Sản phẩm bổ sung đủ 4 ảnh rồi lưu mới tạo được landing.
             </p>
-          )}
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => fileInputRef.current?.click()}
-              disabled={uploading}
-              className="flex items-center gap-1.5 rounded-lg border border-dashed border-violet-300 bg-violet-50 px-3 py-2 text-xs font-semibold text-violet-700 hover:bg-violet-100 disabled:opacity-40"
-            >
-              {uploading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}
-              {uploading ? 'Đang upload…' : 'Thêm ảnh tham chiếu'}
-            </button>
-            <span className="text-[10px] text-gray-400">{visualMemory.length} ảnh</span>
-          </div>
-          <input
-            ref={fileInputRef}
-            type="file"
-            multiple
-            accept="image/jpeg,image/png,image/webp"
-            className="hidden"
-            onChange={(e) => handleFilesPicked(e.target.files)}
-          />
-          {visualMemory.length > 0 && (
-            <div className="mt-2 grid grid-cols-3 gap-1.5">
-              {visualMemory.map((m) => (
-                <VisualMemoryThumb
-                  key={m.ref}
-                  item={m}
-                  onRemove={() => removeMemoryItem(m.ref)}
-                  onLabelChange={(label) => updateMemoryLabel(m.ref, label)}
-                />
-              ))}
-            </div>
+          ) : (
+            <>
+              <p className="text-[10px] text-gray-500">
+                Dùng 4 ảnh từ sản phẩm để AI hiểu + giữ identity. Đổi ảnh ở app Sản phẩm.
+              </p>
+              <div className="mt-2 grid grid-cols-4 gap-1.5">
+                {selectedProduct.productImages.filter((r) => !!r && r.trim() !== '').slice(0, 4).map((ref) => (
+                  <VisualMemoryThumb key={ref} item={{ ref, label: 'product' }} />
+                ))}
+              </div>
+            </>
           )}
         </Section>
 
@@ -579,8 +511,8 @@ function VisualMemoryThumb({
   item, onRemove, onLabelChange,
 }: {
   item: VisualMemoryItem
-  onRemove: () => void
-  onLabelChange: (label: string) => void
+  onRemove?: () => void
+  onLabelChange?: (label: string) => void
 }) {
   const url = useAssetUrl(item.ref)
   return (
@@ -594,20 +526,24 @@ function VisualMemoryThumb({
           </div>
         )}
       </div>
-      <input
-        type="text"
-        value={item.label}
-        onChange={(e) => onLabelChange(e.target.value)}
-        className="w-full border-t border-black/8 bg-white px-1.5 py-1 text-[10px] text-gray-700 outline-none focus:bg-violet-50"
-      />
-      <button
-        onClick={onRemove}
-        title="Xoá"
-        className="absolute right-1 top-1 flex h-5 w-5 items-center justify-center rounded-full bg-black/60 text-white transition-opacity hover:bg-red-600"
-        style={{ opacity: 1 }}
-      >
-        <X className="h-2.5 w-2.5" />
-      </button>
+      {onLabelChange && (
+        <input
+          type="text"
+          value={item.label}
+          onChange={(e) => onLabelChange(e.target.value)}
+          className="w-full border-t border-black/8 bg-white px-1.5 py-1 text-[10px] text-gray-700 outline-none focus:bg-violet-50"
+        />
+      )}
+      {onRemove && (
+        <button
+          onClick={onRemove}
+          title="Xoá"
+          className="absolute right-1 top-1 flex h-5 w-5 items-center justify-center rounded-full bg-black/60 text-white transition-opacity hover:bg-red-600"
+          style={{ opacity: 1 }}
+        >
+          <X className="h-2.5 w-2.5" />
+        </button>
+      )}
     </div>
   )
 }
