@@ -6,6 +6,7 @@
 import { create } from 'zustand'
 import { persist, createJSONStorage } from 'zustand/middleware'
 import type { Market } from '../../types/brandKit'
+import { useBankStore } from '../../stores/bankStore'
 
 // ── IndexedDB storage adapter (avoids localStorage 5-10MB quota) ──
 // Same pattern brandKitStore uses. Listing output (9 image refs + description
@@ -184,14 +185,22 @@ export const useTikTokShopStore = create<TikTokShopState>()(
   selectBrandKit: (id) => set((s) => ({ draft: { ...s.draft, brandKitId: id } })),
   // Selecting a different product invalidates the cached brief (it was Vision-
   // analyzed for a different product).
-  selectProduct:  (id) => set((s) => ({
-    draft: {
-      ...s.draft,
-      productId: id,
-      productBrief: id === s.draft.productId ? s.draft.productBrief : null,
-      productBriefKey: id === s.draft.productId ? s.draft.productBriefKey : null,
-    },
-  })),
+  selectProduct:  (id) => set((s) => {
+    // Source reference images straight from the bank product's 4 images — the
+    // user no longer uploads per-listing refs (avoids 5-6 extra images that
+    // overload/confuse the brain). Empty if the product has none yet.
+    const product = id ? useBankStore.getState().products.find((p) => p.id === id) : null
+    const imgs = product ? product.productImages.filter((r) => !!r && r.trim() !== '').slice(0, 4) : []
+    return {
+      draft: {
+        ...s.draft,
+        productId: id,
+        referenceImageAssetIds: imgs,
+        productBrief: id === s.draft.productId ? s.draft.productBrief : null,
+        productBriefKey: id === s.draft.productId ? s.draft.productBriefKey : null,
+      },
+    }
+  }),
   setLanguage:    (m)  => set((s) => ({ draft: { ...s.draft, market: m } })),
 
   // Adding/removing reference images invalidates the cached brief (refs changed
@@ -535,12 +544,8 @@ export function checkDraftReadiness(
   else if (!brandKitReady) missing.push('Brand Kit chưa đủ thông tin')
 
   if (!draft.productId) missing.push('Sản phẩm')
-  if (draft.referenceImageAssetIds.length < 2) missing.push('Tối thiểu 2 ảnh tham chiếu')
+  else if (draft.referenceImageAssetIds.length < 4) missing.push('Sản phẩm cần đủ 4 ảnh — vào Sản phẩm bổ sung đủ 4 ảnh rồi lưu')
   if (!hasApiKey) missing.push('Kie.ai API key (vào Cài đặt)')
-
-  if (draft.referenceImageAssetIds.length < 4 && draft.referenceImageAssetIds.length >= 2) {
-    warnings.push('Khuyến nghị 4 ảnh tham chiếu để chất lượng tốt hơn')
-  }
 
   return { ready: missing.length === 0, missing, warnings }
 }

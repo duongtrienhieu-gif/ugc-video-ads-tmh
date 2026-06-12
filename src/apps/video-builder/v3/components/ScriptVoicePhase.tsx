@@ -240,10 +240,13 @@ export default function ScriptVoicePhase({ onContinue }: Props) {
       // first, then press "Tiếp tục" themselves. The blocks join into plain text
       // (no labels) — the hook is the first line. Re-segmentation happens on continue.
       if (isQuick) {
+        // One continuous paragraph (no line breaks): blank lines between blocks
+        // make ElevenLabs insert long pauses that break the reading rhythm. Collapse
+        // all internal whitespace and join blocks with a single space.
         const draft = result.script.blocks
-          .map((b) => b.text.trim())
+          .map((b) => b.text.trim().replace(/\s+/g, ' '))
           .filter(Boolean)
-          .join('\n\n')
+          .join(' ')
         setScript(draft)
         setLangTouched(true)   // keep the chosen language; don't auto-detect over it
         setGenTab('own')

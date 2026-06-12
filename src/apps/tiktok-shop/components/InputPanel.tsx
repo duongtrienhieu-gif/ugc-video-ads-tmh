@@ -3,16 +3,17 @@
 // + cost estimate + generate button.
 // Phase 3: Generate runs real kie.ai pipeline for Slot 1 (others land Phase 4).
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import {
-  Palette, Package, Upload, X, Globe, Sparkles, Loader2, AlertCircle, Info, FilePlus2, History,
+  Palette, Package, X, Globe, Sparkles, Loader2, AlertCircle, Info, FilePlus2, History,
 } from 'lucide-react'
 import { useBrandKitStore, isBrandKitReady } from '../../../stores/brandKitStore'
 import { useBankStore } from '../../../stores/bankStore'
+import { hasFourProductImages } from '../../../stores/types'
 import { useSettingsStore } from '../../../stores/settingsStore'
 import { useAppStore } from '../../../stores/appStore'
 import { MARKET_LABELS, type Market } from '../../../types/brandKit'
-import { saveAsset, getUrl } from '../../../utils/assetStore'
+import { getUrl } from '../../../utils/assetStore'
 import { getKieCredits } from '../../../utils/kieai'
 import { useTikTokShopStore, checkDraftReadiness } from '../store'
 import {
@@ -33,8 +34,6 @@ export default function InputPanel() {
   const selectBrandKit = useTikTokShopStore((s) => s.selectBrandKit)
   const selectProduct  = useTikTokShopStore((s) => s.selectProduct)
   const setLanguage    = useTikTokShopStore((s) => s.setLanguage)
-  const addRef         = useTikTokShopStore((s) => s.addReferenceImage)
-  const removeRef      = useTikTokShopStore((s) => s.removeReferenceImage)
   const startNewListing = useTikTokShopStore((s) => s.startNewListing)
   const initializeOutput = useTikTokShopStore((s) => s.initializeListingOutput)
   const setSlotStatus    = useTikTokShopStore((s) => s.setSlotStatus)
@@ -58,10 +57,8 @@ export default function InputPanel() {
   const openApp     = useAppStore((s) => s.openApp)
   const addToast    = useAppStore((s) => s.addToast)
 
-  const [uploading, setUploading] = useState(false)
   const [costModalOpen, setCostModalOpen] = useState(false)
   const [historyOpen, setHistoryOpen] = useState(false)
-  const fileInputRef = useRef<HTMLInputElement>(null)
 
   // Filter brand kits by selected market — only show kits that target the
   // current language so user doesn't accidentally use a VN kit for an MS listing.
@@ -75,33 +72,10 @@ export default function InputPanel() {
   const paletteFamily = snapToPaletteFamily(resolvedBrandKit.palette.primary)
 
   const readiness = checkDraftReadiness(draft, kitReady, hasApiKey)
+  const selectedProduct = draft.productId ? getProductById(draft.productId) : undefined
 
   // Phase 4: full 9-slot cost (7 AI gens + 1 text gen; slots 5,9 canvas-only free).
   const estimatedCost = estimateListingCredits()
-
-  async function handleUpload(files: FileList | null) {
-    if (!files || files.length === 0) return
-    if (draft.referenceImageAssetIds.length + files.length > 5) {
-      addToast('Tối đa 5 ảnh tham chiếu', 'error')
-      return
-    }
-    setUploading(true)
-    try {
-      for (const file of Array.from(files)) {
-        if (!file.type.startsWith('image/')) {
-          addToast(`${file.name} không phải ảnh — bỏ qua`, 'error')
-          continue
-        }
-        const assetId = await saveAsset(file, file.type)
-        addRef(assetId)
-      }
-    } catch (err) {
-      addToast(`Tải ảnh thất bại: ${err instanceof Error ? err.message : String(err)}`, 'error')
-    } finally {
-      setUploading(false)
-      if (fileInputRef.current) fileInputRef.current.value = ''
-    }
-  }
 
   function handleGenerate() {
     if (!readiness.ready) return
@@ -130,6 +104,13 @@ export default function InputPanel() {
       addToast('Không tìm thấy sản phẩm', 'error')
       return
     }
+    // Reference images = the product's 4 bank images (authoritative source).
+    const productRefs = product.productImages.filter((r) => !!r && r.trim() !== '').slice(0, 4)
+    // Hard gate (also covers stale persisted drafts that bypass readiness).
+    if (productRefs.length < 4) {
+      addToast('Sản phẩm cần đủ 4 ảnh — vào app Sản phẩm bổ sung đủ 4 ảnh rồi lưu mới tạo được listing', 'error')
+      return
+    }
 
     // 1. Initialize fresh 9-slot output (wipes previous if any — user is
     //    starting a new listing). Canvas-only slots (5, 9) start completed.
@@ -148,7 +129,7 @@ export default function InputPanel() {
     //    "Tạo Listing" again with the same product + same refs, reuse cached
     //    brief instead of re-paying ~3-5 credits for Vision.
     let brief = draft.productBrief ?? undefined
-    const newCacheKey = buildBriefCacheKey(draft.productId, draft.referenceImageAssetIds)
+    const newCacheKey = buildBriefCacheKey(draft.productId, productRefs)
     const briefIsCached = brief && draft.productBriefKey === newCacheKey
     if (briefIsCached) {
       console.log(`[tiktok-shop] ✓ reusing cached product brief (key=${newCacheKey.slice(0, 40)}...)`)
@@ -161,7 +142,7 @@ export default function InputPanel() {
         brief = await extractProductBrief({
           geminiApiKey,
           product,
-          referenceImageAssetIds: draft.referenceImageAssetIds,
+          referenceImageAssetIds: productRefs,
           language: draft.market,
         })
         incrementGeminiCalls()  // count Vision call against daily quota
@@ -205,7 +186,7 @@ export default function InputPanel() {
         product,
         paletteFamily,
         language: draft.market,
-        referenceImageAssetIds: draft.referenceImageAssetIds,
+        referenceImageAssetIds: productRefs,
         slotTexts,
         brief,
         callbacks: {
@@ -341,38 +322,29 @@ export default function InputPanel() {
         )}
       </Section>
 
-      {/* ── Reference images ────────────────────────────────────────── */}
+      {/* ── Product images (read-only, sourced from Project) ─────────── */}
       <Section
-        icon={<Upload className="h-4 w-4" />}
-        title={`Ảnh tham chiếu (${draft.referenceImageAssetIds.length}/5)`}
+        icon={<Package className="h-4 w-4" />}
+        title="Ảnh sản phẩm (từ Project)"
       >
-        <p className="mb-2 text-[11px] leading-snug text-gray-500">
-          Tối thiểu 2 ảnh: hero + label. Khuyến nghị 4 ảnh để chất lượng tốt hơn.
-        </p>
-
-        <div className="grid grid-cols-3 gap-2">
-          {draft.referenceImageAssetIds.map((assetId) => (
-            <ReferenceThumb key={assetId} assetId={assetId} onRemove={() => removeRef(assetId)} />
-          ))}
-          {draft.referenceImageAssetIds.length < 5 && (
-            <button
-              onClick={() => fileInputRef.current?.click()}
-              disabled={uploading}
-              className="flex aspect-square items-center justify-center rounded-lg border border-dashed border-gray-300 bg-white text-gray-400 transition-colors hover:border-violet-400 hover:text-violet-500 disabled:opacity-50"
-            >
-              {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
-            </button>
-          )}
-        </div>
-
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept="image/*"
-          multiple
-          className="hidden"
-          onChange={(e) => handleUpload(e.target.files)}
-        />
+        {!selectedProduct ? (
+          <p className="text-[11px] text-gray-400">Chọn sản phẩm để dùng 4 ảnh của nó.</p>
+        ) : !hasFourProductImages(selectedProduct) ? (
+          <p className="text-[11px] leading-snug text-amber-600">
+            Sản phẩm này thiếu ảnh — cần đủ <strong>4 ảnh</strong>. Vào app Sản phẩm bổ sung đủ 4 ảnh rồi lưu mới tạo được listing.
+          </p>
+        ) : (
+          <>
+            <p className="mb-2 text-[11px] leading-snug text-gray-500">
+              Dùng 4 ảnh từ sản phẩm. Đổi ảnh tại app Sản phẩm.
+            </p>
+            <div className="grid grid-cols-4 gap-2">
+              {selectedProduct.productImages.filter((r) => !!r && r.trim() !== '').slice(0, 4).map((ref) => (
+                <ReferenceThumb key={ref} assetId={ref} />
+              ))}
+            </div>
+          </>
+        )}
       </Section>
 
       {/* ── Cost estimate ───────────────────────────────────────────── */}
@@ -476,7 +448,7 @@ function Section({ icon, title, children }: { icon: React.ReactNode; title: stri
   )
 }
 
-function ReferenceThumb({ assetId, onRemove }: { assetId: string; onRemove: () => void }) {
+function ReferenceThumb({ assetId, onRemove }: { assetId: string; onRemove?: () => void }) {
   const [url, setUrl] = useState<string | null>(null)
 
   // Lazy-load the signed URL from Supabase Storage
@@ -497,13 +469,15 @@ function ReferenceThumb({ assetId, onRemove }: { assetId: string; onRemove: () =
           <Loader2 className="h-3 w-3 animate-spin" />
         </div>
       )}
-      <button
-        onClick={onRemove}
-        className="absolute right-1 top-1 flex h-5 w-5 items-center justify-center rounded-full bg-black/60 text-white opacity-0 transition-opacity group-hover:opacity-100"
-        title="Xóa"
-      >
-        <X className="h-3 w-3" />
-      </button>
+      {onRemove && (
+        <button
+          onClick={onRemove}
+          className="absolute right-1 top-1 flex h-5 w-5 items-center justify-center rounded-full bg-black/60 text-white opacity-0 transition-opacity group-hover:opacity-100"
+          title="Xóa"
+        >
+          <X className="h-3 w-3" />
+        </button>
+      )}
     </div>
   )
 }
