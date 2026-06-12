@@ -1,11 +1,9 @@
 ﻿import { useState } from 'react'
-import { FolderOpen, Trash2, Sparkles, Save } from 'lucide-react'
+import { Trash2, Sparkles, Save } from 'lucide-react'
 import type { TabId, CharacterProfile } from '../types'
 import { TABS, generateRandomUGCProfile, createEmptyProfile, COUNTRY_OPTIONS } from '../types'
-import type { Model } from '../../../stores/types'
 import { useBankStore } from '../../../stores/bankStore'
 import { buildJsonPrompt } from '../services/generateCharacter'
-import BankPicker from '../../../components/BankPicker'
 import ChipField from './ChipField'
 
 interface ControlsPanelProps {
@@ -15,7 +13,6 @@ interface ControlsPanelProps {
 }
 
 export default function ControlsPanel({ profile, onProfileChange, activeTab }: ControlsPanelProps) {
-  const [pickerOpen, setPickerOpen] = useState(false)
   const [showSaveForm, setShowSaveForm] = useState(false)
   const [saveName, setSaveName] = useState('')
   const [saved, setSaved] = useState(false)
@@ -35,22 +32,6 @@ export default function ControlsPanel({ profile, onProfileChange, activeTab }: C
 
   const setField = (key: string, value: string) => {
     onProfileChange({ ...profile, [key]: value })
-  }
-
-  const handleLoadFromBank = (item: Model) => {
-    if (item.jsonProfile) {
-      const newProfile = createEmptyProfile()
-      for (const section of Object.values(item.jsonProfile)) {
-        if (typeof section === 'object' && section !== null) {
-          for (const [key, value] of Object.entries(section as Record<string, string>)) {
-            if (key in newProfile) {
-              newProfile[key] = value
-            }
-          }
-        }
-      }
-      onProfileChange(newProfile)
-    }
   }
 
   return (
@@ -77,13 +58,6 @@ export default function ControlsPanel({ profile, onProfileChange, activeTab }: C
           >
             <Sparkles className="h-3 w-3" />
             UGC Creator
-          </button>
-          <button
-            onClick={() => setPickerOpen(true)}
-            className="flex items-center gap-1 rounded-full bg-black/[0.04] px-2.5 py-1 text-[11px] font-medium text-gray-600 transition-colors hover:bg-sky-500/10 hover:text-sky-400"
-          >
-            <FolderOpen className="h-3 w-3" />
-            Tải từ PROJECT
           </button>
 
           <div className="flex-1" />
@@ -188,14 +162,6 @@ export default function ControlsPanel({ profile, onProfileChange, activeTab }: C
           ))}
         </div>
       </div>
-
-      {/* Bank Picker */}
-      <BankPicker
-        bankType="models"
-        isOpen={pickerOpen}
-        onSelect={(item) => handleLoadFromBank(item as Model)}
-        onClose={() => setPickerOpen(false)}
-      />
     </div>
   )
 }
