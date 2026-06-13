@@ -363,21 +363,41 @@ async function fetchPageContent(url: string): Promise<PageContent> {
     run().catch((err) => { console.log(`[FETCH] ${name} threw:`, err?.message ?? err); return null })
   )
 
-  // Race: first non-null result wins, cancel the rest
+  // Resolve strategy: PREFER an image-rich provider so we can OCR banners that
+  // hold price/ingredients/mechanism (these matter most on LadiPage). The
+  // fastest provider (jina-lean) is often image-poor — taking it blindly loses
+  // the in-image text. So an image-rich result wins immediately; a text-only
+  // result is stashed as fallback and we give image-rich providers a short
+  // grace window before settling for it.
   return new Promise<PageContent>((resolve) => {
     let settled = false
     let pending = wrapped.length
+    let textOnly: PageContent | null = null
+    let grace: ReturnType<typeof setTimeout> | null = null
+
+    const finish = (result: PageContent) => {
+      if (settled) return
+      settled = true
+      if (grace) clearTimeout(grace)
+      console.log(`[FETCH] winner: ${result.source} · text=${result.text.length}c · images=${result.imageUrls.length}`)
+      ctrl.abort()
+      resolve(result)
+    }
+
     wrapped.forEach((p) => {
       p.then((result) => {
         if (settled) return
-        if (result) {
-          settled = true
-          console.log(`[FETCH] winner: ${result.source} · text=${result.text.length}c · images=${result.imageUrls.length}`)
-          ctrl.abort()
-          resolve(result)
-        } else if (--pending === 0) {
-          console.warn('[FETCH] all providers failed')
-          resolve({ text: '', imageUrls: [], source: 'none' })
+        if (result && result.imageUrls.length > 0) {
+          finish(result)                       // ideal: text + images → OCR works
+          return
+        }
+        if (result && result.text) {           // text-only: stash best, wait briefly for an image-rich one
+          if (!textOnly || result.text.length > textOnly.text.length) textOnly = result
+          if (!grace) grace = setTimeout(() => { if (textOnly) finish(textOnly) }, 4000)
+        }
+        if (--pending === 0) {
+          if (!textOnly) console.warn('[FETCH] all providers failed')
+          finish(textOnly ?? { text: '', imageUrls: [], source: 'none' })
         }
       })
     })
@@ -399,23 +419,66 @@ function extractTextFromHtml(html: string): string {
     .trim()
 }
 
-/** Extract image src URLs from raw HTML, resolving relative paths against the page URL. */
+/**
+ * Drop logos, icons, favicons, tracking pixels, spinners, and formats Gemini
+ * can't OCR (SVG/GIF) — so the 6 precious image slots go to real info banners
+ * (ingredients / mechanism / price combo) instead of nav chrome.
+ */
+function isJunkImageUrl(url: string): boolean {
+  const u = url.toLowerCase()
+  if (/\.(svg|gif|ico|bmp)(?:[?#]|$)/.test(u)) return true
+  if (/\b(logo|favicon|sprite|icon|tracking|pixel|spacer|blank|loading|spinner|placeholder|avatar|flag|watermark|1x1)\b/.test(u)) return true
+  if (/[/_-](?:16|24|32|48|64)x(?:16|24|32|48|64)[/_.-]/.test(u)) return true
+  return false
+}
+
+/**
+ * Extract image URLs from raw HTML. Beyond plain <img src>, this also reads
+ * lazy-load attrs (data-src / data-original / srcset) and CSS background-image
+ * — LadiPage renders its info banners as backgrounds and 1px-placeholder <img>
+ * whose real source lives in data-src, so a naive src-only scan misses them.
+ * Junk (logos/icons) is filtered out.
+ */
 function extractImageUrlsFromHtml(html: string, pageUrl: string): string[] {
   const base = (() => { try { return new URL(pageUrl) } catch { return null } })()
   const seen = new Set<string>()
   const urls: string[] = []
-  const re = /<img\b[^>]*\bsrc=["']([^"']+)["']/gi
-  let m: RegExpExecArray | null
-  while ((m = re.exec(html)) !== null) {
-    let src = m[1].trim()
-    if (!src || src.startsWith('data:')) continue
+  const push = (raw?: string | null) => {
+    if (!raw) return
+    let src = raw.trim()
+    if (!src || src.startsWith('data:')) return
     if (src.startsWith('//')) src = 'https:' + src
     else if (src.startsWith('/') && base) src = base.origin + src
-    else if (!/^https?:\/\//i.test(src) && base) {
-      try { src = new URL(src, base.href).toString() } catch { continue }
+    else if (!/^https?:\/\//i.test(src)) {
+      if (!base) return
+      try { src = new URL(src, base.href).toString() } catch { return }
     }
+    if (isJunkImageUrl(src)) return
     if (!seen.has(src)) { seen.add(src); urls.push(src) }
   }
+
+  // 1) <img> tags — prefer lazy-load attrs (the real image) over src (often a
+  //    1px placeholder), and take the largest candidate from srcset.
+  const imgTag = /<img\b[^>]*>/gi
+  let tag: RegExpExecArray | null
+  while ((tag = imgTag.exec(html)) !== null) {
+    const t = tag[0]
+    const attr = (name: string) => {
+      const m = t.match(new RegExp(`\\b${name}=["']([^"']+)["']`, 'i'))
+      return m ? m[1] : null
+    }
+    const srcset = attr('srcset') || attr('data-srcset')
+    const fromSrcset = srcset
+      ? srcset.split(',').map((s) => s.trim().split(/\s+/)[0]).filter(Boolean).pop()
+      : null
+    push(attr('data-src') || attr('data-lazy-src') || attr('data-original') || attr('data-lazy') || fromSrcset || attr('src'))
+  }
+
+  // 2) CSS background-image + LadiPage data-background/data-bg — where banners live.
+  const bg = /(?:background(?:-image)?\s*:\s*url\(|data-background=["']|data-bg=["'])\s*["']?([^"')]+)/gi
+  let b: RegExpExecArray | null
+  while ((b = bg.exec(html)) !== null) push(b[1])
+
   return urls
 }
 
@@ -432,7 +495,7 @@ function extractUrlsFromJinaImages(images: Record<string, string> | undefined): 
     if (typeof k === 'string' && /^https?:\/\//.test(k) && !seen.has(k)) { seen.add(k); urls.push(k) }
     if (typeof v === 'string' && /^https?:\/\//.test(v) && !seen.has(v)) { seen.add(v); urls.push(v) }
   }
-  return urls
+  return urls.filter((u) => !isJunkImageUrl(u))
 }
 
 /** Extract image URLs from Jina markdown (![alt](url) syntax + bare image extension URLs). */
@@ -448,7 +511,31 @@ function extractImageUrlsFromMarkdown(markdown: string): string[] {
   while ((m = bareImg.exec(markdown)) !== null) {
     if (!seen.has(m[0])) { seen.add(m[0]); urls.push(m[0]) }
   }
-  return urls
+  return urls.filter((u) => !isJunkImageUrl(u))
+}
+
+/**
+ * Pick which images to send to Gemini Vision. On LadiPage/landing pages the
+ * money info (ingredients, mechanism, price combos) sits in banners DEEP in the
+ * page, while the first images are usually hero/lifestyle shots. So instead of
+ * blindly taking the first N, we keep the first 2 (product hero) and SPREAD the
+ * rest evenly across the whole page to reach the deep info banners.
+ */
+function pickInformativeImages(urls: string[], max = 6): string[] {
+  if (urls.length <= max) return urls
+  const picks: string[] = []
+  const used = new Set<number>()
+  const take = (i: number) => { if (i >= 0 && i < urls.length && !used.has(i)) { used.add(i); picks.push(urls[i]) } }
+
+  take(0); take(1)                       // product hero shots
+  const remaining = max - picks.length
+  const start = picks.length
+  const span = urls.length - start
+  for (let k = 0; k < remaining; k++) {  // spread across the rest of the page
+    take(start + Math.round((span - 1) * (k / Math.max(1, remaining - 1))))
+  }
+  for (let i = start; i < urls.length && picks.length < max; i++) take(i)  // fill any dedup gaps
+  return picks
 }
 
 /**
@@ -866,10 +953,11 @@ export default function ProductForm({ item, onSave, onCancel }: ProductFormProps
       type GeminiPart = { text: string } | { inlineData: { mimeType: string; data: string } }
       let imageParts: GeminiPart[] = []
       if (imageUrls.length > 0) {
-        const fetchCount = Math.min(imageUrls.length, 6)
+        const picks = pickInformativeImages(imageUrls, 6)
+        const fetchCount = picks.length
         addToast(`Đang tải ${fetchCount} ảnh để phân tích...`)
         const results = await Promise.allSettled(
-          imageUrls.slice(0, 6).map(fetchImageAsBase64)
+          picks.map(fetchImageAsBase64)
         )
         imageParts = results
           .filter((r): r is PromiseFulfilledResult<{ mimeType: string; data: string }> =>
