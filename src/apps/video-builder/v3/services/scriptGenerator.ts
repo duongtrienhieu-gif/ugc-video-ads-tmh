@@ -97,6 +97,8 @@ export async function generateScript(
         frameworkLabel: structure.labelVi,
         structureSystem: structure.systemPrompt,
         productRevealRule: structure.productRevealRule,
+        blockGuides: structure.blockGuides,
+        bodyAntiPatterns: structure.bodyAntiPatterns,
         angleTone: angle.tonePrompt,
         lang,
       }),
@@ -117,6 +119,8 @@ export async function generateScript(
       frameworkLabel: structure.labelVi,
       structureSystem: structure.systemPrompt,
       productRevealRule: structure.productRevealRule,
+      blockGuides: structure.blockGuides,
+      bodyAntiPatterns: structure.bodyAntiPatterns,
       angleTone: angle.tonePrompt,
       lang,
     })
@@ -214,9 +218,14 @@ function buildSystemPrompt(args: {
   frameworkLabel: string
   structureSystem: string
   productRevealRule: string
+  blockGuides: { pain: string; discovery: string; benefit: string; cta: string }
+  bodyAntiPatterns: string[]
   angleTone: string
   lang: string
 }): string {
+  const antiPatternList = args.bodyAntiPatterns
+    .map((p) => `  • "${p}…"`)
+    .join('\n')
   return `You are a TikTok-native ad copywriter writing in ${args.lang}.
 
 FRAMEWORK: "${args.frameworkLabel}" — STICK TO IT.
@@ -230,6 +239,16 @@ ${args.productRevealRule}
   the hook + pain DO NOT name the product yet.
 - The body must NEVER drift to a different framework's shape (e.g. inserting a
   long pain block into a "vào thẳng sản phẩm" framework).
+
+PER-BLOCK GUIDE FOR THIS FRAMEWORK (HARD — exactly what each block must do):
+- pain:      ${args.blockGuides.pain}
+- discovery: ${args.blockGuides.discovery}
+- benefit:   ${args.blockGuides.benefit}
+- cta:       ${args.blockGuides.cta}
+
+BANNED BODY OPENINGS for this framework (these are the WRONG framework's defaults —
+NEVER start any block with them; they signal the script has drifted):
+${antiPatternList}
 
 TONE GUIDANCE:
 ${args.angleTone}
@@ -269,6 +288,36 @@ UNIVERSAL TIKTOK-NATIVE RULES:
       khô vừa nhăn sớm như mình không").
   Keep ALL of this in casual spoken register — a real person who genuinely knows
   the product, weaving the facts in naturally, NEVER a brochure or a spec list.
+- SENSORY MOMENT (UNIVERSAL — pick the dimension that fits THIS product):
+  The script MUST include AT LEAST ONE concrete sensory beat — what it FEELS /
+  TASTES / SMELLS / SOUNDS / LOOKS like at the moment of use. Read the brief to
+  pick the 1-2 relevant dimensions; never list all. Examples across niches:
+    • Food / drink → taste + texture + smell + temperature ("giòn rụm như bánh vừa
+      ra lò, ngọt thanh tự nhiên không gắt", "ấm bụng, thơm mùi quế nhẹ")
+    • Skincare / cosmetic → feel on skin + scent + finish ("mát tê tê khi vỗ vào",
+      "thấm nhanh, không nhờn", "mùi hoa cam dịu")
+    • Appliance / tool → grip + weight + sound + force ("cầm vừa tay, nặng đúng kiểu
+      chắc chắn", "tiếng êm như tủ lạnh chạy")
+    • Apparel / accessory → fabric feel + breathability + fit ("mát rượi như cotton
+      hè", "co giãn 4 chiều, vận động thoải mái")
+    • Tech / electronics → button feel + screen + warmth + response time ("bấm chắc,
+      không lỏng lẻo", "phản hồi gần như tức thì")
+  Be SPECIFIC ("giòn rụm như bánh vừa nướng"), NEVER abstract ("ngon", "đẹp",
+  "tốt"). The sensory line is also what the visual director films, so it must be
+  filmable, not feeling-only.
+- EMPATHY ECHO — the hook touches a pain / persona / moment; the benefit block
+  MUST come back to that EXACT pain or moment in a NEW state (after using the
+  product). The viewer needs the emotional loop to close ("hồi đó mình hay đau
+  đầu lúc 3 giờ chiều / giờ thì ngồi trọn ca không phải vò đầu nữa"). Universal
+  across niches.
+- POINT-OF-CONTACT — at least ONE sentence in pain / discovery is a very
+  CONCRETE everyday moment (a TIME of day / a PLACE / an ACTION / an inner
+  thought) the persona would silently nod at, not an abstract feeling. Example
+  upgrades:
+    bad:  "tôi hay mệt" → good: "3 giờ chiều ngồi máy tính, dạ dày kêu, cứ với tay
+                                  tìm gì đó nhâm nhi"
+    bad:  "lười skincare" → good: "tối thứ Sáu uể oải, chỉ kịp vỗ 2 giọt rồi đi ngủ"
+  Read the brief to pick the moment that fits the persona — universal across niches.
 - KEEP IT BELIEVABLE — a believable specific beats a spectacular lie. NO miracle
   instant results ("3 giây", "vài ngày là hết nhăn"), NO claiming it equals a
   medical procedure ("như đi tiêm filler / botox"), realistic timeframes, spoken
@@ -486,14 +535,20 @@ is FIXED (given below). Write ONLY the remaining 4 blocks (pain, discovery,
 benefit, cta) so they continue DIRECTLY from this exact hook.
 
 HARD CONTRACT (must hold across all 4 blocks):
-- The FIRST WORDS of the pain block must continue the IDEA the hook just started
-  (the SAME object / persona / claim / detail). NEVER jump to an unrelated topic.
-  If the hook holds the product up, the pain stays in that same hand-held moment.
-  If the hook is "Nếu bạn X, thì PRODUCT là dành cho bạn", the pain elaborates X.
-- STICK TO THE FRAMEWORK above + the PRODUCT REVEAL RULE — do not pivot to a
-  different framework's shape (e.g. don't suddenly insert a 3-line confession into
-  a "vào thẳng sản phẩm" framework, and don't reveal the product early in a
-  "dẫn dắt sản phẩm" framework).
+- The FIRST SENTENCE of the pain block MUST reuse at least 1 KEY WORD or KEY
+  PHRASE from the hook (the same object / persona / pain / detail / number / time).
+  Reuse means literally pulling a noun/verb out of the hook line, not just "same
+  topic". Example:
+    Hook: "Mẹ bỉm nào hay quên uống nước, cái bình Stanley này là cứu tinh á."
+    GOOD pain opening: "Mình cũng vậy, cứ pha sữa cho con xong là mê man, ngó lại
+                        bình thì khô khốc rồi…"
+    BAD  pain opening: "Bạn có hay bị đầy hơi, ợ chua sau khi ăn không?" ← drift.
+- DO NOT start the body with a generic pain question that the WRONG framework
+  uses (the BANNED BODY OPENINGS list above lists them for this framework). The
+  body MUST respect the per-block guide above.
+- STICK TO THE FRAMEWORK + the PRODUCT REVEAL RULE — never pivot to another
+  framework's shape (e.g. don't insert a 3-line confession into a "vào thẳng sản
+  phẩm" framework; don't reveal the product early in a "dẫn dắt" framework).
 - Reproduce the GIVEN hook VERBATIM in the "hook" field — do not edit a word.`
 
   const userPrompt = `${args.userPrompt}
@@ -541,11 +596,22 @@ async function refitScriptToLength(args: {
   tooLong: boolean
 }): Promise<Record<ScriptBlockId, string> | null> {
   const current = SCRIPT_BLOCK_IDS.map((id) => `[${id}] ${args.blocks[id] ?? ''}`).join('\n')
+  const lo = args.targetSec - 3
+  const hi = args.targetSec + 3
   const systemInstruction = `You are editing a finished TikTok ad script written in ${args.langName} to FIT A TARGET SPOKEN LENGTH. Keep the SAME language, the SAME casual spoken voice, and the 5-block structure (hook, pain, discovery, benefit, cta). Do not switch language or tone.`
-  const userPrompt = `This script currently reads about ${Math.round(args.currentSec)} seconds spoken, but it MUST read about ${args.targetSec} seconds. ${
+  const userPrompt = `This script currently reads about ${Math.round(args.currentSec)} seconds spoken, but it MUST land within ${lo}-${hi} seconds (target ~${args.targetSec}s). ${
     args.tooLong
-      ? `It is TOO LONG — CUT it down to about ${args.targetSec}s. Remove the least essential sentences, trim repetition and filler, and tighten the wording. You MUST KEEP: the opening hook (verbatim), the product name + its key ingredients + how it works (the mechanism), the one concrete usage moment, and the offer / CTA. Cut fluff, never the core facts.`
-      : `It is TOO SHORT — expand to about ${args.targetSec}s by going a little deeper on the mechanism or adding one more concrete benefit, using ONLY facts already present. Do not invent new product claims and do not pad with filler.`
+      ? `It is TOO LONG — CUT it down to about ${args.targetSec}s. Remove the least essential sentences, trim repetition + filler + meta talk, tighten wording. You MUST KEEP: the opening hook (verbatim), the product name + its key ingredients + the mechanism, the one concrete usage moment, the sensory beat, the empathy echo (hook → benefit), and the offer / CTA. Cut fluff, never the core facts.`
+      : `It is TOO SHORT — expand to ~${args.targetSec}s. EXPANSION FUEL (in this order — use ONLY facts in the brief, never invent product claims, never pad with filler):
+  1. Add a CONCRETE SENSORY beat to discovery / benefit — what it tastes / smells /
+     feels / sounds like at the moment of use, in plain spoken words.
+  2. Add an EMPATHY ECHO — bring the hook's pain / persona / moment back in the
+     benefit block at the new state (after using the product).
+  3. Add a POINT-OF-CONTACT — one very specific everyday moment (time / place /
+     action / inner thought) the persona would silently nod at.
+  4. Deepen the MECHANISM by one spoken sentence — how the ingredient actually
+     works in the body / on skin / in the device, the way a friend explains it.
+NEVER add filler ("rồi đó, các bạn ạ, mình nói thật nhé") to fake length.`
   }
 
 CURRENT SCRIPT:
@@ -589,6 +655,10 @@ export interface GenerateHooksParams {
   productName: string
   productPitch: string
   creatorDescription?: string
+  /** P3i — when the user presses "Đổi 6 hook", pass the previous batch so the
+   *  re-roll is FORCED to break out of the same connectors / closing clauses
+   *  rather than mass-producing 6 copies of the previous template. */
+  previousBatch?: string[]
 }
 
 // P3g — hook archetype is metadata only (the FRAMEWORK is the driver). Each
@@ -646,6 +716,9 @@ export async function generateHooks(params: GenerateHooksParams): Promise<HookVa
   const angleList = structure.hookAngleHints
     .map((h, i) => `  ${i + 1}. ${h}`)
     .join('\n')
+  const exampleList = structure.hookExamples
+    .map((h, i) => `  ${i + 1}. ${h}`)
+    .join('\n')
   // Hook archetype is now METADATA only — the framework is the driver. Tag every
   // generated hook with the framework's natural archetype so the UI badge still
   // works and the existing parser/back-compat survives.
@@ -653,22 +726,46 @@ export async function generateHooks(params: GenerateHooksParams): Promise<HookVa
   const productRevealLine = structure.group === 'instant'
     ? `- The product NAME (or the creator visibly holding it) MUST appear in EVERY hook — this framework is "vào thẳng sản phẩm".`
     : `- The product NAME must NOT appear in any hook — this framework is "dẫn dắt sản phẩm"; the body reveals the product later. The hook sets up tension only.`
+  const isReroll = (params.previousBatch?.length ?? 0) > 0
 
   const systemInstruction = `You are a TikTok-native ad HOOK specialist writing in ${lang}.
 A hook is the first 1-3 seconds of a short video ad — the single biggest factor
 in whether a viewer keeps watching or scrolls past.
 
 *** FRAMEWORK BINDING — THE #1 RULE ***
-The user has chosen the framework "${structure.labelVi}". ALL 6 hooks MUST follow
-that framework's hook pattern — same SHAPE, only the angle / detail varies.
+The user has chosen the framework "${structure.labelVi}". ALL 6 hooks MUST respect
+its hook SHAPE — but vary words, sentence structure, opening, connector, and
+closing clause. NEVER mass-produce 6 copies of one literal template.
 
-HOOK SHAPE (every hook respects this shape — different words/structure each one):
+HOOK SHAPE (the elements every hook must contain; words/structure free):
 ${structure.hookShape}
 
-THE 6 HOOKS — one per angle below (so they aren't paraphrases of one another):
+3 REFERENCE EXAMPLES (different niches — STUDY the variation in how they open,
+nối, and close. Do NOT copy the words; copy the shape-bound + word-free spirit):
+${exampleList}
+
+THE 6 HOOKS — ONE per angle below (so they aren't paraphrases of one another):
 ${angleList}
 
 ${productRevealLine}
+
+*** STRUCTURAL DIVERSITY (HARD — the WHOLE point of having 6 hooks) ***
+The 6 hooks together MUST cover at least 4 DIFFERENT SENTENCE STRUCTURES from
+this list (don't write 6 statements; don't write 6 questions):
+  • Statement thẳng (declarative)
+  • Câu hỏi rồi tự trả lời / câu hỏi tu từ
+  • Mệnh lệnh / lời khuyên ngắn ("Thử…", "Đừng…", "Nhớ…")
+  • Mở câu chuyện ("Hôm qua mình…", "Hồi đó…")
+  • Cảm thán / ngạc nhiên ("Trời ơi…", "Ai dè…")
+  • So sánh / đối chiếu ("Tưởng X mà Y", "Mua A để Y")
+  • Liệt kê ngắn ("3 thứ…", "2 lý do…")
+
+*** ANTI-REPETITION (HARD) ***
+- NO TWO hooks may share the same opening words (the first 2-3 words).
+- NO TWO hooks may share the same closing clause / connector phrase
+  (e.g. if hook 1 ends with "là dành cho bạn", NO OTHER hook may end with that).
+- KILL the lazy "fill the bracket" instinct — write each hook AS IF it were the
+  ONLY hook for this product, then check it doesn't echo the others.
 
 *** LANGUAGE LOCK ***
 ALL 6 hooks 100% in ${lang}. The brief may be Vietnamese — READ + understand it,
@@ -679,19 +776,16 @@ WHAT MAKES A HOOK STOP THE SCROLL:
 - VOICE-MEMO REGISTER, not Instagram caption. A real person talking to a friend.
   Each hook MUST have a clear subject ("mình / tôi / em / bạn") and read like a
   spoken line, NEVER a captionless fragment.
-- 8-15 words, one breath, readable in under 3 seconds. Punchy but COMPLETE — the
+- 8-16 words, one breath, readable in under 3 seconds. Punchy but COMPLETE — the
   sentence makes sense said out loud cold.
 - ONE concrete, slightly UNEXPECTED detail per hook (a moment, number, texture,
   ingredient, situation, persona). Make the viewer see a picture, not read a claim.
-- KILL softeners / filler: no trailing "...nhé / ...đó / ...cơ / ...vậy", no
-  "Bạn có thấy... không?" wind-ups. Say it straight.
+- KILL softeners / filler in the trail: no "...nhé / ...đó / ...cơ / ...vậy"
+  habit, no "Bạn có thấy... không?" wind-ups. Say it straight.
 - BAN clichés: "bí mật ít ai biết", "điều bất ngờ là", "không ngờ...", "thay đổi
   cuộc đời", and their ${lang} equivalents. If it sounds like an ad, rewrite.
-- NO meta-labels or stage directions inside the text — the hook is spoken aloud,
-  so every character is read out. NEVER write "POV:", "Hook:", brackets, or
-  scene directions. Just the words the person actually says.
-- Each of the 6 hooks takes a DIFFERENT angle from the list above AND uses a
-  DIFFERENT concrete detail. They must NOT be 6 paraphrases of the same line.
+- NO meta-labels or stage directions inside the text — every character is read
+  aloud. NEVER write "POV:", "Hook:", brackets, or scene directions.
 
 GROUNDING (universal):
 - Ground every hook in the REAL product from the brief — specific, not generic.
@@ -713,18 +807,22 @@ ${params.lang !== 'vi'
   // A fresh token per call so "Đổi hook" actually re-rolls instead of converging
   // on the same safe answer (combined with a high temperature below).
   const freshness = Math.random().toString(36).slice(2, 8)
+  // P3i — on re-roll, force a break from the previous batch's connectors / endings.
+  const prevBlock = isReroll
+    ? `\n*** PREVIOUS BATCH (the user pressed "Đổi 6 hook" — they didn't like these; do NOT repeat their opening words, connectors, or closing clauses; break out completely): ***\n${params.previousBatch!.map((h, i) => `  ${i + 1}. ${h}`).join('\n')}\nWrite 6 RADICALLY different hooks: different sentence structures, different opening words, different angles. If the previous batch all closed with the same clause, the new batch must use 6 distinct closings.\n`
+    : ''
   const userPrompt = `Write the 6 hooks in ${lang} for this product.
 
 PRODUCT: ${params.productName}
 PRODUCT BRIEF (understand + ground the hooks in these real facts; may be in
 Vietnamese — never echo Vietnamese words, write only in ${lang}):
 ${params.productPitch}
-${creatorLine}
+${creatorLine}${prevBlock}
 Give a FRESH, BOLD set — explore genuinely DIFFERENT angles, concrete details and
-phrasings than the safest obvious version; do NOT repeat the typical wording. Each
-press should feel like a new brainstorm. (variation ${freshness})
+phrasings than the safest obvious version. Each hook MUST cover a different angle
+AND a different sentence structure. (variation ${freshness})
 
-Generate the JSON now — exactly 6 hooks, one per archetype.`
+Generate the JSON now — exactly 6 hooks.`
 
   const call = (schema = true) =>
     directGeminiText({
@@ -732,7 +830,9 @@ Generate the JSON now — exactly 6 hooks, one per archetype.`
       systemInstruction,
       prompt: userPrompt,
       maxOutputTokens: 3072,
-      temperature: 0.9,   // varied but disciplined — 1.1 drifted off the target language
+      // Re-rolls run hotter so Gemini breaks out of the safe-converged answer
+      // it just produced. First-time generation stays disciplined at 0.9.
+      temperature: isReroll ? 1.05 : 0.9,
       thinkingBudget: 0,  // 2.5 models otherwise burn the token budget thinking → truncated JSON → 1 hook
       responseMimeType: 'application/json',
       ...(schema ? { responseSchema: HOOKS_RESPONSE_SCHEMA } : {}),
