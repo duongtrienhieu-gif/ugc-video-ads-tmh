@@ -189,7 +189,7 @@ export default function Finder() {
         {/* Content area — list or form */}
         <div className="flex-1 overflow-y-auto p-5">
           {showForm ? (
-            <div className="mx-auto max-w-md rounded-xl border border-black/8 bg-black/[0.02] p-5">
+            <div className={`mx-auto rounded-xl border border-black/8 bg-black/[0.02] p-5 ${activeBank === 'products' ? 'max-w-3xl' : 'max-w-md'}`}>
               {activeBank === 'products' && (
                 <ProductForm item={editingProduct} onSave={handleSaveProduct} onCancel={closeForm} />
               )}

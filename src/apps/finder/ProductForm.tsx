@@ -691,6 +691,32 @@ function ProductImageSlot({ index, refStr, uploading, onFile, onRemove }: {
   )
 }
 
+/** Textarea that auto-grows to fit its content (up to a cap, then scrolls) so
+ *  the operator reads the full value without a tiny inner scrollbar. */
+function AutoTextarea({ value, onChange, placeholder }: {
+  value: string
+  onChange: (e: React.ChangeEvent<HTMLTextAreaElement>) => void
+  placeholder?: string
+}) {
+  const ref = useRef<HTMLTextAreaElement>(null)
+  useEffect(() => {
+    const el = ref.current
+    if (!el) return
+    el.style.height = 'auto'
+    el.style.height = `${Math.min(el.scrollHeight, 360)}px`
+  }, [value])
+  return (
+    <textarea
+      ref={ref}
+      value={value}
+      onChange={onChange}
+      placeholder={placeholder}
+      rows={2}
+      className="max-h-[360px] resize-none overflow-y-auto rounded-lg border border-black/10 bg-transparent px-3 py-2 text-sm leading-relaxed text-gray-800 placeholder-gray-400 outline-none transition-colors focus:border-black/15"
+    />
+  )
+}
+
 export default function ProductForm({ item, onSave, onCancel }: ProductFormProps) {
   const [form, setForm] = useState<FormState>({
     productImage: item?.productImage ?? '',
@@ -1109,29 +1135,29 @@ export default function ProductForm({ item, onSave, onCancel }: ProductFormProps
         </span>
       </div>
 
-      {FIELDS.map(({ key, label, type, required, placeholder }) => (
-        <label key={key} className="flex flex-col gap-1">
-          <span className="text-[11px] font-medium uppercase tracking-widest text-gray-500">
-            {label}{required && ' *'}
-          </span>
-          {type === 'textarea' ? (
-            <textarea
-              value={form[key as keyof typeof form] as string}
-              onChange={(e) => set(key, e.target.value)}
-              placeholder={placeholder}
-              rows={2}
-              className="rounded-lg border border-black/10 bg-transparent px-3 py-2 text-sm text-gray-800 placeholder-gray-400 outline-none transition-colors focus:border-black/15 resize-none"
-            />
-          ) : (
-            <input
-              value={form[key as keyof typeof form] as string}
-              onChange={(e) => set(key, e.target.value)}
-              placeholder={placeholder}
-              className="rounded-lg border border-black/10 bg-transparent px-3 py-2 text-sm text-gray-800 placeholder-gray-400 outline-none transition-colors focus:border-black/15"
-            />
-          )}
-        </label>
-      ))}
+      <div className="grid grid-cols-1 items-start gap-x-4 gap-y-3 sm:grid-cols-2">
+        {FIELDS.map(({ key, label, type, required, placeholder }) => (
+          <label key={key} className="flex flex-col gap-1">
+            <span className="text-[11px] font-medium uppercase tracking-widest text-gray-500">
+              {label}{required && ' *'}
+            </span>
+            {type === 'textarea' ? (
+              <AutoTextarea
+                value={form[key as keyof typeof form] as string}
+                onChange={(e) => set(key, e.target.value)}
+                placeholder={placeholder}
+              />
+            ) : (
+              <input
+                value={form[key as keyof typeof form] as string}
+                onChange={(e) => set(key, e.target.value)}
+                placeholder={placeholder}
+                className="rounded-lg border border-black/10 bg-transparent px-3 py-2 text-sm text-gray-800 placeholder-gray-400 outline-none transition-colors focus:border-black/15"
+              />
+            )}
+          </label>
+        ))}
+      </div>
 
       <button
         type="button"
