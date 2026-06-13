@@ -178,6 +178,11 @@ THREE cut ROLES (set "role"):
        mistake and makes the ad feel like a slideshow, not a real review.
      • "cameraFraming": "hands_noface" (only hands + product in its setting, NO
        face — use GENEROUSLY for usage/demo) or "creator" (a person/reaction).
+   ⚠ conceptPrompt is REQUIRED for EVERY broll — describe concretely WHAT IS ON
+   SCREEN: the hands + the action, WHICH part of the product, the real setting (e.g.
+   "hands break the biscuit in half over a plate, nuts and figs visible in the
+   crumb"). An EMPTY or vague conceptPrompt = a wasted, generic cut — never leave it
+   blank. Lean to "hands_noface" so we SEE the product used, not just a face.
    The setting is INFERRED, never hardcoded — examples across niches: seasoning →
    hands sprinkling over food in a kitchen; tyre inflator → pumping a tyre at the
    roadside; serum → dabbed on at a bathroom mirror; watch → on a wrist; seeds →
@@ -203,7 +208,8 @@ names — never pad with vague stickers, but never leave a concrete callout bare
   Stickers carry the info the old hand-drawn overlays used to; do NOT make overlay
   scenes. They pop ONE at a time, spaced ~3s apart (two within 3s collide and the
   later one is dropped) — so cover the KEY callouts; don't stack many on one line.
-  Keep ALL sticker text in ${langName}.
+  ALL sticker text 100% in ${langName} — translate the idea INTO ${langName}; NEVER
+  leave or switch a word to English (write the ${langName} word, not the English one).
 
 RULES:
 - COVER 100%: the scenes' durations sum to ~${dur}s; every spoken beat has a cut;
@@ -224,8 +230,9 @@ RULES:
   ad feels like a real hand-held review, not a slideshow or a single locked shot.
 - The CTA / buy line MUST show the PRODUCT in frame with an endorsing gesture — the
   creator holding/presenting the product and a thumbs-up / nod / offering it to camera
-  (set role:"broll", kind:"product_action", cameraFraming:"creator"). NEVER end on a
-  bare talking-head with no product — the viewer must see the product at the call to buy.
+  (set role:"broll", kind:"product_action", cameraFraming:"creator", AND write its
+  conceptPrompt describing exactly that endorsement shot). NEVER end on a bare
+  talking-head with no product — the viewer must see the product at the call to buy.
 - Universal: infer setting/usage from the product context; never hardcode a niche.
 
 SCRIPT (cover all of it):
@@ -274,6 +281,17 @@ OUTPUT strict JSON only (no markdown fences):
       if (scenes2.length > scenes.length) { scenes = scenes2; parsed = parsed2 }
     }
   }
+  // CTA visual guarantee — the LAST cut is the buy line; lock it to the standard
+  // product endorsement (creator + product + thumbs-up) so the call-to-buy always
+  // shows the product, regardless of what the model wrote for that scene.
+  const lastScene = scenes[scenes.length - 1]
+  if (lastScene && lastScene.role === 'broll') {
+    lastScene.kind = 'product_action'
+    lastScene.cameraFraming = 'creator'
+    lastScene.conceptPrompt =
+      'The creator holds the product up beside their face and gives an enthusiastic thumbs-up to camera, smiling — a genuine endorsement at the call to buy.'
+  }
+
   const stickers = sanitizeStickers(parsed.stickers)
 
   const coveredSec = scenes.reduce((s, x) => s + x.durationSec, 0)
@@ -358,11 +376,23 @@ function sanitizeScenes(raw: RawScene[] | undefined): BrollScene[] {
     const durationSec = Math.max(2, Math.min(6, Number(r.durationSec) || 4))
     const scene: BrollScene = { role, quote, durationSec }
     if (role !== 'lips') {
-      scene.conceptPrompt = typeof r.conceptPrompt === 'string' ? r.conceptPrompt.trim() : ''
       // No-face only makes sense for a real product-action cut; otherwise creator.
       scene.kind = SCENE_KINDS.includes(r.kind as BrollSceneKind) ? (r.kind as BrollSceneKind) : 'product_action'
       const wantsNoFace = r.cameraFraming === 'hands_noface'
       scene.cameraFraming = wantsNoFace && role === 'broll' && scene.kind !== 'concept' ? 'hands_noface' : 'creator'
+      // Backstop: the model sometimes returns an empty conceptPrompt for product
+      // cuts (assuming the product image is enough) → the render would collapse to a
+      // bland generic closeup. Fill a grounded default BY KIND so every cut keeps a
+      // real on-product visual direction (and product_action stays product_action).
+      let cp = typeof r.conceptPrompt === 'string' ? r.conceptPrompt.trim() : ''
+      if (!cp) {
+        cp = scene.kind === 'product_closeup'
+          ? 'A clean, well-lit close-up of the product — its texture and a key detail filling the frame.'
+          : scene.kind === 'concept'
+          ? 'A simple real-life moment that illustrates the spoken line (no product on screen).'
+          : 'Hands actively using and holding the product in its real everyday setting.'
+      }
+      scene.conceptPrompt = cp
     }
     scene.reason = typeof r.reason === 'string' ? r.reason : undefined
     out.push(scene)
