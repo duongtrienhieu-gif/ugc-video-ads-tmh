@@ -727,6 +727,13 @@ export interface HybridState {
    *  finishes or fails. A >4-minute-old value is treated as stale (the tab was
    *  closed mid-gen) so the UI never gets permanently stuck. */
   assetsGenStartedAt?: number
+  /** P3z — per-scene render tracking, persisted so a mid-render navigation (to
+   *  Bước 1 and back) or an F5 doesn't lose the "đang render" state. Keyed by
+   *  scene INDEX. `startedAt` drives the visual + a staleness guard; `taskId` is
+   *  the Grok i2v job id (set once the job is submitted) so an F5 can RE-POLL the
+   *  already-paid job via resumeInsertVideo (no new charge) instead of losing it.
+   *  Cleared per index when that scene's clip saves or its render fails. */
+  renderingScenes?: Record<number, { startedAt: number; taskId?: string }>
 }
 
 export function createEmptyHybridState(): HybridState {

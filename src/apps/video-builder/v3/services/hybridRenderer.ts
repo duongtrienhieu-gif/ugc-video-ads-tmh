@@ -41,6 +41,12 @@ export async function renderOneHybridScene(
   // currently surfaces it (it's where the long Grok i2v wait lives); the lips
   // path stays opaque for now since KIE's lipsync poll is shorter.
   onProgress?: (info: { pollCount: number; elapsedSec: number }) => void,
+  // P3z — fired the moment the Grok i2v job is submitted, so the caller can
+  // PERSIST the taskId. If the user navigates away / F5s mid-render, the already
+  // -paid job can be RE-POLLED (resumeInsertVideo) on return instead of lost.
+  // Only the broll/mechanism path has a resumable taskId (lips uses a different
+  // Kling flow); lips renders are short and just re-render if interrupted.
+  onTaskId?: (taskId: string) => void,
 ): Promise<string> {
   if (scene.role === 'lips') {
     if (!ctx.keyframeRef || !ctx.voiceRef) {
@@ -98,7 +104,11 @@ export async function renderOneHybridScene(
     durationSec: scene.endSec - scene.startSec,
     cameraFraming,   // P3v — defaulted above so product shots don't grow a face.
     quote: scene.quote,
-    onStageUpdate: (u) => onStage?.(u.stage),
+    onStageUpdate: (u) => {
+      onStage?.(u.stage)
+      // P3z — surface the Grok video taskId so the caller can persist it for resume.
+      if (u.fullTaskId) onTaskId?.(u.fullTaskId)
+    },
     onProgress,   // P3t — thread KIE poll updates so the UI shows "poll #N · Ms".
   })
   return r.videoRef

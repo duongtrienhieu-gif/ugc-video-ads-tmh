@@ -84,6 +84,9 @@ interface AdsVideoStoreState {
    *  so navigating away + back keeps the "đang tạo" lock (no double-charge).
    *  Pass a timestamp to start, undefined to clear. */
   setAssetsGenStartedAt:  (ts: number | undefined) => void
+  /** P3z — track a per-scene render in flight (persisted). Pass an info object to
+   *  set/merge (startedAt + optional taskId), or null to clear that index. */
+  patchSceneRender:       (idx: number, info: { startedAt: number; taskId?: string } | null) => void
   /** Store the one creator keyframe + voice for the whole video. */
   setHybridCreatorAssets: (a: { keyframeRef: string; voiceRef: string; voiceDurationSec: number; voiceAlignment?: VoiceAlignment }) => void
   /** Store the final assembled MP4. */
@@ -446,6 +449,14 @@ export const useAdsVideoStore = create<AdsVideoStoreState>((set, get) => ({
       ...s,
       hybrid: { ...s.hybrid, assetsGenStartedAt: ts },
     })),
+
+  patchSceneRender: (idx, info) =>
+    commit(set, get, (s) => {
+      const cur = { ...(s.hybrid.renderingScenes ?? {}) }
+      if (info === null) delete cur[idx]
+      else cur[idx] = { ...cur[idx], ...info }
+      return { ...s, hybrid: { ...s.hybrid, renderingScenes: cur } }
+    }),
 
   setHybridCreatorAssets: (a) =>
     commit(set, get, (s) => ({

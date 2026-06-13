@@ -16,6 +16,7 @@ import { useAssetUrl } from '../../../../hooks/useAssetUrl'
 import { useAdsVideoStore } from '../stores/adsVideoStore'
 import { directBrollScenes, assignSceneTiming, type TimedBrollScene } from '../services/brollDirector'
 import { renderOneHybridScene, type HybridRenderContext } from '../services/hybridRenderer'
+import { resumeInsertVideo } from '../services/insertRenderer'
 import { renderCreatorKeyframe } from '../services/creatorVideoEngine'
 import { matchVoiceForAvatar } from '../services/voiceCreatorMatcher'
 import { BROLL_RENDER_RES } from '../services/hybridConstants'
@@ -29,6 +30,14 @@ const LIPS_CR_PER_SEC = 8
 // a fail on one doesn't cascade. 2 is the safe Mode-1 cadence the user wants back.
 const MAX_CONCURRENT_RENDERS = 2
 const ASSETS_CR = V3_CREDIT_COST.tts + V3_CREDIT_COST.keyframe
+// P3z — staleness window for a persisted "đang render" before we treat it as
+// abandoned (tab closed). Grok i2v + poll tops out ~10min, so 12 is safe.
+const RENDER_STALE_MS = 12 * 60 * 1000
+// P3z — module-level (survives SPA re-mount, resets on F5). Lets the mount-effect
+// tell "the original render promise is STILL running in this JS session"
+// (SPA-nav — don't re-poll, it'll finish itself) from "JS restarted" (F5 — the
+// promise is dead, RE-POLL the persisted taskId to recover the paid job).
+const ACTIVE_RENDERS = new Set<number>()
 
 const ROLE_BADGE: Record<string, { label: string; cls: string }> = {
   lips:        { label: '🗣 Nói',  cls: 'bg-violet-600/90 text-white' },
@@ -45,6 +54,7 @@ export default function HybridVideoPhase(_props: Props) {
   const setSceneConceptPrompt = useAdsVideoStore((s) => s.setSceneConceptPrompt)
   const setHybridAssets= useAdsVideoStore((s) => s.setHybridCreatorAssets)
   const setAssetsGenStartedAt = useAdsVideoStore((s) => s.setAssetsGenStartedAt)
+  const patchSceneRender = useAdsVideoStore((s) => s.patchSceneRender)
   const setPhase       = useAdsVideoStore((s) => s.setPhase)
   const addToast       = useAppStore((s) => s.addToast)
   const geminiKey      = useSettingsStore((s) => s.geminiApiKey)
@@ -166,9 +176,11 @@ export default function HybridVideoPhase(_props: Props) {
   const runRender = async (i: number) => {
     const s = (useAdsVideoStore.getState().state.hybrid.scenes ?? [])[i]
     if (!s) return
+    ACTIVE_RENDERS.add(i)                                   // P3z — this JS session owns it
     setRenderingIdx((set) => new Set(set).add(i))
     setFailedIdx((set) => { const n = new Set(set); n.delete(i); return n })
     setProgressByIdx((p) => ({ ...p, [i]: { pollCount: 0, elapsedSec: 0 } }))
+    patchSceneRender(i, { startedAt: Date.now() })          // P3z — persist "đang render"
     try {
       const videoRef = await renderOneHybridScene(
         s,
@@ -176,6 +188,8 @@ export default function HybridVideoPhase(_props: Props) {
         undefined,
         // P3t — KIE poll progress → UI shows "poll #N · Ms" per card.
         (info) => setProgressByIdx((p) => ({ ...p, [i]: info })),
+        // P3z — persist the Grok taskId so an F5 mid-render can re-poll (no recharge).
+        (taskId) => patchSceneRender(i, { startedAt: Date.now(), taskId }),
       )
       setHybridClip(i, videoRef)
     } catch (e) {
@@ -185,6 +199,8 @@ export default function HybridVideoPhase(_props: Props) {
       setLostCredits((c) => c + sceneCredit(s))
       addToast(`Cảnh #${i + 1} lỗi: ${(e instanceof Error ? e.message : String(e)).slice(0, 100)}`, 'error')
     } finally {
+      ACTIVE_RENDERS.delete(i)
+      patchSceneRender(i, null)                             // P3z — clear persisted state
       setRenderingIdx((set) => { const n = new Set(set); n.delete(i); return n })
       setProgressByIdx((p) => { const n = { ...p }; delete n[i]; return n })
       // Pull the next queued scene (if any) right after a slot frees up.
@@ -197,6 +213,52 @@ export default function HybridVideoPhase(_props: Props) {
       })
     }
   }
+
+  // P3z — resume a render that was in flight when the user navigated away / F5'd.
+  // Re-polls the already-paid Grok task (resumeInsertVideo, no new charge) and
+  // saves the clip. Only for broll scenes that had reached the Grok stage (taskId
+  // persisted). Scenes without a taskId (lips, or interrupted mid-keyframe) can't
+  // resume → cleared so the user sees an idle Render button (re-render).
+  const resumeRender = async (i: number, taskId: string) => {
+    ACTIVE_RENDERS.add(i)
+    setRenderingIdx((set) => new Set(set).add(i))
+    setProgressByIdx((p) => ({ ...p, [i]: { pollCount: 0, elapsedSec: 0 } }))
+    try {
+      const { videoRef } = await resumeInsertVideo({ kieApiKey, taskId, onStageUpdate: () => {} })
+      setHybridClip(i, videoRef)
+      addToast(`✓ Cảnh #${i + 1} đã khôi phục (không tốn thêm credit)`, 'success')
+    } catch (e) {
+      console.warn(`[HYBRID_UI] resume cảnh ${i} lỗi:`, e)
+      setFailedIdx((set) => new Set(set).add(i))
+    } finally {
+      ACTIVE_RENDERS.delete(i)
+      patchSceneRender(i, null)
+      setRenderingIdx((set) => { const n = new Set(set); n.delete(i); return n })
+      setProgressByIdx((p) => { const n = { ...p }; delete n[i]; return n })
+    }
+  }
+
+  // P3z — on mount, recover any render that was in flight when the user left.
+  // Runs once per mount (SPA-nav remount re-runs it, which is what we want).
+  const resumedRef = useRef(false)
+  useEffect(() => {
+    if (resumedRef.current) return
+    resumedRef.current = true
+    const st = useAdsVideoStore.getState().state.hybrid
+    const persisted = st.renderingScenes ?? {}
+    const now = Date.now()
+    const restore: number[] = []
+    for (const [idxStr, info] of Object.entries(persisted)) {
+      const idx = Number(idxStr)
+      if (st.clips[idx]) { patchSceneRender(idx, null); continue }       // already finished
+      if (now - info.startedAt > RENDER_STALE_MS) { patchSceneRender(idx, null); continue }  // abandoned
+      if (ACTIVE_RENDERS.has(idx)) { restore.push(idx); continue }       // SPA-nav: promise alive → show visual, it finishes itself
+      if (info.taskId) { restore.push(idx); void resumeRender(idx, info.taskId); continue }  // F5 broll → re-poll paid job
+      patchSceneRender(idx, null)                                        // F5 lips/mid-keyframe: can't resume → idle button
+    }
+    if (restore.length) setRenderingIdx((set) => { const n = new Set(set); restore.forEach((i) => n.add(i)); return n })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   // P3s — user-facing render call. Enqueues if ≥MAX_CONCURRENT_RENDERS are in
   // flight (UI just shows "đang chờ" on that card); fires immediately otherwise.
