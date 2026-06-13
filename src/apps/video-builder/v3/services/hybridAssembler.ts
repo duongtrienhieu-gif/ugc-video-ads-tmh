@@ -89,8 +89,14 @@ export async function assembleHybridVideo(
   })
 
   // ── STAGE 1: normalize each clip to an MPEG-TS segment (no audio) ──────────
-  const crf = params.resolution === '1080p' ? '23' : '28'
-  const preset_x264 = 'veryfast'
+  // P4c — sharpness fix. The single re-encode here was CRF 28 + veryfast, which
+  // bóp nhòe MỌI clip — even the native-720p Kling lips clip came out as mushy as
+  // an upscaled 480p broll (the user audited "lips cũng mờ y chang"). CRF is the
+  // dominant perceived-quality lever and costs NO credit (just a bigger file +
+  // slightly slower encode). 20/19 ≈ visually sharp; 'fast' preset compresses
+  // better per bit than 'veryfast' for a small wasm-time cost.
+  const crf = params.resolution === '1080p' ? '19' : '20'
+  const preset_x264 = 'fast'
   const MARGIN = 24                       // px from the frame edge (sticker)
   const allStickers = params.stickers ?? []
   const normFiles: string[] = []

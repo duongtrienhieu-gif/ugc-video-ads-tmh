@@ -24,14 +24,44 @@ async function buildStickerPlacements(
     })
     .filter((x): x is { stk: BrollSticker; at: number } => typeof x.at === 'number' && x.at < realDur)
     .sort((a, b) => a.at - b.at)
-  const out: HybridStickerPlacement[] = []
-  let last = -Infinity
+
+  // P4c — was: DROP any sticker within 3s of the previous one → 8 stickers became
+  // 4 (the user audited the loss; the CTA burst "179k / tặng kèm / 139k / quà"
+  // all land within ~3s → only 1 survived). Now we GROUP stickers that fall
+  // within MERGE_WINDOW into ONE stacked LIST card instead of dropping them — so
+  // EVERY sticker's info stays on screen, just consolidated when they cluster.
+  // Spread-out stickers still pop individually (livelier, as the user wants).
+  const MERGE_WINDOW = 2.0   // stickers closer than this share one list card
+  type Group = { at: number; items: string[] }
+  const groups: Group[] = []
   for (const { stk, at } of dated) {
-    if (at - last < 3.0) continue            // ≥ sticker duration so they don't stack
-    last = at
+    const label = (stk.items && stk.items.length > 0) ? stk.items : (stk.text ? [stk.text] : [])
+    if (label.length === 0) continue
+    const g = groups[groups.length - 1]
+    if (g && at - g.at < MERGE_WINDOW) {
+      g.items.push(...label)               // merge into the current card (no drop)
+    } else {
+      groups.push({ at, items: [...label] })
+    }
+  }
+
+  const out: HybridStickerPlacement[] = []
+  for (const g of groups) {
+    const isList = g.items.length > 1
     try {
-      const blob = await renderStickerBlob({ style: stk.style as StickerStyle, text: stk.text ?? '', items: stk.items })
-      out.push({ pngRef: await saveAsset(blob, 'image/png'), atSec: at, durationSec: 2.7, heightFraction: 0.1 })
+      const blob = await renderStickerBlob({
+        style: (isList ? 'list' : 'badge') as StickerStyle,
+        text: isList ? '' : g.items[0],
+        items: isList ? g.items : undefined,
+      })
+      out.push({
+        pngRef: await saveAsset(blob, 'image/png'),
+        atSec: g.at,
+        // A consolidated list card holds longer (more to read) + sits taller so
+        // multiple lines stay legible; a single badge keeps the original size.
+        durationSec: isList ? 3.4 : 2.7,
+        heightFraction: isList ? Math.min(0.30, 0.10 + 0.045 * (g.items.length - 1)) : 0.10,
+      })
     } catch { /* skip a bad sticker */ }
   }
   return out
