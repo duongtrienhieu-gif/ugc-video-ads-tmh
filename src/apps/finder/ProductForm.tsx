@@ -717,8 +717,8 @@ function AutoTextarea({ value, onChange, placeholder }: {
   )
 }
 
-export default function ProductForm({ item, onSave, onCancel }: ProductFormProps) {
-  const [form, setForm] = useState<FormState>({
+function buildFormFromItem(item?: Product | null): FormState {
+  return {
     productImage: item?.productImage ?? '',
     productImages: item?.productImages ?? (item?.productImage ? [item.productImage] : []),
     productName: item?.productName ?? '',
@@ -730,7 +730,21 @@ export default function ProductForm({ item, onSave, onCancel }: ProductFormProps
     offer: stripShippingFromOffer(item?.offer ?? ''),
     ingredients: looksLikeCTA(item?.ingredients ?? '') ? '' : (item?.ingredients ?? ''),
     usageGuide: item?.usageGuide ?? '',
-  })
+  }
+}
+
+// Draft persistence — survives ProductForm unmount (e.g. switching the data-bank
+// tab to find images, then coming back) so the 4 uploaded images + typed text
+// aren't lost. Images are already in Supabase; only the refs need remembering.
+const draftKeyFor = (item?: Product | null): string => `ugc-product-draft-${item?.id ?? 'new'}`
+
+function loadDraft(key: string): FormState | null {
+  try { const raw = localStorage.getItem(key); return raw ? (JSON.parse(raw) as FormState) : null } catch { return null }
+}
+
+export default function ProductForm({ item, onSave, onCancel }: ProductFormProps) {
+  const draftKey = draftKeyFor(item)
+  const [form, setForm] = useState<FormState>(() => loadDraft(draftKey) ?? buildFormFromItem(item))
   const [productUrl, setProductUrl] = useState('')
   const [isFetching, setIsFetching] = useState(false)
   const [isAnalyzing, setIsAnalyzing] = useState(false)
@@ -741,25 +755,19 @@ export default function ProductForm({ item, onSave, onCancel }: ProductFormProps
 
   const addToast = useAppStore((s) => s.addToast)
 
+  // When editing a different product, load that product's draft (resume) or its
+  // saved data. New product (no item) keeps its in-progress draft.
   useEffect(() => {
-    if (item) {
-      setForm({
-        productImage: item.productImage,
-        productImages: item.productImages ?? (item.productImage ? [item.productImage] : []),
-        productName: item.productName,
-        productDescription: item.productDescription,
-        targetMarket: item.targetMarket,
-        painPoints: item.painPoints,
-        usps: item.usps,
-        benefits: item.benefits,
-        // Auto-strip shipping/delivery text from offer field on load
-        offer: stripShippingFromOffer(item.offer),
-        // Clear legacy CTA text that leaked from the old `cta` column rename
-        ingredients: looksLikeCTA(item.ingredients) ? '' : item.ingredients,
-        usageGuide: item.usageGuide ?? '',
-      })
-    }
+    if (!item) return
+    setForm(loadDraft(draftKeyFor(item)) ?? buildFormFromItem(item))
   }, [item])
+
+  // Persist the draft on every change so it survives an unmount (tab switch).
+  useEffect(() => {
+    try { localStorage.setItem(draftKey, JSON.stringify(form)) } catch { /* quota / private mode */ }
+  }, [form, draftKey])
+
+  const clearDraft = () => { try { localStorage.removeItem(draftKey) } catch { /* ignore */ } }
 
   /** Force-clean all promotional / shipping noise from the form right now. */
   const handleCleanGarbage = () => {
@@ -999,6 +1007,7 @@ export default function ProductForm({ item, onSave, onCancel }: ProductFormProps
       addToast('Vui lòng tải đủ 4 ảnh sản phẩm trước khi lưu', 'error')
       return
     }
+    clearDraft()  // saved → no draft to resume
     onSave(form)
   }
 
@@ -1008,7 +1017,7 @@ export default function ProductForm({ item, onSave, onCancel }: ProductFormProps
         <h3 className="text-sm font-semibold tracking-tight text-gray-800">
           {item ? 'Chỉnh sửa sản phẩm' : 'Sản phẩm mới'}
         </h3>
-        <button type="button" onClick={onCancel} className="text-gray-500 hover:text-gray-700 transition-colors">
+        <button type="button" onClick={() => { clearDraft(); onCancel() }} className="text-gray-500 hover:text-gray-700 transition-colors">
           <X className="h-4 w-4" />
         </button>
       </div>
