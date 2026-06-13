@@ -200,13 +200,16 @@ export const CREDIBILITY_BAITS: { id: CredibilityBait; labelVi: string; cue: str
   },
 ]
 
-// ── 150 viral hook REFERENCES (50 Tier S+/S curated + 100 TikTok Shop) ──────
-// Stored as plain Vietnamese strings — Gemini reads them as STYLE reference
+// ── Viral hook REFERENCES — split by language (P3m) ─────────────────────────
+// Stored as plain native strings — Gemini reads them as STYLE reference
 // (tone / rhythm / shock vocabulary), NOT as templates to be filled in. The
 // hook generator picks a random subset each call so 6 generations across the
-// session aren't all anchored on the same 5 references.
+// session aren't all anchored on the same 5 references. Lang-specific because
+// Vietnamese viral hooks DO NOT translate one-to-one into Bahasa Malaysia
+// (different cadence, code-switching, "korang/aku/eh wait" register).
 
-export const VIRAL_HOOK_REFERENCES: string[] = [
+// 150 Vietnamese viral hooks (50 Tier S+/S curated + 100 TikTok Shop e-commerce).
+export const VIRAL_HOOK_REFERENCES_VI: string[] = [
   // ── Tier S+ (cực mạnh) ────────────────────────────────────────────────────
   'Nếu bạn còn đang làm điều này thì bạn đang mất tiền mỗi ngày.',
   'Tôi ước gì mình biết điều này sớm hơn 3 năm.',
@@ -365,13 +368,159 @@ export const VIRAL_HOOK_REFERENCES: string[] = [
   'Đây là điều khiến tôi quyết định mua.',
 ]
 
+// 120 Malaysia TikTok Shop viral hooks — bahasa rojak natural (BM + EN + code-switch).
+// Uses "aku / korang / eh wait / tau dak / memang / confirm / serious la" — the
+// real Gen Z MS TikTok register, NOT formal Bahasa Malaysia. Curated by the user
+// from Tier S+ TikTok Shop MY content; the patterns include scam-test, wrong-way,
+// secret, comparison, reaction, and buying-frame hooks.
+export const VIRAL_HOOK_REFERENCES_MS: string[] = [
+  // ── Tier S+ MS general (60) ───────────────────────────────────────────────
+  'Korang, benda ni memang worth it ke?',
+  'Aku test 7 hari, result dia gila weh.',
+  'Eh wait... korang kena tengok ni dulu.',
+  'Serious la, aku tak sangka macam ni.',
+  'Aku ingat scam, rupanya memang jadi.',
+  'Jangan buy dulu sampai tengok ni.',
+  'Korang masih buat benda ni ke?',
+  'Aku rugi banyak sebab tak tahu ni awal.',
+  'Benda ni tengah viral tapi betul ke?',
+  'Confirm korang tak tahu pasal ni.',
+  'Aku compare dua-dua, result dia lain gila.',
+  'Kenapa seller tak cerita part ni?',
+  'Benda ni memang tak masuk akal.',
+  'Aku try sebab tak percaya.',
+  'Korang jangan repeat mistake aku.',
+  'Ramai orang guna salah cara.',
+  'Patutlah ramai repeat order.',
+  'Aku jumpa benda ni secara tak sengaja.',
+  'Hasil dia memang tak boleh blah.',
+  'Baru aku faham kenapa viral.',
+  'Kalau korang ada masalah ni, tengok sampai habis.',
+  'Aku fikir benda ni overrated.',
+  'Rupanya aku yang silap.',
+  'Serious, benda ni buat aku speechless.',
+  'Aku test supaya korang tak payah bazir duit.',
+  'Korang tengok sendiri.',
+  'Aku dah cuba semua cara lain.',
+  'Yang ni paling menjadi.',
+  'Benda kecil tapi effect besar.',
+  'Aku tak expect result macam ni.',
+  'Korang pernah kena macam ni tak?',
+  'Aku harap aku tahu ni lebih awal.',
+  'Jangan kena scam macam aku.',
+  'Aku buat test betul-betul.',
+  'Korang mesti tengok ni.',
+  'Part ni memang ramai tak sedar.',
+  'Seller lain takkan cerita benda ni.',
+  'Aku dah check sendiri.',
+  'Patutlah stock selalu habis.',
+  'Memang lain macam.',
+  'Aku ingat marketing je.',
+  'Sekali try terus faham.',
+  'Korang kena tengok comparison ni.',
+  'Ini sebelum dan selepas.',
+  'Aku guna 30 hari, ni result dia.',
+  'Aku hampir tak percaya.',
+  'Memang menjadi la.',
+  'Serious worth every sen.',
+  'Benda ni ubah rutin aku.',
+  'Aku dah stop guna yang lama.',
+  'Korang masih bayar mahal untuk benda ni?',
+  'Aku jumpa option lagi best.',
+  'Aku test paling murah lawan paling mahal.',
+  'Gila weh, beza dia macam ni.',
+  'Aku takkan beli yang lama lagi.',
+  'Baru tahu selama ni aku buat salah.',
+  'Kenapa tak ramai orang tahu ni?',
+  'Korang jangan skip video ni.',
+  'Rahsia ni ramai seller tak cover.',
+  'Lepas tengok ni baru decide nak buy atau tak.',
+  // ── SCAM TEST PATTERN ─────────────────────────────────────────────────────
+  'Aku betul-betul ingat benda ni scam.',
+  'Serious la, aku nak prove benda ni tak jadi.',
+  'Aku beli sebab nak expose produk ni.',
+  'Aku test supaya korang tak kena tipu.',
+  'Ramai cakap best, aku check sendiri.',
+  'Aku tak percaya langsung sampai aku try.',
+  'Hype ke real? Aku test sendiri.',
+  'Aku sengaja cari kelemahan dia.',
+  'Aku nak tengok betul ke macam orang cakap.',
+  'Result dia buat aku diam terus.',
+  // ── WRONG WAY PATTERN ─────────────────────────────────────────────────────
+  'Korang mungkin guna benda ni salah selama ni.',
+  'Patutlah tak jadi, rupanya ramai buat macam ni.',
+  'Aku baru tahu selama ni aku silap.',
+  'Ini sebab kenapa result korang tak menjadi.',
+  'Jangan guna macam ni lagi.',
+  'Ramai orang tak sedar mistake ni.',
+  'Korang buat benda ni juga tak?',
+  'Aku rugi berbulan sebab tak tahu ni.',
+  'Ini satu detail yang ramai terlepas.',
+  'Kalau tak betulkan ni, memang susah nak nampak hasil.',
+  // ── SECRET PATTERN ───────────────────────────────────────────────────────
+  'Rahsia ni seller memang jarang cerita.',
+  'Part ni ramai seller skip.',
+  'Aku baru tahu benda ni lepas berbulan guna.',
+  'Tak ramai orang Malaysia tahu pasal ni.',
+  'Kenapa benda ni tak viral lagi?',
+  'Rahsia sebenar ada dekat sini.',
+  'Aku terkejut bila jumpa benda ni.',
+  'Benda ni patutnya semua orang tahu.',
+  'Serious, kenapa tak ada orang cerita?',
+  'Ini part paling penting sebenarnya.',
+  // ── COMPARISON PATTERN ───────────────────────────────────────────────────
+  'Aku compare RM20 vs RM200.',
+  'Yang murah lawan yang mahal.',
+  'Korang rasa mana satu menang?',
+  'Aku test side by side.',
+  'Result dia memang tak sangka.',
+  'Aku compare supaya korang tak bazir duit.',
+  'Yang mahal tak semestinya terbaik.',
+  'Ini beza sebenar selepas test.',
+  'Aku beli dua-dua dan check sendiri.',
+  'Korang tengok sendiri siapa menang.',
+  // ── REACTION PATTERN ─────────────────────────────────────────────────────
+  'Eh wait... apa benda ni?',
+  'Serious la?',
+  'Gila weh.',
+  'Aku tak expect langsung.',
+  'No way benda ni jadi macam ni.',
+  'Korang tengok ni cepat.',
+  'Aku speechless tengok result dia.',
+  'Ini memang unexpected.',
+  'Aku check dua kali sebab tak percaya.',
+  'Korang nampak apa yang aku nampak?',
+  // ── BUYING PATTERN ───────────────────────────────────────────────────────
+  'Lepas tengok ni baru decide nak buy.',
+  'Jangan checkout dulu.',
+  'Aku harap aku tengok video ni lebih awal.',
+  'Kalau nak beli, tengok ni dulu.',
+  'Ini benda yang aku check sebelum beli.',
+  'Aku menyesal tak beli awal.',
+  'Aku menyesal beli yang lama.',
+  'Ini sebab kenapa aku repeat order.',
+  'Sekarang aku faham kenapa ramai beli.',
+  'Worth it ke tak? Jom check.',
+]
+
 // ── Helpers ──────────────────────────────────────────────────────────────────
+
+/** Map the script's language code → which viral library to pick from. EN /
+ *  fallback default to VI references (VN viral hooks transfer better in
+ *  spirit than not having any anchor at all). */
+function libraryForLang(lang: string): string[] {
+  // Match the SCRIPT_LANG_GEMINI_NAME values used in scriptGenerator, plus the
+  // short lang codes the store uses ('vi' / 'ms' / 'en').
+  if (lang === 'ms' || lang === 'Bahasa Malaysia') return VIRAL_HOOK_REFERENCES_MS
+  // 'vi' / 'Vietnamese' / 'en' / 'English' / anything else → VN (most curated).
+  return VIRAL_HOOK_REFERENCES_VI
+}
 
 /** Pick `count` random hooks from the viral library — Gemini reads them as style
  *  reference each call so different "Tạo 6 hook" presses anchor on different
  *  examples. Pure JS shuffle (no extra deps). */
-export function pickRandomViralReferences(count = 8): string[] {
-  const pool = VIRAL_HOOK_REFERENCES.slice()
+export function pickRandomViralReferences(count = 8, lang = 'vi'): string[] {
+  const pool = libraryForLang(lang).slice()
   // Fisher-Yates partial shuffle — stop after `count` picks.
   const n = Math.min(count, pool.length)
   for (let i = 0; i < n; i++) {

@@ -809,7 +809,7 @@ export async function generateHooks(params: GenerateHooksParams): Promise<HookVa
   // so Gemini reads varied scroll-stop examples every call (different press → different
   // anchors → less template-copying).
   const poolBlock = buildHookPoolBlock()
-  const viralRefs = pickRandomViralReferences(10)
+  const viralRefs = pickRandomViralReferences(10, params.lang)
     .map((h, i) => `  ${i + 1}. ${h}`)
     .join('\n')
 
