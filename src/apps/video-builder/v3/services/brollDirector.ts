@@ -86,6 +86,19 @@ function lipsCountForDuration(sec: number): number {
   return 6
 }
 
+// ── Density floor (deterministic) ───────────────────────────────────────────
+// Gemini is non-deterministic about scene COUNT: the same script can come back
+// as 8 sparse cuts one run and 14 the next. A sparse plan stretched over the
+// whole voice yields long, flat ~6s holds that feel slow. We enforce a minimum
+// cut density two ways: (1) RE-ROLL the director ONCE if the first plan is sparse,
+// and (2) a hard post-timing floor that splits the LONGEST cuts until the floor
+// is met — splitting longest-first keeps the short snappy cuts intact (variety),
+// never a uniform metronome. ~4.5s/cut → a 55s ad floors at ~12 cuts.
+const TARGET_AVG_CUT_SEC = 4.5
+function densityFloor(dur: number): number {
+  return Math.max(8, Math.round(dur / TARGET_AVG_CUT_SEC))
+}
+
 // ── Gemini response schema ──────────────────────────────────────────────────
 const BROLL_RESPONSE_SCHEMA = {
   type: 'object',
@@ -208,11 +221,13 @@ ${scriptDump}
 OUTPUT strict JSON only (no markdown fences):
 { "scenes": [ {"role":"lips","quote":"…","durationSec":4}, {"role":"broll","quote":"…","durationSec":5,"kind":"product_action","cameraFraming":"hands_noface","conceptPrompt":"…"} ], "stickers": [ {"style":"list","items":["…","…"],"quote":"…"} ] }`
 
-  const call = (schema = true) =>
+  const call = (schema = true, denserHint?: { have: number; want: number }) =>
     directGeminiText({
       apiKey: params.geminiKey,
       systemInstruction,
-      prompt: 'Plan the full-coverage hybrid shot list now. Return the JSON.',
+      prompt: denserHint
+        ? `Your last plan had only ${denserHint.have} cuts for a ${dur}s video — too sparse; it will feel slow and flat. Re-plan with MORE, DENSER, VARIED-length cuts (aim ≥${denserHint.want} total): keep the hook, callouts and any feature/use-case run as fast 2-3s cuts, and only let the main demo / reveal / CTA breathe at 4-6s. Cover every second. Return the JSON.`
+        : 'Plan the full-coverage hybrid shot list now. Return the JSON.',
       maxOutputTokens: 4096,
       temperature: 0.6,
       thinkingBudget: 0,   // structured JSON — keep the whole list, no truncation
@@ -229,7 +244,22 @@ OUTPUT strict JSON only (no markdown fences):
 
   // Enforce the lips ladder DETERMINISTICALLY — the prompt asks for exactly N but
   // Gemini sometimes returns fewer; promote evenly-spread broll cuts to lips to hit N.
-  const scenes = enforceLipsCount(sanitizeScenes(parsed.scenes), lipsCount)
+  let scenes = enforceLipsCount(sanitizeScenes(parsed.scenes), lipsCount)
+
+  // Density floor (1/2) — if the first plan is sparse, re-roll ONCE asking for
+  // denser, varied cuts; keep whichever roll has more scenes. The hard floor in
+  // assignSceneTiming is the deterministic backstop if the re-roll is still sparse.
+  const minScenes = densityFloor(dur)
+  if (scenes.length < minScenes) {
+    // eslint-disable-next-line no-console
+    console.log(`[BROLL_DIRECTOR] plan thưa (${scenes.length}<${minScenes}) — re-roll 1 lần cho dày hơn`)
+    const raw2 = await call(true, { have: scenes.length, want: minScenes })
+    const parsed2 = tryParse(raw2)
+    if (parsed2) {
+      const scenes2 = enforceLipsCount(sanitizeScenes(parsed2.scenes), lipsCount)
+      if (scenes2.length > scenes.length) { scenes = scenes2; parsed = parsed2 }
+    }
+  }
   const stickers = sanitizeStickers(parsed.stickers)
 
   const coveredSec = scenes.reduce((s, x) => s + x.durationSec, 0)
@@ -386,7 +416,7 @@ export function assignSceneTiming(
     const endSec = round2(Math.max(startSec + 0.2, rawEnd))
     out.push({ ...scenes[i], startSec, endSec })
   }
-  return capSplitScenes(out)
+  return enforceDensityFloor(capSplitScenes(out), densityFloor(dur))
 }
 
 // Hard cut-length caps (deterministic — independent of how many scenes the model
@@ -403,7 +433,18 @@ function capSplitScenes(timed: TimedBrollScene[]): TimedBrollScene[] {
   // Fill [start,end] with product-closeup B-roll cut(s), each ≤ MAX_BROLL_SEC.
   const fillBroll = (start: number, end: number, quote: string) => {
     const L = end - start
-    if (L < MIN_CUT_SEC) { if (out.length) out[out.length - 1].endSec = round2(end); return }
+    if (L < MIN_CUT_SEC) {
+      // Too small for its own cut — extend the PREVIOUS cut, but NEVER a lips cut
+      // (that would push the lips past its hard cap). Absorb into the last broll if
+      // there is one; otherwise emit a short broll rather than violate the lips cap.
+      const last = out[out.length - 1]
+      if (last && last.role !== 'lips') {
+        last.endSec = round2(end); last.durationSec = round2(end - last.startSec)
+      } else {
+        out.push({ role: 'broll', kind: 'product_closeup', quote, conceptPrompt: '', durationSec: round2(L), startSec: round2(start), endSec: round2(end) })
+      }
+      return
+    }
     const parts = Math.max(1, Math.ceil(L / MAX_BROLL_SEC))
     const step = L / parts
     for (let k = 0; k < parts; k++) {
@@ -416,8 +457,11 @@ function capSplitScenes(timed: TimedBrollScene[]): TimedBrollScene[] {
     const L = s.endSec - s.startSec
     if (s.role === 'lips') {
       if (L <= MAX_LIPS_SEC + 0.4) { out.push(s); continue }
-      const lipsEnd = round2(s.startSec + MAX_LIPS_SEC)
-      out.push({ ...s, endSec: lipsEnd, durationSec: round2(MAX_LIPS_SEC) })
+      // Hard-cap the lips ABSOLUTELY: cut it at MAX_LIPS_SEC, but pull the cut a
+      // touch earlier when needed so the overflow is ≥ MIN_CUT — that way the
+      // leftover always becomes its own broll and we never extend the lips past 5s.
+      const lipsEnd = round2(Math.min(s.startSec + MAX_LIPS_SEC, s.endSec - MIN_CUT_SEC))
+      out.push({ ...s, endSec: lipsEnd, durationSec: round2(lipsEnd - s.startSec) })
       fillBroll(lipsEnd, s.endSec, s.quote)  // overflow → product close-up
     } else {
       if (L <= MAX_BROLL_SEC + 0.4) { out.push(s); continue }
@@ -432,6 +476,41 @@ function capSplitScenes(timed: TimedBrollScene[]): TimedBrollScene[] {
         })
       }
     }
+  }
+  return out
+}
+
+// Density floor (2/2) — the deterministic backstop. After capping, if the plan is
+// still below `minScenes` (a stubborn-sparse director that the re-roll didn't fix),
+// split the LONGEST cut in half, repeatedly, until the floor is met. Splitting
+// longest-first preserves the short snappy cuts (variety) instead of chopping
+// everything to a uniform ~4s metronome. A long lips splits into lips + a
+// product-closeup broll (keep one face beat, don't make two lipsync renders).
+function enforceDensityFloor(scenes: TimedBrollScene[], minScenes: number): TimedBrollScene[] {
+  const out = scenes.slice()
+  let guard = 0
+  let split = 0
+  while (out.length < minScenes && guard++ < 64) {
+    let li = -1
+    let lLen = 2 * MIN_CUT_SEC   // only split cuts that yield two ≥ MIN_CUT halves
+    for (let i = 0; i < out.length; i++) {
+      const L = out[i].endSec - out[i].startSec
+      if (L > lLen) { lLen = L; li = i }
+    }
+    if (li < 0) break   // nothing long enough to split — accept the current density
+    const s = out[li]
+    const mid = round2(s.startSec + (s.endSec - s.startSec) / 2)
+    const first: TimedBrollScene = { ...s, endSec: mid, durationSec: round2(mid - s.startSec) }
+    const second: TimedBrollScene = s.role === 'lips'
+      ? { role: 'broll', kind: 'product_closeup', quote: s.quote, conceptPrompt: '', startSec: mid, endSec: s.endSec, durationSec: round2(s.endSec - mid) }
+      : { ...s, startSec: mid, durationSec: round2(s.endSec - mid),
+          conceptPrompt: s.conceptPrompt ? `${s.conceptPrompt} (a slightly different angle / closer)` : s.conceptPrompt }
+    out.splice(li, 1, first, second)
+    split++
+  }
+  if (split > 0) {
+    // eslint-disable-next-line no-console
+    console.log(`[BROLL_DIRECTOR] density floor: chẻ ${split} cảnh dài → tổng ${out.length} cảnh (sàn ${minScenes})`)
   }
   return out
 }
