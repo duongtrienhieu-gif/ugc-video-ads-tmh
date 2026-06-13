@@ -25,7 +25,7 @@ import { useAdsVideoStore } from '../stores/adsVideoStore'
 import {
   COST_MODE_CONFIG, INSERT_STAGE_LABEL_VI,
   estimateInsertCredits, formatCredits,
-  type ActionPresetId, type ActionInsertClip, type InsertRenderStage,
+  type ActionInsertClip, type InsertRenderStage,
   type InsertRenderMode, type V3ClipStatus, type GeneratedScript,
   type VoiceFirstSlot,
 } from '../types'
@@ -37,6 +37,7 @@ import {
 import { renderInsert, resumeInsertVideo, listEligibleInsertsForBulk } from '../services/insertRenderer'
 import { directBrollScenes, assignSceneTiming, type TimedBrollScene, type BrollSticker } from '../services/brollDirector'
 import { assembleHybridVideo, type HybridSceneClip, type HybridStickerPlacement } from '../services/hybridAssembler'
+import { renderOneHybridScene, renderHybridScenes, type HybridRenderContext } from '../services/hybridRenderer'
 import { getProductVisualBrief, type ProductVisualBrief } from '../../../../services/productVisualBrief'
 import { hasFourProductImages } from '../../../../stores/types'
 import { computeBlockStartTimestamps, computeQuoteTimestamp, computeWordTimestampFromAlignment } from '../services/insertTimingEngine'
@@ -45,7 +46,7 @@ import { renderStickerBlob, STICKER_STYLE_META, type StickerStyle } from '../ser
 import { saveAsset, getUrl } from '../../../../utils/assetStore'
 // Z98 B2 — voice-first: synth the real voice + recalibrate the script BEFORE the
 // director runs, so scene count/placement use the real duration not a WPM guess.
-import { generateCreatorVoice, renderLipsyncSegment } from '../services/creatorVideoEngine'
+import { generateCreatorVoice } from '../services/creatorVideoEngine'
 import { recalibrateScriptToRealVoice, scriptVoiceSig } from '../services/voiceTimingEstimator'
 import { matchVoiceForAvatar } from '../services/voiceCreatorMatcher'
 
@@ -192,45 +193,34 @@ export default function ActionInsertsPhase({ onContinue }: Props) {
     // __testRenderScene(0), __testRenderScene(1)… It opens the resulting clip.
     const w2 = window as unknown as {
       __testRenderScene?: (i: number) => Promise<unknown>
+      __testRenderAllScenes?: () => Promise<unknown>
       __testHybridAssemble?: () => Promise<unknown>
+      __testHybridExport?: () => Promise<unknown>
       __lastBrollTimed?: TimedBrollScene[]
       __lastBrollStickers?: BrollSticker[]
       __hybridClips?: (HybridSceneClip | undefined)[]
     }
-    w2.__testRenderScene = async (i: number) => {
+    // Build the render context (keyframe + voice + product) from the live store.
+    const buildHybridCtx = (): HybridRenderContext => {
       const st = useAdsVideoStore.getState().state
+      return {
+        kieApiKey,
+        keyframeRef: st.creatorVideo?.keyframeRef,
+        voiceRef: st.voiceFirst?.voiceRef ?? st.creatorVideo?.voiceRef,
+        product: st.inputs.product,
+        avatar: st.inputs.avatar,
+        creatorVideoConfig: st.creatorVideoConfig,
+        resolution: st.costMode === 'FULL' ? '1080p' : st.costMode === 'STANDARD' ? '720p' : '480p',
+      }
+    }
+    w2.__testRenderScene = async (i: number) => {
       const timed = w2.__lastBrollTimed
       if (!timed || !timed[i]) { console.warn('[BROLL_RENDER] chạy __testBrollDirector() trước rồi __testRenderScene(i)'); return }
       if (!kieApiKey) { console.warn('[BROLL_RENDER] thiếu KIE key'); return }
       const scene = timed[i]
-      const keyframeRef = st.creatorVideo?.keyframeRef
-      const voiceRef = st.voiceFirst?.voiceRef ?? st.creatorVideo?.voiceRef
-      const resolution = st.costMode === 'FULL' ? '1080p' : st.costMode === 'STANDARD' ? '720p' : '480p'
       console.log(`[BROLL_RENDER] #${i} role=${scene.role} ${scene.startSec}-${scene.endSec}s "${scene.quote.slice(0, 40)}"`)
       try {
-        let videoRef: string
-        if (scene.role === 'lips') {
-          if (!keyframeRef || !voiceRef) { console.warn('[BROLL_RENDER] lips cần keyframe + voice — tạo keyframe ở Bước 3 trước'); return }
-          const r = await renderLipsyncSegment({ kieApiKey, config: st.creatorVideoConfig, voiceRef, keyframeRef, startSec: scene.startSec, endSec: scene.endSec })
-          videoRef = r.videoRef
-        } else {
-          const presetId = (scene.role === 'mechanism3d' ? 'CONCEPT_SCENE'
-            : scene.kind === 'product_closeup' ? 'PRODUCT_CLOSEUP'
-            : scene.kind === 'concept' ? 'CONCEPT_SCENE'
-            : 'PRODUCT_IN_ACTION') as ActionPresetId
-          let conceptPrompt = scene.conceptPrompt || ''
-          if (scene.role === 'mechanism3d' && !conceptPrompt.startsWith('3D MECHANISM ANIMATION')) {
-            conceptPrompt = `3D MECHANISM ANIMATION (no people): clean photorealistic 3D scientific/technical animation INSIDE the subject — ${conceptPrompt}. Cross-section or macro of the internal workings, studio 3D render, soft clinical light. NO people, NO hands, NO product packaging, NO text.`
-          }
-          const r = await renderInsert({
-            kieApiKey, presetId, product: st.inputs.product, avatar: st.inputs.avatar,
-            creatorKeyframeRef: keyframeRef, resolution,
-            conceptPrompt, renderMode: 'video', durationSec: scene.endSec - scene.startSec,
-            cameraFraming: scene.cameraFraming, quote: scene.quote,
-            onStageUpdate: (u) => console.log(`[BROLL_RENDER] #${i} ${u.stage}`),
-          })
-          videoRef = r.videoRef
-        }
+        const videoRef = await renderOneHybridScene(scene, buildHybridCtx(), (s) => console.log(`[BROLL_RENDER] #${i} ${s}`))
         // P3c-1 — cache the rendered clip so __testHybridAssemble() can ghép them.
         w2.__hybridClips = w2.__hybridClips ?? []
         w2.__hybridClips[i] = { scene, videoRef }
@@ -239,6 +229,25 @@ export default function ActionInsertsPhase({ onContinue }: Props) {
         if (url) window.open(url, '_blank')
         return url
       } catch (e) { console.error(`[BROLL_RENDER] #${i} lỗi:`, e) }
+    }
+    // P3c-3 — render ALL scenes of the last plan (concurrency 2), caching each clip
+    // into __hybridClips as it finishes. This is the credit-costing batch.
+    w2.__testRenderAllScenes = async () => {
+      const timed = w2.__lastBrollTimed
+      if (!timed || timed.length === 0) { console.warn('[HYBRID_RENDER] chạy __testBrollDirector() trước'); return }
+      if (!kieApiKey) { console.warn('[HYBRID_RENDER] thiếu KIE key'); return }
+      console.log(`[HYBRID_RENDER] render ${timed.length} cảnh (×2 song song)…`)
+      w2.__hybridClips = w2.__hybridClips ?? []
+      const { clips, failed } = await renderHybridScenes(timed, buildHybridCtx(), {
+        concurrency: 2,
+        onSceneStart: (i, s) => console.log(`[HYBRID_RENDER] ▶ #${i} ${s.role} ${s.startSec}-${s.endSec}s`),
+        onSceneDone: (i, clip) => {
+          if (clip) { (w2.__hybridClips as (HybridSceneClip | undefined)[])[i] = clip; console.log(`[HYBRID_RENDER] ✅ #${i} xong`) }
+          else console.warn(`[HYBRID_RENDER] ✗ #${i} lỗi (bỏ qua)`)
+        },
+      })
+      console.log(`[HYBRID_RENDER] XONG ${clips.filter(Boolean).length}/${timed.length} cảnh (lỗi ${failed.length}: ${failed.join(',') || '—'})`)
+      return { ok: clips.filter(Boolean).length, failed }
     }
     // P3c-1 — ghép các clip ĐÃ render (cache trong __hybridClips) + master TTS → MP4.
     // FREE (local ffmpeg, 0 credit). Render vài cảnh LIÊN TIẾP từ 0 trước, rồi gọi cái này.
@@ -288,10 +297,22 @@ export default function ActionInsertsPhase({ onContinue }: Props) {
         return url
       } catch (e) { console.error('[HYBRID_ASM] lỗi:', e) }
     }
+    // P3c-4 — FULL end-to-end in one call: director → render all → assemble (+sticker)
+    // → open the MP4. Run AFTER a keyframe exists (Bước 3) so lips have a face + voice.
+    w2.__testHybridExport = async () => {
+      console.log('[HYBRID_EXPORT] 1/3 đạo diễn…')
+      await (window as unknown as { __testBrollDirector?: () => Promise<unknown> }).__testBrollDirector?.()
+      console.log('[HYBRID_EXPORT] 2/3 render tất cả cảnh (tốn credit)…')
+      await w2.__testRenderAllScenes?.()
+      console.log('[HYBRID_EXPORT] 3/3 ghép → MP4…')
+      return await w2.__testHybridAssemble?.()
+    }
     return () => {
       delete (window as unknown as { __testBrollDirector?: unknown }).__testBrollDirector
       delete (window as unknown as { __testRenderScene?: unknown }).__testRenderScene
+      delete (window as unknown as { __testRenderAllScenes?: unknown }).__testRenderAllScenes
       delete (window as unknown as { __testHybridAssemble?: unknown }).__testHybridAssemble
+      delete (window as unknown as { __testHybridExport?: unknown }).__testHybridExport
     }
   }, [geminiKey, kieApiKey])
 
