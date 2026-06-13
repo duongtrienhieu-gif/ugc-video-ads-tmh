@@ -986,7 +986,15 @@ export async function generateVideoJob(params: {
     if (params.referenceImageUrls?.length) input.image_urls = [params.referenceImageUrls[0]]
     input.resolution = params.resolution === '480p' ? '480p' : '720p'
     input.mode = 'normal'
-    input.duration = String(Math.max(6, Math.min(30, Math.round(params.duration ?? 6))))
+    // P3s — Grok i2v internally splits the clip into a 6s BASE + an extension
+    // chunk whose length = duration - 6. The extension API requires
+    // `video_extension_start_time >= 2s` (i.e. extension_chunk >= 2s), so a
+    // duration of exactly 7 fails with "Invalid parameter:
+    // video_extension_start_time must be at least 2s" — costing the keyframe
+    // credit. Force the duration ladder to 6 / 8 / 10 / … (skip 7).
+    let dur = Math.max(6, Math.min(30, Math.round(params.duration ?? 6)))
+    if (dur > 6 && dur < 8) dur = 8
+    input.duration = String(dur)
   }
 
   const res = await fetch(`${KIE_BASE}/jobs/createTask`, {

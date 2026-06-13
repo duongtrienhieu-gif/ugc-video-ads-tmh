@@ -20,7 +20,13 @@ import { matchVoiceForAvatar } from '../services/voiceCreatorMatcher'
 import { BROLL_RENDER_RES } from '../services/hybridConstants'
 import { estimateInsertCredits, V3_CREDIT_COST } from '../types'
 
-const LIPS_CR_PER_SEC = 14
+// P3s — KIE Kling AI Avatar Standard 720p is 8 cr/s (was incorrectly 14 — user
+// audited against KIE pricing page). The renderer already calls
+// `kling/ai-avatar-standard` (the right model id), only the UI estimate was wrong.
+const LIPS_CR_PER_SEC = 8
+// P3s — render 2 scenes concurrently (was: 1 at a time). KIE jobs are independent;
+// a fail on one doesn't cascade. 2 is the safe Mode-1 cadence the user wants back.
+const MAX_CONCURRENT_RENDERS = 2
 const ASSETS_CR = V3_CREDIT_COST.tts + V3_CREDIT_COST.keyframe
 
 const ROLE_BADGE: Record<string, { label: string; cls: string }> = {
@@ -53,7 +59,15 @@ export default function HybridVideoPhase(_props: Props) {
   const [planning, setPlanning] = useState(false)
   const [assetsBusy, setAssetsBusy] = useState(false)
   const [renderingIdx, setRenderingIdx] = useState<Set<number>>(new Set())
+  // P3s — scenes the user clicked while ≥2 were already rendering. They wait
+  // their turn (FIFO) and auto-launch as a slot frees up.
+  const [queuedIdx, setQueuedIdx] = useState<number[]>([])
   const [failedIdx, setFailedIdx] = useState<Set<number>>(new Set())
+  // P3s — running tally of credits KIE consumed on scenes that then failed.
+  // Shown as a warning banner so the user knows how much they've lost to the
+  // pre-flight bugs (B/D) before the retry succeeds. NOT refundable — KIE keeps
+  // charged credits on failure — so this is a visibility tool, not a recovery.
+  const [lostCredits, setLostCredits] = useState(0)
   const [error, setError] = useState('')
 
   const sceneCredit = (s: TimedBrollScene): number => {
@@ -64,7 +78,11 @@ export default function HybridVideoPhase(_props: Props) {
   const pendingIdx = scenes.map((_, i) => i).filter((i) => !hybrid.clips[i])
   const pendingCredit = pendingIdx.reduce((sum, i) => sum + sceneCredit(scenes[i]), 0)
   const allDone = scenes.length > 0 && doneCount === scenes.length
-  const busy = planning || assetsBusy || renderingIdx.size > 0
+  // P3s — `busy` now ONLY locks the toolbar actions (plan / makeAssets / renderAll).
+  // The per-card Render button no longer respects `busy` — it queues instead
+  // (see renderScene). The user can fire up to N concurrent renders themselves.
+  const busy = planning || assetsBusy
+  const renderingNow = renderingIdx.size + queuedIdx.length > 0
 
   const runPlan = async () => {
     if (!script) { addToast('Chưa có kịch bản (Bước 1)', 'error'); return }
@@ -115,9 +133,10 @@ export default function HybridVideoPhase(_props: Props) {
     product: state.inputs.product, avatar: state.inputs.avatar, creatorVideoConfig: state.creatorVideoConfig, resolution,
   })
 
-  const renderScene = async (i: number) => {
-    if (!hasAssets) { addToast('Bấm "Tạo giọng + mặt" trước', 'error'); return }
-    if (!kieApiKey) { addToast('Thiếu KIE key', 'error'); return }
+  // P3s — directly render a scene WITHOUT queue logic. Used internally by the
+  // queue worker. Tracks lostCredits on failure so the user can see how much
+  // KIE took on the failed attempt (it doesn't refund).
+  const runRender = async (i: number) => {
     const s = (useAdsVideoStore.getState().state.hybrid.scenes ?? [])[i]
     if (!s) return
     setRenderingIdx((set) => new Set(set).add(i))
@@ -128,19 +147,48 @@ export default function HybridVideoPhase(_props: Props) {
     } catch (e) {
       console.error(`[HYBRID_UI] cảnh ${i} lỗi:`, e)
       setFailedIdx((set) => new Set(set).add(i))
+      // KIE keeps credits on failure → tally the loss for the visibility banner.
+      setLostCredits((c) => c + sceneCredit(s))
       addToast(`Cảnh #${i + 1} lỗi: ${(e instanceof Error ? e.message : String(e)).slice(0, 100)}`, 'error')
     } finally {
       setRenderingIdx((set) => { const n = new Set(set); n.delete(i); return n })
+      // Pull the next queued scene (if any) right after a slot frees up.
+      setQueuedIdx((q) => {
+        if (q.length === 0) return q
+        const [nextI, ...rest] = q
+        // Defer the launch so React commits the state update first.
+        setTimeout(() => { void runRender(nextI) }, 0)
+        return rest
+      })
     }
   }
 
-  const renderAll = async () => {
+  // P3s — user-facing render call. Enqueues if ≥MAX_CONCURRENT_RENDERS are in
+  // flight (UI just shows "đang chờ" on that card); fires immediately otherwise.
+  const renderScene = (i: number) => {
     if (!hasAssets) { addToast('Bấm "Tạo giọng + mặt" trước', 'error'); return }
-    const queue = scenes.map((_, i) => i).filter((i) => !hybrid.clips[i])
-    if (queue.length === 0) { addToast('Tất cả cảnh đã render', 'info'); return }
-    addToast(`🎬 Render ${queue.length} cảnh (×2 song song)…`, 'info')
-    const worker = async () => { while (queue.length) { const i = queue.shift(); if (i === undefined) break; await renderScene(i) } }
-    await Promise.all([worker(), worker()])
+    if (!kieApiKey) { addToast('Thiếu KIE key', 'error'); return }
+    // If a slot is free, launch directly.
+    if (renderingIdx.size < MAX_CONCURRENT_RENDERS) {
+      void runRender(i)
+      return
+    }
+    // Otherwise queue (dedupe: don't enqueue twice if user spam-clicks).
+    setQueuedIdx((q) => (q.includes(i) ? q : [...q, i]))
+  }
+
+  const renderAll = () => {
+    if (!hasAssets) { addToast('Bấm "Tạo giọng + mặt" trước', 'error'); return }
+    if (!kieApiKey) { addToast('Thiếu KIE key', 'error'); return }
+    const pending = scenes.map((_, i) => i).filter((i) => !hybrid.clips[i] && !renderingIdx.has(i) && !queuedIdx.includes(i))
+    if (pending.length === 0) { addToast('Không còn cảnh chờ render', 'info'); return }
+    addToast(`🎬 Render ${pending.length} cảnh (${MAX_CONCURRENT_RENDERS} song song)…`, 'info')
+    // Fill the slots; queue the rest. The runRender finalizer drains the queue.
+    const slots = Math.max(0, MAX_CONCURRENT_RENDERS - renderingIdx.size)
+    const immediate = pending.slice(0, slots)
+    const queued = pending.slice(slots)
+    if (queued.length) setQueuedIdx((q) => [...q, ...queued])
+    immediate.forEach((i) => { void runRender(i) })
   }
 
   if (!script) {
@@ -180,7 +228,8 @@ export default function HybridVideoPhase(_props: Props) {
             </button>
           )}
           {scenes.length > 0 && hasAssets && pendingIdx.length > 0 && (
-            <button onClick={renderAll} disabled={busy}
+            <button onClick={renderAll} disabled={busy || renderingNow}
+              title={renderingNow ? 'Đang có cảnh đang render — đợi xong rồi bấm' : ''}
               className="flex items-center gap-1.5 rounded-full bg-gradient-to-r from-violet-600 to-pink-600 px-4 py-2 text-[12px] font-bold text-white shadow-sm hover:from-violet-700 hover:to-pink-700 disabled:opacity-50">
               <Sparkles className="h-3.5 w-3.5" /> Tạo tất cả (~{pendingCredit}cr)
             </button>
@@ -200,6 +249,17 @@ export default function HybridVideoPhase(_props: Props) {
           </div>
         )}
 
+        {/* P3s — credit lost on failed renders (KIE doesn't refund). Visibility, not recovery. */}
+        {lostCredits > 0 && (
+          <div className="mb-4 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-[12px] text-amber-800">
+            <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+            <span>
+              Đã mất <strong>~{lostCredits}cr</strong> do {failedIdx.size} cảnh fail (KIE không hoàn credit). Bấm "Render lại" ở cảnh ✗ để thử lại.
+              <button onClick={() => setLostCredits(0)} className="ml-2 underline">[Xoá]</button>
+            </span>
+          </div>
+        )}
+
         {/* ── Creator assets — listen to the voice + see the face before paying ─ */}
         {hasAssets ? (
           <AssetsBar keyframeRef={hybrid.keyframeRef} voiceRef={hybrid.voiceRef}
@@ -215,8 +275,8 @@ export default function HybridVideoPhase(_props: Props) {
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
             {scenes.map((s, i) => (
               <SceneCard key={i} i={i} scene={s} clipRef={hybrid.clips[i]}
-                rendering={renderingIdx.has(i)} failed={failedIdx.has(i)}
-                credit={sceneCredit(s)} hasAssets={hasAssets} busy={busy}
+                rendering={renderingIdx.has(i)} queued={queuedIdx.includes(i)} failed={failedIdx.has(i)}
+                credit={sceneCredit(s)} hasAssets={hasAssets}
                 onRender={() => renderScene(i)} />
             ))}
           </div>
@@ -276,9 +336,9 @@ function AssetsBar({ keyframeRef, voiceRef, voiceDurationSec, busy, onRegen }: {
 }
 
 // ── One scene = a 9:16 frame; render button ON the frame; clip plays in place ──
-function SceneCard({ i, scene, clipRef, rendering, failed, credit, hasAssets, busy, onRender }: {
-  i: number; scene: TimedBrollScene; clipRef?: string; rendering: boolean; failed: boolean
-  credit: number; hasAssets: boolean; busy: boolean; onRender: () => void
+function SceneCard({ i, scene, clipRef, rendering, queued, failed, credit, hasAssets, onRender }: {
+  i: number; scene: TimedBrollScene; clipRef?: string; rendering: boolean; queued: boolean; failed: boolean
+  credit: number; hasAssets: boolean; onRender: () => void
 }) {
   const url = useAssetUrl(clipRef ?? undefined)
   const badge = ROLE_BADGE[scene.role] ?? ROLE_BADGE.broll
@@ -295,8 +355,12 @@ function SceneCard({ i, scene, clipRef, rendering, failed, credit, hasAssets, bu
               <div className="flex flex-col items-center gap-1 text-violet-300">
                 <Loader2 className="h-6 w-6 animate-spin" /> <span className="text-[10px]">đang render…</span>
               </div>
+            ) : queued ? (
+              <div className="flex flex-col items-center gap-1 text-amber-300">
+                <Loader2 className="h-6 w-6 animate-pulse" /> <span className="text-[10px]">đang chờ…</span>
+              </div>
             ) : (
-              <button onClick={onRender} disabled={busy || !hasAssets}
+              <button onClick={onRender} disabled={!hasAssets}
                 className="flex flex-col items-center gap-1.5 rounded-xl bg-violet-600 px-4 py-3 text-white shadow-lg hover:bg-violet-700 disabled:opacity-40">
                 <Play className="h-5 w-5 fill-white" />
                 <span className="text-[12px] font-bold">Render</span>
@@ -321,9 +385,9 @@ function SceneCard({ i, scene, clipRef, rendering, failed, credit, hasAssets, bu
         {scene.role !== 'lips' && scene.conceptPrompt && (
           <p className="line-clamp-2 text-[10px] italic leading-tight text-gray-500">{scene.conceptPrompt}</p>
         )}
-        {done && !rendering && (
-          <button onClick={onRender} disabled={busy}
-            className="mt-auto flex items-center justify-center gap-1 rounded-md border border-gray-200 bg-white px-2 py-1 text-[10px] font-bold text-gray-600 hover:bg-gray-50 disabled:opacity-50">
+        {done && !rendering && !queued && (
+          <button onClick={onRender}
+            className="mt-auto flex items-center justify-center gap-1 rounded-md border border-gray-200 bg-white px-2 py-1 text-[10px] font-bold text-gray-600 hover:bg-gray-50">
             <RotateCcw className="h-3 w-3" /> Render lại ~{credit}cr
           </button>
         )}
