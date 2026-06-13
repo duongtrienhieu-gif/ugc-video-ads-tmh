@@ -28,6 +28,31 @@ export interface ValidatorResult {
   failures: string[]
 }
 
+// ── VN spell-fix table (P3p-D) ──────────────────────────────────────────────
+// Gemini occasionally mistypes common Vietnamese tones — the user audited
+// "Hấu hết" twice across separate batches (should be "Hầu hết"). This is a
+// SILENT post-gen replacement, not a validator failure: there's no
+// architectural reason to retry just to fix a tone mark when we can correct
+// it deterministically. Patterns are case-aware (capitalized + lowercase).
+const VN_SPELL_FIXES: Array<[RegExp, string]> = [
+  [/\bHấu hết\b/g, 'Hầu hết'],
+  [/\bhấu hết\b/g, 'hầu hết'],
+  [/\bbị mật\b/g, 'bí mật'],
+  [/\bBị mật\b/g, 'Bí mật'],
+  // Stray "tôi" → "mình" cleanup is NOT auto-done; that's the pronoun rule's job.
+]
+
+/** Silent VN spell fix. Returns the corrected string (or the original if no
+ *  patterns matched). Used by scriptGenerator after the body parse, before the
+ *  block reaches the user. Pure deterministic replacement — no LLM call. */
+export function spellFixVi(text: string): string {
+  let out = text
+  for (const [pattern, replacement] of VN_SPELL_FIXES) {
+    out = out.replace(pattern, replacement)
+  }
+  return out
+}
+
 // ── Tokenization helpers (VN-friendly) ───────────────────────────────────────
 
 const STOPWORDS_VI = new Set([
@@ -96,6 +121,22 @@ export function validateHooks(hooks: string[]): ValidatorResult {
       `${hooks.length - uniqueClosings + 1} hooks share the same closing clause ` +
       `(e.g. "…${closings.filter((c, i) => closings.indexOf(c) !== i)[0] ?? ''}"). ` +
       `Each hook needs a DIFFERENT closing.`,
+    )
+  }
+  // P3p-E — hook length: the system prompt says "8-16 words, one breath" but
+  // Gemini sometimes pushes to 20+ (the user audited a 21-word hook). 18 is
+  // the hard ceiling — past that the viewer can't read it in 3 seconds and
+  // the scroll-stop dies. Counts whitespace-separated tokens after stripping
+  // punctuation; lenient enough to allow rojak ("worth it") without false-fail.
+  const overlong = hooks
+    .map((h, i) => ({ idx: i, words: normalize(h).split(' ').filter(Boolean).length, text: h }))
+    .filter((h) => h.words > 18)
+  if (overlong.length > 0) {
+    const sample = overlong[0]
+    failures.push(
+      `${overlong.length} hook(s) exceed 18 words (a TikTok hook must read in under 3s). ` +
+      `Hook #${sample.idx + 1} is ${sample.words} words: "${sample.text.slice(0, 70)}…". ` +
+      `Tighten to 8-16 words — cut redundant adjectives and connectors.`,
     )
   }
   return { ok: failures.length === 0, failures }

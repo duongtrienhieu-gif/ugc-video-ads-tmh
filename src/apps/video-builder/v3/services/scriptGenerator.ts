@@ -29,7 +29,7 @@ import {
 } from '../types'
 import { AD_STRUCTURES } from './adStructures'
 import { buildHookPoolBlock, pickRandomViralReferences } from './hookViralPatterns'
-import { validateHooks, validateBody, type BodyBlocks } from './scriptValidator'
+import { validateHooks, validateBody, spellFixVi, type BodyBlocks } from './scriptValidator'
 import { buildMsBodyVocabBlock } from './bodyPatternsMs'
 import { AD_ANGLES } from './adAngles'
 import {
@@ -632,6 +632,17 @@ THE FIXED HOOK (continue the script DIRECTLY from this line; reproduce it verbat
   // Force the hook verbatim — never trust the model to reproduce it exactly.
   blocks.hook = args.chosenHook
 
+  // P3p-D — silent VN spell fix on the 4 generated blocks (NOT the hook, which
+  // was forced verbatim above and is the user's own picked text). Catches
+  // recurring Gemini typos like "hấu hết" → "hầu hết" deterministically without
+  // costing a retry call. No-op when lang ≠ 'vi'.
+  if (args.lang === 'vi') {
+    blocks.pain = spellFixVi(blocks.pain ?? '')
+    blocks.discovery = spellFixVi(blocks.discovery ?? '')
+    blocks.benefit = spellFixVi(blocks.benefit ?? '')
+    blocks.cta = spellFixVi(blocks.cta ?? '')
+  }
+
   // P3k — post-gen body validator: catches the symptom-drift + missing-hook-reuse
   // + banned-opening + flat-CTA failures the prompt sometimes lets through. ONE
   // feedback retry (no new prompt layer, just an append) when something failed.
@@ -960,8 +971,17 @@ Generate the JSON now — exactly 6 hooks.`
     throw new Error(`Gemini trả về không đọc được${raw.trim() ? ` (${raw.trim().slice(0, 80)}…)` : ' (rỗng)'}. Thử lại.`)
   }
 
+  // P3p-D — silent VN spell fix on every hook text before the user even sees
+  // it. Catches "Hấu hết" → "Hầu hết" deterministically.
+  if (params.lang === 'vi') {
+    for (const h of hooks) {
+      h.text = spellFixVi(h.text)
+    }
+  }
+
   // P3k — post-gen validator: catches "6 hooks share the same opening / closing"
   // (lazy template-copy mode) that the prompt's diversity rule sometimes misses.
+  // P3p-E — now also fails when ≥1 hook exceeds 18 words (rule was prompt-only).
   // One feedback retry — NO new prompt layer, just a short fix-only instruction.
   const hookTexts = hooks.map((h) => h.text)
   const diversity = validateHooks(hookTexts)
