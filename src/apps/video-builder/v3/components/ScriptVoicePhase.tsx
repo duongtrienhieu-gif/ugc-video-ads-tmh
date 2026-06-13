@@ -129,18 +129,14 @@ export default function ScriptVoicePhase({ onContinue }: Props) {
   // heuristic across vi/ms/en; just a highlight, the user can pick any).
   const suggestedFramework = useMemo<AdStructure>(() => {
     const p = state.inputs.product
-    // Default = a "vào thẳng sản phẩm" framework — strongest scroll-stop for cold reach.
-    if (!p) return 'VISUAL_HAND'
+    // P3j — INSTANT is the default cold-reach winner for most niches; LEAD is
+    // suggested when the brief leans on emotional pain / story / clinical
+    // mechanism that needs build-up before the product lands.
+    if (!p) return 'INSTANT'
     const txt = `${p.benefits ?? ''} ${p.usps ?? ''} ${p.painPoints ?? ''} ${p.productDescription ?? ''} ${p.ingredients ?? ''}`.toLowerCase()
-    // Spec/feature-heavy products → list-style hook wins.
-    if (/\d+\s?(mah|w|bar|kg|ml|gb|tb|cm|inch|tuần|tháng|hour|day)|nhiều\s+(lý\s+do|công\s+dụng)|spec|tính\s+năng/.test(txt)) return 'RAPID_REASONS'
-    // Spec data + insider mechanism → authority is a fit.
-    if (/ingredient|thành phần|cơ chế|công nghệ|bahan|teknologi|mechanism|chiết xuất|extract/.test(txt)) return 'AUTHORITY_EXPERT'
-    // Strong reviewer/best-seller signals → social proof.
-    if (/review|đánh giá|ngàn người|nghìn người|khách|ulasan|testimoni|best.?sell|bán chạy|laris/.test(txt)) return 'SOCIAL_PROOF'
-    // Specific pain language → problem-solution.
-    if (/đau|nhức|khó|mệt|gãi|ngứa|chóng mặt|ợ chua|táo bón|mất ngủ|stress/.test(txt)) return 'PROBLEM_SOLUTION'
-    return 'VISUAL_HAND'
+    // Heavy emotional / clinical / story-driven niches → LEAD lets the script breathe.
+    if (/đau|nhức|mệt|chóng mặt|ợ chua|táo bón|mất ngủ|stress|trầm cảm|nhạy cảm|tổn thương|hậu sản|sau sinh|kén ăn|ám ảnh|mặc cảm/.test(txt)) return 'LEAD'
+    return 'INSTANT'
   }, [state.inputs.product])
 
   // useOwnScript follows the script box: text present → segment it verbatim;
@@ -564,7 +560,7 @@ export default function ScriptVoicePhase({ onContinue }: Props) {
                             <button
                               key={s}
                               onClick={() => setAdStructure(s)}
-                              title={`${cfg.descriptionVi}\n\nDạng hook: ${cfg.hookShape}\n\nQuy tắc sản phẩm: ${cfg.productRevealRule}`}
+                              title={`${cfg.descriptionVi}\n\nQuy tắc sản phẩm: ${cfg.productRevealRule}`}
                               className={`relative flex items-center gap-1.5 rounded-lg border px-2 py-1.5 text-left text-[11px] font-semibold transition-all ${
                                 isActive ? TONE_BG[cfg.tone] : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50'
                               }`}

@@ -230,6 +230,16 @@ function loadFromStorage(): V3PipelineState | null {
       const h = parsed.hybrid as unknown as Record<string, unknown>
       if ('resolution' in h) delete h.resolution
     }
+    // P3j — AdStructure collapsed from 8 sub-frameworks → 2 groups. Map any
+    // persisted old value onto its group so the picker doesn't crash.
+    if (parsed.scriptBrain && typeof parsed.scriptBrain.structure === 'string') {
+      const old = parsed.scriptBrain.structure as string
+      const INSTANT_OLD = ['VISUAL_HAND', 'RAPID_REASONS', 'UNEXPECTED_DISCOVERY', 'POV_FOR_YOU']
+      const LEAD_OLD = ['STORY_CONFESSION', 'AUTHORITY_EXPERT', 'SOCIAL_PROOF', 'PROBLEM_SOLUTION']
+      if (INSTANT_OLD.includes(old)) parsed.scriptBrain.structure = 'INSTANT'
+      else if (LEAD_OLD.includes(old)) parsed.scriptBrain.structure = 'LEAD'
+      else if (old !== 'INSTANT' && old !== 'LEAD') parsed.scriptBrain.structure = 'INSTANT'
+    }
     // Defensive: a corrupted / pre-inserts payload may not carry an array.
     // Guard before .map so a bad localStorage blob can't crash hydration.
     if (!Array.isArray(parsed.inserts)) parsed.inserts = []

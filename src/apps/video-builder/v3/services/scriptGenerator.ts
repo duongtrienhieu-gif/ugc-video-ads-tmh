@@ -28,6 +28,7 @@ import {
   SCRIPT_LANG_GEMINI_NAME, HOOK_ARCHETYPE_ORDER, DEFAULT_SCRIPT_LANG,
 } from '../types'
 import { AD_STRUCTURES } from './adStructures'
+import { buildHookPoolBlock, pickRandomViralReferences } from './hookViralPatterns'
 import { AD_ANGLES } from './adAngles'
 import {
   allocateBlockBudgets, estimateReadDurationSec, estimateReadDurationForVoice,
@@ -99,6 +100,7 @@ export async function generateScript(
         productRevealRule: structure.productRevealRule,
         blockGuides: structure.blockGuides,
         bodyAntiPatterns: structure.bodyAntiPatterns,
+        symptomBans: structure.symptomBans,
         angleTone: angle.tonePrompt,
         lang,
       }),
@@ -121,6 +123,7 @@ export async function generateScript(
       productRevealRule: structure.productRevealRule,
       blockGuides: structure.blockGuides,
       bodyAntiPatterns: structure.bodyAntiPatterns,
+      symptomBans: structure.symptomBans,
       angleTone: angle.tonePrompt,
       lang,
     })
@@ -221,12 +224,16 @@ function buildSystemPrompt(args: {
   productRevealRule: string
   blockGuides: { pain: string; discovery: string; benefit: string; cta: string }
   bodyAntiPatterns: string[]
+  symptomBans: string[]
   angleTone: string
   lang: string
 }): string {
   const antiPatternList = args.bodyAntiPatterns
     .map((p) => `  • "${p}…"`)
     .join('\n')
+  const symptomLine = args.symptomBans.length > 0
+    ? `\n*** SYMPTOM VOCABULARY BANNED in the pain block (this is an INSTANT group — pain is a 1-line transition, NOT a symptom report). Words listed below are HARD-BANNED in pain; if you write any of them, the script has drifted into Problem-Solution shape: ${args.symptomBans.map((s) => `"${s}"`).join(', ')}. The discovery / benefit blocks may reference outcomes but the pain block must NEVER name a symptom.`
+    : ''
   return `You are a TikTok-native ad copywriter writing in ${args.lang}.
 
 FRAMEWORK: "${args.frameworkLabel}" — STICK TO IT.
@@ -249,7 +256,7 @@ PER-BLOCK GUIDE FOR THIS FRAMEWORK (HARD — exactly what each block must do):
 
 BANNED BODY OPENINGS for this framework (these are the WRONG framework's defaults —
 NEVER start any block with them; they signal the script has drifted):
-${antiPatternList}
+${antiPatternList}${symptomLine}
 
 TONE GUIDANCE:
 ${args.angleTone}
@@ -662,20 +669,13 @@ export interface GenerateHooksParams {
   previousBatch?: string[]
 }
 
-// P3g — hook archetype is metadata only (the FRAMEWORK is the driver). Each
-// framework maps to the archetype tag that best describes the SHAPE of its hook,
-// purely so the UI badge / parser back-compat keeps working.
-const FRAMEWORK_TO_ARCHETYPE: Record<AdStructure, HookArchetype> = {
-  // INSTANT
-  VISUAL_HAND:          'shock_result',
-  RAPID_REASONS:        'curiosity_gap',
-  UNEXPECTED_DISCOVERY: 'contrarian',
-  POV_FOR_YOU:          'question_pov',
-  // LEAD
-  STORY_CONFESSION:     'confession',
-  AUTHORITY_EXPERT:     'contrarian',
-  SOCIAL_PROOF:         'shock_result',
-  PROBLEM_SOLUTION:     'callout_pain',
+// P3j — hook archetype is now METADATA ONLY (each generated hook also gets a
+// natural archetype tag for the UI badge / store back-compat). The actual shape
+// of every hook is decided by mix-matching the 3 POOLs at generate time, not by
+// a per-framework archetype.
+const GROUP_TO_DEFAULT_ARCHETYPE: Record<AdStructure, HookArchetype> = {
+  INSTANT: 'shock_result',
+  LEAD:    'confession',
 }
 
 const ARCHETYPE_TO_STYLE: Record<HookArchetype, HookStyle> = {
@@ -714,59 +714,47 @@ const HOOKS_RESPONSE_SCHEMA = {
 export async function generateHooks(params: GenerateHooksParams): Promise<HookVariant[]> {
   const lang = SCRIPT_LANG_GEMINI_NAME[params.lang]
   const structure = AD_STRUCTURES[params.framework]
-  const angleList = structure.hookAngleHints
-    .map((h, i) => `  ${i + 1}. ${h}`)
-    .join('\n')
-  const exampleList = structure.hookExamples
-    .map((h, i) => `  ${i + 1}. ${h}`)
-    .join('\n')
-  // Hook archetype is now METADATA only — the framework is the driver. Tag every
-  // generated hook with the framework's natural archetype so the UI badge still
-  // works and the existing parser/back-compat survives.
-  const frameworkArchetype: HookArchetype = FRAMEWORK_TO_ARCHETYPE[params.framework]
+  const groupArchetype: HookArchetype = GROUP_TO_DEFAULT_ARCHETYPE[params.framework]
   const productRevealLine = structure.group === 'instant'
-    ? `- The product NAME (or the creator visibly holding it) MUST appear in EVERY hook — this framework is "vào thẳng sản phẩm".`
-    : `- The product NAME must NOT appear in any hook — this framework is "dẫn dắt sản phẩm"; the body reveals the product later. The hook sets up tension only.`
+    ? `- The product NAME (or a clear "cầm thử / mở gói / show" reference) MUST appear in EVERY hook — this group is "vào thẳng sản phẩm".`
+    : `- The product NAME must NOT appear in any hook — this group is "dẫn dắt sản phẩm"; the body reveals the product later. The hook sets up tension only.`
   const isReroll = (params.previousBatch?.length ?? 0) > 0
+  // P3j — inject the 3 POOL block + a random subset of the 150-hook viral library
+  // so Gemini reads varied scroll-stop examples every call (different press → different
+  // anchors → less template-copying).
+  const poolBlock = buildHookPoolBlock()
+  const viralRefs = pickRandomViralReferences(10)
+    .map((h, i) => `  ${i + 1}. ${h}`)
+    .join('\n')
 
   const systemInstruction = `You are a TikTok-native ad HOOK specialist writing in ${lang}.
 A hook is the first 1-3 seconds of a short video ad — the single biggest factor
 in whether a viewer keeps watching or scrolls past.
 
-*** FRAMEWORK BINDING — THE #1 RULE ***
-The user has chosen the framework "${structure.labelVi}". ALL 6 hooks MUST respect
-its hook SHAPE — but vary words, sentence structure, opening, connector, and
-closing clause. NEVER mass-produce 6 copies of one literal template.
-
-HOOK SHAPE (the elements every hook must contain; words/structure free):
-${structure.hookShape}
-
-3 REFERENCE EXAMPLES (different niches — STUDY the variation in how they open,
-nối, and close. Do NOT copy the words; copy the shape-bound + word-free spirit):
-${exampleList}
-
-THE 6 HOOKS — ONE per angle below (so they aren't paraphrases of one another):
-${angleList}
-
+*** GROUP BINDING ***
+Group: "${structure.labelVi}".
 ${productRevealLine}
 
-*** STRUCTURAL DIVERSITY (HARD — the WHOLE point of having 6 hooks) ***
-The 6 hooks together MUST cover at least 4 DIFFERENT SENTENCE STRUCTURES from
-this list (don't write 6 statements; don't write 6 questions):
-  • Statement thẳng (declarative)
-  • Câu hỏi rồi tự trả lời / câu hỏi tu từ
-  • Mệnh lệnh / lời khuyên ngắn ("Thử…", "Đừng…", "Nhớ…")
-  • Mở câu chuyện ("Hôm qua mình…", "Hồi đó…")
-  • Cảm thán / ngạc nhiên ("Trời ơi…", "Ai dè…")
-  • So sánh / đối chiếu ("Tưởng X mà Y", "Mua A để Y")
-  • Liệt kê ngắn ("3 thứ…", "2 lý do…")
+*** THE 3 POOLs — mix-match for each of the 6 hooks ***
+Build each of the 6 hooks by combining ONE choice from POOL 1 + ONE choice from
+POOL 2 + (optionally) ONE choice from POOL 3. Across the 6 hooks the combinations
+MUST be different — never reuse the same POOL 1 device twice, never reuse the same
+POOL 2 mechanism twice.
+
+${poolBlock}
+
+*** 10 VIRAL HOOK REFERENCES (random sample from a 150-hook viral library) ***
+STUDY the tone / rhythm / shock vocabulary. Do NOT copy the words — these are not
+templates. Notice how they OPEN punchy, end clean, and avoid Instagram-caption
+softeners. Adapt the SPIRIT to the user's product:
+${viralRefs}
 
 *** ANTI-REPETITION (HARD) ***
 - NO TWO hooks may share the same opening words (the first 2-3 words).
 - NO TWO hooks may share the same closing clause / connector phrase
-  (e.g. if hook 1 ends with "là dành cho bạn", NO OTHER hook may end with that).
+  (e.g. if hook 1 ends with "là dành cho bạn", NO OTHER hook may end that way).
 - KILL the lazy "fill the bracket" instinct — write each hook AS IF it were the
-  ONLY hook for this product, then check it doesn't echo the others.
+  only hook for this product, then check it doesn't echo the others.
 
 *** LANGUAGE LOCK ***
 ALL 6 hooks 100% in ${lang}. The brief may be Vietnamese — READ + understand it,
@@ -775,14 +763,12 @@ is a HARD FAILURE.
 
 WHAT MAKES A HOOK STOP THE SCROLL:
 - VOICE-MEMO REGISTER, not Instagram caption. A real person talking to a friend.
-  Each hook MUST have a clear subject ("mình / tôi / em / bạn") and read like a
-  spoken line, NEVER a captionless fragment.
-- 8-16 words, one breath, readable in under 3 seconds. Punchy but COMPLETE — the
-  sentence makes sense said out loud cold.
+  Each hook reads like a SPOKEN line — never a captionless fragment.
+- 8-16 words, one breath, readable in under 3 seconds. Punchy but COMPLETE.
 - ONE concrete, slightly UNEXPECTED detail per hook (a moment, number, texture,
   ingredient, situation, persona). Make the viewer see a picture, not read a claim.
-- KILL softeners / filler in the trail: no "...nhé / ...đó / ...cơ / ...vậy"
-  habit, no "Bạn có thấy... không?" wind-ups. Say it straight.
+- KILL softeners in the trail: no "...nhé / ...đó / ...cơ / ...vậy" habit, no
+  "Bạn có thấy... không?" wind-ups. Say it straight.
 - BAN clichés: "bí mật ít ai biết", "điều bất ngờ là", "không ngờ...", "thay đổi
   cuộc đời", and their ${lang} equivalents. If it sounds like an ad, rewrite.
 - NO meta-labels or stage directions inside the text — every character is read
@@ -797,11 +783,11 @@ TRANSLATION: each hook also gets a faithful Vietnamese translation in "vi" —
 keep the casual spoken tone, NOT formal/literal. Display-only, NEVER used in the
 video. "text" stays 100% in ${lang}; only "vi" is Vietnamese.` : ''}
 
-OUTPUT strict JSON, no markdown fences. Tag every hook with archetype "${frameworkArchetype}"
-(metadata only — the SHAPE is set by the framework above, not by the archetype tag):
+OUTPUT strict JSON, no markdown fences. Tag every hook with archetype "${groupArchetype}"
+(metadata only — the SHAPE is set by the POOL mix above, not by the archetype tag):
 ${params.lang !== 'vi'
-  ? `{ "hooks": [ { "archetype": "${frameworkArchetype}", "text": "<in ${lang}>", "vi": "<VN>" }, ... exactly 6 ] }`
-  : `{ "hooks": [ { "archetype": "${frameworkArchetype}", "text": "..." }, ... exactly 6 ] }`}`
+  ? `{ "hooks": [ { "archetype": "${groupArchetype}", "text": "<in ${lang}>", "vi": "<VN>" }, ... exactly 6 ] }`
+  : `{ "hooks": [ { "archetype": "${groupArchetype}", "text": "..." }, ... exactly 6 ] }`}`
 
   const creatorLine = params.creatorDescription
     ? `\nCREATOR PROFILE (write in this voice): ${params.creatorDescription}\n` : ''
@@ -810,7 +796,7 @@ ${params.lang !== 'vi'
   const freshness = Math.random().toString(36).slice(2, 8)
   // P3i — on re-roll, force a break from the previous batch's connectors / endings.
   const prevBlock = isReroll
-    ? `\n*** PREVIOUS BATCH (the user pressed "Đổi 6 hook" — they didn't like these; do NOT repeat their opening words, connectors, or closing clauses; break out completely): ***\n${params.previousBatch!.map((h, i) => `  ${i + 1}. ${h}`).join('\n')}\nWrite 6 RADICALLY different hooks: different sentence structures, different opening words, different angles. If the previous batch all closed with the same clause, the new batch must use 6 distinct closings.\n`
+    ? `\n*** PREVIOUS BATCH (the user pressed "Đổi 6 hook" — they didn't like these; do NOT repeat their opening words, connectors, or closing clauses; break out completely): ***\n${params.previousBatch!.map((h, i) => `  ${i + 1}. ${h}`).join('\n')}\nWrite 6 RADICALLY different hooks: different POOL-1 devices, different POOL-2 mechanisms, different opening words. If the previous batch all closed with the same clause, the new batch must use 6 distinct closings.\n`
     : ''
   const userPrompt = `Write the 6 hooks in ${lang} for this product.
 
@@ -819,9 +805,9 @@ PRODUCT BRIEF (understand + ground the hooks in these real facts; may be in
 Vietnamese — never echo Vietnamese words, write only in ${lang}):
 ${params.productPitch}
 ${creatorLine}${prevBlock}
-Give a FRESH, BOLD set — explore genuinely DIFFERENT angles, concrete details and
-phrasings than the safest obvious version. Each hook MUST cover a different angle
-AND a different sentence structure. (variation ${freshness})
+Give a FRESH, BOLD set — mix-match the 3 POOLs so each hook lands a DIFFERENT
+linguistic device + DIFFERENT tension mechanism. Aim for scroll-stop, not
+narration. (variation ${freshness})
 
 Generate the JSON now — exactly 6 hooks.`
 

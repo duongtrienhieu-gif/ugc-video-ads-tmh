@@ -766,25 +766,18 @@ export function createEmptyV3State(): V3PipelineState {
 
 // ── Ad Structures (Z31 §2) ─────────────────────────────────────────────────
 
-// 8 frameworks in TWO GROUPS — scroll-stop strategy on TikTok 2024-25:
-//   "instant" — product is in frame / named in the first ~1-2s (the hook).
-//   "lead"    — product is built up and revealed later in the discovery block.
-// The hook 100% matches the framework's hookPattern (a hard template), so the
-// generated script never drifts between "vào thẳng sản phẩm" and "dẫn dắt sản phẩm".
-export type AdStructure =
-  // Group 1 — VÀO THẲNG SẢN PHẨM (product in the hook)
-  | 'VISUAL_HAND'              // Sản phẩm trong tay (cầm + USP)
-  | 'RAPID_REASONS'            // 3 lý do mua ngay (list nhanh)
-  | 'UNEXPECTED_DISCOVERY'     // Phát hiện bất ngờ (phản trực giác)
-  | 'POV_FOR_YOU'              // Dành cho ai... (POV/định danh)
-  // Group 2 — DẪN DẮT SẢN PHẨM (product revealed mid-script)
-  | 'STORY_CONFESSION'
-  | 'AUTHORITY_EXPERT'
-  | 'SOCIAL_PROOF'
-  | 'PROBLEM_SOLUTION'
+// P3j — collapsed from 8 sub-frameworks → 2 GROUPS. The 6 hookShape templates
+// that the 8 frameworks each carried were over-rigid: a hook from POV_FOR_YOU
+// could only end with "...là dành cho bạn", a body picked under RAPID_REASONS
+// was forced into a 3-bullet shape even when the natural tone was a confession.
+// Hook tone is now decided by mix-matching 3 POOLs in `hookViralPatterns.ts`;
+// the 2 groups below only carry what's structural:
+//   INSTANT — product in the hook (~0-2s). Strongest cold-reach scroll-stop.
+//   LEAD    — product revealed mid-script (~30-40%). Best when emotion / story
+//             / authority needs to be built before the product lands.
+export type AdStructure = 'INSTANT' | 'LEAD'
 
-// Default: a "vào thẳng sản phẩm" framework — strongest scroll-stop for cold reach.
-export const DEFAULT_AD_STRUCTURE: AdStructure = 'VISUAL_HAND'
+export const DEFAULT_AD_STRUCTURE: AdStructure = 'INSTANT'
 
 // ── Ad Angles (Z31 §10) ────────────────────────────────────────────────────
 
