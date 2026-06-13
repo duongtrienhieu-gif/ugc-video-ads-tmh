@@ -29,6 +29,17 @@ export interface HybridSceneClip {
   videoRef: string
 }
 
+export interface HybridStickerPlacement {
+  /** Transparent PNG asset ref (rendered locally via stickerRenderer — 0 credit). */
+  pngRef: string
+  /** Absolute timeline second to pop on (from the voice word-alignment). */
+  atSec: number
+  /** How long it stays on screen (default ~1.8s). */
+  durationSec: number
+  /** Sticker height as a fraction of the frame (default 0.10). */
+  heightFraction?: number
+}
+
 export interface HybridAssembleParams {
   /** Clips in TIMELINE ORDER. Missing/unrendered scenes should be omitted. */
   clips: HybridSceneClip[]
@@ -36,6 +47,8 @@ export interface HybridAssembleParams {
   voiceRef: string
   /** Real measured voice length (for -shortest sanity / logging). */
   voiceDurationSec: number
+  /** 0-credit text pops, composited onto the segment they fall within. */
+  stickers?: HybridStickerPlacement[]
   /** Output height; width is derived 9:16 vertical. Default 480p. */
   resolution?: '480p' | '720p' | '1080p'
   onStage?: (msg: string) => void
@@ -71,6 +84,8 @@ export async function assembleHybridVideo(
   // ── STAGE 1: normalize each clip to an MPEG-TS segment (no audio) ──────────
   const crf = params.resolution === '1080p' ? '23' : '28'
   const preset_x264 = 'veryfast'
+  const MARGIN = 24                       // px from the frame edge (sticker)
+  const allStickers = params.stickers ?? []
   const normFiles: string[] = []
   const failedIdx: number[] = []
 
@@ -95,20 +110,67 @@ export async function assembleHybridVideo(
     const isInsert = c.scene.role !== 'lips'   // broll + mechanism3d need the speed-up
     const trimDur = isInsert ? dur * INSERT_SPEED : dur
     const ptsExpr = isInsert ? `setpts=(PTS-STARTPTS)/${INSERT_SPEED}` : 'setpts=PTS-STARTPTS'
-
-    const normFile = `hnorm_${i}.ts`
-    await ffmpeg.exec([
-      '-i', inFile,
-      '-vf',
+    const baseChain =
       `scale=${evenW}:${evenH}:force_original_aspect_ratio=increase,` +
-      `crop=${evenW}:${evenH},trim=duration=${trimDur.toFixed(3)},${ptsExpr}`,
-      '-an',                                   // strip clip audio — master TTS only
-      '-c:v', 'libx264', '-preset', preset_x264, '-crf', crf,
-      '-pix_fmt', 'yuv420p', '-r', '30',
-      '-f', 'mpegts', '-y', normFile,
-    ])
+      `crop=${evenW}:${evenH},trim=duration=${trimDur.toFixed(3)},${ptsExpr}`
+
+    // Stickers whose absolute pop time falls inside THIS segment ride on it (the
+    // overlay `enable` window uses the OUTPUT-time offset = atSec - segStart, which
+    // is correct regardless of the 1.3× source speed-up).
+    const segStickers = allStickers.filter((s) => s.atSec >= c.scene.startSec && s.atSec < c.scene.endSec)
+    const stickerFiles: string[] = []
+    const normFile = `hnorm_${i}.ts`
+
+    if (segStickers.length === 0) {
+      await ffmpeg.exec([
+        '-i', inFile,
+        '-vf', baseChain,
+        '-an',                                 // strip clip audio — master TTS only
+        '-c:v', 'libx264', '-preset', preset_x264, '-crf', crf,
+        '-pix_fmt', 'yuv420p', '-r', '30',
+        '-f', 'mpegts', '-y', normFile,
+      ])
+    } else {
+      // Build a filter_complex: base + one looped PNG input per sticker.
+      const inputs: string[] = ['-i', inFile]
+      const parts: string[] = [`[0:v]${baseChain}[base]`]
+      let last = 'base'
+      for (let j = 0; j < segStickers.length; j++) {
+        const s = segStickers[j]
+        const sUrl = isAssetRef(s.pngRef) ? await getUrl(s.pngRef) : s.pngRef
+        if (!sUrl) continue
+        const pngFile = `hstk_${i}_${j}.png`
+        try { await ffmpeg.writeFile(pngFile, await fetchFile(sUrl)) }
+        catch (err) { console.warn(`[HYBRID_ASM] sticker ${i}.${j} fetch lỗi — bỏ qua`, err); continue }
+        stickerFiles.push(pngFile)
+        inputs.push('-loop', '1', '-t', dur.toFixed(3), '-i', pngFile)
+        const inIdx = j + 1
+        const pipH = Math.round((evenH * (s.heightFraction ?? 0.10)) / 2) * 2
+        parts.push(`[${inIdx}:v]format=rgba,scale=-2:${pipH},setsar=1[stk${j}]`)
+        const off = Math.max(0, s.atSec - c.scene.startSec)
+        const endW = Math.min(dur, off + s.durationSec)
+        const next = `m${j}`
+        // mid-right, lowered into the lower third (y≈72%) — same spot as mode-1.
+        parts.push(
+          `[${last}][stk${j}]overlay=x=W-w-${MARGIN}:y=(H-h)*0.72:` +
+          `enable='between(t,${off.toFixed(2)},${endW.toFixed(2)})'[${next}]`,
+        )
+        last = next
+      }
+      await ffmpeg.exec([
+        ...inputs,
+        '-filter_complex', parts.join(';'),
+        '-map', `[${last}]`,
+        '-an',
+        '-c:v', 'libx264', '-preset', preset_x264, '-crf', crf,
+        '-pix_fmt', 'yuv420p', '-r', '30',
+        '-f', 'mpegts', '-y', normFile,
+      ])
+    }
+
     normFiles.push(normFile)
     await ffmpeg.deleteFile(inFile).catch(() => {})
+    for (const f of stickerFiles) await ffmpeg.deleteFile(f).catch(() => {})
   }
 
   if (normFiles.length === 0) {

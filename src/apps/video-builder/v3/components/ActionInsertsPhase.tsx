@@ -35,13 +35,13 @@ import {
   type InsertSuggestion,
 } from '../services/insertSuggester'
 import { renderInsert, resumeInsertVideo, listEligibleInsertsForBulk } from '../services/insertRenderer'
-import { directBrollScenes, assignSceneTiming, type TimedBrollScene } from '../services/brollDirector'
-import { assembleHybridVideo, type HybridSceneClip } from '../services/hybridAssembler'
+import { directBrollScenes, assignSceneTiming, type TimedBrollScene, type BrollSticker } from '../services/brollDirector'
+import { assembleHybridVideo, type HybridSceneClip, type HybridStickerPlacement } from '../services/hybridAssembler'
 import { getProductVisualBrief, type ProductVisualBrief } from '../../../../services/productVisualBrief'
 import { hasFourProductImages } from '../../../../stores/types'
 import { computeBlockStartTimestamps, computeQuoteTimestamp, computeWordTimestampFromAlignment } from '../services/insertTimingEngine'
 // Z98 #5 — local sticker renderer (canvas → transparent PNG, 0 credit).
-import { renderStickerBlob, STICKER_STYLE_META } from '../services/stickerRenderer'
+import { renderStickerBlob, STICKER_STYLE_META, type StickerStyle } from '../services/stickerRenderer'
 import { saveAsset, getUrl } from '../../../../utils/assetStore'
 // Z98 B2 — voice-first: synth the real voice + recalibrate the script BEFORE the
 // director runs, so scene count/placement use the real duration not a WPM guess.
@@ -183,6 +183,7 @@ export default function ActionInsertsPhase({ onContinue }: Props) {
         )
         console.log('[BROLL_TIMING] timeline:', timed.map((t) => `${t.role} ${t.startSec.toFixed(1)}-${t.endSec.toFixed(1)}s (${(t.endSec - t.startSec).toFixed(1)})`))
         ;(window as unknown as { __lastBrollTimed?: TimedBrollScene[] }).__lastBrollTimed = timed
+        ;(window as unknown as { __lastBrollStickers?: BrollSticker[] }).__lastBrollStickers = res.stickers
         return { ...res, timed }
       } catch (e) { console.error('[BROLL_DIRECTOR] lỗi:', e) }
     }
@@ -193,6 +194,7 @@ export default function ActionInsertsPhase({ onContinue }: Props) {
       __testRenderScene?: (i: number) => Promise<unknown>
       __testHybridAssemble?: () => Promise<unknown>
       __lastBrollTimed?: TimedBrollScene[]
+      __lastBrollStickers?: BrollSticker[]
       __hybridClips?: (HybridSceneClip | undefined)[]
     }
     w2.__testRenderScene = async (i: number) => {
@@ -249,10 +251,35 @@ export default function ActionInsertsPhase({ onContinue }: Props) {
       const clips = (w2.__hybridClips ?? []).filter((c): c is HybridSceneClip => !!c)
       if (clips.length === 0) { console.warn('[HYBRID_ASM] chưa có clip nào — chạy __testRenderScene(0), (1)… trước'); return }
       const resolution = st.costMode === 'FULL' ? '1080p' : st.costMode === 'STANDARD' ? '720p' : '480p'
-      console.log(`[HYBRID_ASM] ghép ${clips.length} clip (res=${resolution})…`)
+
+      // P3c-2 — render sticker PNGs locally (0 credit) + place each on the real
+      // timeline second (word-alignment first, sentence estimate fallback). Spacing
+      // dedup ≥2.5s (all stickers share the same mid-right spot, like applySuggestions).
+      const alignment = st.voiceFirst?.voiceAlignment ?? st.creatorVideo?.voiceAlignment
+      const script = st.scriptBrain.script
+      const placements: HybridStickerPlacement[] = []
+      const dated = (w2.__lastBrollStickers ?? [])
+        .map((stk) => {
+          const atSec = (alignment ? computeWordTimestampFromAlignment(alignment, stk.quote, stk.wordAnchor) : null)
+            ?? (script ? computeQuoteTimestamp(script, stk.quote) : null)
+          return { stk, atSec }
+        })
+        .filter((x): x is { stk: BrollSticker; atSec: number } => typeof x.atSec === 'number')
+        .sort((a, b) => a.atSec - b.atSec)
+      let lastTs = -Infinity
+      for (const { stk, atSec } of dated) {
+        if (atSec - lastTs < 2.5) continue
+        lastTs = atSec
+        try {
+          const blob = await renderStickerBlob({ style: stk.style as StickerStyle, text: stk.text ?? '', items: stk.items })
+          const pngRef = await saveAsset(blob, 'image/png')
+          placements.push({ pngRef, atSec, durationSec: 1.8, heightFraction: 0.10 })
+        } catch (e) { console.warn('[HYBRID_ASM] sticker render lỗi — bỏ qua', e) }
+      }
+      console.log(`[HYBRID_ASM] ghép ${clips.length} clip + ${placements.length} sticker (res=${resolution})…`)
       try {
         const r = await assembleHybridVideo({
-          clips, voiceRef, voiceDurationSec, resolution,
+          clips, voiceRef, voiceDurationSec, resolution, stickers: placements,
           onStage: (m) => console.log('[HYBRID_ASM]', m),
         })
         const url = await getUrl(r.videoRef)
