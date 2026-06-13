@@ -148,6 +148,44 @@ export async function directBrollScenes(
   const minScenes = densityFloor(dur)
   const productContext = buildProductContextBlock(params.product)
   const scriptDump = params.script.blocks.map((b) => `[${b.id}] ${b.text}`).join('\n')
+  // P3o — when the script targets Malaysia, ground the scene SETTING in real
+  // Malaysian visual culture so conceptPrompts stop defaulting to "generic
+  // Asian office / generic bedroom". The user-curated MS daily contexts
+  // ("aircond semalaman", "lunch break dekat office", "balik kerja", "musim
+  // hujan") only carry weight if the director knows what those LOOK like.
+  const culturalSettingBlock = params.lang === 'ms' ? `
+MALAYSIAN VISUAL CULTURE (this script targets Malaysia — every conceptPrompt
+should look like a real Malaysian creator filmed it, NOT a generic Asian setting):
+- LIGHTING: warm tropical daylight, soft natural shadows; midday sunlight through
+  window blinds; the warm yellow of "balik kerja jam 6-7 petang"; occasional
+  monsoon-rain look ("musim hujan") for moody beats.
+- LOCATIONS (pick what fits the script's point-of-contact moment): a Malaysian
+  apartment / landed-house bedroom (often with a ceiling fan + a window aircond
+  unit visible); a small home kitchen with rice cooker + electric kettle on the
+  counter; a KL/PJ open-plan office with mixed-race coworkers; a kopitiam (kopi
+  + roti); a mamak with steel tables + plastic chairs; a food court (KL eatery);
+  a Grab car interior; LRT / commuter rail; a residential gym; an HDB-style
+  corridor; a wet market; a Mydin / 99 Speedmart aisle for the buying beat.
+- PEOPLE: Malaysian Gen Z / millennial casual wear — t-shirt + shorts at home,
+  smart-casual at office. Cast mixed race naturally (Malay / Chinese / Indian);
+  if visibly Malay, modest dress (sleeves, optional tudung) — never force tudung
+  but never put a Malay-coded creator in revealing clothes.
+- FOOD CUES (only when script names food / kitchen / breakfast moments): nasi
+  lemak, roti canai, kopi-O, milo dinosaur, kuih, biskut Raya — universal MY
+  food iconography.
+- AVOID (these break the Malaysian feel): snow / winter / autumn leaves;
+  fully-Western European suburbs / brownstones; pork in frame; alcohol bottles
+  in frame; formal Hollywood-corporate suits + ties (MY office is smart-casual).
+- SPECIFIC TRANSLATIONS for daily-context cues the body script likes to use:
+  • "aircond semalaman" / "bangun pagi" → bed with ceiling fan + window aircon
+    unit; creator stretches / rubs eyes in morning warm light.
+  • "lunch break dekat office" → mamak or food court with creator's phone on the
+    table + a plate (nasi campur / mee) + a teh tarik.
+  • "balik kerja" → Grab car interior at dusk / LRT carriage / parking lot of a
+    PJ shopping mall.
+  • "weekend" → kopitiam / mall / home couch with TV.
+  • "musim hujan" → exterior shot through a window with rain streaks.
+` : ''
 
   const systemInstruction = `You are a senior UGC ad video DIRECTOR cutting a ${dur}-second TikTok ad written
 in ${langName}. There is NO continuous talking-head — you build the WHOLE video as
@@ -214,7 +252,7 @@ names — never pad with vague stickers, but never leave a concrete callout bare
   later one is dropped) — so cover the KEY callouts; don't stack many on one line.
   ALL sticker text 100% in ${langName} — translate the idea INTO ${langName}; NEVER
   leave or switch a word to English (write the ${langName} word, not the English one).
-
+${culturalSettingBlock}
 RULES:
 - COVER 100%: the scenes' durations sum to ~${dur}s; every spoken beat has a cut;
   NO empty span. Group sentences that are TRULY one single thought into one cut;
