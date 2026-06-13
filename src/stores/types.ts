@@ -11,6 +11,11 @@ export interface Product {
   offer: string
   ingredients: string
   usageGuide: string
+  /** P4i — universal VISUAL brief computed ONCE from the product photos (Gemini
+   *  vision): form factor / hero parts / how it's used / size / shot-idea palette.
+   *  Cached so the b-roll director (text-only) can "see" the product. Optional +
+   *  additive — empty until computed; never required to construct a Product. */
+  visualBrief?: string
   createdAt: number
 }
 

@@ -242,7 +242,7 @@ USE THIS to choose usage-correct scenes. Worked examples:
 - A supplement / vitamin / capsule is swallowed.
 - A device / appliance / tool is operated, not consumed.
 - A joint brace / support is WORN on the body, not swallowed.
-- A pest bait / repellent is PLACED or sprayed; the human never consumes it.\n`
+- A pest bait / repellent is PLACED or sprayed; the human never consumes it.${product.visualBrief ?? ''}\n`
 }
 
 // ── Z37 Scene Director (primary path when own-script / brainstorm wanted) ──

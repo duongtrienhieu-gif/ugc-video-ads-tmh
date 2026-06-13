@@ -15,6 +15,7 @@ import { useSettingsStore } from '../../../../stores/settingsStore'
 import { useAssetUrl } from '../../../../hooks/useAssetUrl'
 import { useAdsVideoStore } from '../stores/adsVideoStore'
 import { directBrollScenes, assignSceneTiming, groundOrphanScenes, type TimedBrollScene } from '../services/brollDirector'
+import { generateProductVisualBrief } from '../services/productVisionBrief'
 import { renderOneHybridScene, type HybridRenderContext } from '../services/hybridRenderer'
 import { resumeInsertVideo } from '../services/insertRenderer'
 import { renderCreatorKeyframe } from '../services/creatorVideoEngine'
@@ -58,6 +59,7 @@ export default function HybridVideoPhase(_props: Props) {
   const setHybridAssets= useAdsVideoStore((s) => s.setHybridCreatorAssets)
   const setAssetsGenStartedAt = useAdsVideoStore((s) => s.setAssetsGenStartedAt)
   const patchSceneRender = useAdsVideoStore((s) => s.patchSceneRender)
+  const setProduct     = useAdsVideoStore((s) => s.setProduct)
   const setPhase       = useAdsVideoStore((s) => s.setPhase)
   const addToast       = useAppStore((s) => s.addToast)
   const geminiKey      = useSettingsStore((s) => s.geminiApiKey)
@@ -122,14 +124,23 @@ export default function HybridVideoPhase(_props: Props) {
     setPlanning(true); setError('')
     try {
       const voiceDur = hybrid.voiceDurationSec ?? script.totalDurationSec ?? 50
+      // P4i — give the director EYES: compute the product VISUAL BRIEF from the
+      // photos ONCE (cached on product.visualBrief) so the text-only director can
+      // picture the real form / hero parts / size / how it's used. Universal —
+      // works for any product. Graceful: failure leaves text-only context.
+      let product = state.inputs.product
+      if (product && !product.visualBrief) {
+        const brief = await generateProductVisualBrief(product, geminiKey)
+        if (brief) { product = { ...product, visualBrief: brief }; setProduct(product) }
+      }
       const res = await directBrollScenes({
-        geminiKey, script, lang: state.scriptBrain.outputLang, product: state.inputs.product, voiceDurationSec: voiceDur,
+        geminiKey, script, lang: state.scriptBrain.outputLang, product, voiceDurationSec: voiceDur,
         shape: state.scriptBrain.shape,
       })
       const timed = assignSceneTiming(res.scenes, hybrid.voiceAlignment, script, voiceDur)
       // P4g — brain pass over the deterministic filler cuts (split/density) so a
       // spoken line never renders as a generic product shot. Mutates `timed`.
-      await groundOrphanScenes(timed, state.inputs.product, geminiKey)
+      await groundOrphanScenes(timed, product, geminiKey)
       setHybridPlan(timed, res.stickers, res.scenes)
       setFailedIdx(new Set())
     } catch (e) {
