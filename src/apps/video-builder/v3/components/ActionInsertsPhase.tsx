@@ -16,7 +16,7 @@
 import { useState, useRef, useEffect } from 'react'
 import {
   Loader2, Sparkles, AlertCircle, ChevronRight, Play, Pause, RotateCcw,
-  Check, ThumbsDown, Lock, Unlock, X, Plus, Trash2, Lightbulb, Zap, Wand2, Mic,
+  Lock, X, Plus, Trash2, Lightbulb, Zap, Wand2, Mic,
 } from 'lucide-react'
 import { useAppStore } from '../../../../stores/appStore'
 import { useSettingsStore } from '../../../../stores/settingsStore'
@@ -24,12 +24,12 @@ import { useAssetUrl } from '../../../../hooks/useAssetUrl'
 import { useAdsVideoStore } from '../stores/adsVideoStore'
 import {
   COST_MODE_CONFIG, INSERT_STAGE_LABEL_VI,
-  estimateInsertCredits, formatCredits, defaultInsertRenderMode,
+  estimateInsertCredits, formatCredits,
   type ActionPresetId, type ActionInsertClip, type InsertRenderStage,
   type InsertRenderMode, type V3ClipStatus, type GeneratedScript,
   type VoiceFirstSlot,
 } from '../types'
-import { ACTION_PRESETS, ACTION_PRESET_ORDER } from '../services/actionPresets'
+import { ACTION_PRESETS } from '../services/actionPresets'
 import {
   pickTopInsertsForBudget, directScenesWithGemini,
   type InsertSuggestion,
@@ -134,7 +134,6 @@ function seekVoiceTo(sec: number) {
 export default function ActionInsertsPhase({ onContinue }: Props) {
   const state = useAdsVideoStore((s) => s.state)
   const bulkAddInsertsFromPresets = useAdsVideoStore((s) => s.bulkAddInsertsFromPresets)
-  const addInsert        = useAdsVideoStore((s) => s.addInsert)
   const patchInsert      = useAdsVideoStore((s) => s.patchInsert)
   const removeInsert     = useAdsVideoStore((s) => s.removeInsert)
   const clearAllInserts  = useAdsVideoStore((s) => s.clearAllInserts)
@@ -260,20 +259,11 @@ export default function ActionInsertsPhase({ onContinue }: Props) {
     (sum, it) => sum + estimateInsertCredits(it.renderMode ?? 'video', insertResolution, it.durationSec ?? 4), 0,
   )
 
-  const overBudget = inserts.length > maxInserts
-
   // ── Smart suggestions (Gemini semantic, script-language aware) ────────────
   const [suggestions, setSuggestions] = useState<InsertSuggestion[]>([])
   const [isSuggesting, setIsSuggesting] = useState(false)
   // Z98 B2 — true while the real voice is being synthesized before the director.
   const [isPreparingVoice, setIsPreparingVoice] = useState(false)
-
-  // ── Free-scene composer (Z42) — the 2 AI presets (CONCEPT_SCENE +
-  // PRODUCT_IN_ACTION) need a written scene description, so the manual library
-  // opens an inline textarea instead of adding instantly like the 12 fixed
-  // presets. `composerPreset` = which free preset's box is open (null = closed).
-  const [composerPreset, setComposerPreset] = useState<ActionPresetId | null>(null)
-  const [composerText, setComposerText] = useState('')
 
   // Z98 B2 — VOICE-FIRST. Ensure the REAL voice exists BEFORE the director runs,
   // recalibrate the script to its measured duration, and return the recalibrated
@@ -585,54 +575,6 @@ export default function ActionInsertsPhase({ onContinue }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.scriptBrain.script])
 
-  const handleAddPreset = (presetId: ActionPresetId) => {
-    if (inserts.length >= maxInserts) {
-      addToast(`Đã đạt giới hạn ${maxInserts} insert cho ${costModeCfg.labelVi} mode`, 'error')
-      return
-    }
-    const preset = ACTION_PRESETS[presetId]
-    addInsert({
-      presetId,
-      order: inserts.length,
-      stage: 'idle',
-      status: 'idle',
-      durationSec: preset.durationPreset,
-      resolution: insertResolution,
-      voiceTimestampSec: null,
-      renderMode: defaultInsertRenderMode(presetId),
-    })
-  }
-
-  // Z42 — add one of the 2 free presets (CONCEPT_SCENE / PRODUCT_IN_ACTION)
-  // with the user's typed scene description. These need a conceptPrompt, so
-  // they come from the composer textarea instead of an instant click.
-  const handleAddFreeScene = () => {
-    if (!composerPreset) return
-    if (inserts.length >= maxInserts) {
-      addToast(`Đã đạt giới hạn ${maxInserts} insert cho ${costModeCfg.labelVi} mode`, 'error')
-      return
-    }
-    const text = composerText.trim()
-    if (text.length < 4) {
-      addToast('Hãy mô tả cảnh bạn muốn (tối thiểu vài từ)', 'error')
-      return
-    }
-    const preset = ACTION_PRESETS[composerPreset]
-    addInsert({
-      presetId: composerPreset,
-      order: inserts.length,
-      stage: 'idle',
-      status: 'idle',
-      durationSec: preset.durationPreset,
-      resolution: insertResolution,
-      voiceTimestampSec: null,
-      renderMode: defaultInsertRenderMode(composerPreset),
-      conceptPrompt: text,
-    })
-    setComposerPreset(null)
-    setComposerText('')
-  }
-
   // ── Per-insert render ────────────────────────────────────────────────────
 
   // Z44 — Render concurrency gate. Manual clicks fire in parallel by default;
@@ -775,23 +717,19 @@ export default function ActionInsertsPhase({ onContinue }: Props) {
     }
   }
 
-  const handleApprove = (insertId: number) => patchInsert(insertId, { status: 'approved' })
-  const handleReject  = (insertId: number) => patchInsert(insertId, { status: 'rejected' })
-  const handleLock    = (insertId: number) => patchInsert(insertId, { status: 'locked' })
-  const handleUnlock  = (insertId: number) => patchInsert(insertId, { status: 'completed' })
 
   const handleBulkRender = async () => {
     // Z98 #5 — never bulk-render stickers (local, 0 credit; Grok render errors).
     const eligible = listEligibleInsertsForBulk(inserts).filter((it) => it.renderMode !== 'sticker')
     if (eligible.length === 0) {
-      addToast('Không có insert nào pending — tất cả đã render / locked / approved', 'info')
+      addToast('Tất cả cảnh đã có video — không còn cảnh nào cần tạo', 'info')
       return
     }
     // Z98 P1 — parallel with concurrency=2. Sequential was ~5min/scene worst
     // case when KIE freezes (150s × 3 fast-attempt retries) → 12 scenes = 60min.
     // 2-at-a-time roughly halves wall-clock without hitting KIE rate limits.
     const CONCURRENCY = 2
-    addToast(`🎬 Bulk render ${eligible.length} insert (×${CONCURRENCY} song song)...`)
+    addToast(`🎬 Đang tạo ${eligible.length} cảnh (×${CONCURRENCY} song song)...`)
     const queue = [...eligible]
     const workers = Array.from({ length: Math.min(CONCURRENCY, queue.length) }, async () => {
       while (queue.length > 0) {
@@ -801,12 +739,10 @@ export default function ActionInsertsPhase({ onContinue }: Props) {
       }
     })
     await Promise.all(workers)
-    addToast(`✓ Bulk render xong ${eligible.length} insert`, 'success')
+    addToast(`✓ Tạo xong ${eligible.length} cảnh`, 'success')
   }
 
   // ── Render ───────────────────────────────────────────────────────────────
-
-  const approvedCount = inserts.filter((it) => it.status === 'approved' || it.status === 'locked').length
 
   return (
     <div className="h-full overflow-y-auto p-6">
@@ -893,112 +829,6 @@ export default function ActionInsertsPhase({ onContinue }: Props) {
           </div>
         )}
 
-        {/* ── Insert library (12 preset cards) ─────────────────────────────── */}
-        <div className="mb-4 rounded-xl border border-black/10 bg-white p-4">
-          <div className="flex items-center justify-between">
-            <p className="text-[10px] font-bold uppercase tracking-widest text-gray-500">
-              Thêm thủ công — thư viện preset ({ACTION_PRESET_ORDER.length})
-            </p>
-            <p className="text-[10px] text-gray-400">
-              Hiện có {inserts.length}/{maxInserts} insert
-              {overBudget && <span className="ml-1 text-red-600">— vượt budget!</span>}
-            </p>
-          </div>
-          <div className="mt-2 grid grid-cols-3 gap-2 md:grid-cols-4 lg:grid-cols-6">
-            {ACTION_PRESET_ORDER.map((p) => {
-              const preset = ACTION_PRESETS[p]
-              const usedCount = inserts.filter((it) => it.presetId === p).length
-              return (
-                <button
-                  key={p}
-                  onClick={() => handleAddPreset(p)}
-                  disabled={inserts.length >= maxInserts}
-                  title={`${preset.descriptionVi}\n\nDuration ~${preset.durationPreset}s`}
-                  className={`relative flex flex-col items-center gap-1 rounded-lg border p-2 text-center transition-all ${
-                    usedCount > 0
-                      ? TONE_BG[preset.tone]
-                      : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50'
-                  } disabled:cursor-not-allowed disabled:opacity-50`}
-                >
-                  <span className="text-xl">{preset.emoji}</span>
-                  <span className="text-[10px] font-bold leading-tight">{preset.labelVi}</span>
-                  {usedCount > 0 && (
-                    <span className="absolute right-1 top-1 rounded-full bg-violet-600 px-1 text-[8px] font-bold text-white">
-                      ×{usedCount}
-                    </span>
-                  )}
-                </button>
-              )
-            })}
-          </div>
-
-          {/* ── 2 AI free presets — need a written scene description (Z42) ──── */}
-          <div className="mt-4 border-t border-dashed border-black/10 pt-3">
-            <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-gray-500">
-              Cảnh tự do (bạn tự mô tả)
-            </p>
-            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-              {(['CONCEPT_SCENE', 'PRODUCT_IN_ACTION'] as ActionPresetId[]).map((p) => {
-                const preset = ACTION_PRESETS[p]
-                const isOpen = composerPreset === p
-                return (
-                  <button
-                    key={p}
-                    onClick={() => {
-                      setComposerPreset(isOpen ? null : p)
-                      setComposerText('')
-                    }}
-                    disabled={inserts.length >= maxInserts}
-                    title={preset.descriptionVi}
-                    className={`flex items-start gap-2 rounded-lg border p-2 text-left transition-all ${
-                      isOpen
-                        ? TONE_BG[preset.tone]
-                        : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50'
-                    } disabled:cursor-not-allowed disabled:opacity-50`}
-                  >
-                    <span className="text-xl leading-none">{preset.emoji}</span>
-                    <span className="min-w-0">
-                      <span className="block text-[11px] font-bold leading-tight">{preset.labelVi}</span>
-                      <span className="block text-[10px] leading-tight text-gray-500">{preset.descriptionVi}</span>
-                    </span>
-                  </button>
-                )
-              })}
-            </div>
-
-            {composerPreset && (
-              <div className="mt-2 rounded-lg border border-black/10 bg-gray-50 p-2">
-                <textarea
-                  value={composerText}
-                  onChange={(e) => setComposerText(e.target.value)}
-                  rows={2}
-                  placeholder={
-                    composerPreset === 'PRODUCT_IN_ACTION'
-                      ? 'Mô tả cảnh sản phẩm hoạt động thật — ví dụ: máy xay đang xay đá, kem được thoa lên da, máy khoan bắt vít…'
-                      : 'Mô tả cảnh minh hoạ (không có sản phẩm) — ví dụ: ruột khoẻ mạnh nhìn từ bên trong, người mệt mỏi buổi sáng, cánh đồng nguyên liệu…'
-                  }
-                  className="w-full resize-none rounded-md border border-gray-200 bg-white p-2 text-[12px] text-gray-800 outline-none focus:border-violet-400"
-                />
-                <div className="mt-2 flex items-center justify-end gap-2">
-                  <button
-                    onClick={() => { setComposerPreset(null); setComposerText('') }}
-                    className="rounded-md border border-gray-200 bg-white px-2 py-1 text-[11px] font-semibold text-gray-500 hover:bg-gray-100"
-                  >
-                    Huỷ
-                  </button>
-                  <button
-                    onClick={handleAddFreeScene}
-                    disabled={composerText.trim().length < 4 || inserts.length >= maxInserts}
-                    className="rounded-md bg-violet-600 px-3 py-1 text-[11px] font-bold text-white hover:bg-violet-700 disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    <Plus className="mr-0.5 inline h-3 w-3" /> Thêm cảnh
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-
         {/* ── Insert cards ─────────────────────────────────────────────────── */}
         {inserts.length > 0 && (
           <div className="mb-4">
@@ -1023,10 +853,6 @@ export default function ActionInsertsPhase({ onContinue }: Props) {
                   onSetLayout={(layout) => patchInsert(insert.insertId, { layout })}
                   onRender={() => handleRenderInsert(insert.insertId)}
                   onResume={() => handleResumeInsert(insert.insertId)}
-                  onApprove={() => handleApprove(insert.insertId)}
-                  onReject={() => handleReject(insert.insertId)}
-                  onLock={() => handleLock(insert.insertId)}
-                  onUnlock={() => handleUnlock(insert.insertId)}
                   onRemove={() => removeInsert(insert.insertId)}
                 />
               ))}
@@ -1040,10 +866,12 @@ export default function ActionInsertsPhase({ onContinue }: Props) {
             <div className="flex items-center justify-between gap-3">
               <div className="min-w-0">
                 <p className="text-sm font-bold text-gray-900">
-                  Đã duyệt: {approvedCount}/{inserts.length}
+                  {bulkPendingCount > 0
+                    ? `${bulkPendingCount} cảnh chờ tạo / ${inserts.length}`
+                    : `Đã tạo xong · ${inserts.length} cảnh`}
                 </p>
                 <p className="text-[11px] text-gray-500">
-                  Bulk render skip những clip đã locked / approved / rejected (Z26 lesson).
+                  "Tạo tất cả" render mọi cảnh chưa có video — cảnh đã xong không tạo lại (không tốn credit thừa).
                 </p>
               </div>
               <div className="flex gap-2">
@@ -1051,7 +879,7 @@ export default function ActionInsertsPhase({ onContinue }: Props) {
                   onClick={handleBulkRender}
                   className="flex items-center gap-1.5 rounded-full bg-gradient-to-r from-violet-600 to-pink-600 px-4 py-2 text-[12px] font-bold text-white shadow-sm hover:from-violet-700 hover:to-pink-700"
                 >
-                  <Sparkles className="h-3.5 w-3.5" /> Bulk render{bulkPendingCount > 0 ? ` · ${formatCredits(bulkCredits)}` : ''}
+                  <Sparkles className="h-3.5 w-3.5" /> Tạo tất cả{bulkPendingCount > 0 ? ` · ${formatCredits(bulkCredits)}` : ''}
                 </button>
                 <button
                   onClick={onContinue}
@@ -1067,9 +895,9 @@ export default function ActionInsertsPhase({ onContinue }: Props) {
         {inserts.length === 0 && (
           <div className="rounded-xl border border-dashed border-gray-300 p-8 text-center">
             <Plus className="mx-auto h-8 w-8 text-gray-300" />
-            <p className="mt-2 text-sm font-semibold text-gray-500">Chưa có insert nào</p>
+            <p className="mt-2 text-sm font-semibold text-gray-500">Chưa có cảnh nào</p>
             <p className="mt-1 text-[11px] text-gray-400">
-              Pick từ "Thư viện preset" trên hoặc dùng "Apply gợi ý" để auto-fill.
+              AI tự đạo diễn khi bạn vào bước này. Bấm "Đạo diễn lại" ở trên nếu chưa thấy cảnh.
             </p>
           </div>
         )}
@@ -1082,7 +910,7 @@ export default function ActionInsertsPhase({ onContinue }: Props) {
 
 function InsertCard({
   insert, voiceRef,
-  onSetMode, onSetLayout, onRender, onResume, onApprove, onReject, onLock, onUnlock, onRemove,
+  onSetMode, onSetLayout, onRender, onResume, onRemove,
 }: {
   insert: ActionInsertClip
   /** Z98 #5 — the voice-first voice asset, for the sticker mini-preview. */
@@ -1091,10 +919,6 @@ function InsertCard({
   onSetLayout: (layout: 'cut' | 'overlay_corner') => void
   onRender: () => void
   onResume: () => void
-  onApprove: () => void
-  onReject: () => void
-  onLock: () => void
-  onUnlock: () => void
   onRemove: () => void
 }) {
   const preset = ACTION_PRESETS[insert.presetId]
@@ -1442,16 +1266,10 @@ function InsertCard({
         </div>
       </div>
 
-      {/* Buttons */}
+      {/* Buttons — director auto-fills + auto-renders; per-card just allows a
+          re-render / recover / delete. Approval (✓/✗/lock) removed (Z26 retired). */}
       <div className="flex flex-wrap gap-1 border-t border-black/5 bg-gray-50 px-1.5 py-1.5">
-        {isLocked ? (
-          <button
-            onClick={onUnlock}
-            className="flex flex-1 items-center justify-center gap-1 rounded-md border border-blue-300 bg-white px-2 py-1 text-[10px] font-semibold text-blue-700 hover:bg-blue-50"
-          >
-            <Unlock className="h-3 w-3" /> Mở khoá
-          </button>
-        ) : isLoading ? (
+        {isLoading ? (
           <span className="flex-1 px-2 py-1 text-center text-[10px] italic text-gray-400">đang render...</span>
         ) : (
           <>
@@ -1470,33 +1288,6 @@ function InsertCard({
                 className="flex items-center justify-center gap-1 rounded-md border border-amber-300 bg-white px-2 py-1 text-[10px] font-bold text-amber-700 hover:bg-amber-50"
               >
                 <RotateCcw className="h-3 w-3" /> Khôi phục
-              </button>
-            )}
-            {hasVideo && !isApproved && !isRejected && (
-              <>
-                <button
-                  onClick={onApprove}
-                  title="Approve"
-                  className="flex items-center justify-center rounded-md border border-emerald-300 bg-white px-2 py-1 text-[10px] font-semibold text-emerald-700 hover:bg-emerald-50"
-                >
-                  <Check className="h-3 w-3" />
-                </button>
-                <button
-                  onClick={onReject}
-                  title="Reject"
-                  className="flex items-center justify-center rounded-md border border-rose-300 bg-white px-2 py-1 text-[10px] font-semibold text-rose-700 hover:bg-rose-50"
-                >
-                  <ThumbsDown className="h-3 w-3" />
-                </button>
-              </>
-            )}
-            {isApproved && (
-              <button
-                onClick={onLock}
-                title="Lock — không bao giờ rerender"
-                className="flex items-center justify-center rounded-md border border-blue-300 bg-white px-2 py-1 text-[10px] font-semibold text-blue-700 hover:bg-blue-50"
-              >
-                <Lock className="h-3 w-3" />
               </button>
             )}
             <button
