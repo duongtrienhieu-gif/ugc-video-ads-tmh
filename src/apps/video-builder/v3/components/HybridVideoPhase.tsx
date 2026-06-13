@@ -14,7 +14,7 @@ import { useAppStore } from '../../../../stores/appStore'
 import { useSettingsStore } from '../../../../stores/settingsStore'
 import { useAssetUrl } from '../../../../hooks/useAssetUrl'
 import { useAdsVideoStore } from '../stores/adsVideoStore'
-import { directBrollScenes, assignSceneTiming, type TimedBrollScene } from '../services/brollDirector'
+import { directBrollScenes, assignSceneTiming, groundOrphanScenes, type TimedBrollScene } from '../services/brollDirector'
 import { renderOneHybridScene, type HybridRenderContext } from '../services/hybridRenderer'
 import { resumeInsertVideo } from '../services/insertRenderer'
 import { renderCreatorKeyframe } from '../services/creatorVideoEngine'
@@ -127,6 +127,9 @@ export default function HybridVideoPhase(_props: Props) {
         shape: state.scriptBrain.shape,
       })
       const timed = assignSceneTiming(res.scenes, hybrid.voiceAlignment, script, voiceDur)
+      // P4g — brain pass over the deterministic filler cuts (split/density) so a
+      // spoken line never renders as a generic product shot. Mutates `timed`.
+      await groundOrphanScenes(timed, state.inputs.product, geminiKey)
       setHybridPlan(timed, res.stickers, res.scenes)
       setFailedIdx(new Set())
     } catch (e) {
@@ -158,6 +161,8 @@ export default function HybridVideoPhase(_props: Props) {
       })
       setHybridAssets({ keyframeRef: kf.keyframeRef, voiceRef: kf.voiceRef, voiceDurationSec: kf.voiceDurationSec, voiceAlignment: kf.voiceAlignment })
       const timed = assignSceneTiming(raw, kf.voiceAlignment, script, kf.voiceDurationSec)
+      // P4g — re-timing after the real voice may create new filler cuts; ground them.
+      await groundOrphanScenes(timed, state.inputs.product, geminiKey)
       setHybridPlan(timed, useAdsVideoStore.getState().state.hybrid.stickers, raw)
       addToast(`✓ Giọng (${kf.voiceDurationSec.toFixed(1)}s) + khuôn mặt — nghe thử rồi render cảnh`, 'success')
     } catch (e) {

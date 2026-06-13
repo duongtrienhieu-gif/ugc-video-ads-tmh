@@ -232,6 +232,79 @@ OUTPUT exactly ${weak.length} lines, ONE conceptPrompt per line, SAME order, no 
   }
 }
 
+/** P4g — POST-TIMING "director's brain" for the deterministic FILLER cuts that
+ *  split/density create AFTER backfillWeakConcepts already ran (lips-overflow
+ *  halves, density splits of a lips cut). Those carry a REAL spoken line but no
+ *  conceptPrompt — and the main backfill never saw them (they didn't exist yet).
+ *  Without this, a rich emotional line ("cả nhà khỏe luôn", "mùi thơm tự nhiên")
+ *  renders as a generic product shot — the exact "đạo diễn show sản phẩm" bug.
+ *  This reads each line's MEANING and decides TYPE (human moment vs product shot)
+ *  + writes a grounded conceptPrompt, fixing kind + cameraFraming to match. ONE
+ *  Gemini call, mutates in place, graceful (leaves the deterministic concept+
+ *  creator floor for Layer 3 on failure). Run on the FINAL timed scene list. */
+export async function groundOrphanScenes(
+  scenes: BrollScene[], product: Product | null | undefined, apiKey: string,
+): Promise<void> {
+  const orphans = scenes
+    .map((s, i) => ({ s, i }))
+    .filter(({ s }) => s.role === 'broll' && isWeakConceptPrompt(s.conceptPrompt))
+  if (orphans.length === 0) return
+  const productContext = buildProductContextBlock(product)
+  const list = orphans.map(({ s }, n) => `${n + 1}. câu thoại: "${s.quote}"`).join('\n')
+  const systemInstruction =
+`You are a UGC ad video DIRECTOR with a real director's brain. Each scene below is a
+spoken line that still needs a VISUAL. For EACH line: READ ITS MEANING, picture the
+real-life moment + the person's EMOTION it implies, and decide how to film it — like
+the garlic-salt rule (a "tastes great" line is someone tasting a bite with a happy
+face, NOT a static jar shot).${productContext}
+
+For each line output ONE line in EXACTLY this format:
+TYPE | conceptPrompt
+where TYPE is one of:
+- "human"   → the line is about a FEELING, a RESULT, an EXPERIENCE, or a real-life
+  MOMENT that lands on a PERSON (tasting and enjoying, a family sharing a meal,
+  waking up refreshed, a relieved smile, confidence in the mirror). conceptPrompt =
+  a person / people in that authentic candid moment, NO product packaging in frame.
+- "product" → the line is about the PRODUCT itself, a feature, a spec, an ingredient,
+  or the product being USED. conceptPrompt = the product doing a concrete action
+  (hands using / pouring / sprinkling / holding it) in its real setting.
+conceptPrompt rules: ONE vivid English sentence — SHOT TYPE (macro / wide / POV-hands
+/ over-the-shoulder / top-down) + a concrete ACTION + a real SETTING, grounded in the
+product + THIS exact line. Make each DISTINCT. NEVER abstract ("show the benefit") —
+always a filmable moment. UNIVERSAL — infer from the product context; never assume a
+niche.
+
+OUTPUT exactly ${orphans.length} lines, SAME order, each "TYPE | conceptPrompt",
+no numbering, no quotes, no extra commentary.`
+  const prompt = `Direct each line (output "TYPE | conceptPrompt", conceptPrompt in English):\n${list}\n\nOutput ${orphans.length} lines, same order.`
+  try {
+    const raw = await directGeminiText({
+      apiKey, systemInstruction, prompt, maxOutputTokens: 1536, temperature: 0.7, thinkingBudget: 0,
+    })
+    const lines = raw.split('\n').map((l) => l.trim()).filter(Boolean)
+    let applied = 0
+    orphans.forEach(({ i }, n) => {
+      const ln = lines[n]
+      if (!ln) return
+      const sep = ln.indexOf('|')
+      const type = (sep >= 0 ? ln.slice(0, sep) : '').toLowerCase()
+      const cp = (sep >= 0 ? ln.slice(sep + 1) : ln).replace(/^["'“”\-•\s]+|["'“”\s]+$/g, '').trim()
+      if (!cp || isWeakConceptPrompt(cp)) return
+      scenes[i].conceptPrompt = cp
+      // Re-direct kind + framing to match the line's MEANING (the mechanical
+      // splitter's product_closeup/concept guess is overridden by the brain).
+      if (type.includes('product')) { scenes[i].kind = 'product_action'; scenes[i].cameraFraming = 'hands_noface' }
+      else { scenes[i].kind = 'concept'; scenes[i].cameraFraming = 'creator' }
+      applied++
+    })
+    // eslint-disable-next-line no-console
+    console.log(`[BROLL_DIRECTOR] ground orphan ${applied}/${orphans.length} cảnh filler (đọc nghĩa câu)`)
+  } catch (e) {
+    // eslint-disable-next-line no-console
+    console.warn('[BROLL_DIRECTOR] ground orphan lỗi (để Layer 3 lo):', e)
+  }
+}
+
 // ── Public: plan a full-coverage hybrid shot list ───────────────────────────
 export async function directBrollScenes(
   params: BrollDirectorParams,
@@ -687,7 +760,14 @@ const MIN_CUT_SEC = 2.0
 
 function capSplitScenes(timed: TimedBrollScene[]): TimedBrollScene[] {
   const out: TimedBrollScene[] = []
-  // Fill [start,end] with product-closeup B-roll cut(s), each ≤ MAX_BROLL_SEC.
+  // Fill [start,end] with B-roll cut(s), each ≤ MAX_BROLL_SEC. These are the
+  // LIPS-OVERFLOW leftovers (the creator was still talking when the lips cut hit
+  // its 5s cap). P4g — default them to a CONCEPT + creator HUMAN-moment shot, NOT
+  // a product_closeup: a spoken line is the creator's own words, so the coherent
+  // fallback is the person/reaction, never a generic product shot slapped on a
+  // rich emotional line ("cả nhà khỏe luôn" must not become a túi sản phẩm). The
+  // post-timing brain (groundOrphanScenes) + Layer 3 ground the real concept; the
+  // kind/framing set here is just the safe floor if Gemini is unavailable.
   const fillBroll = (start: number, end: number, quote: string) => {
     const L = end - start
     if (L < MIN_CUT_SEC) {
@@ -698,7 +778,7 @@ function capSplitScenes(timed: TimedBrollScene[]): TimedBrollScene[] {
       if (last && last.role !== 'lips') {
         last.endSec = round2(end); last.durationSec = round2(end - last.startSec)
       } else {
-        out.push({ role: 'broll', kind: 'product_closeup', quote, conceptPrompt: '', durationSec: round2(L), startSec: round2(start), endSec: round2(end) })
+        out.push({ role: 'broll', kind: 'concept', cameraFraming: 'creator', quote, conceptPrompt: '', durationSec: round2(L), startSec: round2(start), endSec: round2(end) })
       }
       return
     }
@@ -708,7 +788,7 @@ function capSplitScenes(timed: TimedBrollScene[]): TimedBrollScene[] {
     for (let k = 0; k < parts; k++) {
       const a = round2(start + k * step)
       const b = round2(k === parts - 1 ? end : start + (k + 1) * step)
-      out.push({ role: 'broll', kind: 'product_closeup', quote: quoteParts[k], conceptPrompt: '', durationSec: round2(b - a), startSec: a, endSec: b })
+      out.push({ role: 'broll', kind: 'concept', cameraFraming: 'creator', quote: quoteParts[k], conceptPrompt: '', durationSec: round2(b - a), startSec: a, endSec: b })
     }
   }
   for (const s of timed) {
@@ -823,7 +903,11 @@ function enforceDensityFloor(scenes: TimedBrollScene[], minScenes: number): Time
     const [q1, q2] = splitQuoteByParts(s.quote, 2)
     const first: TimedBrollScene = { ...s, quote: q1, endSec: mid, durationSec: round2(mid - s.startSec) }
     const second: TimedBrollScene = s.role === 'lips'
-      ? { role: 'broll', kind: 'product_closeup', quote: q2, conceptPrompt: '', startSec: mid, endSec: s.endSec, durationSec: round2(s.endSec - mid) }
+      // P4g — second half of a split LIPS cut = the creator still talking. Default
+      // to a concept + creator HUMAN-moment shot (groundOrphanScenes / Layer 3
+      // fill the real concept), NOT a product_closeup that would dump a generic
+      // product shot onto a spoken emotional line.
+      ? { role: 'broll', kind: 'concept', cameraFraming: 'creator', quote: q2, conceptPrompt: '', startSec: mid, endSec: s.endSec, durationSec: round2(s.endSec - mid) }
       // P3t — was: " (a slightly different angle / closer)" → visually-identical
       // clones. Now apply a rotating angle modifier so the second half is a
       // genuinely different shot of the same subject.
