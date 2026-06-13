@@ -93,8 +93,9 @@ function lipsCountForDuration(sec: number): number {
 // cut density two ways: (1) RE-ROLL the director ONCE if the first plan is sparse,
 // and (2) a hard post-timing floor that splits the LONGEST cuts until the floor
 // is met — splitting longest-first keeps the short snappy cuts intact (variety),
-// never a uniform metronome. ~4.5s/cut → a 55s ad floors at ~12 cuts.
-const TARGET_AVG_CUT_SEC = 4.5
+// never a uniform metronome. ~5s/cut → a 60s ad floors at ~12 cuts (12-15 is the
+// natural UGC ad rhythm — earlier 4.5s/cut floor produced 18 cuts that felt frantic).
+const TARGET_AVG_CUT_SEC = 5.0
 function densityFloor(dur: number): number {
   return Math.max(8, Math.round(dur / TARGET_AVG_CUT_SEC))
 }
@@ -216,18 +217,20 @@ names — never pad with vague stickers, but never leave a concrete callout bare
 
 RULES:
 - COVER 100%: the scenes' durations sum to ~${dur}s; every spoken beat has a cut;
-  NO empty span. Give each DISTINCT beat its OWN cut with its OWN visual — only merge
-  sentences that are truly one single thought; lean toward MORE distinct cuts, not fewer.
+  NO empty span. Group sentences that are TRULY one single thought into one cut;
+  don't fragment a single idea into multiple tiny cuts just to add count.
 - PACING is set by HOW MUCH SPEECH each cut covers — you do NOT set seconds; a cut
-  lasts exactly as long as its quote is spoken. So control rhythm by CHUNKING:
+  lasts exactly as long as its quote is spoken. Control rhythm by CHUNKING:
     • a SHORT quote (a few words — the hook, a quick callout, a snappy reaction) → a
-      fast punchy cut. Keep the open and the listy parts as short quotes.
-    • a FULL line (one complete idea — a demo, a result) → a longer beat that breathes.
-  Mix them (fast-fast-slow), never a flat metronome. NO cut may cover more than ~5s of
-  speech — if ONE idea is spoken longer than that, split it into TWO DISTINCT shots (a
-  different angle / action / detail of the same product), never one long shot and never
-  a repeat. Return AT LEAST ${minScenes} distinct cuts for this ${dur}s video, each a
-  DIFFERENT real visual — never vague filler to pad the count.
+      fast punchy cut (~2-3s of speech).
+    • a FULL line (one complete idea — a demo, a result) → a longer beat that breathes
+      (~4-${MAX_BROLL_SEC.toFixed(0)}s of speech).
+  Mix them (fast-fast-slow), never a flat metronome. NO cut may cover more than
+  ~${MAX_BROLL_SEC.toFixed(0)}s of speech — if ONE idea runs longer than that, split it
+  into TWO DISTINCT shots (different angle / action / detail of the same product),
+  never one long shot, never a repeat. AIM FOR AROUND ${minScenes} cuts (up to
+  ${minScenes + 3} is fine if the natural rhythm calls for it) — do NOT pad past that
+  with filler cuts; a ${dur}s ad in 12-15 cuts beats the same ad in 18-20 frantic cuts.
 - Each scene's "quote" MUST be text that actually appears in the script.
 - VARIETY: mix lips + no-face hands-action + product close-ups + (some) 3D, so the
   ad feels like a real hand-held review, not a slideshow or a single locked shot.
@@ -253,7 +256,7 @@ OUTPUT strict JSON only (no markdown fences):
       apiKey: params.geminiKey,
       systemInstruction,
       prompt: denserHint
-        ? `Your last plan had only ${denserHint.have} cuts for a ${dur}s video — too sparse; you GROUPED several lines into long cuts. Re-plan with at least ${denserHint.want} cuts: give EACH distinct line/beat its OWN cut with its OWN visual (a new action, angle, or detail grounded in that exact line) — do NOT pad with repeats or vague filler. Keep the hook / callouts / feature runs as fast 2-3s cuts; only the main demo / reveal / CTA breathe at 4-6s. Cover every second. Return the JSON.`
+        ? `Your last plan had only ${denserHint.have} cuts for a ${dur}s video — too sparse; a few ideas were merged into one long cut. Re-plan with about ${denserHint.want} cuts (a bit more is fine if it feels natural): give EACH distinct beat its own visual (new action / angle / detail grounded in that line). Keep the hook + callouts as fast 2-3s cuts; the main demo / reveal / CTA at 4-${MAX_BROLL_SEC.toFixed(0)}s. Cover every second. Return the JSON.`
         : 'Plan the full-coverage hybrid shot list now. Return the JSON.',
       maxOutputTokens: 4096,
       temperature: 0.6,
@@ -278,9 +281,12 @@ OUTPUT strict JSON only (no markdown fences):
   // asking it to give each distinct line its OWN grounded visual; keep whichever
   // roll has the most scenes. The mechanical floor in assignSceneTiming is only the
   // last-resort backstop and should rarely fire once the director cooperates.
-  for (let attempt = 1; attempt <= 2 && scenes.length < minScenes; attempt++) {
+  // Re-roll ONCE if the plan is genuinely sparse (was 2× — too many calls + burned
+  // Gemini quota; the new "AROUND minScenes (allow up to +3)" prompt is permissive
+  // enough that the director rarely returns much fewer than the floor on the 1st try).
+  for (let attempt = 1; attempt <= 1 && scenes.length < minScenes; attempt++) {
     // eslint-disable-next-line no-console
-    console.log(`[BROLL_DIRECTOR] plan thưa (${scenes.length}<${minScenes}) — re-roll ${attempt}/2 cho cảnh riêng, dày hơn`)
+    console.log(`[BROLL_DIRECTOR] plan thưa (${scenes.length}<${minScenes}) — re-roll cho dày hơn`)
     const raw2 = await call(true, { have: scenes.length, want: minScenes })
     const parsed2 = tryParse(raw2)
     if (parsed2) {
@@ -479,10 +485,13 @@ export function assignSceneTiming(
 // 2nd lipsync). B-ROLL longer than the cap is split into equal sub-cuts.
 const MAX_LIPS_SEC = 5
 // Grok i2v clips are ~6s; at 1.3× (after skipping the static lead-in) one clip fills
-// ≤~5s of timeline. Cap broll/3d at 5s so a longer voice span SPLITS into more cuts
-// (each fully fillable + snappier) instead of one slow/short cut.
-const MAX_BROLL_SEC = 5.0
-const MIN_CUT_SEC = 1.5
+// ~5s of timeline natively, and the assembler's fit-speed re-fits anything between
+// 5-6s. Cap broll/3d at 6s so a single coherent idea can BREATHE (~5-6s) instead of
+// being chopped into 3s "(closer angle)" duplicates — the source of "18 cuts trong 60s
+// feels frantic". Lips stays 5s (a talking-head shouldn't hold longer).
+const MAX_BROLL_SEC = 6.0
+// 2s minimum so a leftover cut never flashes < 2s and disrupts the eye.
+const MIN_CUT_SEC = 2.0
 
 function capSplitScenes(timed: TimedBrollScene[]): TimedBrollScene[] {
   const out: TimedBrollScene[] = []
