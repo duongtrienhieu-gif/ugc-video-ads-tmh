@@ -26,9 +26,12 @@ import { estimateInsertCredits, V3_CREDIT_COST } from '../types'
 // audited against KIE pricing page). The renderer already calls
 // `kling/ai-avatar-standard` (the right model id), only the UI estimate was wrong.
 const LIPS_CR_PER_SEC = 8
-// P3s — render 2 scenes concurrently (was: 1 at a time). KIE jobs are independent;
-// a fail on one doesn't cascade. 2 is the safe Mode-1 cadence the user wants back.
-const MAX_CONCURRENT_RENDERS = 2
+// P3s — render scenes concurrently (was: 1 at a time). KIE jobs are independent;
+// a fail on one doesn't cascade. P4a — bumped 2 → 3 for ~50% faster throughput.
+// 3 is safe: client polling load is trivial (3 fetch/5s), submission is 3 POSTs
+// (no 429), and any KIE-side queueing / timeout is recoverable via P3z resume
+// (re-poll the paid job, no extra charge). 4+ risks heavier KIE queueing.
+const MAX_CONCURRENT_RENDERS = 3
 const ASSETS_CR = V3_CREDIT_COST.tts + V3_CREDIT_COST.keyframe
 // P3z — staleness window for a persisted "đang render" before we treat it as
 // abandoned (tab closed). Grok i2v + poll tops out ~10min, so 12 is safe.
