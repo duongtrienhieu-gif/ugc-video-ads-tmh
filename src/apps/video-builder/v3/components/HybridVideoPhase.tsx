@@ -21,17 +21,12 @@ import {
 import { useAppStore } from '../../../../stores/appStore'
 import { useSettingsStore } from '../../../../stores/settingsStore'
 import { useAdsVideoStore } from '../stores/adsVideoStore'
-import {
-  directBrollScenes, assignSceneTiming, type TimedBrollScene, type BrollSticker,
-} from '../services/brollDirector'
+import { directBrollScenes, assignSceneTiming, type TimedBrollScene } from '../services/brollDirector'
 import { renderOneHybridScene, type HybridRenderContext } from '../services/hybridRenderer'
-import { assembleHybridVideo, type HybridSceneClip, type HybridStickerPlacement } from '../services/hybridAssembler'
+import { assembleFromHybridState } from '../services/hybridAssembleFlow'
 import { renderCreatorKeyframe } from '../services/creatorVideoEngine'
-import { renderStickerBlob, type StickerStyle } from '../services/stickerRenderer'
-import { computeWordTimestampFromAlignment, computeQuoteTimestamp } from '../services/insertTimingEngine'
-import { saveAsset } from '../../../../utils/assetStore'
 import { matchVoiceForAvatar } from '../services/voiceCreatorMatcher'
-import { estimateInsertCredits, V3_CREDIT_COST, type VoiceAlignment } from '../types'
+import { estimateInsertCredits, V3_CREDIT_COST } from '../types'
 
 // Kling Avatar Std ≈ 70cr per ~5s clip (V3_CREDIT_COST.lipsync) → ~14cr/s. Slightly
 // conservative so the user is never surprised by MORE than the quote.
@@ -170,47 +165,17 @@ export default function HybridVideoPhase(_props: Props) {
   const assemble = async () => {
     const h = useAdsVideoStore.getState().state.hybrid
     if (!h.voiceRef || !script) return
-    const sc = h.scenes ?? []
-    if (sc.some((_, i) => !h.clips[i])) { addToast('Còn cảnh chưa render — render hết đã', 'error'); return }
+    if ((h.scenes ?? []).some((_, i) => !h.clips[i])) { addToast('Còn cảnh chưa render — render hết đã', 'error'); return }
     setAssembling(true); setError('')
     try {
-      const clips: HybridSceneClip[] = sc.map((scene, i) => ({ scene, videoRef: h.clips[i] }))
-      const placements = await buildStickerPlacements(h.stickers, h.voiceAlignment, h.voiceDurationSec ?? script.totalDurationSec)
-      const r = await assembleHybridVideo({
-        clips, voiceRef: h.voiceRef, voiceDurationSec: h.voiceDurationSec ?? script.totalDurationSec,
-        resolution, stickers: placements,
-      })
-      setHybridFinal(r.videoRef)
+      const videoRef = await assembleFromHybridState(h, script, resolution)
+      setHybridFinal(videoRef)
       addToast('✓ Đã ghép video — sang bước Export để xem + tải', 'success')
       setPhase('export')
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e)
       setError(msg); addToast(`Ghép video lỗi: ${msg.slice(0, 120)}`, 'error')
     } finally { setAssembling(false) }
-  }
-
-  const buildStickerPlacements = async (
-    raw: BrollSticker[], alignment: VoiceAlignment | undefined, realDur: number,
-  ): Promise<HybridStickerPlacement[]> => {
-    const dated = raw
-      .map((stk) => {
-        const at = (alignment ? computeWordTimestampFromAlignment(alignment, stk.quote, stk.wordAnchor) : null)
-          ?? (script ? computeQuoteTimestamp(script, stk.quote) : null)
-        return { stk, at }
-      })
-      .filter((x): x is { stk: BrollSticker; at: number } => typeof x.at === 'number' && x.at < realDur)
-      .sort((a, b) => a.at - b.at)
-    const out: HybridStickerPlacement[] = []
-    let last = -Infinity
-    for (const { stk, at } of dated) {
-      if (at - last < 3.0) continue
-      last = at
-      try {
-        const blob = await renderStickerBlob({ style: stk.style as StickerStyle, text: stk.text ?? '', items: stk.items })
-        out.push({ pngRef: await saveAsset(blob, 'image/png'), atSec: at, durationSec: 2.7, heightFraction: 0.1 })
-      } catch { /* skip */ }
-    }
-    return out
   }
 
   // ── Render ──────────────────────────────────────────────────────────────────

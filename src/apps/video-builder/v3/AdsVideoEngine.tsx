@@ -30,10 +30,8 @@ import {
 import { useAppStore } from '../../../stores/appStore'
 import { useAdsVideoStore } from './stores/adsVideoStore'
 import ScriptVoicePhase from './components/ScriptVoicePhase'
-import CreatorVideoPhase from './components/CreatorVideoPhase'
 import HybridVideoPhase from './components/HybridVideoPhase'
-import AutoEditPhase from './components/AutoEditPhase'
-import ExportPhase from './components/ExportPhase'
+import HybridExportPhase from './components/HybridExportPhase'
 import {
   V3_PHASE_LABEL_VI,
   type V3Phase,
@@ -60,12 +58,12 @@ interface Props {
 // test cheap inserts (Ken Burns ~6cr / Kling ~51cr) BEFORE committing ~700cr to
 // avatar lipsync. Rationale: don't risk paying for lipsync only to find the
 // B-roll concept was wrong.
+// HYBRID 1-luồng: only 3 steps. creator-video + auto-edit (mode-1) are retired —
+// the hybrid "Tạo Video" step does director + voice + face + render + assemble.
 const PHASE_ORDER: V3Phase[] = [
   'input',
-  'action-inserts',
-  'creator-video',
-  'auto-edit',        // clip approval gate + edit plan live here
-  'export',
+  'action-inserts',   // = "Tạo Video" (hybrid hub)
+  'export',           // = HybridExportPhase
 ]
 
 const PHASE_ICON: Record<V3Phase, React.ElementType> = {
@@ -139,47 +137,26 @@ export default function AdsVideoEngine({ onSwitchToV2, onSwitchToV1 }: Props) {
   const handleRestore = (proj: SavedProject) => {
     hydrateFromSnapshot(hydrateProjectAsState(proj))
     const snap = proj.snapshot
-    const target: V3Phase = snap.autoEdit?.plan
-      ? 'export'
-      : snap.creatorVideo?.videoRef
-      ? 'auto-edit'
-      : snap.creatorVideo
-      ? 'creator-video'
-      : 'input'
+    // Hybrid restore: a script → "Tạo Video"; else Input. (The hybrid render state
+    // lives in the main store, not the Library snapshot, so we land on Tạo Video.)
+    const target: V3Phase = snap.scriptBrain?.script ? 'action-inserts' : 'input'
     setPhase(target)
     setRestoreOpen(false)
     addToast(`Đã khôi phục "${proj.name}"`, 'success')
   }
 
-  // Z37 — migration: persisted state may still sit on the now-merged
-  // 'script-voice' phase. Map it back onto 'input' (the merged screen).
+  // Migration: map retired phases onto the hybrid flow. 'script-voice' (Z37 merge)
+  // and the mode-1 'creator-video' / 'auto-edit' steps → the merged screens.
   useEffect(() => {
     if (state.phase === 'script-voice') setPhase('input')
+    else if (state.phase === 'creator-video' || state.phase === 'auto-edit') setPhase('action-inserts')
   }, [state.phase, setPhase])
 
-  // Phase reachability — Phase 1 keeps it simple: input always reachable;
-  // creator-video reachable once inputs valid; rest reachable in narrative
-  // order once their predecessor has output. Phase 2+ will tighten these.
+  // Phase reachability (hybrid): input always; "Tạo Video" once a script exists;
+  // Export once a plan exists (the export screen guides the user if not yet rendered).
   const reachable = new Set<V3Phase>(['input'])
-  // Z39 — once a script exists, BOTH B-roll and creator-video unlock. B-roll now
-  // comes first in the flow so the user can test cheap inserts before lipsync.
-  if (state.scriptBrain.script) {
-    reachable.add('action-inserts')
-    reachable.add('creator-video')
-  }
-  // auto-edit only needs creator video + script. Inserts are optional.
-  // The clip approval gate now lives inside this phase.
-  if (state.creatorVideo?.videoRef && state.scriptBrain.script) {
-    reachable.add('auto-edit')
-    // Z98 — the Library/restore + export bundle live on the Export step. Once a
-    // (paid) creator video exists, keep Export reachable so a lost auto-edit plan
-    // can never trap the user away from their saved work.
-    reachable.add('export')
-  }
-  // export reachable once an auto-edit plan exists.
-  if (state.autoEdit.plan) {
-    reachable.add('export')
-  }
+  if (state.scriptBrain.script) reachable.add('action-inserts')
+  if (state.hybrid.scenes?.length || state.hybrid.finalVideoRef) reachable.add('export')
 
   const handleResetAll = () => {
     setResetConfirmOpen(false)
@@ -263,17 +240,11 @@ export default function AdsVideoEngine({ onSwitchToV2, onSwitchToV1 }: Props) {
         {(state.phase === 'input' || state.phase === 'script-voice') && (
           <ScriptVoicePhase onContinue={() => setPhase('action-inserts')} />
         )}
-        {state.phase === 'action-inserts' && (
+        {(state.phase === 'action-inserts' || state.phase === 'creator-video' || state.phase === 'auto-edit') && (
           <HybridVideoPhase />
         )}
-        {state.phase === 'creator-video' && (
-          <CreatorVideoPhase onContinue={() => setPhase('auto-edit')} />
-        )}
-        {state.phase === 'auto-edit' && (
-          <AutoEditPhase onContinue={() => setPhase('export')} />
-        )}
         {state.phase === 'export' && (
-          <ExportPhase />
+          <HybridExportPhase />
         )}
       </div>
 

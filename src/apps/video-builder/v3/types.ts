@@ -37,7 +37,7 @@ export const V3_PHASE_LABEL_VI: Record<V3Phase, string> = {
   'input':          'Input + Script',
   'script-voice':   'Script + Voice',
   'creator-video':  'Video creator chính',
-  'action-inserts': 'Action inserts',
+  'action-inserts': 'Tạo Video',
   'auto-edit':      'Auto edit',
   'export':         'Export MP4',
 }
