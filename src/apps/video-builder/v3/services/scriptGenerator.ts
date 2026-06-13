@@ -157,19 +157,20 @@ export async function generateScript(
   if (!params.useOwnScript) {
     let blockMap: Record<ScriptBlockId, string> = { ...parsed.blocks }
     const target = params.targetDurationSec
-    for (let pass = 0; pass < 2; pass++) {
+    // P3i — tighter band [0.90, 1.10] + 3 passes (was 2). With the refit prompt's
+    // explicit "must land in [target-3, target+3]" + sensory/empathy expansion fuel,
+    // 3 passes virtually guarantee the script reaches ~target ±10%.
+    for (let pass = 0; pass < 3; pass++) {
       const joined = SCRIPT_BLOCK_IDS.map((id) => blockMap[id] ?? '').join(' ')
       const durNow = estimateReadDurationForVoice(joined, params.lang)
-      // Tight band so the real video lands near the picked target: was [0.72,1.15]
-      // (accepted scripts ~28% short). Now [0.85,1.12] → expand/cut to hit ~target.
-      if (durNow <= target * 1.12 && durNow >= target * 0.85) break  // in band
+      if (durNow <= target * 1.10 && durNow >= target * 0.90) break  // in band
       const refit = await refitScriptToLength({
         apiKey: params.geminiKey,
         blocks: blockMap,
         langName: lang,
         targetSec: target,
         currentSec: durNow,
-        tooLong: durNow > target * 1.12,
+        tooLong: durNow > target * 1.10,
       })
       if (!refit) break
       blockMap = refit

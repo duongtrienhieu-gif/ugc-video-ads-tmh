@@ -209,6 +209,12 @@ export default function ScriptVoicePhase({ onContinue }: Props) {
     setScriptBrainError(null)
     try {
       const brief = buildProductBrief()
+      // P3i — pass the PREVIOUS batch when re-rolling so Gemini is forced to break
+      // out of the same template (the user pressed "Đổi" because they didn't like
+      // those exact ones).
+      const previousBatch = brain.hookVariants.length > 0
+        ? brain.hookVariants.map((h) => h.text)
+        : undefined
       const hooks = await generateHooks({
         geminiKey,
         lang: brain.outputLang,
@@ -216,6 +222,7 @@ export default function ScriptVoicePhase({ onContinue }: Props) {
         productName: brief.productName,
         productPitch: brief.productPitch,
         creatorDescription: brief.creatorDescription,
+        previousBatch,
       })
       setHookVariants(hooks)
       pickHookVariant(-1)

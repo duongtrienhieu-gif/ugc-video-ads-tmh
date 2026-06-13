@@ -31,8 +31,13 @@ import { AD_STRUCTURES } from './adStructures'
 // engine's 1.2× pace = 4.05 syll/s). Each language self-calibrates from its real
 // measured voice (EMA in localStorage), so it converges without a guessed table.
 const BASE_SYLLABLES_PER_SEC = 4.05
-const RATE_MIN = 3.0
-const RATE_MAX = 5.5
+// P3i — tighter clamp [3.5, 4.3] (was [3.0, 5.5]). The wider band was letting the
+// self-calibration drift after a few TTS runs (the engine's atempo 1.35× pushed
+// syllables/sec into the 4.5-5.0 zone, which made the estimate read ~25% shorter
+// than reality — "60s pick → est 43s" was this drift). Real human articulation
+// rates fall ~3.7-4.2 syll/s across VN / EN / MS, so 3.5-4.3 is the honest band.
+const RATE_MIN = 3.5
+const RATE_MAX = 4.3
 
 // Vowel groups INCLUDING Vietnamese accented vowels — one group ≈ one syllable. This
 // makes the counter work for VN too (every VN syllable carries exactly one vowel
