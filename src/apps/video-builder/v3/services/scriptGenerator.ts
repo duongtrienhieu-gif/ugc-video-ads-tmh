@@ -835,15 +835,40 @@ export async function generateHooks(params: GenerateHooksParams): Promise<HookVa
   const shape = (params.shape ?? 'narrative') as 'narrative' | 'listicle' | 'comparison' | 'journey'
   const groupArchetype: HookArchetype = GROUP_TO_DEFAULT_ARCHETYPE[params.framework]
   const archetypeStyle: HookStyle = ARCHETYPE_TO_STYLE[groupArchetype]
+  // [1] Pick 6 proven viral SKELETONS for the shape (Tier S+ structure + voice).
   const picked = pickShapedViralHooks({
     shape,
     count: 6,
     lang: params.lang,
     exclude: params.previousBatch,
   })
-  // Apply VN spell-fix safety net (the file is already curated, but this stays
-  // as a backstop so any future edit to the file can't sneak a typo through).
-  const fixed = params.lang === 'vi' ? picked.map((t) => spellFixVi(t)) : picked
+  // [2] P3y — ADAPT each skeleton to THIS product via ONE cheap Gemini call.
+  // P3u picked skeletons verbatim → hooks were generic ("Mình đã đổi ý về điều
+  // này") with zero product relevance. We keep the skeleton's structure/energy
+  // but swap the vague placeholder ("điều này / cái này / nó") for a SHORT,
+  // natural reference to the product or its core benefit. On ANY failure we fall
+  // back to the raw skeletons (never break the step).
+  let finalTexts = picked
+  try {
+    const adapted = await adaptHooksToProduct({
+      apiKey: params.geminiKey,
+      lang: params.lang,
+      productName: params.productName,
+      productPitch: params.productPitch,
+      creatorDescription: params.creatorDescription,
+      skeletons: picked,
+    })
+    if (adapted.length >= Math.min(4, picked.length)) {
+      // Keep order; if the model returned fewer than 6, top up with the
+      // remaining raw skeletons so the user still sees 6 cards.
+      finalTexts = picked.map((raw, i) => adapted[i]?.trim() || raw)
+    }
+  } catch (e) {
+    // eslint-disable-next-line no-console
+    console.warn('[generateHooks] adapt failed, dùng skeleton gốc:', e)
+  }
+  // [3] VN spell-fix safety net + build variants.
+  const fixed = params.lang === 'vi' ? finalTexts.map((t) => spellFixVi(t)) : finalTexts
   const hooks: HookVariant[] = fixed.map((text) => ({
     style: archetypeStyle,
     archetype: groupArchetype,
@@ -851,6 +876,70 @@ export async function generateHooks(params: GenerateHooksParams): Promise<HookVa
     estDurationSec: estimateReadDurationSec(text, params.lang),
   }))
   return hooks
+}
+
+// P3y — adapt viral hook SKELETONS to a specific product. One Gemini call, returns
+// one rewritten hook per skeleton (same order). Keeps the skeleton's structure +
+// scroll-stop energy but grounds it in the product. Flexible length — the user
+// explicitly asked NOT to cap word count (a hard cap made the model over-stuff
+// product specs and break the hook's logic); the rule is "hook hay > nhồi từ".
+async function adaptHooksToProduct(args: {
+  apiKey: string
+  lang: ScriptLang
+  productName: string
+  productPitch: string
+  creatorDescription?: string
+  skeletons: string[]
+}): Promise<string[]> {
+  const langName = SCRIPT_LANG_GEMINI_NAME[args.lang]
+  const creatorLine = args.creatorDescription
+    ? `\nCREATOR VOICE: ${args.creatorDescription}` : ''
+  const numbered = args.skeletons.map((s, i) => `${i + 1}. ${s}`).join('\n')
+  const systemInstruction =
+`You ADAPT proven viral TikTok hook SKELETONS to a specific product, writing in ${langName}.
+You are given ${args.skeletons.length} Tier S+ scroll-stop hook skeletons + a product brief.
+Rewrite EACH skeleton so it is now ABOUT this product — KEEP its sentence structure,
+rhythm, shock device and energy, but replace any vague placeholder ("điều này / cái
+này / thứ này / nó / cách này" or their ${langName} equivalents) with a SHORT, natural
+reference to the product OR its core purpose / benefit / standout feature.
+
+HARD RULES:
+- The hook MUST now clearly connect to the product (its job, its benefit, or what it
+  IS) — a viewer should sense what's being sold, not a blank "điều này".
+- You MAY shorten the product name (e.g. "máy bơm mini" instead of the full long
+  name). NEVER cram the full specs — a hook is a SCROLL-STOP, not a feature list.
+- ${pronounRule(langName).replace(/^- /, '')}
+- LENGTH IS FLEXIBLE — do NOT pad and do NOT over-stuff product words; if adding the
+  product makes it clunky, keep it tight. PRIORITISE that the hook reads GREAT and
+  natural over cramming product terms. A punchy short hook beats a stuffed long one.
+- NEVER invent a statistic / number that is not in the brief.
+- Keep it 100% in ${langName}, casual spoken TikTok register.
+
+OUTPUT: exactly ${args.skeletons.length} lines, ONE adapted hook per line, in the SAME
+order as the skeletons. No numbering, no quotes, no commentary, no blank lines.`
+  const prompt =
+`PRODUCT: ${args.productName}
+PRODUCT BRIEF (ground the hooks in these real facts; may be Vietnamese — understand
+it but write only in ${langName}):
+${args.productPitch}${creatorLine}
+
+SKELETONS to adapt (rewrite each to be about the product, keep its structure):
+${numbered}
+
+Output ${args.skeletons.length} adapted hooks now — one per line, same order.`
+  const raw = await directGeminiText({
+    apiKey: args.apiKey,
+    systemInstruction,
+    prompt,
+    maxOutputTokens: 1024,
+    temperature: 0.8,
+    thinkingBudget: 0,
+  })
+  // Parse: one hook per line. Strip any stray numbering / bullets / quotes.
+  return raw
+    .split('\n')
+    .map((l) => l.replace(/^\s*\d+[.)]\s*/, '').replace(/^["'“”\-•]+|["'“”]+$/g, '').trim())
+    .filter((l) => l.length > 0)
 }
 
 // ── #6 — Vietnamese translation for display (never used as the script input) ──
