@@ -29,6 +29,7 @@ import {
 } from '../types'
 import { AD_STRUCTURES } from './adStructures'
 import { buildHookPoolBlock, pickRandomViralReferences } from './hookViralPatterns'
+import { validateHooks, validateBody, type BodyBlocks } from './scriptValidator'
 import { AD_ANGLES } from './adAngles'
 import {
   allocateBlockBudgets, estimateReadDurationSec, estimateReadDurationForVoice,
@@ -104,6 +105,8 @@ export async function generateScript(
         angleTone: angle.tonePrompt,
         lang,
       }),
+      // P3k — pass the structure so the validator can run after parse.
+      structure,
       chosenHook: params.chosenHook!.trim(),
       userPrompt: buildUserPrompt({
         productName: params.productName,
@@ -262,17 +265,17 @@ TONE GUIDANCE:
 ${args.angleTone}
 
 UNIVERSAL TIKTOK-NATIVE RULES:
-- Write spoken language, not written copy. Short sentences. Natural rhythm.
-- Use first person. Sound like a real person on TikTok sharing what worked.
-- NO corporate language. NO "in this video". NO "let me introduce you to".
-- Keep each SENTENCE short and punchy (spoken, not written). Be CONCISE — cover the
-  key beats without rambling, repeating, or over-explaining; do NOT pad to fill time.
-- It is OK (encouraged) to have imperfect, conversational phrasing.
-- Write in the casual, everyday spoken register of ${args.lang} — the way a real
-  person talks to friends, NOT formal or written language. Pick ONE consistent
-  first-person voice and stick with it. Use the natural filler words, rhythm and
-  short clauses native to ${args.lang}. Do NOT borrow filler or phrasing from any
-  other language, and write 100% in ${args.lang} only. NO formal salutation.
+- Write spoken language, not written copy. First person. Sound like a real person on
+  TikTok sharing what worked. NO corporate "in this video / let me introduce you to".
+- TikTok RHYTHM (critical for scroll-retention): VARY sentence length across the
+  script — alternate PUNCH sentences (4-8 words: "Trời ơi mê quá đi.", "Đợi chút.",
+  "Cái đó tự nhiên không.") with FULLER sentences (12-18 words explaining details).
+  A script of all 15-word sentences feels flat; a script of all 5-word sentences
+  feels jumpy. Mix them — punch, full, punch, full, punch. Imperfect conversational
+  phrasing is encouraged.
+- Write in the casual everyday spoken register of ${args.lang} — the way a real
+  person talks to friends. Pick ONE first-person voice and stick with it. 100% in
+  ${args.lang}; never borrow filler from another language. NO formal salutation.
 - The product should appear as a discovery the speaker stumbled onto, NOT
   as a sponsored mention. Avoid "today I'll tell you about X".
 - GROUND IT IN THE REAL PRODUCT — do NOT stay vague ("some Korean technology",
@@ -535,6 +538,10 @@ async function generateBodyAroundHook(args: {
   systemInstruction: string
   userPrompt: string
   chosenHook: string
+  /** P3k — optional: when present, the body is validated against the group's
+   *  symptomBans / bodyAntiPatterns / CTA-lever rules and 1 feedback retry runs
+   *  if anything failed. Omit to skip the post-gen check. */
+  structure?: import('./adStructures').AdStructureConfig
 }): Promise<GeminiOutput> {
   const systemInstruction = `${args.systemInstruction}
 
@@ -588,6 +595,60 @@ THE FIXED HOOK (continue the script DIRECTLY from this line; reproduce it verbat
   }
   // Force the hook verbatim — never trust the model to reproduce it exactly.
   blocks.hook = args.chosenHook
+
+  // P3k — post-gen body validator: catches the symptom-drift + missing-hook-reuse
+  // + banned-opening + flat-CTA failures the prompt sometimes lets through. ONE
+  // feedback retry (no new prompt layer, just an append) when something failed.
+  if (args.structure) {
+    const bodyBlocks: BodyBlocks = {
+      hook: blocks.hook,
+      pain: blocks.pain ?? '',
+      discovery: blocks.discovery ?? '',
+      benefit: blocks.benefit ?? '',
+      cta: blocks.cta ?? '',
+    }
+    const check = validateBody(bodyBlocks, args.structure)
+    if (!check.ok) {
+      // eslint-disable-next-line no-console
+      console.log(`[generateBodyAroundHook] body check failed (${check.failures.length} issues), 1 retry…`)
+      try {
+        const feedback = check.failures.map((f) => `- ${f}`).join('\n')
+        const retryPrompt = `${userPrompt}
+
+PREVIOUS ATTEMPT FAILED THESE CHECKS — fix ONLY these (keep everything else exactly the same shape and content):
+${feedback}
+
+Return the JSON in the same shape — the hook field unchanged, the 4 other blocks corrected.`
+        const raw2 = await directGeminiText({
+          apiKey: args.apiKey,
+          systemInstruction,
+          prompt: retryPrompt,
+          maxOutputTokens: 2048,
+          temperature: 0.7,
+          thinkingBudget: 0,
+          responseMimeType: 'application/json',
+          responseSchema: SEGMENT_RESPONSE_SCHEMA,
+        })
+        const blocks2 = tryParseSegments(raw2) ?? tryParseSegments(repairJsonString(raw2))
+        if (blocks2) {
+          blocks2.hook = args.chosenHook
+          const check2 = validateBody({
+            hook: blocks2.hook,
+            pain: blocks2.pain ?? '',
+            discovery: blocks2.discovery ?? '',
+            benefit: blocks2.benefit ?? '',
+            cta: blocks2.cta ?? '',
+          }, args.structure)
+          // Keep retry only if it actually fixed MORE than it broke.
+          if (check2.failures.length < check.failures.length) blocks = blocks2
+        }
+      } catch (err) {
+        // eslint-disable-next-line no-console
+        console.warn('[generateBodyAroundHook] retry failed (silent fallback):', err)
+      }
+    }
+  }
+
   return { blocks, hookVariants: [] }
 }
 
@@ -856,6 +917,44 @@ Generate the JSON now — exactly 6 hooks.`
     // eslint-disable-next-line no-console
     console.warn('[generateHooks] still no hooks. final raw:', raw.slice(0, 500))
     throw new Error(`Gemini trả về không đọc được${raw.trim() ? ` (${raw.trim().slice(0, 80)}…)` : ' (rỗng)'}. Thử lại.`)
+  }
+
+  // P3k — post-gen validator: catches "6 hooks share the same opening / closing"
+  // (lazy template-copy mode) that the prompt's diversity rule sometimes misses.
+  // One feedback retry — NO new prompt layer, just a short fix-only instruction.
+  const hookTexts = hooks.map((h) => h.text)
+  const diversity = validateHooks(hookTexts)
+  if (!diversity.ok) {
+    // eslint-disable-next-line no-console
+    console.log(`[generateHooks] diversity check failed (${diversity.failures.length} issues), 1 retry…`)
+    try {
+      const feedback = diversity.failures.map((f) => `- ${f}`).join('\n')
+      const retryPrompt = `${userPrompt}
+
+PREVIOUS ATTEMPT FAILED DIVERSITY CHECKS — fix ONLY these (keep everything else exactly the same):
+${feedback}
+
+Rewrite the 6 hooks so each one opens with DIFFERENT first 3 words and closes with a DIFFERENT clause. Return the JSON in the same shape.`
+      const raw3 = await directGeminiText({
+        apiKey: params.geminiKey,
+        systemInstruction,
+        prompt: retryPrompt,
+        maxOutputTokens: 3072,
+        temperature: 1.0,
+        thinkingBudget: 0,
+        responseMimeType: 'application/json',
+        responseSchema: HOOKS_RESPONSE_SCHEMA,
+      })
+      const hooks3 = parseHooks(raw3, params.lang) ?? parseHooks(repairJsonString(raw3), params.lang) ?? salvageHooks(raw3, params.lang)
+      if (hooks3 && hooks3.length >= 4) {
+        const diversity2 = validateHooks(hooks3.map((h) => h.text))
+        // Keep retry only if it actually improved diversity.
+        if (diversity2.failures.length < diversity.failures.length) hooks = hooks3
+      }
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.warn('[generateHooks] diversity retry failed (silent fallback):', err)
+    }
   }
   return hooks
 }

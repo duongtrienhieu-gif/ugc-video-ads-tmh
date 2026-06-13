@@ -78,7 +78,13 @@ export const AD_STRUCTURES: Record<AdStructure, AdStructureConfig> = {
         'Kết quả sau khi dùng + LẶP LẠI khoảnh khắc/cảm giác từ hook ở trạng thái mới ' +
         '(empathy echo — đóng vòng cảm xúc).',
       cta:
-        'Mời mua + offer ngắn. 1-2 câu, không lan man. Sản phẩm vẫn trong tay creator.',
+        '1-2 câu, KHÔNG lan man. Sản phẩm vẫn trong tay creator. Phải có ' +
+        'ÍT NHẤT 1 đòn bẩy mua hàng cụ thể (chọn 1 trong các loại, tuỳ brief): ' +
+        'SCARCITY ("kẻo hết hàng / chỉ còn vài hộp / cuối tuần này thôi"), ' +
+        'URGENCY ("hốt lẹ / nhanh tay / trong 24h / sale hôm nay"), ' +
+        'SOCIAL PROOF ("đã 10k người đặt / 2.3k đánh giá 5 sao"), ' +
+        'RISK REVERSAL ("đổi trả 30 ngày / không thích hoàn tiền"). ' +
+        'KHÔNG dùng câu CTA flat kiểu "Mua ngay tại link bio" — thiếu đòn bẩy.',
     },
     bodyAntiPatterns: [
       'Bạn có hay', 'Bạn đã bao giờ', 'Có khi nào bạn', 'Dạo này bạn có',
@@ -118,7 +124,13 @@ export const AD_STRUCTURES: Record<AdStructure, AdStructureConfig> = {
         'Thay đổi sau khi dùng + LẶP LẠI khoảnh khắc đã nêu trong hook + pain ở trạng thái mới ' +
         '(giờ với cảm giác mới — empathy echo).',
       cta:
-        'Mời thử / mua, nhẹ nhàng. Tone narrative, không bán cứng. 1-2 câu.',
+        '1-2 câu nhẹ nhàng, tone narrative tiếp nối câu chuyện ở trên — không bán cứng. ' +
+        'Phải có ÍT NHẤT 1 đòn bẩy mua hàng cụ thể (chọn loại hợp tone story): ' +
+        'SOCIAL PROOF mềm ("ai dùng rồi cũng quay lại / 10k người đã thử"), ' +
+        'RISK REVERSAL ("đổi trả 30 ngày / không thích hoàn tiền"), ' +
+        'SCARCITY mềm ("đợt giảm tuần này thôi"), ' +
+        'INVITATION ("nếu bạn cũng đang ở đó, thử coi"). ' +
+        'KHÔNG dùng câu CTA flat kiểu "Mua ngay tại link bio".',
     },
     bodyAntiPatterns: [
       'Cái này mình đang cầm', 'Mình vừa mở',
