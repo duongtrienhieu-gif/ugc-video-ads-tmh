@@ -192,7 +192,10 @@ RULES:
     • MEDIUM (3-4s): most supporting B-roll and transitions.
     • LONGER holds (4-6s): the main product demo / usage moment, a satisfying
       reveal or result, the CTA close — let these breathe.
-  Aim for a mix (e.g. fast-fast-slow), not uniform durations.
+  Aim for a mix (e.g. fast-fast-slow), not uniform durations. NO single cut may
+  cover more than ~6s of voice — if a stretch of the script runs longer, SPLIT it
+  into MORE scenes (more cuts) instead of one long shot. LIPS cuts stay 4-5s. Make
+  ENOUGH scenes that the voice is densely covered (a 55s ad ≈ 12-16 cuts).
 - Each scene's "quote" MUST be text that actually appears in the script.
 - VARIETY: mix lips + no-face hands-action + product close-ups + (some) 3D, so the
   ad feels like a real hand-held review, not a slideshow or a single locked shot.
@@ -382,6 +385,53 @@ export function assignSceneTiming(
     const rawEnd = i < n - 1 ? starts[i + 1] : dur
     const endSec = round2(Math.max(startSec + 0.2, rawEnd))
     out.push({ ...scenes[i], startSec, endSec })
+  }
+  return capSplitScenes(out)
+}
+
+// Hard cut-length caps (deterministic — independent of how many scenes the model
+// returned). A sparse plan stretched to fill the voice can otherwise produce a 12s
+// monster cut. LIPS are kept to 4-5s (a talking-head shouldn't hold longer); the
+// overflow voice becomes a product close-up B-roll (cheaper + more dynamic than a
+// 2nd lipsync). B-ROLL longer than the cap is split into equal sub-cuts.
+const MAX_LIPS_SEC = 5
+const MAX_BROLL_SEC = 6.5
+const MIN_CUT_SEC = 1.5
+
+function capSplitScenes(timed: TimedBrollScene[]): TimedBrollScene[] {
+  const out: TimedBrollScene[] = []
+  // Fill [start,end] with product-closeup B-roll cut(s), each ≤ MAX_BROLL_SEC.
+  const fillBroll = (start: number, end: number, quote: string) => {
+    const L = end - start
+    if (L < MIN_CUT_SEC) { if (out.length) out[out.length - 1].endSec = round2(end); return }
+    const parts = Math.max(1, Math.ceil(L / MAX_BROLL_SEC))
+    const step = L / parts
+    for (let k = 0; k < parts; k++) {
+      const a = round2(start + k * step)
+      const b = round2(k === parts - 1 ? end : start + (k + 1) * step)
+      out.push({ role: 'broll', kind: 'product_closeup', quote, conceptPrompt: '', durationSec: round2(b - a), startSec: a, endSec: b })
+    }
+  }
+  for (const s of timed) {
+    const L = s.endSec - s.startSec
+    if (s.role === 'lips') {
+      if (L <= MAX_LIPS_SEC + 0.4) { out.push(s); continue }
+      const lipsEnd = round2(s.startSec + MAX_LIPS_SEC)
+      out.push({ ...s, endSec: lipsEnd, durationSec: round2(MAX_LIPS_SEC) })
+      fillBroll(lipsEnd, s.endSec, s.quote)  // overflow → product close-up
+    } else {
+      if (L <= MAX_BROLL_SEC + 0.4) { out.push(s); continue }
+      const parts = Math.ceil(L / MAX_BROLL_SEC)
+      const step = L / parts
+      for (let k = 0; k < parts; k++) {
+        const a = round2(s.startSec + k * step)
+        const b = round2(k === parts - 1 ? s.endSec : s.startSec + (k + 1) * step)
+        out.push({
+          ...s, startSec: a, endSec: b, durationSec: round2(b - a),
+          conceptPrompt: k > 0 && s.conceptPrompt ? `${s.conceptPrompt} (a slightly different angle / closer)` : s.conceptPrompt,
+        })
+      }
+    }
   }
   return out
 }
