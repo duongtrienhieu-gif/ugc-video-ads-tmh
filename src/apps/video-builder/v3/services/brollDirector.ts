@@ -144,6 +144,7 @@ export async function directBrollScenes(
   const langName = SCRIPT_LANG_GEMINI_NAME[params.lang]
   const dur = Math.round(params.voiceDurationSec || params.script.totalDurationSec || 50)
   const lipsCount = lipsCountForDuration(dur)
+  const minScenes = densityFloor(dur)
   const productContext = buildProductContextBlock(params.product)
   const scriptDump = params.script.blocks.map((b) => `[${b.id}] ${b.text}`).join('\n')
 
@@ -197,7 +198,8 @@ names — never pad with vague stickers, but never leave a concrete callout bare
 
 RULES:
 - COVER 100%: the scenes' durations sum to ~${dur}s; every spoken beat has a cut;
-  NO empty span. Group sentences about the SAME idea into one cut; don't over-cut.
+  NO empty span. Give each DISTINCT beat its OWN cut with its OWN visual — only merge
+  sentences that are truly one single thought; lean toward MORE distinct cuts, not fewer.
 - PACING — vary cut LENGTH by PURPOSE so the ad has rhythm, NEVER a flat ~4s
   metronome (consecutive cuts must NOT be the same length):
     • SHORT punchy cuts (2-3s): the hook, a quick callout, a rapid run of feature/
@@ -208,7 +210,9 @@ RULES:
   Aim for a mix (e.g. fast-fast-slow), not uniform durations. NO single cut may
   cover more than ~6s of voice — if a stretch of the script runs longer, SPLIT it
   into MORE scenes (more cuts) instead of one long shot. LIPS cuts stay 4-5s. Make
-  ENOUGH scenes that the voice is densely covered (a 55s ad ≈ 12-16 cuts).
+  ENOUGH scenes that the voice is densely covered — for THIS ${dur}s video return AT
+  LEAST ${minScenes} distinct cuts (each a DIFFERENT visual grounded in a real line,
+  never a repeat or vague filler to pad the count).
 - Each scene's "quote" MUST be text that actually appears in the script.
 - VARIETY: mix lips + no-face hands-action + product close-ups + (some) 3D, so the
   ad feels like a real hand-held review, not a slideshow or a single locked shot.
@@ -226,7 +230,7 @@ OUTPUT strict JSON only (no markdown fences):
       apiKey: params.geminiKey,
       systemInstruction,
       prompt: denserHint
-        ? `Your last plan had only ${denserHint.have} cuts for a ${dur}s video — too sparse; it will feel slow and flat. Re-plan with MORE, DENSER, VARIED-length cuts (aim ≥${denserHint.want} total): keep the hook, callouts and any feature/use-case run as fast 2-3s cuts, and only let the main demo / reveal / CTA breathe at 4-6s. Cover every second. Return the JSON.`
+        ? `Your last plan had only ${denserHint.have} cuts for a ${dur}s video — too sparse; you GROUPED several lines into long cuts. Re-plan with at least ${denserHint.want} cuts: give EACH distinct line/beat its OWN cut with its OWN visual (a new action, angle, or detail grounded in that exact line) — do NOT pad with repeats or vague filler. Keep the hook / callouts / feature runs as fast 2-3s cuts; only the main demo / reveal / CTA breathe at 4-6s. Cover every second. Return the JSON.`
         : 'Plan the full-coverage hybrid shot list now. Return the JSON.',
       maxOutputTokens: 4096,
       temperature: 0.6,
@@ -246,13 +250,14 @@ OUTPUT strict JSON only (no markdown fences):
   // Gemini sometimes returns fewer; promote evenly-spread broll cuts to lips to hit N.
   let scenes = enforceLipsCount(sanitizeScenes(parsed.scenes), lipsCount)
 
-  // Density floor (1/2) — if the first plan is sparse, re-roll ONCE asking for
-  // denser, varied cuts; keep whichever roll has more scenes. The hard floor in
-  // assignSceneTiming is the deterministic backstop if the re-roll is still sparse.
-  const minScenes = densityFloor(dur)
-  if (scenes.length < minScenes) {
+  // Density floor (1/2) — REAL content density comes from the DIRECTOR, not from
+  // mechanically cutting one cut in half. If the plan is sparse, re-roll (up to 2×)
+  // asking it to give each distinct line its OWN grounded visual; keep whichever
+  // roll has the most scenes. The mechanical floor in assignSceneTiming is only the
+  // last-resort backstop and should rarely fire once the director cooperates.
+  for (let attempt = 1; attempt <= 2 && scenes.length < minScenes; attempt++) {
     // eslint-disable-next-line no-console
-    console.log(`[BROLL_DIRECTOR] plan thưa (${scenes.length}<${minScenes}) — re-roll 1 lần cho dày hơn`)
+    console.log(`[BROLL_DIRECTOR] plan thưa (${scenes.length}<${minScenes}) — re-roll ${attempt}/2 cho cảnh riêng, dày hơn`)
     const raw2 = await call(true, { have: scenes.length, want: minScenes })
     const parsed2 = tryParse(raw2)
     if (parsed2) {
