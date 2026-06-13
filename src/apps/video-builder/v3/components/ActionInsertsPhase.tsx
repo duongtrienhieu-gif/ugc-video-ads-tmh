@@ -36,6 +36,7 @@ import {
 } from '../services/insertSuggester'
 import { renderInsert, resumeInsertVideo, listEligibleInsertsForBulk } from '../services/insertRenderer'
 import { directBrollScenes, assignSceneTiming, type TimedBrollScene } from '../services/brollDirector'
+import { assembleHybridVideo, type HybridSceneClip } from '../services/hybridAssembler'
 import { getProductVisualBrief, type ProductVisualBrief } from '../../../../services/productVisualBrief'
 import { hasFourProductImages } from '../../../../stores/types'
 import { computeBlockStartTimestamps, computeQuoteTimestamp, computeWordTimestampFromAlignment } from '../services/insertTimingEngine'
@@ -188,7 +189,12 @@ export default function ActionInsertsPhase({ onContinue }: Props) {
     // P3b — render ONE scene of the last plan to a clip (verify quality + sync on a
     // few scenes before the full batch). Run __testBrollDirector() first, then
     // __testRenderScene(0), __testRenderScene(1)… It opens the resulting clip.
-    const w2 = window as unknown as { __testRenderScene?: (i: number) => Promise<unknown>; __lastBrollTimed?: TimedBrollScene[] }
+    const w2 = window as unknown as {
+      __testRenderScene?: (i: number) => Promise<unknown>
+      __testHybridAssemble?: () => Promise<unknown>
+      __lastBrollTimed?: TimedBrollScene[]
+      __hybridClips?: (HybridSceneClip | undefined)[]
+    }
     w2.__testRenderScene = async (i: number) => {
       const st = useAdsVideoStore.getState().state
       const timed = w2.__lastBrollTimed
@@ -223,15 +229,42 @@ export default function ActionInsertsPhase({ onContinue }: Props) {
           })
           videoRef = r.videoRef
         }
+        // P3c-1 — cache the rendered clip so __testHybridAssemble() can ghép them.
+        w2.__hybridClips = w2.__hybridClips ?? []
+        w2.__hybridClips[i] = { scene, videoRef }
         const url = await getUrl(videoRef)
-        console.log(`[BROLL_RENDER] ✅ #${i} XONG. Video: ${url}`)
+        console.log(`[BROLL_RENDER] ✅ #${i} XONG (cache __hybridClips[${i}]). Video: ${url}`)
         if (url) window.open(url, '_blank')
         return url
       } catch (e) { console.error(`[BROLL_RENDER] #${i} lỗi:`, e) }
     }
+    // P3c-1 — ghép các clip ĐÃ render (cache trong __hybridClips) + master TTS → MP4.
+    // FREE (local ffmpeg, 0 credit). Render vài cảnh LIÊN TIẾP từ 0 trước, rồi gọi cái này.
+    w2.__testHybridAssemble = async () => {
+      const st = useAdsVideoStore.getState().state
+      const voiceRef = st.voiceFirst?.voiceRef ?? st.creatorVideo?.voiceRef
+      const voiceDurationSec =
+        st.voiceFirst?.voiceDurationSec ?? st.creatorVideo?.voiceDurationSec ?? st.scriptBrain.script?.totalDurationSec ?? 50
+      if (!voiceRef) { console.warn('[HYBRID_ASM] thiếu voiceRef — tạo keyframe ở Bước 3 trước'); return }
+      const clips = (w2.__hybridClips ?? []).filter((c): c is HybridSceneClip => !!c)
+      if (clips.length === 0) { console.warn('[HYBRID_ASM] chưa có clip nào — chạy __testRenderScene(0), (1)… trước'); return }
+      const resolution = st.costMode === 'FULL' ? '1080p' : st.costMode === 'STANDARD' ? '720p' : '480p'
+      console.log(`[HYBRID_ASM] ghép ${clips.length} clip (res=${resolution})…`)
+      try {
+        const r = await assembleHybridVideo({
+          clips, voiceRef, voiceDurationSec, resolution,
+          onStage: (m) => console.log('[HYBRID_ASM]', m),
+        })
+        const url = await getUrl(r.videoRef)
+        console.log(`[HYBRID_ASM] ✅ XONG. MP4: ${url}`)
+        if (url) window.open(url, '_blank')
+        return url
+      } catch (e) { console.error('[HYBRID_ASM] lỗi:', e) }
+    }
     return () => {
       delete (window as unknown as { __testBrollDirector?: unknown }).__testBrollDirector
       delete (window as unknown as { __testRenderScene?: unknown }).__testRenderScene
+      delete (window as unknown as { __testHybridAssemble?: unknown }).__testHybridAssemble
     }
   }, [geminiKey, kieApiKey])
 
