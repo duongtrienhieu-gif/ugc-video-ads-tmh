@@ -32,6 +32,11 @@ import { buildHookPoolBlock, pickRandomViralReferences } from './hookViralPatter
 import { validateHooks, validateBody, spellFixVi, type BodyBlocks } from './scriptValidator'
 import { buildMsBodyVocabBlock } from './bodyPatternsMs'
 import { buildShapeOverrideBlock } from './scriptShapes'
+import {
+  detectHookShape,
+  buildSemanticAnswerRule,
+  validateNumbersInHook,
+} from './hookSemanticBinder'
 import { AD_ANGLES } from './adAngles'
 import {
   allocateBlockBudgets, estimateReadDurationSec, estimateReadDurationForVoice,
@@ -592,21 +597,21 @@ async function generateBodyAroundHook(args: {
   // bahasa rojak with the actual viral TikTok register. EN/VI fall through to
   // the universal rules already in args.systemInstruction.
   const msVocabBlock = args.lang === 'ms' ? `\n\n${buildMsBodyVocabBlock()}` : ''
+  // P3r — Hướng X: detect hook shape (question / listicle / comparison / confession /
+  // claim_bold / investigation / imperative) and inject the matching ANSWER rule.
+  // Replaces P3i's "reuse a key word" literal contract — that rule worked for
+  // confessions but broke awkwardly for question hooks (the body picked up a noun
+  // instead of answering the question).
+  const semanticRule = buildSemanticAnswerRule(detectHookShape(args.chosenHook), args.chosenHook)
   const systemInstruction = `${args.systemInstruction}${msVocabBlock}
 
 HOOK IS ALREADY CHOSEN — do NOT write or change the hook. The opening hook line
 is FIXED (given below). Write ONLY the remaining 4 blocks (pain, discovery,
 benefit, cta) so they continue DIRECTLY from this exact hook.
 
+${semanticRule}
+
 HARD CONTRACT (must hold across all 4 blocks):
-- The FIRST SENTENCE of the pain block MUST reuse at least 1 KEY WORD or KEY
-  PHRASE from the hook (the same object / persona / pain / detail / number / time).
-  Reuse means literally pulling a noun/verb out of the hook line, not just "same
-  topic". Example:
-    Hook: "Mẹ bỉm nào hay quên uống nước, cái bình Stanley này là cứu tinh á."
-    GOOD pain opening: "Mình cũng vậy, cứ pha sữa cho con xong là mê man, ngó lại
-                        bình thì khô khốc rồi…"
-    BAD  pain opening: "Bạn có hay bị đầy hơi, ợ chua sau khi ăn không?" ← drift.
 - DO NOT start the body with a generic pain question that the WRONG framework
   uses (the BANNED BODY OPENINGS list above lists them for this framework). The
   body MUST respect the per-block guide above.
@@ -788,6 +793,10 @@ export interface GenerateHooksParams {
    *  re-roll is FORCED to break out of the same connectors / closing clauses
    *  rather than mass-producing 6 copies of the previous template. */
   previousBatch?: string[]
+  /** P3r — body shape selected by the user. The hook prompt now requires the 6
+   *  hooks to fit the shape (listicle → "N reasons" openers; comparison → "A vs B";
+   *  journey → "N ngày test"; narrative → no shape constraint). Omit → 'narrative'. */
+  shape?: import('../types').ScriptShape
 }
 
 // P3j — hook archetype is now METADATA ONLY (each generated hook also gets a
@@ -847,6 +856,18 @@ export async function generateHooks(params: GenerateHooksParams): Promise<HookVa
   const viralRefs = pickRandomViralReferences(10, params.lang)
     .map((h, i) => `  ${i + 1}. ${h}`)
     .join('\n')
+  // P3r — shape-aware hook generation. P3q only wired shape into the body prompt
+  // (the user audited: pick "listicle" / "comparison" / "journey" → hooks were
+  // still random). The hook prompt now carries an explicit SHAPE BIND block so
+  // every one of the 6 hooks fits the body shape that will be written for it.
+  const shape = params.shape ?? 'narrative'
+  const shapeBindLine = shape === 'listicle'
+    ? `*** BODY SHAPE = LISTICLE *** — EVERY one of the 6 hooks MUST be an N-reasons opener (e.g. "3 lý do mình mua...", "Có 2 lý do thôi mà mình...", "Aku ada 3 sebab kenapa..."). The N can vary (2/3/4/5) but ALL 6 hooks MUST include a number + "lý do / reasons / sebab" pattern. Hooks without a number-list opener are a HARD FAILURE for this shape.`
+    : shape === 'comparison'
+    ? `*** BODY SHAPE = COMPARISON *** — EVERY one of the 6 hooks MUST set up a side-by-side test (e.g. "Mình so sánh A và B", "Bên trái 200k, bên phải 99k", "Aku compare RM20 vs RM200", "Tôi đã test 3 brand", "Yang murah lawan yang mahal"). Hooks that don't tee up a comparison are a HARD FAILURE for this shape.`
+    : shape === 'journey'
+    ? `*** BODY SHAPE = JOURNEY *** — EVERY one of the 6 hooks MUST signal a multi-day / multi-week / multi-month test (e.g. "Test 7 ngày kết quả", "Aku guna 30 hari, ni result", "Sau 1 tháng dùng...", "Aku test 7 hari, gila weh"). The duration must be EXPLICIT (a number + unit of time). Hooks without a time-bound test are a HARD FAILURE for this shape.`
+    : ''   // 'narrative' = no shape constraint, current free POOL behaviour
 
   const systemInstruction = `You are a TikTok-native ad HOOK specialist writing in ${lang}.
 A hook is the first 1-3 seconds of a short video ad — the single biggest factor
@@ -855,7 +876,7 @@ in whether a viewer keeps watching or scrolls past.
 *** GROUP BINDING ***
 Group: "${structure.labelVi}".
 ${productRevealLine}
-
+${shapeBindLine ? `\n${shapeBindLine}\n` : ''}
 *** THE 3 POOLs — mix-match for each of the 6 hooks ***
 Build each of the 6 hooks by combining ONE choice from POOL 1 + ONE choice from
 POOL 2 + (optionally) ONE choice from POOL 3. Across the 6 hooks the combinations
@@ -996,19 +1017,43 @@ Generate the JSON now — exactly 6 hooks.`
   // (lazy template-copy mode) that the prompt's diversity rule sometimes misses.
   // P3p-E — now also fails when ≥1 hook exceeds 18 words (rule was prompt-only).
   // One feedback retry — NO new prompt layer, just a short fix-only instruction.
-  const hookTexts = hooks.map((h) => h.text)
-  const diversity = validateHooks(hookTexts)
-  if (!diversity.ok) {
+  const collectHookFailures = (list: HookVariant[]): string[] => {
+    const texts = list.map((h) => h.text)
+    const failures = validateHooks(texts).failures.slice()
+    // P3r — fabricated-number check on every hook against the brief.
+    for (const h of texts) {
+      const numHit = validateNumbersInHook(h, params.productPitch)
+      if (numHit) failures.push(numHit)
+    }
+    // P3r — shape conformance: when user picked a non-narrative shape, each
+    // hook must match it (listicle hooks must have a number-list opener; etc).
+    if (shape !== 'narrative') {
+      for (const h of texts) {
+        const detected = detectHookShape(h)
+        if (shape === 'listicle' && detected !== 'listicle') {
+          failures.push(`Hook "${h.slice(0, 60)}…" is NOT a listicle (shape "${detected}"). User selected LISTICLE — rewrite so this hook opens with an N-reasons / N-lý do / N-sebab pattern.`)
+        } else if (shape === 'comparison' && detected !== 'comparison') {
+          failures.push(`Hook "${h.slice(0, 60)}…" is NOT a comparison (shape "${detected}"). User selected COMPARISON — rewrite so this hook tees up an A vs B / side-by-side test.`)
+        } else if (shape === 'journey' && detected !== 'investigation' && !/\b\d+\s*(ngày|days?|hari|tuần|weeks?|minggu|tháng|months?|bulan)/i.test(h)) {
+          failures.push(`Hook "${h.slice(0, 60)}…" is NOT a journey (no explicit time duration). User selected JOURNEY — rewrite so this hook signals a multi-day / multi-week test (e.g. "7 ngày", "30 hari", "1 tháng").`)
+        }
+      }
+    }
+    return failures
+  }
+
+  const initialFailures = collectHookFailures(hooks)
+  if (initialFailures.length > 0) {
     // eslint-disable-next-line no-console
-    console.log(`[generateHooks] diversity check failed (${diversity.failures.length} issues), 1 retry…`)
+    console.log(`[generateHooks] post-gen check failed (${initialFailures.length} issues), 1 retry…`)
     try {
-      const feedback = diversity.failures.map((f) => `- ${f}`).join('\n')
+      const feedback = initialFailures.map((f) => `- ${f}`).join('\n')
       const retryPrompt = `${userPrompt}
 
-PREVIOUS ATTEMPT FAILED DIVERSITY CHECKS — fix ONLY these (keep everything else exactly the same):
+PREVIOUS ATTEMPT FAILED THESE CHECKS — fix ONLY these (keep everything else exactly the same):
 ${feedback}
 
-Rewrite the 6 hooks so each one opens with DIFFERENT first 3 words and closes with a DIFFERENT clause. Return the JSON in the same shape.`
+Return the JSON in the same shape — exactly 6 hooks, each fixing its issue.`
       const raw3 = await directGeminiText({
         apiKey: params.geminiKey,
         systemInstruction,
@@ -1021,13 +1066,14 @@ Rewrite the 6 hooks so each one opens with DIFFERENT first 3 words and closes wi
       })
       const hooks3 = parseHooks(raw3, params.lang) ?? parseHooks(repairJsonString(raw3), params.lang) ?? salvageHooks(raw3, params.lang)
       if (hooks3 && hooks3.length >= 4) {
-        const diversity2 = validateHooks(hooks3.map((h) => h.text))
-        // Keep retry only if it actually improved diversity.
-        if (diversity2.failures.length < diversity.failures.length) hooks = hooks3
+        if (params.lang === 'vi') for (const h of hooks3) h.text = spellFixVi(h.text)
+        const retryFailures = collectHookFailures(hooks3)
+        // Keep retry only if it actually reduced failures.
+        if (retryFailures.length < initialFailures.length) hooks = hooks3
       }
     } catch (err) {
       // eslint-disable-next-line no-console
-      console.warn('[generateHooks] diversity retry failed (silent fallback):', err)
+      console.warn('[generateHooks] post-gen retry failed (silent fallback):', err)
     }
   }
   return hooks

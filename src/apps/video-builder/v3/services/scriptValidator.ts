@@ -22,6 +22,7 @@ import {
   MS_BODY_ANTI_PATTERNS,
   MS_SYMPTOM_BANS_INSTANT,
 } from './bodyPatternsMs'
+import { validateSemanticAnswer } from './hookSemanticBinder'
 
 export interface ValidatorResult {
   ok: boolean
@@ -55,22 +56,8 @@ export function spellFixVi(text: string): string {
 
 // ── Tokenization helpers (VN-friendly) ───────────────────────────────────────
 
-const STOPWORDS_VI = new Set([
-  'là', 'và', 'của', 'với', 'cho', 'này', 'kia', 'ấy', 'tôi', 'mình',
-  'bạn', 'đó', 'đây', 'thì', 'mà', 'ơi', 'á', 'nha', 'nhé', 'rồi',
-  'cũng', 'còn', 'vẫn', 'lại', 'đã', 'đang', 'sẽ', 'có', 'không',
-  'một', 'cái', 'thằng', 'con', 'mấy', 'như', 'để', 'từ', 'đến', 'tới',
-  'trong', 'ngoài', 'trên', 'dưới', 'khi', 'mỗi', 'mọi', 'nhiều', 'ít',
-  'rất', 'lắm', 'quá', 'hơn', 'kém', 'nữa', 'thôi', 'luôn', 'mới',
-])
-
-/** Tokenize a Vietnamese (or generic Latin) string into lowercase words longer
- *  than 3 chars, with stopwords filtered out. Returns a SET for cheap lookup. */
-function meaningfulTokens(text: string): Set<string> {
-  const cleaned = text.toLowerCase().replace(/[.,!?;:"'…–—()/]/g, ' ').trim()
-  const tokens = cleaned.split(/\s+/).filter((t) => t.length > 3 && !STOPWORDS_VI.has(t))
-  return new Set(tokens)
-}
+// VN stopword list + `meaningfulTokens` helper removed in P3r — the literal-reuse
+// rule they powered was replaced by the semantic-answer rule in hookSemanticBinder.
 
 /** Lowercase normalized form for opening/closing comparison. */
 function normalize(s: string): string {
@@ -225,20 +212,13 @@ export function validateBody(
     }
   }
 
-  // 2. HOOK LITERAL REUSE — first sentence of pain must reuse ≥1 meaningful token from hook.
+  // 2. HOOK SEMANTIC ANSWER (P3r — Hướng X) — replaces the P3i literal-reuse rule.
+  // Detects what shape of hook this is (question / listicle / comparison / test) and
+  // requires the body's first sentence to actually ANSWER it (not just share a noun).
   if (blocks.hook && blocks.pain) {
-    const hookTokens = meaningfulTokens(blocks.hook)
     const firstPain = firstSentence(blocks.pain)
-    const painFirstTokens = meaningfulTokens(firstPain)
-    const overlap = [...hookTokens].filter((t) => painFirstTokens.has(t))
-    if (hookTokens.size > 0 && overlap.length === 0) {
-      failures.push(
-        `First sentence of pain ("${firstPain.slice(0, 60)}…") does NOT reuse any key ` +
-        `word from the hook. Pull at least ONE concrete noun/verb (≥4 chars) from the ` +
-        `hook into the first sentence of pain. Hook tokens to choose from: ` +
-        `${[...hookTokens].slice(0, 6).join(', ')}.`,
-      )
-    }
+    const semanticFailure = validateSemanticAnswer(blocks.hook, firstPain, lang)
+    if (semanticFailure) failures.push(semanticFailure)
   }
 
   // 3. BANNED OPENINGS — no block may start with one of bodyAntiPatterns (per-framework + per-lang).

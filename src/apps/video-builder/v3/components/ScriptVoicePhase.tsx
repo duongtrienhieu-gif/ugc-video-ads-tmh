@@ -221,6 +221,7 @@ export default function ScriptVoicePhase({ onContinue }: Props) {
         productPitch: brief.productPitch,
         creatorDescription: brief.creatorDescription,
         previousBatch,
+        shape: brain.shape,
       })
       setHookVariants(hooks)
       pickHookVariant(-1)
