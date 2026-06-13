@@ -31,7 +31,7 @@ import { useAppStore } from '../../../stores/appStore'
 import { useAdsVideoStore } from './stores/adsVideoStore'
 import ScriptVoicePhase from './components/ScriptVoicePhase'
 import CreatorVideoPhase from './components/CreatorVideoPhase'
-import ActionInsertsPhase from './components/ActionInsertsPhase'
+import HybridVideoPhase from './components/HybridVideoPhase'
 import AutoEditPhase from './components/AutoEditPhase'
 import ExportPhase from './components/ExportPhase'
 import {
@@ -264,7 +264,7 @@ export default function AdsVideoEngine({ onSwitchToV2, onSwitchToV1 }: Props) {
           <ScriptVoicePhase onContinue={() => setPhase('action-inserts')} />
         )}
         {state.phase === 'action-inserts' && (
-          <ActionInsertsPhase onContinue={() => setPhase('creator-video')} />
+          <HybridVideoPhase />
         )}
         {state.phase === 'creator-video' && (
           <CreatorVideoPhase onContinue={() => setPhase('auto-edit')} />
