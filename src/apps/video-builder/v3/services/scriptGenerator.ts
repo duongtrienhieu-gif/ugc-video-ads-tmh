@@ -221,6 +221,28 @@ const SCRIPT_BLOCK_IDS: ScriptBlockId[] = [
 
 const HOOK_STYLES: HookStyle[] = ['emotional', 'shock', 'curiosity']
 
+/** P3l — per-language first-person pronoun rule, shared by the body prompt and
+ *  the hook prompt so both speak in the same voice. Branches on the Gemini
+ *  language NAME ("Vietnamese" / "Bahasa Malaysia" / …).
+ *  VN: "mình" only (never "tôi" except an explicit authority role).
+ *  MS: "aku" default (Gen Z TikTok-native), "saya" for mature niches.
+ *  EN/other: neutral casual "I". */
+function pronounRule(langName: string): string {
+  if (langName === 'Vietnamese') {
+    return '- XƯNG HÔ (VN — BẮT BUỘC): dùng "mình" làm ngôi thứ nhất XUYÊN SUỐT (cả hook lẫn body). ' +
+      'TUYỆT ĐỐI KHÔNG dùng "tôi" — "tôi" nghe formal, phá chất voice-memo TikTok. Ngoại lệ DUY ' +
+      'NHẤT: khi nói bằng vai trò chuyên gia rõ ràng (vd "Là bác sĩ / bartender 8 năm, tôi nói ' +
+      'thẳng…") thì "tôi" được phép để tăng uy tín. Gọi người xem là "bạn" (KHÔNG "quý khách").'
+  }
+  if (langName === 'Bahasa Malaysia') {
+    return '- KATA GANTI DIRI (MS — WAJIB): default "aku" (Gen Z TikTok-native, mesra) untuk produk ' +
+      'snek / kecantikan / fesyen / gajet. Guna "saya" HANYA untuk niche matang (kesihatan / ' +
+      'wellness / keibubapaan) yang audiensnya 30+. Panggil penonton "korang"/"kau" (santai), ' +
+      'JANGAN formal. Pilih SATU kata ganti dan kekal konsisten sepanjang skrip.'
+  }
+  return '- FIRST PERSON: a natural casual "I"; address the viewer as "you". Stay consistent throughout.'
+}
+
 function buildSystemPrompt(args: {
   frameworkLabel: string
   structureSystem: string
@@ -274,15 +296,18 @@ UNIVERSAL TIKTOK-NATIVE RULES:
   feels jumpy. Mix them — punch, full, punch, full, punch. Imperfect conversational
   phrasing is encouraged.
 - Write in the casual everyday spoken register of ${args.lang} — the way a real
-  person talks to friends. Pick ONE first-person voice and stick with it. 100% in
-  ${args.lang}; never borrow filler from another language. NO formal salutation.
+  person talks to friends. 100% in ${args.lang}; never borrow filler from another
+  language. NO formal salutation.
+${pronounRule(args.lang)}
 - The product should appear as a discovery the speaker stumbled onto, NOT
   as a sponsored mention. Avoid "today I'll tell you about X".
 - GROUND IT IN THE REAL PRODUCT — do NOT stay vague ("some Korean technology",
   "this serum", "công nghệ gì đó", "thứ này"). Vague copy persuades nobody AND
   gives the downstream visual director nothing to show. A real person who actually
   uses a product can name what is in it and why it works — so must this script,
-  using ONLY the real facts in the PRODUCT BRIEF (never invent ingredients/claims):
+  using ONLY the real facts in the PRODUCT BRIEF (never invent ingredients, claims,
+  or STATISTICS — if the brief gives no number, do NOT fabricate one like
+  "740.000 hộp đã bán" / "90% người dùng"; switch to a non-numeric angle instead):
     • NAME the key ingredient(s) / active(s) / material the brief lists — say them
       out loud (e.g. "peptide với collagen", "than hoạt tính", "thép Nhật"), NOT
       "công nghệ gì đó". If the brief names two actives, name both.
@@ -821,6 +846,7 @@ ${viralRefs}
 ALL 6 hooks 100% in ${lang}. The brief may be Vietnamese — READ + understand it,
 NEVER echo Vietnamese words. If ${lang} is not Vietnamese, a Vietnamese/mixed hook
 is a HARD FAILURE.
+${pronounRule(lang)}
 
 WHAT MAKES A HOOK STOP THE SCROLL:
 - VOICE-MEMO REGISTER, not Instagram caption. A real person talking to a friend.
@@ -839,6 +865,10 @@ GROUNDING (universal):
 - Ground every hook in the REAL product from the brief — specific, not generic.
 - BELIEVABLE: no "in X days" miracles, no certifications/approvals (Halal, KKM,
   GMP, FDA, clinically proven, doctor approved). Felt + personal beats grand.
+- NO FABRICATED STATISTICS: only use a number (sales count / %, e.g. "740.000 hộp",
+  "90% người dùng") if it appears in the PRODUCT BRIEF. If the brief gives no such
+  number, do NOT invent one — for a hook that wants the stat_number / concrete_comparison
+  bait, fall back to a non-numeric tension (insider / contrarian / personal-stake).
 ${params.lang !== 'vi' ? `
 TRANSLATION: each hook also gets a faithful Vietnamese translation in "vi" —
 keep the casual spoken tone, NOT formal/literal. Display-only, NEVER used in the

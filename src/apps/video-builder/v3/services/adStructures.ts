@@ -65,18 +65,14 @@ export const AD_STRUCTURES: Record<AdStructure, AdStructureConfig> = {
     blockGuides: {
       pain:
         'CHỈ 1 câu TRANSITION nối tiếp từ hook — mở rộng chính cảm giác / chi tiết / khoảnh khắc đã ' +
-        'nêu trong hook. PHẢI reuse ÍT NHẤT 1 từ chính (literal) từ hook. ' +
-        'CẤM TUYỆT ĐỐI: đặt câu hỏi pain ("Bạn có hay…?"), kể triệu chứng, mention các từ trong ' +
-        'symptomBans, mở bằng "Tôi từng / Trước đây tôi / Bạn có biết". ' +
-        'Câu này dài ~3-5s nói thôi.',
+        'nêu trong hook. CẤM: đặt câu hỏi pain ("Bạn có hay…?"), kể triệu chứng, mở bằng ' +
+        '"Tôi từng / Trước đây tôi / Bạn có biết". Câu này dài ~3-5s nói thôi.',
       discovery:
         'Phần thân chính — tả sản phẩm cụ thể: thành phần / cấu tạo / USP / cách dùng. ' +
-        'Lồng TỐI THIỂU 1 sensory beat THẬT (vị / kết cấu / mùi / cảm giác trên da / cảm giác cầm / ' +
-        'âm thanh — pick chiều phù hợp loại sản phẩm). Có thể thêm 1 point-of-contact đời thường ' +
-        '(giờ giấc / chỗ / hành động cụ thể) nếu hợp.',
+        'Đây là block ĐẶT sensory beat (theo rule SENSORY MOMENT ở dưới).',
       benefit:
-        'Kết quả sau khi dùng + LẶP LẠI khoảnh khắc/cảm giác từ hook ở trạng thái mới ' +
-        '(empathy echo — đóng vòng cảm xúc).',
+        'Kết quả sau khi dùng. Đây là block ĐÓNG empathy echo (theo rule ở dưới) — lặp lại ' +
+        'khoảnh khắc / cảm giác từ hook ở trạng thái mới.',
       cta:
         '1-2 câu, KHÔNG lan man. Sản phẩm vẫn trong tay creator. Phải có ' +
         'ÍT NHẤT 1 đòn bẩy mua hàng cụ thể (chọn 1 trong các loại, tuỳ brief): ' +
@@ -113,16 +109,15 @@ export const AD_STRUCTURES: Record<AdStructure, AdStructureConfig> = {
       'Tên sản phẩm KHÔNG xuất hiện trong HOOK. Pain block dài hơn (~25% video) kể cụ thể với khoảnh khắc đời thường. Discovery block REVEAL sản phẩm như đáp án / bước ngoặt (~giây 15-25 cho video 60s). Benefit lặp moment từ hook (empathy echo).',
     blockGuides: {
       pain:
-        'Mở rộng câu chuyện / cảm xúc / pain từ hook — thêm KHOẢNH KHẮC ĐỜI THƯỜNG RẤT CỤ THỂ ' +
-        '(giờ giấc / chỗ ngồi / hành động / câu nội tâm). PHẢI reuse ÍT NHẤT 1 từ chính từ hook. ' +
-        'Tone đời sống thật, không khoa trương. Phần này là điểm chạm chính, kéo người xem đồng cảm.',
+        'Mở rộng câu chuyện / cảm xúc / pain từ hook — tone đời sống thật, không khoa trương. ' +
+        'Phần dài nhất, kéo người xem đồng cảm. Đây là block ĐẶT point-of-contact (theo rule ở dưới).',
       discovery:
         'KHOẢNH KHẮC tìm ra / nhận ra / thử sản phẩm — kiểu "tình cờ thấy review" / "bạn cho thử" / ' +
-        '"mua đại". Nêu TÊN sản phẩm + 1 đặc tính / cơ chế cụ thể đáp pain trên. Lồng 1 sensory ' +
-        'beat thật khi thử lần đầu.',
+        '"mua đại". Nêu TÊN sản phẩm + 1 đặc tính / cơ chế cụ thể đáp pain trên. ' +
+        'Đây là block ĐẶT sensory beat (cảm giác khi thử lần đầu — theo rule ở dưới).',
       benefit:
-        'Thay đổi sau khi dùng + LẶP LẠI khoảnh khắc đã nêu trong hook + pain ở trạng thái mới ' +
-        '(giờ với cảm giác mới — empathy echo).',
+        'Thay đổi sau khi dùng. Đây là block ĐÓNG empathy echo (theo rule ở dưới) — lặp lại ' +
+        'khoảnh khắc hook + pain ở trạng thái mới.',
       cta:
         '1-2 câu nhẹ nhàng, tone narrative tiếp nối câu chuyện ở trên — không bán cứng. ' +
         'Phải có ÍT NHẤT 1 đòn bẩy mua hàng cụ thể (chọn loại hợp tone story): ' +
