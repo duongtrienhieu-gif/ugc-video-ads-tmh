@@ -208,7 +208,9 @@ OUTPUT strict JSON only (no markdown fences):
     throw new Error('Director (hybrid) trả về JSON không đọc được. Thử lại.')
   }
 
-  const scenes = sanitizeScenes(parsed.scenes, lipsCount)
+  // Enforce the lips ladder DETERMINISTICALLY — the prompt asks for exactly N but
+  // Gemini sometimes returns fewer; promote evenly-spread broll cuts to lips to hit N.
+  const scenes = enforceLipsCount(sanitizeScenes(parsed.scenes), lipsCount)
   const stickers = sanitizeStickers(parsed.stickers)
 
   const coveredSec = scenes.reduce((s, x) => s + x.durationSec, 0)
@@ -246,7 +248,42 @@ function tryParse(raw: string): { scenes?: RawScene[]; stickers?: RawSticker[] }
 const SCENE_ROLES: BrollSceneRole[] = ['lips', 'broll', 'mechanism3d']
 const SCENE_KINDS: BrollSceneKind[] = ['product_action', 'product_closeup', 'concept']
 
-function sanitizeScenes(raw: RawScene[] | undefined, _lipsCount: number): BrollScene[] {
+// Guarantee the lips ladder: if fewer "lips" than `target`, convert the broll cuts
+// sitting in the LARGEST gaps between existing lips into lips, so the creator's face
+// re-appears at evenly-spread points (hook + middle(s) + CTA). Never drops below the
+// model's choice; only tops up. If there are MORE lips than target, leaves them.
+function enforceLipsCount(scenes: BrollScene[], target: number): BrollScene[] {
+  const lipsIdx = scenes.map((s, i) => (s.role === 'lips' ? i : -1)).filter((i) => i >= 0)
+  if (lipsIdx.length >= target) return scenes
+  const brollIdx = scenes.map((s, i) => (s.role === 'broll' ? i : -1)).filter((i) => i >= 0)
+  const need = target - lipsIdx.length
+  const chosen: number[] = []
+  const n = scenes.length
+  for (let k = 0; k < need; k++) {
+    const occupied = [...lipsIdx, ...chosen].sort((a, b) => a - b)
+    const bounds = [-1, ...occupied, n]
+    let gapMid = 0, gapSize = -1
+    for (let g = 0; g < bounds.length - 1; g++) {
+      const size = bounds[g + 1] - bounds[g]
+      if (size > gapSize) { gapSize = size; gapMid = Math.round((bounds[g] + bounds[g + 1]) / 2) }
+    }
+    const cand = brollIdx.filter((i) => !chosen.includes(i))
+    if (cand.length === 0) break
+    cand.sort((a, b) => Math.abs(a - gapMid) - Math.abs(b - gapMid))
+    chosen.push(cand[0])
+  }
+  for (const i of chosen) {
+    scenes[i] = {
+      role: 'lips',
+      quote: scenes[i].quote,
+      durationSec: scenes[i].durationSec,
+      reason: 'promoted to lips (enforce ladder)',
+    }
+  }
+  return scenes
+}
+
+function sanitizeScenes(raw: RawScene[] | undefined): BrollScene[] {
   if (!Array.isArray(raw)) return []
   const out: BrollScene[] = []
   for (const r of raw) {
