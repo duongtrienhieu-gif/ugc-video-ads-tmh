@@ -129,12 +129,18 @@ export default function ScriptVoicePhase({ onContinue }: Props) {
   // heuristic across vi/ms/en; just a highlight, the user can pick any).
   const suggestedFramework = useMemo<AdStructure>(() => {
     const p = state.inputs.product
-    if (!p) return 'PROBLEM_SOLUTION'
+    // Default = a "vào thẳng sản phẩm" framework — strongest scroll-stop for cold reach.
+    if (!p) return 'VISUAL_HAND'
     const txt = `${p.benefits ?? ''} ${p.usps ?? ''} ${p.painPoints ?? ''} ${p.productDescription ?? ''} ${p.ingredients ?? ''}`.toLowerCase()
-    if (/before|after|trước|sau|sebelum|selepas|kết quả|hasil|transform/.test(txt)) return 'BEFORE_AFTER'
-    if (/review|đánh giá|ngàn người|nghìn người|khách|ulasan|testimoni|best.?sell|bán chạy|laris/.test(txt)) return 'SOCIAL_PROOF'
+    // Spec/feature-heavy products → list-style hook wins.
+    if (/\d+\s?(mah|w|bar|kg|ml|gb|tb|cm|inch|tuần|tháng|hour|day)|nhiều\s+(lý\s+do|công\s+dụng)|spec|tính\s+năng/.test(txt)) return 'RAPID_REASONS'
+    // Spec data + insider mechanism → authority is a fit.
     if (/ingredient|thành phần|cơ chế|công nghệ|bahan|teknologi|mechanism|chiết xuất|extract/.test(txt)) return 'AUTHORITY_EXPERT'
-    return 'PROBLEM_SOLUTION'
+    // Strong reviewer/best-seller signals → social proof.
+    if (/review|đánh giá|ngàn người|nghìn người|khách|ulasan|testimoni|best.?sell|bán chạy|laris/.test(txt)) return 'SOCIAL_PROOF'
+    // Specific pain language → problem-solution.
+    if (/đau|nhức|khó|mệt|gãi|ngứa|chóng mặt|ợ chua|táo bón|mất ngủ|stress/.test(txt)) return 'PROBLEM_SOLUTION'
+    return 'VISUAL_HAND'
   }, [state.inputs.product])
 
   // useOwnScript follows the script box: text present → segment it verbatim;

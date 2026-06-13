@@ -769,17 +769,25 @@ export function createEmptyV3State(): V3PipelineState {
 
 // ── Ad Structures (Z31 §2) ─────────────────────────────────────────────────
 
+// 8 frameworks in TWO GROUPS — scroll-stop strategy on TikTok 2024-25:
+//   "instant" — product is in frame / named in the first ~1-2s (the hook).
+//   "lead"    — product is built up and revealed later in the discovery block.
+// The hook 100% matches the framework's hookPattern (a hard template), so the
+// generated script never drifts between "vào thẳng sản phẩm" and "dẫn dắt sản phẩm".
 export type AdStructure =
-  | 'PROBLEM_SOLUTION'
+  // Group 1 — VÀO THẲNG SẢN PHẨM (product in the hook)
+  | 'VISUAL_HAND'              // Sản phẩm trong tay (cầm + USP)
+  | 'RAPID_REASONS'            // 3 lý do mua ngay (list nhanh)
+  | 'UNEXPECTED_DISCOVERY'     // Phát hiện bất ngờ (phản trực giác)
+  | 'POV_FOR_YOU'              // Dành cho ai... (POV/định danh)
+  // Group 2 — DẪN DẮT SẢN PHẨM (product revealed mid-script)
   | 'STORY_CONFESSION'
-  | 'BEFORE_AFTER'
   | 'AUTHORITY_EXPERT'
-  | 'PRODUCT_DEMO'
   | 'SOCIAL_PROOF'
-  | 'PAIN_POINT_HOOK'
-  | 'LISTICLE_TIPS'
+  | 'PROBLEM_SOLUTION'
 
-export const DEFAULT_AD_STRUCTURE: AdStructure = 'PROBLEM_SOLUTION'
+// Default: a "vào thẳng sản phẩm" framework — strongest scroll-stop for cold reach.
+export const DEFAULT_AD_STRUCTURE: AdStructure = 'VISUAL_HAND'
 
 // ── Ad Angles (Z31 §10) ────────────────────────────────────────────────────
 
