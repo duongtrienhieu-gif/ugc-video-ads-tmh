@@ -26,7 +26,7 @@ import { directGeminiText } from '../../../../utils/gemini'
 import { SCRIPT_LANG_GEMINI_NAME } from '../types'
 import type { GeneratedScript, ScriptLang, CameraFraming, VoiceAlignment } from '../types'
 import type { Product } from '../../../../stores/types'
-import { buildProductContextBlock } from './insertSuggester'
+import { buildProductContextBlock, detectProductNiche } from './insertSuggester'
 import { computeQuoteTimestampFromAlignment, computeQuoteTimestamp } from './insertTimingEngine'
 import { buildShapeDirectorHint } from './scriptShapes'
 
@@ -147,6 +147,89 @@ const BROLL_RESPONSE_SCHEMA = {
     },
   },
   required: ['scenes'],
+}
+
+// ── Concept-prompt guarantee (P4e) ──────────────────────────────────────────
+// Universal 3-layer defense so EVERY non-lips scene renders a grounded visual —
+// never a silent generic "product close-up". Layer 1 = the director prompt asks
+// for it. Layer 2 = backfillWeakConcepts (1 Gemini call fills the missing/vague
+// ones). Layer 3 = deriveConceptPrompt (deterministic last-resort, role/kind
+// aware). Both helpers are exported + reused by hybridRenderer (Layer 3 runs at
+// render time to also cover the deterministic filler cuts that split/density
+// add later, which carry no conceptPrompt).
+
+/** A conceptPrompt is "weak" when it's empty, a stub, or a generic placeholder
+ *  that tells the video model nothing specific ("close-up of the product"). */
+export function isWeakConceptPrompt(cp: string | undefined): boolean {
+  const t = (cp ?? '').trim()
+  if (t.length < 18) return true
+  if (t.split(/\s+/).filter(Boolean).length < 4) return true
+  const lower = t.toLowerCase()
+  if (/^(close[- ]?up of (the )?product\b|the product\b|product (shot|on)\b|a product\b|sản phẩm\b)/.test(lower)) return true
+  return false
+}
+
+/** Deterministic, UNIVERSAL last-resort conceptPrompt from a scene's role/kind +
+ *  the product's real usage. No niche hardcode — keys off role/kind + the
+ *  detected usage so it's correct for food / skincare / device / 3D / emotion
+ *  alike. Used only when Layer 2 (Gemini) didn't fill the scene (e.g. the
+ *  deterministic filler cuts from split/density, or a backfill rate-limit). */
+export function deriveConceptPrompt(args: {
+  role: string; kind?: string; cameraFraming?: string; product?: Product | null
+}): string {
+  if (args.role === 'mechanism3d') {
+    return 'a clean cross-section / macro showing how the product works on the inside, soft studio light, no people, no packaging'
+  }
+  if (args.kind === 'concept' && args.cameraFraming === 'creator') {
+    return 'a real person with an authentic, natural facial expression and body language reacting in the moment, candid UGC, soft natural light, no product packaging'
+  }
+  if (args.kind === 'concept') {
+    return 'a real-world everyday moment that illustrates the idea, natural light, authentic UGC, no product packaging'
+  }
+  const name = args.product?.productName?.trim() || 'the product'
+  const usage = args.product ? detectProductNiche(args.product)?.usage : null
+  return `hands holding and naturally using ${name}${usage ? ` — ${usage}` : ''}, shown close-up in its real-world setting, authentic UGC iPhone footage, natural light`
+}
+
+/** Layer 2 — one targeted Gemini call to write a vivid conceptPrompt for every
+ *  scene the director left empty / vague. Mutates `scenes` in place. Graceful:
+ *  any failure leaves them for Layer 3 (deriveConceptPrompt) to backstop. */
+async function backfillWeakConcepts(
+  scenes: BrollScene[], product: Product | null | undefined, apiKey: string,
+): Promise<void> {
+  const weak = scenes
+    .map((s, i) => ({ s, i }))
+    .filter(({ s }) => (s.role === 'broll' || s.role === 'mechanism3d') && isWeakConceptPrompt(s.conceptPrompt))
+  if (weak.length === 0) return
+  const productContext = buildProductContextBlock(product)
+  const list = weak
+    .map(({ s }, n) => `${n + 1}. role=${s.role}${s.kind ? `/${s.kind}` : ''}${s.cameraFraming ? `/${s.cameraFraming}` : ''} | câu thoại: "${s.quote}"`)
+    .join('\n')
+  const systemInstruction =
+`You are a UGC ad video DIRECTOR. For each scene below, write ONE vivid English conceptPrompt — the literal instruction a video model renders — grounded in the PRODUCT + that scene's spoken quote.${productContext}
+
+Each conceptPrompt MUST specify: SHOT TYPE (macro / wide / over-the-shoulder / POV-hands / top-down) + a concrete ACTION + WHICH PART of the subject + a real SETTING. Make each DISTINCT (no two the same shot).
+By role:
+- broll + product_action / product_closeup → the PRODUCT on screen doing a concrete action (break / pour / apply / hold up / use), in its real setting. The line tells you what to show.
+- broll + concept + creator → a PERSON with an authentic expression / reaction (NO product packaging).
+- broll + concept (no creator) → a real-world moment illustrating the line (NO product packaging).
+- mechanism3d → the internal mechanism as a clean 3D cross-section / macro (NO people, NO packaging).
+UNIVERSAL — infer the action + setting from the product context; NEVER assume a niche.
+
+OUTPUT exactly ${weak.length} lines, ONE conceptPrompt per line, SAME order, no numbering, no quotes, no commentary.`
+  const prompt = `Write a conceptPrompt for each scene (write in English):\n${list}\n\nOutput ${weak.length} lines, one per line, same order.`
+  try {
+    const raw = await directGeminiText({
+      apiKey, systemInstruction, prompt, maxOutputTokens: 1536, temperature: 0.7, thinkingBudget: 0,
+    })
+    const lines = raw.split('\n').map((l) => l.replace(/^\s*\d+[.)]\s*/, '').replace(/^["'“”\-•]+|["'“”]+$/g, '').trim()).filter(Boolean)
+    weak.forEach(({ i }, n) => { if (lines[n] && !isWeakConceptPrompt(lines[n])) scenes[i].conceptPrompt = lines[n] })
+    // eslint-disable-next-line no-console
+    console.log(`[BROLL_DIRECTOR] backfill ${Math.min(lines.length, weak.length)}/${weak.length} conceptPrompt rỗng/yếu`)
+  } catch (e) {
+    // eslint-disable-next-line no-console
+    console.warn('[BROLL_DIRECTOR] backfill concept lỗi (để Layer 3 lo):', e)
+  }
 }
 
 // ── Public: plan a full-coverage hybrid shot list ───────────────────────────
@@ -380,6 +463,12 @@ OUTPUT strict JSON only (no markdown fences):
     lastScene.conceptPrompt =
       'The creator holds the product up beside their face and gives an enthusiastic thumbs-up to camera, smiling — a genuine endorsement at the call to buy.'
   }
+
+  // P4e Layer 2 — fill any scene the director left with an empty / vague
+  // conceptPrompt via ONE targeted Gemini call (grounded in product + quote), so
+  // the render never silently falls back to a generic product close-up. Filler
+  // cuts added later by split/density are caught by Layer 3 at render time.
+  await backfillWeakConcepts(scenes, params.product, params.geminiKey)
 
   const stickers = sanitizeStickers(parsed.stickers)
 

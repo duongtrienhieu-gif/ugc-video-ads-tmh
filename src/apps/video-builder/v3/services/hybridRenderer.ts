@@ -15,6 +15,7 @@
 import { renderLipsyncSegment } from './creatorVideoEngine'
 import { renderInsert } from './insertRenderer'
 import type { TimedBrollScene } from './brollDirector'
+import { isWeakConceptPrompt, deriveConceptPrompt } from './brollDirector'
 import type { HybridSceneClip } from './hybridAssembler'
 import type { Product, Model } from '../../../../stores/types'
 import type { CreatorVideoConfig, ActionPresetId } from '../types'
@@ -65,7 +66,17 @@ export async function renderOneHybridScene(
 
   // broll / mechanism3d → Grok insert.
   let conceptPrompt = scene.conceptPrompt || ''
-  // Cut-split / density-floor leftovers arrive as broll with no conceptPrompt.
+  // P4e Layer 3 — deterministic last-resort: any non-lips scene still carrying an
+  // empty/vague conceptPrompt (the split/density FILLER cuts, or a scene the
+  // director + Gemini backfill both missed) gets a grounded prompt derived from
+  // its role/kind + the product's real usage. Universal — never a silent generic
+  // close-up. (Layer 2's Gemini backfill already handled the main scenes.)
+  if (isWeakConceptPrompt(conceptPrompt)) {
+    conceptPrompt = deriveConceptPrompt({
+      role: scene.role, kind: scene.kind, cameraFraming: scene.cameraFraming, product: ctx.product,
+    })
+  }
+  // After the derive above this is ~never true; kept as the absolute backstop.
   const emptyBroll = scene.role === 'broll' && !conceptPrompt.trim()
   // P3v — preset mapping. The OLD mapping sent every `product_closeup` scene to
   // the PRODUCT_CLOSEUP preset, which IGNORES conceptPrompt (insertRenderer only
