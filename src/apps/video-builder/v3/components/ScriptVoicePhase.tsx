@@ -557,7 +557,7 @@ export default function ScriptVoicePhase({ onContinue }: Props) {
                             <button
                               key={s}
                               onClick={() => setAdStructure(s)}
-                              title={`${cfg.descriptionVi}\n\nMẫu hook: ${cfg.hookPattern}\n\nQuy tắc sản phẩm: ${cfg.productRevealRule}`}
+                              title={`${cfg.descriptionVi}\n\nDạng hook: ${cfg.hookShape}\n\nQuy tắc sản phẩm: ${cfg.productRevealRule}`}
                               className={`relative flex items-center gap-1.5 rounded-lg border px-2 py-1.5 text-left text-[11px] font-semibold transition-all ${
                                 isActive ? TONE_BG[cfg.tone] : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50'
                               }`}

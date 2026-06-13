@@ -662,8 +662,8 @@ in whether a viewer keeps watching or scrolls past.
 The user has chosen the framework "${structure.labelVi}". ALL 6 hooks MUST follow
 that framework's hook pattern — same SHAPE, only the angle / detail varies.
 
-HOOK PATTERN (every hook fills these brackets — never invent a different shape):
-${structure.hookPattern}
+HOOK SHAPE (every hook respects this shape — different words/structure each one):
+${structure.hookShape}
 
 THE 6 HOOKS — one per angle below (so they aren't paraphrases of one another):
 ${angleList}
