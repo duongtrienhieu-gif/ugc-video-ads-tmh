@@ -137,6 +137,17 @@ export function buildShapeOverrideBlock(shape: ScriptShape): string {
     `- discovery: ${o.discovery}`,
     `- benefit:   ${o.benefit}`,
     `- cta:       ${o.cta}`,
+    // P4j — SHAPE PRECEDENCE. The universal rules below (empathy echo, point-of-
+    // contact, "real person sharing") are written for the NARRATIVE shape and
+    // otherwise pull every shape back into the same personal-confession story.
+    // This makes the SHAPE the body's spine and demotes those rules to texture.
+    `*** SHAPE PRECEDENCE (read this BEFORE the universal rules) ***`,
+    `- This script's BODY STRUCTURE is the shape above ("${cfg.labelVi}") — it is the`,
+    `  SPINE of the body and WINS over the default narrative pain→discovery→benefit arc.`,
+    `- The universal EMPATHY ECHO / POINT-OF-CONTACT / "real person sharing" rules below`,
+    `  still apply ONLY as texture INSIDE this shape — they must NOT turn the body back`,
+    `  into a flowing personal confession that ignores the shape. Do NOT default to`,
+    `  "Mình là…, mấy năm nay mình…"; execute the shape's structure from sentence 1.`,
   ].join('\n')
 }
 

@@ -22,7 +22,7 @@ import {
   MS_BODY_ANTI_PATTERNS,
   MS_SYMPTOM_BANS_INSTANT,
 } from './bodyPatternsMs'
-import { validateSemanticAnswer } from './hookSemanticBinder'
+import { validateSemanticAnswer, type HookSemanticShape } from './hookSemanticBinder'
 
 export interface ValidatorResult {
   ok: boolean
@@ -189,6 +189,9 @@ export function validateBody(
   blocks: BodyBlocks,
   structure: AdStructureConfig,
   lang?: string,
+  // P4j — resolved hook-answer shape (from the user's ScriptShape). Threaded into
+  // the semantic-answer check so it matches what the body was instructed to do.
+  shapeHint?: HookSemanticShape,
 ): ValidatorResult {
   const failures: string[] = []
   const ctaLevers = ctaLeversForLang(lang)
@@ -222,7 +225,7 @@ export function validateBody(
   // requires the body's first sentence to actually ANSWER it (not just share a noun).
   if (blocks.hook && blocks.pain) {
     const firstPain = firstSentence(blocks.pain)
-    const semanticFailure = validateSemanticAnswer(blocks.hook, firstPain, lang)
+    const semanticFailure = validateSemanticAnswer(blocks.hook, firstPain, lang, shapeHint)
     if (semanticFailure) failures.push(semanticFailure)
   }
 
@@ -271,5 +274,57 @@ export function validateBody(
     }
   }
 
+  return { ok: failures.length === 0, failures }
+}
+
+// ── P4j — shape-execution validator ──────────────────────────────────────────
+// validateBody checks symptom / CTA / banned-openings but NOT whether the body
+// actually EXECUTES the chosen ScriptShape — so a "comparison" or "listicle"
+// script could quietly collapse into the same narrative confession (the bug the
+// user audited). This is a LENIENT structural check: it only fails when the shape
+// is CLEARLY absent (no enumeration / no two-sides / no time progression), so it
+// never burns a retry on a script that did follow the shape. Lang-aware (VN/MS).
+export function validateShapeExecution(
+  blocks: BodyBlocks,
+  shape: string | undefined,
+  lang?: string,
+): ValidatorResult {
+  const failures: string[] = []
+  if (!shape || shape === 'narrative') return { ok: true, failures }
+  const isMs = lang === 'ms' || lang === 'Bahasa Malaysia'
+  const body = `${blocks.pain ?? ''} ${blocks.discovery ?? ''} ${blocks.benefit ?? ''}`.toLowerCase()
+
+  if (shape === 'listicle') {
+    const markers = isMs
+      ? ['pertama', 'kedua', 'ketiga', 'nombor 1', 'nombor 2', 'sebab 1', 'sebab 2', 'yang pertama', 'yang kedua']
+      : ['số 1', 'số 2', 'số 3', 'đầu tiên', 'thứ hai', 'thứ ba', 'tiếp theo', 'lý do 1', 'lý do 2', 'cuối cùng']
+    const hits = markers.filter((m) => body.includes(m)).length
+    if (hits < 2) failures.push(
+      `SHAPE=LISTICLE but the body does not read as an enumerated list (need ≥2 of ` +
+      `"số 1 / đầu tiên / thứ hai / tiếp theo…"). Rewrite discovery as explicit numbered ` +
+      `reasons spoken back-to-back, not one flowing story.`,
+    )
+  } else if (shape === 'comparison') {
+    const markers = isMs
+      ? ['yang kiri', 'yang kanan', 'satu lagi', 'berbanding', ' vs ', 'manakala', 'sebelah', 'yang biasa']
+      : ['bên trái', 'bên phải', 'so với', 'cái cũ', 'cái kia', 'cái này thì', 'còn cái', 'trong khi', 'một bên', 'loại thường', 'đối thủ']
+    const hits = markers.filter((m) => body.includes(m)).length
+    if (hits < 1) failures.push(
+      `SHAPE=COMPARISON but the body never sets up the two sides (need a contrast like ` +
+      `"bên trái/bên phải", "so với cái cũ", "còn cái kia…"). Rewrite discovery to test ` +
+      `BOTH options side by side, then reveal the winner — do NOT tell one personal story.`,
+    )
+  } else if (shape === 'journey') {
+    const re = isMs
+      ? /(hari|minggu|bulan)\s*\d|day\s*\d|\d+\s*(hari|minggu|bulan|days?|weeks?)/i
+      : /(ngày|tuần|tháng)\s*\d|day\s*\d|\d+\s*(ngày|tuần|tháng|days?|weeks?)/i
+    const hasStamp = re.test(body)
+      || /(ngày đầu|ngày cuối|hôm đầu|tuần đầu|hari pertama|hari terakhir)/i.test(body)
+    if (!hasStamp) failures.push(
+      `SHAPE=JOURNEY but the body has no time progression (need markers like "ngày 1 / ` +
+      `ngày 3 / ngày 7" or "ngày đầu… đến ngày cuối"). Rewrite discovery as dated ` +
+      `milestones across the journey, not one undated story.`,
+    )
+  }
   return { ok: failures.length === 0, failures }
 }

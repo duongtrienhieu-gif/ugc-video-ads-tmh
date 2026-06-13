@@ -29,12 +29,13 @@ import {
 } from '../types'
 import { AD_STRUCTURES } from './adStructures'
 import { pickShapedViralHooks } from './hookViralPatterns'
-import { validateBody, spellFixVi, type BodyBlocks } from './scriptValidator'
+import { validateBody, validateShapeExecution, spellFixVi, type BodyBlocks } from './scriptValidator'
 import { buildMsBodyVocabBlock } from './bodyPatternsMs'
 import { buildShapeOverrideBlock } from './scriptShapes'
 import {
   detectHookShape,
   buildSemanticAnswerRule,
+  scriptShapeToHookSemantic,
 } from './hookSemanticBinder'
 import { AD_ANGLES } from './adAngles'
 import {
@@ -121,6 +122,8 @@ export async function generateScript(
       structure,
       // P3n — script language so MS scripts validate against MS vocab.
       lang: params.lang,
+      // P4j — picked ScriptShape drives the opening anchor + shape-execution check.
+      shape: params.shape,
       chosenHook: params.chosenHook!.trim(),
       userPrompt: buildUserPrompt({
         productName: params.productName,
@@ -321,6 +324,15 @@ UNIVERSAL TIKTOK-NATIVE RULES:
   person talks to friends. 100% in ${args.lang}; never borrow filler from another
   language. NO formal salutation.
 ${pronounRule(args.lang)}
+- PRODUCT NAMING (speak it like a local) — say the product's name the way a real
+  ${args.lang} creator would say it OUT LOUD. If the name is a DESCRIPTIVE English
+  phrase (e.g. "Knee Support Booster", "Cooling Neck Fan", "Posture Corrector"),
+  render it NATURALLY in ${args.lang} ("đai trợ lực khớp gối", "quạt đeo cổ", "đai
+  chỉnh dáng lưng") — do NOT read the clunky English verbatim. KEEP a genuine BRAND
+  token as-is (e.g. "Hada Labo", "Anessa", "Xiaomi") — only the descriptive part is
+  localized. Pick ONE natural name and use it CONSISTENTLY across all blocks. A
+  ${args.lang} viewer should never hear a raw English product name they wouldn't
+  naturally say themselves.
 - The product should appear as a discovery the speaker stumbled onto, NOT
   as a sponsored mention. Avoid "today I'll tell you about X".
 - GROUND IT IN THE REAL PRODUCT — do NOT stay vague ("some Korean technology",
@@ -592,6 +604,10 @@ async function generateBodyAroundHook(args: {
   /** P3n — script language. Threaded to the validator so MS scripts use the
    *  Malaysian CTA / anti-pattern / symptom vocab; defaults to VN when absent. */
   lang?: ScriptLang
+  /** P4j — the user's picked ScriptShape. Drives the hook-answer anchor (so the
+   *  body opens in the SHAPE the user chose, not a re-guess from the hook text)
+   *  AND the post-gen shape-execution check. Omit → narrative (detect from hook). */
+  shape?: import('../types').ScriptShape
 }): Promise<GeminiOutput> {
   // P3n — when lang='ms', inject the Malaysian native-vocabulary block so Gemini
   // stops translating from Vietnamese ("hết hàng" → "habis" formal) and uses
@@ -603,7 +619,12 @@ async function generateBodyAroundHook(args: {
   // Replaces P3i's "reuse a key word" literal contract — that rule worked for
   // confessions but broke awkwardly for question hooks (the body picked up a noun
   // instead of answering the question).
-  const semanticRule = buildSemanticAnswerRule(detectHookShape(args.chosenHook), args.chosenHook)
+  // P4j — anchor the body's opening to the SHAPE THE USER PICKED. The old code
+  // re-detected the shape from the hook TEXT, which mis-fired ("So với…" → 'general')
+  // and let the body drift into a confession. The explicit ScriptShape wins; we
+  // only fall back to hook-text detection for the 'narrative' (no-shape) case.
+  const resolvedHookShape = scriptShapeToHookSemantic(args.shape) ?? detectHookShape(args.chosenHook)
+  const semanticRule = buildSemanticAnswerRule(resolvedHookShape, args.chosenHook)
   const systemInstruction = `${args.systemInstruction}${msVocabBlock}
 
 HOOK IS ALREADY CHOSEN — do NOT write or change the hook. The opening hook line
@@ -673,7 +694,11 @@ THE FIXED HOOK (continue the script DIRECTLY from this line; reproduce it verbat
       benefit: blocks.benefit ?? '',
       cta: blocks.cta ?? '',
     }
-    const check = validateBody(bodyBlocks, args.structure, args.lang)
+    // P4j — combine the body checks (symptom/CTA/banned/semantic) with the
+    // shape-execution check (does the body actually run the chosen shape).
+    const bodyCheck = validateBody(bodyBlocks, args.structure, args.lang, resolvedHookShape)
+    const shapeCheck = validateShapeExecution(bodyBlocks, args.shape, args.lang)
+    const check = { ok: bodyCheck.ok && shapeCheck.ok, failures: [...bodyCheck.failures, ...shapeCheck.failures] }
     if (!check.ok) {
       // eslint-disable-next-line no-console
       console.log(`[generateBodyAroundHook] body check failed (${check.failures.length} issues), 1 retry…`)
@@ -698,15 +723,18 @@ Return the JSON in the same shape — the hook field unchanged, the 4 other bloc
         const blocks2 = tryParseSegments(raw2) ?? tryParseSegments(repairJsonString(raw2))
         if (blocks2) {
           blocks2.hook = args.chosenHook
-          const check2 = validateBody({
+          const blk2: BodyBlocks = {
             hook: blocks2.hook,
             pain: blocks2.pain ?? '',
             discovery: blocks2.discovery ?? '',
             benefit: blocks2.benefit ?? '',
             cta: blocks2.cta ?? '',
-          }, args.structure)
+          }
+          const c2body = validateBody(blk2, args.structure, args.lang, resolvedHookShape)
+          const c2shape = validateShapeExecution(blk2, args.shape, args.lang)
+          const failures2 = c2body.failures.length + c2shape.failures.length
           // Keep retry only if it actually fixed MORE than it broke.
-          if (check2.failures.length < check.failures.length) blocks = blocks2
+          if (failures2 < check.failures.length) blocks = blocks2
         }
       } catch (err) {
         // eslint-disable-next-line no-console
@@ -908,6 +936,10 @@ HARD RULES:
   IS) — a viewer should sense what's being sold, not a blank "điều này".
 - You MAY shorten the product name (e.g. "máy bơm mini" instead of the full long
   name). NEVER cram the full specs — a hook is a SCROLL-STOP, not a feature list.
+- LOCALIZE THE NAME — if the product name is a DESCRIPTIVE English phrase ("Knee
+  Support Booster", "Cooling Neck Fan"), say it naturally in ${langName} ("đai trợ
+  lực khớp gối", "quạt đeo cổ"), NOT the English verbatim. KEEP a genuine BRAND
+  token as-is. A ${langName} viewer must not hear a raw English name they wouldn't say.
 - ${pronounRule(langName).replace(/^- /, '')}
 - LENGTH IS FLEXIBLE — do NOT pad and do NOT over-stuff product words; if adding the
   product makes it clunky, keep it tight. PRIORITISE that the hook reads GREAT and

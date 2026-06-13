@@ -34,11 +34,25 @@ export type HookSemanticShape =
 
 const QUESTION_OPENERS_RE = /^(bạn (có|đã|hay|sẽ|từng|có biết|có hay)|tại sao|có ai|có khi nào|adakah|kenapa|korang (pernah|tau|nampak)|awak (pernah|tau))/i
 const LISTICLE_RE = /\b(\d+|hai|ba|bốn|năm|sáu|dua|tiga|empat|lima|enam)\s*(lý ?do|reasons?|sebab|hal)\b/i
-const COMPARISON_RE = /\b(vs|versus|compare|lawan|so sánh|side by side|test paling)\b|(rm\d+\s*vs\s*rm\d+)/i
+const COMPARISON_RE = /\b(vs|versus|compare|lawan|so sánh|so với|side by side|test paling)\b|(rm\d+\s*vs\s*rm\d+)/i
 const CONFESSION_OPENERS_RE = /^(mình từng|tôi đã|tôi từng|aku dulu|aku ingat|aku rugi|aku skeptikal|aku tak|aku pernah)/i
 const CLAIM_BOLD_OPENERS_RE = /^(sự thật|hấu hết|hầu hết|\d{1,3}%|sebenarnya|memang ramai|ramai|kebanyakan)/i
 const INVESTIGATION_RE = /\b(thử để chứng minh|test \d+ (ngày|hari|days?)|compare dua|aku test|tôi đã thử)\b/i
 const IMPERATIVE_OPENERS_RE = /^(đừng|stop|jangan|cẩn thận|eh wait|hear me out|đợi đã|tunggu)/i
+
+/** P4j — map the USER's explicitly-picked ScriptShape (Dạng kịch bản) to the
+ *  matching hook-answer shape, so the body's opening anchor follows what the user
+ *  CHOSE — not what a regex guesses from the hook text (which mis-fires, e.g.
+ *  "So với…" hooks were read as 'general' and the body drifted into a confession).
+ *  Returns null for 'narrative'/unknown → caller falls back to detectHookShape. */
+export function scriptShapeToHookSemantic(shape: string | undefined): HookSemanticShape | null {
+  switch (shape) {
+    case 'listicle':   return 'listicle'
+    case 'comparison': return 'comparison'
+    case 'journey':    return 'investigation'   // a journey is "I tested over N days"
+    default:           return null              // narrative / unknown → detect from hook
+  }
+}
 
 /** Detect the semantic shape of a hook so the body prompt can inject the matching
  *  answer rule. Pure regex; no LLM. */
@@ -80,10 +94,11 @@ export function buildSemanticAnswerRule(shape: HookSemanticShape, hookText: stri
     case 'comparison':
       return (
         `*** HOOK SHAPE: COMPARISON (A vs B) ***\n` +
-        `The hook sets up a test ("${hook}"). The body's FIRST sentence MUST immediately ` +
-        `start the comparison: "Bên trái là X, bên phải là Y..." / "Cái mắc 500k, cái rẻ 99k..." ` +
-        `/ "Yang kiri RM200, yang kanan RM20...". Do NOT pivot to emotion. The discovery block ` +
-        `runs both sides of the test.`
+        `The hook sets up a comparison ("${hook}"). The body's FIRST sentence MUST immediately ` +
+        `start the comparison — either two named items ("Bên trái là X, bên phải là Y...", "Cái ` +
+        `mắc 500k, cái rẻ 99k...", "Yang kiri RM200, yang kanan RM20...") OR the product vs a ` +
+        `FAMILIAR alternative ("So với [cái quen thuộc / loại thường], cái này..."). Do NOT pivot ` +
+        `to an emotional confession. The discovery block runs both sides of the test.`
       )
     case 'confession':
       return (
@@ -153,8 +168,12 @@ export function validateSemanticAnswer(
   hookText: string,
   painFirstSentence: string,
   lang?: string,
+  // P4j — when the user picked a ScriptShape, the caller passes the resolved
+  // hook-answer shape so the check matches what the body was TOLD to do (not a
+  // re-guess from the hook text that can disagree). Omit → detect from the hook.
+  shapeHint?: HookSemanticShape,
 ): string | null {
-  const shape = detectHookShape(hookText)
+  const shape = shapeHint ?? detectHookShape(hookText)
   const opening = lower(firstSentence(painFirstSentence)).replace(/[.,!?;:"'…–—]/g, ' ').replace(/\s+/g, ' ').trim()
   const isMs = lang === 'ms' || lang === 'Bahasa Malaysia'
   const answerOpeners = isMs ? MS_ANSWER_OPENERS : VN_ANSWER_OPENERS
