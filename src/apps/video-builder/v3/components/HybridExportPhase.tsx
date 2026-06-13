@@ -39,6 +39,9 @@ export default function HybridExportPhase() {
   const resolution = FINAL_RES
 
   const [assembling, setAssembling] = useState(false)
+  // P4b — real ffmpeg assemble progress: ratio 0-1 + the current stage label.
+  const [assembleRatio, setAssembleRatio] = useState(0)
+  const [assembleStage, setAssembleStage] = useState('')
   const [error, setError] = useState('')
   const finalUrl = useAssetUrl(hybrid.finalVideoRef ?? undefined)
   const pickedThumbUrl = useAssetUrl(ev.pickedThumbnailRef ?? undefined)
@@ -46,9 +49,12 @@ export default function HybridExportPhase() {
   const makeVideo = async () => {
     const h = useAdsVideoStore.getState().state.hybrid
     if (!script) return
-    setAssembling(true); setError('')
+    setAssembling(true); setError(''); setAssembleRatio(0); setAssembleStage('Đang nạp ffmpeg…')
     try {
-      const videoRef = await assembleFromHybridState(h, script, resolution)
+      const videoRef = await assembleFromHybridState(h, script, resolution, {
+        onProgress: (r) => setAssembleRatio(r),
+        onStage: (label) => setAssembleStage(label),
+      })
       setHybridFinal(videoRef)
       addToast('✓ Đã tạo video', 'success')
     } catch (e) {
@@ -129,6 +135,21 @@ export default function HybridExportPhase() {
               className="inline-flex items-center gap-1.5 rounded-full bg-gradient-to-r from-emerald-600 to-teal-600 px-5 py-2.5 text-[13px] font-bold text-white shadow-sm hover:from-emerald-700 hover:to-teal-700 disabled:opacity-50">
               {assembling ? <Loader2 className="h-4 w-4 animate-spin" /> : <Clapperboard className="h-4 w-4" />} Tạo video (0cr)
             </button>
+
+            {/* P4b — real ffmpeg assemble progress (% + stage). Not fake: the bar
+                follows the per-clip normalize ratio the assembler emits. */}
+            {assembling && (
+              <div className="mx-auto mt-4 max-w-md">
+                <div className="mb-1 flex items-center justify-between text-[11px] font-semibold text-gray-500">
+                  <span className="truncate">{assembleStage || 'Đang ghép…'}</span>
+                  <span className="tabular-nums">{Math.round(assembleRatio * 100)}%</span>
+                </div>
+                <div className="h-2 w-full overflow-hidden rounded-full bg-gray-200">
+                  <div className="h-full rounded-full bg-gradient-to-r from-emerald-500 to-teal-500 transition-all duration-300"
+                    style={{ width: `${Math.max(2, Math.round(assembleRatio * 100))}%` }} />
+                </div>
+              </div>
+            )}
           </div>
         )}
 

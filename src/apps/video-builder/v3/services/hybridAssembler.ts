@@ -204,7 +204,8 @@ export async function assembleHybridVideo(
   await ffmpeg.deleteFile(listFile).catch(() => {})
 
   // ── STAGE 3: mux the master TTS (the only audio) ───────────────────────────
-  params.onStage?.('Ghép tiếng (TTS)…')
+  params.onStage?.('Ghép tiếng + xuất MP4…')
+  params.onProgress?.(0.95)   // P4b — nudge so the bar moves 92→95 before the final mux
   const voiceUrl = isAssetRef(params.voiceRef) ? await getUrl(params.voiceRef) : params.voiceRef
   if (!voiceUrl) throw new Error('Không lấy được voiceRef (master TTS)')
   const voiceFile = 'hvoice.mp3'

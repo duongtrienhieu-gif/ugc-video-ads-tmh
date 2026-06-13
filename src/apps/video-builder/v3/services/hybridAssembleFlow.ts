@@ -41,6 +41,11 @@ async function buildStickerPlacements(
  *  (no voice, or a scene still unrendered). Returns the final video asset ref. */
 export async function assembleFromHybridState(
   hybrid: HybridState, script: GeneratedScript, resolution: '480p' | '720p' | '1080p',
+  // P4b — real assemble progress: `onProgress` is the ffmpeg ratio (0-1, the bulk
+  // is the per-clip normalize loop = genuinely accurate), `onStage` is the
+  // human-readable phase ("Chuẩn hoá cảnh 3/14…", "Ghép timeline", "Xuất 720p").
+  // The UI shows a real % bar + the stage label instead of a blind spinner.
+  opts?: { onProgress?: (ratio: number) => void; onStage?: (label: string) => void },
 ): Promise<string> {
   const sc = hybrid.scenes ?? []
   if (!hybrid.voiceRef) throw new Error('Chưa có giọng (Tạo giọng + mặt trước)')
@@ -51,6 +56,8 @@ export async function assembleFromHybridState(
   const placements = await buildStickerPlacements(hybrid.stickers, hybrid.voiceAlignment, realDur, script)
   const r = await assembleHybridVideo({
     clips, voiceRef: hybrid.voiceRef, voiceDurationSec: realDur, resolution, stickers: placements,
+    onProgress: opts?.onProgress,
+    onStage: opts?.onStage,
   })
   return r.videoRef
 }
