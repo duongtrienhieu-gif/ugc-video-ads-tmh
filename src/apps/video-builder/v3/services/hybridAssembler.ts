@@ -66,6 +66,13 @@ export interface HybridAssembleResult {
 // a ~6s file that looks slow-mo). Speed b-roll/3d cuts up 1.3× so they fill their
 // timeline slot at natural speed. Lips clips are already correct (Kling + TTS).
 const INSERT_SPEED = 1.3
+// i2v clips OPEN on the still keyframe (~0.3-0.5s frozen before motion ramps). Skip
+// that lead-in so each cut opens ON MOTION, not on a freeze (the "ảnh tĩnh ở chuyển
+// cảnh"). Grok clips are ~6s; if a slot needs more source than exists we re-fit the
+// speed so the segment still fills the slot EXACTLY (never a held last frame / a short
+// segment that drifts the back-half sync).
+const INSERT_LEAD_IN_SEC = 0.35
+const INSERT_SOURCE_BUDGET_SEC = 6.0
 
 export async function assembleHybridVideo(
   params: HybridAssembleParams,
@@ -108,11 +115,20 @@ export async function assembleHybridVideo(
 
     const dur = Math.max(0.3, c.scene.endSec - c.scene.startSec)
     const isInsert = c.scene.role !== 'lips'   // broll + mechanism3d need the speed-up
-    const trimDur = isInsert ? dur * INSERT_SPEED : dur
-    const ptsExpr = isInsert ? `setpts=(PTS-STARTPTS)/${INSERT_SPEED}` : 'setpts=PTS-STARTPTS'
+    // lips: take the clip as-is (start 0, speed 1). insert: skip the static lead-in,
+    // speed 1.3×; but if the slot needs more source than the ~6s clip holds, re-fit
+    // the speed so the trimmed source still maps to EXACTLY `dur` (no freeze / no short).
+    const leadIn = isInsert ? INSERT_LEAD_IN_SEC : 0
+    let speed = isInsert ? INSERT_SPEED : 1
+    let trimDur = dur * speed
+    if (isInsert && leadIn + trimDur > INSERT_SOURCE_BUDGET_SEC) {
+      trimDur = Math.max(0.3, INSERT_SOURCE_BUDGET_SEC - leadIn)
+      speed = trimDur / dur                      // output = trimDur / speed = dur
+    }
+    const ptsExpr = `setpts=(PTS-STARTPTS)/${speed.toFixed(4)}`
     const baseChain =
       `scale=${evenW}:${evenH}:force_original_aspect_ratio=increase,` +
-      `crop=${evenW}:${evenH},trim=duration=${trimDur.toFixed(3)},${ptsExpr}`
+      `crop=${evenW}:${evenH},trim=start=${leadIn.toFixed(3)}:duration=${trimDur.toFixed(3)},${ptsExpr}`
 
     // Stickers whose absolute pop time falls inside THIS segment ride on it (the
     // overlay `enable` window uses the OUTPUT-time offset = atSec - segStart, which

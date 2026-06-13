@@ -185,6 +185,7 @@ export default function ActionInsertsPhase({ onContinue }: Props) {
         console.log('[BROLL_TIMING] timeline:', timed.map((t) => `${t.role} ${t.startSec.toFixed(1)}-${t.endSec.toFixed(1)}s (${(t.endSec - t.startSec).toFixed(1)})`))
         ;(window as unknown as { __lastBrollTimed?: TimedBrollScene[] }).__lastBrollTimed = timed
         ;(window as unknown as { __lastBrollStickers?: BrollSticker[] }).__lastBrollStickers = res.stickers
+        try { localStorage.setItem('ugc-lab-hybrid-stickers', JSON.stringify(res.stickers)) } catch { /* quota */ }
         return { ...res, timed }
       } catch (e) { console.error('[BROLL_DIRECTOR] lỗi:', e) }
     }
@@ -213,6 +214,13 @@ export default function ActionInsertsPhase({ onContinue }: Props) {
         resolution: st.costMode === 'FULL' ? '1080p' : st.costMode === 'STANDARD' ? '720p' : '480p',
       }
     }
+    // Persist rendered clips → localStorage so re-assembling after a promote/reload is
+    // FREE (the videoRef blobs live in IndexedDB across reload; we only mirror the tiny
+    // {scene, videoRef} list). Lets you iterate the assembler without re-paying render.
+    const HYBRID_CLIPS_KEY = 'ugc-lab-hybrid-clips'
+    const saveHybridClips = () => {
+      try { localStorage.setItem(HYBRID_CLIPS_KEY, JSON.stringify((w2.__hybridClips ?? []).filter(Boolean))) } catch { /* quota */ }
+    }
     w2.__testRenderScene = async (i: number) => {
       const timed = w2.__lastBrollTimed
       if (!timed || !timed[i]) { console.warn('[BROLL_RENDER] chạy __testBrollDirector() trước rồi __testRenderScene(i)'); return }
@@ -224,6 +232,7 @@ export default function ActionInsertsPhase({ onContinue }: Props) {
         // P3c-1 — cache the rendered clip so __testHybridAssemble() can ghép them.
         w2.__hybridClips = w2.__hybridClips ?? []
         w2.__hybridClips[i] = { scene, videoRef }
+        saveHybridClips()
         const url = await getUrl(videoRef)
         console.log(`[BROLL_RENDER] ✅ #${i} XONG (cache __hybridClips[${i}]). Video: ${url}`)
         if (url) window.open(url, '_blank')
@@ -242,7 +251,7 @@ export default function ActionInsertsPhase({ onContinue }: Props) {
         concurrency: 2,
         onSceneStart: (i, s) => console.log(`[HYBRID_RENDER] ▶ #${i} ${s.role} ${s.startSec}-${s.endSec}s`),
         onSceneDone: (i, clip) => {
-          if (clip) { (w2.__hybridClips as (HybridSceneClip | undefined)[])[i] = clip; console.log(`[HYBRID_RENDER] ✅ #${i} xong`) }
+          if (clip) { (w2.__hybridClips as (HybridSceneClip | undefined)[])[i] = clip; saveHybridClips(); console.log(`[HYBRID_RENDER] ✅ #${i} xong`) }
           else console.warn(`[HYBRID_RENDER] ✗ #${i} lỗi (bỏ qua)`)
         },
       })
@@ -257,7 +266,22 @@ export default function ActionInsertsPhase({ onContinue }: Props) {
       const voiceDurationSec =
         st.voiceFirst?.voiceDurationSec ?? st.creatorVideo?.voiceDurationSec ?? st.scriptBrain.script?.totalDurationSec ?? 50
       if (!voiceRef) { console.warn('[HYBRID_ASM] thiếu voiceRef — tạo keyframe ở Bước 3 trước'); return }
-      const clips = (w2.__hybridClips ?? []).filter((c): c is HybridSceneClip => !!c)
+      let clips = (w2.__hybridClips ?? []).filter((c): c is HybridSceneClip => !!c)
+      // Re-assemble after a promote/reload: window cache is gone but the clips were
+      // mirrored to localStorage (videoRef blobs survive in IndexedDB) → 0-credit ghép.
+      if (clips.length === 0) {
+        try {
+          const saved = JSON.parse(localStorage.getItem(HYBRID_CLIPS_KEY) || '[]') as HybridSceneClip[]
+          if (Array.isArray(saved) && saved.length) {
+            clips = saved
+            if (!w2.__lastBrollStickers) {
+              const s = JSON.parse(localStorage.getItem('ugc-lab-hybrid-stickers') || '[]') as BrollSticker[]
+              if (Array.isArray(s) && s.length) w2.__lastBrollStickers = s
+            }
+            console.log(`[HYBRID_ASM] nạp ${clips.length} clip từ localStorage (re-assemble 0 credit)`)
+          }
+        } catch { /* ignore */ }
+      }
       if (clips.length === 0) { console.warn('[HYBRID_ASM] chưa có clip nào — chạy __testRenderScene(0), (1)… trước'); return }
       const resolution = st.costMode === 'FULL' ? '1080p' : st.costMode === 'STANDARD' ? '720p' : '480p'
 

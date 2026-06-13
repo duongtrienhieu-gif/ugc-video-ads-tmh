@@ -430,7 +430,10 @@ export function assignSceneTiming(
 // overflow voice becomes a product close-up B-roll (cheaper + more dynamic than a
 // 2nd lipsync). B-ROLL longer than the cap is split into equal sub-cuts.
 const MAX_LIPS_SEC = 5
-const MAX_BROLL_SEC = 6.5
+// Grok i2v clips are ~6s; at 1.3× (after skipping the static lead-in) one clip fills
+// ≤~5s of timeline. Cap broll/3d at 5s so a longer voice span SPLITS into more cuts
+// (each fully fillable + snappier) instead of one slow/short cut.
+const MAX_BROLL_SEC = 5.0
 const MIN_CUT_SEC = 1.5
 
 function capSplitScenes(timed: TimedBrollScene[]): TimedBrollScene[] {
