@@ -86,6 +86,11 @@ export interface RenderInsertParams {
   visualBrief?: ProductVisualBrief
   /** Per-stage status callback */
   onStageUpdate: (update: InsertStageUpdate) => void
+  /** P3t — KIE poll progress fan-out so the UI can show "đang render…
+   *  poll #5 · 28s" instead of a blind spinner. Best-effort: not every
+   *  upstream KIE call surfaces it (the keyframe pre-roll is too short to
+   *  matter), only the long Grok i2v poll is wired below. */
+  onProgress?: (info: { pollCount: number; elapsedSec: number }) => void
   signal?: AbortSignal
 }
 
@@ -583,6 +588,7 @@ export async function renderInsert(
       taskId: fullSubmission.taskId,
       timeoutMs: 10 * 60 * 1000,  // 10min ceiling for a 5s i2v clip
       logTag: `${params.presetId}/full`,
+      onProgress: params.onProgress,
     })
 
     params.onStageUpdate({
@@ -715,12 +721,14 @@ async function pollAndSaveInsertVideo(args: {
   taskId: string
   timeoutMs: number
   logTag?: string
+  onProgress?: (info: { pollCount: number; elapsedSec: number }) => void
 }): Promise<string> {
   const remoteUrl = await pollVideoJobUntilDone({
     apiKey: args.apiKey,
     taskId: args.taskId,
     timeoutMs: args.timeoutMs,
     logTag: args.logTag,
+    onProgress: args.onProgress,
   })
   const blob = await fetch(remoteUrl).then((r) => r.blob())
   return saveAsset(blob, blob.type || 'video/mp4')

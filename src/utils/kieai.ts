@@ -1060,6 +1060,11 @@ export async function pollVideoJobUntilDone(params: {
   apiKey: string
   taskId: string
   onStatusChange?: (status: VideoStatus) => void
+  /** P3t — optional progress callback fired every poll so the UI can show
+   *  "đang render… poll #5 · 28s" instead of a blind spinner. KIE doesn't
+   *  expose a numeric %, so we surface what we actually know (poll count +
+   *  elapsed seconds + last status). */
+  onProgress?: (info: { pollCount: number; elapsedSec: number; status: VideoStatus }) => void
   timeoutMs?: number
   /** Optional tag so log lines can disambiguate preview vs full video */
   logTag?: string
@@ -1090,6 +1095,7 @@ export async function pollVideoJobUntilDone(params: {
 
     params.onStatusChange?.(result.status)
     const elapsedSec = Math.round((Date.now() - start) / 1000)
+    params.onProgress?.({ pollCount, elapsedSec, status: result.status })
 
     if (result.status !== lastStatus) {
       console.log(`[VIDEO_POLL_STATUS ${tagPrefix}task=${taskTag}] +${elapsedSec}s status=${result.status} (poll #${pollCount})`)

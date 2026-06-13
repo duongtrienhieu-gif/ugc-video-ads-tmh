@@ -36,6 +36,11 @@ export async function renderOneHybridScene(
   scene: TimedBrollScene,
   ctx: HybridRenderContext,
   onStage?: (stage: string) => void,
+  // P3t — fired each KIE poll so the UI can show "đang render… poll #5 · 28s"
+  // instead of a blind spinner. Best-effort: only the broll/mechanism path
+  // currently surfaces it (it's where the long Grok i2v wait lives); the lips
+  // path stays opaque for now since KIE's lipsync poll is shorter.
+  onProgress?: (info: { pollCount: number; elapsedSec: number }) => void,
 ): Promise<string> {
   if (scene.role === 'lips') {
     if (!ctx.keyframeRef || !ctx.voiceRef) {
@@ -82,6 +87,7 @@ export async function renderOneHybridScene(
     cameraFraming: scene.cameraFraming,
     quote: scene.quote,
     onStageUpdate: (u) => onStage?.(u.stage),
+    onProgress,   // P3t — thread KIE poll updates so the UI shows "poll #N · Ms".
   })
   return r.videoRef
 }

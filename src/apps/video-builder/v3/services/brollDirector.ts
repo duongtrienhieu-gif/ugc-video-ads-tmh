@@ -101,9 +101,14 @@ function lipsCountForDuration(sec: number): number {
 // is met — splitting longest-first keeps the short snappy cuts intact (variety),
 // never a uniform metronome. ~5s/cut → a 60s ad floors at ~12 cuts (12-15 is the
 // natural UGC ad rhythm — earlier 4.5s/cut floor produced 18 cuts that felt frantic).
-const TARGET_AVG_CUT_SEC = 5.0
+// P3t — relaxed pacing: was 5.0s/cut (12 cuts/60s floor 8). The user audited
+// this as "frantic + forces 1 sentence = 1 cut". A 6s average lets ideas
+// breathe (10 cuts/60s) and matches the "1 idea = 1 cut, group short sentences"
+// flexibility the user wants. Small-video floor also drops 8 → 6 so a 40s ad
+// doesn't get padded to 8 cuts.
+const TARGET_AVG_CUT_SEC = 6.0
 function densityFloor(dur: number): number {
-  return Math.max(8, Math.round(dur / TARGET_AVG_CUT_SEC))
+  return Math.max(6, Math.round(dur / TARGET_AVG_CUT_SEC))
 }
 
 // ── Gemini response schema ──────────────────────────────────────────────────
@@ -263,21 +268,31 @@ names — never pad with vague stickers, but never leave a concrete callout bare
 ${culturalSettingBlock}${shapeHint}
 RULES:
 - COVER 100%: the scenes' durations sum to ~${dur}s; every spoken beat has a cut;
-  NO empty span. Group sentences that are TRULY one single thought into one cut;
-  don't fragment a single idea into multiple tiny cuts just to add count.
-- PACING is set by HOW MUCH SPEECH each cut covers — you do NOT set seconds; a cut
-  lasts exactly as long as its quote is spoken. Control rhythm by CHUNKING:
-    • a SHORT quote (a few words — the hook, a quick callout, a snappy reaction) → a
-      fast punchy cut (~2-3s of speech).
-    • a FULL line (one complete idea — a demo, a result) → a longer beat that breathes
-      (~4-${MAX_BROLL_SEC.toFixed(0)}s of speech).
-  Mix them (fast-fast-slow), never a flat metronome. NO cut may cover more than
-  ~${MAX_BROLL_SEC.toFixed(0)}s of speech — if ONE idea runs longer than that, split it
-  into TWO DISTINCT shots (different angle / action / detail of the same product),
-  never one long shot, never a repeat. AIM FOR AROUND ${minScenes} cuts (up to
-  ${minScenes + 3} is fine if the natural rhythm calls for it) — do NOT pad past that
-  with filler cuts; a ${dur}s ad in 12-15 cuts beats the same ad in 18-20 frantic cuts.
-- Each scene's "quote" MUST be text that actually appears in the script.
+  NO empty span.
+- GROUPING (the #1 rule — be FLEXIBLE, not mechanical):
+    • ONE idea = ONE cut. If 2-3 SHORT consecutive sentences share ONE visual moment
+      (same product action, same setting, same beat), GROUP them into ONE cut with
+      a quote that joins those sentences. Do NOT fragment by sentence.
+    • Examples of correct grouping:
+        - "Cắn miếng bánh. Giòn rụm. Thơm lừng." → ONE cut (one bite moment,
+          quote = "Cắn miếng bánh. Giòn rụm. Thơm lừng.").
+        - "Mua 1 tặng 1. Chỉ 69k. Hốt lẹ kẻo hết." → ONE CTA cut (one product
+          shot + thumbs-up).
+    • A LONG complete idea (full demo / story beat / result) → ONE longer cut
+      (~5-${MAX_BROLL_SEC.toFixed(0)}s of speech).
+- PACING is set by HOW MUCH SPEECH each cut covers — you do NOT set seconds.
+  Mix punchy ~2-3s callouts with breathing ~5-${MAX_BROLL_SEC.toFixed(0)}s ideas
+  (fast-fast-slow), never a flat metronome.
+- NO cut may cover more than ~${MAX_BROLL_SEC.toFixed(0)}s of speech. If ONE idea
+  is GENUINELY longer, split into TWO DISTINCT shots with DIFFERENT visual angles
+  (e.g. wide → macro, hands → reaction, top-down → over-the-shoulder), NEVER a
+  near-duplicate "(slightly different angle)" of the same shot — Grok renders
+  duplicates as visually-identical clones.
+- AIM FOR AROUND ${minScenes} cuts (up to ${minScenes + 3} is fine if the natural
+  rhythm calls for it). PREFER fewer cuts with grouped quotes over many tiny cuts;
+  ~${minScenes} thoughtful cuts beats ${minScenes + 5} frantic ones.
+- Each scene's "quote" MUST come FROM the script: either ONE sentence verbatim, OR
+  a join of 2-3 CONSECUTIVE sentences (in order, verbatim, joined with spaces).
 - VARIETY: mix lips + no-face hands-action + product close-ups + (some) 3D, so the
   ad feels like a real hand-held review, not a slideshow or a single locked shot.
   Do NOT run more than 2 cuts of the SAME type back-to-back — when several consecutive
@@ -535,7 +550,9 @@ const MAX_LIPS_SEC = 5
 // 5-6s. Cap broll/3d at 6s so a single coherent idea can BREATHE (~5-6s) instead of
 // being chopped into 3s "(closer angle)" duplicates — the source of "18 cuts trong 60s
 // feels frantic". Lips stays 5s (a talking-head shouldn't hold longer).
-const MAX_BROLL_SEC = 6.0
+// P3t — nâng 6 → 8 để khớp với Grok i2v duration step (6 / 8 / 10 — P3s đã loại 7s).
+// Mỗi cảnh broll giờ thở tới 8s thay vì bị chẻ làm đôi 3s/3s với prompt clone.
+const MAX_BROLL_SEC = 8.0
 // 2s minimum so a leftover cut never flashes < 2s and disrupts the eye.
 const MIN_CUT_SEC = 2.0
 
@@ -583,13 +600,31 @@ function capSplitScenes(timed: TimedBrollScene[]): TimedBrollScene[] {
         const b = round2(k === parts - 1 ? s.endSec : s.startSec + (k + 1) * step)
         out.push({
           ...s, startSec: a, endSec: b, durationSec: round2(b - a),
-          conceptPrompt: k > 0 && s.conceptPrompt ? `${s.conceptPrompt} (a slightly different angle / closer)` : s.conceptPrompt,
+          // P3t — was: append "(a slightly different angle / closer)" which Grok
+          // i2v rendered as visually-identical clones (the user audited 2 cảnh
+          // i hệt nhau). Now apply ROTATING visual-craft modifiers so split
+          // halves get genuinely different shots, not a paraphrased duplicate.
+          conceptPrompt: k > 0 && s.conceptPrompt
+            ? `${s.conceptPrompt} — ${SPLIT_ANGLE_VARIANTS[k % SPLIT_ANGLE_VARIANTS.length]}`
+            : s.conceptPrompt,
         })
       }
     }
   }
   return out
 }
+
+// P3t — universal visual modifiers for forced splits (no niche assumption).
+// These describe how a CAMERA moves around the SAME subject — they don't change
+// what the subject IS, so they preserve the director's intent while making
+// Grok render two visibly different frames instead of a clone.
+const SPLIT_ANGLE_VARIANTS = [
+  'macro close-up, shallow depth of field, the same subject',
+  'wider shot showing more of the setting around the same subject',
+  'over-the-shoulder angle of the same action',
+  'low-angle product hero shot of the same subject',
+  'top-down flat-lay of the same subject',
+]
 
 // Density floor (2/2) — the deterministic backstop. After capping, if the plan is
 // still below `minScenes` (a stubborn-sparse director that the re-roll didn't fix),
@@ -614,8 +649,13 @@ function enforceDensityFloor(scenes: TimedBrollScene[], minScenes: number): Time
     const first: TimedBrollScene = { ...s, endSec: mid, durationSec: round2(mid - s.startSec) }
     const second: TimedBrollScene = s.role === 'lips'
       ? { role: 'broll', kind: 'product_closeup', quote: s.quote, conceptPrompt: '', startSec: mid, endSec: s.endSec, durationSec: round2(s.endSec - mid) }
+      // P3t — was: " (a slightly different angle / closer)" → visually-identical
+      // clones. Now apply a rotating angle modifier so the second half is a
+      // genuinely different shot of the same subject.
       : { ...s, startSec: mid, durationSec: round2(s.endSec - mid),
-          conceptPrompt: s.conceptPrompt ? `${s.conceptPrompt} (a slightly different angle / closer)` : s.conceptPrompt }
+          conceptPrompt: s.conceptPrompt
+            ? `${s.conceptPrompt} — ${SPLIT_ANGLE_VARIANTS[split % SPLIT_ANGLE_VARIANTS.length]}`
+            : s.conceptPrompt }
     out.splice(li, 1, first, second)
     split++
   }

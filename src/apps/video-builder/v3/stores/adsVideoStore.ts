@@ -77,6 +77,9 @@ interface AdsVideoStoreState {
   setHybridPlan:          (scenes: TimedBrollScene[], stickers: BrollSticker[], rawScenes: BrollScene[]) => void
   /** Cache a rendered clip for scene INDEX (a re-render replaces just that one). */
   setHybridClip:          (idx: number, videoRef: string) => void
+  /** P3t — patch ONE scene's conceptPrompt without re-running the director.
+   *  The user fixes a drift inline + re-renders that single scene. */
+  setSceneConceptPrompt:  (idx: number, conceptPrompt: string) => void
   /** Store the one creator keyframe + voice for the whole video. */
   setHybridCreatorAssets: (a: { keyframeRef: string; voiceRef: string; voiceDurationSec: number; voiceAlignment?: VoiceAlignment }) => void
   /** Store the final assembled MP4. */
@@ -419,6 +422,20 @@ export const useAdsVideoStore = create<AdsVideoStoreState>((set, get) => ({
       // A clip changed → the previous final MP4 is stale.
       hybrid: { ...s.hybrid, clips: { ...s.hybrid.clips, [idx]: videoRef }, finalVideoRef: undefined },
     })),
+
+  // P3t — let the user fix a director-hallucinated conceptPrompt INLINE on the
+  // scene card and re-render that ONE scene, without re-creating the voice +
+  // keyframe (which is what "Tạo lại" used to force). Persisted, so the edit
+  // survives a refresh.
+  setSceneConceptPrompt: (idx, conceptPrompt) =>
+    commit(set, get, (s) => {
+      const cur = s.hybrid.scenes
+      if (!cur) return s
+      const scenes = cur.slice()
+      if (idx < 0 || idx >= scenes.length) return s
+      scenes[idx] = { ...scenes[idx], conceptPrompt }
+      return { ...s, hybrid: { ...s.hybrid, scenes } }
+    }),
 
   setHybridCreatorAssets: (a) =>
     commit(set, get, (s) => ({

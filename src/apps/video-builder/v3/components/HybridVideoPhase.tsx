@@ -5,9 +5,10 @@
 // renders the scenes — assembling the final MP4 happens on the Export step (Bước 3).
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import {
   Loader2, Wand2, RotateCcw, AlertCircle, Sparkles, Mic, User, Film, Play, ChevronRight,
+  Edit3, Save, X,
 } from 'lucide-react'
 import { useAppStore } from '../../../../stores/appStore'
 import { useSettingsStore } from '../../../../stores/settingsStore'
@@ -41,6 +42,7 @@ export default function HybridVideoPhase(_props: Props) {
   const state          = useAdsVideoStore((s) => s.state)
   const setHybridPlan  = useAdsVideoStore((s) => s.setHybridPlan)
   const setHybridClip  = useAdsVideoStore((s) => s.setHybridClip)
+  const setSceneConceptPrompt = useAdsVideoStore((s) => s.setSceneConceptPrompt)
   const setHybridAssets= useAdsVideoStore((s) => s.setHybridCreatorAssets)
   const setPhase       = useAdsVideoStore((s) => s.setPhase)
   const addToast       = useAppStore((s) => s.addToast)
@@ -68,6 +70,9 @@ export default function HybridVideoPhase(_props: Props) {
   // pre-flight bugs (B/D) before the retry succeeds. NOT refundable — KIE keeps
   // charged credits on failure — so this is a visibility tool, not a recovery.
   const [lostCredits, setLostCredits] = useState(0)
+  // P3t — per-scene KIE poll progress (poll count + elapsed seconds) so the
+  // card shows "đang render… poll #5 · 28s" instead of a blind spinner.
+  const [progressByIdx, setProgressByIdx] = useState<Record<number, { pollCount: number; elapsedSec: number }>>({})
   const [error, setError] = useState('')
 
   const sceneCredit = (s: TimedBrollScene): number => {
@@ -141,8 +146,15 @@ export default function HybridVideoPhase(_props: Props) {
     if (!s) return
     setRenderingIdx((set) => new Set(set).add(i))
     setFailedIdx((set) => { const n = new Set(set); n.delete(i); return n })
+    setProgressByIdx((p) => ({ ...p, [i]: { pollCount: 0, elapsedSec: 0 } }))
     try {
-      const videoRef = await renderOneHybridScene(s, ctx())
+      const videoRef = await renderOneHybridScene(
+        s,
+        ctx(),
+        undefined,
+        // P3t — KIE poll progress → UI shows "poll #N · Ms" per card.
+        (info) => setProgressByIdx((p) => ({ ...p, [i]: info })),
+      )
       setHybridClip(i, videoRef)
     } catch (e) {
       console.error(`[HYBRID_UI] cảnh ${i} lỗi:`, e)
@@ -152,6 +164,7 @@ export default function HybridVideoPhase(_props: Props) {
       addToast(`Cảnh #${i + 1} lỗi: ${(e instanceof Error ? e.message : String(e)).slice(0, 100)}`, 'error')
     } finally {
       setRenderingIdx((set) => { const n = new Set(set); n.delete(i); return n })
+      setProgressByIdx((p) => { const n = { ...p }; delete n[i]; return n })
       // Pull the next queued scene (if any) right after a slot frees up.
       setQueuedIdx((q) => {
         if (q.length === 0) return q
@@ -276,8 +289,10 @@ export default function HybridVideoPhase(_props: Props) {
             {scenes.map((s, i) => (
               <SceneCard key={i} i={i} scene={s} clipRef={hybrid.clips[i]}
                 rendering={renderingIdx.has(i)} queued={queuedIdx.includes(i)} failed={failedIdx.has(i)}
+                progress={progressByIdx[i]}
                 credit={sceneCredit(s)} hasAssets={hasAssets}
-                onRender={() => renderScene(i)} />
+                onRender={() => renderScene(i)}
+                onSavePrompt={(prompt) => setSceneConceptPrompt(i, prompt)} />
             ))}
           </div>
         )}
@@ -336,24 +351,62 @@ function AssetsBar({ keyframeRef, voiceRef, voiceDurationSec, busy, onRegen }: {
 }
 
 // ── One scene = a 9:16 frame; render button ON the frame; clip plays in place ──
-function SceneCard({ i, scene, clipRef, rendering, queued, failed, credit, hasAssets, onRender }: {
+function SceneCard({ i, scene, clipRef, rendering, queued, failed, progress, credit, hasAssets, onRender, onSavePrompt }: {
   i: number; scene: TimedBrollScene; clipRef?: string; rendering: boolean; queued: boolean; failed: boolean
+  progress?: { pollCount: number; elapsedSec: number }
   credit: number; hasAssets: boolean; onRender: () => void
+  onSavePrompt: (prompt: string) => void
 }) {
   const url = useAssetUrl(clipRef ?? undefined)
   const badge = ROLE_BADGE[scene.role] ?? ROLE_BADGE.broll
   const done = !!url
+  // P3t-F — inline prompt editor for broll/mechanism3d. Lips has no
+  // conceptPrompt (lipsync uses keyframe + voice), so the editor is hidden for
+  // lips scenes. Dirty state tracks unsaved edits so the Save button enables only
+  // when there's an actual change.
+  const canEditPrompt = scene.role !== 'lips'
+  const [editing, setEditing] = useState(false)
+  const [draftPrompt, setDraftPrompt] = useState(scene.conceptPrompt ?? '')
+  useEffect(() => { setDraftPrompt(scene.conceptPrompt ?? '') }, [scene.conceptPrompt])
+  const promptDirty = draftPrompt.trim() !== (scene.conceptPrompt ?? '').trim()
+  // P3t-D — custom video player without native audio controls. Click toggles play.
+  // muted=true so the lipsync clip's embedded audio doesn't compete with the
+  // master TTS that the assembler muxes in later.
+  const videoRef = useRef<HTMLVideoElement | null>(null)
+  const [playing, setPlaying] = useState(false)
+  const togglePlay = () => {
+    const v = videoRef.current
+    if (!v) return
+    if (v.paused) { void v.play() } else { v.pause() }
+  }
   return (
     <div className="flex flex-col overflow-hidden rounded-lg border border-gray-200 bg-white">
       {/* 9:16 frame */}
       <div className="relative aspect-[9/16] w-full bg-gray-900">
         {done ? (
-          <video src={url} controls playsInline className="h-full w-full object-contain" />
+          <>
+            <video ref={videoRef} src={url} muted playsInline
+              onPlay={() => setPlaying(true)} onPause={() => setPlaying(false)} onEnded={() => setPlaying(false)}
+              onClick={togglePlay}
+              className="h-full w-full cursor-pointer object-contain" />
+            {!playing && (
+              <button onClick={togglePlay}
+                className="pointer-events-none absolute inset-0 flex items-center justify-center">
+                <span className="rounded-full bg-black/60 p-3 text-white"><Play className="h-5 w-5 fill-white" /></span>
+              </button>
+            )}
+          </>
         ) : (
           <div className="flex h-full w-full items-center justify-center">
             {rendering ? (
               <div className="flex flex-col items-center gap-1 text-violet-300">
-                <Loader2 className="h-6 w-6 animate-spin" /> <span className="text-[10px]">đang render…</span>
+                <Loader2 className="h-6 w-6 animate-spin" />
+                <span className="text-[10px]">đang render…</span>
+                {progress && (
+                  <span className="text-[9px] text-violet-200/80">
+                    poll #{progress.pollCount} · {progress.elapsedSec}s
+                  </span>
+                )}
               </div>
             ) : queued ? (
               <div className="flex flex-col items-center gap-1 text-amber-300">
@@ -382,9 +435,41 @@ function SceneCard({ i, scene, clipRef, rendering, queued, failed, credit, hasAs
       {/* quote + concept + re-render */}
       <div className="flex flex-1 flex-col gap-1 p-2">
         <p className="text-[11px] font-semibold leading-tight text-gray-800 line-clamp-2">“{scene.quote}”</p>
-        {scene.role !== 'lips' && scene.conceptPrompt && (
-          <p className="line-clamp-2 text-[10px] italic leading-tight text-gray-500">{scene.conceptPrompt}</p>
+
+        {/* P3t-F — inline prompt panel (broll/mechanism3d only) */}
+        {canEditPrompt && !editing && (
+          <div className="flex items-start gap-1">
+            <p className="line-clamp-2 flex-1 text-[10px] italic leading-tight text-gray-500">
+              {scene.conceptPrompt || <span className="not-italic text-gray-400">(không có prompt — đang dùng product close-up mặc định)</span>}
+            </p>
+            <button onClick={() => setEditing(true)} title="Sửa prompt"
+              className="shrink-0 rounded p-0.5 text-gray-400 hover:bg-gray-100 hover:text-violet-600">
+              <Edit3 className="h-3 w-3" />
+            </button>
+          </div>
         )}
+        {canEditPrompt && editing && (
+          <div className="flex flex-col gap-1 rounded-md border border-violet-200 bg-violet-50 p-1.5">
+            <textarea value={draftPrompt} onChange={(e) => setDraftPrompt(e.target.value)}
+              rows={4} placeholder="Mô tả CỤ THỂ visual: action + sản phẩm + setting. Tránh từ trừu tượng."
+              className="w-full resize-none rounded border border-violet-200 bg-white p-1.5 text-[10px] leading-tight text-gray-700 focus:border-violet-400 focus:outline-none" />
+            <div className="flex items-center justify-between gap-1">
+              <span className="text-[9px] text-violet-600/80">Lưu rồi bấm "Render lại" để dùng prompt mới</span>
+              <div className="flex gap-1">
+                <button onClick={() => { setEditing(false); setDraftPrompt(scene.conceptPrompt ?? '') }}
+                  className="flex items-center gap-0.5 rounded border border-gray-200 bg-white px-1.5 py-0.5 text-[9px] font-bold text-gray-600 hover:bg-gray-50">
+                  <X className="h-2.5 w-2.5" /> Huỷ
+                </button>
+                <button onClick={() => { onSavePrompt(draftPrompt.trim()); setEditing(false) }}
+                  disabled={!promptDirty}
+                  className="flex items-center gap-0.5 rounded bg-violet-600 px-1.5 py-0.5 text-[9px] font-bold text-white hover:bg-violet-700 disabled:opacity-40">
+                  <Save className="h-2.5 w-2.5" /> Lưu
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {done && !rendering && !queued && (
           <button onClick={onRender}
             className="mt-auto flex items-center justify-center gap-1 rounded-md border border-gray-200 bg-white px-2 py-1 text-[10px] font-bold text-gray-600 hover:bg-gray-50">
