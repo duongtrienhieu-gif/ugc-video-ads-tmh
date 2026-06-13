@@ -190,6 +190,9 @@ THREE cut ROLES (set "role"):
 3. "mechanism3d" — for a line describing a process INSIDE the product/body a phone
    can't film (an ingredient acting inside, airflow inside a device, a coating at
    molecular level…). Write the conceptPrompt; it renders as a clean 3D animation.
+   Use SPARINGLY — at most ~2 per video. If SEVERAL lines describe internal benefits,
+   make only the strongest one a 3D cut and ground the rest as a real product
+   close-up (+ a sticker for the claim) — the ad must not become a science reel.
 
 STICKERS (separate array — 0-credit text pops that ride on a cut, REPLACING the
 old overlays). Be GENEROUS — stickers are FREE and do NOT compete with the cuts,
@@ -228,6 +231,10 @@ RULES:
 - Each scene's "quote" MUST be text that actually appears in the script.
 - VARIETY: mix lips + no-face hands-action + product close-ups + (some) 3D, so the
   ad feels like a real hand-held review, not a slideshow or a single locked shot.
+  Do NOT run more than 2 cuts of the SAME type back-to-back — when several consecutive
+  lines are similar (a list of symptoms, a list of ingredients/benefits), VARY the
+  shot type across them (slip a product close-up or hands-action between concept or 3D
+  cuts) so it stays a hand-held review, not a mood montage or a science reel.
 - The CTA / buy line MUST show the PRODUCT in frame with an endorsing gesture — the
   creator holding/presenting the product and a thumbs-up / nod / offering it to camera
   (set role:"broll", kind:"product_action", cameraFraming:"creator", AND write its
