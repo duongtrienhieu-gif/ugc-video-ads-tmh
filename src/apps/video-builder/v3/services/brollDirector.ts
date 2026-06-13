@@ -305,6 +305,95 @@ no numbering, no quotes, no extra commentary.`
   }
 }
 
+// ── P4h — product establishment + deictic (deterministic backstop) ──────────
+// The Layer-1 prompt asks the director to SHOW the product when a line NAMES or
+// POINTS AT it; these passes GUARANTEE it (mirroring the CTA last-cut lock) so a
+// named product never stays invisible through the first half ("nhắc muối tỏi 5
+// câu mà tới #6 mới thấy lọ"). Pure text/heuristics — universal, no niche hardcode.
+
+// VN "cái lọ NÀY / em NÀY", MS "botol NI / produk NI" — a strong container noun
+// followed (within a few words) by a point-at word. No \b (Vietnamese diacritics
+// break \w boundaries); the strong noun keeps false positives low.
+const PRODUCT_DEICTIC_RE = /(lọ|chai|hộp|tuýp|hũ|gói|sản phẩm|botol|tiub|kotak|produk)[^.?!]{0,30}(này|đây|ni|ini|nih)/iu
+
+/** True if the spoken line POINTS AT the product ("cái lọ này", "botol ni"). */
+function quoteHasProductDeictic(quote: string): boolean {
+  return PRODUCT_DEICTIC_RE.test((quote ?? '').toLowerCase())
+}
+
+/** True if the spoken line NAMES the product (full name, or ≥2 consecutive
+ *  content words of it). Drives the opening + first-third establish rules. */
+function quoteNamesProduct(quote: string, product: Product | null | undefined): boolean {
+  const name = product?.productName?.trim()
+  if (!name || !quote) return false
+  const q = quote.toLowerCase().replace(/\s+/g, ' ')
+  const n = name.toLowerCase().replace(/\s+/g, ' ')
+  if (n.length >= 3 && q.includes(n)) return true
+  const STOP = new Set(['the', 'and', 'for', 'với', 'cho', 'và', 'là', 'các', 'những', 'bộ', 'loại', 'sản', 'phẩm', 'combo', 'set', 'chai', 'lọ', 'hộp', 'gói', 'hũ', 'tuýp', 'gram', 'size'])
+  const words = n.split(' ').filter((w) => w.length >= 3 && !STOP.has(w))
+  for (let i = 0; i + 1 < words.length; i++) {
+    if (q.includes(`${words[i]} ${words[i + 1]}`)) return true
+  }
+  if (words.length === 1 && words[0].length >= 5 && q.includes(words[0])) return true
+  return false
+}
+
+/** A scene that VISIBLY shows the product (not a face / concept / 3D cut). */
+function sceneShowsProduct(s: BrollScene): boolean {
+  return s.role === 'broll' && (s.kind === 'product_action' || s.kind === 'product_closeup')
+}
+
+/** Convert a scene into a product shot. 'creator' = face + product (the opening
+ *  hold-up — keeps the scroll-stop face); 'hands_noface' = hands showing it. */
+function makeProductScene(s: BrollScene, framing: CameraFraming, product: Product | null | undefined): void {
+  s.role = 'broll'
+  s.kind = 'product_action'
+  s.cameraFraming = framing
+  if (isWeakConceptPrompt(s.conceptPrompt)) {
+    const name = product?.productName?.trim() || 'the product'
+    s.conceptPrompt = framing === 'creator'
+      ? `The creator holds up ${name} to the camera at a natural eye level, presenting it with a friendly, confident expression — authentic UGC, natural light.`
+      : `Hands hold and show ${name} clearly in its real-world setting as the line refers to it — close-up, authentic UGC iPhone footage, natural light.`
+  }
+}
+
+/** P4h — guarantee the product is established EARLY + shown on POINT-AT lines.
+ *  Runs on the director's scenes BEFORE the CTA lock + backfill. Never touches
+ *  the last cut (CTA, owned by the CTA lock) or 3D mechanism cuts. */
+function applyProductEstablishRules(scenes: BrollScene[], product: Product | null | undefined): void {
+  if (scenes.length === 0 || !product?.productName) return
+  const lastIdx = scenes.length - 1
+
+  // Rule A — the OPENING establishes the product when the HOOK names it (face+product).
+  const first = scenes[0]
+  if (first && lastIdx > 0 && !sceneShowsProduct(first) && quoteNamesProduct(first.quote, product)) {
+    makeProductScene(first, 'creator', product)
+  }
+
+  // Rule B — any line that POINTS AT the product must show it (never a bare face).
+  for (let i = 0; i < scenes.length; i++) {
+    if (i === lastIdx) continue
+    const s = scenes[i]
+    if (s.role === 'mechanism3d') continue          // 3D internal animation — leave it
+    if (!sceneShowsProduct(s) && quoteHasProductDeictic(s.quote)) {
+      makeProductScene(s, i === 0 ? 'creator' : 'hands_noface', product)
+    }
+  }
+
+  // Rule C — establish within the FIRST THIRD (covers a LEAD / problem-first hook):
+  // if no early scene shows the product, force the first product-NAMING scene to.
+  const third = Math.max(1, Math.ceil(scenes.length / 3))
+  if (!scenes.slice(0, third).some(sceneShowsProduct)) {
+    for (let i = 0; i < lastIdx; i++) {
+      if (scenes[i].role === 'mechanism3d') continue
+      if (quoteNamesProduct(scenes[i].quote, product)) {
+        if (!sceneShowsProduct(scenes[i])) makeProductScene(scenes[i], i === 0 ? 'creator' : 'hands_noface', product)
+        break
+      }
+    }
+  }
+}
+
 // ── Public: plan a full-coverage hybrid shot list ───────────────────────────
 export async function directBrollScenes(
   params: BrollDirectorParams,
@@ -367,10 +456,12 @@ THREE cut ROLES (set "role"):
 1. "lips" — the creator ON CAMERA saying a specific line (face visible, will be
    lip-synced to that exact voice span). Give the "quote" (verbatim spoken line) — a
    lips cut is a SHORT line (~3-5s of speech). NO conceptPrompt needed.
-   *** Use EXACTLY ${lipsCount} lips cuts. The FIRST is the opening HOOK (the viewer
-   must see a real face in the first ~3s or they scroll). SPREAD the rest through the
-   MIDDLE so the creator's face re-appears and carries the trust thread — but the very
-   last CTA/buy line is NOT a lips cut (it is the product-endorsement shot, see RULES). ***
+   *** Use AROUND ${lipsCount} lips cuts. SPREAD them so the creator's face re-appears
+   through the MIDDLE and carries the trust thread. The OPENING does NOT have to be a
+   lips cut — the first ~3s must show a FACE (scroll-stop), but that face can be the
+   creator HOLDING the product (see the OPENING rule), not necessarily a lip-synced
+   shot. The very last CTA/buy line is NOT a lips cut (it is the product-endorsement
+   shot, see RULES). ***
 2. "broll" — a full-screen product/concept cut, usually NO face. Write a vivid
    "conceptPrompt" (one English sentence: action + real-world SETTING) and set:
      • "kind" — pick what the LINE actually calls for:
@@ -495,6 +586,21 @@ RULES:
   lines are similar (a list of symptoms, a list of ingredients/benefits), VARY the
   shot type across them (slip a product close-up or hands-action between concept or 3D
   cuts) so it stays a hand-held review, not a mood montage or a science reel.
+- OPENING / ESTABLISH THE PRODUCT EARLY:
+    • The first ~3s must show a real HUMAN FACE (scroll-stop) — but a face does NOT
+      require a "lips" cut.
+    • If the HOOK (first line) NAMES the product, the OPENING cut SHOWS the product:
+      role:"broll", kind:"product_action", cameraFraming:"creator" — the creator
+      holds / presents the product to camera (face AND product together). Do NOT open
+      on a bare face while the voice names a product the viewer cannot see.
+    • Only if the hook LEADS WITH A PROBLEM and does NOT name the product may the
+      opening be a bare face / problem-concept (the product is revealed a beat later).
+    • The product MUST appear on screen WITHIN THE FIRST THIRD — never keep naming a
+      product for many cuts without ever showing it.
+- DEICTIC (point-at): any line that points AT the product — "cái lọ này", "em này",
+  "nó đây", "cái này", MS "botol ni / produk ni" — MUST show the product on that cut
+  (kind:"product_action"/"product_closeup"), NEVER a bare face: "này / đây / ni" means
+  the viewer should be looking AT the thing right then.
 - The CTA / buy line MUST show the PRODUCT in frame with an endorsing gesture — the
   creator holding/presenting the product and a thumbs-up / nod / offering it to camera
   (set role:"broll", kind:"product_action", cameraFraming:"creator", AND write its
@@ -551,6 +657,12 @@ OUTPUT strict JSON only (no markdown fences):
       if (scenes2.length > scenes.length) { scenes = scenes2; parsed = parsed2 }
     }
   }
+  // P4h — product establishment + deictic (deterministic backstop to the Layer-1
+  // prompt): the hook / early lines that NAME or POINT AT the product must SHOW it,
+  // so the product is never invisible while the voice keeps naming it. Runs before
+  // the CTA lock (the CTA owns the last cut) and before backfill (fills any concept).
+  applyProductEstablishRules(scenes, params.product)
+
   // CTA visual guarantee — the LAST cut is the buy line; lock it to the standard
   // product endorsement (creator + product + thumbs-up) so the call-to-buy always
   // shows the product, regardless of what the model wrote for that scene.
