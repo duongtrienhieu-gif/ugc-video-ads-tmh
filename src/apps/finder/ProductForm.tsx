@@ -16,14 +16,14 @@ interface ProductFormProps {
 
 const FIELDS: { key: keyof Product; label: string; type: 'text' | 'textarea'; required?: boolean; placeholder?: string }[] = [
   { key: 'productName', label: 'Product Name', type: 'text', required: true },
-  { key: 'productDescription', label: 'Product Description', type: 'textarea', required: true },
   { key: 'targetMarket', label: 'Target Market', type: 'text', required: true },
+  { key: 'productDescription', label: 'Product Description', type: 'textarea', required: true },
   { key: 'painPoints', label: 'Pain Points', type: 'textarea' },
   { key: 'usps', label: 'USP - Unique Selling Points', type: 'textarea' },
   { key: 'benefits', label: 'Benefits', type: 'textarea' },
-  { key: 'offer', label: 'Offer & Pricing', type: 'text' },
   { key: 'ingredients', label: 'Ingredients & Mechanism', type: 'textarea', placeholder: 'Thành phần + cơ chế hoạt động, vd: "Hyaluronic Acid giữ nước cấp ẩm sâu lớp biểu bì; Collagen + Peptide kích thích nguyên bào sợi tái tạo cấu trúc nâng đỡ, làm đầy nếp nhăn từ bên trong; Niacinamide củng cố hàng rào bảo vệ, đều màu da"' },
   { key: 'usageGuide', label: 'Usage Guide', type: 'textarea', placeholder: 'Cách dùng + liều lượng, vd: "Thoa 2-3 giọt lên mặt đã làm sạch, sáng và tối; massage nhẹ đến khi thấm. Dùng đều mỗi ngày."' },
+  { key: 'offer', label: 'Offer & Pricing', type: 'text' },
 ]
 
 // Gemini JSON-mode schema. Forcing responseMimeType=application/json +
@@ -1135,9 +1135,11 @@ export default function ProductForm({ item, onSave, onCancel }: ProductFormProps
         </span>
       </div>
 
-      <div className="grid grid-cols-1 items-start gap-x-4 gap-y-3 sm:grid-cols-2">
+      {/* Masonry-style columns: short fields pack tightly under tall ones —
+          no row-locked empty space. */}
+      <div className="columns-1 gap-4 sm:columns-2">
         {FIELDS.map(({ key, label, type, required, placeholder }) => (
-          <label key={key} className="flex flex-col gap-1">
+          <label key={key} className="mb-3 flex break-inside-avoid flex-col gap-1">
             <span className="text-[11px] font-medium uppercase tracking-widest text-gray-500">
               {label}{required && ' *'}
             </span>
