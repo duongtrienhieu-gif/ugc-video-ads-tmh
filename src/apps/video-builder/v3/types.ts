@@ -18,6 +18,9 @@
 
 import type { Model, Product } from '../../../stores/types'
 import type { StickerStyle } from './services/stickerRenderer'
+// type-only (erased at runtime → no circular dependency) — the hybrid plan shapes
+// live in brollDirector; the store persists them as the `hybrid` slice.
+import type { TimedBrollScene, BrollSticker } from './services/brollDirector'
 
 // ── Top-level phase enum ────────────────────────────────────────────────────
 // Sequential workflow; each phase has its own view + persisted state.
@@ -691,8 +694,33 @@ export interface V3PipelineState {
    *  + last built export package) */
   exportVariation: ExportVariationState
 
+  /** P3e — HYBRID 1-luồng state (director plan + per-scene clips + creator
+   *  assets + final MP4). Persisted so F5 / step-nav never loses rendered work. */
+  hybrid: HybridState
+
   /** Timestamp this state was last saved (informational) */
   updatedAt: number
+}
+
+/** P3e — the hybrid pipeline's persisted state. */
+export interface HybridState {
+  /** Director plan (timed scenes) — null until "Đạo diễn" runs. */
+  scenes: TimedBrollScene[] | null
+  /** Director sticker callouts (rendered locally at assemble time). */
+  stickers: BrollSticker[]
+  /** Rendered clip asset ref per scene INDEX (so a re-render replaces just one). */
+  clips: Record<number, string>
+  /** One creator keyframe + voice for the whole video (needed for lips + master TTS). */
+  keyframeRef?: string
+  voiceRef?: string
+  voiceDurationSec?: number
+  voiceAlignment?: VoiceAlignment
+  /** The final assembled MP4 (shown on the Export step). */
+  finalVideoRef?: string
+}
+
+export function createEmptyHybridState(): HybridState {
+  return { scenes: null, stickers: [], clips: {} }
 }
 
 export function createEmptyV3State(): V3PipelineState {
@@ -715,6 +743,7 @@ export function createEmptyV3State(): V3PipelineState {
     inserts: [],
     autoEdit: createEmptyAutoEditState(),
     exportVariation: createEmptyExportVariationState(),
+    hybrid: createEmptyHybridState(),
     updatedAt: Date.now(),
   }
 }

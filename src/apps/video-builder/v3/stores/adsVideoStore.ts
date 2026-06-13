@@ -16,8 +16,9 @@
 
 import { create } from 'zustand'
 import {
-  createEmptyV3State,
+  createEmptyV3State, createEmptyHybridState,
   type V3PipelineState, type V3Phase, type WorkflowMode, type CostMode,
+  type VoiceAlignment,
   type ActionInsertClip, type CreatorVideoClip, type VoiceFirstSlot,
   // Z31 — Ad Brain
   type AdStructure, type AdAngle, type ScriptTargetDurationSec,
@@ -38,6 +39,7 @@ import {
   type ExportRenderStage,
 } from '../types'
 import { COST_MODE_CONFIG, DEFAULT_COST_MODE, defaultInsertRenderMode, DEFAULT_EXPORT_FORMAT, DEFAULT_EXPORT_QUALITY } from '../types'
+import type { TimedBrollScene, BrollSticker } from '../services/brollDirector'
 import { CREATOR_PRESETS } from '../services/creatorPresets'
 import type { Model, Product } from '../../../../stores/types'
 
@@ -69,6 +71,17 @@ interface AdsVideoStoreState {
   /** Z98 B2 — store / clear the pre-generated real voice (voice-first). */
   setVoiceFirst:         (voice: VoiceFirstSlot | null) => void
   clearVoiceFirst:       () => void
+
+  // ── Hybrid (P3e) ──────────────────────────────────────────────────────────
+  /** Store the director plan (resets clips + final — indices change on re-plan). */
+  setHybridPlan:          (scenes: TimedBrollScene[], stickers: BrollSticker[]) => void
+  /** Cache a rendered clip for scene INDEX (a re-render replaces just that one). */
+  setHybridClip:          (idx: number, videoRef: string) => void
+  /** Store the one creator keyframe + voice for the whole video. */
+  setHybridCreatorAssets: (a: { keyframeRef: string; voiceRef: string; voiceDurationSec: number; voiceAlignment?: VoiceAlignment }) => void
+  /** Store the final assembled MP4. */
+  setHybridFinal:         (videoRef: string) => void
+  clearHybrid:            () => void
   /** Z32 — set/replace creator video config (setting + energy + preset + wardrobe + resolution) */
   setCreatorVideoConfig: (config: CreatorVideoConfig) => void
   /** Z32 — apply a preset (writes setting + energy + wardrobeNote in one go) */
@@ -209,6 +222,8 @@ function loadFromStorage(): V3PipelineState | null {
       const empty = createEmptyV3State()
       parsed.creatorVideoConfig = empty.creatorVideoConfig
     }
+    // P3e — pre-hybrid saves won't have the hybrid slice; backfill it.
+    if (!parsed.hybrid) parsed.hybrid = createEmptyHybridState()
     // Defensive: a corrupted / pre-inserts payload may not carry an array.
     // Guard before .map so a bad localStorage blob can't crash hydration.
     if (!Array.isArray(parsed.inserts)) parsed.inserts = []
@@ -366,6 +381,34 @@ export const useAdsVideoStore = create<AdsVideoStoreState>((set, get) => ({
 
   clearVoiceFirst: () =>
     commit(set, get, (s) => ({ ...s, voiceFirst: null })),
+
+  // ── Hybrid (P3e) ──────────────────────────────────────────────────────────
+  setHybridPlan: (scenes, stickers) =>
+    commit(set, get, (s) => ({
+      ...s,
+      // New plan → scene indices change, so old clips + final are stale. Keep the
+      // creator keyframe/voice (not plan-dependent).
+      hybrid: { ...s.hybrid, scenes, stickers, clips: {}, finalVideoRef: undefined },
+    })),
+
+  setHybridClip: (idx, videoRef) =>
+    commit(set, get, (s) => ({
+      ...s,
+      // A clip changed → the previous final MP4 is stale.
+      hybrid: { ...s.hybrid, clips: { ...s.hybrid.clips, [idx]: videoRef }, finalVideoRef: undefined },
+    })),
+
+  setHybridCreatorAssets: (a) =>
+    commit(set, get, (s) => ({
+      ...s,
+      hybrid: { ...s.hybrid, keyframeRef: a.keyframeRef, voiceRef: a.voiceRef, voiceDurationSec: a.voiceDurationSec, voiceAlignment: a.voiceAlignment },
+    })),
+
+  setHybridFinal: (videoRef) =>
+    commit(set, get, (s) => ({ ...s, hybrid: { ...s.hybrid, finalVideoRef: videoRef } })),
+
+  clearHybrid: () =>
+    commit(set, get, (s) => ({ ...s, hybrid: createEmptyHybridState() })),
 
   patchCreatorVideo: (patch) =>
     commit(set, get, (s) => ({
