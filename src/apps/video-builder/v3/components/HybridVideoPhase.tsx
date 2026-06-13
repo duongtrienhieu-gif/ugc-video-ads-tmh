@@ -1,42 +1,31 @@
-// ── HybridVideoPhase (P3e) — Bước "Tạo Video" ────────────────────────────────
-// The hybrid hub. Per-card render control (like mode-1) so the user can render +
-// quality-check each scene individually, with the EXACT credit shown before paying.
-//
-//   1. [Đạo diễn]            director plan → store.hybrid (0 credit, review free).
-//   2. [Tạo giọng + mặt]     renderCreatorKeyframe (voice + face, one call) → assets;
-//                            then RE-TIME the plan to the real voice (lips slice
-//                            from the exact spoken span). Required before rendering.
-//   3. per-card [Render ~Xcr] each scene individually (re-render a bad one) + a
-//      [Tạo tất cả ~Σcr] bulk (concurrency 2, skips done) — clips cached in store.
-//   4. [Tạo video →]         assemble (only when ALL scenes rendered) → go to Export.
-//
-// All rendered work lives in the store (survives F5 / step-nav). Assemble + the
-// player live on the Export step (HybridExportPhase).
+// ── HybridVideoPhase (P3f) — Bước "Tạo Video" ────────────────────────────────
+// Visual, mode-1-style control: each scene is a 9:16 FRAME with the render button
+// ON it; rendered clips play right in the frame so quality is checkable at a glance.
+// Voice + face show in a panel you can LISTEN to before paying. This step ONLY
+// renders the scenes — assembling the final MP4 happens on the Export step (Bước 3).
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { useState } from 'react'
 import {
-  Loader2, Wand2, Clapperboard, RotateCcw, AlertCircle, Sparkles, Mic, User, Film, Play,
+  Loader2, Wand2, RotateCcw, AlertCircle, Sparkles, Mic, User, Film, Play, ChevronRight,
 } from 'lucide-react'
 import { useAppStore } from '../../../../stores/appStore'
 import { useSettingsStore } from '../../../../stores/settingsStore'
+import { useAssetUrl } from '../../../../hooks/useAssetUrl'
 import { useAdsVideoStore } from '../stores/adsVideoStore'
 import { directBrollScenes, assignSceneTiming, type TimedBrollScene } from '../services/brollDirector'
 import { renderOneHybridScene, type HybridRenderContext } from '../services/hybridRenderer'
-import { assembleFromHybridState } from '../services/hybridAssembleFlow'
 import { renderCreatorKeyframe } from '../services/creatorVideoEngine'
 import { matchVoiceForAvatar } from '../services/voiceCreatorMatcher'
 import { estimateInsertCredits, V3_CREDIT_COST } from '../types'
 
-// Kling Avatar Std ≈ 70cr per ~5s clip (V3_CREDIT_COST.lipsync) → ~14cr/s. Slightly
-// conservative so the user is never surprised by MORE than the quote.
 const LIPS_CR_PER_SEC = 14
-const ASSETS_CR = V3_CREDIT_COST.tts + V3_CREDIT_COST.keyframe   // voice + keyframe
+const ASSETS_CR = V3_CREDIT_COST.tts + V3_CREDIT_COST.keyframe
 
 const ROLE_BADGE: Record<string, { label: string; cls: string }> = {
-  lips:        { label: '🗣 Nói',  cls: 'bg-violet-100 text-violet-700' },
-  broll:       { label: '🎬 Cảnh', cls: 'bg-sky-100 text-sky-700' },
-  mechanism3d: { label: '🧬 3D',   cls: 'bg-amber-100 text-amber-700' },
+  lips:        { label: '🗣 Nói',  cls: 'bg-violet-600/90 text-white' },
+  broll:       { label: '🎬 Cảnh', cls: 'bg-sky-600/90 text-white' },
+  mechanism3d: { label: '🧬 3D',   cls: 'bg-amber-500/90 text-white' },
 }
 
 interface Props { onContinue?: () => void }
@@ -46,7 +35,6 @@ export default function HybridVideoPhase(_props: Props) {
   const setHybridPlan  = useAdsVideoStore((s) => s.setHybridPlan)
   const setHybridClip  = useAdsVideoStore((s) => s.setHybridClip)
   const setHybridAssets= useAdsVideoStore((s) => s.setHybridCreatorAssets)
-  const setHybridFinal = useAdsVideoStore((s) => s.setHybridFinal)
   const setHybridResolution = useAdsVideoStore((s) => s.setHybridResolution)
   const setPhase       = useAdsVideoStore((s) => s.setPhase)
   const addToast       = useAppStore((s) => s.addToast)
@@ -62,7 +50,6 @@ export default function HybridVideoPhase(_props: Props) {
 
   const [planning, setPlanning] = useState(false)
   const [assetsBusy, setAssetsBusy] = useState(false)
-  const [assembling, setAssembling] = useState(false)
   const [renderingIdx, setRenderingIdx] = useState<Set<number>>(new Set())
   const [failedIdx, setFailedIdx] = useState<Set<number>>(new Set())
   const [error, setError] = useState('')
@@ -75,9 +62,8 @@ export default function HybridVideoPhase(_props: Props) {
   const pendingIdx = scenes.map((_, i) => i).filter((i) => !hybrid.clips[i])
   const pendingCredit = pendingIdx.reduce((sum, i) => sum + sceneCredit(scenes[i]), 0)
   const allDone = scenes.length > 0 && doneCount === scenes.length
-  const busy = planning || assetsBusy || assembling || renderingIdx.size > 0
+  const busy = planning || assetsBusy || renderingIdx.size > 0
 
-  // ── 1. Director plan (0 credit) ─────────────────────────────────────────────
   const runPlan = async () => {
     if (!script) { addToast('Chưa có kịch bản (Bước 1)', 'error'); return }
     if (!geminiKey) { addToast('Thiếu Gemini key', 'error'); return }
@@ -85,19 +71,16 @@ export default function HybridVideoPhase(_props: Props) {
     try {
       const voiceDur = hybrid.voiceDurationSec ?? script.totalDurationSec ?? 50
       const res = await directBrollScenes({
-        geminiKey, script, lang: state.scriptBrain.outputLang,
-        product: state.inputs.product, voiceDurationSec: voiceDur,
+        geminiKey, script, lang: state.scriptBrain.outputLang, product: state.inputs.product, voiceDurationSec: voiceDur,
       })
       const timed = assignSceneTiming(res.scenes, hybrid.voiceAlignment, script, voiceDur)
       setHybridPlan(timed, res.stickers, res.scenes)
       setFailedIdx(new Set())
     } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e)
-      setError(msg); addToast(`Đạo diễn lỗi: ${msg.slice(0, 120)}`, 'error')
+      const msg = e instanceof Error ? e.message : String(e); setError(msg); addToast(`Đạo diễn lỗi: ${msg.slice(0, 120)}`, 'error')
     } finally { setPlanning(false) }
   }
 
-  // ── 2. Voice + keyframe, then RE-TIME the plan to the real voice ────────────
   const makeAssets = async () => {
     if (!script) return
     if (!kieApiKey) { addToast('Thiếu KIE key', 'error'); return }
@@ -111,33 +94,26 @@ export default function HybridVideoPhase(_props: Props) {
       const voiceCategory = state.scriptBrain.voiceCategory ?? matchVoiceForAvatar(avatar, state.scriptBrain.angle)
       const kf = await renderCreatorKeyframe({
         kieApiKey, elevenLabsApiKey: elevenLabsKey, config: state.creatorVideoConfig,
-        // The voice the user PICKED in Bước 1 lives in inputs.voiceId (NOT
-        // scriptBrain.voice, which is a post-TTS record). Passing it OVERRIDES the
-        // category default — fixes "picked a voice but got the default male voice".
+        // The PICKED voice (Bước 1) lives in inputs.voiceId — overrides the default.
         script, voiceCategory, voiceId: state.inputs.voiceId,
-        avatar, product: state.inputs.product,
-        onStageUpdate: () => {},
+        avatar, product: state.inputs.product, onStageUpdate: () => {},
       })
       setHybridAssets({ keyframeRef: kf.keyframeRef, voiceRef: kf.voiceRef, voiceDurationSec: kf.voiceDurationSec, voiceAlignment: kf.voiceAlignment })
-      // Re-time the SAME director scenes to the real voice (lips slice exactly).
       const timed = assignSceneTiming(raw, kf.voiceAlignment, script, kf.voiceDurationSec)
       setHybridPlan(timed, useAdsVideoStore.getState().state.hybrid.stickers, raw)
-      addToast(`✓ Đã tạo giọng (${kf.voiceDurationSec.toFixed(1)}s) + khuôn mặt — giờ render từng cảnh`, 'success')
+      addToast(`✓ Giọng (${kf.voiceDurationSec.toFixed(1)}s) + khuôn mặt — nghe thử rồi render cảnh`, 'success')
     } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e)
-      setError(msg); addToast(`Tạo giọng/mặt lỗi: ${msg.slice(0, 120)}`, 'error')
+      const msg = e instanceof Error ? e.message : String(e); setError(msg); addToast(`Tạo giọng/mặt lỗi: ${msg.slice(0, 120)}`, 'error')
     } finally { setAssetsBusy(false) }
   }
 
   const ctx = (): HybridRenderContext => ({
     kieApiKey, keyframeRef: hybrid.keyframeRef, voiceRef: hybrid.voiceRef,
-    product: state.inputs.product, avatar: state.inputs.avatar,
-    creatorVideoConfig: state.creatorVideoConfig, resolution,
+    product: state.inputs.product, avatar: state.inputs.avatar, creatorVideoConfig: state.creatorVideoConfig, resolution,
   })
 
-  // ── 3. Render ONE scene (individual quality control) ────────────────────────
   const renderScene = async (i: number) => {
-    if (!hasAssets) { addToast('Bấm "Tạo giọng + mặt" trước khi render cảnh', 'error'); return }
+    if (!hasAssets) { addToast('Bấm "Tạo giọng + mặt" trước', 'error'); return }
     if (!kieApiKey) { addToast('Thiếu KIE key', 'error'); return }
     const s = (useAdsVideoStore.getState().state.hybrid.scenes ?? [])[i]
     if (!s) return
@@ -155,7 +131,6 @@ export default function HybridVideoPhase(_props: Props) {
     }
   }
 
-  // ── Bulk render (concurrency 2, skips already-rendered) ─────────────────────
   const renderAll = async () => {
     if (!hasAssets) { addToast('Bấm "Tạo giọng + mặt" trước', 'error'); return }
     const queue = scenes.map((_, i) => i).filter((i) => !hybrid.clips[i])
@@ -165,24 +140,6 @@ export default function HybridVideoPhase(_props: Props) {
     await Promise.all([worker(), worker()])
   }
 
-  // ── 4. Assemble → Export step ───────────────────────────────────────────────
-  const assemble = async () => {
-    const h = useAdsVideoStore.getState().state.hybrid
-    if (!h.voiceRef || !script) return
-    if ((h.scenes ?? []).some((_, i) => !h.clips[i])) { addToast('Còn cảnh chưa render — render hết đã', 'error'); return }
-    setAssembling(true); setError('')
-    try {
-      const videoRef = await assembleFromHybridState(h, script, resolution)
-      setHybridFinal(videoRef)
-      addToast('✓ Đã ghép video — sang bước Export để xem + tải', 'success')
-      setPhase('export')
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e)
-      setError(msg); addToast(`Ghép video lỗi: ${msg.slice(0, 120)}`, 'error')
-    } finally { setAssembling(false) }
-  }
-
-  // ── Render ──────────────────────────────────────────────────────────────────
   if (!script) {
     return <div className="flex h-full items-center justify-center p-8 text-center text-sm text-gray-500">Chưa có kịch bản — quay lại Bước 1.</div>
   }
@@ -193,8 +150,8 @@ export default function HybridVideoPhase(_props: Props) {
         <div className="mb-4">
           <h2 className="text-lg font-bold text-gray-900">Tạo Video — Hybrid</h2>
           <p className="text-[12px] text-gray-500">
-            AI đạo diễn cả video thành chuỗi cảnh phủ kín giọng đọc. Render <strong>từng cảnh</strong> để
-            kiểm soát chất lượng (xem credit trước khi tạo), rồi <strong>Tạo video</strong> để ghép.
+            Render <strong>từng cảnh</strong> trên khung 9:16 để xem + kiểm chất lượng (credit hiện trên nút). Render hết rồi
+            bấm <strong>Tiếp tục → Export</strong> để ghép + tải.
           </p>
         </div>
 
@@ -203,19 +160,17 @@ export default function HybridVideoPhase(_props: Props) {
           <Film className="h-5 w-5 shrink-0 text-violet-600" />
           <div className="min-w-0 flex-1">
             <p className="text-sm font-bold text-gray-900">
-              {scenes.length > 0 ? `${scenes.length} cảnh · ${doneCount}/${scenes.length} đã render · ${resolution}` : 'Chưa có kịch bản cảnh'}
+              {scenes.length > 0 ? `${scenes.length} cảnh · ${doneCount}/${scenes.length} đã render` : 'Chưa có kịch bản cảnh'}
             </p>
-            <p className="text-[11px] text-gray-500">Đạo diễn + soát: 0 credit. Render mỗi cảnh hiện credit riêng.</p>
+            <p className="text-[11px] text-gray-500">Đạo diễn + soát: 0 credit.</p>
           </div>
-          {/* Output resolution — 720p default; affects credit + render quality. */}
           <div className="flex shrink-0 items-center gap-1">
             <span className="text-[10px] font-semibold text-gray-400">Chất lượng</span>
             <div className="inline-flex overflow-hidden rounded-lg border border-violet-200">
               {(['480p', '720p', '1080p'] as const).map((r) => (
                 <button key={r} onClick={() => setHybridResolution(r)} disabled={busy}
-                  title={r === '480p' ? 'Nháp rẻ' : r === '720p' ? 'Mặc định — nét + khớp lipsync' : 'Premium, tốn credit nhất'}
-                  className={`px-2.5 py-1.5 text-[11px] font-bold transition-colors disabled:opacity-50 ${
-                    resolution === r ? 'bg-violet-600 text-white' : 'bg-white text-gray-500 hover:bg-violet-50'}`}>
+                  title={r === '480p' ? 'Nháp rẻ' : r === '720p' ? 'Mặc định — nét + khớp lipsync' : 'Premium'}
+                  className={`px-2.5 py-1.5 text-[11px] font-bold transition-colors disabled:opacity-50 ${resolution === r ? 'bg-violet-600 text-white' : 'bg-white text-gray-500 hover:bg-violet-50'}`}>
                   {r}
                 </button>
               ))}
@@ -228,8 +183,7 @@ export default function HybridVideoPhase(_props: Props) {
           </button>
           {scenes.length > 0 && (
             <button onClick={makeAssets} disabled={busy}
-              className={`flex items-center gap-1.5 rounded-lg px-3 py-2 text-[12px] font-bold shadow-sm disabled:opacity-50 ${
-                hasAssets ? 'border border-emerald-300 bg-white text-emerald-700' : 'bg-gradient-to-r from-amber-500 to-orange-500 text-white'}`}>
+              className={`flex items-center gap-1.5 rounded-lg px-3 py-2 text-[12px] font-bold shadow-sm disabled:opacity-50 ${hasAssets ? 'border border-emerald-300 bg-white text-emerald-700' : 'bg-gradient-to-r from-amber-500 to-orange-500 text-white'}`}>
               {assetsBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Mic className="h-3.5 w-3.5" />}
               {hasAssets ? 'Giọng + mặt ✓' : `Tạo giọng + mặt (~${ASSETS_CR}cr)`}
             </button>
@@ -241,11 +195,10 @@ export default function HybridVideoPhase(_props: Props) {
             </button>
           )}
           {scenes.length > 0 && (
-            <button onClick={assemble} disabled={busy || !allDone}
-              title={allDone ? 'Ghép + sang Export' : 'Render hết các cảnh trước'}
-              className="flex items-center gap-1.5 rounded-full bg-gradient-to-r from-emerald-600 to-teal-600 px-4 py-2 text-[12px] font-bold text-white shadow-sm hover:from-emerald-700 hover:to-teal-700 disabled:opacity-50">
-              {assembling ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Clapperboard className="h-3.5 w-3.5" />}
-              Tạo video →
+            <button onClick={() => setPhase('export')}
+              title={allDone ? 'Sang Export để ghép + tải' : 'Nên render hết các cảnh trước'}
+              className="flex items-center gap-1.5 rounded-full bg-gradient-to-r from-emerald-600 to-teal-600 px-4 py-2 text-[12px] font-bold text-white shadow-sm hover:from-emerald-700 hover:to-teal-700">
+              Tiếp tục → Export <ChevronRight className="h-3.5 w-3.5" />
             </button>
           )}
         </div>
@@ -255,56 +208,29 @@ export default function HybridVideoPhase(_props: Props) {
             <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" /> <span>{error}</span>
           </div>
         )}
-        {scenes.length > 0 && !hasAssets && (
+
+        {/* ── Creator assets — listen to the voice + see the face before paying ─ */}
+        {hasAssets ? (
+          <AssetsBar keyframeRef={hybrid.keyframeRef} voiceRef={hybrid.voiceRef}
+            voiceDurationSec={hybrid.voiceDurationSec} busy={busy} onRegen={makeAssets} />
+        ) : scenes.length > 0 ? (
           <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 p-2.5 text-[12px] text-amber-800">
-            Bấm <strong>"Tạo giọng + mặt"</strong> trước — cần khuôn mặt + giọng thật để render cảnh "Nói" và canh đúng giây.
+            Bấm <strong>"Tạo giọng + mặt"</strong> trước — cần khuôn mặt + giọng thật để render cảnh "Nói" + nghe kiểm tra giọng.
           </div>
-        )}
+        ) : null}
 
-        {/* ── Scene cards (per-card render) ─────────────────────────────────── */}
+        {/* ── Scene frames (9:16, render on frame) ──────────────────────────── */}
         {scenes.length > 0 && (
-          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
-            {scenes.map((s, i) => {
-              const badge = ROLE_BADGE[s.role] ?? ROLE_BADGE.broll
-              const done = !!hybrid.clips[i]
-              const rendering = renderingIdx.has(i)
-              const failed = failedIdx.has(i)
-              return (
-                <div key={i} className={`flex flex-col rounded-lg border p-2.5 ${
-                  done ? 'border-emerald-300 bg-emerald-50/40' : rendering ? 'border-violet-300 bg-violet-50/40'
-                    : failed ? 'border-rose-300 bg-rose-50/40' : 'border-gray-200 bg-white'}`}>
-                  <div className="mb-1 flex items-center gap-1.5">
-                    <span className="text-[9px] font-bold text-gray-400">#{i + 1}</span>
-                    <span className={`rounded px-1.5 py-0.5 text-[9px] font-bold ${badge.cls}`}>{badge.label}</span>
-                    <span className="text-[9px] text-gray-400">{s.startSec.toFixed(1)}-{s.endSec.toFixed(1)}s</span>
-                    {s.cameraFraming === 'hands_noface' && <span className="rounded bg-gray-100 px-1 text-[8px] text-gray-500">no-face</span>}
-                  </div>
-                  <p className="text-[11px] font-semibold leading-tight text-gray-800">“{s.quote}”</p>
-                  {s.role !== 'lips' && s.conceptPrompt && (
-                    <p className="mt-1 line-clamp-2 text-[10px] italic leading-tight text-gray-500">{s.conceptPrompt}</p>
-                  )}
-                  {/* per-card render control + EXACT credit */}
-                  <div className="mt-2 flex items-center gap-1.5 border-t border-black/5 pt-1.5">
-                    {rendering ? (
-                      <span className="flex flex-1 items-center justify-center gap-1 text-[10px] font-semibold text-violet-600"><Loader2 className="h-3 w-3 animate-spin" /> đang render…</span>
-                    ) : (
-                      <button onClick={() => renderScene(i)} disabled={busy || !hasAssets}
-                        className={`flex flex-1 items-center justify-center gap-1 rounded-md px-2 py-1 text-[10px] font-bold disabled:opacity-50 ${
-                          done ? 'border border-gray-200 bg-white text-gray-600 hover:bg-gray-50' : 'bg-violet-600 text-white hover:bg-violet-700'}`}>
-                        {done ? <><RotateCcw className="h-3 w-3" /> Render lại</> : <><Play className="h-3 w-3 fill-white" /> Render</>}
-                        <span className={done ? 'text-gray-400' : 'text-white/80'}>~{sceneCredit(s)}cr</span>
-                      </button>
-                    )}
-                    {done && <span className="text-[11px] text-emerald-600">✓</span>}
-                    {failed && <span className="text-[10px] font-bold text-rose-600">✗ lỗi</span>}
-                  </div>
-                </div>
-              )
-            })}
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+            {scenes.map((s, i) => (
+              <SceneCard key={i} i={i} scene={s} clipRef={hybrid.clips[i]}
+                rendering={renderingIdx.has(i)} failed={failedIdx.has(i)}
+                credit={sceneCredit(s)} hasAssets={hasAssets} busy={busy}
+                onRender={() => renderScene(i)} />
+            ))}
           </div>
         )}
 
-        {/* ── Sticker chips ─────────────────────────────────────────────────── */}
         {hybrid.stickers.length > 0 && (
           <div className="mt-4">
             <p className="mb-1.5 text-[10px] font-bold uppercase tracking-widest text-gray-500">Sticker ({hybrid.stickers.length})</p>
@@ -329,6 +255,87 @@ export default function HybridVideoPhase(_props: Props) {
           <span className="flex items-center gap-1"><Mic className="h-3 w-3" /> ElevenLabs: {elevenLabsKey ? '✓' : '⚠'}</span>
           <span className="flex items-center gap-1"><Film className="h-3 w-3" /> KIE: {kieApiKey ? '✓' : '⚠'}</span>
         </div>
+      </div>
+    </div>
+  )
+}
+
+// ── Creator assets bar — face thumbnail + voice audio player ──────────────────
+function AssetsBar({ keyframeRef, voiceRef, voiceDurationSec, busy, onRegen }: {
+  keyframeRef?: string; voiceRef?: string; voiceDurationSec?: number; busy: boolean; onRegen: () => void
+}) {
+  const faceUrl = useAssetUrl(keyframeRef ?? undefined)
+  const voiceUrl = useAssetUrl(voiceRef ?? undefined)
+  return (
+    <div className="mb-4 flex items-center gap-3 rounded-xl border border-emerald-200 bg-emerald-50/50 p-3">
+      <div className="h-16 w-16 shrink-0 overflow-hidden rounded-lg bg-gray-900">
+        {faceUrl && <img src={faceUrl} alt="creator" className="h-full w-full object-cover" />}
+      </div>
+      <div className="min-w-0 flex-1">
+        <p className="text-[12px] font-bold text-emerald-800">🎙 Giọng + khuôn mặt creator {voiceDurationSec ? `· ${voiceDurationSec.toFixed(1)}s` : ''}</p>
+        <p className="mb-1 text-[10px] text-emerald-700/80">Nghe thử xem ĐÚNG giọng đã chọn chưa — sai thì "Tạo lại" trước khi render.</p>
+        {voiceUrl && <audio src={voiceUrl} controls className="h-8 w-full max-w-md" />}
+      </div>
+      <button onClick={onRegen} disabled={busy}
+        className="flex shrink-0 items-center gap-1 rounded-lg border border-emerald-300 bg-white px-2.5 py-1.5 text-[11px] font-bold text-emerald-700 hover:bg-emerald-50 disabled:opacity-50">
+        <RotateCcw className="h-3 w-3" /> Tạo lại
+      </button>
+    </div>
+  )
+}
+
+// ── One scene = a 9:16 frame; render button ON the frame; clip plays in place ──
+function SceneCard({ i, scene, clipRef, rendering, failed, credit, hasAssets, busy, onRender }: {
+  i: number; scene: TimedBrollScene; clipRef?: string; rendering: boolean; failed: boolean
+  credit: number; hasAssets: boolean; busy: boolean; onRender: () => void
+}) {
+  const url = useAssetUrl(clipRef ?? undefined)
+  const badge = ROLE_BADGE[scene.role] ?? ROLE_BADGE.broll
+  const done = !!url
+  return (
+    <div className="flex flex-col overflow-hidden rounded-lg border border-gray-200 bg-white">
+      {/* 9:16 frame */}
+      <div className="relative aspect-[9/16] w-full bg-gray-900">
+        {done ? (
+          <video src={url} controls playsInline className="h-full w-full object-contain" />
+        ) : (
+          <div className="flex h-full w-full items-center justify-center">
+            {rendering ? (
+              <div className="flex flex-col items-center gap-1 text-violet-300">
+                <Loader2 className="h-6 w-6 animate-spin" /> <span className="text-[10px]">đang render…</span>
+              </div>
+            ) : (
+              <button onClick={onRender} disabled={busy || !hasAssets}
+                className="flex flex-col items-center gap-1.5 rounded-xl bg-violet-600 px-4 py-3 text-white shadow-lg hover:bg-violet-700 disabled:opacity-40">
+                <Play className="h-5 w-5 fill-white" />
+                <span className="text-[12px] font-bold">Render</span>
+                <span className="text-[10px] text-white/80">~{credit}cr</span>
+              </button>
+            )}
+          </div>
+        )}
+        {/* overlays */}
+        <div className="pointer-events-none absolute left-1 top-1 flex items-center gap-1">
+          <span className="rounded bg-black/60 px-1 text-[9px] font-bold text-white">#{i + 1}</span>
+          <span className={`rounded px-1.5 py-0.5 text-[9px] font-bold ${badge.cls}`}>{badge.label}</span>
+        </div>
+        <span className="pointer-events-none absolute right-1 top-1 rounded bg-black/60 px-1 text-[9px] text-white/90">{scene.startSec.toFixed(1)}-{scene.endSec.toFixed(1)}s</span>
+        {scene.cameraFraming === 'hands_noface' && <span className="pointer-events-none absolute bottom-1 left-1 rounded bg-black/60 px-1 text-[8px] text-white/80">no-face</span>}
+        {done && <span className="absolute right-1 bottom-1 rounded-full bg-emerald-500 px-1.5 text-[10px] font-bold text-white">✓</span>}
+        {failed && <span className="absolute right-1 bottom-1 rounded-full bg-rose-500 px-1.5 text-[10px] font-bold text-white">✗</span>}
+      </div>
+      {/* quote + concept + re-render */}
+      <div className="flex flex-1 flex-col gap-1 p-2">
+        <p className="text-[11px] font-semibold leading-tight text-gray-800 line-clamp-2">“{scene.quote}”</p>
+        {scene.role !== 'lips' && scene.conceptPrompt && (
+          <p className="line-clamp-2 text-[10px] italic leading-tight text-gray-500">{scene.conceptPrompt}</p>
+        )}
+        {done && !rendering && (
+          <button onClick={onRender} disabled={busy}
+            className="mt-auto flex items-center justify-center gap-1 rounded-md border border-gray-200 bg-white px-2 py-1 text-[10px] font-bold text-gray-600 hover:bg-gray-50 disabled:opacity-50">
+            <RotateCcw className="h-3 w-3" /> Render lại ~{credit}cr
+          </button>
+        )}
       </div>
     </div>
   )
