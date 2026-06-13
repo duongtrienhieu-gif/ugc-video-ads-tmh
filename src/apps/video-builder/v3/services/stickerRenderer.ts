@@ -23,9 +23,10 @@
 export type StickerStyle =
   | 'number' | 'countdown' | 'pill' | 'flag'
   | 'badge' | 'warning' | 'price' | 'highlight' | 'arrow'
+  | 'list'   // hybrid — a stacked multi-item card (replaces the old multi-row overlay)
 
 export const STICKER_STYLES: StickerStyle[] = [
-  'number', 'countdown', 'pill', 'flag', 'badge', 'warning', 'price', 'highlight', 'arrow',
+  'number', 'countdown', 'pill', 'flag', 'badge', 'warning', 'price', 'highlight', 'arrow', 'list',
 ]
 
 interface StyleSpec {
@@ -50,6 +51,7 @@ export const STICKER_STYLE_META: Record<StickerStyle, StyleSpec> = {
   price:     { labelVi: 'Giá / Ưu đãi', defaultEmoji: '🔥', ink: '#C2410C' },
   highlight: { labelVi: 'Nhấn chữ',  defaultEmoji: '✏️', ink: '#A16207' },
   arrow:     { labelVi: 'Chỉ vào',   defaultEmoji: '👉', ink: '#3A3226' },
+  list:      { labelVi: 'Danh sách', defaultEmoji: '',   ink: '#3A3226' },
 }
 
 export interface StickerRenderOpts {
@@ -58,6 +60,9 @@ export interface StickerRenderOpts {
   text: string
   /** Optional emoji override; falls back to the style's defaultEmoji. */
   emoji?: string
+  /** style 'list' only — 2-4 stacked items (each may start with its own emoji,
+   *  e.g. "🔋 20000mAh"). Renders a multi-row card. */
+  items?: string[]
 }
 
 // Render scale — the PNG is drawn big for crispness, then the final assembler
@@ -84,8 +89,99 @@ function roundRectPath(ctx: CanvasRenderingContext2D, x: number, y: number, w: n
   ctx.closePath()
 }
 
+const ROW_GAP = 14  // vertical gap between rows in a 'list' sticker
+
+// Split a leading emoji off an item string ("🔋 20000mAh" → {emoji:"🔋", text:"20000mAh"}).
+function splitLeadingEmoji(s: string): { emoji: string; text: string } {
+  const m = s.match(/^(\p{Extended_Pictographic}️?)\s*/u)
+  if (m) return { emoji: m[1], text: s.slice(m[0].length).trim() }
+  return { emoji: '', text: s.trim() }
+}
+
+// Hybrid — a stacked multi-item card (replaces the old multi-row hand-drawn overlay).
+// Self-contained: it reuses the SAME paper-note look but does NOT touch the single
+// sticker path, so that battle-tested path can never regress.
+async function renderListStickerCanvas(items: string[], ink: string): Promise<HTMLCanvasElement> {
+  try {
+    const fonts = (document as Document & { fonts?: FontFaceSet }).fonts
+    if (fonts) { await fonts.load(`${FONT}px 'Patrick Hand'`, items.join(' ') || 'x').catch(() => {}); await fonts.ready }
+  } catch { /* best-effort */ }
+
+  const rows = items.map((it) => splitLeadingEmoji(it)).filter((r) => r.text || r.emoji).slice(0, 4)
+  if (rows.length === 0) rows.push({ emoji: '', text: '…' })
+  const scratch = document.createElement('canvas').getContext('2d')!
+  scratch.font = FONT_STACK
+  let maxRowW = 0
+  const measured = rows.map((r) => {
+    const tw = Math.ceil(scratch.measureText(r.text || '…').width)
+    const ew = r.emoji ? EMOJI + GAP : 0
+    if (ew + tw > maxRowW) maxRowW = ew + tw
+    return { ...r, ew }
+  })
+  const rowH = Math.max(FONT, EMOJI)
+  const innerH = measured.length * rowH + (measured.length - 1) * ROW_GAP
+  const boxW = maxRowW + PAD_X * 2
+  const boxH = innerH + PAD_Y * 2
+  const SHADOW = 18
+  const W = Math.ceil(boxW + SHADOW * 2)
+  const H = Math.ceil(boxH + SHADOW * 2)
+  const dpr = 2
+  const canvas = document.createElement('canvas')
+  canvas.width = W * dpr
+  canvas.height = H * dpr
+  const ctx = canvas.getContext('2d')!
+  ctx.scale(dpr, dpr)
+  ctx.textBaseline = 'middle'
+  const bx = SHADOW
+  const by = SHADOW
+
+  // PAPER NOTE background (same look as the single sticker).
+  ctx.save()
+  ctx.shadowColor = 'rgba(60,40,15,0.30)'
+  ctx.shadowBlur = SHADOW
+  ctx.shadowOffsetY = 7
+  ctx.fillStyle = '#FCF4E1'
+  roundRectPath(ctx, bx, by, boxW, boxH, RADIUS)
+  ctx.fill()
+  ctx.restore()
+  ctx.save()
+  roundRectPath(ctx, bx, by, boxW, boxH, RADIUS)
+  ctx.clip()
+  const specks = Math.min(220, Math.round((boxW * boxH) / 1400))
+  for (let i = 0; i < specks; i++) {
+    ctx.fillStyle = `rgba(120,90,40,${0.025 + Math.random() * 0.04})`
+    ctx.fillRect(bx + Math.random() * boxW, by + Math.random() * boxH, 2, 2)
+  }
+  ctx.restore()
+  ctx.lineWidth = 3
+  ctx.strokeStyle = 'rgba(120,90,40,0.45)'
+  roundRectPath(ctx, bx + 3, by + 3, boxW - 6, boxH - 6, RADIUS - 3)
+  ctx.stroke()
+
+  // Rows: optional emoji + handwritten text, stacked.
+  let ry = by + PAD_Y + rowH / 2
+  for (const r of measured) {
+    let cx = bx + PAD_X
+    if (r.emoji) {
+      ctx.font = `${EMOJI}px 'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji', sans-serif`
+      ctx.fillText(r.emoji, cx, ry + 2)
+      cx += r.ew
+    }
+    ctx.font = FONT_STACK
+    ctx.fillStyle = ink
+    ctx.fillText(r.text || '…', cx, ry + 2)
+    ry += rowH + ROW_GAP
+  }
+  return canvas
+}
+
 /** Draw the sticker onto a fresh canvas (transparent background) + return it. */
 export async function renderStickerCanvas(opts: StickerRenderOpts): Promise<HTMLCanvasElement> {
+  // Hybrid — a 'list' sticker is a separate stacked-card renderer. The single
+  // sticker path below stays 100% untouched.
+  if (opts.style === 'list' && opts.items && opts.items.length > 0) {
+    return renderListStickerCanvas(opts.items, STICKER_STYLE_META.list.ink)
+  }
   // Ensure the hand-drawn font (+ its VN glyphs) is loaded BEFORE measuring/
   // drawing — otherwise the first sticker silently falls back to a sans font
   // and gets mis-measured. Load with the actual text so the right subset loads.
@@ -186,6 +282,13 @@ if (typeof window !== 'undefined') {
     style: StickerStyle, text: string, emoji?: string,
   ) => {
     const blob = await renderStickerBlob({ style, text, emoji })
+    const url = URL.createObjectURL(blob)
+    window.open(url, '_blank')
+    return url
+  }
+  // __testStickerList('🔋 20000mAh', '⏱ 4 tiếng', '⚡ 30 phút')  → opens the card.
+  ;(window as unknown as Record<string, unknown>).__testStickerList = async (...items: string[]) => {
+    const blob = await renderStickerBlob({ style: 'list', text: '', items })
     const url = URL.createObjectURL(blob)
     window.open(url, '_blank')
     return url
