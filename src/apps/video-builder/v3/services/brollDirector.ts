@@ -184,7 +184,14 @@ names — never pad with vague stickers, but never leave a concrete callout bare
 RULES:
 - COVER 100%: the scenes' durations sum to ~${dur}s; every spoken beat has a cut;
   NO empty span. Group sentences about the SAME idea into one cut; don't over-cut.
-- DURATIONS are flexible 3-6s (vary them for rhythm — don't lock every cut to 4s).
+- PACING — vary cut LENGTH by PURPOSE so the ad has rhythm, NEVER a flat ~4s
+  metronome (consecutive cuts must NOT be the same length):
+    • SHORT punchy cuts (2-3s): the hook, a quick callout, a rapid run of feature/
+      use-case shots, a snappy reaction — keep the open and the listy parts FAST.
+    • MEDIUM (3-4s): most supporting B-roll and transitions.
+    • LONGER holds (4-6s): the main product demo / usage moment, a satisfying
+      reveal or result, the CTA close — let these breathe.
+  Aim for a mix (e.g. fast-fast-slow), not uniform durations.
 - Each scene's "quote" MUST be text that actually appears in the script.
 - VARIETY: mix lips + no-face hands-action + product close-ups + (some) 3D, so the
   ad feels like a real hand-held review, not a slideshow or a single locked shot.
