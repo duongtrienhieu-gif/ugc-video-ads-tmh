@@ -30,6 +30,7 @@ import {
 import { AD_STRUCTURES } from './adStructures'
 import { buildHookPoolBlock, pickRandomViralReferences } from './hookViralPatterns'
 import { validateHooks, validateBody, type BodyBlocks } from './scriptValidator'
+import { buildMsBodyVocabBlock } from './bodyPatternsMs'
 import { AD_ANGLES } from './adAngles'
 import {
   allocateBlockBudgets, estimateReadDurationSec, estimateReadDurationForVoice,
@@ -107,6 +108,8 @@ export async function generateScript(
       }),
       // P3k — pass the structure so the validator can run after parse.
       structure,
+      // P3n — script language so MS scripts validate against MS vocab.
+      lang: params.lang,
       chosenHook: params.chosenHook!.trim(),
       userPrompt: buildUserPrompt({
         productName: params.productName,
@@ -567,8 +570,16 @@ async function generateBodyAroundHook(args: {
    *  symptomBans / bodyAntiPatterns / CTA-lever rules and 1 feedback retry runs
    *  if anything failed. Omit to skip the post-gen check. */
   structure?: import('./adStructures').AdStructureConfig
+  /** P3n — script language. Threaded to the validator so MS scripts use the
+   *  Malaysian CTA / anti-pattern / symptom vocab; defaults to VN when absent. */
+  lang?: ScriptLang
 }): Promise<GeminiOutput> {
-  const systemInstruction = `${args.systemInstruction}
+  // P3n — when lang='ms', inject the Malaysian native-vocabulary block so Gemini
+  // stops translating from Vietnamese ("hết hàng" → "habis" formal) and uses
+  // bahasa rojak with the actual viral TikTok register. EN/VI fall through to
+  // the universal rules already in args.systemInstruction.
+  const msVocabBlock = args.lang === 'ms' ? `\n\n${buildMsBodyVocabBlock()}` : ''
+  const systemInstruction = `${args.systemInstruction}${msVocabBlock}
 
 HOOK IS ALREADY CHOSEN — do NOT write or change the hook. The opening hook line
 is FIXED (given below). Write ONLY the remaining 4 blocks (pain, discovery,
@@ -632,7 +643,7 @@ THE FIXED HOOK (continue the script DIRECTLY from this line; reproduce it verbat
       benefit: blocks.benefit ?? '',
       cta: blocks.cta ?? '',
     }
-    const check = validateBody(bodyBlocks, args.structure)
+    const check = validateBody(bodyBlocks, args.structure, args.lang)
     if (!check.ok) {
       // eslint-disable-next-line no-console
       console.log(`[generateBodyAroundHook] body check failed (${check.failures.length} issues), 1 retry…`)

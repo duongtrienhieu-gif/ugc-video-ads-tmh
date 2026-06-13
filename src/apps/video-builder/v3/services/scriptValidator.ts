@@ -17,6 +17,11 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import type { AdStructureConfig } from './adStructures'
+import {
+  MS_CTA_LEVERS,
+  MS_BODY_ANTI_PATTERNS,
+  MS_SYMPTOM_BANS_INSTANT,
+} from './bodyPatternsMs'
 
 export interface ValidatorResult {
   ok: boolean
@@ -98,7 +103,7 @@ export function validateHooks(hooks: string[]): ValidatorResult {
 
 // ── Body validator ───────────────────────────────────────────────────────────
 
-const CTA_LEVER_KEYWORDS = [
+const CTA_LEVER_KEYWORDS_VI = [
   // SCARCITY
   'hết hàng', 'sắp hết', 'còn vài', 'còn ít', 'cuối tuần', 'duy nhất', 'số lượng',
   // URGENCY
@@ -113,6 +118,28 @@ const CTA_LEVER_KEYWORDS = [
   'mua 1 tặng', 'sale', 'giảm', 'tặng', 'free ship', 'miễn phí', 'voucher',
 ]
 
+/** Pick the language-appropriate validator vocab. Falls back to VN if lang is
+ *  unknown (the most curated, plus EN scripts often share VN sentiment words). */
+function ctaLeversForLang(lang?: string): string[] {
+  if (lang === 'ms' || lang === 'Bahasa Malaysia') return MS_CTA_LEVERS
+  return CTA_LEVER_KEYWORDS_VI
+}
+
+/** Lang-specific body anti-patterns layered on top of the framework's bodyAntiPatterns.
+ *  MS scripts can drift via different openers than VN, so we add the MS drift list. */
+function extraBodyAntiPatternsForLang(lang?: string): string[] {
+  if (lang === 'ms' || lang === 'Bahasa Malaysia') return MS_BODY_ANTI_PATTERNS
+  return []
+}
+
+/** Lang-specific symptom bans layered on top of the framework's symptomBans.
+ *  VN list lives in adStructures (Vietnamese); MS equivalents live in bodyPatternsMs.
+ *  Both apply ONLY to INSTANT pain blocks (LEAD allows real symptoms). */
+function extraSymptomBansForLang(lang?: string): string[] {
+  if (lang === 'ms' || lang === 'Bahasa Malaysia') return MS_SYMPTOM_BANS_INSTANT
+  return []
+}
+
 export interface BodyBlocks {
   hook: string
   pain: string
@@ -123,17 +150,31 @@ export interface BodyBlocks {
 
 /** Validate a body against the chosen group's structure: symptom bans, hook
  *  literal reuse, banned openings, CTA lever. Each failure is a short English
- *  cue so the retry prompt can list them verbatim. */
+ *  cue so the retry prompt can list them verbatim. Pass `lang` so MS / VN use
+ *  the right keyword vocabulary; defaults to VN. */
 export function validateBody(
   blocks: BodyBlocks,
   structure: AdStructureConfig,
+  lang?: string,
 ): ValidatorResult {
   const failures: string[] = []
+  const ctaLevers = ctaLeversForLang(lang)
+  const extraAntiPatterns = extraBodyAntiPatternsForLang(lang)
+  const extraSymptomBans = extraSymptomBansForLang(lang)
+  // Combine framework's bans with lang-specific equivalents. INSTANT MS adds
+  // "sakit perut / penat / tak boleh tidur" on top of "đau dạ dày / mệt mỏi".
+  const symptomBans = structure.symptomBans.length > 0
+    ? [...structure.symptomBans, ...extraSymptomBans]
+    : []
+  const allAntiPatterns = [...structure.bodyAntiPatterns, ...extraAntiPatterns]
+  const langCtaExample = lang === 'ms' || lang === 'Bahasa Malaysia'
+    ? '"grab cepat kalau tak rugi", "stok terhad", "ramai dah cuba", "review padu"'
+    : '"kẻo hết hàng", "sale hôm nay", "10k đã đặt", "đổi trả 30 ngày"'
 
   // 1. SYMPTOM BANS — INSTANT pain must not name a symptom.
-  if (structure.symptomBans.length > 0 && blocks.pain) {
+  if (symptomBans.length > 0 && blocks.pain) {
     const painLower = blocks.pain.toLowerCase()
-    const hit = structure.symptomBans.find((s) => painLower.includes(s.toLowerCase()))
+    const hit = symptomBans.find((s) => painLower.includes(s.toLowerCase()))
     if (hit) {
       failures.push(
         `Pain block mentions a banned symptom word ("${hit}"). The INSTANT group's pain ` +
@@ -159,12 +200,12 @@ export function validateBody(
     }
   }
 
-  // 3. BANNED OPENINGS — no block may start with one of bodyAntiPatterns.
+  // 3. BANNED OPENINGS — no block may start with one of bodyAntiPatterns (per-framework + per-lang).
   for (const blockName of ['pain', 'discovery', 'benefit', 'cta'] as const) {
     const text = (blocks[blockName] ?? '').trim()
     if (!text) continue
     const opening = text.slice(0, 80).toLowerCase()
-    const hit = structure.bodyAntiPatterns.find((p) => opening.startsWith(p.toLowerCase()))
+    const hit = allAntiPatterns.find((p) => opening.startsWith(p.toLowerCase()))
     if (hit) {
       failures.push(
         `Block "${blockName}" opens with banned phrase "${hit}…" (this is the WRONG ` +
@@ -173,15 +214,15 @@ export function validateBody(
     }
   }
 
-  // 4. CTA LEVER — must contain at least one buying-lever keyword.
+  // 4. CTA LEVER — must contain at least one buying-lever keyword (lang-specific).
   if (blocks.cta) {
     const ctaLower = blocks.cta.toLowerCase()
-    const hasLever = CTA_LEVER_KEYWORDS.some((k) => ctaLower.includes(k))
+    const hasLever = ctaLevers.some((k) => ctaLower.includes(k))
     if (!hasLever) {
       failures.push(
         `CTA has no buying lever (scarcity / urgency / social proof / risk reversal / ` +
-        `offer). A flat "Mua tại link bio" doesn't convert. Add ONE concrete lever — ` +
-        `e.g. "kẻo hết hàng", "sale hôm nay", "10k đã đặt", "đổi trả 30 ngày".`,
+        `offer). A flat "link bio" close doesn't convert. Add ONE concrete lever — ` +
+        `e.g. ${langCtaExample}.`,
       )
     }
   }
