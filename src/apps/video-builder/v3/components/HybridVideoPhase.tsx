@@ -111,7 +111,10 @@ export default function HybridVideoPhase(_props: Props) {
       const voiceCategory = state.scriptBrain.voiceCategory ?? matchVoiceForAvatar(avatar, state.scriptBrain.angle)
       const kf = await renderCreatorKeyframe({
         kieApiKey, elevenLabsApiKey: elevenLabsKey, config: state.creatorVideoConfig,
-        script, voiceCategory, voiceId: state.scriptBrain.voice?.voiceId ?? null,
+        // The voice the user PICKED in Bước 1 lives in inputs.voiceId (NOT
+        // scriptBrain.voice, which is a post-TTS record). Passing it OVERRIDES the
+        // category default — fixes "picked a voice but got the default male voice".
+        script, voiceCategory, voiceId: state.inputs.voiceId,
         avatar, product: state.inputs.product,
         onStageUpdate: () => {},
       })
