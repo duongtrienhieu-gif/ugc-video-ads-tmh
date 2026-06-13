@@ -40,6 +40,10 @@ import {
   type ElevenLabsVoice, type SharedVoice,
 } from '../../../../utils/elevenlabs'
 
+// VN translation cache (display-only). Module-level so it SURVIVES this phase
+// unmounting when the user navigates to Bước 2 and back — keyed by lang|scriptText.
+const VI_TRANSLATION_CACHE = new Map<string, string>()
+
 const TONE_BG: Record<string, string> = {
   emerald: 'bg-emerald-100 text-emerald-800 border-emerald-300',
   violet:  'bg-violet-100 text-violet-800 border-violet-300',
@@ -99,13 +103,27 @@ export default function ScriptVoicePhase({ onContinue }: Props) {
 
   const runViTranslation = (text: string) => {
     if (!geminiKey || brain.outputLang === 'vi' || !text.trim()) { setViTranslation(null); return }
+    const key = `${brain.outputLang}|${text.trim()}`
+    const cached = VI_TRANSLATION_CACHE.get(key)
+    if (cached) { setViTranslation(cached); return }   // instant on revisit — no re-call
     setIsTranslating(true)
     setViTranslation(null)
     translateScriptToVietnamese(geminiKey, text, brain.outputLang)
-      .then((vi) => setViTranslation(vi))
+      .then((vi) => { VI_TRANSLATION_CACHE.set(key, vi); setViTranslation(vi) })
       .catch(() => {})
       .finally(() => setIsTranslating(false))
   }
+
+  // Re-show the VN translation when the user returns to Bước 1 (local state is lost
+  // on unmount). The module cache makes this instant if it was translated before;
+  // otherwise it re-fetches once.
+  useEffect(() => {
+    const text = state.inputs.script
+    if (brain.outputLang !== 'vi' && text && text.trim() && !viTranslation && !isTranslating) {
+      runViTranslation(text)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state.inputs.script, brain.outputLang])
 
   // #6 — app-suggested framework from the product fields (universal keyword
   // heuristic across vi/ms/en; just a highlight, the user can pick any).
@@ -467,25 +485,25 @@ export default function ScriptVoicePhase({ onContinue }: Props) {
           {/* #6 — VN translation for understanding only (target lang ≠ vi). The
               script above STAYS in the target language; this is never used as input. */}
           {brain.outputLang !== 'vi' && (viTranslation || isTranslating) && (
-            <div className="mt-2 rounded-xl border border-sky-200 bg-sky-50/60 p-3">
-              <div className="mb-1 flex items-center justify-between gap-2">
-                <p className="text-[10px] font-bold uppercase tracking-widest text-sky-700">
+            <div className="mt-2 rounded-xl border border-sky-300 bg-white p-3.5">
+              <div className="mb-1.5 flex items-center justify-between gap-2">
+                <p className="text-[11px] font-bold uppercase tracking-widest text-sky-700">
                   🇻🇳 Bản dịch để hiểu — KHÔNG dùng cho video
                 </p>
                 <button
                   onClick={() => runViTranslation(state.inputs.script)}
                   disabled={isTranslating || !hasScriptText}
-                  className="shrink-0 text-[10px] font-semibold text-sky-600 hover:text-sky-700 disabled:opacity-50"
+                  className="shrink-0 text-[11px] font-semibold text-sky-600 hover:text-sky-700 disabled:opacity-50"
                 >
                   Dịch lại
                 </button>
               </div>
               {isTranslating ? (
-                <p className="flex items-center gap-1.5 text-[12px] text-sky-600">
-                  <Loader2 className="h-3 w-3 animate-spin" /> Đang dịch...
+                <p className="flex items-center gap-1.5 text-[13px] text-sky-600">
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" /> Đang dịch...
                 </p>
               ) : (
-                <p className="whitespace-pre-wrap text-[12px] leading-relaxed text-gray-700">{viTranslation}</p>
+                <p className="whitespace-pre-wrap text-[14px] leading-7 text-gray-800">{viTranslation}</p>
               )}
             </div>
           )}
@@ -597,7 +615,7 @@ export default function ScriptVoicePhase({ onContinue }: Props) {
                         </div>
                         <p className="text-[12px] leading-snug text-gray-800">{h.text}</p>
                         {brain.outputLang !== 'vi' && h.viGloss && (
-                          <p className="mt-1 text-[10px] italic leading-snug text-gray-400">🇻🇳 {h.viGloss}</p>
+                          <p className="mt-1 text-[12px] leading-snug text-gray-600">🇻🇳 {h.viGloss}</p>
                         )}
                       </button>
                     )
