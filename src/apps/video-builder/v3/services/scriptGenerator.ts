@@ -31,6 +31,7 @@ import { AD_STRUCTURES } from './adStructures'
 import { buildHookPoolBlock, pickRandomViralReferences } from './hookViralPatterns'
 import { validateHooks, validateBody, spellFixVi, type BodyBlocks } from './scriptValidator'
 import { buildMsBodyVocabBlock } from './bodyPatternsMs'
+import { buildShapeOverrideBlock } from './scriptShapes'
 import { AD_ANGLES } from './adAngles'
 import {
   allocateBlockBudgets, estimateReadDurationSec, estimateReadDurationForVoice,
@@ -62,6 +63,11 @@ export interface GenerateScriptParams {
    *  When set, Gemini writes the other 4 blocks to flow from THIS exact hook
    *  and the hook block is forced to this text verbatim (never rewritten). */
   chosenHook?: string
+  /** P3q — body shape: 'narrative' (default) / 'listicle' / 'comparison' / 'journey'.
+   *  Orthogonal to structure (INSTANT/LEAD). Drives a SHAPE OVERRIDE block in
+   *  the body system prompt that repurposes pain/discovery/benefit semantics.
+   *  Omit → 'narrative' (back-compat with the previous-implicit behaviour). */
+  shape?: import('../types').ScriptShape
 }
 
 export interface GenerateScriptResult {
@@ -105,6 +111,7 @@ export async function generateScript(
         symptomBans: structure.symptomBans,
         angleTone: angle.tonePrompt,
         lang,
+        shape: params.shape,
       }),
       // P3k — pass the structure so the validator can run after parse.
       structure,
@@ -132,6 +139,7 @@ export async function generateScript(
       symptomBans: structure.symptomBans,
       angleTone: angle.tonePrompt,
       lang,
+      shape: params.shape,
     })
 
     const userPrompt = buildUserPrompt({
@@ -255,6 +263,9 @@ function buildSystemPrompt(args: {
   symptomBans: string[]
   angleTone: string
   lang: string
+  /** P3q — body shape. When non-narrative, a SHAPE OVERRIDE block is appended
+   *  AFTER the per-block guide so it wins for that block's semantic. */
+  shape?: import('../types').ScriptShape
 }): string {
   const antiPatternList = args.bodyAntiPatterns
     .map((p) => `  • "${p}…"`)
@@ -262,6 +273,8 @@ function buildSystemPrompt(args: {
   const symptomLine = args.symptomBans.length > 0
     ? `\n*** SYMPTOM VOCABULARY BANNED in the pain block (this is an INSTANT group — pain is a 1-line transition, NOT a symptom report). Words listed below are HARD-BANNED in pain; if you write any of them, the script has drifted into Problem-Solution shape: ${args.symptomBans.map((s) => `"${s}"`).join(', ')}. The discovery / benefit blocks may reference outcomes but the pain block must NEVER name a symptom.`
     : ''
+  // P3q — shape override (empty for 'narrative', the previous default).
+  const shapeOverride = args.shape ? buildShapeOverrideBlock(args.shape) : ''
   return `You are a TikTok-native ad copywriter writing in ${args.lang}.
 
 FRAMEWORK: "${args.frameworkLabel}" — STICK TO IT.
@@ -280,7 +293,7 @@ PER-BLOCK GUIDE FOR THIS FRAMEWORK (HARD — exactly what each block must do):
 - pain:      ${args.blockGuides.pain}
 - discovery: ${args.blockGuides.discovery}
 - benefit:   ${args.blockGuides.benefit}
-- cta:       ${args.blockGuides.cta}
+- cta:       ${args.blockGuides.cta}${shapeOverride}
 
 BANNED BODY OPENINGS for this framework (these are the WRONG framework's defaults —
 NEVER start any block with them; they signal the script has drifted):

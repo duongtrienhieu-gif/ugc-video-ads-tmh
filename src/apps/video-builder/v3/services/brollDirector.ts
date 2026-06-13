@@ -28,6 +28,7 @@ import type { GeneratedScript, ScriptLang, CameraFraming, VoiceAlignment } from 
 import type { Product } from '../../../../stores/types'
 import { buildProductContextBlock } from './insertSuggester'
 import { computeQuoteTimestampFromAlignment, computeQuoteTimestamp } from './insertTimingEngine'
+import { buildShapeDirectorHint } from './scriptShapes'
 
 // ── Output types ────────────────────────────────────────────────────────────
 
@@ -76,6 +77,11 @@ export interface BrollDirectorParams {
   product?: Product | null
   /** Real measured voice duration (preferred) — the timeline length to cover. */
   voiceDurationSec: number
+  /** P3q — body shape (narrative / listicle / comparison / journey). When
+   *  non-narrative, a SHAPE HINT block is injected into the director prompt so
+   *  scene types (split-screen, date stamps, numbered closeups) match the body.
+   *  Omit → 'narrative' (no hint). */
+  shape?: import('../types').ScriptShape
 }
 
 // ── Lips count ladder (user spec — NOT a niche hardcode) ────────────────────
@@ -148,6 +154,8 @@ export async function directBrollScenes(
   const minScenes = densityFloor(dur)
   const productContext = buildProductContextBlock(params.product)
   const scriptDump = params.script.blocks.map((b) => `[${b.id}] ${b.text}`).join('\n')
+  // P3q — shape hint (empty for 'narrative', the previous default).
+  const shapeHint = params.shape ? buildShapeDirectorHint(params.shape) : ''
   // P3o — when the script targets Malaysia, ground the scene SETTING in real
   // Malaysian visual culture so conceptPrompts stop defaulting to "generic
   // Asian office / generic bedroom". The user-curated MS daily contexts
@@ -252,7 +260,7 @@ names — never pad with vague stickers, but never leave a concrete callout bare
   later one is dropped) — so cover the KEY callouts; don't stack many on one line.
   ALL sticker text 100% in ${langName} — translate the idea INTO ${langName}; NEVER
   leave or switch a word to English (write the ${langName} word, not the English one).
-${culturalSettingBlock}
+${culturalSettingBlock}${shapeHint}
 RULES:
 - COVER 100%: the scenes' durations sum to ~${dur}s; every spoken beat has a cut;
   NO empty span. Group sentences that are TRULY one single thought into one cut;

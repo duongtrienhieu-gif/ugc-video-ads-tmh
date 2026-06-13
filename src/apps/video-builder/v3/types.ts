@@ -779,6 +779,20 @@ export type AdStructure = 'INSTANT' | 'LEAD'
 
 export const DEFAULT_AD_STRUCTURE: AdStructure = 'INSTANT'
 
+// ── Script Shape (P3q) ─────────────────────────────────────────────────────
+// Layered ORTHOGONALLY on top of AdStructure. AdStructure decides WHEN the
+// product is revealed (instant vs lead); AdShape decides the BODY shape — how
+// the 4 non-hook blocks are repurposed. The 5-block schema stays for back-compat
+// (director + storage + validator); only the SEMANTIC of pain/discovery/benefit
+// shifts per shape so output stops feeling like Problem-Solution every time.
+export type ScriptShape =
+  | 'narrative'   // (default) hook → pain → discovery → benefit → cta — current behaviour
+  | 'listicle'   // hook (N reasons) → reason 1 → reasons 2..N → summary → cta
+  | 'comparison' // hook (A vs B) → setup → A test + B test → winner reveal → cta
+  | 'journey'    // hook (multi-day test) → day 1 → mid days → final result → cta
+
+export const DEFAULT_SCRIPT_SHAPE: ScriptShape = 'narrative'
+
 // ── Ad Angles (Z31 §10) ────────────────────────────────────────────────────
 
 export type AdAngle =
@@ -1024,6 +1038,10 @@ export interface VoiceRecord {
 export interface ScriptBrain {
   /** Which ad structure the user picked */
   structure: AdStructure
+  /** P3q — which body SHAPE: narrative (default, P-S flow) / listicle (N reasons) /
+   *  comparison (A vs B) / journey (multi-day test). Layers orthogonally on the
+   *  structure (INSTANT or LEAD can pick any of the 4 shapes). */
+  shape: ScriptShape
   /** Which angle */
   angle: AdAngle
   /** Target duration */
@@ -1056,6 +1074,7 @@ export interface ScriptBrain {
 export function createEmptyScriptBrain(): ScriptBrain {
   return {
     structure: DEFAULT_AD_STRUCTURE,
+    shape: DEFAULT_SCRIPT_SHAPE,
     angle: DEFAULT_AD_ANGLE,
     targetDurationSec: DEFAULT_SCRIPT_DURATION_SEC,
     outputLang: DEFAULT_SCRIPT_LANG,

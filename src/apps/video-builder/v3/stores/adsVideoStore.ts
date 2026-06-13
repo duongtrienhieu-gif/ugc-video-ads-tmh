@@ -150,6 +150,7 @@ interface AdsVideoStoreState {
   // ── Z31 Ad Brain (Script + Voice foundation) ────────────────────────────
 
   setAdStructure:        (structure: AdStructure) => void
+  setAdShape:            (shape: import('../types').ScriptShape) => void
   setAdAngle:            (angle: AdAngle) => void
   setTargetDurationSec:  (sec: ScriptTargetDurationSec) => void
   /** Set the output language — locks script + voice + insert keywords to one language. */
@@ -239,6 +240,11 @@ function loadFromStorage(): V3PipelineState | null {
       if (INSTANT_OLD.includes(old)) parsed.scriptBrain.structure = 'INSTANT'
       else if (LEAD_OLD.includes(old)) parsed.scriptBrain.structure = 'LEAD'
       else if (old !== 'INSTANT' && old !== 'LEAD') parsed.scriptBrain.structure = 'INSTANT'
+    }
+    // P3q — older brain payloads have no `shape` field. Backfill to 'narrative'
+    // (the previous-implicit shape) so the picker + body prompt have a value.
+    if (parsed.scriptBrain && typeof parsed.scriptBrain.shape !== 'string') {
+      (parsed.scriptBrain as { shape: string }).shape = 'narrative'
     }
     // Defensive: a corrupted / pre-inserts payload may not carry an array.
     // Guard before .map so a bad localStorage blob can't crash hydration.
@@ -718,6 +724,12 @@ export const useAdsVideoStore = create<AdsVideoStoreState>((set, get) => ({
     commit(set, get, (s) => ({
       ...s,
       scriptBrain: { ...s.scriptBrain, structure },
+    })),
+
+  setAdShape: (shape) =>
+    commit(set, get, (s) => ({
+      ...s,
+      scriptBrain: { ...s.scriptBrain, shape },
     })),
 
   setAdAngle: (angle) =>

@@ -162,6 +162,7 @@ export default function ActionInsertsPhase({ onContinue }: Props) {
       try {
         const res = await directBrollScenes({
           geminiKey, script, lang: st.scriptBrain.outputLang, product: st.inputs.product, voiceDurationSec,
+          shape: st.scriptBrain.shape,
         })
         console.log('[BROLL_DIRECTOR] SCENES:', res.scenes)
         console.log('[BROLL_DIRECTOR] STICKERS:', res.stickers)

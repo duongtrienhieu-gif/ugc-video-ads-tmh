@@ -33,6 +33,7 @@ import {
   type AdStructure, type ScriptTargetDurationSec, type ScriptLang,
 } from '../types'
 import { AD_STRUCTURES, AD_STRUCTURES_BY_GROUP } from '../services/adStructures'
+import { SHAPE_CONFIGS, SCRIPT_SHAPE_ORDER } from '../services/scriptShapes'
 import { recomputeBlockDurations, estimateReadDurationForVoice } from '../services/voiceTimingEstimator'
 import { generateScript, generateHooks, translateScriptToVietnamese, detectCertClaims } from '../services/scriptGenerator'
 import {
@@ -72,6 +73,7 @@ export default function ScriptVoicePhase({ onContinue }: Props) {
   const setAvatar  = useAdsVideoStore((s) => s.setAvatar)
   const setProduct = useAdsVideoStore((s) => s.setProduct)
   const setAdStructure = useAdsVideoStore((s) => s.setAdStructure)
+  const setAdShape = useAdsVideoStore((s) => s.setAdShape)
   const setTargetDurationSec = useAdsVideoStore((s) => s.setTargetDurationSec)
   const setOutputLang        = useAdsVideoStore((s) => s.setOutputLang)
   const setUseOwnScript      = useAdsVideoStore((s) => s.setUseOwnScript)
@@ -257,6 +259,7 @@ export default function ScriptVoicePhase({ onContinue }: Props) {
         productPitch: brief.productPitch,
         creatorDescription: brief.creatorDescription,
         lang: brain.outputLang,
+        shape: brain.shape,
         useOwnScript: !isQuick && hasScriptText,
         ownScriptText: state.inputs.script,
         chosenHook,
@@ -597,6 +600,33 @@ export default function ScriptVoicePhase({ onContinue }: Props) {
                 </div>
               </PickerCard>
             </div>
+
+            <PickerCard title="Dạng kịch bản (shape)" icon={Lightbulb}>
+              <p className="mb-2 text-[10px] text-gray-500">
+                Cấu trúc thân kịch bản. Mặc định "Kể chuyện" — đổi sang Liệt kê / So sánh / Hành trình nếu nội dung hợp hơn.
+              </p>
+              <div className="grid grid-cols-2 gap-1.5 lg:grid-cols-4">
+                {SCRIPT_SHAPE_ORDER.map((sh) => {
+                  const cfg = SHAPE_CONFIGS[sh]
+                  const isActive = brain.shape === sh
+                  return (
+                    <button
+                      key={sh}
+                      onClick={() => setAdShape(sh)}
+                      title={cfg.descriptionVi}
+                      className={`flex items-center gap-1.5 rounded-lg border px-2 py-1.5 text-left text-[11px] font-semibold transition-all ${
+                        isActive
+                          ? 'border-violet-400 bg-violet-100 text-violet-800'
+                          : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50'
+                      }`}
+                    >
+                      <span className="text-sm">{cfg.emoji}</span>
+                      <span className="truncate">{cfg.labelVi}</span>
+                    </button>
+                  )
+                })}
+              </div>
+            </PickerCard>
 
             <PickerCard title="Hook · 3 giây đầu (quyết định giữ chân)" icon={Sparkles}>
               <div className="mb-2 flex items-center justify-between gap-2">

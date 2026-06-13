@@ -74,6 +74,7 @@ export default function HybridVideoPhase(_props: Props) {
       const voiceDur = hybrid.voiceDurationSec ?? script.totalDurationSec ?? 50
       const res = await directBrollScenes({
         geminiKey, script, lang: state.scriptBrain.outputLang, product: state.inputs.product, voiceDurationSec: voiceDur,
+        shape: state.scriptBrain.shape,
       })
       const timed = assignSceneTiming(res.scenes, hybrid.voiceAlignment, script, voiceDur)
       setHybridPlan(timed, res.stickers, res.scenes)
