@@ -707,9 +707,6 @@ export interface HybridState {
   /** Raw director scenes (un-timed) — kept so the plan can be RE-TIMED to the real
    *  voice once the creator assets exist, without re-calling the director. */
   rawScenes: BrollScene[]
-  /** Output resolution for clip renders + the final assemble. Default 720p (good
-   *  quality + matches the 720p lipsync model). 480p = cheap nháp; 1080p = premium. */
-  resolution: '480p' | '720p' | '1080p'
   /** Director plan (timed scenes) — null until "Đạo diễn" runs. */
   scenes: TimedBrollScene[] | null
   /** Director sticker callouts (rendered locally at assemble time). */
@@ -726,7 +723,7 @@ export interface HybridState {
 }
 
 export function createEmptyHybridState(): HybridState {
-  return { resolution: '720p', rawScenes: [], scenes: null, stickers: [], clips: {} }
+  return { rawScenes: [], scenes: null, stickers: [], clips: {} }
 }
 
 export function createEmptyV3State(): V3PipelineState {

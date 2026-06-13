@@ -17,6 +17,7 @@ import { directBrollScenes, assignSceneTiming, type TimedBrollScene } from '../s
 import { renderOneHybridScene, type HybridRenderContext } from '../services/hybridRenderer'
 import { renderCreatorKeyframe } from '../services/creatorVideoEngine'
 import { matchVoiceForAvatar } from '../services/voiceCreatorMatcher'
+import { BROLL_RENDER_RES } from '../services/hybridConstants'
 import { estimateInsertCredits, V3_CREDIT_COST } from '../types'
 
 const LIPS_CR_PER_SEC = 14
@@ -35,7 +36,6 @@ export default function HybridVideoPhase(_props: Props) {
   const setHybridPlan  = useAdsVideoStore((s) => s.setHybridPlan)
   const setHybridClip  = useAdsVideoStore((s) => s.setHybridClip)
   const setHybridAssets= useAdsVideoStore((s) => s.setHybridCreatorAssets)
-  const setHybridResolution = useAdsVideoStore((s) => s.setHybridResolution)
   const setPhase       = useAdsVideoStore((s) => s.setPhase)
   const addToast       = useAppStore((s) => s.addToast)
   const geminiKey      = useSettingsStore((s) => s.geminiApiKey)
@@ -45,7 +45,9 @@ export default function HybridVideoPhase(_props: Props) {
   const hybrid = state.hybrid
   const script = state.scriptBrain.script
   const scenes = hybrid.scenes ?? []
-  const resolution = hybrid.resolution
+  // Resolution is HARD-CODED per the hybrid contract: brolls render at 480p (cheap),
+  // the final assembles at 720p — the user does not choose. See hybridConstants.ts.
+  const resolution = BROLL_RENDER_RES
   const hasAssets = !!(hybrid.keyframeRef && hybrid.voiceRef)
 
   const [planning, setPlanning] = useState(false)
@@ -162,19 +164,7 @@ export default function HybridVideoPhase(_props: Props) {
             <p className="text-sm font-bold text-gray-900">
               {scenes.length > 0 ? `${scenes.length} cảnh · ${doneCount}/${scenes.length} đã render` : 'Chưa có kịch bản cảnh'}
             </p>
-            <p className="text-[11px] text-gray-500">Đạo diễn + soát: 0 credit.</p>
-          </div>
-          <div className="flex shrink-0 items-center gap-1">
-            <span className="text-[10px] font-semibold text-gray-400">Chất lượng</span>
-            <div className="inline-flex overflow-hidden rounded-lg border border-violet-200">
-              {(['480p', '720p', '1080p'] as const).map((r) => (
-                <button key={r} onClick={() => setHybridResolution(r)} disabled={busy}
-                  title={r === '480p' ? 'Nháp rẻ' : r === '720p' ? 'Mặc định — nét + khớp lipsync' : 'Premium'}
-                  className={`px-2.5 py-1.5 text-[11px] font-bold transition-colors disabled:opacity-50 ${resolution === r ? 'bg-violet-600 text-white' : 'bg-white text-gray-500 hover:bg-violet-50'}`}>
-                  {r}
-                </button>
-              ))}
-            </div>
+            <p className="text-[11px] text-gray-500">Đạo diễn + soát: 0 credit. Render 480p · Video cuối 720p.</p>
           </div>
           <button onClick={runPlan} disabled={busy}
             className="flex items-center gap-1.5 rounded-lg border border-violet-300 bg-white px-3 py-2 text-[12px] font-bold text-violet-700 hover:bg-violet-50 disabled:opacity-50">

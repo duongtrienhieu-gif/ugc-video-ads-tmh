@@ -11,6 +11,7 @@ import { useSettingsStore } from '../../../../stores/settingsStore'
 import { useAdsVideoStore } from '../stores/adsVideoStore'
 import { useAssetUrl } from '../../../../hooks/useAssetUrl'
 import { assembleFromHybridState } from '../services/hybridAssembleFlow'
+import { FINAL_RES } from '../services/hybridConstants'
 import { generateThumbnailHooks, generateAiThumbnail, THUMBNAIL_ARCHETYPES, THUMBNAIL_ARCHETYPE_ORDER } from '../services/thumbnailEngine'
 import { SCRIPT_LANG_GEMINI_NAME, type AiThumbnail } from '../types'
 
@@ -34,7 +35,8 @@ export default function HybridExportPhase() {
   const scenes = hybrid.scenes ?? []
   const doneCount = scenes.filter((_, i) => hybrid.clips[i]).length
   const allDone = scenes.length > 0 && doneCount === scenes.length
-  const resolution = hybrid.resolution
+  // Final assembled video is ALWAYS 720p — hard constant, not user-selectable.
+  const resolution = FINAL_RES
 
   const [assembling, setAssembling] = useState(false)
   const [error, setError] = useState('')
