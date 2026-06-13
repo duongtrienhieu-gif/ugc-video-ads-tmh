@@ -87,7 +87,7 @@ export async function generateCtaVariations(
   return parsed.variants.map((v) => ({
     style: v.style,
     text: v.text,
-    estDurationSec: estimateReadDurationSec(v.text),
+    estDurationSec: estimateReadDurationSec(v.text, params.outputLang ?? DEFAULT_SCRIPT_LANG),
     generatedAt: now,
   }))
 }

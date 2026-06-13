@@ -138,8 +138,8 @@ export default function ScriptVoicePhase({ onContinue }: Props) {
   // sees "ad dài ~Xs" before generating — no 5-block view needed.
   const liveDurationSec = useMemo(() => {
     if (!hasScriptText) return null
-    return estimateReadDurationForVoice(state.inputs.script)
-  }, [state.inputs.script, hasScriptText])
+    return estimateReadDurationForVoice(state.inputs.script, brain.outputLang)
+  }, [state.inputs.script, hasScriptText, brain.outputLang])
 
   const certClaims = brain.script ? detectCertClaims(brain.script) : []
 
@@ -256,7 +256,7 @@ export default function ScriptVoicePhase({ onContinue }: Props) {
       }
 
       // Own-script path: segment verbatim, then advance (cert guard first).
-      const refined = recomputeBlockDurations(result.script)
+      const refined = recomputeBlockDurations(result.script, brain.outputLang)
       setGeneratedScript(refined)
       setHookVariants(result.hookVariants)
       pickHookVariant(-1)

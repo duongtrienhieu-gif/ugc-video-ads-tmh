@@ -385,7 +385,7 @@ export default function ActionInsertsPhase({ onContinue }: Props) {
     // Already have a matching real voice → reuse, just recalibrate (idempotent).
     const existing = state.voiceFirst
     if (existing && existing.scriptSig === sig) {
-      const recal = recalibrateScriptToRealVoice(script, existing.voiceDurationSec, existing.voiceAlignment)
+      const recal = recalibrateScriptToRealVoice(script, existing.voiceDurationSec, existing.voiceAlignment, state.scriptBrain.outputLang)
       setGeneratedScript(recal)
       return recal
     }
@@ -410,7 +410,7 @@ export default function ActionInsertsPhase({ onContinue }: Props) {
         voiceAlignment: voice.voiceAlignment,
         scriptSig: sig,
       })
-      const recal = recalibrateScriptToRealVoice(script, voice.voiceDurationSec, voice.voiceAlignment)
+      const recal = recalibrateScriptToRealVoice(script, voice.voiceDurationSec, voice.voiceAlignment, state.scriptBrain.outputLang)
       setGeneratedScript(recal)
       addToast(
         `✓ Đã tạo giọng thật ${recal.totalDurationSec.toFixed(1)}s — đạo diễn chia cảnh theo độ dài này`,

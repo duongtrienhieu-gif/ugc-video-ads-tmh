@@ -17,28 +17,89 @@
 
 import type {
   GeneratedScript, ScriptBlock, ScriptBlockId, ScriptTargetDurationSec,
-  AdStructure, VoiceAlignment,
+  AdStructure, VoiceAlignment, ScriptLang,
 } from '../types'
+import { DEFAULT_SCRIPT_LANG } from '../types'
 import { AD_STRUCTURES } from './adStructures'
 
-const DEFAULT_WPM = 215
+// ── Read-duration model — SYLLABLE-based, language-universal ────────────────
+// A single WPM can't fit VN + EN + MS: a Vietnamese space-token is ONE syllable
+// ("tiêu hóa" = 2 tokens), but an English/Malay word is 1.5-3.5 syllables — so the
+// same speech speed gives wildly different words/min. Speech rate is far more
+// constant in SYLLABLES/sec (~human articulation rate). So we count SYLLABLES and
+// divide by one rate, calibrated from a real run (170 VN syllables / 41.9s at the
+// engine's 1.2× pace = 4.05 syll/s). Each language self-calibrates from its real
+// measured voice (EMA in localStorage), so it converges without a guessed table.
+const BASE_SYLLABLES_PER_SEC = 4.05
+const RATE_MIN = 3.0
+const RATE_MAX = 5.5
 
-/** Count words — supports Vietnamese (space-tokenized) + English. */
+// Vowel groups INCLUDING Vietnamese accented vowels — one group ≈ one syllable. This
+// makes the counter work for VN too (every VN syllable carries exactly one vowel
+// nucleus), so even a wrong `lang` degrades gracefully.
+const VOWEL_GROUP = /[aeiouyàáảãạăằắẳẵặâầấẩẫậèéẻẽẹêềếểễệìíỉĩịòóỏõọôồốổỗộơờớởỡợùúủũụưừứửữựỳýỷỹỵ]+/gi
+
+/** Count words (space tokens). Kept for callers that need a raw token count. */
 export function countWords(text: string): number {
   if (!text) return 0
   return text.trim().split(/\s+/).filter(Boolean).length
 }
 
-/** Estimate read duration for a piece of text at a given WPM. */
-export function estimateReadDurationSec(text: string, wpm: number = DEFAULT_WPM): number {
-  const words = countWords(text)
-  if (words === 0) return 0
-  return Number(((words / wpm) * 60).toFixed(2))
+/** Count syllables for a language. VN: 1 space-token = 1 syllable (exact). EN/MS:
+ *  sum vowel-groups per word (Malay is highly phonetic → accurate; English ~85-90%,
+ *  with a trailing silent-'e' trim). */
+export function countSyllables(text: string, lang: ScriptLang = DEFAULT_SCRIPT_LANG): number {
+  if (!text) return 0
+  const tokens = text.trim().split(/\s+/).filter(Boolean)
+  if (lang === 'vi') return tokens.length
+  let syl = 0
+  for (const raw of tokens) {
+    const w = raw.toLowerCase()
+    const groups = w.match(VOWEL_GROUP)
+    let n = groups ? groups.length : 1
+    if (lang === 'en' && n > 1 && /[^aeiouy]e$/.test(w)) n -= 1   // English silent final e
+    syl += Math.max(1, n)
+  }
+  return syl
 }
 
-/** Estimate duration at the engine-default pace. */
-export function estimateReadDurationForVoice(text: string): number {
-  return estimateReadDurationSec(text, DEFAULT_WPM)
+const rateKey = (lang: ScriptLang) => `ugc-lab-syll-rate-${lang}`
+
+/** The (possibly self-calibrated) syllables/sec for a language. */
+function syllableRate(lang: ScriptLang): number {
+  try {
+    const v = Number(localStorage.getItem(rateKey(lang)))
+    if (Number.isFinite(v) && v >= RATE_MIN && v <= RATE_MAX) return v
+  } catch { /* no storage */ }
+  return BASE_SYLLABLES_PER_SEC
+}
+
+/** Estimate read duration (seconds) for a piece of text in a language. */
+export function estimateReadDurationSec(text: string, lang: ScriptLang = DEFAULT_SCRIPT_LANG): number {
+  const syl = countSyllables(text, lang)
+  if (syl === 0) return 0
+  return Number((syl / syllableRate(lang)).toFixed(2))
+}
+
+/** Estimate duration at the engine pace (alias). */
+export function estimateReadDurationForVoice(text: string, lang: ScriptLang = DEFAULT_SCRIPT_LANG): number {
+  return estimateReadDurationSec(text, lang)
+}
+
+/** Self-calibrate: once a REAL voice is measured for a known script, refine that
+ *  language's syllables/sec (EMA) so future estimates converge to reality. */
+export function calibrateSyllableRate(text: string, lang: ScriptLang, realDurationSec: number): void {
+  if (realDurationSec <= 0) return
+  const syl = countSyllables(text, lang)
+  if (syl < 20) return                       // too short to be reliable
+  const observed = syl / realDurationSec
+  if (!Number.isFinite(observed) || observed < RATE_MIN || observed > RATE_MAX) return
+  const next = syllableRate(lang) * 0.7 + observed * 0.3   // EMA, weight history
+  try {
+    localStorage.setItem(rateKey(lang), String(Number(next.toFixed(3))))
+    // eslint-disable-next-line no-console
+    console.log(`[VOICE_EST] calibrate ${lang}: ${syl} syll / ${realDurationSec.toFixed(1)}s = ${observed.toFixed(2)} → rate ${next.toFixed(2)} syll/s`)
+  } catch { /* ignore */ }
 }
 
 /**
@@ -70,11 +131,10 @@ export function allocateBlockBudgets(
  * Mutates the input blocks (in-place) and returns a fresh GeneratedScript
  * with the updated totalDurationSec.
  */
-export function recomputeBlockDurations(script: GeneratedScript): GeneratedScript {
-  const wpm = DEFAULT_WPM
+export function recomputeBlockDurations(script: GeneratedScript, lang: ScriptLang = DEFAULT_SCRIPT_LANG): GeneratedScript {
   const updatedBlocks: ScriptBlock[] = script.blocks.map((b) => ({
     ...b,
-    estDurationSec: estimateReadDurationSec(b.text, wpm),
+    estDurationSec: estimateReadDurationSec(b.text, lang),
   }))
   const total = updatedBlocks.reduce((sum, b) => sum + b.estDurationSec, 0)
   return {
@@ -145,8 +205,13 @@ export function recalibrateScriptToRealVoice(
   script: GeneratedScript,
   measuredDurationSec: number,
   voiceAlignment?: VoiceAlignment,
+  lang: ScriptLang = DEFAULT_SCRIPT_LANG,
 ): GeneratedScript {
   const measured = measuredDurationSec > 0 ? measuredDurationSec : script.totalDurationSec
+
+  // Self-calibrate this language's syllables/sec from the REAL measured voice so the
+  // next script's estimate (and the displayed "~Xs") converges to reality.
+  calibrateSyllableRate(script.blocks.map((b) => b.text).join(' '), lang, measured)
 
   // No alignment → proportional scale (real total, blocks keep their ratio).
   if (!voiceAlignment || !voiceAlignment.text || voiceAlignment.charStartSecs.length === 0) {

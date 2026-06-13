@@ -25,7 +25,7 @@ import type {
   ScriptLang, HookArchetype,
 } from '../types'
 import {
-  SCRIPT_LANG_GEMINI_NAME, HOOK_ARCHETYPES, HOOK_ARCHETYPE_ORDER,
+  SCRIPT_LANG_GEMINI_NAME, HOOK_ARCHETYPES, HOOK_ARCHETYPE_ORDER, DEFAULT_SCRIPT_LANG,
 } from '../types'
 import { AD_STRUCTURES } from './adStructures'
 import { AD_ANGLES } from './adAngles'
@@ -151,15 +151,17 @@ export async function generateScript(
     const target = params.targetDurationSec
     for (let pass = 0; pass < 2; pass++) {
       const joined = SCRIPT_BLOCK_IDS.map((id) => blockMap[id] ?? '').join(' ')
-      const durNow = estimateReadDurationForVoice(joined)
-      if (durNow <= target * 1.15 && durNow >= target * 0.72) break  // in band
+      const durNow = estimateReadDurationForVoice(joined, params.lang)
+      // Tight band so the real video lands near the picked target: was [0.72,1.15]
+      // (accepted scripts ~28% short). Now [0.85,1.12] → expand/cut to hit ~target.
+      if (durNow <= target * 1.12 && durNow >= target * 0.85) break  // in band
       const refit = await refitScriptToLength({
         apiKey: params.geminiKey,
         blocks: blockMap,
         langName: lang,
         targetSec: target,
         currentSec: durNow,
-        tooLong: durNow > target * 1.15,
+        tooLong: durNow > target * 1.12,
       })
       if (!refit) break
       blockMap = refit
@@ -172,7 +174,7 @@ export async function generateScript(
   const blocks: ScriptBlock[] = SCRIPT_BLOCK_IDS.map((id) => ({
     id,
     text: parsed.blocks[id] ?? '',
-    estDurationSec: estimateReadDurationSec(parsed.blocks[id] ?? ''),
+    estDurationSec: estimateReadDurationSec(parsed.blocks[id] ?? '', params.lang),
   }))
   const totalDurationSec = Number(
     blocks.reduce((s, b) => s + b.estDurationSec, 0).toFixed(2),
@@ -190,7 +192,7 @@ export async function generateScript(
   const hookVariants: HookVariant[] = parsed.hookVariants.map((hv) => ({
     style: hv.style,
     text: hv.text,
-    estDurationSec: estimateReadDurationSec(hv.text),
+    estDurationSec: estimateReadDurationSec(hv.text, params.lang),
   }))
 
   return { script, hookVariants }
@@ -701,7 +703,7 @@ Generate the JSON now — exactly 6 hooks, one per archetype.`
     const msg = err instanceof Error ? err.message : String(err)
     throw new Error(`Gemini lỗi khi tạo hook: ${msg}`)
   }
-  let hooks = parseHooks(raw) ?? parseHooks(repairJsonString(raw)) ?? salvageHooks(raw)
+  let hooks = parseHooks(raw, params.lang) ?? parseHooks(repairJsonString(raw), params.lang) ?? salvageHooks(raw, params.lang)
   // Retry once if we got nothing OR a truncated partial (< 4 of the 6 hooks) — keep
   // whichever attempt yielded more hooks. Never lose a good batch to a bad retry.
   if (!hooks || hooks.length < 4) {
@@ -709,7 +711,7 @@ Generate the JSON now — exactly 6 hooks, one per archetype.`
     console.warn(`[generateHooks] only ${hooks?.length ?? 0} hooks, retrying. raw:`, raw.slice(0, 400))
     try {
       const raw2 = await call(false)
-      const hooks2 = parseHooks(raw2) ?? parseHooks(repairJsonString(raw2)) ?? salvageHooks(raw2)
+      const hooks2 = parseHooks(raw2, params.lang) ?? parseHooks(repairJsonString(raw2), params.lang) ?? salvageHooks(raw2, params.lang)
       if (hooks2 && (!hooks || hooks2.length > hooks.length)) hooks = hooks2
     } catch (err) {
       if (!hooks) {
@@ -730,7 +732,7 @@ Generate the JSON now — exactly 6 hooks, one per archetype.`
 // off mid-object, or an unescaped quote broke JSON.parse). Pulls every
 // "archetype"/"text" value in document order and zips them by index — every
 // COMPLETE hook before the cut survives, even if the closing braces are missing.
-function salvageHooks(raw: string): HookVariant[] | null {
+function salvageHooks(raw: string, lang: ScriptLang = DEFAULT_SCRIPT_LANG): HookVariant[] | null {
   const archetypes = [...raw.matchAll(/"archetype"\s*:\s*"([a-z_]+)"/g)].map((m) => m[1])
   const texts = [...raw.matchAll(/"text"\s*:\s*"((?:[^"\\]|\\.)*)"/g)].map((m) => m[1])
   const vis = [...raw.matchAll(/"vi"\s*:\s*"((?:[^"\\]|\\.)*)"/g)].map((m) => m[1])
@@ -748,14 +750,14 @@ function salvageHooks(raw: string): HookVariant[] | null {
         archetype,
         text,
         viGloss,
-        estDurationSec: estimateReadDurationSec(text),
+        estDurationSec: estimateReadDurationSec(text, lang),
       })
     }
   }
   return out.length > 0 ? out : null
 }
 
-function parseHooks(raw: string): HookVariant[] | null {
+function parseHooks(raw: string, lang: ScriptLang = DEFAULT_SCRIPT_LANG): HookVariant[] | null {
   let parsed: unknown
   try { parsed = JSON.parse(raw) } catch { return null }
   const obj = parsed as { hooks?: Array<{ archetype?: string; text?: string; vi?: string }> }
@@ -771,7 +773,7 @@ function parseHooks(raw: string): HookVariant[] | null {
       archetype,
       text: h.text.trim(),
       viGloss: typeof h.vi === 'string' && h.vi.trim() ? h.vi.trim() : undefined,
-      estDurationSec: estimateReadDurationSec(h.text.trim()),
+      estDurationSec: estimateReadDurationSec(h.text.trim(), lang),
     })
   }
   return out.length > 0 ? out : null
