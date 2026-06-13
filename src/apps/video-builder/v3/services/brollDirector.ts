@@ -165,13 +165,21 @@ THREE cut ROLES (set "role"):
    molecular level…). Write the conceptPrompt; it renders as a clean 3D animation.
 
 STICKERS (separate array — 0-credit text pops that ride on a cut, REPLACING the
-old overlays). For short callouts the voice names — a number/spec/claim — emit a
-sticker on that line:
-  • single callout → {style:"number"|"price"|"badge"|…, text, quote, wordAnchor}.
-  • a line listing SEVERAL specs/claims (e.g. "20000mAh, 4 hours, 30 min") → ONE
-    {style:"list", items:["20000mAh","4 tiếng","30 phút"], quote} — stacked card.
+old overlays). Be GENEROUS — stickers are FREE and do NOT compete with the cuts,
+so pop one on EVERY beat where the voice names something concrete: a number, a
+spec, a measurement, a feature, a benefit, a time, a price, a discount, a free
+gift, a safety/result claim. Cover MOST such moments, not just two or three — a
+spec/feature-heavy product (gadget, tool, appliance) should get MANY stickers; an
+emotional/abstract script naturally gets fewer. Scale to what THIS script actually
+names — never pad with vague stickers, but never leave a concrete callout bare.
+  • single callout → {style:"number"|"price"|"badge"|"countdown"|…, text:"2kg" /
+    "tự ngắt" / "mấy giây", quote, wordAnchor}. Prepend a fitting emoji to text.
+  • a line listing SEVERAL specs/claims (e.g. "20000mAh, 4 hours, 30 min", or
+    "tiết kiệm thời gian, không cần trạm xăng") → ONE {style:"list", items:["🔋
+    20000mAh","⏱ 4 tiếng","⚡ 30 phút"], quote} — a stacked card (each item may
+    start with its own emoji).
   Stickers carry the info the old hand-drawn overlays used to; do NOT make overlay
-  scenes. Keep sticker text in ${langName}.
+  scenes. Keep ALL sticker text in ${langName}.
 
 RULES:
 - COVER 100%: the scenes' durations sum to ~${dur}s; every spoken beat has a cut;
