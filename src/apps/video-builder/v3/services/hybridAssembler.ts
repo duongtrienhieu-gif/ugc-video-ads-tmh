@@ -136,10 +136,15 @@ export async function assembleHybridVideo(
       `scale=${evenW}:${evenH}:force_original_aspect_ratio=increase,` +
       `crop=${evenW}:${evenH},trim=start=${leadIn.toFixed(3)}:duration=${trimDur.toFixed(3)},${ptsExpr}`
 
-    // Stickers whose absolute pop time falls inside THIS segment ride on it (the
-    // overlay `enable` window uses the OUTPUT-time offset = atSec - segStart, which
-    // is correct regardless of the 1.3× source speed-up).
-    const segStickers = allStickers.filter((s) => s.atSec >= c.scene.startSec && s.atSec < c.scene.endSec)
+    // P4d — a sticker rides on EVERY segment its display window overlaps, not
+    // just the one it pops in. Was: `s.atSec in [segStart,segEnd)` → a sticker
+    // popping near a scene cut got truncated at the boundary (the user audited
+    // "1.8s thay vì 2.7s"). Now: window [atSec, atSec+durationSec] overlaps the
+    // segment's output range → it carries into the next clip and shows its full
+    // duration. The enable window is recomputed per-segment in OUTPUT time below.
+    const segStickers = allStickers.filter(
+      (s) => s.atSec + s.durationSec > c.scene.startSec && s.atSec < c.scene.endSec,
+    )
     const stickerFiles: string[] = []
     const normFile = `hnorm_${i}.ts`
 
@@ -169,8 +174,13 @@ export async function assembleHybridVideo(
         const inIdx = j + 1
         const pipH = Math.round((evenH * (s.heightFraction ?? 0.10)) / 2) * 2
         parts.push(`[${inIdx}:v]format=rgba,scale=-2:${pipH},setsar=1[stk${j}]`)
+        // P4d — enable window in OUTPUT-local time. Start clamps to 0 when the
+        // sticker began in a previous segment (carried over); end uses the
+        // ABSOLUTE window end (atSec + durationSec) - segStart, clamped to the
+        // segment, so a carried sticker shows only its remaining time here (not
+        // a fresh full durationSec).
         const off = Math.max(0, s.atSec - c.scene.startSec)
-        const endW = Math.min(dur, off + s.durationSec)
+        const endW = Math.min(dur, (s.atSec + s.durationSec) - c.scene.startSec)
         const next = `m${j}`
         // mid-right, lowered into the lower third (y≈72%) — same spot as mode-1.
         parts.push(
