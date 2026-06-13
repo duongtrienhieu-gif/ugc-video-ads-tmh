@@ -25,17 +25,16 @@ import type {
   ScriptLang, HookArchetype,
 } from '../types'
 import {
-  SCRIPT_LANG_GEMINI_NAME, HOOK_ARCHETYPE_ORDER, DEFAULT_SCRIPT_LANG,
+  SCRIPT_LANG_GEMINI_NAME,
 } from '../types'
 import { AD_STRUCTURES } from './adStructures'
-import { buildHookPoolBlock, pickRandomViralReferences } from './hookViralPatterns'
-import { validateHooks, validateBody, spellFixVi, type BodyBlocks } from './scriptValidator'
+import { pickShapedViralHooks } from './hookViralPatterns'
+import { validateBody, spellFixVi, type BodyBlocks } from './scriptValidator'
 import { buildMsBodyVocabBlock } from './bodyPatternsMs'
 import { buildShapeOverrideBlock } from './scriptShapes'
 import {
   detectHookShape,
   buildSemanticAnswerRule,
-  validateNumbersInHook,
 } from './hookSemanticBinder'
 import { AD_ANGLES } from './adAngles'
 import {
@@ -817,317 +816,39 @@ const ARCHETYPE_TO_STYLE: Record<HookArchetype, HookStyle> = {
   question_pov:  'curiosity',
 }
 
-const HOOKS_RESPONSE_SCHEMA = {
-  type: 'object',
-  properties: {
-    hooks: {
-      type: 'array',
-      items: {
-        type: 'object',
-        properties: {
-          archetype: { type: 'string', enum: HOOK_ARCHETYPE_ORDER },
-          text:      { type: 'string' },
-          vi:        { type: 'string' },  // #6 — VN gloss for display (when lang ≠ vi)
-        },
-        required: ['archetype', 'text'],
-      },
-    },
-  },
-  required: ['hooks'],
-}
+// HOOKS_RESPONSE_SCHEMA removed in P3u — generateHooks no longer calls Gemini.
 
 /**
- * #6 — Generate 6 scroll-stopping hooks (one per archetype) for the product.
- * Cheap text-only Gemini call; the user picks one, then generateScript writes
- * the body around it. Strict JSON + repair/retry.
+ * P3u — Generate 6 hooks for the picked SHAPE by randomly sampling the curated
+ * 50-hook viral library (per shape). NO Gemini call: the user audited every
+ * Gemini hook generation drifting on pronoun ("tôi" vs "mình"), spelling
+ * ("Hấu hết"), or fabricated stat ("740.000 hộp") — and concluded the safer
+ * path is to skip the LLM entirely and pick from a pre-curated Tier S+ pool.
+ *
+ * Free (0 Gemini quota), zero-latency, guaranteed to land in Tier S+ voice.
+ * The previousBatch is excluded from re-rolls so "Đổi 6 hook" produces a
+ * genuinely different batch.
  */
 export async function generateHooks(params: GenerateHooksParams): Promise<HookVariant[]> {
-  const lang = SCRIPT_LANG_GEMINI_NAME[params.lang]
-  const structure = AD_STRUCTURES[params.framework]
+  const shape = (params.shape ?? 'narrative') as 'narrative' | 'listicle' | 'comparison' | 'journey'
   const groupArchetype: HookArchetype = GROUP_TO_DEFAULT_ARCHETYPE[params.framework]
-  const productRevealLine = structure.group === 'instant'
-    ? `- The product NAME (or a clear "cầm thử / mở gói / show" reference) MUST appear in EVERY hook — this group is "vào thẳng sản phẩm".`
-    : `- The product NAME must NOT appear in any hook — this group is "dẫn dắt sản phẩm"; the body reveals the product later. The hook sets up tension only.`
-  const isReroll = (params.previousBatch?.length ?? 0) > 0
-  // P3j — inject the 3 POOL block + a random subset of the 150-hook viral library
-  // so Gemini reads varied scroll-stop examples every call (different press → different
-  // anchors → less template-copying).
-  const poolBlock = buildHookPoolBlock()
-  const viralRefs = pickRandomViralReferences(10, params.lang)
-    .map((h, i) => `  ${i + 1}. ${h}`)
-    .join('\n')
-  // P3r — shape-aware hook generation. P3q only wired shape into the body prompt
-  // (the user audited: pick "listicle" / "comparison" / "journey" → hooks were
-  // still random). The hook prompt now carries an explicit SHAPE BIND block so
-  // every one of the 6 hooks fits the body shape that will be written for it.
-  const shape = params.shape ?? 'narrative'
-  const shapeBindLine = shape === 'listicle'
-    ? `*** BODY SHAPE = LISTICLE *** — EVERY one of the 6 hooks MUST be an N-reasons opener (e.g. "3 lý do mình mua...", "Có 2 lý do thôi mà mình...", "Aku ada 3 sebab kenapa..."). The N can vary (2/3/4/5) but ALL 6 hooks MUST include a number + "lý do / reasons / sebab" pattern. Hooks without a number-list opener are a HARD FAILURE for this shape.`
-    : shape === 'comparison'
-    ? `*** BODY SHAPE = COMPARISON *** — EVERY one of the 6 hooks MUST set up a side-by-side test (e.g. "Mình so sánh A và B", "Bên trái 200k, bên phải 99k", "Aku compare RM20 vs RM200", "Tôi đã test 3 brand", "Yang murah lawan yang mahal"). Hooks that don't tee up a comparison are a HARD FAILURE for this shape.`
-    : shape === 'journey'
-    ? `*** BODY SHAPE = JOURNEY *** — EVERY one of the 6 hooks MUST signal a multi-day / multi-week / multi-month test (e.g. "Test 7 ngày kết quả", "Aku guna 30 hari, ni result", "Sau 1 tháng dùng...", "Aku test 7 hari, gila weh"). The duration must be EXPLICIT (a number + unit of time). Hooks without a time-bound test are a HARD FAILURE for this shape.`
-    : ''   // 'narrative' = no shape constraint, current free POOL behaviour
-
-  const systemInstruction = `You are a TikTok-native ad HOOK specialist writing in ${lang}.
-A hook is the first 1-3 seconds of a short video ad — the single biggest factor
-in whether a viewer keeps watching or scrolls past.
-
-*** GROUP BINDING ***
-Group: "${structure.labelVi}".
-${productRevealLine}
-${shapeBindLine ? `\n${shapeBindLine}\n` : ''}
-*** THE 3 POOLs — mix-match for each of the 6 hooks ***
-Build each of the 6 hooks by combining ONE choice from POOL 1 + ONE choice from
-POOL 2 + (optionally) ONE choice from POOL 3. Across the 6 hooks the combinations
-MUST be different — never reuse the same POOL 1 device twice, never reuse the same
-POOL 2 mechanism twice.
-
-${poolBlock}
-
-*** 10 VIRAL HOOK REFERENCES (random sample from a 150-hook viral library) ***
-STUDY the tone / rhythm / shock vocabulary. Do NOT copy the words — these are not
-templates. Notice how they OPEN punchy, end clean, and avoid Instagram-caption
-softeners. Adapt the SPIRIT to the user's product:
-${viralRefs}
-
-*** ANTI-REPETITION (HARD) ***
-- NO TWO hooks may share the same opening words (the first 2-3 words).
-- NO TWO hooks may share the same closing clause / connector phrase
-  (e.g. if hook 1 ends with "là dành cho bạn", NO OTHER hook may end that way).
-- KILL the lazy "fill the bracket" instinct — write each hook AS IF it were the
-  only hook for this product, then check it doesn't echo the others.
-
-*** LANGUAGE LOCK ***
-ALL 6 hooks 100% in ${lang}. The brief may be Vietnamese — READ + understand it,
-NEVER echo Vietnamese words. If ${lang} is not Vietnamese, a Vietnamese/mixed hook
-is a HARD FAILURE.
-${pronounRule(lang)}
-
-WHAT MAKES A HOOK STOP THE SCROLL:
-- VOICE-MEMO REGISTER, not Instagram caption. A real person talking to a friend.
-  Each hook reads like a SPOKEN line — never a captionless fragment.
-- 8-16 words, one breath, readable in under 3 seconds. Punchy but COMPLETE.
-- ONE concrete, slightly UNEXPECTED detail per hook (a moment, number, texture,
-  ingredient, situation, persona). Make the viewer see a picture, not read a claim.
-- KILL softeners in the trail: no "...nhé / ...đó / ...cơ / ...vậy" habit, no
-  "Bạn có thấy... không?" wind-ups. Say it straight.
-- BAN clichés: "bí mật ít ai biết", "điều bất ngờ là", "không ngờ...", "thay đổi
-  cuộc đời", and their ${lang} equivalents. If it sounds like an ad, rewrite.
-- NO meta-labels or stage directions inside the text — every character is read
-  aloud. NEVER write "POV:", "Hook:", brackets, or scene directions.
-
-GROUNDING (universal):
-- Ground every hook in the REAL product from the brief — specific, not generic.
-- BELIEVABLE: no "in X days" miracles, no certifications/approvals (Halal, KKM,
-  GMP, FDA, clinically proven, doctor approved). Felt + personal beats grand.
-- NO FABRICATED STATISTICS: only use a number (sales count / %, e.g. "740.000 hộp",
-  "90% người dùng") if it appears in the PRODUCT BRIEF. If the brief gives no such
-  number, do NOT invent one — for a hook that wants the stat_number / concrete_comparison
-  bait, fall back to a non-numeric tension (insider / contrarian / personal-stake).
-${params.lang !== 'vi' ? `
-TRANSLATION: each hook also gets a faithful Vietnamese translation in "vi" —
-keep the casual spoken tone, NOT formal/literal. Display-only, NEVER used in the
-video. "text" stays 100% in ${lang}; only "vi" is Vietnamese.` : ''}
-
-OUTPUT strict JSON, no markdown fences. Tag every hook with archetype "${groupArchetype}"
-(metadata only — the SHAPE is set by the POOL mix above, not by the archetype tag):
-${params.lang !== 'vi'
-  ? `{ "hooks": [ { "archetype": "${groupArchetype}", "text": "<in ${lang}>", "vi": "<VN>" }, ... exactly 6 ] }`
-  : `{ "hooks": [ { "archetype": "${groupArchetype}", "text": "..." }, ... exactly 6 ] }`}`
-
-  const creatorLine = params.creatorDescription
-    ? `\nCREATOR PROFILE (write in this voice): ${params.creatorDescription}\n` : ''
-  // A fresh token per call so "Đổi hook" actually re-rolls instead of converging
-  // on the same safe answer (combined with a high temperature below).
-  const freshness = Math.random().toString(36).slice(2, 8)
-  // P3i — on re-roll, force a break from the previous batch's connectors / endings.
-  const prevBlock = isReroll
-    ? `\n*** PREVIOUS BATCH (the user pressed "Đổi 6 hook" — they didn't like these; do NOT repeat their opening words, connectors, or closing clauses; break out completely): ***\n${params.previousBatch!.map((h, i) => `  ${i + 1}. ${h}`).join('\n')}\nWrite 6 RADICALLY different hooks: different POOL-1 devices, different POOL-2 mechanisms, different opening words. If the previous batch all closed with the same clause, the new batch must use 6 distinct closings.\n`
-    : ''
-  const userPrompt = `Write the 6 hooks in ${lang} for this product.
-
-PRODUCT: ${params.productName}
-PRODUCT BRIEF (understand + ground the hooks in these real facts; may be in
-Vietnamese — never echo Vietnamese words, write only in ${lang}):
-${params.productPitch}
-${creatorLine}${prevBlock}
-Give a FRESH, BOLD set — mix-match the 3 POOLs so each hook lands a DIFFERENT
-linguistic device + DIFFERENT tension mechanism. Aim for scroll-stop, not
-narration. (variation ${freshness})
-
-Generate the JSON now — exactly 6 hooks.`
-
-  const call = (schema = true) =>
-    directGeminiText({
-      apiKey: params.geminiKey,
-      systemInstruction,
-      prompt: userPrompt,
-      maxOutputTokens: 3072,
-      // Re-rolls run hotter so Gemini breaks out of the safe-converged answer
-      // it just produced. First-time generation stays disciplined at 0.9.
-      temperature: isReroll ? 1.05 : 0.9,
-      thinkingBudget: 0,  // 2.5 models otherwise burn the token budget thinking → truncated JSON → 1 hook
-      responseMimeType: 'application/json',
-      ...(schema ? { responseSchema: HOOKS_RESPONSE_SCHEMA } : {}),
-    })
-
-  // Surface the REAL cause: if the Gemini call itself fails (429 rate-limit, 503,
-  // bad key…) propagate that message; only fall back to a generic message when the
-  // call SUCCEEDS but the payload can't be parsed (and log the raw for diagnosis).
-  let raw = ''
-  try {
-    raw = await call()
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err)
-    throw new Error(`Gemini lỗi khi tạo hook: ${msg}`)
-  }
-  let hooks = parseHooks(raw, params.lang) ?? parseHooks(repairJsonString(raw), params.lang) ?? salvageHooks(raw, params.lang)
-  // Retry once if we got nothing OR a truncated partial (< 4 of the 6 hooks) — keep
-  // whichever attempt yielded more hooks. Never lose a good batch to a bad retry.
-  if (!hooks || hooks.length < 4) {
-    // eslint-disable-next-line no-console
-    console.warn(`[generateHooks] only ${hooks?.length ?? 0} hooks, retrying. raw:`, raw.slice(0, 400))
-    try {
-      const raw2 = await call(false)
-      const hooks2 = parseHooks(raw2, params.lang) ?? parseHooks(repairJsonString(raw2), params.lang) ?? salvageHooks(raw2, params.lang)
-      if (hooks2 && (!hooks || hooks2.length > hooks.length)) hooks = hooks2
-    } catch (err) {
-      if (!hooks) {
-        const msg = err instanceof Error ? err.message : String(err)
-        throw new Error(`Gemini lỗi khi tạo hook: ${msg}`)
-      }
-    }
-  }
-  if (!hooks || hooks.length === 0) {
-    // eslint-disable-next-line no-console
-    console.warn('[generateHooks] still no hooks. final raw:', raw.slice(0, 500))
-    throw new Error(`Gemini trả về không đọc được${raw.trim() ? ` (${raw.trim().slice(0, 80)}…)` : ' (rỗng)'}. Thử lại.`)
-  }
-
-  // P3p-D — silent VN spell fix on every hook text before the user even sees
-  // it. Catches "Hấu hết" → "Hầu hết" deterministically.
-  if (params.lang === 'vi') {
-    for (const h of hooks) {
-      h.text = spellFixVi(h.text)
-    }
-  }
-
-  // P3k — post-gen validator: catches "6 hooks share the same opening / closing"
-  // (lazy template-copy mode) that the prompt's diversity rule sometimes misses.
-  // P3p-E — now also fails when ≥1 hook exceeds 18 words (rule was prompt-only).
-  // One feedback retry — NO new prompt layer, just a short fix-only instruction.
-  const collectHookFailures = (list: HookVariant[]): string[] => {
-    const texts = list.map((h) => h.text)
-    const failures = validateHooks(texts).failures.slice()
-    // P3r — fabricated-number check on every hook against the brief.
-    for (const h of texts) {
-      const numHit = validateNumbersInHook(h, params.productPitch)
-      if (numHit) failures.push(numHit)
-    }
-    // P3r — shape conformance: when user picked a non-narrative shape, each
-    // hook must match it (listicle hooks must have a number-list opener; etc).
-    if (shape !== 'narrative') {
-      for (const h of texts) {
-        const detected = detectHookShape(h)
-        if (shape === 'listicle' && detected !== 'listicle') {
-          failures.push(`Hook "${h.slice(0, 60)}…" is NOT a listicle (shape "${detected}"). User selected LISTICLE — rewrite so this hook opens with an N-reasons / N-lý do / N-sebab pattern.`)
-        } else if (shape === 'comparison' && detected !== 'comparison') {
-          failures.push(`Hook "${h.slice(0, 60)}…" is NOT a comparison (shape "${detected}"). User selected COMPARISON — rewrite so this hook tees up an A vs B / side-by-side test.`)
-        } else if (shape === 'journey' && detected !== 'investigation' && !/\b\d+\s*(ngày|days?|hari|tuần|weeks?|minggu|tháng|months?|bulan)/i.test(h)) {
-          failures.push(`Hook "${h.slice(0, 60)}…" is NOT a journey (no explicit time duration). User selected JOURNEY — rewrite so this hook signals a multi-day / multi-week test (e.g. "7 ngày", "30 hari", "1 tháng").`)
-        }
-      }
-    }
-    return failures
-  }
-
-  const initialFailures = collectHookFailures(hooks)
-  if (initialFailures.length > 0) {
-    // eslint-disable-next-line no-console
-    console.log(`[generateHooks] post-gen check failed (${initialFailures.length} issues), 1 retry…`)
-    try {
-      const feedback = initialFailures.map((f) => `- ${f}`).join('\n')
-      const retryPrompt = `${userPrompt}
-
-PREVIOUS ATTEMPT FAILED THESE CHECKS — fix ONLY these (keep everything else exactly the same):
-${feedback}
-
-Return the JSON in the same shape — exactly 6 hooks, each fixing its issue.`
-      const raw3 = await directGeminiText({
-        apiKey: params.geminiKey,
-        systemInstruction,
-        prompt: retryPrompt,
-        maxOutputTokens: 3072,
-        temperature: 1.0,
-        thinkingBudget: 0,
-        responseMimeType: 'application/json',
-        responseSchema: HOOKS_RESPONSE_SCHEMA,
-      })
-      const hooks3 = parseHooks(raw3, params.lang) ?? parseHooks(repairJsonString(raw3), params.lang) ?? salvageHooks(raw3, params.lang)
-      if (hooks3 && hooks3.length >= 4) {
-        if (params.lang === 'vi') for (const h of hooks3) h.text = spellFixVi(h.text)
-        const retryFailures = collectHookFailures(hooks3)
-        // Keep retry only if it actually reduced failures.
-        if (retryFailures.length < initialFailures.length) hooks = hooks3
-      }
-    } catch (err) {
-      // eslint-disable-next-line no-console
-      console.warn('[generateHooks] post-gen retry failed (silent fallback):', err)
-    }
-  }
+  const archetypeStyle: HookStyle = ARCHETYPE_TO_STYLE[groupArchetype]
+  const picked = pickShapedViralHooks({
+    shape,
+    count: 6,
+    lang: params.lang,
+    exclude: params.previousBatch,
+  })
+  // Apply VN spell-fix safety net (the file is already curated, but this stays
+  // as a backstop so any future edit to the file can't sneak a typo through).
+  const fixed = params.lang === 'vi' ? picked.map((t) => spellFixVi(t)) : picked
+  const hooks: HookVariant[] = fixed.map((text) => ({
+    style: archetypeStyle,
+    archetype: groupArchetype,
+    text,
+    estDurationSec: estimateReadDurationSec(text, params.lang),
+  }))
   return hooks
-}
-
-// Salvage hooks from a TRUNCATED / slightly-malformed JSON payload (Gemini cut
-// off mid-object, or an unescaped quote broke JSON.parse). Pulls every
-// "archetype"/"text" value in document order and zips them by index — every
-// COMPLETE hook before the cut survives, even if the closing braces are missing.
-function salvageHooks(raw: string, lang: ScriptLang = DEFAULT_SCRIPT_LANG): HookVariant[] | null {
-  const archetypes = [...raw.matchAll(/"archetype"\s*:\s*"([a-z_]+)"/g)].map((m) => m[1])
-  const texts = [...raw.matchAll(/"text"\s*:\s*"((?:[^"\\]|\\.)*)"/g)].map((m) => m[1])
-  const vis = [...raw.matchAll(/"vi"\s*:\s*"((?:[^"\\]|\\.)*)"/g)].map((m) => m[1])
-  const n = Math.min(archetypes.length, texts.length)
-  const out: HookVariant[] = []
-  for (let i = 0; i < n; i++) {
-    const archetype = HOOK_ARCHETYPE_ORDER.includes(archetypes[i] as HookArchetype)
-      ? (archetypes[i] as HookArchetype)
-      : undefined
-    const text = texts[i].replace(/\\"/g, '"').replace(/\\n/g, ' ').replace(/\s+/g, ' ').trim()
-    const viGloss = vis[i]?.replace(/\\"/g, '"').replace(/\\n/g, ' ').replace(/\s+/g, ' ').trim() || undefined
-    if (text) {
-      out.push({
-        style: ARCHETYPE_TO_STYLE[archetype ?? 'curiosity_gap'],
-        archetype,
-        text,
-        viGloss,
-        estDurationSec: estimateReadDurationSec(text, lang),
-      })
-    }
-  }
-  return out.length > 0 ? out : null
-}
-
-function parseHooks(raw: string, lang: ScriptLang = DEFAULT_SCRIPT_LANG): HookVariant[] | null {
-  let parsed: unknown
-  try { parsed = JSON.parse(raw) } catch { return null }
-  const obj = parsed as { hooks?: Array<{ archetype?: string; text?: string; vi?: string }> }
-  if (!obj || typeof obj !== 'object' || !Array.isArray(obj.hooks)) return null
-  const out: HookVariant[] = []
-  for (const h of obj.hooks) {
-    if (!h || typeof h.text !== 'string' || !h.text.trim()) continue
-    const archetype = HOOK_ARCHETYPE_ORDER.includes(h.archetype as HookArchetype)
-      ? (h.archetype as HookArchetype)
-      : undefined
-    out.push({
-      style: ARCHETYPE_TO_STYLE[archetype ?? 'curiosity_gap'],
-      archetype,
-      text: h.text.trim(),
-      viGloss: typeof h.vi === 'string' && h.vi.trim() ? h.vi.trim() : undefined,
-      estDurationSec: estimateReadDurationSec(h.text.trim(), lang),
-    })
-  }
-  return out.length > 0 ? out : null
 }
 
 // ── #6 — Vietnamese translation for display (never used as the script input) ──

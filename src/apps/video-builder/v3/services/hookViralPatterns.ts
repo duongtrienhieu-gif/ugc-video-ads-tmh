@@ -215,43 +215,43 @@ export const CREDIBILITY_BAITS: { id: CredibilityBait; labelVi: string; cue: str
 export const VIRAL_HOOK_REFERENCES_VI: string[] = [
   // ── Tier S+ (cực mạnh) ────────────────────────────────────────────────────
   'Nếu bạn còn đang làm điều này thì bạn đang mất tiền mỗi ngày.',
-  'Tôi ước gì mình biết điều này sớm hơn 3 năm.',
+  'Mình ước gì biết điều này sớm hơn 3 năm.',
   '90% mọi người đang làm sai mà không hề biết.',
   'Đây là lý do tại sao bạn vẫn chưa có kết quả.',
   'Đừng mua thứ này cho đến khi xem hết video.',
-  'Tôi đã thử để chứng minh nó là lừa đảo, và đây là kết quả.',
-  'Thứ khiến tôi bất ngờ không phải là kết quả cuối cùng.',
+  'Mình đã thử để chứng minh nó là lừa đảo, và đây là kết quả.',
+  'Thứ khiến mình bất ngờ không phải là kết quả cuối cùng.',
   'Không ai nói với bạn điều này trước khi mua.',
   'Đây là sai lầm khiến nhiều người tốn gấp đôi chi phí.',
-  'Tôi đã so sánh cả hai và kết quả hoàn toàn khác dự đoán.',
+  'Mình đã so sánh cả hai và kết quả hoàn toàn khác dự đoán.',
   // ── Tier S — Tò mò cực mạnh ───────────────────────────────────────────────
   'Có một chi tiết nhỏ mà hầu hết mọi người đều bỏ qua.',
   'Tại sao người khác làm được còn bạn thì không?',
-  'Điều đầu tiên tôi nhận ra sau 7 ngày sử dụng là...',
+  'Điều đầu tiên mình nhận ra sau 7 ngày dùng là...',
   'Đây là bí mật mà người bán không muốn bạn biết.',
-  'Tôi không tin cho đến khi tự kiểm chứng.',
+  'Mình không tin cho đến khi tự kiểm chứng.',
   'Điều này nghe vô lý nhưng lại hoạt động.',
   'Hóa ra vấn đề không nằm ở chỗ bạn nghĩ.',
   'Đây là lý do thật sự đằng sau chuyện đó.',
-  'Tôi đã tìm ra nguyên nhân sau nhiều tháng.',
-  'Kết quả này khiến tôi phải kiểm tra lại lần thứ hai.',
+  'Mình đã tìm ra nguyên nhân sau nhiều tháng.',
+  'Kết quả này khiến mình phải kiểm tra lại lần thứ hai.',
   // ── Tier S — Đánh trúng nỗi đau ───────────────────────────────────────────
   'Bạn có đang gặp tình trạng này không?',
-  'Nếu bạn chán cảnh [PROBLEM] thì xem tiếp.',
+  'Nếu bạn chán cảnh này thì xem tiếp.',
   'Tại sao bạn đã thử đủ mọi cách nhưng vẫn thất bại?',
   'Bạn đang tốn tiền cho thứ không giải quyết được vấn đề.',
-  'Đây là lỗi phổ biến nhất tôi thấy mỗi ngày.',
-  'Nếu bạn giống tôi trước đây thì video này dành cho bạn.',
-  'Tôi từng nghĩ không có cách nào xử lý được chuyện này.',
+  'Đây là lỗi phổ biến nhất mình thấy mỗi ngày.',
+  'Nếu bạn giống mình trước đây thì video này dành cho bạn.',
+  'Mình từng nghĩ không có cách nào xử lý được chuyện này.',
   'Điều khó chịu nhất là chẳng ai chỉ cho bạn điều này.',
-  'Đây là thứ khiến tôi bực mình suốt nhiều năm.',
-  'Tôi đã mất rất nhiều tiền vì không biết điều này.',
+  'Đây là thứ khiến mình bực mình suốt nhiều năm.',
+  'Mình đã mất rất nhiều tiền vì không biết điều này.',
   // ── Tier S — Đi ngược số đông ─────────────────────────────────────────────
   'Càng cố gắng, bạn càng làm tình hình tệ hơn.',
   'Điều mọi người khuyên bạn thực ra là sai.',
-  'Tôi ngừng làm điều này và kết quả tốt hơn hẳn.',
+  'Mình ngừng làm điều này và kết quả tốt hơn hẳn.',
   'Sự thật là bạn không cần thứ mà ai cũng đang quảng cáo.',
-  'Tôi đã đổi ý hoàn toàn về điều này.',
+  'Mình đã đổi ý hoàn toàn về điều này.',
   'Đây là quan điểm không phải nhiều người đồng ý.',
   'Hầu hết chuyên gia đều bỏ sót điều này.',
   'Đừng làm theo xu hướng này nếu bạn muốn kết quả tốt.',
@@ -259,15 +259,64 @@ export const VIRAL_HOOK_REFERENCES_VI: string[] = [
   'Điều phổ biến nhất lại là điều kém hiệu quả nhất.',
   // ── Tier S — Social Proof + FOMO ──────────────────────────────────────────
   'Hơn 10.000 người đã chuyển sang cách này.',
-  'Ban đầu tôi nghĩ mọi người đang phóng đại.',
-  'Bây giờ tôi hiểu vì sao nó bán chạy đến vậy.',
-  'Tôi hỏi 100 người và đây là câu trả lời chung.',
+  'Ban đầu mình nghĩ mọi người đang phóng đại.',
+  'Bây giờ mình hiểu vì sao nó bán chạy đến vậy.',
+  'Mình hỏi 100 người và đây là câu trả lời chung.',
   'Đây là lý do ai dùng rồi cũng quay lại mua.',
   'Cộng đồng đang bàn tán về điều này vì một lý do.',
-  'Tôi thấy nó xuất hiện ở khắp mọi nơi nên quyết định thử.',
+  'Mình thấy nó xuất hiện ở khắp mọi nơi nên quyết định thử.',
   'Thứ này đang thay đổi cách mọi người làm việc mỗi ngày.',
   'Sau khi xem hàng nghìn đánh giá, đây là kết luận.',
-  'Tôi cuối cùng cũng hiểu tại sao nó viral.',
+  'Mình cuối cùng cũng hiểu tại sao nó viral.',
+]
+
+// 12 listicle-shape hooks (N reasons / N lý do) — curated to match the same
+// Tier S+ shock register as the narrative pool but with a clear list opener.
+export const VIRAL_HOOK_REFERENCES_VI_LISTICLE: string[] = [
+  '3 lý do mình bỏ luôn món cũ chỉ sau 1 tuần.',
+  'Có 2 lý do thôi mà mình không thèm thử brand khác.',
+  '3 thứ mình ước biết trước khi mua.',
+  'Mình mua đúng 1 lần, 3 lý do dưới đây bạn hiểu liền.',
+  '4 thứ mọi người tưởng đúng mà thực ra sai bét.',
+  '5 lý do dân trong ngành chỉ recommend cái này.',
+  '3 lý do làm mình bỏ chục triệu thử brand khác cũng quay về.',
+  'Có 3 thứ cái này làm được mà cái cũ thì không.',
+  '2 lý do mình giữ luôn không trả lại.',
+  '3 thứ ai dùng rồi cũng nhận ra.',
+  '4 lý do khiến mình tin nó worth từng đồng.',
+  'Đúng 3 thứ mình check trước khi mua bất kỳ món gì.',
+]
+
+// 12 comparison-shape hooks (A vs B / side-by-side).
+export const VIRAL_HOOK_REFERENCES_VI_COMPARISON: string[] = [
+  'Mình so sánh cả hai và kết quả hoàn toàn khác dự đoán.',
+  'Cái 200k với cái 99k, mình thử cả hai để nói thật.',
+  'Mình mua cả hai về test, sự khác biệt rõ luôn.',
+  'Bên trái mắc gấp đôi, bên phải rẻ hơn — đoán cái nào thắng.',
+  'Mình lấy cái này so với cái mình dùng 2 năm, ngạc nhiên thật.',
+  'Mua cả 2 về thử, có 1 cái mình giữ.',
+  'Mình test song song để bạn không phải mất tiền oan.',
+  'Cái rẻ hơn nửa giá mà mình lại chọn nó.',
+  'So với brand quen, cái này khác hẳn ở 1 chỗ.',
+  'Cũ vs mới — mình giữ cái nào sau 1 tuần test?',
+  'Mình đặt 2 cái cạnh nhau, sự thật rõ ràng.',
+  'Đây là sai lầm khiến nhiều người tốn gấp đôi chi phí.',
+]
+
+// 12 journey-shape hooks (multi-day / multi-week test).
+export const VIRAL_HOOK_REFERENCES_VI_JOURNEY: string[] = [
+  'Mình dùng đúng 7 ngày, đây là kết quả thật.',
+  'Test 30 ngày liên tục — ngày cuối mình ngạc nhiên.',
+  'Sau 2 tuần, mình nhận ra 1 thay đổi mình không ngờ.',
+  'Mình ghi lại từng ngày trong 1 tháng, hôm nay chia sẻ.',
+  'Hết 14 ngày, mình quyết định ở lại với cái này.',
+  'Mình thử 3 ngày đầu thấy thường, ngày thứ 7 mới sốc.',
+  '21 ngày test — đây là cái mình rút ra.',
+  'Sau 30 ngày, mình hiểu vì sao nó cháy hàng.',
+  'Mình bắt đầu hôm thứ Hai, hết tuần đã có kết quả.',
+  '7 ngày một thử thách, ngày cuối mình quay lại nhìn.',
+  'Sau 1 tháng, mình không muốn quay lại cách cũ.',
+  'Test đủ 4 tuần — đây là sự thật.',
 ]
 
 // 120 Malaysia TikTok Shop viral hooks — bahasa rojak natural (BM + EN + code-switch).
@@ -405,6 +454,53 @@ export const VIRAL_HOOK_REFERENCES_MS: string[] = [
   'Worth it ke tak? Jom check.',
 ]
 
+// ── MS shape-specific pools ─────────────────────────────────────────────────
+
+export const VIRAL_HOOK_REFERENCES_MS_LISTICLE: string[] = [
+  '3 sebab aku stop pakai yang lama.',
+  'Ada 2 sebab je aku setia dengan benda ni.',
+  '3 benda aku check sebelum beli.',
+  '4 perkara ramai orang silap fikir.',
+  '5 sebab aku recommend ni kat korang.',
+  '3 sebab aku tak nak balik kat brand lama.',
+  '2 sebab cukup, aku tak nak try yang lain.',
+  '3 perkara aku tak tahu sebelum cuba.',
+  '4 sebab aku rasa worth every sen.',
+  '3 benda yang aku nampak orang lain miss.',
+  'Aku ada 3 reason kenapa ni different.',
+  'Ada 2 sebab utama aku tetap dengan ni.',
+]
+
+export const VIRAL_HOOK_REFERENCES_MS_COMPARISON: string[] = [
+  'Aku compare RM20 vs RM200, result tak sangka.',
+  'Aku test side by side, korang tengok sendiri.',
+  'Yang murah vs yang mahal, satu menang clear.',
+  'Aku beli dua-dua dan check sendiri.',
+  'Aku compare supaya korang tak bazir duit.',
+  'Yang mahal tak semestinya terbaik.',
+  'Aku test paling murah lawan paling mahal.',
+  'Aku letak dua-dua side by side, beza terang.',
+  'Brand A vs Brand B — aku pilih yang ni.',
+  'Mahal vs murah — result buat aku rethink.',
+  'Aku try kedua-duanya, satu je yang kekal.',
+  'Beza dia memang gila weh, korang nak tengok?',
+]
+
+export const VIRAL_HOOK_REFERENCES_MS_JOURNEY: string[] = [
+  'Aku test 7 hari, ni result dia.',
+  'Aku guna 30 hari, hari last buat aku terkejut.',
+  'Selepas 2 minggu, aku nampak perubahan jelas.',
+  'Aku try selama sebulan, jujur cakap...',
+  'Day 1 hingga Day 7, aku rakam semua.',
+  'Hari pertama biasa, hari ke-7 baru terasa.',
+  'Aku test 21 hari, kesimpulan aku macam ni.',
+  'Selepas sebulan guna, aku tak nak kembali.',
+  'Aku mula Isnin, hujung minggu dah ada hasil.',
+  '14 hari challenge, hari last aku speechless.',
+  'Aku catat setiap hari selama 30 hari.',
+  'Test 4 minggu — ni sebab aku stick dengan ni.',
+]
+
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 /** Map the script's language code → which viral library to pick from. EN /
@@ -454,4 +550,63 @@ export function buildHookPoolBlock(): string {
     lines.push(`      e.g. "${b.examples[0]}"`)
   }
   return lines.join('\n')
+}
+
+// ── Shape-aware viral picker (P3u — Fix #5) ─────────────────────────────────
+// The user asked for hook generation to STOP being a Gemini call and START
+// being a deterministic RANDOM PICK from the 50-hook viral library (per shape).
+// Reasons: every Gemini hook generation that we audited drifted in one of three
+// ways — pronoun ("tôi" instead of "mình"), typo ("Hấu hết"), or fabricated
+// stat ("740.000 hộp"). The viral library has none of these by construction,
+// so picking from it bypasses the drift entirely and the result is guaranteed
+// to be Tier S+ viral voice.
+//
+// Each shape (narrative / listicle / comparison / journey) has its own pool;
+// 'narrative' falls back to the full library (the original 50) so the user
+// always sees broad Tier S+ variety on the default shape.
+
+type ScriptShapeTag = 'narrative' | 'listicle' | 'comparison' | 'journey'
+
+function shapedPoolForLang(shape: ScriptShapeTag, lang: string): string[] {
+  const isMs = lang === 'ms' || lang === 'Bahasa Malaysia'
+  if (shape === 'listicle')   return isMs ? VIRAL_HOOK_REFERENCES_MS_LISTICLE   : VIRAL_HOOK_REFERENCES_VI_LISTICLE
+  if (shape === 'comparison') return isMs ? VIRAL_HOOK_REFERENCES_MS_COMPARISON : VIRAL_HOOK_REFERENCES_VI_COMPARISON
+  if (shape === 'journey')    return isMs ? VIRAL_HOOK_REFERENCES_MS_JOURNEY    : VIRAL_HOOK_REFERENCES_VI_JOURNEY
+  // narrative → full curated library
+  return libraryForLang(lang)
+}
+
+/** Pick `count` DISTINCT viral hooks matching the picked shape. Excludes any
+ *  hook the caller has already seen (used by the "Đổi 6 hook" re-roll so the
+ *  next batch is genuinely different). If the shaped pool is smaller than
+ *  count + exclude.size, supplements from the general narrative pool so the
+ *  user always gets 6 hooks. */
+export function pickShapedViralHooks(args: {
+  shape: ScriptShapeTag
+  count?: number
+  lang: string
+  exclude?: string[]
+}): string[] {
+  const count = args.count ?? 6
+  const exclude = new Set((args.exclude ?? []).map((s) => s.trim()))
+  const shaped = shapedPoolForLang(args.shape, args.lang).filter((h) => !exclude.has(h.trim()))
+  // Shuffle (Fisher-Yates) and pick
+  const pool = shaped.slice()
+  for (let i = 0; i < pool.length - 1; i++) {
+    const j = i + Math.floor(Math.random() * (pool.length - i))
+    ;[pool[i], pool[j]] = [pool[j], pool[i]]
+  }
+  let picked = pool.slice(0, count)
+  // Top-up from the general narrative pool if the shaped pool didn't have enough.
+  if (picked.length < count) {
+    const general = libraryForLang(args.lang)
+      .filter((h) => !exclude.has(h.trim()) && !picked.includes(h))
+    const generalShuffled = general.slice()
+    for (let i = 0; i < generalShuffled.length - 1; i++) {
+      const j = i + Math.floor(Math.random() * (generalShuffled.length - i))
+      ;[generalShuffled[i], generalShuffled[j]] = [generalShuffled[j], generalShuffled[i]]
+    }
+    picked = picked.concat(generalShuffled.slice(0, count - picked.length))
+  }
+  return picked.slice(0, count)
 }

@@ -61,7 +61,7 @@ export const AD_STRUCTURES: Record<AdStructure, AdStructureConfig> = {
     tone: 'violet',
     blockWeights: { hook: 0.20, pain: 0.05, discovery: 0.35, benefit: 0.25, cta: 0.15 },
     productRevealRule:
-      'Tên sản phẩm PHẢI xuất hiện trong HOOK. Block pain CHỈ 1 câu transition nối tiếp từ hook — KHÔNG kể triệu chứng, KHÔNG đặt câu hỏi pain. Block discovery + benefit giữ sản phẩm trong khung. CTA endorse với sản phẩm trên tay.',
+      'Hook có thể tham chiếu sản phẩm RÚT GỌN ("thứ này / món này / cái này / em này / nó") thay vì tên đầy đủ — Tier S+ viral hooks (50 hook user curate) GẦN NHƯ luôn dùng ref ngắn để giữ punchiness 8-12 từ. Tên SẢN PHẨM ĐẦY ĐỦ PHẢI reveal trong block đầu tiên của BODY (pain hoặc discovery), KHÔNG được trì hoãn xuống cuối. Block pain CHỈ 1 câu transition nối tiếp từ hook — KHÔNG kể triệu chứng, KHÔNG đặt câu hỏi pain. Block discovery + benefit giữ sản phẩm trong khung. CTA endorse với sản phẩm trên tay.',
     blockGuides: {
       pain:
         'CHỈ 1 câu TRANSITION nối tiếp từ hook — mở rộng chính cảm giác / chi tiết / khoảnh khắc đã ' +

@@ -35,11 +35,16 @@ export interface ValidatorResult {
 // SILENT post-gen replacement, not a validator failure: there's no
 // architectural reason to retry just to fix a tone mark when we can correct
 // it deterministically. Patterns are case-aware (capitalized + lowercase).
+// P3u — `\b` doesn't work reliably across Vietnamese diacritics (the user audited
+// "Hấu hết" slipping through). Drop the word-boundary anchor and rely on the
+// fact that these typo strings are themselves distinctive enough that a substring
+// match won't false-positive (no real Vietnamese word contains "hấu hết" or
+// "bị mật" as a substring of something legitimate).
 const VN_SPELL_FIXES: Array<[RegExp, string]> = [
-  [/\bHấu hết\b/g, 'Hầu hết'],
-  [/\bhấu hết\b/g, 'hầu hết'],
-  [/\bbị mật\b/g, 'bí mật'],
-  [/\bBị mật\b/g, 'Bí mật'],
+  [/Hấu hết/g, 'Hầu hết'],
+  [/hấu hết/g, 'hầu hết'],
+  [/Bị mật/g, 'Bí mật'],
+  [/bị mật/g, 'bí mật'],
   // Stray "tôi" → "mình" cleanup is NOT auto-done; that's the pronoun rule's job.
 ]
 
@@ -235,7 +240,25 @@ export function validateBody(
     }
   }
 
-  // 4. CTA LEVER — must contain at least one buying-lever keyword (lang-specific).
+  // 4. VN PRONOUN — when lang='vi', the body must use "mình" only ("tôi" reads
+  //    formal and kills the voice-memo register on TikTok). The pronoun rule has
+  //    been in the body prompt since P3l but Gemini occasionally slips a "Tôi"
+  //    into pain or benefit; we catch it here so the retry has a chance.
+  //    Authority-role context ("là bác sĩ / là bartender N năm") is allowed.
+  if (lang === 'vi' || lang === 'Vietnamese') {
+    const authorityCue = /\b(là (bác sĩ|bartender|chuyên gia|nhà nghiên cứu|kỹ sư|đầu bếp|dược sĩ)|làm (nghề|trong (ngành|nghề)))/i
+    const allBody = `${blocks.pain ?? ''} ${blocks.discovery ?? ''} ${blocks.benefit ?? ''} ${blocks.cta ?? ''}`
+    if (!authorityCue.test(allBody) && /(^|[^A-Za-zÀ-ỹ])[Tt]ôi[^A-Za-zÀ-ỹ]/.test(` ${allBody} `)) {
+      failures.push(
+        `Body uses "tôi" but the VN pronoun rule is "mình" only (TikTok voice-memo register). ` +
+        `Replace every "tôi" with "mình" in the pain / discovery / benefit / cta blocks. ` +
+        `("Tôi" is only allowed when the script opens with an explicit authority role such ` +
+        `as "là bác sĩ" / "là bartender 8 năm".)`,
+      )
+    }
+  }
+
+  // 5. CTA LEVER — must contain at least one buying-lever keyword (lang-specific).
   if (blocks.cta) {
     const ctaLower = blocks.cta.toLowerCase()
     const hasLever = ctaLevers.some((k) => ctaLower.includes(k))
