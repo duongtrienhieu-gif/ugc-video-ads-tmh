@@ -25,7 +25,7 @@ import type {
   ScriptLang, HookArchetype,
 } from '../types'
 import {
-  SCRIPT_LANG_GEMINI_NAME, HOOK_ARCHETYPES, HOOK_ARCHETYPE_ORDER, DEFAULT_SCRIPT_LANG,
+  SCRIPT_LANG_GEMINI_NAME, HOOK_ARCHETYPE_ORDER, DEFAULT_SCRIPT_LANG,
 } from '../types'
 import { AD_STRUCTURES } from './adStructures'
 import { AD_ANGLES } from './adAngles'
@@ -94,7 +94,9 @@ export async function generateScript(
     parsed = await generateBodyAroundHook({
       apiKey: params.geminiKey,
       systemInstruction: buildSystemPrompt({
+        frameworkLabel: structure.labelVi,
         structureSystem: structure.systemPrompt,
+        productRevealRule: structure.productRevealRule,
         angleTone: angle.tonePrompt,
         lang,
       }),
@@ -112,7 +114,9 @@ export async function generateScript(
     })
   } else {
     const systemInstruction = buildSystemPrompt({
+      frameworkLabel: structure.labelVi,
       structureSystem: structure.systemPrompt,
+      productRevealRule: structure.productRevealRule,
       angleTone: angle.tonePrompt,
       lang,
     })
@@ -207,14 +211,25 @@ const SCRIPT_BLOCK_IDS: ScriptBlockId[] = [
 const HOOK_STYLES: HookStyle[] = ['emotional', 'shock', 'curiosity']
 
 function buildSystemPrompt(args: {
+  frameworkLabel: string
   structureSystem: string
+  productRevealRule: string
   angleTone: string
   lang: string
 }): string {
   return `You are a TikTok-native ad copywriter writing in ${args.lang}.
 
-STRUCTURE GUIDANCE:
+FRAMEWORK: "${args.frameworkLabel}" — STICK TO IT.
 ${args.structureSystem}
+
+PRODUCT REVEAL RULE (HARD — this is the cold-reach scroll-stop contract):
+${args.productRevealRule}
+- Every block MUST respect this rule. If the rule says the product is in the hook,
+  the discovery block keeps it on screen / in the words and the pain block is at
+  most 1 short empathy sentence. If the rule says the product appears mid-script,
+  the hook + pain DO NOT name the product yet.
+- The body must NEVER drift to a different framework's shape (e.g. inserting a
+  long pain block into a "vào thẳng sản phẩm" framework).
 
 TONE GUIDANCE:
 ${args.angleTone}
@@ -468,13 +483,22 @@ async function generateBodyAroundHook(args: {
 
 HOOK IS ALREADY CHOSEN — do NOT write or change the hook. The opening hook line
 is FIXED (given below). Write ONLY the remaining 4 blocks (pain, discovery,
-benefit, cta) so they flow naturally and seamlessly from this exact hook — same
-person, same voice, same language. For the "hook" field, reproduce the GIVEN
-hook VERBATIM, unchanged.`
+benefit, cta) so they continue DIRECTLY from this exact hook.
+
+HARD CONTRACT (must hold across all 4 blocks):
+- The FIRST WORDS of the pain block must continue the IDEA the hook just started
+  (the SAME object / persona / claim / detail). NEVER jump to an unrelated topic.
+  If the hook holds the product up, the pain stays in that same hand-held moment.
+  If the hook is "Nếu bạn X, thì PRODUCT là dành cho bạn", the pain elaborates X.
+- STICK TO THE FRAMEWORK above + the PRODUCT REVEAL RULE — do not pivot to a
+  different framework's shape (e.g. don't suddenly insert a 3-line confession into
+  a "vào thẳng sản phẩm" framework, and don't reveal the product early in a
+  "dẫn dắt sản phẩm" framework).
+- Reproduce the GIVEN hook VERBATIM in the "hook" field — do not edit a word.`
 
   const userPrompt = `${args.userPrompt}
 
-THE FIXED HOOK (continue the script from here; reproduce it verbatim as the hook block):
+THE FIXED HOOK (continue the script DIRECTLY from this line; reproduce it verbatim as the hook block):
 """${args.chosenHook}"""`
 
   const call = (schema = true) =>
@@ -567,6 +591,22 @@ export interface GenerateHooksParams {
   creatorDescription?: string
 }
 
+// P3g — hook archetype is metadata only (the FRAMEWORK is the driver). Each
+// framework maps to the archetype tag that best describes the SHAPE of its hook,
+// purely so the UI badge / parser back-compat keeps working.
+const FRAMEWORK_TO_ARCHETYPE: Record<AdStructure, HookArchetype> = {
+  // INSTANT
+  VISUAL_HAND:          'shock_result',
+  RAPID_REASONS:        'curiosity_gap',
+  UNEXPECTED_DISCOVERY: 'contrarian',
+  POV_FOR_YOU:          'question_pov',
+  // LEAD
+  STORY_CONFESSION:     'confession',
+  AUTHORITY_EXPERT:     'contrarian',
+  SOCIAL_PROOF:         'shock_result',
+  PROBLEM_SOLUTION:     'callout_pain',
+}
+
 const ARCHETYPE_TO_STYLE: Record<HookArchetype, HookStyle> = {
   callout_pain:  'emotional',
   contrarian:    'shock',
@@ -603,65 +643,70 @@ const HOOKS_RESPONSE_SCHEMA = {
 export async function generateHooks(params: GenerateHooksParams): Promise<HookVariant[]> {
   const lang = SCRIPT_LANG_GEMINI_NAME[params.lang]
   const structure = AD_STRUCTURES[params.framework]
-  const archetypeList = HOOK_ARCHETYPE_ORDER
-    .map((id) => `- ${id}: ${HOOK_ARCHETYPES[id].promptHint}`)
+  const angleList = structure.hookAngleHints
+    .map((h, i) => `  ${i + 1}. ${h}`)
     .join('\n')
+  // Hook archetype is now METADATA only — the framework is the driver. Tag every
+  // generated hook with the framework's natural archetype so the UI badge still
+  // works and the existing parser/back-compat survives.
+  const frameworkArchetype: HookArchetype = FRAMEWORK_TO_ARCHETYPE[params.framework]
+  const productRevealLine = structure.group === 'instant'
+    ? `- The product NAME (or the creator visibly holding it) MUST appear in EVERY hook — this framework is "vào thẳng sản phẩm".`
+    : `- The product NAME must NOT appear in any hook — this framework is "dẫn dắt sản phẩm"; the body reveals the product later. The hook sets up tension only.`
 
   const systemInstruction = `You are a TikTok-native ad HOOK specialist writing in ${lang}.
 A hook is the first 1-3 seconds of a short video ad — the single biggest factor
-in whether a viewer keeps watching or scrolls past. Write hooks so good the
-target viewer cannot scroll past.
+in whether a viewer keeps watching or scrolls past.
 
-*** LANGUAGE LOCK — THE #1 RULE ***
-ALL 6 hooks MUST be written 100% in ${lang}. The product brief is in Vietnamese —
-you READ and translate its meaning, but you NEVER write a hook in Vietnamese and
-NEVER mix languages. Every single one of the 6 hooks must be entirely in ${lang}.
-If ${lang} is not Vietnamese, a Vietnamese (or mixed) hook is a HARD FAILURE.
+*** FRAMEWORK BINDING — THE #1 RULE ***
+The user has chosen the framework "${structure.labelVi}". ALL 6 hooks MUST follow
+that framework's hook pattern — same SHAPE, only the angle / detail varies.
 
-Generate EXACTLY 6 hooks — ONE for each archetype below — all for the SAME product,
-all in ${lang}:
-${archetypeList}
+HOOK PATTERN (every hook fills these brackets — never invent a different shape):
+${structure.hookPattern}
 
-WHAT MAKES A HOOK STOP THE SCROLL (follow ALL — this is the whole job):
-- BRUTALLY SHORT. Aim for ~6-12 words, one breath, readable in under 3 seconds.
-  Front-load the punch into the FIRST 3 WORDS. Cut every word that isn't pulling
-  weight. A long, complete, polite sentence is a SCROLLED-PAST sentence.
-- ONE sharp, concrete, slightly UNEXPECTED detail per hook — a specific moment,
-  object, number, time of day, or micro-behaviour. NOT a generic list of symptoms.
-  Make the viewer see a picture, not read a claim.
-- KILL the softeners and filler that bleed urgency: no trailing "...nhé / ...đó /
-  ...cơ / ...vậy", no "Bạn có thấy... không?" wind-ups. Say it straight.
-- BAN clichés / ad-speak the audience is blind to: "bí mật ít ai biết", "điều bất
-  ngờ là", "không ngờ...", "cứ như trẻ lại chục tuổi", "thay đổi cuộc đời" and the
-  like (and their ${lang} equivalents). If it sounds like an ad, rewrite it.
-- NO meta-labels or stage directions IN THE TEXT — the hook is spoken aloud by a
-  voiceover, so every character is read out. NEVER write "POV:", "Hook:", archetype
-  names, brackets, or scene directions. Just the words the person actually says.
-- The 6 hooks must each take a CLEARLY DIFFERENT angle and use a DIFFERENT concrete
-  detail — they must NOT read as 6 paraphrases of the same line.
+THE 6 HOOKS — one per angle below (so they aren't paraphrases of one another):
+${angleList}
 
-RULES:
-- Each hook: 1 short SPOKEN line, first person, the casual everyday register of
-  ${lang}. Sound like a real person mid-scroll, never an ad.
-- Write 100% in ${lang}. The brief may be in Vietnamese — understand it but NEVER
-  echo Vietnamese words; write only in ${lang}.
-- Ground every hook in the REAL product / niche from the brief — specific, not generic.
-- The hook sets up tension the rest of the ad pays off; do NOT pitch the product as
-  a sponsored mention in the hook itself.
-- BELIEVABLE: no miracle "in X days" results, no certifications/approvals (Halal,
-  KKM, GMP, FDA, clinically proven, doctor approved) or authority endorsement — a
-  felt, plausible, personal angle beats an unbelievable claim (and stays compliant).
-- The body will use the "${structure.labelVi}" framework — keep hooks compatible,
-  but each hook leads with its OWN archetype angle.${params.lang !== 'vi' ? `
-- TRANSLATION: for EACH hook also give a faithful Vietnamese translation in a "vi"
-  field — keep the casual spoken tone, NOT formal/literal. This is only so the user
-  understands the meaning; it is NEVER shown in the video. "text" stays 100% in
-  ${lang}; only "vi" is Vietnamese.` : ''}
+${productRevealLine}
 
-OUTPUT strict JSON, no markdown fences:
+*** LANGUAGE LOCK ***
+ALL 6 hooks 100% in ${lang}. The brief may be Vietnamese — READ + understand it,
+NEVER echo Vietnamese words. If ${lang} is not Vietnamese, a Vietnamese/mixed hook
+is a HARD FAILURE.
+
+WHAT MAKES A HOOK STOP THE SCROLL:
+- VOICE-MEMO REGISTER, not Instagram caption. A real person talking to a friend.
+  Each hook MUST have a clear subject ("mình / tôi / em / bạn") and read like a
+  spoken line, NEVER a captionless fragment.
+- 8-15 words, one breath, readable in under 3 seconds. Punchy but COMPLETE — the
+  sentence makes sense said out loud cold.
+- ONE concrete, slightly UNEXPECTED detail per hook (a moment, number, texture,
+  ingredient, situation, persona). Make the viewer see a picture, not read a claim.
+- KILL softeners / filler: no trailing "...nhé / ...đó / ...cơ / ...vậy", no
+  "Bạn có thấy... không?" wind-ups. Say it straight.
+- BAN clichés: "bí mật ít ai biết", "điều bất ngờ là", "không ngờ...", "thay đổi
+  cuộc đời", and their ${lang} equivalents. If it sounds like an ad, rewrite.
+- NO meta-labels or stage directions inside the text — the hook is spoken aloud,
+  so every character is read out. NEVER write "POV:", "Hook:", brackets, or
+  scene directions. Just the words the person actually says.
+- Each of the 6 hooks takes a DIFFERENT angle from the list above AND uses a
+  DIFFERENT concrete detail. They must NOT be 6 paraphrases of the same line.
+
+GROUNDING (universal):
+- Ground every hook in the REAL product from the brief — specific, not generic.
+- BELIEVABLE: no "in X days" miracles, no certifications/approvals (Halal, KKM,
+  GMP, FDA, clinically proven, doctor approved). Felt + personal beats grand.
+${params.lang !== 'vi' ? `
+TRANSLATION: each hook also gets a faithful Vietnamese translation in "vi" —
+keep the casual spoken tone, NOT formal/literal. Display-only, NEVER used in the
+video. "text" stays 100% in ${lang}; only "vi" is Vietnamese.` : ''}
+
+OUTPUT strict JSON, no markdown fences. Tag every hook with archetype "${frameworkArchetype}"
+(metadata only — the SHAPE is set by the framework above, not by the archetype tag):
 ${params.lang !== 'vi'
-  ? `{ "hooks": [ { "archetype": "callout_pain", "text": "<in ${lang}>", "vi": "<Vietnamese translation>" }, ... exactly 6 ] }`
-  : `{ "hooks": [ { "archetype": "callout_pain", "text": "..." }, ... exactly 6 ] }`}`
+  ? `{ "hooks": [ { "archetype": "${frameworkArchetype}", "text": "<in ${lang}>", "vi": "<VN>" }, ... exactly 6 ] }`
+  : `{ "hooks": [ { "archetype": "${frameworkArchetype}", "text": "..." }, ... exactly 6 ] }`}`
 
   const creatorLine = params.creatorDescription
     ? `\nCREATOR PROFILE (write in this voice): ${params.creatorDescription}\n` : ''
