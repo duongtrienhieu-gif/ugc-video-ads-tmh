@@ -35,16 +35,16 @@ import {
   type InsertSuggestion,
 } from '../services/insertSuggester'
 import { renderInsert, resumeInsertVideo, listEligibleInsertsForBulk } from '../services/insertRenderer'
-import { directBrollScenes, assignSceneTiming } from '../services/brollDirector'
+import { directBrollScenes, assignSceneTiming, type TimedBrollScene } from '../services/brollDirector'
 import { getProductVisualBrief, type ProductVisualBrief } from '../../../../services/productVisualBrief'
 import { hasFourProductImages } from '../../../../stores/types'
 import { computeBlockStartTimestamps, computeQuoteTimestamp, computeWordTimestampFromAlignment } from '../services/insertTimingEngine'
 // Z98 #5 — local sticker renderer (canvas → transparent PNG, 0 credit).
 import { renderStickerBlob, STICKER_STYLE_META } from '../services/stickerRenderer'
-import { saveAsset } from '../../../../utils/assetStore'
+import { saveAsset, getUrl } from '../../../../utils/assetStore'
 // Z98 B2 — voice-first: synth the real voice + recalibrate the script BEFORE the
 // director runs, so scene count/placement use the real duration not a WPM guess.
-import { generateCreatorVoice } from '../services/creatorVideoEngine'
+import { generateCreatorVoice, renderLipsyncSegment } from '../services/creatorVideoEngine'
 import { recalibrateScriptToRealVoice, scriptVoiceSig } from '../services/voiceTimingEstimator'
 import { matchVoiceForAvatar } from '../services/voiceCreatorMatcher'
 
@@ -182,11 +182,59 @@ export default function ActionInsertsPhase({ onContinue }: Props) {
           `lastEnd=${timed[timed.length - 1]?.endSec.toFixed(1)}s gaps=${gaps} overlaps=${overlaps} short(<1.2s)=${shorts}`,
         )
         console.log('[BROLL_TIMING] timeline:', timed.map((t) => `${t.role} ${t.startSec.toFixed(1)}-${t.endSec.toFixed(1)}s (${(t.endSec - t.startSec).toFixed(1)})`))
+        ;(window as unknown as { __lastBrollTimed?: TimedBrollScene[] }).__lastBrollTimed = timed
         return { ...res, timed }
       } catch (e) { console.error('[BROLL_DIRECTOR] lỗi:', e) }
     }
-    return () => { delete (window as unknown as { __testBrollDirector?: unknown }).__testBrollDirector }
-  }, [geminiKey])
+    // P3b — render ONE scene of the last plan to a clip (verify quality + sync on a
+    // few scenes before the full batch). Run __testBrollDirector() first, then
+    // __testRenderScene(0), __testRenderScene(1)… It opens the resulting clip.
+    const w2 = window as unknown as { __testRenderScene?: (i: number) => Promise<unknown>; __lastBrollTimed?: TimedBrollScene[] }
+    w2.__testRenderScene = async (i: number) => {
+      const st = useAdsVideoStore.getState().state
+      const timed = w2.__lastBrollTimed
+      if (!timed || !timed[i]) { console.warn('[BROLL_RENDER] chạy __testBrollDirector() trước rồi __testRenderScene(i)'); return }
+      if (!kieApiKey) { console.warn('[BROLL_RENDER] thiếu KIE key'); return }
+      const scene = timed[i]
+      const keyframeRef = st.creatorVideo?.keyframeRef
+      const voiceRef = st.voiceFirst?.voiceRef ?? st.creatorVideo?.voiceRef
+      const resolution = st.costMode === 'FULL' ? '1080p' : st.costMode === 'STANDARD' ? '720p' : '480p'
+      console.log(`[BROLL_RENDER] #${i} role=${scene.role} ${scene.startSec}-${scene.endSec}s "${scene.quote.slice(0, 40)}"`)
+      try {
+        let videoRef: string
+        if (scene.role === 'lips') {
+          if (!keyframeRef || !voiceRef) { console.warn('[BROLL_RENDER] lips cần keyframe + voice — tạo keyframe ở Bước 3 trước'); return }
+          const r = await renderLipsyncSegment({ kieApiKey, config: st.creatorVideoConfig, voiceRef, keyframeRef, startSec: scene.startSec, endSec: scene.endSec })
+          videoRef = r.videoRef
+        } else {
+          const presetId = (scene.role === 'mechanism3d' ? 'CONCEPT_SCENE'
+            : scene.kind === 'product_closeup' ? 'PRODUCT_CLOSEUP'
+            : scene.kind === 'concept' ? 'CONCEPT_SCENE'
+            : 'PRODUCT_IN_ACTION') as ActionPresetId
+          let conceptPrompt = scene.conceptPrompt || ''
+          if (scene.role === 'mechanism3d' && !conceptPrompt.startsWith('3D MECHANISM ANIMATION')) {
+            conceptPrompt = `3D MECHANISM ANIMATION (no people): clean photorealistic 3D scientific/technical animation INSIDE the subject — ${conceptPrompt}. Cross-section or macro of the internal workings, studio 3D render, soft clinical light. NO people, NO hands, NO product packaging, NO text.`
+          }
+          const r = await renderInsert({
+            kieApiKey, presetId, product: st.inputs.product, avatar: st.inputs.avatar,
+            creatorKeyframeRef: keyframeRef, resolution,
+            conceptPrompt, renderMode: 'video', durationSec: scene.endSec - scene.startSec,
+            cameraFraming: scene.cameraFraming, quote: scene.quote,
+            onStageUpdate: (u) => console.log(`[BROLL_RENDER] #${i} ${u.stage}`),
+          })
+          videoRef = r.videoRef
+        }
+        const url = await getUrl(videoRef)
+        console.log(`[BROLL_RENDER] ✅ #${i} XONG. Video: ${url}`)
+        if (url) window.open(url, '_blank')
+        return url
+      } catch (e) { console.error(`[BROLL_RENDER] #${i} lỗi:`, e) }
+    }
+    return () => {
+      delete (window as unknown as { __testBrollDirector?: unknown }).__testBrollDirector
+      delete (window as unknown as { __testRenderScene?: unknown }).__testRenderScene
+    }
+  }, [geminiKey, kieApiKey])
 
   const inserts = state.inserts
   const costModeCfg = COST_MODE_CONFIG[state.costMode]
