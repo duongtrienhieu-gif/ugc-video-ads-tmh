@@ -35,7 +35,7 @@ import {
   type InsertSuggestion,
 } from '../services/insertSuggester'
 import { renderInsert, resumeInsertVideo, listEligibleInsertsForBulk } from '../services/insertRenderer'
-import { directBrollScenes } from '../services/brollDirector'
+import { directBrollScenes, assignSceneTiming } from '../services/brollDirector'
 import { getProductVisualBrief, type ProductVisualBrief } from '../../../../services/productVisualBrief'
 import { hasFourProductImages } from '../../../../stores/types'
 import { computeBlockStartTimestamps, computeQuoteTimestamp, computeWordTimestampFromAlignment } from '../services/insertTimingEngine'
@@ -164,7 +164,25 @@ export default function ActionInsertsPhase({ onContinue }: Props) {
         })
         console.log('[BROLL_DIRECTOR] SCENES:', res.scenes)
         console.log('[BROLL_DIRECTOR] STICKERS:', res.stickers)
-        return res
+        // P3a — derive the real timeline from the voice and verify coverage.
+        const alignment = st.voiceFirst?.voiceAlignment ?? st.creatorVideo?.voiceAlignment
+        const timed = assignSceneTiming(res.scenes, alignment, script, voiceDurationSec)
+        let gaps = 0, overlaps = 0, shorts = 0
+        for (let i = 0; i < timed.length; i++) {
+          const len = timed[i].endSec - timed[i].startSec
+          if (len < 1.2) shorts++
+          if (i > 0) {
+            const d = timed[i].startSec - timed[i - 1].endSec
+            if (d > 0.05) gaps++
+            if (d < -0.05) overlaps++
+          }
+        }
+        console.log(
+          `[BROLL_TIMING] align=${alignment ? 'REAL' : 'estimate'} voiceDur=${voiceDurationSec.toFixed(1)}s ` +
+          `lastEnd=${timed[timed.length - 1]?.endSec.toFixed(1)}s gaps=${gaps} overlaps=${overlaps} short(<1.2s)=${shorts}`,
+        )
+        console.log('[BROLL_TIMING] timeline:', timed.map((t) => `${t.role} ${t.startSec.toFixed(1)}-${t.endSec.toFixed(1)}s (${(t.endSec - t.startSec).toFixed(1)})`))
+        return { ...res, timed }
       } catch (e) { console.error('[BROLL_DIRECTOR] lỗi:', e) }
     }
     return () => { delete (window as unknown as { __testBrollDirector?: unknown }).__testBrollDirector }

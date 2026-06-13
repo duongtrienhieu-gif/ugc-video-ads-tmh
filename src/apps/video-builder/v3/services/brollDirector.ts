@@ -24,9 +24,10 @@
 
 import { directGeminiText } from '../../../../utils/gemini'
 import { SCRIPT_LANG_GEMINI_NAME } from '../types'
-import type { GeneratedScript, ScriptLang, CameraFraming } from '../types'
+import type { GeneratedScript, ScriptLang, CameraFraming, VoiceAlignment } from '../types'
 import type { Product } from '../../../../stores/types'
 import { buildProductContextBlock } from './insertSuggester'
+import { computeQuoteTimestampFromAlignment, computeQuoteTimestamp } from './insertTimingEngine'
 
 // ── Output types ────────────────────────────────────────────────────────────
 
@@ -316,6 +317,71 @@ function sanitizeScenes(raw: RawScene[] | undefined): BrollScene[] {
     }
     scene.reason = typeof r.reason === 'string' ? r.reason : undefined
     out.push(scene)
+  }
+  return out
+}
+
+// ── P3a — Scene timing (derive the REAL timeline from the voice) ────────────
+// The director's per-scene durationSec is only a HINT; the real timeline comes
+// from WHERE each scene's quote is actually spoken. We locate each quote in the
+// voice (real word-alignment first, estimate fallback), then each scene spans
+// [its anchor .. the next scene's anchor], so the cuts cover the voice EXACTLY
+// (sum = voiceDurationSec, no gaps, no hang past the voice). Unanchored scenes
+// (quote not locatable) are interpolated between their anchored neighbours.
+
+export interface TimedBrollScene extends BrollScene {
+  startSec: number
+  endSec: number
+}
+
+const round2 = (x: number) => Math.round(x * 100) / 100
+
+export function assignSceneTiming(
+  scenes: BrollScene[],
+  alignment: VoiceAlignment | null | undefined,
+  script: GeneratedScript,
+  voiceDurationSec: number,
+): TimedBrollScene[] {
+  const n = scenes.length
+  if (n === 0) return []
+  const dur = Math.max(1, voiceDurationSec)
+
+  // 1. Locate each scene's quote → raw anchor second (null if not locatable).
+  const raw: (number | null)[] = scenes.map((s) => {
+    const t = alignment ? computeQuoteTimestampFromAlignment(alignment, s.quote) : null
+    return t !== null ? t : computeQuoteTimestamp(script, s.quote)
+  })
+
+  // 2. Collect KNOWN anchors (monotonic, clamped) + virtual ends at 0 and dur.
+  const known: { idx: number; t: number }[] = [{ idx: -1, t: 0 }]
+  for (let i = 0; i < n; i++) {
+    if (raw[i] !== null) {
+      const t = Math.max(known[known.length - 1].t, Math.min(dur, Math.max(0, raw[i]!)))
+      known.push({ idx: i, t })
+    }
+  }
+  known.push({ idx: n, t: dur })
+
+  // 3. Start second per scene — anchored scenes keep their anchor; the runs of
+  //    unanchored scenes between two anchors are spread evenly.
+  const starts = new Array<number>(n).fill(0)
+  for (let k = 0; k < known.length - 1; k++) {
+    const a = known[k]
+    const b = known[k + 1]
+    if (a.idx >= 0 && a.idx < n) starts[a.idx] = a.t
+    for (let i = a.idx + 1; i < b.idx; i++) {
+      starts[i] = a.t + ((b.t - a.t) * (i - a.idx)) / (b.idx - a.idx)
+    }
+  }
+  starts[0] = 0  // the first cut always opens the video
+
+  // 4. Build spans: scene i runs until the next scene's start (last → dur).
+  const out: TimedBrollScene[] = []
+  for (let i = 0; i < n; i++) {
+    const startSec = round2(starts[i])
+    const rawEnd = i < n - 1 ? starts[i + 1] : dur
+    const endSec = round2(Math.max(startSec + 0.2, rawEnd))
+    out.push({ ...scenes[i], startSec, endSec })
   }
   return out
 }
