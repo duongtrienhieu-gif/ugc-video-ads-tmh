@@ -230,11 +230,26 @@ THREE cut ROLES (set "role"):
        mistake and makes the ad feel like a slideshow, not a real review.
      • "cameraFraming": "hands_noface" (only hands + product in its setting, NO
        face — use GENEROUSLY for usage/demo) or "creator" (a person/reaction).
-   ⚠ conceptPrompt is REQUIRED for EVERY broll — describe concretely WHAT IS ON
-   SCREEN: the hands + the action, WHICH part of the product, the real setting (e.g.
-   "hands break the biscuit in half over a plate, nuts and figs visible in the
-   crumb"). An EMPTY or vague conceptPrompt = a wasted, generic cut — never leave it
-   blank. Lean to "hands_noface" so we SEE the product used, not just a face.
+   ⚠ conceptPrompt is REQUIRED + DISTINCT for EVERY broll. This is the SINGLE most
+   important thing you write — it is the literal instruction the video model
+   renders. A weak / vague / repeated conceptPrompt is why an ad looks like the
+   same shot over and over. EACH conceptPrompt MUST specify ALL of:
+     (1) SHOT TYPE — macro close-up / wide / over-the-shoulder / POV-hands /
+         top-down flat-lay / slow push-in. VARY it across scenes.
+     (2) ACTION — the concrete thing happening this second (break / pour / dip /
+         scoop / sprinkle / wipe / hold up / bite / press / unwrap). A real verb,
+         not "show the product".
+     (3) WHICH PART of the product is in frame — the texture, the open cross-
+         section, one feature, the result on a surface — NOT always the packaging.
+     (4) SETTING — the real-world place (kitchen counter, bathroom mirror, desk,
+         car, outdoors) inferred from the product's usage.
+   GOOD: "POV over the hands snapping the biscuit in half on a wooden board,
+   walnut chunks and fig bits tumbling out, morning kitchen light." BAD: "close-up
+   of the product" / "the biscuit on a table" (generic → identical clones).
+   *** NO TWO broll cuts may be the SAME shot. If two lines are about the same
+   thing, give them DIFFERENT shot types / angles / actions (one macro of the
+   texture, one wide of it being eaten, one top-down of the ingredients). ***
+   Lean to "hands_noface" so we SEE the product used, not just a face.
    The setting is INFERRED, never hardcoded — examples across niches: seasoning →
    hands sprinkling over food in a kitchen; tyre inflator → pumping a tyre at the
    roadside; serum → dabbed on at a bathroom mirror; watch → on a wrist; seeds →
@@ -575,10 +590,11 @@ function capSplitScenes(timed: TimedBrollScene[]): TimedBrollScene[] {
     }
     const parts = Math.max(1, Math.ceil(L / MAX_BROLL_SEC))
     const step = L / parts
+    const quoteParts = splitQuoteByParts(quote, parts)   // P3v — no duplicate text
     for (let k = 0; k < parts; k++) {
       const a = round2(start + k * step)
       const b = round2(k === parts - 1 ? end : start + (k + 1) * step)
-      out.push({ role: 'broll', kind: 'product_closeup', quote, conceptPrompt: '', durationSec: round2(b - a), startSec: a, endSec: b })
+      out.push({ role: 'broll', kind: 'product_closeup', quote: quoteParts[k], conceptPrompt: '', durationSec: round2(b - a), startSec: a, endSec: b })
     }
   }
   for (const s of timed) {
@@ -589,17 +605,22 @@ function capSplitScenes(timed: TimedBrollScene[]): TimedBrollScene[] {
       // touch earlier when needed so the overflow is ≥ MIN_CUT — that way the
       // leftover always becomes its own broll and we never extend the lips past 5s.
       const lipsEnd = round2(Math.min(s.startSec + MAX_LIPS_SEC, s.endSec - MIN_CUT_SEC))
-      out.push({ ...s, endSec: lipsEnd, durationSec: round2(lipsEnd - s.startSec) })
-      fillBroll(lipsEnd, s.endSec, s.quote)  // overflow → product close-up
+      // P3v — split the spoken line so the lips card shows the FIRST portion and
+      // the overflow broll shows the REST (no duplicate of the whole sentence).
+      const [lipsQuote, overflowQuote] = splitQuoteByParts(s.quote, 2)
+      out.push({ ...s, quote: lipsQuote, endSec: lipsEnd, durationSec: round2(lipsEnd - s.startSec) })
+      fillBroll(lipsEnd, s.endSec, overflowQuote)  // overflow → product close-up
     } else {
       if (L <= MAX_BROLL_SEC + 0.4) { out.push(s); continue }
       const parts = Math.ceil(L / MAX_BROLL_SEC)
       const step = L / parts
+      const quoteParts = splitQuoteByParts(s.quote, parts)   // P3v — no duplicate text
       for (let k = 0; k < parts; k++) {
         const a = round2(s.startSec + k * step)
         const b = round2(k === parts - 1 ? s.endSec : s.startSec + (k + 1) * step)
         out.push({
           ...s, startSec: a, endSec: b, durationSec: round2(b - a),
+          quote: quoteParts[k],   // P3v — each sub-cut its own portion of speech
           // P3t — was: append "(a slightly different angle / closer)" which Grok
           // i2v rendered as visually-identical clones (the user audited 2 cảnh
           // i hệt nhau). Now apply ROTATING visual-craft modifiers so split
@@ -626,6 +647,44 @@ const SPLIT_ANGLE_VARIANTS = [
   'top-down flat-lay of the same subject',
 ]
 
+// P3v — split a quote across N sub-cuts so a long line chẻ thành nhiều cảnh
+// KHÔNG lặp lại y nguyên text (the user demanded "cấm trùng câu thoại triệt
+// để"). Each sub-cut carries ONLY the portion of speech spoken during its
+// sub-span. Prefers sentence boundaries; falls back to word-split when there
+// are fewer sentences than parts. Pure text — universal, no niche assumption.
+// GUARANTEES: returns exactly `parts` non-empty strings (each sub-cut shows
+// something), and concatenated in order they reconstruct the original quote.
+function splitQuoteByParts(quote: string, parts: number): string[] {
+  const q = (quote ?? '').trim()
+  if (parts <= 1) return [q]
+  if (!q) return new Array(parts).fill('')
+  const sentences = (q.match(/[^.!?…]+[.!?…]*/g) ?? [q]).map((s) => s.trim()).filter(Boolean)
+  // Greedy fill `parts` buckets, balanced by char length, keeping sentence order.
+  const targetLen = q.length / parts
+  const buckets: string[] = new Array(parts).fill('')
+  let bi = 0
+  for (const sent of sentences) {
+    if (bi < parts - 1 && buckets[bi].length >= targetLen && buckets[bi].length > 0) bi++
+    buckets[bi] = buckets[bi] ? `${buckets[bi]} ${sent}` : sent
+  }
+  // Any empty bucket (more parts than sentences) → borrow words from the
+  // longest non-trivial bucket so no sub-cut ends up with a blank quote.
+  for (let i = 0; i < parts; i++) {
+    if (buckets[i]) continue
+    let donor = -1, donorWords = 1
+    for (let j = 0; j < parts; j++) {
+      const w = buckets[j].split(/\s+/).filter(Boolean).length
+      if (w > donorWords) { donorWords = w; donor = j }
+    }
+    if (donor < 0) { buckets[i] = q; continue }
+    const w = buckets[donor].split(/\s+/).filter(Boolean)
+    const half = Math.ceil(w.length / 2)
+    buckets[donor] = w.slice(0, half).join(' ')
+    buckets[i] = w.slice(half).join(' ')
+  }
+  return buckets
+}
+
 // Density floor (2/2) — the deterministic backstop. After capping, if the plan is
 // still below `minScenes` (a stubborn-sparse director that the re-roll didn't fix),
 // split the LONGEST cut in half, repeatedly, until the floor is met. Splitting
@@ -646,13 +705,15 @@ function enforceDensityFloor(scenes: TimedBrollScene[], minScenes: number): Time
     if (li < 0) break   // nothing long enough to split — accept the current density
     const s = out[li]
     const mid = round2(s.startSec + (s.endSec - s.startSec) / 2)
-    const first: TimedBrollScene = { ...s, endSec: mid, durationSec: round2(mid - s.startSec) }
+    // P3v — split the quote so the two halves never show identical text.
+    const [q1, q2] = splitQuoteByParts(s.quote, 2)
+    const first: TimedBrollScene = { ...s, quote: q1, endSec: mid, durationSec: round2(mid - s.startSec) }
     const second: TimedBrollScene = s.role === 'lips'
-      ? { role: 'broll', kind: 'product_closeup', quote: s.quote, conceptPrompt: '', startSec: mid, endSec: s.endSec, durationSec: round2(s.endSec - mid) }
+      ? { role: 'broll', kind: 'product_closeup', quote: q2, conceptPrompt: '', startSec: mid, endSec: s.endSec, durationSec: round2(s.endSec - mid) }
       // P3t — was: " (a slightly different angle / closer)" → visually-identical
       // clones. Now apply a rotating angle modifier so the second half is a
       // genuinely different shot of the same subject.
-      : { ...s, startSec: mid, durationSec: round2(s.endSec - mid),
+      : { ...s, quote: q2, startSec: mid, durationSec: round2(s.endSec - mid),
           conceptPrompt: s.conceptPrompt
             ? `${s.conceptPrompt} — ${SPLIT_ANGLE_VARIANTS[split % SPLIT_ANGLE_VARIANTS.length]}`
             : s.conceptPrompt }

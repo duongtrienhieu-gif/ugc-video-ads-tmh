@@ -178,10 +178,12 @@ export async function generateScript(
   if (!params.useOwnScript) {
     let blockMap: Record<ScriptBlockId, string> = { ...parsed.blocks }
     const target = params.targetDurationSec
-    // P3i — tighter band [0.90, 1.10] + 3 passes (was 2). With the refit prompt's
-    // explicit "must land in [target-3, target+3]" + sensory/empathy expansion fuel,
-    // 3 passes virtually guarantee the script reaches ~target ±10%.
-    for (let pass = 0; pass < 3; pass++) {
+    // P3i — tighter band [0.90, 1.10]. P3x — back to 2 passes (was 3) to cut
+    // Gemini call count on free keys: the band is almost always reached on pass
+    // 0-1 with the strong refit prompt, so the 3rd pass rarely fired but still
+    // counted against the free-tier RPM budget when it did. The loop still
+    // BREAKS early the moment the script lands in band.
+    for (let pass = 0; pass < 2; pass++) {
       const joined = SCRIPT_BLOCK_IDS.map((id) => blockMap[id] ?? '').join(' ')
       const durNow = estimateReadDurationForVoice(joined, params.lang)
       if (durNow <= target * 1.10 && durNow >= target * 0.90) break  // in band

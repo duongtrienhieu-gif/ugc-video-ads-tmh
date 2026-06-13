@@ -720,6 +720,13 @@ export interface HybridState {
   voiceAlignment?: VoiceAlignment
   /** The final assembled MP4 (shown on the Export step). */
   finalVideoRef?: string
+  /** P3x — epoch ms when "Tạo giọng + mặt" started. Persisted so that if the
+   *  user navigates away mid-generation and comes back, the UI still shows
+   *  "đang tạo" and keeps the button locked (preventing a double-charge of the
+   *  ElevenLabs TTS + GPT-4o keyframe). Cleared (undefined) when the generation
+   *  finishes or fails. A >4-minute-old value is treated as stale (the tab was
+   *  closed mid-gen) so the UI never gets permanently stuck. */
+  assetsGenStartedAt?: number
 }
 
 export function createEmptyHybridState(): HybridState {

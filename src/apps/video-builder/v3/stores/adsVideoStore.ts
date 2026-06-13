@@ -80,6 +80,10 @@ interface AdsVideoStoreState {
   /** P3t — patch ONE scene's conceptPrompt without re-running the director.
    *  The user fixes a drift inline + re-renders that single scene. */
   setSceneConceptPrompt:  (idx: number, conceptPrompt: string) => void
+  /** P3x — mark the creator-assets (giọng + mặt) generation in flight. Persisted
+   *  so navigating away + back keeps the "đang tạo" lock (no double-charge).
+   *  Pass a timestamp to start, undefined to clear. */
+  setAssetsGenStartedAt:  (ts: number | undefined) => void
   /** Store the one creator keyframe + voice for the whole video. */
   setHybridCreatorAssets: (a: { keyframeRef: string; voiceRef: string; voiceDurationSec: number; voiceAlignment?: VoiceAlignment }) => void
   /** Store the final assembled MP4. */
@@ -436,6 +440,12 @@ export const useAdsVideoStore = create<AdsVideoStoreState>((set, get) => ({
       scenes[idx] = { ...scenes[idx], conceptPrompt }
       return { ...s, hybrid: { ...s.hybrid, scenes } }
     }),
+
+  setAssetsGenStartedAt: (ts) =>
+    commit(set, get, (s) => ({
+      ...s,
+      hybrid: { ...s.hybrid, assetsGenStartedAt: ts },
+    })),
 
   setHybridCreatorAssets: (a) =>
     commit(set, get, (s) => ({

@@ -8,7 +8,7 @@
 import { useEffect, useRef, useState } from 'react'
 import {
   Loader2, Wand2, RotateCcw, AlertCircle, Sparkles, Mic, User, Film, Play, ChevronRight,
-  Edit3, Save, X,
+  Edit3, Save, X, Pause, Volume2,
 } from 'lucide-react'
 import { useAppStore } from '../../../../stores/appStore'
 import { useSettingsStore } from '../../../../stores/settingsStore'
@@ -44,6 +44,7 @@ export default function HybridVideoPhase(_props: Props) {
   const setHybridClip  = useAdsVideoStore((s) => s.setHybridClip)
   const setSceneConceptPrompt = useAdsVideoStore((s) => s.setSceneConceptPrompt)
   const setHybridAssets= useAdsVideoStore((s) => s.setHybridCreatorAssets)
+  const setAssetsGenStartedAt = useAdsVideoStore((s) => s.setAssetsGenStartedAt)
   const setPhase       = useAdsVideoStore((s) => s.setPhase)
   const addToast       = useAppStore((s) => s.addToast)
   const geminiKey      = useSettingsStore((s) => s.geminiApiKey)
@@ -57,6 +58,11 @@ export default function HybridVideoPhase(_props: Props) {
   // the final assembles at 720p — the user does not choose. See hybridConstants.ts.
   const resolution = BROLL_RENDER_RES
   const hasAssets = !!(hybrid.keyframeRef && hybrid.voiceRef)
+  // P3x-G — resolve the MASTER TTS blob URL ONCE here (not per-card) so each
+  // scene card can play its own [startSec, endSec] slice of the voice — the
+  // "nghe thoại từng cảnh" the user had in Model 1. Hybrid has one master voice,
+  // so we seek into it rather than a per-scene audio file.
+  const masterVoiceUrl = useAssetUrl(hybrid.voiceRef ?? undefined)
 
   const [planning, setPlanning] = useState(false)
   const [assetsBusy, setAssetsBusy] = useState(false)
@@ -83,10 +89,18 @@ export default function HybridVideoPhase(_props: Props) {
   const pendingIdx = scenes.map((_, i) => i).filter((i) => !hybrid.clips[i])
   const pendingCredit = pendingIdx.reduce((sum, i) => sum + sceneCredit(scenes[i]), 0)
   const allDone = scenes.length > 0 && doneCount === scenes.length
+  // P3x — creator-assets generation may still be running in the background after
+  // the user navigated away + back (the promise survives unmount). The persisted
+  // timestamp tells us so we keep the lock + "đang tạo" state instead of showing
+  // an idle button the user would re-click (double-charging TTS + keyframe). A
+  // value older than 4 minutes is stale (tab closed mid-gen) → ignore it.
+  const ASSETS_STALE_MS = 4 * 60 * 1000
+  const assetsGenRunning = !!hybrid.assetsGenStartedAt &&
+    (Date.now() - hybrid.assetsGenStartedAt < ASSETS_STALE_MS)
   // P3s — `busy` now ONLY locks the toolbar actions (plan / makeAssets / renderAll).
   // The per-card Render button no longer respects `busy` — it queues instead
   // (see renderScene). The user can fire up to N concurrent renders themselves.
-  const busy = planning || assetsBusy
+  const busy = planning || assetsBusy || assetsGenRunning
   const renderingNow = renderingIdx.size + queuedIdx.length > 0
 
   const runPlan = async () => {
@@ -115,7 +129,12 @@ export default function HybridVideoPhase(_props: Props) {
     if (!avatar) { addToast('Cần chọn Avatar ở Bước 1', 'error'); return }
     const raw = useAdsVideoStore.getState().state.hybrid.rawScenes
     if (raw.length === 0) { addToast('Bấm "Đạo diễn" trước', 'error'); return }
+    // P3x — guard against double-charge: if a generation is already in flight
+    // (even from a previous mount before the user navigated away), don't start
+    // another. The persisted timestamp survives unmount.
+    if (assetsGenRunning) { addToast('Đang tạo giọng + mặt rồi — đợi xong nhé', 'info'); return }
     setAssetsBusy(true); setError('')
+    setAssetsGenStartedAt(Date.now())   // persist "đang tạo" across nav
     try {
       const voiceCategory = state.scriptBrain.voiceCategory ?? matchVoiceForAvatar(avatar, state.scriptBrain.angle)
       const kf = await renderCreatorKeyframe({
@@ -130,7 +149,10 @@ export default function HybridVideoPhase(_props: Props) {
       addToast(`✓ Giọng (${kf.voiceDurationSec.toFixed(1)}s) + khuôn mặt — nghe thử rồi render cảnh`, 'success')
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e); setError(msg); addToast(`Tạo giọng/mặt lỗi: ${msg.slice(0, 120)}`, 'error')
-    } finally { setAssetsBusy(false) }
+    } finally {
+      setAssetsBusy(false)
+      setAssetsGenStartedAt(undefined)   // clear persisted lock (also runs if unmounted)
+    }
   }
 
   const ctx = (): HybridRenderContext => ({
@@ -289,7 +311,7 @@ export default function HybridVideoPhase(_props: Props) {
             {scenes.map((s, i) => (
               <SceneCard key={i} i={i} scene={s} clipRef={hybrid.clips[i]}
                 rendering={renderingIdx.has(i)} queued={queuedIdx.includes(i)} failed={failedIdx.has(i)}
-                progress={progressByIdx[i]}
+                progress={progressByIdx[i]} voiceUrl={masterVoiceUrl}
                 credit={sceneCredit(s)} hasAssets={hasAssets}
                 onRender={() => renderScene(i)}
                 onSavePrompt={(prompt) => setSceneConceptPrompt(i, prompt)} />
@@ -351,15 +373,28 @@ function AssetsBar({ keyframeRef, voiceRef, voiceDurationSec, busy, onRegen }: {
 }
 
 // ── One scene = a 9:16 frame; render button ON the frame; clip plays in place ──
-function SceneCard({ i, scene, clipRef, rendering, queued, failed, progress, credit, hasAssets, onRender, onSavePrompt }: {
+function SceneCard({ i, scene, clipRef, rendering, queued, failed, progress, voiceUrl, credit, hasAssets, onRender, onSavePrompt }: {
   i: number; scene: TimedBrollScene; clipRef?: string; rendering: boolean; queued: boolean; failed: boolean
   progress?: { pollCount: number; elapsedSec: number }
+  voiceUrl?: string
   credit: number; hasAssets: boolean; onRender: () => void
   onSavePrompt: (prompt: string) => void
 }) {
   const url = useAssetUrl(clipRef ?? undefined)
   const badge = ROLE_BADGE[scene.role] ?? ROLE_BADGE.broll
   const done = !!url
+  // P3x-G — play THIS scene's slice of the master TTS [startSec, endSec] so the
+  // user can check the voice line per card (Model 1 had this). One shared master
+  // voice URL is passed in; we seek into it and stop at endSec.
+  const voiceAudioRef = useRef<HTMLAudioElement | null>(null)
+  const [voicePlaying, setVoicePlaying] = useState(false)
+  const playVoiceLine = () => {
+    const a = voiceAudioRef.current
+    if (!a || !voiceUrl) return
+    if (!a.paused) { a.pause(); return }
+    try { a.currentTime = scene.startSec } catch { /* not yet seekable — will start at 0 */ }
+    void a.play()
+  }
   // P3t-F — inline prompt editor for broll/mechanism3d. Lips has no
   // conceptPrompt (lipsync uses keyframe + voice), so the editor is hidden for
   // lips scenes. Dirty state tracks unsaved edits so the Save button enables only
@@ -434,7 +469,32 @@ function SceneCard({ i, scene, clipRef, rendering, queued, failed, progress, cre
       </div>
       {/* quote + concept + re-render */}
       <div className="flex flex-1 flex-col gap-1 p-2">
-        <p className="text-[11px] font-semibold leading-tight text-gray-800 line-clamp-2">“{scene.quote}”</p>
+        <div className="flex items-start gap-1">
+          <p className="flex-1 text-[11px] font-semibold leading-tight text-gray-800 line-clamp-2">“{scene.quote}”</p>
+          {/* P3x-G — nghe thoại của riêng cảnh này (slice master TTS) */}
+          {voiceUrl && (
+            <button onClick={playVoiceLine} title="Nghe đoạn thoại của cảnh này"
+              className="shrink-0 rounded p-0.5 text-gray-400 hover:bg-gray-100 hover:text-violet-600">
+              {voicePlaying ? <Pause className="h-3.5 w-3.5" /> : <Volume2 className="h-3.5 w-3.5" />}
+            </button>
+          )}
+        </div>
+        {voiceUrl && (
+          <audio
+            ref={voiceAudioRef}
+            src={voiceUrl}
+            onPlay={() => setVoicePlaying(true)}
+            onPause={() => setVoicePlaying(false)}
+            onTimeUpdate={(e) => {
+              // Stop exactly at this scene's end so we only hear ITS line.
+              if (e.currentTarget.currentTime >= scene.endSec) {
+                e.currentTarget.pause()
+                setVoicePlaying(false)
+              }
+            }}
+            className="hidden"
+          />
+        )}
 
         {/* P3t-F — inline prompt panel (broll/mechanism3d only) */}
         {canEditPrompt && !editing && (

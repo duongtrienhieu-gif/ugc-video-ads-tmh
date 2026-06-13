@@ -60,15 +60,27 @@ export async function renderOneHybridScene(
   // broll / mechanism3d → Grok insert.
   let conceptPrompt = scene.conceptPrompt || ''
   // Cut-split / density-floor leftovers arrive as broll with no conceptPrompt.
-  // Render them as a clean product close-up (uses the product bank images) instead
-  // of a blank/generic Grok shot.
   const emptyBroll = scene.role === 'broll' && !conceptPrompt.trim()
+  // P3v — preset mapping. The OLD mapping sent every `product_closeup` scene to
+  // the PRODUCT_CLOSEUP preset, which IGNORES conceptPrompt (insertRenderer only
+  // honours conceptPrompt for PRODUCT_IN_ACTION / CONCEPT_SCENE). Result: every
+  // product scene rendered the SAME fixed "packaging on a surface" shot — the
+  // "toàn túi bánh giống nhau" bug the user audited. Now ANY broll WITH a real
+  // conceptPrompt routes to PRODUCT_IN_ACTION so the director's vivid concept is
+  // actually used as the ACTION. PRODUCT_CLOSEUP is the fallback ONLY when the
+  // concept is empty (a clean product shot is better than a blank Grok frame).
   const presetId: ActionPresetId =
     scene.role === 'mechanism3d' ? 'CONCEPT_SCENE'
-    : emptyBroll ? 'PRODUCT_CLOSEUP'
-    : scene.kind === 'product_closeup' ? 'PRODUCT_CLOSEUP'
     : scene.kind === 'concept' ? 'CONCEPT_SCENE'
+    : emptyBroll ? 'PRODUCT_CLOSEUP'
     : 'PRODUCT_IN_ACTION'
+  // P3v — a product B-roll must NOT randomly grow a face. PRODUCT_IN_ACTION only
+  // drops the avatar ref when cameraFraming === 'hands_noface'; if the director
+  // left it unset, default product scenes to hands-only so we never inject a
+  // stray creator face into a pure product shot. ('creator' is kept only when
+  // the director explicitly asked for a person — e.g. the CTA endorsement).
+  const cameraFraming: typeof scene.cameraFraming =
+    scene.cameraFraming ?? (scene.kind === 'product_closeup' ? 'hands_noface' : 'creator')
 
   if (scene.role === 'mechanism3d' && !conceptPrompt.startsWith('3D MECHANISM ANIMATION')) {
     conceptPrompt = `3D MECHANISM ANIMATION (no people): clean photorealistic 3D scientific/technical animation INSIDE the subject — ${conceptPrompt}. Cross-section or macro of the internal workings, studio 3D render, soft clinical light. NO people, NO hands, NO product packaging, NO text.`
@@ -84,7 +96,7 @@ export async function renderOneHybridScene(
     conceptPrompt,
     renderMode: 'video',
     durationSec: scene.endSec - scene.startSec,
-    cameraFraming: scene.cameraFraming,
+    cameraFraming,   // P3v — defaulted above so product shots don't grow a face.
     quote: scene.quote,
     onStageUpdate: (u) => onStage?.(u.stage),
     onProgress,   // P3t — thread KIE poll updates so the UI shows "poll #N · Ms".
