@@ -300,19 +300,27 @@ THREE cut ROLES (set "role"):
    last CTA/buy line is NOT a lips cut (it is the product-endorsement shot, see RULES). ***
 2. "broll" — a full-screen product/concept cut, usually NO face. Write a vivid
    "conceptPrompt" (one English sentence: action + real-world SETTING) and set:
-     • "kind" — DEFAULT to showing the REAL product: it is the ONE thing you can
-       always film in EVERY niche, so most cuts should be it. Use "product_action"
-       (the product being USED — infer WHERE/HOW from the product's usageGuide/
-       description, in its real setting) or "product_closeup" (a clean close-up of
-       the product / a feature / its texture / the result). GROUND every benefit or
-       claim line in a real product shot (show the product while the voice states the
-       claim) — do NOT turn a claim into an abstract drawing. "concept" (NO product
-       on screen — a pure feeling/problem) is a LAST RESORT, only for a line that is
-       pure emotion or an abstraction the product on screen genuinely can't show.
-       Never pick "concept" just because a line is a benefit/claim — that is the #1
-       mistake and makes the ad feel like a slideshow, not a real review.
+     • "kind" — pick what the LINE actually calls for:
+       - "product_action" (the BACKBONE — the product being USED in its real
+         setting; infer WHERE/HOW from the product's usageGuide/description) or
+         "product_closeup" (a clean close-up of the product / a feature / texture /
+         result). Most cuts are these — ground spec / ingredient / how-it-works
+         lines in a real product shot, never an abstract drawing.
+       - "concept" (NO product on screen) — USE IT, do not avoid it, whenever the
+         line is about a FEELING, a RESULT, an EXPERIENCE, or a real-life MOMENT
+         that lands harder on a PERSON or a scene than on the packaging. A real
+         ad cuts to the human payoff — set cameraFraming:"creator" for these.
+         Universal across niches (read the product, infer the moment):
+           · food → someone tasting a bite, eyes lighting up, satisfied nod
+           · skincare/beauty → touching freshly-clean skin in the mirror, quiet smile
+           · supplement/health → waking up easy, stretching, light and energetic
+           · apparel → spinning in the outfit, confident in the mirror
+           · gadget/tool → the relieved "finally, done in seconds" reaction
+           · home/clean → stepping back to admire the spotless result
+         Do NOT force the product into a beat that is purely about how it FEELS.
      • "cameraFraming": "hands_noface" (only hands + product in its setting, NO
-       face — use GENEROUSLY for usage/demo) or "creator" (a person/reaction).
+       face — use GENEROUSLY for usage/demo) or "creator" (a person / reaction /
+       emotion — use for the human payoff beats above).
    ⚠ conceptPrompt is REQUIRED + DISTINCT for EVERY broll. This is the SINGLE most
    important thing you write — it is the literal instruction the video model
    renders. A weak / vague / repeated conceptPrompt is why an ad looks like the
@@ -365,6 +373,23 @@ names — never pad with vague stickers, but never leave a concrete callout bare
   leave or switch a word to English (write the ${langName} word, not the English one).
 ${culturalSettingBlock}${shapeHint}
 RULES:
+- DIRECTOR'S BRAIN (the #0 rule — think like a real director, not a captioner):
+  READ THE MEANING of each line, then PICTURE the real-life moment + the person's
+  EMOTION it implies, and film THAT — not a static product shot of the words.
+  A descriptive line is an invitation to STAGE a scene. Universal, infer from the
+  product (examples span niches, do NOT copy them literally):
+    · "dùng được cho nhiều món / vị ngon" (a seasoning) → someone cooking at the
+      stove, sprinkling it on, then tasting a spoonful with a happy, satisfied face
+    · "da căng mượt sau 1 tuần" (a serum) → applying at the mirror, then a close,
+      confident touch of glowing skin + a small smile
+    · "ngủ ngon hơn hẳn" (a supplement) → waking up easy in soft morning light,
+      stretching, refreshed
+    · "bơm phát ăn ngay" (a tire inflator) → the roadside relief moment, tire
+      firms up, the driver exhales and smiles
+  When a line is RICH (an action AND a feeling/result), you MAY break it into a
+  short MICRO-SEQUENCE of 2-3 complementary cuts (action → result/taste → the
+  satisfied human reaction) instead of one flat shot — that is real directing.
+  Each cut still gets its own quote slice + conceptPrompt.
 - COVER 100%: the scenes' durations sum to ~${dur}s; every spoken beat has a cut;
   NO empty span.
 - GROUPING (the #1 rule — be FLEXIBLE, not mechanical):
