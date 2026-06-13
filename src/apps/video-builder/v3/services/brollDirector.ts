@@ -161,14 +161,22 @@ THREE cut ROLES (set "role"):
    + durationSec (~3-5s). NO conceptPrompt needed.
    *** Use EXACTLY ${lipsCount} lips cuts. The FIRST lips cut MUST be the opening
    HOOK and sit in the FIRST THIRD of the video (the viewer must see a real face
-   in the first ~3s or they scroll). Then SPREAD the rest — a mid beat and the
-   CTA close — so the creator's face re-appears and carries the trust thread. ***
+   in the first ~3s or they scroll). SPREAD the rest across the middle and near the
+   end so the creator's face re-appears and carries the trust thread. (The very last
+   CTA/buy line is NOT a lips cut — it is the product-endorsement shot, see RULES.) ***
 2. "broll" — a full-screen product/concept cut, usually NO face. Write a vivid
    "conceptPrompt" (one English sentence: action + real-world SETTING) and set:
-     • "kind": "product_action" (the product being USED — infer WHERE/HOW from the
-       product's usageGuide/description, put it in its real setting), or
-       "product_closeup" (a clean close-up showing a feature/the product itself),
-       or "concept" (no product — a feeling / problem / ingredient / proof).
+     • "kind" — DEFAULT to showing the REAL product: it is the ONE thing you can
+       always film in EVERY niche, so most cuts should be it. Use "product_action"
+       (the product being USED — infer WHERE/HOW from the product's usageGuide/
+       description, in its real setting) or "product_closeup" (a clean close-up of
+       the product / a feature / its texture / the result). GROUND every benefit or
+       claim line in a real product shot (show the product while the voice states the
+       claim) — do NOT turn a claim into an abstract drawing. "concept" (NO product
+       on screen — a pure feeling/problem) is a LAST RESORT, only for a line that is
+       pure emotion or an abstraction the product on screen genuinely can't show.
+       Never pick "concept" just because a line is a benefit/claim — that is the #1
+       mistake and makes the ad feel like a slideshow, not a real review.
      • "cameraFraming": "hands_noface" (only hands + product in its setting, NO
        face — use GENEROUSLY for usage/demo) or "creator" (a person/reaction).
    The setting is INFERRED, never hardcoded — examples across niches: seasoning →
@@ -216,7 +224,10 @@ RULES:
 - Each scene's "quote" MUST be text that actually appears in the script.
 - VARIETY: mix lips + no-face hands-action + product close-ups + (some) 3D, so the
   ad feels like a real hand-held review, not a slideshow or a single locked shot.
-- The CTA close should be a "lips" cut (creator endorsing) when the script has one.
+- The CTA / buy line MUST show the PRODUCT in frame with an endorsing gesture — the
+  creator holding/presenting the product and a thumbs-up / nod / offering it to camera
+  (set role:"broll", kind:"product_action", cameraFraming:"creator"). NEVER end on a
+  bare talking-head with no product — the viewer must see the product at the call to buy.
 - Universal: infer setting/usage from the product context; never hardcode a niche.
 
 SCRIPT (cover all of it):

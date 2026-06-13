@@ -301,12 +301,12 @@ export default function ActionInsertsPhase({ onContinue }: Props) {
         .sort((a, b) => a.atSec - b.atSec)
       let lastTs = -Infinity
       for (const { stk, atSec } of dated) {
-        if (atSec - lastTs < 2.5) continue
+        if (atSec - lastTs < 3.0) continue  // ≥ sticker duration (2.7s) so they don't stack
         lastTs = atSec
         try {
           const blob = await renderStickerBlob({ style: stk.style as StickerStyle, text: stk.text ?? '', items: stk.items })
           const pngRef = await saveAsset(blob, 'image/png')
-          placements.push({ pngRef, atSec, durationSec: 1.8, heightFraction: 0.10 })
+          placements.push({ pngRef, atSec, durationSec: 2.7, heightFraction: 0.10 })
         } catch (e) { console.warn('[HYBRID_ASM] sticker render lỗi — bỏ qua', e) }
       }
       console.log(`[HYBRID_ASM] ghép ${clips.length} clip + ${placements.length} sticker (res=${resolution})…`)
