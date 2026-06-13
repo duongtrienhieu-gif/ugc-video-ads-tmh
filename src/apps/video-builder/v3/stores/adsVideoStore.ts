@@ -81,6 +81,8 @@ interface AdsVideoStoreState {
   setHybridCreatorAssets: (a: { keyframeRef: string; voiceRef: string; voiceDurationSec: number; voiceAlignment?: VoiceAlignment }) => void
   /** Store the final assembled MP4. */
   setHybridFinal:         (videoRef: string) => void
+  /** Output resolution (480p nháp / 720p default / 1080p premium). */
+  setHybridResolution:    (resolution: '480p' | '720p' | '1080p') => void
   clearHybrid:            () => void
   /** Z32 — set/replace creator video config (setting + energy + preset + wardrobe + resolution) */
   setCreatorVideoConfig: (config: CreatorVideoConfig) => void
@@ -224,6 +226,8 @@ function loadFromStorage(): V3PipelineState | null {
     }
     // P3e — pre-hybrid saves won't have the hybrid slice; backfill it.
     if (!parsed.hybrid) parsed.hybrid = createEmptyHybridState()
+    // Saves from the first hybrid commits won't carry a resolution; default 720p.
+    if (parsed.hybrid && !parsed.hybrid.resolution) parsed.hybrid.resolution = '720p'
     // Defensive: a corrupted / pre-inserts payload may not carry an array.
     // Guard before .map so a bad localStorage blob can't crash hydration.
     if (!Array.isArray(parsed.inserts)) parsed.inserts = []
@@ -406,6 +410,11 @@ export const useAdsVideoStore = create<AdsVideoStoreState>((set, get) => ({
 
   setHybridFinal: (videoRef) =>
     commit(set, get, (s) => ({ ...s, hybrid: { ...s.hybrid, finalVideoRef: videoRef } })),
+
+  setHybridResolution: (resolution) =>
+    // Already-rendered clips keep their original res (the assembler scales them);
+    // the user can re-render a card for a crisp result at the new res. Stale final.
+    commit(set, get, (s) => ({ ...s, hybrid: { ...s.hybrid, resolution, finalVideoRef: undefined } })),
 
   clearHybrid: () =>
     commit(set, get, (s) => ({ ...s, hybrid: createEmptyHybridState() })),

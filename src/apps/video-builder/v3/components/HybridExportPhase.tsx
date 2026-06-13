@@ -24,7 +24,7 @@ export default function HybridExportPhase() {
   const scenes = hybrid.scenes ?? []
   const doneCount = scenes.filter((_, i) => hybrid.clips[i]).length
   const allDone = scenes.length > 0 && doneCount === scenes.length
-  const resolution = state.costMode === 'FULL' ? '1080p' : state.costMode === 'STANDARD' ? '720p' : '480p'
+  const resolution = hybrid.resolution
 
   const [assembling, setAssembling] = useState(false)
   const [error, setError] = useState('')
