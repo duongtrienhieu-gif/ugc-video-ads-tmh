@@ -157,13 +157,12 @@ appliance, accessory…) — never assume a niche.${productContext}
 
 THREE cut ROLES (set "role"):
 1. "lips" — the creator ON CAMERA saying a specific line (face visible, will be
-   lip-synced to that exact voice span). Give the "quote" (verbatim spoken line)
-   + durationSec (~3-5s). NO conceptPrompt needed.
-   *** Use EXACTLY ${lipsCount} lips cuts. The FIRST lips cut MUST be the opening
-   HOOK and sit in the FIRST THIRD of the video (the viewer must see a real face
-   in the first ~3s or they scroll). SPREAD the rest across the middle and near the
-   end so the creator's face re-appears and carries the trust thread. (The very last
-   CTA/buy line is NOT a lips cut — it is the product-endorsement shot, see RULES.) ***
+   lip-synced to that exact voice span). Give the "quote" (verbatim spoken line) — a
+   lips cut is a SHORT line (~3-5s of speech). NO conceptPrompt needed.
+   *** Use EXACTLY ${lipsCount} lips cuts. The FIRST is the opening HOOK (the viewer
+   must see a real face in the first ~3s or they scroll). SPREAD the rest through the
+   MIDDLE so the creator's face re-appears and carries the trust thread — but the very
+   last CTA/buy line is NOT a lips cut (it is the product-endorsement shot, see RULES). ***
 2. "broll" — a full-screen product/concept cut, usually NO face. Write a vivid
    "conceptPrompt" (one English sentence: action + real-world SETTING) and set:
      • "kind" — DEFAULT to showing the REAL product: it is the ONE thing you can
@@ -202,25 +201,24 @@ names — never pad with vague stickers, but never leave a concrete callout bare
     20000mAh","⏱ 4 tiếng","⚡ 30 phút"], quote} — a stacked card (each item may
     start with its own emoji).
   Stickers carry the info the old hand-drawn overlays used to; do NOT make overlay
-  scenes. Keep ALL sticker text in ${langName}.
+  scenes. They pop ONE at a time, spaced ~3s apart (two within 3s collide and the
+  later one is dropped) — so cover the KEY callouts; don't stack many on one line.
+  Keep ALL sticker text in ${langName}.
 
 RULES:
 - COVER 100%: the scenes' durations sum to ~${dur}s; every spoken beat has a cut;
   NO empty span. Give each DISTINCT beat its OWN cut with its OWN visual — only merge
   sentences that are truly one single thought; lean toward MORE distinct cuts, not fewer.
-- PACING — vary cut LENGTH by PURPOSE so the ad has rhythm, NEVER a flat ~4s
-  metronome (consecutive cuts must NOT be the same length):
-    • SHORT punchy cuts (2-3s): the hook, a quick callout, a rapid run of feature/
-      use-case shots, a snappy reaction — keep the open and the listy parts FAST.
-    • MEDIUM (3-4s): most supporting B-roll and transitions.
-    • LONGER holds (4-6s): the main product demo / usage moment, a satisfying
-      reveal or result, the CTA close — let these breathe.
-  Aim for a mix (e.g. fast-fast-slow), not uniform durations. NO single cut may
-  cover more than ~6s of voice — if a stretch of the script runs longer, SPLIT it
-  into MORE scenes (more cuts) instead of one long shot. LIPS cuts stay 4-5s. Make
-  ENOUGH scenes that the voice is densely covered — for THIS ${dur}s video return AT
-  LEAST ${minScenes} distinct cuts (each a DIFFERENT visual grounded in a real line,
-  never a repeat or vague filler to pad the count).
+- PACING is set by HOW MUCH SPEECH each cut covers — you do NOT set seconds; a cut
+  lasts exactly as long as its quote is spoken. So control rhythm by CHUNKING:
+    • a SHORT quote (a few words — the hook, a quick callout, a snappy reaction) → a
+      fast punchy cut. Keep the open and the listy parts as short quotes.
+    • a FULL line (one complete idea — a demo, a result) → a longer beat that breathes.
+  Mix them (fast-fast-slow), never a flat metronome. NO cut may cover more than ~5s of
+  speech — if ONE idea is spoken longer than that, split it into TWO DISTINCT shots (a
+  different angle / action / detail of the same product), never one long shot and never
+  a repeat. Return AT LEAST ${minScenes} distinct cuts for this ${dur}s video, each a
+  DIFFERENT real visual — never vague filler to pad the count.
 - Each scene's "quote" MUST be text that actually appears in the script.
 - VARIETY: mix lips + no-face hands-action + product close-ups + (some) 3D, so the
   ad feels like a real hand-held review, not a slideshow or a single locked shot.
@@ -315,12 +313,14 @@ const SCENE_KINDS: BrollSceneKind[] = ['product_action', 'product_closeup', 'con
 
 // Guarantee the lips ladder: if fewer "lips" than `target`, convert the broll cuts
 // sitting in the LARGEST gaps between existing lips into lips, so the creator's face
-// re-appears at evenly-spread points (hook + middle(s) + CTA). Never drops below the
-// model's choice; only tops up. If there are MORE lips than target, leaves them.
+// re-appears at evenly-spread points (hook + middle beats). Never drops below the
+// model's choice; only tops up. NEVER promotes the LAST cut — that is the CTA
+// product-endorsement shot and must keep its product (see the CTA rule).
 function enforceLipsCount(scenes: BrollScene[], target: number): BrollScene[] {
   const lipsIdx = scenes.map((s, i) => (s.role === 'lips' ? i : -1)).filter((i) => i >= 0)
   if (lipsIdx.length >= target) return scenes
-  const brollIdx = scenes.map((s, i) => (s.role === 'broll' ? i : -1)).filter((i) => i >= 0)
+  // Exclude the final cut (the CTA) from promotion candidates.
+  const brollIdx = scenes.map((s, i) => (s.role === 'broll' ? i : -1)).filter((i) => i >= 0 && i !== scenes.length - 1)
   const need = target - lipsIdx.length
   const chosen: number[] = []
   const n = scenes.length
