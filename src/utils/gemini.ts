@@ -164,17 +164,19 @@ export async function directGeminiVision(params: {
     // 5s backoff gives the RPM window time to refresh.
     let res: Response | null = null
     let attempts = 0
-    while (attempts < 3) {
+    // P4n — retry-STORM guard (same as directGeminiText): 1 retry max; a DAILY-
+    // exhausted 429 cascades to the next model immediately instead of waiting.
+    while (attempts < 2) {
       res = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       })
-      // Transient: 429 (rate limit) and 503 (overload) — wait + retry
-      if ((res.status === 429 || res.status === 503) && attempts < 2) {
+      if ((res.status === 429 || res.status === 503) && attempts < 1) {
+        if (res.status === 429 && classifyGemini429(await res.clone().text().catch(() => '')).isDailyExhausted) break
         attempts++
-        const backoff = res.status === 429 ? 5000 : 3000  // 5s for rate limit, 3s for overload
-        console.warn(`[directGeminiVision] ${model} ${res.status} — backoff ${backoff}ms then retry (${attempts}/2)`)
+        const backoff = res.status === 429 ? 4000 : 3000
+        console.warn(`[directGeminiVision] ${model} ${res.status} — backoff ${backoff}ms then 1 retry`)
         await sleep(backoff)
         continue
       }
@@ -261,19 +263,25 @@ export async function directGeminiText(params: {
       body.systemInstruction = { parts: [{ text: params.systemInstruction }] }
     }
 
-    // Phase 10.3 — retry same model on 429/503 with backoff before cascading.
+    // P4n — retry-STORM guard. ONE retry max per model (was 2). On a 429, peek the
+    // body: if the DAILY quota (RPD) is exhausted, DON'T wait — cascade to the next
+    // model immediately (its per-day quota is separate + this one won't refresh for
+    // hours). Only a per-MINUTE 429 earns a short backoff. This stops one limited
+    // call ballooning into ~9 HTTP hits × 5s waits across 4 models (the "1 test →
+    // cả 4 model chết" storm the user hit).
     let res: Response | null = null
     let attempts = 0
-    while (attempts < 3) {
+    while (attempts < 2) {
       res = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       })
-      if ((res.status === 429 || res.status === 503) && attempts < 2) {
+      if ((res.status === 429 || res.status === 503) && attempts < 1) {
+        if (res.status === 429 && classifyGemini429(await res.clone().text().catch(() => '')).isDailyExhausted) break
         attempts++
-        const backoff = res.status === 429 ? 5000 : 3000
-        console.warn(`[directGeminiText] ${model} ${res.status} — backoff ${backoff}ms then retry (${attempts}/2)`)
+        const backoff = res.status === 429 ? 4000 : 3000
+        console.warn(`[directGeminiText] ${model} ${res.status} — backoff ${backoff}ms then 1 retry`)
         await sleep(backoff)
         continue
       }

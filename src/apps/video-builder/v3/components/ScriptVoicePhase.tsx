@@ -16,7 +16,7 @@
 // compliance guard is preserved (blocks advancing until the user acknowledges).
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { useMemo, useEffect, useState } from 'react'
+import { useMemo, useEffect, useState, useRef } from 'react'
 import {
   Loader2, Sparkles, RefreshCw, ChevronRight, AlertCircle,
   Clock, Mic2, Lightbulb, Globe, Package, UserRound,
@@ -37,7 +37,7 @@ import { SHAPE_CONFIGS, SCRIPT_SHAPE_ORDER } from '../services/scriptShapes'
 import { recomputeBlockDurations, estimateReadDurationForVoice } from '../services/voiceTimingEstimator'
 import { generateScript, generateHooks, translateScriptToVietnamese, detectCertClaims } from '../services/scriptGenerator'
 import {
-  listVoices, listSharedVoices, addSharedVoice, cloneVoice,
+  listVoices, listSharedVoices, addSharedVoice, cloneVoice, textToSpeech,
   type ElevenLabsVoice, type SharedVoice,
 } from '../../../../utils/elevenlabs'
 
@@ -318,6 +318,8 @@ export default function ScriptVoicePhase({ onContinue }: Props) {
   const [loadingShared, setLoadingShared] = useState(false)
   const [addingId, setAddingId]   = useState<string | null>(null)
   const [cloning, setCloning]     = useState(false)   // P4m — clone voice from MP3
+  const [ttsPreviewingId, setTtsPreviewingId] = useState<string | null>(null)  // P4n — real TTS preview
+  const ttsCacheRef = useRef<Map<string, string>>(new Map())
   const [libLang, setLibLang]     = useState('ms')
   const [libGender, setLibGender] = useState<'' | 'male' | 'female'>('')
   const [libSearch, setLibSearch] = useState('')
@@ -337,6 +339,35 @@ export default function ScriptVoicePhase({ onContinue }: Props) {
     const a = new Audio(url)
     setPreviewEl(a)
     a.play().catch(() => {})
+  }
+
+  // P4n — REAL TTS preview: generate a short sample with the ACTUAL voiceId via
+  // eleven_v3 (the render model) so the user can hear a CLONED voice (which has no
+  // ElevenLabs preview_url) and so "nghe thử" matches the rendered voice. Cached
+  // per voiceId (one ElevenLabs call per voice, replays are free).
+  const handleTtsPreview = async (voiceId: string) => {
+    if (!voiceId) return
+    const cached = ttsCacheRef.current.get(voiceId)
+    if (cached) { playPreview(cached); return }
+    if (!elevenLabsKey) { addToast('Thiếu ElevenLabs API key trong Settings', 'error'); return }
+    setTtsPreviewingId(voiceId)
+    try {
+      const lang = state.scriptBrain.outputLang
+      const sample = lang === 'ms'
+        ? 'Hai semua, ini suara untuk video anda. Macam mana, sesuai tak?'
+        : lang === 'en'
+        ? 'Hi there, this is the voice for your video. How does it sound?'
+        : 'Xin chào, đây là giọng đọc thử cho video của bạn nè. Nghe ổn không?'
+      const buf = await textToSpeech({
+        apiKey: elevenLabsKey, voiceId, text: sample,
+        modelId: 'eleven_v3', stability: 0.45, style: 0.3, outputFormat: 'mp3_44100_128',
+      })
+      const url = URL.createObjectURL(new Blob([buf], { type: 'audio/mpeg' }))
+      ttsCacheRef.current.set(voiceId, url)
+      playPreview(url)
+    } catch (err) {
+      addToast(err instanceof Error ? err.message : 'Nghe thử thất bại', 'error')
+    } finally { setTtsPreviewingId(null) }
   }
 
   const handleLoadMyVoices = async () => {
@@ -398,8 +429,11 @@ export default function ScriptVoicePhase({ onContinue }: Props) {
       const name = `Clone ${file.name.replace(/\.[^.]+$/, '').slice(0, 24)} ${Date.now().toString().slice(-4)}`
       const newId = await cloneVoice({ apiKey: elevenLabsKey, name, file })
       setVoiceId(newId)
-      addToast(`✓ Đã clone & chọn giọng từ "${file.name}"`, 'success')
+      addToast('✓ Clone thành công! Đang phát thử giọng clone…', 'success')
       setVoiceTab('mine'); handleLoadMyVoices()
+      // P4n — immediately speak a sample so the user HEARS the clone worked (a
+      // freshly-cloned voice has no ElevenLabs preview_url to play otherwise).
+      void handleTtsPreview(newId)
     } catch (err) {
       addToast(err instanceof Error ? err.message : 'Clone giọng thất bại', 'error')
     } finally { setCloning(false) }
@@ -732,6 +766,16 @@ export default function ScriptVoicePhase({ onContinue }: Props) {
               ) : (
                 <span className="text-[11px] text-gray-500">Đang dùng giọng mặc định.</span>
               )}
+              {selectedVoiceId && (
+                <button
+                  onClick={() => handleTtsPreview(selectedVoiceId)}
+                  disabled={ttsPreviewingId === selectedVoiceId}
+                  title="Nghe thử giọng đang chọn (tạo mẫu bằng đúng giọng render)"
+                  className="inline-flex items-center gap-1 rounded-full border border-violet-200 bg-white px-2 py-1 text-[11px] font-bold text-violet-700 hover:bg-violet-50 disabled:opacity-50"
+                >
+                  {ttsPreviewingId === selectedVoiceId ? <Loader2 className="h-3 w-3 animate-spin" /> : <Play className="h-3 w-3" />} Nghe thử
+                </button>
+              )}
               <button
                 onClick={() => setVoicePanelOpen((o) => !o)}
                 className="ml-auto rounded-full border border-violet-200 bg-violet-50 px-3 py-1 text-[11px] font-bold text-violet-700 transition-all hover:bg-violet-100"
@@ -811,11 +855,13 @@ export default function ScriptVoicePhase({ onContinue }: Props) {
                                 {v.category}{v.labels?.gender ? ` · ${v.labels.gender}` : ''}{v.labels?.accent ? ` · ${v.labels.accent}` : ''}
                               </p>
                             </div>
-                            {v.preview_url && (
-                              <button onClick={() => playPreview(v.preview_url)} title="Nghe thử" className="rounded-full p-1 text-violet-600 hover:bg-violet-100">
-                                <Play className="h-3.5 w-3.5" />
-                              </button>
-                            )}
+                            <button
+                              onClick={() => v.preview_url ? playPreview(v.preview_url) : handleTtsPreview(v.voice_id)}
+                              disabled={ttsPreviewingId === v.voice_id}
+                              title={v.preview_url ? 'Nghe thử' : 'Nghe thử (tạo mẫu giọng)'}
+                              className="rounded-full p-1 text-violet-600 hover:bg-violet-100 disabled:opacity-50">
+                              {ttsPreviewingId === v.voice_id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Play className="h-3.5 w-3.5" />}
+                            </button>
                             <button
                               onClick={() => { setVoiceId(v.voice_id); addToast(`✓ Đã chọn giọng "${v.name}"`, 'success') }}
                               className={`rounded-full px-2.5 py-1 text-[10px] font-bold transition-all ${
@@ -889,11 +935,13 @@ export default function ScriptVoicePhase({ onContinue }: Props) {
                                 {v.language}{v.accent ? ` · ${v.accent}` : ''}{v.gender ? ` · ${v.gender}` : ''}{v.use_case ? ` · ${v.use_case}` : ''}
                               </p>
                             </div>
-                            {v.preview_url && (
-                              <button onClick={() => playPreview(v.preview_url)} title="Nghe thử" className="rounded-full p-1 text-violet-600 hover:bg-violet-100">
-                                <Play className="h-3.5 w-3.5" />
-                              </button>
-                            )}
+                            <button
+                              onClick={() => v.preview_url ? playPreview(v.preview_url) : handleTtsPreview(v.voice_id)}
+                              disabled={ttsPreviewingId === v.voice_id}
+                              title={v.preview_url ? 'Nghe thử' : 'Nghe thử (tạo mẫu giọng)'}
+                              className="rounded-full p-1 text-violet-600 hover:bg-violet-100 disabled:opacity-50">
+                              {ttsPreviewingId === v.voice_id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Play className="h-3.5 w-3.5" />}
+                            </button>
                             <button
                               onClick={() => handleAddSharedVoice(v)}
                               disabled={addingId === v.voice_id || isSel}

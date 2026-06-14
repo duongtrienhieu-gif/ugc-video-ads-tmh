@@ -190,35 +190,27 @@ export default function HybridVideoPhase(_props: Props) {
     }
   }
 
-  // P4k — CORRECT-ORDER pipeline: voice/keyframe FIRST → director on the REAL
-  // duration + alignment. Used by auto-run + the "Tạo lại giọng" button.
-  const runFullPipeline = async () => {
-    const ok = await makeVoice()
-    if (ok) await runPlan()
-  }
-
-  // P4k — AUTO-RUN. The user no longer clicks "Tạo giọng" then "Đạo diễn"
-  // separately: on arriving at this step with a ready script, the app runs the
-  // whole pipeline in the CORRECT order automatically. Fires ONCE; skips when a
-  // gen is already in flight (F5 mid-gen) or voice+scenes already exist — so it
-  // never double-charges. If keys/avatar are missing it stays idle (manual button).
+  // P4n — AUTO-RUN ONLY the voice + keyframe (0 Gemini — ElevenLabs + KIE). The
+  // DIRECTOR (the Gemini-heavy step) is now a MANUAL button. Rationale: voice+frame
+  // takes ~30-60s with ZERO Gemini calls, so by the time the user reads/clicks
+  // "Đạo diễn", the Bước-1 hook/body calls have aged out of the 60s RPM window →
+  // the director burst no longer stacks on top of them (far fewer rate-limit hits
+  // on free keys). Auto-fires ONCE; re-voices if the picked voice changed (P4m);
+  // skips while a gen is in flight (no double-charge).
   const autoRanRef = useRef(false)
   useEffect(() => {
     if (autoRanRef.current) return
-    if (!geminiKey || !kieApiKey || !elevenLabsKey) return
+    if (!kieApiKey || !elevenLabsKey) return        // voice needs KIE + ElevenLabs (not Gemini)
     const s = useAdsVideoStore.getState().state
     if (!s.inputs.avatar) return
     const h = s.hybrid
-    // P4m — the cached voice is STALE if it was made with a different pick than the
-    // one selected now (user changed the voice in Bước 1). Stale → regenerate.
     const voiceStale = !!h.voiceRef && (h.voiceId ?? '') !== (s.inputs.voiceId ?? '')
-    if (h.voiceRef && !voiceStale && (h.scenes?.length ?? 0) > 0) { autoRanRef.current = true; return }   // complete + voice current
+    if (h.voiceRef && !voiceStale) { autoRanRef.current = true; return }   // voice already current → director is the user's manual click
     if (h.assetsGenStartedAt && Date.now() - h.assetsGenStartedAt < ASSETS_STALE_MS) return // gen in flight → don't double-fire
     autoRanRef.current = true
-    if (h.voiceRef && !voiceStale) void runPlan()    // voice current → only direct (0 credit)
-    else void runFullPipeline()                      // fresh OR voice changed → regen voice + direct
+    void makeVoice()    // auto ONLY the voice + frame; user clicks "Đạo diễn" after
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [geminiKey, kieApiKey, elevenLabsKey, script])
+  }, [kieApiKey, elevenLabsKey, script])
 
   const ctx = (): HybridRenderContext => ({
     kieApiKey, keyframeRef: hybrid.keyframeRef, voiceRef: hybrid.voiceRef,
@@ -366,21 +358,26 @@ export default function HybridVideoPhase(_props: Props) {
               {assetsBusy ? 'Đang tạo giọng + khuôn mặt…'
                 : planning ? 'Đang đạo diễn (chia cảnh theo giọng thật)…'
                 : scenes.length > 0 ? `${scenes.length} cảnh · ${doneCount}/${scenes.length} đã render`
-                : 'Đang khởi tạo tự động…'}
+                : hasAssets ? 'Giọng đã sẵn — bấm "Đạo diễn" để chia cảnh'
+                : 'Đang tạo giọng + khuôn mặt…'}
             </p>
-            <p className="text-[11px] text-gray-500">Tự động: giọng → đạo diễn → render. Đạo diễn + soát: 0 credit. Render 480p · Video cuối 720p.</p>
+            <p className="text-[11px] text-gray-500">Giọng tự tạo · Đạo diễn bấm tay (0 credit, đỡ dính rate-limit). Render 480p · Video cuối 720p.</p>
           </div>
           <button onClick={runPlan} disabled={busy || !hasAssets}
-            title={!hasAssets ? 'Cần giọng trước (đang tự tạo)' : 'Đạo diễn lại trên giọng hiện có (0 credit)'}
-            className="flex items-center gap-1.5 rounded-lg border border-violet-300 bg-white px-3 py-2 text-[12px] font-bold text-violet-700 hover:bg-violet-50 disabled:opacity-50">
+            title={!hasAssets ? 'Đợi giọng + mặt tạo xong (đang tự chạy)' : 'Chia kịch bản thành cảnh theo giọng (0 credit Gemini)'}
+            className={`flex items-center gap-1.5 rounded-lg px-3 py-2 text-[12px] font-bold shadow-sm disabled:opacity-50 ${
+              hasAssets && scenes.length === 0
+                ? 'bg-gradient-to-r from-violet-600 to-pink-600 text-white'   // primary call-to-action once voice is ready
+                : 'border border-violet-300 bg-white text-violet-700 hover:bg-violet-50'
+            }`}>
             {planning ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Wand2 className="h-3.5 w-3.5" />}
-            Đạo diễn lại
+            {scenes.length > 0 ? 'Đạo diễn lại' : 'Đạo diễn'}
           </button>
-          <button onClick={runFullPipeline} disabled={busy}
-            title="Tạo lại giọng + mặt rồi đạo diễn lại (tốn credit giọng)"
-            className={`flex items-center gap-1.5 rounded-lg px-3 py-2 text-[12px] font-bold shadow-sm disabled:opacity-50 ${hasAssets ? 'border border-emerald-300 bg-white text-emerald-700' : 'bg-gradient-to-r from-amber-500 to-orange-500 text-white'}`}>
+          <button onClick={makeVoice} disabled={busy}
+            title="Tạo lại giọng + khuôn mặt (tốn credit giọng). Đạo diễn bấm riêng sau."
+            className={`flex items-center gap-1.5 rounded-lg px-3 py-2 text-[12px] font-bold shadow-sm disabled:opacity-50 ${hasAssets ? 'border border-emerald-300 bg-white text-emerald-700' : 'border border-amber-300 bg-white text-amber-700'}`}>
             {assetsBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Mic className="h-3.5 w-3.5" />}
-            {hasAssets ? `Tạo lại giọng (~${ASSETS_CR}cr)` : `Tạo giọng + đạo diễn (~${ASSETS_CR}cr)`}
+            {hasAssets ? `Tạo lại giọng (~${ASSETS_CR}cr)` : `Tạo giọng + mặt (~${ASSETS_CR}cr)`}
           </button>
           {scenes.length > 0 && hasAssets && pendingIdx.length > 0 && (
             <button onClick={renderAll} disabled={busy || renderingNow}
@@ -418,10 +415,10 @@ export default function HybridVideoPhase(_props: Props) {
         {/* ── Creator assets — listen to the voice + see the face before paying ─ */}
         {hasAssets ? (
           <AssetsBar keyframeRef={hybrid.keyframeRef} voiceRef={hybrid.voiceRef}
-            voiceDurationSec={hybrid.voiceDurationSec} busy={busy} onRegen={runFullPipeline} />
+            voiceDurationSec={hybrid.voiceDurationSec} busy={busy} onRegen={makeVoice} />
         ) : scenes.length > 0 ? (
           <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 p-2.5 text-[12px] text-amber-800">
-            Chưa có giọng — bấm <strong>"Tạo giọng + đạo diễn"</strong> để tạo khuôn mặt + giọng thật rồi đạo diễn lại theo đúng nhịp giọng.
+            Chưa có giọng — bấm <strong>"Tạo giọng + mặt"</strong> để tạo khuôn mặt + giọng thật, rồi bấm <strong>"Đạo diễn"</strong> chia cảnh theo nhịp giọng.
           </div>
         ) : null}
 
@@ -457,13 +454,22 @@ export default function HybridVideoPhase(_props: Props) {
             {assetsBusy || planning ? (
               <><Loader2 className="mx-auto mb-2 h-7 w-7 animate-spin text-violet-400" />
                 {assetsBusy ? 'Đang tạo giọng + khuôn mặt thật…' : 'Đang đạo diễn (chia cảnh theo giọng)…'} Giữ tab mở nhé.</>
+            ) : hasAssets ? (
+              <>
+                <Sparkles className="mx-auto mb-2 h-7 w-7 text-violet-300" />
+                <p className="mb-2">Giọng + khuôn mặt đã sẵn sàng. Bấm để AI chia kịch bản thành cảnh (0 credit Gemini):</p>
+                <button onClick={runPlan} disabled={busy}
+                  className="mx-auto flex items-center gap-1.5 rounded-lg bg-gradient-to-r from-violet-600 to-pink-600 px-4 py-2 text-[12px] font-bold text-white disabled:opacity-50">
+                  <Wand2 className="h-3.5 w-3.5" /> Đạo diễn (chia cảnh)
+                </button>
+              </>
             ) : (
               <>
                 <Sparkles className="mx-auto mb-2 h-7 w-7 text-gray-300" />
-                <p className="mb-2">App tự chạy: giọng + mặt → đạo diễn → render. Nếu chưa tự chạy, bấm để bắt đầu:</p>
-                <button onClick={runFullPipeline} disabled={busy}
+                <p className="mb-2">App tự tạo giọng + khuôn mặt. Nếu chưa tự chạy, bấm để bắt đầu:</p>
+                <button onClick={makeVoice} disabled={busy}
                   className="mx-auto flex items-center gap-1.5 rounded-lg bg-gradient-to-r from-amber-500 to-orange-500 px-3 py-2 text-[12px] font-bold text-white disabled:opacity-50">
-                  <Mic className="h-3.5 w-3.5" /> Tạo giọng + đạo diễn (~{ASSETS_CR}cr)
+                  <Mic className="h-3.5 w-3.5" /> Tạo giọng + mặt (~{ASSETS_CR}cr)
                 </button>
               </>
             )}

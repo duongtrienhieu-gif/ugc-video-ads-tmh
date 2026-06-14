@@ -186,7 +186,10 @@ export async function generateScript(
     // 0-1 with the strong refit prompt, so the 3rd pass rarely fired but still
     // counted against the free-tier RPM budget when it did. The loop still
     // BREAKS early the moment the script lands in band.
-    for (let pass = 0; pass < 2; pass++) {
+    // P4n — 1 fit pass (was 2) to cut Gemini calls on free keys. The strong refit
+    // prompt lands the script in-band on pass 0 ~always; the 2nd pass rarely moved
+    // the needle but still burned a call against the 10 RPM / 250 RPD budget.
+    for (let pass = 0; pass < 1; pass++) {
       const joined = SCRIPT_BLOCK_IDS.map((id) => blockMap[id] ?? '').join(' ')
       const durNow = estimateReadDurationForVoice(joined, params.lang)
       if (durNow <= target * 1.10 && durNow >= target * 0.90) break  // in band

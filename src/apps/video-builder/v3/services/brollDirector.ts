@@ -659,9 +659,14 @@ OUTPUT strict JSON only (no markdown fences):
   // Re-roll ONCE if the plan is genuinely sparse (was 2× — too many calls + burned
   // Gemini quota; the new "AROUND minScenes (allow up to +3)" prompt is permissive
   // enough that the director rarely returns much fewer than the floor on the 1st try).
-  for (let attempt = 1; attempt <= 1 && scenes.length < minScenes; attempt++) {
+  // P4n — only re-roll when GENUINELY sparse (< floor − 2), not on a 1-2 cut miss.
+  // The deterministic density floor (enforceDensityFloor) backstops the small gap
+  // by splitting long cuts, so a 2nd full director call (a whole extra Gemini call)
+  // isn't worth it for a near-miss. Saves ~1 call/run on the common case.
+  const rerollThreshold = minScenes - 2
+  for (let attempt = 1; attempt <= 1 && scenes.length < rerollThreshold; attempt++) {
     // eslint-disable-next-line no-console
-    console.log(`[BROLL_DIRECTOR] plan thưa (${scenes.length}<${minScenes}) — re-roll cho dày hơn`)
+    console.log(`[BROLL_DIRECTOR] plan thưa (${scenes.length}<${rerollThreshold}) — re-roll cho dày hơn`)
     const raw2 = await call(true, { have: scenes.length, want: minScenes })
     const parsed2 = tryParse(raw2)
     if (parsed2) {
