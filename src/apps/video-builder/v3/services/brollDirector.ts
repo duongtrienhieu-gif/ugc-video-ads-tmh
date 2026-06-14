@@ -614,6 +614,12 @@ RULES:
   "nó đây", "cái này", MS "botol ni / produk ni" — MUST show the product on that cut
   (kind:"product_action"/"product_closeup"), NEVER a bare face: "này / đây / ni" means
   the viewer should be looking AT the thing right then.
+- CORRECT ORIENTATION: if the PRODUCT CONTEXT above lists a "CORRECT ORIENTATION"
+  (a brace / strap / mask / insole / device with a right-vs-wrong way to wear or
+  place it), EVERY wear / put-on / placement / demo conceptPrompt MUST spell out
+  that exact orientation (which part faces / sits where, what lines up) so the
+  render never shows it worn BACKWARDS. Copy the orientation detail into the
+  conceptPrompt itself — the video model only knows what the prompt says.
 - The CTA / buy line MUST show the PRODUCT in frame with an endorsing gesture — the
   creator holding/presenting the product and a thumbs-up / nod / offering it to camera
   (set role:"broll", kind:"product_action", cameraFraming:"creator", AND write its

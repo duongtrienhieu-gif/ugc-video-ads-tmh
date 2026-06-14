@@ -59,6 +59,7 @@ export default function HybridVideoPhase(_props: Props) {
   const setHybridAssets= useAdsVideoStore((s) => s.setHybridCreatorAssets)
   const setAssetsGenStartedAt = useAdsVideoStore((s) => s.setAssetsGenStartedAt)
   const patchSceneRender = useAdsVideoStore((s) => s.patchSceneRender)
+  const setHybridQueue = useAdsVideoStore((s) => s.setHybridQueue)
   const setProduct     = useAdsVideoStore((s) => s.setProduct)
   const setPhase       = useAdsVideoStore((s) => s.setPhase)
   const addToast       = useAppStore((s) => s.addToast)
@@ -220,9 +221,20 @@ export default function HybridVideoPhase(_props: Props) {
   // P3s — directly render a scene WITHOUT queue logic. Used internally by the
   // queue worker. Tracks lostCredits on failure so the user can see how much
   // KIE took on the failed attempt (it doesn't refund).
+  // P4p — queue mutations go through here so the store mirror stays in sync (the
+  // queue is persisted → survives a tab switch instead of vanishing).
+  const setQueue = (updater: (q: number[]) => number[]) => {
+    setQueuedIdx((q) => { const next = updater(q); setHybridQueue(next); return next })
+  }
+
   const runRender = async (i: number) => {
-    const s = (useAdsVideoStore.getState().state.hybrid.scenes ?? [])[i]
+    const hy = useAdsVideoStore.getState().state.hybrid
+    const s = (hy.scenes ?? [])[i]
     if (!s) return
+    // P4p — never double-render the same index: an old (pre-tab-switch) closure may
+    // still be draining the queue while the remounted component re-drives it. Bail
+    // if this index is already rendering this session or already has a clip.
+    if (ACTIVE_RENDERS.has(i) || hy.clips[i]) return
     ACTIVE_RENDERS.add(i)                                   // P3z — this JS session owns it
     setRenderingIdx((set) => new Set(set).add(i))
     setFailedIdx((set) => { const n = new Set(set); n.delete(i); return n })
@@ -251,7 +263,7 @@ export default function HybridVideoPhase(_props: Props) {
       setRenderingIdx((set) => { const n = new Set(set); n.delete(i); return n })
       setProgressByIdx((p) => { const n = { ...p }; delete n[i]; return n })
       // Pull the next queued scene (if any) right after a slot frees up.
-      setQueuedIdx((q) => {
+      setQueue((q) => {
         if (q.length === 0) return q
         const [nextI, ...rest] = q
         // Defer the launch so React commits the state update first.
@@ -304,8 +316,43 @@ export default function HybridVideoPhase(_props: Props) {
       patchSceneRender(idx, null)                                        // F5 lips/mid-keyframe: can't resume → idle button
     }
     if (restore.length) setRenderingIdx((set) => { const n = new Set(set); restore.forEach((i) => n.add(i)); return n })
+    // P4p — restore the persisted bulk-render QUEUE + re-drive free slots so "Tạo
+    // tất cả" keeps going after a tab switch instead of the queued cảnh treo mãi.
+    // Drop indices already done / already rendering this session.
+    const persistedQueue = (st.queuedScenes ?? []).filter((i) => !st.clips[i] && !ACTIVE_RENDERS.has(i))
+    if (persistedQueue.length) {
+      const freeSlots = Math.max(0, MAX_CONCURRENT_RENDERS - restore.length)
+      const startNow = persistedQueue.slice(0, freeSlots)
+      const stillQueued = persistedQueue.slice(freeSlots)
+      setQueuedIdx(stillQueued); setHybridQueue(stillQueued)
+      startNow.forEach((i) => setTimeout(() => { void runRender(i) }, 0))
+    } else if ((st.queuedScenes ?? []).length) {
+      setHybridQueue([])   // queue fully resolved while away
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  // P4p — self-heal the local render UI from the STORE. When a render an OLD
+  // (pre-tab-switch) closure owns finishes, it saves the clip + clears
+  // renderingScenes on the store (cross-instance writes work) but cannot touch
+  // THIS instance's renderingIdx → the card would spin forever. Reconcile: a scene
+  // stops "rendering" once it has a clip, or once it's neither active nor persisted.
+  useEffect(() => {
+    const rs = hybrid.renderingScenes ?? {}
+    setRenderingIdx((set) => {
+      let changed = false
+      const n = new Set(set)
+      for (const i of set) if (hybrid.clips[i] || (!ACTIVE_RENDERS.has(i) && !rs[i])) { n.delete(i); changed = true }
+      return changed ? n : set
+    })
+    setQueuedIdx((q) => {
+      const n = q.filter((i) => !hybrid.clips[i])
+      if (n.length === q.length) return q
+      setHybridQueue(n)
+      return n
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hybrid.clips, hybrid.renderingScenes])
 
   // P3s — user-facing render call. Enqueues if ≥MAX_CONCURRENT_RENDERS are in
   // flight (UI just shows "đang chờ" on that card); fires immediately otherwise.
@@ -318,7 +365,7 @@ export default function HybridVideoPhase(_props: Props) {
       return
     }
     // Otherwise queue (dedupe: don't enqueue twice if user spam-clicks).
-    setQueuedIdx((q) => (q.includes(i) ? q : [...q, i]))
+    setQueue((q) => (q.includes(i) ? q : [...q, i]))
   }
 
   const renderAll = () => {
@@ -331,7 +378,7 @@ export default function HybridVideoPhase(_props: Props) {
     const slots = Math.max(0, MAX_CONCURRENT_RENDERS - renderingIdx.size)
     const immediate = pending.slice(0, slots)
     const queued = pending.slice(slots)
-    if (queued.length) setQueuedIdx((q) => [...q, ...queued])
+    if (queued.length) setQueue((q) => [...q, ...queued])
     immediate.forEach((i) => { void runRender(i) })
   }
 

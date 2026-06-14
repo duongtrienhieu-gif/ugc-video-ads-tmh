@@ -87,6 +87,8 @@ interface AdsVideoStoreState {
   /** P3z — track a per-scene render in flight (persisted). Pass an info object to
    *  set/merge (startedAt + optional taskId), or null to clear that index. */
   patchSceneRender:       (idx: number, info: { startedAt: number; taskId?: string } | null) => void
+  /** P4p — persist the bulk-render queue so it survives a tab switch. */
+  setHybridQueue:         (idxs: number[]) => void
   /** Store the one creator keyframe + voice for the whole video. */
   setHybridCreatorAssets: (a: { keyframeRef: string; voiceRef: string; voiceDurationSec: number; voiceAlignment?: VoiceAlignment; voiceId?: string }) => void
   /** Store the final assembled MP4. */
@@ -457,6 +459,11 @@ export const useAdsVideoStore = create<AdsVideoStoreState>((set, get) => ({
       else cur[idx] = { ...cur[idx], ...info }
       return { ...s, hybrid: { ...s.hybrid, renderingScenes: cur } }
     }),
+
+  // P4p — persist the render QUEUE so "Tạo tất cả" survives a tab switch (the queue
+  // was local React state → lost on unmount → queued cảnh treo mãi after returning).
+  setHybridQueue: (idxs) =>
+    commit(set, get, (s) => ({ ...s, hybrid: { ...s.hybrid, queuedScenes: idxs } })),
 
   setHybridCreatorAssets: (a) =>
     commit(set, get, (s) => ({

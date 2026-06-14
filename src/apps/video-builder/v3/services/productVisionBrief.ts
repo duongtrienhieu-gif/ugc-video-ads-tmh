@@ -18,13 +18,14 @@ import type { Product } from '../../../../stores/types'
 const VISION_SCHEMA = {
   type: 'object',
   properties: {
-    formFactor:     { type: 'string' },
-    heroComponents: { type: 'array', items: { type: 'string' } },
-    howUsed:        { type: 'string' },
-    sizeCue:        { type: 'string' },
-    colors:         { type: 'array', items: { type: 'string' } },
-    settings:       { type: 'array', items: { type: 'string' } },
-    shotIdeas:      { type: 'array', items: { type: 'string' } },
+    formFactor:       { type: 'string' },
+    heroComponents:   { type: 'array', items: { type: 'string' } },
+    howUsed:          { type: 'string' },
+    correctUsage:     { type: 'string' },
+    sizeCue:          { type: 'string' },
+    colors:           { type: 'array', items: { type: 'string' } },
+    settings:         { type: 'array', items: { type: 'string' } },
+    shotIdeas:        { type: 'array', items: { type: 'string' } },
   },
   required: ['formFactor', 'howUsed', 'shotIdeas'],
 }
@@ -33,6 +34,7 @@ interface VisionBrief {
   formFactor?: string
   heroComponents?: string[]
   howUsed?: string
+  correctUsage?: string
   sizeCue?: string
   colors?: string[]
   settings?: string[]
@@ -80,6 +82,12 @@ Fill this JSON (all values in English, concise):
   texture, a closure, a nozzle, a hinge, a strap…). What the eye is drawn to.
 - howUsed: how a person physically uses / wears / applies it, inferred from the shape
   and any in-use photo — concrete (wrap on the knee / sprinkle on food / drip on skin).
+- correctUsage: the CORRECT ORIENTATION / placement for proper use, ONLY if the product
+  has a right-vs-wrong way to wear/place/hold it (a brace, mask, strap, insole, device…).
+  State exactly which part faces/sits where, what lines up with what — e.g. "the spring
+  hinge sits on the SIDE of the knee joint with the kneecap exposed through the front
+  opening; NEVER worn with the hinge over the front of the kneecap". Empty if orientation
+  doesn't matter (e.g. a seasoning, a drink).
 - sizeCue: a real-world size reference (fits in a palm / knee-sized / phone-sized…).
 - colors: the visible color variants.
 - settings: 3-6 real places this product is naturally used or shown.
@@ -118,6 +126,7 @@ function formatBrief(b: VisionBrief): string | null {
   if (b.formFactor) lines.push(`- Form factor (from photos): ${b.formFactor}`)
   if (b.heroComponents?.length) lines.push(`- Hero parts to film: ${b.heroComponents.join('; ')}`)
   if (b.howUsed) lines.push(`- How it is physically used (from photos): ${b.howUsed}`)
+  if (b.correctUsage) lines.push(`- ⚠ CORRECT ORIENTATION (MUST follow in every wear/placement shot — getting this wrong shows the product used backwards): ${b.correctUsage}`)
   if (b.sizeCue) lines.push(`- Real-world size: ${b.sizeCue}`)
   if (b.colors?.length) lines.push(`- Color variants: ${b.colors.join(', ')}`)
   if (b.settings?.length) lines.push(`- Natural settings: ${b.settings.join(', ')}`)

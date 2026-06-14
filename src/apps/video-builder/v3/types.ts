@@ -738,6 +738,9 @@ export interface HybridState {
    *  already-paid job via resumeInsertVideo (no new charge) instead of losing it.
    *  Cleared per index when that scene's clip saves or its render fails. */
   renderingScenes?: Record<number, { startedAt: number; taskId?: string }>
+  /** P4p — bulk-render queue (scene indices waiting for a free slot). Persisted so
+   *  "Tạo tất cả" survives a tab switch instead of the queued cảnh vanishing. */
+  queuedScenes?: number[]
 }
 
 export function createEmptyHybridState(): HybridState {
