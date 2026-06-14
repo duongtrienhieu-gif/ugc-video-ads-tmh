@@ -316,12 +316,22 @@ export const THUMBNAIL_ARCHETYPE_ORDER: ThumbnailArchetypeId[] = [
 // reads as a designed thumbnail. The avatar (person) + product are passed as
 // i2i references via filesUrl.
 function buildArchetypePrompt(archetype: ThumbnailArchetypeId, hook: string, langName: string): string {
+  // P4r — Malaysian visual culture when the script targets MY, so the thumbnail
+  // vibe/setting/casting reads as a real Malaysian creator's (the avatar + product
+  // refs already anchor the person + product; this fixes the BACKGROUND/styling).
+  const msCulture = langName === 'Bahasa Malaysia'
+    ? `Setting + styling MUST feel authentically MALAYSIAN: warm tropical daylight, a real Malaysian ` +
+      `home / office / mamak / kopitiam vibe, Malaysian Gen-Z casual wear, naturally mixed-race casting ` +
+      `(Malay / Chinese / Indian; if a Malay-coded creator, modest dress). AVOID snow / Western-suburb / ` +
+      `Hollywood-corporate looks. `
+    : ''
   const base =
     `Design a scroll-stopping VERTICAL 9:16 TikTok ad THUMBNAIL. ` +
     `Use the SAME PERSON from the avatar reference (identical face) as the creator, and the EXACT product ` +
     `from the product reference (same packaging, colour, label — do NOT redesign it). ` +
     `Render the hook text "${hook}" as BIG, BOLD, perfectly-spelled ${langName} text with a heavy contrasting ` +
-    `outline so it is readable on a small phone. Authentic UGC look (real iPhone photo, natural light), NOT stock. `
+    `outline so it is readable on a small phone. Authentic UGC look (real iPhone photo, natural light), NOT stock. ` +
+    msCulture
   switch (archetype) {
     case 'reaction_face':
       return base +
@@ -354,15 +364,23 @@ export async function generateThumbnailHooks(params: {
   const langName = SCRIPT_LANG_GEMINI_NAME[params.lang]
   const productName = params.product?.productName ?? ''
   const scriptText = params.script.blocks.map((b) => b.text).join(' ').slice(0, 1200)
-  const fallback = buildFallbackHooks(params.script, productName)
+  const fallback = buildFallbackHooks(params.script, productName, params.lang)
   if (!params.geminiKey) return fallback
+  // P4r — MS register: thumbnail hooks must read as bahasa ROJAK (the casual MY
+  // TikTok caption voice), not formal Malay, and NEVER leak Vietnamese (the dev/
+  // source language). EN/VI fall through to the universal rule.
+  const msHint = params.lang === 'ms'
+    ? ` Write in natural Malaysian bahasa ROJAK (casual MY TikTok caption voice, light English mix like ` +
+      `"Free", "Best", "Confirm" is fine). NEVER write any Vietnamese. Use MY hook energy: "Korang kena tengok ni", ` +
+      `"Jangan beli sebelum...", "Confirm menyesal kalau...", "Rahsia yang shop tak bagitau".`
+    : ''
   try {
     const raw = await directGeminiText({
       apiKey: params.geminiKey,
       systemInstruction:
         `You write THUMBNAIL hooks for a TikTok ad. Output 4 DIFFERENT hooks in ${langName}, each 3-7 words, ` +
         `SHORT + punchy, designed to STOP the scroll via a curiosity gap (a question, bold claim, "secret", ` +
-        `"don't buy before…"). No hashtags, no emojis, no quotes. Base them on the product + script. ` +
+        `"don't buy before…"). No hashtags, no emojis, no quotes. Base them on the product + script.${msHint} ` +
         `Return strict JSON: {"hooks":["...","...","...","..."]}`,
       prompt: `PRODUCT: ${productName}\nSCRIPT: ${scriptText}\n\nWrite the 4 thumbnail hooks now.`,
       maxOutputTokens: 512,
@@ -375,9 +393,12 @@ export async function generateThumbnailHooks(params: {
       thinkingBudget: 0,
     })
     const parsed = JSON.parse(raw) as { hooks?: unknown }
-    const hooks = Array.isArray(parsed.hooks)
+    let hooks = Array.isArray(parsed.hooks)
       ? parsed.hooks.map((h) => String(h).trim()).filter((h) => h.length >= 2 && h.length <= 60)
       : []
+    // P4r — anti-VN-leak for MS: Malay never carries Vietnamese diacritics, so any
+    // hook that does is contaminated → swap it for the (MS) fallback.
+    if (params.lang === 'ms') hooks = hooks.map((h, n) => (VN_DIACRITICS_RE.test(h) ? (fallback[n] ?? fallback[0]) : h))
     while (hooks.length < 4) hooks.push(fallback[hooks.length % fallback.length])
     return hooks.slice(0, 4)
   } catch (err) {
@@ -386,16 +407,24 @@ export async function generateThumbnailHooks(params: {
   }
 }
 
-function buildFallbackHooks(script: GeneratedScript, productName: string): string[] {
+// P4r — VN-only diacritics (Malay is plain a-z). Any of these on an MS hook = a
+// Vietnamese leak. Same signal used for MS stickers in brollDirector.
+const VN_DIACRITICS_RE = /[ăâđêôơưĂÂĐÊÔƠƯàáảãạằắẳẵặầấẩẫậèéẻẽẹềếểễệìíỉĩịòóỏõọồốổỗộờớởỡợùúủũụừứửữựỳýỷỹỵ]/
+
+// P4r — language-aware fallback. The 3 non-script hooks used to be HARD-CODED
+// Vietnamese → an MS video that hit a Gemini rate-limit got Vietnamese thumbnail
+// text. Now each language has its own set; hook #1 still comes from the script's
+// own hook (already in the right language). MS = bahasa rojak.
+function buildFallbackHooks(script: GeneratedScript, productName: string, lang: ScriptLang): string[] {
   const hookBlock = script.blocks.find((b) => b.id === 'hook')?.text ?? ''
   const firstClause = hookBlock.split(/[.!?…\n]/)[0]?.trim().slice(0, 50) ?? ''
-  const name = productName.slice(0, 28) || 'Sản phẩm này'
-  return [
-    firstClause.length >= 6 ? firstClause : 'Mình suýt bỏ cuộc...',
-    'Trước vs Sau khi dùng',
-    `${name} — thử là mê`,
-    'Tại sao ai cũng giấu cái này?',
-  ]
+  const name = productName.slice(0, 28)
+  const set = lang === 'ms'
+    ? ['Aku hampir give up...', 'Sebelum vs Selepas guna', `${name || 'Produk ni'} — try je terus suka`, 'Kenapa semua orang sorok benda ni?']
+    : lang === 'en'
+    ? ['I almost gave up...', 'Before vs After using it', `${name || 'This product'} — try it, you’ll love it`, 'Why is everyone hiding this?']
+    : ['Mình suýt bỏ cuộc...', 'Trước vs Sau khi dùng', `${name || 'Sản phẩm này'} — thử là mê`, 'Tại sao ai cũng giấu cái này?']
+  return [firstClause.length >= 6 ? firstClause : set[0], set[1], set[2], set[3]]
 }
 
 /** Render ONE AI thumbnail for an archetype (GPT-4o i2i with avatar + product
