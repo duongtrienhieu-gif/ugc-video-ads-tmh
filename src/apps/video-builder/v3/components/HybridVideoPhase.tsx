@@ -175,7 +175,10 @@ export default function HybridVideoPhase(_props: Props) {
         script, voiceCategory, voiceId: state.inputs.voiceId,
         avatar, product: state.inputs.product, onStageUpdate: () => {},
       })
-      setHybridAssets({ keyframeRef: kf.keyframeRef, voiceRef: kf.voiceRef, voiceDurationSec: kf.voiceDurationSec, voiceAlignment: kf.voiceAlignment })
+      // P4m — record WHICH voice this was made with (the user's pick, '' = default)
+      // so auto-run can detect a voice change and regenerate instead of serving a
+      // stale cached voice (the "đổi giọng mà Bước 2 vẫn giọng cũ" bug).
+      setHybridAssets({ keyframeRef: kf.keyframeRef, voiceRef: kf.voiceRef, voiceDurationSec: kf.voiceDurationSec, voiceAlignment: kf.voiceAlignment, voiceId: state.inputs.voiceId ?? '' })
       addToast(`✓ Giọng (${kf.voiceDurationSec.toFixed(1)}s) + khuôn mặt — đang đạo diễn…`, 'success')
       return true
     } catch (e) {
@@ -206,11 +209,14 @@ export default function HybridVideoPhase(_props: Props) {
     const s = useAdsVideoStore.getState().state
     if (!s.inputs.avatar) return
     const h = s.hybrid
-    if (h.voiceRef && (h.scenes?.length ?? 0) > 0) { autoRanRef.current = true; return }   // already complete
+    // P4m — the cached voice is STALE if it was made with a different pick than the
+    // one selected now (user changed the voice in Bước 1). Stale → regenerate.
+    const voiceStale = !!h.voiceRef && (h.voiceId ?? '') !== (s.inputs.voiceId ?? '')
+    if (h.voiceRef && !voiceStale && (h.scenes?.length ?? 0) > 0) { autoRanRef.current = true; return }   // complete + voice current
     if (h.assetsGenStartedAt && Date.now() - h.assetsGenStartedAt < ASSETS_STALE_MS) return // gen in flight → don't double-fire
     autoRanRef.current = true
-    if (h.voiceRef) void runPlan()           // voice exists → only direct (0 credit)
-    else void runFullPipeline()              // fresh → voice then direct
+    if (h.voiceRef && !voiceStale) void runPlan()    // voice current → only direct (0 credit)
+    else void runFullPipeline()                      // fresh OR voice changed → regen voice + direct
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [geminiKey, kieApiKey, elevenLabsKey, script])
 

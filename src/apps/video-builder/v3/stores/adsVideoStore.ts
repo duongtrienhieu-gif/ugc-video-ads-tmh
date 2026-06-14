@@ -88,7 +88,7 @@ interface AdsVideoStoreState {
    *  set/merge (startedAt + optional taskId), or null to clear that index. */
   patchSceneRender:       (idx: number, info: { startedAt: number; taskId?: string } | null) => void
   /** Store the one creator keyframe + voice for the whole video. */
-  setHybridCreatorAssets: (a: { keyframeRef: string; voiceRef: string; voiceDurationSec: number; voiceAlignment?: VoiceAlignment }) => void
+  setHybridCreatorAssets: (a: { keyframeRef: string; voiceRef: string; voiceDurationSec: number; voiceAlignment?: VoiceAlignment; voiceId?: string }) => void
   /** Store the final assembled MP4. */
   setHybridFinal:         (videoRef: string) => void
   clearHybrid:            () => void
@@ -461,7 +461,7 @@ export const useAdsVideoStore = create<AdsVideoStoreState>((set, get) => ({
   setHybridCreatorAssets: (a) =>
     commit(set, get, (s) => ({
       ...s,
-      hybrid: { ...s.hybrid, keyframeRef: a.keyframeRef, voiceRef: a.voiceRef, voiceDurationSec: a.voiceDurationSec, voiceAlignment: a.voiceAlignment },
+      hybrid: { ...s.hybrid, keyframeRef: a.keyframeRef, voiceRef: a.voiceRef, voiceDurationSec: a.voiceDurationSec, voiceAlignment: a.voiceAlignment, voiceId: a.voiceId },
     })),
 
   setHybridFinal: (videoRef) =>

@@ -20,7 +20,7 @@ import { useMemo, useEffect, useState } from 'react'
 import {
   Loader2, Sparkles, RefreshCw, ChevronRight, AlertCircle,
   Clock, Mic2, Lightbulb, Globe, Package, UserRound,
-  Library, UserCircle2, Search, Check, Play, Plus, X,
+  Library, UserCircle2, Search, Check, Play, Plus, X, Upload,
 } from 'lucide-react'
 import { useAppStore } from '../../../../stores/appStore'
 import { useSettingsStore } from '../../../../stores/settingsStore'
@@ -37,7 +37,7 @@ import { SHAPE_CONFIGS, SCRIPT_SHAPE_ORDER } from '../services/scriptShapes'
 import { recomputeBlockDurations, estimateReadDurationForVoice } from '../services/voiceTimingEstimator'
 import { generateScript, generateHooks, translateScriptToVietnamese, detectCertClaims } from '../services/scriptGenerator'
 import {
-  listVoices, listSharedVoices, addSharedVoice,
+  listVoices, listSharedVoices, addSharedVoice, cloneVoice,
   type ElevenLabsVoice, type SharedVoice,
 } from '../../../../utils/elevenlabs'
 
@@ -317,6 +317,7 @@ export default function ScriptVoicePhase({ onContinue }: Props) {
   const [sharedVoices, setSharedVoices] = useState<SharedVoice[]>([])
   const [loadingShared, setLoadingShared] = useState(false)
   const [addingId, setAddingId]   = useState<string | null>(null)
+  const [cloning, setCloning]     = useState(false)   // P4m — clone voice from MP3
   const [libLang, setLibLang]     = useState('ms')
   const [libGender, setLibGender] = useState<'' | 'male' | 'female'>('')
   const [libSearch, setLibSearch] = useState('')
@@ -384,6 +385,24 @@ export default function ScriptVoicePhase({ onContinue }: Props) {
     } catch (err) {
       addToast(err instanceof Error ? err.message : 'Thêm giọng thất bại', 'error')
     } finally { setAddingId(null) }
+  }
+
+  // P4m — clone a voice from an uploaded MP3 sample (ElevenLabs Instant Voice
+  // Cloning). On success the new account voice_id is picked immediately, so Bước 2
+  // generates with the clone (the voice-stale check there picks up the change).
+  const handleCloneVoice = async (file: File) => {
+    if (!elevenLabsKey) { addToast('Thiếu ElevenLabs API key trong Settings', 'error'); return }
+    if (file.size > 12 * 1024 * 1024) { addToast('File quá lớn (>12MB) — dùng mẫu ngắn 30s-2 phút', 'error'); return }
+    setCloning(true)
+    try {
+      const name = `Clone ${file.name.replace(/\.[^.]+$/, '').slice(0, 24)} ${Date.now().toString().slice(-4)}`
+      const newId = await cloneVoice({ apiKey: elevenLabsKey, name, file })
+      setVoiceId(newId)
+      addToast(`✓ Đã clone & chọn giọng từ "${file.name}"`, 'success')
+      setVoiceTab('mine'); handleLoadMyVoices()
+    } catch (err) {
+      addToast(err instanceof Error ? err.message : 'Clone giọng thất bại', 'error')
+    } finally { setCloning(false) }
   }
 
   const inputsOk = !!state.inputs.product && !!state.inputs.avatar
@@ -740,7 +759,25 @@ export default function ScriptVoicePhase({ onContinue }: Props) {
                   >
                     <Library className="h-3.5 w-3.5" /> Thư viện ElevenLabs
                   </button>
+                  {/* P4m — clone a voice from an uploaded MP3 sample */}
+                  <label
+                    title="Tải file MP3 mẫu (30s–2 phút) để clone giọng"
+                    className={`inline-flex items-center gap-1.5 rounded-full border border-violet-300 px-3 py-1 text-[11px] font-bold text-violet-700 transition-all ${
+                      cloning || !elevenLabsKey ? 'cursor-not-allowed opacity-50' : 'cursor-pointer hover:bg-violet-50'
+                    }`}
+                  >
+                    {cloning ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}
+                    {cloning ? 'Đang clone…' : 'Clone từ MP3'}
+                    <input
+                      type="file" accept="audio/*" className="hidden"
+                      disabled={cloning || !elevenLabsKey}
+                      onChange={(e) => { const f = e.target.files?.[0]; if (f) void handleCloneVoice(f); e.target.value = '' }}
+                    />
+                  </label>
                 </div>
+                <p className="mt-1.5 text-[10px] text-gray-400">
+                  Clone: tải MP3 mẫu giọng (rõ, 30s–2 phút) → ElevenLabs tạo giọng riêng rồi chọn luôn cho video. Cần gói Starter ($5/mo) trở lên.
+                </p>
 
                 {!elevenLabsKey && (
                   <p className="mt-2 flex items-center gap-1.5 text-[11px] text-amber-700">

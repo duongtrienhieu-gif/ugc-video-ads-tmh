@@ -718,6 +718,10 @@ export interface HybridState {
   voiceRef?: string
   voiceDurationSec?: number
   voiceAlignment?: VoiceAlignment
+  /** P4m — the user's voice PICK this cached voice was generated with ('' = the
+   *  category default). Lets Bước 2 detect a voice change (inputs.voiceId differs)
+   *  and regenerate instead of serving a stale voice. */
+  voiceId?: string
   /** The final assembled MP4 (shown on the Export step). */
   finalVideoRef?: string
   /** P3x — epoch ms when "Tạo giọng + mặt" started. Persisted so that if the
