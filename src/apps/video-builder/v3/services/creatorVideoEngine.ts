@@ -66,8 +66,13 @@ export const EXPRESSIVE_TTS = {
 // ffmpeg atempo. This is the ONLY reliable way to control pace because v3
 // ignores the API speed param. Fallback: on ANY ffmpeg error, return the
 // original audio unchanged so the voice never breaks.
-async function applyTempo(audio: ArrayBuffer, tempo: number): Promise<ArrayBuffer> {
-  if (!Number.isFinite(tempo) || Math.abs(tempo - 1) < 0.01) return audio
+// Z98 — returns the (possibly) sped-up audio AND the tempo that was ACTUALLY
+// achieved. On any ffmpeg failure the audio stays 1.0× and tempoApplied=1, so the
+// caller can build the word-alignment against the REAL pace instead of blindly
+// assuming 1.2× (which desynced every scene by ~20% whenever atempo silently
+// fell back — the "gợi ý 74s ra thực 84s" bug).
+async function applyTempo(audio: ArrayBuffer, tempo: number): Promise<{ audio: ArrayBuffer; tempoApplied: number }> {
+  if (!Number.isFinite(tempo) || Math.abs(tempo - 1) < 0.01) return { audio, tempoApplied: 1 }
   try {
     const ffmpeg = await getFFmpeg()
     const id = Math.random().toString(36).slice(2, 8)
@@ -80,11 +85,11 @@ async function applyTempo(audio: ArrayBuffer, tempo: number): Promise<ArrayBuffe
     await ffmpeg.deleteFile(inName).catch(() => {})
     await ffmpeg.deleteFile(outName).catch(() => {})
     const arr = data instanceof Uint8Array ? data : new Uint8Array()
-    if (arr.byteLength === 0) return audio  // safety — empty output → keep original
-    return arr.slice().buffer
+    if (arr.byteLength === 0) return { audio, tempoApplied: 1 }  // safety — empty output → kept original 1.0×
+    return { audio: arr.slice().buffer, tempoApplied: tempo }
   } catch (err) {
     console.warn('[TTS atempo] failed — using original (1.0×) speed', err)
-    return audio
+    return { audio, tempoApplied: 1 }
   }
 }
 
@@ -110,7 +115,7 @@ async function synthVoice(args: {
     onModelUsed: args.onModelUsed,
   })
   // Z81 — apply the snappy pace ourselves (v3 ignores the API speed param).
-  return applyTempo(raw, EXPRESSIVE_TTS.speed)
+  return (await applyTempo(raw, EXPRESSIVE_TTS.speed)).audio
 }
 
 // Z98 (#6) — map raw ElevenLabs char timings onto the FINAL atempo'd audio.
@@ -143,6 +148,10 @@ async function synthVoiceTimed(args: {
   text: string
   onModelUsed?: (model: string) => void
 }): Promise<{ audio: ArrayBuffer; alignment: VoiceAlignment | null }> {
+  // Z98 — pre-warm ffmpeg.wasm IN PARALLEL with the TTS network call so it's
+  // ready by the time applyTempo runs (atempo silently fell back to 1.0× when
+  // ffmpeg wasn't loaded yet). Best-effort: applyTempo awaits the same singleton.
+  void getFFmpeg().catch(() => {})
   let fallbackAudio: ArrayBuffer | null = null
   let fallbackModel = ''
   for (const model of ['eleven_v3', 'eleven_multilingual_v2'] as const) {
@@ -160,8 +169,11 @@ async function synthVoiceTimed(args: {
       })
       if (res.alignment) {
         args.onModelUsed?.(model)
-        const audio = await applyTempo(res.buffer, EXPRESSIVE_TTS.speed)
-        return { audio, alignment: toVoiceAlignment(res.alignment, EXPRESSIVE_TTS.speed, model) }
+        // Z98 — build the alignment against the tempo ACTUALLY achieved, not the
+        // requested 1.2×. If atempo silently fell back to 1.0×, tempoApplied=1 and
+        // the word timings now match the real (un-sped) audio → no 20% desync.
+        const { audio, tempoApplied } = await applyTempo(res.buffer, EXPRESSIVE_TTS.speed)
+        return { audio, alignment: toVoiceAlignment(res.alignment, tempoApplied, model) }
       }
       // Audio came back but with no timing — remember it only if nothing better
       // turns up, then try the next (more timing-reliable) model.
@@ -174,7 +186,7 @@ async function synthVoiceTimed(args: {
   // No alignment from any model — use the best timing-less audio we captured…
   if (fallbackAudio) {
     args.onModelUsed?.(fallbackModel)
-    return { audio: await applyTempo(fallbackAudio, EXPRESSIVE_TTS.speed), alignment: null }
+    return { audio: (await applyTempo(fallbackAudio, EXPRESSIVE_TTS.speed)).audio, alignment: null }
   }
   // …or, if every timestamped call failed outright, the original plain path.
   console.warn('[TTS timed] all timestamped calls failed — plain TTS (no timing)')

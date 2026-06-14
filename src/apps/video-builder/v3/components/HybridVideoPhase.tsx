@@ -123,7 +123,12 @@ export default function HybridVideoPhase(_props: Props) {
     if (!geminiKey) { addToast('Thiếu Gemini key', 'error'); return }
     setPlanning(true); setError('')
     try {
-      const voiceDur = hybrid.voiceDurationSec ?? script.totalDurationSec ?? 50
+      // P4k — read voice data from the STORE (fresh). The director now runs AFTER
+      // the voice (correct order), so use the REAL measured duration + alignment —
+      // NOT the `hybrid` closure, which is stale right after makeVoice in the auto
+      // pipeline. Falls back to the script estimate only if no voice exists yet.
+      const h = useAdsVideoStore.getState().state.hybrid
+      const voiceDur = h.voiceDurationSec ?? script.totalDurationSec ?? 50
       // P4i — give the director EYES: compute the product VISUAL BRIEF from the
       // photos ONCE (cached on product.visualBrief) so the text-only director can
       // picture the real form / hero parts / size / how it's used. Universal —
@@ -137,7 +142,7 @@ export default function HybridVideoPhase(_props: Props) {
         geminiKey, script, lang: state.scriptBrain.outputLang, product, voiceDurationSec: voiceDur,
         shape: state.scriptBrain.shape,
       })
-      const timed = assignSceneTiming(res.scenes, hybrid.voiceAlignment, script, voiceDur)
+      const timed = assignSceneTiming(res.scenes, h.voiceAlignment, script, voiceDur)
       // P4g — brain pass over the deterministic filler cuts (split/density) so a
       // spoken line never renders as a generic product shot. Mutates `timed`.
       await groundOrphanScenes(timed, product, geminiKey)
@@ -148,20 +153,20 @@ export default function HybridVideoPhase(_props: Props) {
     } finally { setPlanning(false) }
   }
 
-  const makeAssets = async () => {
-    if (!script) return
-    if (!kieApiKey) { addToast('Thiếu KIE key', 'error'); return }
-    if (!elevenLabsKey) { addToast('Thiếu ElevenLabs key', 'error'); return }
+  // P4k — VOICE-FIRST. Make the real voice + keyframe ONLY (no timing/grounding):
+  // the director now runs AFTER this, on the REAL measured duration + alignment, so
+  // we no longer re-time here (the old flow planned on an ESTIMATE then re-timed +
+  // re-grounded after the voice — a wasted Gemini call + janky scene shift). Returns
+  // true on success. Guarded against double-charge by the persisted lock.
+  const makeVoice = async (): Promise<boolean> => {
+    if (!script) return false
+    if (!kieApiKey) { addToast('Thiếu KIE key', 'error'); return false }
+    if (!elevenLabsKey) { addToast('Thiếu ElevenLabs key', 'error'); return false }
     const avatar = state.inputs.avatar
-    if (!avatar) { addToast('Cần chọn Avatar ở Bước 1', 'error'); return }
-    const raw = useAdsVideoStore.getState().state.hybrid.rawScenes
-    if (raw.length === 0) { addToast('Bấm "Đạo diễn" trước', 'error'); return }
-    // P3x — guard against double-charge: if a generation is already in flight
-    // (even from a previous mount before the user navigated away), don't start
-    // another. The persisted timestamp survives unmount.
-    if (assetsGenRunning) { addToast('Đang tạo giọng + mặt rồi — đợi xong nhé', 'info'); return }
+    if (!avatar) { addToast('Cần chọn Avatar ở Bước 1', 'error'); return false }
+    if (assetsGenRunning) { addToast('Đang tạo giọng + mặt rồi — đợi xong nhé', 'info'); return false }
     setAssetsBusy(true); setError('')
-    setAssetsGenStartedAt(Date.now())   // persist "đang tạo" across nav
+    setAssetsGenStartedAt(Date.now())   // persist "đang tạo" across nav (anti double-charge)
     try {
       const voiceCategory = state.scriptBrain.voiceCategory ?? matchVoiceForAvatar(avatar, state.scriptBrain.angle)
       const kf = await renderCreatorKeyframe({
@@ -171,18 +176,43 @@ export default function HybridVideoPhase(_props: Props) {
         avatar, product: state.inputs.product, onStageUpdate: () => {},
       })
       setHybridAssets({ keyframeRef: kf.keyframeRef, voiceRef: kf.voiceRef, voiceDurationSec: kf.voiceDurationSec, voiceAlignment: kf.voiceAlignment })
-      const timed = assignSceneTiming(raw, kf.voiceAlignment, script, kf.voiceDurationSec)
-      // P4g — re-timing after the real voice may create new filler cuts; ground them.
-      await groundOrphanScenes(timed, state.inputs.product, geminiKey)
-      setHybridPlan(timed, useAdsVideoStore.getState().state.hybrid.stickers, raw)
-      addToast(`✓ Giọng (${kf.voiceDurationSec.toFixed(1)}s) + khuôn mặt — nghe thử rồi render cảnh`, 'success')
+      addToast(`✓ Giọng (${kf.voiceDurationSec.toFixed(1)}s) + khuôn mặt — đang đạo diễn…`, 'success')
+      return true
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e); setError(msg); addToast(`Tạo giọng/mặt lỗi: ${msg.slice(0, 120)}`, 'error')
+      return false
     } finally {
       setAssetsBusy(false)
       setAssetsGenStartedAt(undefined)   // clear persisted lock (also runs if unmounted)
     }
   }
+
+  // P4k — CORRECT-ORDER pipeline: voice/keyframe FIRST → director on the REAL
+  // duration + alignment. Used by auto-run + the "Tạo lại giọng" button.
+  const runFullPipeline = async () => {
+    const ok = await makeVoice()
+    if (ok) await runPlan()
+  }
+
+  // P4k — AUTO-RUN. The user no longer clicks "Tạo giọng" then "Đạo diễn"
+  // separately: on arriving at this step with a ready script, the app runs the
+  // whole pipeline in the CORRECT order automatically. Fires ONCE; skips when a
+  // gen is already in flight (F5 mid-gen) or voice+scenes already exist — so it
+  // never double-charges. If keys/avatar are missing it stays idle (manual button).
+  const autoRanRef = useRef(false)
+  useEffect(() => {
+    if (autoRanRef.current) return
+    if (!geminiKey || !kieApiKey || !elevenLabsKey) return
+    const s = useAdsVideoStore.getState().state
+    if (!s.inputs.avatar) return
+    const h = s.hybrid
+    if (h.voiceRef && (h.scenes?.length ?? 0) > 0) { autoRanRef.current = true; return }   // already complete
+    if (h.assetsGenStartedAt && Date.now() - h.assetsGenStartedAt < ASSETS_STALE_MS) return // gen in flight → don't double-fire
+    autoRanRef.current = true
+    if (h.voiceRef) void runPlan()           // voice exists → only direct (0 credit)
+    else void runFullPipeline()              // fresh → voice then direct
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [geminiKey, kieApiKey, elevenLabsKey, script])
 
   const ctx = (): HybridRenderContext => ({
     kieApiKey, keyframeRef: hybrid.keyframeRef, voiceRef: hybrid.voiceRef,
@@ -327,22 +357,25 @@ export default function HybridVideoPhase(_props: Props) {
           <Film className="h-5 w-5 shrink-0 text-violet-600" />
           <div className="min-w-0 flex-1">
             <p className="text-sm font-bold text-gray-900">
-              {scenes.length > 0 ? `${scenes.length} cảnh · ${doneCount}/${scenes.length} đã render` : 'Chưa có kịch bản cảnh'}
+              {assetsBusy ? 'Đang tạo giọng + khuôn mặt…'
+                : planning ? 'Đang đạo diễn (chia cảnh theo giọng thật)…'
+                : scenes.length > 0 ? `${scenes.length} cảnh · ${doneCount}/${scenes.length} đã render`
+                : 'Đang khởi tạo tự động…'}
             </p>
-            <p className="text-[11px] text-gray-500">Đạo diễn + soát: 0 credit. Render 480p · Video cuối 720p.</p>
+            <p className="text-[11px] text-gray-500">Tự động: giọng → đạo diễn → render. Đạo diễn + soát: 0 credit. Render 480p · Video cuối 720p.</p>
           </div>
-          <button onClick={runPlan} disabled={busy}
+          <button onClick={runPlan} disabled={busy || !hasAssets}
+            title={!hasAssets ? 'Cần giọng trước (đang tự tạo)' : 'Đạo diễn lại trên giọng hiện có (0 credit)'}
             className="flex items-center gap-1.5 rounded-lg border border-violet-300 bg-white px-3 py-2 text-[12px] font-bold text-violet-700 hover:bg-violet-50 disabled:opacity-50">
             {planning ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Wand2 className="h-3.5 w-3.5" />}
-            {scenes.length > 0 ? 'Đạo diễn lại' : 'Đạo diễn'}
+            Đạo diễn lại
           </button>
-          {scenes.length > 0 && (
-            <button onClick={makeAssets} disabled={busy}
-              className={`flex items-center gap-1.5 rounded-lg px-3 py-2 text-[12px] font-bold shadow-sm disabled:opacity-50 ${hasAssets ? 'border border-emerald-300 bg-white text-emerald-700' : 'bg-gradient-to-r from-amber-500 to-orange-500 text-white'}`}>
-              {assetsBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Mic className="h-3.5 w-3.5" />}
-              {hasAssets ? 'Giọng + mặt ✓' : `Tạo giọng + mặt (~${ASSETS_CR}cr)`}
-            </button>
-          )}
+          <button onClick={runFullPipeline} disabled={busy}
+            title="Tạo lại giọng + mặt rồi đạo diễn lại (tốn credit giọng)"
+            className={`flex items-center gap-1.5 rounded-lg px-3 py-2 text-[12px] font-bold shadow-sm disabled:opacity-50 ${hasAssets ? 'border border-emerald-300 bg-white text-emerald-700' : 'bg-gradient-to-r from-amber-500 to-orange-500 text-white'}`}>
+            {assetsBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Mic className="h-3.5 w-3.5" />}
+            {hasAssets ? `Tạo lại giọng (~${ASSETS_CR}cr)` : `Tạo giọng + đạo diễn (~${ASSETS_CR}cr)`}
+          </button>
           {scenes.length > 0 && hasAssets && pendingIdx.length > 0 && (
             <button onClick={renderAll} disabled={busy || renderingNow}
               title={renderingNow ? 'Đang có cảnh đang render — đợi xong rồi bấm' : ''}
@@ -379,10 +412,10 @@ export default function HybridVideoPhase(_props: Props) {
         {/* ── Creator assets — listen to the voice + see the face before paying ─ */}
         {hasAssets ? (
           <AssetsBar keyframeRef={hybrid.keyframeRef} voiceRef={hybrid.voiceRef}
-            voiceDurationSec={hybrid.voiceDurationSec} busy={busy} onRegen={makeAssets} />
+            voiceDurationSec={hybrid.voiceDurationSec} busy={busy} onRegen={runFullPipeline} />
         ) : scenes.length > 0 ? (
           <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 p-2.5 text-[12px] text-amber-800">
-            Bấm <strong>"Tạo giọng + mặt"</strong> trước — cần khuôn mặt + giọng thật để render cảnh "Nói" + nghe kiểm tra giọng.
+            Chưa có giọng — bấm <strong>"Tạo giọng + đạo diễn"</strong> để tạo khuôn mặt + giọng thật rồi đạo diễn lại theo đúng nhịp giọng.
           </div>
         ) : null}
 
@@ -413,9 +446,21 @@ export default function HybridVideoPhase(_props: Props) {
           </div>
         )}
 
-        {scenes.length === 0 && !planning && (
+        {scenes.length === 0 && (
           <div className="rounded-xl border border-dashed border-gray-300 p-8 text-center text-[12px] text-gray-400">
-            <Sparkles className="mx-auto mb-2 h-7 w-7 text-gray-300" /> Bấm "Đạo diễn" để AI tách kịch bản thành cảnh (0 credit).
+            {assetsBusy || planning ? (
+              <><Loader2 className="mx-auto mb-2 h-7 w-7 animate-spin text-violet-400" />
+                {assetsBusy ? 'Đang tạo giọng + khuôn mặt thật…' : 'Đang đạo diễn (chia cảnh theo giọng)…'} Giữ tab mở nhé.</>
+            ) : (
+              <>
+                <Sparkles className="mx-auto mb-2 h-7 w-7 text-gray-300" />
+                <p className="mb-2">App tự chạy: giọng + mặt → đạo diễn → render. Nếu chưa tự chạy, bấm để bắt đầu:</p>
+                <button onClick={runFullPipeline} disabled={busy}
+                  className="mx-auto flex items-center gap-1.5 rounded-lg bg-gradient-to-r from-amber-500 to-orange-500 px-3 py-2 text-[12px] font-bold text-white disabled:opacity-50">
+                  <Mic className="h-3.5 w-3.5" /> Tạo giọng + đạo diễn (~{ASSETS_CR}cr)
+                </button>
+              </>
+            )}
           </div>
         )}
 
