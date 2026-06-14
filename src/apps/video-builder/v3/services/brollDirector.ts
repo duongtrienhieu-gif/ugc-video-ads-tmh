@@ -445,6 +445,18 @@ should look like a real Malaysian creator filmed it, NOT a generic Asian setting
   • "musim hujan" → exterior shot through a window with rain streaks.
 ` : ''
 
+  // P4l — sticker register for Malaysia. The universal sticker rule says "no
+  // English" (right for VN), but Malaysian TikTok captions are bahasa ROJAK —
+  // light English mix ("Free", "Stok", "Best", "Combo") is NATURAL. This refines
+  // it for MS: rojak yes, Vietnamese NEVER. A JS validator below re-localizes any
+  // sticker that still leaked Vietnamese.
+  const msStickerHint = params.lang === 'ms' ? `
+STICKER LANGUAGE (Malaysia) — write stickers in natural Malaysian Bahasa ROJAK, the
+casual register a real MY TikTok seller types: a light English mix ("Free", "Stok",
+"Best", "Combo", "Free postage") is NATURAL — keep it. Use MY callout words: "Jimat
+50%", "Stok terhad", "Beli 1 Free 1", "Laris", "Murah gila", "RM59". NEVER write a
+sticker in Vietnamese — not a single word.` : ''
+
   const systemInstruction = `You are a senior UGC ad video DIRECTOR cutting a ${dur}-second TikTok ad written
 in ${langName}. There is NO continuous talking-head — you build the WHOLE video as
 a SEQUENCE of full-screen cuts that together COVER EVERY SECOND of the voice, with
@@ -535,7 +547,7 @@ names — never pad with vague stickers, but never leave a concrete callout bare
   later one is dropped) — so cover the KEY callouts; don't stack many on one line.
   ALL sticker text 100% in ${langName} — translate the idea INTO ${langName}; NEVER
   leave or switch a word to English (write the ${langName} word, not the English one).
-${culturalSettingBlock}${shapeHint}
+${culturalSettingBlock}${msStickerHint}${shapeHint}
 RULES:
 - DIRECTOR'S BRAIN (the #0 rule — think like a real director, not a captioner):
   READ THE MEANING of each line, then PICTURE the real-life moment + the person's
@@ -681,6 +693,10 @@ OUTPUT strict JSON only (no markdown fences):
   await backfillWeakConcepts(scenes, params.product, params.geminiKey)
 
   const stickers = sanitizeStickers(parsed.stickers)
+  // P4l — MS sticker safety net: even with the rojak hint, Gemini sometimes leaks
+  // Vietnamese onto a sticker (the dev/source language). Re-localize any flagged
+  // sticker to Malay in ONE call. Only fires when ms AND a leak is actually found.
+  if (params.lang === 'ms') await localizeStickersToMs(stickers, params.geminiKey)
 
   const coveredSec = scenes.reduce((s, x) => s + x.durationSec, 0)
   const lipsScenes = scenes.filter((s) => s.role === 'lips')
@@ -1035,6 +1051,61 @@ function enforceDensityFloor(scenes: TimedBrollScene[], minScenes: number): Time
     console.log(`[BROLL_DIRECTOR] density floor: chẻ ${split} cảnh dài → tổng ${out.length} cảnh (sàn ${minScenes})`)
   }
   return out
+}
+
+// ── P4l — MS sticker localization (anti Vietnamese-leak) ─────────────────────
+// Malay (rojak) uses plain a-z + light English; it has NONE of Vietnamese's tone
+// marks / special vowels. So any of these characters on an MS sticker = leaked
+// Vietnamese → re-localize. Clean deterministic signal, zero false positives on
+// real Malay (which never carries these diacritics).
+const VN_DIACRITICS_RE = /[ăâđêôơưĂÂĐÊÔƠƯàáảãạằắẳẵặầấẩẫậèéẻẽẹềếểễệìíỉĩịòóỏõọồốổỗộờớởỡợùúủũụừứửữựỳýỷỹỵ]/
+
+/** Re-localize any sticker that leaked Vietnamese into natural Malay rojak. ONE
+ *  Gemini call, only when there IS a leak; mutates in place; graceful on failure
+ *  (a stray VN sticker is better than a broken plan). Universal — no niche assumption. */
+async function localizeStickersToMs(stickers: BrollSticker[], apiKey: string): Promise<void> {
+  type Ptr = { si: number; kind: 'text' } | { si: number; kind: 'item'; ii: number }
+  const frags: string[] = []
+  const ptrs: Ptr[] = []
+  stickers.forEach((s, si) => {
+    if (s.text && VN_DIACRITICS_RE.test(s.text)) { frags.push(s.text); ptrs.push({ si, kind: 'text' }) }
+    ;(s.items ?? []).forEach((it, ii) => {
+      if (VN_DIACRITICS_RE.test(it)) { frags.push(it); ptrs.push({ si, kind: 'item', ii }) }
+    })
+  })
+  if (frags.length === 0) return
+  const numbered = frags.map((f, n) => `${n + 1}. ${f}`).join('\n')
+  const systemInstruction =
+`You localize short ad STICKER labels (numbers, prices, discounts, feature callouts)
+into natural Malaysian Bahasa ROJAK — the casual mixed register a real Malaysian
+TikTok seller types. Each label below LEAKED Vietnamese; rewrite it in Malaysian.
+RULES: keep any emoji; keep any number / price / unit (RM…, %, mAh, g…); keep it
+SHORT (≤24 chars); keep the MEANING. A light English mix is fine ("Free", "Stok",
+"Best", "Combo"); Malaysian callout words: "Jimat", "Stok terhad", "Beli 1 Free 1",
+"Laris", "Murah", "Free postage". NO Vietnamese left.
+OUTPUT exactly ${frags.length} lines, ONE label per line, SAME order, no numbering,
+no quotes, no commentary.`
+  const prompt = `Localize these ${frags.length} sticker labels to Malaysian (one per line, same order):\n${numbered}`
+  try {
+    const raw = await directGeminiText({
+      apiKey, systemInstruction, prompt, maxOutputTokens: 512, temperature: 0.5, thinkingBudget: 0,
+    })
+    const lines = raw.split('\n')
+      .map((l) => l.replace(/^\s*\d+[.)]\s*/, '').replace(/^["'“”\-•]+|["'“”]+$/g, '').trim())
+      .filter(Boolean)
+    ptrs.forEach((p, n) => {
+      const v = lines[n]
+      if (!v || VN_DIACRITICS_RE.test(v)) return   // skip if model still left VN
+      const s = stickers[p.si]
+      if (p.kind === 'text') s.text = v.slice(0, 24)
+      else if (s.items) s.items[p.ii] = v.slice(0, 24)
+    })
+    // eslint-disable-next-line no-console
+    console.log(`[BROLL_DIRECTOR] localize ${ptrs.length} sticker VN→MS`)
+  } catch (e) {
+    // eslint-disable-next-line no-console
+    console.warn('[BROLL_DIRECTOR] localize sticker MS lỗi (giữ nguyên):', e)
+  }
 }
 
 function sanitizeStickers(raw: RawSticker[] | undefined): BrollSticker[] {
