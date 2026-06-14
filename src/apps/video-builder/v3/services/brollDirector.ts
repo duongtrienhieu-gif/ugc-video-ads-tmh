@@ -85,11 +85,12 @@ export interface BrollDirectorParams {
 }
 
 // ── Lips count ladder (user spec — NOT a niche hardcode) ────────────────────
+// P4o — <50s = 3, 50-70s = 4, >70s = 5 (HARD CAP). 5 is the ceiling — a longer
+// ad does NOT keep adding talking-head cuts (kept the b-roll the hero).
 function lipsCountForDuration(sec: number): number {
   if (sec < 50) return 3
-  if (sec < 60) return 4
-  if (sec < 70) return 5
-  return 6
+  if (sec <= 70) return 4
+  return 5
 }
 
 // ── Density floor (deterministic) ───────────────────────────────────────────
