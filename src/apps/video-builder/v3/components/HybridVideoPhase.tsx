@@ -233,8 +233,9 @@ export default function HybridVideoPhase(_props: Props) {
     if (!s) return
     // P4p — never double-render the same index: an old (pre-tab-switch) closure may
     // still be draining the queue while the remounted component re-drives it. Bail
-    // if this index is already rendering this session or already has a clip.
-    if (ACTIVE_RENDERS.has(i) || hy.clips[i]) return
+    // only if this index is ALREADY rendering this session. (Do NOT bail on an
+    // existing clip — that would block an intentional "Render lại" of a done scene.)
+    if (ACTIVE_RENDERS.has(i)) return
     ACTIVE_RENDERS.add(i)                                   // P3z — this JS session owns it
     setRenderingIdx((set) => new Set(set).add(i))
     setFailedIdx((set) => { const n = new Set(set); n.delete(i); return n })
@@ -342,7 +343,10 @@ export default function HybridVideoPhase(_props: Props) {
     setRenderingIdx((set) => {
       let changed = false
       const n = new Set(set)
-      for (const i of set) if (hybrid.clips[i] || (!ACTIVE_RENDERS.has(i) && !rs[i])) { n.delete(i); changed = true }
+      // A scene is still rendering iff this session owns it (ACTIVE_RENDERS) OR the
+      // store says so (renderingScenes). NOT keyed on clips — an old clip lingers
+      // during a "Render lại", and clearing on it would kill the spinner mid-render.
+      for (const i of set) if (!ACTIVE_RENDERS.has(i) && !rs[i]) { n.delete(i); changed = true }
       return changed ? n : set
     })
     setQueuedIdx((q) => {
@@ -603,7 +607,29 @@ function SceneCard({ i, scene, clipRef, rendering, queued, failed, progress, voi
     <div className="flex flex-col overflow-hidden rounded-lg border border-gray-200 bg-white">
       {/* 9:16 frame */}
       <div className="relative aspect-[9/16] w-full bg-gray-900">
-        {done ? (
+        {/* P4q — rendering/queued takes PRECEDENCE over the old clip: clicking
+            "Render lại" must immediately CLEAR the old preview + show the spinner
+            so the user sees the render actually started (before it only swapped
+            after the new clip saved → looked like nothing happened). */}
+        {rendering ? (
+          <div className="flex h-full w-full items-center justify-center">
+            <div className="flex flex-col items-center gap-1 text-violet-300">
+              <Loader2 className="h-6 w-6 animate-spin" />
+              <span className="text-[10px]">đang render…</span>
+              {progress && (
+                <span className="text-[9px] text-violet-200/80">
+                  poll #{progress.pollCount} · {progress.elapsedSec}s
+                </span>
+              )}
+            </div>
+          </div>
+        ) : queued ? (
+          <div className="flex h-full w-full items-center justify-center">
+            <div className="flex flex-col items-center gap-1 text-amber-300">
+              <Loader2 className="h-6 w-6 animate-pulse" /> <span className="text-[10px]">đang chờ…</span>
+            </div>
+          </div>
+        ) : done ? (
           <>
             <video ref={videoRef} src={url} muted playsInline
               onPlay={() => setPlaying(true)} onPause={() => setPlaying(false)} onEnded={() => setPlaying(false)}
@@ -618,28 +644,12 @@ function SceneCard({ i, scene, clipRef, rendering, queued, failed, progress, voi
           </>
         ) : (
           <div className="flex h-full w-full items-center justify-center">
-            {rendering ? (
-              <div className="flex flex-col items-center gap-1 text-violet-300">
-                <Loader2 className="h-6 w-6 animate-spin" />
-                <span className="text-[10px]">đang render…</span>
-                {progress && (
-                  <span className="text-[9px] text-violet-200/80">
-                    poll #{progress.pollCount} · {progress.elapsedSec}s
-                  </span>
-                )}
-              </div>
-            ) : queued ? (
-              <div className="flex flex-col items-center gap-1 text-amber-300">
-                <Loader2 className="h-6 w-6 animate-pulse" /> <span className="text-[10px]">đang chờ…</span>
-              </div>
-            ) : (
-              <button onClick={onRender} disabled={!hasAssets}
-                className="flex flex-col items-center gap-1.5 rounded-xl bg-violet-600 px-4 py-3 text-white shadow-lg hover:bg-violet-700 disabled:opacity-40">
-                <Play className="h-5 w-5 fill-white" />
-                <span className="text-[12px] font-bold">Render</span>
-                <span className="text-[10px] text-white/80">~{credit}cr</span>
-              </button>
-            )}
+            <button onClick={onRender} disabled={!hasAssets}
+              className="flex flex-col items-center gap-1.5 rounded-xl bg-violet-600 px-4 py-3 text-white shadow-lg hover:bg-violet-700 disabled:opacity-40">
+              <Play className="h-5 w-5 fill-white" />
+              <span className="text-[12px] font-bold">Render</span>
+              <span className="text-[10px] text-white/80">~{credit}cr</span>
+            </button>
           </div>
         )}
         {/* overlays */}
@@ -649,8 +659,8 @@ function SceneCard({ i, scene, clipRef, rendering, queued, failed, progress, voi
         </div>
         <span className="pointer-events-none absolute right-1 top-1 rounded bg-black/60 px-1 text-[9px] text-white/90">{scene.startSec.toFixed(1)}-{scene.endSec.toFixed(1)}s</span>
         {scene.cameraFraming === 'hands_noface' && <span className="pointer-events-none absolute bottom-1 left-1 rounded bg-black/60 px-1 text-[8px] text-white/80">no-face</span>}
-        {done && <span className="absolute right-1 bottom-1 rounded-full bg-emerald-500 px-1.5 text-[10px] font-bold text-white">✓</span>}
-        {failed && <span className="absolute right-1 bottom-1 rounded-full bg-rose-500 px-1.5 text-[10px] font-bold text-white">✗</span>}
+        {done && !rendering && !queued && <span className="absolute right-1 bottom-1 rounded-full bg-emerald-500 px-1.5 text-[10px] font-bold text-white">✓</span>}
+        {failed && !rendering && !queued && <span className="absolute right-1 bottom-1 rounded-full bg-rose-500 px-1.5 text-[10px] font-bold text-white">✗</span>}
       </div>
       {/* quote + concept + re-render */}
       <div className="flex flex-1 flex-col gap-1 p-2">
