@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { X, Upload, Link2, Loader2, Check } from 'lucide-react'
 import { useBankStore } from '../../../stores/bankStore'
 import { useAppStore } from '../../../stores/appStore'
+import { useTikTokShopListingsStore } from '../../tiktok-shop/listingsStore'
 import { listProjects } from '../../landing-page/services/projectsAPI'
 import type { SavedLandingPack } from '../../landing-page/types'
 import { saveAsset } from '../../../utils/assetStore'
@@ -12,13 +13,21 @@ export interface PickedMedia {
   mediaType: 'image' | 'video'
 }
 
-type Source = 'ladipage' | 'bank' | 'upload'
+type Source = 'ladipage' | 'tiktok' | 'bank' | 'upload'
 
-// Modal chọn ảnh/video cho mediaMap. 4 nguồn (P1):
-//   • Ladipage/super-ladipage (ảnh đã tạo, lọc theo sản phẩm)
-//   • product bank (productImages)
-//   • Tải lên file
-//   • Dán URL
+/** Tách 2 nhóm: ảnh khớp đúng sản phẩm đang chọn, và toàn bộ ảnh có sẵn.
+ *  Khi khớp = rỗng (productId khác / không gắn SP) vẫn cho xem "tất cả". */
+interface RefBuckets {
+  matched: string[]
+  all: string[]
+}
+
+function dedupe(arr: string[]): string[] {
+  return Array.from(new Set(arr.filter(Boolean)))
+}
+
+// Modal chọn ảnh/video cho mediaMap. Nguồn: Ladipage/super-ladipage, TikTok Shop,
+// product bank, tải lên/URL. Lọc theo productId HOẶC tên sản phẩm; fallback "tất cả".
 export default function MediaPickerModal({
   productId, onClose, onPick,
 }: {
@@ -28,37 +37,70 @@ export default function MediaPickerModal({
 }) {
   const product = useBankStore((s) => s.getProductById(productId))
   const addToast = useAppStore((s) => s.addToast)
+  const tiktokListings = useTikTokShopListingsStore((s) => s.listings)
+  const hydrateTiktok = useTikTokShopListingsStore((s) => s.hydrate)
 
   const [source, setSource] = useState<Source>('ladipage')
-  const [ladiRefs, setLadiRefs] = useState<string[] | null>(null) // null = đang tải
+  const [onlyThisProduct, setOnlyThisProduct] = useState(true)
+  const [ladi, setLadi] = useState<RefBuckets | null>(null) // null = đang tải
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [urlValue, setUrlValue] = useState('')
   const [uploading, setUploading] = useState(false)
 
-  // Tải ảnh Ladipage đã tạo cho sản phẩm này (landing-page + super-ladipage).
+  const productName = (product?.productName ?? '').trim().toLowerCase()
+
+  // Tải ảnh Ladipage + super-ladipage.
   useEffect(() => {
     let cancelled = false
-    setLadiRefs(null)
+    void hydrateTiktok()
     ;(async () => {
       const [lp, sl] = await Promise.all([
         listProjects<SavedLandingPack>('landing-page'),
         listProjects<SavedLandingPack>('super-ladipage'),
       ])
-      const packs = [...(lp ?? []), ...(sl ?? [])].filter((p) => p.productId === productId)
-      const refs: string[] = []
+      const packs = [...(lp ?? []), ...(sl ?? [])]
+      const matched: string[] = []
+      const all: string[] = []
       for (const pack of packs) {
+        const isMatch =
+          pack.productId === productId ||
+          (!!productName && (pack.productName ?? '').trim().toLowerCase() === productName)
         for (const sec of pack.sections ?? []) {
           for (const ip of sec.imagePrompts ?? []) {
-            if (ip.generatedAssetRef) refs.push(ip.generatedAssetRef)
+            if (!ip.generatedAssetRef) continue
+            all.push(ip.generatedAssetRef)
+            if (isMatch) matched.push(ip.generatedAssetRef)
           }
         }
       }
-      if (!cancelled) setLadiRefs(Array.from(new Set(refs)))
+      if (!cancelled) setLadi({ matched: dedupe(matched), all: dedupe(all) })
     })()
     return () => { cancelled = true }
-  }, [productId])
+  }, [productId, productName, hydrateTiktok])
 
-  const bankImages = product?.productImages ?? []
+  // TikTok Shop listings (đã ở store sau hydrate).
+  const tiktok: RefBuckets = useMemo(() => {
+    const matched: string[] = []
+    const all: string[] = []
+    for (const l of tiktokListings) {
+      const isMatch = l.productId === productId
+      const refs = [
+        ...(l.images ?? []).map((i) => i.imageAssetId),
+        ...(l.combos ?? []).map((c) => c.imageAssetId),
+      ].filter((r): r is string => !!r)
+      for (const r of refs) {
+        all.push(r)
+        if (isMatch) matched.push(r)
+      }
+    }
+    return { matched: dedupe(matched), all: dedupe(all) }
+  }, [tiktokListings, productId])
+
+  const bankImages = dedupe(product?.productImages ?? [])
+
+  function bucketRefs(b: RefBuckets): string[] {
+    return onlyThisProduct && b.matched.length > 0 ? b.matched : b.all
+  }
 
   function toggle(ref: string) {
     setSelected((prev) => {
@@ -98,6 +140,9 @@ export default function MediaPickerModal({
     onClose()
   }
 
+  const showMatchedToggle = source === 'ladipage' || source === 'tiktok'
+  const activeBucket = source === 'ladipage' ? ladi : source === 'tiktok' ? tiktok : null
+
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
       <div
@@ -113,8 +158,8 @@ export default function MediaPickerModal({
         </div>
 
         {/* Source tabs */}
-        <div className="flex shrink-0 gap-1 border-b border-black/10 px-3 py-2">
-          {([['ladipage', 'Từ Ladipage'], ['bank', 'Từ sản phẩm'], ['upload', 'Tải lên / URL']] as [Source, string][]).map(
+        <div className="flex shrink-0 flex-wrap items-center gap-1 border-b border-black/10 px-3 py-2">
+          {([['ladipage', 'Từ Ladipage'], ['tiktok', 'Từ TikTok Shop'], ['bank', 'Từ sản phẩm'], ['upload', 'Tải lên / URL']] as [Source, string][]).map(
             ([s, label]) => (
               <button
                 key={s}
@@ -127,69 +172,55 @@ export default function MediaPickerModal({
               </button>
             ),
           )}
+          {showMatchedToggle && (
+            <label className="ml-auto flex cursor-pointer items-center gap-1.5 text-[11px] font-medium text-gray-500">
+              <input
+                type="checkbox"
+                checked={onlyThisProduct}
+                onChange={(e) => setOnlyThisProduct(e.target.checked)}
+                className="accent-emerald-500"
+              />
+              Chỉ sản phẩm này
+            </label>
+          )}
         </div>
 
         {/* Body */}
         <div className="flex-1 overflow-y-auto p-4">
-          {source === 'ladipage' && (
-            ladiRefs === null ? (
+          {(source === 'ladipage' || source === 'tiktok') && (
+            activeBucket === null ? (
               <div className="flex h-32 items-center justify-center text-gray-400">
                 <Loader2 className="h-5 w-5 animate-spin" />
               </div>
-            ) : ladiRefs.length === 0 ? (
-              <p className="py-10 text-center text-sm text-gray-400">
-                Chưa có ảnh Ladipage nào cho sản phẩm này. Tạo ở Landing Page AI / Super Ladipage trước nhé.
-              </p>
-            ) : (
-              <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
-                {ladiRefs.map((ref) => {
-                  const on = selected.has(ref)
-                  return (
-                    <button
-                      key={ref}
-                      onClick={() => toggle(ref)}
-                      className={`relative aspect-square overflow-hidden rounded-lg border-2 transition-colors ${
-                        on ? 'border-emerald-500' : 'border-transparent hover:border-black/10'
-                      }`}
-                    >
-                      <MediaThumb assetRef={ref} className="h-full w-full" />
-                      {on && (
-                        <span className="absolute right-1 top-1 flex h-5 w-5 items-center justify-center rounded-full bg-emerald-500 text-white">
-                          <Check className="h-3 w-3" strokeWidth={3} />
-                        </span>
-                      )}
-                    </button>
-                  )
-                })}
-              </div>
-            )
+            ) : (() => {
+              const refs = bucketRefs(activeBucket)
+              if (refs.length === 0) {
+                return (
+                  <p className="py-10 text-center text-sm text-gray-400">
+                    {activeBucket.all.length === 0
+                      ? `Chưa có ảnh ${source === 'ladipage' ? 'Ladipage' : 'TikTok Shop'} nào. Tạo bên app đó trước nhé.`
+                      : 'Không có ảnh gắn đúng sản phẩm này. Bỏ tick "Chỉ sản phẩm này" để xem tất cả.'}
+                  </p>
+                )
+              }
+              return (
+                <>
+                  {onlyThisProduct && activeBucket.matched.length === 0 && (
+                    <p className="mb-2 text-[11px] text-amber-600">
+                      Không khớp đúng sản phẩm — đang hiện tất cả ảnh.
+                    </p>
+                  )}
+                  <SelectableGrid refs={refs} selected={selected} onToggle={toggle} />
+                </>
+              )
+            })()
           )}
 
           {source === 'bank' && (
             bankImages.length === 0 ? (
               <p className="py-10 text-center text-sm text-gray-400">Sản phẩm chưa có ảnh trong bank.</p>
             ) : (
-              <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
-                {bankImages.map((ref) => {
-                  const on = selected.has(ref)
-                  return (
-                    <button
-                      key={ref}
-                      onClick={() => toggle(ref)}
-                      className={`relative aspect-square overflow-hidden rounded-lg border-2 transition-colors ${
-                        on ? 'border-emerald-500' : 'border-transparent hover:border-black/10'
-                      }`}
-                    >
-                      <MediaThumb assetRef={ref} className="h-full w-full" />
-                      {on && (
-                        <span className="absolute right-1 top-1 flex h-5 w-5 items-center justify-center rounded-full bg-emerald-500 text-white">
-                          <Check className="h-3 w-3" strokeWidth={3} />
-                        </span>
-                      )}
-                    </button>
-                  )
-                })}
-              </div>
+              <SelectableGrid refs={bankImages} selected={selected} onToggle={toggle} />
             )
           )}
 
@@ -225,8 +256,8 @@ export default function MediaPickerModal({
           )}
         </div>
 
-        {/* Footer (multi-select confirm cho ladipage/bank) */}
-        {(source === 'ladipage' || source === 'bank') && (
+        {/* Footer (multi-select confirm) */}
+        {source !== 'upload' && (
           <div className="flex shrink-0 items-center justify-between border-t border-black/10 px-5 py-3">
             <span className="text-xs text-gray-500">Đã chọn {selected.size}</span>
             <button
@@ -239,6 +270,38 @@ export default function MediaPickerModal({
           </div>
         )}
       </div>
+    </div>
+  )
+}
+
+function SelectableGrid({
+  refs, selected, onToggle,
+}: {
+  refs: string[]
+  selected: Set<string>
+  onToggle: (ref: string) => void
+}) {
+  return (
+    <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
+      {refs.map((ref) => {
+        const on = selected.has(ref)
+        return (
+          <button
+            key={ref}
+            onClick={() => onToggle(ref)}
+            className={`relative aspect-square overflow-hidden rounded-lg border-2 transition-colors ${
+              on ? 'border-emerald-500' : 'border-transparent hover:border-black/10'
+            }`}
+          >
+            <MediaThumb assetRef={ref} className="h-full w-full" />
+            {on && (
+              <span className="absolute right-1 top-1 flex h-5 w-5 items-center justify-center rounded-full bg-emerald-500 text-white">
+                <Check className="h-3 w-3" strokeWidth={3} />
+              </span>
+            )}
+          </button>
+        )
+      })}
     </div>
   )
 }
