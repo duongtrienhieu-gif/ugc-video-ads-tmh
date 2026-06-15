@@ -93,6 +93,8 @@ interface AdsVideoStoreState {
   setHybridCreatorAssets: (a: { keyframeRef: string; voiceRef: string; voiceDurationSec: number; voiceAlignment?: VoiceAlignment; voiceId?: string }) => void
   /** Store the final assembled MP4. */
   setHybridFinal:         (videoRef: string) => void
+  /** P5k — burned-caption settings (preset + on/off), applied at assemble. */
+  setHybridCaption:       (patch: { captionsOn?: boolean; captionPreset?: import('../services/captionPresets').CaptionPresetId }) => void
   clearHybrid:            () => void
   /** Z32 — set/replace creator video config (setting + energy + preset + wardrobe + resolution) */
   setCreatorVideoConfig: (config: CreatorVideoConfig) => void
@@ -473,6 +475,9 @@ export const useAdsVideoStore = create<AdsVideoStoreState>((set, get) => ({
 
   setHybridFinal: (videoRef) =>
     commit(set, get, (s) => ({ ...s, hybrid: { ...s.hybrid, finalVideoRef: videoRef } })),
+
+  setHybridCaption: (patch) =>
+    commit(set, get, (s) => ({ ...s, hybrid: { ...s.hybrid, ...patch } })),
 
   clearHybrid: () =>
     commit(set, get, (s) => ({ ...s, hybrid: createEmptyHybridState() })),

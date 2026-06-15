@@ -13,6 +13,7 @@ import { useAssetUrl } from '../../../../hooks/useAssetUrl'
 import { assembleFromHybridState } from '../services/hybridAssembleFlow'
 import { FINAL_RES } from '../services/hybridConstants'
 import { generateThumbnailHooks, generateAiThumbnail, THUMBNAIL_ARCHETYPES, THUMBNAIL_ARCHETYPE_ORDER } from '../services/thumbnailEngine'
+import { CAPTION_PRESETS, CAPTION_PRESET_ORDER, DEFAULT_CAPTION_PRESET } from '../services/captionPresets'
 import { SCRIPT_LANG_GEMINI_NAME, type AiThumbnail } from '../types'
 
 const now = () => Date.now()
@@ -29,9 +30,12 @@ export default function HybridExportPhase() {
   const geminiKey       = useSettingsStore((s) => s.geminiApiKey)
   const kieApiKey       = useSettingsStore((s) => s.kieApiKey)
 
+  const setHybridCaption = useAdsVideoStore((s) => s.setHybridCaption)
   const hybrid = state.hybrid
   const ev = state.exportVariation
   const script = state.scriptBrain.script
+  const captionsOn = hybrid.captionsOn !== false           // default ON
+  const captionPreset = hybrid.captionPreset ?? DEFAULT_CAPTION_PRESET
   const scenes = hybrid.scenes ?? []
   const doneCount = scenes.filter((_, i) => hybrid.clips[i]).length
   const allDone = scenes.length > 0 && doneCount === scenes.length
@@ -107,6 +111,34 @@ export default function HybridExportPhase() {
             <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" /> <span>{error}</span>
           </div>
         )}
+
+        {/* ── Caption (phụ đề cháy chữ) — applied at assemble, 0 credit ──────── */}
+        <div className="mb-4 rounded-xl border border-black/10 bg-white p-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <p className="text-sm font-bold text-gray-900">💬 Phụ đề (caption)</p>
+              <p className="text-[11px] text-gray-500">Cháy chữ vào video — đúng lời nói, 0 credit. Đổi xong bấm <strong>Ghép lại / Tạo video</strong>.</p>
+            </div>
+            <label className="flex shrink-0 cursor-pointer items-center gap-1.5 text-[12px] font-semibold text-gray-700">
+              <input type="checkbox" checked={captionsOn} onChange={(e) => setHybridCaption({ captionsOn: e.target.checked })} />
+              Bật phụ đề
+            </label>
+          </div>
+          {captionsOn && (
+            <div className="mt-2 grid grid-cols-2 gap-1.5 sm:grid-cols-4">
+              {CAPTION_PRESET_ORDER.map((id) => (
+                <button key={id} onClick={() => setHybridCaption({ captionPreset: id })}
+                  className={`rounded-lg border px-2 py-2 text-[11px] font-bold transition-all ${
+                    captionPreset === id
+                      ? 'border-violet-400 bg-violet-100 text-violet-800'
+                      : 'border-gray-200 bg-white text-gray-500 hover:bg-gray-50'
+                  }`}>
+                  {CAPTION_PRESETS[id].labelVi}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
 
         {/* ── Final video ───────────────────────────────────────────────────── */}
         {hybrid.finalVideoRef && finalUrl ? (
