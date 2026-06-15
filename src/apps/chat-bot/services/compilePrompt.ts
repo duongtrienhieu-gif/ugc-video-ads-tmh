@@ -7,7 +7,7 @@
 // ─────────────────────────────────────────────────────────────────────────
 
 import type { Product } from '../../../stores/types'
-import type { ChatTurn, MediaSlot, SalesConfig } from '../types'
+import type { ChatTurn, MediaRole, MediaSlot, SalesConfig } from '../types'
 import { ROLE_LABELS, STAGE_LABELS } from '../labels'
 import { buildSystemPrompt } from './playbook'
 
@@ -33,16 +33,23 @@ export function compilePrompt(args: {
 }): CompiledPrompt {
   const { config, product, history, customerText } = args
 
-  // ── Media: gán id ngắn ──
+  // ── Media: gán id ngắn + GOM THEO LOẠI (để bot biết cụm cùng loại có thể gửi chung) ──
   const mediaIndex = new Map<string, MediaSlot>()
-  const mediaLines: string[] = []
+  const byRole = new Map<MediaRole, string[]>()
   config.mediaMap.forEach((slot, i) => {
     const id = `m${i + 1}`
     mediaIndex.set(id, slot)
-    mediaLines.push(
-      `${id} [${ROLE_LABELS[slot.role]} · gửi ở "${STAGE_LABELS[slot.stage]}"]${slot.caption ? `: ${slot.caption}` : ''}`,
-    )
+    const desc = slot.caption?.trim() ? slot.caption.trim() : `(${slot.mediaType})`
+    const arr = byRole.get(slot.role) ?? []
+    arr.push(`  ${id} [${STAGE_LABELS[slot.stage]}]: ${desc}`)
+    byRole.set(slot.role, arr)
   })
+  const mediaLines: string[] = []
+  for (const [role, lines] of byRole) {
+    const cluster = lines.length > 1 ? ' — CÙNG LOẠI, có thể gửi CỤM 2-4 ảnh một lần' : ''
+    mediaLines.push(`• ${ROLE_LABELS[role]}${cluster}:`)
+    mediaLines.push(...lines)
+  }
 
   // ── Fact sản phẩm (từ bank) ──
   const facts = [
