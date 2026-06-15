@@ -20,6 +20,7 @@ import { renderOneHybridScene, type HybridRenderContext } from '../services/hybr
 import { resumeInsertVideo } from '../services/insertRenderer'
 import { renderCreatorKeyframe } from '../services/creatorVideoEngine'
 import { matchVoiceForAvatar } from '../services/voiceCreatorMatcher'
+import { calibrateSyllableRate } from '../services/voiceTimingEstimator'
 import { BROLL_RENDER_RES } from '../services/hybridConstants'
 import { estimateInsertCredits, V3_CREDIT_COST } from '../types'
 
@@ -186,6 +187,15 @@ export default function HybridVideoPhase(_props: Props) {
       // so auto-run can detect a voice change and regenerate instead of serving a
       // stale cached voice (the "đổi giọng mà Bước 2 vẫn giọng cũ" bug).
       setHybridAssets({ keyframeRef: kf.keyframeRef, voiceRef: kf.voiceRef, voiceDurationSec: kf.voiceDurationSec, voiceAlignment: kf.voiceAlignment, voiceId: state.inputs.voiceId ?? '' })
+      // P5j — feed the REAL measured voice back into the per-language syllable-rate
+      // calibration so the Bước-1 "~Xs" estimate converges to the user's ACTUAL
+      // ElevenLabs pace. The hybrid flow never did this (only the legacy ActionInserts
+      // flow did), so the estimate could never self-correct here — the root reason the
+      // Bước-1 number stayed far from the real voice. Works for both VN + MS.
+      try {
+        const spokenText = script.blocks.map((b) => b.text).join(' ')
+        calibrateSyllableRate(spokenText, state.scriptBrain.outputLang, kf.voiceDurationSec)
+      } catch { /* calibration is best-effort, never break the gen */ }
       addToast(`✓ Giọng (${kf.voiceDurationSec.toFixed(1)}s) + khuôn mặt — đang đạo diễn…`, 'success')
       return true
     } catch (e) {
