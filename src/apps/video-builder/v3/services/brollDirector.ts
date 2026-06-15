@@ -435,7 +435,10 @@ function enforceRenderSafeHolds(scenes: BrollScene[], product: Product | null | 
 // audit). Two enforcements, universal: (a) appetite/usage/sensory lines must SHOW the
 // product action, never a face; (b) cap face-only concept cuts at 2 — convert the rest
 // to product shots. Converted concepts go weak → backfillWeakConcepts grounds them.
-const SENSORY_USAGE_RE = /\b(eat|bite|chew|tast|crunch|crisp|chewy|smell|scent|sip|apply|rub|spray|sprinkle|pour|dip|scoop|wear|use|using)\b|cắn|ăn|nhai|nếm|thử|gi[oò]n|dẻo|dai|vị|chua|ngọt|thơm|mùi|thoa|bôi|xịt|rắc|chấm|đắp|đeo|dùng|xài|makan|gigit|rasa|sapu|pakai/i
+// EN/MS tokens are \b-bounded; VN syllables are bounded by whitespace/punctuation so a
+// short token never matches as a SUBSTRING of another word (e.g. "ăn" must NOT fire on
+// "lăn"/"khăn", "vị" not on "vị thế" inside a word). VN syllables are space-separated.
+const SENSORY_USAGE_RE = /\b(?:eat|bite|chew|tast\w*|crunch\w*|crisp\w*|chewy|smell|scent|sip|apply|rub|spray|sprinkl\w*|pour|dip|scoop|wear|use|using|makan|gigit|rasa|sapu|pakai)\b|(?:^|[\s.,!?;:"'(])(?:cắn|ăn|nhai|nếm|thử|giòn|dẻo|dai|chua|ngọt|thơm|mùi|thoa|bôi|xịt|rắc|chấm|đắp|đeo|dùng|xài)(?=$|[\s.,!?;:"')])/i
 function enforceProductHero(scenes: BrollScene[]): void {
   const lastIdx = scenes.length - 1
   // (a) appetite / usage / sensory lines → product action shot (never a talking head).
