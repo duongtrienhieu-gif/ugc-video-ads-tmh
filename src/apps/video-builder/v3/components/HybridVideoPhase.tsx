@@ -42,6 +42,11 @@ const RENDER_STALE_MS = 12 * 60 * 1000
 // (SPA-nav — don't re-poll, it'll finish itself) from "JS restarted" (F5 — the
 // promise is dead, RE-POLL the persisted taskId to recover the paid job).
 const ACTIVE_RENDERS = new Set<number>()
+// P5h — tracks whether THIS JS session still owns a LIVE voice+face gen promise.
+// Mirrors ACTIVE_RENDERS for renders: on a remount it lets us tell "still generating
+// in the background (SPA nav, same session)" apart from "orphaned lock (gen died / F5
+// reset the JS context)" — so the button never greys out forever on a dead lock.
+let ASSETS_GEN_ACTIVE = false
 
 const ROLE_BADGE: Record<string, { label: string; cls: string }> = {
   lips:        { label: '🗣 Nói',  cls: 'bg-violet-600/90 text-white' },
@@ -167,6 +172,7 @@ export default function HybridVideoPhase(_props: Props) {
     if (!avatar) { addToast('Cần chọn Avatar ở Bước 1', 'error'); return false }
     if (assetsGenRunning) { addToast('Đang tạo giọng + mặt rồi — đợi xong nhé', 'info'); return false }
     setAssetsBusy(true); setError('')
+    ASSETS_GEN_ACTIVE = true             // P5h — this JS session owns the live gen
     setAssetsGenStartedAt(Date.now())   // persist "đang tạo" across nav (anti double-charge)
     try {
       const voiceCategory = state.scriptBrain.voiceCategory ?? matchVoiceForAvatar(avatar, state.scriptBrain.angle)
@@ -186,6 +192,7 @@ export default function HybridVideoPhase(_props: Props) {
       const msg = e instanceof Error ? e.message : String(e); setError(msg); addToast(`Tạo giọng/mặt lỗi: ${msg.slice(0, 120)}`, 'error')
       return false
     } finally {
+      ASSETS_GEN_ACTIVE = false          // P5h — live gen done (success or fail)
       setAssetsBusy(false)
       setAssetsGenStartedAt(undefined)   // clear persisted lock (also runs if unmounted)
     }
@@ -305,6 +312,15 @@ export default function HybridVideoPhase(_props: Props) {
     if (resumedRef.current) return
     resumedRef.current = true
     const st = useAdsVideoStore.getState().state.hybrid
+    // P5h — orphaned voice+face lock recovery. The store says a gen was running, but
+    // no live promise owns it THIS session (ASSETS_GEN_ACTIVE=false) → it died on a
+    // tab switch or an F5 reset the JS context. Clear the lock so "Tạo giọng + mặt" /
+    // "Đạo diễn" re-enable immediately instead of greying out for the full 4-min stale
+    // window. A gen still alive (SPA nav, same session) keeps the flag true → left
+    // alone; it finishes + writes the store itself, and the UI heals via subscription.
+    if (st.assetsGenStartedAt && !ASSETS_GEN_ACTIVE) {
+      setAssetsGenStartedAt(undefined)
+    }
     const persisted = st.renderingScenes ?? {}
     const now = Date.now()
     const restore: number[] = []
@@ -406,7 +422,7 @@ export default function HybridVideoPhase(_props: Props) {
           <Film className="h-5 w-5 shrink-0 text-violet-600" />
           <div className="min-w-0 flex-1">
             <p className="text-sm font-bold text-gray-900">
-              {assetsBusy ? 'Đang tạo giọng + khuôn mặt…'
+              {(assetsBusy || assetsGenRunning) ? 'Đang tạo giọng + khuôn mặt…'
                 : planning ? 'Đang đạo diễn (chia cảnh theo giọng thật)…'
                 : scenes.length > 0 ? `${scenes.length} cảnh · ${doneCount}/${scenes.length} đã render`
                 : hasAssets ? 'Giọng đã sẵn — bấm "Đạo diễn" để chia cảnh'
@@ -427,7 +443,7 @@ export default function HybridVideoPhase(_props: Props) {
           <button onClick={makeVoice} disabled={busy}
             title="Tạo lại giọng + khuôn mặt (tốn credit giọng). Đạo diễn bấm riêng sau."
             className={`flex items-center gap-1.5 rounded-lg px-3 py-2 text-[12px] font-bold shadow-sm disabled:opacity-50 ${hasAssets ? 'border border-emerald-300 bg-white text-emerald-700' : 'border border-amber-300 bg-white text-amber-700'}`}>
-            {assetsBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Mic className="h-3.5 w-3.5" />}
+            {(assetsBusy || assetsGenRunning) ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Mic className="h-3.5 w-3.5" />}
             {hasAssets ? `Tạo lại giọng (~${ASSETS_CR}cr)` : `Tạo giọng + mặt (~${ASSETS_CR}cr)`}
           </button>
           {scenes.length > 0 && hasAssets && pendingIdx.length > 0 && (
@@ -502,9 +518,9 @@ export default function HybridVideoPhase(_props: Props) {
 
         {scenes.length === 0 && (
           <div className="rounded-xl border border-dashed border-gray-300 p-8 text-center text-[12px] text-gray-400">
-            {assetsBusy || planning ? (
+            {assetsBusy || assetsGenRunning || planning ? (
               <><Loader2 className="mx-auto mb-2 h-7 w-7 animate-spin text-violet-400" />
-                {assetsBusy ? 'Đang tạo giọng + khuôn mặt thật…' : 'Đang đạo diễn (chia cảnh theo giọng)…'} Giữ tab mở nhé.</>
+                {(assetsBusy || assetsGenRunning) ? 'Đang tạo giọng + khuôn mặt thật…' : 'Đang đạo diễn (chia cảnh theo giọng)…'} Giữ tab mở nhé.</>
             ) : hasAssets ? (
               <>
                 <Sparkles className="mx-auto mb-2 h-7 w-7 text-violet-300" />
