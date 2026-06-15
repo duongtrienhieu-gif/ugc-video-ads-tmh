@@ -248,6 +248,14 @@ function buildInsertKeyframePrompt(
   if (productRefIndex > 0 && product) {
     paragraphs.push(
       `PRODUCT LOCK: ${product.productName ?? 'the product'} from reference image #${productRefIndex}. ` +
+      // P5s — keep the product IDENTICAL across every scene + honor the real form. The
+      // model was inventing packaging (a different pouch each scene) for a LOOSE product
+      // whose photos have no pack → "gói đỏ cảnh này, gói vàng cảnh kia". Lock it.
+      `Match its appearance EXACTLY to the reference photo — same form, color, label, and ` +
+      `the SAME packaging-or-no-packaging. Do NOT invent a package / pouch / box / label / ` +
+      `text that is NOT in the reference. If the reference shows the product LOOSE (no ` +
+      `packaging — e.g. loose food, powder, loose items), keep it LOOSE (in a bowl / hand / ` +
+      `on a surface), NEVER a made-up pack. The product must look the SAME in every scene. ` +
       preset.objectInteraction,
     )
   }
