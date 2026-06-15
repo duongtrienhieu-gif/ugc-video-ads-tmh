@@ -73,6 +73,11 @@ export interface GenerateScriptParams {
    *  the body system prompt that repurposes pain/discovery/benefit semantics.
    *  Omit → 'narrative' (back-compat with the previous-implicit behaviour). */
   shape?: import('../types').ScriptShape
+  /** P5e "Tạo lại kịch bản" — the previous script the user wants to replace. When
+   *  present (hook-first regenerate), it is fed to Gemini with a DIVERGE instruction
+   *  so the new version is genuinely different (not a lazy near-duplicate), while the
+   *  fixed hook + product facts + shape stay the same. */
+  previousScript?: string
 }
 
 export interface GenerateScriptResult {
@@ -125,6 +130,8 @@ export async function generateScript(
       // P4j — picked ScriptShape drives the opening anchor + shape-execution check.
       shape: params.shape,
       chosenHook: params.chosenHook!.trim(),
+      // P5e — "Tạo lại kịch bản": diverge from the previous version when present.
+      previousScript: params.previousScript,
       userPrompt: buildUserPrompt({
         productName: params.productName,
         productPitch: params.productPitch,
@@ -664,6 +671,8 @@ async function generateBodyAroundHook(args: {
    *  body opens in the SHAPE the user chose, not a re-guess from the hook text)
    *  AND the post-gen shape-execution check. Omit → narrative (detect from hook). */
   shape?: import('../types').ScriptShape
+  /** P5e — previous script to DIVERGE from on "Tạo lại kịch bản" (anti-lazy). */
+  previousScript?: string
 }): Promise<GeminiOutput> {
   // P3n — when lang='ms', inject the Malaysian native-vocabulary block so Gemini
   // stops translating from Vietnamese ("hết hàng" → "habis" formal) and uses
@@ -698,10 +707,29 @@ HARD CONTRACT (must hold across all 4 blocks):
   phẩm" framework; don't reveal the product early in a "dẫn dắt" framework).
 - Reproduce the GIVEN hook VERBATIM in the "hook" field — do not edit a word.`
 
+  // P5e — "Tạo lại kịch bản": when a previous version is supplied, force a genuinely
+  // different take so the model doesn't lazily re-emit a near-duplicate. Same hook +
+  // same facts + same shape/energy, but different beats, ordering, sensory pick, CTA
+  // lever and wording. Mirrors generateHooks' previousBatch anti-repeat for the body.
+  const divergeBlock = (args.previousScript ?? '').trim()
+    ? `
+
+REGENERATE — WRITE A GENUINELY DIFFERENT TAKE: You already wrote the version below for
+this EXACT hook + product. Produce a NEW script that a different creator might film —
+same fixed hook, same true product facts, same shape + máu lửa energy, but change it
+up: a different beat right after the hook, a different ORDER + selection of benefits to
+spotlight, a different sensory detail / everyday moment, a different CTA lever, and
+fresh wording throughout. Do NOT reuse the same sentences, the same opening move, or the
+same benefit order as before.
+
+PREVIOUS VERSION (diverge from this — do NOT repeat it):
+"""${args.previousScript!.trim()}"""`
+    : ''
+
   const userPrompt = `${args.userPrompt}
 
 THE FIXED HOOK (continue the script DIRECTLY from this line; reproduce it verbatim as the hook block):
-"""${args.chosenHook}"""`
+"""${args.chosenHook}"""${divergeBlock}`
 
   const call = (schema = true) =>
     directGeminiText({

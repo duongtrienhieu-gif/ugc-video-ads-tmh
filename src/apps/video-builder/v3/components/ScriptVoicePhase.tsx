@@ -309,6 +309,50 @@ export default function ScriptVoicePhase({ onContinue }: Props) {
     }
   }
 
+  // ── P5e — "Tạo lại kịch bản" — keep the SAME picked hook, write a fully NEW body.
+  // Feeds the current draft back as previousScript so Gemini diverges (anti-lazy).
+  const handleRegenerateScript = async () => {
+    if (!geminiKey) { addToast('Chưa có Gemini API key trong Settings', 'error'); return }
+    if (!state.inputs.product) { addToast('Chưa chọn sản phẩm', 'error'); return }
+    const chosenHook = brain.pickedHookIdx >= 0
+      ? brain.hookVariants[brain.pickedHookIdx]?.text
+      : undefined
+    if (!chosenHook) { addToast('Không tìm thấy hook đã chọn — quay lại ⚡ Tạo nhanh để chọn hook', 'error'); return }
+    setIsGeneratingScript(true)
+    setScriptBrainError(null)
+    try {
+      const brief = buildProductBrief()
+      const result = await generateScript({
+        geminiKey,
+        structure: brain.structure,
+        angle: brain.angle,
+        targetDurationSec: brain.targetDurationSec,
+        productName: brief.productName,
+        productPitch: brief.productPitch,
+        creatorDescription: brief.creatorDescription,
+        lang: brain.outputLang,
+        shape: brain.shape,
+        useOwnScript: false,
+        chosenHook,
+        previousScript: state.inputs.script,   // diverge from the current version
+      })
+      const draft = result.script.blocks
+        .map((b) => b.text.trim().replace(/\s+/g, ' '))
+        .filter(Boolean)
+        .join(' ')
+      setScript(draft)
+      setLangTouched(true)
+      runViTranslation(draft)
+      addToast('✓ Đã tạo lại kịch bản mới (giữ hook) — xem lại & chỉnh sửa', 'success')
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      setScriptBrainError(msg.slice(0, 240))
+      addToast(`Tạo lại lỗi: ${msg}`, 'error')
+    } finally {
+      setIsGeneratingScript(false)
+    }
+  }
+
   // ── Voice picker (chọn giọng ElevenLabs cụ thể) ───────────────────────────
   const [voicePanelOpen, setVoicePanelOpen] = useState(false)
   const [voiceTab, setVoiceTab]   = useState<'mine' | 'library'>('mine')
@@ -547,6 +591,20 @@ export default function ScriptVoicePhase({ onContinue }: Props) {
                 </>
               ) : 'Dán kịch bản hoàn chỉnh của bạn, hoặc chuyển sang ⚡ Tạo nhanh để AI viết.'}
             </p>
+            {/* P5e — regenerate a fully new body keeping the SAME picked hook. Only
+                shown when this script came from ⚡ Tạo nhanh (a hook is still picked). */}
+            {hasScriptText && brain.pickedHookIdx >= 0 && brain.hookVariants[brain.pickedHookIdx] && (
+              <button
+                onClick={handleRegenerateScript}
+                disabled={brain.isGeneratingScript || !geminiKey}
+                className="mt-2 flex items-center gap-1.5 rounded-full border border-violet-300 bg-violet-50 px-3 py-1.5 text-[11px] font-bold text-violet-700 transition-all hover:bg-violet-100 disabled:cursor-not-allowed disabled:opacity-50"
+                title="Giữ nguyên hook đã chọn, viết lại kịch bản mới hoàn toàn (khác bản hiện tại)"
+              >
+                {brain.isGeneratingScript
+                  ? <><Loader2 className="h-3 w-3 animate-spin" /> Đang viết lại...</>
+                  : <><RefreshCw className="h-3 w-3" /> Tạo lại kịch bản (giữ hook)</>}
+              </button>
+            )}
           </div>
           {/* #6 — VN translation for understanding only (target lang ≠ vi). The
               script above STAYS in the target language; this is never used as input. */}
