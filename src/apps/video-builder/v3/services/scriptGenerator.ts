@@ -422,6 +422,10 @@ ${pronounRule(args.lang)}
     • SOCIAL PROOF: ONLY if there's a REAL figure in the brief (sold count / rating).
       If none → SKIP entirely. NEVER invent "10k đã mua / 50 triệu người".
   Keep these conversational + SPARSE — trust beats woven in, NOT an ad checklist.
+- LANGUAGE (anchor/expectation/conviction): every example phrase in the rules above
+  is ILLUSTRATIVE Vietnamese — WRITE THE ACTUAL SCRIPT 100% in ${args.lang}. For
+  Bahasa Malaysia use the natural LOCAL register (light rojak), NEVER Vietnamese
+  words and NEVER a word-for-word Vietnamese calque; for English, idiomatic English.
 - KEEP IT BELIEVABLE — a believable specific beats a spectacular lie. NO miracle
   instant results ("3 giây", "vài ngày là hết nhăn"), NO claiming it equals a
   medical procedure ("như đi tiêm filler / botox"), realistic timeframes, spoken
