@@ -1146,7 +1146,7 @@ export async function translateScriptToVietnamese(
     `Translate this ${fromName} TikTok ad script into casual spoken Vietnamese. ` +
     `Output ONLY the Vietnamese translation — no notes, no labels, no quotes:\n\n${text}`
   const out = await directGeminiText({
-    apiKey, systemInstruction, prompt, maxOutputTokens: 2048, temperature: 0.4,
+    apiKey, systemInstruction, prompt, maxOutputTokens: 3072, temperature: 0.4,
     thinkingBudget: 0,   // don't let "thinking" eat the budget → truncated translation
   })
   return out.trim()

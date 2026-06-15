@@ -103,10 +103,11 @@ export default function ScriptVoicePhase({ onContinue }: Props) {
   const [viTranslation, setViTranslation] = useState<string | null>(null)
   const [isTranslating, setIsTranslating] = useState(false)
 
-  const runViTranslation = (text: string) => {
+  const runViTranslation = (text: string, force = false) => {
     if (!geminiKey || brain.outputLang === 'vi' || !text.trim()) { setViTranslation(null); return }
     const key = `${brain.outputLang}|${text.trim()}`
-    const cached = VI_TRANSLATION_CACHE.get(key)
+    if (force) VI_TRANSLATION_CACHE.delete(key)   // "Dịch lại" → always re-fetch fresh
+    const cached = force ? undefined : VI_TRANSLATION_CACHE.get(key)
     if (cached) { setViTranslation(cached); return }   // instant on revisit — no re-call
     setIsTranslating(true)
     setViTranslation(null)
@@ -615,7 +616,7 @@ export default function ScriptVoicePhase({ onContinue }: Props) {
                   🇻🇳 Bản dịch để hiểu — KHÔNG dùng cho video
                 </p>
                 <button
-                  onClick={() => runViTranslation(state.inputs.script)}
+                  onClick={() => runViTranslation(state.inputs.script, true)}
                   disabled={isTranslating || !hasScriptText}
                   className="shrink-0 text-[11px] font-semibold text-sky-600 hover:text-sky-700 disabled:opacity-50"
                 >
