@@ -30,14 +30,22 @@ import { AD_STRUCTURES } from './adStructures'
 // divide by one rate, calibrated from a real run (170 VN syllables / 41.9s at the
 // engine's 1.2× pace = 4.05 syll/s). Each language self-calibrates from its real
 // measured voice (EMA in localStorage), so it converges without a guessed table.
-const BASE_SYLLABLES_PER_SEC = 4.05
-// P3i — tighter clamp [3.5, 4.3] (was [3.0, 5.5]). The wider band was letting the
-// self-calibration drift after a few TTS runs (the engine's atempo 1.35× pushed
-// syllables/sec into the 4.5-5.0 zone, which made the estimate read ~25% shorter
-// than reality — "60s pick → est 43s" was this drift). Real human articulation
-// rates fall ~3.7-4.2 syll/s across VN / EN / MS, so 3.5-4.3 is the honest band.
-const RATE_MIN = 3.5
-const RATE_MAX = 4.3
+// P5i — PER-LANGUAGE rate. The old single 4.05 syll/s + clamp [3.5, 4.3] was measured
+// from VIETNAMESE only. MS + EN are spoken MUCH faster at the engine's 1.2× pace (~5.8
+// syll/s for MS), so a VN-tuned rate made MS scripts estimate ~30% LONGER than the real
+// voice (est 62.9s → real 43.7s). Worse: the 4.3 ceiling REJECTED every real MS
+// observation (~5.8 > 4.3) in calibrateSyllableRate, so MS could NEVER converge — the
+// estimate stayed permanently long, which STARVED the refit (it thought a 43s script was
+// already 60s and never expanded it → short, content-poor scripts). Each language now
+// has its own base rate + accept/clamp band so it converges to its real pace.
+const BASE_RATE: Record<ScriptLang, number> = { vi: 4.05, ms: 5.7, en: 5.3 }
+const RATE_BAND: Record<ScriptLang, [number, number]> = {
+  vi: [3.6, 4.6],
+  ms: [4.6, 7.2],
+  en: [4.4, 7.2],
+}
+const baseRate = (lang: ScriptLang): number => BASE_RATE[lang] ?? 4.05
+const rateBand = (lang: ScriptLang): [number, number] => RATE_BAND[lang] ?? [3.5, 7.2]
 
 // Vowel groups INCLUDING Vietnamese accented vowels — one group ≈ one syllable. This
 // makes the counter work for VN too (every VN syllable carries exactly one vowel
@@ -70,13 +78,16 @@ export function countSyllables(text: string, lang: ScriptLang = DEFAULT_SCRIPT_L
 
 const rateKey = (lang: ScriptLang) => `ugc-lab-syll-rate-${lang}`
 
-/** The (possibly self-calibrated) syllables/sec for a language. */
+/** The (possibly self-calibrated) syllables/sec for a language. A stored value
+ *  outside the language's band (e.g. an old MS rate clamped at 4.3) is ignored so we
+ *  fall back to the corrected base. */
 function syllableRate(lang: ScriptLang): number {
+  const [lo, hi] = rateBand(lang)
   try {
     const v = Number(localStorage.getItem(rateKey(lang)))
-    if (Number.isFinite(v) && v >= RATE_MIN && v <= RATE_MAX) return v
+    if (Number.isFinite(v) && v >= lo && v <= hi) return v
   } catch { /* no storage */ }
-  return BASE_SYLLABLES_PER_SEC
+  return baseRate(lang)
 }
 
 /** Estimate read duration (seconds) for a piece of text in a language. */
@@ -98,7 +109,8 @@ export function calibrateSyllableRate(text: string, lang: ScriptLang, realDurati
   const syl = countSyllables(text, lang)
   if (syl < 20) return                       // too short to be reliable
   const observed = syl / realDurationSec
-  if (!Number.isFinite(observed) || observed < RATE_MIN || observed > RATE_MAX) return
+  const [lo, hi] = rateBand(lang)
+  if (!Number.isFinite(observed) || observed < lo || observed > hi) return
   const next = syllableRate(lang) * 0.7 + observed * 0.3   // EMA, weight history
   try {
     localStorage.setItem(rateKey(lang), String(Number(next.toFixed(3))))
