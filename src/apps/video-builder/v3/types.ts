@@ -741,6 +741,10 @@ export interface HybridState {
   /** P4p — bulk-render queue (scene indices waiting for a free slot). Persisted so
    *  "Tạo tất cả" survives a tab switch instead of the queued cảnh vanishing. */
   queuedScenes?: number[]
+  /** P5k — burned-caption settings (applied at assemble, 0 credit). Absent = ON +
+   *  default preset, so existing projects get captions automatically. */
+  captionsOn?: boolean
+  captionPreset?: import('./services/captionPresets').CaptionPresetId
 }
 
 export function createEmptyHybridState(): HybridState {

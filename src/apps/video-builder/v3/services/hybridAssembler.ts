@@ -40,6 +40,15 @@ export interface HybridStickerPlacement {
   heightFraction?: number
 }
 
+export interface HybridCaptionPlacement {
+  /** Transparent caption PNG (rendered locally via captionRenderer — 0 credit). */
+  pngRef: string
+  /** Absolute timeline second the chunk appears. */
+  atSec: number
+  /** How long the chunk stays (chunker makes these continuous → no gaps/flicker). */
+  durationSec: number
+}
+
 export interface HybridAssembleParams {
   /** Clips in TIMELINE ORDER. Missing/unrendered scenes should be omitted. */
   clips: HybridSceneClip[]
@@ -49,6 +58,8 @@ export interface HybridAssembleParams {
   voiceDurationSec: number
   /** 0-credit text pops, composited onto the segment they fall within. */
   stickers?: HybridStickerPlacement[]
+  /** 0-credit burned captions (bottom-centre), composited like stickers. */
+  captions?: HybridCaptionPlacement[]
   /** Output height; width is derived 9:16 vertical. Default 480p. */
   resolution?: '480p' | '720p' | '1080p'
   onStage?: (msg: string) => void
@@ -99,6 +110,13 @@ export async function assembleHybridVideo(
   const preset_x264 = 'fast'
   const MARGIN = 24                       // px from the frame edge (sticker)
   const allStickers = params.stickers ?? []
+  const allCaptions = params.captions ?? []
+  // Caption box (CapCut-style): fit each chunk PNG inside 92% width × 30% height
+  // (preserve aspect → font auto-fits, never overflows), sat 12% above the bottom
+  // so it clears the TikTok action bar. Consistent placement every chunk.
+  const CAP_MAXW = Math.round((evenW * 0.92) / 2) * 2
+  const CAP_MAXH = Math.round((evenH * 0.30) / 2) * 2
+  const CAP_BOT_MARGIN = Math.round(evenH * 0.12)
   const normFiles: string[] = []
   const failedIdx: number[] = []
 
@@ -142,13 +160,14 @@ export async function assembleHybridVideo(
     // "1.8s thay vì 2.7s"). Now: window [atSec, atSec+durationSec] overlaps the
     // segment's output range → it carries into the next clip and shows its full
     // duration. The enable window is recomputed per-segment in OUTPUT time below.
-    const segStickers = allStickers.filter(
-      (s) => s.atSec + s.durationSec > c.scene.startSec && s.atSec < c.scene.endSec,
-    )
-    const stickerFiles: string[] = []
+    const overlapsSeg = (atSec: number, durationSec: number) =>
+      atSec + durationSec > c.scene.startSec && atSec < c.scene.endSec
+    const segStickers = allStickers.filter((s) => overlapsSeg(s.atSec, s.durationSec))
+    const segCaptions = allCaptions.filter((s) => overlapsSeg(s.atSec, s.durationSec))
+    const overlayFiles: string[] = []
     const normFile = `hnorm_${i}.ts`
 
-    if (segStickers.length === 0) {
+    if (segStickers.length === 0 && segCaptions.length === 0) {
       await ffmpeg.exec([
         '-i', inFile,
         '-vf', baseChain,
@@ -158,35 +177,50 @@ export async function assembleHybridVideo(
         '-f', 'mpegts', '-y', normFile,
       ])
     } else {
-      // Build a filter_complex: base + one looped PNG input per sticker.
+      // Build a filter_complex: base + one looped PNG input per overlay. Stickers
+      // (corner, height-scaled — UNCHANGED behaviour) come first, then captions
+      // (bottom-centre, box-fit). Both use the same OUTPUT-local enable window.
+      type Overlay =
+        | { mode: 'sticker'; pngRef: string; atSec: number; durationSec: number; heightFraction?: number }
+        | { mode: 'caption'; pngRef: string; atSec: number; durationSec: number }
+      const overlays: Overlay[] = [
+        ...segStickers.map((s) => ({ mode: 'sticker' as const, ...s })),
+        ...segCaptions.map((s) => ({ mode: 'caption' as const, pngRef: s.pngRef, atSec: s.atSec, durationSec: s.durationSec })),
+      ]
       const inputs: string[] = ['-i', inFile]
       const parts: string[] = [`[0:v]${baseChain}[base]`]
       let last = 'base'
-      for (let j = 0; j < segStickers.length; j++) {
-        const s = segStickers[j]
+      for (let j = 0; j < overlays.length; j++) {
+        const s = overlays[j]
         const sUrl = isAssetRef(s.pngRef) ? await getUrl(s.pngRef) : s.pngRef
         if (!sUrl) continue
-        const pngFile = `hstk_${i}_${j}.png`
+        const pngFile = `hov_${i}_${j}.png`
         try { await ffmpeg.writeFile(pngFile, await fetchFile(sUrl)) }
-        catch (err) { console.warn(`[HYBRID_ASM] sticker ${i}.${j} fetch lỗi — bỏ qua`, err); continue }
-        stickerFiles.push(pngFile)
+        catch (err) { console.warn(`[HYBRID_ASM] overlay ${i}.${j} fetch lỗi — bỏ qua`, err); continue }
+        overlayFiles.push(pngFile)
         inputs.push('-loop', '1', '-t', dur.toFixed(3), '-i', pngFile)
         const inIdx = j + 1
-        const pipH = Math.round((evenH * (s.heightFraction ?? 0.10)) / 2) * 2
-        parts.push(`[${inIdx}:v]format=rgba,scale=-2:${pipH},setsar=1[stk${j}]`)
-        // P4d — enable window in OUTPUT-local time. Start clamps to 0 when the
-        // sticker began in a previous segment (carried over); end uses the
-        // ABSOLUTE window end (atSec + durationSec) - segStart, clamped to the
-        // segment, so a carried sticker shows only its remaining time here (not
-        // a fresh full durationSec).
+        // P4d — enable window in OUTPUT-local time; a carried overlay shows only its
+        // remaining time here (clamped to the segment), not a fresh full duration.
         const off = Math.max(0, s.atSec - c.scene.startSec)
         const endW = Math.min(dur, (s.atSec + s.durationSec) - c.scene.startSec)
         const next = `m${j}`
-        // mid-right, lowered into the lower third (y≈72%) — same spot as mode-1.
-        parts.push(
-          `[${last}][stk${j}]overlay=x=W-w-${MARGIN}:y=(H-h)*0.72:` +
-          `enable='between(t,${off.toFixed(2)},${endW.toFixed(2)})'[${next}]`,
-        )
+        if (s.mode === 'caption') {
+          // Bottom-centre, fit inside the caption box (font auto-fits, never overflows).
+          parts.push(`[${inIdx}:v]format=rgba,scale=${CAP_MAXW}:${CAP_MAXH}:force_original_aspect_ratio=decrease,setsar=1[ov${j}]`)
+          parts.push(
+            `[${last}][ov${j}]overlay=x=(W-w)/2:y=H-h-${CAP_BOT_MARGIN}:` +
+            `enable='between(t,${off.toFixed(2)},${endW.toFixed(2)})'[${next}]`,
+          )
+        } else {
+          // mid-right, lowered into the lower third (y≈72%) — same spot as mode-1.
+          const pipH = Math.round((evenH * (s.heightFraction ?? 0.10)) / 2) * 2
+          parts.push(`[${inIdx}:v]format=rgba,scale=-2:${pipH},setsar=1[ov${j}]`)
+          parts.push(
+            `[${last}][ov${j}]overlay=x=W-w-${MARGIN}:y=(H-h)*0.72:` +
+            `enable='between(t,${off.toFixed(2)},${endW.toFixed(2)})'[${next}]`,
+          )
+        }
         last = next
       }
       await ffmpeg.exec([
@@ -202,7 +236,7 @@ export async function assembleHybridVideo(
 
     normFiles.push(normFile)
     await ffmpeg.deleteFile(inFile).catch(() => {})
-    for (const f of stickerFiles) await ffmpeg.deleteFile(f).catch(() => {})
+    for (const f of overlayFiles) await ffmpeg.deleteFile(f).catch(() => {})
   }
 
   if (normFiles.length === 0) {

@@ -5,9 +5,11 @@
 // them on the timeline (word-align → quote estimate, ≥3s dedup), then assembles.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { assembleHybridVideo, type HybridSceneClip, type HybridStickerPlacement } from './hybridAssembler'
+import { assembleHybridVideo, type HybridSceneClip, type HybridStickerPlacement, type HybridCaptionPlacement } from './hybridAssembler'
 import { renderStickerBlob, type StickerStyle } from './stickerRenderer'
-import './captionRenderer'   // P5k — registers __testCaption + bundles the caption renderer (wired into the flow in Part B)
+import { renderCaptionBlob } from './captionRenderer'
+import { buildCaptionChunks } from './captionChunker'
+import { DEFAULT_CAPTION_PRESET, type CaptionPresetId } from './captionPresets'
 import { computeWordTimestampFromAlignment, computeQuoteTimestamp } from './insertTimingEngine'
 import { saveAsset } from '../../../../utils/assetStore'
 import type { HybridState, GeneratedScript } from '../types'
@@ -68,6 +70,32 @@ async function buildStickerPlacements(
   return out
 }
 
+// P5k — burned captions: chunk the REAL spoken text (voiceAlignment.text = verbatim,
+// zero drift, NEVER a translation; falls back to the script text) into phrase chunks,
+// render each as a transparent PNG (0 credit), place it on the timeline. Applied at
+// assemble so changing the preset / re-exporting costs no render credit.
+async function buildCaptionPlacements(
+  alignment: VoiceAlignment | undefined, script: GeneratedScript, realDur: number,
+  presetId: CaptionPresetId,
+): Promise<HybridCaptionPlacement[]> {
+  const fallback = script.blocks.map((b) => b.text).join(' ')
+  const chunks = buildCaptionChunks(alignment, fallback, realDur)
+  const out: HybridCaptionPlacement[] = []
+  for (const ch of chunks) {
+    const text = ch.text.trim()
+    if (!text) continue
+    try {
+      const blob = await renderCaptionBlob(text, presetId)
+      out.push({
+        pngRef: await saveAsset(blob, 'image/png'),
+        atSec: ch.startSec,
+        durationSec: Math.max(0.4, ch.endSec - ch.startSec),
+      })
+    } catch { /* skip a bad chunk — never break the assemble */ }
+  }
+  return out
+}
+
 /** Assemble the final MP4 from the current hybrid state. Throws if not ready
  *  (no voice, or a scene still unrendered). Returns the final video asset ref. */
 export async function assembleFromHybridState(
@@ -85,8 +113,16 @@ export async function assembleFromHybridState(
   const realDur = hybrid.voiceDurationSec ?? script.totalDurationSec
   const clips: HybridSceneClip[] = sc.map((scene, i) => ({ scene, videoRef: hybrid.clips[i] }))
   const placements = await buildStickerPlacements(hybrid.stickers, hybrid.voiceAlignment, realDur, script)
+  // P5k — captions default ON (absent = on); preset defaults to Clean White.
+  const captionsOn = hybrid.captionsOn !== false
+  const presetId = hybrid.captionPreset ?? DEFAULT_CAPTION_PRESET
+  opts?.onStage?.(captionsOn ? 'Tạo phụ đề…' : 'Bỏ qua phụ đề…')
+  const captions = captionsOn
+    ? await buildCaptionPlacements(hybrid.voiceAlignment, script, realDur, presetId)
+    : []
   const r = await assembleHybridVideo({
-    clips, voiceRef: hybrid.voiceRef, voiceDurationSec: realDur, resolution, stickers: placements,
+    clips, voiceRef: hybrid.voiceRef, voiceDurationSec: realDur, resolution,
+    stickers: placements, captions,
     onProgress: opts?.onProgress,
     onStage: opts?.onStage,
   })
