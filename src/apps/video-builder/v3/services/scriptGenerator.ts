@@ -443,6 +443,28 @@ ${pronounRule(args.lang)}
       hàng", "ai dùng cũng quay lại"); use a REAL figure if the brief has one. Don't
       go absurd ("cả thế giới dùng") — plausible sells, cartoonish breaks trust.
   Keep them woven + punchy (energy!), NOT a flat checklist.
+- BELIEVABLE PROOF — SHOW, don't just TELL (this is what makes a viewer BELIEVE, and a
+  believed promise = an order that STAYS, not one refused at the door). A flat "xịn lắm,
+  ai cũng khen" persuades nobody. Weave in ONE concrete proof beat — pick the move that
+  fits THIS product, ground it in the brief, NEVER fabricate a review/number:
+    • SKEPTIC → CONVERT: admit you doubted it, then what flipped you ("mình cũng tưởng
+      quảng cáo nói quá, ai dè…"). Lowers the guard better than any hype.
+    • DEMONSTRABLE MOMENT (best — the app films it): a thing you can SHOW on camera —
+      bẻ ra / cắm vào / đo / thử ngay ("bẻ một cái ra cho coi, nguyên hạt óc chó lộ ra";
+      "cắm vô lốp xẹp, 3 phút đồng hồ nhảy 30 bar rồi tự tắt"). The B-roll director can
+      actually shoot this, so the spoken proof + the visual proof match → double trust.
+    • SPECIFIC SELF BEFORE→AFTER: your own concrete change, not a stranger's ("chụp lại
+      ngày 1 với sau 3 tuần để tự so… vùng má khô đỡ rõ").
+    • THIRD-PARTY NOTICED: a real bystander reaction ("nhỏ bạn hỏi đổi gì mà da lạ vậy",
+      "mấy chị hỏi mua ở đâu"). For MS, the "aku skeptikal mula-mula…" objection beat is
+      the most native version of this.
+  ONE proof beat is enough — do NOT dump proof (over-proving reads staged). Show the
+  thing, don't assert an adjective.
+- DON'T BE TEMPLATED — this product will be turned into MANY ads, so vary it: pick a
+  clear CREATOR STANCE for this take (skeptic-turned-fan / nerd-who-tested / friend
+  warning you / the person who had the problem) and let it colour the whole script; and
+  VARY THE CLOSE — do NOT end every script with the same stock line ("kẻo hết hàng" /
+  "grab cepat sebelum stok habis"). Rotate the CTA lever + wording each time.
 - LANGUAGE (anchor/expectation/conviction): every example phrase in the rules above
   is ILLUSTRATIVE Vietnamese — WRITE THE ACTUAL SCRIPT 100% in ${args.lang}. For
   Bahasa Malaysia use the natural LOCAL register (light rojak), NEVER Vietnamese
@@ -528,6 +550,16 @@ MUST INCLUDE (pull from the brief — this is what makes it persuasive, not basi
 - a believable result (NO "3 giây" / miracle / filler-botox claims).
 If the brief has no ingredient/mechanism info, do not invent — lean on the pain,
 the usage moment and the honest result instead.
+
+PRIORITY UNDER LENGTH PRESSURE (the script MUST fit ~${args.targetDurationSec}s — so be
+ECONOMICAL, write tight from the start, every line earns its place):
+- NON-NEGOTIABLE (always keep, even when short): the hook; the ONE memory ANCHOR
+  (the single most concrete reason/expectation); the ONE believable PROOF beat
+  (skeptic→convert / demonstrable moment / before-after / bystander); the offer + CTA.
+- COMPRESSIBLE (cut HERE first when space is tight): the NUMBER of benefits — keep only
+  the 2-3 STRONGEST as punchy hits, drop the rest; adjectives; any repetition or
+  throat-clearing. Better 3 benefits + a real proof beat than 6 benefits and no proof.
+Do NOT sacrifice the anchor, the proof beat, or the CTA to cram in more benefits.
 
 Generate the JSON now.`
 }
@@ -854,15 +886,18 @@ async function refitScriptToLength(args: {
   const systemInstruction = `You are editing a finished TikTok ad script written in ${args.langName} to FIT A TARGET SPOKEN LENGTH. Keep the SAME language, the SAME casual spoken voice, and the 5-block structure (hook, pain, discovery, benefit, cta). Do not switch language or tone.`
   const userPrompt = `This script currently reads about ${Math.round(args.currentSec)} seconds spoken, but it MUST land within ${lo}-${hi} seconds (target ~${args.targetSec}s). ${
     args.tooLong
-      ? `It is TOO LONG — CUT it down to about ${args.targetSec}s. Remove the least essential sentences, trim repetition + filler + meta talk, tighten wording. You MUST KEEP: the opening hook (verbatim), the product name + its key ingredients + the mechanism, the one concrete usage moment, the sensory beat, the empathy echo (hook → benefit), and the offer / CTA. Cut fluff, never the core facts.`
+      ? `It is TOO LONG — CUT it down to about ${args.targetSec}s. You MUST KEEP (these are the conversion spine — never cut them): the opening hook (verbatim); the ONE memory ANCHOR (the single most concrete reason/expectation); the ONE believable PROOF beat (the skeptic→convert / demonstrable-moment / before-after / bystander line); the product name + its key ingredient(s) + the one-line mechanism; the one concrete usage moment; the offer / CTA. CUT FROM HERE FIRST: the NUMBER of benefits (keep only the 2-3 strongest as punchy hits, drop the rest), extra adjectives, repetition, throat-clearing, meta talk. Trimming a benefit or an adjective is fine; deleting the anchor, the proof beat, or the CTA is NOT.`
       : `It is TOO SHORT — expand to ~${args.targetSec}s. EXPANSION FUEL (in this order — use ONLY facts in the brief, never invent product claims, never pad with filler):
-  1. Add a CONCRETE SENSORY beat to discovery / benefit — what it tastes / smells /
+  1. If there is NO believable PROOF beat yet, ADD one — a skeptic→convert line, a
+     demonstrable moment you could film (bẻ ra / cắm vào / đo / thử ngay), a specific
+     self before→after, or a real bystander reaction. SHOW, don't just assert.
+  2. Add a CONCRETE SENSORY beat to discovery / benefit — what it tastes / smells /
      feels / sounds like at the moment of use, in plain spoken words.
-  2. Add an EMPATHY ECHO — bring the hook's pain / persona / moment back in the
+  3. Add an EMPATHY ECHO — bring the hook's pain / persona / moment back in the
      benefit block at the new state (after using the product).
-  3. Add a POINT-OF-CONTACT — one very specific everyday moment (time / place /
+  4. Add a POINT-OF-CONTACT — one very specific everyday moment (time / place /
      action / inner thought) the persona would silently nod at.
-  4. Deepen the MECHANISM by one spoken sentence — how the ingredient actually
+  5. Deepen the MECHANISM by one spoken sentence — how the ingredient actually
      works in the body / on skin / in the device, the way a friend explains it.
 NEVER add filler ("rồi đó, các bạn ạ, mình nói thật nhé") to fake length.`
   }
