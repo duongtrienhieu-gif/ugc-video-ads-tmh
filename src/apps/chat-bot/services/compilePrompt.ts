@@ -88,7 +88,7 @@ export function compilePrompt(args: {
     .join('\n')
 
   const prompt = [
-    '=== SẢN PHẨM ===',
+    '=== KHO THÔNG TIN SẢN PHẨM (nguyên liệu để CHỌN LỌC + diễn lại, ĐỪNG đọc nguyên văn) ===',
     facts || '(không có dữ liệu sản phẩm)',
     '',
     '=== GIÁ & BÁN (kênh chat) ===',
