@@ -22,7 +22,8 @@ export default function ChatBot() {
   return (
     <div className="flex h-full flex-col">
       {/* Header */}
-      <div className="flex shrink-0 items-center gap-3 border-b border-black/10 px-5 py-3.5">
+      {/* pr lớn để cụm tab không nằm dưới badge Gemini/KIE Credit (góc phải, z-50) */}
+      <div className="flex shrink-0 items-center gap-3 border-b border-black/10 py-3.5 pl-5 pr-28 md:pr-64">
         <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-500/10">
           <MessageCircle className="h-5 w-5 text-emerald-600" strokeWidth={2} />
         </div>
@@ -55,7 +56,7 @@ export default function ChatBot() {
             </div>
             <div className="min-h-0 flex-1 overflow-y-auto">
               {productId ? (
-                <ConfigPanel key={productId} productId={productId} />
+                <ConfigPanel key={productId} productId={productId} onSaved={() => setTab('simulator')} />
               ) : (
                 <div className="py-16 text-center text-sm text-gray-400">
                   Chọn một sản phẩm để bắt đầu cấu hình bot bán hàng.

@@ -40,7 +40,8 @@ OUTPUT: CHỈ trả JSON đúng schema (messages, awaitCustomer, nextStage, inte
 const LANG_MY = `NGÔN NGỮ:
 - contentTarget = Manglish (Bahasa Malaysia trộn English tự nhiên như người Malaysia chat thật). Đây là tin GỬI KHÁCH.
 - contentVi = bản dịch tiếng Việt sát nghĩa của contentTarget — CHỈ chủ shop xem, KHÔNG gửi khách. BẮT BUỘC điền cho mọi tin text.
-- Tiền tệ: RM.`
+- Tiền tệ: RM.
+- QUAN TRỌNG: mọi dữ liệu cấu hình (giá, khuyến mãi, caption ảnh, xử lý từ chối, ghi chú playbook) có thể đang viết bằng TIẾNG VIỆT. Hãy DỊCH/localize chúng sang Manglish khi nói với khách (vd "Mua 1 tặng 1" → "Beli 1 Free 1"). TUYỆT ĐỐI KHÔNG dán nguyên tiếng Việt vào contentTarget gửi khách MY.`
 
 const LANG_VN = `NGÔN NGỮ:
 - contentTarget = tiếng Việt tự nhiên (đúng lóng/viết tắt VN). Đây là tin GỬI KHÁCH.

@@ -46,9 +46,11 @@ export const ROLE_DEFAULT_STAGE: Record<MediaRole, Stage> = {
   feature: 'value',
   mechanism: 'advise',
   usage: 'advise',
-  compare: 'objection',
-  proof: 'objection',
-  authority: 'objection',
+  // Khách thường im chứ không chê ra lời → proof/so sánh hợp nhất lúc follow-up
+  // khi khách im (chủ động tạo niềm tin), KHÔNG chờ "xử lý từ chối".
+  compare: 'followup',
+  proof: 'followup',
+  authority: 'advise',
   promo: 'close',
   unboxing: 'advise',
   other: 'value',

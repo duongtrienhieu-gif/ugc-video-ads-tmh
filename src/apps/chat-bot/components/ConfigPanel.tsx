@@ -28,7 +28,7 @@ function emptyConfig(productId: string, title: string): SalesConfig {
 
 // Màn cấu hình bán-qua-chat cho 1 sản phẩm. Fact sản phẩm đọc read-only từ bank;
 // giá chat + trần giảm + media + objection + playbook nhập riêng cho kênh chat.
-export default function ConfigPanel({ productId }: { productId: string }) {
+export default function ConfigPanel({ productId, onSaved }: { productId: string; onSaved?: () => void }) {
   const product = useBankStore((s) => s.getProductById(productId))
   const getByProductId = useChatBotStore((s) => s.getByProductId)
   const upsert = useChatBotStore((s) => s.upsert)
@@ -71,8 +71,9 @@ export default function ConfigPanel({ productId }: { productId: string }) {
     }
     setSaving(true)
     upsert({ ...draft, title: product?.productName ?? draft.title })
-    addToast('Đã lưu cấu hình Chat Bot', 'success')
+    addToast('Đã lưu — chuyển sang Mô phỏng để chat thử', 'success')
     setSaving(false)
+    onSaved?.()
   }
 
 
