@@ -3,6 +3,7 @@ import { MessageCircle, Settings2, PlayCircle } from 'lucide-react'
 import { useChatBotStore } from './store'
 import ProductPicker from './components/ProductPicker'
 import ConfigPanel from './components/ConfigPanel'
+import Simulator from './components/Simulator'
 
 type Tab = 'config' | 'simulator'
 
@@ -44,7 +45,7 @@ export default function ChatBot() {
       </div>
 
       {/* Body */}
-      <div className="flex-1 overflow-y-auto">
+      <div className="min-h-0 flex-1">
         {tab === 'config' ? (
           <div className="flex h-full flex-col">
             <div className="shrink-0 border-b border-black/8 px-5 py-3">
@@ -52,22 +53,22 @@ export default function ChatBot() {
                 <ProductPicker value={productId} onChange={setProductId} />
               </div>
             </div>
-            {productId ? (
-              <ConfigPanel key={productId} productId={productId} />
-            ) : (
-              <div className="py-16 text-center text-sm text-gray-400">
-                Chọn một sản phẩm để bắt đầu cấu hình bot bán hàng.
-              </div>
-            )}
+            <div className="min-h-0 flex-1 overflow-y-auto">
+              {productId ? (
+                <ConfigPanel key={productId} productId={productId} />
+              ) : (
+                <div className="py-16 text-center text-sm text-gray-400">
+                  Chọn một sản phẩm để bắt đầu cấu hình bot bán hàng.
+                </div>
+              )}
+            </div>
           </div>
+        ) : productId ? (
+          <Simulator key={productId} productId={productId} />
         ) : (
-          <Placeholder
-            title="Màn Mô phỏng (P3)"
-            lines={[
-              'Chat thử với bot như khách thật — song ngữ (MY gửi + VN gloss), gửi ảnh đúng bậc.',
-              'Nút "ca khó" + panel debug (bậc, intent, số call Gemini) để QC trước khi nối kênh.',
-            ]}
-          />
+          <div className="py-16 text-center text-sm text-gray-400">
+            Chọn một sản phẩm (ở tab Cấu hình) để mô phỏng chat.
+          </div>
         )}
       </div>
     </div>
@@ -92,22 +93,5 @@ function TabButton({
       <Icon className="h-3.5 w-3.5" strokeWidth={2} />
       {children}
     </button>
-  )
-}
-
-function Placeholder({ title, lines }: { title: string; lines: string[] }) {
-  return (
-    <div className="mx-auto max-w-2xl px-6 py-16 text-center">
-      <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-black/[0.04]">
-        <MessageCircle className="h-6 w-6 text-gray-400" strokeWidth={1.5} />
-      </div>
-      <h2 className="mb-2 text-base font-bold text-gray-800">{title}</h2>
-      <div className="space-y-1.5">
-        {lines.map((l, i) => (
-          <p key={i} className="text-sm leading-relaxed text-gray-500">{l}</p>
-        ))}
-      </div>
-      <p className="mt-6 text-xs font-medium text-gray-400">Sẽ được dựng ở phase kế tiếp.</p>
-    </div>
   )
 }
