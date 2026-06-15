@@ -59,8 +59,18 @@ const TONE_BG: Record<string, string> = {
 function detectScriptLang(text: string): ScriptLang | null {
   const t = text.trim()
   if (t.length < 8) return null
-  if (/[ăâêôơưđàáạảãằắặẳẵầấậẩẫèéẹẻẽềếệểễìíịỉĩòóọỏõồốộổỗờớợởỡùúụủũừứựửữỳýỵỷỹ]/i.test(t)) return 'vi'
-  if (/\b(yang|dan|saya|untuk|dengan|tak|sangat|boleh|jadi|sebab|memang|kita|nak|lah|ni)\b/i.test(t)) return 'ms'
+  const lower = t.toLowerCase()
+  // Strong Malay markers — counted FIRST. The old code returned 'vi' on the FIRST
+  // Vietnamese diacritic, so an MS script mis-tagged as 'vi' the moment a product
+  // name leaked one accented loanword ("garam tỏi"). Now we weigh signals instead.
+  const msHits = (lower.match(/\b(yang|dan|saya|aku|korang|untuk|dengan|tak|sangat|boleh|jadi|sebab|memang|kita|nak|lah|ni|guna|macam|sangat)\b/g) ?? []).length
+  // Words carrying a Vietnamese-only diacritic. A real VN script has many; an MS
+  // script with a stray accented loanword has ~1.
+  const viWords = (lower.match(/\S*[ăâêôơưđàáạảãằắặẳẵầấậẩẫèéẹẻẽềếệểễìíịỉĩòóọỏõồốộổỗờớợởỡùúụủũừứựửữỳýỵỷỹ]\S*/g) ?? []).length
+  if (msHits >= 2 && viWords <= 1) return 'ms'   // clearly Malay (tolerate 1 leaked accented word)
+  if (viWords >= 2) return 'vi'                  // multiple accented words → real Vietnamese
+  if (msHits >= 2) return 'ms'
+  if (viWords >= 1) return 'vi'
   return 'en'
 }
 
@@ -93,7 +103,12 @@ export default function ScriptVoicePhase({ onContinue }: Props) {
   const hasScriptText = state.inputs.script.trim().length > 0
 
   const [pickerMode, setPickerMode] = useState<'avatar' | 'product' | 'script' | null>(null)
-  const [langTouched, setLangTouched] = useState(false)
+  // Init TRUE when a script already exists on mount: its language is already settled
+  // (chosen in quick-gen or detected on paste), so a remount — e.g. returning from
+  // Bước 2 — must NOT re-run auto-detect and override it (that flipped a Malaysia
+  // script's label + duration estimate to 'vi' when the script contained a stray
+  // Vietnamese-accented product word). Fresh/empty → false so paste-detect still works.
+  const [langTouched, setLangTouched] = useState(() => !!(state.inputs.script ?? '').trim())
   const [acknowledgedCerts, setAcknowledgedCerts] = useState(false)
   // #6 — Tab A "⚡ Tạo nhanh" (AI viết, default) vs Tab B "📝 Dán" (own script).
   const [genTab, setGenTab] = useState<'quick' | 'own'>('quick')
