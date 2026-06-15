@@ -1,15 +1,17 @@
 import { useEffect, useState } from 'react'
 import { MessageCircle, Settings2, PlayCircle } from 'lucide-react'
 import { useChatBotStore } from './store'
+import ProductPicker from './components/ProductPicker'
+import ConfigPanel from './components/ConfigPanel'
 
 type Tab = 'config' | 'simulator'
 
 // CHAT BOT — bộ não bán hàng cho chatbot rep tin nhắn (WhatsApp MY / Pancake VN).
-// P0: khung 2 tab + store. Tab Cấu hình (P1) và Mô phỏng (P3) sẽ được dựng sau.
+// P0: khung + store. P1: tab Cấu hình (ProductPicker + ConfigPanel). P3: Mô phỏng.
 export default function ChatBot() {
   const [tab, setTab] = useState<Tab>('config')
+  const [productId, setProductId] = useState<string | null>(null)
   const hydrate = useChatBotStore((s) => s.hydrate)
-  const configCount = useChatBotStore((s) => s.configs.length)
 
   // Nạp cấu hình đã lưu (Supabase + localStorage fallback) khi mở app.
   useEffect(() => {
@@ -44,14 +46,20 @@ export default function ChatBot() {
       {/* Body */}
       <div className="flex-1 overflow-y-auto">
         {tab === 'config' ? (
-          <Placeholder
-            title="Màn Cấu hình (P1)"
-            lines={[
-              'Chọn sản phẩm từ product bank → nhập giá chat riêng, trần giảm giá, thị trường (VN/MY).',
-              'Gắn ảnh/video theo bậc (từ Ladipage / bank / upload) + objection + playbook.',
-              `Đã lưu: ${configCount} cấu hình.`,
-            ]}
-          />
+          <div className="flex h-full flex-col">
+            <div className="shrink-0 border-b border-black/8 px-5 py-3">
+              <div className="mx-auto max-w-3xl">
+                <ProductPicker value={productId} onChange={setProductId} />
+              </div>
+            </div>
+            {productId ? (
+              <ConfigPanel key={productId} productId={productId} />
+            ) : (
+              <div className="py-16 text-center text-sm text-gray-400">
+                Chọn một sản phẩm để bắt đầu cấu hình bot bán hàng.
+              </div>
+            )}
+          </div>
         ) : (
           <Placeholder
             title="Màn Mô phỏng (P3)"
@@ -99,7 +107,7 @@ function Placeholder({ title, lines }: { title: string; lines: string[] }) {
           <p key={i} className="text-sm leading-relaxed text-gray-500">{l}</p>
         ))}
       </div>
-      <p className="mt-6 text-xs font-medium text-gray-400">Khung P0 đã sẵn sàng — nội dung sẽ được dựng ở phase kế tiếp.</p>
+      <p className="mt-6 text-xs font-medium text-gray-400">Sẽ được dựng ở phase kế tiếp.</p>
     </div>
   )
 }
