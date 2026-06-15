@@ -36,9 +36,11 @@ export function compilePrompt(args: {
   // ── Media: gán id ngắn + GOM THEO LOẠI (để bot biết cụm cùng loại có thể gửi chung) ──
   const mediaIndex = new Map<string, MediaSlot>()
   const byRole = new Map<MediaRole, string[]>()
+  const refToId = new Map<string, string>() // assetRef thật → id ngắn (để đánh dấu ảnh đã gửi)
   config.mediaMap.forEach((slot, i) => {
     const id = `m${i + 1}`
     mediaIndex.set(id, slot)
+    refToId.set(slot.assetRef, id)
     const desc = slot.caption?.trim() ? slot.caption.trim() : `(${slot.mediaType})`
     const arr = byRole.get(slot.role) ?? []
     arr.push(`  ${id} [${STAGE_LABELS[slot.stage]}]: ${desc}`)
@@ -86,11 +88,13 @@ export function compilePrompt(args: {
   const historyText = recent
     .map((t) => {
       if (t.role === 'customer') return `Khách: ${t.customerText ?? ''}`
-      const botText = (t.packet?.messages ?? [])
-        .map((m) => m.contentTarget)
-        .filter(Boolean)
-        .join(' / ')
-      return `Bot: ${botText}`
+      const msgs = t.packet?.messages ?? []
+      const botText = msgs.map((m) => m.contentTarget).filter(Boolean).join(' / ')
+      // Đánh dấu ảnh đã gửi (map assetRef thật → id ngắn) để bot KHÔNG gửi lại
+      const sentIds = msgs
+        .map((m) => (m.assetRef ? refToId.get(m.assetRef) : undefined))
+        .filter((x): x is string => !!x)
+      return `Bot: ${botText}${sentIds.length ? ` [đã gửi ảnh: ${sentIds.join(', ')}]` : ''}`
     })
     .join('\n')
 
