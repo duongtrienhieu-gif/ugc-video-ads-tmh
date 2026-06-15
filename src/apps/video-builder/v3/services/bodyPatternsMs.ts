@@ -145,6 +145,41 @@ export const MS_FORBIDDEN_STYLE: string[] = [
   'sounding like a TV commercial',
 ]
 
+/** MS END-PARTICLES — the #1 native signal (both source banks agree ~70% of the
+ *  "real Malaysian" feel comes from particles + rhythm + code-switch, NOT vocab).
+ *  Sprinkled 2-3 across the WHOLE script, NOT every line (overuse = fake). */
+export const MS_PARTICLES: string[] = [
+  'lah', 'kan', 'kot', 'weh', 'je', 'doh', 'eh', 'pun',
+]
+
+/** MS hype phrases — punchy excitement markers a real creator says out loud
+ *  (cross-confirmed by both source banks). Use punchy, not every line. */
+export const MS_HYPE: string[] = [
+  'memang padu', 'best gila', 'power', 'memang power', 'confirm',
+  'serious tak tipu', 'jangan main-main', 'lain macam', 'next level',
+  'gila', 'padu', 'memang jadi',
+]
+
+/** English words Malaysians KEEP in English mid-sentence (code-switch). The body
+ *  prompt tells Gemini to leave these untranslated so the script doesn't read as
+ *  stiff pure-BM. Cross-confirmed by both source banks. */
+export const MS_CODESWITCH_EN: string[] = [
+  'worth it', 'game changer', 'legit', 'feedback', 'review', 'repeat order',
+  'struggle', 'insecure', 'must have', 'before after', 'no joke', 'trust me',
+  'highly recommend', 'instant result', 'viral', 'trending',
+]
+
+/** MS HARD BLACKLIST — Indonesian-dialect words that instantly mark a script as
+ *  fake/non-Malaysian. Enforced by scriptValidator (word-boundary regex) ONLY when
+ *  lang='ms'. Kept to UNAMBIGUOUS Indonesian words — deliberately excludes 'bisa'
+ *  (= "venom" in Malay) and 'lo' (too short → false positives) to avoid flagging
+ *  legitimate Malay. Matched with \b…\b so 'aja' never trips 'saja', 'udah' never
+ *  trips 'sudah'. */
+export const MS_BLACKLIST_INDO: string[] = [
+  'banget', 'nggak', 'kalian', 'gue', 'aja', 'dong', 'udah', 'capek',
+  'biarin', 'malah',
+]
+
 /** Pick a sensory bucket by rough product niche key. The body prompt passes the
  *  detected niche so Gemini gets the RELEVANT bucket inline, not all 4. */
 export function pickMsSensoryBucket(nicheHint: string | undefined): string[] {
@@ -163,7 +198,15 @@ export function pickMsSensoryBucket(nicheHint: string | undefined): string[] {
 export function buildMsBodyVocabBlock(nicheHint?: string): string {
   const sensory = pickMsSensoryBucket(nicheHint)
   const lines: string[] = []
-  lines.push('*** MS NATIVE VOCABULARY (use these instead of translating from Vietnamese) ***')
+  lines.push('*** MS NATIVE VOICE (this is what separates a real Malaysian creator from machine-translated BM) ***')
+  // The single highest-leverage rule — both source banks: rhythm > vocabulary.
+  lines.push('- RHYTHM IS ~70% OF SOUNDING MALAYSIAN: write VERY SHORT lines (mostly 3-7 words), many of them, broken up — never long textbook sentences. Short punches, then an occasional fuller line. This matters MORE than fancy words. A correct-but-long BM sentence still reads as AI.')
+  lines.push(`- END-PARTICLES — the top native tell. Sprinkle 2-3 across the WHOLE script (NOT every line — every-line = fake): ${MS_PARTICLES.join(', ')}. e.g. "Murah je lah.", "Memang power weh.", "Korang kena try kot."`)
+  lines.push(`- KEEP THESE ENGLISH WORDS in English (Malaysians code-switch naturally — translating them reads stiff): ${MS_CODESWITCH_EN.join(', ')}. e.g. "Sumpah worth it.", "Skincare ni memang game changer."`)
+  lines.push('- PRONOUN — pick ONE and keep it consistent, by product/audience: "aku" + "korang" for casual / affordable / trend; "saya" for higher-value or older audience; "sis" for women\'s beauty & fashion; "boss" / "bro" for men\'s gadgets & tools.')
+  lines.push(`- HYPE PHRASES (punchy, not every line): ${MS_HYPE.join(', ')}.`)
+  lines.push('')
+  lines.push('*** MS NATIVE VOCABULARY (use instead of translating from Vietnamese) ***')
   lines.push(`- NATIVE OPENERS (sprinkle 1-2 in body): ${MS_NATIVE_OPENERS.slice(0, 10).join(', ')}.`)
   lines.push(`- STORY CONNECTORS (use as transitions): ${MS_TRANSITIONS.slice(0, 10).join(', ')}.`)
   lines.push(`- POINT-OF-CONTACT MOMENTS (pick 1 for the everyday-moment beat): ${MS_DAILY_CONTEXTS.slice(0, 14).join(', ')}.`)
@@ -174,6 +217,9 @@ export function buildMsBodyVocabBlock(nicheHint?: string): string {
   lines.push('')
   lines.push('*** AVOID (would break the Malaysian TikTok creator voice) ***')
   for (const f of MS_FORBIDDEN_STYLE) lines.push(`  - ${f}`)
+  lines.push(`  - NEVER use Indonesian words (instant fake giveaway): ${MS_BLACKLIST_INDO.join(', ')} — use Malay instead (tak, korang, je, dah, penat).`)
+  lines.push('  - AVOID dated / cringe slang: onz, mantul, meletop, kebabom, "terbaikkkkk", "power gilerrr".')
+  lines.push('  - AVOID the over-used cliché "viral satu Malaysia".')
   lines.push('Target voice: "Real Malaysian TikTok creator talking to a friend."')
   return lines.join('\n')
 }

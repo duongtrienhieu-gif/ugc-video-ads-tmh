@@ -21,7 +21,16 @@ import {
   MS_CTA_LEVERS,
   MS_BODY_ANTI_PATTERNS,
   MS_SYMPTOM_BANS_INSTANT,
+  MS_BLACKLIST_INDO,
 } from './bodyPatternsMs'
+
+// Indonesian-dialect words that instantly mark an MS script as fake. Built once
+// from MS_BLACKLIST_INDO with \b…\b boundaries so 'aja' can't trip 'saja' and
+// 'udah' can't trip 'sudah'. Only consulted when lang='ms'.
+const MS_INDO_BLACKLIST_RE = new RegExp(
+  `\\b(${MS_BLACKLIST_INDO.join('|')})\\b`,
+  'i',
+)
 import { validateSemanticAnswer, type HookSemanticShape } from './hookSemanticBinder'
 
 export interface ValidatorResult {
@@ -270,6 +279,23 @@ export function validateBody(
         `CTA has no buying lever (scarcity / urgency / social proof / risk reversal / ` +
         `offer). A flat "link bio" close doesn't convert. Add ONE concrete lever — ` +
         `e.g. ${langCtaExample}.`,
+      )
+    }
+  }
+
+  // 6. MS INDO-DIALECT BLACKLIST — when lang='ms', an Indonesian word (banget /
+  //    nggak / kalian / aja …) instantly outs the script as non-Malaysian and
+  //    kills the native feel. Hard-ban (these are wrong-dialect facts, not style),
+  //    word-boundary matched so 'saja'/'sudah' don't false-trip.
+  if (lang === 'ms' || lang === 'Bahasa Malaysia') {
+    // body blocks only (hook is user-picked + not regenerated on retry).
+    const allBody = `${blocks.pain ?? ''} ${blocks.discovery ?? ''} ${blocks.benefit ?? ''} ${blocks.cta ?? ''}`
+    const m = allBody.match(MS_INDO_BLACKLIST_RE)
+    if (m) {
+      failures.push(
+        `Script uses the Indonesian word "${m[1]}" — Malaysians spot this instantly as ` +
+        `fake/non-local. Replace with the Malay equivalent (tak, korang, je, dah, penat, ` +
+        `etc.) and remove any other Indonesian-dialect words.`,
       )
     }
   }
