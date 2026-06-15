@@ -58,6 +58,13 @@ interface RawPacket {
   followupNote?: string
 }
 
+// Hạ chữ HOA đầu câu/đầu tin cho văn phong chat thật (Flash hay tự viết hoa lại).
+// Chỉ hạ khi chữ hoa đứng trước 1 chữ THƯỜNG (Capitalized word) → acronym/thương hiệu
+// viết HOA-HOA (LANZF, RM, KKM, COD) KHÔNG khớp nên được giữ nguyên.
+function lowerSentenceStarts(text: string): string {
+  return text.replace(/(^|[.!?]\s+|\n+)([A-ZÀ-Ỹ])(?=[a-zà-ỹ])/gu, (_m, pre: string, c: string) => pre + c.toLowerCase())
+}
+
 /** Cố parse JSON, gỡ fence nếu có. Không tốn call. */
 function parseJson(text: string): RawPacket | null {
   const cleaned = text.trim().replace(/^```(?:json)?/i, '').replace(/```$/i, '').trim()
@@ -80,15 +87,20 @@ function normalize(raw: RawPacket, mediaIndex: Map<string, MediaSlot>): ActionPa
     const type = m.type === 'image' || m.type === 'video' ? m.type : 'text'
     if (type === 'text') {
       if (!m.contentTarget?.trim()) return null
-      return { type: 'text', contentTarget: m.contentTarget, contentVi: m.contentVi }
+      return { type: 'text', contentTarget: lowerSentenceStarts(m.contentTarget), contentVi: m.contentVi }
     }
     // image/video — resolve id ngắn (m1) → assetRef thật
     const slot = m.assetRef ? mediaIndex.get(m.assetRef) : undefined
     if (!slot) {
       // bot tham chiếu ảnh không có → hạ về text nếu có chữ, không thì bỏ
-      return m.contentTarget?.trim() ? { type: 'text', contentTarget: m.contentTarget, contentVi: m.contentVi } : null
+      return m.contentTarget?.trim() ? { type: 'text', contentTarget: lowerSentenceStarts(m.contentTarget), contentVi: m.contentVi } : null
     }
-    return { type: slot.mediaType, assetRef: slot.assetRef, contentTarget: m.contentTarget, contentVi: m.contentVi }
+    return {
+      type: slot.mediaType,
+      assetRef: slot.assetRef,
+      contentTarget: m.contentTarget ? lowerSentenceStarts(m.contentTarget) : undefined,
+      contentVi: m.contentVi,
+    }
   }).filter((m): m is BotMessage => m !== null)
 
   const captured: Record<string, string> = {}
