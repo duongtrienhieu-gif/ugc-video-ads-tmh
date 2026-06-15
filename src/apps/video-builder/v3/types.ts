@@ -1039,6 +1039,10 @@ export interface GeneratedScript {
   totalDurationSec: number
   /** When the script was generated (resume / cache check) */
   generatedAt: number
+  /** P5m — the ONE concrete memorable reason/number (anchor) the script plants early
+   *  + restates at the CTA. Passed to the director so it gives the anchor a HERO shot
+   *  + sticker. Absent on own-script / older projects. */
+  anchor?: string
 }
 
 // ── Voice record ───────────────────────────────────────────────────────────

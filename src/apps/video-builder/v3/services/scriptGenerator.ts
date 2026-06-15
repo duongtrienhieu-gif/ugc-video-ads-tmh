@@ -235,6 +235,7 @@ export async function generateScript(
     blocks,
     totalDurationSec,
     generatedAt: Date.now(),
+    anchor: parsed.anchor?.trim() || undefined,   // P5m — carry to the director (hero shot)
   }
 
   const hookVariants: HookVariant[] = parsed.hookVariants.map((hv) => ({
@@ -870,7 +871,7 @@ Return the JSON in the same shape — the hook field unchanged, the 4 other bloc
     }
   }
 
-  return { blocks, hookVariants: [] }
+  return { blocks, hookVariants: [], anchor }
 }
 
 // ── Fit-to-length corrective pass ───────────────────────────────────────────
@@ -1322,6 +1323,9 @@ function repairJsonString(raw: string): string {
 interface GeminiOutput {
   blocks: Record<ScriptBlockId, string>
   hookVariants: Array<{ style: HookStyle; text: string }>
+  /** P5m — the anchor line (hook-first body sets it; carried onto GeneratedScript
+   *  so the director can give it a hero shot). */
+  anchor?: string
 }
 
 function parseAndValidate(raw: string): GeminiOutput {

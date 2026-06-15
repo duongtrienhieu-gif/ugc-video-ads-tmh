@@ -421,6 +421,11 @@ export async function directBrollScenes(
   const minScenes = densityFloor(dur)
   const productContext = buildProductContextBlock(params.product)
   const scriptDump = params.script.blocks.map((b) => `[${b.id}] ${b.text}`).join('\n')
+  // P5m — the anchor (the ONE memorable reason/number) gets a HERO cut + a sticker;
+  // the OFFER lands as a sticker at the CTA so the deal is visible, not just spoken.
+  const anchorHint = params.script.anchor?.trim()
+    ? `\n\nANCHOR — the ONE memorable reason/number this script drives home: "${params.script.anchor.trim()}". Give it a clear HERO cut in the FIRST HALF (the spec / number / result shown BIG + clean, a real product shot) and reinforce it at the CTA. Put a number/price STICKER on the anchor, and another on the OFFER (price / "Beli 1 Free 1" / "-50%") at the CTA so the deal lands VISUALLY, not just in the voice.`
+    : ''
   // P3q — shape hint (empty for 'narrative', the previous default).
   const shapeHint = params.shape ? buildShapeDirectorHint(params.shape) : ''
   // P3o — when the script targets Malaysia, ground the scene SETTING in real
@@ -653,7 +658,7 @@ RULES:
   (set role:"broll", kind:"product_action", cameraFraming:"creator", AND write its
   conceptPrompt describing exactly that endorsement shot). NEVER end on a bare
   talking-head with no product — the viewer must see the product at the call to buy.
-- Universal: infer setting/usage from the product context; never hardcode a niche.
+- Universal: infer setting/usage from the product context; never hardcode a niche.${anchorHint}
 
 SCRIPT (cover all of it):
 ${scriptDump}
