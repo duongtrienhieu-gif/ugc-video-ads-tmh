@@ -4,7 +4,7 @@
 // (ported back from the mode-1 Export step) from the creator + product.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Loader2, Download, RotateCcw, ArrowLeft, AlertCircle, Film, Clapperboard, Sparkles } from 'lucide-react'
 import { useAppStore } from '../../../../stores/appStore'
 import { useSettingsStore } from '../../../../stores/settingsStore'
@@ -13,7 +13,8 @@ import { useAssetUrl } from '../../../../hooks/useAssetUrl'
 import { assembleFromHybridState } from '../services/hybridAssembleFlow'
 import { FINAL_RES } from '../services/hybridConstants'
 import { generateThumbnailHooks, generateAiThumbnail, THUMBNAIL_ARCHETYPES, THUMBNAIL_ARCHETYPE_ORDER } from '../services/thumbnailEngine'
-import { CAPTION_PRESETS, CAPTION_PRESET_ORDER, DEFAULT_CAPTION_PRESET } from '../services/captionPresets'
+import { CAPTION_PRESETS, CAPTION_PRESET_ORDER, DEFAULT_CAPTION_PRESET, type CaptionPresetId } from '../services/captionPresets'
+import { renderCaptionBlob } from '../services/captionRenderer'
 import { SCRIPT_LANG_GEMINI_NAME, type AiThumbnail } from '../types'
 
 const now = () => Date.now()
@@ -128,12 +129,13 @@ export default function HybridExportPhase() {
             <div className="mt-2 grid grid-cols-2 gap-1.5 sm:grid-cols-4">
               {CAPTION_PRESET_ORDER.map((id) => (
                 <button key={id} onClick={() => setHybridCaption({ captionPreset: id })}
-                  className={`rounded-lg border px-2 py-2 text-[11px] font-bold transition-all ${
+                  className={`flex flex-col items-stretch gap-1 rounded-lg border p-1.5 text-[11px] font-bold transition-all ${
                     captionPreset === id
                       ? 'border-violet-400 bg-violet-100 text-violet-800'
                       : 'border-gray-200 bg-white text-gray-500 hover:bg-gray-50'
                   }`}>
-                  {CAPTION_PRESETS[id].labelVi}
+                  <CaptionPresetPreview presetId={id} />
+                  <span className="text-center">{CAPTION_PRESETS[id].labelVi}</span>
                 </button>
               ))}
             </div>
@@ -219,6 +221,25 @@ export default function HybridExportPhase() {
           )}
         </div>
       </div>
+    </div>
+  )
+}
+
+// P5t — live preview of a caption preset's look, rendered by the SAME captionRenderer
+// the final video uses (so it's accurate, not a mockup) on a dark chip. 0 credit.
+function CaptionPresetPreview({ presetId }: { presetId: CaptionPresetId }) {
+  const [url, setUrl] = useState<string | null>(null)
+  useEffect(() => {
+    let alive = true
+    let made: string | null = null
+    renderCaptionBlob('Đỉnh thật · RM79', presetId)
+      .then((b) => { if (!alive) return; made = URL.createObjectURL(b); setUrl(made) })
+      .catch(() => {})
+    return () => { alive = false; if (made) URL.revokeObjectURL(made) }
+  }, [presetId])
+  return (
+    <div className="flex h-9 items-center justify-center overflow-hidden rounded bg-gray-900">
+      {url && <img src={url} alt="" className="max-h-8 w-auto object-contain px-1" />}
     </div>
   )
 }
