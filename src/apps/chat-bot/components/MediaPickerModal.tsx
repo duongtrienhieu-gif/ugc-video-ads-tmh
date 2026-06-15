@@ -3,8 +3,8 @@ import { X, Upload, Link2, Loader2, Check } from 'lucide-react'
 import { useBankStore } from '../../../stores/bankStore'
 import { useAppStore } from '../../../stores/appStore'
 import { useTikTokShopListingsStore } from '../../tiktok-shop/listingsStore'
-import { listProjects } from '../../landing-page/services/projectsAPI'
-import type { SavedLandingPack } from '../../landing-page/types'
+import { useLandingPageStore } from '../../landing-page/store'
+import { useSuperLadipageStore } from '../../super-ladipage/store'
 import { saveAsset } from '../../../utils/assetStore'
 import MediaThumb from './MediaThumb'
 
@@ -27,7 +27,8 @@ function dedupe(arr: string[]): string[] {
 }
 
 // Modal chọn ảnh/video cho mediaMap. Nguồn: Ladipage/super-ladipage, TikTok Shop,
-// product bank, tải lên/URL. Lọc theo productId HOẶC tên sản phẩm; fallback "tất cả".
+// product bank, tải lên/URL. Đọc ảnh Ladipage + TikTok từ store (có cache localStorage)
+// nên không phụ thuộc 1 lần fetch Supabase. Lọc theo productId HOẶC tên SP; fallback "tất cả".
 export default function MediaPickerModal({
   productId, onClose, onPick,
 }: {
@@ -38,47 +39,45 @@ export default function MediaPickerModal({
   const product = useBankStore((s) => s.getProductById(productId))
   const addToast = useAppStore((s) => s.addToast)
   const tiktokListings = useTikTokShopListingsStore((s) => s.listings)
-  const hydrateTiktok = useTikTokShopListingsStore((s) => s.hydrate)
+  const landingItems = useLandingPageStore((s) => s.items)
+  const superItems = useSuperLadipageStore((s) => s.items)
 
   const [source, setSource] = useState<Source>('ladipage')
   const [onlyThisProduct, setOnlyThisProduct] = useState(true)
-  const [ladi, setLadi] = useState<RefBuckets | null>(null) // null = đang tải
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [urlValue, setUrlValue] = useState('')
   const [uploading, setUploading] = useState(false)
 
   const productName = (product?.productName ?? '').trim().toLowerCase()
 
-  // Tải ảnh Ladipage + super-ladipage.
+  // Đảm bảo store đã hydrate (login thường đã chạy; gọi lại cho chắc, idempotent).
   useEffect(() => {
-    let cancelled = false
-    void hydrateTiktok()
-    ;(async () => {
-      const [lp, sl] = await Promise.all([
-        listProjects<SavedLandingPack>('landing-page'),
-        listProjects<SavedLandingPack>('super-ladipage'),
-      ])
-      const packs = [...(lp ?? []), ...(sl ?? [])]
-      const matched: string[] = []
-      const all: string[] = []
-      for (const pack of packs) {
-        const isMatch =
-          pack.productId === productId ||
-          (!!productName && (pack.productName ?? '').trim().toLowerCase() === productName)
-        for (const sec of pack.sections ?? []) {
-          for (const ip of sec.imagePrompts ?? []) {
-            if (!ip.generatedAssetRef) continue
-            all.push(ip.generatedAssetRef)
-            if (isMatch) matched.push(ip.generatedAssetRef)
-          }
+    void useLandingPageStore.getState().hydrate()
+    void useSuperLadipageStore.getState().hydrate()
+    void useTikTokShopListingsStore.getState().hydrate()
+  }, [])
+
+  // Ladipage + super-ladipage (gộp 2 store).
+  const ladi: RefBuckets = useMemo(() => {
+    const packs = [...landingItems, ...superItems]
+    const matched: string[] = []
+    const all: string[] = []
+    for (const pack of packs) {
+      const isMatch =
+        pack.productId === productId ||
+        (!!productName && (pack.productName ?? '').trim().toLowerCase() === productName)
+      for (const sec of pack.sections ?? []) {
+        for (const ip of sec.imagePrompts ?? []) {
+          if (!ip.generatedAssetRef) continue
+          all.push(ip.generatedAssetRef)
+          if (isMatch) matched.push(ip.generatedAssetRef)
         }
       }
-      if (!cancelled) setLadi({ matched: dedupe(matched), all: dedupe(all) })
-    })()
-    return () => { cancelled = true }
-  }, [productId, productName, hydrateTiktok])
+    }
+    return { matched: dedupe(matched), all: dedupe(all) }
+  }, [landingItems, superItems, productId, productName])
 
-  // TikTok Shop listings (đã ở store sau hydrate).
+  // TikTok Shop listings.
   const tiktok: RefBuckets = useMemo(() => {
     const matched: string[] = []
     const all: string[] = []
@@ -187,34 +186,28 @@ export default function MediaPickerModal({
 
         {/* Body */}
         <div className="flex-1 overflow-y-auto p-4">
-          {(source === 'ladipage' || source === 'tiktok') && (
-            activeBucket === null ? (
-              <div className="flex h-32 items-center justify-center text-gray-400">
-                <Loader2 className="h-5 w-5 animate-spin" />
-              </div>
-            ) : (() => {
-              const refs = bucketRefs(activeBucket)
-              if (refs.length === 0) {
-                return (
-                  <p className="py-10 text-center text-sm text-gray-400">
-                    {activeBucket.all.length === 0
-                      ? `Chưa có ảnh ${source === 'ladipage' ? 'Ladipage' : 'TikTok Shop'} nào. Tạo bên app đó trước nhé.`
-                      : 'Không có ảnh gắn đúng sản phẩm này. Bỏ tick "Chỉ sản phẩm này" để xem tất cả.'}
-                  </p>
-                )
-              }
+          {activeBucket && (() => {
+            const refs = bucketRefs(activeBucket)
+            if (refs.length === 0) {
               return (
-                <>
-                  {onlyThisProduct && activeBucket.matched.length === 0 && (
-                    <p className="mb-2 text-[11px] text-amber-600">
-                      Không khớp đúng sản phẩm — đang hiện tất cả ảnh.
-                    </p>
-                  )}
-                  <SelectableGrid refs={refs} selected={selected} onToggle={toggle} />
-                </>
+                <p className="py-10 text-center text-sm text-gray-400">
+                  {activeBucket.all.length === 0
+                    ? `Chưa có ảnh ${source === 'ladipage' ? 'Ladipage' : 'TikTok Shop'} nào. Tạo bên app đó trước nhé.`
+                    : 'Không có ảnh gắn đúng sản phẩm này. Bỏ tick "Chỉ sản phẩm này" để xem tất cả.'}
+                </p>
               )
-            })()
-          )}
+            }
+            return (
+              <>
+                {onlyThisProduct && activeBucket.matched.length === 0 && (
+                  <p className="mb-2 text-[11px] text-amber-600">
+                    Không khớp đúng sản phẩm — đang hiện tất cả ảnh.
+                  </p>
+                )}
+                <SelectableGrid refs={refs} selected={selected} onToggle={toggle} />
+              </>
+            )
+          })()}
 
           {source === 'bank' && (
             bankImages.length === 0 ? (

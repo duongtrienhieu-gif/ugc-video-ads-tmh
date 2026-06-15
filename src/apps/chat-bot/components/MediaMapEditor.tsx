@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Plus, Trash2 } from 'lucide-react'
 import type { MediaSlot, MediaRole, Stage } from '../types'
-import { ROLE_LABELS, ROLE_ORDER, STAGE_LABELS, STAGE_ORDER } from '../labels'
+import { ROLE_DEFAULT_STAGE, ROLE_LABELS, ROLE_ORDER, STAGE_LABELS, STAGE_ORDER } from '../labels'
 import MediaThumb from './MediaThumb'
 import MediaPickerModal, { type PickedMedia } from './MediaPickerModal'
 
@@ -64,7 +64,11 @@ export default function MediaMapEditor({
                 <div className="flex gap-1.5">
                   <select
                     value={slot.role}
-                    onChange={(e) => updateSlot(slot.id, { role: e.target.value as MediaRole })}
+                    onChange={(e) => {
+                      const role = e.target.value as MediaRole
+                      // Đổi vai trò → tự gợi ý bậc gửi hợp lý (vẫn sửa được).
+                      updateSlot(slot.id, { role, stage: ROLE_DEFAULT_STAGE[role] })
+                    }}
                     className="min-w-0 flex-1 rounded-md border border-black/10 bg-white px-2 py-1 text-xs outline-none focus:border-emerald-400"
                     title="Vai trò nội dung"
                   >

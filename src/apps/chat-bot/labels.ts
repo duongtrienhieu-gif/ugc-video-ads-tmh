@@ -17,12 +17,16 @@ export const STAGE_LABELS: Record<Stage, string> = {
 }
 
 export const ROLE_LABELS: Record<MediaRole, string> = {
-  feature: 'Tính năng',
+  hook: 'Hook / Thu hút',
+  pain: 'Vấn đề / Nỗi đau',
+  feature: 'Tính năng / Thành phần',
   mechanism: 'Cơ chế hoạt động',
-  promo: 'Khuyến mãi',
-  feedback: 'Phản hồi / Bằng chứng',
-  unboxing: 'Mở hộp / Dùng thử',
+  usage: 'Hướng dẫn dùng (HDSD)',
   compare: 'So sánh / Before-After',
+  proof: 'Phản hồi khách (review/WhatsApp)',
+  authority: 'Báo chí / Chuyên gia',
+  promo: 'Khuyến mãi / Giá',
+  unboxing: 'Mở hộp / Dùng thử',
   other: 'Khác',
 }
 
@@ -31,5 +35,21 @@ export const STAGE_ORDER: Stage[] = [
 ]
 
 export const ROLE_ORDER: MediaRole[] = [
-  'feature', 'mechanism', 'promo', 'feedback', 'unboxing', 'compare', 'other',
+  'hook', 'pain', 'feature', 'mechanism', 'usage', 'compare', 'proof', 'authority', 'promo', 'unboxing', 'other',
 ]
+
+/** Bậc gửi GỢI Ý mặc định theo vai trò — tự set khi user đổi role (vẫn sửa được).
+ *  Logic: ảnh nào hợp với bước nào trong tiến trình tư vấn → chốt. */
+export const ROLE_DEFAULT_STAGE: Record<MediaRole, Stage> = {
+  hook: 'greeting',
+  pain: 'qualify',
+  feature: 'value',
+  mechanism: 'advise',
+  usage: 'advise',
+  compare: 'objection',
+  proof: 'objection',
+  authority: 'objection',
+  promo: 'close',
+  unboxing: 'advise',
+  other: 'value',
+}

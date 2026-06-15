@@ -23,14 +23,19 @@ export type Stage =
   | 'followup'   // khách im → nhắc
 
 /** Vai trò nội dung của 1 ảnh/video — gán NHÃN 1 lần lúc setup; lúc chat AI chỉ
- *  đọc nhãn (text) để chọn gửi đúng bậc, KHÔNG xem pixel (tiết kiệm vision call). */
+ *  đọc nhãn (text) để chọn gửi đúng bậc, KHÔNG xem pixel (tiết kiệm vision call).
+ *  Bộ nhãn bám theo nội dung thật của ảnh Ladipage/TikTok (hook/pain/hdsd/...). */
 export type MediaRole =
-  | 'feature'    // ảnh tính năng
+  | 'hook'       // ảnh thu hút / mở đầu
+  | 'pain'       // ảnh vấn đề / nỗi đau
+  | 'feature'    // ảnh tính năng / thành phần
   | 'mechanism'  // ảnh cơ chế hoạt động
-  | 'promo'      // ảnh khuyến mãi
-  | 'feedback'   // ảnh phản hồi / social proof
-  | 'unboxing'   // ảnh/video mở hộp, dùng thử
+  | 'usage'      // ảnh hướng dẫn sử dụng (HDSD)
   | 'compare'    // ảnh so sánh / before-after
+  | 'proof'      // phản hồi khách (review / WhatsApp)
+  | 'authority'  // báo chí / chuyên gia / uy tín
+  | 'promo'      // ảnh khuyến mãi / giá
+  | 'unboxing'   // ảnh/video mở hộp, dùng thử
   | 'other'
 
 export interface MediaSlot {
