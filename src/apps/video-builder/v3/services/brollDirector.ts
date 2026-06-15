@@ -411,6 +411,24 @@ function separateLipsRuns(scenes: BrollScene[]): void {
   }
 }
 
+// P5p — render-safe holds (deterministic backstop to the prompt rule). The i2v model
+// renders "container held in one hand while the other reaches in" / loose contents in
+// a palm as a FLOATING bowl/object (the user's "đĩa bay"). For a PRESENT-to-camera
+// (creator-framing) shot whose concept hits that pattern, rewrite it to a simple,
+// well-supported PRODUCT hold. Universal — uses the product name, no niche. Usage
+// shots (hands_noface on a surface — sprinkling / pouring / dipping) are left as-is.
+const FLOATING_POSE_RE = /\b(bowl|plate|dish|tray|cup|saucer|platter|handful|overflowing|reaching\s+in(?:to)?|reach\s+into|balanced|scoop)\b|in (?:her|his|their) palm/i
+function enforceRenderSafeHolds(scenes: BrollScene[], product: Product | null | undefined): void {
+  const name = product?.productName?.trim() || 'the product'
+  for (const s of scenes) {
+    if (s.role !== 'broll' || s.cameraFraming !== 'creator') continue   // only present-to-camera holds
+    if (!FLOATING_POSE_RE.test(s.conceptPrompt ?? '')) continue
+    s.kind = 'product_action'
+    s.conceptPrompt =
+      `The creator holds ${name} firmly with both hands at chest height, presenting it clearly to the camera with a warm, confident smile — a simple, well-supported grip (NOT a floating object, NOT a container reached into), authentic UGC, natural light.`
+  }
+}
+
 // ── Public: plan a full-coverage hybrid shot list ───────────────────────────
 export async function directBrollScenes(
   params: BrollDirectorParams,
@@ -632,6 +650,15 @@ RULES:
   camera / the before-vs-after, NOT a generic product close-up. Keep the action SIMPLE
   + filmable (ONE clear move) so the render lands it. If the proof carries a number /
   spec, that cut is a great spot for a number sticker.
+- RENDER-SAFE POSES (the video model BOTCHES hands holding loose objects → a "floating
+  bowl / detached object" — the #1 visible artifact). For ANY hold / present / hero /
+  CTA shot, the creator holds the PRODUCT ITSELF in ONE simple, clearly-SUPPORTED grip
+  (both hands on it, or one hand gripping it firmly against the body). NEVER a pose
+  where a CONTAINER (bowl / plate / tray / cup) is held in one hand while the OTHER
+  hand reaches into it; NEVER loose contents balanced in an open palm; NEVER an object
+  floating with no visible support. Universal — whatever the product is, present the
+  PRODUCT itself, simply and firmly held. (Loose-product usage — sprinkling, pouring,
+  dipping — is fine as a hands-on-a-SURFACE shot, just never "held + reached into".)
 - OPENING / ESTABLISH THE PRODUCT EARLY:
     • The first ~3s must show a real HUMAN FACE (scroll-stop) — but a face does NOT
       require a "lips" cut.
@@ -756,6 +783,12 @@ OUTPUT strict JSON only (no markdown fences):
   // the render never silently falls back to a generic product close-up. Filler
   // cuts added later by split/density are caught by Layer 3 at render time.
   await backfillWeakConcepts(scenes, params.product, params.geminiKey)
+
+  // P5p — render-safe holds: rewrite any present-to-camera concept that would render
+  // as a "floating bowl / object" into a simple supported product hold. Runs LAST so
+  // it overrides whatever the director / backfill wrote (the CTA endorsement + offer
+  // shots carry no floating words, so they're untouched).
+  enforceRenderSafeHolds(scenes, params.product)
 
   const stickers = sanitizeStickers(parsed.stickers)
   // P4l — MS sticker safety net: even with the rojak hint, Gemini sometimes leaks
