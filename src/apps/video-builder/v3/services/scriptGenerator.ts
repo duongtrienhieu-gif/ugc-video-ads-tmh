@@ -199,7 +199,13 @@ export async function generateScript(
     // the top of the loop is the gate, so pass 1 only fires a 2nd Gemini call when the
     // script is STILL outside ±10% after pass 0 (the actual drift cases). When pass 0
     // already lands in-band — the common case — the loop breaks and no extra call burns.
-    for (let pass = 0; pass < 2; pass++) {
+    // P5n — up to 3 CONDITIONAL passes (was 2). The band check at the top gates every
+    // pass, so an in-band script still breaks immediately with ZERO refit calls; the
+    // extra pass only fires when STILL out of band. Needed because a regenerated +
+    // benefit-rich script can land ~1.3× over (the user saw 79.6s vs a 60s pick) and 2
+    // trims weren't enough. When FAR over (>20%), refit is told to cut AGGRESSIVELY
+    // (drop secondary benefits, keep only the spine) so it actually reaches the band.
+    for (let pass = 0; pass < 3; pass++) {
       const joined = SCRIPT_BLOCK_IDS.map((id) => blockMap[id] ?? '').join(' ')
       const durNow = estimateReadDurationForVoice(joined, params.lang)
       if (durNow <= target * 1.10 && durNow >= target * 0.90) break  // in band
@@ -210,6 +216,7 @@ export async function generateScript(
         targetSec: target,
         currentSec: durNow,
         tooLong: durNow > target * 1.10,
+        aggressive: durNow > target * 1.20,   // far over → cut hard, sacrifice minor coverage
       })
       if (!refit) break
       blockMap = refit
@@ -886,6 +893,8 @@ async function refitScriptToLength(args: {
   targetSec: number
   currentSec: number
   tooLong: boolean
+  /** P5n — FAR over (>20%): cut hard, sacrifice minor coverage to hit the band. */
+  aggressive?: boolean
 }): Promise<Record<ScriptBlockId, string> | null> {
   const current = SCRIPT_BLOCK_IDS.map((id) => `[${id}] ${args.blocks[id] ?? ''}`).join('\n')
   const lo = args.targetSec - 3
@@ -893,7 +902,9 @@ async function refitScriptToLength(args: {
   const systemInstruction = `You are editing a finished TikTok ad script written in ${args.langName} to FIT A TARGET SPOKEN LENGTH. Keep the SAME language, the SAME casual spoken voice, and the 5-block structure (hook, pain, discovery, benefit, cta). Do not switch language or tone.`
   const userPrompt = `This script currently reads about ${Math.round(args.currentSec)} seconds spoken, but it MUST land within ${lo}-${hi} seconds (target ~${args.targetSec}s). ${
     args.tooLong
-      ? `It is TOO LONG — CUT it down to about ${args.targetSec}s. You MUST KEEP (these are the conversion spine — never cut them): the opening hook (verbatim); the ONE memory ANCHOR (the single most concrete reason/expectation); the ONE believable PROOF beat (the skeptic→convert / demonstrable-moment / before-after / bystander line); the product name + its key ingredient(s) + the one-line mechanism; the one concrete usage moment; the offer / CTA. CUT FROM HERE FIRST: the NUMBER of benefits (keep only the 2-3 strongest as punchy hits, drop the rest), extra adjectives, repetition, throat-clearing, meta talk. Trimming a benefit or an adjective is fine; deleting the anchor, the proof beat, or the CTA is NOT.`
+      ? (args.aggressive
+        ? `It is WAY TOO LONG (${Math.round(args.currentSec)}s vs target ~${args.targetSec}s) — CUT HARD. Keep ONLY the SPINE and nothing else: the opening hook (verbatim); the ONE memory ANCHOR; the ONE believable PROOF beat; the product name + ONE key ingredient + a one-line mechanism; the offer / CTA. AGGRESSIVELY DROP everything else: keep only the 2 STRONGEST benefits (delete the rest entirely), cut every secondary clause, every extra adjective, every repeated idea, all throat-clearing. It is OK to LOSE minor coverage to hit ${args.targetSec}s — a tight punchy ${args.targetSec}s ad beats a bloated one. Land within ${lo}-${hi}s.`
+        : `It is TOO LONG — CUT it down to about ${args.targetSec}s. You MUST KEEP (these are the conversion spine — never cut them): the opening hook (verbatim); the ONE memory ANCHOR (the single most concrete reason/expectation); the ONE believable PROOF beat (the skeptic→convert / demonstrable-moment / before-after / bystander line); the product name + its key ingredient(s) + the one-line mechanism; the one concrete usage moment; the offer / CTA. CUT FROM HERE FIRST: the NUMBER of benefits (keep only the 2-3 strongest as punchy hits, drop the rest), extra adjectives, repetition, throat-clearing, meta talk. Trimming a benefit or an adjective is fine; deleting the anchor, the proof beat, or the CTA is NOT.`)
       : `It is TOO SHORT — expand to ~${args.targetSec}s. EXPANSION FUEL (in this order — use ONLY facts in the brief, never invent product claims, never pad with filler):
   1. If there is NO believable PROOF beat yet, ADD one — a skeptic→convert line, a
      demonstrable moment you could film (bẻ ra / cắm vào / đo / thử ngay), a specific
