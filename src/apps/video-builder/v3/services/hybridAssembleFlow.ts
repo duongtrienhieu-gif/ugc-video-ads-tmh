@@ -7,6 +7,7 @@
 
 import { assembleHybridVideo, type HybridSceneClip, type HybridStickerPlacement } from './hybridAssembler'
 import { renderStickerBlob, type StickerStyle } from './stickerRenderer'
+import './captionRenderer'   // P5k — registers __testCaption + bundles the caption renderer (wired into the flow in Part B)
 import { computeWordTimestampFromAlignment, computeQuoteTimestamp } from './insertTimingEngine'
 import { saveAsset } from '../../../../utils/assetStore'
 import type { HybridState, GeneratedScript } from '../types'
