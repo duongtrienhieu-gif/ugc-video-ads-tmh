@@ -9,7 +9,6 @@ import { useBankStore } from './stores/bankStore'
 import { useLandingPageStore } from './apps/landing-page/store'
 import { useSuperLadipageStore } from './apps/super-ladipage/store'
 import { useAdTemplateStore } from './stores/adTemplateStore'
-import { useLabContentStore } from './apps/lab-content/store'
 import { useAdsContentStore } from './apps/ads-content/store'
 import { useLipSyncStore } from './stores/lipSyncStore'
 import { useVideoTranslateStore } from './stores/videoTranslateStore'
@@ -27,7 +26,6 @@ import Finder from './apps/finder/Finder'
 import AdAnatomy from './apps/ad-anatomy/AdAnatomy'
 import ScriptArchitect from './apps/script-architect/ScriptArchitect'
 import AdsContent from './apps/ads-content/AdsContent'
-import LabContent from './apps/lab-content/LabContent'
 import LandingPageAI from './apps/landing-page/LandingPageAI'
 import SuperLadipage from './apps/super-ladipage/SuperLadipage'
 import History from './apps/history/History'
@@ -37,7 +35,6 @@ import CreativeStudio from './apps/creative-studio/CreativeStudio'
 import ImageDna from './apps/image-dna/ImageDna'
 import VideoTranslate from './apps/video-translate/VideoTranslate'
 import VideoBuilder from './apps/video-builder/VideoBuilder'
-import TimSourceVideo from './apps/tim-source-video/TimSourceVideo'
 import StudioBrandKit from './apps/studio-brand-kit/StudioBrandKit'
 import TikTokShop from './apps/tiktok-shop/TikTokShop'
 import Research from './apps/research/Research'
@@ -48,7 +45,6 @@ const APP_COMPONENTS: Record<string, React.ComponentType> = {
   'ad-anatomy': AdAnatomy,
   'script-architect': ScriptArchitect,
   'ads-content': AdsContent,
-  'lab-content': LabContent,
   'landing-page': LandingPageAI,
   'super-ladipage': SuperLadipage,
   'history': History,
@@ -62,7 +58,6 @@ const APP_COMPONENTS: Record<string, React.ComponentType> = {
   'image-dna': ImageDna,
   'video-translate': VideoTranslate,
   'video-builder': VideoBuilder,
-  'tim-source-video': TimSourceVideo,
   'studio-brand-kit': StudioBrandKit,
   'tiktok-shop': TikTokShop,
   'research': Research,
@@ -77,7 +72,6 @@ const APP_BOUNDARY_META: Record<string, { name: string; resetKeys: string[] }> =
   'ad-anatomy':        { name: 'Phân tích QC',   resetKeys: ['ugc-ad-anatomy-cache'] },
   'script-architect':  { name: 'Script Architect', resetKeys: [] },
   'ads-content':       { name: 'Ads Content',    resetKeys: [] },
-  'lab-content':       { name: 'Lab Content',    resetKeys: [] },
   'landing-page':      { name: 'Landing Page AI', resetKeys: [] },
   'super-ladipage':    { name: 'Super Ladipage',  resetKeys: [] },
   'history':           { name: 'Lịch sử',        resetKeys: [] },
@@ -88,7 +82,6 @@ const APP_BOUNDARY_META: Record<string, { name: string; resetKeys: string[] }> =
   'image-dna':         { name: 'Image DNA',      resetKeys: [] },
   'video-translate':   { name: 'Dịch Video',     resetKeys: [] },
   'video-builder':     { name: 'UGC Builder',    resetKeys: [] },
-  'tim-source-video':  { name: 'Tìm Source Video', resetKeys: [] },
   'studio-brand-kit':  { name: 'Studio Brand Kit', resetKeys: ['ugc-lab:brand-kits'] },
   'tiktok-shop':       { name: 'TikTok Shop',      resetKeys: [] },
   'research':          { name: 'Research',         resetKeys: [] },
@@ -172,7 +165,6 @@ export default function App() {
       void useLandingPageStore.getState().hydrate()
       void useSuperLadipageStore.getState().hydrate()
       void useAdTemplateStore.getState().hydrate()
-      void useLabContentStore.getState().hydrate()
       void useAdsContentStore.getState().hydrate()
       void useLipSyncStore.getState().hydrate()
       void useVideoTranslateStore.getState().hydrate()

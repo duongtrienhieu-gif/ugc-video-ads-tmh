@@ -50,13 +50,6 @@ export const MODULE_REGISTRY: ModuleRegistration[] = [
     version: 1,
     maxAgeMs: DEFAULT_MAX_AGE_MS,
   },
-  {
-    moduleId: 'lab-content',
-    moduleNameVi: 'Lab Content',
-    persistKey: 'ugc-lab:lab-content:inflight-v1',
-    version: 1,
-    maxAgeMs: DEFAULT_MAX_AGE_MS,
-  },
   // ── R4b — Creative Studio (migrated from bespoke pattern) ───────────────
   // moduleId + persistKey deliberately keep 'broll-studio' for back-compat
   // with users' existing localStorage. The app id was renamed in P10

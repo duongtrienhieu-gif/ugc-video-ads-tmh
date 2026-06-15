@@ -20,10 +20,9 @@
 import { useMemo } from 'react'
 import { useLandingPageStore } from '../landing-page/store'
 import { useAdsContentStore } from '../ads-content/store'
-import { useLabContentStore } from '../lab-content/store'
 import { useBankStore } from '../../stores/bankStore'
 
-export type HistoryType = 'landing-page' | 'ads-content' | 'lab-content' | 'script' | 'broll' | 'model'
+export type HistoryType = 'landing-page' | 'ads-content' | 'script' | 'broll' | 'model'
 
 export interface HistoryItem {
   id: string
@@ -53,7 +52,6 @@ export interface HistoryItem {
 export function useHistoryItems(): HistoryItem[] {
   const landingItems = useLandingPageStore((s) => s.items)
   const adsItems     = useAdsContentStore((s) => s.items)
-  const labItems     = useLabContentStore((s) => s.items)
   const scripts      = useBankStore((s) => s.scripts)
   const brolls       = useBankStore((s) => s.brolls)
   const models       = useBankStore((s) => s.models)
@@ -82,27 +80,6 @@ export function useHistoryItems(): HistoryItem[] {
         sourceAppId: 'landing-page',
         sourceProductId: lp.productId,
         countLabel: `${lp.sections.length} sections`,
-      })
-    }
-
-    // ── Lab Content ───────────────────────────────────────────────────
-    for (const lab of labItems) {
-      const angleCount = Array.isArray(lab.angles) ? lab.angles.length : 0
-      const hookCount  = Array.isArray(lab.hooks) ? lab.hooks.length : 0
-      items.push({
-        id: `lab-${lab.id}`,
-        type: 'lab-content',
-        typeLabel: 'Lab Content',
-        typeIcon: '🧠',
-        typeAccent: 'purple',
-        title: lab.title,
-        productName: lab.productName,
-        thumbnail: undefined,
-        createdAt: lab.createdAt,
-        sourceAppId: 'lab-content',
-        sourceProductId: lab.productId,
-        previewText: lab.strategySummaryVi?.slice(0, 80),
-        countLabel: `${angleCount} góc · ${hookCount} hook`,
       })
     }
 
@@ -178,5 +155,5 @@ export function useHistoryItems(): HistoryItem[] {
     // Sort newest first
     items.sort((a, b) => b.createdAt - a.createdAt)
     return items
-  }, [landingItems, adsItems, labItems, scripts, brolls, models, products])
+  }, [landingItems, adsItems, scripts, brolls, models, products])
 }

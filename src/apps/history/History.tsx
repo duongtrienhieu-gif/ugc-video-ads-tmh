@@ -21,7 +21,6 @@ interface FilterChip {
 
 const FILTERS: FilterChip[] = [
   { id: 'all',          label: 'Tất cả',         icon: '📂' },
-  { id: 'lab-content',  label: 'Lab Content',    icon: '🧠' },
   { id: 'landing-page', label: 'Landing Page',   icon: '📄' },
   { id: 'ads-content',  label: 'Ads Content',    icon: '📣' },
   { id: 'script',       label: 'Kịch bản',       icon: '✍️' },

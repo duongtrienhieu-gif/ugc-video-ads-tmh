@@ -9,7 +9,6 @@
 // Known kinds (keep in sync with each feature's store):
 //   • 'ad-win-template'         → src/stores/adTemplateStore.ts
 //   • 'ads-content'             → src/apps/ads-content/store.ts
-//   • 'lab-content'             → src/apps/lab-content/store.ts
 //   • 'lip-sync-history'        → src/stores/lipSyncStore.ts
 //   • 'video-translate-history' → src/stores/videoTranslateStore.ts
 //   • 'chat-bot-config'         → src/apps/chat-bot/store.ts
@@ -25,7 +24,6 @@ import { supabase, requireUserId } from '../lib/supabase'
 export type OutputKind =
   | 'ad-win-template'
   | 'ads-content'
-  | 'lab-content'
   | 'lip-sync-history'
   | 'video-translate-history'
   | 'brand-kit'

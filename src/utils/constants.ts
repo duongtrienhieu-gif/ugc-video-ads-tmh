@@ -10,7 +10,6 @@ import {
   FileText,
   Megaphone,
   LayoutTemplate,
-  Sparkles,
   History as HistoryIcon,
 } from 'lucide-react'
 import type { ElementType } from 'react'
@@ -29,7 +28,6 @@ export const APP_REGISTRY: AppConfig[] = [
   { id: 'ad-anatomy', name: 'Phân Tích QC', icon: Clapperboard, accent: '#FB2B37' },
   { id: 'script-architect', name: 'Tạo Kịch bản UGC', icon: PenLine, accent: '#3b82f6' },
   { id: 'ads-content',      name: 'Ads Content',       icon: Megaphone, accent: '#ec4899' },
-  { id: 'lab-content',      name: 'Lab Content',       icon: Sparkles, accent: '#a855f7' },
   { id: 'landing-page',     name: 'Landing Page AI',   icon: LayoutTemplate, accent: '#7c3aed' },
   { id: 'history',          name: 'History',           icon: HistoryIcon, accent: '#8b5cf6' },
   { id: 'voice-studio', name: 'Giọng Đọc', icon: Mic, accent: '#6366f1' },

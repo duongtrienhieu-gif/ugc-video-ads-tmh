@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { LayoutGrid, User, PenLine, Mic, Image, Eye, Settings, FlaskConical, RefreshCw, LogOut, Activity, Languages, Sparkles, Package, Megaphone, FolderOpen, Brain, Rocket, Search, History as HistoryIcon, Palette, ShoppingBag, TrendingUp, MessageCircle } from 'lucide-react'
+import { LayoutGrid, User, Settings, FlaskConical, RefreshCw, LogOut, Activity, Sparkles, Package, Megaphone, FolderOpen, Rocket, History as HistoryIcon, Palette, ShoppingBag, TrendingUp, MessageCircle } from 'lucide-react'
 import SettingsModal from './SettingsModal'
 import Diagnostic from './Diagnostic'
 import DraftsPanel from './DraftsPanel'
@@ -23,65 +23,28 @@ interface NavGroup {
   items: NavItem[]
 }
 
-// 2026-05-28 — Sidebar restructure: 16 apps grouped into 6 workflow
-// buckets so users don't have to scan the whole list every time.
-// Order matches the real seller journey: foundation → research →
-// content → publish → video production.
-//
-// 'landing-page' kept commented out (older variant of Super Ladipage —
-// route still resolves in App.tsx for direct-URL access).
+// 2026-06-16 — Sidebar slimmed to one flat list (no section headers) so it
+// stays short. Only the apps in active use are listed; the rest still have
+// live routes in App.tsx (reachable via direct openApp / inter-app links),
+// they're just hidden from the nav:
+//   • hidden: voice-studio, script-architect, creative-studio,
+//             video-translate, ad-anatomy
+//   • deleted entirely: tim-source-video, lab-content, landing-page
 const NAV_GROUPS: NavGroup[] = [
   {
     label: '',
     items: [
-      { id: 'finder',  label: 'Project', icon: LayoutGrid },
-      { id: 'history', label: 'History', icon: HistoryIcon },
-    ],
-  },
-  {
-    label: 'Nền tảng',
-    items: [
-      { id: 'products-shortcut', label: 'Sản phẩm',   icon: Package },
-      { id: 'studio-brand-kit',  label: 'Brand Kit',  icon: Palette },
-      { id: 'character-studio',  label: 'Avatar AI',  icon: User },
-      { id: 'voice-studio',      label: 'Giọng đọc',  icon: Mic },
-    ],
-  },
-  {
-    label: 'Nghiên cứu',
-    items: [
-      { id: 'research',         label: 'Research',     icon: TrendingUp },
-      { id: 'tim-source-video', label: 'Tìm Source', icon: Search },
-      { id: 'ad-anatomy',       label: 'Phân tích QC', icon: Eye },
-      { id: 'lab-content',      label: 'Lab Content',  icon: Brain },
-    ],
-  },
-  {
-    label: 'Nội dung',
-    items: [
-      { id: 'script-architect', label: 'Kịch bản',       icon: PenLine },
-      { id: 'ads-content',      label: 'Ads Content',    icon: Megaphone },
-      { id: 'creative-studio',  label: 'Creative Studio', icon: Image },
-    ],
-  },
-  {
-    label: 'Publish',
-    items: [
-      { id: 'tiktok-shop',    label: 'TikTok Shop',    icon: ShoppingBag },
-      { id: 'super-ladipage', label: 'Super Ladipage', icon: Rocket },
-    ],
-  },
-  {
-    label: 'Video',
-    items: [
-      { id: 'video-builder',   label: 'UGC Builder', icon: Sparkles },
-      { id: 'video-translate', label: 'Dịch Video',  icon: Languages },
-    ],
-  },
-  {
-    label: 'Bán hàng',
-    items: [
-      { id: 'chat-bot', label: 'Chat Bot', icon: MessageCircle },
+      { id: 'finder',            label: 'Project',        icon: LayoutGrid },
+      { id: 'history',           label: 'History',        icon: HistoryIcon },
+      { id: 'products-shortcut', label: 'Sản phẩm',       icon: Package },
+      { id: 'studio-brand-kit',  label: 'Brand Kit',      icon: Palette },
+      { id: 'character-studio',  label: 'Avatar AI',      icon: User },
+      { id: 'research',          label: 'Research',       icon: TrendingUp },
+      { id: 'ads-content',       label: 'Ads Content',    icon: Megaphone },
+      { id: 'tiktok-shop',       label: 'TikTok Shop',    icon: ShoppingBag },
+      { id: 'super-ladipage',    label: 'Super Ladipage', icon: Rocket },
+      { id: 'video-builder',     label: 'UGC Builder',    icon: Sparkles },
+      { id: 'chat-bot',          label: 'Chat Bot',       icon: MessageCircle },
     ],
   },
 ]
