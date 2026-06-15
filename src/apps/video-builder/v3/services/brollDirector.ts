@@ -395,6 +395,22 @@ function applyProductEstablishRules(scenes: BrollScene[], product: Product | nul
   }
 }
 
+/** P5l — no two "lips" cuts adjacent (user rule: lips must be separated by ≥1 broll;
+ *  2-4 broll between lips is great). Gemini sometimes returns a 1:1 metronome or
+ *  back-to-back lips; this deterministic backstop flips the SECOND of any adjacent
+ *  lips pair to a broll that illustrates its OWN quote (empty concept → grounded by
+ *  backfillWeakConcepts / Layer-3 later). Never adds lips; fewer lips is fine. */
+function separateLipsRuns(scenes: BrollScene[]): void {
+  for (let i = 1; i < scenes.length; i++) {
+    if (scenes[i].role === 'lips' && scenes[i - 1].role === 'lips') {
+      scenes[i].role = 'broll'
+      scenes[i].kind = 'product_action'
+      scenes[i].cameraFraming = 'hands_noface'
+      scenes[i].conceptPrompt = ''   // weak → backfilled, grounded in this cut's quote
+    }
+  }
+}
+
 // ── Public: plan a full-coverage hybrid shot list ───────────────────────────
 export async function directBrollScenes(
   params: BrollDirectorParams,
@@ -599,6 +615,18 @@ RULES:
   lines are similar (a list of symptoms, a list of ingredients/benefits), VARY the
   shot type across them (slip a product close-up or hands-action between concept or 3D
   cuts) so it stays a hand-held review, not a mood montage or a science reel.
+- LIPS SPACING (HARD RULE): NEVER put two "lips" cuts back-to-back. Every lips cut
+  MUST have AT LEAST ONE broll cut between it and the next lips. It is GREAT to run 2,
+  3, even 4 broll cuts between two lips cuts — a broll-heavy ad showing the product
+  sells harder. Do NOT fall into a mechanical 1:1 "lips, broll, lips, broll" metronome.
+  Think: a FEW lips anchors spread out, with rich broll RUNS between them.
+- SHOW THE PROOF (demonstrable cut): when a line is a PROOF beat — "lúc đầu tôi cũng
+  nghĩ… ai dè…" (skeptic→convert), a before→after, a "để tôi quay cho coi / cắm vô thử"
+  demonstration, or a bystander reaction ("nhỏ bạn hỏi đổi gì") — render it as a
+  DEMONSTRABLE broll that VISUALLY PROVES it: the real action / the result happening on
+  camera / the before-vs-after, NOT a generic product close-up. Keep the action SIMPLE
+  + filmable (ONE clear move) so the render lands it. If the proof carries a number /
+  spec, that cut is a great spot for a number sticker.
 - OPENING / ESTABLISH THE PRODUCT EARLY:
     • The first ~3s must show a real HUMAN FACE (scroll-stop) — but a face does NOT
       require a "lips" cut.
@@ -681,6 +709,11 @@ OUTPUT strict JSON only (no markdown fences):
       if (scenes2.length > scenes.length) { scenes = scenes2; parsed = parsed2 }
     }
   }
+  // P5l — no two "lips" cuts adjacent (≥1 broll between lips). Runs after the lips
+  // ladder + any re-roll, before establish/CTA (those only convert lips→broll, never
+  // re-introduce adjacency) so the flipped cuts get backfilled below.
+  separateLipsRuns(scenes)
+
   // P4h — product establishment + deictic (deterministic backstop to the Layer-1
   // prompt): the hook / early lines that NAME or POINT AT the product must SHOW it,
   // so the product is never invisible while the voice keeps naming it. Runs before

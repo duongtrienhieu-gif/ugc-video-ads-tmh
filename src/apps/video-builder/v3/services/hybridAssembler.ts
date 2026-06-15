@@ -213,11 +213,12 @@ export async function assembleHybridVideo(
             `enable='between(t,${off.toFixed(2)},${endW.toFixed(2)})'[${next}]`,
           )
         } else {
-          // mid-right, lowered into the lower third (y≈72%) — same spot as mode-1.
+          // mid-right, upper-middle (y≈60%) — raised from 72% so it clears the
+          // bottom-centre captions added in P5k (was colliding with the caption band).
           const pipH = Math.round((evenH * (s.heightFraction ?? 0.10)) / 2) * 2
           parts.push(`[${inIdx}:v]format=rgba,scale=-2:${pipH},setsar=1[ov${j}]`)
           parts.push(
-            `[${last}][ov${j}]overlay=x=W-w-${MARGIN}:y=(H-h)*0.72:` +
+            `[${last}][ov${j}]overlay=x=W-w-${MARGIN}:y=(H-h)*0.60:` +
             `enable='between(t,${off.toFixed(2)},${endW.toFixed(2)})'[${next}]`,
           )
         }
