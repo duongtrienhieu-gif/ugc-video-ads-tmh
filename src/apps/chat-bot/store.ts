@@ -21,10 +21,13 @@ const KIND = 'chat-bot-config' as const
 
 interface ChatBotStore {
   configs: SalesConfig[]
+  /** Sản phẩm đang chọn ở tab Cấu hình/Mô phỏng — persist để F5 không mất chỗ. */
+  selectedProductId: string | null
   hydrated: boolean
   hydrating: boolean
 
   hydrate: () => Promise<void>
+  setSelectedProductId: (id: string | null) => void
   /** Insert hoặc update (theo id). Trả về config đã lưu. */
   upsert: (config: SalesConfig) => SalesConfig
   remove: (id: string) => void
@@ -37,8 +40,11 @@ export const useChatBotStore = create<ChatBotStore>()(
   persist(
     (set, get) => ({
       configs: [],
+      selectedProductId: null,
       hydrated: false,
       hydrating: false,
+
+      setSelectedProductId: (id) => set({ selectedProductId: id }),
 
       hydrate: async () => {
         if (get().hydrating) return
@@ -95,6 +101,10 @@ export const useChatBotStore = create<ChatBotStore>()(
       getByProductId: (productId) =>
         get().configs.find((c) => c.productId === productId),
     }),
-    { name: 'chat-bot-configs-v1' },
+    {
+      name: 'chat-bot-configs-v1',
+      // Chỉ persist dữ liệu thật + sản phẩm đang chọn (không persist cờ hydrating).
+      partialize: (s) => ({ configs: s.configs, selectedProductId: s.selectedProductId }),
+    },
   ),
 )
