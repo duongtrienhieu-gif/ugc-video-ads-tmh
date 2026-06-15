@@ -300,6 +300,24 @@ export function validateBody(
     }
   }
 
+  // 7. SOURCE-LANGUAGE LEAK — the product brief is written in Vietnamese, so a
+  //    non-VN script (ms / en) must NOT contain Vietnamese words. A Vietnamese-only
+  //    diacritic (ă â ê ô ơ ư đ + tone marks) is a sure sign a brief word leaked
+  //    through untranslated — most often the product NAME ("tỏi", "mùi tây"). This
+  //    is a binary correctness check (wrong-language word present), not a style call.
+  if (lang && lang !== 'vi' && lang !== 'Vietnamese') {
+    const allBody = `${blocks.pain ?? ''} ${blocks.discovery ?? ''} ${blocks.benefit ?? ''} ${blocks.cta ?? ''}`
+    const leak = allBody.match(/\S*[ăâêôơưđàáạảãằắặẳẵầấậẩẫèéẹẻẽềếệểễìíịỉĩòóọỏõồốộổỗờớợởỡùúụủũừứựửữỳýỵỷỹ]\S*/i)
+    if (leak) {
+      failures.push(
+        `Vietnamese word "${leak[0]}" leaked into a non-Vietnamese script — the brief is ` +
+        `Vietnamese but the script must be 100% in the target language. Translate it (e.g. ` +
+        `"tỏi"→"bawang putih"/"garlic", "mùi tây"→"pasli"/"parsley") and remove EVERY ` +
+        `Vietnamese word, especially in the product name.`,
+      )
+    }
+  }
+
   return { ok: failures.length === 0, failures }
 }
 

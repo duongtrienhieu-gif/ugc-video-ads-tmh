@@ -345,14 +345,19 @@ UNIVERSAL TIKTOK-NATIVE RULES:
   language. NO formal salutation.
 ${pronounRule(args.lang)}
 - PRODUCT NAMING (speak it like a local) — say the product's name the way a real
-  ${args.lang} creator would say it OUT LOUD. If the name is a DESCRIPTIVE English
-  phrase (e.g. "Knee Support Booster", "Cooling Neck Fan", "Posture Corrector"),
-  render it NATURALLY in ${args.lang} ("đai trợ lực khớp gối", "quạt đeo cổ", "đai
-  chỉnh dáng lưng") — do NOT read the clunky English verbatim. KEEP a genuine BRAND
-  token as-is (e.g. "Hada Labo", "Anessa", "Xiaomi") — only the descriptive part is
-  localized. Pick ONE natural name and use it CONSISTENTLY across all blocks. A
-  ${args.lang} viewer should never hear a raw English product name they wouldn't
-  naturally say themselves.
+  ${args.lang} creator would say it OUT LOUD. The descriptive / common-noun parts of
+  the name must be in ${args.lang}, NO MATTER what language they arrive in:
+    • from English ("Knee Support Booster", "Cooling Neck Fan") → natural ${args.lang}.
+    • from VIETNAMESE — the product brief is written in Vietnamese, so its name often
+      contains Vietnamese words ("tỏi", "mùi tây", "máy bơm", "đai lưng"). TRANSLATE
+      every such word into ${args.lang}; NEVER leave a Vietnamese word in the script.
+      (For Bahasa Malaysia: "tỏi" → "bawang putih", "mùi tây" → "pasli/parsley",
+      "máy bơm" → "pam"; for English: "garlic", "parsley", "pump".)
+  KEEP a genuine BRAND token as-is (e.g. "Hada Labo", "Anessa", "Xiaomi") — only the
+  descriptive part is localized. Pick ONE natural name and use it CONSISTENTLY across
+  all blocks. ZERO source-language leakage: a ${args.lang} viewer must never hear a
+  Vietnamese or raw-English word they wouldn't say themselves — that instantly reads
+  as a foreign-run / machine-translated ad and kills trust.
 - The product should appear as a discovery the speaker stumbled onto, NOT
   as a sponsored mention. Avoid "today I'll tell you about X".
 - GROUND IT IN THE REAL PRODUCT — do NOT stay vague ("some Korean technology",
@@ -1068,10 +1073,13 @@ HARD RULES:
   IS) — a viewer should sense what's being sold, not a blank "điều này".
 - You MAY shorten the product name (e.g. "máy bơm mini" instead of the full long
   name). NEVER cram the full specs — a hook is a SCROLL-STOP, not a feature list.
-- LOCALIZE THE NAME — if the product name is a DESCRIPTIVE English phrase ("Knee
-  Support Booster", "Cooling Neck Fan"), say it naturally in ${langName} ("đai trợ
-  lực khớp gối", "quạt đeo cổ"), NOT the English verbatim. KEEP a genuine BRAND
-  token as-is. A ${langName} viewer must not hear a raw English name they wouldn't say.
+- LOCALIZE THE NAME — the descriptive parts of the product name MUST be in ${langName},
+  whatever language they arrive in. From English ("Cooling Neck Fan") → natural ${langName}.
+  From VIETNAMESE (the brief is written in Vietnamese, so the name often has Vietnamese
+  words like "tỏi", "mùi tây", "máy bơm") → TRANSLATE them into ${langName}, NEVER leave a
+  Vietnamese word (for Bahasa Malaysia: "tỏi"→"bawang putih", "mùi tây"→"pasli"; for English:
+  "garlic", "parsley"). KEEP a genuine BRAND token as-is. ZERO Vietnamese/foreign leakage —
+  a ${langName} viewer must not hear a word they wouldn't say themselves.
 - P5 — if the hook implies a RESULT TIMEFRAME, keep it REALISTIC + HEDGED + first-
   person/typical ("đỡ rõ sau khoảng 1 tuần", "đa số 2-3 tuần"), NEVER an absolute
   cure or miracle speed ("hết hẳn sau 3 ngày", "chữa khỏi", "100%"). A believable
