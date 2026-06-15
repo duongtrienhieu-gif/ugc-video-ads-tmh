@@ -429,6 +429,37 @@ function enforceRenderSafeHolds(scenes: BrollScene[], product: Product | null | 
   }
 }
 
+// P5q — PRODUCT-IS-HERO backstop (deterministic). The director kept turning payoff
+// lines into face-only "concept" shots and even put eating/sensory lines on a lips
+// talking-head → a >70% model reel where the product wasn't the highlight (user
+// audit). Two enforcements, universal: (a) appetite/usage/sensory lines must SHOW the
+// product action, never a face; (b) cap face-only concept cuts at 2 — convert the rest
+// to product shots. Converted concepts go weak → backfillWeakConcepts grounds them.
+const SENSORY_USAGE_RE = /\b(eat|bite|chew|tast|crunch|crisp|chewy|smell|scent|sip|apply|rub|spray|sprinkle|pour|dip|scoop|wear|use|using)\b|cắn|ăn|nhai|nếm|thử|gi[oò]n|dẻo|dai|vị|chua|ngọt|thơm|mùi|thoa|bôi|xịt|rắc|chấm|đắp|đeo|dùng|xài|makan|gigit|rasa|sapu|pakai/i
+function enforceProductHero(scenes: BrollScene[]): void {
+  const lastIdx = scenes.length - 1
+  // (a) appetite / usage / sensory lines → product action shot (never a talking head).
+  for (let i = 0; i < scenes.length; i++) {
+    if (i === lastIdx) continue                 // CTA owned by the lock
+    const s = scenes[i]
+    if (s.role === 'mechanism3d') continue
+    if (!SENSORY_USAGE_RE.test(s.quote ?? '')) continue
+    if (s.role === 'lips' || s.kind === 'concept') {
+      s.role = 'broll'; s.kind = 'product_action'; s.cameraFraming = 'hands_noface'
+      s.conceptPrompt = ''                       // weak → backfilled, grounded in this line
+    }
+  }
+  // (b) cap face-only "concept" cuts at 2 — convert the rest to a product shot.
+  let conceptKept = 0
+  for (let i = 0; i < scenes.length; i++) {
+    if (i === lastIdx) continue
+    const s = scenes[i]
+    if (s.role !== 'broll' || s.kind !== 'concept') continue
+    conceptKept++
+    if (conceptKept > 2) { s.kind = 'product_action'; s.cameraFraming = 'hands_noface'; s.conceptPrompt = '' }
+  }
+}
+
 // ── Public: plan a full-coverage hybrid shot list ───────────────────────────
 export async function directBrollScenes(
   params: BrollDirectorParams,
@@ -650,6 +681,17 @@ RULES:
   camera / the before-vs-after, NOT a generic product close-up. Keep the action SIMPLE
   + filmable (ONE clear move) so the render lands it. If the proof carries a number /
   spec, that cut is a great spot for a number sticker.
+- THE PRODUCT IS THE HERO (this is a PRODUCT ad, NOT a model reel). The MAJORITY of
+  cuts MUST show the product — in use, its texture, the pack, or the result WITH the
+  product in frame. The creator's face is the TRUST thread (the hook, a few lips, the
+  CTA) — NOT the main subject. Do NOT turn most payoff lines into face-only "feeling"
+  shots; show the PRODUCT delivering that result instead. Face-only / feeling-only cuts
+  (kind:"concept", no product on screen) are CAPPED at ~2 in the entire video.
+- APPETITE / USAGE / SENSORY lines (eating, biting, texture, taste, smell, applying,
+  spraying, sprinkling, using) → ALWAYS a product BROLL showing that exact action (a
+  mouth-watering close-up for food; the apply/use moment for others), NEVER a "lips"
+  talking-head. Lips cuts are reserved for talk / confession / transition lines only —
+  never waste an eating/usage moment (the most product-selling shot) on a face.
 - RENDER-SAFE POSES (the video model BOTCHES hands holding loose objects → a "floating
   bowl / detached object" — the #1 visible artifact). For ANY hold / present / hero /
   CTA shot, the creator holds the PRODUCT ITSELF in ONE simple, clearly-SUPPORTED grip
@@ -782,6 +824,11 @@ OUTPUT strict JSON only (no markdown fences):
   // conceptPrompt via ONE targeted Gemini call (grounded in product + quote), so
   // the render never silently falls back to a generic product close-up. Filler
   // cuts added later by split/density are caught by Layer 3 at render time.
+  // P5q — make the PRODUCT the hero: appetite/usage lines → product action (not a
+  // talking head), and cap face-only concept cuts at 2. Runs after the CTA lock + before
+  // backfill so the converted weak concepts get grounded in their line + the product.
+  enforceProductHero(scenes)
+
   await backfillWeakConcepts(scenes, params.product, params.geminiKey)
 
   // P5p — render-safe holds: rewrite any present-to-camera concept that would render
