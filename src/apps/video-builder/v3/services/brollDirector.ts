@@ -429,24 +429,34 @@ function enforceRenderSafeHolds(scenes: BrollScene[], product: Product | null | 
   }
 }
 
-// P5q — PRODUCT-IS-HERO backstop (deterministic). The director kept turning payoff
-// lines into face-only "concept" shots and even put eating/sensory lines on a lips
-// talking-head → a >70% model reel where the product wasn't the highlight (user
-// audit). Two enforcements, universal: (a) appetite/usage/sensory lines must SHOW the
-// product action, never a face; (b) cap face-only concept cuts at 2 — convert the rest
-// to product shots. Converted concepts go weak → backfillWeakConcepts grounds them.
-// EN/MS tokens are \b-bounded; VN syllables are bounded by whitespace/punctuation so a
-// short token never matches as a SUBSTRING of another word (e.g. "ăn" must NOT fire on
-// "lăn"/"khăn", "vị" not on "vị thế" inside a word). VN syllables are space-separated.
-const SENSORY_USAGE_RE = /\b(?:eat|bite|chew|tast\w*|crunch\w*|crisp\w*|chewy|smell|scent|sip|apply|rub|spray|sprinkl\w*|pour|dip|scoop|wear|use|using|makan|gigit|rasa|sapu|pakai)\b|(?:^|[\s.,!?;:"'(])(?:cắn|ăn|nhai|nếm|thử|giòn|dẻo|dai|chua|ngọt|thơm|mùi|thoa|bôi|xịt|rắc|chấm|đắp|đeo|dùng|xài)(?=$|[\s.,!?;:"')])/i
+// P5q/P5r — PRODUCT-IS-HERO backstop (deterministic, NARROW). The director was making
+// a >70% model reel. The bulk of "product is hero" is now enforced by the PROMPT (the
+// LLM understands meaning); the deterministic layer is kept PRECISE to avoid the blunt
+// over-trigger the user caught ("ăn đều đặn" — a habit/result line — wrongly forced to
+// an eating shot). So we force ONLY unambiguous physical "doing-it-with-the-product"
+// verbs (a true filmable demo), and still cap face-only concept cuts.
+//
+// DEMO_ACTION_RE = clear physical actions ONLY (bite/apply/spray… / cắn/nhai/thoa/xịt).
+// It EXCLUDES ambiguous verbs (eat/use/try, ăn/dùng/thử) and flavor/texture DESCRIPTORS
+// (taste/crunchy, vị/giòn/dẻo) — those can sit over a talking head, so the director
+// decides. EN \b-bounded; VN syllables bounded by whitespace/punctuation (space-sep).
+const DEMO_ACTION_RE = /\b(?:bite|chew|apply|spray|sprinkle|rub|dab|squeeze)\b|(?:^|[\s.,!?;:"'(])(?:cắn|nhai|thoa|bôi|xịt|rắc|chấm|vắt|nặn)(?=$|[\s.,!?;:"')])/i
+// Deictic — points AT the product ("này / đây / em này / cái này", MS "ni"): must SHOW
+// the product, never a bare face → a bad lips candidate.
+const DEICTIC_RE = /(?:^|[\s.,!?;:"'(])(?:này|đây|cái này|em này)(?=$|[\s.,!?;:"')])|\bni\b/i
+// A line that should NOT become a "lips" talking-head (it begs for a product visual).
+function isBadLipsCandidate(quote: string | undefined): boolean {
+  const q = quote ?? ''
+  return DEMO_ACTION_RE.test(q) || DEICTIC_RE.test(q)
+}
 function enforceProductHero(scenes: BrollScene[]): void {
   const lastIdx = scenes.length - 1
-  // (a) appetite / usage / sensory lines → product action shot (never a talking head).
+  // (a) a clear DEMO-ACTION line → must SHOW that action, never a talking head.
   for (let i = 0; i < scenes.length; i++) {
     if (i === lastIdx) continue                 // CTA owned by the lock
     const s = scenes[i]
     if (s.role === 'mechanism3d') continue
-    if (!SENSORY_USAGE_RE.test(s.quote ?? '')) continue
+    if (!DEMO_ACTION_RE.test(s.quote ?? '')) continue
     if (s.role === 'lips' || s.kind === 'concept') {
       s.role = 'broll'; s.kind = 'product_action'; s.cameraFraming = 'hands_noface'
       s.conceptPrompt = ''                       // weak → backfilled, grounded in this line
@@ -904,7 +914,16 @@ function enforceLipsCount(scenes: BrollScene[], target: number): BrollScene[] {
     }
     const cand = brollIdx.filter((i) => !chosen.includes(i))
     if (cand.length === 0) break
-    cand.sort((a, b) => Math.abs(a - gapMid) - Math.abs(b - gapMid))
+    // P5r — pick lips from TALK lines, not action/deictic lines. A lips promotion
+    // turns a broll into a talking head, so NEVER grab a demo-action / point-at-product
+    // line (that's a product visual). Prefer the talk candidate nearest the gap; only
+    // fall back to a "bad" candidate if no talk line is left.
+    cand.sort((a, b) => {
+      const badA = isBadLipsCandidate(scenes[a].quote) ? 1 : 0
+      const badB = isBadLipsCandidate(scenes[b].quote) ? 1 : 0
+      if (badA !== badB) return badA - badB
+      return Math.abs(a - gapMid) - Math.abs(b - gapMid)
+    })
     chosen.push(cand[0])
   }
   for (const i of chosen) {
