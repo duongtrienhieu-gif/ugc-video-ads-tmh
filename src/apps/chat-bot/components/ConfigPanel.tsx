@@ -148,14 +148,17 @@ export default function ConfigPanel({ productId }: { productId: string }) {
 
       {/* Objection bank */}
       <div>
-        <div className="mb-2 flex items-center justify-between">
+        <div className="mb-1 flex items-center justify-between">
           <label className="text-xs font-semibold text-gray-700">
-            Xử lý từ chối <span className="font-normal text-gray-400">({draft.objectionBank.length})</span>
+            Xử lý từ chối <span className="font-normal text-gray-400">(không bắt buộc · {draft.objectionBank.length})</span>
           </label>
           <button onClick={addObjection} className="flex items-center gap-1 rounded-lg bg-black/5 px-2.5 py-1.5 text-xs font-semibold text-gray-600 hover:bg-black/10">
             <Plus className="h-3.5 w-3.5" /> Thêm
           </button>
         </div>
+        <p className="mb-2 text-[11px] text-gray-400">
+          AI tự gỡ từ chối phổ biến (mắc, sợ lừa, ship lâu). Chỉ điền nếu có từ chối ĐẶC THÙ sản phẩm/ngành mà AI khó đoán.
+        </p>
         <div className="space-y-2">
           {draft.objectionBank.map((o) => (
             <div key={o.id} className="flex gap-2 rounded-lg border border-black/8 p-2">
@@ -183,14 +186,17 @@ export default function ConfigPanel({ productId }: { productId: string }) {
 
       {/* Golden examples */}
       <div>
-        <div className="mb-2 flex items-center justify-between">
+        <div className="mb-1 flex items-center justify-between">
           <label className="text-xs font-semibold text-gray-700">
-            Hội thoại mẫu vàng <span className="font-normal text-gray-400">(dạy bot giọng của bạn)</span>
+            Hội thoại mẫu vàng <span className="font-normal text-gray-400">(không bắt buộc)</span>
           </label>
           <button onClick={addExample} className="flex items-center gap-1 rounded-lg bg-black/5 px-2.5 py-1.5 text-xs font-semibold text-gray-600 hover:bg-black/10">
             <Plus className="h-3.5 w-3.5" /> Thêm
           </button>
         </div>
+        <p className="mb-2 text-[11px] text-gray-400">
+          Để trống vẫn chạy tốt — AI dùng giọng mặc định. Sau này có 1 đoạn chat thật chốt được đơn thì dán vào để bot nói giống chất của bạn.
+        </p>
         <div className="space-y-2">
           {examples.map((ex, i) => (
             <div key={i} className="flex gap-2">
