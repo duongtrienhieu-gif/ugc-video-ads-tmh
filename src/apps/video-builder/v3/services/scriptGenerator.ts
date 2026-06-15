@@ -1099,9 +1099,12 @@ const MS_SPIRIT_TRANSLATE_SYSTEM =
   `words ("worth it", "game changer") as-is.\n` +
   `- First person, friendly, a bit playful — the way a real person talks on TikTok.`
 
-/** Batch-translate the hook list into VN gloss in ONE Gemini call (numbered lines
- *  in, numbered lines out). Returns [] on any failure so hook generation never
- *  breaks. Same spirit-aware rules as the body translation. */
+/** Batch-translate the hook list into VN gloss in ONE Gemini call. Returns a
+ *  string[] aligned to the input order ([] on failure → hooks just render without a
+ *  gloss). Uses a JSON-array schema + thinkingBudget 0 so we get EXACTLY hooks.length
+ *  items reliably — the earlier "numbered lines" parse dropped items when the model
+ *  wrapped a translation onto two lines, and a missing thinkingBudget let "thinking"
+ *  eat the token budget so the output was truncated after ~2 hooks. */
 export async function translateHooksToVietnamese(
   apiKey: string, hooks: string[], fromLang: ScriptLang,
 ): Promise<string[]> {
@@ -1109,18 +1112,23 @@ export async function translateHooksToVietnamese(
   const fromName = SCRIPT_LANG_GEMINI_NAME[fromLang]
   const numbered = hooks.map((h, i) => `${i + 1}. ${h}`).join('\n')
   const prompt =
-    `Translate each of these ${fromName} TikTok hooks into casual spoken Vietnamese. ` +
-    `Output EXACTLY ${hooks.length} lines, ONE translation per line, in the SAME order, ` +
-    `numbered "1. ", "2. " …  No quotes, no commentary:\n\n${numbered}`
+    `Translate each of these ${hooks.length} ${fromName} TikTok hooks into casual spoken ` +
+    `Vietnamese. Return a JSON object {"translations": [...]} with EXACTLY ${hooks.length} ` +
+    `strings, in the SAME order as the input. One translation per hook:\n\n${numbered}`
   try {
     const out = await directGeminiText({
       apiKey, systemInstruction: MS_SPIRIT_TRANSLATE_SYSTEM, prompt,
-      maxOutputTokens: 1024, temperature: 0.4,
+      maxOutputTokens: 2048, temperature: 0.4, thinkingBudget: 0,
+      responseMimeType: 'application/json',
+      responseSchema: {
+        type: 'object',
+        properties: { translations: { type: 'array', items: { type: 'string' } } },
+        required: ['translations'],
+      },
     })
-    return out
-      .split('\n')
-      .map((l) => l.replace(/^\s*\d+[.)]\s*/, '').replace(/^["'“”\-•]+|["'“”]+$/g, '').trim())
-      .filter((l) => l.length > 0)
+    const parsed = JSON.parse(out) as { translations?: unknown }
+    const arr = Array.isArray(parsed.translations) ? parsed.translations : []
+    return arr.map((t) => (typeof t === 'string' ? t.trim() : ''))
   } catch (e) {
     // eslint-disable-next-line no-console
     console.warn('[translateHooksToVietnamese] failed, no gloss:', e)
@@ -1139,6 +1147,7 @@ export async function translateScriptToVietnamese(
     `Output ONLY the Vietnamese translation — no notes, no labels, no quotes:\n\n${text}`
   const out = await directGeminiText({
     apiKey, systemInstruction, prompt, maxOutputTokens: 2048, temperature: 0.4,
+    thinkingBudget: 0,   // don't let "thinking" eat the budget → truncated translation
   })
   return out.trim()
 }
