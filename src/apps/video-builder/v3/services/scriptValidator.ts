@@ -336,9 +336,15 @@ export function validateShapeExecution(
 // anchor (a) exists + is concrete (not pure vague praise), (b) is echoed early AND
 // at the CTA, (c) is HONEST (no absolute-cure / miracle phrasing). Language-light.
 const ANCHOR_VAGUE_ONLY_RE = /^(rất )?(tốt|tuyệt vời|tuyệt|đỉnh|xịn|chất lượng|đa năng|hoàn hảo|number one|terbaik|bagus|best)\.?$/i
-// Absolute-cure / miracle phrasing that gets refused at the door (VN + light MS).
-const ABSOLUTE_CURE_RE = /(hết hẳn|khỏi hẳn|dứt điểm|chữa khỏi|trị dứt|hết bệnh|sembuh terus|100\s*%|cam kết khỏi|đảm bảo khỏi)/i
-const MIRACLE_SPEED_RE = /\b\d+\s*(giây|phút|saat|minit)\b[^.!?]{0,30}(hết|khỏi|sembuh)/i
+// Absolute-cure / miracle phrasing that gets refused at the door (VN + MS).
+// Only the day-1-CHECKABLE cure promise is banned — bold benefit/popularity hype is
+// allowed (see scriptGenerator "SELL HARD" rules). The "100%" branch requires a cure/
+// effect word after it so a material spec ("100% cotton", "thép 100%") is NOT flagged.
+const ABSOLUTE_CURE_RE = /(hết hẳn|khỏi hẳn|dứt điểm|chữa khỏi|trị dứt|hết bệnh|cam kết khỏi|đảm bảo khỏi|sembuh terus|sembuh total|sembuh sepenuhnya|hilang terus|hilang serta[- ]?merta|(confirm|pasti|mesti|dijamin|jamin)\s+sembuh|100\s*%\s*(khỏi|sembuh|berkesan|hết))/i
+// Number + time-unit immediately tied to a cure verb = a falsifiable deadline ("3 ngày
+// là hết", "3 hari sembuh"). A hedged window ("khoảng 1 tuần", "sekitar seminggu") has no
+// \d+ here and a non-cure speed claim ("bơm 3 phút đầy lốp") lacks the cure verb → both pass.
+const MIRACLE_SPEED_RE = /\b\d+\s*(giây|phút|ngày|saat|minit|jam|hari)\b[^.!?]{0,30}(hết|khỏi|sembuh|hilang|sihat)/i
 
 function anchorTokens(s: string): string[] {
   return s.toLowerCase().replace(/[.,!?;:"'“”…()\-–—]/g, ' ').split(/\s+/)
@@ -375,7 +381,7 @@ export function validateAnchor(blocks: BodyBlocks, anchor: string, _lang?: strin
   // (c) honesty — no absolute-cure / miracle-speed anywhere in the body
   const body = `${blocks.pain} ${blocks.discovery} ${blocks.benefit} ${blocks.cta}`
   if (ABSOLUTE_CURE_RE.test(body) || MIRACLE_SPEED_RE.test(body)) {
-    failures.push('Kỳ vọng đang là CAM KẾT TUYỆT ĐỐI / phép màu (hết hẳn / chữa khỏi / 100% / X phút là hết) — đổi sang HEDGED thực tế ngôi 1 ("đa số ... sau khoảng ...", "mình thấy đỡ rõ sau ~..."). Cam kết tuyệt đối = bị bom hàng ở cửa.')
+    failures.push('Kỳ vọng đang là CAM KẾT KHỎI TUYỆT ĐỐI / phép màu (VN: "hết hẳn / chữa khỏi / 100% khỏi / 3 ngày là hết"; MS: "sembuh terus / sembuh total / 3 hari sembuh / 100% berkesan") — đổi sang HEDGED thực tế ngôi 1 (VN "mình thấy đỡ rõ sau ~1 tuần"; MS "rasa beza lepas seminggu lebih kurang"). Cam kết khỏi theo mốc kiểm-được-ngay = bị bom hàng ở cửa COD.')
   }
 
   return { ok: failures.length === 0, failures }
