@@ -117,13 +117,17 @@ export default function ScriptVoicePhase({ onContinue }: Props) {
       .finally(() => setIsTranslating(false))
   }
 
-  // Re-show the VN translation when the user returns to Bước 1 (local state is lost
-  // on unmount). The module cache makes this instant if it was translated before;
-  // otherwise it re-fetches once.
+  // Re-show the VN translation when the user returns to Bước 1 — but CACHE-ONLY,
+  // never auto-fetch. P5g: the body gloss is now lazy (user clicks "Dịch để hiểu")
+  // to save free-tier Gemini calls, so on mount we only restore a translation that
+  // was already fetched this session; we never spend a call automatically.
   useEffect(() => {
     const text = state.inputs.script
-    if (brain.outputLang !== 'vi' && text && text.trim() && !viTranslation && !isTranslating) {
-      runViTranslation(text)
+    if (brain.outputLang !== 'vi' && text && text.trim()) {
+      const cached = VI_TRANSLATION_CACHE.get(`${brain.outputLang}|${text.trim()}`)
+      setViTranslation(cached ?? null)
+    } else {
+      setViTranslation(null)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.inputs.script, brain.outputLang])
@@ -282,7 +286,7 @@ export default function ScriptVoicePhase({ onContinue }: Props) {
         setScript(draft)
         setLangTouched(true)   // keep the chosen language; don't auto-detect over it
         setGenTab('own')
-        runViTranslation(draft)   // VN translation for display (no-op when lang = vi)
+        setViTranslation(null)   // P5g — body gloss is lazy now; user clicks "Dịch để hiểu"
         addToast('✓ Đã tạo kịch bản — xem lại & chỉnh sửa, rồi bấm Tiếp tục', 'success')
         return
       }
@@ -343,7 +347,7 @@ export default function ScriptVoicePhase({ onContinue }: Props) {
         .join(' ')
       setScript(draft)
       setLangTouched(true)
-      runViTranslation(draft)
+      setViTranslation(null)   // P5g — lazy gloss; user clicks "Dịch để hiểu" when needed
       addToast('✓ Đã tạo lại kịch bản mới (giữ hook) — xem lại & chỉnh sửa', 'success')
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
@@ -607,28 +611,38 @@ export default function ScriptVoicePhase({ onContinue }: Props) {
               </button>
             )}
           </div>
-          {/* #6 — VN translation for understanding only (target lang ≠ vi). The
-              script above STAYS in the target language; this is never used as input. */}
-          {brain.outputLang !== 'vi' && (viTranslation || isTranslating) && (
+          {/* #6 — VN translation for understanding only (target lang ≠ vi). The script
+              above STAYS in the target language; this is never used as input. P5g — LAZY:
+              the translation only runs when the user clicks (saves free-tier Gemini calls). */}
+          {brain.outputLang !== 'vi' && hasScriptText && (
             <div className="mt-2 rounded-xl border border-sky-300 bg-white p-3.5">
               <div className="mb-1.5 flex items-center justify-between gap-2">
                 <p className="text-[11px] font-bold uppercase tracking-widest text-sky-700">
                   🇻🇳 Bản dịch để hiểu — KHÔNG dùng cho video
                 </p>
-                <button
-                  onClick={() => runViTranslation(state.inputs.script, true)}
-                  disabled={isTranslating || !hasScriptText}
-                  className="shrink-0 text-[11px] font-semibold text-sky-600 hover:text-sky-700 disabled:opacity-50"
-                >
-                  Dịch lại
-                </button>
+                {viTranslation && !isTranslating && (
+                  <button
+                    onClick={() => runViTranslation(state.inputs.script, true)}
+                    disabled={isTranslating}
+                    className="shrink-0 text-[11px] font-semibold text-sky-600 hover:text-sky-700 disabled:opacity-50"
+                  >
+                    Dịch lại
+                  </button>
+                )}
               </div>
               {isTranslating ? (
                 <p className="flex items-center gap-1.5 text-[13px] text-sky-600">
                   <Loader2 className="h-3.5 w-3.5 animate-spin" /> Đang dịch...
                 </p>
-              ) : (
+              ) : viTranslation ? (
                 <p className="whitespace-pre-wrap text-[14px] leading-7 text-gray-800">{viTranslation}</p>
+              ) : (
+                <button
+                  onClick={() => runViTranslation(state.inputs.script)}
+                  className="flex items-center gap-1.5 rounded-full bg-sky-600 px-3 py-1.5 text-[12px] font-bold text-white transition-all hover:bg-sky-700"
+                >
+                  🇻🇳 Dịch để hiểu (1 lượt Gemini)
+                </button>
               )}
             </div>
           )}
