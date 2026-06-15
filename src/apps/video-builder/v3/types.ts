@@ -830,7 +830,7 @@ export const DEFAULT_AD_ANGLE: AdAngle = 'native_tiktok'
 
 // ── Target script duration (Z31 §5) ────────────────────────────────────────
 
-export type ScriptTargetDurationSec = 40 | 50 | 60
+export type ScriptTargetDurationSec = 40 | 50 | 60 | 70 | 80
 
 export const DEFAULT_SCRIPT_DURATION_SEC: ScriptTargetDurationSec = 50
 
