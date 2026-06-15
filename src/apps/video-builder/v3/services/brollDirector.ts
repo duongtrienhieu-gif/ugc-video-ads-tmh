@@ -736,6 +736,21 @@ OUTPUT strict JSON only (no markdown fences):
       'The creator holds the product up beside their face and gives an enthusiastic thumbs-up to camera, smiling — a genuine endorsement at the call to buy.'
   }
 
+  // P5o — when the CTA spans the LAST TWO scenes (two buy/offer lines), the single
+  // lock above left BOTH reading as the same thumbs-up endorsement (the user audited
+  // "#14 và #15 gần trùng"). Give the PENULTIMATE buy scene a DISTINCT OFFER shot
+  // (product hero + the deal called out) so the close reads OFFER → ENDORSE, not two
+  // identical thumbs-ups. Only fires when that scene is a broll AND its quote is a
+  // buy/offer line (a CTA-block line), so a normal benefit penultimate is untouched.
+  const penult = scenes[scenes.length - 2]
+  const ctaCue = /(mua|ch[oố]t|gi[oỏ] h[aà]ng|link|[uư]u đãi|t[aặ]ng|sale|h[eế]t h[aà]ng|h[oố]t|s[oở] h[uữ]u|grab|beli|checkout|order|jom|cart)/i
+  if (penult && penult.role === 'broll' && ctaCue.test(penult.quote ?? '')) {
+    penult.kind = 'product_action'
+    penult.cameraFraming = 'creator'
+    penult.conceptPrompt =
+      'Close-up of the creator presenting the product to camera and tapping / pointing at it excitedly as the deal is announced — the OFFER moment, the product the hero in frame (NOT a thumbs-up beside the face).'
+  }
+
   // P4e Layer 2 — fill any scene the director left with an empty / vague
   // conceptPrompt via ONE targeted Gemini call (grounded in product + quote), so
   // the render never silently falls back to a generic product close-up. Filler
