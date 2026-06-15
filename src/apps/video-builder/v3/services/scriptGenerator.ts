@@ -186,10 +186,13 @@ export async function generateScript(
     // 0-1 with the strong refit prompt, so the 3rd pass rarely fired but still
     // counted against the free-tier RPM budget when it did. The loop still
     // BREAKS early the moment the script lands in band.
-    // P4n — 1 fit pass (was 2) to cut Gemini calls on free keys. The strong refit
-    // prompt lands the script in-band on pass 0 ~always; the 2nd pass rarely moved
-    // the needle but still burned a call against the 10 RPM / 250 RPD budget.
-    for (let pass = 0; pass < 1; pass++) {
+    // P4n cut this to 1 pass to save free-tier Gemini calls — but with no re-measure
+    // after pass 0, a refit that over/under-shot was never corrected → the 60s→52-70s
+    // drift the user reported. P5d — back to a CONDITIONAL 2nd pass: the band check at
+    // the top of the loop is the gate, so pass 1 only fires a 2nd Gemini call when the
+    // script is STILL outside ±10% after pass 0 (the actual drift cases). When pass 0
+    // already lands in-band — the common case — the loop breaks and no extra call burns.
+    for (let pass = 0; pass < 2; pass++) {
       const joined = SCRIPT_BLOCK_IDS.map((id) => blockMap[id] ?? '').join(' ')
       const durNow = estimateReadDurationForVoice(joined, params.lang)
       if (durNow <= target * 1.10 && durNow >= target * 0.90) break  // in band
@@ -317,12 +320,19 @@ ${args.angleTone}
 UNIVERSAL TIKTOK-NATIVE RULES:
 - Write spoken language, not written copy. First person. Sound like a real person on
   TikTok sharing what worked. NO corporate "in this video / let me introduce you to".
-- TikTok RHYTHM (critical for scroll-retention): VARY sentence length across the
-  script — alternate PUNCH sentences (4-8 words: "Trời ơi mê quá đi.", "Đợi chút.",
-  "Cái đó tự nhiên không.") with FULLER sentences (12-18 words explaining details).
-  A script of all 15-word sentences feels flat; a script of all 5-word sentences
-  feels jumpy. Mix them — punch, full, punch, full, punch. Imperfect conversational
-  phrasing is encouraged.
+- ENERGY = THE JOB (FLAT IS THE ENEMY): this is a SELLER hyping a product they're
+  excited about — NOT a calm diary. High energy, momentum, "phải mua ngay" feel. A
+  flat, even-toned recital is the #1 reason nobody buys. Use spoken HYPE markers in
+  ${args.lang} (VN: "trời ơi", "mê xỉu", "đỉnh thật sự", "chốt đơn liền", "xịn dã man";
+  MS rojak: "gila", "confirm", "terbaik", "memang padu", "jangan main-main") — always
+  the LOCAL equivalent, never Vietnamese inside an MS script.
+- TikTok RHYTHM: VARY sentence length — alternate PUNCH lines (3-7 words: "Trời ơi mê
+  quá.", "Đỉnh thật.", "Chốt liền.") with FULLER lines (12-18 words). punch, full,
+  punch, full. All-long = flat; all-short = jumpy. Imperfect conversational phrasing ok.
+- BENEFITS AS HITS, NOT A LIST: stack as many strong benefits as you want (more
+  benefits = more desire) — but land EACH as a SHARP, punchy hit with energy, NEVER
+  a flat monotone recital. And say each idea ONCE: repeating the SAME benefit 3-4×
+  DILUTES the punch, it doesn't add it.
 - Write in the casual everyday spoken register of ${args.lang} — the way a real
   person talks to friends. 100% in ${args.lang}; never borrow filler from another
   language. NO formal salutation.
@@ -342,9 +352,11 @@ ${pronounRule(args.lang)}
   "this serum", "công nghệ gì đó", "thứ này"). Vague copy persuades nobody AND
   gives the downstream visual director nothing to show. A real person who actually
   uses a product can name what is in it and why it works — so must this script,
-  using ONLY the real facts in the PRODUCT BRIEF (never invent ingredients, claims,
-  or STATISTICS — if the brief gives no number, do NOT fabricate one like
-  "740.000 hộp đã bán" / "90% người dùng"; switch to a non-numeric angle instead):
+  grounded in the PRODUCT BRIEF. SELL HARD — bold benefit claims + a plausible
+  popularity/"everyone loves it" vibe are GOOD (they excite and a viewer can't
+  disprove them). The ONLY things you must NOT invent are FALSIFIABLE-AT-THE-DOOR
+  facts: don't claim an ingredient/material the product doesn't have, and don't
+  invent a precise checkable spec (size/weight/capacity) that contradicts the brief:
     • NAME the key ingredient(s) / active(s) / material the brief lists — say them
       out loud (e.g. "peptide với collagen", "than hoạt tính", "thép Nhật"), NOT
       "công nghệ gì đó". If the brief names two actives, name both.
@@ -399,45 +411,46 @@ ${pronounRule(args.lang)}
   (in the fixed hook if it already carries it, else the first body sentence) and
   RESTATE it — reworded, not copy-paste — in the CTA. Do NOT repeat it more than
   these 2 places (over-repeating = ad-spam). Output it in the "anchor" field.
-- EXPECTATION must be CONCRETE but HONEST (this is what decides keep-vs-return):
-  the viewer needs a concrete expectation to decide, so DO give one — but for a
-  felt-RESULT product, frame the timeframe as REALISTIC + HEDGED + first-person/
-  typical, e.g. "mình thấy đỡ rõ sau khoảng 1 tuần", "đa số dùng đều 2-3 tuần mới
-  cảm nhận khác". NEVER an absolute cure or miracle speed ("hết hẳn sau 3 ngày",
-  "chữa khỏi", "100%"). If the chosen hook already states a timeframe, REUSE that
-  exact one — never introduce a second, contradicting number.
-- CONVICTION & TRUST (P5b — what turns a PLACED order into a KEPT order at the door).
-  WEAVE 2-3 of these into the blocks where they fit NATURALLY — do NOT add separate
-  sections, do NOT force all, NEVER fabricate. Pick what fits THIS product:
-    • QUALIFY (highest value — also FILTERS impulse-wrong orders that get refused):
-      one short line saying who it's FOR and, honestly, who it's NOT for / when you
-      don't need it ("hợp [đúng persona]; nhà đã có [giải pháp khác] thì khỏi cần").
-      Naming who it's NOT for reads as honest → builds trust + cuts returns.
-    • RISK REVERSAL in the CTA (only if plausible for a real seller): a concrete,
-      HONEST assurance — "đổi trả / bảo hành / lỗi hoàn tiền" — NOT a fake "đền 10 lần".
-    • STAKES: make the pain's CONSEQUENCE concrete + real (what actually happens if
-      unsolved) — honest, not catastrophizing ("kẹt giữa đường tối, con nhỏ trên xe").
-    • OBJECTION: pre-empt ONE real doubt a buyer of THIS product has, in a clause
-      ("không lo nóng máy / không nặng / dễ dùng, bấm 1 nút").
-    • SOCIAL PROOF: ONLY if there's a REAL figure in the brief (sold count / rating).
-      If none → SKIP entirely. NEVER invent "10k đã mua / 50 triệu người".
-  Keep these conversational + SPARSE — trust beats woven in, NOT an ad checklist.
+- EXPECTATION must be CONCRETE + EXCITING (the viewer needs a vivid expectation to
+  buy, so give a BOLD one). The ONLY guardrail (a MONEY rule, not a soft one): do NOT
+  make a SPECIFIC, TIME-BOUND, CHECKABLE-ON-ARRIVAL CURE promise the product visibly
+  fails on day 1 — "hết hẳn đau sau đúng 3 ngày", "khỏi bệnh 100%". That one bounces
+  at the COD door = a refused parcel = your money lost. Everything else can be bold:
+  big benefits, dream outcome, "đổi đời", a confident felt result ("cảm nhận khác rõ
+  lắm"). Prefer first-person/typical for time results ("mình thấy khác sau tầm 1
+  tuần") — exciting but not a falsifiable deadline. If the chosen hook already states
+  a timeframe, REUSE that exact one — never a second, contradicting number.
+- CONVICTION LEVERS (P5b — these BOTH push the order AND help it survive to the door).
+  WEAVE 2-3 where they fit NATURALLY — do NOT add separate sections, do NOT force all.
+  Pick what fits THIS product:
+    • QUALIFY (desire + filter lever): a line on who it's PERFECT for + a light "not
+      for everyone" exclusivity ("hợp [đúng persona]; ai [tình huống ngược] thì thôi").
+      Creates "that's ME" desire AND quietly filters the wrong buyer.
+    • RISK REVERSAL in the CTA: a confident assurance — "đổi trả / bảo hành / lỗi
+      hoàn tiền". Make it BOLD; just don't promise a refund mechanism that doesn't exist.
+    • STAKES: dramatize the pain's CONSEQUENCE hard ("kẹt giữa đường tối, con nhỏ
+      trên xe, gọi cứu hộ cả tiếng") — push the fear, that's fine.
+    • OBJECTION: smash ONE real doubt in a clause ("không lo nóng máy / không nặng").
+    • SOCIAL PROOF: a popularity/crowd vibe is GREAT for desire and a viewer can't
+      check it at the door — use a PLAUSIBLE one ("mấy nghìn người sắm rồi", "bán cháy
+      hàng", "ai dùng cũng quay lại"); use a REAL figure if the brief has one. Don't
+      go absurd ("cả thế giới dùng") — plausible sells, cartoonish breaks trust.
+  Keep them woven + punchy (energy!), NOT a flat checklist.
 - LANGUAGE (anchor/expectation/conviction): every example phrase in the rules above
   is ILLUSTRATIVE Vietnamese — WRITE THE ACTUAL SCRIPT 100% in ${args.lang}. For
   Bahasa Malaysia use the natural LOCAL register (light rojak), NEVER Vietnamese
   words and NEVER a word-for-word Vietnamese calque; for English, idiomatic English.
-- KEEP IT BELIEVABLE — a believable specific beats a spectacular lie. NO miracle
-  instant results ("3 giây", "vài ngày là hết nhăn"), NO claiming it equals a
-  medical procedure ("như đi tiêm filler / botox"), realistic timeframes, spoken
-  as personal felt experience. Overclaiming reads as a scam, kills trust, and
-  breaks compliance. Let the named ingredient + mechanism do the convincing, not
-  an unbelievable result.
-- COMPLIANCE (Malaysia Trade Descriptions Act): NEVER claim regulatory
-  certifications or official approvals — no "Halal certified", "KKM approved",
-  "GMP", "FDA approved", "clinically proven", "doctor approved", or similar
-  authority/approval claims. We cannot verify proof here, so these are illegal
-  if unbacked. Speak only to personal experience and felt benefits, not
-  official endorsements.
+- SELL HARD (the smart way): exaggerate the BENEFIT, the DREAM and the emotion
+  freely — that excitement is what makes people buy. The ONLY lines not to cross are
+  the two that actually cost YOU money: (1) the door-bounce claim above (a specific,
+  time-bound CURE the product visibly fails on arrival → refused parcel), and (2)
+  claiming it's a MEDICAL PROCEDURE ("như đi tiêm filler / như đi mổ") → that wording
+  trips platform ad-review + the app's cert detector. Everything else: go big.
+- ONE SELF-INTEREST GUARD (not morality): don't name a regulator/cert you can't back
+  — "Halal/KKM/GMP/FDA certified", "clinically proven", "doctor approved". Those EXACT
+  words trip TikTok/Meta ad-review → account ban → you lose the whole channel, and the
+  app flags them. Bold benefits + popularity vibes are fine; a fake regulator badge
+  isn't worth getting banned over.
 
 OUTPUT FORMAT:
 Return strict JSON with this exact shape (no markdown fences, no commentary):
