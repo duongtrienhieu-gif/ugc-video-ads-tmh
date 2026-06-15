@@ -15,6 +15,7 @@ import { useLipSyncStore } from './stores/lipSyncStore'
 import { useVideoTranslateStore } from './stores/videoTranslateStore'
 import { useBrandKitStore } from './stores/brandKitStore'
 import { useTikTokShopListingsStore } from './apps/tiktok-shop/listingsStore'
+import { useChatBotStore } from './apps/chat-bot/store'
 import AuthScreen from './components/AuthScreen'
 import RestoreSessionModal from './components/RestoreSessionModal'
 import { RefreshCw, CheckCircle2, AlertCircle } from 'lucide-react'
@@ -40,6 +41,7 @@ import TimSourceVideo from './apps/tim-source-video/TimSourceVideo'
 import StudioBrandKit from './apps/studio-brand-kit/StudioBrandKit'
 import TikTokShop from './apps/tiktok-shop/TikTokShop'
 import Research from './apps/research/Research'
+import ChatBot from './apps/chat-bot/ChatBot'
 
 const APP_COMPONENTS: Record<string, React.ComponentType> = {
   'finder': Finder,
@@ -64,6 +66,7 @@ const APP_COMPONENTS: Record<string, React.ComponentType> = {
   'studio-brand-kit': StudioBrandKit,
   'tiktok-shop': TikTokShop,
   'research': Research,
+  'chat-bot': ChatBot,
 }
 
 /** VN label + cache keys used by the per-app ErrorBoundary fallback so the
@@ -89,6 +92,7 @@ const APP_BOUNDARY_META: Record<string, { name: string; resetKeys: string[] }> =
   'studio-brand-kit':  { name: 'Studio Brand Kit', resetKeys: ['ugc-lab:brand-kits'] },
   'tiktok-shop':       { name: 'TikTok Shop',      resetKeys: [] },
   'research':          { name: 'Research',         resetKeys: [] },
+  'chat-bot':          { name: 'Chat Bot',         resetKeys: ['chat-bot-configs-v1'] },
 }
 
 export default function App() {
@@ -174,6 +178,7 @@ export default function App() {
       void useVideoTranslateStore.getState().hydrate()
       void useBrandKitStore.getState().hydrate()
       void useTikTokShopListingsStore.getState().hydrate()
+      void useChatBotStore.getState().hydrate()
     }
 
     supabase.auth.getSession().then(({ data: { session } }) => {

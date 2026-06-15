@@ -14,10 +14,13 @@
 - Simulator chat trong app (song ngữ MY-gửi + VN-gloss), test ca khó, panel debug.
 - Lưu config vào Supabase (scoped user_id) + localStorage fallback.
 
-**Ngoài phạm vi (làm sau):**
-- Webhook respond.io/Pancake, gửi tin thật, tạo đơn/POS.
-- Follow-up cron 72h/24h thật, template marketing, CAPI.
-- Dashboard analytics, cross-sell nhiều SP, nhớ khách cũ.
+**Giai đoạn sau MVP — CAM KẾT làm (mục tiêu cuối, xem PHASES.md P5–P6):**
+- **P5:** Backend (Vercel Serverless Functions `api/`) + nối **WhatsApp LIVE (MY)** — bot chat khách thật.
+- **P6:** nối **Pancake LIVE (VN / test Mess MY)** + Follow-up cron 72h/24h, lưu hội thoại Supabase.
+- → Engine P2 thiết kế **channel-agnostic**: Simulator/WhatsApp/Pancake là adapter cắm vào cùng engine, không làm lại.
+
+**Ngoài phạm vi (chưa làm):**
+- Template marketing ngoài cửa sổ, CAPI, dashboard analytics, cross-sell nhiều SP, nhớ khách cũ.
 
 ---
 
@@ -45,7 +48,7 @@ benefits, usps, painPoints, ingredients, usageGuide, productImages[], targetMark
 > (bán 1 chạm), khác hẳn giá bán qua chat. Giá chat nhập riêng ở Sales Config.
 
 ### 3.2. Sales Config (MỚI — nhập riêng cho kênh chat)
-`src/apps/sales-brain/types.ts`
+`src/apps/chat-bot/types.ts` — ✅ P0 DONE (xem file types thực tế; bản dưới là tóm tắt)
 
 ```typescript
 export type Market = 'VN' | 'MY'
@@ -67,26 +70,41 @@ export interface SalesConfig {
 }
 
 export interface MediaSlot {
-  assetUrl: string             // ref ảnh/video
-  stage: Stage                 // bậc nên gửi: 'greeting' | 'value' | 'advise' | ...
-  caption?: string             // ghi chú (VN)
+  assetRef: string             // asset-UUID (KHÔNG lưu signed URL — hết hạn 1h);
+                               // resolve link tươi bằng assetStore.getUrl() lúc gửi/hiển thị
+  role: MediaRole              // NHÃN nội dung: 'feature'|'mechanism'|'promo'|'feedback'|'unboxing'|'compare'|'other'
+  stage: Stage                 // bậc nên gửi
+  caption?: string             // mô tả ngắn (VN) — đưa vào prompt để AI biết khi nào dùng
 }
+export type MediaRole = 'feature'|'mechanism'|'promo'|'feedback'|'unboxing'|'compare'|'other'
+
+// NGUỒN ảnh/video cho MediaMapEditor (P1):
+//  1. Ladipage/super-ladipage: listProjects('landing-page'|'super-ladipage') → lọc productId
+//     → sections[].imagePrompts[].generatedAssetRef
+//  2. product bank: product.productImages[]
+//  3. tiktok-shop: useTikTokShopListingsStore → listings.filter(productId) → images[].imageAssetId
+//  4. upload/URL thủ công → assetStore.saveAsset() (cùng bucket 'assets')
+// AI KHÔNG "xem" ảnh lúc chat — chỉ đọc role+caption (text) để chọn gửi đúng bậc.
+// Nhãn role: user chọn dropdown (mặc định) hoặc nút "AI gợi ý nhãn" = 1 vision call/ảnh LÚC SETUP (không lặp lúc chat).
 
 export interface ObjectionItem { trigger: string; guidance: string }  // cả 2 viết VN
 ```
 
-### 3.3. Persistence
-- Bảng Supabase mới `sales_brain_configs` (cột snake_case, có `user_id`, `created_at`, `updated_at`).
-- Store `src/apps/sales-brain/store.ts` (zustand) theo đúng pattern `bankStore`:
-  `loadAll()`, `getByProductId(productId)`, `upsert(config)`, `remove(id)`.
-- Mọi insert/update **stamp `user_id`** qua `requireUserId()`; query filter `eq('user_id', ...)`.
-- localStorage fallback khi Supabase lỗi (giống bankStore).
+### 3.3. Persistence — ✅ P0 DONE
+- **KHÔNG tạo bảng mới.** Tái dùng bảng `user_outputs` có sẵn, `kind='chat-bot-config'`
+  (đã thêm vào `OutputKind` trong `services/userOutputsAPI.ts`). User không phải chạy SQL.
+- Store `src/apps/chat-bot/store.ts` = `useChatBotStore` (zustand + `persist` localStorage
+  `'chat-bot-configs-v1'`) theo đúng pattern `ads-content/store.ts`:
+  `hydrate()`, `upsert(config)`, `remove(id)`, `getById(id)`, `getByProductId(productId)`.
+- Dùng `userOutputsAPI` (`listOutputs/createOutput/updateOutput/deleteOutput`) — đã scope
+  `user_id` qua `requireUserId()`, graceful-degrade khi offline/chưa migrate (giữ cache local).
+- `hydrate()` gọi onLogin trong `App.tsx` + khi mở ChatBot.
 
 ---
 
 ## 4. Hợp đồng AI (1 call → gói hành động)
 
-`src/apps/sales-brain/services/salesBrainEngine.ts`
+`src/apps/chat-bot/services/salesBrainEngine.ts`
 
 **Input gửi Gemini (1 lần):**
 - `systemInstruction` = playbook bậc thang + Sales Config sản phẩm + few-shot (đã compile gọn).
@@ -156,30 +174,32 @@ Quy tắc cứng (đưa vào playbook):
 ## 7. Cấu trúc file & đăng ký module
 
 ```
-src/apps/sales-brain/
-├── SalesBrain.tsx                 # entry (tab Setup | Simulator)
-├── types.ts
-├── store.ts                       # zustand + Supabase + localStorage fallback
-├── components/
+src/apps/chat-bot/
+├── ChatBot.tsx                    # ✅ P0 — entry (tab Cấu hình | Mô phỏng)
+├── types.ts                       # ✅ P0
+├── store.ts                       # ✅ P0 — useChatBotStore (zustand persist + userOutputsAPI)
+├── components/                    # P1+
 │   ├── ConfigPanel.tsx            # form Sales Config
 │   ├── ProductPicker.tsx
 │   ├── MediaMapEditor.tsx
 │   ├── Simulator.tsx              # khung chat QC
 │   ├── ChatBubble.tsx             # render song ngữ + media
 │   └── DebugSidebar.tsx
-├── services/
+├── services/                      # P2+
 │   ├── salesBrainEngine.ts        # 1 call Gemini → ActionPacket
 │   ├── compilePrompt.ts           # ghép playbook + config + few-shot (gọn)
 │   ├── playbook.ts                # text playbook bậc thang (sửa-in-place)
 │   └── hardScenarios.ts           # preset ca khó cho simulator
-└── SPEC.md                        # file này
+├── SPEC.md                        # file này
+└── PHASES.md                      # kế hoạch từng phase
 ```
 
-**Đăng ký (3 chỗ):**
-- `src/App.tsx`: import `SalesBrain`; thêm `'sales-brain': SalesBrain` vào `APP_COMPONENTS`;
-  thêm `'sales-brain': { name: 'Sales Brain', resetKeys: [] }` vào `APP_BOUNDARY_META`.
-- `src/components/Sidebar.tsx`: thêm NavItem `{ id: 'sales-brain', label: 'Sales Brain', icon: ... }`
-  vào nhóm phù hợp (gợi ý: nhóm "Nội dung" hoặc nhóm mới "Bán hàng").
+**Đăng ký (3 chỗ) — ✅ P0 DONE:**
+- `src/App.tsx`: import `ChatBot`; `'chat-bot': ChatBot` trong `APP_COMPONENTS`;
+  `'chat-bot': { name: 'Chat Bot', resetKeys: ['chat-bot-configs-v1'] }` trong `APP_BOUNDARY_META`;
+  `useChatBotStore.getState().hydrate()` trong onLogin.
+- `src/components/Sidebar.tsx`: NavItem `{ id: 'chat-bot', label: 'Chat Bot', icon: MessageCircle }`
+  trong nhóm mới **"Bán hàng"**.
 
 ---
 

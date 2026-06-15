@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { LayoutGrid, User, PenLine, Mic, Image, Eye, Settings, FlaskConical, RefreshCw, LogOut, Activity, Languages, Sparkles, Package, Megaphone, FolderOpen, Brain, Rocket, Search, History as HistoryIcon, Palette, ShoppingBag, TrendingUp } from 'lucide-react'
+import { LayoutGrid, User, PenLine, Mic, Image, Eye, Settings, FlaskConical, RefreshCw, LogOut, Activity, Languages, Sparkles, Package, Megaphone, FolderOpen, Brain, Rocket, Search, History as HistoryIcon, Palette, ShoppingBag, TrendingUp, MessageCircle } from 'lucide-react'
 import SettingsModal from './SettingsModal'
 import Diagnostic from './Diagnostic'
 import DraftsPanel from './DraftsPanel'
@@ -76,6 +76,12 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       { id: 'video-builder',   label: 'UGC Builder', icon: Sparkles },
       { id: 'video-translate', label: 'Dịch Video',  icon: Languages },
+    ],
+  },
+  {
+    label: 'Bán hàng',
+    items: [
+      { id: 'chat-bot', label: 'Chat Bot', icon: MessageCircle },
     ],
   },
 ]

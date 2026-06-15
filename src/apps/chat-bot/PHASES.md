@@ -86,6 +86,44 @@
 
 ---
 
+---
+
+## P5 — Backend + WhatsApp LIVE (MY) — MỤC TIÊU CUỐI
+
+**Mục tiêu:** Bot chat với KHÁCH THẬT trên WhatsApp khi chạy ads CTWA.
+
+**Bối cảnh kỹ thuật:** Frontend thuần không nhận webhook / giữ secret / chạy cron được →
+thêm **Vercel Serverless Functions** (`api/` trong repo) + **Supabase** (lưu hội thoại) + **Vercel Cron**.
+
+**Mình làm gì:**
+- `api/whatsapp/webhook.ts`: nhận tin khách từ WhatsApp Cloud API/respond.io.
+- Gọi **cùng engine** P2 (server-side) → ActionPacket.
+- `whatsappAdapter`: gửi reply (text/ảnh/video) qua WhatsApp API; lưu hội thoại + stage vào Supabase.
+- Secret (token WhatsApp, Gemini key server) trong env Vercel, KHÔNG để frontend.
+
+**Kết quả bạn thấy:** Chạy ads CTWA → khách nhắn WhatsApp → bot tự chat đúng như simulator.
+
+**Cách dùng & nghiệm thu:** Nhắn thử từ số thật vào số WhatsApp business → bot rep đúng bậc, đúng giá, song ngữ log lại để bạn xem.
+
+---
+
+## P6 — Pancake LIVE (VN / test Mess MY) + Follow-up engine
+
+**Mục tiêu:** Chạy được thị trường VN qua Pancake/Messenger, và follow-up tự động trong cửa sổ.
+
+**Mình làm gì:**
+- `api/pancake/webhook.ts` + `pancakeAdapter` (nhận tin + gửi tin + tạo đơn) — cùng engine.
+- **Vercel Cron** quét khách im → đẩy follow-up trong **72h (WA) / 24h (Mess)**, nấc giảm ≤ trần.
+- Quá cửa sổ: dừng / chuyển kênh (không spam).
+
+**Kết quả bạn thấy:** VN chạy qua Pancake; khách im được nhắc tự động đúng luật cửa sổ.
+
+**Cách dùng & nghiệm thu:** Test cả 2 kênh; follow-up bắn đúng thời điểm, không vượt cửa sổ, không phá giá.
+
+---
+
 ## Quy ước chung
+- **Channel-agnostic:** Simulator / WhatsApp / Pancake là ADAPTER cắm vào CÙNG engine (P2). Build 1 lần.
 - Sau mỗi phase: `npm run build`/`tsc -b` xanh rồi commit + push (auto-deploy Vercel).
-- STOP & hỏi nếu phát sinh ngoài spec. Playbook sửa-in-place. Không nối respond.io/Pancake trong MVP.
+- **Mọi lần fix:** đọc lại toàn bộ code → nghĩ chỗ sửa → rewrite/xóa/thêm đúng logic, KHÔNG vá chồng layer (app mới chưa test, tránh càng sửa càng mâu thuẫn).
+- STOP & hỏi nếu phát sinh ngoài spec. Playbook sửa-in-place.

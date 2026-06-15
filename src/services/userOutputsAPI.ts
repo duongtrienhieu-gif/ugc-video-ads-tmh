@@ -12,6 +12,7 @@
 //   • 'lab-content'             → src/apps/lab-content/store.ts
 //   • 'lip-sync-history'        → src/stores/lipSyncStore.ts
 //   • 'video-translate-history' → src/stores/videoTranslateStore.ts
+//   • 'chat-bot-config'         → src/apps/chat-bot/store.ts
 //
 // Every function gracefully degrades — returns null/false on any
 // failure so callers can keep their localStorage cache intact. Never
@@ -28,6 +29,7 @@ export type OutputKind =
   | 'lip-sync-history'
   | 'video-translate-history'
   | 'brand-kit'
+  | 'chat-bot-config'
 
 /** Minimum required fields any output item must expose. The full body
  *  lives in `payload_json`; the row-level fields are for fast listing
