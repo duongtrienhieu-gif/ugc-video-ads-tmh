@@ -328,3 +328,55 @@ export function validateShapeExecution(
   }
   return { ok: failures.length === 0, failures }
 }
+
+// ── P5 — Memory ANCHOR validator ─────────────────────────────────────────────
+// The script must plant ONE concrete reason/expectation EARLY and RESTATE it at
+// the CTA — the line that survives the COD cooling-off and wins the re-decision at
+// the door. LENIENT (only fail on clear misses → avoid retry storms): checks the
+// anchor (a) exists + is concrete (not pure vague praise), (b) is echoed early AND
+// at the CTA, (c) is HONEST (no absolute-cure / miracle phrasing). Language-light.
+const ANCHOR_VAGUE_ONLY_RE = /^(rất )?(tốt|tuyệt vời|tuyệt|đỉnh|xịn|chất lượng|đa năng|hoàn hảo|number one|terbaik|bagus|best)\.?$/i
+// Absolute-cure / miracle phrasing that gets refused at the door (VN + light MS).
+const ABSOLUTE_CURE_RE = /(hết hẳn|khỏi hẳn|dứt điểm|chữa khỏi|trị dứt|hết bệnh|sembuh terus|100\s*%|cam kết khỏi|đảm bảo khỏi)/i
+const MIRACLE_SPEED_RE = /\b\d+\s*(giây|phút|saat|minit)\b[^.!?]{0,30}(hết|khỏi|sembuh)/i
+
+function anchorTokens(s: string): string[] {
+  return s.toLowerCase().replace(/[.,!?;:"'“”…()\-–—]/g, ' ').split(/\s+/)
+    .filter((w) => w.length >= 3)
+}
+
+/** Validate the memory anchor. `anchor` is the model's declared anchor phrase.
+ *  Returns ok=true (lenient pass) when missing-but-can't-verify; only hard-fails on
+ *  clear contract breaks so it never burns a retry on a fine script. */
+export function validateAnchor(blocks: BodyBlocks, anchor: string, _lang?: string): ValidatorResult {
+  const failures: string[] = []
+  const a = (anchor ?? '').trim()
+
+  // (a) present + concrete (not pure vague praise)
+  if (a.length < 4) {
+    failures.push('Thiếu ANCHOR — chọn 1 lý do/kỳ vọng CỤ THỂ, THẬT (số liệu job chính / cơ chế / kết quả có mốc) và xuất ra field "anchor".')
+    return { ok: false, failures }   // can't check the rest without an anchor
+  }
+  if (ANCHOR_VAGUE_ONLY_RE.test(a)) {
+    failures.push(`ANCHOR quá chung ("${a}"). Phải CỤ THỂ — kèm số/đặc tính/kết quả (vd "bơm đầy lốp 3 phút", "đỡ rõ sau ~1 tuần"), không chỉ "tốt/đa năng".`)
+  }
+
+  // (b) echoed EARLY (hook/pain/discovery) AND at the CTA — fuzzy token overlap
+  const tokens = [...new Set(anchorTokens(a))].filter((t) => !/^\d+$/.test(t))   // skip bare numbers for overlap
+  if (tokens.length > 0) {
+    const early = `${blocks.hook} ${blocks.pain} ${blocks.discovery}`.toLowerCase()
+    const cta = (blocks.cta ?? '').toLowerCase()
+    const inEarly = tokens.some((t) => early.includes(t))
+    const inCta = tokens.some((t) => cta.includes(t))
+    if (!inEarly) failures.push(`ANCHOR ("${a}") chưa xuất hiện SỚM (trong hook / câu body đầu). Gài nó ngay đầu.`)
+    if (!inCta) failures.push(`ANCHOR ("${a}") chưa được NHẮC LẠI ở CTA (diễn đạt khác cũng được). Lặp lại để khách nhớ tới lúc nhận hàng.`)
+  }
+
+  // (c) honesty — no absolute-cure / miracle-speed anywhere in the body
+  const body = `${blocks.pain} ${blocks.discovery} ${blocks.benefit} ${blocks.cta}`
+  if (ABSOLUTE_CURE_RE.test(body) || MIRACLE_SPEED_RE.test(body)) {
+    failures.push('Kỳ vọng đang là CAM KẾT TUYỆT ĐỐI / phép màu (hết hẳn / chữa khỏi / 100% / X phút là hết) — đổi sang HEDGED thực tế ngôi 1 ("đa số ... sau khoảng ...", "mình thấy đỡ rõ sau ~..."). Cam kết tuyệt đối = bị bom hàng ở cửa.')
+  }
+
+  return { ok: failures.length === 0, failures }
+}

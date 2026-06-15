@@ -29,7 +29,7 @@ import {
 } from '../types'
 import { AD_STRUCTURES } from './adStructures'
 import { pickShapedViralHooks } from './hookViralPatterns'
-import { validateBody, validateShapeExecution, spellFixVi, type BodyBlocks } from './scriptValidator'
+import { validateBody, validateShapeExecution, validateAnchor, spellFixVi, type BodyBlocks } from './scriptValidator'
 import { buildMsBodyVocabBlock } from './bodyPatternsMs'
 import { buildShapeOverrideBlock } from './scriptShapes'
 import {
@@ -391,6 +391,21 @@ ${pronounRule(args.lang)}
                                   tìm gì đó nhâm nhi"
     bad:  "lười skincare" → good: "tối thứ Sáu uể oải, chỉ kịp vỗ 2 giọt rồi đi ngủ"
   Read the brief to pick the moment that fits the persona — universal across niches.
+- MEMORY ANCHOR (P5 — the single most important line for an order that STAYS, not
+  just one that's placed): pick the ONE most concrete, TRUE, memorable reason to
+  buy from the PRODUCT BRIEF — the strongest of: a real performance fact/number of
+  the MAIN job ("bơm đầy lốp ~3 phút, tự tắt"), a unique mechanism, or a concrete
+  felt RESULT with an EXPECTATION. ONE thing, a short phrase. Surface it ONCE EARLY
+  (in the fixed hook if it already carries it, else the first body sentence) and
+  RESTATE it — reworded, not copy-paste — in the CTA. Do NOT repeat it more than
+  these 2 places (over-repeating = ad-spam). Output it in the "anchor" field.
+- EXPECTATION must be CONCRETE but HONEST (this is what decides keep-vs-return):
+  the viewer needs a concrete expectation to decide, so DO give one — but for a
+  felt-RESULT product, frame the timeframe as REALISTIC + HEDGED + first-person/
+  typical, e.g. "mình thấy đỡ rõ sau khoảng 1 tuần", "đa số dùng đều 2-3 tuần mới
+  cảm nhận khác". NEVER an absolute cure or miracle speed ("hết hẳn sau 3 ngày",
+  "chữa khỏi", "100%"). If the chosen hook already states a timeframe, REUSE that
+  exact one — never introduce a second, contradicting number.
 - KEEP IT BELIEVABLE — a believable specific beats a spectacular lie. NO miracle
   instant results ("3 giây", "vài ngày là hết nhăn"), NO claiming it equals a
   medical procedure ("như đi tiêm filler / botox"), realistic timeframes, spoken
@@ -407,6 +422,7 @@ ${pronounRule(args.lang)}
 OUTPUT FORMAT:
 Return strict JSON with this exact shape (no markdown fences, no commentary):
 {
+  "anchor":    "string (the ONE concrete true reason/expectation — see MEMORY ANCHOR rule)",
   "blocks": {
     "hook":      "string",
     "pain":      "string",
@@ -530,6 +546,10 @@ const SEGMENT_RESPONSE_SCHEMA = {
       },
       required: ['hook', 'pain', 'discovery', 'benefit', 'cta'],
     },
+    // P5 (Anchor) — the ONE concrete, true, memorable reason/expectation the
+    // script plants early + restates at the CTA. Used by validateAnchor; harmless
+    // for the own-script segmenter (it just won't fill it).
+    anchor:      { type: 'string', maxLength: 140 },
   },
   required: ['blocks'],
 }
@@ -674,6 +694,8 @@ THE FIXED HOOK (continue the script DIRECTLY from this line; reproduce it verbat
   }
   // Force the hook verbatim — never trust the model to reproduce it exactly.
   blocks.hook = args.chosenHook
+  // P5 (Anchor) — the ONE concrete reason/expectation Gemini chose (best-effort).
+  let anchor = parseAnchor(raw)
 
   // P3p-D — silent VN spell fix on the 4 generated blocks (NOT the hook, which
   // was forced verbatim above and is the user's own picked text). Catches
@@ -701,7 +723,9 @@ THE FIXED HOOK (continue the script DIRECTLY from this line; reproduce it verbat
     // shape-execution check (does the body actually run the chosen shape).
     const bodyCheck = validateBody(bodyBlocks, args.structure, args.lang, resolvedHookShape)
     const shapeCheck = validateShapeExecution(bodyBlocks, args.shape, args.lang)
-    const check = { ok: bodyCheck.ok && shapeCheck.ok, failures: [...bodyCheck.failures, ...shapeCheck.failures] }
+    // P5 — anchor present + concrete + repeated (early↔cta) + honest (no absolute cure).
+    const anchorCheck = validateAnchor(bodyBlocks, anchor, args.lang)
+    const check = { ok: bodyCheck.ok && shapeCheck.ok && anchorCheck.ok, failures: [...bodyCheck.failures, ...shapeCheck.failures, ...anchorCheck.failures] }
     if (!check.ok) {
       // eslint-disable-next-line no-console
       console.log(`[generateBodyAroundHook] body check failed (${check.failures.length} issues), 1 retry…`)
@@ -726,6 +750,7 @@ Return the JSON in the same shape — the hook field unchanged, the 4 other bloc
         const blocks2 = tryParseSegments(raw2) ?? tryParseSegments(repairJsonString(raw2))
         if (blocks2) {
           blocks2.hook = args.chosenHook
+          const anchor2 = parseAnchor(raw2)
           const blk2: BodyBlocks = {
             hook: blocks2.hook,
             pain: blocks2.pain ?? '',
@@ -735,9 +760,10 @@ Return the JSON in the same shape — the hook field unchanged, the 4 other bloc
           }
           const c2body = validateBody(blk2, args.structure, args.lang, resolvedHookShape)
           const c2shape = validateShapeExecution(blk2, args.shape, args.lang)
-          const failures2 = c2body.failures.length + c2shape.failures.length
+          const c2anchor = validateAnchor(blk2, anchor2, args.lang)
+          const failures2 = c2body.failures.length + c2shape.failures.length + c2anchor.failures.length
           // Keep retry only if it actually fixed MORE than it broke.
-          if (failures2 < check.failures.length) blocks = blocks2
+          if (failures2 < check.failures.length) { blocks = blocks2; anchor = anchor2 }
         }
       } catch (err) {
         // eslint-disable-next-line no-console
@@ -943,6 +969,10 @@ HARD RULES:
   Support Booster", "Cooling Neck Fan"), say it naturally in ${langName} ("đai trợ
   lực khớp gối", "quạt đeo cổ"), NOT the English verbatim. KEEP a genuine BRAND
   token as-is. A ${langName} viewer must not hear a raw English name they wouldn't say.
+- P5 — if the hook implies a RESULT TIMEFRAME, keep it REALISTIC + HEDGED + first-
+  person/typical ("đỡ rõ sau khoảng 1 tuần", "đa số 2-3 tuần"), NEVER an absolute
+  cure or miracle speed ("hết hẳn sau 3 ngày", "chữa khỏi", "100%"). A believable
+  expectation converts AND survives delivery; a miracle promise gets refused at the door.
 - ${pronounRule(langName).replace(/^- /, '')}
 - LENGTH IS FLEXIBLE — do NOT pad and do NOT over-stuff product words; if adding the
   product makes it clunky, keep it tight. PRIORITISE that the hook reads GREAT and
@@ -1015,6 +1045,15 @@ function tryParseSegments(raw: string): Record<ScriptBlockId, string> | null {
     out[id] = v
   }
   return out
+}
+
+// P5 (Anchor) — best-effort pull of the top-level "anchor" field. Separate from
+// tryParseSegments so its return type (blocks) stays unchanged. Returns '' if absent.
+function parseAnchor(raw: string): string {
+  try {
+    const obj = JSON.parse(raw) as { anchor?: unknown }
+    return typeof obj?.anchor === 'string' ? obj.anchor.trim() : ''
+  } catch { return '' }
 }
 
 async function callGeminiWithRetry(args: {
