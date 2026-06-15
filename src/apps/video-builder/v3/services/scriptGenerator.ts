@@ -406,6 +406,22 @@ ${pronounRule(args.lang)}
   cảm nhận khác". NEVER an absolute cure or miracle speed ("hết hẳn sau 3 ngày",
   "chữa khỏi", "100%"). If the chosen hook already states a timeframe, REUSE that
   exact one — never introduce a second, contradicting number.
+- CONVICTION & TRUST (P5b — what turns a PLACED order into a KEPT order at the door).
+  WEAVE 2-3 of these into the blocks where they fit NATURALLY — do NOT add separate
+  sections, do NOT force all, NEVER fabricate. Pick what fits THIS product:
+    • QUALIFY (highest value — also FILTERS impulse-wrong orders that get refused):
+      one short line saying who it's FOR and, honestly, who it's NOT for / when you
+      don't need it ("hợp [đúng persona]; nhà đã có [giải pháp khác] thì khỏi cần").
+      Naming who it's NOT for reads as honest → builds trust + cuts returns.
+    • RISK REVERSAL in the CTA (only if plausible for a real seller): a concrete,
+      HONEST assurance — "đổi trả / bảo hành / lỗi hoàn tiền" — NOT a fake "đền 10 lần".
+    • STAKES: make the pain's CONSEQUENCE concrete + real (what actually happens if
+      unsolved) — honest, not catastrophizing ("kẹt giữa đường tối, con nhỏ trên xe").
+    • OBJECTION: pre-empt ONE real doubt a buyer of THIS product has, in a clause
+      ("không lo nóng máy / không nặng / dễ dùng, bấm 1 nút").
+    • SOCIAL PROOF: ONLY if there's a REAL figure in the brief (sold count / rating).
+      If none → SKIP entirely. NEVER invent "10k đã mua / 50 triệu người".
+  Keep these conversational + SPARSE — trust beats woven in, NOT an ad checklist.
 - KEEP IT BELIEVABLE — a believable specific beats a spectacular lie. NO miracle
   instant results ("3 giây", "vài ngày là hết nhăn"), NO claiming it equals a
   medical procedure ("như đi tiêm filler / botox"), realistic timeframes, spoken
