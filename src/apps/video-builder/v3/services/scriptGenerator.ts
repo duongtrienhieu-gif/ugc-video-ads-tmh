@@ -965,6 +965,13 @@ export async function generateHooks(params: GenerateHooksParams): Promise<HookVa
     text,
     estDurationSec: estimateReadDurationSec(text, params.lang),
   }))
+  // [4] #6 — VN gloss for DISPLAY when target lang ≠ vi, so the VN seller can read
+  // each hook's meaning + vibe before picking (the picker shows h.viGloss). ONE
+  // batched call; on any failure the hooks just render without a gloss (never break).
+  if (params.lang !== 'vi') {
+    const glosses = await translateHooksToVietnamese(params.geminiKey, fixed, params.lang)
+    hooks.forEach((h, i) => { if (glosses[i]) h.viGloss = glosses[i] })
+  }
   return hooks
 }
 
@@ -1043,21 +1050,67 @@ Output ${args.skeletons.length} adapted hooks now — one per line, same order.`
 // ── #6 — Vietnamese translation for display (never used as the script input) ──
 // Lets the Vietnamese user understand a non-Vietnamese script/hook without copying
 // to Google Translate. Keeps the casual TikTok tone, not a stiff literal gloss.
+//
+// Shared SPIRIT-aware system prompt (body + hooks). The whole point of this gloss
+// is so a VN seller can REVIEW a Malay script before approving it — a flat literal
+// translation hides whether the MS original is actually "máu lửa" and mangles rojak
+// slang ("racun" → "thuốc độc" is wrong). So we tell the model to carry the ENERGY +
+// translate slang by VIBE, not word-for-word. Display-only; never fed back as script.
+const MS_SPIRIT_TRANSLATE_SYSTEM =
+  `You translate short TikTok ad copy into natural, CASUAL, SPOKEN Vietnamese so a ` +
+  `Vietnamese seller can REVIEW its meaning and vibe before approving it. This is ` +
+  `DISPLAY-ONLY — never used as the actual script.\n` +
+  `- Carry the MEANING and the ENERGY/INTENT, not a word-for-word literal translation. ` +
+  `If the source is hype / high-energy / "máu lửa", the Vietnamese must feel just as ` +
+  `punchy — never flatten it into textbook Vietnamese.\n` +
+  `- The source may be Bahasa Malaysia with rojak slang, end-particles and English ` +
+  `code-switching. Translate slang by its VIBE, NOT literally: "racun / kena racun" → ` +
+  `"gây nghiện / cuốn dữ lắm" (NOT "thuốc độc"); "padu / power / memang padu" → "đỉnh / ` +
+  `xịn"; "best gila" → "ngon dữ / đỉnh thật"; end-particles "weh / lah / kan" → a natural ` +
+  `Vietnamese exclamation/filler tone, not a literal word. Keep code-switched English ` +
+  `words ("worth it", "game changer") as-is.\n` +
+  `- First person, friendly, a bit playful — the way a real person talks on TikTok.`
+
+/** Batch-translate the hook list into VN gloss in ONE Gemini call (numbered lines
+ *  in, numbered lines out). Returns [] on any failure so hook generation never
+ *  breaks. Same spirit-aware rules as the body translation. */
+export async function translateHooksToVietnamese(
+  apiKey: string, hooks: string[], fromLang: ScriptLang,
+): Promise<string[]> {
+  if (fromLang === 'vi' || hooks.length === 0) return []
+  const fromName = SCRIPT_LANG_GEMINI_NAME[fromLang]
+  const numbered = hooks.map((h, i) => `${i + 1}. ${h}`).join('\n')
+  const prompt =
+    `Translate each of these ${fromName} TikTok hooks into casual spoken Vietnamese. ` +
+    `Output EXACTLY ${hooks.length} lines, ONE translation per line, in the SAME order, ` +
+    `numbered "1. ", "2. " …  No quotes, no commentary:\n\n${numbered}`
+  try {
+    const out = await directGeminiText({
+      apiKey, systemInstruction: MS_SPIRIT_TRANSLATE_SYSTEM, prompt,
+      maxOutputTokens: 1024, temperature: 0.4,
+    })
+    return out
+      .split('\n')
+      .map((l) => l.replace(/^\s*\d+[.)]\s*/, '').replace(/^["'“”\-•]+|["'“”]+$/g, '').trim())
+      .filter((l) => l.length > 0)
+  } catch (e) {
+    // eslint-disable-next-line no-console
+    console.warn('[translateHooksToVietnamese] failed, no gloss:', e)
+    return []
+  }
+}
+
 export async function translateScriptToVietnamese(
   apiKey: string, text: string, fromLang: ScriptLang,
 ): Promise<string> {
   if (fromLang === 'vi' || !text.trim()) return text
   const fromName = SCRIPT_LANG_GEMINI_NAME[fromLang]
-  const systemInstruction =
-    `You translate short ad scripts into natural, CASUAL, SPOKEN Vietnamese — the way ` +
-    `a real person talks on TikTok (first person, friendly, a bit playful), NOT formal ` +
-    `or stiff. The translation is only so a Vietnamese reader understands the meaning ` +
-    `and tone; keep the energy, do not soften it into textbook Vietnamese.`
+  const systemInstruction = MS_SPIRIT_TRANSLATE_SYSTEM
   const prompt =
     `Translate this ${fromName} TikTok ad script into casual spoken Vietnamese. ` +
     `Output ONLY the Vietnamese translation — no notes, no labels, no quotes:\n\n${text}`
   const out = await directGeminiText({
-    apiKey, systemInstruction, prompt, maxOutputTokens: 2048, temperature: 0.3,
+    apiKey, systemInstruction, prompt, maxOutputTokens: 2048, temperature: 0.4,
   })
   return out.trim()
 }
