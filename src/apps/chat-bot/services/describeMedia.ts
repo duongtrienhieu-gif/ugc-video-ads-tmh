@@ -20,11 +20,12 @@ const SCHEMA: Record<string, unknown> = {
   required: ['role', 'caption'],
 }
 
-const PROMPT = `Đây là 1 ảnh dùng để bán hàng/quảng cáo. Phân loại + mô tả ngắn để 1 chatbot bán hàng biết KHI NÀO nên gửi ảnh này.
+const PROMPT = `Đây là 1 ảnh dùng để bán hàng/quảng cáo. Phân loại + MÔ TẢ để 1 chatbot bán hàng biết ảnh THỂ HIỆN GÌ và KHI NÀO nên gửi.
 Trả JSON { role, caption }:
 - role: chọn 1 ĐÚNG nội dung ảnh:
   hook (giật tít/thu hút) · pain (vấn đề/nỗi đau) · feature (tính năng/thành phần) · mechanism (cơ chế hoạt động) · usage (hướng dẫn dùng) · compare (so sánh/before-after) · proof (review/chat khách) · authority (báo chí/chuyên gia/chứng nhận) · promo (khuyến mãi/giá) · unboxing (mở hộp/dùng thử) · other.
-- caption: TIẾNG VIỆT, ≤15 từ, tả ĐÚNG cái ảnh thể hiện (vd "review KOL nghẹt mũi ban đêm", "ảnh trước-sau 3 ngày", "bảng giá combo mua 1 tặng 1"). KHÔNG bịa thông tin không có trong ảnh.`
+- caption: TIẾNG VIỆT, ≤20 từ. MÔ TẢ ảnh thể hiện gì + tình huống nên gửi. KHÔNG chép nguyên câu chữ/headline in trên ảnh. KHÔNG bịa thông tin không có trong ảnh.
+  Ví dụ tốt: "ảnh khách đau gối khi leo cầu thang — gửi khi khách than đau lúc lên xuống cầu thang"; "review 5 sao khách lớn tuổi — gửi khi khách do dự/nghi ngờ".`
 
 async function blobToBase64(blob: Blob): Promise<string> {
   return new Promise((resolve, reject) => {
