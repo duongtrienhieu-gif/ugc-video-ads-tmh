@@ -6,6 +6,16 @@ import MediaThumb from './MediaThumb'
 //  • Bot: bóng trái — mỗi BotMessage là 1 bóng (text song ngữ, hoặc ảnh/video).
 //    contentVi (gloss VN) hiện mờ dưới contentTarget khi khác nhau (thị trường MY).
 export default function ChatBubble({ turn }: { turn: ChatTurn }) {
+  if (turn.role === 'system') {
+    return (
+      <div className="flex justify-center py-1">
+        <span className="rounded-full bg-black/[0.05] px-3 py-1 text-[11px] font-medium text-gray-400">
+          {turn.customerText}
+        </span>
+      </div>
+    )
+  }
+
   if (turn.role === 'customer') {
     return (
       <div className="flex justify-end">

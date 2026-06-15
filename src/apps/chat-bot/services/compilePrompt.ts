@@ -81,8 +81,8 @@ export function compilePrompt(args: {
     .map((e, i) => `[Mẫu ${i + 1}]\n${e}`)
     .join('\n\n')
 
-  // ── Lịch sử (cắt 8 lượt gần nhất) ──
-  const recent = history.slice(-MAX_HISTORY_TURNS)
+  // ── Lịch sử (cắt 8 lượt gần nhất; bỏ ghi chú hệ thống) ──
+  const recent = history.filter((t) => t.role !== 'system').slice(-MAX_HISTORY_TURNS)
   const historyText = recent
     .map((t) => {
       if (t.role === 'customer') return `Khách: ${t.customerText ?? ''}`

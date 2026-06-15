@@ -100,11 +100,11 @@ export interface ActionPacket {
 
 // ── Simulator ────────────────────────────────────────────────────────────────
 
-/** Một lượt trong simulator: tin khách hoặc gói hành động của bot. */
+/** Một lượt trong simulator: tin khách / gói hành động của bot / ghi chú hệ thống. */
 export interface ChatTurn {
   id: string
-  role: 'customer' | 'bot'
-  /** Với customer: text khách gõ. Với bot: rỗng (xem `packet`). */
+  role: 'customer' | 'bot' | 'system'
+  /** Với customer: text khách gõ. Với system: ghi chú hiển thị (vd "khách im"). Bot: xem `packet`. */
   customerText?: string
   packet?: ActionPacket
   at: number
