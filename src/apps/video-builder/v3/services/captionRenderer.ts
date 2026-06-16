@@ -28,6 +28,7 @@ const ACCENT_TOKEN_RE = /^(rm\s?\d[\d.,]*k?|\$?\d[\d.,]*%?|\d+k|\d+%)$/i
 const HL_STOPWORDS = new Set([
   'và','là','của','cho','với','mà','thì','được','các','những','một','khi','đã','rồi','nha','nhé','đó','này','ấy','rất','quá','cũng','vẫn','còn','nó','mình','bạn',
   'dan','yang','untuk','dengan','ni','tu','je','dah','tak','ada','ini','itu',
+  'di','ke','dari','pada','akan','sudah','saya','awak','dia','kami','kita','nak','pun','lah','kan','atau','tapi','tetapi','sangat','memang','sebab','kerana','adalah','ialah','macam',
   'the','a','an','and','to','of','with','for','is','are','it','this','that','you','your',
 ])
 
@@ -40,13 +41,22 @@ const tokenizeWords = (s?: string) => (s ?? '').toLowerCase()
  *  The renderer still highlights exactly ONE word per chunk and FALLS BACK to the longest
  *  content word, so a caption ALWAYS shows a coloured keyword even if the set misses it. */
 export function deriveCaptionHighlights(anchor?: string, bodyText?: string): string[] {
-  const fromAnchor = [...new Set(tokenizeWords(anchor).filter((w) => w.length >= 2 && !HL_STOPWORDS.has(w)))]
+  const anchorToks = tokenizeWords(anchor)
+  const fromAnchor = [...new Set(anchorToks.filter((w) => w.length >= 2 && !HL_STOPWORDS.has(w)))]
+  // P5z5 — also key PHRASES: consecutive content-word pairs in the anchor ("chất xơ",
+  // "đường huyết", "óc chó"). Listed FIRST → the renderer prefers a real 2-word term over
+  // splitting it / picking one arbitrary word. Universal (VN+MS+EN — stopword-gated only).
+  const bigrams: string[] = []
+  for (let i = 0; i < anchorToks.length - 1; i++) {
+    const a = anchorToks[i], b = anchorToks[i + 1]
+    if (a.length >= 2 && b.length >= 2 && !HL_STOPWORDS.has(a) && !HL_STOPWORDS.has(b)) bigrams.push(`${a} ${b}`)
+  }
   const freq = new Map<string, number>()
   for (const w of tokenizeWords(bodyText)) {
     if (w.length >= 4 && !HL_STOPWORDS.has(w)) freq.set(w, (freq.get(w) ?? 0) + 1)
   }
   const fromBody = [...freq.entries()].sort((a, b) => b[1] - a[1] || b[0].length - a[0].length).map((e) => e[0])
-  return [...new Set([...fromAnchor, ...fromBody])].slice(0, 8)
+  return [...new Set([...bigrams, ...fromAnchor, ...fromBody])].slice(0, 12)
 }
 
 let fontsInjected = false
@@ -113,6 +123,19 @@ function normWord(w: string): string {
   return w.toLowerCase().replace(/[.,!?;:"'“”…()\-–—]/g, '')
 }
 
+/** A "content" word worth pairing into a 2-word accent phrase (not a function word).
+ *  Stopword-gated → universal VN/MS/EN. */
+const isContentWord = (n: string): boolean => n.length >= 2 && !HL_STOPWORDS.has(n) && /\p{L}/u.test(n)
+
+/** P5z5 — grow a single accent index into a 1-2 word PHRASE: pair it with an adjacent
+ *  CONTENT word (prefer the next, else the previous) so "chất"→"chất xơ", "đường"→"đường
+ *  huyết". Stays a single word when both neighbours are function words. */
+function phraseSpan(i: number, norm: string[]): [number, number] {
+  if (i + 1 < norm.length && isContentWord(norm[i + 1])) return [i, i + 1]
+  if (i - 1 >= 0 && isContentWord(norm[i - 1])) return [i - 1, i]
+  return [i, i]
+}
+
 /** Render a caption chunk to a transparent canvas (text only, no background).
  *  `highlightTerms` = script keywords (from the anchor) to colour with the accent. */
 export async function renderCaptionCanvas(
@@ -148,20 +171,34 @@ export async function renderCaptionCanvas(
   const strokeW = p.strokeFrac > 0 ? FONT_PX * p.strokeFrac : 0
   const accentMode = p.accentMode ?? 'color'
 
-  // Choose ONE accent word for the whole caption (so the highlight is always visible,
-  // never multiple). Priority: a price/number token → a script-keyword (longest match)
-  // → the longest meaningful word (fallback). Indexed across BOTH lines in reading order.
+  // P5z5 — Accent a 1-2 word PHRASE (not one arbitrary word). Priority, indexed across BOTH
+  // lines in reading order: price/number token → a key BIGRAM present in the chunk → a
+  // single script-keyword (grown to a 2-word phrase) → the longest content word (grown).
   const allWords = lines.flatMap((l) => l.split(' '))
-  let accIdx = allWords.findIndex((w) => ACCENT_TOKEN_RE.test(w))
-  if (accIdx < 0) {
-    let best = -1, bestLen = 0
-    allWords.forEach((w, i) => { const n = normWord(w); if (hlSet.has(n) && n.length > bestLen) { best = i; bestLen = n.length } })
-    accIdx = best
+  const norm = allWords.map(normWord)
+  const hlBigrams = new Set([...hlSet].filter((t) => t.includes(' ')))
+  const hlSingles = new Set([...hlSet].filter((t) => !t.includes(' ')))
+  let accStart = -1, accEnd = -1
+  // 1) a price / number token (always a single token like "RM79", "50%")
+  const numIdx = allWords.findIndex((w) => ACCENT_TOKEN_RE.test(w))
+  if (numIdx >= 0) { accStart = numIdx; accEnd = numIdx }
+  // 2) a key bigram literally present (two consecutive words forming a term)
+  if (accStart < 0) {
+    for (let i = 0; i < norm.length - 1; i++) {
+      if (hlBigrams.has(`${norm[i]} ${norm[i + 1]}`)) { accStart = i; accEnd = i + 1; break }
+    }
   }
-  if (accIdx < 0) {
+  // 3) a single script-keyword (longest) → grow to a 2-word phrase
+  if (accStart < 0) {
+    let best = -1, bestLen = 0
+    norm.forEach((n, i) => { if (hlSingles.has(n) && n.length > bestLen) { best = i; bestLen = n.length } })
+    if (best >= 0) [accStart, accEnd] = phraseSpan(best, norm)
+  }
+  // 4) fallback: the longest content word → grow to a 2-word phrase
+  if (accStart < 0) {
     let best = -1, bestLen = 2
-    allWords.forEach((w, i) => { const n = normWord(w); if (n.length > bestLen && !HL_STOPWORDS.has(n)) { best = i; bestLen = n.length } })
-    accIdx = best
+    norm.forEach((n, i) => { if (n.length > bestLen && !HL_STOPWORDS.has(n)) { best = i; bestLen = n.length } })
+    if (best >= 0) [accStart, accEnd] = phraseSpan(best, norm)
   }
   const canAccent = !!p.accent && p.accent !== p.fill
 
@@ -174,7 +211,7 @@ export async function renderCaptionCanvas(
     for (let wi = 0; wi < words.length; wi++) {
       const word = words[wi]
       const ww = ctx.measureText(word).width
-      const isAccent = canAccent && gi === accIdx
+      const isAccent = canAccent && gi >= accStart && gi <= accEnd
       ctx.save()
       // Neon glow ONLY on the accent word in 'glow' presets (a colour bloom, no box).
       if (isAccent && accentMode === 'glow') {
