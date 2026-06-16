@@ -95,6 +95,7 @@ interface AdsVideoStoreState {
   setHybridFinal:         (videoRef: string) => void
   /** P5k — burned-caption settings (preset + on/off), applied at assemble. */
   setHybridCaption:       (patch: { captionsOn?: boolean; captionPreset?: import('../services/captionPresets').CaptionPresetId; bannerOn?: boolean; bannerPreset?: import('../services/bannerPresets').BannerPresetId; bannerText?: string }) => void
+  setHybridAssemble:      (patch: { assembling?: boolean; assembleRatio?: number; assembleStage?: string }) => void
   clearHybrid:            () => void
   /** Z32 — set/replace creator video config (setting + energy + preset + wardrobe + resolution) */
   setCreatorVideoConfig: (config: CreatorVideoConfig) => void
@@ -244,6 +245,9 @@ function loadFromStorage(): V3PipelineState | null {
     if (parsed.hybrid) {
       const h = parsed.hybrid as unknown as Record<string, unknown>
       if ('resolution' in h) delete h.resolution
+      // P5s — assemble is in-memory progress; an F5 killed the ffmpeg promise, so a
+      // persisted `assembling:true` would stick forever. Always reset on hydrate.
+      h.assembling = false; h.assembleRatio = 0; h.assembleStage = ''
     }
     // P3j — AdStructure collapsed from 8 sub-frameworks → 2 groups. Map any
     // persisted old value onto its group so the picker doesn't crash.
@@ -477,6 +481,9 @@ export const useAdsVideoStore = create<AdsVideoStoreState>((set, get) => ({
     commit(set, get, (s) => ({ ...s, hybrid: { ...s.hybrid, finalVideoRef: videoRef } })),
 
   setHybridCaption: (patch) =>
+    commit(set, get, (s) => ({ ...s, hybrid: { ...s.hybrid, ...patch } })),
+
+  setHybridAssemble: (patch) =>
     commit(set, get, (s) => ({ ...s, hybrid: { ...s.hybrid, ...patch } })),
 
   clearHybrid: () =>

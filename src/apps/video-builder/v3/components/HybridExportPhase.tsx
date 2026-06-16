@@ -34,6 +34,7 @@ export default function HybridExportPhase() {
   const kieApiKey       = useSettingsStore((s) => s.kieApiKey)
 
   const setHybridCaption = useAdsVideoStore((s) => s.setHybridCaption)
+  const setHybridAssemble = useAdsVideoStore((s) => s.setHybridAssemble)
   const hybrid = state.hybrid
   const ev = state.exportVariation
   const script = state.scriptBrain.script
@@ -87,10 +88,12 @@ export default function HybridExportPhase() {
   // Final assembled video is ALWAYS 720p — hard constant, not user-selectable.
   const resolution = FINAL_RES
 
-  const [assembling, setAssembling] = useState(false)
-  // P4b — real ffmpeg assemble progress: ratio 0-1 + the current stage label.
-  const [assembleRatio, setAssembleRatio] = useState(0)
-  const [assembleStage, setAssembleStage] = useState('')
+  // P5s — assemble progress lives in the STORE (not local state) so switching the
+  // stepper tab mid-ghép (which unmounts this component) doesn't lose it — the running
+  // assemble promise keeps writing to the store and the bar reconnects on return.
+  const assembling    = hybrid.assembling ?? false
+  const assembleRatio = hybrid.assembleRatio ?? 0
+  const assembleStage = hybrid.assembleStage ?? ''
   const [error, setError] = useState('')
   const finalUrl = useAssetUrl(hybrid.finalVideoRef ?? undefined)
   const pickedThumbUrl = useAssetUrl(ev.pickedThumbnailRef ?? undefined)
@@ -98,18 +101,19 @@ export default function HybridExportPhase() {
   const makeVideo = async () => {
     const h = useAdsVideoStore.getState().state.hybrid
     if (!script) return
-    setAssembling(true); setError(''); setAssembleRatio(0); setAssembleStage('Đang nạp ffmpeg…')
+    if (h.assembling) return   // P5s — already ghép (survives a tab switch) → don't double-start
+    setError(''); setHybridAssemble({ assembling: true, assembleRatio: 0, assembleStage: 'Đang nạp ffmpeg…' })
     try {
       const videoRef = await assembleFromHybridState(h, script, resolution, {
-        onProgress: (r) => setAssembleRatio(r),
-        onStage: (label) => setAssembleStage(label),
+        onProgress: (r) => setHybridAssemble({ assembleRatio: r }),
+        onStage: (label) => setHybridAssemble({ assembleStage: label }),
         bannerSlogan: bannerText,
       })
       setHybridFinal(videoRef)
       addToast('✓ Đã tạo video', 'success')
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e); setError(msg); addToast(`Tạo video lỗi: ${msg.slice(0, 120)}`, 'error')
-    } finally { setAssembling(false) }
+    } finally { setHybridAssemble({ assembling: false }) }
   }
 
   const genThumbnails = async () => {

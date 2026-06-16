@@ -762,6 +762,13 @@ export interface HybridState {
   /** P5z2 — user-edited banner text (overrides the AI hook). Persisted per project so
    *  F5 / re-assemble keeps it. Empty = fall back to the AI hook. */
   bannerText?: string
+  /** P5s — in-flight ASSEMBLE progress, kept in the store (not component state) so a
+   *  tab switch mid-ghép doesn't lose it: navigating away unmounts HybridExportPhase, but
+   *  the assemble promise keeps writing here → on return the bar reconnects. Reset to
+   *  false on hydrate (an F5 kills the promise, so a persisted `true` would stick). */
+  assembling?: boolean
+  assembleRatio?: number
+  assembleStage?: string
 }
 
 export function createEmptyHybridState(): HybridState {
