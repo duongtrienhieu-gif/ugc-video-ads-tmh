@@ -472,13 +472,17 @@ ${pronounRule(args.lang)}
       trên xe, gọi cứu hộ cả tiếng") — push the fear, that's fine.
     • OBJECTION: smash ONE real doubt in a clause ("không lo nóng máy / không nặng").
   Keep them woven + punchy (energy!), NOT a flat checklist.
-- SOCIAL PROOF — MANDATORY, and it must be its OWN clear, punchy WIDER-PUBLIC CROWD beat.
-  A soft personal aside or a FAMILY-only line ("nhỏ bạn mình cũng mê", "cả nhà mình ai
-  cũng khen") is too weak and does NOT count — the proof must be the OUTSIDE crowd:
-  STRANGERS / buyers / a number / reviews / sold-out. EVERY script MUST contain ONE such
-  explicit HERD line the viewer instantly reads as PROOF — popularity, sold-out, repeat
-  buyers, or reviews — because the video turns this exact line into a believable social-
-  proof CARD (a Facebook-post / review screenshot) on screen. State it as a STANDALONE
+- SOCIAL PROOF — MANDATORY, and it must be its OWN clear, punchy WIDER-PUBLIC CROWD beat
+  about MANY people. Does NOT count (too weak): a family-only line ("cả nhà mình ai cũng
+  khen"), a soft personal aside ("nhỏ bạn mình cũng mê"), AND — important — a SINGLE
+  reviewer / one expert / one chef ("một chị đầu bếp review nó", "có người nổi tiếng dùng").
+  One person endorsing it is NOT herd proof. The beat MUST be the PLURAL crowd: a NUMBER
+  ("mấy nghìn người mua rồi"), SOLD-OUT ("bán cháy hàng mấy đợt"), REPEAT buyers ("ai mua
+  cũng quay lại đặt thêm"), or MANY ratings ("review toàn 5 sao", "cả ngàn đánh giá 5 sao").
+  EVERY script MUST contain ONE such explicit HERD line — because the video turns this exact
+  line into a believable social-proof CARD (a Facebook-post / review screenshot) on screen.
+  (A single chef/expert can ALSO appear as a separate authority beat, but it does NOT
+  replace the crowd line.) State it as a STANDALONE
   sentence the viewer can't check at the door, e.g. "mấy nghìn người mua rồi", "bán cháy
   hàng mấy đợt liền", "ai mua cũng quay lại đặt thêm", "review toàn 5 sao". (These examples
   are ILLUSTRATIVE Vietnamese — write the line in ${args.lang} per the LANGUAGE rule below.)

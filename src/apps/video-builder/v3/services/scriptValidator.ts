@@ -362,8 +362,13 @@ export function validateBody(
 // Cross-language crowd / social-proof cues (VN + MS + EN). Broad on purpose — rule 8
 // is a presence check, so a wide net keeps false-fails rare (it fires only when NO
 // crowd beat at all is present). Mirrors brollDirector's SOCIAL_PROOF_CUE_RE.
+// P5z3 — must signal a PLURAL crowd. Dropped single-capable cues (review / đánh giá /
+// recommend / ulasan / puas hati / verified) because a LONE reviewer ("một chị đầu bếp
+// review nó") was false-passing as crowd proof. Kept only counts / sold-out / repeat /
+// many-people / star-ratings / community (VN + MS + EN). "review toàn 5 sao" still passes
+// via "5 sao"; "cả ngàn đánh giá" via "ngàn".
 const SOCIAL_PROOF_CUE_RE =
-  /ngh[ìi]n ng[ưu][ờo]i|ng[àa]n ng[ưu][ờo]i|m[oọ]i ng[ưu][ờo]i|ai (?:d[ùu]ng|mua)|nhi[eề]u ng[ưu][ờo]i|b[áa]n ch[aạ]y|ch[áa]y h[àa]ng|quay l[aạ]i mua|mua l[aạ]i|đ[áa]nh gi[áa]|l[ưu][ợo]t (?:mua|b[áa]n)|ng[ưu][ờo]i (?:mua|đ[ặa]t)|5 sao|n[ăa]m sao|c[oộ]ng đ[ồo]ng|\b(?:review|reviews|sold|sold[- ]?out|repeat|verified|viral|popular|recommend)\b|ramai|terjual|ulasan|bintang|\blaku\b|puas hati|semua orang|orang (?:beli|guna|pakai|cuba|recommend)/i
+  /ngh[ìi]n ng[ưu][ờo]i|ng[àa]n ng[ưu][ờo]i|m[oọ]i ng[ưu][ờo]i|ai (?:d[ùu]ng|mua)|nhi[eề]u ng[ưu][ờo]i|b[áa]n ch[aạ]y|ch[áa]y h[àa]ng|quay l[aạ]i mua|mua l[aạ]i|l[ưu][ợo]t (?:mua|b[áa]n)|ng[ưu][ờo]i (?:mua|đ[ặa]t)|5 sao|n[ăa]m sao|c[oộ]ng đ[ồo]ng|\b(?:sold|sold[- ]?out|repeat|viral|popular)\b|ramai|terjual|bintang|\blaku\b|semua orang|orang (?:beli|guna|pakai|cuba)/i
 
 // ── P4j — shape-execution validator ──────────────────────────────────────────
 // validateBody checks symptom / CTA / banned-openings but NOT whether the body
