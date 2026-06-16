@@ -116,7 +116,7 @@ const IDEA_SCHEMA = {
 /** Generate ONE grounded idea per angle in a single batch call. Ensures the deep vision
  *  brief first (1 cached call if missing). Returns ideas keyed by angle. */
 export async function generateStudioIdeas(
-  product: Product, lang: ScriptLang, geminiKey: string,
+  product: Product, _lang: ScriptLang, geminiKey: string,   // _lang: ideas are always Vietnamese now
 ): Promise<{ ideas: Record<string, StudioIdea>; product: Product }> {
   // Deep vision-brief (product fidelity foundation) — generate + cache if absent.
   let p = product
@@ -126,7 +126,9 @@ export async function generateStudioIdeas(
       if (vb) p = { ...p, visualBrief: vb }
     } catch { /* fall back to text-only context */ }
   }
-  const langName = SCRIPT_LANG_GEMINI_NAME[lang]
+  // NOTE: operator-facing text (ideaVi / suggestedLine) is ALWAYS Vietnamese — the operator
+  // works in VN regardless of target market. Market language only materialises in the FINAL
+  // audio (translateLineForMarket runs at TTS time).
   const productContext = buildProductContextBlock(p)
   const angleList = STUDIO_ANGLES.map((a) => `- ${a.id}: ${a.labelVi} — ${a.descVi}`).join('\n')
 
@@ -139,14 +141,14 @@ ${angleList}
 
 For EACH angle output:
 - angle: the exact id.
-- ideaVi: ONE short line in ${langName} describing the scene (what the viewer sees).
+- ideaVi: ONE short line in VIETNAMESE describing the scene (for the Vietnamese operator to read — ALWAYS Vietnamese, NEVER the target-market language).
 - conceptPromptEn: ONE vivid ENGLISH i2v prompt — SHOT TYPE (macro / POV-hands / wide /
   over-the-shoulder) + a concrete ACTION + the real SETTING, grounded in the product. For
   'mechanism3d' = a clean 3D cross-section animation, NO people/packaging/text. For 'reaction' =
   a tight shot of a genuine delighted/surprised facial reaction right after using the product.
   NEVER ask the video model to render text.
-- suggestedLine: ONE short spoken line in ${langName} that fits this scene (used only if
-  voice is on). Native, punchy.
+- suggestedLine: ONE short spoken line in VIETNAMESE that fits this scene (the operator reads/
+  edits it in VN; it is auto-translated to the target market language at voice time). Natural, punchy.
 
 Output STRICT JSON { "ideas": [ ${STUDIO_ANGLES.length} objects, SAME order ] }. No markdown.`
 
@@ -240,7 +242,6 @@ export async function engineerScenePrompt(args: {
   briefVi?: string
 }): Promise<{ conceptPromptEn: string; noteVi: string; spec: SceneSpec }> {
   const spec = resolveSceneSpec(args.angle, args.toggles)
-  const langName = SCRIPT_LANG_GEMINI_NAME[args.lang]
   const productContext = buildProductContextBlock(args.product)
   const localeHint = (!args.toggles.avatar && spec.role !== 'mechanism3d')
     ? ` Setting / casting locale: ${LOCALE_HINT[args.lang]}.` : ''
@@ -261,7 +262,7 @@ export async function engineerScenePrompt(args: {
     systemInstruction:
       `You are a UGC ad B-ROLL prompt engineer. Write ONE vivid ENGLISH image-to-video prompt — ` +
       `SHOT TYPE + concrete ACTION + real SETTING — grounded in the product, for the scene below.${productContext}\n${ANTI_DRIFT}\n` +
-      `Output STRICT JSON {"conceptPromptEn":"…","noteVi":"<1 short ${langName} line: what the clip shows>"}.`,
+      `Output STRICT JSON {"conceptPromptEn":"…","noteVi":"<1 short VIETNAMESE line for the operator: what the clip shows>"}.`,
     prompt: `${cfg}\n${args.briefVi
       ? `User scene description (written in VIETNAMESE — understand it and build THIS exact scene, grounded in the product): "${args.briefVi}"`
       : `Idea seed: ${args.idea?.conceptPromptEn ?? args.idea?.ideaVi ?? args.angle.descVi}`}${variantNudge}\nWrite the prompt.`,
@@ -279,7 +280,7 @@ export async function engineerScenePrompt(args: {
         `CRITICAL: if an avatar is present its FACE STAYS VISIBLE and it keeps actively using the product — you must ` +
         `NOT remove the person, NOT replace them with anonymous hands, NOT turn it into a product-only shot. Keep the ` +
         `creator performing the real action.${ANTI_DRIFT}\n` +
-        `Output STRICT JSON {"conceptPromptEn":"<fixed prompt>","noteVi":"<1 short ${langName} line>"}.`,
+        `Output STRICT JSON {"conceptPromptEn":"<fixed prompt>","noteVi":"<1 short VIETNAMESE line for the operator>"}.`,
       prompt: `Scene: ${cfg}\nPROMPT TO REVIEW:\n"""${draft.conceptPromptEn}"""`,
       maxOutputTokens: 700, temperature: 0.3, thinkingBudget: 0, responseMimeType: 'application/json', responseSchema: ENGINEER_SCHEMA,
     })
