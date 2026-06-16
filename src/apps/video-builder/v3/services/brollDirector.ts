@@ -652,9 +652,12 @@ FOUR cut ROLES (set "role"):
            · gadget/tool → the relieved "finally, done in seconds" reaction
            · home/clean → stepping back to admire the spotless result
          Do NOT force the product into a beat that is purely about how it FEELS.
-     • "cameraFraming": "hands_noface" (only hands + product in its setting, NO
-       face — use GENEROUSLY for usage/demo) or "creator" (a person / reaction /
-       emotion — use for the human payoff beats above).
+     • "cameraFraming": "hands_noface" — ONLY for a product used ON A SURFACE or held/
+       operated IN-HAND (scoop from a jar, pour, snap, wipe a counter, operate a gadget),
+       NO face. For any usage ON THE BODY (apply / wear / eat / drink — skin, face, hair,
+       neck, knee, wrist…) use "creator": the person actually doing it, FACE VISIBLE (a
+       head-less body renders deformed). Also "creator" for reaction / emotion / human-
+       payoff beats.
    ⚠ conceptPrompt is REQUIRED + DISTINCT for EVERY broll. This is the SINGLE most
    important thing you write — it is the literal instruction the video model
    renders. A weak / vague / repeated conceptPrompt is why an ad looks like the
@@ -697,13 +700,14 @@ FOUR cut ROLES (set "role"):
    broll/lips), and NEVER make the final CTA cut a social_proof card.
 
 STICKERS (separate array — 0-credit text pops that ride on a cut, REPLACING the
-old overlays). Be GENEROUS — stickers are FREE and do NOT compete with the cuts,
-so pop one on EVERY beat where the voice names something concrete: a number, a
-spec, a measurement, a feature, a benefit, a time, a price, a discount, a free
-gift, a safety/result claim. Cover MOST such moments, not just two or three — a
-spec/feature-heavy product (gadget, tool, appliance) should get MANY stickers; an
-emotional/abstract script naturally gets fewer. Scale to what THIS script actually
-names — never pad with vague stickers, but never leave a concrete callout bare.
+old overlays). Be GENEROUS — stickers are FREE — BUT a sticker is a TAG that COMPRESSES
+HARD DATA, never a repeat of the spoken line. Pop one on every beat where the voice names
+a CONCRETE DATUM that shrinks to a short tag: a number, a spec, a measurement, a %, an
+ingredient / active, a time, a price, a discount, a free gift. A vague "benefit / it works
+great / result claim" is the CAPTION's job — do NOT sticker it. Cover MOST such data
+moments — a spec/feature-heavy product (gadget, tool, appliance) gets MANY; an emotional/
+abstract script gets fewer. Scale to what THIS script names — never pad, never leave a
+concrete number/spec bare.
   • ⛔ NON-VERBATIM (critical) — a sticker COMPRESSES the point into a punchy TAG (a
     number, %, price, ingredient, proof, offer, badge), it must NOT restate the spoken
     sentence. That line is ALREADY burned on-screen as a CAPTION, so a sticker repeating
