@@ -259,6 +259,17 @@ const I2V_CR_PER_SEC: Record<'480p' | '720p' | '1080p', number> = {
   '1080p': 7,
 }
 
+/** Seedance 1.5 Pro renders ONLY 4 / 8 / 12s. Pick the SMALLEST that gives the assembler
+ *  enough source to fill the director's slot: inserts are sped up by ~INSERT_SPEED (1.3×)
+ *  after a ~0.35s lead-in skip, so a slot of S seconds needs ≈ S×1.3 + 0.85s of footage.
+ *  The renderer AND the credit estimate both call this, so the shown cost always matches the
+ *  rendered length (no hard 8s fit; short cuts get the cheap 4s, long ones 12s).
+ *  ⚠️ Keep the 1.3 in sync with INSERT_SPEED in hybridAssembler/finalVideoAssembler. */
+export function pickSeedanceDuration(slotDurSec: number): 4 | 8 | 12 {
+  const needed = Math.max(1, slotDurSec) * 1.3 + 0.85
+  return needed <= 4 ? 4 : needed <= 8 ? 8 : 12
+}
+
 export function estimateInsertCredits(
   mode: InsertRenderMode = 'video',
   resolution: '480p' | '720p' | '1080p' = '480p',
@@ -266,10 +277,9 @@ export function estimateInsertCredits(
 ): number {
   if (mode === 'sticker') return 0           // Z98 #5 — local canvas PNG, no AI call
   if (mode === 'ken_burns') return V3_CREDIT_COST.keyframe
-  // Mirror the renderer's clamp: the insert renderer always renders 6-8s regardless
-  // of the director's durationSec, so we bill for what will actually be charged —
-  // never less than the clamp floor.
-  const billedSec = Math.max(6, Math.min(8, Math.ceil(durationSec)))
+  // Bill EXACTLY the Seedance length the renderer will use (4/8/12s), so the cost chip
+  // matches reality — no more under-reporting from a 6-8 clamp.
+  const billedSec = pickSeedanceDuration(durationSec)
   const videoCr = Math.round(I2V_CR_PER_SEC[resolution] * billedSec)
   return V3_CREDIT_COST.keyframe + videoCr
 }

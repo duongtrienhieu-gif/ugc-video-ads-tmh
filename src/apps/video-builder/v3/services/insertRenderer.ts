@@ -25,6 +25,7 @@ import type { Model, Product } from '../../../../stores/types'
 import type {
   ActionInsertClip, InsertRenderStage, ActionPresetId, InsertRenderMode, CameraFraming,
 } from '../types'
+import { pickSeedanceDuration } from '../types'
 import { ACTION_PRESETS } from './actionPresets'
 import { getFFmpeg } from './ffmpegLoader'
 import { pickProductRefIndexes } from './insertRefPicker'
@@ -559,8 +560,10 @@ export async function renderInsert(
   // less logic-drift). Keyframe goes in as first_frame_image_url so the GPT-4o
   // face+product lock is preserved; prompt + director (brain) UNCHANGED — only the
   // animate model swapped. VIDEO-ONLY. ~11cr/clip at 480p. Static-image auto-fallback
-  // (Z63/Z76) still covers any failure. (Duration kept 6-8s; assembler trims.)
-  const videoDuration = Math.max(6, Math.min(8, Math.ceil(params.durationSec ?? 6)))
+  // (Z63/Z76) still covers any failure. Seedance renders ONLY 4/8/12s → pick the
+  // smallest that covers THIS scene's slot (assembler trims the rest). Short cuts get
+  // the cheap 4s, longer ones 8/12 — credit chip uses the SAME pickSeedanceDuration.
+  const videoDuration = pickSeedanceDuration(params.durationSec ?? 4)
 
   // Z77 — keep b-roll people SILENT. Grok i2v otherwise animates the person
   // mouthing ENGLISH words (it's English-trained), which clashes with the
