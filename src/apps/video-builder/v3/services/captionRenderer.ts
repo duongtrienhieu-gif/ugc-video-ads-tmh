@@ -31,18 +31,22 @@ const HL_STOPWORDS = new Set([
   'the','a','an','and','to','of','with','for','is','are','it','this','that','you','your',
 ])
 
-/** P5y (ii) — highlight terms from the script's KEY (its anchor — what the brain
- *  identified as THE reason). Tokenise the anchor, drop stopwords, prefer numeric +
- *  longest, cap 3 → those words get the accent colour in any caption chunk they appear
- *  in. Universal, deterministic, 0 cost. */
-export function deriveCaptionHighlights(anchor?: string): string[] {
-  const toks = (anchor ?? '').toLowerCase()
-    .replace(/[.,!?;:"'“”…()\-–—]/g, ' ')
-    .split(/\s+/).map((w) => w.trim()).filter(Boolean)
-    .filter((w) => w.length >= 2 && !HL_STOPWORDS.has(w))
-  const uniq = [...new Set(toks)]
-  uniq.sort((a, b) => (/\d/.test(b) ? 1 : 0) - (/\d/.test(a) ? 1 : 0) || b.length - a.length)
-  return uniq.slice(0, 3)
+const tokenizeWords = (s?: string) => (s ?? '').toLowerCase()
+  .replace(/[.,!?;:"'“”…()\-–—]/g, ' ').split(/\s+/).map((w) => w.trim()).filter(Boolean)
+
+/** P5z (ii) — script keyword SET to bias which word gets the accent. Sourced from BOTH
+ *  the anchor (the brain's KEY) AND the recurring meaningful words in the body — so the
+ *  set is rarely empty (the old anchor-only version was empty → nothing ever coloured).
+ *  The renderer still highlights exactly ONE word per chunk and FALLS BACK to the longest
+ *  content word, so a caption ALWAYS shows a coloured keyword even if the set misses it. */
+export function deriveCaptionHighlights(anchor?: string, bodyText?: string): string[] {
+  const fromAnchor = [...new Set(tokenizeWords(anchor).filter((w) => w.length >= 2 && !HL_STOPWORDS.has(w)))]
+  const freq = new Map<string, number>()
+  for (const w of tokenizeWords(bodyText)) {
+    if (w.length >= 4 && !HL_STOPWORDS.has(w)) freq.set(w, (freq.get(w) ?? 0) + 1)
+  }
+  const fromBody = [...freq.entries()].sort((a, b) => b[1] - a[1] || b[0].length - a[0].length).map((e) => e[0])
+  return [...new Set([...fromAnchor, ...fromBody])].slice(0, 8)
 }
 
 let fontsInjected = false
@@ -137,7 +141,26 @@ export async function renderCaptionCanvas(
   ctx.miterLimit = 2
 
   const strokeW = p.strokeFrac > 0 ? FONT_PX * p.strokeFrac : 0
+  const accentMode = p.accentMode ?? 'color'
 
+  // Choose ONE accent word for the whole caption (so the highlight is always visible,
+  // never multiple). Priority: a price/number token → a script-keyword (longest match)
+  // → the longest meaningful word (fallback). Indexed across BOTH lines in reading order.
+  const allWords = lines.flatMap((l) => l.split(' '))
+  let accIdx = allWords.findIndex((w) => ACCENT_TOKEN_RE.test(w))
+  if (accIdx < 0) {
+    let best = -1, bestLen = 0
+    allWords.forEach((w, i) => { const n = normWord(w); if (hlSet.has(n) && n.length > bestLen) { best = i; bestLen = n.length } })
+    accIdx = best
+  }
+  if (accIdx < 0) {
+    let best = -1, bestLen = 2
+    allWords.forEach((w, i) => { const n = normWord(w); if (n.length > bestLen && !HL_STOPWORDS.has(n)) { best = i; bestLen = n.length } })
+    accIdx = best
+  }
+  const canAccent = !!p.accent && p.accent !== p.fill
+
+  let gi = 0
   lines.forEach((line, li) => {
     const lw = lineWidths[li]
     let x = (W - lw) / 2          // centre each line
@@ -146,16 +169,14 @@ export async function renderCaptionCanvas(
     for (let wi = 0; wi < words.length; wi++) {
       const word = words[wi]
       const ww = ctx.measureText(word).width
-      const canAccent = !!p.accent && p.accent !== p.fill
-      const isAccent = canAccent && (ACCENT_TOKEN_RE.test(word) || hlSet.has(normWord(word)))
-      // soft shadow (premium) — set once, applies to the fill below
+      const isAccent = canAccent && gi === accIdx
       ctx.save()
-      if (p.shadow) {
-        ctx.shadowColor = 'rgba(0,0,0,0.55)'
-        ctx.shadowBlur = FONT_PX * 0.12
-        ctx.shadowOffsetY = FONT_PX * 0.05
+      // Neon glow ONLY on the accent word in 'glow' presets (a colour bloom, no box).
+      if (isAccent && accentMode === 'glow') {
+        ctx.shadowColor = p.accent
+        ctx.shadowBlur = FONT_PX * 0.4
       }
-      if (strokeW > 0) {
+      if (strokeW > 0) {                 // every preset has a stroke (readability rule)
         ctx.lineWidth = strokeW
         ctx.strokeStyle = p.stroke
         ctx.strokeText(word, x, y)
@@ -163,7 +184,15 @@ export async function renderCaptionCanvas(
       ctx.fillStyle = isAccent ? p.accent : p.fill
       ctx.fillText(word, x, y)
       ctx.restore()
+      // Underline the accent word in 'underline' presets (no background, just a bar).
+      if (isAccent && accentMode === 'underline') {
+        ctx.save()
+        ctx.fillStyle = p.accent
+        ctx.fillRect(x, y + FONT_PX * 1.0, ww, Math.max(3, FONT_PX * 0.09))
+        ctx.restore()
+      }
       x += ww + spaceW
+      gi++
     }
   })
 

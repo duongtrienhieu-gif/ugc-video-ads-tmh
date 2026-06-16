@@ -72,6 +72,32 @@ export function deriveBannerSlogan(productName?: string, anchor?: string, _hook?
   return ''
 }
 
+// P5z — the banner should make a scroller CURIOUS about the video's topic, NOT just name
+// the product (a name persuades no one to stop). Generate ONE ultra-short curiosity hook
+// in the output language from the script's opening line. Cached; graceful fallback to ''.
+const hookCache = new Map<string, string>()
+export async function generateBannerHook(scriptHook: string, langName: string, apiKey: string): Promise<string> {
+  const src = (scriptHook ?? '').trim()
+  if (!src || !apiKey) return ''
+  const key = `${langName}::${src}`
+  const hit = hookCache.get(key)
+  if (hit !== undefined) return hit
+  try {
+    const out = await directGeminiText({
+      apiKey,
+      systemInstruction:
+        `Write ONE ultra-short BANNER hook for a TikTok ad, in ${langName}: a ≤6-word curiosity ` +
+        `line that makes a scroller instantly wonder what the video is about. Do NOT use the ` +
+        `product name, no price, no quotes. Punchy + native. Output ONLY the line.`,
+      prompt: `Video opening line: "${src}"\nBanner hook:`,
+      maxOutputTokens: 40, temperature: 0.7, thinkingBudget: 0,
+    })
+    const cleaned = (out ?? '').split('\n')[0].replace(/^["'“”]+|["'“”.!]+$/g, '').trim().slice(0, 42)
+    hookCache.set(key, cleaned)
+    return cleaned
+  } catch { return '' }
+}
+
 // The keyword to emphasise: a number/result token if present, else the LAST word.
 function pickAccentIndex(words: string[]): number {
   for (let i = 0; i < words.length; i++) if (/\d/.test(words[i])) return i

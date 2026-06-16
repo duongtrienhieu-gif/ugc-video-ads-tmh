@@ -28,41 +28,44 @@ export interface CaptionPreset {
   strokeFrac: number
   /** Soft drop-shadow instead of a hard stroke (premium look). */
   shadow: boolean
-  /** Colour for emphasised KEY tokens (script keywords + price / number). '' = same as fill. */
+  /** Colour for the ONE emphasised KEY word per chunk (script keyword / price / number). */
   accent: string
   /** Render the caption in UPPERCASE (extra visual distinctiveness for one preset). */
   upper?: boolean
+  /** How the accent word is treated — NO background (user rule), differs per preset:
+   *  'color' = colour only · 'underline' = colour + underline · 'glow' = colour + neon glow. */
+  accentMode?: 'color' | 'underline' | 'glow'
 }
 
-// P5y — the 4 presets were too similar (Clean White & Neon Pop shared the SAME font;
-// 3/4 were white+stroke; Soft/Premium's accent was WHITE = no visible highlight). Now
-// each preset has a DISTINCT font + a DISTINCT accent colour (so the keyword pops in a
-// different hue), and one is UPPERCASE — visibly different at a glance. All 4 stay clean
-// + readable (white fill + dark stroke / soft shadow). Fonts all cover VN+MS+EN.
+// P5y/P5z — 4 genuinely DISTINCT presets, differing on EVERY axis a no-background caption
+// can: font + UPPER/lower case + accent COLOUR + accent TREATMENT (plain colour / underline
+// / neon glow). Hard rules (user): NO background on any of them, and ALL must have a dark
+// STROKE for readability over any footage. Fonts all cover VN+MS+EN. The accent applies to
+// exactly ONE key word per chunk (see captionRenderer) so the highlight is always visible.
 export const CAPTION_PRESETS: Record<CaptionPresetId, CaptionPreset> = {
-  // Neutral clean sans, yellow keyword.
+  // Neutral clean sans, lower-case, plain YELLOW keyword.
   clean_white: {
     id: 'clean_white', labelVi: 'Clean White',
     family: `'Inter', 'Be Vietnam Pro', sans-serif`, weight: '700',
-    fill: '#FFFFFF', stroke: '#000000', strokeFrac: 0.15, shadow: false, accent: '#FFD400',
+    fill: '#FFFFFF', stroke: '#000000', strokeFrac: 0.15, shadow: false, accent: '#FFD400', accentMode: 'color',
   },
-  // Geometric heavy + UPPERCASE, hot-pink keyword — the loud one.
+  // Geometric heavy, UPPERCASE, thick stroke, plain HOT-PINK keyword — the loud one.
   bold_punch: {
     id: 'bold_punch', labelVi: 'Bold Punch',
     family: `'Montserrat', 'Be Vietnam Pro', sans-serif`, weight: '800',
-    fill: '#FFFFFF', stroke: '#000000', strokeFrac: 0.2, shadow: false, accent: '#FF2D7E', upper: true,
+    fill: '#FFFFFF', stroke: '#000000', strokeFrac: 0.22, shadow: false, accent: '#FF2D7E', upper: true, accentMode: 'color',
   },
-  // Rounded friendly + soft shadow, orange keyword (was the "no-accent" premium → now pops).
+  // Rounded friendly, lower-case, ORANGE keyword with an UNDERLINE (+ stroke now).
   soft_premium: {
     id: 'soft_premium', labelVi: 'Tròn mềm',
     family: `'Baloo 2', 'Be Vietnam Pro', sans-serif`, weight: '800',
-    fill: '#FFFFFF', stroke: '#000000', strokeFrac: 0, shadow: true, accent: '#FF7A00',
+    fill: '#FFFFFF', stroke: '#000000', strokeFrac: 0.13, shadow: false, accent: '#FF7A00', accentMode: 'underline',
   },
-  // Be Vietnam Pro, neon-green keyword — the TikTok-native one.
+  // Be Vietnam Pro, NEON-green keyword with a GLOW — the TikTok-native one.
   neon_pop: {
     id: 'neon_pop', labelVi: 'Neon Pop',
     family: `'Be Vietnam Pro', sans-serif`, weight: '700',
-    fill: '#FFFFFF', stroke: '#000000', strokeFrac: 0.18, shadow: false, accent: '#19FF6A',
+    fill: '#FFFFFF', stroke: '#000000', strokeFrac: 0.18, shadow: false, accent: '#19FF6A', accentMode: 'glow',
   },
 }
 

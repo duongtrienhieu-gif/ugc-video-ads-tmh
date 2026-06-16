@@ -16,7 +16,7 @@ import { generateThumbnailHooks, generateAiThumbnail, THUMBNAIL_ARCHETYPES, THUM
 import { CAPTION_PRESETS, CAPTION_PRESET_ORDER, DEFAULT_CAPTION_PRESET, type CaptionPresetId } from '../services/captionPresets'
 import { renderCaptionBlob } from '../services/captionRenderer'
 import { BANNER_PRESETS, BANNER_PRESET_ORDER, DEFAULT_BANNER_PRESET, type BannerPresetId } from '../services/bannerPresets'
-import { renderBannerBlob, deriveBannerSlogan, localizeProductName } from '../services/bannerRenderer'
+import { renderBannerBlob, deriveBannerSlogan, localizeProductName, generateBannerHook } from '../services/bannerRenderer'
 import { SCRIPT_LANG_GEMINI_NAME, type AiThumbnail } from '../types'
 
 const now = () => Date.now()
@@ -41,20 +41,26 @@ export default function HybridExportPhase() {
   const captionPreset = hybrid.captionPreset ?? DEFAULT_CAPTION_PRESET
   const bannerOn = hybrid.bannerOn !== false               // default ON
   const bannerPreset = hybrid.bannerPreset ?? DEFAULT_BANNER_PRESET
-  // The exact slogan the banner will carry: PRODUCT NAME · short benefit (choice "B").
-  // P5x(B) — localize the product name to the output language (the bank name can be the
-  // English packaging label). 1 cached Gemini call; raw name shows until it resolves.
+  // P5z — the banner is a short CURIOSITY HOOK about the video's topic (what makes a
+  // scroller stop), NOT the product name. Generated from the script's opening line (1
+  // cached Gemini call). Fallback = product name · benefit (localized) if the hook fails.
   const rawProductName = state.inputs.product?.productName ?? ''
+  const scriptHookText = script?.blocks?.[0]?.text ?? ''
+  const [bannerHook, setBannerHook] = useState('')
   const [bannerName, setBannerName] = useState(rawProductName)
   useEffect(() => {
-    if (!rawProductName) { setBannerName(''); return }
     let alive = true
     const langName = SCRIPT_LANG_GEMINI_NAME[state.scriptBrain.outputLang]
-    localizeProductName(rawProductName, langName, geminiKey).then((n) => { if (alive) setBannerName(n) }).catch(() => {})
+    if (scriptHookText) {
+      generateBannerHook(scriptHookText, langName, geminiKey).then((h) => { if (alive) setBannerHook(h) }).catch(() => {})
+    }
+    if (rawProductName) {
+      localizeProductName(rawProductName, langName, geminiKey).then((n) => { if (alive) setBannerName(n) }).catch(() => {})
+    } else { setBannerName('') }
     return () => { alive = false }
-  }, [rawProductName, state.scriptBrain.outputLang, geminiKey])
-  const bannerSlogan = deriveBannerSlogan(bannerName || rawProductName, script?.anchor, script?.blocks?.[0]?.text)
-  const bannerPreviewText = bannerSlogan || 'Tên sản phẩm · lợi ích ngắn'
+  }, [scriptHookText, rawProductName, state.scriptBrain.outputLang, geminiKey])
+  const bannerSlogan = bannerHook || deriveBannerSlogan(bannerName || rawProductName, script?.anchor, scriptHookText)
+  const bannerPreviewText = bannerSlogan || 'Hook gây tò mò'
   const scenes = hybrid.scenes ?? []
   const doneCount = scenes.filter((_, i) => hybrid.clips[i]).length
   const allDone = scenes.length > 0 && doneCount === scenes.length
@@ -166,7 +172,7 @@ export default function HybridExportPhase() {
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div>
               <p className="text-sm font-bold text-gray-900">🏷️ Banner hook (dải trên)</p>
-              <p className="text-[11px] text-gray-500">Banner: <strong>"{bannerPreviewText}"</strong> (tên sản phẩm · lợi ích) — 0 credit. Đổi xong bấm <strong>Ghép lại / Tạo video</strong>.</p>
+              <p className="text-[11px] text-gray-500">Banner: <strong>"{bannerPreviewText}"</strong> (hook gây tò mò từ kịch bản) — 0 credit. Đổi xong bấm <strong>Ghép lại / Tạo video</strong>.</p>
             </div>
             <label className="flex shrink-0 cursor-pointer items-center gap-1.5 text-[12px] font-semibold text-gray-700">
               <input type="checkbox" checked={bannerOn} onChange={(e) => setHybridCaption({ bannerOn: e.target.checked })} />

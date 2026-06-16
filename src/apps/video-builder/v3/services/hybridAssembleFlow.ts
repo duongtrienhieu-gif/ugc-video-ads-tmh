@@ -134,7 +134,7 @@ export async function assembleFromHybridState(
     .filter((s) => s.role === 'social_proof')
     .map((s) => ({ startSec: s.startSec, endSec: s.endSec }))
   // P5y (ii) — caption keyword highlight: colour the script's KEY terms (from the anchor).
-  const highlightTerms = deriveCaptionHighlights(script.anchor)
+  const highlightTerms = deriveCaptionHighlights(script.anchor, script.blocks.map((b) => b.text).join(' '))
   const captions = captionsOn
     ? await buildCaptionPlacements(hybrid.voiceAlignment, script, realDur, presetId, cardWindows, highlightTerms)
     : []
