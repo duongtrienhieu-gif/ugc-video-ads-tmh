@@ -740,8 +740,18 @@ RULES:
 - NO cut may cover more than ~${MAX_BROLL_SEC.toFixed(0)}s of speech. If ONE idea
   is GENUINELY longer, split into TWO DISTINCT shots with DIFFERENT visual angles
   (e.g. wide → macro, hands → reaction, top-down → over-the-shoulder), NEVER a
-  near-duplicate "(slightly different angle)" of the same shot — Grok renders
+  near-duplicate "(slightly different angle)" of the same shot — i2v renders
   duplicates as visually-identical clones.
+- ⛔ HARD RULE — NO TWO CUTS ALIKE (across the WHOLE video, face OR no-face): every
+  scene's conceptPrompt MUST render a VISUALLY DISTINCT image from EVERY other cut —
+  a different SHOT TYPE + ACTION + framing + setting, not merely a new camera angle.
+  This holds EVEN when several lines repeat the SAME idea (multiple "after / result /
+  feels-great" lines) or a line is long. For a REPEATED idea, show a DIFFERENT VISUAL
+  FACET each time, e.g.: result #1 = the physical result in MACRO close-up (skin / hair
+  / teeth / the relevant body part), #2 = the creator's GENUINE REACTION (face), #3 = a
+  real LIFESTYLE moment the result enables, #4 = the PRODUCT resting in its setting.
+  Two cuts that would look the same in the final video = a bug. Make every prompt earn
+  its own distinct frame.
 - AIM FOR AROUND ${minScenes} cuts (up to ${minScenes + 3} is fine if the natural
   rhythm calls for it). PREFER fewer cuts with grouped quotes over many tiny cuts;
   ~${minScenes} thoughtful cuts beats ${minScenes + 5} frantic ones.
@@ -1118,7 +1128,7 @@ export function assignSceneTiming(
     const endSec = round2(Math.max(startSec + 0.2, rawEnd))
     out.push({ ...scenes[i], startSec, endSec })
   }
-  return enforceDensityFloor(capSplitScenes(out), densityFloor(dur))
+  return dedupeScenePrompts(enforceDensityFloor(capSplitScenes(out), densityFloor(dur)))
 }
 
 // Hard cut-length caps (deterministic — independent of how many scenes the model
@@ -1224,6 +1234,65 @@ const SPLIT_ANGLE_VARIANTS = [
   'low-angle product hero shot of the same subject',
   'top-down flat-lay of the same subject',
 ]
+
+// P5r — GLOBAL anti-duplicate (user hard rule: NO two B-roll cuts alike across the whole
+// video, face or no-face). The angle modifiers above only change the LENS (same subject) →
+// i2v still clones them. These change WHAT IS IN FRAME so a repeated/long idea becomes a
+// genuinely different shot. Applied by dedupeScenePrompts as the last word.
+const DISTINCT_SHOT_VARIANTS = [
+  'an EXTREME MACRO close-up of the product texture / one key detail (no person, no full packaging)',
+  "the creator's GENUINE REACTION — a face close-up with real emotion to this exact beat",
+  'a WIDE lifestyle shot — the product small inside the real daily setting, a candid real-life moment',
+  'a first-person POV of the hands USING / interacting with the product',
+  'a clean PRODUCT-HERO still resting on a real surface in its setting (no person)',
+  'an over-the-shoulder shot capturing a DIFFERENT step / angle of the same idea',
+]
+const CTA_ENDORSE_RE = /thumbs-up to camera|genuine endorsement at the call to buy/i
+const CTA_OFFER_PROMPT =
+  'Close-up of the creator presenting the product to camera and tapping / pointing at it excitedly as the deal is announced — the OFFER moment, the product the hero in frame (NOT a thumbs-up beside the face).'
+const DEDUP_STOP = new Set(['this','that','with','from','into','onto','their','they','them','your','about','over','shot','scene','camera','frame','video','clip','footage','natural','real','iphone','authentic','setting','light','lighting'])
+const sigWords = (p: string): Set<string> =>
+  new Set(p.toLowerCase().replace(/[^a-z0-9\s]/g, ' ').split(/\s+/).filter((w) => w.length > 3 && !DEDUP_STOP.has(w)))
+const jac = (a: Set<string>, b: Set<string>): number => {
+  if (!a.size || !b.size) return 0
+  let inter = 0; for (const x of a) if (b.has(x)) inter++
+  return inter / (a.size + b.size - inter)
+}
+// Drop a trailing split angle-modifier / prior DIFFERENT-SHOT tag (NOT a legit em-dash clause).
+const stripMod = (p: string): string =>
+  p.replace(/\s*—\s*(?:DIFFERENT SHOT\b.*|[^—]*\bsame (?:subject|action)\b.*)$/i, '').trim()
+
+/** P5r — guarantee every B-roll cut renders a DISTINCT image. (1) CTA: keep ONLY the last
+ *  endorsement, turn earlier endorsements into the OFFER shot. (2) Any non-card/non-lips cut
+ *  whose prompt is ≥70% similar to an earlier accepted cut → rewrite into a genuinely
+ *  different shot. Never rewrites the locked CTA last cut. Runs AFTER split (the source of
+ *  the clone pairs) so it catches both split-halves and director-authored repeats. */
+function dedupeScenePrompts(timed: TimedBrollScene[]): TimedBrollScene[] {
+  const lastIdx = timed.length - 1
+  const endorse = timed.filter((s) => s.role !== 'lips' && s.role !== 'social_proof' && CTA_ENDORSE_RE.test(s.conceptPrompt ?? ''))
+  if (endorse.length > 1) {
+    for (const s of endorse.slice(0, -1)) { s.conceptPrompt = CTA_OFFER_PROMPT; s.kind = 'product_action'; s.cameraFraming = 'creator' }
+  }
+  const accepted: Set<string>[] = []
+  let vi = 0
+  for (let i = 0; i < timed.length; i++) {
+    const s = timed[i]
+    if (s.role === 'lips' || s.role === 'social_proof') continue
+    const base = stripMod((s.conceptPrompt ?? '').trim())
+    if (!base) continue
+    const w = sigWords(base)
+    const dup = i !== lastIdx && accepted.some((a) => jac(a, w) >= 0.7)   // never touch the locked CTA last cut
+    if (dup) {
+      s.conceptPrompt = `${base} — DIFFERENT SHOT (must NOT resemble the other cuts): ${DISTINCT_SHOT_VARIANTS[vi % DISTINCT_SHOT_VARIANTS.length]}`
+      vi++
+      accepted.push(sigWords(s.conceptPrompt))
+    } else {
+      s.conceptPrompt = base   // normalize — drop any weak split angle-modifier
+      accepted.push(w)
+    }
+  }
+  return timed
+}
 
 // P3v — split a quote across N sub-cuts so a long line chẻ thành nhiều cảnh
 // KHÔNG lặp lại y nguyên text (the user demanded "cấm trùng câu thoại triệt
