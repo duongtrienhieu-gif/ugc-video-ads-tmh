@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { LayoutGrid, User, Mic, Settings, FlaskConical, RefreshCw, LogOut, Activity, Sparkles, Package, Megaphone, FolderOpen, Rocket, History as HistoryIcon, Palette, ShoppingBag, TrendingUp, MessageCircle } from 'lucide-react'
+import { LayoutGrid, User, Mic, PenLine, Settings, FlaskConical, RefreshCw, LogOut, Activity, Sparkles, Package, Megaphone, FolderOpen, Rocket, History as HistoryIcon, Palette, ShoppingBag, TrendingUp, MessageCircle } from 'lucide-react'
 import SettingsModal from './SettingsModal'
 import Diagnostic from './Diagnostic'
 import DraftsPanel from './DraftsPanel'
@@ -27,7 +27,7 @@ interface NavGroup {
 // stays short. Only the apps in active use are listed; the rest still have
 // live routes in App.tsx (reachable via direct openApp / inter-app links),
 // they're just hidden from the nav:
-//   • hidden: script-architect, creative-studio, video-translate, ad-anatomy
+//   • hidden: creative-studio, video-translate, ad-anatomy
 //   • deleted entirely: tim-source-video, lab-content, landing-page
 const NAV_GROUPS: NavGroup[] = [
   {
@@ -40,6 +40,7 @@ const NAV_GROUPS: NavGroup[] = [
       { id: 'character-studio',  label: 'Avatar AI',      icon: User },
       { id: 'voice-studio',      label: 'Giọng đọc',      icon: Mic },
       { id: 'research',          label: 'Research',       icon: TrendingUp },
+      { id: 'script-architect',  label: 'Kịch bản',       icon: PenLine },
       { id: 'ads-content',       label: 'Ads Content',    icon: Megaphone },
       { id: 'tiktok-shop',       label: 'TikTok Shop',    icon: ShoppingBag },
       { id: 'super-ladipage',    label: 'Super Ladipage', icon: Rocket },
