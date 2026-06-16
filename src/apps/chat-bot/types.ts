@@ -96,6 +96,9 @@ export interface ActionPacket {
   captured: Record<string, string>    // SĐT/địa chỉ/màu... bot moi được
   handover: boolean                   // true = chuyển cho người
   suggestedFollowup?: { afterMinutes: number; note: string }
+  /** Tóm tắt phiên (cập nhật mỗi lượt): khách là ai, đã hỏi/lo gì, chốt tới đâu —
+   *  để nhớ xuyên cả chat dài dù lịch sử thô bị cắt. */
+  sessionSummary?: string
 }
 
 // ── Simulator ────────────────────────────────────────────────────────────────

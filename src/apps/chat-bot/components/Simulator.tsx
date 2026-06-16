@@ -63,7 +63,9 @@ export default function Simulator({ productId }: { productId: string }) {
         {},
         ...history.filter((t) => t.role === 'bot' && t.packet?.captured).map((t) => t.packet!.captured),
       )
-      const packet = await runSalesBrain({ config, product, history, customerText, apiKey: geminiKey, knownInfo })
+      // Tóm tắt phiên mới nhất (running summary) — nhớ tổng hợp dù chat dài
+      const priorSummary = [...history].reverse().find((t) => t.role === 'bot' && t.packet?.sessionSummary)?.packet?.sessionSummary
+      const packet = await runSalesBrain({ config, product, history, customerText, apiKey: geminiKey, knownInfo, priorSummary })
       setTurns((t) => [...t, { id: nextId(), role: 'bot', packet, at: Date.now() }])
     } catch (err) {
       addToast(`Bot lỗi: ${err instanceof Error ? err.message : String(err)}`, 'error')

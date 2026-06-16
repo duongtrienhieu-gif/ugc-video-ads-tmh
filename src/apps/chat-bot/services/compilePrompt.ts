@@ -33,8 +33,10 @@ export function compilePrompt(args: {
   /** Thông tin đã moi được tích luỹ XUYÊN PHIÊN (sđt/địa chỉ/tên/số lượng…) —
    *  để bot KHÔNG hỏi lại cái khách đã cung cấp. */
   knownInfo?: Record<string, string>
+  /** Tóm tắt phiên ở lượt trước — nhớ tổng hợp khi chat dài. */
+  priorSummary?: string
 }): CompiledPrompt {
-  const { config, product, history, customerText, knownInfo } = args
+  const { config, product, history, customerText, knownInfo, priorSummary } = args
 
   // ── Media: gán id ngắn + GOM THEO LOẠI (để bot biết cụm cùng loại có thể gửi chung) ──
   const mediaIndex = new Map<string, MediaSlot>()
@@ -108,6 +110,7 @@ export function compilePrompt(args: {
     .join('\n')
 
   const prompt = [
+    priorSummary?.trim() ? `=== TÓM TẮT PHIÊN (nhớ tổng hợp — bám để trả lời nhất quán) ===\n${priorSummary.trim()}\n` : '',
     '=== KHO THÔNG TIN SẢN PHẨM (nguyên liệu để CHỌN LỌC + diễn lại, ĐỪNG đọc nguyên văn) ===',
     facts || '(không có dữ liệu sản phẩm)',
     '',

@@ -43,6 +43,7 @@ const ACTION_SCHEMA: Record<string, unknown> = {
     handover: { type: 'boolean' },
     followupAfterMinutes: { type: 'number' },
     followupNote: { type: 'string' },
+    sessionSummary: { type: 'string' },
   },
   required: ['messages', 'awaitCustomer', 'nextStage', 'intent', 'handover'],
 }
@@ -56,6 +57,7 @@ interface RawPacket {
   handover?: boolean
   followupAfterMinutes?: number
   followupNote?: string
+  sessionSummary?: string
 }
 
 // Hạ chữ HOA đầu câu/đầu tin cho văn phong chat thật (Flash hay tự viết hoa lại).
@@ -119,6 +121,7 @@ function normalize(raw: RawPacket, mediaIndex: Map<string, MediaSlot>): ActionPa
       typeof raw.followupAfterMinutes === 'number'
         ? { afterMinutes: raw.followupAfterMinutes, note: raw.followupNote ?? '' }
         : undefined,
+    sessionSummary: raw.sessionSummary?.trim() || undefined,
   }
 }
 
@@ -130,6 +133,8 @@ export interface SalesBrainInput {
   apiKey: string
   /** Thông tin đã moi tích luỹ xuyên phiên (sđt/địa chỉ/tên/số lượng…). */
   knownInfo?: Record<string, string>
+  /** Tóm tắt phiên ở lượt trước (running summary) — để nhớ tổng hợp khi chat dài. */
+  priorSummary?: string
 }
 
 /** Chạy engine 1 lượt: tin khách → ActionPacket. ĐÚNG 1 call Gemini (re-call tối đa 1

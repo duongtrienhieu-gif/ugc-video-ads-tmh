@@ -27,6 +27,12 @@ export default function DebugSidebar({
           {packet.suggestedFollowup && (
             <Row label="Gợi ý nhắc lại" value={`sau ${packet.suggestedFollowup.afterMinutes}' · ${packet.suggestedFollowup.note}`} />
           )}
+          {packet.sessionSummary && (
+            <div>
+              <div className="mb-1 font-semibold text-gray-500">Bộ não nhớ (tóm tắt phiên)</div>
+              <div className="rounded bg-violet-500/10 px-1.5 py-1 text-violet-700">{packet.sessionSummary}</div>
+            </div>
+          )}
           {Object.keys(packet.captured).length > 0 && (
             <div>
               <div className="mb-1 font-semibold text-gray-500">Đã moi được</div>
