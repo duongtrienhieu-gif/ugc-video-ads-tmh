@@ -349,7 +349,7 @@ export function validateBody(
 // is a presence check, so a wide net keeps false-fails rare (it fires only when NO
 // crowd beat at all is present). Mirrors brollDirector's SOCIAL_PROOF_CUE_RE.
 const SOCIAL_PROOF_CUE_RE =
-  /ngh[ìi]n ng[ưu][ờo]i|ng[àa]n ng[ưu][ờo]i|m[oọ]i ng[ưu][ờo]i|ai (?:c[ũu]ng|d[ùu]ng|mua)|nhi[eề]u ng[ưu][ờo]i|b[áa]n ch[aạ]y|ch[áa]y h[àa]ng|quay l[aạ]i mua|mua l[aạ]i|đ[áa]nh gi[áa]|l[ưu][ợo]t (?:mua|b[áa]n)|ng[ưu][ờo]i (?:mua|đ[ặa]t)|5 sao|n[ăa]m sao|c[oộ]ng đ[ồo]ng|\b(?:review|reviews|sold|sold[- ]?out|repeat|verified|viral)\b|ramai|orang beli|terjual|ulasan|bintang|laku keras|semua orang/i
+  /ngh[ìi]n ng[ưu][ờo]i|ng[àa]n ng[ưu][ờo]i|m[oọ]i ng[ưu][ờo]i|ai (?:c[ũu]ng|d[ùu]ng|mua)|nhi[eề]u ng[ưu][ờo]i|b[áa]n ch[aạ]y|ch[áa]y h[àa]ng|quay l[aạ]i mua|mua l[aạ]i|đ[áa]nh gi[áa]|l[ưu][ợo]t (?:mua|b[áa]n)|ng[ưu][ờo]i (?:mua|đ[ặa]t)|5 sao|n[ăa]m sao|c[oộ]ng đ[ồo]ng|\b(?:review|reviews|sold|sold[- ]?out|repeat|verified|viral|popular|recommend)\b|ramai|terjual|ulasan|bintang|\blaku\b|puas hati|semua orang|orang (?:beli|guna|pakai|cuba|recommend)/i
 
 // ── P4j — shape-execution validator ──────────────────────────────────────────
 // validateBody checks symptom / CTA / banned-openings but NOT whether the body

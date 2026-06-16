@@ -460,7 +460,9 @@ ${pronounRule(args.lang)}
   exact line into a believable social-proof CARD (a Facebook-post / review screenshot) on
   screen. State it as a STANDALONE sentence the viewer can't check at the door, e.g.
   "mấy nghìn người mua rồi", "bán cháy hàng mấy đợt liền", "ai mua cũng quay lại", "review
-  toàn 5 sao", "cả nhà giờ ai cũng ăn". Put it in the BENEFIT/PROOF stretch of the body
+  toàn 5 sao", "cả nhà giờ ai cũng ăn" (for Bahasa Malaysia use the NATIVE rojak form, NOT
+  a VN calque: "ramai dah beli", "laku keras", "ulasan 5 bintang", "ramai repeat order",
+  "viral satu TikTok"). Put it in the BENEFIT/PROOF stretch of the body
   (never the hook, never the very last CTA line). GUARD (a MONEY rule, not morality): a
   plausible crowd VIBE is encouraged, but NEVER invent a fake SPECIFIC exact number
   ("740,128 hộp đã bán") and NEVER claim a certification (Halal/KKM/GMP/FDA/clinically
